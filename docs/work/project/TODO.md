@@ -37,11 +37,11 @@ CURRENT Task PRIORITIES:
 Building from scratch with proper module separation from the beginning.
 
 - [x] Premake5 workspace for Visual Studio 2022 (C++23, Debug/Release/Dist)
-- [ ] Directory structure: Core/, App/, Vendor/, Assets/, Docs/, Scripts/
-- [ ] Vendor layout: pybind11, GLFW, ImGui (docking), GLM, entt, yaml-cpp, spdlog, Tracy, ImPlot, nlohmann/json, SQLiteCpp, libssh2, cpr, zstd
+- [x] Directory structure: Core/, App/, Vendor/, Assets/, Docs/, Scripts/
+- [x] Vendor layout: GLFW, ImGui (docking), spdlog, Tracy, 
 - [x] Scripts/Tooling.bat / Tooling.ps1 + setup.py as canonical setup
 - [x] uv as dependency manager for Python venv
-- [ ] PCH (pch.hpp) per-module, .hpp convention
+- [x] PCH (pch.hpp) per-module, .hpp convention
 - [x] Logging (spdlog) with levels and source metadata
 - [x] scripts/ci_check.py – local CI (Debug + Release build verification)
 - [x] Initialize mdBook in docs/ + SUMMARY.md with basic structure
@@ -54,19 +54,18 @@ Building from scratch with proper module separation from the beginning.
 
 ### T02 – Documentation and Tests (	`task/02-docs-tests`)
 
-- [ ] mdBook: full SUMMARY.md structure
-- [ ] Architectural pages: Core, DataModel, IO, Renderer, PythonBridge, Layers, UI
-- [ ] Developer workflows: build, run, debug, branch conventions
-- [ ] API-oriented pages for key classes and data flow
-- [ ] assets/samples/ – small test files per format
+- [x] mdBook: full SUMMARY.md structure
+- [x] Architectural pages: Core, DataModel, IO, Renderer, PythonBridge, Layers, UI
+- [x] Developer workflows: build, run, debug, branch conventions
+- [x] API-oriented pages for key classes and data flow
 - [ ] Config migration regression tests (legacy → YAML)
-- [ ] scripts/ci_check.py finalization (Debug + Release)
+- [x] scripts/ci_check.py finalization (Debug + Release)
 
 ### T03 – Cross-Platform (	`task/03-crossplatform`)
 
-- [ ] Linux build: Premake5 gmake2, g++ / clang
-- [ ] Python tooling verification
-- [ ] Parity scripts/Tooling.bat vs Tooling.sh
+- [x] Linux build: Premake5 gmake2, g++ / clang
+- [x] Python tooling verification
+- [x] Parity scripts/Tooling.bat vs Tooling.sh
 - [x] Windows local build matrix verified: msvc/gcc/clang x Debug/Release/Dist
 ***
 

@@ -70,3 +70,10 @@ def app_executable_path(config: str, arch: str = "x86_64") -> Path:
     system = "windows" if os.name == "nt" else "linux"
     output_key = f"{config}-{system}-{arch}"
     return build_dir() / "bin" / output_key / project_name() / project_executable_name()
+
+
+def test_executable_path(config: str, arch: str = "x86_64") -> Path:
+    system = "windows" if os.name == "nt" else "linux"
+    output_key = f"{config}-{system}-{arch}"
+    name = "DefectStudioTests.exe" if os.name == "nt" else "DefectStudioTests"
+    return build_dir() / "bin" / output_key / "DefectStudioTests" / name

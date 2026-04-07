@@ -10,6 +10,7 @@ workspace "DefectStudio"
     }
 
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
+_DS_ROOT = path.getabsolute(".")
 
 -- Icon paths: absolute for Windows (VS2022 postbuild), relative for Linux (gmake2)
 -- On Windows, translate to backslashes for cmd.exe
@@ -19,7 +20,8 @@ local linuxIcon = "../../../assets/icon.png"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
-include "Vendor/Tracy"
+dofile "Vendor/Tracy.premake5.lua"
+dofile "Vendor/GoogleTest.premake5.lua"
 
 project "DefectStudio"
     location "build/generated/%{_ACTION}"
@@ -94,6 +96,63 @@ project "DefectStudio"
                 'if [ -f "' .. linuxIcon .. '" ]; then cp "' .. linuxIcon .. '" "%{cfg.targetdir}/icon.png"; fi'
             }
         end
+
+    filter "configurations:Debug"
+        defines { "DS_DEBUG" }
+        symbols "On"
+
+    filter "configurations:Release"
+        defines { "DS_RELEASE" }
+        optimize "On"
+
+    filter "configurations:Dist"
+        defines { "DS_DIST" }
+        optimize "Full"
+
+    filter {}
+
+project "DefectStudioTests"
+    location "build/generated/%{_ACTION}"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++latest"
+    staticruntime "off"
+    warnings "Extra"
+    flags { "MultiProcessorCompile" }
+
+    targetdir ("build/bin/" .. outputdir .. "/%{prj.name}")
+    objdir ("build/bin-int/" .. outputdir .. "/%{prj.name}")
+
+    files {
+        "tests/**.hpp",
+        "tests/**.cpp",
+        "Vendor/GoogleTest/googletest/src/gtest_main.cc",
+        "src/Core/Logger.hpp",
+        "src/Core/Logger.cpp"
+    }
+
+    includedirs {
+        "src",
+        "Vendor/spdlog/include",
+        "Vendor/GoogleTest/googletest/include",
+        "Vendor/GoogleTest/googlemock/include"
+    }
+
+    links {
+        "GoogleTest"
+    }
+
+    filter "system:windows"
+        systemversion "latest"
+        defines { "DS_PLATFORM_WINDOWS" }
+
+    filter { "system:windows", "action:vs2022" }
+        buildoptions { "/utf-8" }
+
+    filter "system:linux"
+        pic "On"
+        defines { "DS_PLATFORM_LINUX" }
+        links { "pthread" }
 
     filter "configurations:Debug"
         defines { "DS_DEBUG" }
