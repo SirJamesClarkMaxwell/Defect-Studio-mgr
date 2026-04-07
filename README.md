@@ -14,7 +14,7 @@ The repository is designed around script-first onboarding so both technical and 
 ## Setup Guide (Windows and Linux)
 ### Windows
 ```ps1
-git clone https://github.com/sjcmdev/Defect-Studio.git  // 1. clone repository
+git clone --recursive -b task/04-core https://github.com/sjcmdev/Defect-Studio.git  // 1. clone repository
 cd Defect-Studio
 .\scripts\Windows\ConfigurePreferences.bat 				// 2. Configure local preferences
 .\scripts\Windows\Setup.bat 							// 3. Run Setup configuration
