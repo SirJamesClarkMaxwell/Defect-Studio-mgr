@@ -42,7 +42,7 @@ def run(args: argparse.Namespace) -> int:
 
     print_step("Ensuring git submodules are initialized")
     code = run_command(
-        ["git", "submodule", "update", "--init", "--recursive"],
+        ["git", "submodule", "update", "--init", "--recursive", "--force"],
         cwd=repo_root(),
         dry_run=args.dry_run,
         verbose=args.verbose,
