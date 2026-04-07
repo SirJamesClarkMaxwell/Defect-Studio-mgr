@@ -14,6 +14,6 @@
 [submodule "Vendor/Tracy"]
 	path = Vendor/Tracy
 	url = https://github.com/sjcmdev/tracy.git
-[submodule "Vendor/Tracy"]
-	path = Vendor/Tracy
-	url = https://github.com/sjcmdev/tracy.git
+[submodule "Vendor/GoogleTest"]
+	path = Vendor/GoogleTest
+	url = https://github.com/sjcmdev/googletest.git
