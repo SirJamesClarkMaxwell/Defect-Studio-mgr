@@ -17,7 +17,6 @@ from scripts.python.common.tooling import (
     detect_many,
     detect_msvc_compiler_path,
     detect_msvc_installation_path,
-    require_vendored_tool,
 )
 
 
@@ -52,6 +51,11 @@ def make_parser() -> argparse.ArgumentParser:
         help="Reserved for managed tool installation.",
     )
     parser.add_argument("--python-group", action="append", default=None)
+    parser.add_argument(
+        "--python-version",
+        default=None,
+        help="Target Python version prepared by bootstrap wrappers (e.g. 3.12).",
+    )
     parser.add_argument("--generator", choices=["vs2022", "gmake2"], default=None)
     parser.add_argument("--compiler", choices=["msvc", "gcc", "clang"], default=None)
     parser.add_argument("--config", choices=["Debug", "Release", "Dist"], default=None)
@@ -137,17 +141,16 @@ def run_tool_discovery(args: argparse.Namespace) -> int:
 
 
 def run_python_env(args: argparse.Namespace) -> int:
-    print_step("Preparing Python env")
+    version_note = (
+        f" (target Python {args.python_version})" if args.python_version else ""
+    )
+    print_step(f"Preparing Python env{version_note}")
     preferences = load_preferences().get("setup", {})
     groups = args.python_group or preferences.get("python_groups") or ["dev"]
     uv = detect_many(["uv"]).get("uv")
     if not uv:
         print(
-            "[error] uv not found. Please install uv from https://docs.astral.sh/uv/getting-started/"
-        )
-        print("        On Windows: winget install uv  or  pip install uv")
-        print(
-            "        On Linux:   pip install uv  or  curl -LsSf https://astral.sh/uv/install.sh | sh"
+            "[error] uv not found. Run setup via scripts/Windows/Setup.bat or scripts/Linux/Setup.sh bootstrap wrappers."
         )
         return 1
 
@@ -251,6 +254,9 @@ def run(args: argparse.Namespace) -> int:
     args.config = resolve_preference(preferences, "config", args.config, "Debug")
     args.open = resolve_preference(preferences, "open", args.open, "none")
     args.python_group = args.python_group or preferences.get("python_groups") or ["dev"]
+
+    if args.python_version:
+        print_step(f"Bootstrap provided Python target: {args.python_version}")
 
     if should_run(args.phase, "repo-update"):
         code = run_repo_update(args)

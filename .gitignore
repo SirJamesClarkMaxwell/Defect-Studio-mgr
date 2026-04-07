@@ -9,6 +9,7 @@ bin/
 bin-int/
 logs/
 docs/book
+tmp/
 
 # IDE and editor caches
 .vs/
