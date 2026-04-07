@@ -3,6 +3,11 @@ from __future__ import annotations
 import argparse
 import platform
 import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 import build as build_script
 import doctor as doctor_script
@@ -11,7 +16,7 @@ import run as run_script
 from scripts.python.common.cli import add_common_flags, print_header, print_step
 from scripts.python.common.config import save_local_config
 from scripts.python.common.exec import run_command
-from scripts.python.common.paths import repo_root
+from scripts.python.common.paths import repo_root, solution_path
 from scripts.python.common.preferences import load_preferences, resolve_preference
 from scripts.python.common.tooling import (
     detect_many,
@@ -216,7 +221,7 @@ def run_open(args: argparse.Namespace) -> int:
             verbose=args.verbose,
         )
 
-    sln = repo_root() / "Hazel" / "Hazel.sln"
+    sln = solution_path("vs2022")
     return run_command(
         ["cmd", "/c", "start", "", str(sln)],
         cwd=repo_root(),

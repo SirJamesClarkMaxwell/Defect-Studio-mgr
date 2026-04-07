@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 import build as build_script
 import generate_projects as generate_script
 import run as run_script
+from scripts.python.common.paths import project_name
 from scripts.python.common.preferences import load_preferences, resolve_preference
 
 
@@ -33,7 +39,7 @@ def run(args: argparse.Namespace) -> int:
         build_preferences, "compiler", args.compiler, "msvc"
     )
     args.target = resolve_preference(
-        build_preferences, "target", args.target, "Hazelnut"
+        build_preferences, "target", args.target, project_name()
     )
     args.project = resolve_preference(run_preferences, "project", args.project, None)
 

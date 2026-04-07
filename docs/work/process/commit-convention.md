@@ -59,6 +59,13 @@ Scope should describe the affected area, for example:
 - fix(io): preserve POSCAR selective dynamics flags
 - refactor(scene): move gizmo selection sync into bridge
 - docs(ai): clarify AI task size rules
+- build(project): isolate build-matrix artifacts between compiler/config runs
+
+## Current recommended commit
+
+For the current matrix-stability batch, use:
+
+- build(project): stabilize matrix builds across msvc gcc and clang
 
 ## Bad examples
 

@@ -3,6 +3,7 @@ set -euo pipefail
 
 WRAPPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(cd "$WRAPPER_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPTS_DIR/.." && pwd)"
 
 PYTHON_VERSION="${DEFECT_STUDIO_PYTHON_VERSION:-3.12}"
 
@@ -66,5 +67,5 @@ else:
 print("Python native build prerequisites: OK")
 PY
 
-export PYTHONPATH="$SCRIPTS_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 "$MANAGED_PYTHON" "$SCRIPTS_DIR/python/setup.py" --python-version "$PYTHON_VERSION" "$@"

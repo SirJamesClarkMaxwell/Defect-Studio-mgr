@@ -6,19 +6,12 @@ from pathlib import Path
 
 from scripts.python.common.cli import print_header, print_step
 from scripts.python.common.exec import run_command
-from scripts.python.common.paths import repo_root
+from scripts.python.common.paths import app_executable_path, repo_root
 from scripts.python.common.preferences import load_preferences, resolve_preference
 
 
 def default_app_path(config: str) -> Path:
-    return (
-        repo_root()
-        / "Hazel"
-        / "bin"
-        / f"{config}-windows-x86_64"
-        / "Hazelnut"
-        / "Hazelnut.exe"
-    )
+    return app_executable_path(config)
 
 
 def make_parser() -> argparse.ArgumentParser:
