@@ -1,0 +1,13 @@
+[submodule "Vendor/GLFW"]
+	path = Vendor/GLFW
+	url = https://github.com/sjcmdev/glfw.git
+[submodule "Vendor/ImGui"]
+	path = Vendor/ImGui
+	url = https://github.com/sjcmdev/imgui.git
+	branch = docking
+[submodule "Vendor/GLAD"]
+	path = Vendor/GLAD
+	url = https://github.com/sjcmdev/glad.git
+[submodule "Vendor/spdlog"]
+	path = Vendor/spdlog
+	url = https://github.com/sjcmdev/spdlog.git

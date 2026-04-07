@@ -60,7 +60,41 @@ def run_make(args: argparse.Namespace) -> int:
     make = detect_tool("make")
     if not make:
         print("[error] make not found.")
+        if os.name != "nt":
+            print("        Install required build tools, e.g.:")
+            print("        sudo apt update && sudo apt install -y build-essential")
         return 1
+
+    if os.name != "nt":
+        required_headers = {
+            "X11/Xlib.h": "libx11-dev",
+            "X11/extensions/Xrandr.h": "libxrandr-dev",
+            "X11/extensions/Xinerama.h": "libxinerama-dev",
+            "X11/Xcursor/Xcursor.h": "libxcursor-dev",
+            "X11/extensions/XInput2.h": "libxi-dev",
+            "X11/extensions/xf86vmode.h": "libxxf86vm-dev",
+            "EGL/egl.h": "libegl1-mesa-dev",
+            "GL/gl.h": "libgl1-mesa-dev",
+        }
+
+        include_roots = [Path("/usr/include"), Path("/usr/local/include")]
+        missing: list[tuple[str, str]] = []
+        for header, package in required_headers.items():
+            if not any((root / header).exists() for root in include_roots):
+                missing.append((header, package))
+
+        if missing:
+            print("[error] Missing Linux development headers required by GLFW (X11 backend).")
+            for header, package in missing:
+                print(f"        - {header}  (package: {package})")
+            print("        Install prerequisites:")
+            print("        sudo apt update")
+            print(
+                "        sudo apt install -y build-essential pkg-config "
+                "libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev "
+                "libgl1-mesa-dev libegl1-mesa-dev"
+            )
+            return 1
 
     make_dir = repo_root() / "build" / "generated" / "gmake2"
     if not make_dir.exists() and not args.dry_run:
@@ -108,6 +142,18 @@ def run_make(args: argparse.Namespace) -> int:
         print(
             f"[step] toolchain CC={env_override.get('CC')} CXX={env_override.get('CXX')}"
         )
+
+    if os.name != "nt":
+        root_path = str(repo_root()).replace("\\", "/")
+        if "/mnt/hgfs/" in root_path or root_path.endswith("/mnt/hgfs"):
+            print(
+                "[warn] Repository is located on a VMware shared folder (/mnt/hgfs). "
+                "GNU make may report timestamps in the future and rebuilds can become unstable. "
+                "Use a normal Linux filesystem path for builds if possible."
+            )
+
+    jobs = max(os.cpu_count() or 1, 1)
+    command.insert(1, f"-j{jobs}")
 
     return run_command(
         command,
