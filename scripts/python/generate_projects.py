@@ -40,6 +40,16 @@ def run(args: argparse.Namespace) -> int:
             "Clean requested (current version keeps this as a no-op placeholder)."
         )
 
+    print_step("Ensuring git submodules are initialized")
+    code = run_command(
+        ["git", "submodule", "update", "--init", "--recursive"],
+        cwd=repo_root(),
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+    )
+    if code != 0:
+        return code
+
     command = [premake, "vs2022" if args.generator == "vs2022" else "gmake2"]
     if args.compiler == "clang":
         command.append("--cc=clang")
