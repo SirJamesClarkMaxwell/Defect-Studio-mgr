@@ -24,9 +24,9 @@ cd Defect-Studio
 ```
 ### Linux
 ```bash
-git clone https://github.com/sjcmdev/Defect-Studio.git // 1. clone repository
+git clone --recursive -b task/04-core https://github.com/sjcmdev/Defect-Studio.git // 1. clone repository
 cd Defect-Studio
-chmod +x ./scirpts/Linux/*.sh						   // 2. Add executable privlages to scripts
+chmod +x ./scripts/Linux/*.sh						   // 2. Add executable privileges to scripts
 ./scripts/Linux/ConfigurePreferences.sh				   // 3. Configure local preferences
 ./scripts/Linux/Setup.sh							   // 4. Run Setup configuration
 ./scripts/Linux/GenerateProjects.sh --verbose		   // 5. Generate project	
