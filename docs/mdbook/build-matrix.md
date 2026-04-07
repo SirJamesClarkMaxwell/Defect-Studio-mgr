@@ -73,6 +73,27 @@ Wrappers enable this flag by default. The runner removes per-configuration outpu
 
 before each build step, reducing cross-run contamination issues (especially `gcc/clang` on Linux).
 
+## Submodule Cleanup
+
+After vendor updates or matrix runs, `git status` in the superproject may still show dirty submodules.
+This usually means local files changed only inside a submodule worktree.
+
+To reset submodules to the commit recorded by the superproject:
+
+```powershell
+git -C Vendor/GLFW restore --staged --worktree -- .
+git -C Vendor/Tracy clean -fd
+git -C Vendor/Tracy restore --staged --worktree -- .
+```
+
+Then verify both states:
+
+```powershell
+git status --short
+git -C Vendor/GLFW status --short
+git -C Vendor/Tracy status --short
+```
+
 ## Manual Runner
 
 If needed, run the Python runner directly:
