@@ -36,6 +36,18 @@ def mdbook_dir() -> Path:
     return vendor_binaries_dir() / "MdBook"
 
 
+def tracy_dir() -> Path:
+    if os.name == "nt":
+        return vendor_binaries_dir() / "Windows" / "Tracy"
+    return vendor_binaries_dir() / "Linux" / "Tracy"
+
+
+def tracy_profiler_path() -> Path:
+    return tracy_dir() / (
+        "tracy-profiler.exe" if os.name == "nt" else "tracy-profiler"
+    )
+
+
 def local_config_path() -> Path:
     return repo_root() / ".local" / "toolchain.json"
 

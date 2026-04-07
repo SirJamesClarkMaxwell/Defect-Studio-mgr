@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .paths import mdbook_dir, premake_dir, tools_dir
+from .paths import mdbook_dir, premake_dir, tools_dir, tracy_profiler_path
 
 
 TOOL_HINTS: dict[str, list[str]] = {
@@ -16,7 +16,8 @@ TOOL_HINTS: dict[str, list[str]] = {
     "mdbook": ["mdbook"],
     "msbuild": ["MSBuild"],
     "code": ["code"],
-    "make": ["make", "mingw32-make"],
+    "tracy": ["tracy-profiler", "Tracy"],
+    "make": ["make", "gmake", "mingw32-make"],
     "gcc": ["gcc"],
     "clang": ["clang"],
 }
@@ -41,6 +42,8 @@ def _repo_local_tool_path(name: str) -> str | None:
             / "bin"
             / ("mdbook.exe" if os.name == "nt" else "mdbook")
         )
+    elif name in {"tracy", "tracy-profiler"}:
+        base = tracy_profiler_path()
     else:
         base = tools_dir() / name / name
 
@@ -61,7 +64,7 @@ def require_vendored_tool(name: str) -> str:
 
 
 def detect_tool(name: str) -> str | None:
-    if name in {"premake5", "mdbook"}:
+    if name in {"premake5", "mdbook", "tracy", "tracy-profiler"}:
         try:
             return require_vendored_tool(name)
         except FileNotFoundError:

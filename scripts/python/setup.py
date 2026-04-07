@@ -66,6 +66,13 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", choices=["Debug", "Release", "Dist"], default=None)
     parser.add_argument("--open", choices=["vs", "vscode", "none"], default=None)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument(
+        "--log-file",
+        nargs="?",
+        const="",
+        default=None,
+        help="Enable file logging and optionally set the log file path.",
+    )
     parser.add_argument("--phase", choices=PHASES, action="append", default=[])
     return parser
 
@@ -114,6 +121,7 @@ def run_tool_discovery(args: argparse.Namespace) -> int:
             "make",
             "gcc",
             "clang",
+            "tracy",
         ]
     )
 
@@ -237,6 +245,7 @@ def run_app(args: argparse.Namespace) -> int:
             config=resolve_preference(preferences, "config", args.config, "Debug"),
             project=None,
             log_level="info",
+            log_file=args.log_file,
             safe_mode=False,
             reset_layout=False,
             exe=None,
