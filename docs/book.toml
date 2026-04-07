@@ -1,0 +1,10 @@
+[book]
+title = "Defect Studio"
+authors = ["Team"]
+description = "Defect Studio Project Documentation"
+language = "en"
+src = "mdbook"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "dark"
