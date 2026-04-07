@@ -23,6 +23,13 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--compiler", choices=["msvc", "gcc", "clang"], default=None)
     parser.add_argument("--project", default=None)
     parser.add_argument("--target", default=None)
+    parser.add_argument(
+        "--log-file",
+        nargs="?",
+        const="",
+        default=None,
+        help="Enable file logging and optionally set the log file path.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     return parser
@@ -72,6 +79,7 @@ def run(args: argparse.Namespace) -> int:
         config=args.config,
         project=args.project,
         log_level="info",
+        log_file=args.log_file,
         safe_mode=False,
         reset_layout=False,
         exe=None,

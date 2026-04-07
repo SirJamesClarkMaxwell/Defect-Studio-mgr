@@ -11,3 +11,9 @@
 [submodule "Vendor/spdlog"]
 	path = Vendor/spdlog
 	url = https://github.com/sjcmdev/spdlog.git
+[submodule "Vendor/Tracy"]
+	path = Vendor/Tracy
+	url = https://github.com/sjcmdev/tracy.git
+[submodule "Vendor/Tracy"]
+	path = Vendor/Tracy
+	url = https://github.com/sjcmdev/tracy.git

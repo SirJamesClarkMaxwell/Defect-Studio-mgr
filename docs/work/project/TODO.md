@@ -36,17 +36,18 @@ CURRENT Task PRIORITIES:
 
 Building from scratch with proper module separation from the beginning.
 
-- [ ] Premake5 workspace for Visual Studio 2022 (C++23, Debug/Release/Dist)
+- [x] Premake5 workspace for Visual Studio 2022 (C++23, Debug/Release/Dist)
 - [ ] Directory structure: Core/, App/, Vendor/, Assets/, Docs/, Scripts/
 - [ ] Vendor layout: pybind11, GLFW, ImGui (docking), GLM, entt, yaml-cpp, spdlog, Tracy, ImPlot, nlohmann/json, SQLiteCpp, libssh2, cpr, zstd
-- [ ] Scripts/Tooling.bat / Tooling.ps1 + setup.py as canonical setup
-- [ ] uv as dependency manager for Python venv
+- [x] Scripts/Tooling.bat / Tooling.ps1 + setup.py as canonical setup
+- [x] uv as dependency manager for Python venv
 - [ ] PCH (pch.hpp) per-module, .hpp convention
-- [ ] Logging (spdlog) with levels and source metadata
-- [ ] scripts/ci_check.py – local CI (Debug + Release build verification)
-- [ ] Initialize mdBook in docs/ + SUMMARY.md with basic structure
-- [ ] Windows VERSIONINFO + application icon resource (.rc) for Debug/Release/Dist
-- [ ] Build flags for Debug / Release / Dist + optional internal Release diagnostics
+- [x] Logging (spdlog) with levels and source metadata
+- [x] scripts/ci_check.py – local CI (Debug + Release build verification)
+- [x] Initialize mdBook in docs/ + SUMMARY.md with basic structure
+- [x] Windows VERSIONINFO + application icon resource (.rc) for Debug/Release/Dist
+- [x] Build flags for Debug / Release / Dist + optional internal Release diagnostics
+- [x] RunWithTracy.bat + run_with_tracy.py for automatic Tracy startup on Windows
 
 **Libraries:** Premake5, spdlog, yaml-cpp, Tracy  
 ***
@@ -66,6 +67,7 @@ Building from scratch with proper module separation from the beginning.
 - [ ] Linux build: Premake5 gmake2, g++ / clang
 - [ ] Python tooling verification
 - [ ] Parity scripts/Tooling.bat vs Tooling.sh
+- [x] Windows local build matrix verified: msvc/gcc/clang x Debug/Release/Dist
 ***
 
 ### T04 – Core: Application, LayerStack, EventSystem (	`task/04-core`)

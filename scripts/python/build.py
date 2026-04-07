@@ -84,7 +84,9 @@ def run_make(args: argparse.Namespace) -> int:
                 missing.append((header, package))
 
         if missing:
-            print("[error] Missing Linux development headers required by GLFW (X11 backend).")
+            print(
+                "[error] Missing Linux development headers required by GLFW (X11 backend)."
+            )
             for header, package in missing:
                 print(f"        - {header}  (package: {package})")
             print("        Install prerequisites:")
@@ -143,9 +145,13 @@ def run_make(args: argparse.Namespace) -> int:
             f"[step] toolchain CC={env_override.get('CC')} CXX={env_override.get('CXX')}"
         )
 
+    on_vmware_shared_folder = False
     if os.name != "nt":
         root_path = str(repo_root()).replace("\\", "/")
-        if "/mnt/hgfs/" in root_path or root_path.endswith("/mnt/hgfs"):
+        on_vmware_shared_folder = "/mnt/hgfs/" in root_path or root_path.endswith(
+            "/mnt/hgfs"
+        )
+        if on_vmware_shared_folder:
             print(
                 "[warn] Repository is located on a VMware shared folder (/mnt/hgfs). "
                 "GNU make may report timestamps in the future and rebuilds can become unstable. "
@@ -153,6 +159,10 @@ def run_make(args: argparse.Namespace) -> int:
             )
 
     jobs = max(os.cpu_count() or 1, 1)
+    if on_vmware_shared_folder:
+        jobs = 1
+        if args.verbose:
+            print("[step] Using -j1 on /mnt/hgfs to avoid make timestamp/LTO instability.")
     command.insert(1, f"-j{jobs}")
 
     return run_command(

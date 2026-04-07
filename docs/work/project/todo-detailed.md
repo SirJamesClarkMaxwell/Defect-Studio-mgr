@@ -22,6 +22,7 @@ The user-facing entrypoints should be:
 - `GenerateProjects.bat` / `GenerateProjects.sh` – regenerate only
 - `Build.bat` / `Build.sh` – compile only
 - `Run.bat` / `Run.sh` – run only
+- `RunWithTracy.bat` – run app with Tracy profiler auto-start (Windows)
 - `BuildAndRun.bat` / `BuildAndRun.sh` – compile and run
 - `ExportPythonEnv.bat` / `ExportPythonEnv.sh` – freeze/export Python environment
 
@@ -39,6 +40,7 @@ Recommended canonical scripts under `scripts/`:
 - `scripts/generate_projects.py`
 - `scripts/build.py`
 - `scripts/run.py`
+- `scripts/run_with_tracy.py`
 - `scripts/build_and_run.py`
 - `scripts/export_python_env.py`
 - `scripts/doctor.py`
@@ -52,6 +54,7 @@ Recommended wrappers at repository root or `scripts/`:
 - `GenerateProjects.bat` / `GenerateProjects.sh`
 - `Build.bat` / `Build.sh`
 - `Run.bat` / `Run.sh`
+- `RunWithTracy.bat`
 - `BuildAndRun.bat` / `BuildAndRun.sh`
 - `ExportPythonEnv.bat` / `ExportPythonEnv.sh`
 
@@ -107,6 +110,15 @@ The script should always prefer:
 
 **Goal:** establish the bootstrap, build, and app-shell baseline for DefectsStudio on Windows first, without over-downloading future dependencies.
 
+### Status update (2026-04-07)
+
+- [x] Build matrix wrappers added for Windows and Linux.
+- [x] Matrix runner added with `--clean-between-runs` to reduce cross-compiler/config artifact collisions.
+- [x] mdBook bootstrap extended with a dedicated build-matrix page.
+- [x] Full Windows local CI matrix passed (`msvc`, `gcc`, `clang` x `Debug`, `Release`, `Dist`).
+- [x] Added `RunWithTracy.bat` + `run_with_tracy.py` for automatic Tracy startup on Windows.
+- [ ] Next focus: GUI subsystem decision and implementation for Windows app target (T01.3).
+
 ### T01.1 – Repository and directory baseline
 
 - [ ] Create and validate repository structure:
@@ -142,18 +154,18 @@ The script should always prefer:
 
 ### T01.2 – Premake workspace and build configurations
 
-- [ ] Create `premake5.lua` workspace for Visual Studio 2022.
-- [ ] Enable `C++23` and define `Debug`, `Release`, `Dist`
-- [ ] Enable mutlithread code compilation
+- [x] Create `premake5.lua` workspace for Visual Studio 2022.
+- [x] Enable `C++23` and define `Debug`, `Release`, `Dist`
+- [x] Enable mutlithread code compilation
 - [ ] Add optional internal diagnostics switch for Release-like builds.
 - [ ] Separate output folders by:
 - action/generator,
 - compiler/toolset,
 - architecture,
 - configuration.
-- [ ] Add central warning policy and runtime library policy.
-- [ ] Add per-project output naming conventions.
-- [ ] Ensure future Linux generator parity is possible without rewriting the workspace.
+- [x] Add central warning policy and runtime library policy.
+- [x] Add per-project output naming conventions.
+- [x] Ensure future Linux generator parity is possible without rewriting the workspace.
 
 ### T01.3 – Entry point and GUI application shell
 
@@ -161,8 +173,8 @@ The script should always prefer:
 - [ ] On Windows, use the proper GUI subsystem so the application does not spawn a startup console window.
 - [ ] Keep console-based tooling separate from the GUI application executable.
 - [ ] Decide whether Debug uses the same GUI subsystem or a separate debug launcher.
-- [ ] Add `VERSIONINFO` and `.rc` resource integration early.
-- [ ] Add application icon resources for Debug/Release/Dist.
+- [x] Add `VERSIONINFO` and `.rc` resource integration early.
+- [x] Add application icon resources for Debug/Release/Dist.
 
 ### T01.4 – Minimal runtime foundation
 
@@ -179,7 +191,7 @@ The script should always prefer:
 - git commit if available,
 - compiler/toolset,
 - capability snapshot.
-- [ ] Add a minimal `Application` / `AppShell` bootstrap compatible with the architecture.
+- [x] Add a minimal `Application` / `AppShell` bootstrap compatible with the architecture.
 
 ### T01.5 – Vendor and dependency management baseline
 
@@ -195,9 +207,9 @@ The script should always prefer:
 
 ### T01.6 – Setup orchestration
 
-- [ ] Implement `scripts/setup.py` as the canonical bootstrap entrypoint.
-- [ ] Make `Setup.bat` and `Setup.sh` thin wrappers around it.
-- [ ] Support the following phases in one script:
+- [x] Implement `scripts/setup.py` as the canonical bootstrap entrypoint.
+- [x] Make `Setup.bat` and `Setup.sh` thin wrappers around it.
+- [x] Support the following phases in one script:
 - repository update,
 - tool discovery,
 - optional tool install,
@@ -207,14 +219,14 @@ The script should always prefer:
 - build,
 - IDE open,
 - run.
-- [ ] Each phase should be callable independently through flags.
-- [ ] The script should explain what it is doing before changing the system.
+- [x] Each phase should be callable independently through flags.
+- [x] The script should explain what it is doing before changing the system.
 - [ ] Missing dependency handling should be interactive:
 - found,
 - not found but installable automatically,
 - not found and user must provide a path,
 - user skipped.
-- [ ] Support re-entry: rerunning setup on an already prepared machine should be safe.
+- [x] Support re-entry: rerunning setup on an already prepared machine should be safe.
 
 ### T01.7 – Tool discovery and installation policy
 
@@ -233,30 +245,30 @@ The script should always prefer:
 - use managed local installation,
 - provide custom path,
 - skip optional tool.
-- [ ] Persist discovered paths in a local machine-specific config file, for example `.local/toolchain.json`.
+- [x] Persist discovered paths in a local machine-specific config file, for example `.local/toolchain.json`.
 
 ### T01.8 – Python environment bootstrap
 
-- [ ] Use `uv` as the canonical Python environment manager.
-- [ ] Create repo-local `.venv/`.
-- [ ] Define Python dependencies in `pyproject.toml` with groups, instead of treating `requirements.txt` as the primary source of truth.
+- [x] Use `uv` as the canonical Python environment manager.
+- [x] Create repo-local `.venv/`.
+- [x] Define Python dependencies in `pyproject.toml` with groups, instead of treating `requirements.txt` as the primary source of truth.
 - [ ] Add at least these dependency groups:
 - `dev`
 - `scientific-core`
 - `scientific-extended`
 - `docs`
-- [ ] Setup should be able to install only selected groups.
+- [x] Setup should be able to install only selected groups.
 - [ ] Add a smoke test that imports required packages and reports versions.
 - [ ] Add runtime capability checks so the application can later report missing Python capabilities cleanly.
 
 ### T01.9 – Python environment export / freeze
 
-- [ ] Add `scripts/export_python_env.py`.
+- [x] Add `scripts/export_python_env.py`.
 - [ ] Its purpose is to:
 - refresh the lock state,
 - export a human-readable snapshot of currently installed Python packages,
 - optionally export group-specific snapshots.
-- [ ] Prefer `uv.lock` as the canonical lock artifact.
+- [x] Prefer `uv.lock` as the canonical lock artifact.
 - [ ] Optionally export `requirements.txt`-style snapshots for inspection, debugging, or interoperability.
 - [ ] Recommended outputs:
 - `uv.lock`
@@ -271,26 +283,26 @@ The script should always prefer:
 
 ### T01.10 – Project generation scripts
 
-- [ ] Add `scripts/generate_projects.py`.
+- [x] Add `scripts/generate_projects.py`.
 - [ ] It should support:
 - Visual Studio 2022,
 - future `gmake2`,
 - selected architecture,
 - selected compiler/toolset,
 - cleaning previous generated files if requested.
-- [ ] Add wrapper `GenerateProjects.bat` / `GenerateProjects.sh`.
-- [ ] Generation should be independent from environment bootstrap after the first successful setup.
+- [x] Add wrapper `GenerateProjects.bat` / `GenerateProjects.sh`.
+- [x] Generation should be independent from environment bootstrap after the first successful setup.
 
 ### T01.11 – Build scripts
 
-- [ ] Add `scripts/build.py`.
+- [x] Add `scripts/build.py`.
 - [ ] It should support:
 - config selection: `Debug`, `Release`, `Dist`,
 - compiler/toolset selection,
 - clean build,
 - rebuild,
 - selected target/project.
-- [ ] Add wrapper `Build.bat` / `Build.sh`.
+- [x] Add wrapper `Build.bat` / `Build.sh`.
 - [ ] Output should clearly identify:
 - generator,
 - compiler,
@@ -299,31 +311,32 @@ The script should always prefer:
 
 ### T01.12 – Run scripts
 
-- [ ] Add `scripts/run.py`.
-- [ ] It should run the already-built app without implicitly rebuilding unless requested.
-- [ ] Support runtime flags for:
+- [x] Add `scripts/run.py`.
+- [x] It should run the already-built app without implicitly rebuilding unless requested.
+- [x] Support runtime flags for:
 - debug/dev mode,
 - log level,
 - project path,
 - safe mode,
 - reset layout.
-- [ ] Add wrapper `Run.bat` / `Run.sh`.
+- [x] Add wrapper `Run.bat` / `Run.sh`.
+- [x] Add `RunWithTracy.bat` (Windows) to auto-launch profiler and then start the app.
 
 ### T01.13 – Build-and-run scripts
 
-- [ ] Add `scripts/build_and_run.py`.
+- [x] Add `scripts/build_and_run.py`.
 - [ ] It should:
 - optionally regenerate,
 - build selected config,
 - launch the executable.
-- [ ] Support explicit compiler selection from one entrypoint.
-- [ ] Add wrapper `BuildAndRun.bat` / `BuildAndRun.sh`.
+- [x] Support explicit compiler selection from one entrypoint.
+- [x] Add wrapper `BuildAndRun.bat` / `BuildAndRun.sh`.
 - [ ] This should become the fastest loop for daily development.
 
 ### T01.14 – Local CI / doctor tooling
 
-- [ ] Add `scripts/ci_check.py` for local verification.
-- [ ] Add `scripts/doctor.py` for machine diagnostics.
+- [x] Add `scripts/ci_check.py` for local verification.
+- [x] Add `scripts/doctor.py` for machine diagnostics.
 - [ ] `ci_check.py` should verify at minimum:
 - generation succeeds,
 - Debug builds,
@@ -334,16 +347,16 @@ The script should always prefer:
 
 ### T01.15 – Documentation bootstrap
 
-- [ ] Initialize `mdBook` in `docs/`.
-- [ ] Add minimal `SUMMARY.md`.
+- [x] Initialize `mdBook` in `docs/`.
+- [x] Add minimal `SUMMARY.md`.
 - [ ] Add documentation pages for:
 - getting started,
 - project layout,
 - tooling overview,
 - setup flow,
 - troubleshooting.
-- [ ] Add a script/flag to build the docs locally.
-- [ ] Add a script/flag to serve docs on localhost.
+- [x] Add a script/flag to build the docs locally.
+- [x] Add a script/flag to serve docs on localhost.
 
 ### T01.16 – App branding and shell polish baseline
 
@@ -438,15 +451,16 @@ These should be registered in the dependency policy, but do not need to be fully
 
 ### T03.1 – Generation parity
 
-- [ ] Add Linux generation through `premake5 gmake2`.
-- [ ] Support both `gcc` and `clang` builds.
-- [ ] Ensure output folder naming is consistent with Windows.
-- [ ] Keep platform-specific switches isolated in Premake, not scattered.
+- [x] Add Linux generation through `premake5 gmake2`.
+- [x] Support both `gcc` and `clang` builds.
+- [x] Ensure output folder naming is consistent with Windows.
+- [x] Keep platform-specific switches isolated in Premake, not scattered.
+- [x] Linux backend direction documented as X11-only for the current GLFW fork.
 
 ### T03.2 – Script parity
 
 - [ ] `Setup.sh` should mirror `Setup.bat` behavior as closely as practical.
-- [ ] `GenerateProjects.sh`, `Build.sh`, `Run.sh`, `BuildAndRun.sh`, `ExportPythonEnv.sh` should exist and map to the same canonical Python scripts.
+- [x] `GenerateProjects.sh`, `Build.sh`, `Run.sh`, `BuildAndRun.sh`, `ExportPythonEnv.sh` should exist and map to the same canonical Python scripts.
 - [ ] Flags and help text should stay aligned between platforms.
 - [ ] Platform-specific defaults may differ, but command names and semantics should not.
 
@@ -467,7 +481,7 @@ These should be registered in the dependency policy, but do not need to be fully
 
 ### T03.4 – Python parity
 
-- [ ] The same `pyproject.toml` and `uv.lock` should drive both Windows and Linux.
+- [x] The same `pyproject.toml` and `uv.lock` should drive both Windows and Linux.
 - [ ] The setup flow should install the same dependency groups where supported.
 - [ ] Capability checks should explicitly report platform-specific missing packages or unsupported paths.
 
@@ -481,12 +495,12 @@ These should be registered in the dependency policy, but do not need to be fully
 ### T03.6 – Validation matrix
 
 - [ ] Validate at least these flows:
-- Windows + VS2022 + MSVC + Debug
-- Windows + VS2022 + MSVC + Release
-- Windows + gmake + g++ + Debug
-- Windows + gmake + g++ + Release
-- Windows + gmake + clang++ + Debug
-- Windows + gmake + clang++ + Release
+- [x] Windows + VS2022 + MSVC + Debug
+- [x] Windows + VS2022 + MSVC + Release
+- [x] Windows + gmake + g++ + Debug
+- [x] Windows + gmake + g++ + Release
+- [x] Windows + gmake + clang++ + Debug
+- [x] Windows + gmake + clang++ + Release
 - Linux + gmake2 + gcc++ + Debug
 - Linux + gmake2 + gcc++ + Debug
 - Linux + gmake2 + clang++ + Debug

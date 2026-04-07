@@ -11,5 +11,5 @@ if exist "%REPO_ROOT%\.venv\Scripts\python.exe" (
 	set "PYTHON=python"
 )
 
-"%PYTHON%" "%SCRIPTS_DIR%\python\test_build_matrix.py" --clean-between-runs %*
+"%PYTHON%" "%SCRIPTS_DIR%\python\run_with_tracy.py" %*
 exit /b %ERRORLEVEL%

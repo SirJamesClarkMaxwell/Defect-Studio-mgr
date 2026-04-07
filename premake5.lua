@@ -16,6 +16,11 @@ outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 local windowsIcon = path.translate(path.getabsolute("assets/icon.png"), "\\")
 local linuxIcon = "../../../assets/icon.png"
 
+include "Vendor/GLFW"
+include "Vendor/GLAD"
+include "Vendor/ImGui"
+include "Vendor/Tracy"
+
 project "DefectStudio"
     location "build/generated/%{_ACTION}"
     kind "ConsoleApp"
@@ -34,19 +39,47 @@ project "DefectStudio"
     }
 
     includedirs {
-        "src"
+        "src",
+        "Vendor/spdlog/include",
+        "Vendor/Tracy/public",
+        "Vendor/GLFW/include",
+        "Vendor/GLAD/generated/include",
+        "Vendor/ImGui",
+        "Vendor/ImGui/backends"
     }
 
+    defines {
+        "GLFW_INCLUDE_NONE",
+        "IMGUI_IMPL_OPENGL_LOADER_GLAD"
+    }
+
+    links {
+        "GLFW",
+        "GLAD",
+        "ImGui"
+    }
+
+    filter "system:windows"
+        links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }
+
     filter { "system:windows", "action:vs2022" }
+        kind "WindowedApp"
+        entrypoint "mainCRTStartup"
         systemversion "latest"
-        defines { "DS_PLATFORM_WINDOWS" }
+        buildoptions { "/utf-8" }
+        defines {
+            "DS_PLATFORM_WINDOWS",
+            "TRACY_ENABLE"
+        }
         files { "assets/icon.rc" }
+        links { "Tracy" }
         pchheader "Core/dspch.hpp"
         pchsource "src/Core/dspch.cpp"
 
     filter "system:linux"
         pic "On"
         defines { "DS_PLATFORM_LINUX" }
+        links { "GL", "dl", "pthread", "X11", "Xrandr", "Xi", "Xxf86vm", "Xinerama", "Xcursor" }
         -- Disable -MD -MP for gmake2 on Linux to avoid absolute path issues in .d files
         filter { "system:linux", "action:gmake2" }
             buildoptions { "-fPIC" }  -- Replaces -MD -MP

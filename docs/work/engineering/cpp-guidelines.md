@@ -238,6 +238,17 @@ Headers should stay light, stable, and explicit. Dependencies must be intentiona
 - Each file should include what it uses.
 - Heavy dependencies should not be placed in headers without a real reason.
 - Implementation belongs in `.cpp`, not in `.hpp`, unless there is a technical reason.
+- Include order in `.cpp` files should normally be:
+    1. standard library headers
+    2. external headers in `<...>`
+    3. project headers in `"..."`
+- If the file uses a precompiled header, keep the PCH include first when required by the build system, then apply the standard order for the remaining includes.
+
+### Namespace formatting
+
+- Do not use anonymous namespaces for state that needs a stable project-level name.
+- If a helper is only needed inside one translation unit, prefer a small file-local helper function over introducing a `Detail` namespace.
+- When code is inside a namespace block, indent the contents with tabs to match the repository convention.
 
 ### PCH rules
 

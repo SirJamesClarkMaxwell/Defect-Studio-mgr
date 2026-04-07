@@ -18,7 +18,21 @@ def run(args: argparse.Namespace) -> int:
     print("== Doctor ==")
     print(f"Platform: {platform.system()} {platform.release()}")
 
-    tools = detect_many(["git", "python", "uv", "premake5", "mdbook", "tracy", "msbuild", "make", "gcc", "clang", "code"])
+    tools = detect_many(
+        [
+            "git",
+            "python",
+            "uv",
+            "premake5",
+            "mdbook",
+            "tracy",
+            "msbuild",
+            "make",
+            "gcc",
+            "clang",
+            "code",
+        ]
+    )
     for name, path in tools.items():
         status = path if path else "MISSING"
         print(f"- {name:8} {status}")

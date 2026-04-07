@@ -48,6 +48,10 @@ For the current Premake pipeline, Linux is configured as X11-only. Wayland packa
 
 If you prefer a broader desktop-dev bundle, `xorg-dev` also covers many of these headers, but the explicit package list above is the minimal maintainable option.
 
+The vendored Tracy profiler binary, when needed on Windows, lives under:
+
+- `Vendor/Binaries/Tracy/Windows/tracy-profiler.exe`
+
 ## VMware Shared Folders
 
 If the repository lives under `/mnt/hgfs/...`, GNU make can emit the warning about files having modification times in the future.

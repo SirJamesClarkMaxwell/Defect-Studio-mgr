@@ -24,7 +24,15 @@ If `--log-file` is passed without a path, the default file is `logs/DefectStudio
 
 The Tracy profiler binary is vendored under:
 
-- `Vendor/Binaries/Windows/Tracy/tracy-profiler.exe`
+- `Vendor/Binaries/Tracy/Windows/tracy-profiler.exe`
+
+Windows application builds also compile the Tracy client source from `Vendor/Tracy/public/TracyClient.cpp`, so the profiler can connect to live CPU zones and frame markers.
+
+To start the profiler and the app together on Windows, use:
+
+- `scripts\\Windows\\RunWithTracy.bat --config Debug`
+
+The script launches `tracy-profiler.exe` first and then starts the app with the same runtime flags accepted by `scripts\\Windows\\Run.bat` (for example: `--log-level`, `--log-file`, `--project`, `--safe-mode`, `--reset-layout`).
 
 The vendored release archive also includes helper tools such as:
 
@@ -35,9 +43,10 @@ The vendored release archive also includes helper tools such as:
 - `tracy-update.exe`
 
 The current repository configuration only vendors the official Windows x64 Tracy release binary. Tracy is not part of the Linux build pipeline yet.
+Linux builds keep Tracy headers available as no-op declarations, but the client is only enabled on Windows for now.
 
 ## Tool Discovery
 
 The bootstrap scripts now discover Tracy through the same vendored-tool path used by Premake and mdBook.
 
-If the profiler is missing, run the Tracy release download step again and keep the extracted files under `Vendor/Binaries/Windows/Tracy`.
+If the profiler is missing, run the Tracy release download step again and keep the extracted files under `Vendor/Binaries/Tracy/Windows`.

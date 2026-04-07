@@ -10,6 +10,7 @@ bin-int/
 logs/
 docs/book
 tmp/
+imgui.ini
 
 # IDE and editor caches
 .vs/
