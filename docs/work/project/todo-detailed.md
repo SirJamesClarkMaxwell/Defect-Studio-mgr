@@ -551,10 +551,11 @@ These should be registered in the dependency policy, but do not need to be fully
 
 ### T04.2 – Smart pointer wrappers and helpers
 
-- [ ] Implement `Ref<T>`, `WeakRef<T>`, `CreateRef(...)` wrappers in one small core header.
-- [ ] Keep wrappers lightweight (alias/helper layer only, no custom allocator policy yet).
-- [ ] Replace direct `std::shared_ptr` usage in newly touched core files with wrappers.
-- [ ] Add compile-time smoke checks for wrapper usage in Core/App targets.
+- [x] Implement `Ref<T>`, `WeakRef<T>`, `CreateRef(...)` wrappers in one small core header.
+- [x] Add `Unique<T>` and `CreateUnique(...)` for consistent ownership API.
+- [x] Keep wrappers lightweight (alias/helper layer only, no custom allocator policy yet).
+- [x] Replace direct `std::shared_ptr` usage in newly touched core files with wrappers.
+- [x] Add compile-time smoke checks for wrapper usage in Core/App targets.
 
 ### T04.3 – Application lifecycle skeleton
 
@@ -568,35 +569,35 @@ These should be registered in the dependency policy, but do not need to be fully
 
 ### T04.4 – Layer and LayerStack baseline
 
-- [ ] Implement `Layer` base interface:
+- [x] Implement `Layer` base interface:
 - `OnAttach`
 - `OnDetach`
 - `OnUpdate`
 - `OnEvent`
 - `OnImGuiRender`
-- [ ] Implement `LayerStack` with:
+- [x] Implement `LayerStack` with:
 - push layer
 - pop layer
 - push overlay
 - pop overlay
-- [ ] Guarantee reverse-order event propagation through stack.
-- [ ] Add basic lifetime tests (attach/detach ordering).
+- [x] Guarantee reverse-order event propagation through stack.
+- [x] Add basic lifetime tests (attach/detach ordering).
 
 ### T04.5 – Event system and dispatch flow
 
-- [ ] Implement event type/category model for minimum set:
+- [x] Implement event type/category model for minimum set:
 - window
 - keyboard
 - mouse
 - touchpad
-- [ ] Implement dispatcher that supports handled/not-handled propagation.
+- [x] Implement dispatcher that supports handled/not-handled propagation.
 - [ ] Ensure Application routes OS events into LayerStack in one canonical path.
 - [ ] Add debug logging flag for event tracing (off by default, enabled in Debug/internal).
 
 ### T04.6 – EventBus for decoupled panel communication
 
-- [ ] Add publish-subscribe `EventBus` abstraction (EnTT-backed if available).
-- [ ] Support:
+- [x] Add publish-subscribe `EventBus` abstraction (lightweight local implementation for now).
+- [x] Support:
 - subscribe
 - unsubscribe
 - publish
@@ -663,9 +664,9 @@ These should be registered in the dependency policy, but do not need to be fully
 ### T04.13 – Test strategy for T04
 
 - [ ] Unit tests:
-- LayerStack ordering
-- event dispatch propagation rules
-- EventBus subscribe/unsubscribe lifecycle
+- [x] LayerStack ordering
+- [x] event dispatch propagation rules
+- [x] EventBus subscribe/unsubscribe lifecycle
 - structured error payload mapping
 - [ ] Integration smoke tests:
 - app boot

@@ -201,7 +201,7 @@ namespace DefectStudio
 
 	bool Application::createMainWindow()
 	{
-		m_Window = std::make_unique<Window>();
+		m_Window = CreateUnique<Window>();
 		if (!m_Window->Create(1280, 720, "DefectStudio"))
 		{
 			m_Window.reset();

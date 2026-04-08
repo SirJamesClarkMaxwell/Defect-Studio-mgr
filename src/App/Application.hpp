@@ -1,10 +1,10 @@
 #pragma once
 
 #include <filesystem>
-#include <memory>
 
 #include "App/Window.hpp"
 #include "Core/Logger.hpp"
+#include "Core/Memory.hpp"
 
 namespace DefectStudio
 {
@@ -47,7 +47,7 @@ namespace DefectStudio
 		int m_Argc = 0;
 		char **m_Argv = nullptr;
 		ApplicationSpecification m_Specification;
-		std::unique_ptr<Window> m_Window;
+		Unique<Window> m_Window;
 		bool m_GlfwInitialized = false;
 		bool m_ImGuiInitialized = false;
 		bool m_GladInitialized = false;

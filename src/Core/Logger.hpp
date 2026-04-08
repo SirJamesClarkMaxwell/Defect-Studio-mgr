@@ -1,10 +1,11 @@
 #pragma once
 
 #include <filesystem>
-#include <memory>
 #include <string>
 
 #include <spdlog/spdlog.h>
+
+#include "Core/Memory.hpp"
 
 namespace DefectStudio
 {
@@ -32,10 +33,10 @@ namespace DefectStudio
 	public:
 		static void Initialize(const LoggerOptions &options);
 		static void Shutdown();
-		static std::shared_ptr<spdlog::logger> &Get();
+		static Ref<spdlog::logger> &Get();
 
 	private:
-		static std::shared_ptr<spdlog::logger> &Access();
+		static Ref<spdlog::logger> &Access();
 	};
 } // namespace DefectStudio
 

@@ -74,12 +74,13 @@ Building from scratch with proper module separation from the beginning.
 - [x] Window abstraction extracted (`Window` wrapper) and platform window hooks split under `src/Core/Platform/`
 - [x] Baseline assert layer added (`DS_ASSERT` in `Core/Assert.hpp`)
 - [x] Logging bootstrap aligned with project-owned log level abstraction (`Core::LogLevel` mapped to spdlog)
-- [ ] `Ref<>` / `WeakRef<>` wrappers on shared_ptr / weak_ptr + CreateRef helper
+- [x] `Ref<>` / `WeakRef<>` wrappers on shared_ptr / weak_ptr + CreateRef helper
+- [x] `Unique<>` wrapper on `std::unique_ptr` + `CreateUnique` helper
 - [ ] Application singleton – main loop, OnUpdate/OnEvent/OnRender
-- [ ] LayerStack – push/pop/overlay layers
+- [x] LayerStack – push/pop/overlay layers
 - [ ] CoreLayer, ImGuiLayer, EditorLayer – layer hierarchy
-- [ ] EventSystem – keyboard, mouse, window events (own event bus)
-- [ ] EventBus (publish-subscribe) for communication between panels without mutual dependencies
+- [x] EventSystem – keyboard, mouse, window events (own event bus)
+- [x] EventBus (publish-subscribe) for communication between panels without mutual dependencies
 - [ ] ProjectWorkspace remains the runtime source of truth for project/domain state; EditorContext only references it
 - [ ] ConfigManager – owner of all configuration files (default.yaml, ui_settings.yaml)
 - [ ] UI style presets (Hazel-like) + user settings persistence

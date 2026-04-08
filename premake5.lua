@@ -128,7 +128,11 @@ project "DefectStudioTests"
         "tests/**.cpp",
         "Vendor/GoogleTest/googletest/src/gtest_main.cc",
         "src/Core/Logger.hpp",
-        "src/Core/Logger.cpp"
+        "src/Core/Logger.cpp",
+        "src/Core/Layer.hpp",
+        "src/Core/Layer.cpp",
+        "src/Core/LayerStack.hpp",
+        "src/Core/LayerStack.cpp"
     }
 
     includedirs {
