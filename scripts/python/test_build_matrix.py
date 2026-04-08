@@ -43,8 +43,15 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def clean_build_artifacts(config: str, dry_run: bool, verbose: bool) -> None:
-    build_root = repo_root() / "build"
-    targets = [build_root / "bin", build_root / "bin-int"]
+    root = repo_root()
+    targets = [
+        root / "build" / "bin",
+        root / "build" / "bin-int",
+        root / "Vendor" / "build" / "bin",
+        root / "Vendor" / "build" / "bin-int",
+        root / "Vendor" / "GLFW" / "bin",
+        root / "Vendor" / "GLFW" / "bin-int",
+    ]
     prefix = f"{config}-"
 
     for base in targets:
