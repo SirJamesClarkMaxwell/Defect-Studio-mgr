@@ -10,8 +10,7 @@ namespace DefectStudio
 {
 	LayerStack::~LayerStack()
 	{
-		for (Unique<Layer> &layer : m_Layers)
-			layer->OnDetach();
+		Clear();
 	}
 
 	void LayerStack::PushLayer(Unique<Layer> layer)
@@ -52,6 +51,15 @@ namespace DefectStudio
 
 		(*it)->OnDetach();
 		m_Layers.erase(it);
+	}
+
+	void LayerStack::Clear()
+	{
+		for (auto it = m_Layers.rbegin(); it != m_Layers.rend(); ++it)
+			(*it)->OnDetach();
+
+		m_Layers.clear();
+		m_LayerInsertIndex = 0;
 	}
 
 	LayerStack::Iterator LayerStack::begin()

@@ -136,7 +136,23 @@ project "DefectStudioTests"
         "src/Core/LayerStack.hpp",
         "src/Core/LayerStack.cpp",
         "src/Core/Input.hpp",
-        "src/Core/Input.cpp"
+        "src/Core/Input.cpp",
+        "src/Core/CoreLayer.hpp",
+        "src/Core/CoreLayer.cpp",
+        "src/Debug/DebugLayer.hpp",
+        "src/Debug/DebugLayer.cpp",
+        "src/Domain/DomainLayer.hpp",
+        "src/Domain/DomainLayer.cpp",
+        "src/IO/IOLayer.hpp",
+        "src/IO/IOLayer.cpp",
+        "src/ScientificRuntime/ScientificRuntimeLayer.hpp",
+        "src/ScientificRuntime/ScientificRuntimeLayer.cpp",
+        "src/Storage/StorageLayer.hpp",
+        "src/Storage/StorageLayer.cpp",
+        "src/Presentation/EditorLayer.hpp",
+        "src/Presentation/EditorLayer.cpp",
+        "src/Presentation/ImGuiLayer.hpp",
+        "src/Presentation/ImGuiLayer.cpp"
     }
 
     includedirs {

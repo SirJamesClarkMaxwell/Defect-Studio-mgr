@@ -42,6 +42,7 @@ namespace DefectStudio
 		void initializeLogger() const;
 		void shutdownLogger() const;
 		void logStartupSpecification() const;
+		void setupDefaultLayers();
 		bool initializeGlfw();
 		bool createMainWindow();
 		bool initializeGraphics();

@@ -17,7 +17,15 @@
 #include "App/Application.hpp"
 #include "Core/Assert.hpp"
 #include "Core/Input.hpp"
+#include "Core/CoreLayer.hpp"
 #include "Core/Logger.hpp"
+#include "Debug/DebugLayer.hpp"
+#include "Domain/DomainLayer.hpp"
+#include "IO/IOLayer.hpp"
+#include "Presentation/EditorLayer.hpp"
+#include "Presentation/ImGuiLayer.hpp"
+#include "ScientificRuntime/ScientificRuntimeLayer.hpp"
+#include "Storage/StorageLayer.hpp"
 
 namespace DefectStudio
 {
@@ -169,6 +177,8 @@ namespace DefectStudio
 			return false;
 		}
 
+		setupDefaultLayers();
+
 		m_Running = true;
 		return true;
 	}
@@ -185,11 +195,24 @@ namespace DefectStudio
 
 	void Application::Shutdown()
 	{
+		m_LayerStack.Clear();
 		shutdownImGui();
 		shutdownWindow();
 		shutdownGlfw();
 		shutdownLogger();
 		m_Running = false;
+	}
+
+	void Application::setupDefaultLayers()
+	{
+		m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
+		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+		m_LayerStack.PushLayer(CreateUnique<IOLayer>());
+		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
+		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
+		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
+		m_LayerStack.PushOverlay(CreateUnique<ImGuiLayer>());
 	}
 
 	void Application::initializeLogger() const

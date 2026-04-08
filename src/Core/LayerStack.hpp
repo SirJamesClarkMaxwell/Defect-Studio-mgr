@@ -22,6 +22,7 @@ namespace DefectStudio
 		void PushOverlay(Unique<Layer> overlay);
 		void PopLayer(Layer &layer);
 		void PopOverlay(Layer &overlay);
+		void Clear();
 
 		Iterator begin();
 		Iterator end();
