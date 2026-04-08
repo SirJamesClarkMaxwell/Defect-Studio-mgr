@@ -70,6 +70,10 @@ Building from scratch with proper module separation from the beginning.
 ***
 
 ### T04 – Core: Application, LayerStack, EventSystem (	`task/04-core`)
+- [x] Runtime shell foundation: `Application` lifecycle split (`Create`/`Run`/`Shutdown`) with deterministic frame loop helpers
+- [x] Window abstraction extracted (`Window` wrapper) and platform window hooks split under `src/Core/Platform/`
+- [x] Baseline assert layer added (`DS_ASSERT` in `Core/Assert.hpp`)
+- [x] Logging bootstrap aligned with project-owned log level abstraction (`Core::LogLevel` mapped to spdlog)
 - [ ] `Ref<>` / `WeakRef<>` wrappers on shared_ptr / weak_ptr + CreateRef helper
 - [ ] Application singleton – main loop, OnUpdate/OnEvent/OnRender
 - [ ] LayerStack – push/pop/overlay layers

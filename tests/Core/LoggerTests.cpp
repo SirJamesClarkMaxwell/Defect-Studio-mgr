@@ -5,7 +5,7 @@
 TEST(LoggerTests, InitializesAndReturnsLogger)
 {
 	DefectStudio::LoggerOptions options;
-	options.level = spdlog::level::debug;
+	options.level = DefectStudio::LogLevel::Debug;
 
 	DefectStudio::Logger::Initialize(options);
 

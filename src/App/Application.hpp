@@ -1,24 +1,56 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 
-#include <spdlog/common.h>
+#include "App/Window.hpp"
+#include "Core/Logger.hpp"
 
 namespace DefectStudio
 {
-struct ApplicationOptions
-{
-	spdlog::level::level_enum logLevel = spdlog::level::info;
-	bool logToFile = false;
-	std::filesystem::path logFilePath;
-	std::filesystem::path projectPath;
-	bool safeMode = false;
-	bool resetLayout = false;
-};
+	struct ApplicationSpecification
+	{
+		LogLevel logLevel = LogLevel::Info;
+		bool logToFile = true;
+		std::filesystem::path logFilePath;
+		bool resetLayout = false;
+	};
 
-class Application
-{
+	class Application
+	{
 	public:
-	int Run(const ApplicationOptions &options);
-};
+		Application(int argc, char **argv);
+		~Application();
+		Application(const Application &) = delete;
+		Application &operator=(const Application &) = delete;
+		Application(Application &&) = delete;
+		Application &operator=(Application &&) = delete;
+
+		bool Create(const ApplicationSpecification &specification);
+		int Run();
+		void Shutdown();
+
+	private:
+		void initializeLogger() const;
+		void shutdownLogger() const;
+		void logStartupSpecification() const;
+		bool initializeGlfw();
+		bool createMainWindow();
+		bool initializeGraphics();
+		bool initializeImGui();
+		void mainLoop();
+		void shutdownImGui();
+		void shutdownWindow();
+		void shutdownGlfw();
+
+	private:
+		int m_Argc = 0;
+		char **m_Argv = nullptr;
+		ApplicationSpecification m_Specification;
+		std::unique_ptr<Window> m_Window;
+		bool m_GlfwInitialized = false;
+		bool m_ImGuiInitialized = false;
+		bool m_GladInitialized = false;
+		bool m_Running = false;
+	};
 } // namespace DefectStudio

@@ -8,59 +8,101 @@
 
 namespace DefectStudio
 {
-std::shared_ptr<spdlog::logger> &LoggerStorage()
-{
-	static std::shared_ptr<spdlog::logger> s_Logger;
-	return s_Logger;
-}
-
-std::shared_ptr<spdlog::logger> &Logger::Access()
-{
-	if (LoggerStorage() == nullptr)
+	spdlog::level::level_enum ToSpdlogLevel(LogLevel level)
 	{
-		LoggerOptions defaultOptions;
-		Initialize(defaultOptions);
+		switch (level)
+		{
+			case LogLevel::Trace:
+				return spdlog::level::trace;
+			case LogLevel::Debug:
+				return spdlog::level::debug;
+			case LogLevel::Info:
+				return spdlog::level::info;
+			case LogLevel::Warn:
+				return spdlog::level::warn;
+			case LogLevel::Error:
+				return spdlog::level::err;
+			case LogLevel::Critical:
+				return spdlog::level::critical;
+		}
+
+		return spdlog::level::info;
 	}
 
-	return LoggerStorage();
-}
-
-void Logger::Initialize(const LoggerOptions &options)
-{
-	std::vector<spdlog::sink_ptr> sinks;
-	sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
-
-	if (options.logToFile)
+	const char *ToString(LogLevel level)
 	{
-		std::filesystem::path logFilePath = options.logFilePath;
-		if (logFilePath.empty())
+		switch (level)
 		{
-			logFilePath = std::filesystem::path("logs") / "DefectStudio.log";
+			case LogLevel::Trace:
+				return "trace";
+			case LogLevel::Debug:
+				return "debug";
+			case LogLevel::Info:
+				return "info";
+			case LogLevel::Warn:
+				return "warn";
+			case LogLevel::Error:
+				return "error";
+			case LogLevel::Critical:
+				return "critical";
 		}
-		if (!logFilePath.parent_path().empty())
-		{
-			std::filesystem::create_directories(logFilePath.parent_path());
-		}
-		sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath.string(), true));
+
+		return "info";
 	}
 
-	LoggerStorage() = std::make_shared<spdlog::logger>("defectstudio", sinks.begin(), sinks.end());
-	spdlog::set_default_logger(LoggerStorage());
-	spdlog::set_pattern("[%H:%M:%S] [%^%l%$] %v");
-	spdlog::set_level(options.level);
-	spdlog::flush_on(spdlog::level::warn);
-	LoggerStorage()->set_level(options.level);
-	LoggerStorage()->flush_on(spdlog::level::warn);
-}
+	std::shared_ptr<spdlog::logger> &LoggerStorage()
+	{
+		static std::shared_ptr<spdlog::logger> s_Logger;
+		return s_Logger;
+	}
 
-void Logger::Shutdown()
-{
-	spdlog::shutdown();
-	LoggerStorage().reset();
-}
+	std::shared_ptr<spdlog::logger> &Logger::Access()
+	{
+		if (LoggerStorage() == nullptr)
+		{
+			LoggerOptions defaultOptions;
+			Initialize(defaultOptions);
+		}
 
-std::shared_ptr<spdlog::logger> &Logger::Get()
-{
-	return Access();
-}
+		return LoggerStorage();
+	}
+
+	void Logger::Initialize(const LoggerOptions &options)
+	{
+		const spdlog::level::level_enum logLevel = ToSpdlogLevel(options.level);
+
+		std::vector<spdlog::sink_ptr> sinks;
+		sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+
+		if (options.logToFile)
+		{
+			std::filesystem::path logFilePath = options.logFilePath;
+			if (logFilePath.empty())
+				logFilePath = std::filesystem::path("logs") / "DefectStudio.log";
+
+			if (!logFilePath.parent_path().empty())
+				std::filesystem::create_directories(logFilePath.parent_path());
+
+			sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath.string(), true));
+		}
+
+		LoggerStorage() = std::make_shared<spdlog::logger>("defectstudio", sinks.begin(), sinks.end());
+		spdlog::set_default_logger(LoggerStorage());
+		spdlog::set_pattern("[%H:%M:%S] [%^%l%$] %v");
+		spdlog::set_level(logLevel);
+		spdlog::flush_on(spdlog::level::warn);
+		LoggerStorage()->set_level(logLevel);
+		LoggerStorage()->flush_on(spdlog::level::warn);
+	}
+
+	void Logger::Shutdown()
+	{
+		spdlog::shutdown();
+		LoggerStorage().reset();
+	}
+
+	std::shared_ptr<spdlog::logger> &Logger::Get()
+	{
+		return Access();
+	}
 } // namespace DefectStudio

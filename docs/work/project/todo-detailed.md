@@ -1,6 +1,6 @@
-# TODO Detailed – T01 / T03 Expansion
+# TODO Detailed – T01 / T03 / T04 Expansion
 
-This document expands and reorganizes **T01** and **T03** so they are immediately actionable and consistent with the current DefectsStudio direction: a **single desktop executable**, a **modular domain monolith**, and Python used as a **Scientific Runtime** rather than as end-user scripting in MVP.
+This document expands and reorganizes **T01**, **T03**, and now **T04** so they are immediately actionable and consistent with the current DefectsStudio direction: a **single desktop executable**, a **modular domain monolith**, and Python used as a **Scientific Runtime** rather than as end-user scripting in MVP.
 
 ---
 
@@ -365,7 +365,7 @@ The script should always prefer:
 - source `.svg` or high-resolution master asset,
 - PNG exports for docs and future packaging.
 - [ ] Add a **dark title-bar / window chrome** policy.
-- [ ] On Windows, prefer native dark title-bar integration if available.
+- [x] On Windows, prefer native dark title-bar integration if available.
 - [ ] Add a startup banner/splash asset that is visually consistent with the final app identity.
 - [ ] Keep this phase functional, not overdesigned: one good branded baseline is enough.
 
@@ -516,6 +516,196 @@ These should be registered in the dependency policy, but do not need to be fully
 - [ ] `Run.sh` launches the app.
 - [ ] `BuildAndRun.sh` supports daily development on Linux.
 - [ ] `ExportPythonEnv.sh` produces the same lock/export artifacts as on Windows.
+
+---
+
+## Revised T04 – Core: Application, LayerStack, EventSystem (`task/04-core`)
+
+**Goal:** deliver a stable editor core loop with deterministic layer/event flow, explicit runtime ownership boundaries, and baseline diagnostics suitable for day-to-day development.
+
+### T04 status seed (2026-04-08)
+
+- [x] Task selected as the next implementation focus based on `TODO.md` priorities (P2).
+- [x] `Application` lifecycle shell refactored to explicit `Create`/`Run`/`Shutdown` flow with smaller per-frame helpers.
+- [x] Window ownership extracted to `App::Window` and platform-specific hooks moved under `src/Core/Platform/`.
+- [x] Baseline assertion layer added (`Core/Assert.hpp`, `DS_ASSERT`) for runtime guardrails.
+- [x] Logger bootstrap aligned with project-level `LogLevel` abstraction and startup/shutdown phase logging in `Application`.
+- [x] Linux platform window hook scaffold added (stub), matching Windows split and keeping cross-platform structure ready.
+- [ ] Branch scope should remain focused on runtime core only; no renderer-feature creep.
+
+### T04.1 – Core contracts and folder boundaries
+
+- [ ] Define and document minimal contracts first:
+- `Application`
+- `Layer`
+- `LayerStack`
+- `Event` and `EventDispatcher`
+- `EventBus`
+- `EditorContext` (reference-only)
+- `ProjectWorkspace` (runtime source of truth)
+- [ ] Verify source placement is aligned with modular monolith boundaries:
+- `src/Core/`
+- `src/App/`
+- `src/Debug/`
+- [ ] Add one architecture note in docs that states ownership rules explicitly.
+
+### T04.2 – Smart pointer wrappers and helpers
+
+- [ ] Implement `Ref<T>`, `WeakRef<T>`, `CreateRef(...)` wrappers in one small core header.
+- [ ] Keep wrappers lightweight (alias/helper layer only, no custom allocator policy yet).
+- [ ] Replace direct `std::shared_ptr` usage in newly touched core files with wrappers.
+- [ ] Add compile-time smoke checks for wrapper usage in Core/App targets.
+
+### T04.3 – Application lifecycle skeleton
+
+- [ ] Implement Application singleton lifecycle:
+- initialize
+- run main loop
+- shutdown
+- [ ] Add `OnUpdate`, `OnEvent`, `OnRender` phases with deterministic call order.
+- [ ] Keep loop timing simple first (frame delta + fixed hook points, no complex scheduler).
+- [ ] Add explicit startup/shutdown logging (phase-by-phase).
+
+### T04.4 – Layer and LayerStack baseline
+
+- [ ] Implement `Layer` base interface:
+- `OnAttach`
+- `OnDetach`
+- `OnUpdate`
+- `OnEvent`
+- `OnImGuiRender`
+- [ ] Implement `LayerStack` with:
+- push layer
+- pop layer
+- push overlay
+- pop overlay
+- [ ] Guarantee reverse-order event propagation through stack.
+- [ ] Add basic lifetime tests (attach/detach ordering).
+
+### T04.5 – Event system and dispatch flow
+
+- [ ] Implement event type/category model for minimum set:
+- window
+- keyboard
+- mouse
+- touchpad
+- [ ] Implement dispatcher that supports handled/not-handled propagation.
+- [ ] Ensure Application routes OS events into LayerStack in one canonical path.
+- [ ] Add debug logging flag for event tracing (off by default, enabled in Debug/internal).
+
+### T04.6 – EventBus for decoupled panel communication
+
+- [ ] Add publish-subscribe `EventBus` abstraction (EnTT-backed if available).
+- [ ] Support:
+- subscribe
+- unsubscribe
+- publish
+- [ ] Keep EventBus for cross-panel/module communication, not for low-level OS input dispatch.
+- [ ] Add one small integration example proving panel decoupling.
+
+### T04.7 – Runtime ownership: ProjectWorkspace and EditorContext
+
+- [ ] Implement `ProjectWorkspace` as mutable runtime owner of project/domain state.
+- [ ] Implement `EditorContext` as a lightweight reference facade (no duplicated ownership).
+- [ ] Add guardrails to prevent accidental state ownership drift into UI layers.
+- [ ] Document allowed mutation path (main-thread commit rule).
+
+### T04.8 – ConfigManager baseline
+
+- [ ] Implement `ConfigManager` as the single owner of configuration file IO.
+- [ ] Start with:
+- `default.yaml`
+- `ui_settings.yaml`
+- [ ] Add schema/version marker for forward migrations.
+- [ ] Ensure load failure path returns structured error and safe fallback defaults.
+
+### T04.9 – JobSystem and progress reporting foundation
+
+- [ ] Add minimal thread-pool JobSystem with:
+- queued jobs
+- priority tag (basic)
+- cooperative cancellation token
+- [ ] Implement `ProgressTracker` registration/report API for long tasks.
+- [ ] Enforce no direct UI mutation from worker threads.
+- [ ] Add one demo job visible in diagnostics UI.
+
+### T04.10 – CapabilityRegistry and capability gates
+
+- [ ] Implement `CapabilityRegistry` / `CapabilityService` baseline for:
+- build-time capabilities
+- runtime detected capabilities
+- policy/access flags
+- [ ] Expose read API for UI and diagnostics.
+- [ ] Connect capability snapshot to startup diagnostics banner/log output.
+
+### T04.11 – Debug and error/notification policies
+
+- [ ] Add `DebugLayer` skeleton for developer diagnostics (Debug + optional internal Release).
+- [ ] Implement structured error model:
+- category
+- code
+- technical context
+- user-facing message
+- [ ] Implement notification channels:
+- `NotificationCenter` (live)
+- `NotificationHistory` (persistent session log)
+- [ ] Apply policy split:
+- blocking popup for pre-execution validation failures
+- non-blocking notifications for runtime/execution failures
+
+### T04.12 – Operational diagnostics in normal UI
+
+- [ ] Add baseline log panel.
+- [ ] Add job/task monitor panel.
+- [ ] Add thread-affinity assertions on critical paths (e.g. `ASSERT_MAIN_THREAD`).
+- [ ] Ensure diagnostics are informative but low-noise in normal workflow.
+
+### T04.13 – Test strategy for T04
+
+- [ ] Unit tests:
+- LayerStack ordering
+- event dispatch propagation rules
+- EventBus subscribe/unsubscribe lifecycle
+- structured error payload mapping
+- [ ] Integration smoke tests:
+- app boot
+- one frame update/render cycle
+- clean shutdown
+- [ ] Threading safety checks:
+- cancellation token respected
+- forbidden main-thread-only mutations from worker threads blocked/asserted
+
+### T04.14 – Suggested implementation slices (commit-friendly)
+
+1. Core pointers + base contracts (`Ref`, `Layer`, event primitives).
+2. Application loop + LayerStack integration + tests.
+3. Event dispatcher + EventBus + tests.
+4. ProjectWorkspace/EditorContext ownership path.
+5. ConfigManager + structured error model.
+6. JobSystem + ProgressTracker + thread guards + tests.
+7. DebugLayer + notifications + diagnostics panels.
+
+Each slice should end with green local checks and minimal doc update.
+
+### T04.15 – Acceptance criteria for T04
+
+- [ ] Application boots into main loop and exits cleanly.
+- [ ] Layer push/pop/overlay behavior is deterministic and tested.
+- [ ] Input/window events propagate through dispatcher and layers in defined order.
+- [ ] EventBus supports decoupled communication without tight panel dependencies.
+- [ ] `ProjectWorkspace` is the only runtime owner of project/domain mutable state.
+- [ ] `EditorContext` does not become a secondary ownership container.
+- [ ] Config load/save is centralized in `ConfigManager`.
+- [ ] Structured error + notification policy is implemented and observable in UI.
+- [ ] JobSystem cancellation/progress flow works and respects thread-affinity constraints.
+- [ ] Debug diagnostics layer is available in Debug/internal Release.
+
+### T04.16 – Boundaries and non-goals
+
+- [ ] Do not implement advanced renderer features in this task.
+- [ ] Do not expand into full T10/T11 persistence model yet; keep only ownership foundations needed by core.
+- [ ] Do not introduce heavy scripting workflows; Python bridge remains in T05 scope.
+- [ ] Prefer minimal viable abstractions that are easy to test and refactor.
 
 ---
 

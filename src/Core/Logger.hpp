@@ -8,23 +8,35 @@
 
 namespace DefectStudio
 {
-struct LoggerOptions
-{
-	spdlog::level::level_enum level = spdlog::level::info;
-	bool logToFile = false;
-	std::filesystem::path logFilePath;
-};
+	enum class LogLevel
+	{
+		Trace,
+		Debug,
+		Info,
+		Warn,
+		Error,
+		Critical
+	};
 
-class Logger
-{
+	struct LoggerOptions
+	{
+		LogLevel level = LogLevel::Info;
+		bool logToFile = false;
+		std::filesystem::path logFilePath;
+	};
+
+	const char *ToString(LogLevel level);
+
+	class Logger
+	{
 	public:
-	static void Initialize(const LoggerOptions &options);
-	static void Shutdown();
-	static std::shared_ptr<spdlog::logger> &Get();
+		static void Initialize(const LoggerOptions &options);
+		static void Shutdown();
+		static std::shared_ptr<spdlog::logger> &Get();
 
 	private:
-	static std::shared_ptr<spdlog::logger> &Access();
-};
+		static std::shared_ptr<spdlog::logger> &Access();
+	};
 } // namespace DefectStudio
 
 #define DS_LOG_TRACE(...) ::DefectStudio::Logger::Get()->trace(__VA_ARGS__)
