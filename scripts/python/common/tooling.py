@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .config import load_local_config
 from .paths import mdbook_dir, premake_dir, tools_dir, tracy_profiler_path
 
 
@@ -63,6 +64,24 @@ def require_vendored_tool(name: str) -> str:
     raise FileNotFoundError(f"Vendored tool not found: {name}")
 
 
+def _local_config_tool_path(name: str) -> str | None:
+    config = load_local_config()
+    tools = config.get("tools", {}) if isinstance(config, dict) else {}
+
+    if not isinstance(tools, dict):
+        return None
+
+    path = tools.get(name)
+    if not path:
+        return None
+
+    candidate = Path(path)
+    if candidate.exists():
+        return str(candidate)
+
+    return None
+
+
 def detect_tool(name: str) -> str | None:
     if name in {"premake5", "mdbook", "tracy", "tracy-profiler"}:
         try:
@@ -74,6 +93,10 @@ def detect_tool(name: str) -> str | None:
         msbuild = detect_msvc_msbuild_path()
         if msbuild:
             return msbuild
+
+    configured = _local_config_tool_path(name)
+    if configured:
+        return configured
 
     candidates = TOOL_HINTS.get(name, [name])
     for candidate in candidates:

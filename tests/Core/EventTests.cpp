@@ -80,4 +80,23 @@ TEST(EventTests, CategoriesAreExposedCorrectly)
 	EXPECT_TRUE(touchpadEvent.IsInCategory(DefectStudio::EventCategoryTouchpad));
 	EXPECT_TRUE(touchpadEvent.IsInCategory(DefectStudio::EventCategoryInput));
 	EXPECT_FALSE(touchpadEvent.IsInCategory(DefectStudio::EventCategoryApplication));
+
+	DefectStudio::KeyReleasedEvent keyReleasedEvent(65);
+	EXPECT_TRUE(keyReleasedEvent.IsInCategory(DefectStudio::EventCategoryKeyboard));
+
+	DefectStudio::KeyRepeatedEvent keyRepeatedEvent(65);
+	EXPECT_TRUE(keyRepeatedEvent.IsInCategory(DefectStudio::EventCategoryKeyboard));
+	EXPECT_TRUE(keyRepeatedEvent.IsInCategory(DefectStudio::EventCategoryInput));
+
+	DefectStudio::MouseButtonPressedEvent mousePressedEvent(0);
+	EXPECT_TRUE(mousePressedEvent.IsInCategory(DefectStudio::EventCategoryMouse));
+	EXPECT_TRUE(mousePressedEvent.IsInCategory(DefectStudio::EventCategoryMouseButton));
+
+	DefectStudio::MouseButtonReleasedEvent mouseReleasedEvent(0);
+	EXPECT_TRUE(mouseReleasedEvent.IsInCategory(DefectStudio::EventCategoryMouse));
+	EXPECT_TRUE(mouseReleasedEvent.IsInCategory(DefectStudio::EventCategoryMouseButton));
+
+	DefectStudio::MouseScrolledEvent mouseScrolledEvent(0.0f, 1.0f);
+	EXPECT_TRUE(mouseScrolledEvent.IsInCategory(DefectStudio::EventCategoryMouse));
+	EXPECT_FALSE(mouseScrolledEvent.IsInCategory(DefectStudio::EventCategoryMouseButton));
 }

@@ -13,8 +13,8 @@ namespace DefectStudio
 
 		virtual void OnAttach() {}
 		virtual void OnDetach() {}
-		virtual void OnUpdate(float deltaTime) {}
-		virtual void OnEvent(Event &event) {}
+		virtual void OnUpdate(float) {}
+		virtual void OnEvent(Event &) {}
 		virtual void OnImGuiRender() {}
 
 		[[nodiscard]] const std::string &GetName() const;

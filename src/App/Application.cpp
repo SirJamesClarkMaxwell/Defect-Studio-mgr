@@ -1,5 +1,9 @@
 #include "Core/dspch.hpp"
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
@@ -12,6 +16,7 @@
 
 #include "App/Application.hpp"
 #include "Core/Assert.hpp"
+#include "Core/Input.hpp"
 #include "Core/Logger.hpp"
 
 namespace DefectStudio
@@ -42,18 +47,21 @@ namespace DefectStudio
 			const std::string_view argument = argv[index];
 			if (argument == "--help" || argument == "-h")
 			{
-				std::cout << "Usage: DefectStudio [--reset-layout]\n";
+				std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events]\n";
 				std::exit(0);
 			}
 
 			if (argument == "--reset-layout")
 				specification.resetLayout = true;
+
+			if (argument == "--trace-events")
+				specification.traceEvents = true;
 		}
 
 		return specification;
 	}
 
-	void beginImGuiFrame()
+	void Application::beginImGuiFrame()
 	{
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -62,7 +70,7 @@ namespace DefectStudio
 		                             ImGuiDockNodeFlags_PassthruCentralNode);
 	}
 
-	void drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate)
+	void Application::drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate)
 	{
 		ImGui::Begin("DefectStudio");
 		ImGui::Text("GUI shell is running.");
@@ -75,21 +83,50 @@ namespace DefectStudio
 			ImGui::ShowDemoWindow(&showDemoWindow);
 	}
 
-	void renderFrame(Window &window, const ImVec4 &clearColor, float frameRate)
+	void Application::renderFrame(const ImVec4 &clearColor, float frameRate)
 	{
+		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+		(void)frameRate;
+
 		ImGui::Render();
 
 		int displayWidth = 0;
 		int displayHeight = 0;
-		window.GetFramebufferSize(displayWidth, displayHeight);
+		m_Window->GetFramebufferSize(displayWidth, displayHeight);
 		glViewport(0, 0, displayWidth, displayHeight);
 		glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		TracyPlot("FPS", frameRate);
 
-		window.SwapBuffers();
+		m_Window->SwapBuffers();
 		FrameMark;
+	}
+
+	void Application::configureInputBackend()
+	{
+		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+
+		GLFWwindow *nativeHandle = m_Window->GetNativeHandle();
+		DS_ASSERT(nativeHandle != nullptr, "Native window handle is null");
+
+		InputBackend backend;
+		backend.isKeyDown = [nativeHandle](KeyCode code) {
+			const int state = glfwGetKey(nativeHandle, ToNativeKeyCode(code));
+			return state == GLFW_PRESS || state == GLFW_REPEAT;
+		};
+		backend.isMouseButtonDown = [nativeHandle](MouseCode code) {
+			const int state = glfwGetMouseButton(nativeHandle, ToNativeMouseCode(code));
+			return state == GLFW_PRESS;
+		};
+		backend.mousePosition = [nativeHandle]() {
+			double x = 0.0;
+			double y = 0.0;
+			glfwGetCursorPos(nativeHandle, &x, &y);
+			return std::make_pair(static_cast<float>(x), static_cast<float>(y));
+		};
+
+		Input::SetBackend(std::move(backend));
 	}
 
 	Application::Application(int argc, char **argv) : m_Argc(argc), m_Argv(argv)
@@ -184,6 +221,9 @@ namespace DefectStudio
 
 		if (m_Specification.resetLayout)
 			DS_LOG_WARN("Layout reset requested");
+
+		if (m_Specification.traceEvents)
+			DS_LOG_INFO("Event tracing enabled");
 	}
 
 	bool Application::initializeGlfw()
@@ -207,6 +247,10 @@ namespace DefectStudio
 			m_Window.reset();
 			return false;
 		}
+
+		m_Window->SetEventCallback([this](Event &event) { onEvent(event); });
+
+		configureInputBackend();
 
 		return true;
 	}
@@ -252,17 +296,59 @@ namespace DefectStudio
 		ImGuiIO &io = ImGui::GetIO();
 		bool showDemoWindow = true;
 		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
+		m_LastFrameTime = glfwGetTime();
 		DS_LOG_INFO("Entering render loop");
 		TracyMessageL("Entering render loop");
 
 		while (m_Running && !m_Window->ShouldClose())
 		{
+			const double now = glfwGetTime();
+			const float deltaTime = static_cast<float>(now - m_LastFrameTime);
+			m_LastFrameTime = now;
+
 			m_Window->PollEvents();
+			onUpdate(deltaTime);
 
 			beginImGuiFrame();
+			for (const auto &layer : m_LayerStack)
+				layer->OnImGuiRender();
 			drawMainPanel(showDemoWindow, clearColor, io.Framerate);
-			renderFrame(*m_Window, clearColor, io.Framerate);
+			onRender(clearColor, io.Framerate);
 		}
+	}
+
+	void Application::onEvent(Event &event)
+	{
+		if (m_Specification.traceEvents)
+			DS_LOG_DEBUG("Event: {}", event.GetName());
+
+		EventDispatcher dispatcher(event);
+		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent &)
+		                                      {
+			                                      m_Running = false;
+			                                      return true;
+		                                      });
+
+		if (event.handled)
+			return;
+
+		for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
+		{
+			(*it)->OnEvent(event);
+			if (event.handled)
+				break;
+		}
+	}
+
+	void Application::onUpdate(float deltaTime)
+	{
+		for (const auto &layer : m_LayerStack)
+			layer->OnUpdate(deltaTime);
+	}
+
+	void Application::onRender(const ImVec4 &clearColor, float frameRate)
+	{
+		renderFrame(clearColor, frameRate);
 	}
 
 	void Application::shutdownImGui()
@@ -281,6 +367,7 @@ namespace DefectStudio
 		if (m_Window == nullptr)
 			return;
 
+		Input::ResetBackend();
 		m_Window->Destroy();
 		m_Window.reset();
 	}

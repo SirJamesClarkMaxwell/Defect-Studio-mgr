@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import platform
+import shutil
 import sys
 
 from scripts.python.common.config import load_local_config
@@ -36,6 +37,14 @@ def run(args: argparse.Namespace) -> int:
     for name, path in tools.items():
         status = path if path else "MISSING"
         print(f"- {name:8} {status}")
+
+    clangxx = shutil.which("clang++")
+    print(f"- {'clang++':8} {clangxx if clangxx else 'MISSING'}")
+
+    if tools.get("clang") and not clangxx:
+        print(
+            "[warn] clang is present but clang++ is missing; clang matrix builds will fail."
+        )
 
     local_cfg = load_local_config()
     if local_cfg:

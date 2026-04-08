@@ -3,8 +3,12 @@
 #include <filesystem>
 
 #include "App/Window.hpp"
+#include "Core/Event.hpp"
+#include "Core/LayerStack.hpp"
 #include "Core/Logger.hpp"
 #include "Core/Memory.hpp"
+
+struct ImVec4;
 
 namespace DefectStudio
 {
@@ -14,6 +18,7 @@ namespace DefectStudio
 		bool logToFile = true;
 		std::filesystem::path logFilePath;
 		bool resetLayout = false;
+		bool traceEvents = false;
 	};
 
 	class Application
@@ -31,6 +36,9 @@ namespace DefectStudio
 		void Shutdown();
 
 	private:
+		void onEvent(Event &event);
+		void onUpdate(float deltaTime);
+		void onRender(const ImVec4 &clearColor, float frameRate);
 		void initializeLogger() const;
 		void shutdownLogger() const;
 		void logStartupSpecification() const;
@@ -38,6 +46,10 @@ namespace DefectStudio
 		bool createMainWindow();
 		bool initializeGraphics();
 		bool initializeImGui();
+		void beginImGuiFrame();
+		void drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate);
+		void renderFrame(const ImVec4 &clearColor, float frameRate);
+		void configureInputBackend();
 		void mainLoop();
 		void shutdownImGui();
 		void shutdownWindow();
@@ -48,9 +60,11 @@ namespace DefectStudio
 		char **m_Argv = nullptr;
 		ApplicationSpecification m_Specification;
 		Unique<Window> m_Window;
+		LayerStack m_LayerStack;
 		bool m_GlfwInitialized = false;
 		bool m_ImGuiInitialized = false;
 		bool m_GladInitialized = false;
 		bool m_Running = false;
+		double m_LastFrameTime = 0.0;
 	};
 } // namespace DefectStudio

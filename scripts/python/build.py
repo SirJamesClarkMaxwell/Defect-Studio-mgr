@@ -136,6 +136,20 @@ def run_make(args: argparse.Namespace) -> int:
                 clangxx = str(candidate)
         if not clang or not clangxx:
             print("[error] clang/clang++ toolchain not found.")
+            print(f"        clang:   {clang or 'MISSING'}")
+            print(f"        clang++: {clangxx or 'MISSING'}")
+            if os.name == "nt":
+                print(
+                    "        Install LLVM/Clang and ensure both clang.exe and clang++.exe are in PATH."
+                )
+                print("        Example: winget install LLVM.LLVM")
+                print(
+                    "        Then restart the terminal and rerun TestBuildMatrix.bat."
+                )
+            else:
+                print(
+                    "        Install clang and clang++ packages and ensure they are in PATH."
+                )
             return 1
         env_override["CC"] = clang
         env_override["CXX"] = clangxx
@@ -162,7 +176,9 @@ def run_make(args: argparse.Namespace) -> int:
     if on_vmware_shared_folder:
         jobs = 1
         if args.verbose:
-            print("[step] Using -j1 on /mnt/hgfs to avoid make timestamp/LTO instability.")
+            print(
+                "[step] Using -j1 on /mnt/hgfs to avoid make timestamp/LTO instability."
+            )
     command.insert(1, f"-j{jobs}")
 
     return run_command(

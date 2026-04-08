@@ -1,6 +1,9 @@
 #pragma once
 
+#include <functional>
 #include <string>
+
+#include "Core/Event.hpp"
 
 struct GLFWwindow;
 
@@ -9,6 +12,8 @@ namespace DefectStudio
 	class Window
 	{
 	public:
+		using EventCallback = std::function<void(Event &)>;
+
 		Window() = default;
 		~Window();
 
@@ -22,10 +27,13 @@ namespace DefectStudio
 		void PollEvents() const;
 		void SwapBuffers() const;
 		void GetFramebufferSize(int &width, int &height) const;
+		void SetEventCallback(EventCallback callback);
+		void DispatchEvent(Event &event);
 
 		GLFWwindow *GetNativeHandle() const;
 
 	private:
 		GLFWwindow *m_Handle = nullptr;
+		EventCallback m_EventCallback;
 	};
 } // namespace DefectStudio

@@ -10,6 +10,7 @@ namespace DefectStudio
 		WindowClose,
 		WindowResize,
 		KeyPressed,
+		KeyRepeated,
 		KeyReleased,
 		MouseButtonPressed,
 		MouseButtonReleased,
@@ -136,6 +137,82 @@ namespace DefectStudio
 		int m_KeyCode;
 	};
 
+	class KeyReleasedEvent final : public Event
+	{
+	public:
+		explicit KeyReleasedEvent(int keyCode) : m_KeyCode(keyCode)
+		{
+		}
+
+		[[nodiscard]] int GetKeyCode() const
+		{
+			return m_KeyCode;
+		}
+
+		DS_EVENT_CLASS_TYPE(KeyReleased)
+		DS_EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryKeyboard)
+
+	private:
+		int m_KeyCode;
+	};
+
+	class KeyRepeatedEvent final : public Event
+	{
+	public:
+		explicit KeyRepeatedEvent(int keyCode) : m_KeyCode(keyCode)
+		{
+		}
+
+		[[nodiscard]] int GetKeyCode() const
+		{
+			return m_KeyCode;
+		}
+
+		DS_EVENT_CLASS_TYPE(KeyRepeated)
+		DS_EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryKeyboard)
+
+	private:
+		int m_KeyCode;
+	};
+
+	class MouseButtonPressedEvent final : public Event
+	{
+	public:
+		explicit MouseButtonPressedEvent(int button) : m_Button(button)
+		{
+		}
+
+		[[nodiscard]] int GetButton() const
+		{
+			return m_Button;
+		}
+
+		DS_EVENT_CLASS_TYPE(MouseButtonPressed)
+		DS_EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryMouse | EventCategoryMouseButton)
+
+	private:
+		int m_Button;
+	};
+
+	class MouseButtonReleasedEvent final : public Event
+	{
+	public:
+		explicit MouseButtonReleasedEvent(int button) : m_Button(button)
+		{
+		}
+
+		[[nodiscard]] int GetButton() const
+		{
+			return m_Button;
+		}
+
+		DS_EVENT_CLASS_TYPE(MouseButtonReleased)
+		DS_EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryMouse | EventCategoryMouseButton)
+
+	private:
+		int m_Button;
+	};
+
 	class MouseMovedEvent final : public Event
 	{
 	public:
@@ -182,5 +259,29 @@ namespace DefectStudio
 	private:
 		float m_DeltaX;
 		float m_DeltaY;
+	};
+
+	class MouseScrolledEvent final : public Event
+	{
+	public:
+		MouseScrolledEvent(float offsetX, float offsetY) : m_OffsetX(offsetX), m_OffsetY(offsetY)
+		{
+		}
+
+		[[nodiscard]] float GetOffsetX() const
+		{
+			return m_OffsetX;
+		}
+		[[nodiscard]] float GetOffsetY() const
+		{
+			return m_OffsetY;
+		}
+
+		DS_EVENT_CLASS_TYPE(MouseScrolled)
+		DS_EVENT_CLASS_CATEGORY(EventCategoryInput | EventCategoryMouse)
+
+	private:
+		float m_OffsetX;
+		float m_OffsetY;
 	};
 } // namespace DefectStudio

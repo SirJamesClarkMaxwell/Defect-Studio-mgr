@@ -1,5 +1,9 @@
 #include "Core/dspch.hpp"
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include "App/Window.hpp"
@@ -9,6 +13,97 @@
 
 namespace DefectStudio
 {
+	static Window *GetWindowInstance(GLFWwindow *window)
+	{
+		return static_cast<Window *>(glfwGetWindowUserPointer(window));
+	}
+
+	static void OnGlfwWindowClose(GLFWwindow *window)
+	{
+		Window *instance = GetWindowInstance(window);
+		if (instance == nullptr)
+			return;
+
+		WindowCloseEvent event;
+		instance->DispatchEvent(event);
+	}
+
+	static void OnGlfwWindowSize(GLFWwindow *window, int newWidth, int newHeight)
+	{
+		Window *instance = GetWindowInstance(window);
+		if (instance == nullptr)
+			return;
+
+		WindowResizeEvent event(newWidth, newHeight);
+		instance->DispatchEvent(event);
+	}
+
+	static void OnGlfwKey(GLFWwindow *window, int key, int scancode, int action, int mods)
+	{
+		(void)scancode;
+		(void)mods;
+
+		Window *instance = GetWindowInstance(window);
+		if (instance == nullptr)
+			return;
+
+		if (action == GLFW_PRESS)
+		{
+			KeyPressedEvent event(key);
+			instance->DispatchEvent(event);
+		}
+		else if (action == GLFW_REPEAT)
+		{
+			KeyRepeatedEvent event(key);
+			instance->DispatchEvent(event);
+		}
+		else if (action == GLFW_RELEASE)
+		{
+			KeyReleasedEvent event(key);
+			instance->DispatchEvent(event);
+		}
+	}
+
+	static void OnGlfwMouseButton(GLFWwindow *window, int button, int action, int mods)
+	{
+		(void)mods;
+
+		Window *instance = GetWindowInstance(window);
+		if (instance == nullptr)
+			return;
+
+		if (action == GLFW_PRESS)
+		{
+			MouseButtonPressedEvent event(button);
+			instance->DispatchEvent(event);
+		}
+		else if (action == GLFW_RELEASE)
+		{
+			MouseButtonReleasedEvent event(button);
+			instance->DispatchEvent(event);
+		}
+	}
+
+	static void OnGlfwCursorPos(GLFWwindow *window, double x, double y)
+	{
+		Window *instance = GetWindowInstance(window);
+		if (instance == nullptr)
+			return;
+
+		MouseMovedEvent event(static_cast<float>(x), static_cast<float>(y));
+		instance->DispatchEvent(event);
+	}
+
+	static void OnGlfwScroll(GLFWwindow *window, double offsetX, double offsetY)
+	{
+		Window *instance = GetWindowInstance(window);
+		if (instance == nullptr)
+			return;
+
+		MouseScrolledEvent event(static_cast<float>(offsetX), static_cast<float>(offsetY));
+		instance->DispatchEvent(event);
+	}
+
 	Window::~Window()
 	{
 		Destroy();
@@ -31,6 +126,14 @@ namespace DefectStudio
 
 		glfwMakeContextCurrent(m_Handle);
 		glfwSwapInterval(1);
+		glfwSetWindowUserPointer(m_Handle, this);
+
+		glfwSetWindowCloseCallback(m_Handle, OnGlfwWindowClose);
+		glfwSetWindowSizeCallback(m_Handle, OnGlfwWindowSize);
+		glfwSetKeyCallback(m_Handle, OnGlfwKey);
+		glfwSetMouseButtonCallback(m_Handle, OnGlfwMouseButton);
+		glfwSetCursorPosCallback(m_Handle, OnGlfwCursorPos);
+		glfwSetScrollCallback(m_Handle, OnGlfwScroll);
 
 		Platform::InitializeWindowPlatform(m_Handle, std::filesystem::path("assets") / "icon.ico");
 		DS_LOG_INFO("GLFW window created");
@@ -56,6 +159,19 @@ namespace DefectStudio
 	void Window::PollEvents() const
 	{
 		glfwPollEvents();
+	}
+
+	void Window::SetEventCallback(EventCallback callback)
+	{
+		m_EventCallback = std::move(callback);
+	}
+
+	void Window::DispatchEvent(Event &event)
+	{
+		if (!m_EventCallback)
+			return;
+
+		m_EventCallback(event);
 	}
 
 	void Window::SwapBuffers() const
