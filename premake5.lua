@@ -17,11 +17,13 @@ _DS_ROOT = path.getabsolute(".")
 local windowsIcon = path.translate(path.getabsolute("assets/icon.png"), "\\")
 local linuxIcon = "../../../assets/icon.png"
 
+group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
 dofile "Vendor/Tracy.premake5.lua"
 dofile "Vendor/GoogleTest.premake5.lua"
+group ""
 
 project "DefectStudio"
     location "build/generated/%{_ACTION}"
@@ -132,7 +134,9 @@ project "DefectStudioTests"
         "src/Core/Layer.hpp",
         "src/Core/Layer.cpp",
         "src/Core/LayerStack.hpp",
-        "src/Core/LayerStack.cpp"
+        "src/Core/LayerStack.cpp",
+        "src/Core/Input.hpp",
+        "src/Core/Input.cpp"
     }
 
     includedirs {
