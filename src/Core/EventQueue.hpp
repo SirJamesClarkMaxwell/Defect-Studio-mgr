@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "Core/Event.hpp"
-#include "Core/Memory.hpp"
 
 namespace DefectStudio
 {
@@ -17,18 +16,21 @@ namespace DefectStudio
 		void Unlock();
 		void Resize(std::size_t newCapacity);
 		void FitToSize();
-		void Add(Unique<Event> event);
-		[[nodiscard]] std::vector<Unique<Event>> Drain();
+
+		void Add(EventVariant event);
+
+		[[nodiscard]] std::vector<EventVariant> Drain();
 		[[nodiscard]] std::size_t Size() const;
 		[[nodiscard]] std::size_t Capacity() const;
 		[[nodiscard]] bool Empty() const;
+
 		void SetGrowthStep(std::size_t growthStep);
 
 	private:
 		void EnsureCapacityLocked();
 
 		std::size_t m_GrowthStep = 256;
-		std::vector<Unique<Event>> m_Pending;
-		mutable std::mutex m_Guard;
+		std::vector<EventVariant> m_Pending;
+		mutable std::recursive_mutex m_Guard;
 	};
 } // namespace DefectStudio
