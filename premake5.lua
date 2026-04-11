@@ -21,8 +21,12 @@ group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
-dofile "Vendor/Tracy.premake5.lua"
-dofile "Vendor/GoogleTest.premake5.lua"
+dofile "Vendor/thread-pool/premake5.lua"
+dofile "Vendor/json/premake5.lua"
+dofile "Vendor/yaml-cpp/premake5.lua"
+
+dofile "Vendor/Tracy/premake5.lua"
+dofile "Vendor/GoogleTest/GoogleTest.premake5.lua"
 group ""
 
 project "DefectStudio"
@@ -49,18 +53,23 @@ project "DefectStudio"
         "Vendor/GLFW/include",
         "Vendor/GLAD/generated/include",
         "Vendor/ImGui",
-        "Vendor/ImGui/backends"
+        "Vendor/ImGui/backends",
+        "Vendor/thread-pool/include",
+        "Vendor/json/include",
+        "Vendor/yaml-cpp/include"
     }
 
     defines {
         "GLFW_INCLUDE_NONE",
-        "IMGUI_IMPL_OPENGL_LOADER_GLAD"
+        "IMGUI_IMPL_OPENGL_LOADER_GLAD",
+        "YAML_CPP_STATIC_DEFINE"
     }
 
     links {
         "GLFW",
         "GLAD",
-        "ImGui"
+        "ImGui",
+        "yaml-cpp"
     }
 
     filter "system:windows"
@@ -137,6 +146,12 @@ project "DefectStudioTests"
         "src/Core/LayerStack.cpp",
         "src/Core/Input.hpp",
         "src/Core/Input.cpp",
+        "src/Core/JobSystem.hpp",
+        "src/Core/JobSystem.cpp",
+        "src/Core/ProgressTracker.hpp",
+        "src/Core/ProgressTracker.cpp",
+        "src/App/ConfigManager.hpp",
+        "src/App/ConfigManager.cpp",
         "src/Core/CoreLayer.hpp",
         "src/Core/CoreLayer.cpp",
         "src/Debug/DebugLayer.hpp",
@@ -159,16 +174,20 @@ project "DefectStudioTests"
         "src",
         "Vendor/spdlog/include",
         "Vendor/GoogleTest/googletest/include",
-        "Vendor/GoogleTest/googlemock/include"
+        "Vendor/GoogleTest/googlemock/include",
+        "Vendor/thread-pool/include",
+        "Vendor/json/include",
+        "Vendor/yaml-cpp/include"
     }
 
     links {
-        "GoogleTest"
+        "GoogleTest",
+        "yaml-cpp"
     }
 
     filter "system:windows"
         systemversion "latest"
-        defines { "DS_PLATFORM_WINDOWS" }
+        defines { "DS_PLATFORM_WINDOWS", "YAML_CPP_STATIC_DEFINE" }
 
     filter { "system:windows", "action:vs2022" }
         buildoptions { "/utf-8" }

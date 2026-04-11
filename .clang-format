@@ -9,15 +9,24 @@ ColumnLimit: 120
 Standard: Latest
 
 BreakBeforeBraces: Allman
-AllowShortFunctionsOnASingleLine: None
+RemoveBracesLLVM: true
+
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  SplitEmptyFunction: false
+
 
 IndentCaseLabels: true
 IndentAccessModifiers: false
-AccessModifierOffset: 0
+AccessModifierOffset: -4
+NamespaceIndentation: All
 
 PointerAlignment: Right
 ReferenceAlignment: Right

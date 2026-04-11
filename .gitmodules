@@ -17,3 +17,12 @@
 [submodule "Vendor/GoogleTest"]
 	path = Vendor/GoogleTest
 	url = https://github.com/sjcmdev/googletest.git
+[submodule "Vendor/yaml-cpp"]
+	path = Vendor/yaml-cpp
+	url = https://github.com/sjcmdev/yaml-cpp.git
+[submodule "Vendor/json"]
+	path = Vendor/json
+	url = https://github.com/sjcmdev/json.git
+[submodule "Vendor/thread-pool"]
+	path = Vendor/thread-pool
+	url = https://github.com/sjcmdev/thread-pool.git

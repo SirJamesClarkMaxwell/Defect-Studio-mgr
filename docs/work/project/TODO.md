@@ -78,7 +78,7 @@ Building from scratch with proper module separation from the beginning.
 - [x] `Unique<>` wrapper on `std::unique_ptr` + `CreateUnique` helper
 - [ ] Application singleton – main loop, OnUpdate/OnEvent/OnRender
 - [x] LayerStack – push/pop/overlay layers
-- [ ] CoreLayer, ImGuiLayer, EditorLayer – layer hierarchy
+- [x] CoreLayer, ImGuiLayer, EditorLayer – layer hierarchy
 - [x] EventSystem – keyboard, mouse, window events (own event bus)
 - [x] EventBus (publish-subscribe) for communication between panels without mutual dependencies
 - [ ] ProjectWorkspace remains the runtime source of truth for project/domain state; EditorContext only references it
