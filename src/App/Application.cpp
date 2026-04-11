@@ -15,11 +15,13 @@
 #include <tracy/TracyC.h>
 
 #include "App/Application.hpp"
+#include "App/ConfigManager.hpp"
 #include "Core/Assert.hpp"
-#include "Core/Input.hpp"
 #include "Core/CoreLayer.hpp"
 #include "Core/Logger.hpp"
+#include "Core/Input.hpp"
 #include "Debug/DebugLayer.hpp"
+#include "Demo/DemoLayer.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
@@ -29,6 +31,297 @@
 
 namespace DefectStudio
 {
+	Application *Application::s_Instance = nullptr;
+
+	// ===== File-local path and event helpers =====
+
+	static bool HasConfigFiles(const Path &root)
+	{
+		const Path configPath = root.Join("config");
+		return std::filesystem::exists(configPath.Join("ui_settings.yaml").Native())
+			|| std::filesystem::exists(configPath.Join("default.yaml").Native());
+	}
+
+	static Path FindConfigDirectoryInAncestors(Path start)
+	{
+		std::filesystem::path current = start.Native();
+		for (int i = 0; i < 10; ++i)
+		{
+			if (HasConfigFiles(Path::FromResolved(current)))
+				return Path::FromResolved(current / "config");
+
+			const std::filesystem::path parent = current.parent_path();
+			if (parent.empty() || parent == current)
+				break;
+
+			current = parent;
+		}
+
+		return Path{};
+	}
+
+		static Path ResolveConfigDirectory(char **argv)
+	{
+			const Path fromCwd = FindConfigDirectoryInAncestors(Path::FromResolved(std::filesystem::current_path()));
+			if (!fromCwd.Empty())
+			return fromCwd;
+
+		if (argv != nullptr && argv[0] != nullptr)
+		{
+			std::error_code absoluteError;
+			const std::filesystem::path executablePath = std::filesystem::absolute(argv[0], absoluteError);
+			if (!absoluteError && !executablePath.empty())
+			{
+					const Path fromExe = FindConfigDirectoryInAncestors(Path::FromResolved(executablePath.parent_path()));
+					if (!fromExe.Empty())
+					return fromExe;
+			}
+		}
+
+			return Path::FromResolved(std::filesystem::current_path() / "config");
+	}
+
+	static Unique<Event> CloneEvent(const Event &event)
+	{
+		switch (event.GetEventType())
+		{
+			case EventType::WindowClose:
+				return CreateUnique<WindowCloseEvent>();
+			case EventType::WindowResize:
+			{
+				const auto &resize = static_cast<const WindowResizeEvent &>(event);
+				return CreateUnique<WindowResizeEvent>(resize.GetWidth(), resize.GetHeight());
+			}
+			case EventType::KeyPressed:
+			{
+				const auto &key = static_cast<const KeyPressedEvent &>(event);
+				return CreateUnique<KeyPressedEvent>(key.GetKeyCode());
+			}
+			case EventType::KeyRepeated:
+			{
+				const auto &key = static_cast<const KeyRepeatedEvent &>(event);
+				return CreateUnique<KeyRepeatedEvent>(key.GetKeyCode());
+			}
+			case EventType::KeyReleased:
+			{
+				const auto &key = static_cast<const KeyReleasedEvent &>(event);
+				return CreateUnique<KeyReleasedEvent>(key.GetKeyCode());
+			}
+			case EventType::MouseButtonPressed:
+			{
+				const auto &mouse = static_cast<const MouseButtonPressedEvent &>(event);
+				return CreateUnique<MouseButtonPressedEvent>(mouse.GetButton());
+			}
+			case EventType::MouseButtonReleased:
+			{
+				const auto &mouse = static_cast<const MouseButtonReleasedEvent &>(event);
+				return CreateUnique<MouseButtonReleasedEvent>(mouse.GetButton());
+			}
+			case EventType::MouseMoved:
+			{
+				const auto &mouse = static_cast<const MouseMovedEvent &>(event);
+				return CreateUnique<MouseMovedEvent>(mouse.GetX(), mouse.GetY());
+			}
+			case EventType::MouseScrolled:
+			{
+				const auto &mouse = static_cast<const MouseScrolledEvent &>(event);
+				return CreateUnique<MouseScrolledEvent>(mouse.GetOffsetX(), mouse.GetOffsetY());
+			}
+			case EventType::TouchpadGesture:
+			{
+				const auto &gesture = static_cast<const TouchpadGestureEvent &>(event);
+				return CreateUnique<TouchpadGestureEvent>(gesture.GetDeltaX(), gesture.GetDeltaY());
+			}
+			case EventType::None:
+			default:
+				break;
+		}
+
+		return nullptr;
+	}
+
+	struct MainLoopState
+	{
+		bool showDemoWindow = true;
+		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
+	};
+
+	ApplicationSpecification defaultApplicationSpecification();
+	ApplicationSpecification parseApplicationArguments(int argc, char **argv);
+
+	// ===== Singleton lifecycle API =====
+
+	Application Application::Create(int argc, char **argv)
+	{
+		return Application(argc, argv);
+	}
+
+	int Application::Run()
+	{
+		if (!m_Runtime.lifecycle.IsRunning())
+			return 1;
+
+		mainLoop();
+		shutdownInternal();
+		return 0;
+	}
+
+	void Application::Shutdown()
+	{
+		shutdownInternal();
+	}
+
+	void Application::EmitEvent(Event &event)
+	{
+		DS_ASSERT(s_Instance != nullptr, "Application not created");
+		s_Instance->queueEvent(event);
+	}
+
+	void Application::ProcessQueuedEvents()
+	{
+		DS_ASSERT(s_Instance != nullptr, "Application not created");
+		s_Instance->processPendingEvents();
+	}
+
+	Application &Application::Get()
+	{
+		DS_ASSERT(s_Instance != nullptr, "Application not created");
+		return *s_Instance;
+	}
+
+	EventBus &Application::GetEventBus()
+	{
+		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer not initialized");
+		return m_CoreLayer->GetEventBus();
+	}
+
+	JobSystem &Application::GetJobSystem()
+	{
+		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer not initialized");
+		return m_CoreLayer->GetJobSystem();
+	}
+
+	ProgressTracker &Application::GetProgressTracker()
+	{
+		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer not initialized");
+		return m_CoreLayer->GetProgressTracker();
+	}
+
+	// ===== Instance lifecycle =====
+
+	Application::Application(int argc, char **argv)
+	{
+		if (s_Instance != nullptr)
+		{
+			DS_LOG_WARN("Application::Create called more than once; replacing previous instance pointer");
+		}
+
+		s_Instance = this;
+		m_Runtime.argc = argc;
+		m_Runtime.argv = argv;
+
+		if (!createFromSpecification(parseApplicationArguments(m_Runtime.argc, m_Runtime.argv)))
+			DS_LOG_ERROR("Application creation failed");
+	}
+
+	Application::~Application()
+	{
+		shutdownInternal();
+		if (s_Instance == this)
+			s_Instance = nullptr;
+	}
+
+	bool Application::createFromSpecification(const ApplicationSpecification &specification)
+	{
+		ZoneScoped;
+
+		if (!m_Runtime.lifecycle.TryMarkCreated())
+		{
+			DS_LOG_WARN("Application::Create called more than once; call ignored");
+			return false;
+		}
+
+		s_Instance = this;
+		TracyMessageL("Launching GUI shell");
+
+		m_Runtime.specification = specification;
+		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
+		m_EventQueue.Configure(256);
+		initializeLogger();
+		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
+		logStartupSpecification();
+
+		if (!initializeGlfw())
+		{
+			shutdownInternal();
+			return false;
+		}
+
+		if (!createMainWindow())
+		{
+			shutdownInternal();
+			return false;
+		}
+
+		if (!initializeGraphics())
+		{
+			shutdownInternal();
+			return false;
+		}
+
+		if (!initializeImGui())
+		{
+			shutdownInternal();
+			return false;
+		}
+
+		setupDefaultLayers();
+
+		if (!initializeCoreLayerSystems())
+		{
+			shutdownInternal();
+			return false;
+		}
+
+		m_Runtime.lifecycle.SetRunning(true);
+		return true;
+	}
+
+	void Application::shutdownInternal()
+	{
+		if (!m_Runtime.lifecycle.TryBeginShutdown())
+			return;
+
+		DS_LOG_INFO("Shutdown: clearing layers");
+		m_LayerStack.Clear();
+		m_CoreLayer = nullptr;
+		
+		DS_LOG_INFO("Shutdown: releasing ImGui");
+		shutdownImGui();
+		
+		DS_LOG_INFO("Shutdown: destroying window");
+		shutdownWindow();
+		
+		DS_LOG_INFO("Shutdown: terminating GLFW");
+		shutdownGlfw();
+
+		DS_LOG_INFO("Shutdown: closing logger");
+		shutdownLogger();
+	}
+
+	// ===== High-level runtime flow =====
+
+	void Application::dispatchEventToLayers(Event &event)
+	{
+		for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
+		{
+			auto &layer = *it;
+			layer->OnEvent(event);
+			if (event.handled)
+				break;
+		}
+	}
+
 	ApplicationSpecification defaultApplicationSpecification()
 	{
 		ApplicationSpecification specification;
@@ -69,8 +362,11 @@ namespace DefectStudio
 		return specification;
 	}
 
+	// ===== Low-level frame and UI helpers =====
+
 	void Application::beginImGuiFrame()
 	{
+		ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -80,12 +376,28 @@ namespace DefectStudio
 
 	void Application::drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate)
 	{
+		bool saveUiSettings = false;
+
 		ImGui::Begin("DefectStudio");
 		ImGui::Text("GUI shell is running.");
 		ImGui::Text("FPS: %.1f", frameRate);
 		ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
 		ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor));
+		if (ImGui::SliderFloat("Font scale", &m_Config.fontScale, 0.70f, 2.00f, "%.2f"))
+		{
+			m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
+			ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
+			saveUiSettings = true;
+		}
 		ImGui::End();
+
+		if (saveUiSettings)
+		{
+			ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
+			loadUiSettingsDocument(uiDocument);
+			uiDocument.Set("font_scale", std::to_string(m_Config.fontScale));
+			saveUiSettingsDocument(uiDocument);
+		}
 
 		if (showDemoWindow)
 			ImGui::ShowDemoWindow(&showDemoWindow);
@@ -93,29 +405,29 @@ namespace DefectStudio
 
 	void Application::renderFrame(const ImVec4 &clearColor, float frameRate)
 	{
-		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 		(void)frameRate;
 
 		ImGui::Render();
 
 		int displayWidth = 0;
 		int displayHeight = 0;
-		m_Window->GetFramebufferSize(displayWidth, displayHeight);
+		m_Graphics.window->GetFramebufferSize(displayWidth, displayHeight);
 		glViewport(0, 0, displayWidth, displayHeight);
 		glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		TracyPlot("FPS", frameRate);
 
-		m_Window->SwapBuffers();
+		m_Graphics.window->SwapBuffers();
 		FrameMark;
 	}
 
 	void Application::configureInputBackend()
 	{
-		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
-		GLFWwindow *nativeHandle = m_Window->GetNativeHandle();
+		GLFWwindow *nativeHandle = m_Graphics.window->GetNativeHandle();
 		DS_ASSERT(nativeHandle != nullptr, "Native window handle is null");
 
 		InputBackend backend;
@@ -137,90 +449,29 @@ namespace DefectStudio
 		Input::SetBackend(std::move(backend));
 	}
 
-	Application::Application(int argc, char **argv) : m_Argc(argc), m_Argv(argv)
-	{
-		Create(parseApplicationArguments(m_Argc, m_Argv));
-	}
-
-	Application::~Application() = default;
-
-	bool Application::Create(const ApplicationSpecification &specification)
-	{
-		ZoneScoped;
-		TracyMessageL("Launching GUI shell");
-
-		m_Specification = specification;
-		initializeLogger();
-		logStartupSpecification();
-
-		if (!initializeGlfw())
-		{
-			Shutdown();
-			return false;
-		}
-
-		if (!createMainWindow())
-		{
-			Shutdown();
-			return false;
-		}
-
-		if (!initializeGraphics())
-		{
-			Shutdown();
-			return false;
-		}
-
-		if (!initializeImGui())
-		{
-			Shutdown();
-			return false;
-		}
-
-		setupDefaultLayers();
-
-		m_Running = true;
-		return true;
-	}
-
-	int Application::Run()
-	{
-		if (!m_Running)
-			return 1;
-
-		mainLoop();
-		Shutdown();
-		return 0;
-	}
-
-	void Application::Shutdown()
-	{
-		m_LayerStack.Clear();
-		shutdownImGui();
-		shutdownWindow();
-		shutdownGlfw();
-		shutdownLogger();
-		m_Running = false;
-	}
+	// ===== Runtime services and configuration =====
 
 	void Application::setupDefaultLayers()
 	{
-		m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
-		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+		auto coreLayer = CreateUnique<CoreLayer>();
+		m_CoreLayer = coreLayer.get();
+		m_LayerStack.PushLayer(std::move(coreLayer));
 		m_LayerStack.PushLayer(CreateUnique<IOLayer>());
-		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
 		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
+		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
+		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>());
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>());
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
-		m_LayerStack.PushOverlay(CreateUnique<ImGuiLayer>());
 	}
 
 	void Application::initializeLogger() const
 	{
 		LoggerOptions loggerOptions;
-		loggerOptions.level = m_Specification.logLevel;
-		loggerOptions.logToFile = m_Specification.logToFile;
-		loggerOptions.logFilePath = m_Specification.logFilePath;
+		loggerOptions.level = m_Runtime.specification.logLevel;
+		loggerOptions.logToFile = m_Runtime.specification.logToFile;
+		loggerOptions.logFilePath = m_Runtime.specification.logFilePath.Native();
 		Logger::Initialize(loggerOptions);
 	}
 
@@ -232,22 +483,81 @@ namespace DefectStudio
 	void Application::logStartupSpecification() const
 	{
 		DS_LOG_INFO("Starting DefectStudio GUI shell");
-		DS_LOG_INFO("Log level: {}", ToString(m_Specification.logLevel));
+		DS_LOG_INFO("Log level: {}", ToString(m_Runtime.specification.logLevel));
 
-		if (m_Specification.logToFile)
+		if (m_Runtime.specification.logToFile)
 		{
-			if (m_Specification.logFilePath.empty())
+			if (m_Runtime.specification.logFilePath.Empty())
 				DS_LOG_INFO("File logging enabled: logs/DefectStudio.log");
 			else
-				DS_LOG_INFO("File logging enabled: {}", m_Specification.logFilePath.string());
+				DS_LOG_INFO("File logging enabled: {}", m_Runtime.specification.logFilePath.String());
 		}
 
-		if (m_Specification.resetLayout)
+		if (m_Runtime.specification.resetLayout)
 			DS_LOG_WARN("Layout reset requested");
 
-		if (m_Specification.traceEvents)
+		if (m_Runtime.specification.traceEvents)
 			DS_LOG_INFO("Event tracing enabled");
 	}
+
+	bool Application::initializeCoreLayerSystems()
+	{
+		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer was not created");
+		if (!m_CoreLayer->InitializeSystems())
+			return false;
+
+		GetEventBus();
+		GetJobSystem();
+		GetProgressTracker();
+		return true;
+	}
+
+	ConfigLoadResult Application::loadConfigFromPath(const Path &path) const
+	{
+		DS_LOG_INFO("Config load: {}", path.String());
+		auto result = ConfigManager::LoadFile(path.Native());
+		if (!result.success)
+			DS_LOG_WARN("Config load failed [{}]: {}", path.String(), result.error);
+		return result;
+	}
+
+	bool Application::saveConfigToPath(const Path &path, const ConfigDocument &document) const
+	{
+		DS_LOG_INFO("Config save: {}", path.String());
+		std::string saveError;
+		if (!ConfigManager::SaveFile(path.Native(), document, saveError))
+		{
+			DS_LOG_WARN("Config save failed [{}]: {}", path.String(), saveError);
+			return false;
+		}
+
+		return true;
+	}
+
+	bool Application::loadUiSettingsDocument(ConfigDocument &document) const
+	{
+		const Path uiSettingsPath = Path::FromResolved(ConfigManager::GetUiSettingsPath(m_Config.directory.Native()));
+		if (!std::filesystem::exists(uiSettingsPath.Native()))
+		{
+			DS_LOG_INFO("UI config missing, using defaults: {}", uiSettingsPath.String());
+			return false;
+		}
+
+		auto loadResult = loadConfigFromPath(uiSettingsPath);
+		if (!loadResult.success)
+			return false;
+
+		document = std::move(loadResult.document);
+		return true;
+	}
+
+	bool Application::saveUiSettingsDocument(const ConfigDocument &document) const
+	{
+		const Path uiSettingsPath = Path::FromResolved(ConfigManager::GetUiSettingsPath(m_Config.directory.Native()));
+		return saveConfigToPath(uiSettingsPath, document);
+	}
+
+	// ===== Low-level platform/graphics setup =====
 
 	bool Application::initializeGlfw()
 	{
@@ -257,21 +567,21 @@ namespace DefectStudio
 			return false;
 		}
 
-		m_GlfwInitialized = true;
+		m_Graphics.glfwInitialized = true;
 		DS_LOG_INFO("GLFW initialized");
 		return true;
 	}
 
 	bool Application::createMainWindow()
 	{
-		m_Window = CreateUnique<Window>();
-		if (!m_Window->Create(1280, 720, "DefectStudio"))
+		m_Graphics.window = CreateUnique<Window>();
+		if (!m_Graphics.window->Create(1280, 720, "DefectStudio"))
 		{
-			m_Window.reset();
+			m_Graphics.window.reset();
 			return false;
 		}
 
-		m_Window->SetEventCallback([this](Event &event) { onEvent(event); });
+		m_Graphics.window->SetEventCallback([this](Event &event) { queueEvent(event); });
 
 		configureInputBackend();
 
@@ -280,7 +590,7 @@ namespace DefectStudio
 
 	bool Application::initializeGraphics()
 	{
-		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
 		const int glVersion = gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress));
 		if (glVersion == 0)
@@ -289,84 +599,120 @@ namespace DefectStudio
 			return false;
 		}
 
-		m_GladInitialized = true;
+		m_Graphics.gladInitialized = true;
 		DS_LOG_INFO("OpenGL loaded: {}.{}", GLAD_VERSION_MAJOR(glVersion), GLAD_VERSION_MINOR(glVersion));
 		return true;
 	}
 
 	bool Application::initializeImGui()
 	{
-		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+		const std::filesystem::path iniPath = m_Config.directory.Join("imgui.ini").Native();
+		std::filesystem::create_directories(iniPath.parent_path());
+		if (m_Runtime.specification.resetLayout && std::filesystem::exists(iniPath))
+			std::filesystem::remove(iniPath);
+
+		m_Config.imGuiIniPath = iniPath.string();
+		io.IniFilename = m_Config.imGuiIniPath.c_str();
+		if (std::filesystem::exists(iniPath))
+			ImGui::LoadIniSettingsFromDisk(m_Config.imGuiIniPath.c_str());
+
+		ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
+		loadUiSettingsDocument(uiDocument);
+		m_Config.fontScale = static_cast<float>(ConfigManager::GetDouble(uiDocument, "font_scale", 1.0));
+		m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
+		io.FontGlobalScale = m_Config.fontScale;
+
 		ImGui::StyleColorsDark();
 		DS_LOG_INFO("ImGui context created and docking enabled");
 
-		ImGui_ImplGlfw_InitForOpenGL(m_Window->GetNativeHandle(), true);
+		ImGui_ImplGlfw_InitForOpenGL(m_Graphics.window->GetNativeHandle(), true);
 		ImGui_ImplOpenGL3_Init("#version 330");
-		m_ImGuiInitialized = true;
+		m_Graphics.imGuiInitialized = true;
 		DS_LOG_INFO("ImGui backends initialized");
 		return true;
 	}
 
+	// ===== Main loop and event queue internals =====
+
 	void Application::mainLoop()
 	{
-		DS_ASSERT(m_Window != nullptr, "Main window was not created");
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
 		ImGuiIO &io = ImGui::GetIO();
-		bool showDemoWindow = true;
-		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
-		m_LastFrameTime = glfwGetTime();
+		MainLoopState state;
+		m_Runtime.lastFrameTime = glfwGetTime();
 		DS_LOG_INFO("Entering render loop");
 		TracyMessageL("Entering render loop");
 
-		while (m_Running && !m_Window->ShouldClose())
-		{
-			const double now = glfwGetTime();
-			const float deltaTime = static_cast<float>(now - m_LastFrameTime);
-			m_LastFrameTime = now;
-
-			m_Window->PollEvents();
-			onUpdate(deltaTime);
-
-			beginImGuiFrame();
-			for (const auto &layer : m_LayerStack)
-				layer->OnImGuiRender();
-			drawMainPanel(showDemoWindow, clearColor, io.Framerate);
-			onRender(clearColor, io.Framerate);
-		}
+		while (m_Runtime.lifecycle.IsRunning() && !m_Graphics.window->ShouldClose())
+			runMainLoopFrame(state.showDemoWindow, state.clearColor, io);
 	}
 
 	void Application::onEvent(Event &event)
 	{
-		if (m_Specification.traceEvents)
+		if (m_Runtime.specification.traceEvents)
 			DS_LOG_DEBUG("Event: {}", event.GetName());
 
-		EventDispatcher dispatcher(event);
-		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent &)
-		                                      {
-			                                      m_Running = false;
-			                                      return true;
-		                                      });
+		HandleLifecycleEvent(event, m_Runtime.lifecycle);
 
 		if (event.handled)
 			return;
 
-		for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
-		{
-			(*it)->OnEvent(event);
-			if (event.handled)
-				break;
-		}
+		dispatchEventToLayers(event);
+	}
+
+	void Application::runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io)
+	{
+		const double now = glfwGetTime();
+		const float deltaTime = static_cast<float>(now - m_Runtime.lastFrameTime);
+		m_Runtime.lastFrameTime = now;
+
+
+		onUpdate(deltaTime);
+
+		beginImGuiFrame();
+		for (const auto &layer : m_LayerStack)
+			layer->OnImGuiRender();
+		drawMainPanel(showDemoWindow, clearColor, io.Framerate);
+		onRender(clearColor, io.Framerate);
 	}
 
 	void Application::onUpdate(float deltaTime)
 	{
 		for (const auto &layer : m_LayerStack)
 			layer->OnUpdate(deltaTime);
+			
+		m_Graphics.window->PollEvents();
+		processPendingEvents();
+	}
+
+	void Application::queueEvent(const Event &event)
+	{
+		Unique<Event> cloned = CloneEvent(event);
+		if (cloned == nullptr)
+		{
+			DS_LOG_WARN("Unknown event type in queueEvent: {}", event.GetName());
+			return;
+		}
+
+		m_EventQueue.Add(std::move(cloned));
+	}
+
+	void Application::processPendingEvents()
+	{
+		std::vector<Unique<Event>> events = m_EventQueue.Drain();
+		if (events.empty())
+			return;
+
+		for (auto &event : events)
+			onEvent(*event);
 	}
 
 	void Application::onRender(const ImVec4 &clearColor, float frameRate)
@@ -376,33 +722,42 @@ namespace DefectStudio
 
 	void Application::shutdownImGui()
 	{
-		if (!m_ImGuiInitialized)
+		if (!m_Graphics.imGuiInitialized)
 			return;
+
+		ImGuiIO &io = ImGui::GetIO();
+		if (io.IniFilename != nullptr)
+			ImGui::SaveIniSettingsToDisk(io.IniFilename);
+
+		ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
+		loadUiSettingsDocument(uiDocument);
+		uiDocument.Set("font_scale", std::to_string(m_Config.fontScale));
+		saveUiSettingsDocument(uiDocument);
 
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
-		m_ImGuiInitialized = false;
+		m_Graphics.imGuiInitialized = false;
 	}
 
 	void Application::shutdownWindow()
 	{
-		if (m_Window == nullptr)
+		if (m_Graphics.window == nullptr)
 			return;
 
 		Input::ResetBackend();
-		m_Window->Destroy();
-		m_Window.reset();
+		m_Graphics.window->Destroy();
+		m_Graphics.window.reset();
 	}
 
 	void Application::shutdownGlfw()
 	{
-		if (!m_GlfwInitialized)
+		if (!m_Graphics.glfwInitialized)
 			return;
 
 		glfwTerminate();
-		m_GlfwInitialized = false;
-		m_GladInitialized = false;
+		m_Graphics.glfwInitialized = false;
+		m_Graphics.gladInitialized = false;
 
 		DS_LOG_INFO("DefectStudio GUI shell stopped");
 	}

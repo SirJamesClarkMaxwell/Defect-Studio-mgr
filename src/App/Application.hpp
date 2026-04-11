@@ -2,70 +2,106 @@
 
 #include <filesystem>
 
+#include "App/ApplicationLifecycle.hpp"
+#include "App/ApplicationState.hpp"
+#include "App/ConfigManager.hpp"
 #include "App/Window.hpp"
 #include "Core/Event.hpp"
+#include "Core/EventBus.hpp"
+#include "Core/EventQueue.hpp"
+#include "Core/JobSystem.hpp"
 #include "Core/LayerStack.hpp"
 #include "Core/Logger.hpp"
-#include "Core/Memory.hpp"
+#include "Core/ProgressTracker.hpp"
 
 struct ImVec4;
+struct ImGuiIO;
 
 namespace DefectStudio
 {
-	struct ApplicationSpecification
-	{
-		LogLevel logLevel = LogLevel::Info;
-		bool logToFile = true;
-		std::filesystem::path logFilePath;
-		bool resetLayout = false;
-		bool traceEvents = false;
-	};
+	class CoreLayer;
 
 	class Application
 	{
 	public:
-		Application(int argc, char **argv);
+		static Application Create(int argc, char **argv);
+		int Run();
+		void Shutdown();
 		~Application();
+
+		static void EmitEvent(Event &event);
+
+		// Global accessor for layers and demos
+		static Application &Get();
+
+		// Runtime service accessors
+		EventBus &GetEventBus();
+		JobSystem &GetJobSystem();
+		ProgressTracker &GetProgressTracker();
+
+	private:
+		Application(int argc, char **argv);
 		Application(const Application &) = delete;
 		Application &operator=(const Application &) = delete;
 		Application(Application &&) = delete;
 		Application &operator=(Application &&) = delete;
-
-		bool Create(const ApplicationSpecification &specification);
-		int Run();
-		void Shutdown();
-
-	private:
+		
+		// High-level lifecycle orchestration
+		bool createFromSpecification(const ApplicationSpecification &specification);
+		void shutdownInternal();
+		
+		// High-level runtime flow
 		void onEvent(Event &event);
 		void onUpdate(float deltaTime);
 		void onRender(const ImVec4 &clearColor, float frameRate);
+		void dispatchEventToLayers(Event &event);
+		void mainLoop();
+		void runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io);
 		void initializeLogger() const;
 		void shutdownLogger() const;
 		void logStartupSpecification() const;
+
+		// Runtime services lifecycle
+		bool initializeCoreLayerSystems();
+
+		// Configuration API
+		ConfigLoadResult loadConfigFromPath(const Path &path) const;
+		bool saveConfigToPath(const Path &path, const ConfigDocument &document) const;
+		bool loadUiSettingsDocument(ConfigDocument &document) const;
+		bool saveUiSettingsDocument(const ConfigDocument &document) const;
+
+		// Low-level platform/graphics setup
 		void setupDefaultLayers();
 		bool initializeGlfw();
 		bool createMainWindow();
 		bool initializeGraphics();
 		bool initializeImGui();
-		void beginImGuiFrame();
-		void drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate);
-		void renderFrame(const ImVec4 &clearColor, float frameRate);
-		void configureInputBackend();
-		void mainLoop();
+		
 		void shutdownImGui();
 		void shutdownWindow();
 		void shutdownGlfw();
+		void configureInputBackend();
+
+		// Low-level frame and UI helpers
+		void beginImGuiFrame();
+		void drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate);
+		void renderFrame(const ImVec4 &clearColor, float frameRate);
+
+		// Event queue internals
+		static void ProcessQueuedEvents();
+		void queueEvent(const Event &event);
+		void processPendingEvents();
 
 	private:
-		int m_Argc = 0;
-		char **m_Argv = nullptr;
-		ApplicationSpecification m_Specification;
-		Unique<Window> m_Window;
+		ApplicationRuntimeState m_Runtime;
+		ApplicationGraphicsState m_Graphics;
+		ApplicationConfigState m_Config;
+		EventQueue m_EventQueue;
+
 		LayerStack m_LayerStack;
-		bool m_GlfwInitialized = false;
-		bool m_ImGuiInitialized = false;
-		bool m_GladInitialized = false;
-		bool m_Running = false;
-		double m_LastFrameTime = 0.0;
+		CoreLayer *m_CoreLayer = nullptr;
+
+		// Singleton ownership
+		static Application *s_Instance;
 	};
 } // namespace DefectStudio
