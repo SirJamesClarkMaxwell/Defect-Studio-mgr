@@ -7,8 +7,12 @@ The Core layer contains startup, lifetime, diagnostics, and low-level runtime or
 Implemented:
 
 - Application bootstrap and render loop shell.
+- Lifecycle guard state for idempotent `Create`/`Shutdown` behavior.
 - Logger bootstrap with console and optional file output.
 - Build profiles Debug, Release, and Dist.
+- The Application composition root already owns early runtime services such as `EventBus`, `JobSystem`, and `ProgressTracker`.
+
+See dedicated page: [Application Lifecycle System](application-lifecycle.md).
 
 ## Target Responsibilities
 

@@ -2,6 +2,8 @@
 
 Python is treated as Scientific Runtime infrastructure, not as the primary end-user scripting UX for MVP.
 
+The name is intentional: this subsystem is about scientific execution and adapters, not a general-purpose scripting layer.
+
 ## Intended Responsibilities
 
 - Manage interpreter lifecycle safely.

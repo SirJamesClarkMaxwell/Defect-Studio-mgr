@@ -6,7 +6,10 @@ Layers define presentation and runtime composition order inside the application 
 
 From TODO:
 
-- CoreLayer for base runtime controls.
+- IOLayer for file and external integration handling.
+- StorageLayer for project/session persistence ownership.
+- ScientificRuntimeLayer for scientific Python-backed capability adapters.
+- DomainLayer for runtime domain orchestration.
 - ImGuiLayer for UI context and docking lifecycle.
 - EditorLayer for domain editing workflow and tools.
 - DebugLayer for privileged diagnostics and developer-only panels.
