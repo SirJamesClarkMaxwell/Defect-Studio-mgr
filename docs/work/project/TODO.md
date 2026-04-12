@@ -76,7 +76,9 @@ Building from scratch with proper module separation from the beginning.
 - [x] Logging bootstrap aligned with project-owned log level abstraction (`Core::LogLevel` mapped to spdlog)
 - [x] `Ref<>` / `WeakRef<>` wrappers on shared_ptr / weak_ptr + CreateRef helper
 - [x] `Unique<>` wrapper on `std::unique_ptr` + `CreateUnique` helper
-- [ ] Application singleton – main loop, OnUpdate/OnEvent/OnRender
+- [x] EventQueue foundational implementation – extracted from Application into `Core/EventQueue` class
+- [x] EventQueue migration from `vector<Unique<Event>>` → `std::variant<...>` **[memory locality + compile-time-closed event types]**
+- [x] Application singleton – main loop, OnUpdate/OnEvent/OnRender
 - [x] LayerStack – push/pop/overlay layers
 - [x] CoreLayer, ImGuiLayer, EditorLayer – layer hierarchy
 - [x] EventSystem – keyboard, mouse, window events (own event bus)

@@ -1,4 +1,5 @@
+clear_color: 0.10, 0.10, 0.12, 1.00
+font_scale: 1.830000
+reset_layout: false
 schema_version: 1
 show_demo_window: true
-reset_layout: false
-clear_color: "0.10, 0.10, 0.12, 1.00"

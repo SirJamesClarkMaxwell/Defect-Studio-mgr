@@ -31,6 +31,7 @@ These rules are non-negotiable and apply to all C++ code in the project.
 - Background jobs must not directly mutate live project state.
 - Final commit of project-visible runtime state happens on the main thread.
 - `DebugLayer` is developer-only and production code must not depend on it.
+- Application behavior must be explicit: init/shutdown/config load/save flow must be readable in code and not hidden in implicit constructor/destructor side effects.
 
 These are guardrails, not the main topic of this document.
 
@@ -129,6 +130,8 @@ Code should be easy to understand after a break, easy to review, and easy to spl
 - Headers should declare as little as reasonably possible.
 - Helper implementation that does not need to be public should stay out of headers.
 - Prefer a few small, predictable pieces over one clever but fragile construct.
+- In `.cpp` files, place the highest-level orchestration functions first and push lower-level helpers further down the file.
+- The reader should be able to scan a `.cpp` top-down from intent to mechanics, not from plumbing to purpose.
 
 ## 7. Functions and API design
 

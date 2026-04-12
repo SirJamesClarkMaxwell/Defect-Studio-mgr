@@ -2,7 +2,7 @@
 
 **Status:** rewrite based on current code state  
 **Branch:** `task/04-core`  
-**Last updated:** 2026-04-11
+**Last updated:** 2026-04-12
 
 > This version is written for implementation guidance.  
 > It is grounded in the current codebase, not only in the original backlog text.
@@ -29,8 +29,8 @@ This plan intentionally avoids vague backlog language.
 ### 1.1 Already implemented and usable
 
 #### Application shell
-- `Application` already has `Create`, `Run`, `Shutdown`, `onEvent`, `onUpdate`, `onRender`, `mainLoop`, logger setup, GLFW/GLAD/ImGui initialization, and default layer setup.
-- OS/window events are already routed through one path: `Window -> Application::onEvent -> LayerStack`.
+- `Application` already has `Create`, `Run`, `Shutdown`, `OnEvent`, `onUpdate`, `onRender`, `mainLoop`, logger setup, GLFW/GLAD/ImGui initialization, and default layer setup.
+- OS/window events are already routed through one path: `Window -> Application::OnEvent -> LayerStack`.
 - Layer update order is forward.
 - Layer event order is reverse.
 - Main loop is already deterministic enough for T04 stabilization.
@@ -74,6 +74,24 @@ This plan intentionally avoids vague backlog language.
   - `completedWork`
   - `finished`
 - There is no status enum, timestamps, stage/message, error, tags, source, or integration with jobs.
+
+#### EventQueue foundational implementation exists
+- `EventQueue` extracted from `Application` into `src/Core/EventQueue.hpp` + `.cpp`
+- Migration completed from `vector<Unique<Event>>` to `std::variant<...>`
+  - Benefits: compile-time event safety, better memory locality (inline variant storage vs scattered heap allocations)
+  - Design: `EventVariant` contains all 10 closed event types; variant instances are stored directly in vector
+  - API currently exposed: `Configure()`, `Add()`, `Drain()`, `Size()`, `Capacity()`, `Empty()`, `SetGrowthStep()`, `Resize()`, `FitToSize()`, `Lock()`, `Unlock()`
+  - Migration steps completed: (1) add `EventVariant` to `Core/Event.hpp`, (2) update `EventQueue.hpp` internal types, (3) simplify `EventQueue.cpp`, (4) refactor `Application` to use value-based construction instead of `MakeUnique<>`
+  - **Lock/Unlock restored** – explicit locking remains available and uses `recursive_mutex` so nested calls from the same thread do not deadlock
+- Once complete, enables memory pooling in future iterations if needed
+
+### 1.3 Completed since commit `0520821`
+
+- `Application::OnEvent<TEvent>` is now the public event entry point and variant visitor calls it directly.
+- `Core/Events/` hierarchy is in place and `Core/Event.hpp` serves as an aggregate + `EventVariant` definition.
+- EventQueue regression coverage added in `tests/Core/EventQueueTests.cpp`.
+- mdBook was reorganized into a start page + section pages (`Build and Validation`, `Reference`, `Runtime Core`, `Architecture`).
+- Event system documentation was updated to explicitly separate low-level EventHandling vs EventBus and include practical usage patterns.
 
 #### ConfigManager partially exists
 - `ConfigManager.cpp` already supports default document creation, UI settings document creation, JSON/YAML load/save, format detection, and typed getters.
