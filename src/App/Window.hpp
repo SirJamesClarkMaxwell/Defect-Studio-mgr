@@ -12,7 +12,7 @@ namespace DefectStudio
 	class Window
 	{
 	public:
-		using EventCallback = std::function<void(Event &)>;
+		using EventCallback = std::function<void(EventVariant)>;
 
 		Window() = default;
 		~Window();
@@ -28,7 +28,7 @@ namespace DefectStudio
 		void SwapBuffers() const;
 		void GetFramebufferSize(int &width, int &height) const;
 		void SetEventCallback(EventCallback callback);
-		void DispatchEvent(Event &event);
+		void DispatchEvent(EventVariant event);
 
 		GLFWwindow *GetNativeHandle() const;
 

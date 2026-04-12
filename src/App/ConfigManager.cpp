@@ -5,6 +5,8 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <locale>
+#include <sstream>
 
 #include <nlohmann/json.hpp>
 #include <yaml-cpp/yaml.h>
@@ -249,6 +251,7 @@ namespace DefectStudio
 		document.Set(std::string(SchemaVersionKey), std::string(SchemaVersion));
 		document.Set("show_demo_window", "true");
 		document.Set("reset_layout", "false");
+		document.Set("font_scale", "1.0");
 		document.Set("clear_color", "0.10, 0.10, 0.12, 1.00");
 		return document;
 	}
@@ -339,9 +342,15 @@ namespace DefectStudio
 		if (value.empty())
 			return fallback;
 
-		char *end = nullptr;
-		const double parsed = std::strtod(value.c_str(), &end);
-		if (end == value.c_str() || *end != '\0')
+		std::istringstream stream(value);
+		stream.imbue(std::locale::classic());
+		double parsed = 0.0;
+		stream >> parsed;
+		if (stream.fail())
+			return fallback;
+
+		stream >> std::ws;
+		if (!stream.eof())
 			return fallback;
 
 		return parsed;

@@ -69,40 +69,42 @@ namespace DefectStudio
 		}
 
 		template <typename TCallable>
-		[[nodiscard]] auto SubmitCancelable(CancellationToken token, TCallable &&callable,
-		                                    Priority priority = BS::pr::normal)
-		    -> std::future<std::invoke_result_t<TCallable, const CancellationToken &>>
+		[[nodiscard]] auto SubmitCancelable(CancellationToken token, TCallable &&callable, Priority priority = BS::pr::normal) -> std::future<std::invoke_result_t<TCallable, const CancellationToken &>>
 		{
 			using Result = std::invoke_result_t<TCallable, const CancellationToken &>;
 			return m_Pool.submit_task(
 			    [token = std::move(token), callable = std::forward<TCallable>(callable)]() mutable -> Result
 			    {
-				    if (token.IsCancellationRequested())
-				    {
-					    if constexpr (std::is_void_v<Result>)
-					    {
-						    return;
-					    }
-					    else
-					    {
-						    return Result{};
-					    }
-				    }
-
-				    if constexpr (std::is_void_v<Result>)
-				    {
-					    callable(token);
-					    return;
-				    }
-				    else
-				    {
-					    return callable(token);
-				    }
+				    return invokeCancelable<Result>(token, callable);
 			    },
 			    priority);
 		}
 
 	private:
+		template <typename TResult>
+		static TResult canceledResult()
+		{
+			if constexpr (std::is_void_v<TResult>)
+				return;
+
+			return TResult{};
+		}
+
+		template <typename TResult, typename TCallable>
+		static TResult invokeCancelable(const CancellationToken &token, TCallable &callable)
+		{
+			if (token.IsCancellationRequested())
+				return canceledResult<TResult>();
+
+			if constexpr (std::is_void_v<TResult>)
+			{
+				callable(token);
+				return;
+			}
+
+			return callable(token);
+		}
+
 		BS::priority_thread_pool m_Pool;
 	};
 } // namespace DefectStudio

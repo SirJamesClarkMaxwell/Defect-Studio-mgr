@@ -166,12 +166,12 @@ namespace DefectStudio
 		m_EventCallback = std::move(callback);
 	}
 
-	void Window::DispatchEvent(Event &event)
+	void Window::DispatchEvent(EventVariant event)
 	{
 		if (!m_EventCallback)
 			return;
 
-		m_EventCallback(event);
+		m_EventCallback(std::move(event));
 	}
 
 	void Window::SwapBuffers() const

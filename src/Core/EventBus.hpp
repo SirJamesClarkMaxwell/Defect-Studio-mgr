@@ -9,7 +9,8 @@ namespace DefectStudio
 	public:
 		using SubscriptionId = std::uint64_t;
 
-		template <typename TEvent, typename THandler> SubscriptionId Subscribe(THandler &&handler)
+		template <typename TEvent, typename THandler> 
+		SubscriptionId Subscribe(THandler &&handler)
 		{
 			std::function<void(const TEvent &)> typedHandler(std::forward<THandler>(handler));
 
@@ -23,7 +24,8 @@ namespace DefectStudio
 			return subscriptions.back().id;
 		}
 
-		template <typename TEvent> bool Unsubscribe(SubscriptionId id)
+		template <typename TEvent> 
+		bool Unsubscribe(SubscriptionId id)
 		{
 			auto it = m_Subscriptions.find(std::type_index(typeid(TEvent)));
 			if (it == m_Subscriptions.end())
@@ -41,7 +43,8 @@ namespace DefectStudio
 			return true;
 		}
 
-		template <typename TEvent> void Publish(const TEvent &event) const
+		template <typename TEvent> 
+		void Publish(const TEvent &event) const
 		{
 			auto it = m_Subscriptions.find(std::type_index(typeid(TEvent)));
 			if (it == m_Subscriptions.end())

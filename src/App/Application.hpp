@@ -29,7 +29,7 @@ namespace DefectStudio
 		void Shutdown();
 		~Application();
 
-		static void EmitEvent(Event &event);
+		static void EmitEvent(EventVariant event);
 
 		// Global accessor for layers and demos
 		static Application &Get();
@@ -38,6 +38,10 @@ namespace DefectStudio
 		EventBus &GetEventBus();
 		JobSystem &GetJobSystem();
 		ProgressTracker &GetProgressTracker();
+
+		// Event processing entry point for concrete event types.
+		template <typename TEvent>
+		void OnEvent(TEvent &event);
 
 	private:
 		Application(int argc, char **argv);
@@ -51,10 +55,10 @@ namespace DefectStudio
 		void shutdownInternal();
 		
 		// High-level runtime flow
-		void onEvent(Event &event);
 		void onUpdate(float deltaTime);
 		void onRender(const ImVec4 &clearColor, float frameRate);
-		void dispatchEventToLayers(Event &event);
+		template <typename TEvent>
+		void dispatchEventToLayers(TEvent &event);
 		void mainLoop();
 		void runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io);
 		void initializeLogger() const;
@@ -89,7 +93,7 @@ namespace DefectStudio
 
 		// Event queue internals
 		static void ProcessQueuedEvents();
-		void queueEvent(const Event &event);
+		void queueEvent(EventVariant event);
 		void processPendingEvents();
 
 	private:

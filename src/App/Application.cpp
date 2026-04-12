@@ -81,65 +81,6 @@ namespace DefectStudio
 			return Path::FromResolved(std::filesystem::current_path() / "config");
 	}
 
-	static Unique<Event> CloneEvent(const Event &event)
-	{
-		switch (event.GetEventType())
-		{
-			case EventType::WindowClose:
-				return CreateUnique<WindowCloseEvent>();
-			case EventType::WindowResize:
-			{
-				const auto &resize = static_cast<const WindowResizeEvent &>(event);
-				return CreateUnique<WindowResizeEvent>(resize.GetWidth(), resize.GetHeight());
-			}
-			case EventType::KeyPressed:
-			{
-				const auto &key = static_cast<const KeyPressedEvent &>(event);
-				return CreateUnique<KeyPressedEvent>(key.GetKeyCode());
-			}
-			case EventType::KeyRepeated:
-			{
-				const auto &key = static_cast<const KeyRepeatedEvent &>(event);
-				return CreateUnique<KeyRepeatedEvent>(key.GetKeyCode());
-			}
-			case EventType::KeyReleased:
-			{
-				const auto &key = static_cast<const KeyReleasedEvent &>(event);
-				return CreateUnique<KeyReleasedEvent>(key.GetKeyCode());
-			}
-			case EventType::MouseButtonPressed:
-			{
-				const auto &mouse = static_cast<const MouseButtonPressedEvent &>(event);
-				return CreateUnique<MouseButtonPressedEvent>(mouse.GetButton());
-			}
-			case EventType::MouseButtonReleased:
-			{
-				const auto &mouse = static_cast<const MouseButtonReleasedEvent &>(event);
-				return CreateUnique<MouseButtonReleasedEvent>(mouse.GetButton());
-			}
-			case EventType::MouseMoved:
-			{
-				const auto &mouse = static_cast<const MouseMovedEvent &>(event);
-				return CreateUnique<MouseMovedEvent>(mouse.GetX(), mouse.GetY());
-			}
-			case EventType::MouseScrolled:
-			{
-				const auto &mouse = static_cast<const MouseScrolledEvent &>(event);
-				return CreateUnique<MouseScrolledEvent>(mouse.GetOffsetX(), mouse.GetOffsetY());
-			}
-			case EventType::TouchpadGesture:
-			{
-				const auto &gesture = static_cast<const TouchpadGestureEvent &>(event);
-				return CreateUnique<TouchpadGestureEvent>(gesture.GetDeltaX(), gesture.GetDeltaY());
-			}
-			case EventType::None:
-			default:
-				break;
-		}
-
-		return nullptr;
-	}
-
 	struct MainLoopState
 	{
 		bool showDemoWindow = true;
@@ -171,10 +112,10 @@ namespace DefectStudio
 		shutdownInternal();
 	}
 
-	void Application::EmitEvent(Event &event)
+	void Application::EmitEvent(EventVariant event)
 	{
 		DS_ASSERT(s_Instance != nullptr, "Application not created");
-		s_Instance->queueEvent(event);
+		s_Instance->queueEvent(std::move(event));
 	}
 
 	void Application::ProcessQueuedEvents()
@@ -219,8 +160,10 @@ namespace DefectStudio
 		s_Instance = this;
 		m_Runtime.argc = argc;
 		m_Runtime.argv = argv;
-
-		if (!createFromSpecification(parseApplicationArguments(m_Runtime.argc, m_Runtime.argv)))
+		
+		ApplicationSpecification spec = parseApplicationArguments(m_Runtime.argc,m_Runtime.argv);
+		bool created = createFromSpecification(spec);
+		if (!created)
 			DS_LOG_ERROR("Application creation failed");
 	}
 
@@ -246,8 +189,11 @@ namespace DefectStudio
 
 		m_Runtime.specification = specification;
 		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
+
 		m_EventQueue.Configure(256);
+
 		initializeLogger();
+
 		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
 		logStartupSpecification();
 
@@ -311,7 +257,8 @@ namespace DefectStudio
 
 	// ===== High-level runtime flow =====
 
-	void Application::dispatchEventToLayers(Event &event)
+	template <typename TEvent>
+	void Application::dispatchEventToLayers(TEvent &event)
 	{
 		for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
 		{
@@ -581,7 +528,7 @@ namespace DefectStudio
 			return false;
 		}
 
-		m_Graphics.window->SetEventCallback([this](Event &event) { queueEvent(event); });
+		m_Graphics.window->SetEventCallback([this](EventVariant event) { queueEvent(std::move(event)); });
 
 		configureInputBackend();
 
@@ -651,11 +598,12 @@ namespace DefectStudio
 		DS_LOG_INFO("Entering render loop");
 		TracyMessageL("Entering render loop");
 
-		while (m_Runtime.lifecycle.IsRunning() && !m_Graphics.window->ShouldClose())
+		while (m_Runtime.Running() && !m_Graphics.window->ShouldClose())
 			runMainLoopFrame(state.showDemoWindow, state.clearColor, io);
 	}
 
-	void Application::onEvent(Event &event)
+	template <typename TEvent>
+	void Application::OnEvent(TEvent &event)
 	{
 		if (m_Runtime.specification.traceEvents)
 			DS_LOG_DEBUG("Event: {}", event.GetName());
@@ -693,26 +641,32 @@ namespace DefectStudio
 		processPendingEvents();
 	}
 
-	void Application::queueEvent(const Event &event)
+	void Application::queueEvent(EventVariant event)
 	{
-		Unique<Event> cloned = CloneEvent(event);
-		if (cloned == nullptr)
-		{
-			DS_LOG_WARN("Unknown event type in queueEvent: {}", event.GetName());
-			return;
-		}
-
-		m_EventQueue.Add(std::move(cloned));
+		m_EventQueue.Add(std::move(event));
 	}
+
+	struct VariantEventVisitor
+	{
+		Application *self;
+
+		template <typename TEvent>
+		void operator()(TEvent &event) const
+		{
+			self->OnEvent(event);
+		}
+	};
 
 	void Application::processPendingEvents()
 	{
-		std::vector<Unique<Event>> events = m_EventQueue.Drain();
+		std::vector<EventVariant> events = m_EventQueue.Drain();
 		if (events.empty())
 			return;
 
-		for (auto &event : events)
-			onEvent(*event);
+		for (auto &variant : events)
+		{
+			std::visit(VariantEventVisitor{this}, variant);
+		}
 	}
 
 	void Application::onRender(const ImVec4 &clearColor, float frameRate)
@@ -761,4 +715,15 @@ namespace DefectStudio
 
 		DS_LOG_INFO("DefectStudio GUI shell stopped");
 	}
+
+	template void Application::OnEvent<WindowCloseEvent>(WindowCloseEvent &);
+	template void Application::OnEvent<WindowResizeEvent>(WindowResizeEvent &);
+	template void Application::OnEvent<KeyPressedEvent>(KeyPressedEvent &);
+	template void Application::OnEvent<KeyReleasedEvent>(KeyReleasedEvent &);
+	template void Application::OnEvent<KeyRepeatedEvent>(KeyRepeatedEvent &);
+	template void Application::OnEvent<MouseButtonPressedEvent>(MouseButtonPressedEvent &);
+	template void Application::OnEvent<MouseButtonReleasedEvent>(MouseButtonReleasedEvent &);
+	template void Application::OnEvent<MouseMovedEvent>(MouseMovedEvent &);
+	template void Application::OnEvent<MouseScrolledEvent>(MouseScrolledEvent &);
+	template void Application::OnEvent<TouchpadGestureEvent>(TouchpadGestureEvent &);
 } // namespace DefectStudio

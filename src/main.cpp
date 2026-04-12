@@ -1,10 +1,9 @@
 #include "Core/dspch.hpp"
 
 #include "App/Application.hpp"
-
+using namespace DefectStudio;
 int main(int argc, char **argv)
 {
-
-	DefectStudio::Application app(argc, argv);
-	return app.Run();
+	Application app = Application::Create(argc,argv);
+	app.Run();
 }

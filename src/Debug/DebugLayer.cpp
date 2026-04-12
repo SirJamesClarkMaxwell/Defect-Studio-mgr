@@ -1,8 +1,7 @@
 #include "Core/dspch.hpp"
 
-#include "Debug/DebugLayer.hpp"
-
 #include "Core/Logger.hpp"
+#include "Debug/DebugLayer.hpp"
 
 namespace DefectStudio
 {
@@ -22,5 +21,6 @@ namespace DefectStudio
 
 	void DebugLayer::OnImGuiRender()
 	{
+		// Additional diagnostics can be added here
 	}
 } // namespace DefectStudio

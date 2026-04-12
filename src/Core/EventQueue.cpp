@@ -32,7 +32,7 @@ namespace DefectStudio
 		if (targetCapacity == m_Pending.capacity())
 			return;
 
-		std::vector<Unique<Event>> resized;
+		std::vector<EventVariant> resized;
 		resized.reserve(targetCapacity);
 		for (auto &event : m_Pending)
 			resized.push_back(std::move(event));
@@ -43,7 +43,7 @@ namespace DefectStudio
 	void EventQueue::FitToSize()
 	{
 		std::scoped_lock lock(m_Guard);
-		std::vector<Unique<Event>> fitted;
+		std::vector<EventVariant> fitted;
 		fitted.reserve(m_Pending.size());
 		for (auto &event : m_Pending)
 			fitted.push_back(std::move(event));
@@ -51,16 +51,16 @@ namespace DefectStudio
 		m_Pending.swap(fitted);
 	}
 
-	void EventQueue::Add(Unique<Event> event)
+	void EventQueue::Add(EventVariant event)
 	{
 		std::scoped_lock lock(m_Guard);
 		EnsureCapacityLocked();
 		m_Pending.push_back(std::move(event));
 	}
 
-	std::vector<Unique<Event>> EventQueue::Drain()
+	std::vector<EventVariant> EventQueue::Drain()
 	{
-		std::vector<Unique<Event>> events;
+		std::vector<EventVariant> events;
 		std::scoped_lock lock(m_Guard);
 		if (m_Pending.empty())
 			return events;

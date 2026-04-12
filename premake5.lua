@@ -46,6 +46,18 @@ project "DefectStudio"
         "src/**.cpp"
     }
 
+    vpaths {
+        ["App/*"] = { "src/App/**.cpp", "src/App/**.hpp" },
+        ["Core/*"] = { "src/Core/**.cpp", "src/Core/**.hpp" },
+        ["Debug/*"] = { "src/Debug/**.cpp", "src/Debug/**.hpp" },
+        ["Demo/*"] = { "src/Demo/**.cpp", "src/Demo/**.hpp" },
+        ["Domain/*"] = { "src/Domain/**.cpp", "src/Domain/**.hpp" },
+        ["IO/*"] = { "src/IO/**.cpp", "src/IO/**.hpp" },
+        ["Presentation/*"] = { "src/Presentation/**.cpp", "src/Presentation/**.hpp" },
+        ["ScientificRuntime/*"] = { "src/ScientificRuntime/**.cpp", "src/ScientificRuntime/**.hpp" },
+        ["Storage/*"] = { "src/Storage/**.cpp", "src/Storage/**.hpp" },
+    }
+
     includedirs {
         "src",
         "Vendor/spdlog/include",
@@ -138,43 +150,63 @@ project "DefectStudioTests"
         "tests/**.hpp",
         "tests/**.cpp",
         "Vendor/GoogleTest/googletest/src/gtest_main.cc",
-        "src/Core/Logger.hpp",
-        "src/Core/Logger.cpp",
-        "src/Core/Layer.hpp",
-        "src/Core/Layer.cpp",
-        "src/Core/LayerStack.hpp",
-        "src/Core/LayerStack.cpp",
-        "src/Core/Input.hpp",
-        "src/Core/Input.cpp",
-        "src/Core/JobSystem.hpp",
-        "src/Core/JobSystem.cpp",
-        "src/Core/ProgressTracker.hpp",
-        "src/Core/ProgressTracker.cpp",
-        "src/App/ConfigManager.hpp",
-        "src/App/ConfigManager.cpp",
-        "src/Core/CoreLayer.hpp",
-        "src/Core/CoreLayer.cpp",
-        "src/Debug/DebugLayer.hpp",
-        "src/Debug/DebugLayer.cpp",
-        "src/Domain/DomainLayer.hpp",
-        "src/Domain/DomainLayer.cpp",
-        "src/IO/IOLayer.hpp",
-        "src/IO/IOLayer.cpp",
-        "src/ScientificRuntime/ScientificRuntimeLayer.hpp",
-        "src/ScientificRuntime/ScientificRuntimeLayer.cpp",
-        "src/Storage/StorageLayer.hpp",
-        "src/Storage/StorageLayer.cpp",
-        "src/Presentation/EditorLayer.hpp",
-        "src/Presentation/EditorLayer.cpp",
-        "src/Presentation/ImGuiLayer.hpp",
-        "src/Presentation/ImGuiLayer.cpp"
+
+
+        "src/Core/**.hpp",
+        "src/Core/**.cpp",
+
+        "src/App/**.hpp",
+        "src/App/**.cpp",
+        
+        "src/Debug/**.hpp",
+        "src/Debug/**.cpp",
+
+        "src/Demo/**.hpp",
+        "src/Demo/**.cpp",
+
+        "src/Domain/**.hpp",
+        "src/Domain/**.cpp",
+
+        "src/IO/**.hpp",
+        "src/IO/**.cpp",
+
+        "src/ScientificRuntime/**.hpp",
+        "src/ScientificRuntime/**.cpp",
+
+        "src/Storage/**.hpp",
+        "src/Storage/**.cpp",
+
+        "src/Presentation/**.hpp",
+        "src/Presentation/**.cpp",
+    }
+
+    removefiles {
+        "src/Core/dspch.cpp"
+    }
+
+    vpaths {
+        ["Tests/*"] = { "tests/**.cpp", "tests/**.hpp" },
+        ["App/*"] = { "src/App/**.cpp", "src/App/**.hpp" },
+        ["Core/*"] = { "src/Core/**.cpp", "src/Core/**.hpp" },
+        ["Debug/*"] = { "src/Debug/**.cpp", "src/Debug/**.hpp" },
+        ["Demo/*"] = { "src/Demo/**.cpp", "src/Demo/**.hpp" },
+        ["Domain/*"] = { "src/Domain/**.cpp", "src/Domain/**.hpp" },
+        ["IO/*"] = { "src/IO/**.cpp", "src/IO/**.hpp" },
+        ["Presentation/*"] = { "src/Presentation/**.cpp", "src/Presentation/**.hpp" },
+        ["ScientificRuntime/*"] = { "src/ScientificRuntime/**.cpp", "src/ScientificRuntime/**.hpp" },
+        ["Storage/*"] = { "src/Storage/**.cpp", "src/Storage/**.hpp" },
     }
 
     includedirs {
         "src",
         "Vendor/spdlog/include",
+        "Vendor/Tracy/public",
         "Vendor/GoogleTest/googletest/include",
         "Vendor/GoogleTest/googlemock/include",
+        "Vendor/GLFW/include",
+        "Vendor/GLAD/generated/include",
+        "Vendor/ImGui",
+        "Vendor/ImGui/backends",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
         "Vendor/yaml-cpp/include"
@@ -182,12 +214,21 @@ project "DefectStudioTests"
 
     links {
         "GoogleTest",
+        "GLFW",
+        "GLAD",
+        "ImGui",
         "yaml-cpp"
     }
 
     filter "system:windows"
+        links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }
         systemversion "latest"
-        defines { "DS_PLATFORM_WINDOWS", "YAML_CPP_STATIC_DEFINE" }
+        defines {
+            "DS_PLATFORM_WINDOWS",
+            "YAML_CPP_STATIC_DEFINE",
+            "GLFW_INCLUDE_NONE",
+            "IMGUI_IMPL_OPENGL_LOADER_GLAD"
+        }
 
     filter { "system:windows", "action:vs2022" }
         buildoptions { "/utf-8" }
