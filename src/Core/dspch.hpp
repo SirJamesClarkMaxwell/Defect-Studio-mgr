@@ -33,3 +33,20 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#if defined(TRACY_ENABLE)
+#include <tracy/Tracy.hpp>
+#else
+#ifndef ZoneScoped
+#define ZoneScoped ((void)0)
+#endif
+#ifndef TracyMessageL
+#define TracyMessageL(message) ((void)0)
+#endif
+#ifndef TracyPlot
+#define TracyPlot(name, value) ((void)0)
+#endif
+#ifndef FrameMark
+#define FrameMark ((void)0)
+#endif
+#endif

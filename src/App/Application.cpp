@@ -11,8 +11,10 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 
+#if defined(TRACY_ENABLE)
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
+#endif
 
 #include "App/Application.hpp"
 #include "App/ConfigManager.hpp"

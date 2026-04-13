@@ -9,7 +9,11 @@ workspace "DefectStudio"
         "Dist"
     }
 
-outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
+if _ACTION == "gmake2" then
+    outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}-gmake2"
+else
+    outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
+end
 _DS_ROOT = path.getabsolute(".")
 
 -- Icon paths: absolute for Windows (VS2022 postbuild), relative for Linux (gmake2)
