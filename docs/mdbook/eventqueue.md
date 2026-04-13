@@ -26,14 +26,14 @@ class EventQueue
 
 ### Event Types
 
-Organized in subdirectories under `src/Core/Events/`:
+Organized in subdirectories under `src/Core/Platform/Events/`:
 
 - **WindowEvents.hpp**: `WindowCloseEvent`, `WindowResizeEvent`
 - **KeyboardEvents.hpp**: `KeyPressedEvent`, `KeyReleasedEvent`, `KeyRepeatedEvent`
 - **MouseEvents.hpp**: `MouseMovedEvent`, `MouseButtonPressedEvent`, `MouseButtonReleasedEvent`, `MouseScrolledEvent`
 - **TouchpadEvents.hpp**: `TouchpadGestureEvent`
 
-All inherit from `Event` base class (defined in `EventBase.hpp`).
+All inherit from `Event` base class (defined in `PlatformEventBase.hpp`).
 
 ### EventVariant
 
@@ -57,7 +57,7 @@ static_assert(std::variant_size_v<EventVariant> == 10,
 
 **Adding a new event type:**
 1. Create type in appropriate subdirectory (e.g., `Core/Events/NewCategoryEvents.hpp`)
-2. Add `#include` in `Core/Event.hpp`
+2. Add `#include` in `Core/Platform/Events/PlatformEvent.hpp`
 3. Add type to `EventVariant` alias
 4. Update `static_assert` guard from 10 → 11 (or current+1)
 

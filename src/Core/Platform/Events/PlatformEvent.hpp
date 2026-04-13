@@ -5,13 +5,13 @@
 #include "Core/dspch.hpp"
 
 // Base event type interface and macros
-#include "Core/Events/EventBase.hpp"
+#include "Core/Platform/Events/PlatformEventBase.hpp"
 
 // Concrete event implementations
-#include "Core/Events/WindowEvents.hpp"
-#include "Core/Events/KeyboardEvents.hpp"
-#include "Core/Events/MouseEvents.hpp"
-#include "Core/Events/TouchpadEvents.hpp"
+#include "Core/Platform/Events/WindowEvents.hpp"
+#include "Core/Platform/Events/KeyboardEvents.hpp"
+#include "Core/Platform/Events/MouseEvents.hpp"
+#include "Core/Platform/Events/TouchpadEvents.hpp"
 
 namespace DefectStudio
 {

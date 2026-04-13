@@ -12,6 +12,7 @@
 		- [API Key Classes](api-key-classes.md)
 
 	- [Runtime Core](runtime-core.md)
+		- [Event Systems API Definition](event-systems-api.md)
 		- [System Architecture Overview](architecture-system-overview.md)
 		- [Core Architecture](architecture-core.md)
 		- [Application Lifecycle System](application-lifecycle.md)

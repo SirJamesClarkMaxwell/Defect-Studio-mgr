@@ -8,6 +8,7 @@ Use this page as the entry point.
 
 - [Build and Validation](build-and-validation.md) for local build and test workflows.
 - [Runtime Core](runtime-core.md) for application shell, event handling, queueing, and core services.
+- [Event Systems API Definition](event-systems-api.md) for the exact contract of EventHandling and EventBus.
 - [Architecture](architecture.md) for higher-level system design.
 - [Reference](reference.md) for shared conventions and key classes.
 

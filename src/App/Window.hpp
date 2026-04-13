@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-#include "Core/Event.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
 
 struct GLFWwindow;
 

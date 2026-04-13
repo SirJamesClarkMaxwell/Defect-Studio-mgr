@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Core/Event.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
 #include "Core/EventQueue.hpp"
 
 namespace DefectStudio::Test
@@ -74,7 +74,7 @@ namespace DefectStudio::Test
 	{
 		queue.Configure(256);
 		queue.Add(WindowCloseEvent());
-		queue.Drain();
+		(void)queue.Drain();
 		EXPECT_TRUE(queue.Empty());
 	}
 

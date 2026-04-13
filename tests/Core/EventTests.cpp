@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Core/Event.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
 
 TEST(EventTests, DispatchesOnlyMatchingType)
 {

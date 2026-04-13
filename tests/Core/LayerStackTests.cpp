@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "Core/Event.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
 #include "Core/Layer.hpp"
 #include "Core/LayerStack.hpp"
 
@@ -30,6 +30,10 @@ namespace
 			m_Log.push_back(GetName() + ":event");
 			if (m_HandlesEvent)
 				event.handled = true;
+		}
+		void OnUpdate(float) override
+		{
+			m_Log.push_back(GetName() + ":update");
 		}
 
 	private:
@@ -79,6 +83,26 @@ TEST(LayerStackTests, IterationOrderIsLayersThenOverlays)
 
 	const std::vector<std::string> expected = {"A", "B", "C"};
 	EXPECT_EQ(order, expected);
+}
+
+TEST(LayerStackTests, UpdateOrderIsLayersThenOverlays)
+{
+	std::vector<std::string> log;
+	DefectStudio::LayerStack stack;
+	auto layerA = DefectStudio::CreateUnique<RecordingLayer>("A", log);
+	auto layerB = DefectStudio::CreateUnique<RecordingLayer>("B", log);
+	auto overlayC = DefectStudio::CreateUnique<RecordingLayer>("C", log);
+
+	stack.PushLayer(std::move(layerA));
+	stack.PushLayer(std::move(layerB));
+	stack.PushOverlay(std::move(overlayC));
+
+	log.clear();
+	for (const auto &layer : stack)
+		layer->OnUpdate(0.016f);
+
+	const std::vector<std::string> expected = {"A:update", "B:update", "C:update"};
+	EXPECT_EQ(log, expected);
 }
 
 TEST(LayerStackTests, ReverseOrderEventPropagationStopsWhenHandled)

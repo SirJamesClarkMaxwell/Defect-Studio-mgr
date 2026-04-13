@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Event.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
 
 namespace DefectStudio
 {
