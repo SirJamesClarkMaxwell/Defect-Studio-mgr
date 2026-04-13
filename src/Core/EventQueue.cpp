@@ -4,15 +4,19 @@
 
 #include <algorithm>
 
+#include "Core/Logger.hpp"
+
 namespace DefectStudio
 {
 	void EventQueue::Configure(std::size_t initialCapacity, std::size_t growthStep)
 	{
+		ZoneScoped;
 		const std::size_t safeCapacity = std::max<std::size_t>(initialCapacity, 32);
 		std::scoped_lock lock(m_Guard);
 		m_GrowthStep = std::max<std::size_t>(growthStep, 32);
 		m_Pending.clear();
 		m_Pending.reserve(safeCapacity);
+		DS_LOG_INFO("EventQueue configured capacity={} growthStep={}", safeCapacity, m_GrowthStep);
 	}
 
 	void EventQueue::Lock()
@@ -53,19 +57,23 @@ namespace DefectStudio
 
 	void EventQueue::Add(EventVariant event)
 	{
+		ZoneScoped;
 		std::scoped_lock lock(m_Guard);
 		EnsureCapacityLocked();
 		m_Pending.push_back(std::move(event));
+		DS_LOG_TRACE("EventQueue add size={} capacity={}", m_Pending.size(), m_Pending.capacity());
 	}
 
 	std::vector<EventVariant> EventQueue::Drain()
 	{
+		ZoneScoped;
 		std::vector<EventVariant> events;
 		std::scoped_lock lock(m_Guard);
 		if (m_Pending.empty())
 			return events;
 
 		events.swap(m_Pending);
+		DS_LOG_TRACE("EventQueue drain count={}", events.size());
 		return events;
 	}
 

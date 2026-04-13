@@ -1,6 +1,11 @@
 #pragma once
 
-#include <memory>
+#include "Core/Memory.hpp"
+
+namespace DefectStudio
+{
+	class EventBus;
+}
 
 namespace DefectStudio::Demo
 {
@@ -10,13 +15,14 @@ namespace DefectStudio::Demo
 	class EventBusDemo
 	{
 	public:
-		EventBusDemo();
+		explicit EventBusDemo(Ref<EventBus> bus);
 		~EventBusDemo();
 
 		void Render();
 
 	private:
-		std::unique_ptr<EventBusPublisherDemo> m_Publisher;
-		std::unique_ptr<EventBusSubscriberDemo> m_Subscriber;
+		Ref<EventBus> m_Bus;
+		Unique<EventBusPublisherDemo> m_Publisher;
+		Unique<EventBusSubscriberDemo> m_Subscriber;
 	};
 } // namespace DefectStudio::Demo

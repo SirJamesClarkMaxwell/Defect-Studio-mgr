@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/EventBus.hpp"
+#include "Core/Events/EventBus.hpp"
 #include "Core/JobSystem.hpp"
 #include "Core/Layer.hpp"
 #include "Core/Memory.hpp"
@@ -18,7 +18,9 @@ namespace DefectStudio
 		void OnUpdate(float deltaTime) override;
 
 		bool InitializeSystems();
+		bool InitializeEventBusSystem();
 		void ShutdownSystems();
+		void ShutdownEventBusSystem();
 
 		EventBus &GetEventBus();
 		JobSystem &GetJobSystem();
@@ -27,7 +29,7 @@ namespace DefectStudio
 	private:
 		float m_AccumulatedTime = 0.0f;
 		bool m_SystemsInitialized = false;
-		Unique<EventBus> m_EventBus;
+		Ref<EventBus> m_EventBus;
 		Unique<JobSystem> m_JobSystem;
 		Unique<ProgressTracker> m_ProgressTracker;
 	};

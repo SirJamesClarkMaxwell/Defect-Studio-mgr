@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Event.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
 
 namespace DefectStudio::Demo
 {
@@ -11,9 +11,9 @@ namespace DefectStudio::Demo
 		void Render();
 
 	private:
-		bool OnWindowResize(WindowResizeEvent &event);
-		bool OnKeyPressed(KeyPressedEvent &event);
-		bool OnMouseMoved(MouseMovedEvent &event);
+		bool onWindowResize(WindowResizeEvent &event);
+		bool onKeyPressed(KeyPressedEvent &event);
+		bool onMouseMoved(MouseMovedEvent &event);
 
 		int m_TotalEventsSeen = 0;
 		int m_WindowResizeCount = 0;

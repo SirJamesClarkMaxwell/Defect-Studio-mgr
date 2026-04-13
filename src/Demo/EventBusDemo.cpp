@@ -1,15 +1,17 @@
 #include "Core/dspch.hpp"
 
+#include "Core/Memory.hpp"
 #include "Demo/EventBusDemo.hpp"
 #include "Demo/EventBusPublisherDemo.hpp"
 #include "Demo/EventBusSubscriberDemo.hpp"
 
 namespace DefectStudio::Demo
 {
-	EventBusDemo::EventBusDemo()
+	EventBusDemo::EventBusDemo(Ref<EventBus> bus)
+		: m_Bus(std::move(bus))
 	{
-		m_Publisher = std::make_unique<EventBusPublisherDemo>();
-		m_Subscriber = std::make_unique<EventBusSubscriberDemo>();
+		m_Publisher = CreateUnique<EventBusPublisherDemo>(m_Bus);
+		m_Subscriber = CreateUnique<EventBusSubscriberDemo>(m_Bus);
 	}
 
 	EventBusDemo::~EventBusDemo()

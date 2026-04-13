@@ -190,7 +190,11 @@ namespace DefectStudio
 		m_Runtime.specification = specification;
 		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
 
-		m_EventQueue.Configure(256);
+		if (!initializeEventDispatchingSystem())
+		{
+			shutdownInternal();
+			return false;
+		}
 
 		initializeLogger();
 
@@ -230,6 +234,13 @@ namespace DefectStudio
 		}
 
 		m_Runtime.lifecycle.SetRunning(true);
+		return true;
+	}
+
+	bool Application::initializeEventDispatchingSystem()
+	{
+		DS_LOG_INFO("Init: EventDispatchingSystem (EventQueue)");
+		m_EventQueue.Configure(256);
 		return true;
 	}
 
@@ -450,9 +461,11 @@ namespace DefectStudio
 	bool Application::initializeCoreLayerSystems()
 	{
 		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer was not created");
-		if (!m_CoreLayer->InitializeSystems())
+		bool systemInitialized = m_CoreLayer->InitializeSystems();
+		if (!systemInitialized)
 			return false;
 
+		// Sanity-check: force asserts if any core service failed to initialize.
 		GetEventBus();
 		GetJobSystem();
 		GetProgressTracker();

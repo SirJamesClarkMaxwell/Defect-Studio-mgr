@@ -9,10 +9,11 @@ namespace DefectStudio::Demo
 	void EventDispatcherDemo::OnEvent(Event &event)
 	{
 		++m_TotalEventsSeen;
+		// Dispatcher fits layer-local, immediate input events (type-based routing per frame).
 		EventDispatcher dispatcher(event);
-		dispatcher.Dispatch<WindowResizeEvent>(std::bind(&EventDispatcherDemo::OnWindowResize, this, std::placeholders::_1));
-		dispatcher.Dispatch<KeyPressedEvent>(std::bind(&EventDispatcherDemo::OnKeyPressed, this, std::placeholders::_1));
-		dispatcher.Dispatch<MouseMovedEvent>(std::bind(&EventDispatcherDemo::OnMouseMoved, this, std::placeholders::_1));
+		dispatcher.Dispatch<WindowResizeEvent>(std::bind(&EventDispatcherDemo::onWindowResize, this, std::placeholders::_1));
+		dispatcher.Dispatch<KeyPressedEvent>(std::bind(&EventDispatcherDemo::onKeyPressed, this, std::placeholders::_1));
+		dispatcher.Dispatch<MouseMovedEvent>(std::bind(&EventDispatcherDemo::onMouseMoved, this, std::placeholders::_1));
 		m_LastHandled = event.handled;
 	}
 
@@ -37,21 +38,22 @@ namespace DefectStudio::Demo
 		ImGui::End();
 	}
 
-	bool EventDispatcherDemo::OnWindowResize(WindowResizeEvent &event)
+	bool EventDispatcherDemo::onWindowResize(WindowResizeEvent &event)
 	{
 		++m_WindowResizeCount;
 		(void)event;
 		return false;
 	}
 
-	bool EventDispatcherDemo::OnKeyPressed(KeyPressedEvent &event)
+	bool EventDispatcherDemo::onKeyPressed(KeyPressedEvent &event)
 	{
 		++m_KeyPressedCount;
 		(void)event;
+		// Allow this layer to stop propagation for lower-priority layers when desired.
 		return m_ConsumeKeyboardEvents;
 	}
 
-	bool EventDispatcherDemo::OnMouseMoved(MouseMovedEvent &event)
+	bool EventDispatcherDemo::onMouseMoved(MouseMovedEvent &event)
 	{
 		++m_MouseMovedCount;
 		(void)event;

@@ -2,35 +2,35 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
+#include "Core/Events/EventBus.hpp"
 #include "Demo/DemoEvents.hpp"
 #include "Demo/EventBusSubscriberDemo.hpp"
 
 namespace DefectStudio::Demo
 {
-	EventBusSubscriberDemo::EventBusSubscriberDemo()
+	EventBusSubscriberDemo::EventBusSubscriberDemo(Ref<EventBus> bus)
+		: m_Bus(std::move(bus))
 	{
-		auto &bus = Application::Get().GetEventBus();
-		m_FileOpenedSub = bus.Subscribe<FileOpenedBusEvent>(
-		    std::bind(&EventBusSubscriberDemo::OnFileOpened, this, std::placeholders::_1));
-		m_DataProcessedSub = bus.Subscribe<DataProcessedBusEvent>(
-		    std::bind(&EventBusSubscriberDemo::OnDataProcessed, this, std::placeholders::_1));
-		m_PipelineStatusSub = bus.Subscribe<PipelineStatusBusEvent>(
-		    std::bind(&EventBusSubscriberDemo::OnPipelineStatus, this, std::placeholders::_1));
+		m_FileOpenedSub = m_Bus->Subscribe<FileOpenedBusEvent>(
+			[this](const FileOpenedBusEvent &event) { onFileOpened(event); });
+		m_DataProcessedSub = m_Bus->Subscribe<DataProcessedBusEvent>(
+			[this](const DataProcessedBusEvent &event) { onDataProcessed(event); });
+		m_PipelineStatusSub = m_Bus->Subscribe<PipelineStatusBusEvent>(
+			[this](const PipelineStatusBusEvent &event) { onPipelineStatus(event); });
 	}
 
 	EventBusSubscriberDemo::~EventBusSubscriberDemo()
 	{
-		auto &bus = Application::Get().GetEventBus();
-		bus.Unsubscribe<FileOpenedBusEvent>(m_FileOpenedSub);
-		bus.Unsubscribe<DataProcessedBusEvent>(m_DataProcessedSub);
-		bus.Unsubscribe<PipelineStatusBusEvent>(m_PipelineStatusSub);
+		m_FileOpenedSub.Reset();
+		m_DataProcessedSub.Reset();
+		m_PipelineStatusSub.Reset();
 	}
 
 	void EventBusSubscriberDemo::Render()
 	{
 		ImGui::Begin("Demo/EventBus Subscriber");
 		ImGui::TextUnformatted("Subscriber class in a separate object/window.");
+		// Separate object demonstrates lifetime ownership; subscriptions live with the subscriber.
 		ImGui::Separator();
 		ImGui::Text("Received FileOpened: %d", m_ReceivedFileEvents);
 		ImGui::Text("Last filename: %s", m_LastFilename.empty() ? "<none>" : m_LastFilename.c_str());
@@ -43,19 +43,19 @@ namespace DefectStudio::Demo
 		ImGui::End();
 	}
 
-	void EventBusSubscriberDemo::OnFileOpened(const FileOpenedBusEvent &event)
+	void EventBusSubscriberDemo::onFileOpened(const FileOpenedBusEvent &event)
 	{
 		++m_ReceivedFileEvents;
 		m_LastFilename = event.filename;
 	}
 
-	void EventBusSubscriberDemo::OnDataProcessed(const DataProcessedBusEvent &event)
+	void EventBusSubscriberDemo::onDataProcessed(const DataProcessedBusEvent &event)
 	{
 		++m_ReceivedDataEvents;
 		m_LastResult = event.resultSummary;
 	}
 
-	void EventBusSubscriberDemo::OnPipelineStatus(const PipelineStatusBusEvent &event)
+	void EventBusSubscriberDemo::onPipelineStatus(const PipelineStatusBusEvent &event)
 	{
 		++m_ReceivedPipelineEvents;
 		m_LastPipelineMessage = event.message;

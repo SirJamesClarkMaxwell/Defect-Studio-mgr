@@ -3,7 +3,7 @@
 #include "Core/CoreLayer.hpp"
 
 #include "Core/Assert.hpp"
-#include "Core/EventBus.hpp"
+#include "Core/Events/EventBus.hpp"
 #include "Core/JobSystem.hpp"
 #include "Core/Logger.hpp"
 #include "Core/ProgressTracker.hpp"
@@ -39,8 +39,8 @@ namespace DefectStudio
 			return true;
 		}
 
-		DS_LOG_INFO("Init: EventBus");
-		m_EventBus = CreateUnique<EventBus>();
+		if (!InitializeEventBusSystem())
+			return false;
 
 		DS_LOG_INFO("Init: JobSystem");
 		m_JobSystem = CreateUnique<JobSystem>();
@@ -53,6 +53,16 @@ namespace DefectStudio
 		return true;
 	}
 
+	bool CoreLayer::InitializeEventBusSystem()
+	{
+		if (m_EventBus)
+			return true;
+
+		DS_LOG_INFO("Init: EventBus");
+		m_EventBus = CreateRef<EventBus>();
+		return m_EventBus != nullptr;
+	}
+
 	void CoreLayer::ShutdownSystems()
 	{
 		if (!m_SystemsInitialized)
@@ -62,9 +72,17 @@ namespace DefectStudio
 		m_ProgressTracker.reset();
 		DS_LOG_INFO("Shutdown: JobSystem");
 		m_JobSystem.reset();
+		ShutdownEventBusSystem();
+		m_SystemsInitialized = false;
+	}
+
+	void CoreLayer::ShutdownEventBusSystem()
+	{
+		if (!m_EventBus)
+			return;
+
 		DS_LOG_INFO("Shutdown: EventBus");
 		m_EventBus.reset();
-		m_SystemsInitialized = false;
 	}
 
 	EventBus &CoreLayer::GetEventBus()

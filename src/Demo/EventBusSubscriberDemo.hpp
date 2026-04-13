@@ -2,27 +2,34 @@
 
 #include <string>
 
-#include "Core/EventBus.hpp"
+#include "Core/Events/SubscriptionHandle.hpp"
+#include "Core/Memory.hpp"
 #include "Demo/DemoEvents.hpp"
+
+namespace DefectStudio
+{
+	class EventBus;
+}
 
 namespace DefectStudio::Demo
 {
 	class EventBusSubscriberDemo
 	{
 	public:
-		EventBusSubscriberDemo();
+		explicit EventBusSubscriberDemo(Ref<EventBus> bus);
 		~EventBusSubscriberDemo();
 
 		void Render();
 
 	private:
-		void OnFileOpened(const FileOpenedBusEvent &event);
-		void OnDataProcessed(const DataProcessedBusEvent &event);
-		void OnPipelineStatus(const PipelineStatusBusEvent &event);
+		void onFileOpened(const FileOpenedBusEvent &event);
+		void onDataProcessed(const DataProcessedBusEvent &event);
+		void onPipelineStatus(const PipelineStatusBusEvent &event);
 
-		EventBus::SubscriptionId m_FileOpenedSub = 0;
-		EventBus::SubscriptionId m_DataProcessedSub = 0;
-		EventBus::SubscriptionId m_PipelineStatusSub = 0;
+		Ref<EventBus> m_Bus;
+		SubscriptionHandle m_FileOpenedSub;
+		SubscriptionHandle m_DataProcessedSub;
+		SubscriptionHandle m_PipelineStatusSub;
 
 		int m_ReceivedFileEvents = 0;
 		int m_ReceivedDataEvents = 0;

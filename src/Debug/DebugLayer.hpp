@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Core/Layer.hpp"
-
 namespace DefectStudio
 {
 	class DebugLayer final : public Layer

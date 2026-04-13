@@ -6,8 +6,8 @@
 #include "App/ApplicationState.hpp"
 #include "App/ConfigManager.hpp"
 #include "App/Window.hpp"
-#include "Core/Event.hpp"
-#include "Core/EventBus.hpp"
+#include "Core/Platform/Events/PlatformEvent.hpp"
+#include "Core/Events/EventBus.hpp"
 #include "Core/EventQueue.hpp"
 #include "Core/JobSystem.hpp"
 #include "Core/LayerStack.hpp"
@@ -24,19 +24,27 @@ namespace DefectStudio
 	class Application
 	{
 	public:
+		// Create a fully initialized application instance (may fail internally; check Run()).
 		static Application Create(int argc, char **argv);
+		// Run the main loop until shutdown is requested; returns exit code.
 		int Run();
+		// Request shutdown; safe to call multiple times.
 		void Shutdown();
 		~Application();
 
+		// Queue a platform event for main-thread processing.
 		static void EmitEvent(EventVariant event);
 
 		// Global accessor for layers and demos
+		// Precondition: Application was created.
 		static Application &Get();
 
 		// Runtime service accessors
+		// Precondition: CoreLayer initialized.
 		EventBus &GetEventBus();
+		// Precondition: CoreLayer initialized.
 		JobSystem &GetJobSystem();
+		// Precondition: CoreLayer initialized.
 		ProgressTracker &GetProgressTracker();
 
 		// Event processing entry point for concrete event types.
@@ -66,6 +74,7 @@ namespace DefectStudio
 		void logStartupSpecification() const;
 
 		// Runtime services lifecycle
+		bool initializeEventDispatchingSystem();
 		bool initializeCoreLayerSystems();
 
 		// Configuration API

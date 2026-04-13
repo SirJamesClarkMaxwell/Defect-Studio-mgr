@@ -2,19 +2,32 @@
 
 #include <string>
 
+#include "Core/Memory.hpp"
+
+#include "Core/Memory.hpp"
+
+namespace DefectStudio
+{
+	class EventBus;
+}
+
 namespace DefectStudio::Demo
 {
 	class EventBusPublisherDemo
 	{
 	public:
+		explicit EventBusPublisherDemo(Ref<EventBus> bus);
 		void Render();
 
 	private:
-		std::string BuildFileName() const;
-		std::string BuildSummary() const;
+		std::string buildFileName() const;
+		std::string buildSummary() const;
 
-		int m_PublishedFileEvents = 0;
-		int m_PublishedDataEvents = 0;
-		int m_PublishedPipelineEvents = 0;
+		Ref<EventBus> m_Bus;
+		int m_PublishedFileEvents = 0; 
+		int m_PublishedDataEvents = 0; 
+		int m_PublishedPipelineEvents = 0; 
+		int m_QueuedFileEvents = 0; 
+		int m_QueuedPipelineEvents = 0; 
 	};
 } // namespace DefectStudio::Demo
