@@ -48,7 +48,7 @@ namespace DefectStudio
 		m_JobSystem = CreateUnique<JobSystem>(CreateWeakRef(m_EventBus));
 
 		DS_LOG_INFO("Init: ProgressTracker");
-		m_ProgressTracker = CreateUnique<ProgressTracker>();
+		m_ProgressTracker = CreateUnique<ProgressTracker>(CreateWeakRef(m_EventBus));
 
 		m_SystemsInitialized = true;
 		DS_LOG_INFO("Init complete: runtime services");

@@ -9,9 +9,12 @@
 #include <thread>
 #include <vector>
 
+#include "App/Events/JobEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "Core/JobSystem/TestJobs/TestJobs.hpp"
 #include "Core/Utils/Time.hpp"
 
@@ -159,7 +162,7 @@ namespace
 			for (int i = 0; i < m_ChainDepth; ++i)
 			{
 				auto chainedJob = DefectStudio::CreateRef<ChainedJob>(i, m_ExecutionOrder);
-				const auto id = context.SubmitJob(chainedJob, DefectStudio::JobPriority::Normal);
+				const auto id = context.SubmitJobSequential(chainedJob, DefectStudio::JobPriority::Normal);
 				if (id == 0)
 				{
 					context.LogError("Failed to submit chained job " + std::to_string(i));
@@ -668,4 +671,101 @@ TEST(JobSystemTests, MultipleJobsCanSubmitOtherJobsConcurrently)
 	EXPECT_EQ(executionOrder->size(), submitterCount * chainPerSubmitter);
 
 	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, PublishesQueuedStartedProgressAndCompletedEvents)
+{
+	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
+	DefectStudio::JobSystem jobSystem(DefectStudio::CreateWeakRef(eventBus));
+
+	std::atomic<int> queuedCount = 0;
+	std::atomic<int> startedCount = 0;
+	std::atomic<int> progressCount = 0;
+	std::atomic<int> completedCount = 0;
+
+	auto queuedSub = eventBus->Subscribe<DefectStudio::JobQueuedEvent>([&](const DefectStudio::JobQueuedEvent &) {
+		++queuedCount;
+	});
+	auto startedSub = eventBus->Subscribe<DefectStudio::JobStartedEvent>([&](const DefectStudio::JobStartedEvent &) {
+		++startedCount;
+	});
+	auto progressSub = eventBus->Subscribe<DefectStudio::JobProgressEvent>([&](const DefectStudio::JobProgressEvent &) {
+		++progressCount;
+	});
+	auto completedSub = eventBus->Subscribe<DefectStudio::JobCompletedEvent>([&](const DefectStudio::JobCompletedEvent &) {
+		++completedCount;
+	});
+
+	const auto id = jobSystem.Submit(DefectStudio::CreateRef<DefectStudio::SleepJob>("events", 5, DefectStudio::Time::Milliseconds(2)));
+	ASSERT_GT(id, 0u);
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		eventBus->ProcessQueue();
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(1500)));
+
+	eventBus->ProcessQueue();
+
+	EXPECT_GE(queuedCount.load(), 1);
+	EXPECT_GE(startedCount.load(), 1);
+	EXPECT_GE(progressCount.load(), 1);
+	EXPECT_GE(completedCount.load(), 1);
+
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, ProgressTrackerBuildsSnapshotFromLifecycleEvents)
+{
+	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
+	DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(eventBus));
+
+	const DefectStudio::JobId id = 77;
+	const auto createdAt = DefectStudio::Time::Now();
+	const auto startedAt = DefectStudio::Time::Now();
+	const auto finishedAt = DefectStudio::Time::Now();
+
+	eventBus->Queue(DefectStudio::JobQueuedEvent{id, "ImportPipeline", "IO", createdAt});
+	eventBus->Queue(DefectStudio::JobStartedEvent{id, "ImportPipeline", "IO", startedAt});
+	eventBus->Queue(DefectStudio::JobProgressEvent{id, 3.0f, 4.0f, "Validate", "Parsing", DefectStudio::Time::Now()});
+	eventBus->Queue(DefectStudio::JobCompletedEvent{id, "ImportPipeline", "IO", finishedAt});
+	eventBus->ProcessQueue();
+
+	auto snapshot = tracker.GetSnapshot(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Completed);
+	EXPECT_TRUE(snapshot->finished);
+	EXPECT_EQ(snapshot->label, "ImportPipeline");
+	EXPECT_EQ(snapshot->source, "IO");
+	EXPECT_EQ(snapshot->currentStage, "Validate");
+	EXPECT_EQ(snapshot->currentMessage, "Parsing");
+	EXPECT_FLOAT_EQ(snapshot->completedWork, 4.0f);
+	EXPECT_FLOAT_EQ(snapshot->totalWork, 4.0f);
+	EXPECT_EQ(snapshot->createdAt, createdAt);
+	EXPECT_EQ(snapshot->startedAt, startedAt);
+	EXPECT_EQ(snapshot->finishedAt, finishedAt);
+}
+
+TEST(JobSystemTests, ProgressTrackerStoresErrorSummaryAndViews)
+{
+	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
+	DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(eventBus));
+
+	eventBus->Queue(DefectStudio::JobQueuedEvent{1, "A", "IO", DefectStudio::Time::Now()});
+	eventBus->Queue(DefectStudio::JobStartedEvent{1, "A", "IO", DefectStudio::Time::Now()});
+	eventBus->Queue(DefectStudio::JobQueuedEvent{2, "B", "Core", DefectStudio::Time::Now()});
+	eventBus->Queue(DefectStudio::JobFailedEvent{2, "B", "Core", "failure", DefectStudio::Time::Now()});
+	eventBus->ProcessQueue();
+
+	auto failed = tracker.GetSnapshot(2);
+	ASSERT_TRUE(failed.has_value());
+	EXPECT_EQ(failed->status, DefectStudio::JobStatus::Failed);
+	EXPECT_EQ(failed->errorSummary, "failure");
+
+	const auto active = tracker.GetActiveSnapshots();
+	const auto finished = tracker.GetFinishedSnapshots();
+	ASSERT_EQ(active.size(), 1u);
+	ASSERT_EQ(finished.size(), 1u);
+	EXPECT_EQ(active.front().id, 1u);
+	EXPECT_EQ(finished.front().id, 2u);
 }

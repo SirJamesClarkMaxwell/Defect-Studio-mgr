@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <deque>
-#include <unordered_map>
 #include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -26,7 +25,6 @@ namespace DefectStudio::Demo
 		void submitFailingJob();
 		void submitBulkJobs(int count, int steps, int delayMs, JobPriority priority);
 
-		void syncProgressTracker();
 		void renderControls();
 		void renderEventBusPanel();
 		void renderProgressPanel();
@@ -39,9 +37,8 @@ namespace DefectStudio::Demo
 		Ref<EventBus> m_DemoEventBus;
 		Unique<JobSystem> m_DemoJobSystem;
 
-		// Tracker is driven by snapshots from the demo-owned JobSystem.
+		// Tracker is driven by JobEvents emitted to the demo-owned EventBus.
 		ProgressTracker m_ProgressTracker;
-		std::unordered_map<JobId, ProgressTracker::ProgressId> m_ProgressIds;
 
 		std::vector<JobId> m_KnownJobs;
 		Ref<std::atomic_bool> m_PauseRequested;
@@ -62,6 +59,7 @@ namespace DefectStudio::Demo
 		bool m_ShowFinished = true;
 		bool m_ShowSelectedJob = true;
 		bool m_ShowLogs = true;
+		JobId m_ExpandedProgressId = 0;
 		std::deque<std::string> m_LifecycleEvents;
 
 		SubscriptionHandle m_StartedSubscription;

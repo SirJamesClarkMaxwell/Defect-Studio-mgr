@@ -10,13 +10,15 @@ namespace DefectStudio
 		MessageCallback messageCallback,
 		LogCallback logCallback,
 		CancelQuery cancelQuery,
-		SubmitJobCallback submitJobCallback)
+		SubmitJobCallback submitJobCallback,
+		WaitJobCallback waitJobCallback)
 		: m_ProgressCallback(std::move(progressCallback)),
 		  m_StageCallback(std::move(stageCallback)),
 		  m_MessageCallback(std::move(messageCallback)),
 		  m_LogCallback(std::move(logCallback)),
 		  m_CancelQuery(std::move(cancelQuery)),
-		  m_SubmitJobCallback(std::move(submitJobCallback))
+		  m_SubmitJobCallback(std::move(submitJobCallback)),
+		  m_WaitJobCallback(std::move(waitJobCallback))
 	{
 	}
 
@@ -78,5 +80,24 @@ namespace DefectStudio
 		if (m_SubmitJobCallback)
 			return m_SubmitJobCallback(job, priority);
 		return 0; // Failed submission
+	}
+
+	bool JobContext::WaitForJob(JobId id) const
+	{
+		if (m_WaitJobCallback)
+			return m_WaitJobCallback(id);
+		return false;
+	}
+
+	JobId JobContext::SubmitJobSequential(const Ref<IJob> &job, JobPriority priority) const
+	{
+		const JobId id = SubmitJob(job, priority);
+		if (id == 0)
+			return 0;
+
+		if (!WaitForJob(id))
+			return 0;
+
+		return id;
 	}
 } // namespace DefectStudio

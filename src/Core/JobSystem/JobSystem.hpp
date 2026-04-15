@@ -63,8 +63,10 @@ namespace DefectStudio
 		[[nodiscard]] bool isCancellationRequested(JobId id) const;
 		void markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt);
 		[[nodiscard]] std::optional<Ref<EventBus>> lockEventBus() const;
-		void publishStartedEvent(JobId id, const IJob &job) const;
-		void publishFinishedEvent(JobId id, const IJob &job, JobStatus status, const std::string &errorMessage) const;
+		void publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt) const;
+		void publishStartedEvent(JobId id, const IJob &job, const Time::TimePoint &startedAt) const;
+		void publishProgressEvent(JobId id, float completedWork, float totalWork, const std::string &stage, const std::string &message) const;
+		void publishFinishedEvent(JobId id, const IJob &job, JobStatus status, const std::string &errorMessage, const Time::TimePoint &finishedAt) const;
 		void delayedWorkerLoop(std::stop_token stopToken);
 		void cancelPendingDelayedSubmissions();
 

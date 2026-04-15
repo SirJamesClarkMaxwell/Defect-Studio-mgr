@@ -137,7 +137,7 @@ namespace DefectStudio::Demo
 			{
 				context.ThrowIfCancellationRequested();
 				auto chainedJob = CreateRef<DemoChainedJob>(m_JobName, i);
-				const auto id = context.SubmitJob(chainedJob, JobPriority::Normal);
+				const auto id = context.SubmitJobSequential(chainedJob, JobPriority::Normal);
 				if (id == 0)
 				{
 					context.LogError("Failed to submit chained job " + std::to_string(i));
@@ -185,6 +185,7 @@ namespace DefectStudio::Demo
 	JobSystemDemo::JobSystemDemo()
 		: m_DemoEventBus(CreateRef<EventBus>()),
 		  m_DemoJobSystem(CreateUnique<JobSystem>(CreateWeakRef(m_DemoEventBus), 0)),
+		  m_ProgressTracker(CreateWeakRef(m_DemoEventBus)),
 		  m_PauseRequested(CreateRef<std::atomic_bool>(false))
 	{
 		m_CurrentThreadCount = m_DemoJobSystem->GetThreadCount();
@@ -223,7 +224,6 @@ namespace DefectStudio::Demo
 			return;
 
 		m_DemoEventBus->ProcessQueue();
-		syncProgressTracker();
 
 		ImGui::Begin("JobSystem Demo");
 
@@ -254,7 +254,6 @@ namespace DefectStudio::Demo
 
 		m_KnownJobs.push_back(id);
 		m_SelectedJobId = id;
-		m_ProgressIds[id] = m_ProgressTracker.Register(name, static_cast<std::size_t>(std::max(1, steps)));
 	}
 
 	void JobSystemDemo::submitFailingJob()
@@ -265,7 +264,6 @@ namespace DefectStudio::Demo
 
 		m_KnownJobs.push_back(id);
 		m_SelectedJobId = id;
-		m_ProgressIds[id] = m_ProgressTracker.Register("demo-failing", 1);
 	}
 
 	void JobSystemDemo::submitBulkJobs(int count, int steps, int delayMs, JobPriority priority)
@@ -273,27 +271,6 @@ namespace DefectStudio::Demo
 		const int safeCount = std::max(1, count);
 		for (int i = 0; i < safeCount; ++i)
 			submitSleepJob(steps, delayMs, priority);
-	}
-
-	void JobSystemDemo::syncProgressTracker()
-	{
-		for (const JobId id : m_KnownJobs)
-		{
-			auto snapshot = m_DemoJobSystem->GetJob(id);
-			if (!snapshot.has_value())
-				continue;
-
-			auto progressIt = m_ProgressIds.find(id);
-			if (progressIt == m_ProgressIds.end())
-				continue;
-
-			const auto progressId = progressIt->second;
-			const std::size_t completed = static_cast<std::size_t>(std::max(0.0f, snapshot->completedWork));
-			m_ProgressTracker.Report(progressId, completed);
-
-			if (IsFinished(snapshot->status))
-				m_ProgressTracker.Finish(progressId);
-		}
 	}
 
 	void JobSystemDemo::renderControls()
@@ -328,7 +305,6 @@ namespace DefectStudio::Demo
 			{
 				m_KnownJobs.push_back(id);
 				m_SelectedJobId = id;
-				m_ProgressIds[id] = m_ProgressTracker.Register(name, static_cast<std::size_t>(std::max(1, m_NewJobSteps)));
 			}
 		}
 
@@ -370,7 +346,6 @@ namespace DefectStudio::Demo
 			{
 				m_KnownJobs.push_back(id);
 				m_SelectedJobId = id;
-				m_ProgressIds[id] = m_ProgressTracker.Register(name, static_cast<std::size_t>(std::max(1, m_BulkJobCount)));
 			}
 		}
 
@@ -409,38 +384,145 @@ namespace DefectStudio::Demo
 
 	void JobSystemDemo::renderProgressPanel()
 	{
-		if (!ImGui::CollapsingHeader("ProgressTracker (green)", m_ShowProgress ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None))
+		if (!ImGui::CollapsingHeader("Job Monitor", m_ShowProgress ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None))
 			return;
 
-		const auto snapshots = m_ProgressTracker.Snapshot();
+		const auto snapshots = m_ProgressTracker.GetAllSnapshots();
 		if (snapshots.empty())
 		{
 			ImGui::TextUnformatted("No tracked progress yet.");
 			return;
 		}
 
-		float totalCompleted = 0.0f;
-		float totalWork = 0.0f;
+		int runningCount = 0;
+		int queuedCount = 0;
+		int doneCount = 0;
+		int failedCount = 0;
+		float totalActiveRatio = 0.0f;
+		int activeCount = 0;
+
 		for (const auto &entry : snapshots)
 		{
-			totalCompleted += static_cast<float>(entry.completedWork);
-			totalWork += static_cast<float>(entry.totalWork);
+			switch (entry.status)
+			{
+			case JobStatus::Running:
+				++runningCount;
+				break;
+			case JobStatus::Queued:
+				++queuedCount;
+				break;
+			case JobStatus::Completed:
+				++doneCount;
+				break;
+			case JobStatus::Failed:
+				++failedCount;
+				break;
+			case JobStatus::Cancelled:
+				break;
+			}
+
+			if (!entry.finished)
+			{
+				const float ratio = (entry.totalWork <= 0.0f)
+					? 0.0f
+					: std::clamp(entry.completedWork / entry.totalWork, 0.0f, 1.0f);
+				totalActiveRatio += ratio;
+				++activeCount;
+			}
 		}
 
-		const float summaryRatio = (totalWork <= 0.0f) ? 0.0f : std::clamp(totalCompleted / totalWork, 0.0f, 1.0f);
-		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.18f, 0.72f, 0.24f, 1.0f));
-		ImGui::ProgressBar(summaryRatio, ImVec2(-1.0f, 0.0f), "Total progress");
-		ImGui::PopStyleColor();
+		ImGui::Text("Session jobs: %llu", static_cast<unsigned long long>(snapshots.size()));
+		ImGui::SameLine();
+		ImGui::Text("Running: %d", runningCount);
+		ImGui::SameLine();
+		ImGui::Text("Queued: %d", queuedCount);
+		ImGui::SameLine();
+		ImGui::Text("Done: %d", doneCount);
+		ImGui::SameLine();
+		ImGui::Text("Failed: %d", failedCount);
 
-		for (const auto &entry : snapshots)
+		const float avgActiveRatio = (activeCount == 0) ? 0.0f : (totalActiveRatio / static_cast<float>(activeCount));
+		ImGui::Text("Avg active progress: %.1f%%", avgActiveRatio * 100.0f);
+
+		if (ImGui::BeginTable("job-monitor-table", 7, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable))
 		{
-			const float ratio = (entry.totalWork == 0)
-				? 0.0f
-				: std::clamp(static_cast<float>(entry.completedWork) / static_cast<float>(entry.totalWork), 0.0f, 1.0f);
-			ImGui::Text("#%llu %s", static_cast<unsigned long long>(entry.id), entry.label.c_str());
-			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.20f, 0.78f, 0.28f, 1.0f));
-			ImGui::ProgressBar(ratio, ImVec2(-1.0f, 0.0f));
-			ImGui::PopStyleColor();
+			ImGui::TableSetupColumn("number", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+			ImGui::TableSetupColumn("expand", ImGuiTableColumnFlags_WidthFixed, 56.0f);
+			ImGui::TableSetupColumn("From", ImGuiTableColumnFlags_WidthStretch, 120.0f);
+			ImGui::TableSetupColumn("Progress Bar", ImGuiTableColumnFlags_WidthStretch, 180.0f);
+			ImGui::TableSetupColumn("left time", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+			ImGui::TableSetupColumn("info", ImGuiTableColumnFlags_WidthStretch, 220.0f);
+			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+			ImGui::TableHeadersRow();
+
+			for (std::size_t row = 0; row < snapshots.size(); ++row)
+			{
+				const auto &entry = snapshots[row];
+				const float ratio = (entry.totalWork <= 0.0f)
+					? 0.0f
+					: std::clamp(entry.completedWork / entry.totalWork, 0.0f, 1.0f);
+				const bool isExpanded = (m_ExpandedProgressId == entry.id);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("%llu", static_cast<unsigned long long>(entry.id));
+
+				ImGui::TableSetColumnIndex(1);
+				if (ImGui::SmallButton((std::string(isExpanded ? "v##exp-" : ">##exp-") + std::to_string(entry.id)).c_str()))
+					m_ExpandedProgressId = isExpanded ? 0 : entry.id;
+
+				ImGui::TableSetColumnIndex(2);
+				ImGui::TextUnformatted(entry.source.c_str());
+
+				ImGui::TableSetColumnIndex(3);
+				ImGui::ProgressBar(ratio, ImVec2(-1.0f, 0.0f), (std::to_string(static_cast<int>(ratio * 100.0f)) + "%").c_str());
+
+				ImGui::TableSetColumnIndex(4);
+				if (!entry.finished && entry.totalWork > 0.0f && entry.completedWork > 0.0f)
+				{
+					const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(Time::Now() - entry.startedAt).count();
+					const float speed = entry.completedWork / std::max(1.0f, static_cast<float>(elapsedMs));
+					const float remaining = std::max(0.0f, entry.totalWork - entry.completedWork);
+					const int etaMs = static_cast<int>(remaining / std::max(0.0001f, speed));
+					ImGui::Text("%d s", etaMs / 1000);
+				}
+				else
+				{
+					ImGui::TextUnformatted(entry.finished ? "0 s" : "n/d");
+				}
+
+				ImGui::TableSetColumnIndex(5);
+				if (!entry.currentMessage.empty())
+					ImGui::TextUnformatted(entry.currentMessage.c_str());
+				else if (!entry.errorSummary.empty())
+					ImGui::TextUnformatted(entry.errorSummary.c_str());
+				else
+					ImGui::TextUnformatted("-");
+
+				ImGui::TableSetColumnIndex(6);
+				ImGui::TextUnformatted(ToStatusLabel(entry.status));
+
+				if (!isExpanded)
+					continue;
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted("details");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextUnformatted("-");
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text("label: %s", entry.label.c_str());
+				ImGui::TableSetColumnIndex(3);
+				ImGui::Text("stage: %s", entry.currentStage.c_str());
+				ImGui::TableSetColumnIndex(4);
+				ImGui::Text("created: %lld", static_cast<long long>(std::chrono::duration_cast<std::chrono::seconds>(entry.createdAt.time_since_epoch()).count()));
+				ImGui::TableSetColumnIndex(5);
+				ImGui::Text("started: %lld", static_cast<long long>(std::chrono::duration_cast<std::chrono::seconds>(entry.startedAt.time_since_epoch()).count()));
+				ImGui::TableSetColumnIndex(6);
+				ImGui::Text("finished: %lld", static_cast<long long>(std::chrono::duration_cast<std::chrono::seconds>(entry.finishedAt.time_since_epoch()).count()));
+			}
+
+			ImGui::EndTable();
 		}
 	}
 

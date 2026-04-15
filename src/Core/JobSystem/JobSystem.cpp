@@ -6,7 +6,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/Utils/Time.hpp"
-#include "App/Events/ApplicationEvents.hpp"
+#include "App/Events/JobEvents.hpp"
 
 namespace DefectStudio
 {
@@ -67,6 +67,7 @@ namespace DefectStudio
 		const JobId id = m_NextId.fetch_add(1, std::memory_order_relaxed);
 		const auto now = Time::Now();
 		recordQueued(id, job, now);
+		publishQueuedEvent(id, *job, now);
 		enqueueForExecution(id, job, priority);
 
 		return id;
@@ -86,6 +87,7 @@ namespace DefectStudio
 		const JobId id = m_NextId.fetch_add(1, std::memory_order_relaxed);
 		const auto now = Time::Now();
 		recordQueued(id, job, now);
+		publishQueuedEvent(id, *job, now);
 
 		{
 			std::lock_guard<std::mutex> lock(m_DelayedMutex);
@@ -287,7 +289,7 @@ namespace DefectStudio
 	{
 		const auto startedAt = Time::Now();
 		markRunning(id, startedAt);
-		publishStartedEvent(id, *job);
+		publishStartedEvent(id, *job, startedAt);
 
 		JobContext context(
 			[this, id](float completedWork, float totalWork) { updateProgress(id, completedWork, totalWork); },
@@ -295,7 +297,20 @@ namespace DefectStudio
 			[this, id](const std::string &message) { updateMessage(id, message); },
 			[this, id](JobLogLevel level, const std::string &message) { appendLog(id, level, message); },
 			[this, id]() { return isCancellationRequested(id); },
-			[this](const Ref<IJob> &job, JobPriority priority) { return Submit(job, priority); });
+			[this](const Ref<IJob> &job, JobPriority priority) { return Submit(job, priority); },
+			[this](JobId childId) {
+				for (;;)
+				{
+					if (m_ShutdownRequested.load(std::memory_order_relaxed))
+						return false;
+
+					auto child = GetJob(childId);
+					if (child.has_value() && isFinishedStatus(child->status))
+						return true;
+
+					std::this_thread::sleep_for(Time::Milliseconds(1));
+				}
+			});
 
 		JobStatus finalStatus = JobStatus::Completed;
 		std::string errorMessage;
@@ -325,7 +340,7 @@ namespace DefectStudio
 
 		const auto finishedAt = Time::Now();
 		markFinished(id, finalStatus, errorMessage, finishedAt);
-		publishFinishedEvent(id, *job, finalStatus, errorMessage);
+		publishFinishedEvent(id, *job, finalStatus, errorMessage, finishedAt);
 	}
 
 	void JobSystem::markRunning(JobId id, const Time::TimePoint &startedAt)
@@ -342,33 +357,61 @@ namespace DefectStudio
 
 	void JobSystem::updateProgress(JobId id, float completedWork, float totalWork)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
-		auto it = m_Records.find(id);
-		if (it == m_Records.end())
-			return;
+		std::string stage;
+		std::string message;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto it = m_Records.find(id);
+			if (it == m_Records.end())
+				return;
 
-		it->second.snapshot.completedWork = completedWork;
-		it->second.snapshot.totalWork = totalWork;
+			it->second.snapshot.completedWork = completedWork;
+			it->second.snapshot.totalWork = totalWork;
+			stage = it->second.snapshot.currentStage;
+			message = it->second.snapshot.currentMessage;
+		}
+
+		publishProgressEvent(id, completedWork, totalWork, stage, message);
 	}
 
 	void JobSystem::updateStage(JobId id, const std::string &stage)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
-		auto it = m_Records.find(id);
-		if (it == m_Records.end())
-			return;
+		float completedWork = 0.0f;
+		float totalWork = 0.0f;
+		std::string message;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto it = m_Records.find(id);
+			if (it == m_Records.end())
+				return;
 
-		it->second.snapshot.currentStage = stage;
+			it->second.snapshot.currentStage = stage;
+			completedWork = it->second.snapshot.completedWork;
+			totalWork = it->second.snapshot.totalWork;
+			message = it->second.snapshot.currentMessage;
+		}
+
+		publishProgressEvent(id, completedWork, totalWork, stage, message);
 	}
 
 	void JobSystem::updateMessage(JobId id, const std::string &message)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
-		auto it = m_Records.find(id);
-		if (it == m_Records.end())
-			return;
+		float completedWork = 0.0f;
+		float totalWork = 0.0f;
+		std::string stage;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto it = m_Records.find(id);
+			if (it == m_Records.end())
+				return;
 
-		it->second.snapshot.currentMessage = message;
+			it->second.snapshot.currentMessage = message;
+			completedWork = it->second.snapshot.completedWork;
+			totalWork = it->second.snapshot.totalWork;
+			stage = it->second.snapshot.currentStage;
+		}
+
+		publishProgressEvent(id, completedWork, totalWork, stage, message);
 	}
 
 	void JobSystem::appendLog(JobId id, JobLogLevel level, const std::string &message)
@@ -432,27 +475,50 @@ namespace DefectStudio
 		return eventBus;
 	}
 
-	void JobSystem::publishStartedEvent(JobId id, const IJob &job) const
+	void JobSystem::publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt) const
 	{
 		auto eventBus = lockEventBus();
 		if (!eventBus)
 			return;
 
-		(*eventBus)->Queue(JobStartedEvent{id, job.GetName(), job.GetType()});
+		(*eventBus)->Queue(JobQueuedEvent{id, job.GetName(), job.GetType(), createdAt});
 	}
 
-	void JobSystem::publishFinishedEvent(JobId id, const IJob &job, JobStatus status, const std::string &errorMessage) const
+	void JobSystem::publishStartedEvent(JobId id, const IJob &job, const Time::TimePoint &startedAt) const
+	{
+		auto eventBus = lockEventBus();
+		if (!eventBus)
+			return;
+
+		(*eventBus)->Queue(JobStartedEvent{id, job.GetName(), job.GetType(), startedAt});
+	}
+
+	void JobSystem::publishProgressEvent(JobId id, float completedWork, float totalWork, const std::string &stage, const std::string &message) const
+	{
+		auto eventBus = lockEventBus();
+		if (!eventBus)
+			return;
+
+		(*eventBus)->Queue(JobProgressEvent{id, completedWork, totalWork, stage, message, Time::Now()});
+	}
+
+	void JobSystem::publishFinishedEvent(
+		JobId id,
+		const IJob &job,
+		JobStatus status,
+		const std::string &errorMessage,
+		const Time::TimePoint &finishedAt) const
 	{
 		auto eventBus = lockEventBus();
 		if (!eventBus)
 			return;
 
 		if (status == JobStatus::Completed)
-			(*eventBus)->Queue(JobCompletedEvent{id, job.GetName(), job.GetType()});
+			(*eventBus)->Queue(JobCompletedEvent{id, job.GetName(), job.GetType(), finishedAt});
 		else if (status == JobStatus::Cancelled)
-			(*eventBus)->Queue(JobCancelledEvent{id, job.GetName(), job.GetType()});
+			(*eventBus)->Queue(JobCancelledEvent{id, job.GetName(), job.GetType(), finishedAt});
 		else
-			(*eventBus)->Queue(JobFailedEvent{id, job.GetName(), job.GetType(), errorMessage});
+			(*eventBus)->Queue(JobFailedEvent{id, job.GetName(), job.GetType(), errorMessage, finishedAt});
 	}
 
 	void JobSystem::delayedWorkerLoop(std::stop_token stopToken)

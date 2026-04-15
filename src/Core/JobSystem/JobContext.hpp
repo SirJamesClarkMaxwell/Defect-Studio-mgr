@@ -17,6 +17,7 @@ namespace DefectStudio
 		using LogCallback = std::function<void(JobLogLevel level, const std::string &message)>;
 		using CancelQuery = std::function<bool()>;
 		using SubmitJobCallback = std::function<JobId(const Ref<IJob>&, JobPriority)>;
+		using WaitJobCallback = std::function<bool(JobId)>;
 
 		JobContext(
 			ProgressCallback progressCallback,
@@ -24,7 +25,8 @@ namespace DefectStudio
 			MessageCallback messageCallback,
 			LogCallback logCallback,
 			CancelQuery cancelQuery,
-			SubmitJobCallback submitJobCallback = {});
+			SubmitJobCallback submitJobCallback = {},
+			WaitJobCallback waitJobCallback = {});
 
 		void SetProgress(float completedWork, float totalWork) const;
 		void SetStage(const std::string &stage) const;
@@ -39,6 +41,8 @@ namespace DefectStudio
 		void ThrowIfCancellationRequested() const;
 
 		[[nodiscard]] JobId SubmitJob(const Ref<IJob> &job, JobPriority priority = JobPriority::Normal) const;
+		[[nodiscard]] bool WaitForJob(JobId id) const;
+		[[nodiscard]] JobId SubmitJobSequential(const Ref<IJob> &job, JobPriority priority = JobPriority::Normal) const;
 
 	private:
 		ProgressCallback m_ProgressCallback;
@@ -47,5 +51,6 @@ namespace DefectStudio
 		LogCallback m_LogCallback;
 		CancelQuery m_CancelQuery;
 		SubmitJobCallback m_SubmitJobCallback;
+		WaitJobCallback m_WaitJobCallback;
 	};
 } // namespace DefectStudio
