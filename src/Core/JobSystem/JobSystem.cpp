@@ -15,7 +15,7 @@ namespace DefectStudio
 		if (requested != 0)
 			return requested;
 
-		const std::size_t detected = std::thread::hardware_concurrency();
+		const std::size_t detected = std::thread::hardware_concurrency(); 
 		return detected == 0 ? 1 : detected;
 	}
 
@@ -44,8 +44,11 @@ namespace DefectStudio
 
 	JobSystem::JobSystem(WeakRef<EventBus> eventBus, std::size_t threadCount)
 		: m_EventBus(std::move(eventBus)),
-		  m_Pool(resolveThreadCount(threadCount))
+		  m_Pool(resolveThreadCount(threadCount)) // todo: load it from config file
 	{
+		m_DelayedWorker = std::jthread([this](std::stop_token stopToken) {
+			delayedWorkerLoop(stopToken);
+		});
 	}
 
 	JobSystem::~JobSystem()
@@ -64,9 +67,37 @@ namespace DefectStudio
 		const JobId id = m_NextId.fetch_add(1, std::memory_order_relaxed);
 		const auto now = Time::Now();
 		recordQueued(id, job, now);
-		auto priority = toBackendPriority(priority);
-		m_Pool.detach_task([this, id, job]() {runJob(id, job);},priority);
+		enqueueForExecution(id, job, priority);
 
+		return id;
+	}
+
+	JobId JobSystem::SubmitAfter(const Ref<IJob> &job, Time::Milliseconds delay, JobPriority priority)
+	{
+		if (!job)
+			return 0;
+
+		if (m_ShutdownRequested.load(std::memory_order_relaxed))
+			return 0;
+
+		if (delay.count() <= 0)
+			return Submit(job, priority);
+
+		const JobId id = m_NextId.fetch_add(1, std::memory_order_relaxed);
+		const auto now = Time::Now();
+		recordQueued(id, job, now);
+
+		{
+			std::lock_guard<std::mutex> lock(m_DelayedMutex);
+			m_DelayedSubmissions.push_back(DelayedSubmission{
+				.id = id,
+				.job = job,
+				.priority = priority,
+				.dueAt = Time::NowSteady() + delay,
+			});
+		}
+
+		m_DelayedCv.notify_all();
 		return id;
 	}
 
@@ -79,6 +110,84 @@ namespace DefectStudio
 
 		it->second.cancellationRequested->store(true, std::memory_order_relaxed);
 		it->second.snapshot.cancellationRequested = true;
+		return true;
+	}
+
+	bool JobSystem::Reset(JobId id)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto it = m_Records.find(id);
+		if (it == m_Records.end())
+			return false;
+
+		// Only allow reset on finished jobs
+		if (!isFinishedStatus(it->second.snapshot.status))
+			return false;
+
+		// Reset to Queued state
+		it->second.snapshot.status = JobStatus::Queued;
+		it->second.snapshot.startedAt = Time::TimePoint{};
+		it->second.snapshot.finishedAt = Time::TimePoint{};
+		it->second.snapshot.errorMessage.clear();
+		it->second.snapshot.cancellationRequested = false;
+		it->second.snapshot.completedWork = 0.0f;
+		it->second.snapshot.currentStage.clear();
+		it->second.snapshot.currentMessage.clear();
+		it->second.cancellationRequested->store(false, std::memory_order_relaxed);
+		it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Reset", Time::Now()});
+		return true;
+	}
+
+	bool JobSystem::Retry(JobId id, JobPriority priority)
+	{
+		Ref<IJob> jobToRetry;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto it = m_Records.find(id);
+			if (it == m_Records.end())
+				return false;
+
+			// Only allow retry on finished jobs
+			if (!isFinishedStatus(it->second.snapshot.status))
+				return false;
+
+			jobToRetry = it->second.job;
+			if (!jobToRetry)
+				return false;
+
+			// Reset to Queued state
+			it->second.snapshot.status = JobStatus::Queued;
+			it->second.snapshot.startedAt = Time::TimePoint{};
+			it->second.snapshot.finishedAt = Time::TimePoint{};
+			it->second.snapshot.errorMessage.clear();
+			it->second.snapshot.cancellationRequested = false;
+			it->second.snapshot.completedWork = 0.0f;
+			it->second.snapshot.currentStage.clear();
+			it->second.snapshot.currentMessage.clear();
+			it->second.cancellationRequested->store(false, std::memory_order_relaxed);
+			it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Retry", Time::Now()});
+		}
+
+		// Re-enqueue without holding mutex
+		enqueueForExecution(id, jobToRetry, priority);
+		return true;
+	}
+
+	std::size_t JobSystem::GetThreadCount() const
+	{
+		return m_Pool.get_thread_count();
+	}
+
+	bool JobSystem::SetThreadCount(std::size_t threadCount)
+	{
+		if (m_ShutdownRequested.load(std::memory_order_relaxed))
+			return false;
+
+		const std::size_t resolved = resolveThreadCount(threadCount);
+		if (resolved == m_Pool.get_thread_count())
+			return true;
+
+		m_Pool.reset(resolved);
 		return true;
 	}
 
@@ -138,8 +247,26 @@ namespace DefectStudio
 	{
 		std::call_once(m_ShutdownOnce, [this]() {
 			m_ShutdownRequested.store(true, std::memory_order_relaxed);
+			m_DelayedWorker.request_stop();
+			m_DelayedCv.notify_all();
+			if (m_DelayedWorker.joinable())
+				m_DelayedWorker.join();
+
+			cancelPendingDelayedSubmissions();
 			m_Pool.wait();
 		});
+	}
+
+	void JobSystem::enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority)
+	{
+		if (!job)
+			return;
+
+		m_Pool.detach_task(
+			[this, id, job]() {
+				runJob(id, job);
+			},
+			toBackendPriority(priority));
 	}
 
 	void JobSystem::recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now)
@@ -151,6 +278,7 @@ namespace DefectStudio
 		record.snapshot.type = job->GetType();
 		record.snapshot.status = JobStatus::Queued;
 		record.snapshot.createdAt = now;
+		record.job = job;
 		record.logs.push_back(JobLogEntry{JobLogLevel::Info, "Queued", now});
 		m_Records.emplace(id, std::move(record));
 	}
@@ -166,7 +294,8 @@ namespace DefectStudio
 			[this, id](const std::string &stage) { updateStage(id, stage); },
 			[this, id](const std::string &message) { updateMessage(id, message); },
 			[this, id](JobLogLevel level, const std::string &message) { appendLog(id, level, message); },
-			[this, id]() { return isCancellationRequested(id); });
+			[this, id]() { return isCancellationRequested(id); },
+			[this](const Ref<IJob> &job, JobPriority priority) { return Submit(job, priority); });
 
 		JobStatus finalStatus = JobStatus::Completed;
 		std::string errorMessage;
@@ -324,5 +453,69 @@ namespace DefectStudio
 			(*eventBus)->Queue(JobCancelledEvent{id, job.GetName(), job.GetType()});
 		else
 			(*eventBus)->Queue(JobFailedEvent{id, job.GetName(), job.GetType(), errorMessage});
+	}
+
+	void JobSystem::delayedWorkerLoop(std::stop_token stopToken)
+	{
+		for (;;)
+		{
+			if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
+				return;
+
+			DelayedSubmission submission;
+			bool hasReadySubmission = false;
+
+			{
+				std::unique_lock<std::mutex> lock(m_DelayedMutex);
+				m_DelayedCv.wait(lock, [this, &stopToken]() {
+					return stopToken.stop_requested()
+						|| m_ShutdownRequested.load(std::memory_order_relaxed)
+						|| !m_DelayedSubmissions.empty();
+				});
+
+				if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
+					return;
+
+				auto nextIt = std::min_element(
+					m_DelayedSubmissions.begin(),
+					m_DelayedSubmissions.end(),
+					[](const DelayedSubmission &left, const DelayedSubmission &right) {
+						return left.dueAt < right.dueAt;
+					});
+
+				if (nextIt == m_DelayedSubmissions.end())
+					continue;
+
+				const auto now = Time::NowSteady();
+				if (nextIt->dueAt > now)
+				{
+					m_DelayedCv.wait_until(lock, nextIt->dueAt, [this, &stopToken]() {
+						return stopToken.stop_requested()
+							|| m_ShutdownRequested.load(std::memory_order_relaxed);
+					});
+					continue;
+				}
+
+				submission = std::move(*nextIt);
+				m_DelayedSubmissions.erase(nextIt);
+				hasReadySubmission = true;
+			}
+
+			if (hasReadySubmission && !m_ShutdownRequested.load(std::memory_order_relaxed))
+				enqueueForExecution(submission.id, submission.job, submission.priority);
+		}
+	}
+
+	void JobSystem::cancelPendingDelayedSubmissions()
+	{
+		std::deque<DelayedSubmission> pending;
+		{
+			std::lock_guard<std::mutex> lock(m_DelayedMutex);
+			pending.swap(m_DelayedSubmissions);
+		}
+
+		const auto finishedAt = Time::Now();
+		for (const auto &submission : pending)
+			markFinished(submission.id, JobStatus::Cancelled, "Cancelled by shutdown before dispatch", finishedAt);
 	}
 } // namespace DefectStudio

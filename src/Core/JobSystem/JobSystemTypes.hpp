@@ -63,11 +63,23 @@ namespace DefectStudio
 		Time::TimePoint finishedAt{};
 	};
 
+	class JobContext;
+	class IJob;
+
+	struct DelayedSubmission
+	{
+		JobId id = 0;
+		Ref<IJob> job;
+		JobPriority priority = JobPriority::Normal;
+		Time::SteadyTimePoint dueAt{};
+	};
+
 	struct JobRecord
 	{
 		JobSnapshot snapshot;
 		std::vector<JobLogEntry> logs;
 		Ref<std::atomic_bool> cancellationRequested = CreateRef<std::atomic_bool>(false);
+		Ref<IJob> job;
 	};
 
 	class JobCancelledException final : public std::runtime_error
@@ -78,8 +90,6 @@ namespace DefectStudio
 		{
 		}
 	};
-
-	class JobContext;
 
 	class IJob
 	{

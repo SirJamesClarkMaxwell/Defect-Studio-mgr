@@ -10,7 +10,7 @@ namespace
 {
 	[[nodiscard]] std::filesystem::path CreateTempDirectory()
 	{
-		const auto stamp = DefectStudio::Time::now().time_since_epoch().count();
+		const auto stamp = DefectStudio::Time::Now().time_since_epoch().count();
 		const std::filesystem::path baseDirectory = std::filesystem::temp_directory_path() /
 		                                            ("DefectStudioConfigTests_" + std::to_string(stamp));
 		std::filesystem::create_directories(baseDirectory);

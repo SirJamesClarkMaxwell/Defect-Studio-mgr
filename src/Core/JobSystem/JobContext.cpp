@@ -9,12 +9,14 @@ namespace DefectStudio
 		StageCallback stageCallback,
 		MessageCallback messageCallback,
 		LogCallback logCallback,
-		CancelQuery cancelQuery)
+		CancelQuery cancelQuery,
+		SubmitJobCallback submitJobCallback)
 		: m_ProgressCallback(std::move(progressCallback)),
 		  m_StageCallback(std::move(stageCallback)),
 		  m_MessageCallback(std::move(messageCallback)),
 		  m_LogCallback(std::move(logCallback)),
-		  m_CancelQuery(std::move(cancelQuery))
+		  m_CancelQuery(std::move(cancelQuery)),
+		  m_SubmitJobCallback(std::move(submitJobCallback))
 	{
 	}
 
@@ -69,5 +71,12 @@ namespace DefectStudio
 	{
 		if (IsCancellationRequested())
 			throw JobCancelledException();
+	}
+
+	JobId JobContext::SubmitJob(const Ref<IJob> &job, JobPriority priority) const
+	{
+		if (m_SubmitJobCallback)
+			return m_SubmitJobCallback(job, priority);
+		return 0; // Failed submission
 	}
 } // namespace DefectStudio

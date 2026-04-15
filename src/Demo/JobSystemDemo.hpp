@@ -1,15 +1,15 @@
 #pragma once
 
 #include <atomic>
+#include <deque>
 #include <unordered_map>
 #include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/SubscriptionHandle.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "Core/Utils/Memory.hpp"
-
-struct ImFont;
 
 namespace DefectStudio::Demo
 {
@@ -28,11 +28,11 @@ namespace DefectStudio::Demo
 
 		void syncProgressTracker();
 		void renderControls();
+		void renderEventBusPanel();
 		void renderProgressPanel();
 		void renderJobsPanel();
 		void renderSelectedJobPanel();
-
-		void tryLoadPreferredFont();
+		void appendLifecycleEvent(std::string eventLine);
 
 	private:
 		// Demo lane is intentionally isolated from Application services.
@@ -52,13 +52,21 @@ namespace DefectStudio::Demo
 		int m_NewJobSteps = 30;
 		int m_NewJobDelayMs = 10;
 		int m_BulkJobCount = 10;
+		int m_DelayedStartMs = 250;
+		int m_ThreadCountInput = 0;
+		std::size_t m_CurrentThreadCount = 0;
 		bool m_ShowControls = true;
+		bool m_ShowEventBus = true;
 		bool m_ShowProgress = true;
 		bool m_ShowWaiting = true;
 		bool m_ShowFinished = true;
 		bool m_ShowSelectedJob = true;
 		bool m_ShowLogs = true;
+		std::deque<std::string> m_LifecycleEvents;
 
-		ImFont *m_DemoFont = nullptr;
+		SubscriptionHandle m_StartedSubscription;
+		SubscriptionHandle m_CompletedSubscription;
+		SubscriptionHandle m_CancelledSubscription;
+		SubscriptionHandle m_FailedSubscription;
 	};
 } // namespace DefectStudio::Demo

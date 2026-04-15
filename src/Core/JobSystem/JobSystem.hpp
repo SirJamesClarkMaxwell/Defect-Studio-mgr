@@ -1,9 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <mutex>
 #include <optional>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -29,7 +32,12 @@ namespace DefectStudio
 		JobSystem &operator=(JobSystem &&) = delete;
 
 		[[nodiscard]] JobId Submit(const Ref<IJob> &job, JobPriority priority = JobPriority::Normal);
+		[[nodiscard]] JobId SubmitAfter(const Ref<IJob> &job, Time::Milliseconds delay, JobPriority priority = JobPriority::Normal);
 		[[nodiscard]] bool RequestCancel(JobId id);
+		[[nodiscard]] bool Reset(JobId id);
+		[[nodiscard]] bool Retry(JobId id, JobPriority priority = JobPriority::Normal);
+		[[nodiscard]] std::size_t GetThreadCount() const;
+		[[nodiscard]] bool SetThreadCount(std::size_t threadCount);
 
 		[[nodiscard]] std::optional<JobSnapshot> GetJob(JobId id) const;
 		[[nodiscard]] std::vector<JobSnapshot> GetAllJobs() const;
@@ -44,6 +52,7 @@ namespace DefectStudio
 		static BS::priority_t toBackendPriority(JobPriority priority);
 		static bool isFinishedStatus(JobStatus status);
 
+		void enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority);
 		void recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now);
 		void runJob(JobId id, Ref<IJob> job);
 		void markRunning(JobId id, const Time::TimePoint &startedAt);
@@ -56,11 +65,17 @@ namespace DefectStudio
 		[[nodiscard]] std::optional<Ref<EventBus>> lockEventBus() const;
 		void publishStartedEvent(JobId id, const IJob &job) const;
 		void publishFinishedEvent(JobId id, const IJob &job, JobStatus status, const std::string &errorMessage) const;
+		void delayedWorkerLoop(std::stop_token stopToken);
+		void cancelPendingDelayedSubmissions();
 
 		WeakRef<EventBus> m_EventBus;
 		BS::priority_thread_pool m_Pool;
 		mutable std::mutex m_Mutex;
 		std::unordered_map<JobId, JobRecord> m_Records;
+		mutable std::mutex m_DelayedMutex;
+		std::condition_variable m_DelayedCv;
+		std::deque<DelayedSubmission> m_DelayedSubmissions;
+		std::jthread m_DelayedWorker;
 		std::atomic<JobId> m_NextId{1};
 		std::atomic_bool m_ShutdownRequested{false};
 		std::once_flag m_ShutdownOnce;

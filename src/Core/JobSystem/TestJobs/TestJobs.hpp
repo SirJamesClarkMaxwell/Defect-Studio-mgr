@@ -10,7 +10,7 @@ namespace DefectStudio
 	class SleepJob final : public IJob
 	{
 	public:
-		SleepJob(std::string name, int steps, Milliseconds::milliseconds stepDelay);
+		SleepJob(std::string name, int steps, Time::Milliseconds stepDelay);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;

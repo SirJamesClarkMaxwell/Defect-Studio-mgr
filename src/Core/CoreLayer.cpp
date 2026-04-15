@@ -29,6 +29,8 @@ namespace DefectStudio
 	void CoreLayer::OnUpdate(float deltaTime)
 	{
 		m_AccumulatedTime += deltaTime;
+		if (m_EventBus)
+			m_EventBus->ProcessQueue();
 	}
 
 	bool CoreLayer::InitializeSystems()

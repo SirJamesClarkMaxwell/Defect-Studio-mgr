@@ -575,6 +575,25 @@ namespace DefectStudio
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+		const std::array<const char *, 3> preferredFonts = {
+			// "C:/Windows/Fonts/CascadiaCode.ttf",
+			// "C:/Windows/Fonts/CascadiaMono.ttf",
+			"C:/Windows/Fonts/segoeui.ttf"
+		};
+
+		for (const char *fontPath : preferredFonts)
+		{
+			if (!std::filesystem::exists(fontPath))
+				continue;
+
+			if (ImFont *font = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f); font != nullptr)
+			{
+				io.FontDefault = font;
+				DS_LOG_INFO("Loaded UI font: {}", fontPath);
+				break;
+			}
+		}
+
 		const std::filesystem::path iniPath = m_Config.directory.Join("imgui.ini").Native();
 		std::filesystem::create_directories(iniPath.parent_path());
 		if (m_Runtime.specification.resetLayout && std::filesystem::exists(iniPath))

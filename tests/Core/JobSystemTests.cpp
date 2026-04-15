@@ -102,6 +102,79 @@ namespace
 		}
 		return predicate();
 	}
+
+	class ChainedJob final : public DefectStudio::IJob
+	{
+	public:
+		ChainedJob(int jobIndex, DefectStudio::Ref<std::vector<int>> executionOrder)
+			: m_JobIndex(jobIndex), m_ExecutionOrder(std::move(executionOrder))
+		{
+		}
+
+		[[nodiscard]] std::string GetName() const override
+		{
+			return "ChainedJob-" + std::to_string(m_JobIndex);
+		}
+
+		[[nodiscard]] std::string GetType() const override
+		{
+			return "ChainedJob";
+		}
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			// Record this job's execution
+			m_ExecutionOrder->push_back(m_JobIndex);
+			context.SetProgress(1.0f, 1.0f);
+			context.SetStage("completed");
+		}
+
+	private:
+		int m_JobIndex;
+		DefectStudio::Ref<std::vector<int>> m_ExecutionOrder;
+	};
+
+	class SequentialSubmitterJob final : public DefectStudio::IJob
+	{
+	public:
+		SequentialSubmitterJob(int chainDepth, DefectStudio::Ref<std::vector<int>> executionOrder)
+			: m_ChainDepth(chainDepth), m_ExecutionOrder(std::move(executionOrder))
+		{
+		}
+
+		[[nodiscard]] std::string GetName() const override
+		{
+			return "SequentialSubmitterJob";
+		}
+
+		[[nodiscard]] std::string GetType() const override
+		{
+			return "SequentialSubmitterJob";
+		}
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			context.SetStage("submitting");
+			// This job submits m_ChainDepth new jobs sequentially
+			for (int i = 0; i < m_ChainDepth; ++i)
+			{
+				auto chainedJob = DefectStudio::CreateRef<ChainedJob>(i, m_ExecutionOrder);
+				const auto id = context.SubmitJob(chainedJob, DefectStudio::JobPriority::Normal);
+				if (id == 0)
+				{
+					context.LogError("Failed to submit chained job " + std::to_string(i));
+					return;
+				}
+				context.SetMessage("Submitted job " + std::to_string(i));
+			}
+			context.SetStage("all-submitted");
+			context.SetProgress(1.0f, 1.0f);
+		}
+
+	private:
+		int m_ChainDepth;
+		DefectStudio::Ref<std::vector<int>> m_ExecutionOrder;
+	};
 } // namespace
 
 TEST(JobSystemTests, SubmitReturnsValidJobId)
@@ -290,4 +363,309 @@ TEST(JobSystemTests, ConcurrentSubmitDoesNotCorruptRecords)
 	jobSystem.Shutdown();
 	const auto all = jobSystem.GetAllJobs();
 	EXPECT_EQ(all.size(), static_cast<std::size_t>(threadCount * jobsPerThread));
+}
+
+TEST(JobSystemTests, SubmitAfterDelaysExecutionUntilDueTime)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto submitTime = DefectStudio::Time::Now();
+	const auto delayMs = DefectStudio::Time::Milliseconds(100);
+	const auto id = jobSystem.SubmitAfter(DefectStudio::CreateRef<DefectStudio::SleepJob>("delayed", 1, DefectStudio::Time::Milliseconds(5)), delayMs);
+
+	EXPECT_GT(id, 0u);
+	auto snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Queued);
+
+	// Should still be queued shortly after submit
+	std::this_thread::sleep_for(DefectStudio::Time::Milliseconds(10));
+	snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Queued);
+
+	// Wait for it to complete
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snap = jobSystem.GetJob(id);
+		return snap.has_value() && snap->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(snapshot->startedAt - submitTime);
+	EXPECT_GE(elapsedMs.count(), delayMs.count() - 20); // 20ms tolerance
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, SubmitAfterZeroDelayExecutesImmediately)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto id = jobSystem.SubmitAfter(DefectStudio::CreateRef<DefectStudio::SleepJob>("zero-delay", 1, DefectStudio::Time::Milliseconds(1)), DefectStudio::Time::Milliseconds(0));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	auto snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Completed);
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, SetThreadCountScalesWorkerPool)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto initialCount = jobSystem.GetThreadCount();
+	EXPECT_GT(initialCount, 0u);
+
+	const auto newCount = initialCount + 2;
+	EXPECT_TRUE(jobSystem.SetThreadCount(newCount));
+	EXPECT_EQ(jobSystem.GetThreadCount(), newCount);
+
+	// Submit job to verify pool still works
+	const auto id = jobSystem.Submit(DefectStudio::CreateRef<DefectStudio::SleepJob>("after-scale", 1, DefectStudio::Time::Milliseconds(1)));
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, SetThreadCountPreservesJobRecords)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto id1 = jobSystem.Submit(DefectStudio::CreateRef<DefectStudio::SleepJob>("before-scale", 1, DefectStudio::Time::Milliseconds(1)));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id1);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	const auto beforeScale = jobSystem.GetAllJobs();
+	const auto beforeCount = beforeScale.size();
+
+	EXPECT_TRUE(jobSystem.SetThreadCount(4));
+
+	const auto afterScale = jobSystem.GetAllJobs();
+	EXPECT_EQ(afterScale.size(), beforeCount);
+	EXPECT_TRUE(std::any_of(afterScale.begin(), afterScale.end(), [id1](const DefectStudio::JobSnapshot &job) {
+		return job.id == id1 && job.status == DefectStudio::JobStatus::Completed;
+	}));
+
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, ResetMovesFinishedJobToQueued)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto id = jobSystem.Submit(DefectStudio::CreateRef<DefectStudio::SleepJob>("reset-me", 1, DefectStudio::Time::Milliseconds(5)));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	auto snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	const auto errorMsg = snapshot->errorMessage;
+
+	EXPECT_TRUE(jobSystem.Reset(id));
+
+	snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Queued);
+	EXPECT_TRUE(snapshot->errorMessage.empty());
+	EXPECT_EQ(snapshot->completedWork, 0.0f);
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, ResetFailsOnRunningJob)
+{
+	DefectStudio::JobSystem jobSystem;
+	auto gate = DefectStudio::CreateRef<Gate>();
+	const auto id = jobSystem.Submit(DefectStudio::CreateRef<BlockingJob>(gate));
+
+	// Let it start running
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Running;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	EXPECT_FALSE(jobSystem.Reset(id));
+
+	gate->Open();
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, RetryResubmitsFinishedJob)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto id = jobSystem.Submit(DefectStudio::CreateRef<DefectStudio::SleepJob>("retry-me", 1, DefectStudio::Time::Milliseconds(5)));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	EXPECT_TRUE(jobSystem.Retry(id));
+
+	auto snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Queued);
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snap = jobSystem.GetJob(id);
+		return snap.has_value() && snap->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, RetryFailsOnRunningJob)
+{
+	DefectStudio::JobSystem jobSystem;
+	auto gate = DefectStudio::CreateRef<Gate>();
+	const auto id = jobSystem.Submit(DefectStudio::CreateRef<BlockingJob>(gate));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(id);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Running;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	EXPECT_FALSE(jobSystem.Retry(id));
+
+	gate->Open();
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, CancelledDelayedJobDoesNotExecute)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto id = jobSystem.SubmitAfter(DefectStudio::CreateRef<DefectStudio::SleepJob>("delayed-cancel", 5, DefectStudio::Time::Milliseconds(5)), DefectStudio::Time::Milliseconds(200));
+
+	// Cancel before it executes
+	std::this_thread::sleep_for(DefectStudio::Time::Milliseconds(50));
+	EXPECT_TRUE(jobSystem.RequestCancel(id));
+
+	// Wait longer than the delay
+	std::this_thread::sleep_for(DefectStudio::Time::Milliseconds(300));
+
+	auto snapshot = jobSystem.GetJob(id);
+	ASSERT_TRUE(snapshot.has_value());
+	EXPECT_EQ(snapshot->status, DefectStudio::JobStatus::Cancelled);
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, MultipleDelayedJobsExecuteInOrder)
+{
+	DefectStudio::JobSystem jobSystem;
+	const auto id1 = jobSystem.SubmitAfter(DefectStudio::CreateRef<DefectStudio::SleepJob>("delayed1", 1, DefectStudio::Time::Milliseconds(2)), DefectStudio::Time::Milliseconds(100));
+	const auto id2 = jobSystem.SubmitAfter(DefectStudio::CreateRef<DefectStudio::SleepJob>("delayed2", 1, DefectStudio::Time::Milliseconds(2)), DefectStudio::Time::Milliseconds(50));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snap1 = jobSystem.GetJob(id1);
+		auto snap2 = jobSystem.GetJob(id2);
+		return snap1.has_value() && snap1->status == DefectStudio::JobStatus::Completed &&
+		       snap2.has_value() && snap2->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(1000)));
+
+	auto snap1 = jobSystem.GetJob(id1);
+	auto snap2 = jobSystem.GetJob(id2);
+	ASSERT_TRUE(snap1.has_value() && snap2.has_value());
+	// id2 should have started roughly 50ms before id1
+	EXPECT_LT(snap2->startedAt, snap1->startedAt);
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, SynchronizationBetweenConcurrentOperations)
+{
+	DefectStudio::JobSystem jobSystem;
+	std::vector<DefectStudio::JobId> ids;
+	std::vector<std::thread> workers;
+
+	// Submit jobs from multiple threads
+	for (int i = 0; i < 5; ++i)
+	{
+		workers.emplace_back([&jobSystem, &ids, i]() {
+			for (int j = 0; j < 10; ++j)
+			{
+				const auto id = jobSystem.Submit(DefectStudio::CreateRef<DefectStudio::SleepJob>(
+					"sync-job-" + std::to_string(i * 10 + j), 1, DefectStudio::Time::Milliseconds(1)));
+				ids.push_back(id);
+			}
+		});
+	}
+
+	for (auto &w : workers)
+		w.join();
+
+	// Wait for all to complete
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto finished = jobSystem.GetFinishedJobs();
+		return finished.size() == ids.size();
+	}, DefectStudio::Time::Milliseconds(2000)));
+
+	jobSystem.Shutdown();
+	const auto allJobs = jobSystem.GetAllJobs();
+	EXPECT_EQ(allJobs.size(), ids.size());
+	for (const auto &job : allJobs)
+		EXPECT_EQ(job.status, DefectStudio::JobStatus::Completed);
+}
+
+TEST(JobSystemTests, JobCanSubmitOtherJobsSequentially)
+{
+	DefectStudio::JobSystem jobSystem;
+	const int chainDepth = 5;
+	auto executionOrder = DefectStudio::CreateRef<std::vector<int>>();
+
+	// Submit a job that will submit N other jobs
+	const auto mainId = jobSystem.Submit(
+		DefectStudio::CreateRef<SequentialSubmitterJob>(chainDepth, executionOrder));
+	(void)mainId; // Used implicitly by WaitUntil count
+
+	// Wait for main job and all chained jobs to complete
+	ASSERT_TRUE(WaitUntil([&]() {
+		const auto allJobs = jobSystem.GetAllJobs();
+		return std::count_if(allJobs.begin(), allJobs.end(), [](const DefectStudio::JobSnapshot &snap) {
+			return snap.status == DefectStudio::JobStatus::Completed;
+		}) == chainDepth + 1; // Main job + chain depth jobs
+	}, DefectStudio::Time::Milliseconds(2000)));
+
+	// Verify execution order matches submission order
+	EXPECT_EQ(executionOrder->size(), chainDepth);
+	for (int i = 0; i < chainDepth; ++i)
+		EXPECT_EQ((*executionOrder)[i], i);
+
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, MultipleJobsCanSubmitOtherJobsConcurrently)
+{
+	DefectStudio::JobSystem jobSystem;
+	const int submitterCount = 3;
+	const int chainPerSubmitter = 4;
+	auto executionOrder = DefectStudio::CreateRef<std::vector<int>>();
+
+	// Submit multiple jobs that will each submit N other jobs
+	std::vector<DefectStudio::JobId> mainIds;
+	for (int i = 0; i < submitterCount; ++i)
+	{
+		auto id = jobSystem.Submit(
+			DefectStudio::CreateRef<SequentialSubmitterJob>(chainPerSubmitter, executionOrder));
+		mainIds.push_back(id);
+	}
+
+	// Wait for all to complete
+	ASSERT_TRUE(WaitUntil([&]() {
+		const auto allJobs = jobSystem.GetAllJobs();
+		return std::count_if(allJobs.begin(), allJobs.end(), [](const DefectStudio::JobSnapshot &snap) {
+			return snap.status == DefectStudio::JobStatus::Completed;
+		}) == submitterCount + (submitterCount * chainPerSubmitter); // Submitters + all chains
+	}, DefectStudio::Time::Milliseconds(3000)));
+
+	// All submitted jobs should be in execution order
+	EXPECT_EQ(executionOrder->size(), submitterCount * chainPerSubmitter);
+
+	jobSystem.Shutdown();
 }

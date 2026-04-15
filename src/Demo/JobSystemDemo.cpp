@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 
+#include "App/Events/JobEvents.hpp"
 #include "Core/Utils/Time.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 
@@ -89,6 +90,71 @@ namespace DefectStudio::Demo
 		std::string m_Message;
 	};
 
+	class DemoChainedJob final : public DefectStudio::IJob
+	{
+	public:
+		DemoChainedJob(std::string jobName, int index)
+			: m_JobName(std::move(jobName)), m_Index(index)
+		{
+		}
+
+		[[nodiscard]] std::string GetName() const override
+		{
+			return m_JobName + "[" + std::to_string(m_Index) + "]";
+		}
+
+		[[nodiscard]] std::string GetType() const override { return "DemoChainedJob"; }
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			context.SetStage("working");
+			std::this_thread::sleep_for(Time::Milliseconds(100));
+			context.SetProgress(1.0f, 1.0f);
+			context.SetStage("done");
+		}
+
+	private:
+		std::string m_JobName;
+		int m_Index;
+	};
+
+	class DemoSequentialSubmitterJob final : public DefectStudio::IJob
+	{
+	public:
+		DemoSequentialSubmitterJob(std::string jobName, int chainCount)
+			: m_JobName(std::move(jobName)), m_ChainCount(chainCount)
+		{
+		}
+
+		[[nodiscard]] std::string GetName() const override { return m_JobName; }
+
+		[[nodiscard]] std::string GetType() const override { return "DemoSequentialSubmitterJob"; }
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			context.SetStage("submitting-chain");
+			for (int i = 0; i < m_ChainCount; ++i)
+			{
+				context.ThrowIfCancellationRequested();
+				auto chainedJob = CreateRef<DemoChainedJob>(m_JobName, i);
+				const auto id = context.SubmitJob(chainedJob, JobPriority::Normal);
+				if (id == 0)
+				{
+					context.LogError("Failed to submit chained job " + std::to_string(i));
+					return;
+				}
+				context.SetProgress(static_cast<float>(i + 1), static_cast<float>(m_ChainCount));
+				context.SetMessage("Submitted chain job " + std::to_string(i));
+			}
+			context.SetStage("all-submitted");
+			context.SetProgress(1.0f, 1.0f);
+		}
+
+	private:
+		std::string m_JobName;
+		int m_ChainCount;
+	};
+
 	const char *ToStatusLabel(DefectStudio::JobStatus status)
 	{
 		switch (status)
@@ -121,7 +187,28 @@ namespace DefectStudio::Demo
 		  m_DemoJobSystem(CreateUnique<JobSystem>(CreateWeakRef(m_DemoEventBus), 0)),
 		  m_PauseRequested(CreateRef<std::atomic_bool>(false))
 	{
-		tryLoadPreferredFont();
+		m_CurrentThreadCount = m_DemoJobSystem->GetThreadCount();
+		m_ThreadCountInput = static_cast<int>(m_CurrentThreadCount);
+
+		m_StartedSubscription = m_DemoEventBus->Subscribe<JobStartedEvent>(
+			[this](const JobStartedEvent &event) {
+				appendLifecycleEvent("Started #" + std::to_string(event.id) + " [" + event.name + "]");
+			});
+
+		m_CompletedSubscription = m_DemoEventBus->Subscribe<JobCompletedEvent>(
+			[this](const JobCompletedEvent &event) {
+				appendLifecycleEvent("Completed #" + std::to_string(event.id) + " [" + event.name + "]");
+			});
+
+		m_CancelledSubscription = m_DemoEventBus->Subscribe<JobCancelledEvent>(
+			[this](const JobCancelledEvent &event) {
+				appendLifecycleEvent("Cancelled #" + std::to_string(event.id) + " [" + event.name + "]");
+			});
+
+		m_FailedSubscription = m_DemoEventBus->Subscribe<JobFailedEvent>(
+			[this](const JobFailedEvent &event) {
+				appendLifecycleEvent("Failed #" + std::to_string(event.id) + " [" + event.name + "]: " + event.errorMessage);
+			});
 	}
 
 	JobSystemDemo::~JobSystemDemo()
@@ -135,24 +222,24 @@ namespace DefectStudio::Demo
 		if (!m_DemoJobSystem)
 			return;
 
+		m_DemoEventBus->ProcessQueue();
 		syncProgressTracker();
 
 		ImGui::Begin("JobSystem Demo");
-		if (m_DemoFont != nullptr)
-			ImGui::PushFont(m_DemoFont);
 
 		ImGui::TextUnformatted("API workflow:");
 		ImGui::BulletText("Submit(const Ref<IJob> &, priority)");
+		ImGui::BulletText("SubmitAfter(const Ref<IJob> &, delay, priority)");
+		ImGui::BulletText("SetThreadCount(threadCount)");
 		ImGui::BulletText("RequestCancel(jobId)");
 		ImGui::BulletText("GetAllJobs/GetJob/GetLogs");
 
 		renderControls();
+		renderEventBusPanel();
 		renderProgressPanel();
 		renderJobsPanel();
 		renderSelectedJobPanel();
 
-		if (m_DemoFont != nullptr)
-			ImGui::PopFont();
 		ImGui::End();
 	}
 
@@ -220,9 +307,30 @@ namespace DefectStudio::Demo
 		ImGui::InputInt("Delay (ms)", &m_NewJobDelayMs);
 		ImGui::SetNextItemWidth(500.0f);
 		ImGui::InputInt("Bulk Count", &m_BulkJobCount);
+		ImGui::SetNextItemWidth(500.0f);
+		ImGui::InputInt("Delay before start (ms)", &m_DelayedStartMs);
+		ImGui::SetNextItemWidth(500.0f);
+		ImGui::InputInt("Worker threads", &m_ThreadCountInput);
+		ImGui::Text("Current workers: %llu", static_cast<unsigned long long>(m_CurrentThreadCount));
 
 		if (ImGui::Button("Add Job"))
 			submitSleepJob(m_NewJobSteps, m_NewJobDelayMs, JobPriority::Normal);
+
+		ImGui::SameLine();
+		if (ImGui::Button("Add Delayed Job"))
+		{
+			++m_JobCounter;
+			const std::string name = "demo-delayed-" + std::to_string(m_JobCounter);
+			auto job = CreateRef<DemoSleepJob>(name, m_NewJobSteps, m_NewJobDelayMs, m_PauseRequested);
+			const auto delay = Time::Milliseconds(std::max(0, m_DelayedStartMs));
+			const JobId id = m_DemoJobSystem->SubmitAfter(job, delay, JobPriority::Normal);
+			if (id != 0)
+			{
+				m_KnownJobs.push_back(id);
+				m_SelectedJobId = id;
+				m_ProgressIds[id] = m_ProgressTracker.Register(name, static_cast<std::size_t>(std::max(1, m_NewJobSteps)));
+			}
+		}
 
 		ImGui::SameLine();
 		if (ImGui::Button("Add Many Jobs"))
@@ -242,6 +350,61 @@ namespace DefectStudio::Demo
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel Selected") && m_SelectedJobId != 0)
 			(void)m_DemoJobSystem->RequestCancel(m_SelectedJobId);
+
+		ImGui::SameLine();
+		if (ImGui::Button("Reset Selected") && m_SelectedJobId != 0)
+			(void)m_DemoJobSystem->Reset(m_SelectedJobId);
+
+		ImGui::SameLine();
+		if (ImGui::Button("Retry Selected") && m_SelectedJobId != 0)
+			(void)m_DemoJobSystem->Retry(m_SelectedJobId);
+
+		ImGui::SameLine();
+		if (ImGui::Button("Sequential Chain"))
+		{
+			++m_JobCounter;
+			const std::string name = "demo-sequential-" + std::to_string(m_JobCounter);
+			auto job = CreateRef<DemoSequentialSubmitterJob>(name, m_BulkJobCount);
+			const JobId id = m_DemoJobSystem->Submit(job, JobPriority::Normal);
+			if (id != 0)
+			{
+				m_KnownJobs.push_back(id);
+				m_SelectedJobId = id;
+				m_ProgressIds[id] = m_ProgressTracker.Register(name, static_cast<std::size_t>(std::max(1, m_BulkJobCount)));
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Apply Worker Count"))
+		{
+			const auto requested = static_cast<std::size_t>(std::max(1, m_ThreadCountInput));
+			if (m_DemoJobSystem->SetThreadCount(requested))
+				m_CurrentThreadCount = m_DemoJobSystem->GetThreadCount();
+			m_ThreadCountInput = static_cast<int>(m_CurrentThreadCount);
+		}
+	}
+
+	void JobSystemDemo::renderEventBusPanel()
+	{
+		if (!ImGui::CollapsingHeader("EventBus Job Lifecycle", m_ShowEventBus ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None))
+			return;
+
+		ImGui::Text("Subscriptions: %llu", static_cast<unsigned long long>(m_DemoEventBus->GetTotalSubscriberCount()));
+		ImGui::Text("Queued events: %llu", static_cast<unsigned long long>(m_DemoEventBus->GetQueuedEventCount()));
+
+		if (m_LifecycleEvents.empty())
+		{
+			ImGui::TextUnformatted("No lifecycle events yet.");
+			return;
+		}
+
+		for (const auto &entry : m_LifecycleEvents)
+			ImGui::TextUnformatted(entry.c_str());
+	}
+
+	void JobSystemDemo::appendLifecycleEvent(std::string eventLine)
+	{
+		m_LifecycleEvents.push_back(std::move(eventLine));
 	}
 
 	void JobSystemDemo::renderProgressPanel()
@@ -356,28 +519,4 @@ namespace DefectStudio::Demo
 		}
 	}
 
-	void JobSystemDemo::tryLoadPreferredFont()
-	{
-		ImGuiIO &io = ImGui::GetIO();
-
-		const std::array<const char *, 3> candidates = {
-			"C:/Windows/Fonts/CascadiaCode.ttf",
-			"C:/Windows/Fonts/CascadiaMono.ttf",
-			"C:/Windows/Fonts/segoeui.ttf"
-		};
-
-		for (const char *path : candidates)
-		{
-			if (!std::filesystem::exists(path))
-				continue;
-
-			m_DemoFont = io.Fonts->AddFontFromFileTTF(path, 16.0f);
-			if (m_DemoFont != nullptr)
-			{
-				// Use VSCode-like typography globally after successful font load.
-				io.FontDefault = m_DemoFont;
-				break;
-			}
-		}
-	}
 } // namespace DefectStudio::Demo
