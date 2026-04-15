@@ -1,0 +1,20 @@
+/* Keep generated PlantUML diagrams readable on both dark and light themes. */
+img[src*="diagrams/generated/"] {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	padding: 12px;
+	border-radius: 10px;
+	background: #ffffff;
+	border: 1px solid #d6d6d6;
+	box-sizing: border-box;
+}
+
+/* Slightly stronger edge contrast in dark themes. */
+.navy img[src*="diagrams/generated/"],
+.coal img[src*="diagrams/generated/"],
+.ayu img[src*="diagrams/generated/"],
+.rust img[src*="diagrams/generated/"] {
+	border-color: #9aa0a6;
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}

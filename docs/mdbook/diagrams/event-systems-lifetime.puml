@@ -1,0 +1,22 @@
+@startuml
+title Event Systems - High-Level Lifetime Map
+skinparam shadowing false
+
+participant Application
+participant EventQueue
+participant LayerStack
+participant CoreLayer
+participant EventBus
+participant "UI Panels" as UIPanels
+participant "Worker Jobs" as WorkerJobs
+
+Application -> EventQueue : owns and drains each frame
+Application -> LayerStack : owns and dispatches platform events
+Application -> CoreLayer : coordinates runtime services
+CoreLayer -> EventBus : owns subsystem bus
+
+UIPanels -> EventBus : Subscribe/Publish
+WorkerJobs -> EventBus : Queue(...)
+Application -> EventBus : ProcessQueue()
+
+@enduml

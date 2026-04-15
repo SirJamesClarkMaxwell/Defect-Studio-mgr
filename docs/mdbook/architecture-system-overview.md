@@ -50,7 +50,9 @@ int main(int argc, char** argv)
 
 - Application shell: `Application Shell System`
 - Lifecycle details: `Application Lifecycle System`
-- Event details: `Event Systems`
+- Event details (overview): `events/introduction.md`
+- Event details (usage): `events/overview.md`
+- Event details (implementation): `events/for-programmers.md`
 - Background execution: `Job System`
 - Progress snapshots: `Progress Tracker System`
 - Configuration ownership: `Config Manager System`

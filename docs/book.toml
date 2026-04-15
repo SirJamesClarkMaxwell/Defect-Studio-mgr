@@ -8,3 +8,4 @@ src = "mdbook"
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "dark"
+additional-css = ["mdbook/custom.css"]

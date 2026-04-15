@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .config import load_local_config
-from .paths import mdbook_dir, premake_dir, tools_dir, tracy_profiler_path
+from .paths import mdbook_dir, plantuml_dir, premake_dir, tools_dir, tracy_profiler_path
 
 
 TOOL_HINTS: dict[str, list[str]] = {
@@ -15,6 +15,7 @@ TOOL_HINTS: dict[str, list[str]] = {
     "uv": ["uv"],
     "premake5": ["premake5"],
     "mdbook": ["mdbook"],
+    "plantuml": ["plantuml"],
     "msbuild": ["MSBuild"],
     "code": ["code"],
     "tracy": ["tracy-profiler", "Tracy"],
@@ -42,6 +43,13 @@ def _repo_local_tool_path(name: str) -> str | None:
             / _platform_folder()
             / "bin"
             / ("mdbook.exe" if os.name == "nt" else "mdbook")
+        )
+    elif name == "plantuml":
+        base = (
+            plantuml_dir()
+            / _platform_folder()
+            / "bin"
+            / ("plantuml.bat" if os.name == "nt" else "plantuml")
         )
     elif name in {"tracy", "tracy-profiler"}:
         base = tracy_profiler_path()

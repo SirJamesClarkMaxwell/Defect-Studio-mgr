@@ -1,0 +1,20 @@
+@startuml
+title LayerStack Reverse Propagation and handled Stop
+skinparam shadowing false
+
+participant Application
+participant "Overlay Layer" as Overlay
+participant "Editor Layer" as Editor
+participant "Core Layer" as Core
+
+Application -> Overlay : OnEvent(event)
+Overlay --> Application : handled? false
+Application -> Editor : OnEvent(event)
+Editor --> Application : handled? true
+Application -> Core : (skipped)
+
+note right of Application
+Propagation stops after handled=true.
+end note
+
+@enduml

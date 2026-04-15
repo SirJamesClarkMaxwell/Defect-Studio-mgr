@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from scripts.python.common.cli import print_header, print_step
 from scripts.python.common.exec import run_command
@@ -29,7 +30,57 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--skip-plantuml",
+        action="store_true",
+        help="Skip PlantUML diagram generation step.",
+    )
     return parser
+
+
+def generate_plantuml_diagrams(args: argparse.Namespace, docs_dir: Path) -> int:
+    diagrams_dir = docs_dir / "mdbook" / "diagrams"
+    source_files = sorted(diagrams_dir.glob("*.puml"))
+    if not source_files:
+        return 0
+
+    generated_dir = diagrams_dir / "generated"
+    expected_svg = [generated_dir / f"{source.stem}.svg" for source in source_files]
+
+    plantuml = detect_tool("plantuml")
+    if not plantuml:
+        if all(path.exists() for path in expected_svg):
+            print_step("PlantUML not found; using existing generated SVG diagrams")
+            return 0
+
+        print(
+            "[error] PlantUML source files were found but 'plantuml' was not detected in toolchain."
+        )
+        print(
+            "        Configure tool path in .local/toolchain.json as tools.plantuml, or add plantuml to PATH."
+        )
+        print(
+            "        Alternatively run with --skip-plantuml if generated SVG files already exist."
+        )
+        return 1
+
+    generated_dir.mkdir(parents=True, exist_ok=True)
+
+    for stale in generated_dir.glob("*.svg"):
+        stale.unlink()
+
+    print_step(f"Generating PlantUML diagrams ({len(source_files)} files)")
+    for source in source_files:
+        code = run_command(
+            [plantuml, "-tsvg", "-o", "generated", source.name],
+            cwd=diagrams_dir,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+        )
+        if code != 0:
+            return code
+
+    return 0
 
 
 def run(args: argparse.Namespace) -> int:
@@ -44,6 +95,11 @@ def run(args: argparse.Namespace) -> int:
     if not docs_dir.exists():
         print(f"[error] docs directory not found: {docs_dir}")
         return 1
+
+    if not args.skip_plantuml:
+        code = generate_plantuml_diagrams(args, docs_dir)
+        if code != 0:
+            return code
 
     print_step("Building documentation with mdbook")
     code = run_command(

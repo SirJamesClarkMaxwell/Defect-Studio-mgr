@@ -23,7 +23,7 @@ Deliver a stable core runtime with:
 
 ## 1. Contract and boundary pass
 
-- [ ] Finalize the minimal core contracts before adding more behavior.
+- [x] Finalize the minimal core contracts before adding more behavior.
 - [ ] Keep `Application`, `Layer`, `LayerStack`, `Event`, `EventDispatcher`, `EventBus`, `ProjectWorkspace`, and `EditorContext` as the only first-order concepts in this milestone.
 - [ ] Document ownership rules directly in docs: `ProjectWorkspace` owns mutable runtime state, `EditorContext` only references it.
 - [ ] Keep UI layers read-mostly and main-thread only for commits.
@@ -33,12 +33,12 @@ Deliver a stable core runtime with:
 
 ## 2. Application lifecycle
 
-- [ ] Complete the `Application` singleton lifecycle with `Create`, `Run`, and `Shutdown`.
-- [ ] Add deterministic `OnUpdate`, `OnEvent`, and `OnRender` call order.
-- [ ] Keep the frame loop simple: delta time, fixed hook points, no scheduler complexity.
-- [ ] Route OS events into the `LayerStack` through one canonical path only.
-- [ ] Add explicit startup and shutdown logging so the main phases are visible in logs.
-- [ ] Preserve the existing window abstraction split under `src/Core/Platform/`.
+- [x] Complete the `Application` singleton lifecycle with `Create`, `Run`, and `Shutdown`.
+- [x] Add deterministic `OnUpdate`, `OnEvent`, and `OnRender` call order.
+- [x] Keep the frame loop simple: delta time, fixed hook points, no scheduler complexity.
+- [x] Route OS events into the `LayerStack` through one canonical path only.
+- [x] Add explicit startup and shutdown logging so the main phases are visible in logs.
+- [x] Preserve the existing window abstraction split under `src/Core/Platform/`.
 - [ ] Prevent renderer-feature creep in this task.
 
 ---
@@ -47,26 +47,26 @@ Deliver a stable core runtime with:
 
 ### 3.1 Core event model
 
-- [ ] Keep the event system aligned with the specification in `tmp/event-system-specification.md`.
-- [ ] Use a base `Event` type with handled and stop-propagation flags.
-- [ ] Add event priority levels only where dispatch order matters.
-- [ ] Keep listener identifiers stable and RAII-safe.
+- [x] Keep the event system aligned with the specification in `tmp/event-system-specification.md`.
+- [x] Use a base `Event` type with handled and stop-propagation flags.
+- [x] Add event priority levels only where dispatch order matters.
+- [x] Keep listener identifiers stable and RAII-safe.
 
 ### 3.2 EventBus behavior
 
-- [ ] Implement subscription, unsubscription, publishing, queued publishing, and queue processing.
-- [ ] Preserve listener ordering by priority.
-- [ ] Keep unsubscribe safe during dispatch by deferring cleanup.
-- [ ] Support queued event processing for main-thread consumption of worker-thread output.
-- [ ] Add subscriber count and queue count queries for diagnostics.
-- [ ] Ensure dispatch stops when an event requests propagation stop.
+- [x] Implement subscription, unsubscription, publishing, queued publishing, and queue processing.
+- [x] Preserve listener ordering by priority.
+- [x] Keep unsubscribe safe during dispatch by deferring cleanup.
+- [x] Support queued event processing for main-thread consumption of worker-thread output.
+- [x] Add subscriber count and queue count queries for diagnostics.
+- [x] Ensure dispatch stops when an event requests propagation stop.
 
 ### 3.3 RAII and receivers
 
-- [ ] Add `SubscriptionHandle` as the sole ownership boundary for event subscriptions.
-- [ ] Add `EventReceiver` as the helper base for UI and panel objects that own multiple subscriptions.
-- [ ] Make subscription cleanup automatic during destruction.
-- [ ] Keep event receiver enable/disable behavior explicit and testable.
+- [x] Add `SubscriptionHandle` as the sole ownership boundary for event subscriptions.
+- [x] Add `EventReceiver` as the helper base for UI and panel objects that own multiple subscriptions.
+- [x] Make subscription cleanup automatic during destruction.
+- [x] Keep event receiver enable/disable behavior explicit and testable.
 
 ### 3.4 Event types needed for T04
 
@@ -78,11 +78,11 @@ Deliver a stable core runtime with:
 
 ### 3.5 Event tests
 
-- [ ] Add tests for publish delivery.
-- [ ] Add tests for priority ordering.
-- [ ] Add tests for unsubscribe during dispatch.
-- [ ] Add tests for queued event processing.
-- [ ] Add tests for receiver-owned subscriptions.
+- [x] Add tests for publish delivery.
+- [x] Add tests for priority ordering.
+- [x] Add tests for unsubscribe during dispatch.
+- [x] Add tests for queued event processing.
+- [x] Add tests for receiver-owned subscriptions.
 
 ---
 

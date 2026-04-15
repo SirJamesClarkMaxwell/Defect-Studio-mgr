@@ -296,28 +296,28 @@ Each slice follows the same internal cycle. Do not skip steps. Do not batch step
 All planned tests across all slices are listed here as a single reference. Tests are written per-slice (step 2 of the cycle above), not as a single pre-implementation block.
 
 **Application lifecycle (Slice A):**
-- [ ] `Application` boots, runs one frame, and shuts down without assertions
-- [ ] `Shutdown()` called twice is a no-op on the second call
-- [ ] Layer `OnAttach` → `OnUpdate` → `OnDetach` ordering is correct
-- [ ] `LayerStack` delivers events to layers in the correct order
+- [x] `Application` boots, runs one frame, and shuts down without assertions
+- [x] `Shutdown()` called twice is a no-op on the second call
+- [x] Layer `OnAttach` → `OnUpdate` → `OnDetach` ordering is correct
+- [x] `LayerStack` delivers events to layers in the correct order
 
 **EventBus (Slice B):**
-- [ ] `Subscribe` returns a valid `SubscriptionHandle`
-- [ ] `SubscriptionHandle` destructor triggers `Unsubscribe`
-- [ ] Move-assigning `SubscriptionHandle` transfers ownership correctly
-- [ ] `Publish` delivers to all active subscribers
-- [ ] Subscribers are invoked in priority order (Highest first)
-- [ ] Equal-priority subscribers are invoked in subscription order (`stable_sort`)
-- [ ] `stopPropagation = true` stops delivery to remaining subscribers
-- [ ] `handled = true` does not stop propagation on its own
-- [ ] Unsubscribe during dispatch defers removal; removed listener is not invoked in the current cycle
-- [ ] Subscriber added during dispatch is not invoked in the same cycle
-- [ ] `ClearAllListeners` during dispatch defers all removals
-- [ ] `Queue<TEvent>()` is callable from a non-main thread without data races
-- [ ] `ProcessQueue()` delivers all queued events in submission order
-- [ ] `ProcessQueue()` with empty queue is a no-op
-- [ ] `IsDispatching()` returns `true` only inside a dispatch call
-- [ ] `GetQueuedEventCount()` reflects queued but unprocessed events
+- [x] `Subscribe` returns a valid `SubscriptionHandle`
+- [x] `SubscriptionHandle` destructor triggers `Unsubscribe`
+- [x] Move-assigning `SubscriptionHandle` transfers ownership correctly
+- [x] `Publish` delivers to all active subscribers
+- [x] Subscribers are invoked in priority order (Highest first)
+- [x] Equal-priority subscribers are invoked in subscription order (`stable_sort`)
+- [x] `stopPropagation = true` stops delivery to remaining subscribers
+- [x] `handled = true` does not stop propagation on its own
+- [x] Unsubscribe during dispatch defers removal; removed listener is not invoked in the current cycle
+- [x] Subscriber added during dispatch is not invoked in the same cycle
+- [x] `ClearAllListeners` during dispatch defers all removals
+- [x] `Queue<TEvent>()` is callable from a non-main thread without data races
+- [x] `ProcessQueue()` delivers all queued events in submission order
+- [x] `ProcessQueue()` with empty queue is a no-op
+- [x] `IsDispatching()` returns `true` only inside a dispatch call
+- [x] `GetQueuedEventCount()` reflects queued but unprocessed events
 
 **JobSystem (Slice C):**
 - [ ] `Submit` returns a valid `JobId`

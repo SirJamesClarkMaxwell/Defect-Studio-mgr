@@ -1,0 +1,20 @@
+@startuml
+title EventQueue Producer-Consumer Flow
+skinparam shadowing false
+
+participant "Producer (callback/thread)" as Producer
+participant EventQueue
+participant Application
+participant "Dispatch Path" as Dispatch
+
+Producer -> EventQueue : Add(EventVariant)
+Application -> EventQueue : Drain()
+EventQueue --> Application : vector<EventVariant>
+Application -> Dispatch : process batch
+
+note right of EventQueue
+Queue is synchronized and
+stores platform events only.
+end note
+
+@enduml

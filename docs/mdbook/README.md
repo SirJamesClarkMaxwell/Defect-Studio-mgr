@@ -7,8 +7,7 @@ Use this page as the entry point.
 ## What to read first
 
 - [Build and Validation](build-and-validation.md) for local build and test workflows.
-- [Runtime Core](runtime-core.md) for application shell, event handling, queueing, and core services.
-- [Event Systems API Definition](event-systems-api.md) for the exact contract of EventHandling and EventBus.
+- [Runtime Core](runtime-core.md) for application shell, event systems, and core services.
 - [Architecture](architecture.md) for higher-level system design.
 - [Reference](reference.md) for shared conventions and key classes.
 
@@ -27,8 +26,13 @@ Use this page as the entry point.
 - [Application Lifecycle System](application-lifecycle.md)
 - [Application Shell System](system-application-shell.md)
 - [LayerStack System](system-layer-stack.md)
-- [Event Systems](system-events.md)
-- [Event Queue System](eventqueue.md)
+- [Event Systems](events/introduction.md)
+- [Overview](events/overview.md)
+- [For Programmers](events/for-programmers.md)
+- [EventDispatcher](events/event-dispatcher.md)
+- [EventBus](events/event-bus.md)
+- [EventQueue](events/event-queue.md)
+- [Design Decisions](events/design-decisions.md)
 - [Job System](system-jobs.md)
 - [Progress Tracker System](system-progress-tracker.md)
 - [Config Manager System](system-config-manager.md)

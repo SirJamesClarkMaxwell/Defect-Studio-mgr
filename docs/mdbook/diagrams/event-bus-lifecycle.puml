@@ -1,0 +1,24 @@
+@startuml
+title EventBus Lifecycle and Dispatch
+skinparam shadowing false
+
+participant Publisher
+participant "Worker" as Worker
+participant EventBus
+participant "Subscriber A" as SubA
+participant "Subscriber B" as SubB
+participant Application
+
+SubA -> EventBus : Subscribe<T>() => SubscriptionHandle
+SubB -> EventBus : Subscribe<T>() => SubscriptionHandle
+
+Publisher -> EventBus : Publish(event)
+EventBus -> SubA : callback(event)
+EventBus -> SubB : callback(event)
+
+Worker -> EventBus : Queue(event)
+Application -> EventBus : ProcessQueue()
+EventBus -> SubA : callback(queued event)
+EventBus -> SubB : callback(queued event)
+
+@enduml

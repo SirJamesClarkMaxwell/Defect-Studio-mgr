@@ -1,0 +1,21 @@
+@startuml
+title EventDispatcher Pipeline Flow
+skinparam shadowing false
+
+participant "OS / GLFW" as OS
+participant "Window callbacks" as Win
+participant "EventQueue" as Queue
+participant "Application" as App
+participant "LayerStack" as Stack
+participant "Top Layer" as Top
+
+OS -> Win : input/window event
+Win -> Queue : Add(EventVariant)
+App -> Queue : Drain() each frame
+Queue --> App : batch of events
+App -> Stack : OnEvent(event)
+Stack -> Top : deliver (reverse order)
+Top --> Stack : handled=true? / false
+Stack --> App : propagation result
+
+@enduml

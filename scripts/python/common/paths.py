@@ -36,6 +36,10 @@ def mdbook_dir() -> Path:
     return vendor_binaries_dir() / "MdBook"
 
 
+def plantuml_dir() -> Path:
+    return vendor_binaries_dir() / "PlantUML"
+
+
 def tracy_dir() -> Path:
     if os.name == "nt":
         return vendor_binaries_dir() / "Tracy" / "Windows"
