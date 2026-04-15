@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "Core/Platform/Events/PlatformEvent.hpp"
-#include "Core/EventQueue.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 
 namespace DefectStudio::Test
 {

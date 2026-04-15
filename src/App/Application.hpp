@@ -6,13 +6,13 @@
 #include "App/ApplicationState.hpp"
 #include "App/ConfigManager.hpp"
 #include "App/Window.hpp"
-#include "Core/Platform/Events/PlatformEvent.hpp"
-#include "Core/Events/EventBus.hpp"
-#include "Core/EventQueue.hpp"
-#include "Core/JobSystem.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
 #include "Core/LayerStack.hpp"
-#include "Core/Logger.hpp"
-#include "Core/ProgressTracker.hpp"
+#include "Core/Utils/Logger.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 struct ImVec4;
 struct ImGuiIO;

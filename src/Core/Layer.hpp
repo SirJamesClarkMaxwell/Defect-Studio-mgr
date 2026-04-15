@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Core/dspch.hpp"
-#include "Core/Platform/Events/PlatformEvent.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
 
 namespace DefectStudio
 {

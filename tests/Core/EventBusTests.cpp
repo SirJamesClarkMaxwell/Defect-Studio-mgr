@@ -5,10 +5,10 @@
 #include <thread>
 #include <vector>
 
-#include "Core/Memory.hpp"
-#include "Core/Events/Event.hpp"
-#include "Core/Events/EventBus.hpp"
-#include "Core/Events/EventPriority.hpp"
+#include "Core/Utils/Memory.hpp"
+#include "Core/EventSystem/BusEventSystem/Event.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/EventPriority.hpp"
 
 namespace
 {

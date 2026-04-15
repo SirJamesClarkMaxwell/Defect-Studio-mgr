@@ -3,7 +3,7 @@
 #include <string>
 #include <utility>
 
-#include "Core/Events/Event.hpp"
+#include "Core/EventSystem/BusEventSystem/Event.hpp"
 
 namespace DefectStudio::Demo
 {

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Core/Input.hpp"
+#include "Core/Utils/Input.hpp"
 
 TEST(InputTests, UsesConfiguredBackendForKeyState)
 {

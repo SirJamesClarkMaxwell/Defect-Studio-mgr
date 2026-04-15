@@ -34,6 +34,15 @@
 #include <unordered_set>
 #include <vector>
 
+#include <cctype>
+#include <cstdlib>
+#include <locale>
+#include <cstdio>
+
+#include <stdexcept>
+#include <thread>
+
+
 #if defined(TRACY_ENABLE)
 #include <tracy/Tracy.hpp>
 #else

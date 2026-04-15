@@ -3,14 +3,14 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-
+#include "Core/Utils/Time.hpp"
 #include "App/ConfigManager.hpp"
 
 namespace
 {
 	[[nodiscard]] std::filesystem::path CreateTempDirectory()
 	{
-		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto stamp = DefectStudio::Time::now().time_since_epoch().count();
 		const std::filesystem::path baseDirectory = std::filesystem::temp_directory_path() /
 		                                            ("DefectStudioConfigTests_" + std::to_string(stamp));
 		std::filesystem::create_directories(baseDirectory);

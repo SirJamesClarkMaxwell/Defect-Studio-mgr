@@ -2,7 +2,7 @@
 
 #include "Domain/DomainLayer.hpp"
 
-#include "Core/Logger.hpp"
+#include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
 {

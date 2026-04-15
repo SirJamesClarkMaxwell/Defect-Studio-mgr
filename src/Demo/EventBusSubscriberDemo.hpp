@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "Core/Events/SubscriptionHandle.hpp"
-#include "Core/Memory.hpp"
+#include "Core/EventSystem/BusEventSystem/SubscriptionHandle.hpp"
+#include "Core/Utils/Memory.hpp"
 #include "Demo/DemoEvents.hpp"
 
 namespace DefectStudio

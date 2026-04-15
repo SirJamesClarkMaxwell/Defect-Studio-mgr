@@ -5,9 +5,9 @@
 
 #include "App/ApplicationLifecycle.hpp"
 #include "App/Window.hpp"
-#include "Core/Logger.hpp"
-#include "Core/Memory.hpp"
-#include "Core/Path.hpp"
+#include "Core/Utils/Logger.hpp"
+#include "Core/Utils/Memory.hpp"
+#include "Core/Utils/Path.hpp"
 
 namespace DefectStudio
 {

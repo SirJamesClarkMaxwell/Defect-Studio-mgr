@@ -18,10 +18,10 @@
 
 #include "App/Application.hpp"
 #include "App/ConfigManager.hpp"
-#include "Core/Assert.hpp"
+#include "Core/Utils/Assert.hpp"
 #include "Core/CoreLayer.hpp"
-#include "Core/Logger.hpp"
-#include "Core/Input.hpp"
+#include "Core/Utils/Logger.hpp"
+#include "Core/Utils/Input.hpp"
 #include "Debug/DebugLayer.hpp"
 #include "Demo/DemoLayer.hpp"
 #include "Domain/DomainLayer.hpp"

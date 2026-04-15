@@ -2,9 +2,9 @@
 
 #include "Core/LayerStack.hpp"
 
-#include "Core/Assert.hpp"
+#include "Core/Utils/Assert.hpp"
 
-#include <algorithm>
+
 
 namespace DefectStudio
 {

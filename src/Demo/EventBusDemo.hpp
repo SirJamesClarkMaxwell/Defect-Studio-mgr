@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/Memory.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {

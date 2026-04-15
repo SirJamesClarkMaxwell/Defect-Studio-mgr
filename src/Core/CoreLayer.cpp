@@ -2,11 +2,11 @@
 
 #include "Core/CoreLayer.hpp"
 
-#include "Core/Assert.hpp"
-#include "Core/Events/EventBus.hpp"
-#include "Core/JobSystem.hpp"
-#include "Core/Logger.hpp"
-#include "Core/ProgressTracker.hpp"
+#include "Core/Utils/Assert.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Utils/Logger.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 namespace DefectStudio
 {
@@ -43,7 +43,7 @@ namespace DefectStudio
 			return false;
 
 		DS_LOG_INFO("Init: JobSystem");
-		m_JobSystem = CreateUnique<JobSystem>();
+		m_JobSystem = CreateUnique<JobSystem>(CreateWeakRef(m_EventBus));
 
 		DS_LOG_INFO("Init: ProgressTracker");
 		m_ProgressTracker = CreateUnique<ProgressTracker>();

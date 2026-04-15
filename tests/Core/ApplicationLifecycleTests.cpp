@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "App/ApplicationLifecycle.hpp"
-#include "Core/Platform/Events/PlatformEvent.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
 
 TEST(ApplicationLifecycleTests, CreateGuardPreventsDoubleCreate)
 {

@@ -2,7 +2,7 @@
 
 #include "Presentation/EditorLayer.hpp"
 
-#include "Core/Logger.hpp"
+#include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
 {

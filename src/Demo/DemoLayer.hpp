@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Core/Layer.hpp"
-#include "Core/Memory.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {
@@ -12,6 +12,7 @@ namespace DefectStudio::Demo
 {
 	class EventDispatcherDemo;
 	class EventBusDemo;
+	class JobSystemDemo;
 
 	class DemoLayer final : public Layer
 	{
@@ -24,9 +25,9 @@ namespace DefectStudio::Demo
 		void OnEvent(Event &event) override;
 		void OnImGuiRender() override;
 
-	private:
 		Ref<EventBus> m_DemoEventBus;
 		Unique<EventDispatcherDemo> m_EventDispatcherDemo;
 		Unique<EventBusDemo> m_EventBusDemo;
+		Unique<JobSystemDemo> m_JobSystemDemo;
 	};
 } // namespace DefectStudio::Demo

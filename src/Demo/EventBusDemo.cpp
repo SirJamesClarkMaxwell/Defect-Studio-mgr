@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 
-#include "Core/Memory.hpp"
+#include "Core/Utils/Memory.hpp"
 #include "Demo/EventBusDemo.hpp"
 #include "Demo/EventBusPublisherDemo.hpp"
 #include "Demo/EventBusSubscriberDemo.hpp"

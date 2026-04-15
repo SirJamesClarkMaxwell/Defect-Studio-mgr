@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "Core/Platform/Events/PlatformEvent.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
 #include "Core/Layer.hpp"
 #include "Core/LayerStack.hpp"
 

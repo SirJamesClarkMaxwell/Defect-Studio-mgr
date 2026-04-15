@@ -7,8 +7,8 @@
 #include <GLFW/glfw3.h>
 
 #include "App/Window.hpp"
-#include "Core/Assert.hpp"
-#include "Core/Logger.hpp"
+#include "Core/Utils/Assert.hpp"
+#include "Core/Utils/Logger.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 
 namespace DefectStudio

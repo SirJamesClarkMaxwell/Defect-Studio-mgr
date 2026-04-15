@@ -2,7 +2,7 @@
 
 #include <imgui.h>
 
-#include "Core/Events/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Demo/DemoEvents.hpp"
 #include "Demo/EventBusSubscriberDemo.hpp"
 

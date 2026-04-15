@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Core/Events/EventBus.hpp"
-#include "Core/JobSystem.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Layer.hpp"
-#include "Core/Memory.hpp"
-#include "Core/ProgressTracker.hpp"
+#include "Core/Utils/Memory.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 namespace DefectStudio
 {

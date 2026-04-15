@@ -2,9 +2,9 @@
 
 #include <string>
 
-#include "Core/Memory.hpp"
+#include "Core/Utils/Memory.hpp"
 
-#include "Core/Memory.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {

@@ -249,6 +249,8 @@ Headers should stay light, stable, and explicit. Dependencies must be intentiona
 
 ### Namespace formatting
 
+- Anonymous namespaces are not allowed in project code.
+- Use file-local static helper functions or private methods instead.
 - Do not use anonymous namespaces for state that needs a stable project-level name.
 - If a helper is only needed inside one translation unit, prefer a small file-local helper function over introducing a `Detail` namespace.
 - When code is inside a namespace block, indent the contents with tabs to match the repository convention.

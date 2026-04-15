@@ -9,7 +9,7 @@
 #include <dwmapi.h>
 #include <windows.h>
 
-#include "Core/Logger.hpp"
+#include "Core/Utils/Logger.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 
 static std::unordered_map<GLFWwindow *, HICON> s_WindowIcons;
