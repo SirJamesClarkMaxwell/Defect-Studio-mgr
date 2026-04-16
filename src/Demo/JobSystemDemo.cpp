@@ -236,9 +236,6 @@ namespace DefectStudio::Demo
 
 		renderControls();
 		renderEventBusPanel();
-		renderProgressPanel();
-		renderJobsPanel();
-		renderSelectedJobPanel();
 
 		ImGui::End();
 	}

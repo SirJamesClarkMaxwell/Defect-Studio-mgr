@@ -49,9 +49,11 @@ namespace DefectStudio
 	struct JobSnapshot
 	{
 		JobId id = 0;
+		JobId parentId = 0;
 		std::string name;
 		std::string type;
 		JobStatus status = JobStatus::Queued;
+		JobPriority priority = JobPriority::Normal;
 		float totalWork = 0.0f;
 		float completedWork = 0.0f;
 		std::string currentStage;

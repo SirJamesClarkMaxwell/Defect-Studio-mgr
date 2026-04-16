@@ -11,8 +11,14 @@ namespace DefectStudio
 {
 	struct JobQueuedEvent final : public BusEvent
 	{
-		JobQueuedEvent(JobId newId, std::string newName, std::string newType, Time::TimePoint newCreatedAt)
-			: id(newId), name(std::move(newName)), type(std::move(newType)), createdAt(newCreatedAt)
+		JobQueuedEvent(
+			JobId newId,
+			std::string newName,
+			std::string newType,
+			Time::TimePoint newCreatedAt,
+			JobId newParentId = 0,
+			JobPriority newPriority = JobPriority::Normal)
+			: id(newId), name(std::move(newName)), type(std::move(newType)), createdAt(newCreatedAt), parentId(newParentId), priority(newPriority)
 		{
 		}
 
@@ -20,6 +26,8 @@ namespace DefectStudio
 		std::string name;
 		std::string type;
 		Time::TimePoint createdAt{};
+		JobId parentId = 0;
+		JobPriority priority = JobPriority::Normal;
 	};
 
 	struct JobStartedEvent final : public BusEvent

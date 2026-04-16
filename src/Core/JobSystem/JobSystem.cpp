@@ -46,6 +46,9 @@ namespace DefectStudio
 		: m_EventBus(std::move(eventBus)),
 		  m_Pool(resolveThreadCount(threadCount)) // todo: load it from config file
 	{
+		m_ThreadCountWorker = std::jthread([this](std::stop_token stopToken) {
+			threadCountWorkerLoop(stopToken);
+		});
 		m_DelayedWorker = std::jthread([this](std::stop_token stopToken) {
 			delayedWorkerLoop(stopToken);
 		});
@@ -58,22 +61,15 @@ namespace DefectStudio
 
 	JobId JobSystem::Submit(const Ref<IJob> &job, JobPriority priority)
 	{
-		if (!job)
-			return 0;
-
-		if (m_ShutdownRequested.load(std::memory_order_relaxed))
-			return 0;
-
-		const JobId id = m_NextId.fetch_add(1, std::memory_order_relaxed);
-		const auto now = Time::Now();
-		recordQueued(id, job, now);
-		publishQueuedEvent(id, *job, now);
-		enqueueForExecution(id, job, priority);
-
-		return id;
+		return submitInternal(job, priority, 0, std::nullopt);
 	}
 
 	JobId JobSystem::SubmitAfter(const Ref<IJob> &job, Time::Milliseconds delay, JobPriority priority)
+	{
+		return submitInternal(job, priority, 0, delay);
+	}
+
+	JobId JobSystem::submitInternal(const Ref<IJob> &job, JobPriority priority, JobId parentId, std::optional<Time::Milliseconds> delay)
 	{
 		if (!job)
 			return 0;
@@ -81,25 +77,29 @@ namespace DefectStudio
 		if (m_ShutdownRequested.load(std::memory_order_relaxed))
 			return 0;
 
-		if (delay.count() <= 0)
-			return Submit(job, priority);
+		const bool hasDelay = delay.has_value() && delay->count() > 0;
+		if (delay.has_value() && delay->count() <= 0)
+			return submitInternal(job, priority, parentId, std::nullopt);
 
 		const JobId id = m_NextId.fetch_add(1, std::memory_order_relaxed);
 		const auto now = Time::Now();
-		recordQueued(id, job, now);
-		publishQueuedEvent(id, *job, now);
+		recordQueued(id, job, now, parentId, priority);
+		publishQueuedEvent(id, *job, now, parentId, priority);
 
+		if (hasDelay)
 		{
 			std::lock_guard<std::mutex> lock(m_DelayedMutex);
 			m_DelayedSubmissions.push_back(DelayedSubmission{
 				.id = id,
 				.job = job,
 				.priority = priority,
-				.dueAt = Time::NowSteady() + delay,
+				.dueAt = Time::NowSteady() + *delay,
 			});
+			m_DelayedCv.notify_all();
+			return id;
 		}
 
-		m_DelayedCv.notify_all();
+		enqueueForExecution(id, job, priority);
 		return id;
 	}
 
@@ -189,7 +189,11 @@ namespace DefectStudio
 		if (resolved == m_Pool.get_thread_count())
 			return true;
 
-		m_Pool.reset(resolved);
+		{
+			std::lock_guard<std::mutex> lock(m_ThreadCountMutex);
+			m_PendingThreadCount = resolved;
+		}
+		m_ThreadCountCv.notify_all();
 		return true;
 	}
 
@@ -249,6 +253,11 @@ namespace DefectStudio
 	{
 		std::call_once(m_ShutdownOnce, [this]() {
 			m_ShutdownRequested.store(true, std::memory_order_relaxed);
+			m_ThreadCountCv.notify_all();
+			if (m_ThreadCountWorker.joinable())
+				m_ThreadCountWorker.request_stop();
+			if (m_ThreadCountWorker.joinable())
+				m_ThreadCountWorker.join();
 			m_DelayedWorker.request_stop();
 			m_DelayedCv.notify_all();
 			if (m_DelayedWorker.joinable())
@@ -258,6 +267,35 @@ namespace DefectStudio
 			m_Pool.wait();
 		});
 	}
+
+		void JobSystem::threadCountWorkerLoop(std::stop_token stopToken)
+		{
+			for (;;)
+			{
+				std::size_t requestedThreadCount = 0;
+				{
+					std::unique_lock<std::mutex> lock(m_ThreadCountMutex);
+					m_ThreadCountCv.wait(lock, [&]() {
+						return stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed) || m_PendingThreadCount.has_value();
+					});
+
+					if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
+						return;
+
+					requestedThreadCount = *m_PendingThreadCount;
+					m_PendingThreadCount.reset();
+				}
+
+				if (m_ShutdownRequested.load(std::memory_order_relaxed))
+					return;
+
+				m_Pool.wait();
+				if (m_ShutdownRequested.load(std::memory_order_relaxed))
+					return;
+
+				m_Pool.reset(requestedThreadCount);
+			}
+		}
 
 	void JobSystem::enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority)
 	{
@@ -271,14 +309,16 @@ namespace DefectStudio
 			toBackendPriority(priority));
 	}
 
-	void JobSystem::recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now)
+	void JobSystem::recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now, JobId parentId, JobPriority priority)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		JobRecord record;
 		record.snapshot.id = id;
+		record.snapshot.parentId = parentId;
 		record.snapshot.name = job->GetName();
 		record.snapshot.type = job->GetType();
 		record.snapshot.status = JobStatus::Queued;
+		record.snapshot.priority = priority;
 		record.snapshot.createdAt = now;
 		record.job = job;
 		record.logs.push_back(JobLogEntry{JobLogLevel::Info, "Queued", now});
@@ -297,7 +337,7 @@ namespace DefectStudio
 			[this, id](const std::string &message) { updateMessage(id, message); },
 			[this, id](JobLogLevel level, const std::string &message) { appendLog(id, level, message); },
 			[this, id]() { return isCancellationRequested(id); },
-			[this](const Ref<IJob> &job, JobPriority priority) { return Submit(job, priority); },
+			[this, id](const Ref<IJob> &job, JobPriority priority) { return submitInternal(job, priority, id, std::nullopt); },
 			[this](JobId childId) {
 				for (;;)
 				{
@@ -475,13 +515,13 @@ namespace DefectStudio
 		return eventBus;
 	}
 
-	void JobSystem::publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt) const
+	void JobSystem::publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt, JobId parentId, JobPriority priority) const
 	{
 		auto eventBus = lockEventBus();
 		if (!eventBus)
 			return;
 
-		(*eventBus)->Queue(JobQueuedEvent{id, job.GetName(), job.GetType(), createdAt});
+		(*eventBus)->Queue(JobQueuedEvent{id, job.GetName(), job.GetType(), createdAt, parentId, priority});
 	}
 
 	void JobSystem::publishStartedEvent(JobId id, const IJob &job, const Time::TimePoint &startedAt) const

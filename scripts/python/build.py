@@ -17,6 +17,11 @@ from scripts.python.common.preferences import load_preferences, resolve_preferen
 from scripts.python.common.tooling import detect_tool
 
 
+def build_job_count(reserve: int = 2) -> int:
+    cpu_count = os.cpu_count() or 1
+    return max(cpu_count - reserve, 1)
+
+
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build project.")
     parser.add_argument("--config", choices=["Debug", "Release", "Dist"], default=None)
@@ -40,11 +45,15 @@ def run_msvc(args: argparse.Namespace) -> int:
         print(f"[error] Solution not found: {solution}")
         return 1
 
+    jobs = build_job_count()
+    if args.verbose:
+        print(f"[step] Using /maxcpucount:{jobs} on MSBuild")
+
     command = [
         msbuild,
         str(solution),
         f"/p:Configuration={args.config}",
-        "/m",
+        f"/maxcpucount:{jobs}",
     ]
     if args.rebuild:
         command.append("/t:Rebuild")
@@ -172,7 +181,7 @@ def run_make(args: argparse.Namespace) -> int:
                 "Use a normal Linux filesystem path for builds if possible."
             )
 
-    jobs = max(os.cpu_count() or 1, 1)
+    jobs = build_job_count()
     if on_vmware_shared_folder:
         jobs = 1
         if args.verbose:

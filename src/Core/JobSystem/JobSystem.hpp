@@ -52,9 +52,11 @@ namespace DefectStudio
 		static BS::priority_t toBackendPriority(JobPriority priority);
 		static bool isFinishedStatus(JobStatus status);
 
+		[[nodiscard]] JobId submitInternal(const Ref<IJob> &job, JobPriority priority, JobId parentId, std::optional<Time::Milliseconds> delay);
 		void enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority);
-		void recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now);
+		void recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now, JobId parentId, JobPriority priority);
 		void runJob(JobId id, Ref<IJob> job);
+		void threadCountWorkerLoop(std::stop_token stopToken);
 		void markRunning(JobId id, const Time::TimePoint &startedAt);
 		void updateProgress(JobId id, float completedWork, float totalWork);
 		void updateStage(JobId id, const std::string &stage);
@@ -63,7 +65,7 @@ namespace DefectStudio
 		[[nodiscard]] bool isCancellationRequested(JobId id) const;
 		void markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt);
 		[[nodiscard]] std::optional<Ref<EventBus>> lockEventBus() const;
-		void publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt) const;
+		void publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt, JobId parentId, JobPriority priority) const;
 		void publishStartedEvent(JobId id, const IJob &job, const Time::TimePoint &startedAt) const;
 		void publishProgressEvent(JobId id, float completedWork, float totalWork, const std::string &stage, const std::string &message) const;
 		void publishFinishedEvent(JobId id, const IJob &job, JobStatus status, const std::string &errorMessage, const Time::TimePoint &finishedAt) const;
@@ -72,6 +74,10 @@ namespace DefectStudio
 
 		WeakRef<EventBus> m_EventBus;
 		BS::priority_thread_pool m_Pool;
+		mutable std::mutex m_ThreadCountMutex;
+		std::condition_variable m_ThreadCountCv;
+		std::optional<std::size_t> m_PendingThreadCount;
+		std::jthread m_ThreadCountWorker;
 		mutable std::mutex m_Mutex;
 		std::unordered_map<JobId, JobRecord> m_Records;
 		mutable std::mutex m_DelayedMutex;

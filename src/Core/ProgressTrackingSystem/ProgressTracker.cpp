@@ -114,9 +114,11 @@ namespace DefectStudio
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
+		entry.parentId = event.parentId;
 		entry.source = event.type;
 		entry.label = event.name;
 		entry.status = JobStatus::Queued;
+		entry.priority = event.priority;
 		entry.createdAt = event.createdAt;
 		entry.finished = false;
 		entry.errorSummary.clear();
@@ -127,8 +129,6 @@ namespace DefectStudio
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
-		entry.source = event.type;
-		entry.label = event.name;
 		entry.status = JobStatus::Running;
 		entry.startedAt = event.startedAt;
 		entry.finished = false;
@@ -153,8 +153,6 @@ namespace DefectStudio
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
-		entry.source = event.type;
-		entry.label = event.name;
 		entry.status = JobStatus::Completed;
 		entry.finishedAt = event.finishedAt;
 		entry.finished = true;
@@ -167,8 +165,6 @@ namespace DefectStudio
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
-		entry.source = event.type;
-		entry.label = event.name;
 		entry.status = JobStatus::Cancelled;
 		entry.finishedAt = event.finishedAt;
 		entry.finished = true;
@@ -179,8 +175,6 @@ namespace DefectStudio
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
-		entry.source = event.type;
-		entry.label = event.name;
 		entry.status = JobStatus::Failed;
 		entry.errorSummary = event.errorMessage;
 		entry.finishedAt = event.finishedAt;

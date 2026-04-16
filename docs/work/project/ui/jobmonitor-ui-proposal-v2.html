@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pl" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>jobmonitor-ui-proposal-v2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#12101a; --panel:#171421; --panel2:#1d1928; --panel3:#262132; --line:rgba(255,255,255,.18); --text:#f1eef8; --muted:#aea7bf; --green:#63b30d; --green2:#81d11f; --blue:#74a8ff; --yellow:#eab859; --red:#d96a7b; --radius:18px; }
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at top, rgba(116,168,255,.08), transparent 22%), var(--bg);color:var(--text);font-family:Inter,sans-serif}
+    .wrap{max-width:1440px;margin:0 auto;padding:20px}
+    .title{display:flex;justify-content:center;margin-bottom:16px}
+    .pill{padding:10px 22px;border:1px solid var(--line);border-radius:12px;background:#dcd6f5;color:#232034;font-size:18px;font-weight:700}
+    .board{border:2px solid rgba(255,255,255,.75);border-radius:22px;padding:20px;background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px}
+    .section-title{display:flex;align-items:center;gap:12px;font-size:22px;margin:6px 0 18px}
+    .section-title:before,.section-title:after{content:'';height:2px;background:rgba(255,255,255,.75);flex:1}
+    .section-title span{white-space:nowrap}
+    .table-shell{border:2px solid rgba(255,255,255,.82);overflow:hidden;background:rgba(0,0,0,.08)}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-right:2px solid rgba(255,255,255,.82);border-bottom:2px solid rgba(255,255,255,.82);padding:14px 12px;vertical-align:middle}
+    th:last-child,td:last-child{border-right:none} tr:last-child td{border-bottom:none}
+    th{font-size:16px;font-weight:700;text-align:center;background:rgba(255,255,255,.02)}
+    td{font-size:16px}
+    .center{text-align:center}.right{text-align:right}
+    .expand{font-size:18px;font-weight:800;cursor:pointer}
+    .progress{position:relative;height:40px;background:rgba(255,255,255,.04);overflow:hidden}
+    .bar{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--green),var(--green2));display:flex;align-items:center;justify-content:center;color:#111;font-weight:800}
+    .muted{color:var(--muted)}
+    .badge{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid var(--line)}
+    .badge.run{color:#bff482;background:rgba(99,179,13,.12)} .badge.done{color:#d1ffac;background:rgba(99,179,13,.18)} .badge.queue{color:#ffd789;background:rgba(234,184,89,.15)} .badge.fail{color:#ffb8c1;background:rgba(217,106,123,.15)}
+    .details{background:rgba(255,255,255,.025)}
+    .details-inner{padding:14px 6px 4px;display:grid;grid-template-columns:1.2fr 1fr;gap:18px}
+    .card{border:1px solid var(--line);border-radius:14px;background:var(--panel2);padding:14px}
+    .card h3{margin:0 0 10px;font-size:16px}
+    .meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .meta .item{border:1px solid var(--line);border-radius:12px;padding:10px;background:rgba(255,255,255,.03)}
+    .subtasks{display:flex;flex-direction:column;gap:10px}
+    .subtask{border:1px solid var(--line);border-radius:12px;padding:10px;background:rgba(255,255,255,.03)}
+    .subtask-top{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px}
+    .mini-progress{height:26px;background:rgba(255,255,255,.05);position:relative;border-radius:8px;overflow:hidden}
+    .mini-progress span{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--green),var(--green2));display:flex;align-items:center;justify-content:center;color:#111;font-size:13px;font-weight:800}
+    .stats{display:flex;flex-direction:column;gap:14px}
+    .stat-card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}
+    .stat-big{font-size:34px;font-weight:800;margin-top:6px}
+    .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .small{font-size:13px;color:var(--muted)}
+    .list{display:flex;flex-direction:column;gap:8px}
+    .rowline{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.1)}
+    .rowline:last-child{border-bottom:none}
+    .future{opacity:.5}
+    @media (max-width:1100px){.board{grid-template-columns:1fr}.details-inner{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(4,1fr)}}
+    @media (max-width:760px){th,td{padding:10px 8px;font-size:13px}.section-title{font-size:18px}.stat-grid{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title"><div class="pill">Statistics</div></div>
+    <div class="board">
+      <section>
+        <div class="section-title"><span>Process</span></div>
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:90px">number</th>
+                <th style="width:70px"></th>
+                <th style="width:180px">From</th>
+                <th>Progress Bar</th>
+                <th style="width:130px">left time</th>
+                <th style="width:260px">info</th>
+                <th style="width:140px">Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="center">1</td>
+                <td class="center expand">▼</td>
+                <td class="center">ImportPipeline</td>
+                <td style="padding:0"><div class="progress"><div class="bar" style="width:75%">75%</div></div></td>
+                <td class="center">90 s</td>
+                <td>Walidacja struktur i zapis snapshotu</td>
+                <td class="center"><span class="badge run">High</span></td>
+              </tr>
+              <tr class="details">
+                <td colspan="7">
+                  <div class="details-inner">
+                    <div class="card">
+                      <h3>Szczegóły zadania głównego</h3>
+                      <div class="meta">
+                        <div class="item"><div class="small">JobId</div><div>204</div></div>
+                        <div class="item"><div class="small">Status</div><div>Running</div></div>
+                        <div class="item"><div class="small">Stage</div><div>ValidateStructure</div></div>
+                        <div class="item"><div class="small">Message</div><div>Parsing symmetry and unit cell metadata</div></div>
+                        <div class="item"><div class="small">Created</div><div>21:31:08</div></div>
+                        <div class="item"><div class="small">Started</div><div>21:31:10</div></div>
+                        <div class="item"><div class="small">Estimated left</div><div>90 s</div></div>
+                        <div class="item"><div class="small">Reported subtasks</div><div>2 / 3</div></div>
+                      </div>
+                    </div>
+                    <div class="card">
+                      <h3>Podzadania</h3>
+                      <div class="subtasks">
+                        <div class="subtask">
+                          <div class="subtask-top"><strong>Download metadata</strong><span class="badge done">Completed</span></div>
+                          <div class="mini-progress"><span style="width:100%">100%</span></div>
+                          <div class="small" style="margin-top:8px">reported: yes · ETA: 0 s · source: IO stage</div>
+                        </div>
+                        <div class="subtask">
+                          <div class="subtask-top"><strong>Validate structure</strong><span class="badge run">Running</span></div>
+                          <div class="mini-progress"><span style="width:62%">62%</span></div>
+                          <div class="small" style="margin-top:8px">reported: yes · ETA: 90 s · source: parser stage</div>
+                        </div>
+                        <div class="subtask future">
+                          <div class="subtask-top"><strong>Persist imported assets</strong><span class="badge queue">Queued</span></div>
+                          <div class="mini-progress"><span style="width:0%">0%</span></div>
+                          <div class="small" style="margin-top:8px">reported: planned · ETA: n/d · future capability</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="center">2</td>
+                <td class="center expand">▶</td>
+                <td class="center">TestJobs</td>
+                <td style="padding:0"><div class="progress"><div class="bar" style="width:50%">50%</div></div></td>
+                <td class="center">120 s</td>
+                <td>SleepJob oczekuje na dokończenie bieżącego etapu</td>
+                <td class="center"><span class="badge queue">Normal</span></td>
+              </tr>
+              <tr>
+                <td class="center">3</td>
+                <td class="center expand">▶</td>
+                <td class="center">GpuCompute</td>
+                <td style="padding:0"><div class="progress"><div class="bar" style="width:100%">100%</div></div></td>
+                <td class="center">0 s</td>
+                <td>Orbital precompute finished</td>
+                <td class="center"><span class="badge done">Low</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="stats">
+        <div class="stat-card">
+          <div class="small">Ogólne statystyki</div>
+          <div class="stat-big">24</div>
+          <div class="small">wszystkich jobów w sesji</div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="small">Running</div><div class="stat-big" style="font-size:24px">3</div></div>
+          <div class="stat-card"><div class="small">Queued</div><div class="stat-big" style="font-size:24px">2</div></div>
+          <div class="stat-card"><div class="small">Done</div><div class="stat-big" style="font-size:24px">18</div></div>
+          <div class="stat-card"><div class="small">Failed</div><div class="stat-big" style="font-size:24px">1</div></div>
+        </div>
+        <div class="stat-card">
+          <h3 style="margin:0 0 10px">Health</h3>
+          <div class="list">
+            <div class="rowline"><span class="small">Średni progress aktywnych</span><strong>64%</strong></div>
+            <div class="rowline"><span class="small">Średni ETA</span><strong>83 s</strong></div>
+            <div class="rowline"><span class="small">Najwyższy priorytet</span><strong>High</strong></div>
+            <div class="rowline"><span class="small">Cancelled w sesji</span><strong>0</strong></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <h3 style="margin:0 0 10px">Panel szczegółów</h3>
+          <div class="small">Kliknięcie w wiersz rozwija blok pod spodem. To tam pokazujemy pasek postępu podzadań, ich status zgłoszenia, ETA i dodatkowe pola read modelu.</div>
+        </div>
+        <div class="stat-card future">
+          <h3 style="margin:0 0 10px">Wyłączone na razie</h3>
+          <div class="list">
+            <div class="rowline"><span class="small">Retry failed job</span><strong>future</strong></div>
+            <div class="rowline"><span class="small">Persistent history</span><strong>future</strong></div>
+            <div class="rowline"><span class="small">Hierarchiczne subtask tree</span><strong>future</strong></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

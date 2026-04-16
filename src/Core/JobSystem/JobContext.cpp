@@ -13,12 +13,12 @@ namespace DefectStudio
 		SubmitJobCallback submitJobCallback,
 		WaitJobCallback waitJobCallback)
 		: m_ProgressCallback(std::move(progressCallback)),
-		  m_StageCallback(std::move(stageCallback)),
-		  m_MessageCallback(std::move(messageCallback)),
-		  m_LogCallback(std::move(logCallback)),
-		  m_CancelQuery(std::move(cancelQuery)),
-		  m_SubmitJobCallback(std::move(submitJobCallback)),
-		  m_WaitJobCallback(std::move(waitJobCallback))
+		m_StageCallback(std::move(stageCallback)),
+		m_MessageCallback(std::move(messageCallback)),
+		m_LogCallback(std::move(logCallback)),
+		m_CancelQuery(std::move(cancelQuery)),
+		m_SubmitJobCallback(std::move(submitJobCallback)),
+		m_WaitJobCallback(std::move(waitJobCallback))
 	{
 	}
 

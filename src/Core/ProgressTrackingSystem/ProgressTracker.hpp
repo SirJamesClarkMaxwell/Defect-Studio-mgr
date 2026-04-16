@@ -24,9 +24,11 @@ namespace DefectStudio
 	struct ProgressEntrySnapshot
 	{
 		JobId id = 0;
+		JobId parentId = 0;
 		std::string source;
 		std::string label;
 		JobStatus status = JobStatus::Queued;
+		JobPriority priority = JobPriority::Normal;
 		float totalWork = 0.0f;
 		float completedWork = 0.0f;
 		std::string currentStage;

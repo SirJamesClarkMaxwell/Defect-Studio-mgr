@@ -86,7 +86,9 @@ namespace DefectStudio
 	struct MainLoopState
 	{
 		bool showDemoWindow = true;
+		bool showSettingsWindow = false;
 		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
+		int workerThreadCount = 5;
 	};
 
 	ApplicationSpecification defaultApplicationSpecification();
@@ -339,10 +341,12 @@ namespace DefectStudio
 		bool saveUiSettings = false;
 
 		ImGui::Begin("DefectStudio");
+
 		ImGui::Text("GUI shell is running.");
 		ImGui::Text("FPS: %.1f", frameRate);
 		ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
 		ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor));
+
 		if (ImGui::SliderFloat("Font scale", &m_Config.fontScale, 0.70f, 2.00f, "%.2f"))
 		{
 			m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
@@ -574,6 +578,7 @@ namespace DefectStudio
 		ImGui::CreateContext();
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		io.ConfigWindowsResizeFromEdges = true;
 
 		const std::array<const char *, 3> preferredFonts = {
 			// "C:/Windows/Fonts/CascadiaCode.ttf",
