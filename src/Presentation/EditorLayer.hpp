@@ -1,9 +1,13 @@
 #pragma once
 
-#include <vector>
+#include <cstdint>
+#include <utility>
 
 #include "Core/Layer.hpp"
-#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "Presentation/Panels/PanelRegistry.hpp"
+#include "Presentation/Panels/ProgressMonitorWindow.hpp"
+#include "Presentation/Panels/Settings.hpp"
+#include "Presentation/Panels/TaskMonitorWindow.hpp"
 
 namespace DefectStudio
 {
@@ -14,28 +18,33 @@ namespace DefectStudio
 
 		void OnAttach() override;
 		void OnDetach() override;
+		void OnEvent(Event &event) override;
 		void OnImGuiRender() override;
 
 	private:
+		template <typename TPanel, typename... Args>
+		PanelId registerPanel(Args &&...args);
+
+		WeakRef<IPanel> findPanel(PanelId panelId);
+		WeakRef<const IPanel> findPanel(PanelId panelId) const;
+
 		void renderMainMenuBar();
-		void renderProgressMonitorWindow();
-		void renderTaskMonitorWindow();
-		void renderSettingsWindow();
-		void renderJobNode(const ProgressEntrySnapshot &snapshot, const std::vector<ProgressEntrySnapshot> &allJobs, int depth);
-		void renderJobContextMenu(const ProgressEntrySnapshot &snapshot);
-		[[nodiscard]] static const char *toStatusLabel(JobStatus status);
-		[[nodiscard]] static const char *toPriorityLabel(JobPriority priority);
+		void renderFileMenu();
+		void renderEditMenu();
+		void renderViewMenu();
+		void renderDefectMenu();
+		void renderComputationsMenu();
+		void renderToolsMenu();
+		void renderHelpMenu();
+		void handleFontShortcuts(Event &event);
 
 	private:
-		bool m_ShowProgressMonitor = true;
-		bool m_ShowTaskMonitor = true;
-		bool m_ShowSettingsWindow = true;
-		bool m_ReserveUrgentWorker = true;
-		bool m_SettingsInitialized = false;
-		int m_WorkerThreadCount = 5;
-		char m_DummyJobName[64] = "DummyJob";
-		int m_DummyJobSteps = 5;
-		int m_DummyJobDelayMs = 150;
-		JobPriority m_DummyJobPriority = JobPriority::Normal;
+		PanelRegistry m_Panels;
 	};
+
+	template <typename TPanel, typename... Args>
+	PanelId EditorLayer::registerPanel(Args &&...args)
+	{
+		return m_Panels.Add<TPanel>(std::forward<Args>(args)...);
+	}
 } // namespace DefectStudio
