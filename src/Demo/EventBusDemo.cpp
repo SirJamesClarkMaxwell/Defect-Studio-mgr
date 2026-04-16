@@ -1,5 +1,7 @@
 #include "Core/dspch.hpp"
 
+#include <imgui.h>
+
 #include "Core/Utils/Memory.hpp"
 #include "Demo/EventBusDemo.hpp"
 #include "Demo/EventBusPublisherDemo.hpp"
@@ -22,9 +24,10 @@ namespace DefectStudio::Demo
 
 	void EventBusDemo::Render()
 	{
-		if (m_Publisher)
+		if (ImGui::CollapsingHeader("Publisher", ImGuiTreeNodeFlags_DefaultOpen) && m_Publisher)
 			m_Publisher->Render();
-		if (m_Subscriber)
+
+		if (ImGui::CollapsingHeader("Subscriber", ImGuiTreeNodeFlags_DefaultOpen) && m_Subscriber)
 			m_Subscriber->Render();
 	}
 } // namespace DefectStudio::Demo

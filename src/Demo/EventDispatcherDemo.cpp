@@ -19,7 +19,6 @@ namespace DefectStudio::Demo
 
 	void EventDispatcherDemo::Render()
 	{
-		ImGui::Begin("Demo/EventDispatcher");
 		ImGui::TextUnformatted("Real use-case: handles actual events routed through LayerStack.");
 
 		ImGui::Checkbox("Consume keyboard events in this layer", &m_ConsumeKeyboardEvents);
@@ -34,8 +33,6 @@ namespace DefectStudio::Demo
 		ImGui::Spacing();
 		ImGui::TextUnformatted("Flow: GLFW -> Window callback -> Application::onEvent -> LayerStack -> this dispatcher");
 		ImGui::TextUnformatted("When handler returns true, propagation is stopped for lower-priority layers.");
-
-		ImGui::End();
 	}
 
 	bool EventDispatcherDemo::onWindowResize(WindowResizeEvent &event)

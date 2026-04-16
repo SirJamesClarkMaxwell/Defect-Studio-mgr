@@ -28,7 +28,6 @@ namespace DefectStudio::Demo
 
 	void EventBusSubscriberDemo::Render()
 	{
-		ImGui::Begin("Demo/EventBus Subscriber");
 		ImGui::TextUnformatted("Subscriber class in a separate object/window.");
 		// Separate object demonstrates lifetime ownership; subscriptions live with the subscriber.
 		ImGui::Separator();
@@ -40,7 +39,6 @@ namespace DefectStudio::Demo
 		ImGui::Separator();
 		ImGui::Text("Received PipelineStatus: %d", m_ReceivedPipelineEvents);
 		ImGui::TextWrapped("Last status: %s", m_LastPipelineMessage.empty() ? "<none>" : m_LastPipelineMessage.c_str());
-		ImGui::End();
 	}
 
 	void EventBusSubscriberDemo::onFileOpened(const FileOpenedBusEvent &event)

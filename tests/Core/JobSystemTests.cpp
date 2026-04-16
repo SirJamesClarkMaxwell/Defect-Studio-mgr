@@ -178,6 +178,99 @@ namespace
 		int m_ChainDepth;
 		DefectStudio::Ref<std::vector<int>> m_ExecutionOrder;
 	};
+
+	class ConcurrencyProbeJob final : public DefectStudio::IJob
+	{
+	public:
+		ConcurrencyProbeJob(
+			DefectStudio::Ref<Gate> startGate,
+			DefectStudio::Ref<Gate> releaseGate,
+			DefectStudio::Ref<std::atomic<int>> runningNow,
+			DefectStudio::Ref<std::atomic<int>> maxRunning)
+			: m_StartGate(std::move(startGate)),
+			  m_ReleaseGate(std::move(releaseGate)),
+			  m_RunningNow(std::move(runningNow)),
+			  m_MaxRunning(std::move(maxRunning))
+		{
+		}
+
+		[[nodiscard]] std::string GetName() const override
+		{
+			return "ConcurrencyProbeJob";
+		}
+
+		[[nodiscard]] std::string GetType() const override
+		{
+			return "ConcurrencyProbeJob";
+		}
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			m_StartGate->Wait();
+
+			const int active = m_RunningNow->fetch_add(1, std::memory_order_relaxed) + 1;
+			int observed = m_MaxRunning->load(std::memory_order_relaxed);
+			while (active > observed && !m_MaxRunning->compare_exchange_weak(observed, active, std::memory_order_relaxed))
+			{
+			}
+
+			context.SetStage("running");
+			m_ReleaseGate->Wait();
+			context.SetProgress(1.0f, 1.0f);
+
+			m_RunningNow->fetch_sub(1, std::memory_order_relaxed);
+		}
+
+	private:
+		DefectStudio::Ref<Gate> m_StartGate;
+		DefectStudio::Ref<Gate> m_ReleaseGate;
+		DefectStudio::Ref<std::atomic<int>> m_RunningNow;
+		DefectStudio::Ref<std::atomic<int>> m_MaxRunning;
+	};
+
+	class ChildTrackerJob final : public DefectStudio::IJob
+	{
+	public:
+		[[nodiscard]] std::string GetName() const override
+		{
+			return "ChildTrackerJob";
+		}
+
+		[[nodiscard]] std::string GetType() const override
+		{
+			return "ChildTrackerJob";
+		}
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			context.SetProgress(1.0f, 1.0f);
+			context.SetStage("child-done");
+		}
+	};
+
+	class ParentTrackerJob final : public DefectStudio::IJob
+	{
+	public:
+		[[nodiscard]] std::string GetName() const override
+		{
+			return "ParentTrackerJob";
+		}
+
+		[[nodiscard]] std::string GetType() const override
+		{
+			return "ParentTrackerJob";
+		}
+
+		void Execute(DefectStudio::JobContext &context) override
+		{
+			context.SetStage("submit-child");
+			const auto childId = context.SubmitJobSequential(DefectStudio::CreateRef<ChildTrackerJob>(), DefectStudio::JobPriority::Normal);
+			if (childId == 0)
+				context.LogError("Failed to submit child job");
+			context.SetProgress(1.0f, 1.0f);
+			context.SetStage("parent-done");
+		}
+	};
 } // namespace
 
 TEST(JobSystemTests, SubmitReturnsValidJobId)
@@ -459,6 +552,62 @@ TEST(JobSystemTests, SetThreadCountPreservesJobRecords)
 	jobSystem.Shutdown();
 }
 
+TEST(JobSystemTests, ReducingThreadCountKeepsRunningJobsAndLimitsNewParallelism)
+{
+	DefectStudio::JobSystem jobSystem({}, 3);
+
+	auto firstStart = DefectStudio::CreateRef<Gate>();
+	auto firstRelease = DefectStudio::CreateRef<Gate>();
+	auto firstRunning = DefectStudio::CreateRef<std::atomic<int>>(0);
+	auto firstMax = DefectStudio::CreateRef<std::atomic<int>>(0);
+
+	for (int i = 0; i < 6; ++i)
+	{
+		(void)jobSystem.Submit(DefectStudio::CreateRef<ConcurrencyProbeJob>(firstStart, firstRelease, firstRunning, firstMax));
+	}
+
+	firstStart->Open();
+	ASSERT_TRUE(WaitUntil([&]() {
+		return firstRunning->load(std::memory_order_relaxed) >= 3;
+	}, DefectStudio::Time::Milliseconds(800)));
+
+	EXPECT_TRUE(jobSystem.SetThreadCount(2));
+	ASSERT_TRUE(WaitUntil([&]() {
+		return jobSystem.GetThreadCount() == 2;
+	}, DefectStudio::Time::Milliseconds(1000)));
+
+	EXPECT_GE(firstMax->load(std::memory_order_relaxed), 3);
+
+	firstRelease->Open();
+	ASSERT_TRUE(WaitUntil([&]() {
+		const auto all = jobSystem.GetAllJobs();
+		return std::all_of(all.begin(), all.end(), [](const DefectStudio::JobSnapshot &job) {
+			return job.status == DefectStudio::JobStatus::Completed;
+		});
+	}, DefectStudio::Time::Milliseconds(2000)));
+
+	auto secondStart = DefectStudio::CreateRef<Gate>();
+	auto secondRelease = DefectStudio::CreateRef<Gate>();
+	auto secondRunning = DefectStudio::CreateRef<std::atomic<int>>(0);
+	auto secondMax = DefectStudio::CreateRef<std::atomic<int>>(0);
+
+	for (int i = 0; i < 4; ++i)
+	{
+		(void)jobSystem.Submit(DefectStudio::CreateRef<ConcurrencyProbeJob>(secondStart, secondRelease, secondRunning, secondMax));
+	}
+
+	secondStart->Open();
+	ASSERT_TRUE(WaitUntil([&]() {
+		return secondRunning->load(std::memory_order_relaxed) >= 2;
+	}, DefectStudio::Time::Milliseconds(800)));
+
+	std::this_thread::sleep_for(DefectStudio::Time::Milliseconds(80));
+	EXPECT_LE(secondMax->load(std::memory_order_relaxed), 2);
+
+	secondRelease->Open();
+	jobSystem.Shutdown();
+}
+
 TEST(JobSystemTests, ResetMovesFinishedJobToQueued)
 {
 	DefectStudio::JobSystem jobSystem;
@@ -539,6 +688,31 @@ TEST(JobSystemTests, RetryFailsOnRunningJob)
 	EXPECT_FALSE(jobSystem.Retry(id));
 
 	gate->Open();
+	jobSystem.Shutdown();
+}
+
+TEST(JobSystemTests, RemoveFromHistoryDeletesOnlyFinishedJobs)
+{
+	DefectStudio::JobSystem jobSystem;
+	auto gate = DefectStudio::CreateRef<Gate>();
+
+	const auto runningId = jobSystem.Submit(DefectStudio::CreateRef<BlockingJob>(gate));
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(runningId);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Running;
+	}, DefectStudio::Time::Milliseconds(500)));
+
+	EXPECT_FALSE(jobSystem.RemoveFromHistory(runningId));
+
+	gate->Open();
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto snapshot = jobSystem.GetJob(runningId);
+		return snapshot.has_value() && snapshot->status == DefectStudio::JobStatus::Completed;
+	}, DefectStudio::Time::Milliseconds(1000)));
+
+	EXPECT_TRUE(jobSystem.RemoveFromHistory(runningId));
+	EXPECT_FALSE(jobSystem.GetJob(runningId).has_value());
+
 	jobSystem.Shutdown();
 }
 
@@ -768,4 +942,37 @@ TEST(JobSystemTests, ProgressTrackerStoresErrorSummaryAndViews)
 	ASSERT_EQ(finished.size(), 1u);
 	EXPECT_EQ(active.front().id, 1u);
 	EXPECT_EQ(finished.front().id, 2u);
+}
+
+TEST(JobSystemTests, ProgressTrackerContainsSubtasksWithParentId)
+{
+	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
+	DefectStudio::JobSystem jobSystem(DefectStudio::CreateWeakRef(eventBus), 2);
+	DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(eventBus));
+
+	const auto parentId = jobSystem.Submit(DefectStudio::CreateRef<ParentTrackerJob>());
+	ASSERT_GT(parentId, 0u);
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		eventBus->ProcessQueue();
+		const auto entries = tracker.GetAllSnapshots();
+		const auto completedCount = std::count_if(entries.begin(), entries.end(), [](const DefectStudio::ProgressEntrySnapshot &entry) {
+			return entry.status == DefectStudio::JobStatus::Completed;
+		});
+		return completedCount >= 2;
+	}, DefectStudio::Time::Milliseconds(2000)));
+
+	const auto allEntries = tracker.GetAllSnapshots();
+	auto parentIt = std::find_if(allEntries.begin(), allEntries.end(), [parentId](const DefectStudio::ProgressEntrySnapshot &entry) {
+		return entry.id == parentId;
+	});
+	ASSERT_NE(parentIt, allEntries.end());
+
+	auto childIt = std::find_if(allEntries.begin(), allEntries.end(), [parentId](const DefectStudio::ProgressEntrySnapshot &entry) {
+		return entry.parentId == parentId;
+	});
+	ASSERT_NE(childIt, allEntries.end());
+	EXPECT_GT(childIt->id, parentId);
+
+	jobSystem.Shutdown();
 }

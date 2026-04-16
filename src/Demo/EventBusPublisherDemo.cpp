@@ -15,7 +15,6 @@ namespace DefectStudio::Demo
 
 	void EventBusPublisherDemo::Render()
 	{
-		ImGui::Begin("Demo/EventBus Publisher");
 		ImGui::TextUnformatted("Publishes to global EventBus from Application.");
 		// EventBus is for cross-system, decoupled notifications (not tied to the input/event pipeline).
 		ImGui::TextUnformatted("Immediate = Publish/PublishNew. Deferred = Queue/QueueNew + ProcessQueue.");
@@ -62,7 +61,6 @@ namespace DefectStudio::Demo
 		ImGui::Text("Published PipelineStatus: %d", m_PublishedPipelineEvents);
 		ImGui::Text("Queued FileOpened: %d", m_QueuedFileEvents);
 		ImGui::Text("Queued PipelineStatus: %d", m_QueuedPipelineEvents);
-		ImGui::End();
 	}
 
 	std::string EventBusPublisherDemo::buildFileName() const

@@ -1,5 +1,7 @@
 #include "Core/dspch.hpp"
 
+#include <imgui.h>
+
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Logger.hpp"
@@ -43,11 +45,21 @@ namespace DefectStudio::Demo
 
 	void DemoLayer::OnImGuiRender()
 	{
-		if (m_EventDispatcherDemo)
+		if (!ImGui::Begin("Demos"))
+		{
+			ImGui::End();
+			return;
+		}
+
+		if (ImGui::CollapsingHeader("Event Dispatcher", ImGuiTreeNodeFlags_DefaultOpen) && m_EventDispatcherDemo)
 			m_EventDispatcherDemo->Render();
-		if (m_EventBusDemo)
+
+		if (ImGui::CollapsingHeader("Event Bus", ImGuiTreeNodeFlags_DefaultOpen) && m_EventBusDemo)
 			m_EventBusDemo->Render();
-		if (m_JobSystemDemo)
+
+		if (ImGui::CollapsingHeader("Job System", ImGuiTreeNodeFlags_DefaultOpen) && m_JobSystemDemo)
 			m_JobSystemDemo->Render();
+
+		ImGui::End();
 	}
 } // namespace DefectStudio::Demo

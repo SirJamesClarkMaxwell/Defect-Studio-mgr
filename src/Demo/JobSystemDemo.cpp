@@ -225,8 +225,6 @@ namespace DefectStudio::Demo
 
 		m_DemoEventBus->ProcessQueue();
 
-		ImGui::Begin("JobSystem Demo");
-
 		ImGui::TextUnformatted("API workflow:");
 		ImGui::BulletText("Submit(const Ref<IJob> &, priority)");
 		ImGui::BulletText("SubmitAfter(const Ref<IJob> &, delay, priority)");
@@ -236,8 +234,6 @@ namespace DefectStudio::Demo
 
 		renderControls();
 		renderEventBusPanel();
-
-		ImGui::End();
 	}
 
 	void JobSystemDemo::submitSleepJob(int steps, int delayMs, JobPriority priority)
