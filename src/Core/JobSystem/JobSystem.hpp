@@ -34,8 +34,10 @@ namespace DefectStudio
 		[[nodiscard]] JobId Submit(const Ref<IJob> &job, JobPriority priority = JobPriority::Normal);
 		[[nodiscard]] JobId SubmitAfter(const Ref<IJob> &job, Time::Milliseconds delay, JobPriority priority = JobPriority::Normal);
 		[[nodiscard]] bool RequestCancel(JobId id);
+		[[nodiscard]] bool Resume(JobId id);
 		[[nodiscard]] bool Reset(JobId id);
 		[[nodiscard]] bool Retry(JobId id, JobPriority priority = JobPriority::Normal);
+		[[nodiscard]] bool RemoveFromHistory(JobId id);
 		[[nodiscard]] std::size_t GetThreadCount() const;
 		[[nodiscard]] bool SetThreadCount(std::size_t threadCount);
 
@@ -56,6 +58,7 @@ namespace DefectStudio
 		void enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority);
 		void recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now, JobId parentId, JobPriority priority);
 		void runJob(JobId id, Ref<IJob> job);
+		[[nodiscard]] bool waitForJobCooperative(JobId id);
 		void threadCountWorkerLoop(std::stop_token stopToken);
 		void markRunning(JobId id, const Time::TimePoint &startedAt);
 		void updateProgress(JobId id, float completedWork, float totalWork);

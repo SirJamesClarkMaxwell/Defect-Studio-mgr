@@ -45,6 +45,7 @@ namespace DefectStudio
 		Path directory;
 		std::string imGuiIniPath;
 		float fontScale = 1.0f;
+		float fontScaleStep = 0.10f;
 	};
 
 } // namespace DefectStudio

@@ -152,6 +152,33 @@ namespace DefectStudio
 		return m_CoreLayer->GetProgressTracker();
 	}
 
+	float Application::GetFontScale() const
+	{
+		return m_Config.fontScale;
+	}
+
+	float Application::GetFontScaleStep() const
+	{
+		return m_Config.fontScaleStep;
+	}
+
+	void Application::SetFontScale(float fontScale)
+	{
+		m_Config.fontScale = std::clamp(fontScale, 0.70f, 2.00f);
+		if (ImGui::GetCurrentContext() != nullptr)
+			ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
+	}
+
+	void Application::SetFontScaleStep(float fontScaleStep)
+	{
+		m_Config.fontScaleStep = std::clamp(fontScaleStep, 0.01f, 1.00f);
+	}
+
+	void Application::AdjustFontScale(float delta)
+	{
+		SetFontScale(m_Config.fontScale + delta);
+	}
+
 	// ===== Instance lifecycle =====
 
 	Application::Application(int argc, char **argv)
@@ -349,8 +376,12 @@ namespace DefectStudio
 
 		if (ImGui::SliderFloat("Font scale", &m_Config.fontScale, 0.70f, 2.00f, "%.2f"))
 		{
-			m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
-			ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
+			SetFontScale(m_Config.fontScale);
+			saveUiSettings = true;
+		}
+		if (ImGui::SliderFloat("Font scale step", &m_Config.fontScaleStep, 0.01f, 0.50f, "%.2f"))
+		{
+			SetFontScaleStep(m_Config.fontScaleStep);
 			saveUiSettings = true;
 		}
 		ImGui::End();
@@ -612,7 +643,9 @@ namespace DefectStudio
 		ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
 		loadUiSettingsDocument(uiDocument);
 		m_Config.fontScale = static_cast<float>(ConfigManager::GetDouble(uiDocument, "font_scale", 1.0));
+		m_Config.fontScaleStep = static_cast<float>(ConfigManager::GetDouble(uiDocument, "font_scale_step", 0.10));
 		m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
+		m_Config.fontScaleStep = std::clamp(m_Config.fontScaleStep, 0.01f, 1.00f);
 		io.FontGlobalScale = m_Config.fontScale;
 
 		ImGui::StyleColorsDark();
@@ -725,6 +758,7 @@ namespace DefectStudio
 		ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
 		loadUiSettingsDocument(uiDocument);
 		uiDocument.Set("font_scale", std::to_string(m_Config.fontScale));
+		uiDocument.Set("font_scale_step", std::to_string(m_Config.fontScaleStep));
 		saveUiSettingsDocument(uiDocument);
 
 		ImGui_ImplOpenGL3_Shutdown();

@@ -1,5 +1,6 @@
 clear_color: 0.10, 0.10, 0.12, 1.00
-font_scale: 1.830000
+font_scale: 2.000000
+font_scale_step: 0.100000
 reset_layout: false
 schema_version: 1
 show_demo_window: true

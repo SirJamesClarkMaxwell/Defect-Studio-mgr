@@ -12,6 +12,7 @@ namespace DefectStudio
 		Apostrophe = 39,
 		Comma = 44,
 		Minus = 45,
+		Equal = 61,
 		Period = 46,
 		Slash = 47,
 

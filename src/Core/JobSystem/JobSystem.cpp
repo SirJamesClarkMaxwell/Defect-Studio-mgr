@@ -10,6 +10,27 @@
 
 namespace DefectStudio
 {
+	namespace
+	{
+		thread_local const JobSystem *g_CurrentJobSystem = nullptr;
+		thread_local JobId g_CurrentJobId = 0;
+
+		struct WorkerContextGuard
+		{
+			explicit WorkerContextGuard(const JobSystem *jobSystem, JobId jobId)
+			{
+				g_CurrentJobSystem = jobSystem;
+				g_CurrentJobId = jobId;
+			}
+
+			~WorkerContextGuard()
+			{
+				g_CurrentJobSystem = nullptr;
+				g_CurrentJobId = 0;
+			}
+		};
+	}
+
 	std::size_t JobSystem::resolveThreadCount(std::size_t requested)
 	{
 		if (requested != 0)
@@ -115,6 +136,50 @@ namespace DefectStudio
 		return true;
 	}
 
+	bool JobSystem::Resume(JobId id)
+	{
+		Ref<IJob> jobToResume;
+		JobPriority priority = JobPriority::Normal;
+		bool shouldEnqueue = false;
+
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto it = m_Records.find(id);
+			if (it == m_Records.end())
+				return false;
+
+			it->second.cancellationRequested->store(false, std::memory_order_relaxed);
+			it->second.snapshot.cancellationRequested = false;
+
+			if (it->second.snapshot.status == JobStatus::Cancelled)
+			{
+				jobToResume = it->second.job;
+				if (!jobToResume)
+					return false;
+
+				priority = it->second.snapshot.priority;
+				it->second.snapshot.status = JobStatus::Queued;
+				it->second.snapshot.startedAt = Time::TimePoint{};
+				it->second.snapshot.finishedAt = Time::TimePoint{};
+				it->second.snapshot.errorMessage.clear();
+				it->second.snapshot.completedWork = 0.0f;
+				it->second.snapshot.currentStage.clear();
+				it->second.snapshot.currentMessage.clear();
+				it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Resume", Time::Now()});
+				shouldEnqueue = true;
+			}
+			else
+			{
+				it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Resume request cleared cancellation", Time::Now()});
+			}
+		}
+
+		if (shouldEnqueue)
+			enqueueForExecution(id, jobToResume, priority);
+
+		return true;
+	}
+
 	bool JobSystem::Reset(JobId id)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
@@ -172,6 +237,20 @@ namespace DefectStudio
 
 		// Re-enqueue without holding mutex
 		enqueueForExecution(id, jobToRetry, priority);
+		return true;
+	}
+
+	bool JobSystem::RemoveFromHistory(JobId id)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto it = m_Records.find(id);
+		if (it == m_Records.end())
+			return false;
+
+		if (!isFinishedStatus(it->second.snapshot.status))
+			return false;
+
+		m_Records.erase(it);
 		return true;
 	}
 
@@ -337,19 +416,9 @@ namespace DefectStudio
 			[this, id](JobLogLevel level, const std::string &message) { appendLog(id, level, message); },
 			[this, id]() { return isCancellationRequested(id); },
 			[this, id](const Ref<IJob> &job, JobPriority priority) { return submitInternal(job, priority, id, std::nullopt); },
-			[this](JobId childId) {
-				for (;;)
-				{
-					if (m_ShutdownRequested.load(std::memory_order_relaxed))
-						return false;
+			[this](JobId childId) { return waitForJobCooperative(childId); });
 
-					auto child = GetJob(childId);
-					if (child.has_value() && isFinishedStatus(child->status))
-						return true;
-
-					std::this_thread::sleep_for(Time::Milliseconds(1));
-				}
-			});
+		WorkerContextGuard workerContext(this, id);
 
 		JobStatus finalStatus = JobStatus::Completed;
 		std::string errorMessage;
@@ -380,6 +449,24 @@ namespace DefectStudio
 		const auto finishedAt = Time::Now();
 		markFinished(id, finalStatus, errorMessage, finishedAt);
 		publishFinishedEvent(id, *job, finalStatus, errorMessage, finishedAt);
+	}
+
+	bool JobSystem::waitForJobCooperative(JobId id)
+	{
+		for (;;)
+		{
+			if (m_ShutdownRequested.load(std::memory_order_relaxed))
+				return false;
+
+			auto child = GetJob(id);
+			if (child.has_value() && isFinishedStatus(child->status))
+				return true;
+
+			if (g_CurrentJobSystem == this && g_CurrentJobId != 0)
+				return false;
+
+			std::this_thread::sleep_for(Time::Milliseconds(1));
+		}
 	}
 
 	void JobSystem::markRunning(JobId id, const Time::TimePoint &startedAt)

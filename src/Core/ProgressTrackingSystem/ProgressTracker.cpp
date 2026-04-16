@@ -86,7 +86,7 @@ namespace DefectStudio
 		}
 
 		std::sort(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &left, const ProgressEntrySnapshot &right) {
-			return left.id > right.id;
+			return left.id < right.id;
 		});
 		return entries;
 	}
@@ -107,6 +107,12 @@ namespace DefectStudio
 			return !entry.finished;
 		}), entries.end());
 		return entries;
+	}
+
+	bool ProgressTracker::RemoveEntry(JobId id)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		return m_Entries.erase(id) > 0;
 	}
 
 	void ProgressTracker::onQueued(const JobQueuedEvent &event)

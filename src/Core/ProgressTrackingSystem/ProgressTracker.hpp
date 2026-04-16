@@ -58,6 +58,7 @@ namespace DefectStudio
 		[[nodiscard]] std::vector<ProgressEntrySnapshot> GetAllSnapshots() const;
 		[[nodiscard]] std::vector<ProgressEntrySnapshot> GetActiveSnapshots() const;
 		[[nodiscard]] std::vector<ProgressEntrySnapshot> GetFinishedSnapshots() const;
+		[[nodiscard]] bool RemoveEntry(JobId id);
 
 	private:
 		void onQueued(const JobQueuedEvent &event);

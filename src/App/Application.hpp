@@ -46,6 +46,11 @@ namespace DefectStudio
 		JobSystem &GetJobSystem();
 		// Precondition: CoreLayer initialized.
 		ProgressTracker &GetProgressTracker();
+		[[nodiscard]] float GetFontScale() const;
+		[[nodiscard]] float GetFontScaleStep() const;
+		void SetFontScale(float fontScale);
+		void SetFontScaleStep(float fontScaleStep);
+		void AdjustFontScale(float delta);
 
 		// Event processing entry point for concrete event types.
 		template <typename TEvent>

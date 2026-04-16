@@ -247,6 +247,7 @@ namespace DefectStudio
 		document.Set("show_demo_window", "true");
 		document.Set("reset_layout", "false");
 		document.Set("font_scale", "1.0");
+		document.Set("font_scale_step", "0.10");
 		document.Set("clear_color", "0.10, 0.10, 0.12, 1.00");
 		return document;
 	}
