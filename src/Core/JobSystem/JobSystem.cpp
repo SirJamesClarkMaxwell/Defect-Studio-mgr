@@ -289,10 +289,9 @@ namespace DefectStudio
 				if (m_ShutdownRequested.load(std::memory_order_relaxed))
 					return;
 
-				m_Pool.wait();
-				if (m_ShutdownRequested.load(std::memory_order_relaxed))
-					return;
-
+				// reset() automatically pauses the pool before resetting threads (since we enabled pause feature),
+				// waits only for currently running tasks (not queued), then resumes execution.
+				// This allows reducing thread count even if more threads are currently working.
 				m_Pool.reset(requestedThreadCount);
 			}
 		}

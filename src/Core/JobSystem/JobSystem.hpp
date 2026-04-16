@@ -73,7 +73,7 @@ namespace DefectStudio
 		void cancelPendingDelayedSubmissions();
 
 		WeakRef<EventBus> m_EventBus;
-		BS::priority_thread_pool m_Pool;
+		BS::thread_pool<BS::tp::priority | BS::tp::pause> m_Pool;
 		mutable std::mutex m_ThreadCountMutex;
 		std::condition_variable m_ThreadCountCv;
 		std::optional<std::size_t> m_PendingThreadCount;
