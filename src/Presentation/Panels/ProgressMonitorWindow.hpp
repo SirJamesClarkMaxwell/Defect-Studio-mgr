@@ -32,6 +32,7 @@ namespace DefectStudio
 		JobId m_FocusedJobId = 0;
 		int m_SelectionAnchorIndex = -1;
 		float m_DetailsHeight = 220.0f;
+		float m_InternalTasksHeight = 220.0f;
 		std::unordered_set<JobId> m_ExpandedJobIds;
 		std::vector<JobId> m_DeletePendingIds;
 		int m_DeletePendingSkipped = 0;

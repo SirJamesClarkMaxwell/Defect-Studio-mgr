@@ -35,7 +35,7 @@ namespace DefectStudio
 			for (int i = 0; i < m_ChainCount; ++i)
 			{
 				auto child = CreateRef<SleepJob>(m_Name + "::child-" + std::to_string(i + 1), 30, Time::Milliseconds(8));
-				const auto childId = context.SubmitJobSequential(child, JobPriority::Normal);
+				const auto childId = context.SubmitJob(child, JobPriority::Normal);
 				if (childId == 0)
 				{
 					context.LogError("Could not submit child");

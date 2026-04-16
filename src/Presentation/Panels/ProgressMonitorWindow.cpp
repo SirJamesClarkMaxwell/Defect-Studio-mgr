@@ -16,6 +16,123 @@ namespace DefectStudio
 {
 	namespace
 	{
+		struct DisplayMetrics
+		{
+			float progressPercent = 0.0f;
+			JobStatus status = JobStatus::Queued;
+			bool aggregated = false;
+		};
+
+		std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> buildChildrenByParent(const std::vector<ProgressEntrySnapshot> &allJobs)
+		{
+			std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> childrenByParent;
+			for (const auto &snapshot : allJobs)
+				childrenByParent[snapshot.parentId].push_back(&snapshot);
+
+			for (auto &entry : childrenByParent)
+			{
+				std::sort(entry.second.begin(), entry.second.end(), [](const ProgressEntrySnapshot *left, const ProgressEntrySnapshot *right) {
+					return left->id > right->id;
+				});
+			}
+
+			return childrenByParent;
+		}
+
+		template <typename Predicate>
+		int countMatchingDescendants(
+			const std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> &childrenByParent,
+			JobId parentId,
+			Predicate predicate)
+		{
+			const auto childrenIt = childrenByParent.find(parentId);
+			if (childrenIt == childrenByParent.end())
+				return 0;
+
+			int count = 0;
+			for (const auto *child : childrenIt->second)
+			{
+				if (predicate(*child))
+					++count;
+				count += countMatchingDescendants(childrenByParent, child->id, predicate);
+			}
+			return count;
+		}
+
+		int countAllDescendantsLocal(
+			const std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> &childrenByParent,
+			JobId parentId)
+		{
+			return countMatchingDescendants(childrenByParent, parentId, [](const ProgressEntrySnapshot &) {
+				return true;
+			});
+		}
+
+		int countFinishedDescendantsLocal(
+			const std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> &childrenByParent,
+			JobId parentId)
+		{
+			return countMatchingDescendants(childrenByParent, parentId, [](const ProgressEntrySnapshot &entry) {
+				return entry.status == JobStatus::Completed || entry.status == JobStatus::Failed || entry.status == JobStatus::Cancelled;
+			});
+		}
+
+		DisplayMetrics buildDisplayMetrics(
+			const ProgressEntrySnapshot &snapshot,
+			const std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> &childrenByParent)
+		{
+			DisplayMetrics metrics;
+			metrics.status = snapshot.status;
+
+			const int totalDescendants = countAllDescendantsLocal(childrenByParent, snapshot.id);
+			if (totalDescendants == 0)
+			{
+				metrics.progressPercent = snapshot.totalWork <= 0.0f
+					? 0.0f
+					: std::clamp((snapshot.completedWork / snapshot.totalWork) * 100.0f, 0.0f, 100.0f);
+				return metrics;
+			}
+
+			metrics.aggregated = true;
+			const int finishedDescendants = countFinishedDescendantsLocal(childrenByParent, snapshot.id);
+			metrics.progressPercent = totalDescendants <= 0 ? 0.0f : std::clamp((static_cast<float>(finishedDescendants) / static_cast<float>(totalDescendants)) * 100.0f, 0.0f, 100.0f);
+
+			const bool hasFailedDescendant = countMatchingDescendants(childrenByParent, snapshot.id, [](const ProgressEntrySnapshot &entry) {
+				return entry.status == JobStatus::Failed;
+			}) > 0;
+			const bool hasActiveDescendant = countMatchingDescendants(childrenByParent, snapshot.id, [](const ProgressEntrySnapshot &entry) {
+				return entry.status == JobStatus::Queued || entry.status == JobStatus::Running;
+			}) > 0;
+			const bool hasCancelledDescendant = countMatchingDescendants(childrenByParent, snapshot.id, [](const ProgressEntrySnapshot &entry) {
+				return entry.status == JobStatus::Cancelled;
+			}) > 0;
+
+			if (hasFailedDescendant || snapshot.status == JobStatus::Failed)
+				metrics.status = JobStatus::Failed;
+			else if (hasActiveDescendant || snapshot.status == JobStatus::Queued || snapshot.status == JobStatus::Running)
+				metrics.status = JobStatus::Running;
+			else if (hasCancelledDescendant || snapshot.status == JobStatus::Cancelled)
+				metrics.status = JobStatus::Cancelled;
+			else
+				metrics.status = JobStatus::Completed;
+
+			return metrics;
+		}
+
+		void collectSubtreeIds(
+			const std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> &childrenByParent,
+			JobId rootId,
+			std::vector<JobId> &ids)
+		{
+			ids.push_back(rootId);
+			const auto childrenIt = childrenByParent.find(rootId);
+			if (childrenIt == childrenByParent.end())
+				return;
+
+			for (const auto *child : childrenIt->second)
+				collectSubtreeIds(childrenByParent, child->id, ids);
+		}
+
 		void collectVisibleRows(
 			const std::vector<ProgressEntrySnapshot> &allJobs,
 			const std::unordered_map<JobId, std::vector<const ProgressEntrySnapshot *>> &childrenByParent,
@@ -145,7 +262,7 @@ namespace DefectStudio
 		for (auto &entry : childrenByParent)
 		{
 			std::sort(entry.second.begin(), entry.second.end(), [](const ProgressEntrySnapshot *left, const ProgressEntrySnapshot *right) {
-				return left->id < right->id;
+				return left->id > right->id;
 			});
 		}
 
@@ -177,6 +294,8 @@ namespace DefectStudio
 
 	void ProgressMonitorWindow::renderJobList(const std::vector<VisibleJobRow> &rows, const std::vector<ProgressEntrySnapshot> &allJobs)
 	{
+		const auto childrenByParent = buildChildrenByParent(allJobs);
+
 		constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg
 			| ImGuiTableFlags_ScrollY
 			| ImGuiTableFlags_Resizable
@@ -200,6 +319,7 @@ namespace DefectStudio
 		{
 			const auto &row = rows[static_cast<std::size_t>(rowIndex)];
 			const auto &snapshot = *row.snapshot;
+			const DisplayMetrics metrics = buildDisplayMetrics(snapshot, childrenByParent);
 
 			ImGui::TableNextRow(ImGuiTableRowFlags_None, 26.0f);
 			ImGui::TableSetColumnIndex(0);
@@ -243,10 +363,7 @@ namespace DefectStudio
 				ImGui::Text("%d/%d", finishedSubtasks, allSubtasks);
 
 			ImGui::TableSetColumnIndex(2);
-			ImGui::TextDisabled("%d%%", static_cast<int>(std::clamp(
-				snapshot.totalWork <= 0.0f ? 0.0f : (snapshot.completedWork / snapshot.totalWork) * 100.0f,
-				0.0f,
-				100.0f)));
+			ImGui::TextDisabled("%d%%", static_cast<int>(metrics.progressPercent));
 
 			ImGui::TableSetColumnIndex(3);
 			ImGui::TextUnformatted(toPriorityLabel(snapshot.priority));
@@ -255,8 +372,8 @@ namespace DefectStudio
 			ImGui::TextUnformatted(formatEstimatedTime(snapshot).c_str());
 
 			ImGui::TableSetColumnIndex(5);
-			const ImVec4 color = toStatusColor(snapshot.status);
-			ImGui::TextColored(color, "%s", toStatusBadge(snapshot.status));
+			const ImVec4 color = toStatusColor(metrics.status);
+			ImGui::TextColored(color, "%s", toStatusBadge(metrics.status));
 		}
 
 		ImGui::EndTable();
@@ -264,6 +381,8 @@ namespace DefectStudio
 
 	void ProgressMonitorWindow::renderSelectedJobDetails(const std::vector<ProgressEntrySnapshot> &allJobs)
 	{
+		const auto childrenByParent = buildChildrenByParent(allJobs);
+
 		if (m_FocusedJobId == 0)
 		{
 			ImGui::TextUnformatted("No job selected.");
@@ -280,9 +399,76 @@ namespace DefectStudio
 		}
 
 		const auto &snapshot = *it;
+		const DisplayMetrics metrics = buildDisplayMetrics(snapshot, childrenByParent);
+		std::unordered_map<JobId, JobId> parentById;
+		parentById.reserve(allJobs.size());
+		for (const auto &job : allJobs)
+			parentById.emplace(job.id, job.parentId);
+
+		std::vector<const ProgressEntrySnapshot *> ancestry;
+		for (JobId current = snapshot.parentId; current != 0;)
+		{
+			const auto parentIt = parentById.find(current);
+			if (parentIt == parentById.end())
+				break;
+
+			const auto parentSnapshotIt = std::find_if(allJobs.begin(), allJobs.end(), [current](const ProgressEntrySnapshot &candidate) {
+				return candidate.id == current;
+			});
+			if (parentSnapshotIt == allJobs.end())
+				break;
+
+			ancestry.push_back(&*parentSnapshotIt);
+			current = parentIt->second;
+		}
+		std::vector<const ProgressEntrySnapshot *> internalJobs;
+		for (const auto &candidate : allJobs)
+		{
+			if (candidate.id == snapshot.id || candidate.parentId == 0)
+				continue;
+
+			JobId currentParent = candidate.parentId;
+			while (currentParent != 0)
+			{
+				if (currentParent == snapshot.id)
+				{
+					internalJobs.push_back(&candidate);
+					break;
+				}
+
+				const auto parentIt = parentById.find(currentParent);
+				if (parentIt == parentById.end())
+					break;
+
+				currentParent = parentIt->second;
+			}
+		}
+
+		std::sort(internalJobs.begin(), internalJobs.end(), [](const ProgressEntrySnapshot *left, const ProgressEntrySnapshot *right) {
+			return left->id > right->id;
+		});
+
+		const bool hasInternalJobs = !internalJobs.empty();
+		const float splitterHeight = hasInternalJobs ? 10.0f : 0.0f;
+		const float minTopHeight = 120.0f;
+		const float minBottomHeight = 120.0f;
+		const float totalAvailHeight = ImGui::GetContentRegionAvail().y;
+		const float maxBottomHeight = std::max(minBottomHeight, totalAvailHeight - minTopHeight - splitterHeight);
+		if (hasInternalJobs)
+			m_InternalTasksHeight = std::clamp(m_InternalTasksHeight, minBottomHeight, maxBottomHeight);
+		const float topHeight = hasInternalJobs
+			? std::max(minTopHeight, totalAvailHeight - m_InternalTasksHeight - splitterHeight)
+			: std::max(0.0f, totalAvailHeight);
+
+		ImGui::BeginChild("SelectedJobSummaryRegion", ImVec2(0.0f, topHeight), false);
 		ImGui::Text("Selected: #%llu | %s", static_cast<unsigned long long>(snapshot.id), snapshot.label.c_str());
 		ImGui::SameLine();
-		ImGui::TextColored(toStatusColor(snapshot.status), "%s", toStatusBadge(snapshot.status));
+		ImGui::TextColored(toStatusColor(metrics.status), "%s", toStatusBadge(metrics.status));
+		if (metrics.status != snapshot.status)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("raw: %s", toStatusBadge(snapshot.status));
+		}
 		ImGui::SameLine();
 		ImGui::TextDisabled("Priority: %s", toPriorityLabel(snapshot.priority));
 		if (snapshot.parentId != 0)
@@ -313,6 +499,11 @@ namespace DefectStudio
 			addRow("Parent", snapshot.parentId == 0 ? std::string("-") : std::to_string(snapshot.parentId));
 			addRow("Priority", toPriorityLabel(snapshot.priority));
 			addRow("Status", toStatusLabel(snapshot.status));
+			if (metrics.aggregated)
+			{
+				addRow("Effective Status", toStatusLabel(metrics.status));
+				addRow("Effective Progress", std::to_string(static_cast<int>(metrics.progressPercent)) + "%");
+			}
 			addRow("ETA", formatEstimatedTime(snapshot));
 			addRow("Progress", std::to_string(static_cast<int>(snapshot.completedWork)) + " / " + std::to_string(static_cast<int>(snapshot.totalWork)));
 			addRow("Created", formatTimePoint(snapshot.createdAt));
@@ -326,27 +517,6 @@ namespace DefectStudio
 		if (!snapshot.errorSummary.empty())
 			ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Error: %s", snapshot.errorSummary.c_str());
 
-		std::unordered_map<JobId, JobId> parentById;
-		parentById.reserve(allJobs.size());
-		for (const auto &job : allJobs)
-			parentById.emplace(job.id, job.parentId);
-
-		std::vector<const ProgressEntrySnapshot *> ancestry;
-		for (JobId current = snapshot.parentId; current != 0;)
-		{
-			const auto parentIt = parentById.find(current);
-			if (parentIt == parentById.end())
-				break;
-
-			const auto parentSnapshotIt = std::find_if(allJobs.begin(), allJobs.end(), [current](const ProgressEntrySnapshot &candidate) {
-				return candidate.id == current;
-			});
-			if (parentSnapshotIt == allJobs.end())
-				break;
-
-			ancestry.push_back(&*parentSnapshotIt);
-			current = parentIt->second;
-		}
 		std::reverse(ancestry.begin(), ancestry.end());
 		if (!ancestry.empty())
 		{
@@ -373,41 +543,29 @@ namespace DefectStudio
 			}
 		}
 
-		std::vector<const ProgressEntrySnapshot *> internalJobs;
-		for (const auto &candidate : allJobs)
-		{
-			if (candidate.id == snapshot.id || candidate.parentId == 0)
-				continue;
-
-			JobId currentParent = candidate.parentId;
-			while (currentParent != 0)
-			{
-				if (currentParent == snapshot.id)
-				{
-					internalJobs.push_back(&candidate);
-					break;
-				}
-
-				const auto parentIt = parentById.find(currentParent);
-				if (parentIt == parentById.end())
-					break;
-
-				currentParent = parentIt->second;
-			}
-		}
-
-		std::sort(internalJobs.begin(), internalJobs.end(), [](const ProgressEntrySnapshot *left, const ProgressEntrySnapshot *right) {
-			return left->id < right->id;
-		});
-
-		if (internalJobs.empty())
+		if (!hasInternalJobs)
 		{
 			ImGui::Spacing();
 			ImGui::TextDisabled("No internal tasks for this job.");
+		}
+		ImGui::EndChild();
+
+		if (!hasInternalJobs)
+		{
 			return;
 		}
 
-		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.18f, 0.20f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.28f, 0.34f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.35f, 0.35f, 0.42f, 1.0f));
+		ImGui::Button("##InternalTasksSplitter", ImVec2(ImGui::GetContentRegionAvail().x, splitterHeight));
+		ImGui::PopStyleColor(3);
+		if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+		if (ImGui::IsItemActive())
+			m_InternalTasksHeight = std::clamp(m_InternalTasksHeight - ImGui::GetIO().MouseDelta.y, minBottomHeight, maxBottomHeight);
+
+		ImGui::BeginChild("InternalTasksRegion", ImVec2(0.0f, m_InternalTasksHeight), false);
 		ImGui::TextUnformatted("Internal Tasks");
 		constexpr ImGuiTableFlags internalFlags = ImGuiTableFlags_RowBg
 			| ImGuiTableFlags_BordersInnerV
@@ -416,7 +574,7 @@ namespace DefectStudio
 			| ImGuiTableFlags_ScrollY
 			| ImGuiTableFlags_SizingStretchProp;
 
-		const float internalTableHeight = std::max(120.0f, ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing());
+		const float internalTableHeight = std::max(80.0f, ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing());
 		if (ImGui::BeginTable("InternalTasksTable", 7, internalFlags, ImVec2(0.0f, internalTableHeight)))
 		{
 			ImGui::TableSetupColumn("Id", ImGuiTableColumnFlags_WidthFixed, 64.0f);
@@ -452,6 +610,7 @@ namespace DefectStudio
 
 			ImGui::EndTable();
 		}
+		ImGui::EndChild();
 	}
 
 	void ProgressMonitorWindow::applySelection(const std::vector<VisibleJobRow> &rows, int rowIndex, JobId jobId)
@@ -597,6 +756,7 @@ namespace DefectStudio
 
 	void ProgressMonitorWindow::requestDeleteSelectionConfirmation(const std::vector<ProgressEntrySnapshot> &allJobs)
 	{
+		const auto childrenByParent = buildChildrenByParent(allJobs);
 		m_DeletePendingIds.clear();
 		m_DeletePendingSkipped = 0;
 
@@ -608,7 +768,8 @@ namespace DefectStudio
 			if (it == allJobs.end())
 				continue;
 
-			if (it->status == JobStatus::Completed || it->status == JobStatus::Failed || it->status == JobStatus::Cancelled)
+			const DisplayMetrics metrics = buildDisplayMetrics(*it, childrenByParent);
+			if (metrics.status == JobStatus::Completed || metrics.status == JobStatus::Failed || metrics.status == JobStatus::Cancelled)
 				m_DeletePendingIds.push_back(selectedId);
 			else
 				++m_DeletePendingSkipped;
@@ -621,15 +782,36 @@ namespace DefectStudio
 	{
 		auto &jobSystem = Application::Get().GetJobSystem();
 		auto &progressTracker = Application::Get().GetProgressTracker();
+		const auto snapshots = progressTracker.GetAllSnapshots();
+		const auto childrenByParent = buildChildrenByParent(snapshots);
+		std::vector<JobId> idsToRemove;
 
 		for (const JobId id : ids)
+		{
+			const auto snapshotIt = std::find_if(snapshots.begin(), snapshots.end(), [id](const ProgressEntrySnapshot &snapshot) {
+				return snapshot.id == id;
+			});
+			if (snapshotIt == snapshots.end())
+				continue;
+
+			const DisplayMetrics metrics = buildDisplayMetrics(*snapshotIt, childrenByParent);
+			if (metrics.status != JobStatus::Completed && metrics.status != JobStatus::Failed && metrics.status != JobStatus::Cancelled)
+				continue;
+
+			collectSubtreeIds(childrenByParent, id, idsToRemove);
+		}
+
+		std::sort(idsToRemove.begin(), idsToRemove.end());
+		idsToRemove.erase(std::unique(idsToRemove.begin(), idsToRemove.end()), idsToRemove.end());
+
+		for (const JobId id : idsToRemove)
 		{
 			if (jobSystem.RemoveFromHistory(id))
 				(void)progressTracker.RemoveEntry(id);
 		}
 
-		m_SelectedJobIds.erase(std::remove_if(m_SelectedJobIds.begin(), m_SelectedJobIds.end(), [&ids](JobId id) {
-			return std::find(ids.begin(), ids.end(), id) != ids.end();
+		m_SelectedJobIds.erase(std::remove_if(m_SelectedJobIds.begin(), m_SelectedJobIds.end(), [&idsToRemove](JobId id) {
+			return std::find(idsToRemove.begin(), idsToRemove.end(), id) != idsToRemove.end();
 		}), m_SelectedJobIds.end());
 		updateFocusedSelectionFallback();
 	}
@@ -642,14 +824,19 @@ namespace DefectStudio
 
 	int ProgressMonitorWindow::countFinishedSelected(const std::vector<ProgressEntrySnapshot> &allJobs) const
 	{
+		const auto childrenByParent = buildChildrenByParent(allJobs);
 		int count = 0;
 		for (const JobId id : m_SelectedJobIds)
 		{
 			const auto it = std::find_if(allJobs.begin(), allJobs.end(), [id](const ProgressEntrySnapshot &snapshot) {
 				return snapshot.id == id;
 			});
-			if (it != allJobs.end() && (it->status == JobStatus::Completed || it->status == JobStatus::Failed || it->status == JobStatus::Cancelled))
-				++count;
+			if (it != allJobs.end())
+			{
+				const DisplayMetrics metrics = buildDisplayMetrics(*it, childrenByParent);
+				if (metrics.status == JobStatus::Completed || metrics.status == JobStatus::Failed || metrics.status == JobStatus::Cancelled)
+					++count;
+			}
 		}
 		return count;
 	}
