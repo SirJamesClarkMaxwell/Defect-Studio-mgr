@@ -127,15 +127,17 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Actions");
 			ImGui::TableSetColumnIndex(1);
+			
+			std::size_t urgentWorker = static_cast<std::size_t>(m_ReserveUrgentWorker ? 1 : 0);
 			if (ImGui::Button("Apply"))
 			{
-				(void)jobSystem.SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + (m_ReserveUrgentWorker ? 1 : 0)));
+				(void)jobSystem.SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + urgentWorker));
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Reset to 5"))
 			{
-				m_WorkerThreadCount = 5;
-				(void)jobSystem.SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + (m_ReserveUrgentWorker ? 1 : 0)));
+				//todo: add this setting 
+				(void)jobSystem.SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + urgentWorker));
 			}
 
 			ImGui::EndTable();

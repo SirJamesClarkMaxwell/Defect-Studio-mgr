@@ -126,7 +126,7 @@ namespace DefectStudio
 
 	bool JobSystem::RequestCancel(JobId id)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return false;
@@ -143,7 +143,7 @@ namespace DefectStudio
 		bool shouldEnqueue = false;
 
 		{
-			std::lock_guard<std::mutex> lock(m_Mutex);
+			std::lock_guard<std::mutex> lock(m_RecordsMutex);
 			auto it = m_Records.find(id);
 			if (it == m_Records.end())
 				return false;
@@ -182,7 +182,7 @@ namespace DefectStudio
 
 	bool JobSystem::Reset(JobId id)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return false;
@@ -209,7 +209,7 @@ namespace DefectStudio
 	{
 		Ref<IJob> jobToRetry;
 		{
-			std::lock_guard<std::mutex> lock(m_Mutex);
+			std::lock_guard<std::mutex> lock(m_RecordsMutex);
 			auto it = m_Records.find(id);
 			if (it == m_Records.end())
 				return false;
@@ -242,7 +242,7 @@ namespace DefectStudio
 
 	bool JobSystem::RemoveFromHistory(JobId id)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return false;
@@ -278,7 +278,7 @@ namespace DefectStudio
 
 	std::optional<JobSnapshot> JobSystem::GetJob(JobId id) const
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return std::nullopt;
@@ -288,15 +288,13 @@ namespace DefectStudio
 
 	std::vector<JobSnapshot> JobSystem::GetAllJobs() const
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		std::vector<JobSnapshot> jobs;
 		jobs.reserve(m_Records.size());
 		for (const auto &entry : m_Records)
 			jobs.push_back(entry.second.snapshot);
 
-		std::sort(jobs.begin(), jobs.end(), [](const JobSnapshot &left, const JobSnapshot &right) {
-			return left.id < right.id;
-		});
+		std::sort(jobs.begin(), jobs.end());
 		return jobs;
 	}
 
@@ -320,7 +318,7 @@ namespace DefectStudio
 
 	std::vector<JobLogEntry> JobSystem::GetLogs(JobId id) const
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return {};
@@ -330,15 +328,20 @@ namespace DefectStudio
 
 	void JobSystem::Shutdown()
 	{
-		std::call_once(m_ShutdownOnce, [this]() {
+		std::call_once(m_ShutdownOnce, [this]() 
+		{
 			m_ShutdownRequested.store(true, std::memory_order_relaxed);
 			m_ThreadCountCv.notify_all();
+
 			if (m_ThreadCountWorker.joinable())
 				m_ThreadCountWorker.request_stop();
+
 			if (m_ThreadCountWorker.joinable())
 				m_ThreadCountWorker.join();
+
 			m_DelayedWorker.request_stop();
 			m_DelayedCv.notify_all();
+
 			if (m_DelayedWorker.joinable())
 				m_DelayedWorker.join();
 
@@ -347,49 +350,37 @@ namespace DefectStudio
 		});
 	}
 
-		void JobSystem::threadCountWorkerLoop(std::stop_token stopToken)
+	void JobSystem::threadCountWorkerLoop(std::stop_token stopToken)
+	{
+		while (true)
 		{
-			for (;;)
+			std::size_t requestedThreadCount = 0;
 			{
-				std::size_t requestedThreadCount = 0;
-				{
-					std::unique_lock<std::mutex> lock(m_ThreadCountMutex);
-					m_ThreadCountCv.wait(lock, [&]() {
-						return stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed) || m_PendingThreadCount.has_value();
-					});
+				std::unique_lock<std::mutex> lock(m_ThreadCountMutex);
+				m_ThreadCountCv.wait(lock, [&]() {
+					return stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed) || m_PendingThreadCount.has_value();
+				});
 
-					if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
-						return;
-
-					requestedThreadCount = *m_PendingThreadCount;
-					m_PendingThreadCount.reset();
-				}
-
-				if (m_ShutdownRequested.load(std::memory_order_relaxed))
+				if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
 					return;
 
-				// reset() automatically pauses the pool before resetting threads (since we enabled pause feature),
-				// waits only for currently running tasks (not queued), then resumes execution.
-				// This allows reducing thread count even if more threads are currently working.
-				m_Pool.reset(requestedThreadCount);
+				requestedThreadCount = *m_PendingThreadCount;
+				m_PendingThreadCount.reset();
 			}
+
+			if (m_ShutdownRequested.load(std::memory_order_relaxed))
+				return;
+
+			// reset() pauses the backend pool, waits only for currently running tasks,
+			// applies the new thread count, and resumes queued work.
+			// Executing it on this dedicated jthread keeps caller threads responsive.
+			m_Pool.reset(requestedThreadCount);
 		}
-
-	void JobSystem::enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority)
-	{
-		if (!job)
-			return;
-
-		m_Pool.detach_task(
-			[this, id, job]() {
-				runJob(id, job);
-			},
-			toBackendPriority(priority));
 	}
 
 	void JobSystem::recordQueued(JobId id, const Ref<IJob> &job, const Time::TimePoint &now, JobId parentId, JobPriority priority)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		JobRecord record;
 		record.snapshot.id = id;
 		record.snapshot.parentId = parentId;
@@ -409,14 +400,36 @@ namespace DefectStudio
 		markRunning(id, startedAt);
 		publishStartedEvent(id, *job, startedAt);
 
+		auto onProgress = [this, id](float completedWork, float totalWork) {
+			updateProgress(id, completedWork, totalWork);
+		};
+		auto onStage = [this, id](const std::string &stage) {
+			updateStage(id, stage);
+		};
+		auto onMessage = [this, id](const std::string &message) {
+			updateMessage(id, message);
+		};
+		auto onLog = [this, id](JobLogLevel level, const std::string &message) {
+			appendLog(id, level, message);
+		};
+		auto onCancelQuery = [this, id]() {
+			return isCancellationRequested(id);
+		};
+		auto onSubmitChild = [this, id](const Ref<IJob> &childJob, JobPriority priority) {
+			return submitInternal(childJob, priority, id, std::nullopt);
+		};
+		auto onWaitChild = [this](JobId childId) {
+			return waitForJobCooperative(childId);
+		};
+
 		JobContext context(
-			[this, id](float completedWork, float totalWork) { updateProgress(id, completedWork, totalWork); },
-			[this, id](const std::string &stage) { updateStage(id, stage); },
-			[this, id](const std::string &message) { updateMessage(id, message); },
-			[this, id](JobLogLevel level, const std::string &message) { appendLog(id, level, message); },
-			[this, id]() { return isCancellationRequested(id); },
-			[this, id](const Ref<IJob> &job, JobPriority priority) { return submitInternal(job, priority, id, std::nullopt); },
-			[this](JobId childId) { return waitForJobCooperative(childId); });
+			onProgress,
+			onStage,
+			onMessage,
+			onLog,
+			onCancelQuery,
+			onSubmitChild,
+			onWaitChild);
 
 		WorkerContextGuard workerContext(this, id);
 
@@ -453,7 +466,7 @@ namespace DefectStudio
 
 	bool JobSystem::waitForJobCooperative(JobId id)
 	{
-		for (;;)
+		while (true)
 		{
 			if (m_ShutdownRequested.load(std::memory_order_relaxed))
 				return false;
@@ -462,7 +475,9 @@ namespace DefectStudio
 			if (child.has_value() && isFinishedStatus(child->status))
 				return true;
 
-			if (g_CurrentJobSystem == this && g_CurrentJobId != 0)
+			// Avoid deadlock only in true single-worker mode. With 2+ workers,
+			// a parent job can safely wait while another worker executes the child.
+			if (g_CurrentJobSystem == this && g_CurrentJobId != 0 && m_Pool.get_thread_count() <= 1)
 				return false;
 
 			std::this_thread::sleep_for(Time::Milliseconds(1));
@@ -471,7 +486,7 @@ namespace DefectStudio
 
 	void JobSystem::markRunning(JobId id, const Time::TimePoint &startedAt)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return;
@@ -486,7 +501,7 @@ namespace DefectStudio
 		std::string stage;
 		std::string message;
 		{
-			std::lock_guard<std::mutex> lock(m_Mutex);
+			std::lock_guard<std::mutex> lock(m_RecordsMutex);
 			auto it = m_Records.find(id);
 			if (it == m_Records.end())
 				return;
@@ -506,7 +521,7 @@ namespace DefectStudio
 		float totalWork = 0.0f;
 		std::string message;
 		{
-			std::lock_guard<std::mutex> lock(m_Mutex);
+			std::lock_guard<std::mutex> lock(m_RecordsMutex);
 			auto it = m_Records.find(id);
 			if (it == m_Records.end())
 				return;
@@ -526,7 +541,7 @@ namespace DefectStudio
 		float totalWork = 0.0f;
 		std::string stage;
 		{
-			std::lock_guard<std::mutex> lock(m_Mutex);
+			std::lock_guard<std::mutex> lock(m_RecordsMutex);
 			auto it = m_Records.find(id);
 			if (it == m_Records.end())
 				return;
@@ -542,7 +557,7 @@ namespace DefectStudio
 
 	void JobSystem::appendLog(JobId id, JobLogLevel level, const std::string &message)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return;
@@ -552,7 +567,7 @@ namespace DefectStudio
 
 	bool JobSystem::isCancellationRequested(JobId id) const
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return true;
@@ -562,7 +577,7 @@ namespace DefectStudio
 
 	void JobSystem::markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt)
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
 			return;
@@ -649,9 +664,20 @@ namespace DefectStudio
 
 	void JobSystem::delayedWorkerLoop(std::stop_token stopToken)
 	{
-		for (;;)
+		auto shouldStop = [this, &stopToken]() 
 		{
-			if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
+			return stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed);
+		};
+
+		auto hasWakeCondition = [this, &shouldStop]() 
+		{
+			return shouldStop() || !m_DelayedSubmissions.empty();
+		};
+
+
+		while (true)
+		{
+			if (shouldStop())
 				return;
 
 			DelayedSubmission submission;
@@ -659,21 +685,14 @@ namespace DefectStudio
 
 			{
 				std::unique_lock<std::mutex> lock(m_DelayedMutex);
-				m_DelayedCv.wait(lock, [this, &stopToken]() {
-					return stopToken.stop_requested()
-						|| m_ShutdownRequested.load(std::memory_order_relaxed)
-						|| !m_DelayedSubmissions.empty();
-				});
+				m_DelayedCv.wait(lock, hasWakeCondition);
 
-				if (stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed))
+				if (shouldStop())
 					return;
 
 				auto nextIt = std::min_element(
 					m_DelayedSubmissions.begin(),
-					m_DelayedSubmissions.end(),
-					[](const DelayedSubmission &left, const DelayedSubmission &right) {
-						return left.dueAt < right.dueAt;
-					});
+					m_DelayedSubmissions.end());
 
 				if (nextIt == m_DelayedSubmissions.end())
 					continue;
@@ -681,10 +700,7 @@ namespace DefectStudio
 				const auto now = Time::NowSteady();
 				if (nextIt->dueAt > now)
 				{
-					m_DelayedCv.wait_until(lock, nextIt->dueAt, [this, &stopToken]() {
-						return stopToken.stop_requested()
-							|| m_ShutdownRequested.load(std::memory_order_relaxed);
-					});
+					m_DelayedCv.wait_until(lock, nextIt->dueAt, shouldStop);
 					continue;
 				}
 
@@ -709,5 +725,15 @@ namespace DefectStudio
 		const auto finishedAt = Time::Now();
 		for (const auto &submission : pending)
 			markFinished(submission.id, JobStatus::Cancelled, "Cancelled by shutdown before dispatch", finishedAt);
+	}
+
+	void JobSystem::enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority)
+	{
+		if (!job)
+			return;
+
+		m_Pool.detach_task(
+			[this, id, job]() { runJob(id, job); },
+			toBackendPriority(priority));
 	}
 } // namespace DefectStudio

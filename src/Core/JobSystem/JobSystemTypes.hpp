@@ -46,6 +46,24 @@ namespace DefectStudio
 		Time::TimePoint timestamp{};
 	};
 
+	
+	class JobContext;
+	class IJob;
+	
+	struct DelayedSubmission
+	{
+		JobId id = 0;
+		Ref<IJob> job;
+		JobPriority priority = JobPriority::Normal;
+		Time::SteadyTimePoint dueAt{};
+		
+		// Scheduling order in delayed queue: earliest dueAt first.
+		[[nodiscard]] bool operator<(const DelayedSubmission &other) const noexcept
+		{
+			return dueAt < other.dueAt;
+		}
+	};
+	
 	struct JobSnapshot
 	{
 		JobId id = 0;
@@ -63,19 +81,13 @@ namespace DefectStudio
 		Time::TimePoint createdAt{};
 		Time::TimePoint startedAt{};
 		Time::TimePoint finishedAt{};
+
+		// Natural ordering in UI/query collections: by stable JobId.
+		[[nodiscard]] bool operator<(const JobSnapshot &other) const noexcept
+		{
+			return id < other.id;
+		}
 	};
-
-	class JobContext;
-	class IJob;
-
-	struct DelayedSubmission
-	{
-		JobId id = 0;
-		Ref<IJob> job;
-		JobPriority priority = JobPriority::Normal;
-		Time::SteadyTimePoint dueAt{};
-	};
-
 	struct JobRecord
 	{
 		JobSnapshot snapshot;
@@ -88,9 +100,7 @@ namespace DefectStudio
 	{
 	public:
 		explicit JobCancelledException(const std::string &message = "Job cancelled")
-			: std::runtime_error(message)
-		{
-		}
+			: std::runtime_error(message) {}
 	};
 
 	class IJob

@@ -53,11 +53,11 @@ namespace DefectStudio
 			std::string newMessage,
 			Time::TimePoint newUpdatedAt)
 			: id(newId),
-			  completedWork(newCompletedWork),
-			  totalWork(newTotalWork),
-			  stage(std::move(newStage)),
-			  message(std::move(newMessage)),
-			  updatedAt(newUpdatedAt)
+			completedWork(newCompletedWork),
+			totalWork(newTotalWork),
+			stage(std::move(newStage)),
+			message(std::move(newMessage)),
+			updatedAt(newUpdatedAt)
 		{
 		}
 

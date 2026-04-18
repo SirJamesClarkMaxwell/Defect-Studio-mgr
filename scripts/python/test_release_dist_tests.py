@@ -16,6 +16,30 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.python.common.paths import repo_root, test_executable_path
 
 
+def resolve_test_executable(config: str, compiler: str) -> Path:
+    default_path = test_executable_path(config)
+    if (
+        default_path.exists()
+        or compiler == "msvc"
+        or not sys.platform.startswith("win")
+    ):
+        return default_path
+
+    name = "DefectStudioTests.exe"
+    candidate = (
+        repo_root()
+        / "build"
+        / "bin"
+        / f"{config}-windows-x86_64-gmake2"
+        / "DefectStudioTests"
+        / name
+    )
+    if candidate.exists():
+        return candidate
+
+    return default_path
+
+
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run test matrix across compilers for Release and Dist."
@@ -149,7 +173,7 @@ def run(args: argparse.Namespace) -> int:
                     break
                 continue
 
-            test_exe = test_executable_path(config)
+            test_exe = resolve_test_executable(config, compiler)
             if not test_exe.exists() and not args.dry_run:
                 print(f"[error] test executable not found: {test_exe}")
                 code = 1

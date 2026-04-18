@@ -7,9 +7,11 @@
 
 ### Aktywne problemy
 
-
+Brak.
 ---
 
 ### Resolved
+
+1. Wyjaśnienie mechaniki `threadCountWorkerLoop` / `m_PendingThreadCount` / `m_ThreadCountCv` omówione w rozmowie (bez rozbudowanego opisu w tym pliku).
 
 ---

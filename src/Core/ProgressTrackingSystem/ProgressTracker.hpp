@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -21,6 +22,17 @@ namespace DefectStudio
 	struct JobCancelledEvent;
 	struct JobFailedEvent;
 
+
+	template <typename EventType>
+	concept TrackerEvent =
+		std::same_as<EventType, JobQueuedEvent>
+		|| std::same_as<EventType, JobStartedEvent>
+		|| std::same_as<EventType, JobProgressEvent>
+		|| std::same_as<EventType, JobCompletedEvent>
+		|| std::same_as<EventType, JobCancelledEvent>
+		|| std::same_as<EventType, JobFailedEvent>;
+
+
 	struct ProgressEntrySnapshot
 	{
 		JobId id = 0;
@@ -38,6 +50,12 @@ namespace DefectStudio
 		Time::TimePoint finishedAt{};
 		std::string errorSummary;
 		bool finished = false;
+
+		// Natural ordering in tracker snapshots: by stable JobId.
+		[[nodiscard]] bool operator<(const ProgressEntrySnapshot &other) const noexcept
+		{
+			return id < other.id;
+		}
 	};
 
 	class ProgressTracker

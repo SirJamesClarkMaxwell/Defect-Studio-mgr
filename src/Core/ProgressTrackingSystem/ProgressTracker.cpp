@@ -3,12 +3,22 @@
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 #include <algorithm>
+#include <functional>
 
 #include "App/Events/JobEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 
 namespace DefectStudio
 {
+	template <TrackerEvent EventType>
+	SubscriptionHandle subscribeTrackerMember(
+		EventBus &bus,
+		ProgressTracker &tracker,
+		void (ProgressTracker::*method)(const EventType &))
+	{
+		return bus.Subscribe<EventType>(std::bind_front(method, &tracker));
+	}
+
 	ProgressTracker::ProgressTracker(WeakRef<EventBus> eventBus)
 	{
 		BindEventBus(std::move(eventBus));
@@ -28,29 +38,13 @@ namespace DefectStudio
 		if (!bus)
 			return;
 
-		m_QueuedSubscription = bus->Subscribe<JobQueuedEvent>([this](const JobQueuedEvent &event) {
-			onQueued(event);
-		});
-
-		m_StartedSubscription = bus->Subscribe<JobStartedEvent>([this](const JobStartedEvent &event) {
-			onStarted(event);
-		});
-
-		m_ProgressSubscription = bus->Subscribe<JobProgressEvent>([this](const JobProgressEvent &event) {
-			onProgress(event);
-		});
-
-		m_CompletedSubscription = bus->Subscribe<JobCompletedEvent>([this](const JobCompletedEvent &event) {
-			onCompleted(event);
-		});
-
-		m_CancelledSubscription = bus->Subscribe<JobCancelledEvent>([this](const JobCancelledEvent &event) {
-			onCancelled(event);
-		});
-
-		m_FailedSubscription = bus->Subscribe<JobFailedEvent>([this](const JobFailedEvent &event) {
-			onFailed(event);
-		});
+		m_QueuedSubscription = subscribeTrackerMember<JobQueuedEvent>(*bus, *this, &ProgressTracker::onQueued);
+		m_StartedSubscription = subscribeTrackerMember<JobStartedEvent>(*bus, *this, &ProgressTracker::onStarted);
+		m_ProgressSubscription = subscribeTrackerMember<JobProgressEvent>(*bus, *this, &ProgressTracker::onProgress);
+		m_CompletedSubscription = subscribeTrackerMember<JobCompletedEvent>(*bus, *this, &ProgressTracker::onCompleted);
+		m_CancelledSubscription = subscribeTrackerMember<JobCancelledEvent>(*bus, *this, &ProgressTracker::onCancelled);
+		m_FailedSubscription = subscribeTrackerMember<JobFailedEvent>(*bus, *this, &ProgressTracker::onFailed);
+		
 	}
 
 	void ProgressTracker::UnbindEventBus()
@@ -85,9 +79,7 @@ namespace DefectStudio
 			entries.push_back(entry);
 		}
 
-		std::sort(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &left, const ProgressEntrySnapshot &right) {
-			return left.id < right.id;
-		});
+		std::sort(entries.begin(), entries.end());
 		return entries;
 	}
 

@@ -1,155 +1,93 @@
 # Job System
 
-## What It Is
+## Purpose
 
-`JobSystem` is a thin wrapper over `BS::priority_thread_pool`.
+`JobSystem` executes background jobs with priorities and delayed scheduling, while preserving a queryable in-memory history of job state.
 
-Its purpose is simple: run CPU work in background threads so the UI thread stays responsive.
+Primary goal: keep the UI thread responsive and provide deterministic lifecycle visibility (`Queued -> Running -> Completed/Failed/Cancelled`).
 
-## Core API
+## Public API (Entry)
 
-- `Submit(...)`: run work and get `std::future<T>`.
-- `SubmitDetached(...)`: fire-and-forget execution.
-- `SubmitCancelable(...)`: cooperative cancellation with `CancellationToken`.
-- `WaitIdle()`: wait until queued/running jobs complete.
+The current backend API lives in `src/Core/JobSystem/JobSystem.hpp`.
 
-## Cancellation Model
+Submission and control:
 
-`CancellationSource` owns cancellation state.
+- `JobId Submit(const Ref<IJob>& job, JobPriority priority = JobPriority::Normal)`
+- `JobId SubmitAfter(const Ref<IJob>& job, Time::Milliseconds delay, JobPriority priority = JobPriority::Normal)`
+- `bool RequestCancel(JobId id)`
+- `bool Resume(JobId id)`
+- `bool Reset(JobId id)`
+- `bool Retry(JobId id, JobPriority priority = JobPriority::Normal)`
+- `bool RemoveFromHistory(JobId id)`
 
-- Call `source.GetToken()` and pass token into the job.
-- Call `source.Cancel()` to request cancellation.
-- Job code must periodically check `token.IsCancellationRequested()`.
+Runtime configuration:
 
-Cancellation is cooperative, not preemptive.
+- `std::size_t GetThreadCount() const`
+- `bool SetThreadCount(std::size_t threadCount)`
 
-## Example Without Lambdas (std::bind)
+Read/query:
 
-```cpp
-class ImportWorker
-{
-public:
-    int Execute(const DefectStudio::CancellationToken& token)
-    {
-        for (int i = 0; i < 100; ++i)
-        {
-            if (token.IsCancellationRequested())
-                return -1;
+- `std::optional<JobSnapshot> GetJob(JobId id) const`
+- `std::vector<JobSnapshot> GetAllJobs() const`
+- `std::vector<JobSnapshot> GetActiveJobs() const`
+- `std::vector<JobSnapshot> GetFinishedJobs() const`
+- `std::vector<JobLogEntry> GetLogs(JobId id) const`
 
-            DoOneStep();
-        }
-        return 0;
-    }
+Lifecycle:
 
-private:
-    void DoOneStep();
-};
+- `void Shutdown()`
 
-DefectStudio::JobSystem jobs;
-DefectStudio::CancellationSource source;
-ImportWorker worker;
+## Functional Capabilities
 
-auto future = jobs.SubmitCancelable<int>(
-    source.GetToken(),
-        std::bind(&ImportWorker::Execute, &worker, std::placeholders::_1),
-        BS::pr::normal);
-```
+- Priority scheduling (`Lowest .. Highest`) on worker pool.
+- Delayed jobs (`SubmitAfter`) with cancellation support before due time.
+- Cooperative cancellation (`RequestCancel`) and restart flows (`Resume`, `Retry`, `Reset`).
+- Parent/child relation tracking (`parentId`) when a job submits nested jobs.
+- Event publication (`Queued`, `Started`, `Progress`, `Completed/Cancelled/Failed`) for read-model systems.
+- Thread-count scaling at runtime (`SetThreadCount`) without dropping records.
 
-## Object Lifetime Diagram
+## Execution Flow (Step By Step)
 
-```text
-Application
-    owns JobSystem (global)
-    owns ProgressTracker (global)
-    owns LayerStack
-        owns DemoLayer
-            owns JobSystemDemo
-                owns TaskEntry list
-                    each TaskEntry owns future + cancel source + progress atomic + progressId
-```
+### 1. Source of event
 
-## Submit Sequence (Step By Step)
+Source: caller invokes `Submit` / `SubmitAfter`.
 
-```text
-UI button click
-    -> JobSystemDemo::EnqueueTask()
-    -> Application::Get().GetJobSystem().SubmitCancelable(...)
-    -> task enqueued in BS::priority_thread_pool queue
-    -> worker thread executes bound callable
-    -> worker updates task progress atomic
-    -> main thread polls future in SyncTasks()
-    -> main thread writes ProgressTracker::Report/Finish
+### 2. When it is processed
 
-Batch jobs from any subsystem go to the same global pool:
+Processing moment: immediately in `submitInternal`.
 
-- `Start Batch Of 3 Jobs` uses the same `Application::Get().GetJobSystem()` instance,
-- all those tasks are visible in the shared `ProgressTracker` snapshot,
-- multiple windows can render the same global queue state.
-```
+### 3. Flow owner
 
-## Where Data Is Stored
+Owner: `JobSystem` (`m_Records`, queue/delayed queue, worker pool).
 
-- Queue and workers: inside `JobSystem::m_Pool`.
-- Per-task runtime state: `JobSystemDemo::TaskEntry` vector.
-- Cancellation flags: shared atomic bool owned by each `CancellationSource`.
-- UI-safe progress state: `ProgressTracker::m_Entries` (mutex-protected map).
+### 4. Where it is handled
 
-## How To Access State
+Handling points:
 
-- Core services through `Application` API:
-    - `Application::Get().GetJobSystem()`
-    - `Application::Get().GetProgressTracker()`
-- UI snapshot via `ProgressTracker::Snapshot()`.
+- queue snapshot recorded (`recordQueued`),
+- event emitted (`publishQueuedEvent`),
+- execution starts in worker (`runJob`),
+- state transitions published (`publishStartedEvent`, `publishProgressEvent`, `publishFinishedEvent`).
 
-## EventBus Registration Lifecycle (Practical Rule)
+### 5. Architectural consequence
 
-For UI layers and windows, subscription should usually happen in lifecycle entry:
+Consequence: UI and monitoring systems consume immutable snapshots/events instead of touching worker-thread state directly.
 
-1. subscribe in constructor or `OnAttach`,
-2. unsubscribe in destructor or `OnDetach`.
+## Cancellation/Resume Semantics
 
-Why:
+- `RequestCancel(id)` marks cancellation requested.
+- Running jobs must check cancellation cooperatively via `JobContext`.
+- `Resume(id)` clears cancellation flag and, if status is `Cancelled`, re-queues the same record/job id.
+- `Retry(id)` re-queues finished jobs and resets runtime fields.
+- `Reset(id)` clears finished state to `Queued` without immediate execution.
 
-- guarantees handlers exist before events start flowing,
-- avoids stale subscriptions after a panel is removed,
-- allows many windows to subscribe to one event type (`vector<Subscription>` fan-out).
+## Integration Points
 
-## Synchronization Strategy (Practical)
+- Producer side: any layer/service can submit jobs through `Application::Get().GetJobSystem()`.
+- Consumer side: `ProgressTracker` subscribes to job events and builds UI snapshots.
+- Presentation side: monitor windows render data from tracker snapshots, not directly from worker threads.
 
-Recommended frame-loop pattern:
+## Known Design Constraints
 
-1. Worker thread computes data only.
-2. UI/main thread polls state in `OnUpdate`.
-3. Main thread performs final commit to application state.
-
-This respects the "main-thread commit" architectural rule and avoids race-prone direct mutation from worker threads.
-
-## Should Application Update Job Status In Main Loop?
-
-Yes, application-level status transitions should be observed and finalized in the main loop (or in a dedicated main-thread runtime coordinator called by the loop).
-
-Reason:
-
-- rendering and UI consume main-thread state,
-- domain-facing commits must be deterministic,
-- worker threads should only produce intermediate/output artifacts.
-
-## Priority Guidance
-
-- `High`: latency-sensitive tasks required for immediate interaction.
-- `Normal`: default background work.
-- `Low`: opportunistic/non-critical tasks.
-
-Priority misuse can starve low-priority work. Keep high-priority usage rare and explicit.
-
-Current demo focus:
-
-- demonstrates multi-task enqueue,
-- does not expose custom user-defined priority enum yet,
-- uses thread-pool built-in priority type (`BS::priority_t`).
-
-## Common Pitfalls
-
-- Blocking on `future.get()` from UI thread during rendering.
-- Ignoring cancellation checks inside long-running loops.
-- Writing directly to shared app/domain state from worker threads.
+- Worker-to-worker blocking waits are intentionally guarded to avoid pool starvation/deadlock.
+- Parent completion and child completion are separate events; subtree aggregation is a read-model concern.

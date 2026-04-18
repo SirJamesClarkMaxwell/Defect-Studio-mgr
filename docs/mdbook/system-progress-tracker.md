@@ -1,78 +1,77 @@
 # Progress Tracker System
 
-## What It Is
+## Purpose
 
-`ProgressTracker` is a thread-safe progress registry for long-running operations.
+`ProgressTracker` is an event-driven read model for job lifecycle and progress data.
 
-It is designed as a read model for UI/debug views.
+It subscribes to job events and stores thread-safe snapshots that UI panels can render safely.
 
-## Core API
+## Public API (Entry)
 
-- `Register(label, total) -> id`
-- `Report(id, completed)`
-- `Finish(id)`
-- `Snapshot() -> copy of entries`
+The current backend API lives in `src/Core/ProgressTrackingSystem/ProgressTracker.hpp`.
 
-## Responsibility Split
+EventBus wiring:
 
-Worker threads should:
+- `explicit ProgressTracker(WeakRef<EventBus> eventBus = {})`
+- `void BindEventBus(WeakRef<EventBus> eventBus)`
+- `void UnbindEventBus()`
 
-- report incremental progress,
-- avoid direct UI/state commits.
+Read/query:
 
-Main thread should:
+- `std::optional<ProgressEntrySnapshot> GetSnapshot(JobId id) const`
+- `std::vector<ProgressEntrySnapshot> GetAllSnapshots() const`
+- `std::vector<ProgressEntrySnapshot> GetActiveSnapshots() const`
+- `std::vector<ProgressEntrySnapshot> GetFinishedSnapshots() const`
+- `bool RemoveEntry(JobId id)`
 
-- read `Snapshot()` during update/render,
-- decide when to transition application-level state.
+## Functional Capabilities
 
-## Application Perspective Example
+- Builds and updates a snapshot per `JobId` from lifecycle events.
+- Preserves parent-child relation (`parentId`) for nested jobs.
+- Stores stage/message/progress values and terminal error summary.
+- Exposes filtered views (`active`, `finished`) for UI and diagnostics.
+- Supports manual cleanup (`RemoveEntry`) after backend history deletion.
 
-```cpp
-class ImportController
-{
-public:
-	void StartImport(DefectStudio::JobSystem& jobs, DefectStudio::ProgressTracker& tracker)
-	{
-		m_ProgressId = tracker.Register("Import Structures", 100);
-		m_Future = jobs.SubmitDetached(std::bind(&ImportController::RunImport, this, std::ref(tracker)));
-	}
+## Event Flow (Step By Step)
 
-	void OnMainThreadUpdate(DefectStudio::ProgressTracker& tracker)
-	{
-		const auto entries = tracker.Snapshot();
-		UpdateUi(entries);
-		if (IsFinished(entries, m_ProgressId))
-		{
-			CommitImportedData();
-		}
-	}
+### 1. Source of event
 
-private:
-	void RunImport(DefectStudio::ProgressTracker& tracker)
-	{
-		for (std::size_t i = 1; i <= 100; ++i)
-		{
-			DoImportStep(i);
-			tracker.Report(m_ProgressId, i);
-		}
-		tracker.Finish(m_ProgressId);
-	}
+Source: `JobSystem` publishes `JobQueuedEvent`, `JobStartedEvent`, `JobProgressEvent`, `JobCompletedEvent`, `JobCancelledEvent`, `JobFailedEvent`.
 
-	void DoImportStep(std::size_t step);
-	void UpdateUi(const std::vector<DefectStudio::ProgressEntry>& entries);
-	bool IsFinished(const std::vector<DefectStudio::ProgressEntry>& entries, std::size_t id) const;
-	void CommitImportedData();
+### 2. When it is processed
 
-private:
-	std::size_t m_ProgressId = 0;
-	std::future<void> m_Future;
-};
-```
+Processing moment: when `EventBus::ProcessQueue()` runs on the main update loop.
 
-## Why This Pattern Works
+### 3. Flow owner
 
-- The background job reports facts (progress numbers).
-- The main thread owns final orchestration decisions.
-- UI always reads a safe snapshot.
+Owner: `ProgressTracker` subscriptions and `m_Entries` map.
 
-This keeps the concurrency boundary explicit and debuggable.
+### 4. Where it is handled
+
+Handling methods:
+
+- `onQueued` initializes entry and metadata,
+- `onStarted` marks running state and start time,
+- `onProgress` updates stage/message/work counters,
+- `onCompleted` / `onCancelled` / `onFailed` close lifecycle.
+
+### 5. Architectural consequence
+
+Consequence: UI reads consistent snapshots without direct synchronization against worker threads.
+
+## Data Contract (`ProgressEntrySnapshot`)
+
+Each snapshot contains:
+
+- identity: `id`, `parentId`,
+- descriptors: `source`, `label`,
+- state: `status`, `priority`, `finished`,
+- progress: `completedWork`, `totalWork`, `currentStage`, `currentMessage`,
+- timing: `createdAt`, `startedAt`, `finishedAt`,
+- terminal diagnostics: `errorSummary`.
+
+## Integration Notes
+
+- `ProgressTracker` does not execute jobs; it only reflects observed events.
+- Any aggregate subtree semantics should be computed in a read model / presentation layer.
+- When backend history is pruned, tracker entries should be pruned as well to avoid stale UI rows.
