@@ -92,8 +92,10 @@ namespace DefectStudio::Tests
 	class ChainedJob final : public IJob
 	{
 	public:
-		ChainedJob(int jobIndex, Ref<std::vector<int>> executionOrder)
-			: m_JobIndex(jobIndex), m_ExecutionOrder(std::move(executionOrder))
+		ChainedJob(int jobIndex, Ref<std::vector<int>> executionOrder, Ref<std::mutex> executionOrderMutex)
+			: m_JobIndex(jobIndex),
+			  m_ExecutionOrder(std::move(executionOrder)),
+			  m_ExecutionOrderMutex(std::move(executionOrderMutex))
 		{
 		}
 
@@ -109,6 +111,7 @@ namespace DefectStudio::Tests
 
 		void Execute(JobContext &context) override
 		{
+			std::lock_guard<std::mutex> lock(*m_ExecutionOrderMutex);
 			m_ExecutionOrder->push_back(m_JobIndex);
 			context.SetProgress(1.0f, 1.0f);
 			context.SetStage("completed");
@@ -117,13 +120,16 @@ namespace DefectStudio::Tests
 	private:
 		int m_JobIndex;
 		Ref<std::vector<int>> m_ExecutionOrder;
+		Ref<std::mutex> m_ExecutionOrderMutex;
 	};
 
 	class SequentialSubmitterJob final : public IJob
 	{
 	public:
-		SequentialSubmitterJob(int chainDepth, Ref<std::vector<int>> executionOrder)
-			: m_ChainDepth(chainDepth), m_ExecutionOrder(std::move(executionOrder))
+		SequentialSubmitterJob(int chainDepth, Ref<std::vector<int>> executionOrder, Ref<std::mutex> executionOrderMutex)
+			: m_ChainDepth(chainDepth),
+			  m_ExecutionOrder(std::move(executionOrder)),
+			  m_ExecutionOrderMutex(std::move(executionOrderMutex))
 		{
 		}
 
@@ -142,7 +148,7 @@ namespace DefectStudio::Tests
 			context.SetStage("submitting");
 			for (int i = 0; i < m_ChainDepth; ++i)
 			{
-				auto chainedJob = CreateRef<ChainedJob>(i, m_ExecutionOrder);
+				auto chainedJob = CreateRef<ChainedJob>(i, m_ExecutionOrder, m_ExecutionOrderMutex);
 				const auto id = context.SubmitJobSequential(chainedJob, JobPriority::Normal);
 				if (id == 0)
 				{
@@ -158,6 +164,7 @@ namespace DefectStudio::Tests
 	private:
 		int m_ChainDepth;
 		Ref<std::vector<int>> m_ExecutionOrder;
+		Ref<std::mutex> m_ExecutionOrderMutex;
 	};
 
 	class ConcurrencyProbeJob final : public IJob

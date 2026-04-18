@@ -49,6 +49,8 @@ def clean_build_artifacts(config: str, dry_run: bool, verbose: bool) -> None:
         root / "build" / "bin-int",
         root / "Vendor" / "build" / "bin",
         root / "Vendor" / "build" / "bin-int",
+        root / "Vendor" / "yaml-cpp" / "build" / "bin",
+        root / "Vendor" / "yaml-cpp" / "build" / "bin-int",
         root / "Vendor" / "GLFW" / "bin",
         root / "Vendor" / "GLFW" / "bin-int",
     ]

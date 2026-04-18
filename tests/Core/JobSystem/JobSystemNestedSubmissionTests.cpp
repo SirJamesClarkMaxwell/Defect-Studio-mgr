@@ -75,8 +75,9 @@ TEST(JobSystemNestedSubmissionTests, JobCanSubmitOtherJobsSequentially)
 	JobSystem jobSystem;
 	const int chainDepth = 5;
 	auto executionOrder = CreateRef<std::vector<int>>();
+	auto executionOrderMutex = CreateRef<std::mutex>();
 
-	const auto mainId = jobSystem.Submit(CreateRef<SequentialSubmitterJob>(chainDepth, executionOrder));
+	const auto mainId = jobSystem.Submit(CreateRef<SequentialSubmitterJob>(chainDepth, executionOrder, executionOrderMutex));
 	(void)mainId;
 
 	ASSERT_TRUE(WaitUntil([&]() {
@@ -99,9 +100,10 @@ TEST(JobSystemNestedSubmissionTests, MultipleJobsCanSubmitOtherJobsConcurrently)
 	const int submitterCount = 3;
 	const int chainPerSubmitter = 4;
 	auto executionOrder = CreateRef<std::vector<int>>();
+	auto executionOrderMutex = CreateRef<std::mutex>();
 
 	for (int i = 0; i < submitterCount; ++i)
-		(void)jobSystem.Submit(CreateRef<SequentialSubmitterJob>(chainPerSubmitter, executionOrder));
+		(void)jobSystem.Submit(CreateRef<SequentialSubmitterJob>(chainPerSubmitter, executionOrder, executionOrderMutex));
 
 	ASSERT_TRUE(WaitUntil([&]() {
 		const auto allJobs = jobSystem.GetAllJobs();

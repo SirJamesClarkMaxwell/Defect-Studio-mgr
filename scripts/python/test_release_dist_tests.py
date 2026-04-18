@@ -91,7 +91,12 @@ def run_step(title: str, command: List[str], dry_run: bool) -> int:
 
 def clean_build_artifacts(config: str, dry_run: bool, verbose: bool) -> None:
     build_root = repo_root() / "build"
-    targets = [build_root / "bin", build_root / "bin-int"]
+    targets = [
+        build_root / "bin",
+        build_root / "bin-int",
+        repo_root() / "Vendor" / "yaml-cpp" / "build" / "bin",
+        repo_root() / "Vendor" / "yaml-cpp" / "build" / "bin-int",
+    ]
     prefix = f"{config}-"
 
     for base in targets:

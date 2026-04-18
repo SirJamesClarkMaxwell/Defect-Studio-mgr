@@ -140,16 +140,20 @@ TEST(JobSystemThreadingTests, SynchronizationBetweenConcurrentOperations)
 {
 	JobSystem jobSystem;
 	std::vector<JobId> ids;
+	std::mutex idsMutex;
 	std::vector<std::thread> workers;
 
 	for (int i = 0; i < 5; ++i)
 	{
-		workers.emplace_back([&jobSystem, &ids, i]() {
+		workers.emplace_back([&jobSystem, &ids, &idsMutex, i]() {
 			for (int j = 0; j < 10; ++j)
 			{
 				const auto id = jobSystem.Submit(CreateRef<SleepJob>(
 					"sync-job-" + std::to_string(i * 10 + j), 1, Time::Milliseconds(1)));
+				{
+					std::lock_guard<std::mutex> lock(idsMutex);
 				ids.push_back(id);
+				}
 			}
 		});
 	}
