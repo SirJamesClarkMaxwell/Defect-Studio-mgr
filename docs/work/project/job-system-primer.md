@@ -238,16 +238,16 @@ Callbacki przekazywane przez `runJob`:
   - Kiedy uzywac: regularnie w dluzszych petlach i przed kosztownymi krokami.
 - submit child callback
   - Co robi: submituje child job z `parentId`.
+  - Kiedy uzywac: przy podziale pracy na podzadania.
+- wait child callback (`waitForJobCooperative`)
+  - Co robi: kooperacyjne oczekiwanie na child job, z ochrona anty-deadlock.
+  - Kiedy uzywac: zawsze gdy parent czeka na child.
 
 ## 11. Co zostalo zweryfikowane w macierzy
 
 - `clang` `Release` i `Dist` przechodza pelny test matrix.
 - `JobSystemNestedSubmissionTests.MultipleJobsCanSubmitOtherJobsConcurrently` przestal flakowac po dodaniu synchronizacji do wspolnego `executionOrder` w helperach testowych.
 - Ostrzezenia kompilatora w `ConfigManager.cpp`, `EditorLayer.cpp`, `TaskMonitorWindow.hpp` i testach porownujacych typy nadal sie pojawiaja, ale nie blokuja uruchomienia.
-  - Kiedy uzywac: przy podziale pracy na podzadania.
-- wait child callback (`waitForJobCooperative`)
-  - Co robi: kooperacyjne oczekiwanie na child job, z ochrona anty-deadlock.
-  - Kiedy uzywac: zawsze gdy parent czeka na child.
 
 Regula praktyczna dla autorow `IJob`:
 
@@ -255,7 +255,7 @@ Regula praktyczna dla autorow `IJob`:
 - do anulowania: `ThrowIfCancellationRequested` i okresowe `IsCancellationRequested`
 - do nested execution: `SubmitJob` + `WaitForJob` (lub `SubmitJobSequential`)
 
-## 11. Diagram czasowy: 3 delayed zadania (szczegolowy)
+## 12. Diagram czasowy: 3 delayed zadania (szczegolowy)
 
 Ponizszy diagram pokazuje scenariusz z trzema zadaniami zgloszonymi w roznych chwilach i z roznymi delay.
 Cel: zobaczyc kiedy worker zasypia, kiedy budzi sie przez notify, a kiedy budzi sie przez timeout `wait_until`.
