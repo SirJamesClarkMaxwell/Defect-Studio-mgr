@@ -238,6 +238,12 @@ Callbacki przekazywane przez `runJob`:
   - Kiedy uzywac: regularnie w dluzszych petlach i przed kosztownymi krokami.
 - submit child callback
   - Co robi: submituje child job z `parentId`.
+
+## 11. Co zostalo zweryfikowane w macierzy
+
+- `clang` `Release` i `Dist` przechodza pelny test matrix.
+- `JobSystemNestedSubmissionTests.MultipleJobsCanSubmitOtherJobsConcurrently` przestal flakowac po dodaniu synchronizacji do wspolnego `executionOrder` w helperach testowych.
+- Ostrzezenia kompilatora w `ConfigManager.cpp`, `EditorLayer.cpp`, `TaskMonitorWindow.hpp` i testach porownujacych typy nadal sie pojawiaja, ale nie blokuja uruchomienia.
   - Kiedy uzywac: przy podziale pracy na podzadania.
 - wait child callback (`waitForJobCooperative`)
   - Co robi: kooperacyjne oczekiwanie na child job, z ochrona anty-deadlock.
