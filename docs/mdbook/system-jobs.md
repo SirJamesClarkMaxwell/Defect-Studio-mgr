@@ -1,5 +1,10 @@
 # Job System
 
+> Pelna, aktualna dokumentacja (3 czesci) jest w sekcji **Job + Progress Systems**:
+> - `job-progress/overview.md`
+> - `job-progress/for-users.md`
+> - `job-progress/for-developers.md`
+
 ## Purpose
 
 `JobSystem` executes background jobs with priorities and delayed scheduling, while preserving a queryable in-memory history of job state.

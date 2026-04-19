@@ -658,11 +658,11 @@ Slices are meant to be small enough to compile and test after each one. Do not s
 
 ## 4. TDD order
 
-1. [ ] Application lifecycle ordering tests (Slice A)
-2. [ ] EventBus behavior tests — subscribe, publish, priority, propagation, queue (Slice B)
-3. [ ] JobSystem state transition tests — lifecycle, cancellation, exception boundary (Slice C)
-4. [ ] JobSystem concurrency tests — concurrent submit, concurrent cancel (Slice C)
-5. [ ] ProgressTracker snapshot tests (Slice D)
+1. [x] Application lifecycle ordering tests (Slice A)
+2. [x] EventBus behavior tests — subscribe, publish, priority, propagation, queue (Slice B)
+3. [x] JobSystem state transition tests — lifecycle, cancellation, exception boundary (Slice C)
+4. [x] JobSystem concurrency tests — concurrent submit, concurrent cancel (Slice C)
+5. [x] ProgressTracker snapshot tests (Slice D)
 6. [ ] ConfigManager load/save/fallback tests (Slice E)
 7. [ ] Notification emit, history, filtering tests (Slice F)
 8. [ ] Thread affinity assertion tests (Slice G)

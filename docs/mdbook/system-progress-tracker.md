@@ -1,5 +1,10 @@
 # Progress Tracker System
 
+> Pelna, aktualna dokumentacja (3 czesci) jest w sekcji **Job + Progress Systems**:
+> - `job-progress/overview.md`
+> - `job-progress/for-users.md`
+> - `job-progress/for-developers.md`
+
 ## Purpose
 
 `ProgressTracker` is an event-driven read model for job lifecycle and progress data.
