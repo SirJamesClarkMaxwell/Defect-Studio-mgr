@@ -53,12 +53,12 @@ std::uintmax_t FileSystem::RemoveAll(const FilePath &path)
 }
 
 std::uintmax_t FileSystem::RemoveAll(const FilePath &path, std::error_code &error)
-{
+	{
 	return std::filesystem::remove_all(path, error);
 }
 
 namespace DefectStudio
-{
+	{
 	Path::Path(std::filesystem::path path) : m_Path(std::move(path))
 	{
 	}
@@ -175,4 +175,4 @@ namespace DefectStudio
 	{
 		return m_Path.empty();
 	}
-} // namespace DefectStudio
+	} // namespace DefectStudio

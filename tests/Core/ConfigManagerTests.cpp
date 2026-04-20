@@ -9,12 +9,12 @@
 namespace
 {
 	using Path = DefectStudio::Path;
+	using FileSystem = ::FileSystem;
 
 	[[nodiscard]] Path CreateTempDirectory()
 	{
 		const auto stamp = DefectStudio::Time::Now().time_since_epoch().count();
-		const Path baseDirectory = FileSystem::TempDirectoryPath() /
-		                                            ("DefectStudioConfigTests_" + std::to_string(stamp));
+		const Path baseDirectory = Path::FromResolved(FileSystem::TempDirectoryPath()) / ("DefectStudioConfigTests_" + std::to_string(stamp));
 		FileSystem::CreateDirectories(baseDirectory.Native());
 		return baseDirectory;
 	}

@@ -47,7 +47,7 @@ namespace DefectStudio
 
 	static Path FindConfigDirectoryInAncestors(Path start)
 	{
-		Path current = start.Native();
+		Path current = Path::FromResolved(start.Native());
 		for (int i = 0; i < 10; ++i)
 		{
 			if (HasConfigFiles(Path::FromResolved(current)))
@@ -72,7 +72,7 @@ namespace DefectStudio
 		if (argv != nullptr && argv[0] != nullptr)
 		{
 			std::error_code absoluteError;
-			const Path executablePath = FileSystem::Absolute(argv[0], absoluteError);
+			const Path executablePath = Path::FromResolved(FileSystem::Absolute(argv[0], absoluteError));
 			if (!absoluteError && !executablePath.empty())
 			{
 					const Path fromExe = FindConfigDirectoryInAncestors(Path::FromResolved(executablePath.parent_path()));
@@ -602,7 +602,7 @@ namespace DefectStudio
 
 	bool Application::bootstrapConfiguration()
 	{
-		m_ConfigManager = CreateUnique<ConfigManager>(m_Config.directory.Native());
+		m_ConfigManager = CreateUnique<ConfigManager>(m_Config.directory);
 		std::string configError;
 		if (!m_ConfigManager->Initialize(configError))
 		{
@@ -737,7 +737,7 @@ namespace DefectStudio
 			}
 		}
 
-		const Path iniPath = m_Config.directory.Join("imgui.ini").Native();
+		const Path iniPath = Path::FromResolved(m_Config.directory.Join("imgui.ini").Native());
 		FileSystem::CreateDirectories(iniPath.parent_path().Native());
 		if (m_Runtime.specification.resetLayout && FileSystem::Exists(iniPath.Native()))
 			FileSystem::Remove(iniPath.Native());

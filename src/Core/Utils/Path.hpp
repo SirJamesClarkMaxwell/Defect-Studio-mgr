@@ -30,7 +30,7 @@ namespace DefectStudio
 	{
 	public:
 		Path() = default;
-			Path(std::filesystem::path path);
+		explicit Path(std::filesystem::path path);
 
 		[[nodiscard]] static Path FromResolved(std::filesystem::path path);
 		[[nodiscard]] Path Join(std::string_view child) const;
