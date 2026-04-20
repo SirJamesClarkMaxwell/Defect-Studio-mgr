@@ -1,19 +1,23 @@
 # Job + Progress Systems For Users
 
-Ta strona jest dla osoby, ktora chce korzystac z API bez wchodzenia w internals.
+This page is for application developers who want to use the API without diving into engine internals.
 
-## Mentalny model
+## Mental Model
 
-- `JobSystem` to wykonawca pracy.
-- `JobContext` to kanal raportowania stanu i sterowania nested jobs.
-- `EventBus` to transport eventow.
-- `ProgressTracker` to read-model dla UI.
+- `JobSystem` executes asynchronous work.
+- `JobContext` is the runtime reporting and control channel available inside `Execute`.
+- `EventBus` transports lifecycle updates.
+- `ProgressTracker` exposes UI-friendly snapshots.
 
-## Publiczne API
+## Class Diagram
+
+![Job + Progress class diagram](../diagrams/generated/job-progress-class-diagram.svg)
+
+## Public API
 
 ### JobSystem
 
-Plik kontraktu: `src/Core/JobSystem/JobSystem.hpp`
+Contract file: `src/Core/JobSystem/JobSystem.hpp`
 
 Lifecycle:
 - `JobSystem(WeakRef<EventBus> eventBus = {}, std::size_t threadCount = 0)`
@@ -44,14 +48,14 @@ Query:
 
 ### JobContext
 
-Plik kontraktu: `src/Core/JobSystem/JobContext.hpp`
+Contract file: `src/Core/JobSystem/JobContext.hpp`
 
-Raportowanie:
+Progress/state reporting:
 - `SetProgress(float completedWork, float totalWork)`
 - `SetStage(const std::string& stage)`
 - `SetMessage(const std::string& message)`
 
-Logowanie:
+Logging:
 - `LogDebug`, `LogInfo`, `LogWarning`, `LogError`
 
 Cancellation:
@@ -65,7 +69,7 @@ Nested jobs:
 
 ### ProgressTracker
 
-Plik kontraktu: `src/Core/ProgressTrackingSystem/ProgressTracker.hpp`
+Contract file: `src/Core/ProgressTrackingSystem/ProgressTracker.hpp`
 
 - `void BindEventBus(WeakRef<EventBus> eventBus)`
 - `void UnbindEventBus()`
@@ -75,147 +79,117 @@ Plik kontraktu: `src/Core/ProgressTrackingSystem/ProgressTracker.hpp`
 - `std::vector<ProgressEntrySnapshot> GetFinishedSnapshots() const`
 - `bool RemoveEntry(JobId id)`
 
-## Odpowiedzialnosc klas (w praktyce)
+## Class Responsibilities
 
-- `IJob`: logika biznesowa pojedynczego zadania.
-- `JobSystem`: planowanie i lifecycle.
-- `JobContext`: jedyny poprawny kanal raportowania z `Execute`.
-- `ProgressTracker`: widok stanu dla UI.
+- `IJob`: business logic of one task.
+- `JobSystem`: scheduling and lifecycle state.
+- `JobContext`: the supported reporting/control channel inside `Execute`.
+- `ProgressTracker`: read model for UI.
 
-## UML relacji klas
+## `WaitForJob` and `waitForJobCooperative`
 
-```mermaid
-classDiagram
-  class IJob {
-    +GetName() string
-    +GetType() string
-    +Execute(JobContext&)
-  }
+`waitForJobCooperative` is an internal `JobSystem` method (not public API). You do not call it directly.
 
-  class JobContext {
-    +SetProgress(float,float)
-    +SetStage(string)
-    +SetMessage(string)
-    +SubmitJob(Ref~IJob~,JobPriority) JobId
-    +WaitForJob(JobId) bool
-  }
+As a user, you call:
+- `JobContext::WaitForJob(id)` when a parent job needs to wait for a child.
+- `JobContext::SubmitJobSequential(...)` when you want submit + cooperative wait in one operation.
 
-  class JobSystem {
-    +Submit(Ref~IJob~,JobPriority) JobId
-    +SubmitAfter(Ref~IJob~,Milliseconds,JobPriority) JobId
-    +RequestCancel(JobId) bool
-    +GetJob(JobId) optional~JobSnapshot~
-  }
+Behavior to know:
+- Waiting is cooperative and cancellation-aware.
+- In a single-worker deadlock-prone parent->child case, sequential wait can fail fast (returns `0` from `SubmitJobSequential`) instead of hard deadlocking.
 
-  class EventBus
-  class ProgressTracker
+Usage guidance:
+- Prefer small child jobs.
+- Avoid long blocking waits in parent jobs.
+- If sequential dependency is weak, prefer asynchronous fan-out and aggregate later.
 
-  JobSystem --> IJob : executes
-  IJob --> JobContext : uses
-  JobSystem --> EventBus : publishes Job*Event
-  ProgressTracker --> EventBus : subscribes
-```
-
-## Praktyczne scenariusze
-
-### 1) Pojedynczy job
+## Practical Example: Single Import Job with Real Progress Tracking
 
 ```cpp
-class ImportJob final : public DefectStudio::IJob {
+class CsvImportJob final : public IJob {
 public:
-    std::string GetName() const override { return "ImportJob"; }
-    std::string GetType() const override { return "IO"; }
+    explicit CsvImportJob(std::vector<std::string> files)
+        : m_Files(std::move(files)) {}
 
-    void Execute(DefectStudio::JobContext& context) override {
-        context.SetStage("prepare");
-        context.SetProgress(0.0f, 3.0f);
+    std::string GetName() const override { return "CsvImportJob"; }
+    std::string GetType() const override { return "Import"; }
 
-        for (int step = 1; step <= 3; ++step) {
+    void Execute(JobContext& context) override {
+        const float totalFiles = static_cast<float>(m_Files.size());
+        context.SetStage("scan");
+        context.SetMessage("Preparing import");
+        context.SetProgress(0.0f, totalFiles);
+
+        for (std::size_t i = 0; i < m_Files.size(); ++i) {
             context.ThrowIfCancellationRequested();
-            context.SetProgress(static_cast<float>(step), 3.0f);
+
+            const std::string& path = m_Files[i];
+            context.SetStage("parse");
+            context.SetMessage("Importing: " + path);
+
+            // Domain work example:
+            // - open CSV
+            // - validate headers
+            // - transform rows
+            // - write to storage
+            ImportOneCsvFile(path);
+
+            context.SetProgress(static_cast<float>(i + 1), totalFiles);
+            context.LogInfo("Imported file: " + path);
         }
 
         context.SetStage("done");
-        context.SetMessage("Import zakonczony");
+        context.SetMessage("Import finished");
     }
+
+private:
+    std::vector<std::string> m_Files;
 };
 
-DefectStudio::JobSystem system;
-auto id = system.Submit(DefectStudio::CreateRef<ImportJob>());
-```
+auto bus = CreateRef<EventBus>();
+ProgressTracker tracker(CreateWeakRef(bus));
+JobSystem system(CreateWeakRef(bus), 4);
 
-### 2) Job wieloetapowy i nested child
+auto id = system.Submit(CreateRef<CsvImportJob>(
+    std::vector<std::string>{"customers.csv", "orders.csv", "invoices.csv"}
+));
 
-```cpp
-class ChildJob final : public DefectStudio::IJob {
-public:
-    std::string GetName() const override { return "ChildJob"; }
-    std::string GetType() const override { return "Pipeline"; }
-
-    void Execute(DefectStudio::JobContext& context) override {
-        context.SetStage("child");
-        context.SetProgress(1.0f, 1.0f);
-    }
-};
-
-class ParentJob final : public DefectStudio::IJob {
-public:
-    std::string GetName() const override { return "ParentJob"; }
-    std::string GetType() const override { return "Pipeline"; }
-
-    void Execute(DefectStudio::JobContext& context) override {
-        context.SetStage("submit-child");
-        auto childId = context.SubmitJobSequential(DefectStudio::CreateRef<ChildJob>());
-        if (childId == 0) {
-            context.LogWarning("Child nie zakonczyl sie sekwencyjnie");
-        }
-        context.SetProgress(1.0f, 1.0f);
-    }
-};
-```
-
-### 3) Subskrypcja eventow + tracker
-
-```cpp
-auto bus = DefectStudio::CreateRef<DefectStudio::EventBus>();
-DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(bus));
-DefectStudio::JobSystem system(DefectStudio::CreateWeakRef(bus));
-
-auto sub = bus->Subscribe<DefectStudio::JobCompletedEvent>(
-    [](const DefectStudio::JobCompletedEvent& e) {
-        (void)e; // telemetry / UI signal
-    }
-);
-
-// update loop:
+// Application update loop (required for tracker updates from queued events):
 // bus->ProcessQueue();
+
+// Example UI polling:
+// if (auto snapshot = tracker.GetSnapshot(id)) {
+//     RenderProgressBar(snapshot->completedWork / snapshot->totalWork);
+//     RenderLabel(snapshot->stage + " - " + snapshot->message);
+// }
 ```
 
-## Dobre praktyki
+## Best Practices
 
-- Trzymaj `Execute` krotkie i etapowe.
-- Sprawdzaj cancel regularnie (`ThrowIfCancellationRequested` lub `IsCancellationRequested`).
-- Uzywaj `SubmitAfter` tylko do realnych opoznien biznesowych.
-- Utrzymuj stabilna skale postepu (`totalWork`).
+- Keep `Execute` stage-based and bounded.
+- Check cancellation regularly (`ThrowIfCancellationRequested` or `IsCancellationRequested`).
+- Use `SubmitAfter` only for true business delays.
+- Keep progress scale stable (`totalWork`).
+- Call `EventBus::ProcessQueue()` regularly if UI depends on `ProgressTracker`.
 
-## Typowe bledy
+## Common Mistakes
 
-- Zakladanie, ze `RequestCancel` zatrzyma kod natychmiast.
-- Brak `EventBus::ProcessQueue()` (tracker nie bedzie aktualny).
-- Blokowanie workerow bez potrzeby.
-- Wlasne blokujace waity dla nested jobs poza `JobContext` API.
+- Assuming `RequestCancel` force-stops code immediately.
+- Forgetting `EventBus::ProcessQueue()` (tracker will appear stale).
+- Blocking workers unnecessarily with heavy waiting patterns.
+- Implementing custom blocking wait loops outside `JobContext` APIs.
 
 ## FAQ
 
-P: Dlaczego `SubmitJobSequential` czasem zwraca `0`?
+Q: Why can `SubmitJobSequential` return `0`?
 
-O: W trybie pojedynczego workera czekanie parent->child fail-fast, zeby uniknac deadlocka.
+A: In a deadlock-prone single-worker parent->child scenario, sequential wait fails fast by design.
 
-P: Dlaczego tracker ma stary stan?
+Q: Why does tracker show old state?
 
-O: Najczesciej brakuje `ProcessQueue` w petli aplikacji.
+A: Most often, queued events are not being committed via `ProcessQueue()` in the main loop.
 
-## API cheat sheet
+## API Cheat Sheet
 
 - Start: `JobSystem(eventBus, threadCount)`
 - Submit: `Submit`, `SubmitAfter`

@@ -1,89 +1,80 @@
 # Job + Progress Systems Overview
 
-Ta sekcja opisuje wspolnie `JobSystem` i `ProgressTracker`, bo w runtime dzialaja jako jeden lancuch:
-- `JobSystem` wykonuje prace,
-- `EventBus` przenosi informacje o lifecycle,
-- `ProgressTracker` buduje read-model dla UI.
+This section describes `JobSystem` and `ProgressTracker` together because they operate as one runtime chain:
+- `JobSystem` executes work,
+- `EventBus` transports lifecycle updates,
+- `ProgressTracker` builds a UI-facing read model.
 
-## Problem, ktory rozwiazujemy
+## Problem This Solves
 
-Bez tego zestawu komponentow:
-- praca dlugotrwala blokowalaby glowny watek,
-- UI nie mialoby stabilnego modelu postepu,
-- moduly bylyby mocno ze soba sprzezone.
+Without this stack:
+- long-running work would block the main thread,
+- UI would not have a stable progress model,
+- modules would be tightly coupled.
 
-Z tym zestawem:
-- joby dzialaja asynchronicznie,
-- status jest obserwowalny i queryable,
-- integracja jest event-driven.
+With this stack:
+- jobs run asynchronously,
+- status is observable and queryable,
+- integration is event-driven.
 
-## Architektura wysokiego poziomu
+## High-Level Architecture
 
-```mermaid
-flowchart LR
-  A[Caller / App] --> B[JobSystem]
-  B --> C[BS::thread_pool]
-  C --> D[IJob::Execute(JobContext)]
-  B --> E[EventBus Queue(Job*Event)]
-  E --> F[EventBus.ProcessQueue]
-  F --> G[ProgressTracker]
-  G --> H[UI: snapshot views]
-```
+![Job + Progress high-level flow](../diagrams/generated/job-progress-overview-flow.svg)
 
-## Glowne komponenty i role
+## Core Components and Roles
 
 - `IJob`
-  - kontrakt pracy domenowej (`GetName`, `GetType`, `Execute`).
+  - domain work contract (`GetName`, `GetType`, `Execute`).
 - `JobSystem`
-  - submit/control/query,
-  - aktualizacja snapshotow i logow,
-  - harmonogramowanie delayed jobs,
-  - runtime resize worker pool.
+  - submit/control/query API,
+  - snapshot and log updates,
+  - delayed scheduling,
+  - runtime worker-count changes.
 - `JobContext`
-  - API runtime dla kodu joba (progress, stage, message, log, cancel, nested jobs).
+  - runtime API for job code (progress, stage, message, logging, cancellation, nested jobs).
 - `EventBus`
-  - transport eventow lifecycle (`Queue` + `ProcessQueue`).
+  - lifecycle transport (`Queue` + `ProcessQueue`).
 - `ProgressTracker`
-  - subskrybuje eventy i buduje snapshoty dla UI.
+  - subscribes to events and builds query snapshots for UI.
 
-## Przeplyw od stworzenia zadania do zakonczenia
+## End-to-End Flow
 
-1. Aplikacja wywoluje `Submit` albo `SubmitAfter`.
-2. `JobSystem` tworzy rekord `Queued` i publikuje `JobQueuedEvent`.
-3. Zadanie trafia do puli (lub do delayed queue do czasu `dueAt`).
-4. Worker uruchamia `runJob` i status przechodzi na `Running`.
-5. `IJob::Execute` raportuje postep przez `JobContext`.
-6. `JobSystem` publikuje `JobProgressEvent`.
-7. Po koncu publikuje `JobCompletedEvent` / `JobCancelledEvent` / `JobFailedEvent`.
-8. `EventBus::ProcessQueue()` dostarcza eventy do `ProgressTracker`.
-9. UI czyta `ProgressEntrySnapshot` przez `GetActiveSnapshots` / `GetFinishedSnapshots`.
+1. Application calls `Submit` or `SubmitAfter`.
+2. `JobSystem` creates a `Queued` record and queues `JobQueuedEvent`.
+3. Job goes to pool immediately, or to delayed queue until `dueAt`.
+4. Worker starts `runJob`; status moves to `Running`.
+5. `IJob::Execute` reports updates through `JobContext`.
+6. `JobSystem` queues `JobProgressEvent` updates.
+7. On finish, it queues `JobCompletedEvent` / `JobCancelledEvent` / `JobFailedEvent`.
+8. `EventBus::ProcessQueue()` dispatches queued events to `ProgressTracker`.
+9. UI reads `ProgressEntrySnapshot` through `GetActiveSnapshots` / `GetFinishedSnapshots`.
 
-## Scenariusz uzycia (krotki)
+## Short Usage Story
 
-Uzytkownik uruchamia import. `JobSystem` startuje `ImportJob` na workerze i publikuje eventy lifecycle. Glowne update loop wywoluje `EventBus::ProcessQueue()`, a `ProgressTracker` aktualizuje snapshot. Panel monitoringu pokazuje etap i postep. Po zakonczeniu wpis trafia do listy finished.
+User starts an import. `JobSystem` runs `ImportJob` on a worker and emits lifecycle events. Main update loop calls `EventBus::ProcessQueue()`, `ProgressTracker` updates snapshots, and monitoring UI displays stage and progress until completion.
 
-## Lifecycle joba (krok po kroku)
+## Job Lifecycle
 
-- `Queued`: rekord istnieje, job czeka na wykonanie.
-- `Running`: worker rozpoczal `Execute`.
-- `Completed` / `Cancelled` / `Failed`: stan terminalny.
-- Snapshot i logi pozostaja queryable do czasu `RemoveFromHistory`.
+- `Queued`: record exists, waiting for execution.
+- `Running`: worker entered `Execute`.
+- `Completed` / `Cancelled` / `Failed`: terminal state.
+- Snapshot and logs remain queryable until `RemoveFromHistory`.
 
-## Thread safety (co jest bezpieczne)
+## Thread-Safety Summary
 
 - `JobSystem`:
-  - `m_RecordsMutex` chroni `m_Records`,
-  - `m_DelayedMutex` + `m_DelayedCv` chroni delayed queue,
-  - `m_ThreadCountMutex` + `m_ThreadCountCv` chroni channel zmiany liczby workerow,
-  - `m_NextId` i `m_ShutdownRequested` sa atomikami.
-- `ProgressTracker`: `m_Mutex` chroni `m_Entries`.
-- `EventBus`: `m_QueueMutex` chroni kolejke queued eventow.
+  - `m_RecordsMutex` protects `m_Records`,
+  - `m_DelayedMutex` + `m_DelayedCv` protects delayed queue,
+  - `m_ThreadCountMutex` + `m_ThreadCountCv` protects thread-count channel,
+  - `m_NextId` and `m_ShutdownRequested` are atomics.
+- `ProgressTracker`: `m_Mutex` protects `m_Entries`.
+- `EventBus`: `m_QueueMutex` protects queued events.
 
-Kod `IJob::Execute` pozostaje odpowiedzialnoscia autora joba i nie jest automatycznie synchronizowany przez runtime.
+`IJob::Execute` code remains user-authored and is not automatically synchronized by runtime.
 
-## Kod jako zrodlo prawdy
+## Code as Source of Truth
 
-Kontrakty i zachowanie opisane w tym rozdziale wynikaja bezposrednio z:
+Contracts and behavior in this section come directly from:
 - `src/Core/JobSystem/JobSystem.hpp`
 - `src/Core/JobSystem/JobSystem.cpp`
 - `src/Core/ProgressTrackingSystem/ProgressTracker.hpp`

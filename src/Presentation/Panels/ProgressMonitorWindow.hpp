@@ -14,7 +14,7 @@ namespace DefectStudio
 {
 	struct VisibleJobRow
 	{
-		const ProgressEntrySnapshot *snapshot = nullptr;
+		WeakRef<ProgressEntrySnapshot> snapshot;
 		int depth = 0;
 		bool hasChildren = false;
 	};
@@ -37,6 +37,7 @@ namespace DefectStudio
 		std::vector<JobId> m_DeletePendingIds;
 		int m_DeletePendingSkipped = 0;
 		bool m_OpenDeleteConfirmPopup = false;
+		mutable std::vector<Ref<ProgressEntrySnapshot>> m_RowSnapshotRefs;
 
 		void buildVisibleRows(const std::vector<ProgressEntrySnapshot> &allJobs, std::vector<VisibleJobRow> &rows) const;
 		void ensureSelectionVisible(const std::vector<ProgressEntrySnapshot> &allJobs);

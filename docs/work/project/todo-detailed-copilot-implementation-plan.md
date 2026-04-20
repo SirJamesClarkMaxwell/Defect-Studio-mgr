@@ -320,26 +320,26 @@ All planned tests across all slices are listed here as a single reference. Tests
 - [x] `GetQueuedEventCount()` reflects queued but unprocessed events
 
 **JobSystem (Slice C):**
-- [ ] `Submit` returns a valid `JobId`
-- [ ] Submitted job transitions: `Queued → Running → Completed`
-- [ ] `Failed` job stores exception message in snapshot
-- [ ] `Cancelled` job is marked `Cancelled` (cooperative — not forced)
-- [ ] `GetJob(id)` returns a populated snapshot with correct timestamps
-- [ ] `GetActiveJobs()` includes `Running` and `Queued`
-- [ ] `GetFinishedJobs()` includes `Completed`, `Failed`, and `Cancelled`
-- [ ] `GetLogs(id)` returns log entries in submission order
-- [ ] `SleepJob` reports progress increments and supports cancellation
-- [ ] `FailingJob` produces `Failed` status with the expected error message
-- [ ] `Shutdown()` waits for in-flight jobs to finish cleanly
-- [ ] `Shutdown()` is idempotent (second call is a no-op)
-- [ ] Concurrent `Submit` calls from multiple threads do not corrupt job records
+- [x] `Submit` returns a valid `JobId`
+- [x] Submitted job transitions: `Queued → Running → Completed`
+- [x] `Failed` job stores exception message in snapshot
+- [x] `Cancelled` job is marked `Cancelled` (cooperative — not forced)
+- [x] `GetJob(id)` returns a populated snapshot with correct timestamps
+- [x] `GetActiveJobs()` includes `Running` and `Queued`
+- [x] `GetFinishedJobs()` includes `Completed`, `Failed`, and `Cancelled`
+- [x] `GetLogs(id)` returns log entries in submission order
+- [x] `SleepJob` reports progress increments and supports cancellation
+- [x] `FailingJob` produces `Failed` status with the expected error message
+- [x] `Shutdown()` waits for in-flight jobs to finish cleanly
+- [x] `Shutdown()` is idempotent (second call is a no-op)
+- [x] Concurrent `Submit` calls from multiple threads do not corrupt job records
 
 **ProgressTracker (Slice D):**
-- [ ] Tracker entry is created when a job is submitted
-- [ ] Progress updates appear in snapshot after `SetProgress()` call
-- [ ] Finishing a job marks the entry as completed in the snapshot
-- [ ] Failure and cancellation are visible in snapshot with correct status
-- [ ] Concurrent snapshot reads are safe while job is running
+- [x] Tracker entry is created when a job is submitted
+- [x] Progress updates appear in snapshot after `SetProgress()` call
+- [x] Finishing a job marks the entry as completed in the snapshot
+- [x] Failure and cancellation are visible in snapshot with correct status
+- [x] Concurrent snapshot reads are safe while job is running
 
 **ConfigManager (Slice E):**
 - [ ] Default document is created when config file is missing

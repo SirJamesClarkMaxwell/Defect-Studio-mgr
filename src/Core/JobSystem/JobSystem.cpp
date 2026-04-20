@@ -82,16 +82,19 @@ namespace DefectStudio
 
 	JobId JobSystem::Submit(const Ref<IJob> &job, JobPriority priority)
 	{
+		ZoneScoped;
 		return submitInternal(job, priority, 0, std::nullopt);
 	}
 
 	JobId JobSystem::SubmitAfter(const Ref<IJob> &job, Time::Milliseconds delay, JobPriority priority)
 	{
+		ZoneScoped;
 		return submitInternal(job, priority, 0, delay);
 	}
 
 	JobId JobSystem::submitInternal(const Ref<IJob> &job, JobPriority priority, JobId parentId, std::optional<Time::Milliseconds> delay)
 	{
+		ZoneScoped;
 		if (!job)
 			return 0;
 
@@ -126,6 +129,7 @@ namespace DefectStudio
 
 	bool JobSystem::RequestCancel(JobId id)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
@@ -138,6 +142,7 @@ namespace DefectStudio
 
 	bool JobSystem::Resume(JobId id)
 	{
+		ZoneScoped;
 		Ref<IJob> jobToResume;
 		JobPriority priority = JobPriority::Normal;
 		bool shouldEnqueue = false;
@@ -182,6 +187,7 @@ namespace DefectStudio
 
 	bool JobSystem::Reset(JobId id)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
@@ -207,6 +213,7 @@ namespace DefectStudio
 
 	bool JobSystem::Retry(JobId id, JobPriority priority)
 	{
+		ZoneScoped;
 		Ref<IJob> jobToRetry;
 		{
 			std::lock_guard<std::mutex> lock(m_RecordsMutex);
@@ -242,6 +249,7 @@ namespace DefectStudio
 
 	bool JobSystem::RemoveFromHistory(JobId id)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
@@ -288,6 +296,7 @@ namespace DefectStudio
 
 	std::vector<JobSnapshot> JobSystem::GetAllJobs() const
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		std::vector<JobSnapshot> jobs;
 		jobs.reserve(m_Records.size());
@@ -300,6 +309,7 @@ namespace DefectStudio
 
 	std::vector<JobSnapshot> JobSystem::GetActiveJobs() const
 	{
+		ZoneScoped;
 		auto jobs = GetAllJobs();
 		jobs.erase(std::remove_if(jobs.begin(), jobs.end(), [](const JobSnapshot &snapshot) {
 			return isFinishedStatus(snapshot.status);
@@ -309,6 +319,7 @@ namespace DefectStudio
 
 	std::vector<JobSnapshot> JobSystem::GetFinishedJobs() const
 	{
+		ZoneScoped;
 		auto jobs = GetAllJobs();
 		jobs.erase(std::remove_if(jobs.begin(), jobs.end(), [](const JobSnapshot &snapshot) {
 			return !isFinishedStatus(snapshot.status);
@@ -330,6 +341,7 @@ namespace DefectStudio
 	{
 		std::call_once(m_ShutdownOnce, [this]() 
 		{
+			ZoneScoped;
 			m_ShutdownRequested.store(true, std::memory_order_relaxed);
 			m_ThreadCountCv.notify_all();
 
@@ -352,6 +364,7 @@ namespace DefectStudio
 
 	void JobSystem::threadCountWorkerLoop(std::stop_token stopToken)
 	{
+		ZoneScoped;
 		while (true)
 		{
 			std::size_t requestedThreadCount = 0;
@@ -396,6 +409,7 @@ namespace DefectStudio
 
 	void JobSystem::runJob(JobId id, Ref<IJob> job)
 	{
+		ZoneScoped;
 		const auto startedAt = Time::Now();
 		markRunning(id, startedAt);
 		publishStartedEvent(id, *job, startedAt);
@@ -466,6 +480,7 @@ namespace DefectStudio
 
 	bool JobSystem::waitForJobCooperative(JobId id)
 	{
+		ZoneScoped;
 		while (true)
 		{
 			if (m_ShutdownRequested.load(std::memory_order_relaxed))
@@ -498,6 +513,7 @@ namespace DefectStudio
 
 	void JobSystem::updateProgress(JobId id, float completedWork, float totalWork)
 	{
+		ZoneScoped;
 		std::string stage;
 		std::string message;
 		{
@@ -517,6 +533,7 @@ namespace DefectStudio
 
 	void JobSystem::updateStage(JobId id, const std::string &stage)
 	{
+		ZoneScoped;
 		float completedWork = 0.0f;
 		float totalWork = 0.0f;
 		std::string message;
@@ -537,6 +554,7 @@ namespace DefectStudio
 
 	void JobSystem::updateMessage(JobId id, const std::string &message)
 	{
+		ZoneScoped;
 		float completedWork = 0.0f;
 		float totalWork = 0.0f;
 		std::string stage;
@@ -577,6 +595,7 @@ namespace DefectStudio
 
 	void JobSystem::markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end())
@@ -636,6 +655,7 @@ namespace DefectStudio
 
 	void JobSystem::publishProgressEvent(JobId id, float completedWork, float totalWork, const std::string &stage, const std::string &message) const
 	{
+		ZoneScoped;
 		auto eventBus = lockEventBus();
 		if (!eventBus)
 			return;
@@ -664,6 +684,7 @@ namespace DefectStudio
 
 	void JobSystem::delayedWorkerLoop(std::stop_token stopToken)
 	{
+		ZoneScoped;
 		auto shouldStop = [this, &stopToken]() 
 		{
 			return stopToken.stop_requested() || m_ShutdownRequested.load(std::memory_order_relaxed);
@@ -716,6 +737,7 @@ namespace DefectStudio
 
 	void JobSystem::cancelPendingDelayedSubmissions()
 	{
+		ZoneScoped;
 		std::deque<DelayedSubmission> pending;
 		{
 			std::lock_guard<std::mutex> lock(m_DelayedMutex);
@@ -729,6 +751,7 @@ namespace DefectStudio
 
 	void JobSystem::enqueueForExecution(JobId id, const Ref<IJob> &job, JobPriority priority)
 	{
+		ZoneScoped;
 		if (!job)
 			return;
 

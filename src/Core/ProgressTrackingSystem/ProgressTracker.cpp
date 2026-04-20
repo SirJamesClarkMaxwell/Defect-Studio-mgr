@@ -31,6 +31,7 @@ namespace DefectStudio
 
 	void ProgressTracker::BindEventBus(WeakRef<EventBus> eventBus)
 	{
+		ZoneScoped;
 		UnbindEventBus();
 		m_EventBus = std::move(eventBus);
 
@@ -49,6 +50,7 @@ namespace DefectStudio
 
 	void ProgressTracker::UnbindEventBus()
 	{
+		ZoneScoped;
 		m_QueuedSubscription.Reset();
 		m_StartedSubscription.Reset();
 		m_ProgressSubscription.Reset();
@@ -60,6 +62,7 @@ namespace DefectStudio
 
 	std::optional<ProgressEntrySnapshot> ProgressTracker::GetSnapshot(JobId id) const
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto it = m_Entries.find(id);
 		if (it == m_Entries.end())
@@ -70,6 +73,7 @@ namespace DefectStudio
 
 	std::vector<ProgressEntrySnapshot> ProgressTracker::GetAllSnapshots() const
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		std::vector<ProgressEntrySnapshot> entries;
 		entries.reserve(m_Entries.size());
@@ -85,6 +89,7 @@ namespace DefectStudio
 
 	std::vector<ProgressEntrySnapshot> ProgressTracker::GetActiveSnapshots() const
 	{
+		ZoneScoped;
 		auto entries = GetAllSnapshots();
 		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &entry) {
 			return entry.finished;
@@ -94,6 +99,7 @@ namespace DefectStudio
 
 	std::vector<ProgressEntrySnapshot> ProgressTracker::GetFinishedSnapshots() const
 	{
+		ZoneScoped;
 		auto entries = GetAllSnapshots();
 		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &entry) {
 			return !entry.finished;
@@ -103,12 +109,14 @@ namespace DefectStudio
 
 	bool ProgressTracker::RemoveEntry(JobId id)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		return m_Entries.erase(id) > 0;
 	}
 
 	void ProgressTracker::onQueued(const JobQueuedEvent &event)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
@@ -124,6 +132,7 @@ namespace DefectStudio
 
 	void ProgressTracker::onStarted(const JobStartedEvent &event)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
@@ -134,6 +143,7 @@ namespace DefectStudio
 
 	void ProgressTracker::onProgress(const JobProgressEvent &event)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
@@ -148,6 +158,7 @@ namespace DefectStudio
 
 	void ProgressTracker::onCompleted(const JobCompletedEvent &event)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
@@ -160,6 +171,7 @@ namespace DefectStudio
 
 	void ProgressTracker::onCancelled(const JobCancelledEvent &event)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
@@ -170,6 +182,7 @@ namespace DefectStudio
 
 	void ProgressTracker::onFailed(const JobFailedEvent &event)
 	{
+		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;

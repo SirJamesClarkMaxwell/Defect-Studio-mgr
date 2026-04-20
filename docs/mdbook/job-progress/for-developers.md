@@ -1,10 +1,10 @@
 # Job + Progress Systems For Developers (Deep Dive)
 
-Ta strona jest dla osob rozwijajacych implementacje.
+This page is for maintainers working on implementation internals.
 
-## Kod jako zrodlo prawdy
+## Code as Source of Truth
 
-Kluczowe pliki:
+Key files:
 - `src/Core/JobSystem/JobSystem.hpp`
 - `src/Core/JobSystem/JobSystem.cpp`
 - `src/Core/JobSystem/JobContext.hpp`
@@ -17,25 +17,25 @@ Kluczowe pliki:
 - `tests/Core/JobSystem/*.cpp`
 - `tests/Core/ProgressTracking/ProgressTrackerTests.cpp`
 
-## Wewnetrzne punkty krytyczne
+## Internal Critical Points
 
 ### JobSystem
 
 - `submitInternal`
-  - gatekeeper dla immediate i delayed submission.
+  - gatekeeper for immediate and delayed submission.
 - `runJob`
-  - mapowanie callbackow `JobContext`, ustawianie final status, publikacja eventow terminalnych.
+  - wires `JobContext` callbacks, sets final status, emits terminal events.
 - `waitForJobCooperative`
-  - zabezpieczenie anty-deadlock dla nested waits.
+  - anti-deadlock guard for nested waits.
 - `delayedWorkerLoop`
-  - harmonogram opoznionych zadan oparty o `dueAt`.
+  - delayed scheduler based on `dueAt`.
 - `threadCountWorkerLoop`
-  - asynchroniczny channel zmiany liczby workerow.
+  - asynchronous worker-count channel.
 
 ### ProgressTracker
 
 - `onQueued/onStarted/onProgress/onCompleted/onCancelled/onFailed`
-  - mapowanie lifecycle eventow na read-model.
+  - maps lifecycle events into read model.
 
 ### EventBus
 
@@ -43,147 +43,118 @@ Kluczowe pliki:
 - `ProcessQueue`
 - `unsubscribeById`
 
-## Synchroniczne vs asynchroniczne
+## Synchronous vs Asynchronous
 
-Synchroniczne (caller thread):
-- `Submit`/`SubmitAfter` do momentu utworzenia rekordu i `Queue(JobQueuedEvent)`.
-- mutacje sterujace (`RequestCancel`, `Resume`, `Reset`, `Retry`, `RemoveFromHistory`).
-- gettery snapshotow i logow.
+Synchronous (caller thread):
+- `Submit`/`SubmitAfter` until record creation and `Queue(JobQueuedEvent)`.
+- control mutations (`RequestCancel`, `Resume`, `Reset`, `Retry`, `RemoveFromHistory`).
+- snapshot/log getters.
 
-Asynchroniczne:
+Asynchronous:
 - `runJob` (thread pool),
 - `delayedWorkerLoop` (`std::jthread`),
 - `threadCountWorkerLoop` (`std::jthread`),
-- dostarczenie eventow queued dopiero przy `EventBus::ProcessQueue`.
+- queued event delivery only on `EventBus::ProcessQueue`.
 
-## Synchronizacja: gdzie i jak
+## Synchronization Model
 
 ### JobSystem
 
-- `m_RecordsMutex`: `m_Records` i mutacje snapshot/log.
-- `m_DelayedMutex` + `m_DelayedCv`: kolejka opozniona i budzenia.
+- `m_RecordsMutex`: `m_Records` and snapshot/log mutations.
+- `m_DelayedMutex` + `m_DelayedCv`: delayed queue and wakeups.
 - `m_ThreadCountMutex` + `m_ThreadCountCv`: `m_PendingThreadCount`.
-- `m_NextId`, `m_ShutdownRequested`: atomiki.
+- `m_NextId`, `m_ShutdownRequested`: atomics.
 
 ### ProgressTracker
 
-- `m_Mutex` chroni `m_Entries`.
+- `m_Mutex` protects `m_Entries`.
 
 ### EventBus
 
-- `m_QueueMutex` chroni `m_Queue`.
-- modyfikacje listenerow podczas dispatch sa deferowane (`pendingAdditions`, `pendingRemoval`).
+- `m_QueueMutex` protects `m_Queue`.
+- listener mutation during dispatch is deferred (`pendingAdditions`, `pendingRemoval`).
 
-## Scheduler i delayed jobs
+## Scheduler and Delayed Jobs
 
 ### Sequence: delayed submission
 
-```mermaid
-sequenceDiagram
-  participant C as Caller
-  participant J as JobSystem
-  participant D as delayedWorkerLoop
-  participant P as thread pool
+![Delayed submission sequence](../diagrams/generated/job-progress-delayed-sequence.svg)
 
-  C->>J: SubmitAfter(job, delay)
-  J->>J: recordQueued + Queue(JobQueuedEvent)
-  J->>J: push DelayedSubmission(dueAt)
-  J->>D: notify delayed CV
+### Delayed queue/scheduler flow
 
-  D->>D: wait(hasWakeCondition)
-  D->>D: pick min dueAt
-  alt dueAt > now
-    D->>D: wait_until(dueAt)
-  else ready
-    D->>J: enqueueForExecution
-    J->>P: detach_task(runJob)
-  end
-```
+![Delayed scheduler flow](../diagrams/generated/job-progress-delayed-queue-flow.svg)
 
-### Diagram kolejki/schedulera
+## Event System Behavior for Job Lifecycle
 
-```mermaid
-flowchart TD
-  A[SubmitAfter] --> B[DelayedSubmission {id, dueAt}]
-  B --> C[Delayed queue]
-  C --> D[delayedWorkerLoop]
-  D --> E{dueAt reached?}
-  E -- no --> F[wait_until(next dueAt)]
-  E -- yes --> G[enqueueForExecution]
-  G --> H[runJob on pool]
-```
+- `JobSystem` emits through `EventBus::Queue(Job*Event)`.
+- `EventBus::ProcessQueue` is the commit point for queued events.
+- `ProgressTracker` updates state in `on*` handlers.
 
-## Event system behavior dla job lifecycle
+## Progress Reporting and Aggregation
 
-- `JobSystem` emituje wyłącznie przez `EventBus::Queue(Job*Event)`.
-- `EventBus::ProcessQueue` jest jedynym commit-pointem dostarczenia queued events.
-- `ProgressTracker` aktualizuje model w handlerach `on*`.
+Reporting:
+- `JobContext` calls callbacks configured in `runJob`.
+- callbacks route into `updateProgress/updateStage/updateMessage`.
+- each update produces `JobProgressEvent`.
 
-## Raportowanie i agregacja progresu
+Aggregation:
+- `ProgressTracker::onProgress` updates work counters and stage/message.
+- `onCompleted` closes `completedWork` to `totalWork` when needed.
 
-Raportowanie:
-- `JobContext` -> callbacki ustawione w `runJob`.
-- callbacki trafiaja do `updateProgress/updateStage/updateMessage`.
-- kazda aktualizacja skutkuje `JobProgressEvent`.
+## Race Conditions: Main Risk Areas
 
-Agregacja:
-- `ProgressTracker::onProgress` aktualizuje work counters i stage/message.
-- `onCompleted` domyka `completedWork` do `totalWork`, gdy potrzeba.
+1. Concurrent submit and record reads
+- Risk: record map corruption.
+- Mitigation: `m_RecordsMutex`.
 
-## Race conditions: gdzie byly/bylyby problemy
+2. Subscribe/unsubscribe during dispatch
+- Risk: iterator invalidation and nondeterministic ordering.
+- Mitigation: `pendingAdditions` and `pendingRemoval`.
 
-1. Concurrent submit i odczyt rekordow
-- Ryzyko: uszkodzenie mapy rekordow.
-- Rozwiazanie: `m_RecordsMutex`.
+3. Parent wait on child with a single worker
+- Risk: deadlock.
+- Mitigation: fail-fast behavior in `waitForJobCooperative`.
 
-2. Listener unsubscribe/subscribe podczas dispatch
-- Ryzyko: invalidacja iteratora i niedeterministyczna kolejnosc.
-- Rozwiazanie: `pendingAdditions` i `pendingRemoval`.
+4. Test race on shared `executionOrder`
+- Risk: flaky nested-submission tests.
+- Mitigation: mutex-protected writes in test helpers.
 
-3. Parent wait na child przy jednym workerze
-- Ryzyko: deadlock.
-- Rozwiazanie: fail-fast w `waitForJobCooperative` dla single-worker parent wait.
+## Thread-Safety Contract
 
-4. Testowy race na wspolnym `executionOrder`
-- Ryzyko: flaky wynik nested submission tests.
-- Rozwiazanie: synchronizacja zapisu przez mutex w helperach testowych.
+Safe for concurrent use:
+- `JobSystem` submit/control/getter API,
+- `ProgressTracker` reads and updates,
+- `EventBus` queue operations.
 
-## Thread safety (jawnie)
+Requires discipline:
+- `IJob::Execute` is user code; runtime does not auto-synchronize domain resources touched by jobs,
+- application logic must call `ProcessQueue` regularly.
 
-Bezpieczne przy wspolbieznym uzyciu:
-- submit/control/getter API `JobSystem`,
-- odczyty i update `ProgressTracker`,
-- enqueue/dequeue eventow przez `EventBus` queue API.
-
-Wymaga dyscypliny:
-- kod `IJob::Execute` jest user code; runtime nie robi automatycznej synchronizacji zasobow, ktore job dotyka,
-- logika aplikacji musi regularnie wywolywac `ProcessQueue`.
-
-## Trade-offs i decyzje projektowe
+## Trade-Offs and Decisions
 
 - Queue-first event delivery:
-  - plus: kontrolowany commit-point i przewidywalny przeplyw,
-  - minus: opoznienie widocznosci bez `ProcessQueue`.
+  - plus: explicit commit point and predictable flow,
+  - minus: visibility lag without `ProcessQueue`.
 
 - Cooperative cancellation:
-  - plus: brak brutalnego przerywania watku,
-  - minus: stop zalezy od miejsc sprawdzania cancel.
+  - plus: no forced thread interruption,
+  - minus: stop latency depends on cancellation checkpoints.
 
-- Polling (`sleep_for(1ms)`) w `waitForJobCooperative`:
-  - plus: prostota,
-  - minus: dodatkowe wake-ups i koszt przy wysokiej skali.
+- Polling (`sleep_for(1ms)`) in `waitForJobCooperative`:
+  - plus: simple behavior,
+  - minus: extra wakeups and overhead under high scale.
 
-## Miejsca latwe do zepsucia
+## Easy-to-Break Areas
 
-- `runJob`: centralny punkt lifecycle i exception->status mapping.
-- `submitInternal`: wspolna semantyka immediate + delayed.
-- `delayedWorkerLoop`: logika `wait_until` i wyboru `dueAt`.
-- `EventBus::dispatchByType`: semantyka `stopPropagation` i deferred changes.
-- `ProgressTracker::onProgress`: spojnosc status/progress/stage/message.
+- `runJob`: central lifecycle and exception-to-status mapping.
+- `submitInternal`: shared semantics for immediate + delayed paths.
+- `delayedWorkerLoop`: `wait_until` timing and `dueAt` selection logic.
+- `EventBus::dispatchByType`: `stopPropagation` and deferred-listener semantics.
+- `ProgressTracker::onProgress`: consistency of status/progress/stage/message.
 
-## Proponowane ulepszenia
+## Suggested Improvements
 
-1. Zastapic polling w cooperative wait przez sygnalizacje condition-variable per job.
-2. Dodac bardziej jawny sygnal bledu dla fail-fast nested wait (zamiast samego `0`).
-3. Rozwazyc ograniczanie czestotliwosci `JobProgressEvent` dla bardzo chatty jobs.
-4. Ujednolicic helper resetowania snapshotu (wspolna funkcja dla `Reset`, `Retry`, `Resume`).
+1. Replace cooperative polling with condition-variable signaling per job.
+2. Add explicit error signaling for fail-fast nested wait (instead of plain `0`).
+3. Consider throttling `JobProgressEvent` for very chatty jobs.
+4. Consolidate snapshot reset logic used by `Reset`, `Retry`, and `Resume`.

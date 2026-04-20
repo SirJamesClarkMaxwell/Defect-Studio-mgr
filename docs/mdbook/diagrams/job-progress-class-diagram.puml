@@ -1,0 +1,33 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+class IJob {
+  +GetName() string
+  +GetType() string
+  +Execute(JobContext&)
+}
+
+class JobContext {
+  +SetProgress(float,float)
+  +SetStage(string)
+  +SetMessage(string)
+  +SubmitJob(Ref<IJob>,JobPriority) JobId
+  +WaitForJob(JobId) bool
+}
+
+class JobSystem {
+  +Submit(Ref<IJob>,JobPriority) JobId
+  +SubmitAfter(Ref<IJob>,Milliseconds,JobPriority) JobId
+  +RequestCancel(JobId) bool
+  +GetJob(JobId) optional<JobSnapshot>
+}
+
+class EventBus
+class ProgressTracker
+
+JobSystem --> IJob : executes
+IJob --> JobContext : uses
+JobSystem --> EventBus : publishes Job*Event
+ProgressTracker --> EventBus : subscribes
+
+@enduml

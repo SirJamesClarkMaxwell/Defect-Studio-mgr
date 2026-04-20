@@ -1,0 +1,22 @@
+@startuml
+actor Caller
+participant JobSystem
+participant delayedWorkerLoop
+participant "thread pool" as ThreadPool
+
+Caller -> JobSystem : SubmitAfter(job, delay)
+JobSystem -> JobSystem : recordQueued + Queue(JobQueuedEvent)
+JobSystem -> JobSystem : push DelayedSubmission(dueAt)
+JobSystem -> delayedWorkerLoop : notify delayed CV
+
+delayedWorkerLoop -> delayedWorkerLoop : wait(hasWakeCondition)
+delayedWorkerLoop -> delayedWorkerLoop : pick min dueAt
+
+alt dueAt > now
+  delayedWorkerLoop -> delayedWorkerLoop : wait_until(dueAt)
+else ready
+  delayedWorkerLoop -> JobSystem : enqueueForExecution
+  JobSystem -> ThreadPool : detach_task(runJob)
+end
+
+@enduml

@@ -28,8 +28,6 @@
 			- [Overview](job-progress/overview.md)
 			- [For Users](job-progress/for-users.md)
 			- [For Developers](job-progress/for-developers.md)
-		- [Job System](system-jobs.md)
-		- [Progress Tracker System](system-progress-tracker.md)
 		- [Config Manager System](system-config-manager.md)
 
 	- [Architecture](architecture.md)

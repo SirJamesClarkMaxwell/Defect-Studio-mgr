@@ -1,0 +1,18 @@
+@startuml
+skinparam linetype ortho
+
+start
+:SubmitAfter;
+:Create DelayedSubmission {id, dueAt};
+:Push to delayed queue;
+:delayedWorkerLoop;
+
+if (dueAt reached?) then (no)
+  :wait_until(next dueAt);
+else (yes)
+  :enqueueForExecution;
+  :runJob on pool;
+endif
+
+stop
+@enduml
