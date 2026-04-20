@@ -79,6 +79,27 @@ TEST(ConfigManagerTests, LoadsNestedYamlAndFlattensKeys)
 	std::filesystem::remove_all(tempDirectory, ignored);
 }
 
+TEST(ConfigManagerTests, LoadsYamlSequencesAsCommaSeparatedScalars)
+{
+	const std::filesystem::path tempDirectory = CreateTempDirectory();
+	const std::filesystem::path configPath = tempDirectory / "default.yaml";
+	WriteFile(configPath,
+	          "schema_version: 1\n"
+	          "viewport:\n"
+	          "  background: [0.12, 0.12, 0.16]\n"
+	          "recent_projects:\n"
+	          "  paths: []\n");
+
+	const auto result = DefectStudio::ConfigManager::LoadFile(configPath);
+	ASSERT_TRUE(result.success) << result.error;
+	EXPECT_EQ(result.format, DefectStudio::ConfigFormat::Yaml);
+	EXPECT_EQ(result.document.Get("viewport.background"), "0.12, 0.12, 0.16");
+	EXPECT_EQ(result.document.Get("recent_projects.paths"), "");
+
+	std::error_code ignored;
+	std::filesystem::remove_all(tempDirectory, ignored);
+}
+
 TEST(ConfigManagerTests, SaveAndLoadRoundTripAcrossFormats)
 {
 	const std::filesystem::path tempDirectory = CreateTempDirectory();
@@ -102,6 +123,35 @@ TEST(ConfigManagerTests, SaveAndLoadRoundTripAcrossFormats)
 	const auto yamlResult = DefectStudio::ConfigManager::LoadFile(yamlPath);
 	EXPECT_TRUE(yamlResult.success);
 	EXPECT_FALSE(DefectStudio::ConfigManager::GetBool(yamlResult.document, "show_demo_window"));
+
+	std::error_code ignored;
+	std::filesystem::remove_all(tempDirectory, ignored);
+}
+
+TEST(ConfigManagerTests, SaveYamlWithDottedKeysWritesNestedStructure)
+{
+	const std::filesystem::path tempDirectory = CreateTempDirectory();
+	const std::filesystem::path yamlPath = tempDirectory / "ui_settings.yaml";
+
+	DefectStudio::ConfigDocument document;
+	document.Set("schema_version", "1");
+	document.Set("viewport.fov", "45.0");
+	document.Set("ui.show_demo_window", "true");
+
+	std::string error;
+	ASSERT_TRUE(DefectStudio::ConfigManager::SaveFile(yamlPath, document, error)) << error;
+
+	std::ifstream stream(yamlPath, std::ios::binary);
+	ASSERT_TRUE(stream.good());
+	std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+	EXPECT_NE(text.find("viewport:"), std::string::npos);
+	EXPECT_NE(text.find("fov:"), std::string::npos);
+	EXPECT_EQ(text.find("viewport.fov:"), std::string::npos);
+
+	const auto result = DefectStudio::ConfigManager::LoadFile(yamlPath);
+	ASSERT_TRUE(result.success) << result.error;
+	EXPECT_EQ(result.document.Get("viewport.fov"), "45.0");
+	EXPECT_EQ(result.document.Get("ui.show_demo_window"), "true");
 
 	std::error_code ignored;
 	std::filesystem::remove_all(tempDirectory, ignored);

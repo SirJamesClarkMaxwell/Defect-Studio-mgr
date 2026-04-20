@@ -4,6 +4,7 @@
 
 
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <yaml-cpp/yaml.h>
 
 namespace DefectStudio
@@ -88,7 +89,32 @@ namespace DefectStudio
 
 		if (node.IsSequence())
 		{
-			error = "YAML sequences are not supported in config files yet";
+			std::string joined;
+			for (const auto &item : node)
+			{
+				std::string serialized;
+				if (item.IsScalar())
+					serialized = item.Scalar();
+				else if (item.IsNull())
+					serialized = "null";
+				else
+				{
+					YAML::Emitter itemEmitter;
+					itemEmitter << item;
+					if (!itemEmitter.good())
+					{
+						error = "Unsupported YAML sequence item in config file";
+						return;
+					}
+					serialized = TrimCopy(itemEmitter.c_str());
+				}
+
+				if (!joined.empty())
+					joined += ", ";
+				joined += serialized;
+			}
+
+			document.Set(prefix, joined);
 			return;
 		}
 
@@ -174,11 +200,82 @@ namespace DefectStudio
 			return false;
 		}
 
-		YAML::Emitter emitter;
-		emitter << YAML::BeginMap;
+		struct YamlTreeNode
+		{
+			std::map<std::string, YamlTreeNode> children;
+			std::optional<std::string> value;
+		};
+
+		auto insertByDottedPath = [](YamlTreeNode &root, const std::string &dottedKey, const std::string &value,
+		                            std::string &insertError) {
+			if (dottedKey.empty())
+			{
+				insertError = "Empty key is not allowed in YAML config";
+				return;
+			}
+
+			YamlTreeNode *current = &root;
+			std::size_t segmentBegin = 0;
+			while (true)
+			{
+				const std::size_t separator = dottedKey.find('.', segmentBegin);
+				const std::string segment = dottedKey.substr(
+					segmentBegin,
+					separator == std::string::npos ? std::string::npos : separator - segmentBegin);
+
+				if (segment.empty())
+				{
+					insertError = "Invalid dotted path in YAML config key: " + dottedKey;
+					return;
+				}
+
+				if (separator == std::string::npos)
+				{
+					YamlTreeNode &leaf = current->children[segment];
+					if (!leaf.children.empty())
+					{
+						insertError = "Conflicting YAML config key path: " + dottedKey;
+						return;
+					}
+					leaf.value = value;
+					return;
+				}
+
+				YamlTreeNode &child = current->children[segment];
+				if (child.value.has_value())
+				{
+					insertError = "Conflicting YAML config key path: " + dottedKey;
+					return;
+				}
+
+				current = &child;
+				segmentBegin = separator + 1;
+			}
+		};
+
+		auto emitTree = [](const YamlTreeNode &node, YAML::Emitter &emitter, const auto &emitRef) -> void {
+			emitter << YAML::BeginMap;
+			for (const auto &[key, child] : node.children)
+			{
+				emitter << YAML::Key << key << YAML::Value;
+				if (!child.children.empty())
+					emitRef(child, emitter, emitRef);
+				else
+					emitter << child.value.value_or(std::string());
+			}
+			emitter << YAML::EndMap;
+		};
+
+		YamlTreeNode root;
 		for (const auto &[key, value] : document.values)
-			emitter << YAML::Key << key << YAML::Value << value;
-		emitter << YAML::EndMap;
+		{
+			insertByDottedPath(root, key, value, error);
+			if (!error.empty())
+				return false;
+		}
+
+		YAML::Emitter emitter;
+		emitTree(root, emitter, emitTree);
 
 		if (!emitter.good())
 		{
