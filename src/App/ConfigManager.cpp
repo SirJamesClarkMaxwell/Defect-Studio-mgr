@@ -1,12 +1,13 @@
 #include "Core/dspch.hpp"
 
-#include "App/ConfigManager.hpp"
 
 
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <yaml-cpp/yaml.h>
 
+#include "Core/Utils/Path.hpp"
+#include "App/ConfigManager.hpp"
 namespace DefectStudio
 {
 	struct JsonValue;
@@ -127,9 +128,9 @@ namespace DefectStudio
 		document.Set(prefix, node.Scalar());
 	}
 
-	static bool LoadJsonDocument(const std::filesystem::path &path, ConfigDocument &document, std::string &error)
+	static bool LoadJsonDocument(const Path &path, ConfigDocument &document, std::string &error)
 	{
-		std::ifstream stream(path, std::ios::binary);
+		std::ifstream stream(path.Native(), std::ios::binary);
 		if (!stream)
 		{
 			error = "Unable to open config file";
@@ -155,11 +156,11 @@ namespace DefectStudio
 		}
 	}
 
-	static bool LoadYamlDocument(const std::filesystem::path &path, ConfigDocument &document, std::string &error)
+	static bool LoadYamlDocument(const Path &path, ConfigDocument &document, std::string &error)
 	{
 		try
 		{
-			const YAML::Node parsed = YAML::LoadFile(path.string());
+			const YAML::Node parsed = YAML::LoadFile(path.String());
 			if (!parsed || !parsed.IsMap())
 			{
 				error = "YAML config root must be a mapping";
@@ -176,9 +177,9 @@ namespace DefectStudio
 		}
 	}
 
-	static bool WriteJsonFile(const std::filesystem::path &path, const ConfigDocument &document, std::string &error)
+	static bool WriteJsonFile(const Path &path, const ConfigDocument &document, std::string &error)
 	{
-		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		std::ofstream stream(path.Native(), std::ios::binary | std::ios::trunc);
 		if (!stream)
 		{
 			error = "Unable to open JSON config file for writing";
@@ -191,9 +192,9 @@ namespace DefectStudio
 		return true;
 	}
 
-	static bool WriteYamlFile(const std::filesystem::path &path, const ConfigDocument &document, std::string &error)
+	static bool WriteYamlFile(const Path &path, const ConfigDocument &document, std::string &error)
 	{
-		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		std::ofstream stream(path.Native(), std::ios::binary | std::ios::trunc);
 		if (!stream)
 		{
 			error = "Unable to open YAML config file for writing";
@@ -287,7 +288,7 @@ namespace DefectStudio
 		return true;
 	}
 
-	static ConfigFormat DetectFormatImpl(const std::filesystem::path &path, std::string_view text)
+	static ConfigFormat DetectFormatImpl(const Path &path, std::string_view text)
 	{
 		const std::string extension = ToLowerCopy(path.extension().string());
 		if (extension == ".json")
@@ -325,6 +326,127 @@ namespace DefectStudio
 		values[std::move(key)] = std::move(value);
 	}
 
+	ConfigManager::ConfigManager(Path configDirectory):
+		m_ConfigDirectory(std::move(configDirectory))
+	{
+	}
+
+	bool ConfigManager::Initialize(std::string &error)
+	{
+		std::error_code directoryError;
+		FileSystem::CreateDirectories(m_ConfigDirectory.Native(), directoryError);
+		if (directoryError)
+		{
+			error = directoryError.message();
+			return false;
+		}
+
+		if (!LoadOrCreateDocument(GetDefaultConfigPath(m_ConfigDirectory), CreateDefaultDocument(), m_DefaultDocument, error))
+			return false;
+
+		if (!LoadOrCreateDocument(GetUiSettingsPath(m_ConfigDirectory), CreateUiSettingsDocument(), m_UiSettingsDocument, error))
+			return false;
+
+		m_Initialized = true;
+		return true;
+	}
+
+	const Path &ConfigManager::GetConfigDirectory() const
+	{
+		return m_ConfigDirectory;
+	}
+
+	const ConfigDocument &ConfigManager::GetDefaultDocument() const
+	{
+		return m_DefaultDocument;
+	}
+
+	const ConfigDocument &ConfigManager::GetUiSettingsDocument() const
+	{
+		return m_UiSettingsDocument;
+	}
+
+	void ConfigManager::SetUiValue(std::string key, std::string value)
+	{
+		m_UiSettingsDocument.Set(std::move(key), std::move(value));
+	}
+
+	bool ConfigManager::SaveUiSettings(std::string &error) const
+	{
+		if (!EnsureInitialized(error))
+			return false;
+
+		return SaveFile(GetUiSettingsPath(m_ConfigDirectory), m_UiSettingsDocument, error);
+	}
+
+	std::string ConfigManager::GetDefaultString(std::string_view key, std::string_view fallback) const
+	{
+		return GetString(m_DefaultDocument, key, fallback);
+	}
+
+	bool ConfigManager::GetDefaultBool(std::string_view key, bool fallback) const
+	{
+		return GetBool(m_DefaultDocument, key, fallback);
+	}
+
+	int ConfigManager::GetDefaultInt(std::string_view key, int fallback) const
+	{
+		return GetInt(m_DefaultDocument, key, fallback);
+	}
+
+	double ConfigManager::GetDefaultDouble(std::string_view key, double fallback) const
+	{
+		return GetDouble(m_DefaultDocument, key, fallback);
+	}
+
+	std::string ConfigManager::GetUiString(std::string_view key, std::string_view fallback) const
+	{
+		return GetString(m_UiSettingsDocument, key, fallback);
+	}
+
+	bool ConfigManager::GetUiBool(std::string_view key, bool fallback) const
+	{
+		return GetBool(m_UiSettingsDocument, key, fallback);
+	}
+
+	int ConfigManager::GetUiInt(std::string_view key, int fallback) const
+	{
+		return GetInt(m_UiSettingsDocument, key, fallback);
+	}
+
+	double ConfigManager::GetUiDouble(std::string_view key, double fallback) const
+	{
+		return GetDouble(m_UiSettingsDocument, key, fallback);
+	}
+
+	bool ConfigManager::LoadOrCreateDocument(const Path &path,
+	                                        const ConfigDocument &fallback,
+	                                        ConfigDocument &target,
+	                                        std::string &error) const
+	{
+		if (FileSystem::Exists(path.Native()))
+		{
+			const auto result = LoadFile(path);
+			if (result.success)
+			{
+				target = result.document;
+				return true;
+			}
+		}
+
+		target = fallback;
+		return SaveFile(path, target, error);
+	}
+
+	bool ConfigManager::EnsureInitialized(std::string &error) const
+	{
+		if (m_Initialized)
+			return true;
+
+		error = "ConfigManager is not initialized";
+		return false;
+	}
+
 	[[nodiscard]] ConfigDocument ConfigManager::CreateDefaultDocument()
 	{
 		ConfigDocument document;
@@ -349,7 +471,7 @@ namespace DefectStudio
 		return document;
 	}
 
-	[[nodiscard]] ConfigLoadResult ConfigManager::LoadFile(const std::filesystem::path &path)
+	[[nodiscard]] ConfigLoadResult ConfigManager::LoadFile(const Path &path)
 	{
 		ConfigLoadResult result;
 		result.path = path;
@@ -372,17 +494,17 @@ namespace DefectStudio
 		return result;
 	}
 
-	[[nodiscard]] ConfigFormat ConfigManager::DetectFormat(const std::filesystem::path &path, const std::string &text)
+	[[nodiscard]] ConfigFormat ConfigManager::DetectFormat(const Path &path, const std::string &text)
 	{
 		return DetectFormatImpl(path, text);
 	}
 
-	bool ConfigManager::SaveFile(const std::filesystem::path &path, const ConfigDocument &document, std::string &error)
+	bool ConfigManager::SaveFile(const Path &path, const ConfigDocument &document, std::string &error)
 	{
 		if (!path.parent_path().empty())
 		{
 			std::error_code directoryError;
-			std::filesystem::create_directories(path.parent_path(), directoryError);
+			FileSystem::CreateDirectories(path.parent_path().Native(), directoryError);
 			if (directoryError)
 			{
 				error = directoryError.message();
@@ -449,13 +571,13 @@ namespace DefectStudio
 		return parsed;
 	}
 
-	[[nodiscard]] std::filesystem::path ConfigManager::GetDefaultConfigPath(const std::filesystem::path &configDirectory)
+	[[nodiscard]] Path ConfigManager::GetDefaultConfigPath(const Path &configDirectory)
 	{
-		return configDirectory / std::filesystem::path(DefaultConfigFileName);
+		return configDirectory / Path(DefaultConfigFileName);
 	}
 
-	[[nodiscard]] std::filesystem::path ConfigManager::GetUiSettingsPath(const std::filesystem::path &configDirectory)
+	[[nodiscard]] Path ConfigManager::GetUiSettingsPath(const Path &configDirectory)
 	{
-		return configDirectory / std::filesystem::path(UiSettingsFileName);
+		return configDirectory / Path(UiSettingsFileName);
 	}
 } // namespace DefectStudio

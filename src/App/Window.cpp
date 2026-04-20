@@ -9,6 +9,7 @@
 #include "App/Window.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 
 namespace DefectStudio
@@ -135,7 +136,7 @@ namespace DefectStudio
 		glfwSetCursorPosCallback(m_Handle, OnGlfwCursorPos);
 		glfwSetScrollCallback(m_Handle, OnGlfwScroll);
 
-		Platform::InitializeWindowPlatform(m_Handle, std::filesystem::path("assets") / "icon.ico");
+		Platform::InitializeWindowPlatform(m_Handle, Path("assets") / "icon.ico");
 		DS_LOG_INFO("GLFW window created");
 		return true;
 	}

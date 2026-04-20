@@ -10,13 +10,14 @@
 #include <windows.h>
 
 #include "Core/Utils/Logger.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 
 static std::unordered_map<GLFWwindow *, HICON> s_WindowIcons;
 
 namespace DefectStudio::Platform
 {
-	void InitializeWindowPlatform(GLFWwindow *window, const std::filesystem::path &iconPath)
+	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)
 	{
 		if (window == nullptr)
 			return;
@@ -29,7 +30,7 @@ namespace DefectStudio::Platform
 		if (DwmSetWindowAttribute(hwnd, 20, &useDark, sizeof(useDark)) != S_OK)
 			DwmSetWindowAttribute(hwnd, 19, &useDark, sizeof(useDark));
 
-		const std::filesystem::path absoluteIconPath = std::filesystem::current_path() / iconPath;
+		const Path absoluteIconPath = FileSystem::CurrentPath() / iconPath;
 		HICON icon = static_cast<HICON>(LoadImageW(nullptr, absoluteIconPath.wstring().c_str(), IMAGE_ICON, 0, 0,
 		                                           LR_DEFAULTSIZE | LR_LOADFROMFILE));
 		if (icon == nullptr)

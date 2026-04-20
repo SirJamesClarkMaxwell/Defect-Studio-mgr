@@ -8,18 +8,20 @@
 
 namespace
 {
-	[[nodiscard]] std::filesystem::path CreateTempDirectory()
+	using Path = DefectStudio::Path;
+
+	[[nodiscard]] Path CreateTempDirectory()
 	{
 		const auto stamp = DefectStudio::Time::Now().time_since_epoch().count();
-		const std::filesystem::path baseDirectory = std::filesystem::temp_directory_path() /
+		const Path baseDirectory = FileSystem::TempDirectoryPath() /
 		                                            ("DefectStudioConfigTests_" + std::to_string(stamp));
-		std::filesystem::create_directories(baseDirectory);
+		FileSystem::CreateDirectories(baseDirectory.Native());
 		return baseDirectory;
 	}
 
-	void WriteFile(const std::filesystem::path &path, const std::string &text)
+	void WriteFile(const Path &path, const std::string &text)
 	{
-		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+		std::ofstream stream(path.Native(), std::ios::binary | std::ios::trunc);
 		ASSERT_TRUE(stream.good());
 		stream << text;
 	}
@@ -27,8 +29,8 @@ namespace
 
 TEST(ConfigManagerTests, LoadsNestedJsonAndFlattensKeys)
 {
-	const std::filesystem::path tempDirectory = CreateTempDirectory();
-	const std::filesystem::path configPath = tempDirectory / "default.json";
+	const Path tempDirectory = CreateTempDirectory();
+	const Path configPath = tempDirectory / "default.json";
 	WriteFile(configPath,
 	          R"JSON({
   "schema_version": "1",
@@ -50,13 +52,13 @@ TEST(ConfigManagerTests, LoadsNestedJsonAndFlattensKeys)
 	EXPECT_TRUE(DefectStudio::ConfigManager::GetBool(result.document, "ui.show_demo_window"));
 
 	std::error_code ignored;
-	std::filesystem::remove_all(tempDirectory, ignored);
+	FileSystem::RemoveAll(tempDirectory.Native(), ignored);
 }
 
 TEST(ConfigManagerTests, LoadsNestedYamlAndFlattensKeys)
 {
-	const std::filesystem::path tempDirectory = CreateTempDirectory();
-	const std::filesystem::path configPath = tempDirectory / "ui_settings.yaml";
+	const Path tempDirectory = CreateTempDirectory();
+	const Path configPath = tempDirectory / "ui_settings.yaml";
 	WriteFile(configPath,
 	          "schema_version: 1\n"
 	          "window:\n"
@@ -76,13 +78,13 @@ TEST(ConfigManagerTests, LoadsNestedYamlAndFlattensKeys)
 	          "0.10, 0.10, 0.12, 1.00");
 
 	std::error_code ignored;
-	std::filesystem::remove_all(tempDirectory, ignored);
+	FileSystem::RemoveAll(tempDirectory.Native(), ignored);
 }
 
 TEST(ConfigManagerTests, LoadsYamlSequencesAsCommaSeparatedScalars)
 {
-	const std::filesystem::path tempDirectory = CreateTempDirectory();
-	const std::filesystem::path configPath = tempDirectory / "default.yaml";
+	const Path tempDirectory = CreateTempDirectory();
+	const Path configPath = tempDirectory / "default.yaml";
 	WriteFile(configPath,
 	          "schema_version: 1\n"
 	          "viewport:\n"
@@ -97,19 +99,19 @@ TEST(ConfigManagerTests, LoadsYamlSequencesAsCommaSeparatedScalars)
 	EXPECT_EQ(result.document.Get("recent_projects.paths"), "");
 
 	std::error_code ignored;
-	std::filesystem::remove_all(tempDirectory, ignored);
+	FileSystem::RemoveAll(tempDirectory.Native(), ignored);
 }
 
 TEST(ConfigManagerTests, SaveAndLoadRoundTripAcrossFormats)
 {
-	const std::filesystem::path tempDirectory = CreateTempDirectory();
+	const Path tempDirectory = CreateTempDirectory();
 
 	auto defaultDocument = DefectStudio::ConfigManager::CreateDefaultDocument();
 	defaultDocument.Set("window.width", "1400");
 	defaultDocument.Set("window.height", "900");
 
 	std::string error;
-	const std::filesystem::path jsonPath = tempDirectory / "default.json";
+	const Path jsonPath = tempDirectory / "default.json";
 	ASSERT_TRUE(DefectStudio::ConfigManager::SaveFile(jsonPath, defaultDocument, error)) << error;
 	const auto jsonResult = DefectStudio::ConfigManager::LoadFile(jsonPath);
 	EXPECT_TRUE(jsonResult.success);
@@ -118,20 +120,20 @@ TEST(ConfigManagerTests, SaveAndLoadRoundTripAcrossFormats)
 
 	auto uiDocument = DefectStudio::ConfigManager::CreateUiSettingsDocument();
 	uiDocument.Set("show_demo_window", "false");
-	const std::filesystem::path yamlPath = tempDirectory / "ui_settings.yaml";
+	const Path yamlPath = tempDirectory / "ui_settings.yaml";
 	ASSERT_TRUE(DefectStudio::ConfigManager::SaveFile(yamlPath, uiDocument, error)) << error;
 	const auto yamlResult = DefectStudio::ConfigManager::LoadFile(yamlPath);
 	EXPECT_TRUE(yamlResult.success);
 	EXPECT_FALSE(DefectStudio::ConfigManager::GetBool(yamlResult.document, "show_demo_window"));
 
 	std::error_code ignored;
-	std::filesystem::remove_all(tempDirectory, ignored);
+	FileSystem::RemoveAll(tempDirectory.Native(), ignored);
 }
 
 TEST(ConfigManagerTests, SaveYamlWithDottedKeysWritesNestedStructure)
 {
-	const std::filesystem::path tempDirectory = CreateTempDirectory();
-	const std::filesystem::path yamlPath = tempDirectory / "ui_settings.yaml";
+	const Path tempDirectory = CreateTempDirectory();
+	const Path yamlPath = tempDirectory / "ui_settings.yaml";
 
 	DefectStudio::ConfigDocument document;
 	document.Set("schema_version", "1");
@@ -141,7 +143,7 @@ TEST(ConfigManagerTests, SaveYamlWithDottedKeysWritesNestedStructure)
 	std::string error;
 	ASSERT_TRUE(DefectStudio::ConfigManager::SaveFile(yamlPath, document, error)) << error;
 
-	std::ifstream stream(yamlPath, std::ios::binary);
+	std::ifstream stream(yamlPath.Native(), std::ios::binary);
 	ASSERT_TRUE(stream.good());
 	std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 	EXPECT_NE(text.find("viewport:"), std::string::npos);
@@ -154,12 +156,34 @@ TEST(ConfigManagerTests, SaveYamlWithDottedKeysWritesNestedStructure)
 	EXPECT_EQ(result.document.Get("ui.show_demo_window"), "true");
 
 	std::error_code ignored;
-	std::filesystem::remove_all(tempDirectory, ignored);
+	FileSystem::RemoveAll(tempDirectory.Native(), ignored);
 }
 
 TEST(ConfigManagerTests, MissingFileReturnsStructuredFailure)
 {
-	const auto result = DefectStudio::ConfigManager::LoadFile(std::filesystem::path("missing-config.yaml"));
+	const auto result = DefectStudio::ConfigManager::LoadFile(Path("missing-config.yaml"));
 	EXPECT_FALSE(result.success);
 	EXPECT_FALSE(result.error.empty());
+}
+
+TEST(ConfigManagerTests, InstanceManagerBootstrapsAndPersistsUiSettings)
+{
+	const Path tempDirectory = CreateTempDirectory();
+
+	DefectStudio::ConfigManager manager(tempDirectory);
+	std::string error;
+	ASSERT_TRUE(manager.Initialize(error)) << error;
+
+	EXPECT_EQ(manager.GetDefaultString("window.title", ""), "DefectStudio");
+	EXPECT_DOUBLE_EQ(manager.GetUiDouble("font_scale", 0.0), 1.0);
+
+	manager.SetUiValue("font_scale", "1.25");
+	ASSERT_TRUE(manager.SaveUiSettings(error)) << error;
+
+	DefectStudio::ConfigManager reloaded(tempDirectory);
+	ASSERT_TRUE(reloaded.Initialize(error)) << error;
+	EXPECT_DOUBLE_EQ(reloaded.GetUiDouble("font_scale", 0.0), 1.25);
+
+	std::error_code ignored;
+	FileSystem::RemoveAll(tempDirectory.Native(), ignored);
 }

@@ -1,11 +1,11 @@
 #pragma once
 
-#include <filesystem>
+#include "Core/Utils/Path.hpp"
 
 struct GLFWwindow;
 
 namespace DefectStudio::Platform
 {
-	void InitializeWindowPlatform(GLFWwindow *window, const std::filesystem::path &iconPath);
+	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath);
 	void ShutdownWindowPlatform(GLFWwindow *window);
 } // namespace DefectStudio::Platform

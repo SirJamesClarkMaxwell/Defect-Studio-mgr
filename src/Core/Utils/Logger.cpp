@@ -5,7 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include "Core/Utils/Logger.hpp"
-
+#include "Core/Utils/Path.hpp"
 namespace DefectStudio
 {
 	spdlog::level::level_enum ToSpdlogLevel(LogLevel level)
@@ -76,12 +76,12 @@ namespace DefectStudio
 
 		if (options.logToFile)
 		{
-			std::filesystem::path logFilePath = options.logFilePath;
+			Path logFilePath = options.logFilePath;
 			if (logFilePath.empty())
-				logFilePath = std::filesystem::path("logs") / "DefectStudio.log";
+				logFilePath = Path("logs") / "DefectStudio.log";
 
 			if (!logFilePath.parent_path().empty())
-				std::filesystem::create_directories(logFilePath.parent_path());
+				FileSystem::CreateDirectories(logFilePath.parent_path().Native());
 
 			sinks.push_back(CreateRef<spdlog::sinks::basic_file_sink_mt>(logFilePath.string(), true));
 		}

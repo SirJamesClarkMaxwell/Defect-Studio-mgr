@@ -5,10 +5,11 @@
 #include <GLFW/glfw3.h>
 
 #include "Core/Platform/PlatformWindow.hpp"
+#include "Core/Utils/Path.hpp"
 
 namespace DefectStudio::Platform
 {
-	void InitializeWindowPlatform(GLFWwindow *window, const std::filesystem::path &iconPath)
+	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)
 	{
 		(void)window;
 		(void)iconPath;

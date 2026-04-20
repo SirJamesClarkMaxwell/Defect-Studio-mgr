@@ -5,7 +5,7 @@
 #if !defined(_WIN32) && !defined(__linux__)
 namespace DefectStudio::Platform
 {
-	void InitializeWindowPlatform(GLFWwindow *window, const std::filesystem::path &iconPath)
+	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)
 	{
 		(void)window;
 		(void)iconPath;

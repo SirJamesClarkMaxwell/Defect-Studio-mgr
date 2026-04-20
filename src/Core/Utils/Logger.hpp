@@ -6,6 +6,7 @@
 #include <spdlog/spdlog.h>
 
 #include "Core/Utils/Memory.hpp"
+#include "Core/Utils/Path.hpp"
 
 namespace DefectStudio
 {
@@ -23,7 +24,7 @@ namespace DefectStudio
 	{
 		LogLevel level = LogLevel::Info;
 		bool logToFile = false;
-		std::filesystem::path logFilePath;
+		Path logFilePath;
 	};
 
 	const char *ToString(LogLevel level);

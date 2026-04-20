@@ -87,8 +87,6 @@ namespace DefectStudio
 		void applySpecificationFromDefaultConfig();
 		void applyUiSettingsFromConfig();
 		bool persistUiSettings();
-		ConfigLoadResult loadConfigFromPath(const Path &path) const;
-		bool saveConfigToPath(const Path &path, const ConfigDocument &document) const;
 
 		// Low-level platform/graphics setup
 		void setupDefaultLayers();
@@ -116,8 +114,7 @@ namespace DefectStudio
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
 		ApplicationConfigState m_Config;
-		ConfigDocument m_DefaultConfigDocument;
-		ConfigDocument m_UiSettingsDocument;
+		Unique<ConfigManager> m_ConfigManager;
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
 
