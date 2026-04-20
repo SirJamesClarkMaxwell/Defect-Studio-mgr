@@ -83,6 +83,42 @@ namespace DefectStudio
 			return Path::FromResolved(std::filesystem::current_path() / "config");
 	}
 
+	static std::string TrimCopy(std::string_view value)
+	{
+		const auto first = value.find_first_not_of(" \t\r\n");
+		if (first == std::string_view::npos)
+			return {};
+
+		const auto last = value.find_last_not_of(" \t\r\n");
+		return std::string(value.substr(first, last - first + 1));
+	}
+
+	static std::string ToLowerCopy(std::string_view value)
+	{
+		std::string result(value);
+		for (char &character : result)
+			character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+		return result;
+	}
+
+	static LogLevel ParseLogLevel(std::string_view value, LogLevel fallback)
+	{
+		const std::string normalized = ToLowerCopy(TrimCopy(value));
+		if (normalized == "trace")
+			return LogLevel::Trace;
+		if (normalized == "debug")
+			return LogLevel::Debug;
+		if (normalized == "info")
+			return LogLevel::Info;
+		if (normalized == "warn" || normalized == "warning")
+			return LogLevel::Warn;
+		if (normalized == "error")
+			return LogLevel::Error;
+		if (normalized == "critical")
+			return LogLevel::Critical;
+		return fallback;
+	}
+
 	struct MainLoopState
 	{
 		bool showDemoWindow = true;
@@ -223,6 +259,13 @@ namespace DefectStudio
 		m_Runtime.specification = specification;
 		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
 		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.String());
+		if (!bootstrapConfiguration())
+		{
+			DS_LOG_ERROR("CreateFromSpecification: configuration bootstrap failed");
+			shutdownInternal();
+			return false;
+		}
+		applySpecificationFromDefaultConfig();
 
 		DS_LOG_INFO("CreateFromSpecification: init EventDispatchingSystem");
 		if (!initializeEventDispatchingSystem())
@@ -431,12 +474,7 @@ namespace DefectStudio
 		ImGui::End();
 
 		if (saveUiSettings)
-		{
-			ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
-			loadUiSettingsDocument(uiDocument);
-			uiDocument.Set("font_scale", std::to_string(m_Config.fontScale));
-			saveUiSettingsDocument(uiDocument);
-		}
+			persistUiSettings();
 
 		if (showDemoWindow)
 			ImGui::ShowDemoWindow(&showDemoWindow);
@@ -583,27 +621,76 @@ namespace DefectStudio
 		return true;
 	}
 
-	bool Application::loadUiSettingsDocument(ConfigDocument &document) const
+	bool Application::bootstrapConfiguration()
 	{
-		const Path uiSettingsPath = Path::FromResolved(ConfigManager::GetUiSettingsPath(m_Config.directory.Native()));
-		if (!std::filesystem::exists(uiSettingsPath.Native()))
+		std::error_code directoryError;
+		std::filesystem::create_directories(m_Config.directory.Native(), directoryError);
+		if (directoryError)
 		{
-			DS_LOG_INFO("UI config missing, using defaults: {}", uiSettingsPath.String());
+			DS_LOG_ERROR("Config directory create failed [{}]: {}", m_Config.directory.String(), directoryError.message());
 			return false;
 		}
 
-		auto loadResult = loadConfigFromPath(uiSettingsPath);
-		if (!loadResult.success)
-			return false;
+		const Path defaultConfigPath = Path::FromResolved(ConfigManager::GetDefaultConfigPath(m_Config.directory.Native()));
+		const Path uiSettingsPath = Path::FromResolved(ConfigManager::GetUiSettingsPath(m_Config.directory.Native()));
 
-		document = std::move(loadResult.document);
+		auto loadOrCreateDocument = [this](const Path &path, const auto &factory, ConfigDocument &target,
+		                                  const char *label) {
+			const ConfigDocument fallbackDocument = factory();
+
+			if (std::filesystem::exists(path.Native()))
+			{
+				const auto loadResult = loadConfigFromPath(path);
+				if (loadResult.success)
+				{
+					target = loadResult.document;
+					return;
+				}
+
+				DS_LOG_WARN("{} config invalid, restoring defaults: {}", label, path.String());
+			}
+			else
+			{
+				DS_LOG_INFO("{} config missing, creating defaults: {}", label, path.String());
+			}
+
+			target = fallbackDocument;
+			saveConfigToPath(path, target);
+		};
+
+		loadOrCreateDocument(defaultConfigPath, ConfigManager::CreateDefaultDocument, m_DefaultConfigDocument, "Default");
+		loadOrCreateDocument(uiSettingsPath, ConfigManager::CreateUiSettingsDocument, m_UiSettingsDocument, "UI settings");
 		return true;
 	}
 
-	bool Application::saveUiSettingsDocument(const ConfigDocument &document) const
+	void Application::applySpecificationFromDefaultConfig()
+	{
+		m_Runtime.specification.logLevel = ParseLogLevel(
+			ConfigManager::GetString(m_DefaultConfigDocument, "log.level", ToString(m_Runtime.specification.logLevel)),
+			m_Runtime.specification.logLevel);
+		m_Runtime.specification.traceEvents = ConfigManager::GetBool(
+			m_DefaultConfigDocument,
+			"trace_events",
+			m_Runtime.specification.traceEvents);
+	}
+
+	void Application::applyUiSettingsFromConfig()
+	{
+		m_Config.fontScale = static_cast<float>(ConfigManager::GetDouble(m_UiSettingsDocument, "font_scale", 1.0));
+		m_Config.fontScaleStep = static_cast<float>(ConfigManager::GetDouble(m_UiSettingsDocument, "font_scale_step", 0.10));
+		m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
+		m_Config.fontScaleStep = std::clamp(m_Config.fontScaleStep, 0.01f, 1.00f);
+
+		if (ImGui::GetCurrentContext() != nullptr)
+			ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
+	}
+
+	bool Application::persistUiSettings()
 	{
 		const Path uiSettingsPath = Path::FromResolved(ConfigManager::GetUiSettingsPath(m_Config.directory.Native()));
-		return saveConfigToPath(uiSettingsPath, document);
+		m_UiSettingsDocument.Set("font_scale", std::to_string(m_Config.fontScale));
+		m_UiSettingsDocument.Set("font_scale_step", std::to_string(m_Config.fontScaleStep));
+		return saveConfigToPath(uiSettingsPath, m_UiSettingsDocument);
 	}
 
 	// ===== Low-level platform/graphics setup =====
@@ -623,8 +710,12 @@ namespace DefectStudio
 
 	bool Application::createMainWindow()
 	{
+		const int width = ConfigManager::GetInt(m_DefaultConfigDocument, "window.width", 1280);
+		const int height = ConfigManager::GetInt(m_DefaultConfigDocument, "window.height", 720);
+		const std::string title = ConfigManager::GetString(m_DefaultConfigDocument, "window.title", "DefectStudio");
+
 		m_Graphics.window = CreateUnique<Window>();
-		if (!m_Graphics.window->Create(1280, 720, "DefectStudio"))
+		if (!m_Graphics.window->Create(width, height, title))
 		{
 			m_Graphics.window.reset();
 			return false;
@@ -692,12 +783,7 @@ namespace DefectStudio
 		if (std::filesystem::exists(iniPath))
 			ImGui::LoadIniSettingsFromDisk(m_Config.imGuiIniPath.c_str());
 
-		ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
-		loadUiSettingsDocument(uiDocument);
-		m_Config.fontScale = static_cast<float>(ConfigManager::GetDouble(uiDocument, "font_scale", 1.0));
-		m_Config.fontScaleStep = static_cast<float>(ConfigManager::GetDouble(uiDocument, "font_scale_step", 0.10));
-		m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
-		m_Config.fontScaleStep = std::clamp(m_Config.fontScaleStep, 0.01f, 1.00f);
+		applyUiSettingsFromConfig();
 		io.FontGlobalScale = m_Config.fontScale;
 
 		ImGui::StyleColorsDark();
@@ -807,11 +893,7 @@ namespace DefectStudio
 		if (io.IniFilename != nullptr)
 			ImGui::SaveIniSettingsToDisk(io.IniFilename);
 
-		ConfigDocument uiDocument = ConfigManager::CreateUiSettingsDocument();
-		loadUiSettingsDocument(uiDocument);
-		uiDocument.Set("font_scale", std::to_string(m_Config.fontScale));
-		uiDocument.Set("font_scale_step", std::to_string(m_Config.fontScaleStep));
-		saveUiSettingsDocument(uiDocument);
+		persistUiSettings();
 
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();

@@ -83,10 +83,12 @@ namespace DefectStudio
 		bool initializeCoreLayerSystems();
 
 		// Configuration API
+		bool bootstrapConfiguration();
+		void applySpecificationFromDefaultConfig();
+		void applyUiSettingsFromConfig();
+		bool persistUiSettings();
 		ConfigLoadResult loadConfigFromPath(const Path &path) const;
 		bool saveConfigToPath(const Path &path, const ConfigDocument &document) const;
-		bool loadUiSettingsDocument(ConfigDocument &document) const;
-		bool saveUiSettingsDocument(const ConfigDocument &document) const;
 
 		// Low-level platform/graphics setup
 		void setupDefaultLayers();
@@ -114,6 +116,8 @@ namespace DefectStudio
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
 		ApplicationConfigState m_Config;
+		ConfigDocument m_DefaultConfigDocument;
+		ConfigDocument m_UiSettingsDocument;
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
 
