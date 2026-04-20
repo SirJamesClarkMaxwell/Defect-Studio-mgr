@@ -115,6 +115,7 @@ namespace DefectStudio
 		ApplicationGraphicsState m_Graphics;
 		ApplicationConfigState m_Config;
 		EventQueue m_EventQueue;
+		Ref<EventBus> m_EventBus;
 
 		LayerStack m_LayerStack;
 		CoreLayer *m_CoreLayer = nullptr;

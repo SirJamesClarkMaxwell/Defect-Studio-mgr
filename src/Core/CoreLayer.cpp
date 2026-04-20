@@ -16,7 +16,6 @@ namespace DefectStudio
 
 	void CoreLayer::OnAttach()
 	{
-		InitializeSystems();
 		DS_LOG_INFO("CoreLayer attached");
 	}
 
@@ -29,11 +28,12 @@ namespace DefectStudio
 	void CoreLayer::OnUpdate(float deltaTime)
 	{
 		m_AccumulatedTime += deltaTime;
-		if (m_EventBus)
-			m_EventBus->ProcessQueue();
+		auto eventBus = m_EventBus.lock();
+		if (eventBus)
+			eventBus->ProcessQueue();
 	}
 
-	bool CoreLayer::InitializeSystems()
+	bool CoreLayer::InitializeSystems(WeakRef<EventBus> eventBus)
 	{
 		if (m_SystemsInitialized)
 		{
@@ -41,28 +41,23 @@ namespace DefectStudio
 			return true;
 		}
 
-		if (!InitializeEventBusSystem())
+		m_EventBus = std::move(eventBus);
+		auto eventBusStrong = m_EventBus.lock();
+		if (!eventBusStrong)
+		{
+			DS_LOG_ERROR("CoreLayer::InitializeSystems requires a valid EventBus");
 			return false;
+		}
 
 		DS_LOG_INFO("Init: JobSystem");
-		m_JobSystem = CreateUnique<JobSystem>(CreateWeakRef(m_EventBus));
+		m_JobSystem = CreateUnique<JobSystem>(CreateWeakRef(eventBusStrong));
 
 		DS_LOG_INFO("Init: ProgressTracker");
-		m_ProgressTracker = CreateUnique<ProgressTracker>(CreateWeakRef(m_EventBus));
+		m_ProgressTracker = CreateUnique<ProgressTracker>(CreateWeakRef(eventBusStrong));
 
 		m_SystemsInitialized = true;
 		DS_LOG_INFO("Init complete: runtime services");
 		return true;
-	}
-
-	bool CoreLayer::InitializeEventBusSystem()
-	{
-		if (m_EventBus)
-			return true;
-
-		DS_LOG_INFO("Init: EventBus");
-		m_EventBus = CreateRef<EventBus>();
-		return m_EventBus != nullptr;
 	}
 
 	void CoreLayer::ShutdownSystems()
@@ -74,23 +69,15 @@ namespace DefectStudio
 		m_ProgressTracker.reset();
 		DS_LOG_INFO("Shutdown: JobSystem");
 		m_JobSystem.reset();
-		ShutdownEventBusSystem();
-		m_SystemsInitialized = false;
-	}
-
-	void CoreLayer::ShutdownEventBusSystem()
-	{
-		if (!m_EventBus)
-			return;
-
-		DS_LOG_INFO("Shutdown: EventBus");
 		m_EventBus.reset();
+		m_SystemsInitialized = false;
 	}
 
 	EventBus &CoreLayer::GetEventBus()
 	{
-		DS_ASSERT(m_EventBus != nullptr, "EventBus is not initialized");
-		return *m_EventBus;
+		auto eventBus = m_EventBus.lock();
+		DS_ASSERT(eventBus != nullptr, "EventBus is not initialized");
+		return *eventBus;
 	}
 
 	JobSystem &CoreLayer::GetJobSystem()

@@ -17,10 +17,8 @@ namespace DefectStudio
 		void OnDetach() override;
 		void OnUpdate(float deltaTime) override;
 
-		bool InitializeSystems();
-		bool InitializeEventBusSystem();
+		bool InitializeSystems(WeakRef<EventBus> eventBus);
 		void ShutdownSystems();
-		void ShutdownEventBusSystem();
 
 		EventBus &GetEventBus();
 		JobSystem &GetJobSystem();
@@ -29,7 +27,7 @@ namespace DefectStudio
 	private:
 		float m_AccumulatedTime = 0.0f;
 		bool m_SystemsInitialized = false;
-		Ref<EventBus> m_EventBus;
+		WeakRef<EventBus> m_EventBus;
 		Unique<JobSystem> m_JobSystem;
 		Unique<ProgressTracker> m_ProgressTracker;
 	};

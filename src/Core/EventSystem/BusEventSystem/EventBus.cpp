@@ -37,6 +37,9 @@ namespace DefectStudio
 		list.dispatching = false;
 		--m_DispatchDepth;
 
+		for (auto &listener : list.listeners)
+			listener.skipThisDispatch = false;
+
 		if (!list.pendingAdditions.empty())
 		{
 			list.listeners.insert(list.listeners.end(),
@@ -98,6 +101,7 @@ namespace DefectStudio
 
 	void EventBus::sortByPriority(std::vector<Listener> &listeners)
 	{
+		// Ascending enum order delivers Highest(0) before Lower priorities.
 		std::stable_sort(listeners.begin(), listeners.end(),
                         [](const Listener &left, const Listener &right) {
                             return static_cast<int>(left.priority) < static_cast<int>(right.priority);

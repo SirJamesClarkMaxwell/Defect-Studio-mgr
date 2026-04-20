@@ -136,8 +136,8 @@ namespace DefectStudio
 
 	EventBus &Application::GetEventBus()
 	{
-		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer not initialized");
-		return m_CoreLayer->GetEventBus();
+		DS_ASSERT(m_EventBus != nullptr, "EventBus not initialized");
+		return *m_EventBus;
 	}
 
 	JobSystem &Application::GetJobSystem()
@@ -188,11 +188,12 @@ namespace DefectStudio
 			DS_LOG_WARN("Application::Create called more than once; replacing previous instance pointer");
 		}
 
-		s_Instance = this;
+		DS_LOG_INFO("Application ctor: argc={}", argc);
 		m_Runtime.argc = argc;
 		m_Runtime.argv = argv;
 		
 		ApplicationSpecification spec = parseApplicationArguments(m_Runtime.argc,m_Runtime.argv);
+		DS_LOG_INFO("Application ctor: arguments parsed");
 		bool created = createFromSpecification(spec);
 		if (!created)
 			DS_LOG_ERROR("Application creation failed");
@@ -208,6 +209,7 @@ namespace DefectStudio
 	bool Application::createFromSpecification(const ApplicationSpecification &specification)
 	{
 		ZoneScoped;
+		DS_LOG_INFO("CreateFromSpecification: begin");
 
 		if (!m_Runtime.lifecycle.TryMarkCreated())
 		{
@@ -220,51 +222,85 @@ namespace DefectStudio
 
 		m_Runtime.specification = specification;
 		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
+		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.String());
 
+		DS_LOG_INFO("CreateFromSpecification: init EventDispatchingSystem");
 		if (!initializeEventDispatchingSystem())
 		{
+			DS_LOG_ERROR("CreateFromSpecification: EventDispatchingSystem init failed");
 			shutdownInternal();
 			return false;
 		}
+		DS_LOG_INFO("CreateFromSpecification: EventDispatchingSystem ready");
 
+		DS_LOG_INFO("CreateFromSpecification: create EventBus");
+		m_EventBus = CreateRef<EventBus>();
+		if (!m_EventBus)
+		{
+			DS_LOG_ERROR("Failed to initialize EventBus");
+			shutdownInternal();
+			return false;
+		}
+		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
+
+		DS_LOG_INFO("CreateFromSpecification: init logger");
 		initializeLogger();
+		DS_LOG_INFO("CreateFromSpecification: logger ready");
 
 		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
 		logStartupSpecification();
 
+		DS_LOG_INFO("CreateFromSpecification: init GLFW");
 		if (!initializeGlfw())
 		{
+			DS_LOG_ERROR("CreateFromSpecification: GLFW init failed");
 			shutdownInternal();
 			return false;
 		}
+		DS_LOG_INFO("CreateFromSpecification: GLFW ready");
 
+		DS_LOG_INFO("CreateFromSpecification: create main window");
 		if (!createMainWindow())
 		{
+			DS_LOG_ERROR("CreateFromSpecification: main window creation failed");
 			shutdownInternal();
 			return false;
 		}
+		DS_LOG_INFO("CreateFromSpecification: main window ready");
 
+		DS_LOG_INFO("CreateFromSpecification: init graphics");
 		if (!initializeGraphics())
 		{
+			DS_LOG_ERROR("CreateFromSpecification: graphics init failed");
 			shutdownInternal();
 			return false;
 		}
+		DS_LOG_INFO("CreateFromSpecification: graphics ready");
 
+		DS_LOG_INFO("CreateFromSpecification: init ImGui");
 		if (!initializeImGui())
 		{
+			DS_LOG_ERROR("CreateFromSpecification: ImGui init failed");
 			shutdownInternal();
 			return false;
 		}
+		DS_LOG_INFO("CreateFromSpecification: ImGui ready");
 
+		DS_LOG_INFO("CreateFromSpecification: setup default layers");
 		setupDefaultLayers();
+		DS_LOG_INFO("CreateFromSpecification: default layers ready");
 
+		DS_LOG_INFO("CreateFromSpecification: init core runtime services");
 		if (!initializeCoreLayerSystems())
 		{
+			DS_LOG_ERROR("CreateFromSpecification: core runtime services init failed");
 			shutdownInternal();
 			return false;
 		}
+		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 
 		m_Runtime.lifecycle.SetRunning(true);
+		DS_LOG_INFO("CreateFromSpecification: success, runtime running");
 		return true;
 	}
 
@@ -283,6 +319,14 @@ namespace DefectStudio
 		DS_LOG_INFO("Shutdown: clearing layers");
 		m_LayerStack.Clear();
 		m_CoreLayer = nullptr;
+
+		if (m_EventBus)
+		{
+			DS_LOG_INFO("Shutdown: releasing EventBus");
+			m_EventBus->ClearQueue();
+			m_EventBus->ClearAllListeners();
+			m_EventBus.reset();
+		}
 		
 		DS_LOG_INFO("Shutdown: releasing ImGui");
 		shutdownImGui();
@@ -448,6 +492,7 @@ namespace DefectStudio
 
 	void Application::setupDefaultLayers()
 	{
+		DS_LOG_INFO("LayerStack setup: begin");
 		auto coreLayer = CreateUnique<CoreLayer>();
 		m_CoreLayer = coreLayer.get();
 		m_LayerStack.PushLayer(std::move(coreLayer));
@@ -459,6 +504,7 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
 		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>());
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
+		DS_LOG_INFO("LayerStack setup: complete");
 	}
 
 	void Application::initializeLogger() const
@@ -498,14 +544,20 @@ namespace DefectStudio
 	bool Application::initializeCoreLayerSystems()
 	{
 		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer was not created");
-		bool systemInitialized = m_CoreLayer->InitializeSystems();
+		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
+		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
+		bool systemInitialized = m_CoreLayer->InitializeSystems(CreateWeakRef(m_EventBus));
 		if (!systemInitialized)
+		{
+			DS_LOG_ERROR("Init: Core runtime services failed");
 			return false;
+		}
 
 		// Sanity-check: force asserts if any core service failed to initialize.
 		GetEventBus();
 		GetJobSystem();
 		GetProgressTracker();
+		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
 	}
 
