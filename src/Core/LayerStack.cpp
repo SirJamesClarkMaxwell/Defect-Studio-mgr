@@ -8,6 +8,33 @@
 
 namespace DefectStudio
 {
+	std::string_view LayerStack::toLayerName(LayerId layerId)
+	{
+		switch (layerId)
+		{
+		case LayerId::Core:
+			return "CoreLayer";
+		case LayerId::IO:
+			return "IOLayer";
+		case LayerId::Storage:
+			return "StorageLayer";
+		case LayerId::ScientificRuntime:
+			return "ScientificRuntimeLayer";
+		case LayerId::Domain:
+			return "DomainLayer";
+		case LayerId::ImGui:
+			return "ImGuiLayer";
+		case LayerId::Editor:
+			return "EditorLayer";
+		case LayerId::Demo:
+			return "DemoLayer";
+		case LayerId::Debug:
+			return "DebugLayer";
+		default:
+			return {};
+		}
+	}
+
 	LayerStack::~LayerStack()
 	{
 		Clear();
@@ -16,7 +43,8 @@ namespace DefectStudio
 	void LayerStack::PushLayer(Unique<Layer> layer)
 	{
 		DS_ASSERT(layer != nullptr, "LayerStack::PushLayer requires a valid layer");
-		m_Layers.insert(m_Layers.begin() + static_cast<std::ptrdiff_t>(m_LayerInsertIndex), std::move(layer));
+		Ref<Layer> layerRef(std::move(layer));
+		m_Layers.insert(m_Layers.begin() + static_cast<std::ptrdiff_t>(m_LayerInsertIndex), std::move(layerRef));
 		++m_LayerInsertIndex;
 		m_Layers[m_LayerInsertIndex - 1]->OnAttach();
 	}
@@ -24,7 +52,7 @@ namespace DefectStudio
 	void LayerStack::PushOverlay(Unique<Layer> overlay)
 	{
 		DS_ASSERT(overlay != nullptr, "LayerStack::PushOverlay requires a valid overlay");
-		m_Layers.push_back(std::move(overlay));
+		m_Layers.push_back(Ref<Layer>(std::move(overlay)));
 		m_Layers.back()->OnAttach();
 	}
 
@@ -32,7 +60,7 @@ namespace DefectStudio
 	{
 		auto it = std::find_if(
 			m_Layers.begin(), m_Layers.begin() + static_cast<std::ptrdiff_t>(m_LayerInsertIndex),
-			[&layer](const Unique<Layer> &candidate) { return candidate.get() == &layer; });
+			[&layer](const Ref<Layer> &candidate) { return candidate.get() == &layer; });
 		if (it == m_Layers.begin() + static_cast<std::ptrdiff_t>(m_LayerInsertIndex))
 			return;
 
@@ -45,7 +73,7 @@ namespace DefectStudio
 	{
 		auto it = std::find_if(
 			m_Layers.begin() + static_cast<std::ptrdiff_t>(m_LayerInsertIndex), m_Layers.end(),
-			[&overlay](const Unique<Layer> &candidate) { return candidate.get() == &overlay; });
+			[&overlay](const Ref<Layer> &candidate) { return candidate.get() == &overlay; });
 		if (it == m_Layers.end())
 			return;
 
@@ -60,6 +88,44 @@ namespace DefectStudio
 
 		m_Layers.clear();
 		m_LayerInsertIndex = 0;
+	}
+
+	WeakRef<Layer> LayerStack::FindLayer(std::string_view layerName)
+	{
+		if (layerName.empty())
+			return {};
+
+		auto it = std::find_if(m_Layers.begin(), m_Layers.end(), [layerName](const Ref<Layer> &layer) {
+			return layer != nullptr && layer->GetName() == layerName;
+		});
+
+		return it == m_Layers.end() ? WeakRef<Layer>{} : CreateWeakRef(*it);
+	}
+
+	WeakRef<const Layer> LayerStack::FindLayer(std::string_view layerName) const
+	{
+		if (layerName.empty())
+			return {};
+
+		auto it = std::find_if(m_Layers.begin(), m_Layers.end(), [layerName](const Ref<Layer> &layer) {
+			return layer != nullptr && layer->GetName() == layerName;
+		});
+
+		if (it == m_Layers.end())
+			return {};
+
+		Ref<const Layer> layer = *it;
+		return CreateWeakRef(layer);
+	}
+
+	WeakRef<Layer> LayerStack::FindLayer(LayerId layerId)
+	{
+		return FindLayer(toLayerName(layerId));
+	}
+
+	WeakRef<const Layer> LayerStack::FindLayer(LayerId layerId) const
+	{
+		return FindLayer(toLayerName(layerId));
 	}
 
 	LayerStack::Iterator LayerStack::begin()

@@ -4,7 +4,7 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/TestJobs/TestJobs.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
@@ -52,8 +52,9 @@ namespace DefectStudio
 		int m_ChainCount = 1;
 	};
 
-	TaskMonitorWindow::TaskMonitorWindow(std::string title, bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault)
+	TaskMonitorWindow::TaskMonitorWindow(WeakRef<JobSystem> jobSystem, std::string title, bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault),
+		  m_JobSystem(std::move(jobSystem))
 	{
 	}
 
@@ -64,6 +65,8 @@ namespace DefectStudio
 
 	void TaskMonitorWindow::Render()
 	{
+		auto jobSystem = m_JobSystem.lock();
+
 		if (!IsVisible())
 			return;
 
@@ -94,19 +97,21 @@ namespace DefectStudio
 
 		if (ImGui::Button("Submit Dummy Job"))
 		{
-			auto &jobSystem = Application::Get().GetJobSystem();
-			(void)jobSystem.Submit(CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}), m_DummyJobPriority);
+			if (jobSystem != nullptr)
+				(void)jobSystem->Submit(CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}), m_DummyJobPriority);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Submit Subtask Demo"))
 		{
-			auto &jobSystem = Application::Get().GetJobSystem();
-			(void)jobSystem.Submit(CreateRef<UITaskMonitorSubtaskJob>(std::string(m_DummyJobName) + "::parent", m_SubtaskChainCount), m_DummyJobPriority);
+			if (jobSystem != nullptr)
+				(void)jobSystem->Submit(CreateRef<UITaskMonitorSubtaskJob>(std::string(m_DummyJobName) + "::parent", m_SubtaskChainCount), m_DummyJobPriority);
 		}
 
 		ImGui::SameLine();
-		ImGui::Text("Threads: %llu", static_cast<unsigned long long>(Application::Get().GetJobSystem().GetThreadCount()));
+		ImGui::Text("Threads: %llu", static_cast<unsigned long long>(jobSystem != nullptr ? jobSystem->GetThreadCount() : 0));
 		ImGui::TextWrapped("Submitted subtask chain should be visible in Progress Monitor through parentId links.");
+		if (jobSystem == nullptr)
+			ImGui::TextDisabled("JobSystem service unavailable.");
 		ImGui::End();
 	}
 } // namespace DefectStudio

@@ -23,12 +23,14 @@ namespace DefectStudio
 		EventBus &GetEventBus();
 		JobSystem &GetJobSystem();
 		ProgressTracker &GetProgressTracker();
+		[[nodiscard]] WeakRef<JobSystem> GetJobSystemHandle() const;
+		[[nodiscard]] WeakRef<ProgressTracker> GetProgressTrackerHandle() const;
 
 	private:
 		float m_AccumulatedTime = 0.0f;
 		bool m_SystemsInitialized = false;
 		WeakRef<EventBus> m_EventBus;
-		Unique<JobSystem> m_JobSystem;
-		Unique<ProgressTracker> m_ProgressTracker;
+		Ref<JobSystem> m_JobSystem;
+		Ref<ProgressTracker> m_ProgressTracker;
 	};
 } // namespace DefectStudio

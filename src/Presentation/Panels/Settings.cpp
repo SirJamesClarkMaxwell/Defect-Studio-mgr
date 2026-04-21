@@ -4,13 +4,18 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
 #include "Presentation/Panels/Settings.hpp"
 
 namespace DefectStudio
 {
-	Settings::Settings(std::string title, bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault)
+	Settings::Settings(WeakRef<JobSystem> jobSystem,
+	                   WeakRef<EditorUiState> uiState,
+	                   std::string title,
+	                   bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault),
+		  m_JobSystem(std::move(jobSystem)),
+		  m_UiState(std::move(uiState))
 	{
 	}
 
@@ -21,13 +26,22 @@ namespace DefectStudio
 
 	void Settings::Render()
 	{
-		auto &application = Application::Get();
-		auto &jobSystem = application.GetJobSystem();
+		auto jobSystem = m_JobSystem.lock();
+		auto uiState = m_UiState.lock();
+
 		if (!m_SettingsInitialized)
 		{
-			m_WorkerThreadCount = static_cast<int>(jobSystem.GetThreadCount());
-			m_FontScale = application.GetFontScale();
-			m_FontScaleStep = application.GetFontScaleStep();
+			if (jobSystem != nullptr)
+				m_WorkerThreadCount = static_cast<int>(jobSystem->GetThreadCount());
+			if (uiState != nullptr)
+			{
+				m_FontScale = uiState->fontScale;
+				m_FontScaleStep = uiState->fontScaleStep;
+			}
+			else if (ImGui::GetCurrentContext() != nullptr)
+			{
+				m_FontScale = std::clamp(ImGui::GetIO().FontGlobalScale, 0.70f, 2.00f);
+			}
 			m_SettingsInitialized = true;
 		}
 
@@ -90,8 +104,12 @@ namespace DefectStudio
 
 	void Settings::renderSystemTab()
 	{
-		auto &application = Application::Get();
-		auto &jobSystem = application.GetJobSystem();
+		auto jobSystem = m_JobSystem.lock();
+		if (jobSystem == nullptr)
+		{
+			ImGui::TextDisabled("JobSystem service unavailable.");
+			return;
+		}
 
 		ImGui::TextUnformatted("Job system settings");
 		if (ImGui::BeginTable("SystemJobSettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
@@ -121,7 +139,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Current threads");
 			ImGui::TableSetColumnIndex(1);
-			ImGui::Text("%llu", static_cast<unsigned long long>(jobSystem.GetThreadCount()));
+			ImGui::Text("%llu", static_cast<unsigned long long>(jobSystem->GetThreadCount()));
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -131,13 +149,13 @@ namespace DefectStudio
 			std::size_t urgentWorker = static_cast<std::size_t>(m_ReserveUrgentWorker ? 1 : 0);
 			if (ImGui::Button("Apply"))
 			{
-				(void)jobSystem.SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + urgentWorker));
+				(void)jobSystem->SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + urgentWorker));
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Reset to 5"))
 			{
 				//todo: add this setting 
-				(void)jobSystem.SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + urgentWorker));
+				(void)jobSystem->SetThreadCount(static_cast<std::size_t>(m_WorkerThreadCount + urgentWorker));
 			}
 
 			ImGui::EndTable();
@@ -148,7 +166,13 @@ namespace DefectStudio
 
 	void Settings::renderDisplayTab()
 	{
-		auto &application = Application::Get();
+		auto uiState = m_UiState.lock();
+		if (uiState != nullptr)
+		{
+			m_FontScale = uiState->fontScale;
+			m_FontScaleStep = uiState->fontScaleStep;
+		}
+
 		ImGui::TextUnformatted("Display settings");
 		if (ImGui::BeginTable("DisplaySettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
 		{
@@ -156,15 +180,27 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Font scale");
 			ImGui::TableSetColumnIndex(1);
-			if (ImGui::SliderFloat("##FontScale", &m_FontScale, 0.70f, 2.00f, "%.2f"))
-				application.SetFontScale(m_FontScale);
+			if (uiState == nullptr)
+				ImGui::BeginDisabled();
+			if (ImGui::SliderFloat("##FontScale", &m_FontScale, 0.70f, 2.00f, "%.2f") && uiState != nullptr)
+			{
+				uiState->fontScale = std::clamp(m_FontScale, 0.70f, 2.00f);
+				if (ImGui::GetCurrentContext() != nullptr)
+					ImGui::GetIO().FontGlobalScale = uiState->fontScale;
+			}
+			if (uiState == nullptr)
+				ImGui::EndDisabled();
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Font step (Ctrl +/-)");
 			ImGui::TableSetColumnIndex(1);
-			if (ImGui::SliderFloat("##FontScaleStep", &m_FontScaleStep, 0.01f, 0.50f, "%.2f"))
-				application.SetFontScaleStep(m_FontScaleStep);
+			if (uiState == nullptr)
+				ImGui::BeginDisabled();
+			if (ImGui::SliderFloat("##FontScaleStep", &m_FontScaleStep, 0.01f, 0.50f, "%.2f") && uiState != nullptr)
+				uiState->fontScaleStep = std::clamp(m_FontScaleStep, 0.01f, 1.00f);
+			if (uiState == nullptr)
+				ImGui::EndDisabled();
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);

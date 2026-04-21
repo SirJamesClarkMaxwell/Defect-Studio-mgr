@@ -179,14 +179,16 @@ namespace DefectStudio
 
 	JobSystem &Application::GetJobSystem()
 	{
-		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer not initialized");
-		return m_CoreLayer->GetJobSystem();
+		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+		DS_ASSERT(coreLayer != nullptr, "CoreLayer not initialized");
+		return coreLayer->GetJobSystem();
 	}
 
 	ProgressTracker &Application::GetProgressTracker()
 	{
-		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer not initialized");
-		return m_CoreLayer->GetProgressTracker();
+		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+		DS_ASSERT(coreLayer != nullptr, "CoreLayer not initialized");
+		return coreLayer->GetProgressTracker();
 	}
 
 	float Application::GetFontScale() const
@@ -362,7 +364,6 @@ namespace DefectStudio
 
 		DS_LOG_INFO("Shutdown: clearing layers");
 		m_LayerStack.Clear();
-		m_CoreLayer = nullptr;
 
 		if (m_EventBus)
 		{
@@ -532,9 +533,7 @@ namespace DefectStudio
 	void Application::setupDefaultLayers()
 	{
 		DS_LOG_INFO("LayerStack setup: begin");
-		auto coreLayer = CreateUnique<CoreLayer>();
-		m_CoreLayer = coreLayer.get();
-		m_LayerStack.PushLayer(std::move(coreLayer));
+		m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
 		m_LayerStack.PushLayer(CreateUnique<IOLayer>());
 		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
 		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
@@ -582,10 +581,12 @@ namespace DefectStudio
 
 	bool Application::initializeCoreLayerSystems()
 	{
-		DS_ASSERT(m_CoreLayer != nullptr, "CoreLayer was not created");
+		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+		auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock();
+		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
-		bool systemInitialized = m_CoreLayer->InitializeSystems(CreateWeakRef(m_EventBus));
+		bool systemInitialized = coreLayer->InitializeSystems(CreateWeakRef(m_EventBus));
 		if (!systemInitialized)
 		{
 			DS_LOG_ERROR("Init: Core runtime services failed");
@@ -596,6 +597,12 @@ namespace DefectStudio
 		GetEventBus();
 		GetJobSystem();
 		GetProgressTracker();
+		if (editorLayer != nullptr)
+		{
+			editorLayer->BindRuntimeServices(
+				coreLayer->GetJobSystemHandle(),
+				coreLayer->GetProgressTrackerHandle());
+		}
 		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
 	}

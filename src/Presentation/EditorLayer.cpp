@@ -2,7 +2,6 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
 #include "Core/Utils/Input.hpp"
@@ -16,21 +15,28 @@ namespace DefectStudio
 	{
 	}
 
+	void EditorLayer::BindRuntimeServices(WeakRef<JobSystem> jobSystem, WeakRef<ProgressTracker> progressTracker)
+	{
+		m_JobSystem = std::move(jobSystem);
+		m_ProgressTracker = std::move(progressTracker);
+	}
+
 	void EditorLayer::OnAttach()
 	{
 		DS_LOG_INFO("EditorLayer attached");
-		if (m_Panels.Entries().empty())
-		{
-			registerPanel<ProgressMonitorWindow>("Progress Monitor", true);
-			registerPanel<TaskMonitorWindow>("Task Monitor", true);
-			registerPanel<Settings>("Settings", true);
-		}
+		m_UiState = CreateRef<EditorUiState>();
+		if (ImGui::GetCurrentContext() != nullptr)
+			m_UiState->fontScale = std::clamp(ImGui::GetIO().FontGlobalScale, 0.70f, 2.00f);
 	}
 
 	void EditorLayer::OnDetach()
 	{
 		DS_LOG_INFO("EditorLayer detached");
 		m_Panels.Clear();
+		m_PanelsInitialized = false;
+		m_JobSystem.reset();
+		m_ProgressTracker.reset();
+		m_UiState.reset();
 	}
 
 	void EditorLayer::OnEvent(Event &event)
@@ -48,9 +54,21 @@ namespace DefectStudio
 
 	void EditorLayer::OnImGuiRender()
 	{
+		initializePanelsIfNeeded();
 		renderMainMenuBar();
 		for (auto &entry : m_Panels.Entries())
 			entry.panel->Render();
+	}
+
+	void EditorLayer::initializePanelsIfNeeded()
+	{
+		if (m_PanelsInitialized)
+			return;
+
+		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
+		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
+		registerPanel<Settings>(m_JobSystem, CreateWeakRef(m_UiState), "Settings", true);
+		m_PanelsInitialized = true;
 	}
 
 	WeakRef<IPanel> EditorLayer::findPanel(PanelId panelId)
@@ -70,16 +88,23 @@ namespace DefectStudio
 			return;
 
 		const auto handleKey = [this, &event](int keyCode) {
+			if (m_UiState == nullptr)
+				return false;
+
 			if (keyCode == ToNativeKeyCode(KeyCode::Minus))
 			{
-				Application::Get().AdjustFontScale(-Application::Get().GetFontScaleStep());
+				m_UiState->fontScale = std::clamp(m_UiState->fontScale - m_UiState->fontScaleStep, 0.70f, 2.00f);
+				if (ImGui::GetCurrentContext() != nullptr)
+					ImGui::GetIO().FontGlobalScale = m_UiState->fontScale;
 				event.handled = true;
 				return true;
 			}
 
 			if (keyCode == ToNativeKeyCode(KeyCode::Equal))
 			{
-				Application::Get().AdjustFontScale(Application::Get().GetFontScaleStep());
+				m_UiState->fontScale = std::clamp(m_UiState->fontScale + m_UiState->fontScaleStep, 0.70f, 2.00f);
+				if (ImGui::GetCurrentContext() != nullptr)
+					ImGui::GetIO().FontGlobalScale = m_UiState->fontScale;
 				event.handled = true;
 				return true;
 			}

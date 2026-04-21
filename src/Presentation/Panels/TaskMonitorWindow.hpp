@@ -7,10 +7,14 @@
 
 namespace DefectStudio
 {
+	class JobSystem;
+
 	class TaskMonitorWindow final : public IPanel
 	{
 	public:
-		explicit TaskMonitorWindow(std::string title = "Task Monitor", bool visibleByDefault = true);
+		explicit TaskMonitorWindow(WeakRef<JobSystem> jobSystem = {},
+		                          std::string title = "Task Monitor",
+		                          bool visibleByDefault = true);
 
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
@@ -22,5 +26,6 @@ namespace DefectStudio
 		int m_SubtaskChainCount = 4;
 		JobPriority m_DummyJobPriority = JobPriority::Normal;
 		float m_StatusIconWidth = 0.0f;
+		WeakRef<JobSystem> m_JobSystem;
 	};
 } // namespace DefectStudio

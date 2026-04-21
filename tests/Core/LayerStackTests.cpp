@@ -40,6 +40,15 @@ namespace
 		std::vector<std::string> &m_Log;
 		bool m_HandlesEvent;
 	};
+
+	class TypedLayer final : public DefectStudio::Layer
+	{
+	public:
+		explicit TypedLayer(std::string name)
+			: DefectStudio::Layer(std::move(name))
+		{
+		}
+	};
 } // namespace
 
 TEST(LayerStackTests, AttachDetachOrderingForLayersAndOverlays)
@@ -132,4 +141,22 @@ TEST(LayerStackTests, ReverseOrderEventPropagationStopsWhenHandled)
 	    "C:event",
 	};
 	EXPECT_EQ(log, expected);
+}
+
+TEST(LayerStackTests, FindLayerAsReturnsWeakRefThatLocksForExistingLayer)
+{
+	DefectStudio::LayerStack stack;
+	stack.PushLayer(DefectStudio::CreateUnique<TypedLayer>("CoreLayer"));
+
+	const DefectStudio::WeakRef<TypedLayer> weakCore = stack.FindLayerAs<TypedLayer>(DefectStudio::LayerId::Core);
+	EXPECT_FALSE(weakCore.expired());
+
+	{
+		const auto core = weakCore.lock();
+		ASSERT_NE(core, nullptr);
+		EXPECT_EQ(core->GetName(), "CoreLayer");
+	}
+
+	stack.Clear();
+	EXPECT_TRUE(weakCore.expired());
 }

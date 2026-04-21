@@ -2,14 +2,21 @@
 
 #include <string>
 
+#include "Core/Utils/Memory.hpp"
+#include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 
 namespace DefectStudio
 {
+	class JobSystem;
+
 	class Settings final : public IPanel
 	{
 	public:
-		explicit Settings(std::string title = "Settings", bool visibleByDefault = true);
+		explicit Settings(WeakRef<JobSystem> jobSystem = {},
+		                  WeakRef<EditorUiState> uiState = {},
+		                  std::string title = "Settings",
+		                  bool visibleByDefault = true);
 
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
@@ -44,5 +51,7 @@ namespace DefectStudio
 		float m_FontScaleStep = 0.10f;
 		float m_FontScale = 1.0f;
 		int m_SelectedTabIndex = 0;
+		WeakRef<JobSystem> m_JobSystem;
+		WeakRef<EditorUiState> m_UiState;
 	};
 } // namespace DefectStudio

@@ -1,10 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 #include "Core/Layer.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
+#include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
 #include "Presentation/Panels/Settings.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
@@ -15,6 +19,7 @@ namespace DefectStudio
 	{
 	public:
 		EditorLayer();
+		void BindRuntimeServices(WeakRef<JobSystem> jobSystem, WeakRef<ProgressTracker> progressTracker);
 
 		void OnAttach() override;
 		void OnDetach() override;
@@ -36,10 +41,15 @@ namespace DefectStudio
 		void renderComputationsMenu();
 		void renderToolsMenu();
 		void renderHelpMenu();
+		void initializePanelsIfNeeded();
 		void handleFontShortcuts(Event &event);
 
 	private:
 		PanelRegistry m_Panels;
+		bool m_PanelsInitialized = false;
+		WeakRef<JobSystem> m_JobSystem;
+		WeakRef<ProgressTracker> m_ProgressTracker;
+		Ref<EditorUiState> m_UiState;
 	};
 
 	template <typename TPanel, typename... Args>

@@ -119,7 +119,6 @@ namespace DefectStudio
 		Ref<EventBus> m_EventBus;
 
 		LayerStack m_LayerStack;
-		CoreLayer *m_CoreLayer = nullptr;
 
 		// Singleton ownership
 		static Application *s_Instance;

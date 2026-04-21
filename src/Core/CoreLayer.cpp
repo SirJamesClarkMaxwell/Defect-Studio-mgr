@@ -50,10 +50,10 @@ namespace DefectStudio
 		}
 
 		DS_LOG_INFO("Init: JobSystem");
-		m_JobSystem = CreateUnique<JobSystem>(CreateWeakRef(eventBusStrong));
+		m_JobSystem = CreateRef<JobSystem>(CreateWeakRef(eventBusStrong));
 
 		DS_LOG_INFO("Init: ProgressTracker");
-		m_ProgressTracker = CreateUnique<ProgressTracker>(CreateWeakRef(eventBusStrong));
+		m_ProgressTracker = CreateRef<ProgressTracker>(CreateWeakRef(eventBusStrong));
 
 		m_SystemsInitialized = true;
 		DS_LOG_INFO("Init complete: runtime services");
@@ -90,5 +90,19 @@ namespace DefectStudio
 	{
 		DS_ASSERT(m_ProgressTracker != nullptr, "ProgressTracker is not initialized");
 		return *m_ProgressTracker;
+	}
+
+	WeakRef<JobSystem> CoreLayer::GetJobSystemHandle() const
+	{
+		if (m_JobSystem == nullptr)
+			return {};
+		return CreateWeakRef(m_JobSystem);
+	}
+
+	WeakRef<ProgressTracker> CoreLayer::GetProgressTrackerHandle() const
+	{
+		if (m_ProgressTracker == nullptr)
+			return {};
+		return CreateWeakRef(m_ProgressTracker);
 	}
 } // namespace DefectStudio

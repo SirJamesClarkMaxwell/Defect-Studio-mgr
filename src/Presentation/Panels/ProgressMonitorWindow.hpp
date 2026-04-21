@@ -12,6 +12,9 @@ struct ImVec4;
 
 namespace DefectStudio
 {
+	class JobSystem;
+	class ProgressTracker;
+
 	struct VisibleJobRow
 	{
 		WeakRef<ProgressEntrySnapshot> snapshot;
@@ -21,7 +24,10 @@ namespace DefectStudio
 	class ProgressMonitorWindow final : public IPanel
 	{
 	public:
-		explicit ProgressMonitorWindow(std::string title = "Progress Monitor", bool visibleByDefault = true);
+		explicit ProgressMonitorWindow(WeakRef<JobSystem> jobSystem = {},
+		                              WeakRef<ProgressTracker> progressTracker = {},
+		                              std::string title = "Progress Monitor",
+		                              bool visibleByDefault = true);
 
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
@@ -38,6 +44,8 @@ namespace DefectStudio
 		int m_DeletePendingSkipped = 0;
 		bool m_OpenDeleteConfirmPopup = false;
 		mutable std::vector<Ref<ProgressEntrySnapshot>> m_RowSnapshotRefs;
+		WeakRef<JobSystem> m_JobSystem;
+		WeakRef<ProgressTracker> m_ProgressTracker;
 
 		void buildVisibleRows(const std::vector<ProgressEntrySnapshot> &allJobs, std::vector<VisibleJobRow> &rows) const;
 		void ensureSelectionVisible(const std::vector<ProgressEntrySnapshot> &allJobs);

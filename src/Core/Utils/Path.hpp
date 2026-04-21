@@ -26,11 +26,14 @@ public:
 
 namespace DefectStudio
 {
+	using FilePath = ::FilePath;
+	using FileSystem = ::FileSystem;
+
 	class Path
 	{
 	public:
 		Path() = default;
-		explicit Path(std::filesystem::path path);
+		Path(std::filesystem::path path);
 
 		[[nodiscard]] static Path FromResolved(std::filesystem::path path);
 		[[nodiscard]] Path Join(std::string_view child) const;
