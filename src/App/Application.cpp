@@ -4,6 +4,12 @@
 #include <windows.h>
 #endif
 
+#include <atomic>
+#include <csignal>
+#include <cstdio>
+#include <ctime>
+#include <exception>
+
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
@@ -23,18 +29,117 @@
 #include "Core/CoreLayer.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Input.hpp"
+#include "Core/Utils/RuntimeTuning.hpp"
 #include "Debug/DebugLayer.hpp"
 #include "Demo/DemoLayer.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/EditorUiState.hpp"
 #include "Presentation/ImGuiLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
 
 namespace DefectStudio
 {
-	Application *Application::s_Instance = nullptr;
+	std::optional<std::reference_wrapper<Application>> Application::s_Instance = std::nullopt;
+
+	namespace
+	{
+		std::atomic<bool> g_CrashHandlersInstalled = false;
+		std::atomic<const char *> g_CrashStage = "startup";
+
+		void setCrashStage(const char *stage)
+		{
+			g_CrashStage.store(stage, std::memory_order_relaxed);
+		}
+
+		void appendLineToFile(const char *path, const char *message)
+		{
+			FILE *stream = nullptr;
+#if defined(_WIN32)
+			if (fopen_s(&stream, path, "a") != 0)
+				return;
+#else
+			stream = std::fopen(path, "a");
+#endif
+			if (stream == nullptr)
+				return;
+
+			std::fprintf(stream, "%s\n", message);
+			std::fflush(stream);
+			std::fclose(stream);
+		}
+
+		void appendCrashMarker(const char *message)
+		{
+			FileSystem::CreateDirectories("logs");
+			char line[512] = {};
+			std::snprintf(line,
+			              sizeof(line),
+			              "[%lld] %s stage=%s",
+			              static_cast<long long>(std::time(nullptr)),
+			              message,
+			              g_CrashStage.load(std::memory_order_relaxed));
+
+			appendLineToFile("logs/DefectStudio-crash.log", line);
+			appendLineToFile(RuntimeDefaults::LogFilePath, line);
+		}
+
+		void terminateHandler()
+		{
+			Logger::Flush();
+			appendCrashMarker("[CRASH] std::terminate invoked");
+			std::abort();
+		}
+
+		void signalHandler(int signalCode)
+		{
+			char buffer[128] = {};
+			std::snprintf(buffer, sizeof(buffer), "[CRASH] signal=%d", signalCode);
+			appendCrashMarker(buffer);
+			std::_Exit(EXIT_FAILURE);
+		}
+
+#if defined(_WIN32)
+		LONG WINAPI windowsUnhandledExceptionFilter(EXCEPTION_POINTERS *exceptionPointers)
+		{
+			const unsigned long code = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
+				? exceptionPointers->ExceptionRecord->ExceptionCode
+				: 0UL;
+			const unsigned long flags = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
+				? exceptionPointers->ExceptionRecord->ExceptionFlags
+				: 0UL;
+			void *address = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
+				? exceptionPointers->ExceptionRecord->ExceptionAddress
+				: nullptr;
+
+			Logger::Flush();
+			char buffer[256] = {};
+			std::snprintf(buffer,
+			              sizeof(buffer),
+			              "[CRASH] unhandled SEH exception code=0x%08lX flags=0x%08lX address=%p",
+			              code,
+			              flags,
+			              address);
+			appendCrashMarker(buffer);
+			return EXCEPTION_EXECUTE_HANDLER;
+		}
+#endif
+
+		void installCrashFallbackHandlers()
+		{
+			if (g_CrashHandlersInstalled.exchange(true))
+				return;
+
+			std::set_terminate(terminateHandler);
+			std::signal(SIGABRT, signalHandler);
+			std::signal(SIGSEGV, signalHandler);
+#if defined(_WIN32)
+			SetUnhandledExceptionFilter(windowsUnhandledExceptionFilter);
+#endif
+		}
+	}
 
 	// ===== File-local path and event helpers =====
 
@@ -84,48 +189,11 @@ namespace DefectStudio
 			return Path::FromResolved(FileSystem::CurrentPath() / "config");
 	}
 
-	static std::string TrimCopy(std::string_view value)
-	{
-		const auto first = value.find_first_not_of(" \t\r\n");
-		if (first == std::string_view::npos)
-			return {};
-
-		const auto last = value.find_last_not_of(" \t\r\n");
-		return std::string(value.substr(first, last - first + 1));
-	}
-
-	static std::string ToLowerCopy(std::string_view value)
-	{
-		std::string result(value);
-		for (char &character : result)
-			character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-		return result;
-	}
-
-	static LogLevel ParseLogLevel(std::string_view value, LogLevel fallback)
-	{
-		const std::string normalized = ToLowerCopy(TrimCopy(value));
-		if (normalized == "trace")
-			return LogLevel::Trace;
-		if (normalized == "debug")
-			return LogLevel::Debug;
-		if (normalized == "info")
-			return LogLevel::Info;
-		if (normalized == "warn" || normalized == "warning")
-			return LogLevel::Warn;
-		if (normalized == "error")
-			return LogLevel::Error;
-		if (normalized == "critical")
-			return LogLevel::Critical;
-		return fallback;
-	}
-
 	struct MainLoopState
 	{
 		bool showDemoWindow = true;
 		bool showSettingsWindow = false;
 		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
-		int workerThreadCount = 5;
 	};
 
 	ApplicationSpecification defaultApplicationSpecification();
@@ -143,7 +211,29 @@ namespace DefectStudio
 		if (!m_Runtime.lifecycle.IsRunning())
 			return 1;
 
-		mainLoop();
+		setCrashStage("main loop");
+		try
+		{
+			mainLoop();
+		}
+		catch (const std::exception &exception)
+		{
+			DS_LOG_CRITICAL("Unhandled exception in main loop: {}", exception.what());
+			Logger::Flush();
+			appendCrashMarker("[CRASH] unhandled C++ exception in main loop");
+			shutdownInternal();
+			return 1;
+		}
+		catch (...)
+		{
+			DS_LOG_CRITICAL("Unhandled non-standard exception in main loop");
+			Logger::Flush();
+			appendCrashMarker("[CRASH] unhandled unknown exception in main loop");
+			shutdownInternal();
+			return 1;
+		}
+
+		setCrashStage("shutdown");
 		shutdownInternal();
 		return 0;
 	}
@@ -155,20 +245,20 @@ namespace DefectStudio
 
 	void Application::EmitEvent(EventVariant event)
 	{
-		DS_ASSERT(s_Instance != nullptr, "Application not created");
-		s_Instance->queueEvent(std::move(event));
+		DS_ASSERT(s_Instance.has_value(), "Application not created");
+		s_Instance->get().queueEvent(std::move(event));
 	}
 
 	void Application::ProcessQueuedEvents()
 	{
-		DS_ASSERT(s_Instance != nullptr, "Application not created");
-		s_Instance->processPendingEvents();
+		DS_ASSERT(s_Instance.has_value(), "Application not created");
+		s_Instance->get().processPendingEvents();
 	}
 
 	Application &Application::Get()
 	{
-		DS_ASSERT(s_Instance != nullptr, "Application not created");
-		return *s_Instance;
+		DS_ASSERT(s_Instance.has_value(), "Application not created");
+		return s_Instance->get();
 	}
 
 	EventBus &Application::GetEventBus()
@@ -191,38 +281,14 @@ namespace DefectStudio
 		return coreLayer->GetProgressTracker();
 	}
 
-	float Application::GetFontScale() const
-	{
-		return m_Config.fontScale;
-	}
-
-	float Application::GetFontScaleStep() const
-	{
-		return m_Config.fontScaleStep;
-	}
-
-	void Application::SetFontScale(float fontScale)
-	{
-		m_Config.fontScale = std::clamp(fontScale, 0.70f, 2.00f);
-		if (ImGui::GetCurrentContext() != nullptr)
-			ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
-	}
-
-	void Application::SetFontScaleStep(float fontScaleStep)
-	{
-		m_Config.fontScaleStep = std::clamp(fontScaleStep, 0.01f, 1.00f);
-	}
-
-	void Application::AdjustFontScale(float delta)
-	{
-		SetFontScale(m_Config.fontScale + delta);
-	}
-
 	// ===== Instance lifecycle =====
 
 	Application::Application(int argc, char **argv)
 	{
-		if (s_Instance != nullptr)
+		installCrashFallbackHandlers();
+		setCrashStage("construct application");
+
+		if (s_Instance.has_value())
 		{
 			DS_LOG_WARN("Application::Create called more than once; replacing previous instance pointer");
 		}
@@ -241,13 +307,14 @@ namespace DefectStudio
 	Application::~Application()
 	{
 		shutdownInternal();
-		if (s_Instance == this)
-			s_Instance = nullptr;
+		if (s_Instance.has_value() && &s_Instance->get() == this)
+			s_Instance.reset();
 	}
 
 	bool Application::createFromSpecification(const ApplicationSpecification &specification)
 	{
 		ZoneScoped;
+		setCrashStage("create application");
 		DS_LOG_INFO("CreateFromSpecification: begin");
 
 		if (!m_Runtime.lifecycle.TryMarkCreated())
@@ -256,12 +323,14 @@ namespace DefectStudio
 			return false;
 		}
 
-		s_Instance = this;
+		s_Instance = std::ref(*this);
 		TracyMessageL("Launching GUI shell");
 
 		m_Runtime.specification = specification;
+		setCrashStage("resolve configuration directory");
 		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
 		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.String());
+		setCrashStage("bootstrap configuration");
 		if (!bootstrapConfiguration())
 		{
 			DS_LOG_ERROR("CreateFromSpecification: configuration bootstrap failed");
@@ -270,6 +339,7 @@ namespace DefectStudio
 		}
 		applySpecificationFromDefaultConfig();
 
+		setCrashStage("initialize event dispatch");
 		DS_LOG_INFO("CreateFromSpecification: init EventDispatchingSystem");
 		if (!initializeEventDispatchingSystem())
 		{
@@ -279,6 +349,7 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventDispatchingSystem ready");
 
+		setCrashStage("create event bus");
 		DS_LOG_INFO("CreateFromSpecification: create EventBus");
 		m_EventBus = CreateRef<EventBus>();
 		if (!m_EventBus)
@@ -289,6 +360,7 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
 
+		setCrashStage("initialize logger");
 		DS_LOG_INFO("CreateFromSpecification: init logger");
 		initializeLogger();
 		DS_LOG_INFO("CreateFromSpecification: logger ready");
@@ -296,6 +368,7 @@ namespace DefectStudio
 		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
 		logStartupSpecification();
 
+		setCrashStage("initialize glfw");
 		DS_LOG_INFO("CreateFromSpecification: init GLFW");
 		if (!initializeGlfw())
 		{
@@ -305,6 +378,7 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: GLFW ready");
 
+		setCrashStage("create main window");
 		DS_LOG_INFO("CreateFromSpecification: create main window");
 		if (!createMainWindow())
 		{
@@ -314,6 +388,7 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: main window ready");
 
+		setCrashStage("initialize graphics");
 		DS_LOG_INFO("CreateFromSpecification: init graphics");
 		if (!initializeGraphics())
 		{
@@ -323,6 +398,7 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: graphics ready");
 
+		setCrashStage("initialize imgui");
 		DS_LOG_INFO("CreateFromSpecification: init ImGui");
 		if (!initializeImGui())
 		{
@@ -332,10 +408,12 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: ImGui ready");
 
+		setCrashStage("setup layers");
 		DS_LOG_INFO("CreateFromSpecification: setup default layers");
 		setupDefaultLayers();
 		DS_LOG_INFO("CreateFromSpecification: default layers ready");
 
+		setCrashStage("initialize core runtime services");
 		DS_LOG_INFO("CreateFromSpecification: init core runtime services");
 		if (!initializeCoreLayerSystems())
 		{
@@ -346,6 +424,7 @@ namespace DefectStudio
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 
 		m_Runtime.lifecycle.SetRunning(true);
+		setCrashStage("running");
 		DS_LOG_INFO("CreateFromSpecification: success, runtime running");
 		return true;
 	}
@@ -353,7 +432,7 @@ namespace DefectStudio
 	bool Application::initializeEventDispatchingSystem()
 	{
 		DS_LOG_INFO("Init: EventDispatchingSystem (EventQueue)");
-		m_EventQueue.Configure(256);
+		m_EventQueue.Configure(m_Config.eventQueue.initialCapacity, m_Config.eventQueue.growthStep);
 		return true;
 	}
 
@@ -361,6 +440,9 @@ namespace DefectStudio
 	{
 		if (!m_Runtime.lifecycle.TryBeginShutdown())
 			return;
+
+		DS_LOG_INFO("Shutdown: persisting UI settings");
+		persistUiSettings();
 
 		DS_LOG_INFO("Shutdown: clearing layers");
 		m_LayerStack.Clear();
@@ -411,6 +493,7 @@ namespace DefectStudio
 #endif
 
 		specification.logToFile = true;
+		specification.logFilePath = Path::FromResolved(RuntimeDefaults::LogFilePath);
 		return specification;
 	}
 
@@ -444,7 +527,6 @@ namespace DefectStudio
 
 	void Application::beginImGuiFrame()
 	{
-		ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -454,29 +536,13 @@ namespace DefectStudio
 
 	void Application::drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate)
 	{
-		bool saveUiSettings = false;
-
 		ImGui::Begin("DefectStudio");
 
 		ImGui::Text("GUI shell is running.");
 		ImGui::Text("FPS: %.1f", frameRate);
 		ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
 		ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor));
-
-		if (ImGui::SliderFloat("Font scale", &m_Config.fontScale, 0.70f, 2.00f, "%.2f"))
-		{
-			SetFontScale(m_Config.fontScale);
-			saveUiSettings = true;
-		}
-		if (ImGui::SliderFloat("Font scale step", &m_Config.fontScaleStep, 0.01f, 0.50f, "%.2f"))
-		{
-			SetFontScaleStep(m_Config.fontScaleStep);
-			saveUiSettings = true;
-		}
 		ImGui::End();
-
-		if (saveUiSettings)
-			persistUiSettings();
 
 		if (showDemoWindow)
 			ImGui::ShowDemoWindow(&showDemoWindow);
@@ -567,7 +633,7 @@ namespace DefectStudio
 		if (m_Runtime.specification.logToFile)
 		{
 			if (m_Runtime.specification.logFilePath.Empty())
-				DS_LOG_INFO("File logging enabled: logs/DefectStudio.log");
+				DS_LOG_INFO("File logging enabled: {}", RuntimeDefaults::LogFilePath);
 			else
 				DS_LOG_INFO("File logging enabled: {}", m_Runtime.specification.logFilePath.String());
 		}
@@ -583,6 +649,7 @@ namespace DefectStudio
 	{
 		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
 		auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock();
+		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
@@ -597,11 +664,45 @@ namespace DefectStudio
 		GetEventBus();
 		GetJobSystem();
 		GetProgressTracker();
+
+		const std::size_t urgentWorkerCount = static_cast<std::size_t>(m_Config.jobs.reserveUrgentWorker ? 1 : 0);
+		const std::size_t targetThreadCount = static_cast<std::size_t>(m_Config.jobs.defaultWorkerThreadCount) + urgentWorkerCount;
+		if (!GetJobSystem().SetThreadCount(targetThreadCount))
+		{
+			DS_LOG_WARN("Init: failed to apply startup worker count {}", targetThreadCount);
+		}
+		else
+		{
+			DS_LOG_INFO(
+				"Init: worker count target={} (base={} reserve_urgent={})",
+				targetThreadCount,
+				m_Config.jobs.defaultWorkerThreadCount,
+				m_Config.jobs.reserveUrgentWorker);
+		}
+
 		if (editorLayer != nullptr)
 		{
 			editorLayer->BindRuntimeServices(
 				coreLayer->GetJobSystemHandle(),
 				coreLayer->GetProgressTrackerHandle());
+
+			m_EditorUiState = editorLayer->GetUiStateHandle();
+			if (auto uiState = m_EditorUiState.lock())
+			{
+				uiState->fontScale = m_Config.ui.fontScale;
+				uiState->fontScaleStep = m_Config.ui.fontScaleStep;
+				uiState->fontScaleMin = m_Config.ui.fontScaleMin;
+				uiState->fontScaleMax = m_Config.ui.fontScaleMax;
+				uiState->fontScaleStepMin = m_Config.ui.fontScaleStepMin;
+				uiState->fontScaleStepMax = m_Config.ui.fontScaleStepMax;
+				uiState->fontScaleStepSliderMax = m_Config.ui.fontScaleStepSliderMax;
+				uiState->defaultWorkerThreadCount = m_Config.jobs.defaultWorkerThreadCount;
+				uiState->reserveUrgentWorkerByDefault = m_Config.jobs.reserveUrgentWorker;
+				uiState->selectedFontPath = m_Config.ui.fontPath;
+			}
+
+			if (imGuiLayer != nullptr)
+				imGuiLayer->BindUiState(m_EditorUiState);
 		}
 		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
@@ -618,31 +719,42 @@ namespace DefectStudio
 			return false;
 		}
 
-		DS_LOG_INFO("Config bootstrap complete: {}", m_ConfigManager->GetConfigDirectory().string());
+		m_Config = m_ConfigManager->GetConfig();
+		DS_LOG_INFO("Config bootstrap complete: {}", m_ConfigManager->GetConfigDirectory().String());
 		return true;
 	}
 
 	void Application::applySpecificationFromDefaultConfig()
 	{
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
-		m_Runtime.specification.logLevel = ParseLogLevel(
-			m_ConfigManager->GetDefaultString("log.level", ToString(m_Runtime.specification.logLevel)),
-			m_Runtime.specification.logLevel);
-		m_Runtime.specification.traceEvents = m_ConfigManager->GetDefaultBool(
-			"trace_events",
-			m_Runtime.specification.traceEvents);
+		m_ConfigManager->ApplySpecification(m_Runtime.specification);
+
+		DS_LOG_INFO(
+			"Runtime tuning loaded: font_scale=[{}, {}] step=[{}, {}] step_slider_max={} workers_default={} reserve_urgent={} event_queue={{capacity:{}, growth:{}}}",
+			m_Config.ui.fontScaleMin,
+			m_Config.ui.fontScaleMax,
+			m_Config.ui.fontScaleStepMin,
+			m_Config.ui.fontScaleStepMax,
+			m_Config.ui.fontScaleStepSliderMax,
+			m_Config.jobs.defaultWorkerThreadCount,
+			m_Config.jobs.reserveUrgentWorker,
+			m_Config.eventQueue.initialCapacity,
+			m_Config.eventQueue.growthStep);
 	}
 
 	void Application::applyUiSettingsFromConfig()
 	{
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
-		m_Config.fontScale = static_cast<float>(m_ConfigManager->GetUiDouble("font_scale", 1.0));
-		m_Config.fontScaleStep = static_cast<float>(m_ConfigManager->GetUiDouble("font_scale_step", 0.10));
-		m_Config.fontScale = std::clamp(m_Config.fontScale, 0.70f, 2.00f);
-		m_Config.fontScaleStep = std::clamp(m_Config.fontScaleStep, 0.01f, 1.00f);
+		m_Config.ui.fontScale = std::clamp(m_Config.ui.fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
+		m_Config.ui.fontScaleStep = std::clamp(m_Config.ui.fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
 
 		if (ImGui::GetCurrentContext() != nullptr)
-			ImGui::GetIO().FontGlobalScale = m_Config.fontScale;
+			ImGui::GetIO().FontGlobalScale = m_Config.ui.fontScale;
+
+		DS_LOG_INFO("UI settings loaded: font_scale={}, font_scale_step={}, font_path={}",
+		            m_Config.ui.fontScale,
+		            m_Config.ui.fontScaleStep,
+		            m_Config.ui.fontPath.empty() ? "<default>" : m_Config.ui.fontPath);
 	}
 
 	bool Application::persistUiSettings()
@@ -650,11 +762,17 @@ namespace DefectStudio
 		if (m_ConfigManager == nullptr)
 			return false;
 
-		m_ConfigManager->SetUiValue("font_scale", std::to_string(m_Config.fontScale));
-		m_ConfigManager->SetUiValue("font_scale_step", std::to_string(m_Config.fontScaleStep));
+		if (auto uiState = m_EditorUiState.lock())
+		{
+			m_Config.ui.fontScale = std::clamp(uiState->fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
+			m_Config.ui.fontScaleStep = std::clamp(uiState->fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
+			m_Config.ui.fontPath = uiState->selectedFontPath;
+		}
+
+		m_ConfigManager->SetConfig(m_Config);
 
 		std::string saveError;
-		if (!m_ConfigManager->SaveUiSettings(saveError))
+		if (!m_ConfigManager->SaveUserSettings(saveError))
 		{
 			DS_LOG_WARN("UI settings save failed: {}", saveError);
 			return false;
@@ -681,12 +799,9 @@ namespace DefectStudio
 	bool Application::createMainWindow()
 	{
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
-		const int width = m_ConfigManager->GetDefaultInt("window.width", 1280);
-		const int height = m_ConfigManager->GetDefaultInt("window.height", 720);
-		const std::string title = m_ConfigManager->GetDefaultString("window.title", "DefectStudio");
 
 		m_Graphics.window = CreateUnique<Window>();
-		if (!m_Graphics.window->Create(width, height, title))
+		if (!m_Graphics.window->Create(m_Config.window.width, m_Config.window.height, m_Config.window.title))
 		{
 			m_Graphics.window.reset();
 			return false;
@@ -725,37 +840,20 @@ namespace DefectStudio
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.ConfigWindowsResizeFromEdges = true;
 
-		const std::array<const char *, 3> preferredFonts = {
-			// "C:/Windows/Fonts/CascadiaCode.ttf",
-			// "C:/Windows/Fonts/CascadiaMono.ttf",
-			"C:/Windows/Fonts/segoeui.ttf"
-		};
-
-		for (const char *fontPath : preferredFonts)
-		{
-			if (!FileSystem::Exists(fontPath))
-				continue;
-
-			if (ImFont *font = io.Fonts->AddFontFromFileTTF(fontPath, 16.0f); font != nullptr)
-			{
-				io.FontDefault = font;
-				DS_LOG_INFO("Loaded UI font: {}", fontPath);
-				break;
-			}
-		}
-
-		const Path iniPath = Path::FromResolved(m_Config.directory.Join("imgui.ini").Native());
+		const Path iniPath = m_Config.layout.imGuiIniPath.empty()
+			? ConfigManager::GetLayoutPath(m_Config.directory)
+			: Path::FromResolved(m_Config.layout.imGuiIniPath);
 		FileSystem::CreateDirectories(iniPath.parent_path().Native());
 		if (m_Runtime.specification.resetLayout && FileSystem::Exists(iniPath.Native()))
 			FileSystem::Remove(iniPath.Native());
 
-		m_Config.imGuiIniPath = iniPath.string();
-		io.IniFilename = m_Config.imGuiIniPath.c_str();
+		m_Config.layout.imGuiIniPath = iniPath.String();
+		io.IniFilename = m_Config.layout.imGuiIniPath.c_str();
 		if (FileSystem::Exists(iniPath.Native()))
-			ImGui::LoadIniSettingsFromDisk(m_Config.imGuiIniPath.c_str());
+			ImGui::LoadIniSettingsFromDisk(m_Config.layout.imGuiIniPath.c_str());
 
 		applyUiSettingsFromConfig();
-		io.FontGlobalScale = m_Config.fontScale;
+		io.FontGlobalScale = m_Config.ui.fontScale;
 
 		ImGui::StyleColorsDark();
 		DS_LOG_INFO("ImGui context created and docking enabled");
@@ -775,6 +873,11 @@ namespace DefectStudio
 
 		ImGuiIO &io = ImGui::GetIO();
 		MainLoopState state;
+		state.clearColor = ImVec4(
+			m_Config.ui.clearColor[0],
+			m_Config.ui.clearColor[1],
+			m_Config.ui.clearColor[2],
+			m_Config.ui.clearColor[3]);
 		m_Runtime.lastFrameTime = glfwGetTime();
 		DS_LOG_INFO("Entering render loop");
 		TracyMessageL("Entering render loop");

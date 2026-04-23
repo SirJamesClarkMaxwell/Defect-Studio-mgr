@@ -1,6 +1,26 @@
 schema_version: 1
-log.level: info
+log:
+  level: info
+  to_file: true
+  file_path: logs/DefectStudio.log
 trace_events: false
-window.width: 1280
-window.height: 720
-window.title: DefectStudio
+window:
+  width: 1280
+  height: 720
+  title: DefectStudio
+ui:
+  font_scale:
+    min: 0.70
+    max: 10.00
+  font_scale_step:
+    min: 0.01
+    max: 1.00
+    slider_max: 1.0
+appearance:
+  clear_color: [0.10, 0.10, 0.12, 1.00]
+jobs:
+  default_worker_threads: 5
+  reserve_urgent_worker: true
+event_queue:
+  initial_capacity: 256
+  growth_step: 256

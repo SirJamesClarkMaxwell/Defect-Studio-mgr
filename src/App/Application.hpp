@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+#include <optional>
 #include <filesystem>
 
 #include "App/ApplicationLifecycle.hpp"
@@ -20,6 +22,7 @@ struct ImGuiIO;
 namespace DefectStudio
 {
 	class CoreLayer;
+	struct EditorUiState;
 
 	class Application
 	{
@@ -46,11 +49,6 @@ namespace DefectStudio
 		JobSystem &GetJobSystem();
 		// Precondition: CoreLayer initialized.
 		ProgressTracker &GetProgressTracker();
-		[[nodiscard]] float GetFontScale() const;
-		[[nodiscard]] float GetFontScaleStep() const;
-		void SetFontScale(float fontScale);
-		void SetFontScaleStep(float fontScaleStep);
-		void AdjustFontScale(float delta);
 
 		// Event processing entry point for concrete event types.
 		template <typename TEvent>
@@ -111,16 +109,18 @@ namespace DefectStudio
 		void processPendingEvents();
 
 	private:
-		ApplicationRuntimeState m_Runtime;
-		ApplicationGraphicsState m_Graphics;
-		ApplicationConfigState m_Config;
-		Unique<ConfigManager> m_ConfigManager;
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
-
 		LayerStack m_LayerStack;
+		Unique<ConfigManager> m_ConfigManager;
+
+		ApplicationConfig m_Config;
+		ApplicationRuntimeState m_Runtime;
+		ApplicationGraphicsState m_Graphics;
+		WeakRef<EditorUiState> m_EditorUiState;
+
 
 		// Singleton ownership
-		static Application *s_Instance;
+		static std::optional<std::reference_wrapper<Application>> s_Instance;
 	};
 } // namespace DefectStudio

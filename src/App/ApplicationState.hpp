@@ -1,5 +1,7 @@
-#pragma once
+﻿#pragma once
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <string>
 
@@ -40,12 +42,60 @@ namespace DefectStudio
 		bool gladInitialized = false;
 	};
 
-	struct ApplicationConfigState
+	struct WindowConfig
+	{
+		int width = 1280;
+		int height = 720;
+		std::string title = "DefectStudio";
+	};
+
+	struct LogConfig
+	{
+		LogLevel level = LogLevel::Info;
+		bool toFile = true;
+		Path filePath;
+		bool traceEvents = false;
+	};
+
+	struct UIConfig
+	{
+		float fontScale = 1.0f;
+		float fontScaleStep = 0.1f;
+		std::string fontPath;
+		std::array<float, 4> clearColor = {0.10f, 0.10f, 0.12f, 1.00f};
+		float fontScaleMin = 0.7f;
+		float fontScaleMax = 10.0f;
+		float fontScaleStepMin = 0.01f;
+		float fontScaleStepMax = 1.0f;
+		float fontScaleStepSliderMax = 0.5f;
+	};
+
+	struct JobsConfig
+	{
+		int defaultWorkerThreadCount = 1;
+		bool reserveUrgentWorker = true;
+	};
+
+	struct EventQueueConfig
+	{
+		std::size_t initialCapacity = 32;
+		std::size_t growthStep = 32;
+	};
+
+	struct LayoutConfig
+	{
+		std::string imGuiIniPath;
+	};
+
+	struct ApplicationConfig
 	{
 		Path directory;
-		std::string imGuiIniPath;
-		float fontScale = 1.0f;
-		float fontScaleStep = 0.10f;
+		WindowConfig window;
+		LogConfig log;
+		UIConfig ui;
+		JobsConfig jobs;
+		EventQueueConfig eventQueue;
+		LayoutConfig layout;
 	};
 
 } // namespace DefectStudio
