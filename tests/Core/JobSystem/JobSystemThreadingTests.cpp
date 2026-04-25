@@ -84,6 +84,36 @@ TEST(JobSystemThreadingTests, SetThreadCountPreservesJobRecords)
 	jobSystem.Shutdown();
 }
 
+TEST(JobSystemThreadingTests, SetThreadCountWhileWorkIsQueuedPreservesAndCompletesJobs)
+{
+	JobSystem jobSystem({}, 1);
+	auto release = CreateRef<Gate>();
+	const JobId blockerId = jobSystem.Submit(CreateRef<BlockingJob>(release), JobPriority::Highest);
+	std::vector<JobId> queuedIds;
+	for (int i = 0; i < 8; ++i)
+		queuedIds.push_back(jobSystem.Submit(CreateRef<SleepJob>("queued-scale", 1, Time::Milliseconds(1))));
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		auto blocker = jobSystem.GetJob(blockerId);
+		return blocker.has_value() && blocker->status == JobStatus::Running;
+	}, Time::Milliseconds(800)));
+
+	EXPECT_TRUE(jobSystem.SetThreadCount(4));
+	release->Open();
+
+	ASSERT_TRUE(WaitUntil([&]() {
+		if (jobSystem.GetThreadCount() != 4)
+			return false;
+		const auto jobs = jobSystem.GetAllJobs();
+		return jobs.size() == queuedIds.size() + 1
+			&& std::all_of(jobs.begin(), jobs.end(), [](const JobSnapshot &job) {
+				return job.status == JobStatus::Completed;
+			});
+	}, Time::Milliseconds(3000)));
+
+	jobSystem.Shutdown();
+}
+
 TEST(JobSystemThreadingTests, ReducingThreadCountKeepsRunningJobsAndLimitsNewParallelism) // this test case is taking too long
 {
 	JobSystem jobSystem({}, 3);

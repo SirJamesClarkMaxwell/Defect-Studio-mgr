@@ -7,14 +7,26 @@
 
 namespace DefectStudio
 {
+	namespace EventQueueDefaults
+	{
+		constexpr std::size_t MinCapacity = 32;
+		constexpr std::size_t MinGrowthStep = 32;
+	} // namespace EventQueueDefaults
+
 	void EventQueue::Configure(std::size_t initialCapacity, std::size_t growthStep)
 	{
 		ZoneScoped;
-		const std::size_t safeCapacity = std::max<std::size_t>(initialCapacity, 32);
+		const std::size_t safeCapacity = std::max<std::size_t>(initialCapacity, EventQueueDefaults::MinCapacity);
 		std::scoped_lock lock(m_Guard);
-		m_GrowthStep = std::max<std::size_t>(growthStep, 32);
-		m_Pending.clear();
-		m_Pending.reserve(safeCapacity);
+		m_GrowthStep = std::max<std::size_t>(growthStep, EventQueueDefaults::MinGrowthStep);
+		if (safeCapacity < m_Pending.size())
+		{
+			DS_LOG_WARN(
+				"EventQueue requested capacity {} is below pending event count {}; preserving queued events",
+				safeCapacity,
+				m_Pending.size());
+		}
+		m_Pending.reserve(std::max(safeCapacity, m_Pending.size()));
 		DS_LOG_INFO("EventQueue configured capacity={} growthStep={}", safeCapacity, m_GrowthStep);
 	}
 
@@ -96,7 +108,7 @@ namespace DefectStudio
 	void EventQueue::SetGrowthStep(std::size_t growthStep)
 	{
 		std::scoped_lock lock(m_Guard);
-		m_GrowthStep = std::max<std::size_t>(growthStep, 32);
+		m_GrowthStep = std::max<std::size_t>(growthStep, EventQueueDefaults::MinGrowthStep);
 	}
 
 	void EventQueue::EnsureCapacityLocked()
@@ -104,6 +116,11 @@ namespace DefectStudio
 		if (m_Pending.size() != m_Pending.capacity())
 			return;
 
-		m_Pending.reserve(m_Pending.capacity() + m_GrowthStep);
+		const std::size_t previousCapacity = m_Pending.capacity();
+		m_Pending.reserve(previousCapacity + m_GrowthStep);
+		DS_LOG_WARN(
+			"EventQueue capacity auto-expanded from {} to {} while adding a new event",
+			previousCapacity,
+			m_Pending.capacity());
 	}
 } // namespace DefectStudio

@@ -49,16 +49,34 @@ def run_msvc(args: argparse.Namespace) -> int:
     if args.verbose:
         print(f"[step] Using /maxcpucount:{jobs} on MSBuild")
 
+    build_input = solution
+    target_name = (args.target or "").strip()
+    if target_name:
+        target_project = solution.parent / f"{target_name}.vcxproj"
+        if target_project.exists():
+            build_input = target_project
+
     command = [
         msbuild,
-        str(solution),
+        str(build_input),
         f"/p:Configuration={args.config}",
+        "/p:Platform=x64",
         f"/maxcpucount:{jobs}",
     ]
+    if build_input != solution:
+        # The generated VS graph can silently fail with parallel project-reference
+        # scheduling, while compiler-level /MP still provides per-project parallelism.
+        command.append("/p:BuildInParallel=false")
+
     if args.rebuild:
-        command.append("/t:Rebuild")
+        target = "Rebuild"
     else:
-        command.append("/t:Build")
+        target = "Build"
+
+    if build_input == solution and target_name:
+        command.append(f"/t:{target_name}:{target}")
+    else:
+        command.append(f"/t:{target}")
 
     return run_command(
         command, cwd=repo_root(), dry_run=args.dry_run, verbose=args.verbose

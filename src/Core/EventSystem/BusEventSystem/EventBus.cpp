@@ -101,7 +101,8 @@ namespace DefectStudio
 
 	void EventBus::sortByPriority(std::vector<Listener> &listeners)
 	{
-		// Ascending enum order delivers Highest(0) before Lower priorities.
+		// Ascending by enum value: Highest(0) -> ... -> Lowest(4).
+		// Lower numeric value means higher delivery priority.
 		std::stable_sort(listeners.begin(), listeners.end(),
                         [](const Listener &left, const Listener &right) {
                             return static_cast<int>(left.priority) < static_cast<int>(right.priority);

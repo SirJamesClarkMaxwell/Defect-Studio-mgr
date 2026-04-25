@@ -34,6 +34,19 @@ namespace DefectStudio::Test
 		// This is implicit via subsequent Drain operations
 	}
 
+	TEST_F(EventQueueTest, ConfigurePreservesPendingEvents)
+	{
+		queue.Configure(64, 32);
+		queue.Add(WindowCloseEvent());
+		queue.Add(KeyPressedEvent(10));
+
+		queue.Configure(32, 32);
+
+		EXPECT_EQ(queue.Size(), 2);
+		auto drained = queue.Drain();
+		EXPECT_EQ(drained.size(), 2);
+	}
+
 	// ===== Add and Drain tests =====
 
 	TEST_F(EventQueueTest, AddEventIncreasesSize)
@@ -122,6 +135,17 @@ namespace DefectStudio::Test
 		queue.Add(KeyPressedEvent(10));
 		queue.Resize(256);
 		EXPECT_EQ(queue.Size(), 2);
+	}
+
+	TEST_F(EventQueueTest, AddAutoExpandsWhenConfiguredCapacityIsFull)
+	{
+		queue.Configure(32, 32);
+		const std::size_t initialCapacity = queue.Capacity();
+		for (int i = 0; i < 33; ++i)
+			queue.Add(KeyPressedEvent(i));
+
+		EXPECT_GT(queue.Capacity(), initialCapacity);
+		EXPECT_EQ(queue.Size(), 33);
 	}
 
 	TEST_F(EventQueueTest, FitToSizeReducesCapacity)
