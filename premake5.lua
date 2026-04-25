@@ -18,8 +18,8 @@ _DS_ROOT = path.getabsolute(".")
 
 -- Icon paths: absolute for Windows (VS2022 postbuild), relative for Linux (gmake2)
 -- On Windows, translate to backslashes for cmd.exe
-local windowsIcon = path.translate(path.getabsolute("assets/icon.png"), "\\")
-local linuxIcon = "../../../assets/icon.png"
+local windowsIcon = path.translate(path.getabsolute("install/app/assets/icon.png"), "\\")
+local linuxIcon = "../../../install/app/assets/icon.png"
 
 group "Dependencies"
 include "Vendor/GLFW"
@@ -100,7 +100,7 @@ project "DefectStudio"
             "DS_PLATFORM_WINDOWS",
             "TRACY_ENABLE"
         }
-        files { "assets/icon.rc" }
+        files { "install/app/assets/icon.rc" }
         links { "Tracy" }
         pchheader "Core/dspch.hpp"
         pchsource "src/Core/dspch.cpp"

@@ -1,8 +1,0 @@
-schema_version: 1
-ui:
-  font:
-    path: D:\SJCM\00_DefectStudio\Defect-Studio\assets\fonts\segoeui.ttf
-  font_scale: 2.34
-  font_scale_step: 0.34
-appearance:
-  clear_color: [0.1, 0.1, 0.12, 1]

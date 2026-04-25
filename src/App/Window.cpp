@@ -136,7 +136,7 @@ namespace DefectStudio
 		glfwSetCursorPosCallback(m_Handle, OnGlfwCursorPos);
 		glfwSetScrollCallback(m_Handle, OnGlfwScroll);
 
-		Platform::InitializeWindowPlatform(m_Handle, Path("assets") / "icon.ico");
+		Platform::InitializeWindowPlatform(m_Handle, Path("install") / "app" / "assets" / "icon.ico");
 		DS_LOG_INFO("GLFW window created");
 		return true;
 	}

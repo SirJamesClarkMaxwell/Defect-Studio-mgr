@@ -1,0 +1,54 @@
+schema_version: 1
+ui:
+  font:
+    path: app/assets/fonts/segoeui.ttf
+  font_scale: 1.6599998
+  font_scale_step: 0.34
+  settings_preview_enabled: true
+  settings_auto_save_on_preview: true
+window:
+  x: 0
+  y: 23
+  width: 3440
+  height: 1369
+  maximized: true
+appearance:
+  clear_color: [0.1, 0.1, 0.12, 1]
+  colors:
+    background: [0.078431375, 0.07086506, 0.06582084, 1]
+    surface: [0.12156863, 0.11143931, 0.10154556, 1]
+    raised_surface: [0.16078432, 0.14527336, 0.13493273, 1]
+    border: [0.3254902, 0.3254902, 0.3254902, 1]
+    collapsible: [0.1882353, 0.1882353, 0.1882353, 1]
+    text: [0.949, 0.906, 0.847, 1]
+    muted_text: [0.663, 0.604, 0.545, 1]
+    accent: [1, 0.49019608, 0, 1]
+  rounding:
+    window: 6
+    frame: 3.2
+    grab: 6
+    popup: 8
+    scrollbar: 8
+    tab: 6
+  spacing:
+    window_padding:
+      x: 7.9
+      y: 7.9
+    frame_padding:
+      x: 3.8
+      y: 5.2
+    item_spacing:
+      x: 7.8
+      y: 4
+  state_rules:
+    neutral_hover_lighten: 0.04
+    neutral_active_lighten: 0.042
+    accent_hover_lighten: 0.052
+    accent_hover_saturation: -0.154
+    accent_active_darken: 0.05
+    accent_active_saturation: -0.155
+    selected_alpha: 0.221
+    selected_hover_alpha: 0.217
+    selected_active_alpha: 0.416
+    disabled_alpha: 0.45
+    disabled_background_mix: 0.55
