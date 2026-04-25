@@ -12,6 +12,11 @@ FilePath FileSystem::Absolute(const FilePath &path, std::error_code &error)
 	return std::filesystem::absolute(path, error);
 }
 
+FilePath FileSystem::WeaklyCanonical(const FilePath &path, std::error_code &error)
+{
+	return std::filesystem::weakly_canonical(path, error);
+}
+
 FilePath FileSystem::TempDirectoryPath()
 {
 	return std::filesystem::temp_directory_path();
@@ -24,7 +29,7 @@ FilePath FileSystem::TempDirectoryPath(std::error_code &error)
 
 bool FileSystem::Exists(const FilePath &path)
 {
-	return std::filesystem::exists(path);
+	return std::filesystem::exists(path.native());
 }
 
 bool FileSystem::CreateDirectories(const FilePath &path)

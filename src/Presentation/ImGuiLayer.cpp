@@ -2,17 +2,19 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdlib>
 #include <filesystem>
 #include <set>
 #include <string_view>
 
+#include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 
 #include "Presentation/ImGuiLayer.hpp"
 
 #include "App/ConfigManager.hpp"
+#include "App/Window.hpp"
+#include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiState.hpp"
@@ -51,11 +53,11 @@ namespace DefectStudio
 		std::string normalizePathForCompare(const std::filesystem::path &path)
 		{
 			std::error_code error;
-			std::filesystem::path normalized = std::filesystem::weakly_canonical(path, error); //tutaj powinno być użyte z pliku src/Core/Utils/Path.hpp, jeśli nie ma funkcjonalnościto należey dodać
+			std::filesystem::path normalized = FileSystem::WeaklyCanonical(path, error);
 			if (error)
 			{
 				error.clear();
-				normalized = std::filesystem::absolute(path, error); // tutaj też powinno być użyte z pliku Path.hpp. jeśli nie ma tej funkcjonalności to należy dodać
+				normalized = FileSystem::Absolute(path, error);
 			}
 			if (error)
 				normalized = path;
@@ -70,55 +72,6 @@ namespace DefectStudio
 			const std::string stem = fontPath.stem().string();
 			const std::string filename = fontPath.filename().string();
 			return std::string(source) + ": " + (!stem.empty() ? stem : filename);
-		}
-
-		void appendEnvironmentDirectory(std::vector<FilePath> &directories,
-		                                const char *variableName,
-		                                const FilePath &suffix = {})
-		{ 
-			std::string value;
-#if defined(_WIN32)
-			char *buffer = nullptr;
-			std::size_t bufferSize = 0;
-			if (_dupenv_s(&buffer, &bufferSize, variableName) != 0 || buffer == nullptr)
-				return;
-			value = buffer;
-			std::free(buffer);
-#else
-			const char *environmentValue = std::getenv(variableName);
-			if (environmentValue == nullptr)
-				return;
-			value = environmentValue;
-#endif
-			if (value.empty())
-				return;
-
-			FilePath directory(value);
-			if (!suffix.empty())
-				directory /= suffix;
-			directories.push_back(std::move(directory));
-		}
-
-		std::vector<FilePath> systemFontDirectories()
-		{
-			std::vector<FilePath> directories;
-
-#if defined(_WIN32)
-			appendEnvironmentDirectory(directories, "WINDIR", "Fonts");
-			appendEnvironmentDirectory(directories, "SystemRoot", "Fonts");
-			directories.emplace_back("C:/Windows/Fonts");
-#elif defined(__APPLE__)
-			appendEnvironmentDirectory(directories, "HOME", "Library/Fonts");
-			directories.emplace_back("/Library/Fonts");
-			directories.emplace_back("/System/Library/Fonts");
-#else
-			appendEnvironmentDirectory(directories, "HOME", ".local/share/fonts");
-			appendEnvironmentDirectory(directories, "HOME", ".fonts");
-			directories.emplace_back("/usr/local/share/fonts");
-			directories.emplace_back("/usr/share/fonts");
-#endif
-
-			return directories;
 		}
 
 		void collectFontsFromDirectory(std::vector<EditorFontOption> &fontOptions,
@@ -151,7 +104,7 @@ namespace DefectStudio
 					continue;
 				}
 
-				const std::filesystem::directory_entry &entry = *iterator; // 
+				const std::filesystem::directory_entry &entry = *iterator;
 				if (!entry.is_regular_file(error) || error)
 				{
 					error.clear();
@@ -169,7 +122,7 @@ namespace DefectStudio
 				EditorFontOption option;
 				option.label = fontLabelFromPath(fontPath, source);
 				option.source = std::string(source);
-				option.path = std::filesystem::absolute(fontPath, error).lexically_normal().string();
+				option.path = FileSystem::Absolute(fontPath, error).lexically_normal().string();
 				if (error)
 				{
 					error.clear();
@@ -333,9 +286,29 @@ namespace DefectStudio
 	{
 	}
 
+	ImGuiLayer::ImGuiLayer(WeakRef<Window> window, WeakRef<ConfigManager> configManager, ApplicationConfig config, bool resetLayout)
+		: ImGuiLayer()
+	{
+		BindRuntime(window, std::move(configManager), std::move(config), resetLayout);
+	}
+
 	void ImGuiLayer::ApplyAppearanceToCurrentContext(const AppearanceConfig &appearance)
 	{
 		ImGuiLayerDetail::applyAppearanceToImGui(appearance);
+	}
+
+	void ImGuiLayer::ApplyUiConfig(const UIConfig &uiConfig)
+	{
+		m_Config.ui = uiConfig;
+		applyUiConfigToContext();
+	}
+
+	void ImGuiLayer::BindRuntime(WeakRef<Window> window, WeakRef<ConfigManager> configManager, ApplicationConfig config, bool resetLayout)
+	{
+		m_Window = std::move(window);
+		m_ConfigManager = std::move(configManager);
+		m_Config = std::move(config);
+		m_ResetLayoutOnAttach = resetLayout;
 	}
 
 	void ImGuiLayer::BindConfigManager(WeakRef<ConfigManager> configManager)
@@ -366,27 +339,80 @@ namespace DefectStudio
 		}
 	}
 
+	bool ImGuiLayer::IsInitialized() const
+	{
+		return m_Initialized;
+	}
+
+	void ImGuiLayer::BeginFrame()
+	{
+		if (!m_Initialized)
+			return;
+
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID,
+		                             ImGui::GetMainViewport(),
+		                             ImGuiDockNodeFlags_PassthruCentralNode);
+	}
+
+	void ImGuiLayer::RenderDrawData()
+	{
+		if (!m_Initialized)
+			return;
+
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	}
+
 	void ImGuiLayer::OnAttach()
 	{
-		DS_LOG_INFO("ImGuiLayer attached");
+		if (m_Initialized)
+			return;
+
+		auto window = m_Window.lock();
+		if (window == nullptr || window->GetNativeHandle() == nullptr)
+		{
+			DS_LOG_ERROR("ImGuiLayer attach failed: window handle is unavailable");
+			return;
+		}
+
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO &io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		io.ConfigWindowsResizeFromEdges = true;
+		io.IniFilename = nullptr;
+
+		const Path layoutPath = resolveLayoutPath();
+		m_Config.layout.imGuiIniPath = layoutPath.String();
+		resetLayoutIfRequested(layoutPath);
+		applyUiConfigToContext();
+		ImGui::StyleColorsDark();
+		ImGuiLayerDetail::applyAppearanceToImGui(m_Config.appearance);
+
+		const bool glfwBackendInitialized = ImGui_ImplGlfw_InitForOpenGL(window->GetNativeHandle(), true);
+		const bool openGlBackendInitialized = ImGui_ImplOpenGL3_Init("#version 330");
+		if (!glfwBackendInitialized || !openGlBackendInitialized)
+		{
+			DS_LOG_ERROR("ImGuiLayer attach failed: backend initialization failed");
+			ImGui_ImplOpenGL3_Shutdown();
+			ImGui_ImplGlfw_Shutdown();
+			ImGui::DestroyContext();
+			return;
+		}
+
+		m_Initialized = true;
+		DS_LOG_INFO("ImGuiLayer attached: context and backends initialized");
 	}
 
 	void ImGuiLayer::OnDetach()
 	{
-		if (auto uiState = m_UiState.lock())
-		{
-			auto configManager = m_ConfigManager.lock();
-			if (configManager != nullptr && !uiState->layoutPath.empty() && ImGui::GetCurrentContext() != nullptr)
-			{
-				std::size_t size = 0;
-				const char *data = ImGui::SaveIniSettingsToMemory(&size);
-				std::string error;
-				if (!configManager->SaveTextFile(Path::FromResolved(uiState->layoutPath), std::string_view(data, size), error))
-					DS_LOG_WARN("Layout save on detach failed: {}", error);
-			}
-		}
+		saveLayout();
+		shutdownImGui();
 		m_UiState.reset();
 		m_ConfigManager.reset();
+		m_Window.reset();
 		DS_LOG_INFO("ImGuiLayer detached");
 	}
 
@@ -397,6 +423,87 @@ namespace DefectStudio
 
 	void ImGuiLayer::OnImGuiRender()
 	{
+	}
+
+	Path ImGuiLayer::resolveLayoutPath() const
+	{
+		if (!m_Config.layout.imGuiIniPath.empty())
+			return Path::FromResolved(m_Config.layout.imGuiIniPath);
+
+		if (!m_Config.directory.Empty())
+			return ConfigManager::GetLayoutPath(m_Config.directory);
+
+		if (auto configManager = m_ConfigManager.lock())
+			return ConfigManager::GetLayoutPath(configManager->GetConfigDirectory());
+
+		return Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "layouts" / ConfigManager::LayoutFileName);
+	}
+
+	void ImGuiLayer::resetLayoutIfRequested(const Path &layoutPath)
+	{
+		if (!m_ResetLayoutOnAttach)
+			return;
+
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
+		{
+			DS_LOG_WARN("Layout reset requested but ConfigManager is unavailable");
+			return;
+		}
+
+		std::string error;
+		if (!configManager->SaveTextFile(layoutPath, "", error))
+			DS_LOG_WARN("Layout reset failed: {}", error);
+	}
+
+	void ImGuiLayer::applyUiConfigToContext() const
+	{
+		if (ImGui::GetCurrentContext() == nullptr)
+			return;
+
+		const float fontScale = std::clamp(m_Config.ui.fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
+		ImGui::GetIO().FontGlobalScale = fontScale;
+		DS_LOG_INFO("UI settings loaded: font_scale={}, font_scale_step={}, font_path={}",
+		            fontScale,
+		            std::clamp(m_Config.ui.fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax),
+		            m_Config.ui.fontPath.empty() ? "<default>" : m_Config.ui.fontPath);
+	}
+
+	void ImGuiLayer::saveLayout()
+	{
+		if (ImGui::GetCurrentContext() == nullptr)
+			return;
+
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
+			return;
+
+		Path layoutPath = resolveLayoutPath();
+		if (auto uiState = m_UiState.lock())
+		{
+			if (!uiState->layoutPath.empty())
+				layoutPath = Path::FromResolved(uiState->layoutPath);
+		}
+
+		if (layoutPath.Empty())
+			return;
+
+		std::size_t size = 0;
+		const char *data = ImGui::SaveIniSettingsToMemory(&size);
+		std::string error;
+		if (!configManager->SaveTextFile(layoutPath, std::string_view(data, size), error))
+			DS_LOG_WARN("Layout save on detach failed: {}", error);
+	}
+
+	void ImGuiLayer::shutdownImGui()
+	{
+		if (!m_Initialized)
+			return;
+
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+		m_Initialized = false;
 	}
 
 	void ImGuiLayer::syncFontsFromSources()
@@ -419,7 +526,7 @@ namespace DefectStudio
 		std::size_t systemFontCount = 0;
 
 		ImGuiLayerDetail::collectFontsFromDirectory(scannedFonts, seenPaths, localFontsDirectory.Native(), "Local", localFontCount);
-		for (const FilePath &directory : ImGuiLayerDetail::systemFontDirectories())
+		for (const FilePath &directory : Platform::GetSystemFontDirectories())
 			ImGuiLayerDetail::collectFontsFromDirectory(scannedFonts, seenPaths, directory, "System", systemFontCount);
 
 		std::sort(scannedFonts.begin(), scannedFonts.end(), [](const EditorFontOption &left, const EditorFontOption &right) {

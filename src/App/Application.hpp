@@ -66,6 +66,13 @@ namespace DefectStudio
 		
 		// High-level lifecycle orchestration
 		bool createFromSpecification(const ApplicationSpecification &specification);
+		bool beginCreateFromSpecification();
+		bool bootstrapApplicationConfiguration();
+		bool initializeEventInfrastructure();
+		bool initializeWindowingAndGraphics();
+		bool initializeApplicationLayers();
+		bool initializeCoreRuntimeServices();
+		bool finishCreateFromSpecification();
 		void shutdownInternal();
 		
 		// High-level runtime flow
@@ -86,7 +93,6 @@ namespace DefectStudio
 		// Configuration API
 		bool bootstrapConfiguration();
 		void applySpecificationFromDefaultConfig();
-		void applyUiSettingsFromConfig();
 		bool persistUiSettings();
 
 		// Low-level platform/graphics setup
@@ -94,9 +100,7 @@ namespace DefectStudio
 		bool initializeGlfw();
 		bool createMainWindow();
 		bool initializeGraphics();
-		bool initializeImGui();
 		
-		void shutdownImGui();
 		void shutdownWindow();
 		void shutdownGlfw();
 		void configureInputBackend();

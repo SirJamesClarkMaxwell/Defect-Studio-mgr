@@ -1,21 +1,10 @@
 #include "Core/dspch.hpp"
 
-#if defined(_WIN32)
-#include <windows.h>
-#endif
-
 #include <atomic>
 #include <csignal>
 #include <cstdio>
 #include <ctime>
 #include <exception>
-
-#include <GLFW/glfw3.h>
-#include <glad/gl.h>
-
-#include <backends/imgui_impl_glfw.h>
-#include <backends/imgui_impl_opengl3.h>
-#include <imgui.h>
 
 #if defined(TRACY_ENABLE)
 #include <tracy/Tracy.hpp>
@@ -24,6 +13,7 @@
 
 #include "App/Application.hpp"
 #include "App/ConfigManager.hpp"
+#include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/CoreLayer.hpp"
@@ -39,6 +29,10 @@
 #include "Presentation/ImGuiLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
+
+#include <GLFW/glfw3.h>
+#include <glad/gl.h>
+#include <imgui.h>
 
 namespace DefectStudio
 {
@@ -56,19 +50,11 @@ namespace DefectStudio
 
 		void appendLineToFile(const char *path, const char *message)
 		{
-			FILE *stream = nullptr;
-#if defined(_WIN32)
-			if (fopen_s(&stream, path, "a") != 0)
+			std::ofstream stream(path, std::ios::app);
+			if (!stream)
 				return;
-#else
-			stream = std::fopen(path, "a");
-#endif
-			if (stream == nullptr)
-				return;
-
-			std::fprintf(stream, "%s\n", message);
-			std::fflush(stream);
-			std::fclose(stream);
+			stream << message << '\n';
+			stream.flush();
 		}
 
 		void appendCrashMarker(const char *message)
@@ -101,32 +87,6 @@ namespace DefectStudio
 			std::_Exit(EXIT_FAILURE);
 		}
 
-#if defined(_WIN32)
-		LONG WINAPI windowsUnhandledExceptionFilter(EXCEPTION_POINTERS *exceptionPointers)
-		{
-			const unsigned long code = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
-				? exceptionPointers->ExceptionRecord->ExceptionCode
-				: 0UL;
-			const unsigned long flags = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
-				? exceptionPointers->ExceptionRecord->ExceptionFlags
-				: 0UL;
-			void *address = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
-				? exceptionPointers->ExceptionRecord->ExceptionAddress
-				: nullptr;
-
-			Logger::Flush();
-			char buffer[256] = {};
-			std::snprintf(buffer,
-			              sizeof(buffer),
-			              "[CRASH] unhandled SEH exception code=0x%08lX flags=0x%08lX address=%p",
-			              code,
-			              flags,
-			              address);
-			appendCrashMarker(buffer);
-			return EXCEPTION_EXECUTE_HANDLER;
-		}
-#endif
-
 		void installCrashFallbackHandlers()
 		{
 			if (g_CrashHandlersInstalled.exchange(true))
@@ -135,9 +95,7 @@ namespace DefectStudio
 			std::set_terminate(terminateHandler);
 			std::signal(SIGABRT, signalHandler);
 			std::signal(SIGSEGV, signalHandler);
-#if defined(_WIN32)
-			SetUnhandledExceptionFilter(windowsUnhandledExceptionFilter);
-#endif
+			Platform::InstallNativeCrashHandler(appendCrashMarker);
 		}
 	}
 
@@ -146,15 +104,17 @@ namespace DefectStudio
 	static bool HasPortableConfigFiles(const Path &root)
 	{
 		const Path configPath = root.Join("install").Join("app").Join("config");
-		return FileSystem::Exists(configPath.Join(ConfigManager::DefaultConfigFileName).Native())
-			|| FileSystem::Exists(configPath.Join(ConfigManager::UserSettingsFileName).Native());
+		const Path defaultConfigFileName = configPath.Join(ConfigManager::DefaultConfigFileName);
+		const Path userSettingsFileName = configPath.Join(ConfigManager::UserSettingsFileName);
+		return FileSystem::Exists(defaultConfigFileName) || FileSystem::Exists(userSettingsFileName);
 	}
 
 	static bool HasLegacyConfigFiles(const Path &root)
 	{
 		const Path configPath = root.Join("config");
-		return FileSystem::Exists(configPath.Join(ConfigManager::DefaultConfigFileName).Native())
-			|| FileSystem::Exists(configPath.Join(ConfigManager::UserSettingsFileName).Native());
+		const Path defaultConfigFileName = configPath.Join(ConfigManager::DefaultConfigFileName);
+		const Path userSettingsFileName = configPath.Join(ConfigManager::UserSettingsFileName);
+		return FileSystem::Exists(defaultConfigFileName) || FileSystem::Exists(userSettingsFileName);
 	}
 
 	static Path FindConfigDirectoryInAncestors(Path start)
@@ -377,8 +337,8 @@ namespace DefectStudio
 			uiState->appearanceApplyRequested = persist;
 		}
 
-		if (ImGui::GetCurrentContext() != nullptr)
-			ImGui::GetIO().FontGlobalScale = m_Config.ui.fontScale;
+		if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock())
+			imGuiLayer->ApplyUiConfig(m_Config.ui);
 
 		m_ConfigManager->SetConfig(m_Config);
 		m_ConfigManager->ApplySpecification(m_Runtime.specification);
@@ -412,17 +372,10 @@ namespace DefectStudio
 		installCrashFallbackHandlers();
 		setCrashStage("construct application");
 
-		if (s_Instance.has_value())
-		{
-			DS_LOG_WARN("Application::Create called more than once; replacing previous instance pointer");
-		}
-
-		DS_LOG_INFO("Application ctor: argc={}", argc);
 		m_Runtime.argc = argc;
 		m_Runtime.argv = argv;
 		
 		ApplicationSpecification spec = parseApplicationArguments(m_Runtime.argc,m_Runtime.argv);
-		DS_LOG_INFO("Application ctor: arguments parsed");
 		bool created = createFromSpecification(spec);
 		if (!created)
 			DS_LOG_ERROR("Application creation failed");
@@ -438,8 +391,35 @@ namespace DefectStudio
 	bool Application::createFromSpecification(const ApplicationSpecification &specification)
 	{
 		ZoneScoped;
+		m_Runtime.specification = specification;
+		initializeLogger();
+
+		if (!beginCreateFromSpecification())
+			return false;
+		if (!bootstrapApplicationConfiguration())
+			return false;
+		initializeLogger();
+		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
+		logStartupSpecification();
+		if (!initializeEventInfrastructure())
+			return false;
+		if (!initializeWindowingAndGraphics())
+			return false;
+		if (!initializeApplicationLayers())
+			return false;
+		if (!initializeCoreRuntimeServices())
+			return false;
+
+		return finishCreateFromSpecification();
+	}
+
+	bool Application::beginCreateFromSpecification()
+	{
 		setCrashStage("create application");
 		DS_LOG_INFO("CreateFromSpecification: begin");
+
+		if (s_Instance.has_value())
+			DS_LOG_WARN("Application::Create called more than once; replacing previous instance pointer");
 
 		if (!m_Runtime.lifecycle.TryMarkCreated())
 		{
@@ -449,8 +429,11 @@ namespace DefectStudio
 
 		s_Instance = std::ref(*this);
 		TracyMessageL("Launching GUI shell");
+		return true;
+	}
 
-		m_Runtime.specification = specification;
+	bool Application::bootstrapApplicationConfiguration()
+	{
 		setCrashStage("resolve configuration directory");
 		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
 		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.String());
@@ -462,7 +445,11 @@ namespace DefectStudio
 			return false;
 		}
 		applySpecificationFromDefaultConfig();
+		return true;
+	}
 
+	bool Application::initializeEventInfrastructure()
+	{
 		setCrashStage("initialize event dispatch");
 		DS_LOG_INFO("CreateFromSpecification: init EventDispatchingSystem");
 		if (!initializeEventDispatchingSystem())
@@ -483,15 +470,11 @@ namespace DefectStudio
 			return false;
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
+		return true;
+	}
 
-		setCrashStage("initialize logger");
-		DS_LOG_INFO("CreateFromSpecification: init logger");
-		initializeLogger();
-		DS_LOG_INFO("CreateFromSpecification: logger ready");
-
-		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
-		logStartupSpecification();
-
+	bool Application::initializeWindowingAndGraphics()
+	{
 		setCrashStage("initialize glfw");
 		DS_LOG_INFO("CreateFromSpecification: init GLFW");
 		if (!initializeGlfw())
@@ -521,22 +504,27 @@ namespace DefectStudio
 			return false;
 		}
 		DS_LOG_INFO("CreateFromSpecification: graphics ready");
+		return true;
+	}
 
-		setCrashStage("initialize imgui");
-		DS_LOG_INFO("CreateFromSpecification: init ImGui");
-		if (!initializeImGui())
-		{
-			DS_LOG_ERROR("CreateFromSpecification: ImGui init failed");
-			shutdownInternal();
-			return false;
-		}
-		DS_LOG_INFO("CreateFromSpecification: ImGui ready");
-
+	bool Application::initializeApplicationLayers()
+	{
 		setCrashStage("setup layers");
 		DS_LOG_INFO("CreateFromSpecification: setup default layers");
 		setupDefaultLayers();
+		if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
+		    imGuiLayer == nullptr || !imGuiLayer->IsInitialized())
+		{
+			DS_LOG_ERROR("CreateFromSpecification: ImGuiLayer initialization failed");
+			shutdownInternal();
+			return false;
+		}
 		DS_LOG_INFO("CreateFromSpecification: default layers ready");
+		return true;
+	}
 
+	bool Application::initializeCoreRuntimeServices()
+	{
 		setCrashStage("initialize core runtime services");
 		DS_LOG_INFO("CreateFromSpecification: init core runtime services");
 		if (!initializeCoreLayerSystems())
@@ -546,7 +534,11 @@ namespace DefectStudio
 			return false;
 		}
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
+		return true;
+	}
 
+	bool Application::finishCreateFromSpecification()
+	{
 		m_Runtime.lifecycle.SetRunning(true);
 		setCrashStage("running");
 		DS_LOG_INFO("CreateFromSpecification: success, runtime running");
@@ -578,9 +570,6 @@ namespace DefectStudio
 			m_EventBus->ClearAllListeners();
 			m_EventBus.reset();
 		}
-		
-		DS_LOG_INFO("Shutdown: releasing ImGui");
-		shutdownImGui();
 		
 		DS_LOG_INFO("Shutdown: destroying window");
 		shutdownWindow();
@@ -651,11 +640,9 @@ namespace DefectStudio
 
 	void Application::beginImGuiFrame()
 	{
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID, ImGui::GetMainViewport(),
-		                             ImGuiDockNodeFlags_PassthruCentralNode);
+		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
+		DS_ASSERT(imGuiLayer != nullptr, "ImGuiLayer not initialized");
+		imGuiLayer->BeginFrame();
 	}
 
 	void Application::drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate)
@@ -694,7 +681,8 @@ namespace DefectStudio
 		glViewport(0, 0, displayWidth, displayHeight);
 		glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
 		glClear(GL_COLOR_BUFFER_BIT);
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock())
+			imGuiLayer->RenderDrawData();
 		TracyPlot("FPS", frameRate);
 
 		m_Graphics.window->SwapBuffers();
@@ -737,7 +725,11 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
 		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
-		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>());
+		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(
+			CreateWeakRef(m_Graphics.window),
+			GetConfigManager(),
+			m_Config,
+			m_Runtime.specification.resetLayout));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
 		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>());
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
@@ -885,21 +877,6 @@ namespace DefectStudio
 			m_Config.eventQueue.growthStep);
 	}
 
-	void Application::applyUiSettingsFromConfig()
-	{
-		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
-		m_Config.ui.fontScale = std::clamp(m_Config.ui.fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
-		m_Config.ui.fontScaleStep = std::clamp(m_Config.ui.fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
-
-		if (ImGui::GetCurrentContext() != nullptr)
-			ImGui::GetIO().FontGlobalScale = m_Config.ui.fontScale;
-
-		DS_LOG_INFO("UI settings loaded: font_scale={}, font_scale_step={}, font_path={}",
-		            m_Config.ui.fontScale,
-		            m_Config.ui.fontScaleStep,
-		            m_Config.ui.fontPath.empty() ? "<default>" : m_Config.ui.fontPath);
-	}
-
 	bool Application::persistUiSettings()
 	{
 		if (m_ConfigManager == nullptr)
@@ -950,7 +927,7 @@ namespace DefectStudio
 	{
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
 
-		m_Graphics.window = CreateUnique<Window>();
+		m_Graphics.window = CreateRef<Window>();
 		if (!m_Graphics.window->Create(m_Config.window.width, m_Config.window.height, m_Config.window.title))
 		{
 			m_Graphics.window.reset();
@@ -979,43 +956,6 @@ namespace DefectStudio
 
 		m_Graphics.gladInitialized = true;
 		DS_LOG_INFO("OpenGL loaded: {}.{}", GLAD_VERSION_MAJOR(glVersion), GLAD_VERSION_MINOR(glVersion));
-		return true;
-	}
-
-	bool Application::initializeImGui()
-	{
-		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
-
-		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
-		ImGuiIO &io = ImGui::GetIO();
-		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-		io.ConfigWindowsResizeFromEdges = true;
-
-		const Path iniPath = m_Config.layout.imGuiIniPath.empty()
-			? ConfigManager::GetLayoutPath(m_Config.directory)
-			: Path::FromResolved(m_Config.layout.imGuiIniPath);
-		FileSystem::CreateDirectories(iniPath.parent_path().Native());
-		if (m_Runtime.specification.resetLayout && m_ConfigManager != nullptr)
-		{
-			std::string resetError;
-			if (!m_ConfigManager->SaveTextFile(iniPath, "", resetError))
-				DS_LOG_WARN("Layout reset failed: {}", resetError);
-		}
-
-		m_Config.layout.imGuiIniPath = iniPath.String();
-		io.IniFilename = nullptr;
-
-		applyUiSettingsFromConfig();
-		io.FontGlobalScale = m_Config.ui.fontScale;
-
-		ImGui::StyleColorsDark();
-		DS_LOG_INFO("ImGui context created and docking enabled");
-
-		ImGui_ImplGlfw_InitForOpenGL(m_Graphics.window->GetNativeHandle(), true);
-		ImGui_ImplOpenGL3_Init("#version 330");
-		m_Graphics.imGuiInitialized = true;
-		DS_LOG_INFO("ImGui backends initialized");
 		return true;
 	}
 
@@ -1118,22 +1058,6 @@ namespace DefectStudio
 	void Application::onRender(const ImVec4 &clearColor, float frameRate)
 	{
 		renderFrame(clearColor, frameRate);
-	}
-
-	void Application::shutdownImGui()
-	{
-		if (!m_Graphics.imGuiInitialized)
-			return;
-
-		ImGuiIO &io = ImGui::GetIO();
-		(void)io;
-
-		persistUiSettings();
-
-		ImGui_ImplOpenGL3_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext();
-		m_Graphics.imGuiInitialized = false;
 	}
 
 	void Application::shutdownWindow()

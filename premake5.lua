@@ -124,6 +124,9 @@ project "DefectStudio"
             }
         end
 
+    filter "system:macosx"
+        defines { "DS_PLATFORM_MACOS" }
+
     filter "configurations:Debug"
         defines { "DS_DEBUG" }
         symbols "On"
@@ -241,6 +244,9 @@ project "DefectStudioTests"
         pic "On"
         defines { "DS_PLATFORM_LINUX" }
         links { "pthread" }
+
+    filter "system:macosx"
+        defines { "DS_PLATFORM_MACOS" }
 
     filter "configurations:Debug"
         defines { "DS_DEBUG" }

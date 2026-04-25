@@ -1,16 +1,12 @@
 #include "Core/dspch.hpp"
 
-#if defined(_WIN32)
-#include <windows.h>
-#endif
-
-#include <GLFW/glfw3.h>
-
 #include "App/Window.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
+
+#include <GLFW/glfw3.h>
 
 namespace DefectStudio
 {

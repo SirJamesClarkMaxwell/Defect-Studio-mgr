@@ -36,9 +36,8 @@ namespace DefectStudio
 
 	struct ApplicationGraphicsState
 	{
-		Unique<Window> window;
+		Ref<Window> window;
 		bool glfwInitialized = false;
-		bool imGuiInitialized = false;
 		bool gladInitialized = false;
 	};
 

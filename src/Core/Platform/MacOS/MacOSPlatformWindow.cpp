@@ -1,10 +1,8 @@
 #include "Core/dspch.hpp"
 
-#if defined(__linux__)
+#if defined(DS_PLATFORM_MACOS)
 
 #include <csignal>
-
-#include <GLFW/glfw3.h>
 
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
@@ -52,10 +50,9 @@ namespace DefectStudio::Platform
 	std::vector<FilePath> GetSystemFontDirectories()
 	{
 		std::vector<FilePath> directories;
-		AppendEnvironmentDirectory(directories, "HOME", ".local/share/fonts");
-		AppendEnvironmentDirectory(directories, "HOME", ".fonts");
-		directories.emplace_back("/usr/local/share/fonts");
-		directories.emplace_back("/usr/share/fonts");
+		AppendEnvironmentDirectory(directories, "HOME", "Library/Fonts");
+		directories.emplace_back("/Library/Fonts");
+		directories.emplace_back("/System/Library/Fonts");
 		return directories;
 	}
 

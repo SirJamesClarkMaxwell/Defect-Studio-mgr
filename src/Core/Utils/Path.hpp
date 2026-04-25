@@ -12,6 +12,7 @@ class FileSystem
 public:
 	[[nodiscard]] static FilePath CurrentPath();
 	[[nodiscard]] static FilePath Absolute(const FilePath &path, std::error_code &error);
+	[[nodiscard]] static FilePath WeaklyCanonical(const FilePath &path, std::error_code &error);
 	[[nodiscard]] static FilePath TempDirectoryPath();
 	[[nodiscard]] static FilePath TempDirectoryPath(std::error_code &error);
 

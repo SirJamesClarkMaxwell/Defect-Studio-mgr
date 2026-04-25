@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Platform/PlatformSystem.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
 
 namespace DefectStudio
@@ -1076,11 +1077,8 @@ namespace DefectStudio
 
 		const auto t = std::chrono::system_clock::to_time_t(timePoint);
 		std::tm localTm{};
-#ifdef _WIN32
-		localtime_s(&localTm, &t);
-#else
-		localtime_r(&t, &localTm);
-#endif
+		if (!Platform::LocalTime(t, localTm))
+			return "-";
 		char buffer[64] = {};
 		std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &localTm);
 		return buffer;

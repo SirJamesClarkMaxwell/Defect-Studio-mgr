@@ -11,6 +11,8 @@
 
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Core/Platform/PlatformPaths.hpp"
+#include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 
 struct WindowIconState
@@ -25,6 +27,7 @@ static std::unordered_map<GLFWwindow *, WindowIconState> s_WindowIcons;
 namespace
 {
 	constexpr wchar_t kWindowIconResourceName[] = L"IDI_ICON1";
+	DefectStudio::Platform::NativeCrashCallback s_NativeCrashCallback = nullptr;
 
 	DefectStudio::Path GetExecutableDirectory()
 	{
@@ -95,10 +98,84 @@ namespace
 		SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
 		return state;
 	}
+
+	std::optional<FilePath> EnvironmentDirectory(const char *variableName, const FilePath &suffix = {})
+	{
+		char *buffer = nullptr;
+		std::size_t bufferSize = 0;
+		if (_dupenv_s(&buffer, &bufferSize, variableName) != 0 || buffer == nullptr)
+			return std::nullopt;
+
+		std::string value(buffer);
+		std::free(buffer);
+		if (value.empty())
+			return std::nullopt;
+
+		FilePath directory(value);
+		if (!suffix.empty())
+			directory /= suffix;
+		return directory;
+	}
+
+	void AppendEnvironmentDirectory(std::vector<FilePath> &directories, const char *variableName, const FilePath &suffix = {})
+	{
+		if (auto directory = EnvironmentDirectory(variableName, suffix))
+			directories.push_back(std::move(*directory));
+	}
+
+	LONG WINAPI WindowsUnhandledExceptionFilter(EXCEPTION_POINTERS *exceptionPointers)
+	{
+		const unsigned long code = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
+			? exceptionPointers->ExceptionRecord->ExceptionCode
+			: 0UL;
+		const unsigned long flags = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
+			? exceptionPointers->ExceptionRecord->ExceptionFlags
+			: 0UL;
+		void *address = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
+			? exceptionPointers->ExceptionRecord->ExceptionAddress
+			: nullptr;
+
+		DefectStudio::Logger::Flush();
+		char buffer[256] = {};
+		std::snprintf(buffer,
+		              sizeof(buffer),
+		              "[CRASH] unhandled SEH exception code=0x%08lX flags=0x%08lX address=%p",
+		              code,
+		              flags,
+		              address);
+		if (s_NativeCrashCallback != nullptr)
+			s_NativeCrashCallback(buffer);
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
 }
 
 namespace DefectStudio::Platform
 {
+	void DebugBreak()
+	{
+		::DebugBreak();
+	}
+
+	void InstallNativeCrashHandler(NativeCrashCallback callback)
+	{
+		s_NativeCrashCallback = callback;
+		SetUnhandledExceptionFilter(WindowsUnhandledExceptionFilter);
+	}
+
+	bool LocalTime(std::time_t time, std::tm &outLocalTime)
+	{
+		return localtime_s(&outLocalTime, &time) == 0;
+	}
+
+	std::vector<FilePath> GetSystemFontDirectories()
+	{
+		std::vector<FilePath> directories;
+		AppendEnvironmentDirectory(directories, "WINDIR", "Fonts");
+		AppendEnvironmentDirectory(directories, "SystemRoot", "Fonts");
+		directories.emplace_back("C:/Windows/Fonts");
+		return directories;
+	}
+
 	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)
 	{
 		if (window == nullptr)

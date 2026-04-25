@@ -1,14 +1,9 @@
 #pragma once
 
-#include <csignal>
-
+#include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Utils/Logger.hpp"
 
-#if defined(_WIN32)
-#define DS_DEBUGBREAK() __debugbreak()
-#else
-#define DS_DEBUGBREAK() raise(SIGTRAP)
-#endif
+#define DS_DEBUGBREAK() ::DefectStudio::Platform::DebugBreak()
 
 #if defined(DS_DEBUG)
 #define DS_ENABLE_ASSERTS
