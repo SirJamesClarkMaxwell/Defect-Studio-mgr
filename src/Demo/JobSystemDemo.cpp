@@ -184,8 +184,8 @@ namespace DefectStudio::Demo
 
 	JobSystemDemo::JobSystemDemo()
 		: m_DemoEventBus(CreateRef<EventBus>()),
-		  m_DemoJobSystem(CreateUnique<JobSystem>(CreateWeakRef(m_DemoEventBus), 0)),
-		  m_ProgressTracker(CreateWeakRef(m_DemoEventBus)),
+		  m_DemoJobSystem(CreateUnique<JobSystem>(m_DemoEventBus, 0)),
+		  m_ProgressTracker(m_DemoEventBus),
 		  m_PauseRequested(CreateRef<std::atomic_bool>(false))
 	{
 		m_CurrentThreadCount = m_DemoJobSystem->GetThreadCount();

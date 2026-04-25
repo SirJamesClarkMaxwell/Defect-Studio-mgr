@@ -16,7 +16,7 @@ namespace
 TEST(JobSystemEventsTests, PublishesQueuedStartedProgressAndCompletedEvents)
 {
 	auto eventBus = CreateRef<EventBus>();
-	JobSystem jobSystem(CreateWeakRef(eventBus));
+	JobSystem jobSystem(eventBus);
 
 	std::atomic<int> queuedCount = 0;
 	std::atomic<int> startedCount = 0;

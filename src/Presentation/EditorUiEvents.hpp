@@ -6,11 +6,11 @@
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/Utils/Path.hpp"
 
-namespace DefectStudio
+namespace DefectStudio::EditorUiEvents
 {
-	struct UiConfigPreviewRequestedEvent final : public BusEvent
+	struct ConfigPreviewRequested final : public BusEvent
 	{
-		explicit UiConfigPreviewRequestedEvent(UIConfig uiConfig)
+		explicit ConfigPreviewRequested(UIConfig uiConfig)
 			: ui(std::move(uiConfig))
 		{
 		}
@@ -18,17 +18,17 @@ namespace DefectStudio
 		UIConfig ui;
 	};
 
-	struct UiFontListRefreshRequestedEvent final : public BusEvent
+	struct FontListRefreshRequested final : public BusEvent
 	{
 	};
 
-	struct UiFontReloadRequestedEvent final : public BusEvent
+	struct FontReloadRequested final : public BusEvent
 	{
 	};
 
-	struct UiFontScaleChangedEvent final : public BusEvent
+	struct FontScaleChanged final : public BusEvent
 	{
-		explicit UiFontScaleChangedEvent(float requestedFontScale)
+		explicit FontScaleChanged(float requestedFontScale)
 			: fontScale(requestedFontScale)
 		{
 		}
@@ -36,9 +36,9 @@ namespace DefectStudio
 		float fontScale = 1.0f;
 	};
 
-	struct UiAppearancePreviewRequestedEvent final : public BusEvent
+	struct AppearancePreviewRequested final : public BusEvent
 	{
-		explicit UiAppearancePreviewRequestedEvent(AppearanceConfig appearanceConfig)
+		explicit AppearancePreviewRequested(AppearanceConfig appearanceConfig)
 			: appearance(std::move(appearanceConfig))
 		{
 		}
@@ -46,9 +46,9 @@ namespace DefectStudio
 		AppearanceConfig appearance;
 	};
 
-	struct UiAppearanceApplyRequestedEvent final : public BusEvent
+	struct AppearanceApplyRequested final : public BusEvent
 	{
-		explicit UiAppearanceApplyRequestedEvent(AppearanceConfig appearanceConfig)
+		explicit AppearanceApplyRequested(AppearanceConfig appearanceConfig)
 			: appearance(std::move(appearanceConfig))
 		{
 		}
@@ -56,9 +56,9 @@ namespace DefectStudio
 		AppearanceConfig appearance;
 	};
 
-	struct UiThemeSaveRequestedEvent final : public BusEvent
+	struct ThemeSaveRequested final : public BusEvent
 	{
-		UiThemeSaveRequestedEvent(Path targetPath, AppearanceConfig appearanceConfig)
+		ThemeSaveRequested(Path targetPath, AppearanceConfig appearanceConfig)
 			: path(std::move(targetPath)),
 			  appearance(std::move(appearanceConfig))
 		{
@@ -68,9 +68,9 @@ namespace DefectStudio
 		AppearanceConfig appearance;
 	};
 
-	struct UiThemeLoadRequestedEvent final : public BusEvent
+	struct ThemeLoadRequested final : public BusEvent
 	{
-		explicit UiThemeLoadRequestedEvent(Path targetPath)
+		explicit ThemeLoadRequested(Path targetPath)
 			: path(std::move(targetPath))
 		{
 		}
@@ -78,9 +78,9 @@ namespace DefectStudio
 		Path path;
 	};
 
-	struct UiLayoutSaveRequestedEvent final : public BusEvent
+	struct LayoutSaveRequested final : public BusEvent
 	{
-		explicit UiLayoutSaveRequestedEvent(Path targetPath)
+		explicit LayoutSaveRequested(Path targetPath)
 			: path(std::move(targetPath))
 		{
 		}
@@ -88,9 +88,9 @@ namespace DefectStudio
 		Path path;
 	};
 
-	struct UiLayoutLoadRequestedEvent final : public BusEvent
+	struct LayoutLoadRequested final : public BusEvent
 	{
-		explicit UiLayoutLoadRequestedEvent(Path targetPath)
+		explicit LayoutLoadRequested(Path targetPath)
 			: path(std::move(targetPath))
 		{
 		}
@@ -98,13 +98,13 @@ namespace DefectStudio
 		Path path;
 	};
 
-	struct UiLayoutResetRequestedEvent final : public BusEvent
+	struct LayoutResetRequested final : public BusEvent
 	{
-		explicit UiLayoutResetRequestedEvent(Path targetPath)
+		explicit LayoutResetRequested(Path targetPath)
 			: path(std::move(targetPath))
 		{
 		}
 
 		Path path;
 	};
-} // namespace DefectStudio
+} // namespace DefectStudio::EditorUiEvents

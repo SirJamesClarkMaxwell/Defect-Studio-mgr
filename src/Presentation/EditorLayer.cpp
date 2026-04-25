@@ -17,7 +17,7 @@ namespace DefectStudio
 	{
 	}
 
-	void EditorLayer::BindRuntimeServices(WeakRef<EventBus> eventBus,
+	void EditorLayer::BindRuntimeServices(Ref<EventBus> eventBus,
 	                                      WeakRef<JobSystem> jobSystem,
 	                                      WeakRef<ProgressTracker> progressTracker)
 	{
@@ -98,6 +98,8 @@ namespace DefectStudio
 
 	void EditorLayer::handleFontShortcuts(Event &event)
 	{
+		using namespace EditorUiEvents;
+
 		const bool ctrlPressed = Input::IsKeyDown(KeyCode::LeftControl) || Input::IsKeyDown(KeyCode::RightControl);
 		if (!ctrlPressed)
 			return;
@@ -116,8 +118,8 @@ namespace DefectStudio
 			if (keyCode == ToNativeKeyCode(KeyCode::Minus))
 			{
 				m_UiState->fontScale = std::clamp(m_UiState->fontScale - fontScaleStep, fontScaleMin, fontScaleMax);
-				if (auto eventBus = m_EventBus.lock())
-					eventBus->Queue(UiFontScaleChangedEvent{m_UiState->fontScale});
+				if (m_EventBus != nullptr)
+					m_EventBus->Queue(FontScaleChanged{m_UiState->fontScale});
 				event.handled = true;
 				return true;
 			}
@@ -125,8 +127,8 @@ namespace DefectStudio
 			if (keyCode == ToNativeKeyCode(KeyCode::Equal))
 			{
 				m_UiState->fontScale = std::clamp(m_UiState->fontScale + fontScaleStep, fontScaleMin, fontScaleMax);
-				if (auto eventBus = m_EventBus.lock())
-					eventBus->Queue(UiFontScaleChangedEvent{m_UiState->fontScale});
+				if (m_EventBus != nullptr)
+					m_EventBus->Queue(FontScaleChanged{m_UiState->fontScale});
 				event.handled = true;
 				return true;
 			}

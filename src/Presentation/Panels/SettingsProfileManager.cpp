@@ -5,15 +5,17 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
+#include "App/Events/ApplicationConfigEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/SettingsProfileManager.hpp"
 
 namespace DefectStudio
 {
-	void SettingsProfileManager::Bind(WeakRef<ConfigManager> configManager)
+	void SettingsProfileManager::Bind(WeakRef<ConfigManager> configManager, Ref<EventBus> eventBus)
 	{
 		m_Store.Bind(std::move(configManager));
+		m_EventBus = std::move(eventBus);
 		m_Initialized = false;
 	}
 
@@ -69,20 +71,25 @@ namespace DefectStudio
 
 			if (ImGui::Button("Load selected"))
 			{
+				using namespace AppEvents::Config;
+
 				ApplicationConfig config;
 				std::string error;
 				const ConfigProfileEntry *profile = selectedProfile();
 				const std::string profileName = profile != nullptr ? profile->name : m_ProfileNameBuffer.data();
-				if (profile != nullptr && m_Store.Load(profile->path, config, error) && Application::Get().ApplyConfigFromSettings(config, error, true))
+				if (profile != nullptr && m_Store.Load(profile->path, config, error) && m_EventBus != nullptr)
 				{
-					m_StatusMessage = "Profile loaded: " + profileName;
+					m_EventBus->Queue(ApplyRequested{config, true});
+					m_StatusMessage = "Profile apply queued: " + profileName;
 					appliedProfile = true;
 					if (uiState != nullptr)
 						uiState->appearanceStatusMessage = m_StatusMessage;
 				}
 				else
 				{
-					m_StatusMessage = "Profile load failed: " + error;
+					m_StatusMessage = m_EventBus == nullptr
+						? "Profile load failed: EventBus unavailable."
+						: "Profile load failed: " + error;
 				}
 			}
 

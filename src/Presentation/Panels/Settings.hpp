@@ -3,7 +3,9 @@
 #include <array>
 #include <string>
 
+#include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/ApplicationState.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/IPanel.hpp"
@@ -14,14 +16,15 @@ namespace DefectStudio
 	class EventBus;
 	class JobSystem;
 
-	class Settings final : public IPanel
+	class Settings final : public IPanel, public EventReceiver
 	{
 	public:
-		explicit Settings(WeakRef<EventBus> eventBus = {},
+		explicit Settings(Ref<EventBus> eventBus = {},
 		                  WeakRef<JobSystem> jobSystem = {},
 		                  WeakRef<EditorUiState> uiState = {},
 		                  std::string title = "Settings",
 		                  bool visibleByDefault = true);
+		Settings(const Settings &other);
 
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
@@ -42,6 +45,13 @@ namespace DefectStudio
 		void applyRuntimePreview();
 		void maybeApplyPreview();
 		void previewAppearanceIfEnabled();
+		void bindConfigEvents();
+		void onConfigApplied(const AppEvents::Config::Applied &event);
+		void onConfigApplyFailed(const AppEvents::Config::ApplyFailed &event);
+		void onUserConfigSaved(const AppEvents::Config::UserSaved &event);
+		void onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event);
+		void onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event);
+		void onDefaultsSaveFailed(const AppEvents::Config::DefaultsSaveFailed &event);
 
 		void renderActionBar();
 		void renderSidebar();
@@ -65,7 +75,7 @@ namespace DefectStudio
 		std::array<char, 320> m_LogFilePathBuffer = {};
 		std::array<char, 320> m_FontPathBuffer = {};
 		std::string m_StatusMessage;
-		WeakRef<EventBus> m_EventBus;
+		Ref<EventBus> m_EventBus;
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<EditorUiState> m_UiState;
 		SettingsProfileManager m_ProfileManager;

@@ -4,15 +4,17 @@
 #include <string>
 
 #include "App/ConfigProfileStore.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {
+	class EventBus;
 	struct EditorUiState;
 
 	class SettingsProfileManager
 	{
 	public:
-		void Bind(WeakRef<ConfigManager> configManager);
+		void Bind(WeakRef<ConfigManager> configManager, Ref<EventBus> eventBus);
 		[[nodiscard]] bool Render(EditorUiState *uiState, const ApplicationConfig &currentConfig);
 
 	private:
@@ -21,6 +23,7 @@ namespace DefectStudio
 
 	private:
 		ConfigProfileStore m_Store;
+		Ref<EventBus> m_EventBus;
 		std::array<char, 96> m_ProfileNameBuffer = {"default"};
 		int m_SelectedProfileIndex = 0;
 		bool m_Initialized = false;

@@ -28,12 +28,11 @@ namespace DefectStudio
 	void CoreLayer::OnUpdate(float deltaTime)
 	{
 		m_AccumulatedTime += deltaTime;
-		auto eventBus = m_EventBus.lock();
-		if (eventBus)
-			eventBus->ProcessQueue();
+		if (m_EventBus)
+			m_EventBus->ProcessQueue();
 	}
 
-	bool CoreLayer::InitializeSystems(WeakRef<EventBus> eventBus)
+	bool CoreLayer::InitializeSystems(Ref<EventBus> eventBus)
 	{
 		if (m_SystemsInitialized)
 		{
@@ -42,18 +41,17 @@ namespace DefectStudio
 		}
 
 		m_EventBus = std::move(eventBus);
-		auto eventBusStrong = m_EventBus.lock();
-		if (!eventBusStrong)
+		if (!m_EventBus)
 		{
 			DS_LOG_ERROR("CoreLayer::InitializeSystems requires a valid EventBus");
 			return false;
 		}
 
 		DS_LOG_INFO("Init: JobSystem");
-		m_JobSystem = CreateRef<JobSystem>(CreateWeakRef(eventBusStrong));
+		m_JobSystem = CreateRef<JobSystem>(m_EventBus);
 
 		DS_LOG_INFO("Init: ProgressTracker");
-		m_ProgressTracker = CreateRef<ProgressTracker>(CreateWeakRef(eventBusStrong));
+		m_ProgressTracker = CreateRef<ProgressTracker>(m_EventBus);
 
 		m_SystemsInitialized = true;
 		DS_LOG_INFO("Init complete: runtime services");
@@ -75,9 +73,8 @@ namespace DefectStudio
 
 	EventBus &CoreLayer::GetEventBus()
 	{
-		auto eventBus = m_EventBus.lock();
-		DS_ASSERT(eventBus != nullptr, "EventBus is not initialized");
-		return *eventBus;
+		DS_ASSERT(m_EventBus != nullptr, "EventBus is not initialized");
+		return *m_EventBus;
 	}
 
 	JobSystem &CoreLayer::GetJobSystem()

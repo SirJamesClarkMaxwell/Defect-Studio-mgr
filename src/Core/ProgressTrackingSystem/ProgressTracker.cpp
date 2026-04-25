@@ -19,7 +19,7 @@ namespace DefectStudio
 		return bus.Subscribe<EventType>(std::bind_front(method, &tracker));
 	}
 
-	ProgressTracker::ProgressTracker(WeakRef<EventBus> eventBus)
+	ProgressTracker::ProgressTracker(Ref<EventBus> eventBus)
 	{
 		BindEventBus(std::move(eventBus));
 	}
@@ -29,22 +29,21 @@ namespace DefectStudio
 		UnbindEventBus();
 	}
 
-	void ProgressTracker::BindEventBus(WeakRef<EventBus> eventBus)
+	void ProgressTracker::BindEventBus(Ref<EventBus> eventBus)
 	{
 		ZoneScoped;
 		UnbindEventBus();
 		m_EventBus = std::move(eventBus);
 
-		auto bus = m_EventBus.lock();
-		if (!bus)
+		if (!m_EventBus)
 			return;
 
-		m_QueuedSubscription = subscribeTrackerMember<JobQueuedEvent>(*bus, *this, &ProgressTracker::onQueued);
-		m_StartedSubscription = subscribeTrackerMember<JobStartedEvent>(*bus, *this, &ProgressTracker::onStarted);
-		m_ProgressSubscription = subscribeTrackerMember<JobProgressEvent>(*bus, *this, &ProgressTracker::onProgress);
-		m_CompletedSubscription = subscribeTrackerMember<JobCompletedEvent>(*bus, *this, &ProgressTracker::onCompleted);
-		m_CancelledSubscription = subscribeTrackerMember<JobCancelledEvent>(*bus, *this, &ProgressTracker::onCancelled);
-		m_FailedSubscription = subscribeTrackerMember<JobFailedEvent>(*bus, *this, &ProgressTracker::onFailed);
+		m_QueuedSubscription = subscribeTrackerMember<JobQueuedEvent>(*m_EventBus, *this, &ProgressTracker::onQueued);
+		m_StartedSubscription = subscribeTrackerMember<JobStartedEvent>(*m_EventBus, *this, &ProgressTracker::onStarted);
+		m_ProgressSubscription = subscribeTrackerMember<JobProgressEvent>(*m_EventBus, *this, &ProgressTracker::onProgress);
+		m_CompletedSubscription = subscribeTrackerMember<JobCompletedEvent>(*m_EventBus, *this, &ProgressTracker::onCompleted);
+		m_CancelledSubscription = subscribeTrackerMember<JobCancelledEvent>(*m_EventBus, *this, &ProgressTracker::onCancelled);
+		m_FailedSubscription = subscribeTrackerMember<JobFailedEvent>(*m_EventBus, *this, &ProgressTracker::onFailed);
 		
 	}
 

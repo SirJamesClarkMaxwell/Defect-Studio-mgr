@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <functional>
 #include <vector>
 
 #include <imgui.h>
@@ -53,18 +54,26 @@ namespace DefectStudio
 		};
 
 		template <typename EventType>
-		bool queueUiEvent(const WeakRef<EventBus> &eventBus, const EventType &event)
+		bool queueEvent(const Ref<EventBus> &eventBus, const EventType &event)
 		{
-			auto bus = eventBus.lock();
-			if (bus == nullptr)
+			if (eventBus == nullptr)
 				return false;
 
-			bus->Queue(event);
+			eventBus->Queue(event);
 			return true;
+		}
+
+		template <typename EventType>
+		SubscriptionHandle subscribeSettings(
+			EventBus &bus,
+			Settings &settings,
+			void (Settings::*method)(const EventType &))
+		{
+			return bus.Subscribe<EventType>(std::bind_front(method, &settings));
 		}
 	} // namespace
 
-	Settings::Settings(WeakRef<EventBus> eventBus,
+	Settings::Settings(Ref<EventBus> eventBus,
 	                   WeakRef<JobSystem> jobSystem,
 	                   WeakRef<EditorUiState> uiState,
 	                   std::string title,
@@ -74,6 +83,25 @@ namespace DefectStudio
 		  m_JobSystem(std::move(jobSystem)),
 		  m_UiState(std::move(uiState))
 	{
+		bindConfigEvents();
+	}
+
+	Settings::Settings(const Settings &other)
+		: IPanel(other.GetTitle(), other.IsVisible()),
+		  m_DraftInitialized(other.m_DraftInitialized),
+		  m_DraftDirty(other.m_DraftDirty),
+		  m_SelectedTabIndex(other.m_SelectedTabIndex),
+		  m_DraftConfig(other.m_DraftConfig),
+		  m_WindowTitleBuffer(other.m_WindowTitleBuffer),
+		  m_LogFilePathBuffer(other.m_LogFilePathBuffer),
+		  m_FontPathBuffer(other.m_FontPathBuffer),
+		  m_StatusMessage(other.m_StatusMessage),
+		  m_EventBus(other.m_EventBus),
+		  m_JobSystem(other.m_JobSystem),
+		  m_UiState(other.m_UiState),
+		  m_ProfileManager(other.m_ProfileManager)
+	{
+		bindConfigEvents();
 	}
 
 	Ref<IPanel> Settings::Clone() const
@@ -157,7 +185,7 @@ namespace DefectStudio
 			return;
 
 		syncDraftFromApplication();
-		m_ProfileManager.Bind(Application::Get().GetConfigManager());
+		m_ProfileManager.Bind(Application::Get().GetConfigManager(), m_EventBus);
 	}
 
 	void Settings::syncDraftFromApplication()
@@ -190,6 +218,8 @@ namespace DefectStudio
 
 	bool Settings::applyDraft(bool persist)
 	{
+		using namespace AppEvents::Config;
+
 		syncDraftFromBuffers();
 
 		m_DraftConfig.ui.fontScaleMax = std::max(m_DraftConfig.ui.fontScaleMax, m_DraftConfig.ui.fontScaleMin);
@@ -211,49 +241,37 @@ namespace DefectStudio
 		m_DraftConfig.window.width = std::max(320, m_DraftConfig.window.width);
 		m_DraftConfig.window.height = std::max(240, m_DraftConfig.window.height);
 
-		std::string error;
-		if (!Application::Get().ApplyConfigFromSettings(m_DraftConfig, error, persist))
+		if (!queueEvent(m_EventBus, ApplyRequested{m_DraftConfig, persist}))
 		{
-			m_StatusMessage = persist ? "Apply & save failed: " + error : "Apply failed: " + error;
+			m_StatusMessage = "Apply failed: EventBus unavailable.";
 			return false;
 		}
 
-		m_StatusMessage = persist ? "Settings applied and saved to YAML." : "Settings applied.";
-		syncDraftFromApplication();
+		m_StatusMessage = persist ? "Apply & save queued." : "Runtime apply queued.";
 		return true;
 	}
 
 	bool Settings::saveDraftAsDefaults()
 	{
+		using namespace AppEvents::Config;
+
 		syncDraftFromBuffers();
 
-		auto configManager = Application::Get().GetConfigManager().lock();
-		if (configManager == nullptr)
+		if (!queueEvent(m_EventBus, SaveDefaultsRequested{m_DraftConfig}))
 		{
-			m_StatusMessage = "Save defaults failed: ConfigManager unavailable.";
+			m_StatusMessage = "Save defaults failed: EventBus unavailable.";
 			return false;
 		}
 
-		ApplicationConfig defaults = m_DraftConfig;
-		defaults.directory = configManager->GetConfigDirectory();
-		defaults.paths = configManager->GetPaths();
-		if (defaults.layout.imGuiIniPath.empty())
-			defaults.layout.imGuiIniPath = ConfigManager::GetLayoutPath(defaults.directory).String();
-
-		configManager->SetConfig(defaults);
-		std::string error;
-		if (!configManager->SaveDefaultConfig(error))
-		{
-			m_StatusMessage = "Save defaults failed: " + error;
-			return false;
-		}
-
-		m_StatusMessage = "Default YAML saved.";
+		m_StatusMessage = "Default YAML save queued.";
 		return true;
 	}
 
 	void Settings::applyRuntimePreview()
 	{
+		using namespace AppEvents::Config;
+		using namespace EditorUiEvents;
+
 		syncDraftFromBuffers();
 
 		if (auto uiState = m_UiState.lock())
@@ -263,23 +281,18 @@ namespace DefectStudio
 			uiState->fontScaleStep = std::clamp(m_DraftConfig.ui.fontScaleStep, m_DraftConfig.ui.fontScaleStepMin, m_DraftConfig.ui.fontScaleStepMax);
 			uiState->selectedFontPath = m_DraftConfig.ui.fontPath;
 			uiState->appearance = m_DraftConfig.appearance;
-			(void)queueUiEvent(m_EventBus, UiConfigPreviewRequestedEvent{m_DraftConfig.ui});
-			(void)queueUiEvent(m_EventBus, UiAppearancePreviewRequestedEvent{m_DraftConfig.appearance});
+			(void)queueEvent(m_EventBus, ConfigPreviewRequested{m_DraftConfig.ui});
+			(void)queueEvent(m_EventBus, AppearancePreviewRequested{m_DraftConfig.appearance});
 			if (fontPathChanged)
-				(void)queueUiEvent(m_EventBus, UiFontReloadRequestedEvent{});
+				(void)queueEvent(m_EventBus, FontReloadRequested{});
 		}
 
 		if (m_DraftConfig.ui.settingsAutoSaveOnPreview)
 		{
-			if (auto configManager = Application::Get().GetConfigManager().lock())
-			{
-				configManager->SetConfig(m_DraftConfig);
-				std::string error;
-				if (!configManager->SaveUserSettings(error))
-					m_StatusMessage = "Preview applied, auto-save failed: " + error;
-				else
-					m_StatusMessage = "Preview applied and user YAML saved.";
-			}
+			if (queueEvent(m_EventBus, SaveUserRequested{m_DraftConfig}))
+				m_StatusMessage = "Preview applied; auto-save queued.";
+			else
+				m_StatusMessage = "Preview applied; auto-save failed: EventBus unavailable.";
 		}
 	}
 
@@ -297,14 +310,75 @@ namespace DefectStudio
 
 	void Settings::previewAppearanceIfEnabled()
 	{
+		using namespace EditorUiEvents;
+
 		if (!m_DraftConfig.ui.settingsPreviewEnabled)
 			return;
 
 		if (auto uiState = m_UiState.lock())
 		{
 			uiState->appearance = m_DraftConfig.appearance;
-			(void)queueUiEvent(m_EventBus, UiAppearancePreviewRequestedEvent{m_DraftConfig.appearance});
+			(void)queueEvent(m_EventBus, AppearancePreviewRequested{m_DraftConfig.appearance});
 		}
+	}
+
+	void Settings::bindConfigEvents()
+	{
+		if (m_EventBus == nullptr)
+			return;
+
+		using namespace AppEvents::Config;
+
+		AddSubscription(subscribeSettings<Applied>(*m_EventBus, *this, &Settings::onConfigApplied));
+		AddSubscription(subscribeSettings<ApplyFailed>(*m_EventBus, *this, &Settings::onConfigApplyFailed));
+		AddSubscription(subscribeSettings<UserSaved>(*m_EventBus, *this, &Settings::onUserConfigSaved));
+		AddSubscription(subscribeSettings<UserSaveFailed>(*m_EventBus, *this, &Settings::onUserConfigSaveFailed));
+		AddSubscription(subscribeSettings<DefaultsSaved>(*m_EventBus, *this, &Settings::onDefaultsSaved));
+		AddSubscription(subscribeSettings<DefaultsSaveFailed>(*m_EventBus, *this, &Settings::onDefaultsSaveFailed));
+	}
+
+	void Settings::onConfigApplied(const AppEvents::Config::Applied &event)
+	{
+		m_DraftConfig = event.config;
+		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
+		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
+		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
+		m_DraftDirty = false;
+		m_DraftInitialized = true;
+		m_StatusMessage = event.persisted ? "Settings applied and saved to YAML." : "Settings applied.";
+	}
+
+	void Settings::onConfigApplyFailed(const AppEvents::Config::ApplyFailed &event)
+	{
+		m_StatusMessage = event.persist ? "Apply & save failed: " + event.error : "Apply failed: " + event.error;
+	}
+
+	void Settings::onUserConfigSaved(const AppEvents::Config::UserSaved &event)
+	{
+		m_DraftConfig = event.config;
+		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
+		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
+		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
+		m_DraftDirty = false;
+		m_StatusMessage = "Preview applied and user YAML saved.";
+	}
+
+	void Settings::onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event)
+	{
+		(void)event.config;
+		m_StatusMessage = "Preview applied, auto-save failed: " + event.error;
+	}
+
+	void Settings::onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event)
+	{
+		(void)event.config;
+		m_StatusMessage = "Default YAML saved.";
+	}
+
+	void Settings::onDefaultsSaveFailed(const AppEvents::Config::DefaultsSaveFailed &event)
+	{
+		(void)event.config;
+		m_StatusMessage = "Save defaults failed: " + event.error;
 	}
 
 	void Settings::renderActionBar()
@@ -501,6 +575,8 @@ namespace DefectStudio
 
 	void Settings::renderDisplayTab()
 	{
+		using namespace EditorUiEvents;
+
 		auto uiState = m_UiState.lock();
 
 		m_DraftConfig.ui.fontScaleMax = std::max(m_DraftConfig.ui.fontScaleMax, m_DraftConfig.ui.fontScaleMin);
@@ -558,7 +634,7 @@ namespace DefectStudio
 			if (uiState == nullptr)
 				ImGui::BeginDisabled();
 			if (ImGui::Button("Refresh") && uiState != nullptr)
-				(void)queueUiEvent(m_EventBus, UiFontListRefreshRequestedEvent{});
+				(void)queueEvent(m_EventBus, FontListRefreshRequested{});
 			if (uiState == nullptr)
 				ImGui::EndDisabled();
 
@@ -660,15 +736,13 @@ namespace DefectStudio
 	void Settings::renderProfilesTab()
 	{
 		auto uiState = m_UiState.lock();
-		if (m_ProfileManager.Render(uiState.get(), m_DraftConfig))
-		{
-			syncDraftFromApplication();
-			m_StatusMessage = "Draft reloaded from applied profile.";
-		}
+		(void)m_ProfileManager.Render(uiState.get(), m_DraftConfig);
 	}
 
 	void Settings::renderLayoutTab()
 	{
+		using namespace EditorUiEvents;
+
 		auto uiState = m_UiState.lock();
 		if (uiState == nullptr)
 		{
@@ -680,13 +754,13 @@ namespace DefectStudio
 		ImGui::TextWrapped("Layout is saved as ImGui .ini data. Requests go to ImGuiLayer; file access stays behind ConfigManager.");
 		ImGui::TextWrapped("Active layout: %s", uiState->layoutPath.empty() ? "<not configured>" : uiState->layoutPath.c_str());
 		if (ImGui::Button("Save current layout"))
-			(void)queueUiEvent(m_EventBus, UiLayoutSaveRequestedEvent{Path::FromResolved(uiState->layoutPath)});
+			(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(uiState->layoutPath)});
 		ImGui::SameLine();
 		if (ImGui::Button("Load active layout"))
-			(void)queueUiEvent(m_EventBus, UiLayoutLoadRequestedEvent{Path::FromResolved(uiState->layoutPath)});
+			(void)queueEvent(m_EventBus, LayoutLoadRequested{Path::FromResolved(uiState->layoutPath)});
 		ImGui::SameLine();
 		if (ImGui::Button("Reset runtime layout"))
-			(void)queueUiEvent(m_EventBus, UiLayoutResetRequestedEvent{Path::FromResolved(uiState->layoutPath)});
+			(void)queueEvent(m_EventBus, LayoutResetRequested{Path::FromResolved(uiState->layoutPath)});
 
 		if (!uiState->layoutStatusMessage.empty())
 			ImGui::TextWrapped("%s", uiState->layoutStatusMessage.c_str());

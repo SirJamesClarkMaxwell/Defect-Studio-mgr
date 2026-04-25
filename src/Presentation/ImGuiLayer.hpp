@@ -15,22 +15,26 @@ namespace DefectStudio
 	class Window;
 	struct EditorFontOption;
 	struct EditorUiState;
-	struct UiAppearanceApplyRequestedEvent;
-	struct UiAppearancePreviewRequestedEvent;
-	struct UiConfigPreviewRequestedEvent;
-	struct UiFontListRefreshRequestedEvent;
-	struct UiFontReloadRequestedEvent;
-	struct UiFontScaleChangedEvent;
-	struct UiLayoutLoadRequestedEvent;
-	struct UiLayoutResetRequestedEvent;
-	struct UiLayoutSaveRequestedEvent;
-	struct UiThemeLoadRequestedEvent;
-	struct UiThemeSaveRequestedEvent;
+
+	namespace EditorUiEvents
+	{
+		struct AppearanceApplyRequested;
+		struct AppearancePreviewRequested;
+		struct ConfigPreviewRequested;
+		struct FontListRefreshRequested;
+		struct FontReloadRequested;
+		struct FontScaleChanged;
+		struct LayoutLoadRequested;
+		struct LayoutResetRequested;
+		struct LayoutSaveRequested;
+		struct ThemeLoadRequested;
+		struct ThemeSaveRequested;
+	}
 
 	struct ImGuiLayerRuntime
 	{
 		WeakRef<Window> window;
-		WeakRef<EventBus> eventBus;
+		Ref<EventBus> eventBus;
 		WeakRef<ConfigManager> configManager;
 		ApplicationConfig config;
 		bool resetLayout = false;
@@ -57,7 +61,7 @@ namespace DefectStudio
 		[[nodiscard]] Path resolveLayoutPath() const;
 		void resetLayoutIfRequested(const Path &layoutPath);
 		void applyUiConfigToContext() const;
-		void bindEventBus(WeakRef<EventBus> eventBus);
+		void bindEventBus(Ref<EventBus> eventBus);
 		void bindConfigManager(WeakRef<ConfigManager> configManager);
 		void saveLayout();
 		void shutdownImGui();
@@ -66,21 +70,21 @@ namespace DefectStudio
 		bool rebuildImGuiFont(const EditorFontOption &fontOption);
 		[[nodiscard]] Path resolveRequestedLayoutPath(const Path &requestedPath) const;
 		void saveLayoutToPath(const Path &layoutPath, const char *failurePrefix);
-		void onUiConfigPreviewRequested(const UiConfigPreviewRequestedEvent &event);
-		void onFontListRefreshRequested(const UiFontListRefreshRequestedEvent &event);
-		void onFontReloadRequested(const UiFontReloadRequestedEvent &event);
-		void onFontScaleChanged(const UiFontScaleChangedEvent &event);
-		void onAppearancePreviewRequested(const UiAppearancePreviewRequestedEvent &event);
-		void onAppearanceApplyRequested(const UiAppearanceApplyRequestedEvent &event);
-		void onThemeSaveRequested(const UiThemeSaveRequestedEvent &event);
-		void onThemeLoadRequested(const UiThemeLoadRequestedEvent &event);
-		void onLayoutSaveRequested(const UiLayoutSaveRequestedEvent &event);
-		void onLayoutLoadRequested(const UiLayoutLoadRequestedEvent &event);
-		void onLayoutResetRequested(const UiLayoutResetRequestedEvent &event);
+		void onUiConfigPreviewRequested(const EditorUiEvents::ConfigPreviewRequested &event);
+		void onFontListRefreshRequested(const EditorUiEvents::FontListRefreshRequested &event);
+		void onFontReloadRequested(const EditorUiEvents::FontReloadRequested &event);
+		void onFontScaleChanged(const EditorUiEvents::FontScaleChanged &event);
+		void onAppearancePreviewRequested(const EditorUiEvents::AppearancePreviewRequested &event);
+		void onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event);
+		void onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event);
+		void onThemeLoadRequested(const EditorUiEvents::ThemeLoadRequested &event);
+		void onLayoutSaveRequested(const EditorUiEvents::LayoutSaveRequested &event);
+		void onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event);
+		void onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event);
 
 	private:
 		WeakRef<Window> m_Window;
-		WeakRef<EventBus> m_EventBus;
+		Ref<EventBus> m_EventBus;
 		WeakRef<EditorUiState> m_UiState;
 		WeakRef<ConfigManager> m_ConfigManager;
 		ApplicationConfig m_Config;

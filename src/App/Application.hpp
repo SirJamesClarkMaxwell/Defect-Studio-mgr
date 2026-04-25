@@ -7,8 +7,10 @@
 #include "App/ApplicationLifecycle.hpp"
 #include "App/ApplicationState.hpp"
 #include "App/ConfigManager.hpp"
+#include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Window.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
@@ -24,7 +26,7 @@ namespace DefectStudio
 	class CoreLayer;
 	struct EditorUiState;
 
-	class Application
+	class Application : public EventReceiver
 	{
 	public:
 		// Create a fully initialized application instance (may fail internally; check Run()).
@@ -51,7 +53,6 @@ namespace DefectStudio
 		ProgressTracker &GetProgressTracker();
 		[[nodiscard]] WeakRef<ConfigManager> GetConfigManager() const;
 		[[nodiscard]] const ApplicationConfig &GetConfig() const;
-		[[nodiscard]] bool ApplyConfigFromSettings(const ApplicationConfig &config, std::string &error, bool persist);
 
 		// Event processing entry point for concrete event types.
 		template <typename TEvent>
@@ -93,6 +94,14 @@ namespace DefectStudio
 		// Configuration API
 		bool bootstrapConfiguration();
 		void applySpecificationFromDefaultConfig();
+		void bindApplicationConfigEvents();
+		void onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event);
+		void onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event);
+		void onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event);
+		[[nodiscard]] bool applyConfigRequest(const ApplicationConfig &config, std::string &error, bool persist);
+		[[nodiscard]] bool saveUserConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error);
+		[[nodiscard]] bool saveDefaultConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error);
+		[[nodiscard]] ApplicationConfig normalizeConfigSnapshot(const ApplicationConfig &config) const;
 		bool persistUiSettings();
 
 		// Low-level platform/graphics setup

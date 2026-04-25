@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <ctime>
 #include <exception>
+#include <functional>
 
 #if defined(TRACY_ENABLE)
 #include <tracy/Tracy.hpp>
@@ -13,6 +14,7 @@
 
 #include "App/Application.hpp"
 #include "App/ConfigManager.hpp"
+#include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Path.hpp"
@@ -43,6 +45,15 @@ namespace DefectStudio
 	{
 		std::atomic<bool> g_CrashHandlersInstalled = false;
 		std::atomic<const char *> g_CrashStage = "startup";
+
+		template <typename EventType>
+		SubscriptionHandle subscribeApplication(
+			EventBus &bus,
+			Application &application,
+			void (Application::*method)(const EventType &))
+		{
+			return bus.Subscribe<EventType>(std::bind_front(method, &application));
+		}
 
 		void setCrashStage(const char *stage)
 		{
@@ -302,7 +313,24 @@ namespace DefectStudio
 		return m_Config;
 	}
 
-	bool Application::ApplyConfigFromSettings(const ApplicationConfig &config, std::string &error, bool persist)
+	ApplicationConfig Application::normalizeConfigSnapshot(const ApplicationConfig &config) const
+	{
+		ApplicationConfig normalized = config;
+		if (m_ConfigManager != nullptr)
+		{
+			normalized.directory = m_ConfigManager->GetConfigDirectory();
+			normalized.paths = m_ConfigManager->GetPaths();
+		}
+
+		normalized.window.width = std::max(320, normalized.window.width);
+		normalized.window.height = std::max(240, normalized.window.height);
+		if (normalized.layout.imGuiIniPath.empty() && !normalized.directory.Empty())
+			normalized.layout.imGuiIniPath = ConfigManager::GetLayoutPath(normalized.directory).String();
+
+		return normalized;
+	}
+
+	bool Application::applyConfigRequest(const ApplicationConfig &config, std::string &error, bool persist)
 	{
 		if (m_ConfigManager == nullptr)
 		{
@@ -310,13 +338,7 @@ namespace DefectStudio
 			return false;
 		}
 
-		m_Config = config;
-		m_Config.directory = m_ConfigManager->GetConfigDirectory();
-		m_Config.paths = m_ConfigManager->GetPaths();
-		m_Config.window.width = std::max(320, m_Config.window.width);
-		m_Config.window.height = std::max(240, m_Config.window.height);
-		if (m_Config.layout.imGuiIniPath.empty())
-			m_Config.layout.imGuiIniPath = ConfigManager::GetLayoutPath(m_Config.directory).String();
+		m_Config = normalizeConfigSnapshot(config);
 
 		if (auto uiState = m_EditorUiState.lock())
 		{
@@ -337,12 +359,14 @@ namespace DefectStudio
 
 		if (m_EventBus)
 		{
-			m_EventBus->Queue(UiFontListRefreshRequestedEvent{});
-			m_EventBus->Queue(UiConfigPreviewRequestedEvent{m_Config.ui});
+			using namespace EditorUiEvents;
+
+			m_EventBus->Queue(FontListRefreshRequested{});
+			m_EventBus->Queue(ConfigPreviewRequested{m_Config.ui});
 			if (persist)
-				m_EventBus->Queue(UiAppearanceApplyRequestedEvent{m_Config.appearance});
+				m_EventBus->Queue(AppearanceApplyRequested{m_Config.appearance});
 			else
-				m_EventBus->Queue(UiAppearancePreviewRequestedEvent{m_Config.appearance});
+				m_EventBus->Queue(AppearancePreviewRequested{m_Config.appearance});
 		}
 
 		m_ConfigManager->SetConfig(m_Config);
@@ -368,6 +392,92 @@ namespace DefectStudio
 			return true;
 
 		return m_ConfigManager->SaveUserSettings(error);
+	}
+
+	bool Application::saveUserConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
+	{
+		if (m_ConfigManager == nullptr)
+		{
+			error = "ConfigManager is not initialized";
+			return false;
+		}
+
+		savedConfig = normalizeConfigSnapshot(config);
+		m_Config = savedConfig;
+		m_ConfigManager->SetConfig(savedConfig);
+		return m_ConfigManager->SaveUserSettings(error);
+	}
+
+	bool Application::saveDefaultConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
+	{
+		if (m_ConfigManager == nullptr)
+		{
+			error = "ConfigManager is not initialized";
+			return false;
+		}
+
+		savedConfig = normalizeConfigSnapshot(config);
+		const ApplicationConfig currentConfig = m_ConfigManager->GetConfig();
+		m_ConfigManager->SetConfig(savedConfig);
+		const bool saved = m_ConfigManager->SaveDefaultConfig(error);
+		m_ConfigManager->SetConfig(currentConfig);
+		return saved;
+	}
+
+	void Application::bindApplicationConfigEvents()
+	{
+		if (m_EventBus == nullptr)
+			return;
+
+		using namespace AppEvents::Config;
+
+		AddSubscription(subscribeApplication<ApplyRequested>(*m_EventBus, *this, &Application::onConfigApplyRequested));
+		AddSubscription(subscribeApplication<SaveUserRequested>(*m_EventBus, *this, &Application::onUserConfigSaveRequested));
+		AddSubscription(subscribeApplication<SaveDefaultsRequested>(*m_EventBus, *this, &Application::onDefaultsSaveRequested));
+	}
+
+	void Application::onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		std::string error;
+		if (!applyConfigRequest(event.config, error, event.persist))
+		{
+			m_EventBus->Queue(ApplyFailed{event.config, event.persist, error});
+			return;
+		}
+
+		m_EventBus->Queue(Applied{m_Config, event.persist});
+	}
+
+	void Application::onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		ApplicationConfig savedConfig;
+		std::string error;
+		if (!saveUserConfigSnapshot(event.config, savedConfig, error))
+		{
+			m_EventBus->Queue(UserSaveFailed{event.config, error});
+			return;
+		}
+
+		m_EventBus->Queue(UserSaved{savedConfig});
+	}
+
+	void Application::onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		ApplicationConfig savedConfig;
+		std::string error;
+		if (!saveDefaultConfigSnapshot(event.config, savedConfig, error))
+		{
+			m_EventBus->Queue(DefaultsSaveFailed{event.config, error});
+			return;
+		}
+
+		m_EventBus->Queue(DefaultsSaved{savedConfig});
 	}
 
 	// ===== Instance lifecycle =====
@@ -475,6 +585,7 @@ namespace DefectStudio
 			return false;
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
+		bindApplicationConfigEvents();
 		return true;
 	}
 
@@ -571,6 +682,7 @@ namespace DefectStudio
 		if (m_EventBus)
 		{
 			DS_LOG_INFO("Shutdown: releasing EventBus");
+			ClearSubscriptions();
 			m_EventBus->ClearQueue();
 			m_EventBus->ClearAllListeners();
 			m_EventBus.reset();
@@ -733,7 +845,7 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
 		ImGuiLayerRuntime imGuiRuntime;
 		imGuiRuntime.window = CreateWeakRef(m_Graphics.window);
-		imGuiRuntime.eventBus = CreateWeakRef(m_EventBus);
+		imGuiRuntime.eventBus = m_EventBus;
 		imGuiRuntime.configManager = GetConfigManager();
 		imGuiRuntime.config = m_Config;
 		imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
@@ -786,7 +898,7 @@ namespace DefectStudio
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
-		bool systemInitialized = coreLayer->InitializeSystems(CreateWeakRef(m_EventBus));
+		bool systemInitialized = coreLayer->InitializeSystems(m_EventBus);
 		if (!systemInitialized)
 		{
 			DS_LOG_ERROR("Init: Core runtime services failed");
@@ -816,7 +928,7 @@ namespace DefectStudio
 		if (editorLayer != nullptr)
 		{
 			editorLayer->BindRuntimeServices(
-				CreateWeakRef(m_EventBus),
+				m_EventBus,
 				coreLayer->GetJobSystemHandle(),
 				coreLayer->GetProgressTrackerHandle());
 

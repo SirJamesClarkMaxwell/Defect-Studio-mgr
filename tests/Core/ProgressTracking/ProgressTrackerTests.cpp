@@ -73,7 +73,7 @@ namespace
 TEST(ProgressTrackerTests, BuildsSnapshotFromLifecycleEvents)
 {
 	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
-	DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(eventBus));
+	DefectStudio::ProgressTracker tracker(eventBus);
 
 	const DefectStudio::JobId id = 77;
 	const auto createdAt = DefectStudio::Time::Now();
@@ -104,7 +104,7 @@ TEST(ProgressTrackerTests, BuildsSnapshotFromLifecycleEvents)
 TEST(ProgressTrackerTests, StoresErrorSummaryAndViews)
 {
 	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
-	DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(eventBus));
+	DefectStudio::ProgressTracker tracker(eventBus);
 
 	eventBus->Queue(DefectStudio::JobQueuedEvent{1, "A", "IO", DefectStudio::Time::Now()});
 	eventBus->Queue(DefectStudio::JobStartedEvent{1, "A", "IO", DefectStudio::Time::Now()});
@@ -128,8 +128,8 @@ TEST(ProgressTrackerTests, StoresErrorSummaryAndViews)
 TEST(ProgressTrackerTests, ContainsSubtasksWithParentId)
 {
 	auto eventBus = DefectStudio::CreateRef<DefectStudio::EventBus>();
-	DefectStudio::JobSystem jobSystem(DefectStudio::CreateWeakRef(eventBus), 2);
-	DefectStudio::ProgressTracker tracker(DefectStudio::CreateWeakRef(eventBus));
+	DefectStudio::JobSystem jobSystem(eventBus, 2);
+	DefectStudio::ProgressTracker tracker(eventBus);
 
 	const auto parentId = jobSystem.Submit(DefectStudio::CreateRef<ParentTrackerJob>());
 	ASSERT_GT(parentId, 0u);

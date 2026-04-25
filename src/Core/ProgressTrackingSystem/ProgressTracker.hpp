@@ -61,7 +61,7 @@ namespace DefectStudio
 	class ProgressTracker
 	{
 	public:
-		explicit ProgressTracker(WeakRef<EventBus> eventBus = {});
+		explicit ProgressTracker(Ref<EventBus> eventBus = {});
 		~ProgressTracker();
 
 		ProgressTracker(const ProgressTracker &) = delete;
@@ -69,7 +69,7 @@ namespace DefectStudio
 		ProgressTracker(ProgressTracker &&) = delete;
 		ProgressTracker &operator=(ProgressTracker &&) = delete;
 
-		void BindEventBus(WeakRef<EventBus> eventBus);
+		void BindEventBus(Ref<EventBus> eventBus);
 		void UnbindEventBus();
 
 		[[nodiscard]] std::optional<ProgressEntrySnapshot> GetSnapshot(JobId id) const;
@@ -89,7 +89,7 @@ namespace DefectStudio
 	private:
 		mutable std::mutex m_Mutex;
 		std::unordered_map<JobId, ProgressEntrySnapshot> m_Entries;
-		WeakRef<EventBus> m_EventBus;
+		Ref<EventBus> m_EventBus;
 		SubscriptionHandle m_QueuedSubscription;
 		SubscriptionHandle m_StartedSubscription;
 		SubscriptionHandle m_ProgressSubscription;

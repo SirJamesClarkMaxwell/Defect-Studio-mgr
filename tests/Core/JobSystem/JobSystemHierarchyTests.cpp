@@ -56,8 +56,8 @@ namespace
 TEST(JobSystemHierarchyTests, NestedSubtasksThreeLevelsBranchingThreeWithTwoThreads)
 {
 	auto eventBus = CreateRef<EventBus>();
-	JobSystem jobSystem(CreateWeakRef(eventBus), 2);
-	ProgressTracker tracker(CreateWeakRef(eventBus));
+	JobSystem jobSystem(eventBus, 2);
+	ProgressTracker tracker(eventBus);
 
 	const auto rootId = jobSystem.Submit(CreateRef<NestedFanoutJob>(0, 3, 3));
 	ASSERT_GT(rootId, 0u);

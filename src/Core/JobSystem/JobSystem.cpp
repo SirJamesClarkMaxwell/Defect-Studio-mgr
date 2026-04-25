@@ -63,7 +63,7 @@ namespace DefectStudio
 		return status == JobStatus::Completed || status == JobStatus::Failed || status == JobStatus::Cancelled;
 	}
 
-	JobSystem::JobSystem(WeakRef<EventBus> eventBus, std::size_t threadCount)
+	JobSystem::JobSystem(Ref<EventBus> eventBus, std::size_t threadCount)
 		: m_EventBus(std::move(eventBus)),
 		  m_Pool(resolveThreadCount(threadCount)) // todo: load it from config file
 	{
@@ -628,11 +628,10 @@ namespace DefectStudio
 
 	std::optional<Ref<EventBus>> JobSystem::lockEventBus() const
 	{
-		auto eventBus = m_EventBus.lock();
-		if (!eventBus)
+		if (!m_EventBus)
 			return std::nullopt;
 
-		return eventBus;
+		return m_EventBus;
 	}
 
 	void JobSystem::publishQueuedEvent(JobId id, const IJob &job, const Time::TimePoint &createdAt, JobId parentId, JobPriority priority) const

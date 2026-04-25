@@ -23,7 +23,7 @@ namespace DefectStudio
 	class JobSystem
 	{
 	public:
-		explicit JobSystem(WeakRef<EventBus> eventBus = {}, std::size_t threadCount = 0);
+		explicit JobSystem(Ref<EventBus> eventBus = {}, std::size_t threadCount = 0);
 		~JobSystem();
 
 		JobSystem(const JobSystem &) = delete;
@@ -87,7 +87,7 @@ namespace DefectStudio
 		
 	private:
 		// Shared external integration.
-		WeakRef<EventBus> m_EventBus;
+		Ref<EventBus> m_EventBus;
 
 		// Execution backend.
 		BS::thread_pool<BS::tp::priority | BS::tp::pause> m_Pool;
