@@ -1,15 +1,33 @@
 #include "Core/dspch.hpp"
 
 #include "App/Window.hpp"
+#include "App/ApplicationState.hpp"
+#include "App/Events/ApplicationConfigEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 
+#include <algorithm>
+#include <functional>
+
 #include <GLFW/glfw3.h>
 
 namespace DefectStudio
 {
+	namespace
+	{
+		template <typename EventType>
+		SubscriptionHandle subscribeWindow(
+			EventBus &bus,
+			Window &window,
+			void (Window::*method)(const EventType &))
+		{
+			return bus.Subscribe<EventType>(std::bind_front(method, &window));
+		}
+	}
+
 	static Window *GetWindowInstance(GLFWwindow *window)
 	{
 		return static_cast<Window *>(glfwGetWindowUserPointer(window));
@@ -142,9 +160,27 @@ namespace DefectStudio
 		if (m_Handle == nullptr)
 			return;
 
+		DS_LOG_INFO("Destroying GLFW window");
+		ClearSubscriptions();
 		Platform::ShutdownWindowPlatform(m_Handle);
 		glfwDestroyWindow(m_Handle);
 		m_Handle = nullptr;
+		m_EventBus.reset();
+	}
+
+	void Window::BindEventBus(Ref<EventBus> eventBus)
+	{
+		ClearSubscriptions();
+		m_EventBus = std::move(eventBus);
+		if (m_EventBus == nullptr)
+		{
+			DS_LOG_WARN("Window event bus binding skipped: EventBus unavailable");
+			return;
+		}
+
+		using namespace AppEvents::Config;
+		AddSubscription(subscribeWindow<Applied>(*m_EventBus, *this, &Window::onConfigApplied));
+		DS_LOG_INFO("Window config event handlers bound");
 	}
 
 	bool Window::ShouldClose() const
@@ -183,8 +219,86 @@ namespace DefectStudio
 		glfwGetFramebufferSize(m_Handle, &width, &height);
 	}
 
+	void Window::ApplyConfig(const WindowConfig &config)
+	{
+		if (m_Handle == nullptr)
+		{
+			DS_LOG_WARN("Window config apply skipped: GLFW handle unavailable");
+			return;
+		}
+
+		setTitle(config.title);
+
+		const bool hasExplicitPosition = config.x >= 0 && config.y >= 0;
+		const bool currentlyMaximized = glfwGetWindowAttrib(m_Handle, GLFW_MAXIMIZED) != 0;
+		if (currentlyMaximized)
+			glfwRestoreWindow(m_Handle);
+
+		if (hasExplicitPosition)
+			glfwSetWindowPos(m_Handle, config.x, config.y);
+
+		glfwSetWindowSize(m_Handle, std::max(320, config.width), std::max(240, config.height));
+
+		if (config.maximized)
+			glfwMaximizeWindow(m_Handle);
+
+		DS_LOG_INFO(
+			"Window config applied: title=\"{}\" size={}x{} position=({}, {}) explicit_position={} maximized={}",
+			config.title,
+			std::max(320, config.width),
+			std::max(240, config.height),
+			config.x,
+			config.y,
+			hasExplicitPosition,
+			config.maximized);
+	}
+
+	void Window::CaptureConfig(WindowConfig &config) const
+	{
+		if (m_Handle == nullptr)
+		{
+			DS_LOG_WARN("Window config capture skipped: GLFW handle unavailable");
+			return;
+		}
+
+		int x = config.x;
+		int y = config.y;
+		int width = config.width;
+		int height = config.height;
+
+		glfwGetWindowPos(m_Handle, &x, &y);
+		glfwGetWindowSize(m_Handle, &width, &height);
+
+		config.x = x;
+		config.y = y;
+		config.width = std::max(320, width);
+		config.height = std::max(240, height);
+		config.maximized = glfwGetWindowAttrib(m_Handle, GLFW_MAXIMIZED) != 0;
+		DS_LOG_INFO(
+			"Window config captured: size={}x{} position=({}, {}) maximized={}",
+			config.width,
+			config.height,
+			config.x,
+			config.y,
+			config.maximized);
+	}
+
 	GLFWwindow *Window::GetNativeHandle() const
 	{
 		return m_Handle;
+	}
+
+	void Window::setTitle(const std::string &title)
+	{
+		if (m_Handle == nullptr)
+			return;
+
+		glfwSetWindowTitle(m_Handle, title.c_str());
+	}
+
+	void Window::onConfigApplied(const AppEvents::Config::Applied &event)
+	{
+		DS_LOG_INFO("Window received config applied event: persisted={}", event.persisted);
+		ApplyConfig(event.config.window);
 	}
 } // namespace DefectStudio

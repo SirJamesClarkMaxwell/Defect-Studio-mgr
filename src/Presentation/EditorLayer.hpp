@@ -4,6 +4,7 @@
 #include <functional>
 #include <utility>
 
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Layer.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
@@ -17,8 +18,14 @@
 namespace DefectStudio
 {
 	class EventBus;
+	struct ApplicationConfig;
 
-	class EditorLayer final : public Layer
+	namespace AppEvents::Config
+	{
+		struct Applied;
+	}
+
+	class EditorLayer final : public Layer, public EventReceiver
 	{
 	public:
 		EditorLayer();
@@ -26,6 +33,8 @@ namespace DefectStudio
 		                         WeakRef<JobSystem> jobSystem,
 		                         WeakRef<ProgressTracker> progressTracker);
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
+		void ApplyConfig(const ApplicationConfig &config);
+		void ExportConfig(ApplicationConfig &config) const;
 
 		void OnAttach() override;
 		void OnDetach() override;
@@ -49,6 +58,9 @@ namespace DefectStudio
 		void renderHelpMenu();
 		void initializePanelsIfNeeded();
 		void handleFontShortcuts(Event &event);
+		void bindConfigEvents();
+		void applyConfigToUiState(const ApplicationConfig &config);
+		void onConfigApplied(const AppEvents::Config::Applied &event);
 
 	private:
 		PanelRegistry m_Panels;

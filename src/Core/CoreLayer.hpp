@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Layer.hpp"
 #include "Core/Utils/Memory.hpp"
@@ -8,7 +9,14 @@
 
 namespace DefectStudio
 {
-	class CoreLayer final : public Layer
+	struct JobsConfig;
+
+	namespace AppEvents::Config
+	{
+		struct Applied;
+	}
+
+	class CoreLayer final : public Layer, public EventReceiver
 	{
 	public:
 		CoreLayer();
@@ -17,7 +25,7 @@ namespace DefectStudio
 		void OnDetach() override;
 		void OnUpdate(float deltaTime) override;
 
-		bool InitializeSystems(Ref<EventBus> eventBus);
+		bool InitializeSystems(Ref<EventBus> eventBus, const JobsConfig &jobsConfig);
 		void ShutdownSystems();
 
 		EventBus &GetEventBus();
@@ -25,6 +33,10 @@ namespace DefectStudio
 		ProgressTracker &GetProgressTracker();
 		[[nodiscard]] WeakRef<JobSystem> GetJobSystemHandle() const;
 		[[nodiscard]] WeakRef<ProgressTracker> GetProgressTrackerHandle() const;
+
+	private:
+		void applyJobConfig(const JobsConfig &jobsConfig);
+		void onConfigApplied(const AppEvents::Config::Applied &event);
 
 	private:
 		float m_AccumulatedTime = 0.0f;

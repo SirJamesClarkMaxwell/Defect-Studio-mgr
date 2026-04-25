@@ -1,18 +1,36 @@
 #include "Core/dspch.hpp"
 
+#include <algorithm>
+#include <functional>
+
 #include <imgui.h>
 
+#include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"
 
 namespace DefectStudio
 {
+	namespace
+	{
+		template <typename EventType>
+		SubscriptionHandle subscribeEditorLayer(
+			EventBus &bus,
+			EditorLayer &layer,
+			void (EditorLayer::*method)(const EventType &),
+			EventPriority priority = EventPriority::Normal)
+		{
+			return bus.Subscribe<EventType>(std::bind_front(method, &layer), priority);
+		}
+	}
+
 	EditorLayer::EditorLayer() : Layer("EditorLayer")
 	{
 	}
@@ -24,6 +42,12 @@ namespace DefectStudio
 		m_EventBus = std::move(eventBus);
 		m_JobSystem = std::move(jobSystem);
 		m_ProgressTracker = std::move(progressTracker);
+		bindConfigEvents();
+		DS_LOG_INFO(
+			"EditorLayer runtime services bound: event_bus={} job_system={} progress_tracker={}",
+			m_EventBus != nullptr,
+			!m_JobSystem.expired(),
+			!m_ProgressTracker.expired());
 	}
 
 	WeakRef<EditorUiState> EditorLayer::GetUiStateHandle() const
@@ -32,6 +56,38 @@ namespace DefectStudio
 			return {};
 
 		return CreateWeakRef(m_UiState);
+	}
+
+	void EditorLayer::ApplyConfig(const ApplicationConfig &config)
+	{
+		applyConfigToUiState(config);
+		DS_LOG_INFO(
+			"EditorLayer config applied to UI state: font_scale={} workers={} layout={}",
+			config.ui.fontScale,
+			config.jobs.defaultWorkerThreadCount,
+			config.layout.imGuiIniPath.empty() ? "<default>" : config.layout.imGuiIniPath);
+	}
+
+	void EditorLayer::ExportConfig(ApplicationConfig &config) const
+	{
+		if (m_UiState == nullptr)
+		{
+			DS_LOG_WARN("EditorLayer config export skipped: UI state unavailable");
+			return;
+		}
+
+		config.ui.fontScale = std::clamp(m_UiState->fontScale, config.ui.fontScaleMin, config.ui.fontScaleMax);
+		config.ui.fontScaleStep = std::clamp(m_UiState->fontScaleStep, config.ui.fontScaleStepMin, config.ui.fontScaleStepMax);
+		config.ui.fontPath = m_UiState->selectedFontPath;
+		config.jobs.defaultWorkerThreadCount = std::max(1, m_UiState->defaultWorkerThreadCount);
+		config.jobs.reserveUrgentWorker = m_UiState->reserveUrgentWorkerByDefault;
+		config.appearance = m_UiState->appearance;
+		config.layout.imGuiIniPath = m_UiState->layoutPath;
+		DS_LOG_INFO(
+			"EditorLayer config exported from UI state: font_scale={} workers={} layout={}",
+			config.ui.fontScale,
+			config.jobs.defaultWorkerThreadCount,
+			config.layout.imGuiIniPath.empty() ? "<default>" : config.layout.imGuiIniPath);
 	}
 
 	void EditorLayer::OnAttach()
@@ -47,6 +103,7 @@ namespace DefectStudio
 		DS_LOG_INFO("EditorLayer detached");
 		m_Panels.Clear();
 		m_PanelsInitialized = false;
+		ClearSubscriptions();
 		m_EventBus.reset();
 		m_JobSystem.reset();
 		m_ProgressTracker.reset();
@@ -140,6 +197,52 @@ namespace DefectStudio
 			handleKey(keyPressed->GetKeyCode());
 		else if (const auto *keyRepeated = dynamic_cast<const KeyRepeatedEvent *>(&event))
 			handleKey(keyRepeated->GetKeyCode());
+	}
+
+	void EditorLayer::bindConfigEvents()
+	{
+		if (m_EventBus == nullptr)
+		{
+			DS_LOG_WARN("EditorLayer config event binding skipped: EventBus unavailable");
+			return;
+		}
+
+		using namespace AppEvents::Config;
+		AddSubscription(subscribeEditorLayer<Applied>(*m_EventBus, *this, &EditorLayer::onConfigApplied, EventPriority::High));
+		DS_LOG_INFO("EditorLayer config event handlers bound");
+	}
+
+	void EditorLayer::applyConfigToUiState(const ApplicationConfig &config)
+	{
+		if (m_UiState == nullptr)
+		{
+			DS_LOG_WARN("EditorLayer config apply skipped: UI state unavailable");
+			return;
+		}
+
+		m_UiState->fontScale = config.ui.fontScale;
+		m_UiState->fontScaleStep = config.ui.fontScaleStep;
+		m_UiState->fontScaleMin = config.ui.fontScaleMin;
+		m_UiState->fontScaleMax = config.ui.fontScaleMax;
+		m_UiState->fontScaleStepMin = config.ui.fontScaleStepMin;
+		m_UiState->fontScaleStepMax = config.ui.fontScaleStepMax;
+		m_UiState->fontScaleStepSliderMax = config.ui.fontScaleStepSliderMax;
+		m_UiState->defaultWorkerThreadCount = config.jobs.defaultWorkerThreadCount;
+		m_UiState->reserveUrgentWorkerByDefault = config.jobs.reserveUrgentWorker;
+		m_UiState->selectedFontPath = config.ui.fontPath;
+		m_UiState->paths = config.paths;
+		m_UiState->appearance = config.appearance;
+		m_UiState->layoutPath = config.layout.imGuiIniPath;
+		if (m_UiState->themeSavePath.empty())
+			m_UiState->themeSavePath = (config.paths.themesDirectory / Path("dark-orange.yaml")).String();
+		if (m_UiState->themeLoadPath.empty())
+			m_UiState->themeLoadPath = m_UiState->themeSavePath;
+	}
+
+	void EditorLayer::onConfigApplied(const AppEvents::Config::Applied &event)
+	{
+		DS_LOG_INFO("EditorLayer received config applied event: persisted={}", event.persisted);
+		applyConfigToUiState(event.config);
 	}
 
 	void EditorLayer::renderMainMenuBar()

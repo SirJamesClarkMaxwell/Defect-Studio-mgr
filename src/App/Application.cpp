@@ -27,8 +27,6 @@
 #include "Domain/DomainLayer.hpp"
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
-#include "Presentation/EditorUiEvents.hpp"
-#include "Presentation/EditorUiState.hpp"
 #include "Presentation/ImGuiLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
@@ -170,45 +168,6 @@ namespace DefectStudio
 		return Path::FromResolved(FileSystem::CurrentPath() / "install" / "app" / "config");
 	}
 
-	static void CaptureWindowState(GLFWwindow *window, WindowConfig &config)
-	{
-		if (window == nullptr)
-			return;
-
-		int x = config.x;
-		int y = config.y;
-		int width = config.width;
-		int height = config.height;
-
-		glfwGetWindowPos(window, &x, &y);
-		glfwGetWindowSize(window, &width, &height);
-
-		config.x = x;
-		config.y = y;
-		config.width = std::max(320, width);
-		config.height = std::max(240, height);
-		config.maximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED) != 0;
-	}
-
-	static void ApplyWindowState(GLFWwindow *window, const WindowConfig &config)
-	{
-		if (window == nullptr)
-			return;
-
-		const bool hasExplicitPosition = config.x >= 0 && config.y >= 0;
-		const bool currentlyMaximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED) != 0;
-		if (currentlyMaximized)
-			glfwRestoreWindow(window);
-
-		if (hasExplicitPosition)
-			glfwSetWindowPos(window, config.x, config.y);
-
-		glfwSetWindowSize(window, std::max(320, config.width), std::max(240, config.height));
-
-		if (config.maximized)
-			glfwMaximizeWindow(window);
-	}
-
 	struct MainLoopState
 	{
 		bool showDemoWindow = true;
@@ -335,63 +294,47 @@ namespace DefectStudio
 		if (m_ConfigManager == nullptr)
 		{
 			error = "ConfigManager is not initialized";
+			DS_LOG_ERROR("Config apply rejected: {}", error);
 			return false;
 		}
 
-		m_Config = normalizeConfigSnapshot(config);
+		ApplicationConfig normalizedConfig = normalizeConfigSnapshot(config);
+		DS_LOG_INFO(
+			"Config apply requested: persist={} directory={} window={}x{} maximized={} workers={} reserve_urgent={} font_scale={}",
+			persist,
+			normalizedConfig.directory.String(),
+			normalizedConfig.window.width,
+			normalizedConfig.window.height,
+			normalizedConfig.window.maximized,
+			normalizedConfig.jobs.defaultWorkerThreadCount,
+			normalizedConfig.jobs.reserveUrgentWorker,
+			normalizedConfig.ui.fontScale);
 
-		if (auto uiState = m_EditorUiState.lock())
+		if (persist)
 		{
-			uiState->fontScale = std::clamp(m_Config.ui.fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
-			uiState->fontScaleStep = std::clamp(m_Config.ui.fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
-			uiState->fontScaleMin = m_Config.ui.fontScaleMin;
-			uiState->fontScaleMax = m_Config.ui.fontScaleMax;
-			uiState->fontScaleStepMin = m_Config.ui.fontScaleStepMin;
-			uiState->fontScaleStepMax = m_Config.ui.fontScaleStepMax;
-			uiState->fontScaleStepSliderMax = m_Config.ui.fontScaleStepSliderMax;
-			uiState->defaultWorkerThreadCount = m_Config.jobs.defaultWorkerThreadCount;
-			uiState->reserveUrgentWorkerByDefault = m_Config.jobs.reserveUrgentWorker;
-			uiState->selectedFontPath = m_Config.ui.fontPath;
-			uiState->paths = m_Config.paths;
-			uiState->appearance = m_Config.appearance;
-			uiState->layoutPath = m_Config.layout.imGuiIniPath;
+			const ApplicationConfig previousConfig = m_ConfigManager->GetConfig();
+			m_ConfigManager->SetConfig(normalizedConfig);
+			if (!m_ConfigManager->SaveUserSettings(error))
+			{
+				m_ConfigManager->SetConfig(previousConfig);
+				DS_LOG_ERROR("Config apply save failed: {}", error);
+				return false;
+			}
+
+			DS_LOG_INFO("Config apply persisted to user settings");
 		}
 
-		if (m_EventBus)
-		{
-			using namespace EditorUiEvents;
-
-			m_EventBus->Queue(FontListRefreshRequested{});
-			m_EventBus->Queue(ConfigPreviewRequested{m_Config.ui});
-			if (persist)
-				m_EventBus->Queue(AppearanceApplyRequested{m_Config.appearance});
-			else
-				m_EventBus->Queue(AppearancePreviewRequested{m_Config.appearance});
-		}
-
+		m_Config = std::move(normalizedConfig);
 		m_ConfigManager->SetConfig(m_Config);
 		m_ConfigManager->ApplySpecification(m_Runtime.specification);
 		initializeLogger();
 
 		m_EventQueue.Configure(m_Config.eventQueue.initialCapacity, m_Config.eventQueue.growthStep);
-
-		if (auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock())
-		{
-			const std::size_t urgentWorkerCount = static_cast<std::size_t>(m_Config.jobs.reserveUrgentWorker ? 1 : 0);
-			const std::size_t targetThreadCount = static_cast<std::size_t>(m_Config.jobs.defaultWorkerThreadCount) + urgentWorkerCount;
-			(void)coreLayer->GetJobSystem().SetThreadCount(targetThreadCount);
-		}
-
-		if (m_Graphics.window != nullptr && m_Graphics.window->GetNativeHandle() != nullptr)
-		{
-			glfwSetWindowTitle(m_Graphics.window->GetNativeHandle(), m_Config.window.title.c_str());
-			ApplyWindowState(m_Graphics.window->GetNativeHandle(), m_Config.window);
-		}
-
-		if (!persist)
-			return true;
-
-		return m_ConfigManager->SaveUserSettings(error);
+		DS_LOG_INFO(
+			"Config apply complete: event_queue_capacity={} event_queue_growth={}",
+			m_Config.eventQueue.initialCapacity,
+			m_Config.eventQueue.growthStep);
+		return true;
 	}
 
 	bool Application::saveUserConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
@@ -399,13 +342,19 @@ namespace DefectStudio
 		if (m_ConfigManager == nullptr)
 		{
 			error = "ConfigManager is not initialized";
+			DS_LOG_ERROR("User config save rejected: {}", error);
 			return false;
 		}
 
 		savedConfig = normalizeConfigSnapshot(config);
 		m_Config = savedConfig;
 		m_ConfigManager->SetConfig(savedConfig);
-		return m_ConfigManager->SaveUserSettings(error);
+		const bool saved = m_ConfigManager->SaveUserSettings(error);
+		if (saved)
+			DS_LOG_INFO("User config saved: directory={}", savedConfig.directory.String());
+		else
+			DS_LOG_ERROR("User config save failed: {}", error);
+		return saved;
 	}
 
 	bool Application::saveDefaultConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
@@ -413,6 +362,7 @@ namespace DefectStudio
 		if (m_ConfigManager == nullptr)
 		{
 			error = "ConfigManager is not initialized";
+			DS_LOG_ERROR("Default config save rejected: {}", error);
 			return false;
 		}
 
@@ -421,6 +371,10 @@ namespace DefectStudio
 		m_ConfigManager->SetConfig(savedConfig);
 		const bool saved = m_ConfigManager->SaveDefaultConfig(error);
 		m_ConfigManager->SetConfig(currentConfig);
+		if (saved)
+			DS_LOG_INFO("Default config saved: directory={}", savedConfig.directory.String());
+		else
+			DS_LOG_ERROR("Default config save failed: {}", error);
 		return saved;
 	}
 
@@ -434,26 +388,32 @@ namespace DefectStudio
 		AddSubscription(subscribeApplication<ApplyRequested>(*m_EventBus, *this, &Application::onConfigApplyRequested));
 		AddSubscription(subscribeApplication<SaveUserRequested>(*m_EventBus, *this, &Application::onUserConfigSaveRequested));
 		AddSubscription(subscribeApplication<SaveDefaultsRequested>(*m_EventBus, *this, &Application::onDefaultsSaveRequested));
+		DS_LOG_INFO("Application config event handlers bound");
 	}
 
 	void Application::onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event)
 	{
 		using namespace AppEvents::Config;
 
+		DS_LOG_INFO("Config apply event received: persist={}", event.persist);
 		std::string error;
 		if (!applyConfigRequest(event.config, error, event.persist))
 		{
 			m_EventBus->Queue(ApplyFailed{event.config, event.persist, error});
+			DS_LOG_ERROR("Config apply event failed: persist={} error={}", event.persist, error);
+			// TODO: expose this through a user-facing notification with the failing area.
 			return;
 		}
 
 		m_EventBus->Queue(Applied{m_Config, event.persist});
+		DS_LOG_INFO("Config applied event queued: persist={}", event.persist);
 	}
 
 	void Application::onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event)
 	{
 		using namespace AppEvents::Config;
 
+		DS_LOG_INFO("User config save event received");
 		ApplicationConfig savedConfig;
 		std::string error;
 		if (!saveUserConfigSnapshot(event.config, savedConfig, error))
@@ -463,12 +423,14 @@ namespace DefectStudio
 		}
 
 		m_EventBus->Queue(UserSaved{savedConfig});
+		DS_LOG_INFO("User config saved event queued");
 	}
 
 	void Application::onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event)
 	{
 		using namespace AppEvents::Config;
 
+		DS_LOG_INFO("Default config save event received");
 		ApplicationConfig savedConfig;
 		std::string error;
 		if (!saveDefaultConfigSnapshot(event.config, savedConfig, error))
@@ -478,6 +440,7 @@ namespace DefectStudio
 		}
 
 		m_EventBus->Queue(DefaultsSaved{savedConfig});
+		DS_LOG_INFO("Default config saved event queued");
 	}
 
 	// ===== Instance lifecycle =====
@@ -755,7 +718,7 @@ namespace DefectStudio
 
 	// ===== Low-level frame and UI helpers =====
 
-	void Application::beginImGuiFrame()
+	void Application::beginFrame()
 	{
 		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
 		DS_ASSERT(imGuiLayer != nullptr, "ImGuiLayer not initialized");
@@ -769,16 +732,7 @@ namespace DefectStudio
 		ImGui::Text("GUI shell is running.");
 		ImGui::Text("FPS: %.1f", frameRate);
 		ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
-		if (ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor)))
-		{
-			if (auto uiState = m_EditorUiState.lock())
-			{
-				uiState->appearance.clearColor[0] = clearColor.x;
-				uiState->appearance.clearColor[1] = clearColor.y;
-				uiState->appearance.clearColor[2] = clearColor.z;
-				uiState->appearance.clearColor[3] = clearColor.w;
-			}
-		}
+		ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor));
 		ImGui::End();
 
 		if (showDemoWindow)
@@ -898,7 +852,7 @@ namespace DefectStudio
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
-		bool systemInitialized = coreLayer->InitializeSystems(m_EventBus);
+		bool systemInitialized = coreLayer->InitializeSystems(m_EventBus, m_Config.jobs);
 		if (!systemInitialized)
 		{
 			DS_LOG_ERROR("Init: Core runtime services failed");
@@ -910,54 +864,16 @@ namespace DefectStudio
 		GetJobSystem();
 		GetProgressTracker();
 
-		const std::size_t urgentWorkerCount = static_cast<std::size_t>(m_Config.jobs.reserveUrgentWorker ? 1 : 0);
-		const std::size_t targetThreadCount = static_cast<std::size_t>(m_Config.jobs.defaultWorkerThreadCount) + urgentWorkerCount;
-		if (!GetJobSystem().SetThreadCount(targetThreadCount))
-		{
-			DS_LOG_WARN("Init: failed to apply startup worker count {}", targetThreadCount);
-		}
-		else
-		{
-			DS_LOG_INFO(
-				"Init: worker count target={} (base={} reserve_urgent={})",
-				targetThreadCount,
-				m_Config.jobs.defaultWorkerThreadCount,
-				m_Config.jobs.reserveUrgentWorker);
-		}
-
 		if (editorLayer != nullptr)
 		{
 			editorLayer->BindRuntimeServices(
 				m_EventBus,
 				coreLayer->GetJobSystemHandle(),
 				coreLayer->GetProgressTrackerHandle());
-
-			m_EditorUiState = editorLayer->GetUiStateHandle();
-			if (auto uiState = m_EditorUiState.lock())
-			{
-				uiState->fontScale = m_Config.ui.fontScale;
-				uiState->fontScaleStep = m_Config.ui.fontScaleStep;
-				uiState->fontScaleMin = m_Config.ui.fontScaleMin;
-				uiState->fontScaleMax = m_Config.ui.fontScaleMax;
-				uiState->fontScaleStepMin = m_Config.ui.fontScaleStepMin;
-				uiState->fontScaleStepMax = m_Config.ui.fontScaleStepMax;
-				uiState->fontScaleStepSliderMax = m_Config.ui.fontScaleStepSliderMax;
-				uiState->defaultWorkerThreadCount = m_Config.jobs.defaultWorkerThreadCount;
-				uiState->reserveUrgentWorkerByDefault = m_Config.jobs.reserveUrgentWorker;
-				uiState->selectedFontPath = m_Config.ui.fontPath;
-				uiState->paths = m_Config.paths;
-				uiState->appearance = m_Config.appearance;
-				uiState->layoutPath = m_Config.layout.imGuiIniPath;
-				if (uiState->themeSavePath.empty())
-					uiState->themeSavePath = (m_Config.paths.themesDirectory / Path("dark-orange.yaml")).String();
-				if (uiState->themeLoadPath.empty())
-					uiState->themeLoadPath = uiState->themeSavePath;
-			}
+			editorLayer->ApplyConfig(m_Config);
 
 			if (imGuiLayer != nullptr)
-			{
-				imGuiLayer->BindUiState(m_EditorUiState);
-			}
+				imGuiLayer->BindUiState(editorLayer->GetUiStateHandle());
 		}
 		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
@@ -1003,18 +919,10 @@ namespace DefectStudio
 			return false;
 
 		if (m_Graphics.window != nullptr)
-			CaptureWindowState(m_Graphics.window->GetNativeHandle(), m_Config.window);
+			m_Graphics.window->CaptureConfig(m_Config.window);
 
-		if (auto uiState = m_EditorUiState.lock())
-		{
-			m_Config.ui.fontScale = std::clamp(uiState->fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
-			m_Config.ui.fontScaleStep = std::clamp(uiState->fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
-			m_Config.ui.fontPath = uiState->selectedFontPath;
-			m_Config.jobs.defaultWorkerThreadCount = std::max(1, uiState->defaultWorkerThreadCount);
-			m_Config.jobs.reserveUrgentWorker = uiState->reserveUrgentWorkerByDefault;
-			m_Config.appearance = uiState->appearance;
-			m_Config.layout.imGuiIniPath = uiState->layoutPath;
-		}
+		if (auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock())
+			editorLayer->ExportConfig(m_Config);
 
 		m_ConfigManager->SetConfig(m_Config);
 
@@ -1054,7 +962,8 @@ namespace DefectStudio
 			return false;
 		}
 
-		ApplyWindowState(m_Graphics.window->GetNativeHandle(), m_Config.window);
+		m_Graphics.window->BindEventBus(m_EventBus);
+		m_Graphics.window->ApplyConfig(m_Config.window);
 
 		m_Graphics.window->SetEventCallback([this](EventVariant event) { queueEvent(std::move(event)); });
 
@@ -1125,18 +1034,10 @@ namespace DefectStudio
 
 		onUpdate(deltaTime);
 
-		beginImGuiFrame();
+		beginFrame();
 		for (const auto &layer : m_LayerStack)
 			layer->OnImGuiRender();
 		// drawMainPanel(showDemoWindow, clearColor, io.Framerate);
-		// if (auto uiState = m_EditorUiState.lock())
-		// {
-		// 	clearColor = ImVec4(
-		// 		uiState->appearance.clearColor[0],
-		// 		uiState->appearance.clearColor[1],
-		// 		uiState->appearance.clearColor[2],
-		// 		uiState->appearance.clearColor[3]);
-		// }
 		onRender(clearColor, io.Framerate);
 	}
 

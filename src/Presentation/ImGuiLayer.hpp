@@ -16,6 +16,11 @@ namespace DefectStudio
 	struct EditorFontOption;
 	struct EditorUiState;
 
+	namespace AppEvents::Config
+	{
+		struct Applied;
+	}
+
 	namespace EditorUiEvents
 	{
 		struct AppearanceApplyRequested;
@@ -81,6 +86,7 @@ namespace DefectStudio
 		void onLayoutSaveRequested(const EditorUiEvents::LayoutSaveRequested &event);
 		void onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event);
 		void onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event);
+		void onApplicationConfigApplied(const AppEvents::Config::Applied &event);
 
 	private:
 		WeakRef<Window> m_Window;

@@ -14,6 +14,7 @@
 #include "Presentation/ImGuiLayer.hpp"
 
 #include "App/ConfigManager.hpp"
+#include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Window.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Platform/PlatformPaths.hpp"
@@ -320,10 +321,15 @@ namespace DefectStudio
 		m_EventBus = std::move(eventBus);
 
 		if (m_EventBus == nullptr)
+		{
+			DS_LOG_WARN("ImGuiLayer event bus binding skipped: EventBus unavailable");
 			return;
+		}
 
 		using namespace EditorUiEvents;
+		using namespace AppEvents::Config;
 
+		AddSubscription(subscribeImGuiLayer<Applied>(*m_EventBus, *this, &ImGuiLayer::onApplicationConfigApplied));
 		AddSubscription(subscribeImGuiLayer<ConfigPreviewRequested>(*m_EventBus, *this, &ImGuiLayer::onUiConfigPreviewRequested));
 		AddSubscription(subscribeImGuiLayer<FontListRefreshRequested>(*m_EventBus, *this, &ImGuiLayer::onFontListRefreshRequested));
 		AddSubscription(subscribeImGuiLayer<FontReloadRequested>(*m_EventBus, *this, &ImGuiLayer::onFontReloadRequested));
@@ -335,16 +341,19 @@ namespace DefectStudio
 		AddSubscription(subscribeImGuiLayer<LayoutSaveRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutSaveRequested));
 		AddSubscription(subscribeImGuiLayer<LayoutLoadRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutLoadRequested));
 		AddSubscription(subscribeImGuiLayer<LayoutResetRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutResetRequested));
+		DS_LOG_INFO("ImGuiLayer UI event handlers bound");
 	}
 
 	void ImGuiLayer::bindConfigManager(WeakRef<ConfigManager> configManager)
 	{
 		m_ConfigManager = std::move(configManager);
+		DS_LOG_INFO("ImGuiLayer ConfigManager bound: available={}", !m_ConfigManager.expired());
 	}
 
 	void ImGuiLayer::BindUiState(WeakRef<EditorUiState> uiState)
 	{
 		m_UiState = std::move(uiState);
+		DS_LOG_INFO("ImGuiLayer UI state bound: available={}", !m_UiState.expired());
 		syncFontsFromSources();
 		applySelectedFont();
 		auto state = m_UiState.lock();
@@ -363,6 +372,7 @@ namespace DefectStudio
 			{
 				ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
 				state->layoutStatusMessage = "Layout loaded: " + state->layoutPath;
+				DS_LOG_INFO("ImGui layout loaded on UI state bind: {}", state->layoutPath);
 			}
 		}
 		
@@ -542,7 +552,12 @@ namespace DefectStudio
 		const char *data = ImGui::SaveIniSettingsToMemory(&size);
 		std::string error;
 		if (!configManager->SaveTextFile(layoutPath, std::string_view(data, size), error))
+		{
 			DS_LOG_WARN("{}: {}", failurePrefix, error);
+			return;
+		}
+
+		DS_LOG_INFO("ImGui layout saved: {} bytes={}", layoutPath.String(), size);
 	}
 
 	void ImGuiLayer::shutdownImGui()
@@ -723,16 +738,19 @@ namespace DefectStudio
 	{
 		m_Config.ui = event.ui;
 		applyUiConfigToContext();
+		DS_LOG_INFO("UI config preview applied: font_scale={}", event.ui.fontScale);
 	}
 
 	void ImGuiLayer::onFontListRefreshRequested(const EditorUiEvents::FontListRefreshRequested &)
 	{
+		DS_LOG_INFO("UI font list refresh requested");
 		syncFontsFromSources();
 		applySelectedFont();
 	}
 
 	void ImGuiLayer::onFontReloadRequested(const EditorUiEvents::FontReloadRequested &)
 	{
+		DS_LOG_INFO("UI font reload requested");
 		applySelectedFont();
 	}
 
@@ -743,6 +761,7 @@ namespace DefectStudio
 			uiState->fontScale = event.fontScale;
 
 		applyUiConfigToContext();
+		DS_LOG_INFO("UI font scale changed: {}", event.fontScale);
 	}
 
 	void ImGuiLayer::onAppearancePreviewRequested(const EditorUiEvents::AppearancePreviewRequested &event)
@@ -751,6 +770,7 @@ namespace DefectStudio
 			uiState->appearance = event.appearance;
 
 		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
+		DS_LOG_INFO("Appearance preview applied");
 	}
 
 	void ImGuiLayer::onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event)
@@ -770,11 +790,16 @@ namespace DefectStudio
 					? "Appearance applied and saved."
 					: "Appearance applied, save failed: " + saveError;
 			}
+			if (saved)
+				DS_LOG_INFO("Appearance applied and saved");
+			else
+				DS_LOG_WARN("Appearance applied but save failed: {}", saveError);
 			return;
 		}
 
 		if (auto uiState = m_UiState.lock())
 			uiState->appearanceStatusMessage = "Appearance applied.";
+		DS_LOG_INFO("Appearance applied without ConfigManager persistence");
 	}
 
 	void ImGuiLayer::onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event)
@@ -793,10 +818,12 @@ namespace DefectStudio
 		{
 			if (uiState != nullptr)
 				uiState->appearanceStatusMessage = "Theme saved: " + event.path.String();
+			DS_LOG_INFO("Appearance theme saved: {}", event.path.String());
 		}
 		else if (uiState != nullptr)
 		{
 			uiState->appearanceStatusMessage = "Theme save failed: " + error;
+			DS_LOG_WARN("Appearance theme save failed [{}]: {}", event.path.String(), error);
 		}
 	}
 
@@ -817,6 +844,7 @@ namespace DefectStudio
 		{
 			if (uiState != nullptr)
 				uiState->appearanceStatusMessage = "Theme load failed: " + error;
+			DS_LOG_WARN("Appearance theme load failed [{}]: {}", event.path.String(), error);
 			return;
 		}
 
@@ -830,6 +858,7 @@ namespace DefectStudio
 			uiState->appearance = appearance;
 			uiState->appearanceStatusMessage = "Theme loaded: " + event.path.String();
 		}
+		DS_LOG_INFO("Appearance theme loaded: {}", event.path.String());
 	}
 
 	void ImGuiLayer::onLayoutSaveRequested(const EditorUiEvents::LayoutSaveRequested &event)
@@ -851,10 +880,12 @@ namespace DefectStudio
 		{
 			if (uiState != nullptr)
 				uiState->layoutStatusMessage = "Layout saved: " + path.String();
+			DS_LOG_INFO("Layout saved from request: {} bytes={}", path.String(), size);
 		}
 		else if (uiState != nullptr)
 		{
 			uiState->layoutStatusMessage = "Layout save failed: " + error;
+			DS_LOG_WARN("Layout save request failed [{}]: {}", path.String(), error);
 		}
 	}
 
@@ -877,10 +908,12 @@ namespace DefectStudio
 			ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
 			if (uiState != nullptr)
 				uiState->layoutStatusMessage = "Layout loaded: " + path.String();
+			DS_LOG_INFO("Layout loaded from request: {} bytes={}", path.String(), text.size());
 		}
 		else if (uiState != nullptr)
 		{
 			uiState->layoutStatusMessage = "Layout load failed: " + error;
+			DS_LOG_WARN("Layout load request failed [{}]: {}", path.String(), error);
 		}
 	}
 
@@ -896,5 +929,27 @@ namespace DefectStudio
 
 		if (auto uiState = m_UiState.lock())
 			uiState->layoutStatusMessage = "Runtime layout reset.";
+		DS_LOG_INFO("Layout reset requested: {}", path.String());
+	}
+
+	void ImGuiLayer::onApplicationConfigApplied(const AppEvents::Config::Applied &event)
+	{
+		const bool fontPathChanged = m_Config.ui.fontPath != event.config.ui.fontPath;
+		m_Config = event.config;
+		applyUiConfigToContext();
+
+		if (fontPathChanged)
+		{
+			syncFontsFromSources();
+			applySelectedFont();
+		}
+
+		ImGuiLayerDetail::applyAppearanceToImGui(m_Config.appearance);
+		DS_LOG_INFO(
+			"ImGuiLayer consumed application config: persisted={} font_path_changed={} font_scale={} layout={}",
+			event.persisted,
+			fontPathChanged,
+			m_Config.ui.fontScale,
+			m_Config.layout.imGuiIniPath.empty() ? "<default>" : m_Config.layout.imGuiIniPath);
 	}
 } // namespace DefectStudio

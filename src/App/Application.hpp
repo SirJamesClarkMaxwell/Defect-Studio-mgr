@@ -24,7 +24,6 @@ struct ImGuiIO;
 namespace DefectStudio
 {
 	class CoreLayer;
-	struct EditorUiState;
 
 	class Application : public EventReceiver
 	{
@@ -115,7 +114,7 @@ namespace DefectStudio
 		void configureInputBackend();
 
 		// Low-level frame and UI helpers
-		void beginImGuiFrame();
+		void beginFrame();
 		void drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate);
 		void renderFrame(const ImVec4 &clearColor, float frameRate);
 
@@ -133,7 +132,6 @@ namespace DefectStudio
 		ApplicationConfig m_Config;
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
-		WeakRef<EditorUiState> m_EditorUiState;
 
 
 		// Singleton ownership
