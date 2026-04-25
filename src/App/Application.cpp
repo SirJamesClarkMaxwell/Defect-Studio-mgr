@@ -175,8 +175,46 @@ namespace DefectStudio
 		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
 	};
 
-	ApplicationSpecification defaultApplicationSpecification();
-	ApplicationSpecification parseApplicationArguments(int argc, char **argv);
+	ApplicationSpecification defaultApplicationSpecification()
+	{
+		ApplicationSpecification specification;
+
+#if defined(DS_DEBUG)
+		specification.logLevel = DefectStudio::LogLevel::Trace;
+#else
+		specification.logLevel = DefectStudio::LogLevel::Info;
+#endif
+
+		specification.logToFile = true;
+		specification.logFilePath = Path::FromResolved(RuntimeDefaults::LogFilePath);
+		return specification;
+	}
+
+	ApplicationSpecification parseApplicationArguments(int argc, char **argv)
+	{
+		ApplicationSpecification specification = defaultApplicationSpecification();
+
+		if (argv == nullptr)
+			return specification;
+
+		for (int index = 1; index < argc; ++index)
+		{
+			const std::string_view argument = argv[index];
+			if (argument == "--help" || argument == "-h")
+			{
+				std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events]\n";
+				std::exit(0);
+			}
+
+			if (argument == "--reset-layout")
+				specification.resetLayout = true;
+
+			if (argument == "--trace-events")
+				specification.traceEvents = true;
+		}
+
+		return specification;
+	}
 
 	// ===== Singleton lifecycle API =====
 
@@ -272,177 +310,6 @@ namespace DefectStudio
 		return m_Config;
 	}
 
-	ApplicationConfig Application::normalizeConfigSnapshot(const ApplicationConfig &config) const
-	{
-		ApplicationConfig normalized = config;
-		if (m_ConfigManager != nullptr)
-		{
-			normalized.directory = m_ConfigManager->GetConfigDirectory();
-			normalized.paths = m_ConfigManager->GetPaths();
-		}
-
-		normalized.window.width = std::max(320, normalized.window.width);
-		normalized.window.height = std::max(240, normalized.window.height);
-		if (normalized.layout.imGuiIniPath.empty() && !normalized.directory.Empty())
-			normalized.layout.imGuiIniPath = ConfigManager::GetLayoutPath(normalized.directory).String();
-
-		return normalized;
-	}
-
-	bool Application::applyConfigRequest(const ApplicationConfig &config, std::string &error, bool persist)
-	{
-		if (m_ConfigManager == nullptr)
-		{
-			error = "ConfigManager is not initialized";
-			DS_LOG_ERROR("Config apply rejected: {}", error);
-			return false;
-		}
-
-		ApplicationConfig normalizedConfig = normalizeConfigSnapshot(config);
-		DS_LOG_INFO(
-			"Config apply requested: persist={} directory={} window={}x{} maximized={} workers={} reserve_urgent={} font_scale={}",
-			persist,
-			normalizedConfig.directory.String(),
-			normalizedConfig.window.width,
-			normalizedConfig.window.height,
-			normalizedConfig.window.maximized,
-			normalizedConfig.jobs.defaultWorkerThreadCount,
-			normalizedConfig.jobs.reserveUrgentWorker,
-			normalizedConfig.ui.fontScale);
-
-		if (persist)
-		{
-			const ApplicationConfig previousConfig = m_ConfigManager->GetConfig();
-			m_ConfigManager->SetConfig(normalizedConfig);
-			if (!m_ConfigManager->SaveUserSettings(error))
-			{
-				m_ConfigManager->SetConfig(previousConfig);
-				DS_LOG_ERROR("Config apply save failed: {}", error);
-				return false;
-			}
-
-			DS_LOG_INFO("Config apply persisted to user settings");
-		}
-
-		m_Config = std::move(normalizedConfig);
-		m_ConfigManager->SetConfig(m_Config);
-		m_ConfigManager->ApplySpecification(m_Runtime.specification);
-		initializeLogger();
-
-		m_EventQueue.Configure(m_Config.eventQueue.initialCapacity, m_Config.eventQueue.growthStep);
-		DS_LOG_INFO(
-			"Config apply complete: event_queue_capacity={} event_queue_growth={}",
-			m_Config.eventQueue.initialCapacity,
-			m_Config.eventQueue.growthStep);
-		return true;
-	}
-
-	bool Application::saveUserConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
-	{
-		if (m_ConfigManager == nullptr)
-		{
-			error = "ConfigManager is not initialized";
-			DS_LOG_ERROR("User config save rejected: {}", error);
-			return false;
-		}
-
-		savedConfig = normalizeConfigSnapshot(config);
-		m_Config = savedConfig;
-		m_ConfigManager->SetConfig(savedConfig);
-		const bool saved = m_ConfigManager->SaveUserSettings(error);
-		if (saved)
-			DS_LOG_INFO("User config saved: directory={}", savedConfig.directory.String());
-		else
-			DS_LOG_ERROR("User config save failed: {}", error);
-		return saved;
-	}
-
-	bool Application::saveDefaultConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
-	{
-		if (m_ConfigManager == nullptr)
-		{
-			error = "ConfigManager is not initialized";
-			DS_LOG_ERROR("Default config save rejected: {}", error);
-			return false;
-		}
-
-		savedConfig = normalizeConfigSnapshot(config);
-		const ApplicationConfig currentConfig = m_ConfigManager->GetConfig();
-		m_ConfigManager->SetConfig(savedConfig);
-		const bool saved = m_ConfigManager->SaveDefaultConfig(error);
-		m_ConfigManager->SetConfig(currentConfig);
-		if (saved)
-			DS_LOG_INFO("Default config saved: directory={}", savedConfig.directory.String());
-		else
-			DS_LOG_ERROR("Default config save failed: {}", error);
-		return saved;
-	}
-
-	void Application::bindApplicationConfigEvents()
-	{
-		if (m_EventBus == nullptr)
-			return;
-
-		using namespace AppEvents::Config;
-
-		AddSubscription(subscribeApplication<ApplyRequested>(*m_EventBus, *this, &Application::onConfigApplyRequested));
-		AddSubscription(subscribeApplication<SaveUserRequested>(*m_EventBus, *this, &Application::onUserConfigSaveRequested));
-		AddSubscription(subscribeApplication<SaveDefaultsRequested>(*m_EventBus, *this, &Application::onDefaultsSaveRequested));
-		DS_LOG_INFO("Application config event handlers bound");
-	}
-
-	void Application::onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event)
-	{
-		using namespace AppEvents::Config;
-
-		DS_LOG_INFO("Config apply event received: persist={}", event.persist);
-		std::string error;
-		if (!applyConfigRequest(event.config, error, event.persist))
-		{
-			m_EventBus->Queue(ApplyFailed{event.config, event.persist, error});
-			DS_LOG_ERROR("Config apply event failed: persist={} error={}", event.persist, error);
-			// TODO: expose this through a user-facing notification with the failing area.
-			return;
-		}
-
-		m_EventBus->Queue(Applied{m_Config, event.persist});
-		DS_LOG_INFO("Config applied event queued: persist={}", event.persist);
-	}
-
-	void Application::onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event)
-	{
-		using namespace AppEvents::Config;
-
-		DS_LOG_INFO("User config save event received");
-		ApplicationConfig savedConfig;
-		std::string error;
-		if (!saveUserConfigSnapshot(event.config, savedConfig, error))
-		{
-			m_EventBus->Queue(UserSaveFailed{event.config, error});
-			return;
-		}
-
-		m_EventBus->Queue(UserSaved{savedConfig});
-		DS_LOG_INFO("User config saved event queued");
-	}
-
-	void Application::onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event)
-	{
-		using namespace AppEvents::Config;
-
-		DS_LOG_INFO("Default config save event received");
-		ApplicationConfig savedConfig;
-		std::string error;
-		if (!saveDefaultConfigSnapshot(event.config, savedConfig, error))
-		{
-			m_EventBus->Queue(DefaultsSaveFailed{event.config, error});
-			return;
-		}
-
-		m_EventBus->Queue(DefaultsSaved{savedConfig});
-		DS_LOG_INFO("Default config saved event queued");
-	}
-
 	// ===== Instance lifecycle =====
 
 	Application::Application(int argc, char **argv)
@@ -452,7 +319,7 @@ namespace DefectStudio
 
 		m_Runtime.argc = argc;
 		m_Runtime.argv = argv;
-		
+
 		ApplicationSpecification spec = parseApplicationArguments(m_Runtime.argc,m_Runtime.argv);
 		bool created = createFromSpecification(spec);
 		if (!created)
@@ -650,10 +517,10 @@ namespace DefectStudio
 			m_EventBus->ClearAllListeners();
 			m_EventBus.reset();
 		}
-		
+
 		DS_LOG_INFO("Shutdown: destroying window");
 		shutdownWindow();
-		
+
 		DS_LOG_INFO("Shutdown: terminating GLFW");
 		shutdownGlfw();
 
@@ -662,6 +529,99 @@ namespace DefectStudio
 	}
 
 	// ===== High-level runtime flow =====
+
+	void Application::mainLoop()
+	{
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
+
+		ImGuiIO &io = ImGui::GetIO();
+		MainLoopState state;
+		state.clearColor = ImVec4(
+			m_Config.appearance.clearColor[0],
+			m_Config.appearance.clearColor[1],
+			m_Config.appearance.clearColor[2],
+			m_Config.appearance.clearColor[3]);
+		m_Runtime.lastFrameTime = glfwGetTime();
+		DS_LOG_INFO("Entering render loop");
+		TracyMessageL("Entering render loop");
+
+		while (m_Runtime.Running() && !m_Graphics.window->ShouldClose())
+			runMainLoopFrame(state.showDemoWindow, state.clearColor, io);
+	}
+
+	template <typename TEvent>
+	void Application::OnEvent(TEvent &event)
+	{
+		if (m_Runtime.specification.traceEvents)
+			DS_LOG_DEBUG("Event: {}", event.GetName());
+
+		HandleLifecycleEvent(event, m_Runtime.lifecycle);
+
+		if (event.handled)
+			return;
+
+		dispatchEventToLayers(event);
+	}
+
+	void Application::runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io)
+	{
+		(void)showDemoWindow;
+
+		const double now = glfwGetTime();
+		const float deltaTime = static_cast<float>(now - m_Runtime.lastFrameTime);
+		m_Runtime.lastFrameTime = now;
+
+
+		onUpdate(deltaTime);
+
+		beginFrame();
+		for (const auto &layer : m_LayerStack)
+			layer->OnImGuiRender();
+		// drawMainPanel(showDemoWindow, clearColor, io.Framerate);
+		onRender(clearColor, io.Framerate);
+	}
+
+	void Application::onUpdate(float deltaTime)
+	{
+		for (const auto &layer : m_LayerStack)
+			layer->OnUpdate(deltaTime);
+
+		m_Graphics.window->PollEvents();
+		processPendingEvents();
+	}
+
+	void Application::queueEvent(EventVariant event)
+	{
+		m_EventQueue.Add(std::move(event));
+	}
+
+	struct VariantEventVisitor
+	{
+		Application *self;
+
+		template <typename TEvent>
+		void operator()(TEvent &event) const
+		{
+			self->OnEvent(event);
+		}
+	};
+
+	void Application::processPendingEvents()
+	{
+		std::vector<EventVariant> events = m_EventQueue.Drain();
+		if (events.empty())
+			return;
+
+		for (auto &variant : events)
+		{
+			std::visit(VariantEventVisitor{this}, variant);
+		}
+	}
+
+	void Application::onRender(const ImVec4 &clearColor, float frameRate)
+	{
+		renderFrame(clearColor, frameRate);
+	}
 
 	template <typename TEvent>
 	void Application::dispatchEventToLayers(TEvent &event)
@@ -675,45 +635,177 @@ namespace DefectStudio
 		}
 	}
 
-	ApplicationSpecification defaultApplicationSpecification()
+	// ===== Configuration API =====
+
+	ApplicationConfig Application::normalizeConfigSnapshot(const ApplicationConfig &config) const
 	{
-		ApplicationSpecification specification;
-
-#if defined(DS_DEBUG)
-		specification.logLevel = DefectStudio::LogLevel::Trace;
-#else
-		specification.logLevel = DefectStudio::LogLevel::Info;
-#endif
-
-		specification.logToFile = true;
-		specification.logFilePath = Path::FromResolved(RuntimeDefaults::LogFilePath);
-		return specification;
-	}
-
-	ApplicationSpecification parseApplicationArguments(int argc, char **argv)
-	{
-		ApplicationSpecification specification = defaultApplicationSpecification();
-
-		if (argv == nullptr)
-			return specification;
-
-		for (int index = 1; index < argc; ++index)
+		ApplicationConfig normalized = config;
+		if (m_ConfigManager != nullptr)
 		{
-			const std::string_view argument = argv[index];
-			if (argument == "--help" || argument == "-h")
-			{
-				std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events]\n";
-				std::exit(0);
-			}
-
-			if (argument == "--reset-layout")
-				specification.resetLayout = true;
-
-			if (argument == "--trace-events")
-				specification.traceEvents = true;
+			normalized.directory = m_ConfigManager->GetConfigDirectory();
+			normalized.paths = m_ConfigManager->GetPaths();
 		}
 
-		return specification;
+		normalized.window.width = std::max(320, normalized.window.width);
+		normalized.window.height = std::max(240, normalized.window.height);
+		if (normalized.layout.imGuiIniPath.empty() && !normalized.directory.Empty())
+			normalized.layout.imGuiIniPath = ConfigManager::GetLayoutPath(normalized.directory).String();
+
+		return normalized;
+	}
+
+	bool Application::applyConfigRequest(const ApplicationConfig &config, std::string &error, bool persist)
+	{
+		if (m_ConfigManager == nullptr)
+		{
+			error = "ConfigManager is not initialized";
+			DS_LOG_ERROR("Config apply rejected: {}", error);
+			return false;
+		}
+
+		ApplicationConfig normalizedConfig = normalizeConfigSnapshot(config);
+		DS_LOG_INFO(
+			"Config apply requested: persist={} directory={} window={}x{} maximized={} workers={} reserve_urgent={} font_scale={}",
+			persist,
+			normalizedConfig.directory.String(),
+			normalizedConfig.window.width,
+			normalizedConfig.window.height,
+			normalizedConfig.window.maximized,
+			normalizedConfig.jobs.defaultWorkerThreadCount,
+			normalizedConfig.jobs.reserveUrgentWorker,
+			normalizedConfig.ui.fontScale);
+
+		if (persist)
+		{
+			const ApplicationConfig previousConfig = m_ConfigManager->GetConfig();
+			m_ConfigManager->SetConfig(normalizedConfig);
+			if (!m_ConfigManager->SaveUserSettings(error))
+			{
+				m_ConfigManager->SetConfig(previousConfig);
+				DS_LOG_ERROR("Config apply save failed: {}", error);
+				return false;
+			}
+
+			DS_LOG_INFO("Config apply persisted to user settings");
+		}
+
+		m_Config = std::move(normalizedConfig);
+		m_ConfigManager->SetConfig(m_Config);
+		m_ConfigManager->ApplySpecification(m_Runtime.specification);
+		initializeLogger();
+
+		m_EventQueue.Configure(m_Config.eventQueue.initialCapacity, m_Config.eventQueue.growthStep);
+		DS_LOG_INFO(
+			"Config apply complete: event_queue_capacity={} event_queue_growth={}",
+			m_Config.eventQueue.initialCapacity,
+			m_Config.eventQueue.growthStep);
+		return true;
+	}
+
+	bool Application::saveUserConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
+	{
+		if (m_ConfigManager == nullptr)
+		{
+			error = "ConfigManager is not initialized";
+			DS_LOG_ERROR("User config save rejected: {}", error);
+			return false;
+		}
+
+		savedConfig = normalizeConfigSnapshot(config);
+		m_Config = savedConfig;
+		m_ConfigManager->SetConfig(savedConfig);
+		const bool saved = m_ConfigManager->SaveUserSettings(error);
+		if (saved)
+			DS_LOG_INFO("User config saved: directory={}", savedConfig.directory.String());
+		else
+			DS_LOG_ERROR("User config save failed: {}", error);
+		return saved;
+	}
+
+	bool Application::saveDefaultConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error)
+	{
+		if (m_ConfigManager == nullptr)
+		{
+			error = "ConfigManager is not initialized";
+			DS_LOG_ERROR("Default config save rejected: {}", error);
+			return false;
+		}
+
+		savedConfig = normalizeConfigSnapshot(config);
+		const ApplicationConfig currentConfig = m_ConfigManager->GetConfig();
+		m_ConfigManager->SetConfig(savedConfig);
+		const bool saved = m_ConfigManager->SaveDefaultConfig(error);
+		m_ConfigManager->SetConfig(currentConfig);
+		if (saved)
+			DS_LOG_INFO("Default config saved: directory={}", savedConfig.directory.String());
+		else
+			DS_LOG_ERROR("Default config save failed: {}", error);
+		return saved;
+	}
+
+	void Application::bindApplicationConfigEvents()
+	{
+		if (m_EventBus == nullptr)
+			return;
+
+		using namespace AppEvents::Config;
+
+		AddSubscription(subscribeApplication<ApplyRequested>(*m_EventBus, *this, &Application::onConfigApplyRequested));
+		AddSubscription(subscribeApplication<SaveUserRequested>(*m_EventBus, *this, &Application::onUserConfigSaveRequested));
+		AddSubscription(subscribeApplication<SaveDefaultsRequested>(*m_EventBus, *this, &Application::onDefaultsSaveRequested));
+		DS_LOG_INFO("Application config event handlers bound");
+	}
+
+	void Application::onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		DS_LOG_INFO("Config apply event received: persist={}", event.persist);
+		std::string error;
+		if (!applyConfigRequest(event.config, error, event.persist))
+		{
+			m_EventBus->Queue(ApplyFailed{event.config, event.persist, error});
+			DS_LOG_ERROR("Config apply event failed: persist={} error={}", event.persist, error);
+			// TODO: expose this through a user-facing notification with the failing area.
+			return;
+		}
+
+		m_EventBus->Queue(Applied{m_Config, event.persist});
+		DS_LOG_INFO("Config applied event queued: persist={}", event.persist);
+	}
+
+	void Application::onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		DS_LOG_INFO("User config save event received");
+		ApplicationConfig savedConfig;
+		std::string error;
+		if (!saveUserConfigSnapshot(event.config, savedConfig, error))
+		{
+			m_EventBus->Queue(UserSaveFailed{event.config, error});
+			return;
+		}
+
+		m_EventBus->Queue(UserSaved{savedConfig});
+		DS_LOG_INFO("User config saved event queued");
+	}
+
+	void Application::onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		DS_LOG_INFO("Default config save event received");
+		ApplicationConfig savedConfig;
+		std::string error;
+		if (!saveDefaultConfigSnapshot(event.config, savedConfig, error))
+		{
+			m_EventBus->Queue(DefaultsSaveFailed{event.config, error});
+			return;
+		}
+
+		m_EventBus->Queue(DefaultsSaved{savedConfig});
+		DS_LOG_INFO("Default config saved event queued");
 	}
 
 	// ===== Low-level frame and UI helpers =====
@@ -988,100 +1080,7 @@ namespace DefectStudio
 		return true;
 	}
 
-	// ===== Main loop and event queue internals =====
-
-	void Application::mainLoop()
-	{
-		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
-
-		ImGuiIO &io = ImGui::GetIO();
-		MainLoopState state;
-		state.clearColor = ImVec4(
-			m_Config.appearance.clearColor[0],
-			m_Config.appearance.clearColor[1],
-			m_Config.appearance.clearColor[2],
-			m_Config.appearance.clearColor[3]);
-		m_Runtime.lastFrameTime = glfwGetTime();
-		DS_LOG_INFO("Entering render loop");
-		TracyMessageL("Entering render loop");
-
-		while (m_Runtime.Running() && !m_Graphics.window->ShouldClose())
-			runMainLoopFrame(state.showDemoWindow, state.clearColor, io);
-	}
-
-	template <typename TEvent>
-	void Application::OnEvent(TEvent &event)
-	{
-		if (m_Runtime.specification.traceEvents)
-			DS_LOG_DEBUG("Event: {}", event.GetName());
-
-		HandleLifecycleEvent(event, m_Runtime.lifecycle);
-
-		if (event.handled)
-			return;
-
-		dispatchEventToLayers(event);
-	}
-
-	void Application::runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io)
-	{
-		(void)showDemoWindow;
-
-		const double now = glfwGetTime();
-		const float deltaTime = static_cast<float>(now - m_Runtime.lastFrameTime);
-		m_Runtime.lastFrameTime = now;
-
-
-		onUpdate(deltaTime);
-
-		beginFrame();
-		for (const auto &layer : m_LayerStack)
-			layer->OnImGuiRender();
-		// drawMainPanel(showDemoWindow, clearColor, io.Framerate);
-		onRender(clearColor, io.Framerate);
-	}
-
-	void Application::onUpdate(float deltaTime)
-	{
-		for (const auto &layer : m_LayerStack)
-			layer->OnUpdate(deltaTime);
-			
-		m_Graphics.window->PollEvents();
-		processPendingEvents();
-	}
-
-	void Application::queueEvent(EventVariant event)
-	{
-		m_EventQueue.Add(std::move(event));
-	}
-
-	struct VariantEventVisitor
-	{
-		Application *self;
-
-		template <typename TEvent>
-		void operator()(TEvent &event) const
-		{
-			self->OnEvent(event);
-		}
-	};
-
-	void Application::processPendingEvents()
-	{
-		std::vector<EventVariant> events = m_EventQueue.Drain();
-		if (events.empty())
-			return;
-
-		for (auto &variant : events)
-		{
-			std::visit(VariantEventVisitor{this}, variant);
-		}
-	}
-
-	void Application::onRender(const ImVec4 &clearColor, float frameRate)
-	{
-		renderFrame(clearColor, frameRate);
-	}
+	// ===== Low-level shutdown helpers =====
 
 	void Application::shutdownWindow()
 	{
