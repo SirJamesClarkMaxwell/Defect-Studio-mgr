@@ -33,16 +33,7 @@ namespace DefectStudio
 		std::vector<EditorFontOption> fontOptions;
 		std::size_t selectedFontIndex = 0;
 		std::string selectedFontPath;
-		bool fontReloadRequested = false;
-		bool fontListRefreshRequested = false;
 		std::string fontStatusMessage;
-		bool appearancePreviewRequested = false;
-		bool appearanceApplyRequested = false;
-		bool themeSaveRequested = false;
-		bool themeLoadRequested = false;
-		bool layoutSaveRequested = false;
-		bool layoutLoadRequested = false;
-		bool layoutResetRequested = false;
 		std::string themeSavePath;
 		std::string themeLoadPath;
 		std::string layoutPath;

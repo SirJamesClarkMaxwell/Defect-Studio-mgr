@@ -11,12 +11,14 @@
 
 namespace DefectStudio
 {
+	class EventBus;
 	class JobSystem;
 
 	class Settings final : public IPanel
 	{
 	public:
-		explicit Settings(WeakRef<JobSystem> jobSystem = {},
+		explicit Settings(WeakRef<EventBus> eventBus = {},
+		                  WeakRef<JobSystem> jobSystem = {},
 		                  WeakRef<EditorUiState> uiState = {},
 		                  std::string title = "Settings",
 		                  bool visibleByDefault = true);
@@ -63,6 +65,7 @@ namespace DefectStudio
 		std::array<char, 320> m_LogFilePathBuffer = {};
 		std::array<char, 320> m_FontPathBuffer = {};
 		std::string m_StatusMessage;
+		WeakRef<EventBus> m_EventBus;
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<EditorUiState> m_UiState;
 		SettingsProfileManager m_ProfileManager;

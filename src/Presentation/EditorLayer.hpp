@@ -16,11 +16,15 @@
 
 namespace DefectStudio
 {
+	class EventBus;
+
 	class EditorLayer final : public Layer
 	{
 	public:
 		EditorLayer();
-		void BindRuntimeServices(WeakRef<JobSystem> jobSystem, WeakRef<ProgressTracker> progressTracker);
+		void BindRuntimeServices(WeakRef<EventBus> eventBus,
+		                         WeakRef<JobSystem> jobSystem,
+		                         WeakRef<ProgressTracker> progressTracker);
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 
 		void OnAttach() override;
@@ -49,6 +53,7 @@ namespace DefectStudio
 	private:
 		PanelRegistry m_Panels;
 		bool m_PanelsInitialized = false;
+		WeakRef<EventBus> m_EventBus;
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<ProgressTracker> m_ProgressTracker;
 		Ref<EditorUiState> m_UiState;

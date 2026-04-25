@@ -41,10 +41,7 @@ namespace DefectStudio
 	void HandleLifecycleEvent(Event &event, ApplicationLifecycleState &state)
 	{
 		EventDispatcher dispatcher(event);
-		dispatcher.Dispatch<WindowCloseEvent>([&state](WindowCloseEvent &)
-		                                      {
-			                                      state.SetRunning(false);
-			                                      return true;
-		                                      });
+		auto function = [&state](WindowCloseEvent &){state.SetRunning(false);return true;};
+		dispatcher.Dispatch<WindowCloseEvent>(function);
 	}
 } // namespace DefectStudio

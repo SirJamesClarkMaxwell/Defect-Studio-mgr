@@ -2,11 +2,13 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"
 
 namespace DefectStudio
@@ -15,8 +17,11 @@ namespace DefectStudio
 	{
 	}
 
-	void EditorLayer::BindRuntimeServices(WeakRef<JobSystem> jobSystem, WeakRef<ProgressTracker> progressTracker)
+	void EditorLayer::BindRuntimeServices(WeakRef<EventBus> eventBus,
+	                                      WeakRef<JobSystem> jobSystem,
+	                                      WeakRef<ProgressTracker> progressTracker)
 	{
+		m_EventBus = std::move(eventBus);
 		m_JobSystem = std::move(jobSystem);
 		m_ProgressTracker = std::move(progressTracker);
 	}
@@ -42,6 +47,7 @@ namespace DefectStudio
 		DS_LOG_INFO("EditorLayer detached");
 		m_Panels.Clear();
 		m_PanelsInitialized = false;
+		m_EventBus.reset();
 		m_JobSystem.reset();
 		m_ProgressTracker.reset();
 		m_UiState.reset();
@@ -75,8 +81,8 @@ namespace DefectStudio
 
 		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
-		registerPanel<Settings>(m_JobSystem, CreateWeakRef(m_UiState), "Settings", true);
-		registerPanel<AppearanceEditor>(CreateWeakRef(m_UiState), "Appearance Editor", false);
+		registerPanel<Settings>(m_EventBus, m_JobSystem, CreateWeakRef(m_UiState), "Settings", true);
+		registerPanel<AppearanceEditor>(m_EventBus, CreateWeakRef(m_UiState), "Appearance Editor", false);
 		m_PanelsInitialized = true;
 	}
 
@@ -110,8 +116,8 @@ namespace DefectStudio
 			if (keyCode == ToNativeKeyCode(KeyCode::Minus))
 			{
 				m_UiState->fontScale = std::clamp(m_UiState->fontScale - fontScaleStep, fontScaleMin, fontScaleMax);
-				if (ImGui::GetCurrentContext() != nullptr)
-					ImGui::GetIO().FontGlobalScale = m_UiState->fontScale;
+				if (auto eventBus = m_EventBus.lock())
+					eventBus->Queue(UiFontScaleChangedEvent{m_UiState->fontScale});
 				event.handled = true;
 				return true;
 			}
@@ -119,8 +125,8 @@ namespace DefectStudio
 			if (keyCode == ToNativeKeyCode(KeyCode::Equal))
 			{
 				m_UiState->fontScale = std::clamp(m_UiState->fontScale + fontScaleStep, fontScaleMin, fontScaleMax);
-				if (ImGui::GetCurrentContext() != nullptr)
-					ImGui::GetIO().FontGlobalScale = m_UiState->fontScale;
+				if (auto eventBus = m_EventBus.lock())
+					eventBus->Queue(UiFontScaleChangedEvent{m_UiState->fontScale});
 				event.handled = true;
 				return true;
 			}

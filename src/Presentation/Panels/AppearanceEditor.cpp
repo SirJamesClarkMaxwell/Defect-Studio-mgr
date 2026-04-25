@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/Panels/AppearanceEditor.hpp"
 
 namespace DefectStudio
@@ -20,10 +22,25 @@ namespace DefectStudio
 		{
 			ImGui::SliderFloat(label, &value, min, max, "%.3f");
 		}
+
+		template <typename EventType>
+		bool queueUiEvent(const WeakRef<EventBus> &eventBus, const EventType &event)
+		{
+			auto bus = eventBus.lock();
+			if (bus == nullptr)
+				return false;
+
+			bus->Queue(event);
+			return true;
+		}
 	}
 
-	AppearanceEditor::AppearanceEditor(WeakRef<EditorUiState> uiState, std::string title, bool visibleByDefault)
+	AppearanceEditor::AppearanceEditor(WeakRef<EventBus> eventBus,
+	                                   WeakRef<EditorUiState> uiState,
+	                                   std::string title,
+	                                   bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
+		  m_EventBus(std::move(eventBus)),
 		  m_UiState(std::move(uiState))
 	{
 	}
@@ -53,12 +70,12 @@ namespace DefectStudio
 
 		ImGui::TextWrapped("Dark orange theme controls. The panel only edits runtime state; ImGuiLayer applies it and ConfigManager handles files.");
 		if (ImGui::Button("Apply style"))
-			uiState->appearanceApplyRequested = true;
+			(void)queueUiEvent(m_EventBus, UiAppearanceApplyRequestedEvent{uiState->appearance});
 		ImGui::SameLine();
 		if (ImGui::Button("Reset to dark orange"))
 		{
 			uiState->appearance = AppearanceConfig{};
-			uiState->appearanceApplyRequested = true;
+			(void)queueUiEvent(m_EventBus, UiAppearanceApplyRequestedEvent{uiState->appearance});
 		}
 
 		if (!uiState->appearanceStatusMessage.empty())
@@ -161,14 +178,15 @@ namespace DefectStudio
 		if (ImGui::Button("Save theme YAML"))
 		{
 			syncBuffersToState(uiState);
-			uiState.themeSaveRequested = true;
+			(void)queueUiEvent(m_EventBus,
+			                   UiThemeSaveRequestedEvent{Path::FromResolved(uiState.themeSavePath), uiState.appearance});
 		}
 
 		ImGui::InputText("Theme load path", m_ThemeLoadPath.data(), m_ThemeLoadPath.size());
 		if (ImGui::Button("Load theme YAML"))
 		{
 			syncBuffersToState(uiState);
-			uiState.themeLoadRequested = true;
+			(void)queueUiEvent(m_EventBus, UiThemeLoadRequestedEvent{Path::FromResolved(uiState.themeLoadPath)});
 		}
 
 		ImGui::Separator();
@@ -176,19 +194,19 @@ namespace DefectStudio
 		if (ImGui::Button("Save ImGui layout"))
 		{
 			syncBuffersToState(uiState);
-			uiState.layoutSaveRequested = true;
+			(void)queueUiEvent(m_EventBus, UiLayoutSaveRequestedEvent{Path::FromResolved(uiState.layoutPath)});
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Load ImGui layout"))
 		{
 			syncBuffersToState(uiState);
-			uiState.layoutLoadRequested = true;
+			(void)queueUiEvent(m_EventBus, UiLayoutLoadRequestedEvent{Path::FromResolved(uiState.layoutPath)});
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Reset runtime layout"))
 		{
 			syncBuffersToState(uiState);
-			uiState.layoutResetRequested = true;
+			(void)queueUiEvent(m_EventBus, UiLayoutResetRequestedEvent{Path::FromResolved(uiState.layoutPath)});
 		}
 
 		if (!uiState.layoutStatusMessage.empty())

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <functional>
 #include <set>
 #include <string_view>
 
@@ -14,13 +15,28 @@
 
 #include "App/ConfigManager.hpp"
 #include "App/Window.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorUiState.hpp"
 
 namespace DefectStudio
 {
+
+	namespace
+	{
+		template <typename EventType>
+		SubscriptionHandle subscribeImGuiLayer(
+			EventBus &bus,
+			ImGuiLayer &layer,
+			void (ImGuiLayer::*method)(const EventType &))
+		{
+			return bus.Subscribe<EventType>(std::bind_front(method, &layer));
+		}
+	}
+
 	namespace ImGuiLayerDetail
 	{
 		constexpr float FontPixelSize = 16.0f;
@@ -282,19 +298,14 @@ namespace DefectStudio
 		}
 	} // namespace ImGuiLayerDetail
 
-	ImGuiLayer::ImGuiLayer() : Layer("ImGuiLayer")
+	ImGuiLayer::ImGuiLayer(ImGuiLayerRuntime runtime)
+		: Layer("ImGuiLayer"),
+		  m_Window(std::move(runtime.window)),
+		  m_Config(std::move(runtime.config)),
+		  m_ResetLayoutOnAttach(runtime.resetLayout)
 	{
-	}
-
-	ImGuiLayer::ImGuiLayer(WeakRef<Window> window, WeakRef<ConfigManager> configManager, ApplicationConfig config, bool resetLayout)
-		: ImGuiLayer()
-	{
-		BindRuntime(window, std::move(configManager), std::move(config), resetLayout);
-	}
-
-	void ImGuiLayer::ApplyAppearanceToCurrentContext(const AppearanceConfig &appearance)
-	{
-		ImGuiLayerDetail::applyAppearanceToImGui(appearance);
+		bindEventBus(std::move(runtime.eventBus));
+		bindConfigManager(std::move(runtime.configManager));
 	}
 
 	void ImGuiLayer::ApplyUiConfig(const UIConfig &uiConfig)
@@ -303,15 +314,29 @@ namespace DefectStudio
 		applyUiConfigToContext();
 	}
 
-	void ImGuiLayer::BindRuntime(WeakRef<Window> window, WeakRef<ConfigManager> configManager, ApplicationConfig config, bool resetLayout)
+	void ImGuiLayer::bindEventBus(WeakRef<EventBus> eventBus)
 	{
-		m_Window = std::move(window);
-		m_ConfigManager = std::move(configManager);
-		m_Config = std::move(config);
-		m_ResetLayoutOnAttach = resetLayout;
+		ClearSubscriptions();
+		m_EventBus = std::move(eventBus);
+
+		auto bus = m_EventBus.lock();
+		if (bus == nullptr)
+			return;
+
+		AddSubscription(subscribeImGuiLayer<UiConfigPreviewRequestedEvent>(*bus, *this, &ImGuiLayer::onUiConfigPreviewRequested));
+		AddSubscription(subscribeImGuiLayer<UiFontListRefreshRequestedEvent>(*bus, *this, &ImGuiLayer::onFontListRefreshRequested));
+		AddSubscription(subscribeImGuiLayer<UiFontReloadRequestedEvent>(*bus, *this, &ImGuiLayer::onFontReloadRequested));
+		AddSubscription(subscribeImGuiLayer<UiFontScaleChangedEvent>(*bus, *this, &ImGuiLayer::onFontScaleChanged));
+		AddSubscription(subscribeImGuiLayer<UiAppearancePreviewRequestedEvent>(*bus, *this, &ImGuiLayer::onAppearancePreviewRequested));
+		AddSubscription(subscribeImGuiLayer<UiAppearanceApplyRequestedEvent>(*bus, *this, &ImGuiLayer::onAppearanceApplyRequested));
+		AddSubscription(subscribeImGuiLayer<UiThemeSaveRequestedEvent>(*bus, *this, &ImGuiLayer::onThemeSaveRequested));
+		AddSubscription(subscribeImGuiLayer<UiThemeLoadRequestedEvent>(*bus, *this, &ImGuiLayer::onThemeLoadRequested));
+		AddSubscription(subscribeImGuiLayer<UiLayoutSaveRequestedEvent>(*bus, *this, &ImGuiLayer::onLayoutSaveRequested));
+		AddSubscription(subscribeImGuiLayer<UiLayoutLoadRequestedEvent>(*bus, *this, &ImGuiLayer::onLayoutLoadRequested));
+		AddSubscription(subscribeImGuiLayer<UiLayoutResetRequestedEvent>(*bus, *this, &ImGuiLayer::onLayoutResetRequested));
 	}
 
-	void ImGuiLayer::BindConfigManager(WeakRef<ConfigManager> configManager)
+	void ImGuiLayer::bindConfigManager(WeakRef<ConfigManager> configManager)
 	{
 		m_ConfigManager = std::move(configManager);
 	}
@@ -321,22 +346,25 @@ namespace DefectStudio
 		m_UiState = std::move(uiState);
 		syncFontsFromSources();
 		applySelectedFont();
-		if (auto state = m_UiState.lock())
+		auto state = m_UiState.lock();
+
+		if (!state)
+			return;
+
+		ImGuiLayerDetail::applyAppearanceToImGui(state->appearance);
+		auto configManager = m_ConfigManager.lock();
+		if (configManager != nullptr && !state->layoutPath.empty())
 		{
-			ImGuiLayerDetail::applyAppearanceToImGui(state->appearance);
-			auto configManager = m_ConfigManager.lock();
-			if (configManager != nullptr && !state->layoutPath.empty())
+			std::string text;
+			std::string error;
+			const Path resolvedPath = Path::FromResolved(state->layoutPath);
+			if (configManager->LoadTextFile(resolvedPath, text, error) && !text.empty())
 			{
-				std::string text;
-				std::string error;
-				const Path resolvedPath = Path::FromResolved(state->layoutPath);
-				if (configManager->LoadTextFile(resolvedPath, text, error) && !text.empty())
-				{
-					ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
-					state->layoutStatusMessage = "Layout loaded: " + state->layoutPath;
-				}
+				ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
+				state->layoutStatusMessage = "Layout loaded: " + state->layoutPath;
 			}
 		}
+		
 	}
 
 	bool ImGuiLayer::IsInitialized() const
@@ -357,12 +385,18 @@ namespace DefectStudio
 		                             ImGuiDockNodeFlags_PassthruCentralNode);
 	}
 
-	void ImGuiLayer::RenderDrawData()
+	void ImGuiLayer::EndFrame()
 	{
 		if (!m_Initialized)
 			return;
+	}
 
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	void ImGuiLayer::Render()
+	{
+		if (!m_Initialized)
+			return;
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		ImGui::Render();
 	}
 
 	void ImGuiLayer::OnAttach()
@@ -409,8 +443,10 @@ namespace DefectStudio
 	void ImGuiLayer::OnDetach()
 	{
 		saveLayout();
+		ClearSubscriptions();
 		shutdownImGui();
 		m_UiState.reset();
+		m_EventBus.reset();
 		m_ConfigManager.reset();
 		m_Window.reset();
 		DS_LOG_INFO("ImGuiLayer detached");
@@ -418,7 +454,6 @@ namespace DefectStudio
 
 	void ImGuiLayer::OnUpdate(float)
 	{
-		handleUiRequests();
 	}
 
 	void ImGuiLayer::OnImGuiRender()
@@ -474,10 +509,6 @@ namespace DefectStudio
 		if (ImGui::GetCurrentContext() == nullptr)
 			return;
 
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
-			return;
-
 		Path layoutPath = resolveLayoutPath();
 		if (auto uiState = m_UiState.lock())
 		{
@@ -485,14 +516,31 @@ namespace DefectStudio
 				layoutPath = Path::FromResolved(uiState->layoutPath);
 		}
 
-		if (layoutPath.Empty())
+		saveLayoutToPath(layoutPath, "Layout save on detach failed");
+	}
+
+	Path ImGuiLayer::resolveRequestedLayoutPath(const Path &requestedPath) const
+	{
+		if (!requestedPath.Empty())
+			return requestedPath;
+
+		return resolveLayoutPath();
+	}
+
+	void ImGuiLayer::saveLayoutToPath(const Path &layoutPath, const char *failurePrefix)
+	{
+		if (ImGui::GetCurrentContext() == nullptr || layoutPath.Empty())
+			return;
+
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
 			return;
 
 		std::size_t size = 0;
 		const char *data = ImGui::SaveIniSettingsToMemory(&size);
 		std::string error;
 		if (!configManager->SaveTextFile(layoutPath, std::string_view(data, size), error))
-			DS_LOG_WARN("Layout save on detach failed: {}", error);
+			DS_LOG_WARN("{}: {}", failurePrefix, error);
 	}
 
 	void ImGuiLayer::shutdownImGui()
@@ -587,6 +635,20 @@ namespace DefectStudio
 		if (uiState->fontOptions.empty())
 			return;
 
+		if (!uiState->selectedFontPath.empty())
+		{
+			const std::string normalizedSelectedPath = ImGuiLayerDetail::normalizePathForCompare(uiState->selectedFontPath);
+			uiState->selectedFontIndex = 0;
+			for (std::size_t index = 1; index < uiState->fontOptions.size(); ++index)
+			{
+				if (ImGuiLayerDetail::normalizePathForCompare(uiState->fontOptions[index].path) == normalizedSelectedPath)
+				{
+					uiState->selectedFontIndex = index;
+					break;
+				}
+			}
+		}
+
 		if (uiState->selectedFontIndex >= uiState->fontOptions.size())
 			uiState->selectedFontIndex = 0;
 
@@ -655,154 +717,182 @@ namespace DefectStudio
 		return loadedRequestedFont;
 	}
 
-	void ImGuiLayer::handleUiRequests()
+	void ImGuiLayer::onUiConfigPreviewRequested(const UiConfigPreviewRequestedEvent &event)
+	{
+		m_Config.ui = event.ui;
+		applyUiConfigToContext();
+	}
+
+	void ImGuiLayer::onFontListRefreshRequested(const UiFontListRefreshRequestedEvent &)
+	{
+		syncFontsFromSources();
+		applySelectedFont();
+	}
+
+	void ImGuiLayer::onFontReloadRequested(const UiFontReloadRequestedEvent &)
+	{
+		applySelectedFont();
+	}
+
+	void ImGuiLayer::onFontScaleChanged(const UiFontScaleChangedEvent &event)
+	{
+		m_Config.ui.fontScale = event.fontScale;
+		if (auto uiState = m_UiState.lock())
+			uiState->fontScale = event.fontScale;
+
+		applyUiConfigToContext();
+	}
+
+	void ImGuiLayer::onAppearancePreviewRequested(const UiAppearancePreviewRequestedEvent &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->appearance = event.appearance;
+
+		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
+	}
+
+	void ImGuiLayer::onAppearanceApplyRequested(const UiAppearanceApplyRequestedEvent &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->appearance = event.appearance;
+
+		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
+		if (auto configManager = m_ConfigManager.lock())
+		{
+			configManager->SetAppearanceConfig(event.appearance);
+			std::string saveError;
+			const bool saved = configManager->SaveUserSettings(saveError);
+			if (auto uiState = m_UiState.lock())
+			{
+				uiState->appearanceStatusMessage = saved
+					? "Appearance applied and saved."
+					: "Appearance applied, save failed: " + saveError;
+			}
+			return;
+		}
+
+		if (auto uiState = m_UiState.lock())
+			uiState->appearanceStatusMessage = "Appearance applied.";
+	}
+
+	void ImGuiLayer::onThemeSaveRequested(const UiThemeSaveRequestedEvent &event)
 	{
 		auto uiState = m_UiState.lock();
-		if (uiState == nullptr)
-			return;
-
-		if (uiState->fontListRefreshRequested)
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
 		{
-			uiState->fontListRefreshRequested = false;
-			syncFontsFromSources();
-			applySelectedFont();
-		}
-
-		if (uiState->fontReloadRequested)
-		{
-			uiState->fontReloadRequested = false;
-			applySelectedFont();
-		}
-
-		if (uiState->appearancePreviewRequested)
-		{
-			uiState->appearancePreviewRequested = false;
-			ImGuiLayerDetail::applyAppearanceToImGui(uiState->appearance);
-		}
-
-		if (uiState->appearanceApplyRequested)
-		{
-			uiState->appearanceApplyRequested = false;
-			ImGuiLayerDetail::applyAppearanceToImGui(uiState->appearance);
-			if (auto configManager = m_ConfigManager.lock())
-			{
-				configManager->SetAppearanceConfig(uiState->appearance);
-				std::string saveError;
-				if (configManager->SaveUserSettings(saveError))
-					uiState->appearanceStatusMessage = "Appearance applied and saved.";
-				else
-					uiState->appearanceStatusMessage = "Appearance applied, save failed: " + saveError;
-			}
-			else
-			{
-				uiState->appearanceStatusMessage = "Appearance applied.";
-			}
-		}
-
-		if (uiState->themeSaveRequested)
-		{
-			uiState->themeSaveRequested = false;
-			auto configManager = m_ConfigManager.lock();
-			if (configManager == nullptr)
-			{
+			if (uiState != nullptr)
 				uiState->appearanceStatusMessage = "Theme save failed: ConfigManager unavailable.";
-			}
-			else
-			{
-				std::string error;
-				const Path path = Path::FromResolved(uiState->themeSavePath);
-				if (configManager->SaveAppearanceTheme(path, uiState->appearance, error))
-					uiState->appearanceStatusMessage = "Theme saved: " + path.String();
-				else
-					uiState->appearanceStatusMessage = "Theme save failed: " + error;
-			}
+			return;
 		}
 
-		if (uiState->themeLoadRequested)
+		std::string error;
+		if (configManager->SaveAppearanceTheme(event.path, event.appearance, error))
 		{
-			uiState->themeLoadRequested = false;
-			auto configManager = m_ConfigManager.lock();
-			if (configManager == nullptr)
-			{
+			if (uiState != nullptr)
+				uiState->appearanceStatusMessage = "Theme saved: " + event.path.String();
+		}
+		else if (uiState != nullptr)
+		{
+			uiState->appearanceStatusMessage = "Theme save failed: " + error;
+		}
+	}
+
+	void ImGuiLayer::onThemeLoadRequested(const UiThemeLoadRequestedEvent &event)
+	{
+		auto uiState = m_UiState.lock();
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
+		{
+			if (uiState != nullptr)
 				uiState->appearanceStatusMessage = "Theme load failed: ConfigManager unavailable.";
-			}
-			else
-			{
-				std::string error;
-				const Path path = Path::FromResolved(uiState->themeLoadPath);
-				AppearanceConfig appearance = uiState->appearance;
-				if (configManager->LoadAppearanceTheme(path, appearance, error))
-				{
-					uiState->appearance = appearance;
-					ImGuiLayerDetail::applyAppearanceToImGui(uiState->appearance);
-					configManager->SetAppearanceConfig(uiState->appearance);
-					std::string saveError;
-					(void)configManager->SaveUserSettings(saveError);
-					uiState->appearanceStatusMessage = "Theme loaded: " + path.String();
-				}
-				else
-				{
-					uiState->appearanceStatusMessage = "Theme load failed: " + error;
-				}
-			}
+			return;
 		}
 
-		if (uiState->layoutSaveRequested)
+		std::string error;
+		AppearanceConfig appearance = uiState != nullptr ? uiState->appearance : m_Config.appearance;
+		if (!configManager->LoadAppearanceTheme(event.path, appearance, error))
 		{
-			uiState->layoutSaveRequested = false;
-			auto configManager = m_ConfigManager.lock();
-			if (configManager == nullptr)
-			{
+			if (uiState != nullptr)
+				uiState->appearanceStatusMessage = "Theme load failed: " + error;
+			return;
+		}
+
+		m_Config.appearance = appearance;
+		ImGuiLayerDetail::applyAppearanceToImGui(appearance);
+		configManager->SetAppearanceConfig(appearance);
+		std::string saveError;
+		(void)configManager->SaveUserSettings(saveError);
+		if (uiState != nullptr)
+		{
+			uiState->appearance = appearance;
+			uiState->appearanceStatusMessage = "Theme loaded: " + event.path.String();
+		}
+	}
+
+	void ImGuiLayer::onLayoutSaveRequested(const UiLayoutSaveRequestedEvent &event)
+	{
+		auto uiState = m_UiState.lock();
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
+		{
+			if (uiState != nullptr)
 				uiState->layoutStatusMessage = "Layout save failed: ConfigManager unavailable.";
-			}
-			else
-			{
-				std::size_t size = 0;
-				const char *data = ImGui::SaveIniSettingsToMemory(&size);
-				std::string error;
-				const Path path = Path::FromResolved(uiState->layoutPath);
-				if (configManager->SaveTextFile(path, std::string_view(data, size), error))
-					uiState->layoutStatusMessage = "Layout saved: " + path.String();
-				else
-					uiState->layoutStatusMessage = "Layout save failed: " + error;
-			}
+			return;
 		}
 
-		if (uiState->layoutLoadRequested)
+		const Path path = resolveRequestedLayoutPath(event.path);
+		std::size_t size = 0;
+		const char *data = ImGui::SaveIniSettingsToMemory(&size);
+		std::string error;
+		if (configManager->SaveTextFile(path, std::string_view(data, size), error))
 		{
-			uiState->layoutLoadRequested = false;
-			auto configManager = m_ConfigManager.lock();
-			if (configManager == nullptr)
-			{
+			if (uiState != nullptr)
+				uiState->layoutStatusMessage = "Layout saved: " + path.String();
+		}
+		else if (uiState != nullptr)
+		{
+			uiState->layoutStatusMessage = "Layout save failed: " + error;
+		}
+	}
+
+	void ImGuiLayer::onLayoutLoadRequested(const UiLayoutLoadRequestedEvent &event)
+	{
+		auto uiState = m_UiState.lock();
+		auto configManager = m_ConfigManager.lock();
+		if (configManager == nullptr)
+		{
+			if (uiState != nullptr)
 				uiState->layoutStatusMessage = "Layout load failed: ConfigManager unavailable.";
-			}
-			else
-			{
-				std::string text;
-				std::string error;
-				const Path path = Path::FromResolved(uiState->layoutPath);
-				if (configManager->LoadTextFile(path, text, error))
-				{
-					ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
-					uiState->layoutStatusMessage = "Layout loaded: " + path.String();
-				}
-				else
-				{
-					uiState->layoutStatusMessage = "Layout load failed: " + error;
-				}
-			}
+			return;
 		}
 
-		if (uiState->layoutResetRequested)
+		std::string text;
+		std::string error;
+		const Path path = resolveRequestedLayoutPath(event.path);
+		if (configManager->LoadTextFile(path, text, error))
 		{
-			uiState->layoutResetRequested = false;
-			ImGui::LoadIniSettingsFromMemory("", 0);
-			if (auto configManager = m_ConfigManager.lock())
-			{
-				std::string error;
-				(void)configManager->SaveTextFile(Path::FromResolved(uiState->layoutPath), "", error);
-			}
-			uiState->layoutStatusMessage = "Runtime layout reset.";
+			ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
+			if (uiState != nullptr)
+				uiState->layoutStatusMessage = "Layout loaded: " + path.String();
 		}
+		else if (uiState != nullptr)
+		{
+			uiState->layoutStatusMessage = "Layout load failed: " + error;
+		}
+	}
+
+	void ImGuiLayer::onLayoutResetRequested(const UiLayoutResetRequestedEvent &event)
+	{
+		ImGui::LoadIniSettingsFromMemory("", 0);
+		const Path path = resolveRequestedLayoutPath(event.path);
+		if (auto configManager = m_ConfigManager.lock())
+		{
+			std::string error;
+			(void)configManager->SaveTextFile(path, "", error);
+		}
+
+		if (auto uiState = m_UiState.lock())
+			uiState->layoutStatusMessage = "Runtime layout reset.";
 	}
 } // namespace DefectStudio

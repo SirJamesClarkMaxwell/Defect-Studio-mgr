@@ -8,9 +8,10 @@
 #include <imgui.h>
 
 #include "App/Application.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Logger.hpp"
-#include "Presentation/ImGuiLayer.hpp"
+#include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/Panels/Settings.hpp"
 
 namespace DefectStudio
@@ -50,13 +51,26 @@ namespace DefectStudio
 			LogLevel::Error,
 			LogLevel::Critical,
 		};
+
+		template <typename EventType>
+		bool queueUiEvent(const WeakRef<EventBus> &eventBus, const EventType &event)
+		{
+			auto bus = eventBus.lock();
+			if (bus == nullptr)
+				return false;
+
+			bus->Queue(event);
+			return true;
+		}
 	} // namespace
 
-	Settings::Settings(WeakRef<JobSystem> jobSystem,
+	Settings::Settings(WeakRef<EventBus> eventBus,
+	                   WeakRef<JobSystem> jobSystem,
 	                   WeakRef<EditorUiState> uiState,
 	                   std::string title,
 	                   bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
+		  m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem)),
 		  m_UiState(std::move(uiState))
 	{
@@ -249,14 +263,11 @@ namespace DefectStudio
 			uiState->fontScaleStep = std::clamp(m_DraftConfig.ui.fontScaleStep, m_DraftConfig.ui.fontScaleStepMin, m_DraftConfig.ui.fontScaleStepMax);
 			uiState->selectedFontPath = m_DraftConfig.ui.fontPath;
 			uiState->appearance = m_DraftConfig.appearance;
-			uiState->appearancePreviewRequested = true;
+			(void)queueUiEvent(m_EventBus, UiConfigPreviewRequestedEvent{m_DraftConfig.ui});
+			(void)queueUiEvent(m_EventBus, UiAppearancePreviewRequestedEvent{m_DraftConfig.appearance});
 			if (fontPathChanged)
-				uiState->fontReloadRequested = true;
+				(void)queueUiEvent(m_EventBus, UiFontReloadRequestedEvent{});
 		}
-
-		if (ImGui::GetCurrentContext() != nullptr)
-			ImGui::GetIO().FontGlobalScale = m_DraftConfig.ui.fontScale;
-		ImGuiLayer::ApplyAppearanceToCurrentContext(m_DraftConfig.appearance);
 
 		if (m_DraftConfig.ui.settingsAutoSaveOnPreview)
 		{
@@ -292,10 +303,8 @@ namespace DefectStudio
 		if (auto uiState = m_UiState.lock())
 		{
 			uiState->appearance = m_DraftConfig.appearance;
-			uiState->appearancePreviewRequested = true;
+			(void)queueUiEvent(m_EventBus, UiAppearancePreviewRequestedEvent{m_DraftConfig.appearance});
 		}
-
-		ImGuiLayer::ApplyAppearanceToCurrentContext(m_DraftConfig.appearance);
 	}
 
 	void Settings::renderActionBar()
@@ -549,7 +558,7 @@ namespace DefectStudio
 			if (uiState == nullptr)
 				ImGui::BeginDisabled();
 			if (ImGui::Button("Refresh") && uiState != nullptr)
-				uiState->fontListRefreshRequested = true;
+				(void)queueUiEvent(m_EventBus, UiFontListRefreshRequestedEvent{});
 			if (uiState == nullptr)
 				ImGui::EndDisabled();
 
@@ -671,13 +680,13 @@ namespace DefectStudio
 		ImGui::TextWrapped("Layout is saved as ImGui .ini data. Requests go to ImGuiLayer; file access stays behind ConfigManager.");
 		ImGui::TextWrapped("Active layout: %s", uiState->layoutPath.empty() ? "<not configured>" : uiState->layoutPath.c_str());
 		if (ImGui::Button("Save current layout"))
-			uiState->layoutSaveRequested = true;
+			(void)queueUiEvent(m_EventBus, UiLayoutSaveRequestedEvent{Path::FromResolved(uiState->layoutPath)});
 		ImGui::SameLine();
 		if (ImGui::Button("Load active layout"))
-			uiState->layoutLoadRequested = true;
+			(void)queueUiEvent(m_EventBus, UiLayoutLoadRequestedEvent{Path::FromResolved(uiState->layoutPath)});
 		ImGui::SameLine();
 		if (ImGui::Button("Reset runtime layout"))
-			uiState->layoutResetRequested = true;
+			(void)queueUiEvent(m_EventBus, UiLayoutResetRequestedEvent{Path::FromResolved(uiState->layoutPath)});
 
 		if (!uiState->layoutStatusMessage.empty())
 			ImGui::TextWrapped("%s", uiState->layoutStatusMessage.c_str());

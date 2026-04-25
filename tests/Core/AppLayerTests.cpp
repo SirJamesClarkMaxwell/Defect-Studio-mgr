@@ -18,5 +18,5 @@ TEST(AppLayerTests, LayerNamesMatchContracts)
 	EXPECT_EQ(DefectStudio::ScientificRuntimeLayer().GetName(), "ScientificRuntimeLayer");
 	EXPECT_EQ(DefectStudio::StorageLayer().GetName(), "StorageLayer");
 	EXPECT_EQ(DefectStudio::EditorLayer().GetName(), "EditorLayer");
-	EXPECT_EQ(DefectStudio::ImGuiLayer().GetName(), "ImGuiLayer");
+	EXPECT_EQ(DefectStudio::ImGuiLayer(DefectStudio::ImGuiLayerRuntime{}).GetName(), "ImGuiLayer");
 }

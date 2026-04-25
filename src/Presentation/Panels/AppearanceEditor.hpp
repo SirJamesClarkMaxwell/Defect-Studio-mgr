@@ -9,10 +9,13 @@
 
 namespace DefectStudio
 {
+	class EventBus;
+
 	class AppearanceEditor final : public IPanel
 	{
 	public:
-		explicit AppearanceEditor(WeakRef<EditorUiState> uiState = {},
+		explicit AppearanceEditor(WeakRef<EventBus> eventBus = {},
+		                          WeakRef<EditorUiState> uiState = {},
 		                          std::string title = "Appearance Editor",
 		                          bool visibleByDefault = false);
 
@@ -28,6 +31,7 @@ namespace DefectStudio
 		void renderFileSection(EditorUiState &uiState);
 
 	private:
+		WeakRef<EventBus> m_EventBus;
 		WeakRef<EditorUiState> m_UiState;
 		bool m_BuffersInitialized = false;
 		std::array<char, 320> m_ThemeSavePath = {};

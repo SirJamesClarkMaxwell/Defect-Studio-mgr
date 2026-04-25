@@ -25,6 +25,7 @@
 #include "Domain/DomainLayer.hpp"
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/ImGuiLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
@@ -332,13 +333,17 @@ namespace DefectStudio
 			uiState->paths = m_Config.paths;
 			uiState->appearance = m_Config.appearance;
 			uiState->layoutPath = m_Config.layout.imGuiIniPath;
-			uiState->fontListRefreshRequested = true;
-			uiState->appearancePreviewRequested = !persist;
-			uiState->appearanceApplyRequested = persist;
 		}
 
-		if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock())
-			imGuiLayer->ApplyUiConfig(m_Config.ui);
+		if (m_EventBus)
+		{
+			m_EventBus->Queue(UiFontListRefreshRequestedEvent{});
+			m_EventBus->Queue(UiConfigPreviewRequestedEvent{m_Config.ui});
+			if (persist)
+				m_EventBus->Queue(UiAppearanceApplyRequestedEvent{m_Config.appearance});
+			else
+				m_EventBus->Queue(UiAppearancePreviewRequestedEvent{m_Config.appearance});
+		}
 
 		m_ConfigManager->SetConfig(m_Config);
 		m_ConfigManager->ApplySpecification(m_Runtime.specification);
@@ -673,8 +678,6 @@ namespace DefectStudio
 		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 		(void)frameRate;
 
-		ImGui::Render();
-
 		int displayWidth = 0;
 		int displayHeight = 0;
 		m_Graphics.window->GetFramebufferSize(displayWidth, displayHeight);
@@ -682,7 +685,10 @@ namespace DefectStudio
 		glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 		if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock())
-			imGuiLayer->RenderDrawData();
+		{
+			imGuiLayer->EndFrame();
+			imGuiLayer->Render();
+		}
 		TracyPlot("FPS", frameRate);
 
 		m_Graphics.window->SwapBuffers();
@@ -725,11 +731,13 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
 		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
-		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(
-			CreateWeakRef(m_Graphics.window),
-			GetConfigManager(),
-			m_Config,
-			m_Runtime.specification.resetLayout));
+		ImGuiLayerRuntime imGuiRuntime;
+		imGuiRuntime.window = CreateWeakRef(m_Graphics.window);
+		imGuiRuntime.eventBus = CreateWeakRef(m_EventBus);
+		imGuiRuntime.configManager = GetConfigManager();
+		imGuiRuntime.config = m_Config;
+		imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
+		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
 		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>());
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
@@ -808,6 +816,7 @@ namespace DefectStudio
 		if (editorLayer != nullptr)
 		{
 			editorLayer->BindRuntimeServices(
+				CreateWeakRef(m_EventBus),
 				coreLayer->GetJobSystemHandle(),
 				coreLayer->GetProgressTrackerHandle());
 
@@ -835,7 +844,6 @@ namespace DefectStudio
 
 			if (imGuiLayer != nullptr)
 			{
-				imGuiLayer->BindConfigManager(GetConfigManager());
 				imGuiLayer->BindUiState(m_EditorUiState);
 			}
 		}
@@ -996,6 +1004,8 @@ namespace DefectStudio
 
 	void Application::runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io)
 	{
+		(void)showDemoWindow;
+
 		const double now = glfwGetTime();
 		const float deltaTime = static_cast<float>(now - m_Runtime.lastFrameTime);
 		m_Runtime.lastFrameTime = now;
@@ -1006,15 +1016,15 @@ namespace DefectStudio
 		beginImGuiFrame();
 		for (const auto &layer : m_LayerStack)
 			layer->OnImGuiRender();
-		drawMainPanel(showDemoWindow, clearColor, io.Framerate);
-		if (auto uiState = m_EditorUiState.lock())
-		{
-			clearColor = ImVec4(
-				uiState->appearance.clearColor[0],
-				uiState->appearance.clearColor[1],
-				uiState->appearance.clearColor[2],
-				uiState->appearance.clearColor[3]);
-		}
+		// drawMainPanel(showDemoWindow, clearColor, io.Framerate);
+		// if (auto uiState = m_EditorUiState.lock())
+		// {
+		// 	clearColor = ImVec4(
+		// 		uiState->appearance.clearColor[0],
+		// 		uiState->appearance.clearColor[1],
+		// 		uiState->appearance.clearColor[2],
+		// 		uiState->appearance.clearColor[3]);
+		// }
 		onRender(clearColor, io.Framerate);
 	}
 
