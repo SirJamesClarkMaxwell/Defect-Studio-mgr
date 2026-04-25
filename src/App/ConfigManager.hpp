@@ -1,6 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "App/ApplicationState.hpp"
 #include "Core/Utils/Path.hpp"
@@ -21,17 +23,35 @@ namespace DefectStudio
 
 		[[nodiscard]] const Path &GetConfigDirectory() const;
 		[[nodiscard]] const ApplicationConfig &GetConfig() const;
+		[[nodiscard]] const ApplicationPaths &GetPaths() const;
 
 		void SetConfig(const ApplicationConfig &config);
 		void SetUiConfig(const UIConfig &config);
+		void SetAppearanceConfig(const AppearanceConfig &config);
+		[[nodiscard]] bool SaveDefaultConfig(std::string &error) const;
 		[[nodiscard]] bool SaveUserSettings(std::string &error) const;
+		[[nodiscard]] bool SaveAppearanceTheme(const Path &path, const AppearanceConfig &appearance, std::string &error) const;
+		[[nodiscard]] bool LoadAppearanceTheme(const Path &path, AppearanceConfig &appearance, std::string &error) const;
+		[[nodiscard]] bool SaveConfigProfile(const Path &path, const ApplicationConfig &config, std::string &error) const;
+		[[nodiscard]] bool LoadConfigProfile(const Path &path, ApplicationConfig &config, std::string &error) const;
+		[[nodiscard]] bool SaveTextFile(const Path &path, std::string_view text, std::string &error) const;
+		[[nodiscard]] bool LoadTextFile(const Path &path, std::string &text, std::string &error) const;
+		[[nodiscard]] std::vector<Path> ListYamlFiles(const Path &directory) const;
+		[[nodiscard]] std::vector<Path> ListIniFiles(const Path &directory) const;
 
 		void ApplySpecification(ApplicationSpecification &specification) const;
 
 		[[nodiscard]] static ApplicationConfig CreateDefaultConfig(const Path &configDirectory = Path{});
+		[[nodiscard]] static ApplicationPaths ResolvePortablePaths(const Path &configDirectory);
 		[[nodiscard]] static Path GetDefaultConfigPath(const Path &configDirectory);
 		[[nodiscard]] static Path GetUserSettingsPath(const Path &configDirectory);
 		[[nodiscard]] static Path GetLayoutPath(const Path &configDirectory);
+		[[nodiscard]] static Path GetProfilesDirectory(const Path &configDirectory);
+		[[nodiscard]] static Path GetThemesDirectory(const Path &configDirectory);
+		[[nodiscard]] static Path GetLayoutsDirectory(const Path &configDirectory);
+		[[nodiscard]] static Path GetExportsDirectory(const Path &configDirectory);
+		[[nodiscard]] static Path GetAssetsDirectory(const Path &configDirectory);
+		[[nodiscard]] static Path GetFontsDirectory(const Path &configDirectory);
 
 	private:
 		[[nodiscard]] bool ensureInitialized(std::string &error) const;

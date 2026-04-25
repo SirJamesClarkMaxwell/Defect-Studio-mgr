@@ -34,6 +34,7 @@ namespace DefectStudio
 	public:
 		static void Initialize(const LoggerOptions &options);
 		static void Shutdown();
+		static void Flush();
 		static Ref<spdlog::logger> &Get();
 
 	private:

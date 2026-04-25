@@ -21,12 +21,20 @@ namespace DefectStudio
 		m_ProgressTracker = std::move(progressTracker);
 	}
 
+	WeakRef<EditorUiState> EditorLayer::GetUiStateHandle() const
+	{
+		if (m_UiState == nullptr)
+			return {};
+
+		return CreateWeakRef(m_UiState);
+	}
+
 	void EditorLayer::OnAttach()
 	{
 		DS_LOG_INFO("EditorLayer attached");
 		m_UiState = CreateRef<EditorUiState>();
 		if (ImGui::GetCurrentContext() != nullptr)
-			m_UiState->fontScale = std::clamp(ImGui::GetIO().FontGlobalScale, 0.70f, 2.00f);
+			m_UiState->fontScale = std::clamp(ImGui::GetIO().FontGlobalScale, m_UiState->fontScaleMin, m_UiState->fontScaleMax);
 	}
 
 	void EditorLayer::OnDetach()
@@ -68,6 +76,7 @@ namespace DefectStudio
 		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
 		registerPanel<Settings>(m_JobSystem, CreateWeakRef(m_UiState), "Settings", true);
+		registerPanel<AppearanceEditor>(CreateWeakRef(m_UiState), "Appearance Editor", false);
 		m_PanelsInitialized = true;
 	}
 
@@ -91,9 +100,16 @@ namespace DefectStudio
 			if (m_UiState == nullptr)
 				return false;
 
+			const float fontScaleMin = m_UiState->fontScaleMin;
+			const float fontScaleMax = std::max(m_UiState->fontScaleMax, fontScaleMin);
+			const float fontScaleStepMin = m_UiState->fontScaleStepMin;
+			const float fontScaleStepMax = std::max(m_UiState->fontScaleStepMax, fontScaleStepMin);
+			const float fontScaleStep = std::clamp(m_UiState->fontScaleStep, fontScaleStepMin, fontScaleStepMax);
+			m_UiState->fontScaleStep = fontScaleStep;
+
 			if (keyCode == ToNativeKeyCode(KeyCode::Minus))
 			{
-				m_UiState->fontScale = std::clamp(m_UiState->fontScale - m_UiState->fontScaleStep, 0.70f, 2.00f);
+				m_UiState->fontScale = std::clamp(m_UiState->fontScale - fontScaleStep, fontScaleMin, fontScaleMax);
 				if (ImGui::GetCurrentContext() != nullptr)
 					ImGui::GetIO().FontGlobalScale = m_UiState->fontScale;
 				event.handled = true;
@@ -102,7 +118,7 @@ namespace DefectStudio
 
 			if (keyCode == ToNativeKeyCode(KeyCode::Equal))
 			{
-				m_UiState->fontScale = std::clamp(m_UiState->fontScale + m_UiState->fontScaleStep, 0.70f, 2.00f);
+				m_UiState->fontScale = std::clamp(m_UiState->fontScale + fontScaleStep, fontScaleMin, fontScaleMax);
 				if (ImGui::GetCurrentContext() != nullptr)
 					ImGui::GetIO().FontGlobalScale = m_UiState->fontScale;
 				event.handled = true;

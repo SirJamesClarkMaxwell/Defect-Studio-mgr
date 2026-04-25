@@ -143,11 +143,18 @@ namespace DefectStudio
 
 	// ===== File-local path and event helpers =====
 
-	static bool HasConfigFiles(const Path &root)
+	static bool HasPortableConfigFiles(const Path &root)
+	{
+		const Path configPath = root.Join("install").Join("app").Join("config");
+		return FileSystem::Exists(configPath.Join(ConfigManager::DefaultConfigFileName).Native())
+			|| FileSystem::Exists(configPath.Join(ConfigManager::UserSettingsFileName).Native());
+	}
+
+	static bool HasLegacyConfigFiles(const Path &root)
 	{
 		const Path configPath = root.Join("config");
-		return FileSystem::Exists(configPath.Join("ui_settings.yaml").Native())
-			|| FileSystem::Exists(configPath.Join("default.yaml").Native());
+		return FileSystem::Exists(configPath.Join(ConfigManager::DefaultConfigFileName).Native())
+			|| FileSystem::Exists(configPath.Join(ConfigManager::UserSettingsFileName).Native());
 	}
 
 	static Path FindConfigDirectoryInAncestors(Path start)
@@ -155,8 +162,10 @@ namespace DefectStudio
 		Path current = Path::FromResolved(start.Native());
 		for (int i = 0; i < 10; ++i)
 		{
-			if (HasConfigFiles(Path::FromResolved(current)))
-				return Path::FromResolved(current / "config");
+			if (HasPortableConfigFiles(current))
+				return Path::FromResolved(current.Native() / "install" / "app" / "config");
+			if (HasLegacyConfigFiles(current))
+				return Path::FromResolved(current.Native() / "config");
 
 			const Path parent = current.parent_path();
 			if (parent.empty() || parent == current)
@@ -168,10 +177,10 @@ namespace DefectStudio
 		return Path{};
 	}
 
-		static Path ResolveConfigDirectory(char **argv)
+	static Path ResolveConfigDirectory(char **argv)
 	{
-			const Path fromCwd = FindConfigDirectoryInAncestors(Path::FromResolved(FileSystem::CurrentPath()));
-			if (!fromCwd.Empty())
+		const Path fromCwd = FindConfigDirectoryInAncestors(Path::FromResolved(FileSystem::CurrentPath()));
+		if (!fromCwd.Empty())
 			return fromCwd;
 
 		if (argv != nullptr && argv[0] != nullptr)
@@ -180,13 +189,52 @@ namespace DefectStudio
 			const Path executablePath = Path::FromResolved(FileSystem::Absolute(argv[0], absoluteError));
 			if (!absoluteError && !executablePath.empty())
 			{
-					const Path fromExe = FindConfigDirectoryInAncestors(Path::FromResolved(executablePath.parent_path()));
-					if (!fromExe.Empty())
+				const Path fromExe = FindConfigDirectoryInAncestors(Path::FromResolved(executablePath.parent_path()));
+				if (!fromExe.Empty())
 					return fromExe;
 			}
 		}
 
-			return Path::FromResolved(FileSystem::CurrentPath() / "config");
+		return Path::FromResolved(FileSystem::CurrentPath() / "install" / "app" / "config");
+	}
+
+	static void CaptureWindowState(GLFWwindow *window, WindowConfig &config)
+	{
+		if (window == nullptr)
+			return;
+
+		int x = config.x;
+		int y = config.y;
+		int width = config.width;
+		int height = config.height;
+
+		glfwGetWindowPos(window, &x, &y);
+		glfwGetWindowSize(window, &width, &height);
+
+		config.x = x;
+		config.y = y;
+		config.width = std::max(320, width);
+		config.height = std::max(240, height);
+		config.maximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED) != 0;
+	}
+
+	static void ApplyWindowState(GLFWwindow *window, const WindowConfig &config)
+	{
+		if (window == nullptr)
+			return;
+
+		const bool hasExplicitPosition = config.x >= 0 && config.y >= 0;
+		const bool currentlyMaximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED) != 0;
+		if (currentlyMaximized)
+			glfwRestoreWindow(window);
+
+		if (hasExplicitPosition)
+			glfwSetWindowPos(window, config.x, config.y);
+
+		glfwSetWindowSize(window, std::max(320, config.width), std::max(240, config.height));
+
+		if (config.maximized)
+			glfwMaximizeWindow(window);
 	}
 
 	struct MainLoopState
@@ -279,6 +327,82 @@ namespace DefectStudio
 		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer not initialized");
 		return coreLayer->GetProgressTracker();
+	}
+
+	WeakRef<ConfigManager> Application::GetConfigManager() const
+	{
+		if (m_ConfigManager == nullptr)
+			return {};
+		return CreateWeakRef(m_ConfigManager);
+	}
+
+	const ApplicationConfig &Application::GetConfig() const
+	{
+		return m_Config;
+	}
+
+	bool Application::ApplyConfigFromSettings(const ApplicationConfig &config, std::string &error, bool persist)
+	{
+		if (m_ConfigManager == nullptr)
+		{
+			error = "ConfigManager is not initialized";
+			return false;
+		}
+
+		m_Config = config;
+		m_Config.directory = m_ConfigManager->GetConfigDirectory();
+		m_Config.paths = m_ConfigManager->GetPaths();
+		m_Config.window.width = std::max(320, m_Config.window.width);
+		m_Config.window.height = std::max(240, m_Config.window.height);
+		if (m_Config.layout.imGuiIniPath.empty())
+			m_Config.layout.imGuiIniPath = ConfigManager::GetLayoutPath(m_Config.directory).String();
+
+		if (auto uiState = m_EditorUiState.lock())
+		{
+			uiState->fontScale = std::clamp(m_Config.ui.fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
+			uiState->fontScaleStep = std::clamp(m_Config.ui.fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
+			uiState->fontScaleMin = m_Config.ui.fontScaleMin;
+			uiState->fontScaleMax = m_Config.ui.fontScaleMax;
+			uiState->fontScaleStepMin = m_Config.ui.fontScaleStepMin;
+			uiState->fontScaleStepMax = m_Config.ui.fontScaleStepMax;
+			uiState->fontScaleStepSliderMax = m_Config.ui.fontScaleStepSliderMax;
+			uiState->defaultWorkerThreadCount = m_Config.jobs.defaultWorkerThreadCount;
+			uiState->reserveUrgentWorkerByDefault = m_Config.jobs.reserveUrgentWorker;
+			uiState->selectedFontPath = m_Config.ui.fontPath;
+			uiState->paths = m_Config.paths;
+			uiState->appearance = m_Config.appearance;
+			uiState->layoutPath = m_Config.layout.imGuiIniPath;
+			uiState->fontListRefreshRequested = true;
+			uiState->appearancePreviewRequested = !persist;
+			uiState->appearanceApplyRequested = persist;
+		}
+
+		if (ImGui::GetCurrentContext() != nullptr)
+			ImGui::GetIO().FontGlobalScale = m_Config.ui.fontScale;
+
+		m_ConfigManager->SetConfig(m_Config);
+		m_ConfigManager->ApplySpecification(m_Runtime.specification);
+		initializeLogger();
+
+		m_EventQueue.Configure(m_Config.eventQueue.initialCapacity, m_Config.eventQueue.growthStep);
+
+		if (auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock())
+		{
+			const std::size_t urgentWorkerCount = static_cast<std::size_t>(m_Config.jobs.reserveUrgentWorker ? 1 : 0);
+			const std::size_t targetThreadCount = static_cast<std::size_t>(m_Config.jobs.defaultWorkerThreadCount) + urgentWorkerCount;
+			(void)coreLayer->GetJobSystem().SetThreadCount(targetThreadCount);
+		}
+
+		if (m_Graphics.window != nullptr && m_Graphics.window->GetNativeHandle() != nullptr)
+		{
+			glfwSetWindowTitle(m_Graphics.window->GetNativeHandle(), m_Config.window.title.c_str());
+			ApplyWindowState(m_Graphics.window->GetNativeHandle(), m_Config.window);
+		}
+
+		if (!persist)
+			return true;
+
+		return m_ConfigManager->SaveUserSettings(error);
 	}
 
 	// ===== Instance lifecycle =====
@@ -541,7 +665,16 @@ namespace DefectStudio
 		ImGui::Text("GUI shell is running.");
 		ImGui::Text("FPS: %.1f", frameRate);
 		ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
-		ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor));
+		if (ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor)))
+		{
+			if (auto uiState = m_EditorUiState.lock())
+			{
+				uiState->appearance.clearColor[0] = clearColor.x;
+				uiState->appearance.clearColor[1] = clearColor.y;
+				uiState->appearance.clearColor[2] = clearColor.z;
+				uiState->appearance.clearColor[3] = clearColor.w;
+			}
+		}
 		ImGui::End();
 
 		if (showDemoWindow)
@@ -699,10 +832,20 @@ namespace DefectStudio
 				uiState->defaultWorkerThreadCount = m_Config.jobs.defaultWorkerThreadCount;
 				uiState->reserveUrgentWorkerByDefault = m_Config.jobs.reserveUrgentWorker;
 				uiState->selectedFontPath = m_Config.ui.fontPath;
+				uiState->paths = m_Config.paths;
+				uiState->appearance = m_Config.appearance;
+				uiState->layoutPath = m_Config.layout.imGuiIniPath;
+				if (uiState->themeSavePath.empty())
+					uiState->themeSavePath = (m_Config.paths.themesDirectory / Path("dark-orange.yaml")).String();
+				if (uiState->themeLoadPath.empty())
+					uiState->themeLoadPath = uiState->themeSavePath;
 			}
 
 			if (imGuiLayer != nullptr)
+			{
+				imGuiLayer->BindConfigManager(GetConfigManager());
 				imGuiLayer->BindUiState(m_EditorUiState);
+			}
 		}
 		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
@@ -710,7 +853,7 @@ namespace DefectStudio
 
 	bool Application::bootstrapConfiguration()
 	{
-		m_ConfigManager = CreateUnique<ConfigManager>(m_Config.directory);
+		m_ConfigManager = CreateRef<ConfigManager>(m_Config.directory);
 		std::string configError;
 		if (!m_ConfigManager->Initialize(configError))
 		{
@@ -762,11 +905,18 @@ namespace DefectStudio
 		if (m_ConfigManager == nullptr)
 			return false;
 
+		if (m_Graphics.window != nullptr)
+			CaptureWindowState(m_Graphics.window->GetNativeHandle(), m_Config.window);
+
 		if (auto uiState = m_EditorUiState.lock())
 		{
 			m_Config.ui.fontScale = std::clamp(uiState->fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
 			m_Config.ui.fontScaleStep = std::clamp(uiState->fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax);
 			m_Config.ui.fontPath = uiState->selectedFontPath;
+			m_Config.jobs.defaultWorkerThreadCount = std::max(1, uiState->defaultWorkerThreadCount);
+			m_Config.jobs.reserveUrgentWorker = uiState->reserveUrgentWorkerByDefault;
+			m_Config.appearance = uiState->appearance;
+			m_Config.layout.imGuiIniPath = uiState->layoutPath;
 		}
 
 		m_ConfigManager->SetConfig(m_Config);
@@ -807,6 +957,8 @@ namespace DefectStudio
 			return false;
 		}
 
+		ApplyWindowState(m_Graphics.window->GetNativeHandle(), m_Config.window);
+
 		m_Graphics.window->SetEventCallback([this](EventVariant event) { queueEvent(std::move(event)); });
 
 		configureInputBackend();
@@ -844,13 +996,15 @@ namespace DefectStudio
 			? ConfigManager::GetLayoutPath(m_Config.directory)
 			: Path::FromResolved(m_Config.layout.imGuiIniPath);
 		FileSystem::CreateDirectories(iniPath.parent_path().Native());
-		if (m_Runtime.specification.resetLayout && FileSystem::Exists(iniPath.Native()))
-			FileSystem::Remove(iniPath.Native());
+		if (m_Runtime.specification.resetLayout && m_ConfigManager != nullptr)
+		{
+			std::string resetError;
+			if (!m_ConfigManager->SaveTextFile(iniPath, "", resetError))
+				DS_LOG_WARN("Layout reset failed: {}", resetError);
+		}
 
 		m_Config.layout.imGuiIniPath = iniPath.String();
-		io.IniFilename = m_Config.layout.imGuiIniPath.c_str();
-		if (FileSystem::Exists(iniPath.Native()))
-			ImGui::LoadIniSettingsFromDisk(m_Config.layout.imGuiIniPath.c_str());
+		io.IniFilename = nullptr;
 
 		applyUiSettingsFromConfig();
 		io.FontGlobalScale = m_Config.ui.fontScale;
@@ -874,10 +1028,10 @@ namespace DefectStudio
 		ImGuiIO &io = ImGui::GetIO();
 		MainLoopState state;
 		state.clearColor = ImVec4(
-			m_Config.ui.clearColor[0],
-			m_Config.ui.clearColor[1],
-			m_Config.ui.clearColor[2],
-			m_Config.ui.clearColor[3]);
+			m_Config.appearance.clearColor[0],
+			m_Config.appearance.clearColor[1],
+			m_Config.appearance.clearColor[2],
+			m_Config.appearance.clearColor[3]);
 		m_Runtime.lastFrameTime = glfwGetTime();
 		DS_LOG_INFO("Entering render loop");
 		TracyMessageL("Entering render loop");
@@ -913,6 +1067,14 @@ namespace DefectStudio
 		for (const auto &layer : m_LayerStack)
 			layer->OnImGuiRender();
 		drawMainPanel(showDemoWindow, clearColor, io.Framerate);
+		if (auto uiState = m_EditorUiState.lock())
+		{
+			clearColor = ImVec4(
+				uiState->appearance.clearColor[0],
+				uiState->appearance.clearColor[1],
+				uiState->appearance.clearColor[2],
+				uiState->appearance.clearColor[3]);
+		}
 		onRender(clearColor, io.Framerate);
 	}
 
@@ -964,8 +1126,7 @@ namespace DefectStudio
 			return;
 
 		ImGuiIO &io = ImGui::GetIO();
-		if (io.IniFilename != nullptr)
-			ImGui::SaveIniSettingsToDisk(io.IniFilename);
+		(void)io;
 
 		persistUiSettings();
 

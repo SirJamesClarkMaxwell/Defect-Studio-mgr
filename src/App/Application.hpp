@@ -49,6 +49,9 @@ namespace DefectStudio
 		JobSystem &GetJobSystem();
 		// Precondition: CoreLayer initialized.
 		ProgressTracker &GetProgressTracker();
+		[[nodiscard]] WeakRef<ConfigManager> GetConfigManager() const;
+		[[nodiscard]] const ApplicationConfig &GetConfig() const;
+		[[nodiscard]] bool ApplyConfigFromSettings(const ApplicationConfig &config, std::string &error, bool persist);
 
 		// Event processing entry point for concrete event types.
 		template <typename TEvent>
@@ -112,7 +115,7 @@ namespace DefectStudio
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
 		LayerStack m_LayerStack;
-		Unique<ConfigManager> m_ConfigManager;
+		Ref<ConfigManager> m_ConfigManager;
 
 		ApplicationConfig m_Config;
 		ApplicationRuntimeState m_Runtime;

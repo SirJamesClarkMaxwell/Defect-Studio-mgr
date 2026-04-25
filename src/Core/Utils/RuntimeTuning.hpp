@@ -7,8 +7,11 @@ namespace DefectStudio
 	namespace RuntimeDefaults
 	{
 		inline constexpr const char *LogFilePath = "logs/DefectStudio.log";
+		inline constexpr int WindowPosX = -1;
+		inline constexpr int WindowPosY = -1;
 		inline constexpr int WindowWidth = 1280;
 		inline constexpr int WindowHeight = 720;
+		inline constexpr bool WindowMaximized = false;
 		inline constexpr const char *WindowTitle = "DefectStudio";
 
 		inline constexpr float UiFontScale = 1.0f;
@@ -21,6 +24,8 @@ namespace DefectStudio
 		inline constexpr float UiFontScaleStepMin = 0.01f;
 		inline constexpr float UiFontScaleStepMax = 1.00f;
 		inline constexpr float UiFontScaleStepSliderMax = 0.50f;
+		inline constexpr bool UiSettingsPreviewEnabled = true;
+		inline constexpr bool UiSettingsAutoSaveOnPreview = false;
 
 		inline constexpr int JobsDefaultWorkerThreads = 5;
 		inline constexpr bool JobsReserveUrgentWorker = true;
