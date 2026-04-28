@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <functional>
+#include <vector>
+#include <memory>
 
 #include <imgui.h>
 
@@ -15,6 +17,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/Panels/SettingsPanel.hpp"
 
 namespace DefectStudio
 {
@@ -127,8 +130,11 @@ namespace DefectStudio
 	{
 		initializePanelsIfNeeded();
 		renderMainMenuBar();
+
 		for (auto &entry : m_Panels.Entries())
+		{
 			entry.panel->Render();
+		}
 	}
 
 	void EditorLayer::initializePanelsIfNeeded()
@@ -138,8 +144,7 @@ namespace DefectStudio
 
 		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
-		registerPanel<Settings>(m_EventBus, m_JobSystem, CreateWeakRef(m_UiState), "Settings", true);
-		registerPanel<AppearanceEditor>(m_EventBus, CreateWeakRef(m_UiState), "Appearance Editor", false);
+		registerPanel<SettingsPanel>(m_EventBus, m_JobSystem, CreateWeakRef(m_UiState), "SettingsPanel", true);
 		m_PanelsInitialized = true;
 	}
 

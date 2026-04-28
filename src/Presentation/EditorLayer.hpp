@@ -10,9 +10,8 @@
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/EditorUiState.hpp"
-#include "Presentation/Panels/AppearanceEditor.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
-#include "Presentation/Panels/Settings.hpp"
+#include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
 
 namespace DefectStudio

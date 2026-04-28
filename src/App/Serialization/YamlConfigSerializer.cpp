@@ -18,6 +18,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "App/Managers/ConfigManager.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
 
@@ -625,22 +626,22 @@ namespace DefectStudio
 			return true;
 		}
 
-		std::filesystem::path NormalizePathForConfig(const std::filesystem::path &path)
+		FilePath NormalizePathForConfig(const FilePath &path)
 		{
 			std::error_code error;
-			std::filesystem::path normalized = std::filesystem::weakly_canonical(path, error);
+			FilePath normalized = FileSystem::WeaklyCanonical(path, error);
 			if (error)
 			{
 				error.clear();
-				normalized = std::filesystem::absolute(path, error);
+				normalized = FileSystem::Absolute(path, error);
 			}
 			if (error)
 				normalized = path;
 
-			return normalized.lexically_normal();
+			return normalized;
 		}
 
-		bool IsPathInsideBase(const std::filesystem::path &relativePath)
+		bool IsPathInsideBase(const FilePath &relativePath)
 		{
 			if (relativePath.empty() || relativePath.is_absolute())
 				return false;
@@ -658,15 +659,15 @@ namespace DefectStudio
 			if (value.empty())
 				return {};
 
-			const std::filesystem::path rawPath{std::string(value)};
+			const FilePath rawPath{std::string(value)};
 			if (!rawPath.is_absolute() || config.paths.installRoot.Empty())
 				return rawPath.generic_string();
 
-			const std::filesystem::path absolutePath = NormalizePathForConfig(rawPath);
-			const std::filesystem::path installRoot = NormalizePathForConfig(config.paths.installRoot.Native());
+			const FilePath absolutePath = NormalizePathForConfig(rawPath);
+			const FilePath installRoot = NormalizePathForConfig(config.paths.installRoot.Native());
 
 			std::error_code error;
-			const std::filesystem::path relativePath = std::filesystem::relative(absolutePath, installRoot, error);
+			const FilePath relativePath = std::filesystem::relative(absolutePath, installRoot, error);
 			if (!error && IsPathInsideBase(relativePath))
 				return relativePath.generic_string();
 
@@ -678,20 +679,20 @@ namespace DefectStudio
 			if (value.empty())
 				return {};
 
-			const std::filesystem::path rawPath{std::string(value)};
+			const FilePath rawPath{std::string(value)};
 			if (rawPath.is_absolute())
 				return NormalizePathForConfig(rawPath).string();
 
-			std::vector<std::filesystem::path> bases;
+			std::vector<FilePath> bases;
 			if (!config.paths.installRoot.Empty())
 				bases.push_back(config.paths.installRoot.Native());
 			if (!config.paths.appConfigDirectory.Empty())
 				bases.push_back(config.paths.appConfigDirectory.Native().parent_path());
 			bases.push_back(FileSystem::CurrentPath());
 
-			for (const std::filesystem::path &base : bases)
+			for (const FilePath &base : bases)
 			{
-				const std::filesystem::path candidate = (base / rawPath).lexically_normal();
+				const FilePath candidate = FilePath((base / rawPath).lexically_normal());
 				std::error_code error;
 				if (std::filesystem::exists(candidate, error) && !error)
 					return NormalizePathForConfig(candidate).string();
@@ -1016,22 +1017,22 @@ namespace DefectStudio
 		constexpr const char *UiSection = "ui";
 		constexpr const char *WindowSection = "window";
 
-		std::filesystem::path normalizePathForConfig(const std::filesystem::path &path)
+		FilePath normalizePathForConfig(const FilePath &path)
 		{
 			std::error_code error;
-			std::filesystem::path normalized = std::filesystem::weakly_canonical(path, error);
+			FilePath normalized = FileSystem::WeaklyCanonical(path, error);
 			if (error)
 			{
 				error.clear();
-				normalized = std::filesystem::absolute(path, error);
+				normalized = FileSystem::Absolute(path, error);
 			}
 			if (error)
 				normalized = path;
 
-			return normalized.lexically_normal();
+			return normalized;
 		}
 
-		bool isPathInsideBase(const std::filesystem::path &relativePath)
+		bool isPathInsideBase(const FilePath &relativePath)
 		{
 			if (relativePath.empty() || relativePath.is_absolute())
 				return false;
@@ -1049,15 +1050,15 @@ namespace DefectStudio
 			if (value.empty())
 				return {};
 
-			const std::filesystem::path rawPath{std::string(value)};
+			const FilePath rawPath{std::string(value)};
 			if (!rawPath.is_absolute() || config.paths.installRoot.Empty())
 				return rawPath.generic_string();
 
-			const std::filesystem::path absolutePath = normalizePathForConfig(rawPath);
-			const std::filesystem::path installRoot = normalizePathForConfig(config.paths.installRoot.Native());
+			const FilePath absolutePath = normalizePathForConfig(rawPath);
+			const FilePath installRoot = normalizePathForConfig(config.paths.installRoot.Native());
 
 			std::error_code error;
-			const std::filesystem::path relativePath = std::filesystem::relative(absolutePath, installRoot, error);
+			const FilePath relativePath = std::filesystem::relative(absolutePath, installRoot, error);
 			if (!error && isPathInsideBase(relativePath))
 				return relativePath.generic_string();
 

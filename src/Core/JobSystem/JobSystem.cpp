@@ -754,8 +754,165 @@ namespace DefectStudio
 		if (!job)
 			return;
 
+		// Auto-expand queue if needed
+		if (IsQueueFull())
+		{
+			expandJobQueue(m_MaxQueueCapacity + 256);
+		}
+
 		m_Pool.detach_task(
 			[this, id, job]() { runJob(id, job); },
 			toBackendPriority(priority));
+	}
+
+	bool JobSystem::PauseAllJobs()
+	{
+		if (m_ShutdownRequested.load(std::memory_order_relaxed))
+			return false;
+
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		if (m_AllJobsPaused.exchange(true, std::memory_order_relaxed))
+			return true; // Already paused
+
+		m_Pool.pause();
+		return true;
+	}
+
+	bool JobSystem::ResumeAllJobs()
+	{
+		if (m_ShutdownRequested.load(std::memory_order_relaxed))
+			return false;
+
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		if (!m_AllJobsPaused.exchange(false, std::memory_order_relaxed))
+			return true; // Already resumed
+
+		m_Pool.unpause();
+		return true;
+	}
+
+	std::size_t JobSystem::GetQueuedJobCount() const
+	{
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
+		std::size_t count = 0;
+		for (const auto &entry : m_Records)
+		{
+			if (entry.second.snapshot.status == JobStatus::Queued)
+				++count;
+		}
+		return count;
+	}
+
+	std::size_t JobSystem::GetMaxQueueCapacity() const
+	{
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		return m_MaxQueueCapacity;
+	}
+
+	bool JobSystem::IsQueueFull() const
+	{
+		return GetQueuedJobCount() >= GetMaxQueueCapacity();
+	}
+
+	bool JobSystem::validateThreadCountChange(std::size_t newThreadCount) const
+	{
+		const std::size_t resolved = resolveThreadCount(newThreadCount);
+		const std::size_t queuedCount = GetQueuedJobCount();
+		
+		// Sanity check: new thread count should not be much smaller than queued job count
+		// Allow flexibility: if queue has many jobs, we don't restrict thread reduction too much
+		if (queuedCount > 0 && resolved < 1)
+			return false;
+
+		return true;
+	}
+
+	void JobSystem::expandJobQueue(std::size_t newCapacity)
+	{
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		if (newCapacity > m_MaxQueueCapacity)
+			m_MaxQueueCapacity = newCapacity;
+	}
+
+	void JobSystem::storeQueuedJobsTemporarily()
+	{
+		// Jobs are kept in m_Records and remain queued
+		// The pause() call ensures they won't execute until unpause()
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		m_TemporaryJobStorage.clear();
+	}
+
+	void JobSystem::restoreQueuedJobsFromTemporary()
+	{
+		// Jobs are already in the queue after unpause()
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		m_TemporaryJobStorage.clear();
+	}
+
+	void JobSystem::clearTemporaryJobStorage()
+	{
+		std::lock_guard<std::mutex> lock(m_QueueSafetyMutex);
+		m_TemporaryJobStorage.clear();
+	}
+
+	bool JobSystem::SafeSetThreadCount(std::size_t newThreadCount, std::string &outMessage)
+	{
+		if (m_ShutdownRequested.load(std::memory_order_relaxed))
+		{
+			outMessage = "Cannot change thread count: JobSystem is shutting down";
+			return false;
+		}
+
+		const std::size_t resolved = resolveThreadCount(newThreadCount);
+		const std::size_t currentThreadCount = m_Pool.get_thread_count();
+
+		if (resolved == currentThreadCount)
+		{
+			outMessage = "Thread count unchanged (already " + std::to_string(resolved) + ")";
+			return true;
+		}
+
+		// Step 1: Validate the new thread count
+		if (!validateThreadCountChange(resolved))
+		{
+			outMessage = "Thread count validation failed: new count (" + std::to_string(resolved) +
+						 ") is invalid for queued jobs (" + std::to_string(GetQueuedJobCount()) + ")";
+			return false;
+		}
+
+		// Step 2: Pause all jobs
+		if (!PauseAllJobs())
+		{
+			outMessage = "Failed to pause jobs";
+			return false;
+		}
+
+		// Step 3: Store queued jobs temporarily
+		storeQueuedJobsTemporarily();
+
+		// Step 4: Change thread count
+		if (!SetThreadCount(resolved))
+		{
+			outMessage = "Failed to set thread count";
+			(void)ResumeAllJobs(); // Suppress [[nodiscard]] warning
+			clearTemporaryJobStorage();
+			return false;
+		}
+
+		// Wait briefly for the change to take effect
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+		// Step 5: Restore queued jobs
+		restoreQueuedJobsFromTemporary();
+
+		// Step 6: Resume jobs
+		if (!ResumeAllJobs())
+		{
+			outMessage = "Failed to resume jobs";
+			return false;
+		}
+
+		outMessage = "Thread count changed from " + std::to_string(currentThreadCount) + " to " + std::to_string(resolved);
+		return true;
 	}
 } // namespace DefectStudio

@@ -20,22 +20,21 @@ namespace DefectStudio::Platform
 			return value;
 		}
 
-		bool isSupportedFontFile(const std::filesystem::path &path)
+		bool isSupportedFontFile(const FilePath &path)
 		{
 			const std::string extension = toLowerCopy(path.extension().string());
 			return extension == ".ttf" || extension == ".otf";
 		}
 
-		std::string fontLabelFromPath(const std::filesystem::path &fontPath, std::string_view source)
+		std::string fontLabelFromPath(const FilePath &fontPath, std::string_view source)
 		{
-			const std::string stem = fontPath.stem().string();
 			const std::string filename = fontPath.filename().string();
-			return std::string(source) + ": " + (!stem.empty() ? stem : filename);
+			return std::string(source) + ": " + filename;
 		}
 
 		void collectFontsFromDirectory(std::vector<FontOption> &fontOptions,
 		                               std::vector<std::string> &seenPaths,
-		                               const std::filesystem::path &directory,
+		                               const FilePath &directory,
 		                               std::string_view source)
 		{
 			std::error_code error;
@@ -69,7 +68,7 @@ namespace DefectStudio::Platform
 					continue;
 				}
 
-				const std::filesystem::path fontPath = entry.path();
+				const FilePath fontPath = entry.path();
 				if (!isSupportedFontFile(fontPath))
 					continue;
 

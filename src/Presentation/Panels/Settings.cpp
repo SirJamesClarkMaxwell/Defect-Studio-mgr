@@ -13,7 +13,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Presentation/EditorUiEvents.hpp"
-#include "Presentation/Panels/Settings.hpp"
+#include "Presentation/Panels/SettingsPanel.hpp"
 
 namespace DefectStudio
 {
@@ -66,14 +66,14 @@ namespace DefectStudio
 		template <typename EventType>
 		SubscriptionHandle subscribeSettings(
 			EventBus &bus,
-			Settings &settings,
-			void (Settings::*method)(const EventType &))
+			SettingsPanel &settings,
+			void (SettingsPanel::*method)(const EventType &))
 		{
 			return bus.Subscribe<EventType>(std::bind_front(method, &settings));
 		}
 	} // namespace
 
-	Settings::Settings(Ref<EventBus> eventBus,
+	SettingsPanel::SettingsPanel(Ref<EventBus> eventBus,
 	                   WeakRef<JobSystem> jobSystem,
 	                   WeakRef<EditorUiState> uiState,
 	                   std::string title,
@@ -86,15 +86,18 @@ namespace DefectStudio
 		bindConfigEvents();
 	}
 
-	Settings::Settings(const Settings &other)
+	SettingsPanel::SettingsPanel(const SettingsPanel &other)
 		: IPanel(other.GetTitle(), other.IsVisible()),
 		  m_DraftInitialized(other.m_DraftInitialized),
 		  m_DraftDirty(other.m_DraftDirty),
-		  m_SelectedTabIndex(other.m_SelectedTabIndex),
+ 		m_SelectedTab(other.m_SelectedTab),
 		  m_DraftConfig(other.m_DraftConfig),
 		  m_WindowTitleBuffer(other.m_WindowTitleBuffer),
 		  m_LogFilePathBuffer(other.m_LogFilePathBuffer),
 		  m_FontPathBuffer(other.m_FontPathBuffer),
+		  m_ThemeSavePathBuffer(other.m_ThemeSavePathBuffer),
+		  m_ThemeLoadPathBuffer(other.m_ThemeLoadPathBuffer),
+		  m_LayoutPathBuffer(other.m_LayoutPathBuffer),
 		  m_StatusMessage(other.m_StatusMessage),
 		  m_EventBus(other.m_EventBus),
 		  m_JobSystem(other.m_JobSystem),
@@ -104,27 +107,27 @@ namespace DefectStudio
 		bindConfigEvents();
 	}
 
-	Ref<IPanel> Settings::Clone() const
+	Ref<IPanel> SettingsPanel::Clone() const
 	{
-		return CreateRef<Settings>(*this);
+		return CreateRef<SettingsPanel>(*this);
 	}
 
-	bool Settings::IsUrgentWorkerReserved() const
+	bool SettingsPanel::IsUrgentWorkerReserved() const
 	{
 		return m_DraftInitialized ? m_DraftConfig.jobs.reserveUrgentWorker : true;
 	}
 
-	float Settings::GetFontScaleStep() const
+	float SettingsPanel::GetFontScaleStep() const
 	{
 		return m_DraftInitialized ? m_DraftConfig.ui.fontScaleStep : 0.1f;
 	}
 
-	float Settings::GetFontScale() const
+	float SettingsPanel::GetFontScale() const
 	{
 		return m_DraftInitialized ? m_DraftConfig.ui.fontScale : 1.0f;
 	}
 
-	void Settings::Render()
+	void SettingsPanel::Render()
 	{
 		ensureDraftInitialized();
 		if (!IsVisible())
@@ -148,24 +151,24 @@ namespace DefectStudio
 		ImGui::BeginChild("SettingsContent", ImVec2(0.0f, 0.0f), true);
 		renderActionBar();
 
-		switch (m_SelectedTabIndex)
+		switch (m_SelectedTab)
 		{
-		case 0:
+		case SettingsPanel::Tab::System:
 			renderSystemTab();
 			break;
-		case 1:
+		case SettingsPanel::Tab::Interface:
 			renderDisplayTab();
 			break;
-		case 2:
+		case SettingsPanel::Tab::Profiles:
 			renderProfilesTab();
 			break;
-		case 3:
+		case SettingsPanel::Tab::Layout:
 			renderLayoutTab();
 			break;
-		case 4:
+		case SettingsPanel::Tab::Viewport:
 			renderViewportTab();
 			break;
-		case 8:
+		case SettingsPanel::Tab::FilePaths:
 			renderFilePathsTab();
 			break;
 		default:
@@ -179,7 +182,7 @@ namespace DefectStudio
 		ImGui::End();
 	}
 
-	void Settings::ensureDraftInitialized()
+	void SettingsPanel::ensureDraftInitialized()
 	{
 		if (m_DraftInitialized)
 			return;
@@ -188,7 +191,7 @@ namespace DefectStudio
 		m_ProfileManager.Bind(Application::Get().GetConfigManager(), m_EventBus);
 	}
 
-	void Settings::syncDraftFromApplication()
+	void SettingsPanel::syncDraftFromApplication()
 	{
 		m_DraftConfig = Application::Get().GetConfig();
 		if (auto uiState = m_UiState.lock())
@@ -209,14 +212,14 @@ namespace DefectStudio
 		m_DraftInitialized = true;
 	}
 
-	void Settings::syncDraftFromBuffers()
+	void SettingsPanel::syncDraftFromBuffers()
 	{
 		m_DraftConfig.window.title = m_WindowTitleBuffer.data();
 		m_DraftConfig.log.filePath = Path::FromResolved(std::string(m_LogFilePathBuffer.data()));
 		m_DraftConfig.ui.fontPath = m_FontPathBuffer.data();
 	}
 
-	bool Settings::applyDraft(bool persist)
+	bool SettingsPanel::applyDraft(bool persist)
 	{
 		using namespace AppEvents::Config;
 
@@ -251,7 +254,7 @@ namespace DefectStudio
 		return true;
 	}
 
-	bool Settings::saveDraftAsDefaults()
+	bool SettingsPanel::saveDraftAsDefaults()
 	{
 		using namespace AppEvents::Config;
 
@@ -267,7 +270,7 @@ namespace DefectStudio
 		return true;
 	}
 
-	void Settings::applyRuntimePreview()
+	void SettingsPanel::applyRuntimePreview()
 	{
 		using namespace AppEvents::Config;
 		using namespace EditorUiEvents;
@@ -296,7 +299,7 @@ namespace DefectStudio
 		}
 	}
 
-	void Settings::maybeApplyPreview()
+	void SettingsPanel::maybeApplyPreview()
 	{
 		if (!m_DraftDirty || !m_DraftConfig.ui.settingsPreviewEnabled)
 			return;
@@ -308,7 +311,7 @@ namespace DefectStudio
 		m_DraftDirty = false;
 	}
 
-	void Settings::previewAppearanceIfEnabled()
+	void SettingsPanel::previewAppearanceIfEnabled()
 	{
 		using namespace EditorUiEvents;
 
@@ -322,22 +325,22 @@ namespace DefectStudio
 		}
 	}
 
-	void Settings::bindConfigEvents()
+	void SettingsPanel::bindConfigEvents()
 	{
 		if (m_EventBus == nullptr)
 			return;
 
 		using namespace AppEvents::Config;
 
-		AddSubscription(subscribeSettings<Applied>(*m_EventBus, *this, &Settings::onConfigApplied));
-		AddSubscription(subscribeSettings<ApplyFailed>(*m_EventBus, *this, &Settings::onConfigApplyFailed));
-		AddSubscription(subscribeSettings<UserSaved>(*m_EventBus, *this, &Settings::onUserConfigSaved));
-		AddSubscription(subscribeSettings<UserSaveFailed>(*m_EventBus, *this, &Settings::onUserConfigSaveFailed));
-		AddSubscription(subscribeSettings<DefaultsSaved>(*m_EventBus, *this, &Settings::onDefaultsSaved));
-		AddSubscription(subscribeSettings<DefaultsSaveFailed>(*m_EventBus, *this, &Settings::onDefaultsSaveFailed));
+		AddSubscription(subscribeSettings<Applied>(*m_EventBus, *this, &SettingsPanel::onConfigApplied));
+		AddSubscription(subscribeSettings<ApplyFailed>(*m_EventBus, *this, &SettingsPanel::onConfigApplyFailed));
+		AddSubscription(subscribeSettings<UserSaved>(*m_EventBus, *this, &SettingsPanel::onUserConfigSaved));
+		AddSubscription(subscribeSettings<UserSaveFailed>(*m_EventBus, *this, &SettingsPanel::onUserConfigSaveFailed));
+		AddSubscription(subscribeSettings<DefaultsSaved>(*m_EventBus, *this, &SettingsPanel::onDefaultsSaved));
+		AddSubscription(subscribeSettings<DefaultsSaveFailed>(*m_EventBus, *this, &SettingsPanel::onDefaultsSaveFailed));
 	}
 
-	void Settings::onConfigApplied(const AppEvents::Config::Applied &event)
+	void SettingsPanel::onConfigApplied(const AppEvents::Config::Applied &event)
 	{
 		m_DraftConfig = event.config;
 		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
@@ -348,12 +351,12 @@ namespace DefectStudio
 		m_StatusMessage = event.persisted ? "Settings applied and saved to YAML." : "Settings applied.";
 	}
 
-	void Settings::onConfigApplyFailed(const AppEvents::Config::ApplyFailed &event)
+	void SettingsPanel::onConfigApplyFailed(const AppEvents::Config::ApplyFailed &event)
 	{
 		m_StatusMessage = event.persist ? "Apply & save failed: " + event.error : "Apply failed: " + event.error;
 	}
 
-	void Settings::onUserConfigSaved(const AppEvents::Config::UserSaved &event)
+	void SettingsPanel::onUserConfigSaved(const AppEvents::Config::UserSaved &event)
 	{
 		m_DraftConfig = event.config;
 		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
@@ -363,25 +366,25 @@ namespace DefectStudio
 		m_StatusMessage = "Settings applied and user YAML saved.";
 	}
 
-	void Settings::onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event)
+	void SettingsPanel::onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event)
 	{
 		(void)event.config;
 		m_StatusMessage = "User YAML save failed: " + event.error;
 	}
 
-	void Settings::onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event)
+	void SettingsPanel::onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event)
 	{
 		(void)event.config;
 		m_StatusMessage = "Default YAML saved.";
 	}
 
-	void Settings::onDefaultsSaveFailed(const AppEvents::Config::DefaultsSaveFailed &event)
+	void SettingsPanel::onDefaultsSaveFailed(const AppEvents::Config::DefaultsSaveFailed &event)
 	{
 		(void)event.config;
 		m_StatusMessage = "Save defaults failed: " + event.error;
 	}
 
-	void Settings::renderActionBar()
+	void SettingsPanel::renderActionBar()
 	{
 		ImGui::TextUnformatted("Configuration editor");
 		ImGui::TextWrapped("This panel edits YAML-backed application settings. Preview updates runtime without touching disk, while Apply & Save also persists the current snapshot.");
@@ -426,7 +429,7 @@ namespace DefectStudio
 		ImGui::Separator();
 	}
 
-	void Settings::renderSidebar()
+	void SettingsPanel::renderSidebar()
 	{
 		const char *tabs[] = {
 			"System",
@@ -440,15 +443,17 @@ namespace DefectStudio
 			"File Paths",
 		};
 
-		for (int i = 0; i < IM_ARRAYSIZE(tabs); ++i)
+		const int tabCount = static_cast<int>(SettingsPanel::Tab::Count);
+		for (int i = 0; i < tabCount; ++i)
 		{
-			const bool selected = (m_SelectedTabIndex == i);
+			const auto tab = static_cast<SettingsPanel::Tab>(i);
+			const bool selected = (m_SelectedTab == tab);
 			if (ImGui::Selectable(tabs[i], selected))
-				m_SelectedTabIndex = i;
+				m_SelectedTab = tab;
 		}
 	}
 
-	void Settings::renderSystemTab()
+	void SettingsPanel::renderSystemTab()
 	{
 		auto jobSystem = m_JobSystem.lock();
 
@@ -573,7 +578,7 @@ namespace DefectStudio
 		ImGui::TextWrapped("Applying event queue settings reconfigures the queue and clears currently queued platform events.");
 	}
 
-	void Settings::renderDisplayTab()
+	void SettingsPanel::renderDisplayTab()
 	{
 		using namespace EditorUiEvents;
 
@@ -727,19 +732,76 @@ namespace DefectStudio
 		}
 
 		ImGui::SeparatorText("Appearance");
-		ImGui::TextWrapped("Appearance values are also stored in YAML. Theme file import/export remains available in the dedicated Appearance Editor panel.");
+		ImGui::TextWrapped("Appearance values are also stored in YAML. Theme file import/export is part of this panel.");
 		renderAppearanceColors();
 		renderAppearanceMetrics();
 		renderAppearanceStateRules();
+		renderAppearanceFiles();
 	}
 
-	void Settings::renderProfilesTab()
+	void SettingsPanel::renderProfilesTab()
 	{
 		auto uiState = m_UiState.lock();
 		(void)m_ProfileManager.Render(uiState.get(), m_DraftConfig);
 	}
 
-	void Settings::renderLayoutTab()
+	void SettingsPanel::renderAppearanceFiles()
+		{
+			using namespace EditorUiEvents;
+
+			if (!ImGui::CollapsingHeader("Theme and layout files", ImGuiTreeNodeFlags_DefaultOpen))
+				return;
+
+			auto uiState = m_UiState.lock();
+			if (uiState == nullptr)
+			{
+				ImGui::TextDisabled("Editor UI state unavailable.");
+				return;
+			}
+
+			copyToBuffer(m_ThemeSavePathBuffer, uiState->themeSavePath);
+			copyToBuffer(m_ThemeLoadPathBuffer, uiState->themeLoadPath);
+			copyToBuffer(m_LayoutPathBuffer, uiState->layoutPath);
+
+			ImGui::InputText("Theme save path", m_ThemeSavePathBuffer.data(), m_ThemeSavePathBuffer.size());
+			if (ImGui::Button("Save theme YAML"))
+			{
+				uiState->themeSavePath = m_ThemeSavePathBuffer.data();
+				(void)queueEvent(m_EventBus, ThemeSaveRequested{Path::FromResolved(uiState->themeSavePath), uiState->appearance});
+			}
+
+			ImGui::InputText("Theme load path", m_ThemeLoadPathBuffer.data(), m_ThemeLoadPathBuffer.size());
+			if (ImGui::Button("Load theme YAML"))
+			{
+				uiState->themeLoadPath = m_ThemeLoadPathBuffer.data();
+				(void)queueEvent(m_EventBus, ThemeLoadRequested{Path::FromResolved(uiState->themeLoadPath)});
+			}
+
+			ImGui::Separator();
+			ImGui::InputText("Layout .ini path", m_LayoutPathBuffer.data(), m_LayoutPathBuffer.size());
+			if (ImGui::Button("Save ImGui layout"))
+			{
+				uiState->layoutPath = m_LayoutPathBuffer.data();
+				(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(uiState->layoutPath)});
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Load ImGui layout"))
+			{
+				uiState->layoutPath = m_LayoutPathBuffer.data();
+				(void)queueEvent(m_EventBus, LayoutLoadRequested{Path::FromResolved(uiState->layoutPath)});
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Reset runtime layout"))
+			{
+				uiState->layoutPath = m_LayoutPathBuffer.data();
+				(void)queueEvent(m_EventBus, LayoutResetRequested{Path::FromResolved(uiState->layoutPath)});
+			}
+
+			if (!uiState->layoutStatusMessage.empty())
+				ImGui::TextWrapped("%s", uiState->layoutStatusMessage.c_str());
+			}
+
+	void SettingsPanel::renderLayoutTab()
 	{
 		using namespace EditorUiEvents;
 
@@ -786,7 +848,7 @@ namespace DefectStudio
 		}
 	}
 
-	void Settings::renderViewportTab()
+	void SettingsPanel::renderViewportTab()
 	{
 		ImGui::TextUnformatted("Window settings");
 		ImGui::TextWrapped("These values are stored in YAML. Apply & Save updates the current GLFW window placement, size and maximize state, and also persists them for the next launch.");
@@ -851,7 +913,7 @@ namespace DefectStudio
 		}
 	}
 
-	void Settings::renderFilePathsTab()
+	void SettingsPanel::renderFilePathsTab()
 	{
 		auto configManager = Application::Get().GetConfigManager().lock();
 		if (configManager == nullptr)
@@ -887,7 +949,7 @@ namespace DefectStudio
 		}
 	}
 
-	void Settings::renderAppearanceColors()
+	void SettingsPanel::renderAppearanceColors()
 	{
 		if (!ImGui::CollapsingHeader("Colors", ImGuiTreeNodeFlags_DefaultOpen))
 			return;
@@ -918,7 +980,7 @@ namespace DefectStudio
 			markDirty();
 	}
 
-	void Settings::renderAppearanceMetrics()
+	void SettingsPanel::renderAppearanceMetrics()
 	{
 		if (!ImGui::CollapsingHeader("Rounding and spacing", ImGuiTreeNodeFlags_DefaultOpen))
 			return;
@@ -955,7 +1017,7 @@ namespace DefectStudio
 			markDirty();
 	}
 
-	void Settings::renderAppearanceStateRules()
+	void SettingsPanel::renderAppearanceStateRules()
 	{
 		if (!ImGui::CollapsingHeader("State rules", ImGuiTreeNodeFlags_DefaultOpen))
 			return;
@@ -1022,14 +1084,14 @@ namespace DefectStudio
 			markDirty();
 	}
 
-	void Settings::SetFontScale(float fontScale)
+	void SettingsPanel::SetFontScale(float fontScale)
 	{
 		ensureDraftInitialized();
 		m_DraftConfig.ui.fontScale = std::clamp(fontScale, m_DraftConfig.ui.fontScaleMin, m_DraftConfig.ui.fontScaleMax);
 		m_DraftDirty = true;
 	}
 
-	void Settings::SetFontScaleStep(float step)
+	void SettingsPanel::SetFontScaleStep(float step)
 	{
 		ensureDraftInitialized();
 		m_DraftConfig.ui.fontScaleStep = std::clamp(step, m_DraftConfig.ui.fontScaleStepMin, m_DraftConfig.ui.fontScaleStepMax);

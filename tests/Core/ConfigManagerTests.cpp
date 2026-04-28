@@ -3,9 +3,9 @@
 #include <fstream>
 #include <string>
 
-#include "App/ConfigManager.hpp"
-#include "App/ConfigProfileStore.hpp"
-#include "App/YamlCodecFacade.hpp"
+#include "App/Managers/ConfigManager.hpp"
+#include "App/Managers/ConfigProfileStore.hpp"
+#include "App/Serialization/YamlCodecFacade.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Time.hpp"
@@ -332,10 +332,10 @@ TEST(ConfigManagerTests, ThemeAndTextFilesRoundTrip)
 	EXPECT_FLOAT_EQ(loaded.accentColor[2], 0.75f);
 
 	const Path layoutPath = manager.GetPaths().layoutsDirectory / Path("layout.ini");
-	ASSERT_TRUE(DefectStudio::TextFileIO::Save(layoutPath, "[Window][Settings]\n", error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(layoutPath, "[Window][SettingsPanel]\n", error)) << error;
 	std::string text;
 	ASSERT_TRUE(DefectStudio::TextFileIO::Load(layoutPath, text, error)) << error;
-	EXPECT_EQ(text, "[Window][Settings]\n");
+	EXPECT_EQ(text, "[Window][SettingsPanel]\n");
 
 	RemoveTempDirectory(tempDirectory);
 }

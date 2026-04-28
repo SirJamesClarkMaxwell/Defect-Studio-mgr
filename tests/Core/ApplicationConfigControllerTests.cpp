@@ -3,8 +3,8 @@
 #include <fstream>
 #include <string>
 
-#include "App/ApplicationConfigController.hpp"
-#include "App/ConfigManager.hpp"
+#include "App/Controllers/ApplicationConfigController.hpp"
+#include "App/Managers/ConfigManager.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
@@ -173,7 +173,7 @@ TEST(IOLayerPersistenceTests, PersistsLayoutAndThemeTextFromEvents)
 
 	const Path layoutPath = tempDirectory / "layouts" / "test.ini";
 	const Path themePath = tempDirectory / "themes" / "orange.yaml";
-	const std::string layoutText = "[Window][Settings]\nPos=1,2\n";
+	const std::string layoutText = "[Window][SettingsPanel]\nPos=1,2\n";
 	const std::string themeText = "schema_version: '1'\nappearance: {}\n";
 
 	bool layoutSaved = false;
@@ -192,8 +192,8 @@ TEST(IOLayerPersistenceTests, PersistsLayoutAndThemeTextFromEvents)
 	(void)layoutSavedSubscription;
 	(void)themeSavedSubscription;
 
-	eventBus->Publish(DefectStudio::EditorUiEvents::LayoutPersistRequested{layoutPath, layoutText});
-	eventBus->Publish(DefectStudio::EditorUiEvents::ThemePersistRequested{themePath, themeText});
+		eventBus->Publish(DefectStudio::EditorUiEvents::PersistRequested{DefectStudio::EditorUiEvents::PersistKind::Layout, layoutPath, layoutText});
+		eventBus->Publish(DefectStudio::EditorUiEvents::PersistRequested{DefectStudio::EditorUiEvents::PersistKind::Theme, themePath, themeText});
 	eventBus->ProcessQueue();
 
 	EXPECT_TRUE(layoutSaved);

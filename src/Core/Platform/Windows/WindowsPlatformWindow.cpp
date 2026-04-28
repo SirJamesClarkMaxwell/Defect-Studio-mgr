@@ -36,7 +36,7 @@ namespace
 		if (modulePathLength == 0 || modulePathLength >= MAX_PATH)
 			return {};
 
-		return DefectStudio::Path::FromResolved(std::filesystem::path(modulePath).parent_path());
+		return DefectStudio::Path::FromResolved(FilePath(modulePath).parent_path());
 	}
 
 	DefectStudio::Path ResolveIconPath(const DefectStudio::Path &iconPath)

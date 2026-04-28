@@ -16,6 +16,13 @@ namespace DefectStudio
 		std::string path;
 	};
 
+	struct AppearancePreview
+	{
+		AppearanceConfig previewAppearance;
+		bool isPreviewActive = false;
+		std::string previewStatusMessage;
+	};
+
 	struct EditorUiState
 	{
 		float fontScale = 1.0f;
@@ -29,6 +36,7 @@ namespace DefectStudio
 		bool reserveUrgentWorkerByDefault = true;
 		ApplicationPaths paths;
 		AppearanceConfig appearance;
+		AppearancePreview appearancePreview;
 
 		std::vector<EditorFontOption> fontOptions;
 		std::size_t selectedFontIndex = 0;

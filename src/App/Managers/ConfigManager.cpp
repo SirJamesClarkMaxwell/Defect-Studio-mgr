@@ -35,7 +35,7 @@ namespace DefectStudio
 
 		bool IsPortableAppConfigDirectory(const Path &configDirectory)
 		{
-			const std::filesystem::path path = configDirectory.Native().lexically_normal();
+			const FilePath path = configDirectory.Native().lexically_normal();
 			return path.filename() == "config"
 				&& path.parent_path().filename() == "app"
 				&& path.parent_path().parent_path().filename() == "install";

@@ -40,6 +40,14 @@ namespace DefectStudio
 		[[nodiscard]] bool RemoveFromHistory(JobId id);
 		[[nodiscard]] std::size_t GetThreadCount() const;
 		[[nodiscard]] bool SetThreadCount(std::size_t threadCount);
+		
+		// Safety features for job queue management
+		[[nodiscard]] bool PauseAllJobs();
+		[[nodiscard]] bool ResumeAllJobs();
+		[[nodiscard]] bool SafeSetThreadCount(std::size_t newThreadCount, std::string &outMessage);
+		[[nodiscard]] std::size_t GetQueuedJobCount() const;
+		[[nodiscard]] std::size_t GetMaxQueueCapacity() const;
+		[[nodiscard]] bool IsQueueFull() const;
 
 		[[nodiscard]] std::optional<JobSnapshot> GetJob(JobId id) const;
 		[[nodiscard]] std::vector<JobSnapshot> GetAllJobs() const;
@@ -85,6 +93,13 @@ namespace DefectStudio
 		void delayedWorkerLoop(std::stop_token stopToken);
 		void cancelPendingDelayedSubmissions();
 		
+		// Queue safety and management helpers.
+		void expandJobQueue(std::size_t newCapacity);
+		[[nodiscard]] bool validateThreadCountChange(std::size_t newThreadCount) const;
+		void storeQueuedJobsTemporarily();
+		void restoreQueuedJobsFromTemporary();
+		void clearTemporaryJobStorage();
+		
 	private:
 		// Shared external integration.
 		Ref<EventBus> m_EventBus;
@@ -107,6 +122,12 @@ namespace DefectStudio
 		std::condition_variable m_DelayedCv;
 		std::deque<DelayedSubmission> m_DelayedSubmissions;
 		std::jthread m_DelayedWorker;
+
+		// Queue safety and expansion.
+		mutable std::mutex m_QueueSafetyMutex;
+		std::size_t m_MaxQueueCapacity = 1024;
+		std::atomic_bool m_AllJobsPaused{false};
+		std::vector<std::pair<Ref<IJob>, JobPriority>> m_TemporaryJobStorage;
 
 		// Lifecycle control.
 		std::atomic<JobId> m_NextId{1};

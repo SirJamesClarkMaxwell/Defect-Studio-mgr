@@ -41,6 +41,8 @@ namespace DefectStudio
 
 		virtual void Render() = 0;
 
+	protected:
+
 	private:
 		std::string m_Title;
 		bool m_Visible = true;
