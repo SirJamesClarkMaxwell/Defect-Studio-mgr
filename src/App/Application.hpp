@@ -6,11 +6,9 @@
 
 #include "App/ApplicationLifecycle.hpp"
 #include "App/ApplicationState.hpp"
-#include "App/ConfigManager.hpp"
-#include "App/Events/ApplicationConfigEvents.hpp"
+#include "App/Managers/ConfigManager.hpp"
 #include "App/Window.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
-#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
@@ -23,9 +21,10 @@ struct ImGuiIO;
 
 namespace DefectStudio
 {
+	class ApplicationEventController;
 	class CoreLayer;
 
-	class Application : public EventReceiver
+	class Application
 	{
 	public:
 		// Create a fully initialized application instance (may fail internally; check Run()).
@@ -93,14 +92,6 @@ namespace DefectStudio
 		// Configuration API
 		bool bootstrapConfiguration();
 		void applySpecificationFromDefaultConfig();
-		void bindApplicationConfigEvents();
-		void onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event);
-		void onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event);
-		void onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event);
-		[[nodiscard]] bool applyConfigRequest(const ApplicationConfig &config, std::string &error, bool persist);
-		[[nodiscard]] bool saveUserConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error);
-		[[nodiscard]] bool saveDefaultConfigSnapshot(const ApplicationConfig &config, ApplicationConfig &savedConfig, std::string &error);
-		[[nodiscard]] ApplicationConfig normalizeConfigSnapshot(const ApplicationConfig &config) const;
 		bool persistUiSettings();
 
 		// Low-level platform/graphics setup
@@ -126,6 +117,7 @@ namespace DefectStudio
 	private:
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
+		Unique<ApplicationEventController> m_EventController;
 		LayerStack m_LayerStack;
 		Ref<ConfigManager> m_ConfigManager;
 

@@ -5,9 +5,16 @@
 
 #include "App/ApplicationState.hpp"
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
+#include "Core/Utils/Path.hpp"
 
 namespace DefectStudio::AppEvents::Config
 {
+	enum class PersistKind
+	{
+		UserSettings,
+		Defaults,
+	};
+
 	struct ApplyRequested final : public BusEvent
 	{
 		ApplyRequested(ApplicationConfig applicationConfig, bool shouldPersist)
@@ -73,6 +80,22 @@ namespace DefectStudio::AppEvents::Config
 		std::string error;
 	};
 
+	struct PersistRequested final : public BusEvent
+	{
+		PersistRequested(PersistKind persistKind, ApplicationConfig applicationConfig, Path targetPath, std::string fileContents)
+			: kind(persistKind),
+			  config(std::move(applicationConfig)),
+			  path(std::move(targetPath)),
+			  contents(std::move(fileContents))
+		{
+		}
+
+		PersistKind kind = PersistKind::UserSettings;
+		ApplicationConfig config;
+		Path path;
+		std::string contents;
+	};
+
 	struct SaveDefaultsRequested final : public BusEvent
 	{
 		explicit SaveDefaultsRequested(ApplicationConfig applicationConfig)
@@ -103,4 +126,5 @@ namespace DefectStudio::AppEvents::Config
 		ApplicationConfig config;
 		std::string error;
 	};
+
 } // namespace DefectStudio::AppEvents::Config

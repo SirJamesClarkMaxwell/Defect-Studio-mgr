@@ -2,10 +2,7 @@
 
 #include <algorithm>
 #include <array>
-#include <filesystem>
 #include <functional>
-#include <set>
-#include <string_view>
 
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
@@ -13,11 +10,12 @@
 
 #include "Presentation/ImGuiLayer.hpp"
 
-#include "App/ConfigManager.hpp"
+#include "App/Managers/ConfigManager.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Window.hpp"
+#include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/Platform/PlatformPaths.hpp"
+#include "Core/Platform/PlatformFontDiscovery.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiEvents.hpp"
@@ -41,123 +39,6 @@ namespace DefectStudio
 	namespace ImGuiLayerDetail
 	{
 		constexpr float FontPixelSize = 16.0f;
-
-		Path assetsFontsDirectory(const EditorUiState &uiState)
-		{
-			if (!uiState.paths.fontsDirectory.Empty())
-				return uiState.paths.fontsDirectory;
-
-			const Path portableFonts = Path::FromResolved(FileSystem::CurrentPath() / "install" / "app" / "assets" / "fonts");
-			if (FileSystem::Exists(portableFonts.Native()))
-				return portableFonts;
-
-			return Path::FromResolved(FileSystem::CurrentPath() / "assets" / "fonts");
-		}
-
-		std::string toLowerCopy(std::string value)
-		{
-			for (char &character : value)
-				character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-			return value;
-		}
-
-		bool isSupportedFontFile(const std::filesystem::path &path)
-		{
-			const std::string extension = toLowerCopy(path.extension().string());
-			return extension == ".ttf" || extension == ".otf";
-		}
-
-		std::string normalizePathForCompare(const std::filesystem::path &path)
-		{
-			std::error_code error;
-			std::filesystem::path normalized = FileSystem::WeaklyCanonical(path, error);
-			if (error)
-			{
-				error.clear();
-				normalized = FileSystem::Absolute(path, error);
-			}
-			if (error)
-				normalized = path;
-
-			std::string result = normalized.lexically_normal().string();
-			result = toLowerCopy(std::move(result));
-			return result;
-		}
-
-		std::string fontLabelFromPath(const std::filesystem::path &fontPath, std::string_view source)
-		{
-			const std::string stem = fontPath.stem().string();
-			const std::string filename = fontPath.filename().string();
-			return std::string(source) + ": " + (!stem.empty() ? stem : filename);
-		}
-
-		void collectFontsFromDirectory(std::vector<EditorFontOption> &fontOptions,
-		                               std::set<std::string> &seenPaths,
-		                               const std::filesystem::path &directory,
-		                               std::string_view source,
-		                               std::size_t &addedCount)
-		{
-			std::error_code error;
-			if (!std::filesystem::exists(directory, error) || error)
-				return;
-
-			std::filesystem::recursive_directory_iterator iterator(
-				directory,
-				std::filesystem::directory_options::skip_permission_denied,
-				error);
-			const std::filesystem::recursive_directory_iterator end;
-			if (error)
-			{
-				DS_LOG_WARN("Font scan skipped [{}]: {}", directory.string(), error.message());
-				return;
-			}
-
-			for (; iterator != end; iterator.increment(error))
-			{
-				if (error)
-				{
-					DS_LOG_WARN("Font scan warning [{}]: {}", directory.string(), error.message());
-					error.clear();
-					continue;
-				}
-
-				const std::filesystem::directory_entry &entry = *iterator;
-				if (!entry.is_regular_file(error) || error)
-				{
-					error.clear();
-					continue;
-				}
-
-				const std::filesystem::path fontPath = entry.path();
-				if (!isSupportedFontFile(fontPath))
-					continue;
-
-				const std::string normalizedPath = normalizePathForCompare(fontPath);
-				if (!seenPaths.insert(normalizedPath).second)
-					continue;
-
-				EditorFontOption option;
-				option.label = fontLabelFromPath(fontPath, source);
-				option.source = std::string(source);
-				option.path = FileSystem::Absolute(fontPath, error).lexically_normal().string();
-				if (error)
-				{
-					error.clear();
-					option.path = fontPath.lexically_normal().string();
-				}
-
-				fontOptions.push_back(std::move(option));
-				++addedCount;
-			}
-		}
-
-		EditorFontOption defaultFontOption()
-		{
-			EditorFontOption option;
-			option.label = "Default: ImGui";
-			option.source = "Default";
-			return option;
-		}
 
 		float clamp01(float value)
 		{
@@ -337,9 +218,15 @@ namespace DefectStudio
 		AddSubscription(subscribeImGuiLayer<AppearancePreviewRequested>(*m_EventBus, *this, &ImGuiLayer::onAppearancePreviewRequested));
 		AddSubscription(subscribeImGuiLayer<AppearanceApplyRequested>(*m_EventBus, *this, &ImGuiLayer::onAppearanceApplyRequested));
 		AddSubscription(subscribeImGuiLayer<ThemeSaveRequested>(*m_EventBus, *this, &ImGuiLayer::onThemeSaveRequested));
-		AddSubscription(subscribeImGuiLayer<ThemeLoadRequested>(*m_EventBus, *this, &ImGuiLayer::onThemeLoadRequested));
+		AddSubscription(subscribeImGuiLayer<ThemeSaved>(*m_EventBus, *this, &ImGuiLayer::onThemeSaved));
+		AddSubscription(subscribeImGuiLayer<ThemeSaveFailed>(*m_EventBus, *this, &ImGuiLayer::onThemeSaveFailed));
+		AddSubscription(subscribeImGuiLayer<ThemeLoaded>(*m_EventBus, *this, &ImGuiLayer::onThemeLoaded));
+		AddSubscription(subscribeImGuiLayer<ThemeLoadFailed>(*m_EventBus, *this, &ImGuiLayer::onThemeLoadFailed));
 		AddSubscription(subscribeImGuiLayer<LayoutSaveRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutSaveRequested));
-		AddSubscription(subscribeImGuiLayer<LayoutLoadRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutLoadRequested));
+		AddSubscription(subscribeImGuiLayer<LayoutSaved>(*m_EventBus, *this, &ImGuiLayer::onLayoutSaved));
+		AddSubscription(subscribeImGuiLayer<LayoutSaveFailed>(*m_EventBus, *this, &ImGuiLayer::onLayoutSaveFailed));
+		AddSubscription(subscribeImGuiLayer<LayoutLoaded>(*m_EventBus, *this, &ImGuiLayer::onLayoutLoaded));
+		AddSubscription(subscribeImGuiLayer<LayoutLoadFailed>(*m_EventBus, *this, &ImGuiLayer::onLayoutLoadFailed));
 		AddSubscription(subscribeImGuiLayer<LayoutResetRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutResetRequested));
 		DS_LOG_INFO("ImGuiLayer UI event handlers bound");
 	}
@@ -362,18 +249,12 @@ namespace DefectStudio
 			return;
 
 		ImGuiLayerDetail::applyAppearanceToImGui(state->appearance);
-		auto configManager = m_ConfigManager.lock();
-		if (configManager != nullptr && !state->layoutPath.empty())
+		if (m_EventBus != nullptr && !state->layoutPath.empty())
 		{
-			std::string text;
-			std::string error;
 			const Path resolvedPath = Path::FromResolved(state->layoutPath);
-			if (configManager->LoadTextFile(resolvedPath, text, error) && !text.empty())
-			{
-				ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
-				state->layoutStatusMessage = "Layout loaded: " + state->layoutPath;
-				DS_LOG_INFO("ImGui layout loaded on UI state bind: {}", state->layoutPath);
-			}
+			m_EventBus->Queue(EditorUiEvents::LayoutLoadRequested{resolvedPath});
+			state->layoutStatusMessage = "Layout load queued: " + state->layoutPath;
+			DS_LOG_INFO("ImGui layout load queued on UI state bind: {}", state->layoutPath);
 		}
 		
 	}
@@ -491,16 +372,13 @@ namespace DefectStudio
 		if (!m_ResetLayoutOnAttach)
 			return;
 
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
+		if (m_EventBus == nullptr)
 		{
-			DS_LOG_WARN("Layout reset requested but ConfigManager is unavailable");
+			DS_LOG_WARN("Layout reset requested but EventBus is unavailable");
 			return;
 		}
 
-		std::string error;
-		if (!configManager->SaveTextFile(layoutPath, "", error))
-			DS_LOG_WARN("Layout reset failed: {}", error);
+		m_EventBus->Publish(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, layoutPath, {}});
 	}
 
 	void ImGuiLayer::applyUiConfigToContext() const
@@ -544,20 +422,18 @@ namespace DefectStudio
 		if (ImGui::GetCurrentContext() == nullptr || layoutPath.Empty())
 			return;
 
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
-			return;
-
-		std::size_t size = 0;
-		const char *data = ImGui::SaveIniSettingsToMemory(&size);
-		std::string error;
-		if (!configManager->SaveTextFile(layoutPath, std::string_view(data, size), error))
+		if (m_EventBus == nullptr)
 		{
-			DS_LOG_WARN("{}: {}", failurePrefix, error);
+			DS_LOG_WARN("{}: EventBus unavailable", failurePrefix);
 			return;
 		}
 
-		DS_LOG_INFO("ImGui layout saved: {} bytes={}", layoutPath.String(), size);
+		std::size_t size = 0;
+		const char *data = ImGui::SaveIniSettingsToMemory(&size);
+		std::string contents = (data != nullptr && size > 0) ? std::string(data, size) : std::string{};
+		m_EventBus->Publish(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, layoutPath, std::move(contents)});
+
+		DS_LOG_INFO("ImGui layout persistence requested: {} bytes={}", layoutPath.String(), size);
 	}
 
 	void ImGuiLayer::shutdownImGui()
@@ -577,41 +453,42 @@ namespace DefectStudio
 		if (uiState == nullptr)
 			return;
 
-		const Path localFontsDirectory = ImGuiLayerDetail::assetsFontsDirectory(*uiState);
-		std::error_code directoryError;
-		FileSystem::CreateDirectories(localFontsDirectory.Native(), directoryError);
-		if (directoryError)
-			DS_LOG_WARN("Unable to create assets font directory [{}]: {}",
-			            localFontsDirectory.String(),
-			            directoryError.message());
-
-		std::vector<EditorFontOption> scannedFonts;
-		std::set<std::string> seenPaths;
-		std::size_t localFontCount = 0;
-		std::size_t systemFontCount = 0;
-
-		ImGuiLayerDetail::collectFontsFromDirectory(scannedFonts, seenPaths, localFontsDirectory.Native(), "Local", localFontCount);
-		for (const FilePath &directory : Platform::GetSystemFontDirectories())
-			ImGuiLayerDetail::collectFontsFromDirectory(scannedFonts, seenPaths, directory, "System", systemFontCount);
-
-		std::sort(scannedFonts.begin(), scannedFonts.end(), [](const EditorFontOption &left, const EditorFontOption &right) {
-			if (left.source != right.source)
-				return left.source < right.source;
-			return left.label < right.label;
-		});
-
+		const Path assetsFontsDirectory = Path::FromResolved(uiState->paths.assetsDirectory.Native() / "fonts");
+		auto assetFonts = Platform::GetFontsFromDirectory(assetsFontsDirectory, "Assets");
+		auto systemFonts = Platform::GetSystemFonts();
 		uiState->fontOptions.clear();
-		uiState->fontOptions.push_back(ImGuiLayerDetail::defaultFontOption());
-		uiState->fontOptions.insert(uiState->fontOptions.end(), scannedFonts.begin(), scannedFonts.end());
+		{
+			EditorFontOption option;
+			auto defaultFont = Platform::DefaultFontOption();
+			option.label = std::move(defaultFont.label);
+			option.source = std::move(defaultFont.source);
+			option.path = std::move(defaultFont.path);
+			uiState->fontOptions.push_back(std::move(option));
+		}
+		for (const Platform::FontOption &fontOption : assetFonts)
+		{
+			EditorFontOption option;
+			option.label = fontOption.label;
+			option.source = fontOption.source;
+			option.path = fontOption.path;
+			uiState->fontOptions.push_back(std::move(option));
+		}
+		for (const Platform::FontOption &fontOption : systemFonts)
+		{
+			EditorFontOption option;
+			option.label = fontOption.label;
+			option.source = fontOption.source;
+			option.path = fontOption.path;
+			uiState->fontOptions.push_back(std::move(option));
+		}
 
 		std::size_t selectedIndex = 0;
 		const std::string selectedPath = uiState->selectedFontPath;
 		if (!selectedPath.empty())
 		{
-			const std::string normalizedSelectedPath = ImGuiLayerDetail::normalizePathForCompare(selectedPath);
 			for (std::size_t index = 1; index < uiState->fontOptions.size(); ++index)
 			{
-				if (ImGuiLayerDetail::normalizePathForCompare(uiState->fontOptions[index].path) == normalizedSelectedPath)
+				if (Platform::FontPathsEqual(uiState->fontOptions[index].path, selectedPath))
 				{
 					selectedIndex = index;
 					break;
@@ -628,16 +505,16 @@ namespace DefectStudio
 		else
 		{
 			uiState->fontStatusMessage = "Font list refreshed: local="
-				+ std::to_string(localFontCount)
+				+ std::to_string(assetFonts.size())
 				+ ", system="
-				+ std::to_string(systemFontCount)
+				+ std::to_string(systemFonts.size())
 				+ ".";
 		}
 
 		uiState->selectedFontIndex = selectedIndex;
 		DS_LOG_INFO("Font scan complete: local={}, system={}, total={}",
-		            localFontCount,
-		            systemFontCount,
+		            assetFonts.size(),
+		            systemFonts.size(),
 		            uiState->fontOptions.size());
 	}
 
@@ -654,11 +531,10 @@ namespace DefectStudio
 
 		if (!uiState->selectedFontPath.empty())
 		{
-			const std::string normalizedSelectedPath = ImGuiLayerDetail::normalizePathForCompare(uiState->selectedFontPath);
 			uiState->selectedFontIndex = 0;
 			for (std::size_t index = 1; index < uiState->fontOptions.size(); ++index)
 			{
-				if (ImGuiLayerDetail::normalizePathForCompare(uiState->fontOptions[index].path) == normalizedSelectedPath)
+				if (Platform::FontPathsEqual(uiState->fontOptions[index].path, uiState->selectedFontPath))
 				{
 					uiState->selectedFontIndex = index;
 					break;
@@ -778,22 +654,14 @@ namespace DefectStudio
 		if (auto uiState = m_UiState.lock())
 			uiState->appearance = event.appearance;
 
+		m_Config.appearance = event.appearance;
 		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
-		if (auto configManager = m_ConfigManager.lock())
+		if (m_EventBus != nullptr)
 		{
-			configManager->SetAppearanceConfig(event.appearance);
-			std::string saveError;
-			const bool saved = configManager->SaveUserSettings(saveError);
+			m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
 			if (auto uiState = m_UiState.lock())
-			{
-				uiState->appearanceStatusMessage = saved
-					? "Appearance applied and saved."
-					: "Appearance applied, save failed: " + saveError;
-			}
-			if (saved)
-				DS_LOG_INFO("Appearance applied and saved");
-			else
-				DS_LOG_WARN("Appearance applied but save failed: {}", saveError);
+				uiState->appearanceStatusMessage = "Appearance applied; save queued.";
+			DS_LOG_INFO("Appearance applied; config save queued");
 			return;
 		}
 
@@ -805,127 +673,135 @@ namespace DefectStudio
 	void ImGuiLayer::onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event)
 	{
 		auto uiState = m_UiState.lock();
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
+		if (m_EventBus == nullptr)
 		{
 			if (uiState != nullptr)
-				uiState->appearanceStatusMessage = "Theme save failed: ConfigManager unavailable.";
+				uiState->appearanceStatusMessage = "Theme save failed: EventBus unavailable.";
 			return;
 		}
 
+		std::string contents;
 		std::string error;
-		if (configManager->SaveAppearanceTheme(event.path, event.appearance, error))
+		if (!YamlCodecFacade::Default().SerializeAppearanceTheme(event.appearance, contents, error))
 		{
 			if (uiState != nullptr)
-				uiState->appearanceStatusMessage = "Theme saved: " + event.path.String();
-			DS_LOG_INFO("Appearance theme saved: {}", event.path.String());
+				uiState->appearanceStatusMessage = "Theme save failed: " + error;
+			DS_LOG_WARN("Appearance theme serialization failed [{}]: {}", event.path.String(), error);
+			return;
 		}
-		else if (uiState != nullptr)
-		{
-			uiState->appearanceStatusMessage = "Theme save failed: " + error;
-			DS_LOG_WARN("Appearance theme save failed [{}]: {}", event.path.String(), error);
-		}
+
+		m_EventBus->Queue(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Theme, event.path, std::move(contents)});
+		if (uiState != nullptr)
+			uiState->appearanceStatusMessage = "Theme save queued: " + event.path.String();
+		DS_LOG_INFO("Appearance theme persistence queued: {}", event.path.String());
 	}
 
-	void ImGuiLayer::onThemeLoadRequested(const EditorUiEvents::ThemeLoadRequested &event)
+	void ImGuiLayer::onThemeSaved(const EditorUiEvents::ThemeSaved &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->appearanceStatusMessage = "Theme saved: " + event.path.String();
+		DS_LOG_INFO("Appearance theme save confirmed: {}", event.path.String());
+	}
+
+	void ImGuiLayer::onThemeSaveFailed(const EditorUiEvents::ThemeSaveFailed &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->appearanceStatusMessage = "Theme save failed: " + event.error;
+		DS_LOG_WARN("Appearance theme save failed [{}]: {}", event.path.String(), event.error);
+	}
+
+	void ImGuiLayer::onThemeLoaded(const EditorUiEvents::ThemeLoaded &event)
 	{
 		auto uiState = m_UiState.lock();
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
-		{
-			if (uiState != nullptr)
-				uiState->appearanceStatusMessage = "Theme load failed: ConfigManager unavailable.";
-			return;
-		}
-
 		std::string error;
 		AppearanceConfig appearance = uiState != nullptr ? uiState->appearance : m_Config.appearance;
-		if (!configManager->LoadAppearanceTheme(event.path, appearance, error))
+		if (!YamlCodecFacade::Default().DeserializeAppearanceTheme(event.contents, appearance, error))
 		{
 			if (uiState != nullptr)
 				uiState->appearanceStatusMessage = "Theme load failed: " + error;
-			DS_LOG_WARN("Appearance theme load failed [{}]: {}", event.path.String(), error);
+			DS_LOG_WARN("Appearance theme decode failed [{}]: {}", event.path.String(), error);
 			return;
 		}
 
 		m_Config.appearance = appearance;
 		ImGuiLayerDetail::applyAppearanceToImGui(appearance);
-		configManager->SetAppearanceConfig(appearance);
-		std::string saveError;
-		(void)configManager->SaveUserSettings(saveError);
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
 		if (uiState != nullptr)
 		{
 			uiState->appearance = appearance;
 			uiState->appearanceStatusMessage = "Theme loaded: " + event.path.String();
 		}
-		DS_LOG_INFO("Appearance theme loaded: {}", event.path.String());
+		DS_LOG_INFO("Appearance theme loaded from payload: {}", event.path.String());
+	}
+
+	void ImGuiLayer::onThemeLoadFailed(const EditorUiEvents::ThemeLoadFailed &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->appearanceStatusMessage = "Theme load failed: " + event.error;
+		DS_LOG_WARN("Appearance theme load failed [{}]: {}", event.path.String(), event.error);
 	}
 
 	void ImGuiLayer::onLayoutSaveRequested(const EditorUiEvents::LayoutSaveRequested &event)
 	{
 		auto uiState = m_UiState.lock();
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
+		if (m_EventBus == nullptr)
 		{
 			if (uiState != nullptr)
-				uiState->layoutStatusMessage = "Layout save failed: ConfigManager unavailable.";
+				uiState->layoutStatusMessage = "Layout save failed: EventBus unavailable.";
 			return;
 		}
 
 		const Path path = resolveRequestedLayoutPath(event.path);
 		std::size_t size = 0;
 		const char *data = ImGui::SaveIniSettingsToMemory(&size);
-		std::string error;
-		if (configManager->SaveTextFile(path, std::string_view(data, size), error))
+		std::string contents = (data != nullptr && size > 0) ? std::string(data, size) : std::string{};
+		m_EventBus->Queue(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, path, std::move(contents)});
+		if (uiState != nullptr)
+			uiState->layoutStatusMessage = "Layout save queued: " + path.String();
+		DS_LOG_INFO("Layout persistence queued from request: {} bytes={}", path.String(), size);
+	}
+
+	void ImGuiLayer::onLayoutSaved(const EditorUiEvents::LayoutSaved &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->layoutStatusMessage = "Layout saved: " + event.path.String();
+		DS_LOG_INFO("Layout save confirmed: {} bytes={}", event.path.String(), event.bytes);
+	}
+
+	void ImGuiLayer::onLayoutSaveFailed(const EditorUiEvents::LayoutSaveFailed &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->layoutStatusMessage = "Layout save failed: " + event.error;
+		DS_LOG_WARN("Layout save failed [{}]: {}", event.path.String(), event.error);
+	}
+
+	void ImGuiLayer::onLayoutLoaded(const EditorUiEvents::LayoutLoaded &event)
+	{
+		auto uiState = m_UiState.lock();
+		const Path path = resolveRequestedLayoutPath(event.path);
+		if (!event.contents.empty())
 		{
+			ImGui::LoadIniSettingsFromMemory(event.contents.data(), event.contents.size());
 			if (uiState != nullptr)
-				uiState->layoutStatusMessage = "Layout saved: " + path.String();
-			DS_LOG_INFO("Layout saved from request: {} bytes={}", path.String(), size);
-		}
-		else if (uiState != nullptr)
-		{
-			uiState->layoutStatusMessage = "Layout save failed: " + error;
-			DS_LOG_WARN("Layout save request failed [{}]: {}", path.String(), error);
+				uiState->layoutStatusMessage = "Layout loaded: " + path.String();
+			DS_LOG_INFO("Layout loaded from payload: {} bytes={}", path.String(), event.contents.size());
 		}
 	}
 
-	void ImGuiLayer::onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event)
+	void ImGuiLayer::onLayoutLoadFailed(const EditorUiEvents::LayoutLoadFailed &event)
 	{
-		auto uiState = m_UiState.lock();
-		auto configManager = m_ConfigManager.lock();
-		if (configManager == nullptr)
-		{
-			if (uiState != nullptr)
-				uiState->layoutStatusMessage = "Layout load failed: ConfigManager unavailable.";
-			return;
-		}
-
-		std::string text;
-		std::string error;
-		const Path path = resolveRequestedLayoutPath(event.path);
-		if (configManager->LoadTextFile(path, text, error))
-		{
-			ImGui::LoadIniSettingsFromMemory(text.data(), text.size());
-			if (uiState != nullptr)
-				uiState->layoutStatusMessage = "Layout loaded: " + path.String();
-			DS_LOG_INFO("Layout loaded from request: {} bytes={}", path.String(), text.size());
-		}
-		else if (uiState != nullptr)
-		{
-			uiState->layoutStatusMessage = "Layout load failed: " + error;
-			DS_LOG_WARN("Layout load request failed [{}]: {}", path.String(), error);
-		}
+		if (auto uiState = m_UiState.lock())
+			uiState->layoutStatusMessage = "Layout load failed: " + event.error;
+		DS_LOG_WARN("Layout load failed [{}]: {}", event.path.String(), event.error);
 	}
 
 	void ImGuiLayer::onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event)
 	{
 		ImGui::LoadIniSettingsFromMemory("", 0);
 		const Path path = resolveRequestedLayoutPath(event.path);
-		if (auto configManager = m_ConfigManager.lock())
-		{
-			std::string error;
-			(void)configManager->SaveTextFile(path, "", error);
-		}
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, path, {}});
 
 		if (auto uiState = m_UiState.lock())
 			uiState->layoutStatusMessage = "Runtime layout reset.";

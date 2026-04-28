@@ -29,10 +29,19 @@ namespace DefectStudio
 		struct FontListRefreshRequested;
 		struct FontReloadRequested;
 		struct FontScaleChanged;
+		struct PersistRequested;
 		struct LayoutLoadRequested;
+		struct LayoutLoaded;
+		struct LayoutLoadFailed;
 		struct LayoutResetRequested;
+		struct LayoutSaved;
+		struct LayoutSaveFailed;
 		struct LayoutSaveRequested;
 		struct ThemeLoadRequested;
+		struct ThemeLoaded;
+		struct ThemeLoadFailed;
+		struct ThemeSaved;
+		struct ThemeSaveFailed;
 		struct ThemeSaveRequested;
 	}
 
@@ -82,9 +91,15 @@ namespace DefectStudio
 		void onAppearancePreviewRequested(const EditorUiEvents::AppearancePreviewRequested &event);
 		void onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event);
 		void onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event);
-		void onThemeLoadRequested(const EditorUiEvents::ThemeLoadRequested &event);
+		void onThemeSaved(const EditorUiEvents::ThemeSaved &event);
+		void onThemeSaveFailed(const EditorUiEvents::ThemeSaveFailed &event);
+		void onThemeLoaded(const EditorUiEvents::ThemeLoaded &event);
+		void onThemeLoadFailed(const EditorUiEvents::ThemeLoadFailed &event);
 		void onLayoutSaveRequested(const EditorUiEvents::LayoutSaveRequested &event);
-		void onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event);
+		void onLayoutSaved(const EditorUiEvents::LayoutSaved &event);
+		void onLayoutSaveFailed(const EditorUiEvents::LayoutSaveFailed &event);
+		void onLayoutLoaded(const EditorUiEvents::LayoutLoaded &event);
+		void onLayoutLoadFailed(const EditorUiEvents::LayoutLoadFailed &event);
 		void onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event);
 		void onApplicationConfigApplied(const AppEvents::Config::Applied &event);
 

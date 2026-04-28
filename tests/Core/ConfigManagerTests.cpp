@@ -5,6 +5,8 @@
 
 #include "App/ConfigManager.hpp"
 #include "App/ConfigProfileStore.hpp"
+#include "App/YamlCodecFacade.hpp"
+#include "IO/TextFileIO.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Time.hpp"
 
@@ -215,7 +217,9 @@ TEST(ConfigManagerTests, SaveUserSettingsWritesNestedYamlAndRoundTrips)
 	config.window.maximized = true;
 	config.appearance.clearColor = {0.05f, 0.15f, 0.25f, 1.00f};
 	manager.SetConfig(config);
-	ASSERT_TRUE(manager.SaveUserSettings(error)) << error;
+	std::string userText;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeUserSettings(config, userText, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(DefectStudio::ConfigManager::GetUserSettingsPath(tempDirectory), userText, error)) << error;
 
 	const std::string text = ReadFile(DefectStudio::ConfigManager::GetUserSettingsPath(tempDirectory));
 	EXPECT_NE(text.find("ui:"), std::string::npos);
@@ -254,12 +258,16 @@ TEST(ConfigManagerTests, SaveDefaultAndUserSettingsStaySeparate)
 	DefectStudio::ApplicationConfig config = manager.GetConfig();
 	config.window.title = "Default Title";
 	manager.SetConfig(config);
-	ASSERT_TRUE(manager.SaveDefaultConfig(error)) << error;
+	std::string defaultSerialized;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeDefaultConfig(config, defaultSerialized, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(DefectStudio::ConfigManager::GetDefaultConfigPath(tempDirectory), defaultSerialized, error)) << error;
 
 	config.window.title = "User Title";
 	config.ui.fontScale = 1.42f;
 	manager.SetConfig(config);
-	ASSERT_TRUE(manager.SaveUserSettings(error)) << error;
+	std::string userSerialized;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeUserSettings(config, userSerialized, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(DefectStudio::ConfigManager::GetUserSettingsPath(tempDirectory), userSerialized, error)) << error;
 
 	const std::string defaultText = ReadFile(DefectStudio::ConfigManager::GetDefaultConfigPath(tempDirectory));
 	const std::string userText = ReadFile(DefectStudio::ConfigManager::GetUserSettingsPath(tempDirectory));
@@ -285,7 +293,9 @@ TEST(ConfigManagerTests, LocalFontPathIsSavedPortableAndResolved)
 	DefectStudio::ApplicationConfig config = manager.GetConfig();
 	config.ui.fontPath = fontPath.String();
 	manager.SetConfig(config);
-	ASSERT_TRUE(manager.SaveUserSettings(error)) << error;
+	std::string serializedUserText;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeUserSettings(config, serializedUserText, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(DefectStudio::ConfigManager::GetUserSettingsPath(configDirectory), serializedUserText, error)) << error;
 
 	const std::string userText = ReadFile(DefectStudio::ConfigManager::GetUserSettingsPath(configDirectory));
 	EXPECT_NE(userText.find("app/assets/fonts/Local.ttf"), std::string::npos);
@@ -309,18 +319,22 @@ TEST(ConfigManagerTests, ThemeAndTextFilesRoundTrip)
 	DefectStudio::AppearanceConfig appearance = manager.GetConfig().appearance;
 	appearance.accentColor = {0.25f, 0.50f, 0.75f, 1.0f};
 	const Path themePath = manager.GetPaths().themesDirectory / Path("roundtrip.yaml");
-	ASSERT_TRUE(manager.SaveAppearanceTheme(themePath, appearance, error)) << error;
+	std::string serializedTheme;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeAppearanceTheme(appearance, serializedTheme, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(themePath, serializedTheme, error)) << error;
 
 	DefectStudio::AppearanceConfig loaded;
-	ASSERT_TRUE(manager.LoadAppearanceTheme(themePath, loaded, error)) << error;
+	std::string loadedTheme;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Load(themePath, loadedTheme, error)) << error;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().DeserializeAppearanceTheme(loadedTheme, loaded, error)) << error;
 	EXPECT_FLOAT_EQ(loaded.accentColor[0], 0.25f);
 	EXPECT_FLOAT_EQ(loaded.accentColor[1], 0.50f);
 	EXPECT_FLOAT_EQ(loaded.accentColor[2], 0.75f);
 
 	const Path layoutPath = manager.GetPaths().layoutsDirectory / Path("layout.ini");
-	ASSERT_TRUE(manager.SaveTextFile(layoutPath, "[Window][Settings]\n", error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(layoutPath, "[Window][Settings]\n", error)) << error;
 	std::string text;
-	ASSERT_TRUE(manager.LoadTextFile(layoutPath, text, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Load(layoutPath, text, error)) << error;
 	EXPECT_EQ(text, "[Window][Settings]\n");
 
 	RemoveTempDirectory(tempDirectory);
@@ -336,7 +350,9 @@ TEST(ConfigManagerTests, ProfileStoreLoadsAndExportsSelectedPath)
 	DefectStudio::ApplicationConfig config = manager->GetConfig();
 	config.window.title = "Manual Profile";
 	const Path manualPath = manager->GetPaths().profilesDirectory / Path("manual profile.yaml");
-	ASSERT_TRUE(manager->SaveConfigProfile(manualPath, config, error)) << error;
+	std::string serializedProfile;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeConfigProfile(config, serializedProfile, error)) << error;
+	ASSERT_TRUE(DefectStudio::TextFileIO::Save(manualPath, serializedProfile, error)) << error;
 
 	DefectStudio::ConfigProfileStore store(DefectStudio::CreateWeakRef(manager));
 	const auto &entries = store.Refresh();

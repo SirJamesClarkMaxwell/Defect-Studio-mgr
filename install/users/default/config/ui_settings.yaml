@@ -20,7 +20,7 @@ appearance:
     raised_surface: [0.16078432, 0.14527336, 0.13493273, 1]
     border: [0.32156864, 0.32156864, 0.32156864, 1]
     collapsible: [0.1882353, 0.1882353, 0.1882353, 1]
-    text: [0.949, 0.906, 0.847, 1]
+    text: [0.89411765, 0.8762147, 0.8450288, 1]
     muted_text: [0.663, 0.604, 0.545, 1]
     accent: [1, 0.49019608, 0, 1]
   rounding:
@@ -41,7 +41,7 @@ appearance:
       x: 7.8
       y: 4
   state_rules:
-    neutral_hover_lighten: 0.04
+    neutral_hover_lighten: 0.044
     neutral_active_lighten: 0.042
     accent_hover_lighten: 0.052
     accent_hover_saturation: -0.154

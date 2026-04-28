@@ -3,7 +3,7 @@
 #include <array>
 #include <string>
 
-#include "App/ConfigProfileStore.hpp"
+#include "App/Managers/ConfigProfileStore.hpp"
 #include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio

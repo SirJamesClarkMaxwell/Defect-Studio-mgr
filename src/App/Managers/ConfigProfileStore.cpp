@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cctype>
 
-#include "App/ConfigManager.hpp"
-#include "App/ConfigProfileStore.hpp"
+#include "App/Managers/ConfigManager.hpp"
+#include "App/Managers/ConfigProfileStore.hpp"
+#include "App/Serialization/YamlCodecFacade.hpp"
+#include "IO/TextFileIO.hpp"
 
 namespace DefectStudio
 {
@@ -60,7 +62,11 @@ namespace DefectStudio
 		if (manager == nullptr)
 			return false;
 
-		if (!manager->SaveConfigProfile(ProfilePath(name), config, error))
+		std::string text;
+		if (!YamlCodecFacade::Default().SerializeConfigProfile(config, text, error))
+			return false;
+
+		if (!TextFileIO::Save(ProfilePath(name), text, error))
 			return false;
 
 		(void)Refresh();
@@ -73,7 +79,18 @@ namespace DefectStudio
 		if (manager == nullptr)
 			return false;
 
-		return manager->LoadConfigProfile(path, config, error);
+		std::string text;
+		if (!TextFileIO::Load(path, text, error))
+			return false;
+
+		config = ConfigManager::CreateDefaultConfig(manager->GetConfigDirectory());
+		if (!YamlCodecFacade::Default().DeserializeConfigProfile(text, config, error))
+			return false;
+
+		config.directory = manager->GetConfigDirectory();
+		config.paths = ConfigManager::ResolvePortablePaths(manager->GetConfigDirectory());
+		config.layout.imGuiIniPath = ConfigManager::GetLayoutPath(manager->GetConfigDirectory()).String();
+		return true;
 	}
 
 	bool ConfigProfileStore::Export(const Path &path, std::string &error)
@@ -83,11 +100,11 @@ namespace DefectStudio
 			return false;
 
 		std::string text;
-		if (!manager->LoadTextFile(path, text, error))
+		if (!TextFileIO::Load(path, text, error))
 			return false;
 
 		const Path destination = manager->GetPaths().exportsDirectory / path.filename();
-		return manager->SaveTextFile(destination, text, error);
+		return TextFileIO::Save(destination, text, error);
 	}
 
 	Ref<ConfigManager> ConfigProfileStore::requireManager(std::string &error) const

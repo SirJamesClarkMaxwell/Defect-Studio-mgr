@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "App/ApplicationState.hpp"
@@ -28,14 +27,6 @@ namespace DefectStudio
 		void SetConfig(const ApplicationConfig &config);
 		void SetUiConfig(const UIConfig &config);
 		void SetAppearanceConfig(const AppearanceConfig &config);
-		[[nodiscard]] bool SaveDefaultConfig(std::string &error) const;
-		[[nodiscard]] bool SaveUserSettings(std::string &error) const;
-		[[nodiscard]] bool SaveAppearanceTheme(const Path &path, const AppearanceConfig &appearance, std::string &error) const;
-		[[nodiscard]] bool LoadAppearanceTheme(const Path &path, AppearanceConfig &appearance, std::string &error) const;
-		[[nodiscard]] bool SaveConfigProfile(const Path &path, const ApplicationConfig &config, std::string &error) const;
-		[[nodiscard]] bool LoadConfigProfile(const Path &path, ApplicationConfig &config, std::string &error) const;
-		[[nodiscard]] bool SaveTextFile(const Path &path, std::string_view text, std::string &error) const;
-		[[nodiscard]] bool LoadTextFile(const Path &path, std::string &text, std::string &error) const;
 		[[nodiscard]] std::vector<Path> ListYamlFiles(const Path &directory) const;
 		[[nodiscard]] std::vector<Path> ListIniFiles(const Path &directory) const;
 

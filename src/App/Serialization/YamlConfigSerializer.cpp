@@ -1,4 +1,6 @@
-﻿#include "Core/dspch.hpp"
+#include "Core/dspch.hpp"
+
+#include "App/Serialization/YamlConfigSerializer.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,307 +17,12 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "App/ConfigManager.hpp"
-#include "Core/Utils/Path.hpp"
+#include "App/Managers/ConfigManager.hpp"
+#include "Core/Utils/Logger.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
 
 namespace DefectStudio
 {
-	namespace ConfigSchema
-	{
-		enum class RootKey
-		{
-			SchemaVersion,
-			TraceEvents,
-		};
-
-		enum class SectionKey
-		{
-			Appearance,
-			EventQueue,
-			Jobs,
-			Log,
-			UI,
-			Window,
-		};
-
-		enum class AppearanceKey
-		{
-			Colors,
-			ClearColor,
-			Rounding,
-			Spacing,
-			StateRules,
-		};
-
-		enum class AppearanceColorKey
-		{
-			Accent,
-			Background,
-			Border,
-			Collapsible,
-			MutedText,
-			RaisedSurface,
-			Surface,
-			Text,
-		};
-
-		enum class AppearanceRoundingKey
-		{
-			Frame,
-			Grab,
-			Popup,
-			Scrollbar,
-			Tab,
-			Window,
-		};
-
-		enum class AppearanceSpacingKey
-		{
-			FramePadding,
-			ItemSpacing,
-			WindowPadding,
-			X,
-			Y,
-		};
-
-		enum class AppearanceStateRuleKey
-		{
-			AccentActiveDarken,
-			AccentActiveSaturation,
-			AccentHoverLighten,
-			AccentHoverSaturation,
-			DisabledAlpha,
-			DisabledBackgroundMix,
-			NeutralActiveLighten,
-			NeutralHoverLighten,
-			SelectedActiveAlpha,
-			SelectedAlpha,
-			SelectedHoverAlpha,
-		};
-
-		enum class EventQueueKey
-		{
-			GrowthStep,
-			InitialCapacity,
-		};
-
-		enum class JobsKey
-		{
-			DefaultWorkerThreads,
-			ReserveUrgentWorker,
-		};
-
-		enum class LogKey
-		{
-			FilePath,
-			Level,
-			ToFile,
-		};
-
-		enum class UiKey
-		{
-			Font,
-			FontPath,
-			SettingsAutoSaveOnPreview,
-			SettingsPreviewEnabled,
-			FontScale,
-			FontScaleMax,
-			FontScaleMin,
-			FontScaleStep,
-			FontScaleStepMax,
-			FontScaleStepMin,
-			FontScaleStepSliderMax,
-		};
-
-		enum class WindowKey
-		{
-			Height,
-			Maximized,
-			Title,
-			Width,
-			X,
-			Y,
-		};
-
-		enum class LegacyKey
-		{
-			AppearanceClearColor,
-			EventQueueGrowthStep,
-			EventQueueInitialCapacity,
-			JobsDefaultWorkerThreads,
-			JobsReserveUrgentWorker,
-			LogFilePath,
-			LogLevel,
-			LogToFile,
-			UiFontPath,
-			UiSettingsAutoSaveOnPreview,
-			UiSettingsPreviewEnabled,
-			UiFontScale,
-			UiFontScaleMax,
-			UiFontScaleMin,
-			UiFontScaleStep,
-			UiFontScaleStepMax,
-			UiFontScaleStepMin,
-			UiFontScaleStepSliderMax,
-			WindowHeight,
-			WindowMaximized,
-			WindowTitle,
-			WindowWidth,
-			WindowX,
-			WindowY,
-		};
-
-		inline const std::unordered_map<RootKey, const char *> RootKeyNames = {
-			{RootKey::SchemaVersion, "schema_version"},
-			{RootKey::TraceEvents, "trace_events"},
-		};
-
-		inline const std::unordered_map<SectionKey, const char *> SectionKeyNames = {
-			{SectionKey::Appearance, "appearance"},
-			{SectionKey::EventQueue, "event_queue"},
-			{SectionKey::Jobs, "jobs"},
-			{SectionKey::Log, "log"},
-			{SectionKey::UI, "ui"},
-			{SectionKey::Window, "window"},
-		};
-
-		inline const std::unordered_map<AppearanceKey, const char *> AppearanceKeyNames = {
-			{AppearanceKey::Colors, "colors"},
-			{AppearanceKey::ClearColor, "clear_color"},
-			{AppearanceKey::Rounding, "rounding"},
-			{AppearanceKey::Spacing, "spacing"},
-			{AppearanceKey::StateRules, "state_rules"},
-		};
-
-		inline const std::unordered_map<AppearanceColorKey, const char *> AppearanceColorKeyNames = {
-			{AppearanceColorKey::Accent, "accent"},
-			{AppearanceColorKey::Background, "background"},
-			{AppearanceColorKey::Border, "border"},
-			{AppearanceColorKey::Collapsible, "collapsible"},
-			{AppearanceColorKey::MutedText, "muted_text"},
-			{AppearanceColorKey::RaisedSurface, "raised_surface"},
-			{AppearanceColorKey::Surface, "surface"},
-			{AppearanceColorKey::Text, "text"},
-		};
-
-		inline const std::unordered_map<AppearanceRoundingKey, const char *> AppearanceRoundingKeyNames = {
-			{AppearanceRoundingKey::Frame, "frame"},
-			{AppearanceRoundingKey::Grab, "grab"},
-			{AppearanceRoundingKey::Popup, "popup"},
-			{AppearanceRoundingKey::Scrollbar, "scrollbar"},
-			{AppearanceRoundingKey::Tab, "tab"},
-			{AppearanceRoundingKey::Window, "window"},
-		};
-
-		inline const std::unordered_map<AppearanceSpacingKey, const char *> AppearanceSpacingKeyNames = {
-			{AppearanceSpacingKey::FramePadding, "frame_padding"},
-			{AppearanceSpacingKey::ItemSpacing, "item_spacing"},
-			{AppearanceSpacingKey::WindowPadding, "window_padding"},
-			{AppearanceSpacingKey::X, "x"},
-			{AppearanceSpacingKey::Y, "y"},
-		};
-
-		inline const std::unordered_map<AppearanceStateRuleKey, const char *> AppearanceStateRuleKeyNames = {
-			{AppearanceStateRuleKey::AccentActiveDarken, "accent_active_darken"},
-			{AppearanceStateRuleKey::AccentActiveSaturation, "accent_active_saturation"},
-			{AppearanceStateRuleKey::AccentHoverLighten, "accent_hover_lighten"},
-			{AppearanceStateRuleKey::AccentHoverSaturation, "accent_hover_saturation"},
-			{AppearanceStateRuleKey::DisabledAlpha, "disabled_alpha"},
-			{AppearanceStateRuleKey::DisabledBackgroundMix, "disabled_background_mix"},
-			{AppearanceStateRuleKey::NeutralActiveLighten, "neutral_active_lighten"},
-			{AppearanceStateRuleKey::NeutralHoverLighten, "neutral_hover_lighten"},
-			{AppearanceStateRuleKey::SelectedActiveAlpha, "selected_active_alpha"},
-			{AppearanceStateRuleKey::SelectedAlpha, "selected_alpha"},
-			{AppearanceStateRuleKey::SelectedHoverAlpha, "selected_hover_alpha"},
-		};
-
-		inline const std::unordered_map<EventQueueKey, const char *> EventQueueKeyNames = {
-			{EventQueueKey::GrowthStep, "growth_step"},
-			{EventQueueKey::InitialCapacity, "initial_capacity"},
-		};
-
-		inline const std::unordered_map<JobsKey, const char *> JobsKeyNames = {
-			{JobsKey::DefaultWorkerThreads, "default_worker_threads"},
-			{JobsKey::ReserveUrgentWorker, "reserve_urgent_worker"},
-		};
-
-		inline const std::unordered_map<LogKey, const char *> LogKeyNames = {
-			{LogKey::FilePath, "file_path"},
-			{LogKey::Level, "level"},
-			{LogKey::ToFile, "to_file"},
-		};
-
-		inline const std::unordered_map<UiKey, const char *> UiKeyNames = {
-			{UiKey::Font, "font"},
-			{UiKey::FontPath, "path"},
-			{UiKey::SettingsAutoSaveOnPreview, "settings_auto_save_on_preview"},
-			{UiKey::SettingsPreviewEnabled, "settings_preview_enabled"},
-			{UiKey::FontScale, "font_scale"},
-			{UiKey::FontScaleMax, "max"},
-			{UiKey::FontScaleMin, "min"},
-			{UiKey::FontScaleStep, "font_scale_step"},
-			{UiKey::FontScaleStepMax, "max"},
-			{UiKey::FontScaleStepMin, "min"},
-			{UiKey::FontScaleStepSliderMax, "slider_max"},
-		};
-
-		inline const std::unordered_map<WindowKey, const char *> WindowKeyNames = {
-			{WindowKey::Height, "height"},
-			{WindowKey::Maximized, "maximized"},
-			{WindowKey::Title, "title"},
-			{WindowKey::Width, "width"},
-			{WindowKey::X, "x"},
-			{WindowKey::Y, "y"},
-		};
-
-		inline const std::unordered_map<LegacyKey, const char *> LegacyKeyNames = {
-			{LegacyKey::AppearanceClearColor, "clear_color"},
-			{LegacyKey::EventQueueGrowthStep, "event_queue.growth_step"},
-			{LegacyKey::EventQueueInitialCapacity, "event_queue.initial_capacity"},
-			{LegacyKey::JobsDefaultWorkerThreads, "jobs.default_worker_threads"},
-			{LegacyKey::JobsReserveUrgentWorker, "jobs.reserve_urgent_worker"},
-			{LegacyKey::LogFilePath, "log.file_path"},
-			{LegacyKey::LogLevel, "log.level"},
-			{LegacyKey::LogToFile, "log.to_file"},
-			{LegacyKey::UiFontPath, "font_path"},
-			{LegacyKey::UiSettingsAutoSaveOnPreview, "ui.settings_auto_save_on_preview"},
-			{LegacyKey::UiSettingsPreviewEnabled, "ui.settings_preview_enabled"},
-			{LegacyKey::UiFontScale, "font_scale"},
-			{LegacyKey::UiFontScaleMax, "ui.font_scale.max"},
-			{LegacyKey::UiFontScaleMin, "ui.font_scale.min"},
-			{LegacyKey::UiFontScaleStep, "font_scale_step"},
-			{LegacyKey::UiFontScaleStepMax, "ui.font_scale_step.max"},
-			{LegacyKey::UiFontScaleStepMin, "ui.font_scale_step.min"},
-			{LegacyKey::UiFontScaleStepSliderMax, "ui.font_scale_step.slider_max"},
-			{LegacyKey::WindowHeight, "window.height"},
-			{LegacyKey::WindowMaximized, "window.maximized"},
-			{LegacyKey::WindowTitle, "window.title"},
-			{LegacyKey::WindowWidth, "window.width"},
-			{LegacyKey::WindowX, "window.x"},
-			{LegacyKey::WindowY, "window.y"},
-		};
-
-		template <typename TEnum>
-		const char *NameFromMap(const std::unordered_map<TEnum, const char *> &map, TEnum key)
-		{
-			return map.at(key);
-		}
-
-		inline const char *Name(RootKey key) { return NameFromMap(RootKeyNames, key); }
-		inline const char *Name(SectionKey key) { return NameFromMap(SectionKeyNames, key); }
-		inline const char *Name(AppearanceKey key) { return NameFromMap(AppearanceKeyNames, key); }
-		inline const char *Name(AppearanceColorKey key) { return NameFromMap(AppearanceColorKeyNames, key); }
-		inline const char *Name(AppearanceRoundingKey key) { return NameFromMap(AppearanceRoundingKeyNames, key); }
-		inline const char *Name(AppearanceSpacingKey key) { return NameFromMap(AppearanceSpacingKeyNames, key); }
-		inline const char *Name(AppearanceStateRuleKey key) { return NameFromMap(AppearanceStateRuleKeyNames, key); }
-		inline const char *Name(EventQueueKey key) { return NameFromMap(EventQueueKeyNames, key); }
-		inline const char *Name(JobsKey key) { return NameFromMap(JobsKeyNames, key); }
-		inline const char *Name(LogKey key) { return NameFromMap(LogKeyNames, key); }
-		inline const char *Name(UiKey key) { return NameFromMap(UiKeyNames, key); }
-		inline const char *Name(WindowKey key) { return NameFromMap(WindowKeyNames, key); }
-		inline const char *Name(LegacyKey key) { return NameFromMap(LegacyKeyNames, key); }
-	}
 
 	namespace ConfigYaml
 	{
@@ -1290,426 +997,394 @@ namespace DefectStudio
 		}
 	}
 
-	namespace ConfigPaths
+
+	namespace ConfigYaml
 	{
-		Path NormalizeConfigDirectory(const Path &configDirectory)
+		void ApplyDefaultYaml(const YAML::Node &root, ApplicationConfig &config);
+		void ApplyUserYaml(const YAML::Node &root, ApplicationConfig &config);
+		void ApplyAppearanceYaml(const YAML::Node &root, AppearanceConfig &appearance);
+	}
+
+	namespace
+	{
+		constexpr const char *SchemaVersionKey = "schema_version";
+		constexpr const char *TraceEventsKey = "trace_events";
+		constexpr const char *AppearanceSection = "appearance";
+		constexpr const char *EventQueueSection = "event_queue";
+		constexpr const char *JobsSection = "jobs";
+		constexpr const char *LogSection = "log";
+		constexpr const char *UiSection = "ui";
+		constexpr const char *WindowSection = "window";
+
+		std::filesystem::path normalizePathForConfig(const std::filesystem::path &path)
 		{
-			if (!configDirectory.Empty())
-				return Path::FromResolved(configDirectory.Native());
-
-			return Path::FromResolved(FileSystem::CurrentPath() / "install" / "app" / "config");
-		}
-
-		bool IsPortableAppConfigDirectory(const Path &configDirectory)
-		{
-			const std::filesystem::path path = configDirectory.Native().lexically_normal();
-			return path.filename() == "config"
-				&& path.parent_path().filename() == "app"
-				&& path.parent_path().parent_path().filename() == "install";
-		}
-
-		ApplicationPaths Build(const Path &configDirectory)
-		{
-			ApplicationPaths paths;
-			paths.appConfigDirectory = NormalizeConfigDirectory(configDirectory);
-
-			if (IsPortableAppConfigDirectory(paths.appConfigDirectory))
-			{
-				paths.installRoot = Path::FromResolved(paths.appConfigDirectory.Native().parent_path().parent_path());
-				const Path appRoot = Path::FromResolved(paths.installRoot.Native() / "app");
-				const Path userRoot = Path::FromResolved(paths.installRoot.Native() / "users" / "default");
-				paths.userConfigDirectory = Path::FromResolved(userRoot.Native() / "config");
-				paths.profilesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "profiles");
-				paths.themesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "themes");
-				paths.layoutsDirectory = Path::FromResolved(userRoot.Native() / "layouts");
-				paths.exportsDirectory = Path::FromResolved(userRoot.Native() / "exports");
-				paths.assetsDirectory = Path::FromResolved(appRoot.Native() / "assets");
-				paths.fontsDirectory = Path::FromResolved(paths.assetsDirectory.Native() / "fonts");
-				return paths;
-			}
-
-			paths.installRoot = Path::FromResolved(paths.appConfigDirectory.Native().parent_path());
-			paths.userConfigDirectory = paths.appConfigDirectory;
-			paths.profilesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "profiles");
-			paths.themesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "themes");
-			paths.layoutsDirectory = paths.userConfigDirectory;
-			paths.exportsDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "exports");
-			paths.assetsDirectory = Path::FromResolved(paths.installRoot.Native() / "assets");
-			paths.fontsDirectory = Path::FromResolved(paths.assetsDirectory.Native() / "fonts");
-			return paths;
-		}
-
-		bool EnsureDirectory(const Path &directory, std::string &error)
-		{
-			std::error_code directoryError;
-			FileSystem::CreateDirectories(directory.Native(), directoryError);
-			if (!directoryError)
-				return true;
-
-			error = directoryError.message();
-			return false;
-		}
-
-		bool EnsurePortableDirectories(const ApplicationPaths &paths, std::string &error)
-		{
-			return EnsureDirectory(paths.appConfigDirectory, error)
-				&& EnsureDirectory(paths.userConfigDirectory, error)
-				&& EnsureDirectory(paths.profilesDirectory, error)
-				&& EnsureDirectory(paths.themesDirectory, error)
-				&& EnsureDirectory(paths.layoutsDirectory, error)
-				&& EnsureDirectory(paths.exportsDirectory, error)
-				&& EnsureDirectory(paths.assetsDirectory, error)
-				&& EnsureDirectory(paths.fontsDirectory, error);
-		}
-
-		std::vector<Path> ListFilesByExtension(const Path &directory, std::string_view extension)
-		{
-			std::vector<Path> result;
 			std::error_code error;
-			if (!std::filesystem::exists(directory.Native(), error) || error)
-				return result;
-
-			for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
+			std::filesystem::path normalized = std::filesystem::weakly_canonical(path, error);
+			if (error)
 			{
-				if (error)
-					break;
-				if (!entry.is_regular_file(error) || error)
-				{
-					error.clear();
-					continue;
-				}
+				error.clear();
+				normalized = std::filesystem::absolute(path, error);
+			}
+			if (error)
+				normalized = path;
 
-				std::string fileExtension = entry.path().extension().string();
-				std::transform(fileExtension.begin(), fileExtension.end(), fileExtension.begin(), [](unsigned char character) {
-					return static_cast<char>(std::tolower(character));
-				});
-				if (fileExtension == extension)
-					result.push_back(Path::FromResolved(entry.path()));
+			return normalized.lexically_normal();
+		}
+
+		bool isPathInsideBase(const std::filesystem::path &relativePath)
+		{
+			if (relativePath.empty() || relativePath.is_absolute())
+				return false;
+
+			for (const auto &part : relativePath)
+			{
+				if (part == "..")
+					return false;
+			}
+			return true;
+		}
+
+		std::string toPortablePathValue(const ApplicationConfig &config, std::string_view value)
+		{
+			if (value.empty())
+				return {};
+
+			const std::filesystem::path rawPath{std::string(value)};
+			if (!rawPath.is_absolute() || config.paths.installRoot.Empty())
+				return rawPath.generic_string();
+
+			const std::filesystem::path absolutePath = normalizePathForConfig(rawPath);
+			const std::filesystem::path installRoot = normalizePathForConfig(config.paths.installRoot.Native());
+
+			std::error_code error;
+			const std::filesystem::path relativePath = std::filesystem::relative(absolutePath, installRoot, error);
+			if (!error && isPathInsideBase(relativePath))
+				return relativePath.generic_string();
+
+			return absolutePath.string();
+		}
+
+		void emitColor(YAML::Emitter &emitter, const std::array<float, 4> &color)
+		{
+			emitter << YAML::Flow << YAML::BeginSeq;
+			for (float component : color)
+				emitter << component;
+			emitter << YAML::EndSeq << YAML::Block;
+		}
+
+		void emitVector2(YAML::Emitter &emitter, float x, float y)
+		{
+			emitter << YAML::BeginMap;
+			emitter << YAML::Key << "x" << YAML::Value << x;
+			emitter << YAML::Key << "y" << YAML::Value << y;
+			emitter << YAML::EndMap;
+		}
+
+		void emitAppearance(YAML::Emitter &out, const AppearanceConfig &appearance)
+		{
+			out << YAML::Key << AppearanceSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "clear_color" << YAML::Value;
+			emitColor(out, appearance.clearColor);
+
+			out << YAML::Key << "colors" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "background" << YAML::Value;
+			emitColor(out, appearance.backgroundColor);
+			out << YAML::Key << "surface" << YAML::Value;
+			emitColor(out, appearance.surfaceColor);
+			out << YAML::Key << "raised_surface" << YAML::Value;
+			emitColor(out, appearance.raisedSurfaceColor);
+			out << YAML::Key << "border" << YAML::Value;
+			emitColor(out, appearance.borderColor);
+			out << YAML::Key << "collapsible" << YAML::Value;
+			emitColor(out, appearance.collapsibleColor);
+			out << YAML::Key << "text" << YAML::Value;
+			emitColor(out, appearance.textColor);
+			out << YAML::Key << "muted_text" << YAML::Value;
+			emitColor(out, appearance.mutedTextColor);
+			out << YAML::Key << "accent" << YAML::Value;
+			emitColor(out, appearance.accentColor);
+			out << YAML::EndMap;
+
+			out << YAML::Key << "rounding" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "window" << YAML::Value << appearance.windowRounding;
+			out << YAML::Key << "frame" << YAML::Value << appearance.frameRounding;
+			out << YAML::Key << "grab" << YAML::Value << appearance.grabRounding;
+			out << YAML::Key << "popup" << YAML::Value << appearance.popupRounding;
+			out << YAML::Key << "scrollbar" << YAML::Value << appearance.scrollbarRounding;
+			out << YAML::Key << "tab" << YAML::Value << appearance.tabRounding;
+			out << YAML::EndMap;
+
+			out << YAML::Key << "spacing" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "window_padding" << YAML::Value;
+			emitVector2(out, appearance.windowPaddingX, appearance.windowPaddingY);
+			out << YAML::Key << "frame_padding" << YAML::Value;
+			emitVector2(out, appearance.framePaddingX, appearance.framePaddingY);
+			out << YAML::Key << "item_spacing" << YAML::Value;
+			emitVector2(out, appearance.itemSpacingX, appearance.itemSpacingY);
+			out << YAML::EndMap;
+
+			const AppearanceStateRules &rules = appearance.stateRules;
+			out << YAML::Key << "state_rules" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "neutral_hover_lighten" << YAML::Value << rules.neutralHoverLighten;
+			out << YAML::Key << "neutral_active_lighten" << YAML::Value << rules.neutralActiveLighten;
+			out << YAML::Key << "accent_hover_lighten" << YAML::Value << rules.accentHoverLighten;
+			out << YAML::Key << "accent_hover_saturation" << YAML::Value << rules.accentHoverSaturation;
+			out << YAML::Key << "accent_active_darken" << YAML::Value << rules.accentActiveDarken;
+			out << YAML::Key << "accent_active_saturation" << YAML::Value << rules.accentActiveSaturation;
+			out << YAML::Key << "selected_alpha" << YAML::Value << rules.selectedAlpha;
+			out << YAML::Key << "selected_hover_alpha" << YAML::Value << rules.selectedHoverAlpha;
+			out << YAML::Key << "selected_active_alpha" << YAML::Value << rules.selectedActiveAlpha;
+			out << YAML::Key << "disabled_alpha" << YAML::Value << rules.disabledAlpha;
+			out << YAML::Key << "disabled_background_mix" << YAML::Value << rules.disabledBackgroundMix;
+			out << YAML::EndMap;
+			out << YAML::EndMap;
+		}
+
+		bool emitterToString(const YAML::Emitter &emitter, std::string &text, std::string &error)
+		{
+			if (!emitter.good())
+			{
+				error = "Unable to emit YAML config";
+				return false;
 			}
 
-			std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) {
-				return left.String() < right.String();
-			});
-			return result;
+			text = emitter.c_str();
+			text.push_back('\n');
+			return true;
 		}
+
+		bool loadYamlText(std::string_view text, YAML::Node &root, std::string &error)
+		{
+			try
+			{
+				root = YAML::Load(std::string(text));
+				if (!root || root.IsNull())
+					root = YAML::Node(YAML::NodeType::Map);
+				if (!root.IsMap())
+				{
+					error = "YAML config root must be a mapping";
+					return false;
+				}
+				return true;
+			}
+			catch (const YAML::Exception &exception)
+			{
+				error = exception.what();
+				return false;
+			}
+		}
+
+		void emitDefaultConfig(YAML::Emitter &out, const ApplicationConfig &config)
+		{
+			out << YAML::BeginMap;
+			out << YAML::Key << SchemaVersionKey << YAML::Value << ConfigManager::SchemaVersion;
+			out << YAML::Key << LogSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "level" << YAML::Value << ToString(config.log.level);
+			out << YAML::Key << "to_file" << YAML::Value << config.log.toFile;
+			out << YAML::Key << "file_path" << YAML::Value << config.log.filePath.String();
+			out << YAML::EndMap;
+			out << YAML::Key << TraceEventsKey << YAML::Value << config.log.traceEvents;
+
+			out << YAML::Key << WindowSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "x" << YAML::Value << config.window.x;
+			out << YAML::Key << "y" << YAML::Value << config.window.y;
+			out << YAML::Key << "width" << YAML::Value << config.window.width;
+			out << YAML::Key << "height" << YAML::Value << config.window.height;
+			out << YAML::Key << "maximized" << YAML::Value << config.window.maximized;
+			out << YAML::Key << "title" << YAML::Value << config.window.title;
+			out << YAML::EndMap;
+
+			out << YAML::Key << UiSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "font_scale" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "min" << YAML::Value << config.ui.fontScaleMin;
+			out << YAML::Key << "max" << YAML::Value << config.ui.fontScaleMax;
+			out << YAML::EndMap;
+			out << YAML::Key << "font_scale_step" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "min" << YAML::Value << config.ui.fontScaleStepMin;
+			out << YAML::Key << "max" << YAML::Value << config.ui.fontScaleStepMax;
+			out << YAML::Key << "slider_max" << YAML::Value << config.ui.fontScaleStepSliderMax;
+			out << YAML::EndMap;
+			out << YAML::Key << "settings_preview_enabled" << YAML::Value << config.ui.settingsPreviewEnabled;
+			out << YAML::Key << "settings_auto_save_on_preview" << YAML::Value << config.ui.settingsAutoSaveOnPreview;
+			out << YAML::EndMap;
+
+			emitAppearance(out, config.appearance);
+
+			out << YAML::Key << JobsSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "default_worker_threads" << YAML::Value << config.jobs.defaultWorkerThreadCount;
+			out << YAML::Key << "reserve_urgent_worker" << YAML::Value << config.jobs.reserveUrgentWorker;
+			out << YAML::EndMap;
+
+			out << YAML::Key << EventQueueSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "initial_capacity" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.initialCapacity);
+			out << YAML::Key << "growth_step" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.growthStep);
+			out << YAML::EndMap;
+			out << YAML::EndMap;
+		}
+
+		void emitUserSettings(YAML::Emitter &out, const ApplicationConfig &config)
+		{
+			out << YAML::BeginMap;
+			out << YAML::Key << SchemaVersionKey << YAML::Value << ConfigManager::SchemaVersion;
+			out << YAML::Key << UiSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "font" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "path" << YAML::Value << toPortablePathValue(config, config.ui.fontPath);
+			out << YAML::EndMap;
+			out << YAML::Key << "font_scale" << YAML::Value << config.ui.fontScale;
+			out << YAML::Key << "font_scale_step" << YAML::Value << config.ui.fontScaleStep;
+			out << YAML::Key << "settings_preview_enabled" << YAML::Value << config.ui.settingsPreviewEnabled;
+			out << YAML::Key << "settings_auto_save_on_preview" << YAML::Value << config.ui.settingsAutoSaveOnPreview;
+			out << YAML::EndMap;
+			out << YAML::Key << WindowSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "x" << YAML::Value << config.window.x;
+			out << YAML::Key << "y" << YAML::Value << config.window.y;
+			out << YAML::Key << "width" << YAML::Value << config.window.width;
+			out << YAML::Key << "height" << YAML::Value << config.window.height;
+			out << YAML::Key << "maximized" << YAML::Value << config.window.maximized;
+			out << YAML::EndMap;
+			emitAppearance(out, config.appearance);
+			out << YAML::EndMap;
+		}
+
+		void emitProfile(YAML::Emitter &out, const ApplicationConfig &config)
+		{
+			out << YAML::BeginMap;
+			out << YAML::Key << SchemaVersionKey << YAML::Value << ConfigManager::SchemaVersion;
+			out << YAML::Key << LogSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "level" << YAML::Value << ToString(config.log.level);
+			out << YAML::Key << "to_file" << YAML::Value << config.log.toFile;
+			out << YAML::Key << "file_path" << YAML::Value << config.log.filePath.String();
+			out << YAML::EndMap;
+			out << YAML::Key << TraceEventsKey << YAML::Value << config.log.traceEvents;
+
+			out << YAML::Key << WindowSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "x" << YAML::Value << config.window.x;
+			out << YAML::Key << "y" << YAML::Value << config.window.y;
+			out << YAML::Key << "width" << YAML::Value << config.window.width;
+			out << YAML::Key << "height" << YAML::Value << config.window.height;
+			out << YAML::Key << "maximized" << YAML::Value << config.window.maximized;
+			out << YAML::Key << "title" << YAML::Value << config.window.title;
+			out << YAML::EndMap;
+
+			out << YAML::Key << UiSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "font" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "path" << YAML::Value << toPortablePathValue(config, config.ui.fontPath);
+			out << YAML::EndMap;
+			out << YAML::Key << "font_scale" << YAML::Value << config.ui.fontScale;
+			out << YAML::Key << "font_scale_step" << YAML::Value << config.ui.fontScaleStep;
+			out << YAML::Key << "settings_preview_enabled" << YAML::Value << config.ui.settingsPreviewEnabled;
+			out << YAML::Key << "settings_auto_save_on_preview" << YAML::Value << config.ui.settingsAutoSaveOnPreview;
+			out << YAML::EndMap;
+
+			emitAppearance(out, config.appearance);
+
+			out << YAML::Key << JobsSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "default_worker_threads" << YAML::Value << config.jobs.defaultWorkerThreadCount;
+			out << YAML::Key << "reserve_urgent_worker" << YAML::Value << config.jobs.reserveUrgentWorker;
+			out << YAML::EndMap;
+
+			out << YAML::Key << EventQueueSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "initial_capacity" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.initialCapacity);
+			out << YAML::Key << "growth_step" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.growthStep);
+			out << YAML::EndMap;
+			out << YAML::EndMap;
+		}
+	} // namespace
+
+	bool YamlConfigSerializer::SerializeDefaultConfig(
+		const ApplicationConfig &config,
+		std::string &text,
+		std::string &error) const
+	{
+		YAML::Emitter out;
+		emitDefaultConfig(out, config);
+		return emitterToString(out, text, error);
 	}
 
-	ConfigManager::ConfigManager(Path configDirectory):
-		m_ConfigDirectory(std::move(configDirectory)),
-		m_Config(CreateDefaultConfig(m_ConfigDirectory))
+	bool YamlConfigSerializer::DeserializeDefaultConfig(
+		std::string_view text,
+		ApplicationConfig &config,
+		std::string &error) const
 	{
-	}
-
-	bool ConfigManager::Initialize(std::string &error)
-	{
-		m_ConfigDirectory = ConfigPaths::NormalizeConfigDirectory(m_ConfigDirectory);
-		m_Config = CreateDefaultConfig(m_ConfigDirectory);
-		if (!ConfigPaths::EnsurePortableDirectories(m_Config.paths, error))
+		YAML::Node root;
+		if (!loadYamlText(text, root, error))
 			return false;
 
-		if (!loadOrCreateDefaultConfig(error))
-			return false;
-		if (!loadOrCreateUserSettings(error))
-			return false;
-
-		m_Config.directory = m_ConfigDirectory;
-		m_Config.paths = ResolvePortablePaths(m_ConfigDirectory);
-		m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).String();
-		m_Initialized = true;
+		ConfigYaml::ApplyDefaultYaml(root, config);
 		return true;
 	}
 
-	const Path &ConfigManager::GetConfigDirectory() const
+	bool YamlConfigSerializer::SerializeUserSettings(
+		const ApplicationConfig &config,
+		std::string &text,
+		std::string &error) const
 	{
-		return m_ConfigDirectory;
+		YAML::Emitter out;
+		emitUserSettings(out, config);
+		return emitterToString(out, text, error);
 	}
 
-	const ApplicationConfig &ConfigManager::GetConfig() const
+	bool YamlConfigSerializer::DeserializeUserSettings(
+		std::string_view text,
+		ApplicationConfig &config,
+		std::string &error) const
 	{
-		return m_Config;
-	}
-
-	const ApplicationPaths &ConfigManager::GetPaths() const
-	{
-		return m_Config.paths;
-	}
-
-	void ConfigManager::SetConfig(const ApplicationConfig &config)
-	{
-		m_Config = config;
-		m_Config.directory = m_ConfigDirectory;
-		m_Config.paths = ResolvePortablePaths(m_ConfigDirectory);
-		if (m_Config.layout.imGuiIniPath.empty())
-			m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).String();
-	}
-
-	void ConfigManager::SetUiConfig(const UIConfig &config)
-	{
-		m_Config.ui = config;
-	}
-
-	void ConfigManager::SetAppearanceConfig(const AppearanceConfig &config)
-	{
-		m_Config.appearance = config;
-	}
-
-	bool ConfigManager::SaveDefaultConfig(std::string &error) const
-	{
-		if (!ensureInitialized(error))
+		YAML::Node root;
+		if (!loadYamlText(text, root, error))
 			return false;
 
-		return ConfigYaml::WriteDefaultConfigFile(GetDefaultConfigPath(m_ConfigDirectory), m_Config, error);
+		ConfigYaml::ApplyUserYaml(root, config);
+		return true;
 	}
 
-	bool ConfigManager::SaveUserSettings(std::string &error) const
+	bool YamlConfigSerializer::SerializeConfigProfile(
+		const ApplicationConfig &config,
+		std::string &text,
+		std::string &error) const
 	{
-		if (!ensureInitialized(error))
-			return false;
-
-		return ConfigYaml::WriteUserSettingsFile(GetUserSettingsPath(m_ConfigDirectory), m_Config, error);
+		YAML::Emitter out;
+		emitProfile(out, config);
+		return emitterToString(out, text, error);
 	}
 
-	bool ConfigManager::SaveAppearanceTheme(const Path &path, const AppearanceConfig &appearance, std::string &error) const
+	bool YamlConfigSerializer::DeserializeConfigProfile(
+		std::string_view text,
+		ApplicationConfig &config,
+		std::string &error) const
 	{
-		using namespace ConfigSchema;
-		const char *schemaVersionKey = Name(RootKey::SchemaVersion);
-
-		if (!ensureInitialized(error))
+		YAML::Node root;
+		if (!loadYamlText(text, root, error))
 			return false;
 
+		ConfigYaml::ApplyDefaultYaml(root, config);
+		ConfigYaml::ApplyUserYaml(root, config);
+		return true;
+	}
+
+	bool YamlConfigSerializer::SerializeAppearanceTheme(
+		const AppearanceConfig &appearance,
+		std::string &text,
+		std::string &error) const
+	{
 		YAML::Emitter out;
 		out << YAML::BeginMap;
-		out << YAML::Key << schemaVersionKey << YAML::Value << SchemaVersion;
-		ConfigYaml::EmitAppearance(out, appearance);
+		out << YAML::Key << SchemaVersionKey << YAML::Value << ConfigManager::SchemaVersion;
+		emitAppearance(out, appearance);
 		out << YAML::EndMap;
-		return ConfigYaml::WriteEmitterToFile(path, out, error);
+		return emitterToString(out, text, error);
 	}
 
-	bool ConfigManager::LoadAppearanceTheme(const Path &path, AppearanceConfig &appearance, std::string &error) const
+	bool YamlConfigSerializer::DeserializeAppearanceTheme(
+		std::string_view text,
+		AppearanceConfig &appearance,
+		std::string &error) const
 	{
-		if (!ensureInitialized(error))
-			return false;
-
 		YAML::Node root;
-		if (!ConfigYaml::LoadYamlFile(path, root, error))
+		if (!loadYamlText(text, root, error))
 			return false;
 
 		ConfigYaml::ApplyAppearanceYaml(root, appearance);
 		return true;
 	}
-
-	bool ConfigManager::SaveConfigProfile(const Path &path, const ApplicationConfig &config, std::string &error) const
-	{
-		if (!ensureInitialized(error))
-			return false;
-
-		return ConfigYaml::WriteProfileFile(path, config, error);
-	}
-
-	bool ConfigManager::LoadConfigProfile(const Path &path, ApplicationConfig &config, std::string &error) const
-	{
-		if (!ensureInitialized(error))
-			return false;
-
-		YAML::Node root;
-		if (!ConfigYaml::LoadYamlFile(path, root, error))
-			return false;
-
-		config = CreateDefaultConfig(m_ConfigDirectory);
-		ConfigYaml::ApplyDefaultYaml(root, config);
-		ConfigYaml::ApplyUserYaml(root, config);
-		config.directory = m_ConfigDirectory;
-		config.paths = ResolvePortablePaths(m_ConfigDirectory);
-		config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).String();
-		return true;
-	}
-
-	bool ConfigManager::SaveTextFile(const Path &path, std::string_view text, std::string &error) const
-	{
-		if (!ensureInitialized(error))
-			return false;
-		if (!ConfigYaml::EnsureParentDirectory(path, error))
-			return false;
-
-		std::ofstream stream(path.Native(), std::ios::binary | std::ios::trunc);
-		if (!stream)
-		{
-			error = "Unable to open file for writing: " + path.String();
-			return false;
-		}
-
-		stream.write(text.data(), static_cast<std::streamsize>(text.size()));
-		return stream.good();
-	}
-
-	bool ConfigManager::LoadTextFile(const Path &path, std::string &text, std::string &error) const
-	{
-		if (!ensureInitialized(error))
-			return false;
-
-		std::ifstream stream(path.Native(), std::ios::binary);
-		if (!stream)
-		{
-			error = "Unable to open file for reading: " + path.String();
-			return false;
-		}
-
-		text.assign(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-		return true;
-	}
-
-	std::vector<Path> ConfigManager::ListYamlFiles(const Path &directory) const
-	{
-		std::vector<Path> result = ConfigPaths::ListFilesByExtension(directory, ".yaml");
-		std::vector<Path> ymlFiles = ConfigPaths::ListFilesByExtension(directory, ".yml");
-		result.insert(result.end(), ymlFiles.begin(), ymlFiles.end());
-		std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) {
-			return left.String() < right.String();
-		});
-		return result;
-	}
-
-	std::vector<Path> ConfigManager::ListIniFiles(const Path &directory) const
-	{
-		return ConfigPaths::ListFilesByExtension(directory, ".ini");
-	}
-
-	void ConfigManager::ApplySpecification(ApplicationSpecification &specification) const
-	{
-		specification.logLevel = m_Config.log.level;
-		specification.logToFile = m_Config.log.toFile;
-		specification.logFilePath = m_Config.log.filePath;
-		specification.traceEvents = m_Config.log.traceEvents;
-	}
-
-	ApplicationConfig ConfigManager::CreateDefaultConfig(const Path &configDirectory)
-	{
-		ApplicationConfig config;
-		config.directory = ConfigPaths::NormalizeConfigDirectory(configDirectory);
-		config.paths = ResolvePortablePaths(config.directory);
-		config.layout.imGuiIniPath = GetLayoutPath(configDirectory).String();
-		config.log.level = LogLevel::Info;
-		config.log.toFile = true;
-		config.log.filePath = Path::FromResolved(RuntimeDefaults::LogFilePath);
-		config.log.traceEvents = false;
-		config.window.x = RuntimeDefaults::WindowPosX;
-		config.window.y = RuntimeDefaults::WindowPosY;
-		config.window.width = RuntimeDefaults::WindowWidth;
-		config.window.height = RuntimeDefaults::WindowHeight;
-		config.window.maximized = RuntimeDefaults::WindowMaximized;
-		config.window.title = RuntimeDefaults::WindowTitle;
-		config.ui.fontScale = RuntimeDefaults::UiFontScale;
-		config.ui.fontScaleStep = RuntimeDefaults::UiFontScaleStep;
-		config.ui.fontPath = RuntimeDefaults::UiFontPath;
-		config.ui.settingsPreviewEnabled = RuntimeDefaults::UiSettingsPreviewEnabled;
-		config.ui.settingsAutoSaveOnPreview = RuntimeDefaults::UiSettingsAutoSaveOnPreview;
-		config.ui.fontScaleMin = RuntimeDefaults::UiFontScaleMin;
-		config.ui.fontScaleMax = RuntimeDefaults::UiFontScaleMax;
-		config.ui.fontScaleStepMin = RuntimeDefaults::UiFontScaleStepMin;
-		config.ui.fontScaleStepMax = RuntimeDefaults::UiFontScaleStepMax;
-		config.ui.fontScaleStepSliderMax = RuntimeDefaults::UiFontScaleStepSliderMax;
-		config.jobs.defaultWorkerThreadCount = RuntimeDefaults::JobsDefaultWorkerThreads;
-		config.jobs.reserveUrgentWorker = RuntimeDefaults::JobsReserveUrgentWorker;
-		config.eventQueue.initialCapacity = RuntimeDefaults::EventQueueInitialCapacity;
-		config.eventQueue.growthStep = RuntimeDefaults::EventQueueGrowthStep;
-		return config;
-	}
-
-	ApplicationPaths ConfigManager::ResolvePortablePaths(const Path &configDirectory)
-	{
-		return ConfigPaths::Build(configDirectory);
-	}
-
-	Path ConfigManager::GetDefaultConfigPath(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).appConfigDirectory / Path(DefaultConfigFileName);
-	}
-
-	Path ConfigManager::GetUserSettingsPath(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).userConfigDirectory / Path(UserSettingsFileName);
-	}
-
-	Path ConfigManager::GetLayoutPath(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).layoutsDirectory / Path(LayoutFileName);
-	}
-
-	Path ConfigManager::GetProfilesDirectory(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).profilesDirectory;
-	}
-
-	Path ConfigManager::GetThemesDirectory(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).themesDirectory;
-	}
-
-	Path ConfigManager::GetLayoutsDirectory(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).layoutsDirectory;
-	}
-
-	Path ConfigManager::GetExportsDirectory(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).exportsDirectory;
-	}
-
-	Path ConfigManager::GetAssetsDirectory(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).assetsDirectory;
-	}
-
-	Path ConfigManager::GetFontsDirectory(const Path &configDirectory)
-	{
-		return ResolvePortablePaths(configDirectory).fontsDirectory;
-	}
-
-	bool ConfigManager::ensureInitialized(std::string &error) const
-	{
-		if (m_Initialized)
-			return true;
-
-		error = "ConfigManager is not initialized";
-		return false;
-	}
-
-	bool ConfigManager::loadOrCreateDefaultConfig(std::string &error)
-	{
-		const Path path = GetDefaultConfigPath(m_ConfigDirectory);
-		if (!FileSystem::Exists(path.Native()))
-			return ConfigYaml::WriteDefaultConfigFile(path, m_Config, error);
-
-		YAML::Node root;
-		if (!ConfigYaml::LoadYamlFile(path, root, error))
-			return false;
-
-		ConfigYaml::ApplyDefaultYaml(root, m_Config);
-		return true;
-	}
-
-	bool ConfigManager::loadOrCreateUserSettings(std::string &error)
-	{
-		const Path path = GetUserSettingsPath(m_ConfigDirectory);
-		if (!FileSystem::Exists(path.Native()))
-		{
-			const Path legacyAppSettingsPath = m_Config.paths.appConfigDirectory / Path(UserSettingsFileName);
-			if (legacyAppSettingsPath != path && FileSystem::Exists(legacyAppSettingsPath.Native()))
-			{
-				YAML::Node legacyRoot;
-				if (!ConfigYaml::LoadYamlFile(legacyAppSettingsPath, legacyRoot, error))
-					return false;
-				ConfigYaml::ApplyUserYaml(legacyRoot, m_Config);
-			}
-
-			return ConfigYaml::WriteUserSettingsFile(path, m_Config, error);
-		}
-
-		YAML::Node root;
-		if (!ConfigYaml::LoadYamlFile(path, root, error))
-			return false;
-
-		ConfigYaml::ApplyUserYaml(root, m_Config);
-		return true;
-	}
 } // namespace DefectStudio
+

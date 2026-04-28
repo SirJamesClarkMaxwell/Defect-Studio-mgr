@@ -360,13 +360,13 @@ namespace DefectStudio
 		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
 		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
 		m_DraftDirty = false;
-		m_StatusMessage = "Preview applied and user YAML saved.";
+		m_StatusMessage = "Settings applied and user YAML saved.";
 	}
 
 	void Settings::onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event)
 	{
 		(void)event.config;
-		m_StatusMessage = "Preview applied, auto-save failed: " + event.error;
+		m_StatusMessage = "User YAML save failed: " + event.error;
 	}
 
 	void Settings::onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event)
