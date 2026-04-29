@@ -380,7 +380,13 @@ namespace DefectStudio::Demo
 		if (!ImGui::CollapsingHeader("Job Monitor", m_ShowProgress ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None))
 			return;
 
-		const auto snapshots = m_ProgressTracker.GetAllSnapshots();
+		auto snapshotsResult = m_ProgressTracker.GetAllSnapshots();
+		if (!snapshotsResult)
+		{
+			ImGui::TextUnformatted("Error retrieving progress data.");
+			return;
+		}
+		const auto snapshots = snapshotsResult.Value();
 		if (snapshots.empty())
 		{
 			ImGui::TextUnformatted("No tracked progress yet.");

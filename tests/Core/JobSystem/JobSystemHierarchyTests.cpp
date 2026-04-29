@@ -102,7 +102,9 @@ TEST(JobSystemHierarchyTests, NestedSubtasksThreeLevelsBranchingThreeWithTwoThre
 	}
 	ASSERT_EQ(level3.size(), 27u);
 
-	const auto trackerSnapshots = tracker.GetAllSnapshots();
+	auto trackerSnapshotsResult = tracker.GetAllSnapshots();
+	ASSERT_TRUE(trackerSnapshotsResult);
+	const auto trackerSnapshots = trackerSnapshotsResult.Value();
 	ASSERT_EQ(trackerSnapshots.size(), expectedJobCount);
 	EXPECT_TRUE(std::any_of(trackerSnapshots.begin(), trackerSnapshots.end(), [rootId](const ProgressEntrySnapshot &snapshot) {
 		return snapshot.parentId == rootId;

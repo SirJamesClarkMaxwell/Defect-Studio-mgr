@@ -16,3 +16,14 @@ TEST(StructuredError, IsRecoverableFalseForFatal)
     e.severity = Severity::Fatal;
     EXPECT_FALSE(e.IsRecoverable());
 }
+
+TEST(Result, StoresValueAndError)
+{
+    Result<int> success = 42;
+    EXPECT_TRUE(success);
+    EXPECT_EQ(success.Value(), 42);
+
+    Result<int> failure = StructuredError{ErrorCategory::Validation, Severity::Error, "bad input", "details", "fix it"};
+    EXPECT_FALSE(failure);
+    EXPECT_EQ(failure.Error().userMessage, "bad input");
+}

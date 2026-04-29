@@ -38,39 +38,47 @@ namespace DefectStudio
 		if (!m_EventBus)
 			return;
 
-		m_QueuedSubscription = subscribeTrackerMember<JobQueuedEvent>(*m_EventBus, *this, &ProgressTracker::onQueued);
-		m_StartedSubscription = subscribeTrackerMember<JobStartedEvent>(*m_EventBus, *this, &ProgressTracker::onStarted);
-		m_ProgressSubscription = subscribeTrackerMember<JobProgressEvent>(*m_EventBus, *this, &ProgressTracker::onProgress);
-		m_CompletedSubscription = subscribeTrackerMember<JobCompletedEvent>(*m_EventBus, *this, &ProgressTracker::onCompleted);
-		m_CancelledSubscription = subscribeTrackerMember<JobCancelledEvent>(*m_EventBus, *this, &ProgressTracker::onCancelled);
-		m_FailedSubscription = subscribeTrackerMember<JobFailedEvent>(*m_EventBus, *this, &ProgressTracker::onFailed);
+		m_Subscriptions[JobEventType::Queued] = subscribeTrackerMember<JobQueuedEvent>(*m_EventBus, *this, &ProgressTracker::onQueued);
+		m_Subscriptions[JobEventType::Started] = subscribeTrackerMember<JobStartedEvent>(*m_EventBus, *this, &ProgressTracker::onStarted);
+		m_Subscriptions[JobEventType::Progress] = subscribeTrackerMember<JobProgressEvent>(*m_EventBus, *this, &ProgressTracker::onProgress);
+		m_Subscriptions[JobEventType::Completed] = subscribeTrackerMember<JobCompletedEvent>(*m_EventBus, *this, &ProgressTracker::onCompleted);
+		m_Subscriptions[JobEventType::Cancelled] = subscribeTrackerMember<JobCancelledEvent>(*m_EventBus, *this, &ProgressTracker::onCancelled);
+		m_Subscriptions[JobEventType::Failed] = subscribeTrackerMember<JobFailedEvent>(*m_EventBus, *this, &ProgressTracker::onFailed);
 		
 	}
 
 	void ProgressTracker::UnbindEventBus()
 	{
 		ZoneScoped;
-		m_QueuedSubscription.Reset();
-		m_StartedSubscription.Reset();
-		m_ProgressSubscription.Reset();
-		m_CompletedSubscription.Reset();
-		m_CancelledSubscription.Reset();
-		m_FailedSubscription.Reset();
+		for (auto &[eventType, handle] : m_Subscriptions)
+		{
+			(void)eventType;
+			handle.Reset();
+		}
+		m_Subscriptions.clear();
 		m_EventBus.reset();
 	}
 
-	std::optional<ProgressEntrySnapshot> ProgressTracker::GetSnapshot(JobId id) const
+	Result<ProgressEntrySnapshot> ProgressTracker::GetSnapshot(JobId id) const
 	{
 		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto it = m_Entries.find(id);
 		if (it == m_Entries.end())
-			return std::nullopt;
+		{
+			return StructuredError{
+				.category = ErrorCategory::Runtime,
+				.code = "progress_tracker.entry_not_found",
+				.userMessage = "Progress entry not found",
+				.technicalDetails = "Requested JobId " + std::to_string(id) + " does not exist in tracker",
+				.source = "ProgressTracker"
+			};
+		}
 
 		return it->second;
 	}
 
-	std::vector<ProgressEntrySnapshot> ProgressTracker::GetAllSnapshots() const
+	Result<std::vector<ProgressEntrySnapshot>> ProgressTracker::GetAllSnapshots() const
 	{
 		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);
@@ -86,27 +94,35 @@ namespace DefectStudio
 		return entries;
 	}
 
-	std::vector<ProgressEntrySnapshot> ProgressTracker::GetActiveSnapshots() const
+	Result<std::vector<ProgressEntrySnapshot>> ProgressTracker::GetActiveSnapshots() const
 	{
 		ZoneScoped;
-		auto entries = GetAllSnapshots();
+		auto result = GetAllSnapshots();
+		if (!result)
+			return result;
+
+		auto entries = result.Value();
 		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &entry) {
 			return entry.finished;
 		}), entries.end());
 		return entries;
 	}
 
-	std::vector<ProgressEntrySnapshot> ProgressTracker::GetFinishedSnapshots() const
+	Result<std::vector<ProgressEntrySnapshot>> ProgressTracker::GetFinishedSnapshots() const
 	{
 		ZoneScoped;
-		auto entries = GetAllSnapshots();
+		auto result = GetAllSnapshots();
+		if (!result)
+			return result;
+
+		auto entries = result.Value();
 		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &entry) {
 			return !entry.finished;
 		}), entries.end());
 		return entries;
 	}
 
-	bool ProgressTracker::RemoveEntry(JobId id)
+	Result<bool> ProgressTracker::RemoveEntry(JobId id)
 	{
 		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_Mutex);

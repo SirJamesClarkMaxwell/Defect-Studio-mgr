@@ -136,14 +136,19 @@ TEST(ProgressTrackerTests, ContainsSubtasksWithParentId)
 
 	ASSERT_TRUE(WaitUntil([&]() {
 		eventBus->ProcessQueue();
-		const auto entries = tracker.GetAllSnapshots();
+		auto entriesResult = tracker.GetAllSnapshots();
+		if (!entriesResult)
+			return false;
+		const auto entries = entriesResult.Value();
 		const auto completedCount = std::count_if(entries.begin(), entries.end(), [](const DefectStudio::ProgressEntrySnapshot &entry) {
 			return entry.status == DefectStudio::JobStatus::Completed;
 		});
 		return completedCount >= 2;
 	}, DefectStudio::Time::Milliseconds(2000)));
 
-	const auto allEntries = tracker.GetAllSnapshots();
+	auto allEntriesResult = tracker.GetAllSnapshots();
+	ASSERT_TRUE(allEntriesResult);
+	const auto allEntries = allEntriesResult.Value();
 	auto parentIt = std::find_if(allEntries.begin(), allEntries.end(), [parentId](const DefectStudio::ProgressEntrySnapshot &entry) {
 		return entry.id == parentId;
 	});

@@ -10,6 +10,7 @@
 
 #include "Core/EventSystem/BusEventSystem/SubscriptionHandle.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/Types/Error.hpp"
 #include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
@@ -22,6 +23,24 @@ namespace DefectStudio
 	struct JobCancelledEvent;
 	struct JobFailedEvent;
 
+	enum class JobEventType
+	{
+		Queued,
+		Started,
+		Progress,
+		Completed,
+		Cancelled,
+		Failed
+	};
+
+	// Hash specialization for JobEventType to use in unordered_map
+	struct JobEventTypeHash
+	{
+		std::size_t operator()(JobEventType type) const noexcept
+		{
+			return std::hash<std::underlying_type_t<JobEventType>>()(static_cast<std::underlying_type_t<JobEventType>>(type));
+		}
+	};
 
 	template <typename EventType>
 	concept TrackerEvent =
@@ -72,11 +91,11 @@ namespace DefectStudio
 		void BindEventBus(Ref<EventBus> eventBus);
 		void UnbindEventBus();
 
-		[[nodiscard]] std::optional<ProgressEntrySnapshot> GetSnapshot(JobId id) const;
-		[[nodiscard]] std::vector<ProgressEntrySnapshot> GetAllSnapshots() const;
-		[[nodiscard]] std::vector<ProgressEntrySnapshot> GetActiveSnapshots() const;
-		[[nodiscard]] std::vector<ProgressEntrySnapshot> GetFinishedSnapshots() const;
-		[[nodiscard]] bool RemoveEntry(JobId id);
+		[[nodiscard]] Result<ProgressEntrySnapshot> GetSnapshot(JobId id) const;
+		[[nodiscard]] Result<std::vector<ProgressEntrySnapshot>> GetAllSnapshots() const;
+		[[nodiscard]] Result<std::vector<ProgressEntrySnapshot>> GetActiveSnapshots() const;
+		[[nodiscard]] Result<std::vector<ProgressEntrySnapshot>> GetFinishedSnapshots() const;
+		[[nodiscard]] Result<bool> RemoveEntry(JobId id);
 
 	private:
 		void onQueued(const JobQueuedEvent &event);
@@ -90,11 +109,6 @@ namespace DefectStudio
 		mutable std::mutex m_Mutex;
 		std::unordered_map<JobId, ProgressEntrySnapshot> m_Entries;
 		Ref<EventBus> m_EventBus;
-		SubscriptionHandle m_QueuedSubscription;
-		SubscriptionHandle m_StartedSubscription;
-		SubscriptionHandle m_ProgressSubscription;
-		SubscriptionHandle m_CompletedSubscription;
-		SubscriptionHandle m_CancelledSubscription;
-		SubscriptionHandle m_FailedSubscription;
+		std::unordered_map<JobEventType, SubscriptionHandle, JobEventTypeHash> m_Subscriptions;
 	};
 } // namespace DefectStudio

@@ -249,7 +249,15 @@ namespace DefectStudio
 			return;
 		}
 
-		auto snapshots = progressTracker->GetAllSnapshots();
+		auto snapshotsResult = progressTracker->GetAllSnapshots();
+		if (!snapshotsResult)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Error retrieving snapshots");
+			ImGui::End();
+			return;
+		}
+
+		auto snapshots = snapshotsResult.Value();
 		std::vector<VisibleJobRow> visibleRows;
 		buildVisibleRows(snapshots, visibleRows);
 		updateFocusedSelectionFallback();
@@ -786,7 +794,11 @@ namespace DefectStudio
 		{
 			ImGui::Separator();
 			if (ImGui::MenuItem("Delete selected finished"))
-				requestDeleteSelectionConfirmation(progressTracker->GetAllSnapshots());
+			{
+				auto snapshotsResult = progressTracker->GetAllSnapshots();
+				if (snapshotsResult)
+					requestDeleteSelectionConfirmation(snapshotsResult.Value());
+			}
 		}
 	}
 
@@ -865,7 +877,11 @@ namespace DefectStudio
 		if (jobSystem == nullptr || progressTracker == nullptr)
 			return;
 
-		const auto snapshots = progressTracker->GetAllSnapshots();
+		auto snapshotsResult = progressTracker->GetAllSnapshots();
+		if (!snapshotsResult)
+			return;
+
+		const auto snapshots = snapshotsResult.Value();
 		const auto snapshotRefs = makeSnapshotRefs(snapshots);
 		const auto childrenByParent = buildChildrenByParent(snapshotRefs);
 		std::vector<JobId> idsToRemove;
@@ -904,8 +920,9 @@ namespace DefectStudio
 		if (progressTracker == nullptr)
 			return;
 
-		const auto snapshots = progressTracker->GetAllSnapshots();
-		requestDeleteSelectionConfirmation(snapshots);
+		auto snapshotsResult = progressTracker->GetAllSnapshots();
+		if (snapshotsResult)
+			requestDeleteSelectionConfirmation(snapshotsResult.Value());
 	}
 
 	int ProgressMonitorWindow::countFinishedSelected(const std::vector<ProgressEntrySnapshot> &allJobs) const
