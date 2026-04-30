@@ -23,7 +23,7 @@ It is not a generic subsystem message bus.
 
 1. Producer calls `Add(EventVariant)`.
 2. Queue stores event in pending vector.
-3. `Drain()` swaps pending batch out.
+3. `Drain()` moves pending events into a returned batch and keeps the queue buffer reserved.
 4. application dispatches drained batch.
 5. drained event objects are destroyed after dispatch scope.
 
@@ -38,7 +38,7 @@ It is not a generic subsystem message bus.
 ## Ownership and Lifetime
 
 - queue owns pending events,
-- `Drain()` transfers ownership of batch to caller by move/swap,
+- `Drain()` transfers ownership of batch to caller by move while preserving configured queue capacity,
 - event objects are inline `EventVariant`, not polymorphic heap nodes.
 
 ## Threading Model
@@ -59,7 +59,7 @@ It is not a generic subsystem message bus.
 
 ### `Drain()`
 
-- atomically swaps pending storage into returned vector.
+- atomically moves pending events into a returned vector and clears the queue without shrinking capacity.
 
 ### `Size()/Capacity()/Empty()`
 

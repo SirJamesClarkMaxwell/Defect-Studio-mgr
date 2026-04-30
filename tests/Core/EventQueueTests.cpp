@@ -91,6 +91,23 @@ namespace DefectStudio::Test
 		EXPECT_TRUE(queue.Empty());
 	}
 
+	TEST_F(EventQueueTest, DrainPreservesConfiguredCapacity)
+	{
+		queue.Configure(256);
+		const std::size_t configuredCapacity = queue.Capacity();
+		queue.Add(WindowCloseEvent());
+
+		auto drained = queue.Drain();
+
+		EXPECT_EQ(drained.size(), 1);
+		EXPECT_EQ(queue.Size(), 0);
+		EXPECT_EQ(queue.Capacity(), configuredCapacity);
+
+		queue.Add(KeyPressedEvent(10));
+		EXPECT_EQ(queue.Capacity(), configuredCapacity);
+		EXPECT_EQ(queue.Size(), 1);
+	}
+
 	// ===== Variant type tests =====
 
 	TEST_F(EventQueueTest, VariantHoldsWindowCloseEvent)

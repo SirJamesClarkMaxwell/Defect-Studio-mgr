@@ -83,7 +83,10 @@ namespace DefectStudio
 		if (m_Pending.empty())
 			return events;
 
-		events.swap(m_Pending);
+		events.reserve(m_Pending.size());
+		for (auto &event : m_Pending)
+			events.push_back(std::move(event));
+		m_Pending.clear();
 		DS_LOG_TRACE("EventQueue drain count={}", events.size());
 		return events;
 	}
