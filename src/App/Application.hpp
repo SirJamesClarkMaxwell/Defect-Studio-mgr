@@ -8,11 +8,16 @@
 #include "App/ApplicationState.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Window.hpp"
+#include "Core/Capabilities/CapabilityRegistry.hpp"
+#include "Core/Capabilities/CapabilityService.hpp"
+#include "Core/Assets/AssetManager.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/LayerStack.hpp"
+#include "Core/Notifications/Notifier.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
@@ -37,6 +42,8 @@ namespace DefectStudio
 
 		// Queue a platform event for main-thread processing.
 		static void EmitEvent(EventVariant event);
+		// Present a blocking error dialog on the main thread.
+		void ShowBlockingError(const StructuredError &error);
 
 		// Global accessor for layers and demos
 		// Precondition: Application was created.
@@ -45,6 +52,10 @@ namespace DefectStudio
 		// Runtime service accessors
 		// Precondition: CoreLayer initialized.
 		EventBus &GetEventBus();
+		[[nodiscard]] Notifier &GetNotifier();
+		[[nodiscard]] CapabilityRegistry &GetCapabilityRegistry();
+		[[nodiscard]] CapabilityService &GetCapabilityService();
+		[[nodiscard]] AssetManager &GetAssetManager();
 		// Precondition: CoreLayer initialized.
 		JobSystem &GetJobSystem();
 		// Precondition: CoreLayer initialized.
@@ -88,6 +99,7 @@ namespace DefectStudio
 		// Runtime services lifecycle
 		bool initializeEventDispatchingSystem();
 		bool initializeCoreLayerSystems();
+		bool initializeAssetManager();
 
 		// Configuration API
 		bool bootstrapConfiguration();
@@ -117,9 +129,14 @@ namespace DefectStudio
 	private:
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
+		Ref<Notifier> m_Notifier;
+		Ref<CapabilityRegistry> m_CapabilityRegistry;
+		Ref<CapabilityService> m_CapabilityService;
+		Ref<AssetManager> m_AssetManager;
 		Unique<ApplicationEventController> m_EventController;
 		LayerStack m_LayerStack;
 		Ref<ConfigManager> m_ConfigManager;
+		std::optional<StructuredError> m_BlockingError;
 
 		ApplicationConfig m_Config;
 		ApplicationRuntimeState m_Runtime;

@@ -124,7 +124,7 @@ namespace DefectStudio
 		Destroy();
 	}
 
-	bool Window::Create(int width, int height, const std::string &title)
+	bool Window::Create(int width, int height, const std::string &title, const Path &iconPath)
 	{
 		DS_ASSERT(m_Handle == nullptr, "Window already created");
 
@@ -150,7 +150,7 @@ namespace DefectStudio
 		glfwSetCursorPosCallback(m_Handle, OnGlfwCursorPos);
 		glfwSetScrollCallback(m_Handle, OnGlfwScroll);
 
-		Platform::InitializeWindowPlatform(m_Handle, Path("install") / "app" / "assets" / "icon.ico");
+		Platform::InitializeWindowPlatform(m_Handle, iconPath);
 		DS_LOG_INFO("GLFW window created");
 		return true;
 	}
@@ -219,7 +219,7 @@ namespace DefectStudio
 		glfwGetFramebufferSize(m_Handle, &width, &height);
 	}
 
-	void Window::ApplyConfig(const WindowConfig &config)
+	void Window::ApplyConfig(const WindowConfig &config, bool applyPositionAndSize)
 	{
 		if (m_Handle == nullptr)
 		{
@@ -229,28 +229,38 @@ namespace DefectStudio
 
 		setTitle(config.title);
 
-		const bool hasExplicitPosition = config.x >= 0 && config.y >= 0;
 		const bool currentlyMaximized = glfwGetWindowAttrib(m_Handle, GLFW_MAXIMIZED) != 0;
-		if (currentlyMaximized)
+		if (currentlyMaximized && !config.maximized)
 			glfwRestoreWindow(m_Handle);
-
-		if (hasExplicitPosition)
-			glfwSetWindowPos(m_Handle, config.x, config.y);
-
-		glfwSetWindowSize(m_Handle, std::max(320, config.width), std::max(240, config.height));
-
-		if (config.maximized)
+		else if (!currentlyMaximized && config.maximized)
 			glfwMaximizeWindow(m_Handle);
 
-		DS_LOG_INFO(
-			"Window config applied: title=\"{}\" size={}x{} position=({}, {}) explicit_position={} maximized={}",
-			config.title,
-			std::max(320, config.width),
-			std::max(240, config.height),
-			config.x,
-			config.y,
-			hasExplicitPosition,
-			config.maximized);
+		// Apply position and size only during initialization or if explicitly requested
+		if (applyPositionAndSize)
+		{
+			const bool hasExplicitPosition = config.x >= 0 && config.y >= 0;
+			if (hasExplicitPosition)
+				glfwSetWindowPos(m_Handle, config.x, config.y);
+
+			glfwSetWindowSize(m_Handle, std::max(320, config.width), std::max(240, config.height));
+
+			DS_LOG_INFO(
+				"Window config applied (full): title=\"{}\" size={}x{} position=({}, {}) explicit_position={} maximized={}",
+				config.title,
+				std::max(320, config.width),
+				std::max(240, config.height),
+				config.x,
+				config.y,
+				hasExplicitPosition,
+				config.maximized);
+		}
+		else
+		{
+			DS_LOG_INFO(
+				"Window config applied (title+maximized only): title=\"{}\" maximized={} (position and size preserved from current state)",
+				config.title,
+				config.maximized);
+		}
 	}
 
 	void Window::CaptureConfig(WindowConfig &config) const

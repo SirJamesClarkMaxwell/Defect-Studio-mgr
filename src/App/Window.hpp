@@ -6,6 +6,7 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Core/Utils/Path.hpp"
 
 struct GLFWwindow;
 
@@ -30,7 +31,7 @@ namespace DefectStudio
 		Window(const Window &) = delete;
 		Window &operator=(const Window &) = delete;
 
-		bool Create(int width, int height, const std::string &title);
+		bool Create(int width, int height, const std::string &title, const Path &iconPath);
 		void Destroy();
 		void BindEventBus(Ref<EventBus> eventBus);
 
@@ -38,7 +39,7 @@ namespace DefectStudio
 		void PollEvents() const;
 		void SwapBuffers() const;
 		void GetFramebufferSize(int &width, int &height) const;
-		void ApplyConfig(const WindowConfig &config);
+		void ApplyConfig(const WindowConfig &config, bool applyPositionAndSize = false);
 		void CaptureConfig(WindowConfig &config) const;
 		void SetEventCallback(EventCallback callback);
 		void DispatchEvent(EventVariant event);

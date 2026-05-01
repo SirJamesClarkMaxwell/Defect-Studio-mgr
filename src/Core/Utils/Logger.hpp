@@ -8,6 +8,8 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 
+#include <spdlog/common.h>
+
 namespace DefectStudio
 {
 	enum class LogLevel
@@ -36,15 +38,12 @@ namespace DefectStudio
 		static void Shutdown();
 		static void Flush();
 		static Ref<spdlog::logger> &Get();
-
-	private:
-		static Ref<spdlog::logger> &Access();
 	};
 } // namespace DefectStudio
 
-#define DS_LOG_TRACE(...) ::DefectStudio::Logger::Get()->trace(__VA_ARGS__)
-#define DS_LOG_DEBUG(...) ::DefectStudio::Logger::Get()->debug(__VA_ARGS__)
-#define DS_LOG_INFO(...) ::DefectStudio::Logger::Get()->info(__VA_ARGS__)
-#define DS_LOG_WARN(...) ::DefectStudio::Logger::Get()->warn(__VA_ARGS__)
-#define DS_LOG_ERROR(...) ::DefectStudio::Logger::Get()->error(__VA_ARGS__)
-#define DS_LOG_CRITICAL(...) ::DefectStudio::Logger::Get()->critical(__VA_ARGS__)
+#define DS_LOG_TRACE(...) ::DefectStudio::Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::trace, __VA_ARGS__)
+#define DS_LOG_DEBUG(...) ::DefectStudio::Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::debug, __VA_ARGS__)
+#define DS_LOG_INFO(...) ::DefectStudio::Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::info, __VA_ARGS__)
+#define DS_LOG_WARN(...) ::DefectStudio::Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::warn, __VA_ARGS__)
+#define DS_LOG_ERROR(...) ::DefectStudio::Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::err, __VA_ARGS__)
+#define DS_LOG_CRITICAL(...) ::DefectStudio::Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::critical, __VA_ARGS__)

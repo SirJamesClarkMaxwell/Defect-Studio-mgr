@@ -28,6 +28,7 @@ include "Vendor/ImGui"
 dofile "Vendor/thread-pool/premake5.lua"
 dofile "Vendor/json/premake5.lua"
 dofile "Vendor/yaml-cpp/premake5.lua"
+include "Vendor/ImGuiNotify"
 
 dofile "Vendor/Tracy/premake5.lua"
 dofile "Vendor/GoogleTest/GoogleTest.premake5.lua"
@@ -70,6 +71,9 @@ project "DefectStudio"
         "Vendor/GLAD/generated/include",
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
+        "Vendor/imgui-command-palette",
+        "Vendor/ImGuiNotify/win32Example/backends",
+        "install/app/assets/fonts",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
         "Vendor/yaml-cpp/include"
@@ -214,6 +218,9 @@ project "DefectStudioTests"
         "Vendor/GLAD/generated/include",
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
+        "Vendor/imgui-command-palette",
+        "Vendor/ImGuiNotify/win32Example/backends",
+        "install/app/assets/fonts",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
         "Vendor/yaml-cpp/include"

@@ -16,6 +16,12 @@
 #include "App/Controllers/ApplicationEventController.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
+#include "Core/Capabilities/CapabilityRegistry.hpp"
+#include "Core/Capabilities/CapabilityService.hpp"
+#include "Core/Assets/AssetManager.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/Notifications/Notifier.hpp"
+#include "Core/Threading/ThreadAffinity.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Path.hpp"
@@ -276,6 +282,37 @@ namespace DefectStudio
 		return *m_EventBus;
 	}
 
+	Notifier &Application::GetNotifier()
+	{
+		DS_ASSERT(m_Notifier != nullptr, "Notifier not initialized");
+		return *m_Notifier;
+	}
+
+	CapabilityRegistry &Application::GetCapabilityRegistry()
+	{
+		DS_ASSERT(m_CapabilityRegistry != nullptr, "CapabilityRegistry not initialized");
+		return *m_CapabilityRegistry;
+	}
+
+	CapabilityService &Application::GetCapabilityService()
+	{
+		DS_ASSERT(m_CapabilityService != nullptr, "CapabilityService not initialized");
+		return *m_CapabilityService;
+	}
+
+	AssetManager &Application::GetAssetManager()
+	{
+		DS_ASSERT(m_AssetManager != nullptr, "AssetManager not initialized");
+		return *m_AssetManager;
+	}
+
+	void Application::ShowBlockingError(const StructuredError &error)
+	{
+		ASSERT_MAIN_THREAD();
+		m_BlockingError = error;
+		DS_LOG_ERROR("Blocking error [{}]: {}", error.code.empty() ? "unknown" : error.code, error.userMessage);
+	}
+
 	JobSystem &Application::GetJobSystem()
 	{
 		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
@@ -307,7 +344,9 @@ namespace DefectStudio
 	Application::Application(int argc, char **argv)
 	{
 		installCrashFallbackHandlers();
+		Threading::SetMainThread();
 		setCrashStage("construct application");
+		m_EventQueue.Configure(RuntimeDefaults::EventQueueInitialCapacity, RuntimeDefaults::EventQueueGrowthStep);
 
 		m_Runtime.argc = argc;
 		m_Runtime.argv = argv;
@@ -339,6 +378,8 @@ namespace DefectStudio
 		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
 		logStartupSpecification();
 		if (!initializeEventInfrastructure())
+			return false;
+		if (!initializeAssetManager())
 			return false;
 		if (!initializeWindowingAndGraphics())
 			return false;
@@ -407,12 +448,49 @@ namespace DefectStudio
 			return false;
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
+		m_Notifier = CreateRef<Notifier>(m_EventBus);
+		m_CapabilityRegistry = CreateRef<CapabilityRegistry>();
+		m_CapabilityService = CreateRef<CapabilityService>(*m_CapabilityRegistry);
 		m_EventController = CreateUnique<ApplicationEventController>(
 			m_EventBus,
 			m_ConfigManager,
 			m_Config,
 			m_Runtime.specification,
 			m_EventQueue);
+		return true;
+	}
+
+	bool Application::initializeAssetManager()
+	{
+		setCrashStage("initialize asset manager");
+		const Path userAssetRoot = m_Config.paths.userConfigDirectory.parent_path() / Path("assets");
+		m_AssetManager = CreateRef<AssetManager>(m_Config.paths.assetsDirectory, userAssetRoot);
+		m_AssetManager->RegisterAsset(AssetDescriptor{"icon.ico", AssetType::Icon, AssetCriticality::Critical, "1", "app.icon"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"fonts/segoeui.ttf", AssetType::Font, AssetCriticality::Critical, "1", "ui.font.default"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"fonts/fa-solid-900.ttf", AssetType::Font, AssetCriticality::Optional, "1", "ui.font.icons"});
+
+		const AssetValidationReport report = m_AssetManager->ValidateRegisteredAssets();
+		for (const AssetValidationIssue &issue : report.issues)
+		{
+			if (issue.descriptor.criticality == AssetCriticality::Critical)
+				DS_LOG_ERROR("Critical asset missing [{}]: {}", issue.descriptor.logicalPath, issue.error.technicalDetails);
+			else
+				DS_LOG_WARN("Optional asset missing [{}]: {}", issue.descriptor.logicalPath, issue.error.technicalDetails);
+		}
+
+		if (report.HasCriticalFailures())
+		{
+			DS_LOG_ERROR("Asset validation failed: critical assets are missing");
+			shutdownInternal();
+			return false;
+		}
+
+		DS_LOG_INFO(
+			"AssetManager initialized: default_root={} user_override_root={} resolved={} issues={}",
+			m_AssetManager->GetDefaultRoot().String(),
+			m_AssetManager->GetUserOverrideRoot().String(),
+			report.resolvedAssets.size(),
+			report.issues.size());
 		return true;
 	}
 
@@ -476,6 +554,8 @@ namespace DefectStudio
 			shutdownInternal();
 			return false;
 		}
+		if (m_CapabilityRegistry)
+			m_CapabilityRegistry->LockAfterStartup();
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 		return true;
 	}
@@ -511,6 +591,11 @@ namespace DefectStudio
 			DS_LOG_INFO("Shutdown: releasing ApplicationEventController");
 			m_EventController.reset();
 		}
+
+		m_CapabilityService.reset();
+		m_CapabilityRegistry.reset();
+		m_AssetManager.reset();
+		m_Notifier.reset();
 
 		if (m_EventBus)
 		{
@@ -555,7 +640,16 @@ namespace DefectStudio
 	void Application::OnEvent(TEvent &event)
 	{
 		if (m_Runtime.specification.traceEvents)
-			DS_LOG_DEBUG("Event: {}", event.GetName());
+		{
+			if constexpr (std::is_same_v<TEvent, MouseMovedEvent> || std::is_same_v<TEvent, MouseScrolledEvent>)
+			{
+				// High-frequency pointer events are intentionally skipped in trace logging.
+			}
+			else
+			{
+				DS_LOG_DEBUG("Event: {}", event.GetName());
+			}
+		}
 
 		HandleLifecycleEvent(event, m_Runtime.lifecycle);
 
@@ -881,14 +975,22 @@ namespace DefectStudio
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
 
 		m_Graphics.window = CreateRef<Window>();
-		if (!m_Graphics.window->Create(m_Config.window.width, m_Config.window.height, m_Config.window.title))
+		Path iconPath = Path("install") / "app" / "assets" / "icon.ico";
+		if (m_AssetManager != nullptr)
+		{
+			auto resolvedIcon = m_AssetManager->ResolvePath("icon.ico");
+			if (resolvedIcon)
+				iconPath = resolvedIcon->resolvedPath;
+		}
+
+		if (!m_Graphics.window->Create(m_Config.window.width, m_Config.window.height, m_Config.window.title, iconPath))
 		{
 			m_Graphics.window.reset();
 			return false;
 		}
 
 		m_Graphics.window->BindEventBus(m_EventBus);
-		m_Graphics.window->ApplyConfig(m_Config.window);
+		m_Graphics.window->ApplyConfig(m_Config.window, true); // Apply full config during initialization
 
 		m_Graphics.window->SetEventCallback([this](EventVariant event) { queueEvent(std::move(event)); });
 

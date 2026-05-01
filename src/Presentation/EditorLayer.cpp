@@ -144,6 +144,7 @@ namespace DefectStudio
 
 		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
+		registerPanel<LoggingPanel>("Logging Panel", true);
 		registerPanel<SettingsPanel>(m_EventBus, m_JobSystem, CreateWeakRef(m_UiState), "SettingsPanel", true);
 		m_PanelsInitialized = true;
 	}

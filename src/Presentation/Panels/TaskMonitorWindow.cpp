@@ -7,6 +7,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/TestJobs/TestJobs.hpp"
+#include "Core/Utils/Logger.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
 
 namespace DefectStudio
@@ -98,13 +99,19 @@ namespace DefectStudio
 		if (ImGui::Button("Submit Dummy Job"))
 		{
 			if (jobSystem != nullptr)
-				(void)jobSystem->Submit(CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}), m_DummyJobPriority);
+			{
+				const auto jobId = jobSystem->Submit(CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}), m_DummyJobPriority);
+				DS_LOG_INFO("TaskMonitor submitted dummy job id={} name=\"{}\" steps={} delay_ms={} priority={}", jobId, m_DummyJobName, m_DummyJobSteps, m_DummyJobDelayMs, static_cast<int>(m_DummyJobPriority));
+			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Submit Subtask Demo"))
 		{
 			if (jobSystem != nullptr)
-				(void)jobSystem->Submit(CreateRef<UITaskMonitorSubtaskJob>(std::string(m_DummyJobName) + "::parent", m_SubtaskChainCount), m_DummyJobPriority);
+			{
+				const auto jobId = jobSystem->Submit(CreateRef<UITaskMonitorSubtaskJob>(std::string(m_DummyJobName) + "::parent", m_SubtaskChainCount), m_DummyJobPriority);
+				DS_LOG_INFO("TaskMonitor submitted subtask demo id={} name=\"{}\" chain={} priority={}", jobId, m_DummyJobName, m_SubtaskChainCount, static_cast<int>(m_DummyJobPriority));
+			}
 		}
 
 		ImGui::SameLine();

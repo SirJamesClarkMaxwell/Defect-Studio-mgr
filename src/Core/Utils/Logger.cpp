@@ -4,10 +4,12 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include "Core/Logging/LogRegistrySink.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 namespace DefectStudio
 {
+	static Ref<spdlog::logger> s_Logger = nullptr;
 	spdlog::level::level_enum ToSpdlogLevel(LogLevel level)
 	{
 		switch (level)
@@ -50,15 +52,11 @@ namespace DefectStudio
 		return "info";
 	}
 
-	Ref<spdlog::logger> &LoggerStorage()
-	{
-		static Ref<spdlog::logger> s_Logger;
-		return s_Logger;
-	}
+
 
 	void ResetLoggerStorage()
 	{
-		auto &logger = LoggerStorage();
+		auto &logger = Logger::Get();
 		if (logger != nullptr)
 		{
 			logger->flush();
@@ -67,17 +65,6 @@ namespace DefectStudio
 		}
 	}
 
-	Ref<spdlog::logger> &Logger::Access()
-	{
-		if (LoggerStorage() == nullptr)
-		{
-			LoggerOptions defaultOptions;
-			defaultOptions.logToFile = true;
-			Initialize(defaultOptions);
-		}
-
-		return LoggerStorage();
-	}
 
 	void Logger::Initialize(const LoggerOptions &options)
 	{
@@ -86,6 +73,7 @@ namespace DefectStudio
 
 		std::vector<spdlog::sink_ptr> sinks;
 		sinks.push_back(CreateRef<spdlog::sinks::stdout_color_sink_mt>());
+		sinks.push_back(CreateRef<LogRegistrySink>());
 
 		std::string fileLoggingError;
 		std::string resolvedLogFilePath;
@@ -108,31 +96,31 @@ namespace DefectStudio
 			}
 		}
 
-		LoggerStorage() = CreateRef<spdlog::logger>("defectstudio", sinks.begin(), sinks.end());
-		spdlog::set_default_logger(LoggerStorage());
+		s_Logger = CreateRef<spdlog::logger>("defectstudio", sinks.begin(), sinks.end());
+		spdlog::set_default_logger(s_Logger);
 		spdlog::set_pattern("[%H:%M:%S] [%^%l%$] %v");
 		spdlog::set_level(logLevel);
 		spdlog::flush_on(spdlog::level::trace);
-		LoggerStorage()->set_level(logLevel);
-		LoggerStorage()->flush_on(spdlog::level::trace);
+		s_Logger()->set_level(logLevel);
+		s_Logger()->flush_on(spdlog::level::trace);
 
 		if (!fileLoggingError.empty())
-			LoggerStorage()->error("File logging disabled [{}]: {}", resolvedLogFilePath, fileLoggingError);
+			s_Logger->error("File logging disabled [{}]: {}", resolvedLogFilePath, fileLoggingError);
 		else if (options.logToFile)
-			LoggerStorage()->info("File logging active: {}", resolvedLogFilePath.empty() ? "logs/DefectStudio.log" : resolvedLogFilePath);
+			s_Logger->info("File logging active: {}", resolvedLogFilePath.empty() ? "logs/DefectStudio.log" : resolvedLogFilePath);
 	}
 
 	void Logger::Shutdown()
 	{
 		Flush();
 		spdlog::shutdown();
-		LoggerStorage().reset();
+		Logger::Get().reset();
 	}
 
 	void Logger::Flush()
 	{
-		if (LoggerStorage() != nullptr)
-			LoggerStorage()->flush();
+		if (Logger::Get() != nullptr)
+			Logger::Get()->flush();
 		spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) {
 			if (logger != nullptr)
 				logger->flush();
@@ -141,6 +129,13 @@ namespace DefectStudio
 
 	Ref<spdlog::logger> &Logger::Get()
 	{
-		return Access();
+		if (s_Logger == nullptr)
+		{
+			LoggerOptions defaultOptions;
+			defaultOptions.logToFile = true;
+			Initialize(defaultOptions);
+		}
+
+		return s_Logger;
 	}
 } // namespace DefectStudio

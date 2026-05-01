@@ -66,13 +66,13 @@ namespace DefectStudio
 		auto it = m_Entries.find(id);
 		if (it == m_Entries.end())
 		{
-			return StructuredError{
-				.category = ErrorCategory::Runtime,
-				.code = "progress_tracker.entry_not_found",
-				.userMessage = "Progress entry not found",
-				.technicalDetails = "Requested JobId " + std::to_string(id) + " does not exist in tracker",
-				.source = "ProgressTracker"
-			};
+			StructuredError error;
+			error.category = ErrorCategory::Runtime;
+			error.code = "progress_tracker.entry_not_found";
+			error.userMessage = "Progress entry not found";
+			error.technicalDetails = "Requested JobId " + std::to_string(id) + " does not exist in tracker";
+			error.source = "ProgressTracker";
+			return error;
 		}
 
 		return it->second;

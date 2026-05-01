@@ -349,11 +349,13 @@ namespace DefectStudio
 		m_DraftDirty = false;
 		m_DraftInitialized = true;
 		m_StatusMessage = event.persisted ? "Settings applied and saved to YAML." : "Settings applied.";
+		DS_LOG_INFO("SettingsPanel apply complete persisted={} title=\"{}\"", event.persisted, m_DraftConfig.window.title);
 	}
 
 	void SettingsPanel::onConfigApplyFailed(const AppEvents::Config::ApplyFailed &event)
 	{
 		m_StatusMessage = event.persist ? "Apply & save failed: " + event.error : "Apply failed: " + event.error;
+		DS_LOG_WARN("SettingsPanel apply failed persist={} error={}", event.persist, event.error);
 	}
 
 	void SettingsPanel::onUserConfigSaved(const AppEvents::Config::UserSaved &event)
@@ -364,24 +366,28 @@ namespace DefectStudio
 		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
 		m_DraftDirty = false;
 		m_StatusMessage = "Settings applied and user YAML saved.";
+		DS_LOG_INFO("SettingsPanel user config saved title=\"{}\"", m_DraftConfig.window.title);
 	}
 
 	void SettingsPanel::onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event)
 	{
 		(void)event.config;
 		m_StatusMessage = "User YAML save failed: " + event.error;
+		DS_LOG_ERROR("SettingsPanel user config save failed error={}", event.error);
 	}
 
 	void SettingsPanel::onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event)
 	{
 		(void)event.config;
 		m_StatusMessage = "Default YAML saved.";
+		DS_LOG_INFO("SettingsPanel default config saved");
 	}
 
 	void SettingsPanel::onDefaultsSaveFailed(const AppEvents::Config::DefaultsSaveFailed &event)
 	{
 		(void)event.config;
 		m_StatusMessage = "Save defaults failed: " + event.error;
+		DS_LOG_ERROR("SettingsPanel default config save failed error={}", event.error);
 	}
 
 	void SettingsPanel::renderActionBar()

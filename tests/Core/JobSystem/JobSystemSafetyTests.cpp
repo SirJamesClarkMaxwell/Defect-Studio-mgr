@@ -18,7 +18,8 @@ protected:
 TEST_F(JobSystemSafetyTests, PauseAllJobsStopsExecution)
 {
 	auto blocker = CreateRef<Gate>();
-	auto blocked = jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	const auto blocked = jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	ASSERT_NE(blocked, 0u);
 	
 	std::this_thread::sleep_for(Time::Milliseconds(50));
 	
@@ -47,12 +48,12 @@ TEST_F(JobSystemSafetyTests, ResumeAllJobsResumesExecution)
 	auto gate1 = CreateRef<Gate>();
 	auto gate2 = CreateRef<Gate>();
 	
-	jobSystem.PauseAllJobs();
+	ASSERT_TRUE(jobSystem.PauseAllJobs());
 	
 	auto job1 = jobSystem.Submit(CreateRef<BlockingJob>(gate1), JobPriority::Normal);
 	auto job2 = jobSystem.Submit(CreateRef<BlockingJob>(gate2), JobPriority::Normal);
 	
-	jobSystem.ResumeAllJobs();
+	ASSERT_TRUE(jobSystem.ResumeAllJobs());
 	
 	std::this_thread::sleep_for(Time::Milliseconds(100));
 	
@@ -79,7 +80,7 @@ TEST_F(JobSystemSafetyTests, SafeSetThreadCountValidatesSanity)
 	
 	// Submit some jobs
 	for (int i = 0; i < 5; ++i)
-		jobSystem.Submit(CreateRef<SleepJob>("test-" + std::to_string(i), i + 1, Time::Milliseconds(100)));
+		(void)jobSystem.Submit(CreateRef<SleepJob>("test-" + std::to_string(i), i + 1, Time::Milliseconds(100)));
 	
 	// Try to change thread count - should succeed with validation
 	EXPECT_TRUE(jobSystem.SafeSetThreadCount(2, message));
@@ -90,29 +91,33 @@ TEST_F(JobSystemSafetyTests, SafeSetThreadCountValidatesSanity)
 
 TEST_F(JobSystemSafetyTests, SafeSetThreadCountPreservesQueuedJobs)
 {
+	JobSystem singleWorkerSystem({}, 1);
 	auto blocker = CreateRef<Gate>();
-	jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	const auto blockerId = singleWorkerSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
 	
-	std::this_thread::sleep_for(Time::Milliseconds(50));
+	ASSERT_TRUE(WaitUntil([&]() {
+		const auto snapshot = singleWorkerSystem.GetJob(blockerId);
+		return snapshot.has_value() && snapshot->status == JobStatus::Running;
+	}, Time::Milliseconds(1000)));
 	
 	// Submit jobs that will be queued
-	auto job1 = jobSystem.Submit(CreateRef<SleepJob>("queued-1", 10, Time::Milliseconds(100)));
-	auto job2 = jobSystem.Submit(CreateRef<SleepJob>("queued-2", 20, Time::Milliseconds(100)));
-	auto job3 = jobSystem.Submit(CreateRef<SleepJob>("queued-3", 30, Time::Milliseconds(100)));
+	auto job1 = singleWorkerSystem.Submit(CreateRef<SleepJob>("queued-1", 1, Time::Milliseconds(1)));
+	auto job2 = singleWorkerSystem.Submit(CreateRef<SleepJob>("queued-2", 1, Time::Milliseconds(1)));
+	auto job3 = singleWorkerSystem.Submit(CreateRef<SleepJob>("queued-3", 1, Time::Milliseconds(1)));
 	
-	const auto queuedBefore = jobSystem.GetQueuedJobCount();
-	EXPECT_GE(queuedBefore, 2); // At least 2 jobs should be queued
+	const auto queuedBefore = singleWorkerSystem.GetQueuedJobCount();
+	EXPECT_EQ(queuedBefore, 3u);
 	
 	std::string message;
-	EXPECT_TRUE(jobSystem.SafeSetThreadCount(1, message)) << "SafeSetThreadCount failed: " << message;
+	EXPECT_TRUE(singleWorkerSystem.SafeSetThreadCount(2, message)) << "SafeSetThreadCount failed: " << message;
 	
 	// All originally queued jobs should still exist
-	EXPECT_TRUE(jobSystem.GetJob(job1).has_value());
-	EXPECT_TRUE(jobSystem.GetJob(job2).has_value());
-	EXPECT_TRUE(jobSystem.GetJob(job3).has_value());
+	EXPECT_TRUE(singleWorkerSystem.GetJob(job1).has_value());
+	EXPECT_TRUE(singleWorkerSystem.GetJob(job2).has_value());
+	EXPECT_TRUE(singleWorkerSystem.GetJob(job3).has_value());
 	
 	blocker->Open();
-	jobSystem.Shutdown();
+	singleWorkerSystem.Shutdown();
 }
 
 TEST_F(JobSystemSafetyTests, SafeSetThreadCountReturnsFailureOnShutdown)
@@ -126,39 +131,52 @@ TEST_F(JobSystemSafetyTests, SafeSetThreadCountReturnsFailureOnShutdown)
 
 TEST_F(JobSystemSafetyTests, GetQueuedJobCountReturnsCorrectCount)
 {
+	JobSystem singleWorkerSystem({}, 1);
 	auto gate = CreateRef<Gate>();
-	jobSystem.Submit(CreateRef<BlockingJob>(gate), JobPriority::Highest);
+	const auto blockerId = singleWorkerSystem.Submit(CreateRef<BlockingJob>(gate), JobPriority::Highest);
 	
-	std::this_thread::sleep_for(Time::Milliseconds(50));
+	ASSERT_TRUE(WaitUntil([&]() {
+		const auto snapshot = singleWorkerSystem.GetJob(blockerId);
+		return snapshot.has_value() && snapshot->status == JobStatus::Running;
+	}, Time::Milliseconds(1000)));
 	
-	auto job1 = jobSystem.Submit(CreateRef<SleepJob>("q1", 1, Time::Milliseconds(100)));
-	auto job2 = jobSystem.Submit(CreateRef<SleepJob>("q2", 2, Time::Milliseconds(100)));
-	auto job3 = jobSystem.Submit(CreateRef<SleepJob>("q3", 3, Time::Milliseconds(100)));
+	(void)singleWorkerSystem.Submit(CreateRef<SleepJob>("q1", 1, Time::Milliseconds(1)));
+	(void)singleWorkerSystem.Submit(CreateRef<SleepJob>("q2", 1, Time::Milliseconds(1)));
+	(void)singleWorkerSystem.Submit(CreateRef<SleepJob>("q3", 1, Time::Milliseconds(1)));
 	
-	const auto count = jobSystem.GetQueuedJobCount();
-	EXPECT_GE(count, 2); // At least 2 queued (plus potentially running blocker)
+	const auto count = singleWorkerSystem.GetQueuedJobCount();
+	EXPECT_EQ(count, 3u);
 	
 	gate->Open();
-	jobSystem.Shutdown();
+	singleWorkerSystem.Shutdown();
 }
 
 TEST_F(JobSystemSafetyTests, IsQueueFullDetectsCapacityReached)
 {
-	const auto initialCapacity = jobSystem.GetMaxQueueCapacity();
+	JobSystem singleWorkerSystem({}, 1);
+	auto gate = CreateRef<Gate>();
+	const auto blockerId = singleWorkerSystem.Submit(CreateRef<BlockingJob>(gate), JobPriority::Highest);
+	ASSERT_TRUE(WaitUntil([&]() {
+		const auto snapshot = singleWorkerSystem.GetJob(blockerId);
+		return snapshot.has_value() && snapshot->status == JobStatus::Running;
+	}, Time::Milliseconds(1000)));
+
+	const auto initialCapacity = singleWorkerSystem.GetMaxQueueCapacity();
 	
 	// Fill queue beyond capacity
 	std::vector<JobId> jobIds;
 	for (std::size_t i = 0; i < initialCapacity + 10; ++i)
 	{
-		jobIds.push_back(jobSystem.Submit(
-			CreateRef<SleepJob>("fill-" + std::to_string(i), static_cast<int>(i), Time::Milliseconds(50))));
+		jobIds.push_back(singleWorkerSystem.Submit(
+			CreateRef<SleepJob>("fill-" + std::to_string(i), 1, Time::Milliseconds(0))));
 	}
 	
 	// Queue should be full or have expanded
-	const auto capacityAfter = jobSystem.GetMaxQueueCapacity();
+	const auto capacityAfter = singleWorkerSystem.GetMaxQueueCapacity();
 	EXPECT_GE(capacityAfter, initialCapacity);
 	
-	jobSystem.Shutdown();
+	gate->Open();
+	singleWorkerSystem.Shutdown();
 }
 
 TEST_F(JobSystemSafetyTests, SafeSetThreadCountWithPauseResumeFlow)
@@ -170,7 +188,8 @@ TEST_F(JobSystemSafetyTests, SafeSetThreadCountWithPauseResumeFlow)
 	// 4. Resume jobs
 	
 	auto blocker = CreateRef<Gate>();
-	jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	const auto blockerId = jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	ASSERT_NE(blockerId, 0u);
 	
 	std::this_thread::sleep_for(Time::Milliseconds(50));
 	
@@ -199,7 +218,8 @@ TEST_F(JobSystemSafetyTests, SafeSetThreadCountWithPauseResumeFlow)
 TEST_F(JobSystemSafetyTests, MultipleJobsPreservedDuringThreadChange)
 {
 	auto blocker = CreateRef<Gate>();
-	jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	const auto blockerId = jobSystem.Submit(CreateRef<BlockingJob>(blocker), JobPriority::Highest);
+	ASSERT_NE(blockerId, 0u);
 	
 	std::this_thread::sleep_for(Time::Milliseconds(50));
 	

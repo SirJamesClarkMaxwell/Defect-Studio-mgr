@@ -10,6 +10,9 @@
 
 #include "Presentation/ImGuiLayer.hpp"
 
+#include "IconsFontAwesome6.h"
+#include "fa-solid-900.h"
+
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Window.hpp"
@@ -595,6 +598,21 @@ namespace DefectStudio
 			font = io.Fonts->AddFontDefault();
 			if (font == nullptr)
 				return false;
+		}
+
+		ImFontConfig iconsConfig;
+		iconsConfig.MergeMode = true;
+		iconsConfig.PixelSnapH = true;
+		const float iconFontSize = ImGuiLayerDetail::FontPixelSize * 2.0f / 3.0f;
+		static constexpr ImWchar iconsRanges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
+		if (io.Fonts->AddFontFromMemoryCompressedTTF(
+				fa_solid_900_compressed_data,
+				static_cast<int>(fa_solid_900_compressed_size),
+				iconFontSize,
+				&iconsConfig,
+				iconsRanges) == nullptr)
+		{
+			DS_LOG_WARN("Font Awesome 6 icon font could not be merged into ImGui font atlas");
 		}
 
 		io.FontDefault = font;

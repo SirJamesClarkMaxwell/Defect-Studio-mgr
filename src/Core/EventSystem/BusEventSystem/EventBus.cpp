@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Threading/ThreadAffinity.hpp"
 #include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
@@ -124,6 +125,7 @@ namespace DefectStudio
 	void EventBus::ProcessQueue()
 	{
 		ZoneScoped;
+		ASSERT_MAIN_THREAD();
 		std::vector<QueuedEvent> pending;
 		{
 			std::scoped_lock lock(m_QueueMutex);

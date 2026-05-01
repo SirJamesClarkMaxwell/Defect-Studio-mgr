@@ -26,3 +26,9 @@
 [submodule "Vendor/thread-pool"]
 	path = Vendor/thread-pool
 	url = https://github.com/sjcmdev/thread-pool.git
+[submodule "Vendor/ImGuiNotify"]
+	path = Vendor/ImGuiNotify
+	url = https://github.com/sjcmdev/ImGuiNotify.git
+[submodule "Vendor/imgui-command-palette"]
+	path = Vendor/imgui-command-palette
+	url = https://github.com/sjcmdev/imgui-command-palette.git
