@@ -20,6 +20,7 @@
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Assets/AssetManager.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/Logging/LogRegistry.hpp"
 #include "Core/Notifications/Notifier.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
@@ -306,6 +307,11 @@ namespace DefectStudio
 		return *m_AssetManager;
 	}
 
+	Ref<LogRegistry> Application::GetLogRegistry() const
+	{
+		return m_LogRegistry;
+	}
+
 	void Application::ShowBlockingError(const StructuredError &error)
 	{
 		ASSERT_MAIN_THREAD();
@@ -346,6 +352,7 @@ namespace DefectStudio
 		installCrashFallbackHandlers();
 		Threading::SetMainThread();
 		setCrashStage("construct application");
+		m_LogRegistry = CreateRef<LogRegistry>();
 		m_EventQueue.Configure(RuntimeDefaults::EventQueueInitialCapacity, RuntimeDefaults::EventQueueGrowthStep);
 
 		m_Runtime.argc = argc;
@@ -456,7 +463,8 @@ namespace DefectStudio
 			m_ConfigManager,
 			m_Config,
 			m_Runtime.specification,
-			m_EventQueue);
+			m_EventQueue,
+			m_LogRegistry);
 		return true;
 	}
 
@@ -833,12 +841,14 @@ namespace DefectStudio
 		loggerOptions.level = m_Runtime.specification.logLevel;
 		loggerOptions.logToFile = m_Runtime.specification.logToFile;
 		loggerOptions.logFilePath = m_Runtime.specification.logFilePath.Native();
+		loggerOptions.logRegistry = m_LogRegistry;
 		Logger::Initialize(loggerOptions);
 	}
 
 	void Application::shutdownLogger() const
 	{
 		Logger::Shutdown();
+		m_LogRegistry.reset();
 	}
 
 	void Application::logStartupSpecification() const
@@ -886,7 +896,8 @@ namespace DefectStudio
 			editorLayer->BindRuntimeServices(
 				m_EventBus,
 				coreLayer->GetJobSystemHandle(),
-				coreLayer->GetProgressTrackerHandle());
+				coreLayer->GetProgressTrackerHandle(),
+				m_LogRegistry);
 			editorLayer->ApplyConfig(m_Config);
 
 			if (imGuiLayer != nullptr)

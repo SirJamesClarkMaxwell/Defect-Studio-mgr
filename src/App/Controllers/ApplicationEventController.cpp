@@ -12,14 +12,16 @@ namespace DefectStudio
 		Ref<ConfigManager> configManager,
 		ApplicationConfig &config,
 		ApplicationSpecification &specification,
-		EventQueue &eventQueue)
+		EventQueue &eventQueue,
+		Ref<LogRegistry> logRegistry)
 	{
 		m_ConfigController = CreateUnique<ApplicationConfigController>(
 			std::move(eventBus),
 			std::move(configManager),
 			config,
 			specification,
-			eventQueue);
+			eventQueue,
+			std::move(logRegistry));
 		DS_LOG_INFO("ApplicationEventController initialized");
 	}
 

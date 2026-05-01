@@ -1,17 +1,22 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
+#include <thread>
 
 #include <spdlog/spdlog.h>
 
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Core/Utils/Time.hpp"
 
 #include <spdlog/common.h>
 
 namespace DefectStudio
 {
+	class LogRegistry;
+
 	enum class LogLevel
 	{
 		Trace,
@@ -22,14 +27,51 @@ namespace DefectStudio
 		Critical
 	};
 
+	enum class LogCategory
+	{
+		General,
+		Project,
+		Import,
+		Export,
+		JobSystem,
+		Parsing,
+		UI,
+		Scripting,
+		Rendering,
+		Capability,
+		Config,
+		Notification,
+		Count
+	};
+
+	struct LogEntry
+	{
+		LogLevel level = LogLevel::Info;
+		LogCategory category = LogCategory::General;
+		std::string loggerName;
+		std::string message;
+		std::string sourceFile;
+		std::string sourceFunction;
+		std::uint32_t sourceLine = 0;
+		std::thread::id threadId{};
+		std::string threadLabel;
+		Time::TimePoint timestamp{};
+
+		[[nodiscard]] std::string Origin() const;
+		[[nodiscard]] std::string TimestampString() const;
+		[[nodiscard]] std::string ToString() const;
+	};
+
 	struct LoggerOptions
 	{
 		LogLevel level = LogLevel::Info;
 		bool logToFile = false;
 		Path logFilePath;
+		Ref<LogRegistry> logRegistry;
 	};
 
 	const char *ToString(LogLevel level);
+	const char *ToString(LogCategory category);
 
 	class Logger
 	{

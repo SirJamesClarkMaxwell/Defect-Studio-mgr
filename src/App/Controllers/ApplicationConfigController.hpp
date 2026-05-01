@@ -11,6 +11,7 @@ namespace DefectStudio
 	class ConfigManager;
 	class EventBus;
 	class EventQueue;
+	class LogRegistry;
 
 	namespace AppEvents::Config
 	{
@@ -27,7 +28,8 @@ namespace DefectStudio
 			Ref<ConfigManager> configManager,
 			ApplicationConfig &config,
 			ApplicationSpecification &specification,
-			EventQueue &eventQueue);
+			EventQueue &eventQueue,
+			Ref<LogRegistry> logRegistry = {});
 		~ApplicationConfigController() override;
 
 		ApplicationConfigController(const ApplicationConfigController &) = delete;
@@ -52,5 +54,6 @@ namespace DefectStudio
 		ApplicationConfig &m_Config;
 		ApplicationSpecification &m_Specification;
 		EventQueue &m_EventQueue;
+		Ref<LogRegistry> m_LogRegistry;
 	};
 } // namespace DefectStudio

@@ -15,11 +15,11 @@ namespace DefectStudio
 			case Severity::Info:
 				return NotificationSeverity::Info;
 			case Severity::Warning:
-				return NotificationSeverity::Warning;
+				return NotificationSeverity::Warn;
 			case Severity::Error:
 				return NotificationSeverity::Error;
 			case Severity::Fatal:
-				return NotificationSeverity::Fatal;
+				return NotificationSeverity::Critical;
 			}
 			return NotificationSeverity::Error;
 		}

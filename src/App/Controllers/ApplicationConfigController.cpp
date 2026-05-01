@@ -31,12 +31,14 @@ namespace DefectStudio
 		Ref<ConfigManager> configManager,
 		ApplicationConfig &config,
 		ApplicationSpecification &specification,
-		EventQueue &eventQueue)
+		EventQueue &eventQueue,
+		Ref<LogRegistry> logRegistry)
 		: m_EventBus(std::move(eventBus)),
 		  m_ConfigManager(std::move(configManager)),
 		  m_Config(config),
 		  m_Specification(specification),
-		  m_EventQueue(eventQueue)
+		  m_EventQueue(eventQueue),
+		  m_LogRegistry(std::move(logRegistry))
 	{
 		bindEvents();
 	}
@@ -70,6 +72,7 @@ namespace DefectStudio
 		loggerOptions.level = m_Specification.logLevel;
 		loggerOptions.logToFile = m_Specification.logToFile;
 		loggerOptions.logFilePath = m_Specification.logFilePath.Native();
+		loggerOptions.logRegistry = m_LogRegistry;
 		Logger::Initialize(loggerOptions);
 	}
 

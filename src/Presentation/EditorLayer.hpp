@@ -18,6 +18,7 @@
 namespace DefectStudio
 {
 	class EventBus;
+	class LogRegistry;
 	struct ApplicationConfig;
 
 	namespace AppEvents::Config
@@ -31,7 +32,8 @@ namespace DefectStudio
 		EditorLayer();
 		void BindRuntimeServices(Ref<EventBus> eventBus,
 		                         WeakRef<JobSystem> jobSystem,
-		                         WeakRef<ProgressTracker> progressTracker);
+		                         WeakRef<ProgressTracker> progressTracker,
+		                         Ref<LogRegistry> logRegistry);
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 		void ApplyConfig(const ApplicationConfig &config);
 		void ExportConfig(ApplicationConfig &config) const;
@@ -66,6 +68,7 @@ namespace DefectStudio
 		PanelRegistry m_Panels;
 		bool m_PanelsInitialized = false;
 		Ref<EventBus> m_EventBus;
+		Ref<LogRegistry> m_LogRegistry;
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<ProgressTracker> m_ProgressTracker;
 		Ref<EditorUiState> m_UiState;

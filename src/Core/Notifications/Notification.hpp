@@ -9,13 +9,10 @@ namespace DefectStudio
 {
 	enum class NotificationSeverity
 	{
-		Fatal,
-		Trace,
-		Debug,
 		Info,
-		Success,
-		Warning,
-		Error
+		Warn,
+		Error,
+		Critical
 	};
 
 	enum class NotificationCategory

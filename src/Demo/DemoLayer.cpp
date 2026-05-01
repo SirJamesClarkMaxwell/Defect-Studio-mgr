@@ -260,14 +260,12 @@ namespace DefectStudio::Demo
 		{
 			switch (severity)
 			{
-			case NotificationSeverity::Debug:
 			case NotificationSeverity::Info:
 				return ImGuiToastType::Info;
-			case NotificationSeverity::Success:
-				return ImGuiToastType::Success;
-			case NotificationSeverity::Warning:
+			case NotificationSeverity::Warn:
 				return ImGuiToastType::Warning;
 			case NotificationSeverity::Error:
+			case NotificationSeverity::Critical:
 				return ImGuiToastType::Error;
 			}
 
@@ -278,16 +276,14 @@ namespace DefectStudio::Demo
 		{
 			switch (severity)
 			{
-			case NotificationSeverity::Debug:
-				return ImVec4(0.55f, 0.70f, 1.00f, 1.00f);
 			case NotificationSeverity::Info:
 				return ImVec4(0.35f, 0.72f, 1.00f, 1.00f);
-			case NotificationSeverity::Success:
-				return ImVec4(0.30f, 0.90f, 0.45f, 1.00f);
-			case NotificationSeverity::Warning:
+			case NotificationSeverity::Warn:
 				return ImVec4(1.00f, 0.76f, 0.28f, 1.00f);
 			case NotificationSeverity::Error:
 				return ImVec4(1.00f, 0.38f, 0.38f, 1.00f);
+			case NotificationSeverity::Critical:
+				return ImVec4(1.00f, 0.18f, 0.18f, 1.00f);
 			}
 
 			return ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
@@ -675,20 +671,17 @@ namespace DefectStudio::Demo
 
 			switch (severity)
 			{
-			case NotificationSeverity::Debug:
-				notifier.Debug(resolvedTitle, resolvedMessage, category);
-				break;
 			case NotificationSeverity::Info:
 				notifier.Info(resolvedTitle, resolvedMessage, category);
 				break;
-			case NotificationSeverity::Success:
-				notifier.Success(resolvedTitle, resolvedMessage, category);
-				break;
-			case NotificationSeverity::Warning:
+			case NotificationSeverity::Warn:
 				notifier.Warning(resolvedTitle, resolvedMessage, category);
 				break;
 			case NotificationSeverity::Error:
 				notifier.Error(resolvedTitle, resolvedMessage, category);
+				break;
+			case NotificationSeverity::Critical:
+				notifier.Critical(resolvedTitle, resolvedMessage, category);
 				break;
 			}
 
@@ -698,17 +691,14 @@ namespace DefectStudio::Demo
 		if (ImGui::Button("Info toast"))
 			emitNotification(NotificationSeverity::Info, "Info", "ImGuiNotify toast from DemoLayer");
 		ImGui::SameLine();
-		if (ImGui::Button("Success toast"))
-			emitNotification(NotificationSeverity::Success, "Success", "Notifier success event published");
-		ImGui::SameLine();
 		if (ImGui::Button("Warning toast"))
-			emitNotification(NotificationSeverity::Warning, "Warning", "Diagnostic warning surfaced in UI");
+			emitNotification(NotificationSeverity::Warn, "Warning", "Diagnostic warning surfaced in UI");
 		ImGui::SameLine();
 		if (ImGui::Button("Error toast"))
 			emitNotification(NotificationSeverity::Error, "Error", "Blocking error path demonstrated");
-
-		if (ImGui::Button("Debug toast"))
-			emitNotification(NotificationSeverity::Debug, "Debug", "Low-noise trace notification");
+		ImGui::SameLine();
+		if (ImGui::Button("Critical toast"))
+			emitNotification(NotificationSeverity::Critical, "Critical", "Critical diagnostic surfaced in UI");
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Runtime snapshot");
@@ -724,7 +714,7 @@ namespace DefectStudio::Demo
 			{
 				capabilityService.Require("ui.notifications");
 				emitNotification(
-					NotificationSeverity::Success,
+					NotificationSeverity::Info,
 					"Capability available",
 					"ui.notifications requirement satisfied",
 					NotificationCategory::Capability);
@@ -745,7 +735,7 @@ namespace DefectStudio::Demo
 			{
 				capabilityService.Require("demo.missing");
 				emitNotification(
-					NotificationSeverity::Success,
+					NotificationSeverity::Info,
 					"Capability available",
 					"demo.missing requirement satisfied",
 					NotificationCategory::Capability);

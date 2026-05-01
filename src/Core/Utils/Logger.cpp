@@ -1,5 +1,9 @@
 #include "Core/dspch.hpp"
 
+#include <ctime>
+#include <filesystem>
+#include <sstream>
+
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -52,16 +56,97 @@ namespace DefectStudio
 		return "info";
 	}
 
+	const char *ToString(LogCategory category)
+	{
+		switch (category)
+		{
+			case LogCategory::General:
+				return "General";
+			case LogCategory::Project:
+				return "Project";
+			case LogCategory::Import:
+				return "Import";
+			case LogCategory::Export:
+				return "Export";
+			case LogCategory::JobSystem:
+				return "JobSystem";
+			case LogCategory::Parsing:
+				return "Parsing";
+			case LogCategory::UI:
+				return "UI";
+			case LogCategory::Scripting:
+				return "Scripting";
+			case LogCategory::Rendering:
+				return "Rendering";
+			case LogCategory::Capability:
+				return "Capability";
+			case LogCategory::Config:
+				return "Config";
+			case LogCategory::Notification:
+				return "Notification";
+			case LogCategory::Count:
+				break;
+		}
 
+		return "General";
+	}
+
+	std::string LogEntry::Origin() const
+	{
+		if (!sourceFile.empty())
+		{
+			std::filesystem::path path(sourceFile);
+			std::string origin = path.stem().string();
+			if (origin.empty())
+				origin = path.filename().string();
+			if (sourceLine > 0)
+				origin += ":" + std::to_string(sourceLine);
+			return origin;
+		}
+
+		if (!loggerName.empty())
+			return loggerName;
+		if (!threadLabel.empty())
+			return threadLabel;
+		return "-";
+	}
+
+	std::string LogEntry::TimestampString() const
+	{
+		if (timestamp == Time::TimePoint{})
+			return "-";
+
+		const std::time_t time = Time::Clock::to_time_t(timestamp);
+		std::tm localTime{};
+#if defined(_WIN32)
+		localtime_s(&localTime, &time);
+#else
+		localtime_r(&time, &localTime);
+#endif
+
+		char buffer[32] = {};
+		std::strftime(buffer, sizeof(buffer), "%H:%M:%S", &localTime);
+		return std::string(buffer);
+	}
+
+	std::string LogEntry::ToString() const
+	{
+		std::ostringstream stream;
+		stream << '[' << TimestampString() << "] "
+		       << '[' << DefectStudio::ToString(level) << "] "
+		       << '[' << DefectStudio::ToString(category) << "] "
+		       << Origin() << ": "
+		       << message;
+		return stream.str();
+	}
 
 	void ResetLoggerStorage()
 	{
-		auto &logger = Logger::Get();
-		if (logger != nullptr)
+		if (s_Logger != nullptr)
 		{
-			logger->flush();
-			spdlog::drop(logger->name());
-			logger.reset();
+			s_Logger->flush();
+			spdlog::drop(s_Logger->name());
+			s_Logger.reset();
 		}
 	}
 
@@ -73,7 +158,8 @@ namespace DefectStudio
 
 		std::vector<spdlog::sink_ptr> sinks;
 		sinks.push_back(CreateRef<spdlog::sinks::stdout_color_sink_mt>());
-		sinks.push_back(CreateRef<LogRegistrySink>());
+		if (options.logRegistry != nullptr)
+			sinks.push_back(CreateRef<LogRegistrySink>(options.logRegistry));
 
 		std::string fileLoggingError;
 		std::string resolvedLogFilePath;
@@ -101,8 +187,8 @@ namespace DefectStudio
 		spdlog::set_pattern("[%H:%M:%S] [%^%l%$] %v");
 		spdlog::set_level(logLevel);
 		spdlog::flush_on(spdlog::level::trace);
-		s_Logger()->set_level(logLevel);
-		s_Logger()->flush_on(spdlog::level::trace);
+		s_Logger->set_level(logLevel);
+		s_Logger->flush_on(spdlog::level::trace);
 
 		if (!fileLoggingError.empty())
 			s_Logger->error("File logging disabled [{}]: {}", resolvedLogFilePath, fileLoggingError);
@@ -114,13 +200,13 @@ namespace DefectStudio
 	{
 		Flush();
 		spdlog::shutdown();
-		Logger::Get().reset();
+		s_Logger.reset();
 	}
 
 	void Logger::Flush()
 	{
-		if (Logger::Get() != nullptr)
-			Logger::Get()->flush();
+		if (s_Logger != nullptr)
+			s_Logger->flush();
 		spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) {
 			if (logger != nullptr)
 				logger->flush();

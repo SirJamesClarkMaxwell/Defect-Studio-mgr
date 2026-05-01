@@ -28,6 +28,7 @@ namespace DefectStudio
 {
 	class ApplicationEventController;
 	class CoreLayer;
+	class LogRegistry;
 
 	class Application
 	{
@@ -56,6 +57,7 @@ namespace DefectStudio
 		[[nodiscard]] CapabilityRegistry &GetCapabilityRegistry();
 		[[nodiscard]] CapabilityService &GetCapabilityService();
 		[[nodiscard]] AssetManager &GetAssetManager();
+		[[nodiscard]] Ref<LogRegistry> GetLogRegistry() const;
 		// Precondition: CoreLayer initialized.
 		JobSystem &GetJobSystem();
 		// Precondition: CoreLayer initialized.
@@ -133,6 +135,7 @@ namespace DefectStudio
 		Ref<CapabilityRegistry> m_CapabilityRegistry;
 		Ref<CapabilityService> m_CapabilityService;
 		Ref<AssetManager> m_AssetManager;
+		Ref<LogRegistry> m_LogRegistry;
 		Unique<ApplicationEventController> m_EventController;
 		LayerStack m_LayerStack;
 		Ref<ConfigManager> m_ConfigManager;

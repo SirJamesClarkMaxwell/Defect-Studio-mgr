@@ -40,9 +40,11 @@ namespace DefectStudio
 
 	void EditorLayer::BindRuntimeServices(Ref<EventBus> eventBus,
 	                                      WeakRef<JobSystem> jobSystem,
-	                                      WeakRef<ProgressTracker> progressTracker)
+	                                      WeakRef<ProgressTracker> progressTracker,
+	                                      Ref<LogRegistry> logRegistry)
 	{
 		m_EventBus = std::move(eventBus);
+		m_LogRegistry = std::move(logRegistry);
 		m_JobSystem = std::move(jobSystem);
 		m_ProgressTracker = std::move(progressTracker);
 		bindConfigEvents();
@@ -108,6 +110,7 @@ namespace DefectStudio
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
 		m_EventBus.reset();
+		m_LogRegistry.reset();
 		m_JobSystem.reset();
 		m_ProgressTracker.reset();
 		m_UiState.reset();
@@ -144,7 +147,7 @@ namespace DefectStudio
 
 		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
-		registerPanel<LoggingPanel>("Logging Panel", true);
+		registerPanel<LoggingPanel>(m_LogRegistry, "Logging Panel", true);
 		registerPanel<SettingsPanel>(m_EventBus, m_JobSystem, CreateWeakRef(m_UiState), "SettingsPanel", true);
 		m_PanelsInitialized = true;
 	}

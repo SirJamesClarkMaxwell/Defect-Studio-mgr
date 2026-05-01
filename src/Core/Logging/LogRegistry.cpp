@@ -16,19 +16,15 @@ namespace DefectStudio
 		}
 	}
 
-	LogRegistry &LogRegistry::Get()
-	{
-		static LogRegistry s_Registry;
-		return s_Registry;
-	}
-
-	void LogRegistry::Append(Entry entry)
+	void LogRegistry::Append(LogEntry entry)
 	{
 		if (entry.threadLabel.empty())
 			entry.threadLabel = toThreadLabel(entry.threadId);
 
 		std::scoped_lock lock(m_Mutex);
 		m_Entries.push_back(std::move(entry));
+		if (m_Entries.size() > MaxEntries)
+			m_Entries.erase(m_Entries.begin(), m_Entries.begin() + static_cast<std::ptrdiff_t>(m_Entries.size() - MaxEntries));
 	}
 
 	void LogRegistry::Clear()
@@ -37,7 +33,7 @@ namespace DefectStudio
 		m_Entries.clear();
 	}
 
-	std::vector<LogRegistry::Entry> LogRegistry::Snapshot() const
+	std::vector<LogEntry> LogRegistry::Snapshot() const
 	{
 		std::scoped_lock lock(m_Mutex);
 		return m_Entries;

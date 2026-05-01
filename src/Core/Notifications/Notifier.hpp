@@ -16,11 +16,10 @@ namespace DefectStudio
 		void UnbindEventBus();
 
 		void Notify(Notification notification);
-		void Debug(std::string title, std::string message, NotificationCategory category = NotificationCategory::General);
 		void Info(std::string title, std::string message, NotificationCategory category = NotificationCategory::General);
-		void Success(std::string title, std::string message, NotificationCategory category = NotificationCategory::General);
 		void Warning(std::string title, std::string message, NotificationCategory category = NotificationCategory::General);
 		void Error(std::string title, std::string message, NotificationCategory category = NotificationCategory::General);
+		void Critical(std::string title, std::string message, NotificationCategory category = NotificationCategory::General);
 
 		[[nodiscard]] const std::vector<Notification> &GetHistory() const;
 		void ClearHistory();

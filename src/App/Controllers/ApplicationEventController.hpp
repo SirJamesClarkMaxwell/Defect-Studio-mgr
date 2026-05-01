@@ -9,6 +9,7 @@ namespace DefectStudio
 	class ConfigManager;
 	class EventBus;
 	class EventQueue;
+	class LogRegistry;
 
 	class ApplicationEventController final
 	{
@@ -18,7 +19,8 @@ namespace DefectStudio
 			Ref<ConfigManager> configManager,
 			ApplicationConfig &config,
 			ApplicationSpecification &specification,
-			EventQueue &eventQueue);
+			EventQueue &eventQueue,
+			Ref<LogRegistry> logRegistry = {});
 		~ApplicationEventController();
 
 		ApplicationEventController(const ApplicationEventController &) = delete;
