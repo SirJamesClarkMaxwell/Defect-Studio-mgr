@@ -203,11 +203,11 @@ namespace DefectStudio::Demo
 	void DemoLayer::OnDetach()
 	{
 		DS_LOG_INFO("DemoLayer detached");
-		m_BackendCommandPalette.reset();
-		m_BackendContextManager.reset();
-		m_BackendKeymapResolver.reset();
-		m_BackendCommandRegistry.reset();
-		m_BackendUndoStack.reset();
+		m_CommandPalette.reset();
+		m_ContextManager.reset();
+		m_KeymapResolver.reset();
+		m_CommandRegistry.reset();
+		m_UndoStack.reset();
 		m_JobSystemDemo.reset();
 		m_EventDispatcherDemo.reset();
 		m_EventBusDemo.reset();
@@ -244,7 +244,7 @@ namespace DefectStudio::Demo
 			m_JobSystemDemo->Render();
 		
 			if (ImGui::CollapsingHeader("Notifications", ImGuiTreeNodeFlags_DefaultOpen))
-			renderNotificationDemo();
+				renderNotificationDemo();
 			
 		if (ImGui::CollapsingHeader("Backend Runtime", ImGuiTreeNodeFlags_DefaultOpen))
 			renderBackendRuntimeDemo();
@@ -294,16 +294,17 @@ namespace DefectStudio::Demo
 	{
 		m_BackendDemoValue = 0;
 		m_BackendRuntimeLog.clear();
-		m_BackendUndoStack = CreateUnique<UndoStack>();
-		m_BackendCommandRegistry = CreateUnique<CommandRegistry>(&Application::Get().GetCapabilityService());
-		m_BackendCommandRegistry->SetUndoStack(m_BackendUndoStack.get());
-		m_BackendKeymapResolver = CreateUnique<KeymapResolver>();
-		m_BackendContextManager = CreateUnique<ContextManager>();
-		m_BackendCommandPalette = CreateUnique<CommandPaletteIndex>(*m_BackendCommandRegistry);
-		m_BackendCommandPalette->SetKeymapResolver(m_BackendKeymapResolver.get(), m_BackendContextManager.get());
+
+		m_UndoStack = CreateUnique<UndoStack>();
+		m_CommandRegistry = CreateUnique<CommandRegistry>(&Application::Get().GetCapabilityService());
+		m_CommandRegistry->SetUndoStack(m_UndoStack.get());
+		m_KeymapResolver = CreateUnique<KeymapResolver>();
+		m_ContextManager = CreateUnique<ContextManager>();
+		m_CommandPalette = CreateUnique<CommandPaletteIndex>(*m_CommandRegistry);
+		m_CommandPalette->SetKeymapResolver(m_KeymapResolver.get(), m_ContextManager.get());
 
 		auto registerCommand = [this](CommandMeta meta, CommandFactory factory) {
-			auto result = m_BackendCommandRegistry->Register(std::move(meta), std::move(factory));
+			auto result = m_CommandRegistry->Register(std::move(meta), std::move(factory));
 			if (!result)
 				appendBackendRuntimeLog("register failed: " + result.Error().technicalDetails);
 		};
@@ -354,7 +355,7 @@ namespace DefectStudio::Demo
 				CommandFlags::None},
 			[this](CommandContext &) {
 				return std::make_unique<DemoCallbackCommand>("Undo demo command", [this](CommandContext &context) {
-					return m_BackendUndoStack->Undo(std::move(context));
+					return m_UndoStack->Undo(std::move(context));
 				});
 			});
 
@@ -368,7 +369,7 @@ namespace DefectStudio::Demo
 				CommandFlags::None},
 			[this](CommandContext &) {
 				return std::make_unique<DemoCallbackCommand>("Redo demo command", [this](CommandContext &context) {
-					return m_BackendUndoStack->Redo(std::move(context));
+					return m_UndoStack->Redo(std::move(context));
 				});
 			});
 
@@ -408,30 +409,30 @@ namespace DefectStudio::Demo
 				});
 			});
 
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		(void)m_KeymapResolver->RegisterBinding(KeyBinding{
 			"demo.increment.f6",
 			KeyChord{KeyCode::F6, KeyModifiers::None},
 			kCommandIncrement,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		(void)m_KeymapResolver->RegisterBinding(KeyBinding{
 			"demo.undo.f7",
 			KeyChord{KeyCode::F7, KeyModifiers::None},
 			kCommandUndo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		(void)m_KeymapResolver->RegisterBinding(KeyBinding{
 			"demo.redo.f8",
 			KeyChord{KeyCode::F8, KeyModifiers::None},
 			kCommandRedo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		m_BackendContextManager->SetActive("demo.backend", true);
+		m_ContextManager->SetActive("demo.backend", true);
 
-		(void)m_BackendCommandRegistry->AddObserver([this](const CommandExecutionEvent &event) {
+		(void)m_CommandRegistry->AddObserver([this](const CommandExecutionEvent &event) {
 			std::string message = event.name + " -> " + executionStateName(event.state);
 			if (event.error)
 				message += " (" + event.error->code + ")";
@@ -443,7 +444,7 @@ namespace DefectStudio::Demo
 
 	void DemoLayer::renderBackendRuntimeDemo()
 	{
-		if (!m_BackendCommandRegistry || !m_BackendUndoStack || !m_BackendCommandPalette)
+		if (!m_CommandRegistry || !m_UndoStack || !m_CommandPalette)
 		{
 			ImGui::TextUnformatted("Backend runtime demo is not initialized.");
 			return;
@@ -455,16 +456,16 @@ namespace DefectStudio::Demo
 		ImGui::SeparatorText("Command runtime");
 		ImGui::Text("Demo value: %d", m_BackendDemoValue);
 		ImGui::Text("Undo depth: %zu | Redo depth: %zu | Clean: %s",
-		            m_BackendUndoStack->GetUndoDepth(),
-		            m_BackendUndoStack->GetRedoDepth(),
-		            m_BackendUndoStack->IsClean() ? "yes" : "no");
-		ImGui::Text("Next undo: %s", m_BackendUndoStack->GetUndoDescription().c_str());
-		ImGui::Text("Next redo: %s", m_BackendUndoStack->GetRedoDescription().c_str());
+		            m_UndoStack->GetUndoDepth(),
+		            m_UndoStack->GetRedoDepth(),
+		            m_UndoStack->IsClean() ? "yes" : "no");
+		ImGui::Text("Next undo: %s", m_UndoStack->GetUndoDescription().c_str());
+		ImGui::Text("Next redo: %s", m_UndoStack->GetRedoDescription().c_str());
 
 		auto executeCommand = [this](const CommandID &id, const char *source) {
 			CommandContext context(ContextID{"demo.backend"});
 			context.SetSource(source);
-			auto result = m_BackendCommandRegistry->Execute(id, std::move(context));
+			auto result = m_CommandRegistry->Execute(id, std::move(context));
 			if (!result)
 			{
 				const StructuredError &error = result.Error();
@@ -484,7 +485,7 @@ namespace DefectStudio::Demo
 
 		if (ImGui::Button("Grouped +3 transaction"))
 		{
-			auto scope = m_BackendUndoStack->ScopedGroup("Grouped +3 demo transaction");
+			auto scope = m_UndoStack->ScopedGroup("Grouped +3 demo transaction");
 			executeCommand(kCommandIncrement, "DemoLayer grouped transaction");
 			executeCommand(kCommandIncrement, "DemoLayer grouped transaction");
 			executeCommand(kCommandIncrement, "DemoLayer grouped transaction");
@@ -493,16 +494,16 @@ namespace DefectStudio::Demo
 		ImGui::SameLine();
 		if (ImGui::Button("Mark clean"))
 		{
-			m_BackendUndoStack->MarkClean();
+			m_UndoStack->MarkClean();
 			appendBackendRuntimeLog("clean mark set at current undo index");
 		}
 
-		ImGui::BeginDisabled(!m_BackendUndoStack->CanUndo());
+		ImGui::BeginDisabled(!m_UndoStack->CanUndo());
 		if (ImGui::Button("Undo"))
 			executeCommand(kCommandUndo, "DemoLayer button");
 		ImGui::EndDisabled();
 		ImGui::SameLine();
-		ImGui::BeginDisabled(!m_BackendUndoStack->CanRedo());
+		ImGui::BeginDisabled(!m_UndoStack->CanRedo());
 		if (ImGui::Button("Redo"))
 			executeCommand(kCommandRedo, "DemoLayer button");
 		ImGui::EndDisabled();
@@ -513,10 +514,10 @@ namespace DefectStudio::Demo
 		ImGui::Spacing();
 		ImGui::SeparatorText("Hotkeys");
 		ImGui::Checkbox("Enable backend demo hotkeys", &m_BackendHotkeysEnabled);
-		const bool contextActive = m_BackendContextManager->IsActive("demo.backend");
+		const bool contextActive = m_ContextManager->IsActive("demo.backend");
 		ImGui::Text("Context 'demo.backend': %s", contextActive ? "active" : "inactive");
 		if (ImGui::Button("Toggle context"))
-			m_BackendContextManager->SetActive("demo.backend", !contextActive);
+			m_ContextManager->SetActive("demo.backend", !contextActive);
 		ImGui::SameLine();
 		if (ImGui::Button("Simulate F6"))
 			(void)executeBackendDemoChord(KeyChord{KeyCode::F6, KeyModifiers::None}, "DemoLayer simulated hotkey");
@@ -531,7 +532,7 @@ namespace DefectStudio::Demo
 		ImGui::Spacing();
 		ImGui::SeparatorText("Command palette backend");
 		ImGui::InputText("Search", m_CommandPaletteSearch.data(), m_CommandPaletteSearch.size());
-		const auto items = m_BackendCommandPalette->Search(m_CommandPaletteSearch.data());
+		const auto items = m_CommandPalette->Search(m_CommandPaletteSearch.data());
 		if (ImGui::BeginTable("##backend_command_palette_table", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
 		{
 			ImGui::TableSetupColumn("Command");
@@ -560,7 +561,7 @@ namespace DefectStudio::Demo
 				{
 					CommandContext context(ContextID{"demo.backend"});
 					context.SetSource("DemoLayer command palette");
-					auto result = m_BackendCommandPalette->Execute(item.id, std::move(context));
+					auto result = m_CommandPalette->Execute(item.id, std::move(context));
 					if (!result)
 					{
 						const StructuredError &error = result.Error();
@@ -573,7 +574,7 @@ namespace DefectStudio::Demo
 			ImGui::EndTable();
 		}
 
-		const auto recent = m_BackendCommandPalette->GetRecentCommands();
+		const auto recent = m_CommandPalette->GetRecentCommands();
 		ImGui::Text("Recent commands: %zu", recent.size());
 		for (const CommandID &id : recent)
 			ImGui::BulletText("%s", id.value.c_str());
@@ -624,10 +625,10 @@ namespace DefectStudio::Demo
 
 	bool DemoLayer::executeBackendDemoChord(const KeyChord &chord, const char *source)
 	{
-		if (!m_BackendCommandRegistry || !m_BackendKeymapResolver || !m_BackendContextManager)
+		if (!m_CommandRegistry || !m_KeymapResolver || !m_ContextManager)
 			return false;
 
-		KeyInputProcessor processor(*m_BackendCommandRegistry, *m_BackendKeymapResolver, *m_BackendContextManager);
+		KeyInputProcessor processor(*m_CommandRegistry, *m_KeymapResolver, *m_ContextManager);
 		CommandContext context(ContextID{"demo.backend"});
 		context.SetSource(source == nullptr ? "DemoLayer hotkey" : source);
 		auto result = processor.HandleKeyPressed(chord, std::move(context));

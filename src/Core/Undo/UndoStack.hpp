@@ -11,26 +11,32 @@
 
 namespace DefectStudio
 {
+	class UndoScope
+	{
+	public:
+		UndoScope(UndoStack &stack, std::string description);
+		UndoScope(const UndoScope &) = delete;
+		UndoScope &operator=(const UndoScope &) = delete;
+		UndoScope(UndoScope &&other) noexcept;
+		UndoScope &operator=(UndoScope &&other) noexcept = delete;
+		~UndoScope();
+
+		[[nodiscard]] Result<void> Commit();
+		[[nodiscard]] Result<void> Cancel(CommandContext context = {});
+
+		private:
+		UndoStack *m_Stack = nullptr;
+		bool m_Active = false;
+	};
+	struct UndoRecord
+	{
+		std::string description;
+		std::vector<std::unique_ptr<ICommand>> commands;
+	};
+
 	class UndoStack
 	{
 	public:
-		class UndoScope
-		{
-		public:
-			UndoScope(UndoStack &stack, std::string description);
-			UndoScope(const UndoScope &) = delete;
-			UndoScope &operator=(const UndoScope &) = delete;
-			UndoScope(UndoScope &&other) noexcept;
-			UndoScope &operator=(UndoScope &&other) noexcept = delete;
-			~UndoScope();
-
-			[[nodiscard]] Result<void> Commit();
-			[[nodiscard]] Result<void> Cancel(CommandContext context = {});
-
-		private:
-			UndoStack *m_Stack = nullptr;
-			bool m_Active = false;
-		};
 
 		[[nodiscard]] bool PushExecuted(std::unique_ptr<ICommand> command);
 
@@ -56,17 +62,12 @@ namespace DefectStudio
 		[[nodiscard]] std::string GetRedoDescription() const;
 
 	private:
-		struct UndoRecord
-		{
-			std::string description;
-			std::vector<std::unique_ptr<ICommand>> commands;
-		};
 
-		[[nodiscard]] Result<void> PushRecord(UndoRecord record);
-		[[nodiscard]] Result<void> ApplyUndoRecord(UndoRecord &record, CommandContext &context);
-		[[nodiscard]] Result<void> ApplyRedoRecord(UndoRecord &record, CommandContext &context);
-		void DropRedoBranch();
-		void InvalidateCleanIfHistoryMutatedAtCleanPoint();
+		[[nodiscard]] Result<void> pushRecord(UndoRecord record);
+		[[nodiscard]] Result<void> applyUndoRecord(UndoRecord &record, CommandContext &context);
+		[[nodiscard]] Result<void> applyRedoRecord(UndoRecord &record, CommandContext &context);
+		void dropRedoBranch();
+		void invalidateCleanIfHistoryMutatedAtCleanPoint();
 
 		std::vector<UndoRecord> m_History;
 		std::size_t m_Index = 0;

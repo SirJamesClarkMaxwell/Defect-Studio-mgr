@@ -101,7 +101,12 @@ namespace DefectStudio
 		KeyBinding newBinding;
 		KeyBindingConflictType type = KeyBindingConflictType::ExactChordAndContext;
 	};
-
+	
+	struct RegisteredBinding
+	{
+		KeyBinding binding;
+		std::size_t order = 0;
+	};
 	class KeymapResolver
 	{
 	public:
@@ -113,11 +118,6 @@ namespace DefectStudio
 		[[nodiscard]] const std::vector<KeyBindingConflict> &GetConflicts() const noexcept;
 
 	private:
-		struct RegisteredBinding
-		{
-			KeyBinding binding;
-			std::size_t order = 0;
-		};
 
 		[[nodiscard]] bool HasConflict(const KeyBinding &binding, KeyBindingConflict &conflict) const;
 

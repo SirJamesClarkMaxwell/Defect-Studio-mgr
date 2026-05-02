@@ -847,8 +847,8 @@ namespace DefectStudio
 
 	void Application::shutdownLogger() const
 	{
+		// m_LogRegistry = nullptr;
 		Logger::Shutdown();
-		m_LogRegistry.reset();
 	}
 
 	void Application::logStartupSpecification() const

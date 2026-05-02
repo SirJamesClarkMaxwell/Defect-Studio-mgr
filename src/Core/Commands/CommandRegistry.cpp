@@ -6,25 +6,24 @@
 
 namespace DefectStudio
 {
-	namespace
+
+	[[nodiscard]] StructuredError MakeCommandError(
+		std::string code,
+		std::string userMessage,
+		std::string technicalDetails,
+		std::string suggestion,
+		ErrorCategory category = ErrorCategory::Validation)
 	{
-		[[nodiscard]] StructuredError MakeCommandError(
-			std::string code,
-			std::string userMessage,
-			std::string technicalDetails,
-			std::string suggestion,
-			ErrorCategory category = ErrorCategory::Validation)
-		{
-			return StructuredError{
-				category,
-				Severity::Error,
-				std::move(userMessage),
-				std::move(technicalDetails),
-				std::move(suggestion),
-				"CommandRegistry",
-				std::move(code)};
-		}
+		return StructuredError{
+			category,
+			Severity::Error,
+			std::move(userMessage),
+			std::move(technicalDetails),
+			std::move(suggestion),
+			"CommandRegistry",
+			std::move(code)};
 	}
+
 
 	CommandRegistry::CommandRegistry(CapabilityService *capabilityService)
 		: m_CapabilityService(capabilityService)
@@ -151,19 +150,7 @@ namespace DefectStudio
 			return capabilityResult.Error();
 		}
 
-		struct ExecutionScope
-		{
-			bool &flag;
-			explicit ExecutionScope(bool &newFlag)
-				: flag(newFlag)
-			{
-				flag = true;
-			}
-			~ExecutionScope()
-			{
-				flag = false;
-			}
-		} scope(m_IsExecuting);
+		ExecutionScope	scope(m_IsExecuting);
 
 		std::unique_ptr<ICommand> command = registration.factory(context);
 		if (!command)

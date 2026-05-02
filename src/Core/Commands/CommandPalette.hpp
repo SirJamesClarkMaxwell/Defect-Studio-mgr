@@ -32,9 +32,9 @@ namespace DefectStudio
 		[[nodiscard]] Result<CommandOutcome> Execute(const CommandID &id, CommandContext context = {});
 
 	private:
-		[[nodiscard]] std::optional<std::string> FindShortcut(const CommandID &id) const;
-		[[nodiscard]] bool MatchesQuery(const CommandMeta &meta, const std::string &query) const;
-		void RecordRecent(const CommandID &id);
+		[[nodiscard]] std::optional<std::string> findShortcut(const CommandID &id) const;
+		[[nodiscard]] bool matchesQuery(const CommandMeta &meta, const std::string &query) const;
+		void recordRecent(const CommandID &id);
 
 		CommandRegistry &m_CommandRegistry;
 		const KeymapResolver *m_KeymapResolver = nullptr;

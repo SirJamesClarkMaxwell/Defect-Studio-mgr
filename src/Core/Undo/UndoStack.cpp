@@ -4,26 +4,25 @@
 
 namespace DefectStudio
 {
-	namespace
-	{
-		[[nodiscard]] StructuredError MakeUndoError(
-			std::string code,
-			std::string userMessage,
-			std::string technicalDetails,
-			std::string suggestion)
-		{
-			return StructuredError{
-				ErrorCategory::Validation,
-				Severity::Error,
-				std::move(userMessage),
-				std::move(technicalDetails),
-				std::move(suggestion),
-				"UndoStack",
-				std::move(code)};
-		}
-	}
 
-	UndoStack::UndoScope::UndoScope(UndoStack &stack, std::string description)
+	[[nodiscard]] StructuredError MakeUndoError(
+		std::string code,
+		std::string userMessage,
+		std::string technicalDetails,
+		std::string suggestion)
+	{
+		return StructuredError{
+			ErrorCategory::Validation,
+			Severity::Error,
+			std::move(userMessage),
+			std::move(technicalDetails),
+			std::move(suggestion),
+			"UndoStack",
+			std::move(code)};
+	}
+	
+
+	UndoScope::UndoScope(UndoStack &stack, std::string description)
 		: m_Stack(&stack), m_Active(true)
 	{
 		auto result = m_Stack->BeginGroup(std::move(description));
@@ -31,20 +30,20 @@ namespace DefectStudio
 			m_Active = false;
 	}
 
-	UndoStack::UndoScope::UndoScope(UndoScope &&other) noexcept
+	UndoScope::UndoScope(UndoScope &&other) noexcept
 		: m_Stack(other.m_Stack), m_Active(other.m_Active)
 	{
 		other.m_Stack = nullptr;
 		other.m_Active = false;
 	}
 
-	UndoStack::UndoScope::~UndoScope()
+	UndoScope::~UndoScope()
 	{
 		if (m_Stack != nullptr && m_Active)
 			(void)m_Stack->EndGroup();
 	}
 
-	Result<void> UndoStack::UndoScope::Commit()
+	Result<void> UndoScope::Commit()
 	{
 		if (m_Stack == nullptr || !m_Active)
 			return {};
@@ -53,7 +52,7 @@ namespace DefectStudio
 		return m_Stack->EndGroup();
 	}
 
-	Result<void> UndoStack::UndoScope::Cancel(CommandContext context)
+	Result<void> UndoScope::Cancel(CommandContext context)
 	{
 		if (m_Stack == nullptr || !m_Active)
 			return {};
@@ -83,7 +82,7 @@ namespace DefectStudio
 				auto mergeResult = lastRecord.commands.front()->Merge(std::move(command));
 				if (mergeResult)
 				{
-					InvalidateCleanIfHistoryMutatedAtCleanPoint();
+					invalidateCleanIfHistoryMutatedAtCleanPoint();
 					return true;
 				}
 			}
@@ -92,7 +91,7 @@ namespace DefectStudio
 		UndoRecord record;
 		record.description = command->Description();
 		record.commands.push_back(std::move(command));
-		return PushRecord(std::move(record)).HasValue();
+		return pushRecord(std::move(record)).HasValue();
 	}
 
 	Result<void> UndoStack::Undo(CommandContext context)
@@ -119,7 +118,7 @@ namespace DefectStudio
 			return {};
 
 		m_IsApplying = true;
-		Result<void> result = ApplyUndoRecord(m_History[m_Index - 1], context);
+		Result<void> result = applyUndoRecord(m_History[m_Index - 1], context);
 		m_IsApplying = false;
 
 		if (!result)
@@ -153,7 +152,7 @@ namespace DefectStudio
 			return {};
 
 		m_IsApplying = true;
-		Result<void> result = ApplyRedoRecord(m_History[m_Index], context);
+		Result<void> result = applyRedoRecord(m_History[m_Index], context);
 		m_IsApplying = false;
 
 		if (!result)
@@ -205,7 +204,7 @@ namespace DefectStudio
 
 		if (record.description.empty())
 			record.description = record.commands.front()->Description();
-		return PushRecord(std::move(record));
+		return pushRecord(std::move(record));
 	}
 
 	Result<void> UndoStack::CancelGroup(CommandContext context)
@@ -224,12 +223,12 @@ namespace DefectStudio
 		m_GroupDepth = 0;
 
 		m_IsApplying = true;
-		Result<void> result = ApplyUndoRecord(record, context);
+		Result<void> result = applyUndoRecord(record, context);
 		m_IsApplying = false;
 		return result;
 	}
 
-	UndoStack::UndoScope UndoStack::ScopedGroup(std::string description)
+	UndoScope UndoStack::ScopedGroup(std::string description)
 	{
 		return UndoScope(*this, std::move(description));
 	}
@@ -298,19 +297,19 @@ namespace DefectStudio
 		return m_History[m_Index].description;
 	}
 
-	Result<void> UndoStack::PushRecord(UndoRecord record)
+	Result<void> UndoStack::pushRecord(UndoRecord record)
 	{
 		if (record.commands.empty())
 			return {};
 
-		DropRedoBranch();
+		dropRedoBranch();
 		m_History.push_back(std::move(record));
 		m_Index = m_History.size();
-		InvalidateCleanIfHistoryMutatedAtCleanPoint();
+		invalidateCleanIfHistoryMutatedAtCleanPoint();
 		return {};
 	}
 
-	Result<void> UndoStack::ApplyUndoRecord(UndoRecord &record, CommandContext &context)
+	Result<void> UndoStack::applyUndoRecord(UndoRecord &record, CommandContext &context)
 	{
 		for (auto it = record.commands.rbegin(); it != record.commands.rend(); ++it)
 		{
@@ -321,7 +320,7 @@ namespace DefectStudio
 		return {};
 	}
 
-	Result<void> UndoStack::ApplyRedoRecord(UndoRecord &record, CommandContext &context)
+	Result<void> UndoStack::applyRedoRecord(UndoRecord &record, CommandContext &context)
 	{
 		for (auto &command : record.commands)
 		{
@@ -332,13 +331,13 @@ namespace DefectStudio
 		return {};
 	}
 
-	void UndoStack::DropRedoBranch()
+	void UndoStack::dropRedoBranch()
 	{
 		if (m_Index < m_History.size())
 			m_History.erase(m_History.begin() + static_cast<std::ptrdiff_t>(m_Index), m_History.end());
 	}
 
-	void UndoStack::InvalidateCleanIfHistoryMutatedAtCleanPoint()
+	void UndoStack::invalidateCleanIfHistoryMutatedAtCleanPoint()
 	{
 		if (m_CleanIndex.has_value() && *m_CleanIndex >= m_Index)
 			m_CleanIndex.reset();

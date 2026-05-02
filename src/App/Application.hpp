@@ -131,17 +131,20 @@ namespace DefectStudio
 	private:
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
-		Ref<Notifier> m_Notifier;
-		Ref<CapabilityRegistry> m_CapabilityRegistry;
-		Ref<CapabilityService> m_CapabilityService;
-		Ref<AssetManager> m_AssetManager;
-		Ref<LogRegistry> m_LogRegistry;
 		Unique<ApplicationEventController> m_EventController;
 		LayerStack m_LayerStack;
-		Ref<ConfigManager> m_ConfigManager;
-		std::optional<StructuredError> m_BlockingError;
-
+		Ref<LogRegistry> m_LogRegistry;
+		
+		Ref<CapabilityRegistry> m_CapabilityRegistry;
+		Ref<CapabilityService> m_CapabilityService;
+		Ref<Notifier> m_Notifier;
+		
 		ApplicationConfig m_Config;
+		Ref<AssetManager> m_AssetManager;
+		Ref<ConfigManager> m_ConfigManager;
+
+		std::optional<StructuredError> m_BlockingError;
+		
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
 

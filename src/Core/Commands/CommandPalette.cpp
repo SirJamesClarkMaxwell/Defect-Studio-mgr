@@ -47,7 +47,7 @@ namespace DefectStudio
 
 		for (const CommandMeta &meta : commands)
 		{
-			if (HasFlag(meta.flags, CommandFlags::HiddenFromPalette) || !MatchesQuery(meta, query))
+			if (HasFlag(meta.flags, CommandFlags::HiddenFromPalette) || !matchesQuery(meta, query))
 				continue;
 
 			CommandPaletteItem item;
@@ -56,7 +56,7 @@ namespace DefectStudio
 			item.category = meta.category;
 			item.description = meta.description;
 			item.enabled = m_CommandRegistry.CanExecute(meta.id).HasValue();
-			if (auto shortcut = FindShortcut(meta.id))
+			if (auto shortcut = findShortcut(meta.id))
 				item.shortcut = *shortcut;
 			items.push_back(std::move(item));
 		}
@@ -72,11 +72,11 @@ namespace DefectStudio
 	{
 		auto result = m_CommandRegistry.Execute(id, std::move(context));
 		if (result)
-			RecordRecent(id);
+			recordRecent(id);
 		return result;
 	}
 
-	std::optional<std::string> CommandPaletteIndex::FindShortcut(const CommandID &id) const
+	std::optional<std::string> CommandPaletteIndex::findShortcut(const CommandID &id) const
 	{
 		if (m_KeymapResolver == nullptr)
 			return std::nullopt;
@@ -92,7 +92,7 @@ namespace DefectStudio
 		return std::nullopt;
 	}
 
-	bool CommandPaletteIndex::MatchesQuery(const CommandMeta &meta, const std::string &query) const
+	bool CommandPaletteIndex::matchesQuery(const CommandMeta &meta, const std::string &query) const
 	{
 		if (query.empty())
 			return true;
@@ -101,7 +101,7 @@ namespace DefectStudio
 		return haystack.find(query) != std::string::npos;
 	}
 
-	void CommandPaletteIndex::RecordRecent(const CommandID &id)
+	void CommandPaletteIndex::recordRecent(const CommandID &id)
 	{
 		auto it = std::find_if(m_RecentCommands.begin(), m_RecentCommands.end(), [&id](const CommandID &recent) {
 			return recent.value == id.value;

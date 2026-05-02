@@ -52,13 +52,16 @@ namespace DefectStudio::Demo
 		std::vector<std::string> m_BackendRuntimeLog;
 
 		Ref<EventBus> m_DemoEventBus;
+
 		Unique<EventDispatcherDemo> m_EventDispatcherDemo;
 		Unique<EventBusDemo> m_EventBusDemo;
+
 		Unique<JobSystemDemo> m_JobSystemDemo;
-		Unique<UndoStack> m_BackendUndoStack;
-		Unique<CommandRegistry> m_BackendCommandRegistry;
-		Unique<KeymapResolver> m_BackendKeymapResolver;
-		Unique<ContextManager> m_BackendContextManager;
-		Unique<CommandPaletteIndex> m_BackendCommandPalette;
+
+		Unique<UndoStack> m_UndoStack;
+		Unique<CommandRegistry> m_CommandRegistry;
+		Unique<KeymapResolver> m_KeymapResolver;
+		Unique<ContextManager> m_ContextManager;
+		Unique<CommandPaletteIndex> m_CommandPalette;
 	};
 } // namespace DefectStudio::Demo

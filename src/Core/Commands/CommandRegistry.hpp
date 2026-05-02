@@ -30,6 +30,24 @@ namespace DefectStudio
 		CommandExecutionState state = CommandExecutionState::Started;
 		std::optional<StructuredError> error;
 	};
+	struct RegisteredCommand
+	{
+		CommandMeta meta;
+		CommandFactory factory;
+	};
+	struct ExecutionScope
+	{
+		explicit ExecutionScope(bool &newFlag)
+		: flag(newFlag)
+		{
+			flag = true;
+		}
+		~ExecutionScope()
+		{
+			flag = false;
+		}
+		bool &flag;
+	}
 
 	using CommandFactory = std::function<std::unique_ptr<ICommand>(CommandContext &)>;
 	using CommandExecutionObserver = std::function<void(const CommandExecutionEvent &)>;
@@ -54,11 +72,6 @@ namespace DefectStudio
 		void RemoveObserver(std::size_t observerId);
 
 	private:
-		struct RegisteredCommand
-		{
-			CommandMeta meta;
-			CommandFactory factory;
-		};
 
 		[[nodiscard]] Result<void> ValidateCapabilities(const CommandMeta &meta) const;
 		void Notify(const CommandExecutionEvent &event) const;
