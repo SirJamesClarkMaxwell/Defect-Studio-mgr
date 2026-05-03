@@ -836,8 +836,12 @@ namespace DefectStudio
 		imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
 		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+#ifndef DS_DIST
 		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>());
+#endif
+#ifndef DS_DIST
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
+#endif
 		DS_LOG_INFO("LayerStack setup: complete");
 	}
 

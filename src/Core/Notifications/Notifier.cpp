@@ -83,6 +83,6 @@ namespace DefectStudio
 		}
 
 		if (m_EventBus)
-			m_EventBus->Publish(NotificationEvent{std::move(notification)});
+			m_EventBus->Queue(NotificationEvent{std::move(notification)});
 	}
 } // namespace DefectStudio

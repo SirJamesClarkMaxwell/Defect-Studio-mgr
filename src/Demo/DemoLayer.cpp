@@ -96,6 +96,9 @@ namespace DefectStudio::Demo
 
 		ImGui::End();
 
+		if (m_DemoEventBus)
+			m_DemoEventBus->ProcessQueue();
+
 		if (m_NotificationsPanel)
 			m_NotificationsPanel->RenderToasts();
 	}

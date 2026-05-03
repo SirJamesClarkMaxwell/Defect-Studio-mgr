@@ -81,6 +81,13 @@ namespace DefectStudio::Demo
 		return {};
 	}
 
+	Result<void> DemoSetValueCommand::Redo(CommandContext &context)
+	{
+		(void)context;
+		*m_Value = m_NewValue;
+		return {};
+	}
+
 	std::string DemoSetValueCommand::Description() const
 	{
 		return "Reset demo value";

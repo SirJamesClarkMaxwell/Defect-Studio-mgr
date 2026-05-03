@@ -60,6 +60,7 @@ namespace DefectStudio
 
 		[[nodiscard]] virtual Result<void> Execute(CommandContext &context) = 0;
 		[[nodiscard]] virtual Result<void> Undo(CommandContext &context);
+		[[nodiscard]] virtual Result<void> Redo(CommandContext &context);
 		[[nodiscard]] virtual std::string Description() const = 0;
 		[[nodiscard]] virtual bool IsUndoable() const noexcept;
 		[[nodiscard]] virtual bool CanMerge(const ICommand &next) const noexcept;

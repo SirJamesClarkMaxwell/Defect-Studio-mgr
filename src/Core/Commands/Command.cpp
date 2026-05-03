@@ -17,6 +17,11 @@ namespace DefectStudio
 			"command.undo.unsupported"};
 	}
 
+	Result<void> ICommand::Redo(CommandContext &context)
+	{
+		return Execute(context);
+	}
+
 	bool ICommand::IsUndoable() const noexcept
 	{
 		return false;

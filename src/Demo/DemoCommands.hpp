@@ -41,6 +41,7 @@ namespace DefectStudio::Demo
 
 		[[nodiscard]] Result<void> Execute(CommandContext &context) override;
 		[[nodiscard]] Result<void> Undo(CommandContext &context) override;
+		[[nodiscard]] Result<void> Redo(CommandContext &context) override;
 		[[nodiscard]] std::string Description() const override;
 		[[nodiscard]] bool IsUndoable() const noexcept override;
 

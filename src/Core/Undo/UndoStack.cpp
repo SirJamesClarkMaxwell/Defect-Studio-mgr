@@ -331,7 +331,7 @@ namespace DefectStudio
 	{
 		for (auto &command : record.commands)
 		{
-			Result<void> result = command->Execute(context);
+			Result<void> result = command->Redo(context);
 			if (!result)
 				return result;
 		}
