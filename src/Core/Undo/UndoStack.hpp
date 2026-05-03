@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -11,6 +12,8 @@
 
 namespace DefectStudio
 {
+	class UndoStack;
+
 	class UndoScope
 	{
 	public:
@@ -24,7 +27,7 @@ namespace DefectStudio
 		[[nodiscard]] Result<void> Commit();
 		[[nodiscard]] Result<void> Cancel(CommandContext context = {});
 
-		private:
+	private:
 		UndoStack *m_Stack = nullptr;
 		bool m_Active = false;
 	};
@@ -37,7 +40,6 @@ namespace DefectStudio
 	class UndoStack
 	{
 	public:
-
 		[[nodiscard]] bool PushExecuted(std::unique_ptr<ICommand> command);
 
 		[[nodiscard]] Result<void> Undo(CommandContext context = {});
@@ -62,7 +64,6 @@ namespace DefectStudio
 		[[nodiscard]] std::string GetRedoDescription() const;
 
 	private:
-
 		[[nodiscard]] Result<void> pushRecord(UndoRecord record);
 		[[nodiscard]] Result<void> applyUndoRecord(UndoRecord &record, CommandContext &context);
 		[[nodiscard]] Result<void> applyRedoRecord(UndoRecord &record, CommandContext &context);

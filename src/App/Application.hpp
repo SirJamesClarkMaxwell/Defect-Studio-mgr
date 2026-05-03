@@ -54,6 +54,7 @@ namespace DefectStudio
 		// Precondition: CoreLayer initialized.
 		EventBus &GetEventBus();
 		[[nodiscard]] Notifier &GetNotifier();
+		[[nodiscard]] Ref<Notifier> GetNotifierRef() const;
 		[[nodiscard]] CapabilityRegistry &GetCapabilityRegistry();
 		[[nodiscard]] CapabilityService &GetCapabilityService();
 		[[nodiscard]] AssetManager &GetAssetManager();

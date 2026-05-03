@@ -289,6 +289,12 @@ namespace DefectStudio
 		return *m_Notifier;
 	}
 
+	Ref<Notifier> Application::GetNotifierRef() const
+	{
+		DS_ASSERT(m_Notifier != nullptr, "Notifier not initialized");
+		return m_Notifier;
+	}
+
 	CapabilityRegistry &Application::GetCapabilityRegistry()
 	{
 		DS_ASSERT(m_CapabilityRegistry != nullptr, "CapabilityRegistry not initialized");
