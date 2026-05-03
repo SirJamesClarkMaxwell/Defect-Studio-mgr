@@ -220,6 +220,9 @@ namespace DefectStudio
 
 		UndoRecord record = std::move(*m_ActiveGroup);
 		m_ActiveGroup.reset();
+		// Intentionally resets entire nesting depth to zero rather than decrementing.
+		// Cancel is atomic: the entire group hierarchy is abandoned, not just the
+		// outermost level. This is asymmetric with EndGroup by design.
 		m_GroupDepth = 0;
 
 		m_IsApplying = true;
@@ -311,6 +314,10 @@ namespace DefectStudio
 
 	Result<void> UndoStack::applyUndoRecord(UndoRecord &record, CommandContext &context)
 	{
+		// Known limitation: if Undo fails mid-group, commands processed before the
+		// failure are already reverted while remaining commands are not. The stack
+		// index is not decremented on failure, leaving domain state partially reverted.
+		// Mitigation: implement Undo as an infallible operation in all ICommand subclasses.
 		for (auto it = record.commands.rbegin(); it != record.commands.rend(); ++it)
 		{
 			Result<void> result = (*it)->Undo(context);
