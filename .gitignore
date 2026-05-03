@@ -11,6 +11,7 @@ logs/
 docs/book
 tmp/
 imgui.ini
+*.pdf
 
 # IDE and editor caches
 .vs/
