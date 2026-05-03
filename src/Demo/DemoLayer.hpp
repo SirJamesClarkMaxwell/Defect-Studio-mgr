@@ -11,6 +11,7 @@ namespace DefectStudio
 namespace DefectStudio::Demo
 {
 	class DemoBackendRuntime;
+	class DemoCapabilitiesPanel;
 	class DemoNotificationsPanel;
 	class EventDispatcherDemo;
 	class EventBusDemo;
@@ -33,6 +34,7 @@ namespace DefectStudio::Demo
 		Unique<EventBusDemo> m_EventBusDemo;
 		Unique<JobSystemDemo> m_JobSystemDemo;
 		Unique<DemoNotificationsPanel> m_NotificationsPanel;
+		Unique<DemoCapabilitiesPanel> m_CapabilitiesPanel;
 		Unique<DemoBackendRuntime> m_BackendRuntime;
 	};
 } // namespace DefectStudio::Demo

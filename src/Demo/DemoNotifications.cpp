@@ -1,15 +1,16 @@
 #include "Core/dspch.hpp"
 
-#include <exception>
 #include <imgui.h>
 #include <string>
 #include <utility>
 
 #include "App/Application.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notification.hpp"
 #include "Core/Notifications/Notifier.hpp"
 #include "Demo/DemoNotifications.hpp"
+#include "Events/NotificationEvents.hpp"
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -55,9 +56,17 @@ namespace DefectStudio::Demo
 		return ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 	}
 
-	DemoNotificationsPanel::DemoNotificationsPanel(Ref<Notifier> notifier)
-		: m_Notifier(std::move(notifier))
+	DemoNotificationsPanel::DemoNotificationsPanel(Ref<Notifier> notifier, Ref<EventBus> eventBus)
+		: m_Notifier(std::move(notifier)),
+		  m_EventBus(std::move(eventBus))
 	{
+		if (m_EventBus)
+		{
+			m_NotificationSubscription = m_EventBus->Subscribe<NotificationEvent>(
+				[this](const NotificationEvent &event) {
+					onNotificationEvent(event);
+				});
+		}
 	}
 
 	void DemoNotificationsPanel::Render()
@@ -70,8 +79,6 @@ namespace DefectStudio::Demo
 
 		auto &application = Application::Get();
 		auto &notifier = *m_Notifier;
-		auto &capabilityRegistry = application.GetCapabilityRegistry();
-		auto &capabilityService = application.GetCapabilityService();
 
 		ImGui::TextUnformatted("Toast notifications and runtime diagnostics");
 		ImGui::Spacing();
@@ -100,7 +107,7 @@ namespace DefectStudio::Demo
 				break;
 			}
 
-			ImGui::InsertNotification({toToastType(severity), 3000, "%s", resolvedMessage.c_str()});
+			(void)severity;
 		};
 
 		if (ImGui::Button("Info toast"))
@@ -114,56 +121,6 @@ namespace DefectStudio::Demo
 		ImGui::SameLine();
 		if (ImGui::Button("Critical toast"))
 			emitNotification(NotificationSeverity::Critical, "Critical", "Critical diagnostic surfaced in UI");
-
-		ImGui::Spacing();
-		ImGui::SeparatorText("Runtime snapshot");
-		ImGui::Text("Capability registry locked: %s", capabilityRegistry.IsLocked() ? "yes" : "no");
-		ImGui::Text("Registered capabilities: %zu", capabilityRegistry.GetAll().size());
-		ImGui::Text("Capability service reports 'ui.notifications': %s", capabilityService.IsAvailable("ui.notifications") ? "yes" : "no");
-
-		ImGui::Spacing();
-		ImGui::SeparatorText("CapabilityService example");
-		if (ImGui::Button("Require ui.notifications"))
-		{
-			try
-			{
-				capabilityService.Require("ui.notifications");
-				emitNotification(
-					NotificationSeverity::Info,
-					"Capability available",
-					"ui.notifications requirement satisfied",
-					NotificationCategory::Capability);
-			}
-			catch (const std::exception &exception)
-			{
-				emitNotification(
-					NotificationSeverity::Error,
-					"Capability missing",
-					exception.what(),
-					NotificationCategory::Capability);
-			}
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Require demo.missing"))
-		{
-			try
-			{
-				capabilityService.Require("demo.missing");
-				emitNotification(
-					NotificationSeverity::Info,
-					"Capability available",
-					"demo.missing requirement satisfied",
-					NotificationCategory::Capability);
-			}
-			catch (const std::exception &exception)
-			{
-				emitNotification(
-					NotificationSeverity::Error,
-					"Capability missing",
-					exception.what(),
-					NotificationCategory::Capability);
-			}
-		}
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("StructuredError example");
@@ -208,6 +165,22 @@ namespace DefectStudio::Demo
 
 	void DemoNotificationsPanel::RenderToasts()
 	{
+		while (!m_PendingToasts.empty())
+		{
+			const Notification &notification = m_PendingToasts.front();
+			ImGui::InsertNotification({
+				toToastType(notification.severity),
+				static_cast<int>(notification.timeoutMs),
+				"%s",
+				notification.message.c_str()});
+			m_PendingToasts.pop_front();
+		}
+
 		ImGui::RenderNotifications();
+	}
+
+	void DemoNotificationsPanel::onNotificationEvent(const NotificationEvent &event)
+	{
+		m_PendingToasts.push_back(event.notification);
 	}
 } // namespace DefectStudio::Demo

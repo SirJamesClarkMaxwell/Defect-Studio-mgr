@@ -36,8 +36,8 @@ namespace DefectStudio::Demo
 		return "unknown";
 	}
 
-	DemoBackendRuntime::DemoBackendRuntime(CapabilityService *capabilityService)
-		: m_CapabilityService(capabilityService)
+	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService)
+		: m_CapabilityService(std::move(capabilityService))
 	{
 		setupBackendRuntimeDemo();
 	}
@@ -233,7 +233,7 @@ namespace DefectStudio::Demo
 		m_BackendRuntimeLog.clear();
 
 		m_BackendUndoStack = CreateUnique<UndoStack>();
-		m_BackendCommandRegistry = CreateUnique<CommandRegistry>(m_CapabilityService);
+		m_BackendCommandRegistry = CreateUnique<CommandRegistry>(m_CapabilityService.get());
 		m_BackendCommandRegistry->SetUndoStack(m_BackendUndoStack.get());
 		m_BackendKeymapResolver = CreateUnique<KeymapResolver>();
 		m_BackendContextManager = CreateUnique<ContextManager>();

@@ -2,10 +2,13 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
+#include "Core/Capabilities/CapabilityRegistry.hpp"
+#include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Notifications/Notifier.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Demo/DemoBackendRuntime.hpp"
+#include "Demo/DemoCapabilities.hpp"
 #include "Demo/DemoLayer.hpp"
 #include "Demo/DemoNotifications.hpp"
 #include "Demo/EventBusDemo.hpp"
@@ -24,21 +27,31 @@ namespace DefectStudio::Demo
 	{
 		DS_LOG_INFO("DemoLayer attached");
 
-		// TODO(Sesja 6): inject via BindRuntimeServices
-		auto &application = Application::Get();
-
 		m_EventDispatcherDemo = CreateUnique<EventDispatcherDemo>();
 		m_DemoEventBus = CreateRef<EventBus>();
 		m_EventBusDemo = CreateUnique<EventBusDemo>(m_DemoEventBus);
 		m_JobSystemDemo = CreateUnique<JobSystemDemo>();
-		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(application.GetNotifierRef());
-		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(&application.GetCapabilityService());
+
+		Ref<Notifier> notifier = CreateRef<Notifier>(m_DemoEventBus);
+		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(notifier, m_DemoEventBus);
+
+		Ref<CapabilityRegistry> capabilityRegistry = CreateRef<CapabilityRegistry>();
+		capabilityRegistry->RegisterCapability(CapabilityEntry{
+			"ui.notifications",
+			CapabilityCategory::RuntimeDetected,
+			true,
+			"Demo runtime can emit notifications through its local Notifier."});
+
+		Ref<CapabilityService> capabilityService = CreateRef<CapabilityService>(*capabilityRegistry);
+		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, notifier);
+		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService);
 	}
 
 	void DemoLayer::OnDetach()
 	{
 		DS_LOG_INFO("DemoLayer detached");
 		m_BackendRuntime.reset();
+		m_CapabilitiesPanel.reset();
 		m_NotificationsPanel.reset();
 		m_JobSystemDemo.reset();
 		m_EventBusDemo.reset();
@@ -74,6 +87,9 @@ namespace DefectStudio::Demo
 
 		if (ImGui::CollapsingHeader("Notifications", ImGuiTreeNodeFlags_DefaultOpen) && m_NotificationsPanel)
 			m_NotificationsPanel->Render();
+
+		if (ImGui::CollapsingHeader("Capabilities", ImGuiTreeNodeFlags_DefaultOpen) && m_CapabilitiesPanel)
+			m_CapabilitiesPanel->Render();
 
 		if (ImGui::CollapsingHeader("Backend Runtime", ImGuiTreeNodeFlags_DefaultOpen) && m_BackendRuntime)
 			m_BackendRuntime->Render();

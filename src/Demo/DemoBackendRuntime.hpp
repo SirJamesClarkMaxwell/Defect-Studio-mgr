@@ -23,7 +23,7 @@ namespace DefectStudio::Demo
 	class DemoBackendRuntime
 	{
 	public:
-		explicit DemoBackendRuntime(CapabilityService *capabilityService);
+		explicit DemoBackendRuntime(Ref<CapabilityService> capabilityService);
 		~DemoBackendRuntime();
 
 		void OnEvent(Event &event);
@@ -36,7 +36,7 @@ namespace DefectStudio::Demo
 		void appendBackendRuntimeLog(std::string message);
 
 	private:
-		CapabilityService *m_CapabilityService = nullptr; 
+		Ref<CapabilityService> m_CapabilityService;
 		int m_BackendDemoValue = 0;
 		bool m_BackendHotkeysEnabled = true;
 		std::array<char, 96> m_CommandPaletteSearch{};
