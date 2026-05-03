@@ -1,11 +1,13 @@
 #pragma once
 
+#include <deque>
 #include <string>
 #include <vector>
 
 #include "App/ApplicationState.hpp"
 #include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
+#include "Core/Notifications/Notification.hpp"
 #include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
@@ -15,6 +17,7 @@ namespace DefectStudio
 	class Window;
 	struct EditorFontOption;
 	struct EditorUiState;
+	struct NotificationEvent;
 
 	namespace AppEvents::Config
 	{
@@ -102,6 +105,7 @@ namespace DefectStudio
 		void onLayoutLoadFailed(const EditorUiEvents::LayoutLoadFailed &event);
 		void onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event);
 		void onApplicationConfigApplied(const AppEvents::Config::Applied &event);
+		void onNotificationEvent(const NotificationEvent &event);
 
 	private:
 		WeakRef<Window> m_Window;
@@ -109,6 +113,7 @@ namespace DefectStudio
 		WeakRef<EditorUiState> m_UiState;
 		WeakRef<ConfigManager> m_ConfigManager;
 		ApplicationConfig m_Config;
+		std::deque<Notification> m_PendingToasts;
 		bool m_ResetLayoutOnAttach = false;
 		bool m_Initialized = false;
 	};

@@ -3,10 +3,13 @@
 #include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/SubscriptionHandle.hpp"
 #include "Core/Notifications/Notification.hpp"
 
 namespace DefectStudio
 {
+	struct NotificationRequestedEvent;
+
 	class Notifier
 	{
 	public:
@@ -25,10 +28,12 @@ namespace DefectStudio
 		void ClearHistory();
 
 	private:
+		void onNotificationRequested(const NotificationRequestedEvent &event);
 		void appendAndPublish(Notification notification);
 
 	private:
 		Ref<EventBus> m_EventBus;
+		SubscriptionHandle m_NotificationRequestSubscription;
 		std::vector<Notification> m_History;
 	};
 } // namespace DefectStudio

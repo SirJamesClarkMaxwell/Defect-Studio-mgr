@@ -12,11 +12,13 @@
 #include "Core/Commands/CommandPalette.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
-#include "Core/Notifications/Notifier.hpp"
+#include "Core/Notifications/Notification.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Demo/DemoBackendRuntime.hpp"
 #include "Demo/DemoCommands.hpp"
+#include "Events/NotificationEvents.hpp"
 
 namespace DefectStudio::Demo
 {
@@ -36,8 +38,9 @@ namespace DefectStudio::Demo
 		return "unknown";
 	}
 
-	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService)
-		: m_CapabilityService(std::move(capabilityService))
+	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus)
+		: m_CapabilityService(std::move(capabilityService)),
+		  m_EventBus(std::move(eventBus))
 	{
 		setupBackendRuntimeDemo();
 	}
@@ -81,7 +84,7 @@ namespace DefectStudio::Demo
 			{
 				const StructuredError &error = result.Error();
 				appendBackendRuntimeLog("error: " + error.userMessage + " [" + error.code + "]");
-				Application::Get().GetNotifier().Notify(ToNotification(error));
+				requestNotification(ToNotification(error));
 			}
 		};
 
@@ -177,7 +180,7 @@ namespace DefectStudio::Demo
 					{
 						const StructuredError &error = result.Error();
 						appendBackendRuntimeLog("palette error: " + error.userMessage + " [" + error.code + "]");
-						Application::Get().GetNotifier().Notify(ToNotification(error));
+						requestNotification(ToNotification(error));
 					}
 				}
 				ImGui::EndDisabled();
@@ -321,10 +324,15 @@ namespace DefectStudio::Demo
 			[this](CommandContext &) {
 				return std::make_unique<DemoCallbackCommand>("Send notification", [this](CommandContext &context) {
 					(void)context;
-					Application::Get().GetNotifier().Info(
+					requestNotification(Notification{
+						NotificationSeverity::Info,
+						NotificationCategory::UI,
 						"Command runtime demo",
 						"Notification emitted from demo.backend.notify",
-						NotificationCategory::UI);
+						"DemoBackendRuntime",
+						Time::Now(),
+						4000,
+						false});
 					appendBackendRuntimeLog("notification command emitted ui.notifications");
 					return Result<void>{};
 				});
@@ -399,7 +407,7 @@ namespace DefectStudio::Demo
 		{
 			const StructuredError &error = result.Error();
 			appendBackendRuntimeLog("hotkey error: " + error.userMessage + " [" + error.code + "]");
-			Application::Get().GetNotifier().Notify(ToNotification(error));
+			requestNotification(ToNotification(error));
 			return false;
 		}
 
@@ -415,5 +423,11 @@ namespace DefectStudio::Demo
 			m_BackendRuntimeLog.erase(
 				m_BackendRuntimeLog.begin(),
 				m_BackendRuntimeLog.begin() + static_cast<std::ptrdiff_t>(m_BackendRuntimeLog.size() - 24));
+	}
+
+	void DemoBackendRuntime::requestNotification(Notification notification)
+	{
+		if (m_EventBus)
+			m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
 	}
 } // namespace DefectStudio::Demo

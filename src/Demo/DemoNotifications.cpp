@@ -4,11 +4,9 @@
 #include <string>
 #include <utility>
 
-#include "App/Application.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notification.hpp"
-#include "Core/Notifications/Notifier.hpp"
 #include "Demo/DemoNotifications.hpp"
 #include "Events/NotificationEvents.hpp"
 
@@ -56,29 +54,26 @@ namespace DefectStudio::Demo
 		return ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 	}
 
-	DemoNotificationsPanel::DemoNotificationsPanel(Ref<Notifier> notifier, Ref<EventBus> eventBus)
-		: m_Notifier(std::move(notifier)),
-		  m_EventBus(std::move(eventBus))
+	DemoNotificationsPanel::DemoNotificationsPanel(Ref<EventBus> eventBus)
+		: m_EventBus(std::move(eventBus))
 	{
 		if (m_EventBus)
 		{
-			m_NotificationSubscription = m_EventBus->Subscribe<NotificationEvent>(
-				[this](const NotificationEvent &event) {
-					onNotificationEvent(event);
+			m_NotificationCenter = CreateUnique<NotificationCenter>(m_EventBus);
+			m_NotificationCenter->RegisterListener(
+				[this](const Notification &notification) {
+					onNotification(notification);
 				});
 		}
 	}
 
 	void DemoNotificationsPanel::Render()
 	{
-		if (!m_Notifier)
+		if (!m_EventBus)
 		{
 			ImGui::TextUnformatted("Notification demo is not initialized.");
 			return;
 		}
-
-		auto &application = Application::Get();
-		auto &notifier = *m_Notifier;
 
 		ImGui::TextUnformatted("Toast notifications and runtime diagnostics");
 		ImGui::Spacing();
@@ -91,23 +86,8 @@ namespace DefectStudio::Demo
 			std::string resolvedTitle = std::string(title) + suffix;
 			std::string resolvedMessage = std::string(message) + suffix;
 
-			switch (severity)
-			{
-			case NotificationSeverity::Info:
-				notifier.Info(resolvedTitle, resolvedMessage, category);
-				break;
-			case NotificationSeverity::Warn:
-				notifier.Warning(resolvedTitle, resolvedMessage, category);
-				break;
-			case NotificationSeverity::Error:
-				notifier.Error(resolvedTitle, resolvedMessage, category);
-				break;
-			case NotificationSeverity::Critical:
-				notifier.Critical(resolvedTitle, resolvedMessage, category);
-				break;
-			}
-
-			(void)severity;
+			const std::uint32_t timeoutMs = severity == NotificationSeverity::Info ? 4000u : (severity == NotificationSeverity::Warn ? 8000u : 12000u);
+			requestNotification(Notification{severity, category, std::move(resolvedTitle), std::move(resolvedMessage), "DemoNotificationsPanel", Time::Now(), timeoutMs, severity == NotificationSeverity::Critical});
 		};
 
 		if (ImGui::Button("Info toast"))
@@ -124,7 +104,7 @@ namespace DefectStudio::Demo
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("StructuredError example");
-		if (ImGui::Button("Show blocking StructuredError"))
+		if (ImGui::Button("Emit StructuredError notification"))
 		{
 			StructuredError error{
 				ErrorCategory::Runtime,
@@ -135,13 +115,12 @@ namespace DefectStudio::Demo
 				"DemoLayer",
 				"DEMO_RENDERER_ASSET_MISSING",
 				DisplayPolicy::BlockingPopup};
-			application.ShowBlockingError(error);
-			notifier.Notify(ToNotification(error));
+			requestNotification(ToNotification(error));
 		}
 
 		ImGui::Spacing();
-		ImGui::SeparatorText("Recent notifier history");
-		const auto &history = notifier.GetHistory();
+		ImGui::SeparatorText("Recent notification history");
+		const auto &history = m_NotificationCenter->GetNotifications();
 		ImGui::Text("History entries: %zu", history.size());
 		if (ImGui::BeginChild("##notification_history", ImVec2(0.0f, 180.0f), true))
 		{
@@ -179,8 +158,14 @@ namespace DefectStudio::Demo
 		ImGui::RenderNotifications();
 	}
 
-	void DemoNotificationsPanel::onNotificationEvent(const NotificationEvent &event)
+	void DemoNotificationsPanel::onNotification(const Notification &notification)
 	{
-		m_PendingToasts.push_back(event.notification);
+		m_PendingToasts.push_back(notification);
+	}
+
+	void DemoNotificationsPanel::requestNotification(Notification notification)
+	{
+		if (m_EventBus)
+			m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
 	}
 } // namespace DefectStudio::Demo

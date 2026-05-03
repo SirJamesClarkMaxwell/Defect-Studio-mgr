@@ -32,8 +32,8 @@ namespace DefectStudio::Demo
 		m_EventBusDemo = CreateUnique<EventBusDemo>(m_DemoEventBus);
 		m_JobSystemDemo = CreateUnique<JobSystemDemo>();
 
-		Ref<Notifier> notifier = CreateRef<Notifier>(m_DemoEventBus);
-		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(notifier, m_DemoEventBus);
+		m_DemoNotifier = CreateRef<Notifier>(m_DemoEventBus);
+		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(m_DemoEventBus);
 
 		Ref<CapabilityRegistry> capabilityRegistry = CreateRef<CapabilityRegistry>();
 		capabilityRegistry->RegisterCapability(CapabilityEntry{
@@ -43,8 +43,8 @@ namespace DefectStudio::Demo
 			"Demo runtime can emit notifications through its local Notifier."});
 
 		Ref<CapabilityService> capabilityService = CreateRef<CapabilityService>(*capabilityRegistry);
-		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, notifier);
-		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService);
+		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, m_DemoEventBus);
+		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService, m_DemoEventBus);
 	}
 
 	void DemoLayer::OnDetach()
@@ -56,6 +56,7 @@ namespace DefectStudio::Demo
 		m_JobSystemDemo.reset();
 		m_EventBusDemo.reset();
 		m_EventDispatcherDemo.reset();
+		m_DemoNotifier.reset();
 		m_DemoEventBus.reset();
 	}
 

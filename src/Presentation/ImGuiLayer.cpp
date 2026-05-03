@@ -8,6 +8,8 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 
+#include "ImGuiNotify.hpp"
+
 #include "Presentation/ImGuiLayer.hpp"
 
 #include "IconsFontAwesome6.h"
@@ -18,6 +20,7 @@
 #include "App/Window.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Events/NotificationEvents.hpp"
 #include "Core/Platform/PlatformFontDiscovery.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
@@ -78,6 +81,22 @@ namespace DefectStudio
 				clamp01(grey + (color.y - grey) * multiplier),
 				clamp01(grey + (color.z - grey) * multiplier),
 				color.w);
+		}
+
+		ImGuiToastType toToastType(NotificationSeverity severity)
+		{
+			switch (severity)
+			{
+			case NotificationSeverity::Info:
+				return ImGuiToastType::Info;
+			case NotificationSeverity::Warn:
+				return ImGuiToastType::Warning;
+			case NotificationSeverity::Error:
+			case NotificationSeverity::Critical:
+				return ImGuiToastType::Error;
+			}
+
+			return ImGuiToastType::Info;
 		}
 
 		void applyAppearanceToImGui(const AppearanceConfig &appearance)
@@ -231,6 +250,7 @@ namespace DefectStudio
 		AddSubscription(subscribeImGuiLayer<LayoutLoaded>(*m_EventBus, *this, &ImGuiLayer::onLayoutLoaded));
 		AddSubscription(subscribeImGuiLayer<LayoutLoadFailed>(*m_EventBus, *this, &ImGuiLayer::onLayoutLoadFailed));
 		AddSubscription(subscribeImGuiLayer<LayoutResetRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutResetRequested));
+		AddSubscription(subscribeImGuiLayer<NotificationEvent>(*m_EventBus, *this, &ImGuiLayer::onNotificationEvent));
 		DS_LOG_INFO("ImGuiLayer UI event handlers bound");
 	}
 
@@ -354,6 +374,18 @@ namespace DefectStudio
 
 	void ImGuiLayer::OnImGuiRender()
 	{
+		while (!m_PendingToasts.empty())
+		{
+			const Notification &notification = m_PendingToasts.front();
+			ImGui::InsertNotification({
+				ImGuiLayerDetail::toToastType(notification.severity),
+				static_cast<int>(notification.timeoutMs),
+				"%s",
+				notification.message.c_str()});
+			m_PendingToasts.pop_front();
+		}
+
+		ImGui::RenderNotifications();
 	}
 
 	Path ImGuiLayer::resolveLayoutPath() const
@@ -845,5 +877,10 @@ namespace DefectStudio
 			fontPathChanged,
 			m_Config.ui.fontScale,
 			m_Config.layout.imGuiIniPath.empty() ? "<default>" : m_Config.layout.imGuiIniPath);
+	}
+
+	void ImGuiLayer::onNotificationEvent(const NotificationEvent &event)
+	{
+		m_PendingToasts.push_back(event.notification);
 	}
 } // namespace DefectStudio

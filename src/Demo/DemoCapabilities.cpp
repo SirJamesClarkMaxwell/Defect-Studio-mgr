@@ -5,18 +5,20 @@
 #include <string>
 #include <utility>
 
-#include "Core/Notifications/Notifier.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Notifications/Notification.hpp"
 #include "Demo/DemoCapabilities.hpp"
+#include "Events/NotificationEvents.hpp"
 
 namespace DefectStudio::Demo
 {
 	DemoCapabilitiesPanel::DemoCapabilitiesPanel(
 		Ref<CapabilityRegistry> capabilityRegistry,
 		Ref<CapabilityService> capabilityService,
-		Ref<Notifier> notifier)
+		Ref<EventBus> eventBus)
 		: m_CapabilityRegistry(std::move(capabilityRegistry)),
 		  m_CapabilityService(std::move(capabilityService)),
-		  m_Notifier(std::move(notifier))
+		  m_EventBus(std::move(eventBus))
 	{
 	}
 
@@ -160,14 +162,34 @@ namespace DefectStudio::Demo
 
 	void DemoCapabilitiesPanel::notifyInfo(std::string title, std::string message)
 	{
-		if (m_Notifier)
-			m_Notifier->Info(std::move(title), std::move(message), NotificationCategory::Capability);
+		if (m_EventBus)
+		{
+			m_EventBus->Queue(NotificationRequestedEvent{Notification{
+				NotificationSeverity::Info,
+				NotificationCategory::Capability,
+				std::move(title),
+				std::move(message),
+				"DemoCapabilitiesPanel",
+				Time::Now(),
+				4000,
+				false}});
+		}
 	}
 
 	void DemoCapabilitiesPanel::notifyError(std::string title, std::string message)
 	{
-		if (m_Notifier)
-			m_Notifier->Error(std::move(title), std::move(message), NotificationCategory::Capability);
+		if (m_EventBus)
+		{
+			m_EventBus->Queue(NotificationRequestedEvent{Notification{
+				NotificationSeverity::Error,
+				NotificationCategory::Capability,
+				std::move(title),
+				std::move(message),
+				"DemoCapabilitiesPanel",
+				Time::Now(),
+				12000,
+				false}});
+		}
 	}
 
 	const char *DemoCapabilitiesPanel::categoryName(CapabilityCategory category)

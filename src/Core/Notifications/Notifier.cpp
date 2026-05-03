@@ -9,17 +9,26 @@
 namespace DefectStudio
 {
 	Notifier::Notifier(Ref<EventBus> eventBus)
-		: m_EventBus(std::move(eventBus))
 	{
+		BindEventBus(std::move(eventBus));
 	}
 
 	void Notifier::BindEventBus(Ref<EventBus> eventBus)
 	{
+		UnbindEventBus();
 		m_EventBus = std::move(eventBus);
+		if (!m_EventBus)
+			return;
+
+		m_NotificationRequestSubscription = m_EventBus->Subscribe<NotificationRequestedEvent>(
+			[this](const NotificationRequestedEvent &event) {
+				onNotificationRequested(event);
+			});
 	}
 
 	void Notifier::UnbindEventBus()
 	{
+		m_NotificationRequestSubscription.Reset();
 		m_EventBus.reset();
 	}
 
@@ -56,6 +65,11 @@ namespace DefectStudio
 	void Notifier::ClearHistory()
 	{
 		m_History.clear();
+	}
+
+	void Notifier::onNotificationRequested(const NotificationRequestedEvent &event)
+	{
+		Notify(event.notification);
 	}
 
 	void Notifier::appendAndPublish(Notification notification)

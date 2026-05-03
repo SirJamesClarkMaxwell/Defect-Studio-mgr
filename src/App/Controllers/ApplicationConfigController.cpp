@@ -11,7 +11,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
-#include "Core/Notifications/Notifier.hpp"
+#include "Events/NotificationEvents.hpp"
 #include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
@@ -32,6 +32,19 @@ namespace DefectStudio
 			bus.Queue(AppEvents::Config::Applied{config, persisted});
 			bus.Queue(JobSystemConfigAppliedEvent{config.jobs});
 		}
+
+		void queueConfigApplyFailedNotification(EventBus &bus, std::string message)
+		{
+			bus.Queue(NotificationRequestedEvent{Notification{
+				NotificationSeverity::Error,
+				NotificationCategory::Config,
+				"Config apply failed",
+				std::move(message),
+				"ApplicationConfigController",
+				Time::Now(),
+				12000,
+				false}});
+		}
 	}
 
 	ApplicationConfigController::ApplicationConfigController(
@@ -40,14 +53,12 @@ namespace DefectStudio
 		ApplicationConfig &config,
 		ApplicationSpecification &specification,
 		EventQueue &eventQueue,
-		Ref<Notifier> notifier,
 		Ref<LogRegistry> logRegistry)
 		: m_EventBus(std::move(eventBus)),
 		  m_ConfigManager(std::move(configManager)),
 		  m_Config(config),
 		  m_Specification(specification),
 		  m_EventQueue(eventQueue),
-		  m_Notifier(std::move(notifier)),
 		  m_LogRegistry(std::move(logRegistry))
 	{
 		bindEvents();
@@ -58,7 +69,6 @@ namespace DefectStudio
 		ClearSubscriptions();
 		m_EventBus.reset();
 		m_ConfigManager.reset();
-		m_Notifier.reset();
 	}
 
 	void ApplicationConfigController::bindEvents()
@@ -166,8 +176,7 @@ namespace DefectStudio
 		{
 			m_EventBus->Queue(ApplyFailed{event.config, event.persist, error});
 			DS_LOG_ERROR("Config apply event failed: persist={} error={}", event.persist, error);
-			if (m_Notifier != nullptr)
-				m_Notifier->Error("Config apply failed", error, NotificationCategory::Config);
+			queueConfigApplyFailedNotification(*m_EventBus, error);
 			return;
 		}
 

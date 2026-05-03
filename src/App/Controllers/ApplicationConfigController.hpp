@@ -12,7 +12,6 @@ namespace DefectStudio
 	class EventBus;
 	class EventQueue;
 	class LogRegistry;
-	class Notifier;
 
 	namespace AppEvents::Config
 	{
@@ -30,7 +29,6 @@ namespace DefectStudio
 			ApplicationConfig &config,
 			ApplicationSpecification &specification,
 			EventQueue &eventQueue,
-			Ref<Notifier> notifier = {},
 			Ref<LogRegistry> logRegistry = {});
 		~ApplicationConfigController() override;
 
@@ -56,7 +54,6 @@ namespace DefectStudio
 		ApplicationConfig &m_Config;
 		ApplicationSpecification &m_Specification;
 		EventQueue &m_EventQueue;
-		Ref<Notifier> m_Notifier;
 		Ref<LogRegistry> m_LogRegistry;
 	};
 } // namespace DefectStudio

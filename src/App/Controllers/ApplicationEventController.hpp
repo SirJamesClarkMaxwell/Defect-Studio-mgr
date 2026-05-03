@@ -10,7 +10,6 @@ namespace DefectStudio
 	class EventBus;
 	class EventQueue;
 	class LogRegistry;
-	class Notifier;
 
 	class ApplicationEventController final
 	{
@@ -21,7 +20,6 @@ namespace DefectStudio
 			ApplicationConfig &config,
 			ApplicationSpecification &specification,
 			EventQueue &eventQueue,
-			Ref<Notifier> notifier = {},
 			Ref<LogRegistry> logRegistry = {});
 		~ApplicationEventController();
 

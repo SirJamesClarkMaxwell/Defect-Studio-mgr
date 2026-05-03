@@ -6,6 +6,7 @@
 namespace DefectStudio
 {
 	class EventBus;
+	class Notifier;
 }
 
 namespace DefectStudio::Demo
@@ -30,6 +31,7 @@ namespace DefectStudio::Demo
 
 	private:
 		Ref<EventBus> m_DemoEventBus;
+		Ref<Notifier> m_DemoNotifier;
 		Unique<EventDispatcherDemo> m_EventDispatcherDemo;
 		Unique<EventBusDemo> m_EventBusDemo;
 		Unique<JobSystemDemo> m_JobSystemDemo;

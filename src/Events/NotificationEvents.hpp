@@ -16,4 +16,14 @@ namespace DefectStudio
 
 		Notification notification;
 	};
+
+	struct NotificationRequestedEvent final : public BusEvent
+	{
+		explicit NotificationRequestedEvent(Notification newNotification)
+			: notification(std::move(newNotification))
+		{
+		}
+
+		Notification notification;
+	};
 } // namespace DefectStudio

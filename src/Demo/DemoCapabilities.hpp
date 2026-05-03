@@ -8,7 +8,7 @@
 
 namespace DefectStudio
 {
-	class Notifier;
+	class EventBus;
 }
 
 namespace DefectStudio::Demo
@@ -16,7 +16,7 @@ namespace DefectStudio::Demo
 	class DemoCapabilitiesPanel
 	{
 	public:
-		DemoCapabilitiesPanel(Ref<CapabilityRegistry> capabilityRegistry, Ref<CapabilityService> capabilityService, Ref<Notifier> notifier);
+		DemoCapabilitiesPanel(Ref<CapabilityRegistry> capabilityRegistry, Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus);
 
 		void Render();
 
@@ -33,7 +33,7 @@ namespace DefectStudio::Demo
 	private:
 		Ref<CapabilityRegistry> m_CapabilityRegistry;
 		Ref<CapabilityService> m_CapabilityService;
-		Ref<Notifier> m_Notifier;
+		Ref<EventBus> m_EventBus;
 
 		std::string m_LastCapabilityDemoAction = "No local capability registered yet.";
 	};
