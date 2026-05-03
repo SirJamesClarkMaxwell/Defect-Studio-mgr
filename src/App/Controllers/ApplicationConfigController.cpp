@@ -13,6 +13,7 @@
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
 #include "Events/NotificationEvents.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "Presentation/EditorUiEvents.hpp"
 
 namespace DefectStudio
 {
@@ -31,6 +32,11 @@ namespace DefectStudio
 		{
 			bus.Queue(AppEvents::Config::Applied{config, persisted});
 			bus.Queue(JobSystemConfigAppliedEvent{config.jobs});
+			bus.Queue(EditorUiEvents::RuntimeConfigApplied{
+				config.ui,
+				config.appearance,
+				config.layout.imGuiIniPath.empty() ? ConfigManager::GetLayoutPath(config.directory) : Path::FromResolved(config.layout.imGuiIniPath),
+				persisted});
 		}
 
 		void queueConfigApplyFailedNotification(EventBus &bus, std::string message)
@@ -84,6 +90,8 @@ namespace DefectStudio
 		AddSubscription(subscribeConfigController<ApplyRequested>(*m_EventBus, *this, &ApplicationConfigController::onConfigApplyRequested));
 		AddSubscription(subscribeConfigController<SaveUserRequested>(*m_EventBus, *this, &ApplicationConfigController::onUserConfigSaveRequested));
 		AddSubscription(subscribeConfigController<SaveDefaultsRequested>(*m_EventBus, *this, &ApplicationConfigController::onDefaultsSaveRequested));
+		AddSubscription(subscribeConfigController<EditorUiEvents::AppearanceApplyRequested>(*m_EventBus, *this, &ApplicationConfigController::onAppearanceApplyRequested));
+		AddSubscription(subscribeConfigController<EditorUiEvents::ThemeLoaded>(*m_EventBus, *this, &ApplicationConfigController::onThemeLoaded));
 		DS_LOG_INFO("ApplicationConfigController event handlers bound");
 	}
 
@@ -262,5 +270,19 @@ namespace DefectStudio
 			ConfigManager::GetDefaultConfigPath(appliedConfig.directory),
 			std::move(contents)});
 		DS_LOG_INFO("Default config persistence queued after successful apply");
+	}
+
+	void ApplicationConfigController::onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event)
+	{
+		m_Config.appearance = event.appearance;
+		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
+		DS_LOG_INFO("Appearance apply requested; user config save queued");
+	}
+
+	void ApplicationConfigController::onThemeLoaded(const EditorUiEvents::ThemeLoaded &event)
+	{
+		m_Config.appearance = event.appearance;
+		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
+		DS_LOG_INFO("Appearance theme loaded; user config save queued: {}", event.path.String());
 	}
 } // namespace DefectStudio

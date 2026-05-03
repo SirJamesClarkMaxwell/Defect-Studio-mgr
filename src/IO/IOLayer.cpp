@@ -5,6 +5,7 @@
 #include <functional>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
+#include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
@@ -66,6 +67,7 @@ namespace DefectStudio
 
 		AddSubscription(subscribeIOLayer<PersistRequested>(*m_EventBus, *this, &IOLayer::onConfigPersistRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::PersistRequested>(*m_EventBus, *this, &IOLayer::onUiPersistRequested));
+		AddSubscription(subscribeIOLayer<EditorUiEvents::ThemeSaveRequested>(*m_EventBus, *this, &IOLayer::onThemeSaveRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::ThemeLoadRequested>(*m_EventBus, *this, &IOLayer::onThemeLoadRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutLoadRequested>(*m_EventBus, *this, &IOLayer::onLayoutLoadRequested));
 		DS_LOG_INFO("IOLayer config persistence event handlers bound");
@@ -123,6 +125,34 @@ namespace DefectStudio
 		DS_LOG_INFO("UI file persisted: {}", event.path.String());
 	}
 
+	void IOLayer::onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event)
+	{
+		using namespace EditorUiEvents;
+
+		if (m_EventBus == nullptr)
+			return;
+
+		std::string contents;
+		std::string error;
+		if (!YamlCodecFacade::Default().SerializeAppearanceTheme(event.appearance, contents, error))
+		{
+			DS_LOG_WARN("Appearance theme serialization failed [{}]: {}", event.path.String(), error);
+			m_EventBus->Queue(ThemeSaveFailed{event.path, error});
+			return;
+		}
+
+		DS_LOG_INFO("Persisting appearance theme: path={}", event.path.String());
+		if (!TextFileIO::Save(event.path, contents, error))
+		{
+			DS_LOG_ERROR("Appearance theme persistence failed: {}", error);
+			m_EventBus->Queue(ThemeSaveFailed{event.path, error});
+			return;
+		}
+
+		m_EventBus->Queue(ThemeSaved{event.path});
+		DS_LOG_INFO("Appearance theme persisted: {}", event.path.String());
+	}
+
 	void IOLayer::onThemeLoadRequested(const EditorUiEvents::ThemeLoadRequested &event)
 	{
 		using namespace EditorUiEvents;
@@ -139,7 +169,15 @@ namespace DefectStudio
 			return;
 		}
 
-		m_EventBus->Queue(ThemeLoaded{event.path, std::move(text)});
+		AppearanceConfig appearance;
+		if (!YamlCodecFacade::Default().DeserializeAppearanceTheme(text, appearance, error))
+		{
+			DS_LOG_WARN("Appearance theme decode failed [{}]: {}", event.path.String(), error);
+			m_EventBus->Queue(ThemeLoadFailed{event.path, error});
+			return;
+		}
+
+		m_EventBus->Queue(ThemeLoaded{event.path, std::move(appearance)});
 	}
 
 	void IOLayer::onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event)

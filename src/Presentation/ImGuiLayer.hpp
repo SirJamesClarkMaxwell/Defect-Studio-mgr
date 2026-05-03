@@ -4,28 +4,25 @@
 #include <string>
 #include <vector>
 
-#include "App/ApplicationState.hpp"
 #include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Notifications/Notification.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Presentation/UiConfig.hpp"
+
+struct GLFWwindow;
 
 namespace DefectStudio
 {
-	class ConfigManager;
 	class EventBus;
-	class Window;
 	struct EditorFontOption;
 	struct EditorUiState;
 	struct NotificationEvent;
 
-	namespace AppEvents::Config
-	{
-		struct Applied;
-	}
-
 	namespace EditorUiEvents
 	{
+		struct RuntimeConfigApplied;
 		struct AppearanceApplyRequested;
 		struct AppearancePreviewRequested;
 		struct ConfigPreviewRequested;
@@ -45,15 +42,15 @@ namespace DefectStudio
 		struct ThemeLoadFailed;
 		struct ThemeSaved;
 		struct ThemeSaveFailed;
-		struct ThemeSaveRequested;
 	}
 
 	struct ImGuiLayerRuntime
 	{
-		WeakRef<Window> window;
+		GLFWwindow *nativeWindow = nullptr;
 		Ref<EventBus> eventBus;
-		WeakRef<ConfigManager> configManager;
-		ApplicationConfig config;
+		UIConfig ui;
+		AppearanceConfig appearance;
+		Path layoutPath;
 		bool resetLayout = false;
 	};
 
@@ -79,7 +76,6 @@ namespace DefectStudio
 		void resetLayoutIfRequested(const Path &layoutPath);
 		void applyUiConfigToContext() const;
 		void bindEventBus(Ref<EventBus> eventBus);
-		void bindConfigManager(WeakRef<ConfigManager> configManager);
 		void saveLayout();
 		void shutdownImGui();
 		void syncFontsFromSources();
@@ -93,7 +89,6 @@ namespace DefectStudio
 		void onFontScaleChanged(const EditorUiEvents::FontScaleChanged &event);
 		void onAppearancePreviewRequested(const EditorUiEvents::AppearancePreviewRequested &event);
 		void onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event);
-		void onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event);
 		void onThemeSaved(const EditorUiEvents::ThemeSaved &event);
 		void onThemeSaveFailed(const EditorUiEvents::ThemeSaveFailed &event);
 		void onThemeLoaded(const EditorUiEvents::ThemeLoaded &event);
@@ -104,15 +99,16 @@ namespace DefectStudio
 		void onLayoutLoaded(const EditorUiEvents::LayoutLoaded &event);
 		void onLayoutLoadFailed(const EditorUiEvents::LayoutLoadFailed &event);
 		void onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event);
-		void onApplicationConfigApplied(const AppEvents::Config::Applied &event);
+		void onRuntimeConfigApplied(const EditorUiEvents::RuntimeConfigApplied &event);
 		void onNotificationEvent(const NotificationEvent &event);
 
 	private:
-		WeakRef<Window> m_Window;
+		GLFWwindow *m_NativeWindow = nullptr;
 		Ref<EventBus> m_EventBus;
 		WeakRef<EditorUiState> m_UiState;
-		WeakRef<ConfigManager> m_ConfigManager;
-		ApplicationConfig m_Config;
+		UIConfig m_UiConfig;
+		AppearanceConfig m_AppearanceConfig;
+		Path m_LayoutPath;
 		std::deque<Notification> m_PendingToasts;
 		bool m_ResetLayoutOnAttach = false;
 		bool m_Initialized = false;

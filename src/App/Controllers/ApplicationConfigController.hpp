@@ -20,6 +20,12 @@ namespace DefectStudio
 		struct SaveDefaultsRequested;
 	}
 
+	namespace EditorUiEvents
+	{
+		struct AppearanceApplyRequested;
+		struct ThemeLoaded;
+	}
+
 	class ApplicationConfigController final : public EventReceiver
 	{
 	public:
@@ -47,6 +53,8 @@ namespace DefectStudio
 		void onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event);
 		void onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event);
 		void onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event);
+		void onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event);
+		void onThemeLoaded(const EditorUiEvents::ThemeLoaded &event);
 
 	private:
 		Ref<EventBus> m_EventBus;

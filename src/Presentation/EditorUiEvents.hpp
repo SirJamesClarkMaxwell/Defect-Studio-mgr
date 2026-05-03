@@ -4,9 +4,9 @@
 #include <string>
 #include <utility>
 
-#include "App/ApplicationState.hpp"
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Presentation/UiConfig.hpp"
 
 namespace DefectStudio::EditorUiEvents
 {
@@ -24,6 +24,22 @@ namespace DefectStudio::EditorUiEvents
 		}
 
 		UIConfig ui;
+	};
+
+	struct RuntimeConfigApplied final : public BusEvent
+	{
+		RuntimeConfigApplied(UIConfig uiConfig, AppearanceConfig appearanceConfig, Path imGuiLayoutPath, bool wasPersisted)
+			: ui(std::move(uiConfig)),
+			  appearance(std::move(appearanceConfig)),
+			  layoutPath(std::move(imGuiLayoutPath)),
+			  persisted(wasPersisted)
+		{
+		}
+
+		UIConfig ui;
+		AppearanceConfig appearance;
+		Path layoutPath;
+		bool persisted = false;
 	};
 
 	struct FontListRefreshRequested final : public BusEvent
@@ -92,14 +108,14 @@ namespace DefectStudio::EditorUiEvents
 
 	struct ThemeLoaded final : public BusEvent
 	{
-		ThemeLoaded(Path targetPath, std::string fileContents)
+		ThemeLoaded(Path targetPath, AppearanceConfig loadedAppearance)
 			: path(std::move(targetPath)),
-			  contents(std::move(fileContents))
+			  appearance(std::move(loadedAppearance))
 		{
 		}
 
 		Path path;
-		std::string contents;
+		AppearanceConfig appearance;
 	};
 
 	struct ThemeLoadFailed final : public BusEvent

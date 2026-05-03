@@ -829,10 +829,13 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
 		ImGuiLayerRuntime imGuiRuntime;
-		imGuiRuntime.window = CreateWeakRef(m_Graphics.window);
+		imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;
 		imGuiRuntime.eventBus = m_EventBus;
-		imGuiRuntime.configManager = GetConfigManager();
-		imGuiRuntime.config = m_Config;
+		imGuiRuntime.ui = m_Config.ui;
+		imGuiRuntime.appearance = m_Config.appearance;
+		imGuiRuntime.layoutPath = m_Config.layout.imGuiIniPath.empty()
+			? ConfigManager::GetLayoutPath(m_Config.directory)
+			: Path::FromResolved(m_Config.layout.imGuiIniPath);
 		imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
 		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());

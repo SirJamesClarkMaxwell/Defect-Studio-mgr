@@ -15,10 +15,6 @@
 #include "IconsFontAwesome6.h"
 #include "fa-solid-900.h"
 
-#include "App/Managers/ConfigManager.hpp"
-#include "App/Events/ApplicationConfigEvents.hpp"
-#include "App/Window.hpp"
-#include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Events/NotificationEvents.hpp"
 #include "Core/Platform/PlatformFontDiscovery.hpp"
@@ -45,6 +41,7 @@ namespace DefectStudio
 	namespace ImGuiLayerDetail
 	{
 		constexpr float FontPixelSize = 16.0f;
+		constexpr const char *FallbackLayoutFileName = "imgui.ini";
 
 		float clamp01(float value)
 		{
@@ -204,17 +201,18 @@ namespace DefectStudio
 
 	ImGuiLayer::ImGuiLayer(ImGuiLayerRuntime runtime)
 		: Layer("ImGuiLayer"),
-		  m_Window(std::move(runtime.window)),
-		  m_Config(std::move(runtime.config)),
+		  m_NativeWindow(runtime.nativeWindow),
+		  m_UiConfig(std::move(runtime.ui)),
+		  m_AppearanceConfig(std::move(runtime.appearance)),
+		  m_LayoutPath(std::move(runtime.layoutPath)),
 		  m_ResetLayoutOnAttach(runtime.resetLayout)
 	{
 		bindEventBus(std::move(runtime.eventBus));
-		bindConfigManager(std::move(runtime.configManager));
 	}
 
 	void ImGuiLayer::ApplyUiConfig(const UIConfig &uiConfig)
 	{
-		m_Config.ui = uiConfig;
+		m_UiConfig = uiConfig;
 		applyUiConfigToContext();
 	}
 
@@ -230,16 +228,13 @@ namespace DefectStudio
 		}
 
 		using namespace EditorUiEvents;
-		using namespace AppEvents::Config;
-
-		AddSubscription(subscribeImGuiLayer<Applied>(*m_EventBus, *this, &ImGuiLayer::onApplicationConfigApplied));
+		AddSubscription(subscribeImGuiLayer<RuntimeConfigApplied>(*m_EventBus, *this, &ImGuiLayer::onRuntimeConfigApplied));
 		AddSubscription(subscribeImGuiLayer<ConfigPreviewRequested>(*m_EventBus, *this, &ImGuiLayer::onUiConfigPreviewRequested));
 		AddSubscription(subscribeImGuiLayer<FontListRefreshRequested>(*m_EventBus, *this, &ImGuiLayer::onFontListRefreshRequested));
 		AddSubscription(subscribeImGuiLayer<FontReloadRequested>(*m_EventBus, *this, &ImGuiLayer::onFontReloadRequested));
 		AddSubscription(subscribeImGuiLayer<FontScaleChanged>(*m_EventBus, *this, &ImGuiLayer::onFontScaleChanged));
 		AddSubscription(subscribeImGuiLayer<AppearancePreviewRequested>(*m_EventBus, *this, &ImGuiLayer::onAppearancePreviewRequested));
 		AddSubscription(subscribeImGuiLayer<AppearanceApplyRequested>(*m_EventBus, *this, &ImGuiLayer::onAppearanceApplyRequested));
-		AddSubscription(subscribeImGuiLayer<ThemeSaveRequested>(*m_EventBus, *this, &ImGuiLayer::onThemeSaveRequested));
 		AddSubscription(subscribeImGuiLayer<ThemeSaved>(*m_EventBus, *this, &ImGuiLayer::onThemeSaved));
 		AddSubscription(subscribeImGuiLayer<ThemeSaveFailed>(*m_EventBus, *this, &ImGuiLayer::onThemeSaveFailed));
 		AddSubscription(subscribeImGuiLayer<ThemeLoaded>(*m_EventBus, *this, &ImGuiLayer::onThemeLoaded));
@@ -252,12 +247,6 @@ namespace DefectStudio
 		AddSubscription(subscribeImGuiLayer<LayoutResetRequested>(*m_EventBus, *this, &ImGuiLayer::onLayoutResetRequested));
 		AddSubscription(subscribeImGuiLayer<NotificationEvent>(*m_EventBus, *this, &ImGuiLayer::onNotificationEvent));
 		DS_LOG_INFO("ImGuiLayer UI event handlers bound");
-	}
-
-	void ImGuiLayer::bindConfigManager(WeakRef<ConfigManager> configManager)
-	{
-		m_ConfigManager = std::move(configManager);
-		DS_LOG_INFO("ImGuiLayer ConfigManager bound: available={}", !m_ConfigManager.expired());
 	}
 
 	void ImGuiLayer::BindUiState(WeakRef<EditorUiState> uiState)
@@ -320,8 +309,7 @@ namespace DefectStudio
 		if (m_Initialized)
 			return;
 
-		auto window = m_Window.lock();
-		if (window == nullptr || window->GetNativeHandle() == nullptr)
+		if (m_NativeWindow == nullptr)
 		{
 			DS_LOG_ERROR("ImGuiLayer attach failed: window handle is unavailable");
 			return;
@@ -335,13 +323,13 @@ namespace DefectStudio
 		io.IniFilename = nullptr;
 
 		const Path layoutPath = resolveLayoutPath();
-		m_Config.layout.imGuiIniPath = layoutPath.String();
+		m_LayoutPath = layoutPath;
 		resetLayoutIfRequested(layoutPath);
 		applyUiConfigToContext();
 		ImGui::StyleColorsDark();
-		ImGuiLayerDetail::applyAppearanceToImGui(m_Config.appearance);
+		ImGuiLayerDetail::applyAppearanceToImGui(m_AppearanceConfig);
 
-		const bool glfwBackendInitialized = ImGui_ImplGlfw_InitForOpenGL(window->GetNativeHandle(), true);
+		const bool glfwBackendInitialized = ImGui_ImplGlfw_InitForOpenGL(m_NativeWindow, true);
 		const bool openGlBackendInitialized = ImGui_ImplOpenGL3_Init("#version 330");
 		if (!glfwBackendInitialized || !openGlBackendInitialized)
 		{
@@ -363,8 +351,7 @@ namespace DefectStudio
 		shutdownImGui();
 		m_UiState.reset();
 		m_EventBus.reset();
-		m_ConfigManager.reset();
-		m_Window.reset();
+		m_NativeWindow = nullptr;
 		DS_LOG_INFO("ImGuiLayer detached");
 	}
 
@@ -390,16 +377,10 @@ namespace DefectStudio
 
 	Path ImGuiLayer::resolveLayoutPath() const
 	{
-		if (!m_Config.layout.imGuiIniPath.empty())
-			return Path::FromResolved(m_Config.layout.imGuiIniPath);
+		if (!m_LayoutPath.Empty())
+			return m_LayoutPath;
 
-		if (!m_Config.directory.Empty())
-			return ConfigManager::GetLayoutPath(m_Config.directory);
-
-		if (auto configManager = m_ConfigManager.lock())
-			return ConfigManager::GetLayoutPath(configManager->GetConfigDirectory());
-
-		return Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "layouts" / ConfigManager::LayoutFileName);
+		return Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "layouts" / ImGuiLayerDetail::FallbackLayoutFileName);
 	}
 
 	void ImGuiLayer::resetLayoutIfRequested(const Path &layoutPath)
@@ -421,12 +402,12 @@ namespace DefectStudio
 		if (ImGui::GetCurrentContext() == nullptr)
 			return;
 
-		const float fontScale = std::clamp(m_Config.ui.fontScale, m_Config.ui.fontScaleMin, m_Config.ui.fontScaleMax);
+		const float fontScale = std::clamp(m_UiConfig.fontScale, m_UiConfig.fontScaleMin, m_UiConfig.fontScaleMax);
 		ImGui::GetIO().FontGlobalScale = fontScale;
 		DS_LOG_INFO("UI settings loaded: font_scale={}, font_scale_step={}, font_path={}",
 		            fontScale,
-		            std::clamp(m_Config.ui.fontScaleStep, m_Config.ui.fontScaleStepMin, m_Config.ui.fontScaleStepMax),
-		            m_Config.ui.fontPath.empty() ? "<default>" : m_Config.ui.fontPath);
+		            std::clamp(m_UiConfig.fontScaleStep, m_UiConfig.fontScaleStepMin, m_UiConfig.fontScaleStepMax),
+		            m_UiConfig.fontPath.empty() ? "<default>" : m_UiConfig.fontPath);
 	}
 
 	void ImGuiLayer::saveLayout()
@@ -662,7 +643,7 @@ namespace DefectStudio
 
 	void ImGuiLayer::onUiConfigPreviewRequested(const EditorUiEvents::ConfigPreviewRequested &event)
 	{
-		m_Config.ui = event.ui;
+		m_UiConfig = event.ui;
 		applyUiConfigToContext();
 		DS_LOG_INFO("UI config preview applied: font_scale={}", event.ui.fontScale);
 	}
@@ -682,7 +663,7 @@ namespace DefectStudio
 
 	void ImGuiLayer::onFontScaleChanged(const EditorUiEvents::FontScaleChanged &event)
 	{
-		m_Config.ui.fontScale = event.fontScale;
+		m_UiConfig.fontScale = event.fontScale;
 		if (auto uiState = m_UiState.lock())
 			uiState->fontScale = event.fontScale;
 
@@ -695,6 +676,7 @@ namespace DefectStudio
 		if (auto uiState = m_UiState.lock())
 			uiState->appearance = event.appearance;
 
+		m_AppearanceConfig = event.appearance;
 		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
 		DS_LOG_INFO("Appearance preview applied");
 	}
@@ -704,46 +686,12 @@ namespace DefectStudio
 		if (auto uiState = m_UiState.lock())
 			uiState->appearance = event.appearance;
 
-		m_Config.appearance = event.appearance;
+		m_AppearanceConfig = event.appearance;
 		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
-		if (m_EventBus != nullptr)
-		{
-			m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
-			if (auto uiState = m_UiState.lock())
-				uiState->appearanceStatusMessage = "Appearance applied; save queued.";
-			DS_LOG_INFO("Appearance applied; config save queued");
-			return;
-		}
 
 		if (auto uiState = m_UiState.lock())
 			uiState->appearanceStatusMessage = "Appearance applied.";
-		DS_LOG_INFO("Appearance applied without ConfigManager persistence");
-	}
-
-	void ImGuiLayer::onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event)
-	{
-		auto uiState = m_UiState.lock();
-		if (m_EventBus == nullptr)
-		{
-			if (uiState != nullptr)
-				uiState->appearanceStatusMessage = "Theme save failed: EventBus unavailable.";
-			return;
-		}
-
-		std::string contents;
-		std::string error;
-		if (!YamlCodecFacade::Default().SerializeAppearanceTheme(event.appearance, contents, error))
-		{
-			if (uiState != nullptr)
-				uiState->appearanceStatusMessage = "Theme save failed: " + error;
-			DS_LOG_WARN("Appearance theme serialization failed [{}]: {}", event.path.String(), error);
-			return;
-		}
-
-		m_EventBus->Queue(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Theme, event.path, std::move(contents)});
-		if (uiState != nullptr)
-			uiState->appearanceStatusMessage = "Theme save queued: " + event.path.String();
-		DS_LOG_INFO("Appearance theme persistence queued: {}", event.path.String());
+		DS_LOG_INFO("Appearance applied");
 	}
 
 	void ImGuiLayer::onThemeSaved(const EditorUiEvents::ThemeSaved &event)
@@ -763,26 +711,15 @@ namespace DefectStudio
 	void ImGuiLayer::onThemeLoaded(const EditorUiEvents::ThemeLoaded &event)
 	{
 		auto uiState = m_UiState.lock();
-		std::string error;
-		AppearanceConfig appearance = uiState != nullptr ? uiState->appearance : m_Config.appearance;
-		if (!YamlCodecFacade::Default().DeserializeAppearanceTheme(event.contents, appearance, error))
-		{
-			if (uiState != nullptr)
-				uiState->appearanceStatusMessage = "Theme load failed: " + error;
-			DS_LOG_WARN("Appearance theme decode failed [{}]: {}", event.path.String(), error);
-			return;
-		}
 
-		m_Config.appearance = appearance;
-		ImGuiLayerDetail::applyAppearanceToImGui(appearance);
-		if (m_EventBus != nullptr)
-			m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
+		m_AppearanceConfig = event.appearance;
+		ImGuiLayerDetail::applyAppearanceToImGui(event.appearance);
 		if (uiState != nullptr)
 		{
-			uiState->appearance = appearance;
+			uiState->appearance = event.appearance;
 			uiState->appearanceStatusMessage = "Theme loaded: " + event.path.String();
 		}
-		DS_LOG_INFO("Appearance theme loaded from payload: {}", event.path.String());
+		DS_LOG_INFO("Appearance theme loaded: {}", event.path.String());
 	}
 
 	void ImGuiLayer::onThemeLoadFailed(const EditorUiEvents::ThemeLoadFailed &event)
@@ -858,10 +795,12 @@ namespace DefectStudio
 		DS_LOG_INFO("Layout reset requested: {}", path.String());
 	}
 
-	void ImGuiLayer::onApplicationConfigApplied(const AppEvents::Config::Applied &event)
+	void ImGuiLayer::onRuntimeConfigApplied(const EditorUiEvents::RuntimeConfigApplied &event)
 	{
-		const bool fontPathChanged = m_Config.ui.fontPath != event.config.ui.fontPath;
-		m_Config = event.config;
+		const bool fontPathChanged = m_UiConfig.fontPath != event.ui.fontPath;
+		m_UiConfig = event.ui;
+		m_AppearanceConfig = event.appearance;
+		m_LayoutPath = event.layoutPath;
 		applyUiConfigToContext();
 
 		if (fontPathChanged)
@@ -870,13 +809,13 @@ namespace DefectStudio
 			applySelectedFont();
 		}
 
-		ImGuiLayerDetail::applyAppearanceToImGui(m_Config.appearance);
+		ImGuiLayerDetail::applyAppearanceToImGui(m_AppearanceConfig);
 		DS_LOG_INFO(
-			"ImGuiLayer consumed application config: persisted={} font_path_changed={} font_scale={} layout={}",
+			"ImGuiLayer consumed runtime UI config: persisted={} font_path_changed={} font_scale={} layout={}",
 			event.persisted,
 			fontPathChanged,
-			m_Config.ui.fontScale,
-			m_Config.layout.imGuiIniPath.empty() ? "<default>" : m_Config.layout.imGuiIniPath);
+			m_UiConfig.fontScale,
+			m_LayoutPath.Empty() ? "<default>" : m_LayoutPath.String());
 	}
 
 	void ImGuiLayer::onNotificationEvent(const NotificationEvent &event)

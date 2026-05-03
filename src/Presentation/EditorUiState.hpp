@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "App/ApplicationState.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Presentation/UiConfig.hpp"
 
 namespace DefectStudio
 {

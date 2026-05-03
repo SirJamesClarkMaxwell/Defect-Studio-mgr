@@ -19,6 +19,7 @@ namespace DefectStudio
 		struct LayoutLoadRequested;
 		struct LayoutLoaded;
 		struct LayoutLoadFailed;
+		struct ThemeSaveRequested;
 		struct ThemeLoadRequested;
 		struct ThemeLoaded;
 		struct ThemeLoadFailed;
@@ -39,6 +40,7 @@ namespace DefectStudio
 		void bindConfigPersistenceEvents();
 		void onConfigPersistRequested(const AppEvents::Config::PersistRequested &event);
 		void onUiPersistRequested(const EditorUiEvents::PersistRequested &event);
+		void onThemeSaveRequested(const EditorUiEvents::ThemeSaveRequested &event);
 		void onThemeLoadRequested(const EditorUiEvents::ThemeLoadRequested &event);
 		void onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event);
 
