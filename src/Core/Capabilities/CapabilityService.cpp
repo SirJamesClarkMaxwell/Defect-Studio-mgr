@@ -15,12 +15,21 @@ namespace DefectStudio
 		return m_Registry.IsAvailable(name);
 	}
 
-	void CapabilityService::Require(const std::string &name) const
+	Result<void> CapabilityService::Require(const std::string &name) const
 	{
 		if (!IsAvailable(name))
 		{
-			DS_LOG_ERROR("Capability requirement failed: capability '{}' not available", name);
-			throw CapabilityNotAvailableException(name);
+			DS_LOG_ERROR("CapabilityService: required capability '{}' is not available", name);
+			return StructuredError{
+				ErrorCategory::Capability,
+				Severity::Error,
+				"Required capability is not available.",
+				"Capability '" + name + "' was required but is not registered or is disabled.",
+				"Check capability registration order and ensure LockAfterStartup() was called.",
+				"CapabilityService",
+				"capability.require.unavailable"};
 		}
+
+		return {};
 	}
 } // namespace DefectStudio

@@ -470,6 +470,7 @@ namespace DefectStudio
 			m_Config,
 			m_Runtime.specification,
 			m_EventQueue,
+			m_Notifier,
 			m_LogRegistry);
 		return true;
 	}

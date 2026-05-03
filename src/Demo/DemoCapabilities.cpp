@@ -145,18 +145,17 @@ namespace DefectStudio::Demo
 		if (!m_CapabilityService)
 			return;
 
-		try
+		Result<void> result = m_CapabilityService->Require(name);
+		if (result)
 		{
-			m_CapabilityService->Require(name);
 			m_LastCapabilityDemoAction = "Requirement satisfied: " + name;
 			notifyInfo("Local capability available", name + " requirement satisfied.");
+			return;
 		}
-		catch (const std::exception &exception)
-		{
-			m_LastCapabilityDemoAction = exception.what();
-			notifyError("Local capability missing", exception.what());
 
-		}
+		const StructuredError &error = result.Error();
+		m_LastCapabilityDemoAction = error.technicalDetails;
+		notifyError("Local capability missing", error.userMessage);
 	}
 
 	void DemoCapabilitiesPanel::notifyInfo(std::string title, std::string message)

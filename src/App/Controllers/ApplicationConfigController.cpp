@@ -11,6 +11,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
+#include "Core/Notifications/Notifier.hpp"
 #include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
@@ -39,12 +40,14 @@ namespace DefectStudio
 		ApplicationConfig &config,
 		ApplicationSpecification &specification,
 		EventQueue &eventQueue,
+		Ref<Notifier> notifier,
 		Ref<LogRegistry> logRegistry)
 		: m_EventBus(std::move(eventBus)),
 		  m_ConfigManager(std::move(configManager)),
 		  m_Config(config),
 		  m_Specification(specification),
 		  m_EventQueue(eventQueue),
+		  m_Notifier(std::move(notifier)),
 		  m_LogRegistry(std::move(logRegistry))
 	{
 		bindEvents();
@@ -55,6 +58,7 @@ namespace DefectStudio
 		ClearSubscriptions();
 		m_EventBus.reset();
 		m_ConfigManager.reset();
+		m_Notifier.reset();
 	}
 
 	void ApplicationConfigController::bindEvents()
@@ -162,7 +166,8 @@ namespace DefectStudio
 		{
 			m_EventBus->Queue(ApplyFailed{event.config, event.persist, error});
 			DS_LOG_ERROR("Config apply event failed: persist={} error={}", event.persist, error);
-			// TODO: expose this through a user-facing notification with the failing area.
+			if (m_Notifier != nullptr)
+				m_Notifier->Error("Config apply failed", error, NotificationCategory::Config);
 			return;
 		}
 
