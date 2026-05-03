@@ -1,20 +1,16 @@
 #pragma once
 
+#include "Core/Utils/Memory.hpp"
+#include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
-#include "Core/Layer.hpp"
-#include "Core/Utils/Memory.hpp"
+#include "Core/JobSystem/JobSystemConfig.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 namespace DefectStudio
 {
-	struct JobsConfig;
-
-	namespace AppEvents::Config
-	{
-		struct Applied;
-	}
+	struct JobSystemConfigAppliedEvent;
 
 	class CoreLayer final : public Layer, public EventReceiver
 	{
@@ -36,7 +32,7 @@ namespace DefectStudio
 
 	private:
 		void applyJobConfig(const JobsConfig &jobsConfig);
-		void onConfigApplied(const AppEvents::Config::Applied &event);
+		void onJobSystemConfigApplied(const JobSystemConfigAppliedEvent &event);
 
 	private:
 		float m_AccumulatedTime = 0.0f;

@@ -1,12 +1,12 @@
 #include "Core/dspch.hpp"
 
-#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Utils/Time.hpp"
 
+#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/JobSystem/JobContext.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/JobSystem/JobContext.hpp"
-#include "Core/Utils/Time.hpp"
-#include "App/Events/JobEvents.hpp"
 
 namespace DefectStudio
 {

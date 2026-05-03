@@ -10,6 +10,7 @@
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
+#include "Core/JobSystem/JobSystemConfigEvents.hpp"
 #include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
@@ -23,6 +24,12 @@ namespace DefectStudio
 			void (ApplicationConfigController::*method)(const EventType &))
 		{
 			return bus.Subscribe<EventType>(std::bind_front(method, &controller));
+		}
+
+		void queueAppliedConfigEvents(EventBus &bus, const ApplicationConfig &config, bool persisted)
+		{
+			bus.Queue(AppEvents::Config::Applied{config, persisted});
+			bus.Queue(JobSystemConfigAppliedEvent{config.jobs});
 		}
 	}
 
@@ -159,7 +166,7 @@ namespace DefectStudio
 			return;
 		}
 
-		m_EventBus->Queue(Applied{appliedConfig, false});
+		queueAppliedConfigEvents(*m_EventBus, appliedConfig, false);
 		if (event.persist)
 		{
 			std::string contents;
@@ -195,7 +202,7 @@ namespace DefectStudio
 			return;
 		}
 
-		m_EventBus->Queue(Applied{appliedConfig, false});
+		queueAppliedConfigEvents(*m_EventBus, appliedConfig, false);
 		std::string contents;
 		if (!YamlCodecFacade::Default().SerializeUserSettings(appliedConfig, contents, error))
 		{
@@ -226,7 +233,7 @@ namespace DefectStudio
 			return;
 		}
 
-		m_EventBus->Queue(Applied{appliedConfig, false});
+		queueAppliedConfigEvents(*m_EventBus, appliedConfig, false);
 		std::string contents;
 		if (!YamlCodecFacade::Default().SerializeDefaultConfig(appliedConfig, contents, error))
 		{

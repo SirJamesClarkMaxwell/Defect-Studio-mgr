@@ -1,12 +1,12 @@
 #include "Core/dspch.hpp"
 
-#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 #include <algorithm>
 #include <functional>
 
-#include "App/Events/JobEvents.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 namespace DefectStudio
 {

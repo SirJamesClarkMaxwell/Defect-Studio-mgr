@@ -1,16 +1,15 @@
 #include "Core/dspch.hpp"
 
-#include "Core/CoreLayer.hpp"
 
 #include <algorithm>
 #include <functional>
 
-#include "App/ApplicationState.hpp"
-#include "App/Events/ApplicationConfigEvents.hpp"
+#include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Assert.hpp"
+#include "Core/CoreLayer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/JobSystem/JobSystemConfigEvents.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 namespace DefectStudio
@@ -70,8 +69,6 @@ namespace DefectStudio
 			return false;
 		}
 
-		using namespace AppEvents::Config;
-
 		const std::size_t workerThreadCount = resolveWorkerThreadCount(jobsConfig);
 		DS_LOG_INFO(
 			"Init: JobSystem worker_count={} (base={} reserve_urgent={})",
@@ -83,7 +80,10 @@ namespace DefectStudio
 		DS_LOG_INFO("Init: ProgressTracker");
 		m_ProgressTracker = CreateRef<ProgressTracker>(m_EventBus);
 
-		AddSubscription(subscribeCoreLayer<Applied>(*m_EventBus, *this, &CoreLayer::onConfigApplied));
+		AddSubscription(subscribeCoreLayer<JobSystemConfigAppliedEvent>(
+			*m_EventBus,
+			*this,
+			&CoreLayer::onJobSystemConfigApplied));
 
 		m_SystemsInitialized = true;
 		DS_LOG_INFO(
@@ -167,9 +167,9 @@ namespace DefectStudio
 			jobsConfig.reserveUrgentWorker);
 	}
 
-	void CoreLayer::onConfigApplied(const AppEvents::Config::Applied &event)
+	void CoreLayer::onJobSystemConfigApplied(const JobSystemConfigAppliedEvent &event)
 	{
-		DS_LOG_INFO("CoreLayer received config applied event: persisted={}", event.persisted);
-		applyJobConfig(event.config.jobs);
+		DS_LOG_INFO("CoreLayer received job system config applied event");
+		applyJobConfig(event.jobs);
 	}
 } // namespace DefectStudio

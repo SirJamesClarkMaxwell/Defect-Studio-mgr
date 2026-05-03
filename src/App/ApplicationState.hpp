@@ -7,6 +7,7 @@
 
 #include "App/ApplicationLifecycle.hpp"
 #include "App/Window.hpp"
+#include "Core/JobSystem/JobSystemConfig.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
@@ -112,12 +113,6 @@ namespace DefectStudio
 		float itemSpacingX = 8.0f;
 		float itemSpacingY = 7.0f;
 		AppearanceStateRules stateRules;
-	};
-
-	struct JobsConfig
-	{
-		int defaultWorkerThreadCount = 1;
-		bool reserveUrgentWorker = true;
 	};
 
 	struct EventQueueConfig
