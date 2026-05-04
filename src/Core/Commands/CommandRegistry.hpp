@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -11,6 +10,7 @@
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Commands/Command.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {
@@ -32,7 +32,7 @@ namespace DefectStudio
 		std::optional<StructuredError> error;
 	};
 
-	using CommandFactory = std::function<std::unique_ptr<ICommand>(CommandContext &)>;
+	using CommandFactory = std::function<Unique<ICommand>(CommandContext &)>;
 	using CommandExecutionObserver = std::function<void(const CommandExecutionEvent &)>;
 
 	struct RegisteredCommand
@@ -57,10 +57,10 @@ namespace DefectStudio
 	class CommandRegistry
 	{
 	public:
-		explicit CommandRegistry(CapabilityService *capabilityService = nullptr);
+		explicit CommandRegistry(WeakRef<CapabilityService> capabilityService = {});
 
-		void SetCapabilityService(CapabilityService *capabilityService) noexcept;
-		void SetUndoStack(UndoStack *undoStack) noexcept;
+		void SetCapabilityService(WeakRef<CapabilityService> capabilityService) noexcept;
+		void SetUndoStack(WeakRef<UndoStack> undoStack) noexcept;
 
 		[[nodiscard]] Result<void> Register(CommandMeta meta, CommandFactory factory);
 		[[nodiscard]] bool HasCommand(const CommandID &id) const;
@@ -75,10 +75,10 @@ namespace DefectStudio
 
 	private:
 		[[nodiscard]] Result<void> ValidateCapabilities(const CommandMeta &meta) const;
-		void Notify(const CommandExecutionEvent &event) const;
+		void notifyObservers(const CommandExecutionEvent &event) const;
 
-		CapabilityService *m_CapabilityService = nullptr;
-		UndoStack *m_UndoStack = nullptr;
+		WeakRef<CapabilityService> m_CapabilityService;
+		WeakRef<UndoStack> m_UndoStack;
 		std::unordered_map<std::string, RegisteredCommand> m_Commands;
 		std::unordered_map<std::size_t, CommandExecutionObserver> m_Observers;
 		std::size_t m_NextObserverId = 1;

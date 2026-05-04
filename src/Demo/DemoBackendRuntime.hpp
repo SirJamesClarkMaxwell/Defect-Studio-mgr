@@ -48,7 +48,7 @@ namespace DefectStudio::Demo
 		std::array<char, 96> m_CommandPaletteSearch{};
 		std::vector<std::string> m_BackendRuntimeLog;
 
-		Unique<UndoStack> m_BackendUndoStack;
+		Ref<UndoStack> m_BackendUndoStack;
 		Unique<CommandRegistry> m_BackendCommandRegistry;
 		Unique<KeymapResolver> m_BackendKeymapResolver;
 		Unique<ContextManager> m_BackendContextManager;

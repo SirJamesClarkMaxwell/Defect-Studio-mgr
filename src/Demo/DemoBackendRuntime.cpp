@@ -242,9 +242,9 @@ namespace DefectStudio::Demo
 		m_BackendDemoValue = 0;
 		m_BackendRuntimeLog.clear();
 
-		m_BackendUndoStack = CreateUnique<UndoStack>();
-		m_BackendCommandRegistry = CreateUnique<CommandRegistry>(m_CapabilityService.get());
-		m_BackendCommandRegistry->SetUndoStack(m_BackendUndoStack.get());
+		m_BackendUndoStack = CreateRef<UndoStack>();
+		m_BackendCommandRegistry = CreateUnique<CommandRegistry>(CreateWeakRef(m_CapabilityService));
+		m_BackendCommandRegistry->SetUndoStack(CreateWeakRef(m_BackendUndoStack));
 		m_BackendKeymapResolver = CreateUnique<KeymapResolver>();
 		m_BackendContextManager = CreateUnique<ContextManager>();
 		m_BackendCommandPalette = CreateUnique<CommandPaletteIndex>(*m_BackendCommandRegistry);
@@ -264,8 +264,8 @@ namespace DefectStudio::Demo
 				"Mutates demo state through CommandRegistry and pushes UndoStack.",
 				{},
 				CommandFlags::Undoable},
-			[this](CommandContext &) {
-				return std::make_unique<DemoValueDeltaCommand>(m_BackendDemoValue, 1, "Increment demo value");
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoValueDeltaCommand>(m_BackendDemoValue, 1, "Increment demo value");
 			});
 
 		registerCommand(
@@ -276,8 +276,8 @@ namespace DefectStudio::Demo
 				"Mutates demo state through CommandRegistry and pushes UndoStack.",
 				{},
 				CommandFlags::Undoable},
-			[this](CommandContext &) {
-				return std::make_unique<DemoValueDeltaCommand>(m_BackendDemoValue, -1, "Decrement demo value");
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoValueDeltaCommand>(m_BackendDemoValue, -1, "Decrement demo value");
 			});
 
 		registerCommand(
@@ -288,8 +288,8 @@ namespace DefectStudio::Demo
 				"Stores previous state and restores it on undo.",
 				{},
 				CommandFlags::Undoable},
-			[this](CommandContext &) {
-				return std::make_unique<DemoSetValueCommand>(m_BackendDemoValue, 0);
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoSetValueCommand>(m_BackendDemoValue, 0);
 			});
 
 		registerCommand(
@@ -300,8 +300,8 @@ namespace DefectStudio::Demo
 				"Executes UndoStack::Undo through the command runtime shell.",
 				{},
 				CommandFlags::None},
-			[this](CommandContext &) {
-				return std::make_unique<DemoCallbackCommand>("Undo demo command", [this](CommandContext &context) {
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoCallbackCommand>("Undo demo command", [this](CommandContext &context) {
 					return m_BackendUndoStack->Undo(std::move(context));
 				});
 			});
@@ -314,8 +314,8 @@ namespace DefectStudio::Demo
 				"Executes UndoStack::Redo through the command runtime shell.",
 				{},
 				CommandFlags::None},
-			[this](CommandContext &) {
-				return std::make_unique<DemoCallbackCommand>("Redo demo command", [this](CommandContext &context) {
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoCallbackCommand>("Redo demo command", [this](CommandContext &context) {
 					return m_BackendUndoStack->Redo(std::move(context));
 				});
 			});
@@ -328,8 +328,8 @@ namespace DefectStudio::Demo
 				"Capability-gated command that emits a notification.",
 				{CapabilityID{"ui.notifications"}},
 				CommandFlags::None},
-			[this](CommandContext &) {
-				return std::make_unique<DemoCallbackCommand>("Send notification", [this](CommandContext &context) {
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoCallbackCommand>("Send notification", [this](CommandContext &context) {
 					(void)context;
 					requestNotification(Notification{
 						NotificationSeverity::Info,
@@ -353,8 +353,8 @@ namespace DefectStudio::Demo
 				"Shows capability gating and disabled palette entries.",
 				{CapabilityID{"demo.missing"}},
 				CommandFlags::None},
-			[this](CommandContext &) {
-				return std::make_unique<DemoCallbackCommand>("Requires missing capability", [this](CommandContext &context) {
+			[this](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<DemoCallbackCommand>("Requires missing capability", [this](CommandContext &context) {
 					(void)context;
 					m_BackendDemoValue += 1000;
 					return Result<void>{};

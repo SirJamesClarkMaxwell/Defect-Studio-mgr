@@ -3,6 +3,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 
 #include "Core/Undo/UndoStack.hpp"
+#include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
 {
@@ -25,25 +26,26 @@ namespace DefectStudio
 	}
 
 
-	CommandRegistry::CommandRegistry(CapabilityService *capabilityService)
-		: m_CapabilityService(capabilityService)
+	CommandRegistry::CommandRegistry(WeakRef<CapabilityService> capabilityService)
+	    : m_CapabilityService(std::move(capabilityService))
 	{
 	}
 
-	void CommandRegistry::SetCapabilityService(CapabilityService *capabilityService) noexcept
+	void CommandRegistry::SetCapabilityService(WeakRef<CapabilityService> capabilityService) noexcept
 	{
-		m_CapabilityService = capabilityService;
+		m_CapabilityService = std::move(capabilityService);
 	}
 
-	void CommandRegistry::SetUndoStack(UndoStack *undoStack) noexcept
+	void CommandRegistry::SetUndoStack(WeakRef<UndoStack> undoStack) noexcept
 	{
-		m_UndoStack = undoStack;
+		m_UndoStack = std::move(undoStack);
 	}
 
 	Result<void> CommandRegistry::Register(CommandMeta meta, CommandFactory factory)
 	{
 		if (!meta.id)
 		{
+			DS_LOG_ERROR("CommandRegistry::Register failed [command.register.empty_id]: CommandMeta.id is empty");
 			return MakeCommandError(
 				"command.register.empty_id",
 				"Command registration failed.",
@@ -53,6 +55,7 @@ namespace DefectStudio
 
 		if (!factory)
 		{
+			DS_LOG_ERROR("CommandRegistry::Register failed [command.register.missing_factory]: id='{}'", meta.id.value);
 			return MakeCommandError(
 				"command.register.missing_factory",
 				"Command registration failed.",
@@ -64,6 +67,7 @@ namespace DefectStudio
 		const auto [it, inserted] = m_Commands.emplace(commandId, RegisteredCommand{std::move(meta), std::move(factory)});
 		if (!inserted)
 		{
+			DS_LOG_ERROR("CommandRegistry::Register failed [command.register.duplicate_id]: id='{}' already registered", it->first);
 			return MakeCommandError(
 				"command.register.duplicate_id",
 				"Command registration failed.",
@@ -141,18 +145,18 @@ namespace DefectStudio
 		}
 
 		const RegisteredCommand &registration = it->second;
-		Notify(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Started, std::nullopt});
+		notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Started, std::nullopt});
 
 		auto capabilityResult = ValidateCapabilities(registration.meta);
 		if (!capabilityResult)
 		{
-			Notify(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Rejected, capabilityResult.Error()});
+			notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Rejected, capabilityResult.Error()});
 			return capabilityResult.Error();
 		}
 
 		ExecutionScope	scope(m_IsExecuting);
 
-		std::unique_ptr<ICommand> command = registration.factory(context);
+		Unique<ICommand> command = registration.factory(context);
 		if (!command)
 		{
 			auto error = MakeCommandError(
@@ -160,14 +164,14 @@ namespace DefectStudio
 				"Command execution failed.",
 				"Factory returned null for command '" + id.value + "'.",
 				"Command factories must return a valid ICommand instance.");
-			Notify(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Failed, error});
+			notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Failed, error});
 			return error;
 		}
 
 		Result<void> executionResult = command->Execute(context);
 		if (!executionResult)
 		{
-			Notify(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Failed, executionResult.Error()});
+			notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Failed, executionResult.Error()});
 			return executionResult.Error();
 		}
 
@@ -176,10 +180,13 @@ namespace DefectStudio
 		outcome.description = command->Description();
 		outcome.undoable = command->IsUndoable();
 
-		if (outcome.undoable && m_UndoStack != nullptr)
-			outcome.pushedToUndoStack = m_UndoStack->PushExecuted(std::move(command));
+		if (outcome.undoable)
+		{
+			if (auto undoStack = m_UndoStack.lock())
+				outcome.pushedToUndoStack = undoStack->PushExecuted(std::move(command));
+		}
 
-		Notify(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Succeeded, std::nullopt});
+		notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Succeeded, std::nullopt});
 		return outcome;
 	}
 
@@ -203,7 +210,7 @@ namespace DefectStudio
 		if (meta.requiredCapabilities.empty())
 			return {};
 
-		if (m_CapabilityService == nullptr)
+		if (m_CapabilityService.expired())
 		{
 			return MakeCommandError(
 				"command.capability.no_service",
@@ -213,9 +220,20 @@ namespace DefectStudio
 				ErrorCategory::Capability);
 		}
 
+		auto capabilityService = m_CapabilityService.lock();
+		if (!capabilityService)
+		{
+			return MakeCommandError(
+				"command.capability.no_service",
+				"Command cannot verify required capabilities.",
+				"Command '" + meta.id.value + "' declares capability requirements but CapabilityService is no longer available.",
+				"Ensure CapabilityService outlives CommandRegistry.",
+				ErrorCategory::Capability);
+		}
+
 		for (const CapabilityID &capability : meta.requiredCapabilities)
 		{
-			if (!m_CapabilityService->IsAvailable(capability.value))
+			if (!capabilityService->IsAvailable(capability.value))
 			{
 				return MakeCommandError(
 					"command.capability.unavailable",
@@ -229,7 +247,7 @@ namespace DefectStudio
 		return {};
 	}
 
-	void CommandRegistry::Notify(const CommandExecutionEvent &event) const
+	void CommandRegistry::notifyObservers(const CommandExecutionEvent &event) const
 	{
 		for (const auto &[id, observer] : m_Observers)
 		{
