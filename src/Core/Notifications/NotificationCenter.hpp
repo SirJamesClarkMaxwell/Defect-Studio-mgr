@@ -5,6 +5,7 @@
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notification.hpp"
+#include "Core/Notifications/NotificationHistory.hpp"
 
 namespace DefectStudio
 {
@@ -36,6 +37,6 @@ namespace DefectStudio
 		Ref<EventBus> m_EventBus;
 		SubscriptionHandle m_Subscription;
 		std::vector<Listener> m_Listeners;
-		std::vector<Notification> m_Notifications;
+		NotificationHistory m_History;
 	};
 } // namespace DefectStudio

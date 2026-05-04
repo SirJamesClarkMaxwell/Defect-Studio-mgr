@@ -283,6 +283,12 @@ namespace DefectStudio
 		return *m_EventBus;
 	}
 
+	Ref<EventBus> Application::GetEventBusRef() const
+	{
+		DS_ASSERT(m_EventBus != nullptr, "EventBus not initialized");
+		return m_EventBus;
+	}
+
 	Notifier &Application::GetNotifier()
 	{
 		DS_ASSERT(m_Notifier != nullptr, "Notifier not initialized");
@@ -840,7 +846,7 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
 #ifndef DS_DIST
-		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>(CreateWeakRef(m_AssetManager)));
+		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>(m_EventBus, CreateWeakRef(m_AssetManager)));
 #endif
 #ifndef DS_DIST
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());

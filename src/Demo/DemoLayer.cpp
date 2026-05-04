@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -17,11 +18,12 @@
 
 namespace DefectStudio::Demo
 {
-	DemoLayer::DemoLayer(WeakRef<AssetManager> assetManager)
-		: Layer("DemoLayer"),
-		  m_AssetManager(std::move(assetManager))
-	{
-	}
+		DemoLayer::DemoLayer(Ref<EventBus> globalEventBus, WeakRef<AssetManager> assetManager)
+				: Layer("DemoLayer"),
+					m_AssetManager(std::move(assetManager)),
+					m_GlobalEventBus(std::move(globalEventBus))
+		{
+		}
 
 	DemoLayer::~DemoLayer() = default;
 
@@ -35,7 +37,7 @@ namespace DefectStudio::Demo
 		m_JobSystemDemo = CreateUnique<JobSystemDemo>();
 
 		m_DemoNotifier = CreateRef<Notifier>(m_DemoEventBus);
-		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(m_DemoEventBus);
+		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(m_GlobalEventBus);
 
 		Ref<CapabilityRegistry> capabilityRegistry = CreateRef<CapabilityRegistry>();
 		capabilityRegistry->RegisterCapability(CapabilityEntry{
@@ -45,8 +47,8 @@ namespace DefectStudio::Demo
 			"Demo runtime can emit notifications through its local Notifier."});
 
 		Ref<CapabilityService> capabilityService = CreateRef<CapabilityService>(*capabilityRegistry);
-		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, m_DemoEventBus);
-		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService, m_DemoEventBus, m_AssetManager);
+		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, m_GlobalEventBus);
+		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService, m_GlobalEventBus, m_AssetManager);
 	}
 
 	void DemoLayer::OnDetach()
@@ -101,8 +103,5 @@ namespace DefectStudio::Demo
 
 		if (m_DemoEventBus)
 			m_DemoEventBus->ProcessQueue();
-
-		if (m_NotificationsPanel)
-			m_NotificationsPanel->RenderToasts();
 	}
 } // namespace DefectStudio::Demo

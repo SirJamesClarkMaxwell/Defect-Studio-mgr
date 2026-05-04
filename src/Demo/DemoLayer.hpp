@@ -22,7 +22,7 @@ namespace DefectStudio::Demo
 	class DemoLayer final : public Layer
 	{
 	public:
-		explicit DemoLayer(WeakRef<AssetManager> assetManager = {});
+		explicit DemoLayer(Ref<EventBus> globalEventBus, WeakRef<AssetManager> assetManager = {});
 		~DemoLayer();
 
 		void OnAttach() override;
@@ -33,6 +33,7 @@ namespace DefectStudio::Demo
 	private:
 		WeakRef<AssetManager> m_AssetManager;
 		Ref<EventBus> m_DemoEventBus;
+		Ref<EventBus> m_GlobalEventBus;
 		Ref<Notifier> m_DemoNotifier;
 		Unique<EventDispatcherDemo> m_EventDispatcherDemo;
 		Unique<EventBusDemo> m_EventBusDemo;

@@ -46,12 +46,12 @@ namespace DefectStudio
 
 	const std::vector<Notification> &NotificationCenter::GetNotifications() const
 	{
-		return m_Notifications;
+		return m_History.GetAll();
 	}
 
 	void NotificationCenter::onNotification(const Notification &notification)
 	{
-		m_Notifications.push_back(notification);
+		m_History.Append(notification);
 		for (const auto &listener : m_Listeners)
 		{
 			if (listener)

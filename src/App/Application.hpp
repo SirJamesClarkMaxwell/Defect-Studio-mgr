@@ -53,6 +53,7 @@ namespace DefectStudio
 		// Runtime service accessors
 		// Precondition: CoreLayer initialized.
 		EventBus &GetEventBus();
+		[[nodiscard]] Ref<EventBus> GetEventBusRef() const;
 		[[nodiscard]] Notifier &GetNotifier();
 		[[nodiscard]] Ref<Notifier> GetNotifierRef() const;
 		[[nodiscard]] CapabilityRegistry &GetCapabilityRegistry();
