@@ -66,12 +66,13 @@ Faza II
 Faza III
 8. Decouple `CommandRegistry` -> Wydzielić `CommandService` z `CommandRegistry`
 9.  Dodanie lepszego konstructora dla CommandOutcome
-10.  Usunięcie raw-ptr i raw-smart-ptr i zastąpienie z `Memory.hpp`
-11.  Rozbicie `KeyBinding` na mniejsze pliki odpowiadające lepiej nazwą i logicznie
+10.  (done) Usunięcie raw-ptr i raw-smart-ptr i zastąpienie z `Memory.hpp`
+11.  (done) Rozbicie `KeyBinding` na mniejsze pliki odpowiadające lepiej nazwą i logicznie
 12.  Poprawa rejestracji komend w demo (patrz komentarz)
-13.  Dodanie ctrl+z, ctrl+y, ctrl+shift+p, ctrl+shift+w, ctrl+s oraz poprawny przechwyt naciśniętych klawyszy (persystencję keybindings w IOLayer) + emit odpowienich eventów
-14.  Utworzenie sekcji KeyBinding w settings -> narazie wyświetlanie i wyszukiwanie (po opisie `app.save`/`app.quit`/`app.undo` itd albo przechwytując z klawaitury)
-15.  CancelGroup zeruje m_groupDepth zamiast dekrementować -> poprawić 
+13.  Dodanie ctrl+z, ctrl+y, ctrl+shift+p, ctrl+shift+w, ctrl+s
+14.  poprawny przechwyt naciśniętych klawyszy (persystencję keybindings w IOLayer) + emit odpowienich eventów
+15.  Utworzenie sekcji KeyBinding w settings -> narazie wyświetlanie i wyszukiwanie (po opisie `app.save`/`app.quit`/`app.undo` itd albo przechwytując z klawaitury)
+16.  CancelGroup zeruje m_groupDepth zamiast dekrementować -> poprawić 
 
 Faza IV
 16.  Naprawa reinicjalizacji Loggera (parz sekcja z komentarza)
@@ -104,3 +105,6 @@ Komentarze:
 1. W `ApplicationConfigController` nie reinicjalizujemy Loggera. Zmieńmy tylko te ustawiania które można zmienić. Reszta może być zablokowana do zmiany
 2. To co teraz jest po przez lambdy i implicit object construction jest złe. Jeśli chodzi o lambdy to zdecydowanie bardziej wolę bind funkcji z klasy niż lambda. Tutaj miejscem i ilością lini, nie musimy się przejmować. W realnej aplikacji prawdopodobnie będą to osobne funkcje do rejestracji po kategoriach i one będą w jednym pliku. Miejsce nie jest problemem.
 3. Nie chodziło mi o to, że panele to singletony. Bo to nie prawda. W niektórych aplikacjach np. SemiconductorStudio na przykład będzie wiele analiz -> wszystkie panale analiz będą mialy ten sam panel do renderowania ale z różnymi danymi, te powinny dać się duplikować. Natomiast są panele których nie powinno dać sie zduplikować, tak jak te które wymieniłem 
+
+
+

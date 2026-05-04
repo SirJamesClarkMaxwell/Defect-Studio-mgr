@@ -34,6 +34,13 @@ namespace DefectStudio::Demo
 
 	private:
 		void setupBackendRuntimeDemo();
+		[[nodiscard]] Unique<ICommand> createIncrementCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createDecrementCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createResetCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createUndoCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createRedoCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createNotifyCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createMissingCapabilityCommand(CommandContext &context);
 		bool onBackendDemoKeyPressed(KeyPressedEvent &event);
 		bool executeBackendDemoChord(const KeyChord &chord, const char *source);
 		void appendBackendRuntimeLog(std::string message);

@@ -264,9 +264,7 @@ namespace DefectStudio::Demo
 				"Mutates demo state through CommandRegistry and pushes UndoStack.",
 				{},
 				CommandFlags::Undoable},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoValueDeltaCommand>(m_BackendDemoValue, 1, "Increment demo value");
-			});
+			std::bind_front(&DemoBackendRuntime::createIncrementCommand, this));
 
 		registerCommand(
 			CommandMeta{
@@ -276,9 +274,7 @@ namespace DefectStudio::Demo
 				"Mutates demo state through CommandRegistry and pushes UndoStack.",
 				{},
 				CommandFlags::Undoable},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoValueDeltaCommand>(m_BackendDemoValue, -1, "Decrement demo value");
-			});
+			std::bind_front(&DemoBackendRuntime::createDecrementCommand, this));
 
 		registerCommand(
 			CommandMeta{
@@ -288,9 +284,7 @@ namespace DefectStudio::Demo
 				"Stores previous state and restores it on undo.",
 				{},
 				CommandFlags::Undoable},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoSetValueCommand>(m_BackendDemoValue, 0);
-			});
+			std::bind_front(&DemoBackendRuntime::createResetCommand, this));
 
 		registerCommand(
 			CommandMeta{
@@ -300,11 +294,7 @@ namespace DefectStudio::Demo
 				"Executes UndoStack::Undo through the command runtime shell.",
 				{},
 				CommandFlags::None},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoCallbackCommand>("Undo demo command", [this](CommandContext &context) {
-					return m_BackendUndoStack->Undo(std::move(context));
-				});
-			});
+			std::bind_front(&DemoBackendRuntime::createUndoCommand, this));
 
 		registerCommand(
 			CommandMeta{
@@ -314,11 +304,7 @@ namespace DefectStudio::Demo
 				"Executes UndoStack::Redo through the command runtime shell.",
 				{},
 				CommandFlags::None},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoCallbackCommand>("Redo demo command", [this](CommandContext &context) {
-					return m_BackendUndoStack->Redo(std::move(context));
-				});
-			});
+			std::bind_front(&DemoBackendRuntime::createRedoCommand, this));
 
 		registerCommand(
 			CommandMeta{
@@ -328,22 +314,7 @@ namespace DefectStudio::Demo
 				"Capability-gated command that emits a notification.",
 				{CapabilityID{"ui.notifications"}},
 				CommandFlags::None},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoCallbackCommand>("Send notification", [this](CommandContext &context) {
-					(void)context;
-					requestNotification(Notification{
-						NotificationSeverity::Info,
-						NotificationCategory::UI,
-						"Command runtime demo",
-						"Notification emitted from demo.backend.notify",
-						"DemoBackendRuntime",
-						Time::Now(),
-						4000,
-						false});
-					appendBackendRuntimeLog("notification command emitted ui.notifications");
-					return Result<void>{};
-				});
-			});
+			std::bind_front(&DemoBackendRuntime::createNotifyCommand, this));
 
 		registerCommand(
 			CommandMeta{
@@ -353,13 +324,7 @@ namespace DefectStudio::Demo
 				"Shows capability gating and disabled palette entries.",
 				{CapabilityID{"demo.missing"}},
 				CommandFlags::None},
-			[this](CommandContext &) -> Unique<ICommand> {
-				return CreateUnique<DemoCallbackCommand>("Requires missing capability", [this](CommandContext &context) {
-					(void)context;
-					m_BackendDemoValue += 1000;
-					return Result<void>{};
-				});
-			});
+			std::bind_front(&DemoBackendRuntime::createMissingCapabilityCommand, this));
 
 		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
 			"demo.increment.f6",
@@ -392,6 +357,62 @@ namespace DefectStudio::Demo
 		});
 
 		appendBackendRuntimeLog("backend runtime demo initialized");
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createIncrementCommand(CommandContext &)
+	{
+		return CreateUnique<DemoValueDeltaCommand>(m_BackendDemoValue, 1, "Increment demo value");
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createDecrementCommand(CommandContext &)
+	{
+		return CreateUnique<DemoValueDeltaCommand>(m_BackendDemoValue, -1, "Decrement demo value");
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createResetCommand(CommandContext &)
+	{
+		return CreateUnique<DemoSetValueCommand>(m_BackendDemoValue, 0);
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createUndoCommand(CommandContext &)
+	{
+		return CreateUnique<DemoCallbackCommand>("Undo demo command", [this](CommandContext &context) {
+			return m_BackendUndoStack->Undo(std::move(context));
+		});
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createRedoCommand(CommandContext &)
+	{
+		return CreateUnique<DemoCallbackCommand>("Redo demo command", [this](CommandContext &context) {
+			return m_BackendUndoStack->Redo(std::move(context));
+		});
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createNotifyCommand(CommandContext &)
+	{
+		return CreateUnique<DemoCallbackCommand>("Send notification", [this](CommandContext &context) {
+			(void)context;
+			requestNotification(Notification{
+				NotificationSeverity::Info,
+				NotificationCategory::UI,
+				"Command runtime demo",
+				"Notification emitted from demo.backend.notify",
+				"DemoBackendRuntime",
+				Time::Now(),
+				4000,
+				false});
+			appendBackendRuntimeLog("notification command emitted ui.notifications");
+			return Result<void>{};
+		});
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createMissingCapabilityCommand(CommandContext &)
+	{
+		return CreateUnique<DemoCallbackCommand>("Requires missing capability", [this](CommandContext &context) {
+			(void)context;
+			m_BackendDemoValue += 1000;
+			return Result<void>{};
+		});
 	}
 
 	bool DemoBackendRuntime::onBackendDemoKeyPressed(KeyPressedEvent &event)
