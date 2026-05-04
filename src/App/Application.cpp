@@ -840,7 +840,7 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
 #ifndef DS_DIST
-		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>());
+		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>(CreateWeakRef(m_AssetManager)));
 #endif
 #ifndef DS_DIST
 		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());

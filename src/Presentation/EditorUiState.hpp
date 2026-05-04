@@ -45,6 +45,7 @@ namespace DefectStudio
 		std::string themeSavePath;
 		std::string themeLoadPath;
 		std::string layoutPath;
+		std::vector<Path> availableLayouts;
 		std::string appearanceStatusMessage;
 		std::string layoutStatusMessage;
 	};

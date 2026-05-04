@@ -11,6 +11,12 @@
 namespace DefectStudio
 {
 	struct JobSystemConfigAppliedEvent;
+	struct JobCancelRequested;
+	struct JobHistoryRemoveRequested;
+	struct JobResetRequested;
+	struct JobResumeRequested;
+	struct JobRetryRequested;
+	struct JobSubmitRequested;
 
 	class CoreLayer final : public Layer, public EventReceiver
 	{
@@ -33,6 +39,12 @@ namespace DefectStudio
 	private:
 		void applyJobConfig(const JobsConfig &jobsConfig);
 		void onJobSystemConfigApplied(const JobSystemConfigAppliedEvent &event);
+		void onJobSubmitRequested(const JobSubmitRequested &event);
+		void onJobCancelRequested(const JobCancelRequested &event);
+		void onJobResumeRequested(const JobResumeRequested &event);
+		void onJobResetRequested(const JobResetRequested &event);
+		void onJobRetryRequested(const JobRetryRequested &event);
+		void onJobHistoryRemoveRequested(const JobHistoryRemoveRequested &event);
 
 	private:
 		float m_AccumulatedTime = 0.0f;

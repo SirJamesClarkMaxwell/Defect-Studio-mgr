@@ -5,6 +5,7 @@
 
 namespace DefectStudio
 {
+	class AssetManager;
 	class EventBus;
 	class Notifier;
 }
@@ -21,7 +22,7 @@ namespace DefectStudio::Demo
 	class DemoLayer final : public Layer
 	{
 	public:
-		DemoLayer();
+		explicit DemoLayer(WeakRef<AssetManager> assetManager = {});
 		~DemoLayer();
 
 		void OnAttach() override;
@@ -30,6 +31,7 @@ namespace DefectStudio::Demo
 		void OnImGuiRender() override;
 
 	private:
+		WeakRef<AssetManager> m_AssetManager;
 		Ref<EventBus> m_DemoEventBus;
 		Ref<Notifier> m_DemoNotifier;
 		Unique<EventDispatcherDemo> m_EventDispatcherDemo;

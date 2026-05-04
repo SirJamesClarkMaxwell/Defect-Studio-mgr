@@ -16,12 +16,19 @@ namespace DefectStudio
     class EventBus;
     class JobSystem;
 
+    namespace EditorUiEvents
+    {
+        struct LayoutListLoaded;
+        struct LayoutListFailed;
+    }
+
     class SettingsPanel final : public IPanel, public EventReceiver
     {
     public:
         explicit SettingsPanel(Ref<EventBus> eventBus = {},
                           WeakRef<JobSystem> jobSystem = {},
                           WeakRef<EditorUiState> uiState = {},
+                          ApplicationConfig initialConfig = {},
                           std::string title = "SettingsPanel",
                           bool visibleByDefault = true);
         SettingsPanel(const SettingsPanel &other);
@@ -38,7 +45,7 @@ namespace DefectStudio
 
     private:
         void ensureDraftInitialized();
-        void syncDraftFromApplication();
+        void syncDraftFromCurrentConfig();
         void syncDraftFromBuffers();
         [[nodiscard]] bool applyDraft(bool persist);
         [[nodiscard]] bool saveDraftAsDefaults();
@@ -52,6 +59,8 @@ namespace DefectStudio
         void onUserConfigSaveFailed(const AppEvents::Config::UserSaveFailed &event);
         void onDefaultsSaved(const AppEvents::Config::DefaultsSaved &event);
         void onDefaultsSaveFailed(const AppEvents::Config::DefaultsSaveFailed &event);
+        void onLayoutListLoaded(const EditorUiEvents::LayoutListLoaded &event);
+        void onLayoutListFailed(const EditorUiEvents::LayoutListFailed &event);
 
         void renderActionBar();
         void renderSidebar();
@@ -70,6 +79,7 @@ namespace DefectStudio
     private:
         bool m_DraftInitialized = false;
         bool m_DraftDirty = false;
+        bool m_LayoutListRequested = false;
         enum class Tab : int
         {
             System = 0,

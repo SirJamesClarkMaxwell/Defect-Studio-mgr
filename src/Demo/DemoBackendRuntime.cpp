@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "App/Application.hpp"
 #include "Core/Assets/AssetManager.hpp"
 #include "Core/Commands/CommandPalette.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -38,9 +37,10 @@ namespace DefectStudio::Demo
 		return "unknown";
 	}
 
-	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus)
+	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus, WeakRef<AssetManager> assetManager)
 		: m_CapabilityService(std::move(capabilityService)),
-		  m_EventBus(std::move(eventBus))
+		  m_EventBus(std::move(eventBus)),
+		  m_AssetManager(std::move(assetManager))
 	{
 		setupBackendRuntimeDemo();
 	}
@@ -195,29 +195,36 @@ namespace DefectStudio::Demo
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Asset manager");
-		auto &assetManager = Application::Get().GetAssetManager();
-		ImGui::Text("Default root: %s", assetManager.GetDefaultRoot().String().c_str());
-		ImGui::Text("User override root: %s", assetManager.GetUserOverrideRoot().String().c_str());
-		ImGui::Text("Registered descriptors: %zu", assetManager.ListDescriptors().size());
-		if (ImGui::Button("Resolve icon.ico"))
+		auto assetManager = m_AssetManager.lock();
+		if (assetManager == nullptr)
 		{
-			auto result = assetManager.ResolvePath("icon.ico");
-			appendBackendRuntimeLog(result ? "asset icon.ico -> " + result->resolvedPath.String() : "asset error: " + result.Error().userMessage);
+			ImGui::TextDisabled("AssetManager unavailable.");
 		}
-		ImGui::SameLine();
-		if (ImGui::Button("Resolve fonts/segoeui.ttf"))
+		else
 		{
-			auto result = assetManager.ResolvePath("fonts/segoeui.ttf");
-			appendBackendRuntimeLog(result ? "asset fonts/segoeui.ttf -> " + result->resolvedPath.String() : "asset error: " + result.Error().userMessage);
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Validate assets"))
-		{
-			const AssetValidationReport report = assetManager.ValidateRegisteredAssets();
-			appendBackendRuntimeLog(
-				"asset validation: resolved=" + std::to_string(report.resolvedAssets.size())
-				+ " issues=" + std::to_string(report.issues.size())
-				+ " critical=" + (report.HasCriticalFailures() ? "yes" : "no"));
+			ImGui::Text("Default root: %s", assetManager->GetDefaultRoot().String().c_str());
+			ImGui::Text("User override root: %s", assetManager->GetUserOverrideRoot().String().c_str());
+			ImGui::Text("Registered descriptors: %zu", assetManager->ListDescriptors().size());
+			if (ImGui::Button("Resolve icon.ico"))
+			{
+				auto result = assetManager->ResolvePath("icon.ico");
+				appendBackendRuntimeLog(result ? "asset icon.ico -> " + result->resolvedPath.String() : "asset error: " + result.Error().userMessage);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Resolve fonts/segoeui.ttf"))
+			{
+				auto result = assetManager->ResolvePath("fonts/segoeui.ttf");
+				appendBackendRuntimeLog(result ? "asset fonts/segoeui.ttf -> " + result->resolvedPath.String() : "asset error: " + result.Error().userMessage);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Validate assets"))
+			{
+				const AssetValidationReport report = assetManager->ValidateRegisteredAssets();
+				appendBackendRuntimeLog(
+					"asset validation: resolved=" + std::to_string(report.resolvedAssets.size())
+					+ " issues=" + std::to_string(report.issues.size())
+					+ " critical=" + (report.HasCriticalFailures() ? "yes" : "no"));
+			}
 		}
 
 		ImGui::Spacing();

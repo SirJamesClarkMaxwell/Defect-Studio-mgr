@@ -52,16 +52,16 @@
 
 Kolejność wprowadzania poprawek
 Faza I
-0. Rozbicie DemoLayer do osobnych plików
-1. dodanie przykładu z rejestracją Capability
-2. Demo-Notifier w DemoLayer zamiast tego z Application
-3. Wdrożenie NotificationCenter w DemoLayer oraz usunięcie lambdy `emmitNotification` -> ImGuiLayer powinno słuchać eventów produkowanych podczas proźby o wyświetlenie powiadomienia
+0. (done) Rozbicie DemoLayer do osobnych plików
+1. (done) dodanie przykładu z rejestracją Capability
+2. (done) Demo-Notifier w DemoLayer zamiast tego z Application
+3. (done) Wdrożenie NotificationCenter w DemoLayer oraz usunięcie lambdy `emmitNotification` -> ImGuiLayer powinno słuchać eventów produkowanych podczas proźby o wyświetlenie powiadomienia
 
 Faza II
-4. Uniezależnić Core od App (Ryzyko I)
-5. Zmiana `Execute` -> `Redo` (Ryzyko II)
-6. Zmiana `Publish` -> `Queue` (Ryzyko III)
-7. Pozbyć się `Application::Get()` (Ryzyko V)
+4. (done) Uniezależnić Core od App (Ryzyko I)
+5. (done) Zmiana `Execute` -> `Redo` (Ryzyko II)
+6. (done) Zmiana `Publish` -> `Queue` (Ryzyko III)
+7. (done) Pozbyć się `Application::Get()` (Ryzyko V)
 
 Faza III
 8. Decouple `CommandRegistry` -> Wydzielić `CommandService` z `CommandRegistry`
@@ -77,11 +77,11 @@ Faza IV
 16.  Naprawa reinicjalizacji Loggera (parz sekcja z komentarza)
 17.  Schowanie `CapabilityRegistry` za `CapabilityService`
 18.  Usunięcie niepotrzebnych historii Notification
-19.  Ujednolicenie `Result<>`
+19.  (done) Ujednolicenie `Result<>`
 20.  Wyłączyć DS_ASSERT w buildzie Dist (Ryzyko IV)
 21.  wyrzucenie z `initializeEventInfrastructure` inicjalizacji `CapabilityService`, `CapabilityRegistry` i `Notifier`
 22.  Ujednolicenie plików Logging -> jedno miejsce 
-23. Usunąć **DemoLayer** i **DebugLayer** z build Dist (Ryzyko VII)
+23. (done) Usunąć **DemoLayer** i **DebugLayer** z build Dist (Ryzyko VII)
 24. Dodać **RemoveListener** i zmiana nazwy **Listener** w `NotificationCenter`
 25. usunąć anonymus namespace
 26. usunięcie double `ProcessQueue`

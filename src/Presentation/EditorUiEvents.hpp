@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/Utils/Path.hpp"
@@ -238,5 +239,37 @@ namespace DefectStudio::EditorUiEvents
 		}
 
 		Path path;
+	};
+
+	struct LayoutListRequested final : public BusEvent
+	{
+		explicit LayoutListRequested(Path targetDirectory)
+			: directory(std::move(targetDirectory))
+		{
+		}
+
+		Path directory;
+	};
+
+	struct LayoutListLoaded final : public BusEvent
+	{
+		LayoutListLoaded(Path targetDirectory, std::vector<Path> layoutPaths)
+			: directory(std::move(targetDirectory)), layouts(std::move(layoutPaths))
+		{
+		}
+
+		Path directory;
+		std::vector<Path> layouts;
+	};
+
+	struct LayoutListFailed final : public BusEvent
+	{
+		LayoutListFailed(Path targetDirectory, std::string failureReason)
+			: directory(std::move(targetDirectory)), error(std::move(failureReason))
+		{
+		}
+
+		Path directory;
+		std::string error;
 	};
 } // namespace DefectStudio::EditorUiEvents

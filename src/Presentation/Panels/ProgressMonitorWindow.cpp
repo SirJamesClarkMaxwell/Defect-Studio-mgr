@@ -9,7 +9,8 @@
 
 #include <imgui.h>
 
-#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
 
@@ -44,6 +45,16 @@ namespace DefectStudio
 		for (const auto &snapshot : allJobs)
 			refs.push_back(CreateRef<ProgressEntrySnapshot>(snapshot));
 		return refs;
+	}
+
+	template <typename EventType>
+	bool queueJobEvent(const Ref<EventBus> &eventBus, const EventType &event)
+	{
+		if (eventBus == nullptr)
+			return false;
+
+		eventBus->Queue(event);
+		return true;
 	}
 
 	bool compareSnapshotWeakByIdDesc(const SnapshotWeak &left, const SnapshotWeak &right)
@@ -209,12 +220,12 @@ namespace DefectStudio
 		}
 	}
 
-	ProgressMonitorWindow::ProgressMonitorWindow(WeakRef<JobSystem> jobSystem,
+	ProgressMonitorWindow::ProgressMonitorWindow(Ref<EventBus> eventBus,
 	                                             WeakRef<ProgressTracker> progressTracker,
 	                                             std::string title,
 	                                             bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
-		  m_JobSystem(std::move(jobSystem)),
+		  m_EventBus(std::move(eventBus)),
 		  m_ProgressTracker(std::move(progressTracker))
 	{
 	}
@@ -226,7 +237,6 @@ namespace DefectStudio
 
 	void ProgressMonitorWindow::Render()
 	{
-		auto jobSystem = m_JobSystem.lock();
 		auto progressTracker = m_ProgressTracker.lock();
 
 		if (!IsVisible())
@@ -242,7 +252,7 @@ namespace DefectStudio
 		}
 		SetVisible(visible);
 
-		if (jobSystem == nullptr || progressTracker == nullptr)
+		if (m_EventBus == nullptr || progressTracker == nullptr)
 		{
 			ImGui::TextDisabled("Progress services unavailable.");
 			ImGui::End();
@@ -278,16 +288,10 @@ namespace DefectStudio
 			ImGui::EndDisabled();
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel selected") && !m_SelectedJobIds.empty())
-		{
-			for (const JobId jobId : m_SelectedJobIds)
-				(void)jobSystem->RequestCancel(jobId);
-		}
+			(void)queueJobEvent(m_EventBus, JobCancelRequested{m_SelectedJobIds});
 		ImGui::SameLine();
 		if (ImGui::Button("Resume selected") && !m_SelectedJobIds.empty())
-		{
-			for (const JobId jobId : m_SelectedJobIds)
-				(void)jobSystem->Resume(jobId);
-		}
+			(void)queueJobEvent(m_EventBus, JobResumeRequested{m_SelectedJobIds});
 
 		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete) && !m_SelectedJobIds.empty())
 			requestDeleteSelectionConfirmation(snapshots);
@@ -749,9 +753,8 @@ namespace DefectStudio
 
 	void ProgressMonitorWindow::renderJobContextMenu(const ProgressEntrySnapshot &snapshot)
 	{
-		auto jobSystem = m_JobSystem.lock();
 		auto progressTracker = m_ProgressTracker.lock();
-		if (jobSystem == nullptr || progressTracker == nullptr)
+		if (m_EventBus == nullptr || progressTracker == nullptr)
 			return;
 
 		const JobStatus status = snapshot.status;
@@ -775,20 +778,17 @@ namespace DefectStudio
 		ImGui::Separator();
 
 		if (ImGui::MenuItem("Cancel", nullptr, false, canCancel))
-			(void)jobSystem->RequestCancel(snapshot.id);
+			(void)queueJobEvent(m_EventBus, JobCancelRequested{std::vector<JobId>{snapshot.id}});
 		if (ImGui::MenuItem("Resume", nullptr, false, canResume))
-			(void)jobSystem->Resume(snapshot.id);
+			(void)queueJobEvent(m_EventBus, JobResumeRequested{std::vector<JobId>{snapshot.id}});
 		if (ImGui::MenuItem("Reset", nullptr, false, canReset))
-			(void)jobSystem->Reset(snapshot.id);
+			(void)queueJobEvent(m_EventBus, JobResetRequested{snapshot.id});
 		if (ImGui::MenuItem("Retry", nullptr, false, canRetry))
-			(void)jobSystem->Retry(snapshot.id);
+			(void)queueJobEvent(m_EventBus, JobRetryRequested{snapshot.id});
 
 		ImGui::Separator();
 		if (ImGui::MenuItem("Delete from history", nullptr, false, canDeleteFromHistory))
-		{
-			if (jobSystem->RemoveFromHistory(snapshot.id))
-				(void)progressTracker->RemoveEntry(snapshot.id);
-		}
+			(void)queueJobEvent(m_EventBus, JobHistoryRemoveRequested{std::vector<JobId>{snapshot.id}});
 
 		if (m_SelectedJobIds.size() > 1 && isSelected(snapshot.id))
 		{
@@ -872,9 +872,8 @@ namespace DefectStudio
 
 	void ProgressMonitorWindow::removeFromHistory(const std::vector<JobId> &ids)
 	{
-		auto jobSystem = m_JobSystem.lock();
 		auto progressTracker = m_ProgressTracker.lock();
-		if (jobSystem == nullptr || progressTracker == nullptr)
+		if (m_EventBus == nullptr || progressTracker == nullptr)
 			return;
 
 		auto snapshotsResult = progressTracker->GetAllSnapshots();
@@ -902,11 +901,7 @@ namespace DefectStudio
 		std::sort(idsToRemove.begin(), idsToRemove.end());
 		idsToRemove.erase(std::unique(idsToRemove.begin(), idsToRemove.end()), idsToRemove.end());
 
-		for (const JobId id : idsToRemove)
-		{
-			if (jobSystem->RemoveFromHistory(id))
-				(void)progressTracker->RemoveEntry(id);
-		}
+		(void)queueJobEvent(m_EventBus, JobHistoryRemoveRequested{idsToRemove});
 
 		m_SelectedJobIds.erase(std::remove_if(m_SelectedJobIds.begin(), m_SelectedJobIds.end(), [&idsToRemove](JobId id) {
 			return std::find(idsToRemove.begin(), idsToRemove.end(), id) != idsToRemove.end();

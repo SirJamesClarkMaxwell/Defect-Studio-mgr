@@ -72,6 +72,7 @@ namespace DefectStudio
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<ProgressTracker> m_ProgressTracker;
 		Ref<EditorUiState> m_UiState;
+		Ref<ApplicationConfig> m_CurrentConfig;
 	};
 
 	template <typename TPanel, typename... Args>

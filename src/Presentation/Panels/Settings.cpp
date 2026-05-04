@@ -8,7 +8,6 @@
 
 #include <imgui.h>
 
-#include "App/Application.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Logger.hpp"
@@ -76,20 +75,25 @@ namespace DefectStudio
 	SettingsPanel::SettingsPanel(Ref<EventBus> eventBus,
 	                   WeakRef<JobSystem> jobSystem,
 	                   WeakRef<EditorUiState> uiState,
+	                   ApplicationConfig initialConfig,
 	                   std::string title,
 	                   bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
+		  m_DraftConfig(std::move(initialConfig)),
 		  m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem)),
 		  m_UiState(std::move(uiState))
 	{
 		bindConfigEvents();
+		if (m_DraftInitialized)
+			m_ProfileManager.Bind(m_EventBus);
 	}
 
 	SettingsPanel::SettingsPanel(const SettingsPanel &other)
 		: IPanel(other.GetTitle(), other.IsVisible()),
 		  m_DraftInitialized(other.m_DraftInitialized),
 		  m_DraftDirty(other.m_DraftDirty),
+		  m_LayoutListRequested(other.m_LayoutListRequested),
  		m_SelectedTab(other.m_SelectedTab),
 		  m_DraftConfig(other.m_DraftConfig),
 		  m_WindowTitleBuffer(other.m_WindowTitleBuffer),
@@ -101,8 +105,7 @@ namespace DefectStudio
 		  m_StatusMessage(other.m_StatusMessage),
 		  m_EventBus(other.m_EventBus),
 		  m_JobSystem(other.m_JobSystem),
-		  m_UiState(other.m_UiState),
-		  m_ProfileManager(other.m_ProfileManager)
+		  m_UiState(other.m_UiState)
 	{
 		bindConfigEvents();
 	}
@@ -187,13 +190,12 @@ namespace DefectStudio
 		if (m_DraftInitialized)
 			return;
 
-		syncDraftFromApplication();
-		m_ProfileManager.Bind(Application::Get().GetConfigManager(), m_EventBus);
+		syncDraftFromCurrentConfig();
+		m_ProfileManager.Bind(m_EventBus);
 	}
 
-	void SettingsPanel::syncDraftFromApplication()
+	void SettingsPanel::syncDraftFromCurrentConfig()
 	{
-		m_DraftConfig = Application::Get().GetConfig();
 		if (auto uiState = m_UiState.lock())
 		{
 			m_DraftConfig.ui.fontScale = std::clamp(uiState->fontScale, m_DraftConfig.ui.fontScaleMin, m_DraftConfig.ui.fontScaleMax);
@@ -338,6 +340,8 @@ namespace DefectStudio
 		AddSubscription(subscribeSettings<UserSaveFailed>(*m_EventBus, *this, &SettingsPanel::onUserConfigSaveFailed));
 		AddSubscription(subscribeSettings<DefaultsSaved>(*m_EventBus, *this, &SettingsPanel::onDefaultsSaved));
 		AddSubscription(subscribeSettings<DefaultsSaveFailed>(*m_EventBus, *this, &SettingsPanel::onDefaultsSaveFailed));
+		AddSubscription(subscribeSettings<EditorUiEvents::LayoutListLoaded>(*m_EventBus, *this, &SettingsPanel::onLayoutListLoaded));
+		AddSubscription(subscribeSettings<EditorUiEvents::LayoutListFailed>(*m_EventBus, *this, &SettingsPanel::onLayoutListFailed));
 	}
 
 	void SettingsPanel::onConfigApplied(const AppEvents::Config::Applied &event)
@@ -390,13 +394,32 @@ namespace DefectStudio
 		DS_LOG_ERROR("SettingsPanel default config save failed error={}", event.error);
 	}
 
+	void SettingsPanel::onLayoutListLoaded(const EditorUiEvents::LayoutListLoaded &event)
+	{
+		if (auto uiState = m_UiState.lock())
+		{
+			uiState->availableLayouts = event.layouts;
+			uiState->layoutStatusMessage = event.layouts.empty()
+				? "No .ini layouts found in " + event.directory.String()
+				: "Layouts refreshed: " + std::to_string(event.layouts.size());
+		}
+		m_LayoutListRequested = false;
+	}
+
+	void SettingsPanel::onLayoutListFailed(const EditorUiEvents::LayoutListFailed &event)
+	{
+		if (auto uiState = m_UiState.lock())
+			uiState->layoutStatusMessage = "Layout refresh failed: " + event.error;
+		m_LayoutListRequested = false;
+	}
+
 	void SettingsPanel::renderActionBar()
 	{
 		ImGui::TextUnformatted("Configuration editor");
 		ImGui::TextWrapped("This panel edits YAML-backed application settings. Preview updates runtime without touching disk, while Apply & Save also persists the current snapshot.");
 
 		if (ImGui::Button("Reload current config"))
-			syncDraftFromApplication();
+			syncDraftFromCurrentConfig();
 
 		ImGui::SameLine();
 		if (ImGui::Button("Preview now"))
@@ -819,7 +842,7 @@ namespace DefectStudio
 		}
 
 		ImGui::TextUnformatted("ImGui layout");
-		ImGui::TextWrapped("Layout is saved as ImGui .ini data. Requests go to ImGuiLayer; file access stays behind ConfigManager.");
+		ImGui::TextWrapped("Layout is saved as ImGui .ini data. Requests go through the event bus.");
 		ImGui::TextWrapped("Active layout: %s", uiState->layoutPath.empty() ? "<not configured>" : uiState->layoutPath.c_str());
 		if (ImGui::Button("Save current layout"))
 			(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(uiState->layoutPath)});
@@ -833,19 +856,25 @@ namespace DefectStudio
 		if (!uiState->layoutStatusMessage.empty())
 			ImGui::TextWrapped("%s", uiState->layoutStatusMessage.c_str());
 
-		auto configManager = Application::Get().GetConfigManager().lock();
-		if (configManager == nullptr)
-			return;
-
-		const std::vector<Path> layouts = configManager->ListIniFiles(configManager->GetPaths().layoutsDirectory);
-		ImGui::SeparatorText("Available layouts");
-		if (layouts.empty())
+		if (!m_LayoutListRequested && uiState->availableLayouts.empty())
 		{
-			ImGui::TextDisabled("No .ini layouts in %s", configManager->GetPaths().layoutsDirectory.String().c_str());
+			(void)queueEvent(m_EventBus, LayoutListRequested{m_DraftConfig.paths.layoutsDirectory});
+			m_LayoutListRequested = true;
+		}
+
+		ImGui::SeparatorText("Available layouts");
+		if (ImGui::Button("Refresh layouts"))
+		{
+			(void)queueEvent(m_EventBus, LayoutListRequested{m_DraftConfig.paths.layoutsDirectory});
+			m_LayoutListRequested = true;
+		}
+		if (uiState->availableLayouts.empty())
+		{
+			ImGui::TextDisabled("No .ini layouts in %s", m_DraftConfig.paths.layoutsDirectory.String().c_str());
 			return;
 		}
 
-		for (const Path &layoutPath : layouts)
+		for (const Path &layoutPath : uiState->availableLayouts)
 		{
 			if (ImGui::Selectable(layoutPath.Native().filename().string().c_str(), uiState->layoutPath == layoutPath.String()))
 				uiState->layoutPath = layoutPath.String();
@@ -921,14 +950,7 @@ namespace DefectStudio
 
 	void SettingsPanel::renderFilePathsTab()
 	{
-		auto configManager = Application::Get().GetConfigManager().lock();
-		if (configManager == nullptr)
-		{
-			ImGui::TextDisabled("ConfigManager unavailable.");
-			return;
-		}
-
-		const ApplicationPaths &paths = configManager->GetPaths();
+		const ApplicationPaths &paths = m_DraftConfig.paths;
 		const auto renderPathRow = [](const char *label, const std::string &value) {
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -949,8 +971,8 @@ namespace DefectStudio
 			renderPathRow("Exports", paths.exportsDirectory.String());
 			renderPathRow("Assets", paths.assetsDirectory.String());
 			renderPathRow("Fonts", paths.fontsDirectory.String());
-			renderPathRow("default.yaml", ConfigManager::GetDefaultConfigPath(configManager->GetConfigDirectory()).String());
-			renderPathRow("ui_settings.yaml", ConfigManager::GetUserSettingsPath(configManager->GetConfigDirectory()).String());
+			renderPathRow("default.yaml", (paths.appConfigDirectory / Path("default.yaml")).String());
+			renderPathRow("ui_settings.yaml", (paths.userConfigDirectory / Path("ui_settings.yaml")).String());
 			ImGui::EndTable();
 		}
 	}

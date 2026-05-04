@@ -2,8 +2,10 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "App/ApplicationState.hpp"
+#include "Core/Configuration/ConfigProfile.hpp"
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/Utils/Path.hpp"
 
@@ -124,6 +126,129 @@ namespace DefectStudio::AppEvents::Config
 		}
 
 		ApplicationConfig config;
+		std::string error;
+	};
+
+	struct ProfileListRequested final : public BusEvent
+	{
+	};
+
+	struct ProfileListLoaded final : public BusEvent
+	{
+		explicit ProfileListLoaded(std::vector<ConfigProfileEntry> profileEntries)
+			: entries(std::move(profileEntries))
+		{
+		}
+
+		std::vector<ConfigProfileEntry> entries;
+	};
+
+	struct ProfileListFailed final : public BusEvent
+	{
+		explicit ProfileListFailed(std::string failureReason)
+			: error(std::move(failureReason))
+		{
+		}
+
+		std::string error;
+	};
+
+	struct ProfileSaveRequested final : public BusEvent
+	{
+		ProfileSaveRequested(std::string profileName, ApplicationConfig applicationConfig)
+			: name(std::move(profileName)), config(std::move(applicationConfig))
+		{
+		}
+
+		std::string name;
+		ApplicationConfig config;
+	};
+
+	struct ProfileSaved final : public BusEvent
+	{
+		ProfileSaved(std::string profileName, Path profilePath)
+			: name(std::move(profileName)), path(std::move(profilePath))
+		{
+		}
+
+		std::string name;
+		Path path;
+	};
+
+	struct ProfileSaveFailed final : public BusEvent
+	{
+		ProfileSaveFailed(std::string profileName, std::string failureReason)
+			: name(std::move(profileName)), error(std::move(failureReason))
+		{
+		}
+
+		std::string name;
+		std::string error;
+	};
+
+	struct ProfileLoadRequested final : public BusEvent
+	{
+		ProfileLoadRequested(std::string profileName, Path profilePath)
+			: name(std::move(profileName)), path(std::move(profilePath))
+		{
+		}
+
+		std::string name;
+		Path path;
+	};
+
+	struct ProfileLoaded final : public BusEvent
+	{
+		ProfileLoaded(std::string profileName, ApplicationConfig applicationConfig)
+			: name(std::move(profileName)), config(std::move(applicationConfig))
+		{
+		}
+
+		std::string name;
+		ApplicationConfig config;
+	};
+
+	struct ProfileLoadFailed final : public BusEvent
+	{
+		ProfileLoadFailed(std::string profileName, std::string failureReason)
+			: name(std::move(profileName)), error(std::move(failureReason))
+		{
+		}
+
+		std::string name;
+		std::string error;
+	};
+
+	struct ProfileExportRequested final : public BusEvent
+	{
+		ProfileExportRequested(std::string profileName, Path profilePath)
+			: name(std::move(profileName)), path(std::move(profilePath))
+		{
+		}
+
+		std::string name;
+		Path path;
+	};
+
+	struct ProfileExported final : public BusEvent
+	{
+		ProfileExported(std::string profileName, Path exportPath)
+			: name(std::move(profileName)), path(std::move(exportPath))
+		{
+		}
+
+		std::string name;
+		Path path;
+	};
+
+	struct ProfileExportFailed final : public BusEvent
+	{
+		ProfileExportFailed(std::string profileName, std::string failureReason)
+			: name(std::move(profileName)), error(std::move(failureReason))
+		{
+		}
+
+		std::string name;
 		std::string error;
 	};
 

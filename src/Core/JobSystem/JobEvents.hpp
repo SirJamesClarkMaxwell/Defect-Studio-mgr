@@ -2,9 +2,11 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Time.hpp"
 
 namespace DefectStudio
@@ -116,5 +118,68 @@ namespace DefectStudio
 		std::string type;
 		std::string errorMessage;
 		Time::TimePoint finishedAt{};
+	};
+
+	struct JobSubmitRequested final : public BusEvent
+	{
+		JobSubmitRequested(Ref<IJob> requestedJob, JobPriority requestedPriority, std::string requestSource = {})
+			: job(std::move(requestedJob)), priority(requestedPriority), source(std::move(requestSource))
+		{
+		}
+
+		Ref<IJob> job;
+		JobPriority priority = JobPriority::Normal;
+		std::string source;
+	};
+
+	struct JobCancelRequested final : public BusEvent
+	{
+		explicit JobCancelRequested(std::vector<JobId> requestedIds)
+			: ids(std::move(requestedIds))
+		{
+		}
+
+		std::vector<JobId> ids;
+	};
+
+	struct JobResumeRequested final : public BusEvent
+	{
+		explicit JobResumeRequested(std::vector<JobId> requestedIds)
+			: ids(std::move(requestedIds))
+		{
+		}
+
+		std::vector<JobId> ids;
+	};
+
+	struct JobResetRequested final : public BusEvent
+	{
+		explicit JobResetRequested(JobId requestedId)
+			: id(requestedId)
+		{
+		}
+
+		JobId id = 0;
+	};
+
+	struct JobRetryRequested final : public BusEvent
+	{
+		JobRetryRequested(JobId requestedId, JobPriority requestedPriority = JobPriority::Normal)
+			: id(requestedId), priority(requestedPriority)
+		{
+		}
+
+		JobId id = 0;
+		JobPriority priority = JobPriority::Normal;
+	};
+
+	struct JobHistoryRemoveRequested final : public BusEvent
+	{
+		explicit JobHistoryRemoveRequested(std::vector<JobId> requestedIds)
+			: ids(std::move(requestedIds))
+		{
+		}
+
+		std::vector<JobId> ids;
 	};
 } // namespace DefectStudio

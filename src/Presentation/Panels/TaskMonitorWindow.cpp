@@ -4,6 +4,8 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/TestJobs/TestJobs.hpp"
@@ -53,8 +55,9 @@ namespace DefectStudio
 		int m_ChainCount = 1;
 	};
 
-	TaskMonitorWindow::TaskMonitorWindow(WeakRef<JobSystem> jobSystem, std::string title, bool visibleByDefault)
+	TaskMonitorWindow::TaskMonitorWindow(Ref<EventBus> eventBus, WeakRef<JobSystem> jobSystem, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
+		  m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem))
 	{
 	}
@@ -98,19 +101,25 @@ namespace DefectStudio
 
 		if (ImGui::Button("Submit Dummy Job"))
 		{
-			if (jobSystem != nullptr)
+			if (m_EventBus != nullptr)
 			{
-				const auto jobId = jobSystem->Submit(CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}), m_DummyJobPriority);
-				DS_LOG_INFO("TaskMonitor submitted dummy job id={} name=\"{}\" steps={} delay_ms={} priority={}", jobId, m_DummyJobName, m_DummyJobSteps, m_DummyJobDelayMs, static_cast<int>(m_DummyJobPriority));
+				m_EventBus->Queue(JobSubmitRequested{
+					CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}),
+					m_DummyJobPriority,
+					"TaskMonitorWindow"});
+				DS_LOG_INFO("TaskMonitor queued dummy job name=\"{}\" steps={} delay_ms={} priority={}", m_DummyJobName, m_DummyJobSteps, m_DummyJobDelayMs, static_cast<int>(m_DummyJobPriority));
 			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Submit Subtask Demo"))
 		{
-			if (jobSystem != nullptr)
+			if (m_EventBus != nullptr)
 			{
-				const auto jobId = jobSystem->Submit(CreateRef<UITaskMonitorSubtaskJob>(std::string(m_DummyJobName) + "::parent", m_SubtaskChainCount), m_DummyJobPriority);
-				DS_LOG_INFO("TaskMonitor submitted subtask demo id={} name=\"{}\" chain={} priority={}", jobId, m_DummyJobName, m_SubtaskChainCount, static_cast<int>(m_DummyJobPriority));
+				m_EventBus->Queue(JobSubmitRequested{
+					CreateRef<UITaskMonitorSubtaskJob>(std::string(m_DummyJobName) + "::parent", m_SubtaskChainCount),
+					m_DummyJobPriority,
+					"TaskMonitorWindow"});
+				DS_LOG_INFO("TaskMonitor queued subtask demo name=\"{}\" chain={} priority={}", m_DummyJobName, m_SubtaskChainCount, static_cast<int>(m_DummyJobPriority));
 			}
 		}
 

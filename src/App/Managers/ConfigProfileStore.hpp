@@ -5,18 +5,13 @@
 #include <vector>
 
 #include "App/ApplicationState.hpp"
+#include "Core/Configuration/ConfigProfile.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 
 namespace DefectStudio
 {
 	class ConfigManager;
-
-	struct ConfigProfileEntry
-	{
-		std::string name;
-		Path path;
-	};
 
 	class ConfigProfileStore
 	{

@@ -12,7 +12,7 @@ struct ImVec4;
 
 namespace DefectStudio
 {
-	class JobSystem;
+	class EventBus;
 	class ProgressTracker;
 
 	struct VisibleJobRow
@@ -24,7 +24,7 @@ namespace DefectStudio
 	class ProgressMonitorWindow final : public IPanel
 	{
 	public:
-		explicit ProgressMonitorWindow(WeakRef<JobSystem> jobSystem = {},
+		explicit ProgressMonitorWindow(Ref<EventBus> eventBus = {},
 		                              WeakRef<ProgressTracker> progressTracker = {},
 		                              std::string title = "Progress Monitor",
 		                              bool visibleByDefault = true);
@@ -44,7 +44,7 @@ namespace DefectStudio
 		int m_DeletePendingSkipped = 0;
 		bool m_OpenDeleteConfirmPopup = false;
 		mutable std::vector<Ref<ProgressEntrySnapshot>> m_RowSnapshotRefs;
-		WeakRef<JobSystem> m_JobSystem;
+		Ref<EventBus> m_EventBus;
 		WeakRef<ProgressTracker> m_ProgressTracker;
 
 		void buildVisibleRows(const std::vector<ProgressEntrySnapshot> &allJobs, std::vector<VisibleJobRow> &rows) const;

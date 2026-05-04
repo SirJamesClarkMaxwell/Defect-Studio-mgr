@@ -65,6 +65,7 @@ namespace DefectStudio
 
 	void EditorLayer::ApplyConfig(const ApplicationConfig &config)
 	{
+		m_CurrentConfig = CreateRef<ApplicationConfig>(config);
 		applyConfigToUiState(config);
 		DS_LOG_INFO(
 			"EditorLayer config applied to UI state: font_scale={} workers={} layout={}",
@@ -114,6 +115,7 @@ namespace DefectStudio
 		m_JobSystem.reset();
 		m_ProgressTracker.reset();
 		m_UiState.reset();
+		m_CurrentConfig.reset();
 	}
 
 	void EditorLayer::OnEvent(Event &event)
@@ -145,10 +147,16 @@ namespace DefectStudio
 		if (m_PanelsInitialized)
 			return;
 
-		registerPanel<ProgressMonitorWindow>(m_JobSystem, m_ProgressTracker, "Progress Monitor", true);
-		registerPanel<TaskMonitorWindow>(m_JobSystem, "Task Monitor", true);
+		registerPanel<ProgressMonitorWindow>(m_EventBus, m_ProgressTracker, "Progress Monitor", true);
+		registerPanel<TaskMonitorWindow>(m_EventBus, m_JobSystem, "Task Monitor", true);
 		registerPanel<LoggingPanel>(m_LogRegistry, "Logging Panel", true);
-		registerPanel<SettingsPanel>(m_EventBus, m_JobSystem, CreateWeakRef(m_UiState), "SettingsPanel", true);
+		registerPanel<SettingsPanel>(
+			m_EventBus,
+			m_JobSystem,
+			CreateWeakRef(m_UiState),
+			m_CurrentConfig != nullptr ? *m_CurrentConfig : ApplicationConfig{},
+			"SettingsPanel",
+			true);
 		m_PanelsInitialized = true;
 	}
 
@@ -251,6 +259,7 @@ namespace DefectStudio
 	void EditorLayer::onConfigApplied(const AppEvents::Config::Applied &event)
 	{
 		DS_LOG_INFO("EditorLayer received config applied event: persisted={}", event.persisted);
+		m_CurrentConfig = CreateRef<ApplicationConfig>(event.config);
 		applyConfigToUiState(event.config);
 	}
 

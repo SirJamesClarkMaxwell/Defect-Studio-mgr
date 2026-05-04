@@ -2,7 +2,12 @@
 
 #include "IO/IOLayer.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <functional>
+#include <string_view>
+#include <vector>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
@@ -25,6 +30,36 @@ namespace DefectStudio
 			return bus.Subscribe<EventType>(std::bind_front(method, &layer));
 		}
 
+		std::vector<Path> listFilesByExtension(const Path &directory, std::string_view extension)
+		{
+			std::vector<Path> result;
+			std::error_code error;
+			if (!std::filesystem::exists(directory.Native(), error) || error)
+				return result;
+
+			for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
+			{
+				if (error)
+					break;
+				if (!entry.is_regular_file(error) || error)
+				{
+					error.clear();
+					continue;
+				}
+
+				std::string fileExtension = entry.path().extension().string();
+				std::transform(fileExtension.begin(), fileExtension.end(), fileExtension.begin(), [](unsigned char character) {
+					return static_cast<char>(std::tolower(character));
+				});
+				if (fileExtension == extension)
+					result.push_back(Path::FromResolved(entry.path()));
+			}
+
+			std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) {
+				return left.String() < right.String();
+			});
+			return result;
+		}
 	} // namespace
 
 	IOLayer::IOLayer() : Layer("IOLayer")
@@ -70,6 +105,7 @@ namespace DefectStudio
 		AddSubscription(subscribeIOLayer<EditorUiEvents::ThemeSaveRequested>(*m_EventBus, *this, &IOLayer::onThemeSaveRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::ThemeLoadRequested>(*m_EventBus, *this, &IOLayer::onThemeLoadRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutLoadRequested>(*m_EventBus, *this, &IOLayer::onLayoutLoadRequested));
+		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutListRequested>(*m_EventBus, *this, &IOLayer::onLayoutListRequested));
 		DS_LOG_INFO("IOLayer config persistence event handlers bound");
 	}
 
@@ -197,5 +233,28 @@ namespace DefectStudio
 		}
 
 		m_EventBus->Queue(LayoutLoaded{event.path, std::move(text)});
+	}
+
+	void IOLayer::onLayoutListRequested(const EditorUiEvents::LayoutListRequested &event)
+	{
+		using namespace EditorUiEvents;
+
+		if (m_EventBus == nullptr)
+			return;
+
+		std::error_code error;
+		if (!std::filesystem::exists(event.directory.Native(), error) || error)
+		{
+			m_EventBus->Queue(LayoutListLoaded{event.directory, {}});
+			return;
+		}
+
+		if (!std::filesystem::is_directory(event.directory.Native(), error) || error)
+		{
+			m_EventBus->Queue(LayoutListFailed{event.directory, "Layout path is not a directory"});
+			return;
+		}
+
+		m_EventBus->Queue(LayoutListLoaded{event.directory, listFilesByExtension(event.directory, ".ini")});
 	}
 } // namespace DefectStudio

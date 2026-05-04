@@ -9,6 +9,7 @@
 
 namespace DefectStudio
 {
+	class AssetManager;
 	class CapabilityService;
 	class CommandPaletteIndex;
 	class CommandRegistry;
@@ -25,7 +26,7 @@ namespace DefectStudio::Demo
 	class DemoBackendRuntime
 	{
 	public:
-		DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus);
+		DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus, WeakRef<AssetManager> assetManager = {});
 		~DemoBackendRuntime();
 
 		void OnEvent(Event &event);
@@ -41,6 +42,7 @@ namespace DefectStudio::Demo
 	private:
 		Ref<CapabilityService> m_CapabilityService;
 		Ref<EventBus> m_EventBus;
+		WeakRef<AssetManager> m_AssetManager;
 		int m_BackendDemoValue = 0;
 		bool m_BackendHotkeysEnabled = true;
 		std::array<char, 96> m_CommandPaletteSearch{};

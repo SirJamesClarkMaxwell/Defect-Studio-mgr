@@ -4,8 +4,10 @@
 
 #include <algorithm>
 #include <functional>
+#include <vector>
 
 #include "App/Managers/ConfigManager.hpp"
+#include "App/Managers/ConfigProfileStore.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -90,6 +92,10 @@ namespace DefectStudio
 		AddSubscription(subscribeConfigController<ApplyRequested>(*m_EventBus, *this, &ApplicationConfigController::onConfigApplyRequested));
 		AddSubscription(subscribeConfigController<SaveUserRequested>(*m_EventBus, *this, &ApplicationConfigController::onUserConfigSaveRequested));
 		AddSubscription(subscribeConfigController<SaveDefaultsRequested>(*m_EventBus, *this, &ApplicationConfigController::onDefaultsSaveRequested));
+		AddSubscription(subscribeConfigController<ProfileListRequested>(*m_EventBus, *this, &ApplicationConfigController::onProfileListRequested));
+		AddSubscription(subscribeConfigController<ProfileSaveRequested>(*m_EventBus, *this, &ApplicationConfigController::onProfileSaveRequested));
+		AddSubscription(subscribeConfigController<ProfileLoadRequested>(*m_EventBus, *this, &ApplicationConfigController::onProfileLoadRequested));
+		AddSubscription(subscribeConfigController<ProfileExportRequested>(*m_EventBus, *this, &ApplicationConfigController::onProfileExportRequested));
 		AddSubscription(subscribeConfigController<EditorUiEvents::AppearanceApplyRequested>(*m_EventBus, *this, &ApplicationConfigController::onAppearanceApplyRequested));
 		AddSubscription(subscribeConfigController<EditorUiEvents::ThemeLoaded>(*m_EventBus, *this, &ApplicationConfigController::onThemeLoaded));
 		DS_LOG_INFO("ApplicationConfigController event handlers bound");
@@ -270,6 +276,88 @@ namespace DefectStudio
 			ConfigManager::GetDefaultConfigPath(appliedConfig.directory),
 			std::move(contents)});
 		DS_LOG_INFO("Default config persistence queued after successful apply");
+	}
+
+	void ApplicationConfigController::onProfileListRequested(const AppEvents::Config::ProfileListRequested &event)
+	{
+		(void)event;
+		using namespace AppEvents::Config;
+
+		if (m_ConfigManager == nullptr)
+		{
+			m_EventBus->Queue(ProfileListFailed{"ConfigManager is not initialized"});
+			return;
+		}
+
+		ConfigProfileStore store(CreateWeakRef(m_ConfigManager));
+		std::vector<ConfigProfileEntry> entries = store.Refresh();
+		m_EventBus->Queue(ProfileListLoaded{std::move(entries)});
+	}
+
+	void ApplicationConfigController::onProfileSaveRequested(const AppEvents::Config::ProfileSaveRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		if (m_ConfigManager == nullptr)
+		{
+			m_EventBus->Queue(ProfileSaveFailed{event.name, "ConfigManager is not initialized"});
+			return;
+		}
+
+		ConfigProfileStore store(CreateWeakRef(m_ConfigManager));
+		std::string error;
+		if (!store.Save(event.name, normalizeConfigSnapshot(event.config), error))
+		{
+			m_EventBus->Queue(ProfileSaveFailed{event.name, error});
+			return;
+		}
+
+		m_EventBus->Queue(ProfileSaved{event.name, store.ProfilePath(event.name)});
+		m_EventBus->Queue(ProfileListLoaded{std::vector<ConfigProfileEntry>(store.Entries().begin(), store.Entries().end())});
+	}
+
+	void ApplicationConfigController::onProfileLoadRequested(const AppEvents::Config::ProfileLoadRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		if (m_ConfigManager == nullptr)
+		{
+			m_EventBus->Queue(ProfileLoadFailed{event.name, "ConfigManager is not initialized"});
+			return;
+		}
+
+		ConfigProfileStore store(CreateWeakRef(m_ConfigManager));
+		ApplicationConfig config;
+		std::string error;
+		if (!store.Load(event.path, config, error))
+		{
+			m_EventBus->Queue(ProfileLoadFailed{event.name, error});
+			return;
+		}
+
+		m_EventBus->Queue(ProfileLoaded{event.name, config});
+		m_EventBus->Queue(ApplyRequested{std::move(config), true});
+	}
+
+	void ApplicationConfigController::onProfileExportRequested(const AppEvents::Config::ProfileExportRequested &event)
+	{
+		using namespace AppEvents::Config;
+
+		if (m_ConfigManager == nullptr)
+		{
+			m_EventBus->Queue(ProfileExportFailed{event.name, "ConfigManager is not initialized"});
+			return;
+		}
+
+		ConfigProfileStore store(CreateWeakRef(m_ConfigManager));
+		std::string error;
+		if (!store.Export(event.path, error))
+		{
+			m_EventBus->Queue(ProfileExportFailed{event.name, error});
+			return;
+		}
+
+		m_EventBus->Queue(ProfileExported{event.name, m_ConfigManager->GetPaths().exportsDirectory / event.path.filename()});
 	}
 
 	void ApplicationConfigController::onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event)

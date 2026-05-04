@@ -18,6 +18,10 @@ namespace DefectStudio
 		struct ApplyRequested;
 		struct SaveUserRequested;
 		struct SaveDefaultsRequested;
+		struct ProfileListRequested;
+		struct ProfileSaveRequested;
+		struct ProfileLoadRequested;
+		struct ProfileExportRequested;
 	}
 
 	namespace EditorUiEvents
@@ -53,6 +57,10 @@ namespace DefectStudio
 		void onConfigApplyRequested(const AppEvents::Config::ApplyRequested &event);
 		void onUserConfigSaveRequested(const AppEvents::Config::SaveUserRequested &event);
 		void onDefaultsSaveRequested(const AppEvents::Config::SaveDefaultsRequested &event);
+		void onProfileListRequested(const AppEvents::Config::ProfileListRequested &event);
+		void onProfileSaveRequested(const AppEvents::Config::ProfileSaveRequested &event);
+		void onProfileLoadRequested(const AppEvents::Config::ProfileLoadRequested &event);
+		void onProfileExportRequested(const AppEvents::Config::ProfileExportRequested &event);
 		void onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event);
 		void onThemeLoaded(const EditorUiEvents::ThemeLoaded &event);
 

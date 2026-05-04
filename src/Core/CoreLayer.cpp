@@ -10,6 +10,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 namespace DefectStudio
@@ -84,6 +85,12 @@ namespace DefectStudio
 			*m_EventBus,
 			*this,
 			&CoreLayer::onJobSystemConfigApplied));
+		AddSubscription(subscribeCoreLayer<JobSubmitRequested>(*m_EventBus, *this, &CoreLayer::onJobSubmitRequested));
+		AddSubscription(subscribeCoreLayer<JobCancelRequested>(*m_EventBus, *this, &CoreLayer::onJobCancelRequested));
+		AddSubscription(subscribeCoreLayer<JobResumeRequested>(*m_EventBus, *this, &CoreLayer::onJobResumeRequested));
+		AddSubscription(subscribeCoreLayer<JobResetRequested>(*m_EventBus, *this, &CoreLayer::onJobResetRequested));
+		AddSubscription(subscribeCoreLayer<JobRetryRequested>(*m_EventBus, *this, &CoreLayer::onJobRetryRequested));
+		AddSubscription(subscribeCoreLayer<JobHistoryRemoveRequested>(*m_EventBus, *this, &CoreLayer::onJobHistoryRemoveRequested));
 
 		m_SystemsInitialized = true;
 		DS_LOG_INFO(
@@ -171,5 +178,60 @@ namespace DefectStudio
 	{
 		DS_LOG_INFO("CoreLayer received job system config applied event");
 		applyJobConfig(event.jobs);
+	}
+
+	void CoreLayer::onJobSubmitRequested(const JobSubmitRequested &event)
+	{
+		if (m_JobSystem == nullptr || event.job == nullptr)
+			return;
+
+		const JobId id = m_JobSystem->Submit(event.job, event.priority);
+		DS_LOG_INFO("CoreLayer submitted requested job id={} source={}", id, event.source.empty() ? "<unknown>" : event.source);
+	}
+
+	void CoreLayer::onJobCancelRequested(const JobCancelRequested &event)
+	{
+		if (m_JobSystem == nullptr)
+			return;
+
+		for (const JobId id : event.ids)
+			(void)m_JobSystem->RequestCancel(id);
+	}
+
+	void CoreLayer::onJobResumeRequested(const JobResumeRequested &event)
+	{
+		if (m_JobSystem == nullptr)
+			return;
+
+		for (const JobId id : event.ids)
+			(void)m_JobSystem->Resume(id);
+	}
+
+	void CoreLayer::onJobResetRequested(const JobResetRequested &event)
+	{
+		if (m_JobSystem == nullptr || event.id == 0)
+			return;
+
+		(void)m_JobSystem->Reset(event.id);
+	}
+
+	void CoreLayer::onJobRetryRequested(const JobRetryRequested &event)
+	{
+		if (m_JobSystem == nullptr || event.id == 0)
+			return;
+
+		(void)m_JobSystem->Retry(event.id, event.priority);
+	}
+
+	void CoreLayer::onJobHistoryRemoveRequested(const JobHistoryRemoveRequested &event)
+	{
+		if (m_JobSystem == nullptr)
+			return;
+
+		for (const JobId id : event.ids)
+		{
+			if (m_JobSystem->RemoveFromHistory(id) && m_ProgressTracker != nullptr)
+				(void)m_ProgressTracker->RemoveEntry(id);
+		}
 	}
 } // namespace DefectStudio

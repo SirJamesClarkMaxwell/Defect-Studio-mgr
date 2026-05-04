@@ -17,7 +17,9 @@
 
 namespace DefectStudio::Demo
 {
-	DemoLayer::DemoLayer() : Layer("DemoLayer")
+	DemoLayer::DemoLayer(WeakRef<AssetManager> assetManager)
+		: Layer("DemoLayer"),
+		  m_AssetManager(std::move(assetManager))
 	{
 	}
 
@@ -44,7 +46,7 @@ namespace DefectStudio::Demo
 
 		Ref<CapabilityService> capabilityService = CreateRef<CapabilityService>(*capabilityRegistry);
 		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, m_DemoEventBus);
-		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService, m_DemoEventBus);
+		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService, m_DemoEventBus, m_AssetManager);
 	}
 
 	void DemoLayer::OnDetach()
