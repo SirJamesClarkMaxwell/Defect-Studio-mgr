@@ -33,6 +33,25 @@ namespace DefectStudio
 		return s_Backend.isMouseButtonDown(code);
 	}
 
+	KeyModifiers Input::GetCurrentKeyModifiers()
+	{
+		KeyModifiers modifiers = KeyModifiers::None;
+		if (IsKeyDown(KeyCode::LeftControl) || IsKeyDown(KeyCode::RightControl))
+			modifiers = modifiers | KeyModifiers::Ctrl;
+		if (IsKeyDown(KeyCode::LeftShift) || IsKeyDown(KeyCode::RightShift))
+			modifiers = modifiers | KeyModifiers::Shift;
+		if (IsKeyDown(KeyCode::LeftAlt) || IsKeyDown(KeyCode::RightAlt))
+			modifiers = modifiers | KeyModifiers::Alt;
+		if (IsKeyDown(KeyCode::LeftSuper) || IsKeyDown(KeyCode::RightSuper))
+			modifiers = modifiers | KeyModifiers::Super;
+		return modifiers;
+	}
+
+	KeyChord Input::MakeKeyChord(KeyCode code)
+	{
+		return KeyChord{code, GetCurrentKeyModifiers()};
+	}
+
 	std::pair<float, float> Input::GetMousePosition()
 	{
 		if (!s_Backend.mousePosition)

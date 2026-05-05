@@ -13,6 +13,7 @@ namespace DefectStudio
 		struct PersistRequested;
 	}
 
+	// Defined in Core/Input/KeyBindingEvents.hpp
 	namespace AppEvents::Keymap
 	{
 		struct BindingsSaveRequested;

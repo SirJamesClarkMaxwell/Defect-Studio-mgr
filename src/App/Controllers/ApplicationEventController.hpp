@@ -12,7 +12,7 @@ namespace DefectStudio
 	class EventQueue;
 	class LogRegistry;
 
-	namespace AppEvents
+	namespace CoreEvents
 	{
 		struct ProjectSaveRequested;
 		struct ShutdownRequested;
@@ -37,8 +37,8 @@ namespace DefectStudio
 
 	private:
 		void bindEvents();
-		void onShutdownRequested(const AppEvents::ShutdownRequested &event);
-		void onProjectSaveRequested(const AppEvents::ProjectSaveRequested &event);
+		void onShutdownRequested(const CoreEvents::ShutdownRequested &event);
+		void onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &event);
 
 	private:
 		Ref<EventBus> m_EventBus;

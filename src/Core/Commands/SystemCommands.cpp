@@ -2,7 +2,7 @@
 
 #include "Core/Commands/SystemCommands.hpp"
 
-#include "App/Events/ApplicationEvents.hpp"
+#include "Core/Commands/SystemCommandEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Utils/Assert.hpp"
@@ -39,7 +39,7 @@ namespace DefectStudio
 
 	Result<void> OpenCommandPaletteCommand::Execute(CommandContext &)
 	{
-		m_EventBus->Queue(AppEvents::OpenCommandPaletteRequested{});
+		m_EventBus->Queue(CoreEvents::OpenCommandPaletteRequested{});
 		return Result<void>{};
 	}
 
@@ -51,7 +51,7 @@ namespace DefectStudio
 
 	Result<void> QuitCommand::Execute(CommandContext &)
 	{
-		m_EventBus->Queue(AppEvents::ShutdownRequested{});
+		m_EventBus->Queue(CoreEvents::ShutdownRequested{});
 		return Result<void>{};
 	}
 
@@ -63,7 +63,7 @@ namespace DefectStudio
 
 	Result<void> SaveProjectCommand::Execute(CommandContext &)
 	{
-		m_EventBus->Queue(AppEvents::ProjectSaveRequested{});
+		m_EventBus->Queue(CoreEvents::ProjectSaveRequested{});
 		return Result<void>{};
 	}
 } // namespace DefectStudio

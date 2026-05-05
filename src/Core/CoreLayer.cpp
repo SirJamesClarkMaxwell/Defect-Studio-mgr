@@ -37,19 +37,6 @@ namespace DefectStudio
 			return static_cast<std::size_t>(std::max(1, jobsConfig.defaultWorkerThreadCount)) + urgentWorkerCount;
 		}
 
-		[[nodiscard]] KeyModifiers currentKeyModifiers()
-		{
-			KeyModifiers modifiers = KeyModifiers::None;
-			if (Input::IsKeyDown(KeyCode::LeftControl) || Input::IsKeyDown(KeyCode::RightControl))
-				modifiers = modifiers | KeyModifiers::Ctrl;
-			if (Input::IsKeyDown(KeyCode::LeftShift) || Input::IsKeyDown(KeyCode::RightShift))
-				modifiers = modifiers | KeyModifiers::Shift;
-			if (Input::IsKeyDown(KeyCode::LeftAlt) || Input::IsKeyDown(KeyCode::RightAlt))
-				modifiers = modifiers | KeyModifiers::Alt;
-			if (Input::IsKeyDown(KeyCode::LeftSuper) || Input::IsKeyDown(KeyCode::RightSuper))
-				modifiers = modifiers | KeyModifiers::Super;
-			return modifiers;
-		}
 	}
 
 	CoreLayer::CoreLayer() : Layer("CoreLayer")
@@ -350,7 +337,7 @@ namespace DefectStudio
 		if (m_CommandService == nullptr || m_KeymapResolver == nullptr || m_ContextManager == nullptr)
 			return false;
 
-		const KeyChord chord{static_cast<KeyCode>(event.GetKeyCode()), currentKeyModifiers()};
+		const KeyChord chord = Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode()));
 		KeyInputProcessor processor(*m_KeymapResolver, *m_ContextManager);
 		auto inputResult = processor.HandleKeyPressed(chord);
 		if (!inputResult)

@@ -10,9 +10,9 @@
 #include <imgui.h>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
-#include "App/Events/ApplicationEvents.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Commands/CommandService.hpp"
+#include "Core/Commands/SystemCommandEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
@@ -270,7 +270,7 @@ namespace DefectStudio
 	{
 		using namespace EditorUiEvents;
 
-		const bool ctrlPressed = Input::IsKeyDown(KeyCode::LeftControl) || Input::IsKeyDown(KeyCode::RightControl);
+		const bool ctrlPressed = HasModifier(Input::GetCurrentKeyModifiers(), KeyModifiers::Ctrl);
 		if (!ctrlPressed)
 			return;
 
@@ -465,7 +465,7 @@ namespace DefectStudio
 
 		using namespace AppEvents::Config;
 		AddSubscription(subscribeEditorLayer<Applied>(*m_EventBus, *this, &EditorLayer::onConfigApplied, EventPriority::High));
-		AddSubscription(subscribeEditorLayer<AppEvents::OpenCommandPaletteRequested>(
+		AddSubscription(subscribeEditorLayer<CoreEvents::OpenCommandPaletteRequested>(
 			*m_EventBus,
 			*this,
 			&EditorLayer::onOpenCommandPaletteRequested,
@@ -507,7 +507,7 @@ namespace DefectStudio
 		applyConfigToUiState(event.config);
 	}
 
-	void EditorLayer::onOpenCommandPaletteRequested(const AppEvents::OpenCommandPaletteRequested &)
+	void EditorLayer::onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &)
 	{
 		m_CommandPaletteOpenRequested = true;
 	}

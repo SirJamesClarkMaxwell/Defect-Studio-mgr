@@ -6,7 +6,7 @@
 
 namespace DefectStudio
 {
-	[[nodiscard]] static std::string keyName(KeyCode key)
+	std::string ToString(KeyCode key)
 	{
 		const auto native = static_cast<int>(key);
 		if (key >= KeyCode::A && key <= KeyCode::Z)
@@ -65,7 +65,7 @@ namespace DefectStudio
 			out << "Alt+";
 		if (HasModifier(chord.modifiers, KeyModifiers::Super))
 			out << "Super+";
-		out << keyName(chord.key);
+		out << ToString(chord.key);
 		return out.str();
 	}
 } // namespace DefectStudio

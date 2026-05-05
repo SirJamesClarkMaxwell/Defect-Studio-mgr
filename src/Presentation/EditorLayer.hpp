@@ -27,14 +27,14 @@ namespace DefectStudio
 	struct CommandID;
 	struct ApplicationConfig;
 
+	namespace CoreEvents
+	{
+		struct OpenCommandPaletteRequested;
+	}
+
 	namespace AppEvents::Config
 	{
 		struct Applied;
-	}
-
-	namespace AppEvents
-	{
-		struct OpenCommandPaletteRequested;
 	}
 
 	class EditorLayer final : public Layer, public EventReceiver
@@ -80,7 +80,7 @@ namespace DefectStudio
 		void bindConfigEvents();
 		void applyConfigToUiState(const ApplicationConfig &config);
 		void onConfigApplied(const AppEvents::Config::Applied &event);
-		void onOpenCommandPaletteRequested(const AppEvents::OpenCommandPaletteRequested &event);
+		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 
 	private:
 		PanelRegistry m_Panels;

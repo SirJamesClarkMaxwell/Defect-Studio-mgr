@@ -3,7 +3,7 @@
 #include "App/Controllers/ApplicationEventController.hpp"
 
 #include "App/Controllers/ApplicationConfigController.hpp"
-#include "App/Events/ApplicationEvents.hpp"
+#include "Core/Commands/SystemCommandEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/Utils/Logger.hpp"
@@ -56,23 +56,23 @@ namespace DefectStudio
 		if (m_EventBus == nullptr)
 			return;
 
-		AddSubscription(subscribeApplicationEventController<AppEvents::ShutdownRequested>(
+		AddSubscription(subscribeApplicationEventController<CoreEvents::ShutdownRequested>(
 			*m_EventBus,
 			*this,
 			&ApplicationEventController::onShutdownRequested));
-		AddSubscription(subscribeApplicationEventController<AppEvents::ProjectSaveRequested>(
+		AddSubscription(subscribeApplicationEventController<CoreEvents::ProjectSaveRequested>(
 			*m_EventBus,
 			*this,
 			&ApplicationEventController::onProjectSaveRequested));
 	}
 
-	void ApplicationEventController::onShutdownRequested(const AppEvents::ShutdownRequested &)
+	void ApplicationEventController::onShutdownRequested(const CoreEvents::ShutdownRequested &)
 	{
 		m_EventQueue.Add(WindowCloseEvent{});
 		DS_LOG_INFO("Application shutdown requested through command system");
 	}
 
-	void ApplicationEventController::onProjectSaveRequested(const AppEvents::ProjectSaveRequested &)
+	void ApplicationEventController::onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &)
 	{
 		DS_LOG_INFO("Project save requested through command system");
 	}

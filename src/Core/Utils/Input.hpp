@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/dspch.hpp"
+#include "Core/Input/KeyChord.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Utils/MouseCodes.hpp"
 
@@ -21,6 +22,8 @@ namespace DefectStudio
 
 		[[nodiscard]] static bool IsKeyDown(KeyCode code);
 		[[nodiscard]] static bool IsMouseButtonDown(MouseCode code);
+		[[nodiscard]] static KeyModifiers GetCurrentKeyModifiers();
+		[[nodiscard]] static KeyChord MakeKeyChord(KeyCode code);
 		[[nodiscard]] static std::pair<float, float> GetMousePosition();
 		[[nodiscard]] static float GetMouseX();
 		[[nodiscard]] static float GetMouseY();

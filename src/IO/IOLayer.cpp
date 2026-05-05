@@ -11,10 +11,10 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "App/Events/KeyBindingEvents.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Input/KeyBindingEvents.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "IO/TextFileIO.hpp"

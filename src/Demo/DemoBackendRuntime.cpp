@@ -39,20 +39,6 @@ namespace DefectStudio::Demo
 		return "unknown";
 	}
 
-	[[nodiscard]] static KeyModifiers currentKeyModifiers()
-	{
-		KeyModifiers modifiers = KeyModifiers::None;
-		if (Input::IsKeyDown(KeyCode::LeftControl) || Input::IsKeyDown(KeyCode::RightControl))
-			modifiers = modifiers | KeyModifiers::Ctrl;
-		if (Input::IsKeyDown(KeyCode::LeftShift) || Input::IsKeyDown(KeyCode::RightShift))
-			modifiers = modifiers | KeyModifiers::Shift;
-		if (Input::IsKeyDown(KeyCode::LeftAlt) || Input::IsKeyDown(KeyCode::RightAlt))
-			modifiers = modifiers | KeyModifiers::Alt;
-		if (Input::IsKeyDown(KeyCode::LeftSuper) || Input::IsKeyDown(KeyCode::RightSuper))
-			modifiers = modifiers | KeyModifiers::Super;
-		return modifiers;
-	}
-
 	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus, WeakRef<AssetManager> assetManager)
 		: m_CapabilityService(std::move(capabilityService)),
 		  m_EventBus(std::move(eventBus)),
@@ -529,7 +515,7 @@ namespace DefectStudio::Demo
 	bool DemoBackendRuntime::onBackendDemoKeyPressed(KeyPressedEvent &event)
 	{
 		return executeBackendDemoChord(
-			KeyChord{static_cast<KeyCode>(event.GetKeyCode()), currentKeyModifiers()},
+			Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode())),
 			"DemoLayer real key event");
 	}
 

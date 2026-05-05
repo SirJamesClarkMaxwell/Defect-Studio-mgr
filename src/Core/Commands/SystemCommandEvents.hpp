@@ -1,10 +1,8 @@
 #pragma once
 
-#include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
-#include "Core/JobSystem/JobEvents.hpp"
 
-namespace DefectStudio::AppEvents
+namespace DefectStudio::CoreEvents
 {
 	struct OpenCommandPaletteRequested final : public BusEvent
 	{
@@ -17,4 +15,4 @@ namespace DefectStudio::AppEvents
 	struct ProjectSaveRequested final : public BusEvent
 	{
 	};
-} // namespace DefectStudio::AppEvents
+} // namespace DefectStudio::CoreEvents

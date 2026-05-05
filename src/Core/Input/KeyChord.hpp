@@ -42,5 +42,6 @@ namespace DefectStudio
 		}
 	};
 
+	[[nodiscard]] std::string ToString(KeyCode key);
 	[[nodiscard]] std::string ToString(const KeyChord &chord);
 } // namespace DefectStudio
