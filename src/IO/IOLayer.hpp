@@ -13,6 +13,12 @@ namespace DefectStudio
 		struct PersistRequested;
 	}
 
+	namespace AppEvents::Keymap
+	{
+		struct BindingsSaveRequested;
+		struct BindingsLoadRequested;
+	}
+
 	namespace EditorUiEvents
 	{
 		struct PersistRequested;
@@ -45,6 +51,8 @@ namespace DefectStudio
 		void onThemeLoadRequested(const EditorUiEvents::ThemeLoadRequested &event);
 		void onLayoutLoadRequested(const EditorUiEvents::LayoutLoadRequested &event);
 		void onLayoutListRequested(const EditorUiEvents::LayoutListRequested &event);
+		void onBindingsSaveRequested(const AppEvents::Keymap::BindingsSaveRequested &event);
+		void onBindingsLoadRequested(const AppEvents::Keymap::BindingsLoadRequested &event);
 
 	private:
 		Ref<EventBus> m_EventBus;

@@ -14,6 +14,7 @@ namespace DefectStudio
 		static constexpr const char *SchemaVersion = "1";
 		static constexpr const char *DefaultConfigFileName = "default.yaml";
 		static constexpr const char *UserSettingsFileName = "ui_settings.yaml";
+		static constexpr const char *KeybindingsFileName = "keybindings.yaml";
 		static constexpr const char *LayoutFileName = "imgui.ini";
 
 		explicit ConfigManager(Path configDirectory);
@@ -36,6 +37,7 @@ namespace DefectStudio
 		[[nodiscard]] static ApplicationPaths ResolvePortablePaths(const Path &configDirectory);
 		[[nodiscard]] static Path GetDefaultConfigPath(const Path &configDirectory);
 		[[nodiscard]] static Path GetUserSettingsPath(const Path &configDirectory);
+		[[nodiscard]] static Path GetKeybindingsPath(const Path &configDirectory);
 		[[nodiscard]] static Path GetLayoutPath(const Path &configDirectory);
 		[[nodiscard]] static Path GetProfilesDirectory(const Path &configDirectory);
 		[[nodiscard]] static Path GetThemesDirectory(const Path &configDirectory);

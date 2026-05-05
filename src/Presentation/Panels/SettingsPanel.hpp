@@ -15,6 +15,8 @@ namespace DefectStudio
 {
     class EventBus;
     class JobSystem;
+    class KeymapResolver;
+    class CommandRegistry;
 
     namespace EditorUiEvents
     {
@@ -28,6 +30,8 @@ namespace DefectStudio
         explicit SettingsPanel(Ref<EventBus> eventBus = {},
                           WeakRef<JobSystem> jobSystem = {},
                           WeakRef<EditorUiState> uiState = {},
+                          WeakRef<KeymapResolver> keymapResolver = {},
+                          WeakRef<CommandRegistry> commandRegistry = {},
                           ApplicationConfig initialConfig = {},
                           std::string title = "SettingsPanel",
                           bool visibleByDefault = true);
@@ -70,6 +74,8 @@ namespace DefectStudio
         void renderLayoutTab();
         void renderViewportTab();
         void renderFilePathsTab();
+        void renderInputTab();
+        void renderKeyBindingsTab();
 
         void renderAppearanceColors();
         void renderAppearanceMetrics();
@@ -90,6 +96,7 @@ namespace DefectStudio
             Editing,
             Animation,
             Input,
+            KeyBindings,
             FilePaths,
             Count
         };
@@ -102,10 +109,13 @@ namespace DefectStudio
         std::array<char, 320> m_ThemeSavePathBuffer = {};
         std::array<char, 320> m_ThemeLoadPathBuffer = {};
         std::array<char, 320> m_LayoutPathBuffer = {};
+        std::array<char, 128> m_KeyBindingSearchBuffer = {};
         std::string m_StatusMessage;
         Ref<EventBus> m_EventBus;
         WeakRef<JobSystem> m_JobSystem;
         WeakRef<EditorUiState> m_UiState;
+        WeakRef<KeymapResolver> m_KeymapResolver;
+        WeakRef<CommandRegistry> m_CommandRegistry;
         SettingsProfileManager m_ProfileManager;
     };
 } // namespace DefectStudio

@@ -16,6 +16,7 @@
 #include "App/Controllers/ApplicationEventController.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
+#include "App/Events/KeyBindingEvents.hpp"
 #include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Assets/AssetManager.hpp"
@@ -916,12 +917,20 @@ namespace DefectStudio
 				m_EventBus,
 				coreLayer->GetJobSystemHandle(),
 				coreLayer->GetProgressTrackerHandle(),
-				m_LogRegistry);
+				m_LogRegistry,
+				coreLayer->GetCommandServiceHandle(),
+				coreLayer->GetKeymapResolverHandle(),
+				coreLayer->GetContextManagerHandle(),
+				coreLayer->GetCommandRegistryHandle());
 			editorLayer->ApplyConfig(m_Config);
 
 			if (imGuiLayer != nullptr)
 				imGuiLayer->BindUiState(editorLayer->GetUiStateHandle());
 		}
+
+		const Path keybindingsPath = ConfigManager::GetKeybindingsPath(m_Config.directory);
+		m_EventBus->Queue(AppEvents::Keymap::BindingsLoadRequested{keybindingsPath});
+		m_EventBus->ProcessQueue();
 		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
 	}

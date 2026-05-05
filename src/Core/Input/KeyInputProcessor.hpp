@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 
 namespace DefectStudio
@@ -18,12 +18,11 @@ namespace DefectStudio
 	class KeyInputProcessor
 	{
 	public:
-		KeyInputProcessor(CommandRegistry &commandRegistry, KeymapResolver &resolver, ContextManager &contextManager);
+		KeyInputProcessor(KeymapResolver &resolver, ContextManager &contextManager);
 
-		[[nodiscard]] Result<KeyInputResult> HandleKeyPressed(const KeyChord &chord, CommandContext context = {});
+		[[nodiscard]] Result<KeyInputResult> HandleKeyPressed(const KeyChord &chord) const;
 
 	private:
-		CommandRegistry &m_CommandRegistry;
 		KeymapResolver &m_Resolver;
 		ContextManager &m_ContextManager;
 	};

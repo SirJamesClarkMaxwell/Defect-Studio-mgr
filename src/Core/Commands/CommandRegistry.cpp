@@ -175,11 +175,7 @@ namespace DefectStudio
 			return executionResult.Error();
 		}
 
-		CommandOutcome outcome;
-		outcome.id = id;
-		outcome.description = command->Description();
-		outcome.undoable = command->IsUndoable();
-
+		CommandOutcome outcome = CommandOutcome::FromCommand(id, *command);
 		if (outcome.undoable)
 		{
 			if (auto undoStack = m_UndoStack.lock())

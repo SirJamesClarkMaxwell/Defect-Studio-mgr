@@ -258,6 +258,11 @@ namespace DefectStudio
 		return ResolvePortablePaths(configDirectory).userConfigDirectory / Path(UserSettingsFileName);
 	}
 
+	Path ConfigManager::GetKeybindingsPath(const Path &configDirectory)
+	{
+		return ResolvePortablePaths(configDirectory).userConfigDirectory / Path(KeybindingsFileName);
+	}
+
 	Path ConfigManager::GetLayoutPath(const Path &configDirectory)
 	{
 		return ResolvePortablePaths(configDirectory).layoutsDirectory / Path(LayoutFileName);

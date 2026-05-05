@@ -45,12 +45,18 @@ namespace DefectStudio
 		CommandFlags flags = CommandFlags::None;
 	};
 
+	class ICommand;
+
 	struct CommandOutcome
 	{
 		CommandID id;
 		std::string description;
 		bool undoable = false;
 		bool pushedToUndoStack = false;
+
+		// Factory: tworzy outcome z komendy przed próbą wypchnięcia na UndoStack.
+		// pushedToUndoStack należy ustawić osobno po wywołaniu UndoStack::PushExecuted.
+		[[nodiscard]] static CommandOutcome FromCommand(const CommandID &id, const ICommand &command);
 	};
 
 	class ICommand
@@ -66,4 +72,9 @@ namespace DefectStudio
 		[[nodiscard]] virtual bool CanMerge(const ICommand &next) const noexcept;
 		[[nodiscard]] virtual Result<void> Merge(std::unique_ptr<ICommand> next);
 	};
+
+	inline CommandOutcome CommandOutcome::FromCommand(const CommandID &id, const ICommand &command)
+	{
+		return {id, command.Description(), command.IsUndoable(), false};
+	}
 } // namespace DefectStudio

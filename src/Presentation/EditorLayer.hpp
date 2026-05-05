@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <utility>
@@ -19,11 +20,21 @@ namespace DefectStudio
 {
 	class EventBus;
 	class LogRegistry;
+	class CommandService;
+	class CommandRegistry;
+	class ContextManager;
+	class KeymapResolver;
+	struct CommandID;
 	struct ApplicationConfig;
 
 	namespace AppEvents::Config
 	{
 		struct Applied;
+	}
+
+	namespace AppEvents
+	{
+		struct OpenCommandPaletteRequested;
 	}
 
 	class EditorLayer final : public Layer, public EventReceiver
@@ -33,7 +44,11 @@ namespace DefectStudio
 		void BindRuntimeServices(Ref<EventBus> eventBus,
 		                         WeakRef<JobSystem> jobSystem,
 		                         WeakRef<ProgressTracker> progressTracker,
-		                         Ref<LogRegistry> logRegistry);
+		                         Ref<LogRegistry> logRegistry,
+		                         WeakRef<CommandService> commandService,
+		                         WeakRef<KeymapResolver> keymapResolver,
+		                         WeakRef<ContextManager> contextManager,
+		                         WeakRef<CommandRegistry> commandRegistry);
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 		void ApplyConfig(const ApplicationConfig &config);
 		void ExportConfig(ApplicationConfig &config) const;
@@ -60,9 +75,12 @@ namespace DefectStudio
 		void renderHelpMenu();
 		void initializePanelsIfNeeded();
 		void handleFontShortcuts(Event &event);
+		void renderCommandPalettePopup();
+		void executeCommandFromPalette(const CommandID &id);
 		void bindConfigEvents();
 		void applyConfigToUiState(const ApplicationConfig &config);
 		void onConfigApplied(const AppEvents::Config::Applied &event);
+		void onOpenCommandPaletteRequested(const AppEvents::OpenCommandPaletteRequested &event);
 
 	private:
 		PanelRegistry m_Panels;
@@ -71,8 +89,15 @@ namespace DefectStudio
 		Ref<LogRegistry> m_LogRegistry;
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<ProgressTracker> m_ProgressTracker;
+		WeakRef<CommandService> m_CommandService;
+		WeakRef<KeymapResolver> m_KeymapResolver;
+		WeakRef<ContextManager> m_ContextManager;
+		WeakRef<CommandRegistry> m_CommandRegistry;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;
+		bool m_CommandPaletteOpenRequested = false;
+		int m_CommandPaletteSelection = 0;
+		std::array<char, 128> m_CommandPaletteSearchBuffer{};
 	};
 
 	template <typename TPanel, typename... Args>

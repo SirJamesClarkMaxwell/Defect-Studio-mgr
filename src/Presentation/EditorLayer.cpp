@@ -1,16 +1,23 @@
 #include "Core/dspch.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
-#include <vector>
 #include <memory>
+#include <string_view>
+#include <vector>
 
 #include <imgui.h>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
+#include "App/Events/ApplicationEvents.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Commands/CommandService.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
+#include "Core/Input/ContextManager.hpp"
+#include "Core/Input/KeymapResolver.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Utils/Logger.hpp"
@@ -32,6 +39,80 @@ namespace DefectStudio
 		{
 			return bus.Subscribe<EventType>(std::bind_front(method, &layer), priority);
 		}
+
+		struct PaletteCommandRow
+		{
+			CommandID id;
+			std::string name;
+			std::string category;
+			std::string description;
+			std::string shortcut;
+			bool enabled = true;
+		};
+
+		struct PaletteInputState
+		{
+			int navigationDelta = 0;
+		};
+
+		[[nodiscard]] std::string toLowerCopy(std::string_view value)
+		{
+			std::string result(value);
+			std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) {
+				return static_cast<char>(std::tolower(ch));
+			});
+			return result;
+		}
+
+		[[nodiscard]] bool containsIgnoreCase(std::string_view haystack, std::string_view needle)
+		{
+			if (needle.empty())
+				return true;
+			const std::string lowerHaystack = toLowerCopy(haystack);
+			const std::string lowerNeedle = toLowerCopy(needle);
+			return lowerHaystack.find(lowerNeedle) != std::string::npos;
+		}
+
+		[[nodiscard]] std::string findShortcutForCommand(
+			const CommandID &id,
+			const KeymapResolver *resolver,
+			const ContextManager *contextManager)
+		{
+			if (resolver == nullptr)
+				return {};
+
+			ContextManager emptyContext;
+			const ContextManager &activeContext = contextManager == nullptr ? emptyContext : *contextManager;
+			for (const KeyBinding &binding : resolver->ListBindings())
+			{
+				if (!binding.enabled || binding.commandId.value != id.value || !binding.when.Matches(activeContext))
+					continue;
+				return ToString(binding.chord);
+			}
+			return {};
+		}
+
+		[[nodiscard]] bool matchesPaletteQuery(const PaletteCommandRow &row, std::string_view query)
+		{
+			return containsIgnoreCase(row.name, query)
+				|| containsIgnoreCase(row.category, query)
+				|| containsIgnoreCase(row.description, query)
+				|| containsIgnoreCase(row.id.value, query)
+				|| containsIgnoreCase(row.shortcut, query);
+		}
+
+		int commandPaletteInputCallback(ImGuiInputTextCallbackData *data)
+		{
+			auto *state = static_cast<PaletteInputState *>(data->UserData);
+			if (state == nullptr || data->EventFlag != ImGuiInputTextFlags_CallbackHistory)
+				return 0;
+
+			if (data->EventKey == ImGuiKey_UpArrow)
+				state->navigationDelta = -1;
+			else if (data->EventKey == ImGuiKey_DownArrow)
+				state->navigationDelta = 1;
+			return 0;
+		}
 	}
 
 	EditorLayer::EditorLayer() : Layer("EditorLayer")
@@ -41,12 +122,20 @@ namespace DefectStudio
 	void EditorLayer::BindRuntimeServices(Ref<EventBus> eventBus,
 	                                      WeakRef<JobSystem> jobSystem,
 	                                      WeakRef<ProgressTracker> progressTracker,
-	                                      Ref<LogRegistry> logRegistry)
+	                                      Ref<LogRegistry> logRegistry,
+	                                      WeakRef<CommandService> commandService,
+	                                      WeakRef<KeymapResolver> keymapResolver,
+	                                      WeakRef<ContextManager> contextManager,
+	                                      WeakRef<CommandRegistry> commandRegistry)
 	{
 		m_EventBus = std::move(eventBus);
 		m_LogRegistry = std::move(logRegistry);
 		m_JobSystem = std::move(jobSystem);
 		m_ProgressTracker = std::move(progressTracker);
+		m_CommandService = std::move(commandService);
+		m_KeymapResolver = std::move(keymapResolver);
+		m_ContextManager = std::move(contextManager);
+		m_CommandRegistry = std::move(commandRegistry);
 		bindConfigEvents();
 		DS_LOG_INFO(
 			"EditorLayer runtime services bound: event_bus={} job_system={} progress_tracker={}",
@@ -114,6 +203,10 @@ namespace DefectStudio
 		m_LogRegistry.reset();
 		m_JobSystem.reset();
 		m_ProgressTracker.reset();
+		m_CommandService.reset();
+		m_KeymapResolver.reset();
+		m_ContextManager.reset();
+		m_CommandRegistry.reset();
 		m_UiState.reset();
 		m_CurrentConfig.reset();
 	}
@@ -135,6 +228,7 @@ namespace DefectStudio
 	{
 		initializePanelsIfNeeded();
 		renderMainMenuBar();
+		renderCommandPalettePopup();
 
 		for (auto &entry : m_Panels.Entries())
 		{
@@ -154,6 +248,8 @@ namespace DefectStudio
 			m_EventBus,
 			m_JobSystem,
 			CreateWeakRef(m_UiState),
+			m_KeymapResolver,
+			m_CommandRegistry,
 			m_CurrentConfig != nullptr ? *m_CurrentConfig : ApplicationConfig{},
 			"SettingsPanel",
 			true);
@@ -216,6 +312,149 @@ namespace DefectStudio
 			handleKey(keyRepeated->GetKeyCode());
 	}
 
+	void EditorLayer::renderCommandPalettePopup()
+	{
+		if (m_CommandPaletteOpenRequested)
+		{
+			ImGui::OpenPopup("Command Palette");
+			m_CommandPaletteOpenRequested = false;
+			m_CommandPaletteSelection = 0;
+		}
+
+		bool open = true;
+		if (!ImGui::BeginPopupModal("Command Palette", &open, ImGuiWindowFlags_AlwaysAutoResize))
+			return;
+
+		auto commandRegistry = m_CommandRegistry.lock();
+		auto commandService = m_CommandService.lock();
+		auto keymapResolver = m_KeymapResolver.lock();
+		auto contextManager = m_ContextManager.lock();
+		if (commandRegistry == nullptr || commandService == nullptr)
+		{
+			ImGui::TextDisabled("Command runtime unavailable.");
+			if (ImGui::Button("Close"))
+				ImGui::CloseCurrentPopup();
+			ImGui::EndPopup();
+			return;
+		}
+
+		if (ImGui::IsWindowAppearing())
+			ImGui::SetKeyboardFocusHere();
+
+		PaletteInputState inputState;
+		ImGui::SetNextItemWidth(520.0f);
+		const bool enterPressed = ImGui::InputTextWithHint(
+			"##command_palette_search",
+			"Search commands",
+			m_CommandPaletteSearchBuffer.data(),
+			m_CommandPaletteSearchBuffer.size(),
+			ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory,
+			commandPaletteInputCallback,
+			&inputState);
+
+		std::vector<PaletteCommandRow> rows;
+		for (const CommandMeta &meta : commandRegistry->ListCommands())
+		{
+			if (HasFlag(meta.flags, CommandFlags::HiddenFromPalette))
+				continue;
+
+			PaletteCommandRow row;
+			row.id = meta.id;
+			row.name = meta.name;
+			row.category = meta.category;
+			row.description = meta.description;
+			row.shortcut = findShortcutForCommand(
+				meta.id,
+				keymapResolver.get(),
+				contextManager.get());
+			row.enabled = commandService->CanExecute(meta.id).HasValue();
+			if (matchesPaletteQuery(row, m_CommandPaletteSearchBuffer.data()))
+				rows.push_back(std::move(row));
+		}
+
+		std::sort(rows.begin(), rows.end(), [](const PaletteCommandRow &lhs, const PaletteCommandRow &rhs) {
+			if (lhs.category == rhs.category)
+				return lhs.name < rhs.name;
+			return lhs.category < rhs.category;
+		});
+
+		if (m_CommandPaletteSelection >= static_cast<int>(rows.size()))
+			m_CommandPaletteSelection = std::max(0, static_cast<int>(rows.size()) - 1);
+
+		if (inputState.navigationDelta != 0 && !rows.empty())
+			m_CommandPaletteSelection = std::clamp(
+				m_CommandPaletteSelection + inputState.navigationDelta,
+				0,
+				static_cast<int>(rows.size()) - 1);
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+			ImGui::CloseCurrentPopup();
+
+		ImGui::Separator();
+		if (ImGui::BeginChild("##command_palette_results", ImVec2(640.0f, 320.0f), true))
+		{
+			for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+			{
+				const PaletteCommandRow &row = rows[static_cast<std::size_t>(index)];
+				const std::string label = row.name
+					+ (row.shortcut.empty() ? "" : "    " + row.shortcut)
+					+ "##" + row.id.value;
+				const bool selected = index == m_CommandPaletteSelection;
+				if (selected)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.12f, 0.14f, 0.17f, 1.0f));
+					ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.16f, 0.18f, 0.22f, 1.0f));
+					ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.10f, 0.12f, 0.15f, 1.0f));
+				}
+				ImGui::BeginDisabled(!row.enabled);
+				if (ImGui::Selectable(label.c_str(), selected))
+				{
+					executeCommandFromPalette(row.id);
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndDisabled();
+				if (selected)
+				{
+					if (inputState.navigationDelta != 0)
+						ImGui::SetScrollHereY(0.5f);
+					ImGui::PopStyleColor(3);
+				}
+				if (!row.description.empty())
+					ImGui::TextDisabled("%s", row.description.c_str());
+			}
+
+			if (rows.empty())
+				ImGui::TextDisabled("No commands found.");
+		}
+		ImGui::EndChild();
+
+		if (enterPressed && !rows.empty())
+		{
+			const PaletteCommandRow &row = rows[static_cast<std::size_t>(m_CommandPaletteSelection)];
+			if (row.enabled)
+			{
+				executeCommandFromPalette(row.id);
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
+		if (!open)
+			ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+	}
+
+	void EditorLayer::executeCommandFromPalette(const CommandID &id)
+	{
+		auto commandService = m_CommandService.lock();
+		if (commandService == nullptr)
+			return;
+
+		CommandContext context(ContextID{"editor.command_palette"});
+		context.SetSource("EditorLayer command palette");
+		auto result = commandService->Execute(id, std::move(context));
+		if (!result)
+			DS_LOG_WARN("EditorLayer command palette failed: {}", result.Error().technicalDetails);
+	}
+
 	void EditorLayer::bindConfigEvents()
 	{
 		if (m_EventBus == nullptr)
@@ -226,6 +465,11 @@ namespace DefectStudio
 
 		using namespace AppEvents::Config;
 		AddSubscription(subscribeEditorLayer<Applied>(*m_EventBus, *this, &EditorLayer::onConfigApplied, EventPriority::High));
+		AddSubscription(subscribeEditorLayer<AppEvents::OpenCommandPaletteRequested>(
+			*m_EventBus,
+			*this,
+			&EditorLayer::onOpenCommandPaletteRequested,
+			EventPriority::High));
 		DS_LOG_INFO("EditorLayer config event handlers bound");
 	}
 
@@ -261,6 +505,11 @@ namespace DefectStudio
 		DS_LOG_INFO("EditorLayer received config applied event: persisted={}", event.persisted);
 		m_CurrentConfig = CreateRef<ApplicationConfig>(event.config);
 		applyConfigToUiState(event.config);
+	}
+
+	void EditorLayer::onOpenCommandPaletteRequested(const AppEvents::OpenCommandPaletteRequested &)
+	{
+		m_CommandPaletteOpenRequested = true;
 	}
 
 	void EditorLayer::renderMainMenuBar()

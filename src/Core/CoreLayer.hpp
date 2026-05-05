@@ -1,6 +1,11 @@
 #pragma once
 
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Commands/CommandService.hpp"
+#include "Core/Input/KeyBinding.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "App/Events/KeyBindingEvents.hpp"
 #include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
@@ -17,6 +22,7 @@ namespace DefectStudio
 	struct JobResumeRequested;
 	struct JobRetryRequested;
 	struct JobSubmitRequested;
+	class KeyPressedEvent;
 
 	class CoreLayer final : public Layer, public EventReceiver
 	{
@@ -26,6 +32,7 @@ namespace DefectStudio
 		void OnAttach() override;
 		void OnDetach() override;
 		void OnUpdate(float deltaTime) override;
+		void OnEvent(Event &event) override;
 
 		bool InitializeSystems(Ref<EventBus> eventBus, const JobsConfig &jobsConfig);
 		void ShutdownSystems();
@@ -33,8 +40,16 @@ namespace DefectStudio
 		EventBus &GetEventBus();
 		JobSystem &GetJobSystem();
 		ProgressTracker &GetProgressTracker();
+		CommandService &GetCommandService();
+		KeymapResolver &GetKeymapResolver();
+		ContextManager &GetContextManager();
+		UndoStack &GetUndoStack();
 		[[nodiscard]] WeakRef<JobSystem> GetJobSystemHandle() const;
 		[[nodiscard]] WeakRef<ProgressTracker> GetProgressTrackerHandle() const;
+		[[nodiscard]] WeakRef<CommandService> GetCommandServiceHandle() const;
+		[[nodiscard]] WeakRef<KeymapResolver> GetKeymapResolverHandle() const;
+		[[nodiscard]] WeakRef<ContextManager> GetContextManagerHandle() const;
+		[[nodiscard]] WeakRef<CommandRegistry> GetCommandRegistryHandle() const;
 
 	private:
 		void applyJobConfig(const JobsConfig &jobsConfig);
@@ -45,6 +60,16 @@ namespace DefectStudio
 		void onJobResetRequested(const JobResetRequested &event);
 		void onJobRetryRequested(const JobRetryRequested &event);
 		void onJobHistoryRemoveRequested(const JobHistoryRemoveRequested &event);
+		void onBindingsLoaded(const AppEvents::Keymap::BindingsLoaded &event);
+		bool onKeyPressed(KeyPressedEvent &event);
+		void registerSystemCommands();
+		[[nodiscard]] Unique<ICommand> createUndoCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createRedoCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createOpenCommandPaletteCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createQuitCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createSaveProjectCommand(CommandContext &context);
+		void registerCommand(CommandMeta meta, CommandFactory factory);
+		void registerBinding(KeyBinding binding);
 
 	private:
 		float m_AccumulatedTime = 0.0f;
@@ -52,5 +77,10 @@ namespace DefectStudio
 		Ref<EventBus> m_EventBus;
 		Ref<JobSystem> m_JobSystem;
 		Ref<ProgressTracker> m_ProgressTracker;
+		Ref<UndoStack> m_UndoStack;
+		Ref<CommandRegistry> m_CommandRegistry;
+		Ref<CommandService> m_CommandService;
+		Ref<KeymapResolver> m_KeymapResolver;
+		Ref<ContextManager> m_ContextManager;
 	};
 } // namespace DefectStudio

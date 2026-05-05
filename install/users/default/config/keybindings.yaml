@@ -1,0 +1,34 @@
+# Defect Studio keybindings.
+# System bindings are registered by CoreLayer at startup. This file documents
+# the current defaults and is also the place for future user-defined bindings.
+bindings:
+  - id: "system.undo"
+    chord: "Ctrl+Z"
+    command: "edit.undo"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.redo"
+    chord: "Ctrl+Y"
+    command: "edit.redo"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.command_palette"
+    chord: "Ctrl+Shift+P"
+    command: "app.command_palette"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.quit"
+    chord: "Ctrl+Shift+W"
+    command: "app.quit"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.save"
+    chord: "Ctrl+S"
+    command: "project.save"
+    context: ""
+    layer: 0
+    enabled: true

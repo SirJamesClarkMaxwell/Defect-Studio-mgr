@@ -2,6 +2,8 @@
 
 #include "Core/Undo/UndoStack.hpp"
 
+#include "Core/Utils/Logger.hpp"
+
 namespace DefectStudio
 {
 
@@ -199,6 +201,18 @@ namespace DefectStudio
 
 		UndoRecord record = std::move(*m_ActiveGroup);
 		m_ActiveGroup.reset();
+
+		if (m_GroupCancelled)
+		{
+			m_GroupCancelled = false;
+			CommandContext context;
+			m_IsApplying = true;
+			Result<void> result = applyUndoRecord(record, context);
+			m_IsApplying = false;
+			DS_LOG_WARN("UndoStack: EndGroup converted to rollback due to inner CancelGroup");
+			return result;
+		}
+
 		if (record.commands.empty())
 			return {};
 
@@ -218,17 +232,27 @@ namespace DefectStudio
 				"Use UndoScope or pair BeginGroup/CancelGroup calls.");
 		}
 
-		UndoRecord record = std::move(*m_ActiveGroup);
-		m_ActiveGroup.reset();
-		// Intentionally resets entire nesting depth to zero rather than decrementing.
-		// Cancel is atomic: the entire group hierarchy is abandoned, not just the
-		// outermost level. This is asymmetric with EndGroup by design.
-		m_GroupDepth = 0;
+		// CancelGroup semantics:
+		// - Decrements m_GroupDepth (symmetric with EndGroup)
+		// - Sets m_GroupCancelled = true so outer EndGroup knows to rollback
+		// - When depth reaches 0: immediately applies Undo to all accumulated commands
+		// - When depth > 0: defers rollback to the outermost EndGroup/CancelGroup
+		--m_GroupDepth;
+		m_GroupCancelled = true;
 
-		m_IsApplying = true;
-		Result<void> result = applyUndoRecord(record, context);
-		m_IsApplying = false;
-		return result;
+		if (m_GroupDepth == 0)
+		{
+			UndoRecord record = std::move(*m_ActiveGroup);
+			m_ActiveGroup.reset();
+			m_GroupCancelled = false;
+
+			m_IsApplying = true;
+			Result<void> result = applyUndoRecord(record, context);
+			m_IsApplying = false;
+			return result;
+		}
+
+		return {};
 	}
 
 	UndoScope UndoStack::ScopedGroup(std::string description)
@@ -243,6 +267,7 @@ namespace DefectStudio
 		m_CleanIndex = 0;
 		m_ActiveGroup.reset();
 		m_GroupDepth = 0;
+		m_GroupCancelled = false;
 		m_IsApplying = false;
 	}
 

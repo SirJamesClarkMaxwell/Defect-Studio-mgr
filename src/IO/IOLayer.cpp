@@ -9,6 +9,9 @@
 #include <string_view>
 #include <vector>
 
+#include <yaml-cpp/yaml.h>
+
+#include "App/Events/KeyBindingEvents.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -62,6 +65,117 @@ namespace DefectStudio
 		}
 	} // namespace
 
+	static bool serializeBindings(
+		const std::vector<KeyBinding> &bindings,
+		std::string &outContents,
+		std::string &outError)
+	{
+		try
+		{
+			YAML::Emitter emit;
+			emit << YAML::BeginMap;
+			emit << YAML::Key << "bindings" << YAML::Value << YAML::BeginSeq;
+			for (const KeyBinding &binding : bindings)
+			{
+				emit << YAML::BeginMap;
+				emit << YAML::Key << "id" << YAML::Value << binding.id;
+				emit << YAML::Key << "chord" << YAML::Value << ToString(binding.chord);
+				emit << YAML::Key << "command" << YAML::Value << binding.commandId.value;
+				emit << YAML::Key << "context" << YAML::Value << binding.when.GetExpression();
+				emit << YAML::Key << "layer" << YAML::Value << static_cast<int>(binding.layer);
+				emit << YAML::Key << "enabled" << YAML::Value << binding.enabled;
+				emit << YAML::EndMap;
+			}
+			emit << YAML::EndSeq;
+			emit << YAML::EndMap;
+			outContents = emit.c_str();
+			return true;
+		}
+		catch (const std::exception &exception)
+		{
+			outError = exception.what();
+			return false;
+		}
+	}
+
+	static bool deserializeBindings(
+		std::string_view text,
+		std::vector<KeyBinding> &bindings,
+		std::string &outError)
+	{
+		try
+		{
+			YAML::Node root = YAML::Load(std::string(text));
+			if (!root || !root.IsMap())
+			{
+				outError = "Keybindings YAML root is not a map";
+				return false;
+			}
+
+			YAML::Node list = root["bindings"];
+			if (!list || !list.IsSequence())
+			{
+				outError = "Keybindings YAML has no 'bindings' sequence";
+				return false;
+			}
+
+			bindings.clear();
+			bindings.reserve(list.size());
+			for (const YAML::Node &node : list)
+			{
+				if (!node || !node.IsMap())
+					continue;
+
+				const std::string id = node["id"].as<std::string>("");
+				const std::string chordText = node["chord"].as<std::string>("");
+				const std::string command = node["command"].as<std::string>("");
+				const std::string context = node["context"].as<std::string>("");
+				const int layerValue = node["layer"].as<int>(0);
+				const bool enabled = node["enabled"].as<bool>(true);
+
+				if (id.empty() || command.empty() || chordText.empty())
+				{
+					outError = "Keybinding entry is missing required fields";
+					return false;
+				}
+
+				auto chord = ParseKeyChord(chordText);
+				if (!chord)
+				{
+					outError = "Invalid chord: " + chordText;
+					return false;
+				}
+
+				KeymapLayer layer = KeymapLayer::Global;
+				if (layerValue == static_cast<int>(KeymapLayer::Project))
+					layer = KeymapLayer::Project;
+				else if (layerValue == static_cast<int>(KeymapLayer::WindowLocal))
+					layer = KeymapLayer::WindowLocal;
+				else if (layerValue != static_cast<int>(KeymapLayer::Global))
+				{
+					outError = "Invalid keymap layer value";
+					return false;
+				}
+
+				KeyBinding binding;
+				binding.id = id;
+				binding.chord = *chord;
+				binding.commandId = CommandID{command};
+				binding.when = ContextExpr{context};
+				binding.layer = layer;
+				binding.enabled = enabled;
+				bindings.push_back(std::move(binding));
+			}
+
+			return true;
+		}
+		catch (const std::exception &exception)
+		{
+			outError = exception.what();
+			return false;
+		}
+	}
+
 	IOLayer::IOLayer() : Layer("IOLayer")
 	{
 	}
@@ -106,6 +220,8 @@ namespace DefectStudio
 		AddSubscription(subscribeIOLayer<EditorUiEvents::ThemeLoadRequested>(*m_EventBus, *this, &IOLayer::onThemeLoadRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutLoadRequested>(*m_EventBus, *this, &IOLayer::onLayoutLoadRequested));
 		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutListRequested>(*m_EventBus, *this, &IOLayer::onLayoutListRequested));
+		AddSubscription(subscribeIOLayer<AppEvents::Keymap::BindingsSaveRequested>(*m_EventBus, *this, &IOLayer::onBindingsSaveRequested));
+		AddSubscription(subscribeIOLayer<AppEvents::Keymap::BindingsLoadRequested>(*m_EventBus, *this, &IOLayer::onBindingsLoadRequested));
 		DS_LOG_INFO("IOLayer config persistence event handlers bound");
 	}
 
@@ -256,5 +372,63 @@ namespace DefectStudio
 		}
 
 		m_EventBus->Queue(LayoutListLoaded{event.directory, listFilesByExtension(event.directory, ".ini")});
+	}
+
+	void IOLayer::onBindingsSaveRequested(const AppEvents::Keymap::BindingsSaveRequested &event)
+	{
+		using namespace AppEvents::Keymap;
+
+		if (m_EventBus == nullptr)
+			return;
+
+		DS_LOG_INFO("IOLayer: saving keybindings to '{}'", event.targetPath.String());
+
+		std::string contents;
+		std::string error;
+		if (!serializeBindings(event.bindings, contents, error))
+		{
+			m_EventBus->Queue(BindingsSaveFailed{error});
+			DS_LOG_ERROR("IOLayer: keybindings serialization failed: {}", error);
+			return;
+		}
+
+		if (!TextFileIO::Save(event.targetPath, contents, error))
+		{
+			m_EventBus->Queue(BindingsSaveFailed{error});
+			DS_LOG_ERROR("IOLayer: keybindings write failed: {}", error);
+			return;
+		}
+
+		m_EventBus->Queue(BindingsSaved{event.targetPath});
+		DS_LOG_INFO("IOLayer: keybindings saved successfully");
+	}
+
+	void IOLayer::onBindingsLoadRequested(const AppEvents::Keymap::BindingsLoadRequested &event)
+	{
+		using namespace AppEvents::Keymap;
+
+		if (m_EventBus == nullptr)
+			return;
+
+		DS_LOG_INFO("IOLayer: loading keybindings from '{}'", event.sourcePath.String());
+
+		std::string text;
+		std::string error;
+		if (!TextFileIO::Load(event.sourcePath, text, error))
+		{
+			m_EventBus->Queue(BindingsLoadFailed{error});
+			DS_LOG_WARN("IOLayer: keybindings file not found or unreadable: {}", event.sourcePath.String());
+			return;
+		}
+
+		std::vector<KeyBinding> bindings;
+		if (!deserializeBindings(text, bindings, error))
+		{
+			m_EventBus->Queue(BindingsLoadFailed{error});
+			DS_LOG_ERROR("IOLayer: keybindings deserialization failed: {}", error);
+			return;
+		}
+
+		m_EventBus->Queue(BindingsLoaded{std::move(bindings)});
 	}
 } // namespace DefectStudio

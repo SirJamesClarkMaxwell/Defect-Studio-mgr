@@ -10,11 +10,13 @@
 #include "Core/Assets/AssetManager.hpp"
 #include "Core/Commands/CommandPalette.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Commands/CommandService.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/Notifications/Notification.hpp"
 #include "Core/Undo/UndoStack.hpp"
+#include "Core/Utils/Input.hpp"
 #include "Demo/DemoBackendRuntime.hpp"
 #include "Demo/DemoCommands.hpp"
 #include "Events/NotificationEvents.hpp"
@@ -35,6 +37,20 @@ namespace DefectStudio::Demo
 			return "rejected";
 		}
 		return "unknown";
+	}
+
+	[[nodiscard]] static KeyModifiers currentKeyModifiers()
+	{
+		KeyModifiers modifiers = KeyModifiers::None;
+		if (Input::IsKeyDown(KeyCode::LeftControl) || Input::IsKeyDown(KeyCode::RightControl))
+			modifiers = modifiers | KeyModifiers::Ctrl;
+		if (Input::IsKeyDown(KeyCode::LeftShift) || Input::IsKeyDown(KeyCode::RightShift))
+			modifiers = modifiers | KeyModifiers::Shift;
+		if (Input::IsKeyDown(KeyCode::LeftAlt) || Input::IsKeyDown(KeyCode::RightAlt))
+			modifiers = modifiers | KeyModifiers::Alt;
+		if (Input::IsKeyDown(KeyCode::LeftSuper) || Input::IsKeyDown(KeyCode::RightSuper))
+			modifiers = modifiers | KeyModifiers::Super;
+		return modifiers;
 	}
 
 	DemoBackendRuntime::DemoBackendRuntime(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus, WeakRef<AssetManager> assetManager)
@@ -58,7 +74,7 @@ namespace DefectStudio::Demo
 
 	void DemoBackendRuntime::Render()
 	{
-		if (!m_BackendCommandRegistry || !m_BackendUndoStack || !m_BackendCommandPalette)
+		if (!m_BackendCommandRegistry || !m_BackendCommandService || !m_BackendUndoStack || !m_BackendCommandPalette)
 		{
 			ImGui::TextUnformatted("Backend runtime demo is not initialized.");
 			return;
@@ -79,7 +95,7 @@ namespace DefectStudio::Demo
 		auto executeCommand = [this](const CommandID &id, const char *source) {
 			CommandContext context(ContextID{"demo.backend"});
 			context.SetSource(source);
-			auto result = m_BackendCommandRegistry->Execute(id, std::move(context));
+			auto result = m_BackendCommandService->Execute(id, std::move(context));
 			if (!result)
 			{
 				const StructuredError &error = result.Error();
@@ -125,6 +141,8 @@ namespace DefectStudio::Demo
 		if (ImGui::Button("Capability failure"))
 			executeCommand(kCommandMissingCapability, "DemoLayer button");
 
+		renderUndoRedoExamples();
+
 		ImGui::Spacing();
 		ImGui::SeparatorText("Hotkeys");
 		ImGui::Checkbox("Enable backend demo hotkeys", &m_BackendHotkeysEnabled);
@@ -141,7 +159,7 @@ namespace DefectStudio::Demo
 		ImGui::SameLine();
 		if (ImGui::Button("Simulate F8"))
 			(void)executeBackendDemoChord(KeyChord{KeyCode::F8, KeyModifiers::None}, "DemoLayer simulated hotkey");
-		ImGui::TextDisabled("Real keys: F6 increment, F7 undo, F8 redo. They only resolve when demo.backend context is active.");
+		ImGui::TextDisabled("Real keys: F6 increment, F7 undo, F8 redo, Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo.");
 
 		ImGui::Spacing();
 		ImGui::SeparatorText("Command palette backend");
@@ -240,11 +258,23 @@ namespace DefectStudio::Demo
 	void DemoBackendRuntime::setupBackendRuntimeDemo()
 	{
 		m_BackendDemoValue = 0;
+		m_BackendSliderValue = 50;
+		m_PendingSliderValue = m_BackendSliderValue;
+		m_BackendTokenCounter = 0;
+		m_BackendFlag = false;
+		m_PendingFlagValue = false;
+		m_BackendSliderGroupActive = false;
+		m_PendingToken.clear();
+		m_BackendTokens.clear();
 		m_BackendRuntimeLog.clear();
 
 		m_BackendUndoStack = CreateRef<UndoStack>();
-		m_BackendCommandRegistry = CreateUnique<CommandRegistry>(CreateWeakRef(m_CapabilityService));
+		m_BackendCommandRegistry = CreateRef<CommandRegistry>(CreateWeakRef(m_CapabilityService));
 		m_BackendCommandRegistry->SetUndoStack(CreateWeakRef(m_BackendUndoStack));
+		m_BackendCommandService = CreateUnique<CommandService>(
+			m_BackendCommandRegistry,
+			CreateWeakRef(m_BackendUndoStack),
+			CreateWeakRef(m_CapabilityService));
 		m_BackendKeymapResolver = CreateUnique<KeymapResolver>();
 		m_BackendContextManager = CreateUnique<ContextManager>();
 		m_BackendCommandPalette = CreateUnique<CommandPaletteIndex>(*m_BackendCommandRegistry);
@@ -326,6 +356,46 @@ namespace DefectStudio::Demo
 				CommandFlags::None},
 			std::bind_front(&DemoBackendRuntime::createMissingCapabilityCommand, this));
 
+		registerCommand(
+			CommandMeta{
+				kCommandSetSlider,
+				"Set grouped slider",
+				"Demo",
+				"Uses an explicit UndoStack group while the slider is dragged.",
+				{},
+				CommandFlags::Undoable},
+			std::bind_front(&DemoBackendRuntime::createSetSliderCommand, this));
+
+		registerCommand(
+			CommandMeta{
+				kCommandSetFlag,
+				"Set demo flag",
+				"Demo",
+				"Undoable boolean state change.",
+				{},
+				CommandFlags::Undoable},
+			std::bind_front(&DemoBackendRuntime::createSetFlagCommand, this));
+
+		registerCommand(
+			CommandMeta{
+				kCommandAppendToken,
+				"Append token",
+				"Demo",
+				"Undoable append operation for checking ordered undo.",
+				{},
+				CommandFlags::Undoable},
+			std::bind_front(&DemoBackendRuntime::createAppendTokenCommand, this));
+
+		registerCommand(
+			CommandMeta{
+				kCommandClearTokens,
+				"Clear tokens",
+				"Demo",
+				"Undoable bulk state replacement.",
+				{},
+				CommandFlags::Undoable},
+			std::bind_front(&DemoBackendRuntime::createClearTokensCommand, this));
+
 		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
 			"demo.increment.f6",
 			KeyChord{KeyCode::F6, KeyModifiers::None},
@@ -343,6 +413,27 @@ namespace DefectStudio::Demo
 		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
 			"demo.redo.f8",
 			KeyChord{KeyCode::F8, KeyModifiers::None},
+			kCommandRedo,
+			ContextExpr{"demo.backend"},
+			KeymapLayer::WindowLocal,
+			true});
+		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+			"demo.undo.ctrl_z",
+			KeyChord{KeyCode::Z, KeyModifiers::Ctrl},
+			kCommandUndo,
+			ContextExpr{"demo.backend"},
+			KeymapLayer::WindowLocal,
+			true});
+		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+			"demo.redo.ctrl_y",
+			KeyChord{KeyCode::Y, KeyModifiers::Ctrl},
+			kCommandRedo,
+			ContextExpr{"demo.backend"},
+			KeymapLayer::WindowLocal,
+			true});
+		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+			"demo.redo.ctrl_shift_z",
+			KeyChord{KeyCode::Z, KeyModifiers::Ctrl | KeyModifiers::Shift},
 			kCommandRedo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
@@ -371,7 +462,7 @@ namespace DefectStudio::Demo
 
 	Unique<ICommand> DemoBackendRuntime::createResetCommand(CommandContext &)
 	{
-		return CreateUnique<DemoSetValueCommand>(m_BackendDemoValue, 0);
+		return CreateUnique<DemoSetValueCommand>(m_BackendDemoValue, 0, "Reset demo value");
 	}
 
 	Unique<ICommand> DemoBackendRuntime::createUndoCommand(CommandContext &)
@@ -415,22 +506,125 @@ namespace DefectStudio::Demo
 		});
 	}
 
+	Unique<ICommand> DemoBackendRuntime::createSetSliderCommand(CommandContext &)
+	{
+		return CreateUnique<DemoSetValueCommand>(m_BackendSliderValue, m_PendingSliderValue, "Set grouped slider");
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createSetFlagCommand(CommandContext &)
+	{
+		return CreateUnique<DemoSetBoolCommand>(m_BackendFlag, m_PendingFlagValue, "Set demo flag");
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createAppendTokenCommand(CommandContext &)
+	{
+		return CreateUnique<DemoAppendTokenCommand>(m_BackendTokens, m_PendingToken);
+	}
+
+	Unique<ICommand> DemoBackendRuntime::createClearTokensCommand(CommandContext &)
+	{
+		return CreateUnique<DemoClearTokensCommand>(m_BackendTokens);
+	}
+
 	bool DemoBackendRuntime::onBackendDemoKeyPressed(KeyPressedEvent &event)
 	{
 		return executeBackendDemoChord(
-			KeyChord{static_cast<KeyCode>(event.GetKeyCode()), KeyModifiers::None},
+			KeyChord{static_cast<KeyCode>(event.GetKeyCode()), currentKeyModifiers()},
 			"DemoLayer real key event");
+	}
+
+	void DemoBackendRuntime::renderUndoRedoExamples()
+	{
+		auto executeCommand = [this](const CommandID &id, const char *source) {
+			CommandContext context(ContextID{"demo.backend"});
+			context.SetSource(source);
+			auto result = m_BackendCommandService->Execute(id, std::move(context));
+			if (!result)
+			{
+				const StructuredError &error = result.Error();
+				appendBackendRuntimeLog("error: " + error.userMessage + " [" + error.code + "]");
+				requestNotification(ToNotification(error));
+				return false;
+			}
+			return true;
+		};
+
+		ImGui::Spacing();
+		ImGui::SeparatorText("Undo/redo examples");
+
+		int sliderValue = m_BackendSliderValue;
+		ImGui::SetNextItemWidth(280.0f);
+		const bool sliderChanged = ImGui::SliderInt("Grouped slider", &sliderValue, 0, 100);
+		if (ImGui::IsItemActivated() && !m_BackendSliderGroupActive)
+		{
+			auto result = m_BackendUndoStack->BeginGroup("Grouped slider edit");
+			if (result)
+				m_BackendSliderGroupActive = true;
+			else
+				appendBackendRuntimeLog("slider group begin failed: " + result.Error().code);
+		}
+
+		if (sliderChanged && sliderValue != m_BackendSliderValue)
+		{
+			m_PendingSliderValue = sliderValue;
+			(void)executeCommand(kCommandSetSlider, "DemoLayer grouped slider");
+		}
+
+		if (m_BackendSliderGroupActive && ImGui::IsItemDeactivatedAfterEdit())
+		{
+			auto result = m_BackendUndoStack->EndGroup();
+			if (!result)
+				appendBackendRuntimeLog("slider group end failed: " + result.Error().code);
+			m_BackendSliderGroupActive = false;
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("value=%d", m_BackendSliderValue);
+
+		const char *flagLabel = m_BackendFlag ? "Set flag off" : "Set flag on";
+		if (ImGui::Button(flagLabel))
+		{
+			m_PendingFlagValue = !m_BackendFlag;
+			(void)executeCommand(kCommandSetFlag, "DemoLayer flag button");
+		}
+		ImGui::SameLine();
+		ImGui::Text("Flag: %s", m_BackendFlag ? "true" : "false");
+
+		if (ImGui::Button("Append token"))
+		{
+			++m_BackendTokenCounter;
+			m_PendingToken = "token-" + std::to_string(m_BackendTokenCounter);
+			(void)executeCommand(kCommandAppendToken, "DemoLayer token button");
+		}
+		ImGui::SameLine();
+		ImGui::BeginDisabled(m_BackendTokens.empty());
+		if (ImGui::Button("Clear tokens"))
+			(void)executeCommand(kCommandClearTokens, "DemoLayer clear tokens button");
+		ImGui::EndDisabled();
+
+		if (m_BackendTokens.empty())
+		{
+			ImGui::TextDisabled("Tokens: <empty>");
+		}
+		else
+		{
+			ImGui::TextUnformatted("Tokens:");
+			ImGui::SameLine();
+			for (std::size_t index = 0; index < m_BackendTokens.size(); ++index)
+			{
+				if (index > 0)
+					ImGui::SameLine();
+				ImGui::TextUnformatted(m_BackendTokens[index].c_str());
+			}
+		}
 	}
 
 	bool DemoBackendRuntime::executeBackendDemoChord(const KeyChord &chord, const char *source)
 	{
-		if (!m_BackendCommandRegistry || !m_BackendKeymapResolver || !m_BackendContextManager)
+		if (!m_BackendCommandService || !m_BackendKeymapResolver || !m_BackendContextManager)
 			return false;
 
-		KeyInputProcessor processor(*m_BackendCommandRegistry, *m_BackendKeymapResolver, *m_BackendContextManager);
-		CommandContext context(ContextID{"demo.backend"});
-		context.SetSource(source == nullptr ? "DemoLayer hotkey" : source);
-		auto result = processor.HandleKeyPressed(chord, std::move(context));
+		KeyInputProcessor processor(*m_BackendKeymapResolver, *m_BackendContextManager);
+		auto result = processor.HandleKeyPressed(chord);
 		if (!result)
 		{
 			const StructuredError &error = result.Error();
@@ -440,7 +634,19 @@ namespace DefectStudio::Demo
 		}
 
 		if (result->handled && result->commandId)
+		{
+			CommandContext context(ContextID{"demo.backend"});
+			context.SetSource(source == nullptr ? "DemoLayer hotkey" : source);
+			auto commandResult = m_BackendCommandService->Execute(*result->commandId, std::move(context));
+			if (!commandResult)
+			{
+				const StructuredError &error = commandResult.Error();
+				appendBackendRuntimeLog("hotkey command error: " + error.userMessage + " [" + error.code + "]");
+				requestNotification(ToNotification(error));
+				return false;
+			}
 			appendBackendRuntimeLog("hotkey " + ToString(chord) + " -> " + result->commandId->value);
+		}
 		return result->handled;
 	}
 

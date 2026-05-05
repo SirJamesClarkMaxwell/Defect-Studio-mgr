@@ -1,6 +1,7 @@
 #pragma once
 
 #include "App/ApplicationState.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
@@ -11,7 +12,13 @@ namespace DefectStudio
 	class EventQueue;
 	class LogRegistry;
 
-	class ApplicationEventController final
+	namespace AppEvents
+	{
+		struct ProjectSaveRequested;
+		struct ShutdownRequested;
+	}
+
+	class ApplicationEventController final : public EventReceiver
 	{
 	public:
 		ApplicationEventController(
@@ -29,6 +36,13 @@ namespace DefectStudio
 		ApplicationEventController &operator=(ApplicationEventController &&) = delete;
 
 	private:
+		void bindEvents();
+		void onShutdownRequested(const AppEvents::ShutdownRequested &event);
+		void onProjectSaveRequested(const AppEvents::ProjectSaveRequested &event);
+
+	private:
+		Ref<EventBus> m_EventBus;
+		EventQueue &m_EventQueue;
 		Unique<ApplicationConfigController> m_ConfigController;
 	};
 } // namespace DefectStudio

@@ -76,6 +76,7 @@ namespace DefectStudio
 
 		std::optional<UndoRecord> m_ActiveGroup;
 		std::size_t m_GroupDepth = 0;
+		bool m_GroupCancelled = false;
 		bool m_IsApplying = false;
 	};
 } // namespace DefectStudio

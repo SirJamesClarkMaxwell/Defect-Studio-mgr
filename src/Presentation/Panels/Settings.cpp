@@ -2,14 +2,18 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <functional>
+#include <string_view>
 #include <vector>
 
 #include <imgui.h>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Input/KeymapResolver.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
@@ -75,6 +79,8 @@ namespace DefectStudio
 	SettingsPanel::SettingsPanel(Ref<EventBus> eventBus,
 	                   WeakRef<JobSystem> jobSystem,
 	                   WeakRef<EditorUiState> uiState,
+	                   WeakRef<KeymapResolver> keymapResolver,
+	                   WeakRef<CommandRegistry> commandRegistry,
 	                   ApplicationConfig initialConfig,
 	                   std::string title,
 	                   bool visibleByDefault)
@@ -82,7 +88,9 @@ namespace DefectStudio
 		  m_DraftConfig(std::move(initialConfig)),
 		  m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem)),
-		  m_UiState(std::move(uiState))
+		  m_UiState(std::move(uiState)),
+		  m_KeymapResolver(std::move(keymapResolver)),
+		  m_CommandRegistry(std::move(commandRegistry))
 	{
 		bindConfigEvents();
 		if (m_DraftInitialized)
@@ -102,10 +110,13 @@ namespace DefectStudio
 		  m_ThemeSavePathBuffer(other.m_ThemeSavePathBuffer),
 		  m_ThemeLoadPathBuffer(other.m_ThemeLoadPathBuffer),
 		  m_LayoutPathBuffer(other.m_LayoutPathBuffer),
+		  m_KeyBindingSearchBuffer(other.m_KeyBindingSearchBuffer),
 		  m_StatusMessage(other.m_StatusMessage),
 		  m_EventBus(other.m_EventBus),
 		  m_JobSystem(other.m_JobSystem),
-		  m_UiState(other.m_UiState)
+		  m_UiState(other.m_UiState),
+		  m_KeymapResolver(other.m_KeymapResolver),
+		  m_CommandRegistry(other.m_CommandRegistry)
 	{
 		bindConfigEvents();
 	}
@@ -170,6 +181,12 @@ namespace DefectStudio
 			break;
 		case SettingsPanel::Tab::Viewport:
 			renderViewportTab();
+			break;
+		case SettingsPanel::Tab::Input:
+			renderInputTab();
+			break;
+		case SettingsPanel::Tab::KeyBindings:
+			renderKeyBindingsTab();
 			break;
 		case SettingsPanel::Tab::FilePaths:
 			renderFilePathsTab();
@@ -469,6 +486,7 @@ namespace DefectStudio
 			"Editing",
 			"Animation",
 			"Input",
+			"Key Bindings",
 			"File Paths",
 		};
 
@@ -880,6 +898,138 @@ namespace DefectStudio
 				uiState->layoutPath = layoutPath.String();
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("%s", layoutPath.String().c_str());
+		}
+	}
+
+	void SettingsPanel::renderInputTab()
+	{
+		ImGui::TextDisabled("Input settings are currently handled by the key binding runtime.");
+	}
+
+	void SettingsPanel::renderKeyBindingsTab()
+	{
+		auto resolver = m_KeymapResolver.lock();
+		auto registry = m_CommandRegistry.lock();
+
+		if (!resolver)
+		{
+			ImGui::TextDisabled("KeymapResolver not available.");
+			return;
+		}
+
+		ImGui::SeparatorText("Key Bindings");
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::InputTextWithHint(
+			"##keybind_search",
+			"Search by command name, description or chord (e.g. Ctrl+Z)",
+			m_KeyBindingSearchBuffer.data(),
+			m_KeyBindingSearchBuffer.size());
+
+		const std::string_view searchText{m_KeyBindingSearchBuffer.data()};
+		const std::vector<KeyBinding> allBindings = resolver->ListBindings();
+
+		constexpr ImGuiTableFlags tableFlags =
+			ImGuiTableFlags_Borders |
+			ImGuiTableFlags_RowBg |
+			ImGuiTableFlags_ScrollY |
+			ImGuiTableFlags_SizingStretchProp;
+
+		const float tableHeight = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing();
+		if (!ImGui::BeginTable("##keybindings_table", 4, tableFlags, ImVec2(0.0f, tableHeight)))
+			return;
+
+		ImGui::TableSetupScrollFreeze(0, 1);
+		ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+		ImGui::TableSetupColumn("Command", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+		ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 0.5f);
+		ImGui::TableSetupColumn("Context", ImGuiTableColumnFlags_WidthStretch, 0.2f);
+		ImGui::TableHeadersRow();
+
+		for (const KeyBinding &binding : allBindings)
+		{
+			if (!binding.enabled)
+				continue;
+
+			const std::string chordStr = ToString(binding.chord);
+
+			std::string commandName = binding.commandId.value;
+			std::string commandDesc;
+			if (registry)
+			{
+				auto meta = registry->GetMeta(binding.commandId);
+				if (meta)
+				{
+					commandName = meta->name;
+					commandDesc = meta->description;
+				}
+			}
+
+			if (!searchText.empty())
+			{
+				const auto contains = [](std::string_view haystack, std::string_view needle) {
+					auto it = std::search(
+						haystack.begin(), haystack.end(),
+						needle.begin(), needle.end(),
+						[](unsigned char a, unsigned char b) {
+							return std::tolower(a) == std::tolower(b);
+						});
+					return it != haystack.end();
+				};
+
+				const bool matches =
+					contains(chordStr, searchText) ||
+					contains(commandName, searchText) ||
+					contains(commandDesc, searchText) ||
+					contains(binding.commandId.value, searchText) ||
+					contains(binding.when.GetExpression(), searchText);
+
+				if (!matches)
+					continue;
+			}
+
+			ImGui::TableNextRow();
+
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(chordStr.c_str());
+
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(commandName.c_str());
+			if (commandName != binding.commandId.value)
+			{
+				ImGui::SameLine();
+				ImGui::TextDisabled("(%s)", binding.commandId.value.c_str());
+			}
+
+			ImGui::TableNextColumn();
+			if (!commandDesc.empty())
+				ImGui::TextUnformatted(commandDesc.c_str());
+			else
+				ImGui::TextDisabled("-");
+
+			ImGui::TableNextColumn();
+			const std::string &ctx = binding.when.GetExpression();
+			ImGui::TextDisabled("%s", ctx.empty() ? "global" : ctx.c_str());
+		}
+
+		ImGui::EndTable();
+
+		const auto &conflicts = resolver->GetConflicts();
+		if (!conflicts.empty())
+		{
+			ImGui::Spacing();
+			ImGui::Text("! %zu binding conflict(s) detected", conflicts.size());
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				for (const KeyBindingConflict &conflict : conflicts)
+				{
+					ImGui::Text("'%s' conflicts with '%s' on %s",
+						conflict.newBinding.id.c_str(),
+						conflict.existingBinding.id.c_str(),
+						ToString(conflict.newBinding.chord).c_str());
+				}
+				ImGui::EndTooltip();
+			}
 		}
 	}
 
