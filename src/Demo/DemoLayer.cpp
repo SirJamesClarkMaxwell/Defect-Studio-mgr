@@ -2,8 +2,6 @@
 
 #include <imgui.h>
 
-#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notifier.hpp"
@@ -39,15 +37,14 @@ namespace DefectStudio::Demo
 		m_DemoNotifier = CreateRef<Notifier>(m_DemoEventBus);
 		m_NotificationsPanel = CreateUnique<DemoNotificationsPanel>(m_GlobalEventBus);
 
-		Ref<CapabilityRegistry> capabilityRegistry = CreateRef<CapabilityRegistry>();
-		capabilityRegistry->RegisterCapability(CapabilityEntry{
+		Ref<CapabilityService> capabilityService = CreateRef<CapabilityService>();
+		capabilityService->RegisterCapability(CapabilityEntry{
 			"ui.notifications",
 			CapabilityCategory::RuntimeDetected,
 			true,
 			"Demo runtime can emit notifications through its local Notifier."});
 
-		Ref<CapabilityService> capabilityService = CreateRef<CapabilityService>(*capabilityRegistry);
-		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityRegistry, capabilityService, m_GlobalEventBus);
+		m_CapabilitiesPanel = CreateUnique<DemoCapabilitiesPanel>(capabilityService, m_GlobalEventBus);
 		m_BackendRuntime = CreateUnique<DemoBackendRuntime>(capabilityService, m_GlobalEventBus, m_AssetManager);
 	}
 

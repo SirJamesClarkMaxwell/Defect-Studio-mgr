@@ -13,11 +13,9 @@
 namespace DefectStudio::Demo
 {
 	DemoCapabilitiesPanel::DemoCapabilitiesPanel(
-		Ref<CapabilityRegistry> capabilityRegistry,
 		Ref<CapabilityService> capabilityService,
 		Ref<EventBus> eventBus)
-		: m_CapabilityRegistry(std::move(capabilityRegistry)),
-		  m_CapabilityService(std::move(capabilityService)),
+		: m_CapabilityService(std::move(capabilityService)),
 		  m_EventBus(std::move(eventBus))
 	{
 	}
@@ -31,16 +29,16 @@ namespace DefectStudio::Demo
 
 	void DemoCapabilitiesPanel::renderRegistrySnapshot() const
 	{
-		if (!m_CapabilityRegistry || !m_CapabilityService)
+		if (!m_CapabilityService)
 		{
 			ImGui::TextUnformatted("Capability demo is not initialized.");
 			return;
 		}
 
-		const auto capabilities = m_CapabilityRegistry->GetAll();
+		const auto capabilities = m_CapabilityService->GetAll();
 
 		ImGui::TextUnformatted("Local demo runtime capabilities");
-		ImGui::Text("Registry locked: %s", m_CapabilityRegistry->IsLocked() ? "yes" : "no");
+		ImGui::Text("Registry locked: %s", m_CapabilityService->IsLocked() ? "yes" : "no");
 		ImGui::Text("Registered capabilities: %zu", capabilities.size());
 		ImGui::Text("Capability service reports 'ui.notifications': %s",
 		            m_CapabilityService->IsAvailable("ui.notifications") ? "yes" : "no");
@@ -75,7 +73,7 @@ namespace DefectStudio::Demo
 		ImGui::SeparatorText("Local registration example");
 		ImGui::TextWrapped("%s", m_LastCapabilityDemoAction.c_str());
 
-		ImGui::BeginDisabled(!m_CapabilityRegistry || m_CapabilityRegistry->IsLocked());
+		ImGui::BeginDisabled(!m_CapabilityService || m_CapabilityService->IsLocked());
 		if (ImGui::Button("Register available demo capability"))
 		{
 			registerCapability(
@@ -95,8 +93,8 @@ namespace DefectStudio::Demo
 
 		if (ImGui::Button("Lock local demo registry"))
 		{
-			if (m_CapabilityRegistry)
-				m_CapabilityRegistry->LockAfterStartup();
+			if (m_CapabilityService)
+				m_CapabilityService->LockAfterStartup();
 			m_LastCapabilityDemoAction = "Local demo registry locked.";
 			notifyInfo("Capability registry locked", "Local demo capability registry is now locked.");
 		}
@@ -121,11 +119,11 @@ namespace DefectStudio::Demo
 
 	void DemoCapabilitiesPanel::registerCapability(std::string name, bool available, std::string description)
 	{
-		if (!m_CapabilityRegistry)
+		if (!m_CapabilityService)
 			return;
 
-		const bool locked = m_CapabilityRegistry->IsLocked();
-		m_CapabilityRegistry->RegisterCapability(CapabilityEntry{
+		const bool locked = m_CapabilityService->IsLocked();
+		m_CapabilityService->RegisterCapability(CapabilityEntry{
 			name,
 			CapabilityCategory::RuntimeDetected,
 			available,

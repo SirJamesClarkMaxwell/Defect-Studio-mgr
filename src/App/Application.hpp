@@ -8,7 +8,6 @@
 #include "App/ApplicationState.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Window.hpp"
-#include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Assets/AssetManager.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
@@ -56,7 +55,6 @@ namespace DefectStudio
 		[[nodiscard]] Ref<EventBus> GetEventBusRef() const;
 		[[nodiscard]] Notifier &GetNotifier();
 		[[nodiscard]] Ref<Notifier> GetNotifierRef() const;
-		[[nodiscard]] CapabilityRegistry &GetCapabilityRegistry();
 		[[nodiscard]] CapabilityService &GetCapabilityService();
 		[[nodiscard]] AssetManager &GetAssetManager();
 		[[nodiscard]] Ref<LogRegistry> GetLogRegistry() const;
@@ -137,7 +135,6 @@ namespace DefectStudio
 		LayerStack m_LayerStack;
 		Ref<LogRegistry> m_LogRegistry;
 		
-		Ref<CapabilityRegistry> m_CapabilityRegistry;
 		Ref<CapabilityService> m_CapabilityService;
 		Ref<Notifier> m_Notifier;
 		

@@ -64,15 +64,15 @@ Faza II
 7. (done) Pozbyć się `Application::Get()` (Ryzyko V)
 
 Faza III
-8. Decouple `CommandRegistry` -> Wydzielić `CommandService` z `CommandRegistry`
-9.  Dodanie lepszego konstructora dla CommandOutcome
+8.   (done) Decouple `CommandRegistry` -> Wydzielić `CommandService` z `CommandRegistry`
+9.   (done) Dodanie lepszego konstructora dla CommandOutcome
 10.  (done) Usunięcie raw-ptr i raw-smart-ptr i zastąpienie z `Memory.hpp`
 11.  (done) Rozbicie `KeyBinding` na mniejsze pliki odpowiadające lepiej nazwą i logicznie
-12.  Poprawa rejestracji komend w demo (patrz komentarz)
-13.  Dodanie ctrl+z, ctrl+y, ctrl+shift+p, ctrl+shift+w, ctrl+s
-14.  poprawny przechwyt naciśniętych klawyszy (persystencję keybindings w IOLayer) + emit odpowienich eventów
-15.  Utworzenie sekcji KeyBinding w settings -> narazie wyświetlanie i wyszukiwanie (po opisie `app.save`/`app.quit`/`app.undo` itd albo przechwytując z klawaitury)
-16.  CancelGroup zeruje m_groupDepth zamiast dekrementować -> poprawić 
+12.  (done) Poprawa rejestracji komend w demo (patrz komentarz)
+13.  (done) Dodanie ctrl+z, ctrl+y, ctrl+shift+p, ctrl+shift+w, ctrl+s
+14.  (done) poprawny przechwyt naciśniętych klawyszy (persystencję keybindings w IOLayer) + emit odpowienich eventów
+15.  (done) Utworzenie sekcji KeyBinding w settings -> narazie wyświetlanie i wyszukiwanie (po opisie `app.save`/`app.quit`/`app.undo` itd albo przechwytując z klawaitury)
+16.  (done) CancelGroup zeruje m_groupDepth zamiast dekrementować -> poprawić 
 
 Faza IV
 16.  Naprawa reinicjalizacji Loggera (parz sekcja z komentarza)

@@ -1,18 +1,42 @@
 #include "Core/dspch.hpp"
 
 #include "Core/Capabilities/CapabilityService.hpp"
+
+#include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Utils/Logger.hpp"
 
 namespace DefectStudio
 {
-	CapabilityService::CapabilityService(CapabilityRegistry &registry)
-		: m_Registry(registry)
+	CapabilityService::CapabilityService()
+		: m_Registry(CreateUnique<CapabilityRegistry>())
 	{
+	}
+
+	CapabilityService::~CapabilityService() = default;
+
+	void CapabilityService::RegisterCapability(CapabilityEntry capability)
+	{
+		m_Registry->RegisterCapability(std::move(capability));
+	}
+
+	void CapabilityService::LockAfterStartup()
+	{
+		m_Registry->LockAfterStartup();
+	}
+
+	bool CapabilityService::IsLocked() const
+	{
+		return m_Registry->IsLocked();
+	}
+
+	std::vector<CapabilityEntry> CapabilityService::GetAll() const
+	{
+		return m_Registry->GetAll();
 	}
 
 	bool CapabilityService::IsAvailable(const std::string &name) const
 	{
-		return m_Registry.IsAvailable(name);
+		return m_Registry->IsAvailable(name);
 	}
 
 	Result<void> CapabilityService::Require(const std::string &name) const

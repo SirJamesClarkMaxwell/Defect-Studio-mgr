@@ -16,7 +16,6 @@
 #include "App/Controllers/ApplicationEventController.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
-#include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Assets/AssetManager.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
@@ -302,12 +301,6 @@ namespace DefectStudio
 		return m_Notifier;
 	}
 
-	CapabilityRegistry &Application::GetCapabilityRegistry()
-	{
-		DS_ASSERT(m_CapabilityRegistry != nullptr, "CapabilityRegistry not initialized");
-		return *m_CapabilityRegistry;
-	}
-
 	CapabilityService &Application::GetCapabilityService()
 	{
 		DS_ASSERT(m_CapabilityService != nullptr, "CapabilityService not initialized");
@@ -469,8 +462,7 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
 		m_Notifier = CreateRef<Notifier>(m_EventBus);
-		m_CapabilityRegistry = CreateRef<CapabilityRegistry>();
-		m_CapabilityService = CreateRef<CapabilityService>(*m_CapabilityRegistry);
+		m_CapabilityService = CreateRef<CapabilityService>();
 		m_EventController = CreateUnique<ApplicationEventController>(
 			m_EventBus,
 			m_ConfigManager,
@@ -575,8 +567,8 @@ namespace DefectStudio
 			shutdownInternal();
 			return false;
 		}
-		if (m_CapabilityRegistry)
-			m_CapabilityRegistry->LockAfterStartup();
+		if (m_CapabilityService)
+			m_CapabilityService->LockAfterStartup();
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 		return true;
 	}
@@ -614,7 +606,6 @@ namespace DefectStudio
 		}
 
 		m_CapabilityService.reset();
-		m_CapabilityRegistry.reset();
 		m_AssetManager.reset();
 		m_Notifier.reset();
 

@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "Core/Capabilities/CapabilityRegistry.hpp"
+#include "Core/Capabilities/Capability.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Utils/Memory.hpp"
 
@@ -16,7 +16,7 @@ namespace DefectStudio::Demo
 	class DemoCapabilitiesPanel
 	{
 	public:
-		DemoCapabilitiesPanel(Ref<CapabilityRegistry> capabilityRegistry, Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus);
+		DemoCapabilitiesPanel(Ref<CapabilityService> capabilityService, Ref<EventBus> eventBus);
 
 		void Render();
 
@@ -31,7 +31,6 @@ namespace DefectStudio::Demo
 		[[nodiscard]] static const char *categoryName(CapabilityCategory category);
 
 	private:
-		Ref<CapabilityRegistry> m_CapabilityRegistry;
 		Ref<CapabilityService> m_CapabilityService;
 		Ref<EventBus> m_EventBus;
 
