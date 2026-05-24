@@ -32,3 +32,6 @@
 [submodule "Vendor/imgui-command-palette"]
 	path = Vendor/imgui-command-palette
 	url = https://github.com/sjcmdev/imgui-command-palette.git
+[submodule "Vendor/nanobind"]
+	path = Vendor/nanobind
+	url = https://github.com/sjcmdev/nanobind.git

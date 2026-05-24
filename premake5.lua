@@ -32,38 +32,6 @@ include "Vendor/ImGuiNotify"
 
 dofile "Vendor/Tracy/premake5.lua"
 dofile "Vendor/GoogleTest/GoogleTest.premake5.lua"
-
--- Keep third-party runtime model aligned with workspace configurations to avoid
--- Debug/Release CRT mismatches during linkage on MSVC.
-project "yaml-cpp"
-    filter "configurations:Debug"
-        runtime "Debug"
-        symbols "On"
-
-    filter "configurations:Release"
-        runtime "Release"
-        optimize "On"
-
-    filter "configurations:Dist"
-        runtime "Release"
-        optimize "Full"
-
-    filter {}
-
-project "Tracy"
-    filter "configurations:Debug"
-        runtime "Debug"
-        symbols "On"
-
-    filter "configurations:Release"
-        runtime "Release"
-        optimize "On"
-
-    filter "configurations:Dist"
-        runtime "Release"
-        optimize "Full"
-
-    filter {}
 group ""
 
 project "DefectStudio"
