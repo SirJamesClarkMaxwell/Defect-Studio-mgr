@@ -30,8 +30,6 @@
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
-#include "Debug/DebugLayer.hpp"
-#include "Demo/DemoLayer.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
@@ -837,12 +835,7 @@ namespace DefectStudio
 		imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
 		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
-#ifndef DS_DIST
-		m_LayerStack.PushLayer(CreateUnique<Demo::DemoLayer>(m_EventBus, CreateWeakRef(m_AssetManager)));
-#endif
-#ifndef DS_DIST
-		m_LayerStack.PushOverlay(CreateUnique<DebugLayer>());
-#endif
+		DS_LOG_INFO("LayerStack setup: DemoLayer and DebugLayer registration disabled");
 		DS_LOG_INFO("LayerStack setup: complete");
 	}
 
