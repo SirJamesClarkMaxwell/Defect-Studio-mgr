@@ -825,6 +825,13 @@ namespace DefectStudio
 		m_LayerStack.PushLayer(std::move(ioLayer));
 		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
 		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
+		auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
+		if (scientificRuntimeLayer != nullptr && m_CapabilityService != nullptr)
+		{
+			scientificRuntimeLayer->RegisterCapability(
+				*m_CapabilityService,
+				scientificRuntimeLayer->BuildPythonBridgeCapability());
+		}
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
 		ImGuiLayerRuntime imGuiRuntime;
 		imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;

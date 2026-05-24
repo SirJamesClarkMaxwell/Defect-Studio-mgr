@@ -103,14 +103,14 @@
 
 > Uzależniony od stabilnego T04. Implementować po T06 jeśli renderer blokuje.
 
-- [ ] `PythonInterpreter` RAII wrapper na `py::scoped_interpreter`
-- [ ] `ScriptRunner` – wewnętrzne narzędzie deweloperskie (nie główny workflow użytkownika)
-- [ ] `PymatgenBridge` – `Structure.from_file()`, superkomórki, symetria
-- [ ] `ASEBridge` – Atoms I/O, konwersja formatów
-- [ ] GIL management w JobSystem (`gil_scoped_acquire` / `release`)
-- [ ] Python venv management – uv + `.venv` z pakietami naukowymi
-- [ ] Error propagation: Python exceptions → structured errors → UI policy
-- [ ] Testy interoperacyjności: pymatgen POSCAR roundtrip przez bridge
+- [x] `PythonInterpreter` RAII wrapper na `py::scoped_interpreter`
+- [x] `ScriptRunner` – wewnętrzne narzędzie deweloperskie (nie główny workflow użytkownika)
+- [x] `PymatgenBridge` – `Structure.from_file()`, superkomórki, symetria
+- [x] `ASEBridge` – Atoms I/O, konwersja formatów
+- [x] GIL management w JobSystem (`gil_scoped_acquire` / `release`)
+- [x] Python venv management – uv + `.venv` z pakietami naukowymi
+- [x] Error propagation: Python exceptions → structured errors → UI policy
+- [x] Testy interoperacyjności: pymatgen POSCAR roundtrip przez bridge
 
 **Biblioteki:** nanobind, pymatgen, ASE, numpy
 
@@ -127,14 +127,14 @@
 - [ ] FBO (FrameBuffer Object) dla offscreen render i viewport texture
 - [ ] Instanced atom rendering (sphere impostor lub prosta sfera-mesh, konfigurowalny radius)
 - [ ] Instanced bond rendering (cylinder 8-stronny, dwie półsfery)
-- [ ] Orbit camera (Blender-like: LMB orbit, MMB pan, scroll zoom) + persist
+- [ ] Orbit camera (Vesta-like: LMB orbit, MMB pan, scroll zoom) + persist
 - [ ] **OpenGL 4.3 Compute Shader infrastruktura** (SSBO, dispatch, sync barrier) – fundament dla bonds i volumetrics
 - [ ] Tracy GPU profiling integration
 - [ ] Grid / unit cell box rendering (linie krawędzi komórki)
 - [ ] View gizmo overlay (XYZ osie, kliknięcie ustawia kamerę)
 - [ ] Exception-free zone – granica opisana statycznym komentarzem / assertem
 
-**Biblioteki:** GLFW, OpenGL 4.3, GLM, stb\_image, Tracy
+**Biblioteki:** GLFW, OpenGL 4.3, GLM, stb\_image, Tracy, entt
 
 ---
 

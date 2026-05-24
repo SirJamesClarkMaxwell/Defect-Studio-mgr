@@ -1,35 +1,9 @@
 #include <gtest/gtest.h>
 
-#include <memory>
-
 #include "Core/Input/KeyBinding.hpp"
 
 namespace
 {
-	class CountCommand final : public DefectStudio::ICommand
-	{
-	public:
-		explicit CountCommand(std::shared_ptr<int> counter)
-			: m_Counter(std::move(counter))
-		{
-		}
-
-		DefectStudio::Result<void> Execute(DefectStudio::CommandContext &context) override
-		{
-			(void)context;
-			++(*m_Counter);
-			return {};
-		}
-
-		std::string Description() const override
-		{
-			return "Count";
-		}
-
-	private:
-		std::shared_ptr<int> m_Counter;
-	};
-
 	DefectStudio::KeyChord Ctrl(DefectStudio::KeyCode key)
 	{
 		return DefectStudio::KeyChord{key, DefectStudio::KeyModifiers::Ctrl};
@@ -98,25 +72,12 @@ TEST(KeyBindingTests, WindowLocalBindingOverridesGlobalBinding)
 	EXPECT_EQ(resolved->commandId.value, "panel.search");
 }
 
-TEST(KeyBindingTests, InputProcessorExecutesResolvedCommand)
+TEST(KeyBindingTests, InputProcessorReturnsResolvedCommand)
 {
-	auto counter = std::make_shared<int>(0);
 	DefectStudio::ContextManager contexts;
 	DefectStudio::KeymapResolver resolver;
-	DefectStudio::CommandRegistry commands;
-	DefectStudio::KeyInputProcessor processor(commands, resolver, contexts);
+	DefectStudio::KeyInputProcessor processor(resolver, contexts);
 
-	ASSERT_TRUE(commands.Register(
-		DefectStudio::CommandMeta{
-			DefectStudio::CommandID("count"),
-			"Count",
-			"Test",
-			"Increment counter",
-			{},
-			DefectStudio::CommandFlags::None},
-		[counter](DefectStudio::CommandContext &) {
-			return std::make_unique<CountCommand>(counter);
-		}));
 	ASSERT_TRUE(resolver.RegisterBinding(DefectStudio::KeyBinding{
 		"count.shortcut",
 		Ctrl(DefectStudio::KeyCode::K),
@@ -131,5 +92,4 @@ TEST(KeyBindingTests, InputProcessorExecutesResolvedCommand)
 	EXPECT_TRUE(result->handled);
 	ASSERT_TRUE(result->commandId);
 	EXPECT_EQ(result->commandId->value, "count");
-	EXPECT_EQ(*counter, 1);
 }

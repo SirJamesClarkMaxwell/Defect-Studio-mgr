@@ -110,6 +110,7 @@ namespace DefectStudio
 
 		[[nodiscard]] virtual std::string GetName() const = 0;
 		[[nodiscard]] virtual std::string GetType() const = 0;
+		[[nodiscard]] virtual bool UsesPythonRuntime() const { return false; }
 		virtual void Execute(JobContext &context) = 0;
 	};
 } // namespace DefectStudio

@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-#include "App/Events/JobEvents.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/TestJobs/TestJobs.hpp"
 #include "JobSystemTestUtils.hpp"

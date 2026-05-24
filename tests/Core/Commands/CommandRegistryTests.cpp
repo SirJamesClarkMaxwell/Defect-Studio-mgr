@@ -1,19 +1,18 @@
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <vector>
 
-#include "Core/Capabilities/CapabilityRegistry.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Undo/UndoStack.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace
 {
 	class IncrementCommand final : public DefectStudio::ICommand
 	{
 	public:
-		IncrementCommand(std::shared_ptr<int> value, int amount)
+		IncrementCommand(DefectStudio::Ref<int> value, int amount)
 			: m_Value(std::move(value)), m_Amount(amount)
 		{
 		}
@@ -43,7 +42,7 @@ namespace
 		}
 
 	private:
-		std::shared_ptr<int> m_Value;
+		DefectStudio::Ref<int> m_Value;
 		int m_Amount = 0;
 	};
 
@@ -84,10 +83,10 @@ TEST(CommandContextTests, StoresAndRetrievesTypedValues)
 
 TEST(CommandRegistryTests, ExecutesFactoryCommandAndPushesUndo)
 {
-	auto value = std::make_shared<int>(0);
+	auto value = DefectStudio::CreateRef<int>(0);
 	DefectStudio::CommandRegistry registry;
-	DefectStudio::UndoStack undoStack;
-	registry.SetUndoStack(&undoStack);
+	auto undoStack = DefectStudio::CreateRef<DefectStudio::UndoStack>();
+	registry.SetUndoStack(DefectStudio::CreateWeakRef(undoStack));
 
 	auto registered = registry.Register(
 		DefectStudio::CommandMeta{
@@ -108,26 +107,25 @@ TEST(CommandRegistryTests, ExecutesFactoryCommandAndPushesUndo)
 	EXPECT_EQ(*value, 3);
 	EXPECT_TRUE(result->undoable);
 	EXPECT_TRUE(result->pushedToUndoStack);
-	EXPECT_EQ(undoStack.GetUndoDepth(), 1u);
+	EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
 
-	ASSERT_TRUE(undoStack.Undo());
+	ASSERT_TRUE(undoStack->Undo());
 	EXPECT_EQ(*value, 0);
 
-	ASSERT_TRUE(undoStack.Redo());
+	ASSERT_TRUE(undoStack->Redo());
 	EXPECT_EQ(*value, 3);
 }
 
 TEST(CommandRegistryTests, CapabilityFailureReturnsStructuredError)
 {
-	auto value = std::make_shared<int>(0);
-	DefectStudio::CapabilityRegistry capabilityRegistry;
-	capabilityRegistry.RegisterCapability(DefectStudio::CapabilityEntry{
+	auto value = DefectStudio::CreateRef<int>(0);
+	auto capabilityService = DefectStudio::CreateRef<DefectStudio::CapabilityService>();
+	capabilityService->RegisterCapability(DefectStudio::CapabilityEntry{
 		"runtime.python",
 		DefectStudio::CapabilityCategory::RuntimeDetected,
 		false,
 		"Python runtime"});
-	DefectStudio::CapabilityService capabilityService(capabilityRegistry);
-	DefectStudio::CommandRegistry registry(&capabilityService);
+	DefectStudio::CommandRegistry registry(DefectStudio::CreateWeakRef(capabilityService));
 
 	ASSERT_TRUE(registry.Register(
 		DefectStudio::CommandMeta{

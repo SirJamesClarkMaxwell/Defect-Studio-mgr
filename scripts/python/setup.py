@@ -12,6 +12,7 @@ if str(ROOT_DIR) not in sys.path:
 import build as build_script
 import doctor as doctor_script
 import generate_projects as generate_script
+import prepare_app_python_runtime as prepare_python_runtime_script
 import run as run_script
 from scripts.python.common.cli import add_common_flags, print_header, print_step
 from scripts.python.common.config import save_local_config
@@ -30,6 +31,7 @@ PHASES = [
     "git-submodule",
     "tool-discovery",
     "python-env",
+    "python-runtime",
     "vendor-check",
     "generate",
     "build",
@@ -56,6 +58,17 @@ def make_parser() -> argparse.ArgumentParser:
         help="Reserved for managed tool installation.",
     )
     parser.add_argument("--python-group", action="append", default=None)
+    parser.add_argument(
+        "--python-runtime-source",
+        default=None,
+        help="Explicit CPython home path for install/app/python runtime preparation.",
+    )
+    parser.add_argument(
+        "--python-runtime-platform",
+        choices=["windows", "linux", "macos"],
+        default=None,
+        help="Override target platform folder for app-local Python runtime.",
+    )
     parser.add_argument(
         "--python-version",
         default=None,
@@ -176,6 +189,22 @@ def run_python_env(args: argparse.Namespace) -> int:
     )
 
 
+def run_python_runtime(args: argparse.Namespace) -> int:
+    print_step("Preparing app-local Python runtime")
+    return prepare_python_runtime_script.run(
+        argparse.Namespace(
+            source_home=args.python_runtime_source,
+            venv=".venv",
+            dest_root="install/app/python",
+            platform=args.python_runtime_platform,
+            clean=False,
+            skip_site_packages=False,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+        )
+    )
+
+
 def run_vendor_check(args: argparse.Namespace) -> int:
     print_step("Vendor/dependency check placeholder")
     if args.install_tools:
@@ -286,6 +315,10 @@ def run(args: argparse.Namespace) -> int:
             return code
     if should_run(args.phase, "python-env"):
         code = run_python_env(args)
+        if code != 0:
+            return code
+    if should_run(args.phase, "python-runtime"):
+        code = run_python_runtime(args)
         if code != 0:
             return code
     if should_run(args.phase, "vendor-check"):

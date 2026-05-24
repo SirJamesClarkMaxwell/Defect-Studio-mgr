@@ -14,15 +14,22 @@ dev = [
 ]
 scientific-core = [
     "numpy>=2.0",
+    "scipy>=1.14",
     "ase>=3.22",
     "pymatgen>=2025.1",
     "spglib>=2.0",
     "seekpath>=2.1",
+    "matplotlib>=3.9",
+    "pandas>=2.2",
 ]
 scientific-extended = [
     "phonopy>=2.0",
+    "phono3py>=3.0",
     "sumo>=2.3",
     "doped>=3.0",
+    "mp-api>=0.45",
+    "h5py>=3.11",
+    "networkx>=3.3",
 ]
 docs = [
     "mkdocs>=1.6",

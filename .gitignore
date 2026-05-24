@@ -32,6 +32,11 @@ __pycache__/
 # Exported env snapshots
 scripts/requirements/*.txt
 
+# App-local Python runtime artifacts (kept local, rebuilt by tooling)
+install/app/python/*
+!install/app/python/.gitkeep
+!install/app/python/README.md
+
 # OS artifacts
 Thumbs.db
 .DS_Store

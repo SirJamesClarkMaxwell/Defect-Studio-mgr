@@ -21,6 +21,106 @@ _DS_ROOT = path.getabsolute(".")
 local windowsIcon = path.translate(path.getabsolute("install/app/assets/icon.png"), "\\")
 local linuxIcon = "../../../install/app/assets/icon.png"
 
+local function appendUnique(list, value)
+    if value == nil or value == "" then
+        return
+    end
+
+    for _, existing in ipairs(list) do
+        if existing == value then
+            return
+        end
+    end
+
+    table.insert(list, value)
+end
+
+local function readVenvHome(venvCfgPath)
+    local file = io.open(venvCfgPath, "r")
+    if file == nil then
+        return nil
+    end
+
+    for line in file:lines() do
+        local home = line:match("^home%s*=%s*(.+)$")
+        if home ~= nil and home ~= "" then
+            file:close()
+            return home
+        end
+    end
+
+    file:close()
+    return nil
+end
+
+local pythonIncludeDir = nil
+local pythonLibDir = nil
+local pythonLibName = nil
+
+local pythonRuntimeRoots = {}
+if os.host() == "windows" then
+    appendUnique(pythonRuntimeRoots, path.getabsolute("install/app/python/windows"))
+elseif os.host() == "linux" then
+    appendUnique(pythonRuntimeRoots, path.getabsolute("install/app/python/linux"))
+elseif os.host() == "macosx" then
+    appendUnique(pythonRuntimeRoots, path.getabsolute("install/app/python/macos"))
+end
+appendUnique(pythonRuntimeRoots, path.getabsolute("install/app/python"))
+appendUnique(pythonRuntimeRoots, path.getabsolute(".venv"))
+
+local venvHome = readVenvHome(path.getabsolute(".venv/pyvenv.cfg"))
+if venvHome ~= nil then
+    appendUnique(pythonRuntimeRoots, path.getabsolute(venvHome))
+end
+
+local pythonIncludeCandidates = {}
+local pythonLibDirCandidates = {}
+for _, runtimeRoot in ipairs(pythonRuntimeRoots) do
+    appendUnique(pythonIncludeCandidates, runtimeRoot .. "/Include")
+    appendUnique(pythonIncludeCandidates, runtimeRoot .. "/include")
+    appendUnique(pythonLibDirCandidates, runtimeRoot .. "/libs")
+    appendUnique(pythonLibDirCandidates, runtimeRoot .. "/lib")
+end
+
+for _, candidate in ipairs(pythonIncludeCandidates) do
+    if os.isdir(candidate) then
+        pythonIncludeDir = candidate
+        break
+    end
+end
+
+local pythonLibPatterns = {}
+if os.host() == "windows" then
+    pythonLibPatterns = { "python3*.lib", "python*.lib" }
+else
+    pythonLibPatterns = { "libpython3*.so", "libpython3*.a", "libpython*.so", "libpython*.a" }
+end
+
+for _, libDirCandidate in ipairs(pythonLibDirCandidates) do
+    if os.isdir(libDirCandidate) then
+        for _, pattern in ipairs(pythonLibPatterns) do
+            local matches = os.matchfiles(libDirCandidate .. "/" .. pattern)
+            if #matches > 0 then
+                pythonLibDir = libDirCandidate
+                pythonLibName = path.getbasename(matches[1])
+                if os.host() ~= "windows" then
+                    pythonLibName = pythonLibName:gsub("^lib", "")
+                end
+                break
+            end
+        end
+    end
+
+    if pythonLibName ~= nil then
+        break
+    end
+end
+
+_DS_PYTHON_INCLUDE_DIR = pythonIncludeDir
+_DS_PYTHON_LIB_DIR = pythonLibDir
+_DS_PYTHON_LIB_NAME = pythonLibName
+_DS_PYTHON_EMBED_AVAILABLE = pythonIncludeDir ~= nil and pythonLibDir ~= nil and pythonLibName ~= nil
+
 group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
@@ -32,6 +132,7 @@ include "Vendor/ImGuiNotify"
 
 dofile "Vendor/Tracy/premake5.lua"
 dofile "Vendor/GoogleTest/GoogleTest.premake5.lua"
+dofile "Vendor/nanobind.premake5.lua"
 group ""
 
 project "DefectStudio"
@@ -49,6 +150,11 @@ project "DefectStudio"
     files {
         "src/**.hpp",
         "src/**.cpp"
+    }
+
+    removefiles {
+        "src/ScientificRuntime/PythonBindings/**.hpp",
+        "src/ScientificRuntime/PythonBindings/**.cpp"
     }
 
     vpaths {
@@ -79,11 +185,30 @@ project "DefectStudio"
         "Vendor/yaml-cpp/include"
     }
 
+    if _DS_PYTHON_EMBED_AVAILABLE then
+        includedirs {
+            _DS_PYTHON_INCLUDE_DIR,
+            "Vendor/nanobind/include",
+            "Vendor/nanobind/ext/robin_map/include"
+        }
+    end
+
     defines {
         "GLFW_INCLUDE_NONE",
         "IMGUI_IMPL_OPENGL_LOADER_GLAD",
         "YAML_CPP_STATIC_DEFINE"
     }
+
+    if _DS_PYTHON_EMBED_AVAILABLE then
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1" }
+        libdirs { _DS_PYTHON_LIB_DIR }
+        links {
+            _DS_PYTHON_LIB_NAME,
+            "nanobind"
+        }
+    else
+        defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
+    end
 
     links {
         "GLFW",
@@ -192,7 +317,9 @@ project "DefectStudioTests"
     }
 
     removefiles {
-        "src/Core/dspch.cpp"
+        "src/Core/dspch.cpp",
+        "src/ScientificRuntime/PythonBindings/**.hpp",
+        "src/ScientificRuntime/PythonBindings/**.cpp"
     }
 
     vpaths {
@@ -226,6 +353,20 @@ project "DefectStudioTests"
         "Vendor/yaml-cpp/include"
     }
 
+    if _DS_PYTHON_EMBED_AVAILABLE then
+        includedirs {
+            _DS_PYTHON_INCLUDE_DIR,
+            "Vendor/nanobind/include",
+            "Vendor/nanobind/ext/robin_map/include"
+        }
+    end
+
+    if _DS_PYTHON_EMBED_AVAILABLE then
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1" }
+    else
+        defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
+    end
+
     links {
         "GoogleTest",
         "GLFW",
@@ -233,6 +374,14 @@ project "DefectStudioTests"
         "ImGui",
         "yaml-cpp"
     }
+
+    if _DS_PYTHON_EMBED_AVAILABLE then
+        libdirs { _DS_PYTHON_LIB_DIR }
+        links {
+            _DS_PYTHON_LIB_NAME,
+            "nanobind"
+        }
+    end
 
     filter "system:windows"
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }

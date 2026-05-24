@@ -4,7 +4,7 @@
 #include <functional>
 #include <thread>
 
-#include "App/Events/JobEvents.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/JobSystem.hpp"

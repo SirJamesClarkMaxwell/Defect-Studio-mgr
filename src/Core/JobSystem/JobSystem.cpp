@@ -1,12 +1,14 @@
 #include "Core/dspch.hpp"
 
 #include "Core/Utils/Time.hpp"
+#include "Core/Utils/Memory.hpp"
 
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "ScientificRuntime/Python/PythonGilScope.hpp"
 
 namespace DefectStudio
 {
@@ -453,6 +455,11 @@ namespace DefectStudio
 		try
 		{
 			context.ThrowIfCancellationRequested();
+			
+			Ref<PythonGilAcquireScope> pythonGilScope;
+			if (job->UsesPythonRuntime())
+				pythonGilScope = CreateRef<PythonGilAcquireScope>();
+
 			job->Execute(context);
 			if (context.IsCancellationRequested())
 				finalStatus = JobStatus::Cancelled;
