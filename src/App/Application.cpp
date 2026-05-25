@@ -36,6 +36,7 @@
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/ImGuiLayer.hpp"
+#include "Renderer/RendererLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
 
@@ -833,6 +834,13 @@ namespace DefectStudio
 				scientificRuntimeLayer->BuildPythonBridgeCapability());
 		}
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+		RendererQuickTestRuntime rendererRuntime;
+		rendererRuntime.configDirectory = m_Config.paths.userConfigDirectory;
+		rendererRuntime.assetsDirectory = m_Config.paths.assetsDirectory;
+		rendererRuntime.shaderDirectory = Path::FromResolved(
+			FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
+		rendererRuntime.enableQuickTestingStartup = true;
+		m_LayerStack.PushLayer(CreateUnique<RendererLayer>(std::move(rendererRuntime)));
 		ImGuiLayerRuntime imGuiRuntime;
 		imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;
 		imGuiRuntime.eventBus = m_EventBus;

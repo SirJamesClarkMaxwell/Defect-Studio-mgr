@@ -43,11 +43,11 @@
 - [x] Windows VERSIONINFO + ikona aplikacji (`.rc`) dla Debug/Release/Dist
 - [x] Flagi buildów Debug / Release / Dist
 - [x] `RunWithTracy.bat` + `run_with_tracy.py`
-- [ ] **Vendor: `glm`** – dodać do `Vendor/`, premake target `glm`
-- [ ] **Vendor: `stb_image` + `stb_image_write`** – header-only, dodać do `Vendor/stb/`
-- [ ] **Vendor: `nativefiledialog-extended`** – `https://github.com/sjcmdev/nativefiledialog-extended.git`, premake target `nfd`
+- [x] **Vendor: `glm`** – dodać do `Vendor/`, premake target `glm`
+- [x] **Vendor: `stb_image` + `stb_image_write`** – header-only, dodać do `Vendor/stb/`
+- [x] **Vendor: `nativefiledialog-extended`** – `https://github.com/sjcmdev/nativefiledialog-extended.git`, premake target `nfd`
 - [ ] **Vendor: `ImPlot`** – dodać do `Vendor/implot/`, premake target, podlinkować z ImGui
-- [ ] **Vendor: `entt`** – header-only ECS, dodać do `Vendor/entt/`
+- [x] **Vendor: `entt`** – header-only ECS, dodać do `Vendor/entt/`
 
 **Biblioteki:** Premake5, spdlog, yaml-cpp, Tracy
 
@@ -121,18 +121,18 @@
 > **MVP first:** działający renderer z atomami i bondami.
 > Compute shaders jako first-class od początku — nie migracja później.
 
-- [ ] GL context, GLAD loader, debug callback
-- [ ] `Renderer` – minimalna abstrakcja backend (forward rendering, jeden pass)
-- [ ] `ShaderLibrary` – ładowanie, kompilacja, reload on-the-fly
-- [ ] FBO (FrameBuffer Object) dla offscreen render i viewport texture
-- [ ] Instanced atom rendering (sphere impostor lub prosta sfera-mesh, konfigurowalny radius)
-- [ ] Instanced bond rendering (cylinder 8-stronny, dwie półsfery)
-- [ ] Orbit camera (Vesta-like: LMB orbit, MMB pan, scroll zoom) + persist
-- [ ] **OpenGL 4.3 Compute Shader infrastruktura** (SSBO, dispatch, sync barrier) – fundament dla bonds i volumetrics
-- [ ] Tracy GPU profiling integration
-- [ ] Grid / unit cell box rendering (linie krawędzi komórki)
-- [ ] View gizmo overlay (XYZ osie, kliknięcie ustawia kamerę)
-- [ ] Exception-free zone – granica opisana statycznym komentarzem / assertem
+- [x] GL context, GLAD loader, debug callback
+- [x] `Renderer` – minimalna abstrakcja backend (forward rendering, jeden pass)
+- [x] `ShaderLibrary` – ładowanie, kompilacja, reload on-the-fly
+- [x] FBO (FrameBuffer Object) dla offscreen render i viewport texture
+- [x] Instanced atom rendering (sphere impostor lub prosta sfera-mesh, konfigurowalny radius)
+- [x] Instanced bond rendering (cylinder 8-stronny, dwie półsfery)
+- [x] Orbit camera (Vesta-like: LMB orbit, MMB pan, scroll zoom) + persist
+- [x] **OpenGL 4.3 Compute Shader infrastruktura** (SSBO, dispatch, sync barrier) – fundament dla bonds i volumetrics
+- [x] Tracy GPU profiling integration
+- [x] Grid / unit cell box rendering (linie krawędzi komórki)
+- [x] View gizmo overlay (XYZ osie, kliknięcie ustawia kamerę)
+- [x] Exception-free zone – granica opisana statycznym komentarzem / assertem
 
 **Biblioteki:** GLFW, OpenGL 4.3, GLM, stb\_image, Tracy, entt
 

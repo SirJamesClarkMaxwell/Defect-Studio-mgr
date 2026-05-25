@@ -14,6 +14,7 @@ namespace DefectStudio
 		Storage,
 		ScientificRuntime,
 		Domain,
+		Renderer,
 		ImGui,
 		Editor,
 		Demo,

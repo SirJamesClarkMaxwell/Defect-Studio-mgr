@@ -125,14 +125,17 @@ group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
-dofile "Vendor/thread-pool/premake5.lua"
-dofile "Vendor/json/premake5.lua"
-dofile "Vendor/yaml-cpp/premake5.lua"
+include "Vendor/thread-pool"
+include "Vendor/json"
+include "Vendor/yaml-cpp"
 include "Vendor/ImGuiNotify"
-
-dofile "Vendor/Tracy/premake5.lua"
-dofile "Vendor/GoogleTest/GoogleTest.premake5.lua"
-dofile "Vendor/nanobind.premake5.lua"
+include "Vendor/Tracy"
+include "Vendor/GoogleTest/GoogleTest.premake5.lua"
+include "Vendor/nanobind"
+include "Vendor/stb"
+include "Vendor/glm"
+include "Vendor/entt"
+include "Vendor/nativefiledialog-extended"
 group ""
 
 project "DefectStudio"
@@ -165,6 +168,7 @@ project "DefectStudio"
         ["Domain/*"] = { "src/Domain/**.cpp", "src/Domain/**.hpp" },
         ["IO/*"] = { "src/IO/**.cpp", "src/IO/**.hpp" },
         ["Presentation/*"] = { "src/Presentation/**.cpp", "src/Presentation/**.hpp" },
+        ["Renderer/*"] = { "src/Renderer/**.cpp", "src/Renderer/**.hpp" },
         ["ScientificRuntime/*"] = { "src/ScientificRuntime/**.cpp", "src/ScientificRuntime/**.hpp" },
         ["Storage/*"] = { "src/Storage/**.cpp", "src/Storage/**.hpp" },
     }
@@ -179,6 +183,10 @@ project "DefectStudio"
         "Vendor/ImGui/backends",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
+        "Vendor/stb",
+        "Vendor/glm",
+        "Vendor/entt/src",
+        "Vendor/nativefiledialog-extended/src/include",
         "install/app/assets/fonts",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
@@ -214,6 +222,7 @@ project "DefectStudio"
         "GLFW",
         "GLAD",
         "ImGui",
+        "nfd",
         "yaml-cpp"
     }
 
@@ -314,6 +323,9 @@ project "DefectStudioTests"
 
         "src/Presentation/**.hpp",
         "src/Presentation/**.cpp",
+
+        "src/Renderer/**.hpp",
+        "src/Renderer/**.cpp",
     }
 
     removefiles {
@@ -331,6 +343,7 @@ project "DefectStudioTests"
         ["Domain/*"] = { "src/Domain/**.cpp", "src/Domain/**.hpp" },
         ["IO/*"] = { "src/IO/**.cpp", "src/IO/**.hpp" },
         ["Presentation/*"] = { "src/Presentation/**.cpp", "src/Presentation/**.hpp" },
+        ["Renderer/*"] = { "src/Renderer/**.cpp", "src/Renderer/**.hpp" },
         ["ScientificRuntime/*"] = { "src/ScientificRuntime/**.cpp", "src/ScientificRuntime/**.hpp" },
         ["Storage/*"] = { "src/Storage/**.cpp", "src/Storage/**.hpp" },
     }
@@ -347,6 +360,10 @@ project "DefectStudioTests"
         "Vendor/ImGui/backends",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
+        "Vendor/stb",
+        "Vendor/glm",
+        "Vendor/entt/src",
+        "Vendor/nativefiledialog-extended/src/include",
         "install/app/assets/fonts",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
@@ -372,6 +389,7 @@ project "DefectStudioTests"
         "GLFW",
         "GLAD",
         "ImGui",
+        "nfd",
         "yaml-cpp"
     }
 

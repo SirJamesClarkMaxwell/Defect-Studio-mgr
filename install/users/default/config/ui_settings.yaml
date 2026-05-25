@@ -7,11 +7,11 @@ ui:
   settings_preview_enabled: true
   settings_auto_save_on_preview: true
 window:
-  x: 0
-  y: 23
+  x: 8
+  y: 63
   width: 3440
   height: 1369
-  maximized: true
+  maximized: false
 appearance:
   clear_color: [0.1, 0.1, 0.12, 1]
   colors:

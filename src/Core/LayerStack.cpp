@@ -22,6 +22,8 @@ namespace DefectStudio
 			return "ScientificRuntimeLayer";
 		case LayerId::Domain:
 			return "DomainLayer";
+		case LayerId::Renderer:
+			return "RendererLayer";
 		case LayerId::ImGui:
 			return "ImGuiLayer";
 		case LayerId::Editor:

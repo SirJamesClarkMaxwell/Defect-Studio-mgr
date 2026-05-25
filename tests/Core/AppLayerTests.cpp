@@ -6,6 +6,7 @@
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/ImGuiLayer.hpp"
+#include "Renderer/RendererLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
 
@@ -17,6 +18,7 @@ TEST(AppLayerTests, LayerNamesMatchContracts)
 	EXPECT_EQ(DefectStudio::IOLayer().GetName(), "IOLayer");
 	EXPECT_EQ(DefectStudio::ScientificRuntimeLayer().GetName(), "ScientificRuntimeLayer");
 	EXPECT_EQ(DefectStudio::StorageLayer().GetName(), "StorageLayer");
+	EXPECT_EQ(DefectStudio::RendererLayer(DefectStudio::RendererQuickTestRuntime{}).GetName(), "RendererLayer");
 	EXPECT_EQ(DefectStudio::EditorLayer().GetName(), "EditorLayer");
 	EXPECT_EQ(DefectStudio::ImGuiLayer(DefectStudio::ImGuiLayerRuntime{}).GetName(), "ImGuiLayer");
 }
