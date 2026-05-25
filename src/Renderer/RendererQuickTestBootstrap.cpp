@@ -76,10 +76,10 @@ namespace DefectStudio
 			poscarDirectory,
 			{Path("hBN.vasp"), Path("hBN")});
 		const std::array<Path, 3> files = {
-			poscarDirectory / Path("NaCl.vasp"),
+			poscarDirectory / Path("GeV.vasp"),
 			hbnPath,
-			poscarDirectory / Path("CdIn2S4.vasp")};
-		const std::array<std::string, 3> names = {"NaCl", "hBN", "CdIn2S4"};
+			poscarDirectory / Path("diament.vasp")};
+		const std::array<std::string, 3> names = {"GeV", "hBN", "diament"};
 		const std::array<glm::vec3, 3> directions = {
 			glm::normalize(glm::vec3(1.0f, 1.0f, 0.8f)),
 			glm::normalize(glm::vec3(-1.0f, 1.2f, 0.7f)),
