@@ -8,7 +8,14 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4127 4267 4458 4459)
+#endif
 #include "ImGuiNotify.hpp"
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #include "Presentation/ImGuiLayer.hpp"
 

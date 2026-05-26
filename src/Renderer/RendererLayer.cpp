@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include <yaml-cpp/yaml.h>
 
@@ -17,6 +18,16 @@ namespace DefectStudio
 {
 	namespace
 	{
+		constexpr float kViewportMinSize = 64.0f;
+		constexpr float kViewportMaxSize = 8192.0f;
+
+		[[nodiscard]] float SanitizeViewportDimension(float value)
+		{
+			if (!std::isfinite(value))
+				return 640.0f;
+			return std::clamp(value, kViewportMinSize, kViewportMaxSize);
+		}
+
 		[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 		{
 			return Path::FromResolved(
@@ -113,6 +124,7 @@ namespace DefectStudio
 		// per-frame renderer calls do not throw and are expected to fail through logs/results.
 		for (RendererWindowState &windowState : m_Windows)
 			renderStructureWindow(windowState, m_LastDeltaTime);
+		m_RendererBackend->CollectProfilingData();
 	}
 
 	void RendererLayer::loadQuickTestWindows()
@@ -220,8 +232,8 @@ namespace DefectStudio
 		ImGui::Separator();
 
 		const ImVec2 available = ImGui::GetContentRegionAvail();
-		windowState.viewportSize.x = std::max(available.x, 64.0f);
-		windowState.viewportSize.y = std::max(available.y, 64.0f);
+		windowState.viewportSize.x = SanitizeViewportDimension(available.x);
+		windowState.viewportSize.y = SanitizeViewportDimension(available.y);
 		windowState.camera->SetViewport(windowState.viewportSize.x, windowState.viewportSize.y);
 
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
@@ -245,12 +257,14 @@ namespace DefectStudio
 		const bool hovered = ImGui::IsItemHovered();
 		if (hovered)
 		{
-			if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-				windowState.camera->Orbit(ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y);
-			if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
-				windowState.camera->Pan(ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y);
+			const ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
+			const bool finiteMouseDelta = std::isfinite(mouseDelta.x) && std::isfinite(mouseDelta.y);
+			if (finiteMouseDelta && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+				windowState.camera->Orbit(mouseDelta.x, mouseDelta.y);
+			if (finiteMouseDelta && ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
+				windowState.camera->Pan(mouseDelta.x, mouseDelta.y);
 			const float wheel = ImGui::GetIO().MouseWheel;
-			if (wheel != 0.0f)
+			if (std::isfinite(wheel) && wheel != 0.0f)
 				windowState.camera->Zoom(wheel);
 		}
 

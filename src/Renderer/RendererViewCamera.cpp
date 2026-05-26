@@ -15,12 +15,33 @@ namespace DefectStudio
 	{
 		constexpr float kPi = 3.1415926535f;
 		constexpr float kPitchLimit = 1.55334306f; // ~89 degrees.
+		constexpr float kDirectionEpsilonSquared = 1.0e-10f;
+
+		[[nodiscard]] bool IsFiniteFloat(float value)
+		{
+			return std::isfinite(value);
+		}
+
+		[[nodiscard]] bool IsFiniteVec3(const glm::vec3 &value)
+		{
+			return IsFiniteFloat(value.x) && IsFiniteFloat(value.y) && IsFiniteFloat(value.z);
+		}
+
+		[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
+		{
+			const float lengthSquared = glm::dot(value, value);
+			if (!IsFiniteVec3(value) || !IsFiniteFloat(lengthSquared) || lengthSquared <= kDirectionEpsilonSquared)
+				return fallback;
+			return value / std::sqrt(lengthSquared);
+		}
 	}
 
 	RendererViewCamera::RendererViewCamera() = default;
 
 	void RendererViewCamera::SetViewport(float width, float height)
 	{
+		if (!IsFiniteFloat(width) || !IsFiniteFloat(height))
+			return;
 		const float safeWidth = std::max(width, 1.0f);
 		const float safeHeight = std::max(height, 1.0f);
 		m_AspectRatio = safeWidth / safeHeight;
@@ -28,40 +49,57 @@ namespace DefectStudio
 
 	void RendererViewCamera::SetTarget(const glm::vec3 &target)
 	{
+		if (!IsFiniteVec3(target))
+			return;
 		m_Target = target;
 	}
 
 	void RendererViewCamera::SetDistance(float distance)
 	{
+		if (!IsFiniteFloat(distance))
+			return;
 		m_Distance = std::max(distance, 0.1f);
 	}
 
 	void RendererViewCamera::SetYawPitch(float yawRadians, float pitchRadians)
 	{
+		if (!IsFiniteFloat(yawRadians) || !IsFiniteFloat(pitchRadians))
+			return;
 		m_Yaw = yawRadians;
 		m_Pitch = clampedPitch(pitchRadians);
 	}
 
 	void RendererViewCamera::SetFromDirection(const glm::vec3 &viewDirection)
 	{
-		if (glm::length(viewDirection) <= 0.00001f)
+		if (!IsFiniteVec3(viewDirection))
+			return;
+		const float lengthSquared = glm::dot(viewDirection, viewDirection);
+		if (!IsFiniteFloat(lengthSquared) || lengthSquared <= kDirectionEpsilonSquared)
 			return;
 
-		const glm::vec3 normalized = glm::normalize(viewDirection);
+		const glm::vec3 normalized = viewDirection / std::sqrt(lengthSquared);
 		m_Pitch = clampedPitch(std::asin(normalized.y));
 		m_Yaw = std::atan2(normalized.z, normalized.x);
 	}
 
 	void RendererViewCamera::FocusBounds(const glm::vec3 &minimum, const glm::vec3 &maximum)
 	{
+		if (!IsFiniteVec3(minimum) || !IsFiniteVec3(maximum))
+			return;
 		m_Target = 0.5f * (minimum + maximum);
 		const glm::vec3 extent = maximum - minimum;
+		if (!IsFiniteVec3(extent))
+			return;
 		const float radius = std::max(0.5f * glm::length(extent), 0.5f);
+		if (!IsFiniteFloat(radius))
+			return;
 		m_Distance = std::max(radius * 2.25f, 2.5f);
 	}
 
 	void RendererViewCamera::Orbit(float deltaX, float deltaY)
 	{
+		if (!IsFiniteFloat(deltaX) || !IsFiniteFloat(deltaY))
+			return;
 		const float rotationScale = 0.0065f;
 		m_Yaw += deltaX * rotationScale;
 		m_Pitch = clampedPitch(m_Pitch - deltaY * rotationScale);
@@ -69,13 +107,20 @@ namespace DefectStudio
 
 	void RendererViewCamera::Pan(float deltaX, float deltaY)
 	{
+		if (!IsFiniteFloat(deltaX) || !IsFiniteFloat(deltaY) || !IsFiniteFloat(m_Distance))
+			return;
 		const float panScale = 0.0028f * m_Distance;
-		m_Target -= rightDirection() * (deltaX * panScale);
-		m_Target += upDirection() * (deltaY * panScale);
+		glm::vec3 nextTarget = m_Target;
+		nextTarget -= rightDirection() * (deltaX * panScale);
+		nextTarget += upDirection() * (deltaY * panScale);
+		if (IsFiniteVec3(nextTarget))
+			m_Target = nextTarget;
 	}
 
 	void RendererViewCamera::Zoom(float delta)
 	{
+		if (!IsFiniteFloat(delta) || !IsFiniteFloat(m_Distance))
+			return;
 		const float zoomScale = std::max(0.1f, m_Distance * 0.12f);
 		m_Distance = std::max(0.25f, m_Distance - delta * zoomScale);
 	}
@@ -118,20 +163,23 @@ namespace DefectStudio
 	glm::vec3 RendererViewCamera::forwardDirection() const
 	{
 		const float cosPitch = std::cos(m_Pitch);
-		return glm::normalize(glm::vec3(
+		const glm::vec3 direction(
 			std::cos(m_Yaw) * cosPitch,
 			std::sin(m_Pitch),
-			std::sin(m_Yaw) * cosPitch));
+			std::sin(m_Yaw) * cosPitch);
+		return SafeNormalize(direction, glm::vec3(0.0f, 0.0f, -1.0f));
 	}
 
 	glm::vec3 RendererViewCamera::rightDirection() const
 	{
-		return glm::normalize(glm::cross(forwardDirection(), glm::vec3(0.0f, 1.0f, 0.0f)));
+		const glm::vec3 right = glm::cross(forwardDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+		return SafeNormalize(right, glm::vec3(1.0f, 0.0f, 0.0f));
 	}
 
 	glm::vec3 RendererViewCamera::upDirection() const
 	{
-		return glm::normalize(glm::cross(rightDirection(), forwardDirection()));
+		const glm::vec3 up = glm::cross(rightDirection(), forwardDirection());
+		return SafeNormalize(up, glm::vec3(0.0f, 1.0f, 0.0f));
 	}
 
 	float RendererViewCamera::clampedPitch(float value) const
@@ -139,4 +187,3 @@ namespace DefectStudio
 		return std::clamp(value, -kPitchLimit, kPitchLimit);
 	}
 } // namespace DefectStudio
-

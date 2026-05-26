@@ -138,6 +138,39 @@ include "Vendor/entt"
 include "Vendor/nativefiledialog-extended"
 group ""
 
+local function ApplyDependencyRuntimeFilters(projectName)
+    filter { "projects:" .. projectName, "configurations:Debug" }
+        runtime "Debug"
+        symbols "On"
+    filter { "projects:" .. projectName, "configurations:Release" }
+        runtime "Release"
+        optimize "On"
+    filter { "projects:" .. projectName, "configurations:Dist" }
+        runtime "Release"
+        optimize "Full"
+    filter {}
+end
+
+ApplyDependencyRuntimeFilters("GLAD")
+ApplyDependencyRuntimeFilters("ImGui")
+ApplyDependencyRuntimeFilters("yaml-cpp")
+ApplyDependencyRuntimeFilters("Tracy")
+ApplyDependencyRuntimeFilters("GoogleTest")
+ApplyDependencyRuntimeFilters("GoogleTestMain")
+ApplyDependencyRuntimeFilters("nfd")
+ApplyDependencyRuntimeFilters("nanobind")
+
+filter "projects:nanobind"
+    defines { "Py_NO_LINK_LIB" }
+filter {}
+
+filter { "projects:DefectStudioPythonBridge", "system:windows", "configurations:Debug" }
+    linkoptions {
+        "/NODEFAULTLIB:python313_d.lib",
+        "/NODEFAULTLIB:python313t_d.lib"
+    }
+filter {}
+
 project "DefectStudio"
     location "build/generated/%{_ACTION}"
     kind "ConsoleApp"
@@ -208,12 +241,22 @@ project "DefectStudio"
     }
 
     if _DS_PYTHON_EMBED_AVAILABLE then
-        defines { "DS_PYTHON_CAPI_AVAILABLE=1" }
+        defines {
+            "DS_PYTHON_CAPI_AVAILABLE=1",
+            "Py_NO_LINK_LIB"
+        }
         libdirs { _DS_PYTHON_LIB_DIR }
         links {
             _DS_PYTHON_LIB_NAME,
             "nanobind"
         }
+
+        filter { "system:windows", "configurations:Debug" }
+            linkoptions {
+                "/NODEFAULTLIB:python313_d.lib",
+                "/NODEFAULTLIB:python313t_d.lib"
+            }
+        filter {}
     else
         defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
     end
@@ -379,7 +422,10 @@ project "DefectStudioTests"
     end
 
     if _DS_PYTHON_EMBED_AVAILABLE then
-        defines { "DS_PYTHON_CAPI_AVAILABLE=1" }
+        defines {
+            "DS_PYTHON_CAPI_AVAILABLE=1",
+            "Py_NO_LINK_LIB"
+        }
     else
         defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
     end
@@ -399,6 +445,13 @@ project "DefectStudioTests"
             _DS_PYTHON_LIB_NAME,
             "nanobind"
         }
+
+        filter { "system:windows", "configurations:Debug" }
+            linkoptions {
+                "/NODEFAULTLIB:python313_d.lib",
+                "/NODEFAULTLIB:python313t_d.lib"
+            }
+        filter {}
     end
 
     filter "system:windows"

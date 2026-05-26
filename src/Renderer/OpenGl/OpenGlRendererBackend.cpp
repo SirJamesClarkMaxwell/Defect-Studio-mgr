@@ -44,6 +44,11 @@ namespace DefectStudio
 		float gradientT = 0.0f;
 	};
 
+	[[nodiscard]] static bool IsFiniteVec3(const glm::vec3 &value)
+	{
+		return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+	}
+
 	static void GLAPIENTRY OpenGlDebugCallback(
 		unsigned int source,
 		unsigned int type,
@@ -62,7 +67,7 @@ namespace DefectStudio
 		if (severity == GL_DEBUG_SEVERITY_NOTIFICATION)
 			return;
 
-		const bool isKnownPerformanceSpam = type == GL_DEBUG_TYPE_PERFORMANCE && id == 131185u;
+		const bool isKnownPerformanceSpam = type == GL_DEBUG_TYPE_PERFORMANCE && (id == 131185u || id == 131218u);
 		if (isKnownPerformanceSpam)
 			return;
 
@@ -132,7 +137,7 @@ namespace DefectStudio
 		glDebugMessageCallback(OpenGlDebugCallback, nullptr);
 		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
 		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
-		const std::array<unsigned int, 1> filteredMessageIds = {131185u};
+		const std::array<unsigned int, 2> filteredMessageIds = {131185u, 131218u};
 		glDebugMessageControl(
 			GL_DEBUG_SOURCE_API,
 			GL_DEBUG_TYPE_PERFORMANCE,
@@ -165,6 +170,15 @@ namespace DefectStudio
 		if (!m_Initialized)
 			return;
 		m_ShaderLibrary.ReloadModifiedPrograms();
+	}
+
+	void OpenGlRendererBackend::CollectProfilingData()
+	{
+		if (!m_Initialized)
+			return;
+#if defined(TRACY_ENABLE)
+		TracyGpuCollect;
+#endif
 	}
 
 	unsigned int OpenGlRendererBackend::RenderWindow(
@@ -491,7 +505,8 @@ namespace DefectStudio
 		if (instances.empty())
 			return;
 
-		dispatchBondCompute(structure);
+		// CPU-generated bond transforms are currently used for rendering.
+		// The compute path is intentionally disabled until its output is consumed by draw instances.
 
 		const unsigned int program = m_ShaderLibrary.Program("bonds");
 		if (program == 0)
@@ -634,16 +649,29 @@ namespace DefectStudio
 
 	glm::mat4 OpenGlRendererBackend::buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const
 	{
+		if (!IsFiniteVec3(start) || !IsFiniteVec3(finish) || !std::isfinite(radius))
+			return glm::mat4(1.0f);
+
 		const glm::vec3 direction = finish - start;
 		const float length = glm::length(direction);
-		if (length <= 0.00001f)
+		if (!std::isfinite(length) || length <= 0.00001f)
 			return glm::mat4(1.0f);
 		const glm::vec3 zAxis = direction / length;
 		glm::vec3 helperUp = glm::vec3(0.0f, 1.0f, 0.0f);
 		if (std::abs(glm::dot(zAxis, helperUp)) > 0.97f)
 			helperUp = glm::vec3(1.0f, 0.0f, 0.0f);
-		const glm::vec3 xAxis = glm::normalize(glm::cross(helperUp, zAxis));
-		const glm::vec3 yAxis = glm::normalize(glm::cross(zAxis, xAxis));
+		const glm::vec3 xCandidate = glm::cross(helperUp, zAxis);
+		const float xLength = glm::length(xCandidate);
+		if (!std::isfinite(xLength) || xLength <= 0.00001f)
+			return glm::mat4(1.0f);
+		const glm::vec3 xAxis = xCandidate / xLength;
+		const glm::vec3 yCandidate = glm::cross(zAxis, xAxis);
+		const float yLength = glm::length(yCandidate);
+		if (!std::isfinite(yLength) || yLength <= 0.00001f)
+			return glm::mat4(1.0f);
+		const glm::vec3 yAxis = yCandidate / yLength;
+		if (!IsFiniteVec3(xAxis) || !IsFiniteVec3(yAxis) || !IsFiniteVec3(zAxis))
+			return glm::mat4(1.0f);
 
 		glm::mat4 rotation(1.0f);
 		rotation[0] = glm::vec4(xAxis, 0.0f);

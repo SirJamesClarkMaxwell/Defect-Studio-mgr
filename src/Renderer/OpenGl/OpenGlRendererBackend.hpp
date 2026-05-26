@@ -52,6 +52,7 @@ namespace DefectStudio
 		Result<void> Initialize(const Path &shaderDirectory);
 		void Shutdown();
 		void ReloadShadersIfNeeded();
+		void CollectProfilingData();
 		[[nodiscard]] unsigned int RenderWindow(
 			const std::string &windowKey,
 			const RendererStructureData &structure,
@@ -91,4 +92,3 @@ namespace DefectStudio
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;
 	};
 } // namespace DefectStudio
-

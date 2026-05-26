@@ -6,7 +6,11 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
+#include <dbghelp.h>
 #include <dwmapi.h>
+#include <corecrt.h>
+#include <crtdbg.h>
+#include <cstdlib>
 #include <windows.h>
 
 #include "Core/Utils/Logger.hpp"
@@ -14,6 +18,8 @@
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
+
+#pragma comment(lib, "Dbghelp.lib")
 
 struct WindowIconState
 {
@@ -28,6 +34,38 @@ namespace
 {
 	constexpr wchar_t kWindowIconResourceName[] = L"IDI_ICON1";
 	DefectStudio::Platform::NativeCrashCallback s_NativeCrashCallback = nullptr;
+
+	std::string NarrowWideString(const wchar_t *text)
+	{
+		if (text == nullptr || text[0] == L'\0')
+			return {};
+
+		const int requiredSize = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+		if (requiredSize <= 1)
+			return {};
+
+		std::string converted(static_cast<std::size_t>(requiredSize - 1), '\0');
+		WideCharToMultiByte(
+			CP_UTF8,
+			0,
+			text,
+			-1,
+			converted.data(),
+			requiredSize,
+			nullptr,
+			nullptr);
+		return converted;
+	}
+
+	std::string BasenameFromPath(const std::string &path)
+	{
+		if (path.empty())
+			return {};
+		const std::size_t slash = path.find_last_of("/\\");
+		if (slash == std::string::npos)
+			return path;
+		return path.substr(slash + 1);
+	}
 
 	DefectStudio::Path GetExecutableDirectory()
 	{
@@ -147,6 +185,60 @@ namespace
 			s_NativeCrashCallback(buffer);
 		return EXCEPTION_EXECUTE_HANDLER;
 	}
+
+	void WindowsInvalidParameterHandler(
+		const wchar_t *expression,
+		const wchar_t *functionName,
+		const wchar_t *fileName,
+		unsigned int lineNumber,
+		uintptr_t reserved)
+	{
+		(void)reserved;
+		DefectStudio::Logger::Flush();
+		const std::string expressionUtf8 = NarrowWideString(expression);
+		const std::string functionUtf8 = NarrowWideString(functionName);
+		const std::string fileUtf8 = NarrowWideString(fileName);
+
+		char buffer[512] = {};
+		std::snprintf(
+			buffer,
+			sizeof(buffer),
+			"[CRASH] invalid parameter expression='%s' function='%s' file='%s' line=%u",
+			expressionUtf8.c_str(),
+			functionUtf8.c_str(),
+			fileUtf8.c_str(),
+			lineNumber);
+		if (s_NativeCrashCallback != nullptr)
+			s_NativeCrashCallback(buffer);
+
+		std::abort();
+	}
+
+	void WindowsPurecallHandler()
+	{
+		DefectStudio::Logger::Flush();
+		if (s_NativeCrashCallback != nullptr)
+			s_NativeCrashCallback("[CRASH] pure virtual function call");
+		std::abort();
+	}
+
+	int WindowsCrtReportHook(int reportType, wchar_t *message, int *returnValue)
+	{
+		(void)returnValue;
+		if (s_NativeCrashCallback == nullptr || message == nullptr)
+			return FALSE;
+
+		const std::string messageUtf8 = NarrowWideString(message);
+		char buffer[1024] = {};
+		std::snprintf(
+			buffer,
+			sizeof(buffer),
+			"[CRASH] CRT report type=%d message=%s",
+			reportType,
+			messageUtf8.c_str());
+		s_NativeCrashCallback(buffer);
+		return FALSE;
+	}
 }
 
 namespace DefectStudio::Platform
@@ -159,7 +251,94 @@ namespace DefectStudio::Platform
 	void InstallNativeCrashHandler(NativeCrashCallback callback)
 	{
 		s_NativeCrashCallback = callback;
+		_set_invalid_parameter_handler(WindowsInvalidParameterHandler);
+		_set_purecall_handler(WindowsPurecallHandler);
+		_CrtSetReportHookW2(_CRT_RPTHOOK_INSTALL, WindowsCrtReportHook);
 		SetUnhandledExceptionFilter(WindowsUnhandledExceptionFilter);
+	}
+
+	void AppendNativeCrashStackTrace(NativeCrashCallback callback, unsigned int framesToSkip)
+	{
+		if (callback == nullptr)
+			return;
+
+		const HANDLE processHandle = GetCurrentProcess();
+		SymSetOptions(SYMOPT_UNDNAME | SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS);
+		SymInitialize(processHandle, nullptr, TRUE);
+
+		void *frames[48] = {};
+		const USHORT capturedFrames = CaptureStackBackTrace(framesToSkip + 1, 48, frames, nullptr);
+		for (USHORT frameIndex = 0; frameIndex < capturedFrames; ++frameIndex)
+		{
+			const DWORD64 address = reinterpret_cast<DWORD64>(frames[frameIndex]);
+			char symbolStorage[sizeof(SYMBOL_INFO) + MAX_SYM_NAME] = {};
+			SYMBOL_INFO *symbol = reinterpret_cast<SYMBOL_INFO *>(symbolStorage);
+			symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+			symbol->MaxNameLen = MAX_SYM_NAME;
+			DWORD64 symbolDisplacement = 0;
+
+			std::string symbolName = "unknown";
+			if (SymFromAddr(processHandle, address, &symbolDisplacement, symbol))
+				symbolName = symbol->Name;
+
+			IMAGEHLP_LINE64 sourceLine = {};
+			sourceLine.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+			DWORD sourceDisplacement = 0;
+			std::string sourceFile;
+			DWORD sourceLineNumber = 0;
+			if (SymGetLineFromAddr64(processHandle, address, &sourceDisplacement, &sourceLine))
+			{
+				sourceFile = BasenameFromPath(sourceLine.FileName != nullptr ? sourceLine.FileName : "");
+				sourceLineNumber = sourceLine.LineNumber;
+			}
+
+			HMODULE moduleHandle = nullptr;
+			std::string moduleName = "unknown";
+			unsigned long long moduleOffset = 0ULL;
+			if (GetModuleHandleExW(
+				    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				    reinterpret_cast<LPCWSTR>(address),
+				    &moduleHandle) != 0
+			    && moduleHandle != nullptr)
+			{
+				wchar_t modulePath[MAX_PATH] = {};
+				if (GetModuleFileNameW(moduleHandle, modulePath, MAX_PATH) > 0)
+					moduleName = BasenameFromPath(NarrowWideString(modulePath));
+				const auto moduleBase = reinterpret_cast<DWORD64>(moduleHandle);
+				moduleOffset = address >= moduleBase ? static_cast<unsigned long long>(address - moduleBase) : 0ULL;
+			}
+
+			char line[512] = {};
+			if (sourceLineNumber > 0 && !sourceFile.empty())
+			{
+				std::snprintf(
+					line,
+					sizeof(line),
+					"[CRASH] stack[%u]=%p module=%s+0x%llX symbol=%s+0x%llX source=%s:%lu",
+					static_cast<unsigned int>(frameIndex),
+					reinterpret_cast<void *>(address),
+					moduleName.c_str(),
+					moduleOffset,
+					symbolName.c_str(),
+					static_cast<unsigned long long>(symbolDisplacement),
+					sourceFile.c_str(),
+					static_cast<unsigned long>(sourceLineNumber));
+			}
+			else
+			{
+				std::snprintf(
+					line,
+					sizeof(line),
+					"[CRASH] stack[%u]=%p module=%s+0x%llX symbol=%s+0x%llX",
+					static_cast<unsigned int>(frameIndex),
+					reinterpret_cast<void *>(address),
+					moduleName.c_str(),
+					moduleOffset,
+					symbolName.c_str(),
+					static_cast<unsigned long long>(symbolDisplacement));
+			}
+			callback(line);
+		}
 	}
 
 	bool LocalTime(std::time_t time, std::tm &outLocalTime)

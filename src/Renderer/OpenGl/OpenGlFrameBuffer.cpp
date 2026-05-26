@@ -17,8 +17,13 @@ namespace DefectStudio
 
 	void OpenGlFrameBuffer::Resize(int width, int height)
 	{
-		const int safeWidth = std::max(width, 1);
-		const int safeHeight = std::max(height, 1);
+		int maxTextureSize = 8192;
+		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+		if (maxTextureSize <= 0)
+			maxTextureSize = 8192;
+
+		const int safeWidth = std::clamp(width, 1, maxTextureSize);
+		const int safeHeight = std::clamp(height, 1, maxTextureSize);
 		if (m_Width == safeWidth && m_Height == safeHeight && m_FrameBuffer != 0)
 			return;
 

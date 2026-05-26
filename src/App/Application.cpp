@@ -6,6 +6,7 @@
 #include <ctime>
 #include <exception>
 #include <functional>
+#include <string>
 
 #if defined(TRACY_ENABLE)
 #include <tracy/Tracy.hpp>
@@ -52,6 +53,7 @@ namespace DefectStudio
 	{
 		std::atomic<bool> g_CrashHandlersInstalled = false;
 		std::atomic<const char *> g_CrashStage = "startup";
+		std::atomic<bool> g_TerminateHandlerInvoked = false;
 
 		void setCrashStage(const char *stage)
 		{
@@ -84,15 +86,37 @@ namespace DefectStudio
 
 		void terminateHandler()
 		{
+			g_TerminateHandlerInvoked.store(true, std::memory_order_relaxed);
+			std::string reason = "unknown";
+			if (const std::exception_ptr current = std::current_exception(); current != nullptr)
+			{
+				try
+				{
+					std::rethrow_exception(current);
+				}
+				catch (const std::exception &exception)
+				{
+					reason = exception.what();
+				}
+				catch (...)
+				{
+					reason = "non-standard exception";
+				}
+			}
+
 			Logger::Flush();
-			appendCrashMarker("[CRASH] std::terminate invoked");
-			std::abort();
+			Platform::AppendNativeCrashStackTrace(appendCrashMarker, 1);
+			const std::string message = "[CRASH] std::terminate invoked reason=" + reason;
+			appendCrashMarker(message.c_str());
+			std::_Exit(EXIT_FAILURE);
 		}
 
 		void signalHandler(int signalCode)
 		{
+			Platform::AppendNativeCrashStackTrace(appendCrashMarker, 1);
 			char buffer[128] = {};
-			std::snprintf(buffer, sizeof(buffer), "[CRASH] signal=%d", signalCode);
+			const int terminateInvoked = g_TerminateHandlerInvoked.load(std::memory_order_relaxed) ? 1 : 0;
+			std::snprintf(buffer, sizeof(buffer), "[CRASH] signal=%d terminate=%d", signalCode, terminateInvoked);
 			appendCrashMarker(buffer);
 			std::_Exit(EXIT_FAILURE);
 		}
@@ -105,6 +129,8 @@ namespace DefectStudio
 			std::set_terminate(terminateHandler);
 			std::signal(SIGABRT, signalHandler);
 			std::signal(SIGSEGV, signalHandler);
+			std::signal(SIGILL, signalHandler);
+			std::signal(SIGFPE, signalHandler);
 			Platform::InstallNativeCrashHandler(appendCrashMarker);
 		}
 	}

@@ -19,6 +19,12 @@ namespace DefectStudio::Platform
 		(void)callback;
 	}
 
+	void AppendNativeCrashStackTrace(NativeCrashCallback callback, unsigned int framesToSkip)
+	{
+		(void)callback;
+		(void)framesToSkip;
+	}
+
 	bool LocalTime(std::time_t time, std::tm &outLocalTime)
 	{
 		const std::tm *local = std::localtime(&time);
