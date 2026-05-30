@@ -272,6 +272,8 @@ namespace DefectStudio
 		constexpr float kMaxFocusDistance = 256.0f;
 		constexpr float kMinFocusTransitionSeconds = 0.02f;
 		constexpr float kMaxFocusTransitionSeconds = 3.0f;
+		constexpr float kMinFocusRadiusMultiplier = 0.1f;
+		constexpr float kMaxFocusRadiusMultiplier = 32.0f;
 		constexpr float kMinViewportButtonSize = 10.0f;
 		constexpr float kMaxViewportButtonSize = 48.0f;
 
@@ -288,6 +290,10 @@ namespace DefectStudio
 			m_DraftConfig.renderer.focusSelectedAtomTransitionSeconds,
 			kMinFocusTransitionSeconds,
 			kMaxFocusTransitionSeconds);
+		m_DraftConfig.renderer.focusSelectedAtomRadiusMultiplier = std::clamp(
+			m_DraftConfig.renderer.focusSelectedAtomRadiusMultiplier,
+			kMinFocusRadiusMultiplier,
+			kMaxFocusRadiusMultiplier);
 		m_DraftConfig.renderer.viewport.axisButtonSize = std::clamp(
 			m_DraftConfig.renderer.viewport.axisButtonSize,
 			kMinViewportButtonSize,
@@ -954,14 +960,100 @@ namespace DefectStudio
 	{
 		auto resolver = m_KeymapResolver.lock();
 		auto registry = m_CommandRegistry.lock();
+		bool rendererShortcutsChanged = false;
+		const auto markRendererShortcutDirty = [this, &rendererShortcutsChanged]() {
+			m_DraftDirty = true;
+			rendererShortcutsChanged = true;
+		};
+
+		ImGui::SeparatorText("Renderer viewport shortcuts");
+		constexpr std::array<const char *, 20> shortcutTokens = {
+			"None",
+			"A", "B", "C", "D", "E", "F", "Q", "R", "S", "W",
+			"Left", "Right", "Up", "Down",
+			"Period", "Comma", "Minus", "Equal", "Space"};
+		constexpr std::array<const char *, 20> shortcutLabels = {
+			"Disabled",
+			"A", "B", "C", "D", "E", "F", "Q", "R", "S", "W",
+			"Left Arrow", "Right Arrow", "Up Arrow", "Down Arrow",
+			"Period (.)", "Comma (,)", "Minus (-)", "Equal (=)", "Space"};
+
+		auto normalizeToken = [](std::string value) {
+			for (char &character : value)
+				character = static_cast<char>(std::toupper(static_cast<unsigned char>(character)));
+			return value;
+		};
+
+		auto shortcutCombo = [&](const char *id, std::string &value) {
+			int currentIndex = 0;
+			const std::string normalizedValue = normalizeToken(value);
+			for (int optionIndex = 0; optionIndex < static_cast<int>(shortcutTokens.size()); ++optionIndex)
+			{
+				if (normalizeToken(shortcutTokens[optionIndex]) == normalizedValue)
+				{
+					currentIndex = optionIndex;
+					break;
+				}
+			}
+
+			bool changed = false;
+			if (ImGui::BeginCombo(id, shortcutLabels[currentIndex]))
+			{
+				for (int optionIndex = 0; optionIndex < static_cast<int>(shortcutTokens.size()); ++optionIndex)
+				{
+					const bool selected = optionIndex == currentIndex;
+					if (ImGui::Selectable(shortcutLabels[optionIndex], selected))
+					{
+						value = shortcutTokens[optionIndex];
+						changed = true;
+					}
+					if (selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			return changed;
+		};
+
+		if (ImGui::BeginTable("RendererShortcutBindings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			const auto renderShortcutRow = [&](const char *label, const char *comboId, std::string &value) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(label);
+				ImGui::TableSetColumnIndex(1);
+				const bool changed = shortcutCombo(comboId, value);
+				if (changed)
+					markRendererShortcutDirty();
+			};
+
+			renderShortcutRow("Align axis a", "##ShortcutAlignAxisA", m_DraftConfig.renderer.shortcuts.alignAxisA);
+			renderShortcutRow("Align axis b", "##ShortcutAlignAxisB", m_DraftConfig.renderer.shortcuts.alignAxisB);
+			renderShortcutRow("Align axis c", "##ShortcutAlignAxisC", m_DraftConfig.renderer.shortcuts.alignAxisC);
+			renderShortcutRow("Orbit left", "##ShortcutOrbitLeft", m_DraftConfig.renderer.shortcuts.orbitLeft);
+			renderShortcutRow("Orbit right", "##ShortcutOrbitRight", m_DraftConfig.renderer.shortcuts.orbitRight);
+			renderShortcutRow("Orbit up", "##ShortcutOrbitUp", m_DraftConfig.renderer.shortcuts.orbitUp);
+			renderShortcutRow("Orbit down", "##ShortcutOrbitDown", m_DraftConfig.renderer.shortcuts.orbitDown);
+			renderShortcutRow("Roll left", "##ShortcutRollLeft", m_DraftConfig.renderer.shortcuts.rollLeft);
+			renderShortcutRow("Roll right", "##ShortcutRollRight", m_DraftConfig.renderer.shortcuts.rollRight);
+			renderShortcutRow("Zoom in", "##ShortcutZoomIn", m_DraftConfig.renderer.shortcuts.zoomIn);
+			renderShortcutRow("Zoom out", "##ShortcutZoomOut", m_DraftConfig.renderer.shortcuts.zoomOut);
+			renderShortcutRow("Focus selected atom", "##ShortcutFocusSelectedAtom", m_DraftConfig.renderer.shortcuts.focusSelectedAtom);
+
+			ImGui::EndTable();
+		}
+
+		if (rendererShortcutsChanged)
+			(void)applyDraft(false);
 
 		if (!resolver)
 		{
+			ImGui::Spacing();
 			ImGui::TextDisabled("KeymapResolver not available.");
 			return;
 		}
 
-		ImGui::SeparatorText("Key Bindings");
+		ImGui::SeparatorText("Command key bindings");
 		ImGui::SetNextItemWidth(-1.0f);
 		ImGui::InputTextWithHint(
 			"##keybind_search",
@@ -1213,6 +1305,27 @@ namespace DefectStudio
 					0.02f,
 					3.0f,
 					"%.2fs"))
+			{
+				markDirty();
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Focus respects atom radius");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##FocusRespectRadius", &m_DraftConfig.renderer.focusSelectedAtomRespectAtomRadius))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Focus radius multiplier");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat(
+					"##FocusRadiusMultiplier",
+					&m_DraftConfig.renderer.focusSelectedAtomRadiusMultiplier,
+					0.1f,
+					32.0f,
+					"%.2fx"))
 			{
 				markDirty();
 			}

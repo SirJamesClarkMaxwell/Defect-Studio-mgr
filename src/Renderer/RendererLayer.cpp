@@ -9,8 +9,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 #include <glad/gl.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -31,6 +33,8 @@ namespace DefectStudio
 		constexpr float kMaxFocusDistance = 256.0f;
 		constexpr float kMinFocusTransitionSeconds = 0.02f;
 		constexpr float kMaxFocusTransitionSeconds = 3.0f;
+		constexpr float kMinFocusRadiusMultiplier = 0.1f;
+		constexpr float kMaxFocusRadiusMultiplier = 32.0f;
 
 		[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 		{
@@ -72,6 +76,66 @@ namespace DefectStudio
 			if (value == "orthographic" || value == "ORTHO" || value == "ortho")
 				return CameraProjection::Orthographic;
 			return CameraProjection::Perspective;
+		}
+
+		[[nodiscard]] std::string ToUpperAscii(std::string_view text)
+		{
+			std::string upper;
+			upper.reserve(text.size());
+			for (const char character : text)
+			{
+				const unsigned char unsignedCharacter = static_cast<unsigned char>(character);
+				upper.push_back(static_cast<char>(std::toupper(unsignedCharacter)));
+			}
+			return upper;
+		}
+
+		[[nodiscard]] ImGuiKey ParseRendererShortcutKey(std::string_view token, ImGuiKey fallback)
+		{
+			const std::string normalized = ToUpperAscii(token);
+			if (normalized.empty() || normalized == "NONE")
+				return ImGuiKey_None;
+
+			if (normalized == "A")
+				return ImGuiKey_A;
+			if (normalized == "B")
+				return ImGuiKey_B;
+			if (normalized == "C")
+				return ImGuiKey_C;
+			if (normalized == "D")
+				return ImGuiKey_D;
+			if (normalized == "E")
+				return ImGuiKey_E;
+			if (normalized == "F")
+				return ImGuiKey_F;
+			if (normalized == "Q")
+				return ImGuiKey_Q;
+			if (normalized == "R")
+				return ImGuiKey_R;
+			if (normalized == "S")
+				return ImGuiKey_S;
+			if (normalized == "W")
+				return ImGuiKey_W;
+			if (normalized == "LEFT" || normalized == "LEFTARROW")
+				return ImGuiKey_LeftArrow;
+			if (normalized == "RIGHT" || normalized == "RIGHTARROW")
+				return ImGuiKey_RightArrow;
+			if (normalized == "UP" || normalized == "UPARROW")
+				return ImGuiKey_UpArrow;
+			if (normalized == "DOWN" || normalized == "DOWNARROW")
+				return ImGuiKey_DownArrow;
+			if (normalized == "PERIOD" || normalized == ".")
+				return ImGuiKey_Period;
+			if (normalized == "COMMA" || normalized == ",")
+				return ImGuiKey_Comma;
+			if (normalized == "MINUS" || normalized == "-")
+				return ImGuiKey_Minus;
+			if (normalized == "EQUAL" || normalized == "=" || normalized == "PLUS")
+				return ImGuiKey_Equal;
+			if (normalized == "SPACE")
+				return ImGuiKey_Space;
+
+			return fallback;
 		}
 
 	}
@@ -160,6 +224,8 @@ namespace DefectStudio
 		m_GlobalRenderSettings.zoomSensitivity = config.renderer.zoomSensitivity;
 		m_GlobalRenderSettings.focusSelectedAtomDistance = config.renderer.focusSelectedAtomDistance;
 		m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds = config.renderer.focusSelectedAtomTransitionSeconds;
+		m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius = config.renderer.focusSelectedAtomRespectAtomRadius;
+		m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier = config.renderer.focusSelectedAtomRadiusMultiplier;
 		m_GlobalRenderSettings.invertZoom = config.renderer.invertZoom;
 		m_GlobalRenderSettings.touchpadNavigation = config.renderer.touchpadNavigation;
 		m_GlobalRenderSettings.defaultCameraProjection = ProjectionFromString(config.renderer.defaultProjection);
@@ -188,6 +254,42 @@ namespace DefectStudio
 			config.renderer.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
+		m_GlobalRenderSettings.shortcuts.alignAxisA = ParseRendererShortcutKey(
+			config.renderer.shortcuts.alignAxisA,
+			ImGuiKey_A);
+		m_GlobalRenderSettings.shortcuts.alignAxisB = ParseRendererShortcutKey(
+			config.renderer.shortcuts.alignAxisB,
+			ImGuiKey_B);
+		m_GlobalRenderSettings.shortcuts.alignAxisC = ParseRendererShortcutKey(
+			config.renderer.shortcuts.alignAxisC,
+			ImGuiKey_C);
+		m_GlobalRenderSettings.shortcuts.orbitLeft = ParseRendererShortcutKey(
+			config.renderer.shortcuts.orbitLeft,
+			ImGuiKey_LeftArrow);
+		m_GlobalRenderSettings.shortcuts.orbitRight = ParseRendererShortcutKey(
+			config.renderer.shortcuts.orbitRight,
+			ImGuiKey_RightArrow);
+		m_GlobalRenderSettings.shortcuts.orbitUp = ParseRendererShortcutKey(
+			config.renderer.shortcuts.orbitUp,
+			ImGuiKey_UpArrow);
+		m_GlobalRenderSettings.shortcuts.orbitDown = ParseRendererShortcutKey(
+			config.renderer.shortcuts.orbitDown,
+			ImGuiKey_DownArrow);
+		m_GlobalRenderSettings.shortcuts.rollLeft = ParseRendererShortcutKey(
+			config.renderer.shortcuts.rollLeft,
+			ImGuiKey_Q);
+		m_GlobalRenderSettings.shortcuts.rollRight = ParseRendererShortcutKey(
+			config.renderer.shortcuts.rollRight,
+			ImGuiKey_E);
+		m_GlobalRenderSettings.shortcuts.zoomIn = ParseRendererShortcutKey(
+			config.renderer.shortcuts.zoomIn,
+			ImGuiKey_R);
+		m_GlobalRenderSettings.shortcuts.zoomOut = ParseRendererShortcutKey(
+			config.renderer.shortcuts.zoomOut,
+			ImGuiKey_F);
+		m_GlobalRenderSettings.shortcuts.focusSelectedAtom = ParseRendererShortcutKey(
+			config.renderer.shortcuts.focusSelectedAtom,
+			ImGuiKey_Period);
 
 		if (glm::length(m_GlobalRenderSettings.lighting.keyDirection) <= 0.001f)
 			m_GlobalRenderSettings.lighting.keyDirection = glm::normalize(glm::vec3(0.6f, 0.8f, 0.5f));
@@ -207,6 +309,10 @@ namespace DefectStudio
 			m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds,
 			kMinFocusTransitionSeconds,
 			kMaxFocusTransitionSeconds);
+		m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier = std::clamp(
+			m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier,
+			kMinFocusRadiusMultiplier,
+			kMaxFocusRadiusMultiplier);
 		applyDefaultProjectionToWindows();
 	}
 

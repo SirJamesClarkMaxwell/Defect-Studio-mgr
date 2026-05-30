@@ -115,6 +115,22 @@ namespace DefectStudio
 		float iconButtonSize = 18.0f;
 	};
 
+	struct RendererKeyboardShortcutSettings
+	{
+		ImGuiKey alignAxisA = ImGuiKey_A;
+		ImGuiKey alignAxisB = ImGuiKey_B;
+		ImGuiKey alignAxisC = ImGuiKey_C;
+		ImGuiKey orbitLeft = ImGuiKey_LeftArrow;
+		ImGuiKey orbitRight = ImGuiKey_RightArrow;
+		ImGuiKey orbitUp = ImGuiKey_UpArrow;
+		ImGuiKey orbitDown = ImGuiKey_DownArrow;
+		ImGuiKey rollLeft = ImGuiKey_Q;
+		ImGuiKey rollRight = ImGuiKey_E;
+		ImGuiKey zoomIn = ImGuiKey_R;
+		ImGuiKey zoomOut = ImGuiKey_F;
+		ImGuiKey focusSelectedAtom = ImGuiKey_Period;
+	};
+
 	struct RendererGlobalRenderSettings
 	{
 		glm::vec4 backgroundColor = glm::vec4(0.06f, 0.07f, 0.08f, 1.0f);
@@ -123,11 +139,14 @@ namespace DefectStudio
 		float zoomSensitivity = 1.0f;
 		float focusSelectedAtomDistance = 3.0f;
 		float focusSelectedAtomTransitionSeconds = 0.18f;
+		bool focusSelectedAtomRespectAtomRadius = true;
+		float focusSelectedAtomRadiusMultiplier = 2.0f;
 		bool invertZoom = false;
 		bool touchpadNavigation = true;
 		CameraProjection defaultCameraProjection = CameraProjection::Perspective;
 		RendererLightingSettings lighting;
 		RendererViewportSettings viewport;
+		RendererKeyboardShortcutSettings shortcuts;
 	};
 
 	struct RendererToolbarIconTexture

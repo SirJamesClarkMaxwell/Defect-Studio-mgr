@@ -79,7 +79,7 @@ namespace DefectStudio
 		for (RendererWindowState &windowState : m_Layer.m_Windows)
 			renderStructureWindow(windowState, deltaTime);
 
-		drawPeriodicTableWindow();
+		// drawPeriodicTableWindow();
 		m_Layer.m_RendererBackend->CollectProfilingData();
 	}
 
@@ -165,10 +165,10 @@ namespace DefectStudio
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 2.0f));
 
-		const float iconExtent = std::clamp(m_Layer.m_GlobalRenderSettings.viewport.iconButtonSize, 12.0f, 26.0f);
+		const float iconExtent = std::clamp(m_Layer.m_GlobalRenderSettings.viewport.iconButtonSize, 12.0f, 40.0f);
 		const ImVec2 iconButtonSize(iconExtent, iconExtent);
 
-		const float axisExtent = std::clamp(m_Layer.m_GlobalRenderSettings.viewport.axisButtonSize, 12.0f, 28.0f);
+		const float axisExtent = std::clamp(m_Layer.m_GlobalRenderSettings.viewport.axisButtonSize, 12.0f, 40.0f);
 		const ImVec2 axisButtonSize(axisExtent, axisExtent);
 
 		const auto rotationStepRadians = [&windowState]()
@@ -358,17 +358,15 @@ namespace DefectStudio
 		sameLineTight();
 		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out"))
 		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
-			queueTransition(animated);
+			windowState.transitionActive = false;
+			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		sameLineTight();
 
 		if (iconButton("##ZoomIn", "plus.png", "+", "Zoom in"))
 		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
-			queueTransition(animated);
+			windowState.transitionActive = false;
+			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		sameLineTight();
 
@@ -458,9 +456,12 @@ namespace DefectStudio
 				return;
 
 			const RendererAtomData &atom = windowState.structure.atoms[selectedIndex];
-			const float desiredDistance = std::max(
-				m_Layer.m_GlobalRenderSettings.focusSelectedAtomDistance,
-				atom.radius * 2.0f);
+			float desiredDistance = m_Layer.m_GlobalRenderSettings.focusSelectedAtomDistance;
+			if (m_Layer.m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius)
+			{
+				const float radiusDistance = atom.radius * m_Layer.m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier;
+				desiredDistance = std::max(desiredDistance, radiusDistance);
+			}
 			windowState.transitionDuration = std::max(
 				0.02f,
 				m_Layer.m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds);
@@ -476,66 +477,70 @@ namespace DefectStudio
 
 		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.1f, 180.0f) * 3.1415926535f / 180.0f;
 		const float orbitStep = rotationStepRadians * 30.0f;
+		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.m_GlobalRenderSettings.shortcuts;
+
+		const auto shortcutPressed = [](ImGuiKey key) -> bool
+		{
+			return key != ImGuiKey_None && ImGui::IsKeyPressed(key);
+		};
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
-		if (ImGui::IsKeyPressed(ImGuiKey_A))
+		if (shortcutPressed(shortcuts.alignAxisA))
 			alignToAxis(lattice[0]);
-		if (ImGui::IsKeyPressed(ImGuiKey_B))
+		if (shortcutPressed(shortcuts.alignAxisB))
 			alignToAxis(lattice[1]);
-		if (ImGui::IsKeyPressed(ImGuiKey_C))
+		if (shortcutPressed(shortcuts.alignAxisC))
 			alignToAxis(lattice[2]);
 
-		if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+		if (shortcutPressed(shortcuts.orbitLeft))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(+orbitStep, 0.0f);
 			queueTransition(animated);
 		}
-		if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+		if (shortcutPressed(shortcuts.orbitRight))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(-orbitStep, 0.0f);
 			queueTransition(animated);
 		}
-		if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+		if (shortcutPressed(shortcuts.orbitUp))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, +orbitStep);
 			queueTransition(animated);
 		}
-		if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+		if (shortcutPressed(shortcuts.orbitDown))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, -orbitStep);
 			queueTransition(animated);
 		}
-		if (ImGui::IsKeyPressed(ImGuiKey_Q))
+		if (shortcutPressed(shortcuts.rollLeft))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationStepRadians);
 			queueTransition(animated);
 		}
-		if (ImGui::IsKeyPressed(ImGuiKey_E))
+		if (shortcutPressed(shortcuts.rollRight))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationStepRadians);
 			queueTransition(animated);
 		}
 
-		if (ImGui::IsKeyPressed(ImGuiKey_R))
+		if (shortcutPressed(shortcuts.zoomIn))
 		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
-			queueTransition(animated);
+			windowState.transitionActive = false;
+			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
-		if (ImGui::IsKeyPressed(ImGuiKey_F))
+		if (shortcutPressed(shortcuts.zoomOut))
 		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
-			queueTransition(animated);
+			windowState.transitionActive = false;
+			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 
-		if (ImGui::IsKeyPressed(ImGuiKey_Period))
+		if (shortcutPressed(shortcuts.focusSelectedAtom))
 			focusSelectedAtom();
 	}
 

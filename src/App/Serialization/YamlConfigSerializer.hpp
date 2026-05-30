@@ -34,13 +34,32 @@ namespace DefectStudio
 			DefaultProjection,
 			FocusSelectedAtomDistance,
 			FocusSelectedAtomTransitionSeconds,
+			FocusSelectedAtomRespectAtomRadius,
+			FocusSelectedAtomRadiusMultiplier,
 			InvertZoom,
+			KeyboardShortcuts,
 			Lighting,
 			OrbitSensitivity,
 			PanSensitivity,
 			TouchpadNavigation,
 			Viewport,
 			ZoomSensitivity,
+		};
+
+		enum class RendererShortcutKey
+		{
+			AlignAxisA,
+			AlignAxisB,
+			AlignAxisC,
+			OrbitLeft,
+			OrbitRight,
+			OrbitUp,
+			OrbitDown,
+			RollLeft,
+			RollRight,
+			ZoomIn,
+			ZoomOut,
+			FocusSelectedAtom,
 		};
 
 		enum class RendererLightingKey
@@ -208,13 +227,31 @@ namespace DefectStudio
 			{RendererKey::DefaultProjection, "default_projection"},
 			{RendererKey::FocusSelectedAtomDistance, "focus_selected_atom_distance"},
 			{RendererKey::FocusSelectedAtomTransitionSeconds, "focus_selected_atom_transition_seconds"},
+			{RendererKey::FocusSelectedAtomRespectAtomRadius, "focus_selected_atom_respect_atom_radius"},
+			{RendererKey::FocusSelectedAtomRadiusMultiplier, "focus_selected_atom_radius_multiplier"},
 			{RendererKey::InvertZoom, "invert_zoom"},
+			{RendererKey::KeyboardShortcuts, "keyboard_shortcuts"},
 			{RendererKey::Lighting, "lighting"},
 			{RendererKey::OrbitSensitivity, "orbit_sensitivity"},
 			{RendererKey::PanSensitivity, "pan_sensitivity"},
 			{RendererKey::TouchpadNavigation, "touchpad_navigation"},
 			{RendererKey::Viewport, "viewport"},
 			{RendererKey::ZoomSensitivity, "zoom_sensitivity"},
+		};
+
+		inline const std::unordered_map<RendererShortcutKey, const char *> RendererShortcutKeyNames = {
+			{RendererShortcutKey::AlignAxisA, "align_axis_a"},
+			{RendererShortcutKey::AlignAxisB, "align_axis_b"},
+			{RendererShortcutKey::AlignAxisC, "align_axis_c"},
+			{RendererShortcutKey::OrbitLeft, "orbit_left"},
+			{RendererShortcutKey::OrbitRight, "orbit_right"},
+			{RendererShortcutKey::OrbitUp, "orbit_up"},
+			{RendererShortcutKey::OrbitDown, "orbit_down"},
+			{RendererShortcutKey::RollLeft, "roll_left"},
+			{RendererShortcutKey::RollRight, "roll_right"},
+			{RendererShortcutKey::ZoomIn, "zoom_in"},
+			{RendererShortcutKey::ZoomOut, "zoom_out"},
+			{RendererShortcutKey::FocusSelectedAtom, "focus_selected_atom"},
 		};
 
 		inline const std::unordered_map<RendererLightingKey, const char *> RendererLightingKeyNames = {
@@ -363,6 +400,7 @@ namespace DefectStudio
 		inline const char *Name(AppearanceSpacingKey key) { return NameFromMap(AppearanceSpacingKeyNames, key); }
 		inline const char *Name(AppearanceStateRuleKey key) { return NameFromMap(AppearanceStateRuleKeyNames, key); }
 		inline const char *Name(RendererKey key) { return NameFromMap(RendererKeyNames, key); }
+		inline const char *Name(RendererShortcutKey key) { return NameFromMap(RendererShortcutKeyNames, key); }
 		inline const char *Name(RendererLightingKey key) { return NameFromMap(RendererLightingKeyNames, key); }
 		inline const char *Name(RendererViewportKey key) { return NameFromMap(RendererViewportKeyNames, key); }
 		inline const char *Name(EventQueueKey key) { return NameFromMap(EventQueueKeyNames, key); }

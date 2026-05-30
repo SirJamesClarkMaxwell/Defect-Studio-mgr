@@ -57,6 +57,8 @@ renderer:
   orbit_sensitivity: 1
   pan_sensitivity: 1
   zoom_sensitivity: 1
+  focus_selected_atom_distance: 3
+  focus_selected_atom_transition_seconds: 0.18
   invert_zoom: false
   touchpad_navigation: true
   default_projection: orthographic

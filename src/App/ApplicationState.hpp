@@ -89,6 +89,22 @@ namespace DefectStudio
 		float iconButtonSize = 18.0f;
 	};
 
+	struct RendererShortcutConfig
+	{
+		std::string alignAxisA = "A";
+		std::string alignAxisB = "B";
+		std::string alignAxisC = "C";
+		std::string orbitLeft = "Left";
+		std::string orbitRight = "Right";
+		std::string orbitUp = "Up";
+		std::string orbitDown = "Down";
+		std::string rollLeft = "Q";
+		std::string rollRight = "E";
+		std::string zoomIn = "R";
+		std::string zoomOut = "F";
+		std::string focusSelectedAtom = "Period";
+	};
+
 	struct RendererConfig
 	{
 		std::array<float, 4> backgroundColor = {0.06f, 0.07f, 0.08f, 1.0f};
@@ -97,11 +113,14 @@ namespace DefectStudio
 		float zoomSensitivity = 1.0f;
 		float focusSelectedAtomDistance = 3.0f;
 		float focusSelectedAtomTransitionSeconds = 0.18f;
+		bool focusSelectedAtomRespectAtomRadius = true;
+		float focusSelectedAtomRadiusMultiplier = 2.0f;
 		bool invertZoom = false;
 		bool touchpadNavigation = true;
 		std::string defaultProjection = "perspective";
 		RendererLightingConfig lighting;
 		RendererViewportConfig viewport;
+		RendererShortcutConfig shortcuts;
 	};
 
 	struct ApplicationConfig
