@@ -9,12 +9,14 @@ uniform mat4 u_ViewProjection;
 
 out vec3 vNormal;
 out vec4 vColor;
+out vec3 vWorldPos;
 
 void main()
 {
-    vec3 worldPosition = aPosition * aInstancePositionRadius.w + aInstancePositionRadius.xyz;
-    gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
-    vNormal = normalize(aNormal);
-    vColor = aInstanceColor;
+	vec3 worldPosition = aPosition * aInstancePositionRadius.w
+		+ aInstancePositionRadius.xyz;
+	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
+	vNormal = normalize(aNormal);
+	vColor = aInstanceColor;
+	vWorldPos = worldPosition;
 }
-

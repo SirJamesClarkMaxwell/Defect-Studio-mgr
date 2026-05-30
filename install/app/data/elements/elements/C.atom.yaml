@@ -1,0 +1,577 @@
+schema_version: 2
+kind: element_orbital_bundle
+element: C
+radial_orbitals:
+- orbital: 2p
+  n: 2
+  l: 1
+  zeff: 3.136
+  method: hydrogen_like
+  grid:
+    type: linear
+    r_min: 1.0e-08
+    r_max: 5.06
+    n_points: 1024
+  normalization: radial
+  dtype: float32
+  endian: little
+  sample_count: 1024
+  data_encoding: base64
+  data_format: float32_little_endian
+  samples_base64: |-
+    P2I7tKM1rr3GrCu+BsR9vju3pr7ZXM2+itnyvu2ZC78bOR2/c00uvwvaPr/q4U6/Bmhev0lvbb+L+nu/TAaFvxbUi7/8Z5K/TsOYv1fnnr9a1aS/lY6qvz4U
+    sL+HZ7W/mYm6v5p7v7+pPsS/3tPIv008zb8EedG/DIvVv2dz2b8UM92/C8vgv0E85L+kh+e/H67qv5Ww7b/pj/C/9Uzzv5Lo9b+TY/i/xr76v/X6/L/oGP+/
+    sIwAwI5+AcBrYgLAojgDwIwBBMCCvQTA2GwFwOIPBsDzpgbAWzIHwGiyB8BoJwjApZEIwGvxCMABRwnArZIJwLXUCcBdDQrA5jwKwJJjCsChgQrAUJcKwNuk
+    CsCAqgrAdqgKwPmeCsA+jgrAfXYKwOtXCsC8MgrAIgcKwFDVCcB2nQnAxV8JwGkcCcCS0wjAa4UIwCEyCMDc2QfAyHwHwA0bB8DStAbAPkoGwHjbBcCkaAXA
+    5vEEwGJ3BMA6+QPAkHcDwIbyAsA6agLAzt4BwF5QAcAKvwDA7yoAwFIo/7+o9f2/F778v9SB+78SQfq/BPz4v92y97/LZfa//hT1v6PA87/oaPK/+A3xv/6v
+    778jT+6/juvsv2mF67/ZHOq/BLLovw1F578Z1uW/S2Xkv8Py4r+jfuG/CgngvxiS3r/sGd2/oaDbv1cm2r8nq9i/LS/Xv4Wy1b9GNdS/i7fSv2w50b8Au8+/
+    XzzOv529zL/SPsu/E8DJv3JByL8Gw8a/30TFvxPHw7+xScK/zczAv3dQv7+/1L2/tlm8v2vfur/tZbm/Su23v5J1tr/Q/rS/E4mzv2cUsr/YoLC/cy6vv0O9
+    rb9TTay/rd6qv1xxqb9qBai/4Zqmv8kxpb8syqO/EmSiv4P/oL+InJ+/Jzuev2nbnL9UfZu/7iCavz/GmL9MbZe/GxaWv7LAlL8XbZO/TRuSv1vLkL9EfY+/
+    DTGOv7rmjL9Pnou/0VeKv0ETib+k0Ie//I+Gv01Rhb+aFIS/5NmCvy2hgb96aoC/lGt+v0AGfL/8pHm/y0d3v67udL+omXK/vEhwv+z7bb84s2u/om5pvysu
+    Z7/U8WS/nrliv4iFYL+TVV6/vilcvwoCWr913le//75Vv6ajU79qjFG/SXlPv0FqTb9RX0u/d1hJv7FVR7/8VkW/VlxDv71lQb8ucz+/pYQ9vyCaO7+cszm/
+    FtE3v4ryNb/1FzS/U0Eyv6FuML/any6/+tQsv/8NK7/jSim/o4snvznQJb+jGCS/2mQiv9y0IL+jCB+/KmAdv227G79nGhq/E30Yv2zjFr9tTRW/EbsTv1Qs
+    Er8voRC/nhkPv5uVDb8iFQy/LJgKv7UeCb+4qAe/LTYGvxHHBL9eWwO/D/MBvx2OAL8FWf6+d5z7voPm+L4dN/a+PI7zvtLr8L7WT+6+O7rrvvcq6b7+oea+
+    RR/kvr+i4b5jLN++JLzcvvhR2r7S7de+p4/Vvmw3074W5dC+mZjOvupRzL7+EMq+yNXHvj+gxb5WcMO+AkbBvjghv77tAb2+Fui6vqfTuL6WxLa+1rq0vl62
+    sr4it7C+F72uvjLIrL5o2Kq+r+2ovvsHp75BJ6W+eEujvpN0ob6Jop++T9WdvtoMnL4fSZq+FYqYvrHPlr7oGZW+r2iTvv67kb7JE5C+BnCOvqzQjL6vNYu+
+    B5+JvqkMiL6Kfoa+o/SEvudug75O7YG+z2+Avr3sfb7oAXu+DB94vhZEdb7zcHK+kKVvvtvhbL7BJWq+MHFnvhbEZL5hHmK+/n9fvtzoXL7qWFq+FdBXvk1O
+    Vb5/01K+m19QvpDyTb5MjEu+vyxJvtjTRr6HgUS+ujVCvmLwP75usT2+z3g7vnNGOb5MGje+SvQ0vl3UMr51ujC+g6YuvniYLL5FkCq+240oviqRJr4lmiS+
+    vKgivuC8IL6F1h6+mvUcvhIaG77fQxm+83IXvkCnFb654BO+Tx8SvvZiEL6fqw6+PvkMvsZLC74powm+W/8Hvk9gBr74xQS+STADvjefAb60EgC+aRX9vVkO
+    +r0gEPe9phr0vdIt8b2PSe69xG3rvVua6L08z+W9UgzjvYZR4L3Bnt297vPavfdQ2L3HtdW9SCLTvWSW0L0IEs69HpXLvZIfyb1Qsca9QkrEvVbqwb13kb+9
+    kj+9vZT0ur1psLi9/nK2vUA8tL0dDLK9g+KvvV6/rb2doqu9Loypvf97p73+caW9G26jvUNwob1meJ+9c4advVmam70HtJm9bdOXvXz4lb0iI5S9T1OSvfWI
+    kL0DxI69agSNvRtKi70HlYm9HuWHvVI6hr2UlIS91fOCvQhYgb06gn+9D158vXFDeb1GMna9cipzvdorcL1jNm298klqvW5mZ729i2S9xLlhvWvwXr2ZL1y9
+    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
+    Wy8YuS8jFrkEHhS5wx8SuVUoELmhNw65kk0MuRBqCrkFjQi5XLYGuf/lBLnYGwO50lcBubEz/7iuw/u4cl/4uNUG9bivufG42nfuuC9B67iHFei4v/TkuLDe
+    4bg20964LdLbuHLb2Ljh7tW4WAzTuLUz0LjVZM24mZ/KuN7jx7iEMcW4bYjCuHfov7iEUb24dcO6uCw+uLiMwbW4dU2zuMzhsLhzfq64TyOsuEPQqbgzhae4
+    BUKluJ4Go7ji0qC4uKaeuAaCnLiyZJq4pE6YuMI/lrj0N5S4IjeSuDQ9kLgSSo64pV2MuNd3iriQmIi4ur+GuEDthLgLIYO4B1uBuDo2f7hzwnu4j1p4uGX+
+    dLjOrXG4oWhuuLcua7jr/2e4FtxkuBLDYbi6tF6467BbuH+3WLhTyFW4ReNSuDIIULj2Nk24cW9KuIKxR7gH/US44VFCuO6vP7gQFz24KIc6uBYAOLi9gTW4
+    /wszuL6eMLjcOS64Pt0ruMeIKbhbPCe43vckuDa7IrhHhiC49lgeuCozHLjJFBq4uv0XuOLtFbgr5RO4euMRuLjoD7jN9A24ogcMuB8hCrgtQQi4t2cGuKWU
+    BLjixwK4WAEBuOSB/rc1Dfu3eaT3t4hH9Lc49vC3Y7Dtt+B16reIRue3NSLktw==
+- orbital: 2s
+  n: 2
+  l: 0
+  zeff: 3.217
+  method: hydrogen_like
+  grid:
+    type: linear
+    r_min: 1.0e-08
+    r_max: 4.93
+    n_points: 1024
+  normalization: radial
+  dtype: float32
+  endian: little
+  sample_count: 1024
+  data_encoding: base64
+  data_format: float32_little_endian
+  samples_base64: |-
+    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
+orbital_definitions:
+- schema_version: 1
+  id: C_2px
+  element: C
+  label: 2px
+  type: atomic
+  lobes: 2
+  color_positive:
+  - 0.7
+  - 0.7
+  - 0.7
+  color_negative:
+  - 0.8
+  - 0.3
+  - 0.3
+  components:
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: 1.0
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: 2p_x dumbbell; lobes along x-axis
+- schema_version: 1
+  id: C_2py
+  element: C
+  label: 2py
+  type: atomic
+  lobes: 2
+  color_positive:
+  - 0.7
+  - 0.7
+  - 0.7
+  color_negative:
+  - 0.8
+  - 0.3
+  - 0.3
+  components:
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: 1.0
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: 2p_y dumbbell; lobes along y-axis
+- schema_version: 1
+  id: C_2pz
+  element: C
+  label: 2pz
+  type: atomic
+  lobes: 2
+  color_positive:
+  - 0.7
+  - 0.7
+  - 0.7
+  color_negative:
+  - 0.8
+  - 0.3
+  - 0.3
+  components:
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 1.0
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.1
+  notes: 2p_z dumbbell; lobes along z-axis
+- schema_version: 1
+  id: C_2s
+  element: C
+  label: 2s
+  type: atomic
+  lobes: 1
+  color_positive:
+  - 0.7
+  - 0.7
+  - 0.7
+  color_negative:
+  - 0.3
+  - 0.3
+  - 0.8
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 1.0
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: Carbon 2s, one radial node
+- schema_version: 1
+  id: C_pz_pi
+  element: C
+  label: "2pz (\u03C0 orbital in graphene)"
+  type: atomic
+  lobes: 2
+  color_positive:
+  - 0.3
+  - 0.3
+  - 0.9
+  color_negative:
+  - 0.9
+  - 0.3
+  - 0.3
+  components:
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 1.0
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: "Perpendicular pz; forms \u03C0-band in graphene/graphite; Dirac cone"
+- schema_version: 1
+  id: C_sp2_1
+  element: C
+  label: "sp2 hybrid #1 (120\xB0)"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.57735
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: 0.816497
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: 'sp2: points along +x'
+- schema_version: 1
+  id: C_sp2_2
+  element: C
+  label: "sp2 hybrid #2 (120\xB0)"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.57735
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: -0.408248
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: 0.707107
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: "sp2: points at 120\xB0 from #1"
+- schema_version: 1
+  id: C_sp2_3
+  element: C
+  label: "sp2 hybrid #3 (120\xB0)"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.57735
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: -0.408248
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: -0.707107
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: "sp2: points at 240\xB0 from #1"
+- schema_version: 1
+  id: C_sp3_1
+  element: C
+  label: 'sp3 hybrid #1 [111]'
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 0.5
+  iso_values:
+  - 0.02
+  - 0.06
+  - 0.12
+  notes: "sp3: \u03C8=\xBD(2s+cx\xB72px+cy\xB72py+cz\xB72pz); tetrahedral geometry"
+- schema_version: 1
+  id: C_sp3_2
+  element: C
+  label: "sp3 hybrid #2 [1\u03041\u03041]"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: -0.5
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: -0.5
+  iso_values:
+  - 0.02
+  - 0.06
+  - 0.12
+  notes: "sp3: \u03C8=\xBD(2s+cx\xB72px+cy\xB72py+cz\xB72pz); tetrahedral geometry"
+- schema_version: 1
+  id: C_sp3_3
+  element: C
+  label: "sp3 hybrid #3 [1\u030411\u0304]"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: -0.5
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: -0.5
+  iso_values:
+  - 0.02
+  - 0.06
+  - 0.12
+  notes: "sp3: \u03C8=\xBD(2s+cx\xB72px+cy\xB72py+cz\xB72pz); tetrahedral geometry"
+- schema_version: 1
+  id: C_sp3_4
+  element: C
+  label: "sp3 hybrid #4 [11\u03041\u0304]"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 2p
+    real_sph_harm: px
+    l: 1
+    coefficient: -0.5
+  - shell: 2p
+    real_sph_harm: py
+    l: 1
+    coefficient: -0.5
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 0.5
+  iso_values:
+  - 0.02
+  - 0.06
+  - 0.12
+  notes: "sp3: \u03C8=\xBD(2s+cx\xB72px+cy\xB72py+cz\xB72pz); tetrahedral geometry"
+- schema_version: 1
+  id: C_sp_1
+  element: C
+  label: 'sp hybrid #1 (+z)'
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.707107
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 0.707107
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: "sp: \u03C3-bond in carbyne / CO2"
+- schema_version: 1
+  id: C_sp_2
+  element: C
+  label: "sp hybrid #2 (\u2212z)"
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.6
+  - 0.1
+  color_negative:
+  - 0.2
+  - 0.2
+  - 0.6
+  components:
+  - shell: 2s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.707107
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: -0.707107
+  iso_values:
+  - 0.01
+  - 0.04
+  - 0.09
+  notes: "sp: opposite \u03C3-lobe"
+- schema_version: 1
+  id: graphene_VB_Gamma_C
+  element: C
+  label: "Graphene \u03C0 VB at \u0393 \u2014 C 2pz"
+  type: crystal_bloch_contribution
+  lobes: 2
+  color_positive:
+  - 0.3
+  - 0.3
+  - 0.9
+  color_negative:
+  - 0.9
+  - 0.3
+  - 0.3
+  components:
+  - shell: 2p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 1.0
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: "\u03C0 valence band of graphene. Bonding combination of C 2pz on A and B sublattices."
+  crystal:
+    material: graphene
+    band_index: 0
+    k_point: Gamma
+    character: C_2pz_bonding
+
+display:
+  color: [0.50, 0.50, 0.50]
+  radius_display: 0.40
+  radius_covalent: 0.76

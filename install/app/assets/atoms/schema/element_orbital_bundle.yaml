@@ -63,3 +63,19 @@ fields:
     type: list
     required: true
     description: Entries copied from previous definitions/*.yaml files.
+  display:
+    type: mapping
+    required: false
+    fields:
+      color:
+        type: list[float]
+        required: true
+        description: RGB values in range [0, 1]
+      radius_display:
+        type: float
+        required: true
+        description: Sphere radius used by renderer in Angstrom
+      radius_covalent:
+        type: float
+        required: true
+        description: Covalent radius used for bond cutoff in Angstrom

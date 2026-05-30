@@ -4,6 +4,12 @@
 
 namespace DefectStudio
 {
+	enum class CameraProjection
+	{
+		Perspective,
+		Orthographic
+	};
+
 	class RendererViewCamera
 	{
 	public:
@@ -15,10 +21,16 @@ namespace DefectStudio
 		void SetYawPitch(float yawRadians, float pitchRadians);
 		void SetFromDirection(const glm::vec3 &viewDirection);
 		void FocusBounds(const glm::vec3 &minimum, const glm::vec3 &maximum);
+		void SetProjection(CameraProjection projection);
+		void ToggleProjection();
 
+		// VESTA-style: orbit uses screen-space axes (local camera frame)
 		void Orbit(float deltaX, float deltaY);
 		void Pan(float deltaX, float deltaY);
 		void Zoom(float delta);
+
+		// Snap to crystallographic axis directions
+		void SetAlignToAxis(const glm::vec3 &axis, const glm::vec3 &up);
 
 		[[nodiscard]] glm::mat4 ViewMatrix() const;
 		[[nodiscard]] glm::mat4 ProjectionMatrix() const;
@@ -27,12 +39,14 @@ namespace DefectStudio
 		[[nodiscard]] float Distance() const;
 		[[nodiscard]] float Yaw() const;
 		[[nodiscard]] float Pitch() const;
+		[[nodiscard]] CameraProjection Projection() const;
 
 	private:
 		[[nodiscard]] glm::vec3 forwardDirection() const;
 		[[nodiscard]] glm::vec3 rightDirection() const;
 		[[nodiscard]] glm::vec3 upDirection() const;
 		[[nodiscard]] float clampedPitch(float value) const;
+		[[nodiscard]] float orthoHalfHeight() const;
 
 	private:
 		glm::vec3 m_Target = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -43,6 +57,7 @@ namespace DefectStudio
 		float m_FieldOfViewRadians = 45.0f * 3.1415926535f / 180.0f;
 		float m_NearPlane = 0.01f;
 		float m_FarPlane = 500.0f;
+		CameraProjection m_Projection = CameraProjection::Perspective;
+		float m_OrthoScale = 1.0f; // zoom scale for orthographic
 	};
 } // namespace DefectStudio
-

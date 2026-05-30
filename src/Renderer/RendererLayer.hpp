@@ -50,6 +50,8 @@ namespace DefectStudio
 		std::vector<RendererAtomData> atoms;
 		std::vector<RendererBondData> bonds;
 		std::vector<RendererCellEdge> cellEdges;
+		glm::mat3 lattice = glm::mat3(1.0f);
+		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
 	};
 
 	struct RendererWindowState
@@ -62,6 +64,10 @@ namespace DefectStudio
 		bool showCellBox = true;
 		bool showBonds = true;
 		bool showAtoms = true;
+		std::vector<std::size_t> selectedAtomIndices;
+		float rotationStepDeg = 1.0f;
+		float pixelStepPx = 10.0f;
+		float percentStep = 10.0f;
 	};
 
 	struct RendererQuickTestRuntime
@@ -90,6 +96,7 @@ namespace DefectStudio
 		void renderStructureWindow(RendererWindowState &windowState, float deltaTime);
 		void drawViewportToolbar(RendererWindowState &windowState);
 		void drawViewportGizmo(RendererWindowState &windowState);
+		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
 		Path rendererQuickStatePath() const;
 		Path resolveShaderDirectory() const;
 

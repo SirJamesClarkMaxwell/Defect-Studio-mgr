@@ -1,15 +1,17 @@
 #pragma once
 
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <imgui.h>
 
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Time.hpp"
-#include "Renderer/RendererLayer.hpp"
 #include "Renderer/OpenGl/OpenGlFrameBuffer.hpp"
 #include "Renderer/OpenGl/OpenGlShaderLibrary.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
@@ -20,12 +22,6 @@ namespace DefectStudio
 		unsigned int ebo = 0;
 		unsigned int instanceVbo = 0;
 		int indexCount = 0;
-	};
-
-	struct OpenGlViewportResources
-	{
-		OpenGlFrameBuffer frameBuffer;
-		Time::SteadyTimePoint lastRenderTime{};
 	};
 
 	struct OpenGlAtomInstance
@@ -39,6 +35,23 @@ namespace DefectStudio
 		glm::mat4 model = glm::mat4(1.0f);
 		glm::vec4 colorA = glm::vec4(1.0f);
 		glm::vec4 colorB = glm::vec4(1.0f);
+	};
+
+	struct OpenGlViewportResources
+	{
+		OpenGlFrameBuffer frameBuffer;
+		Time::SteadyTimePoint lastRenderTime{};
+		bool atomsDirty = true;
+		bool bondsDirty = true;
+		bool gridDirty = true;
+		std::size_t lastAtomCount = 0;
+		std::size_t lastBondCount = 0;
+		std::size_t lastSelectedCount = 0;
+		std::size_t lastSelectionHash = 0;
+		std::string lastSourcePath;
+		std::vector<OpenGlAtomInstance> cachedAtomInstances;
+		std::vector<OpenGlBondInstance> cachedBondInstances;
+		std::vector<glm::vec3> cachedGridVertices;
 	};
 
 	class RendererViewCamera;
@@ -62,7 +75,8 @@ namespace DefectStudio
 			bool showAtoms,
 			bool showBonds,
 			bool showCellBox,
-			bool showGrid);
+			bool showGrid,
+			const std::vector<std::size_t> &selectedAtomIndices = {});
 
 	private:
 		void createStaticGeometry();
@@ -71,10 +85,17 @@ namespace DefectStudio
 		void createCylinderMesh();
 		void createScreenGrid();
 		void configureOpenGlState() const;
-		void renderAtoms(const RendererStructureData &structure, const RendererViewCamera &camera);
-		void renderBonds(const RendererStructureData &structure, const RendererViewCamera &camera);
+		void renderAtoms(
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const std::vector<std::size_t> &selectedIndices = {});
+		void renderBonds(
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources);
 		void renderCellBox(const RendererStructureData &structure, const RendererViewCamera &camera);
-		void renderGrid(const RendererViewCamera &camera);
+		void renderGrid(const RendererViewCamera &camera, OpenGlViewportResources &resources);
 		void dispatchBondCompute(const RendererStructureData &structure);
 		[[nodiscard]] OpenGlViewportResources &viewportResources(const std::string &windowKey, int width, int height);
 		[[nodiscard]] glm::mat4 buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const;

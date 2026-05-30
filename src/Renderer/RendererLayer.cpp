@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 #include <yaml-cpp/yaml.h>
 
@@ -246,7 +247,8 @@ namespace DefectStudio
 			windowState.showAtoms,
 			windowState.showBonds,
 			windowState.showCellBox,
-			windowState.showGrid);
+			windowState.showGrid,
+			windowState.selectedAtomIndices);
 
 		ImGui::Image(
 			static_cast<ImTextureID>(static_cast<uintptr_t>(textureId)),
@@ -257,15 +259,44 @@ namespace DefectStudio
 		const bool hovered = ImGui::IsItemHovered();
 		if (hovered)
 		{
-			const ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
-			const bool finiteMouseDelta = std::isfinite(mouseDelta.x) && std::isfinite(mouseDelta.y);
-			if (finiteMouseDelta && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-				windowState.camera->Orbit(mouseDelta.x, mouseDelta.y);
-			if (finiteMouseDelta && ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
-				windowState.camera->Pan(mouseDelta.x, mouseDelta.y);
-			const float wheel = ImGui::GetIO().MouseWheel;
-			if (std::isfinite(wheel) && wheel != 0.0f)
-				windowState.camera->Zoom(wheel);
+			ImGuiIO &io = ImGui::GetIO();
+
+			if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+				windowState.camera->Orbit(io.MouseDelta.x, io.MouseDelta.y);
+
+			if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle) ||
+				ImGui::IsMouseDragging(ImGuiMouseButton_Right))
+			{
+				windowState.camera->Pan(io.MouseDelta.x, io.MouseDelta.y);
+			}
+
+			const float wheel = io.MouseWheel;
+			if (wheel != 0.0f)
+			{
+				if (io.KeyShift)
+					windowState.camera->Pan(0.0f, wheel * 30.0f);
+				else if (io.KeyCtrl)
+					windowState.camera->Pan(wheel * -30.0f, 0.0f);
+				else
+					windowState.camera->Zoom(wheel);
+			}
+
+			const bool leftClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+				!ImGui::IsMouseDragging(ImGuiMouseButton_Left);
+			if (leftClicked)
+			{
+				const ImVec2 mousePos = ImGui::GetMousePos();
+				const float relX = mousePos.x - imageOrigin.x;
+				const float relY = mousePos.y - imageOrigin.y;
+				if (relX >= 0.0f &&
+					relY >= 0.0f &&
+					relX < windowState.viewportSize.x &&
+					relY < windowState.viewportSize.y)
+				{
+					const bool additive = io.KeyCtrl;
+					handleAtomPick(windowState, relX, relY, additive);
+				}
+			}
 		}
 
 		ImGui::SetCursorScreenPos(imageOrigin);
@@ -275,6 +306,79 @@ namespace DefectStudio
 
 	void RendererLayer::drawViewportToolbar(RendererWindowState &windowState)
 	{
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.0f, 3.0f));
+
+		auto axisButton = [&](const char *label, const glm::vec3 &axis)
+		{
+			if (ImGui::SmallButton(label))
+				windowState.camera->SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 1.0f, 0.0f));
+			ImGui::SameLine();
+		};
+
+		const glm::mat3 &lattice = windowState.structure.lattice;
+		const glm::mat3 &reciprocal = windowState.structure.reciprocalLattice;
+		axisButton("a", lattice[0]);
+		axisButton("b", lattice[1]);
+		axisButton("c", lattice[2]);
+		axisButton("a*", reciprocal[0]);
+		axisButton("b*", reciprocal[1]);
+		axisButton("c*", reciprocal[2]);
+
+		auto rotBtn = [&](const char *label, float dYaw, float dPitch)
+		{
+			if (ImGui::SmallButton(label))
+			{
+				const float step = windowState.rotationStepDeg * 3.1415926535f / 180.0f;
+				windowState.camera->SetYawPitch(
+					windowState.camera->Yaw() + dYaw * step,
+					windowState.camera->Pitch() + dPitch * step);
+			}
+			ImGui::SameLine();
+		};
+
+		rotBtn("\u21F1", 0.0f, +1.0f);
+		rotBtn("\u21F3", 0.0f, -1.0f);
+		rotBtn("\u2190", -1.0f, 0.0f);
+		rotBtn("\u2192", +1.0f, 0.0f);
+		rotBtn("\u21BA", 0.0f, 0.0f);
+		rotBtn("\u21BB", 0.0f, 0.0f);
+
+		ImGui::SetNextItemWidth(45.0f);
+		ImGui::InputFloat("##step_deg", &windowState.rotationStepDeg, 0.0f, 0.0f, "%.1f");
+		ImGui::SameLine();
+
+		auto panBtn = [&](const char *label, float dx, float dy)
+		{
+			if (ImGui::SmallButton(label))
+				windowState.camera->Pan(dx * windowState.pixelStepPx, dy * windowState.pixelStepPx);
+			ImGui::SameLine();
+		};
+		panBtn("\u21D1", 0.0f, 1.0f);
+		panBtn("\u21D3", 0.0f, -1.0f);
+		panBtn("\u21D0", -1.0f, 0.0f);
+		panBtn("\u21D2", +1.0f, 0.0f);
+
+		ImGui::SetNextItemWidth(40.0f);
+		ImGui::InputFloat("##step_px", &windowState.pixelStepPx, 0.0f, 0.0f, "%.0f");
+		ImGui::SameLine();
+
+		if (ImGui::SmallButton("+"))
+			windowState.camera->Zoom(+1.0f);
+		ImGui::SameLine();
+		if (ImGui::SmallButton("-"))
+			windowState.camera->Zoom(-1.0f);
+		ImGui::SameLine();
+
+		const bool isOrtho = windowState.camera->Projection() == CameraProjection::Orthographic;
+		if (ImGui::SmallButton(isOrtho ? "ORTHO" : "PERSP"))
+			windowState.camera->ToggleProjection();
+		ImGui::SameLine();
+
+		ImGui::SetNextItemWidth(40.0f);
+		ImGui::InputFloat("##step_pct", &windowState.percentStep, 0.0f, 0.0f, "%.0f");
+
+		ImGui::PopStyleVar();
+
 		ImGui::Checkbox("Atoms", &windowState.showAtoms);
 		ImGui::SameLine();
 		ImGui::Checkbox("Bonds", &windowState.showBonds);
@@ -318,6 +422,73 @@ namespace DefectStudio
 
 		ImGui::PopStyleColor(3);
 		ImGui::EndGroup();
+	}
+
+	void RendererLayer::handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive)
+	{
+		if (!windowState.camera || windowState.structure.atoms.empty())
+			return;
+
+		const float vpW = windowState.viewportSize.x;
+		const float vpH = windowState.viewportSize.y;
+		if (vpW <= 0.0f || vpH <= 0.0f)
+			return;
+
+		const float ndcX = (2.0f * relX / vpW) - 1.0f;
+		const float ndcY = -((2.0f * relY / vpH) - 1.0f);
+
+		const glm::mat4 invVP = glm::inverse(
+			windowState.camera->ProjectionMatrix() *
+			windowState.camera->ViewMatrix());
+
+		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
+		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+
+		float bestT = std::numeric_limits<float>::max();
+		std::size_t hitIndex = std::numeric_limits<std::size_t>::max();
+
+		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
+		{
+			const RendererAtomData &atom = windowState.structure.atoms[i];
+			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
+			const float a = glm::dot(rayDir, rayDir);
+			const float b = 2.0f * glm::dot(oc, rayDir);
+			const float c = glm::dot(oc, oc) - atom.radius * atom.radius;
+			const float disc = b * b - 4.0f * a * c;
+			if (disc < 0.0f)
+				continue;
+			const float t = (-b - std::sqrt(disc)) / (2.0f * a);
+			if (t > 0.001f && t < bestT)
+			{
+				bestT = t;
+				hitIndex = i;
+			}
+		}
+
+		if (hitIndex == std::numeric_limits<std::size_t>::max())
+		{
+			if (!additive)
+				windowState.selectedAtomIndices.clear();
+			return;
+		}
+
+		if (!additive)
+		{
+			windowState.selectedAtomIndices.clear();
+			windowState.selectedAtomIndices.push_back(hitIndex);
+			return;
+		}
+
+		auto it = std::find(
+			windowState.selectedAtomIndices.begin(),
+			windowState.selectedAtomIndices.end(),
+			hitIndex);
+		if (it != windowState.selectedAtomIndices.end())
+			windowState.selectedAtomIndices.erase(it);
+		else
+			windowState.selectedAtomIndices.push_back(hitIndex);
 	}
 
 	Path RendererLayer::rendererQuickStatePath() const

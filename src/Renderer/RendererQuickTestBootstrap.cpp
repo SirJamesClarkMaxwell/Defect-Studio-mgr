@@ -7,6 +7,7 @@
 #include <glm/geometric.hpp>
 
 #include "Core/Utils/Logger.hpp"
+#include "Renderer/ElementDataTable.hpp"
 #include "Renderer/RendererPoscarLoader.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
@@ -15,6 +16,15 @@ namespace DefectStudio
 	[[nodiscard]] static Path QuickPoscarDirectory(const Path &assetsDirectory)
 	{
 		return assetsDirectory / Path("quicktest") / Path("poscar");
+	}
+
+	[[nodiscard]] static Path ElementDataDirectory(const Path &assetsDirectory)
+	{
+		return Path::FromResolved(
+			assetsDirectory.Native()
+			.parent_path()
+			/ "data"
+			/ "elements");
 	}
 
 	[[nodiscard]] static Path ResolveExistingQuickPoscar(
@@ -71,6 +81,15 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<RendererWindowState> BuildRendererQuickTestWindows(const Path &assetsDirectory)
 	{
 		std::vector<RendererWindowState> windows;
+		ElementDataTable elementTable;
+		const Path elementDataDirectory = ElementDataDirectory(assetsDirectory);
+		if (!elementTable.LoadFromDirectory(elementDataDirectory.String()))
+		{
+			DS_LOG_WARN(
+				"Renderer quick-test bootstrap: element display table fallback defaults, load failed at {}",
+				elementDataDirectory.String());
+		}
+
 		const Path poscarDirectory = QuickPoscarDirectory(assetsDirectory);
 		const Path hbnPath = ResolveExistingQuickPoscar(
 			poscarDirectory,
@@ -89,7 +108,10 @@ namespace DefectStudio
 
 		for (std::size_t index = 0; index < files.size(); ++index)
 		{
-			Result<RendererStructureData> loaded = LoadRendererStructureFromPoscar(files[index], names[index]);
+			Result<RendererStructureData> loaded = LoadRendererStructureFromPoscar(
+				files[index],
+				names[index],
+				elementTable);
 			if (!loaded.HasValue())
 			{
 				DS_LOG_ERROR(

@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <string_view>
 
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Path.hpp"
@@ -25,6 +26,7 @@ namespace DefectStudio
 		std::filesystem::file_time_type computeTimestamp{};
 		unsigned int programId = 0;
 		bool isCompute = false;
+		std::unordered_map<std::string, int> uniformCache;
 	};
 
 	class OpenGlShaderLibrary
@@ -37,6 +39,7 @@ namespace DefectStudio
 		Result<void> LoadComputeProgram(const std::string &name, const Path &computePath);
 		void ReloadModifiedPrograms();
 		[[nodiscard]] unsigned int Program(const std::string &name) const;
+		[[nodiscard]] int Uniform(const std::string &programName, std::string_view uniformName);
 
 	private:
 		[[nodiscard]] Result<void> compileGraphicsProgram(OpenGlShaderProgramState &state);
@@ -50,4 +53,3 @@ namespace DefectStudio
 		std::unordered_map<std::string, OpenGlShaderProgramState> m_Programs;
 	};
 } // namespace DefectStudio
-

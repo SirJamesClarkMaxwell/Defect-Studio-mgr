@@ -9,9 +9,18 @@ out vec4 oColor;
 
 void main()
 {
-    vec3 baseColor = mix(vColorA.rgb, vColorB.rgb, clamp(vGradientT, 0.0, 1.0));
-    vec3 lightDirection = normalize(vec3(0.5, 0.8, 0.2));
-    float diffuse = max(dot(normalize(vNormal), lightDirection), 0.3);
-    oColor = vec4(baseColor * diffuse, 1.0);
-}
+	vec3 N = normalize(vNormal);
+	vec3 baseColor = mix(vColorA.rgb, vColorB.rgb, clamp(vGradientT, 0.0, 1.0));
 
+	vec3 key = normalize(vec3(0.6, 0.8, 0.5));
+	vec3 fill = normalize(vec3(-0.7, 0.3, 0.2));
+	vec3 backLight = normalize(vec3(0.0, -0.4, -0.8));
+
+	float dKey = max(dot(N, key), 0.0) * 0.55;
+	float dFill = max(dot(N, fill), 0.0) * 0.25;
+	float dBack = max(dot(N, backLight), 0.0) * 0.12;
+	float ambient = 0.18;
+
+	float intensity = ambient + dKey + dFill + dBack;
+	oColor = vec4(baseColor * intensity, 1.0);
+}

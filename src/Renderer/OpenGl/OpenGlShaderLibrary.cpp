@@ -87,6 +87,26 @@ namespace DefectStudio
 		return found->second.programId;
 	}
 
+	int OpenGlShaderLibrary::Uniform(const std::string &programName, std::string_view uniformName)
+	{
+		auto found = m_Programs.find(programName);
+		if (found == m_Programs.end())
+			return -1;
+
+		OpenGlShaderProgramState &state = found->second;
+		if (state.programId == 0)
+			return -1;
+
+		const std::string uniformKey(uniformName);
+		auto uniformIt = state.uniformCache.find(uniformKey);
+		if (uniformIt != state.uniformCache.end())
+			return uniformIt->second;
+
+		const int location = glGetUniformLocation(state.programId, uniformKey.c_str());
+		state.uniformCache.insert_or_assign(uniformKey, location);
+		return location;
+	}
+
 	Result<void> OpenGlShaderLibrary::compileGraphicsProgram(OpenGlShaderProgramState &state)
 	{
 		Result<std::string> vertexSource = loadTextFile(state.paths.vertexPath);
@@ -134,6 +154,7 @@ namespace DefectStudio
 
 		releaseProgram(state);
 		state.programId = program;
+		state.uniformCache.clear();
 		state.vertexTimestamp = readTimestamp(state.paths.vertexPath);
 		state.fragmentTimestamp = readTimestamp(state.paths.fragmentPath);
 		return {};
@@ -175,6 +196,7 @@ namespace DefectStudio
 
 		releaseProgram(state);
 		state.programId = program;
+		state.uniformCache.clear();
 		state.computeTimestamp = readTimestamp(state.paths.computePath);
 		return {};
 	}
@@ -244,5 +266,6 @@ namespace DefectStudio
 			return;
 		glDeleteProgram(state.programId);
 		state.programId = 0;
+		state.uniformCache.clear();
 	}
 } // namespace DefectStudio

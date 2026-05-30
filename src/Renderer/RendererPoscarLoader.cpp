@@ -2,8 +2,10 @@
 
 #include "Renderer/RendererPoscarLoader.hpp"
 
+#include <array>
 #include <charconv>
 #include <cmath>
+#include <fstream>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -14,16 +16,32 @@
 
 namespace DefectStudio
 {
-	struct ElementRenderStyle
-	{
-		glm::vec3 color = glm::vec3(0.7f, 0.7f, 0.7f);
-		float atomRadius = 0.45f;
-		float covalentRadius = 0.8f;
-	};
-
 	struct PoscarTokenizedLine
 	{
 		std::vector<std::string> tokens;
+	};
+
+	struct GridCellKey
+	{
+		int x = 0;
+		int y = 0;
+		int z = 0;
+
+		[[nodiscard]] bool operator==(const GridCellKey &other) const
+		{
+			return x == other.x && y == other.y && z == other.z;
+		}
+	};
+
+	struct GridCellKeyHasher
+	{
+		[[nodiscard]] std::size_t operator()(const GridCellKey &key) const noexcept
+		{
+			std::size_t seed = static_cast<std::size_t>(key.x) * 73856093u;
+			seed ^= static_cast<std::size_t>(key.y) * 19349663u;
+			seed ^= static_cast<std::size_t>(key.z) * 83492791u;
+			return seed;
+		}
 	};
 
 	[[nodiscard]] static Result<float> ParseFloatToken(std::string_view token, std::string_view context)
@@ -77,7 +95,6 @@ namespace DefectStudio
 					continue;
 				trimmed.push_back(character);
 			}
-
 			if (trimmed.empty())
 				continue;
 
@@ -91,29 +108,6 @@ namespace DefectStudio
 		}
 
 		return lines;
-	}
-
-	[[nodiscard]] static std::unordered_map<std::string, ElementRenderStyle> CreateElementStyleTable()
-	{
-		return std::unordered_map<std::string, ElementRenderStyle>{
-			{"H", {glm::vec3(0.95f, 0.95f, 0.95f), 0.27f, 0.31f}},
-			{"B", {glm::vec3(0.95f, 0.45f, 0.30f), 0.43f, 0.85f}},
-			{"N", {glm::vec3(0.25f, 0.55f, 0.95f), 0.42f, 0.71f}},
-			{"Na", {glm::vec3(0.55f, 0.45f, 0.95f), 0.63f, 1.66f}},
-			{"Cl", {glm::vec3(0.25f, 0.85f, 0.35f), 0.58f, 1.02f}},
-			{"Cd", {glm::vec3(0.95f, 0.80f, 0.30f), 0.66f, 1.44f}},
-			{"In", {glm::vec3(0.35f, 0.70f, 0.75f), 0.64f, 1.42f}},
-			{"S", {glm::vec3(0.95f, 0.90f, 0.25f), 0.52f, 1.05f}}};
-	}
-
-	[[nodiscard]] static ElementRenderStyle ResolveElementStyle(
-		const std::unordered_map<std::string, ElementRenderStyle> &table,
-		const std::string &element)
-	{
-		auto found = table.find(element);
-		if (found != table.end())
-			return found->second;
-		return ElementRenderStyle{};
 	}
 
 	[[nodiscard]] static std::vector<std::string> ExpandElementList(
@@ -156,33 +150,73 @@ namespace DefectStudio
 			{p110, p111}, {p101, p111}, {p011, p111}};
 	}
 
+	[[nodiscard]] static GridCellKey CellForPosition(const glm::vec3 &position, float cellSize)
+	{
+		return GridCellKey{
+			static_cast<int>(std::floor(position.x / cellSize)),
+			static_cast<int>(std::floor(position.y / cellSize)),
+			static_cast<int>(std::floor(position.z / cellSize))};
+	}
+
 	[[nodiscard]] static std::vector<RendererBondData> BuildBonds(
 		const std::vector<RendererAtomData> &atoms,
-		const std::unordered_map<std::string, ElementRenderStyle> &styleTable)
+		const ElementDataTable &elementTable)
 	{
+		constexpr float kCellSize = 4.72f;
+		constexpr float kCutoffScale = 1.18f;
+		std::unordered_map<GridCellKey, std::vector<std::uint32_t>, GridCellKeyHasher> buckets;
+		buckets.reserve(atoms.size() * 2);
+
+		for (std::uint32_t index = 0; index < atoms.size(); ++index)
+		{
+			const GridCellKey cell = CellForPosition(atoms[index].cartesianPosition, kCellSize);
+			buckets[cell].push_back(index);
+		}
+
 		std::vector<RendererBondData> bonds;
+		bonds.reserve(atoms.size());
 		for (std::uint32_t first = 0; first < atoms.size(); ++first)
 		{
-			for (std::uint32_t second = first + 1; second < atoms.size(); ++second)
+			const RendererAtomData &atomA = atoms[first];
+			const GridCellKey baseCell = CellForPosition(atomA.cartesianPosition, kCellSize);
+			for (int dx = -1; dx <= 1; ++dx)
 			{
-				const RendererAtomData &atomA = atoms[first];
-				const RendererAtomData &atomB = atoms[second];
-				const ElementRenderStyle styleA = ResolveElementStyle(styleTable, atomA.element);
-				const ElementRenderStyle styleB = ResolveElementStyle(styleTable, atomB.element);
-				const float cutoff = 1.18f * (styleA.covalentRadius + styleB.covalentRadius);
-				const float cutoffSquared = cutoff * cutoff;
-				const glm::vec3 delta = atomA.cartesianPosition - atomB.cartesianPosition;
-				const float distanceSquared = glm::dot(delta, delta);
-				if (distanceSquared > cutoffSquared || distanceSquared < 0.00001f)
-					continue;
+				for (int dy = -1; dy <= 1; ++dy)
+				{
+					for (int dz = -1; dz <= 1; ++dz)
+					{
+						const GridCellKey neighbor{
+							baseCell.x + dx,
+							baseCell.y + dy,
+							baseCell.z + dz};
+						auto found = buckets.find(neighbor);
+						if (found == buckets.end())
+							continue;
 
-				RendererBondData bond;
-				bond.firstAtomIndex = first;
-				bond.secondAtomIndex = second;
-				bond.radius = std::max(0.05f, 0.22f * std::min(atomA.radius, atomB.radius));
-				bond.gradient.start = atomA.color;
-				bond.gradient.finish = atomB.color;
-				bonds.push_back(bond);
+						for (std::uint32_t second : found->second)
+						{
+							if (second <= first)
+								continue;
+							const RendererAtomData &atomB = atoms[second];
+							const float cutoff = kCutoffScale * (
+								elementTable.CovalentRadius(atomA.element) +
+								elementTable.CovalentRadius(atomB.element));
+							const float cutoffSquared = cutoff * cutoff;
+							const glm::vec3 delta = atomA.cartesianPosition - atomB.cartesianPosition;
+							const float distanceSquared = glm::dot(delta, delta);
+							if (distanceSquared > cutoffSquared || distanceSquared < 0.00001f)
+								continue;
+
+							RendererBondData bond;
+							bond.firstAtomIndex = first;
+							bond.secondAtomIndex = second;
+							bond.radius = std::max(0.05f, 0.22f * std::min(atomA.radius, atomB.radius));
+							bond.gradient.start = atomA.color;
+							bond.gradient.finish = atomB.color;
+							bonds.push_back(bond);
+						}
+					}
+				}
 			}
 		}
 		return bonds;
@@ -207,7 +241,10 @@ namespace DefectStudio
 		return text.str();
 	}
 
-	Result<RendererStructureData> LoadRendererStructureFromPoscar(const Path &filePath, std::string name)
+	Result<RendererStructureData> LoadRendererStructureFromPoscar(
+		const Path &filePath,
+		std::string name,
+		const ElementDataTable &elementTable)
 	{
 		Result<std::string> textResult = LoadUtf8Text(filePath);
 		if (!textResult.HasValue())
@@ -283,7 +320,8 @@ namespace DefectStudio
 				ErrorCategory::Validation,
 				Severity::Error,
 				"POSCAR element/count mismatch.",
-				"Element symbols: " + std::to_string(elements.size()) + ", counts: " + std::to_string(counts.size()),
+				"Element symbols: " + std::to_string(elements.size()) +
+					", counts: " + std::to_string(counts.size()),
 				"Fix POSCAR element/count lines.",
 				"renderer.poscar.count_mismatch"};
 		}
@@ -293,7 +331,8 @@ namespace DefectStudio
 		if (!lines[7].tokens.empty())
 		{
 			const std::string first = lines[7].tokens[0];
-			if (first == "Selective" || first == "selective" || first == "SelectiveDynamics" || first == "selective_dynamics")
+			if (first == "Selective" || first == "selective" ||
+				first == "SelectiveDynamics" || first == "selective_dynamics")
 			{
 				selectiveDynamics = true;
 				coordinateLineIndex = 8;
@@ -311,8 +350,8 @@ namespace DefectStudio
 		}
 
 		const std::string modeToken = lines[coordinateLineIndex].tokens[0];
-		const bool directCoordinates =
-			modeToken == "Direct" || modeToken == "direct" || modeToken == "D" || modeToken == "d";
+		const bool directCoordinates = modeToken == "Direct" || modeToken == "direct" ||
+			modeToken == "D" || modeToken == "d";
 
 		std::vector<std::string> expandedElements = ExpandElementList(elements, counts);
 		const std::size_t atomCount = expandedElements.size();
@@ -328,7 +367,6 @@ namespace DefectStudio
 				"renderer.poscar.atom_section_short"};
 		}
 
-		const auto styleTable = CreateElementStyleTable();
 		std::vector<RendererAtomData> atoms;
 		atoms.reserve(atomCount);
 		for (std::size_t atomIndex = 0; atomIndex < atomCount; ++atomIndex)
@@ -362,9 +400,8 @@ namespace DefectStudio
 
 			RendererAtomData atom;
 			atom.element = expandedElements[atomIndex];
-			const ElementRenderStyle style = ResolveElementStyle(styleTable, atom.element);
-			atom.color = style.color;
-			atom.radius = style.atomRadius;
+			atom.radius = elementTable.DisplayRadius(atom.element);
+			atom.color = elementTable.Color(atom.element);
 			atom.cartesianPosition = cartesian;
 			atom.visible = true;
 			atoms.push_back(atom);
@@ -374,8 +411,16 @@ namespace DefectStudio
 		structure.name = std::move(name);
 		structure.sourcePath = filePath;
 		structure.atoms = atoms;
-		structure.bonds = BuildBonds(structure.atoms, styleTable);
+		structure.bonds = BuildBonds(structure.atoms, elementTable);
 		structure.cellEdges = BuildCellEdges(lattice);
+		structure.lattice = lattice;
+
+		const float det = glm::determinant(lattice);
+		if (std::abs(det) > 1e-6f)
+		{
+			const glm::mat3 invT = glm::transpose(glm::inverse(lattice));
+			structure.reciprocalLattice = invT;
+		}
 
 		if (selectiveDynamics)
 		{
