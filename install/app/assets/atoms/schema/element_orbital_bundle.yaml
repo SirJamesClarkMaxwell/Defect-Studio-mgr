@@ -1,0 +1,65 @@
+schema_version: 1
+id: element_orbital_bundle_schema
+fields:
+  schema_version:
+    type: int
+    required: true
+  kind:
+    type: str
+    required: true
+    enum:
+    - element_orbital_bundle
+  element:
+    type: str
+    required: true
+  radial_orbitals:
+    type: list
+    required: true
+    item_fields:
+      orbital:
+        type: str
+        required: true
+      n:
+        type: int
+        required: true
+      l:
+        type: int
+        required: true
+      zeff:
+        type: float
+        required: true
+      method:
+        type: str
+        required: true
+      grid:
+        type: mapping
+        required: true
+      normalization:
+        type: str
+        required: true
+      dtype:
+        type: str
+        required: true
+      endian:
+        type: str
+        required: false
+      sample_count:
+        type: int
+        required: true
+      data_encoding:
+        type: str
+        required: true
+        enum:
+        - base64
+      data_format:
+        type: str
+        required: true
+        enum:
+        - float32_little_endian
+      samples_base64:
+        type: str
+        required: true
+  orbital_definitions:
+    type: list
+    required: true
+    description: Entries copied from previous definitions/*.yaml files.

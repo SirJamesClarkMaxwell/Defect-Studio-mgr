@@ -1,0 +1,92 @@
+schema_version: 2
+kind: element_orbital_bundle
+element: H
+radial_orbitals:
+- orbital: 1s
+  n: 1
+  l: 0
+  zeff: 1.0
+  method: hydrogen_like
+  grid:
+    type: linear
+    r_min: 1.0e-08
+    r_max: 7.94
+    n_points: 1024
+  normalization: radial
+  dtype: float32
+  endian: little
+  sample_count: 1024
+  data_encoding: base64
+  data_format: float32_little_endian
+  samples_base64: |-
+    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
+    sT8ht6jmHrdflhy3tk4at40PGLfE2BW3O6oTt9SDEbdwZQ+38k4Ntz1AC7czOQm3tzkHt65BBbf7UAO3hGcBt1wK/7a6U/u28Kr3tsoP9LYUgvC2ngHttjSO
+    6baoJ+a2yM3itmaA37ZUP9y2YgrZtmTh1bYuxNK2k7LPtmmszLaEscm2usHGtuPcw7bVAsG2aTO+tnZuu7bVs7i2YQO2tvJcs7ZlwLC2ky2utlmkq7aTJKm2
+    Hq6mttZApLaa3KG2SYGftsAunbbf5Jq2hqOYtpVqlrbtOZS2bhGStvvwj7Z12I22v8eLtru+ibZOvYe2WsOFtsXQg7Zx5YG2RQGAtkxIfLbym3i2Sv10th9s
+    cbZA6G22e3FqtqAHZ7Z9qmO25VlgtqcVXbaX3Vm2hrFWtkiRU7awfFC2lHNNtsl1SrYkg0e2fJtEtqi+QbZ/7D622iQ8tpJnObZ/tDa2fQs0tmVsMbYS1y62
+    YEsstivJKbZRUCe2reAkth16IraAHCC2tccdtpp7G7YPOBm29PwWtirKFLaSnxK2DX0Qtn1iDrbFTwy2xkQKtmVBCLaFRQa2ClEEttljArbWfQC2zD39td+N
+    +bWx6/W1DlfytcPP7rWfVeu1cejntQmI5LU2NOG1y+zdtZmx2rVygte1KV/UtQ==
+orbital_definitions:
+- schema_version: 1
+  id: H_1s
+  element: H
+  label: 1s
+  type: atomic
+  lobes: 1
+  color_positive:
+  - 1.0
+  - 1.0
+  - 1.0
+  color_negative:
+  - 0.9
+  - 0.9
+  - 0.9
+  components:
+  - shell: 1s
+    real_sph_harm: s
+    l: 0
+    coefficient: 1.0
+  iso_values:
+  - 0.05
+  - 0.15
+  - 0.4
+  notes: "Spherically symmetric; \u03C8(r)=R_10\xB7Y_00"

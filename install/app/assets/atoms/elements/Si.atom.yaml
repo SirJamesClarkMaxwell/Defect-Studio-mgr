@@ -1,0 +1,308 @@
+schema_version: 2
+kind: element_orbital_bundle
+element: Si
+radial_orbitals:
+- orbital: 3p
+  n: 3
+  l: 1
+  zeff: 4.285
+  method: hydrogen_like
+  grid:
+    type: linear
+    r_min: 1.0e-08
+    r_max: 5.56
+    n_points: 1024
+  normalization: radial
+  dtype: float32
+  endian: little
+  sample_count: 1024
+  data_encoding: base64
+  data_format: float32_little_endian
+  samples_base64: |-
+    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
+- orbital: 3s
+  n: 3
+  l: 0
+  zeff: 4.903
+  method: hydrogen_like
+  grid:
+    type: linear
+    r_min: 1.0e-08
+    r_max: 4.86
+    n_points: 1024
+  normalization: radial
+  dtype: float32
+  endian: little
+  sample_count: 1024
+  data_encoding: base64
+  data_format: float32_little_endian
+  samples_base64: |-
+    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
+orbital_definitions:
+- schema_version: 1
+  id: Si_VBM_Gamma
+  element: Si
+  label: "Si VBM at \u0393 \u2014 3p character"
+  type: crystal_bloch_contribution
+  lobes: 2
+  color_positive:
+  - 0.9
+  - 0.78
+  - 0.63
+  color_negative:
+  - 0.2
+  - 0.1
+  - 0.1
+  components:
+  - shell: 3p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 0.87
+  - shell: 3s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: 'Valence band maximum of Si at Gamma: mainly 3p with small 3s admixture.'
+  crystal:
+    material: Si
+    band_index: 0
+    k_point: Gamma
+    character: 3p_antibonding
+- schema_version: 1
+  id: Si_sp3_1
+  element: Si
+  label: 'sp3 hybrid #1'
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.78
+  - 0.63
+  color_negative:
+  - 0.3
+  - 0.2
+  - 0.1
+  components:
+  - shell: 3s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: px
+    l: 1
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: py
+    l: 1
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 0.5
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: Silicon diamond lattice sp3
+- schema_version: 1
+  id: Si_sp3_2
+  element: Si
+  label: 'sp3 hybrid #2'
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.78
+  - 0.63
+  color_negative:
+  - 0.3
+  - 0.2
+  - 0.1
+  components:
+  - shell: 3s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: px
+    l: 1
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: py
+    l: 1
+    coefficient: -0.5
+  - shell: 3p
+    real_sph_harm: pz
+    l: 1
+    coefficient: -0.5
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: Silicon diamond lattice sp3
+- schema_version: 1
+  id: Si_sp3_3
+  element: Si
+  label: 'sp3 hybrid #3'
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.78
+  - 0.63
+  color_negative:
+  - 0.3
+  - 0.2
+  - 0.1
+  components:
+  - shell: 3s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: px
+    l: 1
+    coefficient: -0.5
+  - shell: 3p
+    real_sph_harm: py
+    l: 1
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: pz
+    l: 1
+    coefficient: -0.5
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: Silicon diamond lattice sp3
+- schema_version: 1
+  id: Si_sp3_4
+  element: Si
+  label: 'sp3 hybrid #4'
+  type: hybrid
+  lobes: 1
+  color_positive:
+  - 0.9
+  - 0.78
+  - 0.63
+  color_negative:
+  - 0.3
+  - 0.2
+  - 0.1
+  components:
+  - shell: 3s
+    real_sph_harm: s
+    l: 0
+    coefficient: 0.5
+  - shell: 3p
+    real_sph_harm: px
+    l: 1
+    coefficient: -0.5
+  - shell: 3p
+    real_sph_harm: py
+    l: 1
+    coefficient: -0.5
+  - shell: 3p
+    real_sph_harm: pz
+    l: 1
+    coefficient: 0.5
+  iso_values:
+  - 0.01
+  - 0.03
+  - 0.08
+  notes: Silicon diamond lattice sp3

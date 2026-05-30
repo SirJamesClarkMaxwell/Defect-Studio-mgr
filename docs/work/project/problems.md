@@ -6,8 +6,15 @@
 ---
 
 ### Aktywne problemy
-
-Brak.
+1. Brak możliwości przełączenia na drugi typ kamery: 
+2. MW (mouse wheel) powinno być do obracania się a przytrzumane z shift przesuwać kamerę, nie superkomórkę
+3. obrót powinien być wedle lokalnych osi kamery, a nie zdefiniowanych globalnie. Ma być tak jak w VESTA 
+4. ![alt text](image.png) skopiuj też ten pasek. (dodam odpowiednie ikony w assets)
+5. dodam zdjęcie ale wiązania wchodzą w atomy i brzydko to wygląda
+6. oświetlenie jest tylko z jednej strony. Tutaj powinno być równomierne z każdej
+7. dodaj mechanizm mouse-picking (z mechanizmem ctrl jako dodawania wielu atomów) i podświetlenie atomu który jest wybrany
+8. Funkcję createSphereMesh, createCylinderMesh powinny być zastąpione przez funkcję ładującą mesh z asset (asset też trzeba wytworzyć (kolejne zadanie))
+9. ilość atomów jest ograniczona (zaraz dodam listę wszystkich atomów)
 ---
 
 ### Resolved
