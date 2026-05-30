@@ -73,6 +73,7 @@ namespace DefectStudio
         void renderProfilesTab();
         void renderLayoutTab();
         void renderViewportTab();
+        void renderRendererTab();
         void renderFilePathsTab();
         void renderInputTab();
         void renderKeyBindingsTab();
@@ -93,6 +94,7 @@ namespace DefectStudio
             Profiles,
             Layout,
             Viewport,
+            Renderer,
             Editing,
             Animation,
             Input,

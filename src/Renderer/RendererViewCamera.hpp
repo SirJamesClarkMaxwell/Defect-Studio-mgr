@@ -19,13 +19,16 @@ namespace DefectStudio
 		void SetTarget(const glm::vec3 &target);
 		void SetDistance(float distance);
 		void SetYawPitch(float yawRadians, float pitchRadians);
+		void SetOrbitState(const glm::vec3 &target, float distance, float yawRadians, float pitchRadians);
 		void SetFromDirection(const glm::vec3 &viewDirection);
 		void FocusBounds(const glm::vec3 &minimum, const glm::vec3 &maximum);
 		void SetProjection(CameraProjection projection);
 		void ToggleProjection();
+		void SetRoll(float rollRadians);
 
 		// VESTA-style: orbit uses screen-space axes (local camera frame)
 		void Orbit(float deltaX, float deltaY);
+		void Roll(float delta);
 		void Pan(float deltaX, float deltaY);
 		void Zoom(float delta);
 
@@ -39,6 +42,7 @@ namespace DefectStudio
 		[[nodiscard]] float Distance() const;
 		[[nodiscard]] float Yaw() const;
 		[[nodiscard]] float Pitch() const;
+		[[nodiscard]] float Roll() const;
 		[[nodiscard]] CameraProjection Projection() const;
 
 	private:
@@ -59,5 +63,6 @@ namespace DefectStudio
 		float m_FarPlane = 500.0f;
 		CameraProjection m_Projection = CameraProjection::Perspective;
 		float m_OrthoScale = 1.0f; // zoom scale for orthographic
+		float m_Roll = 0.0f;
 	};
 } // namespace DefectStudio

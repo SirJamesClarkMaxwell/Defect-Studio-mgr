@@ -139,13 +139,14 @@ include "Vendor/nativefiledialog-extended"
 group ""
 
 local function ApplyDependencyRuntimeFilters(projectName)
-    filter { "projects:" .. projectName, "configurations:Debug" }
+    project(projectName)
+    filter "configurations:Debug"
         runtime "Debug"
         symbols "On"
-    filter { "projects:" .. projectName, "configurations:Release" }
+    filter "configurations:Release"
         runtime "Release"
         optimize "On"
-    filter { "projects:" .. projectName, "configurations:Dist" }
+    filter "configurations:Dist"
         runtime "Release"
         optimize "Full"
     filter {}
@@ -160,11 +161,12 @@ ApplyDependencyRuntimeFilters("GoogleTestMain")
 ApplyDependencyRuntimeFilters("nfd")
 ApplyDependencyRuntimeFilters("nanobind")
 
-filter "projects:nanobind"
+project "nanobind"
     defines { "Py_NO_LINK_LIB" }
 filter {}
 
-filter { "projects:DefectStudioPythonBridge", "system:windows", "configurations:Debug" }
+project "DefectStudioPythonBridge"
+filter { "system:windows", "configurations:Debug" }
     linkoptions {
         "/NODEFAULTLIB:python313_d.lib",
         "/NODEFAULTLIB:python313t_d.lib"

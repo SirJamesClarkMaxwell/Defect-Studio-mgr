@@ -182,6 +182,9 @@ namespace DefectStudio
 		case SettingsPanel::Tab::Viewport:
 			renderViewportTab();
 			break;
+		case SettingsPanel::Tab::Renderer:
+			renderRendererTab();
+			break;
 		case SettingsPanel::Tab::Input:
 			renderInputTab();
 			break;
@@ -262,6 +265,46 @@ namespace DefectStudio
 		m_DraftConfig.eventQueue.growthStep = std::max<std::size_t>(m_DraftConfig.eventQueue.growthStep, 32);
 		m_DraftConfig.window.width = std::max(320, m_DraftConfig.window.width);
 		m_DraftConfig.window.height = std::max(240, m_DraftConfig.window.height);
+
+		constexpr float kMinSensitivity = 0.05f;
+		constexpr float kMaxSensitivity = 4.0f;
+		constexpr float kMinFocusDistance = 0.25f;
+		constexpr float kMaxFocusDistance = 256.0f;
+		constexpr float kMinFocusTransitionSeconds = 0.02f;
+		constexpr float kMaxFocusTransitionSeconds = 3.0f;
+		constexpr float kMinViewportButtonSize = 10.0f;
+		constexpr float kMaxViewportButtonSize = 48.0f;
+
+		for (float &channel : m_DraftConfig.renderer.backgroundColor)
+			channel = std::clamp(channel, 0.0f, 1.0f);
+		m_DraftConfig.renderer.orbitSensitivity = std::clamp(m_DraftConfig.renderer.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
+		m_DraftConfig.renderer.panSensitivity = std::clamp(m_DraftConfig.renderer.panSensitivity, kMinSensitivity, kMaxSensitivity);
+		m_DraftConfig.renderer.zoomSensitivity = std::clamp(m_DraftConfig.renderer.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
+		m_DraftConfig.renderer.focusSelectedAtomDistance = std::clamp(
+			m_DraftConfig.renderer.focusSelectedAtomDistance,
+			kMinFocusDistance,
+			kMaxFocusDistance);
+		m_DraftConfig.renderer.focusSelectedAtomTransitionSeconds = std::clamp(
+			m_DraftConfig.renderer.focusSelectedAtomTransitionSeconds,
+			kMinFocusTransitionSeconds,
+			kMaxFocusTransitionSeconds);
+		m_DraftConfig.renderer.viewport.axisButtonSize = std::clamp(
+			m_DraftConfig.renderer.viewport.axisButtonSize,
+			kMinViewportButtonSize,
+			kMaxViewportButtonSize);
+		m_DraftConfig.renderer.viewport.iconButtonSize = std::clamp(
+			m_DraftConfig.renderer.viewport.iconButtonSize,
+			kMinViewportButtonSize,
+			kMaxViewportButtonSize);
+		m_DraftConfig.renderer.lighting.ambientIntensity = std::clamp(m_DraftConfig.renderer.lighting.ambientIntensity, 0.0f, 1.5f);
+		m_DraftConfig.renderer.lighting.keyIntensity = std::clamp(m_DraftConfig.renderer.lighting.keyIntensity, 0.0f, 1.5f);
+		m_DraftConfig.renderer.lighting.fillIntensity = std::clamp(m_DraftConfig.renderer.lighting.fillIntensity, 0.0f, 1.5f);
+		m_DraftConfig.renderer.lighting.backIntensity = std::clamp(m_DraftConfig.renderer.lighting.backIntensity, 0.0f, 1.5f);
+		if (m_DraftConfig.renderer.defaultProjection != "perspective" &&
+			m_DraftConfig.renderer.defaultProjection != "orthographic")
+		{
+			m_DraftConfig.renderer.defaultProjection = "perspective";
+		}
 
 		if (!queueEvent(m_EventBus, ApplyRequested{m_DraftConfig, persist}))
 		{
@@ -483,6 +526,7 @@ namespace DefectStudio
 			"Profiles",
 			"Layout",
 			"Viewport",
+			"Renderer",
 			"Editing",
 			"Animation",
 			"Input",
@@ -1096,6 +1140,191 @@ namespace DefectStudio
 
 			ImGui::EndTable();
 		}
+	}
+
+	void SettingsPanel::renderRendererTab()
+	{
+		bool rendererSettingsChanged = false;
+		auto markDirty = [this, &rendererSettingsChanged]() {
+			m_DraftDirty = true;
+			rendererSettingsChanged = true;
+		};
+
+		ImGui::TextUnformatted("Renderer settings");
+		ImGui::TextWrapped("Values apply immediately to renderer windows; use Apply to persist them.");
+
+		ImGui::SeparatorText("Camera");
+		if (ImGui::BeginTable("RendererCamera", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Default projection");
+			ImGui::TableSetColumnIndex(1);
+			int projectionIndex = m_DraftConfig.renderer.defaultProjection == "orthographic" ? 1 : 0;
+			const char *projectionModes[] = {"Perspective", "Orthographic"};
+			if (ImGui::Combo("##RendererProjection", &projectionIndex, projectionModes, IM_ARRAYSIZE(projectionModes)))
+			{
+				m_DraftConfig.renderer.defaultProjection = projectionIndex == 1 ? "orthographic" : "perspective";
+				markDirty();
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Orbit sensitivity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##OrbitSensitivity", &m_DraftConfig.renderer.orbitSensitivity, 0.05f, 4.0f, "%.2fx"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Pan sensitivity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##PanSensitivity", &m_DraftConfig.renderer.panSensitivity, 0.05f, 4.0f, "%.2fx"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Zoom sensitivity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##ZoomSensitivity", &m_DraftConfig.renderer.zoomSensitivity, 0.05f, 4.0f, "%.2fx"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Focus atom distance");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat(
+					"##FocusSelectedAtomDistance",
+					&m_DraftConfig.renderer.focusSelectedAtomDistance,
+					0.25f,
+					256.0f,
+					"%.2f"))
+			{
+				markDirty();
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Focus animation");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat(
+					"##FocusSelectedAtomTransitionSeconds",
+					&m_DraftConfig.renderer.focusSelectedAtomTransitionSeconds,
+					0.02f,
+					3.0f,
+					"%.2fs"))
+			{
+				markDirty();
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Invert zoom");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##InvertZoom", &m_DraftConfig.renderer.invertZoom))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Touchpad navigation");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##TouchpadNav", &m_DraftConfig.renderer.touchpadNavigation))
+				markDirty();
+
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Lighting");
+		if (ImGui::BeginTable("RendererLighting", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Background");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##RendererBackground", m_DraftConfig.renderer.backgroundColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Ambient intensity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##AmbientIntensity", &m_DraftConfig.renderer.lighting.ambientIntensity, 0.0f, 1.5f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Key light intensity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##KeyIntensity", &m_DraftConfig.renderer.lighting.keyIntensity, 0.0f, 1.5f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Fill light intensity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##FillIntensity", &m_DraftConfig.renderer.lighting.fillIntensity, 0.0f, 1.5f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Back light intensity");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##BackIntensity", &m_DraftConfig.renderer.lighting.backIntensity, 0.0f, 1.5f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Two-sided lighting");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##TwoSidedLighting", &m_DraftConfig.renderer.lighting.twoSided))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Key direction");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::DragFloat3("##KeyDirection", m_DraftConfig.renderer.lighting.keyDirection.data(), 0.05f, -1.0f, 1.0f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Fill direction");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::DragFloat3("##FillDirection", m_DraftConfig.renderer.lighting.fillDirection.data(), 0.05f, -1.0f, 1.0f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Back direction");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::DragFloat3("##BackDirection", m_DraftConfig.renderer.lighting.backDirection.data(), 0.05f, -1.0f, 1.0f, "%.2f"))
+				markDirty();
+
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Viewport gizmo");
+		if (ImGui::BeginTable("RendererViewport", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Axis button size");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##AxisButtonSize", &m_DraftConfig.renderer.viewport.axisButtonSize, 10.0f, 48.0f, "%.0f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Icon button size");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##IconButtonSize", &m_DraftConfig.renderer.viewport.iconButtonSize, 10.0f, 48.0f, "%.0f"))
+				markDirty();
+
+			ImGui::EndTable();
+		}
+
+		if (rendererSettingsChanged)
+			(void)applyDraft(false);
 	}
 
 	void SettingsPanel::renderFilePathsTab()

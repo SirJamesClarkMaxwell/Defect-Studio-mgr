@@ -6,19 +6,29 @@ in vec3 vWorldPos;
 
 out vec4 oColor;
 
+uniform vec3 u_KeyDirection;
+uniform vec3 u_FillDirection;
+uniform vec3 u_BackDirection;
+uniform float u_AmbientIntensity;
+uniform float u_KeyIntensity;
+uniform float u_FillIntensity;
+uniform float u_BackIntensity;
+uniform int u_TwoSidedLighting;
+
+float ComputeDiffuse(vec3 normalVector, vec3 lightDirection)
+{
+	float value = dot(normalVector, normalize(lightDirection));
+	if (u_TwoSidedLighting == 1)
+		return abs(value);
+	return max(value, 0.0);
+}
+
 void main()
 {
 	vec3 N = normalize(vNormal);
-
-	vec3 key = normalize(vec3(0.6, 0.8, 0.5));
-	vec3 fill = normalize(vec3(-0.7, 0.3, 0.2));
-	vec3 backLight = normalize(vec3(0.0, -0.4, -0.8));
-
-	float dKey = max(dot(N, key), 0.0) * 0.55;
-	float dFill = max(dot(N, fill), 0.0) * 0.25;
-	float dBack = max(dot(N, backLight), 0.0) * 0.12;
-	float ambient = 0.18;
-
-	float intensity = ambient + dKey + dFill + dBack;
+	float dKey = ComputeDiffuse(N, u_KeyDirection) * u_KeyIntensity;
+	float dFill = ComputeDiffuse(N, u_FillDirection) * u_FillIntensity;
+	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;
+	float intensity = u_AmbientIntensity + dKey + dFill + dBack;
 	oColor = vec4(vColor.rgb * intensity, vColor.a);
 }

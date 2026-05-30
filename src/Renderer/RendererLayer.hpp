@@ -1,18 +1,30 @@
 #pragma once
 
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/glm.hpp>
 #include <imgui.h>
 
 #include "Core/Layer.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {
 	class OpenGlRendererBackend;
 	class RendererViewCamera;
+	class RendererPanel;
+	class EventBus;
+	struct ApplicationConfig;
+
+	namespace AppEvents::Config
+	{
+		struct Applied;
+	}
 
 	struct RendererAtomData
 	{
@@ -68,6 +80,62 @@ namespace DefectStudio
 		float rotationStepDeg = 1.0f;
 		float pixelStepPx = 10.0f;
 		float percentStep = 10.0f;
+		bool dragActive = false;
+		ImVec2 lastMousePosition = ImVec2(0.0f, 0.0f);
+		bool transitionActive = false;
+		float transitionElapsed = 0.0f;
+		float transitionDuration = 0.14f;
+		glm::vec3 transitionStartTarget = glm::vec3(0.0f);
+		glm::vec3 transitionEndTarget = glm::vec3(0.0f);
+		float transitionStartDistance = 0.0f;
+		float transitionEndDistance = 0.0f;
+		float transitionStartYaw = 0.0f;
+		float transitionEndYaw = 0.0f;
+		float transitionStartPitch = 0.0f;
+		float transitionEndPitch = 0.0f;
+		float transitionStartRoll = 0.0f;
+		float transitionEndRoll = 0.0f;
+	};
+
+	struct RendererLightingSettings
+	{
+		glm::vec3 keyDirection = glm::normalize(glm::vec3(0.6f, 0.8f, 0.5f));
+		glm::vec3 fillDirection = glm::normalize(glm::vec3(-0.7f, 0.3f, 0.2f));
+		glm::vec3 backDirection = glm::normalize(glm::vec3(0.0f, -0.4f, -0.8f));
+		float ambientIntensity = 0.18f;
+		float keyIntensity = 0.55f;
+		float fillIntensity = 0.25f;
+		float backIntensity = 0.12f;
+		bool twoSided = true;
+	};
+
+	struct RendererViewportSettings
+	{
+		float axisButtonSize = 20.0f;
+		float iconButtonSize = 18.0f;
+	};
+
+	struct RendererGlobalRenderSettings
+	{
+		glm::vec4 backgroundColor = glm::vec4(0.06f, 0.07f, 0.08f, 1.0f);
+		float orbitSensitivity = 1.0f;
+		float panSensitivity = 1.0f;
+		float zoomSensitivity = 1.0f;
+		float focusSelectedAtomDistance = 3.0f;
+		float focusSelectedAtomTransitionSeconds = 0.18f;
+		bool invertZoom = false;
+		bool touchpadNavigation = true;
+		CameraProjection defaultCameraProjection = CameraProjection::Perspective;
+		RendererLightingSettings lighting;
+		RendererViewportSettings viewport;
+	};
+
+	struct RendererToolbarIconTexture
+	{
+		unsigned int rendererId = 0;
+		int width = 0;
+		int height = 0;
+		bool loadAttempted = false;
 	};
 
 	struct RendererQuickTestRuntime
@@ -75,10 +143,11 @@ namespace DefectStudio
 		Path configDirectory;
 		Path assetsDirectory;
 		Path shaderDirectory;
+		Ref<EventBus> eventBus;
 		bool enableQuickTestingStartup = true;
 	};
 
-	class RendererLayer final : public Layer
+	class RendererLayer final : public Layer, public EventReceiver
 	{
 	public:
 		explicit RendererLayer(RendererQuickTestRuntime runtime);
@@ -88,23 +157,30 @@ namespace DefectStudio
 		void OnDetach() override;
 		void OnUpdate(float deltaTime) override;
 		void OnImGuiRender() override;
+		void ApplyConfig(const ApplicationConfig &config);
 
 	private:
 		void loadQuickTestWindows();
-		void loadCameraState();
-		void saveCameraState() const;
-		void renderStructureWindow(RendererWindowState &windowState, float deltaTime);
-		void drawViewportToolbar(RendererWindowState &windowState);
-		void drawViewportGizmo(RendererWindowState &windowState);
-		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
-		Path rendererQuickStatePath() const;
+		void bindConfigEvents();
+		void onConfigApplied(const AppEvents::Config::Applied &event);
+		void applyDefaultProjectionToWindows();
+		const RendererToolbarIconTexture *getToolbarIcon(const std::string &iconFileName);
+		void releaseToolbarIcons();
 		Path resolveShaderDirectory() const;
 
 	private:
 		RendererQuickTestRuntime m_Runtime;
 		Unique<OpenGlRendererBackend> m_RendererBackend;
 		std::vector<RendererWindowState> m_Windows;
+		RendererGlobalRenderSettings m_GlobalRenderSettings;
+		Ref<EventBus> m_EventBus;
+		Unique<RendererPanel> m_Panel;
+		std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
+		std::string m_SelectedPeriodicElement = "C";
+		bool m_ShowPeriodicTableWindow = true;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;
+
+		friend class RendererPanel;
 	};
 } // namespace DefectStudio

@@ -70,6 +70,7 @@ namespace DefectStudio
 			const std::string &windowKey,
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings,
 			int viewportWidth,
 			int viewportHeight,
 			bool showAtoms,
@@ -89,11 +90,13 @@ namespace DefectStudio
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {});
 		void renderBonds(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
-			OpenGlViewportResources &resources);
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings);
 		void renderCellBox(const RendererStructureData &structure, const RendererViewCamera &camera);
 		void renderGrid(const RendererViewCamera &camera, OpenGlViewportResources &resources);
 		void dispatchBondCompute(const RendererStructureData &structure);

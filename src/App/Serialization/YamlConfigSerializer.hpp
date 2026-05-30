@@ -23,8 +23,42 @@ namespace DefectStudio
 			EventQueue,
 			Jobs,
 			Log,
+			Renderer,
 			UI,
 			Window,
+		};
+
+		enum class RendererKey
+		{
+			Background,
+			DefaultProjection,
+			FocusSelectedAtomDistance,
+			FocusSelectedAtomTransitionSeconds,
+			InvertZoom,
+			Lighting,
+			OrbitSensitivity,
+			PanSensitivity,
+			TouchpadNavigation,
+			Viewport,
+			ZoomSensitivity,
+		};
+
+		enum class RendererLightingKey
+		{
+			Ambient,
+			BackDirection,
+			BackIntensity,
+			FillDirection,
+			FillIntensity,
+			KeyDirection,
+			KeyIntensity,
+			TwoSided,
+		};
+
+		enum class RendererViewportKey
+		{
+			AxisButtonSize,
+			IconButtonSize,
 		};
 
 		enum class AppearanceKey
@@ -164,8 +198,39 @@ namespace DefectStudio
 			{SectionKey::EventQueue, "event_queue"},
 			{SectionKey::Jobs, "jobs"},
 			{SectionKey::Log, "log"},
+			{SectionKey::Renderer, "renderer"},
 			{SectionKey::UI, "ui"},
 			{SectionKey::Window, "window"},
+		};
+
+		inline const std::unordered_map<RendererKey, const char *> RendererKeyNames = {
+			{RendererKey::Background, "background"},
+			{RendererKey::DefaultProjection, "default_projection"},
+			{RendererKey::FocusSelectedAtomDistance, "focus_selected_atom_distance"},
+			{RendererKey::FocusSelectedAtomTransitionSeconds, "focus_selected_atom_transition_seconds"},
+			{RendererKey::InvertZoom, "invert_zoom"},
+			{RendererKey::Lighting, "lighting"},
+			{RendererKey::OrbitSensitivity, "orbit_sensitivity"},
+			{RendererKey::PanSensitivity, "pan_sensitivity"},
+			{RendererKey::TouchpadNavigation, "touchpad_navigation"},
+			{RendererKey::Viewport, "viewport"},
+			{RendererKey::ZoomSensitivity, "zoom_sensitivity"},
+		};
+
+		inline const std::unordered_map<RendererLightingKey, const char *> RendererLightingKeyNames = {
+			{RendererLightingKey::Ambient, "ambient"},
+			{RendererLightingKey::BackDirection, "back_direction"},
+			{RendererLightingKey::BackIntensity, "back"},
+			{RendererLightingKey::FillDirection, "fill_direction"},
+			{RendererLightingKey::FillIntensity, "fill"},
+			{RendererLightingKey::KeyDirection, "key_direction"},
+			{RendererLightingKey::KeyIntensity, "key"},
+			{RendererLightingKey::TwoSided, "two_sided"},
+		};
+
+		inline const std::unordered_map<RendererViewportKey, const char *> RendererViewportKeyNames = {
+			{RendererViewportKey::AxisButtonSize, "axis_button_size"},
+			{RendererViewportKey::IconButtonSize, "icon_button_size"},
 		};
 
 		inline const std::unordered_map<AppearanceKey, const char *> AppearanceKeyNames = {
@@ -297,6 +362,9 @@ namespace DefectStudio
 		inline const char *Name(AppearanceRoundingKey key) { return NameFromMap(AppearanceRoundingKeyNames, key); }
 		inline const char *Name(AppearanceSpacingKey key) { return NameFromMap(AppearanceSpacingKeyNames, key); }
 		inline const char *Name(AppearanceStateRuleKey key) { return NameFromMap(AppearanceStateRuleKeyNames, key); }
+		inline const char *Name(RendererKey key) { return NameFromMap(RendererKeyNames, key); }
+		inline const char *Name(RendererLightingKey key) { return NameFromMap(RendererLightingKeyNames, key); }
+		inline const char *Name(RendererViewportKey key) { return NameFromMap(RendererViewportKeyNames, key); }
 		inline const char *Name(EventQueueKey key) { return NameFromMap(EventQueueKeyNames, key); }
 		inline const char *Name(JobsKey key) { return NameFromMap(JobsKeyNames, key); }
 		inline const char *Name(LogKey key) { return NameFromMap(LogKeyNames, key); }

@@ -1,25 +1,82 @@
+global:
+  background:
+    - 0.06
+    - 0.07
+    - 0.08
+    - 1
+  orbit_sensitivity: 1
+  pan_sensitivity: 1
+  zoom_sensitivity: 1
+  invert_zoom: false
+  touchpad_navigation: true
+  default_projection: perspective
+  lighting:
+    ambient: 0.16
+    key: 0.2
+    fill: 0.25
+    back: 0.12
+    two_sided: true
+    key_direction:
+      - 0.6
+      - 0.8
+      - 0.5
+    fill_direction:
+      - -0.7
+      - 0.3
+      - 0.2
+    back_direction:
+      - 0
+      - -0.4
+      - -0.8
+ui:
+  show_periodic_table: false
+camera_frame: z_up_v2
 windows:
   T06 | GeV:
     target:
-      - 5.874964
-      - 2.4225516
-      - 5.5134883
-    distance: 0.25
-    yaw: 0.7853982
-    pitch: 0.61547977
+      - 10.558272
+      - 9.629946
+      - 8.367876
+    distance: 32.410057
+    yaw: -0.09156578
+    pitch: -0.9890425
+    projection: perspective
+    show_grid: true
+    show_cell: true
+    show_bonds: true
+    show_atoms: true
+    rotation_step_deg: 1
+    pan_step_px: 10
+    zoom_step_pct: 10
   T06 | hBN:
     target:
-      - 6.7806354
-      - 0.43894508
-      - 5.780209
-    distance: 36.707287
-    yaw: 4.664798
-    pitch: -0.11684263
+      - 5.6301584
+      - 8.668316
+      - 6.587242
+    distance: 40.59695
+    yaw: -0.3909735
+    pitch: 0.55808187
+    projection: perspective
+    show_grid: true
+    show_cell: true
+    show_bonds: true
+    show_atoms: true
+    rotation_step_deg: 5
+    pan_step_px: 10
+    zoom_step_pct: 10
   T06 | diament:
     target:
       - 6.6531405
       - 6.6531405
       - 6.6531405
-    distance: 16.27334
-    yaw: 0.7853982
-    pitch: 0.61547977
+    distance: 50.818974
+    yaw: 2.4317815
+    pitch: -0.62413913
+    projection: perspective
+    show_grid: true
+    show_cell: true
+    show_bonds: true
+    show_atoms: true
+    rotation_step_deg: 10
+    pan_step_px: 10
+    zoom_step_pct: 10

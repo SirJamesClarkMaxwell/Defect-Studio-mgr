@@ -7,12 +7,24 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace DefectStudio
 {
 	namespace
 	{
-		constexpr float kPitchLimit = 1.55334306f; // ~89 degrees
+		constexpr float kPitchLimit = 1.5692268f; // ~89.91 degrees
+
+		[[nodiscard]] float NormalizeAngleRadians(float angle)
+		{
+			constexpr float kTwoPi = 6.283185307f;
+			constexpr float kPi = 3.1415926535f;
+			while (angle > kPi)
+				angle -= kTwoPi;
+			while (angle < -kPi)
+				angle += kTwoPi;
+			return angle;
+		}
 	}
 
 	RendererViewCamera::RendererViewCamera() = default;
@@ -53,19 +65,56 @@ namespace DefectStudio
 		m_Pitch = clampedPitch(pitchRadians);
 	}
 
+	void RendererViewCamera::SetOrbitState(
+		const glm::vec3 &target,
+		float distance,
+		float yawRadians,
+		float pitchRadians)
+	{
+		m_Target = target;
+		m_Distance = std::max(distance, 0.1f);
+		m_Yaw = yawRadians;
+		m_Pitch = clampedPitch(pitchRadians);
+	}
+
 	void RendererViewCamera::SetFromDirection(const glm::vec3 &viewDirection)
 	{
 		if (glm::length(viewDirection) <= 0.00001f)
 			return;
 		const glm::vec3 normalized = glm::normalize(viewDirection);
-		m_Pitch = clampedPitch(std::asin(normalized.y));
-		m_Yaw = std::atan2(normalized.z, normalized.x);
+		m_Pitch = clampedPitch(std::asin(normalized.z));
+		m_Yaw = std::atan2(normalized.x, normalized.y);
+		m_Roll = 0.0f;
+	}
+
+	void RendererViewCamera::SetRoll(float rollRadians)
+	{
+		m_Roll = NormalizeAngleRadians(rollRadians);
 	}
 
 	void RendererViewCamera::SetAlignToAxis(const glm::vec3 &axis, const glm::vec3 &upHint)
 	{
-		(void)upHint;
-		SetFromDirection(glm::normalize(axis));
+		if (glm::length(axis) <= 0.00001f)
+			return;
+
+		const glm::vec3 forward = glm::normalize(axis);
+		m_Pitch = clampedPitch(std::asin(forward.z));
+		m_Yaw = std::atan2(forward.x, forward.y);
+
+		glm::vec3 baseRight = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
+		if (glm::dot(baseRight, baseRight) <= 1e-8f)
+			baseRight = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
+		baseRight = glm::normalize(baseRight);
+		const glm::vec3 baseUp = glm::normalize(glm::cross(baseRight, forward));
+
+		glm::vec3 requestedUp = upHint - glm::dot(upHint, forward) * forward;
+		if (glm::dot(requestedUp, requestedUp) <= 1e-8f)
+			requestedUp = baseUp;
+		requestedUp = glm::normalize(requestedUp);
+
+		const float sinRoll = glm::dot(glm::cross(baseUp, requestedUp), forward);
+		const float cosRoll = glm::dot(baseUp, requestedUp);
+		m_Roll = NormalizeAngleRadians(std::atan2(sinRoll, cosRoll));
 	}
 
 	void RendererViewCamera::FocusBounds(const glm::vec3 &minimum, const glm::vec3 &maximum)
@@ -80,8 +129,35 @@ namespace DefectStudio
 	void RendererViewCamera::Orbit(float deltaX, float deltaY)
 	{
 		constexpr float kScale = 0.0065f;
-		m_Yaw = m_Yaw - deltaX * kScale;
-		m_Pitch = clampedPitch(m_Pitch - deltaY * kScale);
+
+		const glm::vec3 forward = forwardDirection();
+		const glm::vec3 up = upDirection();
+
+		const glm::quat yawRotation = glm::angleAxis(-deltaX * kScale, glm::normalize(up));
+		glm::vec3 rotatedForward = glm::normalize(yawRotation * forward);
+		glm::vec3 rotatedUp = glm::normalize(yawRotation * up);
+
+		glm::vec3 localRight = glm::cross(rotatedForward, rotatedUp);
+		if (glm::dot(localRight, localRight) <= 1e-8f)
+			localRight = rightDirection();
+		localRight = glm::normalize(localRight);
+
+		const glm::quat pitchRotation = glm::angleAxis(-deltaY * kScale, localRight);
+		rotatedForward = glm::normalize(pitchRotation * rotatedForward);
+		rotatedUp = glm::normalize(pitchRotation * rotatedUp);
+
+		glm::vec3 baseRight = glm::cross(rotatedForward, glm::vec3(0.0f, 0.0f, 1.0f));
+		if (glm::dot(baseRight, baseRight) <= 1e-8f)
+			baseRight = glm::cross(rotatedForward, glm::vec3(0.0f, 1.0f, 0.0f));
+		baseRight = glm::normalize(baseRight);
+		const glm::vec3 baseUp = glm::normalize(glm::cross(baseRight, rotatedForward));
+
+		const float sinRoll = glm::dot(glm::cross(baseUp, rotatedUp), rotatedForward);
+		const float cosRoll = glm::dot(baseUp, rotatedUp);
+		m_Roll = NormalizeAngleRadians(std::atan2(sinRoll, cosRoll));
+
+		m_Yaw = std::atan2(rotatedForward.x, rotatedForward.y);
+		m_Pitch = clampedPitch(std::asin(glm::clamp(rotatedForward.z, -1.0f, 1.0f)));
 	}
 
 	void RendererViewCamera::Pan(float deltaX, float deltaY)
@@ -89,6 +165,11 @@ namespace DefectStudio
 		const float panScale = 0.0028f * m_Distance;
 		m_Target -= rightDirection() * (deltaX * panScale);
 		m_Target += upDirection() * (deltaY * panScale);
+	}
+
+	void RendererViewCamera::Roll(float delta)
+	{
+		m_Roll = NormalizeAngleRadians(m_Roll + delta);
 	}
 
 	void RendererViewCamera::Zoom(float delta)
@@ -145,6 +226,11 @@ namespace DefectStudio
 		return m_Pitch;
 	}
 
+	float RendererViewCamera::Roll() const
+	{
+		return m_Roll;
+	}
+
 	CameraProjection RendererViewCamera::Projection() const
 	{
 		return m_Projection;
@@ -154,14 +240,23 @@ namespace DefectStudio
 	{
 		const float cosPitch = std::cos(m_Pitch);
 		return glm::normalize(glm::vec3(
+			std::sin(m_Yaw) * cosPitch,
 			std::cos(m_Yaw) * cosPitch,
-			std::sin(m_Pitch),
-			std::sin(m_Yaw) * cosPitch));
+			std::sin(m_Pitch)));
 	}
 
 	glm::vec3 RendererViewCamera::rightDirection() const
 	{
-		return glm::normalize(glm::cross(forwardDirection(), glm::vec3(0.0f, 1.0f, 0.0f)));
+		const glm::vec3 forward = forwardDirection();
+		glm::vec3 baseRight = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
+		if (glm::dot(baseRight, baseRight) <= 1e-8f)
+			baseRight = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
+		baseRight = glm::normalize(baseRight);
+		if (std::abs(m_Roll) <= 1e-6f)
+			return baseRight;
+
+		const glm::quat rollRotation = glm::angleAxis(m_Roll, forward);
+		return glm::normalize(rollRotation * baseRight);
 	}
 
 	glm::vec3 RendererViewCamera::upDirection() const

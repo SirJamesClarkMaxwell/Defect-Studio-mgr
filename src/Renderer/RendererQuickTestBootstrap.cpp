@@ -104,7 +104,7 @@ namespace DefectStudio
 			glm::normalize(glm::vec3(-1.0f, 1.2f, 0.7f)),
 			glm::normalize(glm::vec3(1.0f, 0.9f, 1.2f))};
 		const std::array<float, 3> distanceScale = {1.25f, 1.15f, 1.75f};
-		const std::array<std::size_t, 3> hideSteps = {0, 7, 5};
+		const std::array<std::size_t, 3> hideSteps = {0, 0, 0};
 
 		for (std::size_t index = 0; index < files.size(); ++index)
 		{

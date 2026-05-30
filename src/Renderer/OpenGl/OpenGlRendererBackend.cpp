@@ -193,6 +193,7 @@ namespace DefectStudio
 		const std::string &windowKey,
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
+		const RendererGlobalRenderSettings &globalSettings,
 		int viewportWidth,
 		int viewportHeight,
 		bool showAtoms,
@@ -241,7 +242,11 @@ namespace DefectStudio
 		resources.gridDirty = true;
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
-		glClearColor(0.06f, 0.07f, 0.08f, 1.0f);
+		glClearColor(
+			globalSettings.backgroundColor.r,
+			globalSettings.backgroundColor.g,
+			globalSettings.backgroundColor.b,
+			globalSettings.backgroundColor.a);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		configureOpenGlState();
@@ -255,9 +260,9 @@ namespace DefectStudio
 		if (showCellBox)
 			renderCellBox(structure, camera);
 		if (showBonds)
-			renderBonds(structure, camera, resources);
+			renderBonds(structure, camera, resources, globalSettings);
 		if (showAtoms)
-			renderAtoms(structure, camera, resources, selectedAtomIndices);
+			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -395,13 +400,17 @@ namespace DefectStudio
 
 	void OpenGlRendererBackend::createCylinderMesh()
 	{
-		const int segments = 8;
+		const int segments = 24;
 		std::vector<CylinderVertex> vertices;
 		std::vector<std::uint32_t> indices;
+		vertices.reserve(static_cast<std::size_t>((segments + 1) * 6 + 2));
+		indices.reserve(static_cast<std::size_t>(segments * 12));
+
+		// Side surface.
 		for (int ring = 0; ring <= 1; ++ring)
 		{
 			const float z = static_cast<float>(ring);
-			for (int segment = 0; segment < segments; ++segment)
+			for (int segment = 0; segment <= segments; ++segment)
 			{
 				const float angle = 6.283185307f * static_cast<float>(segment) / static_cast<float>(segments);
 				const float x = std::cos(angle);
@@ -416,12 +425,49 @@ namespace DefectStudio
 
 		for (int segment = 0; segment < segments; ++segment)
 		{
-			const int next = (segment + 1) % segments;
 			const std::uint32_t a = static_cast<std::uint32_t>(segment);
-			const std::uint32_t b = static_cast<std::uint32_t>(next);
-			const std::uint32_t c = static_cast<std::uint32_t>(segment + segments);
-			const std::uint32_t d = static_cast<std::uint32_t>(next + segments);
+			const std::uint32_t b = static_cast<std::uint32_t>(segment + 1);
+			const std::uint32_t c = static_cast<std::uint32_t>(segment + (segments + 1));
+			const std::uint32_t d = static_cast<std::uint32_t>(segment + (segments + 1) + 1);
 			indices.insert(indices.end(), {a, c, b, b, c, d});
+		}
+
+		// Cap near atom A (z = 0).
+		const std::uint32_t capStartCenter = static_cast<std::uint32_t>(vertices.size());
+		vertices.push_back({glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), 0.0f});
+		const std::uint32_t capStartRing = static_cast<std::uint32_t>(vertices.size());
+		for (int segment = 0; segment <= segments; ++segment)
+		{
+			const float angle = 6.283185307f * static_cast<float>(segment) / static_cast<float>(segments);
+			vertices.push_back({
+				glm::vec3(std::cos(angle), std::sin(angle), 0.0f),
+				glm::vec3(0.0f, 0.0f, -1.0f),
+				0.0f});
+		}
+		for (int segment = 0; segment < segments; ++segment)
+		{
+			const std::uint32_t a = capStartRing + static_cast<std::uint32_t>(segment);
+			const std::uint32_t b = capStartRing + static_cast<std::uint32_t>(segment + 1);
+			indices.insert(indices.end(), {capStartCenter, b, a});
+		}
+
+		// Cap near atom B (z = 1).
+		const std::uint32_t capEndCenter = static_cast<std::uint32_t>(vertices.size());
+		vertices.push_back({glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f), 1.0f});
+		const std::uint32_t capEndRing = static_cast<std::uint32_t>(vertices.size());
+		for (int segment = 0; segment <= segments; ++segment)
+		{
+			const float angle = 6.283185307f * static_cast<float>(segment) / static_cast<float>(segments);
+			vertices.push_back({
+				glm::vec3(std::cos(angle), std::sin(angle), 1.0f),
+				glm::vec3(0.0f, 0.0f, 1.0f),
+				1.0f});
+		}
+		for (int segment = 0; segment < segments; ++segment)
+		{
+			const std::uint32_t a = capEndRing + static_cast<std::uint32_t>(segment);
+			const std::uint32_t b = capEndRing + static_cast<std::uint32_t>(segment + 1);
+			indices.insert(indices.end(), {capEndCenter, a, b});
 		}
 
 		glGenVertexArrays(1, &m_CylinderMesh.vao);
@@ -493,6 +539,7 @@ namespace DefectStudio
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
+		const RendererGlobalRenderSettings &globalSettings,
 		const std::vector<std::size_t> &selectedIndices)
 	{
 		if (resources.atomsDirty)
@@ -528,30 +575,51 @@ namespace DefectStudio
 		TracyGpuZone("Renderer.Atoms");
 #endif
 
-		if (resources.atomsDirty)
+		glBindBuffer(GL_ARRAY_BUFFER, m_SphereMesh.instanceVbo);
+		const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(
+			resources.cachedAtomInstances.size() * sizeof(OpenGlAtomInstance));
+		GLint currentSize = 0;
+		glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
+		if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
 		{
-			glBindBuffer(GL_ARRAY_BUFFER, m_SphereMesh.instanceVbo);
-			const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(
-				resources.cachedAtomInstances.size() * sizeof(OpenGlAtomInstance));
-			GLint currentSize = 0;
-			glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
-			if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
-			{
-				const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
-				glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
-			}
-			glBufferSubData(
-				GL_ARRAY_BUFFER,
-				0,
-				requiredBytes,
-				resources.cachedAtomInstances.data());
+			const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
+			glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
 		}
+		glBufferSubData(
+			GL_ARRAY_BUFFER,
+			0,
+			requiredBytes,
+			resources.cachedAtomInstances.data());
 
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("atoms", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		const int keyDirectionLocation = m_ShaderLibrary.Uniform("atoms", "u_KeyDirection");
+		const int fillDirectionLocation = m_ShaderLibrary.Uniform("atoms", "u_FillDirection");
+		const int backDirectionLocation = m_ShaderLibrary.Uniform("atoms", "u_BackDirection");
+		const int ambientLocation = m_ShaderLibrary.Uniform("atoms", "u_AmbientIntensity");
+		const int keyIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_KeyIntensity");
+		const int fillIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_FillIntensity");
+		const int backIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_BackIntensity");
+		const int twoSidedLocation = m_ShaderLibrary.Uniform("atoms", "u_TwoSidedLighting");
+		if (keyDirectionLocation >= 0)
+			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
+		if (fillDirectionLocation >= 0)
+			glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
+		if (backDirectionLocation >= 0)
+			glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
+		if (ambientLocation >= 0)
+			glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
+		if (keyIntensityLocation >= 0)
+			glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
+		if (fillIntensityLocation >= 0)
+			glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
+		if (backIntensityLocation >= 0)
+			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
+		if (twoSidedLocation >= 0)
+			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
 
 		glBindVertexArray(m_SphereMesh.vao);
 		glDrawElementsInstanced(
@@ -567,7 +635,8 @@ namespace DefectStudio
 	void OpenGlRendererBackend::renderBonds(
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
-		OpenGlViewportResources &resources)
+		OpenGlViewportResources &resources,
+		const RendererGlobalRenderSettings &globalSettings)
 	{
 		if (resources.bondsDirty)
 		{
@@ -581,21 +650,24 @@ namespace DefectStudio
 				const RendererAtomData &secondAtom = structure.atoms[bond.secondAtomIndex];
 				if (!firstAtom.visible || !secondAtom.visible)
 					continue;
-				const glm::vec3 fullDir = secondAtom.cartesianPosition - firstAtom.cartesianPosition;
-				const float fullLen = glm::length(fullDir);
-				if (!std::isfinite(fullLen) || fullLen <= 0.0001f)
+				const glm::vec3 axis = secondAtom.cartesianPosition - firstAtom.cartesianPosition;
+				const float axisLength = glm::length(axis);
+				if (!std::isfinite(axisLength) || axisLength <= 0.0001f)
 					continue;
-				const glm::vec3 zAxis = fullDir / fullLen;
-				const float shrinkA = std::min(firstAtom.radius, fullLen * 0.45f);
-				const float shrinkB = std::min(secondAtom.radius, fullLen * 0.45f);
-				const glm::vec3 newStart = firstAtom.cartesianPosition + zAxis * shrinkA;
-				const glm::vec3 newEnd = secondAtom.cartesianPosition - zAxis * shrinkB;
+				const glm::vec3 axisDirection = axis / axisLength;
+				const float firstOffset = std::min(std::max(firstAtom.radius, 0.0f), axisLength * 0.49f);
+				const float secondOffset = std::min(std::max(secondAtom.radius, 0.0f), axisLength * 0.49f);
+				const glm::vec3 startPoint = firstAtom.cartesianPosition + axisDirection * firstOffset;
+				const glm::vec3 endPoint = secondAtom.cartesianPosition - axisDirection * secondOffset;
+				const float clippedLength = glm::length(endPoint - startPoint);
+				if (!std::isfinite(clippedLength) || clippedLength <= 0.0001f)
+					continue;
 
 				OpenGlBondInstance instance;
 				instance.model = buildBondTransform(
-					newStart,
-					newEnd,
-					bond.radius);
+					startPoint,
+					endPoint,
+					std::max(bond.radius, 0.001f));
 				instance.colorA = glm::vec4(bond.gradient.start, 1.0f);
 				instance.colorB = glm::vec4(bond.gradient.finish, 1.0f);
 				resources.cachedBondInstances.push_back(instance);
@@ -603,8 +675,6 @@ namespace DefectStudio
 		}
 		if (resources.cachedBondInstances.empty())
 			return;
-
-		dispatchBondCompute(structure);
 
 		const unsigned int program = m_ShaderLibrary.Program("bonds");
 		if (program == 0)
@@ -614,30 +684,51 @@ namespace DefectStudio
 		TracyGpuZone("Renderer.Bonds");
 #endif
 
-		if (resources.bondsDirty)
+		glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
+		const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(
+			resources.cachedBondInstances.size() * sizeof(OpenGlBondInstance));
+		GLint currentSize = 0;
+		glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
+		if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
 		{
-			glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
-			const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(
-				resources.cachedBondInstances.size() * sizeof(OpenGlBondInstance));
-			GLint currentSize = 0;
-			glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
-			if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
-			{
-				const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
-				glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
-			}
-			glBufferSubData(
-				GL_ARRAY_BUFFER,
-				0,
-				requiredBytes,
-				resources.cachedBondInstances.data());
+			const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
+			glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
 		}
+		glBufferSubData(
+			GL_ARRAY_BUFFER,
+			0,
+			requiredBytes,
+			resources.cachedBondInstances.data());
 
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("bonds", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		const int keyDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyDirection");
+		const int fillDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_FillDirection");
+		const int backDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_BackDirection");
+		const int ambientLocation = m_ShaderLibrary.Uniform("bonds", "u_AmbientIntensity");
+		const int keyIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyIntensity");
+		const int fillIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_FillIntensity");
+		const int backIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_BackIntensity");
+		const int twoSidedLocation = m_ShaderLibrary.Uniform("bonds", "u_TwoSidedLighting");
+		if (keyDirectionLocation >= 0)
+			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
+		if (fillDirectionLocation >= 0)
+			glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
+		if (backDirectionLocation >= 0)
+			glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
+		if (ambientLocation >= 0)
+			glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
+		if (keyIntensityLocation >= 0)
+			glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
+		if (fillIntensityLocation >= 0)
+			glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
+		if (backIntensityLocation >= 0)
+			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
+		if (twoSidedLocation >= 0)
+			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
 
 		glBindVertexArray(m_CylinderMesh.vao);
 		glDrawElementsInstanced(
@@ -696,14 +787,14 @@ namespace DefectStudio
 			const int halfLines = 20;
 			const float spacing = 0.7f;
 			const float halfSpan = static_cast<float>(halfLines) * spacing;
-			const glm::vec3 center = camera.Target();
+			const glm::vec3 center(0.0f, 0.0f, 0.0f);
 			for (int line = -halfLines; line <= halfLines; ++line)
 			{
 				const float coordinate = static_cast<float>(line) * spacing;
-				resources.cachedGridVertices.push_back(glm::vec3(center.x - halfSpan, center.y, center.z + coordinate));
-				resources.cachedGridVertices.push_back(glm::vec3(center.x + halfSpan, center.y, center.z + coordinate));
-				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y, center.z - halfSpan));
-				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y, center.z + halfSpan));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x - halfSpan, center.y + coordinate, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x + halfSpan, center.y + coordinate, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y - halfSpan, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y + halfSpan, center.z));
 			}
 		}
 		if (resources.cachedGridVertices.empty())

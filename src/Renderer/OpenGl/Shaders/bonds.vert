@@ -23,10 +23,9 @@ void main()
     vec4 worldPosition = model * vec4(aPosition, 1.0);
     gl_Position = u_ViewProjection * worldPosition;
 
-    mat3 normalMatrix = mat3(model);
+    mat3 normalMatrix = transpose(inverse(mat3(model)));
     vNormal = normalize(normalMatrix * aNormal);
     vColorA = aColorA;
     vColorB = aColorB;
     vGradientT = aGradientT;
 }
-

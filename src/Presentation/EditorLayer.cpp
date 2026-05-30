@@ -251,7 +251,7 @@ namespace DefectStudio
 			m_KeymapResolver,
 			m_CommandRegistry,
 			m_CurrentConfig != nullptr ? *m_CurrentConfig : ApplicationConfig{},
-			"SettingsPanel",
+			"Settings",
 			true);
 		m_PanelsInitialized = true;
 	}

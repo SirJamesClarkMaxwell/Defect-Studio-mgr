@@ -209,6 +209,25 @@ namespace DefectStudio
 			return fallback;
 		}
 
+		std::array<float, 3> ReadVec3Node(const YAML::Node &node, std::array<float, 3> fallback)
+		{
+			if (!node || !node.IsSequence())
+				return fallback;
+			std::array<float, 3> result = fallback;
+			for (std::size_t i = 0; i < result.size() && i < node.size(); ++i)
+			{
+				try
+				{
+					result[i] = node[i].as<float>(result[i]);
+				}
+				catch (const YAML::Exception &)
+				{
+					return fallback;
+				}
+			}
+			return result;
+		}
+
 		std::array<float, 4> ReadColor(const YAML::Node &root,
 		                               std::span<const std::string_view> path,
 		                               std::string_view legacyFlatKey,
@@ -223,6 +242,22 @@ namespace DefectStudio
 		                               std::array<float, 4> fallback)
 		{
 			return ReadColor(root, std::span<const std::string_view>(path.begin(), path.size()), legacyFlatKey, fallback);
+		}
+
+		std::array<float, 3> ReadVec3(const YAML::Node &root,
+			std::span<const std::string_view> path,
+			std::string_view legacyFlatKey,
+			std::array<float, 3> fallback)
+		{
+			return ReadVec3Node(FindNode(root, path, legacyFlatKey), fallback);
+		}
+
+		std::array<float, 3> ReadVec3(const YAML::Node &root,
+			std::initializer_list<std::string_view> path,
+			std::string_view legacyFlatKey,
+			std::array<float, 3> fallback)
+		{
+			return ReadVec3(root, std::span<const std::string_view>(path.begin(), path.size()), legacyFlatKey, fallback);
 		}
 
 		std::array<float, 4> ReadClearColor(const YAML::Node &root, std::array<float, 4> fallback)
@@ -395,6 +430,18 @@ namespace DefectStudio
 			const char *eventQueueSection = Name(SectionKey::EventQueue);
 			const char *initialCapacityKey = Name(EventQueueKey::InitialCapacity);
 			const char *growthStepKey = Name(EventQueueKey::GrowthStep);
+			const char *rendererSection = Name(SectionKey::Renderer);
+			const char *rendererBackgroundKey = Name(RendererKey::Background);
+			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
+			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
+			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
+			const char *rendererFocusDistanceKey = Name(RendererKey::FocusSelectedAtomDistance);
+			const char *rendererFocusTransitionKey = Name(RendererKey::FocusSelectedAtomTransitionSeconds);
+			const char *rendererInvertZoomKey = Name(RendererKey::InvertZoom);
+			const char *rendererTouchpadKey = Name(RendererKey::TouchpadNavigation);
+			const char *rendererProjectionKey = Name(RendererKey::DefaultProjection);
+			const char *rendererLightingKey = Name(RendererKey::Lighting);
+			const char *rendererViewportKey = Name(RendererKey::Viewport);
 
 			Path2 logPath = {logSection, levelKey};
 			config.log.level = ParseLogLevel(
@@ -507,6 +554,104 @@ namespace DefectStudio
 				std::max(initialCapacity, static_cast<int>(RuntimeDefaults::EventQueueMinCapacity)));
 			config.eventQueue.growthStep = static_cast<std::size_t>(
 				std::max(growthStep, static_cast<int>(RuntimeDefaults::EventQueueMinGrowthStep)));
+
+			config.renderer.backgroundColor = ReadColor(
+				root,
+				{rendererSection, rendererBackgroundKey},
+				{},
+				config.renderer.backgroundColor);
+			config.renderer.orbitSensitivity = ReadValue(
+				root,
+				{rendererSection, rendererOrbitKey},
+				{},
+				config.renderer.orbitSensitivity);
+			config.renderer.panSensitivity = ReadValue(
+				root,
+				{rendererSection, rendererPanKey},
+				{},
+				config.renderer.panSensitivity);
+			config.renderer.zoomSensitivity = ReadValue(
+				root,
+				{rendererSection, rendererZoomKey},
+				{},
+				config.renderer.zoomSensitivity);
+			config.renderer.focusSelectedAtomDistance = ReadValue(
+				root,
+				{rendererSection, rendererFocusDistanceKey},
+				{},
+				config.renderer.focusSelectedAtomDistance);
+			config.renderer.focusSelectedAtomTransitionSeconds = ReadValue(
+				root,
+				{rendererSection, rendererFocusTransitionKey},
+				{},
+				config.renderer.focusSelectedAtomTransitionSeconds);
+			config.renderer.invertZoom = ReadValue(
+				root,
+				{rendererSection, rendererInvertZoomKey},
+				{},
+				config.renderer.invertZoom);
+			config.renderer.touchpadNavigation = ReadValue(
+				root,
+				{rendererSection, rendererTouchpadKey},
+				{},
+				config.renderer.touchpadNavigation);
+			config.renderer.defaultProjection = ReadString(
+				root,
+				{rendererSection, rendererProjectionKey},
+				{},
+				config.renderer.defaultProjection);
+
+			config.renderer.lighting.ambientIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::Ambient)},
+				{},
+				config.renderer.lighting.ambientIntensity);
+			config.renderer.lighting.keyIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::KeyIntensity)},
+				{},
+				config.renderer.lighting.keyIntensity);
+			config.renderer.lighting.fillIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::FillIntensity)},
+				{},
+				config.renderer.lighting.fillIntensity);
+			config.renderer.lighting.backIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::BackIntensity)},
+				{},
+				config.renderer.lighting.backIntensity);
+			config.renderer.lighting.twoSided = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::TwoSided)},
+				{},
+				config.renderer.lighting.twoSided);
+			config.renderer.lighting.keyDirection = ReadVec3(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::KeyDirection)},
+				{},
+				config.renderer.lighting.keyDirection);
+			config.renderer.lighting.fillDirection = ReadVec3(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::FillDirection)},
+				{},
+				config.renderer.lighting.fillDirection);
+			config.renderer.lighting.backDirection = ReadVec3(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::BackDirection)},
+				{},
+				config.renderer.lighting.backDirection);
+
+			config.renderer.viewport.axisButtonSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::AxisButtonSize)},
+				{},
+				config.renderer.viewport.axisButtonSize);
+			config.renderer.viewport.iconButtonSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
+				{},
+				config.renderer.viewport.iconButtonSize);
 		}
 
 		void ApplyUserYaml(const YAML::Node &root, ApplicationConfig &config)
@@ -528,6 +673,18 @@ namespace DefectStudio
 			const char *maximizedKey = Name(WindowKey::Maximized);
 			const char *settingsPreviewEnabledKey = Name(UiKey::SettingsPreviewEnabled);
 			const char *settingsAutoSaveOnPreviewKey = Name(UiKey::SettingsAutoSaveOnPreview);
+			const char *rendererSection = Name(SectionKey::Renderer);
+			const char *rendererBackgroundKey = Name(RendererKey::Background);
+			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
+			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
+			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
+			const char *rendererFocusDistanceKey = Name(RendererKey::FocusSelectedAtomDistance);
+			const char *rendererFocusTransitionKey = Name(RendererKey::FocusSelectedAtomTransitionSeconds);
+			const char *rendererInvertZoomKey = Name(RendererKey::InvertZoom);
+			const char *rendererTouchpadKey = Name(RendererKey::TouchpadNavigation);
+			const char *rendererProjectionKey = Name(RendererKey::DefaultProjection);
+			const char *rendererLightingKey = Name(RendererKey::Lighting);
+			const char *rendererViewportKey = Name(RendererKey::Viewport);
 
 			Path2 uiPath = {uiSection, fontScaleKey};
 			config.ui.fontScale = ReadValue(root, uiPath, Name(LegacyKey::UiFontScale), config.ui.fontScale);
@@ -567,6 +724,104 @@ namespace DefectStudio
 
 			config.ui.fontScale = std::clamp( config.ui.fontScale, config.ui.fontScaleMin, config.ui.fontScaleMax);
 			config.ui.fontScaleStep = std::clamp( config.ui.fontScaleStep, config.ui.fontScaleStepMin, config.ui.fontScaleStepMax);
+
+			config.renderer.backgroundColor = ReadColor(
+				root,
+				{rendererSection, rendererBackgroundKey},
+				{},
+				config.renderer.backgroundColor);
+			config.renderer.orbitSensitivity = ReadValue(
+				root,
+				{rendererSection, rendererOrbitKey},
+				{},
+				config.renderer.orbitSensitivity);
+			config.renderer.panSensitivity = ReadValue(
+				root,
+				{rendererSection, rendererPanKey},
+				{},
+				config.renderer.panSensitivity);
+			config.renderer.zoomSensitivity = ReadValue(
+				root,
+				{rendererSection, rendererZoomKey},
+				{},
+				config.renderer.zoomSensitivity);
+			config.renderer.focusSelectedAtomDistance = ReadValue(
+				root,
+				{rendererSection, rendererFocusDistanceKey},
+				{},
+				config.renderer.focusSelectedAtomDistance);
+			config.renderer.focusSelectedAtomTransitionSeconds = ReadValue(
+				root,
+				{rendererSection, rendererFocusTransitionKey},
+				{},
+				config.renderer.focusSelectedAtomTransitionSeconds);
+			config.renderer.invertZoom = ReadValue(
+				root,
+				{rendererSection, rendererInvertZoomKey},
+				{},
+				config.renderer.invertZoom);
+			config.renderer.touchpadNavigation = ReadValue(
+				root,
+				{rendererSection, rendererTouchpadKey},
+				{},
+				config.renderer.touchpadNavigation);
+			config.renderer.defaultProjection = ReadString(
+				root,
+				{rendererSection, rendererProjectionKey},
+				{},
+				config.renderer.defaultProjection);
+
+			config.renderer.lighting.ambientIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::Ambient)},
+				{},
+				config.renderer.lighting.ambientIntensity);
+			config.renderer.lighting.keyIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::KeyIntensity)},
+				{},
+				config.renderer.lighting.keyIntensity);
+			config.renderer.lighting.fillIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::FillIntensity)},
+				{},
+				config.renderer.lighting.fillIntensity);
+			config.renderer.lighting.backIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::BackIntensity)},
+				{},
+				config.renderer.lighting.backIntensity);
+			config.renderer.lighting.twoSided = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::TwoSided)},
+				{},
+				config.renderer.lighting.twoSided);
+			config.renderer.lighting.keyDirection = ReadVec3(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::KeyDirection)},
+				{},
+				config.renderer.lighting.keyDirection);
+			config.renderer.lighting.fillDirection = ReadVec3(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::FillDirection)},
+				{},
+				config.renderer.lighting.fillDirection);
+			config.renderer.lighting.backDirection = ReadVec3(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::BackDirection)},
+				{},
+				config.renderer.lighting.backDirection);
+
+			config.renderer.viewport.axisButtonSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::AxisButtonSize)},
+				{},
+				config.renderer.viewport.axisButtonSize);
+			config.renderer.viewport.iconButtonSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
+				{},
+				config.renderer.viewport.iconButtonSize);
 		}
 
 		bool LoadYamlFile(const Path &path, YAML::Node &root, std::string &error)
@@ -705,6 +960,14 @@ namespace DefectStudio
 		{
 			emitter << YAML::Flow << YAML::BeginSeq;
 			for (float component : color)
+				emitter << component;
+			emitter << YAML::EndSeq << YAML::Block;
+		}
+
+		void EmitVec3(YAML::Emitter &emitter, const std::array<float, 3> &vector)
+		{
+			emitter << YAML::Flow << YAML::BeginSeq;
+			for (float component : vector)
 				emitter << component;
 			emitter << YAML::EndSeq << YAML::Block;
 		}
@@ -1014,6 +1277,7 @@ namespace DefectStudio
 		constexpr const char *EventQueueSection = "event_queue";
 		constexpr const char *JobsSection = "jobs";
 		constexpr const char *LogSection = "log";
+		constexpr const char *RendererSection = "renderer";
 		constexpr const char *UiSection = "ui";
 		constexpr const char *WindowSection = "window";
 
@@ -1220,6 +1484,36 @@ namespace DefectStudio
 			out << YAML::Key << "initial_capacity" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.initialCapacity);
 			out << YAML::Key << "growth_step" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.growthStep);
 			out << YAML::EndMap;
+
+			out << YAML::Key << RendererSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "background" << YAML::Value;
+			ConfigYaml::EmitColor(out, config.renderer.backgroundColor);
+			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
+			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
+			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
+			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
+			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
+			out << YAML::Key << "invert_zoom" << YAML::Value << config.renderer.invertZoom;
+			out << YAML::Key << "touchpad_navigation" << YAML::Value << config.renderer.touchpadNavigation;
+			out << YAML::Key << "default_projection" << YAML::Value << config.renderer.defaultProjection;
+			out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "ambient" << YAML::Value << config.renderer.lighting.ambientIntensity;
+			out << YAML::Key << "key" << YAML::Value << config.renderer.lighting.keyIntensity;
+			out << YAML::Key << "fill" << YAML::Value << config.renderer.lighting.fillIntensity;
+			out << YAML::Key << "back" << YAML::Value << config.renderer.lighting.backIntensity;
+			out << YAML::Key << "two_sided" << YAML::Value << config.renderer.lighting.twoSided;
+			out << YAML::Key << "key_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.keyDirection);
+			out << YAML::Key << "fill_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.fillDirection);
+			out << YAML::Key << "back_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.backDirection);
+			out << YAML::EndMap;
+			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
+			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
+			out << YAML::EndMap;
+			out << YAML::EndMap;
 			out << YAML::EndMap;
 		}
 
@@ -1244,6 +1538,35 @@ namespace DefectStudio
 			out << YAML::Key << "maximized" << YAML::Value << config.window.maximized;
 			out << YAML::EndMap;
 			emitAppearance(out, config.appearance);
+			out << YAML::Key << RendererSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "background" << YAML::Value;
+			ConfigYaml::EmitColor(out, config.renderer.backgroundColor);
+			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
+			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
+			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
+			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
+			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
+			out << YAML::Key << "invert_zoom" << YAML::Value << config.renderer.invertZoom;
+			out << YAML::Key << "touchpad_navigation" << YAML::Value << config.renderer.touchpadNavigation;
+			out << YAML::Key << "default_projection" << YAML::Value << config.renderer.defaultProjection;
+			out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "ambient" << YAML::Value << config.renderer.lighting.ambientIntensity;
+			out << YAML::Key << "key" << YAML::Value << config.renderer.lighting.keyIntensity;
+			out << YAML::Key << "fill" << YAML::Value << config.renderer.lighting.fillIntensity;
+			out << YAML::Key << "back" << YAML::Value << config.renderer.lighting.backIntensity;
+			out << YAML::Key << "two_sided" << YAML::Value << config.renderer.lighting.twoSided;
+			out << YAML::Key << "key_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.keyDirection);
+			out << YAML::Key << "fill_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.fillDirection);
+			out << YAML::Key << "back_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.backDirection);
+			out << YAML::EndMap;
+			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
+			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
+			out << YAML::EndMap;
+			out << YAML::EndMap;
 			out << YAML::EndMap;
 		}
 
@@ -1287,6 +1610,36 @@ namespace DefectStudio
 			out << YAML::Key << EventQueueSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "initial_capacity" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.initialCapacity);
 			out << YAML::Key << "growth_step" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.growthStep);
+			out << YAML::EndMap;
+
+			out << YAML::Key << RendererSection << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "background" << YAML::Value;
+			ConfigYaml::EmitColor(out, config.renderer.backgroundColor);
+			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
+			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
+			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
+			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
+			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
+			out << YAML::Key << "invert_zoom" << YAML::Value << config.renderer.invertZoom;
+			out << YAML::Key << "touchpad_navigation" << YAML::Value << config.renderer.touchpadNavigation;
+			out << YAML::Key << "default_projection" << YAML::Value << config.renderer.defaultProjection;
+			out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "ambient" << YAML::Value << config.renderer.lighting.ambientIntensity;
+			out << YAML::Key << "key" << YAML::Value << config.renderer.lighting.keyIntensity;
+			out << YAML::Key << "fill" << YAML::Value << config.renderer.lighting.fillIntensity;
+			out << YAML::Key << "back" << YAML::Value << config.renderer.lighting.backIntensity;
+			out << YAML::Key << "two_sided" << YAML::Value << config.renderer.lighting.twoSided;
+			out << YAML::Key << "key_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.keyDirection);
+			out << YAML::Key << "fill_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.fillDirection);
+			out << YAML::Key << "back_direction" << YAML::Value;
+			ConfigYaml::EmitVec3(out, config.renderer.lighting.backDirection);
+			out << YAML::EndMap;
+			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
+			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
+			out << YAML::EndMap;
 			out << YAML::EndMap;
 			out << YAML::EndMap;
 		}

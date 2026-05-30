@@ -865,8 +865,12 @@ namespace DefectStudio
 		rendererRuntime.assetsDirectory = m_Config.paths.assetsDirectory;
 		rendererRuntime.shaderDirectory = Path::FromResolved(
 			FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
+		rendererRuntime.eventBus = m_EventBus;
 		rendererRuntime.enableQuickTestingStartup = true;
 		m_LayerStack.PushLayer(CreateUnique<RendererLayer>(std::move(rendererRuntime)));
+		auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer).lock();
+		if (rendererLayer != nullptr)
+			rendererLayer->ApplyConfig(m_Config);
 		ImGuiLayerRuntime imGuiRuntime;
 		imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;
 		imGuiRuntime.eventBus = m_EventBus;
