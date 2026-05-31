@@ -189,6 +189,15 @@ namespace DefectStudio
 #endif
 	}
 
+	void OpenGlRendererBackend::MarkGridDirty()
+	{
+		for (auto &[windowKey, resources] : m_Viewports)
+		{
+			(void)windowKey;
+			resources.gridDirty = true;
+		}
+	}
+
 	unsigned int OpenGlRendererBackend::RenderWindow(
 		const std::string &windowKey,
 		const RendererStructureData &structure,
@@ -239,7 +248,6 @@ namespace DefectStudio
 			resources.atomsDirty = true;
 			resources.lastSelectionHash = selectionHash;
 		}
-		resources.gridDirty = true;
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
 		glClearColor(

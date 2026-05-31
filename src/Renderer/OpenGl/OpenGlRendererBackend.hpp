@@ -66,6 +66,7 @@ namespace DefectStudio
 		void Shutdown();
 		void ReloadShadersIfNeeded();
 		void CollectProfilingData();
+		void MarkGridDirty();
 		[[nodiscard]] unsigned int RenderWindow(
 			const std::string &windowKey,
 			const RendererStructureData &structure,

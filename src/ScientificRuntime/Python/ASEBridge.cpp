@@ -6,22 +6,10 @@
 
 #include "Core/Utils/Path.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
+#include "ScientificRuntime/Python/ScriptBridgeUtils.hpp"
 
 namespace DefectStudio
 {
-	static std::string extractJsonLineFromOutput(const std::string &rawOutput)
-	{
-		std::istringstream input(rawOutput);
-		std::string line;
-		std::string lastNonEmptyLine;
-		while (std::getline(input, line))
-		{
-			if (!line.empty())
-				lastNonEmptyLine = line;
-		}
-		return lastNonEmptyLine;
-	}
-
 	Result<ASEConvertResult> ASEBridge::ConvertFile(const ASEConvertRequest &request) const
 	{
 		if (request.inputPath.Empty() || request.outputPath.Empty())
@@ -47,7 +35,7 @@ namespace DefectStudio
 		if (!runResult)
 			return runResult.Error();
 
-		const std::string jsonLine = extractJsonLineFromOutput(runResult->standardOutput);
+		const std::string jsonLine = ExtractJsonLineFromOutput(runResult->standardOutput);
 		if (jsonLine.empty())
 		{
 			return MakePythonExecutionError(

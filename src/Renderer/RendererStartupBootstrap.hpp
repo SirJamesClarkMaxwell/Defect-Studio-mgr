@@ -7,6 +7,5 @@
 
 namespace DefectStudio
 {
-	[[nodiscard]] std::vector<RendererWindowState> BuildRendererQuickTestWindows(const Path &assetsDirectory);
+	[[nodiscard]] std::vector<RendererWindowState> BuildRendererStartupWindows(const Path &assetsDirectory);
 }
-

@@ -860,14 +860,14 @@ namespace DefectStudio
 				scientificRuntimeLayer->BuildPythonBridgeCapability());
 		}
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
-		RendererQuickTestRuntime rendererRuntime;
-		rendererRuntime.configDirectory = m_Config.paths.userConfigDirectory;
-		rendererRuntime.assetsDirectory = m_Config.paths.assetsDirectory;
-		rendererRuntime.shaderDirectory = Path::FromResolved(
+		RendererStartupConfig rendererStartupConfig;
+		rendererStartupConfig.configDirectory = m_Config.paths.userConfigDirectory;
+		rendererStartupConfig.assetsDirectory = m_Config.paths.assetsDirectory;
+		rendererStartupConfig.shaderDirectory = Path::FromResolved(
 			FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
-		rendererRuntime.eventBus = m_EventBus;
-		rendererRuntime.enableQuickTestingStartup = true;
-		m_LayerStack.PushLayer(CreateUnique<RendererLayer>(std::move(rendererRuntime)));
+		rendererStartupConfig.eventBus = m_EventBus;
+		rendererStartupConfig.loadDefaultScene = true;
+		m_LayerStack.PushLayer(CreateUnique<RendererLayer>(std::move(rendererStartupConfig)));
 		auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer).lock();
 		if (rendererLayer != nullptr)
 			rendererLayer->ApplyConfig(m_Config);

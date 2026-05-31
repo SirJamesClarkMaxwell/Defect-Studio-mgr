@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 
-#include "Renderer/RendererQuickTestBootstrap.hpp"
+#include "Renderer/RendererStartupBootstrap.hpp"
 
 #include <array>
 
@@ -78,7 +78,7 @@ namespace DefectStudio
 		return window;
 	}
 
-	[[nodiscard]] std::vector<RendererWindowState> BuildRendererQuickTestWindows(const Path &assetsDirectory)
+	[[nodiscard]] std::vector<RendererWindowState> BuildRendererStartupWindows(const Path &assetsDirectory)
 	{
 		std::vector<RendererWindowState> windows;
 		ElementDataTable elementTable;

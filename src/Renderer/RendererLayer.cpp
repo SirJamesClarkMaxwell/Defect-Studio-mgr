@@ -15,13 +15,12 @@
 #include <string_view>
 
 #include <glad/gl.h>
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Time.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
-#include "Renderer/RendererQuickTestBootstrap.hpp"
+#include "Renderer/RendererStartupBootstrap.hpp"
 
 namespace DefectStudio
 {
@@ -150,8 +149,8 @@ namespace DefectStudio
 
 	}
 
-	RendererLayer::RendererLayer(RendererQuickTestRuntime runtime)
-		: Layer("RendererLayer"), m_Runtime(std::move(runtime))
+	RendererLayer::RendererLayer(RendererStartupConfig startupConfig)
+		: Layer("RendererLayer"), m_StartupConfig(std::move(startupConfig))
 	{
 		m_Panel = CreateUnique<RendererPanel>(*this);
 	}
@@ -181,14 +180,11 @@ namespace DefectStudio
 			return;
 		}
 
-		if (m_Runtime.enableQuickTestingStartup)
-			loadQuickTestWindows();
+		if (m_StartupConfig.loadDefaultScene)
+			loadDefaultWindows();
 		applyDefaultProjectionToWindows();
-		if (m_Runtime.eventBus != nullptr)
-		{
-			m_EventBus = m_Runtime.eventBus;
+		if (m_StartupConfig.eventBus != nullptr)
 			bindConfigEvents();
-		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
 		DS_LOG_INFO("RendererLayer attached with {} quick-test windows", m_Windows.size());
@@ -198,7 +194,6 @@ namespace DefectStudio
 	{
 		releaseToolbarIcons();
 		ClearSubscriptions();
-		m_EventBus.reset();
 		if (m_RendererBackend != nullptr)
 			m_RendererBackend->Shutdown();
 		m_RendererBackend.reset();
@@ -224,6 +219,8 @@ namespace DefectStudio
 
 	void RendererLayer::ApplyConfig(const ApplicationConfig &config)
 	{
+		const RendererGridSettings previousGridSettings = m_GlobalRenderSettings.grid;
+
 		m_GlobalRenderSettings.backgroundColor = glm::vec4(
 			config.renderer.backgroundColor[0],
 			config.renderer.backgroundColor[1],
@@ -384,21 +381,32 @@ namespace DefectStudio
 			m_GlobalRenderSettings.grid.planeZ,
 			kMinGridPlaneZ,
 			kMaxGridPlaneZ);
+
+		const bool gridSettingsChanged =
+			previousGridSettings.autoFitToStructureBounds != m_GlobalRenderSettings.grid.autoFitToStructureBounds ||
+			std::abs(previousGridSettings.paddingPercent - m_GlobalRenderSettings.grid.paddingPercent) > 0.0001f ||
+			std::abs(previousGridSettings.spacing - m_GlobalRenderSettings.grid.spacing) > 0.0001f ||
+			std::abs(previousGridSettings.planeZ - m_GlobalRenderSettings.grid.planeZ) > 0.0001f;
+		if (gridSettingsChanged && m_RendererBackend != nullptr)
+			m_RendererBackend->MarkGridDirty();
+
 		applyDefaultProjectionToWindows();
 	}
 
-	void RendererLayer::loadQuickTestWindows()
+	void RendererLayer::loadDefaultWindows()
 	{
-		m_Windows = BuildRendererQuickTestWindows(m_Runtime.assetsDirectory);
+		m_Windows = BuildRendererStartupWindows(m_StartupConfig.assetsDirectory);
+		if (m_RendererBackend != nullptr)
+			m_RendererBackend->MarkGridDirty();
 	}
 
 
 	void RendererLayer::bindConfigEvents()
 	{
-		if (m_EventBus == nullptr)
+		if (m_StartupConfig.eventBus == nullptr)
 			return;
 
-		AddSubscription(m_EventBus->Subscribe<AppEvents::Config::Applied>(
+		AddSubscription(m_StartupConfig.eventBus->Subscribe<AppEvents::Config::Applied>(
 			[this](const AppEvents::Config::Applied &event) { onConfigApplied(event); }));
 	}
 
@@ -428,7 +436,7 @@ namespace DefectStudio
 
 		icon.loadAttempted = true;
 
-		const Path iconPath = m_Runtime.assetsDirectory / Path("icons") / Path(iconFileName);
+		const Path iconPath = m_StartupConfig.assetsDirectory / Path("icons") / Path(iconFileName);
 		if (!FileSystem::Exists(iconPath.Native()))
 		{
 			DS_LOG_WARN("Renderer toolbar icon missing: {}", iconPath.String());
@@ -512,16 +520,16 @@ namespace DefectStudio
 
 	Path RendererLayer::resolveShaderDirectory() const
 	{
-		if (!m_Runtime.shaderDirectory.Empty())
+		if (!m_StartupConfig.shaderDirectory.Empty())
 		{
-			const Path resolvedExplicit = Path::FromResolved(m_Runtime.shaderDirectory.Native());
+			const Path resolvedExplicit = Path::FromResolved(m_StartupConfig.shaderDirectory.Native());
 			if (FileSystem::Exists(resolvedExplicit.Native()))
 				return resolvedExplicit;
 		}
 
 		const std::array<Path, 2> candidates = {
 			BuildShaderDirectoryFromCurrentPath(),
-			BuildShaderDirectoryFromAssetsRoot(m_Runtime.assetsDirectory)};
+			BuildShaderDirectoryFromAssetsRoot(m_StartupConfig.assetsDirectory)};
 
 		for (const Path &candidate : candidates)
 		{
@@ -531,8 +539,8 @@ namespace DefectStudio
 				return candidate;
 		}
 
-		if (!m_Runtime.shaderDirectory.Empty())
-			return Path::FromResolved(m_Runtime.shaderDirectory.Native());
+		if (!m_StartupConfig.shaderDirectory.Empty())
+			return Path::FromResolved(m_StartupConfig.shaderDirectory.Native());
 		return candidates[0];
 	}
 } // namespace DefectStudio

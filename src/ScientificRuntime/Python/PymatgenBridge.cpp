@@ -6,22 +6,10 @@
 
 #include "Core/Utils/Path.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
+#include "ScientificRuntime/Python/ScriptBridgeUtils.hpp"
 
 namespace DefectStudio
 {
-	static std::string extractJsonLine(const std::string &rawOutput)
-	{
-		std::istringstream input(rawOutput);
-		std::string line;
-		std::string lastNonEmptyLine;
-		while (std::getline(input, line))
-		{
-			if (!line.empty())
-				lastNonEmptyLine = line;
-		}
-		return lastNonEmptyLine;
-	}
-
 	Result<PymatgenRoundtripResult> PymatgenBridge::RoundtripPoscar(const PymatgenRoundtripRequest &request) const
 	{
 		if (request.inputPoscarPath.Empty() || request.outputPoscarPath.Empty())
@@ -42,7 +30,7 @@ namespace DefectStudio
 		if (!runResult)
 			return runResult.Error();
 
-		const std::string jsonLine = extractJsonLine(runResult->standardOutput);
+		const std::string jsonLine = ExtractJsonLineFromOutput(runResult->standardOutput);
 		if (jsonLine.empty())
 		{
 			return MakePythonExecutionError(

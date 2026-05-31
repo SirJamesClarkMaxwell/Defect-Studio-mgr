@@ -190,19 +190,19 @@ namespace DefectStudio
 		bool loadAttempted = false;
 	};
 
-	struct RendererQuickTestRuntime
+	struct RendererStartupConfig
 	{
 		Path configDirectory;
 		Path assetsDirectory;
 		Path shaderDirectory;
 		Ref<EventBus> eventBus;
-		bool enableQuickTestingStartup = true;
+		bool loadDefaultScene = true;
 	};
 
 	class RendererLayer final : public Layer, public EventReceiver
 	{
 	public:
-		explicit RendererLayer(RendererQuickTestRuntime runtime);
+		explicit RendererLayer(RendererStartupConfig startupConfig);
 		~RendererLayer() override;
 
 		void OnAttach() override;
@@ -212,7 +212,7 @@ namespace DefectStudio
 		void ApplyConfig(const ApplicationConfig &config);
 
 	private:
-		void loadQuickTestWindows();
+		void loadDefaultWindows();
 		void bindConfigEvents();
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void applyDefaultProjectionToWindows();
@@ -221,11 +221,10 @@ namespace DefectStudio
 		Path resolveShaderDirectory() const;
 
 	private:
-		RendererQuickTestRuntime m_Runtime;
+		RendererStartupConfig m_StartupConfig;
 		Unique<OpenGlRendererBackend> m_RendererBackend;
 		std::vector<RendererWindowState> m_Windows;
 		RendererGlobalRenderSettings m_GlobalRenderSettings;
-		Ref<EventBus> m_EventBus;
 		Unique<RendererPanel> m_Panel;
 		std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
 		std::string m_SelectedPeriodicElement = "C";
