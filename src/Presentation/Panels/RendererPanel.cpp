@@ -322,7 +322,7 @@ namespace DefectStudio
 		if (iconButton("##RollLeft", "rotate-arrow-z-left.png", "Rl-", "Roll left"))
 		{
 			RendererViewCamera animated = *windowState.camera;
-			animated.Roll(+rotationStepRadians());
+			animated.Orbit(+rotationStepRadians(), 0.0f);
 			queueTransition(animated);
 		}
 		sameLineTight();
@@ -330,7 +330,7 @@ namespace DefectStudio
 		if (iconButton("##RollRight", "rotate-arrow-z-right.png", "Rl+", "Roll right"))
 		{
 			RendererViewCamera animated = *windowState.camera;
-			animated.Roll(-rotationStepRadians());
+			animated.Orbit(-rotationStepRadians(), 0.0f);
 			queueTransition(animated);
 		}
 		sameLineTight();
@@ -338,7 +338,7 @@ namespace DefectStudio
 		if (iconButton("##OrbitUp", "rotate-arrow-z-out.png", "^", "Orbit up relative to camera"))
 		{
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, +orbitStep());
+			animated.Orbit(0.0f, +rotationStepRadians());
 			queueTransition(animated);
 		}
 		sameLineTight();
@@ -346,7 +346,7 @@ namespace DefectStudio
 		if (iconButton("##OrbitDown", "rotate-arrow-z-in.png", "v", "Orbit down relative to camera"))
 		{
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, -orbitStep());
+			animated.Orbit(0.0f, -rotationStepRadians());
 			queueTransition(animated);
 		}
 		sameLineTight();
@@ -354,7 +354,7 @@ namespace DefectStudio
 		if (iconButton("##OrbitLeft", "rotate-left.png", "<", "Orbit left relative to camera"))
 		{
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(+orbitStep(), 0.0f);
+			animated.Roll(+rotationStepRadians());
 			queueTransition(animated);
 		}
 		sameLineTight();
@@ -362,7 +362,7 @@ namespace DefectStudio
 		if (iconButton("##OrbitRight", "rotate-right.png", ">", "Orbit right relative to camera"))
 		{
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(-orbitStep(), 0.0f);
+			animated.Roll(-rotationStepRadians());
 			queueTransition(animated);
 		}
 

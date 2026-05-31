@@ -57,10 +57,10 @@ renderer:
   orbit_sensitivity: 1
   pan_sensitivity: 1
   zoom_sensitivity: 1
-  focus_selected_atom_distance: 3
-  focus_selected_atom_transition_seconds: 0.18
+  focus_selected_atom_distance: 2
+  focus_selected_atom_transition_seconds: 0.5
   focus_selected_atom_respect_atom_radius: true
-  focus_selected_atom_radius_multiplier: 2
+  focus_selected_atom_radius_multiplier: 1
   invert_zoom: false
   touchpad_navigation: true
   default_projection: orthographic
@@ -82,9 +82,9 @@ renderer:
     ctrl_presets: [0, 1, 3, 5, 10, 15, 30, 45, 60, 90, 180]
   grid:
     auto_fit_to_structure_bounds: true
-    padding_percent: 20
-    spacing: 0.7
-    plane_z: 0
+    padding_percent: 25.3
+    spacing: 0.99
+    plane_z: -7.9
   keyboard_shortcuts:
     align_axis_a: A
     align_axis_b: B
