@@ -35,6 +35,14 @@ namespace DefectStudio
 		constexpr float kMaxFocusTransitionSeconds = 3.0f;
 		constexpr float kMinFocusRadiusMultiplier = 0.1f;
 		constexpr float kMaxFocusRadiusMultiplier = 32.0f;
+		constexpr float kMinWheelStepDelta = 0.1f;
+		constexpr float kMaxWheelStepDelta = 45.0f;
+		constexpr float kMinGridPaddingPercent = 0.0f;
+		constexpr float kMaxGridPaddingPercent = 400.0f;
+		constexpr float kMinGridSpacing = 0.05f;
+		constexpr float kMaxGridSpacing = 25.0f;
+		constexpr float kMinGridPlaneZ = -10000.0f;
+		constexpr float kMaxGridPlaneZ = 10000.0f;
 
 		[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 		{
@@ -254,6 +262,13 @@ namespace DefectStudio
 			config.renderer.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
+		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = config.renderer.toolbarWheel.rotationStepDelta;
+		m_GlobalRenderSettings.toolbarWheel.zoomStepDelta = config.renderer.toolbarWheel.zoomStepDelta;
+		m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues = config.renderer.toolbarWheel.ctrlPresetValues;
+		m_GlobalRenderSettings.grid.autoFitToStructureBounds = config.renderer.grid.autoFitToStructureBounds;
+		m_GlobalRenderSettings.grid.paddingPercent = config.renderer.grid.paddingPercent;
+		m_GlobalRenderSettings.grid.spacing = config.renderer.grid.spacing;
+		m_GlobalRenderSettings.grid.planeZ = config.renderer.grid.planeZ;
 		m_GlobalRenderSettings.shortcuts.alignAxisA = ParseRendererShortcutKey(
 			config.renderer.shortcuts.alignAxisA,
 			ImGuiKey_A);
@@ -313,6 +328,55 @@ namespace DefectStudio
 			m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier,
 			kMinFocusRadiusMultiplier,
 			kMaxFocusRadiusMultiplier);
+		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = std::clamp(
+			m_GlobalRenderSettings.toolbarWheel.rotationStepDelta,
+			kMinWheelStepDelta,
+			kMaxWheelStepDelta);
+		m_GlobalRenderSettings.toolbarWheel.zoomStepDelta = std::clamp(
+			m_GlobalRenderSettings.toolbarWheel.zoomStepDelta,
+			kMinWheelStepDelta,
+			kMaxWheelStepDelta);
+		std::vector<float> sanitizedPresets;
+		sanitizedPresets.reserve(m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues.size());
+		for (const float value : m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues)
+		{
+			if (!std::isfinite(value))
+				continue;
+			sanitizedPresets.push_back(std::clamp(value, 0.0f, 180.0f));
+		}
+		if (sanitizedPresets.empty())
+		{
+			sanitizedPresets = {
+				0.0f,
+				1.0f,
+				3.0f,
+				5.0f,
+				10.0f,
+				15.0f,
+				30.0f,
+				45.0f,
+				60.0f,
+				90.0f,
+				180.0f};
+		}
+		std::sort(sanitizedPresets.begin(), sanitizedPresets.end());
+		const auto uniqueEnd = std::unique(sanitizedPresets.begin(), sanitizedPresets.end(), [](float a, float b) {
+			return std::abs(a - b) <= 0.0001f;
+		});
+		sanitizedPresets.erase(uniqueEnd, sanitizedPresets.end());
+		m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues = std::move(sanitizedPresets);
+		m_GlobalRenderSettings.grid.paddingPercent = std::clamp(
+			m_GlobalRenderSettings.grid.paddingPercent,
+			kMinGridPaddingPercent,
+			kMaxGridPaddingPercent);
+		m_GlobalRenderSettings.grid.spacing = std::clamp(
+			m_GlobalRenderSettings.grid.spacing,
+			kMinGridSpacing,
+			kMaxGridSpacing);
+		m_GlobalRenderSettings.grid.planeZ = std::clamp(
+			m_GlobalRenderSettings.grid.planeZ,
+			kMinGridPlaneZ,
+			kMaxGridPlaneZ);
 		applyDefaultProjectionToWindows();
 	}
 

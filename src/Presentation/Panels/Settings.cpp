@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstddef>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <string_view>
@@ -276,6 +278,14 @@ namespace DefectStudio
 		constexpr float kMaxFocusRadiusMultiplier = 32.0f;
 		constexpr float kMinViewportButtonSize = 10.0f;
 		constexpr float kMaxViewportButtonSize = 48.0f;
+		constexpr float kMinWheelStepDelta = 0.1f;
+		constexpr float kMaxWheelStepDelta = 45.0f;
+		constexpr float kMinGridPaddingPercent = 0.0f;
+		constexpr float kMaxGridPaddingPercent = 400.0f;
+		constexpr float kMinGridSpacing = 0.05f;
+		constexpr float kMaxGridSpacing = 25.0f;
+		constexpr float kMinGridPlaneZ = -10000.0f;
+		constexpr float kMaxGridPlaneZ = 10000.0f;
 
 		for (float &channel : m_DraftConfig.renderer.backgroundColor)
 			channel = std::clamp(channel, 0.0f, 1.0f);
@@ -302,6 +312,43 @@ namespace DefectStudio
 			m_DraftConfig.renderer.viewport.iconButtonSize,
 			kMinViewportButtonSize,
 			kMaxViewportButtonSize);
+		m_DraftConfig.renderer.toolbarWheel.rotationStepDelta = std::clamp(
+			m_DraftConfig.renderer.toolbarWheel.rotationStepDelta,
+			kMinWheelStepDelta,
+			kMaxWheelStepDelta);
+		m_DraftConfig.renderer.toolbarWheel.zoomStepDelta = std::clamp(
+			m_DraftConfig.renderer.toolbarWheel.zoomStepDelta,
+			kMinWheelStepDelta,
+			kMaxWheelStepDelta);
+		std::vector<float> sanitizedPresets;
+		sanitizedPresets.reserve(m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues.size());
+		for (const float value : m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues)
+		{
+			if (!std::isfinite(value))
+				continue;
+			sanitizedPresets.push_back(std::clamp(value, 0.0f, 180.0f));
+		}
+		if (sanitizedPresets.empty())
+			sanitizedPresets = {0.0f, 1.0f, 3.0f, 5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 60.0f, 90.0f, 180.0f};
+		std::sort(sanitizedPresets.begin(), sanitizedPresets.end());
+		sanitizedPresets.erase(
+			std::unique(sanitizedPresets.begin(), sanitizedPresets.end(), [](float left, float right) {
+				return std::abs(left - right) <= 0.0001f;
+			}),
+			sanitizedPresets.end());
+		m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues = std::move(sanitizedPresets);
+		m_DraftConfig.renderer.grid.paddingPercent = std::clamp(
+			m_DraftConfig.renderer.grid.paddingPercent,
+			kMinGridPaddingPercent,
+			kMaxGridPaddingPercent);
+		m_DraftConfig.renderer.grid.spacing = std::clamp(
+			m_DraftConfig.renderer.grid.spacing,
+			kMinGridSpacing,
+			kMaxGridSpacing);
+		m_DraftConfig.renderer.grid.planeZ = std::clamp(
+			m_DraftConfig.renderer.grid.planeZ,
+			kMinGridPlaneZ,
+			kMaxGridPlaneZ);
 		m_DraftConfig.renderer.lighting.ambientIntensity = std::clamp(m_DraftConfig.renderer.lighting.ambientIntensity, 0.0f, 1.5f);
 		m_DraftConfig.renderer.lighting.keyIntensity = std::clamp(m_DraftConfig.renderer.lighting.keyIntensity, 0.0f, 1.5f);
 		m_DraftConfig.renderer.lighting.fillIntensity = std::clamp(m_DraftConfig.renderer.lighting.fillIntensity, 0.0f, 1.5f);
@@ -1344,6 +1391,75 @@ namespace DefectStudio
 			if (ImGui::Checkbox("##TouchpadNav", &m_DraftConfig.renderer.touchpadNavigation))
 				markDirty();
 
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Wheel rotate step delta");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat(
+					"##WheelRotationStepDelta",
+					&m_DraftConfig.renderer.toolbarWheel.rotationStepDelta,
+					0.1f,
+					45.0f,
+					"%.2f"))
+			{
+				markDirty();
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Wheel zoom step delta");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat(
+					"##WheelZoomStepDelta",
+					&m_DraftConfig.renderer.toolbarWheel.zoomStepDelta,
+					0.1f,
+					45.0f,
+					"%.2f"))
+			{
+				markDirty();
+			}
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Ctrl-wheel presets");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::PushID("RendererCtrlWheelPresets");
+			for (std::size_t presetIndex = 0; presetIndex < m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues.size();)
+			{
+				ImGui::PushID(static_cast<int>(presetIndex));
+				ImGui::SetNextItemWidth(72.0f);
+				if (ImGui::InputFloat(
+						"##PresetValue",
+						&m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues[presetIndex],
+						0.0f,
+						0.0f,
+						"%.2f"))
+				{
+					markDirty();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("X"))
+				{
+					m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues.erase(
+						m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues.begin() + static_cast<std::ptrdiff_t>(presetIndex));
+					markDirty();
+					ImGui::PopID();
+					continue;
+				}
+				if (presetIndex + 1 < m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues.size())
+					ImGui::SameLine();
+				ImGui::PopID();
+				++presetIndex;
+			}
+			if (ImGui::Button("+ Add preset"))
+			{
+				const std::vector<float> &presets = m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues;
+				const float seed = presets.empty() ? 10.0f : (presets.back() + 1.0f);
+				m_DraftConfig.renderer.toolbarWheel.ctrlPresetValues.push_back(seed);
+				markDirty();
+			}
+			ImGui::PopID();
+
 			ImGui::EndTable();
 		}
 
@@ -1431,6 +1547,40 @@ namespace DefectStudio
 			ImGui::TextUnformatted("Icon button size");
 			ImGui::TableSetColumnIndex(1);
 			if (ImGui::SliderFloat("##IconButtonSize", &m_DraftConfig.renderer.viewport.iconButtonSize, 10.0f, 48.0f, "%.0f"))
+				markDirty();
+
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Grid");
+		if (ImGui::BeginTable("RendererGrid", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Auto-fit to structure bounds");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##GridAutoFit", &m_DraftConfig.renderer.grid.autoFitToStructureBounds))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Padding percent");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##GridPaddingPercent", &m_DraftConfig.renderer.grid.paddingPercent, 0.0f, 400.0f, "%.1f%%"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Spacing");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SliderFloat("##GridSpacing", &m_DraftConfig.renderer.grid.spacing, 0.05f, 25.0f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Plane Z");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::DragFloat("##GridPlaneZ", &m_DraftConfig.renderer.grid.planeZ, 0.1f, -10000.0f, 10000.0f, "%.2f"))
 				markDirty();
 
 			ImGui::EndTable();

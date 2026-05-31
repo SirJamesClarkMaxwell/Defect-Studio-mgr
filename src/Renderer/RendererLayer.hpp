@@ -115,6 +115,32 @@ namespace DefectStudio
 		float iconButtonSize = 18.0f;
 	};
 
+	struct RendererToolbarWheelSettings
+	{
+		float rotationStepDelta = 1.0f;
+		float zoomStepDelta = 1.0f;
+		std::vector<float> ctrlPresetValues = {
+			0.0f,
+			1.0f,
+			3.0f,
+			5.0f,
+			10.0f,
+			15.0f,
+			30.0f,
+			45.0f,
+			60.0f,
+			90.0f,
+			180.0f};
+	};
+
+	struct RendererGridSettings
+	{
+		bool autoFitToStructureBounds = true;
+		float paddingPercent = 20.0f;
+		float spacing = 0.7f;
+		float planeZ = 0.0f;
+	};
+
 	struct RendererKeyboardShortcutSettings
 	{
 		ImGuiKey alignAxisA = ImGuiKey_A;
@@ -146,6 +172,8 @@ namespace DefectStudio
 		CameraProjection defaultCameraProjection = CameraProjection::Perspective;
 		RendererLightingSettings lighting;
 		RendererViewportSettings viewport;
+		RendererToolbarWheelSettings toolbarWheel;
+		RendererGridSettings grid;
 		RendererKeyboardShortcutSettings shortcuts;
 	};
 

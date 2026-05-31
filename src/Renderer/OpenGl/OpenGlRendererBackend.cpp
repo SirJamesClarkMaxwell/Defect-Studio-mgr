@@ -256,7 +256,7 @@ namespace DefectStudio
 #endif
 
 		if (showGrid)
-			renderGrid(camera, resources);
+			renderGrid(structure, camera, resources, globalSettings);
 		if (showCellBox)
 			renderCellBox(structure, camera);
 		if (showBonds)
@@ -779,22 +779,66 @@ namespace DefectStudio
 		glBindVertexArray(0);
 	}
 
-	void OpenGlRendererBackend::renderGrid(const RendererViewCamera &camera, OpenGlViewportResources &resources)
+	void OpenGlRendererBackend::renderGrid(
+		const RendererStructureData &structure,
+		const RendererViewCamera &camera,
+		OpenGlViewportResources &resources,
+		const RendererGlobalRenderSettings &globalSettings)
 	{
 		if (resources.gridDirty)
 		{
 			resources.cachedGridVertices.clear();
-			const int halfLines = 20;
-			const float spacing = 0.7f;
-			const float halfSpan = static_cast<float>(halfLines) * spacing;
-			const glm::vec3 center(0.0f, 0.0f, 0.0f);
+
+			const float spacing = std::max(globalSettings.grid.spacing, 0.01f);
+			glm::vec3 minimum(0.0f, 0.0f, globalSettings.grid.planeZ);
+			glm::vec3 maximum(0.0f, 0.0f, globalSettings.grid.planeZ);
+			bool hasBounds = false;
+			if (globalSettings.grid.autoFitToStructureBounds)
+			{
+				for (const RendererCellEdge &edge : structure.cellEdges)
+				{
+					if (!IsFiniteVec3(edge.start) || !IsFiniteVec3(edge.finish))
+						continue;
+
+					if (!hasBounds)
+					{
+						minimum = edge.start;
+						maximum = edge.start;
+						hasBounds = true;
+					}
+
+					minimum = glm::min(minimum, edge.start);
+					minimum = glm::min(minimum, edge.finish);
+					maximum = glm::max(maximum, edge.start);
+					maximum = glm::max(maximum, edge.finish);
+				}
+			}
+
+			const glm::vec3 center = hasBounds
+				? glm::vec3(
+					0.5f * (minimum.x + maximum.x),
+					0.5f * (minimum.y + maximum.y),
+					0.5f * (minimum.z + maximum.z) + globalSettings.grid.planeZ)
+				: glm::vec3(0.0f, 0.0f, globalSettings.grid.planeZ);
+			float halfSpan = spacing * 20.0f;
+			if (hasBounds)
+			{
+				const float spanX = std::max(maximum.x - minimum.x, spacing);
+				const float spanY = std::max(maximum.y - minimum.y, spacing);
+				const float baseSpan = std::max(spanX, spanY);
+				const float paddingFactor = 1.0f + std::max(globalSettings.grid.paddingPercent, 0.0f) * 0.01f;
+				halfSpan = std::max(0.5f * baseSpan * paddingFactor, spacing);
+			}
+
+			const int halfLines = std::max(1, static_cast<int>(std::ceil(halfSpan / spacing)));
+			const float clampedHalfSpan = static_cast<float>(halfLines) * spacing;
 			for (int line = -halfLines; line <= halfLines; ++line)
 			{
 				const float coordinate = static_cast<float>(line) * spacing;
-				resources.cachedGridVertices.push_back(glm::vec3(center.x - halfSpan, center.y + coordinate, center.z));
-				resources.cachedGridVertices.push_back(glm::vec3(center.x + halfSpan, center.y + coordinate, center.z));
-				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y - halfSpan, center.z));
-				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y + halfSpan, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x - clampedHalfSpan, center.y + coordinate, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x + clampedHalfSpan, center.y + coordinate, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y - clampedHalfSpan, center.z));
+				resources.cachedGridVertices.push_back(glm::vec3(center.x + coordinate, center.y + clampedHalfSpan, center.z));
 			}
 		}
 		if (resources.cachedGridVertices.empty())

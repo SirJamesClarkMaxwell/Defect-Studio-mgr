@@ -44,6 +44,8 @@ namespace DefectStudio
 	void RendererViewCamera::SetDistance(float distance)
 	{
 		m_Distance = std::max(distance, 0.1f);
+		if (m_Projection == CameraProjection::Orthographic)
+			m_OrthoScale = std::max(0.1f, m_Distance * std::tan(m_FieldOfViewRadians * 0.5f));
 	}
 
 	void RendererViewCamera::SetProjection(CameraProjection projection)
@@ -73,6 +75,8 @@ namespace DefectStudio
 	{
 		m_Target = target;
 		m_Distance = std::max(distance, 0.1f);
+		if (m_Projection == CameraProjection::Orthographic)
+			m_OrthoScale = std::max(0.1f, m_Distance * std::tan(m_FieldOfViewRadians * 0.5f));
 		m_Yaw = yawRadians;
 		m_Pitch = clampedPitch(pitchRadians);
 	}
@@ -182,6 +186,9 @@ namespace DefectStudio
 		else
 		{
 			m_OrthoScale = std::max(0.25f, m_OrthoScale * (1.0f - delta * 0.1f));
+			m_Distance = std::max(
+				0.25f,
+				m_OrthoScale / std::tan(m_FieldOfViewRadians * 0.5f));
 		}
 	}
 

@@ -260,6 +260,34 @@ namespace DefectStudio
 			return ReadVec3(root, std::span<const std::string_view>(path.begin(), path.size()), legacyFlatKey, fallback);
 		}
 
+		std::vector<float> ReadFloatList(
+			const YAML::Node &root,
+			std::initializer_list<std::string_view> path,
+			std::string_view legacyFlatKey,
+			std::vector<float> fallback)
+		{
+			const YAML::Node node = FindNode(root, path, legacyFlatKey);
+			if (!node.IsDefined() || node.IsNull())
+				return fallback;
+			if (!node.IsSequence())
+				return fallback;
+
+			std::vector<float> values;
+			values.reserve(node.size());
+			for (std::size_t index = 0; index < node.size(); ++index)
+			{
+				try
+				{
+					values.push_back(node[index].as<float>());
+				}
+				catch (const YAML::Exception &)
+				{
+					return fallback;
+				}
+			}
+			return values;
+		}
+
 		std::array<float, 4> ReadClearColor(const YAML::Node &root, std::array<float, 4> fallback)
 		{
 			using namespace ConfigSchema;
@@ -444,6 +472,8 @@ namespace DefectStudio
 			const char *rendererProjectionKey = Name(RendererKey::DefaultProjection);
 			const char *rendererLightingKey = Name(RendererKey::Lighting);
 			const char *rendererViewportKey = Name(RendererKey::Viewport);
+			const char *rendererToolbarWheelKey = Name(RendererKey::ToolbarWheel);
+			const char *rendererGridKey = Name(RendererKey::Grid);
 			const char *rendererShortcutsKey = Name(RendererKey::KeyboardShortcuts);
 
 			Path2 logPath = {logSection, levelKey};
@@ -665,6 +695,41 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.toolbarWheel.rotationStepDelta = ReadValue(
+				root,
+				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::RotationStepDelta)},
+				{},
+				config.renderer.toolbarWheel.rotationStepDelta);
+			config.renderer.toolbarWheel.zoomStepDelta = ReadValue(
+				root,
+				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::ZoomStepDelta)},
+				{},
+				config.renderer.toolbarWheel.zoomStepDelta);
+			config.renderer.toolbarWheel.ctrlPresetValues = ReadFloatList(
+				root,
+				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::CtrlPresets)},
+				{},
+				config.renderer.toolbarWheel.ctrlPresetValues);
+			config.renderer.grid.autoFitToStructureBounds = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::AutoFitToStructureBounds)},
+				{},
+				config.renderer.grid.autoFitToStructureBounds);
+			config.renderer.grid.paddingPercent = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::PaddingPercent)},
+				{},
+				config.renderer.grid.paddingPercent);
+			config.renderer.grid.spacing = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::Spacing)},
+				{},
+				config.renderer.grid.spacing);
+			config.renderer.grid.planeZ = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::PlaneZ)},
+				{},
+				config.renderer.grid.planeZ);
 			config.renderer.shortcuts.alignAxisA = ReadString(
 				root,
 				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisA)},
@@ -760,6 +825,8 @@ namespace DefectStudio
 			const char *rendererProjectionKey = Name(RendererKey::DefaultProjection);
 			const char *rendererLightingKey = Name(RendererKey::Lighting);
 			const char *rendererViewportKey = Name(RendererKey::Viewport);
+			const char *rendererToolbarWheelKey = Name(RendererKey::ToolbarWheel);
+			const char *rendererGridKey = Name(RendererKey::Grid);
 			const char *rendererShortcutsKey = Name(RendererKey::KeyboardShortcuts);
 
 			Path2 uiPath = {uiSection, fontScaleKey};
@@ -908,6 +975,41 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.toolbarWheel.rotationStepDelta = ReadValue(
+				root,
+				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::RotationStepDelta)},
+				{},
+				config.renderer.toolbarWheel.rotationStepDelta);
+			config.renderer.toolbarWheel.zoomStepDelta = ReadValue(
+				root,
+				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::ZoomStepDelta)},
+				{},
+				config.renderer.toolbarWheel.zoomStepDelta);
+			config.renderer.toolbarWheel.ctrlPresetValues = ReadFloatList(
+				root,
+				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::CtrlPresets)},
+				{},
+				config.renderer.toolbarWheel.ctrlPresetValues);
+			config.renderer.grid.autoFitToStructureBounds = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::AutoFitToStructureBounds)},
+				{},
+				config.renderer.grid.autoFitToStructureBounds);
+			config.renderer.grid.paddingPercent = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::PaddingPercent)},
+				{},
+				config.renderer.grid.paddingPercent);
+			config.renderer.grid.spacing = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::Spacing)},
+				{},
+				config.renderer.grid.spacing);
+			config.renderer.grid.planeZ = ReadValue(
+				root,
+				{rendererSection, rendererGridKey, Name(RendererGridKey::PlaneZ)},
+				{},
+				config.renderer.grid.planeZ);
 			config.renderer.shortcuts.alignAxisA = ReadString(
 				root,
 				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisA)},
@@ -1115,6 +1217,14 @@ namespace DefectStudio
 			emitter << YAML::Flow << YAML::BeginSeq;
 			for (float component : vector)
 				emitter << component;
+			emitter << YAML::EndSeq << YAML::Block;
+		}
+
+		void EmitFloatList(YAML::Emitter &emitter, const std::vector<float> &values)
+		{
+			emitter << YAML::Flow << YAML::BeginSeq;
+			for (float value : values)
+				emitter << value;
 			emitter << YAML::EndSeq << YAML::Block;
 		}
 
@@ -1661,6 +1771,18 @@ namespace DefectStudio
 			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
 			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
 			out << YAML::EndMap;
+			out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "rotation_step_delta" << YAML::Value << config.renderer.toolbarWheel.rotationStepDelta;
+			out << YAML::Key << "zoom_step_delta" << YAML::Value << config.renderer.toolbarWheel.zoomStepDelta;
+			out << YAML::Key << "ctrl_presets" << YAML::Value;
+			ConfigYaml::EmitFloatList(out, config.renderer.toolbarWheel.ctrlPresetValues);
+			out << YAML::EndMap;
+			out << YAML::Key << "grid" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "auto_fit_to_structure_bounds" << YAML::Value << config.renderer.grid.autoFitToStructureBounds;
+			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
+			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
+			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
+			out << YAML::EndMap;
 			out << YAML::Key << "keyboard_shortcuts" << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "align_axis_a" << YAML::Value << config.renderer.shortcuts.alignAxisA;
 			out << YAML::Key << "align_axis_b" << YAML::Value << config.renderer.shortcuts.alignAxisB;
@@ -1729,6 +1851,18 @@ namespace DefectStudio
 			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
 			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
+			out << YAML::EndMap;
+			out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "rotation_step_delta" << YAML::Value << config.renderer.toolbarWheel.rotationStepDelta;
+			out << YAML::Key << "zoom_step_delta" << YAML::Value << config.renderer.toolbarWheel.zoomStepDelta;
+			out << YAML::Key << "ctrl_presets" << YAML::Value;
+			ConfigYaml::EmitFloatList(out, config.renderer.toolbarWheel.ctrlPresetValues);
+			out << YAML::EndMap;
+			out << YAML::Key << "grid" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "auto_fit_to_structure_bounds" << YAML::Value << config.renderer.grid.autoFitToStructureBounds;
+			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
+			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
+			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
 			out << YAML::EndMap;
 			out << YAML::Key << "keyboard_shortcuts" << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "align_axis_a" << YAML::Value << config.renderer.shortcuts.alignAxisA;
@@ -1819,6 +1953,18 @@ namespace DefectStudio
 			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
 			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
+			out << YAML::EndMap;
+			out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "rotation_step_delta" << YAML::Value << config.renderer.toolbarWheel.rotationStepDelta;
+			out << YAML::Key << "zoom_step_delta" << YAML::Value << config.renderer.toolbarWheel.zoomStepDelta;
+			out << YAML::Key << "ctrl_presets" << YAML::Value;
+			ConfigYaml::EmitFloatList(out, config.renderer.toolbarWheel.ctrlPresetValues);
+			out << YAML::EndMap;
+			out << YAML::Key << "grid" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "auto_fit_to_structure_bounds" << YAML::Value << config.renderer.grid.autoFitToStructureBounds;
+			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
+			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
+			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
 			out << YAML::EndMap;
 			out << YAML::Key << "keyboard_shortcuts" << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "align_axis_a" << YAML::Value << config.renderer.shortcuts.alignAxisA;

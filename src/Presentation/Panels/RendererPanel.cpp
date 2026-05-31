@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <vector>
 
 #include <imgui.h>
 
@@ -62,6 +63,59 @@ namespace DefectStudio
 			if (!std::isfinite(value))
 				return 640.0f;
 			return std::clamp(value, kViewportMinSize, kViewportMaxSize);
+		}
+
+		[[nodiscard]] float NextPresetValue(
+			float currentValue,
+			const std::vector<float> &presets,
+			float minimumValue,
+			float maximumValue,
+			int direction)
+		{
+			if (presets.empty() || direction == 0)
+				return std::clamp(currentValue, minimumValue, maximumValue);
+
+			const float clampedCurrent = std::clamp(currentValue, minimumValue, maximumValue);
+			if (direction > 0)
+			{
+				for (const float preset : presets)
+				{
+					if (preset > clampedCurrent + 0.0001f)
+						return std::clamp(preset, minimumValue, maximumValue);
+				}
+				return std::clamp(presets.back(), minimumValue, maximumValue);
+			}
+
+			for (std::size_t index = presets.size(); index > 0; --index)
+			{
+				const float preset = presets[index - 1];
+				if (preset < clampedCurrent - 0.0001f)
+					return std::clamp(preset, minimumValue, maximumValue);
+			}
+			return std::clamp(presets.front(), minimumValue, maximumValue);
+		}
+
+		void ApplyToolbarWheelStep(
+			float wheelDelta,
+			bool usePresetList,
+			float plainStepDelta,
+			const std::vector<float> &presets,
+			float minimumValue,
+			float maximumValue,
+			float &value)
+		{
+			if (wheelDelta == 0.0f)
+				return;
+
+			if (usePresetList)
+			{
+				const int direction = wheelDelta > 0.0f ? 1 : -1;
+				value = NextPresetValue(value, presets, minimumValue, maximumValue, direction);
+				return;
+			}
+
+			const float updated = value + wheelDelta * plainStepDelta;
+			value = std::clamp(updated, minimumValue, maximumValue);
 		}
 
 	}
@@ -173,7 +227,7 @@ namespace DefectStudio
 
 		const auto rotationStepRadians = [&windowState]()
 		{
-			return std::clamp(windowState.rotationStepDeg, 0.1f, 180.0f) * 3.1415926535f / 180.0f;
+			return std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
 		};
 
 		const auto orbitStep = [&rotationStepRadians]()
@@ -315,7 +369,20 @@ namespace DefectStudio
 		sameLineTight();
 		ImGui::SetNextItemWidth(90.0f);
 		ImGui::InputFloat("##step_deg", &windowState.rotationStepDeg, 0.0f, 0.0f, "%.1f");
-		windowState.rotationStepDeg = std::clamp(windowState.rotationStepDeg, 0.1f, 180.0f);
+		windowState.rotationStepDeg = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f);
+		const bool rotationStepHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+		ImGuiIO &io = ImGui::GetIO();
+		if (rotationStepHovered)
+		{
+			ApplyToolbarWheelStep(
+				io.MouseWheel,
+				io.KeyCtrl,
+				m_Layer.m_GlobalRenderSettings.toolbarWheel.rotationStepDelta,
+				m_Layer.m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues,
+				0.0f,
+				180.0f,
+				windowState.rotationStepDeg);
+		}
 		sameLineTight();
 
 		if (iconButton("##PanUp", "up-arrow.png", "P^", "Pan up"))
@@ -377,7 +444,19 @@ namespace DefectStudio
 
 		ImGui::SetNextItemWidth(90.0f);
 		ImGui::InputFloat("##step_pct", &windowState.percentStep, 0.0f, 0.0f, "%.0f");
-		windowState.percentStep = std::clamp(windowState.percentStep, 1.0f, 90.0f);
+		windowState.percentStep = std::clamp(windowState.percentStep, 0.0f, 180.0f);
+		const bool zoomStepHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+		if (zoomStepHovered)
+		{
+			ApplyToolbarWheelStep(
+				io.MouseWheel,
+				io.KeyCtrl,
+				m_Layer.m_GlobalRenderSettings.toolbarWheel.zoomStepDelta,
+				m_Layer.m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues,
+				0.0f,
+				180.0f,
+				windowState.percentStep);
+		}
 		sameLineTight();
 
 		ImGui::PopStyleVar(2);
@@ -475,7 +554,7 @@ namespace DefectStudio
 				windowState.camera->Roll());
 		};
 
-		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.1f, 180.0f) * 3.1415926535f / 180.0f;
+		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
 		const float orbitStep = rotationStepRadians * 30.0f;
 		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.m_GlobalRenderSettings.shortcuts;
 

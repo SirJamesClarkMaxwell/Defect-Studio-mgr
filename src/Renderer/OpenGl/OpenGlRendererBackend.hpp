@@ -98,7 +98,11 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings);
 		void renderCellBox(const RendererStructureData &structure, const RendererViewCamera &camera);
-		void renderGrid(const RendererViewCamera &camera, OpenGlViewportResources &resources);
+		void renderGrid(
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings);
 		void dispatchBondCompute(const RendererStructureData &structure);
 		[[nodiscard]] OpenGlViewportResources &viewportResources(const std::string &windowKey, int width, int height);
 		[[nodiscard]] glm::mat4 buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const;

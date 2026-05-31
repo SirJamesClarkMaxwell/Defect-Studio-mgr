@@ -36,12 +36,14 @@ namespace DefectStudio
 			FocusSelectedAtomTransitionSeconds,
 			FocusSelectedAtomRespectAtomRadius,
 			FocusSelectedAtomRadiusMultiplier,
+			Grid,
 			InvertZoom,
 			KeyboardShortcuts,
 			Lighting,
 			OrbitSensitivity,
 			PanSensitivity,
 			TouchpadNavigation,
+			ToolbarWheel,
 			Viewport,
 			ZoomSensitivity,
 		};
@@ -78,6 +80,21 @@ namespace DefectStudio
 		{
 			AxisButtonSize,
 			IconButtonSize,
+		};
+
+		enum class RendererToolbarWheelKey
+		{
+			RotationStepDelta,
+			ZoomStepDelta,
+			CtrlPresets,
+		};
+
+		enum class RendererGridKey
+		{
+			AutoFitToStructureBounds,
+			PaddingPercent,
+			Spacing,
+			PlaneZ,
 		};
 
 		enum class AppearanceKey
@@ -229,12 +246,14 @@ namespace DefectStudio
 			{RendererKey::FocusSelectedAtomTransitionSeconds, "focus_selected_atom_transition_seconds"},
 			{RendererKey::FocusSelectedAtomRespectAtomRadius, "focus_selected_atom_respect_atom_radius"},
 			{RendererKey::FocusSelectedAtomRadiusMultiplier, "focus_selected_atom_radius_multiplier"},
+			{RendererKey::Grid, "grid"},
 			{RendererKey::InvertZoom, "invert_zoom"},
 			{RendererKey::KeyboardShortcuts, "keyboard_shortcuts"},
 			{RendererKey::Lighting, "lighting"},
 			{RendererKey::OrbitSensitivity, "orbit_sensitivity"},
 			{RendererKey::PanSensitivity, "pan_sensitivity"},
 			{RendererKey::TouchpadNavigation, "touchpad_navigation"},
+			{RendererKey::ToolbarWheel, "toolbar_wheel"},
 			{RendererKey::Viewport, "viewport"},
 			{RendererKey::ZoomSensitivity, "zoom_sensitivity"},
 		};
@@ -268,6 +287,19 @@ namespace DefectStudio
 		inline const std::unordered_map<RendererViewportKey, const char *> RendererViewportKeyNames = {
 			{RendererViewportKey::AxisButtonSize, "axis_button_size"},
 			{RendererViewportKey::IconButtonSize, "icon_button_size"},
+		};
+
+		inline const std::unordered_map<RendererToolbarWheelKey, const char *> RendererToolbarWheelKeyNames = {
+			{RendererToolbarWheelKey::RotationStepDelta, "rotation_step_delta"},
+			{RendererToolbarWheelKey::ZoomStepDelta, "zoom_step_delta"},
+			{RendererToolbarWheelKey::CtrlPresets, "ctrl_presets"},
+		};
+
+		inline const std::unordered_map<RendererGridKey, const char *> RendererGridKeyNames = {
+			{RendererGridKey::AutoFitToStructureBounds, "auto_fit_to_structure_bounds"},
+			{RendererGridKey::PaddingPercent, "padding_percent"},
+			{RendererGridKey::Spacing, "spacing"},
+			{RendererGridKey::PlaneZ, "plane_z"},
 		};
 
 		inline const std::unordered_map<AppearanceKey, const char *> AppearanceKeyNames = {
@@ -403,6 +435,8 @@ namespace DefectStudio
 		inline const char *Name(RendererShortcutKey key) { return NameFromMap(RendererShortcutKeyNames, key); }
 		inline const char *Name(RendererLightingKey key) { return NameFromMap(RendererLightingKeyNames, key); }
 		inline const char *Name(RendererViewportKey key) { return NameFromMap(RendererViewportKeyNames, key); }
+		inline const char *Name(RendererToolbarWheelKey key) { return NameFromMap(RendererToolbarWheelKeyNames, key); }
+		inline const char *Name(RendererGridKey key) { return NameFromMap(RendererGridKeyNames, key); }
 		inline const char *Name(EventQueueKey key) { return NameFromMap(EventQueueKeyNames, key); }
 		inline const char *Name(JobsKey key) { return NameFromMap(JobsKeyNames, key); }
 		inline const char *Name(LogKey key) { return NameFromMap(LogKeyNames, key); }
