@@ -24,7 +24,8 @@ namespace DefectStudio
 			float distance,
 			float yaw,
 			float pitch,
-			float roll);
+			float roll,
+			const char *sourceAction = nullptr);
 		void updateCameraTransition(RendererWindowState &windowState, float deltaTime);
 
 	private:

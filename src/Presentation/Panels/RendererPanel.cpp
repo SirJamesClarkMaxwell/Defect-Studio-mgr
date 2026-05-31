@@ -60,6 +60,11 @@ namespace DefectStudio
 			return 1.0f - inv * inv * inv;
 		}
 
+		[[nodiscard]] float RadiansToDegrees(float angleRadians)
+		{
+			return angleRadians * 57.295779513f;
+		}
+
 		[[nodiscard]] float SanitizeViewportDimension(float value)
 		{
 			if (!std::isfinite(value))
@@ -305,7 +310,7 @@ namespace DefectStudio
 			return pressed;
 		};
 
-		auto queueTransition = [&](const RendererViewCamera &cameraState)
+		auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
 				m_Layer.m_GlobalRenderSettings.rotationSpeed);
@@ -315,37 +320,38 @@ namespace DefectStudio
 				cameraState.Distance(),
 				cameraState.Yaw(),
 				cameraState.Pitch(),
-				cameraState.Roll());
+				cameraState.Roll(),
+				sourceAction);
 		};
 
-		auto axisButton = [&](const char *label, const glm::vec3 &axis)
+		auto axisButton = [&](const char *label, const glm::vec3 &axis, const char *sourceAction)
 		{
 			if (ImGui::Button(label, axisButtonSize))
 			{
 				RendererViewCamera animated = *windowState.camera;
 				animated.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
-				queueTransition(animated);
+				queueTransition(animated, sourceAction);
 			}
 		};
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
 		const glm::mat3 &reciprocal = windowState.structure.reciprocalLattice;
-		axisButton("a", lattice[0]);
+		axisButton("a", lattice[0], "toolbar.align_axis_a");
 		sameLineTight();
 
-		axisButton("b", lattice[1]);
+		axisButton("b", lattice[1], "toolbar.align_axis_b");
 		sameLineTight();
 
-		axisButton("c", lattice[2]);
+		axisButton("c", lattice[2], "toolbar.align_axis_c");
 		sameLineTight();
 
-		axisButton("a*", reciprocal[0]);
+		axisButton("a*", reciprocal[0], "toolbar.align_axis_a_star");
 		sameLineTight();
 
-		axisButton("b*", reciprocal[1]);
+		axisButton("b*", reciprocal[1], "toolbar.align_axis_b_star");
 		sameLineTight();
 
-		axisButton("c*", reciprocal[2]);
+		axisButton("c*", reciprocal[2], "toolbar.align_axis_c_star");
 		sameLineTight();
 
 		
@@ -359,7 +365,7 @@ namespace DefectStudio
 				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, +orbitInputDelta());
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.orbit_up");
 		}
 		sameLineTight();
 		
@@ -371,9 +377,9 @@ namespace DefectStudio
 				m_Layer.m_GlobalRenderSettings.rotationSpeed,
 				rotationDeltaRadians(),
 				orbitInputDelta());
-				RendererViewCamera animated = *windowState.camera;
+			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, -orbitInputDelta());
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.orbit_down");
 		}
 		sameLineTight();
 		
@@ -385,9 +391,9 @@ namespace DefectStudio
 				m_Layer.m_GlobalRenderSettings.rotationSpeed,
 				rotationDeltaRadians(),
 				orbitInputDelta());
-				RendererViewCamera animated = *windowState.camera;
+			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(+orbitInputDelta(), 0.0f);
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.orbit_left");
 		}
 		sameLineTight();
 		
@@ -401,7 +407,7 @@ namespace DefectStudio
 				orbitInputDelta());
 				RendererViewCamera animated = *windowState.camera;
 				animated.Orbit(-orbitInputDelta(), 0.0f);
-				queueTransition(animated);
+				queueTransition(animated, "toolbar.orbit_right");
 		}
 		sameLineTight();
 		
@@ -415,7 +421,7 @@ namespace DefectStudio
 				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians());
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.roll_left");
 		}
 		sameLineTight();
 		
@@ -429,7 +435,7 @@ namespace DefectStudio
 				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians());
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.roll_right");
 		}
 		sameLineTight();
 
@@ -456,7 +462,7 @@ namespace DefectStudio
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(0.0f, -windowState.pixelStepPx);
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.pan_up");
 		}
 
 		sameLineTight();
@@ -464,7 +470,7 @@ namespace DefectStudio
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(0.0f, +windowState.pixelStepPx);
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.pan_down");
 		}
 
 		sameLineTight();
@@ -472,7 +478,7 @@ namespace DefectStudio
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(-windowState.pixelStepPx, 0.0f);
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.pan_left");
 		}
 
 		sameLineTight();
@@ -480,7 +486,7 @@ namespace DefectStudio
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(+windowState.pixelStepPx, 0.0f);
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.pan_right");
 		}
 
 		sameLineTight();
@@ -548,7 +554,7 @@ namespace DefectStudio
 			}
 			animated.FocusBounds(minimum, maximum);
 			animated.SetFromDirection(glm::normalize(glm::vec3(1.0f, 1.0f, 0.9f)));
-			queueTransition(animated);
+			queueTransition(animated, "toolbar.reset_view");
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Periodic Table"))
@@ -571,7 +577,7 @@ namespace DefectStudio
 		if (io.WantTextInput || ImGui::IsAnyItemActive())
 			return;
 
-		const auto queueTransition = [&](const RendererViewCamera &cameraState)
+		const auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
 				m_Layer.m_GlobalRenderSettings.rotationSpeed);
@@ -581,7 +587,8 @@ namespace DefectStudio
 				cameraState.Distance(),
 				cameraState.Yaw(),
 				cameraState.Pitch(),
-				cameraState.Roll());
+				cameraState.Roll(),
+				sourceAction);
 		};
 
 		const auto alignToAxis = [&](const glm::vec3 &axis)
@@ -591,7 +598,7 @@ namespace DefectStudio
 
 			RendererViewCamera animated = *windowState.camera;
 			animated.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.align_axis");
 		};
 
 		const auto focusSelectedAtom = [&]()
@@ -620,7 +627,8 @@ namespace DefectStudio
 				desiredDistance,
 				windowState.camera->Yaw(),
 				windowState.camera->Pitch(),
-				windowState.camera->Roll());
+				windowState.camera->Roll(),
+				"keyboard.focus_selected_atom");
 		};
 
 		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
@@ -651,7 +659,7 @@ namespace DefectStudio
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(+orbitInputDelta, 0.0f);
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.orbit_left");
 		}
 		if (shortcutPressed(shortcuts.orbitRight))
 		{
@@ -663,7 +671,7 @@ namespace DefectStudio
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(-orbitInputDelta, 0.0f);
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.orbit_right");
 		}
 		if (shortcutPressed(shortcuts.orbitUp))
 		{
@@ -675,7 +683,7 @@ namespace DefectStudio
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, +orbitInputDelta);
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.orbit_up");
 		}
 		if (shortcutPressed(shortcuts.orbitDown))
 		{
@@ -687,7 +695,7 @@ namespace DefectStudio
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, -orbitInputDelta);
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.orbit_down");
 		}
 		if (shortcutPressed(shortcuts.rollLeft))
 		{
@@ -699,7 +707,7 @@ namespace DefectStudio
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians);
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.roll_left");
 		}
 		if (shortcutPressed(shortcuts.rollRight))
 		{
@@ -711,7 +719,7 @@ namespace DefectStudio
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians);
-			queueTransition(animated);
+			queueTransition(animated, "keyboard.roll_right");
 		}
 
 		if (shortcutPressed(shortcuts.zoomIn))
@@ -946,23 +954,66 @@ namespace DefectStudio
 		float distance,
 		float yaw,
 		float pitch,
-		float roll)
+		float roll,
+		const char *sourceAction)
 	{
 		if (windowState.camera == nullptr)
 			return;
+
+		const char *resolvedSourceAction =
+			(sourceAction != nullptr && sourceAction[0] != '\0')
+				? sourceAction
+				: "unspecified";
+		const float targetDistance = std::max(distance, 0.1f);
+		if (windowState.transitionActive)
+		{
+			const float previousDuration = std::max(0.01f, windowState.transitionDuration);
+			const float previousProgress =
+				std::clamp(windowState.transitionElapsed / previousDuration, 0.0f, 1.0f);
+			DS_LOG_INFO(
+				"Renderer transition interrupted prev_source={} progress={:.3f} new_source={}",
+				windowState.transitionSourceAction.empty() ? "unspecified" : windowState.transitionSourceAction.c_str(),
+				previousProgress,
+				resolvedSourceAction);
+		}
+
+		const float startYaw = windowState.camera->Yaw();
+		const float startPitch = windowState.camera->Pitch();
+		const float startRoll = windowState.camera->Roll();
+		const float deltaYaw = NormalizeAngleRadians(yaw - startYaw);
+		const float deltaPitch = NormalizeAngleRadians(pitch - startPitch);
+		const float deltaRoll = NormalizeAngleRadians(roll - startRoll);
+		DS_LOG_INFO(
+			"Renderer transition start source={} duration={:.3f}s "
+			"start_ypr_deg=({:.2f},{:.2f},{:.2f}) end_ypr_deg=({:.2f},{:.2f},{:.2f}) "
+			"delta_ypr_deg=({:.2f},{:.2f},{:.2f}) distance=({:.3f}->{:.3f})",
+			resolvedSourceAction,
+			std::max(0.01f, windowState.transitionDuration),
+			RadiansToDegrees(startYaw),
+			RadiansToDegrees(startPitch),
+			RadiansToDegrees(startRoll),
+			RadiansToDegrees(yaw),
+			RadiansToDegrees(pitch),
+			RadiansToDegrees(roll),
+			RadiansToDegrees(deltaYaw),
+			RadiansToDegrees(deltaPitch),
+			RadiansToDegrees(deltaRoll),
+			windowState.camera->Distance(),
+			targetDistance);
 
 		windowState.transitionActive = true;
 		windowState.transitionElapsed = 0.0f;
 		windowState.transitionStartTarget = windowState.camera->Target();
 		windowState.transitionEndTarget = target;
 		windowState.transitionStartDistance = windowState.camera->Distance();
-		windowState.transitionEndDistance = std::max(distance, 0.1f);
-		windowState.transitionStartYaw = windowState.camera->Yaw();
+		windowState.transitionEndDistance = targetDistance;
+		windowState.transitionStartYaw = startYaw;
 		windowState.transitionEndYaw = yaw;
-		windowState.transitionStartPitch = windowState.camera->Pitch();
+		windowState.transitionStartPitch = startPitch;
 		windowState.transitionEndPitch = pitch;
-		windowState.transitionStartRoll = windowState.camera->Roll();
+		windowState.transitionStartRoll = startRoll;
 		windowState.transitionEndRoll = roll;
+		windowState.transitionSourceAction = resolvedSourceAction;
 	}
 
 	void RendererPanel::updateCameraTransition(RendererWindowState &windowState, float deltaTime)
@@ -985,6 +1036,14 @@ namespace DefectStudio
 		windowState.camera->SetRoll(roll);
 
 		if (alpha >= 1.0f)
+		{
+			DS_LOG_INFO(
+				"Renderer transition complete source={} final_ypr_deg=({:.2f},{:.2f},{:.2f})",
+				windowState.transitionSourceAction.empty() ? "unspecified" : windowState.transitionSourceAction.c_str(),
+				RadiansToDegrees(yaw),
+				RadiansToDegrees(pitch),
+				RadiansToDegrees(roll));
 			windowState.transitionActive = false;
+		}
 	}
 } // namespace DefectStudio

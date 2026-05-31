@@ -95,6 +95,7 @@ namespace DefectStudio
 		float transitionEndPitch = 0.0f;
 		float transitionStartRoll = 0.0f;
 		float transitionEndRoll = 0.0f;
+		std::string transitionSourceAction;
 	};
 
 	struct RendererLightingSettings
