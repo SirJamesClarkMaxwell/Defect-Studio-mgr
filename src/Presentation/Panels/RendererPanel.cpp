@@ -419,12 +419,6 @@ namespace DefectStudio
 		
 		if (iconButton("##OrbitUp", "rotate-arrow-z-in.png", "^", "Orbit up relative to camera"))
 		{
-			LogRotationAction(
-				"toolbar.orbit_up",
-				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
-				rotationDeltaRadians(),
-				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, +orbitInputDelta());
 			queueTransition(animated, "toolbar.orbit_up");
@@ -433,12 +427,6 @@ namespace DefectStudio
 		
 		if (iconButton("##OrbitDown", "rotate-arrow-z-out.png", "v", "Orbit down relative to camera"))
 		{
-			LogRotationAction(
-				"toolbar.orbit_down",
-				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
-				rotationDeltaRadians(),
-				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, -orbitInputDelta());
 			queueTransition(animated, "toolbar.orbit_down");
@@ -447,12 +435,6 @@ namespace DefectStudio
 		
 		if (iconButton("##OrbitLeft", "rotate-arrow-z-left.png", "<", "Orbit left relative to camera"))
 		{
-			LogRotationAction(
-				"toolbar.orbit_left",
-				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
-				rotationDeltaRadians(),
-				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(+orbitInputDelta(), 0.0f);
 			queueTransition(animated, "toolbar.orbit_left");
@@ -461,12 +443,6 @@ namespace DefectStudio
 		
 		if (iconButton("##OrbitRight", "rotate-arrow-z-right.png", ">", "Orbit right relative to camera"))
 		{
-			LogRotationAction(
-				"toolbar.orbit_right",
-				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
-				rotationDeltaRadians(),
-				orbitInputDelta());
 				RendererViewCamera animated = *windowState.camera;
 				animated.Orbit(-orbitInputDelta(), 0.0f);
 				queueTransition(animated, "toolbar.orbit_right");
@@ -475,12 +451,6 @@ namespace DefectStudio
 		
 		if (iconButton("##RollLeft", "rotate-left.png", "Rl-", "Roll left"))
 		{
-			LogRotationAction(
-				"toolbar.roll_left",
-				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
-				rotationDeltaRadians(),
-				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians());
 			queueTransition(animated, "toolbar.roll_left");
@@ -489,12 +459,6 @@ namespace DefectStudio
 		
 		if (iconButton("##RollRight", "rotate-right.png", "Rl+", "Roll right"))
 		{
-			LogRotationAction(
-				"toolbar.roll_right",
-				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
-				rotationDeltaRadians(),
-				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians());
 			queueTransition(animated, "toolbar.roll_right");
