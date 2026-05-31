@@ -297,9 +297,16 @@ namespace DefectStudio
 	void SettingsPanel::performUndo()
 	{
 		if (m_UndoHistory.empty())
+		{
+			DS_LOG_INFO("Settings undo ignored: history is empty");
 			return;
+		}
 
 		m_IsApplyingHistory = true;
+		DS_LOG_INFO(
+			"Settings undo begin undo_depth={} redo_depth={}",
+			m_UndoHistory.size(),
+			m_RedoHistory.size());
 		m_RedoHistory.push_back(m_DraftConfig);
 		if (m_RedoHistory.size() > kSettingsUndoHistoryLimit)
 			m_RedoHistory.erase(m_RedoHistory.begin());
@@ -313,14 +320,25 @@ namespace DefectStudio
 		(void)applyDraft(false);
 		m_IsApplyingHistory = false;
 		m_StatusMessage = "Undo applied.";
+		DS_LOG_INFO(
+			"Settings undo complete undo_depth={} redo_depth={}",
+			m_UndoHistory.size(),
+			m_RedoHistory.size());
 	}
 
 	void SettingsPanel::performRedo()
 	{
 		if (m_RedoHistory.empty())
+		{
+			DS_LOG_INFO("Settings redo ignored: history is empty");
 			return;
+		}
 
 		m_IsApplyingHistory = true;
+		DS_LOG_INFO(
+			"Settings redo begin undo_depth={} redo_depth={}",
+			m_UndoHistory.size(),
+			m_RedoHistory.size());
 		pushUndoSnapshot(m_DraftConfig);
 
 		m_DraftConfig = m_RedoHistory.back();
@@ -332,6 +350,10 @@ namespace DefectStudio
 		(void)applyDraft(false);
 		m_IsApplyingHistory = false;
 		m_StatusMessage = "Redo applied.";
+		DS_LOG_INFO(
+			"Settings redo complete undo_depth={} redo_depth={}",
+			m_UndoHistory.size(),
+			m_RedoHistory.size());
 	}
 
 	void SettingsPanel::captureHistoryAfterRender(const ApplicationConfig &frameStartConfig)
@@ -344,31 +366,40 @@ namespace DefectStudio
 		if (m_IsApplyingHistory)
 			return;
 
-		if (configsEquivalent(frameStartConfig, m_DraftConfig))
+		const bool changedThisFrame = !configsEquivalent(frameStartConfig, m_DraftConfig);
+		const bool itemActive = ImGui::IsAnyItemActive();
+		if (itemActive)
 		{
-			if (!ImGui::IsAnyItemActive())
-				m_PendingUndoSnapshot.reset();
-			return;
-		}
-
-		if (ImGui::IsAnyItemActive())
-		{
-			if (!m_PendingUndoSnapshot.has_value())
+			if (changedThisFrame && !m_PendingUndoSnapshot.has_value())
+			{
 				m_PendingUndoSnapshot = frameStartConfig;
+				DS_LOG_INFO("Settings undo snapshot staged (interactive edit)");
+			}
 			return;
 		}
 
 		if (m_PendingUndoSnapshot.has_value())
 		{
-			pushUndoSnapshot(*m_PendingUndoSnapshot);
+			if (!configsEquivalent(*m_PendingUndoSnapshot, m_DraftConfig))
+			{
+				pushUndoSnapshot(*m_PendingUndoSnapshot);
+				clearRedoHistory();
+				DS_LOG_INFO(
+					"Settings undo snapshot committed undo_depth={} redo_cleared",
+					m_UndoHistory.size());
+			}
 			m_PendingUndoSnapshot.reset();
-		}
-		else
-		{
-			pushUndoSnapshot(frameStartConfig);
+			return;
 		}
 
+		if (!changedThisFrame)
+			return;
+
+		pushUndoSnapshot(frameStartConfig);
 		clearRedoHistory();
+		DS_LOG_INFO(
+			"Settings undo snapshot committed (non-interactive) undo_depth={} redo_cleared",
+			m_UndoHistory.size());
 	}
 
 	bool SettingsPanel::applyDraft(bool persist)

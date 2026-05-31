@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include "Core/Utils/Logger.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
@@ -19,6 +20,7 @@ namespace DefectStudio
 	{
 		constexpr float kViewportMinSize = 64.0f;
 		constexpr float kViewportMaxSize = 8192.0f;
+		constexpr float kOrbitMouseScale = 0.0065f;
 
 		using PeriodicTableRow = std::array<const char *, 18>;
 		const std::array<PeriodicTableRow, 7> kPeriodicTableRows = {
@@ -116,6 +118,28 @@ namespace DefectStudio
 
 			const float updated = value + wheelDelta * plainStepDelta;
 			value = std::clamp(updated, minimumValue, maximumValue);
+		}
+
+		void LogRotationAction(
+			const char *actionName,
+			float stepDegrees,
+			float rotationSpeed,
+			float deltaRadians,
+			float orbitInputDelta)
+		{
+			DS_LOG_INFO(
+				"Renderer rotation action={} step_deg={:.3f} speed={:.3f} delta_rad={:.6f} orbit_input_delta={:.3f}",
+				actionName,
+				stepDegrees,
+				rotationSpeed,
+				deltaRadians,
+				orbitInputDelta);
+		}
+
+		float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
+		{
+			const float safeSpeed = std::max(0.1f, rotationSpeed);
+			return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
 		}
 
 	}
@@ -229,9 +253,13 @@ namespace DefectStudio
 		{
 			return std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
 		};
-		const auto rotationDeltaRadians = [this, &rotationStepRadians]()
+		const auto rotationDeltaRadians = [&rotationStepRadians]()
 		{
-			return rotationStepRadians() * std::max(0.1f, m_Layer.m_GlobalRenderSettings.rotationSpeed);
+			return rotationStepRadians();
+		};
+		const auto orbitInputDelta = [&rotationDeltaRadians]()
+		{
+			return rotationDeltaRadians() / kOrbitMouseScale;
 		};
 
 		const float toolbarRowHeight = std::max(axisButtonSize.y, iconButtonSize.y) + 25.0f;
@@ -279,6 +307,8 @@ namespace DefectStudio
 
 		auto queueTransition = [&](const RendererViewCamera &cameraState)
 		{
+			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
+				m_Layer.m_GlobalRenderSettings.rotationSpeed);
 			startCameraTransition(
 				windowState,
 				cameraState.Target(),
@@ -318,54 +348,92 @@ namespace DefectStudio
 		axisButton("c*", reciprocal[2]);
 		sameLineTight();
 
-		if (iconButton("##RollLeft", "rotate-arrow-z-left.png", "Rl-", "Roll left"))
+		
+		if (iconButton("##OrbitUp", "rotate-arrow-z-in.png", "^", "Orbit up relative to camera"))
 		{
+			LogRotationAction(
+				"toolbar.orbit_up",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians(),
+				orbitInputDelta());
+			RendererViewCamera animated = *windowState.camera;
+			animated.Orbit(0.0f, +orbitInputDelta());
+			queueTransition(animated);
+		}
+		sameLineTight();
+		
+		if (iconButton("##OrbitDown", "rotate-arrow-z-out.png", "v", "Orbit down relative to camera"))
+		{
+			LogRotationAction(
+				"toolbar.orbit_down",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians(),
+				orbitInputDelta());
+				RendererViewCamera animated = *windowState.camera;
+			animated.Orbit(0.0f, -orbitInputDelta());
+			queueTransition(animated);
+		}
+		sameLineTight();
+		
+		if (iconButton("##OrbitLeft", "rotate-arrow-z-left.png", "<", "Orbit left relative to camera"))
+		{
+			LogRotationAction(
+				"toolbar.orbit_left",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians(),
+				orbitInputDelta());
+				RendererViewCamera animated = *windowState.camera;
+			animated.Orbit(+orbitInputDelta(), 0.0f);
+			queueTransition(animated);
+		}
+		sameLineTight();
+		
+		if (iconButton("##OrbitRight", "rotate-arrow-z-right.png", ">", "Orbit right relative to camera"))
+		{
+			LogRotationAction(
+				"toolbar.orbit_right",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians(),
+				orbitInputDelta());
+				RendererViewCamera animated = *windowState.camera;
+				animated.Orbit(-orbitInputDelta(), 0.0f);
+				queueTransition(animated);
+		}
+		sameLineTight();
+		
+		if (iconButton("##RollLeft", "rotate-left.png", "Rl-", "Roll left"))
+		{
+			LogRotationAction(
+				"toolbar.roll_left",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians(),
+				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians());
 			queueTransition(animated);
 		}
 		sameLineTight();
 		
-		if (iconButton("##RollRight", "rotate-arrow-z-right.png", "Rl+", "Roll right"))
+		if (iconButton("##RollRight", "rotate-right.png", "Rl+", "Roll right"))
 		{
+			LogRotationAction(
+				"toolbar.roll_right",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians(),
+				orbitInputDelta());
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians());
 			queueTransition(animated);
 		}
 		sameLineTight();
-		
-		if (iconButton("##OrbitUp", "rotate-arrow-z-out.png", "^", "Orbit up relative to camera"))
-		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, +rotationDeltaRadians());
-			queueTransition(animated);
-		}
-		sameLineTight();
-		
-		if (iconButton("##OrbitDown", "rotate-arrow-z-in.png", "v", "Orbit down relative to camera"))
-		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, -rotationDeltaRadians());
-			queueTransition(animated);
-		}
-		sameLineTight();
-		
-		if (iconButton("##OrbitLeft", "rotate-left.png", "<", "Orbit left relative to camera"))
-		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(+rotationDeltaRadians(), 0.0f);
-			queueTransition(animated);
-		}
-		sameLineTight();
-		
-		if (iconButton("##OrbitRight", "rotate-right.png", ">", "Orbit right relative to camera"))
-		{
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(-rotationDeltaRadians(), 0.0f);
-			queueTransition(animated);
-		}
 
-		sameLineTight();
+		// sameLineTight();
 		ImGui::SetNextItemWidth(90.0f);
 		ImGui::InputFloat("##step_deg", &windowState.rotationStepDeg, 0.0f, 0.0f, "%.1f");
 		windowState.rotationStepDeg = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f);
@@ -505,6 +573,8 @@ namespace DefectStudio
 
 		const auto queueTransition = [&](const RendererViewCamera &cameraState)
 		{
+			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
+				m_Layer.m_GlobalRenderSettings.rotationSpeed);
 			startCameraTransition(
 				windowState,
 				cameraState.Target(),
@@ -554,7 +624,8 @@ namespace DefectStudio
 		};
 
 		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
-		const float rotationDeltaRadians = rotationStepRadians * std::max(0.1f, m_Layer.m_GlobalRenderSettings.rotationSpeed);
+		const float rotationDeltaRadians = rotationStepRadians;
+		const float orbitInputDelta = rotationDeltaRadians / kOrbitMouseScale;
 		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.m_GlobalRenderSettings.shortcuts;
 
 		const auto shortcutPressed = [](ImGuiKey key) -> bool
@@ -572,36 +643,72 @@ namespace DefectStudio
 
 		if (shortcutPressed(shortcuts.orbitLeft))
 		{
+			LogRotationAction(
+				"keyboard.orbit_left",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians,
+				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(+rotationDeltaRadians, 0.0f);
+			animated.Orbit(+orbitInputDelta, 0.0f);
 			queueTransition(animated);
 		}
 		if (shortcutPressed(shortcuts.orbitRight))
 		{
+			LogRotationAction(
+				"keyboard.orbit_right",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians,
+				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(-rotationDeltaRadians, 0.0f);
+			animated.Orbit(-orbitInputDelta, 0.0f);
 			queueTransition(animated);
 		}
 		if (shortcutPressed(shortcuts.orbitUp))
 		{
+			LogRotationAction(
+				"keyboard.orbit_up",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians,
+				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, +rotationDeltaRadians);
+			animated.Orbit(0.0f, +orbitInputDelta);
 			queueTransition(animated);
 		}
 		if (shortcutPressed(shortcuts.orbitDown))
 		{
+			LogRotationAction(
+				"keyboard.orbit_down",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians,
+				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, -rotationDeltaRadians);
+			animated.Orbit(0.0f, -orbitInputDelta);
 			queueTransition(animated);
 		}
 		if (shortcutPressed(shortcuts.rollLeft))
 		{
+			LogRotationAction(
+				"keyboard.roll_left",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians,
+				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians);
 			queueTransition(animated);
 		}
 		if (shortcutPressed(shortcuts.rollRight))
 		{
+			LogRotationAction(
+				"keyboard.roll_right",
+				windowState.rotationStepDeg,
+				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				rotationDeltaRadians,
+				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians);
 			queueTransition(animated);
