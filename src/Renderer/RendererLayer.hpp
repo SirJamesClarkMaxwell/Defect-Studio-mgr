@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
 #include "Core/Layer.hpp"
@@ -95,6 +96,8 @@ namespace DefectStudio
 		float transitionEndPitch = 0.0f;
 		float transitionStartRoll = 0.0f;
 		float transitionEndRoll = 0.0f;
+		glm::quat transitionStartOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+		glm::quat transitionEndOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 		std::string transitionSourceAction;
 	};
 

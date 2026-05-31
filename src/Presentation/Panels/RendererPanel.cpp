@@ -8,6 +8,7 @@
 #include <limits>
 #include <vector>
 
+#include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
 #include "Core/Utils/Logger.hpp"
@@ -48,11 +49,6 @@ namespace DefectStudio
 			return angle;
 		}
 
-		[[nodiscard]] float LerpAngleRadians(float from, float to, float t)
-		{
-			return from + NormalizeAngleRadians(to - from) * t;
-		}
-
 		[[nodiscard]] float EaseOutCubic(float t)
 		{
 			const float clamped = std::clamp(t, 0.0f, 1.0f);
@@ -63,6 +59,72 @@ namespace DefectStudio
 		[[nodiscard]] float RadiansToDegrees(float angleRadians)
 		{
 			return angleRadians * 57.295779513f;
+		}
+
+		void BuildCameraAxesFromEuler(
+			float yaw,
+			float pitch,
+			float roll,
+			glm::vec3 &forward,
+			glm::vec3 &up)
+		{
+			const float cosPitch = std::cos(pitch);
+			forward = glm::normalize(glm::vec3(
+				std::sin(yaw) * cosPitch,
+				std::cos(yaw) * cosPitch,
+				std::sin(pitch)));
+
+			glm::vec3 baseRight = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
+			if (glm::dot(baseRight, baseRight) <= 1e-8f)
+				baseRight = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
+			baseRight = glm::normalize(baseRight);
+
+			glm::vec3 right = baseRight;
+			if (std::abs(roll) > 1e-6f)
+			{
+				const glm::quat rollRotation = glm::angleAxis(roll, forward);
+				right = glm::normalize(rollRotation * baseRight);
+			}
+
+			up = glm::normalize(glm::cross(right, forward));
+		}
+
+		[[nodiscard]] glm::quat CameraOrientationQuatFromEuler(float yaw, float pitch, float roll)
+		{
+			glm::vec3 forward(0.0f);
+			glm::vec3 up(0.0f);
+			BuildCameraAxesFromEuler(yaw, pitch, roll, forward, up);
+			const glm::vec3 right = glm::normalize(glm::cross(forward, up));
+
+			glm::mat3 basis(1.0f);
+			basis[0] = right;
+			basis[1] = up;
+			basis[2] = -forward;
+			return glm::normalize(glm::quat_cast(basis));
+		}
+
+		void CameraEulerFromOrientationQuat(
+			const glm::quat &orientationQuat,
+			float &yaw,
+			float &pitch,
+			float &roll)
+		{
+			const glm::mat3 basis = glm::mat3_cast(glm::normalize(orientationQuat));
+			const glm::vec3 up = glm::normalize(basis[1]);
+			const glm::vec3 forward = glm::normalize(-basis[2]);
+
+			yaw = std::atan2(forward.x, forward.y);
+			pitch = std::asin(glm::clamp(forward.z, -1.0f, 1.0f));
+
+			glm::vec3 baseRight = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
+			if (glm::dot(baseRight, baseRight) <= 1e-8f)
+				baseRight = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
+			baseRight = glm::normalize(baseRight);
+			const glm::vec3 baseUp = glm::normalize(glm::cross(baseRight, forward));
+
+			const float sinRoll = glm::dot(glm::cross(baseUp, up), forward);
+			const float cosRoll = glm::dot(baseUp, up);
+			roll = NormalizeAngleRadians(std::atan2(sinRoll, cosRoll));
 		}
 
 		[[nodiscard]] float SanitizeViewportDimension(float value)
@@ -980,13 +1042,19 @@ namespace DefectStudio
 		const float startYaw = windowState.camera->Yaw();
 		const float startPitch = windowState.camera->Pitch();
 		const float startRoll = windowState.camera->Roll();
+		const glm::quat startOrientation = CameraOrientationQuatFromEuler(startYaw, startPitch, startRoll);
+		glm::quat endOrientation = CameraOrientationQuatFromEuler(yaw, pitch, roll);
+		if (glm::dot(startOrientation, endOrientation) < 0.0f)
+			endOrientation = -endOrientation;
 		const float deltaYaw = NormalizeAngleRadians(yaw - startYaw);
 		const float deltaPitch = NormalizeAngleRadians(pitch - startPitch);
 		const float deltaRoll = NormalizeAngleRadians(roll - startRoll);
+		const float angularDeltaDegrees = RadiansToDegrees(
+			2.0f * std::acos(glm::clamp(std::abs(glm::dot(startOrientation, endOrientation)), 0.0f, 1.0f)));
 		DS_LOG_INFO(
 			"Renderer transition start source={} duration={:.3f}s "
 			"start_ypr_deg=({:.2f},{:.2f},{:.2f}) end_ypr_deg=({:.2f},{:.2f},{:.2f}) "
-			"delta_ypr_deg=({:.2f},{:.2f},{:.2f}) distance=({:.3f}->{:.3f})",
+			"delta_ypr_deg=({:.2f},{:.2f},{:.2f}) angular_delta_deg={:.2f} distance=({:.3f}->{:.3f})",
 			resolvedSourceAction,
 			std::max(0.01f, windowState.transitionDuration),
 			RadiansToDegrees(startYaw),
@@ -998,6 +1066,7 @@ namespace DefectStudio
 			RadiansToDegrees(deltaYaw),
 			RadiansToDegrees(deltaPitch),
 			RadiansToDegrees(deltaRoll),
+			angularDeltaDegrees,
 			windowState.camera->Distance(),
 			targetDistance);
 
@@ -1013,6 +1082,8 @@ namespace DefectStudio
 		windowState.transitionEndPitch = pitch;
 		windowState.transitionStartRoll = startRoll;
 		windowState.transitionEndRoll = roll;
+		windowState.transitionStartOrientation = startOrientation;
+		windowState.transitionEndOrientation = endOrientation;
 		windowState.transitionSourceAction = resolvedSourceAction;
 	}
 
@@ -1028,9 +1099,12 @@ namespace DefectStudio
 
 		const glm::vec3 target = glm::mix(windowState.transitionStartTarget, windowState.transitionEndTarget, t);
 		const float distance = glm::mix(windowState.transitionStartDistance, windowState.transitionEndDistance, t);
-		const float yaw = LerpAngleRadians(windowState.transitionStartYaw, windowState.transitionEndYaw, t);
-		const float pitch = LerpAngleRadians(windowState.transitionStartPitch, windowState.transitionEndPitch, t);
-		const float roll = LerpAngleRadians(windowState.transitionStartRoll, windowState.transitionEndRoll, t);
+		const glm::quat orientation =
+			glm::normalize(glm::slerp(windowState.transitionStartOrientation, windowState.transitionEndOrientation, t));
+		float yaw = 0.0f;
+		float pitch = 0.0f;
+		float roll = 0.0f;
+		CameraEulerFromOrientationQuat(orientation, yaw, pitch, roll);
 
 		windowState.camera->SetOrbitState(target, distance, yaw, pitch);
 		windowState.camera->SetRoll(roll);
