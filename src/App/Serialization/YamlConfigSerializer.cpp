@@ -463,6 +463,7 @@ namespace DefectStudio
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
+			const char *rendererRotationSpeedKey = Name(RendererKey::RotationSpeed);
 			const char *rendererFocusDistanceKey = Name(RendererKey::FocusSelectedAtomDistance);
 			const char *rendererFocusTransitionKey = Name(RendererKey::FocusSelectedAtomTransitionSeconds);
 			const char *rendererFocusRespectRadiusKey = Name(RendererKey::FocusSelectedAtomRespectAtomRadius);
@@ -608,6 +609,11 @@ namespace DefectStudio
 				{rendererSection, rendererZoomKey},
 				{},
 				config.renderer.zoomSensitivity);
+			config.renderer.rotationSpeed = ReadValue(
+				root,
+				{rendererSection, rendererRotationSpeedKey},
+				{},
+				config.renderer.rotationSpeed);
 			config.renderer.focusSelectedAtomDistance = ReadValue(
 				root,
 				{rendererSection, rendererFocusDistanceKey},
@@ -816,6 +822,7 @@ namespace DefectStudio
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
+			const char *rendererRotationSpeedKey = Name(RendererKey::RotationSpeed);
 			const char *rendererFocusDistanceKey = Name(RendererKey::FocusSelectedAtomDistance);
 			const char *rendererFocusTransitionKey = Name(RendererKey::FocusSelectedAtomTransitionSeconds);
 			const char *rendererFocusRespectRadiusKey = Name(RendererKey::FocusSelectedAtomRespectAtomRadius);
@@ -888,6 +895,11 @@ namespace DefectStudio
 				{rendererSection, rendererZoomKey},
 				{},
 				config.renderer.zoomSensitivity);
+			config.renderer.rotationSpeed = ReadValue(
+				root,
+				{rendererSection, rendererRotationSpeedKey},
+				{},
+				config.renderer.rotationSpeed);
 			config.renderer.focusSelectedAtomDistance = ReadValue(
 				root,
 				{rendererSection, rendererFocusDistanceKey},
@@ -1747,6 +1759,7 @@ namespace DefectStudio
 			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
 			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
 			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
+			out << YAML::Key << "rotation_speed" << YAML::Value << config.renderer.rotationSpeed;
 			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
 			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
 			out << YAML::Key << "focus_selected_atom_respect_atom_radius" << YAML::Value << config.renderer.focusSelectedAtomRespectAtomRadius;
@@ -1828,6 +1841,7 @@ namespace DefectStudio
 			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
 			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
 			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
+			out << YAML::Key << "rotation_speed" << YAML::Value << config.renderer.rotationSpeed;
 			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
 			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
 			out << YAML::Key << "focus_selected_atom_respect_atom_radius" << YAML::Value << config.renderer.focusSelectedAtomRespectAtomRadius;
@@ -1930,6 +1944,7 @@ namespace DefectStudio
 			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
 			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
 			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
+			out << YAML::Key << "rotation_speed" << YAML::Value << config.renderer.rotationSpeed;
 			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
 			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
 			out << YAML::Key << "focus_selected_atom_respect_atom_radius" << YAML::Value << config.renderer.focusSelectedAtomRespectAtomRadius;

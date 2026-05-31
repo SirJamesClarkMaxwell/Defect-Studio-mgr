@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "App/ApplicationState.hpp"
@@ -68,6 +70,7 @@ namespace DefectStudio
 
         void renderActionBar();
         void renderSidebar();
+        void renderSidebarVisibilityToggle();
         void renderSystemTab();
         void renderDisplayTab();
         void renderProfilesTab();
@@ -82,11 +85,22 @@ namespace DefectStudio
         void renderAppearanceMetrics();
         void renderAppearanceStateRules();
         void renderAppearanceFiles();
+        void refreshDraftBuffers();
+        void captureHistoryAfterRender(const ApplicationConfig &frameStartConfig);
+        void pushUndoSnapshot(const ApplicationConfig &snapshot);
+        void clearRedoHistory();
+        void performUndo();
+        void performRedo();
+        [[nodiscard]] bool configsEquivalent(const ApplicationConfig &left, const ApplicationConfig &right) const;
+        [[nodiscard]] std::string configFingerprint(const ApplicationConfig &config) const;
 
     private:
         bool m_DraftInitialized = false;
         bool m_DraftDirty = false;
         bool m_LayoutListRequested = false;
+        bool m_ShowSidebar = true;
+        bool m_IsApplyingHistory = false;
+        bool m_BlockHistoryCaptureForFrame = false;
         enum class Tab : int
         {
             System = 0,
@@ -112,6 +126,9 @@ namespace DefectStudio
         std::array<char, 320> m_ThemeLoadPathBuffer = {};
         std::array<char, 320> m_LayoutPathBuffer = {};
         std::array<char, 128> m_KeyBindingSearchBuffer = {};
+        std::vector<ApplicationConfig> m_UndoHistory;
+        std::vector<ApplicationConfig> m_RedoHistory;
+        std::optional<ApplicationConfig> m_PendingUndoSnapshot;
         std::string m_StatusMessage;
         Ref<EventBus> m_EventBus;
         WeakRef<JobSystem> m_JobSystem;

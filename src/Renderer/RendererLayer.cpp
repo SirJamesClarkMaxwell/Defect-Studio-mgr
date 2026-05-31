@@ -29,6 +29,8 @@ namespace DefectStudio
 	{
 		constexpr float kMinSensitivity = 0.05f;
 		constexpr float kMaxSensitivity = 4.0f;
+		constexpr float kMinRotationSpeed = 0.1f;
+		constexpr float kMaxRotationSpeed = 10.0f;
 		constexpr float kMinFocusDistance = 0.25f;
 		constexpr float kMaxFocusDistance = 256.0f;
 		constexpr float kMinFocusTransitionSeconds = 0.02f;
@@ -230,6 +232,7 @@ namespace DefectStudio
 		m_GlobalRenderSettings.orbitSensitivity = config.renderer.orbitSensitivity;
 		m_GlobalRenderSettings.panSensitivity = config.renderer.panSensitivity;
 		m_GlobalRenderSettings.zoomSensitivity = config.renderer.zoomSensitivity;
+		m_GlobalRenderSettings.rotationSpeed = config.renderer.rotationSpeed;
 		m_GlobalRenderSettings.focusSelectedAtomDistance = config.renderer.focusSelectedAtomDistance;
 		m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds = config.renderer.focusSelectedAtomTransitionSeconds;
 		m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius = config.renderer.focusSelectedAtomRespectAtomRadius;
@@ -316,6 +319,10 @@ namespace DefectStudio
 		m_GlobalRenderSettings.orbitSensitivity = std::clamp(m_GlobalRenderSettings.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.panSensitivity = std::clamp(m_GlobalRenderSettings.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.zoomSensitivity = std::clamp(m_GlobalRenderSettings.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
+		m_GlobalRenderSettings.rotationSpeed = std::clamp(
+			m_GlobalRenderSettings.rotationSpeed,
+			kMinRotationSpeed,
+			kMaxRotationSpeed);
 		m_GlobalRenderSettings.focusSelectedAtomDistance = std::clamp(
 			m_GlobalRenderSettings.focusSelectedAtomDistance,
 			kMinFocusDistance,

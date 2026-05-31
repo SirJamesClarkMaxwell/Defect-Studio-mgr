@@ -7,7 +7,9 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
@@ -17,6 +19,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "App/Serialization/YamlConfigSerializer.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 
@@ -76,6 +79,8 @@ namespace DefectStudio
 		{
 			return bus.Subscribe<EventType>(std::bind_front(method, &settings));
 		}
+
+		constexpr std::size_t kSettingsUndoHistoryLimit = 256;
 	} // namespace
 
 	SettingsPanel::SettingsPanel(Ref<EventBus> eventBus,
@@ -104,6 +109,9 @@ namespace DefectStudio
 		  m_DraftInitialized(other.m_DraftInitialized),
 		  m_DraftDirty(other.m_DraftDirty),
 		  m_LayoutListRequested(other.m_LayoutListRequested),
+		  m_ShowSidebar(other.m_ShowSidebar),
+		  m_IsApplyingHistory(other.m_IsApplyingHistory),
+		  m_BlockHistoryCaptureForFrame(other.m_BlockHistoryCaptureForFrame),
  		m_SelectedTab(other.m_SelectedTab),
 		  m_DraftConfig(other.m_DraftConfig),
 		  m_WindowTitleBuffer(other.m_WindowTitleBuffer),
@@ -113,6 +121,9 @@ namespace DefectStudio
 		  m_ThemeLoadPathBuffer(other.m_ThemeLoadPathBuffer),
 		  m_LayoutPathBuffer(other.m_LayoutPathBuffer),
 		  m_KeyBindingSearchBuffer(other.m_KeyBindingSearchBuffer),
+		  m_UndoHistory(other.m_UndoHistory),
+		  m_RedoHistory(other.m_RedoHistory),
+		  m_PendingUndoSnapshot(other.m_PendingUndoSnapshot),
 		  m_StatusMessage(other.m_StatusMessage),
 		  m_EventBus(other.m_EventBus),
 		  m_JobSystem(other.m_JobSystem),
@@ -148,6 +159,7 @@ namespace DefectStudio
 		ensureDraftInitialized();
 		if (!IsVisible())
 			return;
+		const ApplicationConfig frameStartConfig = m_DraftConfig;
 
 		bool visible = IsVisible();
 		ImGui::SetNextWindowSize(ImVec2(980.0f, 640.0f), ImGuiCond_FirstUseEver);
@@ -159,11 +171,14 @@ namespace DefectStudio
 		}
 		SetVisible(visible);
 
-		ImGui::BeginChild("SettingsSidebar", ImVec2(190.0f, 0.0f), true);
-		renderSidebar();
-		ImGui::EndChild();
+		if (m_ShowSidebar)
+		{
+			ImGui::BeginChild("SettingsSidebar", ImVec2(190.0f, 0.0f), true);
+			renderSidebar();
+			ImGui::EndChild();
+			ImGui::SameLine();
+		}
 
-		ImGui::SameLine();
 		ImGui::BeginChild("SettingsContent", ImVec2(0.0f, 0.0f), true);
 		renderActionBar();
 
@@ -202,6 +217,7 @@ namespace DefectStudio
 		}
 
 		maybeApplyPreview();
+		captureHistoryAfterRender(frameStartConfig);
 		ImGui::EndChild();
 
 		ImGui::End();
@@ -229,11 +245,16 @@ namespace DefectStudio
 			m_DraftConfig.paths = uiState->paths;
 			m_DraftConfig.layout.imGuiIniPath = uiState->layoutPath;
 		}
+		refreshDraftBuffers();
+		m_DraftDirty = false;
+		m_DraftInitialized = true;
+	}
+
+	void SettingsPanel::refreshDraftBuffers()
+	{
 		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
 		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
 		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
-		m_DraftDirty = false;
-		m_DraftInitialized = true;
 	}
 
 	void SettingsPanel::syncDraftFromBuffers()
@@ -241,6 +262,113 @@ namespace DefectStudio
 		m_DraftConfig.window.title = m_WindowTitleBuffer.data();
 		m_DraftConfig.log.filePath = Path::FromResolved(std::string(m_LogFilePathBuffer.data()));
 		m_DraftConfig.ui.fontPath = m_FontPathBuffer.data();
+	}
+
+	std::string SettingsPanel::configFingerprint(const ApplicationConfig &config) const
+	{
+		YamlConfigSerializer serializer;
+		std::string text;
+		std::string error;
+		if (!serializer.SerializeConfigProfile(config, text, error))
+			return {};
+		return text;
+	}
+
+	bool SettingsPanel::configsEquivalent(const ApplicationConfig &left, const ApplicationConfig &right) const
+	{
+		return configFingerprint(left) == configFingerprint(right);
+	}
+
+	void SettingsPanel::pushUndoSnapshot(const ApplicationConfig &snapshot)
+	{
+		if (!m_UndoHistory.empty() && configsEquivalent(m_UndoHistory.back(), snapshot))
+			return;
+
+		m_UndoHistory.push_back(snapshot);
+		if (m_UndoHistory.size() > kSettingsUndoHistoryLimit)
+			m_UndoHistory.erase(m_UndoHistory.begin());
+	}
+
+	void SettingsPanel::clearRedoHistory()
+	{
+		m_RedoHistory.clear();
+	}
+
+	void SettingsPanel::performUndo()
+	{
+		if (m_UndoHistory.empty())
+			return;
+
+		m_IsApplyingHistory = true;
+		m_RedoHistory.push_back(m_DraftConfig);
+		if (m_RedoHistory.size() > kSettingsUndoHistoryLimit)
+			m_RedoHistory.erase(m_RedoHistory.begin());
+
+		m_DraftConfig = m_UndoHistory.back();
+		m_UndoHistory.pop_back();
+		m_PendingUndoSnapshot.reset();
+		refreshDraftBuffers();
+		m_DraftDirty = true;
+		m_BlockHistoryCaptureForFrame = true;
+		(void)applyDraft(false);
+		m_IsApplyingHistory = false;
+		m_StatusMessage = "Undo applied.";
+	}
+
+	void SettingsPanel::performRedo()
+	{
+		if (m_RedoHistory.empty())
+			return;
+
+		m_IsApplyingHistory = true;
+		pushUndoSnapshot(m_DraftConfig);
+
+		m_DraftConfig = m_RedoHistory.back();
+		m_RedoHistory.pop_back();
+		m_PendingUndoSnapshot.reset();
+		refreshDraftBuffers();
+		m_DraftDirty = true;
+		m_BlockHistoryCaptureForFrame = true;
+		(void)applyDraft(false);
+		m_IsApplyingHistory = false;
+		m_StatusMessage = "Redo applied.";
+	}
+
+	void SettingsPanel::captureHistoryAfterRender(const ApplicationConfig &frameStartConfig)
+	{
+		if (m_BlockHistoryCaptureForFrame)
+		{
+			m_BlockHistoryCaptureForFrame = false;
+			return;
+		}
+		if (m_IsApplyingHistory)
+			return;
+
+		if (configsEquivalent(frameStartConfig, m_DraftConfig))
+		{
+			if (!ImGui::IsAnyItemActive())
+				m_PendingUndoSnapshot.reset();
+			return;
+		}
+
+		if (ImGui::IsAnyItemActive())
+		{
+			if (!m_PendingUndoSnapshot.has_value())
+				m_PendingUndoSnapshot = frameStartConfig;
+			return;
+		}
+
+		if (m_PendingUndoSnapshot.has_value())
+		{
+			pushUndoSnapshot(*m_PendingUndoSnapshot);
+			m_PendingUndoSnapshot.reset();
+		}
+		else
+		{
+			pushUndoSnapshot(frameStartConfig);
+		}
+
+		clearRedoHistory();
 	}
 
 	bool SettingsPanel::applyDraft(bool persist)
@@ -270,6 +398,8 @@ namespace DefectStudio
 
 		constexpr float kMinSensitivity = 0.05f;
 		constexpr float kMaxSensitivity = 4.0f;
+		constexpr float kMinRotationSpeed = 0.1f;
+		constexpr float kMaxRotationSpeed = 10.0f;
 		constexpr float kMinFocusDistance = 0.25f;
 		constexpr float kMaxFocusDistance = 256.0f;
 		constexpr float kMinFocusTransitionSeconds = 0.02f;
@@ -292,6 +422,10 @@ namespace DefectStudio
 		m_DraftConfig.renderer.orbitSensitivity = std::clamp(m_DraftConfig.renderer.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.panSensitivity = std::clamp(m_DraftConfig.renderer.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.zoomSensitivity = std::clamp(m_DraftConfig.renderer.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
+		m_DraftConfig.renderer.rotationSpeed = std::clamp(
+			m_DraftConfig.renderer.rotationSpeed,
+			kMinRotationSpeed,
+			kMaxRotationSpeed);
 		m_DraftConfig.renderer.focusSelectedAtomDistance = std::clamp(
 			m_DraftConfig.renderer.focusSelectedAtomDistance,
 			kMinFocusDistance,
@@ -460,9 +594,7 @@ namespace DefectStudio
 	void SettingsPanel::onConfigApplied(const AppEvents::Config::Applied &event)
 	{
 		m_DraftConfig = event.config;
-		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
-		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
-		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
+		refreshDraftBuffers();
 		m_DraftDirty = false;
 		m_DraftInitialized = true;
 		m_StatusMessage = event.persisted ? "Settings applied and saved to YAML." : "Settings applied.";
@@ -478,9 +610,7 @@ namespace DefectStudio
 	void SettingsPanel::onUserConfigSaved(const AppEvents::Config::UserSaved &event)
 	{
 		m_DraftConfig = event.config;
-		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
-		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
-		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
+		refreshDraftBuffers();
 		m_DraftDirty = false;
 		m_StatusMessage = "Settings applied and user YAML saved.";
 		DS_LOG_INFO("SettingsPanel user config saved title=\"{}\"", m_DraftConfig.window.title);
@@ -546,6 +676,36 @@ namespace DefectStudio
 		if (ImGui::Button("Save as defaults"))
 			(void)saveDraftAsDefaults();
 
+		ImGui::SameLine();
+		ImGui::BeginDisabled(m_UndoHistory.empty());
+		if (ImGui::Button("Undo"))
+			performUndo();
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		ImGui::BeginDisabled(m_RedoHistory.empty());
+		if (ImGui::Button("Redo"))
+			performRedo();
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		renderSidebarVisibilityToggle();
+
+		ImGuiIO &io = ImGui::GetIO();
+		const bool canUseHistoryShortcuts =
+			ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+			!io.WantTextInput &&
+			!ImGui::IsAnyItemActive();
+		if (canUseHistoryShortcuts && io.KeyCtrl)
+		{
+			const bool redoViaCtrlShiftZ = io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false);
+			const bool redoViaCtrlY = ImGui::IsKeyPressed(ImGuiKey_Y, false);
+			if (redoViaCtrlShiftZ || redoViaCtrlY)
+				performRedo();
+			else if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
+				performUndo();
+		}
+
 		if (ImGui::Checkbox("Application preview", &m_DraftConfig.ui.settingsPreviewEnabled))
 			m_DraftDirty = true;
 		if (ImGui::IsItemHovered())
@@ -569,6 +729,37 @@ namespace DefectStudio
 			ImGui::TextWrapped("%s", m_StatusMessage.c_str());
 
 		ImGui::Separator();
+	}
+
+	void SettingsPanel::renderSidebarVisibilityToggle()
+	{
+		const ImVec2 size(54.0f, 0.0f);
+		const ImGuiStyle &style = ImGui::GetStyle();
+		const ImVec4 accent = style.Colors[ImGuiCol_HeaderActive];
+		const ImVec4 neutral = style.Colors[ImGuiCol_Button];
+		const ImVec4 neutralHovered = style.Colors[ImGuiCol_ButtonHovered];
+		const ImVec4 neutralActive = style.Colors[ImGuiCol_ButtonActive];
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, style.ItemSpacing.y));
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+		ImGui::PushStyleColor(ImGuiCol_Button, m_ShowSidebar ? accent : neutral);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_ShowSidebar ? accent : neutralHovered);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_ShowSidebar ? accent : neutralActive);
+		if (ImGui::Button("On", size))
+			m_ShowSidebar = true;
+		ImGui::PopStyleColor(3);
+
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, m_ShowSidebar ? neutral : accent);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, m_ShowSidebar ? neutralHovered : accent);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, m_ShowSidebar ? neutralActive : accent);
+		if (ImGui::Button("Off", size))
+			m_ShowSidebar = false;
+		ImGui::PopStyleColor(3);
+
+		ImGui::PopStyleVar(2);
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+			ImGui::SetTooltip("Toggle category sidebar");
 	}
 
 	void SettingsPanel::renderSidebar()
@@ -1288,17 +1479,31 @@ namespace DefectStudio
 			m_DraftDirty = true;
 			rendererSettingsChanged = true;
 		};
+		const auto beginRendererTable = [](const char *id) -> bool
+		{
+			if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
+				return false;
+			ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthFixed, 230.0f);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+			return true;
+		};
+		const auto setValueControlWidth = []()
+		{
+			const float maxWidth = std::min(420.0f, ImGui::GetContentRegionAvail().x);
+			ImGui::SetNextItemWidth(std::max(160.0f, maxWidth));
+		};
 
 		ImGui::TextUnformatted("Renderer settings");
 		ImGui::TextWrapped("Values apply immediately to renderer windows; use Apply to persist them.");
 
 		ImGui::SeparatorText("Camera");
-		if (ImGui::BeginTable("RendererCamera", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		if (beginRendererTable("RendererCamera"))
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Default projection");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			int projectionIndex = m_DraftConfig.renderer.defaultProjection == "orthographic" ? 1 : 0;
 			const char *projectionModes[] = {"Perspective", "Orthographic"};
 			if (ImGui::Combo("##RendererProjection", &projectionIndex, projectionModes, IM_ARRAYSIZE(projectionModes)))
@@ -1311,6 +1516,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Orbit sensitivity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##OrbitSensitivity", &m_DraftConfig.renderer.orbitSensitivity, 0.05f, 4.0f, "%.2fx"))
 				markDirty();
 
@@ -1318,6 +1524,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Pan sensitivity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##PanSensitivity", &m_DraftConfig.renderer.panSensitivity, 0.05f, 4.0f, "%.2fx"))
 				markDirty();
 
@@ -1325,13 +1532,23 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Zoom sensitivity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##ZoomSensitivity", &m_DraftConfig.renderer.zoomSensitivity, 0.05f, 4.0f, "%.2fx"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Rotation speed");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##RotationSpeed", &m_DraftConfig.renderer.rotationSpeed, 0.1f, 10.0f, "%.2fx"))
 				markDirty();
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Focus atom distance");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat(
 					"##FocusSelectedAtomDistance",
 					&m_DraftConfig.renderer.focusSelectedAtomDistance,
@@ -1346,6 +1563,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Focus animation");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat(
 					"##FocusSelectedAtomTransitionSeconds",
 					&m_DraftConfig.renderer.focusSelectedAtomTransitionSeconds,
@@ -1367,6 +1585,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Focus radius multiplier");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat(
 					"##FocusRadiusMultiplier",
 					&m_DraftConfig.renderer.focusSelectedAtomRadiusMultiplier,
@@ -1395,6 +1614,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Wheel rotate step delta");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat(
 					"##WheelRotationStepDelta",
 					&m_DraftConfig.renderer.toolbarWheel.rotationStepDelta,
@@ -1409,6 +1629,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Wheel zoom step delta");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat(
 					"##WheelZoomStepDelta",
 					&m_DraftConfig.renderer.toolbarWheel.zoomStepDelta,
@@ -1464,7 +1685,7 @@ namespace DefectStudio
 		}
 
 		ImGui::SeparatorText("Lighting");
-		if (ImGui::BeginTable("RendererLighting", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		if (beginRendererTable("RendererLighting"))
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -1477,6 +1698,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Ambient intensity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##AmbientIntensity", &m_DraftConfig.renderer.lighting.ambientIntensity, 0.0f, 1.5f, "%.2f"))
 				markDirty();
 
@@ -1484,6 +1706,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Key light intensity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##KeyIntensity", &m_DraftConfig.renderer.lighting.keyIntensity, 0.0f, 1.5f, "%.2f"))
 				markDirty();
 
@@ -1491,6 +1714,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Fill light intensity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##FillIntensity", &m_DraftConfig.renderer.lighting.fillIntensity, 0.0f, 1.5f, "%.2f"))
 				markDirty();
 
@@ -1498,6 +1722,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Back light intensity");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##BackIntensity", &m_DraftConfig.renderer.lighting.backIntensity, 0.0f, 1.5f, "%.2f"))
 				markDirty();
 
@@ -1533,12 +1758,13 @@ namespace DefectStudio
 		}
 
 		ImGui::SeparatorText("Viewport gizmo");
-		if (ImGui::BeginTable("RendererViewport", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		if (beginRendererTable("RendererViewport"))
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Axis button size");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##AxisButtonSize", &m_DraftConfig.renderer.viewport.axisButtonSize, 10.0f, 48.0f, "%.0f"))
 				markDirty();
 
@@ -1546,6 +1772,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Icon button size");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##IconButtonSize", &m_DraftConfig.renderer.viewport.iconButtonSize, 10.0f, 48.0f, "%.0f"))
 				markDirty();
 
@@ -1553,7 +1780,7 @@ namespace DefectStudio
 		}
 
 		ImGui::SeparatorText("Grid");
-		if (ImGui::BeginTable("RendererGrid", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		if (beginRendererTable("RendererGrid"))
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -1566,6 +1793,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Padding percent");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##GridPaddingPercent", &m_DraftConfig.renderer.grid.paddingPercent, 0.0f, 400.0f, "%.1f%%"))
 				markDirty();
 
@@ -1573,6 +1801,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Spacing");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::SliderFloat("##GridSpacing", &m_DraftConfig.renderer.grid.spacing, 0.05f, 25.0f, "%.2f"))
 				markDirty();
 
@@ -1580,6 +1809,7 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Plane Z");
 			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
 			if (ImGui::DragFloat("##GridPlaneZ", &m_DraftConfig.renderer.grid.planeZ, 0.1f, -10000.0f, 10000.0f, "%.2f"))
 				markDirty();
 

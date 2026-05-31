@@ -163,6 +163,7 @@ namespace DefectStudio
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;
+		float rotationSpeed = 1.0f;
 		float focusSelectedAtomDistance = 3.0f;
 		float focusSelectedAtomTransitionSeconds = 0.18f;
 		bool focusSelectedAtomRespectAtomRadius = true;
