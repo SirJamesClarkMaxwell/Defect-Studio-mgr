@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "App/ApplicationLifecycle.hpp"
 #include "App/Window.hpp"
@@ -89,6 +90,21 @@ namespace DefectStudio
 		float iconButtonSize = 18.0f;
 	};
 
+	struct RendererToolbarWheelConfig
+	{
+		float rotationStepDelta = 1.0f;
+		float zoomStepDelta = 1.0f;
+		std::vector<float> ctrlPresetValues = {0.0f, 1.0f, 3.0f, 5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 60.0f, 90.0f, 180.0f};
+	};
+
+	struct RendererGridConfig
+	{
+		bool autoFitToStructureBounds = true;
+		float paddingPercent = 20.0f;
+		float spacing = 0.7f;
+		float planeZ = 0.0f;
+	};
+
 	struct RendererShortcutConfig
 	{
 		std::string alignAxisA = "A";
@@ -120,6 +136,8 @@ namespace DefectStudio
 		std::string defaultProjection = "perspective";
 		RendererLightingConfig lighting;
 		RendererViewportConfig viewport;
+		RendererToolbarWheelConfig toolbarWheel;
+		RendererGridConfig grid;
 		RendererShortcutConfig shortcuts;
 	};
 

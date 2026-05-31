@@ -57,8 +57,10 @@ renderer:
   orbit_sensitivity: 1
   pan_sensitivity: 1
   zoom_sensitivity: 1
-  focus_selected_atom_distance: 3
-  focus_selected_atom_transition_seconds: 0.18
+  focus_selected_atom_distance: 100
+  focus_selected_atom_transition_seconds: 1
+  focus_selected_atom_respect_atom_radius: false
+  focus_selected_atom_radius_multiplier: 2
   invert_zoom: false
   touchpad_navigation: true
   default_projection: orthographic
@@ -72,5 +74,18 @@ renderer:
     fill_direction: [-0.7, 0.3, 0.2]
     back_direction: [0, -0.4, -0.8]
   viewport:
-    axis_button_size: 35
-    icon_button_size: 35
+    axis_button_size: 32
+    icon_button_size: 32
+  keyboard_shortcuts:
+    align_axis_a: A
+    align_axis_b: B
+    align_axis_c: C
+    orbit_left: Left
+    orbit_right: Right
+    orbit_up: Up
+    orbit_down: Down
+    roll_left: Q
+    roll_right: E
+    zoom_in: R
+    zoom_out: F
+    focus_selected_atom: Period
