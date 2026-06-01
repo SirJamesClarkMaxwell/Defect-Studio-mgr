@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <yaml-cpp/yaml.h>
@@ -17,6 +18,8 @@
 #include "Core/Input/KeyBindingEvents.hpp"
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Domain/Crystal/ElementPropertiesEvents.hpp"
+#include "IO/ElementPropertiesIO.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 
@@ -222,6 +225,7 @@ namespace DefectStudio
 		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutListRequested>(*m_EventBus, *this, &IOLayer::onLayoutListRequested));
 		AddSubscription(subscribeIOLayer<AppEvents::Keymap::BindingsSaveRequested>(*m_EventBus, *this, &IOLayer::onBindingsSaveRequested));
 		AddSubscription(subscribeIOLayer<AppEvents::Keymap::BindingsLoadRequested>(*m_EventBus, *this, &IOLayer::onBindingsLoadRequested));
+		AddSubscription(subscribeIOLayer<DomainEvents::Crystal::ElementPropertiesLoadRequested>(*m_EventBus, *this, &IOLayer::onElementPropertiesLoadRequested));
 		DS_LOG_INFO("IOLayer config persistence event handlers bound");
 	}
 
@@ -430,5 +434,25 @@ namespace DefectStudio
 		}
 
 		m_EventBus->Queue(BindingsLoaded{std::move(bindings)});
+	}
+
+	void IOLayer::onElementPropertiesLoadRequested(const DomainEvents::Crystal::ElementPropertiesLoadRequested &event)
+	{
+		using namespace DomainEvents::Crystal;
+
+		if (m_EventBus == nullptr)
+			return;
+
+		std::unordered_map<std::string, ElementProperties> entries;
+		std::string error;
+		if (!ElementPropertiesIO::LoadFromFile(event.sourcePath, entries, error))
+		{
+			DS_LOG_WARN("Element properties load failed [{}]: {}", event.sourcePath.String(), error);
+			m_EventBus->Queue(ElementPropertiesLoadFailed{event.sourcePath, error});
+			return;
+		}
+
+		DS_LOG_INFO("Element properties loaded: {} entries from {}", entries.size(), event.sourcePath.String());
+		m_EventBus->Queue(ElementPropertiesLoaded{event.sourcePath, std::move(entries)});
 	}
 } // namespace DefectStudio

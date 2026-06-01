@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 
@@ -16,10 +17,13 @@ namespace DefectStudio
 	class ElementPropertiesTable
 	{
 	public:
-		bool LoadFromFile(const std::string &path);
+		void ReplaceData(std::unordered_map<std::string, ElementProperties> data);
+		void Clear();
 
 		[[nodiscard]] const ElementProperties &Get(const std::string &symbol) const;
 		[[nodiscard]] float CovalentRadius(const std::string &symbol) const;
+		[[nodiscard]] bool Empty() const;
+		[[nodiscard]] std::size_t Size() const;
 
 	private:
 		std::unordered_map<std::string, ElementProperties> m_Data;

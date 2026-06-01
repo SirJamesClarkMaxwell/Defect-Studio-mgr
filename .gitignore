@@ -12,6 +12,7 @@ docs/book
 tmp/
 imgui.ini
 *.pdf
+refactor.md
 
 # IDE and editor caches
 .vs/

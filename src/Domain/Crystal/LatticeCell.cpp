@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 
-#include "Domain/Crystal/LatticeCell.hpp"
+#include "Domain/Crystal/CrystalPrimitives.hpp"
 
 #include <cmath>
 

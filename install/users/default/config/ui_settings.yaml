@@ -57,8 +57,8 @@ renderer:
   orbit_sensitivity: 1
   pan_sensitivity: 1
   zoom_sensitivity: 1
-  rotation_speed: 1
-  focus_selected_atom_distance: 2
+  rotation_speed: 0.25
+  focus_selected_atom_distance: 10
   focus_selected_atom_transition_seconds: 0.5
   focus_selected_atom_respect_atom_radius: true
   focus_selected_atom_radius_multiplier: 1

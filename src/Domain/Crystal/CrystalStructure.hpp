@@ -5,9 +5,7 @@
 
 #include <glm/glm.hpp>
 
-#include "Domain/Crystal/AtomSite.hpp"
-#include "Domain/Crystal/LatticeCell.hpp"
-#include "Domain/Crystal/VacancySite.hpp"
+#include "Domain/Crystal/CrystalPrimitives.hpp"
 
 namespace DefectStudio
 {

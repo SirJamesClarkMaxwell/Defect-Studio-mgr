@@ -1,36 +1,19 @@
 #include <gtest/gtest.h>
 
-#include "Core/Utils/Path.hpp"
+#include <unordered_map>
+
 #include "Domain/Crystal/ElementProperties.hpp"
-
-namespace
-{
-	[[nodiscard]] DefectStudio::Path FindRepoRoot()
-	{
-		DefectStudio::Path cursor = DefectStudio::Path::FromResolved(FileSystem::CurrentPath());
-		for (int depth = 0; depth < 10; ++depth)
-		{
-			if (FileSystem::Exists((cursor / "pyproject.toml").Native()))
-				return cursor;
-
-			const DefectStudio::Path parent = cursor.parent_path();
-			if (parent.Empty() || parent == cursor)
-				break;
-			cursor = parent;
-		}
-
-		return DefectStudio::Path::FromResolved(FileSystem::CurrentPath());
-	}
-} // namespace
 
 namespace DefectStudio::Tests
 {
-	TEST(ElementPropertiesTableTests, LoadsYamlAndProvidesKnownElementValues)
+	TEST(ElementPropertiesTableTests, ReplacedDataProvidesKnownElementValues)
 	{
-		const Path filePath = FindRepoRoot() / "install" / "app" / "data" / "elements" / "element_properties.yaml";
-
 		ElementPropertiesTable table;
-		ASSERT_TRUE(table.LoadFromFile(filePath.String()));
+		std::unordered_map<std::string, ElementProperties> entries;
+		entries.emplace("Si", ElementProperties{14, 28.086f, 1.11f, 2.10f});
+		table.ReplaceData(std::move(entries));
+		ASSERT_FALSE(table.Empty());
+		ASSERT_EQ(table.Size(), 1u);
 
 		const ElementProperties &silicon = table.Get("Si");
 		EXPECT_EQ(silicon.atomicNumber, 14);
@@ -43,6 +26,7 @@ namespace DefectStudio::Tests
 	TEST(ElementPropertiesTableTests, UsesFallbackForUnknownElement)
 	{
 		ElementPropertiesTable table;
+		ASSERT_TRUE(table.Empty());
 		const ElementProperties &unknown = table.Get("Xx");
 		EXPECT_EQ(unknown.atomicNumber, 0);
 		EXPECT_FLOAT_EQ(unknown.mass, 0.0f);
