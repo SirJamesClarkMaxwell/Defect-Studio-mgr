@@ -2,11 +2,8 @@
 
 #include <string>
 
-#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Domain/Crystal/ElementPropertiesEvents.hpp"
-#include "IO/IOLayer.hpp"
+#include "IO/ElementPropertiesIO.hpp"
 
 namespace
 {
@@ -30,81 +27,31 @@ namespace
 
 namespace DefectStudio::Tests
 {
-	TEST(ElementPropertiesIoEventsTests, LoadsElementPropertiesThroughIOLayerEvent)
+	TEST(ElementPropertiesIoEventsTests, LoadsElementPropertiesFromYamlFile)
 	{
 		const Path sourcePath = FindRepoRoot() / "install" / "app" / "data" / "elements" / "element_properties.yaml";
 
-		Ref<EventBus> bus = CreateRef<EventBus>();
-		IOLayer layer;
-		layer.BindRuntimeServices(bus);
-
-		bool loaded = false;
-		bool failed = false;
-		Path loadedPath;
-		std::size_t loadedEntries = 0;
-		ElementProperties silicon;
-
-		const SubscriptionHandle loadedSubscription = bus->Subscribe<DomainEvents::Crystal::ElementPropertiesLoaded>(
-			[&](const DomainEvents::Crystal::ElementPropertiesLoaded &event) {
-				loaded = true;
-				loadedPath = event.sourcePath;
-				loadedEntries = event.entries.size();
-				const auto found = event.entries.find("Si");
-				if (found != event.entries.end())
-					silicon = found->second;
-			});
-		const SubscriptionHandle failedSubscription = bus->Subscribe<DomainEvents::Crystal::ElementPropertiesLoadFailed>(
-			[&](const DomainEvents::Crystal::ElementPropertiesLoadFailed &) {
-				failed = true;
-			});
-
-		(void)loadedSubscription;
-		(void)failedSubscription;
-
-		bus->Publish(DomainEvents::Crystal::ElementPropertiesLoadRequested{sourcePath});
-		bus->ProcessQueue();
+		std::unordered_map<std::string, ElementProperties> entries;
+		std::string error;
+		const bool loaded = ElementPropertiesIO::LoadFromFile(sourcePath, entries, error);
+		const auto found = entries.find("Si");
+		const ElementProperties silicon = found != entries.end() ? found->second : ElementProperties{};
 
 		EXPECT_TRUE(loaded);
-		EXPECT_FALSE(failed);
-		EXPECT_EQ(loadedPath.String(), sourcePath.String());
-		EXPECT_GT(loadedEntries, 20u);
+		EXPECT_TRUE(error.empty());
+		EXPECT_GT(entries.size(), 20u);
 		EXPECT_EQ(silicon.atomicNumber, 14);
 		EXPECT_NEAR(silicon.covalentRadius, 1.11f, 1e-3f);
 	}
 
-	TEST(ElementPropertiesIoEventsTests, EmitsLoadFailedEventForMissingFile)
+	TEST(ElementPropertiesIoEventsTests, ReturnsErrorForMissingFile)
 	{
 		const Path missingPath = FindRepoRoot() / "install" / "app" / "data" / "elements" / "missing-element-properties.yaml";
 
-		Ref<EventBus> bus = CreateRef<EventBus>();
-		IOLayer layer;
-		layer.BindRuntimeServices(bus);
-
-		bool loaded = false;
-		bool failed = false;
-		Path failedPath;
+		std::unordered_map<std::string, ElementProperties> entries;
 		std::string error;
-
-		const SubscriptionHandle loadedSubscription = bus->Subscribe<DomainEvents::Crystal::ElementPropertiesLoaded>(
-			[&](const DomainEvents::Crystal::ElementPropertiesLoaded &) {
-				loaded = true;
-			});
-		const SubscriptionHandle failedSubscription = bus->Subscribe<DomainEvents::Crystal::ElementPropertiesLoadFailed>(
-			[&](const DomainEvents::Crystal::ElementPropertiesLoadFailed &event) {
-				failed = true;
-				failedPath = event.sourcePath;
-				error = event.error;
-			});
-
-		(void)loadedSubscription;
-		(void)failedSubscription;
-
-		bus->Publish(DomainEvents::Crystal::ElementPropertiesLoadRequested{missingPath});
-		bus->ProcessQueue();
-
+		const bool loaded = ElementPropertiesIO::LoadFromFile(missingPath, entries, error);
 		EXPECT_FALSE(loaded);
-		EXPECT_TRUE(failed);
-		EXPECT_EQ(failedPath.String(), missingPath.String());
 		EXPECT_FALSE(error.empty());
 	}
 } // namespace DefectStudio::Tests

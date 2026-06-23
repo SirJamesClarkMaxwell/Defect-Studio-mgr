@@ -15,7 +15,6 @@ namespace DefectStudio
 	{
 		glm::vec3 color = glm::vec3(0.7f, 0.7f, 0.7f);
 		float radiusDisplay = 0.40f;
-		float radiusCovalent = 0.77f;
 	};
 
 	class ElementDataTable
@@ -81,7 +80,6 @@ namespace DefectStudio
 						display["color"][2].as<float>(0.7f));
 				}
 				data.radiusDisplay = display["radius_display"].as<float>(0.40f);
-				data.radiusCovalent = display["radius_covalent"].as<float>(0.77f);
 				m_Data[symbol] = data;
 			}
 
@@ -105,11 +103,6 @@ namespace DefectStudio
 		[[nodiscard]] float DisplayRadius(const std::string &symbol) const
 		{
 			return Get(symbol).radiusDisplay;
-		}
-
-		[[nodiscard]] float CovalentRadius(const std::string &symbol) const
-		{
-			return Get(symbol).radiusCovalent;
 		}
 
 	private:

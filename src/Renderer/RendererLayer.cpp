@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string_view>
+#include <unordered_map>
 
 #include <glad/gl.h>
 #include <stb_image.h>
@@ -170,7 +171,9 @@ namespace DefectStudio
 			return;
 		}
 
-		Result<void> initializeResult = m_RendererBackend->Initialize(shaderDirectory);
+		Result<void> initializeResult = m_RendererBackend->Initialize(
+			shaderDirectory,
+			m_StartupConfig.primitiveMeshes);
 		if (!initializeResult.HasValue())
 		{
 			DS_LOG_ERROR(
@@ -182,6 +185,8 @@ namespace DefectStudio
 
 		if (m_StartupConfig.loadDefaultScene)
 			loadDefaultWindows();
+		else
+			m_Windows.clear();
 		applyDefaultProjectionToWindows();
 		if (m_StartupConfig.eventBus != nullptr)
 			bindConfigEvents();
@@ -395,7 +400,10 @@ namespace DefectStudio
 
 	void RendererLayer::loadDefaultWindows()
 	{
-		m_Windows = BuildRendererStartupWindows(m_StartupConfig.assetsDirectory);
+		m_Windows = BuildRendererStartupWindows(
+			m_StartupConfig.startupLayout.windows,
+			m_StartupConfig.atomStyleTable,
+			m_StartupConfig.elementPropertiesTable);
 		if (m_RendererBackend != nullptr)
 			m_RendererBackend->MarkGridDirty();
 	}

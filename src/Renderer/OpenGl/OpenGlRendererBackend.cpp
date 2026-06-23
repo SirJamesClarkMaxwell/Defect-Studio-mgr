@@ -93,12 +93,53 @@ namespace DefectStudio
 		DS_LOG_DEBUG("OpenGL debug [id={} type={} severity={}]: {}", id, type, severity, message);
 	}
 
+	[[nodiscard]] StructuredError MakeMeshAssetError(
+		std::string code,
+		std::string userMessage,
+		std::string technicalDetails)
+	{
+		return StructuredError{
+			ErrorCategory::Validation,
+			Severity::Error,
+			std::move(userMessage),
+			std::move(technicalDetails),
+			"Fix renderer primitive mesh assets.",
+			"OpenGlRendererBackend",
+			std::move(code)};
+	}
+
+	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
+	{
+		const float length = glm::length(value);
+		if (!std::isfinite(length) || length <= 0.00001f)
+			return fallback;
+		return value / length;
+	}
+
+	[[nodiscard]] bool ValidateIndexRange(
+		const std::vector<std::uint32_t> &indices,
+		std::size_t vertexCount,
+		std::string &outError)
+	{
+		for (const std::uint32_t index : indices)
+		{
+			if (index < vertexCount)
+				continue;
+			outError = "index out of range: " + std::to_string(index)
+				+ " >= " + std::to_string(vertexCount);
+			return false;
+		}
+		return true;
+	}
+
 	OpenGlRendererBackend::~OpenGlRendererBackend()
 	{
 		Shutdown();
 	}
 
-	Result<void> OpenGlRendererBackend::Initialize(const Path &shaderDirectory)
+	Result<void> OpenGlRendererBackend::Initialize(
+		const Path &shaderDirectory,
+		const RendererPrimitiveMeshAssets &primitiveMeshes)
 	{
 		if (m_Initialized)
 			return {};
@@ -138,7 +179,12 @@ namespace DefectStudio
 		if (!computeLoaded.HasValue())
 			return computeLoaded.Error();
 
-		createStaticGeometry();
+		Result<void> geometryResult = createStaticGeometry(primitiveMeshes);
+		if (!geometryResult.HasValue())
+		{
+			releaseStaticGeometry();
+			return geometryResult.Error();
+		}
 
 		glEnable(GL_DEBUG_OUTPUT);
 		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
@@ -277,13 +323,20 @@ namespace DefectStudio
 		return resources.frameBuffer.ColorTextureId();
 	}
 
-	void OpenGlRendererBackend::createStaticGeometry()
+	Result<void> OpenGlRendererBackend::createStaticGeometry(const RendererPrimitiveMeshAssets &primitiveMeshes)
 	{
-		createSphereMesh();
-		createCylinderMesh();
+		Result<void> sphereResult = createSphereMesh(primitiveMeshes.sphere);
+		if (!sphereResult.HasValue())
+			return sphereResult.Error();
+
+		Result<void> cylinderResult = createCylinderMesh(primitiveMeshes.cylinder);
+		if (!cylinderResult.HasValue())
+			return cylinderResult.Error();
+
 		createScreenGrid();
 		glGenBuffers(1, &m_ComputeInputSsbo);
 		glGenBuffers(1, &m_ComputeOutputSsbo);
+		return {};
 	}
 
 	void OpenGlRendererBackend::releaseStaticGeometry()
@@ -337,44 +390,50 @@ namespace DefectStudio
 		}
 	}
 
-	void OpenGlRendererBackend::createSphereMesh()
+	Result<void> OpenGlRendererBackend::createSphereMesh(const RendererStaticMeshData &meshData)
 	{
-		const int latitudeSegments = 14;
-		const int longitudeSegments = 18;
-
-		std::vector<SphereVertex> vertices;
-		std::vector<std::uint32_t> indices;
-		for (int lat = 0; lat <= latitudeSegments; ++lat)
+		if (meshData.positions.empty() || meshData.indices.empty())
 		{
-			const float v = static_cast<float>(lat) / static_cast<float>(latitudeSegments);
-			const float theta = v * 3.1415926535f;
-			const float y = std::cos(theta);
-			const float ringRadius = std::sin(theta);
-			for (int lon = 0; lon <= longitudeSegments; ++lon)
-			{
-				const float u = static_cast<float>(lon) / static_cast<float>(longitudeSegments);
-				const float phi = u * 6.283185307f;
-				const float x = ringRadius * std::cos(phi);
-				const float z = ringRadius * std::sin(phi);
-				SphereVertex vertex;
-				vertex.position = glm::vec3(x, y, z);
-				vertex.normal = glm::normalize(vertex.position);
-				vertices.push_back(vertex);
-			}
+			return MakeMeshAssetError(
+				"renderer.mesh.sphere.empty",
+				"Sphere mesh asset is empty.",
+				"Sphere mesh positions/indices are empty.");
 		}
 
-		for (int lat = 0; lat < latitudeSegments; ++lat)
+		std::string indexError;
+		if (!ValidateIndexRange(meshData.indices, meshData.positions.size(), indexError))
 		{
-			for (int lon = 0; lon < longitudeSegments; ++lon)
+			return MakeMeshAssetError(
+				"renderer.mesh.sphere.indices_out_of_range",
+				"Sphere mesh asset is invalid.",
+				"Sphere mesh has invalid indices: " + indexError);
+		}
+
+		std::vector<glm::vec3> normals = meshData.normals;
+		if (normals.empty())
+		{
+			normals.resize(meshData.positions.size(), glm::vec3(0.0f, 1.0f, 0.0f));
+			for (std::size_t index = 0; index < meshData.positions.size(); ++index)
 			{
-				const std::uint32_t rowStart = static_cast<std::uint32_t>(lat * (longitudeSegments + 1));
-				const std::uint32_t nextRowStart = static_cast<std::uint32_t>((lat + 1) * (longitudeSegments + 1));
-				const std::uint32_t current = rowStart + static_cast<std::uint32_t>(lon);
-				const std::uint32_t next = current + 1;
-				const std::uint32_t below = nextRowStart + static_cast<std::uint32_t>(lon);
-				const std::uint32_t belowNext = below + 1;
-				indices.insert(indices.end(), {current, below, next, next, below, belowNext});
+				const glm::vec3 fallback = glm::vec3(0.0f, 1.0f, 0.0f);
+				normals[index] = SafeNormalize(meshData.positions[index], fallback);
 			}
+		}
+		else if (normals.size() != meshData.positions.size())
+		{
+			return MakeMeshAssetError(
+				"renderer.mesh.sphere.normal_count_mismatch",
+				"Sphere mesh normals do not match vertex count.",
+				"Sphere mesh has " + std::to_string(normals.size())
+					+ " normals for " + std::to_string(meshData.positions.size()) + " positions.");
+		}
+
+		std::vector<SphereVertex> vertices;
+		vertices.resize(meshData.positions.size());
+		for (std::size_t index = 0; index < meshData.positions.size(); ++index)
+		{
+			vertices[index].position = meshData.positions[index];
+			vertices[index].normal = SafeNormalize(normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
 		}
 
 		glGenVertexArrays(1, &m_SphereMesh.vao);
@@ -386,7 +445,7 @@ namespace DefectStudio
 		glBindBuffer(GL_ARRAY_BUFFER, m_SphereMesh.vbo);
 		glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(SphereVertex)), vertices.data(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_SphereMesh.ebo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(indices.size() * sizeof(std::uint32_t)), indices.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(meshData.indices.size() * sizeof(std::uint32_t)), meshData.indices.data(), GL_STATIC_DRAW);
 
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SphereVertex), reinterpret_cast<void *>(offsetof(SphereVertex, position)));
@@ -403,79 +462,92 @@ namespace DefectStudio
 		glVertexAttribDivisor(3, 1);
 
 		glBindVertexArray(0);
-		m_SphereMesh.indexCount = static_cast<int>(indices.size());
+		m_SphereMesh.indexCount = static_cast<int>(meshData.indices.size());
+		return {};
 	}
 
-	void OpenGlRendererBackend::createCylinderMesh()
+	Result<void> OpenGlRendererBackend::createCylinderMesh(const RendererStaticMeshData &meshData)
 	{
-		const int segments = 24;
-		std::vector<CylinderVertex> vertices;
-		std::vector<std::uint32_t> indices;
-		vertices.reserve(static_cast<std::size_t>((segments + 1) * 6 + 2));
-		indices.reserve(static_cast<std::size_t>(segments * 12));
-
-		// Side surface.
-		for (int ring = 0; ring <= 1; ++ring)
+		if (meshData.positions.empty() || meshData.indices.empty())
 		{
-			const float z = static_cast<float>(ring);
-			for (int segment = 0; segment <= segments; ++segment)
+			return MakeMeshAssetError(
+				"renderer.mesh.cylinder.empty",
+				"Cylinder mesh asset is empty.",
+				"Cylinder mesh positions/indices are empty.");
+		}
+
+		std::string indexError;
+		if (!ValidateIndexRange(meshData.indices, meshData.positions.size(), indexError))
+		{
+			return MakeMeshAssetError(
+				"renderer.mesh.cylinder.indices_out_of_range",
+				"Cylinder mesh asset is invalid.",
+				"Cylinder mesh has invalid indices: " + indexError);
+		}
+
+		std::vector<glm::vec3> normals = meshData.normals;
+		if (normals.empty())
+		{
+			normals.resize(meshData.positions.size(), glm::vec3(0.0f, 1.0f, 0.0f));
+			for (std::size_t index = 0; index < meshData.positions.size(); ++index)
 			{
-				const float angle = 6.283185307f * static_cast<float>(segment) / static_cast<float>(segments);
-				const float x = std::cos(angle);
-				const float y = std::sin(angle);
-				CylinderVertex vertex;
-				vertex.position = glm::vec3(x, y, z);
-				vertex.normal = glm::vec3(x, y, 0.0f);
-				vertex.gradientT = z;
-				vertices.push_back(vertex);
+				const glm::vec3 position = meshData.positions[index];
+				glm::vec3 radial = glm::vec3(position.x, position.y, 0.0f);
+				if (glm::length(radial) <= 0.0001f)
+					radial = position.z >= 0.5f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 0.0f, -1.0f);
+				normals[index] = SafeNormalize(radial, glm::vec3(0.0f, 1.0f, 0.0f));
 			}
 		}
-
-		for (int segment = 0; segment < segments; ++segment)
+		else if (normals.size() != meshData.positions.size())
 		{
-			const std::uint32_t a = static_cast<std::uint32_t>(segment);
-			const std::uint32_t b = static_cast<std::uint32_t>(segment + 1);
-			const std::uint32_t c = static_cast<std::uint32_t>(segment + (segments + 1));
-			const std::uint32_t d = static_cast<std::uint32_t>(segment + (segments + 1) + 1);
-			indices.insert(indices.end(), {a, c, b, b, c, d});
+			return MakeMeshAssetError(
+				"renderer.mesh.cylinder.normal_count_mismatch",
+				"Cylinder mesh normals do not match vertex count.",
+				"Cylinder mesh has " + std::to_string(normals.size())
+					+ " normals for " + std::to_string(meshData.positions.size()) + " positions.");
 		}
 
-		// Cap near atom A (z = 0).
-		const std::uint32_t capStartCenter = static_cast<std::uint32_t>(vertices.size());
-		vertices.push_back({glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), 0.0f});
-		const std::uint32_t capStartRing = static_cast<std::uint32_t>(vertices.size());
-		for (int segment = 0; segment <= segments; ++segment)
+		std::vector<float> gradient = meshData.gradientT;
+		if (gradient.empty())
 		{
-			const float angle = 6.283185307f * static_cast<float>(segment) / static_cast<float>(segments);
-			vertices.push_back({
-				glm::vec3(std::cos(angle), std::sin(angle), 0.0f),
-				glm::vec3(0.0f, 0.0f, -1.0f),
-				0.0f});
+			gradient.resize(meshData.positions.size(), 0.0f);
+			float minZ = meshData.positions.front().z;
+			float maxZ = meshData.positions.front().z;
+			for (const glm::vec3 &position : meshData.positions)
+			{
+				minZ = std::min(minZ, position.z);
+				maxZ = std::max(maxZ, position.z);
+			}
+
+			const float spanZ = maxZ - minZ;
+			for (std::size_t index = 0; index < meshData.positions.size(); ++index)
+			{
+				if (spanZ <= 0.0001f)
+				{
+					gradient[index] = 0.0f;
+					continue;
+				}
+
+				const float raw = (meshData.positions[index].z - minZ) / spanZ;
+				gradient[index] = std::clamp(raw, 0.0f, 1.0f);
+			}
 		}
-		for (int segment = 0; segment < segments; ++segment)
+		else if (gradient.size() != meshData.positions.size())
 		{
-			const std::uint32_t a = capStartRing + static_cast<std::uint32_t>(segment);
-			const std::uint32_t b = capStartRing + static_cast<std::uint32_t>(segment + 1);
-			indices.insert(indices.end(), {capStartCenter, b, a});
+			return MakeMeshAssetError(
+				"renderer.mesh.cylinder.gradient_count_mismatch",
+				"Cylinder mesh gradient values do not match vertex count.",
+				"Cylinder mesh has " + std::to_string(gradient.size())
+					+ " gradient values for " + std::to_string(meshData.positions.size()) + " positions.");
 		}
 
-		// Cap near atom B (z = 1).
-		const std::uint32_t capEndCenter = static_cast<std::uint32_t>(vertices.size());
-		vertices.push_back({glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f), 1.0f});
-		const std::uint32_t capEndRing = static_cast<std::uint32_t>(vertices.size());
-		for (int segment = 0; segment <= segments; ++segment)
+		std::vector<CylinderVertex> vertices;
+		vertices.resize(meshData.positions.size());
+		for (std::size_t index = 0; index < meshData.positions.size(); ++index)
 		{
-			const float angle = 6.283185307f * static_cast<float>(segment) / static_cast<float>(segments);
-			vertices.push_back({
-				glm::vec3(std::cos(angle), std::sin(angle), 1.0f),
-				glm::vec3(0.0f, 0.0f, 1.0f),
-				1.0f});
-		}
-		for (int segment = 0; segment < segments; ++segment)
-		{
-			const std::uint32_t a = capEndRing + static_cast<std::uint32_t>(segment);
-			const std::uint32_t b = capEndRing + static_cast<std::uint32_t>(segment + 1);
-			indices.insert(indices.end(), {capEndCenter, a, b});
+			vertices[index].position = meshData.positions[index];
+			vertices[index].normal = SafeNormalize(normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
+			vertices[index].gradientT = gradient[index];
 		}
 
 		glGenVertexArrays(1, &m_CylinderMesh.vao);
@@ -487,7 +559,7 @@ namespace DefectStudio
 		glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.vbo);
 		glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(CylinderVertex)), vertices.data(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_CylinderMesh.ebo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(indices.size() * sizeof(std::uint32_t)), indices.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(meshData.indices.size() * sizeof(std::uint32_t)), meshData.indices.data(), GL_STATIC_DRAW);
 
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, position)));
@@ -518,7 +590,8 @@ namespace DefectStudio
 		glVertexAttribDivisor(8, 1);
 
 		glBindVertexArray(0);
-		m_CylinderMesh.indexCount = static_cast<int>(indices.size());
+		m_CylinderMesh.indexCount = static_cast<int>(meshData.indices.size());
+		return {};
 	}
 
 	void OpenGlRendererBackend::createScreenGrid()

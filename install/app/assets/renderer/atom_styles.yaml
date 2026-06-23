@@ -1,0 +1,111 @@
+#
+# Atom style colors:
+# - format: color: [R, G, B] where each channel is in range <0.0, 1.0>
+# - quick examples:
+#   pure red    = [1.00, 0.00, 0.00]
+#   pure green  = [0.00, 1.00, 0.00]
+#   pure blue   = [0.00, 0.00, 1.00]
+#   white       = [1.00, 1.00, 1.00]
+#   dark gray   = [0.20, 0.20, 0.20]
+# - display_radius controls visible sphere size in renderer units
+#
+schema_version: 1
+kind: atom_render_styles
+
+vacancy:
+  color: [0.72, 0.20, 0.82] # violet
+  display_radius: 0.45
+  opacity: 0.35
+  render_mode: ghost
+
+elements:
+  # Period 1
+  H: { color: [1.00, 1.00, 1.00], display_radius: 0.25 }
+  He: { color: [0.85, 1.00, 1.00], display_radius: 0.22 }
+  # Period 2
+  Li: { color: [0.80, 0.50, 1.00], display_radius: 0.65 }
+  Be: { color: [0.76, 1.00, 0.00], display_radius: 0.52 }
+  B: { color: [1.00, 0.71, 0.71], display_radius: 0.45 }
+  C: { color: [0.56, 0.56, 0.56], display_radius: 0.35 }
+  N: { color: [0.19, 0.31, 0.97], display_radius: 0.33 }
+  O: { color: [1.00, 0.05, 0.05], display_radius: 0.30 }
+  F: { color: [0.56, 0.88, 0.31], display_radius: 0.28 }
+  Ne: { color: [0.70, 0.89, 0.96], display_radius: 0.28 }
+  # Period 3
+  Na: { color: [0.67, 0.36, 0.95], display_radius: 0.82 }
+  Mg: { color: [0.54, 1.00, 0.00], display_radius: 0.70 }
+  Al: { color: [0.75, 0.65, 0.65], display_radius: 0.62 }
+  Si: { color: [0.94, 0.78, 0.63], display_radius: 0.58 }
+  P: { color: [1.00, 0.50, 0.00], display_radius: 0.55 }
+  S: { color: [1.00, 1.00, 0.19], display_radius: 0.53 }
+  Cl: { color: [0.12, 0.94, 0.12], display_radius: 0.52 }
+  Ar: { color: [0.50, 0.82, 0.89], display_radius: 0.54 }
+  # Period 4
+  K: { color: [0.56, 0.25, 0.83], display_radius: 1.00 }
+  Ca: { color: [0.24, 1.00, 0.00], display_radius: 0.88 }
+  Sc: { color: [0.90, 0.90, 0.90], display_radius: 0.84 }
+  Ti: { color: [0.75, 0.76, 0.78], display_radius: 0.80 }
+  V: { color: [0.65, 0.65, 0.67], display_radius: 0.76 }
+  Cr: { color: [0.54, 0.60, 0.78], display_radius: 0.68 }
+  Mn: { color: [0.61, 0.48, 0.78], display_radius: 0.70 }
+  Fe: { color: [0.88, 0.40, 0.20], display_radius: 0.70 }
+  Co: { color: [0.94, 0.56, 0.63], display_radius: 0.68 }
+  Ni: { color: [0.31, 0.82, 0.31], display_radius: 0.62 }
+  Cu: { color: [0.78, 0.50, 0.20], display_radius: 0.65 }
+  Zn: { color: [0.49, 0.50, 0.69], display_radius: 0.60 }
+  Ga: { color: [0.76, 0.56, 0.56], display_radius: 0.60 }
+  Ge: { color: [0.40, 0.56, 0.56], display_radius: 0.58 }
+  As: { color: [0.74, 0.50, 0.89], display_radius: 0.58 }
+  Se: { color: [1.00, 0.63, 0.00], display_radius: 0.58 }
+  Br: { color: [0.65, 0.16, 0.16], display_radius: 0.58 }
+  Kr: { color: [0.36, 0.72, 0.82], display_radius: 0.56 }
+  # Period 5
+  Rb: { color: [0.44, 0.18, 0.69], display_radius: 1.08 }
+  Sr: { color: [0.00, 1.00, 0.00], display_radius: 0.96 }
+  Y: { color: [0.58, 1.00, 1.00], display_radius: 0.94 }
+  Zr: { color: [0.58, 0.88, 0.88], display_radius: 0.86 }
+  Nb: { color: [0.45, 0.76, 0.79], display_radius: 0.80 }
+  Mo: { color: [0.33, 0.71, 0.71], display_radius: 0.76 }
+  Tc: { color: [0.23, 0.62, 0.62], display_radius: 0.72 }
+  Ru: { color: [0.14, 0.56, 0.56], display_radius: 0.72 }
+  Rh: { color: [0.04, 0.49, 0.55], display_radius: 0.70 }
+  Pd: { color: [0.00, 0.41, 0.52], display_radius: 0.68 }
+  Ag: { color: [0.75, 0.75, 0.75], display_radius: 0.72 }
+  Cd: { color: [1.00, 0.85, 0.56], display_radius: 0.72 }
+  In: { color: [0.65, 0.46, 0.45], display_radius: 0.70 }
+  Sn: { color: [0.40, 0.50, 0.50], display_radius: 0.68 }
+  Sb: { color: [0.62, 0.39, 0.71], display_radius: 0.68 }
+  Te: { color: [0.83, 0.48, 0.00], display_radius: 0.68 }
+  I: { color: [0.58, 0.00, 0.58], display_radius: 0.68 }
+  Xe: { color: [0.26, 0.62, 0.69], display_radius: 0.68 }
+  # Period 6 + lanthanides
+  Cs: { color: [0.34, 0.09, 0.56], display_radius: 1.18 }
+  Ba: { color: [0.00, 0.79, 0.00], display_radius: 1.04 }
+  La: { color: [0.44, 0.83, 1.00], display_radius: 1.00 }
+  Ce: { color: [1.00, 1.00, 0.78], display_radius: 0.98 }
+  Pr: { color: [0.85, 1.00, 0.78], display_radius: 0.97 }
+  Nd: { color: [0.78, 1.00, 0.78], display_radius: 0.96 }
+  Sm: { color: [0.56, 1.00, 0.78], display_radius: 0.95 }
+  Eu: { color: [0.38, 1.00, 0.78], display_radius: 0.95 }
+  Gd: { color: [0.27, 1.00, 0.78], display_radius: 0.94 }
+  Tb: { color: [0.19, 1.00, 0.78], display_radius: 0.93 }
+  Dy: { color: [0.12, 1.00, 0.78], display_radius: 0.92 }
+  Ho: { color: [0.00, 1.00, 0.61], display_radius: 0.92 }
+  Er: { color: [0.00, 0.90, 0.46], display_radius: 0.91 }
+  Tm: { color: [0.00, 0.83, 0.32], display_radius: 0.91 }
+  Yb: { color: [0.00, 0.75, 0.22], display_radius: 0.90 }
+  Lu: { color: [0.00, 0.67, 0.14], display_radius: 0.90 }
+  Hf: { color: [0.30, 0.76, 1.00], display_radius: 0.86 }
+  Ta: { color: [0.30, 0.65, 1.00], display_radius: 0.84 }
+  W: { color: [0.13, 0.58, 0.84], display_radius: 0.80 }
+  Re: { color: [0.15, 0.49, 0.67], display_radius: 0.75 }
+  Os: { color: [0.15, 0.40, 0.59], display_radius: 0.70 }
+  Ir: { color: [0.09, 0.33, 0.53], display_radius: 0.70 }
+  Pt: { color: [0.82, 0.82, 0.88], display_radius: 0.68 }
+  Au: { color: [1.00, 0.82, 0.14], display_radius: 0.68 }
+  Hg: { color: [0.72, 0.72, 0.82], display_radius: 0.65 }
+  Tl: { color: [0.65, 0.33, 0.30], display_radius: 0.70 }
+  Pb: { color: [0.34, 0.35, 0.38], display_radius: 0.72 }
+  Bi: { color: [0.62, 0.31, 0.71], display_radius: 0.74 }
+  # Actinides
+  U: { color: [0.00, 0.56, 1.00], display_radius: 0.94 }

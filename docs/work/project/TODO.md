@@ -19,10 +19,9 @@
 ## Aktualny status i priorytety
 
 ```
-✅ DONE    : T01 – T03  (platform, docs, cross-platform)
-✅ DONE    : T04 partial (Application, LayerStack, EventSystem, EventBus, Window)
-🔨 CURRENT : T04 finish + T05 vendor deps
-⏭ NEXT    : T06 → T07 → T08 → T09 → T10/T11 → T12 → T13 → T14 → T15
+✅ DONE    : T01 – T05  (platform, docs, cross-platform, core, python bridge)
+🔨 CURRENT : T06 stabilization + renderer asset startup
+⏭ NEXT    : T07 → T08 → T09 → T10/T11 → T12 → T13 → T14 → T15
 ```
 
 **Zasada do T15:** działające minimum. Refactor/polish jako osobne taski po tym jak coś działa end-to-end.
@@ -133,6 +132,9 @@
 - [x] Grid / unit cell box rendering (linie krawędzi komórki)
 - [x] View gizmo overlay (XYZ osie, kliknięcie ustawia kamerę)
 - [x] Exception-free zone – granica opisana statycznym komentarzem / assertem
+- [x] Renderer startup assets: atom styles YAML, startup layout YAML, primitive OBJ meshes
+- [x] Renderer asset bundle loading przez `AssetManager`
+- [x] Debug build + `DefectStudioTests` green; Release build green
 
 **Biblioteki:** GLFW, OpenGL 4.3, GLM, stb\_image, Tracy, entt
 
@@ -142,11 +144,11 @@
 
 > Port z repo A (`SirJamesClarkMaxwell`). Czyste klasy, zero zależności UI.
 
-- [ ] `Structure` – wektory sieci, atomy, UUID jako stabilna tożsamość
-- [ ] `Atom` – pozycja frakcyjna, element, właściwości (label, formalny ładunek, magnetyzacja, occupancy)
-- [ ] Derived Cartesian position utilities (przeliczanie Direct ↔ Cartesian)
+- [ ] **PARTIAL:** `Structure` – wektory sieci i atomy są zaczęte; UUID jako stabilna tożsamość nadal brak
+- [ ] **PARTIAL:** `Atom` – podstawowy `AtomSite` istnieje; label, formalny ładunek, magnetyzacja, occupancy nadal brak
+- [x] Derived Cartesian position utilities (przeliczanie Direct ↔ Cartesian)
 - [ ] `Bond` – para atomów, długość, typ (auto/manual)
-- [ ] `ElementCatalog` – globalny katalog per-element (kolor, promień, masa, Z)
+- [ ] **PARTIAL:** `ElementCatalog` – `ElementPropertiesTable` istnieje dla masy/Z/promieni; kolor jest jeszcze w renderer `AtomStyleTable`
 - [ ] POSCAR/CONTCAR parser (VASP5/6, Selective Dynamics, Direct/Cartesian)
 - [ ] POSCAR serializer – precyzja i format bez noisy diff; `canonicalizeDirectTranslation = false` domyślnie
 - [ ] Sortowanie species w POSCAR malejąco po liczbie atomów

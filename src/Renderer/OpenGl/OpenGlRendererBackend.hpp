@@ -11,6 +11,7 @@
 #include "Core/Utils/Time.hpp"
 #include "Renderer/OpenGl/OpenGlFrameBuffer.hpp"
 #include "Renderer/OpenGl/OpenGlShaderLibrary.hpp"
+#include "Renderer/RendererMeshData.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
@@ -62,7 +63,7 @@ namespace DefectStudio
 		OpenGlRendererBackend() = default;
 		~OpenGlRendererBackend();
 
-		Result<void> Initialize(const Path &shaderDirectory);
+		Result<void> Initialize(const Path &shaderDirectory, const RendererPrimitiveMeshAssets &primitiveMeshes);
 		void Shutdown();
 		void ReloadShadersIfNeeded();
 		void CollectProfilingData();
@@ -81,10 +82,10 @@ namespace DefectStudio
 			const std::vector<std::size_t> &selectedAtomIndices = {});
 
 	private:
-		void createStaticGeometry();
+		Result<void> createStaticGeometry(const RendererPrimitiveMeshAssets &primitiveMeshes);
 		void releaseStaticGeometry();
-		void createSphereMesh();
-		void createCylinderMesh();
+		Result<void> createSphereMesh(const RendererStaticMeshData &meshData);
+		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
 		void createScreenGrid();
 		void configureOpenGlState() const;
 		void renderAtoms(

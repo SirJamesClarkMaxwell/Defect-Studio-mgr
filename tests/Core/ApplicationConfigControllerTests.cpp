@@ -89,7 +89,7 @@ TEST(ApplicationConfigControllerTests, ApplyRequestUpdatesRuntimeConfigAndPublis
 	EXPECT_EQ(specification.logLevel, DefectStudio::LogLevel::Debug);
 	EXPECT_TRUE(specification.traceEvents);
 	EXPECT_EQ(eventQueue.Capacity(), 64u);
-	EXPECT_EQ(eventBus->GetQueuedEventCount(), 1u);
+	EXPECT_EQ(eventBus->GetQueuedEventCount(), 3u);
 
 	eventBus->ProcessQueue();
 

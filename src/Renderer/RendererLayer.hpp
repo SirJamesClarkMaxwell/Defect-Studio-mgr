@@ -12,6 +12,10 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Domain/Crystal/ElementProperties.hpp"
+#include "Renderer/RendererMeshData.hpp"
+#include "Renderer/AtomStyleTable.hpp"
+#include "Renderer/RendererStartupDefinitions.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
@@ -195,6 +199,10 @@ namespace DefectStudio
 		Path configDirectory;
 		Path assetsDirectory;
 		Path shaderDirectory;
+		AtomStyleTable atomStyleTable;
+		ElementPropertiesTable elementPropertiesTable;
+		RendererStartupLayoutDefinition startupLayout;
+		RendererPrimitiveMeshAssets primitiveMeshes;
 		Ref<EventBus> eventBus;
 		bool loadDefaultScene = true;
 	};

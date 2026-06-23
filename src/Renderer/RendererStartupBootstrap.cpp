@@ -2,45 +2,14 @@
 
 #include "Renderer/RendererStartupBootstrap.hpp"
 
-#include <array>
-
 #include <glm/geometric.hpp>
 
 #include "Core/Utils/Logger.hpp"
-#include "Renderer/ElementDataTable.hpp"
 #include "Renderer/RendererPoscarLoader.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {
-	[[nodiscard]] static Path QuickPoscarDirectory(const Path &assetsDirectory)
-	{
-		return assetsDirectory / Path("quicktest") / Path("poscar");
-	}
-
-	[[nodiscard]] static Path ElementDataDirectory(const Path &assetsDirectory)
-	{
-		return Path::FromResolved(
-			assetsDirectory.Native()
-			.parent_path()
-			/ "data"
-			/ "elements");
-	}
-
-	[[nodiscard]] static Path ResolveExistingQuickPoscar(
-		const Path &poscarDirectory,
-		const std::array<Path, 2> &candidates)
-	{
-		for (const Path &candidate : candidates)
-		{
-			const Path fullPath = poscarDirectory / candidate;
-			if (FileSystem::Exists(fullPath.Native()))
-				return fullPath;
-		}
-
-		return poscarDirectory / candidates[0];
-	}
-
 	static void HideAtomPattern(RendererStructureData &structure, std::size_t step)
 	{
 		if (step == 0)
@@ -53,14 +22,12 @@ namespace DefectStudio
 	}
 
 	[[nodiscard]] static RendererWindowState BuildWindowFromStructure(
-		std::string title,
+		const RendererStartupWindowDefinition &definition,
 		RendererStructureData structure,
-		const glm::vec3 &direction,
-		float distanceMultiplier,
-		std::size_t hideStep)
+		glm::vec3 direction)
 	{
 		RendererWindowState window;
-		window.title = std::move(title);
+		window.title = definition.title;
 		window.structure = std::move(structure);
 		window.camera = CreateUnique<RendererViewCamera>();
 
@@ -71,62 +38,40 @@ namespace DefectStudio
 			minimum = glm::min(minimum, atom.cartesianPosition);
 			maximum = glm::max(maximum, atom.cartesianPosition);
 		}
+		if (glm::length(direction) <= 0.0001f)
+			direction = glm::vec3(1.0f, 1.0f, 1.0f);
+		direction = glm::normalize(direction);
 		window.camera->FocusBounds(minimum, maximum);
 		window.camera->SetFromDirection(direction);
-		window.camera->SetDistance(window.camera->Distance() * distanceMultiplier);
-		HideAtomPattern(window.structure, hideStep);
+		window.camera->SetDistance(window.camera->Distance() * definition.distanceMultiplier);
+		HideAtomPattern(window.structure, definition.hideStep);
 		return window;
 	}
 
-	[[nodiscard]] std::vector<RendererWindowState> BuildRendererStartupWindows(const Path &assetsDirectory)
+	[[nodiscard]] std::vector<RendererWindowState> BuildRendererStartupWindows(
+		const std::vector<RendererStartupWindowDefinition> &windowDefinitions,
+		const AtomStyleTable &atomStyleTable,
+		const ElementPropertiesTable &elementPropertiesTable)
 	{
 		std::vector<RendererWindowState> windows;
-		ElementDataTable elementTable;
-		const Path elementDataDirectory = ElementDataDirectory(assetsDirectory);
-		if (!elementTable.LoadFromDirectory(elementDataDirectory.String()))
-		{
-			DS_LOG_WARN(
-				"Renderer quick-test bootstrap: element display table fallback defaults, load failed at {}",
-				elementDataDirectory.String());
-		}
-
-		const Path poscarDirectory = QuickPoscarDirectory(assetsDirectory);
-		const Path hbnPath = ResolveExistingQuickPoscar(
-			poscarDirectory,
-			{Path("hBN.vasp"), Path("hBN")});
-		const std::array<Path, 3> files = {
-			poscarDirectory / Path("GeV.vasp"),
-			hbnPath,
-			poscarDirectory / Path("diament.vasp")};
-		const std::array<std::string, 3> names = {"GeV", "hBN", "diament"};
-		const std::array<glm::vec3, 3> directions = {
-			glm::normalize(glm::vec3(1.0f, 1.0f, 0.8f)),
-			glm::normalize(glm::vec3(-1.0f, 1.2f, 0.7f)),
-			glm::normalize(glm::vec3(1.0f, 0.9f, 1.2f))};
-		const std::array<float, 3> distanceScale = {1.25f, 1.15f, 1.75f};
-		const std::array<std::size_t, 3> hideSteps = {0, 0, 0};
-
-		for (std::size_t index = 0; index < files.size(); ++index)
+		windows.reserve(windowDefinitions.size());
+		for (const RendererStartupWindowDefinition &definition : windowDefinitions)
 		{
 			Result<RendererStructureData> loaded = LoadRendererStructureFromPoscar(
-				files[index],
-				names[index],
-				elementTable);
+				definition.poscarPath,
+				definition.structureName,
+				atomStyleTable,
+				elementPropertiesTable);
 			if (!loaded.HasValue())
 			{
 				DS_LOG_ERROR(
 					"Renderer quick-test bootstrap failed for {}: {}",
-					files[index].String(),
+					definition.poscarPath.String(),
 					loaded.Error().technicalDetails);
 				continue;
 			}
 
-			RendererWindowState window = BuildWindowFromStructure(
-				"T06 | " + names[index],
-				std::move(loaded.Value()),
-				directions[index],
-				distanceScale[index],
-				hideSteps[index]);
+			RendererWindowState window = BuildWindowFromStructure(definition, std::move(loaded.Value()), definition.direction);
 			windows.push_back(std::move(window));
 		}
 

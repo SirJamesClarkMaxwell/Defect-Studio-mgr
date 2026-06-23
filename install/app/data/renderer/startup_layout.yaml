@@ -1,0 +1,24 @@
+schema_version: 1
+kind: renderer_startup_layout
+
+windows:
+  - title: T06 | GeV
+    structure_name: GeV
+    poscar_path: ../../assets/quicktest/poscar/GeV.vasp
+    direction: [1.0, 1.0, 0.8]
+    distance_multiplier: 1.25
+    hide_step: 0
+
+  - title: T06 | hBN
+    structure_name: hBN
+    poscar_path: ../../assets/quicktest/poscar/hBN.vasp
+    direction: [-1.0, 1.2, 0.7]
+    distance_multiplier: 1.15
+    hide_step: 0
+
+  - title: T06 | diament
+    structure_name: diament
+    poscar_path: ../../assets/quicktest/poscar/diament.vasp
+    direction: [1.0, 0.9, 1.2]
+    distance_multiplier: 1.75
+    hide_step: 0

@@ -6,6 +6,7 @@ import sys
 import build as build_script
 import generate_projects as generate_script
 import run as run_script
+from scripts.python.common.paths import project_name
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -37,7 +38,7 @@ def run(args: argparse.Namespace) -> int:
             argparse.Namespace(
                 config=cfg,
                 compiler=args.compiler,
-                target="Hazelnut",
+                target=project_name(),
                 clean=False,
                 rebuild=False,
                 dry_run=args.dry_run,
@@ -52,6 +53,7 @@ def run(args: argparse.Namespace) -> int:
             config="Debug",
             project=None,
             log_level="info",
+            log_file=None,
             safe_mode=False,
             reset_layout=False,
             exe=None,

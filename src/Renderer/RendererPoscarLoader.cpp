@@ -160,7 +160,7 @@ namespace DefectStudio
 
 	[[nodiscard]] static std::vector<RendererBondData> BuildBonds(
 		const std::vector<RendererAtomData> &atoms,
-		const ElementDataTable &elementTable)
+		const ElementPropertiesTable &elementPropertiesTable)
 	{
 		constexpr float kCellSize = 4.72f;
 		constexpr float kCutoffScale = 1.18f;
@@ -199,8 +199,8 @@ namespace DefectStudio
 								continue;
 							const RendererAtomData &atomB = atoms[second];
 							const float cutoff = kCutoffScale * (
-								elementTable.CovalentRadius(atomA.element) +
-								elementTable.CovalentRadius(atomB.element));
+								elementPropertiesTable.Get(atomA.element).covalentRadius +
+								elementPropertiesTable.Get(atomB.element).covalentRadius);
 							const float cutoffSquared = cutoff * cutoff;
 							const glm::vec3 delta = atomA.cartesianPosition - atomB.cartesianPosition;
 							const float distanceSquared = glm::dot(delta, delta);
@@ -244,7 +244,8 @@ namespace DefectStudio
 	Result<RendererStructureData> LoadRendererStructureFromPoscar(
 		const Path &filePath,
 		std::string name,
-		const ElementDataTable &elementTable)
+		const AtomStyleTable &atomStyleTable,
+		const ElementPropertiesTable &elementPropertiesTable)
 	{
 		Result<std::string> textResult = LoadUtf8Text(filePath);
 		if (!textResult.HasValue())
@@ -400,8 +401,8 @@ namespace DefectStudio
 
 			RendererAtomData atom;
 			atom.element = expandedElements[atomIndex];
-			atom.radius = elementTable.DisplayRadius(atom.element);
-			atom.color = elementTable.Color(atom.element);
+			atom.radius = atomStyleTable.DisplayRadius(atom.element);
+			atom.color = atomStyleTable.Color(atom.element);
 			atom.cartesianPosition = cartesian;
 			atom.visible = true;
 			atoms.push_back(atom);
@@ -411,7 +412,7 @@ namespace DefectStudio
 		structure.name = std::move(name);
 		structure.sourcePath = filePath;
 		structure.atoms = atoms;
-		structure.bonds = BuildBonds(structure.atoms, elementTable);
+		structure.bonds = BuildBonds(structure.atoms, elementPropertiesTable);
 		structure.cellEdges = BuildCellEdges(lattice);
 		structure.lattice = lattice;
 

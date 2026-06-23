@@ -33,14 +33,9 @@ namespace DefectStudio
 		struct ThemeLoadFailed;
 	}
 
-	namespace DomainEvents::Crystal
-	{
-		struct ElementPropertiesLoadRequested;
-	}
-
 	class IOLayer final : public Layer, public EventReceiver
 	{
-	public:
+public:
 		IOLayer();
 
 		void BindRuntimeServices(Ref<EventBus> eventBus);
@@ -59,9 +54,8 @@ namespace DefectStudio
 		void onLayoutListRequested(const EditorUiEvents::LayoutListRequested &event);
 		void onBindingsSaveRequested(const AppEvents::Keymap::BindingsSaveRequested &event);
 		void onBindingsLoadRequested(const AppEvents::Keymap::BindingsLoadRequested &event);
-		void onElementPropertiesLoadRequested(const DomainEvents::Crystal::ElementPropertiesLoadRequested &event);
 
-	private:
+private:
 		Ref<EventBus> m_EventBus;
 	};
 } // namespace DefectStudio

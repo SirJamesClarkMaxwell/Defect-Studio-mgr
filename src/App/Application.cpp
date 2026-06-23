@@ -37,6 +37,7 @@
 #include "IO/IOLayer.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/ImGuiLayer.hpp"
+#include "Renderer/RendererAssetBundle.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
@@ -503,11 +504,17 @@ namespace DefectStudio
 	bool Application::initializeAssetManager()
 	{
 		setCrashStage("initialize asset manager");
-		const Path userAssetRoot = m_Config.paths.userConfigDirectory.parent_path() / Path("assets");
-		m_AssetManager = CreateRef<AssetManager>(m_Config.paths.assetsDirectory, userAssetRoot);
-		m_AssetManager->RegisterAsset(AssetDescriptor{"icon.ico", AssetType::Icon, AssetCriticality::Critical, "1", "app.icon"});
-		m_AssetManager->RegisterAsset(AssetDescriptor{"fonts/segoeui.ttf", AssetType::Font, AssetCriticality::Critical, "1", "ui.font.default"});
-		m_AssetManager->RegisterAsset(AssetDescriptor{"fonts/fa-solid-900.ttf", AssetType::Font, AssetCriticality::Optional, "1", "ui.font.icons"});
+		const Path defaultAppRoot = m_Config.paths.assetsDirectory.parent_path();
+		const Path userOverrideRoot = m_Config.paths.userConfigDirectory.parent_path();
+		m_AssetManager = CreateRef<AssetManager>(defaultAppRoot, userOverrideRoot);
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/icon.ico", AssetType::Icon, AssetCriticality::Critical, "1", "app.icon"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/fonts/segoeui.ttf", AssetType::Font, AssetCriticality::Critical, "1", "ui.font.default"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/fonts/fa-solid-900.ttf", AssetType::Font, AssetCriticality::Optional, "1", "ui.font.icons"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/atom_styles.yaml", AssetType::Data, AssetCriticality::Critical, "1", "renderer.atom_styles"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"data/elements/element_properties.yaml", AssetType::Data, AssetCriticality::Critical, "1", "renderer.element_properties"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"data/renderer/startup_layout.yaml", AssetType::Data, AssetCriticality::Critical, "1", "renderer.startup_layout"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/sphere.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.sphere"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/cylinder.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.cylinder"});
 
 		const AssetValidationReport report = m_AssetManager->ValidateRegisteredAssets();
 		for (const AssetValidationIssue &issue : report.issues)
@@ -860,13 +867,31 @@ namespace DefectStudio
 				scientificRuntimeLayer->BuildPythonBridgeCapability());
 		}
 		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+		RendererAssetBundle rendererAssets;
+		const Result<RendererAssetBundle> rendererAssetsResult = LoadRendererAssetBundle(*m_AssetManager);
+		if (!rendererAssetsResult.HasValue())
+		{
+			const StructuredError &error = rendererAssetsResult.Error();
+			DS_LOG_ERROR(
+				"Renderer startup assets failed to load [{}]: {}",
+				error.code.empty() ? "unknown" : error.code,
+				error.technicalDetails);
+		}
+		else
+		{
+			rendererAssets = rendererAssetsResult.Value();
+		}
 		RendererStartupConfig rendererStartupConfig;
 		rendererStartupConfig.configDirectory = m_Config.paths.userConfigDirectory;
 		rendererStartupConfig.assetsDirectory = m_Config.paths.assetsDirectory;
 		rendererStartupConfig.shaderDirectory = Path::FromResolved(
 			FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
+		rendererStartupConfig.atomStyleTable = std::move(rendererAssets.atomStyleTable);
+		rendererStartupConfig.elementPropertiesTable = std::move(rendererAssets.elementPropertiesTable);
+		rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
+		rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
 		rendererStartupConfig.eventBus = m_EventBus;
-		rendererStartupConfig.loadDefaultScene = true;
+		rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
 		m_LayerStack.PushLayer(CreateUnique<RendererLayer>(std::move(rendererStartupConfig)));
 		auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer).lock();
 		if (rendererLayer != nullptr)
@@ -1050,7 +1075,7 @@ namespace DefectStudio
 		Path iconPath = Path("install") / "app" / "assets" / "icon.ico";
 		if (m_AssetManager != nullptr)
 		{
-			auto resolvedIcon = m_AssetManager->ResolvePath("icon.ico");
+			auto resolvedIcon = m_AssetManager->ResolvePath("assets/icon.ico");
 			if (resolvedIcon)
 				iconPath = resolvedIcon->resolvedPath;
 		}
