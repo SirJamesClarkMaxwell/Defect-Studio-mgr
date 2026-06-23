@@ -71,6 +71,23 @@ namespace DefectStudio
 		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
 	};
 
+	struct RendererViewSnapshot
+	{
+		glm::vec3 target = glm::vec3(0.0f);
+		float distance = 1.0f;
+		float yaw = 0.0f;
+		float pitch = 0.0f;
+		float roll = 0.0f;
+		CameraProjection projection = CameraProjection::Perspective;
+	};
+
+	struct RendererViewStateChange
+	{
+		std::string description;
+		RendererViewSnapshot before;
+		RendererViewSnapshot after;
+	};
+
 	struct RendererWindowState
 	{
 		std::string title;
@@ -103,6 +120,11 @@ namespace DefectStudio
 		glm::quat transitionStartOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 		glm::quat transitionEndOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 		std::string transitionSourceAction;
+		std::vector<RendererViewStateChange> viewUndoHistory;
+		std::vector<RendererViewStateChange> viewRedoHistory;
+		bool viewInteractionActive = false;
+		std::string viewInteractionSource;
+		RendererViewSnapshot viewInteractionStart;
 	};
 
 	struct RendererLightingSettings

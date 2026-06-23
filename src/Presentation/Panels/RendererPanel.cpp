@@ -194,7 +194,7 @@ namespace DefectStudio
 			float deltaRadians,
 			float orbitInputDelta)
 		{
-			DS_LOG_INFO(
+			DS_LOG_DEBUG(
 				"Renderer rotation action={} step_deg={:.3f} speed={:.3f} delta_rad={:.6f} orbit_input_delta={:.3f}",
 				actionName,
 				stepDegrees,
@@ -297,6 +297,11 @@ namespace DefectStudio
 		else
 		{
 			windowState.dragActive = false;
+			if (windowState.viewInteractionActive &&
+				windowState.viewInteractionSource.rfind("mouse.", 0) == 0)
+			{
+				commitViewInteraction(windowState);
+			}
 		}
 
 		applyViewportKeyboardNavigation(windowState);
@@ -374,6 +379,7 @@ namespace DefectStudio
 
 		auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
+			beginViewInteraction(windowState, sourceAction);
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
 				m_Layer.m_GlobalRenderSettings.rotationSpeed);
 			startCameraTransition(
@@ -524,21 +530,29 @@ namespace DefectStudio
 		sameLineTight();
 		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out"))
 		{
+			beginViewInteraction(windowState, "toolbar.zoom_out");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
+			commitViewInteraction(windowState);
 		}
 		sameLineTight();
 
 		if (iconButton("##ZoomIn", "plus.png", "+", "Zoom in"))
 		{
+			beginViewInteraction(windowState, "toolbar.zoom_in");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
+			commitViewInteraction(windowState);
 		}
 		sameLineTight();
 
 		const bool isOrtho = windowState.camera->Projection() == CameraProjection::Orthographic;
 		if (ImGui::Button(isOrtho ? "ORTHO" : "PERSP"))
+		{
+			beginViewInteraction(windowState, "toolbar.toggle_projection");
 			windowState.camera->ToggleProjection();
+			commitViewInteraction(windowState);
+		}
 		sameLineTight();
 
 		ImGui::SetNextItemWidth(90.0f);
@@ -605,6 +619,7 @@ namespace DefectStudio
 
 		const auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
+			beginViewInteraction(windowState, sourceAction);
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
 				m_Layer.m_GlobalRenderSettings.rotationSpeed);
 			startCameraTransition(
@@ -647,6 +662,7 @@ namespace DefectStudio
 				0.02f,
 				m_Layer.m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds);
 
+			beginViewInteraction(windowState, "keyboard.focus_selected_atom");
 			startCameraTransition(
 				windowState,
 				atom.cartesianPosition,
@@ -666,6 +682,21 @@ namespace DefectStudio
 		{
 			return key != ImGuiKey_None && ImGui::IsKeyPressed(key);
 		};
+		const auto shortcutDown = [](ImGuiKey key) -> bool
+		{
+			return key != ImGuiKey_None && ImGui::IsKeyDown(key);
+		};
+
+		if (io.KeyCtrl && shortcutPressed(ImGuiKey_Z))
+		{
+			undoViewChange(windowState);
+			return;
+		}
+		if (io.KeyCtrl && shortcutPressed(ImGuiKey_Y))
+		{
+			redoViewChange(windowState);
+			return;
+		}
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
 		if (shortcutPressed(shortcuts.alignAxisA))
@@ -750,17 +781,36 @@ namespace DefectStudio
 
 		if (shortcutPressed(shortcuts.zoomIn))
 		{
+			beginViewInteraction(windowState, "keyboard.zoom_in");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		if (shortcutPressed(shortcuts.zoomOut))
 		{
+			beginViewInteraction(windowState, "keyboard.zoom_out");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 
 		if (shortcutPressed(shortcuts.focusSelectedAtom))
 			focusSelectedAtom();
+
+		const bool continuousShortcutDown =
+			shortcutDown(shortcuts.orbitLeft) ||
+			shortcutDown(shortcuts.orbitRight) ||
+			shortcutDown(shortcuts.orbitUp) ||
+			shortcutDown(shortcuts.orbitDown) ||
+			shortcutDown(shortcuts.rollLeft) ||
+			shortcutDown(shortcuts.rollRight) ||
+			shortcutDown(shortcuts.zoomIn) ||
+			shortcutDown(shortcuts.zoomOut);
+		if (!continuousShortcutDown &&
+			windowState.viewInteractionActive &&
+			windowState.viewInteractionSource.rfind("keyboard.", 0) == 0 &&
+			!windowState.transitionActive)
+		{
+			commitViewInteraction(windowState);
+		}
 	}
 
 	void RendererPanel::applyViewportInputNavigation(
@@ -790,6 +840,11 @@ namespace DefectStudio
 		{
 			windowState.dragActive = false;
 			windowState.lastMousePosition = io.MousePos;
+			if (windowState.viewInteractionActive &&
+				windowState.viewInteractionSource.rfind("mouse.", 0) == 0)
+			{
+				commitViewInteraction(windowState);
+			}
 		}
 
 		float wheel = io.MouseWheel;
@@ -797,8 +852,10 @@ namespace DefectStudio
 			wheel = -wheel;
 		if (wheel != 0.0f)
 		{
+			beginViewInteraction(windowState, "mouse.wheel_zoom");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(wheel * m_Layer.m_GlobalRenderSettings.zoomSensitivity);
+			commitViewInteraction(windowState);
 		}
 
 		if (!dragActiveInput)
@@ -806,6 +863,12 @@ namespace DefectStudio
 
 		if (!windowState.dragActive)
 		{
+			const char *sourceAction = touchpadZoom
+				? "mouse.touchpad_zoom"
+				: ((mmb && shiftPressed) || touchpadPan)
+					? "mouse.pan"
+					: "mouse.orbit";
+			beginViewInteraction(windowState, sourceAction);
 			windowState.dragActive = true;
 			windowState.lastMousePosition = io.MousePos;
 			return;
@@ -974,6 +1037,126 @@ namespace DefectStudio
 		ImGui::End();
 	}
 
+	RendererViewSnapshot RendererPanel::captureViewSnapshot(const RendererWindowState &windowState) const
+	{
+		RendererViewSnapshot snapshot;
+		if (windowState.camera == nullptr)
+			return snapshot;
+
+		snapshot.target = windowState.camera->Target();
+		snapshot.distance = windowState.camera->Distance();
+		snapshot.yaw = windowState.camera->Yaw();
+		snapshot.pitch = windowState.camera->Pitch();
+		snapshot.roll = windowState.camera->Roll();
+		snapshot.projection = windowState.camera->Projection();
+		return snapshot;
+	}
+
+	void RendererPanel::restoreViewSnapshot(
+		RendererWindowState &windowState,
+		const RendererViewSnapshot &snapshot,
+		const char *sourceAction)
+	{
+		if (windowState.camera == nullptr)
+			return;
+
+		windowState.camera->SetProjection(snapshot.projection);
+		windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
+			m_Layer.m_GlobalRenderSettings.rotationSpeed);
+		startCameraTransition(
+			windowState,
+			snapshot.target,
+			snapshot.distance,
+			snapshot.yaw,
+			snapshot.pitch,
+			snapshot.roll,
+			sourceAction);
+	}
+
+	void RendererPanel::beginViewInteraction(RendererWindowState &windowState, const char *sourceAction)
+	{
+		if (windowState.camera == nullptr || windowState.viewInteractionActive)
+			return;
+
+		windowState.viewInteractionActive = true;
+		windowState.viewInteractionSource =
+			(sourceAction != nullptr && sourceAction[0] != '\0') ? sourceAction : "view.change";
+		windowState.viewInteractionStart = captureViewSnapshot(windowState);
+	}
+
+	void RendererPanel::commitViewInteraction(RendererWindowState &windowState)
+	{
+		if (!windowState.viewInteractionActive)
+			return;
+
+		const RendererViewSnapshot before = windowState.viewInteractionStart;
+		const RendererViewSnapshot after = captureViewSnapshot(windowState);
+		const std::string source = windowState.viewInteractionSource;
+		windowState.viewInteractionActive = false;
+		windowState.viewInteractionSource.clear();
+		pushViewChange(windowState, before, after, source.c_str());
+	}
+
+	void RendererPanel::cancelViewInteraction(RendererWindowState &windowState)
+	{
+		windowState.viewInteractionActive = false;
+		windowState.viewInteractionSource.clear();
+	}
+
+	void RendererPanel::pushViewChange(
+		RendererWindowState &windowState,
+		const RendererViewSnapshot &before,
+		const RendererViewSnapshot &after,
+		const char *sourceAction)
+	{
+		constexpr float kEpsilon = 0.0001f;
+		const bool sameTarget = glm::length(before.target - after.target) <= kEpsilon;
+		const bool sameScalars =
+			std::abs(before.distance - after.distance) <= kEpsilon &&
+			std::abs(NormalizeAngleRadians(before.yaw - after.yaw)) <= kEpsilon &&
+			std::abs(NormalizeAngleRadians(before.pitch - after.pitch)) <= kEpsilon &&
+			std::abs(NormalizeAngleRadians(before.roll - after.roll)) <= kEpsilon &&
+			before.projection == after.projection;
+		if (sameTarget && sameScalars)
+			return;
+
+		RendererViewStateChange change;
+		change.description = sourceAction != nullptr ? sourceAction : "view.change";
+		change.before = before;
+		change.after = after;
+		windowState.viewUndoHistory.push_back(std::move(change));
+		constexpr std::size_t kMaxViewHistoryEntries = 256u;
+		if (windowState.viewUndoHistory.size() > kMaxViewHistoryEntries)
+			windowState.viewUndoHistory.erase(windowState.viewUndoHistory.begin());
+		windowState.viewRedoHistory.clear();
+	}
+
+	void RendererPanel::undoViewChange(RendererWindowState &windowState)
+	{
+		if (windowState.viewInteractionActive)
+			commitViewInteraction(windowState);
+		if (windowState.viewUndoHistory.empty())
+			return;
+
+		RendererViewStateChange change = std::move(windowState.viewUndoHistory.back());
+		windowState.viewUndoHistory.pop_back();
+		restoreViewSnapshot(windowState, change.before, "view.undo");
+		windowState.viewRedoHistory.push_back(std::move(change));
+	}
+
+	void RendererPanel::redoViewChange(RendererWindowState &windowState)
+	{
+		if (windowState.viewInteractionActive)
+			cancelViewInteraction(windowState);
+		if (windowState.viewRedoHistory.empty())
+			return;
+
+		RendererViewStateChange change = std::move(windowState.viewRedoHistory.back());
+		windowState.viewRedoHistory.pop_back();
+		restoreViewSnapshot(windowState, change.after, "view.redo");
+		windowState.viewUndoHistory.push_back(std::move(change));
+	}
+
 	void RendererPanel::startCameraTransition(
 		RendererWindowState &windowState,
 		const glm::vec3 &target,
@@ -996,7 +1179,7 @@ namespace DefectStudio
 			const float previousDuration = std::max(0.01f, windowState.transitionDuration);
 			const float previousProgress =
 				std::clamp(windowState.transitionElapsed / previousDuration, 0.0f, 1.0f);
-			DS_LOG_INFO(
+			DS_LOG_DEBUG(
 				"Renderer transition interrupted prev_source={} progress={:.3f} new_source={}",
 				windowState.transitionSourceAction.empty() ? "unspecified" : windowState.transitionSourceAction.c_str(),
 				previousProgress,
@@ -1015,7 +1198,7 @@ namespace DefectStudio
 		const float deltaRoll = NormalizeAngleRadians(roll - startRoll);
 		const float angularDeltaDegrees = RadiansToDegrees(
 			2.0f * std::acos(glm::clamp(std::abs(glm::dot(startOrientation, endOrientation)), 0.0f, 1.0f)));
-		DS_LOG_INFO(
+		DS_LOG_DEBUG(
 			"Renderer transition start source={} duration={:.3f}s "
 			"start_ypr_deg=({:.2f},{:.2f},{:.2f}) end_ypr_deg=({:.2f},{:.2f},{:.2f}) "
 			"delta_ypr_deg=({:.2f},{:.2f},{:.2f}) angular_delta_deg={:.2f} distance=({:.3f}->{:.3f})",
@@ -1075,13 +1258,19 @@ namespace DefectStudio
 
 		if (alpha >= 1.0f)
 		{
-			DS_LOG_INFO(
+			DS_LOG_DEBUG(
 				"Renderer transition complete source={} final_ypr_deg=({:.2f},{:.2f},{:.2f})",
 				windowState.transitionSourceAction.empty() ? "unspecified" : windowState.transitionSourceAction.c_str(),
 				RadiansToDegrees(yaw),
 				RadiansToDegrees(pitch),
 				RadiansToDegrees(roll));
 			windowState.transitionActive = false;
+			if (windowState.viewInteractionActive &&
+				windowState.viewInteractionSource.rfind("mouse.", 0) != 0 &&
+				windowState.viewInteractionSource.rfind("keyboard.", 0) != 0)
+			{
+				commitViewInteraction(windowState);
+			}
 		}
 	}
 } // namespace DefectStudio

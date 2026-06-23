@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -130,6 +131,156 @@ namespace DefectStudio
 			return false;
 		}
 		return true;
+	}
+
+	struct RefinedSphereMesh
+	{
+		std::vector<glm::vec3> positions;
+		std::vector<std::uint32_t> indices;
+	};
+
+	struct RefinedCylinderMesh
+	{
+		std::vector<glm::vec3> positions;
+		std::vector<glm::vec3> normals;
+		std::vector<float> gradientT;
+		std::vector<std::uint32_t> indices;
+	};
+
+	void AppendRefinedSphereTriangle(
+		RefinedSphereMesh &mesh,
+		const glm::vec3 &a,
+		const glm::vec3 &b,
+		const glm::vec3 &c,
+		int remainingSubdivisions)
+	{
+		const glm::vec3 normalizedA = SafeNormalize(a, glm::vec3(0.0f, 1.0f, 0.0f));
+		const glm::vec3 normalizedB = SafeNormalize(b, glm::vec3(0.0f, 1.0f, 0.0f));
+		const glm::vec3 normalizedC = SafeNormalize(c, glm::vec3(0.0f, 1.0f, 0.0f));
+
+		if (remainingSubdivisions <= 0)
+		{
+			const std::uint32_t baseIndex = static_cast<std::uint32_t>(mesh.positions.size());
+			mesh.positions.push_back(normalizedA);
+			mesh.positions.push_back(normalizedB);
+			mesh.positions.push_back(normalizedC);
+			mesh.indices.push_back(baseIndex);
+			mesh.indices.push_back(baseIndex + 1u);
+			mesh.indices.push_back(baseIndex + 2u);
+			return;
+		}
+
+		const glm::vec3 ab = SafeNormalize(normalizedA + normalizedB, normalizedA);
+		const glm::vec3 bc = SafeNormalize(normalizedB + normalizedC, normalizedB);
+		const glm::vec3 ca = SafeNormalize(normalizedC + normalizedA, normalizedC);
+
+		AppendRefinedSphereTriangle(mesh, normalizedA, ab, ca, remainingSubdivisions - 1);
+		AppendRefinedSphereTriangle(mesh, normalizedB, bc, ab, remainingSubdivisions - 1);
+		AppendRefinedSphereTriangle(mesh, normalizedC, ca, bc, remainingSubdivisions - 1);
+		AppendRefinedSphereTriangle(mesh, ab, bc, ca, remainingSubdivisions - 1);
+	}
+
+	[[nodiscard]] RefinedSphereMesh BuildRefinedSphereMesh(const RendererStaticMeshData &meshData)
+	{
+		constexpr int SubdivisionLevels = 4;
+
+		RefinedSphereMesh mesh;
+		mesh.positions.reserve(meshData.indices.size() * 16u);
+		mesh.indices.reserve(meshData.indices.size() * 16u);
+
+		for (std::size_t index = 0; index + 2u < meshData.indices.size(); index += 3u)
+		{
+			const glm::vec3 &a = meshData.positions[meshData.indices[index]];
+			const glm::vec3 &b = meshData.positions[meshData.indices[index + 1u]];
+			const glm::vec3 &c = meshData.positions[meshData.indices[index + 2u]];
+			AppendRefinedSphereTriangle(mesh, a, b, c, SubdivisionLevels);
+		}
+
+		return mesh;
+	}
+
+	[[nodiscard]] RefinedCylinderMesh BuildRefinedCylinderMesh(const RendererStaticMeshData &meshData)
+	{
+		constexpr std::uint32_t SegmentCount = 96u;
+		constexpr float TwoPi = 6.283185307f;
+
+		float minZ = meshData.positions.front().z;
+		float maxZ = meshData.positions.front().z;
+		float radius = 0.0f;
+		for (const glm::vec3 &position : meshData.positions)
+		{
+			minZ = std::min(minZ, position.z);
+			maxZ = std::max(maxZ, position.z);
+			radius = std::max(radius, glm::length(glm::vec2(position.x, position.y)));
+		}
+		if (radius <= 0.0001f)
+			radius = 1.0f;
+		if (maxZ - minZ <= 0.0001f)
+			maxZ = minZ + 1.0f;
+
+		RefinedCylinderMesh mesh;
+		mesh.positions.reserve(static_cast<std::size_t>(SegmentCount) * 4u + 2u);
+		mesh.normals.reserve(static_cast<std::size_t>(SegmentCount) * 4u + 2u);
+		mesh.gradientT.reserve(static_cast<std::size_t>(SegmentCount) * 4u + 2u);
+		mesh.indices.reserve(static_cast<std::size_t>(SegmentCount) * 12u);
+
+		for (std::uint32_t segment = 0; segment < SegmentCount; ++segment)
+		{
+			const float angle = TwoPi * static_cast<float>(segment) / static_cast<float>(SegmentCount);
+			const glm::vec3 normal(std::cos(angle), std::sin(angle), 0.0f);
+
+			mesh.positions.emplace_back(normal.x * radius, normal.y * radius, minZ);
+			mesh.normals.push_back(normal);
+			mesh.gradientT.push_back(0.0f);
+			mesh.positions.emplace_back(normal.x * radius, normal.y * radius, maxZ);
+			mesh.normals.push_back(normal);
+			mesh.gradientT.push_back(1.0f);
+
+			mesh.positions.emplace_back(normal.x * radius, normal.y * radius, minZ);
+			mesh.normals.emplace_back(0.0f, 0.0f, -1.0f);
+			mesh.gradientT.push_back(0.0f);
+			mesh.positions.emplace_back(normal.x * radius, normal.y * radius, maxZ);
+			mesh.normals.emplace_back(0.0f, 0.0f, 1.0f);
+			mesh.gradientT.push_back(1.0f);
+		}
+
+		const std::uint32_t bottomCenter = static_cast<std::uint32_t>(mesh.positions.size());
+		mesh.positions.emplace_back(0.0f, 0.0f, minZ);
+		mesh.normals.emplace_back(0.0f, 0.0f, -1.0f);
+		mesh.gradientT.push_back(0.0f);
+		const std::uint32_t topCenter = static_cast<std::uint32_t>(mesh.positions.size());
+		mesh.positions.emplace_back(0.0f, 0.0f, maxZ);
+		mesh.normals.emplace_back(0.0f, 0.0f, 1.0f);
+		mesh.gradientT.push_back(1.0f);
+		(void)bottomCenter;
+		(void)topCenter;
+
+		for (std::uint32_t segment = 0; segment < SegmentCount; ++segment)
+		{
+			const std::uint32_t next = (segment + 1u) % SegmentCount;
+			const std::uint32_t bottom = segment * 4u;
+			const std::uint32_t top = bottom + 1u;
+			const std::uint32_t bottomCap = bottom + 2u;
+			const std::uint32_t topCap = bottom + 3u;
+			const std::uint32_t nextBottom = next * 4u;
+			const std::uint32_t nextTop = nextBottom + 1u;
+			const std::uint32_t nextBottomCap = nextBottom + 2u;
+			const std::uint32_t nextTopCap = nextBottom + 3u;
+			(void)bottomCap;
+			(void)topCap;
+			(void)nextBottomCap;
+			(void)nextTopCap;
+
+			mesh.indices.push_back(bottom);
+			mesh.indices.push_back(top);
+			mesh.indices.push_back(nextTop);
+			mesh.indices.push_back(bottom);
+			mesh.indices.push_back(nextTop);
+			mesh.indices.push_back(nextBottom);
+
+		}
+
+		return mesh;
 	}
 
 	OpenGlRendererBackend::~OpenGlRendererBackend()
@@ -408,32 +559,22 @@ namespace DefectStudio
 				"Sphere mesh asset is invalid.",
 				"Sphere mesh has invalid indices: " + indexError);
 		}
-
-		std::vector<glm::vec3> normals = meshData.normals;
-		if (normals.empty())
-		{
-			normals.resize(meshData.positions.size(), glm::vec3(0.0f, 1.0f, 0.0f));
-			for (std::size_t index = 0; index < meshData.positions.size(); ++index)
-			{
-				const glm::vec3 fallback = glm::vec3(0.0f, 1.0f, 0.0f);
-				normals[index] = SafeNormalize(meshData.positions[index], fallback);
-			}
-		}
-		else if (normals.size() != meshData.positions.size())
+		if (meshData.indices.size() % 3u != 0u)
 		{
 			return MakeMeshAssetError(
-				"renderer.mesh.sphere.normal_count_mismatch",
-				"Sphere mesh normals do not match vertex count.",
-				"Sphere mesh has " + std::to_string(normals.size())
-					+ " normals for " + std::to_string(meshData.positions.size()) + " positions.");
+				"renderer.mesh.sphere.non_triangular",
+				"Sphere mesh asset is invalid.",
+				"Sphere mesh index count is not divisible by 3.");
 		}
 
+		const RefinedSphereMesh refinedMesh = BuildRefinedSphereMesh(meshData);
+
 		std::vector<SphereVertex> vertices;
-		vertices.resize(meshData.positions.size());
-		for (std::size_t index = 0; index < meshData.positions.size(); ++index)
+		vertices.resize(refinedMesh.positions.size());
+		for (std::size_t index = 0; index < refinedMesh.positions.size(); ++index)
 		{
-			vertices[index].position = meshData.positions[index];
-			vertices[index].normal = SafeNormalize(normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
+			vertices[index].position = refinedMesh.positions[index];
+			vertices[index].normal = SafeNormalize(refinedMesh.positions[index], glm::vec3(0.0f, 1.0f, 0.0f));
 		}
 
 		glGenVertexArrays(1, &m_SphereMesh.vao);
@@ -445,7 +586,7 @@ namespace DefectStudio
 		glBindBuffer(GL_ARRAY_BUFFER, m_SphereMesh.vbo);
 		glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(SphereVertex)), vertices.data(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_SphereMesh.ebo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(meshData.indices.size() * sizeof(std::uint32_t)), meshData.indices.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(refinedMesh.indices.size() * sizeof(std::uint32_t)), refinedMesh.indices.data(), GL_STATIC_DRAW);
 
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SphereVertex), reinterpret_cast<void *>(offsetof(SphereVertex, position)));
@@ -462,7 +603,7 @@ namespace DefectStudio
 		glVertexAttribDivisor(3, 1);
 
 		glBindVertexArray(0);
-		m_SphereMesh.indexCount = static_cast<int>(meshData.indices.size());
+		m_SphereMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
 		return {};
 	}
 
@@ -485,69 +626,15 @@ namespace DefectStudio
 				"Cylinder mesh has invalid indices: " + indexError);
 		}
 
-		std::vector<glm::vec3> normals = meshData.normals;
-		if (normals.empty())
-		{
-			normals.resize(meshData.positions.size(), glm::vec3(0.0f, 1.0f, 0.0f));
-			for (std::size_t index = 0; index < meshData.positions.size(); ++index)
-			{
-				const glm::vec3 position = meshData.positions[index];
-				glm::vec3 radial = glm::vec3(position.x, position.y, 0.0f);
-				if (glm::length(radial) <= 0.0001f)
-					radial = position.z >= 0.5f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 0.0f, -1.0f);
-				normals[index] = SafeNormalize(radial, glm::vec3(0.0f, 1.0f, 0.0f));
-			}
-		}
-		else if (normals.size() != meshData.positions.size())
-		{
-			return MakeMeshAssetError(
-				"renderer.mesh.cylinder.normal_count_mismatch",
-				"Cylinder mesh normals do not match vertex count.",
-				"Cylinder mesh has " + std::to_string(normals.size())
-					+ " normals for " + std::to_string(meshData.positions.size()) + " positions.");
-		}
-
-		std::vector<float> gradient = meshData.gradientT;
-		if (gradient.empty())
-		{
-			gradient.resize(meshData.positions.size(), 0.0f);
-			float minZ = meshData.positions.front().z;
-			float maxZ = meshData.positions.front().z;
-			for (const glm::vec3 &position : meshData.positions)
-			{
-				minZ = std::min(minZ, position.z);
-				maxZ = std::max(maxZ, position.z);
-			}
-
-			const float spanZ = maxZ - minZ;
-			for (std::size_t index = 0; index < meshData.positions.size(); ++index)
-			{
-				if (spanZ <= 0.0001f)
-				{
-					gradient[index] = 0.0f;
-					continue;
-				}
-
-				const float raw = (meshData.positions[index].z - minZ) / spanZ;
-				gradient[index] = std::clamp(raw, 0.0f, 1.0f);
-			}
-		}
-		else if (gradient.size() != meshData.positions.size())
-		{
-			return MakeMeshAssetError(
-				"renderer.mesh.cylinder.gradient_count_mismatch",
-				"Cylinder mesh gradient values do not match vertex count.",
-				"Cylinder mesh has " + std::to_string(gradient.size())
-					+ " gradient values for " + std::to_string(meshData.positions.size()) + " positions.");
-		}
+		const RefinedCylinderMesh refinedMesh = BuildRefinedCylinderMesh(meshData);
 
 		std::vector<CylinderVertex> vertices;
-		vertices.resize(meshData.positions.size());
-		for (std::size_t index = 0; index < meshData.positions.size(); ++index)
+		vertices.resize(refinedMesh.positions.size());
+		for (std::size_t index = 0; index < refinedMesh.positions.size(); ++index)
 		{
-			vertices[index].position = meshData.positions[index];
-			vertices[index].normal = SafeNormalize(normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
-			vertices[index].gradientT = gradient[index];
+			vertices[index].position = refinedMesh.positions[index];
+			vertices[index].normal = SafeNormalize(refinedMesh.normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
+			vertices[index].gradientT = refinedMesh.gradientT[index];
 		}
 
 		glGenVertexArrays(1, &m_CylinderMesh.vao);
@@ -559,7 +646,7 @@ namespace DefectStudio
 		glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.vbo);
 		glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(CylinderVertex)), vertices.data(), GL_STATIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_CylinderMesh.ebo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(meshData.indices.size() * sizeof(std::uint32_t)), meshData.indices.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(refinedMesh.indices.size() * sizeof(std::uint32_t)), refinedMesh.indices.data(), GL_STATIC_DRAW);
 
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, position)));
@@ -590,7 +677,7 @@ namespace DefectStudio
 		glVertexAttribDivisor(8, 1);
 
 		glBindVertexArray(0);
-		m_CylinderMesh.indexCount = static_cast<int>(meshData.indices.size());
+		m_CylinderMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
 		return {};
 	}
 
@@ -735,20 +822,21 @@ namespace DefectStudio
 				const float axisLength = glm::length(axis);
 				if (!std::isfinite(axisLength) || axisLength <= 0.0001f)
 					continue;
-				const glm::vec3 axisDirection = axis / axisLength;
-				const float firstOffset = std::min(std::max(firstAtom.radius, 0.0f), axisLength * 0.49f);
-				const float secondOffset = std::min(std::max(secondAtom.radius, 0.0f), axisLength * 0.49f);
-				const glm::vec3 startPoint = firstAtom.cartesianPosition + axisDirection * firstOffset;
-				const glm::vec3 endPoint = secondAtom.cartesianPosition - axisDirection * secondOffset;
-				const float clippedLength = glm::length(endPoint - startPoint);
-				if (!std::isfinite(clippedLength) || clippedLength <= 0.0001f)
+				const float bondRadius = std::max(bond.radius, 0.001f);
+				const glm::vec3 direction = axis / axisLength;
+				const float rawShrinkA = std::sqrt(
+					std::max(firstAtom.radius * firstAtom.radius - bondRadius * bondRadius, 0.0f));
+				const float shrinkA = std::min(rawShrinkA, axisLength * 0.45f);
+				const float rawShrinkB = std::sqrt(
+					std::max(secondAtom.radius * secondAtom.radius - bondRadius * bondRadius, 0.0f));
+				const float shrinkB = std::min(rawShrinkB, axisLength * 0.45f);
+				const float trimmedLength = axisLength - shrinkA - shrinkB;
+				if (trimmedLength <= 0.001f)
 					continue;
-
+				const glm::vec3 bondStart = firstAtom.cartesianPosition + direction * shrinkA;
+				const glm::vec3 bondEnd = secondAtom.cartesianPosition - direction * shrinkB;
 				OpenGlBondInstance instance;
-				instance.model = buildBondTransform(
-					startPoint,
-					endPoint,
-					std::max(bond.radius, 0.001f));
+				instance.model = buildBondTransform(bondStart, bondEnd, bondRadius);
 				instance.colorA = glm::vec4(bond.gradient.start, 1.0f);
 				instance.colorB = glm::vec4(bond.gradient.finish, 1.0f);
 				resources.cachedBondInstances.push_back(instance);
