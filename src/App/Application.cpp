@@ -134,6 +134,36 @@ namespace DefectStudio
 			std::signal(SIGFPE, signalHandler);
 			Platform::InstallNativeCrashHandler(appendCrashMarker);
 		}
+
+		class StartupStepTimer
+		{
+		public:
+			explicit StartupStepTimer(const char *name)
+				: m_Name(name), m_Start(std::chrono::steady_clock::now())
+			{
+				DS_LOG_DEBUG("Startup step begin: {}", m_Name);
+			}
+
+			~StartupStepTimer()
+			{
+				if (!m_Finished)
+					Finish(false);
+			}
+
+			bool Finish(bool success)
+			{
+				const auto elapsed = std::chrono::steady_clock::now() - m_Start;
+				const auto elapsedMs = std::chrono::duration<double, std::milli>(elapsed).count();
+				DS_LOG_INFO("Startup step end: {} success={} elapsed_ms={:.3f}", m_Name, success, elapsedMs);
+				m_Finished = true;
+				return success;
+			}
+
+		private:
+			const char *m_Name = "";
+			std::chrono::steady_clock::time_point m_Start;
+			bool m_Finished = false;
+		};
 	}
 
 	// ===== File-local path and event helpers =====
@@ -210,6 +240,35 @@ namespace DefectStudio
 		return specification;
 	}
 
+	[[nodiscard]] static std::optional<LogLevel> ParseLogLevelArgument(std::string_view value)
+	{
+		if (value == "trace")
+			return LogLevel::Trace;
+		if (value == "debug")
+			return LogLevel::Debug;
+		if (value == "info")
+			return LogLevel::Info;
+		if (value == "warn" || value == "warning")
+			return LogLevel::Warn;
+		if (value == "error")
+			return LogLevel::Error;
+		if (value == "critical")
+			return LogLevel::Critical;
+		return std::nullopt;
+	}
+
+	static void ApplySpecificationOverrides(ApplicationSpecification &specification)
+	{
+		if (specification.logLevelOverride.has_value())
+			specification.logLevel = specification.logLevelOverride.value();
+		if (specification.logToFileOverride.has_value())
+			specification.logToFile = specification.logToFileOverride.value();
+		if (specification.logFilePathOverride.has_value())
+			specification.logFilePath = specification.logFilePathOverride.value();
+		if (specification.traceEventsOverride.has_value())
+			specification.traceEvents = specification.traceEventsOverride.value();
+	}
+
 	ApplicationSpecification parseApplicationArguments(int argc, char **argv)
 	{
 		ApplicationSpecification specification = defaultApplicationSpecification();
@@ -222,7 +281,7 @@ namespace DefectStudio
 			const std::string_view argument = argv[index];
 			if (argument == "--help" || argument == "-h")
 			{
-				std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events]\n";
+				std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events] [--log-level=trace|debug|info|warn|error] [--log-file[=path]]\n";
 				std::exit(0);
 			}
 
@@ -230,7 +289,40 @@ namespace DefectStudio
 				specification.resetLayout = true;
 
 			if (argument == "--trace-events")
+			{
 				specification.traceEvents = true;
+				specification.traceEventsOverride = true;
+			}
+
+			if (argument == "--log-file")
+			{
+				specification.logToFile = true;
+				specification.logToFileOverride = true;
+			}
+
+			constexpr std::string_view logLevelPrefix = "--log-level=";
+			if (argument.starts_with(logLevelPrefix))
+			{
+				const std::string_view levelText = argument.substr(logLevelPrefix.size());
+				if (const std::optional<LogLevel> parsedLevel = ParseLogLevelArgument(levelText))
+				{
+					specification.logLevel = parsedLevel.value();
+					specification.logLevelOverride = parsedLevel.value();
+				}
+			}
+
+			constexpr std::string_view logFilePrefix = "--log-file=";
+			if (argument.starts_with(logFilePrefix))
+			{
+				const std::string_view logFileText = argument.substr(logFilePrefix.size());
+				specification.logToFile = true;
+				specification.logToFileOverride = true;
+				if (!logFileText.empty())
+				{
+					specification.logFilePath = Path::FromResolved(std::string(logFileText));
+					specification.logFilePathOverride = specification.logFilePath;
+				}
+			}
 		}
 
 		return specification;
@@ -401,33 +493,77 @@ namespace DefectStudio
 
 	bool Application::createFromSpecification(const ApplicationSpecification &specification)
 	{
-		ZoneScoped;
+		ZoneScopedN("Application.createFromSpecification");
 		m_Runtime.specification = specification;
-		initializeLogger();
+		StartupStepTimer totalTimer("CreateFromSpecification.total");
+		{
+			ZoneScopedN("Application.CreateFromSpecification.InitialLogger");
+			StartupStepTimer timer("CreateFromSpecification.initializeLogger.initial");
+			initializeLogger();
+			timer.Finish(true);
+		}
 
-		if (!beginCreateFromSpecification())
-			return false;
-		if (!bootstrapApplicationConfiguration())
-			return false;
-		initializeLogger();
+		{
+			ZoneScopedN("Application.CreateFromSpecification.Begin");
+			StartupStepTimer timer("CreateFromSpecification.begin");
+			if (!timer.Finish(beginCreateFromSpecification()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.BootstrapConfiguration");
+			StartupStepTimer timer("CreateFromSpecification.bootstrapConfiguration");
+			if (!timer.Finish(bootstrapApplicationConfiguration()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.ReloadLogger");
+			StartupStepTimer timer("CreateFromSpecification.initializeLogger.afterConfig");
+			initializeLogger();
+			timer.Finish(true);
+		}
 		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
 		logStartupSpecification();
-		if (!initializeEventInfrastructure())
-			return false;
-		if (!initializeAssetManager())
-			return false;
-		if (!initializeWindowingAndGraphics())
-			return false;
-		if (!initializeApplicationLayers())
-			return false;
-		if (!initializeCoreRuntimeServices())
-			return false;
-
-		return finishCreateFromSpecification();
+		{
+			ZoneScopedN("Application.CreateFromSpecification.EventInfrastructure");
+			StartupStepTimer timer("CreateFromSpecification.eventInfrastructure");
+			if (!timer.Finish(initializeEventInfrastructure()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.AssetManager");
+			StartupStepTimer timer("CreateFromSpecification.assetManager");
+			if (!timer.Finish(initializeAssetManager()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.WindowingAndGraphics");
+			StartupStepTimer timer("CreateFromSpecification.windowingAndGraphics");
+			if (!timer.Finish(initializeWindowingAndGraphics()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.ApplicationLayers");
+			StartupStepTimer timer("CreateFromSpecification.applicationLayers");
+			if (!timer.Finish(initializeApplicationLayers()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.CoreRuntimeServices");
+			StartupStepTimer timer("CreateFromSpecification.coreRuntimeServices");
+			if (!timer.Finish(initializeCoreRuntimeServices()))
+				return false;
+		}
+		{
+			ZoneScopedN("Application.CreateFromSpecification.Finish");
+			StartupStepTimer finishTimer("CreateFromSpecification.finish");
+			const bool finished = finishTimer.Finish(finishCreateFromSpecification());
+			return totalTimer.Finish(finished);
+		}
 	}
 
 	bool Application::beginCreateFromSpecification()
 	{
+		ZoneScopedN("Application.beginCreateFromSpecification");
 		setCrashStage("create application");
 		DS_LOG_INFO("CreateFromSpecification: begin");
 
@@ -447,57 +583,90 @@ namespace DefectStudio
 
 	bool Application::bootstrapApplicationConfiguration()
 	{
+		ZoneScopedN("Application.bootstrapApplicationConfiguration");
 		setCrashStage("resolve configuration directory");
-		m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
+		{
+			ZoneScopedN("Application.ResolveConfigDirectory");
+			StartupStepTimer timer("CreateFromSpecification.resolveConfigDirectory");
+			m_Config.directory = ResolveConfigDirectory(m_Runtime.argv);
+			timer.Finish(true);
+		}
 		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.String());
 		setCrashStage("bootstrap configuration");
-		if (!bootstrapConfiguration())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: configuration bootstrap failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.bootstrapConfiguration");
+			StartupStepTimer timer("CreateFromSpecification.bootstrapConfiguration.load");
+			if (!timer.Finish(bootstrapConfiguration()))
+			{
+				DS_LOG_ERROR("CreateFromSpecification: configuration bootstrap failed");
+				shutdownInternal();
+				return false;
+			}
 		}
-		applySpecificationFromDefaultConfig();
+		{
+			ZoneScopedN("Application.ApplySpecificationFromDefaultConfig");
+			StartupStepTimer timer("CreateFromSpecification.applySpecificationFromConfig");
+			applySpecificationFromDefaultConfig();
+			timer.Finish(true);
+		}
 		return true;
 	}
 
 	bool Application::initializeEventInfrastructure()
 	{
+		ZoneScopedN("Application.initializeEventInfrastructure");
 		setCrashStage("initialize event dispatch");
 		DS_LOG_INFO("CreateFromSpecification: init EventDispatchingSystem");
-		if (!initializeEventDispatchingSystem())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: EventDispatchingSystem init failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.initializeEventDispatchingSystem");
+			StartupStepTimer timer("CreateFromSpecification.initializeEventDispatchingSystem");
+			if (!timer.Finish(initializeEventDispatchingSystem()))
+			{
+				DS_LOG_ERROR("CreateFromSpecification: EventDispatchingSystem init failed");
+				shutdownInternal();
+				return false;
+			}
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventDispatchingSystem ready");
 
 		setCrashStage("create event bus");
 		DS_LOG_INFO("CreateFromSpecification: create EventBus");
-		m_EventBus = CreateRef<EventBus>();
-		if (!m_EventBus)
 		{
-			DS_LOG_ERROR("Failed to initialize EventBus");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.CreateEventBus");
+			StartupStepTimer timer("CreateFromSpecification.createEventBus");
+			m_EventBus = CreateRef<EventBus>();
+			if (!m_EventBus)
+			{
+				timer.Finish(false);
+				DS_LOG_ERROR("Failed to initialize EventBus");
+				shutdownInternal();
+				return false;
+			}
+			timer.Finish(true);
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
-		m_Notifier = CreateRef<Notifier>(m_EventBus);
-		m_CapabilityService = CreateRef<CapabilityService>();
-		m_EventController = CreateUnique<ApplicationEventController>(
-			m_EventBus,
-			m_ConfigManager,
-			m_Config,
-			m_Runtime.specification,
-			m_EventQueue,
-			m_LogRegistry);
+		{
+			ZoneScopedN("Application.CreateInfrastructureServices");
+			StartupStepTimer timer("CreateFromSpecification.createInfrastructureServices");
+			m_Notifier = CreateRef<Notifier>(m_EventBus);
+			m_CapabilityService = CreateRef<CapabilityService>();
+			m_EventController = CreateUnique<ApplicationEventController>(
+				m_EventBus,
+				m_ConfigManager,
+				m_Config,
+				m_Runtime.specification,
+				m_EventQueue,
+				m_LogRegistry);
+			timer.Finish(true);
+		}
 		return true;
 	}
 
 	bool Application::initializeAssetManager()
 	{
+		ZoneScopedN("Application.initializeAssetManager");
 		setCrashStage("initialize asset manager");
+		StartupStepTimer assetTimer("CreateFromSpecification.initializeAssetManager.detail");
 		const Path defaultAppRoot = m_Config.paths.assetsDirectory.parent_path();
 		const Path userOverrideRoot = m_Config.paths.userConfigDirectory.parent_path();
 		m_AssetManager = CreateRef<AssetManager>(defaultAppRoot, userOverrideRoot);
@@ -510,7 +679,13 @@ namespace DefectStudio
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/sphere.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.sphere"});
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/cylinder.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.cylinder"});
 
-		const AssetValidationReport report = m_AssetManager->ValidateRegisteredAssets();
+		AssetValidationReport report;
+		{
+			ZoneScopedN("Application.AssetManager.ValidateRegisteredAssets");
+			StartupStepTimer timer("CreateFromSpecification.validateAssets");
+			report = m_AssetManager->ValidateRegisteredAssets();
+			timer.Finish(true);
+		}
 		for (const AssetValidationIssue &issue : report.issues)
 		{
 			if (issue.descriptor.criticality == AssetCriticality::Critical)
@@ -521,6 +696,7 @@ namespace DefectStudio
 
 		if (report.HasCriticalFailures())
 		{
+			assetTimer.Finish(false);
 			DS_LOG_ERROR("Asset validation failed: critical assets are missing");
 			shutdownInternal();
 			return false;
@@ -532,38 +708,51 @@ namespace DefectStudio
 			m_AssetManager->GetUserOverrideRoot().String(),
 			report.resolvedAssets.size(),
 			report.issues.size());
-		return true;
+		return assetTimer.Finish(true);
 	}
 
 	bool Application::initializeWindowingAndGraphics()
 	{
+		ZoneScopedN("Application.initializeWindowingAndGraphics");
 		setCrashStage("initialize glfw");
 		DS_LOG_INFO("CreateFromSpecification: init GLFW");
-		if (!initializeGlfw())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: GLFW init failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.initializeGlfw");
+			StartupStepTimer timer("CreateFromSpecification.initializeGlfw");
+			if (!timer.Finish(initializeGlfw()))
+			{
+				DS_LOG_ERROR("CreateFromSpecification: GLFW init failed");
+				shutdownInternal();
+				return false;
+			}
 		}
 		DS_LOG_INFO("CreateFromSpecification: GLFW ready");
 
 		setCrashStage("create main window");
 		DS_LOG_INFO("CreateFromSpecification: create main window");
-		if (!createMainWindow())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: main window creation failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.createMainWindow");
+			StartupStepTimer timer("CreateFromSpecification.createMainWindow");
+			if (!timer.Finish(createMainWindow()))
+			{
+				DS_LOG_ERROR("CreateFromSpecification: main window creation failed");
+				shutdownInternal();
+				return false;
+			}
 		}
 		DS_LOG_INFO("CreateFromSpecification: main window ready");
 
 		setCrashStage("initialize graphics");
 		DS_LOG_INFO("CreateFromSpecification: init graphics");
-		if (!initializeGraphics())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: graphics init failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.initializeGraphics");
+			StartupStepTimer timer("CreateFromSpecification.initializeGraphics");
+			if (!timer.Finish(initializeGraphics()))
+			{
+				DS_LOG_ERROR("CreateFromSpecification: graphics init failed");
+				shutdownInternal();
+				return false;
+			}
 		}
 		DS_LOG_INFO("CreateFromSpecification: graphics ready");
 		return true;
@@ -571,15 +760,27 @@ namespace DefectStudio
 
 	bool Application::initializeApplicationLayers()
 	{
+		ZoneScopedN("Application.initializeApplicationLayers");
 		setCrashStage("setup layers");
 		DS_LOG_INFO("CreateFromSpecification: setup default layers");
-		setupDefaultLayers();
-		if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
-		    imGuiLayer == nullptr || !imGuiLayer->IsInitialized())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: ImGuiLayer initialization failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.setupDefaultLayers");
+			StartupStepTimer timer("CreateFromSpecification.setupDefaultLayers");
+			setupDefaultLayers();
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.VerifyImGuiLayer");
+			StartupStepTimer timer("CreateFromSpecification.verifyImGuiLayer");
+			if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
+			    imGuiLayer == nullptr || !imGuiLayer->IsInitialized())
+			{
+				timer.Finish(false);
+				DS_LOG_ERROR("CreateFromSpecification: ImGuiLayer initialization failed");
+				shutdownInternal();
+				return false;
+			}
+			timer.Finish(true);
 		}
 		DS_LOG_INFO("CreateFromSpecification: default layers ready");
 		return true;
@@ -587,16 +788,26 @@ namespace DefectStudio
 
 	bool Application::initializeCoreRuntimeServices()
 	{
+		ZoneScopedN("Application.initializeCoreRuntimeServices");
 		setCrashStage("initialize core runtime services");
 		DS_LOG_INFO("CreateFromSpecification: init core runtime services");
-		if (!initializeCoreLayerSystems())
 		{
-			DS_LOG_ERROR("CreateFromSpecification: core runtime services init failed");
-			shutdownInternal();
-			return false;
+			ZoneScopedN("Application.initializeCoreLayerSystems");
+			StartupStepTimer timer("CreateFromSpecification.initializeCoreLayerSystems");
+			if (!timer.Finish(initializeCoreLayerSystems()))
+			{
+				DS_LOG_ERROR("CreateFromSpecification: core runtime services init failed");
+				shutdownInternal();
+				return false;
+			}
 		}
-		if (m_CapabilityService)
-			m_CapabilityService->LockAfterStartup();
+		{
+			ZoneScopedN("Application.LockCapabilitiesAfterStartup");
+			StartupStepTimer timer("CreateFromSpecification.lockCapabilitiesAfterStartup");
+			if (m_CapabilityService)
+				m_CapabilityService->LockAfterStartup();
+			timer.Finish(true);
+		}
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 		return true;
 	}
@@ -611,6 +822,7 @@ namespace DefectStudio
 
 	bool Application::initializeEventDispatchingSystem()
 	{
+		ZoneScopedN("Application.initializeEventDispatchingSystem.detail");
 		DS_LOG_INFO("Init: EventDispatchingSystem (EventQueue)");
 		m_EventQueue.Configure(m_Config.eventQueue.initialCapacity, m_Config.eventQueue.growthStep);
 		return true;
@@ -828,23 +1040,60 @@ namespace DefectStudio
 
 	void Application::setupDefaultLayers()
 	{
+		ZoneScopedN("Application.setupDefaultLayers.detail");
 		DS_LOG_INFO("LayerStack setup: begin");
-		m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
-		auto ioLayer = CreateUnique<IOLayer>();
-		ioLayer->BindRuntimeServices(m_EventBus);
-		m_LayerStack.PushLayer(std::move(ioLayer));
-		m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
-		m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
-		auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
-		if (scientificRuntimeLayer != nullptr && m_CapabilityService != nullptr)
 		{
-			scientificRuntimeLayer->RegisterCapability(
-				*m_CapabilityService,
-				scientificRuntimeLayer->BuildPythonBridgeCapability());
+			ZoneScopedN("Application.setupDefaultLayers.PushCoreLayer");
+			StartupStepTimer timer("LayerStack.push.CoreLayer");
+			m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
+			timer.Finish(true);
 		}
-		m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushIOLayer");
+			StartupStepTimer timer("LayerStack.push.IOLayer");
+			auto ioLayer = CreateUnique<IOLayer>();
+			ioLayer->BindRuntimeServices(m_EventBus);
+			m_LayerStack.PushLayer(std::move(ioLayer));
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushStorageLayer");
+			StartupStepTimer timer("LayerStack.push.StorageLayer");
+			m_LayerStack.PushLayer(CreateUnique<StorageLayer>());
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushScientificRuntimeLayer");
+			StartupStepTimer timer("LayerStack.push.ScientificRuntimeLayer");
+			m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
+			timer.Finish(true);
+		}
+		auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
+		{
+			ZoneScopedN("Application.setupDefaultLayers.RegisterScientificCapabilities");
+			StartupStepTimer timer("LayerStack.register.ScientificRuntimeCapabilities");
+			if (scientificRuntimeLayer != nullptr && m_CapabilityService != nullptr)
+			{
+				scientificRuntimeLayer->RegisterCapability(
+					*m_CapabilityService,
+					scientificRuntimeLayer->BuildPythonBridgeCapability());
+			}
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushDomainLayer");
+			StartupStepTimer timer("LayerStack.push.DomainLayer");
+			m_LayerStack.PushLayer(CreateUnique<DomainLayer>());
+			timer.Finish(true);
+		}
 		RendererAssetBundle rendererAssets;
-		const Result<RendererAssetBundle> rendererAssetsResult = LoadRendererAssetBundle(*m_AssetManager);
+		const Result<RendererAssetBundle> rendererAssetsResult = [&]() {
+			ZoneScopedN("Application.setupDefaultLayers.LoadRendererAssetBundle");
+			StartupStepTimer timer("LayerStack.load.RendererAssetBundle");
+			auto result = LoadRendererAssetBundle(*m_AssetManager);
+			timer.Finish(result.HasValue());
+			return result;
+		}();
 		if (!rendererAssetsResult.HasValue())
 		{
 			const StructuredError &error = rendererAssetsResult.Error();
@@ -858,32 +1107,66 @@ namespace DefectStudio
 			rendererAssets = rendererAssetsResult.Value();
 		}
 		RendererStartupConfig rendererStartupConfig;
-		rendererStartupConfig.configDirectory = m_Config.paths.userConfigDirectory;
-		rendererStartupConfig.assetsDirectory = m_Config.paths.assetsDirectory;
-		rendererStartupConfig.shaderDirectory = Path::FromResolved(
-			FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
-		rendererStartupConfig.atomStyleTable = std::move(rendererAssets.atomStyleTable);
-		rendererStartupConfig.elementPropertiesTable = std::move(rendererAssets.elementPropertiesTable);
-		rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
-		rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
-		rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
-		auto rendererLayerInstance = CreateUnique<RendererLayer>(std::move(rendererStartupConfig));
-		rendererLayerInstance->BindEventBus(m_EventBus);
-		m_LayerStack.PushLayer(std::move(rendererLayerInstance));
-		auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer).lock();
-		if (rendererLayer != nullptr)
-			rendererLayer->ApplyConfig(m_Config);
+		{
+			ZoneScopedN("Application.setupDefaultLayers.BuildRendererStartupConfig");
+			StartupStepTimer timer("LayerStack.build.RendererStartupConfig");
+			rendererStartupConfig.configDirectory = m_Config.paths.userConfigDirectory;
+			rendererStartupConfig.assetsDirectory = m_Config.paths.assetsDirectory;
+			rendererStartupConfig.shaderDirectory = Path::FromResolved(
+				FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
+			rendererStartupConfig.atomStyleTable = std::move(rendererAssets.atomStyleTable);
+			rendererStartupConfig.elementPropertiesTable = std::move(rendererAssets.elementPropertiesTable);
+			rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
+			rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
+			rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
+			rendererStartupConfig.pythonAvailable =
+				scientificRuntimeLayer != nullptr && scientificRuntimeLayer->IsPythonBridgeAvailable();
+			rendererStartupConfig.pymatgenBridge =
+				scientificRuntimeLayer != nullptr ? scientificRuntimeLayer->GetPymatgenBridge() : nullptr;
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.CreateRendererLayer");
+			StartupStepTimer timer("LayerStack.create.RendererLayer");
+			auto rendererLayerInstance = CreateUnique<RendererLayer>(std::move(rendererStartupConfig));
+			rendererLayerInstance->BindEventBus(m_EventBus);
+			m_LayerStack.PushLayer(std::move(rendererLayerInstance));
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.ApplyRendererConfig");
+			StartupStepTimer timer("LayerStack.apply.RendererConfig");
+			auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer).lock();
+			if (rendererLayer != nullptr)
+				rendererLayer->ApplyConfig(m_Config);
+			timer.Finish(rendererLayer != nullptr);
+		}
 		ImGuiLayerRuntime imGuiRuntime;
-		imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;
-		imGuiRuntime.eventBus = m_EventBus;
-		imGuiRuntime.ui = m_Config.ui;
-		imGuiRuntime.appearance = m_Config.appearance;
-		imGuiRuntime.layoutPath = m_Config.layout.imGuiIniPath.empty()
-			? ConfigManager::GetLayoutPath(m_Config.directory)
-			: Path::FromResolved(m_Config.layout.imGuiIniPath);
-		imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
-		m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
-		m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+		{
+			ZoneScopedN("Application.setupDefaultLayers.BuildImGuiRuntime");
+			StartupStepTimer timer("LayerStack.build.ImGuiRuntime");
+			imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;
+			imGuiRuntime.eventBus = m_EventBus;
+			imGuiRuntime.ui = m_Config.ui;
+			imGuiRuntime.appearance = m_Config.appearance;
+			imGuiRuntime.layoutPath = m_Config.layout.imGuiIniPath.empty()
+				? ConfigManager::GetLayoutPath(m_Config.directory)
+				: Path::FromResolved(m_Config.layout.imGuiIniPath);
+			imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushImGuiLayer");
+			StartupStepTimer timer("LayerStack.push.ImGuiLayer");
+			m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushEditorLayer");
+			StartupStepTimer timer("LayerStack.push.EditorLayer");
+			m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+			timer.Finish(true);
+		}
 		// m_LayerStack.PushLayer(CreateUnique<DemoLayer>());
 		// m_LayerStack.PushLayer(CreateUnique<DebugLayer>());
 		DS_LOG_INFO("LayerStack setup: DemoLayer and DebugLayer registration disabled");
@@ -928,13 +1211,20 @@ namespace DefectStudio
 
 	bool Application::initializeCoreLayerSystems()
 	{
+		ZoneScopedN("Application.initializeCoreLayerSystems.detail");
 		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
 		auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock();
 		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
-		bool systemInitialized = coreLayer->InitializeSystems(m_EventBus, m_Config.jobs);
+		bool systemInitialized = false;
+		{
+			ZoneScopedN("Application.CoreLayer.InitializeSystems");
+			StartupStepTimer timer("CoreLayer.InitializeSystems");
+			systemInitialized = coreLayer->InitializeSystems(m_EventBus, m_Config.jobs);
+			timer.Finish(systemInitialized);
+		}
 		if (!systemInitialized)
 		{
 			DS_LOG_ERROR("Init: Core runtime services failed");
@@ -942,40 +1232,67 @@ namespace DefectStudio
 		}
 
 		// Sanity-check: force asserts if any core service failed to initialize.
-		GetEventBus();
-		GetJobSystem();
-		GetProgressTracker();
+		{
+			ZoneScopedN("Application.CoreLayer.VerifyRuntimeServices");
+			StartupStepTimer timer("CoreLayer.VerifyRuntimeServices");
+			GetEventBus();
+			GetJobSystem();
+			GetProgressTracker();
+			timer.Finish(true);
+		}
 
 		if (editorLayer != nullptr)
 		{
-			editorLayer->BindRuntimeServices(
-				m_EventBus,
-				coreLayer->GetJobSystemHandle(),
-				coreLayer->GetProgressTrackerHandle(),
-				m_LogRegistry,
-				coreLayer->GetCommandServiceHandle(),
-				coreLayer->GetKeymapResolverHandle(),
-				coreLayer->GetContextManagerHandle(),
-				coreLayer->GetCommandRegistryHandle());
-			editorLayer->ApplyConfig(m_Config);
-
-			if (imGuiLayer != nullptr)
-				imGuiLayer->BindUiState(editorLayer->GetUiStateHandle());
+			{
+				ZoneScopedN("Application.EditorLayer.BindRuntimeServices");
+				StartupStepTimer timer("EditorLayer.BindRuntimeServices");
+				editorLayer->BindRuntimeServices(
+					m_EventBus,
+					coreLayer->GetJobSystemHandle(),
+					coreLayer->GetProgressTrackerHandle(),
+					m_LogRegistry,
+					coreLayer->GetCommandServiceHandle(),
+					coreLayer->GetKeymapResolverHandle(),
+					coreLayer->GetContextManagerHandle(),
+					coreLayer->GetCommandRegistryHandle());
+				timer.Finish(true);
+			}
+			{
+				ZoneScopedN("Application.EditorLayer.ApplyConfig");
+				StartupStepTimer timer("EditorLayer.ApplyConfig");
+				editorLayer->ApplyConfig(m_Config);
+				timer.Finish(true);
+			}
+			{
+				ZoneScopedN("Application.ImGuiLayer.BindUiState");
+				StartupStepTimer timer("ImGuiLayer.BindUiState");
+				if (imGuiLayer != nullptr)
+					imGuiLayer->BindUiState(editorLayer->GetUiStateHandle());
+				timer.Finish(imGuiLayer != nullptr);
+			}
 		}
 
 		const Path keybindingsPath = ConfigManager::GetKeybindingsPath(m_Config.directory);
-		m_EventBus->Queue(AppEvents::Keymap::BindingsLoadRequested{keybindingsPath});
-		m_EventBus->ProcessQueue();
+		{
+			ZoneScopedN("Application.LoadStartupKeybindings");
+			StartupStepTimer timer("Application.LoadStartupKeybindings");
+			m_EventBus->Queue(AppEvents::Keymap::BindingsLoadRequested{keybindingsPath});
+			m_EventBus->ProcessQueue();
+			timer.Finish(true);
+		}
 		DS_LOG_INFO("Init: Core runtime services ready");
 		return true;
 	}
 
 	bool Application::bootstrapConfiguration()
 	{
+		ZoneScopedN("Application.bootstrapConfiguration.detail");
+		StartupStepTimer timer("ConfigManager.Initialize");
 		m_ConfigManager = CreateRef<ConfigManager>(m_Config.directory);
 		std::string configError;
 		if (!m_ConfigManager->Initialize(configError))
 		{
+			timer.Finish(false);
 			DS_LOG_ERROR("Config bootstrap failed [{}]: {}", m_Config.directory.String(), configError);
 			m_ConfigManager.reset();
 			return false;
@@ -983,13 +1300,16 @@ namespace DefectStudio
 
 		m_Config = m_ConfigManager->GetConfig();
 		DS_LOG_INFO("Config bootstrap complete: {}", m_ConfigManager->GetConfigDirectory().String());
-		return true;
+		return timer.Finish(true);
 	}
 
 	void Application::applySpecificationFromDefaultConfig()
 	{
+		ZoneScopedN("Application.applySpecificationFromDefaultConfig.detail");
+		StartupStepTimer timer("ConfigManager.ApplySpecification");
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
 		m_ConfigManager->ApplySpecification(m_Runtime.specification);
+		ApplySpecificationOverrides(m_Runtime.specification);
 
 		DS_LOG_INFO(
 			"Runtime tuning loaded: font_scale=[{}, {}] step=[{}, {}] step_slider_max={} workers_default={} reserve_urgent={} event_queue={{capacity:{}, growth:{}}}",
@@ -1002,6 +1322,7 @@ namespace DefectStudio
 			m_Config.jobs.reserveUrgentWorker,
 			m_Config.eventQueue.initialCapacity,
 			m_Config.eventQueue.growthStep);
+		timer.Finish(true);
 	}
 
 	bool Application::persistUiSettings()
@@ -1033,19 +1354,24 @@ namespace DefectStudio
 
 	bool Application::initializeGlfw()
 	{
+		ZoneScopedN("Application.initializeGlfw.detail");
+		StartupStepTimer timer("GLFW.initialize");
 		if (!glfwInit())
 		{
+			timer.Finish(false);
 			DS_LOG_ERROR("Failed to initialize GLFW");
 			return false;
 		}
 
 		m_Graphics.glfwInitialized = true;
 		DS_LOG_INFO("GLFW initialized");
-		return true;
+		return timer.Finish(true);
 	}
 
 	bool Application::createMainWindow()
 	{
+		ZoneScopedN("Application.createMainWindow.detail");
+		StartupStepTimer timer("Window.createMainWindow.detail");
 		DS_ASSERT(m_ConfigManager != nullptr, "ConfigManager is not initialized");
 
 		m_Graphics.window = CreateRef<Window>();
@@ -1060,33 +1386,52 @@ namespace DefectStudio
 		if (!m_Graphics.window->Create(m_Config.window.width, m_Config.window.height, m_Config.window.title, iconPath))
 		{
 			m_Graphics.window.reset();
+			timer.Finish(false);
 			return false;
 		}
 
-		m_Graphics.window->BindEventBus(m_EventBus);
-		m_Graphics.window->ApplyConfig(m_Config.window, true); // Apply full config during initialization
+		{
+			ZoneScopedN("Application.Window.BindEventBus");
+			StartupStepTimer bindTimer("Window.BindEventBus");
+			m_Graphics.window->BindEventBus(m_EventBus);
+			bindTimer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.Window.ApplyConfig");
+			StartupStepTimer configTimer("Window.ApplyConfig.initial");
+			m_Graphics.window->ApplyConfig(m_Config.window, true); // Apply full config during initialization
+			configTimer.Finish(true);
+		}
 
 		m_Graphics.window->SetEventCallback([this](EventVariant event) { queueEvent(std::move(event)); });
 
-		configureInputBackend();
+		{
+			ZoneScopedN("Application.configureInputBackend");
+			StartupStepTimer inputTimer("Window.configureInputBackend");
+			configureInputBackend();
+			inputTimer.Finish(true);
+		}
 
-		return true;
+		return timer.Finish(true);
 	}
 
 	bool Application::initializeGraphics()
 	{
+		ZoneScopedN("Application.initializeGraphics.detail");
+		StartupStepTimer timer("OpenGL.initializeGraphics");
 		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
 		const int glVersion = gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress));
 		if (glVersion == 0)
 		{
+			timer.Finish(false);
 			DS_LOG_ERROR("Failed to initialize GLAD");
 			return false;
 		}
 
 		m_Graphics.gladInitialized = true;
 		DS_LOG_INFO("OpenGL loaded: {}.{}", GLAD_VERSION_MAJOR(glVersion), GLAD_VERSION_MINOR(glVersion));
-		return true;
+		return timer.Finish(true);
 	}
 
 	// ===== Low-level shutdown helpers =====

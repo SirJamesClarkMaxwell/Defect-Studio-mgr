@@ -24,6 +24,9 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project", default=None)
     parser.add_argument("--target", default=None)
     parser.add_argument(
+        "--log-level", choices=["trace", "debug", "info", "warn", "error"], default=None
+    )
+    parser.add_argument(
         "--log-file",
         nargs="?",
         const="",
@@ -78,7 +81,7 @@ def run(args: argparse.Namespace) -> int:
     run_args = argparse.Namespace(
         config=args.config,
         project=args.project,
-        log_level="info",
+        log_level=args.log_level or "info",
         log_file=args.log_file,
         safe_mode=False,
         reset_layout=False,

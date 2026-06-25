@@ -9,8 +9,12 @@
 
 namespace DefectStudio
 {
+	class PymatgenBridge;
+
 	[[nodiscard]] std::vector<RendererWindowState> BuildRendererStartupWindows(
 		const std::vector<RendererStartupWindowDefinition> &windowDefinitions,
 		const AtomStyleTable &atomStyleTable,
-		const ElementPropertiesTable &elementPropertiesTable);
+		const ElementPropertiesTable &elementPropertiesTable,
+		PymatgenBridge *pymatgenBridge = nullptr,
+		bool pythonAvailable = false);
 }

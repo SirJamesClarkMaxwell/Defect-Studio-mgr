@@ -76,6 +76,8 @@ def run(args: argparse.Namespace) -> int:
     args.reset_layout = resolve_preference(
         preferences, "reset_layout", args.reset_layout, False
     )
+    if args.log_file is None:
+        args.log_file = "logs/DefectStudio-tracy.log"
 
     print_header("Run With Tracy")
 

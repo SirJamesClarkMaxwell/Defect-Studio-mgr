@@ -19,6 +19,7 @@ namespace DefectStudio
 
 		[[nodiscard]] Result<PymatgenRoundtripResult> RoundtripPoscar(const PymatgenRoundtripRequest &request) const;
 		[[nodiscard]] Result<ASEConvertResult> ConvertWithASE(const ASEConvertRequest &request) const;
+		[[nodiscard]] PymatgenBridge *GetPymatgenBridge();
 
 	private:
 		PythonInterpreter m_Interpreter;

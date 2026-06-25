@@ -174,7 +174,7 @@ namespace DefectStudio
 			{
 				if (!logFilePath.parent_path().empty())
 					FileSystem::CreateDirectories(logFilePath.parent_path().Native());
-				sinks.push_back(CreateRef<spdlog::sinks::basic_file_sink_mt>(resolvedLogFilePath, true));
+				sinks.push_back(CreateRef<spdlog::sinks::basic_file_sink_mt>(resolvedLogFilePath, false));
 			}
 			catch (const std::exception &exception)
 			{

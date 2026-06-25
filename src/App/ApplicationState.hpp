@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,10 @@ namespace DefectStudio
 		Path logFilePath;
 		bool resetLayout = false;
 		bool traceEvents = false;
+		std::optional<LogLevel> logLevelOverride;
+		std::optional<bool> logToFileOverride;
+		std::optional<Path> logFilePathOverride;
+		std::optional<bool> traceEventsOverride;
 	};
 
 	struct ApplicationRuntimeState

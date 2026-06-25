@@ -68,4 +68,16 @@ namespace DefectStudio
 		capability.description = "Scientific Python runtime bridge (nanobind + script adapters)";
 		return capability;
 	}
+
+	bool ScientificRuntimeLayer::IsPythonBridgeAvailable() const noexcept
+	{
+		return m_PythonBridgeAvailable;
+	}
+
+	PymatgenBridge *ScientificRuntimeLayer::GetPymatgenBridge() const
+	{
+		if (!m_PythonBridgeAvailable || m_PythonRuntime == nullptr)
+			return nullptr;
+		return m_PythonRuntime->GetPymatgenBridge();
+	}
 } // namespace DefectStudio

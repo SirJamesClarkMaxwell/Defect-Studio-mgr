@@ -172,7 +172,7 @@ def run_python_env(args: argparse.Namespace) -> int:
     )
     print_step(f"Preparing Python env{version_note}")
     preferences = load_preferences().get("setup", {})
-    groups = args.python_group or preferences.get("python_groups") or ["dev"]
+    groups = args.python_group or preferences.get("python_groups") or ["dev", "scientific-core"]
     uv = detect_many(["uv"]).get("uv")
     if not uv:
         print(
@@ -296,7 +296,7 @@ def run(args: argparse.Namespace) -> int:
     )
     args.config = resolve_preference(preferences, "config", args.config, "Debug")
     args.open = resolve_preference(preferences, "open", args.open, "none")
-    args.python_group = args.python_group or preferences.get("python_groups") or ["dev"]
+    args.python_group = args.python_group or preferences.get("python_groups") or ["dev", "scientific-core"]
 
     if args.python_version:
         print_step(f"Bootstrap provided Python target: {args.python_version}")

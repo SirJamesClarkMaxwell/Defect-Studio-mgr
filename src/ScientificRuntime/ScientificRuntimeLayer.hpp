@@ -7,6 +7,7 @@
 namespace DefectStudio
 {
 	class CapabilityService;
+	class PymatgenBridge;
 	class ScientificPythonRuntime;
 
 	class ScientificRuntimeLayer final : public Layer
@@ -21,6 +22,8 @@ namespace DefectStudio
 
 		void RegisterCapability(CapabilityService &capabilityService, CapabilityEntry capability) const;
 		[[nodiscard]] CapabilityEntry BuildPythonBridgeCapability() const;
+		[[nodiscard]] bool IsPythonBridgeAvailable() const noexcept;
+		[[nodiscard]] PymatgenBridge *GetPymatgenBridge() const;
 
 	private:
 		Unique<ScientificPythonRuntime> m_PythonRuntime;

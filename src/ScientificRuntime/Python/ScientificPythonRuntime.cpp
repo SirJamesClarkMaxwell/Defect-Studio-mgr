@@ -79,4 +79,9 @@ namespace DefectStudio
 
 		return m_ASEBridge.ConvertFile(request);
 	}
+
+	PymatgenBridge *ScientificPythonRuntime::GetPymatgenBridge()
+	{
+		return m_IsReady ? &m_PymatgenBridge : nullptr;
+	}
 } // namespace DefectStudio

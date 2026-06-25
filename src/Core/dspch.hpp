@@ -49,6 +49,9 @@
 #ifndef ZoneScoped
 #define ZoneScoped ((void)0)
 #endif
+#ifndef ZoneScopedN
+#define ZoneScopedN(name) ((void)0)
+#endif
 #ifndef TracyMessageL
 #define TracyMessageL(message) ((void)0)
 #endif

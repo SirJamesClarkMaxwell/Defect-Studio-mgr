@@ -10,6 +10,8 @@
 
 namespace DefectStudio
 {
+	// TODO(T07): Ten parser zostanie zastapiony przez Python bridge (PymatgenBridge).
+	// Zostaw jako fallback gdy Python jest niedostepny.
 	[[nodiscard]] Result<RendererStructureData> LoadRendererStructureFromPoscar(
 		const Path &filePath,
 		std::string name,
