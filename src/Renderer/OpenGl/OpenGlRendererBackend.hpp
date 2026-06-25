@@ -48,6 +48,7 @@ namespace DefectStudio
 		bool atomsDirty = true;
 		bool bondsDirty = true;
 		bool gridDirty = true;
+		bool cellEdgesDirty = true;
 		std::size_t lastAtomCount = 0;
 		std::size_t lastBondCount = 0;
 		std::size_t lastSelectedCount = 0;
@@ -56,6 +57,7 @@ namespace DefectStudio
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
 		std::vector<glm::vec3> cachedGridVertices;
+		std::vector<glm::vec3> cachedCellEdgeVertices;
 	};
 
 	class RendererViewCamera;
@@ -102,7 +104,10 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings);
-		void renderCellBox(const RendererStructureData &structure, const RendererViewCamera &camera);
+		void renderCellBox(
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources);
 		void renderGrid(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,

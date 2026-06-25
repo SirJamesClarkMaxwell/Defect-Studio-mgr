@@ -418,6 +418,7 @@ namespace DefectStudio
 			resources.atomsDirty = true;
 			resources.bondsDirty = true;
 			resources.gridDirty = true;
+			resources.cellEdgesDirty = true;
 			resources.lastSourcePath = sourcePathKey;
 		}
 		if (resources.lastAtomCount != structure.atoms.size())
@@ -463,7 +464,7 @@ namespace DefectStudio
 		if (showGrid)
 			renderGrid(structure, camera, resources, globalSettings);
 		if (showCellBox)
-			renderCellBox(structure, camera);
+			renderCellBox(structure, camera, resources);
 		if (showBonds)
 			renderBonds(structure, camera, resources, globalSettings);
 		if (showAtoms)
@@ -910,18 +911,27 @@ namespace DefectStudio
 		resources.bondsDirty = false;
 	}
 
-	void OpenGlRendererBackend::renderCellBox(const RendererStructureData &structure, const RendererViewCamera &camera)
+	void OpenGlRendererBackend::renderCellBox(
+		const RendererStructureData &structure,
+		const RendererViewCamera &camera,
+		OpenGlViewportResources &resources)
 	{
-		if (structure.cellEdges.empty())
+		if (resources.cellEdgesDirty)
+		{
+			resources.cachedCellEdgeVertices.clear();
+			resources.cachedCellEdgeVertices.reserve(structure.cellEdges.size() * 2);
+			for (const RendererCellEdge &edge : structure.cellEdges)
+			{
+				resources.cachedCellEdgeVertices.push_back(edge.start);
+				resources.cachedCellEdgeVertices.push_back(edge.finish);
+			}
+			resources.cellEdgesDirty = false;
+		}
+
+		if (resources.cachedCellEdgeVertices.empty())
 			return;
 
-		std::vector<glm::vec3> vertices;
-		vertices.reserve(structure.cellEdges.size() * 2);
-		for (const RendererCellEdge &edge : structure.cellEdges)
-		{
-			vertices.push_back(edge.start);
-			vertices.push_back(edge.finish);
-		}
+		const auto &vertices = resources.cachedCellEdgeVertices;
 
 		const unsigned int program = m_ShaderLibrary.Program("lines");
 		if (program == 0)
