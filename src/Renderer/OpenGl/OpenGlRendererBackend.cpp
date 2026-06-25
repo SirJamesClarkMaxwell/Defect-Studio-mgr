@@ -1034,6 +1034,9 @@ namespace DefectStudio
 		resources.gridDirty = false;
 	}
 
+	// T09 extension point: GPU-side bond transform via compute shader.
+	// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
+	// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
 	void OpenGlRendererBackend::dispatchBondCompute(const RendererStructureData &structure)
 	{
 		const unsigned int program = m_ShaderLibrary.Program("bond_compute");

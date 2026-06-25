@@ -61,6 +61,7 @@ namespace DefectStudio
 			if (assetsDirectory.Empty())
 				return {};
 
+			// Dev fallback
 			const FilePath repositoryRoot = assetsDirectory.Native()
 				.parent_path()
 				.parent_path()
@@ -528,6 +529,18 @@ namespace DefectStudio
 
 	Path RendererLayer::resolveShaderDirectory() const
 	{
+		if (!m_StartupConfig.assetsDirectory.Empty())
+		{
+			// Najpierw szukaj shaderów obok binarki (deploy path)
+			const Path deployShaders = Path::FromResolved(
+				m_StartupConfig.assetsDirectory.Native().parent_path() / "shaders");
+			if (FileSystem::Exists(deployShaders.Native()))
+				return deployShaders;
+
+			// Fallback: ścieżka deweloperska w repozytorium
+			// TODO: usunąć gdy pipeline budowania zawsze kopiuje shadery do deploy dir
+		}
+
 		if (!m_StartupConfig.shaderDirectory.Empty())
 		{
 			const Path resolvedExplicit = Path::FromResolved(m_StartupConfig.shaderDirectory.Native());

@@ -49,7 +49,14 @@ namespace DefectStudio
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_DepthStencil);
 
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-			DS_LOG_ERROR("Renderer framebuffer is incomplete for size {}x{}", m_Width, m_Height);
+		{
+			DS_LOG_ERROR(
+				"Renderer: framebuffer incomplete for size {}x{} — releasing resources",
+				m_Width, m_Height);
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			release();
+			return;
+		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 
@@ -95,5 +102,7 @@ namespace DefectStudio
 			glDeleteFramebuffers(1, &m_FrameBuffer);
 			m_FrameBuffer = 0;
 		}
+		m_Width = 0;
+		m_Height = 0;
 	}
 } // namespace DefectStudio

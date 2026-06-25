@@ -105,6 +105,9 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings);
+		// T09 extension point: GPU-side bond transform via compute shader.
+		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
+		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
 		void dispatchBondCompute(const RendererStructureData &structure);
 		[[nodiscard]] OpenGlViewportResources &viewportResources(const std::string &windowKey, int width, int height);
 		[[nodiscard]] glm::mat4 buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const;

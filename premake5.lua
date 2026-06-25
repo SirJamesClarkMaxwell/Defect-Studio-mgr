@@ -273,6 +273,10 @@ project "DefectStudio"
 
     filter "system:windows"
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }
+        postbuildcommands {
+            'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
+            'xcopy /E /Y /I "src\\Renderer\\OpenGl\\Shaders\\*" "%{cfg.targetdir}\\shaders\\" >NUL'
+        }
 
     filter { "system:windows", "action:vs2022" }
         kind "WindowedApp"
@@ -306,6 +310,10 @@ project "DefectStudio"
                 'if [ -f "' .. linuxIcon .. '" ]; then cp "' .. linuxIcon .. '" "%{cfg.targetdir}/icon.png"; fi'
             }
         end
+        postbuildcommands {
+                'mkdir -p "%{cfg.targetdir}/shaders"',
+                'cp -r src/Renderer/OpenGl/Shaders/. "%{cfg.targetdir}/shaders/"'
+        }
 
     filter "system:macosx"
         defines { "DS_PLATFORM_MACOS" }
