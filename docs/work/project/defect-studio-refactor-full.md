@@ -100,7 +100,7 @@ Zakomentuj całą implementację i poprzedź:
 ```
 
 ---
-
+----
 ### R0.4 – Fix: niekompletne FBO nie czyści zasobów
 
 **Przeczytaj przed rozpoczęciem:** `src/Renderer/OpenGl/OpenGlFrameBuffer.cpp`
@@ -660,9 +660,22 @@ Dodaj komentarz przy `RendererPoscarLoader`:
 
 ---
 
-## ETAP R3 – Input przez EventBus, UndoStack, układ okresowy
+## ETAP R3 – Input przez EventBus, lokalne undo widoku, układ okresowy
 
 > **Ważne:** Ten etap wymaga Etapu R1 i R2 jako prerekvizytów.
+>
+> **Aktualizacja architektoniczna po analizie R3:**
+> - Każde okno/viewport renderera ma mieć stabilny techniczny identyfikator `windowId` w formie UUID/string.
+>   `title` pozostaje nazwą UI i nie może być używany jako klucz logiki.
+> - `RendererPanel` nie manipuluje kamerą bezpośrednio dla inputu viewportu. Panel emituje semantic events
+>   z `windowId`, a `RendererLayer` jako właściciel stanu znajduje okno i zmienia kamerę.
+> - Globalny `UndoStack` jest dla zmian projektu/danych domenowych. Zmiany widoku kamery są lokalnym stanem
+>   viewportu i trafiają do lokalnej historii widoku per `windowId`, bez rozszerzania Core `UndoStack`
+>   o domeny undo w tym etapie.
+> - Skróty: `Ctrl+Z` = global undo, `Ctrl+Y` / `Ctrl+Shift+Z` = global redo,
+>   `Ctrl+Alt+Z` = lokalne undo aktywnego viewportu, `Ctrl+Alt+Y` / `Ctrl+Alt+Shift+Z` = lokalne redo viewportu.
+> - Kolejność commitów: R3.1, R3.2, R3.3 + `windowId`, R3.5, R3.4 + `lastFocusedState`, R3.6 atomowo
+>   z cleanupem `RendererPanelInput.cpp` i `RendererPanelToolbar.cpp`.
 
 ### R3.1 – Utwórz src/Events/RendererEvents.hpp
 
@@ -681,27 +694,27 @@ namespace DefectStudio::RendererEvents::Viewport
 
     struct OrbitDelta final : public BusEvent
     {
-        std::string windowKey;
+        std::string windowId;
         float dx = 0.0f;
         float dy = 0.0f;
     };
 
     struct PanDelta final : public BusEvent
     {
-        std::string windowKey;
+        std::string windowId;
         float dx = 0.0f;
         float dy = 0.0f;
     };
 
     struct ZoomDelta final : public BusEvent
     {
-        std::string windowKey;
+        std::string windowId;
         float amount = 0.0f;
     };
 
     struct FocusChanged final : public BusEvent
     {
-        std::string windowKey;
+        std::string windowId;
         bool focused = false;
     };
 } // namespace DefectStudio::RendererEvents::Viewport
@@ -709,9 +722,14 @@ namespace DefectStudio::RendererEvents::Viewport
 
 ---
 
-### R3.2 – Utwórz src/Renderer/Commands/SetCameraViewCommand.hpp i .cpp
+### R3.2 – Utwórz lokalną komendę widoku SetCameraViewCommand
 
 Utwórz katalog `src/Renderer/Commands/`.
+
+> **Zakres po aktualizacji:** `SetCameraViewCommand` jest lokalnym modelem zmiany widoku kamery.
+> Nie rejestruj go w globalnym `CommandRegistry` i nie pushuj do globalnego `UndoStack`.
+> W R3.6 może być użyty przez lokalną historię viewportu albo zastąpiony prostym
+> `RendererViewStateChange`, jeśli implementacja lokalnej historii będzie prostsza.
 
 Plik `src/Renderer/Commands/SetCameraViewCommand.hpp`:
 
@@ -733,7 +751,7 @@ namespace DefectStudio
             RendererViewSnapshot oldView,
             RendererViewSnapshot newView,
             std::string description,
-            std::string windowKey);
+            std::string windowId);
 
         [[nodiscard]] Result<void> Execute(CommandContext &context) override;
         [[nodiscard]] Result<void> Undo(CommandContext &context)   override;
@@ -743,16 +761,20 @@ namespace DefectStudio
         [[nodiscard]] bool         CanMerge(const ICommand &next) const noexcept override;
         [[nodiscard]] Result<void> Merge(std::unique_ptr<ICommand> next) override;
 
-        [[nodiscard]] const std::string &WindowKey() const noexcept;
+        [[nodiscard]] const std::string &WindowId() const noexcept;
 
     private:
         RendererViewSnapshot m_OldView;
         RendererViewSnapshot m_NewView;
         std::string          m_Description;
-        std::string          m_WindowKey;
+        std::string          m_WindowId;
     };
 } // namespace DefectStudio
 ```
+
+> **Uwaga architektoniczna:** ta komenda nie jest podpinana do globalnego `UndoStack` dla zmian kamery.
+> Jeśli zostaje użyta w R3.6, działa jako element lokalnej historii widoku viewportu. Globalny `UndoStack`
+> pozostaje dla zmian projektu/danych domenowych.
 
 Plik `src/Renderer/Commands/SetCameraViewCommand.cpp`:
 
@@ -766,26 +788,26 @@ namespace DefectStudio
         RendererViewSnapshot oldView,
         RendererViewSnapshot newView,
         std::string description,
-        std::string windowKey)
+        std::string windowId)
         : m_OldView(std::move(oldView))
         , m_NewView(std::move(newView))
         , m_Description(std::move(description))
-        , m_WindowKey(std::move(windowKey))
+        , m_WindowId(std::move(windowId))
     {
     }
 
-    // Execute i Redo aplikują m_NewView do kamery windowKey.
-    // Implementacja: RendererLayer musi wystawić API do zmiany widoku per window.
+    // Execute i Redo aplikują m_NewView do kamery windowId.
+    // Implementacja: lokalna historia widoku musi mieć callback/API do RendererLayer.
     // Tymczasowo – TODO(R3.3): podpięcie przez CommandContext lub callback.
     Result<void> SetCameraViewCommand::Execute(CommandContext &)
     {
-        // TODO(R3.3): ApplyViewToWindow(m_WindowKey, m_NewView);
+        // TODO(R3.6): ApplyViewToWindow(m_WindowId, m_NewView);
         return {};
     }
 
     Result<void> SetCameraViewCommand::Undo(CommandContext &)
     {
-        // TODO(R3.3): ApplyViewToWindow(m_WindowKey, m_OldView);
+        // TODO(R3.6): ApplyViewToWindow(m_WindowId, m_OldView);
         return {};
     }
 
@@ -807,7 +829,7 @@ namespace DefectStudio
     bool SetCameraViewCommand::CanMerge(const ICommand &next) const noexcept
     {
         const auto *other = dynamic_cast<const SetCameraViewCommand *>(&next);
-        return other != nullptr && other->m_WindowKey == m_WindowKey;
+        return other != nullptr && other->m_WindowId == m_WindowId;
     }
 
     Result<void> SetCameraViewCommand::Merge(std::unique_ptr<ICommand> next)
@@ -822,9 +844,9 @@ namespace DefectStudio
         return {};
     }
 
-    const std::string &SetCameraViewCommand::WindowKey() const noexcept
+    const std::string &SetCameraViewCommand::WindowId() const noexcept
     {
-        return m_WindowKey;
+        return m_WindowId;
     }
 }
 ```
@@ -861,38 +883,42 @@ void onOrbitDelta(const RendererEvents::Viewport::OrbitDelta &event);
 void onPanDelta(const RendererEvents::Viewport::PanDelta &event);
 void onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event);
 void onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event);
-[[nodiscard]] RendererWindowState *findWindow(const std::string &key);
+[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 ```
 
 #### Krok 3: Implementuj w RendererLayer.cpp
 
+Dodaj `std::string windowId;` do `RendererWindowState` i ustawiaj je przy tworzeniu okna.
+Wartość ma być stabilnym technicznym identyfikatorem, najlepiej UUID. Nie używaj `title`
+jako źródła prawdy dla logiki; `title` jest tylko etykietą UI.
+
 ```cpp
-RendererWindowState *RendererLayer::findWindow(const std::string &key)
+RendererWindowState *RendererLayer::findWindowById(const std::string &windowId)
 {
     for (auto &ws : m_Windows)
-        if (ws.windowKey == key)
+        if (ws.windowId == windowId)
             return &ws;
     return nullptr;
 }
 
 void RendererLayer::onOrbitDelta(const RendererEvents::Viewport::OrbitDelta &event)
 {
-    auto *ws = findWindow(event.windowKey);
+    auto *ws = findWindowById(event.windowId);
     if (!ws || !ws->camera) return;
     ws->camera->Orbit(event.dx, event.dy);
-    // TODO(R3.6): push SetCameraViewCommand to UndoStack
+    // TODO(R3.6): zapisz zmianę w lokalnej historii widoku viewportu
 }
 
 void RendererLayer::onPanDelta(const RendererEvents::Viewport::PanDelta &event)
 {
-    auto *ws = findWindow(event.windowKey);
+    auto *ws = findWindowById(event.windowId);
     if (!ws || !ws->camera) return;
     ws->camera->Pan(event.dx, event.dy);
 }
 
 void RendererLayer::onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event)
 {
-    auto *ws = findWindow(event.windowKey);
+    auto *ws = findWindowById(event.windowId);
     if (!ws || !ws->camera) return;
     ws->camera->Zoom(event.amount);
 }
@@ -900,7 +926,7 @@ void RendererLayer::onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event
 void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event)
 {
     // TODO(R3.5): aktywuj/deaktywuj kontekst "renderer.viewport" w ContextManager
-    DS_LOG_TRACE("Renderer viewport '{}' focus: {}", event.windowKey, event.focused);
+    DS_LOG_TRACE("Renderer viewport '{}' focus: {}", event.windowId, event.focused);
 }
 ```
 
@@ -912,10 +938,15 @@ void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::Focus
 
 #### Krok 1: Dodaj EventBus do RendererPanel
 
-RendererPanel ma dostęp do `m_Layer`. RendererLayer po R1.5 ma publiczne `GetEventBus()` lub `m_EventBus`. Dodaj helper:
+RendererPanel ma dostęp do `m_Layer`. Dodaj publiczny getter w `RendererLayer`:
+```cpp
+[[nodiscard]] Ref<EventBus> GetEventBus() const;
+```
+
+Dodaj helper:
 ```cpp
 // W RendererPanel.cpp, na początku applyViewportInputNavigation:
-auto *eventBus = // pobierz przez m_Layer.GetEventBus() lub wstrzyknij w konstruktorze
+Ref<EventBus> eventBus = m_Layer.GetEventBus();
 ```
 
 #### Krok 2: Zamień bezpośrednie wywołania kamery na emit
@@ -930,7 +961,7 @@ windowState.camera->Orbit(delta.x * ..., delta.y * ...);
 if (eventBus)
 {
     RendererEvents::Viewport::OrbitDelta orbitEvent;
-    orbitEvent.windowKey = windowState.windowKey;
+    orbitEvent.windowId = windowState.windowId;
     orbitEvent.dx = delta.x * m_Layer.GetGlobalSettings().orbitSensitivity;
     orbitEvent.dy = delta.y * m_Layer.GetGlobalSettings().orbitSensitivity;
     eventBus->Publish(orbitEvent);
@@ -950,7 +981,7 @@ if (nowFocused != windowState.lastFocusedState)
     if (eventBus)
     {
         RendererEvents::Viewport::FocusChanged focusEvent;
-        focusEvent.windowKey = windowState.windowKey;
+        focusEvent.windowId = windowState.windowId;
         focusEvent.focused   = nowFocused;
         eventBus->Publish(focusEvent);
     }
@@ -1030,15 +1061,20 @@ const auto &actinides   = m_Layer.GetActinideSymbols();
 
 ---
 
-### R3.6 – Zastąp viewUndoHistory/viewRedoHistory przez UndoStack
+### R3.6 – Lokalna historia widoku viewportu zamiast globalnego UndoStack
 
-> **Uwaga:** To zadanie wymaga działającego R3.2 (SetCameraViewCommand) i dostępu do UndoStack z CoreLayer.
+> **Uwaga:** Kamera i ustawienia widoku są lokalnym stanem viewportu. Nie podpinaj ich do globalnego
+> `UndoStack`, bo globalne `Ctrl+Z` ma cofać zmiany projektu/danych domenowych, a nie orbitowanie kamery.
 
-**Przeczytaj:** `src/Renderer/RendererWindowState.hpp` (po R1.3), `src/Core/Undo/UndoStack.hpp`, `src/Presentation/Panels/RendererPanelInput.cpp` (po R2.4), `src/Renderer/RendererLayer.hpp`
+**Przeczytaj:** `src/Renderer/RendererWindowState.hpp` (po R1.3), `src/Presentation/Panels/RendererPanelInput.cpp` (po R2.4),
+`src/Presentation/Panels/RendererPanelToolbar.cpp`, `src/Renderer/RendererLayer.hpp`, `src/Renderer/RendererLayer.cpp`
 
-#### Krok 1: Usuń pola historii widoku z RendererWindowState
+#### Krok 1: Przenieś historię widoku do RendererLayer
 
-W `src/Renderer/RendererWindowState.hpp`, usuń:
+Historia widoku może pozostać per `RendererWindowState`, ale jej właścicielem i jedynym modyfikatorem ma być
+`RendererLayer`, nie `RendererPanel`.
+
+W `RendererWindowState` zostaw lub przenieś do wewnętrznej mapy `RendererLayer`:
 ```cpp
 std::vector<RendererViewStateChange> viewUndoHistory;
 std::vector<RendererViewStateChange> viewRedoHistory;
@@ -1047,68 +1083,84 @@ std::string viewInteractionSource;
 RendererViewSnapshot viewInteractionStart;
 ```
 
-#### Krok 2: Wstrzyknij UndoStack do RendererLayer
-
-W `RendererLayer.hpp` dodaj:
+Jeśli historia zostaje w `RendererWindowState`, `RendererPanel` nie może jej bezpośrednio modyfikować.
+Jeśli historia trafia do mapy w `RendererLayer`, użyj klucza `windowId`:
 ```cpp
-void BindUndoStack(WeakRef<UndoStack> undoStack);
+std::unordered_map<std::string, RendererViewHistory> m_ViewHistories;
 ```
 
-W `RendererLayer.cpp`:
+#### Krok 2: Dodaj API lokalnej historii do RendererLayer
+
+W `RendererLayer.hpp` dodaj publiczne metody dla lokalnego undo/redo aktywnego viewportu:
 ```cpp
-void RendererLayer::BindUndoStack(WeakRef<UndoStack> undoStack)
-{
-    DS_ASSERT(!m_Attached, "BindUndoStack must be called before OnAttach");
-    m_UndoStack = std::move(undoStack);
-}
+void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
+void CommitViewInteraction(const std::string &windowId);
+void CancelViewInteraction(const std::string &windowId);
+void UndoViewChange(const std::string &windowId);
+void RedoViewChange(const std::string &windowId);
 ```
 
-W `Application.cpp`, po stworzeniu RendererLayer:
+Dodaj prywatne helpery:
 ```cpp
-rendererLayer->BindUndoStack(coreLayer->GetUndoStackHandle());
+[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;
+void restoreViewSnapshot(RendererWindowState &windowState, const RendererViewSnapshot &snapshot, const char *sourceAction);
+void pushViewChange(
+    RendererWindowState &windowState,
+    const RendererViewSnapshot &before,
+    const RendererViewSnapshot &after,
+    const char *sourceAction);
 ```
 
-Dodaj `GetUndoStackHandle()` do `CoreLayer` jeśli brakuje (analogicznie do `GetCommandRegistryHandle`).
+#### Krok 3: Rejestruj zmiany kamery w RendererLayer
 
-#### Krok 3: Pushuj SetCameraViewCommand
+W `RendererLayer::onOrbitDelta`, `onPanDelta`, `onZoomDelta`:
+- znajdź okno po `event.windowId`,
+- zrób snapshot przed zmianą,
+- wykonaj `Orbit` / `Pan` / `Zoom`,
+- zrób snapshot po zmianie,
+- zapisz zmianę do lokalnej historii widoku dla `windowId`.
 
-W `RendererLayer::onOrbitDelta` i analogicznych, zastąp `// TODO(R3.6)` na:
+Nie twórz wpisów w globalnym `UndoStack`.
+
+#### Krok 4: RendererPanel nie zarządza historią widoku
+
+W `src/Presentation/Panels/RendererPanelInput.cpp` i `src/Presentation/Panels/RendererPanelToolbar.cpp` usuń bezpośrednie
+zarządzanie historią:
+- `pushViewChange`
+- `undoViewChange`
+- `redoViewChange`
+- bezpośrednie modyfikowanie `viewUndoHistory`
+- bezpośrednie modyfikowanie `viewRedoHistory`
+
+Jeśli panel potrzebuje rozpocząć/zakończyć interakcję, woła API `RendererLayer`:
 ```cpp
-if (auto undoStack = m_UndoStack.lock())
-{
-    auto cmd = CreateUnique<SetCameraViewCommand>(
-        beforeView,    // snapshot przed zmianą – zrób przed wywołaniem Orbit/Pan/Zoom
-        captureViewSnapshot(*ws),
-        "Camera orbit",
-        event.windowKey);
-    undoStack->PushExecuted(std::move(cmd));
-}
+m_Layer.BeginViewInteraction(windowState.windowId, "mouse.orbit");
+m_Layer.CommitViewInteraction(windowState.windowId);
 ```
 
-Dodaj `captureViewSnapshot` jako statyczną funkcję file-local lub metodę:
+#### Krok 5: Skróty lokalnego undo/redo
+
+`Ctrl+Z` i globalne redo pozostają w Core przez `KeyInputProcessor` / `CommandRegistry`.
+
+Lokalne skróty viewportu obsłuż w ścieżce renderera, tylko gdy viewport jest aktywny/focused:
 ```cpp
-static RendererViewSnapshot captureViewSnapshot(const RendererWindowState &ws)
-{
-    RendererViewSnapshot snap;
-    if (ws.camera)
-    {
-        snap.target     = ws.camera->Target();
-        snap.distance   = ws.camera->Distance();
-        snap.yaw        = ws.camera->Yaw();
-        snap.pitch      = ws.camera->Pitch();
-        snap.roll       = ws.camera->Roll();
-        snap.projection = ws.camera->GetProjection();
-    }
-    return snap;
-}
+Ctrl+Alt+Z              -> m_Layer.UndoViewChange(activeWindowId);
+Ctrl+Alt+Y              -> m_Layer.RedoViewChange(activeWindowId);
+Ctrl+Alt+Shift+Z        -> m_Layer.RedoViewChange(activeWindowId);
 ```
 
-#### Krok 4: Usuń pushViewChange, undoViewChange, redoViewChange z RendererPanel
+Nie przechwytuj zwykłego `Ctrl+Z`, żeby nie blokować globalnego undo projektu.
 
-W `src/Presentation/Panels/RendererPanelInput.cpp` (po R2.4):
-- Usuń metody: `pushViewChange`, `undoViewChange`, `redoViewChange`, `beginViewInteraction`, `commitViewInteraction`, `cancelViewInteraction`
-- Usuń ich deklaracje z `RendererPanel.hpp`
-- `Ctrl+Z` i `Ctrl+Y` trafiają teraz do globalnego UndoStack przez `KeyInputProcessor` i `CommandRegistry` (już zarejestrowane w Sesji 16 jako `edit.undo`/`edit.redo`)
+#### Krok 6: Commit R3.6 musi być atomowy
+
+Ten commit musi objąć jednocześnie:
+- API lokalnej historii w `RendererLayer`
+- cleanup `RendererPanelInput.cpp`
+- cleanup `RendererPanelToolbar.cpp`
+- aktualizację deklaracji w `RendererPanel.hpp`
+- lokalne skróty `Ctrl+Alt+Z` / `Ctrl+Alt+Y`
+
+Nie dziel R3.6 na mniejsze commity, bo stan pośredni może się nie kompilować.
 
 ---
 
@@ -1815,3 +1867,13 @@ Dodaj gettery do CoreLayer jeśli brakują:
 *Koniec dokumentu. Sesje należy implementować w podanej kolejności.*
 *Część I (Renderer): R0 → R1 → R2 → R3.*
 *Część II (Core/App): sesje numerowane mogą być implementowane równolegle z R2/R3 jeśli nie ma zależności.*
+
+# Część III
+
+1) sprawdznie czy wszystko znajduje się w opdpowiednich warstwach (bardzo ważne)
+2) sprawdzenie czy wszystko jest serializowane tak jak powinno
+3) napisanie dokumentacji z diagramami, dla osoby ktora nie wie jak dziala renderowanie
+4) napisanie dokumentacji z diagramami, dla osoby która nie wie jak działa RenderingArchitecture
+5) sprawdzenie i uzupełnienie testów tak aby pokrywały wszystko 
+6) Sprawdzenie czy aby na pewno wszystkie systemy są wykorzystywane tak jak powinny (przed tym należy zrobić listę takowych systemów)
+7) Sprawdzić, czy nie ma przypadkiem reimplementacji niektórych systemów 
