@@ -477,16 +477,11 @@ namespace DefectStudio
 
 	void RendererLayer::loadDefaultWindows()
 	{
-		const bool usePythonForStartup = m_StartupConfig.pythonAvailable && m_StartupConfig.usePythonForDefaultScene;
-		if (m_StartupConfig.pythonAvailable && !m_StartupConfig.usePythonForDefaultScene)
-			DS_LOG_INFO("Renderer startup default scene uses C++ POSCAR parser; Python bridge remains available outside startup");
-
+		DS_LOG_INFO("Renderer startup default scene uses C++ POSCAR parser; Python bridge available for on-demand loading");
 		m_Windows = BuildRendererStartupWindows(
 			m_StartupConfig.startupLayout.windows,
 			m_StartupConfig.atomStyleTable,
-			m_StartupConfig.elementPropertiesTable,
-			m_StartupConfig.pymatgenBridge,
-			usePythonForStartup);
+			m_StartupConfig.elementPropertiesTable);
 		if (m_RendererBackend != nullptr)
 			m_RendererBackend->MarkGridDirty();
 	}

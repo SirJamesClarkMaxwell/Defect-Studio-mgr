@@ -19,7 +19,6 @@
 namespace DefectStudio
 {
 	class OpenGlRendererBackend;
-	class PymatgenBridge;
 	class RendererViewCamera;
 	class RendererPanel;
 	class EventBus;
@@ -39,9 +38,6 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable;
 		RendererStartupLayoutDefinition startupLayout;
 		RendererPrimitiveMeshAssets primitiveMeshes;
-		PymatgenBridge *pymatgenBridge = nullptr;
-		bool pythonAvailable = false;
-		bool usePythonForDefaultScene = false;
 		bool loadDefaultScene = true;
 	};
 

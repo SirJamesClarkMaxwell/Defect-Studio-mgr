@@ -41,11 +41,19 @@ namespace DefectStudio
 	class PymatgenBridge final
 	{
 	public:
+		[[nodiscard]] Result<void> WarmUp();
+		[[nodiscard]] bool IsWarmedUp() const noexcept;
 		[[nodiscard]] Result<PymatgenStructureData> LoadStructure(const Path &filePath) const;
 		[[nodiscard]] Result<std::vector<PymatgenStructureData>> LoadStructures(const std::vector<Path> &filePaths) const;
 		[[nodiscard]] Result<PymatgenRoundtripResult> RoundtripPoscar(const PymatgenRoundtripRequest &request) const;
 
 	private:
+		[[nodiscard]] Result<std::vector<PymatgenStructureData>> LoadStructuresEmbedded(
+			const std::vector<Path> &filePaths) const;
+		[[nodiscard]] Result<std::vector<PymatgenStructureData>> LoadStructuresViaSubprocess(
+			const std::vector<Path> &filePaths) const;
+
 		ScriptRunner m_ScriptRunner;
+		bool m_WarmedUp = false;
 	};
 } // namespace DefectStudio

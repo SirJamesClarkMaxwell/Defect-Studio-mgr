@@ -1119,10 +1119,6 @@ namespace DefectStudio
 			rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
 			rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
 			rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
-			rendererStartupConfig.pythonAvailable =
-				scientificRuntimeLayer != nullptr && scientificRuntimeLayer->IsPythonBridgeAvailable();
-			rendererStartupConfig.pymatgenBridge =
-				scientificRuntimeLayer != nullptr ? scientificRuntimeLayer->GetPymatgenBridge() : nullptr;
 			timer.Finish(true);
 		}
 		{

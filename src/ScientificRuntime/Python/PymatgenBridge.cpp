@@ -6,10 +6,19 @@
 
 #include <nlohmann/json.hpp>
 
+#include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
+
+#if DS_PYTHON_CAPI_AVAILABLE
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+namespace nb = nanobind;
+#endif
+
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Time.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
+#include "ScientificRuntime/Python/PythonGilScope.hpp"
 #include "ScientificRuntime/Python/ScriptBridgeUtils.hpp"
 
 namespace DefectStudio
@@ -104,6 +113,48 @@ namespace DefectStudio
 		return payload;
 	}
 
+	Result<void> PymatgenBridge::WarmUp()
+	{
+#if DS_PYTHON_CAPI_AVAILABLE
+		if (m_WarmedUp)
+			return {};
+
+		PythonGilAcquireScope gil;
+		if (!gil.IsActive())
+		{
+			return MakePythonUnavailableError(
+				"Cannot warm up PymatgenBridge: GIL is not available.",
+				"PythonInterpreter must be started before calling WarmUp().",
+				"Call ScientificPythonRuntime::Initialize() before using the bridge.",
+				"python.pymatgen.warmup.no_gil");
+		}
+
+		try
+		{
+			nb::module_::import_("pymatgen.core");
+			m_WarmedUp = true;
+			DS_LOG_INFO("PymatgenBridge: warm-up complete, pymatgen.core cached in sys.modules");
+			return {};
+		}
+		catch (const nb::python_error &e)
+		{
+			return MakePythonExecutionError(
+				"PymatgenBridge warm-up failed: cannot import pymatgen.core.",
+				e.what(),
+				"Ensure pymatgen is installed in the embedded Python environment at install/app/python.",
+				"python.pymatgen.warmup.import_failed");
+		}
+#else
+		DS_LOG_WARN("PymatgenBridge::WarmUp: DS_PYTHON_CAPI_AVAILABLE=0; subprocess fallback will be used for all loads.");
+		return {};
+#endif
+	}
+
+	bool PymatgenBridge::IsWarmedUp() const noexcept
+	{
+		return m_WarmedUp;
+	}
+
 	Result<PymatgenStructureData> PymatgenBridge::LoadStructure(const Path &filePath) const
 	{
 		Result<std::vector<PymatgenStructureData>> structures = LoadStructures({filePath});
@@ -143,6 +194,102 @@ namespace DefectStudio
 			}
 		}
 
+#if DS_PYTHON_CAPI_AVAILABLE
+		if (m_WarmedUp)
+			return LoadStructuresEmbedded(filePaths);
+#endif
+		return LoadStructuresViaSubprocess(filePaths);
+	}
+
+	Result<std::vector<PymatgenStructureData>> PymatgenBridge::LoadStructuresEmbedded(
+		const std::vector<Path> &filePaths) const
+	{
+#if DS_PYTHON_CAPI_AVAILABLE
+		PythonGilAcquireScope gil;
+		if (!gil.IsActive())
+		{
+			DS_LOG_WARN("PymatgenBridge: embedded path requested but GIL unavailable; falling back to subprocess");
+			return LoadStructuresViaSubprocess(filePaths);
+		}
+
+		const auto startTime = Time::NowSteady();
+		try
+		{
+			nb::object pymatgen = nb::module_::import_("pymatgen.core");
+			nb::object Structure = pymatgen.attr("Structure");
+
+			std::vector<PymatgenStructureData> results;
+			results.reserve(filePaths.size());
+
+			for (const Path &filePath : filePaths)
+			{
+				nb::object pyStructure = Structure.attr("from_file")(filePath.String());
+
+				PymatgenStructureData data;
+				data.reducedFormula = nb::cast<std::string>(
+					pyStructure.attr("composition").attr("reduced_formula"));
+
+				nb::object matrix = pyStructure.attr("lattice").attr("matrix");
+				for (int row = 0; row < 3; ++row)
+				{
+					nb::object vec = matrix[nb::int_(row)];
+					data.lattice[row] = glm::vec3(
+						nb::cast<float>(vec[nb::int_(0)]),
+						nb::cast<float>(vec[nb::int_(1)]),
+						nb::cast<float>(vec[nb::int_(2)]));
+				}
+
+				nb::object sites = pyStructure.attr("sites");
+				int siteCount = static_cast<int>(nb::len(sites));
+				data.sites.reserve(siteCount);
+				for (int i = 0; i < siteCount; ++i)
+				{
+					nb::object site = sites[nb::int_(i)];
+
+					PymatgenStructureSite siteData;
+					siteData.element = nb::cast<std::string>(
+						site.attr("specie").attr("symbol"));
+
+					nb::object frac = site.attr("frac_coords");
+					siteData.fractionalPosition = glm::vec3(
+						nb::cast<float>(frac[nb::int_(0)]),
+						nb::cast<float>(frac[nb::int_(1)]),
+						nb::cast<float>(frac[nb::int_(2)]));
+
+					nb::object cart = site.attr("coords");
+					siteData.cartesianPosition = glm::vec3(
+						nb::cast<float>(cart[nb::int_(0)]),
+						nb::cast<float>(cart[nb::int_(1)]),
+						nb::cast<float>(cart[nb::int_(2)]));
+
+					data.sites.push_back(std::move(siteData));
+				}
+				results.push_back(std::move(data));
+			}
+
+			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				Time::NowSteady() - startTime).count();
+			DS_LOG_DEBUG(
+				"PymatgenBridge: embedded loaded {} structure(s) in {} ms",
+				results.size(),
+				elapsedMs);
+			return results;
+		}
+		catch (const nb::python_error &e)
+		{
+			DS_LOG_WARN(
+				"PymatgenBridge: embedded path threw Python exception; falling back to subprocess: {}",
+				e.what());
+			return LoadStructuresViaSubprocess(filePaths);
+		}
+#else
+		return LoadStructuresViaSubprocess(filePaths);
+#endif
+	}
+
+	Result<std::vector<PymatgenStructureData>> PymatgenBridge::LoadStructuresViaSubprocess(
+		const std::vector<Path> &filePaths) const
+	{
 		const auto startTime = Time::NowSteady();
 		Result<nlohmann::json> payloadResult = RunPymatgenStructureLoadScript(filePaths, m_ScriptRunner);
 		if (!payloadResult)

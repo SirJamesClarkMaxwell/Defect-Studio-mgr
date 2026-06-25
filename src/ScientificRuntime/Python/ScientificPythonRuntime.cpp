@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "ScientificRuntime/Python/ScientificPythonRuntime.hpp"
+#include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 
 namespace DefectStudio
@@ -10,6 +11,15 @@ namespace DefectStudio
 		Result<void> startResult = m_Interpreter.Start();
 		if (!startResult)
 			return startResult.Error();
+
+		Result<void> warmUpResult = m_PymatgenBridge.WarmUp();
+		if (!warmUpResult)
+		{
+			DS_LOG_WARN(
+				"ScientificPythonRuntime: PymatgenBridge warm-up skipped — subprocess fallback active. [{}] {}",
+				warmUpResult.Error().code,
+				warmUpResult.Error().technicalDetails);
+		}
 
 		m_IsReady = true;
 		return {};
