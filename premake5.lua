@@ -20,6 +20,7 @@ _DS_ROOT = path.getabsolute(".")
 -- On Windows, translate to backslashes for cmd.exe
 local windowsIcon = path.translate(path.getabsolute("install/app/assets/icon.png"), "\\")
 local linuxIcon = "../../../install/app/assets/icon.png"
+local windowsShaderSource = path.translate(path.getabsolute("src/Renderer/OpenGl/Shaders"), "\\")
 
 local function appendUnique(list, value)
     if value == nil or value == "" then
@@ -275,7 +276,7 @@ project "DefectStudio"
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }
         postbuildcommands {
             'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
-            'xcopy /E /Y /I "src\\Renderer\\OpenGl\\Shaders\\*" "%{cfg.targetdir}\\shaders\\" >NUL'
+            'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL'
         }
 
     filter { "system:windows", "action:vs2022" }
@@ -299,7 +300,7 @@ project "DefectStudio"
         -- Disable -MD -MP for gmake2 on Linux to avoid absolute path issues in .d files
         filter { "system:linux", "action:gmake2" }
             buildoptions { "-fPIC" }  -- Replaces -MD -MP
-        filter {}
+        filter "system:linux"
         -- Linux does not use .rc resources; copy PNG icon for desktop integration.
         if os.host() == "windows" then
             postbuildcommands {

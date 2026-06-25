@@ -2,14 +2,10 @@
 
 #include <glm/glm.hpp>
 
+#include "Renderer/RendererSettings.hpp"
+
 namespace DefectStudio
 {
-	enum class CameraProjection
-	{
-		Perspective,
-		Orthographic
-	};
-
 	class RendererViewCamera
 	{
 	public:

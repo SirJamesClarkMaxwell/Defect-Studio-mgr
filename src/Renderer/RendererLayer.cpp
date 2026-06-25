@@ -5,6 +5,7 @@
 #include "App/ApplicationState.hpp"
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Utils/Assert.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 
 #include <algorithm>
@@ -159,6 +160,12 @@ namespace DefectStudio
 
 	RendererLayer::~RendererLayer() = default;
 
+	void RendererLayer::BindEventBus(Ref<EventBus> eventBus)
+	{
+		DS_ASSERT(!m_Attached, "BindEventBus must be called before OnAttach");
+		m_EventBus = std::move(eventBus);
+	}
+
 	void RendererLayer::OnAttach()
 	{
 		m_RendererBackend = CreateUnique<OpenGlRendererBackend>();
@@ -189,7 +196,7 @@ namespace DefectStudio
 		else
 			m_Windows.clear();
 		applyDefaultProjectionToWindows();
-		if (m_StartupConfig.eventBus != nullptr)
+		if (m_EventBus != nullptr)
 			bindConfigEvents();
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -412,10 +419,10 @@ namespace DefectStudio
 
 	void RendererLayer::bindConfigEvents()
 	{
-		if (m_StartupConfig.eventBus == nullptr)
+		if (m_EventBus == nullptr)
 			return;
 
-		AddSubscription(m_StartupConfig.eventBus->Subscribe<AppEvents::Config::Applied>(
+		AddSubscription(m_EventBus->Subscribe<AppEvents::Config::Applied>(
 			[this](const AppEvents::Config::Applied &event) { onConfigApplied(event); }));
 	}
 

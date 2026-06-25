@@ -12,7 +12,10 @@
 #include "Renderer/OpenGl/OpenGlFrameBuffer.hpp"
 #include "Renderer/OpenGl/OpenGlShaderLibrary.hpp"
 #include "Renderer/RendererMeshData.hpp"
-#include "Renderer/RendererLayer.hpp"
+#include "Renderer/RendererTypes.hpp"
+#include "Renderer/RendererSettings.hpp"
+#include "Renderer/RendererWindowState.hpp"
+#include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {

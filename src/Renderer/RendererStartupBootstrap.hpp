@@ -4,8 +4,8 @@
 
 #include "Domain/Crystal/ElementProperties.hpp"
 #include "Renderer/AtomStyleTable.hpp"
-#include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererStartupDefinitions.hpp"
+#include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
 {

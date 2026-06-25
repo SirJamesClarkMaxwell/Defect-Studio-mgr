@@ -866,9 +866,10 @@ namespace DefectStudio
 		rendererStartupConfig.elementPropertiesTable = std::move(rendererAssets.elementPropertiesTable);
 		rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
 		rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
-		rendererStartupConfig.eventBus = m_EventBus;
 		rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
-		m_LayerStack.PushLayer(CreateUnique<RendererLayer>(std::move(rendererStartupConfig)));
+		auto rendererLayerInstance = CreateUnique<RendererLayer>(std::move(rendererStartupConfig));
+		rendererLayerInstance->BindEventBus(m_EventBus);
+		m_LayerStack.PushLayer(std::move(rendererLayerInstance));
 		auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer).lock();
 		if (rendererLayer != nullptr)
 			rendererLayer->ApplyConfig(m_Config);
