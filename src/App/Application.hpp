@@ -93,7 +93,7 @@ namespace DefectStudio
 		template <typename TEvent>
 		void dispatchEventToLayers(TEvent &event);
 		void mainLoop();
-		void runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io);
+		void runMainLoopFrame(const ImVec4 &clearColor, ImGuiIO &io);
 		void initializeLogger() const;
 		void shutdownLogger() const;
 		void logStartupSpecification() const;
@@ -120,11 +120,12 @@ namespace DefectStudio
 
 		// Low-level frame and UI helpers
 		void beginFrame();
-		void drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate);
 		void renderFrame(const ImVec4 &clearColor, float frameRate);
 
 		// Event queue internals
-		static void ProcessQueuedEvents();
+		// Extension point: external event pump for test harness or offline tools.
+		// Not currently called from production code. Do not remove.
+		// static void ProcessQueuedEvents();
 		void queueEvent(EventVariant event);
 		void processPendingEvents();
 

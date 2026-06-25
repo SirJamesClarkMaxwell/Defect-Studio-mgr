@@ -195,13 +195,6 @@ namespace DefectStudio
 		return Path::FromResolved(FileSystem::CurrentPath() / "install" / "app" / "config");
 	}
 
-	struct MainLoopState
-	{
-		bool showDemoWindow = true;
-		bool showSettingsWindow = false;
-		ImVec4 clearColor = ImVec4(0.10f, 0.10f, 0.12f, 1.0f);
-	};
-
 	ApplicationSpecification defaultApplicationSpecification()
 	{
 		ApplicationSpecification specification;
@@ -293,11 +286,12 @@ namespace DefectStudio
 		s_Instance->get().queueEvent(std::move(event));
 	}
 
-	void Application::ProcessQueuedEvents()
-	{
-		DS_ASSERT(s_Instance.has_value(), "Application not created");
-		s_Instance->get().processPendingEvents();
-	}
+	// Extension point - see declaration in Application.hpp.
+	// void Application::ProcessQueuedEvents()
+	// {
+	// 	DS_ASSERT(s_Instance.has_value(), "Application not created");
+	// 	s_Instance->get().processPendingEvents();
+	// }
 
 	Application &Application::Get()
 	{
@@ -668,8 +662,7 @@ namespace DefectStudio
 		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
 		ImGuiIO &io = ImGui::GetIO();
-		MainLoopState state;
-		state.clearColor = ImVec4(
+		const ImVec4 clearColor = ImVec4(
 			m_Config.appearance.clearColor[0],
 			m_Config.appearance.clearColor[1],
 			m_Config.appearance.clearColor[2],
@@ -679,7 +672,7 @@ namespace DefectStudio
 		TracyMessageL("Entering render loop");
 
 		while (m_Runtime.Running() && !m_Graphics.window->ShouldClose())
-			runMainLoopFrame(state.showDemoWindow, state.clearColor, io);
+			runMainLoopFrame(clearColor, io);
 	}
 
 	template <typename TEvent>
@@ -705,10 +698,8 @@ namespace DefectStudio
 		dispatchEventToLayers(event);
 	}
 
-	void Application::runMainLoopFrame(bool &showDemoWindow, ImVec4 &clearColor, ImGuiIO &io)
+	void Application::runMainLoopFrame(const ImVec4 &clearColor, ImGuiIO &io)
 	{
-		(void)showDemoWindow;
-
 		const double now = glfwGetTime();
 		const float deltaTime = static_cast<float>(now - m_Runtime.lastFrameTime);
 		m_Runtime.lastFrameTime = now;
@@ -719,7 +710,6 @@ namespace DefectStudio
 		beginFrame();
 		for (const auto &layer : m_LayerStack)
 			layer->OnImGuiRender();
-		// drawMainPanel(showDemoWindow, clearColor, io.Framerate);
 		onRender(clearColor, io.Framerate);
 	}
 
@@ -784,20 +774,6 @@ namespace DefectStudio
 		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
 		DS_ASSERT(imGuiLayer != nullptr, "ImGuiLayer not initialized");
 		imGuiLayer->BeginFrame();
-	}
-
-	void Application::drawMainPanel(bool &showDemoWindow, ImVec4 &clearColor, float frameRate)
-	{
-		ImGui::Begin("DefectStudio");
-
-		ImGui::Text("GUI shell is running.");
-		ImGui::Text("FPS: %.1f", frameRate);
-		ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
-		ImGui::ColorEdit3("Clear color", reinterpret_cast<float *>(&clearColor));
-		ImGui::End();
-
-		if (showDemoWindow)
-			ImGui::ShowDemoWindow(&showDemoWindow);
 	}
 
 	void Application::renderFrame(const ImVec4 &clearColor, float frameRate)
