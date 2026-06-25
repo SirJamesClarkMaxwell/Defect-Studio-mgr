@@ -7,11 +7,11 @@ ui:
   settings_preview_enabled: true
   settings_auto_save_on_preview: true
 window:
-  x: 0
-  y: 23
+  x: 8
+  y: 63
   width: 3440
   height: 1369
-  maximized: true
+  maximized: false
 appearance:
   clear_color: [0.1, 0.1, 0.12, 1]
   colors:
@@ -53,7 +53,7 @@ appearance:
     disabled_alpha: 0.45
     disabled_background_mix: 0.55
 renderer:
-  background: [0.11372549, 0.11372549, 0.11372549, 1]
+  background: [0.44705883, 0.44705883, 0.44705883, 1]
   orbit_sensitivity: 1
   pan_sensitivity: 1
   zoom_sensitivity: 1
