@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "Renderer/RendererSettings.hpp"
 
@@ -9,6 +10,20 @@ namespace DefectStudio
 	class RendererViewCamera
 	{
 	public:
+		[[nodiscard]] static float NormalizeAngleRadians(float angle);
+		static void BuildCameraAxesFromEuler(
+			float yaw,
+			float pitch,
+			float roll,
+			glm::vec3 &forward,
+			glm::vec3 &up);
+		[[nodiscard]] static glm::quat CameraOrientationQuatFromEuler(float yaw, float pitch, float roll);
+		static void CameraEulerFromOrientationQuat(
+			const glm::quat &orientationQuat,
+			float &yaw,
+			float &pitch,
+			float &roll);
+
 		RendererViewCamera();
 
 		void SetViewport(float width, float height);

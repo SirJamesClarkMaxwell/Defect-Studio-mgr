@@ -12,7 +12,6 @@
 #include <imgui.h>
 
 #include "Core/Utils/Logger.hpp"
-#include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
@@ -38,17 +37,6 @@ namespace DefectStudio
 		const std::array<const char *, 15> kActinides = {
 			"Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr"};
 
-		[[nodiscard]] float NormalizeAngleRadians(float angle)
-		{
-			constexpr float kTwoPi = 6.283185307f;
-			constexpr float kPi = 3.1415926535f;
-			while (angle > kPi)
-				angle -= kTwoPi;
-			while (angle < -kPi)
-				angle += kTwoPi;
-			return angle;
-		}
-
 		[[nodiscard]] float EaseOutCubic(float t)
 		{
 			const float clamped = std::clamp(t, 0.0f, 1.0f);
@@ -59,72 +47,6 @@ namespace DefectStudio
 		[[nodiscard]] float RadiansToDegrees(float angleRadians)
 		{
 			return angleRadians * 57.295779513f;
-		}
-
-		void BuildCameraAxesFromEuler(
-			float yaw,
-			float pitch,
-			float roll,
-			glm::vec3 &forward,
-			glm::vec3 &up)
-		{
-			const float cosPitch = std::cos(pitch);
-			forward = glm::normalize(glm::vec3(
-				std::sin(yaw) * cosPitch,
-				std::cos(yaw) * cosPitch,
-				std::sin(pitch)));
-
-			glm::vec3 baseRight = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
-			if (glm::dot(baseRight, baseRight) <= 1e-8f)
-				baseRight = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
-			baseRight = glm::normalize(baseRight);
-
-			glm::vec3 right = baseRight;
-			if (std::abs(roll) > 1e-6f)
-			{
-				const glm::quat rollRotation = glm::angleAxis(roll, forward);
-				right = glm::normalize(rollRotation * baseRight);
-			}
-
-			up = glm::normalize(glm::cross(right, forward));
-		}
-
-		[[nodiscard]] glm::quat CameraOrientationQuatFromEuler(float yaw, float pitch, float roll)
-		{
-			glm::vec3 forward(0.0f);
-			glm::vec3 up(0.0f);
-			BuildCameraAxesFromEuler(yaw, pitch, roll, forward, up);
-			const glm::vec3 right = glm::normalize(glm::cross(forward, up));
-
-			glm::mat3 basis(1.0f);
-			basis[0] = right;
-			basis[1] = up;
-			basis[2] = -forward;
-			return glm::normalize(glm::quat_cast(basis));
-		}
-
-		void CameraEulerFromOrientationQuat(
-			const glm::quat &orientationQuat,
-			float &yaw,
-			float &pitch,
-			float &roll)
-		{
-			const glm::mat3 basis = glm::mat3_cast(glm::normalize(orientationQuat));
-			const glm::vec3 up = glm::normalize(basis[1]);
-			const glm::vec3 forward = glm::normalize(-basis[2]);
-
-			yaw = std::atan2(forward.x, forward.y);
-			pitch = std::asin(glm::clamp(forward.z, -1.0f, 1.0f));
-
-			glm::vec3 baseRight = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
-			if (glm::dot(baseRight, baseRight) <= 1e-8f)
-				baseRight = glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f));
-			baseRight = glm::normalize(baseRight);
-			const glm::vec3 baseUp = glm::normalize(glm::cross(baseRight, forward));
-
-			const float sinRoll = glm::dot(glm::cross(baseUp, up), forward);
-			const float cosRoll = glm::dot(baseUp, up);
-			roll = NormalizeAngleRadians(std::atan2(sinRoll, cosRoll));
 		}
 
 		[[nodiscard]] float SanitizeViewportDimension(float value)
@@ -218,14 +140,14 @@ namespace DefectStudio
 
 	void RendererPanel::Render(float deltaTime)
 	{
-		if (!m_Layer.m_Attached || m_Layer.m_RendererBackend == nullptr)
+		if (!m_Layer.IsAttached())
 			return;
 
-		for (RendererWindowState &windowState : m_Layer.m_Windows)
+		for (RendererWindowState &windowState : m_Layer.GetWindows())
 			renderStructureWindow(windowState, deltaTime);
 
 		// drawPeriodicTableWindow();
-		m_Layer.m_RendererBackend->CollectProfilingData();
+		m_Layer.CollectProfilingData();
 	}
 
 	void RendererPanel::renderStructureWindow(RendererWindowState &windowState, float deltaTime)
@@ -252,18 +174,11 @@ namespace DefectStudio
 
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
 
-		const unsigned int textureId = m_Layer.m_RendererBackend->RenderWindow(
+		const unsigned int textureId = m_Layer.RenderToFbo(
 			windowState.title,
 			windowState.structure,
-			*windowState.camera,
-			m_Layer.m_GlobalRenderSettings,
-			static_cast<int>(windowState.viewportSize.x),
-			static_cast<int>(windowState.viewportSize.y),
-			windowState.showAtoms,
-			windowState.showBonds,
-			windowState.showCellBox,
-			windowState.showGrid,
-			windowState.selectedAtomIndices);
+			windowState,
+			m_Layer.GetGlobalSettings());
 
 		ImGui::Image(
 			static_cast<ImTextureID>(static_cast<uintptr_t>(textureId)),
@@ -315,10 +230,10 @@ namespace DefectStudio
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 2.0f));
 
-		const float iconExtent = std::clamp(m_Layer.m_GlobalRenderSettings.viewport.iconButtonSize, 12.0f, 40.0f);
+		const float iconExtent = std::clamp(m_Layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
 		const ImVec2 iconButtonSize(iconExtent, iconExtent);
 
-		const float axisExtent = std::clamp(m_Layer.m_GlobalRenderSettings.viewport.axisButtonSize, 12.0f, 40.0f);
+		const float axisExtent = std::clamp(m_Layer.GetGlobalSettings().viewport.axisButtonSize, 12.0f, 40.0f);
 		const ImVec2 axisButtonSize(axisExtent, axisExtent);
 
 		const auto rotationStepRadians = [&windowState]()
@@ -350,7 +265,7 @@ namespace DefectStudio
 		auto iconButton = [&](const char *id, const char *iconFileName, const char *fallback, const char *tooltip) -> bool
 		{
 			bool pressed = false;
-			const RendererToolbarIconTexture *icon = m_Layer.getToolbarIcon(iconFileName);
+			const RendererToolbarIconTexture *icon = m_Layer.GetToolbarIcon(iconFileName);
 			if (icon != nullptr && icon->rendererId != 0)
 			{
 				const ImTextureRef textureRef(reinterpret_cast<void *>(static_cast<uintptr_t>(icon->rendererId)));
@@ -381,7 +296,7 @@ namespace DefectStudio
 		{
 			beginViewInteraction(windowState, sourceAction);
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-				m_Layer.m_GlobalRenderSettings.rotationSpeed);
+				m_Layer.GetGlobalSettings().rotationSpeed);
 			startCameraTransition(
 				windowState,
 				cameraState.Target(),
@@ -482,8 +397,8 @@ namespace DefectStudio
 			ApplyToolbarWheelStep(
 				io.MouseWheel,
 				io.KeyCtrl,
-				m_Layer.m_GlobalRenderSettings.toolbarWheel.rotationStepDelta,
-				m_Layer.m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues,
+				m_Layer.GetGlobalSettings().toolbarWheel.rotationStepDelta,
+				m_Layer.GetGlobalSettings().toolbarWheel.ctrlPresetValues,
 				0.0f,
 				180.0f,
 				windowState.rotationStepDeg);
@@ -564,8 +479,8 @@ namespace DefectStudio
 			ApplyToolbarWheelStep(
 				io.MouseWheel,
 				io.KeyCtrl,
-				m_Layer.m_GlobalRenderSettings.toolbarWheel.zoomStepDelta,
-				m_Layer.m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues,
+				m_Layer.GetGlobalSettings().toolbarWheel.zoomStepDelta,
+				m_Layer.GetGlobalSettings().toolbarWheel.ctrlPresetValues,
 				0.0f,
 				180.0f,
 				windowState.percentStep);
@@ -598,7 +513,7 @@ namespace DefectStudio
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Periodic Table"))
-			m_Layer.m_ShowPeriodicTableWindow = true;
+			m_Layer.GetShowPeriodicTableWindow() = true;
 
 		ImGui::EndChild();
 	}
@@ -621,7 +536,7 @@ namespace DefectStudio
 		{
 			beginViewInteraction(windowState, sourceAction);
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-				m_Layer.m_GlobalRenderSettings.rotationSpeed);
+				m_Layer.GetGlobalSettings().rotationSpeed);
 			startCameraTransition(
 				windowState,
 				cameraState.Target(),
@@ -652,15 +567,15 @@ namespace DefectStudio
 				return;
 
 			const RendererAtomData &atom = windowState.structure.atoms[selectedIndex];
-			float desiredDistance = m_Layer.m_GlobalRenderSettings.focusSelectedAtomDistance;
-			if (m_Layer.m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius)
+			float desiredDistance = m_Layer.GetGlobalSettings().focusSelectedAtomDistance;
+			if (m_Layer.GetGlobalSettings().focusSelectedAtomRespectAtomRadius)
 			{
-				const float radiusDistance = atom.radius * m_Layer.m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier;
+				const float radiusDistance = atom.radius * m_Layer.GetGlobalSettings().focusSelectedAtomRadiusMultiplier;
 				desiredDistance = std::max(desiredDistance, radiusDistance);
 			}
 			windowState.transitionDuration = std::max(
 				0.02f,
-				m_Layer.m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds);
+				m_Layer.GetGlobalSettings().focusSelectedAtomTransitionSeconds);
 
 			beginViewInteraction(windowState, "keyboard.focus_selected_atom");
 			startCameraTransition(
@@ -676,7 +591,7 @@ namespace DefectStudio
 		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
 		const float rotationDeltaRadians = rotationStepRadians;
 		const float orbitInputDelta = rotationDeltaRadians / kOrbitMouseScale;
-		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.m_GlobalRenderSettings.shortcuts;
+		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.GetGlobalSettings().shortcuts;
 
 		const auto shortcutPressed = [](ImGuiKey key) -> bool
 		{
@@ -711,7 +626,7 @@ namespace DefectStudio
 			LogRotationAction(
 				"keyboard.orbit_left",
 				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				m_Layer.GetGlobalSettings().rotationSpeed,
 				rotationDeltaRadians,
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
@@ -723,7 +638,7 @@ namespace DefectStudio
 			LogRotationAction(
 				"keyboard.orbit_right",
 				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				m_Layer.GetGlobalSettings().rotationSpeed,
 				rotationDeltaRadians,
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
@@ -735,7 +650,7 @@ namespace DefectStudio
 			LogRotationAction(
 				"keyboard.orbit_up",
 				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				m_Layer.GetGlobalSettings().rotationSpeed,
 				rotationDeltaRadians,
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
@@ -747,7 +662,7 @@ namespace DefectStudio
 			LogRotationAction(
 				"keyboard.orbit_down",
 				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				m_Layer.GetGlobalSettings().rotationSpeed,
 				rotationDeltaRadians,
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
@@ -759,7 +674,7 @@ namespace DefectStudio
 			LogRotationAction(
 				"keyboard.roll_left",
 				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				m_Layer.GetGlobalSettings().rotationSpeed,
 				rotationDeltaRadians,
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
@@ -771,7 +686,7 @@ namespace DefectStudio
 			LogRotationAction(
 				"keyboard.roll_right",
 				windowState.rotationStepDeg,
-				m_Layer.m_GlobalRenderSettings.rotationSpeed,
+				m_Layer.GetGlobalSettings().rotationSpeed,
 				rotationDeltaRadians,
 				orbitInputDelta);
 			RendererViewCamera animated = *windowState.camera;
@@ -829,9 +744,9 @@ namespace DefectStudio
 		const bool altPressed = io.KeyAlt;
 		const bool shiftPressed = io.KeyShift;
 
-		const bool touchpadOrbit = m_Layer.m_GlobalRenderSettings.touchpadNavigation && altPressed && lmb;
-		const bool touchpadPan = m_Layer.m_GlobalRenderSettings.touchpadNavigation && altPressed && shiftPressed && lmb;
-		const bool touchpadZoom = m_Layer.m_GlobalRenderSettings.touchpadNavigation && altPressed && rmb;
+		const bool touchpadOrbit = m_Layer.GetGlobalSettings().touchpadNavigation && altPressed && lmb;
+		const bool touchpadPan = m_Layer.GetGlobalSettings().touchpadNavigation && altPressed && shiftPressed && lmb;
+		const bool touchpadZoom = m_Layer.GetGlobalSettings().touchpadNavigation && altPressed && rmb;
 		const bool dragActiveInput = mmb || touchpadOrbit || touchpadPan || touchpadZoom;
 		if (dragActiveInput)
 			windowState.transitionActive = false;
@@ -848,13 +763,13 @@ namespace DefectStudio
 		}
 
 		float wheel = io.MouseWheel;
-		if (m_Layer.m_GlobalRenderSettings.invertZoom)
+		if (m_Layer.GetGlobalSettings().invertZoom)
 			wheel = -wheel;
 		if (wheel != 0.0f)
 		{
 			beginViewInteraction(windowState, "mouse.wheel_zoom");
 			windowState.transitionActive = false;
-			windowState.camera->Zoom(wheel * m_Layer.m_GlobalRenderSettings.zoomSensitivity);
+			windowState.camera->Zoom(wheel * m_Layer.GetGlobalSettings().zoomSensitivity);
 			commitViewInteraction(windowState);
 		}
 
@@ -885,21 +800,21 @@ namespace DefectStudio
 		if (touchpadZoom)
 		{
 			windowState.camera->Zoom(
-				(-delta.y * 0.020f) * m_Layer.m_GlobalRenderSettings.zoomSensitivity);
+				(-delta.y * 0.020f) * m_Layer.GetGlobalSettings().zoomSensitivity);
 			return;
 		}
 
 		if ((mmb && shiftPressed) || touchpadPan)
 		{
 			windowState.camera->Pan(
-				delta.x * m_Layer.m_GlobalRenderSettings.panSensitivity,
-				delta.y * m_Layer.m_GlobalRenderSettings.panSensitivity);
+				delta.x * m_Layer.GetGlobalSettings().panSensitivity,
+				delta.y * m_Layer.GetGlobalSettings().panSensitivity);
 			return;
 		}
 
 		windowState.camera->Orbit(
-			delta.x * m_Layer.m_GlobalRenderSettings.orbitSensitivity,
-			delta.y * m_Layer.m_GlobalRenderSettings.orbitSensitivity);
+			delta.x * m_Layer.GetGlobalSettings().orbitSensitivity,
+			delta.y * m_Layer.GetGlobalSettings().orbitSensitivity);
 	}
 
 	void RendererPanel::handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive)
@@ -971,11 +886,11 @@ namespace DefectStudio
 
 	void RendererPanel::drawPeriodicTableWindow()
 	{
-		if (!m_Layer.m_ShowPeriodicTableWindow)
+		if (!m_Layer.GetShowPeriodicTableWindow())
 			return;
 
 		ImGui::SetNextWindowSize(ImVec2(760.0f, 430.0f), ImGuiCond_FirstUseEver);
-		if (!ImGui::Begin("Periodic Table", &m_Layer.m_ShowPeriodicTableWindow))
+		if (!ImGui::Begin("Periodic Table", &m_Layer.GetShowPeriodicTableWindow()))
 		{
 			ImGui::End();
 			return;
@@ -996,18 +911,18 @@ namespace DefectStudio
 					continue;
 				}
 
-				if (symbol == m_Layer.m_SelectedPeriodicElement)
+				if (symbol == m_Layer.GetSelectedPeriodicElement())
 				{
 					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.28f, 0.56f, 0.92f, 1.0f));
 					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.34f, 0.64f, 0.98f, 1.0f));
 					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.48f, 0.84f, 1.0f));
 				}
 				const bool clicked = ImGui::Button(symbol, cellSize);
-				if (symbol == m_Layer.m_SelectedPeriodicElement)
+				if (symbol == m_Layer.GetSelectedPeriodicElement())
 					ImGui::PopStyleColor(3);
 
 				if (clicked)
-					m_Layer.m_SelectedPeriodicElement = symbol;
+					m_Layer.GetSelectedPeriodicElement() = symbol;
 			}
 		}
 
@@ -1019,7 +934,7 @@ namespace DefectStudio
 			if (index > 0)
 				ImGui::SameLine();
 			if (ImGui::Button(kLanthanides[index], cellSize))
-				m_Layer.m_SelectedPeriodicElement = kLanthanides[index];
+				m_Layer.GetSelectedPeriodicElement() = kLanthanides[index];
 		}
 		ImGui::TextUnformatted("Actinides");
 		ImGui::SameLine();
@@ -1028,11 +943,11 @@ namespace DefectStudio
 			if (index > 0)
 				ImGui::SameLine();
 			if (ImGui::Button(kActinides[index], cellSize))
-				m_Layer.m_SelectedPeriodicElement = kActinides[index];
+				m_Layer.GetSelectedPeriodicElement() = kActinides[index];
 		}
 
 		ImGui::Separator();
-		ImGui::Text("Selected element: %s", m_Layer.m_SelectedPeriodicElement.c_str());
+		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
 
 		ImGui::End();
 	}
@@ -1062,7 +977,7 @@ namespace DefectStudio
 
 		windowState.camera->SetProjection(snapshot.projection);
 		windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-			m_Layer.m_GlobalRenderSettings.rotationSpeed);
+			m_Layer.GetGlobalSettings().rotationSpeed);
 		startCameraTransition(
 			windowState,
 			snapshot.target,
@@ -1113,9 +1028,9 @@ namespace DefectStudio
 		const bool sameTarget = glm::length(before.target - after.target) <= kEpsilon;
 		const bool sameScalars =
 			std::abs(before.distance - after.distance) <= kEpsilon &&
-			std::abs(NormalizeAngleRadians(before.yaw - after.yaw)) <= kEpsilon &&
-			std::abs(NormalizeAngleRadians(before.pitch - after.pitch)) <= kEpsilon &&
-			std::abs(NormalizeAngleRadians(before.roll - after.roll)) <= kEpsilon &&
+			std::abs(RendererViewCamera::NormalizeAngleRadians(before.yaw - after.yaw)) <= kEpsilon &&
+			std::abs(RendererViewCamera::NormalizeAngleRadians(before.pitch - after.pitch)) <= kEpsilon &&
+			std::abs(RendererViewCamera::NormalizeAngleRadians(before.roll - after.roll)) <= kEpsilon &&
 			before.projection == after.projection;
 		if (sameTarget && sameScalars)
 			return;
@@ -1189,13 +1104,13 @@ namespace DefectStudio
 		const float startYaw = windowState.camera->Yaw();
 		const float startPitch = windowState.camera->Pitch();
 		const float startRoll = windowState.camera->Roll();
-		const glm::quat startOrientation = CameraOrientationQuatFromEuler(startYaw, startPitch, startRoll);
-		glm::quat endOrientation = CameraOrientationQuatFromEuler(yaw, pitch, roll);
+		const glm::quat startOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(startYaw, startPitch, startRoll);
+		glm::quat endOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(yaw, pitch, roll);
 		if (glm::dot(startOrientation, endOrientation) < 0.0f)
 			endOrientation = -endOrientation;
-		const float deltaYaw = NormalizeAngleRadians(yaw - startYaw);
-		const float deltaPitch = NormalizeAngleRadians(pitch - startPitch);
-		const float deltaRoll = NormalizeAngleRadians(roll - startRoll);
+		const float deltaYaw = RendererViewCamera::NormalizeAngleRadians(yaw - startYaw);
+		const float deltaPitch = RendererViewCamera::NormalizeAngleRadians(pitch - startPitch);
+		const float deltaRoll = RendererViewCamera::NormalizeAngleRadians(roll - startRoll);
 		const float angularDeltaDegrees = RadiansToDegrees(
 			2.0f * std::acos(glm::clamp(std::abs(glm::dot(startOrientation, endOrientation)), 0.0f, 1.0f)));
 		DS_LOG_DEBUG(
@@ -1251,7 +1166,7 @@ namespace DefectStudio
 		float yaw = 0.0f;
 		float pitch = 0.0f;
 		float roll = 0.0f;
-		CameraEulerFromOrientationQuat(orientation, yaw, pitch, roll);
+		RendererViewCamera::CameraEulerFromOrientationQuat(orientation, yaw, pitch, roll);
 
 		windowState.camera->SetOrbitState(target, distance, yaw, pitch);
 		windowState.camera->SetRoll(roll);

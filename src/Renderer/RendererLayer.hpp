@@ -53,13 +53,27 @@ namespace DefectStudio
 		void OnImGuiRender() override;
 		void ApplyConfig(const ApplicationConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
+		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
+		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
+		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
+		[[nodiscard]] const RendererGlobalRenderSettings &GetGlobalSettings() const;
+		[[nodiscard]] bool IsAttached() const noexcept;
+		[[nodiscard]] const RendererToolbarIconTexture *GetToolbarIcon(const std::string &fileName) const;
+		[[nodiscard]] unsigned int RenderToFbo(
+			const std::string &windowKey,
+			const RendererStructureData &structure,
+			const RendererWindowState &windowState,
+			const RendererGlobalRenderSettings &settings);
+		void CollectProfilingData();
+		bool &GetShowPeriodicTableWindow();
+		std::string &GetSelectedPeriodicElement();
 
 	private:
 		void loadDefaultWindows();
 		void bindConfigEvents();
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void applyDefaultProjectionToWindows();
-		const RendererToolbarIconTexture *getToolbarIcon(const std::string &iconFileName);
+		const RendererToolbarIconTexture *getToolbarIcon(const std::string &iconFileName) const;
 		void releaseToolbarIcons();
 		Path resolveShaderDirectory() const;
 
@@ -70,12 +84,10 @@ namespace DefectStudio
 		std::vector<RendererWindowState> m_Windows;
 		RendererGlobalRenderSettings m_GlobalRenderSettings;
 		Unique<RendererPanel> m_Panel;
-		std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
+		mutable std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
 		std::string m_SelectedPeriodicElement = "C";
 		bool m_ShowPeriodicTableWindow = true;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;
-
-		friend class RendererPanel;
 	};
 } // namespace DefectStudio

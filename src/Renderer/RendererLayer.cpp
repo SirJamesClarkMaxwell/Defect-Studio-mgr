@@ -166,6 +166,75 @@ namespace DefectStudio
 		m_EventBus = std::move(eventBus);
 	}
 
+	std::vector<RendererWindowState> &RendererLayer::GetWindows()
+	{
+		return m_Windows;
+	}
+
+	const std::vector<RendererWindowState> &RendererLayer::GetWindows() const
+	{
+		return m_Windows;
+	}
+
+	RendererGlobalRenderSettings &RendererLayer::GetGlobalSettings()
+	{
+		return m_GlobalRenderSettings;
+	}
+
+	const RendererGlobalRenderSettings &RendererLayer::GetGlobalSettings() const
+	{
+		return m_GlobalRenderSettings;
+	}
+
+	bool RendererLayer::IsAttached() const noexcept
+	{
+		return m_Attached;
+	}
+
+	const RendererToolbarIconTexture *RendererLayer::GetToolbarIcon(const std::string &fileName) const
+	{
+		return getToolbarIcon(fileName);
+	}
+
+	unsigned int RendererLayer::RenderToFbo(
+		const std::string &windowKey,
+		const RendererStructureData &structure,
+		const RendererWindowState &windowState,
+		const RendererGlobalRenderSettings &settings)
+	{
+		if (m_RendererBackend == nullptr || windowState.camera == nullptr)
+			return 0;
+
+		return m_RendererBackend->RenderWindow(
+			windowKey,
+			structure,
+			*windowState.camera,
+			settings,
+			static_cast<int>(windowState.viewportSize.x),
+			static_cast<int>(windowState.viewportSize.y),
+			windowState.showAtoms,
+			windowState.showBonds,
+			windowState.showCellBox,
+			windowState.showGrid,
+			windowState.selectedAtomIndices);
+	}
+
+	void RendererLayer::CollectProfilingData()
+	{
+		if (m_RendererBackend != nullptr)
+			m_RendererBackend->CollectProfilingData();
+	}
+
+	bool &RendererLayer::GetShowPeriodicTableWindow()
+	{
+		return m_ShowPeriodicTableWindow;
+	}
+
+	std::string &RendererLayer::GetSelectedPeriodicElement()
+	{
+		return m_SelectedPeriodicElement;
+	}
+
 	void RendererLayer::OnAttach()
 	{
 		m_RendererBackend = CreateUnique<OpenGlRendererBackend>();
@@ -441,7 +510,7 @@ namespace DefectStudio
 		}
 	}
 
-	const RendererToolbarIconTexture *RendererLayer::getToolbarIcon(const std::string &iconFileName)
+	const RendererToolbarIconTexture *RendererLayer::getToolbarIcon(const std::string &iconFileName) const
 	{
 		if (iconFileName.empty())
 			return nullptr;
