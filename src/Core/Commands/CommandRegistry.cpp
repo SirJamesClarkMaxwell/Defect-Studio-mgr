@@ -45,7 +45,7 @@ namespace DefectStudio
 	{
 		if (!meta.id)
 		{
-			DS_LOG_ERROR("CommandRegistry::Register failed [command.register.empty_id]: CommandMeta.id is empty");
+			DS_LOG_ERROR("CommandRegistry: registration failed [command.register.empty_id]: id is empty");
 			return MakeCommandError(
 				"command.register.empty_id",
 				"Command registration failed.",
@@ -55,9 +55,9 @@ namespace DefectStudio
 
 		if (!factory)
 		{
-			DS_LOG_ERROR("CommandRegistry::Register failed [command.register.missing_factory]: id='{}'", meta.id.value);
+			DS_LOG_ERROR("CommandRegistry: registration failed [command.register.no_factory]: id='{}'", meta.id.value);
 			return MakeCommandError(
-				"command.register.missing_factory",
+				"command.register.no_factory",
 				"Command registration failed.",
 				"Factory is empty for command '" + meta.id.value + "'.",
 				"Register commands with a factory that creates a fresh ICommand instance per execution.");
@@ -67,9 +67,9 @@ namespace DefectStudio
 		const auto [it, inserted] = m_Commands.emplace(commandId, RegisteredCommand{std::move(meta), std::move(factory)});
 		if (!inserted)
 		{
-			DS_LOG_ERROR("CommandRegistry::Register failed [command.register.duplicate_id]: id='{}' already registered", it->first);
+			DS_LOG_ERROR("CommandRegistry: registration failed [command.register.duplicate]: id='{}'", it->first);
 			return MakeCommandError(
-				"command.register.duplicate_id",
+				"command.register.duplicate",
 				"Command registration failed.",
 				"Command id '" + it->first + "' is already registered.",
 				"Use globally unique command ids and keep aliases outside CommandRegistry.");

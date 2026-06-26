@@ -646,10 +646,8 @@ namespace DefectStudio
 		}
 		DS_LOG_INFO("CreateFromSpecification: EventBus ready");
 		{
-			ZoneScopedN("Application.CreateInfrastructureServices");
-			StartupStepTimer timer("CreateFromSpecification.createInfrastructureServices");
-			m_Notifier = CreateRef<Notifier>(m_EventBus);
-			m_CapabilityService = CreateRef<CapabilityService>();
+			ZoneScopedN("Application.CreateEventController");
+			StartupStepTimer timer("CreateFromSpecification.createEventController");
 			m_EventController = CreateUnique<ApplicationEventController>(
 				m_EventBus,
 				m_ConfigManager,
@@ -792,6 +790,37 @@ namespace DefectStudio
 		setCrashStage("initialize core runtime services");
 		DS_LOG_INFO("CreateFromSpecification: init core runtime services");
 		{
+			ZoneScopedN("Application.CreateCapabilityService");
+			StartupStepTimer timer("CreateFromSpecification.createCapabilityService");
+			m_CapabilityService = CreateRef<CapabilityService>();
+			timer.Finish(m_CapabilityService != nullptr);
+		}
+		{
+			ZoneScopedN("Application.RegisterCapabilities");
+			StartupStepTimer timer("CreateFromSpecification.registerCapabilities");
+			auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
+			if (scientificRuntimeLayer != nullptr && m_CapabilityService != nullptr)
+			{
+				scientificRuntimeLayer->RegisterCapability(
+					*m_CapabilityService,
+					scientificRuntimeLayer->BuildPythonBridgeCapability());
+			}
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.LockCapabilitiesAfterStartup");
+			StartupStepTimer timer("CreateFromSpecification.lockCapabilitiesAfterStartup");
+			if (m_CapabilityService)
+				m_CapabilityService->LockAfterStartup();
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.CreateNotifier");
+			StartupStepTimer timer("CreateFromSpecification.createNotifier");
+			m_Notifier = CreateRef<Notifier>(m_EventBus);
+			timer.Finish(m_Notifier != nullptr);
+		}
+		{
 			ZoneScopedN("Application.initializeCoreLayerSystems");
 			StartupStepTimer timer("CreateFromSpecification.initializeCoreLayerSystems");
 			if (!timer.Finish(initializeCoreLayerSystems()))
@@ -800,13 +829,6 @@ namespace DefectStudio
 				shutdownInternal();
 				return false;
 			}
-		}
-		{
-			ZoneScopedN("Application.LockCapabilitiesAfterStartup");
-			StartupStepTimer timer("CreateFromSpecification.lockCapabilitiesAfterStartup");
-			if (m_CapabilityService)
-				m_CapabilityService->LockAfterStartup();
-			timer.Finish(true);
 		}
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 		return true;
@@ -1066,18 +1088,6 @@ namespace DefectStudio
 			ZoneScopedN("Application.setupDefaultLayers.PushScientificRuntimeLayer");
 			StartupStepTimer timer("LayerStack.push.ScientificRuntimeLayer");
 			m_LayerStack.PushLayer(CreateUnique<ScientificRuntimeLayer>());
-			timer.Finish(true);
-		}
-		auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
-		{
-			ZoneScopedN("Application.setupDefaultLayers.RegisterScientificCapabilities");
-			StartupStepTimer timer("LayerStack.register.ScientificRuntimeCapabilities");
-			if (scientificRuntimeLayer != nullptr && m_CapabilityService != nullptr)
-			{
-				scientificRuntimeLayer->RegisterCapability(
-					*m_CapabilityService,
-					scientificRuntimeLayer->BuildPythonBridgeCapability());
-			}
 			timer.Finish(true);
 		}
 		{
