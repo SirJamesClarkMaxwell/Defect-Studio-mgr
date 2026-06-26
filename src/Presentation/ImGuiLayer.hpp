@@ -16,6 +16,7 @@ struct GLFWwindow;
 namespace DefectStudio
 {
 	class EventBus;
+	class JobSystem;
 	struct EditorFontOption;
 	struct EditorUiState;
 	struct NotificationEvent;
@@ -48,6 +49,7 @@ namespace DefectStudio
 	{
 		GLFWwindow *nativeWindow = nullptr;
 		Ref<EventBus> eventBus;
+		WeakRef<JobSystem> jobSystem;
 		UIConfig ui;
 		AppearanceConfig appearance;
 		Path layoutPath;

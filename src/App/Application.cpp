@@ -1143,6 +1143,9 @@ namespace DefectStudio
 			StartupStepTimer timer("LayerStack.build.ImGuiRuntime");
 			imGuiRuntime.nativeWindow = m_Graphics.window != nullptr ? m_Graphics.window->GetNativeHandle() : nullptr;
 			imGuiRuntime.eventBus = m_EventBus;
+			auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+			if (coreLayer != nullptr)
+				imGuiRuntime.jobSystem = coreLayer->GetJobSystemHandle();
 			imGuiRuntime.ui = m_Config.ui;
 			imGuiRuntime.appearance = m_Config.appearance;
 			imGuiRuntime.layoutPath = m_Config.layout.imGuiIniPath.empty()
