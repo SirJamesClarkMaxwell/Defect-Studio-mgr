@@ -34,9 +34,19 @@ namespace DefectStudio
 		m_EventBus.reset();
 	}
 
-	void NotificationCenter::RegisterListener(Listener listener)
+	std::size_t NotificationCenter::RegisterListener(NotificationHandler listener)
 	{
-		m_Listeners.push_back(std::move(listener));
+		if (!listener)
+			return 0;
+
+		const std::size_t id = m_NextListenerId++;
+		m_Listeners.emplace(id, std::move(listener));
+		return id;
+	}
+
+	void NotificationCenter::RemoveListener(std::size_t listenerId)
+	{
+		m_Listeners.erase(listenerId);
 	}
 
 	void NotificationCenter::ClearListeners()
@@ -52,10 +62,11 @@ namespace DefectStudio
 	void NotificationCenter::onNotification(const Notification &notification)
 	{
 		m_History.Append(notification);
-		for (const auto &listener : m_Listeners)
+		for (const auto &[id, handler] : m_Listeners)
 		{
-			if (listener)
-				listener(notification);
+			(void)id;
+			if (handler)
+				handler(notification);
 		}
 	}
 } // namespace DefectStudio

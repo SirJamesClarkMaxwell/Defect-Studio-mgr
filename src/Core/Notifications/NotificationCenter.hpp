@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <cstddef>
+#include <unordered_map>
 #include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -23,9 +25,10 @@ namespace DefectStudio
 		void BindEventBus(Ref<EventBus> eventBus);
 		void UnbindEventBus();
 
-		using Listener = std::function<void(const Notification &)>;
+		using NotificationHandler = std::function<void(const Notification &)>;
 
-		void RegisterListener(Listener listener);
+		[[nodiscard]] std::size_t RegisterListener(NotificationHandler listener);
+		void RemoveListener(std::size_t listenerId);
 		void ClearListeners();
 
 		[[nodiscard]] const std::vector<Notification> &GetNotifications() const;
@@ -36,7 +39,8 @@ namespace DefectStudio
 	private:
 		Ref<EventBus> m_EventBus;
 		SubscriptionHandle m_Subscription;
-		std::vector<Listener> m_Listeners;
+		std::unordered_map<std::size_t, NotificationHandler> m_Listeners;
+		std::size_t m_NextListenerId = 1;
 		NotificationHistory m_History;
 	};
 } // namespace DefectStudio
