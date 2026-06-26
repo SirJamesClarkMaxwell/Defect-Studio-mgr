@@ -19,9 +19,11 @@
 
 #include <glad/gl.h>
 #include <stb_image.h>
+#include <yaml-cpp/yaml.h>
 
 #include "Core/Utils/Logger.hpp"
 #include "Core/Utils/Time.hpp"
+#include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 
@@ -151,6 +153,71 @@ namespace DefectStudio
 			return fallback;
 		}
 
+		[[nodiscard]] bool ParseSymbolSequence(
+			const YAML::Node &node,
+			std::vector<std::string> &outSymbols)
+		{
+			if (!node || !node.IsSequence())
+				return false;
+
+			outSymbols.clear();
+			for (const YAML::Node &entry : node)
+			{
+				std::string symbol;
+				if (entry.IsMap())
+					symbol = entry["symbol"].as<std::string>("");
+				else if (entry.IsScalar())
+					symbol = entry.as<std::string>("");
+
+				if (!symbol.empty())
+					outSymbols.push_back(std::move(symbol));
+			}
+
+			return !outSymbols.empty();
+		}
+
+		void LoadPeriodicTableFromConfig(
+			const Path &path,
+			std::vector<std::string> &outElements,
+			std::vector<std::string> &outLanthanides,
+			std::vector<std::string> &outActinides)
+		{
+			std::string yamlText;
+			std::string error;
+			if (!TextFileIO::Load(path, yamlText, error))
+			{
+				DS_LOG_ERROR(
+					"Periodic table config load failed: {} | {}",
+					path.String(),
+					error);
+				return;
+			}
+
+			try
+			{
+				YAML::Node root = YAML::Load(yamlText);
+				if (!root || !root.IsMap())
+				{
+					DS_LOG_ERROR("Periodic table YAML root is not a map: {}", path.String());
+					return;
+				}
+
+				if (!ParseSymbolSequence(root["elements"], outElements))
+					DS_LOG_ERROR("Periodic table YAML has no valid 'elements' sequence: {}", path.String());
+				if (!ParseSymbolSequence(root["lanthanides"], outLanthanides))
+					DS_LOG_ERROR("Periodic table YAML has no valid 'lanthanides' sequence: {}", path.String());
+				if (!ParseSymbolSequence(root["actinides"], outActinides))
+					DS_LOG_ERROR("Periodic table YAML has no valid 'actinides' sequence: {}", path.String());
+			}
+			catch (const std::exception &exception)
+			{
+				DS_LOG_ERROR(
+					"Periodic table YAML parse failed: {} | {}",
+					path.String(),
+					exception.what());
+			}
+		}
+
 	}
 
 	RendererLayer::RendererLayer(RendererStartupConfig startupConfig)
@@ -200,6 +267,21 @@ namespace DefectStudio
 	const RendererToolbarIconTexture *RendererLayer::GetToolbarIcon(const std::string &fileName) const
 	{
 		return getToolbarIcon(fileName);
+	}
+
+	const std::vector<std::string> &RendererLayer::GetPeriodicTableSymbols() const
+	{
+		return m_PeriodicTableSymbols;
+	}
+
+	const std::vector<std::string> &RendererLayer::GetLanthanideSymbols() const
+	{
+		return m_LanthanideSymbols;
+	}
+
+	const std::vector<std::string> &RendererLayer::GetActinideSymbols() const
+	{
+		return m_ActinideSymbols;
 	}
 
 	unsigned int RendererLayer::RenderToFbo(
@@ -265,6 +347,15 @@ namespace DefectStudio
 			m_RendererBackend.reset();
 			return;
 		}
+
+		const Path periodicTablePath = m_StartupConfig.assetsDirectory.Native()
+			/ "config"
+			/ "periodic_table.yaml";
+		LoadPeriodicTableFromConfig(
+			periodicTablePath,
+			m_PeriodicTableSymbols,
+			m_LanthanideSymbols,
+			m_ActinideSymbols);
 
 		if (m_StartupConfig.loadDefaultScene)
 			loadDefaultWindows();

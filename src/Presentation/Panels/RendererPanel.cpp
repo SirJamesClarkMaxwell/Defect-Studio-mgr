@@ -23,20 +23,15 @@ namespace DefectStudio
 		constexpr float kViewportMinSize = 64.0f;
 		constexpr float kViewportMaxSize = 8192.0f;
 
-		using PeriodicTableRow = std::array<const char *, 18>;
-		const std::array<PeriodicTableRow, 7> kPeriodicTableRows = {
-			PeriodicTableRow{"H", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "He"},
-			PeriodicTableRow{"Li", "Be", "", "", "", "", "", "", "", "", "", "", "B", "C", "N", "O", "F", "Ne"},
-			PeriodicTableRow{"Na", "Mg", "", "", "", "", "", "", "", "", "", "", "Al", "Si", "P", "S", "Cl", "Ar"},
-			PeriodicTableRow{"K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr"},
-			PeriodicTableRow{"Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe"},
-			PeriodicTableRow{"Cs", "Ba", "", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn"},
-			PeriodicTableRow{"Fr", "Ra", "", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "", "", "", "", "", "", ""}};
-
-		const std::array<const char *, 15> kLanthanides = {
-			"La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu"};
-		const std::array<const char *, 15> kActinides = {
-			"Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr"};
+		using PeriodicTableIndexRow = std::array<int, 18>;
+		const std::array<PeriodicTableIndexRow, 7> kPeriodicTableElementIndices = {
+			PeriodicTableIndexRow{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
+			PeriodicTableIndexRow{3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 6, 7, 8, 9, 10},
+			PeriodicTableIndexRow{11, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 14, 15, 16, 17, 18},
+			PeriodicTableIndexRow{19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36},
+			PeriodicTableIndexRow{37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54},
+			PeriodicTableIndexRow{55, 56, 0, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86},
+			PeriodicTableIndexRow{87, 88, 0, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118}};
 
 		[[nodiscard]] float SanitizeViewportDimension(float value)
 		{
@@ -238,27 +233,32 @@ namespace DefectStudio
 		}
 
 		const ImVec2 cellSize(36.0f, 32.0f);
-		for (const PeriodicTableRow &row : kPeriodicTableRows)
+		const auto &symbols = m_Layer.GetPeriodicTableSymbols();
+		const auto &lanthanides = m_Layer.GetLanthanideSymbols();
+		const auto &actinides = m_Layer.GetActinideSymbols();
+
+		for (const PeriodicTableIndexRow &row : kPeriodicTableElementIndices)
 		{
 			for (std::size_t column = 0; column < row.size(); ++column)
 			{
-				const char *symbol = row[column];
+				const int atomicNumber = row[column];
 				if (column > 0)
 					ImGui::SameLine();
 
-				if (symbol == nullptr || symbol[0] == '\0')
+				if (atomicNumber <= 0 || static_cast<std::size_t>(atomicNumber) > symbols.size())
 				{
 					ImGui::Dummy(cellSize);
 					continue;
 				}
 
+				const std::string &symbol = symbols[static_cast<std::size_t>(atomicNumber - 1)];
 				if (symbol == m_Layer.GetSelectedPeriodicElement())
 				{
 					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.28f, 0.56f, 0.92f, 1.0f));
 					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.34f, 0.64f, 0.98f, 1.0f));
 					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.48f, 0.84f, 1.0f));
 				}
-				const bool clicked = ImGui::Button(symbol, cellSize);
+				const bool clicked = ImGui::Button(symbol.c_str(), cellSize);
 				if (symbol == m_Layer.GetSelectedPeriodicElement())
 					ImGui::PopStyleColor(3);
 
@@ -270,21 +270,21 @@ namespace DefectStudio
 		ImGui::Separator();
 		ImGui::TextUnformatted("Lanthanides");
 		ImGui::SameLine();
-		for (std::size_t index = 0; index < kLanthanides.size(); ++index)
+		for (std::size_t index = 0; index < lanthanides.size(); ++index)
 		{
 			if (index > 0)
 				ImGui::SameLine();
-			if (ImGui::Button(kLanthanides[index], cellSize))
-				m_Layer.GetSelectedPeriodicElement() = kLanthanides[index];
+			if (ImGui::Button(lanthanides[index].c_str(), cellSize))
+				m_Layer.GetSelectedPeriodicElement() = lanthanides[index];
 		}
 		ImGui::TextUnformatted("Actinides");
 		ImGui::SameLine();
-		for (std::size_t index = 0; index < kActinides.size(); ++index)
+		for (std::size_t index = 0; index < actinides.size(); ++index)
 		{
 			if (index > 0)
 				ImGui::SameLine();
-			if (ImGui::Button(kActinides[index], cellSize))
-				m_Layer.GetSelectedPeriodicElement() = kActinides[index];
+			if (ImGui::Button(actinides[index].c_str(), cellSize))
+				m_Layer.GetSelectedPeriodicElement() = actinides[index];
 		}
 
 		ImGui::Separator();

@@ -61,6 +61,9 @@ namespace DefectStudio
 		[[nodiscard]] const RendererGlobalRenderSettings &GetGlobalSettings() const;
 		[[nodiscard]] bool IsAttached() const noexcept;
 		[[nodiscard]] const RendererToolbarIconTexture *GetToolbarIcon(const std::string &fileName) const;
+		[[nodiscard]] const std::vector<std::string> &GetPeriodicTableSymbols() const;
+		[[nodiscard]] const std::vector<std::string> &GetLanthanideSymbols() const;
+		[[nodiscard]] const std::vector<std::string> &GetActinideSymbols() const;
 		[[nodiscard]] unsigned int RenderToFbo(
 			const std::string &windowKey,
 			const RendererStructureData &structure,
@@ -89,6 +92,9 @@ namespace DefectStudio
 		Ref<EventBus> m_EventBus;
 		Unique<OpenGlRendererBackend> m_RendererBackend;
 		std::vector<RendererWindowState> m_Windows;
+		std::vector<std::string> m_PeriodicTableSymbols;
+		std::vector<std::string> m_LanthanideSymbols;
+		std::vector<std::string> m_ActinideSymbols;
 		RendererGlobalRenderSettings m_GlobalRenderSettings;
 		Unique<RendererPanel> m_Panel;
 		mutable std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
