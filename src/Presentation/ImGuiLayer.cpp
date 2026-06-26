@@ -19,6 +19,7 @@
 
 #include "Presentation/ImGuiLayer.hpp"
 
+#include "App/Application.hpp"
 #include "IconsFontAwesome6.h"
 #include "fa-solid-900.h"
 
@@ -311,6 +312,11 @@ namespace DefectStudio
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 	}
 
+	void ImGuiLayer::SetBlockingError(const StructuredError &error)
+	{
+		m_PendingBlockingError = error;
+	}
+
 	void ImGuiLayer::OnAttach()
 	{
 		if (m_Initialized)
@@ -368,6 +374,26 @@ namespace DefectStudio
 
 	void ImGuiLayer::OnImGuiRender()
 	{
+		if (m_PendingBlockingError.has_value())
+			ImGui::OpenPopup("Fatal Error##blocking");
+
+		if (ImGui::BeginPopupModal("Fatal Error##blocking", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::TextUnformatted(m_PendingBlockingError->userMessage.c_str());
+			if (!m_PendingBlockingError->suggestion.empty())
+			{
+				ImGui::Separator();
+				ImGui::TextWrapped("%s", m_PendingBlockingError->suggestion.c_str());
+			}
+			ImGui::Spacing();
+			if (ImGui::Button("Quit Application"))
+			{
+				m_PendingBlockingError.reset();
+				Application::Get().Shutdown();
+			}
+			ImGui::EndPopup();
+		}
+
 		while (!m_PendingToasts.empty())
 		{
 			const Notification &notification = m_PendingToasts.front();

@@ -1,9 +1,11 @@
 #pragma once
 
 #include <deque>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Notifications/Notification.hpp"
@@ -67,6 +69,7 @@ namespace DefectStudio
 		void BeginFrame();
 		void EndFrame();
 		void Render();
+		void SetBlockingError(const StructuredError &error);
 
 		void OnAttach() override;
 		void OnDetach() override;
@@ -111,6 +114,7 @@ namespace DefectStudio
 		UIConfig m_UiConfig;
 		AppearanceConfig m_AppearanceConfig;
 		Path m_LayoutPath;
+		std::optional<StructuredError> m_PendingBlockingError;
 		std::deque<Notification> m_PendingToasts;
 		bool m_ResetLayoutOnAttach = false;
 		bool m_Initialized = false;

@@ -143,8 +143,6 @@ namespace DefectStudio
 		Ref<AssetManager> m_AssetManager;
 		Ref<ConfigManager> m_ConfigManager;
 
-		std::optional<StructuredError> m_BlockingError;
-		
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
 

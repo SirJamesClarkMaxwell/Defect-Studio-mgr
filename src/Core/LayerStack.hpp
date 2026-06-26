@@ -46,6 +46,9 @@ namespace DefectStudio
 		[[nodiscard]] WeakRef<const Layer> FindLayer(LayerId layerId) const;
 
 		template <typename TLayer>
+		[[nodiscard]] TLayer *FindLayer();
+
+		template <typename TLayer>
 		[[nodiscard]] WeakRef<TLayer> FindLayerAs(LayerId layerId);
 
 		template <typename TLayer>
@@ -66,6 +69,15 @@ namespace DefectStudio
 		Layers m_Layers;
 		std::size_t m_LayerInsertIndex = 0;
 	};
+
+	template <typename TLayer>
+	TLayer *LayerStack::FindLayer()
+	{
+		for (auto &layer : m_Layers)
+			if (auto *ptr = dynamic_cast<TLayer *>(layer.get()))
+				return ptr;
+		return nullptr;
+	}
 
 	template <typename TLayer>
 	WeakRef<TLayer> LayerStack::FindLayerAs(LayerId layerId)
