@@ -19,7 +19,7 @@
 
 #include "App/Managers/ConfigManager.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
 
 namespace DefectStudio

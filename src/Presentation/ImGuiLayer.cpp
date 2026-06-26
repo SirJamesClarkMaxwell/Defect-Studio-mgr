@@ -23,9 +23,9 @@
 #include "fa-solid-900.h"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Events/NotificationEvents.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Platform/PlatformFontDiscovery.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorUiState.hpp"

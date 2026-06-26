@@ -5,7 +5,7 @@
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Assert.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformWindow.hpp"
 

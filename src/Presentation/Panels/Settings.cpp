@@ -18,7 +18,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Input/KeymapResolver.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "App/Serialization/YamlConfigSerializer.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"

@@ -7,7 +7,7 @@
 #include <string_view>
 
 #include "Core/Platform/PlatformPaths.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio::Platform
 {

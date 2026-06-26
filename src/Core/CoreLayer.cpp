@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/CoreLayer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"

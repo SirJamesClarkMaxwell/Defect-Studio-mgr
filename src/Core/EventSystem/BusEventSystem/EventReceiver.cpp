@@ -1,7 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

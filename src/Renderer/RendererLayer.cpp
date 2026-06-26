@@ -23,7 +23,7 @@
 #include <stb_image.h>
 #include <yaml-cpp/yaml.h>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Time.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"

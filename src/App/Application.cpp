@@ -28,7 +28,7 @@
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/CoreLayer.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
 #include "Debug/DebugLayer.hpp"

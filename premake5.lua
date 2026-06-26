@@ -403,6 +403,7 @@ project "DefectStudioTests"
     }
 
     includedirs {
+        "tests",
         "src",
         "Vendor/spdlog/include",
         "Vendor/Tracy/public",

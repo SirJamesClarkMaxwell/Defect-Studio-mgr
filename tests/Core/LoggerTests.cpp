@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 TEST(LoggerTests, InitializesAndReturnsLogger)
 {

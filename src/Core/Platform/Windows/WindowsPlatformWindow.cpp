@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <windows.h>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Platform/PlatformSystem.hpp"

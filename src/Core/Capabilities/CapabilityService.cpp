@@ -3,7 +3,7 @@
 #include "Core/Capabilities/CapabilityService.hpp"
 
 #include "Core/Capabilities/CapabilityRegistry.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

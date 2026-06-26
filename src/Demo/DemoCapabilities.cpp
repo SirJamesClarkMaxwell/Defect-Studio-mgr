@@ -8,7 +8,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notification.hpp"
 #include "Demo/DemoCapabilities.hpp"
-#include "Events/NotificationEvents.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 
 namespace DefectStudio::Demo
 {

@@ -13,8 +13,8 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
-#include "Events/NotificationEvents.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 
 namespace DefectStudio

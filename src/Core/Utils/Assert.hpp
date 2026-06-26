@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Core/Platform/PlatformSystem.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 #define DS_DEBUGBREAK() ::DefectStudio::Platform::DebugBreak()
 

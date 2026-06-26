@@ -1,5 +1,5 @@
 #include "Core/dspch.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 #include "Core/Capabilities/CapabilityRegistry.hpp"
 

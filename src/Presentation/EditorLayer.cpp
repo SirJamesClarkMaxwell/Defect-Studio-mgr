@@ -20,7 +20,7 @@
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"

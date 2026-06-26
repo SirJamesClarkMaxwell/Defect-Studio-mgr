@@ -2,7 +2,7 @@
 
 #include "Core/Notifications/NotificationCenter.hpp"
 
-#include "Events/NotificationEvents.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 
 namespace DefectStudio
 {

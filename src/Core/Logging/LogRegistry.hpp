@@ -3,7 +3,7 @@
 #include <mutex>
 #include <vector>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

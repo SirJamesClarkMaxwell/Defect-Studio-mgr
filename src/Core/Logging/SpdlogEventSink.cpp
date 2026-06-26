@@ -1,8 +1,8 @@
 #include "Core/dspch.hpp"
 
-#include "Core/Utils/SpdlogEventSink.hpp"
+#include "Core/Logging/SpdlogEventSink.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Events/LogEvents.hpp"
+#include "Core/Logging/LogEvents.hpp"
 
 namespace DefectStudio
 {

@@ -17,7 +17,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/LayerStack.hpp"
 #include "Core/Notifications/Notifier.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 
 struct ImVec4;

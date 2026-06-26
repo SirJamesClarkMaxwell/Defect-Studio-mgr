@@ -8,12 +8,50 @@
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
-#include "Core/JobSystem/TestJobs/TestJobs.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
 
 namespace DefectStudio
 {
+	class UITaskMonitorSleepJob final : public IJob
+	{
+	public:
+		UITaskMonitorSleepJob(std::string name, int steps, Time::Milliseconds stepDelay)
+			: m_Name(std::move(name)),
+			  m_Steps(std::max(1, steps)),
+			  m_StepDelay(stepDelay)
+		{
+		}
+
+		[[nodiscard]] std::string GetName() const override
+		{
+			return m_Name;
+		}
+
+		[[nodiscard]] std::string GetType() const override
+		{
+			return "UITaskMonitorSleepJob";
+		}
+
+		void Execute(JobContext &context) override
+		{
+			context.SetStage("running");
+			for (int step = 1; step <= m_Steps; ++step)
+			{
+				context.ThrowIfCancellationRequested();
+				std::this_thread::sleep_for(m_StepDelay);
+				context.SetProgress(static_cast<float>(step), static_cast<float>(m_Steps));
+				context.SetMessage("step " + std::to_string(step));
+			}
+			context.SetStage("finished");
+		}
+
+	private:
+		std::string m_Name;
+		int m_Steps = 1;
+		Time::Milliseconds m_StepDelay{1};
+	};
+
 	class UITaskMonitorSubtaskJob final : public IJob
 	{
 	public:
@@ -37,7 +75,7 @@ namespace DefectStudio
 			context.SetStage("submitting-subtasks");
 			for (int i = 0; i < m_ChainCount; ++i)
 			{
-				auto child = CreateRef<SleepJob>(m_Name + "::child-" + std::to_string(i + 1), 30, Time::Milliseconds(8));
+				auto child = CreateRef<UITaskMonitorSleepJob>(m_Name + "::child-" + std::to_string(i + 1), 30, Time::Milliseconds(8));
 				const auto childId = context.SubmitJob(child, JobPriority::Normal);
 				if (childId == 0)
 				{
@@ -104,7 +142,7 @@ namespace DefectStudio
 			if (m_EventBus != nullptr)
 			{
 				m_EventBus->Queue(JobSubmitRequested{
-					CreateRef<SleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}),
+					CreateRef<UITaskMonitorSleepJob>(std::string(m_DummyJobName), m_DummyJobSteps, Time::Milliseconds{m_DummyJobDelayMs}),
 					m_DummyJobPriority,
 					"TaskMonitorWindow"});
 				DS_LOG_INFO("TaskMonitor queued dummy job name=\"{}\" steps={} delay_ms={} priority={}", m_DummyJobName, m_DummyJobSteps, m_DummyJobDelayMs, static_cast<int>(m_DummyJobPriority));

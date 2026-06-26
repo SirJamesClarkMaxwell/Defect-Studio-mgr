@@ -2,7 +2,7 @@
 
 #include "Storage/StorageLayer.hpp"
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

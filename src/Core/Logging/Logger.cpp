@@ -9,7 +9,7 @@
 #include <spdlog/spdlog.h>
 
 #include "Core/Logging/LogRegistrySink.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 namespace DefectStudio
 {

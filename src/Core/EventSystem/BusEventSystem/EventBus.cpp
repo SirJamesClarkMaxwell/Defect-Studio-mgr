@@ -2,7 +2,7 @@
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

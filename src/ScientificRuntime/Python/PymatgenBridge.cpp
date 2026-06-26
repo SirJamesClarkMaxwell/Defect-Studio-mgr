@@ -14,7 +14,7 @@
 namespace nb = nanobind;
 #endif
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Time.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"

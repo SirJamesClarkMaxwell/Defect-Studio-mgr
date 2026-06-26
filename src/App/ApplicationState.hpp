@@ -9,7 +9,7 @@
 #include "App/ApplicationLifecycle.hpp"
 #include "App/Window.hpp"
 #include "Core/JobSystem/JobSystemConfig.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Presentation/UiConfig.hpp"

@@ -5,7 +5,7 @@
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Utils/Assert.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

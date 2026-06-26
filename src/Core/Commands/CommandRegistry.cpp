@@ -3,7 +3,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 
 #include "Core/Undo/UndoStack.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

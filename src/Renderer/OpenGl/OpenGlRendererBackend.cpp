@@ -12,7 +12,7 @@
 #include <glm/geometric.hpp>
 #include <glad/gl.h>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 #if defined(TRACY_ENABLE)

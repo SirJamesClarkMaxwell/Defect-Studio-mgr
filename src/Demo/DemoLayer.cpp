@@ -5,7 +5,7 @@
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notifier.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Demo/DemoBackendRuntime.hpp"
 #include "Demo/DemoCapabilities.hpp"
 #include "Demo/DemoLayer.hpp"

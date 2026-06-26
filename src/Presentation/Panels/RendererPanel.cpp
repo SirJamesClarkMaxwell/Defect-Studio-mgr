@@ -12,7 +12,7 @@
 #include <imgui.h>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 

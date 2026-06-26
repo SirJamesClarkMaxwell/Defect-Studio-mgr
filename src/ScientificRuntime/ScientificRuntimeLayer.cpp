@@ -4,7 +4,7 @@
 
 #include "Core/Capabilities/Capability.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 #include "ScientificRuntime/Python/ScientificPythonRuntime.hpp"
 

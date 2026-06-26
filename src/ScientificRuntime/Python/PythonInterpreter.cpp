@@ -3,7 +3,7 @@
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
 
 #include "Core/Platform/PlatformPythonRuntime.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
 
 namespace DefectStudio

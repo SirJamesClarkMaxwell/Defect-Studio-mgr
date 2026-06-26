@@ -11,7 +11,7 @@
 
 #include <glm/geometric.hpp>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Time.hpp"
 #include "Renderer/RendererPoscarLoader.hpp"
 #include "Renderer/RendererViewCamera.hpp"

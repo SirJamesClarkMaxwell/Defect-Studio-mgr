@@ -3,8 +3,8 @@
 #include "Core/Notifications/Notifier.hpp"
 
 #include "Core/Diagnostics/StructuredError.hpp"
-#include "Core/Utils/Logger.hpp"
-#include "Events/NotificationEvents.hpp"
+#include "Core/Logging/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 
 namespace DefectStudio
 {

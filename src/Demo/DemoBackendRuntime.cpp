@@ -19,7 +19,7 @@
 #include "Core/Utils/Input.hpp"
 #include "Demo/DemoBackendRuntime.hpp"
 #include "Demo/DemoCommands.hpp"
-#include "Events/NotificationEvents.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 
 namespace DefectStudio::Demo
 {

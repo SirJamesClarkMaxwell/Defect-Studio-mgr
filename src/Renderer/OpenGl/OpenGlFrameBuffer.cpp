@@ -6,7 +6,7 @@
 
 #include <glad/gl.h>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {

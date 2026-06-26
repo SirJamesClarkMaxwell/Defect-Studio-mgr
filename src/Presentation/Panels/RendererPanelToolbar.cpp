@@ -8,7 +8,7 @@
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio

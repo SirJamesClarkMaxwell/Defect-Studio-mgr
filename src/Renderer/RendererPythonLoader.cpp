@@ -11,7 +11,7 @@
 #include <glm/geometric.hpp>
 #include <glm/matrix.hpp>
 
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Time.hpp"
 #include "ScientificRuntime/Python/PymatgenBridge.hpp"
 

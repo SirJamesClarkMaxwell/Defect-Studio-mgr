@@ -1,7 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "ScientificRuntime/Python/ScientificPythonRuntime.hpp"
-#include "Core/Utils/Logger.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 
 namespace DefectStudio
