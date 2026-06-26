@@ -20,7 +20,7 @@
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "App/Serialization/YamlConfigSerializer.hpp"
-#include "Presentation/EditorUiEvents.hpp"
+#include "Events/EditorUiEvents.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 
 namespace DefectStudio

@@ -22,7 +22,7 @@
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Presentation/EditorUiEvents.hpp"
+#include "Events/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"

@@ -15,7 +15,7 @@
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Logging/Logger.hpp"
-#include "Presentation/EditorUiEvents.hpp"
+#include "Events/EditorUiEvents.hpp"
 
 namespace DefectStudio
 {

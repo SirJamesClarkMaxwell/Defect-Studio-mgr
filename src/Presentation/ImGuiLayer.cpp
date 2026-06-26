@@ -28,7 +28,7 @@
 #include "Core/Platform/PlatformFontDiscovery.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Presentation/EditorUiEvents.hpp"
+#include "Events/EditorUiEvents.hpp"
 #include "Presentation/EditorUiState.hpp"
 
 namespace DefectStudio

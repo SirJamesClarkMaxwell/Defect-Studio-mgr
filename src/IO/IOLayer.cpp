@@ -19,7 +19,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "IO/TextFileIO.hpp"
-#include "Presentation/EditorUiEvents.hpp"
+#include "Events/EditorUiEvents.hpp"
 
 namespace DefectStudio
 {
