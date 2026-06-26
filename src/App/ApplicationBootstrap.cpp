@@ -894,6 +894,7 @@ namespace DefectStudio
 		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
 		auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock();
 		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
+		auto rendererLayer = m_LayerStack.FindLayerAs<RendererLayer>(LayerId::Renderer);
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
@@ -933,7 +934,8 @@ namespace DefectStudio
 					coreLayer->GetCommandServiceHandle(),
 					coreLayer->GetKeymapResolverHandle(),
 					coreLayer->GetContextManagerHandle(),
-					coreLayer->GetCommandRegistryHandle());
+					coreLayer->GetCommandRegistryHandle(),
+					rendererLayer);
 				timer.Finish(true);
 			}
 			{

@@ -42,12 +42,26 @@ namespace DefectStudio
 
 	}
 
-	RendererPanel::RendererPanel(RendererLayer &layer)
-		: m_Layer(layer)
+	RendererPanel::RendererPanel(RendererLayer &layer, std::string title, bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault),
+		  m_Layer(layer)
 	{
 	}
 
-	void RendererPanel::Render(float deltaTime)
+	Ref<IPanel> RendererPanel::Clone() const
+	{
+		return CreateRef<RendererPanel>(*this);
+	}
+
+	void RendererPanel::Render()
+	{
+		if (!IsVisible())
+			return;
+
+		render(m_Layer.GetLastDeltaTime());
+	}
+
+	void RendererPanel::render(float deltaTime)
 	{
 		if (!m_Layer.IsAttached())
 			return;

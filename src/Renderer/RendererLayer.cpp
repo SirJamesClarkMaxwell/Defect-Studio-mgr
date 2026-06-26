@@ -6,7 +6,6 @@
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Assert.hpp"
-#include "Presentation/Panels/RendererPanel.hpp"
 
 #include <algorithm>
 #include <array>
@@ -232,7 +231,6 @@ namespace DefectStudio
 	RendererLayer::RendererLayer(RendererStartupConfig startupConfig)
 		: Layer("RendererLayer"), m_StartupConfig(std::move(startupConfig))
 	{
-		m_Panel = CreateUnique<RendererPanel>(*this);
 	}
 
 	RendererLayer::~RendererLayer() = default;
@@ -271,6 +269,11 @@ namespace DefectStudio
 	bool RendererLayer::IsAttached() const noexcept
 	{
 		return m_Attached;
+	}
+
+	float RendererLayer::GetLastDeltaTime() const noexcept
+	{
+		return m_LastDeltaTime;
 	}
 
 	const RendererToolbarIconTexture *RendererLayer::GetToolbarIcon(const std::string &fileName) const
@@ -480,10 +483,6 @@ namespace DefectStudio
 
 	void RendererLayer::OnImGuiRender()
 	{
-		if (!m_Attached || m_RendererBackend == nullptr || m_Panel == nullptr)
-			return;
-
-		m_Panel->Render(m_LastDeltaTime);
 	}
 
 	void RendererLayer::ApplyConfig(const ApplicationConfig &config)

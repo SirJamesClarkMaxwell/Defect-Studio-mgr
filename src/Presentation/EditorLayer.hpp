@@ -24,6 +24,7 @@ namespace DefectStudio
 	class CommandRegistry;
 	class ContextManager;
 	class KeymapResolver;
+	class RendererLayer;
 	struct CommandID;
 	struct ApplicationConfig;
 
@@ -48,7 +49,8 @@ namespace DefectStudio
 		                         WeakRef<CommandService> commandService,
 		                         WeakRef<KeymapResolver> keymapResolver,
 		                         WeakRef<ContextManager> contextManager,
-		                         WeakRef<CommandRegistry> commandRegistry);
+		                         WeakRef<CommandRegistry> commandRegistry,
+		                         WeakRef<RendererLayer> rendererLayer);
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 		void ApplyConfig(const ApplicationConfig &config);
 		void ExportConfig(ApplicationConfig &config) const;
@@ -93,6 +95,7 @@ namespace DefectStudio
 		WeakRef<KeymapResolver> m_KeymapResolver;
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
+		WeakRef<RendererLayer> m_RendererLayer;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;
 		bool m_CommandPaletteOpenRequested = false;

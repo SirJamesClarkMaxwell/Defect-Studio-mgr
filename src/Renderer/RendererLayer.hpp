@@ -21,7 +21,6 @@ namespace DefectStudio
 {
 	class OpenGlRendererBackend;
 	class RendererViewCamera;
-	class RendererPanel;
 	class EventBus;
 	struct ApplicationConfig;
 
@@ -65,6 +64,7 @@ namespace DefectStudio
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
 		[[nodiscard]] const RendererGlobalRenderSettings &GetGlobalSettings() const;
 		[[nodiscard]] bool IsAttached() const noexcept;
+		[[nodiscard]] float GetLastDeltaTime() const noexcept;
 		[[nodiscard]] const RendererToolbarIconTexture *GetToolbarIcon(const std::string &fileName) const;
 		[[nodiscard]] const std::vector<std::string> &GetPeriodicTableSymbols() const;
 		[[nodiscard]] const std::vector<std::string> &GetLanthanideSymbols() const;
@@ -111,7 +111,6 @@ namespace DefectStudio
 		std::vector<std::string> m_LanthanideSymbols;
 		std::vector<std::string> m_ActinideSymbols;
 		RendererGlobalRenderSettings m_GlobalRenderSettings;
-		Unique<RendererPanel> m_Panel;
 		mutable std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
 		std::string m_SelectedPeriodicElement = "C";
 		bool m_ShowPeriodicTableWindow = true;

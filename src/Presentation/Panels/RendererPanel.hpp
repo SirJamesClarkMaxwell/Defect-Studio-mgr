@@ -1,17 +1,25 @@
 #pragma once
 
+#include <string>
+
+#include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
-	class RendererPanel
+	class RendererPanel final : public IPanel
 	{
 	public:
-		explicit RendererPanel(RendererLayer &layer);
+		explicit RendererPanel(
+			RendererLayer &layer,
+			std::string title = "Renderer",
+			bool visibleByDefault = true);
 
-		void Render(float deltaTime);
+		void Render() override;
+		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
+		void render(float deltaTime);
 		void renderStructureWindow(RendererWindowState &windowState, float deltaTime);
 		void drawViewportToolbar(RendererWindowState &windowState);
 		void applyViewportKeyboardNavigation(RendererWindowState &windowState);

@@ -24,96 +24,96 @@
 #include "Core/Utils/Path.hpp"
 #include "Presentation/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 
 namespace DefectStudio
 {
-	namespace
+
+	template <typename EventType>
+	SubscriptionHandle subscribeEditorLayer(
+		EventBus &bus,
+		EditorLayer &layer,
+		void (EditorLayer::*method)(const EventType &),
+		EventPriority priority = EventPriority::Normal)
 	{
-		template <typename EventType>
-		SubscriptionHandle subscribeEditorLayer(
-			EventBus &bus,
-			EditorLayer &layer,
-			void (EditorLayer::*method)(const EventType &),
-			EventPriority priority = EventPriority::Normal)
-		{
-			return bus.Subscribe<EventType>(std::bind_front(method, &layer), priority);
-		}
-
-		struct PaletteCommandRow
-		{
-			CommandID id;
-			std::string name;
-			std::string category;
-			std::string description;
-			std::string shortcut;
-			bool enabled = true;
-		};
-
-		struct PaletteInputState
-		{
-			int navigationDelta = 0;
-		};
-
-		[[nodiscard]] std::string toLowerCopy(std::string_view value)
-		{
-			std::string result(value);
-			std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) {
-				return static_cast<char>(std::tolower(ch));
-			});
-			return result;
-		}
-
-		[[nodiscard]] bool containsIgnoreCase(std::string_view haystack, std::string_view needle)
-		{
-			if (needle.empty())
-				return true;
-			const std::string lowerHaystack = toLowerCopy(haystack);
-			const std::string lowerNeedle = toLowerCopy(needle);
-			return lowerHaystack.find(lowerNeedle) != std::string::npos;
-		}
-
-		[[nodiscard]] std::string findShortcutForCommand(
-			const CommandID &id,
-			const KeymapResolver *resolver,
-			const ContextManager *contextManager)
-		{
-			if (resolver == nullptr)
-				return {};
-
-			ContextManager emptyContext;
-			const ContextManager &activeContext = contextManager == nullptr ? emptyContext : *contextManager;
-			for (const KeyBinding &binding : resolver->ListBindings())
-			{
-				if (!binding.enabled || binding.commandId.value != id.value || !binding.when.Matches(activeContext))
-					continue;
-				return ToString(binding.chord);
-			}
-			return {};
-		}
-
-		[[nodiscard]] bool matchesPaletteQuery(const PaletteCommandRow &row, std::string_view query)
-		{
-			return containsIgnoreCase(row.name, query)
-				|| containsIgnoreCase(row.category, query)
-				|| containsIgnoreCase(row.description, query)
-				|| containsIgnoreCase(row.id.value, query)
-				|| containsIgnoreCase(row.shortcut, query);
-		}
-
-		int commandPaletteInputCallback(ImGuiInputTextCallbackData *data)
-		{
-			auto *state = static_cast<PaletteInputState *>(data->UserData);
-			if (state == nullptr || data->EventFlag != ImGuiInputTextFlags_CallbackHistory)
-				return 0;
-
-			if (data->EventKey == ImGuiKey_UpArrow)
-				state->navigationDelta = -1;
-			else if (data->EventKey == ImGuiKey_DownArrow)
-				state->navigationDelta = 1;
-			return 0;
-		}
+		return bus.Subscribe<EventType>(std::bind_front(method, &layer), priority);
 	}
+
+	struct PaletteCommandRow
+	{
+		CommandID id;
+		std::string name;
+		std::string category;
+		std::string description;
+		std::string shortcut;
+		bool enabled = true;
+	};
+
+	struct PaletteInputState
+	{
+		int navigationDelta = 0;
+	};
+
+	[[nodiscard]] std::string toLowerCopy(std::string_view value)
+	{
+		std::string result(value);
+		std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) {
+			return static_cast<char>(std::tolower(ch));
+		});
+		return result;
+	}
+
+	[[nodiscard]] bool containsIgnoreCase(std::string_view haystack, std::string_view needle)
+	{
+		if (needle.empty())
+			return true;
+		const std::string lowerHaystack = toLowerCopy(haystack);
+		const std::string lowerNeedle = toLowerCopy(needle);
+		return lowerHaystack.find(lowerNeedle) != std::string::npos;
+	}
+
+	[[nodiscard]] std::string findShortcutForCommand(
+		const CommandID &id,
+		const KeymapResolver *resolver,
+		const ContextManager *contextManager)
+	{
+		if (resolver == nullptr)
+			return {};
+
+		ContextManager emptyContext;
+		const ContextManager &activeContext = contextManager == nullptr ? emptyContext : *contextManager;
+		for (const KeyBinding &binding : resolver->ListBindings())
+		{
+			if (!binding.enabled || binding.commandId.value != id.value || !binding.when.Matches(activeContext))
+				continue;
+			return ToString(binding.chord);
+		}
+		return {};
+	}
+
+	[[nodiscard]] bool matchesPaletteQuery(const PaletteCommandRow &row, std::string_view query)
+	{
+		return containsIgnoreCase(row.name, query)
+			|| containsIgnoreCase(row.category, query)
+			|| containsIgnoreCase(row.description, query)
+			|| containsIgnoreCase(row.id.value, query)
+			|| containsIgnoreCase(row.shortcut, query);
+	}
+
+	int commandPaletteInputCallback(ImGuiInputTextCallbackData *data)
+	{
+		auto *state = static_cast<PaletteInputState *>(data->UserData);
+		if (state == nullptr || data->EventFlag != ImGuiInputTextFlags_CallbackHistory)
+			return 0;
+
+		if (data->EventKey == ImGuiKey_UpArrow)
+			state->navigationDelta = -1;
+		else if (data->EventKey == ImGuiKey_DownArrow)
+			state->navigationDelta = 1;
+		return 0;
+	}
+
 
 	EditorLayer::EditorLayer() : Layer("EditorLayer")
 	{
@@ -126,7 +126,8 @@ namespace DefectStudio
 	                                      WeakRef<CommandService> commandService,
 	                                      WeakRef<KeymapResolver> keymapResolver,
 	                                      WeakRef<ContextManager> contextManager,
-	                                      WeakRef<CommandRegistry> commandRegistry)
+	                                      WeakRef<CommandRegistry> commandRegistry,
+	                                      WeakRef<RendererLayer> rendererLayer)
 	{
 		m_EventBus = std::move(eventBus);
 		m_LogRegistry = std::move(logRegistry);
@@ -136,6 +137,7 @@ namespace DefectStudio
 		m_KeymapResolver = std::move(keymapResolver);
 		m_ContextManager = std::move(contextManager);
 		m_CommandRegistry = std::move(commandRegistry);
+		m_RendererLayer = std::move(rendererLayer);
 		bindConfigEvents();
 		DS_LOG_INFO(
 			"EditorLayer runtime services bound: event_bus={} job_system={} progress_tracker={}",
@@ -207,6 +209,7 @@ namespace DefectStudio
 		m_KeymapResolver.reset();
 		m_ContextManager.reset();
 		m_CommandRegistry.reset();
+		m_RendererLayer.reset();
 		m_UiState.reset();
 		m_CurrentConfig.reset();
 	}
@@ -244,6 +247,8 @@ namespace DefectStudio
 		registerPanel<ProgressMonitorWindow>(m_EventBus, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_EventBus, m_JobSystem, "Task Monitor", true);
 		registerPanel<LoggingPanel>(m_LogRegistry, "Logging Panel", true);
+		if (auto rendererLayer = m_RendererLayer.lock())
+			registerPanel<RendererPanel>(*rendererLayer, "Renderer", true);
 		registerPanel<SettingsPanel>(
 			m_EventBus,
 			m_JobSystem,
