@@ -23,7 +23,8 @@ namespace DefectStudio
         const std::string loggerName = (msg.logger_name.size() > 0) ? std::string(msg.logger_name.data(), msg.logger_name.size()) : std::string();
         Time::TimePoint ts = Time::Now();
 
-        m_EventBus->Publish(LogEvent(level, loggerName, message, ts));
+        LogEvent event(level, loggerName, message, ts);
+        m_EventBus->Publish(event);
     }
 
     void SpdlogEventSink::flush_()

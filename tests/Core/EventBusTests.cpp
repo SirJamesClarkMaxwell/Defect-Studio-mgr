@@ -38,7 +38,7 @@ TEST(EventBusTests, SubscriptionHandleDestructorUnsubscribes)
 		EXPECT_TRUE(handle.IsValid());
 	}
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 0);
 }
 
@@ -54,7 +54,7 @@ TEST(EventBusTests, MoveAssignTransfersSubscription)
 	EXPECT_FALSE(handleA.IsValid());
 	EXPECT_TRUE(handleB.IsValid());
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 1);
 }
 
@@ -67,7 +67,7 @@ TEST(EventBusTests, PublishDeliversToAllSubscribers)
 	handles.push_back(bus->Subscribe<TestEvent>([&callCount](const TestEvent &) { ++callCount; }));
 	handles.push_back(bus->Subscribe<TestEvent>([&callCount](const TestEvent &) { ++callCount; }));
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 2);
 }
 
@@ -84,7 +84,7 @@ TEST(EventBusTests, PriorityOrderIsHighestFirst)
 	handles.push_back(bus->Subscribe<TestEvent>([&order](const TestEvent &) { order.push_back(3); },
 	                                          DefectStudio::EventPriority::Low));
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 
 	const std::vector<int> expected = {1, 2, 3};
 	EXPECT_EQ(order, expected);
@@ -101,7 +101,7 @@ TEST(EventBusTests, EqualPriorityPreservesSubscriptionOrder)
 	handles.push_back(bus->Subscribe<TestEvent>([&order](const TestEvent &) { order.push_back(2); },
 	                                          DefectStudio::EventPriority::Normal));
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 
 	const std::vector<int> expected = {1, 2};
 	EXPECT_EQ(order, expected);
@@ -115,11 +115,11 @@ TEST(EventBusTests, StopPropagationPreventsRemainingHandlers)
 
 	handles.push_back(bus->Subscribe<TestEvent>([&callCount](const TestEvent &event) {
 		++callCount;
-		const_cast<TestEvent &>(event).stopPropagation = true;
+		event.stopPropagation = true;
 	}));
 	handles.push_back(bus->Subscribe<TestEvent>([&callCount](const TestEvent &) { ++callCount; }));
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 1);
 }
 
@@ -131,11 +131,11 @@ TEST(EventBusTests, HandledFlagDoesNotStopPropagation)
 
 	handles.push_back(bus->Subscribe<TestEvent>([&callCount](const TestEvent &event) {
 		++callCount;
-		const_cast<TestEvent &>(event).handled = true;
+		event.handled = true;
 	}));
 	handles.push_back(bus->Subscribe<TestEvent>([&callCount](const TestEvent &) { ++callCount; }));
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 2);
 }
 
@@ -152,7 +152,7 @@ TEST(EventBusTests, UnsubscribeDuringDispatchDefersRemoval)
 	});
 	handleB = bus->Subscribe<TestEvent>([&callCount](const TestEvent &) { ++callCount; });
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 1);
 }
 
@@ -172,11 +172,11 @@ TEST(EventBusTests, SubscriberAddedDuringDispatchNotCalledSameCycle)
 		}
 	});
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(firstCount, 1);
 	EXPECT_EQ(secondCount, 0);
 
-	bus->Publish(TestEvent{2});
+	bus->PublishNew<TestEvent>(2);
 	EXPECT_EQ(secondCount, 1);
 }
 
@@ -192,10 +192,10 @@ TEST(EventBusTests, ClearAllListenersDuringDispatchDefersRemoval)
 	}));
 	handles.push_back(bus->Subscribe<TestEvent>([&](const TestEvent &) { ++callCount; }));
 
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_EQ(callCount, 2);
 
-	bus->Publish(TestEvent{2});
+	bus->PublishNew<TestEvent>(2);
 	EXPECT_EQ(callCount, 2);
 }
 
@@ -265,7 +265,7 @@ TEST(EventBusTests, IsDispatchingReflectsPublishScope)
 	handle = bus->Subscribe<TestEvent>([&](const TestEvent &) { observedDispatching = bus->IsDispatching(); });
 
 	EXPECT_FALSE(bus->IsDispatching());
-	bus->Publish(TestEvent{1});
+	bus->PublishNew<TestEvent>(1);
 	EXPECT_TRUE(observedDispatching);
 	EXPECT_FALSE(bus->IsDispatching());
 }

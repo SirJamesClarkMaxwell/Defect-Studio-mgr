@@ -30,6 +30,8 @@ namespace DefectStudio
 				return spdlog::level::err;
 			case LogLevel::Critical:
 				return spdlog::level::critical;
+			case LogLevel::Count:
+				break;
 		}
 
 		return spdlog::level::info;
@@ -51,6 +53,8 @@ namespace DefectStudio
 				return "error";
 			case LogLevel::Critical:
 				return "critical";
+			case LogLevel::Count:
+				break;
 		}
 
 		return "info";

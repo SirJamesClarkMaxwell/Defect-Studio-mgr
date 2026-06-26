@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Core/Logging/LogRegistry.hpp"
@@ -32,14 +33,10 @@ namespace DefectStudio
 		[[nodiscard]] static const char *categoryIcon(LogCategory category);
 
 	private:
-		static constexpr std::size_t SeverityFilterCount = 6;
-
 		Ref<LogRegistry> m_LogRegistry;
 		std::vector<LogEntry> m_Entries;
-		std::array<bool, static_cast<std::size_t>(LogCategory::Count)> m_CategoryEnabled = {
-			true, true, true, true, true, true, true, true, true, true, true, true
-		};
-		std::array<bool, SeverityFilterCount> m_SeverityEnabled = {true, true, true, true, true, true};
+		std::array<bool, static_cast<std::size_t>(LogLevel::Count)> m_ShowLevel{};
+		std::unordered_map<LogCategory, bool> m_ShowCategory;
 		bool m_Paused = false;
 		bool m_AutoScroll = true;
 		std::string m_LastExportStatus;

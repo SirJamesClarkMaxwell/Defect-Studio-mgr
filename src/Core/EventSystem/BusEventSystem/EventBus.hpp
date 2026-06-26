@@ -68,7 +68,7 @@ namespace DefectStudio
 		SubscriptionHandle Subscribe(THandler &&handler, EventPriority priority = EventPriority::Normal);
 
 		template <BusEventType TEvent>
-		void Publish(const TEvent &event);
+		void Publish(TEvent &event);
 
 		template <BusEventType TEvent, typename... TArgs>
 		void PublishNew(TArgs &&...args); // Convenience: construct the event inline and publish immediately.
@@ -163,9 +163,9 @@ namespace DefectStudio
 	}
 
 	template <BusEventType TEvent>
-	void EventBus::Publish(const TEvent &event)
+	void EventBus::Publish(TEvent &event)
 	{
-		dispatchByType(GetTypeId(std::type_index(typeid(TEvent))), const_cast<TEvent &>(event));
+		dispatchByType(GetTypeId(std::type_index(typeid(TEvent))), event);
 	}
 
 	template <BusEventType TEvent, typename... TArgs>

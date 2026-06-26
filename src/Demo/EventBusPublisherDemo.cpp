@@ -22,7 +22,8 @@ namespace DefectStudio::Demo
 		if (ImGui::Button("Publish FileOpened"))
 		{
 			++m_PublishedFileEvents;
-			m_Bus->Publish(FileOpenedBusEvent{buildFileName()});
+			FileOpenedBusEvent event{buildFileName()};
+			m_Bus->Publish(event);
 		}
 
 		if (ImGui::Button("Publish DataProcessed"))
@@ -34,7 +35,8 @@ namespace DefectStudio::Demo
 		if (ImGui::Button("Publish Pipeline Status"))
 		{
 			++m_PublishedPipelineEvents;
-			m_Bus->Publish(PipelineStatusBusEvent{"pipeline heartbeat #" + std::to_string(m_PublishedPipelineEvents)});
+			PipelineStatusBusEvent event{"pipeline heartbeat #" + std::to_string(m_PublishedPipelineEvents)};
+			m_Bus->Publish(event);
 		}
 
 		ImGui::Separator();

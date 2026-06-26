@@ -427,7 +427,8 @@ namespace DefectStudio
 			return;
 		}
 
-		m_EventBus->Publish(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, layoutPath, {}});
+		EditorUiEvents::PersistRequested event{EditorUiEvents::PersistKind::Layout, layoutPath, {}};
+		m_EventBus->Publish(event);
 	}
 
 	void ImGuiLayer::applyUiConfigToContext() const
@@ -480,7 +481,8 @@ namespace DefectStudio
 		std::size_t size = 0;
 		const char *data = ImGui::SaveIniSettingsToMemory(&size);
 		std::string contents = (data != nullptr && size > 0) ? std::string(data, size) : std::string{};
-		m_EventBus->Publish(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, layoutPath, std::move(contents)});
+		EditorUiEvents::PersistRequested event{EditorUiEvents::PersistKind::Layout, layoutPath, std::move(contents)};
+		m_EventBus->Publish(event);
 
 		DS_LOG_INFO("ImGui layout persistence requested: {} bytes={}", layoutPath.String(), size);
 	}

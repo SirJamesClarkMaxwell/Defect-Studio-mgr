@@ -47,39 +47,24 @@ namespace DefectStudio
 					return ImVec4(0.95f, 0.7f, 0.2f, 1.0f);
 				case LogLevel::Error:
 					return ImVec4(0.95f, 0.2f, 0.2f, 1.0f);
-				case LogLevel::Critical:
-					return ImVec4(1.0f, 0.15f, 0.15f, 1.0f);
-			}
+			case LogLevel::Critical:
+				return ImVec4(1.0f, 0.15f, 0.15f, 1.0f);
+			case LogLevel::Count:
+				break;
+		}
 
 			return ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
 		}
 
-		std::size_t severityIndex(LogLevel level)
-		{
-			switch (level)
-			{
-				case LogLevel::Trace:
-					return 0;
-				case LogLevel::Debug:
-					return 1;
-				case LogLevel::Info:
-					return 2;
-				case LogLevel::Warn:
-					return 3;
-				case LogLevel::Error:
-					return 4;
-				case LogLevel::Critical:
-					return 5;
-			}
-
-			return 2;
-		}
 	} // namespace
 
 	LoggingPanel::LoggingPanel(Ref<LogRegistry> logRegistry, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_LogRegistry(std::move(logRegistry))
 	{
+		m_ShowLevel.fill(true);
+		for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i)
+			m_ShowCategory[static_cast<LogCategory>(i)] = true;
 		rebuildFromRegistry();
 	}
 
@@ -87,8 +72,8 @@ namespace DefectStudio
 		: IPanel(other.GetTitle(), other.IsVisible()),
 		  m_LogRegistry(other.m_LogRegistry),
 		  m_Entries(other.m_Entries),
-		  m_CategoryEnabled(other.m_CategoryEnabled),
-		  m_SeverityEnabled(other.m_SeverityEnabled),
+		  m_ShowLevel(other.m_ShowLevel),
+		  m_ShowCategory(other.m_ShowCategory),
 		  m_Paused(other.m_Paused),
 		  m_AutoScroll(other.m_AutoScroll),
 		  m_LastExportStatus(other.m_LastExportStatus)
@@ -165,19 +150,12 @@ namespace DefectStudio
 		ImGui::SameLine();
 		ImGui::TextUnformatted("Sev:");
 		ImGui::SameLine();
-		ImGui::Checkbox("Trace", &m_SeverityEnabled[0]);
-		ImGui::SameLine();
-		ImGui::Checkbox("Debug", &m_SeverityEnabled[1]);
-		ImGui::SameLine();
-		ImGui::Checkbox("Info", &m_SeverityEnabled[2]);
-		ImGui::SameLine();
-		ImGui::Checkbox("Warn", &m_SeverityEnabled[3]);
-		ImGui::SameLine();
-		ImGui::Checkbox("Error", &m_SeverityEnabled[4]);
-		ImGui::SameLine();
-		ImGui::Checkbox("Critical", &m_SeverityEnabled[5]);
-
-		ImGui::SameLine();
+		for (std::size_t i = 0; i < m_ShowLevel.size(); ++i)
+		{
+			const auto level = static_cast<LogLevel>(i);
+			ImGui::Checkbox(ToString(level), &m_ShowLevel[i]);
+			ImGui::SameLine();
+		}
 		ImGui::Checkbox("Auto-scroll", &m_AutoScroll);
 
 		ImGui::SameLine();
@@ -195,10 +173,9 @@ namespace DefectStudio
 		for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i)
 		{
 			const auto category = static_cast<LogCategory>(i);
-			bool enabled = m_CategoryEnabled[static_cast<std::size_t>(category)];
+			bool &enabled = m_ShowCategory[category];
 			std::string label = std::string(categoryIcon(category)) + " " + ToString(category);
-			if (ImGui::Checkbox(label.c_str(), &enabled))
-				m_CategoryEnabled[static_cast<std::size_t>(category)] = enabled;
+			ImGui::Checkbox(label.c_str(), &enabled);
 		}
 	}
 
@@ -272,14 +249,15 @@ namespace DefectStudio
 
 	bool LoggingPanel::isCategoryEnabled(LogCategory category) const
 	{
-		const auto index = static_cast<std::size_t>(category);
-		return index < m_CategoryEnabled.size() && m_CategoryEnabled[index];
+		if (const auto it = m_ShowCategory.find(category); it != m_ShowCategory.end())
+			return it->second;
+		return false;
 	}
 
 	bool LoggingPanel::isSeverityEnabled(LogLevel level) const
 	{
-		const auto index = severityIndex(level);
-		return index < m_SeverityEnabled.size() && m_SeverityEnabled[index];
+		const auto index = static_cast<std::size_t>(level);
+		return index < m_ShowLevel.size() && m_ShowLevel[index];
 	}
 
 	const char *LoggingPanel::severityIcon(LogLevel level)
@@ -298,6 +276,8 @@ namespace DefectStudio
 				return ICON_FA_CIRCLE_XMARK;
 			case LogLevel::Critical:
 				return ICON_FA_SKULL;
+			case LogLevel::Count:
+				break;
 		}
 
 		return ICON_FA_CIRCLE_INFO;

@@ -5,8 +5,8 @@ namespace DefectStudio
 	// Common control flags shared by both event lanes.
 	struct EventControl
 	{
-		bool handled = false;
-		bool stopPropagation = false;
+		mutable bool handled = false;
+		mutable bool stopPropagation = false;
 
 		void ResetPropagation()
 		{

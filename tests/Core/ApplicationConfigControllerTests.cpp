@@ -80,7 +80,8 @@ TEST(ApplicationConfigControllerTests, ApplyRequestUpdatesRuntimeConfigAndPublis
 	requested.eventQueue.growthStep = 32;
 	requested.layout.imGuiIniPath.clear();
 
-	eventBus->Publish(DefectStudio::AppEvents::Config::ApplyRequested{requested, false});
+	DefectStudio::AppEvents::Config::ApplyRequested applyRequested{requested, false};
+	eventBus->Publish(applyRequested);
 
 	EXPECT_EQ(runtimeConfig.directory.String(), configManager->GetConfigDirectory().String());
 	EXPECT_EQ(runtimeConfig.window.width, 320);
@@ -140,7 +141,8 @@ TEST(ApplicationConfigControllerTests, SaveRequestsPersistAndPublishStatusEvents
 	DefectStudio::ApplicationConfig userConfig = runtimeConfig;
 	userConfig.window.title = "User Controller Save";
 	userConfig.window.width = 1444;
-	eventBus->Publish(DefectStudio::AppEvents::Config::SaveUserRequested{userConfig});
+	DefectStudio::AppEvents::Config::SaveUserRequested saveUserRequested{userConfig};
+	eventBus->Publish(saveUserRequested);
 	eventBus->ProcessQueue();
 	eventBus->ProcessQueue();
 
@@ -151,7 +153,8 @@ TEST(ApplicationConfigControllerTests, SaveRequestsPersistAndPublishStatusEvents
 
 	DefectStudio::ApplicationConfig defaultConfig = runtimeConfig;
 	defaultConfig.window.title = "Default Controller Save";
-	eventBus->Publish(DefectStudio::AppEvents::Config::SaveDefaultsRequested{defaultConfig});
+	DefectStudio::AppEvents::Config::SaveDefaultsRequested saveDefaultsRequested{defaultConfig};
+	eventBus->Publish(saveDefaultsRequested);
 	eventBus->ProcessQueue();
 	eventBus->ProcessQueue();
 
@@ -192,8 +195,10 @@ TEST(IOLayerPersistenceTests, PersistsLayoutAndThemeTextFromEvents)
 	(void)layoutSavedSubscription;
 	(void)themeSavedSubscription;
 
-		eventBus->Publish(DefectStudio::EditorUiEvents::PersistRequested{DefectStudio::EditorUiEvents::PersistKind::Layout, layoutPath, layoutText});
-		eventBus->Publish(DefectStudio::EditorUiEvents::PersistRequested{DefectStudio::EditorUiEvents::PersistKind::Theme, themePath, themeText});
+	DefectStudio::EditorUiEvents::PersistRequested persistLayout{DefectStudio::EditorUiEvents::PersistKind::Layout, layoutPath, layoutText};
+	eventBus->Publish(persistLayout);
+	DefectStudio::EditorUiEvents::PersistRequested persistTheme{DefectStudio::EditorUiEvents::PersistKind::Theme, themePath, themeText};
+	eventBus->Publish(persistTheme);
 	eventBus->ProcessQueue();
 
 	EXPECT_TRUE(layoutSaved);

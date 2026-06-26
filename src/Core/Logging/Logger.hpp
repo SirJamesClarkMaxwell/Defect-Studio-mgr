@@ -24,7 +24,8 @@ namespace DefectStudio
 		Info,
 		Warn,
 		Error,
-		Critical
+		Critical,
+		Count
 	};
 
 	enum class LogCategory
