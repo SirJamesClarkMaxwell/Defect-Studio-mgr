@@ -167,6 +167,11 @@ namespace DefectStudio
 		m_EventBus = std::move(eventBus);
 	}
 
+	Ref<EventBus> RendererLayer::GetEventBus() const
+	{
+		return m_EventBus;
+	}
+
 	std::vector<RendererWindowState> &RendererLayer::GetWindows()
 	{
 		return m_Windows;

@@ -54,6 +54,7 @@ namespace DefectStudio
 		void OnImGuiRender() override;
 		void ApplyConfig(const ApplicationConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
+		[[nodiscard]] Ref<EventBus> GetEventBus() const;
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();

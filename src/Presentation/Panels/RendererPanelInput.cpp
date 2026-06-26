@@ -4,7 +4,9 @@
 #include <cmath>
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "Events/RendererEvents.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 namespace DefectStudio
 {
@@ -240,6 +242,7 @@ namespace DefectStudio
 		(void)imageOrigin;
 		if (windowState.camera == nullptr)
 			return;
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
 		ImGuiIO &io = ImGui::GetIO();
 		const bool mmb = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 		const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -269,7 +272,13 @@ namespace DefectStudio
 		{
 			beginViewInteraction(windowState, "mouse.wheel_zoom");
 			windowState.transitionActive = false;
-			windowState.camera->Zoom(wheel * m_Layer.GetGlobalSettings().zoomSensitivity);
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::ZoomDelta zoomEvent;
+				zoomEvent.windowId = windowState.windowId;
+				zoomEvent.amount = wheel * m_Layer.GetGlobalSettings().zoomSensitivity;
+				eventBus->Publish(zoomEvent);
+			}
 			commitViewInteraction(windowState);
 		}
 		if (!dragActiveInput)
@@ -295,20 +304,35 @@ namespace DefectStudio
 		delta.y *= frameScale;
 		if (touchpadZoom)
 		{
-			windowState.camera->Zoom(
-				(-delta.y * 0.020f) * m_Layer.GetGlobalSettings().zoomSensitivity);
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::ZoomDelta zoomEvent;
+				zoomEvent.windowId = windowState.windowId;
+				zoomEvent.amount = (-delta.y * 0.020f) * m_Layer.GetGlobalSettings().zoomSensitivity;
+				eventBus->Publish(zoomEvent);
+			}
 			return;
 		}
 		if ((mmb && shiftPressed) || touchpadPan)
 		{
-			windowState.camera->Pan(
-				delta.x * m_Layer.GetGlobalSettings().panSensitivity,
-				delta.y * m_Layer.GetGlobalSettings().panSensitivity);
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::PanDelta panEvent;
+				panEvent.windowId = windowState.windowId;
+				panEvent.dx = delta.x * m_Layer.GetGlobalSettings().panSensitivity;
+				panEvent.dy = delta.y * m_Layer.GetGlobalSettings().panSensitivity;
+				eventBus->Publish(panEvent);
+			}
 			return;
 		}
-		windowState.camera->Orbit(
-			delta.x * m_Layer.GetGlobalSettings().orbitSensitivity,
-			delta.y * m_Layer.GetGlobalSettings().orbitSensitivity);
+		if (eventBus != nullptr)
+		{
+			RendererEvents::Viewport::OrbitDelta orbitEvent;
+			orbitEvent.windowId = windowState.windowId;
+			orbitEvent.dx = delta.x * m_Layer.GetGlobalSettings().orbitSensitivity;
+			orbitEvent.dy = delta.y * m_Layer.GetGlobalSettings().orbitSensitivity;
+			eventBus->Publish(orbitEvent);
+		}
 	}
 	void RendererPanel::beginViewInteraction(RendererWindowState &windowState, const char *sourceAction)
 	{

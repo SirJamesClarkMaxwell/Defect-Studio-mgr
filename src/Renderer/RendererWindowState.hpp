@@ -38,6 +38,7 @@ namespace DefectStudio
 		float pixelStepPx = 10.0f;
 		float percentStep = 10.0f;
 		bool dragActive = false;
+		bool lastFocusedState = false;
 		ImVec2 lastMousePosition = ImVec2(0.0f, 0.0f);
 		bool transitionActive = false;
 		float transitionElapsed = 0.0f;

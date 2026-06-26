@@ -11,7 +11,9 @@
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Logger.hpp"
+#include "Events/RendererEvents.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
@@ -76,6 +78,19 @@ namespace DefectStudio
 		updateCameraTransition(windowState, deltaTime);
 
 		const bool began = ImGui::Begin(windowState.title.c_str());
+		const bool nowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+		if (nowFocused != windowState.lastFocusedState)
+		{
+			windowState.lastFocusedState = nowFocused;
+			Ref<EventBus> eventBus = m_Layer.GetEventBus();
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::FocusChanged focusEvent;
+				focusEvent.windowId = windowState.windowId;
+				focusEvent.focused = nowFocused;
+				eventBus->Publish(focusEvent);
+			}
+		}
 		if (!began)
 		{
 			ImGui::End();
