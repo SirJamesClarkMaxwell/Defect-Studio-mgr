@@ -24,6 +24,7 @@ namespace DefectStudio
 
 	struct RendererWindowState
 	{
+		std::string windowId;
 		std::string title;
 		RendererStructureData structure;
 		Unique<RendererViewCamera> camera;

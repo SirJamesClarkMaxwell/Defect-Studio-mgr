@@ -9,6 +9,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
+#include "Events/RendererEvents.hpp"
 #include "Renderer/RendererMeshData.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererStartupDefinitions.hpp"
@@ -72,6 +73,11 @@ namespace DefectStudio
 		void loadDefaultWindows();
 		void bindConfigEvents();
 		void onConfigApplied(const AppEvents::Config::Applied &event);
+		void onOrbitDelta(const RendererEvents::Viewport::OrbitDelta &event);
+		void onPanDelta(const RendererEvents::Viewport::PanDelta &event);
+		void onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event);
+		void onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event);
+		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		void applyDefaultProjectionToWindows();
 		const RendererToolbarIconTexture *getToolbarIcon(const std::string &iconFileName) const;
 		void releaseToolbarIcons();

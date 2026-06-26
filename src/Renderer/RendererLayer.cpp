@@ -13,6 +13,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <string_view>
 #include <unordered_map>
 
@@ -266,7 +267,17 @@ namespace DefectStudio
 			m_Windows.clear();
 		applyDefaultProjectionToWindows();
 		if (m_EventBus != nullptr)
+		{
 			bindConfigEvents();
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitDelta>(
+				std::bind_front(&RendererLayer::onOrbitDelta, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::PanDelta>(
+				std::bind_front(&RendererLayer::onPanDelta, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ZoomDelta>(
+				std::bind_front(&RendererLayer::onZoomDelta, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::FocusChanged>(
+				std::bind_front(&RendererLayer::onViewportFocusChanged, this)));
+		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
 		DS_LOG_INFO("RendererLayer attached with {} quick-test windows", m_Windows.size());
@@ -494,6 +505,45 @@ namespace DefectStudio
 
 		AddSubscription(m_EventBus->Subscribe<AppEvents::Config::Applied>(
 			[this](const AppEvents::Config::Applied &event) { onConfigApplied(event); }));
+	}
+
+	RendererWindowState *RendererLayer::findWindowById(const std::string &windowId)
+	{
+		for (RendererWindowState &windowState : m_Windows)
+		{
+			if (windowState.windowId == windowId)
+				return &windowState;
+		}
+		return nullptr;
+	}
+
+	void RendererLayer::onOrbitDelta(const RendererEvents::Viewport::OrbitDelta &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+		windowState->camera->Orbit(event.dx, event.dy);
+	}
+
+	void RendererLayer::onPanDelta(const RendererEvents::Viewport::PanDelta &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+		windowState->camera->Pan(event.dx, event.dy);
+	}
+
+	void RendererLayer::onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+		windowState->camera->Zoom(event.amount);
+	}
+
+	void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event)
+	{
+		DS_LOG_TRACE("Renderer viewport '{}' focus: {}", event.windowId, event.focused);
 	}
 
 	void RendererLayer::onConfigApplied(const AppEvents::Config::Applied &event)

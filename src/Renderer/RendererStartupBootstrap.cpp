@@ -2,7 +2,12 @@
 
 #include "Renderer/RendererStartupBootstrap.hpp"
 
+#include <array>
 #include <chrono>
+#include <cstdint>
+#include <iomanip>
+#include <random>
+#include <sstream>
 
 #include <glm/geometric.hpp>
 
@@ -24,12 +29,35 @@ namespace DefectStudio
 		}
 	}
 
+	[[nodiscard]] static std::string GenerateRendererWindowId()
+	{
+		std::random_device randomDevice;
+		std::uniform_int_distribution<std::uint32_t> distribution(0, 255);
+		std::array<std::uint8_t, 16> bytes{};
+		for (std::uint8_t &byte : bytes)
+			byte = static_cast<std::uint8_t>(distribution(randomDevice));
+
+		bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0f) | 0x40);
+		bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3f) | 0x80);
+
+		std::ostringstream stream;
+		stream << std::hex << std::setfill('0');
+		for (std::size_t index = 0; index < bytes.size(); ++index)
+		{
+			if (index == 4 || index == 6 || index == 8 || index == 10)
+				stream << '-';
+			stream << std::setw(2) << static_cast<int>(bytes[index]);
+		}
+		return stream.str();
+	}
+
 	[[nodiscard]] static RendererWindowState BuildWindowFromStructure(
 		const RendererStartupWindowDefinition &definition,
 		RendererStructureData structure,
 		glm::vec3 direction)
 	{
 		RendererWindowState window;
+		window.windowId = GenerateRendererWindowId();
 		window.title = definition.title;
 		window.structure = std::move(structure);
 		window.camera = CreateUnique<RendererViewCamera>();
