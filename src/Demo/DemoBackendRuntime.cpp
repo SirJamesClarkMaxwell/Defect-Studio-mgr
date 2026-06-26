@@ -14,6 +14,7 @@
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/Notification.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Utils/Input.hpp"
@@ -382,42 +383,47 @@ namespace DefectStudio::Demo
 				CommandFlags::Undoable},
 			std::bind_front(&DemoBackendRuntime::createClearTokensCommand, this));
 
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		const auto registerBackendBinding = [this](KeyBinding binding) {
+			if (auto result = m_BackendKeymapResolver->RegisterBinding(std::move(binding)); !result)
+				DS_LOG_WARN("Keybinding registration failed: {}", result.Error().technicalDetails);
+		};
+
+		registerBackendBinding(KeyBinding{
 			"demo.increment.f6",
 			KeyChord{KeyCode::F6, KeyModifiers::None},
 			kCommandIncrement,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		registerBackendBinding(KeyBinding{
 			"demo.undo.f7",
 			KeyChord{KeyCode::F7, KeyModifiers::None},
 			kCommandUndo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		registerBackendBinding(KeyBinding{
 			"demo.redo.f8",
 			KeyChord{KeyCode::F8, KeyModifiers::None},
 			kCommandRedo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		registerBackendBinding(KeyBinding{
 			"demo.undo.ctrl_z",
 			KeyChord{KeyCode::Z, KeyModifiers::Ctrl},
 			kCommandUndo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		registerBackendBinding(KeyBinding{
 			"demo.redo.ctrl_y",
 			KeyChord{KeyCode::Y, KeyModifiers::Ctrl},
 			kCommandRedo,
 			ContextExpr{"demo.backend"},
 			KeymapLayer::WindowLocal,
 			true});
-		(void)m_BackendKeymapResolver->RegisterBinding(KeyBinding{
+		registerBackendBinding(KeyBinding{
 			"demo.redo.ctrl_shift_z",
 			KeyChord{KeyCode::Z, KeyModifiers::Ctrl | KeyModifiers::Shift},
 			kCommandRedo,

@@ -19,12 +19,6 @@ namespace DefectStudio
 		WindowLocal = 2
 	};
 
-	enum class KeyBindingConflictType
-	{
-		ExactChordAndContext,
-		PrefixReserved
-	};
-
 	struct KeyBinding
 	{
 		std::string id;
@@ -39,7 +33,6 @@ namespace DefectStudio
 	{
 		KeyBinding existingBinding;
 		KeyBinding newBinding;
-		KeyBindingConflictType type = KeyBindingConflictType::ExactChordAndContext;
 	};
 
 	struct RegisteredBinding
@@ -58,11 +51,10 @@ namespace DefectStudio
 
 		[[nodiscard]] std::optional<KeyBinding> Resolve(const KeyChord &chord, const ContextManager &contextManager) const;
 		[[nodiscard]] std::vector<KeyBinding> ListBindings() const;
+		[[nodiscard]] std::vector<KeyBinding> GetAllBindings() const;
 		[[nodiscard]] const std::vector<KeyBindingConflict> &GetConflicts() const noexcept;
 
 	private:
-		[[nodiscard]] bool HasConflict(const KeyBinding &binding, KeyBindingConflict &conflict) const;
-
 		std::vector<RegisteredBinding> m_Bindings;
 		std::vector<KeyBindingConflict> m_Conflicts;
 		std::size_t m_NextOrder = 1;

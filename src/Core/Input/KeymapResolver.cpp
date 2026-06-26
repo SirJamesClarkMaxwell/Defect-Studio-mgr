@@ -3,14 +3,10 @@
 #include "Core/Input/KeymapResolver.hpp"
 
 #include "Core/Input/ContextManager.hpp"
+#include "Core/Logging/Logger.hpp"
 
 namespace DefectStudio
 {
-	[[nodiscard]] static bool contextsOverlap(const ContextExpr &lhs, const ContextExpr &rhs)
-	{
-		return lhs.Empty() || rhs.Empty() || lhs.GetExpression() == rhs.GetExpression();
-	}
-
 	[[nodiscard]] static int layerPriority(KeymapLayer layer)
 	{
 		return static_cast<int>(layer);
@@ -61,15 +57,20 @@ namespace DefectStudio
 				"Normalize platform input before registering bindings.");
 		}
 
-		KeyBindingConflict conflict;
-		if (HasConflict(binding, conflict))
+		for (const RegisteredBinding &registered : m_Bindings)
 		{
-			m_Conflicts.push_back(conflict);
-			return makeKeymapError(
-				"keymap.register.conflict",
-				"Key binding conflicts with an existing shortcut.",
-				"Binding '" + binding.id + "' conflicts with '" + conflict.existingBinding.id + "' on " + ToString(binding.chord) + ".",
-				"Move one binding to a narrower context or choose a different chord.");
+			const KeyBinding &existing = registered.binding;
+			if (existing.chord == binding.chord
+				&& existing.when.GetExpression() == binding.when.GetExpression()
+				&& existing.layer == binding.layer)
+			{
+				m_Conflicts.push_back({existing, binding});
+				DS_LOG_WARN(
+					"KeyBinding conflict: '{}' conflicts with '{}' on chord '{}'",
+					binding.id,
+					existing.id,
+					ToString(binding.chord));
+			}
 		}
 
 		m_Bindings.push_back(RegisteredBinding{std::move(binding), m_NextOrder++});
@@ -114,25 +115,13 @@ namespace DefectStudio
 		return bindings;
 	}
 
+	std::vector<KeyBinding> KeymapResolver::GetAllBindings() const
+	{
+		return ListBindings();
+	}
+
 	const std::vector<KeyBindingConflict> &KeymapResolver::GetConflicts() const noexcept
 	{
 		return m_Conflicts;
-	}
-
-	bool KeymapResolver::HasConflict(const KeyBinding &binding, KeyBindingConflict &conflict) const
-	{
-		for (const RegisteredBinding &registered : m_Bindings)
-		{
-			const KeyBinding &existing = registered.binding;
-			if (existing.layer != binding.layer || !(existing.chord == binding.chord))
-				continue;
-
-			if (!contextsOverlap(existing.when, binding.when))
-				continue;
-
-			conflict = KeyBindingConflict{existing, binding, KeyBindingConflictType::ExactChordAndContext};
-			return true;
-		}
-		return false;
 	}
 } // namespace DefectStudio

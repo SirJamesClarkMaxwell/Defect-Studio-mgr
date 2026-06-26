@@ -1222,7 +1222,82 @@ namespace DefectStudio
 
 	void SettingsPanel::renderInputTab()
 	{
-		ImGui::TextDisabled("Input settings are currently handled by the key binding runtime.");
+		auto resolver = m_KeymapResolver.lock();
+		auto registry = m_CommandRegistry.lock();
+		if (!resolver)
+		{
+			ImGui::TextDisabled("KeymapResolver not available.");
+			return;
+		}
+
+		const auto &conflicts = resolver->GetConflicts();
+		if (!conflicts.empty())
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.65f, 0.2f, 1.0f));
+			ImGui::Text("Key binding conflicts: %zu", conflicts.size());
+			ImGui::PopStyleColor();
+			for (const KeyBindingConflict &conflict : conflicts)
+			{
+				ImGui::BulletText(
+					"%s conflicts with %s on %s",
+					conflict.newBinding.id.c_str(),
+					conflict.existingBinding.id.c_str(),
+					ToString(conflict.newBinding.chord).c_str());
+			}
+			ImGui::Separator();
+		}
+
+		const std::vector<KeyBinding> allBindings = resolver->GetAllBindings();
+		constexpr ImGuiTableFlags tableFlags =
+			ImGuiTableFlags_Borders |
+			ImGuiTableFlags_RowBg |
+			ImGuiTableFlags_ScrollY |
+			ImGuiTableFlags_SizingStretchProp;
+
+		if (!ImGui::BeginTable("##input_bindings_table", 4, tableFlags, ImVec2(0.0f, ImGui::GetContentRegionAvail().y)))
+			return;
+
+		ImGui::TableSetupScrollFreeze(0, 1);
+		ImGui::TableSetupColumn("Chord", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+		ImGui::TableSetupColumn("Command", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+		ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 0.5f);
+		ImGui::TableSetupColumn("Context", ImGuiTableColumnFlags_WidthStretch, 0.2f);
+		ImGui::TableHeadersRow();
+
+		for (const KeyBinding &binding : allBindings)
+		{
+			ImGui::TableNextRow();
+
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(ToString(binding.chord).c_str());
+
+			std::string commandName = binding.commandId.value;
+			std::string commandDescription;
+			if (registry)
+			{
+				auto meta = registry->GetMeta(binding.commandId);
+				if (meta)
+				{
+					commandName = meta->name;
+					commandDescription = meta->description;
+				}
+			}
+
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(commandName.c_str());
+
+			ImGui::TableNextColumn();
+			if (!commandDescription.empty())
+				ImGui::TextUnformatted(commandDescription.c_str());
+			else
+				ImGui::TextDisabled("-");
+
+			ImGui::TableNextColumn();
+			const std::string &context = binding.when.GetExpression();
+			ImGui::TextDisabled("%s", context.empty() ? "global" : context.c_str());
+		}
+
+		ImGui::EndTable();
 	}
 
 	void SettingsPanel::renderKeyBindingsTab()
