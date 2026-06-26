@@ -17,6 +17,8 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glad/gl.h>
 #include <stb_image.h>
 #include <yaml-cpp/yaml.h>
@@ -26,6 +28,7 @@
 #include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
+#include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {
@@ -91,6 +94,12 @@ namespace DefectStudio
 			if (value == "orthographic" || value == "ORTHO" || value == "ortho")
 				return CameraProjection::Orthographic;
 			return CameraProjection::Perspective;
+		}
+
+		float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
+		{
+			const float safeSpeed = std::max(0.1f, rotationSpeed);
+			return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
 		}
 
 		[[nodiscard]] std::string ToUpperAscii(std::string_view text)
@@ -321,6 +330,77 @@ namespace DefectStudio
 	std::string &RendererLayer::GetSelectedPeriodicElement()
 	{
 		return m_SelectedPeriodicElement;
+	}
+
+	void RendererLayer::BeginViewInteraction(const std::string &windowId, std::string sourceAction)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr || windowState->camera == nullptr || windowState->viewInteractionActive)
+			return;
+
+		windowState->viewInteractionActive = true;
+		windowState->viewInteractionSource = !sourceAction.empty()
+			? std::move(sourceAction)
+			: "view.change";
+		windowState->viewInteractionStart = captureViewSnapshot(*windowState);
+	}
+
+	void RendererLayer::CommitViewInteraction(const std::string &windowId)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr || !windowState->viewInteractionActive)
+			return;
+
+		const RendererViewSnapshot before = windowState->viewInteractionStart;
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		const std::string source = windowState->viewInteractionSource;
+		windowState->viewInteractionActive = false;
+		windowState->viewInteractionSource.clear();
+		pushViewChange(*windowState, before, after, source.c_str());
+	}
+
+	void RendererLayer::CancelViewInteraction(const std::string &windowId)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->viewInteractionActive = false;
+		windowState->viewInteractionSource.clear();
+	}
+
+	void RendererLayer::UndoViewChange(const std::string &windowId)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr)
+			return;
+
+		if (windowState->viewInteractionActive)
+			CommitViewInteraction(windowId);
+		if (windowState->viewUndoHistory.empty())
+			return;
+
+		RendererViewStateChange change = std::move(windowState->viewUndoHistory.back());
+		windowState->viewUndoHistory.pop_back();
+		restoreViewSnapshot(*windowState, change.before, "view.undo");
+		windowState->viewRedoHistory.push_back(std::move(change));
+	}
+
+	void RendererLayer::RedoViewChange(const std::string &windowId)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr)
+			return;
+
+		if (windowState->viewInteractionActive)
+			CancelViewInteraction(windowId);
+		if (windowState->viewRedoHistory.empty())
+			return;
+
+		RendererViewStateChange change = std::move(windowState->viewRedoHistory.back());
+		windowState->viewRedoHistory.pop_back();
+		restoreViewSnapshot(*windowState, change.after, "view.redo");
+		windowState->viewUndoHistory.push_back(std::move(change));
 	}
 
 	void RendererLayer::OnAttach()
@@ -613,12 +693,101 @@ namespace DefectStudio
 		return nullptr;
 	}
 
+	RendererViewSnapshot RendererLayer::captureViewSnapshot(const RendererWindowState &windowState) const
+	{
+		RendererViewSnapshot snapshot;
+		if (windowState.camera == nullptr)
+			return snapshot;
+
+		snapshot.target = windowState.camera->Target();
+		snapshot.distance = windowState.camera->Distance();
+		snapshot.yaw = windowState.camera->Yaw();
+		snapshot.pitch = windowState.camera->Pitch();
+		snapshot.roll = windowState.camera->Roll();
+		snapshot.projection = windowState.camera->Projection();
+		return snapshot;
+	}
+
+	void RendererLayer::restoreViewSnapshot(
+		RendererWindowState &windowState,
+		const RendererViewSnapshot &snapshot,
+		const char *sourceAction)
+	{
+		if (windowState.camera == nullptr)
+			return;
+
+		const char *resolvedSourceAction =
+			(sourceAction != nullptr && sourceAction[0] != '\0')
+				? sourceAction
+				: "view.restore";
+		const float targetDistance = std::max(snapshot.distance, 0.1f);
+		const float startYaw = windowState.camera->Yaw();
+		const float startPitch = windowState.camera->Pitch();
+		const float startRoll = windowState.camera->Roll();
+		const glm::quat startOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(startYaw, startPitch, startRoll);
+		glm::quat endOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(snapshot.yaw, snapshot.pitch, snapshot.roll);
+		if (glm::dot(startOrientation, endOrientation) < 0.0f)
+			endOrientation = -endOrientation;
+
+		windowState.camera->SetProjection(snapshot.projection);
+		windowState.transitionActive = true;
+		windowState.transitionElapsed = 0.0f;
+		windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
+			m_GlobalRenderSettings.rotationSpeed);
+		windowState.transitionStartTarget = windowState.camera->Target();
+		windowState.transitionEndTarget = snapshot.target;
+		windowState.transitionStartDistance = windowState.camera->Distance();
+		windowState.transitionEndDistance = targetDistance;
+		windowState.transitionStartYaw = startYaw;
+		windowState.transitionEndYaw = snapshot.yaw;
+		windowState.transitionStartPitch = startPitch;
+		windowState.transitionEndPitch = snapshot.pitch;
+		windowState.transitionStartRoll = startRoll;
+		windowState.transitionEndRoll = snapshot.roll;
+		windowState.transitionStartOrientation = startOrientation;
+		windowState.transitionEndOrientation = endOrientation;
+		windowState.transitionSourceAction = resolvedSourceAction;
+		DS_LOG_DEBUG("Renderer view restore transition source={}", resolvedSourceAction);
+	}
+
+	void RendererLayer::pushViewChange(
+		RendererWindowState &windowState,
+		const RendererViewSnapshot &before,
+		const RendererViewSnapshot &after,
+		const char *sourceAction)
+	{
+		constexpr float kEpsilon = 0.0001f;
+		const bool sameTarget = glm::length(before.target - after.target) <= kEpsilon;
+		const bool sameScalars =
+			std::abs(before.distance - after.distance) <= kEpsilon &&
+			std::abs(RendererViewCamera::NormalizeAngleRadians(before.yaw - after.yaw)) <= kEpsilon &&
+			std::abs(RendererViewCamera::NormalizeAngleRadians(before.pitch - after.pitch)) <= kEpsilon &&
+			std::abs(RendererViewCamera::NormalizeAngleRadians(before.roll - after.roll)) <= kEpsilon &&
+			before.projection == after.projection;
+		if (sameTarget && sameScalars)
+			return;
+
+		RendererViewStateChange change;
+		change.description = sourceAction != nullptr ? sourceAction : "view.change";
+		change.before = before;
+		change.after = after;
+		windowState.viewUndoHistory.push_back(std::move(change));
+		constexpr std::size_t kMaxViewHistoryEntries = 256u;
+		if (windowState.viewUndoHistory.size() > kMaxViewHistoryEntries)
+			windowState.viewUndoHistory.erase(windowState.viewUndoHistory.begin());
+		windowState.viewRedoHistory.clear();
+	}
+
 	void RendererLayer::onOrbitDelta(const RendererEvents::Viewport::OrbitDelta &event)
 	{
 		RendererWindowState *windowState = findWindowById(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		windowState->camera->Orbit(event.dx, event.dy);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "event.orbit");
 	}
 
 	void RendererLayer::onPanDelta(const RendererEvents::Viewport::PanDelta &event)
@@ -626,7 +795,11 @@ namespace DefectStudio
 		RendererWindowState *windowState = findWindowById(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		windowState->camera->Pan(event.dx, event.dy);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "event.pan");
 	}
 
 	void RendererLayer::onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event)
@@ -634,7 +807,11 @@ namespace DefectStudio
 		RendererWindowState *windowState = findWindowById(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		windowState->camera->Zoom(event.amount);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "event.zoom");
 	}
 
 	void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event)

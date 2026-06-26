@@ -147,7 +147,7 @@ namespace DefectStudio
 
 		auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
-			beginViewInteraction(windowState, sourceAction);
+			m_Layer.BeginViewInteraction(windowState.windowId, sourceAction);
 			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
 				m_Layer.GetGlobalSettings().rotationSpeed);
 			startCameraTransition(
@@ -297,28 +297,28 @@ namespace DefectStudio
 		sameLineTight();
 		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out"))
 		{
-			beginViewInteraction(windowState, "toolbar.zoom_out");
+			m_Layer.BeginViewInteraction(windowState.windowId, "toolbar.zoom_out");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
-			commitViewInteraction(windowState);
+			m_Layer.CommitViewInteraction(windowState.windowId);
 		}
 		sameLineTight();
 
 		if (iconButton("##ZoomIn", "plus.png", "+", "Zoom in"))
 		{
-			beginViewInteraction(windowState, "toolbar.zoom_in");
+			m_Layer.BeginViewInteraction(windowState.windowId, "toolbar.zoom_in");
 			windowState.transitionActive = false;
 			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
-			commitViewInteraction(windowState);
+			m_Layer.CommitViewInteraction(windowState.windowId);
 		}
 		sameLineTight();
 
 		const bool isOrtho = windowState.camera->Projection() == CameraProjection::Orthographic;
 		if (ImGui::Button(isOrtho ? "ORTHO" : "PERSP"))
 		{
-			beginViewInteraction(windowState, "toolbar.toggle_projection");
+			m_Layer.BeginViewInteraction(windowState.windowId, "toolbar.toggle_projection");
 			windowState.camera->ToggleProjection();
-			commitViewInteraction(windowState);
+			m_Layer.CommitViewInteraction(windowState.windowId);
 		}
 		sameLineTight();
 

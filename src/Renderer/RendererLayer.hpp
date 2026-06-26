@@ -55,6 +55,11 @@ namespace DefectStudio
 		void ApplyConfig(const ApplicationConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
 		[[nodiscard]] Ref<EventBus> GetEventBus() const;
+		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
+		void CommitViewInteraction(const std::string &windowId);
+		void CancelViewInteraction(const std::string &windowId);
+		void UndoViewChange(const std::string &windowId);
+		void RedoViewChange(const std::string &windowId);
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
@@ -82,6 +87,16 @@ namespace DefectStudio
 		void onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event);
 		void onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
+		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;
+		void restoreViewSnapshot(
+			RendererWindowState &windowState,
+			const RendererViewSnapshot &snapshot,
+			const char *sourceAction);
+		void pushViewChange(
+			RendererWindowState &windowState,
+			const RendererViewSnapshot &before,
+			const RendererViewSnapshot &after,
+			const char *sourceAction);
 		void applyDefaultProjectionToWindows();
 		const RendererToolbarIconTexture *getToolbarIcon(const std::string &iconFileName) const;
 		void releaseToolbarIcons();

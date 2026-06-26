@@ -40,12 +40,6 @@ namespace DefectStudio
 			return std::clamp(value, kViewportMinSize, kViewportMaxSize);
 		}
 
-		float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
-		{
-			const float safeSpeed = std::max(0.1f, rotationSpeed);
-			return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
-		}
-
 	}
 
 	RendererPanel::RendererPanel(RendererLayer &layer)
@@ -143,7 +137,7 @@ namespace DefectStudio
 			if (windowState.viewInteractionActive &&
 				windowState.viewInteractionSource.rfind("mouse.", 0) == 0)
 			{
-				commitViewInteraction(windowState);
+				m_Layer.CommitViewInteraction(windowState.windowId);
 			}
 		}
 
@@ -291,42 +285,6 @@ namespace DefectStudio
 		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
 
 		ImGui::End();
-	}
-
-	RendererViewSnapshot RendererPanel::captureViewSnapshot(const RendererWindowState &windowState) const
-	{
-		RendererViewSnapshot snapshot;
-		if (windowState.camera == nullptr)
-			return snapshot;
-
-		snapshot.target = windowState.camera->Target();
-		snapshot.distance = windowState.camera->Distance();
-		snapshot.yaw = windowState.camera->Yaw();
-		snapshot.pitch = windowState.camera->Pitch();
-		snapshot.roll = windowState.camera->Roll();
-		snapshot.projection = windowState.camera->Projection();
-		return snapshot;
-	}
-
-	void RendererPanel::restoreViewSnapshot(
-		RendererWindowState &windowState,
-		const RendererViewSnapshot &snapshot,
-		const char *sourceAction)
-	{
-		if (windowState.camera == nullptr)
-			return;
-
-		windowState.camera->SetProjection(snapshot.projection);
-		windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-			m_Layer.GetGlobalSettings().rotationSpeed);
-		startCameraTransition(
-			windowState,
-			snapshot.target,
-			snapshot.distance,
-			snapshot.yaw,
-			snapshot.pitch,
-			snapshot.roll,
-			sourceAction);
 	}
 
 } // namespace DefectStudio

@@ -1197,19 +1197,19 @@ W `UndoStack::CancelGroup`, bezpośrednio przed `--m_GroupDepth`, dodaj:
 
 ---
 
-## SESJA 8 – Usunięcie Application::Get() z Settings
+## SESJA 3 – Usunięcie Application::Get() z Settings
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Presentation/Panels/Settings.cpp`, `src/Presentation/ImGuiLayer.hpp`, `src/App/Application.hpp`
 
-### 8.1 Rozszerz ImGuiLayerRuntime o JobSystem
+### 3.1 Rozszerz ImGuiLayerRuntime o JobSystem
 
 W `src/Presentation/ImGuiLayer.hpp`, w struct `ImGuiLayerRuntime`, dodaj:
 ```cpp
 WeakRef<JobSystem> jobSystem;
 ```
 
-### 8.2 Uzupełnij runtime w Application.cpp
+### 3.2 Uzupełnij runtime w Application.cpp
 
 W miejscu gdzie tworzony jest `ImGuiLayerRuntime`, dodaj:
 ```cpp
@@ -1221,7 +1221,7 @@ Dodaj `GetJobSystemHandle()` do `CoreLayer` jeśli brakuje:
 [[nodiscard]] WeakRef<JobSystem> GetJobSystemHandle() const;
 ```
 
-### 8.3 Zaktualizuj Settings.cpp
+### 3.3 Zaktualizuj Settings.cpp
 
 Wykonaj: `grep -n "Application::Get()" src/Presentation/Panels/Settings.cpp`
 
@@ -1229,11 +1229,11 @@ Dla każdego trafienia zastąp odpowiednim member pobranym przez wstrzyknięte z
 
 ---
 
-## SESJA 11 – CommandRegistry: logowanie błędów rejestracji
+## SESJA 4 – CommandRegistry: logowanie błędów rejestracji
 
 **Przeczytaj przed rozpoczęciem:** `src/Core/Commands/CommandRegistry.cpp`
 
-### 11.1 Dodaj DS_LOG_ERROR do każdego punktu błędu w Register
+### 4.1 Dodaj DS_LOG_ERROR do każdego punktu błędu w Register
 
 W funkcji `CommandRegistry::Register`, przed każdym `return` zwracającym błąd:
 
@@ -1256,11 +1256,11 @@ DS_LOG_ERROR("CommandRegistry: registration failed [command.register.no_factory]
 
 ---
 
-## SESJA 18 – Kolejność inicjalizacji CapabilityService i Notifier
+## SESJA 5 – Kolejność inicjalizacji CapabilityService i Notifier
 
 **Przeczytaj przed rozpoczęciem:** `src/App/ApplicationLifecycle.cpp` lub `Application.cpp` – funkcje `initializeEventInfrastructure` i `initializeCoreRuntimeServices`
 
-### 18.1 Przesuń inicjalizację
+### 5.1 Przesuń inicjalizację
 
 Upewnij się że `initializeCoreRuntimeServices()` inicjalizuje w tej kolejności:
 1. `m_CapabilityService = CreateRef<CapabilityService>();`
@@ -1273,13 +1273,13 @@ Upewnij się że `initializeCoreRuntimeServices()` inicjalizuje w tej kolejnośc
 
 ---
 
-## SESJA 19 – NotificationCenter: RemoveListener i NotificationHandler
+## SESJA 6 – NotificationCenter: RemoveListener i NotificationHandler
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Core/Notifications/NotificationCenter.hpp`,
 `src/Core/Notifications/NotificationCenter.cpp`
 
-### 19.1 Zmień API
+### 6.1 Zmień API
 
 W `NotificationCenter.hpp`:
 ```cpp
@@ -1303,7 +1303,7 @@ std::unordered_map<std::size_t, NotificationHandler> m_Listeners;
 std::size_t m_NextListenerId = 1;
 ```
 
-### 19.2 Zaktualizuj implementację w NotificationCenter.cpp
+### 6.2 Zaktualizuj implementację w NotificationCenter.cpp
 
 ```cpp
 std::size_t NotificationCenter::RegisterListener(NotificationHandler listener)
@@ -1328,7 +1328,7 @@ for (const auto &[id, handler] : m_Listeners)
         handler(notification);
 ```
 
-### 19.3 Zaktualizuj callsites
+### 6.3 Zaktualizuj callsites
 
 Wykonaj: `grep -rn "RegisterListener" src/`
 
@@ -1341,11 +1341,11 @@ Dodaj `std::size_t m_NotificationCenterListenerId = 0;` do klas które rejestruj
 
 ---
 
-## SESJA 20 – Naprawa podwójnego ProcessQueue
+## SESJA 7 – Naprawa podwójnego ProcessQueue
 
 **Przeczytaj przed rozpoczęciem:** `src/App/Application.cpp` lub `ApplicationLifecycle.cpp` – metoda `persistUiSettings`
 
-### 20.1 Znajdź i napraw
+### 7.1 Znajdź i napraw
 
 Znajdź w `persistUiSettings()` fragment z wielokrotnymi wywołaniami `m_EventBus->ProcessQueue()`.
 
@@ -1360,11 +1360,11 @@ Zostaw dokładnie dwa `ProcessQueue()` jeśli łańcuch zdarzeń tego wymaga (Re
 
 ---
 
-## SESJA 21 – Memory.hpp: usuń dspch.hpp, dodaj <memory>
+## SESJA 8 – Memory.hpp: usuń dspch.hpp, dodaj <memory>
 
 **Przeczytaj przed rozpoczęciem:** `src/Core/Utils/Memory.hpp`
 
-### 21.1 Zmień include
+### 8.1 Zmień include
 
 W `src/Core/Utils/Memory.hpp` usuń:
 ```cpp
@@ -1376,7 +1376,7 @@ Dodaj na początku pliku:
 #include <memory>
 ```
 
-### 21.2 Napraw kompilację
+### 8.2 Napraw kompilację
 
 Skompiluj projekt. Dla każdego pliku `.cpp` który przestał się kompilować z powodu brakującego include (np. brakujące `<string>`, `<vector>`):
 - Dodaj jawny `#include` dla brakującego nagłówka w tym konkretnym `.cpp`
@@ -1384,14 +1384,14 @@ Skompiluj projekt. Dla każdego pliku `.cpp` który przestał się kompilować z
 
 ---
 
-## SESJA 23 – Przenieś pliki Logger do Core/Logging
+## SESJA 9 – Przenieś pliki Logger do Core/Logging
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Core/Utils/Logger.hpp`, `src/Core/Utils/Logger.cpp`,
 `src/Core/Utils/SpdlogEventSink.hpp`, `src/Core/Utils/SpdlogEventSink.cpp`,
 `src/Events/LogEvents.hpp`, `src/Events/NotificationEvents.hpp`
 
-### 23.1 Przenieś pliki (git mv)
+### 9.1 Przenieś pliki (git mv)
 
 ```bash
 git mv src/Core/Utils/Logger.hpp         src/Core/Logging/Logger.hpp
@@ -1402,7 +1402,7 @@ git mv src/Events/LogEvents.hpp          src/Core/Logging/LogEvents.hpp
 git mv src/Events/NotificationEvents.hpp src/Core/Notifications/NotificationEvents.hpp
 ```
 
-### 23.2 Zaktualizuj wszystkie include paths
+### 9.2 Zaktualizuj wszystkie include paths
 
 Wykonaj globalne zamiany w całym `src/`:
 - `"Core/Utils/Logger.hpp"` → `"Core/Logging/Logger.hpp"`
@@ -1412,11 +1412,11 @@ Wykonaj globalne zamiany w całym `src/`:
 
 Sprawdź: `grep -rn "Core/Utils/Logger\|Events/LogEvents\|Events/NotificationEvents" src/`
 
-### 23.3 Zaktualizuj dspch.hpp
+### 9.3 Zaktualizuj dspch.hpp
 
 Jeśli `src/Core/dspch.hpp` zawiera `#include "Core/Utils/Logger.hpp"` – zaktualizuj na `"Core/Logging/Logger.hpp"`.
 
-### 23.4 Usuń pusty src/Events/ jeśli pusty
+### 9.4 Usuń pusty src/Events/ jeśli pusty
 
 ```bash
 ls src/Events/
@@ -1428,14 +1428,14 @@ Zaktualizuj `premake5.lua` jeśli `src/Events/` był jawnie wymieniony w `files`
 
 ---
 
-## SESJA 24 – TestJobs → tests/
+## SESJA 10 – TestJobs → tests/
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Core/JobSystem/TestJobs/TestJobs.hpp`,
 `src/Core/JobSystem/TestJobs/TestJobs.cpp`,
 `premake5.lua`
 
-### 24.1 Przenieś pliki
+### 10.1 Przenieś pliki
 
 ```bash
 mkdir -p tests/Core/JobSystem/TestJobs
@@ -1444,7 +1444,7 @@ git mv src/Core/JobSystem/TestJobs/TestJobs.cpp tests/Core/JobSystem/TestJobs/Te
 git rm -r src/Core/JobSystem/TestJobs/
 ```
 
-### 24.2 Zaktualizuj premake5.lua
+### 10.2 Zaktualizuj premake5.lua
 
 Usuń `src/Core/JobSystem/TestJobs/` ze źródeł produkcyjnych (`files` dla głównego projektu).
 
@@ -1454,7 +1454,7 @@ Zaktualizuj `includedirs` projektu testowego jeśli konieczne.
 
 ---
 
-## SESJA 25 – Rozbicie Application.cpp
+## SESJA 11 – Rozbicie Application.cpp
 
 **Przeczytaj przed rozpoczęciem:** `src/App/Application.hpp`, `src/App/Application.cpp`
 
@@ -1462,7 +1462,7 @@ Sprawdź czy `ApplicationLifecycle.cpp` już istnieje: `ls src/App/Application*.
 
 Jeśli `ApplicationLifecycle.cpp` już istnieje i zawiera część metod, uzupełnij podział o brakujące:
 
-### 25.1 Utwórz src/App/ApplicationWindow.cpp (jeśli nie istnieje)
+### 11.1 Utwórz src/App/ApplicationWindow.cpp (jeśli nie istnieje)
 
 Przenieś z `Application.cpp` implementacje:
 - `Application::initializeGlfw()`
@@ -1481,7 +1481,7 @@ Pierwsze linie:
 
 Usuń te includes z `Application.cpp` po przeniesieniu.
 
-### 25.2 Uzupełnij ApplicationLifecycle.cpp (lub ApplicationBootstrap.cpp)
+### 11.2 Uzupełnij ApplicationLifecycle.cpp (lub ApplicationBootstrap.cpp)
 
 Upewnij się że poniższe metody są w pliku `ApplicationLifecycle.cpp` lub `ApplicationBootstrap.cpp`, nie w `Application.cpp`:
 - `createFromSpecification`, `beginCreateFromSpecification`
@@ -1494,7 +1494,7 @@ Upewnij się że poniższe metody są w pliku `ApplicationLifecycle.cpp` lub `Ap
 - `initializeEventDispatchingSystem`, `initializeCoreLayerSystems`
 - `initializeAssetManager`, `persistUiSettings`
 
-### 25.3 Zostaw w Application.cpp
+### 11.3 Zostaw w Application.cpp
 
 Po podziale `Application.cpp` zawiera wyłącznie:
 - `Application::Create()`
@@ -1520,13 +1520,13 @@ Po podziale `Application.cpp` zawiera wyłącznie:
 
 ---
 
-## SESJA 26 – m_BlockingError → ImGuiLayer
+## SESJA 12 – m_BlockingError → ImGuiLayer
 
 **Przeczytaj przed rozpoczęciem:**
 `src/App/Application.hpp`, `src/App/Application.cpp`,
 `src/Presentation/ImGuiLayer.hpp`, `src/Presentation/ImGuiLayer.cpp`
 
-### 26.1 Dodaj state do ImGuiLayer
+### 12.1 Dodaj state do ImGuiLayer
 
 W `src/Presentation/ImGuiLayer.hpp` dodaj includes (jeśli brakuje):
 ```cpp
@@ -1544,7 +1544,7 @@ Dodaj publiczną metodę:
 void SetBlockingError(const StructuredError &error);
 ```
 
-### 26.2 Rendering w OnImGuiRender
+### 12.2 Rendering w OnImGuiRender
 
 W `src/Presentation/ImGuiLayer.cpp`, na początku `OnImGuiRender()`, przed resztą UI:
 ```cpp
@@ -1577,7 +1577,7 @@ void ImGuiLayer::SetBlockingError(const StructuredError &error)
 }
 ```
 
-### 26.3 Zaktualizuj Application
+### 12.3 Zaktualizuj Application
 
 W `src/App/Application.hpp` usuń:
 ```cpp
@@ -1610,14 +1610,14 @@ Usuń wszystkie sprawdzenia i renderowanie `m_BlockingError` z `Application.cpp`
 
 ---
 
-## SESJA 27 – EventBus: usunięcie const_cast
+## SESJA 13 – EventBus: usunięcie const_cast
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Core/EventSystem/Common/EventControl.hpp`,
 `src/Core/EventSystem/BusEventSystem/EventBus.hpp`,
 `src/Core/EventSystem/BusEventSystem/EventBus.cpp`
 
-### 27.1 Dodaj mutable do EventControl
+### 13.1 Dodaj mutable do EventControl
 
 W `src/Core/EventSystem/Common/EventControl.hpp`, zmień:
 ```cpp
@@ -1630,7 +1630,7 @@ mutable bool handled         = false;
 mutable bool stopPropagation = false;
 ```
 
-### 27.2 Usuń const_cast z EventBus::Publish
+### 13.2 Usuń const_cast z EventBus::Publish
 
 W `src/Core/EventSystem/BusEventSystem/EventBus.hpp` zmień sygnaturę template:
 ```cpp
@@ -1644,7 +1644,7 @@ void Publish(TEvent &event);
 W `src/Core/EventSystem/BusEventSystem/EventBus.cpp` (lub w template body w `.hpp`):
 - Usuń `const_cast<TEvent &>(event)` – przekazuj `event` bezpośrednio
 
-### 27.3 Zaktualizuj callsites
+### 13.3 Zaktualizuj callsites
 
 Wykonaj: `grep -rn "->Publish\|\.Publish" src/`
 
@@ -1661,13 +1661,13 @@ m_EventBus->Publish(event);
 
 ---
 
-## SESJA 28 – LoggingPanel: tablice bool → mapy z enum
+## SESJA 14 – LoggingPanel: tablice bool → mapy z enum
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Presentation/Panels/LoggingPanel.hpp`,
 `src/Presentation/Panels/LoggingPanel.cpp`
 
-### 28.1 Zmień typy pól filtrów
+### 14.1 Zmień typy pól filtrów
 
 W `LoggingPanel.hpp`, zastąp istniejące tablice bool dla poziomów i kategorii:
 ```cpp
@@ -1677,7 +1677,7 @@ std::unordered_map<LogCategory, bool>                        m_ShowCategory;
 
 Dodaj includes jeśli brakuje: `<array>`, `<unordered_map>`.
 
-### 28.2 Zaktualizuj inicjalizację
+### 14.2 Zaktualizuj inicjalizację
 
 W konstruktorze lub `OnAttach`:
 ```cpp
@@ -1686,7 +1686,7 @@ for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i)
     m_ShowCategory[static_cast<LogCategory>(i)] = true;
 ```
 
-### 28.3 Zaktualizuj rendering
+### 14.3 Zaktualizuj rendering
 
 Zamień sprawdzenia z magicznymi indeksami na enum:
 ```cpp
@@ -1706,7 +1706,7 @@ for (std::size_t i = 0; i < m_ShowLevel.size(); ++i)
 
 ---
 
-## SESJA 29 – Wyłączenie klonowania paneli-singletonów
+## SESJA 15 – Wyłączenie klonowania paneli-singletonów
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Presentation/Panels/LoggingPanel.hpp`,
@@ -1714,7 +1714,7 @@ for (std::size_t i = 0; i < m_ShowLevel.size(); ++i)
 `src/Presentation/Panels/ProgressMonitorWindow.hpp`,
 `src/Presentation/Panels/TaskMonitorWindow.hpp`
 
-### 29.1 Dodaj = delete do każdego panelu
+### 15.1 Dodaj = delete do każdego panelu
 
 W każdym z powyższych plików, po deklaracji publicznego konstruktora:
 ```cpp
@@ -1729,13 +1729,13 @@ Nie dodawaj do: `IPanel`, klas Demo/, klas per-dokument lub per-analiza.
 
 ---
 
-## SESJA C – Wykrywanie konfliktów KeyBinding
+## SESJA 16 – Wykrywanie konfliktów KeyBinding
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Core/Input/KeymapResolver.hpp`,
 `src/Core/Input/KeymapResolver.cpp`
 
-### C.1 Dodaj struct KeyBindingConflict
+### 16.1 Dodaj struct KeyBindingConflict
 
 W `src/Core/Input/KeymapResolver.hpp`:
 ```cpp
@@ -1746,7 +1746,7 @@ struct KeyBindingConflict
 };
 ```
 
-### C.2 Zmień RegisterBinding na Result<void>
+### 16.2 Zmień RegisterBinding na Result<void>
 
 ```cpp
 [[nodiscard]] Result<void> RegisterBinding(KeyBinding binding);
@@ -1758,7 +1758,7 @@ Dodaj prywatne pole:
 std::vector<KeyBindingConflict> m_Conflicts;
 ```
 
-### C.3 Implementacja w KeymapResolver.cpp
+### 16.3 Implementacja w KeymapResolver.cpp
 
 W `RegisterBinding`, przed faktyczną rejestracją, sprawdź konflikt:
 ```cpp
@@ -1786,7 +1786,7 @@ const std::vector<KeyBindingConflict> &KeymapResolver::GetConflicts() const
 }
 ```
 
-### C.4 Zaktualizuj callsites RegisterBinding
+### 16.4 Zaktualizuj callsites RegisterBinding
 
 Wykonaj: `grep -rn "RegisterBinding" src/`
 
@@ -1798,14 +1798,14 @@ if (auto result = m_KeymapResolver->RegisterBinding(...); !result)
 
 ---
 
-## SESJA D – Zakładka Input w Settings
+## SESJA 17 – Zakładka Input w Settings
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Presentation/Panels/Settings.hpp` (lub `Settings.cpp`),
 `src/Core/Input/KeymapResolver.hpp`,
 `src/Core/Commands/CommandRegistry.hpp`
 
-### D.1 Dodaj zależności do SettingsPanel
+### 17.1 Dodaj zależności do SettingsPanel
 
 W konstruktorze `SettingsPanel` dodaj parametry:
 ```cpp
@@ -1819,14 +1819,14 @@ WeakRef<KeymapResolver>  m_KeymapResolver;
 WeakRef<CommandRegistry> m_CommandRegistry;
 ```
 
-### D.2 Dodaj enum wartość Tab::Input
+### 17.2 Dodaj enum wartość Tab::Input
 
 Znajdź enum `Tab` w `Settings.hpp/cpp` i dodaj:
 ```cpp
 Input,
 ```
 
-### D.3 Zaimplementuj renderInputTab
+### 17.3 Zaimplementuj renderInputTab
 
 Dodaj prywatną metodę `renderInputTab()`. Implementacja wyświetla tabelę wszystkich bindingów z pola `m_KeymapResolver->GetAllBindings()` (dodaj `GetAllBindings()` do `KeymapResolver` jeśli brakuje).
 
@@ -1834,7 +1834,7 @@ Tabela kolumny: Chord | Command | Description | Context
 
 Pokaż też konflikty jeśli `m_KeymapResolver->GetConflicts()` jest niepuste (pomarańczowe ostrzeżenie).
 
-### D.4 Podepnij w renderingu
+### 17.4 Podepnij w renderingu
 
 W switch/if wybierającym zakładkę do renderowania:
 ```cpp
@@ -1843,7 +1843,7 @@ case Tab::Input:
     break;
 ```
 
-### D.5 Zaktualizuj tworzenie SettingsPanel
+### 17.5 Zaktualizuj tworzenie SettingsPanel
 
 W miejscu gdzie `SettingsPanel` jest tworzony (EditorLayer lub Application):
 ```cpp
