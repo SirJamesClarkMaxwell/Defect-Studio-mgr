@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/dspch.hpp"
+#include <memory>
 
 namespace DefectStudio
 {
