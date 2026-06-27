@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "Core/Assets/AssetManager.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
 #include "Renderer/AtomStyleTable.hpp"
@@ -14,6 +17,9 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable;
 		RendererStartupLayoutDefinition startupLayout;
 		RendererPrimitiveMeshAssets primitiveMeshes;
+		std::vector<std::string> periodicTableSymbols;
+		std::vector<std::string> lanthanideSymbols;
+		std::vector<std::string> actinideSymbols;
 	};
 
 	[[nodiscard]] Result<RendererAssetBundle> LoadRendererAssetBundle(const AssetManager &assetManager);

@@ -38,6 +38,9 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable;
 		RendererStartupLayoutDefinition startupLayout;
 		RendererPrimitiveMeshAssets primitiveMeshes;
+		std::vector<std::string> periodicTableSymbols;
+		std::vector<std::string> lanthanideSymbols;
+		std::vector<std::string> actinideSymbols;
 		bool loadDefaultScene = true;
 	};
 

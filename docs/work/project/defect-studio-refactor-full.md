@@ -1706,36 +1706,14 @@ for (std::size_t i = 0; i < m_ShowLevel.size(); ++i)
 
 ---
 
-## SESJA 15 – Wyłączenie klonowania paneli-singletonów
 
-**Przeczytaj przed rozpoczęciem:**
-`src/Presentation/Panels/LoggingPanel.hpp`,
-`src/Presentation/Panels/SettingsPanel.hpp` (lub `Settings.hpp`),
-`src/Presentation/Panels/ProgressMonitorWindow.hpp`,
-`src/Presentation/Panels/TaskMonitorWindow.hpp`
-
-### 15.1 Dodaj = delete do każdego panelu
-
-W każdym z powyższych plików, po deklaracji publicznego konstruktora:
-```cpp
-// Non-copyable: this panel represents global application state (single session instance).
-ClassName(const ClassName &)            = delete;
-ClassName &operator=(const ClassName &) = delete;
-ClassName(ClassName &&)                 = delete;
-ClassName &operator=(ClassName &&)      = delete;
-```
-
-Nie dodawaj do: `IPanel`, klas Demo/, klas per-dokument lub per-analiza.
-
----
-
-## SESJA 16 – Wykrywanie konfliktów KeyBinding
+## SESJA 15 – Wykrywanie konfliktów KeyBinding
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Core/Input/KeymapResolver.hpp`,
 `src/Core/Input/KeymapResolver.cpp`
 
-### 16.1 Dodaj struct KeyBindingConflict
+### 15.1 Dodaj struct KeyBindingConflict
 
 W `src/Core/Input/KeymapResolver.hpp`:
 ```cpp
@@ -1746,7 +1724,7 @@ struct KeyBindingConflict
 };
 ```
 
-### 16.2 Zmień RegisterBinding na Result<void>
+### 15.2 Zmień RegisterBinding na Result<void>
 
 ```cpp
 [[nodiscard]] Result<void> RegisterBinding(KeyBinding binding);
@@ -1758,7 +1736,7 @@ Dodaj prywatne pole:
 std::vector<KeyBindingConflict> m_Conflicts;
 ```
 
-### 16.3 Implementacja w KeymapResolver.cpp
+### 15.3 Implementacja w KeymapResolver.cpp
 
 W `RegisterBinding`, przed faktyczną rejestracją, sprawdź konflikt:
 ```cpp
@@ -1786,7 +1764,7 @@ const std::vector<KeyBindingConflict> &KeymapResolver::GetConflicts() const
 }
 ```
 
-### 16.4 Zaktualizuj callsites RegisterBinding
+### 15.4 Zaktualizuj callsites RegisterBinding
 
 Wykonaj: `grep -rn "RegisterBinding" src/`
 
@@ -1798,14 +1776,14 @@ if (auto result = m_KeymapResolver->RegisterBinding(...); !result)
 
 ---
 
-## SESJA 17 – Zakładka Input w Settings
+## SESJA 16 – Zakładka Input w Settings
 
 **Przeczytaj przed rozpoczęciem:**
 `src/Presentation/Panels/Settings.hpp` (lub `Settings.cpp`),
 `src/Core/Input/KeymapResolver.hpp`,
 `src/Core/Commands/CommandRegistry.hpp`
 
-### 17.1 Dodaj zależności do SettingsPanel
+### 16.1 Dodaj zależności do SettingsPanel
 
 W konstruktorze `SettingsPanel` dodaj parametry:
 ```cpp
@@ -1819,14 +1797,14 @@ WeakRef<KeymapResolver>  m_KeymapResolver;
 WeakRef<CommandRegistry> m_CommandRegistry;
 ```
 
-### 17.2 Dodaj enum wartość Tab::Input
+### 16.2 Dodaj enum wartość Tab::Input
 
 Znajdź enum `Tab` w `Settings.hpp/cpp` i dodaj:
 ```cpp
 Input,
 ```
 
-### 17.3 Zaimplementuj renderInputTab
+### 16.3 Zaimplementuj renderInputTab
 
 Dodaj prywatną metodę `renderInputTab()`. Implementacja wyświetla tabelę wszystkich bindingów z pola `m_KeymapResolver->GetAllBindings()` (dodaj `GetAllBindings()` do `KeymapResolver` jeśli brakuje).
 
@@ -1834,7 +1812,7 @@ Tabela kolumny: Chord | Command | Description | Context
 
 Pokaż też konflikty jeśli `m_KeymapResolver->GetConflicts()` jest niepuste (pomarańczowe ostrzeżenie).
 
-### 17.4 Podepnij w renderingu
+### 16.4 Podepnij w renderingu
 
 W switch/if wybierającym zakładkę do renderowania:
 ```cpp
@@ -1843,7 +1821,7 @@ case Tab::Input:
     break;
 ```
 
-### 17.5 Zaktualizuj tworzenie SettingsPanel
+### 16.5 Zaktualizuj tworzenie SettingsPanel
 
 W miejscu gdzie `SettingsPanel` jest tworzony (EditorLayer lub Application):
 ```cpp
@@ -1869,11 +1847,242 @@ Dodaj gettery do CoreLayer jeśli brakują:
 *Część II (Core/App): sesje numerowane mogą być implementowane równolegle z R2/R3 jeśli nie ma zależności.*
 
 # Część III
-
 1) sprawdznie czy wszystko znajduje się w opdpowiednich warstwach (bardzo ważne)
-2) sprawdzenie czy wszystko jest serializowane tak jak powinno
-3) napisanie dokumentacji z diagramami, dla osoby ktora nie wie jak dziala renderowanie
-4) napisanie dokumentacji z diagramami, dla osoby która nie wie jak działa RenderingArchitecture
-5) sprawdzenie i uzupełnienie testów tak aby pokrywały wszystko 
-6) Sprawdzenie czy aby na pewno wszystkie systemy są wykorzystywane tak jak powinny (przed tym należy zrobić listę takowych systemów)
-7) Sprawdzić, czy nie ma przypadkiem reimplementacji niektórych systemów 
+2) Sprawdzić, czy nie ma przypadkiem reimplementacji niektórych systemów 
+3) sprawdzenie czy wszystko jest serializowane tak jak powinno tzn przez warstwę IO i odpowiednie eventy, a nie InPlace
+4) Sprawdzenie czy aby na pewno wszystkie systemy są wykorzystywane tak jak powinny (przed tym należy zrobić listę takowych systemów)
+5) napisanie dokumentacji z diagramami, dla osoby ktora nie wie jak dziala renderowanie
+6) napisanie dokumentacji z diagramami, dla osoby która nie wie jak działa RenderingArchitecture
+7) sprawdzenie i uzupełnienie testów tak aby pokrywały wszystko 
+
+
+# Defect Studio – Plan naprawczy naruszeń architektonicznych
+> Gałąź: `refactor/full-plan` · Każda naprawa = osobny commit.
+
+---
+
+## NAPRAWA A — `RendererLayer` nie może tworzyć `RendererPanel`
+
+**Problem:** `src/Renderer/RendererLayer.cpp:9` importuje `"Presentation/Panels/RendererPanel.hpp"`
+i tworzy panel w `OnAttach`. Renderer (niższa warstwa) zależy od Presentation (wyższa).
+
+**Przeczytaj przed wykonaniem:**
+`src/Renderer/RendererLayer.hpp`, `src/Renderer/RendererLayer.cpp`,
+`src/Presentation/EditorLayer.cpp`, `src/Presentation/Panels/RendererPanel.hpp`
+
+### Krok 1 — Usuń panel z `RendererLayer`
+
+W `src/Renderer/RendererLayer.hpp` usuń:
+```cpp
+class RendererPanel;             // forward declaration
+Unique<RendererPanel> m_Panel;   // pole prywatne
+```
+
+W `src/Renderer/RendererLayer.cpp` usuń:
+```cpp
+#include "Presentation/Panels/RendererPanel.hpp"
+```
+Z `OnAttach()` usuń:
+```cpp
+m_Panel = CreateUnique<RendererPanel>(*this);
+```
+Z `OnImGuiRender()` usuń wywołanie `m_Panel->Render(...)`.
+
+### Krok 2 — Przenieś tworzenie panelu do `EditorLayer`
+
+W `src/Presentation/EditorLayer.cpp`, w `OnAttach()`, po tym jak `RendererLayer` jest dostępny:
+
+```cpp
+#include "Presentation/Panels/RendererPanel.hpp"
+
+// W OnAttach, po rejestracji renderera:
+registerPanel<RendererPanel>(*m_RendererLayer, "Renderer", /*startOpen=*/true);
+```
+
+Jeśli `EditorLayer` nie ma jeszcze dostępu do `RendererLayer` w momencie `OnAttach` —
+sprawdź jak inne panele są rejestrowane (np. `ProgressMonitorWindow`) i zastosuj ten sam wzorzec.
+
+### Krok 3 — `OnImGuiRender` pozostaje w `EditorLayer`
+
+`EditorLayer::OnImGuiRender()` już iteruje po panelach przez `PanelRegistry` —
+`RendererPanel` trafi tam automatycznie po rejestracji w kroku 2. Żadnych dodatkowych zmian.
+
+### Weryfikacja
+
+```bash
+grep -rn "Presentation" src/Renderer/
+```
+
+Wynik musi być pusty. Skompiluj — błędy to najczęściej prywatne pola `m_Layer.*`
+odczytywane w `RendererPanel`, które powinny być już zastąpione publicznym API (z R2.2).
+
+---
+
+## NAPRAWA B — `EditorUiEvents.hpp` należy do `src/Events/`
+
+**Problem:** `src/Presentation/EditorUiEvents.hpp` zawiera wyłącznie structs `BusEvent`
+(zero logiki UI), ale mieszka w `Presentation/`. `IOLayer` importuje go jako
+`"Presentation/EditorUiEvents.hpp"` — wygląda jak zależność `IO → Presentation`,
+choć nią nie jest.
+
+**Przeczytaj przed wykonaniem:**
+`src/Presentation/EditorUiEvents.hpp`, `src/IO/IOLayer.cpp`, `src/Presentation/ImGuiLayer.cpp`
+
+### Krok 1 — Przenieś plik
+
+```bash
+git mv src/Presentation/EditorUiEvents.hpp src/Events/EditorUiEvents.hpp
+```
+
+### Krok 2 — Zaktualizuj wszystkie include paths
+
+```bash
+grep -rn "Presentation/EditorUiEvents" src/
+```
+
+Zamień każde trafienie:
+```cpp
+// było:
+#include "Presentation/EditorUiEvents.hpp"
+
+// jest:
+#include "Events/EditorUiEvents.hpp"
+```
+
+Typowe pliki: `IOLayer.cpp`, `IOLayer.hpp`, `ImGuiLayer.cpp`, `ImGuiLayer.hpp`,
+`EditorLayer.cpp`, `Settings.cpp`.
+
+### Weryfikacja
+
+```bash
+grep -rn "Presentation/EditorUiEvents" src/
+```
+
+Wynik musi być pusty. Skompiluj.
+
+---
+
+## NAPRAWA C — `RendererLayer` parsuje YAML inline; brak `PeriodicTableIO`
+
+**Problem:** `RendererLayer.cpp:207` wywołuje `YAML::Load(yamlText)` bezpośrednio dla
+`periodic_table.yaml`. Wszystkie inne assety renderera (atomy, siatki, właściwości pierwiastków)
+idą przez dedykowane klasy `IO/`. Ten plik łamie ten wzorzec.
+
+**Przeczytaj przed wykonaniem:**
+`src/Renderer/RendererLayer.cpp` (funkcja ładująca periodic table),
+`src/IO/ElementPropertiesIO.hpp`, `src/IO/ElementPropertiesIO.cpp`,
+`src/Renderer/RendererAssetBundle.hpp`, `src/Renderer/RendererAssetBundle.cpp`
+
+### Krok 1 — Utwórz `src/IO/PeriodicTableIO.hpp`
+
+```cpp
+#pragma once
+
+#include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/Utils/Path.hpp"
+#include <string>
+#include <vector>
+
+namespace DefectStudio
+{
+    struct PeriodicTableData
+    {
+        std::vector<std::string> elements;
+        std::vector<std::string> lanthanides;
+        std::vector<std::string> actinides;
+    };
+
+    class PeriodicTableIO
+    {
+    public:
+        [[nodiscard]] static bool LoadFromFile(
+            const Path &filePath,
+            PeriodicTableData &outData,
+            StructuredError &outError);
+    };
+}
+```
+
+### Krok 2 — Utwórz `src/IO/PeriodicTableIO.cpp`
+
+Przenieś logikę YAML z `RendererLayer.cpp`. Wzorzec: `ElementPropertiesIO.cpp`.
+
+```cpp
+#include "Core/dspch.hpp"
+#include "IO/PeriodicTableIO.hpp"
+#include <yaml-cpp/yaml.h>
+
+namespace DefectStudio
+{
+    bool PeriodicTableIO::LoadFromFile(
+        const Path &filePath,
+        PeriodicTableData &outData,
+        StructuredError &outError)
+    {
+        // Przenieś tu istniejącą logikę z RendererLayer.cpp:
+        // YAML::Node root = YAML::Load(yamlText);
+        // iteracja node["elements"], node["lanthanides"], node["actinides"]
+        // wypełnij outData.elements, outData.lanthanides, outData.actinides
+    }
+}
+```
+
+### Krok 3 — Przenieś wywołanie do `RendererAssetBundle`
+
+W `src/Renderer/RendererAssetBundle.cpp`, analogicznie do `AtomStyleIO` i `ElementPropertiesIO`:
+
+```cpp
+#include "IO/PeriodicTableIO.hpp"
+
+// W Load(), po załadowaniu innych assetów:
+Result<Path> periodicTablePath =
+    ResolveAssetPath(assetManager, "assets/config/periodic_table.yaml");
+if (periodicTablePath)
+{
+    PeriodicTableData ptData;
+    StructuredError ptError;
+    if (!PeriodicTableIO::LoadFromFile(*periodicTablePath, ptData, ptError))
+        DS_LOG_WARN("PeriodicTableIO: {}", ptError.technicalDetails);
+    else
+    {
+        outBundle.periodicTableSymbols = std::move(ptData.elements);
+        outBundle.lanthanideSymbols    = std::move(ptData.lanthanides);
+        outBundle.actinideSymbols      = std::move(ptData.actinides);
+    }
+}
+```
+
+Dodaj odpowiednie pola do struktury bundle (lub `RendererStartupDefinitions`).
+
+### Krok 4 — Usuń inline YAML z `RendererLayer`
+
+Usuń z `RendererLayer.cpp`:
+- `#include <yaml-cpp/yaml.h>` (jeśli używany tylko tutaj)
+- całą funkcję ładującą periodic table inline
+
+Wypełnij `m_PeriodicTableSymbols` itp. z danych przekazanych przez `RendererAssetBundle`
+w `OnAttach`.
+
+---
+
+## NAPRAWA D — `SettingsPanel::m_UndoHistory` wymaga komentarza intencji
+
+**Problem:** `SettingsPanel` ma własny undo (`m_UndoHistory`, `pushUndoSnapshot`, limit 256)
+niezależny od globalnego `UndoStack`. Bez komentarza wygląda jak przypadkowa reimplementacja.
+
+**Nie wymaga przepisywania.** Zakres jest uzasadniony (lokalny transientny undo draftu
+konfiguracji). Wymagany jest jawny komentarz.
+
+**Przeczytaj:** `src/Presentation/Panels/SettingsPanel.hpp:129`
+
+Dodaj przed polami `m_UndoHistory` / `m_RedoHistory`:
+
+```cpp
+// Local undo for the settings draft (Ctrl+Z within the settings dialog).
+// Intentionally NOT using the global UndoStack: this history is transient
+// (cleared when the panel is closed/reset), operates on ApplicationConfig
+// copies, and must not appear in the project's command history.
+// See: kSettingsUndoHistoryLimit for the cap.
+std::vector<ApplicationConfig> m_UndoHistory;
+std::vector<ApplicationConfig> m_RedoHistory;
+```

@@ -20,213 +20,145 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glad/gl.h>
 #include <stb_image.h>
-#include <yaml-cpp/yaml.h>
 
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Time.hpp"
-#include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {
-	namespace
+
+	constexpr float kMinSensitivity = 0.05f;
+	constexpr float kMaxSensitivity = 4.0f;
+	constexpr float kMinRotationSpeed = 0.1f;
+	constexpr float kMaxRotationSpeed = 10.0f;
+	constexpr float kMinFocusDistance = 0.25f;
+	constexpr float kMaxFocusDistance = 256.0f;
+	constexpr float kMinFocusTransitionSeconds = 0.02f;
+	constexpr float kMaxFocusTransitionSeconds = 3.0f;
+	constexpr float kMinFocusRadiusMultiplier = 0.1f;
+	constexpr float kMaxFocusRadiusMultiplier = 32.0f;
+	constexpr float kMinWheelStepDelta = 0.1f;
+	constexpr float kMaxWheelStepDelta = 45.0f;
+	constexpr float kMinGridPaddingPercent = 0.0f;
+	constexpr float kMaxGridPaddingPercent = 400.0f;
+	constexpr float kMinGridSpacing = 0.05f;
+	constexpr float kMaxGridSpacing = 25.0f;
+	constexpr float kMinGridPlaneZ = -10000.0f;
+	constexpr float kMaxGridPlaneZ = 10000.0f;
+
+	[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 	{
-		constexpr float kMinSensitivity = 0.05f;
-		constexpr float kMaxSensitivity = 4.0f;
-		constexpr float kMinRotationSpeed = 0.1f;
-		constexpr float kMaxRotationSpeed = 10.0f;
-		constexpr float kMinFocusDistance = 0.25f;
-		constexpr float kMaxFocusDistance = 256.0f;
-		constexpr float kMinFocusTransitionSeconds = 0.02f;
-		constexpr float kMaxFocusTransitionSeconds = 3.0f;
-		constexpr float kMinFocusRadiusMultiplier = 0.1f;
-		constexpr float kMaxFocusRadiusMultiplier = 32.0f;
-		constexpr float kMinWheelStepDelta = 0.1f;
-		constexpr float kMaxWheelStepDelta = 45.0f;
-		constexpr float kMinGridPaddingPercent = 0.0f;
-		constexpr float kMaxGridPaddingPercent = 400.0f;
-		constexpr float kMinGridSpacing = 0.05f;
-		constexpr float kMaxGridSpacing = 25.0f;
-		constexpr float kMinGridPlaneZ = -10000.0f;
-		constexpr float kMaxGridPlaneZ = 10000.0f;
-
-		[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
-		{
-			return Path::FromResolved(
-				FileSystem::CurrentPath()
-				/ "src"
-				/ "Renderer"
-				/ "OpenGl"
-				/ "Shaders");
-		}
-
-		[[nodiscard]] Path BuildShaderDirectoryFromAssetsRoot(const Path &assetsDirectory)
-		{
-			if (assetsDirectory.Empty())
-				return {};
-
-			// Dev fallback
-			const FilePath repositoryRoot = assetsDirectory.Native()
-				.parent_path()
-				.parent_path()
-				.parent_path();
-			if (repositoryRoot.empty())
-				return {};
-
-			return Path::FromResolved(
-				repositoryRoot
-				/ "src"
-				/ "Renderer"
-				/ "OpenGl"
-				/ "Shaders");
-		}
-
-		[[nodiscard]] const char *ProjectionToString(CameraProjection projection)
-		{
-			return projection == CameraProjection::Orthographic ? "orthographic" : "perspective";
-		}
-
-		[[nodiscard]] CameraProjection ProjectionFromString(const std::string &value)
-		{
-			if (value == "orthographic" || value == "ORTHO" || value == "ortho")
-				return CameraProjection::Orthographic;
-			return CameraProjection::Perspective;
-		}
-
-		float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
-		{
-			const float safeSpeed = std::max(0.1f, rotationSpeed);
-			return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
-		}
-
-		[[nodiscard]] std::string ToUpperAscii(std::string_view text)
-		{
-			std::string upper;
-			upper.reserve(text.size());
-			for (const char character : text)
-			{
-				const unsigned char unsignedCharacter = static_cast<unsigned char>(character);
-				upper.push_back(static_cast<char>(std::toupper(unsignedCharacter)));
-			}
-			return upper;
-		}
-
-		[[nodiscard]] ImGuiKey ParseRendererShortcutKey(std::string_view token, ImGuiKey fallback)
-		{
-			const std::string normalized = ToUpperAscii(token);
-			if (normalized.empty() || normalized == "NONE")
-				return ImGuiKey_None;
-
-			if (normalized == "A")
-				return ImGuiKey_A;
-			if (normalized == "B")
-				return ImGuiKey_B;
-			if (normalized == "C")
-				return ImGuiKey_C;
-			if (normalized == "D")
-				return ImGuiKey_D;
-			if (normalized == "E")
-				return ImGuiKey_E;
-			if (normalized == "F")
-				return ImGuiKey_F;
-			if (normalized == "Q")
-				return ImGuiKey_Q;
-			if (normalized == "R")
-				return ImGuiKey_R;
-			if (normalized == "S")
-				return ImGuiKey_S;
-			if (normalized == "W")
-				return ImGuiKey_W;
-			if (normalized == "LEFT" || normalized == "LEFTARROW")
-				return ImGuiKey_LeftArrow;
-			if (normalized == "RIGHT" || normalized == "RIGHTARROW")
-				return ImGuiKey_RightArrow;
-			if (normalized == "UP" || normalized == "UPARROW")
-				return ImGuiKey_UpArrow;
-			if (normalized == "DOWN" || normalized == "DOWNARROW")
-				return ImGuiKey_DownArrow;
-			if (normalized == "PERIOD" || normalized == ".")
-				return ImGuiKey_Period;
-			if (normalized == "COMMA" || normalized == ",")
-				return ImGuiKey_Comma;
-			if (normalized == "MINUS" || normalized == "-")
-				return ImGuiKey_Minus;
-			if (normalized == "EQUAL" || normalized == "=" || normalized == "PLUS")
-				return ImGuiKey_Equal;
-			if (normalized == "SPACE")
-				return ImGuiKey_Space;
-
-			return fallback;
-		}
-
-		[[nodiscard]] bool ParseSymbolSequence(
-			const YAML::Node &node,
-			std::vector<std::string> &outSymbols)
-		{
-			if (!node || !node.IsSequence())
-				return false;
-
-			outSymbols.clear();
-			for (const YAML::Node &entry : node)
-			{
-				std::string symbol;
-				if (entry.IsMap())
-					symbol = entry["symbol"].as<std::string>("");
-				else if (entry.IsScalar())
-					symbol = entry.as<std::string>("");
-
-				if (!symbol.empty())
-					outSymbols.push_back(std::move(symbol));
-			}
-
-			return !outSymbols.empty();
-		}
-
-		void LoadPeriodicTableFromConfig(
-			const Path &path,
-			std::vector<std::string> &outElements,
-			std::vector<std::string> &outLanthanides,
-			std::vector<std::string> &outActinides)
-		{
-			std::string yamlText;
-			std::string error;
-			if (!TextFileIO::Load(path, yamlText, error))
-			{
-				DS_LOG_ERROR(
-					"Periodic table config load failed: {} | {}",
-					path.String(),
-					error);
-				return;
-			}
-
-			try
-			{
-				YAML::Node root = YAML::Load(yamlText);
-				if (!root || !root.IsMap())
-				{
-					DS_LOG_ERROR("Periodic table YAML root is not a map: {}", path.String());
-					return;
-				}
-
-				if (!ParseSymbolSequence(root["elements"], outElements))
-					DS_LOG_ERROR("Periodic table YAML has no valid 'elements' sequence: {}", path.String());
-				if (!ParseSymbolSequence(root["lanthanides"], outLanthanides))
-					DS_LOG_ERROR("Periodic table YAML has no valid 'lanthanides' sequence: {}", path.String());
-				if (!ParseSymbolSequence(root["actinides"], outActinides))
-					DS_LOG_ERROR("Periodic table YAML has no valid 'actinides' sequence: {}", path.String());
-			}
-			catch (const std::exception &exception)
-			{
-				DS_LOG_ERROR(
-					"Periodic table YAML parse failed: {} | {}",
-					path.String(),
-					exception.what());
-			}
-		}
-
+		return Path::FromResolved(
+			FileSystem::CurrentPath()
+			/ "src"
+			/ "Renderer"
+			/ "OpenGl"
+			/ "Shaders");
 	}
+
+	[[nodiscard]] Path BuildShaderDirectoryFromAssetsRoot(const Path &assetsDirectory)
+	{
+		if (assetsDirectory.Empty())
+			return {};
+
+		// Dev fallback
+		const FilePath repositoryRoot = assetsDirectory.Native()
+			.parent_path()
+			.parent_path()
+			.parent_path();
+		if (repositoryRoot.empty())
+			return {};
+
+		return Path::FromResolved(
+			repositoryRoot
+			/ "src"
+			/ "Renderer"
+			/ "OpenGl"
+			/ "Shaders");
+	}
+
+	[[nodiscard]] const char *ProjectionToString(CameraProjection projection)
+	{
+		return projection == CameraProjection::Orthographic ? "orthographic" : "perspective";
+	}
+
+	[[nodiscard]] CameraProjection ProjectionFromString(const std::string &value)
+	{
+		if (value == "orthographic" || value == "ORTHO" || value == "ortho")
+			return CameraProjection::Orthographic;
+		return CameraProjection::Perspective;
+	}
+
+	float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
+	{
+		const float safeSpeed = std::max(0.1f, rotationSpeed);
+		return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
+	}
+
+	[[nodiscard]] std::string ToUpperAscii(std::string_view text)
+	{
+		std::string upper;
+		upper.reserve(text.size());
+		for (const char character : text)
+		{
+			const unsigned char unsignedCharacter = static_cast<unsigned char>(character);
+			upper.push_back(static_cast<char>(std::toupper(unsignedCharacter)));
+		}
+		return upper;
+	}
+
+	[[nodiscard]] ImGuiKey ParseRendererShortcutKey(std::string_view token, ImGuiKey fallback)
+	{
+		const std::string normalized = ToUpperAscii(token);
+		if (normalized.empty() || normalized == "NONE")
+			return ImGuiKey_None;
+
+		if (normalized == "A")
+			return ImGuiKey_A;
+		if (normalized == "B")
+			return ImGuiKey_B;
+		if (normalized == "C")
+			return ImGuiKey_C;
+		if (normalized == "D")
+			return ImGuiKey_D;
+		if (normalized == "E")
+			return ImGuiKey_E;
+		if (normalized == "F")
+			return ImGuiKey_F;
+		if (normalized == "Q")
+			return ImGuiKey_Q;
+		if (normalized == "R")
+			return ImGuiKey_R;
+		if (normalized == "S")
+			return ImGuiKey_S;
+		if (normalized == "W")
+			return ImGuiKey_W;
+		if (normalized == "LEFT" || normalized == "LEFTARROW")
+			return ImGuiKey_LeftArrow;
+		if (normalized == "RIGHT" || normalized == "RIGHTARROW")
+			return ImGuiKey_RightArrow;
+		if (normalized == "UP" || normalized == "UPARROW")
+			return ImGuiKey_UpArrow;
+		if (normalized == "DOWN" || normalized == "DOWNARROW")
+			return ImGuiKey_DownArrow;
+		if (normalized == "PERIOD" || normalized == ".")
+			return ImGuiKey_Period;
+		if (normalized == "COMMA" || normalized == ",")
+			return ImGuiKey_Comma;
+		if (normalized == "MINUS" || normalized == "-")
+			return ImGuiKey_Minus;
+		if (normalized == "EQUAL" || normalized == "=" || normalized == "PLUS")
+			return ImGuiKey_Equal;
+		if (normalized == "SPACE")
+			return ImGuiKey_Space;
+
+		return fallback;
+	}
+
+	
 
 	RendererLayer::RendererLayer(RendererStartupConfig startupConfig)
 		: Layer("RendererLayer"), m_StartupConfig(std::move(startupConfig))
@@ -431,14 +363,9 @@ namespace DefectStudio
 			return;
 		}
 
-		const Path periodicTablePath = m_StartupConfig.assetsDirectory.Native()
-			/ "config"
-			/ "periodic_table.yaml";
-		LoadPeriodicTableFromConfig(
-			periodicTablePath,
-			m_PeriodicTableSymbols,
-			m_LanthanideSymbols,
-			m_ActinideSymbols);
+		m_PeriodicTableSymbols = m_StartupConfig.periodicTableSymbols;
+		m_LanthanideSymbols = m_StartupConfig.lanthanideSymbols;
+		m_ActinideSymbols = m_StartupConfig.actinideSymbols;
 
 		if (m_StartupConfig.loadDefaultScene)
 			loadDefaultWindows();

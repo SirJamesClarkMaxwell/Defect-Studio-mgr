@@ -144,6 +144,7 @@
 
 > Port z repo A (`SirJamesClarkMaxwell`). Czyste klasy, zero zależności UI.
 
+- [ ] dodanie skótów klawiaturowych PgDn, PgUp, Home, End na obroty o 90 wokół wybranej osi. Niech będzie jakiś klawisz odpowiedzialny za obrót do wcześniej zdefiniowanego położenia (możliwość dodania takiego położenia w ustawieniach)
 - [ ] **PARTIAL:** `Structure` – wektory sieci i atomy są zaczęte; UUID jako stabilna tożsamość nadal brak
 - [ ] **PARTIAL:** `Atom` – podstawowy `AtomSite` istnieje; label, formalny ładunek, magnetyzacja, occupancy nadal brak
 - [x] Derived Cartesian position utilities (przeliczanie Direct ↔ Cartesian)
@@ -157,7 +158,6 @@
 - [ ] Parser unit tests: POSCAR roundtrip, edge cases (Selective Dynamics, puste struktury)
 - [ ] CIF parser – import, konwersja do modelu wewnętrznego (pymatgen backend przez T05)
 - [ ] XYZ parser (ASE-compatible)
-
 **Biblioteki:** yaml-cpp
 
 ---
@@ -201,7 +201,7 @@
 
 - [ ] **Compute shader dla bond transform** – pre-compute matrix (scale/rotate/translate) na GPU
 - [ ] MSDF (Multi-channel SDF) dla 3D labels zamiast billboard quads
-- [ ] **Multi-viewport** – wiele viewportów z niezależnymi ustawieniami kamery i renderowania
+- [x] **Multi-viewport** – wiele viewportów z niezależnymi ustawieniami kamery i renderowania
 - [ ] Quick image export (PNG/JPG z aktualnego viewportu)
 - [ ] PBR lighting (opcjonalny, dla publication-quality renders)
 - [ ] SVG export pipeline

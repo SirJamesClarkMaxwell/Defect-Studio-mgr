@@ -794,6 +794,9 @@ namespace DefectStudio
 			rendererStartupConfig.elementPropertiesTable = std::move(rendererAssets.elementPropertiesTable);
 			rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
 			rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
+			rendererStartupConfig.periodicTableSymbols = std::move(rendererAssets.periodicTableSymbols);
+			rendererStartupConfig.lanthanideSymbols = std::move(rendererAssets.lanthanideSymbols);
+			rendererStartupConfig.actinideSymbols = std::move(rendererAssets.actinideSymbols);
 			rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
 			timer.Finish(true);
 		}
