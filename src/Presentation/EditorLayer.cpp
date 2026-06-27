@@ -248,7 +248,13 @@ namespace DefectStudio
 		registerPanel<TaskMonitorWindow>(m_EventBus, m_JobSystem, "Task Monitor", true);
 		registerPanel<LoggingPanel>(m_LogRegistry, "Logging Panel", true);
 		if (auto rendererLayer = m_RendererLayer.lock())
-			registerPanel<RendererPanel>(*rendererLayer, "Renderer", true);
+			registerPanel<RendererPanel>(
+				*rendererLayer,
+				m_EventBus,
+				m_KeymapResolver,
+				m_ContextManager,
+				"Renderer",
+				true);
 		registerPanel<SettingsPanel>(
 			m_EventBus,
 			m_JobSystem,

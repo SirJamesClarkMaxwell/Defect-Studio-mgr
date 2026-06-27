@@ -11,5 +11,6 @@
 
 namespace DefectStudio
 {
+	[[nodiscard]] std::optional<KeyCode> ParseKeyCode(std::string_view text);
 	[[nodiscard]] std::optional<KeyChord> ParseKeyChord(std::string_view text);
 }

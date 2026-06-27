@@ -98,67 +98,18 @@ namespace DefectStudio
 		return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
 	}
 
-	[[nodiscard]] std::string ToUpperAscii(std::string_view text)
+	[[nodiscard]] RendererViewSnapshot CaptureViewSnapshotFromCamera(const RendererViewCamera &camera)
 	{
-		std::string upper;
-		upper.reserve(text.size());
-		for (const char character : text)
-		{
-			const unsigned char unsignedCharacter = static_cast<unsigned char>(character);
-			upper.push_back(static_cast<char>(std::toupper(unsignedCharacter)));
-		}
-		return upper;
+		RendererViewSnapshot snapshot;
+		snapshot.target = camera.Target();
+		snapshot.distance = camera.Distance();
+		snapshot.yaw = camera.Yaw();
+		snapshot.pitch = camera.Pitch();
+		snapshot.roll = camera.Roll();
+		snapshot.projection = camera.Projection();
+		return snapshot;
 	}
 
-	[[nodiscard]] KeyCode ParseRendererShortcutKey(std::string_view token, KeyCode fallback)
-	{
-		const std::string normalized = ToUpperAscii(token);
-		if (normalized.empty() || normalized == "NONE")
-			return KeyCode::Unknown;
-
-		if (normalized == "A")
-			return KeyCode::A;
-		if (normalized == "B")
-			return KeyCode::B;
-		if (normalized == "C")
-			return KeyCode::C;
-		if (normalized == "D")
-			return KeyCode::D;
-		if (normalized == "E")
-			return KeyCode::E;
-		if (normalized == "F")
-			return KeyCode::F;
-		if (normalized == "Q")
-			return KeyCode::Q;
-		if (normalized == "R")
-			return KeyCode::R;
-		if (normalized == "S")
-			return KeyCode::S;
-		if (normalized == "W")
-			return KeyCode::W;
-		if (normalized == "LEFT" || normalized == "LEFTARROW")
-			return KeyCode::Left;
-		if (normalized == "RIGHT" || normalized == "RIGHTARROW")
-			return KeyCode::Right;
-		if (normalized == "UP" || normalized == "UPARROW")
-			return KeyCode::Up;
-		if (normalized == "DOWN" || normalized == "DOWNARROW")
-			return KeyCode::Down;
-		if (normalized == "PERIOD" || normalized == ".")
-			return KeyCode::Period;
-		if (normalized == "COMMA" || normalized == ",")
-			return KeyCode::Comma;
-		if (normalized == "MINUS" || normalized == "-")
-			return KeyCode::Minus;
-		if (normalized == "EQUAL" || normalized == "=" || normalized == "PLUS")
-			return KeyCode::Equal;
-		if (normalized == "SPACE")
-			return KeyCode::Space;
-
-		return fallback;
-	}
-
-	
 
 	RendererLayer::RendererLayer(RendererStartupConfig startupConfig)
 		: Layer("RendererLayer"), m_StartupConfig(std::move(startupConfig))
@@ -383,6 +334,20 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onZoomDelta, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::FocusChanged>(
 				std::bind_front(&RendererLayer::onViewportFocusChanged, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::AlignToAxisRequested>(
+				std::bind_front(&RendererLayer::onAlignToAxisRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitStepRequested>(
+				std::bind_front(&RendererLayer::onOrbitStepRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RollStepRequested>(
+				std::bind_front(&RendererLayer::onRollStepRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ZoomStepRequested>(
+				std::bind_front(&RendererLayer::onZoomStepRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::FocusSelectedAtomRequested>(
+				std::bind_front(&RendererLayer::onFocusSelectedAtomRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::UndoViewRequested>(
+				std::bind_front(&RendererLayer::onUndoViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RedoViewRequested>(
+				std::bind_front(&RendererLayer::onRedoViewRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -464,42 +429,6 @@ namespace DefectStudio
 		m_GlobalRenderSettings.grid.paddingPercent = config.renderer.grid.paddingPercent;
 		m_GlobalRenderSettings.grid.spacing = config.renderer.grid.spacing;
 		m_GlobalRenderSettings.grid.planeZ = config.renderer.grid.planeZ;
-		m_GlobalRenderSettings.shortcuts.alignAxisA = ParseRendererShortcutKey(
-			config.renderer.shortcuts.alignAxisA,
-			KeyCode::A);
-		m_GlobalRenderSettings.shortcuts.alignAxisB = ParseRendererShortcutKey(
-			config.renderer.shortcuts.alignAxisB,
-			KeyCode::B);
-		m_GlobalRenderSettings.shortcuts.alignAxisC = ParseRendererShortcutKey(
-			config.renderer.shortcuts.alignAxisC,
-			KeyCode::C);
-		m_GlobalRenderSettings.shortcuts.orbitLeft = ParseRendererShortcutKey(
-			config.renderer.shortcuts.orbitLeft,
-			KeyCode::Left);
-		m_GlobalRenderSettings.shortcuts.orbitRight = ParseRendererShortcutKey(
-			config.renderer.shortcuts.orbitRight,
-			KeyCode::Right);
-		m_GlobalRenderSettings.shortcuts.orbitUp = ParseRendererShortcutKey(
-			config.renderer.shortcuts.orbitUp,
-			KeyCode::Up);
-		m_GlobalRenderSettings.shortcuts.orbitDown = ParseRendererShortcutKey(
-			config.renderer.shortcuts.orbitDown,
-			KeyCode::Down);
-		m_GlobalRenderSettings.shortcuts.rollLeft = ParseRendererShortcutKey(
-			config.renderer.shortcuts.rollLeft,
-			KeyCode::Q);
-		m_GlobalRenderSettings.shortcuts.rollRight = ParseRendererShortcutKey(
-			config.renderer.shortcuts.rollRight,
-			KeyCode::E);
-		m_GlobalRenderSettings.shortcuts.zoomIn = ParseRendererShortcutKey(
-			config.renderer.shortcuts.zoomIn,
-			KeyCode::R);
-		m_GlobalRenderSettings.shortcuts.zoomOut = ParseRendererShortcutKey(
-			config.renderer.shortcuts.zoomOut,
-			KeyCode::F);
-		m_GlobalRenderSettings.shortcuts.focusSelectedAtom = ParseRendererShortcutKey(
-			config.renderer.shortcuts.focusSelectedAtom,
-			KeyCode::Period);
 
 		if (glm::length(m_GlobalRenderSettings.lighting.keyDirection) <= 0.001f)
 			m_GlobalRenderSettings.lighting.keyDirection = glm::normalize(glm::vec3(0.6f, 0.8f, 0.5f));
@@ -743,6 +672,104 @@ namespace DefectStudio
 	void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event)
 	{
 		DS_LOG_TRACE("Renderer viewport '{}' focus: {}", event.windowId, event.focused);
+	}
+
+	void RendererLayer::onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 2)
+			return;
+
+		const glm::vec3 axis = windowState->structure.lattice[static_cast<std::size_t>(event.axis)];
+		if (glm::dot(axis, axis) <= 1e-8f)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		RendererViewCamera targetCamera = *windowState->camera;
+		targetCamera.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera);
+		pushViewChange(*windowState, before, after, "keyboard.align_axis");
+		restoreViewSnapshot(*windowState, after, "keyboard.align_axis");
+	}
+
+	void RendererLayer::onOrbitStepRequested(const RendererEvents::Viewport::OrbitStepRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		RendererViewCamera targetCamera = *windowState->camera;
+		targetCamera.Orbit(event.dx, event.dy);
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera);
+		pushViewChange(*windowState, before, after, "keyboard.orbit_step");
+		restoreViewSnapshot(*windowState, after, "keyboard.orbit_step");
+	}
+
+	void RendererLayer::onRollStepRequested(const RendererEvents::Viewport::RollStepRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		RendererViewCamera targetCamera = *windowState->camera;
+		targetCamera.Roll(event.delta);
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera);
+		pushViewChange(*windowState, before, after, "keyboard.roll_step");
+		restoreViewSnapshot(*windowState, after, "keyboard.roll_step");
+	}
+
+	void RendererLayer::onZoomStepRequested(const RendererEvents::Viewport::ZoomStepRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		windowState->transitionActive = false;
+		windowState->camera->Zoom(event.amount);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		pushViewChange(*windowState, before, after, "keyboard.zoom_step");
+	}
+
+	void RendererLayer::onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr || windowState->selectedAtomIndices.empty())
+			return;
+
+		const std::size_t selectedIndex = windowState->selectedAtomIndices.back();
+		if (selectedIndex >= windowState->structure.atoms.size())
+			return;
+
+		const RendererAtomData &atom = windowState->structure.atoms[selectedIndex];
+		float desiredDistance = m_GlobalRenderSettings.focusSelectedAtomDistance;
+		if (m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius)
+		{
+			const float radiusDistance = atom.radius * m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier;
+			desiredDistance = std::max(desiredDistance, radiusDistance);
+		}
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		RendererViewSnapshot after = before;
+		after.target = atom.cartesianPosition;
+		after.distance = desiredDistance;
+		pushViewChange(*windowState, before, after, "keyboard.focus_selected_atom");
+		restoreViewSnapshot(*windowState, after, "keyboard.focus_selected_atom");
+		windowState->transitionDuration = std::max(
+			kMinFocusTransitionSeconds,
+			m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds);
+	}
+
+	void RendererLayer::onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event)
+	{
+		UndoViewChange(event.windowId);
+	}
+
+	void RendererLayer::onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event)
+	{
+		RedoViewChange(event.windowId);
 	}
 
 	void RendererLayer::onConfigApplied(const AppEvents::Config::Applied &event)

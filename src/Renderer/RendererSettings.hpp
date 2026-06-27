@@ -5,8 +5,6 @@
 #include <glm/geometric.hpp>
 #include <glm/glm.hpp>
 
-#include "Core/Utils/KeyCodes.hpp"
-
 namespace DefectStudio
 {
 	enum class CameraProjection
@@ -59,22 +57,6 @@ namespace DefectStudio
 		float planeZ = 0.0f;
 	};
 
-	struct RendererKeyboardShortcutSettings
-	{
-		KeyCode alignAxisA = KeyCode::A;
-		KeyCode alignAxisB = KeyCode::B;
-		KeyCode alignAxisC = KeyCode::C;
-		KeyCode orbitLeft = KeyCode::Left;
-		KeyCode orbitRight = KeyCode::Right;
-		KeyCode orbitUp = KeyCode::Up;
-		KeyCode orbitDown = KeyCode::Down;
-		KeyCode rollLeft = KeyCode::Q;
-		KeyCode rollRight = KeyCode::E;
-		KeyCode zoomIn = KeyCode::R;
-		KeyCode zoomOut = KeyCode::F;
-		KeyCode focusSelectedAtom = KeyCode::Period;
-	};
-
 	struct RendererGlobalRenderSettings
 	{
 		glm::vec4 backgroundColor = glm::vec4(0.06f, 0.07f, 0.08f, 1.0f);
@@ -93,6 +75,5 @@ namespace DefectStudio
 		RendererViewportSettings viewport;
 		RendererToolbarWheelSettings toolbarWheel;
 		RendererGridSettings grid;
-		RendererKeyboardShortcutSettings shortcuts;
 	};
 } // namespace DefectStudio

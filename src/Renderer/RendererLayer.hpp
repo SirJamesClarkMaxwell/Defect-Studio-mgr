@@ -89,6 +89,13 @@ namespace DefectStudio
 		void onPanDelta(const RendererEvents::Viewport::PanDelta &event);
 		void onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event);
 		void onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event);
+		void onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event);
+		void onOrbitStepRequested(const RendererEvents::Viewport::OrbitStepRequested &event);
+		void onRollStepRequested(const RendererEvents::Viewport::RollStepRequested &event);
+		void onZoomStepRequested(const RendererEvents::Viewport::ZoomStepRequested &event);
+		void onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event);
+		void onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event);
+		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;
 		void restoreViewSnapshot(

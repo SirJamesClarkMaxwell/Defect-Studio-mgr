@@ -10,11 +10,18 @@
 
 namespace DefectStudio
 {
+	class ContextManager;
+	class EventBus;
+	class KeymapResolver;
+
 	class RendererPanel final : public IPanel
 	{
 	public:
 		explicit RendererPanel(
 			RendererLayer &layer,
+			Ref<EventBus> eventBus,
+			WeakRef<KeymapResolver> keymapResolver,
+			WeakRef<ContextManager> contextManager,
 			std::string title = "Renderer",
 			bool visibleByDefault = true);
 
@@ -41,6 +48,9 @@ namespace DefectStudio
 
 	private:
 		RendererLayer &m_Layer;
+		Ref<EventBus> m_EventBus;
+		WeakRef<KeymapResolver> m_KeymapResolver;
+		WeakRef<ContextManager> m_ContextManager;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 	};
 } // namespace DefectStudio

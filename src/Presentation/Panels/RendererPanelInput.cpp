@@ -1,10 +1,16 @@
 #include "Core/dspch.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <optional>
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Input/ContextManager.hpp"
+#include "Core/Input/KeyBinding.hpp"
+#include "Core/Input/KeyInputProcessor.hpp"
+#include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -13,36 +19,121 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr float kOrbitMouseScale = 0.0065f;
-		[[nodiscard]] ImGuiKey ToImGuiKey(KeyCode key)
+		constexpr const char *kRendererViewportFocusedContext = "renderer.viewport.focused";
+		constexpr const char *kCommandAlignAxisA = "renderer.align_axis_a";
+		constexpr const char *kCommandAlignAxisB = "renderer.align_axis_b";
+		constexpr const char *kCommandAlignAxisC = "renderer.align_axis_c";
+		constexpr const char *kCommandOrbitLeft = "renderer.orbit_left";
+		constexpr const char *kCommandOrbitRight = "renderer.orbit_right";
+		constexpr const char *kCommandOrbitUp = "renderer.orbit_up";
+		constexpr const char *kCommandOrbitDown = "renderer.orbit_down";
+		constexpr const char *kCommandRollLeft = "renderer.roll_left";
+		constexpr const char *kCommandRollRight = "renderer.roll_right";
+		constexpr const char *kCommandZoomIn = "renderer.zoom_in";
+		constexpr const char *kCommandZoomOut = "renderer.zoom_out";
+		constexpr const char *kCommandFocusSelectedAtom = "renderer.focus_selected_atom";
+		constexpr const char *kCommandUndoView = "renderer.undo_view";
+		constexpr const char *kCommandRedoView = "renderer.redo_view";
+
+		[[nodiscard]] std::optional<KeyCode> ToKeyCode(ImGuiKey key)
 		{
-			if (key >= KeyCode::A && key <= KeyCode::Z)
-				return static_cast<ImGuiKey>(ImGuiKey_A + (static_cast<int>(key) - static_cast<int>(KeyCode::A)));
-			if (key >= KeyCode::D0 && key <= KeyCode::D9)
-				return static_cast<ImGuiKey>(ImGuiKey_0 + (static_cast<int>(key) - static_cast<int>(KeyCode::D0)));
+			if (key >= ImGuiKey_A && key <= ImGuiKey_Z)
+				return static_cast<KeyCode>(static_cast<int>(KeyCode::A) + (static_cast<int>(key) - static_cast<int>(ImGuiKey_A)));
+			if (key >= ImGuiKey_0 && key <= ImGuiKey_9)
+				return static_cast<KeyCode>(static_cast<int>(KeyCode::D0) + (static_cast<int>(key) - static_cast<int>(ImGuiKey_0)));
 
 			switch (key)
 			{
-			case KeyCode::Space:
-				return ImGuiKey_Space;
-			case KeyCode::Comma:
-				return ImGuiKey_Comma;
-			case KeyCode::Minus:
-				return ImGuiKey_Minus;
-			case KeyCode::Equal:
-				return ImGuiKey_Equal;
-			case KeyCode::Period:
-				return ImGuiKey_Period;
-			case KeyCode::Left:
-				return ImGuiKey_LeftArrow;
-			case KeyCode::Right:
-				return ImGuiKey_RightArrow;
-			case KeyCode::Up:
-				return ImGuiKey_UpArrow;
-			case KeyCode::Down:
-				return ImGuiKey_DownArrow;
+			case ImGuiKey_Space:
+				return KeyCode::Space;
+			case ImGuiKey_Comma:
+				return KeyCode::Comma;
+			case ImGuiKey_Minus:
+				return KeyCode::Minus;
+			case ImGuiKey_Equal:
+				return KeyCode::Equal;
+			case ImGuiKey_Period:
+				return KeyCode::Period;
+			case ImGuiKey_LeftArrow:
+				return KeyCode::Left;
+			case ImGuiKey_RightArrow:
+				return KeyCode::Right;
+			case ImGuiKey_UpArrow:
+				return KeyCode::Up;
+			case ImGuiKey_DownArrow:
+				return KeyCode::Down;
+			case ImGuiKey_Escape:
+				return KeyCode::Escape;
+			case ImGuiKey_Enter:
+				return KeyCode::Enter;
+			case ImGuiKey_Tab:
+				return KeyCode::Tab;
+			case ImGuiKey_Backspace:
+				return KeyCode::Backspace;
+			case ImGuiKey_Delete:
+				return KeyCode::Delete;
+			case ImGuiKey_Insert:
+				return KeyCode::Insert;
+			case ImGuiKey_Home:
+				return KeyCode::Home;
+			case ImGuiKey_End:
+				return KeyCode::End;
+			case ImGuiKey_PageUp:
+				return KeyCode::PageUp;
+			case ImGuiKey_PageDown:
+				return KeyCode::PageDown;
 			default:
-				return ImGuiKey_None;
+				break;
 			}
+
+			if (key >= ImGuiKey_F1 && key <= ImGuiKey_F12)
+				return static_cast<KeyCode>(static_cast<int>(KeyCode::F1) + (static_cast<int>(key) - static_cast<int>(ImGuiKey_F1)));
+			return std::nullopt;
+		}
+
+		[[nodiscard]] KeyModifiers CurrentImGuiModifiers()
+		{
+			ImGuiIO &io = ImGui::GetIO();
+			KeyModifiers modifiers = KeyModifiers::None;
+			if (io.KeyCtrl)
+				modifiers = modifiers | KeyModifiers::Ctrl;
+			if (io.KeyShift)
+				modifiers = modifiers | KeyModifiers::Shift;
+			if (io.KeyAlt)
+				modifiers = modifiers | KeyModifiers::Alt;
+			if (io.KeySuper)
+				modifiers = modifiers | KeyModifiers::Super;
+			return modifiers;
+		}
+
+		[[nodiscard]] std::optional<KeyChord> PollPressedKeyChord()
+		{
+			constexpr std::array<ImGuiKey, 67> keys = {
+				ImGuiKey_A, ImGuiKey_B, ImGuiKey_C, ImGuiKey_D, ImGuiKey_E, ImGuiKey_F,
+				ImGuiKey_G, ImGuiKey_H, ImGuiKey_I, ImGuiKey_J, ImGuiKey_K, ImGuiKey_L,
+				ImGuiKey_M, ImGuiKey_N, ImGuiKey_O, ImGuiKey_P, ImGuiKey_Q, ImGuiKey_R,
+				ImGuiKey_S, ImGuiKey_T, ImGuiKey_U, ImGuiKey_V, ImGuiKey_W, ImGuiKey_X,
+				ImGuiKey_Y, ImGuiKey_Z,
+				ImGuiKey_0, ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4,
+				ImGuiKey_5, ImGuiKey_6, ImGuiKey_7, ImGuiKey_8, ImGuiKey_9,
+				ImGuiKey_Space, ImGuiKey_Comma, ImGuiKey_Minus, ImGuiKey_Equal, ImGuiKey_Period,
+				ImGuiKey_LeftArrow, ImGuiKey_RightArrow, ImGuiKey_UpArrow, ImGuiKey_DownArrow,
+				ImGuiKey_Escape, ImGuiKey_Enter, ImGuiKey_Tab, ImGuiKey_Backspace,
+				ImGuiKey_Delete, ImGuiKey_Insert, ImGuiKey_Home, ImGuiKey_End,
+				ImGuiKey_PageUp, ImGuiKey_PageDown,
+				ImGuiKey_F1, ImGuiKey_F2, ImGuiKey_F3, ImGuiKey_F4, ImGuiKey_F5, ImGuiKey_F6,
+				ImGuiKey_F7, ImGuiKey_F8, ImGuiKey_F9, ImGuiKey_F10, ImGuiKey_F11, ImGuiKey_F12};
+
+			for (const ImGuiKey key : keys)
+			{
+				if (!ImGui::IsKeyPressed(key))
+					continue;
+				std::optional<KeyCode> keyCode = ToKeyCode(key);
+				if (!keyCode)
+					continue;
+				return KeyChord{*keyCode, CurrentImGuiModifiers()};
+			}
+			return std::nullopt;
 		}
 
 		[[nodiscard]] float EaseOutCubic(float t)
@@ -55,220 +146,113 @@ namespace DefectStudio
 		{
 			return angleRadians * 57.295779513f;
 		}
-		void LogRotationAction(
-			const char *actionName,
-			float stepDegrees,
-			float rotationSpeed,
-			float deltaRadians,
-			float orbitInputDelta)
-		{
-			DS_LOG_DEBUG(
-				"Renderer rotation action={} step_deg={:.3f} speed={:.3f} delta_rad={:.6f} orbit_input_delta={:.3f}",
-				actionName,
-				stepDegrees,
-				rotationSpeed,
-				deltaRadians,
-				orbitInputDelta);
-		}
-		float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
-		{
-			const float safeSpeed = std::max(0.1f, rotationSpeed);
-			return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
-		}
 	}
 	void RendererPanel::applyViewportKeyboardNavigation(RendererWindowState &windowState)
 	{
 		if (windowState.camera == nullptr)
 			return;
+
+		auto contextManager = m_ContextManager.lock();
+		auto keymapResolver = m_KeymapResolver.lock();
+		Ref<EventBus> eventBus = m_EventBus != nullptr ? m_EventBus : m_Layer.GetEventBus();
+		if (contextManager == nullptr || keymapResolver == nullptr || eventBus == nullptr)
+			return;
+
+		contextManager->SetActive(kRendererViewportFocusedContext, false);
 		if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 			return;
+
 		ImGuiIO &io = ImGui::GetIO();
 		if (io.WantTextInput || ImGui::IsAnyItemActive())
 			return;
-		const auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
-		{
-			m_Layer.BeginViewInteraction(windowState.windowId, sourceAction);
-			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-				m_Layer.GetGlobalSettings().rotationSpeed);
-			startCameraTransition(
-				windowState,
-				cameraState.Target(),
-				cameraState.Distance(),
-				cameraState.Yaw(),
-				cameraState.Pitch(),
-				cameraState.Roll(),
-				sourceAction);
+
+		contextManager->SetActive(kRendererViewportFocusedContext, true);
+		const auto clearViewportContext = [&]() {
+			contextManager->SetActive(kRendererViewportFocusedContext, false);
 		};
-		const auto alignToAxis = [&](const glm::vec3 &axis)
+
+		std::optional<KeyChord> chord = PollPressedKeyChord();
+		if (!chord)
 		{
-			if (glm::dot(axis, axis) <= 1e-8f)
-				return;
-			RendererViewCamera animated = *windowState.camera;
-			animated.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
-			queueTransition(animated, "keyboard.align_axis");
-		};
-		const auto focusSelectedAtom = [&]()
-		{
-			if (windowState.selectedAtomIndices.empty())
-				return;
-			const std::size_t selectedIndex = windowState.selectedAtomIndices.back();
-			if (selectedIndex >= windowState.structure.atoms.size())
-				return;
-			const RendererAtomData &atom = windowState.structure.atoms[selectedIndex];
-			float desiredDistance = m_Layer.GetGlobalSettings().focusSelectedAtomDistance;
-			if (m_Layer.GetGlobalSettings().focusSelectedAtomRespectAtomRadius)
-			{
-				const float radiusDistance = atom.radius * m_Layer.GetGlobalSettings().focusSelectedAtomRadiusMultiplier;
-				desiredDistance = std::max(desiredDistance, radiusDistance);
-			}
-			windowState.transitionDuration = std::max(
-				0.02f,
-				m_Layer.GetGlobalSettings().focusSelectedAtomTransitionSeconds);
-			m_Layer.BeginViewInteraction(windowState.windowId, "keyboard.focus_selected_atom");
-			startCameraTransition(
-				windowState,
-				atom.cartesianPosition,
-				desiredDistance,
-				windowState.camera->Yaw(),
-				windowState.camera->Pitch(),
-				windowState.camera->Roll(),
-				"keyboard.focus_selected_atom");
-		};
+			clearViewportContext();
+			return;
+		}
+
+		KeyInputProcessor inputProcessor(*keymapResolver, *contextManager);
+		auto inputResult = inputProcessor.HandleKeyPressed(*chord);
+		clearViewportContext();
+		if (!inputResult || !inputResult->handled || !inputResult->commandId)
+			return;
+
 		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
-		const float rotationDeltaRadians = rotationStepRadians;
-		const float orbitInputDelta = rotationDeltaRadians / kOrbitMouseScale;
-		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.GetGlobalSettings().shortcuts;
-		const auto shortcutPressed = [](KeyCode key) -> bool
+		const float orbitInputDelta = rotationStepRadians / kOrbitMouseScale;
+		const float zoomAmount = std::max(0.5f, windowState.percentStep * 0.1f);
+		const std::string &commandId = inputResult->commandId->value;
+
+		if (commandId == kCommandAlignAxisA || commandId == kCommandAlignAxisB || commandId == kCommandAlignAxisC)
 		{
-			const ImGuiKey imGuiKey = ToImGuiKey(key);
-			return imGuiKey != ImGuiKey_None && ImGui::IsKeyPressed(imGuiKey);
-		};
-		const auto shortcutDown = [](KeyCode key) -> bool
+			RendererEvents::Viewport::AlignToAxisRequested event;
+			event.windowId = windowState.windowId;
+			event.axis = commandId == kCommandAlignAxisA ? 0 : (commandId == kCommandAlignAxisB ? 1 : 2);
+			eventBus->Publish(event);
+			return;
+		}
+
+		if (commandId == kCommandOrbitLeft || commandId == kCommandOrbitRight || commandId == kCommandOrbitUp || commandId == kCommandOrbitDown)
 		{
-			const ImGuiKey imGuiKey = ToImGuiKey(key);
-			return imGuiKey != ImGuiKey_None && ImGui::IsKeyDown(imGuiKey);
-		};
-		if (io.KeyCtrl && io.KeyAlt && shortcutPressed(KeyCode::Z))
-		{
-			if (io.KeyShift)
-				m_Layer.RedoViewChange(windowState.windowId);
+			RendererEvents::Viewport::OrbitStepRequested event;
+			event.windowId = windowState.windowId;
+			if (commandId == kCommandOrbitLeft)
+				event.dx = +orbitInputDelta;
+			else if (commandId == kCommandOrbitRight)
+				event.dx = -orbitInputDelta;
+			else if (commandId == kCommandOrbitUp)
+				event.dy = +orbitInputDelta;
 			else
-				m_Layer.UndoViewChange(windowState.windowId);
+				event.dy = -orbitInputDelta;
+			eventBus->Publish(event);
 			return;
 		}
-		if (io.KeyCtrl && io.KeyAlt && shortcutPressed(KeyCode::Y))
+
+		if (commandId == kCommandRollLeft || commandId == kCommandRollRight)
 		{
-			m_Layer.RedoViewChange(windowState.windowId);
+			RendererEvents::Viewport::RollStepRequested event;
+			event.windowId = windowState.windowId;
+			event.delta = commandId == kCommandRollLeft ? +rotationStepRadians : -rotationStepRadians;
+			eventBus->Publish(event);
 			return;
 		}
-		const glm::mat3 &lattice = windowState.structure.lattice;
-		if (shortcutPressed(shortcuts.alignAxisA))
-			alignToAxis(lattice[0]);
-		if (shortcutPressed(shortcuts.alignAxisB))
-			alignToAxis(lattice[1]);
-		if (shortcutPressed(shortcuts.alignAxisC))
-			alignToAxis(lattice[2]);
-		if (shortcutPressed(shortcuts.orbitLeft))
+
+		if (commandId == kCommandZoomIn || commandId == kCommandZoomOut)
 		{
-			LogRotationAction(
-				"keyboard.orbit_left",
-				windowState.rotationStepDeg,
-				m_Layer.GetGlobalSettings().rotationSpeed,
-				rotationDeltaRadians,
-				orbitInputDelta);
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(+orbitInputDelta, 0.0f);
-			queueTransition(animated, "keyboard.orbit_left");
+			RendererEvents::Viewport::ZoomStepRequested event;
+			event.windowId = windowState.windowId;
+			event.amount = commandId == kCommandZoomIn ? +zoomAmount : -zoomAmount;
+			eventBus->Publish(event);
+			return;
 		}
-		if (shortcutPressed(shortcuts.orbitRight))
+
+		if (commandId == kCommandFocusSelectedAtom)
 		{
-			LogRotationAction(
-				"keyboard.orbit_right",
-				windowState.rotationStepDeg,
-				m_Layer.GetGlobalSettings().rotationSpeed,
-				rotationDeltaRadians,
-				orbitInputDelta);
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(-orbitInputDelta, 0.0f);
-			queueTransition(animated, "keyboard.orbit_right");
+			RendererEvents::Viewport::FocusSelectedAtomRequested event;
+			event.windowId = windowState.windowId;
+			eventBus->Publish(event);
+			return;
 		}
-		if (shortcutPressed(shortcuts.orbitUp))
+
+		if (commandId == kCommandUndoView)
 		{
-			LogRotationAction(
-				"keyboard.orbit_up",
-				windowState.rotationStepDeg,
-				m_Layer.GetGlobalSettings().rotationSpeed,
-				rotationDeltaRadians,
-				orbitInputDelta);
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, +orbitInputDelta);
-			queueTransition(animated, "keyboard.orbit_up");
+			RendererEvents::Viewport::UndoViewRequested event;
+			event.windowId = windowState.windowId;
+			eventBus->Publish(event);
+			return;
 		}
-		if (shortcutPressed(shortcuts.orbitDown))
+
+		if (commandId == kCommandRedoView)
 		{
-			LogRotationAction(
-				"keyboard.orbit_down",
-				windowState.rotationStepDeg,
-				m_Layer.GetGlobalSettings().rotationSpeed,
-				rotationDeltaRadians,
-				orbitInputDelta);
-			RendererViewCamera animated = *windowState.camera;
-			animated.Orbit(0.0f, -orbitInputDelta);
-			queueTransition(animated, "keyboard.orbit_down");
-		}
-		if (shortcutPressed(shortcuts.rollLeft))
-		{
-			LogRotationAction(
-				"keyboard.roll_left",
-				windowState.rotationStepDeg,
-				m_Layer.GetGlobalSettings().rotationSpeed,
-				rotationDeltaRadians,
-				orbitInputDelta);
-			RendererViewCamera animated = *windowState.camera;
-			animated.Roll(+rotationDeltaRadians);
-			queueTransition(animated, "keyboard.roll_left");
-		}
-		if (shortcutPressed(shortcuts.rollRight))
-		{
-			LogRotationAction(
-				"keyboard.roll_right",
-				windowState.rotationStepDeg,
-				m_Layer.GetGlobalSettings().rotationSpeed,
-				rotationDeltaRadians,
-				orbitInputDelta);
-			RendererViewCamera animated = *windowState.camera;
-			animated.Roll(-rotationDeltaRadians);
-			queueTransition(animated, "keyboard.roll_right");
-		}
-		if (shortcutPressed(shortcuts.zoomIn))
-		{
-			m_Layer.BeginViewInteraction(windowState.windowId, "keyboard.zoom_in");
-			windowState.transitionActive = false;
-			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
-		}
-		if (shortcutPressed(shortcuts.zoomOut))
-		{
-			m_Layer.BeginViewInteraction(windowState.windowId, "keyboard.zoom_out");
-			windowState.transitionActive = false;
-			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
-		}
-		if (shortcutPressed(shortcuts.focusSelectedAtom))
-			focusSelectedAtom();
-		const bool continuousShortcutDown =
-			shortcutDown(shortcuts.orbitLeft) ||
-			shortcutDown(shortcuts.orbitRight) ||
-			shortcutDown(shortcuts.orbitUp) ||
-			shortcutDown(shortcuts.orbitDown) ||
-			shortcutDown(shortcuts.rollLeft) ||
-			shortcutDown(shortcuts.rollRight) ||
-			shortcutDown(shortcuts.zoomIn) ||
-			shortcutDown(shortcuts.zoomOut);
-		if (!continuousShortcutDown &&
-			windowState.viewInteractionActive &&
-			windowState.viewInteractionSource.rfind("keyboard.", 0) == 0 &&
-			!windowState.transitionActive)
-		{
-			m_Layer.CommitViewInteraction(windowState.windowId);
+			RendererEvents::Viewport::RedoViewRequested event;
+			event.windowId = windowState.windowId;
+			eventBus->Publish(event);
 		}
 	}
 	void RendererPanel::applyViewportInputNavigation(

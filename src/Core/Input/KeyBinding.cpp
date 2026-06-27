@@ -28,7 +28,7 @@ namespace DefectStudio
 		return result;
 	}
 
-	static std::optional<KeyCode> parseKeyCode(std::string_view token)
+	std::optional<KeyCode> ParseKeyCode(std::string_view token)
 	{
 		if (token.size() == 1)
 		{
@@ -40,6 +40,14 @@ namespace DefectStudio
 			}
 			if (std::isdigit(ch))
 				return static_cast<KeyCode>(static_cast<int>(KeyCode::D0) + (ch - '0'));
+			if (ch == '.')
+				return KeyCode::Period;
+			if (ch == ',')
+				return KeyCode::Comma;
+			if (ch == '-')
+				return KeyCode::Minus;
+			if (ch == '=' || ch == '+')
+				return KeyCode::Equal;
 		}
 
 		const std::string lower = toLowerCopy(token);
@@ -55,6 +63,14 @@ namespace DefectStudio
 			return KeyCode::Delete;
 		if (lower == "backspace")
 			return KeyCode::Backspace;
+		if (lower == "period" || lower == "dot")
+			return KeyCode::Period;
+		if (lower == "comma")
+			return KeyCode::Comma;
+		if (lower == "minus")
+			return KeyCode::Minus;
+		if (lower == "equal" || lower == "equals" || lower == "plus")
+			return KeyCode::Equal;
 		if (lower == "left")
 			return KeyCode::Left;
 		if (lower == "right")
@@ -120,7 +136,7 @@ namespace DefectStudio
 					modifiers = modifiers | KeyModifiers::Super;
 				else
 				{
-					auto parsedKey = parseKeyCode(token);
+					auto parsedKey = ParseKeyCode(token);
 					if (!parsedKey)
 						return std::nullopt;
 					if (key != KeyCode::Unknown)
