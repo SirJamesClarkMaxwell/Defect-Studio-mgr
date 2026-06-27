@@ -13,6 +13,38 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr float kOrbitMouseScale = 0.0065f;
+		[[nodiscard]] ImGuiKey ToImGuiKey(KeyCode key)
+		{
+			if (key >= KeyCode::A && key <= KeyCode::Z)
+				return static_cast<ImGuiKey>(ImGuiKey_A + (static_cast<int>(key) - static_cast<int>(KeyCode::A)));
+			if (key >= KeyCode::D0 && key <= KeyCode::D9)
+				return static_cast<ImGuiKey>(ImGuiKey_0 + (static_cast<int>(key) - static_cast<int>(KeyCode::D0)));
+
+			switch (key)
+			{
+			case KeyCode::Space:
+				return ImGuiKey_Space;
+			case KeyCode::Comma:
+				return ImGuiKey_Comma;
+			case KeyCode::Minus:
+				return ImGuiKey_Minus;
+			case KeyCode::Equal:
+				return ImGuiKey_Equal;
+			case KeyCode::Period:
+				return ImGuiKey_Period;
+			case KeyCode::Left:
+				return ImGuiKey_LeftArrow;
+			case KeyCode::Right:
+				return ImGuiKey_RightArrow;
+			case KeyCode::Up:
+				return ImGuiKey_UpArrow;
+			case KeyCode::Down:
+				return ImGuiKey_DownArrow;
+			default:
+				return ImGuiKey_None;
+			}
+		}
+
 		[[nodiscard]] float EaseOutCubic(float t)
 		{
 			const float clamped = std::clamp(t, 0.0f, 1.0f);
@@ -106,15 +138,17 @@ namespace DefectStudio
 		const float rotationDeltaRadians = rotationStepRadians;
 		const float orbitInputDelta = rotationDeltaRadians / kOrbitMouseScale;
 		const RendererKeyboardShortcutSettings &shortcuts = m_Layer.GetGlobalSettings().shortcuts;
-		const auto shortcutPressed = [](ImGuiKey key) -> bool
+		const auto shortcutPressed = [](KeyCode key) -> bool
 		{
-			return key != ImGuiKey_None && ImGui::IsKeyPressed(key);
+			const ImGuiKey imGuiKey = ToImGuiKey(key);
+			return imGuiKey != ImGuiKey_None && ImGui::IsKeyPressed(imGuiKey);
 		};
-		const auto shortcutDown = [](ImGuiKey key) -> bool
+		const auto shortcutDown = [](KeyCode key) -> bool
 		{
-			return key != ImGuiKey_None && ImGui::IsKeyDown(key);
+			const ImGuiKey imGuiKey = ToImGuiKey(key);
+			return imGuiKey != ImGuiKey_None && ImGui::IsKeyDown(imGuiKey);
 		};
-		if (io.KeyCtrl && io.KeyAlt && shortcutPressed(ImGuiKey_Z))
+		if (io.KeyCtrl && io.KeyAlt && shortcutPressed(KeyCode::Z))
 		{
 			if (io.KeyShift)
 				m_Layer.RedoViewChange(windowState.windowId);
@@ -122,7 +156,7 @@ namespace DefectStudio
 				m_Layer.UndoViewChange(windowState.windowId);
 			return;
 		}
-		if (io.KeyCtrl && io.KeyAlt && shortcutPressed(ImGuiKey_Y))
+		if (io.KeyCtrl && io.KeyAlt && shortcutPressed(KeyCode::Y))
 		{
 			m_Layer.RedoViewChange(windowState.windowId);
 			return;
@@ -261,7 +295,7 @@ namespace DefectStudio
 		if (!dragActiveInput)
 		{
 			windowState.dragActive = false;
-			windowState.lastMousePosition = io.MousePos;
+			m_LastMousePositions[windowState.windowId] = io.MousePos;
 			if (windowState.viewInteractionActive &&
 				windowState.viewInteractionSource.rfind("mouse.", 0) == 0)
 			{
@@ -295,13 +329,14 @@ namespace DefectStudio
 					: "mouse.orbit";
 			m_Layer.BeginViewInteraction(windowState.windowId, sourceAction);
 			windowState.dragActive = true;
-			windowState.lastMousePosition = io.MousePos;
+			m_LastMousePositions[windowState.windowId] = io.MousePos;
 			return;
 		}
+		ImVec2 &lastMousePosition = m_LastMousePositions[windowState.windowId];
 		ImVec2 delta(
-			io.MousePos.x - windowState.lastMousePosition.x,
-			io.MousePos.y - windowState.lastMousePosition.y);
-		windowState.lastMousePosition = io.MousePos;
+			io.MousePos.x - lastMousePosition.x,
+			io.MousePos.y - lastMousePosition.y);
+		lastMousePosition = io.MousePos;
 		const float frameScale = std::max(0.0f, deltaTime) * 60.0f;
 		delta.x *= frameScale;
 		delta.y *= frameScale;

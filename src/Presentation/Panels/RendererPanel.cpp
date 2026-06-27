@@ -107,6 +107,7 @@ namespace DefectStudio
 		windowState.viewportSize.x = SanitizeViewportDimension(available.x);
 		windowState.viewportSize.y = SanitizeViewportDimension(available.y);
 		windowState.camera->SetViewport(windowState.viewportSize.x, windowState.viewportSize.y);
+		const ImVec2 viewportSize(windowState.viewportSize.x, windowState.viewportSize.y);
 
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
 
@@ -118,7 +119,7 @@ namespace DefectStudio
 
 		ImGui::Image(
 			static_cast<ImTextureID>(static_cast<uintptr_t>(textureId)),
-			windowState.viewportSize,
+			viewportSize,
 			ImVec2(0.0f, 1.0f),
 			ImVec2(1.0f, 0.0f));
 

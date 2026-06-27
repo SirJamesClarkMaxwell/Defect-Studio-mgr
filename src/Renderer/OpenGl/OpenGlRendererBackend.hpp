@@ -4,8 +4,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <imgui.h>
-
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Time.hpp"

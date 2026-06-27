@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <imgui.h>
 
 #include "Core/Utils/Memory.hpp"
 
@@ -28,7 +28,7 @@ namespace DefectStudio
 		std::string title;
 		RendererStructureData structure;
 		Unique<RendererViewCamera> camera;
-		ImVec2 viewportSize = ImVec2(640.0f, 480.0f);
+		glm::vec2 viewportSize = glm::vec2(640.0f, 480.0f);
 		bool showGrid = true;
 		bool showCellBox = true;
 		bool showBonds = true;
@@ -39,7 +39,6 @@ namespace DefectStudio
 		float percentStep = 10.0f;
 		bool dragActive = false;
 		bool lastFocusedState = false;
-		ImVec2 lastMousePosition = ImVec2(0.0f, 0.0f);
 		bool transitionActive = false;
 		float transitionElapsed = 0.0f;
 		float transitionDuration = 0.14f;

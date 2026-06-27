@@ -1,6 +1,9 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+
+#include <imgui.h>
 
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -38,5 +41,6 @@ namespace DefectStudio
 
 	private:
 		RendererLayer &m_Layer;
+		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 	};
 } // namespace DefectStudio

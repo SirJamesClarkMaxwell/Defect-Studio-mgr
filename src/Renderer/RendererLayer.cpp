@@ -110,50 +110,50 @@ namespace DefectStudio
 		return upper;
 	}
 
-	[[nodiscard]] ImGuiKey ParseRendererShortcutKey(std::string_view token, ImGuiKey fallback)
+	[[nodiscard]] KeyCode ParseRendererShortcutKey(std::string_view token, KeyCode fallback)
 	{
 		const std::string normalized = ToUpperAscii(token);
 		if (normalized.empty() || normalized == "NONE")
-			return ImGuiKey_None;
+			return KeyCode::Unknown;
 
 		if (normalized == "A")
-			return ImGuiKey_A;
+			return KeyCode::A;
 		if (normalized == "B")
-			return ImGuiKey_B;
+			return KeyCode::B;
 		if (normalized == "C")
-			return ImGuiKey_C;
+			return KeyCode::C;
 		if (normalized == "D")
-			return ImGuiKey_D;
+			return KeyCode::D;
 		if (normalized == "E")
-			return ImGuiKey_E;
+			return KeyCode::E;
 		if (normalized == "F")
-			return ImGuiKey_F;
+			return KeyCode::F;
 		if (normalized == "Q")
-			return ImGuiKey_Q;
+			return KeyCode::Q;
 		if (normalized == "R")
-			return ImGuiKey_R;
+			return KeyCode::R;
 		if (normalized == "S")
-			return ImGuiKey_S;
+			return KeyCode::S;
 		if (normalized == "W")
-			return ImGuiKey_W;
+			return KeyCode::W;
 		if (normalized == "LEFT" || normalized == "LEFTARROW")
-			return ImGuiKey_LeftArrow;
+			return KeyCode::Left;
 		if (normalized == "RIGHT" || normalized == "RIGHTARROW")
-			return ImGuiKey_RightArrow;
+			return KeyCode::Right;
 		if (normalized == "UP" || normalized == "UPARROW")
-			return ImGuiKey_UpArrow;
+			return KeyCode::Up;
 		if (normalized == "DOWN" || normalized == "DOWNARROW")
-			return ImGuiKey_DownArrow;
+			return KeyCode::Down;
 		if (normalized == "PERIOD" || normalized == ".")
-			return ImGuiKey_Period;
+			return KeyCode::Period;
 		if (normalized == "COMMA" || normalized == ",")
-			return ImGuiKey_Comma;
+			return KeyCode::Comma;
 		if (normalized == "MINUS" || normalized == "-")
-			return ImGuiKey_Minus;
+			return KeyCode::Minus;
 		if (normalized == "EQUAL" || normalized == "=" || normalized == "PLUS")
-			return ImGuiKey_Equal;
+			return KeyCode::Equal;
 		if (normalized == "SPACE")
-			return ImGuiKey_Space;
+			return KeyCode::Space;
 
 		return fallback;
 	}
@@ -466,40 +466,40 @@ namespace DefectStudio
 		m_GlobalRenderSettings.grid.planeZ = config.renderer.grid.planeZ;
 		m_GlobalRenderSettings.shortcuts.alignAxisA = ParseRendererShortcutKey(
 			config.renderer.shortcuts.alignAxisA,
-			ImGuiKey_A);
+			KeyCode::A);
 		m_GlobalRenderSettings.shortcuts.alignAxisB = ParseRendererShortcutKey(
 			config.renderer.shortcuts.alignAxisB,
-			ImGuiKey_B);
+			KeyCode::B);
 		m_GlobalRenderSettings.shortcuts.alignAxisC = ParseRendererShortcutKey(
 			config.renderer.shortcuts.alignAxisC,
-			ImGuiKey_C);
+			KeyCode::C);
 		m_GlobalRenderSettings.shortcuts.orbitLeft = ParseRendererShortcutKey(
 			config.renderer.shortcuts.orbitLeft,
-			ImGuiKey_LeftArrow);
+			KeyCode::Left);
 		m_GlobalRenderSettings.shortcuts.orbitRight = ParseRendererShortcutKey(
 			config.renderer.shortcuts.orbitRight,
-			ImGuiKey_RightArrow);
+			KeyCode::Right);
 		m_GlobalRenderSettings.shortcuts.orbitUp = ParseRendererShortcutKey(
 			config.renderer.shortcuts.orbitUp,
-			ImGuiKey_UpArrow);
+			KeyCode::Up);
 		m_GlobalRenderSettings.shortcuts.orbitDown = ParseRendererShortcutKey(
 			config.renderer.shortcuts.orbitDown,
-			ImGuiKey_DownArrow);
+			KeyCode::Down);
 		m_GlobalRenderSettings.shortcuts.rollLeft = ParseRendererShortcutKey(
 			config.renderer.shortcuts.rollLeft,
-			ImGuiKey_Q);
+			KeyCode::Q);
 		m_GlobalRenderSettings.shortcuts.rollRight = ParseRendererShortcutKey(
 			config.renderer.shortcuts.rollRight,
-			ImGuiKey_E);
+			KeyCode::E);
 		m_GlobalRenderSettings.shortcuts.zoomIn = ParseRendererShortcutKey(
 			config.renderer.shortcuts.zoomIn,
-			ImGuiKey_R);
+			KeyCode::R);
 		m_GlobalRenderSettings.shortcuts.zoomOut = ParseRendererShortcutKey(
 			config.renderer.shortcuts.zoomOut,
-			ImGuiKey_F);
+			KeyCode::F);
 		m_GlobalRenderSettings.shortcuts.focusSelectedAtom = ParseRendererShortcutKey(
 			config.renderer.shortcuts.focusSelectedAtom,
-			ImGuiKey_Period);
+			KeyCode::Period);
 
 		if (glm::length(m_GlobalRenderSettings.lighting.keyDirection) <= 0.001f)
 			m_GlobalRenderSettings.lighting.keyDirection = glm::normalize(glm::vec3(0.6f, 0.8f, 0.5f));

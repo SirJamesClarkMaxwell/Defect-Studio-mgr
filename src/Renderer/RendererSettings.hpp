@@ -4,7 +4,8 @@
 
 #include <glm/geometric.hpp>
 #include <glm/glm.hpp>
-#include <imgui.h>
+
+#include "Core/Utils/KeyCodes.hpp"
 
 namespace DefectStudio
 {
@@ -60,18 +61,18 @@ namespace DefectStudio
 
 	struct RendererKeyboardShortcutSettings
 	{
-		ImGuiKey alignAxisA = ImGuiKey_A;
-		ImGuiKey alignAxisB = ImGuiKey_B;
-		ImGuiKey alignAxisC = ImGuiKey_C;
-		ImGuiKey orbitLeft = ImGuiKey_LeftArrow;
-		ImGuiKey orbitRight = ImGuiKey_RightArrow;
-		ImGuiKey orbitUp = ImGuiKey_UpArrow;
-		ImGuiKey orbitDown = ImGuiKey_DownArrow;
-		ImGuiKey rollLeft = ImGuiKey_Q;
-		ImGuiKey rollRight = ImGuiKey_E;
-		ImGuiKey zoomIn = ImGuiKey_R;
-		ImGuiKey zoomOut = ImGuiKey_F;
-		ImGuiKey focusSelectedAtom = ImGuiKey_Period;
+		KeyCode alignAxisA = KeyCode::A;
+		KeyCode alignAxisB = KeyCode::B;
+		KeyCode alignAxisC = KeyCode::C;
+		KeyCode orbitLeft = KeyCode::Left;
+		KeyCode orbitRight = KeyCode::Right;
+		KeyCode orbitUp = KeyCode::Up;
+		KeyCode orbitDown = KeyCode::Down;
+		KeyCode rollLeft = KeyCode::Q;
+		KeyCode rollRight = KeyCode::E;
+		KeyCode zoomIn = KeyCode::R;
+		KeyCode zoomOut = KeyCode::F;
+		KeyCode focusSelectedAtom = KeyCode::Period;
 	};
 
 	struct RendererGlobalRenderSettings
