@@ -8,7 +8,6 @@
 #include "Core/JobSystem/JobEvents.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "ScientificRuntime/Python/PythonGilScope.hpp"
 
 namespace DefectStudio
 {
@@ -80,6 +79,15 @@ namespace DefectStudio
 	JobSystem::~JobSystem()
 	{
 		Shutdown();
+	}
+
+	void JobSystem::RegisterPreExecuteHook(PreExecuteHook hook)
+	{
+		if (!hook)
+			return;
+
+		std::lock_guard<std::mutex> lock(m_PreExecuteHooksMutex);
+		m_PreExecuteHooks.push_back(std::move(hook));
 	}
 
 	JobId JobSystem::Submit(const Ref<IJob> &job, JobPriority priority)
@@ -455,10 +463,22 @@ namespace DefectStudio
 		try
 		{
 			context.ThrowIfCancellationRequested();
-			
-			Ref<PythonGilAcquireScope> pythonGilScope;
-			if (job->UsesPythonRuntime())
-				pythonGilScope = CreateRef<PythonGilAcquireScope>();
+
+			std::vector<PreExecuteHook> preExecuteHooks;
+			{
+				std::lock_guard<std::mutex> lock(m_PreExecuteHooksMutex);
+				preExecuteHooks = m_PreExecuteHooks;
+			}
+
+			std::vector<Unique<IJobExecutionGuard>> executionGuards;
+			executionGuards.reserve(preExecuteHooks.size());
+			for (const PreExecuteHook &hook : preExecuteHooks)
+			{
+				if (!hook)
+					continue;
+				if (auto guard = hook(*job))
+					executionGuards.push_back(std::move(guard));
+			}
 
 			job->Execute(context);
 			if (context.IsCancellationRequested())

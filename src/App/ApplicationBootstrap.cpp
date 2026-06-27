@@ -923,6 +923,8 @@ namespace DefectStudio
 			GetProgressTracker();
 			timer.Finish(true);
 		}
+		if (auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock())
+			scientificRuntimeLayer->BindJobSystem(coreLayer->GetJobSystemHandle());
 
 		if (editorLayer != nullptr)
 		{

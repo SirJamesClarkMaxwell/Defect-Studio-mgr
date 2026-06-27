@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 
@@ -9,11 +10,11 @@
 
 namespace DefectStudio
 {
-	class PythonGilAcquireScope final
+	class PythonGilAcquireScope final : public IJobExecutionGuard
 	{
 	public:
 		PythonGilAcquireScope();
-		~PythonGilAcquireScope();
+		~PythonGilAcquireScope() override;
 
 		[[nodiscard]] bool IsActive() const;
 

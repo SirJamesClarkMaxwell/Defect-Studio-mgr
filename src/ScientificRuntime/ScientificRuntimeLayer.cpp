@@ -4,8 +4,11 @@
 
 #include "Core/Capabilities/Capability.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
+#include "ScientificRuntime/Python/PythonGilScope.hpp"
+#include "ScientificRuntime/Python/PythonScriptJob.hpp"
 #include "ScientificRuntime/Python/ScientificPythonRuntime.hpp"
 
 namespace DefectStudio
@@ -35,6 +38,7 @@ namespace DefectStudio
 			DS_LOG_INFO("ScientificRuntimeLayer: Python bridge initialized");
 		}
 
+		registerJobSystemHooks();
 		DS_LOG_INFO("ScientificRuntimeLayer attached");
 	}
 
@@ -49,9 +53,33 @@ namespace DefectStudio
 		DS_LOG_INFO("ScientificRuntimeLayer detached");
 	}
 
+	void ScientificRuntimeLayer::BindJobSystem(WeakRef<JobSystem> jobSystem)
+	{
+		m_JobSystem = std::move(jobSystem);
+		registerJobSystemHooks();
+	}
+
 	void ScientificRuntimeLayer::OnUpdate(float deltaTime)
 	{
 		(void)deltaTime;
+	}
+
+	void ScientificRuntimeLayer::registerJobSystemHooks()
+	{
+		if (m_JobHookRegistered)
+			return;
+
+		auto jobSystem = m_JobSystem.lock();
+		if (jobSystem == nullptr)
+			return;
+
+		jobSystem->RegisterPreExecuteHook([](const IJob &job) -> Unique<IJobExecutionGuard> {
+			const auto *pythonJob = dynamic_cast<const PythonScriptJob *>(&job);
+			if (pythonJob != nullptr && pythonJob->UsesPythonRuntime())
+				return CreateUnique<PythonGilAcquireScope>();
+			return {};
+		});
+		m_JobHookRegistered = true;
 	}
 
 	void ScientificRuntimeLayer::RegisterCapability(CapabilityService &capabilityService, CapabilityEntry capability) const

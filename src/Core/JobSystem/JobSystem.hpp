@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -23,6 +24,8 @@ namespace DefectStudio
 	class JobSystem
 	{
 	public:
+		using PreExecuteHook = std::function<Unique<IJobExecutionGuard>(const IJob &job)>;
+
 		explicit JobSystem(Ref<EventBus> eventBus = {}, std::size_t threadCount = 0);
 		~JobSystem();
 
@@ -55,6 +58,7 @@ namespace DefectStudio
 		[[nodiscard]] std::vector<JobSnapshot> GetFinishedJobs() const;
 		[[nodiscard]] std::vector<JobLogEntry> GetLogs(JobId id) const;
 
+		void RegisterPreExecuteHook(PreExecuteHook hook);
 		void Shutdown();
 
 	private:
@@ -128,6 +132,10 @@ namespace DefectStudio
 		std::size_t m_MaxQueueCapacity = 1024;
 		std::atomic_bool m_AllJobsPaused{false};
 		std::vector<std::pair<Ref<IJob>, JobPriority>> m_TemporaryJobStorage;
+
+		// Per-job execution guards registered by higher-level runtime layers.
+		mutable std::mutex m_PreExecuteHooksMutex;
+		std::vector<PreExecuteHook> m_PreExecuteHooks;
 
 		// Lifecycle control.
 		std::atomic<JobId> m_NextId{1};

@@ -20,7 +20,7 @@ namespace DefectStudio
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
-		[[nodiscard]] bool UsesPythonRuntime() const override;
+		[[nodiscard]] bool UsesPythonRuntime() const;
 		void Execute(JobContext &context) override;
 
 	private:
