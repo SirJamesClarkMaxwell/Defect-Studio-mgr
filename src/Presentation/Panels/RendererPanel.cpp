@@ -86,8 +86,7 @@ namespace DefectStudio
 	{
 		if (windowState.camera == nullptr)
 			return;
-
-		updateCameraTransition(windowState, deltaTime);
+		(void)deltaTime;
 
 		const bool began = ImGui::Begin(windowState.title.c_str());
 		const bool nowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -102,6 +101,7 @@ namespace DefectStudio
 				focusEvent.focused = nowFocused;
 				eventBus->Publish(focusEvent);
 			}
+			onViewportFocusChanged(windowState.windowId, nowFocused);
 		}
 		if (!began)
 		{

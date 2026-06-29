@@ -98,6 +98,18 @@ namespace DefectStudio
 		return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
 	}
 
+	[[nodiscard]] float EaseOutCubic(float t)
+	{
+		const float clamped = std::clamp(t, 0.0f, 1.0f);
+		const float inv = 1.0f - clamped;
+		return 1.0f - inv * inv * inv;
+	}
+
+	[[nodiscard]] float RadiansToDegrees(float angleRadians)
+	{
+		return angleRadians * 57.295779513f;
+	}
+
 	[[nodiscard]] RendererViewSnapshot CaptureViewSnapshotFromCamera(const RendererViewCamera &camera)
 	{
 		RendererViewSnapshot snapshot;
@@ -255,6 +267,127 @@ namespace DefectStudio
 		windowState->viewInteractionSource.clear();
 	}
 
+	void RendererLayer::StartCameraTransition(
+		const std::string &windowId,
+		const glm::vec3 &target,
+		float distance,
+		float yaw,
+		float pitch,
+		float roll,
+		const char *sourceAction)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		const char *resolvedSourceAction =
+			(sourceAction != nullptr && sourceAction[0] != '\0')
+				? sourceAction
+				: "unspecified";
+		const float targetDistance = std::max(distance, 0.1f);
+		if (windowState->transitionActive)
+		{
+			const float previousDuration = std::max(0.01f, windowState->transitionDuration);
+			const float previousProgress =
+				std::clamp(windowState->transitionElapsed / previousDuration, 0.0f, 1.0f);
+			DS_LOG_DEBUG(
+				"Renderer transition interrupted prev_source={} progress={:.3f} new_source={}",
+				windowState->transitionSourceAction.empty() ? "unspecified" : windowState->transitionSourceAction.c_str(),
+				previousProgress,
+				resolvedSourceAction);
+		}
+
+		const float startYaw = windowState->camera->Yaw();
+		const float startPitch = windowState->camera->Pitch();
+		const float startRoll = windowState->camera->Roll();
+		const glm::quat startOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(startYaw, startPitch, startRoll);
+		glm::quat endOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(yaw, pitch, roll);
+		if (glm::dot(startOrientation, endOrientation) < 0.0f)
+			endOrientation = -endOrientation;
+
+		const float deltaYaw = RendererViewCamera::NormalizeAngleRadians(yaw - startYaw);
+		const float deltaPitch = RendererViewCamera::NormalizeAngleRadians(pitch - startPitch);
+		const float deltaRoll = RendererViewCamera::NormalizeAngleRadians(roll - startRoll);
+		const float angularDeltaDegrees = RadiansToDegrees(
+			2.0f * std::acos(glm::clamp(std::abs(glm::dot(startOrientation, endOrientation)), 0.0f, 1.0f)));
+
+		windowState->transitionActive = true;
+		windowState->transitionElapsed = 0.0f;
+		windowState->transitionDuration = ComputeCameraTransitionDurationSeconds(m_GlobalRenderSettings.rotationSpeed);
+		windowState->transitionStartTarget = windowState->camera->Target();
+		windowState->transitionEndTarget = target;
+		windowState->transitionStartDistance = windowState->camera->Distance();
+		windowState->transitionEndDistance = targetDistance;
+		windowState->transitionStartYaw = startYaw;
+		windowState->transitionEndYaw = yaw;
+		windowState->transitionStartPitch = startPitch;
+		windowState->transitionEndPitch = pitch;
+		windowState->transitionStartRoll = startRoll;
+		windowState->transitionEndRoll = roll;
+		windowState->transitionStartOrientation = startOrientation;
+		windowState->transitionEndOrientation = endOrientation;
+		windowState->transitionSourceAction = resolvedSourceAction;
+
+		DS_LOG_DEBUG(
+			"Renderer transition start source={} duration={:.3f}s "
+			"start_ypr_deg=({:.2f},{:.2f},{:.2f}) end_ypr_deg=({:.2f},{:.2f},{:.2f}) "
+			"delta_ypr_deg=({:.2f},{:.2f},{:.2f}) angular_delta_deg={:.2f} distance=({:.3f}->{:.3f})",
+			resolvedSourceAction,
+			std::max(0.01f, windowState->transitionDuration),
+			RadiansToDegrees(startYaw),
+			RadiansToDegrees(startPitch),
+			RadiansToDegrees(startRoll),
+			RadiansToDegrees(yaw),
+			RadiansToDegrees(pitch),
+			RadiansToDegrees(roll),
+			RadiansToDegrees(deltaYaw),
+			RadiansToDegrees(deltaPitch),
+			RadiansToDegrees(deltaRoll),
+			angularDeltaDegrees,
+			windowState->camera->Distance(),
+			targetDistance);
+	}
+
+	void RendererLayer::UpdateCameraTransitions(float deltaTime)
+	{
+		for (RendererWindowState &windowState : m_Windows)
+		{
+			if (!windowState.transitionActive || windowState.camera == nullptr)
+				continue;
+
+			windowState.transitionElapsed += std::max(0.0f, deltaTime);
+			const float duration = std::max(0.01f, windowState.transitionDuration);
+			const float alpha = std::clamp(windowState.transitionElapsed / duration, 0.0f, 1.0f);
+			const float t = EaseOutCubic(alpha);
+
+			const glm::vec3 target = glm::mix(windowState.transitionStartTarget, windowState.transitionEndTarget, t);
+			const float distance = glm::mix(windowState.transitionStartDistance, windowState.transitionEndDistance, t);
+			const glm::quat orientation = glm::normalize(
+				glm::slerp(windowState.transitionStartOrientation, windowState.transitionEndOrientation, t));
+
+			float yaw = 0.0f;
+			float pitch = 0.0f;
+			float roll = 0.0f;
+			RendererViewCamera::CameraEulerFromOrientationQuat(orientation, yaw, pitch, roll);
+
+			windowState.camera->SetOrbitState(target, distance, yaw, pitch);
+			windowState.camera->SetRoll(roll);
+
+			if (alpha >= 1.0f)
+			{
+				DS_LOG_DEBUG(
+					"Renderer transition complete source={} final_ypr_deg=({:.2f},{:.2f},{:.2f})",
+					windowState.transitionSourceAction.empty() ? "unspecified" : windowState.transitionSourceAction.c_str(),
+					RadiansToDegrees(yaw),
+					RadiansToDegrees(pitch),
+					RadiansToDegrees(roll));
+
+				windowState.transitionActive = false;
+				CommitViewInteraction(windowState.windowId);
+			}
+		}
+	}
+
 	void RendererLayer::UndoViewChange(const std::string &windowId)
 	{
 		RendererWindowState *windowState = findWindowById(windowId);
@@ -371,6 +504,7 @@ namespace DefectStudio
 		m_LastDeltaTime = deltaTime;
 		if (m_RendererBackend != nullptr)
 			m_RendererBackend->ReloadShadersIfNeeded();
+		UpdateCameraTransitions(deltaTime);
 	}
 
 	void RendererLayer::OnImGuiRender()
@@ -570,38 +704,20 @@ namespace DefectStudio
 	{
 		if (windowState.camera == nullptr)
 			return;
+		windowState.camera->SetProjection(snapshot.projection);
 
 		const char *resolvedSourceAction =
 			(sourceAction != nullptr && sourceAction[0] != '\0')
 				? sourceAction
 				: "view.restore";
-		const float targetDistance = std::max(snapshot.distance, 0.1f);
-		const float startYaw = windowState.camera->Yaw();
-		const float startPitch = windowState.camera->Pitch();
-		const float startRoll = windowState.camera->Roll();
-		const glm::quat startOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(startYaw, startPitch, startRoll);
-		glm::quat endOrientation = RendererViewCamera::CameraOrientationQuatFromEuler(snapshot.yaw, snapshot.pitch, snapshot.roll);
-		if (glm::dot(startOrientation, endOrientation) < 0.0f)
-			endOrientation = -endOrientation;
-
-		windowState.camera->SetProjection(snapshot.projection);
-		windowState.transitionActive = true;
-		windowState.transitionElapsed = 0.0f;
-		windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-			m_GlobalRenderSettings.rotationSpeed);
-		windowState.transitionStartTarget = windowState.camera->Target();
-		windowState.transitionEndTarget = snapshot.target;
-		windowState.transitionStartDistance = windowState.camera->Distance();
-		windowState.transitionEndDistance = targetDistance;
-		windowState.transitionStartYaw = startYaw;
-		windowState.transitionEndYaw = snapshot.yaw;
-		windowState.transitionStartPitch = startPitch;
-		windowState.transitionEndPitch = snapshot.pitch;
-		windowState.transitionStartRoll = startRoll;
-		windowState.transitionEndRoll = snapshot.roll;
-		windowState.transitionStartOrientation = startOrientation;
-		windowState.transitionEndOrientation = endOrientation;
-		windowState.transitionSourceAction = resolvedSourceAction;
+		StartCameraTransition(
+			windowState.windowId,
+			snapshot.target,
+			snapshot.distance,
+			snapshot.yaw,
+			snapshot.pitch,
+			snapshot.roll,
+			resolvedSourceAction);
 		DS_LOG_DEBUG("Renderer view restore transition source={}", resolvedSourceAction);
 	}
 

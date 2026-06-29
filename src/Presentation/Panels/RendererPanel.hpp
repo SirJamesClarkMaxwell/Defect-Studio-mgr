@@ -1,10 +1,12 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 
 #include <imgui.h>
 
+#include "Core/Input/KeyInputProcessor.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
@@ -34,23 +36,16 @@ namespace DefectStudio
 		void drawViewportToolbar(RendererWindowState &windowState);
 		void applyViewportKeyboardNavigation(RendererWindowState &windowState);
 		void applyViewportInputNavigation(RendererWindowState &windowState, const ImVec2 &imageOrigin, float deltaTime);
+		void onViewportFocusChanged(const std::string &windowId, bool focused);
 		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
 		void drawPeriodicTableWindow();
-		void startCameraTransition(
-			RendererWindowState &windowState,
-			const glm::vec3 &target,
-			float distance,
-			float yaw,
-			float pitch,
-			float roll,
-			const char *sourceAction = nullptr);
-		void updateCameraTransition(RendererWindowState &windowState, float deltaTime);
 
 	private:
 		RendererLayer &m_Layer;
 		Ref<EventBus> m_EventBus;
 		WeakRef<KeymapResolver> m_KeymapResolver;
 		WeakRef<ContextManager> m_ContextManager;
+		std::optional<KeyInputProcessor> m_KeyInputProcessor;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 	};
 } // namespace DefectStudio

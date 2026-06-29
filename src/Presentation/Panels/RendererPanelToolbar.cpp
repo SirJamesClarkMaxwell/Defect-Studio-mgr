@@ -70,11 +70,6 @@ namespace DefectStudio
 			value = std::clamp(updated, minimumValue, maximumValue);
 		}
 
-		float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
-		{
-			const float safeSpeed = std::max(0.1f, rotationSpeed);
-			return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
-		}
 	}
 
 	void RendererPanel::drawViewportToolbar(RendererWindowState &windowState)
@@ -148,10 +143,8 @@ namespace DefectStudio
 		auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
 			m_Layer.BeginViewInteraction(windowState.windowId, sourceAction);
-			windowState.transitionDuration = ComputeCameraTransitionDurationSeconds(
-				m_Layer.GetGlobalSettings().rotationSpeed);
-			startCameraTransition(
-				windowState,
+			m_Layer.StartCameraTransition(
+				windowState.windowId,
 				cameraState.Target(),
 				cameraState.Distance(),
 				cameraState.Yaw(),

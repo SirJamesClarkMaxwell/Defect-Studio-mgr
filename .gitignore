@@ -41,3 +41,6 @@ install/app/python/*
 # OS artifacts
 Thumbs.db
 .DS_Store
+
+graphify-out/*
+.codex/*

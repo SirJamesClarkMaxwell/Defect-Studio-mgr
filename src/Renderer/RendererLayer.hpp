@@ -60,6 +60,15 @@ namespace DefectStudio
 		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
 		void CommitViewInteraction(const std::string &windowId);
 		void CancelViewInteraction(const std::string &windowId);
+		void StartCameraTransition(
+			const std::string &windowId,
+			const glm::vec3 &target,
+			float distance,
+			float yaw,
+			float pitch,
+			float roll,
+			const char *sourceAction = nullptr);
+		void UpdateCameraTransitions(float deltaTime);
 		void UndoViewChange(const std::string &windowId);
 		void RedoViewChange(const std::string &windowId);
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
