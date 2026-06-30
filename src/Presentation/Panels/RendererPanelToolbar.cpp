@@ -8,7 +8,10 @@
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Events/RendererEvents.hpp"
+#include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
@@ -142,15 +145,32 @@ namespace DefectStudio
 
 		auto queueTransition = [&](const RendererViewCamera &cameraState, const char *sourceAction)
 		{
-			m_Layer.BeginViewInteraction(windowState.windowId, sourceAction);
-			m_Layer.StartCameraTransition(
-				windowState.windowId,
-				cameraState.Target(),
-				cameraState.Distance(),
-				cameraState.Yaw(),
-				cameraState.Pitch(),
-				cameraState.Roll(),
-				sourceAction);
+			Ref<EventBus> eventBus = m_Layer.GetEventBus();
+			if (eventBus == nullptr)
+				return;
+
+			RendererEvents::Viewport::ViewTransitionRequested event;
+			event.windowId = windowState.windowId;
+			event.targetView.target = cameraState.Target();
+			event.targetView.distance = cameraState.Distance();
+			event.targetView.yaw = cameraState.Yaw();
+			event.targetView.pitch = cameraState.Pitch();
+			event.targetView.roll = cameraState.Roll();
+			event.targetView.projection = cameraState.Projection();
+			event.sourceAction = sourceAction != nullptr ? sourceAction : "toolbar.view_transition";
+			eventBus->Publish(event);
+		};
+
+		auto publishZoomStep = [&](float amount)
+		{
+			Ref<EventBus> eventBus = m_Layer.GetEventBus();
+			if (eventBus == nullptr)
+				return;
+
+			RendererEvents::Viewport::ZoomStepRequested event;
+			event.windowId = windowState.windowId;
+			event.amount = amount;
+			eventBus->Publish(event);
 		};
 
 		auto axisButton = [&](const char *label, const glm::vec3 &axis, const char *sourceAction)
@@ -290,28 +310,26 @@ namespace DefectStudio
 		sameLineTight();
 		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out"))
 		{
-			m_Layer.BeginViewInteraction(windowState.windowId, "toolbar.zoom_out");
-			windowState.transitionActive = false;
-			windowState.camera->Zoom(-std::max(0.5f, windowState.percentStep * 0.1f));
-			m_Layer.CommitViewInteraction(windowState.windowId);
+			publishZoomStep(-std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		sameLineTight();
 
 		if (iconButton("##ZoomIn", "plus.png", "+", "Zoom in"))
 		{
-			m_Layer.BeginViewInteraction(windowState.windowId, "toolbar.zoom_in");
-			windowState.transitionActive = false;
-			windowState.camera->Zoom(+std::max(0.5f, windowState.percentStep * 0.1f));
-			m_Layer.CommitViewInteraction(windowState.windowId);
+			publishZoomStep(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		sameLineTight();
 
 		const bool isOrtho = windowState.camera->Projection() == CameraProjection::Orthographic;
 		if (ImGui::Button(isOrtho ? "ORTHO" : "PERSP"))
 		{
-			m_Layer.BeginViewInteraction(windowState.windowId, "toolbar.toggle_projection");
-			windowState.camera->ToggleProjection();
-			m_Layer.CommitViewInteraction(windowState.windowId);
+			Ref<EventBus> eventBus = m_Layer.GetEventBus();
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::ProjectionToggleRequested event;
+				event.windowId = windowState.windowId;
+				eventBus->Publish(event);
+			}
 		}
 		sameLineTight();
 

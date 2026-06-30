@@ -48,6 +48,7 @@ namespace DefectStudio
 	constexpr float kMaxGridSpacing = 25.0f;
 	constexpr float kMinGridPlaneZ = -10000.0f;
 	constexpr float kMaxGridPlaneZ = 10000.0f;
+	constexpr float kOrbitMouseScale = 0.0065f;
 
 	[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 	{
@@ -469,6 +470,12 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onViewportFocusChanged, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::AlignToAxisRequested>(
 				std::bind_front(&RendererLayer::onAlignToAxisRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitDirectionRequested>(
+				std::bind_front(&RendererLayer::onOrbitDirectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RollDirectionRequested>(
+				std::bind_front(&RendererLayer::onRollDirectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ZoomDirectionRequested>(
+				std::bind_front(&RendererLayer::onZoomDirectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitStepRequested>(
 				std::bind_front(&RendererLayer::onOrbitStepRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RollStepRequested>(
@@ -481,6 +488,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onUndoViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RedoViewRequested>(
 				std::bind_front(&RendererLayer::onRedoViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ViewTransitionRequested>(
+				std::bind_front(&RendererLayer::onViewTransitionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ProjectionToggleRequested>(
+				std::bind_front(&RendererLayer::onProjectionToggleRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -682,6 +693,15 @@ namespace DefectStudio
 		return nullptr;
 	}
 
+	RendererWindowState *RendererLayer::findViewportCommandWindow(const std::string &windowId)
+	{
+		if (!windowId.empty())
+			return findWindowById(windowId);
+		if (!m_FocusedViewportWindowId.empty())
+			return findWindowById(m_FocusedViewportWindowId);
+		return nullptr;
+	}
+
 	RendererViewSnapshot RendererLayer::captureViewSnapshot(const RendererWindowState &windowState) const
 	{
 		RendererViewSnapshot snapshot;
@@ -787,12 +807,16 @@ namespace DefectStudio
 
 	void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event)
 	{
+		if (event.focused)
+			m_FocusedViewportWindowId = event.windowId;
+		else if (m_FocusedViewportWindowId == event.windowId)
+			m_FocusedViewportWindowId.clear();
 		DS_LOG_TRACE("Renderer viewport '{}' focus: {}", event.windowId, event.focused);
 	}
 
 	void RendererLayer::onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event)
 	{
-		RendererWindowState *windowState = findWindowById(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 2)
 			return;
 
@@ -808,9 +832,67 @@ namespace DefectStudio
 		restoreViewSnapshot(*windowState, after, "keyboard.align_axis");
 	}
 
+	void RendererLayer::onOrbitDirectionRequested(const RendererEvents::Viewport::OrbitDirectionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const float rotationStepRadians = std::clamp(windowState->rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
+		const float orbitInputDelta = rotationStepRadians / kOrbitMouseScale;
+		RendererEvents::Viewport::OrbitStepRequested stepEvent;
+		stepEvent.windowId = windowState->windowId;
+		switch (event.direction)
+		{
+			case RendererEvents::Viewport::OrbitDirection::Left:
+				stepEvent.dx = +orbitInputDelta;
+				break;
+			case RendererEvents::Viewport::OrbitDirection::Right:
+				stepEvent.dx = -orbitInputDelta;
+				break;
+			case RendererEvents::Viewport::OrbitDirection::Up:
+				stepEvent.dy = +orbitInputDelta;
+				break;
+			case RendererEvents::Viewport::OrbitDirection::Down:
+				stepEvent.dy = -orbitInputDelta;
+				break;
+		}
+		onOrbitStepRequested(stepEvent);
+	}
+
+	void RendererLayer::onRollDirectionRequested(const RendererEvents::Viewport::RollDirectionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const float rotationStepRadians = std::clamp(windowState->rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
+		RendererEvents::Viewport::RollStepRequested stepEvent;
+		stepEvent.windowId = windowState->windowId;
+		stepEvent.delta = event.direction == RendererEvents::Viewport::RollDirection::Left
+			? +rotationStepRadians
+			: -rotationStepRadians;
+		onRollStepRequested(stepEvent);
+	}
+
+	void RendererLayer::onZoomDirectionRequested(const RendererEvents::Viewport::ZoomDirectionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const float zoomAmount = std::max(0.5f, windowState->percentStep * 0.1f);
+		RendererEvents::Viewport::ZoomStepRequested stepEvent;
+		stepEvent.windowId = windowState->windowId;
+		stepEvent.amount = event.direction == RendererEvents::Viewport::ZoomDirection::In
+			? +zoomAmount
+			: -zoomAmount;
+		onZoomStepRequested(stepEvent);
+	}
+
 	void RendererLayer::onOrbitStepRequested(const RendererEvents::Viewport::OrbitStepRequested &event)
 	{
-		RendererWindowState *windowState = findWindowById(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
 
@@ -824,7 +906,7 @@ namespace DefectStudio
 
 	void RendererLayer::onRollStepRequested(const RendererEvents::Viewport::RollStepRequested &event)
 	{
-		RendererWindowState *windowState = findWindowById(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
 
@@ -838,7 +920,7 @@ namespace DefectStudio
 
 	void RendererLayer::onZoomStepRequested(const RendererEvents::Viewport::ZoomStepRequested &event)
 	{
-		RendererWindowState *windowState = findWindowById(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
 
@@ -851,7 +933,7 @@ namespace DefectStudio
 
 	void RendererLayer::onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event)
 	{
-		RendererWindowState *windowState = findWindowById(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr || windowState->selectedAtomIndices.empty())
 			return;
 
@@ -880,12 +962,47 @@ namespace DefectStudio
 
 	void RendererLayer::onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event)
 	{
-		UndoViewChange(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState != nullptr)
+			UndoViewChange(windowState->windowId);
 	}
 
 	void RendererLayer::onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event)
 	{
-		RedoViewChange(event.windowId);
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState != nullptr)
+			RedoViewChange(windowState->windowId);
+	}
+
+	void RendererLayer::onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		windowState->camera->SetProjection(event.targetView.projection);
+		BeginViewInteraction(windowState->windowId, event.sourceAction);
+		StartCameraTransition(
+			windowState->windowId,
+			event.targetView.target,
+			event.targetView.distance,
+			event.targetView.yaw,
+			event.targetView.pitch,
+			event.targetView.roll,
+			event.sourceAction.c_str());
+	}
+
+	void RendererLayer::onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		windowState->transitionActive = false;
+		windowState->camera->ToggleProjection();
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		pushViewChange(*windowState, before, after, "toolbar.toggle_projection");
 	}
 
 	void RendererLayer::onConfigApplied(const AppEvents::Config::Applied &event)

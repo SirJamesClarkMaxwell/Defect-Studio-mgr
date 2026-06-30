@@ -9,135 +9,14 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/ContextManager.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/ImGuiInputTranslator.hpp"
 
 namespace DefectStudio
 {
 	namespace
 	{
-		constexpr float kOrbitMouseScale = 0.0065f;
 		constexpr const char *kRendererViewportFocusedContext = "renderer.viewport.focused";
-		constexpr const char *kCommandAlignAxisA = "renderer.align_axis_a";
-		constexpr const char *kCommandAlignAxisB = "renderer.align_axis_b";
-		constexpr const char *kCommandAlignAxisC = "renderer.align_axis_c";
-		constexpr const char *kCommandOrbitLeft = "renderer.orbit_left";
-		constexpr const char *kCommandOrbitRight = "renderer.orbit_right";
-		constexpr const char *kCommandOrbitUp = "renderer.orbit_up";
-		constexpr const char *kCommandOrbitDown = "renderer.orbit_down";
-		constexpr const char *kCommandRollLeft = "renderer.roll_left";
-		constexpr const char *kCommandRollRight = "renderer.roll_right";
-		constexpr const char *kCommandZoomIn = "renderer.zoom_in";
-		constexpr const char *kCommandZoomOut = "renderer.zoom_out";
-		constexpr const char *kCommandFocusSelectedAtom = "renderer.focus_selected_atom";
-		constexpr const char *kCommandUndoView = "renderer.undo_view";
-		constexpr const char *kCommandRedoView = "renderer.redo_view";
 	}
 
-	void RendererPanel::applyViewportKeyboardNavigation(RendererWindowState &windowState)
-	{
-		if (windowState.camera == nullptr)
-			return;
-
-		if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-			return;
-
-		Ref<EventBus> eventBus = m_Layer.GetEventBus();
-		if (eventBus == nullptr)
-			return;
-
-		ImGuiIO &io = ImGui::GetIO();
-		if (io.WantTextInput || ImGui::IsAnyItemActive())
-			return;
-
-		if (!m_KeyInputProcessor.has_value())
-		{
-			auto keymapResolver = m_KeymapResolver.lock();
-			auto contextManager = m_ContextManager.lock();
-			if (keymapResolver != nullptr && contextManager != nullptr)
-				m_KeyInputProcessor.emplace(*keymapResolver, *contextManager);
-		}
-		if (!m_KeyInputProcessor.has_value())
-			return;
-
-		std::optional<KeyChord> chord = ImGuiInputTranslator::PollPressedChord();
-		if (!chord)
-			return;
-
-		auto inputResult = m_KeyInputProcessor->HandleKeyPressed(*chord);
-		if (!inputResult || !inputResult->handled || !inputResult->commandId)
-			return;
-
-		const float rotationStepRadians = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
-		const float orbitInputDelta = rotationStepRadians / kOrbitMouseScale;
-		const float zoomAmount = std::max(0.5f, windowState.percentStep * 0.1f);
-		const std::string &commandId = inputResult->commandId->value;
-
-		if (commandId == kCommandAlignAxisA || commandId == kCommandAlignAxisB || commandId == kCommandAlignAxisC)
-		{
-			RendererEvents::Viewport::AlignToAxisRequested event;
-			event.windowId = windowState.windowId;
-			event.axis = commandId == kCommandAlignAxisA ? 0 : (commandId == kCommandAlignAxisB ? 1 : 2);
-			eventBus->Publish(event);
-			return;
-		}
-
-		if (commandId == kCommandOrbitLeft || commandId == kCommandOrbitRight || commandId == kCommandOrbitUp || commandId == kCommandOrbitDown)
-		{
-			RendererEvents::Viewport::OrbitStepRequested event;
-			event.windowId = windowState.windowId;
-			if (commandId == kCommandOrbitLeft)
-				event.dx = +orbitInputDelta;
-			else if (commandId == kCommandOrbitRight)
-				event.dx = -orbitInputDelta;
-			else if (commandId == kCommandOrbitUp)
-				event.dy = +orbitInputDelta;
-			else
-				event.dy = -orbitInputDelta;
-			eventBus->Publish(event);
-			return;
-		}
-
-		if (commandId == kCommandRollLeft || commandId == kCommandRollRight)
-		{
-			RendererEvents::Viewport::RollStepRequested event;
-			event.windowId = windowState.windowId;
-			event.delta = commandId == kCommandRollLeft ? +rotationStepRadians : -rotationStepRadians;
-			eventBus->Publish(event);
-			return;
-		}
-
-		if (commandId == kCommandZoomIn || commandId == kCommandZoomOut)
-		{
-			RendererEvents::Viewport::ZoomStepRequested event;
-			event.windowId = windowState.windowId;
-			event.amount = commandId == kCommandZoomIn ? +zoomAmount : -zoomAmount;
-			eventBus->Publish(event);
-			return;
-		}
-
-		if (commandId == kCommandFocusSelectedAtom)
-		{
-			RendererEvents::Viewport::FocusSelectedAtomRequested event;
-			event.windowId = windowState.windowId;
-			eventBus->Publish(event);
-			return;
-		}
-
-		if (commandId == kCommandUndoView)
-		{
-			RendererEvents::Viewport::UndoViewRequested event;
-			event.windowId = windowState.windowId;
-			eventBus->Publish(event);
-			return;
-		}
-
-		if (commandId == kCommandRedoView)
-		{
-			RendererEvents::Viewport::RedoViewRequested event;
-			event.windowId = windowState.windowId;
-			eventBus->Publish(event);
-		}
-	}
 	void RendererPanel::applyViewportInputNavigation(
 		RendererWindowState &windowState,
 		const ImVec2 &imageOrigin,

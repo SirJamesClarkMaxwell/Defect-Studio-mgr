@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
+#include "Renderer/RendererTypes.hpp"
 
 #include <string>
 
@@ -41,6 +42,44 @@ namespace DefectStudio::RendererEvents::Viewport
 		int axis = 0;
 	};
 
+	enum class OrbitDirection
+	{
+		Left,
+		Right,
+		Up,
+		Down
+	};
+
+	enum class RollDirection
+	{
+		Left,
+		Right
+	};
+
+	enum class ZoomDirection
+	{
+		In,
+		Out
+	};
+
+	struct OrbitDirectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		OrbitDirection direction = OrbitDirection::Left;
+	};
+
+	struct RollDirectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		RollDirection direction = RollDirection::Left;
+	};
+
+	struct ZoomDirectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		ZoomDirection direction = ZoomDirection::In;
+	};
+
 	struct OrbitStepRequested final : public BusEvent
 	{
 		std::string windowId;
@@ -71,6 +110,18 @@ namespace DefectStudio::RendererEvents::Viewport
 	};
 
 	struct RedoViewRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	struct ViewTransitionRequested final : public BusEvent
+	{
+		std::string windowId;
+		RendererViewSnapshot targetView;
+		std::string sourceAction;
+	};
+
+	struct ProjectionToggleRequested final : public BusEvent
 	{
 		std::string windowId;
 	};

@@ -93,3 +93,50 @@ TEST(KeyBindingTests, InputProcessorReturnsResolvedCommand)
 	ASSERT_TRUE(result->commandId);
 	EXPECT_EQ(result->commandId->value, "count");
 }
+
+TEST(KeyBindingTests, RendererBindingResolvesOnlyWhenViewportContextIsActive)
+{
+	DefectStudio::ContextManager contexts;
+	DefectStudio::KeymapResolver resolver;
+	const DefectStudio::KeyChord chord = Ctrl(DefectStudio::KeyCode::A);
+
+	ASSERT_TRUE(resolver.RegisterBinding(DefectStudio::KeyBinding{
+		"renderer.align_axis_a",
+		chord,
+		DefectStudio::CommandID("renderer.align_axis_a"),
+		DefectStudio::ContextExpr("renderer.viewport.focused"),
+		DefectStudio::KeymapLayer::WindowLocal,
+		true}));
+
+	EXPECT_FALSE(resolver.Resolve(chord, contexts));
+
+	contexts.SetActive("renderer.viewport.focused");
+	const auto resolved = resolver.Resolve(chord, contexts);
+
+	ASSERT_TRUE(resolved);
+	EXPECT_EQ(resolved->commandId.value, "renderer.align_axis_a");
+	EXPECT_EQ(resolved->layer, DefectStudio::KeymapLayer::WindowLocal);
+}
+
+TEST(KeyBindingTests, KeyInputProcessorReturnsRendererCommand)
+{
+	DefectStudio::ContextManager contexts;
+	DefectStudio::KeymapResolver resolver;
+	DefectStudio::KeyInputProcessor processor(resolver, contexts);
+	contexts.SetActive("renderer.viewport.focused");
+
+	ASSERT_TRUE(resolver.RegisterBinding(DefectStudio::KeyBinding{
+		"renderer.zoom_in",
+		Ctrl(DefectStudio::KeyCode::Equal),
+		DefectStudio::CommandID("renderer.zoom_in"),
+		DefectStudio::ContextExpr("renderer.viewport.focused"),
+		DefectStudio::KeymapLayer::WindowLocal,
+		true}));
+
+	const auto result = processor.HandleKeyPressed(Ctrl(DefectStudio::KeyCode::Equal));
+
+	ASSERT_TRUE(result);
+	EXPECT_TRUE(result->handled);
+	ASSERT_TRUE(result->commandId);
+	EXPECT_EQ(result->commandId->value, "renderer.zoom_in");
+}

@@ -1,0 +1,24 @@
+#pragma once
+
+#include "Core/Commands/Command.hpp"
+#include "Core/Utils/Memory.hpp"
+#include "Events/RendererEvents.hpp"
+
+namespace DefectStudio
+{
+	class EventBus;
+
+	[[nodiscard]] Unique<ICommand> CreateRendererAlignAxisCommand(Ref<EventBus> eventBus, int axis);
+	[[nodiscard]] Unique<ICommand> CreateRendererOrbitDirectionCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::OrbitDirection direction);
+	[[nodiscard]] Unique<ICommand> CreateRendererRollDirectionCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::RollDirection direction);
+	[[nodiscard]] Unique<ICommand> CreateRendererZoomDirectionCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::ZoomDirection direction);
+	[[nodiscard]] Unique<ICommand> CreateRendererFocusSelectedAtomCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererUndoViewCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererRedoViewCommand(Ref<EventBus> eventBus);
+} // namespace DefectStudio

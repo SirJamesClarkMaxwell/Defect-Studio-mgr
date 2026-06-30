@@ -45,14 +45,12 @@ namespace DefectStudio
 	RendererPanel::RendererPanel(
 		RendererLayer &layer,
 		Ref<EventBus> eventBus,
-		WeakRef<KeymapResolver> keymapResolver,
 		WeakRef<ContextManager> contextManager,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
 		  m_EventBus(std::move(eventBus)),
-		  m_KeymapResolver(std::move(keymapResolver)),
 		  m_ContextManager(std::move(contextManager))
 	{
 	}
@@ -164,8 +162,6 @@ namespace DefectStudio
 				m_Layer.CommitViewInteraction(windowState.windowId);
 			}
 		}
-
-		applyViewportKeyboardNavigation(windowState);
 
 		ImGui::SetCursorScreenPos(imageOrigin);
 		ImGui::End();

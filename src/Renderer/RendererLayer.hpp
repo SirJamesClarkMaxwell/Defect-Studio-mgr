@@ -99,13 +99,19 @@ namespace DefectStudio
 		void onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event);
 		void onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event);
 		void onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event);
+		void onOrbitDirectionRequested(const RendererEvents::Viewport::OrbitDirectionRequested &event);
+		void onRollDirectionRequested(const RendererEvents::Viewport::RollDirectionRequested &event);
+		void onZoomDirectionRequested(const RendererEvents::Viewport::ZoomDirectionRequested &event);
 		void onOrbitStepRequested(const RendererEvents::Viewport::OrbitStepRequested &event);
 		void onRollStepRequested(const RendererEvents::Viewport::RollStepRequested &event);
 		void onZoomStepRequested(const RendererEvents::Viewport::ZoomStepRequested &event);
 		void onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event);
 		void onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event);
 		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
+		void onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event);
+		void onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
+		[[nodiscard]] RendererWindowState *findViewportCommandWindow(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;
 		void restoreViewSnapshot(
 			RendererWindowState &windowState,
@@ -132,6 +138,7 @@ namespace DefectStudio
 		RendererGlobalRenderSettings m_GlobalRenderSettings;
 		mutable std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
 		std::string m_SelectedPeriodicElement = "C";
+		std::string m_FocusedViewportWindowId;
 		bool m_ShowPeriodicTableWindow = true;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;

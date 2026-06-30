@@ -251,7 +251,6 @@ namespace DefectStudio
 			registerPanel<RendererPanel>(
 				*rendererLayer,
 				m_EventBus,
-				m_KeymapResolver,
 				m_ContextManager,
 				"Renderer",
 				true);

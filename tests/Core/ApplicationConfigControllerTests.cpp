@@ -11,7 +11,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Time.hpp"
 #include "IO/IOLayer.hpp"
-#include "Presentation/EditorUiEvents.hpp"
+#include "Events/EditorUiEvents.hpp"
 
 namespace
 {
