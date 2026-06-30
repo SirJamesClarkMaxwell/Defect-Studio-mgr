@@ -246,7 +246,10 @@ namespace DefectStudio
 
 		registerPanel<ProgressMonitorWindow>(m_EventBus, m_ProgressTracker, "Progress Monitor", true);
 		registerPanel<TaskMonitorWindow>(m_EventBus, m_JobSystem, "Task Monitor", true);
-		registerPanel<LoggingPanel>(m_LogRegistry, "Logging Panel", true);
+		const Path logExportPath = m_CurrentConfig != nullptr
+			? m_CurrentConfig->paths.exportsDirectory / Path("event-log-export.csv")
+			: Path("logs") / Path("event-log-export.csv");
+		registerPanel<LoggingPanel>(m_EventBus, m_LogRegistry, logExportPath, "Logging Panel", true);
 		if (auto rendererLayer = m_RendererLayer.lock())
 			registerPanel<RendererPanel>(
 				*rendererLayer,

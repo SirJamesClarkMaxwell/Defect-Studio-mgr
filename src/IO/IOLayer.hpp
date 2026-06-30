@@ -20,6 +20,11 @@ namespace DefectStudio
 		struct BindingsLoadRequested;
 	}
 
+	namespace AppEvents::Logs
+	{
+		struct ExportRequested;
+	}
+
 	namespace EditorUiEvents
 	{
 		struct PersistRequested;
@@ -54,6 +59,7 @@ public:
 		void onLayoutListRequested(const EditorUiEvents::LayoutListRequested &event);
 		void onBindingsSaveRequested(const AppEvents::Keymap::BindingsSaveRequested &event);
 		void onBindingsLoadRequested(const AppEvents::Keymap::BindingsLoadRequested &event);
+		void onLogExportRequested(const AppEvents::Logs::ExportRequested &event);
 
 private:
 		Ref<EventBus> m_EventBus;

@@ -1,9 +1,9 @@
 #include "Core/dspch.hpp"
 
-#include <fstream>
-
 #include <imgui.h>
 
+#include "App/Events/LogExportEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "IconsFontAwesome6.h"
 
 #include "Presentation/Panels/LoggingPanel.hpp"
@@ -12,22 +12,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		std::string csvEscape(const std::string &value)
-		{
-			std::string escaped;
-			escaped.reserve(value.size() + 8);
-			escaped.push_back('"');
-			for (const char ch : value)
-			{
-				if (ch == '"')
-					escaped += "\"\"";
-				else
-					escaped.push_back(ch);
-			}
-			escaped.push_back('"');
-			return escaped;
-		}
-
 		const char *severityLabel(LogLevel level)
 		{
 			return ToString(level);
@@ -60,7 +44,8 @@ namespace DefectStudio
 
 	LoggingPanel::LoggingPanel(Ref<LogRegistry> logRegistry, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
-		  m_LogRegistry(std::move(logRegistry))
+		  m_LogRegistry(std::move(logRegistry)),
+		  m_ExportPath(Path("logs") / Path("event-log-export.csv"))
 	{
 		m_ShowLevel.fill(true);
 		for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i)
@@ -68,9 +53,29 @@ namespace DefectStudio
 		rebuildFromRegistry();
 	}
 
+	LoggingPanel::LoggingPanel(
+		Ref<EventBus> eventBus,
+		Ref<LogRegistry> logRegistry,
+		Path exportPath,
+		std::string title,
+		bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault),
+		  m_EventBus(std::move(eventBus)),
+		  m_LogRegistry(std::move(logRegistry)),
+		  m_ExportPath(std::move(exportPath))
+	{
+		m_ShowLevel.fill(true);
+		for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i)
+			m_ShowCategory[static_cast<LogCategory>(i)] = true;
+		bindLogExportEvents();
+		rebuildFromRegistry();
+	}
+
 	LoggingPanel::LoggingPanel(const LoggingPanel &other)
 		: IPanel(other.GetTitle(), other.IsVisible()),
+		  m_EventBus(other.m_EventBus),
 		  m_LogRegistry(other.m_LogRegistry),
+		  m_ExportPath(other.m_ExportPath),
 		  m_Entries(other.m_Entries),
 		  m_ShowLevel(other.m_ShowLevel),
 		  m_ShowCategory(other.m_ShowCategory),
@@ -78,11 +83,23 @@ namespace DefectStudio
 		  m_AutoScroll(other.m_AutoScroll),
 		  m_LastExportStatus(other.m_LastExportStatus)
 	{
+		bindLogExportEvents();
 	}
 
 	Ref<IPanel> LoggingPanel::Clone() const
 	{
 		return CreateRef<LoggingPanel>(*this);
+	}
+
+	void LoggingPanel::bindLogExportEvents()
+	{
+		if (m_EventBus == nullptr)
+			return;
+
+		AddSubscription(m_EventBus->Subscribe<AppEvents::Logs::ExportCompleted>(
+			[this](const AppEvents::Logs::ExportCompleted &event) { onExportCompleted(event); }));
+		AddSubscription(m_EventBus->Subscribe<AppEvents::Logs::ExportFailed>(
+			[this](const AppEvents::Logs::ExportFailed &event) { onExportFailed(event); }));
 	}
 
 	void LoggingPanel::Render()
@@ -143,8 +160,7 @@ namespace DefectStudio
 		ImGui::SameLine();
 		if (ImGui::Button(ICON_FA_FILE_EXPORT " Export"))
 		{
-			const bool ok = exportEntriesToCsv("logs/event-log-export.csv");
-			m_LastExportStatus = ok ? "Exported: logs/event-log-export.csv" : "Export failed";
+			requestExport();
 		}
 
 		ImGui::SameLine();
@@ -226,25 +242,33 @@ namespace DefectStudio
 		}
 	}
 
-	bool LoggingPanel::exportEntriesToCsv(const std::string &path) const
+	void LoggingPanel::requestExport()
 	{
-		std::ofstream out(path, std::ios::out | std::ios::trunc);
-		if (!out)
-			return false;
-
-		out << "timestamp,category,severity,origin,logger,message,formatted\n";
-		for (const LogEntry &entry : m_Entries)
+		if (m_EventBus == nullptr)
 		{
-			out << csvEscape(entry.TimestampString()) << ','
-			    << csvEscape(ToString(entry.category)) << ','
-			    << csvEscape(severityLabel(entry.level)) << ','
-			    << csvEscape(entry.Origin()) << ','
-			    << csvEscape(entry.loggerName) << ','
-			    << csvEscape(entry.message) << ','
-			    << csvEscape(entry.ToString()) << '\n';
+			m_LastExportStatus = "Export failed: EventBus unavailable";
+			return;
 		}
 
-		return true;
+		AppEvents::Logs::ExportRequested request;
+		request.entries = m_Entries;
+		request.targetPath = m_ExportPath;
+		m_EventBus->Queue(request);
+		m_LastExportStatus = "Export requested: " + m_ExportPath.String();
+	}
+
+	void LoggingPanel::onExportCompleted(const AppEvents::Logs::ExportCompleted &event)
+	{
+		if (event.targetPath.String() != m_ExportPath.String())
+			return;
+		m_LastExportStatus = "Exported: " + event.targetPath.String();
+	}
+
+	void LoggingPanel::onExportFailed(const AppEvents::Logs::ExportFailed &event)
+	{
+		if (event.targetPath.String() != m_ExportPath.String())
+			return;
+		m_LastExportStatus = "Export failed: " + event.error;
 	}
 
 	bool LoggingPanel::isCategoryEnabled(LogCategory category) const

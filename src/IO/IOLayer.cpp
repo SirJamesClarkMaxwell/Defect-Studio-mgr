@@ -13,11 +13,13 @@
 #include <yaml-cpp/yaml.h>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
+#include "App/Events/LogExportEvents.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/KeyBindingEvents.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "IO/LogCsvIO.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Events/EditorUiEvents.hpp"
 
@@ -223,6 +225,7 @@ namespace DefectStudio
 		AddSubscription(subscribeIOLayer<EditorUiEvents::LayoutListRequested>(*m_EventBus, *this, &IOLayer::onLayoutListRequested));
 		AddSubscription(subscribeIOLayer<AppEvents::Keymap::BindingsSaveRequested>(*m_EventBus, *this, &IOLayer::onBindingsSaveRequested));
 		AddSubscription(subscribeIOLayer<AppEvents::Keymap::BindingsLoadRequested>(*m_EventBus, *this, &IOLayer::onBindingsLoadRequested));
+		AddSubscription(subscribeIOLayer<AppEvents::Logs::ExportRequested>(*m_EventBus, *this, &IOLayer::onLogExportRequested));
 		DS_LOG_INFO("IOLayer config persistence event handlers bound");
 	}
 
@@ -431,6 +434,29 @@ namespace DefectStudio
 		}
 
 		m_EventBus->Queue(BindingsLoaded{std::move(bindings)});
+	}
+
+	void IOLayer::onLogExportRequested(const AppEvents::Logs::ExportRequested &event)
+	{
+		if (m_EventBus == nullptr)
+			return;
+
+		Result<std::size_t> saveResult = LogCsvIO::Save(event.targetPath, event.entries);
+		if (!saveResult.HasValue())
+		{
+			AppEvents::Logs::ExportFailed failed;
+			failed.targetPath = event.targetPath;
+			failed.error = saveResult.Error().technicalDetails;
+			m_EventBus->Queue(failed);
+			DS_LOG_ERROR("IOLayer: log export failed: {}", saveResult.Error().technicalDetails);
+			return;
+		}
+
+		AppEvents::Logs::ExportCompleted completed;
+		completed.targetPath = event.targetPath;
+		completed.bytes = saveResult.Value();
+		m_EventBus->Queue(completed);
+		DS_LOG_INFO("IOLayer: exported {} log CSV bytes to '{}'", saveResult.Value(), event.targetPath.String());
 	}
 
 } // namespace DefectStudio

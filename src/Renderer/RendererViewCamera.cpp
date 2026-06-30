@@ -29,6 +29,12 @@ namespace DefectStudio
 		return angle;
 	}
 
+	float RendererViewCamera::ComputeTransitionDurationSeconds(float rotationSpeed) noexcept
+	{
+		const float safeSpeed = std::max(0.1f, rotationSpeed);
+		return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
+	}
+
 	void RendererViewCamera::BuildCameraAxesFromEuler(
 		float yaw,
 		float pitch,

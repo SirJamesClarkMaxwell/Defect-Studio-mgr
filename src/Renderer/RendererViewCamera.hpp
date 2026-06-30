@@ -11,6 +11,7 @@ namespace DefectStudio
 	{
 	public:
 		[[nodiscard]] static float NormalizeAngleRadians(float angle);
+		[[nodiscard]] static float ComputeTransitionDurationSeconds(float rotationSpeed) noexcept;
 		static void BuildCameraAxesFromEuler(
 			float yaw,
 			float pitch,

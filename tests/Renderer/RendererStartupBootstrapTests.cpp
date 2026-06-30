@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "Renderer/RendererStartupBootstrap.hpp"
+#include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -36,5 +37,12 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(windows[0].structure.atoms[0].visible);
 		EXPECT_TRUE(windows[0].structure.atoms[1].visible);
 		EXPECT_FALSE(windows[0].structure.atoms[2].visible);
+	}
+
+	TEST(RendererViewCameraTests, TransitionDurationScalesWithRotationSpeed)
+	{
+		EXPECT_NEAR(RendererViewCamera::ComputeTransitionDurationSeconds(1.0f), 0.14f, 1e-5f);
+		EXPECT_NEAR(RendererViewCamera::ComputeTransitionDurationSeconds(0.01f), 0.50f, 1e-5f);
+		EXPECT_NEAR(RendererViewCamera::ComputeTransitionDurationSeconds(100.0f), 0.02f, 1e-5f);
 	}
 } // namespace DefectStudio::Tests

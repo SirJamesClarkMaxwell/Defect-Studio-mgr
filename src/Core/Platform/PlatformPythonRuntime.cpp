@@ -81,15 +81,6 @@ namespace DefectStudio::Platform
 		return {};
 	}
 
-	std::string BuildShellCommand(const std::string &workingDirectorySegment, const std::string &payloadCommand)
-	{
-#if defined(DS_PLATFORM_WINDOWS)
-		return "cd /d " + workingDirectorySegment + " && " + payloadCommand;
-#else
-		return "cd " + workingDirectorySegment + " && " + payloadCommand;
-#endif
-	}
-
 	void SetPythonHomeEnvironment(const Path &pythonHome)
 	{
 		if (pythonHome.Empty())

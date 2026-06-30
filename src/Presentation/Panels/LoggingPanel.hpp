@@ -5,27 +5,46 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 
 namespace DefectStudio
 {
-	class LoggingPanel final : public IPanel
+	class EventBus;
+
+	namespace AppEvents::Logs
+	{
+		struct ExportCompleted;
+		struct ExportFailed;
+	}
+
+	class LoggingPanel final : public IPanel, public EventReceiver
 	{
 	public:
 		explicit LoggingPanel(Ref<LogRegistry> logRegistry = {}, std::string title = "Logging Panel", bool visibleByDefault = true);
+		LoggingPanel(
+			Ref<EventBus> eventBus,
+			Ref<LogRegistry> logRegistry,
+			Path exportPath,
+			std::string title = "Logging Panel",
+			bool visibleByDefault = true);
 		LoggingPanel(const LoggingPanel &other);
 
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
+		void bindLogExportEvents();
 		void rebuildFromRegistry();
 		void renderControls();
 		void renderCategoryFilters();
 		void renderEntries();
-		[[nodiscard]] bool exportEntriesToCsv(const std::string &path) const;
+		void requestExport();
+		void onExportCompleted(const AppEvents::Logs::ExportCompleted &event);
+		void onExportFailed(const AppEvents::Logs::ExportFailed &event);
 
 		[[nodiscard]] bool isCategoryEnabled(LogCategory category) const;
 		[[nodiscard]] bool isSeverityEnabled(LogLevel level) const;
@@ -33,7 +52,9 @@ namespace DefectStudio
 		[[nodiscard]] static const char *categoryIcon(LogCategory category);
 
 	private:
+		Ref<EventBus> m_EventBus;
 		Ref<LogRegistry> m_LogRegistry;
+		Path m_ExportPath;
 		std::vector<LogEntry> m_Entries;
 		std::array<bool, static_cast<std::size_t>(LogLevel::Count)> m_ShowLevel{};
 		std::unordered_map<LogCategory, bool> m_ShowCategory;

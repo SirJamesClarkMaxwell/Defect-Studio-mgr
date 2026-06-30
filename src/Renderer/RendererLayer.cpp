@@ -93,12 +93,6 @@ namespace DefectStudio
 		return CameraProjection::Perspective;
 	}
 
-	float ComputeCameraTransitionDurationSeconds(float rotationSpeed)
-	{
-		const float safeSpeed = std::max(0.1f, rotationSpeed);
-		return std::clamp(0.14f / safeSpeed, 0.02f, 0.50f);
-	}
-
 	[[nodiscard]] float EaseOutCubic(float t)
 	{
 		const float clamped = std::clamp(t, 0.0f, 1.0f);
@@ -314,7 +308,8 @@ namespace DefectStudio
 
 		windowState->transitionActive = true;
 		windowState->transitionElapsed = 0.0f;
-		windowState->transitionDuration = ComputeCameraTransitionDurationSeconds(m_GlobalRenderSettings.rotationSpeed);
+		windowState->transitionDuration = RendererViewCamera::ComputeTransitionDurationSeconds(
+			m_GlobalRenderSettings.rotationSpeed);
 		windowState->transitionStartTarget = windowState->camera->Target();
 		windowState->transitionEndTarget = target;
 		windowState->transitionStartDistance = windowState->camera->Distance();
