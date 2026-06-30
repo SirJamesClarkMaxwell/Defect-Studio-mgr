@@ -227,6 +227,7 @@ TEST(ConfigManagerTests, SaveUserSettingsWritesNestedYamlAndRoundTrips)
 	EXPECT_NE(text.find("appearance:"), std::string::npos);
 	EXPECT_NE(text.find("clear_color:"), std::string::npos);
 	EXPECT_EQ(text.find("font_path:"), std::string::npos);
+	EXPECT_EQ(text.find("keyboard_shortcuts:"), std::string::npos);
 
 	DefectStudio::ConfigManager reloaded(tempDirectory);
 	ASSERT_TRUE(reloaded.Initialize(error)) << error;

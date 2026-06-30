@@ -29,7 +29,6 @@
 #include "Core/CoreLayer.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Input/KeyBindingEvents.hpp"
-#include "Core/Input/KeyBinding.hpp"
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/Notifier.hpp"
@@ -190,51 +189,6 @@ namespace DefectStudio
 				if (value == "critical")
 					return LogLevel::Critical;
 				return std::nullopt;
-			}
-
-			void RegisterRendererBinding(
-				KeymapResolver &resolver,
-				const char *id,
-				std::string_view chordText,
-				const char *commandId)
-			{
-				std::optional<KeyChord> chord = ParseKeyChord(chordText);
-				if (!chord)
-				{
-					DS_LOG_WARN("Renderer keybinding skipped: id={} chord='{}'", id, chordText);
-					return;
-				}
-
-				KeyBinding binding;
-				binding.id = id;
-				binding.chord = *chord;
-				binding.commandId = CommandID{std::string(commandId)};
-				binding.when = ContextExpr{"renderer.viewport.focused"};
-				binding.layer = KeymapLayer::WindowLocal;
-				auto result = resolver.RegisterBinding(std::move(binding));
-				if (!result)
-					DS_LOG_WARN("Renderer keybinding conflict: {}", result.Error().technicalDetails);
-			}
-
-			void RegisterRendererKeyBindings(
-				KeymapResolver &resolver,
-				const RendererShortcutConfig &shortcuts)
-			{
-				RegisterRendererBinding(resolver, "renderer.align_axis_a", shortcuts.alignAxisA, "renderer.align_axis_a");
-				RegisterRendererBinding(resolver, "renderer.align_axis_b", shortcuts.alignAxisB, "renderer.align_axis_b");
-				RegisterRendererBinding(resolver, "renderer.align_axis_c", shortcuts.alignAxisC, "renderer.align_axis_c");
-				RegisterRendererBinding(resolver, "renderer.orbit_left", shortcuts.orbitLeft, "renderer.orbit_left");
-				RegisterRendererBinding(resolver, "renderer.orbit_right", shortcuts.orbitRight, "renderer.orbit_right");
-				RegisterRendererBinding(resolver, "renderer.orbit_up", shortcuts.orbitUp, "renderer.orbit_up");
-				RegisterRendererBinding(resolver, "renderer.orbit_down", shortcuts.orbitDown, "renderer.orbit_down");
-				RegisterRendererBinding(resolver, "renderer.roll_left", shortcuts.rollLeft, "renderer.roll_left");
-				RegisterRendererBinding(resolver, "renderer.roll_right", shortcuts.rollRight, "renderer.roll_right");
-				RegisterRendererBinding(resolver, "renderer.zoom_in", shortcuts.zoomIn, "renderer.zoom_in");
-				RegisterRendererBinding(resolver, "renderer.zoom_out", shortcuts.zoomOut, "renderer.zoom_out");
-				RegisterRendererBinding(resolver, "renderer.focus_selected_atom", shortcuts.focusSelectedAtom, "renderer.focus_selected_atom");
-				RegisterRendererBinding(resolver, "renderer.undo_view", "Ctrl+Alt+Z", "renderer.undo_view");
-				RegisterRendererBinding(resolver, "renderer.redo_view", "Ctrl+Alt+Shift+Z", "renderer.redo_view");
-				RegisterRendererBinding(resolver, "renderer.redo_view_alt", "Ctrl+Alt+Y", "renderer.redo_view");
 			}
 
 			void RegisterRendererCommand(
@@ -1089,15 +1043,6 @@ namespace DefectStudio
 			ApplicationDetail::StartupStepTimer timer("Application.RegisterRendererCommands");
 			if (auto commandRegistry = coreLayer->GetCommandRegistryHandle().lock())
 				ApplicationDetail::RegisterRendererCommands(*commandRegistry, m_EventBus);
-			timer.Finish(true);
-		}
-
-		{
-			ZoneScopedN("Application.RegisterRendererKeyBindings");
-			ApplicationDetail::StartupStepTimer timer("Application.RegisterRendererKeyBindings");
-			ApplicationDetail::RegisterRendererKeyBindings(
-				coreLayer->GetKeymapResolver(),
-				m_Config.renderer.shortcuts);
 			timer.Finish(true);
 		}
 

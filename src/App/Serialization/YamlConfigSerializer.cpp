@@ -475,7 +475,6 @@ namespace DefectStudio
 			const char *rendererViewportKey = Name(RendererKey::Viewport);
 			const char *rendererToolbarWheelKey = Name(RendererKey::ToolbarWheel);
 			const char *rendererGridKey = Name(RendererKey::Grid);
-			const char *rendererShortcutsKey = Name(RendererKey::KeyboardShortcuts);
 
 			Path2 logPath = {logSection, levelKey};
 			config.log.level = ParseLogLevel(
@@ -736,66 +735,6 @@ namespace DefectStudio
 				{rendererSection, rendererGridKey, Name(RendererGridKey::PlaneZ)},
 				{},
 				config.renderer.grid.planeZ);
-			config.renderer.shortcuts.alignAxisA = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisA)},
-				{},
-				config.renderer.shortcuts.alignAxisA);
-			config.renderer.shortcuts.alignAxisB = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisB)},
-				{},
-				config.renderer.shortcuts.alignAxisB);
-			config.renderer.shortcuts.alignAxisC = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisC)},
-				{},
-				config.renderer.shortcuts.alignAxisC);
-			config.renderer.shortcuts.orbitLeft = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitLeft)},
-				{},
-				config.renderer.shortcuts.orbitLeft);
-			config.renderer.shortcuts.orbitRight = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitRight)},
-				{},
-				config.renderer.shortcuts.orbitRight);
-			config.renderer.shortcuts.orbitUp = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitUp)},
-				{},
-				config.renderer.shortcuts.orbitUp);
-			config.renderer.shortcuts.orbitDown = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitDown)},
-				{},
-				config.renderer.shortcuts.orbitDown);
-			config.renderer.shortcuts.rollLeft = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::RollLeft)},
-				{},
-				config.renderer.shortcuts.rollLeft);
-			config.renderer.shortcuts.rollRight = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::RollRight)},
-				{},
-				config.renderer.shortcuts.rollRight);
-			config.renderer.shortcuts.zoomIn = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::ZoomIn)},
-				{},
-				config.renderer.shortcuts.zoomIn);
-			config.renderer.shortcuts.zoomOut = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::ZoomOut)},
-				{},
-				config.renderer.shortcuts.zoomOut);
-			config.renderer.shortcuts.focusSelectedAtom = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::FocusSelectedAtom)},
-				{},
-				config.renderer.shortcuts.focusSelectedAtom);
 		}
 
 		void ApplyUserYaml(const YAML::Node &root, ApplicationConfig &config)
@@ -834,7 +773,6 @@ namespace DefectStudio
 			const char *rendererViewportKey = Name(RendererKey::Viewport);
 			const char *rendererToolbarWheelKey = Name(RendererKey::ToolbarWheel);
 			const char *rendererGridKey = Name(RendererKey::Grid);
-			const char *rendererShortcutsKey = Name(RendererKey::KeyboardShortcuts);
 
 			Path2 uiPath = {uiSection, fontScaleKey};
 			config.ui.fontScale = ReadValue(root, uiPath, Name(LegacyKey::UiFontScale), config.ui.fontScale);
@@ -1022,66 +960,6 @@ namespace DefectStudio
 				{rendererSection, rendererGridKey, Name(RendererGridKey::PlaneZ)},
 				{},
 				config.renderer.grid.planeZ);
-			config.renderer.shortcuts.alignAxisA = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisA)},
-				{},
-				config.renderer.shortcuts.alignAxisA);
-			config.renderer.shortcuts.alignAxisB = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisB)},
-				{},
-				config.renderer.shortcuts.alignAxisB);
-			config.renderer.shortcuts.alignAxisC = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::AlignAxisC)},
-				{},
-				config.renderer.shortcuts.alignAxisC);
-			config.renderer.shortcuts.orbitLeft = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitLeft)},
-				{},
-				config.renderer.shortcuts.orbitLeft);
-			config.renderer.shortcuts.orbitRight = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitRight)},
-				{},
-				config.renderer.shortcuts.orbitRight);
-			config.renderer.shortcuts.orbitUp = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitUp)},
-				{},
-				config.renderer.shortcuts.orbitUp);
-			config.renderer.shortcuts.orbitDown = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::OrbitDown)},
-				{},
-				config.renderer.shortcuts.orbitDown);
-			config.renderer.shortcuts.rollLeft = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::RollLeft)},
-				{},
-				config.renderer.shortcuts.rollLeft);
-			config.renderer.shortcuts.rollRight = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::RollRight)},
-				{},
-				config.renderer.shortcuts.rollRight);
-			config.renderer.shortcuts.zoomIn = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::ZoomIn)},
-				{},
-				config.renderer.shortcuts.zoomIn);
-			config.renderer.shortcuts.zoomOut = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::ZoomOut)},
-				{},
-				config.renderer.shortcuts.zoomOut);
-			config.renderer.shortcuts.focusSelectedAtom = ReadString(
-				root,
-				{rendererSection, rendererShortcutsKey, Name(RendererShortcutKey::FocusSelectedAtom)},
-				{},
-				config.renderer.shortcuts.focusSelectedAtom);
 		}
 
 		bool LoadYamlFile(const Path &path, YAML::Node &root, std::string &error)
@@ -1796,20 +1674,6 @@ namespace DefectStudio
 			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
 			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
 			out << YAML::EndMap;
-			out << YAML::Key << "keyboard_shortcuts" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "align_axis_a" << YAML::Value << config.renderer.shortcuts.alignAxisA;
-			out << YAML::Key << "align_axis_b" << YAML::Value << config.renderer.shortcuts.alignAxisB;
-			out << YAML::Key << "align_axis_c" << YAML::Value << config.renderer.shortcuts.alignAxisC;
-			out << YAML::Key << "orbit_left" << YAML::Value << config.renderer.shortcuts.orbitLeft;
-			out << YAML::Key << "orbit_right" << YAML::Value << config.renderer.shortcuts.orbitRight;
-			out << YAML::Key << "orbit_up" << YAML::Value << config.renderer.shortcuts.orbitUp;
-			out << YAML::Key << "orbit_down" << YAML::Value << config.renderer.shortcuts.orbitDown;
-			out << YAML::Key << "roll_left" << YAML::Value << config.renderer.shortcuts.rollLeft;
-			out << YAML::Key << "roll_right" << YAML::Value << config.renderer.shortcuts.rollRight;
-			out << YAML::Key << "zoom_in" << YAML::Value << config.renderer.shortcuts.zoomIn;
-			out << YAML::Key << "zoom_out" << YAML::Value << config.renderer.shortcuts.zoomOut;
-			out << YAML::Key << "focus_selected_atom" << YAML::Value << config.renderer.shortcuts.focusSelectedAtom;
-			out << YAML::EndMap;
 			out << YAML::EndMap;
 			out << YAML::EndMap;
 		}
@@ -1877,20 +1741,6 @@ namespace DefectStudio
 			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
 			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
 			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
-			out << YAML::EndMap;
-			out << YAML::Key << "keyboard_shortcuts" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "align_axis_a" << YAML::Value << config.renderer.shortcuts.alignAxisA;
-			out << YAML::Key << "align_axis_b" << YAML::Value << config.renderer.shortcuts.alignAxisB;
-			out << YAML::Key << "align_axis_c" << YAML::Value << config.renderer.shortcuts.alignAxisC;
-			out << YAML::Key << "orbit_left" << YAML::Value << config.renderer.shortcuts.orbitLeft;
-			out << YAML::Key << "orbit_right" << YAML::Value << config.renderer.shortcuts.orbitRight;
-			out << YAML::Key << "orbit_up" << YAML::Value << config.renderer.shortcuts.orbitUp;
-			out << YAML::Key << "orbit_down" << YAML::Value << config.renderer.shortcuts.orbitDown;
-			out << YAML::Key << "roll_left" << YAML::Value << config.renderer.shortcuts.rollLeft;
-			out << YAML::Key << "roll_right" << YAML::Value << config.renderer.shortcuts.rollRight;
-			out << YAML::Key << "zoom_in" << YAML::Value << config.renderer.shortcuts.zoomIn;
-			out << YAML::Key << "zoom_out" << YAML::Value << config.renderer.shortcuts.zoomOut;
-			out << YAML::Key << "focus_selected_atom" << YAML::Value << config.renderer.shortcuts.focusSelectedAtom;
 			out << YAML::EndMap;
 			out << YAML::EndMap;
 			out << YAML::EndMap;
@@ -1980,20 +1830,6 @@ namespace DefectStudio
 			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
 			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
 			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
-			out << YAML::EndMap;
-			out << YAML::Key << "keyboard_shortcuts" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "align_axis_a" << YAML::Value << config.renderer.shortcuts.alignAxisA;
-			out << YAML::Key << "align_axis_b" << YAML::Value << config.renderer.shortcuts.alignAxisB;
-			out << YAML::Key << "align_axis_c" << YAML::Value << config.renderer.shortcuts.alignAxisC;
-			out << YAML::Key << "orbit_left" << YAML::Value << config.renderer.shortcuts.orbitLeft;
-			out << YAML::Key << "orbit_right" << YAML::Value << config.renderer.shortcuts.orbitRight;
-			out << YAML::Key << "orbit_up" << YAML::Value << config.renderer.shortcuts.orbitUp;
-			out << YAML::Key << "orbit_down" << YAML::Value << config.renderer.shortcuts.orbitDown;
-			out << YAML::Key << "roll_left" << YAML::Value << config.renderer.shortcuts.rollLeft;
-			out << YAML::Key << "roll_right" << YAML::Value << config.renderer.shortcuts.rollRight;
-			out << YAML::Key << "zoom_in" << YAML::Value << config.renderer.shortcuts.zoomIn;
-			out << YAML::Key << "zoom_out" << YAML::Value << config.renderer.shortcuts.zoomOut;
-			out << YAML::Key << "focus_selected_atom" << YAML::Value << config.renderer.shortcuts.focusSelectedAtom;
 			out << YAML::EndMap;
 			out << YAML::EndMap;
 			out << YAML::EndMap;

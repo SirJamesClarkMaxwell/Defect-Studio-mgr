@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "Core/Utils/Memory.hpp"
-#include "Presentation/UiConfig.hpp"
+#include "App/UiConfig.hpp"
 
 namespace DefectStudio
 {

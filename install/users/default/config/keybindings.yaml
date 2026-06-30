@@ -32,3 +32,93 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "renderer.align_axis_a"
+    chord: "A"
+    command: "renderer.align_axis_a"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_b"
+    chord: "B"
+    command: "renderer.align_axis_b"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_c"
+    chord: "C"
+    command: "renderer.align_axis_c"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_left"
+    chord: "Left"
+    command: "renderer.orbit_left"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_right"
+    chord: "Right"
+    command: "renderer.orbit_right"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_up"
+    chord: "Up"
+    command: "renderer.orbit_up"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_down"
+    chord: "Down"
+    command: "renderer.orbit_down"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.roll_left"
+    chord: "Q"
+    command: "renderer.roll_left"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.roll_right"
+    chord: "E"
+    command: "renderer.roll_right"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.zoom_in"
+    chord: "R"
+    command: "renderer.zoom_in"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.zoom_out"
+    chord: "F"
+    command: "renderer.zoom_out"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.focus_selected_atom"
+    chord: "Period"
+    command: "renderer.focus_selected_atom"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.undo_view"
+    chord: "Ctrl+Alt+Z"
+    command: "renderer.undo_view"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.redo_view"
+    chord: "Ctrl+Alt+Shift+Z"
+    command: "renderer.redo_view"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.redo_view_alt"
+    chord: "Ctrl+Alt+Y"
+    command: "renderer.redo_view"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true

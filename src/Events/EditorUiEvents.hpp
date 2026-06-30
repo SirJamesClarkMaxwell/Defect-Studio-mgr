@@ -7,7 +7,7 @@
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Presentation/UiConfig.hpp"
+#include "App/UiConfig.hpp"
 
 namespace DefectStudio::EditorUiEvents
 {

@@ -11,7 +11,7 @@
 #include "Core/Notifications/Notification.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Presentation/UiConfig.hpp"
+#include "App/UiConfig.hpp"
 
 struct GLFWwindow;
 

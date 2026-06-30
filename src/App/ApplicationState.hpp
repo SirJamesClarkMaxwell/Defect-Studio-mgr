@@ -12,7 +12,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Presentation/UiConfig.hpp"
+#include "App/UiConfig.hpp"
 
 namespace DefectStudio
 {
@@ -110,22 +110,6 @@ namespace DefectStudio
 		float planeZ = 0.0f;
 	};
 
-	struct RendererShortcutConfig
-	{
-		std::string alignAxisA = "A";
-		std::string alignAxisB = "B";
-		std::string alignAxisC = "C";
-		std::string orbitLeft = "Left";
-		std::string orbitRight = "Right";
-		std::string orbitUp = "Up";
-		std::string orbitDown = "Down";
-		std::string rollLeft = "Q";
-		std::string rollRight = "E";
-		std::string zoomIn = "R";
-		std::string zoomOut = "F";
-		std::string focusSelectedAtom = "Period";
-	};
-
 	struct RendererConfig
 	{
 		std::array<float, 4> backgroundColor = {0.06f, 0.07f, 0.08f, 1.0f};
@@ -144,7 +128,6 @@ namespace DefectStudio
 		RendererViewportConfig viewport;
 		RendererToolbarWheelConfig toolbarWheel;
 		RendererGridConfig grid;
-		RendererShortcutConfig shortcuts;
 	};
 
 	struct ApplicationConfig
