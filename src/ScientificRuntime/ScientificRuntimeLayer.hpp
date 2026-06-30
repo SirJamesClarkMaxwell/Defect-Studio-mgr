@@ -1,14 +1,18 @@
 #pragma once
 
+#include <vector>
+
 #include "Core/Capabilities/Capability.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Layer.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Domain/Crystal/CrystalStructure.hpp"
 
 namespace DefectStudio
 {
 	class CapabilityService;
 	class JobSystem;
-	class PymatgenBridge;
 	class ScientificPythonRuntime;
 
 	class ScientificRuntimeLayer final : public Layer
@@ -25,7 +29,8 @@ namespace DefectStudio
 		void RegisterCapability(CapabilityService &capabilityService, CapabilityEntry capability) const;
 		[[nodiscard]] CapabilityEntry BuildPythonBridgeCapability() const;
 		[[nodiscard]] bool IsPythonBridgeAvailable() const noexcept;
-		[[nodiscard]] PymatgenBridge *GetPymatgenBridge() const;
+		[[nodiscard]] Result<CrystalStructure> LoadCrystalStructure(const Path &filePath) const;
+		[[nodiscard]] Result<std::vector<CrystalStructure>> LoadCrystalStructures(const std::vector<Path> &filePaths) const;
 
 	private:
 		void registerJobSystemHooks();

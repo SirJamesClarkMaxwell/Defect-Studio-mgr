@@ -3,6 +3,7 @@
 #include "ScientificRuntime/Python/ScientificPythonRuntime.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "ScientificRuntime/Python/PymatgenConversion.hpp"
 
 namespace DefectStudio
 {
@@ -56,6 +57,51 @@ namespace DefectStudio
 		return m_ScriptRunner.RunFile(options);
 	}
 
+	Result<CrystalStructure> ScientificPythonRuntime::LoadCrystalStructure(const Path &filePath) const
+	{
+		if (!m_IsReady)
+		{
+			return StructuredError{
+				ErrorCategory::Python,
+				Severity::Error,
+				"Python runtime is not initialized.",
+				"ScientificPythonRuntime::LoadCrystalStructure called before Initialize().",
+				"Initialize ScientificPythonRuntime in ScientificRuntimeLayer before bridge usage.",
+				"ScientificRuntime/Python",
+				"python.runtime.not_initialized"};
+		}
+
+		Result<PymatgenStructureData> structure = m_PymatgenBridge.LoadStructure(filePath);
+		if (!structure)
+			return structure.Error();
+		return ConvertPymatgenStructureToCrystalStructure(structure.Value());
+	}
+
+	Result<std::vector<CrystalStructure>> ScientificPythonRuntime::LoadCrystalStructures(const std::vector<Path> &filePaths) const
+	{
+		if (!m_IsReady)
+		{
+			return StructuredError{
+				ErrorCategory::Python,
+				Severity::Error,
+				"Python runtime is not initialized.",
+				"ScientificPythonRuntime::LoadCrystalStructures called before Initialize().",
+				"Initialize ScientificPythonRuntime in ScientificRuntimeLayer before bridge usage.",
+				"ScientificRuntime/Python",
+				"python.runtime.not_initialized"};
+		}
+
+		Result<std::vector<PymatgenStructureData>> structures = m_PymatgenBridge.LoadStructures(filePaths);
+		if (!structures)
+			return structures.Error();
+
+		std::vector<CrystalStructure> crystals;
+		crystals.reserve(structures->size());
+		for (const PymatgenStructureData &structure : structures.Value())
+			crystals.push_back(ConvertPymatgenStructureToCrystalStructure(structure));
+		return crystals;
+	}
+
 	Result<PymatgenRoundtripResult> ScientificPythonRuntime::RoundtripPoscar(const PymatgenRoundtripRequest &request) const
 	{
 		if (!m_IsReady)
@@ -88,10 +134,5 @@ namespace DefectStudio
 		}
 
 		return m_ASEBridge.ConvertFile(request);
-	}
-
-	PymatgenBridge *ScientificPythonRuntime::GetPymatgenBridge()
-	{
-		return m_IsReady ? &m_PymatgenBridge : nullptr;
 	}
 } // namespace DefectStudio

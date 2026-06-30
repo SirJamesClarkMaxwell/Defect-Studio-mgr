@@ -3,7 +3,6 @@
 #include "Renderer/RendererStartupBootstrap.hpp"
 
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <iomanip>
 #include <random>
@@ -12,8 +11,6 @@
 #include <glm/geometric.hpp>
 
 #include "Core/Logging/Logger.hpp"
-#include "Core/Utils/Time.hpp"
-#include "Renderer/RendererPoscarLoader.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
@@ -80,47 +77,21 @@ namespace DefectStudio
 	}
 
 	[[nodiscard]] std::vector<RendererWindowState> BuildRendererStartupWindows(
-		const std::vector<RendererStartupWindowDefinition> &windowDefinitions,
-		const AtomStyleTable &atomStyleTable,
-		const ElementPropertiesTable &elementPropertiesTable)
+		std::vector<RendererStartupWindowInput> windowInputs)
 	{
 		std::vector<RendererWindowState> windows;
-		windows.reserve(windowDefinitions.size());
+		windows.reserve(windowInputs.size());
 
-		const auto startTime = Time::NowSteady();
-		for (const RendererStartupWindowDefinition &definition : windowDefinitions)
+		for (RendererStartupWindowInput &input : windowInputs)
 		{
-			const auto structureStartTime = Time::NowSteady();
-			Result<RendererStructureData> loaded = LoadRendererStructureFromPoscar(
-				definition.poscarPath,
-				definition.structureName,
-				atomStyleTable,
-				elementPropertiesTable);
-			const auto structureElapsedMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
-				Time::NowSteady() - structureStartTime).count();
-			DS_LOG_DEBUG(
-				"Renderer startup structure '{}' loaded via C++ POSCAR in {} ms",
-				definition.structureName,
-				structureElapsedMilliseconds);
-			if (!loaded.HasValue())
-			{
-				DS_LOG_ERROR(
-					"Renderer quick-test bootstrap failed for {}: {}",
-					definition.poscarPath.String(),
-					loaded.Error().technicalDetails);
-				continue;
-			}
-
-			RendererWindowState window = BuildWindowFromStructure(definition, std::move(loaded.Value()), definition.direction);
+			RendererWindowState window = BuildWindowFromStructure(
+				input.definition,
+				std::move(input.structure),
+				input.definition.direction);
 			windows.push_back(std::move(window));
 		}
 
-		const auto elapsedMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
-			Time::NowSteady() - startTime).count();
-		DS_LOG_INFO(
-			"Renderer startup loaded {} window(s) via C++ POSCAR in {} ms",
-			windows.size(),
-			elapsedMilliseconds);
+		DS_LOG_INFO("Renderer startup built {} window(s) from prepared structure data", windows.size());
 		return windows;
 	}
 } // namespace DefectStudio

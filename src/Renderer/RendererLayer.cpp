@@ -664,11 +664,8 @@ namespace DefectStudio
 
 	void RendererLayer::loadDefaultWindows()
 	{
-		DS_LOG_INFO("Renderer startup default scene uses C++ POSCAR parser; Python bridge available for on-demand loading");
-		m_Windows = BuildRendererStartupWindows(
-			m_StartupConfig.startupLayout.windows,
-			m_StartupConfig.atomStyleTable,
-			m_StartupConfig.elementPropertiesTable);
+		DS_LOG_INFO("Renderer startup default scene uses prepared renderer structure data");
+		m_Windows = std::move(m_StartupConfig.startupWindows);
 		if (m_RendererBackend != nullptr)
 			m_RendererBackend->MarkGridDirty();
 	}

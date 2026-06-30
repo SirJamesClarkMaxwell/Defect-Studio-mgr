@@ -38,11 +38,13 @@
 #include "Core/Utils/RuntimeTuning.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "IO/IOLayer.hpp"
+#include "IO/StructureToRenderer.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/ImGuiLayer.hpp"
 #include "Renderer/RendererAssetBundle.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/RendererStartupBootstrap.hpp"
 #include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 #include "Storage/StorageLayer.hpp"
 
@@ -894,22 +896,62 @@ namespace DefectStudio
 		{
 			rendererAssets = rendererAssetsResult.Value();
 		}
+		std::vector<RendererWindowState> rendererStartupWindows;
+		if (rendererAssetsResult.HasValue())
+		{
+			ZoneScopedN("Application.setupDefaultLayers.LoadRendererStartupWindows");
+			ApplicationDetail::StartupStepTimer timer("LayerStack.load.RendererStartupWindows");
+			auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
+			if (scientificRuntimeLayer == nullptr || !scientificRuntimeLayer->IsPythonBridgeAvailable())
+			{
+				DS_LOG_ERROR("Renderer startup scene skipped: Scientific Python runtime is unavailable");
+				timer.Finish(false);
+			}
+			else
+			{
+				std::vector<RendererStartupWindowInput> startupWindowInputs;
+				startupWindowInputs.reserve(rendererAssets.startupLayout.windows.size());
+				for (const RendererStartupWindowDefinition &definition : rendererAssets.startupLayout.windows)
+				{
+					Result<CrystalStructure> structure = scientificRuntimeLayer->LoadCrystalStructure(definition.poscarPath);
+					if (!structure.HasValue())
+					{
+						const StructuredError &error = structure.Error();
+						DS_LOG_ERROR(
+							"Renderer startup structure '{}' failed to load via Python [{}]: {}",
+							definition.structureName,
+							error.code.empty() ? "unknown" : error.code,
+							error.technicalDetails);
+						continue;
+					}
+
+					RendererStartupWindowInput input;
+					input.definition = definition;
+					input.structure = ConvertCrystalStructureToRendererData(
+						structure.Value(),
+						definition.poscarPath,
+						definition.structureName,
+						rendererAssets.atomStyleTable,
+						rendererAssets.elementPropertiesTable);
+					startupWindowInputs.push_back(std::move(input));
+				}
+				rendererStartupWindows = BuildRendererStartupWindows(std::move(startupWindowInputs));
+				timer.Finish(!rendererStartupWindows.empty());
+			}
+		}
 		RendererStartupConfig rendererStartupConfig;
 		{
 			ZoneScopedN("Application.setupDefaultLayers.BuildRendererStartupConfig");
 			ApplicationDetail::StartupStepTimer timer("LayerStack.build.RendererStartupConfig");
-			rendererStartupConfig.configDirectory = m_Config.paths.userConfigDirectory;
 			rendererStartupConfig.assetsDirectory = m_Config.paths.assetsDirectory;
 			rendererStartupConfig.shaderDirectory = Path::FromResolved(
 				FileSystem::CurrentPath() / "src" / "Renderer" / "OpenGl" / "Shaders");
-			rendererStartupConfig.atomStyleTable = std::move(rendererAssets.atomStyleTable);
-			rendererStartupConfig.elementPropertiesTable = std::move(rendererAssets.elementPropertiesTable);
-			rendererStartupConfig.startupLayout = std::move(rendererAssets.startupLayout);
+			rendererStartupConfig.startupWindows = std::move(rendererStartupWindows);
 			rendererStartupConfig.primitiveMeshes = std::move(rendererAssets.primitiveMeshes);
 			rendererStartupConfig.periodicTableSymbols = std::move(rendererAssets.periodicTableSymbols);
 			rendererStartupConfig.lanthanideSymbols = std::move(rendererAssets.lanthanideSymbols);
 			rendererStartupConfig.actinideSymbols = std::move(rendererAssets.actinideSymbols);
-			rendererStartupConfig.loadDefaultScene = rendererAssetsResult.HasValue();
+			rendererStartupConfig.loadDefaultScene = !rendererStartupConfig.startupWindows.empty();
 			timer.Finish(true);
 		}
 		{

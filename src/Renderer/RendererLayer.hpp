@@ -8,11 +8,8 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Domain/Crystal/ElementProperties.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/RendererMeshData.hpp"
-#include "Renderer/AtomStyleTable.hpp"
-#include "Renderer/RendererStartupDefinitions.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -31,12 +28,9 @@ namespace DefectStudio
 
 	struct RendererStartupConfig
 	{
-		Path configDirectory;
 		Path assetsDirectory;
 		Path shaderDirectory;
-		AtomStyleTable atomStyleTable;
-		ElementPropertiesTable elementPropertiesTable;
-		RendererStartupLayoutDefinition startupLayout;
+		std::vector<RendererWindowState> startupWindows;
 		RendererPrimitiveMeshAssets primitiveMeshes;
 		std::vector<std::string> periodicTableSymbols;
 		std::vector<std::string> lanthanideSymbols;
