@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 
-#include "IO/StructureToRenderer.hpp"
+#include "Renderer/StructureRendererDataBuilder.hpp"
 
 #include <unordered_map>
 
 namespace DefectStudio::Tests
 {
-	TEST(StructureToRendererTests, ConvertsCrystalStructureToRendererData)
+	TEST(StructureToRendererTests, BuildsRendererStructureData)
 	{
 		CrystalStructure structure;
 		structure.name = "Carbon pair";
@@ -29,7 +29,7 @@ namespace DefectStudio::Tests
 		elementPropertiesTable.ReplaceData(std::move(properties));
 
 		const Path sourcePath("POSCAR");
-		const RendererStructureData rendererData = ConvertCrystalStructureToRendererData(
+		const RendererStructureData rendererData = BuildRendererStructureData(
 			structure,
 			sourcePath,
 			"Renderer name",

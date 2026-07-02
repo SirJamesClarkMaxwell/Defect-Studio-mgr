@@ -9,6 +9,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Renderer/RendererConfig.hpp"
 #include "Renderer/RendererMeshData.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererTypes.hpp"
@@ -19,9 +20,8 @@ namespace DefectStudio
 	class OpenGlRendererBackend;
 	class RendererViewCamera;
 	class EventBus;
-	struct ApplicationConfig;
 
-	namespace AppEvents::Config
+	namespace RendererEvents::Config
 	{
 		struct Applied;
 	}
@@ -48,7 +48,7 @@ namespace DefectStudio
 		void OnDetach() override;
 		void OnUpdate(float deltaTime) override;
 		void OnImGuiRender() override;
-		void ApplyConfig(const ApplicationConfig &config);
+		void ApplyConfig(const RendererConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
 		[[nodiscard]] Ref<EventBus> GetEventBus() const;
 		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
@@ -65,6 +65,7 @@ namespace DefectStudio
 		void UpdateCameraTransitions(float deltaTime);
 		void UndoViewChange(const std::string &windowId);
 		void RedoViewChange(const std::string &windowId);
+		void SetViewportSize(const std::string &windowId, glm::vec2 size);
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
@@ -87,7 +88,7 @@ namespace DefectStudio
 	private:
 		void loadDefaultWindows();
 		void bindConfigEvents();
-		void onConfigApplied(const AppEvents::Config::Applied &event);
+		void onConfigApplied(const RendererEvents::Config::Applied &event);
 		void onOrbitDelta(const RendererEvents::Viewport::OrbitDelta &event);
 		void onPanDelta(const RendererEvents::Viewport::PanDelta &event);
 		void onZoomDelta(const RendererEvents::Viewport::ZoomDelta &event);
@@ -104,6 +105,7 @@ namespace DefectStudio
 		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
 		void onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event);
 		void onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event);
+		void onAtomSelectionRequested(const RendererEvents::Viewport::AtomSelectionRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		[[nodiscard]] RendererWindowState *findViewportCommandWindow(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;

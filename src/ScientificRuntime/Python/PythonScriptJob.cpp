@@ -47,10 +47,15 @@ namespace DefectStudio
 			options.workingDirectory = Path::FromResolved(FileSystem::CurrentPath());
 		else
 			options.workingDirectory = m_WorkingDirectory;
+		options.shouldCancel = [&context]() { return context.IsCancellationRequested(); };
 
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
 		if (!runResult)
+		{
+			if (runResult.Error().category == ErrorCategory::Cancelled)
+				throw JobCancelledException(runResult.Error().technicalDetails);
 			throw std::runtime_error(runResult.Error().technicalDetails);
+		}
 
 		if (!runResult->standardOutput.empty())
 			context.LogInfo("python stdout: " + runResult->standardOutput);

@@ -10,10 +10,11 @@
 
 namespace DefectStudio
 {
-	[[nodiscard]] RendererStructureData ConvertCrystalStructureToRendererData(
+	[[nodiscard]] RendererStructureData BuildRendererStructureData(
 		const CrystalStructure &structure,
 		const Path &sourcePath,
 		std::string name,
 		const AtomStyleTable &atomStyleTable,
-		const ElementPropertiesTable &elementPropertiesTable);
+		const ElementPropertiesTable &elementPropertiesTable,
+		std::string domainStructureId = {});
 } // namespace DefectStudio

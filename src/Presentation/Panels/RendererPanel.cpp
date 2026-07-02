@@ -111,9 +111,9 @@ namespace DefectStudio
 		ImGui::Separator();
 
 		const ImVec2 available = ImGui::GetContentRegionAvail();
-		windowState.viewportSize.x = SanitizeViewportDimension(available.x);
-		windowState.viewportSize.y = SanitizeViewportDimension(available.y);
-		windowState.camera->SetViewport(windowState.viewportSize.x, windowState.viewportSize.y);
+		m_Layer.SetViewportSize(
+			windowState.windowId,
+			glm::vec2(SanitizeViewportDimension(available.x), SanitizeViewportDimension(available.y)));
 		const ImVec2 viewportSize(windowState.viewportSize.x, windowState.viewportSize.y);
 
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
@@ -212,26 +212,26 @@ namespace DefectStudio
 
 		if (hitIndex == std::numeric_limits<std::size_t>::max())
 		{
-			if (!additive)
-				windowState.selectedAtomIndices.clear();
+			Ref<EventBus> eventBus = m_Layer.GetEventBus();
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::AtomSelectionRequested event;
+				event.windowId = windowState.windowId;
+				event.additive = additive;
+				eventBus->Publish(event);
+			}
 			return;
 		}
 
-		if (!additive)
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		if (eventBus != nullptr)
 		{
-			windowState.selectedAtomIndices.clear();
-			windowState.selectedAtomIndices.push_back(hitIndex);
-			return;
+			RendererEvents::Viewport::AtomSelectionRequested event;
+			event.windowId = windowState.windowId;
+			event.atomIndex = hitIndex;
+			event.additive = additive;
+			eventBus->Publish(event);
 		}
-
-		auto it = std::find(
-			windowState.selectedAtomIndices.begin(),
-			windowState.selectedAtomIndices.end(),
-			hitIndex);
-		if (it != windowState.selectedAtomIndices.end())
-			windowState.selectedAtomIndices.erase(it);
-		else
-			windowState.selectedAtomIndices.push_back(hitIndex);
 	}
 
 	void RendererPanel::drawPeriodicTableWindow()

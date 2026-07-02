@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 
-#include "IO/StructureToRenderer.hpp"
+#include "Renderer/StructureRendererDataBuilder.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,8 @@
 
 namespace DefectStudio
 {
-
+	namespace
+	{
 		struct RendererGridCellKey
 		{
 			int x = 0;
@@ -129,16 +130,18 @@ namespace DefectStudio
 			}
 			return bonds;
 		}
+	}
 
-
-	RendererStructureData ConvertCrystalStructureToRendererData(
+	RendererStructureData BuildRendererStructureData(
 		const CrystalStructure &structure,
 		const Path &sourcePath,
 		std::string name,
 		const AtomStyleTable &atomStyleTable,
-		const ElementPropertiesTable &elementPropertiesTable)
+		const ElementPropertiesTable &elementPropertiesTable,
+		std::string domainStructureId)
 	{
 		RendererStructureData data;
+		data.domainStructureId = std::move(domainStructureId);
 		data.name = !name.empty() ? std::move(name) : structure.name;
 		data.sourcePath = sourcePath;
 		data.lattice = structure.cell.ToMatrix();

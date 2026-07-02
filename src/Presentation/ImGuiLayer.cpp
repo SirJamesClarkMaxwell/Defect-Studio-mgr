@@ -19,10 +19,10 @@
 
 #include "Presentation/ImGuiLayer.hpp"
 
-#include "App/Application.hpp"
 #include "IconsFontAwesome6.h"
 #include "fa-solid-900.h"
 
+#include "Core/Commands/SystemCommandEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Platform/PlatformFontDiscovery.hpp"
@@ -389,7 +389,8 @@ namespace DefectStudio
 			if (ImGui::Button("Quit Application"))
 			{
 				m_PendingBlockingError.reset();
-				Application::Get().Shutdown();
+				if (m_EventBus != nullptr)
+					m_EventBus->Queue(CoreEvents::ShutdownRequested{});
 			}
 			ImGui::EndPopup();
 		}

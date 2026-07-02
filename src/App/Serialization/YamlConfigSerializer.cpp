@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "App/Serialization/YamlConfigSerializer.hpp"
+#include "App/Serialization/YamlRendererConfigSection.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1631,50 +1632,7 @@ namespace DefectStudio
 			out << YAML::Key << "growth_step" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.growthStep);
 			out << YAML::EndMap;
 
-			out << YAML::Key << RendererSection << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "background" << YAML::Value;
-			ConfigYaml::EmitColor(out, config.renderer.backgroundColor);
-			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
-			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
-			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
-			out << YAML::Key << "rotation_speed" << YAML::Value << config.renderer.rotationSpeed;
-			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
-			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
-			out << YAML::Key << "focus_selected_atom_respect_atom_radius" << YAML::Value << config.renderer.focusSelectedAtomRespectAtomRadius;
-			out << YAML::Key << "focus_selected_atom_radius_multiplier" << YAML::Value << config.renderer.focusSelectedAtomRadiusMultiplier;
-			out << YAML::Key << "invert_zoom" << YAML::Value << config.renderer.invertZoom;
-			out << YAML::Key << "touchpad_navigation" << YAML::Value << config.renderer.touchpadNavigation;
-			out << YAML::Key << "default_projection" << YAML::Value << config.renderer.defaultProjection;
-			out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "ambient" << YAML::Value << config.renderer.lighting.ambientIntensity;
-			out << YAML::Key << "key" << YAML::Value << config.renderer.lighting.keyIntensity;
-			out << YAML::Key << "fill" << YAML::Value << config.renderer.lighting.fillIntensity;
-			out << YAML::Key << "back" << YAML::Value << config.renderer.lighting.backIntensity;
-			out << YAML::Key << "two_sided" << YAML::Value << config.renderer.lighting.twoSided;
-			out << YAML::Key << "key_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.keyDirection);
-			out << YAML::Key << "fill_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.fillDirection);
-			out << YAML::Key << "back_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.backDirection);
-			out << YAML::EndMap;
-			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
-			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
-			out << YAML::EndMap;
-			out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "rotation_step_delta" << YAML::Value << config.renderer.toolbarWheel.rotationStepDelta;
-			out << YAML::Key << "zoom_step_delta" << YAML::Value << config.renderer.toolbarWheel.zoomStepDelta;
-			out << YAML::Key << "ctrl_presets" << YAML::Value;
-			ConfigYaml::EmitFloatList(out, config.renderer.toolbarWheel.ctrlPresetValues);
-			out << YAML::EndMap;
-			out << YAML::Key << "grid" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "auto_fit_to_structure_bounds" << YAML::Value << config.renderer.grid.autoFitToStructureBounds;
-			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
-			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
-			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
-			out << YAML::EndMap;
-			out << YAML::EndMap;
+			ConfigYaml::EmitRendererConfig(out, config.renderer);
 			out << YAML::EndMap;
 		}
 
@@ -1699,50 +1657,7 @@ namespace DefectStudio
 			out << YAML::Key << "maximized" << YAML::Value << config.window.maximized;
 			out << YAML::EndMap;
 			emitAppearance(out, config.appearance);
-			out << YAML::Key << RendererSection << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "background" << YAML::Value;
-			ConfigYaml::EmitColor(out, config.renderer.backgroundColor);
-			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
-			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
-			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
-			out << YAML::Key << "rotation_speed" << YAML::Value << config.renderer.rotationSpeed;
-			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
-			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
-			out << YAML::Key << "focus_selected_atom_respect_atom_radius" << YAML::Value << config.renderer.focusSelectedAtomRespectAtomRadius;
-			out << YAML::Key << "focus_selected_atom_radius_multiplier" << YAML::Value << config.renderer.focusSelectedAtomRadiusMultiplier;
-			out << YAML::Key << "invert_zoom" << YAML::Value << config.renderer.invertZoom;
-			out << YAML::Key << "touchpad_navigation" << YAML::Value << config.renderer.touchpadNavigation;
-			out << YAML::Key << "default_projection" << YAML::Value << config.renderer.defaultProjection;
-			out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "ambient" << YAML::Value << config.renderer.lighting.ambientIntensity;
-			out << YAML::Key << "key" << YAML::Value << config.renderer.lighting.keyIntensity;
-			out << YAML::Key << "fill" << YAML::Value << config.renderer.lighting.fillIntensity;
-			out << YAML::Key << "back" << YAML::Value << config.renderer.lighting.backIntensity;
-			out << YAML::Key << "two_sided" << YAML::Value << config.renderer.lighting.twoSided;
-			out << YAML::Key << "key_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.keyDirection);
-			out << YAML::Key << "fill_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.fillDirection);
-			out << YAML::Key << "back_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.backDirection);
-			out << YAML::EndMap;
-			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
-			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
-			out << YAML::EndMap;
-			out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "rotation_step_delta" << YAML::Value << config.renderer.toolbarWheel.rotationStepDelta;
-			out << YAML::Key << "zoom_step_delta" << YAML::Value << config.renderer.toolbarWheel.zoomStepDelta;
-			out << YAML::Key << "ctrl_presets" << YAML::Value;
-			ConfigYaml::EmitFloatList(out, config.renderer.toolbarWheel.ctrlPresetValues);
-			out << YAML::EndMap;
-			out << YAML::Key << "grid" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "auto_fit_to_structure_bounds" << YAML::Value << config.renderer.grid.autoFitToStructureBounds;
-			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
-			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
-			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
-			out << YAML::EndMap;
-			out << YAML::EndMap;
+			ConfigYaml::EmitRendererConfig(out, config.renderer);
 			out << YAML::EndMap;
 		}
 
@@ -1788,50 +1703,7 @@ namespace DefectStudio
 			out << YAML::Key << "growth_step" << YAML::Value << static_cast<unsigned long long>(config.eventQueue.growthStep);
 			out << YAML::EndMap;
 
-			out << YAML::Key << RendererSection << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "background" << YAML::Value;
-			ConfigYaml::EmitColor(out, config.renderer.backgroundColor);
-			out << YAML::Key << "orbit_sensitivity" << YAML::Value << config.renderer.orbitSensitivity;
-			out << YAML::Key << "pan_sensitivity" << YAML::Value << config.renderer.panSensitivity;
-			out << YAML::Key << "zoom_sensitivity" << YAML::Value << config.renderer.zoomSensitivity;
-			out << YAML::Key << "rotation_speed" << YAML::Value << config.renderer.rotationSpeed;
-			out << YAML::Key << "focus_selected_atom_distance" << YAML::Value << config.renderer.focusSelectedAtomDistance;
-			out << YAML::Key << "focus_selected_atom_transition_seconds" << YAML::Value << config.renderer.focusSelectedAtomTransitionSeconds;
-			out << YAML::Key << "focus_selected_atom_respect_atom_radius" << YAML::Value << config.renderer.focusSelectedAtomRespectAtomRadius;
-			out << YAML::Key << "focus_selected_atom_radius_multiplier" << YAML::Value << config.renderer.focusSelectedAtomRadiusMultiplier;
-			out << YAML::Key << "invert_zoom" << YAML::Value << config.renderer.invertZoom;
-			out << YAML::Key << "touchpad_navigation" << YAML::Value << config.renderer.touchpadNavigation;
-			out << YAML::Key << "default_projection" << YAML::Value << config.renderer.defaultProjection;
-			out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "ambient" << YAML::Value << config.renderer.lighting.ambientIntensity;
-			out << YAML::Key << "key" << YAML::Value << config.renderer.lighting.keyIntensity;
-			out << YAML::Key << "fill" << YAML::Value << config.renderer.lighting.fillIntensity;
-			out << YAML::Key << "back" << YAML::Value << config.renderer.lighting.backIntensity;
-			out << YAML::Key << "two_sided" << YAML::Value << config.renderer.lighting.twoSided;
-			out << YAML::Key << "key_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.keyDirection);
-			out << YAML::Key << "fill_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.fillDirection);
-			out << YAML::Key << "back_direction" << YAML::Value;
-			ConfigYaml::EmitVec3(out, config.renderer.lighting.backDirection);
-			out << YAML::EndMap;
-			out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "axis_button_size" << YAML::Value << config.renderer.viewport.axisButtonSize;
-			out << YAML::Key << "icon_button_size" << YAML::Value << config.renderer.viewport.iconButtonSize;
-			out << YAML::EndMap;
-			out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "rotation_step_delta" << YAML::Value << config.renderer.toolbarWheel.rotationStepDelta;
-			out << YAML::Key << "zoom_step_delta" << YAML::Value << config.renderer.toolbarWheel.zoomStepDelta;
-			out << YAML::Key << "ctrl_presets" << YAML::Value;
-			ConfigYaml::EmitFloatList(out, config.renderer.toolbarWheel.ctrlPresetValues);
-			out << YAML::EndMap;
-			out << YAML::Key << "grid" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "auto_fit_to_structure_bounds" << YAML::Value << config.renderer.grid.autoFitToStructureBounds;
-			out << YAML::Key << "padding_percent" << YAML::Value << config.renderer.grid.paddingPercent;
-			out << YAML::Key << "spacing" << YAML::Value << config.renderer.grid.spacing;
-			out << YAML::Key << "plane_z" << YAML::Value << config.renderer.grid.planeZ;
-			out << YAML::EndMap;
-			out << YAML::EndMap;
+			ConfigYaml::EmitRendererConfig(out, config.renderer);
 			out << YAML::EndMap;
 		}
 	} // namespace

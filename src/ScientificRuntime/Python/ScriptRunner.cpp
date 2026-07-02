@@ -65,16 +65,42 @@ namespace DefectStudio
 			options.arguments.begin(),
 			options.arguments.end());
 		processOptions.workingDirectory = workingDirectory;
+		processOptions.timeout = options.timeout;
+		processOptions.shouldCancel = options.shouldCancel;
 
 		Result<Platform::ProcessRunResult> processResult = Platform::RunProcess(processOptions);
 		if (!processResult.HasValue())
 			return processResult.Error();
+
+		if (processResult->cancelled)
+		{
+			return StructuredError{
+				ErrorCategory::Cancelled,
+				Severity::Warning,
+				"Python script cancelled.",
+				"Command cancelled: " + processResult->commandLine,
+				"No action required if the cancellation was intentional.",
+				"ScientificRuntime/Python/ScriptRunner",
+				"python.script.cancelled"};
+		}
+
+		if (processResult->timedOut)
+		{
+			return MakePythonExecutionError(
+				"Python script timed out.",
+				"Command timed out and was terminated: " + processResult->commandLine,
+				"Increase the timeout or check the Python script for hangs.",
+				"python.script.timeout");
+		}
 
 		ScriptRunResult result;
 		result.exitCode = processResult->exitCode;
 		result.commandLine = processResult->commandLine;
 		result.standardOutput = std::move(processResult->standardOutput);
 		result.standardError = std::move(processResult->standardError);
+		result.timedOut = processResult->timedOut;
+		result.cancelled = processResult->cancelled;
+		result.terminated = processResult->terminated;
 
 		if (options.requireZeroExitCode && result.exitCode != 0)
 		{

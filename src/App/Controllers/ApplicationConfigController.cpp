@@ -16,6 +16,7 @@
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/EditorUiEvents.hpp"
+#include "Events/RendererEvents.hpp"
 
 namespace DefectStudio
 {
@@ -33,6 +34,7 @@ namespace DefectStudio
 		void queueAppliedConfigEvents(EventBus &bus, const ApplicationConfig &config, bool persisted)
 		{
 			bus.Queue(AppEvents::Config::Applied{config, persisted});
+			bus.Queue(RendererEvents::Config::Applied{config.renderer, persisted});
 			bus.Queue(JobSystemConfigAppliedEvent{config.jobs});
 			bus.Queue(EditorUiEvents::RuntimeConfigApplied{
 				config.ui,

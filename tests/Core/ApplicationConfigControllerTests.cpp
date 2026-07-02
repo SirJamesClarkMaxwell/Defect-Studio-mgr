@@ -12,6 +12,7 @@
 #include "Core/Utils/Time.hpp"
 #include "IO/IOLayer.hpp"
 #include "Events/EditorUiEvents.hpp"
+#include "Events/RendererEvents.hpp"
 
 namespace
 {
@@ -62,6 +63,7 @@ TEST(ApplicationConfigControllerTests, ApplyRequestUpdatesRuntimeConfigAndPublis
 
 	bool applied = false;
 	bool persisted = true;
+	bool rendererApplied = false;
 	DefectStudio::ApplicationConfig appliedConfig;
 	const auto appliedSubscription = eventBus->Subscribe<DefectStudio::AppEvents::Config::Applied>(
 		[&](const DefectStudio::AppEvents::Config::Applied &event) {
@@ -70,6 +72,12 @@ TEST(ApplicationConfigControllerTests, ApplyRequestUpdatesRuntimeConfigAndPublis
 			appliedConfig = event.config;
 		});
 	(void)appliedSubscription;
+	const auto rendererAppliedSubscription = eventBus->Subscribe<DefectStudio::RendererEvents::Config::Applied>(
+		[&](const DefectStudio::RendererEvents::Config::Applied &event) {
+			rendererApplied = true;
+			EXPECT_FALSE(event.wasPersisted);
+		});
+	(void)rendererAppliedSubscription;
 
 	DefectStudio::ApplicationConfig requested = runtimeConfig;
 	requested.log.level = DefectStudio::LogLevel::Debug;
@@ -90,11 +98,12 @@ TEST(ApplicationConfigControllerTests, ApplyRequestUpdatesRuntimeConfigAndPublis
 	EXPECT_EQ(specification.logLevel, DefectStudio::LogLevel::Debug);
 	EXPECT_TRUE(specification.traceEvents);
 	EXPECT_EQ(eventQueue.Capacity(), 64u);
-	EXPECT_EQ(eventBus->GetQueuedEventCount(), 3u);
+	EXPECT_EQ(eventBus->GetQueuedEventCount(), 4u);
 
 	eventBus->ProcessQueue();
 
 	EXPECT_TRUE(applied);
+	EXPECT_TRUE(rendererApplied);
 	EXPECT_FALSE(persisted);
 	EXPECT_EQ(appliedConfig.window.width, 320);
 	EXPECT_EQ(appliedConfig.window.height, 240);

@@ -86,3 +86,16 @@ renderer:
     padding_percent: 25.3
     spacing: 0.99
     plane_z: -7.9
+  keyboard_shortcuts:
+    align_axis_a: A
+    align_axis_b: B
+    align_axis_c: C
+    orbit_left: Left
+    orbit_right: Right
+    orbit_up: Up
+    orbit_down: Down
+    roll_left: Q
+    roll_right: E
+    zoom_in: R
+    zoom_out: F
+    focus_selected_atom: Period

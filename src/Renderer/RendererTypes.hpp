@@ -42,6 +42,7 @@ namespace DefectStudio
 
 	struct RendererStructureData
 	{
+		std::string domainStructureId;
 		std::string name;
 		Path sourcePath;
 		std::vector<RendererAtomData> atoms;

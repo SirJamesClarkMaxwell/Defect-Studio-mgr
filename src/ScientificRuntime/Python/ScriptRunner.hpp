@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -14,6 +16,8 @@ namespace DefectStudio
 		std::vector<std::string> arguments;
 		Path workingDirectory;
 		std::string pythonExecutable;
+		std::chrono::milliseconds timeout{0};
+		std::function<bool()> shouldCancel;
 		bool requireZeroExitCode = true;
 	};
 
@@ -23,6 +27,9 @@ namespace DefectStudio
 		std::string commandLine;
 		std::string standardOutput;
 		std::string standardError;
+		bool timedOut = false;
+		bool cancelled = false;
+		bool terminated = false;
 	};
 
 	class ScriptRunner final

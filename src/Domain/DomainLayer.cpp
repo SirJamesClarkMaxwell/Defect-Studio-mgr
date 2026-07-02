@@ -24,4 +24,14 @@ namespace DefectStudio
 	{
 		(void)deltaTime;
 	}
+
+	ProjectWorkspace &DomainLayer::Workspace() noexcept
+	{
+		return m_Workspace;
+	}
+
+	const ProjectWorkspace &DomainLayer::Workspace() const noexcept
+	{
+		return m_Workspace;
+	}
 } // namespace DefectStudio

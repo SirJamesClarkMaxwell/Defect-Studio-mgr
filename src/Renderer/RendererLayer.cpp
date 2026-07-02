@@ -2,8 +2,6 @@
 
 #include "Renderer/RendererLayer.hpp"
 
-#include "App/ApplicationState.hpp"
-#include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Assert.hpp"
 
@@ -418,6 +416,17 @@ namespace DefectStudio
 		windowState->viewUndoHistory.push_back(std::move(change));
 	}
 
+	void RendererLayer::SetViewportSize(const std::string &windowId, glm::vec2 size)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->viewportSize = size;
+		if (windowState->camera != nullptr)
+			windowState->camera->SetViewport(size.x, size.y);
+	}
+
 	void RendererLayer::OnAttach()
 	{
 		m_RendererBackend = CreateUnique<OpenGlRendererBackend>();
@@ -487,6 +496,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onViewTransitionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ProjectionToggleRequested>(
 				std::bind_front(&RendererLayer::onProjectionToggleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::AtomSelectionRequested>(
+				std::bind_front(&RendererLayer::onAtomSelectionRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -517,58 +528,58 @@ namespace DefectStudio
 	{
 	}
 
-	void RendererLayer::ApplyConfig(const ApplicationConfig &config)
+	void RendererLayer::ApplyConfig(const RendererConfig &config)
 	{
 		const RendererGridSettings previousGridSettings = m_GlobalRenderSettings.grid;
 
 		m_GlobalRenderSettings.backgroundColor = glm::vec4(
-			config.renderer.backgroundColor[0],
-			config.renderer.backgroundColor[1],
-			config.renderer.backgroundColor[2],
-			config.renderer.backgroundColor[3]);
-		m_GlobalRenderSettings.orbitSensitivity = config.renderer.orbitSensitivity;
-		m_GlobalRenderSettings.panSensitivity = config.renderer.panSensitivity;
-		m_GlobalRenderSettings.zoomSensitivity = config.renderer.zoomSensitivity;
-		m_GlobalRenderSettings.rotationSpeed = config.renderer.rotationSpeed;
-		m_GlobalRenderSettings.focusSelectedAtomDistance = config.renderer.focusSelectedAtomDistance;
-		m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds = config.renderer.focusSelectedAtomTransitionSeconds;
-		m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius = config.renderer.focusSelectedAtomRespectAtomRadius;
-		m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier = config.renderer.focusSelectedAtomRadiusMultiplier;
-		m_GlobalRenderSettings.invertZoom = config.renderer.invertZoom;
-		m_GlobalRenderSettings.touchpadNavigation = config.renderer.touchpadNavigation;
-		m_GlobalRenderSettings.defaultCameraProjection = ProjectionFromString(config.renderer.defaultProjection);
-		m_GlobalRenderSettings.lighting.ambientIntensity = config.renderer.lighting.ambientIntensity;
-		m_GlobalRenderSettings.lighting.keyIntensity = config.renderer.lighting.keyIntensity;
-		m_GlobalRenderSettings.lighting.fillIntensity = config.renderer.lighting.fillIntensity;
-		m_GlobalRenderSettings.lighting.backIntensity = config.renderer.lighting.backIntensity;
-		m_GlobalRenderSettings.lighting.twoSided = config.renderer.lighting.twoSided;
+			config.backgroundColor[0],
+			config.backgroundColor[1],
+			config.backgroundColor[2],
+			config.backgroundColor[3]);
+		m_GlobalRenderSettings.orbitSensitivity = config.orbitSensitivity;
+		m_GlobalRenderSettings.panSensitivity = config.panSensitivity;
+		m_GlobalRenderSettings.zoomSensitivity = config.zoomSensitivity;
+		m_GlobalRenderSettings.rotationSpeed = config.rotationSpeed;
+		m_GlobalRenderSettings.focusSelectedAtomDistance = config.focusSelectedAtomDistance;
+		m_GlobalRenderSettings.focusSelectedAtomTransitionSeconds = config.focusSelectedAtomTransitionSeconds;
+		m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius = config.focusSelectedAtomRespectAtomRadius;
+		m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier = config.focusSelectedAtomRadiusMultiplier;
+		m_GlobalRenderSettings.invertZoom = config.invertZoom;
+		m_GlobalRenderSettings.touchpadNavigation = config.touchpadNavigation;
+		m_GlobalRenderSettings.defaultCameraProjection = ProjectionFromString(config.defaultProjection);
+		m_GlobalRenderSettings.lighting.ambientIntensity = config.lighting.ambientIntensity;
+		m_GlobalRenderSettings.lighting.keyIntensity = config.lighting.keyIntensity;
+		m_GlobalRenderSettings.lighting.fillIntensity = config.lighting.fillIntensity;
+		m_GlobalRenderSettings.lighting.backIntensity = config.lighting.backIntensity;
+		m_GlobalRenderSettings.lighting.twoSided = config.lighting.twoSided;
 		m_GlobalRenderSettings.lighting.keyDirection = glm::vec3(
-			config.renderer.lighting.keyDirection[0],
-			config.renderer.lighting.keyDirection[1],
-			config.renderer.lighting.keyDirection[2]);
+			config.lighting.keyDirection[0],
+			config.lighting.keyDirection[1],
+			config.lighting.keyDirection[2]);
 		m_GlobalRenderSettings.lighting.fillDirection = glm::vec3(
-			config.renderer.lighting.fillDirection[0],
-			config.renderer.lighting.fillDirection[1],
-			config.renderer.lighting.fillDirection[2]);
+			config.lighting.fillDirection[0],
+			config.lighting.fillDirection[1],
+			config.lighting.fillDirection[2]);
 		m_GlobalRenderSettings.lighting.backDirection = glm::vec3(
-			config.renderer.lighting.backDirection[0],
-			config.renderer.lighting.backDirection[1],
-			config.renderer.lighting.backDirection[2]);
+			config.lighting.backDirection[0],
+			config.lighting.backDirection[1],
+			config.lighting.backDirection[2]);
 		m_GlobalRenderSettings.viewport.axisButtonSize = std::clamp(
-			config.renderer.viewport.axisButtonSize,
+			config.viewport.axisButtonSize,
 			10.0f,
 			48.0f);
 		m_GlobalRenderSettings.viewport.iconButtonSize = std::clamp(
-			config.renderer.viewport.iconButtonSize,
+			config.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
-		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = config.renderer.toolbarWheel.rotationStepDelta;
-		m_GlobalRenderSettings.toolbarWheel.zoomStepDelta = config.renderer.toolbarWheel.zoomStepDelta;
-		m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues = config.renderer.toolbarWheel.ctrlPresetValues;
-		m_GlobalRenderSettings.grid.autoFitToStructureBounds = config.renderer.grid.autoFitToStructureBounds;
-		m_GlobalRenderSettings.grid.paddingPercent = config.renderer.grid.paddingPercent;
-		m_GlobalRenderSettings.grid.spacing = config.renderer.grid.spacing;
-		m_GlobalRenderSettings.grid.planeZ = config.renderer.grid.planeZ;
+		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = config.toolbarWheel.rotationStepDelta;
+		m_GlobalRenderSettings.toolbarWheel.zoomStepDelta = config.toolbarWheel.zoomStepDelta;
+		m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues = config.toolbarWheel.ctrlPresetValues;
+		m_GlobalRenderSettings.grid.autoFitToStructureBounds = config.grid.autoFitToStructureBounds;
+		m_GlobalRenderSettings.grid.paddingPercent = config.grid.paddingPercent;
+		m_GlobalRenderSettings.grid.spacing = config.grid.spacing;
+		m_GlobalRenderSettings.grid.planeZ = config.grid.planeZ;
 
 		if (glm::length(m_GlobalRenderSettings.lighting.keyDirection) <= 0.001f)
 			m_GlobalRenderSettings.lighting.keyDirection = glm::normalize(glm::vec3(0.6f, 0.8f, 0.5f));
@@ -671,8 +682,8 @@ namespace DefectStudio
 		if (m_EventBus == nullptr)
 			return;
 
-		AddSubscription(m_EventBus->Subscribe<AppEvents::Config::Applied>(
-			[this](const AppEvents::Config::Applied &event) { onConfigApplied(event); }));
+		AddSubscription(m_EventBus->Subscribe<RendererEvents::Config::Applied>(
+			[this](const RendererEvents::Config::Applied &event) { onConfigApplied(event); }));
 	}
 
 	RendererWindowState *RendererLayer::findWindowById(const std::string &windowId)
@@ -997,7 +1008,41 @@ namespace DefectStudio
 		pushViewChange(*windowState, before, after, "toolbar.toggle_projection");
 	}
 
-	void RendererLayer::onConfigApplied(const AppEvents::Config::Applied &event)
+	void RendererLayer::onAtomSelectionRequested(const RendererEvents::Viewport::AtomSelectionRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		if (!event.atomIndex.has_value())
+		{
+			if (!event.additive)
+				windowState->selectedAtomIndices.clear();
+			return;
+		}
+
+		const std::size_t atomIndex = *event.atomIndex;
+		if (atomIndex >= windowState->structure.atoms.size())
+			return;
+
+		if (!event.additive)
+		{
+			windowState->selectedAtomIndices.clear();
+			windowState->selectedAtomIndices.push_back(atomIndex);
+			return;
+		}
+
+		auto it = std::find(
+			windowState->selectedAtomIndices.begin(),
+			windowState->selectedAtomIndices.end(),
+			atomIndex);
+		if (it != windowState->selectedAtomIndices.end())
+			windowState->selectedAtomIndices.erase(it);
+		else
+			windowState->selectedAtomIndices.push_back(atomIndex);
+	}
+
+	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)
 	{
 		ApplyConfig(event.config);
 	}

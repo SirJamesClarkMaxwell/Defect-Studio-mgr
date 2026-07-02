@@ -3,6 +3,7 @@
 #include "Core/Platform/ProcessRunner.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <sstream>
 #include <thread>
@@ -14,13 +15,12 @@
 #include <windows.h>
 #else
 #include <cerrno>
+#include <csignal>
 #include <cstring>
 #include <fcntl.h>
-#include <spawn.h>
 #include <sys/select.h>
 #include <sys/wait.h>
 #include <unistd.h>
-extern char **environ;
 #endif
 
 namespace DefectStudio::Platform
@@ -76,6 +76,29 @@ namespace DefectStudio::Platform
 			for (const std::string &argument : arguments)
 				command << ' ' << QuoteCommandArgument(argument);
 			return command.str();
+		}
+
+		bool ShouldTerminateProcess(
+			const ProcessRunOptions &options,
+			const std::chrono::steady_clock::time_point &startedAt,
+			ProcessRunResult &result)
+		{
+			if (options.shouldCancel && options.shouldCancel())
+			{
+				result.cancelled = true;
+				result.terminated = true;
+				return true;
+			}
+
+			if (options.timeout.count() > 0 &&
+				std::chrono::steady_clock::now() - startedAt >= options.timeout)
+			{
+				result.timedOut = true;
+				result.terminated = true;
+				return true;
+			}
+
+			return false;
 		}
 
 #if defined(DS_PLATFORM_WINDOWS)
@@ -190,10 +213,24 @@ namespace DefectStudio::Platform
 		std::thread stdoutReader([&]() { result.standardOutput = ReadPipeUntilClosed(stdoutPipe.read); });
 		std::thread stderrReader([&]() { result.standardError = ReadPipeUntilClosed(stderrPipe.read); });
 
-		WaitForSingleObject(processInfo.hProcess, INFINITE);
+		const auto startedAt = std::chrono::steady_clock::now();
+		for (;;)
+		{
+			const DWORD waitResult = WaitForSingleObject(processInfo.hProcess, 50);
+			if (waitResult == WAIT_OBJECT_0)
+				break;
+			if (waitResult != WAIT_TIMEOUT)
+				break;
+			if (ShouldTerminateProcess(options, startedAt, result))
+			{
+				TerminateProcess(processInfo.hProcess, 1);
+				WaitForSingleObject(processInfo.hProcess, INFINITE);
+				break;
+			}
+		}
 		DWORD exitCode = 0;
 		GetExitCodeProcess(processInfo.hProcess, &exitCode);
-		result.exitCode = static_cast<int>(exitCode);
+		result.exitCode = result.terminated ? -1 : static_cast<int>(exitCode);
 
 		stdoutReader.join();
 		stderrReader.join();
@@ -207,13 +244,6 @@ namespace DefectStudio::Platform
 		if (pipe(stdoutPipe) != 0 || pipe(stderrPipe) != 0)
 			return MakeProcessError(std::string("pipe failed: ") + std::strerror(errno), "process.pipe_failed");
 
-		posix_spawn_file_actions_t actions;
-		posix_spawn_file_actions_init(&actions);
-		posix_spawn_file_actions_adddup2(&actions, stdoutPipe[1], STDOUT_FILENO);
-		posix_spawn_file_actions_adddup2(&actions, stderrPipe[1], STDERR_FILENO);
-		posix_spawn_file_actions_addclose(&actions, stdoutPipe[0]);
-		posix_spawn_file_actions_addclose(&actions, stderrPipe[0]);
-
 		std::vector<std::string> storage;
 		storage.reserve(options.arguments.size() + 1);
 		storage.push_back(options.executable.String());
@@ -224,49 +254,54 @@ namespace DefectStudio::Platform
 			argv.push_back(item.data());
 		argv.push_back(nullptr);
 
-		const FilePath previousPath = FileSystem::CurrentPath();
-		std::error_code currentPathError;
-		if (!options.workingDirectory.Empty())
-			std::filesystem::current_path(options.workingDirectory.Native(), currentPathError);
-		if (currentPathError)
+		pid_t pid = fork();
+		if (pid < 0)
 		{
-			posix_spawn_file_actions_destroy(&actions);
 			close(stdoutPipe[0]);
 			close(stdoutPipe[1]);
 			close(stderrPipe[0]);
 			close(stderrPipe[1]);
-			return MakeProcessError(
-				"Changing working directory failed: " + currentPathError.message(),
-				"process.working_directory_failed");
+			return MakeProcessError(std::string("fork failed: ") + std::strerror(errno), "process.create_failed");
 		}
-
-		pid_t pid = 0;
-		const int spawnResult = posix_spawnp(
-			&pid,
-			options.executable.String().c_str(),
-			&actions,
-			nullptr,
-			argv.data(),
-			environ);
-		if (!options.workingDirectory.Empty())
-			std::filesystem::current_path(previousPath, currentPathError);
-		posix_spawn_file_actions_destroy(&actions);
-		close(stdoutPipe[1]);
-		close(stderrPipe[1]);
-
-		if (spawnResult != 0)
+		if (pid == 0)
 		{
 			close(stdoutPipe[0]);
 			close(stderrPipe[0]);
-			return MakeProcessError(std::string("posix_spawnp failed: ") + std::strerror(spawnResult), "process.create_failed");
+			dup2(stdoutPipe[1], STDOUT_FILENO);
+			dup2(stderrPipe[1], STDERR_FILENO);
+			close(stdoutPipe[1]);
+			close(stderrPipe[1]);
+			if (!options.workingDirectory.Empty() && chdir(options.workingDirectory.String().c_str()) != 0)
+				_exit(126);
+			execvp(options.executable.String().c_str(), argv.data());
+			_exit(127);
 		}
+
+		close(stdoutPipe[1]);
+		close(stderrPipe[1]);
 
 		fcntl(stdoutPipe[0], F_SETFL, O_NONBLOCK);
 		fcntl(stderrPipe[0], F_SETFL, O_NONBLOCK);
 		bool stdoutOpen = true;
 		bool stderrOpen = true;
-		while (stdoutOpen || stderrOpen)
+		bool childRunning = true;
+		int status = 0;
+		const auto startedAt = std::chrono::steady_clock::now();
+		while (stdoutOpen || stderrOpen || childRunning)
 		{
+			if (childRunning)
+			{
+				const pid_t waitResult = waitpid(pid, &status, WNOHANG);
+				if (waitResult == pid)
+					childRunning = false;
+			}
+			if (childRunning && ShouldTerminateProcess(options, startedAt, result))
+			{
+				kill(pid, SIGKILL);
+				waitpid(pid, &status, 0);
+				childRunning = false;
+			}
+
 			fd_set set;
 			FD_ZERO(&set);
 			int maxFd = -1;
@@ -280,7 +315,13 @@ namespace DefectStudio::Platform
 				FD_SET(stderrPipe[0], &set);
 				maxFd = std::max(maxFd, stderrPipe[0]);
 			}
-			if (select(maxFd + 1, &set, nullptr, nullptr, nullptr) <= 0)
+			if (maxFd < 0)
+				continue;
+
+			timeval timeout{};
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 50000;
+			if (select(maxFd + 1, &set, nullptr, nullptr, &timeout) <= 0)
 				continue;
 			if (stdoutOpen && FD_ISSET(stdoutPipe[0], &set))
 				stdoutOpen = ReadAvailableFromFd(stdoutPipe[0], result.standardOutput);
@@ -290,9 +331,9 @@ namespace DefectStudio::Platform
 		close(stdoutPipe[0]);
 		close(stderrPipe[0]);
 
-		int status = 0;
-		waitpid(pid, &status, 0);
-		if (WIFEXITED(status))
+		if (result.terminated)
+			result.exitCode = -1;
+		else if (WIFEXITED(status))
 			result.exitCode = WEXITSTATUS(status);
 		else
 			result.exitCode = -1;

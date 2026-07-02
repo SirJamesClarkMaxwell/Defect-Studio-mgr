@@ -1,9 +1,28 @@
 #pragma once
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
+#include "Renderer/RendererConfig.hpp"
 #include "Renderer/RendererTypes.hpp"
 
+#include <cstddef>
+#include <optional>
 #include <string>
+#include <utility>
+
+namespace DefectStudio::RendererEvents::Config
+{
+	struct Applied final : public BusEvent
+	{
+		Applied() = default;
+		Applied(RendererConfig rendererConfig, bool persisted)
+			: config(std::move(rendererConfig)), wasPersisted(persisted)
+		{
+		}
+
+		RendererConfig config;
+		bool wasPersisted = false;
+	};
+} // namespace DefectStudio::RendererEvents::Config
 
 namespace DefectStudio::RendererEvents::Viewport
 {
@@ -124,5 +143,12 @@ namespace DefectStudio::RendererEvents::Viewport
 	struct ProjectionToggleRequested final : public BusEvent
 	{
 		std::string windowId;
+	};
+
+	struct AtomSelectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		std::optional<std::size_t> atomIndex;
+		bool additive = false;
 	};
 } // namespace DefectStudio::RendererEvents::Viewport
