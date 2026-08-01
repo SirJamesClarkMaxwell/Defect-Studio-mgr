@@ -21,28 +21,10 @@ W praktyce:
 
 ## Źródła nawigacji
 
-Repozytorium ma graf wiedzy w `graphify-out/`.
 
-Przed szeroką nawigacją po kodzie używaj:
+- commit bazowy: `d78c39`
+- gałąź: `main`
 
-```powershell
-graphify query "<pytanie>"
-graphify explain "<symbol albo plik>"
-graphify path "<A>" "<B>"
-```
-
-Aktualny graf po ostatnim refactorze:
-
-- commit bazowy: `f753418`
-- gałąź: `refactor/full-plan`
-- rozmiar grafu: ok. 67k węzłów i 133k krawędzi
-- `graphify-out/GRAPH_REPORT.md` istnieje, ale jest bardzo duży i mniej użyteczny niż celowane `query/explain/path`
-
-Po zmianach w kodzie uruchamiaj:
-
-```powershell
-graphify update .
-```
 
 ## Sens projektu
 
