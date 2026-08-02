@@ -19,6 +19,7 @@ from scripts.python.common.config import save_local_config
 from scripts.python.common.exec import run_command
 from scripts.python.common.paths import repo_root, solution_path
 from scripts.python.common.preferences import load_preferences, resolve_preference
+from scripts.python.common.submodules import ensure_git_submodules
 from scripts.python.common.tooling import (
     detect_many,
     detect_msvc_compiler_path,
@@ -109,20 +110,7 @@ def run_repo_update(args: argparse.Namespace) -> int:
 
 def run_git_submodule(args: argparse.Namespace) -> int:
     print_step("Initializing and updating git submodules")
-    code = run_command(
-        ["git", "submodule", "init"],
-        cwd=repo_root(),
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    )
-    if code != 0:
-        return code
-    return run_command(
-        ["git", "submodule", "update"],
-        cwd=repo_root(),
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    )
+    return ensure_git_submodules(dry_run=args.dry_run, verbose=args.verbose)
 
 
 def run_tool_discovery(args: argparse.Namespace) -> int:
@@ -181,6 +169,10 @@ def run_python_env(args: argparse.Namespace) -> int:
         return 1
 
     base_cmd = [uv, "sync"]
+    if args.python_version and not (repo_root() / ".venv").exists():
+        base_cmd.extend(["--python", args.python_version])
+    elif args.python_version:
+        print("[warn] Existing .venv detected; keeping its current interpreter.")
     for group in groups:
         base_cmd.extend(["--group", group])
 

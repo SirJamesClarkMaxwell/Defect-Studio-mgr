@@ -145,7 +145,7 @@ namespace DefectStudio
 				"python.pymatgen.warmup.import_failed");
 		}
 #else
-		DS_LOG_WARN("PymatgenBridge::WarmUp: DS_PYTHON_CAPI_AVAILABLE=0; subprocess fallback will be used for all loads.");
+		DS_LOG_INFO("PymatgenBridge::WarmUp: DS_PYTHON_CAPI_AVAILABLE=0; subprocess fallback will be used for all loads.");
 		return {};
 #endif
 	}

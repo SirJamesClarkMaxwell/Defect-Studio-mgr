@@ -122,21 +122,191 @@ _DS_PYTHON_LIB_DIR = pythonLibDir
 _DS_PYTHON_LIB_NAME = pythonLibName
 _DS_PYTHON_EMBED_AVAILABLE = pythonIncludeDir ~= nil and pythonLibDir ~= nil and pythonLibName ~= nil
 
+local function ApplyDependencyPaths()
+    targetdir ("build/bin/" .. outputdir .. "/%{prj.name}")
+    objdir ("build/bin-int/" .. outputdir .. "/%{prj.name}")
+end
+
+local function DefineYamlCppProject()
+    project "yaml-cpp"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        files {
+            "Vendor/yaml-cpp/include/**.h",
+            "Vendor/yaml-cpp/include/**.hpp",
+            "Vendor/yaml-cpp/src/**.h",
+            "Vendor/yaml-cpp/src/**.cpp"
+        }
+
+        includedirs {
+            "Vendor/yaml-cpp/include",
+            "Vendor/yaml-cpp/src"
+        }
+
+        defines { "YAML_CPP_STATIC_DEFINE" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+end
+
+local function DefineGoogleTestProjects()
+    project "GoogleTest"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        files {
+            "Vendor/GoogleTest/googletest/include/**.h",
+            "Vendor/GoogleTest/googletest/src/gtest-all.cc"
+        }
+
+        includedirs {
+            "Vendor/GoogleTest/googletest",
+            "Vendor/GoogleTest/googletest/include"
+        }
+
+        filter "system:windows"
+            systemversion "latest"
+            defines { "_CRT_SECURE_NO_WARNINGS" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+
+    project "GoogleTestMain"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        files { "Vendor/GoogleTest/googletest/src/gtest_main.cc" }
+
+        includedirs {
+            "Vendor/GoogleTest/googletest",
+            "Vendor/GoogleTest/googletest/include"
+        }
+
+        links { "GoogleTest" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+end
+
+local function DefineTracyProject()
+    project "Tracy"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        files { "Vendor/Tracy/public/TracyClient.cpp" }
+        includedirs { "Vendor/Tracy/public" }
+        defines {
+            "TRACY_ENABLE",
+            "TRACY_NO_SYSTEM_TRACING"
+        }
+
+        filter "system:windows"
+            systemversion "latest"
+            defines { "_CRT_SECURE_NO_WARNINGS" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+end
+
+local function DefineNativeFileDialogProject()
+    project "nfd"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        files {
+            "Vendor/nativefiledialog-extended/src/include/**.h",
+            "Vendor/nativefiledialog-extended/src/include/**.hpp"
+        }
+
+        includedirs { "Vendor/nativefiledialog-extended/src/include" }
+
+        filter "system:windows"
+            systemversion "latest"
+            files { "Vendor/nativefiledialog-extended/src/nfd_win.cpp" }
+            defines { "_CRT_SECURE_NO_WARNINGS" }
+
+        filter "system:linux"
+            pic "On"
+            files { "Vendor/nativefiledialog-extended/src/nfd_gtk.cpp" }
+
+        filter "system:macosx"
+            files { "Vendor/nativefiledialog-extended/src/nfd_cocoa.m" }
+
+        filter {}
+end
+
+local function DefineNanobindProject()
+    project "nanobind"
+        kind (_DS_PYTHON_EMBED_AVAILABLE and "StaticLib" or "Utility")
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        includedirs {
+            "Vendor/nanobind/include",
+            "Vendor/nanobind/ext/robin_map/include"
+        }
+
+        defines { "Py_NO_LINK_LIB" }
+
+        if _DS_PYTHON_EMBED_AVAILABLE then
+            files { "Vendor/nanobind/src/nb_combined.cpp" }
+            includedirs { _DS_PYTHON_INCLUDE_DIR }
+        end
+
+        filter "system:windows"
+            systemversion "latest"
+            buildoptions { "/bigobj" }
+
+        filter { "system:windows", "configurations:Debug" }
+            buildoptions { "/U_DEBUG" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+end
+
 group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
-include "Vendor/thread-pool"
-include "Vendor/json"
-include "Vendor/yaml-cpp"
-include "Vendor/ImGuiNotify"
-include "Vendor/Tracy"
-include "Vendor/GoogleTest/GoogleTest.premake5.lua"
-include "Vendor/nanobind"
-include "Vendor/stb"
-include "Vendor/glm"
-include "Vendor/entt"
-include "Vendor/nativefiledialog-extended"
+DefineYamlCppProject()
+DefineGoogleTestProjects()
+DefineTracyProject()
+DefineNativeFileDialogProject()
+DefineNanobindProject()
 group ""
 
 local function ApplyDependencyRuntimeFilters(projectName)
@@ -167,11 +337,61 @@ project "nanobind"
 filter {}
 
 project "DefectStudioPythonBridge"
-filter { "system:windows", "configurations:Debug" }
-    linkoptions {
-        "/NODEFAULTLIB:python313_d.lib",
-        "/NODEFAULTLIB:python313t_d.lib"
-    }
+    location "build/generated/%{_ACTION}"
+    kind (_DS_PYTHON_EMBED_AVAILABLE and "SharedLib" or "Utility")
+    language "C++"
+    cppdialect "C++latest"
+    staticruntime "off"
+    warnings "Extra"
+
+    targetdir ("build/bin/" .. outputdir .. "/%{prj.name}")
+    objdir ("build/bin-int/" .. outputdir .. "/%{prj.name}")
+    targetname "ds_python_bridge"
+
+    if _DS_PYTHON_EMBED_AVAILABLE then
+        files { "src/ScientificRuntime/PythonBindings/**.cpp" }
+        includedirs {
+            "src",
+            _DS_PYTHON_INCLUDE_DIR,
+            "Vendor/nanobind/include",
+            "Vendor/nanobind/ext/robin_map/include"
+        }
+        libdirs { _DS_PYTHON_LIB_DIR }
+        links {
+            _DS_PYTHON_LIB_NAME,
+            "nanobind"
+        }
+        defines { "Py_NO_LINK_LIB" }
+    end
+
+    filter "system:windows"
+        systemversion "latest"
+        targetextension ".pyd"
+
+    filter { "system:windows", "configurations:Debug" }
+        buildoptions { "/U_DEBUG" }
+        linkoptions {
+            "/NODEFAULTLIB:python312_d.lib",
+            "/NODEFAULTLIB:python313_d.lib",
+            "/NODEFAULTLIB:python314_d.lib",
+            "/NODEFAULTLIB:python312t_d.lib",
+            "/NODEFAULTLIB:python313t_d.lib",
+            "/NODEFAULTLIB:python314t_d.lib"
+        }
+
+    filter "system:linux"
+        pic "On"
+        targetextension ".so"
+
+    filter "configurations:Debug"
+        symbols "On"
+
+    filter "configurations:Release"
+        optimize "On"
+
+    filter "configurations:Dist"
+        optimize "Full"
+
 filter {}
 
 project "DefectStudio"
@@ -229,40 +449,12 @@ project "DefectStudio"
         "Vendor/yaml-cpp/include"
     }
 
-    if _DS_PYTHON_EMBED_AVAILABLE then
-        includedirs {
-            _DS_PYTHON_INCLUDE_DIR,
-            "Vendor/nanobind/include",
-            "Vendor/nanobind/ext/robin_map/include"
-        }
-    end
-
     defines {
         "GLFW_INCLUDE_NONE",
         "IMGUI_IMPL_OPENGL_LOADER_GLAD",
-        "YAML_CPP_STATIC_DEFINE"
+        "YAML_CPP_STATIC_DEFINE",
+        "DS_PYTHON_CAPI_AVAILABLE=0"
     }
-
-    if _DS_PYTHON_EMBED_AVAILABLE then
-        defines {
-            "DS_PYTHON_CAPI_AVAILABLE=1",
-            "Py_NO_LINK_LIB"
-        }
-        libdirs { _DS_PYTHON_LIB_DIR }
-        links {
-            _DS_PYTHON_LIB_NAME,
-            "nanobind"
-        }
-
-        filter { "system:windows", "configurations:Debug" }
-            linkoptions {
-                "/NODEFAULTLIB:python313_d.lib",
-                "/NODEFAULTLIB:python313t_d.lib"
-            }
-        filter {}
-    else
-        defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
-    end
 
     links {
         "GLFW",
@@ -286,7 +478,8 @@ project "DefectStudio"
         buildoptions { "/utf-8" }
         defines {
             "DS_PLATFORM_WINDOWS",
-            "TRACY_ENABLE"
+            "TRACY_ENABLE",
+            "TRACY_NO_SYSTEM_TRACING"
         }
         files { "install/app/assets/icon.rc" }
         links { "Tracy" }
@@ -425,22 +618,7 @@ project "DefectStudioTests"
         "Vendor/yaml-cpp/include"
     }
 
-    if _DS_PYTHON_EMBED_AVAILABLE then
-        includedirs {
-            _DS_PYTHON_INCLUDE_DIR,
-            "Vendor/nanobind/include",
-            "Vendor/nanobind/ext/robin_map/include"
-        }
-    end
-
-    if _DS_PYTHON_EMBED_AVAILABLE then
-        defines {
-            "DS_PYTHON_CAPI_AVAILABLE=1",
-            "Py_NO_LINK_LIB"
-        }
-    else
-        defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
-    end
+    defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
 
     links {
         "GoogleTest",
@@ -450,21 +628,6 @@ project "DefectStudioTests"
         "nfd",
         "yaml-cpp"
     }
-
-    if _DS_PYTHON_EMBED_AVAILABLE then
-        libdirs { _DS_PYTHON_LIB_DIR }
-        links {
-            _DS_PYTHON_LIB_NAME,
-            "nanobind"
-        }
-
-        filter { "system:windows", "configurations:Debug" }
-            linkoptions {
-                "/NODEFAULTLIB:python313_d.lib",
-                "/NODEFAULTLIB:python313t_d.lib"
-            }
-        filter {}
-    end
 
     filter "system:windows"
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }

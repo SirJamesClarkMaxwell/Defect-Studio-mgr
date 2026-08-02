@@ -7,6 +7,7 @@ from scripts.python.common.cli import print_header, print_step
 from scripts.python.common.exec import run_command
 from scripts.python.common.paths import repo_root
 from scripts.python.common.preferences import load_preferences, resolve_preference
+from scripts.python.common.submodules import ensure_git_submodules
 from scripts.python.common.tooling import detect_tool
 
 
@@ -41,12 +42,7 @@ def run(args: argparse.Namespace) -> int:
         )
 
     print_step("Ensuring git submodules are initialized")
-    code = run_command(
-        ["git", "submodule", "update", "--init", "--recursive", "--force"],
-        cwd=repo_root(),
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    )
+    code = ensure_git_submodules(dry_run=args.dry_run, verbose=args.verbose)
     if code != 0:
         return code
 

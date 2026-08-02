@@ -245,6 +245,7 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       "appearance vs physical properties", zachować
 
 ### Import / Export (z `old-ds-functionality.md` §1)
+- [ ] proste drzewko projektu, trochę jak w blenderze gdzie jest scene outline (zmiana potem w następnym etapie prac)
 - [ ] POSCAR/CONTCAR parser natywny C++ (VASP5/6, Selective Dynamics, Direct/Cartesian,
       skala ujemna → przeliczenie na docelową objętość, auto-przeskalowanie kartezjańskich
       przez współczynnik sieciowy) — obecnie import idzie wyłącznie przez `PymatgenBridge`
@@ -261,9 +262,9 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       `StructureRegistry` (istnieje i jest wpięte w startup rendererowy, patrz T06.5), ale bez
       pełnego workflow projektu/kolekcji
 - [ ] Parser unit tests: POSCAR roundtrip, edge cases (Selective Dynamics, puste struktury)
-- [ ] CIF parser – import, konwersja do modelu wewnętrznego (pymatgen backend przez T05) —
+<!-- - [ ] CIF parser – import, konwersja do modelu wewnętrznego (pymatgen backend przez T05) —
       **zweryfikowane: brak w kodzie**
-- [ ] XYZ / extended XYZ parser (ASE-compatible) — **zweryfikowane: brak w kodzie**
+- [ ] XYZ / extended XYZ parser (ASE-compatible) — **zweryfikowane: brak w kodzie** -->
 
 **Biblioteki:** yaml-cpp
 
@@ -294,7 +295,7 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       koordynat; wstawienie pod 3D cursorem lub w centrum selekcji (`old-ds-functionality.md` §3.3)
 - [ ] Zmień typ atomu (zaznaczenia), usuń atom (`Delete`), duplikuj (`Ctrl+D`), kopiuj/wklej (`Ctrl+C/V`)
 - [ ] Ukryj (`H`) / odkryj wszystkie (`Alt+H`) — toggle `VisibilityComponent` per kolekcja
-- [ ] Extract to New Collection — przeniesienie zaznaczonych atomów do nowej Kolekcji
+<!-- - [ ] Extract to New Collection — przeniesienie zaznaczonych atomów do nowej Kolekcji -->
 - [ ] `SceneOutliner` panel – lista struktur/kolekcji z entt view, toggle widoczności, F2 rename
 - [ ] `ObjectProperties` panel – właściwości wybranego atomu/struktury (translate przez pola numeryczne,
       uniform XYZ snap)
@@ -315,7 +316,7 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] **3D Cursor**: ustawiany z menu kontekstowego na płaszczyźnie siatki, pivot do transformacji
       lub punkt wstawienia atomu (§9)
 - [ ] Blender-like Shift+A add menu (menu kontekstowe też), Delete, Ctrl+D duplicate
-- [ ] N side-panel (toggle + strip)
+<!-- - [ ] N side-panel (toggle + strip) -->
 - [ ] **Pomiary**: odległość między ostatnimi 2 zaznaczonymi atomami, kąt między ostatnimi 3,
       centrum masy zaznaczenia — etykiety w viewporcie (§5; było już w T09 checkliście oryginału,
       przeniesione tu bo logicznie należy do selekcji/sceny)

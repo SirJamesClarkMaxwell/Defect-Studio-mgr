@@ -11,13 +11,19 @@ namespace DefectStudio
 	{
 		Result<void> startResult = m_Interpreter.Start();
 		if (!startResult)
-			return startResult.Error();
+		{
+			const StructuredError &error = startResult.Error();
+			DS_LOG_INFO(
+				"ScientificPythonRuntime: embedded interpreter unavailable; subprocess fallback active. [{}] {}",
+				error.code,
+				error.technicalDetails);
+		}
 
 		Result<void> warmUpResult = m_PymatgenBridge.WarmUp();
 		if (!warmUpResult)
 		{
 			DS_LOG_WARN(
-				"ScientificPythonRuntime: PymatgenBridge warm-up skipped — subprocess fallback active. [{}] {}",
+				"ScientificPythonRuntime: PymatgenBridge warm-up skipped; subprocess fallback active. [{}] {}",
 				warmUpResult.Error().code,
 				warmUpResult.Error().technicalDetails);
 		}

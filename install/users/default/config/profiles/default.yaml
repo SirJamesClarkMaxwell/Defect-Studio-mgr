@@ -1,4 +1,16 @@
 schema_version: 1
+log:
+  level: info
+  to_file: true
+  file_path: logs/DefectStudio.log
+trace_events: false
+window:
+  x: 0
+  y: 23
+  width: 3440
+  height: 1369
+  maximized: true
+  title: DefectStudio
 ui:
   font:
     path: app/assets/fonts/segoeui.ttf
@@ -6,12 +18,6 @@ ui:
   font_scale_step: 0.34
   settings_preview_enabled: true
   settings_auto_save_on_preview: true
-window:
-  x: 0
-  y: 23
-  width: 2560
-  height: 1369
-  maximized: true
 appearance:
   clear_color: [0.1, 0.1, 0.12, 1]
   colors:
@@ -52,6 +58,12 @@ appearance:
     selected_active_alpha: 0.416
     disabled_alpha: 0.45
     disabled_background_mix: 0.55
+jobs:
+  default_worker_threads: 6
+  reserve_urgent_worker: true
+event_queue:
+  initial_capacity: 256
+  growth_step: 256
 renderer:
   background: [0.44705883, 0.44705883, 0.44705883, 1]
   orbit_sensitivity: 1

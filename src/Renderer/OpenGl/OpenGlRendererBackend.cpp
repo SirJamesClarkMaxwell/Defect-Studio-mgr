@@ -949,7 +949,7 @@ namespace DefectStudio
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
 		if (colorLocation >= 0)
 			glUniform4f(colorLocation, 0.85f, 0.85f, 0.9f, 1.0f);
-		glLineWidth(1.4f);
+		glLineWidth(1.0f);
 
 		glBindVertexArray(m_LineVao);
 		glBindBuffer(GL_ARRAY_BUFFER, m_LineVbo);
