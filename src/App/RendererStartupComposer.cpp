@@ -6,9 +6,9 @@
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Core/Utils/Uuid.hpp"
 #include "Domain/Crystal/BondGenerator.hpp"
 #include "Domain/DomainLayer.hpp"
-#include "Domain/DomainIds.hpp"
 #include "Renderer/RendererAssetBundle.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/StructureRendererDataBuilder.hpp"
@@ -18,8 +18,8 @@ namespace DefectStudio
 {
 	RendererStartupComposition ComposeRendererStartup(
 		AssetManager &assetManager,
-		ScientificRuntimeLayer *scientificRuntimeLayer,
-		DomainLayer *domainLayer)
+		WeakRef<ScientificRuntimeLayer> scientificRuntimeLayerHandle,
+		WeakRef<DomainLayer> domainLayerHandle)
 	{
 		RendererStartupComposition composition;
 		Result<RendererAssetBundle> assetsResult = LoadRendererAssetBundle(assetManager);
@@ -34,12 +34,14 @@ namespace DefectStudio
 		}
 
 		composition.assets = std::move(assetsResult).Value();
+		Ref<ScientificRuntimeLayer> scientificRuntimeLayer = scientificRuntimeLayerHandle.lock();
 		if (scientificRuntimeLayer == nullptr || !scientificRuntimeLayer->IsPythonBridgeAvailable())
 		{
 			DS_LOG_ERROR("Renderer startup scene skipped: Scientific Python runtime is unavailable");
 			return composition;
 		}
 
+		Ref<DomainLayer> domainLayer = domainLayerHandle.lock();
 		std::vector<RendererStartupWindowInput> startupWindowInputs;
 		startupWindowInputs.reserve(composition.assets.startupLayout.windows.size());
 		for (const RendererStartupWindowDefinition &definition : composition.assets.startupLayout.windows)
@@ -59,10 +61,10 @@ namespace DefectStudio
 			CrystalStructure domainStructureValue = std::move(loadedStructure).Value();
 			RegenerateAutoBonds(domainStructureValue, composition.assets.elementPropertiesTable);
 
-			const StructureRecord *structureRecord = nullptr;
+			Ref<const StructureRecord> structureRecord;
 			if (domainLayer != nullptr)
 			{
-				structureRecord = &domainLayer->Workspace().Structures().Add(
+				structureRecord = domainLayer->Workspace().Structures().Add(
 					std::move(domainStructureValue),
 					definition.poscarPath,
 					definition.structureName);

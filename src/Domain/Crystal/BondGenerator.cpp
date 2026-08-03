@@ -3,6 +3,7 @@
 #include "Domain/Crystal/BondGenerator.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -41,6 +42,30 @@ namespace DefectStudio
 				return seed;
 			}
 		};
+
+		struct PotentialBondPair
+		{
+			std::size_t first = 0;
+			std::size_t second = 0;
+		};
+
+		[[nodiscard]] std::array<BondGridCellKey, 27> BuildNeighborCellOffsets()
+		{
+			std::array<BondGridCellKey, 27> offsets{};
+			std::size_t index = 0;
+			for (int dx = -1; dx <= 1; ++dx)
+			{
+				for (int dy = -1; dy <= 1; ++dy)
+				{
+					for (int dz = -1; dz <= 1; ++dz)
+					{
+						offsets[index] = BondGridCellKey{dx, dy, dz};
+						++index;
+					}
+				}
+			}
+			return offsets;
+		}
 
 		[[nodiscard]] BondGridCellKey CellForPosition(const glm::vec3 &position)
 		{
@@ -85,6 +110,40 @@ namespace DefectStudio
 				return found->second;
 			return settings.globalCutoffScale;
 		}
+
+		[[nodiscard]] std::vector<PotentialBondPair> BuildPotentialBondPairs(const std::vector<AtomSite> &atoms)
+		{
+			std::unordered_map<BondGridCellKey, std::vector<std::size_t>, BondGridCellKeyHasher> buckets;
+			buckets.reserve(atoms.size() * 2u);
+
+			for (std::size_t index = 0; index < atoms.size(); ++index)
+				buckets[CellForPosition(atoms[index].position)].push_back(index);
+
+			std::vector<PotentialBondPair> pairs;
+			pairs.reserve(atoms.size() * 16u);
+			const std::array<BondGridCellKey, 27> neighborOffsets = BuildNeighborCellOffsets();
+			for (std::size_t first = 0; first < atoms.size(); ++first)
+			{
+				const BondGridCellKey baseCell = CellForPosition(atoms[first].position);
+				for (const BondGridCellKey &offset : neighborOffsets)
+				{
+					const BondGridCellKey neighbor{
+						baseCell.x + offset.x,
+						baseCell.y + offset.y,
+						baseCell.z + offset.z};
+					const auto found = buckets.find(neighbor);
+					if (found == buckets.end())
+						continue;
+
+					for (std::size_t second : found->second)
+					{
+						if (second > first)
+							pairs.push_back(PotentialBondPair{first, second});
+					}
+				}
+			}
+			return pairs;
+		}
 	} // namespace
 
 	void RegenerateAutoBonds(
@@ -97,59 +156,33 @@ namespace DefectStudio
 			}),
 			structure.bonds.end());
 
-		std::unordered_map<BondGridCellKey, std::vector<std::size_t>, BondGridCellKeyHasher> buckets;
-		buckets.reserve(structure.atoms.size() * 2u);
-
-		for (std::size_t index = 0; index < structure.atoms.size(); ++index)
-			buckets[CellForPosition(structure.atoms[index].position)].push_back(index);
-
-		for (std::size_t first = 0; first < structure.atoms.size(); ++first)
+		const std::vector<PotentialBondPair> potentialPairs = BuildPotentialBondPairs(structure.atoms);
+		for (const PotentialBondPair &pair : potentialPairs)
 		{
-			const AtomSite &atomA = structure.atoms[first];
-			const BondGridCellKey baseCell = CellForPosition(atomA.position);
-			for (int dx = -1; dx <= 1; ++dx)
-			{
-				for (int dy = -1; dy <= 1; ++dy)
-				{
-					for (int dz = -1; dz <= 1; ++dz)
-					{
-						const BondGridCellKey neighbor{
-							baseCell.x + dx,
-							baseCell.y + dy,
-							baseCell.z + dz};
-						const auto found = buckets.find(neighbor);
-						if (found == buckets.end())
-							continue;
+			if (HasBondBetween(structure.bonds, pair.first, pair.second))
+				continue;
 
-						for (std::size_t second : found->second)
-						{
-							if (second <= first || HasBondBetween(structure.bonds, first, second))
-								continue;
+			const AtomSite &atomA = structure.atoms[pair.first];
+			const AtomSite &atomB = structure.atoms[pair.second];
+			const float cutoffScale = CutoffScaleForPair(
+				structure.bondSettings,
+				atomA.species,
+				atomB.species);
+			const float cutoff = cutoffScale * (
+				elementPropertiesTable.Get(atomA.species).covalentRadius +
+				elementPropertiesTable.Get(atomB.species).covalentRadius);
+			const float cutoffSquared = cutoff * cutoff;
+			const glm::vec3 delta = atomA.position - atomB.position;
+			const float distanceSquared = glm::dot(delta, delta);
+			if (distanceSquared > cutoffSquared || distanceSquared < kMinimumBondDistanceSquared)
+				continue;
 
-							const AtomSite &atomB = structure.atoms[second];
-							const float cutoffScale = CutoffScaleForPair(
-								structure.bondSettings,
-								atomA.species,
-								atomB.species);
-							const float cutoff = cutoffScale * (
-								elementPropertiesTable.Get(atomA.species).covalentRadius +
-								elementPropertiesTable.Get(atomB.species).covalentRadius);
-							const float cutoffSquared = cutoff * cutoff;
-							const glm::vec3 delta = atomA.position - atomB.position;
-							const float distanceSquared = glm::dot(delta, delta);
-							if (distanceSquared > cutoffSquared || distanceSquared < kMinimumBondDistanceSquared)
-								continue;
-
-							Bond bond;
-							bond.firstAtomIndex = first;
-							bond.secondAtomIndex = second;
-							bond.lengthAngstrom = std::sqrt(distanceSquared);
-							bond.origin = BondOrigin::Auto;
-							structure.bonds.push_back(bond);
-						}
-					}
-				}
-			}
+			Bond bond;
+			bond.firstAtomIndex = pair.first;
+			bond.secondAtomIndex = pair.second;
+			bond.lengthAngstrom = std::sqrt(distanceSquared);
+			bond.origin = BondOrigin::Auto;
+			structure.bonds.push_back(bond);
 		}
 	}
 } // namespace DefectStudio

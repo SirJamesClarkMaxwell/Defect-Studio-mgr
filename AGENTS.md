@@ -22,6 +22,7 @@ Rules:
 - Prefer the standard library, native platform features, and already-installed dependencies over new abstractions or dependencies.
 - Keep diffs short and boring; do not add boilerplate or abstractions unless explicitly requested or clearly necessary.
 - Fix bugs at the shared root cause, not only at the named symptom.
+- Do not introduce raw pointers in project code; use `Ref`, `WeakRef`, `Unique`, references, `std::optional`, or stable IDs instead.
 - Do not cut validation, data-loss handling, security, accessibility, or required checks.
 - Mark intentional simplifications with a `ponytail:` comment only when the shortcut has a known ceiling and an upgrade path.
 

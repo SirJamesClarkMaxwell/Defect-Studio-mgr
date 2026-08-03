@@ -6,102 +6,115 @@
 
 namespace DefectStudio
 {
-	const StructureRecord &StructureRegistry::Add(
+	Ref<const StructureRecord> StructureRegistry::Add(
 		CrystalStructure structure,
 		Path sourcePath,
 		std::string displayName)
 	{
-		StructureRecord record;
-		record.id = GenerateDomainUuid();
-		record.displayName = displayName.empty() ? structure.name : std::move(displayName);
-		record.sourcePath = std::move(sourcePath);
-		record.structure = std::move(structure);
-		m_Records.push_back(std::move(record));
-		return m_Records.back();
+		Ref<StructureRecord> record = CreateRef<StructureRecord>();
+		record->id = GenerateUuid();
+		record->displayName = displayName.empty() ? structure.name : std::move(displayName);
+		record->sourcePath = std::move(sourcePath);
+		record->structure = std::move(structure);
+		m_Records.push_back(record);
+		return record;
 	}
 
-	const StructureRecord *StructureRegistry::Find(const StructureId &id) const
+	WeakRef<const StructureRecord> StructureRegistry::Find(const StructureId &id) const
 	{
-		for (const StructureRecord &record : m_Records)
+		for (const Ref<StructureRecord> &record : m_Records)
 		{
-			if (record.id == id)
-				return &record;
+			if (record != nullptr && record->id == id)
+			{
+				Ref<const StructureRecord> constRecord = record;
+				return CreateWeakRef(constRecord);
+			}
 		}
-		return nullptr;
+		return {};
 	}
 
-	const std::deque<StructureRecord> &StructureRegistry::Records() const noexcept
+	const StructureRegistry::RecordList &StructureRegistry::Records() const noexcept
 	{
 		return m_Records;
 	}
 
-	const DefectConceptRecord &DefectRegistry::Add(DefectConcept data)
+	Ref<const DefectConceptRecord> DefectRegistry::Add(DefectConcept data)
 	{
-		DefectConceptRecord record;
-		record.id = GenerateDomainUuid();
-		record.data = std::move(data);
-		m_Records.push_back(std::move(record));
-		return m_Records.back();
+		Ref<DefectConceptRecord> record = CreateRef<DefectConceptRecord>();
+		record->id = GenerateUuid();
+		record->data = std::move(data);
+		m_Records.push_back(record);
+		return record;
 	}
 
-	const DefectConceptRecord *DefectRegistry::Find(const DefectId &id) const
+	WeakRef<const DefectConceptRecord> DefectRegistry::Find(const DefectId &id) const
 	{
-		for (const DefectConceptRecord &record : m_Records)
+		for (const Ref<DefectConceptRecord> &record : m_Records)
 		{
-			if (record.id == id)
-				return &record;
+			if (record != nullptr && record->id == id)
+			{
+				Ref<const DefectConceptRecord> constRecord = record;
+				return CreateWeakRef(constRecord);
+			}
 		}
-		return nullptr;
+		return {};
 	}
 
-	const std::deque<DefectConceptRecord> &DefectRegistry::Records() const noexcept
+	const DefectRegistry::RecordList &DefectRegistry::Records() const noexcept
 	{
 		return m_Records;
 	}
 
-	const DefectConfigurationRecord &DefectConfigurationRegistry::Add(DefectConfiguration configuration)
+	Ref<const DefectConfigurationRecord> DefectConfigurationRegistry::Add(DefectConfiguration configuration)
 	{
-		DefectConfigurationRecord record;
-		record.id = GenerateDomainUuid();
-		record.configuration = std::move(configuration);
-		m_Records.push_back(std::move(record));
-		return m_Records.back();
+		Ref<DefectConfigurationRecord> record = CreateRef<DefectConfigurationRecord>();
+		record->id = GenerateUuid();
+		record->configuration = std::move(configuration);
+		m_Records.push_back(record);
+		return record;
 	}
 
-	const DefectConfigurationRecord *DefectConfigurationRegistry::Find(const DefectConfigurationId &id) const
+	WeakRef<const DefectConfigurationRecord> DefectConfigurationRegistry::Find(const DefectConfigurationId &id) const
 	{
-		for (const DefectConfigurationRecord &record : m_Records)
+		for (const Ref<DefectConfigurationRecord> &record : m_Records)
 		{
-			if (record.id == id)
-				return &record;
+			if (record != nullptr && record->id == id)
+			{
+				Ref<const DefectConfigurationRecord> constRecord = record;
+				return CreateWeakRef(constRecord);
+			}
 		}
-		return nullptr;
+		return {};
 	}
 
-	const std::deque<DefectConfigurationRecord> &DefectConfigurationRegistry::Records() const noexcept
+	const DefectConfigurationRegistry::RecordList &DefectConfigurationRegistry::Records() const noexcept
 	{
 		return m_Records;
 	}
 
-	const CalculationRecord &CalculationRegistry::Add(CalculationRecord calculation)
+	Ref<const CalculationRecord> CalculationRegistry::Add(CalculationRecord calculation)
 	{
 		if (calculation.id.is_nil())
-			calculation.id = GenerateDomainUuid();
-		m_Records.push_back(std::move(calculation));
-		return m_Records.back();
+			calculation.id = GenerateUuid();
+		Ref<CalculationRecord> record = CreateRef<CalculationRecord>(std::move(calculation));
+		m_Records.push_back(record);
+		return record;
 	}
 
-	const CalculationRecord *CalculationRegistry::Find(const CalculationRecordId &id) const
+	WeakRef<const CalculationRecord> CalculationRegistry::Find(const CalculationRecordId &id) const
 	{
-		for (const CalculationRecord &record : m_Records)
+		for (const Ref<CalculationRecord> &record : m_Records)
 		{
-			if (record.id == id)
-				return &record;
+			if (record != nullptr && record->id == id)
+			{
+				Ref<const CalculationRecord> constRecord = record;
+				return CreateWeakRef(constRecord);
+			}
 		}
-		return nullptr;
+		return {};
 	}
 
-	const std::deque<CalculationRecord> &CalculationRegistry::Records() const noexcept
+	const CalculationRegistry::RecordList &CalculationRegistry::Records() const noexcept
 	{
 		return m_Records;
 	}

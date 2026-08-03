@@ -769,14 +769,15 @@ namespace DefectStudio
 		{
 			ZoneScopedN("Application.setupDefaultLayers.ComposeRendererStartup");
 			ApplicationDetail::StartupStepTimer timer("LayerStack.build.RendererStartupConfig");
-			auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
-			auto domainLayer = m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain).lock();
+			WeakRef<ScientificRuntimeLayer> scientificRuntimeLayer =
+				m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime);
+			WeakRef<DomainLayer> domainLayer = m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain);
 			rendererStartupConfig = BuildRendererStartupConfig(
 				m_Config,
 				ComposeRendererStartup(
 					*m_AssetManager,
-					scientificRuntimeLayer.get(),
-					domainLayer.get()));
+					scientificRuntimeLayer,
+					domainLayer));
 			timer.Finish(true);
 		}
 		{

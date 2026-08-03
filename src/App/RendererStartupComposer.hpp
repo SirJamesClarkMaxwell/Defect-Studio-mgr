@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "App/ApplicationState.hpp"
+#include "Core/Utils/Memory.hpp"
 #include "Renderer/RendererAssetBundle.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -21,8 +22,8 @@ namespace DefectStudio
 
 	[[nodiscard]] RendererStartupComposition ComposeRendererStartup(
 		AssetManager &assetManager,
-		ScientificRuntimeLayer *scientificRuntimeLayer,
-		DomainLayer *domainLayer);
+		WeakRef<ScientificRuntimeLayer> scientificRuntimeLayer,
+		WeakRef<DomainLayer> domainLayer);
 
 	[[nodiscard]] RendererStartupConfig BuildRendererStartupConfig(
 		const ApplicationConfig &config,

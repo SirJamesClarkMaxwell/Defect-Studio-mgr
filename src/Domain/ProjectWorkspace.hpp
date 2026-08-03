@@ -4,6 +4,7 @@
 #include <string>
 
 #include "Core/Utils/Path.hpp"
+#include "Core/Utils/Memory.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/Defects/DefectModel.hpp"
 #include "Domain/DomainIds.hpp"
@@ -21,15 +22,17 @@ namespace DefectStudio
 	class StructureRegistry
 	{
 	public:
-		[[nodiscard]] const StructureRecord &Add(
+		using RecordList = std::deque<Ref<StructureRecord>>;
+
+		[[nodiscard]] Ref<const StructureRecord> Add(
 			CrystalStructure structure,
 			Path sourcePath = {},
 			std::string displayName = {});
-		[[nodiscard]] const StructureRecord *Find(const StructureId &id) const;
-		[[nodiscard]] const std::deque<StructureRecord> &Records() const noexcept;
+		[[nodiscard]] WeakRef<const StructureRecord> Find(const StructureId &id) const;
+		[[nodiscard]] const RecordList &Records() const noexcept;
 
 	private:
-		std::deque<StructureRecord> m_Records;
+		RecordList m_Records;
 	};
 
 	struct DefectConceptRecord
@@ -41,12 +44,14 @@ namespace DefectStudio
 	class DefectRegistry
 	{
 	public:
-		[[nodiscard]] const DefectConceptRecord &Add(DefectConcept data);
-		[[nodiscard]] const DefectConceptRecord *Find(const DefectId &id) const;
-		[[nodiscard]] const std::deque<DefectConceptRecord> &Records() const noexcept;
+		using RecordList = std::deque<Ref<DefectConceptRecord>>;
+
+		[[nodiscard]] Ref<const DefectConceptRecord> Add(DefectConcept data);
+		[[nodiscard]] WeakRef<const DefectConceptRecord> Find(const DefectId &id) const;
+		[[nodiscard]] const RecordList &Records() const noexcept;
 
 	private:
-		std::deque<DefectConceptRecord> m_Records;
+		RecordList m_Records;
 	};
 
 	struct DefectConfigurationRecord
@@ -58,23 +63,27 @@ namespace DefectStudio
 	class DefectConfigurationRegistry
 	{
 	public:
-		[[nodiscard]] const DefectConfigurationRecord &Add(DefectConfiguration configuration);
-		[[nodiscard]] const DefectConfigurationRecord *Find(const DefectConfigurationId &id) const;
-		[[nodiscard]] const std::deque<DefectConfigurationRecord> &Records() const noexcept;
+		using RecordList = std::deque<Ref<DefectConfigurationRecord>>;
+
+		[[nodiscard]] Ref<const DefectConfigurationRecord> Add(DefectConfiguration configuration);
+		[[nodiscard]] WeakRef<const DefectConfigurationRecord> Find(const DefectConfigurationId &id) const;
+		[[nodiscard]] const RecordList &Records() const noexcept;
 
 	private:
-		std::deque<DefectConfigurationRecord> m_Records;
+		RecordList m_Records;
 	};
 
 	class CalculationRegistry
 	{
 	public:
-		[[nodiscard]] const CalculationRecord &Add(CalculationRecord calculation);
-		[[nodiscard]] const CalculationRecord *Find(const CalculationRecordId &id) const;
-		[[nodiscard]] const std::deque<CalculationRecord> &Records() const noexcept;
+		using RecordList = std::deque<Ref<CalculationRecord>>;
+
+		[[nodiscard]] Ref<const CalculationRecord> Add(CalculationRecord calculation);
+		[[nodiscard]] WeakRef<const CalculationRecord> Find(const CalculationRecordId &id) const;
+		[[nodiscard]] const RecordList &Records() const noexcept;
 
 	private:
-		std::deque<CalculationRecord> m_Records;
+		RecordList m_Records;
 	};
 
 	class ProjectWorkspace
