@@ -57,6 +57,9 @@ namespace DefectStudio
 		std::string transitionSourceAction;
 		std::vector<RendererViewStateChange> viewUndoHistory;
 		std::vector<RendererViewStateChange> viewRedoHistory;
+		// TODO(T10): persist saved views with project/session view state.
+		std::vector<RendererViewSnapshot> savedViews;
+		std::size_t activeSavedViewIndex = 0;
 		bool viewInteractionActive = false;
 		std::string viewInteractionSource;
 		RendererViewSnapshot viewInteractionStart;

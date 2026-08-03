@@ -6,7 +6,9 @@
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Domain/Crystal/BondGenerator.hpp"
 #include "Domain/DomainLayer.hpp"
+#include "Domain/DomainIds.hpp"
 #include "Renderer/RendererAssetBundle.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/StructureRendererDataBuilder.hpp"
@@ -54,18 +56,21 @@ namespace DefectStudio
 				continue;
 			}
 
+			CrystalStructure domainStructureValue = std::move(loadedStructure).Value();
+			RegenerateAutoBonds(domainStructureValue, composition.assets.elementPropertiesTable);
+
 			const StructureRecord *structureRecord = nullptr;
 			if (domainLayer != nullptr)
 			{
 				structureRecord = &domainLayer->Workspace().Structures().Add(
-					std::move(loadedStructure).Value(),
+					std::move(domainStructureValue),
 					definition.poscarPath,
 					definition.structureName);
 			}
 
 			const CrystalStructure &domainStructure = structureRecord != nullptr
 				? structureRecord->structure
-				: loadedStructure.Value();
+				: domainStructureValue;
 
 			RendererStartupWindowInput input;
 			input.definition = definition;
@@ -74,8 +79,7 @@ namespace DefectStudio
 				definition.poscarPath,
 				definition.structureName,
 				composition.assets.atomStyleTable,
-				composition.assets.elementPropertiesTable,
-				structureRecord != nullptr ? structureRecord->id : std::string{});
+				structureRecord != nullptr ? ToString(structureRecord->id) : std::string{});
 			startupWindowInputs.push_back(std::move(input));
 		}
 

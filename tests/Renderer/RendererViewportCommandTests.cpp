@@ -37,4 +37,47 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(observed);
 		EXPECT_EQ(observedAxis, 1);
 	}
+
+	TEST(RendererViewportCommandTests, QuarterTurnCommandPublishesDirectionEvent)
+	{
+		auto eventBus = CreateRef<EventBus>();
+		bool observed = false;
+		RendererEvents::Viewport::OrbitDirection observedDirection = RendererEvents::Viewport::OrbitDirection::Left;
+		auto subscription = eventBus->Subscribe<RendererEvents::Viewport::OrbitQuarterTurnRequested>(
+			[&observed, &observedDirection](const RendererEvents::Viewport::OrbitQuarterTurnRequested &event) {
+				observed = true;
+				observedDirection = event.direction;
+			});
+
+		Unique<ICommand> command = CreateRendererOrbitQuarterTurnCommand(
+			eventBus,
+			RendererEvents::Viewport::OrbitDirection::Up);
+		CommandContext context;
+
+		ASSERT_TRUE(command->Execute(context));
+		EXPECT_TRUE(observed);
+		EXPECT_EQ(observedDirection, RendererEvents::Viewport::OrbitDirection::Up);
+	}
+
+	TEST(RendererViewportCommandTests, SavedViewCommandsPublishEvents)
+	{
+		auto eventBus = CreateRef<EventBus>();
+		bool saveObserved = false;
+		int cycleDirection = 0;
+		auto saveSubscription = eventBus->Subscribe<RendererEvents::Viewport::SaveCurrentViewRequested>(
+			[&saveObserved](const RendererEvents::Viewport::SaveCurrentViewRequested &) {
+				saveObserved = true;
+			});
+		auto cycleSubscription = eventBus->Subscribe<RendererEvents::Viewport::CycleSavedViewRequested>(
+			[&cycleDirection](const RendererEvents::Viewport::CycleSavedViewRequested &event) {
+				cycleDirection = event.direction;
+			});
+
+		CommandContext context;
+		ASSERT_TRUE(CreateRendererSaveCurrentViewCommand(eventBus)->Execute(context));
+		ASSERT_TRUE(CreateRendererCycleSavedViewCommand(eventBus, -1)->Execute(context));
+
+		EXPECT_TRUE(saveObserved);
+		EXPECT_EQ(cycleDirection, -1);
+	}
 } // namespace DefectStudio::Tests

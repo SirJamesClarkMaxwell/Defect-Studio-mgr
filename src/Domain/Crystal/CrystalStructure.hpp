@@ -15,9 +15,12 @@ namespace DefectStudio
 		LatticeCell cell;
 		std::vector<AtomSite> atoms;
 		std::vector<VacancySite> vacancies;
+		std::vector<Bond> bonds;
+		BondGenerationSettings bondSettings;
 		bool isPeriodic = true;
 
 		[[nodiscard]] std::vector<std::string> UniqueSpecies() const;
+		[[nodiscard]] bool HasAnySelectiveDynamics() const;
 		[[nodiscard]] glm::vec3 CartesianToFractional(const glm::vec3 &cart) const;
 		[[nodiscard]] glm::vec3 FractionalToCartesian(const glm::vec3 &frac) const;
 	};

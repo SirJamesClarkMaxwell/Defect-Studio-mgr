@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <string>
+#include <unordered_map>
 
 #include <glm/glm.hpp>
 
@@ -13,6 +15,33 @@ namespace DefectStudio
 		glm::vec3 position = glm::vec3(0.0f);
 		glm::vec3 fractional = glm::vec3(0.0f);
 		int index = 0;
+		std::string label;
+		float charge = 0.0f;
+		float magnetization = 0.0f;
+		float occupancy = 1.0f;
+		std::array<bool, 3> selectiveDynamics = {true, true, true};
+		bool hasSelectiveDynamics = false;
+	};
+
+	enum class BondOrigin
+	{
+		Auto,
+		Manual
+	};
+
+	struct Bond
+	{
+		std::size_t firstAtomIndex = 0;
+		std::size_t secondAtomIndex = 0;
+		float lengthAngstrom = 0.0f;
+		BondOrigin origin = BondOrigin::Auto;
+		bool visible = true;
+	};
+
+	struct BondGenerationSettings
+	{
+		float globalCutoffScale = 1.18f;
+		std::unordered_map<std::string, float> perPairCutoffOverride;
 	};
 
 	struct VacancySite

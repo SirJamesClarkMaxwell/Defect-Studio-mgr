@@ -6,6 +6,27 @@
 
 namespace DefectStudio::Platform
 {
+	static Path resolveExistingFromCurrentOrAncestor(const Path &relativePath)
+	{
+		if (relativePath.Empty() || relativePath.Native().is_absolute())
+			return relativePath;
+
+		Path cursor = Path::FromResolved(FileSystem::CurrentPath());
+		for (int depth = 0; depth < 10; ++depth)
+		{
+			const Path candidate = cursor / relativePath;
+			if (FileSystem::Exists(candidate.Native()))
+				return candidate;
+
+			const Path parent = cursor.parent_path();
+			if (parent.Empty() || parent == cursor)
+				break;
+			cursor = parent;
+		}
+
+		return relativePath;
+	}
+
 	static Path getAppPythonPlatformExecutable()
 	{
 #if defined(DS_PLATFORM_WINDOWS)
@@ -27,15 +48,15 @@ namespace DefectStudio::Platform
 	static Path getVenvPythonExecutable()
 	{
 #if defined(DS_PLATFORM_WINDOWS)
-		return Path(".venv") / "Scripts" / "python.exe";
+		return resolveExistingFromCurrentOrAncestor(Path(".venv") / "Scripts" / "python.exe");
 #else
-		return Path(".venv") / "bin" / "python";
+		return resolveExistingFromCurrentOrAncestor(Path(".venv") / "bin" / "python");
 #endif
 	}
 
 	Path GetAppPythonRoot()
 	{
-		return Path("install") / "app" / "python";
+		return resolveExistingFromCurrentOrAncestor(Path("install") / "app" / "python");
 	}
 
 	Path GetAppPythonPlatformRoot()

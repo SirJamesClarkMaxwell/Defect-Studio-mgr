@@ -2,6 +2,7 @@
 
 #include "ScientificRuntime/Python/PymatgenConversion.hpp"
 
+#include <array>
 #include <cstddef>
 #include <utility>
 
@@ -25,6 +26,11 @@ namespace DefectStudio
 			atom.position = site.cartesianPosition;
 			atom.fractional = site.fractionalPosition;
 			atom.index = static_cast<int>(index);
+			atom.hasSelectiveDynamics = site.selectiveDynamics.has_value();
+			atom.selectiveDynamics = site.selectiveDynamics.value_or(std::array<bool, 3>{true, true, true});
+			atom.charge = site.charge.value_or(0.0f);
+			atom.magnetization = site.magmom.value_or(0.0f);
+			atom.occupancy = site.occupancy;
 			structure.atoms.push_back(std::move(atom));
 		}
 		return structure;

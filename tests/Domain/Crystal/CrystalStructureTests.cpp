@@ -40,6 +40,45 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(species[2], "H");
 	}
 
+	TEST(CrystalStructureTests, AtomSiteDefaultsToFullOccupancyAndNoSelectiveDynamics)
+	{
+		AtomSite atom;
+
+		EXPECT_FLOAT_EQ(atom.occupancy, 1.0f);
+		EXPECT_FALSE(atom.hasSelectiveDynamics);
+		EXPECT_TRUE(atom.selectiveDynamics[0]);
+		EXPECT_TRUE(atom.selectiveDynamics[1]);
+		EXPECT_TRUE(atom.selectiveDynamics[2]);
+		EXPECT_FLOAT_EQ(atom.charge, 0.0f);
+		EXPECT_FLOAT_EQ(atom.magnetization, 0.0f);
+	}
+
+	TEST(CrystalStructureTests, HasAnySelectiveDynamicsReturnsTrueWhenAnyAtomFlagged)
+	{
+		CrystalStructure structure;
+		structure.atoms = {
+			AtomSite{"C", glm::vec3(0.0f), glm::vec3(0.0f), 0},
+			AtomSite{"O", glm::vec3(0.0f), glm::vec3(0.0f), 1}};
+
+		EXPECT_FALSE(structure.HasAnySelectiveDynamics());
+
+		structure.atoms[1].hasSelectiveDynamics = true;
+		EXPECT_TRUE(structure.HasAnySelectiveDynamics());
+	}
+
+	TEST(CrystalStructureTests, BondDefaultsDescribeAutoVisibleBond)
+	{
+		Bond bond;
+		BondGenerationSettings settings;
+
+		EXPECT_EQ(bond.firstAtomIndex, 0u);
+		EXPECT_EQ(bond.secondAtomIndex, 0u);
+		EXPECT_EQ(bond.origin, BondOrigin::Auto);
+		EXPECT_TRUE(bond.visible);
+		EXPECT_FLOAT_EQ(settings.globalCutoffScale, 1.18f);
+		EXPECT_TRUE(settings.perPairCutoffOverride.empty());
+	}
+
 	TEST(CrystalStructureTests, VacancySiteGeneratesFallbackLabel)
 	{
 		VacancySite vacancy;

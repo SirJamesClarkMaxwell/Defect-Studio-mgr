@@ -74,6 +74,30 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.orbit_left_90"
+    chord: "Home"
+    command: "renderer.orbit_left_90"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_right_90"
+    chord: "End"
+    command: "renderer.orbit_right_90"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_up_90"
+    chord: "PageUp"
+    command: "renderer.orbit_up_90"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.orbit_down_90"
+    chord: "PageDown"
+    command: "renderer.orbit_down_90"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.roll_left"
     chord: "Q"
     command: "renderer.roll_left"
@@ -119,6 +143,24 @@ bindings:
   - id: "renderer.redo_view_alt"
     chord: "Ctrl+Alt+Y"
     command: "renderer.redo_view"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.view.save_current"
+    chord: "Shift+V"
+    command: "renderer.view.save_current"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.view.cycle_next"
+    chord: "V"
+    command: "renderer.view.cycle_next"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.view.cycle_previous"
+    chord: "Alt+V"
+    command: "renderer.view.cycle_previous"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true

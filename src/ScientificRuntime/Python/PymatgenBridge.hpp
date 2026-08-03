@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <optional>
 #include <vector>
 #include <string>
 
@@ -29,6 +31,10 @@ namespace DefectStudio
 		std::string element;
 		glm::vec3 fractionalPosition = glm::vec3(0.0f);
 		glm::vec3 cartesianPosition = glm::vec3(0.0f);
+		std::optional<std::array<bool, 3>> selectiveDynamics;
+		std::optional<float> charge;
+		std::optional<float> magmom;
+		float occupancy = 1.0f;
 	};
 
 	struct PymatgenStructureData

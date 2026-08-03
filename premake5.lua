@@ -446,7 +446,8 @@ project "DefectStudio"
         "install/app/assets/fonts",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
-        "Vendor/yaml-cpp/include"
+        "Vendor/yaml-cpp/include",
+        "Vendor/stduuid/include"
     }
 
     defines {
@@ -615,7 +616,8 @@ project "DefectStudioTests"
         "install/app/assets/fonts",
         "Vendor/thread-pool/include",
         "Vendor/json/include",
-        "Vendor/yaml-cpp/include"
+        "Vendor/yaml-cpp/include",
+        "Vendor/stduuid/include"
     }
 
     defines { "DS_PYTHON_CAPI_AVAILABLE=0" }

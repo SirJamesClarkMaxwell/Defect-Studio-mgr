@@ -95,6 +95,7 @@ namespace DefectStudio
 		void onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event);
 		void onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event);
 		void onOrbitDirectionRequested(const RendererEvents::Viewport::OrbitDirectionRequested &event);
+		void onOrbitQuarterTurnRequested(const RendererEvents::Viewport::OrbitQuarterTurnRequested &event);
 		void onRollDirectionRequested(const RendererEvents::Viewport::RollDirectionRequested &event);
 		void onZoomDirectionRequested(const RendererEvents::Viewport::ZoomDirectionRequested &event);
 		void onOrbitStepRequested(const RendererEvents::Viewport::OrbitStepRequested &event);
@@ -103,6 +104,8 @@ namespace DefectStudio
 		void onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event);
 		void onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event);
 		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
+		void onSaveCurrentViewRequested(const RendererEvents::Viewport::SaveCurrentViewRequested &event);
+		void onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event);
 		void onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event);
 		void onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event);
 		void onAtomSelectionRequested(const RendererEvents::Viewport::AtomSelectionRequested &event);

@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <optional>
+#include <string>
+
 #include "Core/Input/KeyBinding.hpp"
 
 namespace
@@ -139,4 +142,23 @@ TEST(KeyBindingTests, KeyInputProcessorReturnsRendererCommand)
 	EXPECT_TRUE(result->handled);
 	ASSERT_TRUE(result->commandId);
 	EXPECT_EQ(result->commandId->value, "renderer.zoom_in");
+}
+
+TEST(KeyBindingTests, NavigationKeysRoundTripThroughStringParser)
+{
+	const DefectStudio::KeyCode keys[] = {
+		DefectStudio::KeyCode::PageUp,
+		DefectStudio::KeyCode::PageDown,
+		DefectStudio::KeyCode::Home,
+		DefectStudio::KeyCode::End};
+
+	for (const DefectStudio::KeyCode key : keys)
+	{
+		const std::string text = DefectStudio::ToString(key);
+		const std::optional<DefectStudio::KeyChord> parsed = DefectStudio::ParseKeyChord(text);
+
+		ASSERT_TRUE(parsed) << text;
+		EXPECT_EQ(parsed->key, key);
+		EXPECT_EQ(DefectStudio::ToString(*parsed), text);
+	}
 }

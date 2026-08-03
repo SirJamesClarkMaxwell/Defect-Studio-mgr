@@ -48,6 +48,10 @@ namespace DefectStudio
 				return KeyCode::Minus;
 			if (ch == '=' || ch == '+')
 				return KeyCode::Equal;
+			if (ch == '/')
+				return KeyCode::Slash;
+			if (ch == '\'')
+				return KeyCode::Apostrophe;
 		}
 
 		const std::string lower = toLowerCopy(token);
@@ -71,6 +75,10 @@ namespace DefectStudio
 			return KeyCode::Minus;
 		if (lower == "equal" || lower == "equals" || lower == "plus")
 			return KeyCode::Equal;
+		if (lower == "slash")
+			return KeyCode::Slash;
+		if (lower == "apostrophe")
+			return KeyCode::Apostrophe;
 		if (lower == "left")
 			return KeyCode::Left;
 		if (lower == "right")

@@ -82,6 +82,20 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererOrbitQuarterTurnCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::OrbitDirection direction)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer quarter turn",
+			[direction](EventBus &bus) {
+				RendererEvents::Viewport::OrbitQuarterTurnRequested event;
+				event.direction = direction;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererRollDirectionCommand(
 		Ref<EventBus> eventBus,
 		RendererEvents::Viewport::RollDirection direction)
@@ -139,6 +153,29 @@ namespace DefectStudio
 			"Renderer redo view",
 			[](EventBus &bus) {
 				RendererEvents::Viewport::RedoViewRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererSaveCurrentViewCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer save current view",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::SaveCurrentViewRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererCycleSavedViewCommand(Ref<EventBus> eventBus, int direction)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer cycle saved view",
+			[direction](EventBus &bus) {
+				RendererEvents::Viewport::CycleSavedViewRequested event;
+				event.direction = direction;
 				bus.Publish(event);
 			});
 	}

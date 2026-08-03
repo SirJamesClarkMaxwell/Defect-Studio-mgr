@@ -70,6 +70,11 @@ namespace DefectStudio
 					binding.id,
 					existing.id,
 					ToString(binding.chord));
+				return makeKeymapError(
+					"keymap.register.conflict",
+					"Key binding registration failed.",
+					"Binding '" + binding.id + "' conflicts with '" + existing.id + "' on chord '" + ToString(binding.chord) + "'.",
+					"Use a different chord or context for one of the bindings.");
 			}
 		}
 

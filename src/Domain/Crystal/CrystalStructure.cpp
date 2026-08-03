@@ -2,6 +2,7 @@
 
 #include "Domain/Crystal/CrystalStructure.hpp"
 
+#include <algorithm>
 #include <unordered_set>
 
 namespace DefectStudio
@@ -26,6 +27,13 @@ namespace DefectStudio
 		}
 
 		return species;
+	}
+
+	bool CrystalStructure::HasAnySelectiveDynamics() const
+	{
+		return std::any_of(atoms.begin(), atoms.end(), [](const AtomSite &atom) {
+			return atom.hasSelectiveDynamics;
+		});
 	}
 
 	glm::vec3 CrystalStructure::CartesianToFractional(const glm::vec3 &cart) const

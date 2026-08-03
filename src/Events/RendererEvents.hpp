@@ -87,6 +87,12 @@ namespace DefectStudio::RendererEvents::Viewport
 		OrbitDirection direction = OrbitDirection::Left;
 	};
 
+	struct OrbitQuarterTurnRequested final : public BusEvent
+	{
+		std::string windowId;
+		OrbitDirection direction = OrbitDirection::Left;
+	};
+
 	struct RollDirectionRequested final : public BusEvent
 	{
 		std::string windowId;
@@ -131,6 +137,17 @@ namespace DefectStudio::RendererEvents::Viewport
 	struct RedoViewRequested final : public BusEvent
 	{
 		std::string windowId;
+	};
+
+	struct SaveCurrentViewRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	struct CycleSavedViewRequested final : public BusEvent
+	{
+		std::string windowId;
+		int direction = 1;
 	};
 
 	struct ViewTransitionRequested final : public BusEvent

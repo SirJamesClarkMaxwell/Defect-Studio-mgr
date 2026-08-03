@@ -28,6 +28,20 @@ namespace DefectStudio
 			return "Delete";
 		case KeyCode::Backspace:
 			return "Backspace";
+		case KeyCode::Apostrophe:
+			return "'";
+		case KeyCode::Comma:
+			return ",";
+		case KeyCode::Minus:
+			return "-";
+		case KeyCode::Equal:
+			return "=";
+		case KeyCode::Period:
+			return ".";
+		case KeyCode::Slash:
+			return "/";
+		case KeyCode::Insert:
+			return "Insert";
 		case KeyCode::Left:
 			return "Left";
 		case KeyCode::Right:
@@ -36,6 +50,18 @@ namespace DefectStudio
 			return "Up";
 		case KeyCode::Down:
 			return "Down";
+		case KeyCode::PageUp:
+			return "PageUp";
+		case KeyCode::PageDown:
+			return "PageDown";
+		case KeyCode::Home:
+			return "Home";
+		case KeyCode::End:
+			return "End";
+		case KeyCode::Pause:
+			return "Pause";
+		case KeyCode::PrintScreen:
+			return "PrintScreen";
 		case KeyCode::F1:
 		case KeyCode::F2:
 		case KeyCode::F3:

@@ -47,6 +47,7 @@ namespace DefectStudio
 	constexpr float kMinGridPlaneZ = -10000.0f;
 	constexpr float kMaxGridPlaneZ = 10000.0f;
 	constexpr float kOrbitMouseScale = 0.0065f;
+	constexpr float kQuarterTurnRadians = 1.57079632679f;
 
 	[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 	{
@@ -476,6 +477,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onAlignToAxisRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitDirectionRequested>(
 				std::bind_front(&RendererLayer::onOrbitDirectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitQuarterTurnRequested>(
+				std::bind_front(&RendererLayer::onOrbitQuarterTurnRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RollDirectionRequested>(
 				std::bind_front(&RendererLayer::onRollDirectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ZoomDirectionRequested>(
@@ -492,6 +495,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onUndoViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RedoViewRequested>(
 				std::bind_front(&RendererLayer::onRedoViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SaveCurrentViewRequested>(
+				std::bind_front(&RendererLayer::onSaveCurrentViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::CycleSavedViewRequested>(
+				std::bind_front(&RendererLayer::onCycleSavedViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ViewTransitionRequested>(
 				std::bind_front(&RendererLayer::onViewTransitionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ProjectionToggleRequested>(
@@ -863,6 +870,33 @@ namespace DefectStudio
 		onOrbitStepRequested(stepEvent);
 	}
 
+	void RendererLayer::onOrbitQuarterTurnRequested(const RendererEvents::Viewport::OrbitQuarterTurnRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const float orbitInputDelta = kQuarterTurnRadians / kOrbitMouseScale;
+		RendererEvents::Viewport::OrbitStepRequested stepEvent;
+		stepEvent.windowId = windowState->windowId;
+		switch (event.direction)
+		{
+			case RendererEvents::Viewport::OrbitDirection::Left:
+				stepEvent.dx = +orbitInputDelta;
+				break;
+			case RendererEvents::Viewport::OrbitDirection::Right:
+				stepEvent.dx = -orbitInputDelta;
+				break;
+			case RendererEvents::Viewport::OrbitDirection::Up:
+				stepEvent.dy = +orbitInputDelta;
+				break;
+			case RendererEvents::Viewport::OrbitDirection::Down:
+				stepEvent.dy = -orbitInputDelta;
+				break;
+		}
+		onOrbitStepRequested(stepEvent);
+	}
+
 	void RendererLayer::onRollDirectionRequested(const RendererEvents::Viewport::RollDirectionRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
@@ -975,6 +1009,36 @@ namespace DefectStudio
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState != nullptr)
 			RedoViewChange(windowState->windowId);
+	}
+
+	void RendererLayer::onSaveCurrentViewRequested(const RendererEvents::Viewport::SaveCurrentViewRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		windowState->savedViews.push_back(captureViewSnapshot(*windowState));
+		windowState->activeSavedViewIndex = windowState->savedViews.size() - 1u;
+	}
+
+	void RendererLayer::onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr || windowState->savedViews.empty())
+			return;
+
+		if (windowState->activeSavedViewIndex >= windowState->savedViews.size())
+			windowState->activeSavedViewIndex = 0u;
+		if (event.direction >= 0)
+			windowState->activeSavedViewIndex = (windowState->activeSavedViewIndex + 1u) % windowState->savedViews.size();
+		else
+			windowState->activeSavedViewIndex =
+				(windowState->activeSavedViewIndex + windowState->savedViews.size() - 1u) % windowState->savedViews.size();
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		const RendererViewSnapshot &after = windowState->savedViews[windowState->activeSavedViewIndex];
+		pushViewChange(*windowState, before, after, "keyboard.saved_view");
+		restoreViewSnapshot(*windowState, after, "keyboard.saved_view");
 	}
 
 	void RendererLayer::onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event)

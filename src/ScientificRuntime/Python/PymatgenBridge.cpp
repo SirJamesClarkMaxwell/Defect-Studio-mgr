@@ -2,7 +2,9 @@
 
 #include "ScientificRuntime/Python/PymatgenBridge.hpp"
 
+#include <array>
 #include <chrono>
+#include <optional>
 
 #include <nlohmann/json.hpp>
 
@@ -23,6 +25,83 @@ namespace nb = nanobind;
 
 namespace DefectStudio
 {
+	namespace
+	{
+		struct PythonExampleScript
+		{
+			Path scriptPath;
+			Path workingDirectory;
+		};
+
+		[[nodiscard]] PythonExampleScript ResolvePythonExampleScript(const char *fileName)
+		{
+			const Path relativePath = Path("scripts") / "python" / "examples" / fileName;
+			Path cursor = Path::FromResolved(FileSystem::CurrentPath());
+			for (int depth = 0; depth < 10; ++depth)
+			{
+				const Path candidate = cursor / relativePath;
+				if (FileSystem::Exists(candidate.Native()))
+					return PythonExampleScript{candidate, cursor};
+
+				const Path parent = cursor.parent_path();
+				if (parent.Empty() || parent == cursor)
+					break;
+				cursor = parent;
+			}
+
+			return PythonExampleScript{relativePath, Path::FromResolved(FileSystem::CurrentPath())};
+		}
+	} // namespace
+
+#if DS_PYTHON_CAPI_AVAILABLE
+	[[nodiscard]] static nb::object GetSiteProperty(const nb::object &site, const char *key)
+	{
+		const nb::dict properties = nb::borrow<nb::dict>(site.attr("properties"));
+		return properties.get(key, nb::none());
+	}
+
+	[[nodiscard]] static std::optional<float> ReadOptionalFloatProperty(const nb::object &site, const char *key)
+	{
+		nb::object value = GetSiteProperty(site, key);
+		if (value.is_none())
+			return std::nullopt;
+		return nb::cast<float>(value);
+	}
+
+	[[nodiscard]] static std::optional<std::array<bool, 3>> ReadSelectiveDynamicsProperty(const nb::object &site)
+	{
+		nb::object values = GetSiteProperty(site, "selective_dynamics");
+		if (values.is_none() || nb::len(values) != 3)
+			return std::nullopt;
+		return std::array<bool, 3>{
+			nb::cast<bool>(values[nb::int_(0)]),
+			nb::cast<bool>(values[nb::int_(1)]),
+			nb::cast<bool>(values[nb::int_(2)])};
+	}
+#endif
+
+	[[nodiscard]] static std::optional<float> ReadOptionalFloat(const nlohmann::json &payload, const char *key)
+	{
+		if (!payload.contains(key) || payload.at(key).is_null())
+			return std::nullopt;
+		return payload.at(key).get<float>();
+	}
+
+	[[nodiscard]] static std::optional<std::array<bool, 3>> ReadSelectiveDynamics(const nlohmann::json &payload)
+	{
+		if (!payload.contains("selective_dynamics") || payload.at("selective_dynamics").is_null())
+			return std::nullopt;
+
+		const auto values = payload.at("selective_dynamics");
+		if (!values.is_array() || values.size() != 3u)
+			return std::nullopt;
+
+		return std::array<bool, 3>{
+			values.at(0).get<bool>(),
+			values.at(1).get<bool>(),
+			values.at(2).get<bool>()};
+	}
+
 	[[nodiscard]] static PymatgenStructureData ParsePymatgenStructurePayload(const nlohmann::json &payload)
 	{
 		PymatgenStructureData result;
@@ -55,6 +134,10 @@ namespace DefectStudio
 				cartesian.at(0).get<float>(),
 				cartesian.at(1).get<float>(),
 				cartesian.at(2).get<float>());
+			parsedSite.selectiveDynamics = ReadSelectiveDynamics(site);
+			parsedSite.charge = ReadOptionalFloat(site, "charge");
+			parsedSite.magmom = ReadOptionalFloat(site, "magmom");
+			parsedSite.occupancy = site.value("occupancy", 1.0f);
 			result.sites.push_back(std::move(parsedSite));
 		}
 
@@ -66,11 +149,12 @@ namespace DefectStudio
 		const ScriptRunner &scriptRunner)
 	{
 		ScriptRunOptions options;
-		options.scriptPath = Path("scripts") / "python" / "examples" / "pymatgen_structure_load.py";
+		const PythonExampleScript script = ResolvePythonExampleScript("pymatgen_structure_load.py");
+		options.scriptPath = script.scriptPath;
 		options.arguments.reserve(filePaths.size());
 		for (const Path &filePath : filePaths)
 			options.arguments.push_back(filePath.String());
-		options.workingDirectory = FileSystem::CurrentPath();
+		options.workingDirectory = script.workingDirectory;
 
 		const auto startTime = Time::NowSteady();
 		DS_LOG_DEBUG("PymatgenBridge: loading {} structure(s)", filePaths.size());
@@ -261,6 +345,11 @@ namespace DefectStudio
 						nb::cast<float>(cart[nb::int_(0)]),
 						nb::cast<float>(cart[nb::int_(1)]),
 						nb::cast<float>(cart[nb::int_(2)]));
+					siteData.selectiveDynamics = ReadSelectiveDynamicsProperty(site);
+					siteData.charge = ReadOptionalFloatProperty(site, "charge");
+					siteData.magmom = ReadOptionalFloatProperty(site, "magmom");
+					siteData.occupancy = nb::cast<float>(
+						nb::module_::import_("builtins").attr("sum")(site.attr("species").attr("values")()));
 
 					data.sites.push_back(std::move(siteData));
 				}
@@ -341,9 +430,10 @@ namespace DefectStudio
 		}
 
 		ScriptRunOptions options;
-		options.scriptPath = Path("scripts") / "python" / "examples" / "pymatgen_poscar_roundtrip.py";
+		const PythonExampleScript script = ResolvePythonExampleScript("pymatgen_poscar_roundtrip.py");
+		options.scriptPath = script.scriptPath;
 		options.arguments = { request.inputPoscarPath.String(), request.outputPoscarPath.String() };
-		options.workingDirectory = FileSystem::CurrentPath();
+		options.workingDirectory = script.workingDirectory;
 
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
 		if (!runResult)

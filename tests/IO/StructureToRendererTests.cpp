@@ -17,24 +17,19 @@ namespace DefectStudio::Tests
 		structure.atoms = {
 			AtomSite{"C", glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0},
 			AtomSite{"C", glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.0f, 0.0f), 1}};
+		structure.bonds.push_back(Bond{0u, 1u, 1.0f, BondOrigin::Auto, true});
 
 		AtomStyleTable atomStyleTable;
 		std::unordered_map<std::string, AtomRenderStyle> styles;
 		styles.emplace("C", AtomRenderStyle{glm::vec3(0.1f, 0.2f, 0.3f), 0.44f});
 		atomStyleTable.ReplaceStyles(std::move(styles), VacancyRenderStyle{});
 
-		ElementPropertiesTable elementPropertiesTable;
-		std::unordered_map<std::string, ElementProperties> properties;
-		properties.emplace("C", ElementProperties{6, 12.0f, 0.80f, 1.70f});
-		elementPropertiesTable.ReplaceData(std::move(properties));
-
 		const Path sourcePath("POSCAR");
 		const RendererStructureData rendererData = BuildRendererStructureData(
 			structure,
 			sourcePath,
 			"Renderer name",
-			atomStyleTable,
-			elementPropertiesTable);
+			atomStyleTable);
 
 		EXPECT_EQ(rendererData.name, "Renderer name");
 		EXPECT_EQ(rendererData.sourcePath.String(), sourcePath.String());

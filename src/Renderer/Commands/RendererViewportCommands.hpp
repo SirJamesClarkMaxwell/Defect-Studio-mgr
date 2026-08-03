@@ -12,6 +12,9 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererOrbitDirectionCommand(
 		Ref<EventBus> eventBus,
 		RendererEvents::Viewport::OrbitDirection direction);
+	[[nodiscard]] Unique<ICommand> CreateRendererOrbitQuarterTurnCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::OrbitDirection direction);
 	[[nodiscard]] Unique<ICommand> CreateRendererRollDirectionCommand(
 		Ref<EventBus> eventBus,
 		RendererEvents::Viewport::RollDirection direction);
@@ -21,4 +24,6 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererFocusSelectedAtomCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererUndoViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererRedoViewCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererSaveCurrentViewCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererCycleSavedViewCommand(Ref<EventBus> eventBus, int direction);
 } // namespace DefectStudio
