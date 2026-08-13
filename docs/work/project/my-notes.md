@@ -106,5 +106,12 @@ Komentarze:
 2. To co teraz jest po przez lambdy i implicit object construction jest złe. Jeśli chodzi o lambdy to zdecydowanie bardziej wolę bind funkcji z klasy niż lambda. Tutaj miejscem i ilością lini, nie musimy się przejmować. W realnej aplikacji prawdopodobnie będą to osobne funkcje do rejestracji po kategoriach i one będą w jednym pliku. Miejsce nie jest problemem.
 3. Nie chodziło mi o to, że panele to singletony. Bo to nie prawda. W niektórych aplikacjach np. SemiconductorStudio na przykład będzie wiele analiz -> wszystkie panale analiz będą mialy ten sam panel do renderowania ale z różnymi danymi, te powinny dać się duplikować. Natomiast są panele których nie powinno dać sie zduplikować, tak jak te które wymieniłem 
 
+--------------
+0. commit
+1. Funkcjonalność UUID powinien dostarczać Core/Utilities
+2. `[[nodiscard]] const StructureRecord *Find(const StructureId &id) const;` te funkcje powinny zwracać `WeakRef` abo `Ref`
+3. Wiele rzeczy jest tutaj zrobionych na `raw-pointers`, jest to bardzo złe. Wpisz do swoich reguł zakaz korzystania z `raw-ptr`
+4. `RegenerateAutoBonds` kilka rzeczy: 
+(1) wiele zagnieżdżonych pętl for, nie podoba mi się to, może lepiej by było aby najpierw za pomocą catesian-product wygenerować długi wektor potencjalnych par do sprawdzanie a potem zrobić to w jednej pętli? 
 
-
+(2) może warto to odrazu przenieść do compute-shader? 
