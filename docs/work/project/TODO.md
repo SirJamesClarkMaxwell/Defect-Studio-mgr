@@ -12,9 +12,11 @@
 >
 > **2026-08-13 — replanning:** T07 domain foundations (C1-C6, C11) scalone do `main`. Natywny
 > POSCAR I/O (C7-C10) zostaje jako otwarty dług w T07, ale nie blokuje niczego innego — odłożony.
-> Priorytet podniesiony dla **T10 (Project System + Remote Storage)**: użytkownik montuje katalog
+> Zaraz po T07 wstawione **T07.5 (Project System + Remote Storage)** — wzorem `T06.5`, nie osobny
+> `T10` daleko w kolejce, bo to jest praca **teraz**, nie "kiedyś". Użytkownik montuje katalog
 > projektu z serwera obliczeniowego przez OS (SMB / SFTP+SSHFS-Win), więc nie trzeba wymyślać
-> własnego formatu/transportu projektu od zera — patrz przepisana sekcja T10 niżej.
+> własnego formatu/transportu projektu od zera. `T07` Import/Export i `T11` Domain Runtime
+> przepisane pod tym kątem, żeby nie dublować własności `ProjectWorkspace`/importu z T07.5.
 
 ---
 
@@ -52,8 +54,8 @@
                 stabilizacja własności domeny/renderera)
 🟡 PARTIAL   : T07 (domain foundations: UUID/AtomSite/Bond/BondGenerator/pymatgen SD scalone do
                 main; natywny POSCAR I/O — C7-C10 — odłożone, nieblokujące)
-🔨 CURRENT   : T10 (Project System + Remote Storage/mount + autoryzacja) — priorytet podniesiony,
-                idzie przed T08
+🔨 CURRENT   : T07.5 (Project System + Remote Storage/mount + autoryzacja) — wstawione zaraz po
+                T07, wzorem T06.5, bo to jest praca teraz, nie kolejny numer w kolejce
 ⏭ NEXT      : T08 → T09 → T11 → T12 → T13 → T14 → T15
 ```
 
@@ -232,14 +234,15 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 > zero zależności UI. T06.5 zdjęło blocker domena-renderer.
 >
 > **2026-08-13:** commity C1-C6 i C11 z `TODO-T07.md` scalone do `main` (`e85be0c`). Pozostaje
-> C7-C10 (natywny POSCAR I/O) — niżej, jako otwarty dług, **nie blokuje T10/T08**. Import struktur
-> nadal idzie przez `PymatgenBridge`, co wystarcza na potrzeby T10/T08.
+> C7-C10 (natywny POSCAR I/O) — niżej, jako otwarty dług, **nie blokuje T07.5/T08**. Import struktur
+> nadal idzie przez `PymatgenBridge`, co wystarcza na potrzeby T07.5/T08.
 
 ### Model domenowy
-- [ ] dodanie skrótów PgDn/PgUp/Home/End na obroty o 90° wokół wybranej osi + klawisz do zapisanego
+- [x] dodanie skrótów PgDn/PgUp/Home/End na obroty o 90° wokół wybranej osi + klawisz do zapisanego
       wcześniej ustawienia kamery (konfigurowalny w Settings) — **UWAGA:** cykliczne zapisane widoki
       (save/cycle_next/cycle_previous) już zaimplementowane (`RendererCommandRegistration.cpp`,
       `renderer.view.{save_current,cycle_next,cycle_previous}`), ale nie sam obrót o 90°
+      
 - [x] **UUID** — `StructureId`/`DefectId`/... to teraz `Uuid` (`Domain/DomainIds.hpp` →
       `Core/Utils/Uuid.hpp`, wrapper na `stduuid`), generowany przez `GenerateUuid()`. Zgodnie z
       notatką z code review: UUID dostarcza `Core/Utilities`, nie Domain bezpośrednio.
@@ -268,7 +271,15 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 > **2026-08-13:** `punktukas-tools` (prywatne narzędzie, optional global dependency — zob.
 > "Infrastruktura" niżej) już parsuje POSCAR/POTCAR/KPOINTS/WAVECAR/CHGCAR po stronie Python.
 > Obniża to priorytet natywnego C++ parsera niżej (offline/no-Python fast path, nie krytyczna
-> ścieżka) — checklisty C7-C10 zostają, ale nie są blockerem dla T08/T10/T13/T14.
+> ścieżka) — checklisty C7-C10 zostają, ale nie są blockerem dla T07.5/T08/T13/T14.
+>
+> **Skąd przychodzi plik do importu (integracja z T07.5):** picker (`nativefiledialog-extended`)
+> nie rozróżnia lokalnej ścieżki od zamontowanej sieciowej (`Z:\...`) — dla `ParsePoscarFile`/
+> `PymatgenBridge` to ten sam `Path`. Jedyna realna konsekwencja dla C7/C8: odczyt/zapis na
+> zamontowanym dysku może zwrócić transient I/O error (VPN padł w trakcie), więc `Result<T>`
+> zwracany z `ParsePoscarFile`/`WritePoscarFile` musi nieść to jako zwykły `StructuredError`, nie
+> zakładać że "plik jest, bo picker go pokazał" — patrz T07.5.2 (odporność na zerwane połączenie).
+> Poza tym zero zmian w parserze z powodu mountu — to jedyny punkt styku.
 
 - [ ] proste drzewko projektu, trochę jak w blenderze gdzie jest scene outline (zmiana potem w następnym etapie prac)
 - [ ] POSCAR/CONTCAR parser natywny C++ (VASP5/6, Selective Dynamics, Direct/Cartesian,
@@ -292,6 +303,93 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] XYZ / extended XYZ parser (ASE-compatible) — **zweryfikowane: brak w kodzie** -->
 
 **Biblioteki:** yaml-cpp
+
+---
+
+## T07.5 – Project System + Remote Storage (`task/07.5-project-mount`) 🔨 CURRENT
+
+> **Replanning 2026-08-13.** Wstawione zaraz po T07, wzorem `T06.5` — to jest praca teraz, nie
+> pozycja daleko w kolejce jako `T10`. Zamiast wymyślać własny format transportu/synchronizacji
+> danych projektu (i konkurować z gitem do dużych binarek DFT), zakładamy że **katalog projektu
+> może leżeć na zamontowanym dysku sieciowym** (SMB albo SFTP przez SSHFS-Win) i traktujemy go jak
+> zwykły katalog lokalny. To nie zmienia architektury z oryginalnego `TODO.md` (projekt = katalog
+> + `manifest.yaml`) — zmienia tylko to, **gdzie** ten katalog może fizycznie leżeć i **jak**
+> użytkownik się do niego dostaje. `StorageLayer` nadal jest pustym szkieletem — cała sekcja
+> realny `[ ]` od zera. Import struktur z tego katalogu zostaje własnością T07 (patrz "Import /
+> Export" wyżej) — T07.5 dostarcza tylko *skąd* ten katalog pochodzi.
+>
+> **Dlaczego mount, nie własny transport:** mount (SMB/SFTP) jest transparentny dla
+> `std::filesystem`/`ifstream`/`nativefiledialog-extended` — zero specjalnego kodu w `IOLayer` do
+> zwykłego czytania/pisania plików. Duże binarki (WAVECAR, CHGCAR mogą mieć GB) nigdy nie muszą
+> trafiać lokalnie — czytane on-demand przez sieć. Git zostaje dla plików tekstowych
+> (POSCAR/INCAR/notatki), gdzie chcemy historię/diff; mount przejmuje dane obliczeniowe.
+
+### T07.5.1 — Project directory model (bez zmian względem oryginalnego planu T10)
+- [ ] Projekt jako katalog z `manifest.yaml`
+- [ ] Create / Open / Recent project workflow
+- [ ] `ProjectMetadata`: uuid, name, created\_at, last\_modified, format\_version (od pierwszego dnia)
+- [ ] Auto-save z konfigurowalnym interwałem
+- [ ] Tracking dodanych plików (lazy resource loading)
+- [ ] `PathResolver` – normalizacja ścieżek project-relative vs external — **brak w kodzie**
+- [ ] Walidacja brakujących plików przy otwieraniu + relink / rebuild flow — **na mounted drive
+      to też pokrywa przypadek "mount padł"** (brak sieci/VPN), nie tylko przeniesiony plik
+- [ ] Zapis ukrytych atomów, widoków, dodanych bondów, overrides kolorów, stanu kolekcji,
+      pozycji kamery (`old-ds-functionality.md` §10)
+- [ ] Export kolekcji do POSCAR
+- [ ] Tags dla defektów i kolekcji
+- [ ] Application startup project (ostatni otwarty)
+- [ ] Lekki migration pipeline dla ewolucji formatu pliku projektu
+- [ ] Canonical save vs recovery/snapshot save split
+
+### T07.5.2 — Remote Storage: mount jako pierwsza ścieżka
+> Ponytail rung 1: sam mount **nie wymaga naszego kodu** — Windows (Map Network Drive / SMB) i
+> SSHFS-Win+WinFsp (SFTP → literka dysku) robią to na poziomie OS. Nasza appka po prostu widzi
+> zamontowany katalog jak lokalny. To co budujemy, to wygoda dookoła tego, nie sam transport.
+
+- [ ] **Server Profiles** — zapamiętane definicje połączenia: host, port, protokół (`smb`/`sftp`),
+      zdalna ścieżka root, nazwa użytkownika, metoda autoryzacji (klucz/hasło). Persystencja przez
+      istniejący `ConfigManager`/yaml-cpp (wzorzec jak `ui_settings.yaml`/`keybindings.yaml`),
+      per-user, **nie** per-projekt — użytkownik ma jeden zestaw serwerów używany w wielu projektach.
+- [ ] **Connect flow (MVP, bez auto-mount):** dialog "Connect to Server" pokazuje instrukcję +
+      przycisk otwierający natywny "Map Network Drive"/`sshfs-win` (przez `Core/Platform/ProcessRunner`
+      — już istnieje, użyty dziś do subprocess Pythona, reużyć, nie pisać nowego wrappera). Appka
+      **nie** próbuje sama zarządzać stosem SMB/SFTP — zbyt platform-specific na v1.
+- [ ] Po połączeniu: `Path` zwrócona przez picker (`nativefiledialog-extended`, już zvendorowany)
+      wskazuje na zamontowaną literę dysku — otwiera się jak każdy inny katalog, zero zmian w
+      `IOLayer`/`AssetManager` (AssetManager blokuje absolute paths/`..` **tylko** dla własnych
+      assetów aplikacji, nie dla user-wybranych plików projektu — nie mylić tych dwóch ścieżek).
+- [ ] Odporność na zerwane połączenie: operacje I/O na plikach projektu mają zwracać
+      `StructuredError`/`Notification` zamiast crashować, gdy mount zniknie w trakcie sesji
+      (VPN padł, serwer restart) — rozszerzenie istniejącego `Result`/`StructuredError`, nie nowy
+      mechanizm (patrz też T07 Import/Export, ten sam mechanizm dla `ParsePoscarFile`/
+      `WritePoscarFile`). UI: "Reconnect" affordance zamiast martwego panelu.
+- [ ] **Stretch (nie w MVP):** in-app SFTP browser bez realnego OS-mounta (osobna pozycja w
+      Backlogu, `libssh2`/podobne jako nowy Vendor) — zostaje tam, dopóki mount-first nie okaże się
+      niewystarczający (np. serwer bez WinFsp-friendly dostępu).
+
+### T07.5.3 — Autoryzacja i poświadczenia (bezpieczeństwo — nie upraszczać)
+> **Twarda zasada: appka nigdy nie przechowuje sekretów (hasło, passphrase, treść klucza
+> prywatnego) we własnych plikach YAML.** Tylko referencje (ścieżka do klucza, nazwa użytkownika)
+> idą do `ConfigManager`. To jest granica bezpieczeństwa, nie do "uproszczenia" nawet w Ponytail.
+
+- [ ] **Klucze SSH (SFTP):** appka **nie generuje, nie przechowuje, nie czyta** bajtów klucza
+      prywatnego. Referencja to tylko ścieżka (`~/.ssh/id_ed25519` domyślnie, wybieralna). Jeśli
+      klucz ma passphrase — oddajemy to `ssh-agent` (OpenSSH już jest częścią Windows/Linux), appka
+      shelluje się przez `ProcessRunner` i pozwala OS/agentowi obsłużyć prompt. Zero własnej
+      kryptografii.
+- [ ] **"Pokaż/skopiuj klucz publiczny"** — wygodny przycisk czytający `<key>.pub` (to jest
+      publiczne, nie sekret) do schowka, żeby dodać do `authorized_keys` na serwerze.
+- [ ] **Hasła (SMB):** **auto-wypełnianie = Windows Credential Manager, nie nasz kod.** Windows już
+      to robi za darmo — checkbox "Remember my credentials" w natywnym dialogu Map Network Drive
+      zapisuje hasło w Credential Manager i podstawia je przy kolejnym połączeniu. Jeśli appka ma
+      sama inicjować connect (zamiast odsyłać do natywnego dialogu), użyć `CredWriteW`/`CredReadW`
+      (`wincred.h`, część Win32, zero nowej zależności) do zapisu/odczytu hasła kluczowanego nazwą
+      profilu serwera. **Nigdy** pola `password`/`passphrase` w naszym YAML.
+- [ ] Linux/macOS credential store (`libsecret`/Keychain) — **odłożone**, appka rozwijana na
+      Windows jako platforma docelowa (zob. `TODO-T07.md` build rule); dodać gdy realnie potrzebne.
+- [ ] Settings panel: lista Server Profiles z edycją (host/port/protokół/użytkownik/ścieżka klucza),
+      bez pola na sekret — sekret zawsze przez natywny dialog/Credential Manager, nigdy przez nasz
+      formularz w postaci zwykłego tekstowego pola.
 
 ---
 
@@ -368,105 +466,21 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 ---
 
-## T10 – Project System + Remote Storage (`task/10-project-mount`) 🔨 CURRENT
-
-> **Replanning 2026-08-13.** Zamiast wymyślać własny format transportu/synchronizacji danych
-> projektu (i konkurować z gitem do dużych binarek DFT), zakładamy że **katalog projektu może
-> leżeć na zamontowanym dysku sieciowym** (SMB albo SFTP przez SSHFS-Win) i traktujemy go jak
-> zwykły katalog lokalny. To nie zmienia architektury z oryginalnego `TODO.md` (projekt = katalog
-> + `manifest.yaml`) — zmienia tylko to, **gdzie** ten katalog może fizycznie leżeć i **jak**
-> użytkownik się do niego dostaje. `StorageLayer` nadal jest pustym szkieletem — cała sekcja
-> realny `[ ]` od zera.
->
-> **Dlaczego mount, nie własny transport:** mount (SMB/SFTP) jest transparentny dla
-> `std::filesystem`/`ifstream`/`nativefiledialog-extended` — zero specjalnego kodu w `IOLayer` do
-> zwykłego czytania/pisania plików. Duże binarki (WAVECAR, CHGCAR mogą mieć GB) nigdy nie muszą
-> trafiać lokalnie — czytane on-demand przez sieć. Git zostaje dla plików tekstowych
-> (POSCAR/INCAR/notatki), gdzie chcemy historię/diff; mount przejmuje dane obliczeniowe.
-
-### T10.1 — Project directory model (bez zmian względem oryginalnego planu)
-- [ ] Projekt jako katalog z `manifest.yaml`
-- [ ] Create / Open / Recent project workflow
-- [ ] `ProjectMetadata`: uuid, name, created\_at, last\_modified, format\_version (od pierwszego dnia)
-- [ ] Auto-save z konfigurowalnym interwałem
-- [ ] Tracking dodanych plików (lazy resource loading)
-- [ ] `PathResolver` – normalizacja ścieżek project-relative vs external — **brak w kodzie**
-- [ ] Walidacja brakujących plików przy otwieraniu + relink / rebuild flow — **na mounted drive
-      to też pokrywa przypadek "mount padł"** (brak sieci/VPN), nie tylko przeniesiony plik
-- [ ] Zapis ukrytych atomów, widoków, dodanych bondów, overrides kolorów, stanu kolekcji,
-      pozycji kamery (`old-ds-functionality.md` §10)
-- [ ] Export kolekcji do POSCAR
-- [ ] Tags dla defektów i kolekcji
-- [ ] Application startup project (ostatni otwarty)
-- [ ] Lekki migration pipeline dla ewolucji formatu pliku projektu
-- [ ] Canonical save vs recovery/snapshot save split
-
-### T10.2 — Remote Storage: mount jako pierwsza ścieżka
-> Ponytail rung 1: sam mount **nie wymaga naszego kodu** — Windows (Map Network Drive / SMB) i
-> SSHFS-Win+WinFsp (SFTP → literka dysku) robią to na poziomie OS. Nasza appka po prostu widzi
-> zamontowany katalog jak lokalny. To co budujemy, to wygoda dookoła tego, nie sam transport.
-
-- [ ] **Server Profiles** — zapamiętane definicje połączenia: host, port, protokół (`smb`/`sftp`),
-      zdalna ścieżka root, nazwa użytkownika, metoda autoryzacji (klucz/hasło). Persystencja przez
-      istniejący `ConfigManager`/yaml-cpp (wzorzec jak `ui_settings.yaml`/`keybindings.yaml`),
-      per-user, **nie** per-projekt — użytkownik ma jeden zestaw serwerów używany w wielu projektach.
-- [ ] **Connect flow (MVP, bez auto-mount):** dialog "Connect to Server" pokazuje instrukcję +
-      przycisk otwierający natywny "Map Network Drive"/`sshfs-win` (przez `Core/Platform/ProcessRunner`
-      — już istnieje, użyty dziś do subprocess Pythona, reużyć, nie pisać nowego wrappera). Appka
-      **nie** próbuje sama zarządzać stosem SMB/SFTP — zbyt platform-specific na v1.
-- [ ] Po połączeniu: `Path` zwrócona przez picker (`nativefiledialog-extended`, już zvendorowany)
-      wskazuje na zamontowaną literę dysku — otwiera się jak każdy inny katalog, zero zmian w
-      `IOLayer`/`AssetManager` (AssetManager blokuje absolute paths/`..` **tylko** dla własnych
-      assetów aplikacji, nie dla user-wybranych plików projektu — nie mylić tych dwóch ścieżek).
-- [ ] Odporność na zerwane połączenie: operacje I/O na plikach projektu mają zwracać
-      `StructuredError`/`Notification` zamiast crashować, gdy mount zniknie w trakcie sesji
-      (VPN padł, serwer restart) — rozszerzenie istniejącego `Result`/`StructuredError`, nie nowy
-      mechanizm. UI: "Reconnect" affordance zamiast martwego panelu.
-- [ ] **Stretch (nie w MVP):** in-app SFTP browser bez realnego OS-mounta (osobna pozycja w
-      Backlogu, `libssh2`/podobne jako nowy Vendor) — zostaje tam, dopóki mount-first nie okaże się
-      niewystarczający (np. serwer bez WinFsp-friendly dostępu).
-
-### T10.3 — Autoryzacja i poświadczenia (bezpieczeństwo — nie upraszczać)
-> **Twarda zasada: appka nigdy nie przechowuje sekretów (hasło, passphrase, treść klucza
-> prywatnego) we własnych plikach YAML.** Tylko referencje (ścieżka do klucza, nazwa użytkownika)
-> idą do `ConfigManager`. To jest granica bezpieczeństwa, nie do "uproszczenia" nawet w Ponytail.
-
-- [ ] **Klucze SSH (SFTP):** appka **nie generuje, nie przechowuje, nie czyta** bajtów klucza
-      prywatnego. Referencja to tylko ścieżka (`~/.ssh/id_ed25519` domyślnie, wybieralna). Jeśli
-      klucz ma passphrase — oddajemy to `ssh-agent` (OpenSSH już jest częścią Windows/Linux), appka
-      shelluje się przez `ProcessRunner` i pozwala OS/agentowi obsłużyć prompt. Zero własnej
-      kryptografii.
-- [ ] **"Pokaż/skopiuj klucz publiczny"** — wygodny przycisk czytający `<key>.pub` (to jest
-      publiczne, nie sekret) do schowka, żeby dodać do `authorized_keys` na serwerze.
-- [ ] **Hasła (SMB):** **auto-wypełnianie = Windows Credential Manager, nie nasz kod.** Windows już
-      to robi za darmo — checkbox "Remember my credentials" w natywnym dialogu Map Network Drive
-      zapisuje hasło w Credential Manager i podstawia je przy kolejnym połączeniu. Jeśli appka ma
-      sama inicjować connect (zamiast odsyłać do natywnego dialogu), użyć `CredWriteW`/`CredReadW`
-      (`wincred.h`, część Win32, zero nowej zależności) do zapisu/odczytu hasła kluczowanego nazwą
-      profilu serwera. **Nigdy** pola `password`/`passphrase` w naszym YAML.
-- [ ] Linux/macOS credential store (`libsecret`/Keychain) — **odłożone**, appka rozwijana na
-      Windows jako platforma docelowa (zob. `TODO-T07.md` build rule); dodać gdy realnie potrzebne.
-- [ ] Settings panel: lista Server Profiles z edycją (host/port/protokół/użytkownik/ścieżka klucza),
-      bez pola na sekret — sekret zawsze przez natywny dialog/Credential Manager, nigdy przez nasz
-      formularz w postaci zwykłego tekstowego pola.
-
----
-
 ## T11 – Domain Runtime Model (`task/11-domain-runtime`)
 
-> Uruchamiać razem z T10. T06.5 zdjęło blocker: `DomainLayer` ma już realne wejście przez startup
-> rendererowy, ale model projektu/kolekcji nadal jest zadaniem T10/T11.
+> **Rozgraniczenie z T07.5 (2026-08-13):** T07.5 jest właścicielem *persystencji* projektu (katalog
+> na dysku/mount, `manifest.yaml`, lifecycle otwierania/zapisu). T11 jest właścicielem *runtime
+> modelu domenowego* nad tym co już jest otwarte (defekty jako encje, kolekcje danych obliczeniowych)
+> — nie duplikować "ProjectWorkspace lifecycle" w obu miejscach.
 
-- [ ] `ProjectWorkspace` – runtime container dla otwartego projektu — **klasa już istnieje**
-      (`Domain/ProjectWorkspace.hpp`) i jest wpięta w startup rendererowy; brakuje jeszcze pełnego
-      lifecycle otwartego projektu
-- [ ] `StructureRegistry` – **klasa już istnieje** i działa standalone (Add/Find/Records), ale
-      aktualnie jest wypełniana przy startupie renderera; brakuje runtime importu z UI/projektu
+- [ ] `StructureRegistry` – **klasa już istnieje** i działa standalone (Add/Find/Records), wpięta
+      w startup rendererowy (T06.5); brakuje runtime importu z UI (zależne od T07.5 Open/Recent —
+      dziś jedyna ścieżka wypełnienia to startup, nie akcja użytkownika w trakcie sesji)
 - [ ] `DefectConcept` – defekt jako pierwszorzędna encja naukowa (pozycja, typ, tagi, stany ładunku).
-      **Fundament częściowo gotowy:** `VacancySite` już istnieje w `CrystalStructure::vacancies`
-      (zob. T07), ale jest niepodłączony — naturalny punkt startowy zamiast pisania od zera
-- [ ] `DefectConfiguration` – jedna konfiguracja/aranżacja defektu
-- [ ] `CalculationRecord` – jeden input structure + opcjonalny output structure
+      **`Domain/Defects/DefectModel.hpp/.cpp` już istnieje** (`DefectConcept`/`DefectConfiguration`/
+      `CalculationRecord` + rejestry w `ProjectWorkspace`, `BuildDefectedStructure`) — scalone przy
+      okazji T07, ale niepodłączone do `CrystalStructure::vacancies` (istnieje jako martwe pole,
+      zob. T07). Ten task domyka wiring, nie pisze typów od zera.
 - [ ] Filter view po charge state i spin channel
 - [ ] Project-scoped query/index helpers
 - [ ] **Defekty punktowe — rozszerzenie `DefectConcept` (z `old-ds-functionality.md` §16.1):**
@@ -474,6 +488,10 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
   - [ ] Antisite: zamiana pierwiastka atomu z zachowaniem historii
   - [ ] Substitutional dopant: jak antisite, z maskowaniem przy eksporcie
   - [ ] Eksport z/bez defektu: toggle "pristine vs defected" do porównania
+- [ ] **Podział pracy z `punktukas-tools` (2026-08-13, zob. Infrastruktura):** formation energy,
+      charge density difference i inne ciężkie obliczenia na `CalculationRecord` idą przez
+      `punktukas`/pymatgen po stronie Python (`ScientificRuntime`), **nie** reimplementacja w C++.
+      Nasza strona: model danych (`DefectConfiguration`/`CalculationRecord`) + UI do ich przeglądania.
 
 ---
 
@@ -574,7 +592,7 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 - [ ] Structure Authoring wizard (prototypy, supercell builder, cell definition)
 - [ ] Plik projektu jako archiwum ZIP (`.dsproj`) – miniz/libzip
-- [ ] Remote SSH / SFTP browser bez OS-mounta (`libssh2`) — **zob. T10.2 stretch**; budować tylko
+- [ ] Remote SSH / SFTP browser bez OS-mounta (`libssh2`) — **zob. T07.5.2 stretch**; budować tylko
       jeśli mount-first (SMB/SSHFS-Win) okaże się niewystarczający w praktyce
 - [ ] VASP OUTCAR/WAVECAR integration
 - [ ] Defect thermodynamics
