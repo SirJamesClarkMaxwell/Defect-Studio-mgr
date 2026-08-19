@@ -12,6 +12,7 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
 {
@@ -28,6 +29,11 @@ namespace DefectStudio
 		std::string windowId;
 		std::string title;
 		RendererStructureData structure;
+		// One entity per atom/bond, synced with `structure` by SceneSystem::SyncSceneWithStructure
+		// (called on load/reload). Owns SelectionComponent/VisibilityComponent - the flat arrays
+		// above (structure.atoms[i].visible, selectedAtomIndices below) stay the GPU-instanced
+		// rendering hot path and are kept as a mirror via SceneSystem::PushSelectionAndVisibilityToWindowState.
+		SceneRegistry sceneRegistry;
 		Unique<RendererViewCamera> camera;
 		glm::vec2 viewportSize = glm::vec2(640.0f, 480.0f);
 		bool showGrid = true;

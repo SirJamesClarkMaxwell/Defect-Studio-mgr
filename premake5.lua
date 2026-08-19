@@ -2,6 +2,7 @@ workspace "DefectStudio"
     architecture "x86_64"
     startproject "DefectStudio"
     location "build/generated/%{_ACTION}"
+    toolset "msc-v145"
 
     configurations {
         "Debug",
@@ -413,6 +414,13 @@ project "DefectStudio"
     staticruntime "off"
     warnings "Extra"
     flags { "MultiProcessorCompile" }
+    -- entt (Vendor/entt) relies on C++20 "implicit typename in dependent contexts" (P0634),
+    -- which MSVC only honors under /permissive- (its default non-conforming parser doesn't apply
+    -- it even with cppdialect "C++latest" - std-version and conformance-mode are separate MSVC
+    -- flags). Without this, Vendor/entt/src/entt/core/hashed_string.hpp fails to compile.
+    filter "toolset:msc*"
+        buildoptions { "/permissive-" }
+    filter {}
 
     targetdir ("build/bin/" .. outputdir .. "/%{prj.name}")
     objdir ("build/bin-int/" .. outputdir .. "/%{prj.name}")
@@ -546,6 +554,9 @@ project "DefectStudioTests"
     staticruntime "off"
     warnings "Extra"
     flags { "MultiProcessorCompile" }
+    filter "toolset:msc*"
+        buildoptions { "/permissive-" }
+    filter {}
 
     targetdir ("build/bin/" .. outputdir .. "/%{prj.name}")
     objdir ("build/bin-int/" .. outputdir .. "/%{prj.name}")

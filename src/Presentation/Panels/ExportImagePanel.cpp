@@ -176,7 +176,7 @@ namespace DefectStudio
 			{
 				dialog.previewState.viewportSize = glm::vec2(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
 				dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
-				m_Layer.RenderToFbo(
+				(void)m_Layer.RenderToFbo(
 					"__export_full__", targetWindow->structure, dialog.previewState, m_Layer.GetGlobalSettings());
 
 				std::string error;

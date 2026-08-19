@@ -24,6 +24,8 @@
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneComponents.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -1139,10 +1141,16 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
+		SceneRegistry &scene = windowState->sceneRegistry;
+
 		if (!event.atomIndex.has_value())
 		{
 			if (!event.additive)
-				windowState->selectedAtomIndices.clear();
+			{
+				for (const entt::entity entity : scene.Registry().view<SelectionComponent>())
+					scene.Registry().get<SelectionComponent>(entity).selected = false;
+				SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+			}
 			return;
 		}
 
@@ -1150,21 +1158,22 @@ namespace DefectStudio
 		if (atomIndex >= windowState->structure.atoms.size())
 			return;
 
+		Entity atomEntity = scene.AtomEntityAt(atomIndex);
+		if (!atomEntity)
+			return;
+
 		if (!event.additive)
 		{
-			windowState->selectedAtomIndices.clear();
-			windowState->selectedAtomIndices.push_back(atomIndex);
+			for (const entt::entity entity : scene.Registry().view<SelectionComponent>())
+				scene.Registry().get<SelectionComponent>(entity).selected = false;
+			atomEntity.GetComponent<SelectionComponent>().selected = true;
+			SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 			return;
 		}
 
-		auto it = std::find(
-			windowState->selectedAtomIndices.begin(),
-			windowState->selectedAtomIndices.end(),
-			atomIndex);
-		if (it != windowState->selectedAtomIndices.end())
-			windowState->selectedAtomIndices.erase(it);
-		else
-			windowState->selectedAtomIndices.push_back(atomIndex);
+		SelectionComponent &selection = atomEntity.GetComponent<SelectionComponent>();
+		selection.selected = !selection.selected;
+		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 	}
 
 	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)

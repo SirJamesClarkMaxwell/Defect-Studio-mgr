@@ -12,6 +12,7 @@
 
 #include "Core/Logging/Logger.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -73,6 +74,7 @@ namespace DefectStudio
 		window.camera->SetFromDirection(direction);
 		window.camera->SetDistance(window.camera->Distance() * definition.distanceMultiplier);
 		HideAtomPattern(window.structure, definition.hideStep);
+		SceneSystem::SyncSceneWithStructure(window.sceneRegistry, window.structure);
 		return window;
 	}
 
