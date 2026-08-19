@@ -371,6 +371,17 @@ namespace DefectStudio
 				return false;
 		}
 		{
+			// Window exists but ImGuiLayer/JobSystem don't yet - setupDefaultLayers() below blocks
+			// the thread on Python init + pymatgen import + startup POSCAR load, which can take
+			// several seconds. Present one frame now so the OS stops marking the window
+			// "Not Responding" during that blocking work, instead of a truly async fix (would need
+			// hoisting JobSystem creation before layer setup - bigger, riskier reorder, deferred).
+			ZoneScopedN("Application.CreateFromSpecification.PresentLoadingFrame");
+			ApplicationDetail::StartupStepTimer timer("CreateFromSpecification.presentLoadingFrame");
+			presentLoadingFrame();
+			timer.Finish(true);
+		}
+		{
 			ZoneScopedN("Application.CreateFromSpecification.ApplicationLayers");
 			ApplicationDetail::StartupStepTimer timer("CreateFromSpecification.applicationLayers");
 			if (!timer.Finish(initializeApplicationLayers()))
@@ -772,12 +783,15 @@ namespace DefectStudio
 			WeakRef<ScientificRuntimeLayer> scientificRuntimeLayer =
 				m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime);
 			WeakRef<DomainLayer> domainLayer = m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain);
-			rendererStartupConfig = BuildRendererStartupConfig(
-				m_Config,
-				ComposeRendererStartup(
-					*m_AssetManager,
-					scientificRuntimeLayer,
-					domainLayer));
+			RendererStartupComposition composition = ComposeRendererStartup(
+				*m_AssetManager,
+				scientificRuntimeLayer,
+				domainLayer);
+			// Kept for RendererRuntimeOpenCoordinator (Project Tree "Open Defect"), which needs the
+			// same tables to build windows at runtime the way this startup path builds them once.
+			m_RendererAtomStyleTable = composition.assets.atomStyleTable;
+			m_RendererElementPropertiesTable = composition.assets.elementPropertiesTable;
+			rendererStartupConfig = BuildRendererStartupConfig(m_Config, std::move(composition));
 			timer.Finish(true);
 		}
 		{
@@ -905,6 +919,19 @@ namespace DefectStudio
 		}
 		if (auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock())
 			scientificRuntimeLayer->BindJobSystem(coreLayer->GetJobSystemHandle());
+
+		{
+			ZoneScopedN("Application.CreateRendererRuntimeOpenCoordinator");
+			ApplicationDetail::StartupStepTimer timer("Application.CreateRendererRuntimeOpenCoordinator");
+			m_RendererRuntimeOpenCoordinator = CreateUnique<RendererRuntimeOpenCoordinator>(
+				m_EventBus,
+				coreLayer->GetJobSystemHandle(),
+				m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain),
+				rendererLayer,
+				m_RendererAtomStyleTable,
+				m_RendererElementPropertiesTable);
+			timer.Finish(true);
+		}
 
 		{
 			ZoneScopedN("Application.RegisterRendererCommands");

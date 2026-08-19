@@ -347,6 +347,27 @@ namespace DefectStudio
 	}
 
 
+	void Application::presentLoadingFrame()
+	{
+		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
+
+		const ImVec4 clearColor = ImVec4(
+			m_Config.appearance.clearColor[0],
+			m_Config.appearance.clearColor[1],
+			m_Config.appearance.clearColor[2],
+			m_Config.appearance.clearColor[3]);
+
+		int displayWidth = 0;
+		int displayHeight = 0;
+		m_Graphics.window->GetFramebufferSize(displayWidth, displayHeight);
+		glViewport(0, 0, displayWidth, displayHeight);
+		glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
+		glClear(GL_COLOR_BUFFER_BIT);
+		m_Graphics.window->SwapBuffers();
+		m_Graphics.window->PollEvents();
+	}
+
+
 	template void Application::OnEvent<WindowCloseEvent>(WindowCloseEvent &);
 	template void Application::OnEvent<WindowResizeEvent>(WindowResizeEvent &);
 	template void Application::OnEvent<KeyPressedEvent>(KeyPressedEvent &);

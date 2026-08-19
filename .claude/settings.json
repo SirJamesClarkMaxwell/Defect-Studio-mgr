@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/Windows/Build.bat)",
+      "Bash(scripts/Windows/Build.bat *)",
+      "Bash(scripts/Windows/BuildErrorsOnly.bat)",
+      "Bash(scripts/Windows/BuildErrorsOnly.bat *)",
+      "Bash(scripts/Windows/BuildAndRun.bat)",
+      "Bash(scripts/Windows/BuildAndRun.bat *)",
+      "Bash(scripts/Windows/Run.bat)",
+      "Bash(scripts/Windows/Run.bat *)",
+      "Bash(scripts/Windows/RunWithTracy.bat)",
+      "Bash(scripts/Windows/RunWithTracy.bat *)",
+      "Bash(scripts/Windows/GenerateProjects.bat)",
+      "Bash(scripts/Windows/GenerateProjects.bat *)"
+    ]
+  }
+}

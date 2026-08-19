@@ -7,6 +7,7 @@
 #include "App/ApplicationLifecycle.hpp"
 #include "App/ApplicationState.hpp"
 #include "App/Managers/ConfigManager.hpp"
+#include "App/RendererRuntimeOpenCoordinator.hpp"
 #include "App/Window.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Assets/AssetManager.hpp"
@@ -19,6 +20,8 @@
 #include "Core/Notifications/Notifier.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "Domain/Crystal/ElementProperties.hpp"
+#include "Renderer/AtomStyleTable.hpp"
 
 struct ImVec4;
 struct ImGuiIO;
@@ -121,6 +124,10 @@ namespace DefectStudio
 		// Low-level frame and UI helpers
 		void beginFrame();
 		void renderFrame(const ImVec4 &clearColor, float frameRate);
+		// Clears + swaps once, before ImGuiLayer exists. Called right after window creation so the
+		// OS stops marking the window "Not Responding" during the blocking Python/layer bootstrap
+		// that follows (setupDefaultLayers) - see docs/work/project/TODO.md startup hotfix.
+		void presentLoadingFrame();
 
 		// Event queue internals
 		// Extension point: external event pump for test harness or offline tools.
@@ -145,6 +152,12 @@ namespace DefectStudio
 
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
+
+		// Captured from ComposeRendererStartup's asset bundle for reuse by runtime structure opens
+		// (Project Tree "Open Defect") - see RendererRuntimeOpenCoordinator.
+		AtomStyleTable m_RendererAtomStyleTable;
+		ElementPropertiesTable m_RendererElementPropertiesTable;
+		Unique<RendererRuntimeOpenCoordinator> m_RendererRuntimeOpenCoordinator;
 
 
 		// Singleton ownership

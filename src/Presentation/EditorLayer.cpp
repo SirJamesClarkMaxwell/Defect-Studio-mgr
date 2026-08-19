@@ -250,6 +250,16 @@ namespace DefectStudio
 			? m_CurrentConfig->paths.exportsDirectory / Path("event-log-export.csv")
 			: Path("logs") / Path("event-log-export.csv");
 		registerPanel<LoggingPanel>(m_EventBus, m_LogRegistry, logExportPath, "Logging Panel", true);
+		// ponytail: hardcoded default project-tree root instead of a real persisted setting -
+		// YamlConfigSerializer.cpp is ~1700 lines with duplicated emit paths (T06.5 P2 debt) and
+		// isn't safe to extend with one more field until that's cleaned up. Promote to a real
+		// per-project setting once T07.5.1 project manifest persistence exists.
+		const Path defaultProjectTreeRoot("O:\\hBN\\V2CBCN");
+		registerPanel<ProjectTreePanel>(
+			m_EventBus,
+			"Project Tree",
+			true,
+			FileSystem::Exists(defaultProjectTreeRoot.Native()) ? defaultProjectTreeRoot : Path{});
 		if (auto rendererLayer = m_RendererLayer.lock())
 			registerPanel<RendererPanel>(
 				*rendererLayer,

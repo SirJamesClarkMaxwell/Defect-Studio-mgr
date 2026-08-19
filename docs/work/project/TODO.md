@@ -63,6 +63,44 @@
 
 ---
 
+## 🔥 Hotfixy — teraz, poza kolejką T-zadań
+
+> Zgłoszone przez użytkownika jako "do zrobienia jak najszybciej", zreconciliowane względem
+> istniejącego stanu kodu (2026-08-19). Drobne, izolowane poprawki — nie temat żadnego T-zadania.
+
+- [x] **Startup performance (częściowo).** Zmierzone empirycznie: `CreateFromSpecification.total`
+      ≈ 18.4s, z czego **17.8s to jeden krok — `LayerStack.build.RendererStartupConfig`** (ładowanie
+      3 quick-test struktur z `install/app/data/renderer/startup_layout.yaml` przez
+      `ScientificRuntimeLayer::LoadCrystalStructure`), **nie** `Py_InitializeEx` (embedded Python
+      jest wyłączony na sztywno: `DS_PYTHON_CAPI_AVAILABLE=0` w `premake5.lua:457,623`, w obu
+      configach — subprocess fallback, `python.exe` + cold `import pymatgen` **3×**, raz na okno).
+      **Zrobione:** `Application::presentLoadingFrame()` (`Application.cpp`/`.hpp`,
+      `ApplicationBootstrap.cpp`) — jedna klatka clear+swap+poll zaraz po utworzeniu okna, przed
+      `setupDefaultLayers()`, żeby OS nie oznaczał okna "Not Responding" podczas blokującej fazy.
+      Nie skraca realnego czasu, tylko usuwa wrażenie zawieszenia.
+      **⏭ Powrót do przyspieszenia startu aplikacji (nie zrobione, prawdziwy fix):** realne źródło
+      17.8s to (a) `DS_PYTHON_CAPI_AVAILABLE=0` wygląda jak zostawiony wyłącznik, nie świadoma
+      decyzja — sprawdzić czy embedded Python (`_DS_PYTHON_EMBED_AVAILABLE` w premake5.lua już
+      wykrywa dostępność dev headers/libs) da się bezpiecznie włączyć; (b) 3 quick-test okna z
+      `startup_layout.yaml` ładowane sekwencyjnie, każde płacące pełny subprocess+cold-import —
+      rozważyć jedno okno zamiast trzech, albo async load przez JobSystem (odrzucona pełna opcja
+      z tego hotfixu — wymaga podniesienia `coreLayer->InitializeSystems(...)` przed
+      `setupDefaultLayers()`, większy reorder bootstrapu, patrz commit history tej sekcji).
+- [ ] **Wiązania nie tworzą się po imporcie przez `puntukas`** (ProjectTreePanel "Open Defect" /
+      `OpenDefectJob`). Root cause zweryfikowany: `puntukas.atoms.base.AtomsBase.get_positions()`/
+      `get_cell()` deklarują `units="angstrom"` i wołają `U.from_angstrom(...)`, ale
+      `puntukas.vasp.poscar.poscar.py:90-92` (`atoms_from_data`) przechowuje pozycje/cell już
+      przekonwertowane do jednostek atomowych — `from_angstrom` na danych które nie są w
+      angstromach to no-op. Efekt: odległości ×1.8897 za duże → `BondGenerator` nie łapie cutoffu
+      → zero wiązań. Fix: workaround lokalny w `scripts/python/examples/puntukas_structure_load.py`
+      (nie upstream w `punktukas-tools`).
+- [ ] Quick PNG export z viewportu (`glReadPixels` + `stbi_write_png`, `stb_image_write.h` już
+      zvendorowany — zero nowej zależności).
+- [ ] Drag&drop z `ProjectTreePanel` (POSCAR/CONTCAR) na viewport + auto-naming okien
+      (`RendererLayer::AddWindow` dziś robi tylko `push_back`, zero deduplikacji nazw).
+
+---
+
 ## T01 – Platform Setup (`task/01-platform-setup`) ✅ DONE
 
 - [x] Premake5 workspace dla Visual Studio 2022 (C++23, Debug/Release/Dist)
@@ -256,7 +294,7 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       (`RendererStartupComposer.cpp`). Renderer czyta `structure.bonds`, nie generuje ich już sam.
       **Dług architektoniczny (świadomy, opisany w TODO-T07.md C3):** `Bond` referencjonuje atomy
       przez indeks, nie stabilny `AtomId` — do rozwiązania w T08 przy pierwszej mutacji `atoms`.
-- [ ] **NOWE (znalezisko w kodzie):** `VacancySite` już istnieje jako struct w
+- [x] **NOWE (znalezisko w kodzie):** `VacancySite` już istnieje jako struct w
       `Domain/Crystal/CrystalPrimitives.hpp` i pole `CrystalStructure::vacancies` — ale **nigdzie
       w `src/` nie jest wypełniane ani czytane**. To gotowy fundament pod T11/§16.1 (defekty
       punktowe), obecnie martwe pole. (`Domain/Defects/DefectModel.*` już istnieje dla T11 —
@@ -335,6 +373,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       to też pokrywa przypadek "mount padł"** (brak sieci/VPN), nie tylko przeniesiony plik
 - [ ] Zapis ukrytych atomów, widoków, dodanych bondów, overrides kolorów, stanu kolekcji,
       pozycji kamery (`old-ds-functionality.md` §10)
+- [x] **Ponytail placeholder (nie prawdziwe ustawienie projektu):** domyślny root
+      `ProjectTreePanel` na sztywno w `EditorLayer.cpp` (`O:\hBN\V2CBCN`, sprawdzany
+      `FileSystem::Exists` przy starcie) — `YamlConfigSerializer.cpp` (~1700 linii, zduplikowane
+      ścieżki emit/parse) nie jest bezpieczny do rozszerzenia jednym polem bez wcześniejszego
+      refactoru. Przenieść do realnej persystencji, gdy powstanie `manifest.yaml`/ustawienia
+      projektu wyżej w tej sekcji.
 - [ ] Export kolekcji do POSCAR
 - [ ] Tags dla defektów i kolekcji
 - [ ] Application startup project (ostatni otwarty)
