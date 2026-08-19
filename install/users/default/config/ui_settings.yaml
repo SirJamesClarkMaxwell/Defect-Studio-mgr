@@ -65,6 +65,7 @@ renderer:
   invert_zoom: false
   touchpad_navigation: true
   default_projection: orthographic
+  auto_apply_default_view_on_open: false
   lighting:
     ambient: 0.45
     key: 0.47

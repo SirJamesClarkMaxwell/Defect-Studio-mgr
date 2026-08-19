@@ -472,6 +472,7 @@ namespace DefectStudio
 			const char *rendererInvertZoomKey = Name(RendererKey::InvertZoom);
 			const char *rendererTouchpadKey = Name(RendererKey::TouchpadNavigation);
 			const char *rendererProjectionKey = Name(RendererKey::DefaultProjection);
+			const char *rendererAutoApplyDefaultViewKey = Name(RendererKey::AutoApplyDefaultViewOnOpen);
 			const char *rendererLightingKey = Name(RendererKey::Lighting);
 			const char *rendererViewportKey = Name(RendererKey::Viewport);
 			const char *rendererToolbarWheelKey = Name(RendererKey::ToolbarWheel);
@@ -649,6 +650,11 @@ namespace DefectStudio
 				{rendererSection, rendererProjectionKey},
 				{},
 				config.renderer.defaultProjection);
+			config.renderer.autoApplyDefaultViewOnOpen = ReadValue(
+				root,
+				{rendererSection, rendererAutoApplyDefaultViewKey},
+				{},
+				config.renderer.autoApplyDefaultViewOnOpen);
 
 			config.renderer.lighting.ambientIntensity = ReadValue(
 				root,
@@ -770,6 +776,7 @@ namespace DefectStudio
 			const char *rendererInvertZoomKey = Name(RendererKey::InvertZoom);
 			const char *rendererTouchpadKey = Name(RendererKey::TouchpadNavigation);
 			const char *rendererProjectionKey = Name(RendererKey::DefaultProjection);
+			const char *rendererAutoApplyDefaultViewKey = Name(RendererKey::AutoApplyDefaultViewOnOpen);
 			const char *rendererLightingKey = Name(RendererKey::Lighting);
 			const char *rendererViewportKey = Name(RendererKey::Viewport);
 			const char *rendererToolbarWheelKey = Name(RendererKey::ToolbarWheel);
@@ -874,6 +881,11 @@ namespace DefectStudio
 				{rendererSection, rendererProjectionKey},
 				{},
 				config.renderer.defaultProjection);
+			config.renderer.autoApplyDefaultViewOnOpen = ReadValue(
+				root,
+				{rendererSection, rendererAutoApplyDefaultViewKey},
+				{},
+				config.renderer.autoApplyDefaultViewOnOpen);
 
 			config.renderer.lighting.ambientIntensity = ReadValue(
 				root,

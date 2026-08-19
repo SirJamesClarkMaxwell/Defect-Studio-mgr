@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -131,6 +132,8 @@ namespace DefectStudio
 		void onHideSelectionRequested(const RendererEvents::Viewport::HideSelectionRequested &event);
 		void onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event);
 		void onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event);
+		void onSetAsDefaultViewRequested(const RendererEvents::Viewport::SetAsDefaultViewRequested &event);
+		void onApplyDefaultViewRequested(const RendererEvents::Viewport::ApplyDefaultViewRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		[[nodiscard]] RendererWindowState *findViewportCommandWindow(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;
@@ -164,5 +167,8 @@ namespace DefectStudio
 		RenderExportDialogState m_ExportDialog;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;
+		// TODO(T07.5.1): promote to real per-project persistence once project manifests exist.
+		// Session-scoped only (does not survive app restart) - see autoApplyDefaultViewOnOpen.
+		std::optional<RendererViewSnapshot> m_SessionDefaultView;
 	};
 } // namespace DefectStudio

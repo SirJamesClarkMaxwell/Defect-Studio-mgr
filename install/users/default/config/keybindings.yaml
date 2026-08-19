@@ -200,3 +200,15 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.view.set_as_project_default"
+    chord: "Ctrl+D"
+    command: "renderer.view.set_as_project_default"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.view.apply_project_default"
+    chord: "Alt+D"
+    command: "renderer.view.apply_project_default"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true

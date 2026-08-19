@@ -29,6 +29,7 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "invert_zoom" << YAML::Value << renderer.invertZoom;
 		out << YAML::Key << "touchpad_navigation" << YAML::Value << renderer.touchpadNavigation;
 		out << YAML::Key << "default_projection" << YAML::Value << renderer.defaultProjection;
+		out << YAML::Key << "auto_apply_default_view_on_open" << YAML::Value << renderer.autoApplyDefaultViewOnOpen;
 		out << YAML::Key << "lighting" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "ambient" << YAML::Value << renderer.lighting.ambientIntensity;
 		out << YAML::Key << "key" << YAML::Value << renderer.lighting.keyIntensity;

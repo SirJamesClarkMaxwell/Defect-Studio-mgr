@@ -235,4 +235,26 @@ namespace DefectStudio
 				bus.Publish(event);
 			});
 	}
+
+	Unique<ICommand> CreateRendererSetAsDefaultViewCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer set as default view",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::SetAsDefaultViewRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererApplyDefaultViewCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer apply default view",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::ApplyDefaultViewRequested event;
+				bus.Publish(event);
+			});
+	}
 } // namespace DefectStudio

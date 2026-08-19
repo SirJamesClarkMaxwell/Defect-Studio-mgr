@@ -53,6 +53,10 @@ namespace DefectStudio
 		bool invertZoom = false;
 		bool touchpadNavigation = true;
 		std::string defaultProjection = "orthographic";
+		// TODO(T07.5.1): promote to a real per-project setting once project manifest persistence
+		// exists - for now this is a session-scoped global default (see RendererLayer's default
+		// saved-view snapshot), same tier as the project-tree root path in EditorLayer.cpp.
+		bool autoApplyDefaultViewOnOpen = false;
 		RendererLightingConfig lighting;
 		RendererViewportConfig viewport;
 		RendererToolbarWheelConfig toolbarWheel;

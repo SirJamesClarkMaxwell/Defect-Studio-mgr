@@ -215,6 +215,18 @@ namespace DefectStudio::RendererEvents::Viewport
 	{
 		std::string windowId;
 	};
+
+	// Captures the target window's current view (camera + selection + visibility) as the
+	// session-scoped default - see RendererLayer::m_SessionDefaultView.
+	struct SetAsDefaultViewRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	struct ApplyDefaultViewRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
 } // namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows

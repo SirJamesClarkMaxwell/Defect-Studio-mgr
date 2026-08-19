@@ -121,6 +121,16 @@ namespace DefectStudio
 		{
 			return CreateRendererSelectionInvertCommand(std::move(eventBus));
 		}
+
+		Unique<ICommand> MakeSetAsDefaultViewCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererSetAsDefaultViewCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeApplyDefaultViewCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererApplyDefaultViewCommand(std::move(eventBus));
+		}
 	}
 
 	void RegisterRendererCommands(CommandRegistry &registry, Ref<EventBus> eventBus)
@@ -289,5 +299,17 @@ namespace DefectStudio
 			"Renderer: Invert selection",
 			"Invert the atom selection in the active renderer viewport.",
 			std::bind_front(MakeSelectionInvertCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.view.set_as_project_default",
+			"Renderer: Set as default view",
+			"Save the active renderer viewport's current view as the session default view.",
+			std::bind_front(MakeSetAsDefaultViewCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.view.apply_project_default",
+			"Renderer: Apply default view",
+			"Apply the session default view to the active renderer viewport.",
+			std::bind_front(MakeApplyDefaultViewCommand, eventBus));
 	}
 } // namespace DefectStudio

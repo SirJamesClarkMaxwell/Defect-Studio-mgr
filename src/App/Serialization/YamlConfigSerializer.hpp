@@ -30,6 +30,7 @@ namespace DefectStudio
 
 		enum class RendererKey
 		{
+			AutoApplyDefaultViewOnOpen,
 			Background,
 			DefaultProjection,
 			FocusSelectedAtomDistance,
@@ -224,6 +225,7 @@ namespace DefectStudio
 		};
 
 		inline const std::unordered_map<RendererKey, const char *> RendererKeyNames = {
+			{RendererKey::AutoApplyDefaultViewOnOpen, "auto_apply_default_view_on_open"},
 			{RendererKey::Background, "background"},
 			{RendererKey::DefaultProjection, "default_projection"},
 			{RendererKey::FocusSelectedAtomDistance, "focus_selected_atom_distance"},

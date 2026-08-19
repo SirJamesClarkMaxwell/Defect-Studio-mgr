@@ -1535,6 +1535,13 @@ namespace DefectStudio
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Auto-apply default view on open");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Checkbox("##AutoApplyDefaultView", &m_DraftConfig.renderer.autoApplyDefaultViewOnOpen))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Orbit sensitivity");
 			ImGui::TableSetColumnIndex(1);
 			setValueControlWidth();

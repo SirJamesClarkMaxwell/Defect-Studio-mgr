@@ -150,6 +150,12 @@ namespace DefectStudio
 	void RendererLayer::AddWindow(RendererWindowState windowState)
 	{
 		m_Windows.push_back(std::move(windowState));
+		if (m_GlobalRenderSettings.autoApplyDefaultViewOnOpen && m_SessionDefaultView.has_value())
+		{
+			RendererWindowState &newWindow = m_Windows.back();
+			if (newWindow.camera != nullptr)
+				restoreViewSnapshot(newWindow, *m_SessionDefaultView, "startup.apply_default_view");
+		}
 	}
 
 	std::vector<RendererWindowState> &RendererLayer::GetWindows()
@@ -556,6 +562,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onShowAllRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionInvertRequested>(
 				std::bind_front(&RendererLayer::onSelectionInvertRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SetAsDefaultViewRequested>(
+				std::bind_front(&RendererLayer::onSetAsDefaultViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ApplyDefaultViewRequested>(
+				std::bind_front(&RendererLayer::onApplyDefaultViewRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -606,6 +616,7 @@ namespace DefectStudio
 		m_GlobalRenderSettings.invertZoom = config.invertZoom;
 		m_GlobalRenderSettings.touchpadNavigation = config.touchpadNavigation;
 		m_GlobalRenderSettings.defaultCameraProjection = ProjectionFromString(config.defaultProjection);
+		m_GlobalRenderSettings.autoApplyDefaultViewOnOpen = config.autoApplyDefaultViewOnOpen;
 		m_GlobalRenderSettings.lighting.ambientIntensity = config.lighting.ambientIntensity;
 		m_GlobalRenderSettings.lighting.keyIntensity = config.lighting.keyIntensity;
 		m_GlobalRenderSettings.lighting.fillIntensity = config.lighting.fillIntensity;
@@ -1275,6 +1286,27 @@ namespace DefectStudio
 		InvertSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
 		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
 		pushViewChange(*windowState, before, after, "keyboard.invert_selection");
+	}
+
+	void RendererLayer::onSetAsDefaultViewRequested(const RendererEvents::Viewport::SetAsDefaultViewRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		m_SessionDefaultView = captureViewSnapshot(*windowState);
+	}
+
+	void RendererLayer::onApplyDefaultViewRequested(const RendererEvents::Viewport::ApplyDefaultViewRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr || !m_SessionDefaultView.has_value())
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		const RendererViewSnapshot &after = *m_SessionDefaultView;
+		pushViewChange(*windowState, before, after, "keyboard.apply_default_view");
+		restoreViewSnapshot(*windowState, after, "keyboard.apply_default_view");
 	}
 
 	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)

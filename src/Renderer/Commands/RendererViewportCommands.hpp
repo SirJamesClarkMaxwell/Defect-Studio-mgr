@@ -33,4 +33,6 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererShowAllCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectionInvertCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererSetAsDefaultViewCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererApplyDefaultViewCommand(Ref<EventBus> eventBus);
 } // namespace DefectStudio

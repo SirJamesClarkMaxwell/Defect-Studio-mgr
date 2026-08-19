@@ -71,6 +71,7 @@ namespace DefectStudio
 		bool invertZoom = false;
 		bool touchpadNavigation = true;
 		CameraProjection defaultCameraProjection = CameraProjection::Perspective;
+		bool autoApplyDefaultViewOnOpen = false;
 		RendererLightingSettings lighting;
 		RendererViewportSettings viewport;
 		RendererToolbarWheelSettings toolbarWheel;
