@@ -88,7 +88,12 @@ namespace DefectStudio
 			return;
 		(void)deltaTime;
 
-		const bool began = ImGui::Begin(windowState.title.c_str());
+		// "###windowId" keeps ImGui's window identity (docking, focus, size/position) pinned to
+		// the stable windowId regardless of the visible label - two windows that happen to share
+		// a display name (e.g. both opened from a "singlet_HSE" leaf folder) no longer collide
+		// into the same ImGui window, and renaming a window's title is safe.
+		const std::string imguiWindowLabel = windowState.title + "###RendererWindow_" + windowState.windowId;
+		const bool began = ImGui::Begin(imguiWindowLabel.c_str());
 		const bool nowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		if (nowFocused != windowState.lastFocusedState)
 		{
@@ -121,7 +126,7 @@ namespace DefectStudio
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
 
 		const unsigned int textureId = m_Layer.RenderToFbo(
-			windowState.title,
+			windowState.windowId,
 			windowState.structure,
 			windowState,
 			m_Layer.GetGlobalSettings());

@@ -133,7 +133,13 @@ namespace DefectStudio
 			{
 				RendererEvents::Windows::OpenStructureRequested request;
 				request.filePath = ResolveDefectFile(directory);
-				request.displayName = directory.filename().string();
+				// Leaf folder name alone is ambiguous (e.g. two different calculations both
+				// ending in ".../singlet_HSE") - prefix the parent folder too so default window
+				// titles stay distinguishable at a glance. Window identity itself no longer
+				// depends on this string either way (see RendererPanel::renderStructureWindow).
+				const std::string parentName = directory.parent_path().filename().String();
+				const std::string leafName = directory.filename().String();
+				request.displayName = parentName.empty() ? leafName : (parentName + "/" + leafName);
 				m_EventBus->Queue(request);
 			}
 		}

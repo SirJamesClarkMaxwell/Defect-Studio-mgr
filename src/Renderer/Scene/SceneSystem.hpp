@@ -31,5 +31,14 @@ namespace DefectStudio
 			SceneRegistry &scene,
 			const std::vector<std::size_t> &selectedAtomIndices,
 			const std::vector<std::size_t> &hiddenAtomIndices);
+
+		// Translates captured positions into atom indices on `targetStructure` by nearest cartesian
+		// distance, for restoring a view snapshot onto a structure that may differ from the one it
+		// was captured on (e.g. the session default view applied to a different window). A position
+		// with no atom within `tolerance` is dropped rather than mapped to a wrong atom.
+		[[nodiscard]] std::vector<std::size_t> ResolveAtomIndicesByPosition(
+			const RendererStructureData &targetStructure,
+			const std::vector<glm::vec3> &positions,
+			float tolerance = 0.35f);
 	} // namespace SceneSystem
 } // namespace DefectStudio

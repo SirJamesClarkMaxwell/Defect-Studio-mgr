@@ -78,4 +78,26 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(scene.AtomEntities().size(), 1u);
 		EXPECT_EQ(scene.AtomEntityAt(0).GetComponent<AtomComponent>().element, "H");
 	}
+
+	TEST(SceneSystemTests, ResolveAtomIndicesByPositionMatchesNearestWithinTolerance)
+	{
+		const RendererStructureData structure = BuildThreeAtomOneBondStructure();
+
+		const std::vector<std::size_t> resolved = SceneSystem::ResolveAtomIndicesByPosition(
+			structure, {glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.05f, 0.0f, 0.0f)});
+
+		ASSERT_EQ(resolved.size(), 2u);
+		EXPECT_EQ(resolved[0], 1u);
+		EXPECT_EQ(resolved[1], 0u);
+	}
+
+	TEST(SceneSystemTests, ResolveAtomIndicesByPositionDropsUnmatchedPositions)
+	{
+		const RendererStructureData structure = BuildThreeAtomOneBondStructure();
+
+		const std::vector<std::size_t> resolved = SceneSystem::ResolveAtomIndicesByPosition(
+			structure, {glm::vec3(50.0f, 50.0f, 50.0f)});
+
+		EXPECT_TRUE(resolved.empty());
+	}
 } // namespace DefectStudio::Tests

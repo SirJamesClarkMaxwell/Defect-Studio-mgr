@@ -86,4 +86,33 @@ namespace DefectStudio::SceneSystem
 			entity.GetComponent<VisibilityComponent>().visible = !hiddenSet.contains(index);
 		}
 	}
+
+	std::vector<std::size_t> ResolveAtomIndicesByPosition(
+		const RendererStructureData &targetStructure,
+		const std::vector<glm::vec3> &positions,
+		float tolerance)
+	{
+		std::vector<std::size_t> resolvedIndices;
+		resolvedIndices.reserve(positions.size());
+		const float toleranceSquared = tolerance * tolerance;
+
+		for (const glm::vec3 &position : positions)
+		{
+			float bestDistanceSquared = toleranceSquared;
+			std::size_t bestIndex = targetStructure.atoms.size();
+			for (std::size_t index = 0; index < targetStructure.atoms.size(); ++index)
+			{
+				const glm::vec3 delta = targetStructure.atoms[index].cartesianPosition - position;
+				const float distanceSquared = glm::dot(delta, delta);
+				if (distanceSquared <= bestDistanceSquared)
+				{
+					bestDistanceSquared = distanceSquared;
+					bestIndex = index;
+				}
+			}
+			if (bestIndex < targetStructure.atoms.size())
+				resolvedIndices.push_back(bestIndex);
+		}
+		return resolvedIndices;
+	}
 } // namespace DefectStudio::SceneSystem

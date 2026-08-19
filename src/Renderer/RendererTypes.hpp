@@ -67,8 +67,18 @@ namespace DefectStudio
 		float pitch = 0.0f;
 		float roll = 0.0f;
 		CameraProjection projection = CameraProjection::Perspective;
+		// Indices are only meaningful within the structure they were captured from - valid for
+		// same-window operations (undo/redo, align-axis, cycle-saved-view, ...) where before/after
+		// always share one structure, and cheap for pushViewChange's before/after dedup compare.
 		std::vector<std::size_t> selectedAtomIndices;
 		std::vector<std::size_t> hiddenAtomIndices;
+		// Positions of the same atoms, captured alongside the indices above. Restoring a snapshot
+		// onto a *different* structure (the session default view copy/pasted between windows, or
+		// auto-applied to a newly-opened window) re-resolves selection/visibility by nearest
+		// position instead of reusing indices, since atom N in one structure is rarely atom N in
+		// another. See SceneSystem::ResolveAtomIndicesByPosition.
+		std::vector<glm::vec3> selectedAtomPositions;
+		std::vector<glm::vec3> hiddenAtomPositions;
 	};
 
 	struct RendererViewStateChange

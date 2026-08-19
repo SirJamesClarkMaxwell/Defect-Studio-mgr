@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -183,6 +184,24 @@ namespace DefectStudio
 				queueTransition(animated, sourceAction);
 			}
 		};
+
+		if (ImGui::SmallButton("Rename"))
+			ImGui::OpenPopup("##RendererWindowRenamePopup");
+		if (ImGui::BeginPopup("##RendererWindowRenamePopup"))
+		{
+			char renameBuffer[256];
+			std::snprintf(renameBuffer, sizeof(renameBuffer), "%s", windowState.title.c_str());
+			ImGui::SetNextItemWidth(220.0f);
+			if (ImGui::InputText(
+					"##RendererWindowRenameInput", renameBuffer, sizeof(renameBuffer), ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				if (renameBuffer[0] != '\0')
+					windowState.title = renameBuffer;
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+		sameLineTight();
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
 		const glm::mat3 &reciprocal = windowState.structure.reciprocalLattice;

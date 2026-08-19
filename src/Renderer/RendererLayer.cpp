@@ -125,6 +125,8 @@ namespace DefectStudio
 		snapshot.projection = camera.Projection();
 		snapshot.selectedAtomIndices = selectionSource.selectedAtomIndices;
 		snapshot.hiddenAtomIndices = selectionSource.hiddenAtomIndices;
+		snapshot.selectedAtomPositions = selectionSource.selectedAtomPositions;
+		snapshot.hiddenAtomPositions = selectionSource.hiddenAtomPositions;
 		return snapshot;
 	}
 
@@ -788,9 +790,17 @@ namespace DefectStudio
 		snapshot.projection = windowState.camera->Projection();
 
 		snapshot.selectedAtomIndices = windowState.selectedAtomIndices;
+		for (const std::size_t index : snapshot.selectedAtomIndices)
+			if (index < windowState.structure.atoms.size())
+				snapshot.selectedAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
 		for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+		{
 			if (!windowState.structure.atoms[index].visible)
+			{
 				snapshot.hiddenAtomIndices.push_back(index);
+				snapshot.hiddenAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
+			}
+		}
 		return snapshot;
 	}
 
@@ -803,8 +813,16 @@ namespace DefectStudio
 			return;
 		windowState.camera->SetProjection(snapshot.projection);
 
-		SceneSystem::ApplySelectionAndVisibilityToScene(
-			windowState.sceneRegistry, snapshot.selectedAtomIndices, snapshot.hiddenAtomIndices);
+		// Resolve by position, not by reusing snapshot indices directly: restoring commonly
+		// crosses structures (session default view copy/pasted to a different window, or
+		// auto-applied to a newly-opened one), where atom N in one structure isn't atom N in
+		// another. For same-structure restores (undo/redo, align-axis, cycle-saved-view, ...) this
+		// resolves back to the exact same indices at ~zero distance, so one code path covers both.
+		const std::vector<std::size_t> resolvedSelected = SceneSystem::ResolveAtomIndicesByPosition(
+			windowState.structure, snapshot.selectedAtomPositions);
+		const std::vector<std::size_t> resolvedHidden = SceneSystem::ResolveAtomIndicesByPosition(
+			windowState.structure, snapshot.hiddenAtomPositions);
+		SceneSystem::ApplySelectionAndVisibilityToScene(windowState.sceneRegistry, resolvedSelected, resolvedHidden);
 		SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 
 		const char *resolvedSourceAction =
