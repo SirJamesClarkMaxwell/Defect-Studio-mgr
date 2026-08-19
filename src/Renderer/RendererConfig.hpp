@@ -52,7 +52,7 @@ namespace DefectStudio
 		float focusSelectedAtomRadiusMultiplier = 2.0f;
 		bool invertZoom = false;
 		bool touchpadNavigation = true;
-		std::string defaultProjection = "perspective";
+		std::string defaultProjection = "orthographic";
 		RendererLightingConfig lighting;
 		RendererViewportConfig viewport;
 		RendererToolbarWheelConfig toolbarWheel;

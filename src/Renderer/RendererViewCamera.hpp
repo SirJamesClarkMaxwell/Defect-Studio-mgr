@@ -73,7 +73,7 @@ namespace DefectStudio
 		float m_FieldOfViewRadians = 45.0f * 3.1415926535f / 180.0f;
 		float m_NearPlane = 0.01f;
 		float m_FarPlane = 500.0f;
-		CameraProjection m_Projection = CameraProjection::Perspective;
+		CameraProjection m_Projection = CameraProjection::Orthographic;
 		float m_OrthoScale = 1.0f; // zoom scale for orthographic
 		float m_Roll = 0.0f;
 	};
