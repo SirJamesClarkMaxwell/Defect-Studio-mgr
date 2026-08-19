@@ -88,6 +88,18 @@ namespace DefectStudio
 		void CollectProfilingData();
 		bool &GetShowPeriodicTableWindow();
 		std::string &GetSelectedPeriodicElement();
+		RenderExportDialogState &GetExportDialogState();
+		// Reads back windowKey's last-rendered frame (via RenderToFbo) and writes it to a PNG.
+		// Returns false + fills error on missing viewport or write failure. crop* are fractions
+		// (0..1) trimmed from each edge before writing.
+		[[nodiscard]] bool CaptureWindowToPng(
+			const std::string &windowKey,
+			const Path &outputPath,
+			std::string &error,
+			float cropLeft = 0.0f,
+			float cropRight = 0.0f,
+			float cropTop = 0.0f,
+			float cropBottom = 0.0f) const;
 
 	private:
 		void loadDefaultWindows();
@@ -110,6 +122,7 @@ namespace DefectStudio
 		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
 		void onSaveCurrentViewRequested(const RendererEvents::Viewport::SaveCurrentViewRequested &event);
 		void onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event);
+		void onExportImageRequested(const RendererEvents::Viewport::ExportImageRequested &event);
 		void onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event);
 		void onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event);
 		void onAtomSelectionRequested(const RendererEvents::Viewport::AtomSelectionRequested &event);
@@ -143,6 +156,7 @@ namespace DefectStudio
 		std::string m_SelectedPeriodicElement = "C";
 		std::string m_FocusedViewportWindowId;
 		bool m_ShowPeriodicTableWindow = true;
+		RenderExportDialogState m_ExportDialog;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;
 	};

@@ -86,16 +86,66 @@
       rozważyć jedno okno zamiast trzech, albo async load przez JobSystem (odrzucona pełna opcja
       z tego hotfixu — wymaga podniesienia `coreLayer->InitializeSystems(...)` przed
       `setupDefaultLayers()`, większy reorder bootstrapu, patrz commit history tej sekcji).
-- [ ] **Wiązania nie tworzą się po imporcie przez `puntukas`** (ProjectTreePanel "Open Defect" /
+- [x] **Wiązania nie tworzą się po imporcie przez `puntukas`** (ProjectTreePanel "Open Defect" /
       `OpenDefectJob`). Root cause zweryfikowany: `puntukas.atoms.base.AtomsBase.get_positions()`/
       `get_cell()` deklarują `units="angstrom"` i wołają `U.from_angstrom(...)`, ale
       `puntukas.vasp.poscar.poscar.py:90-92` (`atoms_from_data`) przechowuje pozycje/cell już
       przekonwertowane do jednostek atomowych — `from_angstrom` na danych które nie są w
       angstromach to no-op. Efekt: odległości ×1.8897 za duże → `BondGenerator` nie łapie cutoffu
-      → zero wiązań. Fix: workaround lokalny w `scripts/python/examples/puntukas_structure_load.py`
-      (nie upstream w `punktukas-tools`).
-- [ ] Quick PNG export z viewportu (`glReadPixels` + `stbi_write_png`, `stb_image_write.h` już
-      zvendorowany — zero nowej zależności).
+      → zero wiązań. **Zrobione:** workaround lokalny w
+      `scripts/python/examples/puntukas_structure_load.py` (nie upstream w `punktukas-tools`) —
+      zweryfikowane numerycznie (diament.vasp, lattice 14.19 Å) i w aplikacji przez użytkownika.
+- [x] **ORTHO jako domyślny tryb kamery** (nie było w oryginalnej liście, dopisane w trakcie).
+      `RendererConfig::defaultProjection` i `RendererViewCamera::m_Projection` mówiły
+      "perspective" mimo że persisted `ui_settings.yaml` już miał `orthographic` — wyrównane.
+- [x] PNG export z viewportu — rozszerzone w trakcie sesji do pełnego dialogu (przesunięte z
+      "quick" MVP na realny kawałek T15, na żądanie użytkownika po teście pierwszej wersji).
+      **Zrobione:**
+      - `OpenGlRendererBackend::CaptureWindowToPng` — odczyt ostatnio wyrenderowanej klatki z FBO
+        danego okna (`glReadPixels`, flip wierszy), `stbi_write_png` (już zvendorowany).
+      - Komenda `renderer.export.image` (`RendererEvents::Viewport::ExportImageRequested`),
+        bindowana pod **F12** (`keybindings.yaml`) — otwiera ten sam panel co przycisk toolbara.
+      - **`ExportImagePanel`** (`src/Presentation/Panels/ExportImagePanel.*`, zarejestrowany w
+        `EditorLayer` obok `RendererPanel`, `visibleByDefault=false`, widoczność śledzi
+        `RenderExportDialogState::open`) — **prawdziwy dokowalny/skalowalny panel, nie modal**
+        (druga iteracja; pierwsza była `BeginPopupModal`, zob. bug #2 niżej dlaczego to się nie
+        sprawdziło z F12). Nazwa pliku proponowana z `structure.sourcePath` (stem), presety
+        rozdzielczości (1080p/2K/4K/Custom), checkboxy atoms/bonds/cell/grid niezależne od
+        głównego viewportu, live preview wypełniający dostępną przestrzeń panelu (letterboxed do
+        aspect ratio wybranej rozdzielczości — **nigdy nie rozciąga**, skaluje się z rozmiarem
+        panelu), przeciąganie preview = `camera.Pan(...)` + slider zoom (`SetDistance`) +
+        "Reset View" — **plus prawdziwy per-krawędziowy crop** (4 slidery Left/Right/Top/Bottom,
+        0-45% każda, `RenderExportDialogState::crop{Left,Right,Top,Bottom}`): ucina piksele na
+        `glReadPixels` sub-rect w `CaptureWindowToPng` (celowo zmienia aspect ratio wyjścia — to
+        jest crop, nie reframing), preview pokazuje przyciemniony overlay na obcinanych
+        marginesach zamiast przerenderowywać w innym rozmiarze.
+        Ścieżka zapisu: `Platform::PickSaveFile` (nowy, `Core/Platform/FileDialog.*`, NFD save
+        dialog — analogiczny do istniejącego `PickFolder` z `ProjectTreePanel`), domyślnie
+        `exports/`, zapamiętywana w `dialog.saveDirectory` między otwarciami.
+      - **Znalezione i naprawione bugi (3):**
+        1. Pierwsza wersja szukała FBO po `windowState.windowId` (UUID), ale
+           `RendererPanel.cpp:122` renderuje pod kluczem `windowState.title` — poprawione.
+        2. **Crash na F12** (nie na przycisku) — `RendererLayer::onExportImageRequested` wołał
+           `ImGui::OpenPopup()` z poziomu event handlera inputu, poza kontekstem jakiegokolwiek
+           ImGui okna (`ImGui::OpenPopup`/`BeginPopupModal` oba liczą ID przez
+           `g.CurrentWindow->GetID(...)`, wymagają żywego okna z niepustym ID stackiem w miejscu
+           wywołania — event handler tego nie ma). Namierzone przez wbudowany w apkę crash-handler
+           (pełny symbolizowany stos w `logs/DefectStudio.log`, `[CRASH]` entry). Ostateczny fix:
+           **modal zamieniony na zwykły dokowalny panel** (`ExportImagePanel`, wyżej) — zwykłe
+           `ImGui::Begin()` nie ma tego wymogu, więc problem znika architektonicznie, nie tylko
+           dla F12 ale dla każdego przyszłego triggera.
+        3. **Powtarzające się "crashe" po fixie #2** okazały się czymś innym: `IM_ASSERT` w Dear
+           ImGui to domyślnie zwykły `assert()`, który pod dołączonym debuggerem VS wykonuje
+           `__debugbreak()` zamiast dialogu Abort/Retry/Ignore — więc każdy wewnętrzny sanity-check
+           ImGui (nawet niegroźny) wygląda jak crash. Fix: `IM_ASSERT` przekierowany na
+           log-and-continue (`DefectStudio_LogImGuiAssertFailure`, tylko Debug) — wpięty przez
+           `IMGUI_USER_CONFIG` w `premake5.lua`, **nie** przez edycję `Vendor/imgui/imconfig.h`
+           (to submodule; `git submodule update --force` z `GenerateProjects.bat` skasowałoby taką
+           edycję przy następnym generowaniu projektów — złapane w trakcie tej sesji). Nowy plik:
+           `src/Presentation/ImGuiUserConfig.hpp` + `ImGuiAssertHandler.cpp`.
+      - **Do ustalenia później (dopisane na koniec planu, nie teraz):** tagowanie eksportów/struktur
+        (`exc_ms`, `exc_tryp`, `gs_sing`, `gs_try` itd., niekoniecznie widoczne dla użytkownika) —
+        wymaga rozmowy z resztą zespołu, zob. `rzeczy-do-dodania-jak-quirky-shell.md` (koniec pliku).
 - [ ] Drag&drop z `ProjectTreePanel` (POSCAR/CONTCAR) na viewport + auto-naming okien
       (`RendererLayer::AddWindow` dziś robi tylko `push_back`, zero deduplikacji nazw).
 

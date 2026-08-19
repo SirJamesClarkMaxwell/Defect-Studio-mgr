@@ -6,11 +6,13 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
 #include <glad/gl.h>
+#include <stb_image_write.h>
 
 #include "Core/Logging/Logger.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -1108,6 +1110,70 @@ namespace DefectStudio
 		const std::uint32_t groups = static_cast<std::uint32_t>((inputs.size() + 63) / 64);
 		glDispatchCompute(groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+	}
+
+	bool OpenGlRendererBackend::CaptureWindowToPng(
+		const std::string &windowKey,
+		const Path &outputPath,
+		std::string &error,
+		float cropLeft,
+		float cropRight,
+		float cropTop,
+		float cropBottom) const
+	{
+		const auto it = m_Viewports.find(windowKey);
+		if (it == m_Viewports.end())
+		{
+			error = "No rendered viewport found for window '" + windowKey + "'";
+			return false;
+		}
+
+		const OpenGlFrameBuffer &frameBuffer = it->second.frameBuffer;
+		const int fullWidth = frameBuffer.Width();
+		const int fullHeight = frameBuffer.Height();
+		if (fullWidth <= 0 || fullHeight <= 0)
+		{
+			error = "Viewport framebuffer has zero size";
+			return false;
+		}
+
+		cropLeft = std::clamp(cropLeft, 0.0f, 0.9f);
+		cropRight = std::clamp(cropRight, 0.0f, 0.9f - cropLeft);
+		cropTop = std::clamp(cropTop, 0.0f, 0.9f);
+		cropBottom = std::clamp(cropBottom, 0.0f, 0.9f - cropTop);
+
+		const int leftPx = static_cast<int>(std::lround(cropLeft * fullWidth));
+		const int rightPx = static_cast<int>(std::lround(cropRight * fullWidth));
+		const int topPx = static_cast<int>(std::lround(cropTop * fullHeight));
+		const int bottomPx = static_cast<int>(std::lround(cropBottom * fullHeight));
+		const int width = std::max(1, fullWidth - leftPx - rightPx);
+		const int height = std::max(1, fullHeight - topPx - bottomPx);
+
+		// GL's y-origin is the bottom of the image, so trimming the image's top edge means
+		// skipping rows at the HIGH end of GL's y range - i.e. starting the read at bottomPx.
+		std::vector<unsigned char> pixels(static_cast<std::size_t>(width) * height * 4);
+		frameBuffer.Bind();
+		glReadPixels(leftPx, bottomPx, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		frameBuffer.Unbind();
+
+		// OpenGL's row 0 is the bottom of the image; PNG expects row 0 at the top.
+		std::vector<unsigned char> flipped(pixels.size());
+		const std::size_t rowBytes = static_cast<std::size_t>(width) * 4;
+		for (int row = 0; row < height; ++row)
+		{
+			std::memcpy(
+				flipped.data() + static_cast<std::size_t>(row) * rowBytes,
+				pixels.data() + static_cast<std::size_t>(height - 1 - row) * rowBytes,
+				rowBytes);
+		}
+
+		FileSystem::CreateDirectories(outputPath.parent_path().Native());
+		if (!stbi_write_png(outputPath.String().c_str(), width, height, 4, flipped.data(), static_cast<int>(rowBytes)))
+		{
+			error = "stbi_write_png failed for '" + outputPath.String() + "'";
+			return false;
+		}
+		return true;
 	}
 
 	OpenGlViewportResources &OpenGlRendererBackend::viewportResources(const std::string &windowKey, int width, int height)

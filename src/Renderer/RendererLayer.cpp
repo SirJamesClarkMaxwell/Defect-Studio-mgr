@@ -229,6 +229,28 @@ namespace DefectStudio
 		return m_SelectedPeriodicElement;
 	}
 
+	RenderExportDialogState &RendererLayer::GetExportDialogState()
+	{
+		return m_ExportDialog;
+	}
+
+	bool RendererLayer::CaptureWindowToPng(
+		const std::string &windowKey,
+		const Path &outputPath,
+		std::string &error,
+		float cropLeft,
+		float cropRight,
+		float cropTop,
+		float cropBottom) const
+	{
+		if (m_RendererBackend == nullptr)
+		{
+			error = "Renderer backend unavailable";
+			return false;
+		}
+		return m_RendererBackend->CaptureWindowToPng(windowKey, outputPath, error, cropLeft, cropRight, cropTop, cropBottom);
+	}
+
 	void RendererLayer::BeginViewInteraction(const std::string &windowId, std::string sourceAction)
 	{
 		RendererWindowState *windowState = findWindowById(windowId);
@@ -504,6 +526,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onSaveCurrentViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::CycleSavedViewRequested>(
 				std::bind_front(&RendererLayer::onCycleSavedViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ExportImageRequested>(
+				std::bind_front(&RendererLayer::onExportImageRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ViewTransitionRequested>(
 				std::bind_front(&RendererLayer::onViewTransitionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ProjectionToggleRequested>(
@@ -1024,6 +1048,38 @@ namespace DefectStudio
 
 		windowState->savedViews.push_back(captureViewSnapshot(*windowState));
 		windowState->activeSavedViewIndex = windowState->savedViews.size() - 1u;
+	}
+
+	void RendererLayer::onExportImageRequested(const RendererEvents::Viewport::ExportImageRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		// Same setup as the toolbar's "Export PNG..." button - keyboard (F12) and toolbar feed the
+		// same dialog rather than each having their own export path. NOTE: does NOT call
+		// ImGui::OpenPopup here - this handler runs during input event dispatch, outside any
+		// ImGui window's ID stack (ImGui::OpenPopup needs a valid current window / crashes in
+		// ImGuiWindow::GetID otherwise). drawExportDialog() opens the popup once it sees `open`.
+		m_ExportDialog.open = true;
+		m_ExportDialog.targetWindowId = windowState->windowId;
+		m_ExportDialog.previewState.camera = CreateUnique<RendererViewCamera>(*windowState->camera);
+		m_ExportDialog.previewState.showAtoms = windowState->showAtoms;
+		m_ExportDialog.previewState.showBonds = windowState->showBonds;
+		m_ExportDialog.previewState.showCellBox = windowState->showCellBox;
+		m_ExportDialog.previewState.showGrid = windowState->showGrid;
+		m_ExportDialog.previewState.selectedAtomIndices = windowState->selectedAtomIndices;
+
+		try
+		{
+			const std::string stem = windowState->structure.sourcePath.Native().stem().string();
+			m_ExportDialog.filename = (stem.empty() ? "structure" : stem) + "_export";
+		}
+		catch (const std::exception &exception)
+		{
+			DS_LOG_ERROR("Export dialog filename derivation failed: {}", exception.what());
+			m_ExportDialog.filename = "structure_export";
+		}
 	}
 
 	void RendererLayer::onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event)

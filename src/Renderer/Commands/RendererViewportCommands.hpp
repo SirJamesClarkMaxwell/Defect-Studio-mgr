@@ -26,4 +26,5 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererRedoViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSaveCurrentViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererCycleSavedViewCommand(Ref<EventBus> eventBus, int direction);
+	[[nodiscard]] Unique<ICommand> CreateRendererExportImageCommand(Ref<EventBus> eventBus);
 } // namespace DefectStudio

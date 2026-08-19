@@ -83,6 +83,19 @@ namespace DefectStudio
 			bool showCellBox,
 			bool showGrid,
 			const std::vector<std::size_t> &selectedAtomIndices = {});
+		// Reads back the last-rendered frame for windowKey (must have been rendered via
+		// RenderWindow this session) and writes it to a PNG. Returns false + fills error on
+		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
+		// from each edge before writing - a real pixel crop (changes output aspect ratio), not the
+		// pan/zoom reframing that keeps the requested resolution's aspect intact.
+		[[nodiscard]] bool CaptureWindowToPng(
+			const std::string &windowKey,
+			const Path &outputPath,
+			std::string &error,
+			float cropLeft = 0.0f,
+			float cropRight = 0.0f,
+			float cropTop = 0.0f,
+			float cropBottom = 0.0f) const;
 
 	private:
 		Result<void> createStaticGeometry(const RendererPrimitiveMeshAssets &primitiveMeshes);

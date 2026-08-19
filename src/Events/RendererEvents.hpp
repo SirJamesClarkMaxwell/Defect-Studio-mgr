@@ -151,6 +151,11 @@ namespace DefectStudio::RendererEvents::Viewport
 		int direction = 1;
 	};
 
+	struct ExportImageRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
 	struct ViewTransitionRequested final : public BusEvent
 	{
 		std::string windowId;

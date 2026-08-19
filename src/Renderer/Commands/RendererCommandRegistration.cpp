@@ -96,6 +96,11 @@ namespace DefectStudio
 		{
 			return CreateRendererCycleSavedViewCommand(std::move(eventBus), direction);
 		}
+
+		Unique<ICommand> MakeExportImageCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererExportImageCommand(std::move(eventBus));
+		}
 	}
 
 	void RegisterRendererCommands(CommandRegistry &registry, Ref<EventBus> eventBus)
@@ -228,5 +233,11 @@ namespace DefectStudio
 			"Renderer: Previous saved view",
 			"Cycle to the previous saved renderer viewport camera view.",
 			std::bind_front(MakeCycleSavedViewCommand, eventBus, -1));
+		RegisterRendererCommand(
+			registry,
+			"renderer.export.image",
+			"Renderer: Export image (PNG)",
+			"Save the active renderer viewport's current frame to exports/ as a PNG.",
+			std::bind_front(MakeExportImageCommand, eventBus));
 	}
 } // namespace DefectStudio

@@ -179,4 +179,15 @@ namespace DefectStudio
 				bus.Publish(event);
 			});
 	}
+
+	Unique<ICommand> CreateRendererExportImageCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer export image",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::ExportImageRequested event;
+				bus.Publish(event);
+			});
+	}
 } // namespace DefectStudio

@@ -24,6 +24,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Events/EditorUiEvents.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/Panels/ExportImagePanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 
@@ -261,12 +262,23 @@ namespace DefectStudio
 			true,
 			FileSystem::Exists(defaultProjectTreeRoot.Native()) ? defaultProjectTreeRoot : Path{});
 		if (auto rendererLayer = m_RendererLayer.lock())
+		{
 			registerPanel<RendererPanel>(
 				*rendererLayer,
 				m_EventBus,
 				m_ContextManager,
 				"Renderer",
 				true);
+			// Hidden until RenderExportDialogState::open flips true (toolbar "Export PNG..." or
+			// the F12 command) - a real dockable panel, not a modal, since modal popups need a
+			// live ImGui window's ID stack at the OpenPopup() call site, which the F12 command
+			// path (an input-event handler) doesn't have.
+			registerPanel<ExportImagePanel>(
+				*rendererLayer,
+				m_EventBus,
+				"Export Image",
+				false);
+		}
 		registerPanel<SettingsPanel>(
 			m_EventBus,
 			m_JobSystem,

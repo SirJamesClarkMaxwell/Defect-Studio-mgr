@@ -164,3 +164,9 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.export.image"
+    chord: "F12"
+    command: "renderer.export.image"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true

@@ -11,6 +11,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "Core/Utils/Memory.hpp"
+#include "Core/Utils/Path.hpp"
 
 namespace DefectStudio
 {
@@ -63,5 +64,38 @@ namespace DefectStudio
 		bool viewInteractionActive = false;
 		std::string viewInteractionSource;
 		RendererViewSnapshot viewInteractionStart;
+	};
+
+	// T15-lite export dialog: resolution preset + filename proposed from the structure's source
+	// path + pan-to-reframe preview, rendered at the target aspect ratio so the exported image is
+	// never stretched (aspect ratio is correct by construction - "crop" here means reframing via
+	// pan, not a post-render pixel crop). One dialog instance application-wide (not per-window).
+	struct RenderExportDialogState
+	{
+		enum class ResolutionPreset
+		{
+			FullHd1080p,
+			QuadHd2K,
+			UltraHd4K,
+			Custom
+		};
+
+		bool open = false;
+		std::string targetWindowId;
+		std::string filename;
+		Path saveDirectory = Path("exports");
+		ResolutionPreset preset = ResolutionPreset::FullHd1080p;
+		int customWidth = 1920;
+		int customHeight = 1080;
+		// Fractions (0..1) trimmed from each edge on export - a real pixel crop (changes the
+		// output aspect ratio), independent of the pan/zoom reframing above.
+		float cropLeft = 0.0f;
+		float cropRight = 0.0f;
+		float cropTop = 0.0f;
+		float cropBottom = 0.0f;
+		// Owns its own camera (copied from the target window's live camera when the dialog opens,
+		// then mutated in place each frame by the preset/pan controls) - kept separate from the
+		// canonical RendererWindowState list, never touches the live window's own camera/state.
+		RendererWindowState previewState;
 	};
 } // namespace DefectStudio

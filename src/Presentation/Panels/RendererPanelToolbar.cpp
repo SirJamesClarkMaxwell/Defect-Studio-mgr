@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -377,6 +378,32 @@ namespace DefectStudio
 		ImGui::SameLine();
 		if (ImGui::Button("Periodic Table"))
 			m_Layer.GetShowPeriodicTableWindow() = true;
+		ImGui::SameLine();
+		if (ImGui::Button("Export PNG..."))
+		{
+			try
+			{
+				RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
+				dialog.open = true;
+				dialog.targetWindowId = windowState.windowId;
+				dialog.previewState.camera = CreateUnique<RendererViewCamera>(*windowState.camera);
+				dialog.previewState.showAtoms = windowState.showAtoms;
+				dialog.previewState.showBonds = windowState.showBonds;
+				dialog.previewState.showCellBox = windowState.showCellBox;
+				dialog.previewState.showGrid = windowState.showGrid;
+				dialog.previewState.selectedAtomIndices = windowState.selectedAtomIndices;
+
+				const std::string stem = windowState.structure.sourcePath.Native().stem().string();
+				dialog.filename = (stem.empty() ? "structure" : stem) + "_export";
+				// drawExportDialog() calls ImGui::OpenPopup once it sees dialog.open - keeps the
+				// button and the F12 command path (RendererLayer::onExportImageRequested, which
+				// runs outside any ImGui window context and can't call OpenPopup itself) in sync.
+			}
+			catch (const std::exception &exception)
+			{
+				DS_LOG_ERROR("Export dialog open failed: {}", exception.what());
+			}
+		}
 
 		ImGui::EndChild();
 	}
