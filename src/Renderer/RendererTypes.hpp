@@ -32,6 +32,10 @@ namespace DefectStudio
 		std::uint32_t secondAtomIndex = 0;
 		float radius = 0.09f;
 		RendererColorGradient gradient;
+		// Cartesian offset to add to secondAtomIndex's position before computing bond geometry -
+		// nonzero only for bonds that cross a periodic cell boundary (see Bond::periodicShift,
+		// already resolved to Cartesian here so rendering doesn't need the lattice matrix again).
+		glm::vec3 secondAtomPeriodicOffset = glm::vec3(0.0f);
 	};
 
 	struct RendererCellEdge

@@ -122,10 +122,19 @@ namespace DefectStudio
 	void RendererPanel::onViewportFocusChanged(const std::string &windowId, bool focused)
 	{
 		(void)windowId;
+		(void)focused;
 		auto contextManager = m_ContextManager.lock();
 		if (contextManager == nullptr)
 			return;
 
-		contextManager->SetActive(kRendererViewportFocusedContext, focused);
+		// Every renderer window shares this one context (there's no per-window keybind scoping),
+		// so it must reflect "is *any* viewport focused right now" - not just this window's own
+		// transition. Re-deriving it from RendererLayer's already-windowId-aware tracking (set
+		// synchronously by the FocusChanged publish just above this call) avoids a last-write-wins
+		// race: with two windows changing focus in the same frame (one losing it, one gaining it),
+		// whichever window happened to be visited last in the render loop used to decide the
+		// result regardless of which one was actually focused - intermittently leaving every
+		// renderer.viewport.focused-gated shortcut dead until focus was toggled again.
+		contextManager->SetActive(kRendererViewportFocusedContext, !m_Layer.GetFocusedViewportWindowId().empty());
 	}
 } // namespace DefectStudio

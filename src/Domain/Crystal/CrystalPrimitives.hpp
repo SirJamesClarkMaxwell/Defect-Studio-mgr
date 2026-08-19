@@ -36,6 +36,11 @@ namespace DefectStudio
 		float lengthAngstrom = 0.0f;
 		BondOrigin origin = BondOrigin::Auto;
 		bool visible = true;
+		// Integer count of lattice vectors (a, b, c) to add to secondAtomIndex's raw position to
+		// get the correct minimum-image bond geometry - nonzero only for bonds that cross a
+		// periodic cell boundary (e.g. a 2D sheet's edge atoms bonding to their image on the
+		// opposite face). Zero for every non-periodic bond, so existing bonds are unaffected.
+		glm::ivec3 periodicShift = glm::ivec3(0);
 	};
 
 	struct BondGenerationSettings

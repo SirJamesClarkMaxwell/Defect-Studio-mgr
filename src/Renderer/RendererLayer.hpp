@@ -76,6 +76,7 @@ namespace DefectStudio
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
 		[[nodiscard]] const RendererGlobalRenderSettings &GetGlobalSettings() const;
 		[[nodiscard]] bool IsAttached() const noexcept;
+		[[nodiscard]] const std::string &GetFocusedViewportWindowId() const noexcept;
 		[[nodiscard]] float GetLastDeltaTime() const noexcept;
 		[[nodiscard]] const RendererToolbarIconTexture *GetToolbarIcon(const std::string &fileName) const;
 		[[nodiscard]] const std::vector<std::string> &GetPeriodicTableSymbols() const;

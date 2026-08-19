@@ -36,7 +36,8 @@ namespace DefectStudio
 
 		[[nodiscard]] std::vector<RendererBondData> BuildRendererBonds(
 			const CrystalStructure &structure,
-			const std::vector<RendererAtomData> &atoms)
+			const std::vector<RendererAtomData> &atoms,
+			const glm::mat3 &lattice)
 		{
 			std::vector<RendererBondData> bonds;
 			bonds.reserve(structure.bonds.size());
@@ -57,6 +58,10 @@ namespace DefectStudio
 				bond.radius = std::max(0.05f, 0.22f * std::min(atomA.radius, atomB.radius));
 				bond.gradient.start = atomA.color;
 				bond.gradient.finish = atomB.color;
+				bond.secondAtomPeriodicOffset =
+					lattice[0] * static_cast<float>(domainBond.periodicShift.x) +
+					lattice[1] * static_cast<float>(domainBond.periodicShift.y) +
+					lattice[2] * static_cast<float>(domainBond.periodicShift.z);
 				bonds.push_back(bond);
 			}
 			return bonds;
@@ -88,7 +93,7 @@ namespace DefectStudio
 			atom.visible = true;
 			data.atoms.push_back(std::move(atom));
 		}
-		data.bonds = BuildRendererBonds(structure, data.atoms);
+		data.bonds = BuildRendererBonds(structure, data.atoms, data.lattice);
 
 		const float det = glm::determinant(data.lattice);
 		if (std::abs(det) > 1e-6f)

@@ -833,7 +833,12 @@ namespace DefectStudio
 				const RendererAtomData &secondAtom = structure.atoms[bond.secondAtomIndex];
 				if (!firstAtom.visible || !secondAtom.visible)
 					continue;
-				const glm::vec3 axis = secondAtom.cartesianPosition - firstAtom.cartesianPosition;
+				// secondAtomPosition, not secondAtom.cartesianPosition directly: nonzero for bonds
+				// that cross a periodic cell boundary (see RendererBondData::secondAtomPeriodicOffset)
+				// - the bond then correctly extends a little past the cell edge instead of drawing
+				// a bogus line straight across the whole cell to the atom's real (unwrapped) position.
+				const glm::vec3 secondAtomPosition = secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset;
+				const glm::vec3 axis = secondAtomPosition - firstAtom.cartesianPosition;
 				const float axisLength = glm::length(axis);
 				if (!std::isfinite(axisLength) || axisLength <= 0.0001f)
 					continue;
@@ -849,7 +854,7 @@ namespace DefectStudio
 				if (trimmedLength <= 0.001f)
 					continue;
 				const glm::vec3 bondStart = firstAtom.cartesianPosition + direction * shrinkA;
-				const glm::vec3 bondEnd = secondAtom.cartesianPosition - direction * shrinkB;
+				const glm::vec3 bondEnd = secondAtomPosition - direction * shrinkB;
 				OpenGlBondInstance instance;
 				instance.model = buildBondTransform(bondStart, bondEnd, bondRadius);
 				instance.colorA = glm::vec4(bond.gradient.start, 1.0f);

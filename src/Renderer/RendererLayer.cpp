@@ -185,6 +185,11 @@ namespace DefectStudio
 		return m_Attached;
 	}
 
+	const std::string &RendererLayer::GetFocusedViewportWindowId() const noexcept
+	{
+		return m_FocusedViewportWindowId;
+	}
+
 	float RendererLayer::GetLastDeltaTime() const noexcept
 	{
 		return m_LastDeltaTime;
