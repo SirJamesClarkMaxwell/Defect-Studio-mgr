@@ -4,8 +4,15 @@
 #include <system_error>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using FilePath = std::filesystem::path;
+
+struct DirectoryEntryInfo
+{
+	FilePath path;
+	bool isDirectory = false;
+};
 
 class FileSystem
 {
@@ -17,6 +24,9 @@ public:
 	[[nodiscard]] static FilePath TempDirectoryPath(std::error_code &error);
 
 	[[nodiscard]] static bool Exists(const FilePath &path);
+	[[nodiscard]] static bool IsDirectory(const FilePath &path);
+	// Non-recursive; entries unsorted. Returns empty on error (path missing, not a directory, or denied).
+	[[nodiscard]] static std::vector<DirectoryEntryInfo> ListDirectory(const FilePath &path);
 	static bool CreateDirectories(const FilePath &path);
 	static bool CreateDirectories(const FilePath &path, std::error_code &error);
 	static bool Remove(const FilePath &path);

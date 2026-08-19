@@ -1,0 +1,17 @@
+{
+  "profiles": [
+    {
+      "name": "simple-server",
+      "hops": [
+        { "host": "example.org", "user": "myuser", "password": "plaintext-password" }
+      ]
+    },
+    {
+      "name": "icm-okeanos",
+      "hops": [
+        { "host": "login.icm.edu.pl", "user": "frazab14", "password": "plaintext-password", "otp": true },
+        { "host": "okeanos", "user": "frazab14", "password": "plaintext-password" }
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/LoggingPanel.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
+#include "Presentation/Panels/ProjectTreePanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
 

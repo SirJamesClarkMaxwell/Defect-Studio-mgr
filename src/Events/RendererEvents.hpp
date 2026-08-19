@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Renderer/RendererConfig.hpp"
 #include "Renderer/RendererTypes.hpp"
 
@@ -169,3 +170,14 @@ namespace DefectStudio::RendererEvents::Viewport
 		bool additive = false;
 	};
 } // namespace DefectStudio::RendererEvents::Viewport
+
+namespace DefectStudio::RendererEvents::Windows
+{
+	// Opens filePath as a new renderer window at runtime (e.g. Project Tree "Open Defect").
+	// Handled off the main thread via JobSystem - see RendererLayer::onOpenStructureRequested.
+	struct OpenStructureRequested final : public BusEvent
+	{
+		Path filePath;
+		std::string displayName;
+	};
+} // namespace DefectStudio::RendererEvents::Windows

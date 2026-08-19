@@ -66,6 +66,10 @@ namespace DefectStudio
 		void UndoViewChange(const std::string &windowId);
 		void RedoViewChange(const std::string &windowId);
 		void SetViewportSize(const std::string &windowId, glm::vec2 size);
+		// Appends a runtime-opened window (e.g. Project Tree "Open Defect") - main thread only,
+		// callers must have already built a fully-formed RendererWindowState (see
+		// App/RendererRuntimeOpenCoordinator, which mirrors RendererStartupComposer's construction).
+		void AddWindow(RendererWindowState windowState);
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();

@@ -32,6 +32,29 @@ bool FileSystem::Exists(const FilePath &path)
 	return std::filesystem::exists(path.native());
 }
 
+bool FileSystem::IsDirectory(const FilePath &path)
+{
+	std::error_code error;
+	return std::filesystem::is_directory(path, error);
+}
+
+std::vector<DirectoryEntryInfo> FileSystem::ListDirectory(const FilePath &path)
+{
+	std::vector<DirectoryEntryInfo> entries;
+	std::error_code error;
+	std::filesystem::directory_iterator iterator(path, error);
+	if (error)
+		return entries;
+
+	for (const std::filesystem::directory_entry &entry : iterator)
+	{
+		std::error_code entryError;
+		const bool isDirectory = entry.is_directory(entryError);
+		entries.push_back(DirectoryEntryInfo{entry.path(), !entryError && isDirectory});
+	}
+	return entries;
+}
+
 bool FileSystem::CreateDirectories(const FilePath &path)
 {
 	return std::filesystem::create_directories(path);

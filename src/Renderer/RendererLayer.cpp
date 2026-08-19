@@ -135,6 +135,11 @@ namespace DefectStudio
 		return m_EventBus;
 	}
 
+	void RendererLayer::AddWindow(RendererWindowState windowState)
+	{
+		m_Windows.push_back(std::move(windowState));
+	}
+
 	std::vector<RendererWindowState> &RendererLayer::GetWindows()
 	{
 		return m_Windows;
