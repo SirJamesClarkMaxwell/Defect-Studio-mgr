@@ -302,6 +302,17 @@ group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
+
+-- Patch the vendored ImGui project from here rather than editing Vendor/imgui/imconfig.h: that
+-- file lives inside the ImGui git submodule, and `git submodule update --force`
+-- (scripts/Windows/GenerateProjects.bat) silently discards uncommitted edits there. See
+-- src/Presentation/ImGuiUserConfig.hpp for what this actually overrides.
+project "ImGui"
+    includedirs { "src" }
+    filter "configurations:Debug"
+        defines { 'IMGUI_USER_CONFIG="Presentation/ImGuiUserConfig.hpp"' }
+    filter {}
+
 DefineYamlCppProject()
 DefineGoogleTestProjects()
 DefineTracyProject()
@@ -514,7 +525,7 @@ project "DefectStudio"
         defines { "DS_PLATFORM_MACOS" }
 
     filter "configurations:Debug"
-        defines { "DS_DEBUG" }
+        defines { "DS_DEBUG", 'IMGUI_USER_CONFIG="Presentation/ImGuiUserConfig.hpp"' }
         symbols "On"
 
     filter "configurations:Release"
@@ -653,7 +664,7 @@ project "DefectStudioTests"
         defines { "DS_PLATFORM_MACOS" }
 
     filter "configurations:Debug"
-        defines { "DS_DEBUG" }
+        defines { "DS_DEBUG", 'IMGUI_USER_CONFIG="Presentation/ImGuiUserConfig.hpp"' }
         symbols "On"
 
     filter "configurations:Release"

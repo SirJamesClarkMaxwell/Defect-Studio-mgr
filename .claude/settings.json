@@ -12,7 +12,12 @@
       "Bash(scripts/Windows/RunWithTracy.bat)",
       "Bash(scripts/Windows/RunWithTracy.bat *)",
       "Bash(scripts/Windows/GenerateProjects.bat)",
-      "Bash(scripts/Windows/GenerateProjects.bat *)"
+      "Bash(scripts/Windows/GenerateProjects.bat *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(./scripts/Windows/BuildErrorsOnly.bat --config Debug)"
     ]
   }
 }
