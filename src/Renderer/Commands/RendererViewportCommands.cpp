@@ -190,4 +190,49 @@ namespace DefectStudio
 				bus.Publish(event);
 			});
 	}
+
+	Unique<ICommand> CreateRendererSelectionToolToggleCommand(Ref<EventBus> eventBus, SelectionToolMode tool)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer toggle selection tool",
+			[tool](EventBus &bus) {
+				RendererEvents::Viewport::SelectionToolToggleRequested event;
+				event.tool = tool;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer hide selection",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::HideSelectionRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererShowAllCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer show all",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::ShowAllRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererSelectionInvertCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer invert selection",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::SelectionInvertRequested event;
+				bus.Publish(event);
+			});
+	}
 } // namespace DefectStudio

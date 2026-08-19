@@ -170,3 +170,33 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.box_select_toggle"
+    chord: "Alt+B"
+    command: "renderer.selection.box_select_toggle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.circle_select_toggle"
+    chord: "Alt+C"
+    command: "renderer.selection.circle_select_toggle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.hide"
+    chord: "H"
+    command: "renderer.selection.hide"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.show_all"
+    chord: "Alt+H"
+    command: "renderer.selection.show_all"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.invert"
+    chord: "I"
+    command: "renderer.selection.invert"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true

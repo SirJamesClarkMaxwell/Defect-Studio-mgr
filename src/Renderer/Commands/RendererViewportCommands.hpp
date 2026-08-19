@@ -27,4 +27,10 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererSaveCurrentViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererCycleSavedViewCommand(Ref<EventBus> eventBus, int direction);
 	[[nodiscard]] Unique<ICommand> CreateRendererExportImageCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererSelectionToolToggleCommand(
+		Ref<EventBus> eventBus,
+		SelectionToolMode tool);
+	[[nodiscard]] Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererShowAllCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererSelectionInvertCommand(Ref<EventBus> eventBus);
 } // namespace DefectStudio

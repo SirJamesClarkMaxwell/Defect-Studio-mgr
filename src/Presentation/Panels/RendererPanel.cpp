@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <glm/gtc/quaternion.hpp>
@@ -15,6 +16,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
 {
@@ -131,10 +133,67 @@ namespace DefectStudio
 			ImVec2(1.0f, 0.0f));
 
 		const bool hovered = ImGui::IsItemHovered();
-		if (hovered)
-		{
-			applyViewportInputNavigation(windowState, imageOrigin, deltaTime);
 
+		if (windowState.activeSelectionTool == SelectionToolMode::Box && windowState.selectionDragActive)
+		{
+			ImDrawList *drawList = ImGui::GetWindowDrawList();
+			const ImVec2 start(
+				imageOrigin.x + windowState.selectionDragStart.x,
+				imageOrigin.y + windowState.selectionDragStart.y);
+			const ImVec2 current(
+				imageOrigin.x + windowState.selectionDragCurrent.x,
+				imageOrigin.y + windowState.selectionDragCurrent.y);
+			const ImVec2 rectMin(std::min(start.x, current.x), std::min(start.y, current.y));
+			const ImVec2 rectMax(std::max(start.x, current.x), std::max(start.y, current.y));
+			drawList->AddRectFilled(rectMin, rectMax, IM_COL32(255, 200, 60, 40));
+			drawList->AddRect(rectMin, rectMax, IM_COL32(255, 200, 60, 255));
+		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::Circle && hovered)
+		{
+			// Brush cursor: always follows the live mouse position at the persistent,
+			// scroll-adjustable radius - not a drag-defined shape like box-select.
+			const ImVec2 mousePos = ImGui::GetMousePos();
+			ImDrawList *drawList = ImGui::GetWindowDrawList();
+			drawList->AddCircleFilled(mousePos, windowState.circleSelectRadius, IM_COL32(255, 200, 60, 40));
+			drawList->AddCircle(mousePos, windowState.circleSelectRadius, IM_COL32(255, 200, 60, 255));
+		}
+
+		if (hovered && windowState.activeSelectionTool == SelectionToolMode::Circle)
+		{
+			ImGuiIO &io = ImGui::GetIO();
+			if (io.MouseWheel != 0.0f)
+			{
+				constexpr float kRadiusStep = 6.0f;
+				constexpr float kMinRadius = 6.0f;
+				constexpr float kMaxRadius = 400.0f;
+				windowState.circleSelectRadius = std::clamp(
+					windowState.circleSelectRadius + io.MouseWheel * kRadiusStep, kMinRadius, kMaxRadius);
+				io.MouseWheel = 0.0f;
+			}
+		}
+
+		if (hovered)
+			applyViewportInputNavigation(windowState, imageOrigin, deltaTime);
+		else
+		{
+			windowState.dragActive = false;
+			if (windowState.viewInteractionActive &&
+				windowState.viewInteractionSource.rfind("mouse.", 0) == 0)
+			{
+				m_Layer.CommitViewInteraction(windowState.windowId);
+			}
+		}
+
+		if (windowState.activeSelectionTool == SelectionToolMode::Box)
+		{
+			handleBoxSelectDrag(windowState, imageOrigin, hovered);
+		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::Circle)
+		{
+			handleCircleSelectDrag(windowState, imageOrigin, hovered);
+		}
+		else if (hovered)
+		{
 			ImGuiIO &io = ImGui::GetIO();
 			const bool leftClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 				!ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
@@ -151,15 +210,6 @@ namespace DefectStudio
 				{
 					handleAtomPick(windowState, relX, relY, io.KeyCtrl);
 				}
-			}
-		}
-		else
-		{
-			windowState.dragActive = false;
-			if (windowState.viewInteractionActive &&
-				windowState.viewInteractionSource.rfind("mouse.", 0) == 0)
-			{
-				m_Layer.CommitViewInteraction(windowState.windowId);
 			}
 		}
 
@@ -232,6 +282,138 @@ namespace DefectStudio
 			event.additive = additive;
 			eventBus->Publish(event);
 		}
+	}
+
+	void RendererPanel::handleBoxSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered)
+	{
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		const glm::vec2 relativeMouse(mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
+
+		if (!windowState.selectionDragActive)
+		{
+			if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+				return;
+			windowState.selectionDragActive = true;
+			windowState.selectionDragStart = relativeMouse;
+			windowState.selectionDragCurrent = relativeMouse;
+			return;
+		}
+
+		windowState.selectionDragCurrent = relativeMouse;
+		if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+		{
+			windowState.selectionDragActive = false;
+			const glm::vec2 rectMin(
+				std::min(windowState.selectionDragStart.x, windowState.selectionDragCurrent.x),
+				std::min(windowState.selectionDragStart.y, windowState.selectionDragCurrent.y));
+			const glm::vec2 rectMax(
+				std::max(windowState.selectionDragStart.x, windowState.selectionDragCurrent.x),
+				std::max(windowState.selectionDragStart.y, windowState.selectionDragCurrent.y));
+
+			ImGuiIO &io = ImGui::GetIO();
+			publishRegionSelection(windowState, hitTestRect(windowState, rectMin, rectMax), resolveRegionSelectMode(io.KeyShift, io.KeyCtrl));
+		}
+	}
+
+	// Circle-select is a live brush, not a drag-defined shape: a plain click selects once at the
+	// click position (replace), Shift held while the mouse button is down paints continuously
+	// (add) as the brush follows the cursor, Ctrl held paints continuously (subtract).
+	void RendererPanel::handleCircleSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered)
+	{
+		if (!hovered)
+			return;
+
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		const glm::vec2 center(mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
+		ImGuiIO &io = ImGui::GetIO();
+
+		if (io.KeyShift && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+		{
+			publishRegionSelection(
+				windowState,
+				hitTestCircle(windowState, center, windowState.circleSelectRadius),
+				RendererEvents::Viewport::RegionSelectMode::Add);
+			return;
+		}
+		if (io.KeyCtrl && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+		{
+			publishRegionSelection(
+				windowState,
+				hitTestCircle(windowState, center, windowState.circleSelectRadius),
+				RendererEvents::Viewport::RegionSelectMode::Subtract);
+			return;
+		}
+		if (!io.KeyShift && !io.KeyCtrl && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+		{
+			publishRegionSelection(
+				windowState,
+				hitTestCircle(windowState, center, windowState.circleSelectRadius),
+				RendererEvents::Viewport::RegionSelectMode::Replace);
+		}
+	}
+
+	std::vector<std::size_t> RendererPanel::hitTestRect(
+		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
+		{
+			if (!windowState.structure.atoms[i].visible)
+				continue;
+			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
+				viewProjection, windowState.viewportSize, windowState.structure.atoms[i].cartesianPosition);
+			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	std::vector<std::size_t> RendererPanel::hitTestCircle(
+		const RendererWindowState &windowState, glm::vec2 center, float radius) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
+		{
+			if (!windowState.structure.atoms[i].visible)
+				continue;
+			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
+				viewProjection, windowState.viewportSize, windowState.structure.atoms[i].cartesianPosition);
+			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	RendererEvents::Viewport::RegionSelectMode RendererPanel::resolveRegionSelectMode(bool additive, bool subtractive)
+	{
+		if (additive)
+			return RendererEvents::Viewport::RegionSelectMode::Add;
+		if (subtractive)
+			return RendererEvents::Viewport::RegionSelectMode::Subtract;
+		return RendererEvents::Viewport::RegionSelectMode::Replace;
+	}
+
+	void RendererPanel::publishRegionSelection(
+		RendererWindowState &windowState,
+		std::vector<std::size_t> atomIndices,
+		RendererEvents::Viewport::RegionSelectMode mode)
+	{
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		if (eventBus == nullptr)
+			return;
+		RendererEvents::Viewport::RegionSelectionRequested event;
+		event.windowId = windowState.windowId;
+		event.atomIndices = std::move(atomIndices);
+		event.mode = mode;
+		eventBus->Publish(event);
 	}
 
 	void RendererPanel::drawPeriodicTableWindow()

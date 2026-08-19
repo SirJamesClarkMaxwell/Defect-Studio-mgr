@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace DefectStudio::RendererEvents::Config
 {
@@ -173,6 +174,46 @@ namespace DefectStudio::RendererEvents::Viewport
 		std::string windowId;
 		std::optional<std::size_t> atomIndex;
 		bool additive = false;
+	};
+
+	// Toggles the active drag-select tool: pressing the chord for the already-active tool turns
+	// it back off (mode None), pressing the other one switches directly.
+	struct SelectionToolToggleRequested final : public BusEvent
+	{
+		std::string windowId;
+		SelectionToolMode tool = SelectionToolMode::None;
+	};
+
+	enum class RegionSelectMode
+	{
+		Replace,
+		Add,
+		Subtract
+	};
+
+	// Published by RendererPanel once a box/circle drag completes, with the already hit-tested
+	// (and visibility-filtered) atom indices - RendererLayer only applies set semantics, it does
+	// not redo any projection math.
+	struct RegionSelectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		std::vector<std::size_t> atomIndices;
+		RegionSelectMode mode = RegionSelectMode::Replace;
+	};
+
+	struct HideSelectionRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	struct ShowAllRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	struct SelectionInvertRequested final : public BusEvent
+	{
+		std::string windowId;
 	};
 } // namespace DefectStudio::RendererEvents::Viewport
 

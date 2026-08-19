@@ -448,6 +448,18 @@ namespace DefectStudio
 			resources.atomsDirty = true;
 			resources.lastSelectionHash = selectionHash;
 		}
+		std::size_t visibilityHash = 1469598103934665603ull;
+		for (std::size_t index = 0; index < structure.atoms.size(); ++index)
+		{
+			if (!structure.atoms[index].visible)
+				visibilityHash ^= index + 0x9e3779b97f4a7c15ull + (visibilityHash << 6) + (visibilityHash >> 2);
+		}
+		if (resources.lastVisibilityHash != visibilityHash)
+		{
+			resources.atomsDirty = true;
+			resources.bondsDirty = true;
+			resources.lastVisibilityHash = visibilityHash;
+		}
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
 		glClearColor(

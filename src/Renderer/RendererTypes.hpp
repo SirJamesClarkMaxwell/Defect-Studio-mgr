@@ -52,6 +52,13 @@ namespace DefectStudio
 		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
 	};
 
+	enum class SelectionToolMode
+	{
+		None,
+		Box,
+		Circle
+	};
+
 	struct RendererViewSnapshot
 	{
 		glm::vec3 target = glm::vec3(0.0f);
@@ -60,6 +67,8 @@ namespace DefectStudio
 		float pitch = 0.0f;
 		float roll = 0.0f;
 		CameraProjection projection = CameraProjection::Perspective;
+		std::vector<std::size_t> selectedAtomIndices;
+		std::vector<std::size_t> hiddenAtomIndices;
 	};
 
 	struct RendererViewStateChange

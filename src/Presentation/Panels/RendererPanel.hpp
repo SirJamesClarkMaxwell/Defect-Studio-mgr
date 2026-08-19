@@ -33,6 +33,17 @@ namespace DefectStudio
 		void applyViewportInputNavigation(RendererWindowState &windowState, const ImVec2 &imageOrigin, float deltaTime);
 		void onViewportFocusChanged(const std::string &windowId, bool focused);
 		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
+		void handleBoxSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
+		void handleCircleSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
+		[[nodiscard]] std::vector<std::size_t> hitTestRect(
+			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
+		[[nodiscard]] std::vector<std::size_t> hitTestCircle(
+			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
+		[[nodiscard]] static RendererEvents::Viewport::RegionSelectMode resolveRegionSelectMode(bool additive, bool subtractive);
+		void publishRegionSelection(
+			RendererWindowState &windowState,
+			std::vector<std::size_t> atomIndices,
+			RendererEvents::Viewport::RegionSelectMode mode);
 		void drawPeriodicTableWindow();
 
 	private:

@@ -26,6 +26,7 @@
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/ViewModifier.hpp"
 
 namespace DefectStudio
 {
@@ -106,7 +107,14 @@ namespace DefectStudio
 		return angleRadians * 57.295779513f;
 	}
 
-	[[nodiscard]] RendererViewSnapshot CaptureViewSnapshotFromCamera(const RendererViewCamera &camera)
+	// Camera-only capture - the three keyboard step handlers below build `after` from a scratch
+	// RendererViewCamera copy, not from the real windowState, so selection/visibility can't be
+	// read off it directly. `selectionSource` (always the handler's own `before` snapshot, since
+	// none of these operations touch selection/visibility) carries those fields through instead
+	// of leaving them default-empty, which previously made restoreViewSnapshot wipe selection and
+	// reveal every hidden atom on every align-axis/orbit-step/roll-step keypress.
+	[[nodiscard]] RendererViewSnapshot CaptureViewSnapshotFromCamera(
+		const RendererViewCamera &camera, const RendererViewSnapshot &selectionSource)
 	{
 		RendererViewSnapshot snapshot;
 		snapshot.target = camera.Target();
@@ -115,6 +123,8 @@ namespace DefectStudio
 		snapshot.pitch = camera.Pitch();
 		snapshot.roll = camera.Roll();
 		snapshot.projection = camera.Projection();
+		snapshot.selectedAtomIndices = selectionSource.selectedAtomIndices;
+		snapshot.hiddenAtomIndices = selectionSource.hiddenAtomIndices;
 		return snapshot;
 	}
 
@@ -536,6 +546,16 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onProjectionToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::AtomSelectionRequested>(
 				std::bind_front(&RendererLayer::onAtomSelectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionToolToggleRequested>(
+				std::bind_front(&RendererLayer::onSelectionToolToggleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RegionSelectionRequested>(
+				std::bind_front(&RendererLayer::onRegionSelectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::HideSelectionRequested>(
+				std::bind_front(&RendererLayer::onHideSelectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ShowAllRequested>(
+				std::bind_front(&RendererLayer::onShowAllRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionInvertRequested>(
+				std::bind_front(&RendererLayer::onSelectionInvertRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -755,6 +775,11 @@ namespace DefectStudio
 		snapshot.pitch = windowState.camera->Pitch();
 		snapshot.roll = windowState.camera->Roll();
 		snapshot.projection = windowState.camera->Projection();
+
+		snapshot.selectedAtomIndices = windowState.selectedAtomIndices;
+		for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+			if (!windowState.structure.atoms[index].visible)
+				snapshot.hiddenAtomIndices.push_back(index);
 		return snapshot;
 	}
 
@@ -766,6 +791,10 @@ namespace DefectStudio
 		if (windowState.camera == nullptr)
 			return;
 		windowState.camera->SetProjection(snapshot.projection);
+
+		SceneSystem::ApplySelectionAndVisibilityToScene(
+			windowState.sceneRegistry, snapshot.selectedAtomIndices, snapshot.hiddenAtomIndices);
+		SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 
 		const char *resolvedSourceAction =
 			(sourceAction != nullptr && sourceAction[0] != '\0')
@@ -796,7 +825,9 @@ namespace DefectStudio
 			std::abs(RendererViewCamera::NormalizeAngleRadians(before.pitch - after.pitch)) <= kEpsilon &&
 			std::abs(RendererViewCamera::NormalizeAngleRadians(before.roll - after.roll)) <= kEpsilon &&
 			before.projection == after.projection;
-		if (sameTarget && sameScalars)
+		const bool sameSelection = before.selectedAtomIndices == after.selectedAtomIndices;
+		const bool sameVisibility = before.hiddenAtomIndices == after.hiddenAtomIndices;
+		if (sameTarget && sameScalars && sameSelection && sameVisibility)
 			return;
 
 		RendererViewStateChange change;
@@ -868,7 +899,7 @@ namespace DefectStudio
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		RendererViewCamera targetCamera = *windowState->camera;
 		targetCamera.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
-		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera);
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
 		pushViewChange(*windowState, before, after, "keyboard.align_axis");
 		restoreViewSnapshot(*windowState, after, "keyboard.align_axis");
 	}
@@ -967,7 +998,7 @@ namespace DefectStudio
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		RendererViewCamera targetCamera = *windowState->camera;
 		targetCamera.Orbit(event.dx, event.dy);
-		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera);
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
 		pushViewChange(*windowState, before, after, "keyboard.orbit_step");
 		restoreViewSnapshot(*windowState, after, "keyboard.orbit_step");
 	}
@@ -981,7 +1012,7 @@ namespace DefectStudio
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		RendererViewCamera targetCamera = *windowState->camera;
 		targetCamera.Roll(event.delta);
-		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera);
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
 		pushViewChange(*windowState, before, after, "keyboard.roll_step");
 		restoreViewSnapshot(*windowState, after, "keyboard.roll_step");
 	}
@@ -1174,6 +1205,76 @@ namespace DefectStudio
 		SelectionComponent &selection = atomEntity.GetComponent<SelectionComponent>();
 		selection.selected = !selection.selected;
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+	}
+
+	void RendererLayer::onSelectionToolToggleRequested(const RendererEvents::Viewport::SelectionToolToggleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->activeSelectionTool =
+			(windowState->activeSelectionTool == event.tool) ? SelectionToolMode::None : event.tool;
+		windowState->selectionDragActive = false;
+	}
+
+	void RendererLayer::onRegionSelectionRequested(const RendererEvents::Viewport::RegionSelectionRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		SceneRegistry &scene = windowState->sceneRegistry;
+		entt::registry &registry = scene.Registry();
+
+		if (event.mode == RendererEvents::Viewport::RegionSelectMode::Replace)
+			for (const entt::entity entity : registry.view<SelectionComponent>())
+				registry.get<SelectionComponent>(entity).selected = false;
+
+		const bool selectedValue = event.mode != RendererEvents::Viewport::RegionSelectMode::Subtract;
+		for (const std::size_t atomIndex : event.atomIndices)
+		{
+			Entity atomEntity = scene.AtomEntityAt(atomIndex);
+			if (atomEntity)
+				atomEntity.GetComponent<SelectionComponent>().selected = selectedValue;
+		}
+		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+	}
+
+	void RendererLayer::onHideSelectionRequested(const RendererEvents::Viewport::HideSelectionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		HideSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		pushViewChange(*windowState, before, after, "keyboard.hide_selection");
+	}
+
+	void RendererLayer::onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		ShowAllModifier{}.Apply(windowState->sceneRegistry, *windowState);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		pushViewChange(*windowState, before, after, "keyboard.show_all");
+	}
+
+	void RendererLayer::onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		InvertSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
+		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
+		pushViewChange(*windowState, before, after, "keyboard.invert_selection");
 	}
 
 	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)

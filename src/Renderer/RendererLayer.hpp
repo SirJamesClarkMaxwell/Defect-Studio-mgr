@@ -126,6 +126,11 @@ namespace DefectStudio
 		void onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event);
 		void onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event);
 		void onAtomSelectionRequested(const RendererEvents::Viewport::AtomSelectionRequested &event);
+		void onSelectionToolToggleRequested(const RendererEvents::Viewport::SelectionToolToggleRequested &event);
+		void onRegionSelectionRequested(const RendererEvents::Viewport::RegionSelectionRequested &event);
+		void onHideSelectionRequested(const RendererEvents::Viewport::HideSelectionRequested &event);
+		void onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event);
+		void onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		[[nodiscard]] RendererWindowState *findViewportCommandWindow(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;

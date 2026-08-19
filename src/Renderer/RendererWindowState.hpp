@@ -70,6 +70,15 @@ namespace DefectStudio
 		bool viewInteractionActive = false;
 		std::string viewInteractionSource;
 		RendererViewSnapshot viewInteractionStart;
+		// Box/circle drag-select (Alt+B / Alt+C). Coordinates are viewport-relative pixels, same
+		// space as RendererPanel::handleAtomPick's relX/relY.
+		SelectionToolMode activeSelectionTool = SelectionToolMode::None;
+		bool selectionDragActive = false;
+		glm::vec2 selectionDragStart = glm::vec2(0.0f);
+		glm::vec2 selectionDragCurrent = glm::vec2(0.0f);
+		// Circle-select brush radius in viewport pixels - persistent per window, adjusted with the
+		// mouse wheel while the circle tool is active (scroll up = bigger, down = smaller).
+		float circleSelectRadius = 48.0f;
 	};
 
 	// T15-lite export dialog: resolution preset + filename proposed from the structure's source

@@ -22,5 +22,14 @@ namespace DefectStudio
 		// Every mutation path (click/box/circle-select, hide/show-all/view-modifiers) ends with
 		// this call.
 		void PushSelectionAndVisibilityToWindowState(const SceneRegistry &scene, RendererWindowState &windowState);
+
+		// The reverse of PushSelectionAndVisibilityToWindowState - sets SelectionComponent/
+		// VisibilityComponent from index lists (e.g. a restored RendererViewSnapshot). Caller is
+		// responsible for following up with PushSelectionAndVisibilityToWindowState to sync the
+		// flat arrays back, per the same contract as every other mutation path.
+		void ApplySelectionAndVisibilityToScene(
+			SceneRegistry &scene,
+			const std::vector<std::size_t> &selectedAtomIndices,
+			const std::vector<std::size_t> &hiddenAtomIndices);
 	} // namespace SceneSystem
 } // namespace DefectStudio

@@ -101,6 +101,26 @@ namespace DefectStudio
 		{
 			return CreateRendererExportImageCommand(std::move(eventBus));
 		}
+
+		Unique<ICommand> MakeSelectionToolToggleCommand(Ref<EventBus> eventBus, SelectionToolMode tool, CommandContext &)
+		{
+			return CreateRendererSelectionToolToggleCommand(std::move(eventBus), tool);
+		}
+
+		Unique<ICommand> MakeHideSelectionCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererHideSelectionCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeShowAllCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererShowAllCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeSelectionInvertCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererSelectionInvertCommand(std::move(eventBus));
+		}
 	}
 
 	void RegisterRendererCommands(CommandRegistry &registry, Ref<EventBus> eventBus)
@@ -239,5 +259,35 @@ namespace DefectStudio
 			"Renderer: Export image (PNG)",
 			"Save the active renderer viewport's current frame to exports/ as a PNG.",
 			std::bind_front(MakeExportImageCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.box_select_toggle",
+			"Renderer: Toggle box-select",
+			"Toggle box drag-select on the active renderer viewport.",
+			std::bind_front(MakeSelectionToolToggleCommand, eventBus, SelectionToolMode::Box));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.circle_select_toggle",
+			"Renderer: Toggle circle-select",
+			"Toggle circle drag-select on the active renderer viewport.",
+			std::bind_front(MakeSelectionToolToggleCommand, eventBus, SelectionToolMode::Circle));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.hide",
+			"Renderer: Hide selection",
+			"Hide the currently selected atoms in the active renderer viewport.",
+			std::bind_front(MakeHideSelectionCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.show_all",
+			"Renderer: Show all",
+			"Make all atoms visible in the active renderer viewport.",
+			std::bind_front(MakeShowAllCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.invert",
+			"Renderer: Invert selection",
+			"Invert the atom selection in the active renderer viewport.",
+			std::bind_front(MakeSelectionInvertCommand, eventBus));
 	}
 } // namespace DefectStudio

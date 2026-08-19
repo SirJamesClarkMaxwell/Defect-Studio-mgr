@@ -2,6 +2,8 @@
 
 #include "Renderer/Scene/SceneSystem.hpp"
 
+#include <unordered_set>
+
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 
@@ -65,6 +67,23 @@ namespace DefectStudio::SceneSystem
 			windowState.structure.atoms[atomComponent.atomIndex].visible = visibilityComponent.visible;
 			if (selectionComponent.selected)
 				windowState.selectedAtomIndices.push_back(atomComponent.atomIndex);
+		}
+	}
+
+	void ApplySelectionAndVisibilityToScene(
+		SceneRegistry &scene,
+		const std::vector<std::size_t> &selectedAtomIndices,
+		const std::vector<std::size_t> &hiddenAtomIndices)
+	{
+		const std::unordered_set<std::size_t> selectedSet(selectedAtomIndices.begin(), selectedAtomIndices.end());
+		const std::unordered_set<std::size_t> hiddenSet(hiddenAtomIndices.begin(), hiddenAtomIndices.end());
+
+		const std::vector<entt::entity> &atomEntities = scene.AtomEntities();
+		for (std::size_t index = 0; index < atomEntities.size(); ++index)
+		{
+			Entity entity(atomEntities[index], &scene);
+			entity.GetComponent<SelectionComponent>().selected = selectedSet.contains(index);
+			entity.GetComponent<VisibilityComponent>().visible = !hiddenSet.contains(index);
 		}
 	}
 } // namespace DefectStudio::SceneSystem
