@@ -545,6 +545,67 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 ---
 
+## T08.5 – Interaction & View Modifiers (`task/08.5-interaction`)
+
+> Fast-track wstawiony między T08 a T09 na prośbę użytkownika. Selekcja box/circle, hide/show/invert,
+> nazwane widoki + domyślny widok projektu — pełny plan commit-po-commicie (C1-C12) w
+> `docs/work/project/plans/rzeczy-do-dodania-jak-quirky-shell.md` (zewnętrzny plan reconciliation).
+
+- [x] Box-select (`Alt+B`) / circle-select (`Alt+C`, live scroll-resizable brush)
+- [x] Hide selection (`H`) / show all (`Alt+H`) / invert selection (`I`) — pełny `ViewModifier` pipeline
+- [x] `RendererViewSnapshot` rozszerzony o selekcję/widoczność (index + position-based, cross-structure
+      resolve po najbliższej pozycji)
+- [x] Nazwane widoki + domyślny widok projektu (set `Ctrl+D` / apply `Alt+D`, session-scoped do
+      czasu T07.5.1)
+- [x] Okna renderera: stabilna tożsamość (`title###windowId`) niezależna od wyświetlanej nazwy,
+      rename z UI
+- [ ] Select by element — **odłożone**, brak zastosowania na teraz (decyzja użytkownika)
+
+**Biblioteki:** brak nowych (reuse `CommandRegistry`, `KeymapResolver`, ECS z T08)
+
+---
+
+## T08.6 – Electronic Structure Foundations (`task/08.6-electronic-structure`)
+
+> Fast-track, promocja z Backlogu (VASP OUTCAR/WAVECAR integration) na wprost prośbę użytkownika —
+> rysowanie funkcji falowej defektu jest priorytetem. Pełny research (puntukas API, zweryfikowany
+> w źródle nie z tutoriala) w zewnętrznym planie `rzeczy-do-dodania-jak-quirky-shell.md`, sekcja
+> T08.6. **Zależność z T14**: wymaga fast-tracku generycznego jądra isosurface (compute shader) —
+> zob. T14 niżej.
+
+### T08.6.1 — Parsing (puntukas)
+- [x] `VaspOutputBridge` (subprocess przez `VaspOutput.from_directory`, ten sam wzorzec co
+      `PuntukasBridge`) — band-gap/HOMO/LUMO + per-band orbital data (energy/occupation/
+      localization/irrep, oba kanały spinowe), oba gracefully `null` przy braku vasprun.xml/WAVECAR
+- [ ] `VaspOutputJob` (`IJob`, wzorem `OpenDefectJob`) — async wrapper, **bez** jeszcze dispatch
+      coordinatora/triggera UI (czeka na T08.6.3 — nie ma skąd tego dziś odpalić)
+
+### T08.6.2 — Model domenowy
+- [ ] `Domain/Electronic/ElectronicStructureModel` — `BandGapData`, `OrbitalChannelData`,
+      `OrbitalRecord`, `ElectronicStructureData` (niezależne od `ScientificRuntime`, konwerter
+      osobno jak `PymatgenConversion`)
+- [ ] Filtr progu `localization_factor` (`LocalizationThresholdSettings` — konkretny struct,
+      nie generyczny `ProjectDefault<T>`, brak dziś w kodzie drugiego call-site który by to uzasadnił)
+- [ ] Klasyfikacja singlet/triplet z occupation per kanał spinowy — **pierwsza wersja to heurystyka,
+      wymaga walidacji przez użytkownika** (fizyka, nie coś do zgadnięcia bez feedbacku)
+- [ ] Bulk reference + band-window-względem-gapu ustawienie — **odłożone, brakuje indeksu pasma
+      HOMO/LUMO w `VaspOutputBridge`** (dziś tylko energia), do doprecyzowania z puntukas API
+      zanim da się zmapować na `start`/`end` w `get_orbital_data_for_two_spins`
+
+### T08.6.3 — UI
+- [ ] Vendor ImPlot
+- [ ] Panel struktury elektronowej — diagram poziomów/obsadzenia (VB/CB shaded, poziomy w gapie,
+      strzałki obsadzenia per kanał spinowy)
+- [ ] Klikalny poziom → render funkcji falowej w 3D (konsumuje T14-core)
+- [ ] **Control Panel** (zob. sekcja niżej) jako naturalny dom dla suwaków tego panelu: okno pasm
+      (below/above gap), próg localization factor, wybór kanału spinowego, iso-value, single-/
+      multi-level toggle — nie osobny ad-hoc panel per suwak
+- [ ] Eksport stanów elektronowych do plików przyjaznych OriginLab (CSV/TSV)
+
+**Biblioteki:** ImPlot (nowy vendor), puntukas (Python, już opcjonalna zależność)
+
+---
+
 ## T09 – Advanced Renderer (`task/09-advanced-render`)
 
 > Po działającym T08. Poprawiamy jakość renderowania.
