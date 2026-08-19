@@ -1,0 +1,62 @@
+#include <gtest/gtest.h>
+
+#include "Domain/Electronic/ElectronicStructureModel.hpp"
+
+namespace DefectStudio::Tests
+{
+	namespace
+	{
+		[[nodiscard]] OrbitalRecord MakeRecord(
+			int band,
+			float upEnergy, float upOccupation, float upLocalization,
+			float downEnergy, float downOccupation, float downLocalization)
+		{
+			OrbitalRecord record;
+			record.band = band;
+			record.up = OrbitalChannelData{upEnergy, upOccupation, upLocalization, std::nullopt};
+			record.down = OrbitalChannelData{downEnergy, downOccupation, downLocalization, std::nullopt};
+			return record;
+		}
+	} // namespace
+
+	TEST(ElectronicStructureModelTests, FilterByLocalizationThresholdKeepsRecordAboveEitherChannel)
+	{
+		const std::vector<OrbitalRecord> orbitals = {
+			MakeRecord(0, 0.0f, 1.0f, 0.9f, 0.0f, 1.0f, 0.1f),  // up localized, down not
+			MakeRecord(1, 0.5f, 1.0f, 0.2f, 0.5f, 1.0f, 0.3f),  // neither localized
+			MakeRecord(2, 1.0f, 0.0f, 0.1f, 1.0f, 0.0f, 0.95f)}; // down localized, up not
+
+		const std::vector<OrbitalRecord> filtered =
+			FilterByLocalizationThreshold(orbitals, LocalizationThresholdSettings{0.5f});
+
+		ASSERT_EQ(filtered.size(), 2u);
+		EXPECT_EQ(filtered[0].band, 0);
+		EXPECT_EQ(filtered[1].band, 2);
+	}
+
+	TEST(ElectronicStructureModelTests, ClassifySpinMultiplicityReturnsUnknownForEmptyWindow)
+	{
+		EXPECT_EQ(ClassifySpinMultiplicity({}), SpinMultiplicity::Unknown);
+	}
+
+	TEST(ElectronicStructureModelTests, ClassifySpinMultiplicityReturnsSingletForPairedOccupation)
+	{
+		const std::vector<OrbitalRecord> window = {
+			MakeRecord(0, -0.1f, 1.0f, 0.8f, -0.1f, 1.0f, 0.8f),
+			MakeRecord(1, 1.4f, 1.0f, 0.7f, 1.4f, 1.0f, 0.7f)};
+
+		EXPECT_EQ(ClassifySpinMultiplicity(window), SpinMultiplicity::Singlet);
+	}
+
+	TEST(ElectronicStructureModelTests, ClassifySpinMultiplicityReturnsTripletForUnpairedOccupation)
+	{
+		// One channel has an extra occupied mid-gap level the other channel lacks - net spin
+		// polarization within the window, matching the exc_ms/triplet screenshot (single arrow
+		// per gap level, asymmetric between up/down).
+		const std::vector<OrbitalRecord> window = {
+			MakeRecord(0, -0.1f, 1.0f, 0.8f, -0.1f, 1.0f, 0.8f),
+			MakeRecord(1, 0.2f, 1.0f, 0.6f, 0.2f, 0.0f, 0.6f)};
+
+		EXPECT_EQ(ClassifySpinMultiplicity(window), SpinMultiplicity::Triplet);
+	}
+} // namespace DefectStudio::Tests
