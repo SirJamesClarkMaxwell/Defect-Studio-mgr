@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include <glm/glm.hpp>
+
 namespace DefectStudio
 {
 	struct OrbitalChannelData
@@ -35,6 +37,19 @@ namespace DefectStudio
 		std::optional<BandGapData> gap;
 		// nullopt if WAVECAR was missing - band gap data above may still be available without it.
 		std::optional<std::vector<OrbitalRecord>> orbitals;
+	};
+
+	// Real-space grid of one Kohn-Sham orbital's wavefunction (from WAVECAR via puntukas), the raw
+	// input to isosurface mesh generation (T14-core). values.size() == dimensions.x*y*z, C-order
+	// (x slowest, z fastest). Signed (real part of the wavefunction, not |psi|^2) so +/- lobes can
+	// be colored independently.
+	struct OrbitalGridData
+	{
+		glm::ivec3 dimensions = glm::ivec3(0);
+		glm::mat3 cell = glm::mat3(1.0f); // direct real-space cell (Angstrom), cell[i] = lattice vector i
+		std::vector<float> values;
+		float energy = 0.0f;
+		float occupation = 0.0f;
 	};
 
 	struct LocalizationThresholdSettings
