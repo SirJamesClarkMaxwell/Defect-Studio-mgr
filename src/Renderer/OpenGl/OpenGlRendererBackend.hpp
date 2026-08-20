@@ -85,10 +85,18 @@ namespace DefectStudio
 			bool showCellBox,
 			bool showGrid,
 			const std::vector<std::size_t> &selectedAtomIndices = {},
-			// TODO(T08.6.3): temporary debug overlay to validate the CPU marching-tetrahedra
-			// isosurface mesher end-to-end before porting it to a compute shader. Not part of the
-			// real per-window structure render path - remove once the real orbital panel exists.
-			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr);
+			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
+			// end-to-end (CPU reference, then its GPU compute-shader port) before the real
+			// orbital panel exists. Not part of the real per-window structure render path.
+			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr,
+			int debugGpuIsosurfaceVertexCount = 0);
+
+		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
+		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
+		// failure/empty), ready to render via the debugGpuIsosurfaceVertexCount path above. The
+		// geometry stays GPU-resident (the compute shader's output SSBO doubles as the vertex
+		// buffer) - only a 4-byte counter is read back, not the vertex data itself.
+		[[nodiscard]] int RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue);
 		// Reads back the last-rendered frame for windowKey (must have been rendered via
 		// RenderWindow this session) and writes it to a PNG. Returns false + fills error on
 		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
@@ -135,6 +143,10 @@ namespace DefectStudio
 			const std::vector<IsosurfaceVertex> &vertices,
 			const RendererViewCamera &camera,
 			const RendererGlobalRenderSettings &globalSettings);
+		void renderIsosurfaceGpuOverlay(
+			int vertexCount,
+			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
@@ -152,6 +164,10 @@ namespace DefectStudio
 		unsigned int m_LineVbo = 0;
 		unsigned int m_IsosurfaceVao = 0;
 		unsigned int m_IsosurfaceVbo = 0;
+		unsigned int m_IsosurfaceGpuVao = 0;
+		unsigned int m_IsosurfaceGridSsbo = 0;
+		unsigned int m_IsosurfaceGpuVertexSsbo = 0;
+		unsigned int m_IsosurfaceCounterSsbo = 0;
 		unsigned int m_ComputeInputSsbo = 0;
 		unsigned int m_ComputeOutputSsbo = 0;
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;

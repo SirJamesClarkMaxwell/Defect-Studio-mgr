@@ -36,4 +36,5 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererSetAsDefaultViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererApplyDefaultViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererLoadTestOrbitalCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLoadTestOrbitalGpuCommand(Ref<EventBus> eventBus);
 } // namespace DefectStudio

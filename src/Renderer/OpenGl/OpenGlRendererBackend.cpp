@@ -339,6 +339,12 @@ namespace DefectStudio
 		if (!computeLoaded.HasValue())
 			return computeLoaded.Error();
 
+		Result<void> isosurfaceComputeLoaded = m_ShaderLibrary.LoadComputeProgram(
+			"isosurface_compute",
+			m_ShaderDirectory / Path("isosurface_march.comp"));
+		if (!isosurfaceComputeLoaded.HasValue())
+			return isosurfaceComputeLoaded.Error();
+
 		Result<void> geometryResult = createStaticGeometry(primitiveMeshes);
 		if (!geometryResult.HasValue())
 		{
@@ -416,7 +422,8 @@ namespace DefectStudio
 		bool showCellBox,
 		bool showGrid,
 		const std::vector<std::size_t> &selectedAtomIndices,
-		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh)
+		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
+		int debugGpuIsosurfaceVertexCount)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -493,6 +500,8 @@ namespace DefectStudio
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
+		if (debugGpuIsosurfaceVertexCount > 0)
+			renderIsosurfaceGpuOverlay(debugGpuIsosurfaceVertexCount, camera, globalSettings);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -548,6 +557,26 @@ namespace DefectStudio
 		{
 			glDeleteVertexArrays(1, &m_IsosurfaceVao);
 			m_IsosurfaceVao = 0;
+		}
+		if (m_IsosurfaceGridSsbo != 0)
+		{
+			glDeleteBuffers(1, &m_IsosurfaceGridSsbo);
+			m_IsosurfaceGridSsbo = 0;
+		}
+		if (m_IsosurfaceGpuVertexSsbo != 0)
+		{
+			glDeleteBuffers(1, &m_IsosurfaceGpuVertexSsbo);
+			m_IsosurfaceGpuVertexSsbo = 0;
+		}
+		if (m_IsosurfaceCounterSsbo != 0)
+		{
+			glDeleteBuffers(1, &m_IsosurfaceCounterSsbo);
+			m_IsosurfaceCounterSsbo = 0;
+		}
+		if (m_IsosurfaceGpuVao != 0)
+		{
+			glDeleteVertexArrays(1, &m_IsosurfaceGpuVao);
+			m_IsosurfaceGpuVao = 0;
 		}
 
 		const std::array<OpenGlMeshHandles *, 2> meshes = {&m_SphereMesh, &m_CylinderMesh};
@@ -729,6 +758,20 @@ namespace DefectStudio
 		glBindVertexArray(0);
 	}
 
+	namespace
+	{
+		// 32 bytes/vertex * 3 * kMaxIsosurfaceGpuVertices ~= 192MB worst case, but real usage is
+		// far smaller (marching-tetrahedra output scales with surface area, not grid volume) - the
+		// singlet_HSE band-0 reference case used ~113k vertices. Overflow is dropped safely by the
+		// compute shader's own bounds check, not corrupted.
+		constexpr std::size_t kMaxIsosurfaceGpuVertices = 2'000'000;
+		struct IsosurfaceGpuVertex
+		{
+			glm::vec4 position;
+			glm::vec4 normalSign;
+		};
+	} // namespace
+
 	void OpenGlRendererBackend::createIsosurfaceGeometry()
 	{
 		glGenVertexArrays(1, &m_IsosurfaceVao);
@@ -745,6 +788,33 @@ namespace DefectStudio
 		glEnableVertexAttribArray(2);
 		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
 			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
+		glBindVertexArray(0);
+
+		glGenBuffers(1, &m_IsosurfaceGridSsbo);
+		glGenBuffers(1, &m_IsosurfaceGpuVertexSsbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceGpuVertexSsbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER,
+			static_cast<GLsizeiptr>(kMaxIsosurfaceGpuVertices * sizeof(IsosurfaceGpuVertex)),
+			nullptr, GL_DYNAMIC_COPY);
+		glGenBuffers(1, &m_IsosurfaceCounterSsbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_COPY);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+		// Same buffer, two roles: written as an SSBO by the compute shader, read as a vertex
+		// buffer here - geometry never leaves the GPU between the two.
+		glGenVertexArrays(1, &m_IsosurfaceGpuVao);
+		glBindVertexArray(m_IsosurfaceGpuVao);
+		glBindBuffer(GL_ARRAY_BUFFER, m_IsosurfaceGpuVertexSsbo);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, position)));
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign)));
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign) + sizeof(glm::vec3)));
 		glBindVertexArray(0);
 	}
 
@@ -1164,6 +1234,137 @@ namespace DefectStudio
 			GL_DYNAMIC_DRAW);
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<int>(vertices.size()));
 		glBindVertexArray(0);
+	}
+
+	void OpenGlRendererBackend::renderIsosurfaceGpuOverlay(
+		int vertexCount,
+		const RendererViewCamera &camera,
+		const RendererGlobalRenderSettings &globalSettings)
+	{
+		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
+		// (m_IsosurfaceGpuVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
+		// visual mismatch between the two overlays means the compute shader port has a bug, not
+		// a rendering/lighting difference.
+		const unsigned int program = m_ShaderLibrary.Program("isosurface");
+		if (program == 0)
+			return;
+
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+		glUseProgram(program);
+		const int viewProjectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_ViewProjection");
+		if (viewProjectionLocation >= 0)
+			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		const int keyDirectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_KeyDirection");
+		const int fillDirectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_FillDirection");
+		const int backDirectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_BackDirection");
+		const int ambientLocation = m_ShaderLibrary.Uniform("isosurface", "u_AmbientIntensity");
+		const int keyIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_KeyIntensity");
+		const int fillIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_FillIntensity");
+		const int backIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_BackIntensity");
+		const int twoSidedLocation = m_ShaderLibrary.Uniform("isosurface", "u_TwoSidedLighting");
+		if (keyDirectionLocation >= 0)
+			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
+		if (fillDirectionLocation >= 0)
+			glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
+		if (backDirectionLocation >= 0)
+			glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
+		if (ambientLocation >= 0)
+			glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
+		if (keyIntensityLocation >= 0)
+			glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
+		if (fillIntensityLocation >= 0)
+			glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
+		if (backIntensityLocation >= 0)
+			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
+		if (twoSidedLocation >= 0)
+			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+
+		// Distinct colors from the CPU overlay (green/yellow instead of blue/orange) purely so the
+		// two are visually distinguishable if ever shown at once - not a real palette choice.
+		const int positiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_PositiveLobeColor");
+		const int negativeLocation = m_ShaderLibrary.Uniform("isosurface", "u_NegativeLobeColor");
+		const int alphaLocation = m_ShaderLibrary.Uniform("isosurface", "u_LobeAlpha");
+		if (positiveLocation >= 0)
+			glUniform3f(positiveLocation, 0.3f, 0.85f, 0.35f);
+		if (negativeLocation >= 0)
+			glUniform3f(negativeLocation, 0.95f, 0.85f, 0.2f);
+		if (alphaLocation >= 0)
+			glUniform1f(alphaLocation, 0.6f);
+
+		glBindVertexArray(m_IsosurfaceGpuVao);
+		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+		glBindVertexArray(0);
+	}
+
+	int OpenGlRendererBackend::RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue)
+	{
+		if (!m_Initialized)
+			return 0;
+		if (grid.dimensions.x < 2 || grid.dimensions.y < 2 || grid.dimensions.z < 2 || isoValue <= 0.0f)
+			return 0;
+
+		const unsigned int program = m_ShaderLibrary.Program("isosurface_compute");
+		if (program == 0)
+			return 0;
+
+		const std::size_t expectedValues =
+			static_cast<std::size_t>(grid.dimensions.x) *
+			static_cast<std::size_t>(grid.dimensions.y) *
+			static_cast<std::size_t>(grid.dimensions.z);
+		if (grid.values.size() != expectedValues)
+			return 0;
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceGridSsbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER,
+			static_cast<GLsizeiptr>(grid.values.size() * sizeof(float)),
+			grid.values.data(), GL_STATIC_DRAW);
+
+		const unsigned int zero = 0;
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo);
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_IsosurfaceGridSsbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_IsosurfaceGpuVertexSsbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_IsosurfaceCounterSsbo);
+
+		glUseProgram(program);
+		const int dimensionsLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Dimensions");
+		const int cellLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Cell");
+		const int isoLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_IsoValue");
+		const int signLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_LobeSign");
+		const int maxVerticesLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_MaxVertices");
+		if (dimensionsLocation >= 0)
+			glUniform3i(dimensionsLocation, grid.dimensions.x, grid.dimensions.y, grid.dimensions.z);
+		if (cellLocation >= 0)
+			glUniformMatrix3fv(cellLocation, 1, GL_FALSE, &grid.cell[0][0]);
+		if (isoLocation >= 0)
+			glUniform1f(isoLocation, isoValue);
+		if (maxVerticesLocation >= 0)
+			glUniform1ui(maxVerticesLocation, static_cast<unsigned int>(kMaxIsosurfaceGpuVertices));
+
+		const int cellsX = grid.dimensions.x - 1;
+		const int cellsY = grid.dimensions.y - 1;
+		const int cellsZ = grid.dimensions.z - 1;
+		const std::uint32_t totalCells = static_cast<std::uint32_t>(cellsX) *
+			static_cast<std::uint32_t>(cellsY) * static_cast<std::uint32_t>(cellsZ);
+		const std::uint32_t groups = (totalCells + 63u) / 64u;
+
+		for (const float lobeSign : {1.0f, -1.0f})
+		{
+			if (signLocation >= 0)
+				glUniform1f(signLocation, lobeSign);
+			glDispatchCompute(groups, 1, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		}
+
+		unsigned int vertexCount = 0;
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &vertexCount);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+		vertexCount = std::min(vertexCount, static_cast<unsigned int>(kMaxIsosurfaceGpuVertices));
+		DS_LOG_INFO("RegenerateIsosurfaceGpu: generated {} vertices", vertexCount);
+		return static_cast<int>(vertexCount);
 	}
 
 	// T09 extension point: GPU-side bond transform via compute shader.

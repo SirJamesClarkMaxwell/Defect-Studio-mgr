@@ -218,3 +218,9 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.debug.load_test_orbital_gpu"
+    chord: "Ctrl+Alt+P"
+    command: "renderer.debug.load_test_orbital_gpu"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true

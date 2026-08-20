@@ -238,7 +238,8 @@ namespace DefectStudio
 			windowState.showCellBox,
 			windowState.showGrid,
 			windowState.selectedAtomIndices,
-			&windowState.debugIsosurfaceMesh);
+			&windowState.debugIsosurfaceMesh,
+			windowState.debugGpuIsosurfaceVertexCount);
 	}
 
 	void RendererLayer::CollectProfilingData()
@@ -578,6 +579,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onApplyDefaultViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LoadTestOrbitalRequested>(
 				std::bind_front(&RendererLayer::onLoadTestOrbitalRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LoadTestOrbitalGpuRequested>(
+				std::bind_front(&RendererLayer::onLoadTestOrbitalGpuRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -1359,6 +1362,27 @@ namespace DefectStudio
 		windowState->debugIsosurfaceMesh = GenerateIsosurfaceMesh(grid, 0.03f);
 		DS_LOG_INFO("LoadTestOrbitalRequested: generated {} isosurface vertices",
 			windowState->debugIsosurfaceMesh.size());
+	}
+
+	void RendererLayer::onLoadTestOrbitalGpuRequested(const RendererEvents::Viewport::LoadTestOrbitalGpuRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || m_RendererBackend == nullptr)
+			return;
+
+		// Same fixture/bridge call as onLoadTestOrbitalRequested - only the mesh generation
+		// (CPU vs GPU compute shader) differs, so the two overlays should look identical.
+		VaspOrbitalGridBridge bridge;
+		Result<VaspOrbitalGridData> result =
+			bridge.LoadOrbitalGrid(Path("test-directory/dimer/exc_ms/singlet_HSE"), 0, 0, 0);
+		if (!result)
+		{
+			DS_LOG_ERROR("LoadTestOrbitalGpuRequested failed: {}", result.Error().technicalDetails);
+			return;
+		}
+
+		const OrbitalGridData grid = ConvertVaspOrbitalGridDataToDomain(std::move(result).Value());
+		windowState->debugGpuIsosurfaceVertexCount = m_RendererBackend->RegenerateIsosurfaceGpu(grid, 0.03f);
 	}
 
 	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)

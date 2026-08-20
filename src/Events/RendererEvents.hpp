@@ -236,6 +236,14 @@ namespace DefectStudio::RendererEvents::Viewport
 	{
 		std::string windowId;
 	};
+
+	// Same fixture/band as LoadTestOrbitalRequested, but meshed via the GPU compute-shader port
+	// (isosurface_march.comp) instead of the CPU reference - lets the two be compared visually on
+	// the same structure to validate the port. See RendererLayer::onLoadTestOrbitalGpuRequested.
+	struct LoadTestOrbitalGpuRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
 } // namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows
