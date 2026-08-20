@@ -489,15 +489,6 @@ namespace DefectStudio
 				m_ContextManager,
 				"Renderer",
 				true);
-			// Hidden until RenderExportDialogState::open flips true (toolbar "Export PNG..." or
-			// the F12 command) - a real dockable panel, not a modal, since modal popups need a
-			// live ImGui window's ID stack at the OpenPopup() call site, which the F12 command
-			// path (an input-event handler) doesn't have.
-			registerPanel<ExportImagePanel>(
-				*rendererLayer,
-				m_EventBus,
-				"Export Image",
-				false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
@@ -521,6 +512,17 @@ namespace DefectStudio
 				m_ElectronicStructureSession,
 				"Occupation Diagram",
 				true);
+			// Hidden until RenderExportDialogState::open flips true (toolbar "Export PNG..." or
+			// the F12 command) - a real dockable panel, not a modal, since modal popups need a
+			// live ImGui window's ID stack at the OpenPopup() call site, which the F12 command
+			// path (an input-event handler) doesn't have. Registered after m_ElectronicStructureSession
+			// (needs it for the orbital overlay section).
+			registerPanel<ExportImagePanel>(
+				*rendererLayer,
+				m_ElectronicStructureSession,
+				m_EventBus,
+				"Export Image",
+				false);
 
 			if (auto commandRegistry = m_CommandRegistry.lock())
 			{

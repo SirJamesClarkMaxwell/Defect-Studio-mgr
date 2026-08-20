@@ -424,6 +424,7 @@ namespace DefectStudio
 				{
 					OrbitalGridData grid = ConvertVaspOrbitalGridDataToDomain(*result);
 					state.gridCache[key] = grid;
+					state.gridFetchErrors.erase(key);
 					if (matchingSlot >= 0)
 					{
 						m_Layer.RegenerateOrbitalIsosurface(
@@ -431,15 +432,20 @@ namespace DefectStudio
 						state.gridError.clear();
 					}
 				}
-				else if (matchingSlot >= 0)
+				else
 				{
-					state.gridError = "Wavefunction load completed with no result";
+					state.gridFetchErrors[key] = "Wavefunction load completed with no result";
+					if (matchingSlot >= 0)
+						state.gridError = state.gridFetchErrors[key];
 				}
 			}
-			else if (matchingSlot >= 0)
+			else
 			{
-				state.gridError = snapshot->errorMessage.empty() ? "Wavefunction load failed" : snapshot->errorMessage;
-				DS_LOG_ERROR("ElectronicStructureSession: VaspOrbitalGridJob failed: {}", state.gridError);
+				state.gridFetchErrors[key] =
+					snapshot->errorMessage.empty() ? "Wavefunction load failed" : snapshot->errorMessage;
+				DS_LOG_ERROR("ElectronicStructureSession: VaspOrbitalGridJob failed: {}", state.gridFetchErrors[key]);
+				if (matchingSlot >= 0)
+					state.gridError = state.gridFetchErrors[key];
 			}
 
 			state.pendingGridJobIds.erase(key);
@@ -481,6 +487,26 @@ namespace DefectStudio
 		const std::uint64_t otherKey = PackGridKey(otherChannel, state.selectedBand);
 		if (!state.gridCache.contains(otherKey))
 			dispatchGridJob(state, otherKey, otherChannel, state.selectedBand);
+	}
+
+	const OrbitalGridData *ElectronicStructureSession::TryGetOrDispatchGrid(
+		WindowState &state, int spinChannel, int band)
+	{
+		const std::uint64_t key = PackGridKey(spinChannel, band);
+		const auto cached = state.gridCache.find(key);
+		if (cached != state.gridCache.end())
+			return &cached->second;
+
+		// Don't retry a key that already failed - see GridFetchError/gridFetchErrors.
+		if (!state.gridFetchErrors.contains(key))
+			dispatchGridJob(state, key, spinChannel, band);
+		return nullptr;
+	}
+
+	const std::string *ElectronicStructureSession::GridFetchError(const WindowState &state, std::uint64_t key)
+	{
+		const auto it = state.gridFetchErrors.find(key);
+		return it != state.gridFetchErrors.end() ? &it->second : nullptr;
 	}
 
 	void ElectronicStructureSession::ExportOrbitalsCsv(WindowState &state)

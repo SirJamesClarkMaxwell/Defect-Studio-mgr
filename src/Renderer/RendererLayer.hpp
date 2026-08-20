@@ -125,6 +125,18 @@ namespace DefectStudio
 		// untouched) if windowId is unknown.
 		int RegenerateOrbitalIsosurface(
 			const std::string &windowId, const OrbitalGridData &grid, float isoValue, int slot = 0);
+		// Same as RegenerateOrbitalIsosurface, but writes vertexCount into the caller-supplied
+		// channel directly instead of looking a live window up by id - for synthetic windowKeys
+		// (ExportImagePanel's "__export_preview__"/"__export_full__") that are never in
+		// GetWindows(). windowKey must already have an active viewport (see
+		// OpenGlRendererBackend::RegenerateIsosurfaceGpu) - call RenderToFbo for it at least once
+		// before this, and again after, so the regenerated mesh actually gets drawn.
+		int RegenerateOrbitalIsosurfaceForChannel(
+			const std::string &windowKey,
+			const OrbitalGridData &grid,
+			float isoValue,
+			int slot,
+			RendererWindowState::OrbitalOverlayChannel &channel);
 		// Thin public wrappers around the private capture/restore pair, for EditorLayer's
 		// project-state persistence (full window snapshot: camera + selection + visibility,
 		// keyed by the now-deterministic windowId - see RendererStartupBootstrap). nullopt/no-op

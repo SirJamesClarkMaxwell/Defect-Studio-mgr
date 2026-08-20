@@ -459,6 +459,20 @@ namespace DefectStudio
 		return channel.vertexCount;
 	}
 
+	int RendererLayer::RegenerateOrbitalIsosurfaceForChannel(
+		const std::string &windowKey,
+		const OrbitalGridData &grid,
+		float isoValue,
+		int slot,
+		RendererWindowState::OrbitalOverlayChannel &channel)
+	{
+		if (m_RendererBackend == nullptr)
+			return 0;
+
+		channel.vertexCount = m_RendererBackend->RegenerateIsosurfaceGpu(windowKey, grid, isoValue, slot);
+		return channel.vertexCount;
+	}
+
 	void RendererLayer::CollectProfilingData()
 	{
 		if (m_RendererBackend != nullptr)
@@ -1362,16 +1376,7 @@ namespace DefectStudio
 		m_ExportDialog.previewState.showGrid = windowState->showGrid;
 		m_ExportDialog.previewState.selectedAtomIndices = windowState->selectedAtomIndices;
 
-		try
-		{
-			const std::string stem = windowState->structure.sourcePath.Native().stem().string();
-			m_ExportDialog.filename = (stem.empty() ? "structure" : stem) + "_export";
-		}
-		catch (const std::exception &exception)
-		{
-			DS_LOG_ERROR("Export dialog filename derivation failed: {}", exception.what());
-			m_ExportDialog.filename = "structure_export";
-		}
+		m_ExportDialog.filename = windowState->title.empty() ? "structure" : windowState->title;
 	}
 
 	void RendererLayer::onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event)

@@ -732,6 +732,42 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       `ElectronicStructurePanel`, który pokazuje realny komunikat błędu (na czerwono) zamiast
       generycznego "no WAVECAR" gdy WAVECAR **jest**, tylko nieczytelny. Nie naprawia samego
       odczytu (to leży w puntukas/sieciowym I/O, poza zasięgiem tej appki) — tylko diagnozowalność.
+      **Follow-up po tym fixie:** dla konkretnego pliku użytkownika (`O:\hBN\convergance_test\882\
+      V_2\obliczenia\singlet\HSE\WAVECAR`, 4.77 GB) zdiagnozowane bezpośrednim odczytem bajtów —
+      **~74% pliku to zera**, rozrzucone od 0.02 GB do 4.74 GB (nie tylko początek/koniec ucięty).
+      To nie bug appki/puntukas — plik jest uszkodzony/niedokończony transfer na dysku sieciowym
+      (prawdopodobnie delta-sync narzędzie jak rsync bez `--whole-file`). Wymaga pełnej, nie-delta
+      re-kopii pliku od źródła; nic do zrobienia po stronie kodu.
+
+### T08.6.7 — Orbital render w image export pipeline (rozmowa 2026-08-20, odłożone wcześniej w sesji, zrobione 2026-08-20)
+- [x] `RenderExportDialogState::previewState.orbitalChannelUp/Down` (już istniały, nigdy nie
+      wypełniane przez `ExportImagePanel`) — teraz `.enabled` **są** przełącznikami "pokaż
+      orbitale" (bez osobnej flagi), kolory/opacity edytowalne tymi samymi widgetami co
+      `ElectronicStructurePanel::renderWavefunctionControls`.
+- [x] Live preview w dialogu eksportu odświeża siatkę na klucz `"__export_preview__"` co klatkę
+      (ten klucz i tak renderuje się co klatkę niezależnie — bez tańca "renderuj dwa razy").
+- [x] Tabelka batch: checkboxy per band (reużywa `FilterByLocalizationThreshold` — te same dane co
+      żywy band table), "Select all/none", przycisk "Export N selected orbitals" — **nie zamyka
+      dialogu** (w przeciwieństwie do zwykłego "Export"), bo musi renderować progress klatka po
+      klatce (`ExportImagePanel::stepOrbitalBatchExport`, wołane co klatkę niezależnie od tego,
+      która sekcja dialogu jest widoczna).
+- [x] Nazwa pliku per orbital: `{filename}_band{N}.png`; domyślny `dialog.filename` teraz z
+      `windowState->title` zamiast `sourcePath` stem — użytkownik prosił wprost o nazwę na
+      podstawie nazwy okna (dotyczy też zwykłego pojedynczego eksportu).
+- [x] **Znaleziony podczas planowania, kluczowy constraint**: `RegenerateIsosurfaceGpu(windowKey)`
+      (z fixu isovalue wyżej) no-opuje na kluczu bez wcześniejszego `RenderWindow`. Dla
+      `"__export_full__"` (renderowany tylko na żądanie, nie co klatkę) to wymaga renderu
+      dwukrotnie na band: raz żeby ustanowić/odświeżyć viewport, regenerate mesh, raz jeszcze żeby
+      go faktycznie narysować (`ExportImagePanel::renderOrbitalBandForCapture`).
+- [x] Nowa metoda `ElectronicStructureSession::TryGetOrDispatchGrid` (cache-or-dispatch, bez
+      dotykania GPU) + `WindowState::gridFetchErrors`/`GridFetchError` (nowość — `pollGridJobs`
+      wcześniej zapisywał błąd tylko dla aktywnego GPU-slotu, więc batch dispatch dla banda spoza
+      dwóch aktywnych slotów retry'owałby permanentnie zepsuty band w nieskończoność; teraz zapisuje
+      błąd dla **każdego** klucza, batch stepper odróżnia "czeka" od "poddał się po błędzie").
+- [x] Nowa `RendererLayer::RegenerateOrbitalIsosurfaceForChannel` — jak `RegenerateOrbitalIsosurface`,
+      ale bez `findWindowById` (synthetic export-key nigdy nie jest w `GetWindows()`).
+- [x] `ExportImagePanel` przeniesiony w kolejności rejestracji za `m_ElectronicStructureSession` w
+      `EditorLayer::initializePanelsIfNeeded` (był przed, więc `Ref` byłby pusty).
 
 ### T08.6.5 — Batch/prefetch orbitali z WAVECAR
 - [ ] Dziś `VaspOrbitalGridJob` ładuje jeden orbital (spin/k-point/band) na klik — brak prefetch

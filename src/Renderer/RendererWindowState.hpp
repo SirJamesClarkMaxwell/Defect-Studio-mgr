@@ -129,5 +129,19 @@ namespace DefectStudio
 		// then mutated in place each frame by the preset/pan controls) - kept separate from the
 		// canonical RendererWindowState list, never touches the live window's own camera/state.
 		RendererWindowState previewState;
+
+		// Orbital overlay in the export image (see ExportImagePanel::renderOrbitalExportControls) -
+		// previewState.orbitalChannelUp/Down.enabled ARE the "show orbitals" toggles, no separate
+		// flag needed; these two are just the batch-specific extras.
+		std::vector<int> selectedOrbitalBands; // checked rows in the export dialog's orbital table
+		struct OrbitalBatchExportState
+		{
+			bool running = false;
+			std::vector<int> pendingBands; // consumed front-to-back
+			int totalCount = 0;
+			int completedCount = 0;
+			int skippedCount = 0; // bands whose grid fetch failed - logged, not fatal to the rest
+		};
+		OrbitalBatchExportState orbitalBatchExport;
 	};
 } // namespace DefectStudio

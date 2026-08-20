@@ -62,6 +62,12 @@ namespace DefectStudio
 			// loaded for this window stays resident, so re-selecting an already-viewed band/channel
 			// is an instant GPU re-mesh, not another ~2s WAVECAR read.
 			std::unordered_map<std::uint64_t, OrbitalGridData> gridCache;
+			// Keyed same as gridCache - set by pollGridJobs for ANY key whose fetch failed (not just
+			// the two live GPU slots' active keys, unlike gridError above). Lets a caller like
+			// TryGetOrDispatchGrid's batch-export consumer (ExportImagePanel) tell "still pending" (no
+			// entry here, not cached yet) apart from "gave up" (entry here) instead of retrying a
+			// permanently-broken band forever.
+			std::unordered_map<std::uint64_t, std::string> gridFetchErrors;
 			// The (spin, band) each GPU slot (0=up, 1=down) is currently showing - when that key's
 			// job completes, the GPU mesh for that slot is regenerated. A pending key that isn't
 			// either slot's active key is a silent background prefetch.
@@ -130,6 +136,14 @@ namespace DefectStudio
 		// selected band - instant from cache, or dispatches the load. Also silently prefetches the
 		// opposite spin channel so toggling the other slot on later is instant too.
 		void EnsureChannelRendered(WindowState &state, RendererWindowState &windowState, int slot, int spinChannel);
+		// Cached grid for (spinChannel, band) if already loaded; nullptr and a background fetch
+		// dispatched otherwise (poll via the next Update()/pollGridJobs() pass - same machinery
+		// EnsureChannelRendered uses). Unlike EnsureChannelRendered, doesn't touch any GPU slot -
+		// for callers (ExportImagePanel) that decide separately when/where to render the result.
+		[[nodiscard]] const OrbitalGridData *TryGetOrDispatchGrid(WindowState &state, int spinChannel, int band);
+		// nullptr if key's fetch hasn't failed (still pending, not yet dispatched, or never asked
+		// for) - see WindowState::gridFetchErrors.
+		[[nodiscard]] static const std::string *GridFetchError(const WindowState &state, std::uint64_t key);
 		void ExportOrbitalsCsv(WindowState &state);
 		// Iso value for grid key `key` (spin+band) - state.isoValue if this orbital hasn't been
 		// individually tuned yet, otherwise its own remembered value.

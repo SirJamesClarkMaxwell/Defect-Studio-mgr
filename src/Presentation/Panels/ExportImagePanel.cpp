@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 
@@ -19,11 +20,13 @@ namespace DefectStudio
 {
 	ExportImagePanel::ExportImagePanel(
 		RendererLayer &layer,
+		Ref<ElectronicStructureSession> session,
 		Ref<EventBus> eventBus,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
+		  m_Session(std::move(session)),
 		  m_EventBus(std::move(eventBus))
 	{
 	}
@@ -31,6 +34,250 @@ namespace DefectStudio
 	Ref<IPanel> ExportImagePanel::Clone() const
 	{
 		return CreateRef<ExportImagePanel>(*this);
+	}
+
+	bool ExportImagePanel::renderOrbitalBandForCapture(
+		const std::string &windowKey,
+		int band,
+		ElectronicStructureSession::WindowState &state,
+		RendererWindowState &targetWindow,
+		int exportWidth,
+		int exportHeight)
+	{
+		RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
+		const bool wantUp = dialog.previewState.orbitalChannelUp.enabled;
+		const bool wantDown = dialog.previewState.orbitalChannelDown.enabled;
+		if (!wantUp && !wantDown)
+			return true; // nothing to overlay - a plain structure capture is still valid
+
+		const OrbitalGridData *gridUp = wantUp ? m_Session->TryGetOrDispatchGrid(state, 0, band) : nullptr;
+		const OrbitalGridData *gridDown = wantDown ? m_Session->TryGetOrDispatchGrid(state, 1, band) : nullptr;
+		if ((wantUp && gridUp == nullptr) || (wantDown && gridDown == nullptr))
+			return false; // still pending (or just failed - caller checks GridFetchError first)
+
+		dialog.previewState.viewportSize = glm::vec2(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
+		if (dialog.previewState.camera != nullptr)
+			dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
+
+		// Pass 1: establish/refresh windowKey's viewport (see this method's header comment).
+		(void)m_Layer.RenderToFbo(windowKey, targetWindow.structure, dialog.previewState, m_Layer.GetGlobalSettings());
+
+		if (wantUp)
+		{
+			const std::uint64_t key = ElectronicStructureSession::PackGridKey(0, band);
+			m_Layer.RegenerateOrbitalIsosurfaceForChannel(
+				windowKey, *gridUp, ElectronicStructureSession::ResolveIsoValue(state, key), 0,
+				dialog.previewState.orbitalChannelUp);
+		}
+		if (wantDown)
+		{
+			const std::uint64_t key = ElectronicStructureSession::PackGridKey(1, band);
+			m_Layer.RegenerateOrbitalIsosurfaceForChannel(
+				windowKey, *gridDown, ElectronicStructureSession::ResolveIsoValue(state, key), 1,
+				dialog.previewState.orbitalChannelDown);
+		}
+
+		// Pass 2: now the freshly-regenerated mesh actually gets drawn.
+		(void)m_Layer.RenderToFbo(windowKey, targetWindow.structure, dialog.previewState, m_Layer.GetGlobalSettings());
+		return true;
+	}
+
+	void ExportImagePanel::stepOrbitalBatchExport(
+		ElectronicStructureSession::WindowState &state, RendererWindowState &targetWindow, int exportWidth, int exportHeight)
+	{
+		RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
+		RenderExportDialogState::OrbitalBatchExportState &batch = dialog.orbitalBatchExport;
+		if (!batch.running)
+			return;
+		if (batch.pendingBands.empty())
+		{
+			batch.running = false;
+			return;
+		}
+
+		const int band = batch.pendingBands.front();
+		const bool wantUp = dialog.previewState.orbitalChannelUp.enabled;
+		const bool wantDown = dialog.previewState.orbitalChannelDown.enabled;
+		const bool upFailed = wantUp &&
+			ElectronicStructureSession::GridFetchError(state, ElectronicStructureSession::PackGridKey(0, band)) != nullptr;
+		const bool downFailed = wantDown &&
+			ElectronicStructureSession::GridFetchError(state, ElectronicStructureSession::PackGridKey(1, band)) != nullptr;
+		if (upFailed || downFailed)
+		{
+			DS_LOG_WARN("Orbital batch export: skipping band {} (wavefunction load failed)", band);
+			++batch.skippedCount;
+			batch.pendingBands.erase(batch.pendingBands.begin());
+			return;
+		}
+
+		if (!renderOrbitalBandForCapture("__export_full__", band, state, targetWindow, exportWidth, exportHeight))
+			return; // still waiting on a grid fetch - try again next frame
+
+		std::string error;
+		const std::string safeName = dialog.filename.empty() ? "export" : dialog.filename;
+		const Path outputPath = dialog.saveDirectory / (safeName + "_band" + std::to_string(band) + ".png");
+		if (!m_Layer.CaptureWindowToPng(
+				"__export_full__", outputPath, error, dialog.cropLeft, dialog.cropRight, dialog.cropTop, dialog.cropBottom))
+			DS_LOG_ERROR("Orbital batch export: PNG export failed for band {}: {}", band, error);
+		else
+			DS_LOG_INFO("Orbital batch export: {}", outputPath.String());
+
+		++batch.completedCount;
+		batch.pendingBands.erase(batch.pendingBands.begin());
+		if (batch.pendingBands.empty())
+			batch.running = false;
+	}
+
+	void ExportImagePanel::renderOrbitalExportControls(ElectronicStructureSession::WindowState *state)
+	{
+		ImGui::Separator();
+		ImGui::TextUnformatted("Orbital overlay");
+
+		if (state == nullptr || !state->data.has_value() || !state->data->orbitals.has_value())
+		{
+			ImGui::TextDisabled("No electronic structure loaded for this window - open Electronic Structure panel and click Load.");
+			return;
+		}
+
+		RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
+
+		bool upEnabled = dialog.previewState.orbitalChannelUp.enabled;
+		if (ImGui::Checkbox("Show spin up##export", &upEnabled))
+			dialog.previewState.orbitalChannelUp.enabled = upEnabled;
+		ImGui::SameLine();
+		bool downEnabled = dialog.previewState.orbitalChannelDown.enabled;
+		if (ImGui::Checkbox("Show spin down##export", &downEnabled))
+			dialog.previewState.orbitalChannelDown.enabled = downEnabled;
+
+		if (!upEnabled && !downEnabled)
+			return;
+
+		constexpr ImGuiColorEditFlags kSwatchFlags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
+		ImGui::TextUnformatted("Spin up colors");
+		ImGui::SameLine();
+		ImGui::ColorEdit3("Positive##exportup", &dialog.previewState.orbitalChannelUp.positiveLobeColor.x, kSwatchFlags);
+		ImGui::SameLine();
+		ImGui::TextUnformatted("/");
+		ImGui::SameLine();
+		ImGui::ColorEdit3("Negative##exportup", &dialog.previewState.orbitalChannelUp.negativeLobeColor.x, kSwatchFlags);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::SliderFloat("Opacity##exportup", &dialog.previewState.orbitalChannelUp.lobeAlpha, 0.05f, 1.0f);
+
+		ImGui::TextUnformatted("Spin down colors");
+		ImGui::SameLine();
+		ImGui::ColorEdit3("Positive##exportdown", &dialog.previewState.orbitalChannelDown.positiveLobeColor.x, kSwatchFlags);
+		ImGui::SameLine();
+		ImGui::TextUnformatted("/");
+		ImGui::SameLine();
+		ImGui::ColorEdit3("Negative##exportdown", &dialog.previewState.orbitalChannelDown.negativeLobeColor.x, kSwatchFlags);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::SliderFloat("Opacity##exportdown", &dialog.previewState.orbitalChannelDown.lobeAlpha, 0.05f, 1.0f);
+
+		// Live preview of whichever band is currently selected in the Electronic Structure panel -
+		// "__export_preview__" is already rendered every frame further down in Render(), so this
+		// just needs to keep its mesh fresh; no viewport resize / double-render dance needed here
+		// (unlike the batch/full-resolution capture path), since that per-frame render is itself
+		// both the "establish viewport" and "draw the regenerated mesh" pass, one frame apart.
+		if (state->selectedBand >= 0)
+		{
+			if (upEnabled)
+			{
+				if (const OrbitalGridData *grid = m_Session->TryGetOrDispatchGrid(*state, 0, state->selectedBand))
+				{
+					const std::uint64_t key = ElectronicStructureSession::PackGridKey(0, state->selectedBand);
+					m_Layer.RegenerateOrbitalIsosurfaceForChannel(
+						"__export_preview__", *grid, ElectronicStructureSession::ResolveIsoValue(*state, key), 0,
+						dialog.previewState.orbitalChannelUp);
+				}
+			}
+			if (downEnabled)
+			{
+				if (const OrbitalGridData *grid = m_Session->TryGetOrDispatchGrid(*state, 1, state->selectedBand))
+				{
+					const std::uint64_t key = ElectronicStructureSession::PackGridKey(1, state->selectedBand);
+					m_Layer.RegenerateOrbitalIsosurfaceForChannel(
+						"__export_preview__", *grid, ElectronicStructureSession::ResolveIsoValue(*state, key), 1,
+						dialog.previewState.orbitalChannelDown);
+				}
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("Batch export: pick which orbitals to render (one PNG per band)");
+		const std::vector<OrbitalRecord> filtered = FilterByLocalizationThreshold(
+			*state->data->orbitals, LocalizationThresholdSettings{state->localizationThreshold});
+		if (filtered.empty())
+		{
+			ImGui::TextDisabled("No bands in the current window/threshold.");
+			return;
+		}
+
+		if (ImGui::SmallButton("Select all"))
+		{
+			dialog.selectedOrbitalBands.clear();
+			for (const OrbitalRecord &record : filtered)
+				dialog.selectedOrbitalBands.push_back(record.band);
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Select none"))
+			dialog.selectedOrbitalBands.clear();
+
+		constexpr ImGuiTableFlags kTableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY;
+		if (ImGui::BeginTable("export_orbitals", 2, kTableFlags, ImVec2(0.0f, 140.0f)))
+		{
+			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 24.0f);
+			ImGui::TableSetupColumn("Band");
+			ImGui::TableHeadersRow();
+			for (const OrbitalRecord &record : filtered)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				bool checked = std::find(
+					dialog.selectedOrbitalBands.begin(), dialog.selectedOrbitalBands.end(), record.band) !=
+					dialog.selectedOrbitalBands.end();
+				char checkboxId[32];
+				std::snprintf(checkboxId, sizeof(checkboxId), "##band%d", record.band);
+				if (ImGui::Checkbox(checkboxId, &checked))
+				{
+					if (checked)
+						dialog.selectedOrbitalBands.push_back(record.band);
+					else
+						std::erase(dialog.selectedOrbitalBands, record.band);
+				}
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%d", record.band);
+			}
+			ImGui::EndTable();
+		}
+
+		const bool batchRunning = dialog.orbitalBatchExport.running;
+		ImGui::BeginDisabled(dialog.selectedOrbitalBands.empty() || batchRunning);
+		char exportLabel[64];
+		std::snprintf(
+			exportLabel, sizeof(exportLabel), "Export %d selected orbitals", static_cast<int>(dialog.selectedOrbitalBands.size()));
+		if (ImGui::Button(exportLabel))
+		{
+			dialog.orbitalBatchExport.pendingBands = dialog.selectedOrbitalBands;
+			dialog.orbitalBatchExport.totalCount = static_cast<int>(dialog.orbitalBatchExport.pendingBands.size());
+			dialog.orbitalBatchExport.completedCount = 0;
+			dialog.orbitalBatchExport.skippedCount = 0;
+			dialog.orbitalBatchExport.running = true;
+		}
+		ImGui::EndDisabled();
+		if (batchRunning)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("Exporting %d/%d (skipped %d)...",
+				dialog.orbitalBatchExport.completedCount, dialog.orbitalBatchExport.totalCount, dialog.orbitalBatchExport.skippedCount);
+		}
+		else if (dialog.orbitalBatchExport.totalCount > 0)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled(
+				"Done: exported %d, skipped %d.", dialog.orbitalBatchExport.completedCount, dialog.orbitalBatchExport.skippedCount);
+		}
 	}
 
 	void ExportImagePanel::Render()
@@ -55,6 +302,13 @@ namespace DefectStudio
 			SetVisible(false);
 			return;
 		}
+
+		// Polled unconditionally (not gated on the orbital section being visible/expanded) so a
+		// running batch export keeps making progress regardless of which part of the dialog the
+		// user is looking at, and so the band table/live preview populate even if
+		// ElectronicStructurePanel was never opened for this window.
+		ElectronicStructureSession::WindowState *esState =
+			m_Session != nullptr ? &m_Session->Update(*targetWindow) : nullptr;
 
 		ImGui::SetNextWindowSize(ImVec2(760.0f, 640.0f), ImGuiCond_FirstUseEver);
 		bool stillOpen = true;
@@ -136,6 +390,9 @@ namespace DefectStudio
 				break;
 		}
 
+		if (esState != nullptr)
+			stepOrbitalBatchExport(*esState, *targetWindow, exportWidth, exportHeight);
+
 		ImGui::Separator();
 		ImGui::Checkbox("Atoms##export", &dialog.previewState.showAtoms);
 		ImGui::SameLine();
@@ -169,43 +426,77 @@ namespace DefectStudio
 		ImGui::SameLine();
 		cropSlider("Bottom##crop", dialog.cropBottom);
 
+		renderOrbitalExportControls(esState);
+
+		// The single Export button also includes whichever orbital(s) are currently toggled on
+		// (same as the live preview), using the Electronic Structure panel's currently-selected
+		// band - if that band's grid isn't cached yet, disable Export rather than capture a frame
+		// with a stale/empty mesh.
+		const bool wantsOrbitalOverlay =
+			dialog.previewState.orbitalChannelUp.enabled || dialog.previewState.orbitalChannelDown.enabled;
+		const bool orbitalNotReady = wantsOrbitalOverlay && (esState == nullptr || esState->selectedBand < 0);
+		const bool batchRunning = dialog.orbitalBatchExport.running;
+
 		ImGui::Separator();
+		ImGui::BeginDisabled(orbitalNotReady || batchRunning);
 		if (ImGui::Button("Export", ImVec2(120.0f, 0.0f)))
 		{
 			try
 			{
-				dialog.previewState.viewportSize = glm::vec2(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
-				dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
-				(void)m_Layer.RenderToFbo(
-					"__export_full__", targetWindow->structure, dialog.previewState, m_Layer.GetGlobalSettings());
-
-				std::string error;
-				const std::string safeName = dialog.filename.empty() ? "export" : dialog.filename;
-				const Path outputPath = dialog.saveDirectory / (safeName + ".png");
-				if (!m_Layer.CaptureWindowToPng(
-						"__export_full__", outputPath, error,
-						dialog.cropLeft, dialog.cropRight, dialog.cropTop, dialog.cropBottom))
-					DS_LOG_ERROR("PNG export failed: {}", error);
+				bool ready = true;
+				if (wantsOrbitalOverlay && esState != nullptr)
+					ready = renderOrbitalBandForCapture(
+						"__export_full__", esState->selectedBand, *esState, *targetWindow, exportWidth, exportHeight);
 				else
-					DS_LOG_INFO("PNG export: {}", outputPath.String());
+				{
+					dialog.previewState.viewportSize = glm::vec2(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
+					dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
+					(void)m_Layer.RenderToFbo(
+						"__export_full__", targetWindow->structure, dialog.previewState, m_Layer.GetGlobalSettings());
+				}
+
+				if (!ready)
+					DS_LOG_WARN("PNG export: orbital data still loading, try again shortly");
+				else
+				{
+					std::string error;
+					const std::string safeName = dialog.filename.empty() ? "export" : dialog.filename;
+					const Path outputPath = dialog.saveDirectory / (safeName + ".png");
+					if (!m_Layer.CaptureWindowToPng(
+							"__export_full__", outputPath, error,
+							dialog.cropLeft, dialog.cropRight, dialog.cropTop, dialog.cropBottom))
+						DS_LOG_ERROR("PNG export failed: {}", error);
+					else
+						DS_LOG_INFO("PNG export: {}", outputPath.String());
+				}
 			}
 			catch (const std::exception &exception)
 			{
 				DS_LOG_ERROR("PNG export threw: {}", exception.what());
 			}
 
+			ImGui::EndDisabled();
 			dialog.open = false;
 			SetVisible(false);
 			ImGui::End();
 			return;
 		}
+		ImGui::EndDisabled();
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+		if (ImGui::Button(batchRunning ? "Cancel batch" : "Cancel", ImVec2(120.0f, 0.0f)))
 		{
-			dialog.open = false;
-			SetVisible(false);
-			ImGui::End();
-			return;
+			if (batchRunning)
+			{
+				dialog.orbitalBatchExport.running = false;
+				dialog.orbitalBatchExport.pendingBands.clear();
+			}
+			else
+			{
+				dialog.open = false;
+				SetVisible(false);
+				ImGui::End();
+				return;
+			}
 		}
 
 		ImGui::Separator();
