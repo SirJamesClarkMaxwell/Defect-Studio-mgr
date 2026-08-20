@@ -48,6 +48,17 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(ClassifySpinMultiplicity(window), SpinMultiplicity::Singlet);
 	}
 
+	TEST(ElectronicStructureModelTests, ClassifySpinMultiplicityReturnsSingletForSingleChannelPopulated)
+	{
+		// Non-spin-polarized calculation (or puntukas leaving the down channel at zero) - only
+		// one channel carries real occupation. Still closed-shell, not an unpaired-spin signal.
+		const std::vector<OrbitalRecord> window = {
+			MakeRecord(0, -0.1f, 1.0f, 0.8f, -0.1f, 0.0f, 0.0f),
+			MakeRecord(1, 1.4f, 1.0f, 0.7f, 1.4f, 0.0f, 0.0f)};
+
+		EXPECT_EQ(ClassifySpinMultiplicity(window), SpinMultiplicity::Singlet);
+	}
+
 	TEST(ElectronicStructureModelTests, ClassifySpinMultiplicityReturnsTripletForUnpairedOccupation)
 	{
 		// One channel has an extra occupied mid-gap level the other channel lacks - net spin

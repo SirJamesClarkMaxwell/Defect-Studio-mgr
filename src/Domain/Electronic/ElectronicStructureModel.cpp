@@ -36,6 +36,13 @@ namespace DefectStudio
 		}
 
 		constexpr float kOccupationEpsilon = 1e-3f;
+		const bool upEmpty = upOccupation < kOccupationEpsilon;
+		const bool downEmpty = downOccupation < kOccupationEpsilon;
+		if (upEmpty && downEmpty)
+			return SpinMultiplicity::Unknown;
+		if (upEmpty || downEmpty)
+			return SpinMultiplicity::Singlet;
+
 		return std::abs(upOccupation - downOccupation) < kOccupationEpsilon
 			? SpinMultiplicity::Singlet
 			: SpinMultiplicity::Triplet;
