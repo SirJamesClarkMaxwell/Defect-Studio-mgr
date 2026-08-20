@@ -455,7 +455,7 @@ namespace DefectStudio
 
 		RendererWindowState::OrbitalOverlayChannel &channel =
 			slot == 0 ? windowState->orbitalChannelUp : windowState->orbitalChannelDown;
-		channel.vertexCount = m_RendererBackend->RegenerateIsosurfaceGpu(grid, isoValue, slot);
+		channel.vertexCount = m_RendererBackend->RegenerateIsosurfaceGpu(windowId, grid, isoValue, slot);
 		return channel.vertexCount;
 	}
 

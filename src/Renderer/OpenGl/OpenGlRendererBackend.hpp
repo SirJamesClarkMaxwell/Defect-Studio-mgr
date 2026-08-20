@@ -19,6 +19,10 @@
 
 namespace DefectStudio
 {
+	// Two independent slots so spin-up and spin-down wavefunctions can render simultaneously -
+	// slot 0 is conventionally "up"/primary, slot 1 "down"/secondary.
+	constexpr int kIsosurfaceSlotCount = 2;
+
 	struct OpenGlMeshHandles
 	{
 		unsigned int vao = 0;
@@ -59,6 +63,20 @@ namespace DefectStudio
 		std::vector<OpenGlBondInstance> cachedBondInstances;
 		std::vector<glm::vec3> cachedGridVertices;
 		std::vector<glm::vec3> cachedCellEdgeVertices;
+
+		// Per-window orbital isosurface GPU buffers. Was 2 backend-global slots shared by every
+		// window; regenerating one window's orbital mesh (e.g. dragging its iso-value slider)
+		// silently overwrote what every OTHER window with an orbital overlay was drawing, since
+		// they all bound the same VAO. Lazily created (ensureIsosurfaceBuffers) on first
+		// RegenerateIsosurfaceGpu() call for this window - not every window shows an orbital
+		// overlay, so eager creation (2M vertices * 32B * 2 slots ~= 128MB) would be wasteful.
+		// Freed only at backend Shutdown, same lifecycle as every other resource in this struct -
+		// RendererLayer::RemoveWindow doesn't tear OpenGlViewportResources down on window close at
+		// all today (pre-existing gap for the whole struct, not something this fix alone should
+		// paper over with new cleanup machinery nothing else here has yet).
+		std::array<unsigned int, kIsosurfaceSlotCount> isosurfaceVao{};
+		std::array<unsigned int, kIsosurfaceSlotCount> isosurfaceVertexSsbo{};
+		std::array<unsigned int, kIsosurfaceSlotCount> isosurfaceCounterSsbo{};
 	};
 
 	class RendererViewCamera;
@@ -98,8 +116,11 @@ namespace DefectStudio
 		// failure/empty), ready to render via the orbitalChannel{Up,Down} slots above. The
 		// geometry stays GPU-resident (the compute shader's output SSBO doubles as the vertex
 		// buffer) - only a 4-byte counter is read back, not the vertex data itself. `slot` selects
-		// which of the two independent channel buffers to write (0=up, 1=down).
-		[[nodiscard]] int RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue, int slot = 0);
+		// which of `windowKey`'s two independent channel buffers to write (0=up, 1=down) - buffers
+		// are per-window (see OpenGlViewportResources), `windowKey` must already have an active
+		// viewport (i.e. RenderWindow has run for it at least once); returns 0 otherwise.
+		[[nodiscard]] int RegenerateIsosurfaceGpu(
+			const std::string &windowKey, const OrbitalGridData &grid, float isoValue, int slot = 0);
 		// Reads back the last-rendered frame for windowKey (must have been rendered via
 		// RenderWindow this session) and writes it to a PNG. Returns false + fills error on
 		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
@@ -121,6 +142,9 @@ namespace DefectStudio
 		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
 		void createScreenGrid();
 		void createIsosurfaceGeometry();
+		// Lazily allocates `resources`'s per-window isosurface GPU buffers on first use - no-op if
+		// already created (checks isosurfaceVao[0]).
+		void ensureIsosurfaceBuffers(OpenGlViewportResources &resources);
 		void configureOpenGlState() const;
 		void renderAtoms(
 			const RendererStructureData &structure,
@@ -171,15 +195,13 @@ namespace DefectStudio
 		unsigned int m_LineVbo = 0;
 		unsigned int m_IsosurfaceVao = 0;
 		unsigned int m_IsosurfaceVbo = 0;
-		// Two independent slots so spin-up and spin-down wavefunctions can render simultaneously -
-		// slot 0 is conventionally "up"/primary, slot 1 "down"/secondary. The grid input SSBO is
-		// shared (consumed synchronously within a single RegenerateIsosurfaceGpu call, never held
-		// across calls), only the per-slot output vertex buffer/counter/VAO need to be separate.
-		static constexpr int kIsosurfaceSlotCount = 2;
-		std::array<unsigned int, kIsosurfaceSlotCount> m_IsosurfaceGpuVao{};
+		// Grid input SSBO stays backend-global (not per-window): consumed synchronously within a
+		// single RegenerateIsosurfaceGpu call and fully overwritten before that call's compute
+		// dispatch reads it, never held/read across calls - safe to share since only one such call
+		// is ever in flight (main-thread only, GL calls aren't reentrant here). The per-window
+		// output vertex buffer/counter/VAO (what actually gets drawn) live in
+		// OpenGlViewportResources instead, see its isosurface* fields.
 		unsigned int m_IsosurfaceGridSsbo = 0;
-		std::array<unsigned int, kIsosurfaceSlotCount> m_IsosurfaceGpuVertexSsbo{};
-		std::array<unsigned int, kIsosurfaceSlotCount> m_IsosurfaceCounterSsbo{};
 		unsigned int m_ComputeInputSsbo = 0;
 		unsigned int m_ComputeOutputSsbo = 0;
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;
