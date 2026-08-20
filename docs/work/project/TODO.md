@@ -413,35 +413,42 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 > (POSCAR/INCAR/notatki), gdzie chcemy historię/diff; mount przejmuje dane obliczeniowe.
 
 ### T07.5.1 — Project directory model (bez zmian względem oryginalnego planu T10)
-- [ ] Projekt jako katalog z `manifest.yaml`
-- [ ] Create / Open / Recent project workflow
-- [ ] `ProjectMetadata`: uuid, name, created\_at, last\_modified, format\_version (od pierwszego dnia)
-- [ ] Auto-save z konfigurowalnym interwałem
+- [x] **Zrobione, 2026-08-20.** Projekt jako katalog z `manifest.yaml` — `ProjectManifestIO`
+      (`src/IO/ProjectManifestIO.hpp/.cpp`): `{uuid, name, created_at, last_modified,
+      format_version, roots[], bulk_directory}`. `roots` reużywa `ProjectRootEntry` z
+      `ProjectRootsIO` (ten sam kształt `{id, path, label}`) — **label to dziś wolny tekst, nie
+      referencja do `ServerProfile`** (ten typ nie istnieje, T07.5.2 to czysty plan).
+- [x] Create / Open / Recent project workflow — menu Plik: "Nowy" (odmawia nadpisania istniejącego
+      `manifest.yaml`), "Otworz", "Ostatnie projekty" (`RecentProjectsIO`,
+      `install/users/default/config/recent_projects.yaml`, cap 10, move-to-front). "Zapisz" to
+      ręczny re-save (idempotentny — każda strukturalna zmiana i tak zapisuje natychmiast).
+      Ostatnio otwarty projekt auto-otwiera się przy starcie (najnowszy wpis z recent list).
+- [x] `ProjectMetadata`: uuid/name/created_at/last_modified/format_version — jak wyżej. `uuid`
+      przez istniejący `Core/Utils/Uuid.hpp` (`GenerateUuid()`/`ToString()`), timestampy jako
+      epoch-seconds (`Time::Now()`) — **brak formatowania na czytelny string nigdzie w kodzie**,
+      świadomie pominięte (nic dziś tego nie wyświetla).
+- [ ] Auto-save z konfigurowalnym interwałem — **nie potrzebne**: każda strukturalna zmiana
+      (add/remove/change-folder root, bulk reference) zapisuje natychmiast, nie ma "dirty state"
+      do zbierania na interwał
 - [ ] Tracking dodanych plików (lazy resource loading)
 - [ ] `PathResolver` – normalizacja ścieżek project-relative vs external — **brak w kodzie**
 - [ ] Walidacja brakujących plików przy otwieraniu + relink / rebuild flow — **na mounted drive
       to też pokrywa przypadek "mount padł"** (brak sieci/VPN), nie tylko przeniesiony plik
 - [ ] Zapis ukrytych atomów, widoków, dodanych bondów, overrides kolorów, stanu kolekcji,
       pozycji kamery (`old-ds-functionality.md` §10)
-- [ ] **Rejestracja wielu folderów/dysków jako jeden projekt (potwierdzone jako praktyczne,
-      2026-08-20)** — użytkownik: "jak podłączę więcej serwerów, dobrze by było wyświetlać dane ze
-      wszystkich, albo w jednym serwerze dane mam w kilku miejscach, wtedy podłączę różne foldery".
-      `manifest.yaml` potrzebuje listy roots, nie jednego katalogu — **i dla każdego roota źródło**
-      (lokalny / który zamontowany serwer z T07.5.2 Server Profiles), żeby dało się serializować
-      **co jest podłączone i skąd konkretnie pochodzą dane**, nie tylko ścieżkę. `ProjectTreePanel`
-      dziś (`m_RootPath`, jeden `Path`) i `ElectronicStructureSession` bulk directory (jeden
-      katalog) oba zakładają single-root — do przeprojektowania razem z manifestem, nie osobno.
-      Zob. "Plan: multi-root" niżej.
-- [x] **Ponytail placeholders (nie prawdziwe ustawienie projektu, trzy niezależne na 2026-08-20,
-      wszystkie do zastąpienia jednym manifestem gdy ten task ruszy realnie):**
-  - `EditorLayer.cpp` — domyślny root `ProjectTreePanel` na sztywno (`O:\hBN\V2CBCN`)
-  - `ProjectTreePanel.cpp` — `last_project_root.txt`, ostatnio wybrany root, przeżywa restart
-  - `EditorLayer.cpp` — `project_windows.txt`, per-okno camera/selection/electronic-structure
-    state, zapis na `OnDetach`, odtwarzane przez replay `OpenStructureRequested`
-  - `ElectronicStructurePanel.hpp` — bulk reference directory (`O:\hBN\bulk`)
-  - `YamlConfigSerializer.cpp` (~1700 linii, zduplikowane ścieżki emit/parse) nie jest bezpieczny
-    do rozszerzenia jednym polem bez wcześniejszego refactoru — stąd cztery osobne txt-y zamiast
-    jednego pliku. Przenieść wszystkie cztery do `manifest.yaml`, gdy powstanie, w jednym ruchu.
+- [x] **Rejestracja wielu folderów/dysków jako jeden projekt — zrobione, 2026-08-20** (patrz
+      T07.5.4 niżej, teraz część manifestu zamiast osobnego pliku gdy projekt jest aktywny).
+- [ ] Świadomie poza scope tego przejścia (nie proszone, trzyma robotę w ryzach): tags dla
+      defektów/kolekcji, migration pipeline formatu pliku, canonical vs recovery/snapshot save
+      split, project rename UI, zamykanie/przełączanie aktywnego projektu w trakcie sesji.
+- [x] **Ponytail placeholder, zostaje celowo (nie do zastąpienia przez manifest — inny scope):**
+      `EditorLayer.cpp` — `project_windows.txt`, per-okno camera/selection/electronic-structure
+      state, zapis na `OnDetach`, odtwarzane przez replay `OpenStructureRequested`. To stan
+      renderera per-window, nie stan projektu — świadomie osobny plik.
+- [x] **Ad-hoc fallback (brak aktywnego projektu) — zostaje, `ProjectRootsIO`/`project_roots.yaml`**
+      — nie każdy `+ Add Root` musi od razu być "prawdziwym projektem"; session-durable roots bez
+      Create/Open dalej działają dokładnie jak wcześniej, po prostu nie przeżywają jako *nazwany*
+      projekt dopóki user nie zrobi Nowy/Otworz.
 - [ ] Export kolekcji do POSCAR
 - [ ] Tags dla defektów i kolekcji
 - [ ] Application startup project (ostatni otwarty)
@@ -628,9 +635,9 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] **Control Panel** (zob. sekcja niżej) jako naturalny dom dla suwaków tego panelu — dziś
       suwaki żyją w `ElectronicStructurePanel` samym, nie w centralnym Control Panelu z T12
 - [ ] Eksport stanów elektronowych do plików przyjaznych OriginLab (CSV/TSV)
-- [ ] **Drag-drop WAVECAR na otwartą strukturę w viewporcie** (nowe, z rozmowy 2026-08-20) —
-      zob. "Plan: drag-drop + context menu" niżej. POSCAR/CONTCAR **nie** przez drag-drop —
-      zostaje RMB "Open Defect" (już istnieje, `ProjectTreePanel::openDefectAt`)
+- [x] **Drag-drop WAVECAR na otwartą strukturę w viewporcie — zrobione 2026-08-20**, zob. T08.6.4
+      niżej. POSCAR/CONTCAR **nie** przez drag-drop — zostaje RMB "Open Defect" (już istniało,
+      `ProjectTreePanel::openDefectAt`)
 - [ ] **Matplotlib export skrypt** (nowe, z rozmowy 2026-08-20) — statyczny PNG/SVG occupation
       diagram 1:1 ze stylem `OccupationDiagramPanel`, do publikacji. Zob. plan niżej.
 
@@ -647,41 +654,84 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 ### T07.5.4 — Multi-root project registration
 > Potwierdzone jako praktyczne (nie hipotetyczne): wiele serwerów podłączonych naraz, albo jeden
 > serwer z danymi rozrzuconymi po kilku folderach/mountach.
-- [ ] `manifest.yaml` schema: `roots: [{ path, label, source }]` zamiast jednego pola root — `source`
-      wskazuje na `ServerProfile` z T07.5.2 (albo `local`), żeby wiedzieć **skąd fizycznie**
-      pochodzą dane danego roota, nie tylko gdzie leżą dziś na dysku
-- [ ] `ProjectTreePanel` – wiele drzew (jedno per zarejestrowany root) zamiast jednego `m_RootPath`,
-      każde z widocznym labelem/źródłem w nagłówku (żeby user widział z którego serwera patrzy)
-- [ ] Add/remove root workflow (przycisk w `ProjectTreePanel` albo osobny "Manage project roots"
-      dialog) — persist do manifestu od razu, nie tylko w pamięci sesji
-- [ ] Migracja obecnych ponytail-placeholderów (zob. T07.5.1 wyżej) do manifestu w jednym ruchu,
-      **nie** cztery osobne migracje
+- [x] **Zrobione, 2026-08-20 — dwa przejścia.** Pierwsze (rano) budowało N osobnych dockable
+      `ProjectTreePanel` — **user to poprawił po kliknięciu**: "jak dodajemy folder to to powinno
+      być jako collapsable element w drzewku projektu... trochę jak kolejny entry". Przerobione:
+      **jeden panel, N collapsible sekcji** (`ImGui::CollapsingHeader` per root, RMB "Change
+      Folder..."/"Remove"). `m_SelectedPath`/`m_ExpandedPaths`/`m_VisibleFlatList` zostały
+      panel-level (nie per-sekcja) — klucze to bezwzględne ścieżki, już globalnie unikalne między
+      sekcjami, więc `handleKeyboardNavigation`/`renderDirectoryContents` nie wymagały zmian
+      logiki, tylko wywołania w pętli. `m_InstanceId`/custom copy-ctor z pierwszego przejścia
+      **usunięte** — z jednym panelem znów wystarcza `= default`.
+- [x] Roots to teraz `EditorLayer::currentRootsMutable()` — wskazuje albo na aktywny projekt
+      (`m_ActiveProject->roots`, patrz T07.5.1) albo na ad-hoc listę (`m_AdHocRoots`,
+      `ProjectRootsIO`) gdy żaden projekt nie jest otwarty. Jeden `ProjectTreePanel::SetRoots(...)`
+      pcha aktualną listę do panelu po każdej mutacji — panel sam nic nie wie o projektach.
+- [x] Add/remove/change-folder — "+ Add Root..." (popup: folder-pick + label) na toolbarze,
+      "Change Folder..."/"Remove" per-sekcja (RMB na nagłówku). Zdarzenia
+      (`ProjectEvents::RootAddRequested`/`RootRemoveRequested`/`RootPathChangedRequested`) bez
+      zmian od pierwszego przejścia — `EditorLayer` tylko mutuje inną listę zależnie od stanu.
+- [ ] `source`/`ServerProfile` referencja zamiast wolnego tekstu — zależne od T07.5.2 (nieistniejące)
 
 ### T07.5.5 — Bulk reference auto-wire z poziomu projektu
-> Dziś działa, ale ręcznie: user musi otworzyć `ElectronicStructurePanel`, wkleić/wybrać ścieżkę,
-> kliknąć "Reload bulk gap". Cel: **zero klików w panel** dla zwykłego przypadku.
-- [ ] RMB context menu w `ProjectTreePanel` na folderze: "Set as bulk reference" — woła
-      `ElectronicStructureSession::SetBulkDirectory` + `DispatchBulkLoad` bezpośrednio, panel nie
-      musi być otwarty (session już istnieje niezależnie od widoczności panelu — sprawdzone w
-      `EditorLayer`)
-- [ ] Pole "bulk root" w manifest.yaml (zależne od T07.5.4) — bulk reference przeżywa restart jako
-      część projektu, nie ponytail-hardcode
-- [ ] Przy otwarciu projektu z ustawionym bulk root: auto-`DispatchBulkLoad` od razu, zanim
-      jakikolwiek defekt-window zostanie otwarty — VBM/CBM reference gotowe zanim user w ogóle
-      kliknie w cokolwiek
+- [x] **Zrobione, 2026-08-20.** RMB na **dowolnym folderze w drzewku** (nie tylko root-level —
+      ten sam `renderDirectoryContextMenu` co "Open Defect"), "Set as Bulk Reference" →
+      `ProjectEvents::BulkDirectoryChangeRequested` → `EditorLayer::onBulkDirectoryChangeRequested`
+      woła `SetBulkDirectory`+`DispatchBulkLoad` na `ElectronicStructureSession` od razu (działa
+      nawet bez otwartego projektu, session-only) **i** zapisuje do `manifest.yaml` jeśli projekt
+      jest aktywny.
+- [x] Bulk directory w manifest.yaml (`bulk_directory` pole) — przeżywa restart jako część
+      projektu. `ElectronicStructureSession::m_BulkDirectory` hardcoded default (`O:\hBN\bulk`)
+      usunięty (→ puste) — dev-machine ścieżka nie ma co być wbudowanym defaultem skoro jest
+      realne miejsce do jej ustawienia.
+- [x] `ElectronicStructurePanel::renderBulkReferenceControls()` — **usunięte** wolne pole
+      tekstowe + przycisk Browse (user: "nie zniknęła ta opcja z electron configuration" — była to
+      świadoma prośba o usunięcie). Zostaje: read-only wyświetlenie ścieżki + hint wskazujący na
+      RMB w drzewku + istniejący przycisk "Reload bulk gap".
+- [x] Przy `openProject()`: auto-`SetBulkDirectory`+`DispatchBulkLoad` od razu jeśli manifest ma
+      ustawiony bulk root, zanim jakikolwiek defekt-window zostanie otwarty.
 
-### T08.6.4 — Drag-drop WAVECAR + jasny podział z context menu (doprecyzowane 2026-08-20)
+### T08.6.4 — Drag-drop WAVECAR + jasny podział z context menu (doprecyzowane 2026-08-20, zrobione 2026-08-20)
 > User rozstrzygnął: **WAVECAR = drag-drop, POSCAR/CONTCAR = context menu** — nie oba na oba sposoby.
-- [ ] `ImGui::BeginDragDropSource` na plikach `WAVECAR` w `ProjectTreePanel` (payload = `Path`)
-- [ ] Drop target: otwarte okno struktury w viewporcie (`RendererPanel`/`RendererWindowState`) —
-      drop WAVECAR na już-załadowaną strukturę ustawia jej `calculationDirectory` (folder WAVECAR
-      leży w) w `ElectronicStructureSession::WindowState`, odpala `DispatchOutputLoad` od razu.
-      WAVECAR bez struktury w viewporcie nie ma sensu (potrzebuje geometrii jako referencji) —
-      drop na pusty viewport/tree to no-op, nie nowe okno
-- [ ] POSCAR/CONTCAR **zostaje jak jest** — RMB "Open Defect" (`ProjectTreePanel::openDefectAt`,
-      już działa), **nie** dodawać drugiej ścieżki przez drag-drop dla tych plików (osobna od
-      T08 linijki 540 "Drag & drop pliku POSCAR/CONTCAR/CHG **z eksploratora**" — to inny wektor,
-      OS Explorer → appka, zostaje jako odrębny, niezrealizowany task)
+> User: "drag-drop WAVECAR nie działa. jest to trochę kluczowe w momencie kiedy nie może znaleźć
+> sama WAVECAR" — chodzi o przypadek gdy `calculationDirectory` (domyślnie folder POSCAR/CONTCAR,
+> zob. `ElectronicStructureSession::Update`) **nie** jest folderem z WAVECAR; drop pozwala to
+> ręcznie skorygować bez edycji configu.
+- [x] `ImGui::BeginDragDropSource` na plikach `WAVECAR` w `ProjectTreePanel` (payload = surowa
+      ścieżka jako `char*`, typ payloadu `"DS_WAVECAR_PATH"`) — `renderDirectoryContents`, tylko
+      gdy `label == "WAVECAR"`.
+- [x] Drop target: otwarte okno struktury w viewporcie (`RendererPanel::renderStructureWindow`,
+      zaraz po `ImGui::Image`) — nowy event `RendererEvents::Viewport::WavecarDropped{windowId,
+      wavecarPath}`, `EditorLayer::onWavecarDropped` ustawia `calculationDirectory` (=
+      `wavecarPath.parent_path()`) w `ElectronicStructureSession::WindowState` danego okna i od
+      razu woła `DispatchOutputLoad`. Drop na okno bez struktury nie jest możliwy z definicji —
+      target to samo `ImGui::Image` viewportu, które istnieje tylko dla już-otwartego okna.
+- [x] POSCAR/CONTCAR **zostaje jak jest** — RMB "Open Defect" (`ProjectTreePanel::openDefectAt`,
+      już działa), **nie** dodano drugiej ścieżki przez drag-drop dla tych plików (osobna od
+      T08 linijki ~540 "Drag & drop pliku POSCAR/CONTCAR/CHG **z eksploratora**" — to inny wektor,
+      OS Explorer → appka, zostaje jako odrębny, niezrealizowany task; pozycja w "🔥 Hotfixy"
+      (linijka ~149) "Drag&drop z `ProjectTreePanel` (POSCAR/CONTCAR) na viewport" jest
+      **superseded** przez tę decyzję — nie implementować, POSCAR/CONTCAR zostaje context-menu-only)
+- [x] **Bug po pierwszym teście użytkownika: drop "działał" (job kończył się OK) ale nic się nie
+      pokazywało** — `ElectronicStructurePanel`/`OccupationDiagramPanel` renderują/pollują tylko
+      `FindFocusedWindow()` (ostatnio zogniskowane okno viewportu), a sam drag-drop nigdy nie
+      klika okna docelowego, więc `m_LastFocusedViewportWindowId` w `RendererLayer` się nie
+      zmieniał — dane ładowały się w tle, ale żaden panel ich nie odbierał. Fix: `RendererPanel`
+      woła `ImGui::SetWindowFocus()` zaraz po zaakceptowaniu dropu (przenosi fokus/tab na wierzch,
+      efekt widoczny klatkę później — ten sam istniejący mechanizm `FocusChanged`, który normalny
+      klik w viewport i tak by wywołał).
+- [x] **Drugi bug z tego samego testu: WAVECAR na dysku sieciowym (`O:\`) — job kończył się OK,
+      band-gap/HOMO-LUMO ładowały się poprawnie, ale orbitale zawsze "Orbitals unavailable (no
+      WAVECAR)" mimo że plik fizycznie istniał.** Przyczyna: `vasp_output_load.py::_orbitals_payload`
+      łapał `FileNotFoundError` (WAVECAR faktycznie brak) i `AssertionError` (WAVECAR jest, ale
+      puntukas nie mógł odczytać nagłówka — już wcześniej udokumentowany w komentarzu przypadek:
+      "k-point count read as 0" na dysku sieciowym, prawdopodobnie uszkodzony/nie w pełni
+      przesłany plik) w jeden, nierozróżnialny komunikat. Fix: Python zwraca teraz osobno
+      `orbitals_error` (string, tylko dla `AssertionError`) w JSON payloadzie; przeciągnięte przez
+      `VaspOutputBridge`/`VaspOutputConversion`/`ElectronicStructureData::orbitalsError` do
+      `ElectronicStructurePanel`, który pokazuje realny komunikat błędu (na czerwono) zamiast
+      generycznego "no WAVECAR" gdy WAVECAR **jest**, tylko nieczytelny. Nie naprawia samego
+      odczytu (to leży w puntukas/sieciowym I/O, poza zasięgiem tej appki) — tylko diagnozowalność.
 
 ### T08.6.5 — Batch/prefetch orbitali z WAVECAR
 - [ ] Dziś `VaspOrbitalGridJob` ładuje jeden orbital (spin/k-point/band) na klik — brak prefetch
@@ -824,6 +874,17 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] Request/commit model dla compute dispatch (render thread owner, nie bezpośrednia mutacja live-state)
 - [x] Backend abstraction: Compute Shader / CPU fallback — CPU (`IsosurfaceMesher.cpp`) i GPU
       (`isosurface_march.comp`) istnieją równolegle, GPU jest production path, CPU debug/test-only
+- [x] **Bug: globalny ISOVALUE między oknami** (zgłoszone przez użytkownika po teście, naprawione
+      2026-08-20) — GPU-owe bufory izopowierzchni (`m_IsosurfaceGpuVao`/`VertexSsbo`/`CounterSsbo`)
+      były jedynymi zasobami OpenGL trzymanymi jako **globalne 2-slotowe tablice na cały backend**
+      zamiast per-okno (w przeciwieństwie do reszty `OpenGlViewportResources`) — każde okno ze
+      spin-up/spin-down orbitalem renderowało z tego samego VAO, więc zmiana iso-value (albo
+      dowolna regeneracja siatki) w jednym oknie nadpisywała mesh widoczny w każdym innym. Fix:
+      przeniesione do `OpenGlViewportResources` (per-`windowKey`, lazy `ensureIsosurfaceBuffers`),
+      `RegenerateIsosurfaceGpu` przyjmuje teraz `windowKey`. Świadomie **nie** naprawione przy
+      okazji: `RendererLayer::RemoveWindow` nadal nie zwalnia `OpenGlViewportResources` zamkniętego
+      okna (pre-existing gap, cała struktura, nie tylko izopowierzchnia) — dopasowane do istniejącego
+      (niedoskonałego) cyklu życia zamiast wprowadzać nowy mechanizm sprzątania tylko dla tego pola.
 - [x] Single-iso i dual-iso rendering (positive/negative lobes, VESTA-like) — dispatch dwa razy
       (dodatni/ujemny lobe) z memory barrier, osobne kolory per lobe (`orbitalChannelUp`/`Down`
       positive/negative color w `RendererWindowState`)

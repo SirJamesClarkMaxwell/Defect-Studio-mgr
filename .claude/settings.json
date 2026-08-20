@@ -29,7 +29,9 @@
       "Bash(\"build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\")",
       "Bash(tasklist //FI \"IMAGENAME eq DefectStudio.exe\")",
       "Bash(tasklist //FI \"IMAGENAME eq cl.exe\")",
-      "Bash(tasklist //FI \"IMAGENAME eq MSBuild.exe\")"
+      "Bash(tasklist //FI \"IMAGENAME eq MSBuild.exe\")",
+      "Bash(python -m scripts.python.build --config Debug)",
+      "Bash(python -m scripts.python.generate_projects)"
     ]
   }
 }
