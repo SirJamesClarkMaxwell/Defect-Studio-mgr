@@ -76,21 +76,27 @@ def _band_gap_payload(output, directory: str) -> dict | None:
         return _parse_eigenval_bandgap(directory)
 
 
-def _orbitals_payload(output, band_start: int, band_end: int) -> list[dict] | None:
+def _orbitals_payload(output, band_start: int, band_end: int) -> tuple[list[dict] | None, str | None]:
     # get_orbital_data_for_two_spins raises FileNotFoundError if WAVECAR is absent, and
     # AssertionError if WAVECAR exists but its own internal header is unreadable/inconsistent
     # (observed on a real file: k-point count read as 0, on a network drive - could be a
     # corrupted/incompletely-transferred file, not something to guess about here). Either way,
     # band gap data above can still be useful without orbitals, so this is reported as
-    # unavailable, not fatal.
+    # unavailable, not fatal - but the two cases get different messages (returned as the second
+    # tuple element) so "no WAVECAR" and "WAVECAR present but unreadable" aren't indistinguishable
+    # in the UI - a user staring at a folder that plainly has a WAVECAR in it needs to know it's
+    # the second case, not go looking for a file that's already there.
     # irreps=False (puntukas' own default): symmetry-labeling each band is real per-band cost
     # (get_symmetry over the structure) that this UI doesn't currently display anywhere - a wide
     # band range with irreps=True was observed to be dramatically slower than the same range
     # without it.
     try:
         rows = output.get_orbital_data_for_two_spins(band_start, band_end, irreps=False)
-    except (FileNotFoundError, AssertionError):
-        return None
+    except FileNotFoundError:
+        return None, None
+    except AssertionError as exc:
+        return None, f"WAVECAR present but unreadable ({exc or 'header assertion failed'}) - " \
+            "possibly corrupted or incompletely transferred (seen on network drives)"
 
     has_irrep = "irrep(up)" in rows.dtype.names
     records = []
@@ -110,16 +116,18 @@ def _orbitals_payload(output, band_start: int, band_end: int) -> list[dict] | No
                 "irrep": str(row["irrep(down)"]) if has_irrep else None,
             },
         })
-    return records
+    return records, None
 
 
 def load_vasp_output_payload(directory: str, band_start: int, band_end: int) -> dict:
     resolved = pathlib.Path(directory).resolve()
     output = VaspOutput.from_directory(str(resolved))
+    orbitals, orbitals_error = _orbitals_payload(output, band_start, band_end)
     return {
         "path": str(resolved),
         "gap": _band_gap_payload(output, str(resolved)),
-        "orbitals": _orbitals_payload(output, band_start, band_end),
+        "orbitals": orbitals,
+        "orbitals_error": orbitals_error,
     }
 
 

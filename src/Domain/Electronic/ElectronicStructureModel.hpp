@@ -37,6 +37,10 @@ namespace DefectStudio
 		std::optional<BandGapData> gap;
 		// nullopt if WAVECAR was missing - band gap data above may still be available without it.
 		std::optional<std::vector<OrbitalRecord>> orbitals;
+		// Set only when orbitals is nullopt because WAVECAR exists but couldn't be read (corrupted/
+		// incomplete transfer, seen on network drives) - distinguishes that from WAVECAR simply
+		// being absent, which leaves this nullopt too.
+		std::optional<std::string> orbitalsError;
 	};
 
 	// Real-space grid of one Kohn-Sham orbital's wavefunction (from WAVECAR via puntukas), the raw

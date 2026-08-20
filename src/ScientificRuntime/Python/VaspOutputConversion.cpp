@@ -36,6 +36,8 @@ namespace DefectStudio
 			data.orbitals = std::move(records);
 		}
 
+		data.orbitalsError = outputData.orbitalsError;
+
 		return data;
 	}
 } // namespace DefectStudio

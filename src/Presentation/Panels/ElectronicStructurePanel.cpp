@@ -408,7 +408,17 @@ namespace DefectStudio
 
 		if (!state.data->orbitals.has_value())
 		{
-			ImGui::TextDisabled("Orbitals unavailable (no WAVECAR)");
+			if (state.data->orbitalsError.has_value())
+			{
+				// WAVECAR exists but puntukas couldn't read it - distinct from the plain "not found"
+				// case below, see VaspOutputBridge's orbitalsError comment for why this matters.
+				ImGui::TextColored(
+					ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Orbitals unavailable: %s", state.data->orbitalsError->c_str());
+			}
+			else
+			{
+				ImGui::TextDisabled("Orbitals unavailable (no WAVECAR)");
+			}
 			ImGui::End();
 			return;
 		}

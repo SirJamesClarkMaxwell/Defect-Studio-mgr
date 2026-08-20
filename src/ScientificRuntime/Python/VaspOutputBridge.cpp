@@ -64,6 +64,11 @@ namespace DefectStudio
 				}
 				data.orbitals = std::move(records);
 			}
+
+			const nlohmann::json &orbitalsError = payload.at("orbitals_error");
+			if (!orbitalsError.is_null())
+				data.orbitalsError = orbitalsError.get<std::string>();
+
 			return data;
 		}
 	} // namespace

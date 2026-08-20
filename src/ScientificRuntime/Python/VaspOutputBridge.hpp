@@ -39,6 +39,10 @@ namespace DefectStudio
 		std::optional<VaspBandGapData> gap;
 		// nullopt if WAVECAR is missing - band gap data above may still be available without it.
 		std::optional<std::vector<VaspOrbitalRecord>> orbitals;
+		// Set only when orbitals is nullopt because WAVECAR exists but couldn't be read (corrupted/
+		// incomplete transfer, seen on network drives) - distinguishes that case from WAVECAR simply
+		// being absent, which leaves this nullopt too.
+		std::optional<std::string> orbitalsError;
 	};
 
 	// Loads band-gap (HOMO/LUMO) and per-band orbital data (energy, occupation, localization
