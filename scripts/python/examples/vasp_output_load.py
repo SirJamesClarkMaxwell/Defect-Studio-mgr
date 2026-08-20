@@ -11,7 +11,53 @@ except ImportError as exc:
     raise SystemExit(1)
 
 
-def _band_gap_payload(output) -> dict | None:
+def _parse_eigenval_bandgap(directory: str) -> dict | None:
+    # Fallback for when vasprun.xml's own eigenvalues/occupations are unavailable (seen on real
+    # fixtures - Vasprun.homo/lumo raise TypeError because vasprun.eigenvalues is None even
+    # though vasprun.xml itself parses fine). EIGENVAL is VASP's raw per-kpoint/per-band
+    # energy+occupation dump - puntukas has no parser for it, so this reads the fixed text layout
+    # directly: header lines 1-7, then per kpoint a "kx ky kz weight" line followed by NBANDS
+    # lines of "index energy[_up] [energy_down] occ[_up] [occ_down]" (3 columns for ISPIN=1, 5 for
+    # ISPIN=2 - splitting each band line in half around the index column handles both without
+    # needing to branch on ISPIN). homo/lumo computed globally across all kpoints+spins+bands,
+    # matching Vasprun.homo/lumo's own convention.
+    path = pathlib.Path(directory) / "EIGENVAL"
+    if not path.exists():
+        return None
+
+    try:
+        lines = path.read_text().splitlines()
+        nkpts, nbands = (int(value) for value in lines[5].split()[1:3])
+
+        occ_threshold = 1e-6
+        homo = None
+        lumo = None
+
+        cursor = 7  # first kpoint line (0-indexed), after the fixed 6-line header + blank line
+        for _ in range(nkpts):
+            cursor += 1  # kpoint coordinates/weight line
+            for _ in range(nbands):
+                fields = lines[cursor].split()
+                cursor += 1
+                half = (len(fields) - 1) // 2
+                energies = fields[1:1 + half]
+                occupations = fields[1 + half:1 + 2 * half]
+                for energy_str, occ_str in zip(energies, occupations):
+                    energy = float(energy_str)
+                    if float(occ_str) > occ_threshold:
+                        homo = energy if homo is None else max(homo, energy)
+                    else:
+                        lumo = energy if lumo is None else min(lumo, energy)
+            cursor += 1  # blank line separating kpoint blocks
+
+        if homo is None or lumo is None:
+            return None
+        return {"bandgap": lumo - homo, "homo": homo, "lumo": lumo}
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _band_gap_payload(output, directory: str) -> dict | None:
     # VaspOutput.bandgap delegates to vasprun.bandgap with no None-guard - raises AttributeError
     # if vasprun.xml is missing. homo/lumo are global across all spins+kpoints (see
     # puntukas/vasp/vasprun/vasprun.py Vasprun.homo/lumo), not spin-resolved.
@@ -22,7 +68,7 @@ def _band_gap_payload(output) -> dict | None:
             "lumo": float(output.vasprun.lumo),
         }
     except (AttributeError, TypeError):
-        return None
+        return _parse_eigenval_bandgap(directory)
 
 
 def _orbitals_payload(output, band_start: int, band_end: int) -> list[dict] | None:
@@ -59,7 +105,7 @@ def load_vasp_output_payload(directory: str, band_start: int, band_end: int) -> 
     output = VaspOutput.from_directory(str(resolved))
     return {
         "path": str(resolved),
-        "gap": _band_gap_payload(output),
+        "gap": _band_gap_payload(output, str(resolved)),
         "orbitals": _orbitals_payload(output, band_start, band_end),
     }
 
