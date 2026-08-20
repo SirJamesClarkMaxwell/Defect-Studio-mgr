@@ -21,11 +21,19 @@ namespace DefectStudio
 	class OpenGlRendererBackend;
 	class RendererViewCamera;
 	class EventBus;
+	struct OrbitalGridData;
 
 	namespace RendererEvents::Config
 	{
 		struct Applied;
 	}
+
+	// "cam-fields|selected-positions|hidden-positions" text encoding of a RendererViewSnapshot -
+	// shared by RendererLayer's own persisted-views files and EditorLayer's per-window project
+	// state, so there is exactly one format/parser for "a saved camera+selection+visibility view"
+	// instead of two independently-evolving ones. Defined in RendererLayer.cpp.
+	[[nodiscard]] std::string SerializeViewSnapshot(const RendererViewSnapshot &snapshot);
+	[[nodiscard]] std::optional<RendererViewSnapshot> DeserializeViewSnapshot(const std::string &line);
 
 	struct RendererStartupConfig
 	{
@@ -71,12 +79,20 @@ namespace DefectStudio
 		// callers must have already built a fully-formed RendererWindowState (see
 		// App/RendererRuntimeOpenCoordinator, which mirrors RendererStartupComposer's construction).
 		void AddWindow(RendererWindowState windowState);
+		// Closes and discards windowId's window (RendererPanel, on its titlebar X). No-op if
+		// unknown.
+		void RemoveWindow(const std::string &windowId);
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
 		[[nodiscard]] const RendererGlobalRenderSettings &GetGlobalSettings() const;
 		[[nodiscard]] bool IsAttached() const noexcept;
 		[[nodiscard]] const std::string &GetFocusedViewportWindowId() const noexcept;
+		// Unlike GetFocusedViewportWindowId(), this stays set when ImGui focus moves to another
+		// panel (e.g. clicking a button in ElectronicStructurePanel) - only changes when a
+		// DIFFERENT viewport window gains focus. For "which structure is this tool inspecting"
+		// UI, not for camera-input focus gating (that's what GetFocusedViewportWindowId is for).
+		[[nodiscard]] const std::string &GetLastFocusedViewportWindowId() const noexcept;
 		[[nodiscard]] float GetLastDeltaTime() const noexcept;
 		[[nodiscard]] const RendererToolbarIconTexture *GetToolbarIcon(const std::string &fileName) const;
 		[[nodiscard]] const std::vector<std::string> &GetPeriodicTableSymbols() const;
@@ -102,6 +118,19 @@ namespace DefectStudio
 			float cropRight = 0.0f,
 			float cropTop = 0.0f,
 			float cropBottom = 0.0f) const;
+		// Regenerates windowId's orbital isosurface on the GPU (compute shader) from an
+		// already-loaded grid and writes the resulting vertex count into its RendererWindowState's
+		// orbitalChannelUp/Down (slot 0/1) - cheap enough to call on every slider tick
+		// (ElectronicStructurePanel), no Python re-fetch. Returns 0 (and leaves the window's mesh
+		// untouched) if windowId is unknown.
+		int RegenerateOrbitalIsosurface(
+			const std::string &windowId, const OrbitalGridData &grid, float isoValue, int slot = 0);
+		// Thin public wrappers around the private capture/restore pair, for EditorLayer's
+		// project-state persistence (full window snapshot: camera + selection + visibility,
+		// keyed by the now-deterministic windowId - see RendererStartupBootstrap). nullopt/no-op
+		// on an unknown windowId.
+		[[nodiscard]] std::optional<RendererViewSnapshot> CaptureWindowViewSnapshot(const std::string &windowId) const;
+		void ApplyWindowViewSnapshot(const std::string &windowId, const RendererViewSnapshot &snapshot);
 
 	private:
 		void loadDefaultWindows();
@@ -135,11 +164,16 @@ namespace DefectStudio
 		void onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event);
 		void onSetAsDefaultViewRequested(const RendererEvents::Viewport::SetAsDefaultViewRequested &event);
 		void onApplyDefaultViewRequested(const RendererEvents::Viewport::ApplyDefaultViewRequested &event);
-		void onLoadTestOrbitalRequested(const RendererEvents::Viewport::LoadTestOrbitalRequested &event);
-		void onLoadTestOrbitalGpuRequested(const RendererEvents::Viewport::LoadTestOrbitalGpuRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		[[nodiscard]] RendererWindowState *findViewportCommandWindow(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;
+		// Minimal stand-in for real T07.5.1 persistence (same pattern as ProjectTreePanel/
+		// ElectronicStructureSession's own small text files) - camera pose only (target/distance/
+		// yaw/pitch/roll/projection), not the selection/hidden-atom arrays, which are tied to one
+		// specific structure and don't carry meaningfully across a restart or onto another window.
+		void loadPersistedViews();
+		void savePersistedDefaultView();
+		void savePersistedSharedViews();
 		void restoreViewSnapshot(
 			RendererWindowState &windowState,
 			const RendererViewSnapshot &snapshot,
@@ -166,6 +200,7 @@ namespace DefectStudio
 		mutable std::unordered_map<std::string, RendererToolbarIconTexture> m_ToolbarIcons;
 		std::string m_SelectedPeriodicElement = "C";
 		std::string m_FocusedViewportWindowId;
+		std::string m_LastFocusedViewportWindowId;
 		bool m_ShowPeriodicTableWindow = true;
 		RenderExportDialogState m_ExportDialog;
 		float m_LastDeltaTime = 0.0f;
@@ -173,5 +208,10 @@ namespace DefectStudio
 		// TODO(T07.5.1): promote to real per-project persistence once project manifests exist.
 		// Session-scoped only (does not survive app restart) - see autoApplyDefaultViewOnOpen.
 		std::optional<RendererViewSnapshot> m_SessionDefaultView;
+		// Shared across every renderer window (not per-window) - a view saved with Shift+V while
+		// looking at one window is meant to be reusable on any other open window (e.g. lining up
+		// two different defects on the same viewing angle), so the list itself is layer-level.
+		std::vector<RendererViewSnapshot> m_SharedSavedViews;
+		std::size_t m_ActiveSharedSavedViewIndex = 0;
 	};
 } // namespace DefectStudio

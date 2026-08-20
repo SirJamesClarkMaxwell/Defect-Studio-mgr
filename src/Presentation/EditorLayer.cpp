@@ -4,6 +4,7 @@
 #include <cctype>
 #include <functional>
 #include <memory>
+#include <sstream>
 #include <string_view>
 #include <vector>
 
@@ -23,10 +24,17 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Events/EditorUiEvents.hpp"
+#include "Events/RendererEvents.hpp"
+#include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/Panels/ElectronicStructurePanel.hpp"
+#include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/ExportImagePanel.hpp"
+#include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
+#include "Renderer/RendererLayer.hpp"
+#include "Renderer/RendererStartupBootstrap.hpp"
 
 namespace DefectStudio
 {
@@ -56,6 +64,186 @@ namespace DefectStudio
 		int navigationDelta = 0;
 	};
 
+	[[nodiscard]] Path ProjectWindowsStatePath()
+	{
+		return Path::FromResolved(
+			FileSystem::CurrentPath() / "install" / "users" / "default" / "config" / "project_windows.txt");
+	}
+
+	[[nodiscard]] std::vector<std::string> SplitOn(const std::string &text, char delimiter)
+	{
+		std::vector<std::string> parts;
+		std::size_t start = 0;
+		while (true)
+		{
+			const std::size_t pos = text.find(delimiter, start);
+			parts.push_back(text.substr(start, pos == std::string::npos ? std::string::npos : pos - start));
+			if (pos == std::string::npos)
+				break;
+			start = pos + 1;
+		}
+		return parts;
+	}
+
+	// Minimal hand-rolled block format ("key=value" lines, "---" between windows) - not real YAML,
+	// deliberately: this file is internal-only (nothing else reads it), and pulling yaml-cpp
+	// ceremony into EditorLayer.cpp for one save/load pair isn't worth it. See
+	// EditorLayer::saveProjectWindowState/loadAndQueueProjectWindowRestores for how it's used.
+	[[nodiscard]] std::string SerializeWindowRecord(const PersistedWindowRecord &record)
+	{
+		std::ostringstream stream;
+		stream << "source=" << record.sourcePath.String() << '\n';
+		stream << "display_name=" << record.displayName << '\n';
+		stream << "view=" << SerializeViewSnapshot(record.view) << '\n';
+		stream << "show=" << record.showAtoms << ',' << record.showBonds << ',' << record.showCellBox << ','
+			   << record.showGrid << '\n';
+		stream << "orbital_up=" << record.orbitalUpEnabled << ',' << record.orbitalUpPositiveColor.x << ','
+			   << record.orbitalUpPositiveColor.y << ',' << record.orbitalUpPositiveColor.z << ','
+			   << record.orbitalUpNegativeColor.x << ',' << record.orbitalUpNegativeColor.y << ','
+			   << record.orbitalUpNegativeColor.z << ',' << record.orbitalUpAlpha << '\n';
+		stream << "orbital_down=" << record.orbitalDownEnabled << ',' << record.orbitalDownPositiveColor.x << ','
+			   << record.orbitalDownPositiveColor.y << ',' << record.orbitalDownPositiveColor.z << ','
+			   << record.orbitalDownNegativeColor.x << ',' << record.orbitalDownNegativeColor.y << ','
+			   << record.orbitalDownNegativeColor.z << ',' << record.orbitalDownAlpha << '\n';
+		stream << "has_es=" << record.hasElectronicStructureState << '\n';
+		if (record.hasElectronicStructureState)
+		{
+			stream << "es=" << record.esBandStart << ',' << record.esBandEnd << ',' << record.esGapWindowMargin
+				   << ',' << record.esLocalizationThreshold << ',' << record.esSplitSpinChannels << ','
+				   << record.esRelativeToVbm << ',' << record.esSelectedBand << ',' << record.esIsoValue << '\n';
+			stream << "es_iso_overrides=";
+			bool first = true;
+			for (const auto &[spinChannel, band, value] : record.esIsoOverrides)
+			{
+				if (!first)
+					stream << ';';
+				first = false;
+				stream << spinChannel << ':' << band << ':' << value;
+			}
+			stream << '\n';
+		}
+		stream << "---\n";
+		return stream.str();
+	}
+
+	[[nodiscard]] std::vector<PersistedWindowRecord> ParseProjectWindowsState(const std::string &text)
+	{
+		std::vector<PersistedWindowRecord> records;
+		std::unordered_map<std::string, std::string> fields;
+		std::istringstream stream(text);
+		std::string line;
+
+		const auto flush = [&]() {
+			if (!fields.contains("source"))
+			{
+				fields.clear();
+				return;
+			}
+			PersistedWindowRecord record;
+			record.sourcePath = Path(fields["source"]);
+			record.displayName = fields.contains("display_name") ? fields["display_name"] : std::string{};
+			if (fields.contains("view"))
+			{
+				if (std::optional<RendererViewSnapshot> snapshot = DeserializeViewSnapshot(fields["view"]))
+					record.view = *snapshot;
+			}
+			if (fields.contains("show"))
+			{
+				const std::vector<std::string> parts = SplitOn(fields["show"], ',');
+				if (parts.size() == 4)
+				{
+					record.showAtoms = parts[0] == "1";
+					record.showBonds = parts[1] == "1";
+					record.showCellBox = parts[2] == "1";
+					record.showGrid = parts[3] == "1";
+				}
+			}
+			const auto parseOrbital =
+				[&](const char *key, bool &enabled, glm::vec3 &pos, glm::vec3 &neg, float &alpha) {
+					if (!fields.contains(key))
+						return;
+					const std::vector<std::string> parts = SplitOn(fields[key], ',');
+					if (parts.size() != 8)
+						return;
+					try
+					{
+						enabled = parts[0] == "1";
+						pos = glm::vec3(std::stof(parts[1]), std::stof(parts[2]), std::stof(parts[3]));
+						neg = glm::vec3(std::stof(parts[4]), std::stof(parts[5]), std::stof(parts[6]));
+						alpha = std::stof(parts[7]);
+					}
+					catch (const std::exception &)
+					{
+					}
+				};
+			parseOrbital(
+				"orbital_up", record.orbitalUpEnabled, record.orbitalUpPositiveColor, record.orbitalUpNegativeColor,
+				record.orbitalUpAlpha);
+			parseOrbital(
+				"orbital_down", record.orbitalDownEnabled, record.orbitalDownPositiveColor,
+				record.orbitalDownNegativeColor, record.orbitalDownAlpha);
+
+			record.hasElectronicStructureState = fields.contains("has_es") && fields["has_es"] == "1";
+			if (record.hasElectronicStructureState && fields.contains("es"))
+			{
+				const std::vector<std::string> parts = SplitOn(fields["es"], ',');
+				if (parts.size() == 8)
+				{
+					try
+					{
+						record.esBandStart = std::stoi(parts[0]);
+						record.esBandEnd = std::stoi(parts[1]);
+						record.esGapWindowMargin = std::stoi(parts[2]);
+						record.esLocalizationThreshold = std::stof(parts[3]);
+						record.esSplitSpinChannels = parts[4] == "1";
+						record.esRelativeToVbm = parts[5] == "1";
+						record.esSelectedBand = std::stoi(parts[6]);
+						record.esIsoValue = std::stof(parts[7]);
+					}
+					catch (const std::exception &)
+					{
+					}
+				}
+			}
+			if (fields.contains("es_iso_overrides") && !fields["es_iso_overrides"].empty())
+			{
+				for (const std::string &token : SplitOn(fields["es_iso_overrides"], ';'))
+				{
+					const std::vector<std::string> parts = SplitOn(token, ':');
+					if (parts.size() != 3)
+						continue;
+					try
+					{
+						record.esIsoOverrides.emplace_back(
+							std::stoi(parts[0]), std::stoi(parts[1]), std::stof(parts[2]));
+					}
+					catch (const std::exception &)
+					{
+					}
+				}
+			}
+
+			records.push_back(std::move(record));
+			fields.clear();
+		};
+
+		while (std::getline(stream, line))
+		{
+			if (line == "---")
+			{
+				flush();
+				continue;
+			}
+			const std::size_t eq = line.find('=');
+			if (eq == std::string::npos)
+				continue;
+			fields[line.substr(0, eq)] = line.substr(eq + 1);
+		}
+		flush();
+
+		return records;
+	}
+
 	[[nodiscard]] std::string toLowerCopy(std::string_view value)
 	{
 		std::string result(value);
@@ -73,6 +261,38 @@ namespace DefectStudio
 		const std::string lowerNeedle = toLowerCopy(needle);
 		return lowerHaystack.find(lowerNeedle) != std::string::npos;
 	}
+
+	// Deliberately separate from "Open Defect" (geometry only, ProjectTreePanel) - electronic
+	// structure is a Python/WAVECAR round-trip the user may not want on every geometry load, so it
+	// gets its own explicit trigger instead of firing automatically whenever a window is focused.
+	class LoadElectronicStructureForFocusedWindowCommand final : public ICommand
+	{
+	public:
+		explicit LoadElectronicStructureForFocusedWindowCommand(Ref<ElectronicStructureSession> session)
+			: m_Session(std::move(session))
+		{
+		}
+
+		Result<void> Execute(CommandContext &) override
+		{
+			if (m_Session == nullptr)
+				return {};
+			RendererWindowState *windowState = m_Session->FindFocusedWindow();
+			if (windowState == nullptr)
+				return {};
+			ElectronicStructureSession::WindowState &state = m_Session->Update(*windowState);
+			m_Session->DispatchOutputLoad(state);
+			return {};
+		}
+
+		std::string Description() const override
+		{
+			return "Load electronic structure for the focused renderer window";
+		}
+
+	private:
+		Ref<ElectronicStructureSession> m_Session;
+	};
 
 	[[nodiscard]] std::string findShortcutForCommand(
 		const CommandID &id,
@@ -199,6 +419,7 @@ namespace DefectStudio
 	void EditorLayer::OnDetach()
 	{
 		DS_LOG_INFO("EditorLayer detached");
+		saveProjectWindowState();
 		m_Panels.Clear();
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
@@ -231,6 +452,7 @@ namespace DefectStudio
 	void EditorLayer::OnImGuiRender()
 	{
 		initializePanelsIfNeeded();
+		pollPendingWindowRestores();
 		renderMainMenuBar();
 		renderCommandPalettePopup();
 
@@ -278,6 +500,38 @@ namespace DefectStudio
 				m_EventBus,
 				"Export Image",
 				false);
+			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
+			// jobs) - split into two windows so the occupation plot can fill its own window
+			// instead of a fixed height squeezed under a long list of controls. Kept as a member
+			// (not local) so saveProjectWindowState/pollPendingWindowRestores can reach it too.
+			m_ElectronicStructureSession = CreateRef<ElectronicStructureSession>(*rendererLayer, m_JobSystem);
+			registerPanel<ElectronicStructurePanel>(
+				m_ElectronicStructureSession,
+				m_EventBus,
+				"Electronic Structure",
+				true);
+			registerPanel<OccupationDiagramPanel>(
+				m_ElectronicStructureSession,
+				"Occupation Diagram",
+				true);
+
+			if (auto commandRegistry = m_CommandRegistry.lock())
+			{
+				auto result = commandRegistry->Register(
+					CommandMeta{
+						CommandID{"electronic_structure.load_focused"},
+						"Electronic Structure: Load for focused window",
+						"Renderer",
+						"Load electronic structure (band gap + orbitals) for the currently focused "
+						"renderer window.",
+						{},
+						CommandFlags::None},
+					[session = m_ElectronicStructureSession](CommandContext &) -> Unique<ICommand> {
+						return CreateUnique<LoadElectronicStructureForFocusedWindowCommand>(session);
+					});
+				if (!result)
+					DS_LOG_WARN("Electronic structure command registration failed: {}", result.Error().technicalDetails);
+			}
 		}
 		registerPanel<SettingsPanel>(
 			m_EventBus,
@@ -289,6 +543,151 @@ namespace DefectStudio
 			"Settings",
 			true);
 		m_PanelsInitialized = true;
+
+		loadAndQueueProjectWindowRestores();
+	}
+
+	void EditorLayer::saveProjectWindowState()
+	{
+		auto rendererLayer = m_RendererLayer.lock();
+		if (rendererLayer == nullptr)
+			return;
+
+		std::ostringstream stream;
+		for (const RendererWindowState &windowState : rendererLayer->GetWindows())
+		{
+			if (windowState.structure.sourcePath.Empty())
+				continue;
+
+			PersistedWindowRecord record;
+			record.sourcePath = windowState.structure.sourcePath;
+			record.displayName = windowState.title;
+			if (std::optional<RendererViewSnapshot> snapshot =
+					rendererLayer->CaptureWindowViewSnapshot(windowState.windowId))
+				record.view = *snapshot;
+			record.showAtoms = windowState.showAtoms;
+			record.showBonds = windowState.showBonds;
+			record.showCellBox = windowState.showCellBox;
+			record.showGrid = windowState.showGrid;
+			record.orbitalUpEnabled = windowState.orbitalChannelUp.enabled;
+			record.orbitalUpPositiveColor = windowState.orbitalChannelUp.positiveLobeColor;
+			record.orbitalUpNegativeColor = windowState.orbitalChannelUp.negativeLobeColor;
+			record.orbitalUpAlpha = windowState.orbitalChannelUp.lobeAlpha;
+			record.orbitalDownEnabled = windowState.orbitalChannelDown.enabled;
+			record.orbitalDownPositiveColor = windowState.orbitalChannelDown.positiveLobeColor;
+			record.orbitalDownNegativeColor = windowState.orbitalChannelDown.negativeLobeColor;
+			record.orbitalDownAlpha = windowState.orbitalChannelDown.lobeAlpha;
+
+			if (m_ElectronicStructureSession != nullptr)
+			{
+				if (const ElectronicStructureSession::WindowState *esState =
+						m_ElectronicStructureSession->FindWindowState(windowState.windowId))
+				{
+					record.hasElectronicStructureState = true;
+					record.esBandStart = esState->bandStart;
+					record.esBandEnd = esState->bandEnd;
+					record.esGapWindowMargin = esState->gapWindowMargin;
+					record.esLocalizationThreshold = esState->localizationThreshold;
+					record.esSplitSpinChannels = esState->splitSpinChannels;
+					record.esRelativeToVbm = esState->relativeToVbm;
+					record.esSelectedBand = esState->selectedBand;
+					record.esIsoValue = esState->isoValue;
+					for (const auto &[key, value] : esState->isoValueByKey)
+					{
+						const int spinChannel = static_cast<int>(key >> 32);
+						const int band = static_cast<int>(key & 0xffffffffu);
+						record.esIsoOverrides.emplace_back(spinChannel, band, value);
+					}
+				}
+			}
+
+			stream << SerializeWindowRecord(record);
+		}
+
+		std::string error;
+		if (!TextFileIO::Save(ProjectWindowsStatePath(), stream.str(), error))
+			DS_LOG_WARN("EditorLayer: failed to persist project window state: {}", error);
+	}
+
+	void EditorLayer::loadAndQueueProjectWindowRestores()
+	{
+		std::string text;
+		std::string error;
+		if (!TextFileIO::Load(ProjectWindowsStatePath(), text, error))
+			return;
+
+		for (PersistedWindowRecord &record : ParseProjectWindowsState(text))
+		{
+			if (record.sourcePath.Empty() || !FileSystem::Exists(record.sourcePath.Native()))
+				continue;
+
+			const std::string predictedId = ComputeDeterministicRendererWindowId(record.sourcePath);
+			m_PendingWindowRestores[predictedId] = record;
+
+			if (m_EventBus != nullptr)
+			{
+				RendererEvents::Windows::OpenStructureRequested request;
+				request.filePath = record.sourcePath;
+				request.displayName = record.displayName;
+				m_EventBus->Queue(request);
+			}
+		}
+	}
+
+	void EditorLayer::pollPendingWindowRestores()
+	{
+		if (m_PendingWindowRestores.empty())
+			return;
+
+		auto rendererLayer = m_RendererLayer.lock();
+		if (rendererLayer == nullptr)
+			return;
+
+		for (RendererWindowState &windowState : rendererLayer->GetWindows())
+		{
+			const auto it = m_PendingWindowRestores.find(windowState.windowId);
+			if (it == m_PendingWindowRestores.end())
+				continue;
+
+			const PersistedWindowRecord &record = it->second;
+			rendererLayer->ApplyWindowViewSnapshot(windowState.windowId, record.view);
+			windowState.showAtoms = record.showAtoms;
+			windowState.showBonds = record.showBonds;
+			windowState.showCellBox = record.showCellBox;
+			windowState.showGrid = record.showGrid;
+			windowState.orbitalChannelUp.enabled = record.orbitalUpEnabled;
+			windowState.orbitalChannelUp.positiveLobeColor = record.orbitalUpPositiveColor;
+			windowState.orbitalChannelUp.negativeLobeColor = record.orbitalUpNegativeColor;
+			windowState.orbitalChannelUp.lobeAlpha = record.orbitalUpAlpha;
+			windowState.orbitalChannelDown.enabled = record.orbitalDownEnabled;
+			windowState.orbitalChannelDown.positiveLobeColor = record.orbitalDownPositiveColor;
+			windowState.orbitalChannelDown.negativeLobeColor = record.orbitalDownNegativeColor;
+			windowState.orbitalChannelDown.lobeAlpha = record.orbitalDownAlpha;
+
+			if (record.hasElectronicStructureState && m_ElectronicStructureSession != nullptr)
+			{
+				ElectronicStructureSession::WindowState &esState = m_ElectronicStructureSession->Update(windowState);
+				esState.bandStart = record.esBandStart;
+				esState.bandEnd = record.esBandEnd;
+				esState.gapWindowMargin = record.esGapWindowMargin;
+				esState.localizationThreshold = record.esLocalizationThreshold;
+				esState.splitSpinChannels = record.esSplitSpinChannels;
+				esState.relativeToVbm = record.esRelativeToVbm;
+				esState.selectedBand = record.esSelectedBand;
+				esState.isoValue = record.esIsoValue;
+				for (const auto &[spinChannel, band, value] : record.esIsoOverrides)
+					esState.isoValueByKey[ElectronicStructureSession::PackGridKey(spinChannel, band)] = value;
+
+				m_ElectronicStructureSession->DispatchOutputLoad(esState);
+
+				if (windowState.orbitalChannelUp.enabled)
+					m_ElectronicStructureSession->EnsureChannelRendered(esState, windowState, 0, 0);
+				if (windowState.orbitalChannelDown.enabled)
+					m_ElectronicStructureSession->EnsureChannelRendered(esState, windowState, 1, 1);
+			}
+
+			m_PendingWindowRestores.erase(it);
+		}
 	}
 
 	WeakRef<IPanel> EditorLayer::findPanel(PanelId panelId)

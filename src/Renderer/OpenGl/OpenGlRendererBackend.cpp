@@ -423,7 +423,8 @@ namespace DefectStudio
 		bool showGrid,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
-		int debugGpuIsosurfaceVertexCount)
+		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp,
+		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -500,8 +501,13 @@ namespace DefectStudio
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
-		if (debugGpuIsosurfaceVertexCount > 0)
-			renderIsosurfaceGpuOverlay(debugGpuIsosurfaceVertexCount, camera, globalSettings);
+		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
+			renderIsosurfaceGpuOverlay(m_IsosurfaceGpuVao[0], orbitalChannelUp->vertexCount, camera, globalSettings,
+				orbitalChannelUp->positiveLobeColor, orbitalChannelUp->negativeLobeColor, orbitalChannelUp->lobeAlpha);
+		if (orbitalChannelDown != nullptr && orbitalChannelDown->enabled && orbitalChannelDown->vertexCount > 0)
+			renderIsosurfaceGpuOverlay(m_IsosurfaceGpuVao[1], orbitalChannelDown->vertexCount, camera, globalSettings,
+				orbitalChannelDown->positiveLobeColor, orbitalChannelDown->negativeLobeColor,
+				orbitalChannelDown->lobeAlpha);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -563,20 +569,23 @@ namespace DefectStudio
 			glDeleteBuffers(1, &m_IsosurfaceGridSsbo);
 			m_IsosurfaceGridSsbo = 0;
 		}
-		if (m_IsosurfaceGpuVertexSsbo != 0)
+		for (int slot = 0; slot < kIsosurfaceSlotCount; ++slot)
 		{
-			glDeleteBuffers(1, &m_IsosurfaceGpuVertexSsbo);
-			m_IsosurfaceGpuVertexSsbo = 0;
-		}
-		if (m_IsosurfaceCounterSsbo != 0)
-		{
-			glDeleteBuffers(1, &m_IsosurfaceCounterSsbo);
-			m_IsosurfaceCounterSsbo = 0;
-		}
-		if (m_IsosurfaceGpuVao != 0)
-		{
-			glDeleteVertexArrays(1, &m_IsosurfaceGpuVao);
-			m_IsosurfaceGpuVao = 0;
+			if (m_IsosurfaceGpuVertexSsbo[slot] != 0)
+			{
+				glDeleteBuffers(1, &m_IsosurfaceGpuVertexSsbo[slot]);
+				m_IsosurfaceGpuVertexSsbo[slot] = 0;
+			}
+			if (m_IsosurfaceCounterSsbo[slot] != 0)
+			{
+				glDeleteBuffers(1, &m_IsosurfaceCounterSsbo[slot]);
+				m_IsosurfaceCounterSsbo[slot] = 0;
+			}
+			if (m_IsosurfaceGpuVao[slot] != 0)
+			{
+				glDeleteVertexArrays(1, &m_IsosurfaceGpuVao[slot]);
+				m_IsosurfaceGpuVao[slot] = 0;
+			}
 		}
 
 		const std::array<OpenGlMeshHandles *, 2> meshes = {&m_SphereMesh, &m_CylinderMesh};
@@ -791,31 +800,34 @@ namespace DefectStudio
 		glBindVertexArray(0);
 
 		glGenBuffers(1, &m_IsosurfaceGridSsbo);
-		glGenBuffers(1, &m_IsosurfaceGpuVertexSsbo);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceGpuVertexSsbo);
-		glBufferData(GL_SHADER_STORAGE_BUFFER,
-			static_cast<GLsizeiptr>(kMaxIsosurfaceGpuVertices * sizeof(IsosurfaceGpuVertex)),
-			nullptr, GL_DYNAMIC_COPY);
-		glGenBuffers(1, &m_IsosurfaceCounterSsbo);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_COPY);
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		for (int slot = 0; slot < kIsosurfaceSlotCount; ++slot)
+		{
+			glGenBuffers(1, &m_IsosurfaceGpuVertexSsbo[slot]);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceGpuVertexSsbo[slot]);
+			glBufferData(GL_SHADER_STORAGE_BUFFER,
+				static_cast<GLsizeiptr>(kMaxIsosurfaceGpuVertices * sizeof(IsosurfaceGpuVertex)),
+				nullptr, GL_DYNAMIC_COPY);
+			glGenBuffers(1, &m_IsosurfaceCounterSsbo[slot]);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo[slot]);
+			glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_COPY);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-		// Same buffer, two roles: written as an SSBO by the compute shader, read as a vertex
-		// buffer here - geometry never leaves the GPU between the two.
-		glGenVertexArrays(1, &m_IsosurfaceGpuVao);
-		glBindVertexArray(m_IsosurfaceGpuVao);
-		glBindBuffer(GL_ARRAY_BUFFER, m_IsosurfaceGpuVertexSsbo);
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
-			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, position)));
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
-			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign)));
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
-			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign) + sizeof(glm::vec3)));
-		glBindVertexArray(0);
+			// Same buffer, two roles: written as an SSBO by the compute shader, read as a vertex
+			// buffer here - geometry never leaves the GPU between the two.
+			glGenVertexArrays(1, &m_IsosurfaceGpuVao[slot]);
+			glBindVertexArray(m_IsosurfaceGpuVao[slot]);
+			glBindBuffer(GL_ARRAY_BUFFER, m_IsosurfaceGpuVertexSsbo[slot]);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+				reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, position)));
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+				reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign)));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+				reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign) + sizeof(glm::vec3)));
+			glBindVertexArray(0);
+		}
 	}
 
 	void OpenGlRendererBackend::configureOpenGlState() const
@@ -1237,9 +1249,13 @@ namespace DefectStudio
 	}
 
 	void OpenGlRendererBackend::renderIsosurfaceGpuOverlay(
+		unsigned int vao,
 		int vertexCount,
 		const RendererViewCamera &camera,
-		const RendererGlobalRenderSettings &globalSettings)
+		const RendererGlobalRenderSettings &globalSettings,
+		const glm::vec3 &positiveLobeColor,
+		const glm::vec3 &negativeLobeColor,
+		float lobeAlpha)
 	{
 		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
 		// (m_IsosurfaceGpuVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
@@ -1279,28 +1295,33 @@ namespace DefectStudio
 		if (twoSidedLocation >= 0)
 			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
 
-		// Distinct colors from the CPU overlay (green/yellow instead of blue/orange) purely so the
-		// two are visually distinguishable if ever shown at once - not a real palette choice.
 		const int positiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_PositiveLobeColor");
 		const int negativeLocation = m_ShaderLibrary.Uniform("isosurface", "u_NegativeLobeColor");
 		const int alphaLocation = m_ShaderLibrary.Uniform("isosurface", "u_LobeAlpha");
 		if (positiveLocation >= 0)
-			glUniform3f(positiveLocation, 0.3f, 0.85f, 0.35f);
+			glUniform3fv(positiveLocation, 1, &positiveLobeColor.x);
 		if (negativeLocation >= 0)
-			glUniform3f(negativeLocation, 0.95f, 0.85f, 0.2f);
+			glUniform3fv(negativeLocation, 1, &negativeLobeColor.x);
 		if (alphaLocation >= 0)
-			glUniform1f(alphaLocation, 0.6f);
+			glUniform1f(alphaLocation, lobeAlpha);
 
-		glBindVertexArray(m_IsosurfaceGpuVao);
+		// A translucent surface should show its back faces too (otherwise back-face culling makes
+		// it look like an opaque shell instead of a soft cloud) - disabled only for this draw call,
+		// re-enabled immediately after so atoms/bonds keep their normal culling.
+		glDisable(GL_CULL_FACE);
+		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 		glBindVertexArray(0);
+		glEnable(GL_CULL_FACE);
 	}
 
-	int OpenGlRendererBackend::RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue)
+	int OpenGlRendererBackend::RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue, int slot)
 	{
 		if (!m_Initialized)
 			return 0;
 		if (grid.dimensions.x < 2 || grid.dimensions.y < 2 || grid.dimensions.z < 2 || isoValue <= 0.0f)
+			return 0;
+		if (slot < 0 || slot >= kIsosurfaceSlotCount)
 			return 0;
 
 		const unsigned int program = m_ShaderLibrary.Program("isosurface_compute");
@@ -1320,12 +1341,12 @@ namespace DefectStudio
 			grid.values.data(), GL_STATIC_DRAW);
 
 		const unsigned int zero = 0;
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo[slot]);
 		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_IsosurfaceGridSsbo);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_IsosurfaceGpuVertexSsbo);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_IsosurfaceCounterSsbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_IsosurfaceGpuVertexSsbo[slot]);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_IsosurfaceCounterSsbo[slot]);
 
 		glUseProgram(program);
 		const int dimensionsLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Dimensions");
@@ -1358,7 +1379,7 @@ namespace DefectStudio
 		}
 
 		unsigned int vertexCount = 0;
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_IsosurfaceCounterSsbo[slot]);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &vertexCount);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 

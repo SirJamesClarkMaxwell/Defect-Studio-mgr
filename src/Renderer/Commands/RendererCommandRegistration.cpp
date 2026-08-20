@@ -132,15 +132,6 @@ namespace DefectStudio
 			return CreateRendererApplyDefaultViewCommand(std::move(eventBus));
 		}
 
-		Unique<ICommand> MakeLoadTestOrbitalCommand(Ref<EventBus> eventBus, CommandContext &)
-		{
-			return CreateRendererLoadTestOrbitalCommand(std::move(eventBus));
-		}
-
-		Unique<ICommand> MakeLoadTestOrbitalGpuCommand(Ref<EventBus> eventBus, CommandContext &)
-		{
-			return CreateRendererLoadTestOrbitalGpuCommand(std::move(eventBus));
-		}
 	}
 
 	void RegisterRendererCommands(CommandRegistry &registry, Ref<EventBus> eventBus)
@@ -321,17 +312,5 @@ namespace DefectStudio
 			"Renderer: Apply default view",
 			"Apply the session default view to the active renderer viewport.",
 			std::bind_front(MakeApplyDefaultViewCommand, eventBus));
-		RegisterRendererCommand(
-			registry,
-			"renderer.debug.load_test_orbital",
-			"Renderer: Load test orbital (debug)",
-			"T08.6 debug: loads a hardcoded fixture orbital and overlays its isosurface on the active viewport.",
-			std::bind_front(MakeLoadTestOrbitalCommand, eventBus));
-		RegisterRendererCommand(
-			registry,
-			"renderer.debug.load_test_orbital_gpu",
-			"Renderer: Load test orbital GPU (debug)",
-			"T08.6 debug: same fixture orbital as Ctrl+Alt+O, meshed via the compute-shader port instead of the CPU reference.",
-			std::bind_front(MakeLoadTestOrbitalGpuCommand, eventBus));
 	}
 } // namespace DefectStudio

@@ -17,7 +17,19 @@
       "Bash(git commit *)",
       "Bash(python *)",
       "Bash(python3 *)",
-      "Bash(./scripts/Windows/BuildErrorsOnly.bat --config Debug)"
+      "Bash(./scripts/Windows/BuildErrorsOnly.bat --config Debug)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(\"build/bin/Debug-windows-x86_64/DefectStudio/DefectStudio.exe\")",
+      "Bash(echo \"launched, pid $!\")",
+      "Bash(\".venv/Scripts/python.exe\" \"C:/Users/fzabi/AppData/Local/Temp/claude/c--Users-fzabi-Desktop-STUDIA-Defect-Studio-mgr/77b78601-b6d1-4d3f-a973-fd33ab42ebc3/scratchpad/debug_orbital_scatter.py\" \"test-directory/dimer/exc_ms/singlet_HSE\" 0 0 0 0.03 \"C:/Users/fzabi/AppData/Local/Temp/claude/c--Users-fzabi-Desktop-STUDIA-Defect-Studio-mgr/77b78601-b6d1-4d3f-a973-fd33ab42ebc3/scratchpad/orbital_scatter_003.png\")",
+      "Bash(\"build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\" --gtest_brief=1)",
+      "Bash(git submodule *)",
+      "Bash(cmd //c \"scripts\\\\\\\\Windows\\\\\\\\BuildErrorsOnly.bat\" DefectStudio Debug)",
+      "Bash(cmd //c \"scripts\\\\\\\\Windows\\\\\\\\BuildErrorsOnly.bat\" --config Debug --target DefectStudio)",
+      "Bash(\"build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq DefectStudio.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq cl.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq MSBuild.exe\")"
     ]
   }
 }

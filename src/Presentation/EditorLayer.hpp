@@ -3,12 +3,19 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <string>
+#include <tuple>
+#include <unordered_map>
 #include <utility>
+#include <vector>
+
+#include <glm/glm.hpp>
 
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Layer.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/LoggingPanel.hpp"
@@ -28,6 +35,44 @@ namespace DefectStudio
 	class RendererLayer;
 	struct CommandID;
 	struct ApplicationConfig;
+
+	// One open renderer window's full state, as persisted to/restored from
+	// install/users/default/config/project_windows.txt (see EditorLayer::saveProjectWindowState /
+	// loadAndQueueProjectWindowRestores). Keyed by source file at rest (that's the one thing that
+	// survives a restart - windowId is deterministic but only knowable once the hash formula is
+	// applied, see RendererStartupBootstrap::GenerateRendererWindowId).
+	struct PersistedWindowRecord
+	{
+		Path sourcePath;
+		std::string displayName;
+		RendererViewSnapshot view;
+		bool showAtoms = true;
+		bool showBonds = true;
+		bool showCellBox = true;
+		bool showGrid = true;
+		bool orbitalUpEnabled = false;
+		glm::vec3 orbitalUpPositiveColor{1.0f, 0.0f, 0.0f};
+		glm::vec3 orbitalUpNegativeColor{0.0f, 0.0f, 1.0f};
+		float orbitalUpAlpha = 0.6f;
+		bool orbitalDownEnabled = false;
+		glm::vec3 orbitalDownPositiveColor{1.0f, 0.0f, 0.0f};
+		glm::vec3 orbitalDownNegativeColor{0.0f, 0.0f, 1.0f};
+		float orbitalDownAlpha = 0.6f;
+		// Electronic structure (ElectronicStructureSession::WindowState) - only meaningful if
+		// hasElectronicStructureState is true (a window the user never opened the ES panel for
+		// while focused on has no ES session state to restore).
+		bool hasElectronicStructureState = false;
+		int esBandStart = 1022;
+		int esBandEnd = 1027;
+		int esGapWindowMargin = 10;
+		float esLocalizationThreshold = 0.0f;
+		bool esSplitSpinChannels = true;
+		bool esRelativeToVbm = false;
+		int esSelectedBand = -1;
+		float esIsoValue = 0.03f;
+		// (spinChannel, band, isoValue) - only the orbitals whose iso value was individually tuned.
+		std::vector<std::tuple<int, int, float>> esIsoOverrides;
+	};
 
 	namespace CoreEvents
 	{
@@ -85,6 +130,19 @@ namespace DefectStudio
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 
+		// Minimal stand-in for real T07.5.1 project persistence - see PersistedWindowRecord.
+		// Save happens once, at shutdown (OnDetach) - the alternative (a save call at every one of
+		// the dozens of mutation sites across RendererLayer/ElectronicStructureSession) is real
+		// wiring risk for marginal benefit over "capture the whole world once, reliably, on exit".
+		// Load happens once at startup: publish an OpenStructureRequested per persisted window
+		// (same event ProjectTreePanel's RMB "Open Defect" uses - no new opening mechanism) and
+		// remember what to apply once each one actually appears; pollPendingWindowRestores (called
+		// every frame from OnImGuiRender) applies+forgets each entry as its window shows up, and
+		// costs nothing once the pending map is empty.
+		void saveProjectWindowState();
+		void loadAndQueueProjectWindowRestores();
+		void pollPendingWindowRestores();
+
 	private:
 		PanelRegistry m_Panels;
 		bool m_PanelsInitialized = false;
@@ -102,6 +160,11 @@ namespace DefectStudio
 		bool m_CommandPaletteOpenRequested = false;
 		int m_CommandPaletteSelection = 0;
 		std::array<char, 128> m_CommandPaletteSearchBuffer{};
+		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
+		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see
+		// RendererStartupBootstrap::GenerateRendererWindowId, which pollPendingWindowRestores
+		// recomputes to match against whatever actually shows up in RendererLayer::GetWindows().
+		std::unordered_map<std::string, PersistedWindowRecord> m_PendingWindowRestores;
 	};
 
 	template <typename TPanel, typename... Args>

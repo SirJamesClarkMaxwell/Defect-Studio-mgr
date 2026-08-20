@@ -11,6 +11,7 @@
 
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
+#include <imgui_internal.h> // ImGui::DockBuilderGetCentralNode - auto-dock new windows into it
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
@@ -75,14 +76,18 @@ namespace DefectStudio
 		if (!m_Layer.IsAttached())
 			return;
 
+		std::vector<std::string> windowsToClose;
 		for (RendererWindowState &windowState : m_Layer.GetWindows())
-			renderStructureWindow(windowState, deltaTime);
+			renderStructureWindow(windowState, deltaTime, windowsToClose);
+		for (const std::string &windowId : windowsToClose)
+			m_Layer.RemoveWindow(windowId);
 
 		// drawPeriodicTableWindow();
 		m_Layer.CollectProfilingData();
 	}
 
-	void RendererPanel::renderStructureWindow(RendererWindowState &windowState, float deltaTime)
+	void RendererPanel::renderStructureWindow(
+		RendererWindowState &windowState, float deltaTime, std::vector<std::string> &windowsToClose)
 	{
 		if (windowState.camera == nullptr)
 			return;
@@ -93,7 +98,21 @@ namespace DefectStudio
 		// a display name (e.g. both opened from a "singlet_HSE" leaf folder) no longer collide
 		// into the same ImGui window, and renaming a window's title is safe.
 		const std::string imguiWindowLabel = windowState.title + "###RendererWindow_" + windowState.windowId;
-		const bool began = ImGui::Begin(imguiWindowLabel.c_str());
+
+		if (!windowState.dockingInitialized)
+		{
+			windowState.dockingInitialized = true;
+			// Looked up fresh (not cached) since dock node IDs can be reshuffled by manual
+			// re-docking elsewhere in the layout - GetMainViewport()->ID is the same dockspace ID
+			// ImGuiLayer passes to DockSpaceOverViewport every frame, so this always resolves the
+			// real central node rather than a stale/guessed ID.
+			if (ImGuiDockNode *centralNode = ImGui::DockBuilderGetCentralNode(ImGui::GetMainViewport()->ID))
+				ImGui::SetNextWindowDockID(centralNode->ID, ImGuiCond_FirstUseEver);
+		}
+
+		bool windowOpen = true;
+		const bool began = ImGui::Begin(imguiWindowLabel.c_str(), &windowOpen);
+
 		const bool nowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		if (nowFocused != windowState.lastFocusedState)
 		{
@@ -110,6 +129,12 @@ namespace DefectStudio
 		}
 		if (!began)
 		{
+			ImGui::End();
+			return;
+		}
+		if (!windowOpen)
+		{
+			windowsToClose.push_back(windowState.windowId);
 			ImGui::End();
 			return;
 		}

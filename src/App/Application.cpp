@@ -249,6 +249,18 @@ namespace DefectStudio
 		if (event.handled)
 			return;
 
+		// ImGui text fields (window rename, search boxes, numeric inputs, ...) should own the
+		// keyboard while focused - without this, app-wide shortcuts (e.g. "B" -> align to B axis)
+		// fire on every keystroke typed into any text field, anywhere in the app.
+		if constexpr (std::is_same_v<TEvent, KeyPressedEvent> || std::is_same_v<TEvent, KeyRepeatedEvent>)
+		{
+			if (ImGui::GetIO().WantCaptureKeyboard)
+			{
+				event.handled = true;
+				return;
+			}
+		}
+
 		dispatchEventToLayers(event);
 	}
 

@@ -19,16 +19,18 @@
 #include <glad/gl.h>
 #include <stb_image.h>
 
+#include <sstream>
+
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Time.hpp"
+#include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
-#include "ScientificRuntime/Python/VaspOrbitalGridBridge.hpp"
-#include "ScientificRuntime/Python/VaspOrbitalGridConversion.hpp"
+#include "Domain/Electronic/ElectronicStructureModel.hpp"
 
 namespace DefectStudio
 {
@@ -53,6 +55,125 @@ namespace DefectStudio
 	constexpr float kMaxGridPlaneZ = 10000.0f;
 	constexpr float kOrbitMouseScale = 0.0065f;
 	constexpr float kQuarterTurnRadians = 1.57079632679f;
+
+	[[nodiscard]] Path DefaultViewStatePath()
+	{
+		return Path::FromResolved(
+			FileSystem::CurrentPath() / "install" / "users" / "default" / "config" / "renderer_default_view.txt");
+	}
+
+	[[nodiscard]] Path SavedViewsStatePath()
+	{
+		return Path::FromResolved(
+			FileSystem::CurrentPath() / "install" / "users" / "default" / "config" / "renderer_saved_views.txt");
+	}
+
+	[[nodiscard]] std::string SerializePositionList(const std::vector<glm::vec3> &positions)
+	{
+		std::ostringstream stream;
+		for (std::size_t i = 0; i < positions.size(); ++i)
+		{
+			if (i != 0)
+				stream << ';';
+			stream << positions[i].x << ':' << positions[i].y << ':' << positions[i].z;
+		}
+		return stream.str();
+	}
+
+	[[nodiscard]] std::vector<glm::vec3> DeserializePositionList(const std::string &text)
+	{
+		std::vector<glm::vec3> result;
+		std::size_t start = 0;
+		while (start < text.size())
+		{
+			const std::size_t semi = text.find(';', start);
+			const std::string token = text.substr(start, semi == std::string::npos ? std::string::npos : semi - start);
+			const std::size_t c1 = token.find(':');
+			const std::size_t c2 = c1 == std::string::npos ? std::string::npos : token.find(':', c1 + 1);
+			if (c1 != std::string::npos && c2 != std::string::npos)
+			{
+				try
+				{
+					result.emplace_back(
+						std::stof(token.substr(0, c1)),
+						std::stof(token.substr(c1 + 1, c2 - c1 - 1)),
+						std::stof(token.substr(c2 + 1)));
+				}
+				catch (const std::exception &)
+				{
+				}
+			}
+			if (semi == std::string::npos)
+				break;
+			start = semi + 1;
+		}
+		return result;
+	}
+
+	// "cam-fields|selected-positions|hidden-positions" - selection/hidden are position lists (not
+	// raw indices), same convention as restoreViewSnapshot's cross-structure resolve: for a
+	// same-file restore this resolves back to the exact original indices at ~zero distance, so one
+	// format covers both the shared/cross-window saved views and the per-window project-state
+	// restore. Segments 2/3 are optional - a bare "|"-free line (this format's first shipped shape)
+	// still parses fine as camera-only with empty selection/hidden.
+	[[nodiscard]] std::string SerializeViewSnapshot(const RendererViewSnapshot &snapshot)
+	{
+		std::ostringstream stream;
+		stream << snapshot.target.x << ',' << snapshot.target.y << ',' << snapshot.target.z << ','
+			   << snapshot.distance << ',' << snapshot.yaw << ',' << snapshot.pitch << ',' << snapshot.roll << ','
+			   << static_cast<int>(snapshot.projection) << '|' << SerializePositionList(snapshot.selectedAtomPositions)
+			   << '|' << SerializePositionList(snapshot.hiddenAtomPositions);
+		return stream.str();
+	}
+
+	[[nodiscard]] std::optional<RendererViewSnapshot> DeserializeViewSnapshot(const std::string &line)
+	{
+		std::vector<std::string> segments;
+		std::size_t segStart = 0;
+		while (true)
+		{
+			const std::size_t bar = line.find('|', segStart);
+			segments.push_back(line.substr(segStart, bar == std::string::npos ? std::string::npos : bar - segStart));
+			if (bar == std::string::npos)
+				break;
+			segStart = bar + 1;
+		}
+
+		std::vector<std::string> fields;
+		std::size_t start = 0;
+		while (true)
+		{
+			const std::size_t comma = segments[0].find(',', start);
+			fields.push_back(
+				segments[0].substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+			if (comma == std::string::npos)
+				break;
+			start = comma + 1;
+		}
+		if (fields.size() != 8)
+			return std::nullopt;
+
+		try
+		{
+			RendererViewSnapshot snapshot;
+			snapshot.target = glm::vec3(std::stof(fields[0]), std::stof(fields[1]), std::stof(fields[2]));
+			snapshot.distance = std::stof(fields[3]);
+			snapshot.yaw = std::stof(fields[4]);
+			snapshot.pitch = std::stof(fields[5]);
+			snapshot.roll = std::stof(fields[6]);
+			snapshot.projection =
+				std::stoi(fields[7]) == 1 ? CameraProjection::Orthographic : CameraProjection::Perspective;
+			if (segments.size() > 1)
+				snapshot.selectedAtomPositions = DeserializePositionList(segments[1]);
+			if (segments.size() > 2)
+				snapshot.hiddenAtomPositions = DeserializePositionList(segments[2]);
+			return snapshot;
+		}
+		catch (const std::exception &)
+		{
+			return std::nullopt;
+		}
+	}
 
 	[[nodiscard]] Path BuildShaderDirectoryFromCurrentPath()
 	{
@@ -136,6 +257,53 @@ namespace DefectStudio
 	RendererLayer::RendererLayer(RendererStartupConfig startupConfig)
 		: Layer("RendererLayer"), m_StartupConfig(std::move(startupConfig))
 	{
+		loadPersistedViews();
+	}
+
+	void RendererLayer::loadPersistedViews()
+	{
+		std::string text;
+		std::string error;
+		if (TextFileIO::Load(DefaultViewStatePath(), text, error) && !text.empty())
+		{
+			std::istringstream stream(text);
+			std::string line;
+			if (std::getline(stream, line))
+			{
+				if (std::optional<RendererViewSnapshot> snapshot = DeserializeViewSnapshot(line))
+					m_SessionDefaultView = *snapshot;
+			}
+		}
+
+		if (TextFileIO::Load(SavedViewsStatePath(), text, error))
+		{
+			std::istringstream stream(text);
+			std::string line;
+			while (std::getline(stream, line))
+			{
+				if (std::optional<RendererViewSnapshot> snapshot = DeserializeViewSnapshot(line))
+					m_SharedSavedViews.push_back(*snapshot);
+			}
+		}
+	}
+
+	void RendererLayer::savePersistedDefaultView()
+	{
+		if (!m_SessionDefaultView.has_value())
+			return;
+		std::string error;
+		if (!TextFileIO::Save(DefaultViewStatePath(), SerializeViewSnapshot(*m_SessionDefaultView), error))
+			DS_LOG_WARN("RendererLayer: failed to persist default view: {}", error);
+	}
+
+	void RendererLayer::savePersistedSharedViews()
+	{
+		std::ostringstream stream;
+		for (const RendererViewSnapshot &snapshot : m_SharedSavedViews)
+			stream << SerializeViewSnapshot(snapshot) << '\n';
+		std::string error;
+		if (!TextFileIO::Save(SavedViewsStatePath(), stream.str(), error))
+			DS_LOG_WARN("RendererLayer: failed to persist saved views: {}", error);
 	}
 
 	RendererLayer::~RendererLayer() = default;
@@ -153,6 +321,23 @@ namespace DefectStudio
 
 	void RendererLayer::AddWindow(RendererWindowState windowState)
 	{
+		// windowId is now deterministic (hashed from the source path, see
+		// RendererStartupBootstrap::GenerateRendererWindowId) so persisted per-window state and
+		// imgui.ini docking layout survive a restart - but that means opening the exact same file
+		// twice in one session would otherwise collide two live windows onto one ImGui window
+		// identity. This is the one place that can see what's already open, so it's the one place
+		// that can catch and resolve that collision.
+		if (findWindowById(windowState.windowId) != nullptr)
+		{
+			const std::string baseId = windowState.windowId;
+			int suffix = 2;
+			do
+			{
+				windowState.windowId = baseId + "-" + std::to_string(suffix);
+				++suffix;
+			} while (findWindowById(windowState.windowId) != nullptr);
+		}
+
 		m_Windows.push_back(std::move(windowState));
 		if (m_GlobalRenderSettings.autoApplyDefaultViewOnOpen && m_SessionDefaultView.has_value())
 		{
@@ -160,6 +345,19 @@ namespace DefectStudio
 			if (newWindow.camera != nullptr)
 				restoreViewSnapshot(newWindow, *m_SessionDefaultView, "startup.apply_default_view");
 		}
+	}
+
+	void RendererLayer::RemoveWindow(const std::string &windowId)
+	{
+		m_Windows.erase(
+			std::remove_if(
+				m_Windows.begin(), m_Windows.end(),
+				[&windowId](const RendererWindowState &candidate) { return candidate.windowId == windowId; }),
+			m_Windows.end());
+		if (m_FocusedViewportWindowId == windowId)
+			m_FocusedViewportWindowId.clear();
+		if (m_LastFocusedViewportWindowId == windowId)
+			m_LastFocusedViewportWindowId.clear();
 	}
 
 	std::vector<RendererWindowState> &RendererLayer::GetWindows()
@@ -190,6 +388,11 @@ namespace DefectStudio
 	const std::string &RendererLayer::GetFocusedViewportWindowId() const noexcept
 	{
 		return m_FocusedViewportWindowId;
+	}
+
+	const std::string &RendererLayer::GetLastFocusedViewportWindowId() const noexcept
+	{
+		return m_LastFocusedViewportWindowId;
 	}
 
 	float RendererLayer::GetLastDeltaTime() const noexcept
@@ -238,8 +441,22 @@ namespace DefectStudio
 			windowState.showCellBox,
 			windowState.showGrid,
 			windowState.selectedAtomIndices,
-			&windowState.debugIsosurfaceMesh,
-			windowState.debugGpuIsosurfaceVertexCount);
+			nullptr,
+			&windowState.orbitalChannelUp,
+			&windowState.orbitalChannelDown);
+	}
+
+	int RendererLayer::RegenerateOrbitalIsosurface(
+		const std::string &windowId, const OrbitalGridData &grid, float isoValue, int slot)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr || m_RendererBackend == nullptr)
+			return 0;
+
+		RendererWindowState::OrbitalOverlayChannel &channel =
+			slot == 0 ? windowState->orbitalChannelUp : windowState->orbitalChannelDown;
+		channel.vertexCount = m_RendererBackend->RegenerateIsosurfaceGpu(grid, isoValue, slot);
+		return channel.vertexCount;
 	}
 
 	void RendererLayer::CollectProfilingData()
@@ -577,10 +794,6 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onSetAsDefaultViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ApplyDefaultViewRequested>(
 				std::bind_front(&RendererLayer::onApplyDefaultViewRequested, this)));
-			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LoadTestOrbitalRequested>(
-				std::bind_front(&RendererLayer::onLoadTestOrbitalRequested, this)));
-			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LoadTestOrbitalGpuRequested>(
-				std::bind_front(&RendererLayer::onLoadTestOrbitalGpuRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -922,7 +1135,10 @@ namespace DefectStudio
 	void RendererLayer::onViewportFocusChanged(const RendererEvents::Viewport::FocusChanged &event)
 	{
 		if (event.focused)
+		{
 			m_FocusedViewportWindowId = event.windowId;
+			m_LastFocusedViewportWindowId = event.windowId;
+		}
 		else if (m_FocusedViewportWindowId == event.windowId)
 			m_FocusedViewportWindowId.clear();
 		DS_LOG_TRACE("Renderer viewport '{}' focus: {}", event.windowId, event.focused);
@@ -1121,8 +1337,9 @@ namespace DefectStudio
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
 
-		windowState->savedViews.push_back(captureViewSnapshot(*windowState));
-		windowState->activeSavedViewIndex = windowState->savedViews.size() - 1u;
+		m_SharedSavedViews.push_back(captureViewSnapshot(*windowState));
+		m_ActiveSharedSavedViewIndex = m_SharedSavedViews.size() - 1u;
+		savePersistedSharedViews();
 	}
 
 	void RendererLayer::onExportImageRequested(const RendererEvents::Viewport::ExportImageRequested &event)
@@ -1160,19 +1377,19 @@ namespace DefectStudio
 	void RendererLayer::onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->camera == nullptr || windowState->savedViews.empty())
+		if (windowState == nullptr || windowState->camera == nullptr || m_SharedSavedViews.empty())
 			return;
 
-		if (windowState->activeSavedViewIndex >= windowState->savedViews.size())
-			windowState->activeSavedViewIndex = 0u;
+		if (m_ActiveSharedSavedViewIndex >= m_SharedSavedViews.size())
+			m_ActiveSharedSavedViewIndex = 0u;
 		if (event.direction >= 0)
-			windowState->activeSavedViewIndex = (windowState->activeSavedViewIndex + 1u) % windowState->savedViews.size();
+			m_ActiveSharedSavedViewIndex = (m_ActiveSharedSavedViewIndex + 1u) % m_SharedSavedViews.size();
 		else
-			windowState->activeSavedViewIndex =
-				(windowState->activeSavedViewIndex + windowState->savedViews.size() - 1u) % windowState->savedViews.size();
+			m_ActiveSharedSavedViewIndex =
+				(m_ActiveSharedSavedViewIndex + m_SharedSavedViews.size() - 1u) % m_SharedSavedViews.size();
 
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
-		const RendererViewSnapshot &after = windowState->savedViews[windowState->activeSavedViewIndex];
+		const RendererViewSnapshot &after = m_SharedSavedViews[m_ActiveSharedSavedViewIndex];
 		pushViewChange(*windowState, before, after, "keyboard.saved_view");
 		restoreViewSnapshot(*windowState, after, "keyboard.saved_view");
 	}
@@ -1319,6 +1536,23 @@ namespace DefectStudio
 		pushViewChange(*windowState, before, after, "keyboard.invert_selection");
 	}
 
+	std::optional<RendererViewSnapshot> RendererLayer::CaptureWindowViewSnapshot(const std::string &windowId) const
+	{
+		for (const RendererWindowState &candidate : m_Windows)
+		{
+			if (candidate.windowId == windowId && candidate.camera != nullptr)
+				return captureViewSnapshot(candidate);
+		}
+		return std::nullopt;
+	}
+
+	void RendererLayer::ApplyWindowViewSnapshot(const std::string &windowId, const RendererViewSnapshot &snapshot)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState != nullptr)
+			restoreViewSnapshot(*windowState, snapshot, "project_state.restore");
+	}
+
 	void RendererLayer::onSetAsDefaultViewRequested(const RendererEvents::Viewport::SetAsDefaultViewRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
@@ -1326,6 +1560,7 @@ namespace DefectStudio
 			return;
 
 		m_SessionDefaultView = captureViewSnapshot(*windowState);
+		savePersistedDefaultView();
 	}
 
 	void RendererLayer::onApplyDefaultViewRequested(const RendererEvents::Viewport::ApplyDefaultViewRequested &event)
@@ -1338,51 +1573,6 @@ namespace DefectStudio
 		const RendererViewSnapshot &after = *m_SessionDefaultView;
 		pushViewChange(*windowState, before, after, "keyboard.apply_default_view");
 		restoreViewSnapshot(*windowState, after, "keyboard.apply_default_view");
-	}
-
-	void RendererLayer::onLoadTestOrbitalRequested(const RendererEvents::Viewport::LoadTestOrbitalRequested &event)
-	{
-		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr)
-			return;
-
-		// T08.6 debug trigger - deliberately synchronous/blocking (~2s), see the TODO on
-		// LoadTestOrbitalRequested. Hardcoded fixture: band 0 of the singlet_HSE dimer WAVECAR,
-		// the one real orbital already verified to extract correctly this session.
-		VaspOrbitalGridBridge bridge;
-		Result<VaspOrbitalGridData> result =
-			bridge.LoadOrbitalGrid(Path("test-directory/dimer/exc_ms/singlet_HSE"), 0, 0, 0);
-		if (!result)
-		{
-			DS_LOG_ERROR("LoadTestOrbitalRequested failed: {}", result.Error().technicalDetails);
-			return;
-		}
-
-		const OrbitalGridData grid = ConvertVaspOrbitalGridDataToDomain(std::move(result).Value());
-		windowState->debugIsosurfaceMesh = GenerateIsosurfaceMesh(grid, 0.03f);
-		DS_LOG_INFO("LoadTestOrbitalRequested: generated {} isosurface vertices",
-			windowState->debugIsosurfaceMesh.size());
-	}
-
-	void RendererLayer::onLoadTestOrbitalGpuRequested(const RendererEvents::Viewport::LoadTestOrbitalGpuRequested &event)
-	{
-		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || m_RendererBackend == nullptr)
-			return;
-
-		// Same fixture/bridge call as onLoadTestOrbitalRequested - only the mesh generation
-		// (CPU vs GPU compute shader) differs, so the two overlays should look identical.
-		VaspOrbitalGridBridge bridge;
-		Result<VaspOrbitalGridData> result =
-			bridge.LoadOrbitalGrid(Path("test-directory/dimer/exc_ms/singlet_HSE"), 0, 0, 0);
-		if (!result)
-		{
-			DS_LOG_ERROR("LoadTestOrbitalGpuRequested failed: {}", result.Error().technicalDetails);
-			return;
-		}
-
-		const OrbitalGridData grid = ConvertVaspOrbitalGridDataToDomain(std::move(result).Value());
-		windowState->debugGpuIsosurfaceVertexCount = m_RendererBackend->RegenerateIsosurfaceGpu(grid, 0.03f);
 	}
 
 	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)

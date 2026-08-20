@@ -303,6 +303,7 @@ group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
+include "Vendor/ImPlot"
 
 -- Patch the vendored ImGui project from here rather than editing Vendor/imgui/imconfig.h: that
 -- file lives inside the ImGui git submodule, and `git submodule update --force`
@@ -337,6 +338,7 @@ end
 
 ApplyDependencyRuntimeFilters("GLAD")
 ApplyDependencyRuntimeFilters("ImGui")
+ApplyDependencyRuntimeFilters("ImPlot")
 ApplyDependencyRuntimeFilters("yaml-cpp")
 ApplyDependencyRuntimeFilters("Tracy")
 ApplyDependencyRuntimeFilters("GoogleTest")
@@ -456,6 +458,7 @@ project "DefectStudio"
         "Vendor/GLAD/generated/include",
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
+        "Vendor/ImPlot",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/stb",
@@ -480,6 +483,7 @@ project "DefectStudio"
         "GLFW",
         "GLAD",
         "ImGui",
+        "ImPlot",
         "nfd",
         "yaml-cpp"
     }
@@ -629,6 +633,7 @@ project "DefectStudioTests"
         "Vendor/GLAD/generated/include",
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
+        "Vendor/ImPlot",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/stb",
@@ -649,6 +654,7 @@ project "DefectStudioTests"
         "GLFW",
         "GLAD",
         "ImGui",
+        "ImPlot",
         "nfd",
         "yaml-cpp"
     }

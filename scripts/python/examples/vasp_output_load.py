@@ -83,8 +83,12 @@ def _orbitals_payload(output, band_start: int, band_end: int) -> list[dict] | No
     # corrupted/incompletely-transferred file, not something to guess about here). Either way,
     # band gap data above can still be useful without orbitals, so this is reported as
     # unavailable, not fatal.
+    # irreps=False (puntukas' own default): symmetry-labeling each band is real per-band cost
+    # (get_symmetry over the structure) that this UI doesn't currently display anywhere - a wide
+    # band range with irreps=True was observed to be dramatically slower than the same range
+    # without it.
     try:
-        rows = output.get_orbital_data_for_two_spins(band_start, band_end, irreps=True)
+        rows = output.get_orbital_data_for_two_spins(band_start, band_end, irreps=False)
     except (FileNotFoundError, AssertionError):
         return None
 

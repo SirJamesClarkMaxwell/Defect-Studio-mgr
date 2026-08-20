@@ -258,25 +258,4 @@ namespace DefectStudio
 			});
 	}
 
-	Unique<ICommand> CreateRendererLoadTestOrbitalCommand(Ref<EventBus> eventBus)
-	{
-		return CreateUnique<RendererViewportEventCommand>(
-			std::move(eventBus),
-			"Renderer load test orbital (debug)",
-			[](EventBus &bus) {
-				RendererEvents::Viewport::LoadTestOrbitalRequested event;
-				bus.Publish(event);
-			});
-	}
-
-	Unique<ICommand> CreateRendererLoadTestOrbitalGpuCommand(Ref<EventBus> eventBus)
-	{
-		return CreateUnique<RendererViewportEventCommand>(
-			std::move(eventBus),
-			"Renderer load test orbital GPU (debug)",
-			[](EventBus &bus) {
-				RendererEvents::Viewport::LoadTestOrbitalGpuRequested event;
-				bus.Publish(event);
-			});
-	}
 } // namespace DefectStudio

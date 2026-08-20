@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <random>
 #include <sstream>
@@ -27,7 +28,7 @@ namespace DefectStudio
 		}
 	}
 
-	[[nodiscard]] static std::string GenerateRendererWindowId()
+	[[nodiscard]] static std::string GenerateRandomRendererWindowId()
 	{
 		std::random_device randomDevice;
 		std::uniform_int_distribution<std::uint32_t> distribution(0, 255);
@@ -49,13 +50,34 @@ namespace DefectStudio
 		return stream.str();
 	}
 
+	// Deterministic (same file -> same id, across restarts) instead of random, so persisted
+	// per-window state (camera/selection/colors/...) and imgui.ini docking layout - both keyed by
+	// windowId - actually mean something across a restart instead of being reshuffled every
+	// launch. Falls back to the old random id when there's no source path to hash (synthetic/test
+	// windows). Collisions between two live windows (the same file opened twice in one session)
+	// are resolved by RendererLayer::AddWindow, the one place that can see what's already open.
+	[[nodiscard]] static std::string GenerateRendererWindowId(const Path &sourcePath)
+	{
+		if (sourcePath.Empty())
+			return GenerateRandomRendererWindowId();
+		return ComputeDeterministicRendererWindowId(sourcePath);
+	}
+
+	std::string ComputeDeterministicRendererWindowId(const Path &sourcePath)
+	{
+		const std::size_t hash = std::hash<std::string>{}(sourcePath.String());
+		std::ostringstream stream;
+		stream << "ws-" << std::hex << std::setfill('0') << std::setw(16) << hash;
+		return stream.str();
+	}
+
 	[[nodiscard]] static RendererWindowState BuildWindowFromStructure(
 		const RendererStartupWindowDefinition &definition,
 		RendererStructureData structure,
 		glm::vec3 direction)
 	{
 		RendererWindowState window;
-		window.windowId = GenerateRendererWindowId();
+		window.windowId = GenerateRendererWindowId(definition.poscarPath);
 		window.title = definition.title;
 		window.structure = std::move(structure);
 		window.camera = CreateUnique<RendererViewCamera>();

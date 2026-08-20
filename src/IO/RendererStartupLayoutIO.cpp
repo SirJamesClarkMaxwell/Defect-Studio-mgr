@@ -83,12 +83,6 @@ namespace DefectStudio
 				outLayout.windows.push_back(std::move(definition));
 			}
 
-			if (outLayout.windows.empty())
-			{
-				outError = "Renderer startup layout does not contain valid window entries";
-				return false;
-			}
-
 			return true;
 		}
 		catch (const std::exception &exception)

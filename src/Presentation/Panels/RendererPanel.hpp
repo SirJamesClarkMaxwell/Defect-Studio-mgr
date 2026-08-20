@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <imgui.h>
 
@@ -28,7 +29,8 @@ namespace DefectStudio
 
 	private:
 		void render(float deltaTime);
-		void renderStructureWindow(RendererWindowState &windowState, float deltaTime);
+		void renderStructureWindow(
+			RendererWindowState &windowState, float deltaTime, std::vector<std::string> &windowsToClose);
 		void drawViewportToolbar(RendererWindowState &windowState);
 		void applyViewportInputNavigation(RendererWindowState &windowState, const ImVec2 &imageOrigin, float deltaTime);
 		void onViewportFocusChanged(const std::string &windowId, bool focused);

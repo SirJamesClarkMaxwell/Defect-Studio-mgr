@@ -12,7 +12,6 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
@@ -65,9 +64,6 @@ namespace DefectStudio
 		std::string transitionSourceAction;
 		std::vector<RendererViewStateChange> viewUndoHistory;
 		std::vector<RendererViewStateChange> viewRedoHistory;
-		// TODO(T10): persist saved views with project/session view state.
-		std::vector<RendererViewSnapshot> savedViews;
-		std::size_t activeSavedViewIndex = 0;
 		bool viewInteractionActive = false;
 		std::string viewInteractionSource;
 		RendererViewSnapshot viewInteractionStart;
@@ -80,11 +76,26 @@ namespace DefectStudio
 		// Circle-select brush radius in viewport pixels - persistent per window, adjusted with the
 		// mouse wheel while the circle tool is active (scroll up = bigger, down = smaller).
 		float circleSelectRadius = 48.0f;
-		// TODO(T08.6.3): temporary debug overlays, see RendererEvents::Viewport::
-		// LoadTestOrbitalRequested/LoadTestOrbitalGpuRequested. Empty/zero means "nothing to
-		// draw" - remove these fields once the real orbital panel exists.
-		std::vector<IsosurfaceVertex> debugIsosurfaceMesh;
-		int debugGpuIsosurfaceVertexCount = 0;
+		// GPU compute-shader isosurface mesh for one spin channel's rendered orbital
+		// (ElectronicStructurePanel, via RendererLayer::RegenerateOrbitalIsosurface). Two
+		// independent channels so spin-up and spin-down can be shown simultaneously - `enabled`
+		// gates drawing (data/vertexCount can stay populated while temporarily hidden).
+		struct OrbitalOverlayChannel
+		{
+			bool enabled = false;
+			int vertexCount = 0;
+			// Positive = red, negative = blue - same convention for both spin channels.
+			glm::vec3 positiveLobeColor = glm::vec3(1.0f, 0.0f, 0.0f);
+			glm::vec3 negativeLobeColor = glm::vec3(0.0f, 0.0f, 1.0f);
+			float lobeAlpha = 0.6f;
+		};
+		OrbitalOverlayChannel orbitalChannelUp;
+		OrbitalOverlayChannel orbitalChannelDown;
+
+		// One-shot: on this window's very first Begin(), RendererPanel docks it into the
+		// dockspace's central node (ImGuiCond_FirstUseEver) instead of opening free-floating -
+		// never reapplied afterwards, so a later manual re-dock by the user sticks.
+		bool dockingInitialized = false;
 	};
 
 	// T15-lite export dialog: resolution preset + filename proposed from the structure's source

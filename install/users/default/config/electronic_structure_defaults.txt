@@ -1,0 +1,8 @@
+band_start=1016
+band_end=1022
+gap_window_margin=3
+localization_threshold=35.73
+split_spin_channels=0
+relative_to_vbm=1
+iso_value=0.089
+bulk_directory=O:\hBN\bulk

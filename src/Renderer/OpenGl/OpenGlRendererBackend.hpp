@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -89,14 +90,16 @@ namespace DefectStudio
 			// end-to-end (CPU reference, then its GPU compute-shader port) before the real
 			// orbital panel exists. Not part of the real per-window structure render path.
 			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr,
-			int debugGpuIsosurfaceVertexCount = 0);
+			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp = nullptr,
+			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown = nullptr);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
-		// failure/empty), ready to render via the debugGpuIsosurfaceVertexCount path above. The
+		// failure/empty), ready to render via the orbitalChannel{Up,Down} slots above. The
 		// geometry stays GPU-resident (the compute shader's output SSBO doubles as the vertex
-		// buffer) - only a 4-byte counter is read back, not the vertex data itself.
-		[[nodiscard]] int RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue);
+		// buffer) - only a 4-byte counter is read back, not the vertex data itself. `slot` selects
+		// which of the two independent channel buffers to write (0=up, 1=down).
+		[[nodiscard]] int RegenerateIsosurfaceGpu(const OrbitalGridData &grid, float isoValue, int slot = 0);
 		// Reads back the last-rendered frame for windowKey (must have been rendered via
 		// RenderWindow this session) and writes it to a PNG. Returns false + fills error on
 		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
@@ -144,9 +147,13 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			const RendererGlobalRenderSettings &globalSettings);
 		void renderIsosurfaceGpuOverlay(
+			unsigned int vao,
 			int vertexCount,
 			const RendererViewCamera &camera,
-			const RendererGlobalRenderSettings &globalSettings);
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &positiveLobeColor,
+			const glm::vec3 &negativeLobeColor,
+			float lobeAlpha);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
@@ -164,10 +171,15 @@ namespace DefectStudio
 		unsigned int m_LineVbo = 0;
 		unsigned int m_IsosurfaceVao = 0;
 		unsigned int m_IsosurfaceVbo = 0;
-		unsigned int m_IsosurfaceGpuVao = 0;
+		// Two independent slots so spin-up and spin-down wavefunctions can render simultaneously -
+		// slot 0 is conventionally "up"/primary, slot 1 "down"/secondary. The grid input SSBO is
+		// shared (consumed synchronously within a single RegenerateIsosurfaceGpu call, never held
+		// across calls), only the per-slot output vertex buffer/counter/VAO need to be separate.
+		static constexpr int kIsosurfaceSlotCount = 2;
+		std::array<unsigned int, kIsosurfaceSlotCount> m_IsosurfaceGpuVao{};
 		unsigned int m_IsosurfaceGridSsbo = 0;
-		unsigned int m_IsosurfaceGpuVertexSsbo = 0;
-		unsigned int m_IsosurfaceCounterSsbo = 0;
+		std::array<unsigned int, kIsosurfaceSlotCount> m_IsosurfaceGpuVertexSsbo{};
+		std::array<unsigned int, kIsosurfaceSlotCount> m_IsosurfaceCounterSsbo{};
 		unsigned int m_ComputeInputSsbo = 0;
 		unsigned int m_ComputeOutputSsbo = 0;
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;

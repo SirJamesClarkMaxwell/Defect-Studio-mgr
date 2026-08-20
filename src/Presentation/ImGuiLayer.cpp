@@ -7,6 +7,7 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
+#include <implot.h>
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -330,6 +331,7 @@ namespace DefectStudio
 
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
+		ImPlot::CreateContext();
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.ConfigWindowsResizeFromEdges = true;
@@ -349,6 +351,7 @@ namespace DefectStudio
 			DS_LOG_ERROR("ImGuiLayer attach failed: backend initialization failed");
 			ImGui_ImplOpenGL3_Shutdown();
 			ImGui_ImplGlfw_Shutdown();
+			ImPlot::DestroyContext();
 			ImGui::DestroyContext();
 			return;
 		}
@@ -495,6 +498,7 @@ namespace DefectStudio
 
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
+		ImPlot::DestroyContext();
 		ImGui::DestroyContext();
 		m_Initialized = false;
 	}

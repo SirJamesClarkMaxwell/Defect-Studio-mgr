@@ -47,3 +47,6 @@
 [submodule "Vendor/entt"]
 	path = Vendor/entt
 	url = https://github.com/sjcmdev/entt.git
+[submodule "Vendor/ImPlot"]
+	path = Vendor/ImPlot
+	url = https://github.com/sjcmdev/implot.git
