@@ -423,12 +423,25 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       to też pokrywa przypadek "mount padł"** (brak sieci/VPN), nie tylko przeniesiony plik
 - [ ] Zapis ukrytych atomów, widoków, dodanych bondów, overrides kolorów, stanu kolekcji,
       pozycji kamery (`old-ds-functionality.md` §10)
-- [x] **Ponytail placeholder (nie prawdziwe ustawienie projektu):** domyślny root
-      `ProjectTreePanel` na sztywno w `EditorLayer.cpp` (`O:\hBN\V2CBCN`, sprawdzany
-      `FileSystem::Exists` przy starcie) — `YamlConfigSerializer.cpp` (~1700 linii, zduplikowane
-      ścieżki emit/parse) nie jest bezpieczny do rozszerzenia jednym polem bez wcześniejszego
-      refactoru. Przenieść do realnej persystencji, gdy powstanie `manifest.yaml`/ustawienia
-      projektu wyżej w tej sekcji.
+- [ ] **Rejestracja wielu folderów/dysków jako jeden projekt (potwierdzone jako praktyczne,
+      2026-08-20)** — użytkownik: "jak podłączę więcej serwerów, dobrze by było wyświetlać dane ze
+      wszystkich, albo w jednym serwerze dane mam w kilku miejscach, wtedy podłączę różne foldery".
+      `manifest.yaml` potrzebuje listy roots, nie jednego katalogu — **i dla każdego roota źródło**
+      (lokalny / który zamontowany serwer z T07.5.2 Server Profiles), żeby dało się serializować
+      **co jest podłączone i skąd konkretnie pochodzą dane**, nie tylko ścieżkę. `ProjectTreePanel`
+      dziś (`m_RootPath`, jeden `Path`) i `ElectronicStructureSession` bulk directory (jeden
+      katalog) oba zakładają single-root — do przeprojektowania razem z manifestem, nie osobno.
+      Zob. "Plan: multi-root" niżej.
+- [x] **Ponytail placeholders (nie prawdziwe ustawienie projektu, trzy niezależne na 2026-08-20,
+      wszystkie do zastąpienia jednym manifestem gdy ten task ruszy realnie):**
+  - `EditorLayer.cpp` — domyślny root `ProjectTreePanel` na sztywno (`O:\hBN\V2CBCN`)
+  - `ProjectTreePanel.cpp` — `last_project_root.txt`, ostatnio wybrany root, przeżywa restart
+  - `EditorLayer.cpp` — `project_windows.txt`, per-okno camera/selection/electronic-structure
+    state, zapis na `OnDetach`, odtwarzane przez replay `OpenStructureRequested`
+  - `ElectronicStructurePanel.hpp` — bulk reference directory (`O:\hBN\bulk`)
+  - `YamlConfigSerializer.cpp` (~1700 linii, zduplikowane ścieżki emit/parse) nie jest bezpieczny
+    do rozszerzenia jednym polem bez wcześniejszego refactoru — stąd cztery osobne txt-y zamiast
+    jednego pliku. Przenieść wszystkie cztery do `manifest.yaml`, gdy powstanie, w jednym ruchu.
 - [ ] Export kolekcji do POSCAR
 - [ ] Tags dla defektów i kolekcji
 - [ ] Application startup project (ostatni otwarty)
@@ -577,32 +590,112 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [x] `VaspOutputBridge` (subprocess przez `VaspOutput.from_directory`, ten sam wzorzec co
       `PuntukasBridge`) — band-gap/HOMO/LUMO + per-band orbital data (energy/occupation/
       localization/irrep, oba kanały spinowe), oba gracefully `null` przy braku vasprun.xml/WAVECAR
-- [ ] `VaspOutputJob` (`IJob`, wzorem `OpenDefectJob`) — async wrapper, **bez** jeszcze dispatch
-      coordinatora/triggera UI (czeka na T08.6.3 — nie ma skąd tego dziś odpalić)
+- [x] `VaspOutputJob` (`IJob`) — **zrobione, 2026-08-20**: `ElectronicStructureSession::
+      DispatchOutputLoad`/`DispatchBulkLoad` odpalają go per-window i dla bulk reference,
+      `pollOutputJob`/`pollBulkJob` odbierają wynik. Trigger UI (T08.6.3) już istnieje.
+- [x] `VaspOrbitalGridBridge`/`VaspOrbitalGridJob` — **dodatkowo zrobione, nie było w oryginalnym
+      planie**: czyta WAVECAR przez punktukas (`Wavecar.phi → real_space_wfs()`), jeden orbital
+      (spin/k-point/band) na raz, siatka przez temp raw-float32 plik (za duża na JSON-line).
+      Dispatch na klik banda w `ElectronicStructurePanel`, wynik konsumowany przez GPU isosurface
+      (`RendererLayer::RegenerateOrbitalIsosurface` → compute shader, zob. T14). Dziś **jeden
+      orbital na raz** — brak batch/prefetch sąsiednich bandów, zob. plan niżej.
 
 ### T08.6.2 — Model domenowy
-- [ ] `Domain/Electronic/ElectronicStructureModel` — `BandGapData`, `OrbitalChannelData`,
+- [x] `Domain/Electronic/ElectronicStructureModel` — `BandGapData`, `OrbitalChannelData`,
       `OrbitalRecord`, `ElectronicStructureData` (niezależne od `ScientificRuntime`, konwerter
       osobno jak `PymatgenConversion`)
-- [ ] Filtr progu `localization_factor` (`LocalizationThresholdSettings` — konkretny struct,
-      nie generyczny `ProjectDefault<T>`, brak dziś w kodzie drugiego call-site który by to uzasadnił)
-- [ ] Klasyfikacja singlet/triplet z occupation per kanał spinowy — **pierwsza wersja to heurystyka,
-      wymaga walidacji przez użytkownika** (fizyka, nie coś do zgadnięcia bez feedbacku)
-- [ ] Bulk reference + band-window-względem-gapu ustawienie — **odłożone, brakuje indeksu pasma
-      HOMO/LUMO w `VaspOutputBridge`** (dziś tylko energia), do doprecyzowania z puntukas API
-      zanim da się zmapować na `start`/`end` w `get_orbital_data_for_two_spins`
+- [x] Filtr progu `localization_factor` (`LocalizationThresholdSettings`)
+- [x] Klasyfikacja singlet/triplet z occupation per kanał spinowy (`ClassifySpinMultiplicity`) —
+      heurystyka nadal niewalidowana fizycznie przez użytkownika, zob. plan niżej
+- [x] **Bulk reference — zrobione, ale ręczne/nie-projektowe.** `ElectronicStructureSession`
+      (`m_BulkDirectory`/`SetBulkDirectory`/`DispatchBulkLoad`/`BulkGap()`) — jeden bulk katalog
+      dzielony między wszystkimi otwartymi oknami defektów, band-window ustawiony (band-index
+      problem z 2026-08-13 rozwiązany). **Dziś jedyny sposób ustawienia:** ręczny tekst/Browse +
+      przycisk "Reload bulk gap" w `ElectronicStructurePanel` — trzeba mieć panel otwarty i wiedzieć
+      gdzie jest bulk. Default zahardkodowany (`O:\hBN\bulk`, ten sam wzorzec placeholderu co
+      `ProjectTreePanel`'owy root — zob. T07.5.1). **Auto-wire z poziomu projektu → osobny task,
+      zob. "Plan: bulk reference z poziomu projektu" niżej.**
 
 ### T08.6.3 — UI
-- [ ] Vendor ImPlot
-- [ ] Panel struktury elektronowej — diagram poziomów/obsadzenia (VB/CB shaded, poziomy w gapie,
-      strzałki obsadzenia per kanał spinowy)
-- [ ] Klikalny poziom → render funkcji falowej w 3D (konsumuje T14-core)
-- [ ] **Control Panel** (zob. sekcja niżej) jako naturalny dom dla suwaków tego panelu: okno pasm
-      (below/above gap), próg localization factor, wybór kanału spinowego, iso-value, single-/
-      multi-level toggle — nie osobny ad-hoc panel per suwak
+- [x] Vendor ImPlot — zvendorowany + wpięty w `premake5.lua` (`DefectStudio` i
+      `DefectStudioTests`), build zweryfikowany (Debug, 0 errors/warnings)
+- [x] Panel struktury elektronowej — `ElectronicStructurePanel` (controls: calc-dir, band table,
+      localization threshold, bulk reference) + `OccupationDiagramPanel` (osobne okno, diagram
+      VB/CB shaded z ImPlot, gap-centered default view, autofit) — dwa dockable panele nad jedną
+      `ElectronicStructureSession`
+- [x] Klikalny poziom → render funkcji falowej w 3D — band click dispatchuje
+      `VaspOrbitalGridJob` → `RegenerateOrbitalIsosurface` (kompute shader, T14)
+- [ ] **Control Panel** (zob. sekcja niżej) jako naturalny dom dla suwaków tego panelu — dziś
+      suwaki żyją w `ElectronicStructurePanel` samym, nie w centralnym Control Panelu z T12
 - [ ] Eksport stanów elektronowych do plików przyjaznych OriginLab (CSV/TSV)
+- [ ] **Drag-drop WAVECAR na otwartą strukturę w viewporcie** (nowe, z rozmowy 2026-08-20) —
+      zob. "Plan: drag-drop + context menu" niżej. POSCAR/CONTCAR **nie** przez drag-drop —
+      zostaje RMB "Open Defect" (już istnieje, `ProjectTreePanel::openDefectAt`)
+- [ ] **Matplotlib export skrypt** (nowe, z rozmowy 2026-08-20) — statyczny PNG/SVG occupation
+      diagram 1:1 ze stylem `OccupationDiagramPanel`, do publikacji. Zob. plan niżej.
 
-**Biblioteki:** ImPlot (nowy vendor), puntukas (Python, już opcjonalna zależność)
+**Biblioteki:** ImPlot (zvendorowany), puntukas (Python, już opcjonalna zależność)
+
+---
+
+## Plan – multi-root, drag-drop, bulk auto-wire, matplotlib export (rozmowa 2026-08-20)
+
+> Rozwinięcie T07.5.1/T08.6 z konkretną kolejnością. Kolejność wymuszona zależnościami: multi-root
+> manifest jest fundamentem dla bulk auto-wire i dla project-open auto-load — nie da się zrobić
+> tamtych dwóch porządnie bez tego pierwszego.
+
+### T07.5.4 — Multi-root project registration
+> Potwierdzone jako praktyczne (nie hipotetyczne): wiele serwerów podłączonych naraz, albo jeden
+> serwer z danymi rozrzuconymi po kilku folderach/mountach.
+- [ ] `manifest.yaml` schema: `roots: [{ path, label, source }]` zamiast jednego pola root — `source`
+      wskazuje na `ServerProfile` z T07.5.2 (albo `local`), żeby wiedzieć **skąd fizycznie**
+      pochodzą dane danego roota, nie tylko gdzie leżą dziś na dysku
+- [ ] `ProjectTreePanel` – wiele drzew (jedno per zarejestrowany root) zamiast jednego `m_RootPath`,
+      każde z widocznym labelem/źródłem w nagłówku (żeby user widział z którego serwera patrzy)
+- [ ] Add/remove root workflow (przycisk w `ProjectTreePanel` albo osobny "Manage project roots"
+      dialog) — persist do manifestu od razu, nie tylko w pamięci sesji
+- [ ] Migracja obecnych ponytail-placeholderów (zob. T07.5.1 wyżej) do manifestu w jednym ruchu,
+      **nie** cztery osobne migracje
+
+### T07.5.5 — Bulk reference auto-wire z poziomu projektu
+> Dziś działa, ale ręcznie: user musi otworzyć `ElectronicStructurePanel`, wkleić/wybrać ścieżkę,
+> kliknąć "Reload bulk gap". Cel: **zero klików w panel** dla zwykłego przypadku.
+- [ ] RMB context menu w `ProjectTreePanel` na folderze: "Set as bulk reference" — woła
+      `ElectronicStructureSession::SetBulkDirectory` + `DispatchBulkLoad` bezpośrednio, panel nie
+      musi być otwarty (session już istnieje niezależnie od widoczności panelu — sprawdzone w
+      `EditorLayer`)
+- [ ] Pole "bulk root" w manifest.yaml (zależne od T07.5.4) — bulk reference przeżywa restart jako
+      część projektu, nie ponytail-hardcode
+- [ ] Przy otwarciu projektu z ustawionym bulk root: auto-`DispatchBulkLoad` od razu, zanim
+      jakikolwiek defekt-window zostanie otwarty — VBM/CBM reference gotowe zanim user w ogóle
+      kliknie w cokolwiek
+
+### T08.6.4 — Drag-drop WAVECAR + jasny podział z context menu (doprecyzowane 2026-08-20)
+> User rozstrzygnął: **WAVECAR = drag-drop, POSCAR/CONTCAR = context menu** — nie oba na oba sposoby.
+- [ ] `ImGui::BeginDragDropSource` na plikach `WAVECAR` w `ProjectTreePanel` (payload = `Path`)
+- [ ] Drop target: otwarte okno struktury w viewporcie (`RendererPanel`/`RendererWindowState`) —
+      drop WAVECAR na już-załadowaną strukturę ustawia jej `calculationDirectory` (folder WAVECAR
+      leży w) w `ElectronicStructureSession::WindowState`, odpala `DispatchOutputLoad` od razu.
+      WAVECAR bez struktury w viewporcie nie ma sensu (potrzebuje geometrii jako referencji) —
+      drop na pusty viewport/tree to no-op, nie nowe okno
+- [ ] POSCAR/CONTCAR **zostaje jak jest** — RMB "Open Defect" (`ProjectTreePanel::openDefectAt`,
+      już działa), **nie** dodawać drugiej ścieżki przez drag-drop dla tych plików (osobna od
+      T08 linijki 540 "Drag & drop pliku POSCAR/CONTCAR/CHG **z eksploratora**" — to inny wektor,
+      OS Explorer → appka, zostaje jako odrębny, niezrealizowany task)
+
+### T08.6.5 — Batch/prefetch orbitali z WAVECAR
+- [ ] Dziś `VaspOrbitalGridJob` ładuje jeden orbital (spin/k-point/band) na klik — brak prefetch
+      sąsiednich bandów w band table. Rozszerzyć `ElectronicStructureSession` o kolejkę N-najbliższych
+      bandów wokół ostatnio klikniętego, low-priority w `JobSystem` (nie blokować głównego joba)
+
+### T08.6.6 — Matplotlib static export
+- [ ] Nowy skrypt (`scripts/python/examples/electronic_structure_plot.py` albo we wspólnym module)
+      — bierze band window / VBM-CBM shading / split-spin-channel / localization threshold jak
+      `OccupationDiagramPanel`, żeby nie duplikować logiki filtrowania po stronie C++ **i** Python
+      osobno: albo czyta CSV/TSV z eksportu T08.6.3 (kolejność: **CSV/TSV export najpierw**, ten
+      skrypt na nim, nie na surowym JSON-line z `VaspOutputBridge`), albo bierze te same argumenty
+      CLI co `VaspOutputBridge`'owy Python-side call i filtruje identycznie
+- [ ] Output PNG/SVG, kolory/strzałki 1:1 z `OccupationDiagramPanel` (nie osobna paleta)
 
 ---
 
@@ -663,6 +756,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       zaimplementowane.** `KeymapResolver` wykrywa i loguje konflikty (`m_Conflicts`,
       `GetConflicts()`), a `Settings.cpp` już to wyświetla w UI (dwa miejsca użycia
       `GetConflicts()` w panelu ustawień)
+- [ ] **Saved-view keybindy ujednolicone (`V`/`Shift+V`/`Alt+V`, z rozmowy 2026-08-20)** — bindingi
+      same w sobie spójne (`V` cycle next, `Alt+V` cycle previous, `Shift+V` save), problem w
+      implementacji: `m_SharedSavedViews` (`RendererLayer.cpp`) globalny dla **wszystkich** okien
+      naraz (nie per-window/per-projekt), `Shift+V` dopisuje bez nazwy/duplicate-check, **zero UI**
+      pokazującego listę — user cyklicznie skacze przez ślepą listę. Fix: nazwane saved views +
+      mały panel/dropdown z listą (nazwa + delete), obok "Persist ImGui dock/panel layout" niżej.
 - [ ] F2 rename w Scene Outliner (zależne od T08 SceneOutliner)
 - [ ] Viewport resolution tuning (redukcja GPU load)
 - [ ] Range selection z Shift w kolekcjach
@@ -710,11 +809,24 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] Wewnętrzna binarna reprezentacja/cache dla szybszego reload
 - [ ] Lazy loading bloków (background JobSystem)
 - [ ] Block statistics: min, max, mean, memory footprint
-- [ ] **OpenGL 4.3 Compute Shader – Marching Cubes** (SSBO density field → dispatch → mesh)
-- [ ] SSBO z probability density |ψ|²
+- [x] **OpenGL 4.3 Compute Shader – isosurface mesher** (SSBO grid → dispatch → mesh) —
+      **zrobione 2026-08-20, `isosurface_march.comp`**. Marching **tetrahedra** (6-tet cube
+      decomposition, 16-case table), nie marching cubes literalnie — świadomy wybór, niższe
+      ryzyko transkrypcji niż 256-case marching cubes dla pierwszego przejścia bez GL test
+      coverage. `RegenerateIsosurfaceGpu` to dziś **jedyna produkcyjna ścieżka**
+      (`RendererLayer::RegenerateOrbitalIsosurface`), zgodnie z założeniem "compute shader jako
+      jedyna ścieżka" wyżej. CPU mesher (`IsosurfaceMesher.cpp`) zostaje jako reference/test-only
+      (`IsosurfaceMesherTests.cpp`), nie main path — pokrywa punkt niżej.
+- [ ] ~~SSBO z probability density |ψ|²~~ — **świadomie zbudowane inaczej**: grid niesie **signed
+      real part** funkcji falowej (φ, nie |ψ|²) właśnie po to, żeby zachować znak +/- lobe do
+      VESTA-like koloringu (zob. `VaspOrbitalGridBridge` komentarz). |ψ|² zabiłoby znak. Zostawić
+      checkbox jako "nie dotyczy" zamiast odznaczać jako zrobione — to inna decyzja, nie to samo zadanie.
 - [ ] Request/commit model dla compute dispatch (render thread owner, nie bezpośrednia mutacja live-state)
-- [ ] Backend abstraction: Compute Shader / CPU fallback (debug/fallback only)
-- [ ] Single-iso i dual-iso rendering (positive/negative lobes, VESTA-like)
+- [x] Backend abstraction: Compute Shader / CPU fallback — CPU (`IsosurfaceMesher.cpp`) i GPU
+      (`isosurface_march.comp`) istnieją równolegle, GPU jest production path, CPU debug/test-only
+- [x] Single-iso i dual-iso rendering (positive/negative lobes, VESTA-like) — dispatch dwa razy
+      (dodatni/ujemny lobe) z memory barrier, osobne kolory per lobe (`orbitalChannelUp`/`Down`
+      positive/negative color w `RendererWindowState`)
 - [ ] Per-surface controls: iso value, kolor, opacity, widoczność; persystencja stanu w manifeście projektu
 - [ ] Async CPU-side preprocessing i immutable compute input preparation
 - [ ] VESTA-like workflow panel (side-by-side surfaces, mniej tekstu)
