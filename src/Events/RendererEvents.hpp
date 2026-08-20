@@ -227,6 +227,15 @@ namespace DefectStudio::RendererEvents::Viewport
 	{
 		std::string windowId;
 	};
+
+	// TODO(T08.6.3): temporary debug trigger to validate the orbital-grid-extraction ->
+	// marching-tetrahedra -> render pipeline end-to-end. Loads a hardcoded fixture orbital
+	// synchronously (blocking) and overlays it on the target window. Remove once the real
+	// electronic-structure panel drives this instead.
+	struct LoadTestOrbitalRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
 } // namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows

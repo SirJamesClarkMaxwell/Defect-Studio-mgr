@@ -10,6 +10,7 @@
 #include "Renderer/OpenGl/OpenGlFrameBuffer.hpp"
 #include "Renderer/OpenGl/OpenGlShaderLibrary.hpp"
 #include "Renderer/RendererMeshData.hpp"
+#include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -83,7 +84,11 @@ namespace DefectStudio
 			bool showBonds,
 			bool showCellBox,
 			bool showGrid,
-			const std::vector<std::size_t> &selectedAtomIndices = {});
+			const std::vector<std::size_t> &selectedAtomIndices = {},
+			// TODO(T08.6.3): temporary debug overlay to validate the CPU marching-tetrahedra
+			// isosurface mesher end-to-end before porting it to a compute shader. Not part of the
+			// real per-window structure render path - remove once the real orbital panel exists.
+			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr);
 		// Reads back the last-rendered frame for windowKey (must have been rendered via
 		// RenderWindow this session) and writes it to a PNG. Returns false + fills error on
 		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
@@ -104,6 +109,7 @@ namespace DefectStudio
 		Result<void> createSphereMesh(const RendererStaticMeshData &meshData);
 		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
 		void createScreenGrid();
+		void createIsosurfaceGeometry();
 		void configureOpenGlState() const;
 		void renderAtoms(
 			const RendererStructureData &structure,
@@ -125,6 +131,10 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings);
+		void renderIsosurfaceOverlay(
+			const std::vector<IsosurfaceVertex> &vertices,
+			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
@@ -140,6 +150,8 @@ namespace DefectStudio
 		OpenGlMeshHandles m_CylinderMesh;
 		unsigned int m_LineVao = 0;
 		unsigned int m_LineVbo = 0;
+		unsigned int m_IsosurfaceVao = 0;
+		unsigned int m_IsosurfaceVbo = 0;
 		unsigned int m_ComputeInputSsbo = 0;
 		unsigned int m_ComputeOutputSsbo = 0;
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;

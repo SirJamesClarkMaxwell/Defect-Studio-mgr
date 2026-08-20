@@ -135,6 +135,7 @@ namespace DefectStudio
 		void onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event);
 		void onSetAsDefaultViewRequested(const RendererEvents::Viewport::SetAsDefaultViewRequested &event);
 		void onApplyDefaultViewRequested(const RendererEvents::Viewport::ApplyDefaultViewRequested &event);
+		void onLoadTestOrbitalRequested(const RendererEvents::Viewport::LoadTestOrbitalRequested &event);
 		[[nodiscard]] RendererWindowState *findWindowById(const std::string &windowId);
 		[[nodiscard]] RendererWindowState *findViewportCommandWindow(const std::string &windowId);
 		[[nodiscard]] RendererViewSnapshot captureViewSnapshot(const RendererWindowState &windowState) const;

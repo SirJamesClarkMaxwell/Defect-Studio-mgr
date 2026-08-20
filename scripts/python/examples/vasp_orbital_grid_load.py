@@ -6,8 +6,13 @@ import pathlib
 import sys
 import tempfile
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
 try:
     from puntukas.vasp import VaspOutput
+
+    from common.puntukas_compat import patch_incar_tolerant_encoding
+    patch_incar_tolerant_encoding()
 except ImportError as exc:
     print(json.dumps({"error": "puntukas_not_installed", "detail": str(exc)}), file=sys.stderr)
     raise SystemExit(1)

@@ -326,6 +326,13 @@ namespace DefectStudio
 		if (!gridLoaded.HasValue())
 			return gridLoaded.Error();
 
+		Result<void> isosurfaceLoaded = m_ShaderLibrary.LoadGraphicsProgram(
+			"isosurface",
+			m_ShaderDirectory / Path("isosurface.vert"),
+			m_ShaderDirectory / Path("isosurface.frag"));
+		if (!isosurfaceLoaded.HasValue())
+			return isosurfaceLoaded.Error();
+
 		Result<void> computeLoaded = m_ShaderLibrary.LoadComputeProgram(
 			"bond_compute",
 			m_ShaderDirectory / Path("bond_transform.comp"));
@@ -408,7 +415,8 @@ namespace DefectStudio
 		bool showBonds,
 		bool showCellBox,
 		bool showGrid,
-		const std::vector<std::size_t> &selectedAtomIndices)
+		const std::vector<std::size_t> &selectedAtomIndices,
+		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -483,6 +491,8 @@ namespace DefectStudio
 			renderBonds(structure, camera, resources, globalSettings);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
+		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
+			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -500,6 +510,7 @@ namespace DefectStudio
 			return cylinderResult.Error();
 
 		createScreenGrid();
+		createIsosurfaceGeometry();
 		glGenBuffers(1, &m_ComputeInputSsbo);
 		glGenBuffers(1, &m_ComputeOutputSsbo);
 		return {};
@@ -527,6 +538,16 @@ namespace DefectStudio
 		{
 			glDeleteVertexArrays(1, &m_LineVao);
 			m_LineVao = 0;
+		}
+		if (m_IsosurfaceVbo != 0)
+		{
+			glDeleteBuffers(1, &m_IsosurfaceVbo);
+			m_IsosurfaceVbo = 0;
+		}
+		if (m_IsosurfaceVao != 0)
+		{
+			glDeleteVertexArrays(1, &m_IsosurfaceVao);
+			m_IsosurfaceVao = 0;
 		}
 
 		const std::array<OpenGlMeshHandles *, 2> meshes = {&m_SphereMesh, &m_CylinderMesh};
@@ -705,6 +726,25 @@ namespace DefectStudio
 		glBufferData(GL_ARRAY_BUFFER, 1, nullptr, GL_DYNAMIC_DRAW);
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), reinterpret_cast<void *>(0));
+		glBindVertexArray(0);
+	}
+
+	void OpenGlRendererBackend::createIsosurfaceGeometry()
+	{
+		glGenVertexArrays(1, &m_IsosurfaceVao);
+		glGenBuffers(1, &m_IsosurfaceVbo);
+		glBindVertexArray(m_IsosurfaceVao);
+		glBindBuffer(GL_ARRAY_BUFFER, m_IsosurfaceVbo);
+		glBufferData(GL_ARRAY_BUFFER, 1, nullptr, GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, position)));
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, normal)));
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
 		glBindVertexArray(0);
 	}
 
@@ -1061,6 +1101,69 @@ namespace DefectStudio
 		glDrawArrays(GL_LINES, 0, static_cast<int>(resources.cachedGridVertices.size()));
 		glBindVertexArray(0);
 		resources.gridDirty = false;
+	}
+
+	void OpenGlRendererBackend::renderIsosurfaceOverlay(
+		const std::vector<IsosurfaceVertex> &vertices,
+		const RendererViewCamera &camera,
+		const RendererGlobalRenderSettings &globalSettings)
+	{
+		const unsigned int program = m_ShaderLibrary.Program("isosurface");
+		if (program == 0)
+			return;
+
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+		glUseProgram(program);
+		const int viewProjectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_ViewProjection");
+		if (viewProjectionLocation >= 0)
+			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		const int keyDirectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_KeyDirection");
+		const int fillDirectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_FillDirection");
+		const int backDirectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_BackDirection");
+		const int ambientLocation = m_ShaderLibrary.Uniform("isosurface", "u_AmbientIntensity");
+		const int keyIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_KeyIntensity");
+		const int fillIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_FillIntensity");
+		const int backIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_BackIntensity");
+		const int twoSidedLocation = m_ShaderLibrary.Uniform("isosurface", "u_TwoSidedLighting");
+		if (keyDirectionLocation >= 0)
+			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
+		if (fillDirectionLocation >= 0)
+			glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
+		if (backDirectionLocation >= 0)
+			glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
+		if (ambientLocation >= 0)
+			glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
+		if (keyIntensityLocation >= 0)
+			glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
+		if (fillIntensityLocation >= 0)
+			glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
+		if (backIntensityLocation >= 0)
+			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
+		if (twoSidedLocation >= 0)
+			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+
+		// Hardcoded debug colors/alpha (T08.6.3 will make these Control Panel sliders) - blue for
+		// the positive lobe, orange-red for the negative lobe, a common orbital-visualization
+		// convention (e.g. VESTA's default +/- isosurface colors).
+		const int positiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_PositiveLobeColor");
+		const int negativeLocation = m_ShaderLibrary.Uniform("isosurface", "u_NegativeLobeColor");
+		const int alphaLocation = m_ShaderLibrary.Uniform("isosurface", "u_LobeAlpha");
+		if (positiveLocation >= 0)
+			glUniform3f(positiveLocation, 0.25f, 0.55f, 0.95f);
+		if (negativeLocation >= 0)
+			glUniform3f(negativeLocation, 0.95f, 0.45f, 0.2f);
+		if (alphaLocation >= 0)
+			glUniform1f(alphaLocation, 0.6f);
+
+		glBindVertexArray(m_IsosurfaceVao);
+		glBindBuffer(GL_ARRAY_BUFFER, m_IsosurfaceVbo);
+		glBufferData(
+			GL_ARRAY_BUFFER,
+			static_cast<long long>(vertices.size() * sizeof(IsosurfaceVertex)),
+			vertices.data(),
+			GL_DYNAMIC_DRAW);
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<int>(vertices.size()));
+		glBindVertexArray(0);
 	}
 
 	// T09 extension point: GPU-side bond transform via compute shader.

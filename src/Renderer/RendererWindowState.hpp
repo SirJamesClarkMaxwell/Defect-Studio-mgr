@@ -12,6 +12,7 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
@@ -79,6 +80,9 @@ namespace DefectStudio
 		// Circle-select brush radius in viewport pixels - persistent per window, adjusted with the
 		// mouse wheel while the circle tool is active (scroll up = bigger, down = smaller).
 		float circleSelectRadius = 48.0f;
+		// TODO(T08.6.3): temporary debug overlay, see RendererEvents::Viewport::LoadTestOrbitalRequested.
+		// Empty means "nothing to draw" - remove this field once the real orbital panel exists.
+		std::vector<IsosurfaceVertex> debugIsosurfaceMesh;
 	};
 
 	// T15-lite export dialog: resolution preset + filename proposed from the structure's source

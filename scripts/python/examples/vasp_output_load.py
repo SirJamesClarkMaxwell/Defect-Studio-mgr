@@ -4,8 +4,13 @@ import json
 import pathlib
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
 try:
     from puntukas.vasp import VaspOutput
+
+    from common.puntukas_compat import patch_incar_tolerant_encoding
+    patch_incar_tolerant_encoding()
 except ImportError as exc:
     print(json.dumps({"error": "puntukas_not_installed", "detail": str(exc)}), file=sys.stderr)
     raise SystemExit(1)
@@ -72,11 +77,15 @@ def _band_gap_payload(output, directory: str) -> dict | None:
 
 
 def _orbitals_payload(output, band_start: int, band_end: int) -> list[dict] | None:
-    # get_orbital_data_for_two_spins raises FileNotFoundError if WAVECAR is absent - band gap
-    # data above can still be useful without it, so this is reported as unavailable, not fatal.
+    # get_orbital_data_for_two_spins raises FileNotFoundError if WAVECAR is absent, and
+    # AssertionError if WAVECAR exists but its own internal header is unreadable/inconsistent
+    # (observed on a real file: k-point count read as 0, on a network drive - could be a
+    # corrupted/incompletely-transferred file, not something to guess about here). Either way,
+    # band gap data above can still be useful without orbitals, so this is reported as
+    # unavailable, not fatal.
     try:
         rows = output.get_orbital_data_for_two_spins(band_start, band_end, irreps=True)
-    except FileNotFoundError:
+    except (FileNotFoundError, AssertionError):
         return None
 
     has_irrep = "irrep(up)" in rows.dtype.names

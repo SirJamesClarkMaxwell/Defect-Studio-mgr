@@ -27,6 +27,8 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
+#include "ScientificRuntime/Python/VaspOrbitalGridBridge.hpp"
+#include "ScientificRuntime/Python/VaspOrbitalGridConversion.hpp"
 
 namespace DefectStudio
 {
@@ -235,7 +237,8 @@ namespace DefectStudio
 			windowState.showBonds,
 			windowState.showCellBox,
 			windowState.showGrid,
-			windowState.selectedAtomIndices);
+			windowState.selectedAtomIndices,
+			&windowState.debugIsosurfaceMesh);
 	}
 
 	void RendererLayer::CollectProfilingData()
@@ -573,6 +576,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onSetAsDefaultViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ApplyDefaultViewRequested>(
 				std::bind_front(&RendererLayer::onApplyDefaultViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LoadTestOrbitalRequested>(
+				std::bind_front(&RendererLayer::onLoadTestOrbitalRequested, this)));
 		}
 		m_Attached = true;
 		DS_LOG_INFO("Renderer shader root: {}", shaderDirectory.String());
@@ -1330,6 +1335,30 @@ namespace DefectStudio
 		const RendererViewSnapshot &after = *m_SessionDefaultView;
 		pushViewChange(*windowState, before, after, "keyboard.apply_default_view");
 		restoreViewSnapshot(*windowState, after, "keyboard.apply_default_view");
+	}
+
+	void RendererLayer::onLoadTestOrbitalRequested(const RendererEvents::Viewport::LoadTestOrbitalRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		// T08.6 debug trigger - deliberately synchronous/blocking (~2s), see the TODO on
+		// LoadTestOrbitalRequested. Hardcoded fixture: band 0 of the singlet_HSE dimer WAVECAR,
+		// the one real orbital already verified to extract correctly this session.
+		VaspOrbitalGridBridge bridge;
+		Result<VaspOrbitalGridData> result =
+			bridge.LoadOrbitalGrid(Path("test-directory/dimer/exc_ms/singlet_HSE"), 0, 0, 0);
+		if (!result)
+		{
+			DS_LOG_ERROR("LoadTestOrbitalRequested failed: {}", result.Error().technicalDetails);
+			return;
+		}
+
+		const OrbitalGridData grid = ConvertVaspOrbitalGridDataToDomain(std::move(result).Value());
+		windowState->debugIsosurfaceMesh = GenerateIsosurfaceMesh(grid, 0.03f);
+		DS_LOG_INFO("LoadTestOrbitalRequested: generated {} isosurface vertices",
+			windowState->debugIsosurfaceMesh.size());
 	}
 
 	void RendererLayer::onConfigApplied(const RendererEvents::Config::Applied &event)

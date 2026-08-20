@@ -212,3 +212,9 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.debug.load_test_orbital"
+    chord: "Ctrl+Alt+O"
+    command: "renderer.debug.load_test_orbital"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
