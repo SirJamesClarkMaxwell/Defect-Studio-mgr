@@ -1,0 +1,10 @@
+roots:
+  - id: root-38df1a514eee4cc1
+    path: O:\hBN\V2CBCN
+    label: V2CBCN
+  - id: root-d75f89c95ece2f07
+    path: O:\hBN\bulk
+    label: bulk
+  - id: root-0231fc3c2580aeab
+    path: O:\hBN\convergance_test\882\V_2\obliczenia
+    label: obliczenia

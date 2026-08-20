@@ -228,6 +228,16 @@ namespace DefectStudio::RendererEvents::Viewport
 		std::string windowId;
 	};
 
+	// Published by RendererPanel when a WAVECAR file dragged from ProjectTreePanel is dropped on
+	// windowId's viewport (T08.6.4) - EditorLayer sets that window's ElectronicStructureSession
+	// calculationDirectory to wavecarPath's folder and reloads. POSCAR/CONTCAR stay context-menu
+	// only (ProjectTreePanel's existing "Open Defect"), no drag-drop path for those.
+	struct WavecarDropped final : public BusEvent
+	{
+		std::string windowId;
+		Path wavecarPath;
+	};
+
 } // namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows

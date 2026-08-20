@@ -3,49 +3,19 @@
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 
 #include <algorithm>
-#include <vector>
+#include <cstdio>
 
 #include <imgui.h>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/Logging/Logger.hpp"
 #include "Core/Platform/FileDialog.hpp"
+#include "Events/ProjectEvents.hpp"
 #include "Events/RendererEvents.hpp"
-#include "IO/TextFileIO.hpp"
 
 namespace DefectStudio
 {
 	namespace
 	{
-		// Minimal stand-in for real T07.5.1 per-project persistence (which needs a project
-		// manifest format that doesn't exist yet, and the main YamlConfigSerializer is documented
-		// as unsafe to extend until its own cleanup - see EditorLayer.cpp). One plain-text file
-		// with just the last-picked root, independent of that system entirely, so the app doesn't
-		// need re-Browsing to the same mounted drive on every single launch.
-		[[nodiscard]] Path LastProjectRootStatePath()
-		{
-			return Path::FromResolved(
-				FileSystem::CurrentPath() / "install" / "users" / "default" / "config" / "last_project_root.txt");
-		}
-
-		void SaveLastProjectRoot(const Path &root)
-		{
-			std::string error;
-			if (!TextFileIO::Save(LastProjectRootStatePath(), root.String(), error))
-				DS_LOG_WARN("ProjectTreePanel: failed to persist last project root: {}", error);
-		}
-
-		[[nodiscard]] Path LoadLastProjectRoot()
-		{
-			std::string text;
-			std::string error;
-			if (!TextFileIO::Load(LastProjectRootStatePath(), text, error))
-				return {};
-			while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
-				text.pop_back();
-			return Path(text);
-		}
-
 		[[nodiscard]] bool HasDefectFile(const Path &directory)
 		{
 			return FileSystem::Exists((directory / "CONTCAR").Native()) || FileSystem::Exists((directory / "POSCAR").Native());
@@ -61,38 +31,42 @@ namespace DefectStudio
 		}
 
 		// The leaf calc-type folder (e.g. "singlet_HSE") is shared across many different defects,
-		// so it's a bad window title - the top-level folder directly under the project root (e.g.
-		// "6-7", a defect-site-pair label) is what actually identifies which defect this is.
-		// Two different calc types under the same defect deliberately end up with the same title
-		// (window identity/docking never depends on this string - see RendererPanel).
-		[[nodiscard]] std::string DeriveMainFolderName(const Path &root, const Path &directory)
+		// so it's a bad window title - the top-level folder directly under whichever registered
+		// root contains it (e.g. "6-7", a defect-site-pair label) is what actually identifies
+		// which defect this is. Two different calc types under the same defect deliberately end up
+		// with the same title (window identity/docking never depends on this string - see
+		// RendererPanel). Falls back to just the folder's own name if `directory` isn't under any
+		// known root (shouldn't happen - defensive only).
+		[[nodiscard]] std::string DeriveMainFolderName(const std::vector<ProjectRootEntry> &roots, const Path &directory)
 		{
-			if (root.Empty())
-				return directory.filename().String();
-			std::error_code error;
-			const std::filesystem::path relative = std::filesystem::relative(directory.Native(), root.Native(), error);
-			if (error || relative.empty() || relative == std::filesystem::path("."))
-				return directory.filename().String();
-			return relative.begin()->string();
+			for (const ProjectRootEntry &root : roots)
+			{
+				std::error_code error;
+				const std::filesystem::path relative = std::filesystem::relative(directory.Native(), root.path.Native(), error);
+				if (error || relative.empty() || relative == std::filesystem::path("."))
+					continue;
+				const std::string first = relative.begin()->string();
+				if (first == "..")
+					continue;
+				return first;
+			}
+			return directory.filename().String();
 		}
 	} // namespace
 
-	ProjectTreePanel::ProjectTreePanel(
-		Ref<EventBus> eventBus, std::string title, bool visibleByDefault, Path initialRootPath)
-		: IPanel(std::move(title), visibleByDefault),
-		  m_EventBus(std::move(eventBus)),
-		  m_RootPath(std::move(initialRootPath))
+	ProjectTreePanel::ProjectTreePanel(Ref<EventBus> eventBus, std::string title, bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault), m_EventBus(std::move(eventBus))
 	{
-		// The last folder the user actually picked wins over whatever hardcoded/passed-in default
-		// the caller supplied - persists across restarts, see LastProjectRootStatePath.
-		const Path persistedRoot = LoadLastProjectRoot();
-		if (!persistedRoot.Empty() && FileSystem::Exists(persistedRoot.Native()))
-			m_RootPath = persistedRoot;
 	}
 
 	Ref<IPanel> ProjectTreePanel::Clone() const
 	{
 		return CreateRef<ProjectTreePanel>(*this);
+	}
+
+	void ProjectTreePanel::SetRoots(std::vector<ProjectRootEntry> roots)
+	{
+		m_Roots = std::move(roots);
 	}
 
 	void ProjectTreePanel::Render()
@@ -110,13 +84,11 @@ namespace DefectStudio
 		}
 		SetVisible(visible);
 
-		renderPickRootButton();
+		renderToolbar();
 		ImGui::Separator();
 
-		if (m_RootPath.Empty())
-			ImGui::TextDisabled("No folder selected.");
-		else if (!FileSystem::Exists(m_RootPath.Native()))
-			ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Folder not found (mount disconnected?): %s", m_RootPath.String().c_str());
+		if (m_Roots.empty())
+			ImGui::TextDisabled("No folders registered - use \"+ Add Root...\" above.");
 		else
 		{
 			// Consumes last frame's m_VisibleFlatList/m_SelectedPath, before this frame rebuilds
@@ -125,7 +97,8 @@ namespace DefectStudio
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 				handleKeyboardNavigation();
 			m_VisibleFlatList.clear();
-			renderDirectoryContents(m_RootPath);
+			for (const ProjectRootEntry &section : m_Roots)
+				renderRootSection(section);
 		}
 
 		ImGui::End();
@@ -137,7 +110,7 @@ namespace DefectStudio
 			return;
 		RendererEvents::Windows::OpenStructureRequested request;
 		request.filePath = ResolveDefectFile(directory);
-		request.displayName = DeriveMainFolderName(m_RootPath, directory);
+		request.displayName = DeriveMainFolderName(m_Roots, directory);
 		m_EventBus->Queue(request);
 	}
 
@@ -202,22 +175,103 @@ namespace DefectStudio
 		}
 	}
 
-	void ProjectTreePanel::renderPickRootButton()
+	void ProjectTreePanel::renderToolbar()
 	{
-		if (ImGui::Button("Pick Folder..."))
+		if (ImGui::Button("+ Add Root..."))
 		{
-			Result<std::optional<Path>> picked = Platform::PickFolder(m_RootPath);
+			Result<std::optional<Path>> picked = Platform::PickFolder({});
 			if (picked && picked->has_value())
 			{
-				m_RootPath = picked->value();
-				SaveLastProjectRoot(m_RootPath);
+				m_AddRootPendingPath = picked->value();
+				const std::string defaultLabel = m_AddRootPendingPath.filename().String();
+				std::snprintf(m_AddRootLabelBuffer.data(), m_AddRootLabelBuffer.size(), "%s", defaultLabel.c_str());
+				m_AddRootPopupOpen = true;
+				ImGui::OpenPopup("Add Project Root");
 			}
 		}
-		if (!m_RootPath.Empty())
+
+		renderAddRootPopup();
+	}
+
+	void ProjectTreePanel::renderAddRootPopup()
+	{
+		if (!ImGui::BeginPopupModal("Add Project Root", &m_AddRootPopupOpen, ImGuiWindowFlags_AlwaysAutoResize))
+			return;
+
+		ImGui::TextDisabled("%s", m_AddRootPendingPath.String().c_str());
+		ImGui::SetNextItemWidth(280.0f);
+		ImGui::InputText("Label", m_AddRootLabelBuffer.data(), m_AddRootLabelBuffer.size());
+
+		const bool canAdd = m_AddRootLabelBuffer[0] != '\0';
+		ImGui::BeginDisabled(!canAdd);
+		if (ImGui::Button("Add"))
 		{
-			ImGui::SameLine();
-			ImGui::TextDisabled("%s", m_RootPath.String().c_str());
+			if (m_EventBus != nullptr)
+			{
+				ProjectEvents::RootAddRequested request;
+				request.path = m_AddRootPendingPath;
+				request.label = m_AddRootLabelBuffer.data();
+				m_EventBus->Queue(request);
+			}
+			m_AddRootPopupOpen = false;
+			ImGui::CloseCurrentPopup();
 		}
+		ImGui::EndDisabled();
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			m_AddRootPopupOpen = false;
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
+
+	void ProjectTreePanel::renderRootSection(const ProjectRootEntry &section)
+	{
+		const std::string headerLabel =
+			section.label + " (" + section.path.filename().String() + ")##root_" + section.id;
+		const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", section.path.String().c_str());
+		renderRootSectionContextMenu(section);
+
+		if (!open)
+			return;
+
+		ImGui::Indent();
+		if (!FileSystem::Exists(section.path.Native()))
+			ImGui::TextColored(
+				ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Folder not found (mount disconnected?): %s", section.path.String().c_str());
+		else
+			renderDirectoryContents(section.path);
+		ImGui::Unindent();
+	}
+
+	void ProjectTreePanel::renderRootSectionContextMenu(const ProjectRootEntry &section)
+	{
+		if (!ImGui::BeginPopupContextItem())
+			return;
+
+		if (ImGui::MenuItem("Change Folder..."))
+		{
+			Result<std::optional<Path>> picked = Platform::PickFolder(section.path);
+			if (picked && picked->has_value() && m_EventBus != nullptr)
+			{
+				ProjectEvents::RootPathChangedRequested request;
+				request.rootId = section.id;
+				request.newPath = picked->value();
+				m_EventBus->Queue(request);
+			}
+		}
+		if (ImGui::MenuItem("Remove") && m_EventBus != nullptr)
+		{
+			ProjectEvents::RootRemoveRequested request;
+			request.rootId = section.id;
+			m_EventBus->Queue(request);
+		}
+		ImGui::EndPopup();
 	}
 
 	void ProjectTreePanel::renderDirectoryContents(const Path &directory)
@@ -261,6 +315,15 @@ namespace DefectStudio
 				ImGui::TreeNodeEx(idLabel.c_str(), leafFlags, "%s", label.c_str());
 				if (ImGui::IsItemClicked())
 					m_SelectedPath = pathKey;
+				// WAVECAR = drag-drop onto an open structure's viewport (T08.6.4); drop target lives
+				// in RendererPanel. POSCAR/CONTCAR deliberately stay context-menu-only (see "Open
+				// Defect" above) - user explicitly rejected drag-drop for those, see TODO.md T08.6.4.
+				if (label == "WAVECAR" && ImGui::BeginDragDropSource())
+				{
+					ImGui::SetDragDropPayload("DS_WAVECAR_PATH", pathKey.c_str(), pathKey.size() + 1);
+					ImGui::TextUnformatted(pathKey.c_str());
+					ImGui::EndDragDropSource();
+				}
 				ImGui::PopStyleColor(pushedColors);
 				continue;
 			}
@@ -295,6 +358,12 @@ namespace DefectStudio
 		const bool hasDefectFile = HasDefectFile(directory);
 		if (ImGui::MenuItem("Open Defect", "Shift+Enter", false, hasDefectFile))
 			openDefectAt(directory);
+		if (ImGui::MenuItem("Set as Bulk Reference") && m_EventBus != nullptr)
+		{
+			ProjectEvents::BulkDirectoryChangeRequested request;
+			request.directory = directory;
+			m_EventBus->Queue(request);
+		}
 		ImGui::EndPopup();
 	}
 } // namespace DefectStudio

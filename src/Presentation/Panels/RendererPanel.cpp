@@ -162,6 +162,32 @@ namespace DefectStudio
 			ImVec2(0.0f, 1.0f),
 			ImVec2(1.0f, 0.0f));
 
+		// T08.6.4: drop target for a WAVECAR dragged from ProjectTreePanel - see the payload's
+		// producer there for why only WAVECAR (not POSCAR/CONTCAR) uses drag-drop at all.
+		if (ImGui::BeginDragDropTarget())
+		{
+			if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DS_WAVECAR_PATH"))
+			{
+				Ref<EventBus> eventBus = m_Layer.GetEventBus();
+				if (eventBus != nullptr)
+				{
+					RendererEvents::Viewport::WavecarDropped event;
+					event.windowId = windowState.windowId;
+					event.wavecarPath = std::filesystem::path(static_cast<const char *>(payload->Data));
+					eventBus->Queue(event);
+				}
+				// ElectronicStructurePanel/OccupationDiagramPanel only show/poll whichever window is
+				// the last-*focused* viewport (FindFocusedWindow()) - a drag-drop never clicks the
+				// window, so without this the load happens silently and neither panel ever notices.
+				// Brings this window's tab to front too if it was docked in a hidden tab - visual
+				// confirmation something happened. Takes effect next frame (IsWindowFocused() at the
+				// top of this function is already past for this frame), same one-frame lag already
+				// accepted elsewhere in this panel.
+				ImGui::SetWindowFocus();
+			}
+			ImGui::EndDragDropTarget();
+		}
+
 		const bool hovered = ImGui::IsItemHovered();
 
 		if (windowState.activeSelectionTool == SelectionToolMode::Box && windowState.selectionDragActive)

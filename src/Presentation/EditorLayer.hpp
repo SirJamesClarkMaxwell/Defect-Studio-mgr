@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -15,6 +16,7 @@
 #include "Core/Layer.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "IO/ProjectManifestIO.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/EditorUiState.hpp"
@@ -84,6 +86,19 @@ namespace DefectStudio
 		struct Applied;
 	}
 
+	namespace ProjectEvents
+	{
+		struct RootAddRequested;
+		struct RootRemoveRequested;
+		struct RootPathChangedRequested;
+		struct BulkDirectoryChangeRequested;
+	}
+
+	namespace RendererEvents::Viewport
+	{
+		struct WavecarDropped;
+	}
+
 	class EditorLayer final : public Layer, public EventReceiver
 	{
 	public:
@@ -130,6 +145,28 @@ namespace DefectStudio
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 
+		// T07.5.1/T07.5.4/T07.5.5 project system - a project is a user-chosen directory holding
+		// manifest.yaml (ProjectManifestIO), distinct from the data `roots` it references. With no
+		// project open, roots fall back to the ad-hoc ProjectRootsIO placeholder (session-durable,
+		// not a named project) - see docs/work/project/TODO.md T07.5.1 for what's still out of
+		// scope (PathResolver, tags, migration pipeline, canonical/recovery save split, ...).
+		void bindProjectRootEvents();
+		void loadInitialProjectState();
+		void createNewProject(const Path &directory);
+		void openProject(const Path &directory);
+		void touchAndSaveRecentProject(const Path &directory);
+		// Pushes whichever root list is currently authoritative (active project's manifest, or
+		// the ad-hoc list) into the single ProjectTreePanel instance.
+		void refreshProjectTreePanel();
+		[[nodiscard]] std::vector<ProjectRootEntry> &currentRootsMutable();
+		void persistCurrentRoots();
+		void onRootAddRequested(const ProjectEvents::RootAddRequested &event);
+		void onRootRemoveRequested(const ProjectEvents::RootRemoveRequested &event);
+		void onRootPathChangedRequested(const ProjectEvents::RootPathChangedRequested &event);
+		void onBulkDirectoryChangeRequested(const ProjectEvents::BulkDirectoryChangeRequested &event);
+		// T08.6.4: WAVECAR dragged from ProjectTreePanel onto an open structure's viewport.
+		void onWavecarDropped(const RendererEvents::Viewport::WavecarDropped &event);
+
 		// Minimal stand-in for real T07.5.1 project persistence - see PersistedWindowRecord.
 		// Save happens once, at shutdown (OnDetach) - the alternative (a save call at every one of
 		// the dozens of mutation sites across RendererLayer/ElectronicStructureSession) is real
@@ -165,6 +202,16 @@ namespace DefectStudio
 		// RendererStartupBootstrap::GenerateRendererWindowId, which pollPendingWindowRestores
 		// recomputes to match against whatever actually shows up in RendererLayer::GetWindows().
 		std::unordered_map<std::string, PersistedWindowRecord> m_PendingWindowRestores;
+
+		// Project system state (see the method-block comment above). Exactly one of these is the
+		// "current" root list at any time: m_ActiveProject's roots if a project is open, else
+		// m_AdHocRoots. Kept in sync with disk on every mutation (not batched to shutdown like
+		// m_PendingWindowRestores above - root list changes are rare and shouldn't risk being lost
+		// to a crash).
+		std::optional<ProjectManifest> m_ActiveProject;
+		Path m_ActiveProjectDirectory;
+		std::vector<ProjectRootEntry> m_AdHocRoots;
+		PanelId m_ProjectTreePanelId = 0;
 	};
 
 	template <typename TPanel, typename... Args>

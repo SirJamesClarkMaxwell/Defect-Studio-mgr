@@ -173,19 +173,12 @@ namespace DefectStudio
 
 		ImGui::TextDisabled("Shared across every open defect window - loaded once, not per window.");
 
-		char pathBuffer[512];
-		std::snprintf(pathBuffer, sizeof(pathBuffer), "%s", m_Session->BulkDirectory().String().c_str());
-		ImGui::SetNextItemWidth(320.0f);
-		Path bulkDirectory = m_Session->BulkDirectory();
-		if (ImGui::InputText("##bulkdir", pathBuffer, sizeof(pathBuffer)))
-			m_Session->SetBulkDirectory(Path(pathBuffer));
-		ImGui::SameLine();
-		if (ImGui::SmallButton("Browse..."))
-		{
-			Result<std::optional<Path>> picked = Platform::PickFolder(bulkDirectory);
-			if (picked && picked->has_value())
-				m_Session->SetBulkDirectory(picked->value());
-		}
+		// No free-text/Browse entry here any more (T07.5.5) - set it by right-clicking any folder
+		// in the Project Tree -> "Set as Bulk Reference", so it can travel with the active project.
+		if (m_Session->BulkDirectory().Empty())
+			ImGui::TextDisabled("Not set - right-click a folder in the Project Tree, \"Set as Bulk Reference\".");
+		else
+			ImGui::TextUnformatted(m_Session->BulkDirectory().String().c_str());
 
 		ImGui::BeginDisabled(m_Session->BulkDirectory().Empty() || m_Session->IsBulkLoading());
 		if (ImGui::Button("Reload bulk gap"))

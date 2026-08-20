@@ -19,12 +19,17 @@
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
 #include "Core/Input/ContextManager.hpp"
 #include "Core/Input/KeymapResolver.hpp"
+#include "Core/Platform/FileDialog.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Events/EditorUiEvents.hpp"
+#include "Events/ProjectEvents.hpp"
 #include "Events/RendererEvents.hpp"
+#include "IO/ProjectManifestIO.hpp"
+#include "IO/ProjectRootsIO.hpp"
+#include "IO/RecentProjectsIO.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
@@ -360,6 +365,7 @@ namespace DefectStudio
 		m_CommandRegistry = std::move(commandRegistry);
 		m_RendererLayer = std::move(rendererLayer);
 		bindConfigEvents();
+		bindProjectRootEvents();
 		DS_LOG_INFO(
 			"EditorLayer runtime services bound: event_bus={} job_system={} progress_tracker={}",
 			m_EventBus != nullptr,
@@ -473,16 +479,8 @@ namespace DefectStudio
 			? m_CurrentConfig->paths.exportsDirectory / Path("event-log-export.csv")
 			: Path("logs") / Path("event-log-export.csv");
 		registerPanel<LoggingPanel>(m_EventBus, m_LogRegistry, logExportPath, "Logging Panel", true);
-		// ponytail: hardcoded default project-tree root instead of a real persisted setting -
-		// YamlConfigSerializer.cpp is ~1700 lines with duplicated emit paths (T06.5 P2 debt) and
-		// isn't safe to extend with one more field until that's cleaned up. Promote to a real
-		// per-project setting once T07.5.1 project manifest persistence exists.
-		const Path defaultProjectTreeRoot("O:\\hBN\\V2CBCN");
-		registerPanel<ProjectTreePanel>(
-			m_EventBus,
-			"Project Tree",
-			true,
-			FileSystem::Exists(defaultProjectTreeRoot.Native()) ? defaultProjectTreeRoot : Path{});
+		m_ProjectTreePanelId = registerPanel<ProjectTreePanel>(m_EventBus, "Project Tree", true);
+		loadInitialProjectState();
 		if (auto rendererLayer = m_RendererLayer.lock())
 		{
 			registerPanel<RendererPanel>(
@@ -505,6 +503,15 @@ namespace DefectStudio
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
 			// (not local) so saveProjectWindowState/pollPendingWindowRestores can reach it too.
 			m_ElectronicStructureSession = CreateRef<ElectronicStructureSession>(*rendererLayer, m_JobSystem);
+			// Applied here (not in loadInitialProjectState(), which runs before this session
+			// exists) - the active project's manifest, if any, owns the bulk reference now (see
+			// T07.5.5); ElectronicStructureSession's own persisted-defaults file stays as a
+			// same-machine convenience fallback for when no project is open.
+			if (m_ActiveProject.has_value() && !m_ActiveProject->bulkDirectory.Empty())
+			{
+				m_ElectronicStructureSession->SetBulkDirectory(m_ActiveProject->bulkDirectory);
+				m_ElectronicStructureSession->DispatchBulkLoad();
+			}
 			registerPanel<ElectronicStructurePanel>(
 				m_ElectronicStructureSession,
 				m_EventBus,
@@ -907,6 +914,239 @@ namespace DefectStudio
 		DS_LOG_INFO("EditorLayer config event handlers bound");
 	}
 
+	void EditorLayer::bindProjectRootEvents()
+	{
+		if (m_EventBus == nullptr)
+		{
+			DS_LOG_WARN("EditorLayer project-root event binding skipped: EventBus unavailable");
+			return;
+		}
+
+		AddSubscription(subscribeEditorLayer<ProjectEvents::RootAddRequested>(
+			*m_EventBus, *this, &EditorLayer::onRootAddRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::RootRemoveRequested>(
+			*m_EventBus, *this, &EditorLayer::onRootRemoveRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::RootPathChangedRequested>(
+			*m_EventBus, *this, &EditorLayer::onRootPathChangedRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::BulkDirectoryChangeRequested>(
+			*m_EventBus, *this, &EditorLayer::onBulkDirectoryChangeRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::WavecarDropped>(
+			*m_EventBus, *this, &EditorLayer::onWavecarDropped, EventPriority::Normal));
+	}
+
+	void EditorLayer::loadInitialProjectState()
+	{
+		std::vector<RecentProjectEntry> recents;
+		std::string recentsError;
+		(void)RecentProjectsIO::Load(RecentProjectsIO::DefaultFilePath(), recents, recentsError);
+
+		bool opened = false;
+		if (!recents.empty())
+		{
+			ProjectManifest manifest;
+			std::string manifestError;
+			if (ProjectManifestIO::Load(recents.front().projectDirectory, manifest, manifestError))
+			{
+				m_ActiveProject = std::move(manifest);
+				m_ActiveProjectDirectory = recents.front().projectDirectory;
+				opened = true;
+			}
+			else
+			{
+				DS_LOG_WARN("EditorLayer: most recent project at '{}' failed to load: {}",
+					recents.front().projectDirectory.String(), manifestError);
+			}
+		}
+
+		if (!opened)
+		{
+			std::string error;
+			if (!ProjectRootsIO::Load(ProjectRootsIO::DefaultFilePath(), m_AdHocRoots, error))
+			{
+				DS_LOG_WARN("EditorLayer: failed to load project_roots.yaml: {}", error);
+				m_AdHocRoots.clear();
+			}
+			else if (!error.empty())
+			{
+				// Load() still returns true after a successful migration even if persisting the
+				// migrated seed failed (session stays usable) - surface that failure here instead
+				// of silently dropping it.
+				DS_LOG_WARN("EditorLayer: {}", error);
+			}
+		}
+
+		refreshProjectTreePanel();
+	}
+
+	void EditorLayer::createNewProject(const Path &directory)
+	{
+		if (directory.Empty())
+			return;
+
+		if (FileSystem::Exists(ProjectManifestIO::ManifestPath(directory).Native()))
+		{
+			DS_LOG_WARN(
+				"EditorLayer: refusing to create a new project at '{}' - manifest.yaml already exists there (use Open instead)",
+				directory.String());
+			return;
+		}
+
+		ProjectManifest manifest = ProjectManifestIO::CreateNew(directory.filename().String());
+		std::string error;
+		if (!ProjectManifestIO::Save(directory, manifest, error))
+		{
+			DS_LOG_WARN("EditorLayer: failed to create project at '{}': {}", directory.String(), error);
+			return;
+		}
+
+		m_ActiveProject = std::move(manifest);
+		m_ActiveProjectDirectory = directory;
+		refreshProjectTreePanel();
+		touchAndSaveRecentProject(directory);
+
+		if (m_ElectronicStructureSession != nullptr)
+			m_ElectronicStructureSession->SetBulkDirectory({});
+	}
+
+	void EditorLayer::openProject(const Path &directory)
+	{
+		if (directory.Empty())
+			return;
+
+		ProjectManifest manifest;
+		std::string error;
+		if (!ProjectManifestIO::Load(directory, manifest, error))
+		{
+			DS_LOG_WARN("EditorLayer: failed to open project at '{}': {}", directory.String(), error);
+			return;
+		}
+
+		m_ActiveProject = std::move(manifest);
+		m_ActiveProjectDirectory = directory;
+		refreshProjectTreePanel();
+		touchAndSaveRecentProject(directory);
+
+		if (m_ElectronicStructureSession != nullptr)
+		{
+			m_ElectronicStructureSession->SetBulkDirectory(m_ActiveProject->bulkDirectory);
+			if (!m_ActiveProject->bulkDirectory.Empty())
+				m_ElectronicStructureSession->DispatchBulkLoad();
+		}
+	}
+
+	void EditorLayer::touchAndSaveRecentProject(const Path &directory)
+	{
+		std::vector<RecentProjectEntry> recents;
+		std::string error;
+		(void)RecentProjectsIO::Load(RecentProjectsIO::DefaultFilePath(), recents, error);
+		RecentProjectsIO::Touch(recents, directory);
+		if (!RecentProjectsIO::Save(RecentProjectsIO::DefaultFilePath(), recents, error))
+			DS_LOG_WARN("EditorLayer: failed to persist recent_projects.yaml: {}", error);
+	}
+
+	void EditorLayer::refreshProjectTreePanel()
+	{
+		if (auto panel = findPanel(m_ProjectTreePanelId).lock())
+		{
+			if (auto *treePanel = dynamic_cast<ProjectTreePanel *>(panel.get()))
+				treePanel->SetRoots(currentRootsMutable());
+		}
+	}
+
+	std::vector<ProjectRootEntry> &EditorLayer::currentRootsMutable()
+	{
+		if (m_ActiveProject.has_value())
+			return m_ActiveProject->roots;
+		return m_AdHocRoots;
+	}
+
+	void EditorLayer::persistCurrentRoots()
+	{
+		std::string error;
+		if (m_ActiveProject.has_value())
+		{
+			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
+				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml: {}", error);
+		}
+		else if (!ProjectRootsIO::Save(ProjectRootsIO::DefaultFilePath(), m_AdHocRoots, error))
+		{
+			DS_LOG_WARN("EditorLayer: failed to persist project_roots.yaml: {}", error);
+		}
+	}
+
+	void EditorLayer::onRootAddRequested(const ProjectEvents::RootAddRequested &event)
+	{
+		ProjectRootEntry entry;
+		entry.id = ProjectRootsIO::GenerateRootId();
+		entry.path = event.path;
+		entry.label = event.label;
+		currentRootsMutable().push_back(std::move(entry));
+
+		refreshProjectTreePanel();
+		persistCurrentRoots();
+	}
+
+	void EditorLayer::onRootRemoveRequested(const ProjectEvents::RootRemoveRequested &event)
+	{
+		std::erase_if(currentRootsMutable(), [&event](const ProjectRootEntry &entry) { return entry.id == event.rootId; });
+
+		refreshProjectTreePanel();
+		persistCurrentRoots();
+	}
+
+	void EditorLayer::onRootPathChangedRequested(const ProjectEvents::RootPathChangedRequested &event)
+	{
+		std::vector<ProjectRootEntry> &roots = currentRootsMutable();
+		const auto it = std::find_if(
+			roots.begin(), roots.end(), [&event](const ProjectRootEntry &entry) { return entry.id == event.rootId; });
+		if (it == roots.end())
+			return;
+		it->path = event.newPath;
+
+		refreshProjectTreePanel();
+		persistCurrentRoots();
+	}
+
+	void EditorLayer::onBulkDirectoryChangeRequested(const ProjectEvents::BulkDirectoryChangeRequested &event)
+	{
+		if (m_ElectronicStructureSession != nullptr)
+		{
+			m_ElectronicStructureSession->SetBulkDirectory(event.directory);
+			m_ElectronicStructureSession->DispatchBulkLoad();
+		}
+
+		if (m_ActiveProject.has_value())
+		{
+			m_ActiveProject->bulkDirectory = event.directory;
+			std::string error;
+			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
+				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after bulk reference change: {}", error);
+		}
+	}
+
+	void EditorLayer::onWavecarDropped(const RendererEvents::Viewport::WavecarDropped &event)
+	{
+		if (m_ElectronicStructureSession == nullptr)
+			return;
+
+		auto rendererLayer = m_RendererLayer.lock();
+		if (rendererLayer == nullptr)
+			return;
+
+		for (RendererWindowState &windowState : rendererLayer->GetWindows())
+		{
+			if (windowState.windowId != event.windowId)
+				continue;
+
+			ElectronicStructureSession::WindowState &state = m_ElectronicStructureSession->Update(windowState);
+			state.calculationDirectory = event.wavecarPath.parent_path();
+			m_ElectronicStructureSession->DispatchOutputLoad(state);
+			DS_LOG_INFO("WAVECAR dropped on window '{}': calculationDirectory set to '{}'",
+				event.windowId, state.calculationDirectory.String());
+			return;
+		}
+	}
+
 	void EditorLayer::applyConfigToUiState(const ApplicationConfig &config)
 	{
 		if (m_UiState == nullptr)
@@ -967,12 +1207,35 @@ namespace DefectStudio
 		if (!ImGui::BeginMenu("Plik"))
 			return;
 
-		ImGui::MenuItem("Nowy", nullptr, false, false);
-		ImGui::MenuItem("Otworz", nullptr, false, false);
-		ImGui::MenuItem("Zapisz", nullptr, false, false);
+		if (ImGui::MenuItem("Nowy"))
+		{
+			Result<std::optional<Path>> picked = Platform::PickFolder({});
+			if (picked && picked->has_value())
+				createNewProject(picked->value());
+		}
+		if (ImGui::MenuItem("Otworz"))
+		{
+			Result<std::optional<Path>> picked = Platform::PickFolder({});
+			if (picked && picked->has_value())
+				openProject(picked->value());
+		}
+		if (ImGui::MenuItem("Zapisz"))
+			persistCurrentRoots();
 		if (ImGui::BeginMenu("Ostatnie projekty"))
 		{
-			ImGui::MenuItem("Brak ostatnich projektow", nullptr, false, false);
+			std::vector<RecentProjectEntry> recents;
+			std::string recentsError;
+			(void)RecentProjectsIO::Load(RecentProjectsIO::DefaultFilePath(), recents, recentsError);
+			if (recents.empty())
+				ImGui::MenuItem("Brak ostatnich projektow", nullptr, false, false);
+			else
+			{
+				for (const RecentProjectEntry &entry : recents)
+				{
+					if (ImGui::MenuItem(entry.projectDirectory.String().c_str()))
+						openProject(entry.projectDirectory);
+				}
+			}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Import DFT"))

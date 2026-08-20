@@ -100,8 +100,10 @@ namespace DefectStudio
 		// defect level rather than the true bulk band edges. One bulk reference for the whole
 		// session (not per-window) - every open defect window shares the same pristine crystal,
 		// so there is no reason to re-fetch it once per window.
-		// ponytail: hardcoded default instead of a persisted per-project setting - T07.5.1 project
-		// manifest persistence doesn't exist yet.
+		// Set directly (SetBulkDirectory + DispatchBulkLoad) from EditorLayer, either from the
+		// active project's manifest.yaml (T07.5.1/T07.5.5) on open, or from ProjectTreePanel's
+		// per-node RMB "Set as Bulk Reference" event - no in-panel free-text entry any more, see
+		// ElectronicStructurePanel::renderBulkReferenceControls().
 		[[nodiscard]] const Path &BulkDirectory() const noexcept
 		{
 			return m_BulkDirectory;
@@ -171,7 +173,7 @@ namespace DefectStudio
 		std::optional<LastUsedSettings> m_PersistedSettingsCache;
 		Path m_PersistedBulkDirectoryCache;
 
-		Path m_BulkDirectory = Path("O:\\hBN\\bulk");
+		Path m_BulkDirectory; // empty = unset; see the accessor comment above for how this gets set
 		std::optional<BandGapData> m_BulkGap;
 		std::string m_BulkError;
 		Ref<VaspOutputJob> m_PendingBulkJob;
