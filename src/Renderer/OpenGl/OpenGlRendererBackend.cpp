@@ -873,8 +873,11 @@ namespace DefectStudio
 					selectedIndices.end(),
 					i) != selectedIndices.end();
 				instance.positionRadius = glm::vec4(atom.cartesianPosition, atom.radius);
+				// Blender's selection orange (~#E8850C), blended rather than added so the
+				// element's own color is still legible on the highlighted atom.
+				constexpr glm::vec3 kSelectionHighlightColor(0.91f, 0.52f, 0.02f);
 				const glm::vec3 displayColor = isSelected
-					? glm::clamp(atom.color + glm::vec3(0.35f, 0.35f, 0.10f), glm::vec3(0.0f), glm::vec3(1.0f))
+					? glm::mix(atom.color, kSelectionHighlightColor, 0.55f)
 					: atom.color;
 				instance.color = glm::vec4(displayColor, 1.0f);
 				resources.cachedAtomInstances.push_back(instance);
