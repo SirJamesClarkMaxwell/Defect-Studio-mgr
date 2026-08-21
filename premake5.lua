@@ -353,6 +353,11 @@ include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
 include "Vendor/ImPlot"
+-- msdf-atlas-gen ships its own working premake5.lua (proven by TheCherno/Hazel, which this fork's
+-- msdfgen/freetype chain is pulled from) that internally chains `include "msdfgen"` -> msdfgen's
+-- own premake5.lua declares the "freetype", "tinyxml2", and "msdfgen" StaticLib projects. Nothing
+-- hand-rolled here - same pattern as ImPlot, just one Vendor/ level deeper.
+include "Vendor/msdf-atlas-gen"
 
 -- Patch the vendored ImGui project from here rather than editing Vendor/imgui/imconfig.h: that
 -- file lives inside the ImGui git submodule, and `git submodule update --force`
@@ -390,6 +395,10 @@ end
 ApplyDependencyRuntimeFilters("GLAD")
 ApplyDependencyRuntimeFilters("ImGui")
 ApplyDependencyRuntimeFilters("ImPlot")
+ApplyDependencyRuntimeFilters("freetype")
+ApplyDependencyRuntimeFilters("tinyxml2")
+ApplyDependencyRuntimeFilters("msdfgen")
+ApplyDependencyRuntimeFilters("msdf-atlas-gen")
 ApplyDependencyRuntimeFilters("yaml-cpp")
 ApplyDependencyRuntimeFilters("Tracy")
 ApplyDependencyRuntimeFilters("GoogleTest")
@@ -512,6 +521,8 @@ project "DefectStudio"
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
         "Vendor/ImPlot",
+        "Vendor/msdf-atlas-gen/msdfgen",
+        "Vendor/msdf-atlas-gen/msdf-atlas-gen",
         "Vendor/ImGuizmo",
         "Vendor/ImGuiColorTextEdit",
         "Vendor/imgui-command-palette",
@@ -539,6 +550,10 @@ project "DefectStudio"
         "GLAD",
         "ImGui",
         "ImPlot",
+        "freetype",
+        "tinyxml2",
+        "msdfgen",
+        "msdf-atlas-gen",
         "ImGuizmo",
         "ImGuiColorTextEdit",
         "nfd",
@@ -696,6 +711,8 @@ project "DefectStudioTests"
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
         "Vendor/ImPlot",
+        "Vendor/msdf-atlas-gen/msdfgen",
+        "Vendor/msdf-atlas-gen/msdf-atlas-gen",
         "Vendor/ImGuizmo",
         "Vendor/ImGuiColorTextEdit",
         "Vendor/imgui-command-palette",
@@ -719,6 +736,10 @@ project "DefectStudioTests"
         "GLAD",
         "ImGui",
         "ImPlot",
+        "freetype",
+        "tinyxml2",
+        "msdfgen",
+        "msdf-atlas-gen",
         "ImGuizmo",
         "ImGuiColorTextEdit",
         "nfd",
