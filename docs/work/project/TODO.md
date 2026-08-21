@@ -566,11 +566,20 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       `renderer.zoom_out` — zob. notatka o zoom keybindach niżej); ukryj pojedyncze wiązanie bez
       usuwania z modelu, auto-ukrycie przy usunięciu atomu; etykiety długości wiązań w 3D (§4.4,
       zob. też "Pomiary" niżej — to ten sam etykietowy mechanizm)
-- [ ] ImGuizmo transform (G/R/S + axis/plane constraints: `G`+`X/Y/Z`, `Shift+X/Y/Z`) dla atomów —
-      **decyzja 2026-08-21:** wymaga zwolnienia `R` z `renderer.zoom_in` (dziś zajęte, koliduje z
-      Rotate). Zoom klawiaturowy (`R`/`F`) odchodzi całkowicie — scroll-zoom już działa (T06,
-      "Orbit camera... scroll zoom", zrobione), keyboardowy skrót był tylko dodatkiem, nie jedyną
-      ścieżką — nie trzeba go relokować, po prostu zwolnić `R` i `F` dla gizmo/connect.
+- [x] ImGuizmo transform (G/R/S) dla zaznaczonych atomów — zrobione 2026-08-21, branch
+      `task/08-scene/imguizmo-transform`. Vendorowany **`sjcmdev/ImGuizmo`** (nie ImViewGuizmo —
+      to inny fork, kamera-nawigacja/compass, nie ma translate/rotate/scale w ogóle; ustalone przy
+      starcie tego etapu, `ImViewGuizmo` submoduł dodany i od razu wycofany). Fork bez własnego
+      premake5.lua → dorobiony lokalny `DefineImGuizmoProject()` (StaticLib, wzorzec `nfd`) zamiast
+      `include "Vendor/ImGuizmo"` jak przy ImPlot. `G`/`R`/`S` (`renderer.gizmo.mode_*`) przełączają
+      operację; pivot = żywy centroid zaznaczenia liczony co klatkę (bez cache — trwały pod
+      rotate/scale, bo sztywna transformacja wokół własnego centroidu go nie rusza). Drag na żywo
+      mutuje `RendererStructureData` (hot path rendera) dla natychmiastowego feedbacku; puszczenie
+      przycisku commituje wynik do domenowej `CrystalStructure` jako jedna komenda undo
+      (`TransformSelectedAtomsCommand`, przez nową `renderer.gizmo.commit_transform`, hidden z
+      palety — potrzebuje payloadu z draga, nie ma sensu jako gołe wywołanie). **Nie zrobione:**
+      axis/plane constraints (`G`+`X/Y/Z`, `Shift+X/Y/Z`) — ImGuizmo sam w sobie nie ma takiego
+      trybu, wymagałoby osobnej modalnej warstwy wejścia, odłożone.
 - [ ] **Scene Objects – Empty**: punkt pomocniczy z lokalnym układem osi, transformowalny (G/R),
       "align active empty Z to selected atoms", align to world/camera (§8.1)
 - [ ] **Scene Objects – Origin i Light**: jednoinstancyjne obiekty specjalne, transformowalny Light (§8.2)
