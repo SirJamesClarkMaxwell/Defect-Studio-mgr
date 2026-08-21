@@ -598,8 +598,9 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 > nazwane widoki + domyślny widok projektu — pełny plan commit-po-commicie (C1-C12) w
 > `docs/work/project/plans/rzeczy-do-dodania-jak-quirky-shell.md` (zewnętrzny plan reconciliation).
 
-- [x] Box-select (`Alt+B`) / circle-select (`Alt+C`, live scroll-resizable brush) — **skróty
-      przechodzą na zwykłe `B`/`C` w Etapie A (plan sesji 2026-08-21), dziś jeszcze `Alt+`.**
+- [x] Box-select (`B`) / circle-select (`C`, live scroll-resizable brush) — **skróty przeniesione
+      z `Alt+B`/`Alt+C` na zwykłe `B`/`C` w Etapie A, 2026-08-21** (align-axis przeniesione na
+      1/2/3, zwalniając litery — zob. `keybindings.yaml`).
       **Circle-select semantyka poprawiona 2026-08-21:** było odwrotnie niż w Blenderze (plain
       click = replace, Shift+drag = dodaj, Ctrl+drag = odejmij) — teraz trzymanie LPM maluje
       zaznaczenie ciągle (dodaje), Shift przełącza pędzel na odejmowanie
@@ -880,12 +881,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       zaimplementowane.** `KeymapResolver` wykrywa i loguje konflikty (`m_Conflicts`,
       `GetConflicts()`), a `Settings.cpp` już to wyświetla w UI (dwa miejsca użycia
       `GetConflicts()` w panelu ustawień)
-- [ ] **Saved-view keybindy ujednolicone (`V`/`Shift+V`/`Alt+V`, z rozmowy 2026-08-20)** — bindingi
-      same w sobie spójne (`V` cycle next, `Alt+V` cycle previous, `Shift+V` save), problem w
-      implementacji: `m_SharedSavedViews` (`RendererLayer.cpp`) globalny dla **wszystkich** okien
-      naraz (nie per-window/per-projekt), `Shift+V` dopisuje bez nazwy/duplicate-check, **zero UI**
-      pokazującego listę — user cyklicznie skacze przez ślepą listę. Fix: nazwane saved views +
-      mały panel/dropdown z listą (nazwa + delete), obok "Persist ImGui dock/panel layout" niżej.
+- [x] **Saved-view keybindy ujednolicone — zrobione 2026-08-21.** `RendererViewSnapshot` ma teraz
+      `name` (auto `"View N"` na `Shift+V`, persystowane jako 4. segment w istniejącym formacie
+      pipe-delimited). `RendererLayer` wystawia Rename/Delete/Move/Apply na
+      `m_SharedSavedViews`, nowa zakładka "Saved Views" w Settings (tabela z Apply/Rename/Up/Down/
+      Delete) — nie ślepy cykl. **Świadomie zostaje jak było:** lista wciąż globalna dla
+      wszystkich okien (nie per-window/per-projekt) — per-projekt scoping to T07.5.1, osobny task.
 - [ ] F2 rename w Scene Outliner (zależne od T08 SceneOutliner)
 - [ ] Viewport resolution tuning (redukcja GPU load)
 - [ ] Range selection z Shift w kolekcjach
