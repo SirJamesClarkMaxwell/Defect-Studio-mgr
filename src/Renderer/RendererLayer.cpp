@@ -111,19 +111,27 @@ namespace DefectStudio
 		return result;
 	}
 
-	// "cam-fields|selected-positions|hidden-positions" - selection/hidden are position lists (not
-	// raw indices), same convention as restoreViewSnapshot's cross-structure resolve: for a
+	// "cam-fields|selected-positions|hidden-positions|name" - selection/hidden are position lists
+	// (not raw indices), same convention as restoreViewSnapshot's cross-structure resolve: for a
 	// same-file restore this resolves back to the exact original indices at ~zero distance, so one
 	// format covers both the shared/cross-window saved views and the per-window project-state
-	// restore. Segments 2/3 are optional - a bare "|"-free line (this format's first shipped shape)
-	// still parses fine as camera-only with empty selection/hidden.
+	// restore. Segments 2/3/4 are optional - a bare "|"-free line (this format's first shipped
+	// shape) still parses fine as camera-only with empty selection/hidden/name.
 	[[nodiscard]] std::string SerializeViewSnapshot(const RendererViewSnapshot &snapshot)
 	{
+		// '|' is the segment delimiter and this is a one-line-per-entry file, so strip anything
+		// that would corrupt either.
+		std::string sanitizedName = snapshot.name;
+		std::replace_if(
+			sanitizedName.begin(), sanitizedName.end(),
+			[](char c) { return c == '|' || c == '\n' || c == '\r'; },
+			' ');
+
 		std::ostringstream stream;
 		stream << snapshot.target.x << ',' << snapshot.target.y << ',' << snapshot.target.z << ','
 			   << snapshot.distance << ',' << snapshot.yaw << ',' << snapshot.pitch << ',' << snapshot.roll << ','
 			   << static_cast<int>(snapshot.projection) << '|' << SerializePositionList(snapshot.selectedAtomPositions)
-			   << '|' << SerializePositionList(snapshot.hiddenAtomPositions);
+			   << '|' << SerializePositionList(snapshot.hiddenAtomPositions) << '|' << sanitizedName;
 		return stream.str();
 	}
 
@@ -168,6 +176,8 @@ namespace DefectStudio
 				snapshot.selectedAtomPositions = DeserializePositionList(segments[1]);
 			if (segments.size() > 2)
 				snapshot.hiddenAtomPositions = DeserializePositionList(segments[2]);
+			if (segments.size() > 3)
+				snapshot.name = segments[3];
 			return snapshot;
 		}
 		catch (const std::exception &)
@@ -1356,9 +1366,75 @@ namespace DefectStudio
 		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
 
-		m_SharedSavedViews.push_back(captureViewSnapshot(*windowState));
+		RendererViewSnapshot snapshot = captureViewSnapshot(*windowState);
+		snapshot.name = "View " + std::to_string(m_SharedSavedViews.size() + 1u);
+		m_SharedSavedViews.push_back(std::move(snapshot));
 		m_ActiveSharedSavedViewIndex = m_SharedSavedViews.size() - 1u;
 		savePersistedSharedViews();
+	}
+
+	const std::vector<RendererViewSnapshot> &RendererLayer::GetSharedSavedViews() const
+	{
+		return m_SharedSavedViews;
+	}
+
+	void RendererLayer::RenameSharedSavedView(std::size_t index, std::string name)
+	{
+		if (index >= m_SharedSavedViews.size())
+			return;
+		m_SharedSavedViews[index].name = std::move(name);
+		savePersistedSharedViews();
+	}
+
+	void RendererLayer::DeleteSharedSavedView(std::size_t index)
+	{
+		if (index >= m_SharedSavedViews.size())
+			return;
+		m_SharedSavedViews.erase(m_SharedSavedViews.begin() + static_cast<std::ptrdiff_t>(index));
+		if (!m_SharedSavedViews.empty() && m_ActiveSharedSavedViewIndex >= m_SharedSavedViews.size())
+			m_ActiveSharedSavedViewIndex = m_SharedSavedViews.size() - 1u;
+		savePersistedSharedViews();
+	}
+
+	void RendererLayer::MoveSharedSavedView(std::size_t index, int direction)
+	{
+		if (index >= m_SharedSavedViews.size())
+			return;
+
+		if (direction < 0)
+		{
+			if (index == 0)
+				return;
+			std::swap(m_SharedSavedViews[index], m_SharedSavedViews[index - 1u]);
+		}
+		else if (direction > 0)
+		{
+			if (index + 1u >= m_SharedSavedViews.size())
+				return;
+			std::swap(m_SharedSavedViews[index], m_SharedSavedViews[index + 1u]);
+		}
+		else
+		{
+			return;
+		}
+		savePersistedSharedViews();
+	}
+
+	void RendererLayer::ApplySharedSavedView(std::size_t index, const std::string &windowId)
+	{
+		if (index >= m_SharedSavedViews.size())
+			return;
+
+		RendererWindowState *windowState =
+			findWindowById(windowId.empty() ? m_LastFocusedViewportWindowId : windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		m_ActiveSharedSavedViewIndex = index;
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		const RendererViewSnapshot &after = m_SharedSavedViews[index];
+		pushViewChange(*windowState, before, after, "panel.saved_view");
+		restoreViewSnapshot(*windowState, after, "panel.saved_view");
 	}
 
 	void RendererLayer::onExportImageRequested(const RendererEvents::Viewport::ExportImageRequested &event)

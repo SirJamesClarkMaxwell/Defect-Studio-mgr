@@ -550,7 +550,8 @@ namespace DefectStudio
 			m_CommandRegistry,
 			m_CurrentConfig != nullptr ? *m_CurrentConfig : ApplicationConfig{},
 			"Settings",
-			true);
+			true,
+			m_RendererLayer);
 		m_PanelsInitialized = true;
 
 		loadAndQueueProjectWindowRestores();

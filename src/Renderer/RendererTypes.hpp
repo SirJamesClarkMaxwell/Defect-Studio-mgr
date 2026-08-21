@@ -65,6 +65,9 @@ namespace DefectStudio
 
 	struct RendererViewSnapshot
 	{
+		// Only meaningful for entries in RendererLayer's shared saved-views list; empty for
+		// transient snapshots (undo/redo, align-axis, project default view).
+		std::string name;
 		glm::vec3 target = glm::vec3(0.0f);
 		float distance = 1.0f;
 		float yaw = 0.0f;

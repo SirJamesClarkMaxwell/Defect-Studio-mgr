@@ -19,6 +19,7 @@ namespace DefectStudio
     class JobSystem;
     class KeymapResolver;
     class CommandRegistry;
+    class RendererLayer;
 
     namespace EditorUiEvents
     {
@@ -36,7 +37,8 @@ namespace DefectStudio
                           WeakRef<CommandRegistry> commandRegistry = {},
                           ApplicationConfig initialConfig = {},
                           std::string title = "SettingsPanel",
-                          bool visibleByDefault = true);
+                          bool visibleByDefault = true,
+                          WeakRef<RendererLayer> rendererLayer = {});
         SettingsPanel(const SettingsPanel &other);
 
         void Render() override;
@@ -80,6 +82,7 @@ namespace DefectStudio
         void renderFilePathsTab();
         void renderInputTab();
         void renderKeyBindingsTab();
+        void renderSavedViewsTab();
 
         void renderAppearanceColors();
         void renderAppearanceMetrics();
@@ -113,6 +116,7 @@ namespace DefectStudio
             Animation,
             Input,
             KeyBindings,
+            SavedViews,
             FilePaths,
             Count
         };
@@ -126,6 +130,10 @@ namespace DefectStudio
         std::array<char, 320> m_ThemeLoadPathBuffer = {};
         std::array<char, 320> m_LayoutPathBuffer = {};
         std::array<char, 128> m_KeyBindingSearchBuffer = {};
+        // Index currently being renamed in the Saved Views tab (SIZE_MAX = none), plus its
+        // in-progress text - kept outside the loop so the InputText widget survives across frames.
+        std::size_t m_RenamingSavedViewIndex = static_cast<std::size_t>(-1);
+        std::array<char, 128> m_SavedViewRenameBuffer = {};
         std::vector<ApplicationConfig> m_UndoHistory;
         std::vector<ApplicationConfig> m_RedoHistory;
         std::optional<ApplicationConfig> m_PendingUndoSnapshot;
@@ -135,6 +143,7 @@ namespace DefectStudio
         WeakRef<EditorUiState> m_UiState;
         WeakRef<KeymapResolver> m_KeymapResolver;
         WeakRef<CommandRegistry> m_CommandRegistry;
+        WeakRef<RendererLayer> m_RendererLayer;
         SettingsProfileManager m_ProfileManager;
     };
 } // namespace DefectStudio

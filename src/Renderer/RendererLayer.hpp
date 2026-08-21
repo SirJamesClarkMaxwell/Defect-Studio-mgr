@@ -143,6 +143,15 @@ namespace DefectStudio
 		// on an unknown windowId.
 		[[nodiscard]] std::optional<RendererViewSnapshot> CaptureWindowViewSnapshot(const std::string &windowId) const;
 		void ApplyWindowViewSnapshot(const std::string &windowId, const RendererViewSnapshot &snapshot);
+		// Management API for the saved-views list (Settings panel: apply/rename/delete/reorder).
+		// All mutators persist immediately via savePersistedSharedViews(), same as Shift+V.
+		[[nodiscard]] const std::vector<RendererViewSnapshot> &GetSharedSavedViews() const;
+		void RenameSharedSavedView(std::size_t index, std::string name);
+		void DeleteSharedSavedView(std::size_t index);
+		// direction < 0 moves one slot earlier, > 0 moves one slot later; 0 is a no-op.
+		void MoveSharedSavedView(std::size_t index, int direction);
+		// Applies to windowId, or to the last-focused viewport window if windowId is empty.
+		void ApplySharedSavedView(std::size_t index, const std::string &windowId = {});
 
 	private:
 		void loadDefaultWindows();

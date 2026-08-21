@@ -22,6 +22,7 @@
 #include "App/Serialization/YamlConfigSerializer.hpp"
 #include "Events/EditorUiEvents.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
@@ -90,14 +91,16 @@ namespace DefectStudio
 	                   WeakRef<CommandRegistry> commandRegistry,
 	                   ApplicationConfig initialConfig,
 	                   std::string title,
-	                   bool visibleByDefault)
+	                   bool visibleByDefault,
+	                   WeakRef<RendererLayer> rendererLayer)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_DraftConfig(std::move(initialConfig)),
 		  m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem)),
 		  m_UiState(std::move(uiState)),
 		  m_KeymapResolver(std::move(keymapResolver)),
-		  m_CommandRegistry(std::move(commandRegistry))
+		  m_CommandRegistry(std::move(commandRegistry)),
+		  m_RendererLayer(std::move(rendererLayer))
 	{
 		bindConfigEvents();
 		if (m_DraftInitialized)
@@ -129,7 +132,8 @@ namespace DefectStudio
 		  m_JobSystem(other.m_JobSystem),
 		  m_UiState(other.m_UiState),
 		  m_KeymapResolver(other.m_KeymapResolver),
-		  m_CommandRegistry(other.m_CommandRegistry)
+		  m_CommandRegistry(other.m_CommandRegistry),
+		  m_RendererLayer(other.m_RendererLayer)
 	{
 		bindConfigEvents();
 	}
@@ -207,6 +211,9 @@ namespace DefectStudio
 			break;
 		case SettingsPanel::Tab::KeyBindings:
 			renderKeyBindingsTab();
+			break;
+		case SettingsPanel::Tab::SavedViews:
+			renderSavedViewsTab();
 			break;
 		case SettingsPanel::Tab::FilePaths:
 			renderFilePathsTab();
@@ -806,6 +813,7 @@ namespace DefectStudio
 			"Animation",
 			"Input",
 			"Key Bindings",
+			"Saved Views",
 			"File Paths",
 		};
 
@@ -1426,6 +1434,94 @@ namespace DefectStudio
 				ImGui::EndTooltip();
 			}
 		}
+	}
+
+	void SettingsPanel::renderSavedViewsTab()
+	{
+		auto rendererLayer = m_RendererLayer.lock();
+		if (!rendererLayer)
+		{
+			ImGui::Spacing();
+			ImGui::TextDisabled("Renderer not available.");
+			return;
+		}
+
+		ImGui::SeparatorText("Saved views");
+		ImGui::TextWrapped(
+			"Shift+V saves the current viewport as a new entry here. V / Alt+V cycle through them "
+			"in the focused viewport.");
+
+		const std::vector<RendererViewSnapshot> &views = rendererLayer->GetSharedSavedViews();
+		if (views.empty())
+		{
+			ImGui::TextDisabled("No saved views yet.");
+			return;
+		}
+
+		constexpr ImGuiTableFlags tableFlags =
+			ImGuiTableFlags_Borders |
+			ImGuiTableFlags_RowBg |
+			ImGuiTableFlags_SizingStretchProp;
+		if (!ImGui::BeginTable("##saved_views_table", 2, tableFlags))
+			return;
+
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+		ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 260.0f);
+		ImGui::TableHeadersRow();
+
+		for (std::size_t index = 0; index < views.size(); ++index)
+		{
+			ImGui::PushID(static_cast<int>(index));
+			ImGui::TableNextRow();
+
+			ImGui::TableSetColumnIndex(0);
+			const std::string displayName =
+				views[index].name.empty() ? "View " + std::to_string(index + 1u) : views[index].name;
+			if (m_RenamingSavedViewIndex == index)
+			{
+				ImGui::SetNextItemWidth(-1.0f);
+				if (ImGui::InputText(
+						"##rename",
+						m_SavedViewRenameBuffer.data(),
+						m_SavedViewRenameBuffer.size(),
+						ImGuiInputTextFlags_EnterReturnsTrue))
+				{
+					rendererLayer->RenameSharedSavedView(index, m_SavedViewRenameBuffer.data());
+					m_RenamingSavedViewIndex = static_cast<std::size_t>(-1);
+				}
+			}
+			else
+			{
+				ImGui::TextUnformatted(displayName.c_str());
+			}
+
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::SmallButton("Apply"))
+				rendererLayer->ApplySharedSavedView(index);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Rename"))
+			{
+				m_RenamingSavedViewIndex = index;
+				std::snprintf(m_SavedViewRenameBuffer.data(), m_SavedViewRenameBuffer.size(), "%s", displayName.c_str());
+			}
+			ImGui::SameLine();
+			ImGui::BeginDisabled(index == 0);
+			if (ImGui::SmallButton("Up"))
+				rendererLayer->MoveSharedSavedView(index, -1);
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::BeginDisabled(index + 1u >= views.size());
+			if (ImGui::SmallButton("Down"))
+				rendererLayer->MoveSharedSavedView(index, 1);
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Delete"))
+				rendererLayer->DeleteSharedSavedView(index);
+
+			ImGui::PopID();
+		}
+
+		ImGui::EndTable();
 	}
 
 	void SettingsPanel::renderViewportTab()
