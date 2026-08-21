@@ -487,6 +487,7 @@ namespace DefectStudio
 				*rendererLayer,
 				m_EventBus,
 				m_ContextManager,
+				m_CommandRegistry,
 				"Renderer",
 				true);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight

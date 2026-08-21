@@ -63,6 +63,16 @@ namespace DefectStudio
 		Circle
 	};
 
+	// Which ImGuizmo::OPERATION the viewport gizmo currently shows for the selection (G/R/S).
+	// Kept decoupled from Vendor/ImGuizmo's own enum so this header stays vendor-agnostic;
+	// RendererPanel maps this to ImGuizmo::OPERATION at the actual Manipulate() call site.
+	enum class GizmoOperation
+	{
+		Translate,
+		Rotate,
+		Scale
+	};
+
 	struct RendererViewSnapshot
 	{
 		// Only meaningful for entries in RendererLayer's shared saved-views list; empty for

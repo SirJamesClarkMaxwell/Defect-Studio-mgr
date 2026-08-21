@@ -188,6 +188,24 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.gizmo.mode_translate"
+    chord: "G"
+    command: "renderer.gizmo.mode_translate"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.gizmo.mode_rotate"
+    chord: "R"
+    command: "renderer.gizmo.mode_rotate"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.gizmo.mode_scale"
+    chord: "S"
+    command: "renderer.gizmo.mode_scale"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.selection.hide"
     chord: "H"
     command: "renderer.selection.hide"

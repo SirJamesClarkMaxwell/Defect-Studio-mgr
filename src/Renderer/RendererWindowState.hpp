@@ -71,6 +71,12 @@ namespace DefectStudio
 		// space as RendererPanel::handleAtomPick's relX/relY.
 		SelectionToolMode activeSelectionTool = SelectionToolMode::None;
 		bool selectionDragActive = false;
+		// Viewport transform gizmo (G/R/S). Rendered whenever selectedAtomIndices is non-empty -
+		// see RendererPanel::renderTransformGizmo. Pivot is recomputed as the selection's live
+		// centroid every frame rather than cached, so no start-of-drag snapshot is kept here: the
+		// domain "before" state for Undo is captured by the commit command itself on drag release.
+		GizmoOperation gizmoOperation = GizmoOperation::Translate;
+		bool gizmoDragActive = false;
 		glm::vec2 selectionDragStart = glm::vec2(0.0f);
 		glm::vec2 selectionDragCurrent = glm::vec2(0.0f);
 		// Circle-select brush radius in viewport pixels - persistent per window, adjusted with the

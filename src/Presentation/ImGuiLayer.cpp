@@ -8,6 +8,7 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <imgui.h>
 #include <implot.h>
+#include <ImGuizmo.h>
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -293,6 +294,7 @@ namespace DefectStudio
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
+		ImGuizmo::BeginFrame();
 		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID,
 		                             ImGui::GetMainViewport(),
 		                             ImGuiDockNodeFlags_PassthruCentralNode);

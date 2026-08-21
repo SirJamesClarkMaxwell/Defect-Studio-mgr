@@ -203,6 +203,18 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer set gizmo operation",
+			[operation](EventBus &bus) {
+				RendererEvents::Viewport::GizmoOperationRequested event;
+				event.operation = operation;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus)
 	{
 		return CreateUnique<RendererViewportEventCommand>(

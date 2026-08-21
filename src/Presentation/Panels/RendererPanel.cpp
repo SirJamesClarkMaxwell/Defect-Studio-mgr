@@ -9,13 +9,18 @@
 #include <optional>
 #include <vector>
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <imgui.h>
 #include <imgui_internal.h> // ImGui::DockBuilderGetCentralNode - auto-dock new windows into it
+#include <ImGuizmo.h>
 
+#include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
@@ -49,12 +54,14 @@ namespace DefectStudio
 		RendererLayer &layer,
 		Ref<EventBus> eventBus,
 		WeakRef<ContextManager> contextManager,
+		WeakRef<CommandRegistry> commandRegistry,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
 		  m_EventBus(std::move(eventBus)),
-		  m_ContextManager(std::move(contextManager))
+		  m_ContextManager(std::move(contextManager)),
+		  m_CommandRegistry(std::move(commandRegistry))
 	{
 	}
 
@@ -190,6 +197,11 @@ namespace DefectStudio
 
 		const bool hovered = ImGui::IsItemHovered();
 
+		renderTransformGizmo(windowState, imageOrigin, viewportSize);
+		// A live gizmo drag takes exclusive control of the viewport for the frame - suppress
+		// box/circle-select and atom-pick so dragging a handle doesn't also fire a click-select.
+		const bool gizmoCapturing = ImGuizmo::IsUsing();
+
 		if (windowState.activeSelectionTool == SelectionToolMode::Box && windowState.selectionDragActive)
 		{
 			ImDrawList *drawList = ImGui::GetWindowDrawList();
@@ -228,9 +240,9 @@ namespace DefectStudio
 			}
 		}
 
-		if (hovered)
+		if (hovered && !gizmoCapturing)
 			applyViewportInputNavigation(windowState, imageOrigin, deltaTime);
-		else
+		else if (!hovered)
 		{
 			windowState.dragActive = false;
 			if (windowState.viewInteractionActive &&
@@ -240,7 +252,11 @@ namespace DefectStudio
 			}
 		}
 
-		if (windowState.activeSelectionTool == SelectionToolMode::Box)
+		if (gizmoCapturing)
+		{
+			// Nothing else consumes mouse input this frame.
+		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::Box)
 		{
 			handleBoxSelectDrag(windowState, imageOrigin, hovered);
 		}
@@ -392,6 +408,91 @@ namespace DefectStudio
 			io.KeyShift
 				? RendererEvents::Viewport::RegionSelectMode::Subtract
 				: RendererEvents::Viewport::RegionSelectMode::Add);
+	}
+
+	// G/R/S transform gizmo for the current selection. Pivot is the live centroid of selected
+	// atoms, recomputed every frame (not cached) - stays correct under rotate/scale since a rigid
+	// transform about its own centroid leaves that centroid fixed. While dragging, the frame's
+	// incremental delta is applied directly to windowState.structure (renderer hot path) for
+	// immediate visual feedback; on release, the final result is committed to the domain structure
+	// as one undoable command (RendererAtomEditCommands::TransformSelectedAtomsCommand).
+	void RendererPanel::renderTransformGizmo(RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+	{
+		if (windowState.selectedAtomIndices.empty() || windowState.camera == nullptr)
+		{
+			windowState.gizmoDragActive = false;
+			return;
+		}
+
+		glm::vec3 pivot(0.0f);
+		for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+			pivot += windowState.structure.atoms[atomIndex].cartesianPosition;
+		pivot /= static_cast<float>(windowState.selectedAtomIndices.size());
+
+		glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), pivot);
+		glm::mat4 deltaMatrix(1.0f);
+
+		const glm::mat4 view = windowState.camera->ViewMatrix();
+		const glm::mat4 projection = windowState.camera->ProjectionMatrix();
+
+		ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE;
+		switch (windowState.gizmoOperation)
+		{
+			case GizmoOperation::Translate: operation = ImGuizmo::TRANSLATE; break;
+			case GizmoOperation::Rotate: operation = ImGuizmo::ROTATE; break;
+			case GizmoOperation::Scale: operation = ImGuizmo::SCALE; break;
+		}
+
+		ImGuizmo::PushID(windowState.windowId.c_str());
+		ImGuizmo::SetDrawlist();
+		ImGuizmo::SetOrthographic(windowState.camera->Projection() == CameraProjection::Orthographic);
+		ImGuizmo::SetRect(imageOrigin.x, imageOrigin.y, imageSize.x, imageSize.y);
+		ImGuizmo::Manipulate(
+			glm::value_ptr(view),
+			glm::value_ptr(projection),
+			operation,
+			ImGuizmo::WORLD,
+			glm::value_ptr(gizmoMatrix),
+			glm::value_ptr(deltaMatrix));
+		ImGuizmo::PopID();
+
+		if (ImGuizmo::IsUsing())
+		{
+			windowState.gizmoDragActive = true;
+			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+			{
+				if (atomIndex >= windowState.structure.atoms.size())
+					continue;
+				RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+				atom.cartesianPosition = glm::vec3(deltaMatrix * glm::vec4(atom.cartesianPosition, 1.0f));
+			}
+			return;
+		}
+
+		if (!windowState.gizmoDragActive)
+			return;
+
+		windowState.gizmoDragActive = false;
+
+		Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
+		if (commandRegistry == nullptr)
+			return;
+
+		GizmoTransformPayload payload;
+		payload.windowId = windowState.windowId;
+		payload.atomIndices = windowState.selectedAtomIndices;
+		payload.afterPositions.reserve(payload.atomIndices.size());
+		for (const std::size_t atomIndex : payload.atomIndices)
+			payload.afterPositions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+		payload.description = windowState.gizmoOperation == GizmoOperation::Translate ? "Move selected atoms"
+			: windowState.gizmoOperation == GizmoOperation::Rotate                    ? "Rotate selected atoms"
+																						: "Scale selected atoms";
+
+		CommandContext context;
+		context.Set<GizmoTransformPayload>("gizmo.transform_payload", std::move(payload));
+		Result<CommandOutcome> result = commandRegistry->Execute(CommandID{"renderer.gizmo.commit_transform"}, std::move(context));
+		if (!result)
+			DS_LOG_WARN("Gizmo transform commit failed: {}", result.Error().technicalDetails);
 	}
 
 	std::vector<std::size_t> RendererPanel::hitTestRect(

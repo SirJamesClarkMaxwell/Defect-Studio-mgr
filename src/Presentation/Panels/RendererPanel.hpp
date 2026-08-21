@@ -11,6 +11,7 @@
 
 namespace DefectStudio
 {
+	class CommandRegistry;
 	class ContextManager;
 	class EventBus;
 
@@ -21,6 +22,7 @@ namespace DefectStudio
 			RendererLayer &layer,
 			Ref<EventBus> eventBus,
 			WeakRef<ContextManager> contextManager,
+			WeakRef<CommandRegistry> commandRegistry = {},
 			std::string title = "Renderer",
 			bool visibleByDefault = true);
 
@@ -47,11 +49,13 @@ namespace DefectStudio
 			std::vector<std::size_t> atomIndices,
 			RendererEvents::Viewport::RegionSelectMode mode);
 		void drawPeriodicTableWindow();
+		void renderTransformGizmo(RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);
 
 	private:
 		RendererLayer &m_Layer;
 		Ref<EventBus> m_EventBus;
 		WeakRef<ContextManager> m_ContextManager;
+		WeakRef<CommandRegistry> m_CommandRegistry;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 	};
 } // namespace DefectStudio

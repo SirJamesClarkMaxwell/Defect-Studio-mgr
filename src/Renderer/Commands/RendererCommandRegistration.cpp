@@ -21,7 +21,8 @@ namespace DefectStudio
 			const char *id,
 			const char *name,
 			const char *description,
-			CommandFactory factory)
+			CommandFactory factory,
+			CommandFlags flags = CommandFlags::None)
 		{
 			auto result = registry.Register(
 				CommandMeta{
@@ -30,7 +31,7 @@ namespace DefectStudio
 					"Renderer",
 					description,
 					{},
-					CommandFlags::None},
+					flags},
 				std::move(factory));
 			if (!result)
 				DS_LOG_WARN("Renderer command registration failed: {}", result.Error().technicalDetails);
@@ -106,6 +107,27 @@ namespace DefectStudio
 		Unique<ICommand> MakeSelectionToolToggleCommand(Ref<EventBus> eventBus, SelectionToolMode tool, CommandContext &)
 		{
 			return CreateRendererSelectionToolToggleCommand(std::move(eventBus), tool);
+		}
+
+		Unique<ICommand> MakeGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation, CommandContext &)
+		{
+			return CreateRendererGizmoOperationCommand(std::move(eventBus), operation);
+		}
+
+		// No keybinding: invoked programmatically by RendererPanel on gizmo drag release, with the
+		// drag result passed via context (see GizmoTransformPayload). Not user-invokable from the
+		// command palette since it needs that payload to do anything.
+		Unique<ICommand> MakeCommitGizmoTransformCommand(
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer,
+			AtomStyleTable atomStyleTable,
+			CommandContext &context)
+		{
+			GizmoTransformPayload *payload = context.TryGet<GizmoTransformPayload>("gizmo.transform_payload");
+			if (payload == nullptr)
+				return nullptr;
+			return CreateTransformSelectedAtomsCommand(
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), *payload);
 		}
 
 		Unique<ICommand> MakeHideSelectionCommand(Ref<EventBus> eventBus, CommandContext &)
@@ -328,6 +350,31 @@ namespace DefectStudio
 			"Renderer: Toggle circle-select",
 			"Toggle circle drag-select on the active renderer viewport.",
 			std::bind_front(MakeSelectionToolToggleCommand, eventBus, SelectionToolMode::Circle));
+		RegisterRendererCommand(
+			registry,
+			"renderer.gizmo.mode_translate",
+			"Renderer: Gizmo - Translate",
+			"Switch the active renderer viewport's transform gizmo to translate (move).",
+			std::bind_front(MakeGizmoOperationCommand, eventBus, GizmoOperation::Translate));
+		RegisterRendererCommand(
+			registry,
+			"renderer.gizmo.mode_rotate",
+			"Renderer: Gizmo - Rotate",
+			"Switch the active renderer viewport's transform gizmo to rotate.",
+			std::bind_front(MakeGizmoOperationCommand, eventBus, GizmoOperation::Rotate));
+		RegisterRendererCommand(
+			registry,
+			"renderer.gizmo.mode_scale",
+			"Renderer: Gizmo - Scale",
+			"Switch the active renderer viewport's transform gizmo to scale.",
+			std::bind_front(MakeGizmoOperationCommand, eventBus, GizmoOperation::Scale));
+		RegisterRendererCommand(
+			registry,
+			"renderer.gizmo.commit_transform",
+			"Renderer: Commit gizmo transform",
+			"Apply a completed viewport gizmo drag to the domain structure (undoable).",
+			std::bind_front(MakeCommitGizmoTransformCommand, domainLayer, rendererLayer, atomStyleTable),
+			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.hide",

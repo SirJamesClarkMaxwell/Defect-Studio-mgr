@@ -30,6 +30,7 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectionToolToggleCommand(
 		Ref<EventBus> eventBus,
 		SelectionToolMode tool);
+	[[nodiscard]] Unique<ICommand> CreateRendererGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation);
 	[[nodiscard]] Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererShowAllCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectionInvertCommand(Ref<EventBus> eventBus);

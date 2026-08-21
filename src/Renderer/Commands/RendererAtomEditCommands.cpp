@@ -345,6 +345,93 @@ namespace DefectStudio
 			std::vector<Bond> m_PreviousBonds;
 			std::vector<std::size_t> m_SourceIndices;
 		};
+		class TransformSelectedAtomsCommand final : public ICommand
+		{
+		public:
+			TransformSelectedAtomsCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				GizmoTransformPayload payload)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_Payload(std::move(payload))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"TransformSelectedAtomsCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_Payload.windowId);
+				if (!target)
+					return target.Error();
+
+				m_WindowIdResolved = target->windowState->windowId;
+				CrystalStructure &structure = target->record->structure;
+				m_PreviousAtoms = structure.atoms;
+
+				for (std::size_t i = 0; i < m_Payload.atomIndices.size(); ++i)
+				{
+					const std::size_t atomIndex = m_Payload.atomIndices[i];
+					if (atomIndex >= structure.atoms.size())
+						continue;
+					structure.atoms[atomIndex].position = m_Payload.afterPositions[i];
+					structure.atoms[atomIndex].fractional = structure.CartesianToFractional(m_Payload.afterPositions[i]);
+				}
+
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_Payload.atomIndices);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"TransformSelectedAtomsCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				target->record->structure.atoms = m_PreviousAtoms;
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_Payload.atomIndices);
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return m_Payload.description;
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			GizmoTransformPayload m_Payload;
+			std::string m_WindowIdResolved;
+			std::vector<AtomSite> m_PreviousAtoms;
+		};
 	} // namespace
 
 	Unique<ICommand> CreateDeleteSelectedAtomsCommand(
@@ -375,5 +462,15 @@ namespace DefectStudio
 			std::move(atomStyleTable),
 			std::move(elementPropertiesTable),
 			std::move(windowId));
+	}
+
+	Unique<ICommand> CreateTransformSelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		GizmoTransformPayload payload)
+	{
+		return CreateUnique<TransformSelectedAtomsCommand>(
+			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(payload));
 	}
 } // namespace DefectStudio

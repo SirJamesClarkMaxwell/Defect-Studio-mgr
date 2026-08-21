@@ -184,6 +184,14 @@ namespace DefectStudio::RendererEvents::Viewport
 		SelectionToolMode tool = SelectionToolMode::None;
 	};
 
+	// Switches the active viewport's transform gizmo operation (G/R/S). Gizmo visibility itself
+	// is driven by "selection non-empty", not by a separate flag.
+	struct GizmoOperationRequested final : public BusEvent
+	{
+		std::string windowId;
+		GizmoOperation operation = GizmoOperation::Translate;
+	};
+
 	enum class RegionSelectMode
 	{
 		Replace,

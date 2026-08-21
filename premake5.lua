@@ -265,6 +265,28 @@ local function DefineNativeFileDialogProject()
         filter {}
 end
 
+local function DefineImGuizmoProject()
+    project "ImGuizmo"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        files { "Vendor/ImGuizmo/ImGuizmo.cpp", "Vendor/ImGuizmo/ImGuizmo.h" }
+        includedirs { "Vendor/ImGui" }
+
+        filter "system:windows"
+            systemversion "latest"
+            defines { "_CRT_SECURE_NO_WARNINGS" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+end
+
 local function DefineNanobindProject()
     project "nanobind"
         kind (_DS_PYTHON_EMBED_AVAILABLE and "StaticLib" or "Utility")
@@ -319,6 +341,7 @@ DefineYamlCppProject()
 DefineGoogleTestProjects()
 DefineTracyProject()
 DefineNativeFileDialogProject()
+DefineImGuizmoProject()
 DefineNanobindProject()
 group ""
 
@@ -344,6 +367,7 @@ ApplyDependencyRuntimeFilters("Tracy")
 ApplyDependencyRuntimeFilters("GoogleTest")
 ApplyDependencyRuntimeFilters("GoogleTestMain")
 ApplyDependencyRuntimeFilters("nfd")
+ApplyDependencyRuntimeFilters("ImGuizmo")
 ApplyDependencyRuntimeFilters("nanobind")
 
 project "nanobind"
@@ -459,6 +483,7 @@ project "DefectStudio"
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
         "Vendor/ImPlot",
+        "Vendor/ImGuizmo",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/stb",
@@ -484,6 +509,7 @@ project "DefectStudio"
         "GLAD",
         "ImGui",
         "ImPlot",
+        "ImGuizmo",
         "nfd",
         "yaml-cpp"
     }
@@ -634,6 +660,7 @@ project "DefectStudioTests"
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
         "Vendor/ImPlot",
+        "Vendor/ImGuizmo",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/stb",
@@ -655,6 +682,7 @@ project "DefectStudioTests"
         "GLAD",
         "ImGui",
         "ImPlot",
+        "ImGuizmo",
         "nfd",
         "yaml-cpp"
     }
