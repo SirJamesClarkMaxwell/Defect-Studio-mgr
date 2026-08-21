@@ -158,6 +158,24 @@ namespace DefectStudio
 			std::bind_front(MakeAlignAxisCommand, eventBus, 2));
 		RegisterRendererCommand(
 			registry,
+			"renderer.align_axis_a_star",
+			"Renderer: Align to a* axis",
+			"Align active renderer viewport to reciprocal lattice axis a*.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 3));
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_b_star",
+			"Renderer: Align to b* axis",
+			"Align active renderer viewport to reciprocal lattice axis b*.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 4));
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_c_star",
+			"Renderer: Align to c* axis",
+			"Align active renderer viewport to reciprocal lattice axis c*.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 5));
+		RegisterRendererCommand(
+			registry,
 			"renderer.orbit_left",
 			"Renderer: Orbit left",
 			"Orbit active renderer viewport left.",

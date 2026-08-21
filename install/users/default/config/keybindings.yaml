@@ -33,20 +33,38 @@ bindings:
     layer: 0
     enabled: true
   - id: "renderer.align_axis_a"
-    chord: "A"
+    chord: "1"
     command: "renderer.align_axis_a"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
   - id: "renderer.align_axis_b"
-    chord: "B"
+    chord: "2"
     command: "renderer.align_axis_b"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
   - id: "renderer.align_axis_c"
-    chord: "C"
+    chord: "3"
     command: "renderer.align_axis_c"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_a_star"
+    chord: "Alt+1"
+    command: "renderer.align_axis_a_star"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_b_star"
+    chord: "Alt+2"
+    command: "renderer.align_axis_b_star"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_c_star"
+    chord: "Alt+3"
+    command: "renderer.align_axis_c_star"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
@@ -110,18 +128,6 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
-  - id: "renderer.zoom_in"
-    chord: "R"
-    command: "renderer.zoom_in"
-    context: "renderer.viewport.focused"
-    layer: 2
-    enabled: true
-  - id: "renderer.zoom_out"
-    chord: "F"
-    command: "renderer.zoom_out"
-    context: "renderer.viewport.focused"
-    layer: 2
-    enabled: true
   - id: "renderer.focus_selected_atom"
     chord: "Period"
     command: "renderer.focus_selected_atom"
@@ -171,13 +177,13 @@ bindings:
     layer: 2
     enabled: true
   - id: "renderer.selection.box_select_toggle"
-    chord: "Alt+B"
+    chord: "B"
     command: "renderer.selection.box_select_toggle"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
   - id: "renderer.selection.circle_select_toggle"
-    chord: "Alt+C"
+    chord: "C"
     command: "renderer.selection.circle_select_toggle"
     context: "renderer.viewport.focused"
     layer: 2

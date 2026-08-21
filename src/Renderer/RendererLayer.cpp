@@ -1162,10 +1162,14 @@ namespace DefectStudio
 	void RendererLayer::onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 2)
+		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 5)
 			return;
 
-		const glm::vec3 axis = windowState->structure.lattice[static_cast<std::size_t>(event.axis)];
+		// axis 0-2 = a/b/c (real lattice), 3-5 = a*/b*/c* (reciprocal lattice) - mirrors the
+		// toolbar axis buttons (RendererPanelToolbar.cpp), which read the same two matrices.
+		const bool isReciprocal = event.axis > 2;
+		const glm::mat3 &basis = isReciprocal ? windowState->structure.reciprocalLattice : windowState->structure.lattice;
+		const glm::vec3 axis = basis[static_cast<std::size_t>(event.axis - (isReciprocal ? 3 : 0))];
 		if (glm::dot(axis, axis) <= 1e-8f)
 			return;
 
