@@ -539,24 +539,51 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] Auto-bond generation z modelem trwałym: global cutoff + **per-para pierwiastków z override**
       (dziś jest tylko global cutoff na poziomie renderera — per-para override z
       `old-ds-functionality.md` §4.2 brak), spatial hash grid, bez wiązań między Kolekcjami
-- [ ] Manual bond add/remove z persystencją w projekcie; ukryj pojedyncze wiązanie bez usuwania
-      z modelu, auto-ukrycie przy usunięciu atomu; etykiety długości wiązań w 3D (§4.4)
-- [ ] ImGuizmo transform (G/R/S + axis/plane constraints: `G`+`X/Y/Z`, `Shift+X/Y/Z`) dla atomów
-- [ ] Collections system: widoczność (eye), blokada selekcji (lock), kolor etykiety, rename,
-      export aktywnej kolekcji do POSCAR (zależne od T07 multi-import)
-- [ ] **Groups** (niezależne od Collections, atom może być w jednej grupie i dowolnej kolekcji):
-      create from selection, add/remove selection, select active group, delete group
-      (`old-ds-functionality.md` §7 — nie było w oryginalnym `TODO.md`)
+- [ ] Manual bond add/remove z persystencją w projekcie — **decyzja 2026-08-21: skrót `F`**
+      (zaznacz 2 atomy → `F` łączy je wiązaniem, blenderowe "fill/connect"; zwalnia `F` z
+      `renderer.zoom_out` — zob. notatka o zoom keybindach niżej); ukryj pojedyncze wiązanie bez
+      usuwania z modelu, auto-ukrycie przy usunięciu atomu; etykiety długości wiązań w 3D (§4.4,
+      zob. też "Pomiary" niżej — to ten sam etykietowy mechanizm)
+- [ ] ImGuizmo transform (G/R/S + axis/plane constraints: `G`+`X/Y/Z`, `Shift+X/Y/Z`) dla atomów —
+      **decyzja 2026-08-21:** wymaga zwolnienia `R` z `renderer.zoom_in` (dziś zajęte, koliduje z
+      Rotate). Zoom klawiaturowy (`R`/`F`) odchodzi całkowicie — scroll-zoom już działa (T06,
+      "Orbit camera... scroll zoom", zrobione), keyboardowy skrót był tylko dodatkiem, nie jedyną
+      ścieżką — nie trzeba go relokować, po prostu zwolnić `R` i `F` dla gizmo/connect.
 - [ ] **Scene Objects – Empty**: punkt pomocniczy z lokalnym układem osi, transformowalny (G/R),
       "align active empty Z to selected atoms", align to world/camera (§8.1)
 - [ ] **Scene Objects – Origin i Light**: jednoinstancyjne obiekty specjalne, transformowalny Light (§8.2)
 - [ ] **3D Cursor**: ustawiany z menu kontekstowego na płaszczyźnie siatki, pivot do transformacji
       lub punkt wstawienia atomu (§9)
-- [ ] Blender-like Shift+A add menu (menu kontekstowe też), Delete, Ctrl+D duplicate
+- [ ] Blender-like Shift+A add menu (menu kontekstowe też), Delete, **Shift+D duplicate** (nie
+      Ctrl+D — koliduje z `renderer.view.set_as_project_default`, sprawdzone w
+      `keybindings.yaml`, poprawka 2026-08-21 względem starej notatki tutaj)
 <!-- - [ ] N side-panel (toggle + strip) -->
-- [ ] **Pomiary**: odległość między ostatnimi 2 zaznaczonymi atomami, kąt między ostatnimi 3,
-      centrum masy zaznaczenia — etykiety w viewporcie (§5; było już w T09 checkliście oryginału,
-      przeniesione tu bo logicznie należy do selekcji/sceny)
+- [ ] **Pomiary — rozszerzone 2026-08-21, teraz oparte o etykiety-encje (zob. MSDF w T09):**
+      odległość między ostatnimi 2 zaznaczonymi atomami, kąt między ostatnimi 3, centrum masy
+      zaznaczenia (§5, oryginalny zakres) — **plus automatyczne, zawsze-aktualne etykiety długości
+      wiązań i kątów jako MSDF-owe encje w scenie** (nie tylko ad-hoc pomiar na zaznaczeniu), toggle
+      widoczności na `M`. Długość wiązania: geometria cylindra już liczy to na GPU co klatkę
+      (`bond_transform.comp`, sprawdzone w kodzie — auto-recalc przy ruchu atomu przez gizmo jest
+      w praktyce **już rozwiązany**, wystarczy że CPU re-uploaduje start/finish z żywych pozycji po
+      drag'u, zero nowego compute shadera potrzebne); kąt — zwykła trygonometria CPU, tanie nawet
+      dla wielu wiązań naraz, nie potrzebuje GPU.
+- [ ] **Tryby zaznaczania (nowe, 2026-08-21):** atoms / atoms+bonds / bonds-labels (tylko etykiety,
+      do przesuwania ich gizmem bez ruszania atomów) / atoms+bonds+labels — skróty **`Ctrl+1..4`**
+      (zwykłe `1/2/3`/`Alt+1/2/3` zajęte przez align-axis a/b/c/a*/b*/c*, decyzja 2026-08-21: axis
+      align zostaje na 1/2/3). Wymaga żeby bond-y i etykiety były realnymi ECS entity z
+      `SelectionComponent` (dziś tylko atomy to mają) — nazwy trybów robocze, do dopracowania.
+- [ ] **Displacement arrows (nowe, 2026-08-21):** strzałki pokazujące jak atomy przemieściły się
+      względem zadanej geometrii referencyjnej — konkretnie POSCAR→CONTCAR (relaksacja) i
+      ground→excited state. **Puntukas ma to już rozwiązane liczbowo:**
+      `puntukas.atoms.base.AtomsBase.get_distances(p1, p2, pbc=True)` (minimum image convention,
+      poprawnie liczy przemieszczenie przez granicę periodyczną) — reużyć przez subprocess bridge
+      (wzorzec `PuntukasBridge`), **nie** przez PyVista/VTK renderer z puntukas (`visual/pyvista/
+      objects.py` ma tylko glyph-rendering, niereużywalne w naszym OpenGL). Rysowanie natywne:
+      strzałka = stożek+walec, reużyć instancing z bond-renderingu (ten sam wzorzec co cylindry
+      wiązań, inny mesh na czubku). **Do zweryfikowania przed implementacją:** czy `BondGenerator`
+      (periodic bond generation, commit `ea85335`) już ma natywną, poprawną minimum-image
+      odległość w C++ — jeśli tak, może nie trzeba w ogóle Pythona dla tego konkretnego przypadku
+      (POSCAR/CONTCAR to ta sama komórka, sam displacement, nie pełne `get_distances` API).
 - [ ] Drag & drop pliku POSCAR/CONTCAR/CHG z eksploratora na viewport
 - [ ] CWD fix: ustaw CWD na katalog exe przy starcie (`GetModuleFileNameA`)
 - [ ] Touchpad support
@@ -571,7 +598,13 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 > nazwane widoki + domyślny widok projektu — pełny plan commit-po-commicie (C1-C12) w
 > `docs/work/project/plans/rzeczy-do-dodania-jak-quirky-shell.md` (zewnętrzny plan reconciliation).
 
-- [x] Box-select (`Alt+B`) / circle-select (`Alt+C`, live scroll-resizable brush)
+- [x] Box-select (`Alt+B`) / circle-select (`Alt+C`, live scroll-resizable brush) — **skróty
+      przechodzą na zwykłe `B`/`C` w Etapie A (plan sesji 2026-08-21), dziś jeszcze `Alt+`.**
+      **Circle-select semantyka poprawiona 2026-08-21:** było odwrotnie niż w Blenderze (plain
+      click = replace, Shift+drag = dodaj, Ctrl+drag = odejmij) — teraz trzymanie LPM maluje
+      zaznaczenie ciągle (dodaje), Shift przełącza pędzel na odejmowanie
+      (`RendererPanel::handleCircleSelectDrag`, `RendererPanel.cpp`), Ctrl-branch usunięty jako
+      zbędny wobec Shift. Zweryfikowane: Release build czysty.
 - [x] Hide selection (`H`) / show all (`Alt+H`) / invert selection (`I`) — pełny `ViewModifier` pipeline
 - [x] `RendererViewSnapshot` rozszerzony o selekcję/widoczność (index + position-based, cross-structure
       resolve po najbliższej pozycji)
@@ -791,7 +824,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 - [x] **Compute shader dla bond transform** — **przeniesione z `[ ]` na `[x]`: zweryfikowane,
       już zaimplementowane i dispatchowane w T06**, nie tylko zaplanowane
-- [ ] MSDF (Multi-channel SDF) dla 3D labels zamiast billboard quads
+- [ ] **MSDF (Multi-channel SDF) dla 3D labels zamiast billboard quads — rozszerzone 2026-08-21:**
+      nowy vendor `sjcmdev/msdf-atlas-gen` (analogiczny checklist wdrożenia jak ImPlot). Etykiety
+      (bond-length/angle, zob. "Pomiary" w T08) mają być **realnymi ECS entity** z
+      `TransformComponent`+`SelectionComponent` — operowalne gizmem (T08 ImGuizmo) tak samo jak
+      atomy, nie tylko renderowane. **Musi trafić też do image-export pipeline** (`ExportImagePanel`,
+      ten sam wymóg co orbitale — zob. T08.6.7) od razu przy wdrożeniu, nie jako osobny dołożony task.
 - [x] Multi-viewport — wiele viewportów z niezależnymi ustawieniami kamery i renderowania
       (potwierdzone: `RendererWindowState` per-window, `m_Viewports` w backendzie)
 - [ ] Quick image export (PNG/JPG z aktualnego viewportu)
@@ -960,9 +998,14 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       jeśli mount-first (SMB/SSHFS-Win) okaże się niewystarczający w praktyce
 - [ ] VASP OUTCAR/WAVECAR integration
 - [ ] Defect thermodynamics
-- [ ] Python scripting panel (REPL w UI, hot-reload przez file watcher np. `efsw`,
+- [ ] **Python scripting panel — wprost zażądane 2026-08-21, priorytet w górę z Backlogu:** REPL w
+      UI, styl ipython (podpowiedzi składni + ścieżek), hot-reload przez file watcher np. `efsw`,
       debugger VSCode/debugpy — `ds` module z submodułami `ds.scene`/`ds.commands`/`ds.events`/`ds.app`;
-      `T05` daje już fundament embeddingu przez nanobind)
+      `T05` daje już fundament embeddingu przez nanobind. **MVP vs stretch:** samo wykonanie
+      snippetu Pythona przeciw `ds` + output/error pane to małe (reuse `PythonInterpreter`
+      RAII/GIL z T05); pełne autocomplete-jak-w-ipython dla składni i ścieżek to osobny, znacznie
+      większy kawałek (introspekcja obiektów `ds`, filesystem completion) — nie robić na starcie
+      w jednym kroku z MVP.
 - [ ] **Energetyka i DFT (`old-ds-functionality.md` §16.4):** uruchamianie VASP/Quantum ESPRESSO
       ze sceny (przez `PythonScriptJob`), monitorowanie konwergencji SCF na żywo (parsing OUTCAR/log),
       import sił na atomy z OUTCAR + wizualizacja wektorów, formation energy calculator
