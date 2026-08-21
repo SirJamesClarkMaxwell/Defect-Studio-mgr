@@ -215,6 +215,28 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererLabelsToggleCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer toggle labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsToggleRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsToggleSelectedBondCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer toggle selected bond label",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsToggleSelectedBondRequested event;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus)
 	{
 		return CreateUnique<RendererViewportEventCommand>(

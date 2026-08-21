@@ -102,13 +102,21 @@ namespace DefectStudio
 		// Rebuilds RendererStructureData from record.structure and re-syncs windowState's ECS
 		// scene - the common tail every atom-edit command needs after mutating the domain
 		// structure. selectAfter (atom indices in the *new* structure) becomes the selection once
-		// synced; empty leaves nothing selected.
+		// synced; empty leaves nothing selected. BuildRendererStructureData always defaults every
+		// atom to visible (visibility isn't a domain concept), so hidden atoms are captured from
+		// windowState's pre-rebuild state and reapplied by index - exact for commands that don't
+		// change atom count/order (transform, undo paths that restore a saved atom array).
 		void RebuildAndSync(
 			RendererWindowState &windowState,
 			const StructureRecord &record,
 			const AtomStyleTable &atomStyleTable,
 			const std::vector<std::size_t> &selectAfter)
 		{
+			std::vector<std::size_t> hiddenBefore;
+			for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+				if (!windowState.structure.atoms[index].visible)
+					hiddenBefore.push_back(index);
+
 			windowState.structure = BuildRendererStructureData(
 				record.structure,
 				windowState.structure.sourcePath,
@@ -116,8 +124,8 @@ namespace DefectStudio
 				atomStyleTable,
 				windowState.structure.domainStructureId);
 			SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
-			if (!selectAfter.empty())
-				SceneSystem::ApplySelectionAndVisibilityToScene(windowState.sceneRegistry, selectAfter, {});
+			if (!selectAfter.empty() || !hiddenBefore.empty())
+				SceneSystem::ApplySelectionAndVisibilityToScene(windowState.sceneRegistry, selectAfter, hiddenBefore);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 

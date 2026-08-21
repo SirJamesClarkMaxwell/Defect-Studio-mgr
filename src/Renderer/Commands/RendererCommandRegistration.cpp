@@ -130,6 +130,16 @@ namespace DefectStudio
 				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), *payload);
 		}
 
+		Unique<ICommand> MakeLabelsToggleCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererLabelsToggleCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeLabelsToggleSelectedBondCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererLabelsToggleSelectedBondCommand(std::move(eventBus));
+		}
+
 		Unique<ICommand> MakeHideSelectionCommand(Ref<EventBus> eventBus, CommandContext &)
 		{
 			return CreateRendererHideSelectionCommand(std::move(eventBus));
@@ -368,6 +378,18 @@ namespace DefectStudio
 			"Renderer: Gizmo - Scale",
 			"Switch the active renderer viewport's transform gizmo to scale.",
 			std::bind_front(MakeGizmoOperationCommand, eventBus, GizmoOperation::Scale));
+		RegisterRendererCommand(
+			registry,
+			"renderer.labels.toggle",
+			"Renderer: Toggle all bond-length labels",
+			"Toggle auto bond-length label visibility for every bond on the active renderer viewport.",
+			std::bind_front(MakeLabelsToggleCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.labels.toggle_selected_bond",
+			"Renderer: Toggle selected bond's length label",
+			"Toggle the bond-length label for the current 2-atom selection on the active renderer viewport.",
+			std::bind_front(MakeLabelsToggleSelectedBondCommand, eventBus));
 		RegisterRendererCommand(
 			registry,
 			"renderer.gizmo.commit_transform",

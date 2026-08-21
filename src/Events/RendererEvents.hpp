@@ -192,6 +192,20 @@ namespace DefectStudio::RendererEvents::Viewport
 		GizmoOperation operation = GizmoOperation::Translate;
 	};
 
+	// Toggles auto bond-length label visibility for every bond (Etap E, `Alt+M`) on the active
+	// viewport.
+	struct LabelsToggleRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	// Toggles the single-bond label for the current 2-atom selection (Etap E, `M`) - distinct
+	// from LabelsToggleRequested's "every bond" toggle.
+	struct LabelsToggleSelectedBondRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
 	enum class RegionSelectMode
 	{
 		Replace,

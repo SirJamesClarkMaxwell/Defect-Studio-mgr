@@ -200,7 +200,19 @@ namespace DefectStudio
 		renderTransformGizmo(windowState, imageOrigin, viewportSize);
 		// A live gizmo drag takes exclusive control of the viewport for the frame - suppress
 		// box/circle-select and atom-pick so dragging a handle doesn't also fire a click-select.
-		const bool gizmoCapturing = ImGuizmo::IsUsing();
+		// IsOver() (hover/hit-test, true the instant the cursor is on a handle) matters just as
+		// much as IsUsing() (drag already active) here: without it, a click that lands on the
+		// gizmo's hotspot but a frame before ImGuizmo's internal click-to-activate edge fires
+		// falls through to handleAtomPick below, misses every atom (the handle isn't drawn over
+		// one), and clears the selection - which deletes the gizmo itself next frame since
+		// renderTransformGizmo() early-returns with no selection. Net effect without this: the
+		// gizmo looked draggable but every attempt just deselected instead of moving anything.
+		// windowState.fallbackGizmoDragging must be included too - ImGuizmo's own IsOver()/IsUsing()
+		// never go true for the hand-rolled fallback drag (see renderTransformGizmo), so without this
+		// the exact frame a fallback drag starts also falls through to handleAtomPick below and
+		// re-picks whatever atom is nearest the cursor (which is off in space along the arrow, not on
+		// the original selection) - selection silently jumps to a different atom mid-drag.
+		const bool gizmoCapturing = ImGuizmo::IsUsing() || ImGuizmo::IsOver() || windowState.fallbackGizmoDragging;
 
 		if (windowState.activeSelectionTool == SelectionToolMode::Box && windowState.selectionDragActive)
 		{
@@ -447,6 +459,19 @@ namespace DefectStudio
 		ImGuizmo::SetDrawlist();
 		ImGuizmo::SetOrthographic(windowState.camera->Projection() == CameraProjection::Orthographic);
 		ImGuizmo::SetRect(imageOrigin.x, imageOrigin.y, imageSize.x, imageSize.y);
+		// Default (0.1) reads as tiny/hard-to-grab against atom sphere sizes - bump handle size,
+		// hit-testing scales with it automatically (ImGuizmo derives hitbox from the same factor).
+		// Line/arrow thickness is a separate style knob (doesn't follow SetGizmoSizeClipSpace) -
+		// bump those too so the arrows read clearly at this scale, not just the hit area.
+		ImGuizmo::SetGizmoSizeClipSpace(0.28f);
+		ImGuizmo::Style &gizmoStyle = ImGuizmo::GetStyle();
+		gizmoStyle.TranslationLineThickness = 5.0f;
+		gizmoStyle.TranslationLineArrowSize = 10.0f;
+		gizmoStyle.RotationLineThickness = 4.0f;
+		gizmoStyle.RotationOuterLineThickness = 4.0f;
+		gizmoStyle.ScaleLineThickness = 5.0f;
+		gizmoStyle.ScaleLineCircleSize = 8.0f;
+		gizmoStyle.CenterCircleSize = 8.0f;
 		ImGuizmo::Manipulate(
 			glm::value_ptr(view),
 			glm::value_ptr(projection),
@@ -455,6 +480,142 @@ namespace DefectStudio
 			glm::value_ptr(gizmoMatrix),
 			glm::value_ptr(deltaMatrix));
 		ImGuizmo::PopID();
+
+		// ImGuizmo's own screen-space picking (IsOver()/IsUsing()) is unreliable in this app - a
+		// click squarely on a visibly-hovered handle routinely fails to activate a drag (confirmed
+		// via synthetic clicks measured directly against screenshots, landing under a pixel off the
+		// handle centerline). Degects-Studio - an earlier iteration of this project at
+		// Desktop/STUDIA/Degects-Studio - hit the identical problem and shipped a hand-rolled
+		// screen-space axis pick + drag as the actual interaction path, using ImGuizmo only to draw
+		// the handles. Ported and simplified here: atoms only (no empties/lights), world-space axes
+		// only (this gizmo never runs in LOCAL mode). Rotate isn't covered - its ring hit-test would
+		// need ImGuizmo's internal ring radius, which isn't exposed - translate/scale cover the
+		// reported bug.
+		if (operation != ImGuizmo::ROTATE)
+		{
+			const glm::mat4 viewProjection = projection * view;
+			auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
+				const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+				if (clip.w <= 0.0001f)
+					return false;
+				const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+				outScreen = glm::vec2(
+					imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+					imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * imageSize.y);
+				return true;
+			};
+
+			glm::vec2 pivotScreen(0.0f);
+			if (projectToScreen(pivot, pivotScreen))
+			{
+				constexpr glm::vec3 kWorldAxes[3] = {
+					glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
+				// A 1-world-unit probe gives axis direction + a pixels-per-world ratio for this
+				// frame's zoom. The pick test below is angle/distance-from-pivot based, not a
+				// fixed-length segment, so it doesn't need to match ImGuizmo's own (inaccessible)
+				// handle length.
+				glm::vec2 axisScreenDir[3];
+				float axisPixelsPerWorld[3] = {1.0f, 1.0f, 1.0f};
+				bool axisValid[3] = {false, false, false};
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					glm::vec2 probeScreen;
+					if (!projectToScreen(pivot + kWorldAxes[axis], probeScreen))
+						continue;
+					const glm::vec2 axisVec = probeScreen - pivotScreen;
+					const float axisPixels = glm::length(axisVec);
+					if (axisPixels < 1.0f)
+						continue;
+					axisScreenDir[axis] = axisVec / axisPixels;
+					axisPixelsPerWorld[axis] = axisPixels;
+					axisValid[axis] = true;
+				}
+
+				if (!windowState.fallbackGizmoDragging && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
+					ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+				{
+					constexpr float kPickMinDistance = 20.0f;
+					constexpr float kPickMaxDistance = 350.0f;
+					constexpr float kPickPerpTolerance = 16.0f;
+					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+					const glm::vec2 fromPivot = mousePos - pivotScreen;
+					const float radial = glm::length(fromPivot);
+					int hoveredAxis = -1;
+					float bestPerp = kPickPerpTolerance;
+					if (radial >= kPickMinDistance && radial <= kPickMaxDistance)
+					{
+						for (int axis = 0; axis < 3; ++axis)
+						{
+							if (!axisValid[axis])
+								continue;
+							const float along = glm::dot(fromPivot, axisScreenDir[axis]);
+							if (along <= 0.0f)
+								continue;
+							const float perp = glm::length(fromPivot - axisScreenDir[axis] * along);
+							if (perp < bestPerp)
+							{
+								bestPerp = perp;
+								hoveredAxis = axis;
+							}
+						}
+					}
+
+					if (hoveredAxis >= 0)
+					{
+						windowState.fallbackGizmoDragging = true;
+						windowState.fallbackGizmoAxis = hoveredAxis;
+						windowState.fallbackLastMousePos = mousePos;
+						windowState.fallbackDragAxisScreenDir = axisScreenDir[hoveredAxis];
+						windowState.fallbackDragAxisWorldDir = kWorldAxes[hoveredAxis];
+						windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
+					}
+				}
+			}
+
+			if (windowState.fallbackGizmoDragging)
+			{
+				if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+				{
+					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+					const glm::vec2 delta = mousePos - windowState.fallbackLastMousePos;
+					windowState.fallbackLastMousePos = mousePos;
+
+					const float deltaOnAxisPixels = glm::dot(delta, windowState.fallbackDragAxisScreenDir);
+					const float deltaOnAxisWorld = deltaOnAxisPixels / windowState.fallbackDragPixelsPerWorld;
+
+					if (operation == ImGuizmo::SCALE)
+					{
+						const float factor = glm::clamp(1.0f + deltaOnAxisWorld, 0.05f, 20.0f);
+						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						{
+							if (atomIndex >= windowState.structure.atoms.size())
+								continue;
+							RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+							const glm::vec3 relative = atom.cartesianPosition - pivot;
+							const float along = glm::dot(relative, windowState.fallbackDragAxisWorldDir);
+							const glm::vec3 perpendicular = relative - windowState.fallbackDragAxisWorldDir * along;
+							atom.cartesianPosition =
+								pivot + perpendicular + windowState.fallbackDragAxisWorldDir * (along * factor);
+						}
+					}
+					else
+					{
+						const glm::vec3 worldDelta = windowState.fallbackDragAxisWorldDir * deltaOnAxisWorld;
+						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						{
+							if (atomIndex >= windowState.structure.atoms.size())
+								continue;
+							windowState.structure.atoms[atomIndex].cartesianPosition += worldDelta;
+						}
+					}
+					windowState.gizmoDragActive = true;
+					return;
+				}
+
+				windowState.fallbackGizmoDragging = false;
+				windowState.fallbackGizmoAxis = -1;
+			}
+		}
 
 		if (ImGuizmo::IsUsing())
 		{

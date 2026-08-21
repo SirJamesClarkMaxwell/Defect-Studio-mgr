@@ -451,6 +451,8 @@ namespace DefectStudio
 			windowState.showBonds,
 			windowState.showCellBox,
 			windowState.showGrid,
+			windowState.showLabels,
+			windowState.showSelectedBondLabel,
 			windowState.selectedAtomIndices,
 			nullptr,
 			&windowState.orbitalChannelUp,
@@ -809,6 +811,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onSelectionToolToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::GizmoOperationRequested>(
 				std::bind_front(&RendererLayer::onGizmoOperationRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleRequested>(
+				std::bind_front(&RendererLayer::onLabelsToggleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleSelectedBondRequested>(
+				std::bind_front(&RendererLayer::onLabelsToggleSelectedBondRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RegionSelectionRequested>(
 				std::bind_front(&RendererLayer::onRegionSelectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::HideSelectionRequested>(
@@ -1572,6 +1578,25 @@ namespace DefectStudio
 			return;
 
 		windowState->gizmoOperation = event.operation;
+	}
+
+	void RendererLayer::onLabelsToggleRequested(const RendererEvents::Viewport::LabelsToggleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->showLabels = !windowState->showLabels;
+	}
+
+	void RendererLayer::onLabelsToggleSelectedBondRequested(
+		const RendererEvents::Viewport::LabelsToggleSelectedBondRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->showSelectedBondLabel = !windowState->showSelectedBondLabel;
 	}
 
 	void RendererLayer::onRegionSelectionRequested(const RendererEvents::Viewport::RegionSelectionRequested &event)

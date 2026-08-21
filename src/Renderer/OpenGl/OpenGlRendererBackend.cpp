@@ -14,7 +14,10 @@
 #include <glad/gl.h>
 #include <stb_image_write.h>
 
+#include <cstdio>
+
 #include "Core/Logging/Logger.hpp"
+#include "Core/Platform/PlatformPaths.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
 #if defined(TRACY_ENABLE)
@@ -109,6 +112,83 @@ namespace DefectStudio
 			"Fix renderer primitive mesh assets.",
 			"OpenGlRendererBackend",
 			std::move(code)};
+	}
+
+	// Same deploy-path/dev-tree-fallback pattern as RendererLayer::resolveShaderDirectory (Etap 0) -
+	// reuses the app's own already-shipped UI font rather than adding a new font asset just for
+	// labels.
+	[[nodiscard]] Path resolveLabelFontPath()
+	{
+		const Path executableDirectory = Platform::GetExecutableDirectory();
+		if (!executableDirectory.Empty())
+		{
+			const Path deployFont = Path::FromResolved(
+				executableDirectory.Native() / "install" / "app" / "assets" / "fonts" / "segoeui.ttf");
+			if (FileSystem::Exists(deployFont.Native()))
+				return deployFont;
+		}
+		return Path::FromResolved(
+			FileSystem::CurrentPath() / "install" / "app" / "assets" / "fonts" / "segoeui.ttf");
+	}
+
+	// snprintf keeps this ASCII-only by construction (digits/'.'/space), so the byte->char32_t
+	// widen below is exact - no UTF-8 decoding needed. U+00C5 (the Angstrom sign, same codepoint
+	// as Latin capital A with ring above) is a literal U+00C5 char32_t below, relying on this file
+	// being read as UTF-8 - already required repo-wide (premake sets /utf-8 for MSVC).
+	[[nodiscard]] std::u32string FormatBondLengthLabel(float lengthAngstrom)
+	{
+		char buffer[16];
+		const int written = std::snprintf(buffer, sizeof(buffer), "%.2f ", static_cast<double>(lengthAngstrom));
+
+		std::u32string text;
+		if (written > 0)
+		{
+			text.reserve(static_cast<std::size_t>(written) + 1);
+			for (int i = 0; i < written; ++i)
+				text.push_back(static_cast<char32_t>(static_cast<unsigned char>(buffer[i])));
+		}
+		text.push_back(U'Å');
+		return text;
+	}
+
+	// Shared by the "every bond" cache rebuild and the single selected-bond path below - lays out
+	// one label's glyph quads (pen-advance + centering) and appends them to whichever instance
+	// list the caller is building.
+	void AppendBondLabelInstances(
+		const MsdfFont &font, const glm::vec3 &midpoint, float lengthAngstrom, std::vector<OpenGlLabelInstance> &outInstances)
+	{
+		// World-space label height (em units -> world units) and a rough baseline centering
+		// offset (typical glyph ascent/descent split) - tuned by eye, not derived from font
+		// metrics, good enough for a fixed-purpose label rather than general text layout.
+		constexpr float kWorldFontSize = 0.28f;
+		constexpr float kBaselineOffset = -0.35f * kWorldFontSize;
+		constexpr glm::vec4 kLabelColor(0.92f, 0.92f, 0.85f, 1.0f);
+
+		const std::u32string text = FormatBondLengthLabel(lengthAngstrom);
+
+		float totalAdvance = 0.0f;
+		for (const char32_t codepoint : text)
+			totalAdvance += font.GetGlyphQuad(codepoint).advance;
+
+		float penX = -totalAdvance * 0.5f * kWorldFontSize;
+		for (const char32_t codepoint : text)
+		{
+			const MsdfGlyphQuad glyph = font.GetGlyphQuad(codepoint);
+			if (glyph.found && glyph.planeMax.x > glyph.planeMin.x && glyph.planeMax.y > glyph.planeMin.y)
+			{
+				OpenGlLabelInstance instance;
+				instance.worldCenter = midpoint;
+				instance.localOffsetSize = glm::vec4(
+					penX + glyph.planeMin.x * kWorldFontSize,
+					kBaselineOffset + glyph.planeMin.y * kWorldFontSize,
+					(glyph.planeMax.x - glyph.planeMin.x) * kWorldFontSize,
+					(glyph.planeMax.y - glyph.planeMin.y) * kWorldFontSize);
+				instance.atlasUvMinMax = glm::vec4(glyph.atlasUvMin, glyph.atlasUvMax);
+				instance.color = kLabelColor;
+				outInstances.push_back(instance);
+			}
+			penX += glyph.advance * kWorldFontSize;
+		}
 	}
 
 	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
@@ -345,6 +425,13 @@ namespace DefectStudio
 		if (!isosurfaceComputeLoaded.HasValue())
 			return isosurfaceComputeLoaded.Error();
 
+		Result<void> labelsLoaded = m_ShaderLibrary.LoadGraphicsProgram(
+			"labels",
+			m_ShaderDirectory / Path("labels.vert"),
+			m_ShaderDirectory / Path("labels.frag"));
+		if (!labelsLoaded.HasValue())
+			return labelsLoaded.Error();
+
 		Result<void> geometryResult = createStaticGeometry(primitiveMeshes);
 		if (!geometryResult.HasValue())
 		{
@@ -421,6 +508,8 @@ namespace DefectStudio
 		bool showBonds,
 		bool showCellBox,
 		bool showGrid,
+		bool showLabels,
+		bool showSelectedBondLabel,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp,
@@ -437,6 +526,7 @@ namespace DefectStudio
 			resources.bondsDirty = true;
 			resources.gridDirty = true;
 			resources.cellEdgesDirty = true;
+			resources.labelsDirty = true;
 			resources.lastSourcePath = sourcePathKey;
 		}
 		if (resources.lastAtomCount != structure.atoms.size())
@@ -447,6 +537,7 @@ namespace DefectStudio
 		if (resources.lastBondCount != structure.bonds.size())
 		{
 			resources.bondsDirty = true;
+			resources.labelsDirty = true;
 			resources.lastBondCount = structure.bonds.size();
 		}
 		if (resources.lastSelectedCount != selectedAtomIndices.size())
@@ -474,6 +565,7 @@ namespace DefectStudio
 		{
 			resources.atomsDirty = true;
 			resources.bondsDirty = true;
+			resources.labelsDirty = true;
 			resources.lastVisibilityHash = visibilityHash;
 		}
 		// Catches atom-position edits that don't touch count/selection/visibility - e.g. an
@@ -494,6 +586,7 @@ namespace DefectStudio
 		{
 			resources.atomsDirty = true;
 			resources.bondsDirty = true;
+			resources.labelsDirty = true;
 			resources.lastPositionHash = positionHash;
 		}
 		resources.frameBuffer.Bind();
@@ -517,6 +610,8 @@ namespace DefectStudio
 			renderCellBox(structure, camera, resources);
 		if (showBonds)
 			renderBonds(structure, camera, resources, globalSettings);
+		if (showLabels || showSelectedBondLabel)
+			renderLabels(structure, camera, resources, showLabels, showSelectedBondLabel, selectedAtomIndices);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
@@ -546,6 +641,7 @@ namespace DefectStudio
 
 		createScreenGrid();
 		createIsosurfaceGeometry();
+		createLabelQuadMesh();
 		glGenBuffers(1, &m_ComputeInputSsbo);
 		glGenBuffers(1, &m_ComputeOutputSsbo);
 		return {};
@@ -612,7 +708,9 @@ namespace DefectStudio
 			}
 		}
 
-		const std::array<OpenGlMeshHandles *, 2> meshes = {&m_SphereMesh, &m_CylinderMesh};
+		m_LabelFont.reset();
+
+		const std::array<OpenGlMeshHandles *, 3> meshes = {&m_SphereMesh, &m_CylinderMesh, &m_LabelQuadMesh};
 		for (OpenGlMeshHandles *mesh : meshes)
 		{
 			if (mesh->instanceVbo != 0)
@@ -777,6 +875,49 @@ namespace DefectStudio
 		glBindVertexArray(0);
 		m_CylinderMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
 		return {};
+	}
+
+	void OpenGlRendererBackend::createLabelQuadMesh()
+	{
+		constexpr glm::vec2 kQuadVertices[4] = {
+			glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 0.0f), glm::vec2(1.0f, 1.0f), glm::vec2(0.0f, 1.0f)};
+		constexpr std::uint32_t kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+
+		glGenVertexArrays(1, &m_LabelQuadMesh.vao);
+		glGenBuffers(1, &m_LabelQuadMesh.vbo);
+		glGenBuffers(1, &m_LabelQuadMesh.ebo);
+		glGenBuffers(1, &m_LabelQuadMesh.instanceVbo);
+		glBindVertexArray(m_LabelQuadMesh.vao);
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_LabelQuadMesh.vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(kQuadVertices), kQuadVertices, GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_LabelQuadMesh.ebo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(kQuadIndices), kQuadIndices, GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_LabelQuadMesh.instanceVbo);
+		glBufferData(GL_ARRAY_BUFFER, 1, nullptr, GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, worldCenter)));
+		glVertexAttribDivisor(1, 1);
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, localOffsetSize)));
+		glVertexAttribDivisor(2, 1);
+		glEnableVertexAttribArray(3);
+		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, atlasUvMinMax)));
+		glVertexAttribDivisor(3, 1);
+		glEnableVertexAttribArray(4);
+		glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, color)));
+		glVertexAttribDivisor(4, 1);
+
+		glBindVertexArray(0);
+		m_LabelQuadMesh.indexCount = 6;
 	}
 
 	void OpenGlRendererBackend::createScreenGrid()
@@ -1084,6 +1225,159 @@ namespace DefectStudio
 			static_cast<int>(resources.cachedBondInstances.size()));
 		glBindVertexArray(0);
 		resources.bondsDirty = false;
+	}
+
+	// Auto bond-length labels, one MSDF billboard per bond, always regenerated from live atom
+	// positions (no separate ECS label entity yet - see docs/work/project/TODO.md T09 for why that
+	// part is deferred to Etap F alongside real selection-mode support). Runs inside RenderWindow
+	// like every other geometry pass, so it's automatically part of whatever CaptureWindowToPng
+	// reads back - no separate export wiring needed.
+	void OpenGlRendererBackend::renderLabels(
+		const RendererStructureData &structure,
+		const RendererViewCamera &camera,
+		OpenGlViewportResources &resources,
+		bool showAllLabels,
+		bool showSelectedBondLabel,
+		const std::vector<std::size_t> &selectedAtomIndices)
+	{
+		if (m_LabelFont == nullptr)
+		{
+			m_LabelFont = CreateUnique<MsdfFont>(resolveLabelFontPath());
+			if (!m_LabelFont->IsValid())
+				DS_LOG_WARN("Renderer: label font failed to load, bond-length labels will not render");
+		}
+		if (!m_LabelFont->IsValid())
+			return;
+
+		// Two independent triggers (Alt+M "every bond" vs M "just the selected one") share the
+		// same draw path but not the same data source: "every bond" is expensive enough to cache
+		// (resources.cachedLabelInstances, invalidated by labelsDirty) while the single-bond case
+		// is cheap enough (one bond's few glyphs) to just rebuild every frame it's shown - adding
+		// a second dirty-tracking axis keyed on selection would cost more than it saves here.
+		std::vector<OpenGlLabelInstance> selectedBondInstances;
+		const std::vector<OpenGlLabelInstance> *instancesToDraw = nullptr;
+
+		if (showAllLabels)
+		{
+			if (resources.labelsDirty)
+			{
+				resources.cachedLabelInstances.clear();
+				for (const RendererBondData &bond : structure.bonds)
+				{
+					if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
+						continue;
+					const RendererAtomData &first = structure.atoms[bond.firstAtomIndex];
+					const RendererAtomData &second = structure.atoms[bond.secondAtomIndex];
+					if (!first.visible || !second.visible)
+						continue;
+
+					const glm::vec3 secondPosition = second.cartesianPosition + bond.secondAtomPeriodicOffset;
+					const float lengthAngstrom = glm::length(secondPosition - first.cartesianPosition);
+					const glm::vec3 midpoint = (first.cartesianPosition + secondPosition) * 0.5f;
+					AppendBondLabelInstances(*m_LabelFont, midpoint, lengthAngstrom, resources.cachedLabelInstances);
+				}
+				resources.labelsDirty = false;
+			}
+			instancesToDraw = &resources.cachedLabelInstances;
+		}
+		else if (showSelectedBondLabel && selectedAtomIndices.size() == 2)
+		{
+			const std::size_t atomA = selectedAtomIndices[0];
+			const std::size_t atomB = selectedAtomIndices[1];
+			bool foundBond = false;
+			for (const RendererBondData &bond : structure.bonds)
+			{
+				const bool matches =
+					(bond.firstAtomIndex == atomA && bond.secondAtomIndex == atomB) ||
+					(bond.firstAtomIndex == atomB && bond.secondAtomIndex == atomA);
+				if (!matches)
+					continue;
+				foundBond = true;
+				if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
+					break;
+				const RendererAtomData &first = structure.atoms[bond.firstAtomIndex];
+				const RendererAtomData &second = structure.atoms[bond.secondAtomIndex];
+				if (!first.visible || !second.visible)
+					break;
+
+				const glm::vec3 secondPosition = second.cartesianPosition + bond.secondAtomPeriodicOffset;
+				const float lengthAngstrom = glm::length(secondPosition - first.cartesianPosition);
+				const glm::vec3 midpoint = (first.cartesianPosition + secondPosition) * 0.5f;
+				AppendBondLabelInstances(*m_LabelFont, midpoint, lengthAngstrom, selectedBondInstances);
+				break;
+			}
+			instancesToDraw = &selectedBondInstances;
+			// TEMP diagnostic (remove once M-toggle is confirmed working live) - throttled to
+			// ~2/sec so the Logging panel stays readable while this is held on with no match.
+			if (!foundBond)
+			{
+				static int throttleCounter = 0;
+				if (throttleCounter++ % 30 == 0)
+					DS_LOG_WARN(
+						"Labels: no bond found between selected atoms {} and {} (structure has {} bonds)",
+						atomA, atomB, structure.bonds.size());
+			}
+		}
+		else if (showSelectedBondLabel)
+		{
+			static int throttleCounter = 0;
+			if (throttleCounter++ % 30 == 0)
+				DS_LOG_WARN(
+					"Labels: selected-bond toggle is on but selection has {} atom(s), need exactly 2",
+					selectedAtomIndices.size());
+		}
+
+		if (instancesToDraw == nullptr || instancesToDraw->empty())
+			return;
+
+		const unsigned int program = m_ShaderLibrary.Program("labels");
+		if (program == 0)
+			return;
+
+#if defined(TRACY_ENABLE)
+		TracyGpuZone("Renderer.Labels");
+#endif
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_LabelQuadMesh.instanceVbo);
+		const GLsizeiptr requiredBytes =
+			static_cast<GLsizeiptr>(instancesToDraw->size() * sizeof(OpenGlLabelInstance));
+		GLint currentSize = 0;
+		glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
+		if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
+		{
+			const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
+			glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
+		}
+		glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, instancesToDraw->data());
+
+		const glm::mat4 view = camera.ViewMatrix();
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * view;
+		glUseProgram(program);
+		const int viewProjectionLocation = m_ShaderLibrary.Uniform("labels", "u_ViewProjection");
+		if (viewProjectionLocation >= 0)
+			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		const int viewLocation = m_ShaderLibrary.Uniform("labels", "u_View");
+		if (viewLocation >= 0)
+			glUniformMatrix4fv(viewLocation, 1, GL_FALSE, &view[0][0]);
+		const int pixelRangeLocation = m_ShaderLibrary.Uniform("labels", "u_PixelRange");
+		if (pixelRangeLocation >= 0)
+			glUniform1f(pixelRangeLocation, static_cast<float>(m_LabelFont->PixelRange()));
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, m_LabelFont->AtlasTextureId());
+		const int atlasLocation = m_ShaderLibrary.Uniform("labels", "u_AtlasTexture");
+		if (atlasLocation >= 0)
+			glUniform1i(atlasLocation, 0);
+
+		glBindVertexArray(m_LabelQuadMesh.vao);
+		glDrawElementsInstanced(
+			GL_TRIANGLES,
+			m_LabelQuadMesh.indexCount,
+			GL_UNSIGNED_INT,
+			nullptr,
+			static_cast<int>(instancesToDraw->size()));
+		glBindVertexArray(0);
+		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 
 	void OpenGlRendererBackend::renderCellBox(

@@ -8,6 +8,8 @@
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Time.hpp"
+#include "Core/Utils/Memory.hpp"
+#include "Renderer/OpenGl/MsdfFont.hpp"
 #include "Renderer/OpenGl/OpenGlFrameBuffer.hpp"
 #include "Renderer/OpenGl/OpenGlShaderLibrary.hpp"
 #include "Renderer/RendererMeshData.hpp"
@@ -45,6 +47,18 @@ namespace DefectStudio
 		glm::vec4 colorB = glm::vec4(1.0f);
 	};
 
+	// One glyph quad. aWorldCenter repeats across every glyph of the same label (the string's
+	// anchor point, e.g. a bond midpoint); aLocalOffsetSize places this particular glyph relative
+	// to it in label-local em-space, which the vertex shader then billboards via the camera's own
+	// right/up axes.
+	struct OpenGlLabelInstance
+	{
+		glm::vec3 worldCenter = glm::vec3(0.0f);
+		glm::vec4 localOffsetSize = glm::vec4(0.0f);
+		glm::vec4 atlasUvMinMax = glm::vec4(0.0f);
+		glm::vec4 color = glm::vec4(1.0f);
+	};
+
 	struct OpenGlViewportResources
 	{
 		OpenGlFrameBuffer frameBuffer;
@@ -53,6 +67,7 @@ namespace DefectStudio
 		bool bondsDirty = true;
 		bool gridDirty = true;
 		bool cellEdgesDirty = true;
+		bool labelsDirty = true;
 		std::size_t lastAtomCount = 0;
 		std::size_t lastBondCount = 0;
 		std::size_t lastSelectedCount = 0;
@@ -62,6 +77,7 @@ namespace DefectStudio
 		std::string lastSourcePath;
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
+		std::vector<OpenGlLabelInstance> cachedLabelInstances;
 		std::vector<glm::vec3> cachedGridVertices;
 		std::vector<glm::vec3> cachedCellEdgeVertices;
 
@@ -104,6 +120,8 @@ namespace DefectStudio
 			bool showBonds,
 			bool showCellBox,
 			bool showGrid,
+			bool showLabels = false,
+			bool showSelectedBondLabel = false,
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
 			// end-to-end (CPU reference, then its GPU compute-shader port) before the real
@@ -141,6 +159,7 @@ namespace DefectStudio
 		void releaseStaticGeometry();
 		Result<void> createSphereMesh(const RendererStaticMeshData &meshData);
 		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
+		void createLabelQuadMesh();
 		void createScreenGrid();
 		void createIsosurfaceGeometry();
 		// Lazily allocates `resources`'s per-window isosurface GPU buffers on first use - no-op if
@@ -158,6 +177,13 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings);
+		void renderLabels(
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			bool showAllLabels,
+			bool showSelectedBondLabel,
+			const std::vector<std::size_t> &selectedAtomIndices);
 		void renderCellBox(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
@@ -192,6 +218,11 @@ namespace DefectStudio
 		OpenGlShaderLibrary m_ShaderLibrary;
 		OpenGlMeshHandles m_SphereMesh;
 		OpenGlMeshHandles m_CylinderMesh;
+		OpenGlMeshHandles m_LabelQuadMesh;
+		// Lazily constructed on first renderLabels() call with showLabels=true - atlas generation
+		// (FreeType + msdfgen) costs real time, no reason to pay it for windows/sessions that never
+		// toggle labels on. Bundled font (see resolveLabelFontPath) same as the app's own UI font.
+		Unique<MsdfFont> m_LabelFont;
 		unsigned int m_LineVao = 0;
 		unsigned int m_LineVbo = 0;
 		unsigned int m_IsosurfaceVao = 0;

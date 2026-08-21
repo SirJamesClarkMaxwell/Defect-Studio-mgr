@@ -40,6 +40,12 @@ namespace DefectStudio
 		bool showCellBox = true;
 		bool showBonds = true;
 		bool showAtoms = true;
+		// Auto bond-length MSDF labels (Etap E) - toggled by `Alt+M`, off by default so existing
+		// structures don't suddenly grow new clutter on every bond until a user opts in.
+		bool showLabels = false;
+		// Single-bond MSDF label (Etap E) - toggled by `M`, shows the length of just the bond
+		// between the current 2-atom selection instead of every bond in the structure.
+		bool showSelectedBondLabel = false;
 		std::vector<std::size_t> selectedAtomIndices;
 		float rotationStepDeg = 1.0f;
 		float pixelStepPx = 10.0f;
@@ -77,6 +83,16 @@ namespace DefectStudio
 		// domain "before" state for Undo is captured by the commit command itself on drag release.
 		GizmoOperation gizmoOperation = GizmoOperation::Translate;
 		bool gizmoDragActive = false;
+		// Fallback screen-space axis pick/drag - see RendererPanel::renderTransformGizmo. ImGuizmo's
+		// own IsOver()/IsUsing() picking has proven unreliable in this app, so this hand-rolled path
+		// (ported from an earlier iteration of this project that hit the same problem) is the drag
+		// mechanism that actually runs in practice, not a rare-case backup.
+		bool fallbackGizmoDragging = false;
+		int fallbackGizmoAxis = -1;
+		glm::vec2 fallbackDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
+		glm::vec3 fallbackDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
+		float fallbackDragPixelsPerWorld = 1.0f;
+		glm::vec2 fallbackLastMousePos = glm::vec2(0.0f);
 		glm::vec2 selectionDragStart = glm::vec2(0.0f);
 		glm::vec2 selectionDragCurrent = glm::vec2(0.0f);
 		// Circle-select brush radius in viewport pixels - persistent per window, adjusted with the

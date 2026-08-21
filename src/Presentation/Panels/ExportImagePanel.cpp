@@ -401,6 +401,8 @@ namespace DefectStudio
 		ImGui::Checkbox("Cell##export", &dialog.previewState.showCellBox);
 		ImGui::SameLine();
 		ImGui::Checkbox("Grid##export", &dialog.previewState.showGrid);
+		ImGui::SameLine();
+		ImGui::Checkbox("Labels##export", &dialog.previewState.showLabels);
 
 		ImGui::Separator();
 		float zoomDistance = dialog.previewState.camera->Distance();
