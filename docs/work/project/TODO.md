@@ -1029,6 +1029,15 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] Remote SSH / SFTP browser bez OS-mounta (`libssh2`) — **zob. T07.5.2 stretch**; budować tylko
       jeśli mount-first (SMB/SSHFS-Win) okaże się niewystarczający w praktyce
 - [ ] VASP OUTCAR/WAVECAR integration
+- [ ] **Moduł poprawki FNV (Freysoldt-Neugebauer-Van de Walle) — zażądane 2026-08-21, priorytet
+      wysoki:** korekta energii formacji defektów naładowanych (finite-size/image-charge, potencjał
+      elektrostatyczny defekt vs pristine, alignment poza rdzeniem defektu). Wiąże się z formation
+      energy calculatorem z bullet "Energetyka i DFT" niżej — bez tego formation energy dla defektów
+      z niezerowym ładunkiem jest błędne przy skończonej superkomórce.
+- [ ] **Moduł generacji testów zbieżności i defektów do obliczeń wielkoskalowych — zażądane
+      2026-08-21:** automatyczna seria testów zbieżności (k-points/ENCUT, seria inputów + parsing
+      wyników), masowa/high-throughput generacja struktur defektowych (kombinacje pozycji/typów/
+      ładunków) pod batch obliczenia
 - [ ] Defect thermodynamics
 - [ ] **Python scripting panel — wprost zażądane 2026-08-21, priorytet w górę z Backlogu:** REPL w
       UI, styl ipython (podpowiedzi składni + ścieżek), hot-reload przez file watcher np. `efsw`,
@@ -1048,6 +1057,9 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       eksport diff struktury (dodane/usunięte/przesunięte atomy), adnotacje przypisane do atomów/pozycji
 - [ ] **Rendering (§16.9, poza tym co już w T09):** ray-traced render (opcjonalnie Blender via
       subprocess), animacja: sekwencja klatek z AIMD/NEB (interpolacja ścieżek atomów)
+- [ ] **Moduł generacji komórek startowych — zażądane 2026-08-21, niski priorytet:** budowanie
+      struktury początkowej (bulk/primitive → supercell, ewentualnie od zera z grupy przestrzennej)
+      jako punkt wejścia przed defektowaniem/testami zbieżności powyżej
 
 ---
 
