@@ -7,4 +7,5 @@
 namespace DefectStudio::Platform
 {
 	[[nodiscard]] std::vector<FilePath> GetSystemFontDirectories();
+	[[nodiscard]] Path GetExecutableDirectory();
 } // namespace DefectStudio::Platform

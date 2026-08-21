@@ -22,6 +22,7 @@
 #include <sstream>
 
 #include "Core/Logging/Logger.hpp"
+#include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Utils/Time.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
@@ -1690,17 +1691,18 @@ namespace DefectStudio
 
 	Path RendererLayer::resolveShaderDirectory() const
 	{
-		if (!m_StartupConfig.assetsDirectory.Empty())
+		// Najpierw szukaj shaderów obok binarki (deploy path) — premake kopiuje je do
+		// %{cfg.targetdir}/shaders, czyli obok samego .exe, nie obok install/app/assets.
+		const Path executableDirectory = Platform::GetExecutableDirectory();
+		if (!executableDirectory.Empty())
 		{
-			// Najpierw szukaj shaderów obok binarki (deploy path)
-			const Path deployShaders = Path::FromResolved(
-				m_StartupConfig.assetsDirectory.Native().parent_path() / "shaders");
+			const Path deployShaders = Path::FromResolved(executableDirectory.Native() / "shaders");
 			if (FileSystem::Exists(deployShaders.Native()))
 				return deployShaders;
-
-			// Fallback: ścieżka deweloperska w repozytorium
-			// TODO: usunąć gdy pipeline budowania zawsze kopiuje shadery do deploy dir
 		}
+
+		// Fallback: ścieżka deweloperska w repozytorium (CWD=repo root, np. odpalone z VS)
+		// TODO: usunąć gdy pipeline budowania zawsze kopiuje shadery do deploy dir
 
 		if (!m_StartupConfig.shaderDirectory.Empty())
 		{

@@ -40,6 +40,11 @@ namespace DefectStudio::Platform
 		return {};
 	}
 
+	Path GetExecutableDirectory()
+	{
+		return {};
+	}
+
 	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)
 	{
 		(void)window;

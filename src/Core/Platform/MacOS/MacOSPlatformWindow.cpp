@@ -2,7 +2,11 @@
 
 #if defined(DS_PLATFORM_MACOS)
 
+#include <climits>
 #include <csignal>
+
+#include <mach-o/dyld.h>
+#include <sys/syslimits.h>
 
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
@@ -60,6 +64,16 @@ namespace DefectStudio::Platform
 		directories.emplace_back("/Library/Fonts");
 		directories.emplace_back("/System/Library/Fonts");
 		return directories;
+	}
+
+	Path GetExecutableDirectory()
+	{
+		char buffer[PATH_MAX] = {};
+		std::uint32_t size = sizeof(buffer);
+		if (_NSGetExecutablePath(buffer, &size) != 0)
+			return {};
+
+		return Path::FromResolved(FilePath(buffer).parent_path());
 	}
 
 	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)

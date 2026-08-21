@@ -2,7 +2,10 @@
 
 #if defined(__linux__)
 
+#include <climits>
 #include <csignal>
+
+#include <unistd.h>
 
 #include <GLFW/glfw3.h>
 
@@ -63,6 +66,16 @@ namespace DefectStudio::Platform
 		directories.emplace_back("/usr/local/share/fonts");
 		directories.emplace_back("/usr/share/fonts");
 		return directories;
+	}
+
+	Path GetExecutableDirectory()
+	{
+		char buffer[PATH_MAX] = {};
+		const ssize_t length = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+		if (length <= 0)
+			return {};
+
+		return Path::FromResolved(FilePath(std::string(buffer, static_cast<std::size_t>(length))).parent_path());
 	}
 
 	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)

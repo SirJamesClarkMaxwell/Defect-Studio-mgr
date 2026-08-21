@@ -67,16 +67,6 @@ namespace
 		return path.substr(slash + 1);
 	}
 
-	DefectStudio::Path GetExecutableDirectory()
-	{
-		wchar_t modulePath[MAX_PATH] = {};
-		const DWORD modulePathLength = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
-		if (modulePathLength == 0 || modulePathLength >= MAX_PATH)
-			return {};
-
-		return DefectStudio::Path::FromResolved(FilePath(modulePath).parent_path());
-	}
-
 	DefectStudio::Path ResolveIconPath(const DefectStudio::Path &iconPath)
 	{
 		if (iconPath.Empty())
@@ -89,7 +79,7 @@ namespace
 		if (FileSystem::Exists(fromCurrentDirectory.Native()))
 			return fromCurrentDirectory;
 
-		const DefectStudio::Path executableDirectory = GetExecutableDirectory();
+		const DefectStudio::Path executableDirectory = DefectStudio::Platform::GetExecutableDirectory();
 		if (!executableDirectory.Empty())
 		{
 			const DefectStudio::Path fromExecutableDirectory = executableDirectory / iconPath;
@@ -353,6 +343,16 @@ namespace DefectStudio::Platform
 		AppendEnvironmentDirectory(directories, "SystemRoot", "Fonts");
 		directories.emplace_back("C:/Windows/Fonts");
 		return directories;
+	}
+
+	Path GetExecutableDirectory()
+	{
+		wchar_t modulePath[MAX_PATH] = {};
+		const DWORD modulePathLength = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+		if (modulePathLength == 0 || modulePathLength >= MAX_PATH)
+			return {};
+
+		return Path::FromResolved(FilePath(modulePath).parent_path());
 	}
 
 	void InitializeWindowPlatform(GLFWwindow *window, const Path &iconPath)
