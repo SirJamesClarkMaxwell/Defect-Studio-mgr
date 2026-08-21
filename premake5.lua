@@ -22,6 +22,9 @@ _DS_ROOT = path.getabsolute(".")
 local windowsIcon = path.translate(path.getabsolute("install/app/assets/icon.png"), "\\")
 local linuxIcon = "../../../install/app/assets/icon.png"
 local windowsShaderSource = path.translate(path.getabsolute("src/Renderer/OpenGl/Shaders"), "\\")
+-- Deployed config/fonts/assets the running exe actually reads (keybindings.yaml etc.) - re-synced
+-- on every build so editing install/ under source control never goes stale next to the binary.
+local windowsInstallSource = path.translate(path.getabsolute("install"), "\\")
 
 local function appendUnique(list, value)
     if value == nil or value == "" then
@@ -518,7 +521,10 @@ project "DefectStudio"
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32" }
         postbuildcommands {
             'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
-            'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL'
+            'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL',
+            -- /D: only copies files newer than the destination, so repeat builds stay fast.
+            'if not exist "%{cfg.targetdir}\\install" mkdir "%{cfg.targetdir}\\install"',
+            'xcopy /E /Y /I /D "' .. windowsInstallSource .. '\\*" "%{cfg.targetdir}\\install\\" >NUL'
         }
 
     filter { "system:windows", "action:vs2022" }
@@ -556,7 +562,9 @@ project "DefectStudio"
         end
         postbuildcommands {
                 'mkdir -p "%{cfg.targetdir}/shaders"',
-                'cp -r src/Renderer/OpenGl/Shaders/. "%{cfg.targetdir}/shaders/"'
+                'cp -r src/Renderer/OpenGl/Shaders/. "%{cfg.targetdir}/shaders/"',
+                'mkdir -p "%{cfg.targetdir}/install"',
+                'cp -r install/. "%{cfg.targetdir}/install/"'
         }
 
     filter "system:macosx"
