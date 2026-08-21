@@ -33,6 +33,16 @@ namespace DefectStudio
 		return {};
 	}
 
+	WeakRef<StructureRecord> StructureRegistry::FindMutable(const StructureId &id) noexcept
+	{
+		for (const Ref<StructureRecord> &record : m_Records)
+		{
+			if (record != nullptr && record->id == id)
+				return CreateWeakRef(record);
+		}
+		return {};
+	}
+
 	const StructureRegistry::RecordList &StructureRegistry::Records() const noexcept
 	{
 		return m_Records;

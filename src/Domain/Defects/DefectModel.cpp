@@ -46,61 +46,61 @@ namespace DefectStudio
 				}),
 				bonds.end());
 		}
-
-		[[nodiscard]] Result<void> ApplyVacancy(CrystalStructure &structure, const PointDefectOperation &operation)
-		{
-			if (operation.atomIndex >= structure.atoms.size())
-				return MakeInvalidDefectOperationError(operation.atomIndex, structure.atoms.size(), "Vacancy");
-
-			const AtomSite removedAtom = structure.atoms[operation.atomIndex];
-			VacancySite vacancy;
-			vacancy.position = removedAtom.position;
-			vacancy.fractional = removedAtom.fractional;
-			vacancy.sourceSpecies = removedAtom.species;
-			vacancy.label = operation.label;
-			vacancy.index = removedAtom.index;
-			structure.vacancies.push_back(std::move(vacancy));
-
-			structure.atoms.erase(structure.atoms.begin() + static_cast<std::ptrdiff_t>(operation.atomIndex));
-			RemoveBondsReferencingAtom(structure.bonds, operation.atomIndex);
-			ReindexAtoms(structure.atoms);
-			return {};
-		}
-
-		[[nodiscard]] Result<void> ApplyInterstitial(CrystalStructure &structure, const PointDefectOperation &operation)
-		{
-			AtomSite atom = operation.atom;
-			atom.index = static_cast<int>(structure.atoms.size());
-			structure.atoms.push_back(std::move(atom));
-			return {};
-		}
-
-		[[nodiscard]] Result<void> ApplyReplacement(
-			CrystalStructure &structure,
-			const PointDefectOperation &operation,
-			const char *operationName)
-		{
-			if (operation.atomIndex >= structure.atoms.size())
-				return MakeInvalidDefectOperationError(operation.atomIndex, structure.atoms.size(), operationName);
-			if (operation.replacementSpecies.empty())
-			{
-				return StructuredError{
-					ErrorCategory::Validation,
-					Severity::Error,
-					"Defect operation failed.",
-					std::string(operationName) + " has an empty replacement species.",
-					"Provide a chemical symbol for replacementSpecies.",
-					"DefectModel",
-					"domain.defect.empty_replacement_species"};
-			}
-
-			AtomSite &atom = structure.atoms[operation.atomIndex];
-			atom.species = operation.replacementSpecies;
-			if (!operation.label.empty())
-				atom.label = operation.label;
-			return {};
-		}
 	} // namespace
+
+	Result<void> ApplyVacancy(CrystalStructure &structure, const PointDefectOperation &operation)
+	{
+		if (operation.atomIndex >= structure.atoms.size())
+			return MakeInvalidDefectOperationError(operation.atomIndex, structure.atoms.size(), "Vacancy");
+
+		const AtomSite removedAtom = structure.atoms[operation.atomIndex];
+		VacancySite vacancy;
+		vacancy.position = removedAtom.position;
+		vacancy.fractional = removedAtom.fractional;
+		vacancy.sourceSpecies = removedAtom.species;
+		vacancy.label = operation.label;
+		vacancy.index = removedAtom.index;
+		structure.vacancies.push_back(std::move(vacancy));
+
+		structure.atoms.erase(structure.atoms.begin() + static_cast<std::ptrdiff_t>(operation.atomIndex));
+		RemoveBondsReferencingAtom(structure.bonds, operation.atomIndex);
+		ReindexAtoms(structure.atoms);
+		return {};
+	}
+
+	Result<void> ApplyInterstitial(CrystalStructure &structure, const PointDefectOperation &operation)
+	{
+		AtomSite atom = operation.atom;
+		atom.index = static_cast<int>(structure.atoms.size());
+		structure.atoms.push_back(std::move(atom));
+		return {};
+	}
+
+	Result<void> ApplyReplacement(
+		CrystalStructure &structure,
+		const PointDefectOperation &operation,
+		const char *operationName)
+	{
+		if (operation.atomIndex >= structure.atoms.size())
+			return MakeInvalidDefectOperationError(operation.atomIndex, structure.atoms.size(), operationName);
+		if (operation.replacementSpecies.empty())
+		{
+			return StructuredError{
+				ErrorCategory::Validation,
+				Severity::Error,
+				"Defect operation failed.",
+				std::string(operationName) + " has an empty replacement species.",
+				"Provide a chemical symbol for replacementSpecies.",
+				"DefectModel",
+				"domain.defect.empty_replacement_species"};
+		}
+
+		AtomSite &atom = structure.atoms[operation.atomIndex];
+		atom.species = operation.replacementSpecies;
+		if (!operation.label.empty())
+			atom.label = operation.label;
+		return {};
+	}
 
 	Result<CrystalStructure> BuildDefectedStructure(
 		const CrystalStructure &pristine,

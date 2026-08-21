@@ -206,6 +206,18 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.delete"
+    chord: "Delete"
+    command: "renderer.selection.delete"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.duplicate"
+    chord: "Shift+D"
+    command: "renderer.selection.duplicate"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.view.set_as_project_default"
     chord: "Ctrl+D"
     command: "renderer.view.set_as_project_default"

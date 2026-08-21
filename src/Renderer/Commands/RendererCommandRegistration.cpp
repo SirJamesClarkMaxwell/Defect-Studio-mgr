@@ -6,6 +6,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 
 #include <functional>
@@ -132,9 +133,36 @@ namespace DefectStudio
 			return CreateRendererApplyDefaultViewCommand(std::move(eventBus));
 		}
 
+		Unique<ICommand> MakeDeleteSelectedAtomsCommand(
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer,
+			AtomStyleTable atomStyleTable,
+			ElementPropertiesTable elementPropertiesTable,
+			CommandContext &)
+		{
+			return CreateDeleteSelectedAtomsCommand(
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable));
+		}
+
+		Unique<ICommand> MakeDuplicateSelectedAtomsCommand(
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer,
+			AtomStyleTable atomStyleTable,
+			ElementPropertiesTable elementPropertiesTable,
+			CommandContext &)
+		{
+			return CreateDuplicateSelectedAtomsCommand(
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable));
+		}
 	}
 
-	void RegisterRendererCommands(CommandRegistry &registry, Ref<EventBus> eventBus)
+	void RegisterRendererCommands(
+		CommandRegistry &registry,
+		Ref<EventBus> eventBus,
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable)
 	{
 		using namespace RendererEvents::Viewport;
 
@@ -318,6 +346,18 @@ namespace DefectStudio
 			"Renderer: Invert selection",
 			"Invert the atom selection in the active renderer viewport.",
 			std::bind_front(MakeSelectionInvertCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.delete",
+			"Renderer: Delete selected atoms",
+			"Delete the currently selected atoms from the structure (undoable).",
+			std::bind_front(MakeDeleteSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.duplicate",
+			"Renderer: Duplicate selected atoms",
+			"Duplicate the currently selected atoms next to themselves (undoable).",
+			std::bind_front(MakeDuplicateSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable));
 		RegisterRendererCommand(
 			registry,
 			"renderer.view.set_as_project_default",

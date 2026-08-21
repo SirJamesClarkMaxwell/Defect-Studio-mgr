@@ -937,7 +937,13 @@ namespace DefectStudio
 			ZoneScopedN("Application.RegisterRendererCommands");
 			ApplicationDetail::StartupStepTimer timer("Application.RegisterRendererCommands");
 			if (auto commandRegistry = coreLayer->GetCommandRegistryHandle().lock())
-				RegisterRendererCommands(*commandRegistry, m_EventBus);
+				RegisterRendererCommands(
+					*commandRegistry,
+					m_EventBus,
+					m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain),
+					rendererLayer,
+					m_RendererAtomStyleTable,
+					m_RendererElementPropertiesTable);
 			timer.Finish(true);
 		}
 

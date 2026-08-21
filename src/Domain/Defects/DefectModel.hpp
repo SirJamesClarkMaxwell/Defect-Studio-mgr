@@ -63,4 +63,16 @@ namespace DefectStudio
 	[[nodiscard]] Result<CrystalStructure> BuildDefectedStructure(
 		const CrystalStructure &pristine,
 		const DefectConfiguration &configuration);
+
+	// In-place point-defect primitives underneath BuildDefectedStructure - exposed directly so
+	// callers that already own a live (not pristine-copy) CrystalStructure, such as scene atom
+	// edit commands, can reuse the exact same erase/reindex/bond-cleanup logic instead of
+	// duplicating it. ApplyVacancy also records a VacancySite, matching this app's point-defect
+	// domain model - a generic "delete atom" is a vacancy here, not a separate concept.
+	[[nodiscard]] Result<void> ApplyVacancy(CrystalStructure &structure, const PointDefectOperation &operation);
+	[[nodiscard]] Result<void> ApplyInterstitial(CrystalStructure &structure, const PointDefectOperation &operation);
+	[[nodiscard]] Result<void> ApplyReplacement(
+		CrystalStructure &structure,
+		const PointDefectOperation &operation,
+		const char *operationName);
 } // namespace DefectStudio

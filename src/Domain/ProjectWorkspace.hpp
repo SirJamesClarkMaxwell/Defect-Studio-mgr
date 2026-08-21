@@ -29,6 +29,9 @@ namespace DefectStudio
 			Path sourcePath = {},
 			std::string displayName = {});
 		[[nodiscard]] WeakRef<const StructureRecord> Find(const StructureId &id) const;
+		// Non-const counterpart to Find - for in-place edits of an already-registered structure
+		// (atom add/delete/duplicate/change-type), which Add-only/const-Find can't support.
+		[[nodiscard]] WeakRef<StructureRecord> FindMutable(const StructureId &id) noexcept;
 		[[nodiscard]] const RecordList &Records() const noexcept;
 
 	private:

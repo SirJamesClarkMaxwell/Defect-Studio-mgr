@@ -35,4 +35,9 @@ namespace DefectStudio
 	{
 		return uuids::to_string(id);
 	}
+
+	std::optional<Uuid> ParseUuid(const std::string &text)
+	{
+		return uuids::uuid::from_string(text);
+	}
 } // namespace DefectStudio

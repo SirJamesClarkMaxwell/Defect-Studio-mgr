@@ -530,7 +530,29 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       przez globalny `Core/Undo`/`UndoStack`
 - [ ] Dodaj atom przez wpisanie współrzędnych (frakcyjne/kartezjańskie); popup: pierwiastek + tryb
       koordynat; wstawienie pod 3D cursorem lub w centrum selekcji (`old-ds-functionality.md` §3.3)
-- [ ] Zmień typ atomu (zaznaczenia), usuń atom (`Delete`), duplikuj (`Ctrl+D`), kopiuj/wklej (`Ctrl+C/V`)
+      — **nie zrobione jeszcze, potrzebuje popupu UI**, zob. notatka niżej.
+- [x] **Usuń atom (`Delete`) i duplikuj (`Shift+D`, nie `Ctrl+D`) — zrobione 2026-08-21.** Nowy
+      `src/Renderer/Commands/RendererAtomEditCommands.{hpp,cpp}` — pierwsza realna hydraulika
+      mutująca żywą `CrystalStructure` otwartego okna (wcześniej nic tego nie robiło, sprawdzone w
+      kodzie: `ApplyVacancy`/`ApplyInterstitial`/`ApplyReplacement` w `DefectModel.cpp` miały zero
+      callerów). Łańcuch: `RendererLayer::GetFocusedViewportWindowId()` (albo jawny windowId) →
+      `windowState.structure.domainStructureId` → `DomainLayer::Workspace().Structures()
+      .FindMutable(id)` (**nowa metoda**, rejestr był tylko `Add`+const `Find`, żadnej mutacji) →
+      `ApplyVacancy`/`ApplyInterstitial` (**wypromowane z anonimowej przestrzeni nazw w
+      `DefectModel.cpp` do publicznego API** — dokładnie ta sama logika co defekty punktowe, bez
+      duplikacji) → `BuildRendererStructureData` (rebuild) → `SceneSystem::SyncSceneWithStructure`
+      + `ApplySelectionAndVisibilityToScene` (duplicate zaznacza nowe kopie, jak w Blenderze).
+      Prawdziwy `ICommand` z `Undo()` (nie event-fire-and-forget jak hide/show/invert) —
+      przechodzi przez globalny `Ctrl+Z`/`Ctrl+Y` (`Core/Undo`/`UndoStack`), zgodnie z
+      `docs/adr/0001-state-mutation-policy.md`. Undo/Redo symetryczne: `Undo` przywraca snapshot
+      `atoms`+`bonds` sprzed operacji **i** oryginalne zaznaczenie, więc domyślny `Redo` (=ponowne
+      `Execute`) trafia w te same atomy. `ApplyVacancy` **świadomie** dopisuje `VacancySite` do
+      `structure.vacancies` przy zwykłym Delete — usuwanie atomu w tej appce to koncepcyjnie
+      wakancja w modelu domenowym (§16.1/T11), nie osobna ścieżka; pierwsze realne wypełnienie tego
+      dotąd martwego pola.
+      **Nie zrobione w tym przejściu:** Change type (brak dedykowanego klawisza — flagowane już w
+      planie sesji, wystawić jako pole/popup, nie globalny skrót), kopiuj/wklej (`Ctrl+C/V`),
+      Add atom popup (wyżej) — obie potrzebują nowego UI (element combo + pola), osobny krok.
 - [ ] Ukryj (`H`) / odkryj wszystkie (`Alt+H`) — toggle `VisibilityComponent` per kolekcja
 <!-- - [ ] Extract to New Collection — przeniesienie zaznaczonych atomów do nowej Kolekcji -->
 - [ ] `SceneOutliner` panel – lista struktur/kolekcji z entt view, toggle widoczności, F2 rename
