@@ -38,4 +38,12 @@ namespace DefectStudio::ProjectEvents
 	{
 		Path directory;
 	};
+
+	// Queued from ProjectTreePanel's leaf-node double-click (any file, no extension gating -
+	// POSCAR/CONTCAR keep their separate RMB "Open Defect" path, no conflict). EditorLayer routes
+	// it to the single TextEditorPanel instance.
+	struct TextFileOpenRequested final : public BusEvent
+	{
+		Path path;
+	};
 } // namespace DefectStudio::ProjectEvents

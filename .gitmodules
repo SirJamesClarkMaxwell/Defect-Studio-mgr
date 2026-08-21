@@ -53,3 +53,6 @@
 [submodule "Vendor/ImGuizmo"]
 	path = Vendor/ImGuizmo
 	url = https://github.com/sjcmdev/ImGuizmo.git
+[submodule "Vendor/ImGuiColorTextEdit"]
+	path = Vendor/ImGuiColorTextEdit
+	url = https://github.com/sjcmdev/ImGuiColorTextEdit.git

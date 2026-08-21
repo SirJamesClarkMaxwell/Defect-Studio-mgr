@@ -918,6 +918,19 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       `m_SharedSavedViews`, nowa zakładka "Saved Views" w Settings (tabela z Apply/Rename/Up/Down/
       Delete) — nie ślepy cykl. **Świadomie zostaje jak było:** lista wciąż globalna dla
       wszystkich okien (nie per-window/per-projekt) — per-projekt scoping to T07.5.1, osobny task.
+- [x] **Text editor panel dla plików projektu — zażądane sesją 2026-08-21 ("bardzo ważne w
+      codziennej pracy"), zrobione, branch `task/12-ux/text-editor-panel`.** Vendorowany
+      `sjcmdev/ImGuiColorTextEdit` (fork z inną, nowszą wewnętrzną architekturą niż klasyczny
+      BalazsJako — `TextEditor::Render()` zwraca `documentChanged` zamiast osobnej flagi dirty;
+      `TextDiff.cpp`/`dtl.h` — opcjonalna funkcja diff, nie kompilowane, nieużywane). Fork bez
+      premake5.lua → lokalny `DefineImGuiColorTextEditProject()` (StaticLib, wzorzec `nfd`/
+      `ImGuizmo`). Jeden dockowalny panel (bez tabs — otwarcie kolejnego pliku podmienia treść),
+      double-click na dowolnym liściu w `ProjectTreePanel` → `ProjectEvents::TextFileOpenRequested`
+      → `EditorLayer` ładuje przez `TextFileIO::Load` do jedynej instancji panelu. `Ctrl+S` zapisuje
+      przez `TextFileIO::Save` (gating przez `IsWindowFocused`, żeby nie kolidować z globalnym
+      `system.save`/`project.save`). **Nie zrobione (MVP scope):** brak promptu "niezapisane zmiany"
+      przy podmianie pliku, brak syntax highlightingu dla INCAR/skryptów (`SetLanguage()` istnieje w
+      forku, nieużyte), brak wielu otwartych plików jednocześnie (tabs).
 - [ ] F2 rename w Scene Outliner (zależne od T08 SceneOutliner)
 - [ ] Viewport resolution tuning (redukcja GPU load)
 - [ ] Range selection z Shift w kolekcjach

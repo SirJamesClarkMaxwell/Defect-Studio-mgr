@@ -92,6 +92,7 @@ namespace DefectStudio
 		struct RootRemoveRequested;
 		struct RootPathChangedRequested;
 		struct BulkDirectoryChangeRequested;
+		struct TextFileOpenRequested;
 	}
 
 	namespace RendererEvents::Viewport
@@ -166,6 +167,8 @@ namespace DefectStudio
 		void onBulkDirectoryChangeRequested(const ProjectEvents::BulkDirectoryChangeRequested &event);
 		// T08.6.4: WAVECAR dragged from ProjectTreePanel onto an open structure's viewport.
 		void onWavecarDropped(const RendererEvents::Viewport::WavecarDropped &event);
+		// Text editor panel: double-click on any project-tree leaf file.
+		void onTextFileOpenRequested(const ProjectEvents::TextFileOpenRequested &event);
 
 		// Minimal stand-in for real T07.5.1 project persistence - see PersistedWindowRecord.
 		// Save happens once, at shutdown (OnDetach) - the alternative (a save call at every one of
@@ -212,6 +215,7 @@ namespace DefectStudio
 		Path m_ActiveProjectDirectory;
 		std::vector<ProjectRootEntry> m_AdHocRoots;
 		PanelId m_ProjectTreePanelId = 0;
+		PanelId m_TextEditorPanelId = 0;
 	};
 
 	template <typename TPanel, typename... Args>

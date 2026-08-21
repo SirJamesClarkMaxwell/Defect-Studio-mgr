@@ -290,6 +290,30 @@ local function DefineImGuizmoProject()
         filter {}
 end
 
+local function DefineImGuiColorTextEditProject()
+    project "ImGuiColorTextEdit"
+        kind "StaticLib"
+        language "C++"
+        cppdialect "C++17"
+        staticruntime "off"
+        warnings "Off"
+        ApplyDependencyPaths()
+
+        -- TextDiff.cpp/dtl.h are an optional diff-view feature we don't use - only the editor
+        -- widget itself (TextEditor.cpp) is compiled.
+        files { "Vendor/ImGuiColorTextEdit/TextEditor.cpp", "Vendor/ImGuiColorTextEdit/TextEditor.h" }
+        includedirs { "Vendor/ImGui" }
+
+        filter "system:windows"
+            systemversion "latest"
+            defines { "_CRT_SECURE_NO_WARNINGS" }
+
+        filter "system:linux"
+            pic "On"
+
+        filter {}
+end
+
 local function DefineNanobindProject()
     project "nanobind"
         kind (_DS_PYTHON_EMBED_AVAILABLE and "StaticLib" or "Utility")
@@ -345,6 +369,7 @@ DefineGoogleTestProjects()
 DefineTracyProject()
 DefineNativeFileDialogProject()
 DefineImGuizmoProject()
+DefineImGuiColorTextEditProject()
 DefineNanobindProject()
 group ""
 
@@ -371,6 +396,7 @@ ApplyDependencyRuntimeFilters("GoogleTest")
 ApplyDependencyRuntimeFilters("GoogleTestMain")
 ApplyDependencyRuntimeFilters("nfd")
 ApplyDependencyRuntimeFilters("ImGuizmo")
+ApplyDependencyRuntimeFilters("ImGuiColorTextEdit")
 ApplyDependencyRuntimeFilters("nanobind")
 
 project "nanobind"
@@ -487,6 +513,7 @@ project "DefectStudio"
         "Vendor/ImGui/backends",
         "Vendor/ImPlot",
         "Vendor/ImGuizmo",
+        "Vendor/ImGuiColorTextEdit",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/stb",
@@ -513,6 +540,7 @@ project "DefectStudio"
         "ImGui",
         "ImPlot",
         "ImGuizmo",
+        "ImGuiColorTextEdit",
         "nfd",
         "yaml-cpp"
     }
@@ -669,6 +697,7 @@ project "DefectStudioTests"
         "Vendor/ImGui/backends",
         "Vendor/ImPlot",
         "Vendor/ImGuizmo",
+        "Vendor/ImGuiColorTextEdit",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/stb",
@@ -691,6 +720,7 @@ project "DefectStudioTests"
         "ImGui",
         "ImPlot",
         "ImGuizmo",
+        "ImGuiColorTextEdit",
         "nfd",
         "yaml-cpp"
     }

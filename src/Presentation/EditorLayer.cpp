@@ -38,6 +38,7 @@
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
+#include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 
@@ -480,6 +481,7 @@ namespace DefectStudio
 			: Path("logs") / Path("event-log-export.csv");
 		registerPanel<LoggingPanel>(m_EventBus, m_LogRegistry, logExportPath, "Logging Panel", true);
 		m_ProjectTreePanelId = registerPanel<ProjectTreePanel>(m_EventBus, "Project Tree", true);
+		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		loadInitialProjectState();
 		if (auto rendererLayer = m_RendererLayer.lock())
 		{
@@ -936,6 +938,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onBulkDirectoryChangeRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::WavecarDropped>(
 			*m_EventBus, *this, &EditorLayer::onWavecarDropped, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::TextFileOpenRequested>(
+			*m_EventBus, *this, &EditorLayer::onTextFileOpenRequested, EventPriority::Normal));
 	}
 
 	void EditorLayer::loadInitialProjectState()
@@ -1125,6 +1129,15 @@ namespace DefectStudio
 			std::string error;
 			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
 				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after bulk reference change: {}", error);
+		}
+	}
+
+	void EditorLayer::onTextFileOpenRequested(const ProjectEvents::TextFileOpenRequested &event)
+	{
+		if (auto panel = findPanel(m_TextEditorPanelId).lock())
+		{
+			if (auto *textEditor = dynamic_cast<TextEditorPanel *>(panel.get()))
+				textEditor->OpenFile(event.path);
 		}
 	}
 

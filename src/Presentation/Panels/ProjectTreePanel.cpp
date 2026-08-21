@@ -315,6 +315,12 @@ namespace DefectStudio
 				ImGui::TreeNodeEx(idLabel.c_str(), leafFlags, "%s", label.c_str());
 				if (ImGui::IsItemClicked())
 					m_SelectedPath = pathKey;
+				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && m_EventBus != nullptr)
+				{
+					ProjectEvents::TextFileOpenRequested request;
+					request.path = entryPath;
+					m_EventBus->Queue(request);
+				}
 				// WAVECAR = drag-drop onto an open structure's viewport (T08.6.4); drop target lives
 				// in RendererPanel. POSCAR/CONTCAR deliberately stay context-menu-only (see "Open
 				// Defect" above) - user explicitly rejected drag-drop for those, see TODO.md T08.6.4.
