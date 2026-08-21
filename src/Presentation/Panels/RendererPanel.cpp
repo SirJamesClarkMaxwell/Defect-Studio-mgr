@@ -371,41 +371,27 @@ namespace DefectStudio
 		}
 	}
 
-	// Circle-select is a live brush, not a drag-defined shape: a plain click selects once at the
-	// click position (replace), Shift held while the mouse button is down paints continuously
-	// (add) as the brush follows the cursor, Ctrl held paints continuously (subtract).
+	// Circle-select is a live brush (Blender-style): holding the mouse button paints the
+	// selection continuously as the brush follows the cursor (add by default), Shift held
+	// switches the brush to subtract instead.
 	void RendererPanel::handleCircleSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered)
 	{
 		if (!hovered)
 			return;
 
+		if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			return;
+
 		const ImVec2 mousePos = ImGui::GetMousePos();
 		const glm::vec2 center(mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
-		ImGuiIO &io = ImGui::GetIO();
+		const ImGuiIO &io = ImGui::GetIO();
 
-		if (io.KeyShift && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-		{
-			publishRegionSelection(
-				windowState,
-				hitTestCircle(windowState, center, windowState.circleSelectRadius),
-				RendererEvents::Viewport::RegionSelectMode::Add);
-			return;
-		}
-		if (io.KeyCtrl && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-		{
-			publishRegionSelection(
-				windowState,
-				hitTestCircle(windowState, center, windowState.circleSelectRadius),
-				RendererEvents::Viewport::RegionSelectMode::Subtract);
-			return;
-		}
-		if (!io.KeyShift && !io.KeyCtrl && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-		{
-			publishRegionSelection(
-				windowState,
-				hitTestCircle(windowState, center, windowState.circleSelectRadius),
-				RendererEvents::Viewport::RegionSelectMode::Replace);
-		}
+		publishRegionSelection(
+			windowState,
+			hitTestCircle(windowState, center, windowState.circleSelectRadius),
+			io.KeyShift
+				? RendererEvents::Viewport::RegionSelectMode::Subtract
+				: RendererEvents::Viewport::RegionSelectMode::Add);
 	}
 
 	std::vector<std::size_t> RendererPanel::hitTestRect(
