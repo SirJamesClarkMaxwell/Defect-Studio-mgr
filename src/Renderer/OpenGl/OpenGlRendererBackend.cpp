@@ -476,6 +476,26 @@ namespace DefectStudio
 			resources.bondsDirty = true;
 			resources.lastVisibilityHash = visibilityHash;
 		}
+		// Catches atom-position edits that don't touch count/selection/visibility - e.g. an
+		// ImGuizmo drag (RendererPanel::renderTransformGizmo mutates cartesianPosition directly
+		// every frame while dragging). Without this, atoms/bonds only redraw their last-uploaded
+		// positions until some unrelated dirty condition above happens to fire.
+		std::size_t positionHash = 1469598103934665603ull;
+		for (const RendererAtomData &atom : structure.atoms)
+		{
+			for (int component = 0; component < 3; ++component)
+			{
+				std::uint32_t bits = 0;
+				std::memcpy(&bits, &atom.cartesianPosition[component], sizeof(bits));
+				positionHash ^= bits + 0x9e3779b97f4a7c15ull + (positionHash << 6) + (positionHash >> 2);
+			}
+		}
+		if (resources.lastPositionHash != positionHash)
+		{
+			resources.atomsDirty = true;
+			resources.bondsDirty = true;
+			resources.lastPositionHash = positionHash;
+		}
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
 		glClearColor(

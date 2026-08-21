@@ -58,6 +58,7 @@ namespace DefectStudio
 		std::size_t lastSelectedCount = 0;
 		std::size_t lastSelectionHash = 0;
 		std::size_t lastVisibilityHash = 0;
+		std::size_t lastPositionHash = 0;
 		std::string lastSourcePath;
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
