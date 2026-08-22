@@ -379,12 +379,13 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       domyślnie (znany błąd ze starego repo — pilnować przy porcie)
 - [ ] Sortowanie species w POSCAR malejąco po liczbie atomów. Użytkownik może zdefiniować swoją kolejność (zapisywać jako własność projektu)
 - [ ] `StructureSerializer` – serializacja do YAML na potrzeby projektu
-- [ ] Multi-import jako Kolekcje: kolejny POSCAR dołącza atomy jako nowa Kolekcja w istniejącej
-      scenie, auto-konwersja układu współrzędnych (Direct ↔ Cartesian), stem ścieżki → nazwa kolekcji
-      (zależne od modelu Kolekcji z T08)
-- [ ] Multi-structure support (wiele POSCAR w jednym projekcie) — częściowo pokryte przez
-      `StructureRegistry` (istnieje i jest wpięte w startup rendererowy, patrz T06.5), ale bez
-      pełnego workflow projektu/kolekcji
+- [ ] Multi-import: kolejny POSCAR otwiera **nowe renderer window** (nie dokłada do istniejącej
+      sceny) — **decyzja 2026-08-22: Collections odrzucone (zob. T08), oddzielne okna już dają
+      izolację, po którą sięgały Collections.** Auto-konwersja układu współrzędnych (Direct ↔
+      Cartesian) przy imporcie zostaje.
+- [ ] Multi-structure support (wiele POSCAR w jednym projekcie, każdy we własnym oknie) —
+      częściowo pokryte przez `StructureRegistry` (istnieje i jest wpięte w startup rendererowy,
+      patrz T06.5), workflow projektu (lista otwartych struktur, przełączanie) w `ProjectTreePanel`
 - [ ] Parser unit tests: POSCAR roundtrip, edge cases (Selective Dynamics, puste struktury)
 <!-- - [ ] CIF parser – import, konwersja do modelu wewnętrznego (pymatgen backend przez T05) —
       **zweryfikowane: brak w kodzie**
@@ -553,17 +554,19 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       **Nie zrobione w tym przejściu:** Change type (brak dedykowanego klawisza — flagowane już w
       planie sesji, wystawić jako pole/popup, nie globalny skrót), kopiuj/wklej (`Ctrl+C/V`),
       Add atom popup (wyżej) — obie potrzebują nowego UI (element combo + pola), osobny krok.
-- [ ] Ukryj (`H`) / odkryj wszystkie (`Alt+H`) — toggle `VisibilityComponent` per kolekcja
-<!-- - [ ] Extract to New Collection — przeniesienie zaznaczonych atomów do nowej Kolekcji -->
-- [ ] `SceneOutliner` panel – lista struktur/kolekcji z entt view, toggle widoczności, F2 rename
+- [ ] Ukryj (`H`) / odkryj wszystkie (`Alt+H`) — toggle `VisibilityComponent` per okno/struktura
+      (Collections odrzucone 2026-08-22, zob. T08 niżej — nie ma per-kolekcja podziału)
+- [ ] `SceneOutliner` panel – lista struktur z entt view (jedna struktura na okno), toggle
+      widoczności, F2 rename
 - [ ] `ObjectProperties` panel – właściwości wybranego atomu/struktury (translate przez pola numeryczne,
       uniform XYZ snap)
 - [ ] Auto-bond generation z modelem trwałym: global cutoff + **per-para pierwiastków z override**
       (dziś jest tylko global cutoff na poziomie renderera — per-para override z
-      `old-ds-functionality.md` §4.2 brak), spatial hash grid, bez wiązań między Kolekcjami
-- [ ] Manual bond add/remove z persystencją w projekcie — **decyzja 2026-08-21: skrót `F`**
-      (zaznacz 2 atomy → `F` łączy je wiązaniem, blenderowe "fill/connect"; zwalnia `F` z
-      `renderer.zoom_out` — zob. notatka o zoom keybindach niżej); ukryj pojedyncze wiązanie bez
+      `old-ds-functionality.md` §4.2 brak), spatial hash grid (jedna struktura per okno, więc bez
+      dodatkowego "między kolekcjami" wykluczenia — Collections odrzucone 2026-08-22, zob. T08)
+- [ ] Manual bond add/remove z persystencją w projekcie — **decyzja 2026-08-22: skrót `J`** (zaznacz
+      2 atomy → `J` łączy je wiązaniem; pierwotny wybór `F` z 2026-08-21 odrzucony — zajęty przez
+      "flip pinu etykiety o 180°", zob. rozwiązaną kolizję niżej); ukryj pojedyncze wiązanie bez
       usuwania z modelu, auto-ukrycie przy usunięciu atomu; etykiety długości wiązań w 3D (§4.4,
       zob. też "Pomiary" niżej — to ten sam etykietowy mechanizm)
 - [x] ImGuizmo transform (G/R/S) dla zaznaczonych atomów — zrobione 2026-08-21, branch
@@ -710,30 +713,25 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       panel od zaplanowanego "Python scripting panel" (Backlog, niżej) — jeden to ogólny shell, drugi
       to REPL z dostępem do `ds` module/sceny; oba mogą żyć w tej samej grupie doków ("Integrated
       tools"), ale to dwa różne zadania implementacyjne.
-- [ ] **⚠️ Kolizja klawisza `F` do zweryfikowania przed implementacją "Manual bond add" (linia
-      wyżej).** Plan z 2026-08-21 rezerwuje `F` na "zaznacz 2 atomy → połącz wiązaniem". Ta sesja
-      (2026-08-22) już zajęła gołe `F` (raw `ImGui::IsKeyPressed`, nie przez `KeymapResolver`) pod
-      "flip zaznaczonego pinu etykiety o 180°" (`RendererPanel::handlePinnedMeasurementInteraction`).
-      Oba czytają `F` bezwarunkowo gdy odpowiedni obiekt jest zaznaczony (pin vs atomy) — mogą się nie
-      gryźć w praktyce (różne selekcje zwykle aktywne naraz rzadko), ale **nie zweryfikowane**.
-      Sprawdzić przy implementacji bond-connect: czy pin i 2+ atomy mogą być zaznaczone jednocześnie,
-      i jeśli tak, który handler ma pierwszeństwo.
-- [ ] **Fundament: Kolekcje (Collections) — z `old-ds-functionality.md` §6, dziś tylko
-      `CollectionComponent` jako "structural placeholder - no Collections UI consumes this yet".**
-      Realny model (atom należy do dokładnie jednej Kolekcji, kontrolki w `SceneOutliner`: eye/lock/
-      kolor etykiety, rename, "Export Active Collection to POSCAR") **jest zależnością** kilku innych
-      już-śledzonych zadań, nie samodzielnym miłym dodatkiem: multi-import jako Kolekcje (T07, §1.2),
-      "Extract to New Collection" (dziś zakomentowane wyżej, czeka na to), auto-bond "bez wiązań
-      między Kolekcjami" (§4.1, dziś auto-bond tego nie rozróżnia w ogóle). **Decyzja do podjęcia
-      zanim ktokolwiek zacznie kodować którykolwiek z tamtych trzech:** budować Collections teraz jako
-      fundament, czy dalej odkładać i implementować tamte trzy bez podziału na kolekcje (upraszczając
-      zakres, np. multi-import zawsze do jednej płaskiej sceny).
-- [ ] **Groups (Blender-like, niezależne od Collections) — z `old-ds-functionality.md` §7, zero
-      trackingu dotąd, prawdopodobnie zbędne dla celu projektu (defekty/DFT, nie ogólne modelowanie
-      sceny).** Mechanizm cross-cutting (atom w wielu Grupach, niezależnie od jego jednej Kolekcji) do
-      dowolnego tagowania zaznaczeń. **Rekomendacja: nie budować** dopóki nie pojawi się konkretny
-      use-case specyficzny dla defektów (np. "grupa atomów wokół defektu X") — na razie zostaje jako
-      świadomie pominięte, nie milczący brak.
+- [x] **Kolizja klawisza `F` — rozwiązana 2026-08-22.** Plan z 2026-08-21 rezerwował `F` pod "zaznacz
+      2 atomy → połącz wiązaniem", ale gołe `F` już zajęte przez "flip pinu etykiety o 180°"
+      (`RendererPanel::handlePinnedMeasurementInteraction`, raw `ImGui::IsKeyPressed`, nie przez
+      `KeymapResolver`). Zamiast analizować czy zaznaczenia (pin vs 2+ atomy) faktycznie nachodzą na
+      siebie w praktyce — po prostu **manual bond add dostaje inny klawisz: `J`** (zob. wyżej). `F`
+      zostaje wyłącznie przy flip pinu, zero dzielenia klawisza.
+- [x] **Collections i Groups — odrzucone 2026-08-22 (decyzja użytkownika, nie odłożone).**
+      `old-ds-functionality.md` §6/§7 miały Collections/Groups jako sposób trzymania wielu
+      struktur/podzbiorów w jednej scenie z osobnym stanem widoczności. **Powód odrzucenia: appka
+      izoluje struktury przez osobne renderer windows, nie przez sub-sceny** — każdy import dostaje
+      własne okno (zob. multi-import w T07), więc problem który Collections miały rozwiązywać
+      (widoczność/kolor/eksport per podzbiór atomów w jednej scenie) tu nie występuje. `Groups` był
+      od początku "zbędny bez konkretnego use-case" — odpada razem z Collections. `CollectionComponent`
+      w kodzie zostaje jako martwy placeholder (usunięcie to osobne, niepilne sprzątanie — nic go nie
+      odczytuje, zero kosztu w utrzymywaniu). **Skutek dla zależnych zadań** (już zaktualizowane
+      wyżej): multi-import → osobne okno zamiast nowej Kolekcji; auto-bond per-para → bez klauzuli
+      "między Kolekcjami" (jedna struktura per okno i tak to daje za darmo); `SceneOutliner` → lista
+      struktur, nie struktur+kolekcji; "Extract to New Collection" (był zakomentowany) → usunięty,
+      bez sensu bez Kolekcji.
 - [ ] **Drobne luki z przeglądu `old-ds-functionality.md` (2026-08-22):**
   - [ ] Axis overlay: tryb **relatywny** (osie liczone względem zaznaczonych atomów, nie tylko
         globalny) — §2.2, dziś gizmo osi w rogu viewportu jest tylko globalne.
@@ -745,6 +743,36 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
         Phong/Blinn światło konfigurowalne z UI, PBR to osobny, większy krok jakości.
   - [ ] Stats panel (liczba atomów/wiązań/wydajność) i Viewport Info (diagnostyka) — z §13, oba
         zero trackingu, oba niski priorytet (informacyjne, nie blokują niczego).
+
+### Priorytetyzacja i kolejność implementacji (2026-08-22)
+
+> Konsoliduje wszystkie "luźne końce T08" + Replanning wyżej (Collections/Groups wyłączone —
+> odrzucone, nie priorytetyzowane) w jedną kolejność. Priorytet = wartość dla użytkownika /
+> ile innych zadań odblokowuje. Trudność = szacunek na podstawie tego co już istnieje w kodzie.
+
+| # | Zadanie | Priorytet | Trudność | Uzasadnienie kolejności |
+|---|---------|-----------|----------|--------------------------|
+| 1 | `SceneOutliner` panel | Wysoki | Łatwe–Średnie | Bez Collections zakres się skurczył (lista struktur, nie struktur+kolekcji) — teraz to głównie UI nad istniejącym `entt` view. Blokuje nic samo w sobie, ale wszystko poniżej jest wygodniejsze do testowania z listą-podglądem obok. |
+| 2 | `ObjectProperties` panel | Wysoki | Średnie | Numeryczne pola transform + miejsce, gdzie wyląduje UI per-atom customization (#9) — budować przed nią, nie po. |
+| 3 | Manual bond add/remove (`J`) | Wysoki | Średnie | Jawnie brakująca, częsta interakcja (parytet ze starą appką); bez zależności od reszty listy — może iść równolegle z #1/#2. |
+| 4 | Element Catalog editor panel | Średni | Łatwe–Średnie | Czysty UI nad już istniejącym `AtomStyleTable`/`ElementPropertiesTable` — zero nowego modelu danych, szybki zysk. |
+| 5 | Add atom przez współrzędne (popup) | Średni | Średnie | Samodzielne, jasno wyspecyfikowane (§3.3 starej appki), zero zależności blokujących. |
+| 6 | `BondComponent` + `SelectionComponent`/`VisibilityComponent` | Średni | Średnie | Techniczny fundament pod #7 i pod "ukryj pojedyncze wiązanie" z #3 — nie ma samodzielnej wartości UX, ale odblokowuje dwie rzeczy naraz. |
+| 7 | `Ctrl+1..4` tryby zaznaczania | Średni | Łatwe (po #6) | Trywialne po #6, bez sensu przed nim. |
+| 8 | Auto-bond: per-para override + model trwały + spatial hash grid | Średni | Trudne | Scope już mniejszy bez klauzuli "między Kolekcjami"; nadal największy pojedynczy kawałek pracy w tej grupie (persystencja + spatial index). |
+| 9 | Per-atom customization (kolor/rozmiar per instancja) | Średni | Średnie–Trudne | Wymaga decyzji renderer-only vs domenowe pole **przed** kodem — placeholder do dyskusji, potem żyje w `ObjectProperties` (#2). |
+| 10 | `ProjectTreePanel` `Ctrl+C/V/D` | Niski–Średni | Łatwe | Mechanicznie kopiuje już istniejący wzorzec z atom-clipboard (`RendererAtomEditCommands.cpp`) — tani, ale nie blokuje niczego innego. |
+| 11 | Scene Objects: Empty / Origin / Light | Niski–Średni | Średnie | Głównie potrzebne jako pełny cel dla Shift+A (#12); bez nich menu "Add" i tak działa (samo dodawanie atomów). |
+| 12 | Shift+A add menu | Niski–Średni | Łatwe (atom-only) / Średnie (pełne, po #11) | Można wypuścić okrojone (tylko Add Atom) zanim #11 gotowe. |
+| 13 | Displacement arrows (POSCAR→CONTCAR) | Niski–Średni | Trudne | Wartościowe dla DFT-workflow, ale wymaga weryfikacji czy `BondGenerator` ma już poprawny minimum-image w C++, inaczej dokłada Python/puntukas bridge. |
+| 14 | Integrated PowerShell terminal | Niski | Trudne | Infrastruktura (ConPTY albo rozszerzenie `ProcessRunner`), nie blokuje żadnej innej pozycji z tej listy. |
+| 15 | Drobne luki (axis overlay relative, render-export override, basic lighting, Stats/Viewport Info) | Niski | Łatwe (każde z osobna) | Wypełniacz między większymi zadaniami, nie samodzielny etap. |
+
+**Poza kolejnością:** bond scaling pivot (notatka na przyszłość, nie zadanie — zob. wyżej, aktualne
+dopiero gdy wiązania dostaną własny transform).
+
+**Rekomendowana kolejność sesji:** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14,
+z #15 dobieranym opportunistycznie (małe, łatwo wcisnąć między większe kawałki bez przerywania toku).
 
 **Biblioteki:** entt
 
