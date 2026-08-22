@@ -676,6 +676,76 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] CWD fix: ustaw CWD na katalog exe przy starcie (`GetModuleFileNameA`)
 - [ ] Touchpad support
 
+### Replanning 2026-08-22 (rozszerzony zakres, na żądanie użytkownika)
+
+> Skonsolidowane po zamknięciu MSDF labels (T09). Nie duplikuje bulletów wyżej (Add atom popup,
+> Shift+A menu, `SceneOutliner`/`ObjectProperties`, auto-bond per-para override, `Ctrl+1..4`,
+> displacement arrows — wszystkie już tam, tylko odsyłacz) — dokłada to czego tam nie było.
+
+- [ ] **Element Catalog editor panel (nowe) — z `old-ds-functionality.md` §11.1, brak jakiegokolwiek
+      trackingu w TODO dotąd.** UI edytujące globalną tabelę kolor/promień per pierwiastek (dane już
+      istnieją: `AtomStyleTable`/`AtomStyleIO`, `ElementPropertiesTable` z T07 — brakuje tylko panelu
+      do ich edycji, nie modelu danych). Periodic Table picker już istnieje
+      (`RendererPanel::drawPeriodicTableWindow`) jako osobna rzecz — Element Catalog to tabelaryczny
+      widok wszystkich pierwiastków naraz (kolor, promień, ewentualnie inne flagi wyglądu), nie picker
+      pojedynczego.
+- [ ] **Customizacja pojedynczego atomu (nowe, szersze niż stary projekt).** Stary projekt miał
+      tylko override **per pierwiastek** (Element Catalog + per-projekt override, T12 już to
+      trackuje). To co teraz proszone: override **per konkretny atom** (np. "ten jeden węgiel ma być
+      czerwony/większy, reszta węgli bez zmian") — inny, drobniejszy poziom niż per-species. Wymaga
+      pola na `AtomSite`/`RendererAtomData` (dziś koloru/promienia atom dostaje wyłącznie z tabeli
+      per-species, zero per-instancji override) + UI w `ObjectProperties` (wyżej) do go ustawiać.
+      Zdecydować przy starcie: renderer-only (jak dziś appearance) czy persystowane w projekcie —
+      **jeśli persystowane, to prawdopodobnie domenowe pole**, nie renderer-side.
+- [ ] **`Ctrl+C`/`Ctrl+V`/`Ctrl+D` dla `ProjectTreePanel` (nowe) — kopiuj/wklej/duplikuj pliki i
+      foldery w drzewku projektu**, jak w eksploratorze plików. Inne niż istniejące `Ctrl+C/V/D` na
+      atomach w viewporcie (`RendererAtomEditCommands.cpp`) — kolizja nazw skrótów tylko jeśli oba
+      konteksty mogłyby być aktywne naraz; do zweryfikowania przy implementacji czy `KeymapResolver`
+      context (`renderer.viewport.focused` vs focus na drzewku) już to naturalnie rozdziela, czy
+      potrzeba osobnego kontekstu dla `ProjectTreePanel`.
+- [ ] **Integrated PowerShell terminal panel (nowe)** — dockowalny panel z żywym PowerShell (Windows;
+      docelowo też bash/sh na Linux per T03 cross-platform). Wzorzec do zbadania: `Core/Platform/
+      ProcessRunner` już obsługuje subprocess z I/O (używany dla Pythona) — sprawdzić czy da się
+      reużyć do interaktywnego PTY-like terminala, czy to inny mechanizm (Windows ConPTY). Osobny
+      panel od zaplanowanego "Python scripting panel" (Backlog, niżej) — jeden to ogólny shell, drugi
+      to REPL z dostępem do `ds` module/sceny; oba mogą żyć w tej samej grupie doków ("Integrated
+      tools"), ale to dwa różne zadania implementacyjne.
+- [ ] **⚠️ Kolizja klawisza `F` do zweryfikowania przed implementacją "Manual bond add" (linia
+      wyżej).** Plan z 2026-08-21 rezerwuje `F` na "zaznacz 2 atomy → połącz wiązaniem". Ta sesja
+      (2026-08-22) już zajęła gołe `F` (raw `ImGui::IsKeyPressed`, nie przez `KeymapResolver`) pod
+      "flip zaznaczonego pinu etykiety o 180°" (`RendererPanel::handlePinnedMeasurementInteraction`).
+      Oba czytają `F` bezwarunkowo gdy odpowiedni obiekt jest zaznaczony (pin vs atomy) — mogą się nie
+      gryźć w praktyce (różne selekcje zwykle aktywne naraz rzadko), ale **nie zweryfikowane**.
+      Sprawdzić przy implementacji bond-connect: czy pin i 2+ atomy mogą być zaznaczone jednocześnie,
+      i jeśli tak, który handler ma pierwszeństwo.
+- [ ] **Fundament: Kolekcje (Collections) — z `old-ds-functionality.md` §6, dziś tylko
+      `CollectionComponent` jako "structural placeholder - no Collections UI consumes this yet".**
+      Realny model (atom należy do dokładnie jednej Kolekcji, kontrolki w `SceneOutliner`: eye/lock/
+      kolor etykiety, rename, "Export Active Collection to POSCAR") **jest zależnością** kilku innych
+      już-śledzonych zadań, nie samodzielnym miłym dodatkiem: multi-import jako Kolekcje (T07, §1.2),
+      "Extract to New Collection" (dziś zakomentowane wyżej, czeka na to), auto-bond "bez wiązań
+      między Kolekcjami" (§4.1, dziś auto-bond tego nie rozróżnia w ogóle). **Decyzja do podjęcia
+      zanim ktokolwiek zacznie kodować którykolwiek z tamtych trzech:** budować Collections teraz jako
+      fundament, czy dalej odkładać i implementować tamte trzy bez podziału na kolekcje (upraszczając
+      zakres, np. multi-import zawsze do jednej płaskiej sceny).
+- [ ] **Groups (Blender-like, niezależne od Collections) — z `old-ds-functionality.md` §7, zero
+      trackingu dotąd, prawdopodobnie zbędne dla celu projektu (defekty/DFT, nie ogólne modelowanie
+      sceny).** Mechanizm cross-cutting (atom w wielu Grupach, niezależnie od jego jednej Kolekcji) do
+      dowolnego tagowania zaznaczeń. **Rekomendacja: nie budować** dopóki nie pojawi się konkretny
+      use-case specyficzny dla defektów (np. "grupa atomów wokół defektu X") — na razie zostaje jako
+      świadomie pominięte, nie milczący brak.
+- [ ] **Drobne luki z przeglądu `old-ds-functionality.md` (2026-08-22):**
+  - [ ] Axis overlay: tryb **relatywny** (osie liczone względem zaznaczonych atomów, nie tylko
+        globalny) — §2.2, dziś gizmo osi w rogu viewportu jest tylko globalne.
+      - [ ] Render Image: tryb override tła (białe tło) i nadpisania kolorów atomów przy eksporcie —
+        §12, `ExportImagePanel` dziś ma tylko toggle widoczności warstw (atoms/bonds/cell/grid/
+        labels), nie color override.
+      - [ ] Podstawowa kontrola oświetlenia (pozycja/intensywność/kolor ambient-diffuse-specular) —
+        §11.3. Prawdopodobnie prerekwizyt dla "PBR lighting" z T09, nie ten sam zakres: to jest zwykłe
+        Phong/Blinn światło konfigurowalne z UI, PBR to osobny, większy krok jakości.
+  - [ ] Stats panel (liczba atomów/wiązań/wydajność) i Viewport Info (diagnostyka) — z §13, oba
+        zero trackingu, oba niski priorytet (informacyjne, nie blokują niczego).
+
 **Biblioteki:** entt
 
 ---
@@ -1172,7 +1242,9 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       snippetu Pythona przeciw `ds` + output/error pane to małe (reuse `PythonInterpreter`
       RAII/GIL z T05); pełne autocomplete-jak-w-ipython dla składni i ścieżek to osobny, znacznie
       większy kawałek (introspekcja obiektów `ds`, filesystem completion) — nie robić na starcie
-      w jednym kroku z MVP.
+      w jednym kroku z MVP. **Siostrzane zadanie, zażądane 2026-08-22:** integrated PowerShell
+      terminal panel (T08 replanning wyżej) — ogólny shell, nie REPL ze scenom; oba mogą dzielić
+      grupę doków "Integrated tools", ale to osobne zadania implementacyjne.
 - [ ] **Energetyka i DFT (`old-ds-functionality.md` §16.4):** uruchamianie VASP/Quantum ESPRESSO
       ze sceny (przez `PythonScriptJob`), monitorowanie konwergencji SCF na żywo (parsing OUTCAR/log),
       import sił na atomy z OUTCAR + wizualizacja wektorów, formation energy calculator
