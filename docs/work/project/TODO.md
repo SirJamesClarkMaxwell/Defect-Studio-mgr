@@ -746,33 +746,66 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 ### Priorytetyzacja i kolejność implementacji (2026-08-22)
 
-> Konsoliduje wszystkie "luźne końce T08" + Replanning wyżej (Collections/Groups wyłączone —
-> odrzucone, nie priorytetyzowane) w jedną kolejność. Priorytet = wartość dla użytkownika /
-> ile innych zadań odblokowuje. Trudność = szacunek na podstawie tego co już istnieje w kodzie.
+> Konsoliduje "luźne końce T08" + Replanning wyżej + dwie rzeczy zostawione osierocone w T12/Backlog
+> przy poprzedniej konsolidacji (multi-tab text editor + INCAR highlighting, Python/ipython console)
+> — Collections/Groups wyłączone, odrzucone. Priorytet = wartość dla użytkownika / ile innych zadań
+> odblokowuje. Trudność = szacunek na podstawie tego co już istnieje w kodzie.
 
-| # | Zadanie | Priorytet | Trudność | Uzasadnienie kolejności |
-|---|---------|-----------|----------|--------------------------|
-| 1 | `SceneOutliner` panel | Wysoki | Łatwe–Średnie | Bez Collections zakres się skurczył (lista struktur, nie struktur+kolekcji) — teraz to głównie UI nad istniejącym `entt` view. Blokuje nic samo w sobie, ale wszystko poniżej jest wygodniejsze do testowania z listą-podglądem obok. |
-| 2 | `ObjectProperties` panel | Wysoki | Średnie | Numeryczne pola transform + miejsce, gdzie wyląduje UI per-atom customization (#9) — budować przed nią, nie po. |
-| 3 | Manual bond add/remove (`J`) | Wysoki | Średnie | Jawnie brakująca, częsta interakcja (parytet ze starą appką); bez zależności od reszty listy — może iść równolegle z #1/#2. |
-| 4 | Element Catalog editor panel | Średni | Łatwe–Średnie | Czysty UI nad już istniejącym `AtomStyleTable`/`ElementPropertiesTable` — zero nowego modelu danych, szybki zysk. |
-| 5 | Add atom przez współrzędne (popup) | Średni | Średnie | Samodzielne, jasno wyspecyfikowane (§3.3 starej appki), zero zależności blokujących. |
-| 6 | `BondComponent` + `SelectionComponent`/`VisibilityComponent` | Średni | Średnie | Techniczny fundament pod #7 i pod "ukryj pojedyncze wiązanie" z #3 — nie ma samodzielnej wartości UX, ale odblokowuje dwie rzeczy naraz. |
-| 7 | `Ctrl+1..4` tryby zaznaczania | Średni | Łatwe (po #6) | Trywialne po #6, bez sensu przed nim. |
-| 8 | Auto-bond: per-para override + model trwały + spatial hash grid | Średni | Trudne | Scope już mniejszy bez klauzuli "między Kolekcjami"; nadal największy pojedynczy kawałek pracy w tej grupie (persystencja + spatial index). |
-| 9 | Per-atom customization (kolor/rozmiar per instancja) | Średni | Średnie–Trudne | Wymaga decyzji renderer-only vs domenowe pole **przed** kodem — placeholder do dyskusji, potem żyje w `ObjectProperties` (#2). |
-| 10 | `ProjectTreePanel` `Ctrl+C/V/D` | Niski–Średni | Łatwe | Mechanicznie kopiuje już istniejący wzorzec z atom-clipboard (`RendererAtomEditCommands.cpp`) — tani, ale nie blokuje niczego innego. |
-| 11 | Scene Objects: Empty / Origin / Light | Niski–Średni | Średnie | Głównie potrzebne jako pełny cel dla Shift+A (#12); bez nich menu "Add" i tak działa (samo dodawanie atomów). |
-| 12 | Shift+A add menu | Niski–Średni | Łatwe (atom-only) / Średnie (pełne, po #11) | Można wypuścić okrojone (tylko Add Atom) zanim #11 gotowe. |
-| 13 | Displacement arrows (POSCAR→CONTCAR) | Niski–Średni | Trudne | Wartościowe dla DFT-workflow, ale wymaga weryfikacji czy `BondGenerator` ma już poprawny minimum-image w C++, inaczej dokłada Python/puntukas bridge. |
-| 14 | Integrated PowerShell terminal | Niski | Trudne | Infrastruktura (ConPTY albo rozszerzenie `ProcessRunner`), nie blokuje żadnej innej pozycji z tej listy. |
-| 15 | Drobne luki (axis overlay relative, render-export override, basic lighting, Stats/Viewport Info) | Niski | Łatwe (każde z osobna) | Wypełniacz między większymi zadaniami, nie samodzielny etap. |
+1. **`SceneOutliner` panel** — Priorytet: wysoki. Trudność: łatwe–średnie. Bez Collections zakres
+   się skurczył (lista struktur, nie struktur+kolekcji) — głównie UI nad już istniejącym `entt`
+   view. Nic samo w sobie nie blokuje, ale wszystko poniżej wygodniej testować z listą obok.
+2. **`ObjectProperties` panel** — Priorytet: wysoki. Trudność: średnie. Numeryczne pola transform +
+   miejsce, gdzie wyląduje UI per-atom customization (#10) — budować przed nią, nie po.
+3. **Manual bond add/remove (`J`)** — Priorytet: wysoki. Trudność: średnie. Jawnie brakująca, częsta
+   interakcja (parytet ze starą appką); bez zależności od reszty listy, może iść równolegle z #1/#2.
+4. **Python console (integrated ipython-style REPL)** — Priorytet: wysoki. Trudność: trudne. Już raz
+   jawnie zażądane (2026-08-21, priorytet podniesiony z Backlogu) — wysoka wartość mimo dużego
+   nakładu (RAII/GIL przez `ScientificRuntime`, hot-reload przez `efsw`, autocomplete jak w ipythonie
+   to osobny, większy podkrok). Niezależne od #1-3, można ciągnąć równolegle innym torem.
+5. **Element Catalog editor panel** — Priorytet: średni. Trudność: łatwe–średnie. Czysty UI nad już
+   istniejącym `AtomStyleTable`/`ElementPropertiesTable` — zero nowego modelu danych, szybki zysk.
+6. **Text editor: multi-tab + syntax highlighting dla INCAR/skryptów** — Priorytet: średni. Trudność:
+   łatwe–średnie. Oba od dawna zanotowane jako "Nie zrobione (MVP scope)" przy już wysłanym panelu
+   (T12, `EditorLayer`) — highlighting to włączenie istniejącego, nieużywanego `SetLanguage()` na
+   forku `ImGuiColorTextEdit`; tabs to nowy stan (lista otwartych dokumentów + dirty per tab + prompt
+   przy zamykaniu niezapisanego).
+7. **Add atom przez współrzędne (popup)** — Priorytet: średni. Trudność: średnie. Samodzielne, jasno
+   wyspecyfikowane (§3.3 starej appki), zero zależności blokujących.
+8. **`BondComponent` + `SelectionComponent`/`VisibilityComponent`** — Priorytet: średni. Trudność:
+   średnie. Techniczny fundament pod #9 i pod "ukryj pojedyncze wiązanie" z #3 — brak samodzielnej
+   wartości UX, ale odblokowuje dwie rzeczy naraz.
+9. **`Ctrl+1..4` tryby zaznaczania** — Priorytet: średni. Trudność: łatwe (po #8). Trywialne po #8,
+   bez sensu przed nim.
+10. **Auto-bond: per-para override + model trwały + spatial hash grid** — Priorytet: średni.
+    Trudność: trudne. Scope już mniejszy bez klauzuli "między Kolekcjami"; nadal największy
+    pojedynczy kawałek pracy w tej grupie (persystencja + spatial index).
+11. **Per-atom customization (kolor/rozmiar per instancja)** — Priorytet: średni. Trudność:
+    średnie–trudne. Wymaga decyzji renderer-only vs domenowe pole **przed** kodem, potem żyje w
+    `ObjectProperties` (#2).
+12. **`ProjectTreePanel` `Ctrl+C/V/D`** — Priorytet: niski–średni. Trudność: łatwe. Mechanicznie
+    kopiuje już istniejący wzorzec z atom-clipboard (`RendererAtomEditCommands.cpp`) — tani, nie
+    blokuje niczego innego.
+13. **Scene Objects: Empty / Origin / Light** — Priorytet: niski–średni. Trudność: średnie. Głównie
+    potrzebne jako pełny cel dla Shift+A (#14); bez nich menu "Add" i tak działa (samo dodawanie
+    atomów).
+14. **Shift+A add menu** — Priorytet: niski–średni. Trudność: łatwe (atom-only) / średnie (pełne, po
+    #13). Można wypuścić okrojone (tylko Add Atom) zanim #13 gotowe.
+15. **Displacement arrows (POSCAR→CONTCAR)** — Priorytet: niski–średni. Trudność: trudne. Wartościowe
+    dla DFT-workflow, ale wymaga weryfikacji czy `BondGenerator` ma już poprawny minimum-image w
+    C++, inaczej dokłada Python/puntukas bridge.
+16. **Integrated PowerShell terminal** — Priorytet: niski. Trudność: trudne. Infrastruktura (ConPTY
+    albo rozszerzenie `ProcessRunner`), nie blokuje żadnej innej pozycji z tej listy.
+17. **Drobne luki** (axis overlay relative, render-export override, basic lighting, Stats/Viewport
+    Info) — Priorytet: niski. Trudność: łatwe (każde z osobna). Wypełniacz między większymi
+    zadaniami, nie samodzielny etap.
 
 **Poza kolejnością:** bond scaling pivot (notatka na przyszłość, nie zadanie — zob. wyżej, aktualne
 dopiero gdy wiązania dostaną własny transform).
 
-**Rekomendowana kolejność sesji:** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14,
-z #15 dobieranym opportunistycznie (małe, łatwo wcisnąć między większe kawałki bez przerywania toku).
+**Rekomendowana kolejność sesji:** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15
+→ 16, z #17 dobieranym opportunistycznie (małe, łatwo wcisnąć między większe kawałki bez przerywania
+toku). #4 (Python console) niezależne — może się przesunąć wcześniej/później bez psucia reszty
+kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
 
 **Biblioteki:** entt
 
@@ -1141,7 +1174,8 @@ z #15 dobieranym opportunistycznie (małe, łatwo wcisnąć między większe kaw
       przez `TextFileIO::Save` (gating przez `IsWindowFocused`, żeby nie kolidować z globalnym
       `system.save`/`project.save`). **Nie zrobione (MVP scope):** brak promptu "niezapisane zmiany"
       przy podmianie pliku, brak syntax highlightingu dla INCAR/skryptów (`SetLanguage()` istnieje w
-      forku, nieużyte), brak wielu otwartych plików jednocześnie (tabs).
+      forku, nieużyte), brak wielu otwartych plików jednocześnie (tabs) — oba dwa
+      spriorytetyzowane razem jako #6 w T08 "Priorytetyzacja i kolejność implementacji" wyżej.
 - [ ] F2 rename w Scene Outliner (zależne od T08 SceneOutliner)
 - [ ] Viewport resolution tuning (redukcja GPU load)
 - [ ] Range selection z Shift w kolekcjach
@@ -1272,7 +1306,9 @@ z #15 dobieranym opportunistycznie (małe, łatwo wcisnąć między większe kaw
       większy kawałek (introspekcja obiektów `ds`, filesystem completion) — nie robić na starcie
       w jednym kroku z MVP. **Siostrzane zadanie, zażądane 2026-08-22:** integrated PowerShell
       terminal panel (T08 replanning wyżej) — ogólny shell, nie REPL ze scenom; oba mogą dzielić
-      grupę doków "Integrated tools", ale to osobne zadania implementacyjne.
+      grupę doków "Integrated tools", ale to osobne zadania implementacyjne. **Spriorytetyzowane
+      razem z resztą jako #4 w T08 "Priorytetyzacja i kolejność implementacji" wyżej** (PowerShell
+      terminal tam jako #16 — Python console wyżej w kolejności, PowerShell niżej).
 - [ ] **Energetyka i DFT (`old-ds-functionality.md` §16.4):** uruchamianie VASP/Quantum ESPRESSO
       ze sceny (przez `PythonScriptJob`), monitorowanie konwergencji SCF na żywo (parsing OUTCAR/log),
       import sił na atomy z OUTCAR + wizualizacja wektorów, formation energy calculator
