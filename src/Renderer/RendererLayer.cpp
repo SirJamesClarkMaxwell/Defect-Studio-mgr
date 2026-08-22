@@ -1524,6 +1524,13 @@ namespace DefectStudio
 		m_ExportDialog.previewState.showCellBox = windowState->showCellBox;
 		m_ExportDialog.previewState.showGrid = windowState->showGrid;
 		m_ExportDialog.previewState.selectedAtomIndices = windowState->selectedAtomIndices;
+		// Pinned bond/angle labels were rendered live but silently dropped from every export until
+		// now - previewState is a fresh RendererWindowState, not a copy of the real window, so its
+		// pinnedMeasurements stayed empty and renderLabels() had nothing to draw regardless of the
+		// "Labels" checkbox. No selection highlight in the exported image (selectedPinnedMeasurement
+		// left at its default -1) since a click-selection is interaction state, not part of the scene.
+		m_ExportDialog.previewState.pinnedMeasurements = windowState->pinnedMeasurements;
+		m_ExportDialog.previewState.bondLabelsAlignToDirection = windowState->bondLabelsAlignToDirection;
 
 		m_ExportDialog.filename = windowState->title.empty() ? "structure" : windowState->title;
 	}
@@ -1747,6 +1754,10 @@ namespace DefectStudio
 						windowState, {bond.firstAtomIndex, bond.secondAtomIndex}, bond.secondAtomPeriodicOffset,
 						/*removeIfPresent=*/false);
 			}
+			// One resync after the whole batch, not per pin inside the loop above - SyncLabelEntities
+			// destroys/recreates every label entity, so doing it per-toggle would be O(pins²) for a
+			// bulk press over a large selection.
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 
 		// With more than 3 atoms in atomSet, pins one angle per actual bonded pair-at-a-vertex within
@@ -1783,6 +1794,9 @@ namespace DefectStudio
 				ToggleMeasurementPin(
 					windowState, std::vector<std::size_t>(atomSet.begin(), atomSet.end()), glm::vec3(0.0f),
 					/*removeIfPresent=*/false);
+
+			// One resync after the whole batch - see AddBondPinsWithinSet's matching comment.
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 
 		// Removes every existing pin of the given size (2 = bond, 3 = angle) whose atoms are ALL
@@ -1809,6 +1823,7 @@ namespace DefectStudio
 				else if (windowState.selectedPinnedMeasurement > static_cast<int>(i))
 					--windowState.selectedPinnedMeasurement;
 			}
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 	} // namespace
 

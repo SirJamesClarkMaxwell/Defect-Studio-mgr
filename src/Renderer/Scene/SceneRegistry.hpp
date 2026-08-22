@@ -83,10 +83,31 @@ namespace DefectStudio
 			return Entity(m_BondEntities[index], this);
 		}
 
+		// Index -> entity lookup for pinned measurement labels, same shape as AtomEntities/BondEntities
+		// above but populated by SceneSystem::SyncLabelEntities from
+		// RendererWindowState::pinnedMeasurements instead of RendererStructureData.
+		[[nodiscard]] std::vector<entt::entity> &LabelEntities()
+		{
+			return m_LabelEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &LabelEntities() const
+		{
+			return m_LabelEntities;
+		}
+
+		[[nodiscard]] Entity LabelEntityAt(std::size_t index)
+		{
+			if (index >= m_LabelEntities.size())
+				return Entity{};
+			return Entity(m_LabelEntities[index], this);
+		}
+
 	private:
 		entt::registry m_Registry;
 		std::vector<entt::entity> m_AtomEntities;
 		std::vector<entt::entity> m_BondEntities;
+		std::vector<entt::entity> m_LabelEntities;
 	};
 
 	template <typename T, typename... Args>

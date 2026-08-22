@@ -1354,11 +1354,12 @@ namespace DefectStudio
 		}
 		else if (!pinnedMeasurements.empty())
 		{
-			// screenOffset is a camera-right/up world-space nudge (see PinnedMeasurement) - computed
-			// from the CURRENT view matrix every frame, same basis vectors labels.vert derives for
-			// billboarding, so a dragged-apart label stays visually offset as the atoms move but will
-			// gently swim if the user orbits the camera afterwards (acceptable for "separate two
-			// overlapping labels", not meant to be a fixed 3D handle).
+			// worldOffset (see PinnedMeasurement) is a fixed 3D world-space nudge as of Etap F, not a
+			// camera-relative one - a dragged-apart label now stays put in world space regardless of
+			// how the camera orbits afterwards (the old screenOffset predecessor swam when orbiting;
+			// see RendererWindowState.hpp's comment on worldOffset for how it is still written to via
+			// the same camera-right/up projection during a plain click-drag). cameraRight/cameraUp are
+			// still needed below for bond-direction label alignment, independent of the offset itself.
 			const glm::mat4 offsetView = camera.ViewMatrix();
 			const glm::vec3 cameraRight(offsetView[0][0], offsetView[1][0], offsetView[2][0]);
 			const glm::vec3 cameraUp(offsetView[0][1], offsetView[1][1], offsetView[2][1]);
@@ -1368,7 +1369,7 @@ namespace DefectStudio
 				const RendererWindowState::PinnedMeasurement &pin = pinnedMeasurements[pinIndex];
 				const glm::vec4 &color =
 					static_cast<int>(pinIndex) == selectedPinnedMeasurement ? kPinnedLabelSelectedColor : kLabelColor;
-				const glm::vec3 offset = cameraRight * pin.screenOffset.x + cameraUp * pin.screenOffset.y;
+				const glm::vec3 offset = pin.worldOffset;
 
 				if (pin.atomIndices.size() == 2)
 				{

@@ -40,5 +40,20 @@ namespace DefectStudio
 			const RendererStructureData &targetStructure,
 			const std::vector<glm::vec3> &positions,
 			float tolerance = 0.35f);
+
+		// (Re)builds one entity per pinned measurement from windowState.pinnedMeasurements, destroying
+		// any label entities from a previous sync first - same "resync on structural change" shape as
+		// SyncSceneWithStructure, not a per-frame rebuild. Call after any pin add/remove.
+		void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState);
+
+		// Refreshes every label entity's TransformComponent.position from its pin's CURRENT anchor
+		// (bond midpoint / angle vertex) + worldOffset. Cheap enough to call every frame - pinned
+		// measurements are few, and the anchor moves with the atoms it measures (gizmo drag, nudge,
+		// relaxation playback), so a stale transform would visibly lag behind the label's own draw.
+		void UpdateLabelTransforms(SceneRegistry &scene, const RendererWindowState &windowState);
+
+		// Mirrors windowState.selectedPinnedMeasurement into the matching label entity's
+		// SelectionComponent (all others cleared). Call after any change to selectedPinnedMeasurement.
+		void SyncLabelSelection(SceneRegistry &scene, const RendererWindowState &windowState);
 	} // namespace SceneSystem
 } // namespace DefectStudio

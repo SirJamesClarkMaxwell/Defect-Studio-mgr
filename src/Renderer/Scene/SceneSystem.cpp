@@ -2,6 +2,7 @@
 
 #include "Renderer/Scene/SceneSystem.hpp"
 
+#include <algorithm>
 #include <unordered_set>
 
 #include "Renderer/RendererWindowState.hpp"
@@ -114,5 +115,82 @@ namespace DefectStudio::SceneSystem
 				resolvedIndices.push_back(bestIndex);
 		}
 		return resolvedIndices;
+	}
+
+	namespace
+	{
+		// Same anchor formula as RendererPanel::handlePinnedMeasurementInteraction's resolveAnchor
+		// lambda (bond midpoint / angle vertex + worldOffset) - ignores a bond's periodic-image shift
+		// like that lambda does, fine for a gizmo pivot/hit-test, not the precise render (see
+		// OpenGlRendererBackend::renderLabels, which matches the exact periodic bond image instead).
+		[[nodiscard]] bool ResolveLabelAnchor(
+			const RendererStructureData &structure, const RendererWindowState::PinnedMeasurement &pin, glm::vec3 &outAnchor)
+		{
+			const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(),
+				[&](const std::size_t index) { return index < structure.atoms.size(); });
+			if (!inRange)
+				return false;
+
+			if (pin.atomIndices.size() == 2)
+			{
+				outAnchor =
+					(structure.atoms[pin.atomIndices[0]].cartesianPosition + structure.atoms[pin.atomIndices[1]].cartesianPosition) *
+					0.5f;
+			}
+			else if (pin.atomIndices.size() == 3)
+			{
+				const std::size_t vertexIndex = ResolveAngleVertexIndex(structure, pin.atomIndices);
+				outAnchor = structure.atoms[vertexIndex].cartesianPosition;
+			}
+			else
+			{
+				return false;
+			}
+			outAnchor += pin.worldOffset;
+			return true;
+		}
+	} // namespace
+
+	void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState)
+	{
+		for (const entt::entity entity : scene.LabelEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.LabelEntities().clear();
+
+		scene.LabelEntities().reserve(windowState.pinnedMeasurements.size());
+		for (std::size_t index = 0; index < windowState.pinnedMeasurements.size(); ++index)
+		{
+			Entity entity = scene.CreateEntity();
+			glm::vec3 anchor(0.0f);
+			(void)ResolveLabelAnchor(windowState.structure, windowState.pinnedMeasurements[index], anchor);
+			entity.AddComponent<TransformComponent>(TransformComponent{anchor});
+			entity.AddComponent<LabelComponent>(LabelComponent{index});
+			entity.AddComponent<SelectionComponent>(
+				SelectionComponent{index == static_cast<std::size_t>(windowState.selectedPinnedMeasurement)});
+			scene.LabelEntities().push_back(static_cast<entt::entity>(entity));
+		}
+	}
+
+	void UpdateLabelTransforms(SceneRegistry &scene, const RendererWindowState &windowState)
+	{
+		const std::vector<entt::entity> &labelEntities = scene.LabelEntities();
+		for (std::size_t index = 0; index < labelEntities.size() && index < windowState.pinnedMeasurements.size(); ++index)
+		{
+			glm::vec3 anchor(0.0f);
+			if (!ResolveLabelAnchor(windowState.structure, windowState.pinnedMeasurements[index], anchor))
+				continue;
+			Entity entity(labelEntities[index], &scene);
+			entity.GetComponent<TransformComponent>().position = anchor;
+		}
+	}
+
+	void SyncLabelSelection(SceneRegistry &scene, const RendererWindowState &windowState)
+	{
+		const std::vector<entt::entity> &labelEntities = scene.LabelEntities();
+		for (std::size_t index = 0; index < labelEntities.size(); ++index)
+		{
+			Entity entity(labelEntities[index], &scene);
+			entity.GetComponent<SelectionComponent>().selected = index == static_cast<std::size_t>(windowState.selectedPinnedMeasurement);
+		}
 	}
 } // namespace DefectStudio::SceneSystem

@@ -54,6 +54,8 @@ namespace DefectStudio
 		void drawPeriodicTableWindow();
 		[[nodiscard]] bool renderTransformGizmo(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		[[nodiscard]] bool renderLabelTransformGizmo(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool handlePinnedMeasurementInteraction(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool handleCursor3DPlacement(

@@ -57,4 +57,15 @@ namespace DefectStudio
 	{
 		std::string collectionId = "default";
 	};
+	// Back-reference into RendererWindowState::pinnedMeasurements[measurementIndex] - mirrors
+	// AtomComponent's atomIndex pattern. One entity per pinned bond/angle measurement label,
+	// synced by SceneSystem::SyncLabelEntities whenever a pin is added/removed. TransformComponent
+	// on this entity holds the label's live resolved world position (anchor + worldOffset),
+	// refreshed every frame by SceneSystem::UpdateLabelTransforms since the anchor moves with the
+	// atoms it measures; SelectionComponent mirrors RendererWindowState::selectedPinnedMeasurement
+	// (single-select today - see SceneSystem::SyncLabelSelection).
+	struct LabelComponent
+	{
+		std::size_t measurementIndex = 0;
+	};
 } // namespace DefectStudio

@@ -50,13 +50,21 @@ namespace DefectStudio
 		// alone rather than unpinning it - click a label to select it, then Delete to remove just that
 		// one (see RendererPanel::handlePinnedMeasurementInteraction). Independent of live selection so
 		// a pin survives deselecting the atoms - that's the whole point versus the old "shows only
-		// while selected" behaviour. Not a full ECS entity yet and not persisted with the project yet
-		// (see TODO.md T09 "Tryby zaznaczania") - screenOffset is a user-dragged nudge so overlapping
-		// labels can be separated, no 3D gizmo integration.
+		// while selected" behaviour. Not persisted with the project yet (see TODO.md T09 "Tryby
+		// zaznaczania"). Real ECS entity as of Etap F (LabelComponent/TransformComponent/
+		// SelectionComponent, synced by SceneSystem::SyncLabelEntities/UpdateLabelTransforms/
+		// SyncLabelSelection) - gizmo-draggable (RendererPanel::renderLabelTransformGizmo, translate
+		// only, see that function's comment for why rotate/scale don't apply).
 		struct PinnedMeasurement
 		{
 			std::vector<std::size_t> atomIndices; // size 2 = bond length, size 3 = angle
-			glm::vec2 screenOffset = glm::vec2(0.0f); // camera-right/up world-space nudge
+			// Free 3D world-space nudge from the resolved anchor (bond midpoint / angle vertex) - was a
+			// camera-plane-only vec2 before Etap F, widened to a full vec3 so the gizmo can also push a
+			// label along the view axis, not just pan it across the screen. The old click-drag-on-label
+			// path (RendererPanel::handlePinnedMeasurementInteraction) still writes into this via the
+			// same camera-right/up projection as before; the gizmo writes along whichever world axis is
+			// grabbed. Both share this one field, no separate representation to keep in sync.
+			glm::vec3 worldOffset = glm::vec3(0.0f);
 			// Bond-length pins only (size 2): rotate the label to read along the bond's own
 			// direction instead of always staying upright. flipped adds 180 degrees on top, for when
 			// the aligned reading direction is upside-down from the current camera angle.
@@ -140,6 +148,18 @@ namespace DefectStudio
 		// click and modal) - the only way to revert on cancel, since the live drag mutates
 		// windowState.structure directly before anything is committed to the domain.
 		std::vector<glm::vec3> fallbackDragStartPositions;
+		// Translate-only gizmo for the selected pinned measurement label (RendererPanel::
+		// renderLabelTransformGizmo) - same click-a-handle-and-drag shape as the fallback atom gizmo
+		// above but its own state, since it drags a single PinnedMeasurement::worldOffset rather than
+		// a list of atom positions. No modal (keypress-only) variant and no axis-lock override - one
+		// point, not worth the extra state atoms' multi-select version justifies.
+		bool labelGizmoDragging = false;
+		int labelGizmoAxis = -1;
+		glm::vec2 labelGizmoLastMousePos = glm::vec2(0.0f);
+		glm::vec2 labelGizmoDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
+		glm::vec3 labelGizmoDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
+		float labelGizmoDragPixelsPerWorld = 1.0f;
+		glm::vec3 labelGizmoDragStartOffset = glm::vec3(0.0f);
 		// Continuous Ctrl+Shift+Arrow nudge - polled every frame (RendererPanel::applyViewportInputNavigation)
 		// instead of riding GLFW's own key-repeat cadence, which is OS-repeat-rate limited (~10-15Hz)
 		// and visibly steps rather than glides. Same start-snapshot/commit-on-release shape as the

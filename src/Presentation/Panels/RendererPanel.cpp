@@ -23,6 +23,8 @@
 #include "Events/RendererEvents.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneComponents.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
@@ -229,7 +231,13 @@ namespace DefectStudio
 		// the original selection) - selection jumping mid-drag. A live gizmo drag/hover takes
 		// exclusive control of the viewport for the frame - suppress box/circle-select and
 		// atom-pick so grabbing a handle doesn't also fire a click-select underneath it.
+		// Keeps each label entity's TransformComponent current before the gizmo/hit-test below read
+		// it - anchors move every frame with the atoms they measure (gizmo drag, nudge, relaxation
+		// playback), so a stale transform would visibly lag a frame behind the label's own draw.
+		SceneSystem::UpdateLabelTransforms(windowState.sceneRegistry, windowState);
+
 		const bool gizmoCapturing = renderTransformGizmo(windowState, imageOrigin, viewportSize, hovered) ||
+			renderLabelTransformGizmo(windowState, imageOrigin, viewportSize, hovered) ||
 			handlePinnedMeasurementInteraction(windowState, imageOrigin, viewportSize, hovered);
 
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
@@ -1259,9 +1267,188 @@ namespace DefectStudio
 		return false;
 	}
 
+	// Translate-only gizmo for the selected pinned measurement label (sibling of renderTransformGizmo
+	// above, see PinnedMeasurement::worldOffset) - same shaft+arrowhead visual and screen-space axis
+	// pick/drag as the atom gizmo (ImGuizmo's own picking is unreliable here too, see that function's
+	// big comment), just for one point instead of a multi-atom selection. Rotate/Scale don't apply: a
+	// label's reading direction is already covered by `A`/`F` (bond-alignment toggle + flip, see
+	// handlePinnedMeasurementInteraction below), and there is no per-label font size to scale. No
+	// undo/redo integration - matches every other pin edit (add/remove/flip/screen-drag) today, none
+	// of which go through Core/Undo either. Reads its pivot from the label entity's TransformComponent
+	// (kept current by SceneSystem::UpdateLabelTransforms, called once per frame before this).
+	bool RendererPanel::renderLabelTransformGizmo(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
+	{
+		const bool pinSelected = windowState.selectedPinnedMeasurement >= 0 &&
+			windowState.selectedPinnedMeasurement < static_cast<int>(windowState.pinnedMeasurements.size());
+		if (!pinSelected || windowState.camera == nullptr)
+		{
+			windowState.labelGizmoDragging = false;
+			windowState.labelGizmoAxis = -1;
+			return false;
+		}
+
+		Entity labelEntity =
+			windowState.sceneRegistry.LabelEntityAt(static_cast<std::size_t>(windowState.selectedPinnedMeasurement));
+		if (!labelEntity || !labelEntity.HasComponent<TransformComponent>())
+			return false;
+		const glm::vec3 pivot = labelEntity.GetComponent<TransformComponent>().position;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
+			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+			if (clip.w <= 0.0001f)
+				return false;
+			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+			outScreen = glm::vec2(
+				imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+				imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * imageSize.y);
+			return true;
+		};
+
+		glm::vec2 pivotScreen(0.0f);
+		const bool pivotOnScreen = projectToScreen(pivot, pivotScreen);
+		const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+
+		// Smaller pick band than the atom gizmo's kPickMaxDistance (130px) - a label has no atom
+		// underneath competing for the same screen space, so there is no need for as much clearance.
+		constexpr float kPickMinDistance = 14.0f;
+		constexpr float kPickMaxDistance = 70.0f;
+		constexpr glm::vec3 kWorldAxes[3] = {
+			glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
+		constexpr ImU32 kAxisLockColors[3] = {
+			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
+
+		glm::vec2 axisScreenDir[3];
+		float axisPixelsPerWorld[3] = {1.0f, 1.0f, 1.0f};
+		bool axisValid[3] = {false, false, false};
+		if (pivotOnScreen)
+		{
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				glm::vec2 probeScreen;
+				if (!projectToScreen(pivot + kWorldAxes[axis], probeScreen))
+					continue;
+				const glm::vec2 axisVec = probeScreen - pivotScreen;
+				const float axisPixels = glm::length(axisVec);
+				if (axisPixels < 1.0f)
+					continue;
+				axisScreenDir[axis] = axisVec / axisPixels;
+				axisPixelsPerWorld[axis] = axisPixels;
+				axisValid[axis] = true;
+			}
+		}
+
+		if (pivotOnScreen && !windowState.labelGizmoDragging)
+		{
+			ImDrawList *axisDrawList = ImGui::GetWindowDrawList();
+			constexpr float kArrowHeadLength = 12.0f;
+			constexpr float kArrowHeadHalfWidth = 5.0f;
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (!axisValid[axis])
+					continue;
+				const glm::vec2 dir = axisScreenDir[axis];
+				const glm::vec2 perp(-dir.y, dir.x);
+				const glm::vec2 tip = glm::vec2(pivotScreen.x, pivotScreen.y) + dir * kPickMaxDistance;
+				const glm::vec2 headBase = tip - dir * kArrowHeadLength;
+				axisDrawList->AddLine(
+					ImVec2(pivotScreen.x, pivotScreen.y), ImVec2(headBase.x, headBase.y), kAxisLockColors[axis], 2.5f);
+				const glm::vec2 headLeft = headBase + perp * kArrowHeadHalfWidth;
+				const glm::vec2 headRight = headBase - perp * kArrowHeadHalfWidth;
+				axisDrawList->AddTriangleFilled(
+					ImVec2(tip.x, tip.y), ImVec2(headLeft.x, headLeft.y), ImVec2(headRight.x, headRight.y),
+					kAxisLockColors[axis]);
+			}
+		}
+
+		int hoveredAxis = -1;
+		if (hovered && pivotOnScreen && !windowState.labelGizmoDragging)
+		{
+			constexpr float kPickPerpTolerance = 12.0f;
+			const glm::vec2 fromPivot = mousePos - pivotScreen;
+			const float radial = glm::length(fromPivot);
+			float bestPerp = kPickPerpTolerance;
+			if (radial >= kPickMinDistance && radial <= kPickMaxDistance)
+			{
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					if (!axisValid[axis])
+						continue;
+					const float along = glm::dot(fromPivot, axisScreenDir[axis]);
+					if (along <= 0.0f)
+						continue;
+					const float perp = glm::length(fromPivot - axisScreenDir[axis] * along);
+					if (perp < bestPerp)
+					{
+						bestPerp = perp;
+						hoveredAxis = axis;
+					}
+				}
+			}
+
+			if (hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			{
+				windowState.labelGizmoDragging = true;
+				windowState.labelGizmoAxis = hoveredAxis;
+				windowState.labelGizmoLastMousePos = mousePos;
+				windowState.labelGizmoDragAxisScreenDir = axisScreenDir[hoveredAxis];
+				windowState.labelGizmoDragAxisWorldDir = kWorldAxes[hoveredAxis];
+				windowState.labelGizmoDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
+				windowState.labelGizmoDragStartOffset =
+					windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)]
+						.worldOffset;
+			}
+		}
+
+		if (windowState.labelGizmoDragging && windowState.labelGizmoAxis >= 0)
+		{
+			RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[static_cast<std::size_t>(
+				windowState.selectedPinnedMeasurement)];
+
+			if (pivotOnScreen)
+			{
+				ImDrawList *drawList = ImGui::GetWindowDrawList();
+				const glm::vec2 dir = windowState.labelGizmoDragAxisScreenDir;
+				const ImVec2 farA(pivotScreen.x - dir.x * 10000.0f, pivotScreen.y - dir.y * 10000.0f);
+				const ImVec2 farB(pivotScreen.x + dir.x * 10000.0f, pivotScreen.y + dir.y * 10000.0f);
+				drawList->AddLine(farA, farB, kAxisLockColors[windowState.labelGizmoAxis], 2.5f);
+			}
+
+			// Cancel: Escape or right-click reverts to the pre-drag snapshot, same convention as the
+			// atom gizmo's fallback drag.
+			if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+			{
+				pin.worldOffset = windowState.labelGizmoDragStartOffset;
+				windowState.labelGizmoDragging = false;
+				windowState.labelGizmoAxis = -1;
+				return true;
+			}
+
+			if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			{
+				const glm::vec2 delta = mousePos - windowState.labelGizmoLastMousePos;
+				windowState.labelGizmoLastMousePos = mousePos;
+				const float deltaOnAxisPixels = glm::dot(delta, windowState.labelGizmoDragAxisScreenDir);
+				const float deltaOnAxisWorld = deltaOnAxisPixels / windowState.labelGizmoDragPixelsPerWorld;
+				pin.worldOffset += windowState.labelGizmoDragAxisWorldDir * deltaOnAxisWorld;
+				return true;
+			}
+
+			// Button released - commit (the drag already mutated worldOffset live, nothing further to
+			// apply) and consume this one release frame same as the atom gizmo does.
+			windowState.labelGizmoDragging = false;
+			windowState.labelGizmoAxis = -1;
+			return true;
+		}
+
+		return hoveredAxis >= 0;
+	}
+
 	// Click-select + drag-to-nudge for pinned measurement labels (`M`, see
-	// RendererLayer::onLabelsToggleSelectedBondRequested) - not a full gizmo, just enough to
-	// separate overlapping labels and know which one Alt+M-adjacent affordances would act on.
+	// RendererLayer::onLabelsToggleSelectedBondRequested). The gizmo above (renderLabelTransformGizmo)
+	// handles precise axis-locked moves via its handles; this is the looser "grab the label glyph
+	// itself and drag" path along the camera plane, plus click-to-select and Delete-to-unpin.
 	// Returns true if this frame's click/drag was consumed here, so the caller can suppress
 	// atom-pick the same way it already does for the transform gizmo (gizmoCapturing).
 	bool RendererPanel::handlePinnedMeasurementInteraction(
@@ -1285,6 +1472,7 @@ namespace DefectStudio
 			windowState.pinnedMeasurements.erase(
 				windowState.pinnedMeasurements.begin() + windowState.selectedPinnedMeasurement);
 			windowState.selectedPinnedMeasurement = -1;
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 
 		if (windowState.camera == nullptr)
@@ -1330,7 +1518,7 @@ namespace DefectStudio
 			{
 				return false;
 			}
-			outAnchor += cameraRight * pin.screenOffset.x + cameraUp * pin.screenOffset.y;
+			outAnchor += pin.worldOffset;
 			return true;
 		};
 
@@ -1357,8 +1545,9 @@ namespace DefectStudio
 					const float pixelsPerWorldUp = std::max(1.0f, glm::length(upProbe - anchorScreen));
 					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 					const glm::vec2 deltaPixels = mousePos - windowState.pinnedMeasurementDragLastMouse;
-					pin.screenOffset.x += deltaPixels.x / pixelsPerWorldRight;
-					pin.screenOffset.y -= deltaPixels.y / pixelsPerWorldUp; // screen Y is flipped vs cameraUp
+					// screen Y is flipped vs cameraUp - same convention as the gizmo axis drag below.
+					pin.worldOffset += cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
+						cameraUp * (deltaPixels.y / pixelsPerWorldUp);
 					windowState.pinnedMeasurementDragLastMouse = mousePos;
 				}
 			}
@@ -1387,6 +1576,7 @@ namespace DefectStudio
 		}
 
 		windowState.selectedPinnedMeasurement = hitIndex;
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 		if (hitIndex < 0)
 			return false;
 

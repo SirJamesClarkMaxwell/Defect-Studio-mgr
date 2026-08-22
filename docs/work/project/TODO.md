@@ -651,7 +651,10 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       do przesuwania ich gizmem bez ruszania atomów) / atoms+bonds+labels — skróty **`Ctrl+1..4`**
       (zwykłe `1/2/3`/`Alt+1/2/3` zajęte przez align-axis a/b/c/a*/b*/c*, decyzja 2026-08-21: axis
       align zostaje na 1/2/3). Wymaga żeby bond-y i etykiety były realnymi ECS entity z
-      `SelectionComponent` (dziś tylko atomy to mają) — nazwy trybów robocze, do dopracowania.
+      `SelectionComponent` — **etykiety już to mają (zob. T09 MSDF, zrobione 2026-08-22:
+      `LabelComponent`+`SelectionComponent`), bond-y nadal nie** (`BondComponent` istnieje, ale
+      `SyncSceneWithStructure` nie dokłada mu `SelectionComponent`/`VisibilityComponent` jak robi to
+      dla atomów) — nazwy trybów robocze, do dopracowania.
 - [ ] **Bond scaling (uwaga na przyszłość, 2026-08-21):** jak wiązania będą niezależnie skalowalne
       gizmem (dziś nie są — geometria cylindra to funkcja pozycji dwóch atomów, nie ma własnego
       transformu), pivot skalowania musi być środkiem WŁASNYM wiązania (midpoint atomów, przeliczany
@@ -910,12 +913,44 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 - [x] **Compute shader dla bond transform** — **przeniesione z `[ ]` na `[x]`: zweryfikowane,
       już zaimplementowane i dispatchowane w T06**, nie tylko zaplanowane
-- [ ] **MSDF (Multi-channel SDF) dla 3D labels zamiast billboard quads — rozszerzone 2026-08-21:**
-      nowy vendor `sjcmdev/msdf-atlas-gen` (analogiczny checklist wdrożenia jak ImPlot). Etykiety
-      (bond-length/angle, zob. "Pomiary" w T08) mają być **realnymi ECS entity** z
-      `TransformComponent`+`SelectionComponent` — operowalne gizmem (T08 ImGuizmo) tak samo jak
-      atomy, nie tylko renderowane. **Musi trafić też do image-export pipeline** (`ExportImagePanel`,
-      ten sam wymóg co orbitale — zob. T08.6.7) od razu przy wdrożeniu, nie jako osobny dołożony task.
+- [x] **MSDF (Multi-channel SDF) dla 3D labels zamiast billboard quads — zrobione 2026-08-22.**
+      Renderowanie MSDF (`sjcmdev/msdf-atlas-gen`, `MsdfFont`, `labels.vert/frag`) zrobione wcześniej
+      w tej sesji (bond/angle label matrix). **ECS entity — domknięte 2026-08-22:** nowy
+      `LabelComponent` (`SceneComponents.hpp`, back-reference do `pinnedMeasurements[index]`) +
+      `SceneRegistry::LabelEntities()`/`LabelEntityAt` (wzorzec identyczny do Atom/BondEntities) +
+      `SceneSystem::SyncLabelEntities`/`UpdateLabelTransforms`/`SyncLabelSelection` — jedno entity per
+      pin, z `TransformComponent` (żywa pozycja anchor+offset, odświeżana co klatkę) i
+      `SelectionComponent` (mirror `selectedPinnedMeasurement`). Sync wywoływany raz na batch po
+      `AddBondPinsWithinSet`/`AddAnglePinsWithinSet`/`RemovePinsWithinSet` (nie per-pin w pętli —
+      `SyncLabelEntities` niszczy/tworzy wszystkie encje, O(n²) inaczej) i po Delete pojedynczego pinu.
+      **Gizmo — `RendererPanel::renderLabelTransformGizmo`:** translate-only (rotate/scale świadomie
+      pominięte — kierunek odczytu etykiety już pokrywają `A`/`F`, nie ma per-label skali fontu), ten
+      sam wzorzec shaft+arrowhead i fallback screen-space pick/drag co gizmo atomów, ale osobny stan
+      (`labelGizmo*` pola w `RendererWindowState`) bo operuje na jednym punkcie (`PinnedMeasurement::
+      worldOffset`) zamiast listy atomów. `PinnedMeasurement::screenOffset` (vec2, camera-plane-only)
+      **zamieniony na `worldOffset`** (vec3, pełny world-space) — stary click-drag-na-etykiecie nadal
+      działa (pisze do tego samego pola przez rzut cameraRight/cameraUp), gizmo dokłada ruch wzdłuż
+      dowolnej osi świata. Efekt uboczny: usunięty stary "swim przy orbicie kamery" z
+      `OpenGlRendererBackend::renderLabels` (offset był przeliczany z bieżącej macierzy widoku co
+      klatkę — teraz to stały wektor world-space). Brak undo/redo dla gizma etykiet — spójne z resztą
+      edycji pinów (add/remove/flip/drag), które też nie idą przez `Core/Undo`.
+      **Image-export pipeline — domknięte 2026-08-22:** prawdziwy bug, nie tylko brakująca funkcja —
+      `RenderExportDialogState::previewState` to świeży `RendererWindowState`, nie kopia żywego okna,
+      więc `pinnedMeasurements` zostawało puste i piny **nigdy nie trafiały do eksportu** niezależnie
+      od checkboxa "Labels" (który i tak steruje tylko trybem auto-all-bonds, osobnym od pinów).
+      Naprawione w obu miejscach otwierających dialog (`RendererLayer::onExportImageRequested` (F12) i
+      `RendererPanelToolbar.cpp` przycisk "Export PNG...") — kopiują teraz `pinnedMeasurements` +
+      `bondLabelsAlignToDirection`, bez podświetlenia zaznaczenia w eksporcie
+      (`selectedPinnedMeasurement` zostaje -1). Zweryfikowane: Debug build czysty (0 warningów).
+      **Świadomie pominięte przy tym wdrożeniu, zostają jako otwarty dług:**
+      - [ ] Rotate/Scale na gizmie etykiet (`RendererPanel::renderLabelTransformGizmo` jest dziś
+            translate-only) → dodać gdy pojawi się realny use-case; dziś kierunek odczytu etykiety
+            kryją już `A` (align-to-bond toggle) i `F` (flip 180°), a skali fontu per-label nie ma
+            (nie ma czego skalować).
+      - [ ] Undo/redo dla drag-a etykiety (gizmo i click-drag-nudge obie mutują `PinnedMeasurement::
+            worldOffset` bez wpięcia w `Core/Undo`/`UndoStack`) → dodać spójnie z resztą edycji
+            pinów (add/remove/flip też dziś nie mają undo) w jednym przejściu, nie osobno dla samego
+            drag-a.
 - [x] Multi-viewport — wiele viewportów z niezależnymi ustawieniami kamery i renderowania
       (potwierdzone: `RendererWindowState` per-window, `m_Viewports` w backendzie)
 - [ ] Quick image export (PNG/JPG z aktualnego viewportu)
@@ -1127,6 +1162,19 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] **Moduł generacji komórek startowych — zażądane 2026-08-21, niski priorytet:** budowanie
       struktury początkowej (bulk/primitive → supercell, ewentualnie od zera z grupy przestrzennej)
       jako punkt wejścia przed defektowaniem/testami zbieżności powyżej
+- [ ] **Edytor własnych etykiet (LaTeX) — zażądane 2026-08-22, niski priorytet, "kiedyś":**
+      użytkownik definiuje dowolny tekstowy label (nie tylko auto bond-length/angle z T09) i może użyć
+      składni LaTeX do zapisu matematycznego (np. wzory, indeksy, symbole greckie) — przy założeniu że
+      LaTeX jest dostępny globalnie na komputerze (`latex`/`pdflatex` na PATH, nie vendorować TeX-a).
+      Prawdopodobny kształt: label → skompilowany przez zewnętrzny `pdflatex`/`dvisvgm` do SVG/PNG →
+      wrzucony jako teksturowany quad (osobna ścieżka od MSDF-owych auto-etykiet z T09, bo MSDF to
+      font-atlas ASCII, nie renderer TeX-a) — **niezweryfikowane, wymaga rozpoznania na starcie tego
+      zadania**: czy dostępny jest `Core/Platform/ProcessRunner` do wywołania `pdflatex` jako
+      subprocess (ten sam wzorzec co Python bridge), koszt/cache kompilacji per-label (nie kompilować
+      od nowa co klatkę), fallback gdy LaTeX niedostępny (graceful `StructuredError`, appka nie ma
+      wymagać LaTeX-a do działania). Reużyje ECS `LabelComponent`/`TransformComponent` z T09 (zob.
+      wyżej) jako ten sam mechanizm co pinned measurement labels, inny tylko backend renderowania
+      glifów.
 
 ---
 

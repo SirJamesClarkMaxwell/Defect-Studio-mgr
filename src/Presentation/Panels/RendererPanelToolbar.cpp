@@ -416,6 +416,11 @@ namespace DefectStudio
 				dialog.previewState.showCellBox = windowState.showCellBox;
 				dialog.previewState.showGrid = windowState.showGrid;
 				dialog.previewState.selectedAtomIndices = windowState.selectedAtomIndices;
+				// See RendererLayer::onExportImageRequested's matching comment - previewState is a
+				// fresh RendererWindowState, so pinned bond/angle labels need an explicit copy or
+				// they silently never appear in the export.
+				dialog.previewState.pinnedMeasurements = windowState.pinnedMeasurements;
+				dialog.previewState.bondLabelsAlignToDirection = windowState.bondLabelsAlignToDirection;
 
 				const std::string stem = windowState.structure.sourcePath.Native().stem().string();
 				dialog.filename = (stem.empty() ? "structure" : stem) + "_export";
