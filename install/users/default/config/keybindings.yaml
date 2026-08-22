@@ -20,6 +20,12 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "editor.focus_project_tree"
+    chord: "Ctrl+Shift+E"
+    command: "editor.focus_project_tree"
+    context: ""
+    layer: 0
+    enabled: true
   - id: "system.quit"
     chord: "Ctrl+Shift+W"
     command: "app.quit"
@@ -92,6 +98,34 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.orbit_left_continuous"
+    chord: "Alt+Left"
+    command: "renderer.orbit_left"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
+  - id: "renderer.orbit_right_continuous"
+    chord: "Alt+Right"
+    command: "renderer.orbit_right"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
+  - id: "renderer.orbit_up_continuous"
+    chord: "Alt+Up"
+    command: "renderer.orbit_up"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
+  - id: "renderer.orbit_down_continuous"
+    chord: "Alt+Down"
+    command: "renderer.orbit_down"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
   - id: "renderer.orbit_left_90"
     chord: "Home"
     command: "renderer.orbit_left_90"
@@ -128,6 +162,20 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.zoom_in"
+    chord: "Equal"
+    command: "renderer.zoom_in"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
+  - id: "renderer.zoom_out"
+    chord: "Minus"
+    command: "renderer.zoom_out"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
   - id: "renderer.focus_selected_atom"
     chord: "Period"
     command: "renderer.focus_selected_atom"
@@ -206,15 +254,57 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
-  - id: "renderer.labels.toggle"
-    chord: "Alt+M"
-    command: "renderer.labels.toggle"
-    context: "renderer.viewport.focused"
-    layer: 2
-    enabled: true
   - id: "renderer.labels.toggle_selected_bond"
     chord: "M"
     command: "renderer.labels.toggle_selected_bond"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.toggle_selected_angle"
+    chord: "Shift+M"
+    command: "renderer.labels.toggle_selected_angle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.remove_selected_bond"
+    chord: "Alt+M"
+    command: "renderer.labels.remove_selected_bond"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.show_all_bond"
+    chord: "Ctrl+M"
+    command: "renderer.labels.show_all_bond"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.remove_all_bond"
+    chord: "Ctrl+Alt+M"
+    command: "renderer.labels.remove_all_bond"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.remove_selected_angle"
+    chord: "Alt+Shift+M"
+    command: "renderer.labels.remove_selected_angle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.show_all_angle"
+    chord: "Ctrl+Shift+M"
+    command: "renderer.labels.show_all_angle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.remove_all_angle"
+    chord: "Ctrl+Alt+Shift+M"
+    command: "renderer.labels.remove_all_angle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.toggle_bond_alignment"
+    chord: "A"
+    command: "renderer.labels.toggle_bond_alignment"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
@@ -243,13 +333,79 @@ bindings:
     layer: 2
     enabled: true
   - id: "renderer.selection.duplicate"
-    chord: "Shift+D"
+    chord: "Ctrl+D"
     command: "renderer.selection.duplicate"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.select_all"
+    chord: "Ctrl+A"
+    command: "renderer.selection.select_all"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.copy"
+    chord: "Ctrl+C"
+    command: "renderer.selection.copy"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.paste"
+    chord: "Ctrl+V"
+    command: "renderer.selection.paste"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.pan_up"
+    chord: "Shift+Up"
+    command: "renderer.pan_up"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.pan_down"
+    chord: "Shift+Down"
+    command: "renderer.pan_down"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.pan_left"
+    chord: "Shift+Left"
+    command: "renderer.pan_left"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.pan_right"
+    chord: "Shift+Right"
+    command: "renderer.pan_right"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.nudge_up"
+    chord: "Ctrl+Shift+Up"
+    command: "renderer.selection.nudge_up"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.nudge_down"
+    chord: "Ctrl+Shift+Down"
+    command: "renderer.selection.nudge_down"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.nudge_left"
+    chord: "Ctrl+Shift+Left"
+    command: "renderer.selection.nudge_left"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.nudge_right"
+    chord: "Ctrl+Shift+Right"
+    command: "renderer.selection.nudge_right"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.view.set_as_project_default"
-    chord: "Ctrl+D"
+    chord: "Shift+D"
     command: "renderer.view.set_as_project_default"
     context: "renderer.viewport.focused"
     layer: 2

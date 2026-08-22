@@ -23,6 +23,7 @@ namespace DefectStudio
 	struct JobRetryRequested;
 	struct JobSubmitRequested;
 	class KeyPressedEvent;
+	class KeyRepeatedEvent;
 
 	class CoreLayer final : public Layer, public EventReceiver
 	{
@@ -62,6 +63,8 @@ namespace DefectStudio
 		void onJobHistoryRemoveRequested(const JobHistoryRemoveRequested &event);
 		void onBindingsLoaded(const AppEvents::Keymap::BindingsLoaded &event);
 		bool onKeyPressed(KeyPressedEvent &event);
+		bool onKeyRepeated(KeyRepeatedEvent &event);
+		bool dispatchKeyChord(const KeyChord &chord, bool requireRepeatable);
 		void registerSystemCommands();
 		[[nodiscard]] Unique<ICommand> createUndoCommand(CommandContext &context);
 		[[nodiscard]] Unique<ICommand> createRedoCommand(CommandContext &context);

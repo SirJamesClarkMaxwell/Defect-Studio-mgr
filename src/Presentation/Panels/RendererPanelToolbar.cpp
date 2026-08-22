@@ -175,13 +175,18 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
-		auto axisButton = [&](const char *label, const glm::vec3 &axis, const char *sourceAction)
+		auto axisButton = [&](const char *label, const glm::vec3 &axis, const char *sourceAction, const char *tooltip)
 		{
 			if (ImGui::Button(label, axisButtonSize))
 			{
 				RendererViewCamera animated = *windowState.camera;
 				animated.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
 				queueTransition(animated, sourceAction);
+			}
+			if (tooltip != nullptr && tooltip[0] != '\0' &&
+				ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+			{
+				ImGui::SetTooltip("%s", tooltip);
 			}
 		};
 
@@ -205,25 +210,25 @@ namespace DefectStudio
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
 		const glm::mat3 &reciprocal = windowState.structure.reciprocalLattice;
-		axisButton("a", lattice[0], "toolbar.align_axis_a");
+		axisButton("a", lattice[0], "toolbar.align_axis_a", "Align to a-axis (1)");
 		sameLineTight();
 
-		axisButton("b", lattice[1], "toolbar.align_axis_b");
+		axisButton("b", lattice[1], "toolbar.align_axis_b", "Align to b-axis (2)");
 		sameLineTight();
 
-		axisButton("c", lattice[2], "toolbar.align_axis_c");
+		axisButton("c", lattice[2], "toolbar.align_axis_c", "Align to c-axis (3)");
 		sameLineTight();
 
-		axisButton("a*", reciprocal[0], "toolbar.align_axis_a_star");
+		axisButton("a*", reciprocal[0], "toolbar.align_axis_a_star", "Align to a* (reciprocal) axis (Alt+1)");
 		sameLineTight();
 
-		axisButton("b*", reciprocal[1], "toolbar.align_axis_b_star");
+		axisButton("b*", reciprocal[1], "toolbar.align_axis_b_star", "Align to b* (reciprocal) axis (Alt+2)");
 		sameLineTight();
 
-		axisButton("c*", reciprocal[2], "toolbar.align_axis_c_star");
+		axisButton("c*", reciprocal[2], "toolbar.align_axis_c_star", "Align to c* (reciprocal) axis (Alt+3)");
 		sameLineTight();
 
-		if (iconButton("##OrbitUp", "rotate-arrow-z-in.png", "^", "Orbit up relative to camera"))
+		if (iconButton("##OrbitUp", "rotate-arrow-z-in.png", "^", "Orbit up relative to camera (Up, hold Alt for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, +orbitInputDelta());
@@ -231,7 +236,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##OrbitDown", "rotate-arrow-z-out.png", "v", "Orbit down relative to camera"))
+		if (iconButton("##OrbitDown", "rotate-arrow-z-out.png", "v", "Orbit down relative to camera (Down, hold Alt for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(0.0f, -orbitInputDelta());
@@ -239,7 +244,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##OrbitLeft", "rotate-arrow-z-left.png", "<", "Orbit left relative to camera"))
+		if (iconButton("##OrbitLeft", "rotate-arrow-z-left.png", "<", "Orbit left relative to camera (Left, hold Alt for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(+orbitInputDelta(), 0.0f);
@@ -247,7 +252,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##OrbitRight", "rotate-arrow-z-right.png", ">", "Orbit right relative to camera"))
+		if (iconButton("##OrbitRight", "rotate-arrow-z-right.png", ">", "Orbit right relative to camera (Right, hold Alt for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Orbit(-orbitInputDelta(), 0.0f);
@@ -255,7 +260,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##RollLeft", "rotate-left.png", "Rl-", "Roll left"))
+		if (iconButton("##RollLeft", "rotate-left.png", "Rl-", "Roll left (Q)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians());
@@ -263,7 +268,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##RollRight", "rotate-right.png", "Rl+", "Roll right"))
+		if (iconButton("##RollRight", "rotate-right.png", "Rl+", "Roll right (E)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians());
@@ -290,7 +295,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##PanUp", "up-arrow.png", "P^", "Pan up"))
+		if (iconButton("##PanUp", "up-arrow.png", "P^", "Pan up (Shift+Up, hold Alt+Shift for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(0.0f, -windowState.pixelStepPx);
@@ -298,7 +303,7 @@ namespace DefectStudio
 		}
 
 		sameLineTight();
-		if (iconButton("##PanDown", "down-arrow.png", "Pv", "Pan down"))
+		if (iconButton("##PanDown", "down-arrow.png", "Pv", "Pan down (Shift+Down, hold Alt+Shift for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(0.0f, +windowState.pixelStepPx);
@@ -306,7 +311,7 @@ namespace DefectStudio
 		}
 
 		sameLineTight();
-		if (iconButton("##PanLeft", "left-arrow.png", "P<", "Pan left"))
+		if (iconButton("##PanLeft", "left-arrow.png", "P<", "Pan left (Shift+Left, hold Alt+Shift for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(-windowState.pixelStepPx, 0.0f);
@@ -314,7 +319,7 @@ namespace DefectStudio
 		}
 
 		sameLineTight();
-		if (iconButton("##PanRight", "right-arrow.png", "P>", "Pan right"))
+		if (iconButton("##PanRight", "right-arrow.png", "P>", "Pan right (Shift+Right, hold Alt+Shift for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Pan(+windowState.pixelStepPx, 0.0f);
@@ -328,13 +333,13 @@ namespace DefectStudio
 		windowState.pixelStepPx = std::clamp(windowState.pixelStepPx, 1.0f, 512.0f);
 
 		sameLineTight();
-		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out"))
+		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out (-)"))
 		{
 			publishZoomStep(-std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		sameLineTight();
 
-		if (iconButton("##ZoomIn", "plus.png", "+", "Zoom in"))
+		if (iconButton("##ZoomIn", "plus.png", "+", "Zoom in (+)"))
 		{
 			publishZoomStep(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
@@ -422,6 +427,141 @@ namespace DefectStudio
 			{
 				DS_LOG_ERROR("Export dialog open failed: {}", exception.what());
 			}
+		}
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+			ImGui::SetTooltip("Export viewport as PNG (F12)");
+
+		ImGui::EndChild();
+	}
+
+	// VESTA-style vertical icon strip along the viewport's left edge: one click each for the tool
+	// modes that would otherwise only be reachable via keyboard shortcut (G/R/S/B/C/M/Shift+M) or
+	// not at all (3D cursor placement, "nothing"/idle tool). Publishes the same events those
+	// shortcuts do rather than going through CommandRegistry, matching this file's existing style
+	// (see drawViewportToolbar's iconButton/queueTransition above) - none of these need undo or a
+	// command-palette entry of their own beyond what's already registered for the keybindings.
+	void RendererPanel::drawViewportVerticalToolbar(RendererWindowState &windowState)
+	{
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		if (eventBus == nullptr)
+			return;
+
+		const float iconExtent = std::clamp(m_Layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
+		const ImVec2 buttonSize(iconExtent, iconExtent);
+		const float columnWidth = iconExtent + ImGui::GetStyle().WindowPadding.x * 2.0f + 4.0f;
+
+		ImGui::BeginChild(
+			"##ViewportVerticalToolbar", ImVec2(columnWidth, ImGui::GetContentRegionAvail().y), false, ImGuiWindowFlags_NoScrollbar);
+
+		auto toolButton = [&](const char *id, const char *iconFileName, const char *fallback, const char *tooltip, bool active) -> bool
+		{
+			if (active)
+				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+
+			bool pressed = false;
+			const RendererToolbarIconTexture *icon = m_Layer.GetToolbarIcon(iconFileName);
+			if (icon != nullptr && icon->rendererId != 0)
+			{
+				const ImTextureRef textureRef(reinterpret_cast<void *>(static_cast<uintptr_t>(icon->rendererId)));
+				pressed = ImGui::ImageButton(
+					id,
+					textureRef,
+					buttonSize,
+					ImVec2(0.0f, 0.0f),
+					ImVec2(1.0f, 1.0f),
+					ImVec4(0.0f, 0.0f, 0.0f, 0.0f),
+					ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+			}
+			else
+			{
+				pressed = ImGui::Button(fallback, buttonSize);
+			}
+
+			if (active)
+				ImGui::PopStyleColor();
+
+			if (tooltip != nullptr && tooltip[0] != '\0' &&
+				ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+			{
+				ImGui::SetTooltip("%s", tooltip);
+			}
+			return pressed;
+		};
+
+		auto publishToolToggle = [&](SelectionToolMode tool)
+		{
+			RendererEvents::Viewport::SelectionToolToggleRequested event;
+			event.windowId = windowState.windowId;
+			event.tool = tool;
+			eventBus->Publish(event);
+		};
+
+		if (toolButton(
+				"##ToolNone", "tool-select.png", "Sel", "Selection tool - plain click-select, no drag tool active",
+				windowState.activeSelectionTool == SelectionToolMode::None))
+		{
+			publishToolToggle(SelectionToolMode::None);
+		}
+
+		if (toolButton(
+				"##ToolCursor3D", "tool-cursor3d.png", "3D", "3D cursor - click in the viewport to place it",
+				windowState.activeSelectionTool == SelectionToolMode::Cursor3D))
+		{
+			publishToolToggle(SelectionToolMode::Cursor3D);
+		}
+
+		ImGui::Spacing();
+
+		if (toolButton("##ToolMeasureBond", "tool-measure-bond.png", "Len", "Measure bond length (selected atoms, M)", false))
+		{
+			RendererEvents::Viewport::LabelsToggleSelectedBondRequested event;
+			event.windowId = windowState.windowId;
+			eventBus->Publish(event);
+		}
+
+		if (toolButton("##ToolMeasureAngle", "tool-measure-angle.png", "Ang", "Measure angle (selected atoms, Shift+M)", false))
+		{
+			RendererEvents::Viewport::LabelsToggleSelectedAngleRequested event;
+			event.windowId = windowState.windowId;
+			eventBus->Publish(event);
+		}
+
+		ImGui::Spacing();
+
+		auto publishGizmoOperation = [&](GizmoOperation operation)
+		{
+			RendererEvents::Viewport::GizmoOperationRequested event;
+			event.windowId = windowState.windowId;
+			event.operation = operation;
+			eventBus->Publish(event);
+		};
+
+		if (toolButton(
+				"##ToolMove", "tool-move.png", "Mov", "Move (G)", windowState.gizmoOperation == GizmoOperation::Translate))
+			publishGizmoOperation(GizmoOperation::Translate);
+
+		if (toolButton(
+				"##ToolRotate", "tool-rotate.png", "Rot", "Rotate (R)", windowState.gizmoOperation == GizmoOperation::Rotate))
+			publishGizmoOperation(GizmoOperation::Rotate);
+
+		if (toolButton(
+				"##ToolScale", "tool-scale.png", "Scl", "Scale (S)", windowState.gizmoOperation == GizmoOperation::Scale))
+			publishGizmoOperation(GizmoOperation::Scale);
+
+		ImGui::Spacing();
+
+		if (toolButton(
+				"##ToolBoxSelect", "tool-box-select.png", "Box", "Box select (B)",
+				windowState.activeSelectionTool == SelectionToolMode::Box))
+		{
+			publishToolToggle(SelectionToolMode::Box);
+		}
+
+		if (toolButton(
+				"##ToolCircleSelect", "tool-circle-select.png", "Cir", "Circle select (C)",
+				windowState.activeSelectionTool == SelectionToolMode::Circle))
+		{
+			publishToolToggle(SelectionToolMode::Circle);
 		}
 
 		ImGui::EndChild();

@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include "IO/TextFileIO.hpp"
+#include "Presentation/EditorFonts.hpp"
 
 namespace DefectStudio
 {
@@ -82,7 +83,16 @@ namespace DefectStudio
 			if (focused && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
 				save();
 
-			if (m_Editor.Render("TextEditorContent"))
+			// ImGuiColorTextEdit assumes a fixed-width font for its cursor/column grid - the app's
+			// default UI font is usually proportional, which is what made this look subtly broken
+			// (misaligned glyphs, odd spacing) before this pushed a real monospace font around it.
+			ImFont *monospaceFont = GetEditorMonospaceFont();
+			if (monospaceFont != nullptr)
+				ImGui::PushFont(monospaceFont);
+			const bool textChanged = m_Editor.Render("TextEditorContent");
+			if (monospaceFont != nullptr)
+				ImGui::PopFont();
+			if (textChanged)
 				m_Dirty = true;
 		}
 

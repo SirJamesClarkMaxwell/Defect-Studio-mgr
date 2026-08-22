@@ -531,7 +531,7 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] Dodaj atom przez wpisanie współrzędnych (frakcyjne/kartezjańskie); popup: pierwiastek + tryb
       koordynat; wstawienie pod 3D cursorem lub w centrum selekcji (`old-ds-functionality.md` §3.3)
       — **nie zrobione jeszcze, potrzebuje popupu UI**, zob. notatka niżej.
-- [x] **Usuń atom (`Delete`) i duplikuj (`Shift+D`, nie `Ctrl+D`) — zrobione 2026-08-21.** Nowy
+- [x] **Usuń atom (`Delete`) i duplikuj (`Ctrl+D`, zob. poprawka 2026-08-22 niżej) — zrobione 2026-08-21.** Nowy
       `src/Renderer/Commands/RendererAtomEditCommands.{hpp,cpp}` — pierwsza realna hydraulika
       mutująca żywą `CrystalStructure` otwartego okna (wcześniej nic tego nie robiło, sprawdzone w
       kodzie: `ApplyVacancy`/`ApplyInterstitial`/`ApplyReplacement` w `DefectModel.cpp` miały zero
@@ -580,29 +580,83 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       palety — potrzebuje payloadu z draga, nie ma sensu jako gołe wywołanie). **Nie zrobione:**
       axis/plane constraints (`G`+`X/Y/Z`, `Shift+X/Y/Z`) — ImGuizmo sam w sobie nie ma takiego
       trybu, wymagałoby osobnej modalnej warstwy wejścia, odłożone.
+      **Wygląd poprawiony 2026-08-22:** `ImGuizmo::Manipulate()` zawsze rysował półprzezroczysty
+      kwadrat plane-handle dla TRANSLATE/SCALE mimo że apka nie ma w ogóle draga po płaszczyźnie
+      (zgłoszone jako "nie wygląda jak w Blenderze") — dla tych dwóch operacji `Manipulate()` już się
+      nie wywołuje, zamiast tego własny rysunek (`AddLine` + `AddTriangleFilled` grot + kropka w
+      pivocie) w `RendererPanel::renderTransformGizmo`. ROTATE nadal przez natywny `Manipulate()`
+      (ring bez tego problemu).
 - [ ] **Scene Objects – Empty**: punkt pomocniczy z lokalnym układem osi, transformowalny (G/R),
       "align active empty Z to selected atoms", align to world/camera (§8.1)
 - [ ] **Scene Objects – Origin i Light**: jednoinstancyjne obiekty specjalne, transformowalny Light (§8.2)
-- [ ] **3D Cursor**: ustawiany z menu kontekstowego na płaszczyźnie siatki, pivot do transformacji
-      lub punkt wstawienia atomu (§9)
-- [ ] Blender-like Shift+A add menu (menu kontekstowe też), Delete, **Shift+D duplicate** (nie
-      Ctrl+D — koliduje z `renderer.view.set_as_project_default`, sprawdzone w
-      `keybindings.yaml`, poprawka 2026-08-21 względem starej notatki tutaj)
+- [x] **3D Cursor — zrobione 2026-08-22 (renderer-only, nie ECS/domain, nie persystowany).**
+      `RendererWindowState::cursor3DPosition`/`cursor3DPlaced`, `SelectionToolMode::Cursor3D`
+      (vertical toolbar "3D point" tool - klik w viewport = `Cursor3DSetPositionRequested`, snap do
+      atomu pod kursorem albo płaszczyzna przez `camera->Target()`), context menu "3D Cursor" →
+      Set Here / Move to Selection Center / First / Last Selected / Origin. Nadal brakuje: pivot do
+      transformacji (gizmo pivot dalej liczy się jako centroid zaznaczenia, nie cursor3D) i punkt
+      wstawienia dla "dodaj atom przez współrzędne" (linia 531 wyżej) - obie rzeczy do zrobienia gdy
+      ten popup faktycznie powstanie.
+- [x] **Ctrl+A/C/V/D — zrobione 2026-08-22.** Select All / Copy / Paste / Duplicate. `Ctrl+D` =
+      duplicate (jak w Blenderze); stary `renderer.view.set_as_project_default` przeniesiony na
+      `Shift+D` (odwraca poprawkę 2026-08-21 opisaną wyżej - użytkownik wolał zgodność z Blenderem
+      od uniknięcia przewiązania). Copy/Paste = in-process clipboard (`std::vector<AtomSite>`,
+      anonimowa przestrzeń nazw w `RendererAtomEditCommands.cpp`), nie system schowka OS, nie
+      persystowany.
+- [ ] Blender-like Shift+A add menu (menu kontekstowe też) - context menu Copy/Paste/Duplicate/
+      Delete/Hide/Change type/Select All/Clear Selection/3D Cursor zrobione 2026-08-22
+      (`RendererPanel::renderViewportContextMenu`); Shift+A "add" menu i Empty/Groups submenu
+      ze starego projektu nadal nie zrobione (Empty/Groups nie mają odpowiednika w domain modelu
+      tego projektu - wymaga decyzji, nie samego UI).
 <!-- - [ ] N side-panel (toggle + strip) -->
 - [ ] **Pomiary — rozszerzone 2026-08-21, teraz oparte o etykiety-encje (zob. MSDF w T09):**
       odległość między ostatnimi 2 zaznaczonymi atomami, kąt między ostatnimi 3, centrum masy
       zaznaczenia (§5, oryginalny zakres) — **plus automatyczne, zawsze-aktualne etykiety długości
-      wiązań i kątów jako MSDF-owe encje w scenie** (nie tylko ad-hoc pomiar na zaznaczeniu), toggle
-      widoczności na `M`. Długość wiązania: geometria cylindra już liczy to na GPU co klatkę
+      wiązań i kątów jako MSDF-owe encje w scenie** (nie tylko ad-hoc pomiar na zaznaczeniu), pełna
+      macierz skrótów `M` — zob. osobny punkt niżej. Długość wiązania: geometria cylindra już liczy to na GPU co klatkę
       (`bond_transform.comp`, sprawdzone w kodzie — auto-recalc przy ruchu atomu przez gizmo jest
       w praktyce **już rozwiązany**, wystarczy że CPU re-uploaduje start/finish z żywych pozycji po
       drag'u, zero nowego compute shadera potrzebne); kąt — zwykła trygonometria CPU, tanie nawet
       dla wielu wiązań naraz, nie potrzebuje GPU.
+- [x] **Macierz skrótów `M` (etykiety wiązań/kątów) — zrobione 2026-08-22.** 8 kombinacji:
+      Ctrl = zasięg (zaznaczenie / wszystkie widoczne atomy), Alt = akcja (dodaj / usuń), Shift = typ
+      (wiązanie / kąt) — `M`/`Shift+M` istniały wcześniej (dodaj dla zaznaczonych), reszta
+      (`Alt+M`, `Ctrl+M`, `Ctrl+Alt+M`, `Alt+Shift+M`, `Ctrl+Shift+M`, `Ctrl+Alt+Shift+M`) nowa.
+      Dodawanie zawsze add-only (`ToggleMeasurementPin(..., removeIfPresent=false)`) więc powiększanie
+      zaznaczenia nigdy nie kasuje już przypiętych etykiet; usuwanie filtruje po zbiorze indeksów
+      atomów (`RemovePinsWithinSet`), nie po istnieniu wiązania w `structure.bonds`, więc sprząta też
+      piny osierocone edycją struktury. Pojedynczy pin nadal usuwa się przez klik + `Delete`
+      (`RendererPanel::handlePinnedMeasurementInteraction`) — bulk-owe skróty nie zastępują tego.
+      Domyślnie etykiety długości wiązań czytają się wzdłuż wiązania
+      (`PinnedMeasurement::alignToBondDirection = true`); skrót **`A`** przełącza globalnie
+      wszystkie już przypięte i przyszłe piny wiązań na upright i z powrotem
+      (`RendererWindowState::bondLabelsAlignToDirection`,
+      `RendererLayer::onLabelsToggleBondAlignmentRequested`) — etykiety kątów zawsze upright, flaga
+      ich nie dotyczy. `Ctrl+A` (select all) zaznacza teraz tylko widoczne atomy, nie całą komórkę.
+      Stary `Alt+M` (`renderer.labels.toggle` — surowe auto-etykiety na każdym wiązaniu, osobny
+      mechanizm od pinów) stracił skrót na rzecz nowego "usuń zaznaczone" — komenda żyje dalej,
+      dostępna z command palette po nazwie.
+- [x] **Ciągły ruch trzymanym klawiszem — zrobione 2026-08-22.** Dotychczasowy mechanizm (GLFW
+      `GLFW_REPEAT`, `repeatable: true` w `keybindings.yaml`) dawał ~10-15 Hz i "rwany" ruch, a dla
+      `Ctrl+Shift+Arrow` w ogóle przestawał się powtarzać po Alt-Tabie (potwierdzone diagnostycznymi
+      logami, usuniętymi po naprawie). Zastąpione per-klatkowym pollingiem `ImGui::IsKeyDown` w
+      `RendererPanel::applyContinuousNudge`/`applyContinuousPan` (skalowane przez `deltaTime`, jedna
+      komenda undo na całe przytrzymanie zamiast jednej na każdy tick powtórzenia) - wywoływane
+      bezwarunkowo co klatkę, nie tylko gdy mysz hoveruje viewport (wcześniejsza regresja: zależność
+      od hover wyłączała ciągły ruch przy zjechaniu myszą poza viewport mid-hold).
+      `Ctrl+Shift+Arrow` = ciągłe przesuwanie zaznaczonych atomów (było, teraz płynne);
+      `Alt+Shift+Arrow` = nowe, ciągłe panning kamery (`Alt+Arrow` samo w sobie dalej orbituje po
+      staremu, `Shift+Arrow` samo to pojedynczy krok pan — nierozszerzony, nie był "rwany").
 - [ ] **Tryby zaznaczania (nowe, 2026-08-21):** atoms / atoms+bonds / bonds-labels (tylko etykiety,
       do przesuwania ich gizmem bez ruszania atomów) / atoms+bonds+labels — skróty **`Ctrl+1..4`**
       (zwykłe `1/2/3`/`Alt+1/2/3` zajęte przez align-axis a/b/c/a*/b*/c*, decyzja 2026-08-21: axis
       align zostaje na 1/2/3). Wymaga żeby bond-y i etykiety były realnymi ECS entity z
       `SelectionComponent` (dziś tylko atomy to mają) — nazwy trybów robocze, do dopracowania.
+- [ ] **Bond scaling (uwaga na przyszłość, 2026-08-21):** jak wiązania będą niezależnie skalowalne
+      gizmem (dziś nie są — geometria cylindra to funkcja pozycji dwóch atomów, nie ma własnego
+      transformu), pivot skalowania musi być środkiem WŁASNYM wiązania (midpoint atomów, przeliczany
+      na żywo), nie world origin ani pozycja jednego z atomów — inaczej skalowanie przesunie
+      wiązanie zamiast tylko zmienić jego grubość/długość.
 - [ ] **Displacement arrows (nowe, 2026-08-21):** strzałki pokazujące jak atomy przemieściły się
       względem zadanej geometrii referencyjnej — konkretnie POSCAR→CONTCAR (relaksacja) i
       ground→excited state. **Puntukas ma to już rozwiązane liczbowo:**

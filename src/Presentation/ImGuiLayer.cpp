@@ -31,6 +31,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Events/EditorUiEvents.hpp"
+#include "Presentation/EditorFonts.hpp"
 #include "Presentation/EditorUiState.hpp"
 
 namespace DefectStudio
@@ -669,6 +670,24 @@ namespace DefectStudio
 		{
 			DS_LOG_WARN("Font Awesome 6 icon font could not be merged into ImGui font atlas");
 		}
+
+		// Code editor font (TextEditorPanel) - always CascadiaMono regardless of the UI font picked
+		// above, since ImGuiColorTextEdit's cursor/column grid assumes a fixed-width font and a
+		// proportional UI font (the usual choice for the rest of the app) breaks that alignment.
+		// Reloaded every rebuild since io.Fonts->Clear() above wipes the whole atlas, not just the UI
+		// font slot. Falls back to the UI font (better than a null PushFont/crash) if the asset is
+		// missing rather than failing the whole rebuild over an editor-only font.
+		ImFont *monospaceFont = nullptr;
+		if (auto uiState = m_UiState.lock())
+		{
+			const Path monospaceFontPath =
+				Path::FromResolved(uiState->paths.assetsDirectory.Native() / "fonts" / "CascadiaMono.ttf");
+			if (FileSystem::Exists(monospaceFontPath))
+				monospaceFont = io.Fonts->AddFontFromFileTTF(monospaceFontPath.String().c_str(), ImGuiLayerDetail::FontPixelSize);
+			else
+				DS_LOG_WARN("Monospace editor font missing: {}", monospaceFontPath.String());
+		}
+		SetEditorMonospaceFont(monospaceFont != nullptr ? monospaceFont : font);
 
 		io.FontDefault = font;
 

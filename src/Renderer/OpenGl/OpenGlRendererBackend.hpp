@@ -57,6 +57,9 @@ namespace DefectStudio
 		glm::vec4 localOffsetSize = glm::vec4(0.0f);
 		glm::vec4 atlasUvMinMax = glm::vec4(0.0f);
 		glm::vec4 color = glm::vec4(1.0f);
+		// In-plane rotation (radians) applied within the billboard's own cameraRight/cameraUp basis
+		// before placing the glyph - see PinnedMeasurement::alignToBondDirection.
+		float rotationRadians = 0.0f;
 	};
 
 	struct OpenGlViewportResources
@@ -74,6 +77,13 @@ namespace DefectStudio
 		std::size_t lastSelectionHash = 0;
 		std::size_t lastVisibilityHash = 0;
 		std::size_t lastPositionHash = 0;
+		// Catches atom-appearance edits that touch neither count/selection/visibility/position - e.g.
+		// "Change atom type" (RendererAtomEditCommands::ChangeSelectedAtomTypeCommand) only rewrites
+		// AtomStyleTable-derived color/radius and bond gradient endpoints, same atom count/positions.
+		// Without this, atoms/bonds keep showing their last-uploaded (pre-change) color until some
+		// unrelated dirty condition above happens to also fire - same class of bug as lastPositionHash
+		// above, just for appearance instead of geometry.
+		std::size_t lastColorHash = 0;
 		std::string lastSourcePath;
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
@@ -121,7 +131,8 @@ namespace DefectStudio
 			bool showCellBox,
 			bool showGrid,
 			bool showLabels = false,
-			bool showSelectedBondLabel = false,
+			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements = {},
+			int selectedPinnedMeasurement = -1,
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
 			// end-to-end (CPU reference, then its GPU compute-shader port) before the real
@@ -182,8 +193,8 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			bool showAllLabels,
-			bool showSelectedBondLabel,
-			const std::vector<std::size_t> &selectedAtomIndices);
+			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
+			int selectedPinnedMeasurement);
 		void renderCellBox(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,

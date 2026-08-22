@@ -11,6 +11,7 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glad/gl.h>
 #include <stb_image_write.h>
 
@@ -151,20 +152,43 @@ namespace DefectStudio
 		return text;
 	}
 
-	// Shared by the "every bond" cache rebuild and the single selected-bond path below - lays out
-	// one label's glyph quads (pen-advance + centering) and appends them to whichever instance
-	// list the caller is building.
-	void AppendBondLabelInstances(
-		const MsdfFont &font, const glm::vec3 &midpoint, float lengthAngstrom, std::vector<OpenGlLabelInstance> &outInstances)
+	[[nodiscard]] std::u32string FormatAngleLabel(float angleDeg)
+	{
+		char buffer[16];
+		const int written = std::snprintf(buffer, sizeof(buffer), "%.1f", static_cast<double>(angleDeg));
+
+		std::u32string text;
+		if (written > 0)
+		{
+			text.reserve(static_cast<std::size_t>(written) + 1);
+			for (int i = 0; i < written; ++i)
+				text.push_back(static_cast<char32_t>(static_cast<unsigned char>(buffer[i])));
+		}
+		text.push_back(U'°'); // degree sign
+		return text;
+	}
+
+	constexpr glm::vec4 kLabelColor(0.92f, 0.92f, 0.85f, 1.0f);
+	// Matches kSelectionHighlightColor used for atom selection below - same accent, reused here so
+	// a selected pinned measurement reads as "selected" the same way a selected atom does.
+	constexpr glm::vec4 kPinnedLabelSelectedColor(0.91f, 0.52f, 0.02f, 1.0f);
+
+	// Shared by every label call site below - lays out one string's glyph quads (pen-advance +
+	// centering) around `worldCenter` and appends them to whichever instance list the caller is
+	// building.
+	void AppendLabelInstances(
+		const MsdfFont &font,
+		const glm::vec3 &worldCenter,
+		const std::u32string &text,
+		std::vector<OpenGlLabelInstance> &outInstances,
+		const glm::vec4 &color = kLabelColor,
+		float rotationRadians = 0.0f)
 	{
 		// World-space label height (em units -> world units) and a rough baseline centering
 		// offset (typical glyph ascent/descent split) - tuned by eye, not derived from font
 		// metrics, good enough for a fixed-purpose label rather than general text layout.
 		constexpr float kWorldFontSize = 0.28f;
 		constexpr float kBaselineOffset = -0.35f * kWorldFontSize;
-		constexpr glm::vec4 kLabelColor(0.92f, 0.92f, 0.85f, 1.0f);
-
-		const std::u32string text = FormatBondLengthLabel(lengthAngstrom);
 
 		float totalAdvance = 0.0f;
 		for (const char32_t codepoint : text)
@@ -177,18 +201,41 @@ namespace DefectStudio
 			if (glyph.found && glyph.planeMax.x > glyph.planeMin.x && glyph.planeMax.y > glyph.planeMin.y)
 			{
 				OpenGlLabelInstance instance;
-				instance.worldCenter = midpoint;
+				instance.worldCenter = worldCenter;
 				instance.localOffsetSize = glm::vec4(
 					penX + glyph.planeMin.x * kWorldFontSize,
 					kBaselineOffset + glyph.planeMin.y * kWorldFontSize,
 					(glyph.planeMax.x - glyph.planeMin.x) * kWorldFontSize,
 					(glyph.planeMax.y - glyph.planeMin.y) * kWorldFontSize);
 				instance.atlasUvMinMax = glm::vec4(glyph.atlasUvMin, glyph.atlasUvMax);
-				instance.color = kLabelColor;
+				instance.color = color;
+				instance.rotationRadians = rotationRadians;
 				outInstances.push_back(instance);
 			}
 			penX += glyph.advance * kWorldFontSize;
 		}
+	}
+
+	void AppendBondLabelInstances(
+		const MsdfFont &font,
+		const glm::vec3 &midpoint,
+		float lengthAngstrom,
+		std::vector<OpenGlLabelInstance> &outInstances,
+		const glm::vec4 &color = kLabelColor,
+		float rotationRadians = 0.0f)
+	{
+		AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, color, rotationRadians);
+	}
+
+	void AppendAngleLabelInstances(
+		const MsdfFont &font,
+		const glm::vec3 &vertex,
+		float angleDeg,
+		std::vector<OpenGlLabelInstance> &outInstances,
+		const glm::vec4 &color = kLabelColor,
+		float rotationRadians = 0.0f)
+	{
+		AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, color, rotationRadians);
 	}
 
 	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
@@ -509,7 +556,8 @@ namespace DefectStudio
 		bool showCellBox,
 		bool showGrid,
 		bool showLabels,
-		bool showSelectedBondLabel,
+		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
+		int selectedPinnedMeasurement,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp,
@@ -589,6 +637,26 @@ namespace DefectStudio
 			resources.labelsDirty = true;
 			resources.lastPositionHash = positionHash;
 		}
+		// Catches atom color/radius edits (e.g. "Change atom type") that leave count/selection/
+		// visibility/position untouched - see lastColorHash's declaration comment.
+		std::size_t colorHash = 1469598103934665603ull;
+		for (const RendererAtomData &atom : structure.atoms)
+		{
+			std::uint32_t bits = 0;
+			std::memcpy(&bits, &atom.radius, sizeof(bits));
+			colorHash ^= bits + 0x9e3779b97f4a7c15ull + (colorHash << 6) + (colorHash >> 2);
+			for (int component = 0; component < 3; ++component)
+			{
+				std::memcpy(&bits, &atom.color[component], sizeof(bits));
+				colorHash ^= bits + 0x9e3779b97f4a7c15ull + (colorHash << 6) + (colorHash >> 2);
+			}
+		}
+		if (resources.lastColorHash != colorHash)
+		{
+			resources.atomsDirty = true;
+			resources.bondsDirty = true;
+			resources.lastColorHash = colorHash;
+		}
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
 		glClearColor(
@@ -610,8 +678,8 @@ namespace DefectStudio
 			renderCellBox(structure, camera, resources);
 		if (showBonds)
 			renderBonds(structure, camera, resources, globalSettings);
-		if (showLabels || showSelectedBondLabel)
-			renderLabels(structure, camera, resources, showLabels, showSelectedBondLabel, selectedAtomIndices);
+		if (showLabels || !pinnedMeasurements.empty())
+			renderLabels(structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurement);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
@@ -915,6 +983,10 @@ namespace DefectStudio
 		glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
 			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, color)));
 		glVertexAttribDivisor(4, 1);
+		glEnableVertexAttribArray(5);
+		glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, rotationRadians)));
+		glVertexAttribDivisor(5, 1);
 
 		glBindVertexArray(0);
 		m_LabelQuadMesh.indexCount = 6;
@@ -1237,8 +1309,8 @@ namespace DefectStudio
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		bool showAllLabels,
-		bool showSelectedBondLabel,
-		const std::vector<std::size_t> &selectedAtomIndices)
+		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
+		int selectedPinnedMeasurement)
 	{
 		if (m_LabelFont == nullptr)
 		{
@@ -1249,12 +1321,12 @@ namespace DefectStudio
 		if (!m_LabelFont->IsValid())
 			return;
 
-		// Two independent triggers (Alt+M "every bond" vs M "just the selected one") share the
-		// same draw path but not the same data source: "every bond" is expensive enough to cache
-		// (resources.cachedLabelInstances, invalidated by labelsDirty) while the single-bond case
-		// is cheap enough (one bond's few glyphs) to just rebuild every frame it's shown - adding
-		// a second dirty-tracking axis keyed on selection would cost more than it saves here.
-		std::vector<OpenGlLabelInstance> selectedBondInstances;
+		// Two independent triggers (Alt+M "every bond" vs M "pin/unpin the current selection") share
+		// the same draw path but not the same data source: "every bond" is expensive enough to cache
+		// (resources.cachedLabelInstances, invalidated by labelsDirty) while pinned measurements are
+		// few and cheap (a handful of glyphs each) to just rebuild every frame - adding a second
+		// dirty-tracking axis keyed on the pin list would cost more than it saves here.
+		std::vector<OpenGlLabelInstance> pinnedInstances;
 		const std::vector<OpenGlLabelInstance> *instancesToDraw = nullptr;
 
 		if (showAllLabels)
@@ -1280,51 +1352,112 @@ namespace DefectStudio
 			}
 			instancesToDraw = &resources.cachedLabelInstances;
 		}
-		else if (showSelectedBondLabel && selectedAtomIndices.size() == 2)
+		else if (!pinnedMeasurements.empty())
 		{
-			const std::size_t atomA = selectedAtomIndices[0];
-			const std::size_t atomB = selectedAtomIndices[1];
-			bool foundBond = false;
-			for (const RendererBondData &bond : structure.bonds)
-			{
-				const bool matches =
-					(bond.firstAtomIndex == atomA && bond.secondAtomIndex == atomB) ||
-					(bond.firstAtomIndex == atomB && bond.secondAtomIndex == atomA);
-				if (!matches)
-					continue;
-				foundBond = true;
-				if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
-					break;
-				const RendererAtomData &first = structure.atoms[bond.firstAtomIndex];
-				const RendererAtomData &second = structure.atoms[bond.secondAtomIndex];
-				if (!first.visible || !second.visible)
-					break;
+			// screenOffset is a camera-right/up world-space nudge (see PinnedMeasurement) - computed
+			// from the CURRENT view matrix every frame, same basis vectors labels.vert derives for
+			// billboarding, so a dragged-apart label stays visually offset as the atoms move but will
+			// gently swim if the user orbits the camera afterwards (acceptable for "separate two
+			// overlapping labels", not meant to be a fixed 3D handle).
+			const glm::mat4 offsetView = camera.ViewMatrix();
+			const glm::vec3 cameraRight(offsetView[0][0], offsetView[1][0], offsetView[2][0]);
+			const glm::vec3 cameraUp(offsetView[0][1], offsetView[1][1], offsetView[2][1]);
 
-				const glm::vec3 secondPosition = second.cartesianPosition + bond.secondAtomPeriodicOffset;
-				const float lengthAngstrom = glm::length(secondPosition - first.cartesianPosition);
-				const glm::vec3 midpoint = (first.cartesianPosition + secondPosition) * 0.5f;
-				AppendBondLabelInstances(*m_LabelFont, midpoint, lengthAngstrom, selectedBondInstances);
-				break;
-			}
-			instancesToDraw = &selectedBondInstances;
-			// TEMP diagnostic (remove once M-toggle is confirmed working live) - throttled to
-			// ~2/sec so the Logging panel stays readable while this is held on with no match.
-			if (!foundBond)
+			for (std::size_t pinIndex = 0; pinIndex < pinnedMeasurements.size(); ++pinIndex)
 			{
-				static int throttleCounter = 0;
-				if (throttleCounter++ % 30 == 0)
-					DS_LOG_WARN(
-						"Labels: no bond found between selected atoms {} and {} (structure has {} bonds)",
-						atomA, atomB, structure.bonds.size());
+				const RendererWindowState::PinnedMeasurement &pin = pinnedMeasurements[pinIndex];
+				const glm::vec4 &color =
+					static_cast<int>(pinIndex) == selectedPinnedMeasurement ? kPinnedLabelSelectedColor : kLabelColor;
+				const glm::vec3 offset = cameraRight * pin.screenOffset.x + cameraUp * pin.screenOffset.y;
+
+				if (pin.atomIndices.size() == 2)
+				{
+					const std::size_t atomA = pin.atomIndices[0];
+					const std::size_t atomB = pin.atomIndices[1];
+					if (atomA >= structure.atoms.size() || atomB >= structure.atoms.size())
+						continue;
+					constexpr float kPeriodicOffsetEpsilon = 1.0e-3f;
+					for (const RendererBondData &bond : structure.bonds)
+					{
+						// Two atoms can be joined by more than one real bond across different periodic
+						// images (see PinnedMeasurement::bondPeriodicOffset) - matching only the atom
+						// pair and taking the first hit would render this pin at whichever bond happened
+						// to come first in the list, regardless of which one was actually pinned.
+						glm::vec3 offsetTowardB(0.0f);
+						bool matches = false;
+						if (bond.firstAtomIndex == atomA && bond.secondAtomIndex == atomB)
+						{
+							offsetTowardB = bond.secondAtomPeriodicOffset;
+							matches = true;
+						}
+						else if (bond.firstAtomIndex == atomB && bond.secondAtomIndex == atomA)
+						{
+							offsetTowardB = -bond.secondAtomPeriodicOffset;
+							matches = true;
+						}
+						if (!matches || glm::distance(offsetTowardB, pin.bondPeriodicOffset) >= kPeriodicOffsetEpsilon)
+							continue;
+						const RendererAtomData &first = structure.atoms[bond.firstAtomIndex];
+						const RendererAtomData &second = structure.atoms[bond.secondAtomIndex];
+						const glm::vec3 secondPosition = second.cartesianPosition + bond.secondAtomPeriodicOffset;
+						const float lengthAngstrom = glm::length(secondPosition - first.cartesianPosition);
+						const glm::vec3 midpoint = (first.cartesianPosition + secondPosition) * 0.5f;
+
+						float rotationRadians = 0.0f;
+						if (pin.alignToBondDirection)
+						{
+							// In-plane angle of the bond direction within the billboard's own basis
+							// (project onto cameraRight/cameraUp, not screen space - keeps the label
+							// readable without perspective skew at extreme angles).
+							const glm::vec3 bondDir = secondPosition - first.cartesianPosition;
+							const float dx = glm::dot(bondDir, cameraRight);
+							const float dy = glm::dot(bondDir, cameraUp);
+							if (dx != 0.0f || dy != 0.0f)
+							{
+								rotationRadians = std::atan2(dy, dx);
+								// Keep the label upright regardless of which way the bond points on
+								// screen - a lattice has bonds pointing every which way, and raw
+								// bond-angle alignment left roughly half of them upside-down/sideways.
+								while (rotationRadians > glm::half_pi<float>())
+									rotationRadians -= glm::pi<float>();
+								while (rotationRadians <= -glm::half_pi<float>())
+									rotationRadians += glm::pi<float>();
+							}
+							if (pin.flipped)
+								rotationRadians += glm::pi<float>();
+						}
+						AppendBondLabelInstances(
+							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, color, rotationRadians);
+						break;
+					}
+				}
+				else if (pin.atomIndices.size() == 3)
+				{
+					const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(), [&](const std::size_t index) {
+						return index < structure.atoms.size();
+					});
+					if (!inRange)
+						continue;
+
+					const std::size_t vertexIndex = ResolveAngleVertexIndex(structure, pin.atomIndices);
+					const RendererAtomData &vertexAtom = structure.atoms[vertexIndex];
+					const RendererAtomData &sideAtomA =
+						structure.atoms[pin.atomIndices[0] == vertexIndex ? pin.atomIndices[1] : pin.atomIndices[0]];
+					const RendererAtomData &sideAtomC =
+						structure.atoms[pin.atomIndices[2] == vertexIndex ? pin.atomIndices[1] : pin.atomIndices[2]];
+					const glm::vec3 toA = sideAtomA.cartesianPosition - vertexAtom.cartesianPosition;
+					const glm::vec3 toC = sideAtomC.cartesianPosition - vertexAtom.cartesianPosition;
+					const float lengthA = glm::length(toA);
+					const float lengthC = glm::length(toC);
+					if (lengthA > 0.0001f && lengthC > 0.0001f)
+					{
+						const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
+						const float angleDeg = glm::degrees(std::acos(cosAngle));
+						AppendAngleLabelInstances(*m_LabelFont, vertexAtom.cartesianPosition + offset, angleDeg, pinnedInstances, color);
+					}
+				}
 			}
-		}
-		else if (showSelectedBondLabel)
-		{
-			static int throttleCounter = 0;
-			if (throttleCounter++ % 30 == 0)
-				DS_LOG_WARN(
-					"Labels: selected-bond toggle is on but selection has {} atom(s), need exactly 2",
-					selectedAtomIndices.size());
+			instancesToDraw = &pinnedInstances;
 		}
 
 		if (instancesToDraw == nullptr || instancesToDraw->empty())

@@ -34,7 +34,10 @@ namespace DefectStudio
 		void renderStructureWindow(
 			RendererWindowState &windowState, float deltaTime, std::vector<std::string> &windowsToClose);
 		void drawViewportToolbar(RendererWindowState &windowState);
+		void drawViewportVerticalToolbar(RendererWindowState &windowState);
 		void applyViewportInputNavigation(RendererWindowState &windowState, const ImVec2 &imageOrigin, float deltaTime);
+		void applyContinuousNudge(RendererWindowState &windowState, float deltaTime);
+		void applyContinuousPan(RendererWindowState &windowState, float deltaTime);
 		void onViewportFocusChanged(const std::string &windowId, bool focused);
 		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
 		void handleBoxSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
@@ -49,7 +52,18 @@ namespace DefectStudio
 			std::vector<std::size_t> atomIndices,
 			RendererEvents::Viewport::RegionSelectMode mode);
 		void drawPeriodicTableWindow();
-		void renderTransformGizmo(RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);
+		[[nodiscard]] bool renderTransformGizmo(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		[[nodiscard]] bool handlePinnedMeasurementInteraction(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		[[nodiscard]] bool handleCursor3DPlacement(
+			RendererWindowState &windowState, float relX, float relY);
+		[[nodiscard]] glm::vec3 computeViewportWorldPosition(
+			const RendererWindowState &windowState, float relX, float relY) const;
+		[[nodiscard]] bool isAtomUnderScreenPosition(
+			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPos) const;
+		void renderViewportContextMenu(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 
 	private:
 		RendererLayer &m_Layer;
@@ -57,5 +71,10 @@ namespace DefectStudio
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
+		// Snapshot of the right-click's world position, taken the frame the viewport context menu
+		// opens (ImGui::IsWindowAppearing()) - "Set 3D cursor here" reads it later, when the user
+		// actually clicks that menu item and the live mouse position no longer points at the click.
+		// Only one context menu can be open at a time app-wide, so a single field is enough.
+		glm::vec3 m_ContextMenuWorldPosition = glm::vec3(0.0f);
 	};
 } // namespace DefectStudio

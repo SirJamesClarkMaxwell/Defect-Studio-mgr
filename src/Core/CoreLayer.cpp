@@ -68,6 +68,7 @@ namespace DefectStudio
 
 		EventDispatcher dispatcher(event);
 		dispatcher.Dispatch<KeyPressedEvent>(std::bind_front(&CoreLayer::onKeyPressed, this));
+		dispatcher.Dispatch<KeyRepeatedEvent>(std::bind_front(&CoreLayer::onKeyRepeated, this));
 	}
 
 	bool CoreLayer::InitializeSystems(Ref<EventBus> eventBus, const JobsConfig &jobsConfig)
@@ -334,24 +335,32 @@ namespace DefectStudio
 
 	bool CoreLayer::onKeyPressed(KeyPressedEvent &event)
 	{
+		return dispatchKeyChord(Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode())), false);
+	}
+
+	// GLFW_REPEAT (OS auto-repeat while a key is held) - only bindings explicitly marked
+	// `repeatable: true` in keybindings.yaml fire here (continuous camera orbit while held, say);
+	// everything else only ever runs once per physical press via onKeyPressed above. Without this
+	// gate, holding Delete or Ctrl+D would spam that command on every repeat tick.
+	bool CoreLayer::onKeyRepeated(KeyRepeatedEvent &event)
+	{
+		return dispatchKeyChord(Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode())), true);
+	}
+
+	bool CoreLayer::dispatchKeyChord(const KeyChord &chord, bool requireRepeatable)
+	{
 		if (m_CommandService == nullptr || m_KeymapResolver == nullptr || m_ContextManager == nullptr)
 			return false;
 
-		const KeyChord chord = Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode()));
-		KeyInputProcessor processor(*m_KeymapResolver, *m_ContextManager);
-		auto inputResult = processor.HandleKeyPressed(chord);
-		if (!inputResult)
-		{
-			DS_LOG_WARN("CoreLayer key input failed: {}", inputResult.Error().technicalDetails);
+		std::optional<KeyBinding> binding = m_KeymapResolver->Resolve(chord, *m_ContextManager);
+		if (!binding)
 			return false;
-		}
-
-		if (!inputResult->handled || !inputResult->commandId)
+		if (requireRepeatable && !binding->repeatable)
 			return false;
 
 		CommandContext context(ContextID{"core.keybinding"});
 		context.SetSource("CoreLayer shortcut " + ToString(chord));
-		auto commandResult = m_CommandService->Execute(*inputResult->commandId, std::move(context));
+		auto commandResult = m_CommandService->Execute(binding->commandId, std::move(context));
 		if (!commandResult)
 			DS_LOG_WARN("CoreLayer command shortcut failed: {}", commandResult.Error().technicalDetails);
 

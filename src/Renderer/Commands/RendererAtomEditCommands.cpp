@@ -129,6 +129,16 @@ namespace DefectStudio
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 
+		// In-process atom clipboard for Copy/Paste (Ctrl+C/Ctrl+V) - shared across every window and
+		// every command instance, matching how a real OS clipboard behaves (copy in one viewport,
+		// paste into another). No project persistence, no OS clipboard integration - just enough to
+		// round-trip within a running session.
+		std::vector<AtomSite> &GetAtomClipboard()
+		{
+			static std::vector<AtomSite> clipboard;
+			return clipboard;
+		}
+
 		class DeleteSelectedAtomsCommand final : public ICommand
 		{
 		public:
@@ -440,6 +450,379 @@ namespace DefectStudio
 			std::string m_WindowIdResolved;
 			std::vector<AtomSite> m_PreviousAtoms;
 		};
+		class NudgeSelectedAtomsCommand final : public ICommand
+		{
+		public:
+			NudgeSelectedAtomsCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				glm::vec2 screenDirection)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ScreenDirection(screenDirection)
+			{
+			}
+
+			Result<void> Execute(CommandContext &context) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"NudgeSelectedAtomsCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, "");
+				if (!target)
+					return target.Error();
+
+				RendererWindowState &windowState = *target->windowState;
+				if (windowState.selectedAtomIndices.empty() || windowState.camera == nullptr)
+					return {}; // Nothing to nudge - a quiet no-op, not a user-facing error.
+
+				// Screen-space (camera-right/camera-up), not world axes - Shift+Left always nudges
+				// "left as you're looking at it" regardless of how the view is currently orbited,
+				// matching the pinned-measurement drag and the rotate trackball elsewhere in this file.
+				constexpr float kNudgeStepWorldUnits = 0.15f;
+				const glm::mat4 view = windowState.camera->ViewMatrix();
+				const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+				const glm::vec3 cameraUp(view[0][1], view[1][1], view[2][1]);
+				const glm::vec3 worldDelta =
+					(cameraRight * m_ScreenDirection.x + cameraUp * m_ScreenDirection.y) * kNudgeStepWorldUnits;
+
+				GizmoTransformPayload payload;
+				payload.windowId = windowState.windowId;
+				payload.atomIndices = windowState.selectedAtomIndices;
+				payload.afterPositions.reserve(payload.atomIndices.size());
+				for (const std::size_t atomIndex : payload.atomIndices)
+				{
+					const glm::vec3 before = atomIndex < windowState.structure.atoms.size()
+						? windowState.structure.atoms[atomIndex].cartesianPosition
+						: glm::vec3(0.0f);
+					payload.afterPositions.push_back(before + worldDelta);
+				}
+				payload.description = "Move selected atoms";
+
+				m_Inner = CreateTransformSelectedAtomsCommand(m_DomainLayer, m_RendererLayer, m_AtomStyleTable, std::move(payload));
+				return m_Inner->Execute(context);
+			}
+
+			Result<void> Undo(CommandContext &context) override
+			{
+				return m_Inner != nullptr ? m_Inner->Undo(context) : Result<void>{};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return m_Inner != nullptr ? m_Inner->Description() : "Move selected atoms";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			glm::vec2 m_ScreenDirection;
+			Unique<ICommand> m_Inner;
+		};
+
+		class CopySelectedAtomsCommand final : public ICommand
+		{
+		public:
+			CopySelectedAtomsCommand(
+				WeakRef<DomainLayer> domainLayer, WeakRef<RendererLayer> rendererLayer, std::string windowId)
+				: m_DomainLayer(std::move(domainLayer)), m_RendererLayer(std::move(rendererLayer)), m_WindowId(std::move(windowId))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"CopySelectedAtomsCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowId);
+				if (!target)
+					return target.Error();
+
+				const RendererWindowState &windowState = *target->windowState;
+				if (windowState.selectedAtomIndices.empty())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.nothing_selected",
+						"No atoms selected.",
+						"CopySelectedAtomsCommand: selectedAtomIndices is empty.");
+				}
+
+				std::vector<std::size_t> sourceIndices = windowState.selectedAtomIndices;
+				std::sort(sourceIndices.begin(), sourceIndices.end());
+
+				const CrystalStructure &structure = target->record->structure;
+				std::vector<AtomSite> &clipboard = GetAtomClipboard();
+				clipboard.clear();
+				for (std::size_t sourceIndex : sourceIndices)
+					if (sourceIndex < structure.atoms.size())
+						clipboard.push_back(structure.atoms[sourceIndex]);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override { return {}; }
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Copy selected atoms";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return false;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			std::string m_WindowId;
+		};
+
+		class PasteAtomsCommand final : public ICommand
+		{
+		public:
+			PasteAtomsCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				ElementPropertiesTable elementPropertiesTable,
+				std::string windowId)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
+				  m_WindowId(std::move(windowId))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"PasteAtomsCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				const std::vector<AtomSite> &clipboard = GetAtomClipboard();
+				if (clipboard.empty())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.clipboard_empty",
+						"Clipboard is empty - copy atoms first (Ctrl+C).",
+						"PasteAtomsCommand: clipboard is empty.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowId);
+				if (!target)
+					return target.Error();
+
+				RendererWindowState &windowState = *target->windowState;
+				m_WindowIdResolved = windowState.windowId;
+				m_PreviousAtoms = target->record->structure.atoms;
+				m_PreviousBonds = target->record->structure.bonds;
+
+				// Same fixed nudge Duplicate uses - avoids dropping the pasted copy exactly on top of
+				// the original (same window) with no extra "smart placement" heuristic needed.
+				constexpr glm::vec3 kPasteOffset(0.5f, 0.0f, 0.0f);
+				CrystalStructure &structure = target->record->structure;
+				std::vector<std::size_t> newIndices;
+				newIndices.reserve(clipboard.size());
+				for (const AtomSite &clipboardAtom : clipboard)
+				{
+					PointDefectOperation operation;
+					operation.atom = clipboardAtom;
+					operation.atom.position += kPasteOffset;
+					operation.atom.fractional = structure.CartesianToFractional(operation.atom.position);
+					newIndices.push_back(structure.atoms.size());
+					Result<void> result = ApplyInterstitial(structure, operation);
+					if (!result)
+						return result.Error();
+				}
+
+				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, newIndices);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"PasteAtomsCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				target->record->structure.atoms = m_PreviousAtoms;
+				target->record->structure.bonds = m_PreviousBonds;
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, {});
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Paste atoms";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			ElementPropertiesTable m_ElementPropertiesTable;
+			std::string m_WindowId;
+			std::string m_WindowIdResolved;
+			std::vector<AtomSite> m_PreviousAtoms;
+			std::vector<Bond> m_PreviousBonds;
+		};
+
+		class ChangeSelectedAtomTypeCommand final : public ICommand
+		{
+		public:
+			ChangeSelectedAtomTypeCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				ElementPropertiesTable elementPropertiesTable,
+				ChangeAtomTypePayload payload)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
+				  m_Payload(std::move(payload))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"ChangeSelectedAtomTypeCommand: DomainLayer or RendererLayer expired.");
+				}
+				if (m_Payload.species.empty())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.empty_species",
+						"Enter an element symbol.",
+						"ChangeSelectedAtomTypeCommand: payload.species is empty.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_Payload.windowId);
+				if (!target)
+					return target.Error();
+
+				RendererWindowState &windowState = *target->windowState;
+				if (windowState.selectedAtomIndices.empty())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.nothing_selected",
+						"No atoms selected.",
+						"ChangeSelectedAtomTypeCommand: selectedAtomIndices is empty.");
+				}
+
+				m_WindowIdResolved = windowState.windowId;
+				m_ChangedIndices = windowState.selectedAtomIndices;
+				std::sort(m_ChangedIndices.begin(), m_ChangedIndices.end());
+				CrystalStructure &structure = target->record->structure;
+				m_PreviousAtoms = structure.atoms;
+
+				for (std::size_t atomIndex : m_ChangedIndices)
+				{
+					PointDefectOperation operation;
+					operation.atomIndex = atomIndex;
+					operation.replacementSpecies = m_Payload.species;
+					Result<void> result = ApplyReplacement(structure, operation, "Change atom type");
+					if (!result)
+						return result.Error();
+				}
+
+				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, m_ChangedIndices);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"ChangeSelectedAtomTypeCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				target->record->structure.atoms = m_PreviousAtoms;
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_ChangedIndices);
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Change atom type to " + m_Payload.species;
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			ElementPropertiesTable m_ElementPropertiesTable;
+			ChangeAtomTypePayload m_Payload;
+			std::string m_WindowIdResolved;
+			std::vector<AtomSite> m_PreviousAtoms;
+			std::vector<std::size_t> m_ChangedIndices;
+		};
 	} // namespace
 
 	Unique<ICommand> CreateDeleteSelectedAtomsCommand(
@@ -480,5 +863,51 @@ namespace DefectStudio
 	{
 		return CreateUnique<TransformSelectedAtomsCommand>(
 			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(payload));
+	}
+
+	Unique<ICommand> CreateNudgeSelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		glm::vec2 screenDirection)
+	{
+		return CreateUnique<NudgeSelectedAtomsCommand>(
+			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), screenDirection);
+	}
+
+	Unique<ICommand> CreateCopySelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer, WeakRef<RendererLayer> rendererLayer, AtomStyleTable, std::string windowId)
+	{
+		return CreateUnique<CopySelectedAtomsCommand>(std::move(domainLayer), std::move(rendererLayer), std::move(windowId));
+	}
+
+	Unique<ICommand> CreatePasteAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		std::string windowId)
+	{
+		return CreateUnique<PasteAtomsCommand>(
+			std::move(domainLayer),
+			std::move(rendererLayer),
+			std::move(atomStyleTable),
+			std::move(elementPropertiesTable),
+			std::move(windowId));
+	}
+
+	Unique<ICommand> CreateChangeSelectedAtomTypeCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		ChangeAtomTypePayload payload)
+	{
+		return CreateUnique<ChangeSelectedAtomTypeCommand>(
+			std::move(domainLayer),
+			std::move(rendererLayer),
+			std::move(atomStyleTable),
+			std::move(elementPropertiesTable),
+			std::move(payload));
 	}
 } // namespace DefectStudio

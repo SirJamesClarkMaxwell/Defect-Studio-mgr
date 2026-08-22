@@ -13,6 +13,7 @@
 #include <functional>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -452,7 +453,8 @@ namespace DefectStudio
 			windowState.showCellBox,
 			windowState.showGrid,
 			windowState.showLabels,
-			windowState.showSelectedBondLabel,
+			windowState.pinnedMeasurements,
+			windowState.selectedPinnedMeasurement,
 			windowState.selectedAtomIndices,
 			nullptr,
 			&windowState.orbitalChannelUp,
@@ -783,6 +785,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onRollDirectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ZoomDirectionRequested>(
 				std::bind_front(&RendererLayer::onZoomDirectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::PanDirectionRequested>(
+				std::bind_front(&RendererLayer::onPanDirectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::PanStepRequested>(
+				std::bind_front(&RendererLayer::onPanStepRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::OrbitStepRequested>(
 				std::bind_front(&RendererLayer::onOrbitStepRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RollStepRequested>(
@@ -815,6 +821,22 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onLabelsToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleSelectedBondRequested>(
 				std::bind_front(&RendererLayer::onLabelsToggleSelectedBondRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleSelectedAngleRequested>(
+				std::bind_front(&RendererLayer::onLabelsToggleSelectedAngleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsRemoveSelectedBondRequested>(
+				std::bind_front(&RendererLayer::onLabelsRemoveSelectedBondRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsShowAllBondRequested>(
+				std::bind_front(&RendererLayer::onLabelsShowAllBondRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsRemoveAllBondRequested>(
+				std::bind_front(&RendererLayer::onLabelsRemoveAllBondRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsRemoveSelectedAngleRequested>(
+				std::bind_front(&RendererLayer::onLabelsRemoveSelectedAngleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsShowAllAngleRequested>(
+				std::bind_front(&RendererLayer::onLabelsShowAllAngleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsRemoveAllAngleRequested>(
+				std::bind_front(&RendererLayer::onLabelsRemoveAllAngleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleBondAlignmentRequested>(
+				std::bind_front(&RendererLayer::onLabelsToggleBondAlignmentRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RegionSelectionRequested>(
 				std::bind_front(&RendererLayer::onRegionSelectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::HideSelectionRequested>(
@@ -823,6 +845,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onShowAllRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionInvertRequested>(
 				std::bind_front(&RendererLayer::onSelectionInvertRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectAllRequested>(
+				std::bind_front(&RendererLayer::onSelectAllRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::Cursor3DSetPositionRequested>(
+				std::bind_front(&RendererLayer::onCursor3DSetPositionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SetAsDefaultViewRequested>(
 				std::bind_front(&RendererLayer::onSetAsDefaultViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::ApplyDefaultViewRequested>(
@@ -1298,6 +1324,40 @@ namespace DefectStudio
 		restoreViewSnapshot(*windowState, after, "keyboard.orbit_step");
 	}
 
+	void RendererLayer::onPanDirectionRequested(const RendererEvents::Viewport::PanDirectionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		// Same up/down sign convention as the toolbar's pan buttons (RendererPanelToolbar.cpp) - up
+		// is negative Y in RendererViewCamera::Pan's own screen-pixel space.
+		RendererEvents::Viewport::PanStepRequested stepEvent;
+		stepEvent.windowId = windowState->windowId;
+		switch (event.direction)
+		{
+			case RendererEvents::Viewport::OrbitDirection::Left: stepEvent.dx = -windowState->pixelStepPx; break;
+			case RendererEvents::Viewport::OrbitDirection::Right: stepEvent.dx = +windowState->pixelStepPx; break;
+			case RendererEvents::Viewport::OrbitDirection::Up: stepEvent.dy = -windowState->pixelStepPx; break;
+			case RendererEvents::Viewport::OrbitDirection::Down: stepEvent.dy = +windowState->pixelStepPx; break;
+		}
+		onPanStepRequested(stepEvent);
+	}
+
+	void RendererLayer::onPanStepRequested(const RendererEvents::Viewport::PanStepRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->camera == nullptr)
+			return;
+
+		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		RendererViewCamera targetCamera = *windowState->camera;
+		targetCamera.Pan(event.dx, event.dy);
+		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
+		pushViewChange(*windowState, before, after, "keyboard.pan_step");
+		restoreViewSnapshot(*windowState, after, "keyboard.pan_step");
+	}
+
 	void RendererLayer::onRollStepRequested(const RendererEvents::Viewport::RollStepRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
@@ -1589,14 +1649,249 @@ namespace DefectStudio
 		windowState->showLabels = !windowState->showLabels;
 	}
 
+	namespace
+	{
+		// A pin's identity is its atom SET, not the order the caller happened to list them in -
+		// callers pass raw bond endpoints or raw selection order, so this sorts before
+		// comparing/storing. removeIfPresent=true (the single-pair M/Shift+M press) toggles: pressing
+		// the same set again removes it. removeIfPresent=false (bulk M/Shift+M over a multi-atom
+		// selection) is add-only: re-selecting a pair/triple that's already pinned leaves it alone
+		// instead of unpinning it - a bulk press used to be able to both add AND remove within the
+		// same press depending on what was already pinned in the selection, which made "select more
+		// atoms, press M again" an unpredictable mix of adding new labels and deleting existing ones.
+		// periodicOffset is RendererBondData::secondAtomPeriodicOffset, pointing atomIndices[0] (as
+		// passed in, BEFORE the identity sort below) -> atomIndices[1] - only meaningful for a 2-atom
+		// bond pin; angle pins (size 3) ignore it. Distinguishes bonds to different periodic images of
+		// the same neighbor (see PinnedMeasurement::bondPeriodicOffset) so bulk-pinning a selection
+		// doesn't collapse two real bonds onto one toggle identity.
+		void ToggleMeasurementPin(
+			RendererWindowState &windowState, std::vector<std::size_t> atomIndices, glm::vec3 periodicOffset = glm::vec3(0.0f),
+			bool removeIfPresent = true)
+		{
+			if (atomIndices.size() == 2)
+			{
+				if (atomIndices[0] > atomIndices[1])
+				{
+					std::swap(atomIndices[0], atomIndices[1]);
+					periodicOffset = -periodicOffset;
+				}
+			}
+			else
+			{
+				std::sort(atomIndices.begin(), atomIndices.end());
+			}
+
+			constexpr float kPeriodicOffsetEpsilon = 1.0e-3f;
+			auto existing = std::find_if(
+				windowState.pinnedMeasurements.begin(),
+				windowState.pinnedMeasurements.end(),
+				[&](const RendererWindowState::PinnedMeasurement &pin) {
+					if (pin.atomIndices != atomIndices)
+						return false;
+					return atomIndices.size() != 2 ||
+						glm::distance(pin.bondPeriodicOffset, periodicOffset) < kPeriodicOffsetEpsilon;
+				});
+			if (existing != windowState.pinnedMeasurements.end())
+			{
+				if (!removeIfPresent)
+					return;
+				const auto removedIndex = std::distance(windowState.pinnedMeasurements.begin(), existing);
+				windowState.pinnedMeasurements.erase(existing);
+				if (windowState.selectedPinnedMeasurement == static_cast<int>(removedIndex))
+					windowState.selectedPinnedMeasurement = -1;
+				else if (windowState.selectedPinnedMeasurement > static_cast<int>(removedIndex))
+					--windowState.selectedPinnedMeasurement;
+			}
+			else
+			{
+				RendererWindowState::PinnedMeasurement pin;
+				pin.atomIndices = std::move(atomIndices);
+				pin.alignToBondDirection = pin.atomIndices.size() == 2 && windowState.bondLabelsAlignToDirection;
+				pin.bondPeriodicOffset = periodicOffset;
+				windowState.pinnedMeasurements.push_back(std::move(pin));
+			}
+		}
+
+		[[nodiscard]] std::unordered_set<std::size_t> VisibleAtomsIn(
+			const RendererWindowState &windowState, const std::vector<std::size_t> &atomIndices)
+		{
+			std::unordered_set<std::size_t> result;
+			for (const std::size_t atomIndex : atomIndices)
+			{
+				if (atomIndex < windowState.structure.atoms.size() && windowState.structure.atoms[atomIndex].visible)
+					result.insert(atomIndex);
+			}
+			return result;
+		}
+
+		[[nodiscard]] std::unordered_set<std::size_t> AllVisibleAtoms(const RendererWindowState &windowState)
+		{
+			std::unordered_set<std::size_t> result;
+			for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
+			{
+				if (windowState.structure.atoms[i].visible)
+					result.insert(i);
+			}
+			return result;
+		}
+
+		// Pins every bonded pair WITHIN atomSet, not just some fixed pair - with 4+ atoms in the set
+		// this pins a length for each actual bond among them in one press. Add-only (see
+		// ToggleMeasurementPin's removeIfPresent note).
+		void AddBondPinsWithinSet(RendererWindowState &windowState, const std::unordered_set<std::size_t> &atomSet)
+		{
+			for (const RendererBondData &bond : windowState.structure.bonds)
+			{
+				if (atomSet.contains(bond.firstAtomIndex) && atomSet.contains(bond.secondAtomIndex))
+					ToggleMeasurementPin(
+						windowState, {bond.firstAtomIndex, bond.secondAtomIndex}, bond.secondAtomPeriodicOffset,
+						/*removeIfPresent=*/false);
+			}
+		}
+
+		// With more than 3 atoms in atomSet, pins one angle per actual bonded pair-at-a-vertex within
+		// it (mirrors AddBondPinsWithinSet's "every bonded pair" generalization) - e.g. a whole ring
+		// labels every internal angle in one press. Falls back to the plain 3-point angle (vertex =
+		// whichever is bonded to both others, or the middle index if none are bonded at all - see
+		// ResolveAngleVertexIndex) only when exactly 3 atoms are in the set and none are bonded to
+		// each other, so a free-floating 3-point angle still works. Add-only.
+		void AddAnglePinsWithinSet(RendererWindowState &windowState, const std::unordered_set<std::size_t> &atomSet)
+		{
+			std::unordered_map<std::size_t, std::vector<std::size_t>> neighborsByAtom;
+			for (const RendererBondData &bond : windowState.structure.bonds)
+			{
+				if (!atomSet.contains(bond.firstAtomIndex) || !atomSet.contains(bond.secondAtomIndex))
+					continue;
+				neighborsByAtom[bond.firstAtomIndex].push_back(bond.secondAtomIndex);
+				neighborsByAtom[bond.secondAtomIndex].push_back(bond.firstAtomIndex);
+			}
+
+			bool pinnedAny = false;
+			for (const auto &[vertex, neighbors] : neighborsByAtom)
+			{
+				for (std::size_t i = 0; i < neighbors.size(); ++i)
+				{
+					for (std::size_t j = i + 1; j < neighbors.size(); ++j)
+					{
+						ToggleMeasurementPin(windowState, {vertex, neighbors[i], neighbors[j]}, glm::vec3(0.0f), /*removeIfPresent=*/false);
+						pinnedAny = true;
+					}
+				}
+			}
+
+			if (!pinnedAny && atomSet.size() == 3)
+				ToggleMeasurementPin(
+					windowState, std::vector<std::size_t>(atomSet.begin(), atomSet.end()), glm::vec3(0.0f),
+					/*removeIfPresent=*/false);
+		}
+
+		// Removes every existing pin of the given size (2 = bond, 3 = angle) whose atoms are ALL
+		// members of atomSet - filters what's already pinned rather than recomputing bond candidates,
+		// so it also cleans up a pin left over from a structure edit that no longer has a matching
+		// bond.
+		void RemovePinsWithinSet(RendererWindowState &windowState, std::size_t pinSize, const std::unordered_set<std::size_t> &atomSet)
+		{
+			std::vector<RendererWindowState::PinnedMeasurement> &pins = windowState.pinnedMeasurements;
+			for (std::size_t i = 0; i < pins.size();)
+			{
+				const RendererWindowState::PinnedMeasurement &pin = pins[i];
+				const bool matches = pin.atomIndices.size() == pinSize &&
+					std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(),
+						[&](const std::size_t atomIndex) { return atomSet.contains(atomIndex); });
+				if (!matches)
+				{
+					++i;
+					continue;
+				}
+				pins.erase(pins.begin() + static_cast<std::ptrdiff_t>(i));
+				if (windowState.selectedPinnedMeasurement == static_cast<int>(i))
+					windowState.selectedPinnedMeasurement = -1;
+				else if (windowState.selectedPinnedMeasurement > static_cast<int>(i))
+					--windowState.selectedPinnedMeasurement;
+			}
+		}
+	} // namespace
+
 	void RendererLayer::onLabelsToggleSelectedBondRequested(
 		const RendererEvents::Viewport::LabelsToggleSelectedBondRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->selectedAtomIndices.size() < 2)
+			return;
+		AddBondPinsWithinSet(*windowState, VisibleAtomsIn(*windowState, windowState->selectedAtomIndices));
+	}
+
+	void RendererLayer::onLabelsRemoveSelectedBondRequested(
+		const RendererEvents::Viewport::LabelsRemoveSelectedBondRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr)
 			return;
+		RemovePinsWithinSet(*windowState, 2, VisibleAtomsIn(*windowState, windowState->selectedAtomIndices));
+	}
 
-		windowState->showSelectedBondLabel = !windowState->showSelectedBondLabel;
+	void RendererLayer::onLabelsShowAllBondRequested(const RendererEvents::Viewport::LabelsShowAllBondRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+		AddBondPinsWithinSet(*windowState, AllVisibleAtoms(*windowState));
+	}
+
+	void RendererLayer::onLabelsRemoveAllBondRequested(const RendererEvents::Viewport::LabelsRemoveAllBondRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+		RemovePinsWithinSet(*windowState, 2, AllVisibleAtoms(*windowState));
+	}
+
+	void RendererLayer::onLabelsToggleSelectedAngleRequested(
+		const RendererEvents::Viewport::LabelsToggleSelectedAngleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr || windowState->selectedAtomIndices.size() < 3)
+			return;
+		AddAnglePinsWithinSet(*windowState, VisibleAtomsIn(*windowState, windowState->selectedAtomIndices));
+	}
+
+	void RendererLayer::onLabelsRemoveSelectedAngleRequested(
+		const RendererEvents::Viewport::LabelsRemoveSelectedAngleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+		RemovePinsWithinSet(*windowState, 3, VisibleAtomsIn(*windowState, windowState->selectedAtomIndices));
+	}
+
+	void RendererLayer::onLabelsShowAllAngleRequested(const RendererEvents::Viewport::LabelsShowAllAngleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+		AddAnglePinsWithinSet(*windowState, AllVisibleAtoms(*windowState));
+	}
+
+	void RendererLayer::onLabelsRemoveAllAngleRequested(const RendererEvents::Viewport::LabelsRemoveAllAngleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+		RemovePinsWithinSet(*windowState, 3, AllVisibleAtoms(*windowState));
+	}
+
+	void RendererLayer::onLabelsToggleBondAlignmentRequested(
+		const RendererEvents::Viewport::LabelsToggleBondAlignmentRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+		windowState->bondLabelsAlignToDirection = !windowState->bondLabelsAlignToDirection;
+		for (RendererWindowState::PinnedMeasurement &pin : windowState->pinnedMeasurements)
+		{
+			if (pin.atomIndices.size() == 2)
+				pin.alignToBondDirection = windowState->bondLabelsAlignToDirection;
+		}
 	}
 
 	void RendererLayer::onRegionSelectionRequested(const RendererEvents::Viewport::RegionSelectionRequested &event)
@@ -1656,6 +1951,32 @@ namespace DefectStudio
 		InvertSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
 		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
 		pushViewChange(*windowState, before, after, "keyboard.invert_selection");
+	}
+
+	void RendererLayer::onSelectAllRequested(const RendererEvents::Viewport::SelectAllRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		// Only visible atoms - selecting hidden ones too would let a subsequent M/gizmo/delete act on
+		// atoms the user can't see or intended to exclude via H (matches InvertSelectionModifier's
+		// same visible-only rule below).
+		SceneRegistry &scene = windowState->sceneRegistry;
+		entt::registry &registry = scene.Registry();
+		for (const entt::entity entity : registry.view<SelectionComponent, const VisibilityComponent>())
+			registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+	}
+
+	void RendererLayer::onCursor3DSetPositionRequested(const RendererEvents::Viewport::Cursor3DSetPositionRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->cursor3DPosition = event.position;
+		windowState->cursor3DPlaced = true;
 	}
 
 	std::optional<RendererViewSnapshot> RendererLayer::CaptureWindowViewSnapshot(const std::string &windowId) const

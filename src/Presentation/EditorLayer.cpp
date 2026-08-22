@@ -300,6 +300,37 @@ namespace DefectStudio
 		Ref<ElectronicStructureSession> m_Session;
 	};
 
+	// Un-hides the panel if the user had closed it, then focuses it - a closed docked window has no
+	// ImGui window to focus, so SetVisible must run first (that frame's Render() reopens it, then
+	// SetWindowFocus can find it by title).
+	class FocusPanelCommand final : public ICommand
+	{
+	public:
+		FocusPanelCommand(WeakRef<IPanel> panel, std::string description)
+			: m_Panel(std::move(panel)), m_Description(std::move(description))
+		{
+		}
+
+		Result<void> Execute(CommandContext &) override
+		{
+			Ref<IPanel> panel = m_Panel.lock();
+			if (panel == nullptr)
+				return {};
+			panel->SetVisible(true);
+			ImGui::SetWindowFocus(panel->GetTitle().c_str());
+			return {};
+		}
+
+		std::string Description() const override
+		{
+			return m_Description;
+		}
+
+	private:
+		WeakRef<IPanel> m_Panel;
+		std::string m_Description;
+	};
+
 	[[nodiscard]] std::string findShortcutForCommand(
 		const CommandID &id,
 		const KeymapResolver *resolver,
@@ -481,6 +512,22 @@ namespace DefectStudio
 			: Path("logs") / Path("event-log-export.csv");
 		registerPanel<LoggingPanel>(m_EventBus, m_LogRegistry, logExportPath, "Logging Panel", true);
 		m_ProjectTreePanelId = registerPanel<ProjectTreePanel>(m_EventBus, "Project Tree", true);
+		if (auto commandRegistry = m_CommandRegistry.lock())
+		{
+			auto result = commandRegistry->Register(
+				CommandMeta{
+					CommandID{"editor.focus_project_tree"},
+					"Focus Project Tree",
+					"Editor",
+					"Bring the Project Tree panel to focus, reopening it first if it was closed.",
+					{},
+					CommandFlags::None},
+				[this](CommandContext &) -> Unique<ICommand> {
+					return CreateUnique<FocusPanelCommand>(findPanel(m_ProjectTreePanelId), "Focus Project Tree");
+				});
+			if (!result)
+				DS_LOG_WARN("Focus Project Tree command registration failed: {}", result.Error().technicalDetails);
+		}
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		loadInitialProjectState();
 		if (auto rendererLayer = m_RendererLayer.lock())

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -56,11 +57,38 @@ namespace DefectStudio
 		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
 	};
 
+	// Which of a 3-atom set is a measured angle's vertex - whichever atom is bonded to the other
+	// two (the geometrically/chemically correct choice for a real bond angle); falls back to the
+	// middle index if none qualifies (three unbonded points). Shared by the OpenGL label renderer
+	// (renders the angle text there) and the viewport panel's pinned-measurement pick/drag (needs
+	// the same point to hit-test and offset against) - atomIndices must have exactly 3 entries.
+	[[nodiscard]] inline std::size_t ResolveAngleVertexIndex(
+		const RendererStructureData &structure, const std::vector<std::size_t> &atomIndices)
+	{
+		for (const std::size_t candidate : atomIndices)
+		{
+			const bool bondedToBothOthers = std::all_of(atomIndices.begin(), atomIndices.end(), [&](const std::size_t other) {
+				if (other == candidate)
+					return true;
+				return std::any_of(structure.bonds.begin(), structure.bonds.end(), [&](const RendererBondData &bond) {
+					return (bond.firstAtomIndex == candidate && bond.secondAtomIndex == other) ||
+						(bond.firstAtomIndex == other && bond.secondAtomIndex == candidate);
+				});
+			});
+			if (bondedToBothOthers)
+				return candidate;
+		}
+		return atomIndices[1];
+	}
+
 	enum class SelectionToolMode
 	{
 		None,
 		Box,
-		Circle
+		Circle,
+		// Click-to-place 3D cursor (vertical toolbar "3D point" tool) - shares this enum so it's
+		// mutually exclusive with Box/Circle the same way they already are with each other.
+		Cursor3D
 	};
 
 	// Which ImGuizmo::OPERATION the viewport gizmo currently shows for the selection (G/R/S).

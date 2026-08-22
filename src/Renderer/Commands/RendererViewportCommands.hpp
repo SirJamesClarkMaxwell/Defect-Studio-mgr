@@ -12,6 +12,9 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererOrbitDirectionCommand(
 		Ref<EventBus> eventBus,
 		RendererEvents::Viewport::OrbitDirection direction);
+	[[nodiscard]] Unique<ICommand> CreateRendererPanDirectionCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::OrbitDirection direction);
 	[[nodiscard]] Unique<ICommand> CreateRendererOrbitQuarterTurnCommand(
 		Ref<EventBus> eventBus,
 		RendererEvents::Viewport::OrbitDirection direction);
@@ -33,9 +36,18 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleSelectedBondCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleSelectedAngleCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsRemoveSelectedBondCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsShowAllBondCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsRemoveAllBondCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsRemoveSelectedAngleCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsShowAllAngleCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsRemoveAllAngleCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleBondAlignmentCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererShowAllCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectionInvertCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererSelectAllCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSetAsDefaultViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererApplyDefaultViewCommand(Ref<EventBus> eventBus);
 } // namespace DefectStudio

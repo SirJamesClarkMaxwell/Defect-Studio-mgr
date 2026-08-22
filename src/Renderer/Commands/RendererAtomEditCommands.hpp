@@ -53,4 +53,48 @@ namespace DefectStudio
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
 		GizmoTransformPayload payload);
+
+	// Keyboard nudge (Shift+Arrows) for the current selection - one undoable step per press, moving
+	// by a small fixed amount along the focused viewport's own camera-right/camera-up axes (screen-
+	// space up/down/left/right, not world axes, so it does the visually expected thing regardless of
+	// orbit). screenDirection is (x=right, y=up) in {-1,0,1}. No-op (not an error) if nothing is
+	// selected or the focused window has no camera.
+	[[nodiscard]] Unique<ICommand> CreateNudgeSelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		glm::vec2 screenDirection);
+
+	// Copies the current selection into an in-process clipboard (shared across every window/command
+	// instance - see the anonymous-namespace holder in the .cpp). Read-only, not undoable.
+	[[nodiscard]] Unique<ICommand> CreateCopySelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		std::string windowId = {});
+
+	// Inserts the clipboard's atoms (from the most recent Copy) into the target window's structure,
+	// offset the same way Duplicate offsets its copies - undoable. Fails if the clipboard is empty.
+	[[nodiscard]] Unique<ICommand> CreatePasteAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		std::string windowId = {});
+
+	// Payload for "renderer.selection.change_type" - species text comes from the context menu's
+	// inline input, so (like GizmoTransformPayload) it's passed through CommandContext rather than
+	// baked into the factory at registration time.
+	struct ChangeAtomTypePayload
+	{
+		std::string windowId;
+		std::string species;
+	};
+
+	[[nodiscard]] Unique<ICommand> CreateChangeSelectedAtomTypeCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		ChangeAtomTypePayload payload);
 } // namespace DefectStudio

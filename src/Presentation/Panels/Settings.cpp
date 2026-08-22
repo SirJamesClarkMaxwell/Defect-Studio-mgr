@@ -1392,8 +1392,22 @@ namespace DefectStudio
 
 			ImGui::TableNextRow();
 
+			// Long command names/descriptions get clipped by the table's column width (that's the
+			// "nie wszystko widać" complaint) - a delayed hover tooltip on every cell in the row shows
+			// the full picture (shortcut, command, description, context) regardless of which cell was
+			// too narrow to read.
+			const std::string &ctx = binding.when.GetExpression();
+			const std::string tooltipText = chordStr + "  -  " + commandName +
+				(commandDesc.empty() ? "" : "\n\n" + commandDesc) +
+				"\n\nContext: " + (ctx.empty() ? "global" : ctx);
+			const auto showTooltipIfHovered = [&tooltipText]() {
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay))
+					ImGui::SetTooltip("%s", tooltipText.c_str());
+			};
+
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(chordStr.c_str());
+			showTooltipIfHovered();
 
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(commandName.c_str());
@@ -1402,16 +1416,18 @@ namespace DefectStudio
 				ImGui::SameLine();
 				ImGui::TextDisabled("(%s)", binding.commandId.value.c_str());
 			}
+			showTooltipIfHovered();
 
 			ImGui::TableNextColumn();
 			if (!commandDesc.empty())
 				ImGui::TextUnformatted(commandDesc.c_str());
 			else
 				ImGui::TextDisabled("-");
+			showTooltipIfHovered();
 
 			ImGui::TableNextColumn();
-			const std::string &ctx = binding.when.GetExpression();
 			ImGui::TextDisabled("%s", ctx.empty() ? "global" : ctx.c_str());
+			showTooltipIfHovered();
 		}
 
 		ImGui::EndTable();

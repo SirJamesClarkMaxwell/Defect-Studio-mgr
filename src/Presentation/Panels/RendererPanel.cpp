@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -149,6 +150,9 @@ namespace DefectStudio
 		drawViewportToolbar(windowState);
 		ImGui::Separator();
 
+		drawViewportVerticalToolbar(windowState);
+		ImGui::SameLine();
+
 		const ImVec2 available = ImGui::GetContentRegionAvail();
 		m_Layer.SetViewportSize(
 			windowState.windowId,
@@ -197,22 +201,38 @@ namespace DefectStudio
 
 		const bool hovered = ImGui::IsItemHovered();
 
-		renderTransformGizmo(windowState, imageOrigin, viewportSize);
-		// A live gizmo drag takes exclusive control of the viewport for the frame - suppress
-		// box/circle-select and atom-pick so dragging a handle doesn't also fire a click-select.
-		// IsOver() (hover/hit-test, true the instant the cursor is on a handle) matters just as
-		// much as IsUsing() (drag already active) here: without it, a click that lands on the
-		// gizmo's hotspot but a frame before ImGuizmo's internal click-to-activate edge fires
-		// falls through to handleAtomPick below, misses every atom (the handle isn't drawn over
-		// one), and clears the selection - which deletes the gizmo itself next frame since
-		// renderTransformGizmo() early-returns with no selection. Net effect without this: the
-		// gizmo looked draggable but every attempt just deselected instead of moving anything.
-		// windowState.fallbackGizmoDragging must be included too - ImGuizmo's own IsOver()/IsUsing()
-		// never go true for the hand-rolled fallback drag (see renderTransformGizmo), so without this
-		// the exact frame a fallback drag starts also falls through to handleAtomPick below and
-		// re-picks whatever atom is nearest the cursor (which is off in space along the arrow, not on
-		// the original selection) - selection silently jumps to a different atom mid-drag.
-		const bool gizmoCapturing = ImGuizmo::IsUsing() || ImGuizmo::IsOver() || windowState.fallbackGizmoDragging;
+		// Escape always deselects, regardless of how a click landed you in this state - a reliable
+		// way out when the gizmo's screen-space pick band swallows a click meant to clear selection
+		// (the gizmo disappears once nothing is selected, since renderTransformGizmo() early-returns
+		// with an empty selection). Doesn't try to cancel/revert a drag already in progress - only
+		// acts when nothing is actively being dragged, so it can't leave a transform half-applied.
+		if (hovered && !windowState.fallbackGizmoDragging && !windowState.pinnedMeasurementDragging &&
+			!windowState.selectionDragActive && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+		{
+			windowState.selectedPinnedMeasurement = -1;
+			Ref<EventBus> eventBus = m_Layer.GetEventBus();
+			if (eventBus != nullptr)
+			{
+				RendererEvents::Viewport::AtomSelectionRequested event;
+				event.windowId = windowState.windowId;
+				event.additive = false;
+				eventBus->Publish(event);
+			}
+		}
+
+		// renderTransformGizmo() returns whether it's hovered/dragging using OUR OWN screen-space
+		// hit-test, not ImGuizmo::IsOver()/IsUsing() - those proved unreliable in both directions
+		// (see the big comment inside renderTransformGizmo): sometimes falsely true, which blocked
+		// our fallback pick from ever starting so the click did nothing; sometimes falsely false
+		// right as a fallback drag begins, letting handleAtomPick fire on the same frame and
+		// silently re-pick whichever atom is nearest the cursor (off in space along the arrow, not
+		// the original selection) - selection jumping mid-drag. A live gizmo drag/hover takes
+		// exclusive control of the viewport for the frame - suppress box/circle-select and
+		// atom-pick so grabbing a handle doesn't also fire a click-select underneath it.
+		const bool gizmoCapturing = renderTransformGizmo(windowState, imageOrigin, viewportSize, hovered) ||
+			handlePinnedMeasurementInteraction(windowState, imageOrigin, viewportSize, hovered);
+
+		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
 
 		if (windowState.activeSelectionTool == SelectionToolMode::Box && windowState.selectionDragActive)
 		{
@@ -252,6 +272,9 @@ namespace DefectStudio
 			}
 		}
 
+		applyContinuousNudge(windowState, deltaTime);
+		applyContinuousPan(windowState, deltaTime);
+
 		if (hovered && !gizmoCapturing)
 			applyViewportInputNavigation(windowState, imageOrigin, deltaTime);
 		else if (!hovered)
@@ -276,6 +299,14 @@ namespace DefectStudio
 		{
 			handleCircleSelectDrag(windowState, imageOrigin, hovered);
 		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::Cursor3D)
+		{
+			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			{
+				const ImVec2 mousePos = ImGui::GetMousePos();
+				(void)handleCursor3DPlacement(windowState, mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
+			}
+		}
 		else if (hovered)
 		{
 			ImGuiIO &io = ImGui::GetIO();
@@ -294,6 +325,29 @@ namespace DefectStudio
 				{
 					handleAtomPick(windowState, relX, relY, io.KeyCtrl);
 				}
+			}
+		}
+
+		if (windowState.cursor3DPlaced && windowState.camera != nullptr)
+		{
+			const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+			const glm::vec4 clip = viewProjection * glm::vec4(windowState.cursor3DPosition, 1.0f);
+			if (clip.w > 0.0001f)
+			{
+				const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+				const ImVec2 screen(
+					imageOrigin.x + (ndc.x * 0.5f + 0.5f) * windowState.viewportSize.x,
+					imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * windowState.viewportSize.y);
+				ImDrawList *drawList = ImGui::GetWindowDrawList();
+				constexpr float kCrossRadius = 9.0f;
+				constexpr ImU32 kCursorColor = IM_COL32(255, 255, 255, 230);
+				constexpr ImU32 kCursorOutline = IM_COL32(20, 20, 20, 200);
+				drawList->AddCircle(screen, kCrossRadius, kCursorOutline, 0, 3.0f);
+				drawList->AddCircle(screen, kCrossRadius, kCursorColor, 0, 1.5f);
+				drawList->AddLine(
+					ImVec2(screen.x - kCrossRadius - 4.0f, screen.y), ImVec2(screen.x + kCrossRadius + 4.0f, screen.y), kCursorColor, 1.5f);
+				drawList->AddLine(
+					ImVec2(screen.x, screen.y - kCrossRadius - 4.0f), ImVec2(screen.x, screen.y + kCrossRadius + 4.0f), kCursorColor, 1.5f);
 			}
 		}
 
@@ -329,10 +383,15 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
 		{
 			const RendererAtomData &atom = windowState.structure.atoms[i];
+			if (!atom.visible)
+				continue;
 			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
 			const float a = glm::dot(rayDir, rayDir);
 			const float b = 2.0f * glm::dot(oc, rayDir);
-			const float c = glm::dot(oc, oc) - atom.radius * atom.radius;
+			// Padded ~35% past the visible sphere - clicking exactly on a rendered edge (anti-
+			// aliasing, small atoms like H) otherwise misses more often than it should.
+			const float pickRadius = atom.radius * 1.35f;
+			const float c = glm::dot(oc, oc) - pickRadius * pickRadius;
 			const float disc = b * b - 4.0f * a * c;
 			if (disc < 0.0f)
 				continue;
@@ -366,6 +425,241 @@ namespace DefectStudio
 			event.additive = additive;
 			eventBus->Publish(event);
 		}
+	}
+
+	// Ray-casts relX/relY (viewport-relative pixels) into the scene: snaps to the picked atom if the
+	// click landed on one (same ray/pick-radius as handleAtomPick), otherwise drops onto the plane
+	// through the camera's orbit target, perpendicular to the view direction - a reasonable depth
+	// for "wherever you clicked in empty space" without needing real scene-depth picking. Shared by
+	// the 3D-cursor tool click and the viewport context menu's "Set 3D cursor here".
+	glm::vec3 RendererPanel::computeViewportWorldPosition(const RendererWindowState &windowState, float relX, float relY) const
+	{
+		if (!windowState.camera || windowState.viewportSize.x <= 0.0f || windowState.viewportSize.y <= 0.0f)
+			return glm::vec3(0.0f);
+
+		const float ndcX = (2.0f * relX / windowState.viewportSize.x) - 1.0f;
+		const float ndcY = -((2.0f * relY / windowState.viewportSize.y) - 1.0f);
+
+		const glm::mat4 invVP = glm::inverse(windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix());
+		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
+		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+
+		float bestT = std::numeric_limits<float>::max();
+		glm::vec3 hitPosition(0.0f);
+		bool hitAtom = false;
+		for (const RendererAtomData &atom : windowState.structure.atoms)
+		{
+			if (!atom.visible)
+				continue;
+			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
+			const float a = glm::dot(rayDir, rayDir);
+			const float b = 2.0f * glm::dot(oc, rayDir);
+			const float pickRadius = atom.radius * 1.35f;
+			const float c = glm::dot(oc, oc) - pickRadius * pickRadius;
+			const float disc = b * b - 4.0f * a * c;
+			if (disc < 0.0f)
+				continue;
+			const float t = (-b - std::sqrt(disc)) / (2.0f * a);
+			if (t > 0.001f && t < bestT)
+			{
+				bestT = t;
+				hitPosition = atom.cartesianPosition;
+				hitAtom = true;
+			}
+		}
+
+		if (!hitAtom)
+		{
+			const glm::vec3 forward = glm::normalize(windowState.camera->Target() - rayOrigin);
+			const float denom = glm::dot(rayDir, forward);
+			const float planeT = std::abs(denom) > 0.0001f ? glm::dot(windowState.camera->Target() - rayOrigin, forward) / denom : 0.0f;
+			hitPosition = rayOrigin + rayDir * planeT;
+		}
+		return hitPosition;
+	}
+
+	// Whether ANY atom's sphere is under screenPos (same ray/pick-radius as handleAtomPick, read-only
+	// - no selection change). Used to give plain atom-click priority over the gizmo's axis pick band:
+	// in a crystal lattice, a bonded neighbour very often sits almost exactly along a world axis from
+	// the selected atom, right where the gizmo's own pick band lives - without this check, clicking
+	// that neighbour to extend the selection (e.g. to build a 2-atom bond-length measurement) grabs
+	// the gizmo instead of selecting it.
+	bool RendererPanel::isAtomUnderScreenPosition(
+		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPos) const
+	{
+		if (!windowState.camera || windowState.viewportSize.x <= 0.0f || windowState.viewportSize.y <= 0.0f)
+			return false;
+
+		const float relX = screenPos.x - imageOrigin.x;
+		const float relY = screenPos.y - imageOrigin.y;
+		if (relX < 0.0f || relY < 0.0f || relX >= windowState.viewportSize.x || relY >= windowState.viewportSize.y)
+			return false;
+
+		const float ndcX = (2.0f * relX / windowState.viewportSize.x) - 1.0f;
+		const float ndcY = -((2.0f * relY / windowState.viewportSize.y) - 1.0f);
+
+		const glm::mat4 invVP = glm::inverse(windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix());
+		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
+		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+
+		for (const RendererAtomData &atom : windowState.structure.atoms)
+		{
+			if (!atom.visible)
+				continue;
+			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
+			const float a = glm::dot(rayDir, rayDir);
+			const float b = 2.0f * glm::dot(oc, rayDir);
+			const float pickRadius = atom.radius * 1.35f;
+			const float c = glm::dot(oc, oc) - pickRadius * pickRadius;
+			const float disc = b * b - 4.0f * a * c;
+			if (disc < 0.0f)
+				continue;
+			const float t = (-b - std::sqrt(disc)) / (2.0f * a);
+			if (t > 0.001f)
+				return true;
+		}
+		return false;
+	}
+
+	// 3D cursor tool click - see computeViewportWorldPosition for the hit/plane logic.
+	bool RendererPanel::handleCursor3DPlacement(RendererWindowState &windowState, float relX, float relY)
+	{
+		if (!windowState.camera)
+			return false;
+
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		if (eventBus == nullptr)
+			return false;
+
+		RendererEvents::Viewport::Cursor3DSetPositionRequested event;
+		event.windowId = windowState.windowId;
+		event.position = computeViewportWorldPosition(windowState, relX, relY);
+		eventBus->Publish(event);
+		return true;
+	}
+
+	// Right-click viewport context menu. Delete/Hide/Duplicate/Copy/Paste/Select All route through
+	// CommandRegistry using the SAME command IDs their keybindings use (identical behaviour, undo
+	// history stays consistent); Clear Selection and the 3D-cursor items are cheap enough to publish
+	// directly, matching the rest of this panel's style for non-domain, non-undoable state.
+	void RendererPanel::renderViewportContextMenu(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
+	{
+		(void)imageSize;
+		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+		{
+			const ImVec2 mousePos = ImGui::GetMousePos();
+			m_ContextMenuWorldPosition =
+				computeViewportWorldPosition(windowState, mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
+		}
+
+		if (!ImGui::BeginPopupContextItem("##RendererViewportContextMenu"))
+			return;
+
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
+		const bool hasSelection = !windowState.selectedAtomIndices.empty();
+
+		auto runCommand = [&](const char *commandId)
+		{
+			if (commandRegistry == nullptr)
+				return;
+			Result<CommandOutcome> result = commandRegistry->Execute(CommandID{commandId}, {});
+			if (!result)
+				DS_LOG_WARN("Viewport context menu command '{}' failed: {}", commandId, result.Error().technicalDetails);
+		};
+
+		if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSelection))
+			runCommand("renderer.selection.copy");
+		if (ImGui::MenuItem("Paste", "Ctrl+V"))
+			runCommand("renderer.selection.paste");
+		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection))
+			runCommand("renderer.selection.duplicate");
+
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
+			runCommand("renderer.selection.delete");
+		if (ImGui::MenuItem("Hide", "H", false, hasSelection))
+			runCommand("renderer.selection.hide");
+
+		if (ImGui::BeginMenu("Change type", hasSelection))
+		{
+			static char speciesBuffer[8] = "";
+			ImGui::SetNextItemWidth(80.0f);
+			const bool enterPressed = ImGui::InputText(
+				"##ChangeTypeInput", speciesBuffer, sizeof(speciesBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+			ImGui::SameLine();
+			const bool applyPressed = ImGui::SmallButton("Apply");
+			if ((enterPressed || applyPressed) && speciesBuffer[0] != '\0' && commandRegistry != nullptr)
+			{
+				ChangeAtomTypePayload payload;
+				payload.windowId = windowState.windowId;
+				payload.species = speciesBuffer;
+				CommandContext context;
+				context.Set<ChangeAtomTypePayload>("atom_edit.change_type_payload", std::move(payload));
+				Result<CommandOutcome> result =
+					commandRegistry->Execute(CommandID{"renderer.selection.change_type"}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Change atom type failed: {}", result.Error().technicalDetails);
+				speciesBuffer[0] = '\0';
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::MenuItem("Select All", "Ctrl+A"))
+			runCommand("renderer.selection.select_all");
+		if (ImGui::MenuItem("Clear Selection", nullptr, false, hasSelection) && eventBus != nullptr)
+		{
+			RendererEvents::Viewport::AtomSelectionRequested event;
+			event.windowId = windowState.windowId;
+			event.additive = false;
+			eventBus->Publish(event);
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::BeginMenu("3D Cursor"))
+		{
+			auto publishCursor = [&](const glm::vec3 &position)
+			{
+				if (eventBus == nullptr)
+					return;
+				RendererEvents::Viewport::Cursor3DSetPositionRequested event;
+				event.windowId = windowState.windowId;
+				event.position = position;
+				eventBus->Publish(event);
+			};
+
+			if (ImGui::MenuItem("Set Here"))
+				publishCursor(m_ContextMenuWorldPosition);
+
+			if (ImGui::MenuItem("Move to Selection Center", nullptr, false, hasSelection))
+			{
+				glm::vec3 centroid(0.0f);
+				for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+					centroid += windowState.structure.atoms[atomIndex].cartesianPosition;
+				centroid /= static_cast<float>(windowState.selectedAtomIndices.size());
+				publishCursor(centroid);
+			}
+			if (ImGui::MenuItem("Move to First Selected", nullptr, false, hasSelection))
+				publishCursor(windowState.structure.atoms[windowState.selectedAtomIndices.front()].cartesianPosition);
+			if (ImGui::MenuItem("Move to Last Selected", nullptr, false, hasSelection))
+				publishCursor(windowState.structure.atoms[windowState.selectedAtomIndices.back()].cartesianPosition);
+			if (ImGui::MenuItem("Move to Origin"))
+				publishCursor(glm::vec3(0.0f));
+
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndPopup();
 	}
 
 	void RendererPanel::handleBoxSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered)
@@ -428,12 +722,13 @@ namespace DefectStudio
 	// incremental delta is applied directly to windowState.structure (renderer hot path) for
 	// immediate visual feedback; on release, the final result is committed to the domain structure
 	// as one undoable command (RendererAtomEditCommands::TransformSelectedAtomsCommand).
-	void RendererPanel::renderTransformGizmo(RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+	bool RendererPanel::renderTransformGizmo(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
 		if (windowState.selectedAtomIndices.empty() || windowState.camera == nullptr)
 		{
 			windowState.gizmoDragActive = false;
-			return;
+			return false;
 		}
 
 		glm::vec3 pivot(0.0f);
@@ -458,65 +753,248 @@ namespace DefectStudio
 		ImGuizmo::PushID(windowState.windowId.c_str());
 		ImGuizmo::SetDrawlist();
 		ImGuizmo::SetOrthographic(windowState.camera->Projection() == CameraProjection::Orthographic);
+		// Enable(false) turns off ImGuizmo's own hit-test/drag path (see prior note: it was silently
+		// live and fighting our fallback system for every click near the gizmo) - kept regardless of
+		// whether Manipulate() below actually runs, in case anything else in this ID scope reads it.
+		ImGuizmo::Enable(false);
 		ImGuizmo::SetRect(imageOrigin.x, imageOrigin.y, imageSize.x, imageSize.y);
-		// Default (0.1) reads as tiny/hard-to-grab against atom sphere sizes - bump handle size,
-		// hit-testing scales with it automatically (ImGuizmo derives hitbox from the same factor).
-		// Line/arrow thickness is a separate style knob (doesn't follow SetGizmoSizeClipSpace) -
-		// bump those too so the arrows read clearly at this scale, not just the hit area.
-		ImGuizmo::SetGizmoSizeClipSpace(0.28f);
-		ImGuizmo::Style &gizmoStyle = ImGuizmo::GetStyle();
-		gizmoStyle.TranslationLineThickness = 5.0f;
-		gizmoStyle.TranslationLineArrowSize = 10.0f;
-		gizmoStyle.RotationLineThickness = 4.0f;
-		gizmoStyle.RotationOuterLineThickness = 4.0f;
-		gizmoStyle.ScaleLineThickness = 5.0f;
-		gizmoStyle.ScaleLineCircleSize = 8.0f;
-		gizmoStyle.CenterCircleSize = 8.0f;
-		ImGuizmo::Manipulate(
-			glm::value_ptr(view),
-			glm::value_ptr(projection),
-			operation,
-			ImGuizmo::WORLD,
-			glm::value_ptr(gizmoMatrix),
-			glm::value_ptr(deltaMatrix));
+		// TRANSLATE/SCALE only draw OUR OWN axis lines below (see "Blender-style axis indicators") -
+		// ImGuizmo's native draw for these two ops also always includes its plane-drag quads
+		// (DrawTranslationGizmo draws one per axis pair unconditionally, see TRANSLATE_PLANS in the
+		// vendored source) even though this app has no plane-drag interaction at all, which is what
+		// the recurring "why is this gray?" / "doesn't look right" reports were pointing at - a
+		// translucent square implying a capability that doesn't exist. ROTATE has no such quads and
+		// its native rings are still the only rest-state visual we have for that mode, so it keeps
+		// using Manipulate() to draw.
+		if (operation == ImGuizmo::ROTATE)
+		{
+			ImGuizmo::Manipulate(
+				glm::value_ptr(view),
+				glm::value_ptr(projection),
+				operation,
+				ImGuizmo::WORLD,
+				glm::value_ptr(gizmoMatrix),
+				glm::value_ptr(deltaMatrix));
+		}
 		ImGuizmo::PopID();
 
-		// ImGuizmo's own screen-space picking (IsOver()/IsUsing()) is unreliable in this app - a
-		// click squarely on a visibly-hovered handle routinely fails to activate a drag (confirmed
-		// via synthetic clicks measured directly against screenshots, landing under a pixel off the
-		// handle centerline). Degects-Studio - an earlier iteration of this project at
-		// Desktop/STUDIA/Degects-Studio - hit the identical problem and shipped a hand-rolled
-		// screen-space axis pick + drag as the actual interaction path, using ImGuizmo only to draw
-		// the handles. Ported and simplified here: atoms only (no empties/lights), world-space axes
-		// only (this gizmo never runs in LOCAL mode). Rotate isn't covered - its ring hit-test would
-		// need ImGuizmo's internal ring radius, which isn't exposed - translate/scale cover the
-		// reported bug.
-		if (operation != ImGuizmo::ROTATE)
-		{
-			const glm::mat4 viewProjection = projection * view;
-			auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
-				const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
-				if (clip.w <= 0.0001f)
-					return false;
-				const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-				outScreen = glm::vec2(
-					imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
-					imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * imageSize.y);
-				return true;
-			};
+		// ImGuizmo::Manipulate() above is called purely to DRAW the handles - its own screen-space
+		// picking (IsOver()/IsUsing()) is unreliable in this app in BOTH directions (confirmed via
+		// synthetic clicks measured directly against screenshots earlier this session) and every
+		// interaction below is driven by our own screen-space hit-test instead, ported from
+		// Desktop/STUDIA/Degects-Studio (an earlier iteration of this project that hit the same
+		// problem): false IsOver()==true blocked our own pick from ever starting so a click that
+		// looked right on target did nothing at all; false IsOver()==false right as a fallback drag
+		// began let handleAtomPick fire the same frame and silently re-pick whatever atom was
+		// nearest the cursor - selection jumping mid-drag. World-space axes only (this gizmo never
+		// runs in LOCAL mode).
+		const glm::mat4 viewProjection = projection * view;
+		auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
+			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+			if (clip.w <= 0.0001f)
+				return false;
+			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+			outScreen = glm::vec2(
+				imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+				imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * imageSize.y);
+			return true;
+		};
 
-			glm::vec2 pivotScreen(0.0f);
-			if (projectToScreen(pivot, pivotScreen))
+		glm::vec2 pivotScreen(0.0f);
+		const bool pivotOnScreen = projectToScreen(pivot, pivotScreen);
+		const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+		// An atom actually under the cursor always wins over grabbing the gizmo (see
+		// isAtomUnderScreenPosition) - only matters for STARTING a new hover/drag below, never checked
+		// once fallbackGizmoDragging is already true so it can't interrupt a drag in progress.
+		const bool atomUnderCursor = !windowState.fallbackGizmoDragging && isAtomUnderScreenPosition(windowState, imageOrigin, mousePos);
+		constexpr float kPickMinDistance = 20.0f;
+		// This band is now evaluated every frame (not just on click) to drive gizmoCapturing's
+		// hover-suppression of atom-pick/box-select - the original 350px was sized for a one-off
+		// click test and, applied continuously, ate clicks on any atom within ~350px of the pivot in
+		// a dense structure ("selection acts erratic"). SetGizmoSizeClipSpace keeps the gizmo's own
+		// drawn size constant in screen pixels regardless of zoom, so a smaller fixed band still
+		// tracks the visible handles correctly at any zoom level.
+		constexpr float kPickMaxDistance = 130.0f;
+
+		constexpr glm::vec3 kWorldAxes[3] = {
+			glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
+		constexpr ImU32 kAxisLockColors[3] = {
+			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
+
+		if (operation == ImGuizmo::ROTATE)
+		{
+			// No per-axis ring hit-test (would need ImGuizmo's internal ring radius, which isn't
+			// exposed) - instead a trackball: grab anywhere in the pick band around the pivot and
+			// drag freely, rotation axis = cross(camera-forward, screen-space drag direction), angle
+			// proportional to drag distance. Visually looser than ImGuizmo's 3 discrete rings but
+			// gives full 3D rotation control without needing their exact geometry.
+			const float radial = pivotOnScreen ? glm::length(mousePos - pivotScreen) : -1.0f;
+			const bool hoveringRing =
+				pivotOnScreen && !atomUnderCursor && radial >= kPickMinDistance && radial <= kPickMaxDistance;
+
+			if (!windowState.fallbackGizmoDragging && hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			{
-				constexpr glm::vec3 kWorldAxes[3] = {
-					glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
-				// A 1-world-unit probe gives axis direction + a pixels-per-world ratio for this
-				// frame's zoom. The pick test below is angle/distance-from-pivot based, not a
-				// fixed-length segment, so it doesn't need to match ImGuizmo's own (inaccessible)
-				// handle length.
-				glm::vec2 axisScreenDir[3];
-				float axisPixelsPerWorld[3] = {1.0f, 1.0f, 1.0f};
-				bool axisValid[3] = {false, false, false};
+				windowState.fallbackGizmoDragging = true;
+				windowState.fallbackGizmoAxis = -2; // sentinel: trackball rotate, not a translate/scale axis
+				windowState.fallbackLastMousePos = mousePos;
+			}
+
+			if (windowState.fallbackGizmoDragging && windowState.fallbackGizmoAxis == -2)
+			{
+				if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+				{
+					const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+					const glm::vec3 cameraUp(view[0][1], view[1][1], view[2][1]);
+					const glm::vec3 cameraForward = -glm::vec3(view[0][2], view[1][2], view[2][2]);
+
+					const glm::vec2 delta = mousePos - windowState.fallbackLastMousePos;
+					windowState.fallbackLastMousePos = mousePos;
+
+					// Screen Y is flipped vs cameraUp (same convention as the pinned-measurement drag).
+					const glm::vec3 dragWorldDir = cameraRight * delta.x - cameraUp * delta.y;
+					const float dragLength = glm::length(dragWorldDir);
+					if (dragLength > 0.0001f)
+					{
+						const glm::vec3 rotationAxis = glm::normalize(glm::cross(cameraForward, dragWorldDir));
+						constexpr float kRadiansPerPixel = 0.006f;
+						const glm::quat rotation = glm::angleAxis(glm::length(delta) * kRadiansPerPixel, rotationAxis);
+						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						{
+							if (atomIndex >= windowState.structure.atoms.size())
+								continue;
+							RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+							atom.cartesianPosition = pivot + rotation * (atom.cartesianPosition - pivot);
+						}
+					}
+					windowState.gizmoDragActive = true;
+					return true;
+				}
+
+				windowState.fallbackGizmoDragging = false;
+				windowState.fallbackGizmoAxis = -1;
+			}
+
+			// Blender-style modal axis-locked rotate: pressing X/Y/Z with no mouse button starts a
+			// rotation constrained to that world axis, following the mouse's angular motion around
+			// the pivot - same modal convention as translate/scale below (confirm with a left-click,
+			// cancel with Escape/right-click). Angular instead of linear since this trackball has no
+			// discrete per-axis handle to click, only the modal (keypress-first) path applies here.
+			if (hovered && pivotOnScreen && !windowState.fallbackGizmoDragging)
+			{
+				constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					if (!ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+						continue;
+					windowState.fallbackGizmoDragging = true;
+					windowState.fallbackModalDrag = true;
+					windowState.fallbackGizmoAxis = axis;
+					windowState.fallbackLastMousePos = mousePos;
+					windowState.fallbackDragStartPositions.clear();
+					for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						windowState.fallbackDragStartPositions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+					break;
+				}
+			}
+
+			if (windowState.fallbackGizmoDragging && windowState.fallbackGizmoAxis >= 0 && windowState.fallbackGizmoAxis <= 2)
+			{
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+				{
+					for (std::size_t i = 0;
+						 i < windowState.selectedAtomIndices.size() && i < windowState.fallbackDragStartPositions.size();
+						 ++i)
+					{
+						windowState.structure.atoms[windowState.selectedAtomIndices[i]].cartesianPosition =
+							windowState.fallbackDragStartPositions[i];
+					}
+					windowState.fallbackGizmoDragging = false;
+					windowState.fallbackModalDrag = false;
+					windowState.fallbackGizmoAxis = -1;
+					windowState.gizmoDragActive = false;
+					return true;
+				}
+
+				// Blender-style axis switch: pressing a different X/Y/Z re-points the lock without ending
+				// the drag - matches translate/scale's override toggle, except rotate has no separate
+				// "grabbed handle" baseline to release back to (this path only starts via modal X/Y/Z),
+				// so re-pressing the SAME key is a no-op here instead of a release.
+				constexpr ImGuiKey kRotateAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					if (axis != windowState.fallbackGizmoAxis && ImGui::IsKeyPressed(kRotateAxisKeys[axis], false))
+						windowState.fallbackGizmoAxis = axis;
+				}
+
+				const bool modalConfirmed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+				if (pivotOnScreen)
+				{
+					const glm::vec3 cameraForward = -glm::vec3(view[0][2], view[1][2], view[2][2]);
+					const glm::vec3 lockedAxisWorld = kWorldAxes[windowState.fallbackGizmoAxis];
+					// Screen Y is flipped vs standard math convention, and a right-hand rotation
+					// around an axis pointing away from the viewer (into the screen) reads as
+					// clockwise on-screen - both flips cancel out when the axis points toward the
+					// viewer instead, so only one sign check is needed here.
+					const float rotationSign = glm::dot(lockedAxisWorld, cameraForward) >= 0.0f ? -1.0f : 1.0f;
+
+					const glm::vec2 fromPivotLast = windowState.fallbackLastMousePos - pivotScreen;
+					const glm::vec2 fromPivotNow = mousePos - pivotScreen;
+					if (glm::length(fromPivotLast) > 1.0f && glm::length(fromPivotNow) > 1.0f)
+					{
+						const float lastAngle = std::atan2(fromPivotLast.y, fromPivotLast.x);
+						const float nowAngle = std::atan2(fromPivotNow.y, fromPivotNow.x);
+						float deltaAngle = nowAngle - lastAngle;
+						while (deltaAngle > glm::pi<float>())
+							deltaAngle -= glm::two_pi<float>();
+						while (deltaAngle < -glm::pi<float>())
+							deltaAngle += glm::two_pi<float>();
+
+						const glm::quat rotation = glm::angleAxis(deltaAngle * rotationSign, lockedAxisWorld);
+						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						{
+							if (atomIndex >= windowState.structure.atoms.size())
+								continue;
+							RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+							atom.cartesianPosition = pivot + rotation * (atom.cartesianPosition - pivot);
+						}
+					}
+					windowState.fallbackLastMousePos = mousePos;
+
+					ImDrawList *lockDrawList = ImGui::GetWindowDrawList();
+					lockDrawList->AddCircle(
+						ImVec2(pivotScreen.x, pivotScreen.y), kPickMaxDistance,
+						kAxisLockColors[windowState.fallbackGizmoAxis], 64, 3.0f);
+				}
+				windowState.gizmoDragActive = true;
+
+				if (modalConfirmed)
+				{
+					windowState.fallbackGizmoDragging = false;
+					windowState.fallbackModalDrag = false;
+					windowState.fallbackGizmoAxis = -1;
+					// Falls through to the shared commit block below instead of returning - matches
+					// the translate/scale modal-confirm convention (no separate "release" frame).
+				}
+				else
+				{
+					return true;
+				}
+			}
+
+			if (!windowState.gizmoDragActive)
+				return hoveringRing;
+		}
+		else
+		{
+			// A 1-world-unit probe gives axis direction + a pixels-per-world ratio for this frame's
+			// zoom. Computed every frame (not just at pick time) so the X/Y/Z axis-lock override
+			// below can re-derive its direction as the camera moves during a drag, and so hovering
+			// (no click yet) can still report an accurate axis for the capturing return value.
+			glm::vec2 axisScreenDir[3];
+			float axisPixelsPerWorld[3] = {1.0f, 1.0f, 1.0f};
+			bool axisValid[3] = {false, false, false};
+			if (pivotOnScreen)
+			{
 				for (int axis = 0; axis < 3; ++axis)
 				{
 					glm::vec2 probeScreen;
@@ -530,53 +1008,173 @@ namespace DefectStudio
 					axisPixelsPerWorld[axis] = axisPixels;
 					axisValid[axis] = true;
 				}
+			}
 
-				if (!windowState.fallbackGizmoDragging && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
-					ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			// Always-on red/green/blue axis indicators (item: "show red/green/blue axis") - this is
+			// now the ONLY gizmo visual for translate/scale (see Manipulate() above), so it carries
+			// the full "Blender-style" look on its own: a thick shaft plus a solid triangular
+			// arrowhead per axis, no plane-drag quads (this app has no plane-drag interaction to
+			// advertise). Short handles at rest, replaced by the full-length lock line below once a
+			// drag actually locks onto one.
+			if (pivotOnScreen && !windowState.fallbackGizmoDragging)
+			{
+				ImDrawList *axisDrawList = ImGui::GetWindowDrawList();
+				constexpr float kArrowHeadLength = 16.0f;
+				constexpr float kArrowHeadHalfWidth = 6.0f;
+				for (int axis = 0; axis < 3; ++axis)
 				{
-					constexpr float kPickMinDistance = 20.0f;
-					constexpr float kPickMaxDistance = 350.0f;
-					constexpr float kPickPerpTolerance = 16.0f;
-					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-					const glm::vec2 fromPivot = mousePos - pivotScreen;
-					const float radial = glm::length(fromPivot);
-					int hoveredAxis = -1;
-					float bestPerp = kPickPerpTolerance;
-					if (radial >= kPickMinDistance && radial <= kPickMaxDistance)
-					{
-						for (int axis = 0; axis < 3; ++axis)
-						{
-							if (!axisValid[axis])
-								continue;
-							const float along = glm::dot(fromPivot, axisScreenDir[axis]);
-							if (along <= 0.0f)
-								continue;
-							const float perp = glm::length(fromPivot - axisScreenDir[axis] * along);
-							if (perp < bestPerp)
-							{
-								bestPerp = perp;
-								hoveredAxis = axis;
-							}
-						}
-					}
+					if (!axisValid[axis])
+						continue;
+					const glm::vec2 dir = axisScreenDir[axis];
+					const glm::vec2 perp(-dir.y, dir.x);
+					const glm::vec2 tip = glm::vec2(pivotScreen.x, pivotScreen.y) + dir * kPickMaxDistance;
+					const glm::vec2 headBase = tip - dir * kArrowHeadLength;
+					axisDrawList->AddLine(ImVec2(pivotScreen.x, pivotScreen.y), ImVec2(headBase.x, headBase.y),
+						kAxisLockColors[axis], 3.5f);
+					const glm::vec2 headLeft = headBase + perp * kArrowHeadHalfWidth;
+					const glm::vec2 headRight = headBase - perp * kArrowHeadHalfWidth;
+					axisDrawList->AddTriangleFilled(
+						ImVec2(tip.x, tip.y), ImVec2(headLeft.x, headLeft.y), ImVec2(headRight.x, headRight.y),
+						kAxisLockColors[axis]);
+				}
+				axisDrawList->AddCircleFilled(ImVec2(pivotScreen.x, pivotScreen.y), 5.0f, IM_COL32(235, 235, 235, 255));
+			}
 
-					if (hoveredAxis >= 0)
-					{
-						windowState.fallbackGizmoDragging = true;
-						windowState.fallbackGizmoAxis = hoveredAxis;
-						windowState.fallbackLastMousePos = mousePos;
-						windowState.fallbackDragAxisScreenDir = axisScreenDir[hoveredAxis];
-						windowState.fallbackDragAxisWorldDir = kWorldAxes[hoveredAxis];
-						windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
-					}
+			// Blender-style modal move/scale: pressing X/Y/Z with NO mouse button held starts a drag
+			// constrained to that axis immediately, following the mouse freely - confirmed with a
+			// left-click, cancelled (reverting to the pre-drag snapshot) with Escape/right-click. This
+			// is in addition to the click-and-drag-a-handle path below, not a replacement for it.
+			if (hovered && pivotOnScreen && !windowState.fallbackGizmoDragging)
+			{
+				constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					if (!axisValid[axis] || !ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+						continue;
+					windowState.fallbackGizmoDragging = true;
+					windowState.fallbackModalDrag = true;
+					windowState.fallbackGizmoAxis = axis;
+					// Deliberately NOT set here - the "Blender-style axis lock" toggle loop below runs
+					// this same frame (fallbackGizmoDragging is already true) and would immediately see
+					// this same X/Y/Z keypress and toggle it straight back off (armed here, disarmed
+					// there, both reading the same still-true IsKeyPressed for one physical press) if it
+					// were pre-armed here too. Leaving it at its previous value (-1 the first time) lets
+					// that loop be the ONLY place that arms it, so the lock/full-length line shows from
+					// the very first press instead of needing a second one.
+					windowState.fallbackLastMousePos = mousePos;
+					windowState.fallbackDragAxisScreenDir = axisScreenDir[axis];
+					windowState.fallbackDragAxisWorldDir = kWorldAxes[axis];
+					windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[axis]);
+					windowState.fallbackDragStartPositions.clear();
+					for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						windowState.fallbackDragStartPositions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+					break;
 				}
 			}
 
-			if (windowState.fallbackGizmoDragging)
+			int hoveredAxis = -1;
+			if (pivotOnScreen && !windowState.fallbackGizmoDragging && !atomUnderCursor)
 			{
-				if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+				constexpr float kPickPerpTolerance = 16.0f;
+				const glm::vec2 fromPivot = mousePos - pivotScreen;
+				const float radial = glm::length(fromPivot);
+				float bestPerp = kPickPerpTolerance;
+				if (radial >= kPickMinDistance && radial <= kPickMaxDistance)
 				{
-					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+					for (int axis = 0; axis < 3; ++axis)
+					{
+						if (!axisValid[axis])
+							continue;
+						const float along = glm::dot(fromPivot, axisScreenDir[axis]);
+						if (along <= 0.0f)
+							continue;
+						const float perp = glm::length(fromPivot - axisScreenDir[axis] * along);
+						if (perp < bestPerp)
+						{
+							bestPerp = perp;
+							hoveredAxis = axis;
+						}
+					}
+				}
+
+				if (hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+				{
+					windowState.fallbackGizmoDragging = true;
+					windowState.fallbackModalDrag = false;
+					windowState.fallbackGizmoAxis = hoveredAxis;
+					windowState.fallbackAxisLockOverride = -1;
+					windowState.fallbackLastMousePos = mousePos;
+					windowState.fallbackDragAxisScreenDir = axisScreenDir[hoveredAxis];
+					windowState.fallbackDragAxisWorldDir = kWorldAxes[hoveredAxis];
+					windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
+					windowState.fallbackDragStartPositions.clear();
+					for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						windowState.fallbackDragStartPositions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+				}
+			}
+
+			if (windowState.fallbackGizmoDragging && windowState.fallbackGizmoAxis >= 0)
+			{
+				// Blender-style axis lock: X/Y/Z re-point the drag at a single world axis regardless
+				// of which handle was originally grabbed; pressing the same key again releases the
+				// override back to the grabbed axis. No local-space double-tap (Blender's XX/YY/ZZ) -
+				// atoms carry no per-object orientation, so a "local" axis would just equal the
+				// global one here.
+				constexpr ImGuiKey kAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					if (ImGui::IsKeyPressed(kAxisKeys[axis], false))
+						windowState.fallbackAxisLockOverride = windowState.fallbackAxisLockOverride == axis ? -1 : axis;
+				}
+
+				const int lockedAxis = windowState.fallbackAxisLockOverride;
+				if (lockedAxis >= 0 && axisValid[lockedAxis])
+				{
+					windowState.fallbackDragAxisScreenDir = axisScreenDir[lockedAxis];
+					windowState.fallbackDragAxisWorldDir = kWorldAxes[lockedAxis];
+					windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[lockedAxis]);
+
+					if (pivotOnScreen)
+					{
+						ImDrawList *drawList = ImGui::GetWindowDrawList();
+						const glm::vec2 dir = axisScreenDir[lockedAxis];
+						const ImVec2 farA(pivotScreen.x - dir.x * 10000.0f, pivotScreen.y - dir.y * 10000.0f);
+						const ImVec2 farB(pivotScreen.x + dir.x * 10000.0f, pivotScreen.y + dir.y * 10000.0f);
+						drawList->AddLine(farA, farB, kAxisLockColors[lockedAxis], 3.0f);
+					}
+				}
+
+				// Cancel: Escape or right-click reverts to the pre-drag snapshot and ends the drag
+				// without committing - works for both a modal drag and a click-drag (Blender lets you
+				// abort either the same way), though in practice a click-drag's short lifetime makes
+				// this mostly a modal-drag affordance.
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+				{
+					for (std::size_t i = 0;
+						 i < windowState.selectedAtomIndices.size() && i < windowState.fallbackDragStartPositions.size();
+						 ++i)
+					{
+						windowState.structure.atoms[windowState.selectedAtomIndices[i]].cartesianPosition =
+							windowState.fallbackDragStartPositions[i];
+					}
+					windowState.fallbackGizmoDragging = false;
+					windowState.fallbackModalDrag = false;
+					windowState.fallbackGizmoAxis = -1;
+					windowState.fallbackAxisLockOverride = -1;
+					windowState.gizmoDragActive = false;
+					return true;
+				}
+
+				// A modal drag (started by X/Y/Z with no button held) applies every frame regardless
+				// of mouse-button state and confirms on left-click; a click-drag keeps applying only
+				// while the button stays down and commits on release - both fall through to the same
+				// apply step below, they just disagree on when "still active" is true.
+				const bool modalConfirmed = windowState.fallbackModalDrag && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+				const bool stillActive =
+					windowState.fallbackModalDrag ? !modalConfirmed : ImGui::IsMouseDown(ImGuiMouseButton_Left);
+
+				if (stillActive || modalConfirmed)
+				{
 					const glm::vec2 delta = mousePos - windowState.fallbackLastMousePos;
 					windowState.fallbackLastMousePos = mousePos;
 
@@ -609,35 +1207,39 @@ namespace DefectStudio
 						}
 					}
 					windowState.gizmoDragActive = true;
-					return;
+
+					if (modalConfirmed)
+					{
+						windowState.fallbackGizmoDragging = false;
+						windowState.fallbackModalDrag = false;
+						windowState.fallbackGizmoAxis = -1;
+						windowState.fallbackAxisLockOverride = -1;
+						// Fall through to the shared commit block below instead of returning - a
+						// confirming click ends the drag the same frame, no separate "release" frame
+						// exists for a modal drag the way there is for a held button.
+					}
+					else
+					{
+						return true;
+					}
 				}
-
-				windowState.fallbackGizmoDragging = false;
-				windowState.fallbackGizmoAxis = -1;
+				else
+				{
+					windowState.fallbackGizmoDragging = false;
+					windowState.fallbackGizmoAxis = -1;
+					windowState.fallbackAxisLockOverride = -1;
+				}
 			}
-		}
 
-		if (ImGuizmo::IsUsing())
-		{
-			windowState.gizmoDragActive = true;
-			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
-			{
-				if (atomIndex >= windowState.structure.atoms.size())
-					continue;
-				RendererAtomData &atom = windowState.structure.atoms[atomIndex];
-				atom.cartesianPosition = glm::vec3(deltaMatrix * glm::vec4(atom.cartesianPosition, 1.0f));
-			}
-			return;
+			if (!windowState.gizmoDragActive)
+				return hoveredAxis >= 0;
 		}
-
-		if (!windowState.gizmoDragActive)
-			return;
 
 		windowState.gizmoDragActive = false;
 
 		Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
 		if (commandRegistry == nullptr)
-			return;
+			return false;
 
 		GizmoTransformPayload payload;
 		payload.windowId = windowState.windowId;
@@ -654,6 +1256,143 @@ namespace DefectStudio
 		Result<CommandOutcome> result = commandRegistry->Execute(CommandID{"renderer.gizmo.commit_transform"}, std::move(context));
 		if (!result)
 			DS_LOG_WARN("Gizmo transform commit failed: {}", result.Error().technicalDetails);
+		return false;
+	}
+
+	// Click-select + drag-to-nudge for pinned measurement labels (`M`, see
+	// RendererLayer::onLabelsToggleSelectedBondRequested) - not a full gizmo, just enough to
+	// separate overlapping labels and know which one Alt+M-adjacent affordances would act on.
+	// Returns true if this frame's click/drag was consumed here, so the caller can suppress
+	// atom-pick the same way it already does for the transform gizmo (gizmoCapturing).
+	bool RendererPanel::handlePinnedMeasurementInteraction(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
+	{
+		// F flips the selected pin's bond-aligned label 180 degrees (item 5) - independent of
+		// hover/drag state below since it acts on whatever is already selected, not the cursor.
+		// TODO: also expose as a toolbar button once one exists (see toolbar proposal).
+		const bool pinSelected = windowState.selectedPinnedMeasurement >= 0 &&
+			windowState.selectedPinnedMeasurement < static_cast<int>(windowState.pinnedMeasurements.size());
+		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_F, false))
+		{
+			windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)].flipped ^= true;
+		}
+		// Delete removes just the selected pin - M/Shift+M are add-only (a bulk press over a growing
+		// selection used to also silently unpin anything already pinned within it, which made
+		// "select more, press M again" an unpredictable mix of adding and removing), so this is now
+		// the only way to unpin a single label; click a label to select it first.
+		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+		{
+			windowState.pinnedMeasurements.erase(
+				windowState.pinnedMeasurements.begin() + windowState.selectedPinnedMeasurement);
+			windowState.selectedPinnedMeasurement = -1;
+		}
+
+		if (windowState.camera == nullptr)
+			return false;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
+			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+			if (clip.w <= 0.0001f)
+				return false;
+			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+			outScreen = glm::vec2(
+				imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+				imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * imageSize.y);
+			return true;
+		};
+
+		const glm::mat4 view = windowState.camera->ViewMatrix();
+		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+		const glm::vec3 cameraUp(view[0][1], view[1][1], view[2][1]);
+
+		// Resolves the same anchor point renderLabels() draws the pin at (bond midpoint / angle
+		// vertex), offset already applied - ignores the bond's periodic-image shift for a 2-atom
+		// pin (only matters for bonds crossing a periodic cell boundary), fine for a hit-test.
+		auto resolveAnchor = [&](const RendererWindowState::PinnedMeasurement &pin, glm::vec3 &outAnchor) -> bool {
+			const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(), [&](const std::size_t index) {
+				return index < windowState.structure.atoms.size();
+			});
+			if (!inRange)
+				return false;
+			if (pin.atomIndices.size() == 2)
+			{
+				outAnchor = (windowState.structure.atoms[pin.atomIndices[0]].cartesianPosition +
+								windowState.structure.atoms[pin.atomIndices[1]].cartesianPosition) *
+					0.5f;
+			}
+			else if (pin.atomIndices.size() == 3)
+			{
+				const std::size_t vertexIndex = ResolveAngleVertexIndex(windowState.structure, pin.atomIndices);
+				outAnchor = windowState.structure.atoms[vertexIndex].cartesianPosition;
+			}
+			else
+			{
+				return false;
+			}
+			outAnchor += cameraRight * pin.screenOffset.x + cameraUp * pin.screenOffset.y;
+			return true;
+		};
+
+		if (windowState.pinnedMeasurementDragging)
+		{
+			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) ||
+				windowState.selectedPinnedMeasurement < 0 ||
+				windowState.selectedPinnedMeasurement >= static_cast<int>(windowState.pinnedMeasurements.size()))
+			{
+				windowState.pinnedMeasurementDragging = false;
+				return false;
+			}
+
+			RendererWindowState::PinnedMeasurement &pin =
+				windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)];
+			glm::vec3 anchor(0.0f);
+			if (resolveAnchor(pin, anchor))
+			{
+				glm::vec2 rightProbe, upProbe, anchorScreen;
+				if (projectToScreen(anchor, anchorScreen) && projectToScreen(anchor + cameraRight, rightProbe) &&
+					projectToScreen(anchor + cameraUp, upProbe))
+				{
+					const float pixelsPerWorldRight = std::max(1.0f, glm::length(rightProbe - anchorScreen));
+					const float pixelsPerWorldUp = std::max(1.0f, glm::length(upProbe - anchorScreen));
+					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+					const glm::vec2 deltaPixels = mousePos - windowState.pinnedMeasurementDragLastMouse;
+					pin.screenOffset.x += deltaPixels.x / pixelsPerWorldRight;
+					pin.screenOffset.y -= deltaPixels.y / pixelsPerWorldUp; // screen Y is flipped vs cameraUp
+					windowState.pinnedMeasurementDragLastMouse = mousePos;
+				}
+			}
+			return true;
+		}
+
+		if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			return false;
+
+		const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+		constexpr float kPickRadius = 40.0f;
+		int hitIndex = -1;
+		float bestDistance = kPickRadius;
+		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
+		{
+			glm::vec3 anchor(0.0f);
+			glm::vec2 anchorScreen;
+			if (!resolveAnchor(windowState.pinnedMeasurements[i], anchor) || !projectToScreen(anchor, anchorScreen))
+				continue;
+			const float distance = glm::length(mousePos - anchorScreen);
+			if (distance < bestDistance)
+			{
+				bestDistance = distance;
+				hitIndex = static_cast<int>(i);
+			}
+		}
+
+		windowState.selectedPinnedMeasurement = hitIndex;
+		if (hitIndex < 0)
+			return false;
+
+		windowState.pinnedMeasurementDragging = true;
+		windowState.pinnedMeasurementDragLastMouse = mousePos;
+		return true;
 	}
 
 	std::vector<std::size_t> RendererPanel::hitTestRect(
@@ -789,6 +1528,39 @@ namespace DefectStudio
 
 		ImGui::Separator();
 		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
+
+		const std::string &focusedWindowId = m_Layer.GetFocusedViewportWindowId();
+		const RendererWindowState *focusedWindow = nullptr;
+		for (const RendererWindowState &candidate : m_Layer.GetWindows())
+		{
+			if (candidate.windowId == focusedWindowId)
+			{
+				focusedWindow = &candidate;
+				break;
+			}
+		}
+		const bool canApply = focusedWindow != nullptr && !focusedWindow->selectedAtomIndices.empty();
+
+		ImGui::BeginDisabled(!canApply);
+		if (ImGui::Button("Apply to selected atoms"))
+		{
+			Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
+			if (commandRegistry != nullptr)
+			{
+				ChangeAtomTypePayload payload;
+				payload.windowId = focusedWindowId;
+				payload.species = m_Layer.GetSelectedPeriodicElement();
+				CommandContext context;
+				context.Set<ChangeAtomTypePayload>("atom_edit.change_type_payload", std::move(payload));
+				Result<CommandOutcome> result =
+					commandRegistry->Execute(CommandID{"renderer.selection.change_type"}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Change atom type from periodic table failed: {}", result.Error().technicalDetails);
+			}
+		}
+		ImGui::EndDisabled();
+		if (!canApply && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Select atoms in a renderer viewport first.");
 
 		ImGui::End();
 	}

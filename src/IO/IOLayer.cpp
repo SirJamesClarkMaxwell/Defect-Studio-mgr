@@ -87,6 +87,8 @@ namespace DefectStudio
 				emit << YAML::Key << "context" << YAML::Value << binding.when.GetExpression();
 				emit << YAML::Key << "layer" << YAML::Value << static_cast<int>(binding.layer);
 				emit << YAML::Key << "enabled" << YAML::Value << binding.enabled;
+				if (binding.repeatable)
+					emit << YAML::Key << "repeatable" << YAML::Value << binding.repeatable;
 				emit << YAML::EndMap;
 			}
 			emit << YAML::EndSeq;
@@ -135,6 +137,7 @@ namespace DefectStudio
 				const std::string context = node["context"].as<std::string>("");
 				const int layerValue = node["layer"].as<int>(0);
 				const bool enabled = node["enabled"].as<bool>(true);
+				const bool repeatable = node["repeatable"].as<bool>(false);
 
 				if (id.empty() || command.empty() || chordText.empty())
 				{
@@ -167,6 +170,7 @@ namespace DefectStudio
 				binding.when = ContextExpr{context};
 				binding.layer = layer;
 				binding.enabled = enabled;
+				binding.repeatable = repeatable;
 				bindings.push_back(std::move(binding));
 			}
 

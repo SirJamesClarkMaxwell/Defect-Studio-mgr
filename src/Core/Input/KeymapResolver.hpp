@@ -27,6 +27,12 @@ namespace DefectStudio
 		ContextExpr when;
 		KeymapLayer layer = KeymapLayer::Global;
 		bool enabled = true;
+		// When true, holding the chord down fires the command on every OS key-repeat (GLFW_REPEAT),
+		// not just the initial press - see CoreLayer::onKeyRepeated. Off by default: most commands
+		// (delete, duplicate, toggle-X) would be actively harmful to fire repeatedly from one held
+		// key, so this is opt-in per-binding for the few that want continuous behaviour (camera
+		// orbit while held, held-move nudge, ...).
+		bool repeatable = false;
 	};
 
 	struct KeyBindingConflict

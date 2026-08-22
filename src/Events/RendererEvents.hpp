@@ -114,6 +114,23 @@ namespace DefectStudio::RendererEvents::Viewport
 		float dy = 0.0f;
 	};
 
+	// Discrete keyboard pan (Shift+Arrow) - reuses OrbitDirection's 4 values rather than a new enum.
+	// Distinct from PanDelta above: that one is the continuous mouse-drag path (no undo push per
+	// pixel); this is a single step sized by windowState.pixelStepPx, pushed as one undo entry -
+	// same instant-apply pattern as OrbitStepRequested/RollStepRequested.
+	struct PanDirectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		OrbitDirection direction = OrbitDirection::Left;
+	};
+
+	struct PanStepRequested final : public BusEvent
+	{
+		std::string windowId;
+		float dx = 0.0f;
+		float dy = 0.0f;
+	};
+
 	struct RollStepRequested final : public BusEvent
 	{
 		std::string windowId;
@@ -199,9 +216,55 @@ namespace DefectStudio::RendererEvents::Viewport
 		std::string windowId;
 	};
 
-	// Toggles the single-bond label for the current 2-atom selection (Etap E, `M`) - distinct
-	// from LabelsToggleRequested's "every bond" toggle.
+	// Pins/unpins a bond-length label for every bonded pair within the current selection (>= 2
+	// atoms, Etap E, `M`) - distinct from LabelsToggleRequested's "every bond in the structure"
+	// toggle, and from LabelsToggleSelectedAngleRequested's angle measurement (`Shift+M`).
 	struct LabelsToggleSelectedBondRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	// Pins/unpins the angle label for the current 3-atom selection (Etap E, `Shift+M`) - separate
+	// shortcut from the bond-length one above so picking a 3rd atom for an angle doesn't also spam
+	// bond-length pins for whatever pairs happen to be bonded within that triple.
+	struct LabelsToggleSelectedAngleRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	// Full bond/angle pin key matrix (`M` family): Ctrl selects scope (selection vs. every visible
+	// atom), Alt selects action (add vs. remove) on top of the base `M`/`Shift+M` (bond/angle, add,
+	// selection-scoped - see above). Removal filters existing pins by atom-set containment rather
+	// than recomputing bond candidates, so it also cleans up a pin left over from a structure edit
+	// that no longer has a matching bond.
+	struct LabelsRemoveSelectedBondRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+	struct LabelsShowAllBondRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+	struct LabelsRemoveAllBondRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+	struct LabelsRemoveSelectedAngleRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+	struct LabelsShowAllAngleRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+	struct LabelsRemoveAllAngleRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	// Bulk-toggles PinnedMeasurement::alignToBondDirection for every existing bond-length pin (and
+	// the default new ones get created with) between "along the bond" (default) and upright (`A`).
+	struct LabelsToggleBondAlignmentRequested final : public BusEvent
 	{
 		std::string windowId;
 	};
@@ -236,6 +299,20 @@ namespace DefectStudio::RendererEvents::Viewport
 	struct SelectionInvertRequested final : public BusEvent
 	{
 		std::string windowId;
+	};
+
+	struct SelectAllRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	// Places/moves the 3D cursor (vertical toolbar "3D point" tool click, or a context-menu "Move
+	// cursor to..." item) - renderer-only state (RendererWindowState::cursor3DPosition), no domain
+	// mutation, so this stays a plain event rather than a CommandRegistry ICommand.
+	struct Cursor3DSetPositionRequested final : public BusEvent
+	{
+		std::string windowId;
+		glm::vec3 position = glm::vec3(0.0f);
 	};
 
 	// Captures the target window's current view (camera + selection + visibility) as the

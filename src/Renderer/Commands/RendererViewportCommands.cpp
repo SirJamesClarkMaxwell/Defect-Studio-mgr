@@ -82,6 +82,20 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererPanDirectionCommand(
+		Ref<EventBus> eventBus,
+		RendererEvents::Viewport::OrbitDirection direction)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer pan",
+			[direction](EventBus &bus) {
+				RendererEvents::Viewport::PanDirectionRequested event;
+				event.direction = direction;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererOrbitQuarterTurnCommand(
 		Ref<EventBus> eventBus,
 		RendererEvents::Viewport::OrbitDirection direction)
@@ -237,6 +251,94 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererLabelsToggleSelectedAngleCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer toggle selected angle label",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsToggleSelectedAngleRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsRemoveSelectedBondCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer remove selected bond labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsRemoveSelectedBondRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsShowAllBondCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer show all visible bond labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsShowAllBondRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsRemoveAllBondCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer remove all visible bond labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsRemoveAllBondRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsRemoveSelectedAngleCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer remove selected angle labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsRemoveSelectedAngleRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsShowAllAngleCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer show all visible angle labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsShowAllAngleRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsRemoveAllAngleCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer remove all visible angle labels",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsRemoveAllAngleRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererLabelsToggleBondAlignmentCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer toggle bond label alignment",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::LabelsToggleBondAlignmentRequested event;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus)
 	{
 		return CreateUnique<RendererViewportEventCommand>(
@@ -266,6 +368,17 @@ namespace DefectStudio
 			"Renderer invert selection",
 			[](EventBus &bus) {
 				RendererEvents::Viewport::SelectionInvertRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererSelectAllCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer select all",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::SelectAllRequested event;
 				bus.Publish(event);
 			});
 	}
