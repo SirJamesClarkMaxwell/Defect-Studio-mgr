@@ -801,6 +801,10 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onUndoViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RedoViewRequested>(
 				std::bind_front(&RendererLayer::onRedoViewRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::UndoLabelsRequested>(
+				std::bind_front(&RendererLayer::onUndoLabelsRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::RedoLabelsRequested>(
+				std::bind_front(&RendererLayer::onRedoLabelsRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SaveCurrentViewRequested>(
 				std::bind_front(&RendererLayer::onSaveCurrentViewRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::CycleSavedViewRequested>(
@@ -1428,6 +1432,68 @@ namespace DefectStudio
 			RedoViewChange(windowState->windowId);
 	}
 
+	void RendererLayer::onUndoLabelsRequested(const RendererEvents::Viewport::UndoLabelsRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState != nullptr)
+			UndoLabelsChange(windowState->windowId);
+	}
+
+	void RendererLayer::onRedoLabelsRequested(const RendererEvents::Viewport::RedoLabelsRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState != nullptr)
+			RedoLabelsChange(windowState->windowId);
+	}
+
+	namespace
+	{
+		constexpr std::size_t kMaxPinnedMeasurementHistoryEntries = 64;
+	} // namespace
+
+	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState)
+	{
+		windowState.pinnedMeasurementUndoHistory.push_back(windowState.pinnedMeasurements);
+		if (windowState.pinnedMeasurementUndoHistory.size() > kMaxPinnedMeasurementHistoryEntries)
+			windowState.pinnedMeasurementUndoHistory.erase(windowState.pinnedMeasurementUndoHistory.begin());
+		windowState.pinnedMeasurementRedoHistory.clear();
+	}
+
+	void RendererLayer::UndoLabelsChange(const std::string &windowId)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr || windowState->pinnedMeasurementUndoHistory.empty())
+			return;
+
+		windowState->pinnedMeasurementRedoHistory.push_back(windowState->pinnedMeasurements);
+		windowState->pinnedMeasurements = std::move(windowState->pinnedMeasurementUndoHistory.back());
+		windowState->pinnedMeasurementUndoHistory.pop_back();
+		// Selection index isn't meaningfully preserved across an undo (the restored vector may have a
+		// different size/order than what was selected a moment ago) - same simple reset RemovePinsWithinSet
+		// already does when the selected pin itself is the one that disappears.
+		windowState->selectedPinnedMeasurement = -1;
+		windowState->labelGizmoDragging = false;
+		windowState->labelGizmoAxis = -1;
+		windowState->pinnedMeasurementDragging = false;
+		SceneSystem::SyncLabelEntities(windowState->sceneRegistry, *windowState);
+	}
+
+	void RendererLayer::RedoLabelsChange(const std::string &windowId)
+	{
+		RendererWindowState *windowState = findWindowById(windowId);
+		if (windowState == nullptr || windowState->pinnedMeasurementRedoHistory.empty())
+			return;
+
+		windowState->pinnedMeasurementUndoHistory.push_back(windowState->pinnedMeasurements);
+		windowState->pinnedMeasurements = std::move(windowState->pinnedMeasurementRedoHistory.back());
+		windowState->pinnedMeasurementRedoHistory.pop_back();
+		windowState->selectedPinnedMeasurement = -1;
+		windowState->labelGizmoDragging = false;
+		windowState->labelGizmoAxis = -1;
+		windowState->pinnedMeasurementDragging = false;
+		SceneSystem::SyncLabelEntities(windowState->sceneRegistry, *windowState);
+	}
+
 	void RendererLayer::onSaveCurrentViewRequested(const RendererEvents::Viewport::SaveCurrentViewRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
@@ -1747,6 +1813,8 @@ namespace DefectStudio
 		// ToggleMeasurementPin's removeIfPresent note).
 		void AddBondPinsWithinSet(RendererWindowState &windowState, const std::unordered_set<std::size_t> &atomSet)
 		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			const std::size_t countBefore = windowState.pinnedMeasurements.size();
 			for (const RendererBondData &bond : windowState.structure.bonds)
 			{
 				if (atomSet.contains(bond.firstAtomIndex) && atomSet.contains(bond.secondAtomIndex))
@@ -1754,6 +1822,12 @@ namespace DefectStudio
 						windowState, {bond.firstAtomIndex, bond.secondAtomIndex}, bond.secondAtomPeriodicOffset,
 						/*removeIfPresent=*/false);
 			}
+			// Add-only, so a pin count unchanged from countBefore means nothing was actually added
+			// (every bonded pair in the selection was already pinned) - drop the snapshot pushed above
+			// rather than leave a no-op entry in the undo history (repeatedly pressing M/Ctrl+M over an
+			// already-fully-pinned selection is a common way to hit this).
+			if (windowState.pinnedMeasurements.size() == countBefore)
+				windowState.pinnedMeasurementUndoHistory.pop_back();
 			// One resync after the whole batch, not per pin inside the loop above - SyncLabelEntities
 			// destroys/recreates every label entity, so doing it per-toggle would be O(pins²) for a
 			// bulk press over a large selection.
@@ -1768,6 +1842,8 @@ namespace DefectStudio
 		// each other, so a free-floating 3-point angle still works. Add-only.
 		void AddAnglePinsWithinSet(RendererWindowState &windowState, const std::unordered_set<std::size_t> &atomSet)
 		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			const std::size_t countBefore = windowState.pinnedMeasurements.size();
 			std::unordered_map<std::size_t, std::vector<std::size_t>> neighborsByAtom;
 			for (const RendererBondData &bond : windowState.structure.bonds)
 			{
@@ -1795,6 +1871,10 @@ namespace DefectStudio
 					windowState, std::vector<std::size_t>(atomSet.begin(), atomSet.end()), glm::vec3(0.0f),
 					/*removeIfPresent=*/false);
 
+			// See AddBondPinsWithinSet's matching comment - drop the no-op snapshot if nothing was
+			// actually added.
+			if (windowState.pinnedMeasurements.size() == countBefore)
+				windowState.pinnedMeasurementUndoHistory.pop_back();
 			// One resync after the whole batch - see AddBondPinsWithinSet's matching comment.
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
@@ -1805,6 +1885,8 @@ namespace DefectStudio
 		// bond.
 		void RemovePinsWithinSet(RendererWindowState &windowState, std::size_t pinSize, const std::unordered_set<std::size_t> &atomSet)
 		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			const std::size_t countBefore = windowState.pinnedMeasurements.size();
 			std::vector<RendererWindowState::PinnedMeasurement> &pins = windowState.pinnedMeasurements;
 			for (std::size_t i = 0; i < pins.size();)
 			{
@@ -1823,6 +1905,9 @@ namespace DefectStudio
 				else if (windowState.selectedPinnedMeasurement > static_cast<int>(i))
 					--windowState.selectedPinnedMeasurement;
 			}
+			// See AddBondPinsWithinSet's matching comment - drop the no-op snapshot if nothing matched.
+			if (windowState.pinnedMeasurements.size() == countBefore)
+				windowState.pinnedMeasurementUndoHistory.pop_back();
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 	} // namespace

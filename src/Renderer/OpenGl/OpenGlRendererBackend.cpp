@@ -182,7 +182,8 @@ namespace DefectStudio
 		const std::u32string &text,
 		std::vector<OpenGlLabelInstance> &outInstances,
 		const glm::vec4 &color = kLabelColor,
-		float rotationRadians = 0.0f)
+		float rotationRadians = 0.0f,
+		float scale = 1.0f)
 	{
 		// World-space label height (em units -> world units) and a rough baseline centering
 		// offset (typical glyph ascent/descent split) - tuned by eye, not derived from font
@@ -202,7 +203,7 @@ namespace DefectStudio
 			{
 				OpenGlLabelInstance instance;
 				instance.worldCenter = worldCenter;
-				instance.localOffsetSize = glm::vec4(
+				instance.localOffsetSize = scale * glm::vec4(
 					penX + glyph.planeMin.x * kWorldFontSize,
 					kBaselineOffset + glyph.planeMin.y * kWorldFontSize,
 					(glyph.planeMax.x - glyph.planeMin.x) * kWorldFontSize,
@@ -222,9 +223,10 @@ namespace DefectStudio
 		float lengthAngstrom,
 		std::vector<OpenGlLabelInstance> &outInstances,
 		const glm::vec4 &color = kLabelColor,
-		float rotationRadians = 0.0f)
+		float rotationRadians = 0.0f,
+		float scale = 1.0f)
 	{
-		AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, color, rotationRadians);
+		AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, color, rotationRadians, scale);
 	}
 
 	void AppendAngleLabelInstances(
@@ -233,9 +235,10 @@ namespace DefectStudio
 		float angleDeg,
 		std::vector<OpenGlLabelInstance> &outInstances,
 		const glm::vec4 &color = kLabelColor,
-		float rotationRadians = 0.0f)
+		float rotationRadians = 0.0f,
+		float scale = 1.0f)
 	{
-		AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, color, rotationRadians);
+		AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, color, rotationRadians, scale);
 	}
 
 	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
@@ -1428,7 +1431,8 @@ namespace DefectStudio
 								rotationRadians += glm::pi<float>();
 						}
 						AppendBondLabelInstances(
-							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, color, rotationRadians);
+							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, color,
+							rotationRadians + pin.rotationOffsetRadians, pin.scale);
 						break;
 					}
 				}
@@ -1454,7 +1458,9 @@ namespace DefectStudio
 					{
 						const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 						const float angleDeg = glm::degrees(std::acos(cosAngle));
-						AppendAngleLabelInstances(*m_LabelFont, vertexAtom.cartesianPosition + offset, angleDeg, pinnedInstances, color);
+						AppendAngleLabelInstances(
+							*m_LabelFont, vertexAtom.cartesianPosition + offset, angleDeg, pinnedInstances, color,
+							pin.rotationOffsetRadians, pin.scale);
 					}
 				}
 			}

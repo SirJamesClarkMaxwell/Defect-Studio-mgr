@@ -53,8 +53,10 @@ namespace DefectStudio
 		// while selected" behaviour. Not persisted with the project yet (see TODO.md T09 "Tryby
 		// zaznaczania"). Real ECS entity as of Etap F (LabelComponent/TransformComponent/
 		// SelectionComponent, synced by SceneSystem::SyncLabelEntities/UpdateLabelTransforms/
-		// SyncLabelSelection) - gizmo-draggable (RendererPanel::renderLabelTransformGizmo, translate
-		// only, see that function's comment for why rotate/scale don't apply).
+		// SyncLabelSelection) - gizmo-draggable (RendererPanel::renderLabelTransformGizmo: Translate
+		// moves worldOffset along a world axis, Rotate/Scale drive rotationOffsetRadians/scale below
+		// via a ring-drag around the pivot instead of per-axis handles, since a billboard label has
+		// only one meaningful rotation axis - its own camera-facing normal - and one meaningful scale).
 		struct PinnedMeasurement
 		{
 			std::vector<std::size_t> atomIndices; // size 2 = bond length, size 3 = angle
@@ -70,6 +72,15 @@ namespace DefectStudio
 			// the aligned reading direction is upside-down from the current camera angle.
 			bool alignToBondDirection = true;
 			bool flipped = false;
+			// Extra in-plane billboard rotation on top of alignToBondDirection/flipped (bond pins) or
+			// the always-upright default (angle pins) - gizmo Rotate (RendererPanel::
+			// renderLabelTransformGizmo), added to the computed rotationRadians in
+			// OpenGlRendererBackend::renderLabels.
+			float rotationOffsetRadians = 0.0f;
+			// Uniform multiplier on the label's rendered glyph size - gizmo Scale (RendererPanel::
+			// renderLabelTransformGizmo), applied in OpenGlRendererBackend::AppendLabelInstances around
+			// the label's own anchor (so it grows/shrinks in place, not toward world origin).
+			float scale = 1.0f;
 			// Bond-length pins only (size 2): the specific RendererBondData::secondAtomPeriodicOffset
 			// this pin was created from (zero for a direct/non-periodic bond), relative to
 			// atomIndices[0]->atomIndices[1] after the identity sort below. Two atoms can be joined by
@@ -81,6 +92,13 @@ namespace DefectStudio
 			glm::vec3 bondPeriodicOffset = glm::vec3(0.0f);
 		};
 		std::vector<PinnedMeasurement> pinnedMeasurements;
+		// Local per-window undo/redo for pinnedMeasurements (Ctrl+Alt+U / Ctrl+Alt+Shift+U) - snapshot-
+		// based (whole-vector copies, cheap given how few pins there typically are), pushed by
+		// PushPinnedMeasurementUndoSnapshot before every add/remove/flip/drag-start, one entry per
+		// logical edit. Separate from the global Core/Undo Ctrl+Z stack and from viewUndoHistory below
+		// - see RendererEvents::Viewport::UndoLabelsRequested for why.
+		std::vector<std::vector<PinnedMeasurement>> pinnedMeasurementUndoHistory;
+		std::vector<std::vector<PinnedMeasurement>> pinnedMeasurementRedoHistory;
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
 			// `flipped` above.
@@ -160,6 +178,12 @@ namespace DefectStudio
 		glm::vec3 labelGizmoDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
 		float labelGizmoDragPixelsPerWorld = 1.0f;
 		glm::vec3 labelGizmoDragStartOffset = glm::vec3(0.0f);
+		// Rotate/Scale ring-drag start snapshot (labelGizmoAxis == -2, no X/Y/Z handle - see
+		// renderLabelTransformGizmo) - used only for Escape/right-click cancel; the live update itself
+		// is incremental (Rotate) or ratio-of-radial-distance (Scale), not computed from these.
+		float labelGizmoDragStartRotation = 0.0f;
+		float labelGizmoDragStartScale = 1.0f;
+		float labelGizmoDragStartRadial = 0.0f;
 		// Continuous Ctrl+Shift+Arrow nudge - polled every frame (RendererPanel::applyViewportInputNavigation)
 		// instead of riding GLFW's own key-repeat cadence, which is OS-repeat-rate limited (~10-15Hz)
 		// and visibly steps rather than glides. Same start-snapshot/commit-on-release shape as the

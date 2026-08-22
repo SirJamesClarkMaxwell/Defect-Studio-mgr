@@ -1267,15 +1267,18 @@ namespace DefectStudio
 		return false;
 	}
 
-	// Translate-only gizmo for the selected pinned measurement label (sibling of renderTransformGizmo
-	// above, see PinnedMeasurement::worldOffset) - same shaft+arrowhead visual and screen-space axis
-	// pick/drag as the atom gizmo (ImGuizmo's own picking is unreliable here too, see that function's
-	// big comment), just for one point instead of a multi-atom selection. Rotate/Scale don't apply: a
-	// label's reading direction is already covered by `A`/`F` (bond-alignment toggle + flip, see
-	// handlePinnedMeasurementInteraction below), and there is no per-label font size to scale. No
-	// undo/redo integration - matches every other pin edit (add/remove/flip/screen-drag) today, none
-	// of which go through Core/Undo either. Reads its pivot from the label entity's TransformComponent
-	// (kept current by SceneSystem::UpdateLabelTransforms, called once per frame before this).
+	// Gizmo for the selected pinned measurement label (sibling of renderTransformGizmo above, see
+	// PinnedMeasurement::worldOffset/rotationOffsetRadians/scale) - same screen-space pick/drag
+	// philosophy as the atom gizmo (ImGuizmo's own picking is unreliable here too, see that
+	// function's big comment), just for one point instead of a multi-atom selection. Translate draws
+	// the familiar shaft+arrowhead 3-axis handles and moves worldOffset. Rotate/Scale use a single
+	// ring-drag around the pivot instead - no per-axis handles, since a camera-facing billboard has
+	// only one meaningful rotation axis (its own normal) and one meaningful scale (uniform glyph
+	// size), so there is nothing for X/Y/Z to choose between. Every drag pushes one undo snapshot at
+	// its start via PushPinnedMeasurementUndoSnapshot (Ctrl+Alt+U/Ctrl+Alt+Shift+U - see
+	// RendererEvents::Viewport::UndoLabelsRequested), never mid-drag, so a whole drag is one step.
+	// Reads its pivot from the label entity's TransformComponent (kept current by
+	// SceneSystem::UpdateLabelTransforms, called once per frame before this).
 	bool RendererPanel::renderLabelTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
@@ -1293,6 +1296,8 @@ namespace DefectStudio
 		if (!labelEntity || !labelEntity.HasComponent<TransformComponent>())
 			return false;
 		const glm::vec3 pivot = labelEntity.GetComponent<TransformComponent>().position;
+		RendererWindowState::PinnedMeasurement &pin =
+			windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)];
 
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
@@ -1314,6 +1319,93 @@ namespace DefectStudio
 		// underneath competing for the same screen space, so there is no need for as much clearance.
 		constexpr float kPickMinDistance = 14.0f;
 		constexpr float kPickMaxDistance = 70.0f;
+
+		if (windowState.gizmoOperation == GizmoOperation::Rotate || windowState.gizmoOperation == GizmoOperation::Scale)
+		{
+			const bool isRotate = windowState.gizmoOperation == GizmoOperation::Rotate;
+			constexpr ImU32 kRingColor = IM_COL32(235, 235, 235, 200);
+			constexpr ImU32 kRingActiveColor = IM_COL32(255, 200, 60, 220);
+
+			if (pivotOnScreen && !windowState.labelGizmoDragging)
+				ImGui::GetWindowDrawList()->AddCircle(
+					ImVec2(pivotScreen.x, pivotScreen.y), kPickMaxDistance, kRingColor, 48, 2.0f);
+
+			const float radialNow = pivotOnScreen ? glm::length(mousePos - pivotScreen) : -1.0f;
+			const bool hoveringRing = hovered && pivotOnScreen && !windowState.labelGizmoDragging &&
+				radialNow >= kPickMinDistance && radialNow <= kPickMaxDistance;
+
+			if (hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				windowState.labelGizmoDragging = true;
+				windowState.labelGizmoAxis = -2; // sentinel: ring drag, no X/Y/Z handle
+				windowState.labelGizmoLastMousePos = mousePos;
+				windowState.labelGizmoDragStartRotation = pin.rotationOffsetRadians;
+				windowState.labelGizmoDragStartScale = pin.scale;
+				windowState.labelGizmoDragStartRadial = std::max(kPickMinDistance, radialNow);
+			}
+
+			if (windowState.labelGizmoDragging && windowState.labelGizmoAxis == -2)
+			{
+				if (pivotOnScreen)
+					ImGui::GetWindowDrawList()->AddCircle(
+						ImVec2(pivotScreen.x, pivotScreen.y), kPickMaxDistance, kRingActiveColor, 48, 3.0f);
+
+				// Cancel: Escape or right-click reverts to the pre-drag snapshot, same convention as
+				// the atom gizmo's fallback drag.
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+				{
+					pin.rotationOffsetRadians = windowState.labelGizmoDragStartRotation;
+					pin.scale = windowState.labelGizmoDragStartScale;
+					windowState.labelGizmoDragging = false;
+					windowState.labelGizmoAxis = -1;
+					return true;
+				}
+
+				if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+				{
+					if (isRotate)
+					{
+						// atan2's y negated: screen space is y-down, while the billboard's own local
+						// "up" (matched to cameraUp in labels.vert) is y-up - without this the drag
+						// would feel mirrored (drag clockwise on screen, label spins the other way).
+						const glm::vec2 fromPivotLast = windowState.labelGizmoLastMousePos - pivotScreen;
+						const glm::vec2 fromPivotNow = mousePos - pivotScreen;
+						if (glm::length(fromPivotLast) > 1.0f && glm::length(fromPivotNow) > 1.0f)
+						{
+							const float lastAngle = std::atan2(-fromPivotLast.y, fromPivotLast.x);
+							const float nowAngle = std::atan2(-fromPivotNow.y, fromPivotNow.x);
+							float deltaAngle = nowAngle - lastAngle;
+							while (deltaAngle > glm::pi<float>())
+								deltaAngle -= glm::two_pi<float>();
+							while (deltaAngle < -glm::pi<float>())
+								deltaAngle += glm::two_pi<float>();
+							pin.rotationOffsetRadians += deltaAngle;
+						}
+					}
+					else
+					{
+						// Blender S-style: scale ratio is the current radial distance from the pivot
+						// over the distance at drag start, not a per-frame delta - dragging back to the
+						// start radius always returns exactly to the start scale.
+						const float currentRadial = std::max(1.0f, glm::length(mousePos - pivotScreen));
+						const float ratio = currentRadial / windowState.labelGizmoDragStartRadial;
+						pin.scale = glm::clamp(windowState.labelGizmoDragStartScale * ratio, 0.1f, 8.0f);
+					}
+					windowState.labelGizmoLastMousePos = mousePos;
+					return true;
+				}
+
+				windowState.labelGizmoDragging = false;
+				windowState.labelGizmoAxis = -1;
+				return true;
+			}
+
+			return hoveringRing;
+		}
+
+		// Translate (default / GizmoOperation::Translate) - 3-axis arrow handles, same shape as the
+		// atom gizmo's own translate branch.
 		constexpr glm::vec3 kWorldAxes[3] = {
 			glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
 		constexpr ImU32 kAxisLockColors[3] = {
@@ -1389,23 +1481,19 @@ namespace DefectStudio
 
 			if (hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
 				windowState.labelGizmoDragging = true;
 				windowState.labelGizmoAxis = hoveredAxis;
 				windowState.labelGizmoLastMousePos = mousePos;
 				windowState.labelGizmoDragAxisScreenDir = axisScreenDir[hoveredAxis];
 				windowState.labelGizmoDragAxisWorldDir = kWorldAxes[hoveredAxis];
 				windowState.labelGizmoDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
-				windowState.labelGizmoDragStartOffset =
-					windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)]
-						.worldOffset;
+				windowState.labelGizmoDragStartOffset = pin.worldOffset;
 			}
 		}
 
 		if (windowState.labelGizmoDragging && windowState.labelGizmoAxis >= 0)
 		{
-			RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[static_cast<std::size_t>(
-				windowState.selectedPinnedMeasurement)];
-
 			if (pivotOnScreen)
 			{
 				ImDrawList *drawList = ImGui::GetWindowDrawList();
@@ -1461,6 +1549,7 @@ namespace DefectStudio
 			windowState.selectedPinnedMeasurement < static_cast<int>(windowState.pinnedMeasurements.size());
 		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_F, false))
 		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
 			windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)].flipped ^= true;
 		}
 		// Delete removes just the selected pin - M/Shift+M are add-only (a bulk press over a growing
@@ -1469,6 +1558,7 @@ namespace DefectStudio
 		// the only way to unpin a single label; click a label to select it first.
 		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
 			windowState.pinnedMeasurements.erase(
 				windowState.pinnedMeasurements.begin() + windowState.selectedPinnedMeasurement);
 			windowState.selectedPinnedMeasurement = -1;
@@ -1580,6 +1670,7 @@ namespace DefectStudio
 		if (hitIndex < 0)
 			return false;
 
+		PushPinnedMeasurementUndoSnapshot(windowState);
 		windowState.pinnedMeasurementDragging = true;
 		windowState.pinnedMeasurementDragLastMouse = mousePos;
 		return true;

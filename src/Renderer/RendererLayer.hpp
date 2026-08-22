@@ -35,6 +35,15 @@ namespace DefectStudio
 	[[nodiscard]] std::string SerializeViewSnapshot(const RendererViewSnapshot &snapshot);
 	[[nodiscard]] std::optional<RendererViewSnapshot> DeserializeViewSnapshot(const std::string &line);
 
+	// Snapshots windowState.pinnedMeasurements onto its undo history and clears the redo history -
+	// call once BEFORE any pin mutation (add/remove/flip/drag-start), never per-frame during a drag,
+	// so a whole drag/bulk-add/bulk-remove collapses into one undo step (Ctrl+Alt+U/Ctrl+Alt+Shift+U,
+	// see RendererEvents::Viewport::UndoLabelsRequested for why this is a separate local stack from
+	// the global Ctrl+Z domain undo). Free function, not a RendererLayer member, so both
+	// RendererLayer.cpp's internal pin-mutation helpers and RendererPanel (which owns the actual
+	// click/drag edits) can call it without routing through a layer method for no reason.
+	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState);
+
 	struct RendererStartupConfig
 	{
 		Path assetsDirectory;
@@ -74,6 +83,10 @@ namespace DefectStudio
 		void UpdateCameraTransitions(float deltaTime);
 		void UndoViewChange(const std::string &windowId);
 		void RedoViewChange(const std::string &windowId);
+		// Local per-window undo/redo for pinned measurement labels - see RendererEvents::Viewport::
+		// UndoLabelsRequested's comment for why this is its own stack instead of the global Ctrl+Z.
+		void UndoLabelsChange(const std::string &windowId);
+		void RedoLabelsChange(const std::string &windowId);
 		void SetViewportSize(const std::string &windowId, glm::vec2 size);
 		// Appends a runtime-opened window (e.g. Project Tree "Open Defect") - main thread only,
 		// callers must have already built a fully-formed RendererWindowState (see
@@ -174,6 +187,8 @@ namespace DefectStudio
 		void onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event);
 		void onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event);
 		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
+		void onUndoLabelsRequested(const RendererEvents::Viewport::UndoLabelsRequested &event);
+		void onRedoLabelsRequested(const RendererEvents::Viewport::RedoLabelsRequested &event);
 		void onSaveCurrentViewRequested(const RendererEvents::Viewport::SaveCurrentViewRequested &event);
 		void onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event);
 		void onExportImageRequested(const RendererEvents::Viewport::ExportImageRequested &event);

@@ -163,6 +163,21 @@ namespace DefectStudio::RendererEvents::Viewport
 		std::string windowId;
 	};
 
+	// Local per-window undo/redo for pinned measurement labels (add/remove/flip/gizmo drag) - own
+	// stack and own chord (Ctrl+Alt+U / Ctrl+Alt+Shift+U), same "renderer-local, not domain" shape
+	// as UndoViewRequested/RedoViewRequested above rather than the global Core/Undo stack (Ctrl+Z),
+	// since pinned measurements are renderer-only state, not a domain concept - see
+	// RendererWindowState::pinnedMeasurements.
+	struct UndoLabelsRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
+	struct RedoLabelsRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
 	struct CycleSavedViewRequested final : public BusEvent
 	{
 		std::string windowId;

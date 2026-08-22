@@ -923,17 +923,16 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       `SelectionComponent` (mirror `selectedPinnedMeasurement`). Sync wywoływany raz na batch po
       `AddBondPinsWithinSet`/`AddAnglePinsWithinSet`/`RemovePinsWithinSet` (nie per-pin w pętli —
       `SyncLabelEntities` niszczy/tworzy wszystkie encje, O(n²) inaczej) i po Delete pojedynczego pinu.
-      **Gizmo — `RendererPanel::renderLabelTransformGizmo`:** translate-only (rotate/scale świadomie
-      pominięte — kierunek odczytu etykiety już pokrywają `A`/`F`, nie ma per-label skali fontu), ten
-      sam wzorzec shaft+arrowhead i fallback screen-space pick/drag co gizmo atomów, ale osobny stan
+      **Gizmo — `RendererPanel::renderLabelTransformGizmo`:** Translate to 3-osiowe strzałki, ten sam
+      wzorzec shaft+arrowhead i fallback screen-space pick/drag co gizmo atomów, ale osobny stan
       (`labelGizmo*` pola w `RendererWindowState`) bo operuje na jednym punkcie (`PinnedMeasurement::
       worldOffset`) zamiast listy atomów. `PinnedMeasurement::screenOffset` (vec2, camera-plane-only)
       **zamieniony na `worldOffset`** (vec3, pełny world-space) — stary click-drag-na-etykiecie nadal
       działa (pisze do tego samego pola przez rzut cameraRight/cameraUp), gizmo dokłada ruch wzdłuż
       dowolnej osi świata. Efekt uboczny: usunięty stary "swim przy orbicie kamery" z
       `OpenGlRendererBackend::renderLabels` (offset był przeliczany z bieżącej macierzy widoku co
-      klatkę — teraz to stały wektor world-space). Brak undo/redo dla gizma etykiet — spójne z resztą
-      edycji pinów (add/remove/flip/drag), które też nie idą przez `Core/Undo`.
+      klatkę — teraz to stały wektor world-space). **Rotate/Scale i Undo/redo dociągnięte
+      2026-08-22, zob. szczegóły w "Pomiary" → "Rotate/Scale na gizmie etykiet + Undo/redo" niżej.**
       **Image-export pipeline — domknięte 2026-08-22:** prawdziwy bug, nie tylko brakująca funkcja —
       `RenderExportDialogState::previewState` to świeży `RendererWindowState`, nie kopia żywego okna,
       więc `pinnedMeasurements` zostawało puste i piny **nigdy nie trafiały do eksportu** niezależnie
@@ -942,15 +941,40 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       `RendererPanelToolbar.cpp` przycisk "Export PNG...") — kopiują teraz `pinnedMeasurements` +
       `bondLabelsAlignToDirection`, bez podświetlenia zaznaczenia w eksporcie
       (`selectedPinnedMeasurement` zostaje -1). Zweryfikowane: Debug build czysty (0 warningów).
-      **Świadomie pominięte przy tym wdrożeniu, zostają jako otwarty dług:**
-      - [ ] Rotate/Scale na gizmie etykiet (`RendererPanel::renderLabelTransformGizmo` jest dziś
-            translate-only) → dodać gdy pojawi się realny use-case; dziś kierunek odczytu etykiety
-            kryją już `A` (align-to-bond toggle) i `F` (flip 180°), a skali fontu per-label nie ma
-            (nie ma czego skalować).
-      - [ ] Undo/redo dla drag-a etykiety (gizmo i click-drag-nudge obie mutują `PinnedMeasurement::
-            worldOffset` bez wpięcia w `Core/Undo`/`UndoStack`) → dodać spójnie z resztą edycji
-            pinów (add/remove/flip też dziś nie mają undo) w jednym przejściu, nie osobno dla samego
-            drag-a.
+      **Rotate/Scale na gizmie etykiet + Undo/redo — domknięte 2026-08-22.**
+      - [x] **Rotate/Scale.** `PinnedMeasurement` ma nowe `rotationOffsetRadians`/`scale`.
+            `renderLabelTransformGizmo` rozgałęzia się na `windowState.gizmoOperation`: Translate to
+            wciąż 3-osiowe strzałki (bez zmian), Rotate/Scale to jeden pierścień wokół pivotu bez
+            osi X/Y/Z do wyboru — billboard etykiety ma tylko jedną sensowną oś obrotu (własną normalną
+            skierowaną w kamerę) i jedną sensowną skalę (jednolity rozmiar glifu), więc nie ma między
+            czym wybierać per-oś. Rotate: kąt myszy wokół pivotu akumulowany przyrostowo (atan2,
+            znak y odwrócony bo screen-space jest y-down a lokalne "up" etykiety w `labels.vert` jest
+            y-up). Scale: stosunek promienia bieżącego do promienia z początku dragu (styl Blenderowego
+            `S` — powrót myszy do promienia startowego zawsze wraca do startowej skali), clamp
+            [0.1, 8.0]. Renderowanie: `AppendLabelInstances` (`OpenGlRendererBackend.cpp`) mnoży cały
+            `localOffsetSize` (offset+size) przez `scale` — jednolite skalowanie wokół własnego
+            zakotwiczenia etykiety, nie world origin; `rotationOffsetRadians` dochodzi do już liczonego
+            `rotationRadians` dla pinów wiązań, a dla pinów kąta (wcześniej zawsze upright, 0) jest
+            teraz jedynym źródłem rotacji.
+      - [x] **Undo/redo.** Osobny, lokalny stos per-okno (`pinnedMeasurementUndoHistory`/
+            `RedoHistory` na `RendererWindowState`, snapshot całego wektora `pinnedMeasurements`) —
+            **nie** globalny `Core/Undo`/`Ctrl+Z`, tym samym wzorcem co już istniejący lokalny
+            view-undo kamery (`Ctrl+Alt+Z`/`Ctrl+Alt+Shift+Z`, decyzja architektoniczna z T06.5: stan
+            renderera nie będący domeną dostaje własny stos i własny skrót, nie miesza się z domenowym
+            undo atomów). Nowy skrót **`Ctrl+Alt+U`** / **`Ctrl+Alt+Shift+U`** (`renderer.labels.undo`/
+            `.redo`, cały łańcuch event→command→keybinding wzorem `renderer.undo_view`/`redo_view`) —
+            `M`-rodzina (wszystkie 8 kombinacji Ctrl×Alt×Shift+M) była już w pełni zajęta przez macierz
+            pinowania, podobnie `Z`/`Y`, więc `U` (od "Undo") to pierwszy wolny, nieskolidowany chord.
+            `PushPinnedMeasurementUndoSnapshot` (wolna funkcja, `RendererLayer.hpp/.cpp` — wołana
+            zarówno z wewnętrznych helperów `AddBondPinsWithinSet`/`AddAnglePinsWithinSet`/
+            `RemovePinsWithinSet`, jak i bezpośrednio z `RendererPanel.cpp` przy F-flip/Delete/starcie
+            każdego typu dragu) pushuje snapshot **raz na całą logiczną edycję** (cały bulk-add, cały
+            drag), nie per-klatkę/per-pin w pętli — z guardem: jeśli bulk add/remove nic faktycznie nie
+            zmienił (np. `M` nad już w pełni popinowanym zaznaczeniem), pushnięty snapshot jest zdejmowany
+            zamiast zaśmiecać historię pustym krokiem. Undo/redo resetuje zaznaczenie pinu i
+            w-trakcie-dragu flagi (indeks mógł przestać być aktualny po przywróceniu innego wektora),
+            resync ECS przez `SceneSystem::SyncLabelEntities`. Zweryfikowane: Debug build czysty
+            (0 warningów).
 - [x] Multi-viewport — wiele viewportów z niezależnymi ustawieniami kamery i renderowania
       (potwierdzone: `RendererWindowState` per-window, `m_Viewports` w backendzie)
 - [ ] Quick image export (PNG/JPG z aktualnego viewportu)

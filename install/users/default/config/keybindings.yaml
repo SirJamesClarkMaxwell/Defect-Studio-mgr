@@ -308,6 +308,18 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.labels.undo"
+    chord: "Ctrl+Alt+U"
+    command: "renderer.labels.undo"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.labels.redo"
+    chord: "Ctrl+Alt+Shift+U"
+    command: "renderer.labels.redo"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.selection.hide"
     chord: "H"
     command: "renderer.selection.hide"

@@ -188,6 +188,16 @@ namespace DefectStudio
 			return CreateRendererLabelsToggleBondAlignmentCommand(std::move(eventBus));
 		}
 
+		Unique<ICommand> MakeUndoLabelsCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererUndoLabelsCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeRedoLabelsCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererRedoLabelsCommand(std::move(eventBus));
+		}
+
 		Unique<ICommand> MakeHideSelectionCommand(Ref<EventBus> eventBus, CommandContext &)
 		{
 			return CreateRendererHideSelectionCommand(std::move(eventBus));
@@ -576,6 +586,19 @@ namespace DefectStudio
 			"Toggle every bond-length label pin between reading along its bond direction (default) "
 			"and staying upright, on the active renderer viewport.",
 			std::bind_front(MakeLabelsToggleBondAlignmentCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.labels.undo",
+			"Renderer: Undo label change",
+			"Undo the last pinned measurement label edit (add/remove/flip/gizmo move) in the active "
+			"renderer viewport. Local to labels, separate from the global Ctrl+Z domain undo.",
+			std::bind_front(MakeUndoLabelsCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.labels.redo",
+			"Renderer: Redo label change",
+			"Redo the last undone pinned measurement label edit in the active renderer viewport.",
+			std::bind_front(MakeRedoLabelsCommand, eventBus));
 		RegisterRendererCommand(
 			registry,
 			"renderer.gizmo.commit_transform",

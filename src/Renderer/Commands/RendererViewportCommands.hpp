@@ -44,6 +44,8 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsShowAllAngleCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsRemoveAllAngleCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleBondAlignmentCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererUndoLabelsCommand(Ref<EventBus> eventBus);
+	[[nodiscard]] Unique<ICommand> CreateRendererRedoLabelsCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererHideSelectionCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererShowAllCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectionInvertCommand(Ref<EventBus> eventBus);
