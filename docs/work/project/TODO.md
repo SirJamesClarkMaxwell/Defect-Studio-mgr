@@ -1362,6 +1362,23 @@ kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
 - [ ] **Moduł generacji komórek startowych — zażądane 2026-08-21, niski priorytet:** budowanie
       struktury początkowej (bulk/primitive → supercell, ewentualnie od zera z grupy przestrzennej)
       jako punkt wejścia przed defektowaniem/testami zbieżności powyżej
+- [ ] **Materials Collection + panel generacji materiałów/superkomórek/właściwości — zażądane
+      2026-08-23.** Persystentna biblioteka definicji materiałów (nazwa, sieć, atomy bazowe,
+      grupa przestrzenna, metadane) do przeglądania i wybierania jako punkt startowy — **to NIE
+      jest odrzucone 2026-08-22 Collections/Groups** (te miały grupować obiekty/podzbiory
+      WEWNĄTRZ jednej sceny/okna, czego appka nie potrzebuje przy modelu "jedna struktura = jedno
+      okno"; to jest biblioteka materiałów NA POZIOMIE APLIKACJI, osobna koncepcyjnie od
+      renderer windows i od ECS-owego `CollectionComponent`). Osobna, dedykowana część UI (panel
+      lub zakładka) do: (1) wyboru/wyszukania materiału z kolekcji, (2) generacji z niego
+      superkomórki (rozmiar, ewentualnie orientacja) i defektów, (3) wyliczenia/przypisania
+      podstawowych właściwości materiału. **Pokrywa się częściowo z już śledzonymi zadaniami
+      wyżej w Backlogu — to ma je spiąć w jeden spójny workflow/UI, nie zastępować:**
+      "Moduł generacji komórek startowych" (bulk/primitive → supercell), "Structure Authoring
+      wizard" (supercell builder, cell definition), "Moduł generacji testów zbieżności i
+      defektów" (masowa generacja wariantów), "Energetyka i DFT" (formation energy i inne
+      właściwości liczone z obliczeń). Design (skąd dane materiałów — plik/pymatgen/ręczny
+      wpis, schema biblioteki, czy to nowy Domain layer koncept) do doprecyzowania przy starcie
+      tego zadania, nie tutaj.
 - [ ] **Edytor własnych etykiet (LaTeX) — zażądane 2026-08-22, niski priorytet, "kiedyś":**
       użytkownik definiuje dowolny tekstowy label (nie tylko auto bond-length/angle z T09) i może użyć
       składni LaTeX do zapisu matematycznego (np. wzory, indeksy, symbole greckie) — przy założeniu że
