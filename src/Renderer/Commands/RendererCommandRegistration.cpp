@@ -320,6 +320,17 @@ namespace DefectStudio
 				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable), *payload);
 		}
 
+		// Payload-driven, like MakeChangeSelectedAtomTypeCommand - ObjectPropertiesPanel builds
+		// AtomPropertiesPayload with the edited field(s) and calls Execute() with it attached.
+		Unique<ICommand> MakeSetAtomPropertiesCommand(
+			WeakRef<DomainLayer> domainLayer, WeakRef<RendererLayer> rendererLayer, CommandContext &context)
+		{
+			AtomPropertiesPayload *payload = context.TryGet<AtomPropertiesPayload>("atom_edit.set_properties_payload");
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetAtomPropertiesCommand(std::move(domainLayer), std::move(rendererLayer), *payload);
+		}
+
 		Unique<ICommand> MakeAddAtomAtCoordinatesCommand(
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
@@ -715,6 +726,13 @@ namespace DefectStudio
 			"Renderer: Change atom type",
 			"Change the currently selected atoms' element (undoable).",
 			std::bind_front(MakeChangeSelectedAtomTypeCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.set_atom_properties",
+			"Renderer: Set atom properties",
+			"Set the selected atom's label/charge/magnetization/occupancy/selective dynamics (undoable).",
+			std::bind_front(MakeSetAtomPropertiesCommand, domainLayer, rendererLayer),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,

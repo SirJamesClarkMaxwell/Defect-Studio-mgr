@@ -390,7 +390,8 @@ namespace DefectStudio
 	                                      WeakRef<CommandRegistry> commandRegistry,
 	                                      WeakRef<RendererLayer> rendererLayer,
 	                                      AtomStyleTable atomStyleTable,
-	                                      Path atomStylesPath)
+	                                      Path atomStylesPath,
+	                                      WeakRef<DomainLayer> domainLayer)
 	{
 		m_EventBus = std::move(eventBus);
 		m_LogRegistry = std::move(logRegistry);
@@ -403,6 +404,7 @@ namespace DefectStudio
 		m_RendererLayer = std::move(rendererLayer);
 		m_AtomStyleTable = std::move(atomStyleTable);
 		m_AtomStylesPath = std::move(atomStylesPath);
+		m_DomainLayer = std::move(domainLayer);
 		bindConfigEvents();
 		bindProjectRootEvents();
 		DS_LOG_INFO(
@@ -547,7 +549,7 @@ namespace DefectStudio
 				"Renderer",
 				true);
 			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
-			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, "Object Properties", true);
+			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_AtomStyleTable, m_AtomStylesPath, "Element Catalog", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight

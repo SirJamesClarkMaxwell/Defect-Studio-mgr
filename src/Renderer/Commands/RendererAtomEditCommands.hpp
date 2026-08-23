@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -7,14 +8,30 @@
 #include <glm/glm.hpp>
 
 #include "Core/Commands/Command.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
 #include "Renderer/AtomStyleTable.hpp"
+#include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
 {
 	class DomainLayer;
 	class RendererLayer;
+	struct StructureRecord;
+
+	// Resolved window + the mutable domain StructureRecord backing it, shared by every atom-edit
+	// command (RendererAtomEditCommands.cpp) and by ObjectPropertiesPanel, which needs domain-only
+	// AtomSite fields (label/charge/occupancy/selective dynamics) that never made it into the
+	// renderer-side flat RendererAtomData.
+	struct AtomEditTarget
+	{
+		RendererWindowState *windowState = nullptr;
+		Ref<StructureRecord> record;
+	};
+
+	[[nodiscard]] Result<AtomEditTarget> ResolveAtomEditTarget(
+		RendererLayer &rendererLayer, DomainLayer &domainLayer, const std::string &windowIdParam);
 
 	// windowId empty = the currently focused renderer viewport (RendererLayer::
 	// GetFocusedViewportWindowId()). Both mutate the live domain CrystalStructure behind the
@@ -126,4 +143,25 @@ namespace DefectStudio
 		AtomStyleTable atomStyleTable,
 		ElementPropertiesTable elementPropertiesTable,
 		ChangeAtomTypePayload payload);
+
+	// Payload for "renderer.selection.set_atom_properties" (ObjectPropertiesPanel) - the domain-only
+	// AtomSite fields that have no renderer-side representation (species/position go through
+	// ChangeAtomTypePayload/GizmoTransformPayload instead, since those DO need a rebuild+ECS resync;
+	// these are pure metadata, so this command skips RegenerateAutoBonds/geometry rebuild entirely).
+	struct AtomPropertiesPayload
+	{
+		std::string windowId;
+		std::size_t atomIndex = 0;
+		std::string label;
+		float charge = 0.0f;
+		float magnetization = 0.0f;
+		float occupancy = 1.0f;
+		bool hasSelectiveDynamics = false;
+		std::array<bool, 3> selectiveDynamics = {true, true, true};
+	};
+
+	[[nodiscard]] Unique<ICommand> CreateSetAtomPropertiesCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomPropertiesPayload payload);
 } // namespace DefectStudio

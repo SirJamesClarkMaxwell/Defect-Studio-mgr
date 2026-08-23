@@ -36,6 +36,7 @@ namespace DefectStudio
 	class ContextManager;
 	class KeymapResolver;
 	class RendererLayer;
+	class DomainLayer;
 	struct CommandID;
 	struct ApplicationConfig;
 
@@ -115,7 +116,8 @@ namespace DefectStudio
 		                         WeakRef<CommandRegistry> commandRegistry,
 		                         WeakRef<RendererLayer> rendererLayer,
 		                         AtomStyleTable atomStyleTable = {},
-		                         Path atomStylesPath = {});
+		                         Path atomStylesPath = {},
+		                         WeakRef<DomainLayer> domainLayer = {});
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 		void ApplyConfig(const ApplicationConfig &config);
 		void ExportConfig(ApplicationConfig &config) const;
@@ -200,6 +202,7 @@ namespace DefectStudio
 		WeakRef<RendererLayer> m_RendererLayer;
 		AtomStyleTable m_AtomStyleTable;
 		Path m_AtomStylesPath;
+		WeakRef<DomainLayer> m_DomainLayer;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;
 		bool m_CommandPaletteOpenRequested = false;

@@ -964,7 +964,8 @@ namespace DefectStudio
 					coreLayer->GetCommandRegistryHandle(),
 					rendererLayer,
 					m_RendererAtomStyleTable,
-					m_RendererAtomStylesPath);
+					m_RendererAtomStylesPath,
+					m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain));
 				timer.Finish(true);
 			}
 			{

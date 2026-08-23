@@ -30,19 +30,16 @@ namespace DefectStudio
 				"RendererAtomEditCommands",
 				std::move(code)};
 		}
+	} // namespace
 
-		struct AtomEditTarget
-		{
-			RendererWindowState *windowState = nullptr;
-			Ref<StructureRecord> record;
-		};
-
-		// Resolves windowId (or the focused viewport if empty) to its live window state and the
-		// mutable domain StructureRecord backing it. Shared by every atom-edit command's Execute
-		// and Undo, since both need to re-resolve rather than cache raw pointers across calls.
-		[[nodiscard]] Result<AtomEditTarget> ResolveAtomEditTarget(
-			RendererLayer &rendererLayer, DomainLayer &domainLayer, const std::string &windowIdParam)
-		{
+	// Resolves windowId (or the focused viewport if empty) to its live window state and the mutable
+	// domain StructureRecord backing it. Shared by every atom-edit command's Execute and Undo (both
+	// need to re-resolve rather than cache raw pointers across calls) and by ObjectPropertiesPanel,
+	// which reads extra domain-only AtomSite fields (label/charge/occupancy/...) that never made it
+	// into the renderer-side flat RendererAtomData.
+	Result<AtomEditTarget> ResolveAtomEditTarget(
+		RendererLayer &rendererLayer, DomainLayer &domainLayer, const std::string &windowIdParam)
+	{
 			const std::string windowId = windowIdParam.empty() ? rendererLayer.GetFocusedViewportWindowId() : windowIdParam;
 			if (windowId.empty())
 			{
@@ -96,9 +93,11 @@ namespace DefectStudio
 					"No StructureRecord found for id " + windowState->structure.domainStructureId + ".");
 			}
 
-			return AtomEditTarget{windowState, std::move(record)};
-		}
+		return AtomEditTarget{windowState, std::move(record)};
+	}
 
+	namespace
+	{
 		// Rebuilds RendererStructureData from record.structure and re-syncs windowState's ECS
 		// scene - the common tail every atom-edit command needs after mutating the domain
 		// structure. selectAfter (atom indices in the *new* structure) becomes the selection once
@@ -1111,6 +1110,107 @@ namespace DefectStudio
 			std::string m_WindowIdResolved;
 			std::vector<Bond> m_PreviousBonds;
 		};
+
+		// Object Properties panel's Label/Charge/Magnetization/Occupancy/selective-dynamics edits -
+		// pure AtomSite metadata with no renderer-side representation, so unlike every other atom-edit
+		// command here this skips RegenerateAutoBonds and RebuildAndSync entirely: nothing about the
+		// window's geometry, style, or ECS scene depends on these fields.
+		class SetAtomPropertiesCommand final : public ICommand
+		{
+		public:
+			SetAtomPropertiesCommand(
+				WeakRef<DomainLayer> domainLayer, WeakRef<RendererLayer> rendererLayer, AtomPropertiesPayload payload)
+				: m_DomainLayer(std::move(domainLayer)), m_RendererLayer(std::move(rendererLayer)), m_Payload(std::move(payload))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"SetAtomPropertiesCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_Payload.windowId);
+				if (!target)
+					return target.Error();
+
+				CrystalStructure &structure = target->record->structure;
+				if (m_Payload.atomIndex >= structure.atoms.size())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.index_out_of_range",
+						"Selected atom is no longer valid.",
+						"SetAtomPropertiesCommand: atomIndex out of range.");
+				}
+
+				m_WindowIdResolved = target->windowState->windowId;
+				m_Previous = structure.atoms[m_Payload.atomIndex];
+				applyPayload(structure.atoms[m_Payload.atomIndex]);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"SetAtomPropertiesCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				CrystalStructure &structure = target->record->structure;
+				if (m_Payload.atomIndex >= structure.atoms.size())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.index_out_of_range",
+						"Selected atom is no longer valid.",
+						"SetAtomPropertiesCommand::Undo: atomIndex out of range.");
+				}
+
+				structure.atoms[m_Payload.atomIndex] = m_Previous;
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Set atom properties";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			void applyPayload(AtomSite &atom) const
+			{
+				atom.label = m_Payload.label;
+				atom.charge = m_Payload.charge;
+				atom.magnetization = m_Payload.magnetization;
+				atom.occupancy = m_Payload.occupancy;
+				atom.hasSelectiveDynamics = m_Payload.hasSelectiveDynamics;
+				atom.selectiveDynamics = m_Payload.selectiveDynamics;
+			}
+
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomPropertiesPayload m_Payload;
+			std::string m_WindowIdResolved;
+			AtomSite m_Previous;
+		};
 	} // namespace
 
 	Unique<ICommand> CreateDeleteSelectedAtomsCommand(
@@ -1222,5 +1322,11 @@ namespace DefectStudio
 			std::move(atomStyleTable),
 			std::move(elementPropertiesTable),
 			std::move(payload));
+	}
+
+	Unique<ICommand> CreateSetAtomPropertiesCommand(
+		WeakRef<DomainLayer> domainLayer, WeakRef<RendererLayer> rendererLayer, AtomPropertiesPayload payload)
+	{
+		return CreateUnique<SetAtomPropertiesCommand>(std::move(domainLayer), std::move(rendererLayer), std::move(payload));
 	}
 } // namespace DefectStudio
