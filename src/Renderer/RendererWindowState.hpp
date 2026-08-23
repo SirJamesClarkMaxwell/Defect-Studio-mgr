@@ -107,6 +107,11 @@ namespace DefectStudio
 		bool pinnedMeasurementDragging = false;
 		glm::vec2 pinnedMeasurementDragLastMouse = glm::vec2(0.0f);
 		std::vector<std::size_t> selectedAtomIndices;
+		// Mirrors selectedAtomIndices but for BondComponent entities (added Etap T08.6 alongside
+		// SelectionComponent/VisibilityComponent on bonds) - populated by SceneSystem::
+		// PushSelectionAndVisibilityToWindowState, read by bond-delete/connect commands and the
+		// bond-pick highlight in OpenGlRendererBackend::renderBonds.
+		std::vector<std::size_t> selectedBondIndices;
 		float rotationStepDeg = 1.0f;
 		float pixelStepPx = 10.0f;
 		float percentStep = 10.0f;

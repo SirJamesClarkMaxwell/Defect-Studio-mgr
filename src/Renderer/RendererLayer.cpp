@@ -456,6 +456,7 @@ namespace DefectStudio
 			windowState.pinnedMeasurements,
 			windowState.selectedPinnedMeasurement,
 			windowState.selectedAtomIndices,
+			windowState.selectedBondIndices,
 			nullptr,
 			&windowState.orbitalChannelUp,
 			&windowState.orbitalChannelDown);
@@ -817,6 +818,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onProjectionToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::AtomSelectionRequested>(
 				std::bind_front(&RendererLayer::onAtomSelectionRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::BondSelectionRequested>(
+				std::bind_front(&RendererLayer::onBondSelectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionToolToggleRequested>(
 				std::bind_front(&RendererLayer::onSelectionToolToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::GizmoOperationRequested>(
@@ -1689,6 +1692,47 @@ namespace DefectStudio
 		}
 
 		SelectionComponent &selection = atomEntity.GetComponent<SelectionComponent>();
+		selection.selected = !selection.selected;
+		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+	}
+
+	void RendererLayer::onBondSelectionRequested(const RendererEvents::Viewport::BondSelectionRequested &event)
+	{
+		RendererWindowState *windowState = findWindowById(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		SceneRegistry &scene = windowState->sceneRegistry;
+
+		if (!event.bondIndex.has_value())
+		{
+			if (!event.additive)
+			{
+				for (const entt::entity entity : scene.Registry().view<SelectionComponent>())
+					scene.Registry().get<SelectionComponent>(entity).selected = false;
+				SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+			}
+			return;
+		}
+
+		const std::size_t bondIndex = *event.bondIndex;
+		if (bondIndex >= windowState->structure.bonds.size())
+			return;
+
+		Entity bondEntity = scene.BondEntityAt(bondIndex);
+		if (!bondEntity)
+			return;
+
+		if (!event.additive)
+		{
+			for (const entt::entity entity : scene.Registry().view<SelectionComponent>())
+				scene.Registry().get<SelectionComponent>(entity).selected = false;
+			bondEntity.GetComponent<SelectionComponent>().selected = true;
+			SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+			return;
+		}
+
+		SelectionComponent &selection = bondEntity.GetComponent<SelectionComponent>();
 		selection.selected = !selection.selected;
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 	}

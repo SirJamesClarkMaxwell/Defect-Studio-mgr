@@ -110,12 +110,21 @@ namespace DefectStudio
 			RendererWindowState &windowState,
 			const StructureRecord &record,
 			const AtomStyleTable &atomStyleTable,
-			const std::vector<std::size_t> &selectAfter)
+			const std::vector<std::size_t> &selectAfter,
+			const std::vector<std::size_t> &selectBondsAfter = {})
 		{
 			std::vector<std::size_t> hiddenBefore;
 			for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
 				if (!windowState.structure.atoms[index].visible)
 					hiddenBefore.push_back(index);
+			// Bond ephemeral hide (VisibilityComponent) is exact only when the rebuild doesn't
+			// change bond count/order (mirrors the atom hiddenBefore contract above) - fine for
+			// every current caller (transform/type-change keep bond identity; delete/duplicate/
+			// paste/connect regenerate bonds and pass an explicit selectBondsAfter instead).
+			std::vector<std::size_t> hiddenBondsBefore;
+			for (std::size_t index = 0; index < windowState.structure.bonds.size(); ++index)
+				if (!windowState.structure.bonds[index].visible)
+					hiddenBondsBefore.push_back(index);
 
 			windowState.structure = BuildRendererStructureData(
 				record.structure,
@@ -124,8 +133,9 @@ namespace DefectStudio
 				atomStyleTable,
 				windowState.structure.domainStructureId);
 			SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
-			if (!selectAfter.empty() || !hiddenBefore.empty())
-				SceneSystem::ApplySelectionAndVisibilityToScene(windowState.sceneRegistry, selectAfter, hiddenBefore);
+			if (!selectAfter.empty() || !hiddenBefore.empty() || !selectBondsAfter.empty() || !hiddenBondsBefore.empty())
+				SceneSystem::ApplySelectionAndVisibilityToScene(
+					windowState.sceneRegistry, selectAfter, hiddenBefore, selectBondsAfter, hiddenBondsBefore);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 
@@ -137,6 +147,26 @@ namespace DefectStudio
 		{
 			static std::vector<AtomSite> clipboard;
 			return clipboard;
+		}
+
+		// RendererStructureData::bonds is domain structure.bonds with invisible (hidden Auto) bonds
+		// filtered out by BuildRendererBonds, in the same relative order - so the k-th visible domain
+		// bond is the k-th entry here. Walk domain bonds counting visible ones to invert that mapping,
+		// rather than storing a reverse index anywhere (bond-select/delete are rare enough that an
+		// O(bonds) walk per call isn't worth caching).
+		[[nodiscard]] std::optional<std::size_t> ResolveDomainBondIndex(
+			const CrystalStructure &structure, std::size_t renderBondIndex)
+		{
+			std::size_t visibleCount = 0;
+			for (std::size_t domainIndex = 0; domainIndex < structure.bonds.size(); ++domainIndex)
+			{
+				if (!structure.bonds[domainIndex].visible)
+					continue;
+				if (visibleCount == renderBondIndex)
+					return domainIndex;
+				++visibleCount;
+			}
+			return std::nullopt;
 		}
 
 		class DeleteSelectedAtomsCommand final : public ICommand
@@ -173,12 +203,12 @@ namespace DefectStudio
 					return target.Error();
 
 				RendererWindowState &windowState = *target->windowState;
-				if (windowState.selectedAtomIndices.empty())
+				if (windowState.selectedAtomIndices.empty() && windowState.selectedBondIndices.empty())
 				{
 					return MakeAtomEditError(
 						"renderer.atom_edit.nothing_selected",
-						"No atoms selected.",
-						"DeleteSelectedAtomsCommand: selectedAtomIndices is empty.");
+						"No atoms or bonds selected.",
+						"DeleteSelectedAtomsCommand: selectedAtomIndices and selectedBondIndices are both empty.");
 				}
 
 				m_WindowIdResolved = windowState.windowId;
@@ -186,6 +216,35 @@ namespace DefectStudio
 				m_PreviousBonds = target->record->structure.bonds;
 				m_DeletedIndices = windowState.selectedAtomIndices;
 				std::sort(m_DeletedIndices.begin(), m_DeletedIndices.end());
+
+				// Resolve+mutate selected bonds first, while atom indices (and therefore bond
+				// endpoint indices) are still the ones selectedBondIndices was resolved against -
+				// ApplyVacancy below reindexes/strips bonds as a side effect of deleting atoms, so
+				// doing this after would risk acting on stale bond identities. Manual bonds are a
+				// real user-authored edge (J) so Delete removes them outright; Auto bonds are
+				// data-derived and would just regenerate on the next RegenerateAutoBonds call, so
+				// Delete only hides them (Bond::visible = false, preserved across regen - see
+				// BondGenerator::RegenerateAutoBonds).
+				std::vector<std::size_t> deletedDomainBondIndices;
+				for (const std::size_t renderBondIndex : windowState.selectedBondIndices)
+				{
+					const std::optional<std::size_t> domainIndex =
+						ResolveDomainBondIndex(target->record->structure, renderBondIndex);
+					if (domainIndex.has_value())
+						deletedDomainBondIndices.push_back(*domainIndex);
+				}
+				std::sort(deletedDomainBondIndices.begin(), deletedDomainBondIndices.end());
+				deletedDomainBondIndices.erase(
+					std::unique(deletedDomainBondIndices.begin(), deletedDomainBondIndices.end()),
+					deletedDomainBondIndices.end());
+				for (auto it = deletedDomainBondIndices.rbegin(); it != deletedDomainBondIndices.rend(); ++it)
+				{
+					Bond &bond = target->record->structure.bonds[*it];
+					if (bond.origin == BondOrigin::Manual)
+						target->record->structure.bonds.erase(target->record->structure.bonds.begin() + *it);
+					else
+						bond.visible = false;
+				}
 
 				// ApplyVacancy already strips/reindexes referencing bonds incrementally - highest
 				// index first so earlier indices in the same batch stay valid as we go.
@@ -226,7 +285,7 @@ namespace DefectStudio
 
 			[[nodiscard]] std::string Description() const override
 			{
-				return "Delete selected atoms";
+				return "Delete selection";
 			}
 
 			[[nodiscard]] bool IsUndoable() const noexcept override
@@ -823,6 +882,131 @@ namespace DefectStudio
 			std::vector<AtomSite> m_PreviousAtoms;
 			std::vector<std::size_t> m_ChangedIndices;
 		};
+
+		// Manual bond add ('J'). Requires exactly 2 selected atoms - unlike Delete/Duplicate/Paste,
+		// does NOT call RegenerateAutoBonds, since that would only rebuild the Auto-origin bonds this
+		// command has nothing to do with (see BondOrigin::Manual in CrystalPrimitives.hpp: Manual
+		// bonds already survive every Auto regen untouched).
+		class ConnectSelectedAtomsCommand final : public ICommand
+		{
+		public:
+			ConnectSelectedAtomsCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				std::string windowId)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_WindowId(std::move(windowId))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"ConnectSelectedAtomsCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowId);
+				if (!target)
+					return target.Error();
+
+				RendererWindowState &windowState = *target->windowState;
+				if (windowState.selectedAtomIndices.size() != 2)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.connect_needs_two",
+						"Select exactly 2 atoms to connect.",
+						"ConnectSelectedAtomsCommand: selectedAtomIndices.size() == " +
+							std::to_string(windowState.selectedAtomIndices.size()) + ", expected 2.");
+				}
+
+				CrystalStructure &structure = target->record->structure;
+				const std::size_t firstIndex = windowState.selectedAtomIndices[0];
+				const std::size_t secondIndex = windowState.selectedAtomIndices[1];
+				if (firstIndex >= structure.atoms.size() || secondIndex >= structure.atoms.size())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.connect_bad_index",
+						"Selected atom is no longer valid.",
+						"ConnectSelectedAtomsCommand: selected atom index out of range.");
+				}
+
+				const bool alreadyConnected =
+					std::any_of(structure.bonds.begin(), structure.bonds.end(), [&](const Bond &bond) {
+						return (bond.firstAtomIndex == firstIndex && bond.secondAtomIndex == secondIndex) ||
+							(bond.firstAtomIndex == secondIndex && bond.secondAtomIndex == firstIndex);
+					});
+				if (alreadyConnected)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.connect_already_bonded",
+						"These atoms are already connected.",
+						"ConnectSelectedAtomsCommand: a bond between these two atom indices already exists.");
+				}
+
+				m_WindowIdResolved = windowState.windowId;
+				m_PreviousBonds = structure.bonds;
+
+				Bond bond;
+				bond.firstAtomIndex = firstIndex;
+				bond.secondAtomIndex = secondIndex;
+				bond.lengthAngstrom =
+					glm::distance(structure.atoms[firstIndex].position, structure.atoms[secondIndex].position);
+				bond.origin = BondOrigin::Manual;
+				bond.visible = true;
+				structure.bonds.push_back(bond);
+
+				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, windowState.selectedAtomIndices);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"ConnectSelectedAtomsCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				target->record->structure.bonds = m_PreviousBonds;
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, {});
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Connect selected atoms";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			std::string m_WindowId;
+			std::string m_WindowIdResolved;
+			std::vector<Bond> m_PreviousBonds;
+		};
 	} // namespace
 
 	Unique<ICommand> CreateDeleteSelectedAtomsCommand(
@@ -853,6 +1037,16 @@ namespace DefectStudio
 			std::move(atomStyleTable),
 			std::move(elementPropertiesTable),
 			std::move(windowId));
+	}
+
+	Unique<ICommand> CreateConnectSelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		std::string windowId)
+	{
+		return CreateUnique<ConnectSelectedAtomsCommand>(
+			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(windowId));
 	}
 
 	Unique<ICommand> CreateTransformSelectedAtomsCommand(

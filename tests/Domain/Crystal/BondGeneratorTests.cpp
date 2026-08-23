@@ -44,6 +44,29 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(structure.bonds[0].secondAtomIndex, 1u);
 	}
 
+	TEST(BondGeneratorTests, PreservesHiddenAutoBondVisibilityAcrossRegen)
+	{
+		CrystalStructure structure;
+		structure.atoms = {
+			AtomSite{"C", glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0},
+			AtomSite{"C", glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.0f, 0.0f), 1}};
+
+		ElementPropertiesTable properties;
+		properties.ReplaceData({{"C", ElementProperties{6, 12.0f, 0.80f, 1.70f}}});
+
+		RegenerateAutoBonds(structure, properties);
+		ASSERT_EQ(structure.bonds.size(), 1u);
+		structure.bonds[0].visible = false; // simulates the bond-delete command hiding an Auto bond
+
+		// An unrelated atom edit (e.g. moving a third atom) triggers another regen - the hide must
+		// survive it, not just the one call that set it.
+		RegenerateAutoBonds(structure, properties);
+
+		ASSERT_EQ(structure.bonds.size(), 1u);
+		EXPECT_EQ(structure.bonds[0].origin, BondOrigin::Auto);
+		EXPECT_FALSE(structure.bonds[0].visible);
+	}
+
 	TEST(BondGeneratorTests, CreatesPeriodicBondAcrossCellBoundary)
 	{
 		CrystalStructure structure;

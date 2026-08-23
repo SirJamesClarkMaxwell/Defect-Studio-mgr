@@ -75,6 +75,9 @@ namespace DefectStudio
 		std::size_t lastBondCount = 0;
 		std::size_t lastSelectedCount = 0;
 		std::size_t lastSelectionHash = 0;
+		std::size_t lastSelectedBondCount = 0;
+		std::size_t lastBondSelectionHash = 0;
+		std::size_t lastBondVisibilityHash = 0;
 		std::size_t lastVisibilityHash = 0;
 		std::size_t lastPositionHash = 0;
 		// Catches atom-appearance edits that touch neither count/selection/visibility/position - e.g.
@@ -134,6 +137,7 @@ namespace DefectStudio
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements = {},
 			int selectedPinnedMeasurement = -1,
 			const std::vector<std::size_t> &selectedAtomIndices = {},
+			const std::vector<std::size_t> &selectedBondIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
 			// end-to-end (CPU reference, then its GPU compute-shader port) before the real
 			// orbital panel exists. Not part of the real per-window structure render path.
@@ -187,7 +191,8 @@ namespace DefectStudio
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
-			const RendererGlobalRenderSettings &globalSettings);
+			const RendererGlobalRenderSettings &globalSettings,
+			const std::vector<std::size_t> &selectedIndices = {});
 		void renderLabels(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,

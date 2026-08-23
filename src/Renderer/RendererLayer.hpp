@@ -195,6 +195,7 @@ namespace DefectStudio
 		void onViewTransitionRequested(const RendererEvents::Viewport::ViewTransitionRequested &event);
 		void onProjectionToggleRequested(const RendererEvents::Viewport::ProjectionToggleRequested &event);
 		void onAtomSelectionRequested(const RendererEvents::Viewport::AtomSelectionRequested &event);
+		void onBondSelectionRequested(const RendererEvents::Viewport::BondSelectionRequested &event);
 		void onSelectionToolToggleRequested(const RendererEvents::Viewport::SelectionToolToggleRequested &event);
 		void onGizmoOperationRequested(const RendererEvents::Viewport::GizmoOperationRequested &event);
 		void onLabelsToggleRequested(const RendererEvents::Viewport::LabelsToggleRequested &event);

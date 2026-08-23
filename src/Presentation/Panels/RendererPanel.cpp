@@ -51,6 +51,38 @@ namespace DefectStudio
 			return std::clamp(value, kViewportMinSize, kViewportMaxSize);
 		}
 
+		// Closest points between an infinite ray (rayOrigin + t*rayDir, rayDir normalized) and a
+		// finite segment [segA, segB] - standard two-line least-squares solve (see e.g. Ericson's
+		// "Real-Time Collision Detection" ClosestPtSegmentSegment), with the segment parameter
+		// clamped to [0,1] and the ray parameter left unclamped (the caller checks outT > 0 for "in
+		// front of camera"). Used by handleViewportPick's bond hit-test - a bond has no analytic ray
+		// intersection like a sphere does, so picking it is "is the ray's closest approach to this
+		// cylinder's axis within its radius".
+		void ClosestPointsRaySegment(
+			const glm::vec3 &rayOrigin, const glm::vec3 &rayDir, const glm::vec3 &segA, const glm::vec3 &segB,
+			float &outT, glm::vec3 &outClosestOnSegment)
+		{
+			const glm::vec3 d2 = segB - segA;
+			const glm::vec3 w0 = rayOrigin - segA;
+			const float e = glm::dot(d2, d2);
+			if (e <= 1.0e-8f)
+			{
+				// Degenerate (zero-length) segment - treat segA as a point.
+				outT = glm::dot(segA - rayOrigin, rayDir);
+				outClosestOnSegment = segA;
+				return;
+			}
+
+			const float b = glm::dot(rayDir, d2);
+			const float c = glm::dot(rayDir, w0);
+			const float f = glm::dot(d2, w0);
+			const float denom = e - b * b; // a == dot(rayDir, rayDir) == 1 (normalized)
+
+			float s = denom > 1.0e-8f ? (b * f - c * e) / denom : 0.0f;
+			s = std::clamp(s, 0.0f, 1.0f);
+			outT = b * s - c;
+			outClosestOnSegment = segA + d2 * s;
+		}
 	}
 
 	RendererPanel::RendererPanel(
@@ -336,7 +368,7 @@ namespace DefectStudio
 					relX < windowState.viewportSize.x &&
 					relY < windowState.viewportSize.y)
 				{
-					handleAtomPick(windowState, relX, relY, io.KeyCtrl);
+					handleViewportPick(windowState, relX, relY, io.KeyCtrl);
 				}
 			}
 		}
@@ -438,6 +470,109 @@ namespace DefectStudio
 			event.additive = additive;
 			eventBus->Publish(event);
 		}
+	}
+
+	void RendererPanel::handleViewportPick(RendererWindowState &windowState, float relX, float relY, bool additive)
+	{
+		if (!windowState.camera)
+			return;
+
+		const float vpW = windowState.viewportSize.x;
+		const float vpH = windowState.viewportSize.y;
+		if (vpW <= 0.0f || vpH <= 0.0f)
+			return;
+
+		const float ndcX = (2.0f * relX / vpW) - 1.0f;
+		const float ndcY = -((2.0f * relY / vpH) - 1.0f);
+
+		const glm::mat4 invVP = glm::inverse(
+			windowState.camera->ProjectionMatrix() *
+			windowState.camera->ViewMatrix());
+
+		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
+		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+
+		float bestAtomT = std::numeric_limits<float>::max();
+		std::size_t hitAtomIndex = std::numeric_limits<std::size_t>::max();
+		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
+		{
+			const RendererAtomData &atom = windowState.structure.atoms[i];
+			if (!atom.visible)
+				continue;
+			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
+			const float a = glm::dot(rayDir, rayDir);
+			const float b = 2.0f * glm::dot(oc, rayDir);
+			const float pickRadius = atom.radius * 1.35f;
+			const float c = glm::dot(oc, oc) - pickRadius * pickRadius;
+			const float disc = b * b - 4.0f * a * c;
+			if (disc < 0.0f)
+				continue;
+			const float t = (-b - std::sqrt(disc)) / (2.0f * a);
+			if (t > 0.001f && t < bestAtomT)
+			{
+				bestAtomT = t;
+				hitAtomIndex = i;
+			}
+		}
+
+		if (hitAtomIndex != std::numeric_limits<std::size_t>::max())
+		{
+			handleAtomPick(windowState, relX, relY, additive);
+			return;
+		}
+
+		float bestBondT = std::numeric_limits<float>::max();
+		std::size_t hitBondIndex = std::numeric_limits<std::size_t>::max();
+		for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
+		{
+			const RendererBondData &bond = windowState.structure.bonds[i];
+			if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
+				bond.secondAtomIndex >= windowState.structure.atoms.size())
+				continue;
+			const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
+			const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
+			if (!firstAtom.visible || !secondAtom.visible)
+				continue;
+
+			float t = 0.0f;
+			glm::vec3 closestOnSegment(0.0f);
+			ClosestPointsRaySegment(
+				rayOrigin, rayDir, firstAtom.cartesianPosition,
+				secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset, t, closestOnSegment);
+			if (t <= 0.001f || t >= bestBondT)
+				continue;
+
+			// Padded well past the rendered cylinder radius - bonds are thin, and unlike an atom's
+			// sphere there's no natural "click anywhere on the visible disc" target to aim for.
+			const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
+			const glm::vec3 closestOnRay = rayOrigin + rayDir * t;
+			if (glm::distance(closestOnRay, closestOnSegment) <= pickRadius)
+			{
+				bestBondT = t;
+				hitBondIndex = i;
+			}
+		}
+
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		if (eventBus == nullptr)
+			return;
+
+		if (hitBondIndex == std::numeric_limits<std::size_t>::max())
+		{
+			RendererEvents::Viewport::AtomSelectionRequested event;
+			event.windowId = windowState.windowId;
+			event.additive = additive;
+			eventBus->Publish(event);
+			return;
+		}
+
+		RendererEvents::Viewport::BondSelectionRequested event;
+		event.windowId = windowState.windowId;
+		event.bondIndex = hitBondIndex;
+		event.additive = additive;
+		eventBus->Publish(event);
 	}
 
 	// Vertical-toolbar Measure Bond/Angle tool: click accumulates atoms into the normal selection

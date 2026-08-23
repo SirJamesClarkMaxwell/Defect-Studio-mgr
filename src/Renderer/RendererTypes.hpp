@@ -37,6 +37,11 @@ namespace DefectStudio
 		// nonzero only for bonds that cross a periodic cell boundary (see Bond::periodicShift,
 		// already resolved to Cartesian here so rendering doesn't need the lattice matrix again).
 		glm::vec3 secondAtomPeriodicOffset = glm::vec3(0.0f);
+		// Per-window ephemeral hide (H/Alt+H via BondComponent's VisibilityComponent), NOT the
+		// domain Bond::visible flag - a domain-invisible bond never reaches this struct at all
+		// (BuildRendererBonds filters it out), so this always starts true and only this renderer-
+		// side toggle can flip it back off. Mirrors RendererAtomData::visible.
+		bool visible = true;
 	};
 
 	struct RendererCellEdge

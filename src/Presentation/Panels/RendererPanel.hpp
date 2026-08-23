@@ -40,6 +40,10 @@ namespace DefectStudio
 		void applyContinuousPan(RendererWindowState &windowState, float deltaTime);
 		void onViewportFocusChanged(const std::string &windowId, bool focused);
 		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
+		// Plain-click entry point for the main viewport (unlike handleAtomPick, which stays atom-only
+		// for handleMeasureToolClick's pair/triple picking) - tries atoms first, then bonds, so an
+		// atom under the cursor always wins a bond behind/near it.
+		void handleViewportPick(RendererWindowState &windowState, float relX, float relY, bool additive);
 		void handleMeasureToolClick(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		void handleBoxSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		void handleCircleSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);

@@ -62,6 +62,7 @@ namespace DefectStudio
 					lattice[0] * static_cast<float>(domainBond.periodicShift.x) +
 					lattice[1] * static_cast<float>(domainBond.periodicShift.y) +
 					lattice[2] * static_cast<float>(domainBond.periodicShift.z);
+				bond.visible = true;
 				bonds.push_back(bond);
 			}
 			return bonds;

@@ -26,11 +26,14 @@ namespace DefectStudio
 		// The reverse of PushSelectionAndVisibilityToWindowState - sets SelectionComponent/
 		// VisibilityComponent from index lists (e.g. a restored RendererViewSnapshot). Caller is
 		// responsible for following up with PushSelectionAndVisibilityToWindowState to sync the
-		// flat arrays back, per the same contract as every other mutation path.
+		// flat arrays back, per the same contract as every other mutation path. Bond lists default
+		// empty - existing callers (view snapshot restore) don't track bond selection/visibility yet.
 		void ApplySelectionAndVisibilityToScene(
 			SceneRegistry &scene,
 			const std::vector<std::size_t> &selectedAtomIndices,
-			const std::vector<std::size_t> &hiddenAtomIndices);
+			const std::vector<std::size_t> &hiddenAtomIndices,
+			const std::vector<std::size_t> &selectedBondIndices = {},
+			const std::vector<std::size_t> &hiddenBondIndices = {});
 
 		// Translates captured positions into atom indices on `targetStructure` by nearest cartesian
 		// distance, for restoring a view snapshot onto a structure that may differ from the one it

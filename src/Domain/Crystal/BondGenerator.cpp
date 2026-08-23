@@ -286,6 +286,16 @@ namespace DefectStudio
 		CrystalStructure &structure,
 		const ElementPropertiesTable &elementPropertiesTable)
 	{
+		// A user-hidden Auto bond (Bond::visible = false, set by the bond-delete command) would
+		// otherwise "come back" visible the next time any atom edit triggers a regen, since this
+		// function used to erase every Auto bond and rebuild it from scratch with the visible=true
+		// default. Snapshot which ones were hidden first (identity = endpoints + periodic shift,
+		// same as BondsMatch/HasBondBetween use elsewhere in this file) and reapply after rebuild.
+		std::vector<Bond> hiddenAutoBonds;
+		for (const Bond &bond : structure.bonds)
+			if (bond.origin == BondOrigin::Auto && !bond.visible)
+				hiddenAutoBonds.push_back(bond);
+
 		structure.bonds.erase(
 			std::remove_if(structure.bonds.begin(), structure.bonds.end(), [](const Bond &bond) {
 				return bond.origin == BondOrigin::Auto;
@@ -318,6 +328,9 @@ namespace DefectStudio
 			bond.lengthAngstrom = std::sqrt(distanceSquared);
 			bond.origin = BondOrigin::Auto;
 			bond.periodicShift = shift;
+			bond.visible = !std::any_of(hiddenAutoBonds.begin(), hiddenAutoBonds.end(), [&](const Bond &hidden) {
+				return BondsMatch(hidden, first, second, shift);
+			});
 			structure.bonds.push_back(bond);
 		};
 

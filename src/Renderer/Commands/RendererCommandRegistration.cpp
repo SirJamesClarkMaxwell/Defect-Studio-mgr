@@ -249,6 +249,15 @@ namespace DefectStudio
 				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable));
 		}
 
+		Unique<ICommand> MakeConnectSelectedAtomsCommand(
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer,
+			AtomStyleTable atomStyleTable,
+			CommandContext &)
+		{
+			return CreateConnectSelectedAtomsCommand(std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable));
+		}
+
 		Unique<ICommand> MakeDuplicateSelectedAtomsCommand(
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
@@ -630,6 +639,13 @@ namespace DefectStudio
 			"Renderer: Delete selected atoms",
 			"Delete the currently selected atoms from the structure (undoable).",
 			std::bind_front(MakeDeleteSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable));
+		RegisterRendererCommand(
+			registry,
+			"renderer.bonds.connect",
+			"Renderer: Connect selected atoms",
+			"Add a manual bond between the 2 currently selected atoms in the active renderer viewport "
+			"(undoable).",
+			std::bind_front(MakeConnectSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable));
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.duplicate",

@@ -35,6 +35,14 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable,
 		std::string windowId = {});
 
+	// Adds a Manual-origin bond between exactly 2 selected atoms ('J') - undoable. Fails if the
+	// selection isn't exactly 2 atoms or the two are already bonded (Auto or Manual).
+	[[nodiscard]] Unique<ICommand> CreateConnectSelectedAtomsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		std::string windowId = {});
+
 	// Result of a completed ImGuizmo drag (RendererPanel::renderTransformGizmo), passed through
 	// CommandContext to "renderer.gizmo.commit_transform" - atomIndices[i] moves to
 	// afterPositions[i] (cartesian). The live drag itself mutates RendererStructureData directly

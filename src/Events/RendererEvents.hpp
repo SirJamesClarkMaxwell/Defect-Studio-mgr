@@ -208,6 +208,17 @@ namespace DefectStudio::RendererEvents::Viewport
 		bool additive = false;
 	};
 
+	// Mirrors AtomSelectionRequested for bond entities (RendererPanel's viewport click handler picks
+	// atoms first, bonds only if no atom was hit - see handleViewportPick). bondIndex indexes
+	// RendererStructureData::bonds (the render-side, visibility-filtered list), not the domain
+	// CrystalStructure::bonds list.
+	struct BondSelectionRequested final : public BusEvent
+	{
+		std::string windowId;
+		std::optional<std::size_t> bondIndex;
+		bool additive = false;
+	};
+
 	// Toggles the active drag-select tool: pressing the chord for the already-active tool turns
 	// it back off (mode None), pressing the other one switches directly.
 	struct SelectionToolToggleRequested final : public BusEvent

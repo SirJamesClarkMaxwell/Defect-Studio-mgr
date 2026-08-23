@@ -562,6 +562,7 @@ namespace DefectStudio
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 		int selectedPinnedMeasurement,
 		const std::vector<std::size_t> &selectedAtomIndices,
+		const std::vector<std::size_t> &selectedBondIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp,
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown)
@@ -605,6 +606,33 @@ namespace DefectStudio
 		{
 			resources.atomsDirty = true;
 			resources.lastSelectionHash = selectionHash;
+		}
+		if (resources.lastSelectedBondCount != selectedBondIndices.size())
+		{
+			resources.bondsDirty = true;
+			resources.lastSelectedBondCount = selectedBondIndices.size();
+		}
+		std::size_t bondSelectionHash = 1469598103934665603ull;
+		for (const std::size_t index : selectedBondIndices)
+		{
+			bondSelectionHash ^= index + 0x9e3779b97f4a7c15ull + (bondSelectionHash << 6) + (bondSelectionHash >> 2);
+		}
+		if (resources.lastBondSelectionHash != bondSelectionHash)
+		{
+			resources.bondsDirty = true;
+			resources.lastBondSelectionHash = bondSelectionHash;
+		}
+		std::size_t bondVisibilityHash = 1469598103934665603ull;
+		for (std::size_t index = 0; index < structure.bonds.size(); ++index)
+		{
+			if (!structure.bonds[index].visible)
+				bondVisibilityHash ^= index + 0x9e3779b97f4a7c15ull + (bondVisibilityHash << 6) + (bondVisibilityHash >> 2);
+		}
+		if (resources.lastBondVisibilityHash != bondVisibilityHash)
+		{
+			resources.bondsDirty = true;
+			resources.labelsDirty = true;
+			resources.lastBondVisibilityHash = bondVisibilityHash;
 		}
 		std::size_t visibilityHash = 1469598103934665603ull;
 		for (std::size_t index = 0; index < structure.atoms.size(); ++index)
@@ -680,7 +708,7 @@ namespace DefectStudio
 		if (showCellBox)
 			renderCellBox(structure, camera, resources);
 		if (showBonds)
-			renderBonds(structure, camera, resources, globalSettings);
+			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices);
 		if (showLabels || !pinnedMeasurements.empty())
 			renderLabels(structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurement);
 		if (showAtoms)
@@ -1191,14 +1219,18 @@ namespace DefectStudio
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
-		const RendererGlobalRenderSettings &globalSettings)
+		const RendererGlobalRenderSettings &globalSettings,
+		const std::vector<std::size_t> &selectedIndices)
 	{
 		if (resources.bondsDirty)
 		{
 			resources.cachedBondInstances.clear();
 			resources.cachedBondInstances.reserve(structure.bonds.size());
-			for (const RendererBondData &bond : structure.bonds)
+			for (std::size_t bondIndex = 0; bondIndex < structure.bonds.size(); ++bondIndex)
 			{
+				const RendererBondData &bond = structure.bonds[bondIndex];
+				if (!bond.visible)
+					continue;
 				if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
 					continue;
 				const RendererAtomData &firstAtom = structure.atoms[bond.firstAtomIndex];
@@ -1227,10 +1259,16 @@ namespace DefectStudio
 					continue;
 				const glm::vec3 bondStart = firstAtom.cartesianPosition + direction * shrinkA;
 				const glm::vec3 bondEnd = secondAtomPosition - direction * shrinkB;
+				const bool isSelected = std::find(
+					selectedIndices.begin(), selectedIndices.end(), bondIndex) != selectedIndices.end();
+				// Same Blender selection orange as renderAtoms, blended the same way.
+				constexpr glm::vec3 kSelectionHighlightColor(0.91f, 0.52f, 0.02f);
 				OpenGlBondInstance instance;
 				instance.model = buildBondTransform(bondStart, bondEnd, bondRadius);
-				instance.colorA = glm::vec4(bond.gradient.start, 1.0f);
-				instance.colorB = glm::vec4(bond.gradient.finish, 1.0f);
+				instance.colorA = glm::vec4(
+					isSelected ? glm::mix(bond.gradient.start, kSelectionHighlightColor, 0.55f) : bond.gradient.start, 1.0f);
+				instance.colorB = glm::vec4(
+					isSelected ? glm::mix(bond.gradient.finish, kSelectionHighlightColor, 0.55f) : bond.gradient.finish, 1.0f);
 				resources.cachedBondInstances.push_back(instance);
 			}
 		}
@@ -1339,6 +1377,8 @@ namespace DefectStudio
 				resources.cachedLabelInstances.clear();
 				for (const RendererBondData &bond : structure.bonds)
 				{
+					if (!bond.visible)
+						continue;
 					if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
 						continue;
 					const RendererAtomData &first = structure.atoms[bond.firstAtomIndex];

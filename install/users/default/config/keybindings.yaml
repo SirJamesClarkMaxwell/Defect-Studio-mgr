@@ -320,6 +320,12 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.bonds.connect"
+    chord: "J"
+    command: "renderer.bonds.connect"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.selection.hide"
     chord: "H"
     command: "renderer.selection.hide"

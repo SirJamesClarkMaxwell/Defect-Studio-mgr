@@ -47,6 +47,8 @@ namespace DefectStudio::SceneSystem
 			component.radius = bond.radius;
 			component.gradient = bond.gradient;
 			entity.AddComponent<BondComponent>(component);
+			entity.AddComponent<VisibilityComponent>(VisibilityComponent{bond.visible});
+			entity.AddComponent<SelectionComponent>();
 			scene.BondEntities().push_back(static_cast<entt::entity>(entity));
 		}
 	}
@@ -54,14 +56,15 @@ namespace DefectStudio::SceneSystem
 	void PushSelectionAndVisibilityToWindowState(const SceneRegistry &scene, RendererWindowState &windowState)
 	{
 		windowState.selectedAtomIndices.clear();
+		windowState.selectedBondIndices.clear();
 
 		const entt::registry &registry = scene.Registry();
-		auto view = registry.view<const AtomComponent, const SelectionComponent, const VisibilityComponent>();
-		for (const entt::entity entity : view)
+		auto atomView = registry.view<const AtomComponent, const SelectionComponent, const VisibilityComponent>();
+		for (const entt::entity entity : atomView)
 		{
-			const AtomComponent &atomComponent = view.get<const AtomComponent>(entity);
-			const SelectionComponent &selectionComponent = view.get<const SelectionComponent>(entity);
-			const VisibilityComponent &visibilityComponent = view.get<const VisibilityComponent>(entity);
+			const AtomComponent &atomComponent = atomView.get<const AtomComponent>(entity);
+			const SelectionComponent &selectionComponent = atomView.get<const SelectionComponent>(entity);
+			const VisibilityComponent &visibilityComponent = atomView.get<const VisibilityComponent>(entity);
 			if (atomComponent.atomIndex >= windowState.structure.atoms.size())
 				continue;
 
@@ -69,12 +72,28 @@ namespace DefectStudio::SceneSystem
 			if (selectionComponent.selected)
 				windowState.selectedAtomIndices.push_back(atomComponent.atomIndex);
 		}
+
+		auto bondView = registry.view<const BondComponent, const SelectionComponent, const VisibilityComponent>();
+		for (const entt::entity entity : bondView)
+		{
+			const BondComponent &bondComponent = bondView.get<const BondComponent>(entity);
+			const SelectionComponent &selectionComponent = bondView.get<const SelectionComponent>(entity);
+			const VisibilityComponent &visibilityComponent = bondView.get<const VisibilityComponent>(entity);
+			if (bondComponent.bondIndex >= windowState.structure.bonds.size())
+				continue;
+
+			windowState.structure.bonds[bondComponent.bondIndex].visible = visibilityComponent.visible;
+			if (selectionComponent.selected)
+				windowState.selectedBondIndices.push_back(bondComponent.bondIndex);
+		}
 	}
 
 	void ApplySelectionAndVisibilityToScene(
 		SceneRegistry &scene,
 		const std::vector<std::size_t> &selectedAtomIndices,
-		const std::vector<std::size_t> &hiddenAtomIndices)
+		const std::vector<std::size_t> &hiddenAtomIndices,
+		const std::vector<std::size_t> &selectedBondIndices,
+		const std::vector<std::size_t> &hiddenBondIndices)
 	{
 		const std::unordered_set<std::size_t> selectedSet(selectedAtomIndices.begin(), selectedAtomIndices.end());
 		const std::unordered_set<std::size_t> hiddenSet(hiddenAtomIndices.begin(), hiddenAtomIndices.end());
@@ -85,6 +104,17 @@ namespace DefectStudio::SceneSystem
 			Entity entity(atomEntities[index], &scene);
 			entity.GetComponent<SelectionComponent>().selected = selectedSet.contains(index);
 			entity.GetComponent<VisibilityComponent>().visible = !hiddenSet.contains(index);
+		}
+
+		const std::unordered_set<std::size_t> selectedBondSet(selectedBondIndices.begin(), selectedBondIndices.end());
+		const std::unordered_set<std::size_t> hiddenBondSet(hiddenBondIndices.begin(), hiddenBondIndices.end());
+
+		const std::vector<entt::entity> &bondEntities = scene.BondEntities();
+		for (std::size_t index = 0; index < bondEntities.size(); ++index)
+		{
+			Entity entity(bondEntities[index], &scene);
+			entity.GetComponent<SelectionComponent>().selected = selectedBondSet.contains(index);
+			entity.GetComponent<VisibilityComponent>().visible = !hiddenBondSet.contains(index);
 		}
 	}
 
