@@ -1380,7 +1380,44 @@ namespace DefectStudio
 					const std::size_t atomB = pin.atomIndices[1];
 					if (atomA >= structure.atoms.size() || atomB >= structure.atoms.size())
 						continue;
+
+					// Shared by both the real-bond match below and the no-bond fallback beneath it -
+					// only the two endpoint positions differ between them.
+					auto appendLengthLabel = [&](const glm::vec3 &posA, const glm::vec3 &posB)
+					{
+						const float lengthAngstrom = glm::length(posB - posA);
+						const glm::vec3 midpoint = (posA + posB) * 0.5f;
+
+						float rotationRadians = 0.0f;
+						if (pin.alignToBondDirection)
+						{
+							// In-plane angle of the bond direction within the billboard's own basis
+							// (project onto cameraRight/cameraUp, not screen space - keeps the label
+							// readable without perspective skew at extreme angles).
+							const glm::vec3 bondDir = posB - posA;
+							const float dx = glm::dot(bondDir, cameraRight);
+							const float dy = glm::dot(bondDir, cameraUp);
+							if (dx != 0.0f || dy != 0.0f)
+							{
+								rotationRadians = std::atan2(dy, dx);
+								// Keep the label upright regardless of which way the bond points on
+								// screen - a lattice has bonds pointing every which way, and raw
+								// bond-angle alignment left roughly half of them upside-down/sideways.
+								while (rotationRadians > glm::half_pi<float>())
+									rotationRadians -= glm::pi<float>();
+								while (rotationRadians <= -glm::half_pi<float>())
+									rotationRadians += glm::pi<float>();
+							}
+							if (pin.flipped)
+								rotationRadians += glm::pi<float>();
+						}
+						AppendBondLabelInstances(
+							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, color,
+							rotationRadians + pin.rotationOffsetRadians, pin.scale);
+					};
+
 					constexpr float kPeriodicOffsetEpsilon = 1.0e-3f;
+					bool matchedBond = false;
 					for (const RendererBondData &bond : structure.bonds)
 					{
 						// Two atoms can be joined by more than one real bond across different periodic
@@ -1403,38 +1440,16 @@ namespace DefectStudio
 							continue;
 						const RendererAtomData &first = structure.atoms[bond.firstAtomIndex];
 						const RendererAtomData &second = structure.atoms[bond.secondAtomIndex];
-						const glm::vec3 secondPosition = second.cartesianPosition + bond.secondAtomPeriodicOffset;
-						const float lengthAngstrom = glm::length(secondPosition - first.cartesianPosition);
-						const glm::vec3 midpoint = (first.cartesianPosition + secondPosition) * 0.5f;
-
-						float rotationRadians = 0.0f;
-						if (pin.alignToBondDirection)
-						{
-							// In-plane angle of the bond direction within the billboard's own basis
-							// (project onto cameraRight/cameraUp, not screen space - keeps the label
-							// readable without perspective skew at extreme angles).
-							const glm::vec3 bondDir = secondPosition - first.cartesianPosition;
-							const float dx = glm::dot(bondDir, cameraRight);
-							const float dy = glm::dot(bondDir, cameraUp);
-							if (dx != 0.0f || dy != 0.0f)
-							{
-								rotationRadians = std::atan2(dy, dx);
-								// Keep the label upright regardless of which way the bond points on
-								// screen - a lattice has bonds pointing every which way, and raw
-								// bond-angle alignment left roughly half of them upside-down/sideways.
-								while (rotationRadians > glm::half_pi<float>())
-									rotationRadians -= glm::pi<float>();
-								while (rotationRadians <= -glm::half_pi<float>())
-									rotationRadians += glm::pi<float>();
-							}
-							if (pin.flipped)
-								rotationRadians += glm::pi<float>();
-						}
-						AppendBondLabelInstances(
-							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, color,
-							rotationRadians + pin.rotationOffsetRadians, pin.scale);
+						appendLengthLabel(first.cartesianPosition, second.cartesianPosition + bond.secondAtomPeriodicOffset);
+						matchedBond = true;
 						break;
 					}
+					// Arbitrary pair with no matching bond (Measure tool's "any 2 atoms" fallback pin,
+					// see AddBondPinsWithinSet) - no periodic image to resolve, just the raw positions.
+					// Without this the pin existed in pinnedMeasurements but never rendered anything,
+					// since the loop above only ever produces a label for an actual RendererBondData.
+					if (!matchedBond)
+						appendLengthLabel(structure.atoms[atomA].cartesianPosition, structure.atoms[atomB].cartesianPosition);
 				}
 				else if (pin.atomIndices.size() == 3)
 				{

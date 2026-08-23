@@ -661,7 +661,24 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
          ogóle. Dodany analogiczny fallback: `atomSet.size() == 2` i zero trafień w pętli po
          `structure.bonds` → pin surowej odległości między dowolnymi dwoma atomami. To był
          prawdopodobny powód "wybieram 2 atomy, label się nie pojawia" niezależnie od bugu #1.
-         Zweryfikowane: `MSBuild /t:DefectStudio` (Debug) czysty build.
+      3. **Trzeci bug, ten sam dzień, po zgłoszeniu że nadal "działa tylko między atomami z
+         wiązaniem":** fallback z #2 poprawnie tworzył pin w `pinnedMeasurements`, ale
+         `OpenGlRendererBackend::renderLabels` (2-atomowa gałąź) w ogóle nie miał na to szans —
+         szukał długości/midpointu WYŁĄCZNIE przez dopasowanie do `structure.bonds` (ten sam
+         wzorzec co bug #2, tylko w renderze zamiast w tworzeniu pinu); bez trafienia `break` nigdy
+         nie następował i `AppendBondLabelInstances` nigdy się nie wołało — pin istniał, nic się nie
+         rysowało. Naprawa: rotation/length/midpoint liczenie wydzielone do lokalnej lambdy
+         `appendLengthLabel(posA, posB)` używanej zarówno przy trafieniu w `structure.bonds` (jak
+         wcześniej), jak i w nowej gałęzi `if (!matchedBond)` — surowe pozycje atomów, bez
+         rozwiązywania obrazu periodycznego (fallback-owy pin i tak zawsze ma
+         `bondPeriodicOffset = 0`).
+      4. **Na życzenie 2026-08-23:** `M`/`Shift+M` z pustym zaznaczeniem (0 atomów) teraz aktywują
+         narzędzie Measure Bond/Angle zamiast cicho nic nie robić (`onLabelsToggleSelectedBondRequested`/
+         `AngleRequested` wołają teraz `onSelectionToolToggleRequested` bezpośrednio, gdy
+         `selectedAtomIndices.empty()`) — spójne z kliknięciem w toolbar. Z 1 zaznaczonym atomem (za
+         mało na parę/trójkę) zachowanie bez zmian: cichy no-op, jak dotąd.
+         Zweryfikowane: `MSBuild /t:DefectStudio`+`/t:DefectStudioTests` (Debug) czyste, 212/212
+         testów przechodzi.
 - [x] **Ciągły ruch trzymanym klawiszem — zrobione 2026-08-22.** Dotychczasowy mechanizm (GLFW
       `GLFW_REPEAT`, `repeatable: true` w `keybindings.yaml`) dawał ~10-15 Hz i "rwany" ruch, a dla
       `Ctrl+Shift+Arrow` w ogóle przestawał się powtarzać po Alt-Tabie (potwierdzone diagnostycznymi

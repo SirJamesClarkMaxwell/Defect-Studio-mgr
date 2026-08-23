@@ -1937,7 +1937,20 @@ namespace DefectStudio
 		const RendererEvents::Viewport::LabelsToggleSelectedBondRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->selectedAtomIndices.size() < 2)
+		if (windowState == nullptr)
+			return;
+		// M with nothing selected activates the Measure Bond tool (click 2 atoms in the viewport)
+		// instead of silently no-op'ing - matches clicking the toolbar button, see
+		// onSelectionToolToggleRequested for the actual toggle/clear-selection logic.
+		if (windowState->selectedAtomIndices.empty())
+		{
+			RendererEvents::Viewport::SelectionToolToggleRequested toggleEvent;
+			toggleEvent.windowId = windowState->windowId;
+			toggleEvent.tool = SelectionToolMode::MeasureBond;
+			onSelectionToolToggleRequested(toggleEvent);
+			return;
+		}
+		if (windowState->selectedAtomIndices.size() < 2)
 			return;
 		AddBondPinsWithinSet(*windowState, VisibleAtomsIn(*windowState, windowState->selectedAtomIndices));
 	}
@@ -1971,7 +1984,19 @@ namespace DefectStudio
 		const RendererEvents::Viewport::LabelsToggleSelectedAngleRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->selectedAtomIndices.size() < 3)
+		if (windowState == nullptr)
+			return;
+		// Shift+M with nothing selected activates the Measure Angle tool - see the matching comment
+		// in onLabelsToggleSelectedBondRequested.
+		if (windowState->selectedAtomIndices.empty())
+		{
+			RendererEvents::Viewport::SelectionToolToggleRequested toggleEvent;
+			toggleEvent.windowId = windowState->windowId;
+			toggleEvent.tool = SelectionToolMode::MeasureAngle;
+			onSelectionToolToggleRequested(toggleEvent);
+			return;
+		}
+		if (windowState->selectedAtomIndices.size() < 3)
 			return;
 		AddAnglePinsWithinSet(*windowState, VisibleAtomsIn(*windowState, windowState->selectedAtomIndices));
 	}
