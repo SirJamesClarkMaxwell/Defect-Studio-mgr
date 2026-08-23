@@ -588,19 +588,19 @@ namespace DefectStudio
 		};
 
 		if (toolButton(
-				"##ModeAtoms", "tool-mode-atoms.png", "At", "Selection mode: Atoms only (Ctrl+1)",
+				"##ModeAtoms", "tool-mode-atoms.png", "1", "Selection mode: Atoms only (Ctrl+1)",
 				windowState.pickAtoms && !windowState.pickBonds && !windowState.pickLabels))
 			publishSelectionMode(true, false, false);
 		if (toolButton(
-				"##ModeAtomsBonds", "tool-mode-atoms-bonds.png", "A+B", "Selection mode: Atoms + Bonds (Ctrl+2)",
+				"##ModeAtomsBonds", "tool-mode-atoms-bonds.png", "2", "Selection mode: Atoms + Bonds (Ctrl+2)",
 				windowState.pickAtoms && windowState.pickBonds && !windowState.pickLabels))
 			publishSelectionMode(true, true, false);
 		if (toolButton(
-				"##ModeBondsLabels", "tool-mode-bonds-labels.png", "B+L", "Selection mode: Bonds + Labels, no atoms (Ctrl+3)",
+				"##ModeBondsLabels", "tool-mode-bonds-labels.png", "3", "Selection mode: Bonds + Labels, no atoms (Ctrl+3)",
 				!windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(false, true, true);
 		if (toolButton(
-				"##ModeAll", "tool-mode-all.png", "All", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
+				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
 				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(true, true, true);
 
