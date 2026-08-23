@@ -481,7 +481,11 @@ namespace DefectStudio
 			}
 			else
 			{
-				pressed = ImGui::Button(fallback, buttonSize);
+				// No icon asset for this button yet - auto-fit the label instead of forcing it into
+				// the square icon size, which silently clips anything longer than ~2 characters (e.g.
+				// "Add" rendered as "Ad") without any visual indication that text was cut off.
+				const float minWidth = std::max(buttonSize.x, ImGui::CalcTextSize(fallback).x + ImGui::GetStyle().FramePadding.x * 2.0f);
+				pressed = ImGui::Button(fallback, ImVec2(minWidth, buttonSize.y));
 			}
 
 			if (active)
@@ -584,19 +588,19 @@ namespace DefectStudio
 		};
 
 		if (toolButton(
-				"##ModeAtoms", "tool-mode-atoms.png", "1", "Selection mode: Atoms (Ctrl+1)",
+				"##ModeAtoms", "tool-mode-atoms.png", "At", "Selection mode: Atoms only (Ctrl+1)",
 				windowState.pickAtoms && !windowState.pickBonds && !windowState.pickLabels))
 			publishSelectionMode(true, false, false);
 		if (toolButton(
-				"##ModeAtomsBonds", "tool-mode-atoms-bonds.png", "2", "Selection mode: Atoms + Bonds (Ctrl+2)",
+				"##ModeAtomsBonds", "tool-mode-atoms-bonds.png", "A+B", "Selection mode: Atoms + Bonds (Ctrl+2)",
 				windowState.pickAtoms && windowState.pickBonds && !windowState.pickLabels))
 			publishSelectionMode(true, true, false);
 		if (toolButton(
-				"##ModeBondsLabels", "tool-mode-bonds-labels.png", "3", "Selection mode: Bonds + Labels (Ctrl+3)",
+				"##ModeBondsLabels", "tool-mode-bonds-labels.png", "B+L", "Selection mode: Bonds + Labels, no atoms (Ctrl+3)",
 				!windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(false, true, true);
 		if (toolButton(
-				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
+				"##ModeAll", "tool-mode-all.png", "All", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
 				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(true, true, true);
 
