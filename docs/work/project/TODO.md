@@ -481,6 +481,14 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] **Stretch (nie w MVP):** in-app SFTP browser bez realnego OS-mounta (osobna pozycja w
       Backlogu, `libssh2`/podobne jako nowy Vendor) — zostaje tam, dopóki mount-first nie okaże się
       niewystarczający (np. serwer bez WinFsp-friendly dostępu).
+- [ ] **Per-serwer dobór plików submit/`run_computations` — zażądane 2026-08-23.** Różne serwery
+      obliczeniowe mają różne konwencje submit-scriptów (`run_computations`, scheduler-specific
+      pliki, itd.) — appka ma dobierać/generować właściwy wariant na podstawie tego, do którego
+      **Server Profile** jest aktualnie podłączony dany root/folder, nie jeden hardcoded szablon.
+      Zależne od Server Profiles wyżej istniejąc jako realny typ (dziś projekt referencuje roots
+      wolnym tekstem, zob. T07.5.4 "`source`/`ServerProfile` referencja"); prawdopodobnie ten sam
+      mechanizm co "auto POTCAR/INCAR/KPOINTS/run_computations per folder" z nowego defekt-creation
+      flow (T08.6.3 wyżej) — jeden template-per-server system, nie dwa osobne.
 
 ### T07.5.3 — Autoryzacja i poświadczenia (bezpieczeństwo — nie upraszczać)
 > **Twarda zasada: appka nigdy nie przechowuje sekretów (hasło, passphrase, treść klucza
@@ -746,6 +754,15 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       konteksty mogłyby być aktywne naraz; do zweryfikowania przy implementacji czy `KeymapResolver`
       context (`renderer.viewport.focused` vs focus na drzewku) już to naturalnie rozdziela, czy
       potrzeba osobnego kontekstu dla `ProjectTreePanel`.
+  - [ ] **Rozszerzenie — zażądane 2026-08-23:** oprócz copy/paste/duplicate, też **New File**,
+        **New Folder**, i **Move** (drag-drop w drzewku albo Cut+Paste) — pełny zestaw jak w
+        eksploratorze VSCode. Move to jedyna z tych operacji bez dzisiejszego odpowiednika nigdzie
+        w appce (copy/duplicate ma już analogię w atom-clipboard) — do zweryfikowania osobno.
+- [ ] **Per-folder toggle "ukryj pewne pliki" w `ProjectTreePanel` — zażądane 2026-08-23.** Context
+      menu na konkretnym folderze dostaje opcję włącz/wyłącz ukrywanie (np. plików tymczasowych/
+      wynikowych, do doprecyzowania jakich dokładnie przy implementacji) — per-folder, nie globalny
+      toggle. Analogiczne miejsce w kodzie co "Set as Bulk Reference" (T07.5.5) —
+      `renderDirectoryContextMenu`, per-folder RMB, nie root-only.
 - [ ] **Integrated PowerShell terminal panel (nowe)** — dockowalny panel z żywym PowerShell (Windows;
       docelowo też bash/sh na Linux per T03 cross-platform). Wzorzec do zbadania: `Core/Platform/
       ProcessRunner` już obsługuje subprocess z I/O (używany dla Pythona) — sprawdzić czy da się
@@ -931,6 +948,21 @@ kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
 - [x] **Drag-drop WAVECAR na otwartą strukturę w viewporcie — zrobione 2026-08-20**, zob. T08.6.4
       niżej. POSCAR/CONTCAR **nie** przez drag-drop — zostaje RMB "Open Defect" (już istniało,
       `ProjectTreePanel::openDefectAt`)
+- [ ] **Dodawanie nowego defektu jako skrót klawiszowy — zażądane 2026-08-23.** Inne niż istniejące
+      "Open Defect" (otwiera już istniejący POSCAR/CONTCAR) — to tworzy defekt **od zera**:
+      1. skrót klawiszowy odpala flow,
+      2. wybór serwera/folderu docelowego (drzewko, prawdopodobnie reużywa
+         `nativefiledialog-extended`/`ProjectTreePanel` roots, nie nowy widget od zera),
+      3. tworzy strukturę folderów dla **różnych typów obliczeń** — **konkretne typy do ustalenia
+         w rozmowie z użytkownikiem przed implementacją, nie zgadywać z tego wpisu** (przykłady z
+         reszty kodu: `exc_ms`/`exc_ms_triplet`/`ground_state` już pojawiają się jako nazwy
+         podfolderów defektu w przykładach użytkownika, ale to nie jest potwierdzona lista),
+      4. auto-generuje/kopiuje `POTCAR` (wybór pseudopotencjałów per-pierwiastek — pokrywa się z
+         "Eksport POTCAR" w Backlogu, reużyć nie duplikować), `INCAR`, `KPOINTS`,
+         `run_computations` (submit script) per folder obliczenia.
+      Zależne od T07.5.2 (Server Profiles, dziś `[ ]`) dla kroku 2 jeśli ma być prawdziwy wybór
+      serwera a nie tylko lokalnej ścieżki; zależne od T11 `DefectConcept`/`CalculationRecord` dla
+      wpięcia nowo utworzonego defektu w model domenowy, nie tylko w pliki na dysku.
 - [ ] **Matplotlib export skrypt** (nowe, z rozmowy 2026-08-20) — statyczny PNG/SVG occupation
       diagram 1:1 ze stylem `OccupationDiagramPanel`, do publikacji. Zob. plan niżej.
 
@@ -1349,6 +1381,41 @@ kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
       grupę doków "Integrated tools", ale to osobne zadania implementacyjne. **Spriorytetyzowane
       razem z resztą jako #4 w T08 "Priorytetyzacja i kolejność implementacji" wyżej** (PowerShell
       terminal tam jako #16 — Python console wyżej w kolejności, PowerShell niżej).
+  - [ ] **Rozszerzenie zakresu — zażądane 2026-08-23, użytkownik sam ocenia jako duże i trudne.**
+        Sam REPL/hot-reload wyżej to za mało — realny cel to **scriptable object model całego
+        projektu**, dostępny identycznie z (a) hot-reloadowanych skryptów `.py` wpiętych w scenę,
+        (b) interaktywnej konsoli w UI, (c) **Jupyter/`.ipynb`** (ten sam kernel/`ds` module, nie
+        osobna integracja). Przykład z rozmowy (składnia orientacyjna, nie kontrakt):
+        ```python
+        6_7_defect = project.okeanos["6-7"]
+        exc_singlet = 6_7_defect["exc_ms"].OUTCAR['free energy']
+        gs_singlet = 6_7_defect["ground_state"].OUTCAR['free energy']
+        exc_triplet = 6_7_defect["exc_ms_triplet"].OUTCAR['free energy']
+        6_7_ZPL = 2 * exc_singlet - exc_triplet - gs_singlet
+        ```
+        tzn. `project[...]`/`defect[...]` adresuje encje modelu domenowego (`DefectConcept`/
+        `CalculationRecord` z T11) po nazwie/tagu, a pola typu `.OUTCAR['free energy']` czytają
+        sparsowane wyniki (`VaspOutputBridge`/T08.6) leniwie. **To NIE jest gotowe do
+        implementacji wprost — wymaga osobnego projektu/designu przed kodem** (użytkownik: "Należy
+        zaprojektować cały system"), bo dotyka na raz kilku nierozwiązanych decyzji:
+        - **Model adresowania** — jak `project.okeanos["6-7"]["exc_ms"]` mapuje się na
+          `DefectConcept`/`CalculationRecord`/`StructureRegistry` (T11); czy `okeanos` to nazwa
+          projektu, serwera, czy grupy defektów — do ustalenia, nie zakładać.
+        - **Persystencja** — czy wyniki/nazwy-referencje z sesji Python (`6_7_ZPL` wyżej) mają
+          przeżywać restart appki (i jako co: cache, czy re-liczone leniwie za każdym razem).
+        - **Bezpieczny zapis** — skrypt z hot-reloadem mutujący scenę (dodaje/usuwa atomy, zmienia
+          projekt) współbieżnie z UI-em edytującym to samo — potrzebna jasna zasada kto ma prawo
+          pisać kiedy (main-thread-only commit już obowiązuje ogólnie, zob. "Granice
+          architektoniczne" na górze pliku — ale trzeba to jawnie rozciągnąć na skrypty).
+        - **Undo/Redo** — mutacje sceny ze skryptu Python muszą przechodzić przez ten sam
+          `Core/Undo`/`UndoStack` co mutacje z UI (T08), nie osobną, niewidoczną dla usera ścieżkę.
+        - **Wielu serwerów** — adresowanie encji, których dane obliczeniowe leżą na różnych
+          zamontowanych serwerach naraz (zob. T07.5.2 Server Profiles, dziś `[ ]` nieistniejące) —
+          `project.okeanos[...]` musi wiedzieć/nie musieć wiedzieć na którym mouncie faktycznie
+          leżą pliki tego konkretnego defektu.
+        - **`.ipynb` wsparcie** — czy przez faktyczny Jupyter kernel (ipykernel) osadzony/
+          zewnętrzny wołający ten sam `ds`/`PythonInterpreter`, czy appka renderuje/edytuje
+          notebooki własnym UI (`nbformat` roundtrip) — różne koszty, do rozstrzygnięcia na starcie.
 - [ ] **Energetyka i DFT (`old-ds-functionality.md` §16.4):** uruchamianie VASP/Quantum ESPRESSO
       ze sceny (przez `PythonScriptJob`), monitorowanie konwergencji SCF na żywo (parsing OUTCAR/log),
       import sił na atomy z OUTCAR + wizualizacja wektorów, formation energy calculator
