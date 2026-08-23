@@ -82,6 +82,7 @@ namespace DefectStudio
 	namespace CoreEvents
 	{
 		struct OpenCommandPaletteRequested;
+		struct ProjectSaveRequested;
 	}
 
 	namespace AppEvents::Config
@@ -140,8 +141,6 @@ namespace DefectStudio
 		void renderFileMenu();
 		void renderEditMenu();
 		void renderViewMenu();
-		void renderDefectMenu();
-		void renderComputationsMenu();
 		void renderToolsMenu();
 		void renderHelpMenu();
 		void initializePanelsIfNeeded();
@@ -152,6 +151,7 @@ namespace DefectStudio
 		void applyConfigToUiState(const ApplicationConfig &config);
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
+		void onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &event);
 
 		// T07.5.1/T07.5.4/T07.5.5 project system - a project is a user-chosen directory holding
 		// manifest.yaml (ProjectManifestIO), distinct from the data `roots` it references. With no
@@ -190,6 +190,17 @@ namespace DefectStudio
 		void loadAndQueueProjectWindowRestores();
 		void pollPendingWindowRestores();
 
+		// Panel open/closed state (IPanel::IsVisible) - a documented-but-unbuilt gap (ADR-008 calls
+		// out "panel visibility" as part of workspace/UI autosave). Same shape as the project window
+		// state above: save once at shutdown, apply once right after every panel is registered at
+		// startup - simpler and safer than threading this through ApplicationConfig/
+		// YamlConfigSerializer, which already has several duplicated read/write paths for the ui:
+		// section and no existing per-panel concept. Keyed by title (registerPanel's titles are
+		// fixed string literals, not user-renamable), so a panel added/removed between versions just
+		// leaves an unused/missing line rather than breaking anything.
+		void savePanelVisibilityState();
+		void applyPanelVisibilityState();
+
 	private:
 		PanelRegistry m_Panels;
 		bool m_PanelsInitialized = false;
@@ -227,6 +238,8 @@ namespace DefectStudio
 		std::vector<ProjectRootEntry> m_AdHocRoots;
 		PanelId m_ProjectTreePanelId = 0;
 		PanelId m_TextEditorPanelId = 0;
+		PanelId m_SettingsPanelId = 0;
+		PanelId m_ExportImagePanelId = 0;
 	};
 
 	template <typename TPanel, typename... Args>

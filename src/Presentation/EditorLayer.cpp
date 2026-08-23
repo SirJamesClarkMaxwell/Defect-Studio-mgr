@@ -79,6 +79,12 @@ namespace DefectStudio
 			FileSystem::CurrentPath() / "install" / "users" / "default" / "config" / "project_windows.txt");
 	}
 
+	[[nodiscard]] Path PanelVisibilityStatePath()
+	{
+		return Path::FromResolved(
+			FileSystem::CurrentPath() / "install" / "users" / "default" / "config" / "panel_visibility.txt");
+	}
+
 	[[nodiscard]] std::vector<std::string> SplitOn(const std::string &text, char delimiter)
 	{
 		std::vector<std::string> parts;
@@ -469,6 +475,7 @@ namespace DefectStudio
 	{
 		DS_LOG_INFO("EditorLayer detached");
 		saveProjectWindowState();
+		savePanelVisibilityState();
 		m_Panels.Clear();
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
@@ -583,7 +590,7 @@ namespace DefectStudio
 			// live ImGui window's ID stack at the OpenPopup() call site, which the F12 command
 			// path (an input-event handler) doesn't have. Registered after m_ElectronicStructureSession
 			// (needs it for the orbital overlay section).
-			registerPanel<ExportImagePanel>(
+			m_ExportImagePanelId = registerPanel<ExportImagePanel>(
 				*rendererLayer,
 				m_ElectronicStructureSession,
 				m_EventBus,
@@ -608,7 +615,7 @@ namespace DefectStudio
 					DS_LOG_WARN("Electronic structure command registration failed: {}", result.Error().technicalDetails);
 			}
 		}
-		registerPanel<SettingsPanel>(
+		m_SettingsPanelId = registerPanel<SettingsPanel>(
 			m_EventBus,
 			m_JobSystem,
 			CreateWeakRef(m_UiState),
@@ -619,6 +626,7 @@ namespace DefectStudio
 			true,
 			m_RendererLayer);
 		m_PanelsInitialized = true;
+		applyPanelVisibilityState();
 
 		loadAndQueueProjectWindowRestores();
 	}
@@ -763,6 +771,49 @@ namespace DefectStudio
 			}
 
 			m_PendingWindowRestores.erase(it);
+		}
+	}
+
+	void EditorLayer::savePanelVisibilityState()
+	{
+		std::ostringstream stream;
+		for (const Entry &entry : m_Panels.Entries())
+		{
+			if (entry.panel == nullptr)
+				continue;
+			stream << entry.panel->GetTitle() << '=' << (entry.panel->IsVisible() ? '1' : '0') << '\n';
+		}
+
+		std::string error;
+		if (!TextFileIO::Save(PanelVisibilityStatePath(), stream.str(), error))
+			DS_LOG_WARN("EditorLayer: failed to persist panel visibility state: {}", error);
+	}
+
+	void EditorLayer::applyPanelVisibilityState()
+	{
+		std::string text;
+		std::string error;
+		if (!TextFileIO::Load(PanelVisibilityStatePath(), text, error))
+			return;
+
+		std::unordered_map<std::string, bool> visibilityByTitle;
+		std::istringstream stream(text);
+		std::string line;
+		while (std::getline(stream, line))
+		{
+			const std::size_t separator = line.find('=');
+			if (separator == std::string::npos)
+				continue;
+			visibilityByTitle[line.substr(0, separator)] = line.substr(separator + 1) == "1";
+		}
+
+		for (Entry &entry : m_Panels.Entries())
+		{
+			if (entry.panel == nullptr)
+				continue;
+			const auto it = visibilityByTitle.find(entry.panel->GetTitle());
+			if (it != visibilityByTitle.end())
+				entry.panel->SetVisible(it->second);
 		}
 	}
 
@@ -980,6 +1031,13 @@ namespace DefectStudio
 			*this,
 			&EditorLayer::onOpenCommandPaletteRequested,
 			EventPriority::High));
+		// project.save (Ctrl+S, CoreLayer::registerSystemCommands) previously only reached
+		// ApplicationEventController::onProjectSaveRequested, which just logs - Ctrl+S looked like it
+		// worked but silently did nothing, while File>Zapisz bypassed the whole command/event path and
+		// called persistCurrentRoots() directly. Routing the same event here makes Ctrl+S do the real
+		// save too, instead of deleting the shortcut or leaving it dead.
+		AddSubscription(subscribeEditorLayer<CoreEvents::ProjectSaveRequested>(
+			*m_EventBus, *this, &EditorLayer::onProjectSaveRequested));
 		DS_LOG_INFO("EditorLayer config event handlers bound");
 	}
 
@@ -1261,6 +1319,11 @@ namespace DefectStudio
 		applyConfigToUiState(event.config);
 	}
 
+	void EditorLayer::onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &)
+	{
+		persistCurrentRoots();
+	}
+
 	void EditorLayer::onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &)
 	{
 		m_CommandPaletteOpenRequested = true;
@@ -1274,8 +1337,6 @@ namespace DefectStudio
 		renderFileMenu();
 		renderEditMenu();
 		renderViewMenu();
-		renderDefectMenu();
-		renderComputationsMenu();
 		renderToolsMenu();
 		renderHelpMenu();
 
@@ -1299,7 +1360,7 @@ namespace DefectStudio
 			if (picked && picked->has_value())
 				openProject(picked->value());
 		}
-		if (ImGui::MenuItem("Zapisz"))
+		if (ImGui::MenuItem("Zapisz", "Ctrl+S"))
 			persistCurrentRoots();
 		if (ImGui::BeginMenu("Ostatnie projekty"))
 		{
@@ -1318,21 +1379,25 @@ namespace DefectStudio
 			}
 			ImGui::EndMenu();
 		}
-		if (ImGui::BeginMenu("Import DFT"))
+		// Real viewport PNG export (ExportImagePanel/renderer.export.image, F12) already exists -
+		// points at it instead of the JSON/CSV/LaTeX/ZIP placeholders that had no feature behind them.
+		if (ImGui::MenuItem("Eksport obrazu (PNG)..."))
 		{
-			ImGui::MenuItem("VASP", nullptr, false, false);
-			ImGui::MenuItem("QE", nullptr, false, false);
-			ImGui::MenuItem("FHI-aims", nullptr, false, false);
-			ImGui::MenuItem("CP2K", nullptr, false, false);
-			ImGui::EndMenu();
+			if (auto panel = findPanel(m_ExportImagePanelId).lock())
+			{
+				panel->SetVisible(true);
+				ImGui::SetWindowFocus(panel->GetTitle().c_str());
+			}
 		}
-		if (ImGui::BeginMenu("Eksport"))
+		if (ImGui::MenuItem("Wyjdz", "Ctrl+Shift+W"))
 		{
-			ImGui::MenuItem("JSON", nullptr, false, false);
-			ImGui::MenuItem("CSV", nullptr, false, false);
-			ImGui::MenuItem("LaTeX", nullptr, false, false);
-			ImGui::MenuItem("ZIP", nullptr, false, false);
-			ImGui::EndMenu();
+			if (auto commandRegistry = m_CommandRegistry.lock())
+			{
+				CommandContext context;
+				Result<CommandOutcome> result = commandRegistry->Execute(CommandID{"app.quit"}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Quit command failed: {}", result.Error().technicalDetails);
+			}
 		}
 		ImGui::EndMenu();
 	}
@@ -1342,18 +1407,23 @@ namespace DefectStudio
 		if (!ImGui::BeginMenu("Edycja"))
 			return;
 
-		ImGui::MenuItem("Cofnij", "Ctrl+Z", false, false);
-		ImGui::MenuItem("Ponow", "Ctrl+Y", false, false);
-		if (ImGui::BeginMenu("Clipboard"))
+		auto executeCommand = [this](const char *commandId)
 		{
-			ImGui::MenuItem("Kopiuj wezel", nullptr, false, false);
-			ImGui::MenuItem("Wytnij wezel", nullptr, false, false);
-			ImGui::MenuItem("Wklej wezel", nullptr, false, false);
-			ImGui::MenuItem("Duplikuj wezel", nullptr, false, false);
-			ImGui::EndMenu();
-		}
-		ImGui::MenuItem("Znajdz defekt", "Ctrl+F", false, false);
-		ImGui::MenuItem("Szybka nawigacja", "Ctrl+G", false, false);
+			if (auto commandRegistry = m_CommandRegistry.lock())
+			{
+				CommandContext context;
+				Result<CommandOutcome> result = commandRegistry->Execute(CommandID{commandId}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Command '{}' failed: {}", commandId, result.Error().technicalDetails);
+			}
+		};
+
+		// edit.undo/edit.redo already exist and work (Ctrl+Z/Ctrl+Y, CoreLayer::registerSystemCommands)
+		// - these were disabled stubs pretending the feature didn't exist.
+		if (ImGui::MenuItem("Cofnij", "Ctrl+Z"))
+			executeCommand("edit.undo");
+		if (ImGui::MenuItem("Ponow", "Ctrl+Y"))
+			executeCommand("edit.redo");
 		ImGui::EndMenu();
 	}
 
@@ -1386,66 +1456,6 @@ namespace DefectStudio
 			ImGui::EndMenu();
 		}
 
-		if (ImGui::BeginMenu("Uklad paneli"))
-		{
-			ImGui::MenuItem("Preset 1", nullptr, false, false);
-			ImGui::MenuItem("Preset 2", nullptr, false, false);
-			ImGui::MenuItem("Preset 3", nullptr, false, false);
-			ImGui::MenuItem("Preset 4", nullptr, false, false);
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("Styl wizualizacji"))
-		{
-			ImGui::MenuItem("Ball-stick", nullptr, false, false);
-			ImGui::MenuItem("CPK", nullptr, false, false);
-			ImGui::MenuItem("Polyhedral", nullptr, false, false);
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("Nakladki"))
-		{
-			ImGui::MenuItem("CHGCAR", nullptr, false, false);
-			ImGui::MenuItem("Orbital KS", nullptr, false, false);
-			ImGui::MenuItem("Spin density", nullptr, false, false);
-			ImGui::EndMenu();
-		}
-		ImGui::EndMenu();
-	}
-
-	void EditorLayer::renderDefectMenu()
-	{
-		if (!ImGui::BeginMenu("Defekt"))
-			return;
-
-		ImGui::MenuItem("Nowy defekt wizard", "Ctrl+D", false, false);
-		ImGui::MenuItem("Generuj supercele per q", nullptr, false, false);
-		ImGui::MenuItem("ShakeNBreak", nullptr, false, false);
-		ImGui::MenuItem("NEB", nullptr, false, false);
-		ImGui::MenuItem("Diagram formacji", nullptr, false, false);
-		ImGui::MenuItem("negative-U", nullptr, false, false);
-		ImGui::MenuItem("ZPL", nullptr, false, false);
-		ImGui::MenuItem("ZFS", nullptr, false, false);
-		ImGui::MenuItem("Scorecard", nullptr, false, false);
-		ImGui::EndMenu();
-	}
-
-	void EditorLayer::renderComputationsMenu()
-	{
-		if (!ImGui::BeginMenu("Obliczenia"))
-			return;
-
-		ImGui::MenuItem("Uruchom", "F5", false, false);
-		ImGui::MenuItem("Zatrzymaj", "F7", false, false);
-		if (ImGui::BeginMenu("Funkcjonały"))
-		{
-			ImGui::MenuItem("PBE", nullptr, false, false);
-			ImGui::MenuItem("HSE06", nullptr, false, false);
-			ImGui::MenuItem("PBE+U", nullptr, false, false);
-			ImGui::MenuItem("vdW-DF", nullptr, false, false);
-			ImGui::MenuItem("G0W0", nullptr, false, false);
-			ImGui::EndMenu();
-		}
-		ImGui::MenuItem("Korekcja FNV/eFNV", nullptr, false, false);
-		ImGui::MenuItem("Menadzer kolejki", nullptr, false, false);
 		ImGui::EndMenu();
 	}
 
@@ -1454,13 +1464,16 @@ namespace DefectStudio
 		if (!ImGui::BeginMenu("Narzedzia"))
 			return;
 
-		ImGui::MenuItem("Baza danych", "Ctrl+B", false, false);
-		ImGui::MenuItem("Import z h-bn.info", nullptr, false, false);
-		ImGui::MenuItem("QPOD API", nullptr, false, false);
-		ImGui::MenuItem("Ranking SPE", nullptr, false, false);
-		ImGui::MenuItem("Brouwer", nullptr, false, false);
-		ImGui::MenuItem("Kalkulator Purcella", nullptr, false, false);
-		ImGui::MenuItem("Preferencje", nullptr, false, false);
+		// The Settings panel already exists (registered visible-by-default) - this just gives it a
+		// conventional Tools>Preferences entry point instead of leaving it reachable only from Widok.
+		if (ImGui::MenuItem("Preferencje"))
+		{
+			if (auto panel = findPanel(m_SettingsPanelId).lock())
+			{
+				panel->SetVisible(true);
+				ImGui::SetWindowFocus(panel->GetTitle().c_str());
+			}
+		}
 		ImGui::EndMenu();
 	}
 
@@ -1469,9 +1482,16 @@ namespace DefectStudio
 		if (!ImGui::BeginMenu("Pomoc"))
 			return;
 
-		ImGui::MenuItem("Dokumentacja", "F1", false, false);
-		ImGui::MenuItem("Tutorial", nullptr, false, false);
-		ImGui::MenuItem("Lista skrotow", nullptr, false, false);
+		// The keybindings table (chord/command/description/context) already exists inside Settings -
+		// points at it rather than duplicating it in a second window.
+		if (ImGui::MenuItem("Lista skrotow"))
+		{
+			if (auto panel = findPanel(m_SettingsPanelId).lock())
+			{
+				panel->SetVisible(true);
+				ImGui::SetWindowFocus(panel->GetTitle().c_str());
+			}
+		}
 		ImGui::EndMenu();
 	}
 
