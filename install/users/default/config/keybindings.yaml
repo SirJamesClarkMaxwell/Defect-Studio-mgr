@@ -236,6 +236,18 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.tool_none"
+    chord: "T"
+    command: "renderer.selection.tool_none"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.cursor3d_tool_toggle"
+    chord: "Shift+C"
+    command: "renderer.selection.cursor3d_tool_toggle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.gizmo.mode_translate"
     chord: "G"
     command: "renderer.gizmo.mode_translate"

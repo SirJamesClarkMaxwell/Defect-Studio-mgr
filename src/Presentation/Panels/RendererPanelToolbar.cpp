@@ -14,7 +14,6 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/Panels/PeriodicTableGrid.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -651,24 +650,15 @@ namespace DefectStudio
 			return;
 		}
 
-		const auto &symbols = m_Layer.GetPeriodicTableSymbols();
-		if (!symbols.empty() &&
-			(m_AddAtomPopupElementIndex < 0 || static_cast<std::size_t>(m_AddAtomPopupElementIndex) >= symbols.size()))
-			m_AddAtomPopupElementIndex = 0;
-
-		if (!symbols.empty())
-		{
-			ImGui::Text("Element: %s", symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)].c_str());
-			const std::string clicked = DrawPeriodicTableGrid(
-				m_Layer, [](const std::string &) { return glm::vec3(0.55f, 0.55f, 0.58f); },
-				symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)]);
-			if (!clicked.empty())
-			{
-				const auto found = std::find(symbols.begin(), symbols.end(), clicked);
-				if (found != symbols.end())
-					m_AddAtomPopupElementIndex = static_cast<int>(std::distance(symbols.begin(), found));
-			}
-		}
+		// Reuses the Periodic Table window's own selection (RendererLayer::GetSelectedPeriodicElement)
+		// instead of embedding a second grid here - the app already has a dedicated element picker,
+		// no need for two.
+		if (m_Layer.GetSelectedPeriodicElement().empty())
+			m_Layer.GetSelectedPeriodicElement() = "C";
+		ImGui::Text("Element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
+		ImGui::SameLine();
+		if (ImGui::Button("Choose..."))
+			m_Layer.GetShowPeriodicTableWindow() = true;
 
 		if (ImGui::RadioButton("Cartesian", !m_AddAtomPopupFractional))
 			m_AddAtomPopupFractional = false;
@@ -699,7 +689,7 @@ namespace DefectStudio
 		ImGui::EndDisabled();
 
 		ImGui::Separator();
-		const bool canInsert = !symbols.empty();
+		const bool canInsert = !m_Layer.GetSelectedPeriodicElement().empty();
 		ImGui::BeginDisabled(!canInsert);
 		if (ImGui::Button("Insert"))
 		{
@@ -708,7 +698,7 @@ namespace DefectStudio
 			{
 				AddAtomAtCoordinatesPayload payload;
 				payload.windowId = windowState->windowId;
-				payload.species = symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)];
+				payload.species = m_Layer.GetSelectedPeriodicElement();
 				payload.position = m_AddAtomPopupPosition;
 				payload.isFractional = m_AddAtomPopupFractional;
 

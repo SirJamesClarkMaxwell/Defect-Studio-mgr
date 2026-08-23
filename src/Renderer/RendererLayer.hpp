@@ -255,7 +255,10 @@ namespace DefectStudio
 		std::string m_SelectedPeriodicElement = "C";
 		std::string m_FocusedViewportWindowId;
 		std::string m_LastFocusedViewportWindowId;
-		bool m_ShowPeriodicTableWindow = true;
+		// Was defaulted true from when this window's own draw call was still disabled (dead state, no
+		// visible effect either way) - now that drawPeriodicTableWindow() actually runs, default to
+		// hidden like every other optional panel until opened via its toolbar button.
+		bool m_ShowPeriodicTableWindow = false;
 		RenderExportDialogState m_ExportDialog;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;

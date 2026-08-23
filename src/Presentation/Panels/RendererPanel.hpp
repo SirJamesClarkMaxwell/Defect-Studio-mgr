@@ -72,6 +72,8 @@ namespace DefectStudio
 			const RendererWindowState &windowState, float relX, float relY) const;
 		[[nodiscard]] bool isAtomUnderScreenPosition(
 			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPos) const;
+		[[nodiscard]] bool isBondUnderScreenPosition(
+			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPos) const;
 		void renderViewportContextMenu(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 
@@ -91,7 +93,6 @@ namespace DefectStudio
 		// fields are enough, same reasoning as m_ContextMenuWorldPosition above.
 		bool m_AddAtomPopupRequested = false;
 		std::string m_AddAtomPopupWindowId;
-		int m_AddAtomPopupElementIndex = 5; // index into GetPeriodicTableSymbols() - carbon (Z=6)
 		bool m_AddAtomPopupFractional = false;
 		glm::vec3 m_AddAtomPopupPosition = glm::vec3(0.0f);
 	};

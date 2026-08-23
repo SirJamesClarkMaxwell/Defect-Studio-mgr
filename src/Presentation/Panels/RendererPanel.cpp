@@ -115,7 +115,7 @@ namespace DefectStudio
 		for (const std::string &windowId : windowsToClose)
 			m_Layer.RemoveWindow(windowId);
 
-		// drawPeriodicTableWindow();
+		drawPeriodicTableWindow();
 		drawAddAtomPopup();
 		m_Layer.CollectProfilingData();
 	}
@@ -735,6 +735,56 @@ namespace DefectStudio
 		return false;
 	}
 
+	// Same idea as isAtomUnderScreenPosition, for bonds - a selected atom's own gizmo axis pick band
+	// (kPickMaxDistance in renderTransformGizmo) very often overlaps a bonded neighbour's bond line
+	// too, not just the neighbour atom itself, so this needs the same priority override to keep a
+	// deliberate bond click from being swallowed by the gizmo.
+	bool RendererPanel::isBondUnderScreenPosition(
+		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPos) const
+	{
+		if (!windowState.camera || windowState.viewportSize.x <= 0.0f || windowState.viewportSize.y <= 0.0f)
+			return false;
+
+		const float relX = screenPos.x - imageOrigin.x;
+		const float relY = screenPos.y - imageOrigin.y;
+		if (relX < 0.0f || relY < 0.0f || relX >= windowState.viewportSize.x || relY >= windowState.viewportSize.y)
+			return false;
+
+		const float ndcX = (2.0f * relX / windowState.viewportSize.x) - 1.0f;
+		const float ndcY = -((2.0f * relY / windowState.viewportSize.y) - 1.0f);
+
+		const glm::mat4 invVP = glm::inverse(windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix());
+		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
+		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+
+		for (const RendererBondData &bond : windowState.structure.bonds)
+		{
+			if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
+				bond.secondAtomIndex >= windowState.structure.atoms.size())
+				continue;
+			const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
+			const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
+			if (!firstAtom.visible || !secondAtom.visible)
+				continue;
+
+			float t = 0.0f;
+			glm::vec3 closestOnSegment(0.0f);
+			ClosestPointsRaySegment(
+				rayOrigin, rayDir, firstAtom.cartesianPosition, secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset,
+				t, closestOnSegment);
+			if (t <= 0.001f)
+				continue;
+
+			const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
+			const glm::vec3 closestOnRay = rayOrigin + rayDir * t;
+			if (glm::distance(closestOnRay, closestOnSegment) <= pickRadius)
+				return true;
+		}
+		return false;
+	}
+
 	// 3D cursor tool click - see computeViewportWorldPosition for the hit/plane logic.
 	bool RendererPanel::handleCursor3DPlacement(RendererWindowState &windowState, float relX, float relY)
 	{
@@ -1017,6 +1067,8 @@ namespace DefectStudio
 		// isAtomUnderScreenPosition) - only matters for STARTING a new hover/drag below, never checked
 		// once fallbackGizmoDragging is already true so it can't interrupt a drag in progress.
 		const bool atomUnderCursor = !windowState.fallbackGizmoDragging && isAtomUnderScreenPosition(windowState, imageOrigin, mousePos);
+		const bool atomOrBondUnderCursor =
+			atomUnderCursor || (!windowState.fallbackGizmoDragging && isBondUnderScreenPosition(windowState, imageOrigin, mousePos));
 		constexpr float kPickMinDistance = 20.0f;
 		// This band is now evaluated every frame (not just on click) to drive gizmoCapturing's
 		// hover-suppression of atom-pick/box-select - the original 350px was sized for a one-off
@@ -1040,7 +1092,7 @@ namespace DefectStudio
 			// gives full 3D rotation control without needing their exact geometry.
 			const float radial = pivotOnScreen ? glm::length(mousePos - pivotScreen) : -1.0f;
 			const bool hoveringRing =
-				pivotOnScreen && !atomUnderCursor && radial >= kPickMinDistance && radial <= kPickMaxDistance;
+				pivotOnScreen && !atomOrBondUnderCursor && radial >= kPickMinDistance && radial <= kPickMaxDistance;
 
 			if (!windowState.fallbackGizmoDragging && hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			{
@@ -1283,7 +1335,7 @@ namespace DefectStudio
 			}
 
 			int hoveredAxis = -1;
-			if (pivotOnScreen && !windowState.fallbackGizmoDragging && !atomUnderCursor)
+			if (pivotOnScreen && !windowState.fallbackGizmoDragging && !atomOrBondUnderCursor)
 			{
 				constexpr float kPickPerpTolerance = 16.0f;
 				const glm::vec2 fromPivot = mousePos - pivotScreen;
@@ -1769,6 +1821,29 @@ namespace DefectStudio
 				windowState.pinnedMeasurements.begin() + windowState.selectedPinnedMeasurement);
 			windowState.selectedPinnedMeasurement = -1;
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		}
+		// Ctrl+Shift+>/< steps the selected pin's size (the same RendererWindowState::PinnedMeasurement
+		// ::scale the label transform gizmo's Scale handle drags) by a fixed increment - a quicker
+		// alternative to dragging that handle when only a nudge is needed. > / < are Shift+Period/
+		// Shift+Comma on a standard layout, so this checks the base keys plus KeyShift explicitly
+		// rather than relying on ImGui to resolve the shifted glyph.
+		if (pinSelected && hovered && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift)
+		{
+			constexpr float kScaleStep = 0.1f;
+			constexpr float kMinScale = 0.2f;
+			constexpr float kMaxScale = 5.0f;
+			RendererWindowState::PinnedMeasurement &selectedPin =
+				windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)];
+			if (ImGui::IsKeyPressed(ImGuiKey_Period, false))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				selectedPin.scale = std::min(kMaxScale, selectedPin.scale + kScaleStep);
+			}
+			else if (ImGui::IsKeyPressed(ImGuiKey_Comma, false))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				selectedPin.scale = std::max(kMinScale, selectedPin.scale - kScaleStep);
+			}
 		}
 
 		if (windowState.camera == nullptr)
