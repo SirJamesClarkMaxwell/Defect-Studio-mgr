@@ -53,6 +53,10 @@ namespace DefectStudio
 		void ReplaceStyles(
 			std::unordered_map<std::string, AtomRenderStyle> styles,
 			VacancyRenderStyle vacancyStyle);
+		// Single-entry mutation for the Element Catalog editor - avoids a wholesale ReplaceStyles
+		// (which would need to carry every OTHER element's already-live style back in from a
+		// caller-held snapshot) for the common case of editing just one element at a time.
+		void SetStyle(const std::string &symbol, const AtomRenderStyle &style);
 		void Clear();
 
 		[[nodiscard]] const AtomRenderStyle &GetStyle(const std::string &symbol) const;

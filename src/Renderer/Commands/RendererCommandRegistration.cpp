@@ -331,6 +331,17 @@ namespace DefectStudio
 			return CreateSetAtomPropertiesCommand(std::move(domainLayer), std::move(rendererLayer), *payload);
 		}
 
+		// Payload-driven, like MakeSetAtomPropertiesCommand - the Element Catalog panel builds
+		// SetElementStylePayload (previousStyle captured before its live drag preview started) and
+		// calls Execute() with it attached.
+		Unique<ICommand> MakeSetElementStyleCommand(WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable, CommandContext &context)
+		{
+			SetElementStylePayload *payload = context.TryGet<SetElementStylePayload>("atom_edit.set_element_style_payload");
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetElementStyleCommand(std::move(rendererLayer), std::move(atomStyleTable), *payload);
+		}
+
 		Unique<ICommand> MakeAddAtomAtCoordinatesCommand(
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
@@ -733,6 +744,13 @@ namespace DefectStudio
 			"Renderer: Set atom properties",
 			"Set the selected atom's label/charge/magnetization/occupancy/selective dynamics (undoable).",
 			std::bind_front(MakeSetAtomPropertiesCommand, domainLayer, rendererLayer),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.set_element_style",
+			"Renderer: Set element style",
+			"Set an element's color/radius in the Element Catalog (undoable).",
+			std::bind_front(MakeSetElementStyleCommand, rendererLayer, atomStyleTable),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,

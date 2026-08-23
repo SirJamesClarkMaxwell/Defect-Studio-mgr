@@ -96,6 +96,32 @@ namespace DefectStudio
 		return AtomEditTarget{windowState, std::move(record)};
 	}
 
+	void RefreshOpenWindowsForElementStyle(RendererLayer &rendererLayer, const std::string &symbol, const AtomRenderStyle &style)
+	{
+		for (RendererWindowState &windowState : rendererLayer.GetWindows())
+		{
+			for (RendererAtomData &atom : windowState.structure.atoms)
+			{
+				if (atom.element == symbol)
+				{
+					atom.color = style.color;
+					atom.radius = style.displayRadius;
+				}
+			}
+			for (RendererBondData &bond : windowState.structure.bonds)
+			{
+				if (bond.firstAtomIndex >= windowState.structure.atoms.size() ||
+					bond.secondAtomIndex >= windowState.structure.atoms.size())
+					continue;
+				const RendererAtomData &atomA = windowState.structure.atoms[bond.firstAtomIndex];
+				const RendererAtomData &atomB = windowState.structure.atoms[bond.secondAtomIndex];
+				bond.radius = std::max(0.05f, 0.22f * std::min(atomA.radius, atomB.radius));
+				bond.gradient.start = atomA.color;
+				bond.gradient.finish = atomB.color;
+			}
+		}
+	}
+
 	namespace
 	{
 		// Rebuilds RendererStructureData from record.structure and re-syncs windowState's ECS
@@ -1211,6 +1237,63 @@ namespace DefectStudio
 			std::string m_WindowIdResolved;
 			AtomSite m_Previous;
 		};
+
+		// Element Catalog's per-element color/radius edit. No DomainLayer involved - style isn't a
+		// domain concept - so unlike every other command in this file, Execute/Undo just flip
+		// between two AtomStyleTable::SetStyle calls and a window refresh; previousStyle comes from
+		// the payload (captured by the panel before its live drag preview started) rather than being
+		// self-discovered, since AtomStyleTable is only mutated here, on commit, not during the drag.
+		class SetElementStyleCommand final : public ICommand
+		{
+		public:
+			SetElementStyleCommand(WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable, SetElementStylePayload payload)
+				: m_RendererLayer(std::move(rendererLayer)), m_AtomStyleTable(std::move(atomStyleTable)), m_Payload(std::move(payload))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers", "Renderer layer unavailable.",
+						"SetElementStyleCommand: RendererLayer expired.");
+				}
+				m_AtomStyleTable.SetStyle(m_Payload.symbol, m_Payload.newStyle);
+				RefreshOpenWindowsForElementStyle(*rendererLayer, m_Payload.symbol, m_Payload.newStyle);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers", "Renderer layer unavailable.",
+						"SetElementStyleCommand::Undo: RendererLayer expired.");
+				}
+				m_AtomStyleTable.SetStyle(m_Payload.symbol, m_Payload.previousStyle);
+				RefreshOpenWindowsForElementStyle(*rendererLayer, m_Payload.symbol, m_Payload.previousStyle);
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Set " + m_Payload.symbol + " style";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			SetElementStylePayload m_Payload;
+		};
 	} // namespace
 
 	Unique<ICommand> CreateDeleteSelectedAtomsCommand(
@@ -1328,5 +1411,11 @@ namespace DefectStudio
 		WeakRef<DomainLayer> domainLayer, WeakRef<RendererLayer> rendererLayer, AtomPropertiesPayload payload)
 	{
 		return CreateUnique<SetAtomPropertiesCommand>(std::move(domainLayer), std::move(rendererLayer), std::move(payload));
+	}
+
+	Unique<ICommand> CreateSetElementStyleCommand(
+		WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable, SetElementStylePayload payload)
+	{
+		return CreateUnique<SetElementStyleCommand>(std::move(rendererLayer), std::move(atomStyleTable), std::move(payload));
 	}
 } // namespace DefectStudio

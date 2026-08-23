@@ -12,6 +12,11 @@ namespace DefectStudio
 		*m_VacancyStyle = std::move(vacancyStyle);
 	}
 
+	void AtomStyleTable::SetStyle(const std::string &symbol, const AtomRenderStyle &style)
+	{
+		(*m_Styles)[symbol] = style;
+	}
+
 	void AtomStyleTable::Clear()
 	{
 		m_Styles->clear();

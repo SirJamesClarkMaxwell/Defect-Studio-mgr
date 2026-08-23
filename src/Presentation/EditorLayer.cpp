@@ -551,7 +551,7 @@ namespace DefectStudio
 			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<ElementCatalogPanel>(
-				*rendererLayer, m_AtomStyleTable, m_AtomStylesPath, "Element Catalog", false);
+				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_AtomStylesPath, "Element Catalog", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member

@@ -164,4 +164,29 @@ namespace DefectStudio
 		WeakRef<DomainLayer> domainLayer,
 		WeakRef<RendererLayer> rendererLayer,
 		AtomPropertiesPayload payload);
+
+	// Bakes symbol's color/radius into every open window's already-built RendererAtomData/
+	// RendererBondData (colors/radii are resolved once at build time - see
+	// StructureRendererDataBuilder.cpp - not read live from AtomStyleTable per frame) without
+	// touching AtomStyleTable itself. Shared by the Element Catalog panel's live drag preview (which
+	// must NOT touch the authoritative table mid-drag, so Undo can still capture the pre-drag value)
+	// and by CreateSetElementStyleCommand's Execute/Undo (which does update the table, then calls
+	// this to match).
+	void RefreshOpenWindowsForElementStyle(RendererLayer &rendererLayer, const std::string &symbol, const AtomRenderStyle &style);
+
+	// Payload for "renderer.selection.set_element_style" (Element Catalog) - previousStyle is
+	// supplied by the caller rather than self-captured, since by the time this command's Execute
+	// runs the live drag preview (RefreshOpenWindowsForElementStyle) has typically already been
+	// mutating the render-side copies for many frames; AtomStyleTable itself is untouched until this
+	// command runs, so previousStyle must be the value from *before the drag started*, not "whatever
+	// AtomStyleTable currently holds" (same value in practice, just not safe to assume).
+	struct SetElementStylePayload
+	{
+		std::string symbol;
+		AtomRenderStyle previousStyle;
+		AtomRenderStyle newStyle;
+	};
+
+	[[nodiscard]] Unique<ICommand> CreateSetElementStyleCommand(
+		WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable, SetElementStylePayload payload);
 } // namespace DefectStudio
