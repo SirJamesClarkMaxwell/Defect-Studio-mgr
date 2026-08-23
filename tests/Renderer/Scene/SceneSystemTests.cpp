@@ -63,6 +63,23 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(windowState.structure.atoms[2].visible);
 	}
 
+	TEST(SceneSystemTests, PushSelectionAndVisibilityWritesBackBondSelectionAndVisibility)
+	{
+		SceneRegistry scene;
+		RendererWindowState windowState;
+		windowState.structure = BuildThreeAtomOneBondStructure();
+		SceneSystem::SyncSceneWithStructure(scene, windowState.structure);
+
+		Entity bondEntity = scene.BondEntityAt(0);
+		bondEntity.GetComponent<SelectionComponent>().selected = true;
+		bondEntity.GetComponent<VisibilityComponent>().visible = false;
+		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, windowState);
+
+		ASSERT_EQ(windowState.selectedBondIndices.size(), 1u);
+		EXPECT_EQ(windowState.selectedBondIndices.front(), 0u);
+		EXPECT_FALSE(windowState.structure.bonds[0].visible);
+	}
+
 	TEST(SceneSystemTests, SyncDestroysPreviousEntitiesOnReload)
 	{
 		SceneRegistry scene;

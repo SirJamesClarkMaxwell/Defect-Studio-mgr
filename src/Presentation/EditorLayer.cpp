@@ -37,6 +37,7 @@
 #include "Presentation/Panels/ExportImagePanel.hpp"
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
+#include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -539,6 +540,7 @@ namespace DefectStudio
 				m_CommandRegistry,
 				"Renderer",
 				true);
+			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
