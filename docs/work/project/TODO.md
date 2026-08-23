@@ -639,6 +639,29 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       Stary `Alt+M` (`renderer.labels.toggle` — surowe auto-etykiety na każdym wiązaniu, osobny
       mechanizm od pinów) stracił skrót na rzecz nowego "usuń zaznaczone" — komenda żyje dalej,
       dostępna z command palette po nazwie.
+- [x] **Narzędzie Measure w pionowym pasku toolbara — naprawione 2026-08-23 (zgłoszone jako "nie
+      działa").** Dwa realne, niezależne bugi:
+      1. Przyciski `##ToolMeasureBond`/`##ToolMeasureAngle` (`RendererPanelToolbar.cpp`) były
+         jednorazowymi akcjami (`active` hardcoded `false`, fire-and-forget event) zamiast trybem
+         narzędzia jak `Sel`/`3D cursor` — nie dało się ich w ogóle "zaznaczyć"/podświetlić. Naprawa:
+         `SelectionToolMode` dostał `MeasureBond`/`MeasureAngle` (`RendererTypes.hpp`), przyciski
+         teraz przez `publishToolToggle` jak reszta paska. Kliknięcie w viewport podczas aktywnego
+         narzędzia (`RendererPanel::handleMeasureToolClick`, nowa metoda obok
+         `handleCursor3DPlacement`) dokłada atom do zaznaczenia (reużywa `handleAtomPick` +
+         addytywny `AtomSelectionRequested`) aż do 2 (bond) / 3 (angle), wtedy strzela ten sam event
+         co klawisz `M`/`Shift+M` i czyści zaznaczenie — narzędzie zostaje aktywne, gotowe na kolejną
+         parę bez ponownego klikania w toolbar. Wejście w tryb (`onSelectionToolToggleRequested`)
+         czyści zaznaczenie z poprzedniego narzędzia, żeby pierwszy klik nie dociągnął przypadkowo
+         starych atomów do pary.
+      2. **Realny bug w `AddBondPinsWithinSet` (nie tylko UX):** funkcja szukała pary WYŁĄCZNIE wśród
+         istniejących `structure.bonds` — dla 2 zaznaczonych atomów bez chemicznego wiązania między
+         nimi (żadna para poza auto-bond cutoff) nic się nie działo, nawet przez stary klawisz `M`.
+         `AddAnglePinsWithinSet` miał już fallback na surowy kąt 3-punktowy gdy nic nie jest
+         zbondowane (`atomSet.size() == 3` bez trafienia) — bond-owa wersja fallbacku nie miała w
+         ogóle. Dodany analogiczny fallback: `atomSet.size() == 2` i zero trafień w pętli po
+         `structure.bonds` → pin surowej odległości między dowolnymi dwoma atomami. To był
+         prawdopodobny powód "wybieram 2 atomy, label się nie pojawia" niezależnie od bugu #1.
+         Zweryfikowane: `MSBuild /t:DefectStudio` (Debug) czysty build.
 - [x] **Ciągły ruch trzymanym klawiszem — zrobione 2026-08-22.** Dotychczasowy mechanizm (GLFW
       `GLFW_REPEAT`, `repeatable: true` w `keybindings.yaml`) dawał ~10-15 Hz i "rwany" ruch, a dla
       `Ctrl+Shift+Arrow` w ogóle przestawał się powtarzać po Alt-Tabie (potwierdzone diagnostycznymi

@@ -1699,8 +1699,17 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		windowState->activeSelectionTool =
+		const SelectionToolMode newTool =
 			(windowState->activeSelectionTool == event.tool) ? SelectionToolMode::None : event.tool;
+		// Entering a measure tool starts from a clean pick - leftover selection from whatever tool
+		// was active before would otherwise silently join the first click as part of the pair/triple.
+		if (newTool == SelectionToolMode::MeasureBond || newTool == SelectionToolMode::MeasureAngle)
+		{
+			for (const entt::entity entity : windowState->sceneRegistry.Registry().view<SelectionComponent>())
+				windowState->sceneRegistry.Registry().get<SelectionComponent>(entity).selected = false;
+			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState->sceneRegistry, *windowState);
+		}
+		windowState->activeSelectionTool = newTool;
 		windowState->selectionDragActive = false;
 	}
 
@@ -1815,13 +1824,25 @@ namespace DefectStudio
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			const std::size_t countBefore = windowState.pinnedMeasurements.size();
+			bool pinnedAny = false;
 			for (const RendererBondData &bond : windowState.structure.bonds)
 			{
 				if (atomSet.contains(bond.firstAtomIndex) && atomSet.contains(bond.secondAtomIndex))
+				{
 					ToggleMeasurementPin(
 						windowState, {bond.firstAtomIndex, bond.secondAtomIndex}, bond.secondAtomPeriodicOffset,
 						/*removeIfPresent=*/false);
+					pinnedAny = true;
+				}
 			}
+			// Falls back to a raw 2-point distance pin when the pair has no actual bond in the model -
+			// mirrors AddAnglePinsWithinSet's 3-point fallback below. Without this, measuring the
+			// distance between two atoms the auto-bond cutoff doesn't connect (e.g. two atoms across a
+			// defect) silently did nothing, since the loop above only ever matches real bonds.
+			if (!pinnedAny && atomSet.size() == 2)
+				ToggleMeasurementPin(
+					windowState, std::vector<std::size_t>(atomSet.begin(), atomSet.end()), glm::vec3(0.0f),
+					/*removeIfPresent=*/false);
 			// Add-only, so a pin count unchanged from countBefore means nothing was actually added
 			// (every bonded pair in the selection was already pinned) - drop the snapshot pushed above
 			// rather than leave a no-op entry in the undo history (repeatedly pressing M/Ctrl+M over an

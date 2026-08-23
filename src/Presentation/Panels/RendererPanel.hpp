@@ -40,6 +40,7 @@ namespace DefectStudio
 		void applyContinuousPan(RendererWindowState &windowState, float deltaTime);
 		void onViewportFocusChanged(const std::string &windowId, bool focused);
 		void handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive);
+		void handleMeasureToolClick(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		void handleBoxSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		void handleCircleSelectDrag(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		[[nodiscard]] std::vector<std::size_t> hitTestRect(

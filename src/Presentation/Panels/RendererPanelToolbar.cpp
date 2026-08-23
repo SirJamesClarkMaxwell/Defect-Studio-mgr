@@ -517,18 +517,18 @@ namespace DefectStudio
 
 		ImGui::Spacing();
 
-		if (toolButton("##ToolMeasureBond", "tool-measure-bond.png", "Len", "Measure bond length (selected atoms, M)", false))
+		if (toolButton(
+				"##ToolMeasureBond", "tool-measure-bond.png", "Len", "Measure bond length - click any 2 atoms (M)",
+				windowState.activeSelectionTool == SelectionToolMode::MeasureBond))
 		{
-			RendererEvents::Viewport::LabelsToggleSelectedBondRequested event;
-			event.windowId = windowState.windowId;
-			eventBus->Publish(event);
+			publishToolToggle(SelectionToolMode::MeasureBond);
 		}
 
-		if (toolButton("##ToolMeasureAngle", "tool-measure-angle.png", "Ang", "Measure angle (selected atoms, Shift+M)", false))
+		if (toolButton(
+				"##ToolMeasureAngle", "tool-measure-angle.png", "Ang", "Measure angle - click any 3 atoms (Shift+M)",
+				windowState.activeSelectionTool == SelectionToolMode::MeasureAngle))
 		{
-			RendererEvents::Viewport::LabelsToggleSelectedAngleRequested event;
-			event.windowId = windowState.windowId;
-			eventBus->Publish(event);
+			publishToolToggle(SelectionToolMode::MeasureAngle);
 		}
 
 		ImGui::Spacing();

@@ -88,7 +88,11 @@ namespace DefectStudio
 		Circle,
 		// Click-to-place 3D cursor (vertical toolbar "3D point" tool) - shares this enum so it's
 		// mutually exclusive with Box/Circle the same way they already are with each other.
-		Cursor3D
+		Cursor3D,
+		// Click 2 (bond) / 3 (angle) atoms in the viewport to auto-pin a measurement label - shares
+		// the enum for the same mutual-exclusion reason as Cursor3D.
+		MeasureBond,
+		MeasureAngle
 	};
 
 	// Which ImGuizmo::OPERATION the viewport gizmo currently shows for the selection (G/R/S).

@@ -315,6 +315,11 @@ namespace DefectStudio
 				(void)handleCursor3DPlacement(windowState, mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
 			}
 		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::MeasureBond ||
+			windowState.activeSelectionTool == SelectionToolMode::MeasureAngle)
+		{
+			handleMeasureToolClick(windowState, imageOrigin, hovered);
+		}
 		else if (hovered)
 		{
 			ImGuiIO &io = ImGui::GetIO();
@@ -433,6 +438,51 @@ namespace DefectStudio
 			event.additive = additive;
 			eventBus->Publish(event);
 		}
+	}
+
+	// Vertical-toolbar Measure Bond/Angle tool: click accumulates atoms into the normal selection
+	// (reusing handleAtomPick's raycast and the existing additive-toggle semantics of
+	// AtomSelectionRequested) until it reaches 2 (bond) or 3 (angle), fires the same bulk-pin event
+	// the M/Shift+M keybinds use, then clears the selection so the next click starts a fresh pick -
+	// the tool itself stays active (VESTA-style: keep measuring pairs without re-selecting the tool).
+	void RendererPanel::handleMeasureToolClick(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered)
+	{
+		if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+			return;
+
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		const float relX = mousePos.x - imageOrigin.x;
+		const float relY = mousePos.y - imageOrigin.y;
+		if (relX < 0.0f || relY < 0.0f || relX >= windowState.viewportSize.x || relY >= windowState.viewportSize.y)
+			return;
+
+		handleAtomPick(windowState, relX, relY, /*additive=*/!windowState.selectedAtomIndices.empty());
+
+		const std::size_t required = windowState.activeSelectionTool == SelectionToolMode::MeasureBond ? 2 : 3;
+		if (windowState.selectedAtomIndices.size() < required)
+			return;
+
+		Ref<EventBus> eventBus = m_Layer.GetEventBus();
+		if (eventBus == nullptr)
+			return;
+
+		if (windowState.activeSelectionTool == SelectionToolMode::MeasureBond)
+		{
+			RendererEvents::Viewport::LabelsToggleSelectedBondRequested pinEvent;
+			pinEvent.windowId = windowState.windowId;
+			eventBus->Publish(pinEvent);
+		}
+		else
+		{
+			RendererEvents::Viewport::LabelsToggleSelectedAngleRequested pinEvent;
+			pinEvent.windowId = windowState.windowId;
+			eventBus->Publish(pinEvent);
+		}
+
+		RendererEvents::Viewport::AtomSelectionRequested clearEvent;
+		clearEvent.windowId = windowState.windowId;
+		clearEvent.additive = false;
+		eventBus->Publish(clearEvent);
 	}
 
 	// Ray-casts relX/relY (viewport-relative pixels) into the scene: snaps to the picked atom if the
