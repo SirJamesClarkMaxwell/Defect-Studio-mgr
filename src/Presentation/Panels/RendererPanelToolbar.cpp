@@ -177,9 +177,29 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
-		auto axisButton = [&](const char *label, const glm::vec3 &axis, const char *sourceAction, const char *tooltip)
+		// Like iconButton above but sized with axisButtonSize (its own configurable size, grouped
+		// visually with these 6 buttons) instead of iconButtonSize - kept as its own lambda rather
+		// than generalizing iconButton's signature, since that one's already called many times with
+		// the implicit iconButtonSize capture.
+		auto axisButton =
+			[&](const char *id, const char *iconFileName, const char *fallback, const glm::vec3 &axis,
+				const char *sourceAction, const char *tooltip)
 		{
-			if (ImGui::Button(label, axisButtonSize))
+			bool pressed = false;
+			const RendererToolbarIconTexture *icon = m_Layer.GetToolbarIcon(iconFileName);
+			if (icon != nullptr && icon->rendererId != 0)
+			{
+				const ImTextureRef textureRef(reinterpret_cast<void *>(static_cast<uintptr_t>(icon->rendererId)));
+				pressed = ImGui::ImageButton(
+					id, textureRef, axisButtonSize, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
+					ImVec4(0.0f, 0.0f, 0.0f, 0.0f), ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+			}
+			else
+			{
+				pressed = ImGui::Button(fallback, axisButtonSize);
+			}
+
+			if (pressed)
 			{
 				RendererViewCamera animated = *windowState.camera;
 				animated.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -212,22 +232,28 @@ namespace DefectStudio
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
 		const glm::mat3 &reciprocal = windowState.structure.reciprocalLattice;
-		axisButton("a", lattice[0], "toolbar.align_axis_a", "Align to a-axis (1)");
+		axisButton("##AxisA", "tool-axis-a.png", "a", lattice[0], "toolbar.align_axis_a", "Align to a-axis (1)");
 		sameLineTight();
 
-		axisButton("b", lattice[1], "toolbar.align_axis_b", "Align to b-axis (2)");
+		axisButton("##AxisB", "tool-axis-b.png", "b", lattice[1], "toolbar.align_axis_b", "Align to b-axis (2)");
 		sameLineTight();
 
-		axisButton("c", lattice[2], "toolbar.align_axis_c", "Align to c-axis (3)");
+		axisButton("##AxisC", "tool-axis-c.png", "c", lattice[2], "toolbar.align_axis_c", "Align to c-axis (3)");
 		sameLineTight();
 
-		axisButton("a*", reciprocal[0], "toolbar.align_axis_a_star", "Align to a* (reciprocal) axis (Alt+1)");
+		axisButton(
+			"##AxisAStar", "tool-axis-a-star.png", "a*", reciprocal[0], "toolbar.align_axis_a_star",
+			"Align to a* (reciprocal) axis (Alt+1)");
 		sameLineTight();
 
-		axisButton("b*", reciprocal[1], "toolbar.align_axis_b_star", "Align to b* (reciprocal) axis (Alt+2)");
+		axisButton(
+			"##AxisBStar", "tool-axis-b-star.png", "b*", reciprocal[1], "toolbar.align_axis_b_star",
+			"Align to b* (reciprocal) axis (Alt+2)");
 		sameLineTight();
 
-		axisButton("c*", reciprocal[2], "toolbar.align_axis_c_star", "Align to c* (reciprocal) axis (Alt+3)");
+		axisButton(
+			"##AxisCStar", "tool-axis-c-star.png", "c*", reciprocal[2], "toolbar.align_axis_c_star",
+			"Align to c* (reciprocal) axis (Alt+3)");
 		sameLineTight();
 
 		if (iconButton("##OrbitUp", "rotate-arrow-z-in.png", "^", "Orbit up relative to camera (Up, hold Alt for continuous)"))
