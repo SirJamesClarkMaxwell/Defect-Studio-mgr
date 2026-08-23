@@ -1509,8 +1509,9 @@ namespace DefectStudio
 
 		// Smaller pick band than the atom gizmo's kPickMaxDistance (130px) - a label has no atom
 		// underneath competing for the same screen space, so there is no need for as much clearance.
-		constexpr float kPickMinDistance = 14.0f;
-		constexpr float kPickMaxDistance = 70.0f;
+		// (Was 14/70 - bumped up, the gizmo was cramped enough to overlap the label's own text.)
+		constexpr float kPickMinDistance = 20.0f;
+		constexpr float kPickMaxDistance = 100.0f;
 
 		if (windowState.gizmoOperation == GizmoOperation::Rotate || windowState.gizmoOperation == GizmoOperation::Scale)
 		{
@@ -1626,8 +1627,8 @@ namespace DefectStudio
 		if (pivotOnScreen && !windowState.labelGizmoDragging)
 		{
 			ImDrawList *axisDrawList = ImGui::GetWindowDrawList();
-			constexpr float kArrowHeadLength = 12.0f;
-			constexpr float kArrowHeadHalfWidth = 5.0f;
+			constexpr float kArrowHeadLength = 16.0f;
+			constexpr float kArrowHeadHalfWidth = 7.0f;
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				if (!axisValid[axis])
@@ -1649,7 +1650,7 @@ namespace DefectStudio
 		int hoveredAxis = -1;
 		if (hovered && pivotOnScreen && !windowState.labelGizmoDragging)
 		{
-			constexpr float kPickPerpTolerance = 12.0f;
+			constexpr float kPickPerpTolerance = 16.0f;
 			const glm::vec2 fromPivot = mousePos - pivotScreen;
 			const float radial = glm::length(fromPivot);
 			float bestPerp = kPickPerpTolerance;
@@ -1843,7 +1844,13 @@ namespace DefectStudio
 			return false;
 
 		const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-		constexpr float kPickRadius = 40.0f;
+		// An unpinned/undragged label's anchor sits exactly at its bond's midpoint (or angle's
+		// vertex) - this pick test runs before handleViewportPick's own atom/bond hit-test and
+		// unconditionally consumes the click if it hits (see gizmoCapturing in Render()), so a
+		// generous radius here made every bond carrying a label nearly impossible to click as a bond:
+		// any click within it always won the label instead, however much closer the bond itself was.
+		// Was 40px; still comfortably clickable but no longer swallows most of the bond around it.
+		constexpr float kPickRadius = 16.0f;
 		int hitIndex = -1;
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
