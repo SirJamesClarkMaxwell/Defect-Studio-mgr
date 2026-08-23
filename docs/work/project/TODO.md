@@ -1367,7 +1367,12 @@ kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
 - [ ] **Moduł generacji testów zbieżności i defektów do obliczeń wielkoskalowych — zażądane
       2026-08-21:** automatyczna seria testów zbieżności (k-points/ENCUT, seria inputów + parsing
       wyników), masowa/high-throughput generacja struktur defektowych (kombinacje pozycji/typów/
-      ładunków) pod batch obliczenia
+      ładunków) pod batch obliczenia. **Prior art znaleziony 2026-08-24 przy okazji T16:**
+      `punktukas.automatization` (`band_path.py`/`cp2k_convergence.py`/`equation_of_state.py`/
+      `spin_contamination.py`/`benchmark_mpi_config.py` w źródle `punktukas-tools`) już częściowo
+      pokrywa ten temat po stronie Python — sprawdzić przy starcie tego zadania zanim cokolwiek się
+      projektuje od zera, ten sam duch co "nie reimplementować OUTCAR parsing" (zob.
+      `docs/work/project/plans/2026-08-23-python-scripting-console.md` sekcja 2.5).
 - [ ] Defect thermodynamics
 - [ ] **Python scripting panel — wprost zażądane 2026-08-21, priorytet w górę z Backlogu:** REPL w
       UI, styl ipython (podpowiedzi składni + ścieżek), hot-reload przez file watcher np. `efsw`,

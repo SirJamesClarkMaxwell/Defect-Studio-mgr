@@ -117,6 +117,54 @@ wzorzec) i część (4) (żywy proces z ciągłym I/O) jest tym samym prymitywem
 
 ---
 
+## 2.5 Rola `punktukas-tools` — nie wynajdywać koła na nowo (zweryfikowane w źródle, 2026-08-24)
+
+> Użytkownik wprost zapytał czy to zostało wzięte pod uwagę — pierwsza wersja tego planu
+> referencjonowała `punktukas` tylko pośrednio (przez `VaspOutputBridge`), bez sprawdzenia
+> faktycznego API w źródle. Sprawdzone teraz bezpośrednio w
+> `C:\Users\fzabi\punktukas-tools\puntukas_tools\puntukas\` (prywatne repo poza tym projektem —
+> **nadal nie wolno go vendorować/commitować**, zob. `TODO.md` "Infrastruktura").
+
+- **`puntukas.vasp.output.VaspOutput`** (`vasp/output.py:22,140`) — `.etot` to zwykła properties
+  delegująca do `self.outcar.etot` (`vasp/outcar/outcar.py:26`, `HasTraits` z polem `etot`, regex na
+  `"free  energy   TOTEN = ..."`). **`.OUTCAR['free energy']` z przykładu użytkownika nie istnieje
+  jako dosłowna składnia w dzisiejszym `punktukas`** — realny odpowiednik to
+  `VaspOutput(path).etot`. To potwierdza wcześniejszą adnotację w tym planie ("składnia
+  orientacyjna, nie kontrakt"), ale ważne żeby **nie projektować bespoke schematu kluczy
+  `['free energy']`/`['bandgap']` od zera** — `ds` ma czytać `.etot`/`.bandgap`/itd. bezpośrednio z
+  `VaspOutput`, nie wymyślać własnego mapowania nazw pól.
+- **`puntukas.vasp.multidet_relax.calculator.MultidetVasp`** (`calculator.py:14-121`) — **to jest
+  dokładnie to, co przykład ZPL użytkownika robi ręcznie.** `MultidetVasp` to `ase.Calculator`
+  czytający katalog z podfolderami (`single_calc_names`, domyślnie `("mixed", "triplet")`, ale
+  **w pełni konfigurowalne**, więc `("exc_ms", "exc_ms_triplet", "ground_state")` też pasuje),
+  budujący `VaspOutput` per podfolder i łączący `.etot` przez **podawaną przez użytkownika lambdę**
+  (`energy_combine_eqn`, domyślnie `lambda mixed, triplet: 2*mixed - triplet` — dosłownie
+  `2*exc_singlet - exc_triplet` z przykładu, uogólnialne do N wejść dla pełnego ZPL z members
+  `ground_state`). **Wniosek: `ds` nie powinno reimplementować kombinowania energii
+  multi-kalkulacyjnego (ZPL i podobne) — to już istnieje i jest ogólne.** Rola `ds` to najwyżej
+  cienki convenience wrapper budujący `MultidetVasp(...)` z metadanych, które DefectStudio już zna
+  (który folder to `exc_ms`, który `ground_state` — z nowego flow tworzenia defektu, `TODO.md`
+  T08.6.3), nie osobna logika naukowa.
+- **`puntukas.automatization`** (`band_path.py`, `cp2k_convergence.py`, `equation_of_state.py`,
+  `spin_contamination.py`, `benchmark_mpi_config.py`) — **bezpośredni prior art dla zupełnie
+  innego zadania w Backlogu** ("Moduł generacji testów zbieżności i defektów..."), niepowiązanego z
+  tym epikiem wprost, ale warty dopisania jako cross-reference w `TODO.md` przy tamtym zadaniu, żeby
+  ktoś nie zaczął tego pisać od zera później.
+- **Konsekwencja dla podziału pracy `ds` (rozwija sekcję 8 niżej):** dla strony "czytanie wyników
+  obliczeń" `ds` ma dokładnie **jedną** realnie nową robotę — **adresowanie** (mapowanie nazw/tagów
+  projektu DefectStudio, o których `punktukas` nic nie wie — `"okeanos"`, `"6-7"`, `"exc_ms"` — na
+  ścieżki na dysku). Gdy już ma ścieżkę, **oddaje ją klasom `punktukas` (`VaspOutput`,
+  `MultidetVasp`, `Outcar`) zamiast cokolwiek parsować/liczyć samemu.**
+- **Ważna konsekwencja dla sekcji 3:** ta połowa (`ds.project`/adresowanie + delegacja do
+  `punktukas`) **nie wymaga wcale żywego, podłączonego `DefectStudio.exe`** — to czysto
+  dyskowy lookup (manifest projektu/tagi → ścieżka), działający identycznie z uruchomioną appką i
+  bez niej, dokładnie jak wygląda przykład użytkownika (zwykły skrypt, zero widocznego "połącz się
+  z appką"). **Decyzja Opcja A/B dotyczy WYŁĄCZNIE `ds.scene`/`ds.commands`/`ds.events`** (żywy
+  viewport) — nie blokuje w ogóle strony adresowania/odczytu wyników. To odblokowuje wcześniejszy
+  start tej części (zob. zaktualizowana kolejność w sekcji 10).
+
+---
+
 ## 3. Fundamentalna decyzja architektoniczna — **wymaga potwierdzenia przed kodem**
 
 Wszystko poniżej zależy od jednej rzeczy: **gdzie żyje kod Python, który dotyka `ds`, i jak
@@ -316,18 +364,23 @@ powód do preferowania Opcji B.
 
 ## 8. `ds` moduł / model adresowania (`project.okeanos["6-7"]["exc_ms"]`)
 
-Rozszerza to co już dopisane w `TODO.md` Backlogu (2026-08-23). Konkretne luki do zamknięcia
-**przed** implementacją `ds.project`:
+Rozszerza to co już dopisane w `TODO.md` Backlogu (2026-08-23), skorygowane po weryfikacji
+`punktukas` w sekcji 2.5 — **`ds.project` to warstwa adresowania, nie warstwa naukowa.** Wszystko
+co dotyczy parsowania/łączenia wyników (OUTCAR, ZPL-style kombinacje) idzie przez `punktukas`
+bezpośrednio (`VaspOutput`, `MultidetVasp`), nie przez nowy kod DefectStudio. Konkretne luki do
+zamknięcia **przed** implementacją `ds.project`:
 1. **Rejestry `ProjectWorkspace` potrzebują wyszukiwania po nazwie/tagu + enumeracji**, nie tylko
    `Find(uuid)` — nowe metody na `StructureRegistry`/`DefectRegistry`/`CalculationRegistry`
    (`FindByTag`/`All()` czy podobne, do zaprojektowania).
 2. **`CalculationRecord` potrzebuje pola na lokalizację danych** (ścieżka na dysku/mount, docelowo
    referencja do `ServerProfile` z T07.5.2 gdy ten zaistnieje) — dziś nic nie łączy
    `CalculationRecord` z konkretnym katalogiem zawierającym `OUTCAR`.
-3. **`.OUTCAR['free energy']` to lazy read przez istniejący `VaspOutputBridge`**
-   (`src/ScientificRuntime/Python/VaspOutputBridge.*`) — `ds` nie parsuje OUTCAR samo, woła
-   istniejący bridge i cache'uje wynik per `CalculationRecord` (polityka cache: do ustalenia —
-   invalidacja gdy plik się zmieni na dysku, timestamp-based prawdopodobnie wystarczy).
+3. **`ds.project["okeanos"]["6-7"]["exc_ms"]` rozwiązuje się do ścieżki/lekkiego uchwytu
+   (`CalculationHandle(path=...)`), nie do sparsowanych danych.** Dalsze użycie (`.etot`,
+   `.bandgap`, budowa `MultidetVasp`) to bezpośrednie wywołanie `punktukas` na tej ścieżce — `ds`
+   nie cache'uje/nie reimplementuje parsowania. Jeśli cache okaże się potrzebny z powodów
+   wydajnościowych (network-mounted OUTCAR, drogi re-parse), to cache **na poziomie
+   `punktukas`-owych wywołań** (memoize po ścieżce+mtime), nie nowy schemat danych.
 4. **Co dokładnie znaczy `"6-7"` i `"exc_ms"`** — to są **tagi/nazwy zdefiniowane przez
    użytkownika**, nie predefiniowana appka-owa lista (potwierdza to nowy wpis TODO o tworzeniu
    defektu: "typy obliczeń do ustalenia w rozmowie z użytkownikiem"). `ds.project[...]` to
@@ -335,6 +388,10 @@ Rozszerza to co już dopisane w `TODO.md` Backlogu (2026-08-23). Konkretne luki 
    `CalculationRecord.displayName`, ale **dokładna gramatyka indeksowania (`project.okeanos["6-7"]`
    — co to jest "okeanos"? nazwa projektu? serwer? kolekcja?) nie jest ustalona przez ten plan** —
    zob. sekcja 11.
+5. **`ds.project` może być czystym pakietem Python czytającym pliki projektu bezpośrednio z
+   dysku** (manifest/tagi), **niezależnie od decyzji Opcja A/B w sekcji 3** i bez potrzeby żywego
+   `DefectStudio.exe` — zob. sekcja 2.5, ostatni punkt. To osobny, prostszy tor pracy niż
+   `ds.scene`/`ds.commands`.
 
 ---
 
@@ -351,23 +408,28 @@ użytkownik ręcznie zamontował/otworzył właściwy katalog, `ds` czyta z nieg
 
 ## 10. Proponowana kolejność faz
 
-Kolejność wymuszona zależnościami (fundament → funkcje niezależne od decyzji z sekcji 3 → funkcje
-zależne).
+Kolejność wymuszona zależnościami. **Zmiana po sekcji 2.5:** `ds.project`/adresowanie
+(dawny punkt 8) nie zależy wcale od decyzji Opcja A/B ani od `InteractiveProcess` — to osobny,
+niezależny tor, może iść równolegle od samego początku, nie na końcu.
 
-1. **Decyzja Opcja A/B (sekcja 3) + rejestry z nazwą/enumeracją (sekcja 8, pkt 1)** — fundament,
-   blokuje 3-7.
-2. **Syntax highlighting `.py`/`.md` + tabs w `TextEditorPanel` (5.1, 5.2 częściowo, 5.6)** —
-   zero zależności od decyzji #1, czysty zysk, rób od razu równolegle z #1.
-3. **`InteractiveProcess` (sekcja 4)** — fundament pod #4 i #6 (jeśli Opcja B/subprocess REPL).
-4. **`ds` serwer IPC minimalny (Opcja B) + `ds.scene`/`ds.commands` read+write podstawowe
+**Tor 1 — adresowanie (niezależny od Opcji A/B, czysto dyskowy, zob. 2.5/8):**
+1. **Rejestry z nazwą/enumeracją (sekcja 8, pkt 1-2)** + **`ds.project` jako czysty pakiet Python**
+   rozwiązujący tagi na ścieżki i oddający je bezpośrednio `punktukas` (`VaspOutput`/
+   `MultidetVasp`) — może ruszyć od razu, zero zależności od reszty planu.
+
+**Tor 2 — scena/konsola/terminal (wymaga decyzji z sekcji 3):**
+2. **Decyzja Opcja A/B (sekcja 3)** — blokuje resztę toru 2.
+3. **Syntax highlighting `.py`/`.md` + tabs w `TextEditorPanel` (5.1, 5.2 częściowo, 5.6)** —
+   zero zależności od #2, czysty zysk, rób równolegle z #2/torem 1.
+4. **`InteractiveProcess` (sekcja 4)** — fundament pod #6 i #7 (jeśli Opcja B/subprocess REPL).
+5. **`ds` serwer IPC minimalny (Opcja B) + `ds.scene`/`ds.commands` read+write podstawowe
    operacje** (dodaj/usuń/przesuń atom przez istniejące `ICommand`, zob. sekcja 6) — pierwszy
    realny dowód, że skrypt Python rusza scenę i cofa się przez `Ctrl+Z`.
-5. **Hot-reload file watcher (polling) dla `.py`** (5.2) — mały krok po #4.
-6. **Terminal PS1 (5.4)** — niezależne od #4, ale korzysta z #3. Może iść równolegle z #4/#5.
-7. **Konsola Python w UI (5.5)** — po #3 i #4 (potrzebuje obu: żywego procesu + działającego `ds`).
-8. **`ds.project`/adresowanie po tagach (sekcja 8, pkt 2-4)** — po #4, gdy jest już co adresować.
+6. **Hot-reload file watcher (polling) dla `.py`** (5.2) — mały krok po #5.
+7. **Terminal PS1 (5.4)** — niezależne od #5, ale korzysta z #4. Może iść równolegle z #5/#6.
+8. **Konsola Python w UI (5.5)** — po #4 i #5 (potrzebuje obu: żywego procesu + działającego `ds`).
 9. **`.ipynb` (5.3)** — najdroższe pojedynczo (nowe UI + integracja `jupyter_client`), na koniec,
-   po #4 (kernel importuje ten sam `ds`).
+   po #5 (kernel importuje ten sam `ds` — obie połowy, `ds.project` z toru 1 i `ds.scene` z toru 2).
 10. **Stretch (dowolna kolejność, niski priorytet):** `LspBridge` autocomplete, markdown live
     preview, ConPTY dla terminala, wielu serwerów (zależne od T07.5.2 osobno).
 
