@@ -23,6 +23,7 @@
 #include "Presentation/Panels/LoggingPanel.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
 #include "Presentation/Panels/ProjectTreePanel.hpp"
+#include "Renderer/AtomStyleTable.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/TaskMonitorWindow.hpp"
 
@@ -112,7 +113,9 @@ namespace DefectStudio
 		                         WeakRef<KeymapResolver> keymapResolver,
 		                         WeakRef<ContextManager> contextManager,
 		                         WeakRef<CommandRegistry> commandRegistry,
-		                         WeakRef<RendererLayer> rendererLayer);
+		                         WeakRef<RendererLayer> rendererLayer,
+		                         AtomStyleTable atomStyleTable = {},
+		                         Path atomStylesPath = {});
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 		void ApplyConfig(const ApplicationConfig &config);
 		void ExportConfig(ApplicationConfig &config) const;
@@ -195,6 +198,8 @@ namespace DefectStudio
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		WeakRef<RendererLayer> m_RendererLayer;
+		AtomStyleTable m_AtomStyleTable;
+		Path m_AtomStylesPath;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;
 		bool m_CommandPaletteOpenRequested = false;

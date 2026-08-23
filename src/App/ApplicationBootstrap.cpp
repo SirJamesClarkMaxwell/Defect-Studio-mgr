@@ -790,6 +790,7 @@ namespace DefectStudio
 			// Kept for RendererRuntimeOpenCoordinator (Project Tree "Open Defect"), which needs the
 			// same tables to build windows at runtime the way this startup path builds them once.
 			m_RendererAtomStyleTable = composition.assets.atomStyleTable;
+			m_RendererAtomStylesPath = composition.assets.atomStylesPath;
 			m_RendererElementPropertiesTable = composition.assets.elementPropertiesTable;
 			rendererStartupConfig = BuildRendererStartupConfig(m_Config, std::move(composition));
 			timer.Finish(true);
@@ -961,7 +962,9 @@ namespace DefectStudio
 					coreLayer->GetKeymapResolverHandle(),
 					coreLayer->GetContextManagerHandle(),
 					coreLayer->GetCommandRegistryHandle(),
-					rendererLayer);
+					rendererLayer,
+					m_RendererAtomStyleTable,
+					m_RendererAtomStylesPath);
 				timer.Finish(true);
 			}
 			{

@@ -45,6 +45,25 @@ namespace DefectStudio
 				return VacancyRenderMode::Solid;
 			return VacancyRenderMode::Ghost;
 		}
+
+		[[nodiscard]] const char *VacancyRenderModeToString(VacancyRenderMode mode)
+		{
+			switch (mode)
+			{
+				case VacancyRenderMode::Wireframe:
+					return "wireframe";
+				case VacancyRenderMode::Solid:
+					return "solid";
+				case VacancyRenderMode::Ghost:
+				default:
+					return "ghost";
+			}
+		}
+
+		void EmitColor(YAML::Emitter &emit, const glm::vec3 &color)
+		{
+			emit << YAML::Flow << YAML::BeginSeq << color.x << color.y << color.z << YAML::EndSeq;
+		}
 	} // namespace
 
 	bool AtomStyleIO::LoadFromFile(
@@ -117,6 +136,54 @@ namespace DefectStudio
 			}
 
 			return true;
+		}
+		catch (const std::exception &exception)
+		{
+			outError = exception.what();
+			return false;
+		}
+	}
+
+	bool AtomStyleIO::SaveToFile(
+		const Path &path,
+		const std::unordered_map<std::string, AtomRenderStyle> &styles,
+		const VacancyRenderStyle &vacancyStyle,
+		std::string &outError)
+	{
+		try
+		{
+			YAML::Emitter emit;
+			emit << YAML::BeginMap;
+
+			emit << YAML::Key << "vacancy" << YAML::Value << YAML::BeginMap;
+			emit << YAML::Key << "color" << YAML::Value;
+			EmitColor(emit, vacancyStyle.color);
+			emit << YAML::Key << "display_radius" << YAML::Value << vacancyStyle.displayRadius;
+			emit << YAML::Key << "opacity" << YAML::Value << vacancyStyle.opacity;
+			emit << YAML::Key << "render_mode" << YAML::Value << VacancyRenderModeToString(vacancyStyle.renderMode);
+			emit << YAML::EndMap;
+
+			std::vector<std::string> symbols;
+			symbols.reserve(styles.size());
+			for (const auto &[symbol, style] : styles)
+				symbols.push_back(symbol);
+			std::sort(symbols.begin(), symbols.end());
+
+			emit << YAML::Key << "elements" << YAML::Value << YAML::BeginMap;
+			for (const std::string &symbol : symbols)
+			{
+				const AtomRenderStyle &style = styles.at(symbol);
+				emit << YAML::Key << symbol << YAML::Value << YAML::BeginMap;
+				emit << YAML::Key << "color" << YAML::Value;
+				EmitColor(emit, style.color);
+				emit << YAML::Key << "display_radius" << YAML::Value << style.displayRadius;
+				emit << YAML::EndMap;
+			}
+			emit << YAML::EndMap;
+
+			emit << YAML::EndMap;
+
+			return TextFileIO::Save(path, emit.c_str(), outError);
 		}
 		catch (const std::exception &exception)
 		{

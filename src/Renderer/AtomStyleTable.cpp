@@ -8,26 +8,26 @@ namespace DefectStudio
 		std::unordered_map<std::string, AtomRenderStyle> styles,
 		VacancyRenderStyle vacancyStyle)
 	{
-		m_Styles = std::move(styles);
-		m_VacancyStyle = std::move(vacancyStyle);
+		*m_Styles = std::move(styles);
+		*m_VacancyStyle = std::move(vacancyStyle);
 	}
 
 	void AtomStyleTable::Clear()
 	{
-		m_Styles.clear();
+		m_Styles->clear();
 	}
 
 	const AtomRenderStyle &AtomStyleTable::GetStyle(const std::string &symbol) const
 	{
-		const auto found = m_Styles.find(symbol);
-		if (found != m_Styles.end())
+		const auto found = m_Styles->find(symbol);
+		if (found != m_Styles->end())
 			return found->second;
-		return m_FallbackStyle;
+		return *m_FallbackStyle;
 	}
 
 	const VacancyRenderStyle &AtomStyleTable::GetVacancyStyle() const
 	{
-		return m_VacancyStyle;
+		return *m_VacancyStyle;
 	}
 
 	glm::vec3 AtomStyleTable::Color(const std::string &symbol) const
@@ -42,6 +42,6 @@ namespace DefectStudio
 
 	std::size_t AtomStyleTable::Size() const
 	{
-		return m_Styles.size();
+		return m_Styles->size();
 	}
 } // namespace DefectStudio

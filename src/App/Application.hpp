@@ -20,6 +20,7 @@
 #include "Core/Notifications/Notifier.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 
@@ -156,6 +157,7 @@ namespace DefectStudio
 		// Captured from ComposeRendererStartup's asset bundle for reuse by runtime structure opens
 		// (Project Tree "Open Defect") - see RendererRuntimeOpenCoordinator.
 		AtomStyleTable m_RendererAtomStyleTable;
+		Path m_RendererAtomStylesPath;
 		ElementPropertiesTable m_RendererElementPropertiesTable;
 		Unique<RendererRuntimeOpenCoordinator> m_RendererRuntimeOpenCoordinator;
 

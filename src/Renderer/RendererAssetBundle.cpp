@@ -169,6 +169,7 @@ namespace DefectStudio
 		Result<void> atomStylesResult = LoadAtomStyles(paths.atomStylesPath, bundle.atomStyleTable);
 		if (!atomStylesResult.HasValue())
 			return atomStylesResult.Error();
+		bundle.atomStylesPath = paths.atomStylesPath;
 
 		Result<void> elementPropertiesResult = LoadElementProperties(paths.elementPropertiesPath, bundle.elementPropertiesTable);
 		if (!elementPropertiesResult.HasValue())

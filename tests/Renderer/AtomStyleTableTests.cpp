@@ -37,6 +37,23 @@ namespace DefectStudio::Tests
 		EXPECT_NEAR(vacancy.displayRadius, 0.45f, 1e-3f);
 	}
 
+	TEST(AtomStyleTableTests, CopiesShareUnderlyingDataAfterReplaceStyles)
+	{
+		// Deliberate: a copy taken before a later ReplaceStyles must still see it. Renderer commands
+		// are handed a copy of AtomStyleTable at registration time (RendererCommandRegistration.cpp),
+		// long before any UI can edit it - without this sharing, ElementCatalogPanel's edits would
+		// never reach them. See AtomStyleTable's class comment.
+		AtomStyleTable original;
+		AtomStyleTable copyTakenBeforeEdit = original;
+
+		std::unordered_map<std::string, AtomRenderStyle> styles;
+		styles.emplace("Fe", AtomRenderStyle{glm::vec3(0.6f, 0.3f, 0.1f), 0.5f});
+		original.ReplaceStyles(std::move(styles), VacancyRenderStyle{});
+
+		ASSERT_EQ(copyTakenBeforeEdit.Size(), 1u);
+		EXPECT_NEAR(copyTakenBeforeEdit.GetStyle("Fe").displayRadius, 0.5f, 1e-4f);
+	}
+
 	TEST(AtomStyleTableTests, UsesFallbackForUnknownElement)
 	{
 		AtomStyleTable table;
