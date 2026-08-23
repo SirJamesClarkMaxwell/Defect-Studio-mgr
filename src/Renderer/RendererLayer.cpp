@@ -505,6 +505,11 @@ namespace DefectStudio
 		return m_SelectedPeriodicElement;
 	}
 
+	bool &RendererLayer::GetPeriodicTableApplyOnConfirm()
+	{
+		return m_PeriodicTableApplyOnConfirm;
+	}
+
 	RenderExportDialogState &RendererLayer::GetExportDialogState()
 	{
 		return m_ExportDialog;

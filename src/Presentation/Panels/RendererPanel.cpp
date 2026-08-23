@@ -274,6 +274,20 @@ namespace DefectStudio
 			windowState.addAtomPopupRequested = false;
 			m_AddAtomPopupRequested = true;
 			m_AddAtomPopupWindowId = windowState.windowId;
+			// Defaults: if a 3D cursor is already placed, start from there (Cartesian, since the
+			// cursor's own position is stored Cartesian) - otherwise Fractional is a more useful
+			// starting point than Cartesian (0,0,0) is, since fractional (0,0,0) is a real cell corner
+			// while Cartesian (0,0,0) is often nowhere near the visible structure.
+			if (windowState.cursor3DPlaced)
+			{
+				m_AddAtomPopupPosition = windowState.cursor3DPosition;
+				m_AddAtomPopupFractional = false;
+			}
+			else
+			{
+				m_AddAtomPopupPosition = glm::vec3(0.0f);
+				m_AddAtomPopupFractional = true;
+			}
 		}
 
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
@@ -1002,6 +1016,18 @@ namespace DefectStudio
 			windowState.gizmoDragActive = false;
 			return false;
 		}
+
+		// A modal/click-drag reads X/Y/Z (axis lock), digits/-/./Backspace/Enter (numeric override,
+		// see CaptureGizmoNumericInput) and Escape (cancel) directly via ImGui::IsKeyPressed below -
+		// none of that goes through an actual ImGui widget, so ImGui's own WantCaptureKeyboard (the
+		// gate Application::dispatchEvent uses to stop app-wide shortcuts firing into a focused text
+		// field) stays false and doesn't protect it. Without this, typing "1" to enter a distance
+		// mid-drag also fired the bare "1" -> renderer.align_axis_a shortcut and yanked the camera.
+		// One frame of lag (this only takes effect for the NEXT frame's input dispatch, since this
+		// frame's events were already dispatched before Render() runs) is harmless for a multi-frame
+		// drag - only the drag's very first keystroke could still leak through.
+		if (windowState.fallbackGizmoDragging)
+			ImGui::GetIO().WantCaptureKeyboard = true;
 
 		glm::vec3 pivot(0.0f);
 		for (const std::size_t atomIndex : windowState.selectedAtomIndices)
@@ -2189,39 +2215,6 @@ namespace DefectStudio
 			return;
 		}
 
-		// Was a hand-rolled duplicate of DrawPeriodicTableGrid (plain gray buttons, small fixed cell
-		// size, no per-category color, no readable-text contrast fix) - reuses the shared, colored,
-		// already-fixed-up grid instead, same as ElementCatalogPanel, plus a bigger font scale so the
-		// larger cells below aren't mostly empty padding around a tiny symbol.
-		ImGui::SetWindowFontScale(1.2f);
-		const ImVec2 cellSize(54.0f, 46.0f);
-		const std::string clicked = DrawPeriodicTableGrid(
-			m_Layer,
-			[&](const std::string &symbol) -> glm::vec3
-			{ return CategoryColor(ClassifyElement(AtomicNumberForSymbol(m_Layer, symbol))); },
-			m_Layer.GetSelectedPeriodicElement(), cellSize);
-		ImGui::SetWindowFontScale(1.0f);
-		if (!clicked.empty())
-		{
-			m_Layer.GetSelectedPeriodicElement() = clicked;
-			// A double-click both picks and closes, same convention as double-clicking a file to open
-			// it - IsMouseDoubleClicked is a frame-global query, not per-cell, but a click this frame
-			// AND the OS reporting a double-click this frame is close enough (the false-positive case,
-			// the two clicks landing on different cells, is harmless: it just closes on whichever cell
-			// the second click happened to land on).
-			if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-				m_Layer.GetShowPeriodicTableWindow() = false;
-		}
-		// Enter confirms the current pick and closes the window - lets a keyboard-only flow (arrow to
-		// a cell isn't supported, but typing then Enter after a mouse click is common) finish without
-		// reaching for the window's own close button.
-		if (ImGui::IsWindowFocused() && !m_Layer.GetSelectedPeriodicElement().empty() &&
-			(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
-			m_Layer.GetShowPeriodicTableWindow() = false;
-
-		ImGui::Separator();
-		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
-
 		const std::string &focusedWindowId = m_Layer.GetFocusedViewportWindowId();
 		const RendererWindowState *focusedWindow = nullptr;
 		for (const RendererWindowState &candidate : m_Layer.GetWindows())
@@ -2234,23 +2227,61 @@ namespace DefectStudio
 		}
 		const bool canApply = focusedWindow != nullptr && !focusedWindow->selectedAtomIndices.empty();
 
-		ImGui::BeginDisabled(!canApply);
-		if (ImGui::Button("Apply to selected atoms"))
+		auto applyToSelectedAtoms = [&]()
 		{
 			Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
-			if (commandRegistry != nullptr)
-			{
-				ChangeAtomTypePayload payload;
-				payload.windowId = focusedWindowId;
-				payload.species = m_Layer.GetSelectedPeriodicElement();
-				CommandContext context;
-				context.Set<ChangeAtomTypePayload>("atom_edit.change_type_payload", std::move(payload));
-				Result<CommandOutcome> result =
-					commandRegistry->Execute(CommandID{"renderer.selection.change_type"}, std::move(context));
-				if (!result)
-					DS_LOG_WARN("Change atom type from periodic table failed: {}", result.Error().technicalDetails);
-			}
+			if (commandRegistry == nullptr)
+				return;
+			ChangeAtomTypePayload payload;
+			payload.windowId = focusedWindowId;
+			payload.species = m_Layer.GetSelectedPeriodicElement();
+			CommandContext context;
+			context.Set<ChangeAtomTypePayload>("atom_edit.change_type_payload", std::move(payload));
+			Result<CommandOutcome> result =
+				commandRegistry->Execute(CommandID{"renderer.selection.change_type"}, std::move(context));
+			if (!result)
+				DS_LOG_WARN("Change atom type from periodic table failed: {}", result.Error().technicalDetails);
+		};
+
+		// Was a hand-rolled duplicate of DrawPeriodicTableGrid (plain gray buttons, small fixed cell
+		// size, no per-category color, no readable-text contrast fix) - reuses the shared, colored,
+		// already-fixed-up grid instead, same as ElementCatalogPanel, plus a bigger font scale so the
+		// larger cells below aren't mostly empty padding around a tiny symbol.
+		ImGui::SetWindowFontScale(1.2f);
+		const ImVec2 cellSize(54.0f, 46.0f);
+		std::string doubleClicked;
+		const std::string clicked = DrawPeriodicTableGrid(
+			m_Layer,
+			[&](const std::string &symbol) -> glm::vec3
+			{ return CategoryColor(ClassifyElement(AtomicNumberForSymbol(m_Layer, symbol))); },
+			m_Layer.GetSelectedPeriodicElement(), cellSize, &doubleClicked);
+		ImGui::SetWindowFontScale(1.0f);
+		if (!clicked.empty())
+			m_Layer.GetSelectedPeriodicElement() = clicked;
+
+		// Confirming a pick - double-click on a cell, or Enter once one is selected - closes the
+		// window like a normal quick-pick popup. GetPeriodicTableApplyOnConfirm() distinguishes WHY
+		// this window is open: opened from Object Properties' "Choose..." (changing an EXISTING
+		// selection's element), confirming should also apply it - the window is about to disappear,
+		// so there's no later chance to press the "Apply" button below. Opened from Add Atom's
+		// "Choose..." (picking a species for a NOT-YET-inserted atom), confirming should just close -
+		// Add Atom reads the selected symbol itself when its own Insert button runs, and unrelated
+		// atoms possibly selected in the viewport at the same time must NOT be silently retyped.
+		const bool confirmedViaEnter = !m_Layer.GetSelectedPeriodicElement().empty() &&
+			(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false));
+		if (!doubleClicked.empty() || confirmedViaEnter)
+		{
+			if (m_Layer.GetPeriodicTableApplyOnConfirm() && canApply)
+				applyToSelectedAtoms();
+			m_Layer.GetShowPeriodicTableWindow() = false;
 		}
+
+		ImGui::Separator();
+		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
+
+		ImGui::BeginDisabled(!canApply);
+		if (ImGui::Button("Apply to selected atoms"))
+			applyToSelectedAtoms();
 		ImGui::EndDisabled();
 		if (!canApply && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Select atoms in a renderer viewport first.");

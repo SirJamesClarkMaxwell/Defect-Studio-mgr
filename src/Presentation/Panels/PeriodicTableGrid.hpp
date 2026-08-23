@@ -30,12 +30,17 @@ namespace DefectStudio
 	// colorForSymbol - callers decide what a color means (current AtomStyleTable style, category
 	// classification, or just a flat neutral fill for a plain element picker). selectedSymbol (may
 	// be empty) gets a highlighted border. Returns the symbol clicked this frame, or an empty string
-	// if none was.
+	// if none was. outDoubleClickedSymbol (optional) receives the symbol double-clicked this frame -
+	// checked via IsItemHovered()+IsMouseDoubleClicked() rather than the click return above, since
+	// IsMouseDoubleClicked fires on the second click's mouse-DOWN while Button's own return fires on
+	// mouse-UP; the two are never true on the same frame, so a caller wanting "double-click to
+	// confirm" needs this rather than combining the click return with its own IsMouseDoubleClicked.
 	[[nodiscard]] std::string DrawPeriodicTableGrid(
 		RendererLayer &layer,
 		const std::function<glm::vec3(const std::string &)> &colorForSymbol,
 		const std::string &selectedSymbol,
-		ImVec2 cellSize = ImVec2(38.0f, 32.0f));
+		ImVec2 cellSize = ImVec2(38.0f, 32.0f),
+		std::string *outDoubleClickedSymbol = nullptr);
 
 	// Classic textbook periodic-table category, shared by every panel that colors elements by
 	// category (ElementCatalogPanel, RendererPanel::drawPeriodicTableWindow) so this classification

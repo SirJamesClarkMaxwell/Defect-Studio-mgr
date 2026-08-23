@@ -90,9 +90,12 @@ namespace DefectStudio
 		RendererLayer &layer,
 		const std::function<glm::vec3(const std::string &)> &colorForSymbol,
 		const std::string &selectedSymbol,
-		ImVec2 cellSize)
+		ImVec2 cellSize,
+		std::string *outDoubleClickedSymbol)
 	{
 		std::string clickedSymbol;
+		if (outDoubleClickedSymbol != nullptr)
+			outDoubleClickedSymbol->clear();
 
 		// A few extra pixels of breathing room between cells - added on top of whatever the app's
 		// current style already has (rather than a hardcoded value) so a later global style tweak
@@ -116,12 +119,20 @@ namespace DefectStudio
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
 			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 			const bool clicked = ImGui::Button(symbol.c_str(), cellSize);
+			// IsMouseDoubleClicked fires on the second click's mouse-DOWN, which is never the same
+			// frame as Button's release-based `clicked` above - IsItemHovered (a per-frame spatial
+			// query, true on a down-frame too as long as the cursor stayed put) is what actually lines
+			// up with it.
+			const bool doubleClicked = outDoubleClickedSymbol != nullptr && ImGui::IsItemHovered() &&
+				ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
 			ImGui::PopStyleColor(4);
 			if (symbol == selectedSymbol)
 				ImGui::GetWindowDrawList()->AddRect(
 					ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(255, 215, 0, 255), 0.0f, 0, 2.5f);
 			if (clicked)
 				clickedSymbol = symbol;
+			if (doubleClicked)
+				*outDoubleClickedSymbol = symbol;
 		};
 
 		const auto &symbols = layer.GetPeriodicTableSymbols();

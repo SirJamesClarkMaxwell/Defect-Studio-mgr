@@ -119,6 +119,12 @@ namespace DefectStudio
 		void CollectProfilingData();
 		bool &GetShowPeriodicTableWindow();
 		std::string &GetSelectedPeriodicElement();
+		// True when the Periodic Table window was opened to change an EXISTING selection's element
+		// (Object Properties' "Choose..." button) rather than to pick a species for a new atom (Add
+		// Atom's "Choose..." button) - set by whichever caller opens the window, read by
+		// RendererPanel::drawPeriodicTableWindow to decide whether confirming a pick (double-click/
+		// Enter) should also apply it to the current selection before closing, or just close.
+		bool &GetPeriodicTableApplyOnConfirm();
 		RenderExportDialogState &GetExportDialogState();
 		// Reads back windowKey's last-rendered frame (via RenderToFbo) and writes it to a PNG.
 		// Returns false + fills error on missing viewport or write failure. crop* are fractions
@@ -259,6 +265,7 @@ namespace DefectStudio
 		// visible effect either way) - now that drawPeriodicTableWindow() actually runs, default to
 		// hidden like every other optional panel until opened via its toolbar button.
 		bool m_ShowPeriodicTableWindow = false;
+		bool m_PeriodicTableApplyOnConfirm = false;
 		RenderExportDialogState m_ExportDialog;
 		float m_LastDeltaTime = 0.0f;
 		bool m_Attached = false;

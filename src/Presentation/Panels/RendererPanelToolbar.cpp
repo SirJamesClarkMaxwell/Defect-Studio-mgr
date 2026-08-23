@@ -465,6 +465,13 @@ namespace DefectStudio
 			if (active)
 				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 
+			// ImageButton's clickable footprint is (size + FramePadding*2), unlike Button() where the
+			// given size IS the footprint - with the style's default padding still applied, icon
+			// buttons rendered visibly bigger than the plain-text fallback buttons (1/2/3/4, before any
+			// icon existed for those) even though both passed the same buttonSize. Zeroing padding here
+			// makes both paths occupy exactly buttonSize, so the column is a uniform grid.
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+
 			bool pressed = false;
 			const RendererToolbarIconTexture *icon = m_Layer.GetToolbarIcon(iconFileName);
 			if (icon != nullptr && icon->rendererId != 0)
@@ -487,6 +494,7 @@ namespace DefectStudio
 				// 2-3 characters precisely so they fit inside that square instead of clipping.
 				pressed = ImGui::Button(fallback, buttonSize);
 			}
+			ImGui::PopStyleVar();
 
 			if (active)
 				ImGui::PopStyleColor();
@@ -655,7 +663,13 @@ namespace DefectStudio
 		ImGui::Text("Element: %s", m_Layer.GetSelectedPeriodicElement().c_str());
 		ImGui::SameLine();
 		if (ImGui::Button("Choose..."))
+		{
 			m_Layer.GetShowPeriodicTableWindow() = true;
+			// Picking a species for a not-yet-inserted atom - confirming in the Periodic Table window
+			// should just close it, not retype whatever atoms happen to already be selected in the
+			// viewport (see drawPeriodicTableWindow's comment on this flag).
+			m_Layer.GetPeriodicTableApplyOnConfirm() = false;
+		}
 
 		if (ImGui::RadioButton("Cartesian", !m_AddAtomPopupFractional))
 			m_AddAtomPopupFractional = false;

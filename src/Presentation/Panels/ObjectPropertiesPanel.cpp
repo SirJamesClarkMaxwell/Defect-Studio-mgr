@@ -109,9 +109,11 @@ namespace DefectStudio
 
 				// Element - reuses "renderer.selection.change_type", the same command the viewport
 				// context menu drives, so this stays a single undo step regardless of entry point.
+				ImGui::TextUnformatted("Element");
+				ImGui::SameLine();
 				char speciesBuffer[16];
 				std::snprintf(speciesBuffer, sizeof(speciesBuffer), "%s", atom.element.c_str());
-				ImGui::InputText("Element", speciesBuffer, sizeof(speciesBuffer));
+				ImGui::InputText("##ElementText", speciesBuffer, sizeof(speciesBuffer));
 				if (ImGui::IsItemDeactivatedAfterEdit() && commandRegistry != nullptr && speciesBuffer[0] != '\0')
 				{
 					ChangeAtomTypePayload payload;
@@ -123,6 +125,16 @@ namespace DefectStudio
 						commandRegistry->Execute(CommandID{"renderer.selection.change_type"}, std::move(context));
 					if (!result)
 						DS_LOG_WARN("Set atom element failed: {}", result.Error().technicalDetails);
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Choose..."))
+				{
+					// Seeds the shared Periodic Table window with this atom's current element and asks
+					// it to apply the pick back to the selection (rather than just close) once
+					// confirmed - see drawPeriodicTableWindow's GetPeriodicTableApplyOnConfirm comment.
+					m_Layer.GetSelectedPeriodicElement() = atom.element;
+					m_Layer.GetShowPeriodicTableWindow() = true;
+					m_Layer.GetPeriodicTableApplyOnConfirm() = true;
 				}
 
 				ImGui::Separator();
