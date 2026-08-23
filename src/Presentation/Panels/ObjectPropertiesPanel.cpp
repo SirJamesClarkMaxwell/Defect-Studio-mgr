@@ -46,7 +46,13 @@ namespace DefectStudio
 			return;
 		}
 
-		const std::string &focusedWindowId = m_Layer.GetFocusedViewportWindowId();
+		// GetLastFocusedViewportWindowId, not GetFocusedViewportWindowId - the latter clears the
+		// instant ImGui focus leaves the viewport (it's meant for camera-input gating), which is
+		// exactly what happens the moment this panel's own fields are clicked to edit them. Using it
+		// here made every field un-editable: clicking into any InputFloat/InputText immediately
+		// dropped the "no viewport focused" message before the click could even register on the
+		// widget. Same fix ElectronicStructureSession.cpp already applies for the same reason.
+		const std::string &focusedWindowId = m_Layer.GetLastFocusedViewportWindowId();
 		RendererWindowState *windowState = nullptr;
 		if (!focusedWindowId.empty())
 		{
@@ -125,12 +131,16 @@ namespace DefectStudio
 				glm::vec3 cartesian = atom.cartesianPosition;
 				bool cartesianCommitted = false;
 				ImGui::Text("Cartesian (A)");
+				ImGui::PushItemWidth(70.0f);
 				ImGui::InputFloat("X##cart", &cartesian.x, 0.0f, 0.0f, "%.4f");
 				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+				ImGui::SameLine();
 				ImGui::InputFloat("Y##cart", &cartesian.y, 0.0f, 0.0f, "%.4f");
 				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+				ImGui::SameLine();
 				ImGui::InputFloat("Z##cart", &cartesian.z, 0.0f, 0.0f, "%.4f");
 				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+				ImGui::PopItemWidth();
 
 				bool fractionalCommitted = false;
 				glm::vec3 fractional(0.0f);
@@ -138,12 +148,16 @@ namespace DefectStudio
 				{
 					fractional = domainRecord->structure.CartesianToFractional(atom.cartesianPosition);
 					ImGui::Text("Fractional");
+					ImGui::PushItemWidth(70.0f);
 					ImGui::InputFloat("X##frac", &fractional.x, 0.0f, 0.0f, "%.4f");
 					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+					ImGui::SameLine();
 					ImGui::InputFloat("Y##frac", &fractional.y, 0.0f, 0.0f, "%.4f");
 					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+					ImGui::SameLine();
 					ImGui::InputFloat("Z##frac", &fractional.z, 0.0f, 0.0f, "%.4f");
 					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+					ImGui::PopItemWidth();
 				}
 
 				if ((cartesianCommitted || fractionalCommitted) && commandRegistry != nullptr)
