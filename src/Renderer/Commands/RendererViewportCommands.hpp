@@ -34,6 +34,8 @@ namespace DefectStudio
 		Ref<EventBus> eventBus,
 		SelectionToolMode tool);
 	[[nodiscard]] Unique<ICommand> CreateRendererGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation);
+	// Shift+A - opens the Add Atom popup for the focused viewport.
+	[[nodiscard]] Unique<ICommand> CreateRendererAddAtomPopupCommand(Ref<EventBus> eventBus);
 	// Ctrl+1..4 (T08 item 7) - see RendererEvents::Viewport::SelectionModeSetRequested.
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectionModeSetCommand(
 		Ref<EventBus> eventBus, bool pickAtoms, bool pickBonds, bool pickLabels);

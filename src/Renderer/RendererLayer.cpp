@@ -826,6 +826,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onSelectionModeSetRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::GizmoOperationRequested>(
 				std::bind_front(&RendererLayer::onGizmoOperationRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::AddAtomPopupToggleRequested>(
+				std::bind_front(&RendererLayer::onAddAtomPopupToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleRequested>(
 				std::bind_front(&RendererLayer::onLabelsToggleRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleSelectedBondRequested>(
@@ -1777,6 +1779,15 @@ namespace DefectStudio
 			return;
 
 		windowState->gizmoOperation = event.operation;
+	}
+
+	void RendererLayer::onAddAtomPopupToggleRequested(const RendererEvents::Viewport::AddAtomPopupToggleRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->addAtomPopupRequested = true;
 	}
 
 	void RendererLayer::onLabelsToggleRequested(const RendererEvents::Viewport::LabelsToggleRequested &event)

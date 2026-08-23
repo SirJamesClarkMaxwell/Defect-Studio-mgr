@@ -14,6 +14,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Presentation/Panels/PeriodicTableGrid.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -657,16 +658,15 @@ namespace DefectStudio
 
 		if (!symbols.empty())
 		{
-			const std::string &currentSymbol = symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)];
-			if (ImGui::BeginCombo("Element", currentSymbol.c_str()))
+			ImGui::Text("Element: %s", symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)].c_str());
+			const std::string clicked = DrawPeriodicTableGrid(
+				m_Layer, [](const std::string &) { return glm::vec3(0.55f, 0.55f, 0.58f); },
+				symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)]);
+			if (!clicked.empty())
 			{
-				for (std::size_t i = 0; i < symbols.size(); ++i)
-				{
-					const bool selected = static_cast<int>(i) == m_AddAtomPopupElementIndex;
-					if (ImGui::Selectable(symbols[i].c_str(), selected))
-						m_AddAtomPopupElementIndex = static_cast<int>(i);
-				}
-				ImGui::EndCombo();
+				const auto found = std::find(symbols.begin(), symbols.end(), clicked);
+				if (found != symbols.end())
+					m_AddAtomPopupElementIndex = static_cast<int>(std::distance(symbols.begin(), found));
 			}
 		}
 

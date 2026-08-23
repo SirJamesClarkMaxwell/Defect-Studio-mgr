@@ -244,6 +244,17 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererAddAtomPopupCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer add atom popup",
+			[](EventBus &bus) {
+				RendererEvents::Viewport::AddAtomPopupToggleRequested event;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererLabelsToggleCommand(Ref<EventBus> eventBus)
 	{
 		return CreateUnique<RendererViewportEventCommand>(

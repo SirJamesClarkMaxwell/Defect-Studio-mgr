@@ -128,6 +128,11 @@ namespace DefectStudio
 			return CreateRendererSelectionModeSetCommand(std::move(eventBus), pickAtoms, pickBonds, pickLabels);
 		}
 
+		Unique<ICommand> MakeAddAtomPopupCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererAddAtomPopupCommand(std::move(eventBus));
+		}
+
 		// No keybinding: invoked programmatically by RendererPanel on gizmo drag release, with the
 		// drag result passed via context (see GizmoTransformPayload). Not user-invokable from the
 		// command palette since it needs that payload to do anything.
@@ -596,6 +601,12 @@ namespace DefectStudio
 			"Renderer: Selection mode - Atoms + Bonds + Labels",
 			"Clicking in the active renderer viewport can select atoms, bonds, or pinned labels.",
 			std::bind_front(MakeSelectionModeSetCommand, eventBus, true, true, true));
+		RegisterRendererCommand(
+			registry,
+			"renderer.atoms.open_add_popup",
+			"Renderer: Add atom...",
+			"Open the Add Atom popup for the active renderer viewport.",
+			std::bind_front(MakeAddAtomPopupCommand, eventBus));
 		RegisterRendererCommand(
 			registry,
 			"renderer.labels.toggle",

@@ -146,6 +146,10 @@ namespace DefectStudio
 		bool pickAtoms = true;
 		bool pickBonds = true;
 		bool pickLabels = true;
+		// Set by RendererLayer::onAddAtomPopupToggleRequested (Shift+A), read and cleared by
+		// RendererPanel's per-window Render loop, which forwards it into its own popup-request
+		// members (drawAddAtomPopup can only be triggered from within RendererPanel itself).
+		bool addAtomPopupRequested = false;
 		// Box/circle drag-select (Alt+B / Alt+C). Coordinates are viewport-relative pixels, same
 		// space as RendererPanel::handleAtomPick's relX/relY.
 		SelectionToolMode activeSelectionTool = SelectionToolMode::None;

@@ -242,6 +242,12 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.atoms.open_add_popup"
+    chord: "Shift+A"
+    command: "renderer.atoms.open_add_popup"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.gizmo.mode_rotate"
     chord: "R"
     command: "renderer.gizmo.mode_rotate"

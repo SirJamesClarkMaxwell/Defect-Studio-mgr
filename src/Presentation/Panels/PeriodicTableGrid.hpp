@@ -1,14 +1,21 @@
 #pragma once
 
 #include <array>
+#include <functional>
+#include <string>
+
+#include <glm/glm.hpp>
+#include <imgui.h>
 
 namespace DefectStudio
 {
+	class RendererLayer;
+
 	// Standard periodic table layout (atomic number per cell, 0 = empty gap; lanthanides/actinides
 	// listed separately below the main grid, same convention as RendererLayer::GetLanthanideSymbols/
 	// GetActinideSymbols) - shared by every panel that draws a clickable periodic table
-	// (RendererPanel::drawPeriodicTableWindow, ElementCatalogPanel) so this 7x18 layout only exists
-	// once.
+	// (RendererPanel::drawAddAtomPopup/drawPeriodicTableWindow, ElementCatalogPanel) so this 7x18
+	// layout only exists once.
 	using PeriodicTableIndexRow = std::array<int, 18>;
 	inline constexpr std::array<PeriodicTableIndexRow, 7> kPeriodicTableElementIndices = {
 		PeriodicTableIndexRow{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
@@ -18,4 +25,15 @@ namespace DefectStudio
 		PeriodicTableIndexRow{37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54},
 		PeriodicTableIndexRow{55, 56, 0, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86},
 		PeriodicTableIndexRow{87, 88, 0, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118}};
+
+	// Draws the grid plus lanthanide/actinide rows below it, one button per element colored by
+	// colorForSymbol - callers decide what a color means (current AtomStyleTable style, category
+	// classification, or just a flat neutral fill for a plain element picker). selectedSymbol (may
+	// be empty) gets a highlighted border. Returns the symbol clicked this frame, or an empty string
+	// if none was.
+	[[nodiscard]] std::string DrawPeriodicTableGrid(
+		RendererLayer &layer,
+		const std::function<glm::vec3(const std::string &)> &colorForSymbol,
+		const std::string &selectedSymbol,
+		ImVec2 cellSize = ImVec2(32.0f, 28.0f));
 } // namespace DefectStudio

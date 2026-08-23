@@ -264,6 +264,16 @@ namespace DefectStudio
 			renderLabelTransformGizmo(windowState, imageOrigin, viewportSize, hovered) ||
 			handlePinnedMeasurementInteraction(windowState, imageOrigin, viewportSize, hovered);
 
+		// Shift+A (RendererEvents::Viewport::AddAtomPopupToggleRequested) can only flag intent on
+		// RendererWindowState - it has no access to this panel's own popup-request members, so it's
+		// picked up and forwarded here, once per frame.
+		if (windowState.addAtomPopupRequested)
+		{
+			windowState.addAtomPopupRequested = false;
+			m_AddAtomPopupRequested = true;
+			m_AddAtomPopupWindowId = windowState.windowId;
+		}
+
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
 
 		if (windowState.activeSelectionTool == SelectionToolMode::Box && windowState.selectionDragActive)

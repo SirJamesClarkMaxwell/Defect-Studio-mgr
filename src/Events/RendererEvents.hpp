@@ -246,6 +246,16 @@ namespace DefectStudio::RendererEvents::Viewport
 		GizmoOperation operation = GizmoOperation::Translate;
 	};
 
+	// Shift+A (Blender convention) / the vertical toolbar's "Add" button - opens
+	// RendererPanel::drawAddAtomPopup for the target window (empty = focused viewport, same
+	// convention as GizmoOperationRequested). The toolbar button still sets RendererPanel's own
+	// popup-request members directly since it already has the instance in hand; this event exists so
+	// a keybinding (no RendererPanel access) can reach the same popup.
+	struct AddAtomPopupToggleRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
 	// Toggles auto bond-length label visibility for every bond (Etap E, `Alt+M`) on the active
 	// viewport.
 	struct LabelsToggleRequested final : public BusEvent

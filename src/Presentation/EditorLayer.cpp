@@ -391,7 +391,8 @@ namespace DefectStudio
 	                                      WeakRef<RendererLayer> rendererLayer,
 	                                      AtomStyleTable atomStyleTable,
 	                                      Path atomStylesPath,
-	                                      WeakRef<DomainLayer> domainLayer)
+	                                      WeakRef<DomainLayer> domainLayer,
+	                                      ElementPropertiesTable elementPropertiesTable)
 	{
 		m_EventBus = std::move(eventBus);
 		m_LogRegistry = std::move(logRegistry);
@@ -405,6 +406,7 @@ namespace DefectStudio
 		m_AtomStyleTable = std::move(atomStyleTable);
 		m_AtomStylesPath = std::move(atomStylesPath);
 		m_DomainLayer = std::move(domainLayer);
+		m_ElementPropertiesTable = std::move(elementPropertiesTable);
 		bindConfigEvents();
 		bindProjectRootEvents();
 		DS_LOG_INFO(
@@ -551,7 +553,8 @@ namespace DefectStudio
 			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<ElementCatalogPanel>(
-				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_AtomStylesPath, "Element Catalog", false);
+				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
+				"Element Catalog", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
