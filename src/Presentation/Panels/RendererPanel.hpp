@@ -57,6 +57,9 @@ namespace DefectStudio
 			std::vector<std::size_t> atomIndices,
 			RendererEvents::Viewport::RegionSelectMode mode);
 		void drawPeriodicTableWindow();
+		// Modal opened by the vertical toolbar's "Add" button (drawViewportVerticalToolbar) - state
+		// lives here rather than per-window since only one instance can be open at a time.
+		void drawAddAtomPopup();
 		[[nodiscard]] bool renderTransformGizmo(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool renderLabelTransformGizmo(
@@ -83,5 +86,13 @@ namespace DefectStudio
 		// actually clicks that menu item and the live mouse position no longer points at the click.
 		// Only one context menu can be open at a time app-wide, so a single field is enough.
 		glm::vec3 m_ContextMenuWorldPosition = glm::vec3(0.0f);
+
+		// Add Atom popup (drawAddAtomPopup) - only one instance can be open app-wide, so single
+		// fields are enough, same reasoning as m_ContextMenuWorldPosition above.
+		bool m_AddAtomPopupRequested = false;
+		std::string m_AddAtomPopupWindowId;
+		int m_AddAtomPopupElementIndex = 5; // index into GetPeriodicTableSymbols() - carbon (Z=6)
+		bool m_AddAtomPopupFractional = false;
+		glm::vec3 m_AddAtomPopupPosition = glm::vec3(0.0f);
 	};
 } // namespace DefectStudio

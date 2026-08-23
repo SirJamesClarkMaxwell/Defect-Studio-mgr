@@ -90,6 +90,27 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable,
 		std::string windowId = {});
 
+	// Payload for "renderer.atoms.add_at_coordinates" (the Add Atom popup) - position is interpreted
+	// as fractional or cartesian per isFractional, resolved to cartesian inside the command via
+	// CrystalStructure::FractionalToCartesian so the popup doesn't need direct CrystalStructure access.
+	struct AddAtomAtCoordinatesPayload
+	{
+		std::string windowId;
+		std::string species;
+		glm::vec3 position = glm::vec3(0.0f);
+		bool isFractional = false;
+	};
+
+	// Inserts a single new atom at the given coordinates - same domain path as Paste
+	// (ApplyInterstitial + RegenerateAutoBonds + RebuildAndSync), undoable. Fails on an empty
+	// species.
+	[[nodiscard]] Unique<ICommand> CreateAddAtomAtCoordinatesCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		AddAtomAtCoordinatesPayload payload);
+
 	// Payload for "renderer.selection.change_type" - species text comes from the context menu's
 	// inline input, so (like GizmoTransformPayload) it's passed through CommandContext rather than
 	// baked into the factory at registration time.

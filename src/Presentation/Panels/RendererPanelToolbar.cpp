@@ -10,9 +10,11 @@
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
+#include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
@@ -569,6 +571,129 @@ namespace DefectStudio
 			publishToolToggle(SelectionToolMode::Circle);
 		}
 
+		ImGui::Spacing();
+
+		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "Add", "Add atom at coordinates...", false))
+		{
+			m_AddAtomPopupRequested = true;
+			m_AddAtomPopupWindowId = windowState.windowId;
+		}
+
 		ImGui::EndChild();
+	}
+
+	// "Use 3D Cursor"/"Use Selection Center" below always fill a CARTESIAN position and force
+	// Cartesian mode - simplest correct behavior without needing a fractional<->cartesian
+	// conversion here (RendererStructureData carries the lattice matrices but not the domain
+	// CrystalStructure::FractionalToCartesian helper); switch back to Fractional afterwards and
+	// retype if that's genuinely what's needed.
+	void RendererPanel::drawAddAtomPopup()
+	{
+		constexpr const char *kPopupId = "Add Atom";
+		if (m_AddAtomPopupRequested)
+		{
+			ImGui::OpenPopup(kPopupId);
+			m_AddAtomPopupRequested = false;
+		}
+
+		if (!ImGui::BeginPopupModal(kPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			return;
+
+		RendererWindowState *windowState = nullptr;
+		for (RendererWindowState &candidate : m_Layer.GetWindows())
+		{
+			if (candidate.windowId == m_AddAtomPopupWindowId)
+			{
+				windowState = &candidate;
+				break;
+			}
+		}
+		if (windowState == nullptr)
+		{
+			ImGui::TextDisabled("Target window is no longer open.");
+			if (ImGui::Button("Close"))
+				ImGui::CloseCurrentPopup();
+			ImGui::EndPopup();
+			return;
+		}
+
+		const auto &symbols = m_Layer.GetPeriodicTableSymbols();
+		if (!symbols.empty() &&
+			(m_AddAtomPopupElementIndex < 0 || static_cast<std::size_t>(m_AddAtomPopupElementIndex) >= symbols.size()))
+			m_AddAtomPopupElementIndex = 0;
+
+		if (!symbols.empty())
+		{
+			const std::string &currentSymbol = symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)];
+			if (ImGui::BeginCombo("Element", currentSymbol.c_str()))
+			{
+				for (std::size_t i = 0; i < symbols.size(); ++i)
+				{
+					const bool selected = static_cast<int>(i) == m_AddAtomPopupElementIndex;
+					if (ImGui::Selectable(symbols[i].c_str(), selected))
+						m_AddAtomPopupElementIndex = static_cast<int>(i);
+				}
+				ImGui::EndCombo();
+			}
+		}
+
+		if (ImGui::RadioButton("Cartesian", !m_AddAtomPopupFractional))
+			m_AddAtomPopupFractional = false;
+		ImGui::SameLine();
+		if (ImGui::RadioButton("Fractional", m_AddAtomPopupFractional))
+			m_AddAtomPopupFractional = true;
+
+		ImGui::InputFloat3("Position", &m_AddAtomPopupPosition.x, "%.4f");
+
+		ImGui::BeginDisabled(!windowState->cursor3DPlaced);
+		if (ImGui::Button("Use 3D Cursor"))
+		{
+			m_AddAtomPopupPosition = windowState->cursor3DPosition;
+			m_AddAtomPopupFractional = false;
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		ImGui::BeginDisabled(windowState->selectedAtomIndices.empty());
+		if (ImGui::Button("Use Selection Center"))
+		{
+			glm::vec3 centroid(0.0f);
+			for (const std::size_t atomIndex : windowState->selectedAtomIndices)
+				centroid += windowState->structure.atoms[atomIndex].cartesianPosition;
+			centroid /= static_cast<float>(windowState->selectedAtomIndices.size());
+			m_AddAtomPopupPosition = centroid;
+			m_AddAtomPopupFractional = false;
+		}
+		ImGui::EndDisabled();
+
+		ImGui::Separator();
+		const bool canInsert = !symbols.empty();
+		ImGui::BeginDisabled(!canInsert);
+		if (ImGui::Button("Insert"))
+		{
+			Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
+			if (commandRegistry != nullptr)
+			{
+				AddAtomAtCoordinatesPayload payload;
+				payload.windowId = windowState->windowId;
+				payload.species = symbols[static_cast<std::size_t>(m_AddAtomPopupElementIndex)];
+				payload.position = m_AddAtomPopupPosition;
+				payload.isFractional = m_AddAtomPopupFractional;
+
+				CommandContext context;
+				context.Set<AddAtomAtCoordinatesPayload>("atom_edit.add_atom_payload", std::move(payload));
+				Result<CommandOutcome> result =
+					commandRegistry->Execute(CommandID{"renderer.atoms.add_at_coordinates"}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Add atom failed: {}", result.Error().technicalDetails);
+				else
+					ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+			ImGui::CloseCurrentPopup();
+
+		ImGui::EndPopup();
 	}
 } // namespace DefectStudio

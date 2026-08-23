@@ -125,6 +125,7 @@ namespace DefectStudio
 			m_Layer.RemoveWindow(windowId);
 
 		// drawPeriodicTableWindow();
+		drawAddAtomPopup();
 		m_Layer.CollectProfilingData();
 	}
 

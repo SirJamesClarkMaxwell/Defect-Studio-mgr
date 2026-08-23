@@ -313,6 +313,20 @@ namespace DefectStudio
 			return CreateChangeSelectedAtomTypeCommand(
 				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable), *payload);
 		}
+
+		Unique<ICommand> MakeAddAtomAtCoordinatesCommand(
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer,
+			AtomStyleTable atomStyleTable,
+			ElementPropertiesTable elementPropertiesTable,
+			CommandContext &context)
+		{
+			AddAtomAtCoordinatesPayload *payload = context.TryGet<AddAtomAtCoordinatesPayload>("atom_edit.add_atom_payload");
+			if (payload == nullptr)
+				return nullptr;
+			return CreateAddAtomAtCoordinatesCommand(
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable), *payload);
+		}
 	}
 
 	void RegisterRendererCommands(
@@ -670,6 +684,13 @@ namespace DefectStudio
 			"Renderer: Change atom type",
 			"Change the currently selected atoms' element (undoable).",
 			std::bind_front(MakeChangeSelectedAtomTypeCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(
+			registry,
+			"renderer.atoms.add_at_coordinates",
+			"Renderer: Add atom at coordinates",
+			"Insert a new atom at explicit coordinates in the active renderer viewport (undoable).",
+			std::bind_front(MakeAddAtomAtCoordinatesCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,

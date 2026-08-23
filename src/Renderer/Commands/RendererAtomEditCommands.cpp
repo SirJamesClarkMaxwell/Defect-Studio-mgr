@@ -771,6 +771,110 @@ namespace DefectStudio
 			std::vector<Bond> m_PreviousBonds;
 		};
 
+		class AddAtomAtCoordinatesCommand final : public ICommand
+		{
+		public:
+			AddAtomAtCoordinatesCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				ElementPropertiesTable elementPropertiesTable,
+				AddAtomAtCoordinatesPayload payload)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
+				  m_Payload(std::move(payload))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"AddAtomAtCoordinatesCommand: DomainLayer or RendererLayer expired.");
+				}
+				if (m_Payload.species.empty())
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.empty_species",
+						"Enter an element symbol.",
+						"AddAtomAtCoordinatesCommand: payload.species is empty.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_Payload.windowId);
+				if (!target)
+					return target.Error();
+
+				RendererWindowState &windowState = *target->windowState;
+				m_WindowIdResolved = windowState.windowId;
+				CrystalStructure &structure = target->record->structure;
+				m_PreviousAtoms = structure.atoms;
+				m_PreviousBonds = structure.bonds;
+
+				PointDefectOperation operation;
+				operation.atom.species = m_Payload.species;
+				operation.atom.position =
+					m_Payload.isFractional ? structure.FractionalToCartesian(m_Payload.position) : m_Payload.position;
+				operation.atom.fractional = structure.CartesianToFractional(operation.atom.position);
+				const std::size_t newIndex = structure.atoms.size();
+				Result<void> result = ApplyInterstitial(structure, operation);
+				if (!result)
+					return result.Error();
+
+				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, {newIndex});
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"AddAtomAtCoordinatesCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				target->record->structure.atoms = m_PreviousAtoms;
+				target->record->structure.bonds = m_PreviousBonds;
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, {});
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Add atom (" + m_Payload.species + ")";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			ElementPropertiesTable m_ElementPropertiesTable;
+			AddAtomAtCoordinatesPayload m_Payload;
+			std::string m_WindowIdResolved;
+			std::vector<AtomSite> m_PreviousAtoms;
+			std::vector<Bond> m_PreviousBonds;
+		};
+
 		class ChangeSelectedAtomTypeCommand final : public ICommand
 		{
 		public:
@@ -1037,6 +1141,21 @@ namespace DefectStudio
 			std::move(atomStyleTable),
 			std::move(elementPropertiesTable),
 			std::move(windowId));
+	}
+
+	Unique<ICommand> CreateAddAtomAtCoordinatesCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		AddAtomAtCoordinatesPayload payload)
+	{
+		return CreateUnique<AddAtomAtCoordinatesCommand>(
+			std::move(domainLayer),
+			std::move(rendererLayer),
+			std::move(atomStyleTable),
+			std::move(elementPropertiesTable),
+			std::move(payload));
 	}
 
 	Unique<ICommand> CreateConnectSelectedAtomsCommand(
