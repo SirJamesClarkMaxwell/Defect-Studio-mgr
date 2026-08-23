@@ -10,6 +10,7 @@
 #include "Core/Commands/Command.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Domain/Crystal/CrystalPrimitives.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -189,4 +190,23 @@ namespace DefectStudio
 
 	[[nodiscard]] Unique<ICommand> CreateSetElementStyleCommand(
 		WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable, SetElementStylePayload payload);
+
+	// Payload for "renderer.bonds.set_settings" (Bond Settings panel) - replaces the structure's
+	// BondGenerationSettings (global cutoff scale + per-pair overrides) and regenerates Auto bonds
+	// from it in one undoable step. Also the mechanism for a plain "rebuild bonds now" (pass the
+	// structure's current settings back unchanged - RegenerateAutoBonds is idempotent for a fixed
+	// atom set + settings, see BondGenerator.cpp). windowId empty = currently focused renderer
+	// viewport, same convention as the atom-edit commands above.
+	struct SetBondSettingsPayload
+	{
+		std::string windowId;
+		BondGenerationSettings settings;
+	};
+
+	[[nodiscard]] Unique<ICommand> CreateSetBondSettingsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		SetBondSettingsPayload payload);
 } // namespace DefectStudio

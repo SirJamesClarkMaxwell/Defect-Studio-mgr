@@ -347,6 +347,24 @@ namespace DefectStudio
 			return CreateSetElementStyleCommand(std::move(rendererLayer), std::move(atomStyleTable), *payload);
 		}
 
+		// Payload-driven, like MakeSetElementStyleCommand - the Bond Settings panel builds
+		// SetBondSettingsPayload (global cutoff scale + per-pair overrides, or the structure's
+		// current settings unchanged for a plain "rebuild bonds now") and calls Execute() with it
+		// attached.
+		Unique<ICommand> MakeSetBondSettingsCommand(
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer,
+			AtomStyleTable atomStyleTable,
+			ElementPropertiesTable elementPropertiesTable,
+			CommandContext &context)
+		{
+			SetBondSettingsPayload *payload = context.TryGet<SetBondSettingsPayload>("bond_edit.set_settings_payload");
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetBondSettingsCommand(
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable), *payload);
+		}
+
 		Unique<ICommand> MakeAddAtomAtCoordinatesCommand(
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
@@ -762,6 +780,14 @@ namespace DefectStudio
 			"Renderer: Set element style",
 			"Set an element's color/radius in the Element Catalog (undoable).",
 			std::bind_front(MakeSetElementStyleCommand, rendererLayer, atomStyleTable),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(
+			registry,
+			"renderer.bonds.set_settings",
+			"Renderer: Set bond settings",
+			"Change bond generation settings (global cutoff scale, per-pair overrides) and regenerate "
+			"Auto bonds from them - also how a plain rebuild-bonds-now works (undoable).",
+			std::bind_front(MakeSetBondSettingsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,

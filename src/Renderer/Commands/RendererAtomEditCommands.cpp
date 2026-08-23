@@ -1012,6 +1012,101 @@ namespace DefectStudio
 			std::vector<std::size_t> m_ChangedIndices;
 		};
 
+		// Replaces BondGenerationSettings and regenerates Auto bonds from it - also how a plain
+		// "rebuild bonds now" works (payload.settings == the structure's current settings, unchanged;
+		// RegenerateAutoBonds is deterministic for a fixed atom set + settings). Undo restores the
+		// previous settings and regenerates again from THOSE, rather than snapshotting/restoring the
+		// raw bond list - equivalent (RegenerateAutoBonds is deterministic and Manual-origin bonds are
+		// never touched by it) and correctly reflects "these settings produce these bonds" either way.
+		class SetBondSettingsCommand final : public ICommand
+		{
+		public:
+			SetBondSettingsCommand(
+				WeakRef<DomainLayer> domainLayer,
+				WeakRef<RendererLayer> rendererLayer,
+				AtomStyleTable atomStyleTable,
+				ElementPropertiesTable elementPropertiesTable,
+				SetBondSettingsPayload payload)
+				: m_DomainLayer(std::move(domainLayer)),
+				  m_RendererLayer(std::move(rendererLayer)),
+				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
+				  m_Payload(std::move(payload))
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"SetBondSettingsCommand: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_Payload.windowId);
+				if (!target)
+					return target.Error();
+
+				RendererWindowState &windowState = *target->windowState;
+				m_WindowIdResolved = windowState.windowId;
+				m_SelectionBefore = windowState.selectedAtomIndices;
+				CrystalStructure &structure = target->record->structure;
+				m_PreviousSettings = structure.bondSettings;
+				structure.bondSettings = m_Payload.settings;
+
+				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, m_SelectionBefore);
+				return {};
+			}
+
+			Result<void> Undo(CommandContext &) override
+			{
+				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<RendererLayer> rendererLayer = m_RendererLayer.lock();
+				if (domainLayer == nullptr || rendererLayer == nullptr)
+				{
+					return MakeAtomEditError(
+						"renderer.atom_edit.no_layers",
+						"Renderer/Domain layer unavailable.",
+						"SetBondSettingsCommand::Undo: DomainLayer or RendererLayer expired.");
+				}
+
+				Result<AtomEditTarget> target = ResolveAtomEditTarget(*rendererLayer, *domainLayer, m_WindowIdResolved);
+				if (!target)
+					return target.Error();
+
+				CrystalStructure &structure = target->record->structure;
+				structure.bondSettings = m_PreviousSettings;
+				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_SelectionBefore);
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Change bond generation settings";
+			}
+
+			[[nodiscard]] bool IsUndoable() const noexcept override
+			{
+				return true;
+			}
+
+		private:
+			WeakRef<DomainLayer> m_DomainLayer;
+			WeakRef<RendererLayer> m_RendererLayer;
+			AtomStyleTable m_AtomStyleTable;
+			ElementPropertiesTable m_ElementPropertiesTable;
+			SetBondSettingsPayload m_Payload;
+			std::string m_WindowIdResolved;
+			std::vector<std::size_t> m_SelectionBefore;
+			BondGenerationSettings m_PreviousSettings;
+		};
+
 		// Manual bond add ('J'). Requires exactly 2 selected atoms - unlike Delete/Duplicate/Paste,
 		// does NOT call RegenerateAutoBonds, since that would only rebuild the Auto-origin bonds this
 		// command has nothing to do with (see BondOrigin::Manual in CrystalPrimitives.hpp: Manual
@@ -1417,5 +1512,20 @@ namespace DefectStudio
 		WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable, SetElementStylePayload payload)
 	{
 		return CreateUnique<SetElementStyleCommand>(std::move(rendererLayer), std::move(atomStyleTable), std::move(payload));
+	}
+
+	Unique<ICommand> CreateSetBondSettingsCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
+		SetBondSettingsPayload payload)
+	{
+		return CreateUnique<SetBondSettingsCommand>(
+			std::move(domainLayer),
+			std::move(rendererLayer),
+			std::move(atomStyleTable),
+			std::move(elementPropertiesTable),
+			std::move(payload));
 	}
 } // namespace DefectStudio

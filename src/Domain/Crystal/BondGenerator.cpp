@@ -82,13 +82,6 @@ namespace DefectStudio
 				static_cast<int>(std::floor(position.z / kCellSize))};
 		}
 
-		[[nodiscard]] std::string PairKey(std::string first, std::string second)
-		{
-			if (second < first)
-				std::swap(first, second);
-			return first + "-" + second;
-		}
-
 		// Bonds are undirected - (first, second, shift) and (second, first, -shift) describe the
 		// same physical bond (the shift is always "how to move secondAtomIndex", so swapping which
 		// atom is "second" flips its sign).
@@ -153,7 +146,7 @@ namespace DefectStudio
 			const std::string &first,
 			const std::string &second)
 		{
-			const auto found = settings.perPairCutoffOverride.find(PairKey(first, second));
+			const auto found = settings.perPairCutoffOverride.find(BondPairKey(first, second));
 			if (found != settings.perPairCutoffOverride.end())
 				return found->second;
 			return settings.globalCutoffScale;
@@ -281,6 +274,13 @@ namespace DefectStudio
 			return pairs;
 		}
 	} // namespace
+
+	std::string BondPairKey(std::string first, std::string second)
+	{
+		if (second < first)
+			std::swap(first, second);
+		return first + "-" + second;
+	}
 
 	void RegenerateAutoBonds(
 		CrystalStructure &structure,

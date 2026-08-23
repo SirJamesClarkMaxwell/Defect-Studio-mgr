@@ -32,6 +32,7 @@
 #include "IO/RecentProjectsIO.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/Panels/BondSettingsPanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/ExportImagePanel.hpp"
@@ -559,6 +560,7 @@ namespace DefectStudio
 				true);
 			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
+			registerPanel<BondSettingsPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Bond Settings", false);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);
