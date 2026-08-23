@@ -523,12 +523,6 @@ namespace DefectStudio
 			}
 		}
 
-		if (hitAtomIndex != std::numeric_limits<std::size_t>::max())
-		{
-			handleAtomPick(windowState, relX, relY, additive);
-			return;
-		}
-
 		float bestBondT = std::numeric_limits<float>::max();
 		std::size_t hitBondIndex = std::numeric_limits<std::size_t>::max();
 		if (windowState.pickBonds)
@@ -565,11 +559,23 @@ namespace DefectStudio
 			}
 		}
 
+		// Whichever hit is closer to the camera wins (atom keeps priority on an exact tie) - not "an
+		// atom always wins if its inflated pick sphere was touched at all", which used to make a bond
+		// unselectable whenever its own click point also fell inside a same-ray atom sphere further
+		// along, even if the bond surface was the nearer of the two along the ray.
+		const bool atomHit = hitAtomIndex != std::numeric_limits<std::size_t>::max();
+		const bool bondHit = hitBondIndex != std::numeric_limits<std::size_t>::max();
+		if (atomHit && (!bondHit || bestAtomT <= bestBondT))
+		{
+			handleAtomPick(windowState, relX, relY, additive);
+			return;
+		}
+
 		Ref<EventBus> eventBus = m_Layer.GetEventBus();
 		if (eventBus == nullptr)
 			return;
 
-		if (hitBondIndex == std::numeric_limits<std::size_t>::max())
+		if (!bondHit)
 		{
 			RendererEvents::Viewport::AtomSelectionRequested event;
 			event.windowId = windowState.windowId;
