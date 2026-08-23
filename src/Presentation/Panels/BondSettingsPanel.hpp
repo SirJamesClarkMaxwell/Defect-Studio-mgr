@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Domain/Crystal/CrystalPrimitives.hpp"
+#include "Domain/Crystal/ElementProperties.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
@@ -24,6 +25,7 @@ namespace DefectStudio
 			RendererLayer &layer,
 			WeakRef<CommandRegistry> commandRegistry,
 			WeakRef<DomainLayer> domainLayer,
+			ElementPropertiesTable elementPropertiesTable,
 			std::string title = "Bond Settings",
 			bool visibleByDefault = false);
 		BondSettingsPanel(const BondSettingsPanel &other) = default;
@@ -33,10 +35,12 @@ namespace DefectStudio
 
 	private:
 		void applySettings();
+		void drawPairPickerPopup(const char *popupId, char *targetBuffer, std::size_t targetSize);
 
 		RendererLayer &m_Layer;
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		WeakRef<DomainLayer> m_DomainLayer;
+		ElementPropertiesTable m_ElementPropertiesTable;
 
 		// Local edit buffer, reseeded from the live structure whenever the target window changes -
 		// not written back until "Rebuild bonds" runs (see Element Catalog's m_LiveStyle for the same
@@ -45,6 +49,11 @@ namespace DefectStudio
 		// through an undoable command anyway).
 		std::string m_EditedForWindowId;
 		BondGenerationSettings m_EditedSettings;
+
+		// When true (default), any edit to m_EditedSettings immediately calls applySettings() instead
+		// of waiting for the "Rebuild bonds" button - that button still exists to force a rebuild on
+		// demand (e.g. after external structure changes) even with auto-rebuild on.
+		bool m_AutoRebuild = true;
 
 		// Add-new-pair-override row (not part of BondGenerationSettings itself until "Add" commits it
 		// into m_EditedSettings.perPairCutoffOverride).

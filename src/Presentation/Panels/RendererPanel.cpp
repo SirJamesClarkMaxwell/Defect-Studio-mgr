@@ -76,6 +76,24 @@ namespace DefectStudio
 				windowState.fallbackNumericInput.pop_back();
 		}
 
+		// Mean of a frozen position snapshot - used by the numeric-override rotate/scale paths below
+		// to get a pivot that stays fixed for the whole typed-number entry instead of the live
+		// per-frame selection centroid (see call sites: mixing a frozen snapshot with a pivot that is
+		// itself recomputed from the snapshot's own output each frame is a feedback loop, and for
+		// rotation in particular it's a DIVERGING one - the per-frame pivot error e satisfies
+		// e(t+1) = (I-R)*e(t), and |I-R| = 2*sin(angle/2) exceeds 1 for any angle over 60 degrees, so
+		// a typed 90 degree rotation doubled its own error roughly every frame and threw the selection
+		// off-screen within a few dozen frames).
+		[[nodiscard]] glm::vec3 MeanPosition(const std::vector<glm::vec3> &positions)
+		{
+			if (positions.empty())
+				return glm::vec3(0.0f);
+			glm::vec3 sum(0.0f);
+			for (const glm::vec3 &position : positions)
+				sum += position;
+			return sum / static_cast<float>(positions.size());
+		}
+
 	}
 
 	RendererPanel::RendererPanel(
@@ -1247,7 +1265,10 @@ namespace DefectStudio
 					if (numericActive)
 					{
 						// Typed degrees apply ABSOLUTE from the pre-drag snapshot (not accumulated),
-						// same reasoning as the translate/scale numeric path below.
+						// same reasoning as the translate/scale numeric path below. Pivot MUST be the
+						// frozen start-of-drag centroid (MeanPosition of the snapshot), not the live
+						// `pivot` above - see MeanPosition's comment for why mixing the two diverges.
+						const glm::vec3 numericPivot = MeanPosition(windowState.fallbackDragStartPositions);
 						const glm::quat rotation = glm::angleAxis(
 							glm::radians(ParseTypedNumber(windowState.fallbackNumericInput)) * rotationSign, lockedAxisWorld);
 						for (std::size_t i = 0;
@@ -1255,7 +1276,7 @@ namespace DefectStudio
 							 ++i)
 						{
 							windowState.structure.atoms[windowState.selectedAtomIndices[i]].cartesianPosition =
-								pivot + rotation * (windowState.fallbackDragStartPositions[i] - pivot);
+								numericPivot + rotation * (windowState.fallbackDragStartPositions[i] - numericPivot);
 						}
 					}
 					else
@@ -1543,6 +1564,12 @@ namespace DefectStudio
 						// position, so factor and "from what" differ between the two paths.
 						const float factor = numericActive ? glm::clamp(deltaOnAxisWorld, 0.05f, 20.0f)
 															: glm::clamp(1.0f + deltaOnAxisWorld, 0.05f, 20.0f);
+						// Numeric path needs the frozen start-of-drag centroid, not the live `pivot`
+						// above - same feedback-loop reasoning as the rotate numeric path (see
+						// MeanPosition's comment): mixing a frozen basePosition with a pivot recomputed
+						// from that same frozen data's own (already-scaled) output diverges whenever the
+						// typed factor is outside (0, 2).
+						const glm::vec3 scalePivot = numericActive ? MeanPosition(windowState.fallbackDragStartPositions) : pivot;
 						for (std::size_t i = 0; i < windowState.selectedAtomIndices.size(); ++i)
 						{
 							const std::size_t atomIndex = windowState.selectedAtomIndices[i];
@@ -1551,11 +1578,11 @@ namespace DefectStudio
 							const glm::vec3 &basePosition = numericActive && i < windowState.fallbackDragStartPositions.size()
 								? windowState.fallbackDragStartPositions[i]
 								: windowState.structure.atoms[atomIndex].cartesianPosition;
-							const glm::vec3 relative = basePosition - pivot;
+							const glm::vec3 relative = basePosition - scalePivot;
 							const float along = glm::dot(relative, windowState.fallbackDragAxisWorldDir);
 							const glm::vec3 perpendicular = relative - windowState.fallbackDragAxisWorldDir * along;
 							windowState.structure.atoms[atomIndex].cartesianPosition =
-								pivot + perpendicular + windowState.fallbackDragAxisWorldDir * (along * factor);
+								scalePivot + perpendicular + windowState.fallbackDragAxisWorldDir * (along * factor);
 						}
 					}
 					else

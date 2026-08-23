@@ -14,6 +14,7 @@
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
+#include "Presentation/Panels/PeriodicTableGrid.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 
 namespace DefectStudio
@@ -22,13 +23,32 @@ namespace DefectStudio
 		RendererLayer &layer,
 		WeakRef<CommandRegistry> commandRegistry,
 		WeakRef<DomainLayer> domainLayer,
+		ElementPropertiesTable elementPropertiesTable,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
 		  m_CommandRegistry(std::move(commandRegistry)),
-		  m_DomainLayer(std::move(domainLayer))
+		  m_DomainLayer(std::move(domainLayer)),
+		  m_ElementPropertiesTable(std::move(elementPropertiesTable))
 	{
+	}
+
+	void BondSettingsPanel::drawPairPickerPopup(const char *popupId, char *targetBuffer, std::size_t targetSize)
+	{
+		if (!ImGui::BeginPopup(popupId))
+			return;
+		const std::string clicked = DrawPeriodicTableGrid(
+			m_Layer,
+			[&](const std::string &symbol) -> glm::vec3
+			{ return CategoryColor(ClassifyElement(AtomicNumberForSymbol(m_Layer, symbol))); },
+			std::string(targetBuffer));
+		if (!clicked.empty())
+		{
+			std::snprintf(targetBuffer, targetSize, "%s", clicked.c_str());
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
 	}
 
 	Ref<IPanel> BondSettingsPanel::Clone() const
@@ -125,10 +145,13 @@ namespace DefectStudio
 		ImGui::TextWrapped(
 			"Cutoff = scale x (covalent radius A + covalent radius B). A bond forms when two atoms "
 			"are closer than their pair's cutoff.");
+		ImGui::Checkbox("Auto-rebuild on change", &m_AutoRebuild);
 		ImGui::Separator();
 
 		ImGui::SetNextItemWidth(160.0f);
 		ImGui::DragFloat("Global cutoff scale", &m_EditedSettings.globalCutoffScale, 0.01f, 0.5f, 3.0f, "%.2f");
+		if (ImGui::IsItemDeactivatedAfterEdit() && m_AutoRebuild)
+			applySettings();
 		ImGui::SameLine();
 		ImGui::TextDisabled("(used for any pair without an override below)");
 
@@ -136,6 +159,7 @@ namespace DefectStudio
 		ImGui::TextUnformatted("Per-pair overrides");
 
 		std::string pairToRemove;
+		bool removeRequested = false;
 		if (ImGui::BeginTable(
 				"##BondPairOverrides", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
@@ -153,25 +177,42 @@ namespace DefectStudio
 				ImGui::SetNextItemWidth(-1.0f);
 				ImGui::PushID(pairKey.c_str());
 				ImGui::DragFloat("##Scale", &scale, 0.01f, 0.1f, 5.0f, "%.2f");
+				if (ImGui::IsItemDeactivatedAfterEdit() && m_AutoRebuild)
+					applySettings();
 				ImGui::TableSetColumnIndex(2);
 				if (ImGui::Button("Remove"))
+				{
 					pairToRemove = pairKey;
+					removeRequested = true;
+				}
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
 		}
 		if (!pairToRemove.empty())
+		{
 			m_EditedSettings.perPairCutoffOverride.erase(pairToRemove);
+			if (removeRequested && m_AutoRebuild)
+				applySettings();
+		}
 
 		ImGui::Separator();
 		ImGui::TextUnformatted("Add override");
 		ImGui::SetNextItemWidth(60.0f);
 		ImGui::InputText("##PairFirst", m_NewPairFirst, sizeof(m_NewPairFirst));
 		ImGui::SameLine();
+		if (ImGui::SmallButton("...##ChooseFirst"))
+			ImGui::OpenPopup("##ChoosePairFirst");
+		drawPairPickerPopup("##ChoosePairFirst", m_NewPairFirst, sizeof(m_NewPairFirst));
+		ImGui::SameLine();
 		ImGui::TextUnformatted("-");
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(60.0f);
 		ImGui::InputText("##PairSecond", m_NewPairSecond, sizeof(m_NewPairSecond));
+		ImGui::SameLine();
+		if (ImGui::SmallButton("...##ChooseSecond"))
+			ImGui::OpenPopup("##ChoosePairSecond");
+		drawPairPickerPopup("##ChoosePairSecond", m_NewPairSecond, sizeof(m_NewPairSecond));
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(100.0f);
 		ImGui::DragFloat("##NewPairScale", &m_NewPairScale, 0.01f, 0.1f, 5.0f, "%.2f");
@@ -183,8 +224,59 @@ namespace DefectStudio
 			m_EditedSettings.perPairCutoffOverride[BondPairKey(m_NewPairFirst, m_NewPairSecond)] = m_NewPairScale;
 			m_NewPairFirst[0] = '\0';
 			m_NewPairSecond[0] = '\0';
+			if (m_AutoRebuild)
+				applySettings();
 		}
 		ImGui::EndDisabled();
+
+		// Auto-detected pairs actually present in this structure - lets the user see real cutoff
+		// distances and add an override without having to guess/type species symbols by hand.
+		const std::vector<std::string> presentSpecies = domainRecord->structure.UniqueSpecies();
+		if (!presentSpecies.empty())
+		{
+			ImGui::Separator();
+			ImGui::TextUnformatted("Detected in this structure");
+			if (ImGui::BeginTable(
+					"##DetectedPairs", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Pair", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+				ImGui::TableSetupColumn("Cutoff at current scale");
+				ImGui::TableSetupColumn("##AddDetected", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+				ImGui::TableHeadersRow();
+
+				for (std::size_t a = 0; a < presentSpecies.size(); ++a)
+				{
+					for (std::size_t b = a; b < presentSpecies.size(); ++b)
+					{
+						const std::string pairKey = BondPairKey(presentSpecies[a], presentSpecies[b]);
+						const auto override_ = m_EditedSettings.perPairCutoffOverride.find(pairKey);
+						const bool hasOverride = override_ != m_EditedSettings.perPairCutoffOverride.end();
+						const float scale = hasOverride ? override_->second : m_EditedSettings.globalCutoffScale;
+						const float cutoffDistance = scale *
+							(m_ElementPropertiesTable.Get(presentSpecies[a]).covalentRadius +
+								m_ElementPropertiesTable.Get(presentSpecies[b]).covalentRadius);
+
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						ImGui::TextUnformatted(pairKey.c_str());
+						ImGui::TableSetColumnIndex(1);
+						ImGui::Text("%.3f A (%s)", cutoffDistance, hasOverride ? "override" : "global scale");
+						ImGui::TableSetColumnIndex(2);
+						ImGui::PushID(pairKey.c_str());
+						ImGui::BeginDisabled(hasOverride);
+						if (ImGui::SmallButton("Add override"))
+						{
+							m_EditedSettings.perPairCutoffOverride[pairKey] = m_EditedSettings.globalCutoffScale;
+							if (m_AutoRebuild)
+								applySettings();
+						}
+						ImGui::EndDisabled();
+						ImGui::PopID();
+					}
+				}
+				ImGui::EndTable();
+			}
+		}
 
 		ImGui::Separator();
 		if (ImGui::Button("Rebuild bonds"))

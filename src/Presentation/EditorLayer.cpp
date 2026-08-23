@@ -560,7 +560,8 @@ namespace DefectStudio
 				true);
 			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
-			registerPanel<BondSettingsPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Bond Settings", false);
+			registerPanel<BondSettingsPanel>(
+				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);
