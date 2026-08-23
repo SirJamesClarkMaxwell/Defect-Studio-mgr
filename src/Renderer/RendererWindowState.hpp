@@ -183,6 +183,13 @@ namespace DefectStudio
 		// click and modal) - the only way to revert on cancel, since the live drag mutates
 		// windowState.structure directly before anything is committed to the domain.
 		std::vector<glm::vec3> fallbackDragStartPositions;
+		// Blender-style numeric override: while a locked-axis fallback drag is active, typed digits
+		// accumulate here and replace the mouse-driven delta with an exact typed value (applied from
+		// fallbackDragStartPositions, absolute rather than incremental) - Enter confirms, Backspace
+		// edits, Escape/right-click cancels same as any other drag. Empty means "no override, follow
+		// the mouse" (the pre-existing behavior). Never set during the free trackball rotate
+		// (fallbackGizmoAxis == -2), which has no single axis for a typed number to mean anything.
+		std::string fallbackNumericInput;
 		// Translate-only gizmo for the selected pinned measurement label (RendererPanel::
 		// renderLabelTransformGizmo) - same click-a-handle-and-drag shape as the fallback atom gizmo
 		// above but its own state, since it drags a single PinnedMeasurement::worldOffset rather than

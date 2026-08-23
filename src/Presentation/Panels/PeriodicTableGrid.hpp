@@ -36,4 +36,29 @@ namespace DefectStudio
 		const std::function<glm::vec3(const std::string &)> &colorForSymbol,
 		const std::string &selectedSymbol,
 		ImVec2 cellSize = ImVec2(38.0f, 32.0f));
+
+	// Classic textbook periodic-table category, shared by every panel that colors elements by
+	// category (ElementCatalogPanel, RendererPanel::drawPeriodicTableWindow) so this classification
+	// only exists once - see PeriodicTableGrid.cpp for the exact groupings and their caveats.
+	enum class ElementCategory
+	{
+		AlkaliMetal,
+		AlkalineEarthMetal,
+		TransitionMetal,
+		PostTransitionMetal,
+		Metalloid,
+		Nonmetal,
+		Halogen,
+		NobleGas,
+		Lanthanide,
+		Actinide,
+		Unknown
+	};
+	[[nodiscard]] ElementCategory ClassifyElement(int atomicNumber);
+	[[nodiscard]] glm::vec3 CategoryColor(ElementCategory category);
+
+	// Reverse lookup for callers (like drawPeriodicTableWindow) that only have a symbol on hand, not
+	// an atomic number - linear scan over GetPeriodicTableSymbols() (118 entries, only called per
+	// grid cell while a periodic table window is open, not a hot path). Returns 0 if not found.
+	[[nodiscard]] int AtomicNumberForSymbol(RendererLayer &layer, const std::string &symbol);
 } // namespace DefectStudio

@@ -330,6 +330,7 @@ namespace DefectStudio::RendererEvents::Viewport
 	{
 		std::string windowId;
 		std::vector<std::size_t> atomIndices;
+		std::vector<std::size_t> bondIndices;
 		RegionSelectMode mode = RegionSelectMode::Replace;
 	};
 

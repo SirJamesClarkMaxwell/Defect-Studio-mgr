@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <optional>
 #include <vector>
@@ -40,6 +42,38 @@ namespace DefectStudio
 			if (!std::isfinite(value))
 				return 640.0f;
 			return std::clamp(value, kViewportMinSize, kViewportMaxSize);
+		}
+
+		// Parses a Blender-style typed numeric override ("-3.5" while it's still being typed, possibly
+		// just "-" or "." mid-entry) - unparsable/partial input reads as 0 rather than erroring, since
+		// the caller applies this every frame while the buffer is non-empty.
+		[[nodiscard]] float ParseTypedNumber(const std::string &buffer)
+		{
+			float value = 0.0f;
+			std::from_chars(buffer.data(), buffer.data() + buffer.size(), value);
+			return value;
+		}
+
+		// Captures Blender-style numeric-override keystrokes (digits, sign, decimal point, Backspace)
+		// into windowState.fallbackNumericInput while a locked-axis fallback drag is active - shared by
+		// both the rotate axis-locked path and the translate/scale path below since the key handling is
+		// identical, only what the resulting number MEANS differs per call site.
+		void CaptureGizmoNumericInput(RendererWindowState &windowState)
+		{
+			for (int digit = 0; digit < 10; ++digit)
+			{
+				if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_0 + digit), false) ||
+					ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_Keypad0 + digit), false))
+					windowState.fallbackNumericInput += static_cast<char>('0' + digit);
+			}
+			if ((ImGui::IsKeyPressed(ImGuiKey_Minus, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false)) &&
+				windowState.fallbackNumericInput.find('-') == std::string::npos)
+				windowState.fallbackNumericInput.insert(windowState.fallbackNumericInput.begin(), '-');
+			if ((ImGui::IsKeyPressed(ImGuiKey_Period, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadDecimal, false)) &&
+				windowState.fallbackNumericInput.find('.') == std::string::npos)
+				windowState.fallbackNumericInput += '.';
+			if (ImGui::IsKeyPressed(ImGuiKey_Backspace, false) && !windowState.fallbackNumericInput.empty())
+				windowState.fallbackNumericInput.pop_back();
 		}
 
 		// Closest points between an infinite ray (rayOrigin + t*rayDir, rayDir normalized) and a
@@ -949,7 +983,14 @@ namespace DefectStudio
 				std::max(windowState.selectionDragStart.y, windowState.selectionDragCurrent.y));
 
 			ImGuiIO &io = ImGui::GetIO();
-			publishRegionSelection(windowState, hitTestRect(windowState, rectMin, rectMax), resolveRegionSelectMode(io.KeyShift, io.KeyCtrl));
+			// Gated on pickAtoms/pickBonds the same way handleViewportPick's plain click already is -
+			// box-select previously always matched atoms regardless of the active selection mode, and
+			// never matched bonds at all even when the mode allowed picking them.
+			publishRegionSelection(
+				windowState,
+				windowState.pickAtoms ? hitTestRect(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				windowState.pickBonds ? hitTestRectBonds(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				resolveRegionSelectMode(io.KeyShift, io.KeyCtrl));
 		}
 	}
 
@@ -970,7 +1011,10 @@ namespace DefectStudio
 
 		publishRegionSelection(
 			windowState,
-			hitTestCircle(windowState, center, windowState.circleSelectRadius),
+			windowState.pickAtoms ? hitTestCircle(windowState, center, windowState.circleSelectRadius)
+								   : std::vector<std::size_t>{},
+			windowState.pickBonds ? hitTestCircleBonds(windowState, center, windowState.circleSelectRadius)
+								   : std::vector<std::size_t>{},
 			io.KeyShift
 				? RendererEvents::Viewport::RegionSelectMode::Subtract
 				: RendererEvents::Viewport::RegionSelectMode::Add);
@@ -1099,6 +1143,7 @@ namespace DefectStudio
 				windowState.fallbackGizmoDragging = true;
 				windowState.fallbackGizmoAxis = -2; // sentinel: trackball rotate, not a translate/scale axis
 				windowState.fallbackLastMousePos = mousePos;
+				windowState.fallbackNumericInput.clear();
 			}
 
 			if (windowState.fallbackGizmoDragging && windowState.fallbackGizmoAxis == -2)
@@ -1152,6 +1197,7 @@ namespace DefectStudio
 					windowState.fallbackModalDrag = true;
 					windowState.fallbackGizmoAxis = axis;
 					windowState.fallbackLastMousePos = mousePos;
+					windowState.fallbackNumericInput.clear();
 					windowState.fallbackDragStartPositions.clear();
 					for (const std::size_t atomIndex : windowState.selectedAtomIndices)
 						windowState.fallbackDragStartPositions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
@@ -1173,6 +1219,7 @@ namespace DefectStudio
 					windowState.fallbackGizmoDragging = false;
 					windowState.fallbackModalDrag = false;
 					windowState.fallbackGizmoAxis = -1;
+					windowState.fallbackNumericInput.clear();
 					windowState.gizmoDragActive = false;
 					return true;
 				}
@@ -1188,7 +1235,11 @@ namespace DefectStudio
 						windowState.fallbackGizmoAxis = axis;
 				}
 
-				const bool modalConfirmed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+				CaptureGizmoNumericInput(windowState);
+				const bool numericActive = !windowState.fallbackNumericInput.empty();
+				const bool numericConfirmed = numericActive &&
+					(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false));
+				const bool modalConfirmed = ImGui::IsMouseClicked(ImGuiMouseButton_Left) || numericConfirmed;
 				if (pivotOnScreen)
 				{
 					const glm::vec3 cameraForward = -glm::vec3(view[0][2], view[1][2], view[2][2]);
@@ -1199,25 +1250,42 @@ namespace DefectStudio
 					// viewer instead, so only one sign check is needed here.
 					const float rotationSign = glm::dot(lockedAxisWorld, cameraForward) >= 0.0f ? -1.0f : 1.0f;
 
-					const glm::vec2 fromPivotLast = windowState.fallbackLastMousePos - pivotScreen;
-					const glm::vec2 fromPivotNow = mousePos - pivotScreen;
-					if (glm::length(fromPivotLast) > 1.0f && glm::length(fromPivotNow) > 1.0f)
+					if (numericActive)
 					{
-						const float lastAngle = std::atan2(fromPivotLast.y, fromPivotLast.x);
-						const float nowAngle = std::atan2(fromPivotNow.y, fromPivotNow.x);
-						float deltaAngle = nowAngle - lastAngle;
-						while (deltaAngle > glm::pi<float>())
-							deltaAngle -= glm::two_pi<float>();
-						while (deltaAngle < -glm::pi<float>())
-							deltaAngle += glm::two_pi<float>();
-
-						const glm::quat rotation = glm::angleAxis(deltaAngle * rotationSign, lockedAxisWorld);
-						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						// Typed degrees apply ABSOLUTE from the pre-drag snapshot (not accumulated),
+						// same reasoning as the translate/scale numeric path below.
+						const glm::quat rotation = glm::angleAxis(
+							glm::radians(ParseTypedNumber(windowState.fallbackNumericInput)) * rotationSign, lockedAxisWorld);
+						for (std::size_t i = 0;
+							 i < windowState.selectedAtomIndices.size() && i < windowState.fallbackDragStartPositions.size();
+							 ++i)
 						{
-							if (atomIndex >= windowState.structure.atoms.size())
-								continue;
-							RendererAtomData &atom = windowState.structure.atoms[atomIndex];
-							atom.cartesianPosition = pivot + rotation * (atom.cartesianPosition - pivot);
+							windowState.structure.atoms[windowState.selectedAtomIndices[i]].cartesianPosition =
+								pivot + rotation * (windowState.fallbackDragStartPositions[i] - pivot);
+						}
+					}
+					else
+					{
+						const glm::vec2 fromPivotLast = windowState.fallbackLastMousePos - pivotScreen;
+						const glm::vec2 fromPivotNow = mousePos - pivotScreen;
+						if (glm::length(fromPivotLast) > 1.0f && glm::length(fromPivotNow) > 1.0f)
+						{
+							const float lastAngle = std::atan2(fromPivotLast.y, fromPivotLast.x);
+							const float nowAngle = std::atan2(fromPivotNow.y, fromPivotNow.x);
+							float deltaAngle = nowAngle - lastAngle;
+							while (deltaAngle > glm::pi<float>())
+								deltaAngle -= glm::two_pi<float>();
+							while (deltaAngle < -glm::pi<float>())
+								deltaAngle += glm::two_pi<float>();
+
+							const glm::quat rotation = glm::angleAxis(deltaAngle * rotationSign, lockedAxisWorld);
+							for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+							{
+								if (atomIndex >= windowState.structure.atoms.size())
+									continue;
+								RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+								atom.cartesianPosition = pivot + rotation * (atom.cartesianPosition - pivot);
+							}
 						}
 					}
 					windowState.fallbackLastMousePos = mousePos;
@@ -1226,6 +1294,14 @@ namespace DefectStudio
 					lockDrawList->AddCircle(
 						ImVec2(pivotScreen.x, pivotScreen.y), kPickMaxDistance,
 						kAxisLockColors[windowState.fallbackGizmoAxis], 64, 3.0f);
+					if (numericActive)
+					{
+						char label[64];
+						std::snprintf(label, sizeof(label), "Rotate %c: %s deg", "XYZ"[windowState.fallbackGizmoAxis],
+							windowState.fallbackNumericInput.c_str());
+						ImGui::GetForegroundDrawList()->AddText(
+							ImVec2(pivotScreen.x + 12.0f, pivotScreen.y - 24.0f), IM_COL32(255, 230, 60, 255), label);
+					}
 				}
 				windowState.gizmoDragActive = true;
 
@@ -1234,6 +1310,7 @@ namespace DefectStudio
 					windowState.fallbackGizmoDragging = false;
 					windowState.fallbackModalDrag = false;
 					windowState.fallbackGizmoAxis = -1;
+					windowState.fallbackNumericInput.clear();
 					// Falls through to the shared commit block below instead of returning - matches
 					// the translate/scale modal-confirm convention (no separate "release" frame).
 				}
@@ -1324,6 +1401,7 @@ namespace DefectStudio
 					// that loop be the ONLY place that arms it, so the lock/full-length line shows from
 					// the very first press instead of needing a second one.
 					windowState.fallbackLastMousePos = mousePos;
+					windowState.fallbackNumericInput.clear();
 					windowState.fallbackDragAxisScreenDir = axisScreenDir[axis];
 					windowState.fallbackDragAxisWorldDir = kWorldAxes[axis];
 					windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[axis]);
@@ -1366,6 +1444,7 @@ namespace DefectStudio
 					windowState.fallbackGizmoAxis = hoveredAxis;
 					windowState.fallbackAxisLockOverride = -1;
 					windowState.fallbackLastMousePos = mousePos;
+					windowState.fallbackNumericInput.clear();
 					windowState.fallbackDragAxisScreenDir = axisScreenDir[hoveredAxis];
 					windowState.fallbackDragAxisWorldDir = kWorldAxes[hoveredAxis];
 					windowState.fallbackDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
@@ -1423,52 +1502,96 @@ namespace DefectStudio
 					windowState.fallbackModalDrag = false;
 					windowState.fallbackGizmoAxis = -1;
 					windowState.fallbackAxisLockOverride = -1;
+					windowState.fallbackNumericInput.clear();
 					windowState.gizmoDragActive = false;
 					return true;
 				}
 
+				CaptureGizmoNumericInput(windowState);
+				const bool numericActive = !windowState.fallbackNumericInput.empty();
+				const bool numericConfirmed = numericActive &&
+					(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false));
+
 				// A modal drag (started by X/Y/Z with no button held) applies every frame regardless
 				// of mouse-button state and confirms on left-click; a click-drag keeps applying only
 				// while the button stays down and commits on release - both fall through to the same
-				// apply step below, they just disagree on when "still active" is true.
-				const bool modalConfirmed = windowState.fallbackModalDrag && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-				const bool stillActive =
-					windowState.fallbackModalDrag ? !modalConfirmed : ImGui::IsMouseDown(ImGuiMouseButton_Left);
+				// apply step below, they just disagree on when "still active" is true. Once a number is
+				// being typed, the drag stays active regardless of mouse state (mirroring a modal drag)
+				// until Enter confirms or Escape cancels - Blender lets you type a number after either
+				// starting method.
+				const bool modalConfirmed =
+					(windowState.fallbackModalDrag && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) || numericConfirmed;
+				const bool stillActive = numericActive ? true
+					: (windowState.fallbackModalDrag ? !modalConfirmed : ImGui::IsMouseDown(ImGuiMouseButton_Left));
 
 				if (stillActive || modalConfirmed)
 				{
-					const glm::vec2 delta = mousePos - windowState.fallbackLastMousePos;
+					float deltaOnAxisWorld;
+					if (numericActive)
+					{
+						// Typed value applies ABSOLUTE from the pre-drag snapshot below (not accumulated
+						// frame over frame the way the mouse-delta path is), so it's computed once here
+						// and reused as an absolute offset/factor per atom.
+						deltaOnAxisWorld = ParseTypedNumber(windowState.fallbackNumericInput);
+					}
+					else
+					{
+						const glm::vec2 delta = mousePos - windowState.fallbackLastMousePos;
+						const float deltaOnAxisPixels = glm::dot(delta, windowState.fallbackDragAxisScreenDir);
+						deltaOnAxisWorld = deltaOnAxisPixels / windowState.fallbackDragPixelsPerWorld;
+					}
 					windowState.fallbackLastMousePos = mousePos;
-
-					const float deltaOnAxisPixels = glm::dot(delta, windowState.fallbackDragAxisScreenDir);
-					const float deltaOnAxisWorld = deltaOnAxisPixels / windowState.fallbackDragPixelsPerWorld;
 
 					if (operation == ImGuizmo::SCALE)
 					{
-						const float factor = glm::clamp(1.0f + deltaOnAxisWorld, 0.05f, 20.0f);
-						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						// Typed number IS the scale factor itself (Blender's "S 2 Enter" means 2x, not
+						// 1+2) - everyone else still accumulates 1+delta incrementally onto the live
+						// position, so factor and "from what" differ between the two paths.
+						const float factor = numericActive ? glm::clamp(deltaOnAxisWorld, 0.05f, 20.0f)
+															: glm::clamp(1.0f + deltaOnAxisWorld, 0.05f, 20.0f);
+						for (std::size_t i = 0; i < windowState.selectedAtomIndices.size(); ++i)
 						{
+							const std::size_t atomIndex = windowState.selectedAtomIndices[i];
 							if (atomIndex >= windowState.structure.atoms.size())
 								continue;
-							RendererAtomData &atom = windowState.structure.atoms[atomIndex];
-							const glm::vec3 relative = atom.cartesianPosition - pivot;
+							const glm::vec3 &basePosition = numericActive && i < windowState.fallbackDragStartPositions.size()
+								? windowState.fallbackDragStartPositions[i]
+								: windowState.structure.atoms[atomIndex].cartesianPosition;
+							const glm::vec3 relative = basePosition - pivot;
 							const float along = glm::dot(relative, windowState.fallbackDragAxisWorldDir);
 							const glm::vec3 perpendicular = relative - windowState.fallbackDragAxisWorldDir * along;
-							atom.cartesianPosition =
+							windowState.structure.atoms[atomIndex].cartesianPosition =
 								pivot + perpendicular + windowState.fallbackDragAxisWorldDir * (along * factor);
 						}
 					}
 					else
 					{
 						const glm::vec3 worldDelta = windowState.fallbackDragAxisWorldDir * deltaOnAxisWorld;
-						for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+						for (std::size_t i = 0; i < windowState.selectedAtomIndices.size(); ++i)
 						{
+							const std::size_t atomIndex = windowState.selectedAtomIndices[i];
 							if (atomIndex >= windowState.structure.atoms.size())
 								continue;
-							windowState.structure.atoms[atomIndex].cartesianPosition += worldDelta;
+							windowState.structure.atoms[atomIndex].cartesianPosition = numericActive &&
+									i < windowState.fallbackDragStartPositions.size()
+								? windowState.fallbackDragStartPositions[i] + worldDelta
+								: windowState.structure.atoms[atomIndex].cartesianPosition + worldDelta;
 						}
 					}
 					windowState.gizmoDragActive = true;
+
+					if (numericActive && pivotOnScreen)
+					{
+						char label[64];
+						const int effectiveAxis = windowState.fallbackAxisLockOverride >= 0
+							? windowState.fallbackAxisLockOverride
+							: windowState.fallbackGizmoAxis;
+						std::snprintf(label, sizeof(label), "%s %c: %s",
+							operation == ImGuizmo::SCALE ? "Scale" : "Move",
+							"XYZ"[effectiveAxis], windowState.fallbackNumericInput.c_str());
+						ImGui::GetForegroundDrawList()->AddText(
+							ImVec2(pivotScreen.x + 12.0f, pivotScreen.y - 24.0f), IM_COL32(255, 230, 60, 255), label);
+					}
 
 					if (modalConfirmed)
 					{
@@ -1476,6 +1599,7 @@ namespace DefectStudio
 						windowState.fallbackModalDrag = false;
 						windowState.fallbackGizmoAxis = -1;
 						windowState.fallbackAxisLockOverride = -1;
+						windowState.fallbackNumericInput.clear();
 						// Fall through to the shared commit block below instead of returning - a
 						// confirming click ends the drag the same frame, no separate "release" frame
 						// exists for a modal drag the way there is for a held button.
@@ -2003,6 +2127,62 @@ namespace DefectStudio
 		return hitIndices;
 	}
 
+	std::vector<std::size_t> RendererPanel::hitTestRectBonds(
+		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
+		{
+			const RendererBondData &bond = windowState.structure.bonds[i];
+			if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
+				bond.secondAtomIndex >= windowState.structure.atoms.size())
+				continue;
+			const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
+			const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
+			if (!firstAtom.visible || !secondAtom.visible)
+				continue;
+			const glm::vec3 midpoint =
+				(firstAtom.cartesianPosition + secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset) * 0.5f;
+			const std::optional<glm::vec2> screen =
+				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, midpoint);
+			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	std::vector<std::size_t> RendererPanel::hitTestCircleBonds(
+		const RendererWindowState &windowState, glm::vec2 center, float radius) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
+		{
+			const RendererBondData &bond = windowState.structure.bonds[i];
+			if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
+				bond.secondAtomIndex >= windowState.structure.atoms.size())
+				continue;
+			const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
+			const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
+			if (!firstAtom.visible || !secondAtom.visible)
+				continue;
+			const glm::vec3 midpoint =
+				(firstAtom.cartesianPosition + secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset) * 0.5f;
+			const std::optional<glm::vec2> screen =
+				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, midpoint);
+			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
 	RendererEvents::Viewport::RegionSelectMode RendererPanel::resolveRegionSelectMode(bool additive, bool subtractive)
 	{
 		if (additive)
@@ -2015,6 +2195,7 @@ namespace DefectStudio
 	void RendererPanel::publishRegionSelection(
 		RendererWindowState &windowState,
 		std::vector<std::size_t> atomIndices,
+		std::vector<std::size_t> bondIndices,
 		RendererEvents::Viewport::RegionSelectMode mode)
 	{
 		Ref<EventBus> eventBus = m_Layer.GetEventBus();
@@ -2023,6 +2204,7 @@ namespace DefectStudio
 		RendererEvents::Viewport::RegionSelectionRequested event;
 		event.windowId = windowState.windowId;
 		event.atomIndices = std::move(atomIndices);
+		event.bondIndices = std::move(bondIndices);
 		event.mode = mode;
 		eventBus->Publish(event);
 	}
@@ -2032,67 +2214,27 @@ namespace DefectStudio
 		if (!m_Layer.GetShowPeriodicTableWindow())
 			return;
 
-		ImGui::SetNextWindowSize(ImVec2(760.0f, 430.0f), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(1260.0f, 640.0f), ImGuiCond_FirstUseEver);
 		if (!ImGui::Begin("Periodic Table", &m_Layer.GetShowPeriodicTableWindow()))
 		{
 			ImGui::End();
 			return;
 		}
 
-		const ImVec2 cellSize(36.0f, 32.0f);
-		const auto &symbols = m_Layer.GetPeriodicTableSymbols();
-		const auto &lanthanides = m_Layer.GetLanthanideSymbols();
-		const auto &actinides = m_Layer.GetActinideSymbols();
-
-		for (const PeriodicTableIndexRow &row : kPeriodicTableElementIndices)
-		{
-			for (std::size_t column = 0; column < row.size(); ++column)
-			{
-				const int atomicNumber = row[column];
-				if (column > 0)
-					ImGui::SameLine();
-
-				if (atomicNumber <= 0 || static_cast<std::size_t>(atomicNumber) > symbols.size())
-				{
-					ImGui::Dummy(cellSize);
-					continue;
-				}
-
-				const std::string &symbol = symbols[static_cast<std::size_t>(atomicNumber - 1)];
-				if (symbol == m_Layer.GetSelectedPeriodicElement())
-				{
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.28f, 0.56f, 0.92f, 1.0f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.34f, 0.64f, 0.98f, 1.0f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.48f, 0.84f, 1.0f));
-				}
-				const bool clicked = ImGui::Button(symbol.c_str(), cellSize);
-				if (symbol == m_Layer.GetSelectedPeriodicElement())
-					ImGui::PopStyleColor(3);
-
-				if (clicked)
-					m_Layer.GetSelectedPeriodicElement() = symbol;
-			}
-		}
-
-		ImGui::Separator();
-		ImGui::TextUnformatted("Lanthanides");
-		ImGui::SameLine();
-		for (std::size_t index = 0; index < lanthanides.size(); ++index)
-		{
-			if (index > 0)
-				ImGui::SameLine();
-			if (ImGui::Button(lanthanides[index].c_str(), cellSize))
-				m_Layer.GetSelectedPeriodicElement() = lanthanides[index];
-		}
-		ImGui::TextUnformatted("Actinides");
-		ImGui::SameLine();
-		for (std::size_t index = 0; index < actinides.size(); ++index)
-		{
-			if (index > 0)
-				ImGui::SameLine();
-			if (ImGui::Button(actinides[index].c_str(), cellSize))
-				m_Layer.GetSelectedPeriodicElement() = actinides[index];
-		}
+		// Was a hand-rolled duplicate of DrawPeriodicTableGrid (plain gray buttons, small fixed cell
+		// size, no per-category color, no readable-text contrast fix) - reuses the shared, colored,
+		// already-fixed-up grid instead, same as ElementCatalogPanel, plus a bigger font scale so the
+		// larger cells below aren't mostly empty padding around a tiny symbol.
+		ImGui::SetWindowFontScale(1.2f);
+		const ImVec2 cellSize(54.0f, 46.0f);
+		const std::string clicked = DrawPeriodicTableGrid(
+			m_Layer,
+			[&](const std::string &symbol) -> glm::vec3
+			{ return CategoryColor(ClassifyElement(AtomicNumberForSymbol(m_Layer, symbol))); },
+			m_Layer.GetSelectedPeriodicElement(), cellSize);
+		ImGui::SetWindowFontScale(1.0f);
+		if (!clicked.empty())
+			m_Layer.GetSelectedPeriodicElement() = clicked;
 
 		ImGui::Separator();
 		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());

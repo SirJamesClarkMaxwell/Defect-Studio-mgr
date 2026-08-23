@@ -51,10 +51,20 @@ namespace DefectStudio
 			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
 		[[nodiscard]] std::vector<std::size_t> hitTestCircle(
 			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
+		// Bond counterparts of hitTestRect/hitTestCircle above - test the bond's (periodic-offset
+		// aware) midpoint against the same screen-space shape, same convention already used for a
+		// pinned two-atom measurement's anchor. Box/circle select previously only ever matched atoms,
+		// silently excluding bonds even though a plain click can select one - kept as separate methods
+		// (not folded into the atom ones) since callers publish the two lists as different fields.
+		[[nodiscard]] std::vector<std::size_t> hitTestRectBonds(
+			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
+		[[nodiscard]] std::vector<std::size_t> hitTestCircleBonds(
+			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
 		[[nodiscard]] static RendererEvents::Viewport::RegionSelectMode resolveRegionSelectMode(bool additive, bool subtractive);
 		void publishRegionSelection(
 			RendererWindowState &windowState,
 			std::vector<std::size_t> atomIndices,
+			std::vector<std::size_t> bondIndices,
 			RendererEvents::Viewport::RegionSelectMode mode);
 		void drawPeriodicTableWindow();
 		// Modal opened by the vertical toolbar's "Add" button (drawViewportVerticalToolbar) - state
@@ -90,7 +100,9 @@ namespace DefectStudio
 		glm::vec3 m_ContextMenuWorldPosition = glm::vec3(0.0f);
 
 		// Add Atom popup (drawAddAtomPopup) - only one instance can be open app-wide, so single
-		// fields are enough, same reasoning as m_ContextMenuWorldPosition above.
+		// fields are enough, same reasoning as m_ContextMenuWorldPosition above. Doubles as the
+		// window's own open/closed state (passed as ImGui::Begin's p_open), not just a one-shot
+		// "please open" request - a plain window, not a modal, see drawAddAtomPopup's comment.
 		bool m_AddAtomPopupRequested = false;
 		std::string m_AddAtomPopupWindowId;
 		bool m_AddAtomPopupFractional = false;

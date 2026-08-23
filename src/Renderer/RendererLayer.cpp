@@ -2128,6 +2128,12 @@ namespace DefectStudio
 			if (atomEntity)
 				atomEntity.GetComponent<SelectionComponent>().selected = selectedValue;
 		}
+		for (const std::size_t bondIndex : event.bondIndices)
+		{
+			Entity bondEntity = scene.BondEntityAt(bondIndex);
+			if (bondEntity)
+				bondEntity.GetComponent<SelectionComponent>().selected = selectedValue;
+		}
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 	}
 

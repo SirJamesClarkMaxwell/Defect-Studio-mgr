@@ -3,9 +3,9 @@
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 
 #include <cctype>
+#include <cstdio>
 #include <map>
 #include <sstream>
-#include <unordered_set>
 
 #include <imgui.h>
 
@@ -19,87 +19,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		enum class ElementCategory
-		{
-			AlkaliMetal,
-			AlkalineEarthMetal,
-			TransitionMetal,
-			PostTransitionMetal,
-			Metalloid,
-			Nonmetal,
-			Halogen,
-			NobleGas,
-			Lanthanide,
-			Actinide,
-			Unknown
-		};
-
-		// Classic textbook periodic-table grouping, derived from atomic number alone - approximate
-		// for a few contested/superheavy elements (e.g. At is grouped with the metalloids rather than
-		// the halogens here; boundaries above Z=112 are sparse and rarely relevant to a defect
-		// structure tool), good enough for a visual reference coloring, not a chemistry claim.
-		[[nodiscard]] ElementCategory ClassifyElement(int z)
-		{
-			static const std::unordered_set<int> kAlkali = {3, 11, 19, 37, 55, 87};
-			static const std::unordered_set<int> kAlkalineEarth = {4, 12, 20, 38, 56, 88};
-			static const std::unordered_set<int> kMetalloid = {5, 14, 32, 33, 51, 52, 85};
-			static const std::unordered_set<int> kHalogen = {9, 17, 35, 53, 117};
-			static const std::unordered_set<int> kNobleGas = {2, 10, 18, 36, 54, 86, 118};
-			static const std::unordered_set<int> kPostTransition = {13, 31, 49, 50, 81, 82, 83, 84, 113, 114, 115, 116};
-			static const std::unordered_set<int> kOtherNonmetal = {1, 6, 7, 8, 15, 16, 34};
-
-			if (z >= 57 && z <= 71)
-				return ElementCategory::Lanthanide;
-			if (z >= 89 && z <= 103)
-				return ElementCategory::Actinide;
-			if (kAlkali.contains(z))
-				return ElementCategory::AlkaliMetal;
-			if (kAlkalineEarth.contains(z))
-				return ElementCategory::AlkalineEarthMetal;
-			if (kNobleGas.contains(z))
-				return ElementCategory::NobleGas;
-			if (kHalogen.contains(z))
-				return ElementCategory::Halogen;
-			if (kMetalloid.contains(z))
-				return ElementCategory::Metalloid;
-			if (kOtherNonmetal.contains(z))
-				return ElementCategory::Nonmetal;
-			if (kPostTransition.contains(z))
-				return ElementCategory::PostTransitionMetal;
-			if ((z >= 21 && z <= 30) || (z >= 39 && z <= 48) || (z >= 72 && z <= 80) || (z >= 104 && z <= 112))
-				return ElementCategory::TransitionMetal;
-			return ElementCategory::Unknown;
-		}
-
-		[[nodiscard]] glm::vec3 CategoryColor(ElementCategory category)
-		{
-			switch (category)
-			{
-				case ElementCategory::AlkaliMetal:
-					return glm::vec3(1.00f, 0.60f, 0.60f);
-				case ElementCategory::AlkalineEarthMetal:
-					return glm::vec3(1.00f, 0.80f, 0.45f);
-				case ElementCategory::TransitionMetal:
-					return glm::vec3(1.00f, 0.90f, 0.55f);
-				case ElementCategory::PostTransitionMetal:
-					return glm::vec3(0.55f, 0.70f, 0.55f);
-				case ElementCategory::Metalloid:
-					return glm::vec3(0.55f, 0.75f, 0.75f);
-				case ElementCategory::Nonmetal:
-					return glm::vec3(0.55f, 0.85f, 0.55f);
-				case ElementCategory::Halogen:
-					return glm::vec3(0.85f, 0.90f, 0.45f);
-				case ElementCategory::NobleGas:
-					return glm::vec3(0.70f, 0.55f, 0.90f);
-				case ElementCategory::Lanthanide:
-					return glm::vec3(0.70f, 0.85f, 0.95f);
-				case ElementCategory::Actinide:
-					return glm::vec3(0.95f, 0.65f, 0.85f);
-				default:
-					return glm::vec3(0.55f, 0.55f, 0.55f);
-			}
-		}
-
 		struct ElectronSubshell
 		{
 			int principalQuantumNumber = 0;
@@ -241,14 +160,42 @@ namespace DefectStudio
 
 		const ElementProperties &properties = m_ElementPropertiesTable.Get(m_SelectedSymbol);
 		ImGui::Separator();
-		ImGui::Text("Atomic number: %d", properties.atomicNumber);
-		ImGui::Text("Atomic mass: %.3f u", properties.mass);
-		ImGui::Text("Covalent radius: %.3f A", properties.covalentRadius);
-		ImGui::Text("Van der Waals radius: %.3f A", properties.vanDerWaalsRadius);
-		if (properties.electronegativity > 0.0f)
-			ImGui::Text("Electronegativity (Pauling): %.2f", properties.electronegativity);
-		else
-			ImGui::TextDisabled("Electronegativity (Pauling): n/a");
+		// A single Property/Value table instead of a stack of Text lines - asked for explicitly ("the
+		// whole thing was supposed to be in a table"), also gives the values a consistent aligned
+		// column instead of each line's number landing wherever its label happened to end.
+		if (ImGui::BeginTable(
+				"##ElementProperties", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+			ImGui::TableSetupColumn("Value");
+			auto propertyRow = [](const char *label, const std::string &value)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(label);
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextUnformatted(value.c_str());
+			};
+			char buffer[64];
+			std::snprintf(buffer, sizeof(buffer), "%d", properties.atomicNumber);
+			propertyRow("Atomic number", buffer);
+			std::snprintf(buffer, sizeof(buffer), "%.3f u", properties.mass);
+			propertyRow("Atomic mass", buffer);
+			std::snprintf(buffer, sizeof(buffer), "%.3f A", properties.covalentRadius);
+			propertyRow("Covalent radius", buffer);
+			std::snprintf(buffer, sizeof(buffer), "%.3f A", properties.vanDerWaalsRadius);
+			propertyRow("Van der Waals radius", buffer);
+			if (properties.electronegativity > 0.0f)
+			{
+				std::snprintf(buffer, sizeof(buffer), "%.2f", properties.electronegativity);
+				propertyRow("Electronegativity (Pauling)", buffer);
+			}
+			else
+			{
+				propertyRow("Electronegativity (Pauling)", "n/a");
+			}
+			ImGui::EndTable();
+		}
 
 		const std::vector<ElectronSubshell> subshells = ParseElectronConfiguration(properties.electronConfiguration);
 		if (!subshells.empty())
@@ -269,12 +216,15 @@ namespace DefectStudio
 				entry.second += subshell.electronCount;
 			}
 
+			// Fixed widths sized to the HEADER text at 1x font scale (not just the data) - "Electrons"
+			// was clipping to "Elect..." at the old 80px, the actual complaint behind "can't tell if
+			// it's the font or what".
 			if (ImGui::BeginTable(
 					"##ElectronShells", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 			{
-				ImGui::TableSetupColumn("Shell", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+				ImGui::TableSetupColumn("Shell", ImGuiTableColumnFlags_WidthFixed, 110.0f);
 				ImGui::TableSetupColumn("Subshells");
-				ImGui::TableSetupColumn("Electrons", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+				ImGui::TableSetupColumn("Electrons", ImGuiTableColumnFlags_WidthFixed, 110.0f);
 				ImGui::TableHeadersRow();
 				for (const auto &[shell, data] : byShell)
 				{
@@ -296,7 +246,7 @@ namespace DefectStudio
 		if (!IsVisible())
 			return;
 
-		ImGui::SetNextWindowSize(ImVec2(760.0f, 820.0f), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(1260.0f, 900.0f), ImGuiCond_FirstUseEver);
 		bool windowOpen = true;
 		if (!ImGui::Begin(GetTitle().c_str(), &windowOpen))
 		{
@@ -311,6 +261,7 @@ namespace DefectStudio
 		if (ImGui::RadioButton("Category", m_ColorMode == ElementColorMode::Category))
 			m_ColorMode = ElementColorMode::Category;
 
+		ImGui::SetWindowFontScale(1.2f);
 		const std::string clicked = DrawPeriodicTableGrid(
 			m_Layer,
 			[&](const std::string &symbol) -> glm::vec3
@@ -319,7 +270,8 @@ namespace DefectStudio
 					return CategoryColor(ClassifyElement(m_ElementPropertiesTable.Get(symbol).atomicNumber));
 				return m_AtomStyleTable.GetStyle(symbol).color;
 			},
-			m_SelectedSymbol, ImVec2(46.0f, 40.0f));
+			m_SelectedSymbol, ImVec2(54.0f, 46.0f));
+		ImGui::SetWindowFontScale(1.0f);
 		if (!clicked.empty())
 			m_SelectedSymbol = clicked;
 

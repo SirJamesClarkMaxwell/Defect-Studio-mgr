@@ -620,17 +620,22 @@ namespace DefectStudio
 	// conversion here (RendererStructureData carries the lattice matrices but not the domain
 	// CrystalStructure::FractionalToCartesian helper); switch back to Fractional afterwards and
 	// retype if that's genuinely what's needed.
+	// Was a BeginPopupModal - modal semantics dim and block input to the ENTIRE app, including the
+	// separate Periodic Table window this popup opens via "Choose..." below, making that button
+	// non-functional (couldn't click any element while the modal held focus). A plain window behaves
+	// like the Periodic Table window itself: both stay open and interactive side by side.
 	void RendererPanel::drawAddAtomPopup()
 	{
 		constexpr const char *kPopupId = "Add Atom";
-		if (m_AddAtomPopupRequested)
-		{
-			ImGui::OpenPopup(kPopupId);
-			m_AddAtomPopupRequested = false;
-		}
-
-		if (!ImGui::BeginPopupModal(kPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		if (!m_AddAtomPopupRequested)
 			return;
+
+		ImGui::SetNextWindowSize(ImVec2(420.0f, 0.0f), ImGuiCond_FirstUseEver);
+		if (!ImGui::Begin(kPopupId, &m_AddAtomPopupRequested, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::End();
+			return;
+		}
 
 		RendererWindowState *windowState = nullptr;
 		for (RendererWindowState &candidate : m_Layer.GetWindows())
@@ -645,8 +650,8 @@ namespace DefectStudio
 		{
 			ImGui::TextDisabled("Target window is no longer open.");
 			if (ImGui::Button("Close"))
-				ImGui::CloseCurrentPopup();
-			ImGui::EndPopup();
+				m_AddAtomPopupRequested = false;
+			ImGui::End();
 			return;
 		}
 
@@ -709,14 +714,14 @@ namespace DefectStudio
 				if (!result)
 					DS_LOG_WARN("Add atom failed: {}", result.Error().technicalDetails);
 				else
-					ImGui::CloseCurrentPopup();
+					m_AddAtomPopupRequested = false;
 			}
 		}
 		ImGui::EndDisabled();
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel"))
-			ImGui::CloseCurrentPopup();
+			m_AddAtomPopupRequested = false;
 
-		ImGui::EndPopup();
+		ImGui::End();
 	}
 } // namespace DefectStudio
