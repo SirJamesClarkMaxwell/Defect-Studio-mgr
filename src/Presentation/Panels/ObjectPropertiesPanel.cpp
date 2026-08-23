@@ -130,35 +130,34 @@ namespace DefectStudio
 
 				glm::vec3 cartesian = atom.cartesianPosition;
 				bool cartesianCommitted = false;
+				ImGui::PushItemWidth(110.0f);
+				ImGui::BeginGroup();
 				ImGui::Text("Cartesian (A)");
-				ImGui::PushItemWidth(70.0f);
 				ImGui::InputFloat("X##cart", &cartesian.x, 0.0f, 0.0f, "%.4f");
 				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-				ImGui::SameLine();
 				ImGui::InputFloat("Y##cart", &cartesian.y, 0.0f, 0.0f, "%.4f");
 				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-				ImGui::SameLine();
 				ImGui::InputFloat("Z##cart", &cartesian.z, 0.0f, 0.0f, "%.4f");
 				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-				ImGui::PopItemWidth();
+				ImGui::EndGroup();
 
 				bool fractionalCommitted = false;
 				glm::vec3 fractional(0.0f);
 				if (domainRecord != nullptr)
 				{
 					fractional = domainRecord->structure.CartesianToFractional(atom.cartesianPosition);
+					ImGui::SameLine();
+					ImGui::BeginGroup();
 					ImGui::Text("Fractional");
-					ImGui::PushItemWidth(70.0f);
 					ImGui::InputFloat("X##frac", &fractional.x, 0.0f, 0.0f, "%.4f");
 					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-					ImGui::SameLine();
 					ImGui::InputFloat("Y##frac", &fractional.y, 0.0f, 0.0f, "%.4f");
 					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-					ImGui::SameLine();
 					ImGui::InputFloat("Z##frac", &fractional.z, 0.0f, 0.0f, "%.4f");
 					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-					ImGui::PopItemWidth();
+					ImGui::EndGroup();
 				}
+				ImGui::PopItemWidth();
 
 				if ((cartesianCommitted || fractionalCommitted) && commandRegistry != nullptr)
 				{
