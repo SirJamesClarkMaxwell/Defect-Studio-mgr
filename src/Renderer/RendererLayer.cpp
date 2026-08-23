@@ -822,6 +822,8 @@ namespace DefectStudio
 				std::bind_front(&RendererLayer::onBondSelectionRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionToolToggleRequested>(
 				std::bind_front(&RendererLayer::onSelectionToolToggleRequested, this)));
+			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::SelectionModeSetRequested>(
+				std::bind_front(&RendererLayer::onSelectionModeSetRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::GizmoOperationRequested>(
 				std::bind_front(&RendererLayer::onGizmoOperationRequested, this)));
 			AddSubscription(m_EventBus->Subscribe<RendererEvents::Viewport::LabelsToggleRequested>(
@@ -1755,6 +1757,17 @@ namespace DefectStudio
 		}
 		windowState->activeSelectionTool = newTool;
 		windowState->selectionDragActive = false;
+	}
+
+	void RendererLayer::onSelectionModeSetRequested(const RendererEvents::Viewport::SelectionModeSetRequested &event)
+	{
+		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
+		if (windowState == nullptr)
+			return;
+
+		windowState->pickAtoms = event.pickAtoms;
+		windowState->pickBonds = event.pickBonds;
+		windowState->pickLabels = event.pickLabels;
 	}
 
 	void RendererLayer::onGizmoOperationRequested(const RendererEvents::Viewport::GizmoOperationRequested &event)

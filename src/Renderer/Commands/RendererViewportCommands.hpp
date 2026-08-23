@@ -34,6 +34,9 @@ namespace DefectStudio
 		Ref<EventBus> eventBus,
 		SelectionToolMode tool);
 	[[nodiscard]] Unique<ICommand> CreateRendererGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation);
+	// Ctrl+1..4 (T08 item 7) - see RendererEvents::Viewport::SelectionModeSetRequested.
+	[[nodiscard]] Unique<ICommand> CreateRendererSelectionModeSetCommand(
+		Ref<EventBus> eventBus, bool pickAtoms, bool pickBonds, bool pickLabels);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleSelectedBondCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererLabelsToggleSelectedAngleCommand(Ref<EventBus> eventBus);

@@ -217,6 +217,21 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererSelectionModeSetCommand(
+		Ref<EventBus> eventBus, bool pickAtoms, bool pickBonds, bool pickLabels)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Renderer set selection mode",
+			[pickAtoms, pickBonds, pickLabels](EventBus &bus) {
+				RendererEvents::Viewport::SelectionModeSetRequested event;
+				event.pickAtoms = pickAtoms;
+				event.pickBonds = pickBonds;
+				event.pickLabels = pickLabels;
+				bus.Publish(event);
+			});
+	}
+
 	Unique<ICommand> CreateRendererGizmoOperationCommand(Ref<EventBus> eventBus, GizmoOperation operation)
 	{
 		return CreateUnique<RendererViewportEventCommand>(

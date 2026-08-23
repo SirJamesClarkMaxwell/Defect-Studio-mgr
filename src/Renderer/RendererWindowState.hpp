@@ -138,6 +138,14 @@ namespace DefectStudio
 		bool viewInteractionActive = false;
 		std::string viewInteractionSource;
 		RendererViewSnapshot viewInteractionStart;
+		// Ctrl+1..4 selection-mode mask (T08 item 7) - which entity kinds handleViewportPick/
+		// handleAtomPick/handlePinnedMeasurementInteraction can target with a click. Independent of
+		// the show*/visibility flags above (those hide things from view; these gate what a click can
+		// select once shown). Ctrl+1 atoms-only, Ctrl+2 +bonds, Ctrl+3 bonds+labels (no atoms - lets
+		// a label be gizmo-dragged without risking an accidental atom drag), Ctrl+4 everything.
+		bool pickAtoms = true;
+		bool pickBonds = true;
+		bool pickLabels = true;
 		// Box/circle drag-select (Alt+B / Alt+C). Coordinates are viewport-relative pixels, same
 		// space as RendererPanel::handleAtomPick's relX/relY.
 		SelectionToolMode activeSelectionTool = SelectionToolMode::None;

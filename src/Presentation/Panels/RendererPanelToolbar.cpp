@@ -573,6 +573,35 @@ namespace DefectStudio
 
 		ImGui::Spacing();
 
+		auto publishSelectionMode = [&](bool pickAtoms, bool pickBonds, bool pickLabels)
+		{
+			RendererEvents::Viewport::SelectionModeSetRequested event;
+			event.windowId = windowState.windowId;
+			event.pickAtoms = pickAtoms;
+			event.pickBonds = pickBonds;
+			event.pickLabels = pickLabels;
+			eventBus->Publish(event);
+		};
+
+		if (toolButton(
+				"##ModeAtoms", "tool-mode-atoms.png", "1", "Selection mode: Atoms (Ctrl+1)",
+				windowState.pickAtoms && !windowState.pickBonds && !windowState.pickLabels))
+			publishSelectionMode(true, false, false);
+		if (toolButton(
+				"##ModeAtomsBonds", "tool-mode-atoms-bonds.png", "2", "Selection mode: Atoms + Bonds (Ctrl+2)",
+				windowState.pickAtoms && windowState.pickBonds && !windowState.pickLabels))
+			publishSelectionMode(true, true, false);
+		if (toolButton(
+				"##ModeBondsLabels", "tool-mode-bonds-labels.png", "3", "Selection mode: Bonds + Labels (Ctrl+3)",
+				!windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
+			publishSelectionMode(false, true, true);
+		if (toolButton(
+				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
+				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
+			publishSelectionMode(true, true, true);
+
+		ImGui::Spacing();
+
 		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "Add", "Add atom at coordinates...", false))
 		{
 			m_AddAtomPopupRequested = true;

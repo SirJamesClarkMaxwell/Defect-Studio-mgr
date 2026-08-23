@@ -434,6 +434,30 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.mode_atoms"
+    chord: "Ctrl+1"
+    command: "renderer.selection.mode_atoms"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.mode_atoms_bonds"
+    chord: "Ctrl+2"
+    command: "renderer.selection.mode_atoms_bonds"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.mode_bonds_labels"
+    chord: "Ctrl+3"
+    command: "renderer.selection.mode_bonds_labels"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.selection.mode_all"
+    chord: "Ctrl+4"
+    command: "renderer.selection.mode_all"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "electronic_structure.load_focused"
     chord: "L"
     command: "electronic_structure.load_focused"

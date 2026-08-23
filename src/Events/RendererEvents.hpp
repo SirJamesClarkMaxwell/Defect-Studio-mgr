@@ -227,6 +227,17 @@ namespace DefectStudio::RendererEvents::Viewport
 		SelectionToolMode tool = SelectionToolMode::None;
 	};
 
+	// Ctrl+1..4 - sets which entity kinds a click can select on the target viewport (empty windowId
+	// = focused viewport, same convention as SelectionToolToggleRequested/GizmoOperationRequested).
+	// See RendererWindowState::pickAtoms/pickBonds/pickLabels.
+	struct SelectionModeSetRequested final : public BusEvent
+	{
+		std::string windowId;
+		bool pickAtoms = true;
+		bool pickBonds = true;
+		bool pickLabels = true;
+	};
+
 	// Switches the active viewport's transform gizmo operation (G/R/S). Gizmo visibility itself
 	// is driven by "selection non-empty", not by a separate flag.
 	struct GizmoOperationRequested final : public BusEvent

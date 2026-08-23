@@ -403,6 +403,8 @@ namespace DefectStudio
 
 	void RendererPanel::handleAtomPick(RendererWindowState &windowState, float relX, float relY, bool additive)
 	{
+		if (!windowState.pickAtoms)
+			return;
 		if (!windowState.camera || windowState.structure.atoms.empty())
 			return;
 
@@ -497,24 +499,27 @@ namespace DefectStudio
 
 		float bestAtomT = std::numeric_limits<float>::max();
 		std::size_t hitAtomIndex = std::numeric_limits<std::size_t>::max();
-		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
+		if (windowState.pickAtoms)
 		{
-			const RendererAtomData &atom = windowState.structure.atoms[i];
-			if (!atom.visible)
-				continue;
-			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
-			const float a = glm::dot(rayDir, rayDir);
-			const float b = 2.0f * glm::dot(oc, rayDir);
-			const float pickRadius = atom.radius * 1.35f;
-			const float c = glm::dot(oc, oc) - pickRadius * pickRadius;
-			const float disc = b * b - 4.0f * a * c;
-			if (disc < 0.0f)
-				continue;
-			const float t = (-b - std::sqrt(disc)) / (2.0f * a);
-			if (t > 0.001f && t < bestAtomT)
+			for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
 			{
-				bestAtomT = t;
-				hitAtomIndex = i;
+				const RendererAtomData &atom = windowState.structure.atoms[i];
+				if (!atom.visible)
+					continue;
+				const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
+				const float a = glm::dot(rayDir, rayDir);
+				const float b = 2.0f * glm::dot(oc, rayDir);
+				const float pickRadius = atom.radius * 1.35f;
+				const float c = glm::dot(oc, oc) - pickRadius * pickRadius;
+				const float disc = b * b - 4.0f * a * c;
+				if (disc < 0.0f)
+					continue;
+				const float t = (-b - std::sqrt(disc)) / (2.0f * a);
+				if (t > 0.001f && t < bestAtomT)
+				{
+					bestAtomT = t;
+					hitAtomIndex = i;
+				}
 			}
 		}
 
@@ -526,33 +531,37 @@ namespace DefectStudio
 
 		float bestBondT = std::numeric_limits<float>::max();
 		std::size_t hitBondIndex = std::numeric_limits<std::size_t>::max();
-		for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
+		if (windowState.pickBonds)
 		{
-			const RendererBondData &bond = windowState.structure.bonds[i];
-			if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
-				bond.secondAtomIndex >= windowState.structure.atoms.size())
-				continue;
-			const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
-			const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
-			if (!firstAtom.visible || !secondAtom.visible)
-				continue;
-
-			float t = 0.0f;
-			glm::vec3 closestOnSegment(0.0f);
-			ClosestPointsRaySegment(
-				rayOrigin, rayDir, firstAtom.cartesianPosition,
-				secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset, t, closestOnSegment);
-			if (t <= 0.001f || t >= bestBondT)
-				continue;
-
-			// Padded well past the rendered cylinder radius - bonds are thin, and unlike an atom's
-			// sphere there's no natural "click anywhere on the visible disc" target to aim for.
-			const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
-			const glm::vec3 closestOnRay = rayOrigin + rayDir * t;
-			if (glm::distance(closestOnRay, closestOnSegment) <= pickRadius)
+			for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
 			{
-				bestBondT = t;
-				hitBondIndex = i;
+				const RendererBondData &bond = windowState.structure.bonds[i];
+				if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
+					bond.secondAtomIndex >= windowState.structure.atoms.size())
+					continue;
+				const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
+				const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
+				if (!firstAtom.visible || !secondAtom.visible)
+					continue;
+
+				float t = 0.0f;
+				glm::vec3 closestOnSegment(0.0f);
+				ClosestPointsRaySegment(
+					rayOrigin, rayDir, firstAtom.cartesianPosition,
+					secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset, t, closestOnSegment);
+				if (t <= 0.001f || t >= bestBondT)
+					continue;
+
+				// Padded well past the rendered cylinder radius - bonds are thin, and unlike an
+				// atom's sphere there's no natural "click anywhere on the visible disc" target to aim
+				// for.
+				const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
+				const glm::vec3 closestOnRay = rayOrigin + rayDir * t;
+				if (glm::distance(closestOnRay, closestOnSegment) <= pickRadius)
+				{
+					bestBondT = t;
+					hitBondIndex = i;
+				}
 			}
 		}
 
@@ -1728,6 +1737,9 @@ namespace DefectStudio
 	bool RendererPanel::handlePinnedMeasurementInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
+		if (!windowState.pickLabels)
+			return false;
+
 		// F flips the selected pin's bond-aligned label 180 degrees (item 5) - independent of
 		// hover/drag state below since it acts on whatever is already selected, not the cursor.
 		// TODO: also expose as a toolbar button once one exists (see toolbar proposal).
