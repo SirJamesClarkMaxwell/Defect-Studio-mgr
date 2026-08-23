@@ -76,38 +76,6 @@ namespace DefectStudio
 				windowState.fallbackNumericInput.pop_back();
 		}
 
-		// Closest points between an infinite ray (rayOrigin + t*rayDir, rayDir normalized) and a
-		// finite segment [segA, segB] - standard two-line least-squares solve (see e.g. Ericson's
-		// "Real-Time Collision Detection" ClosestPtSegmentSegment), with the segment parameter
-		// clamped to [0,1] and the ray parameter left unclamped (the caller checks outT > 0 for "in
-		// front of camera"). Used by handleViewportPick's bond hit-test - a bond has no analytic ray
-		// intersection like a sphere does, so picking it is "is the ray's closest approach to this
-		// cylinder's axis within its radius".
-		void ClosestPointsRaySegment(
-			const glm::vec3 &rayOrigin, const glm::vec3 &rayDir, const glm::vec3 &segA, const glm::vec3 &segB,
-			float &outT, glm::vec3 &outClosestOnSegment)
-		{
-			const glm::vec3 d2 = segB - segA;
-			const glm::vec3 w0 = rayOrigin - segA;
-			const float e = glm::dot(d2, d2);
-			if (e <= 1.0e-8f)
-			{
-				// Degenerate (zero-length) segment - treat segA as a point.
-				outT = glm::dot(segA - rayOrigin, rayDir);
-				outClosestOnSegment = segA;
-				return;
-			}
-
-			const float b = glm::dot(rayDir, d2);
-			const float c = glm::dot(rayDir, w0);
-			const float f = glm::dot(d2, w0);
-			const float denom = e - b * b; // a == dot(rayDir, rayDir) == 1 (normalized)
-
-			float s = denom > 1.0e-8f ? (b * f - c * e) / denom : 0.0f;
-			s = std::clamp(s, 0.0f, 1.0f);
-			outT = b * s - c;
-			outClosestOnSegment = segA + d2 * s;
-		}
 	}
 
 	RendererPanel::RendererPanel(
@@ -575,7 +543,7 @@ namespace DefectStudio
 
 				float t = 0.0f;
 				glm::vec3 closestOnSegment(0.0f);
-				ClosestPointsRaySegment(
+				SelectionHitTest::ClosestPointsRaySegment(
 					rayOrigin, rayDir, firstAtom.cartesianPosition,
 					secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset, t, closestOnSegment);
 				if (t <= 0.001f || t >= bestBondT)
@@ -805,7 +773,7 @@ namespace DefectStudio
 
 			float t = 0.0f;
 			glm::vec3 closestOnSegment(0.0f);
-			ClosestPointsRaySegment(
+			SelectionHitTest::ClosestPointsRaySegment(
 				rayOrigin, rayDir, firstAtom.cartesianPosition, secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset,
 				t, closestOnSegment);
 			if (t <= 0.001f)
@@ -2234,7 +2202,22 @@ namespace DefectStudio
 			m_Layer.GetSelectedPeriodicElement(), cellSize);
 		ImGui::SetWindowFontScale(1.0f);
 		if (!clicked.empty())
+		{
 			m_Layer.GetSelectedPeriodicElement() = clicked;
+			// A double-click both picks and closes, same convention as double-clicking a file to open
+			// it - IsMouseDoubleClicked is a frame-global query, not per-cell, but a click this frame
+			// AND the OS reporting a double-click this frame is close enough (the false-positive case,
+			// the two clicks landing on different cells, is harmless: it just closes on whichever cell
+			// the second click happened to land on).
+			if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+				m_Layer.GetShowPeriodicTableWindow() = false;
+		}
+		// Enter confirms the current pick and closes the window - lets a keyboard-only flow (arrow to
+		// a cell isn't supported, but typing then Enter after a mouse click is common) finish without
+		// reaching for the window's own close button.
+		if (ImGui::IsWindowFocused() && !m_Layer.GetSelectedPeriodicElement().empty() &&
+			(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
+			m_Layer.GetShowPeriodicTableWindow() = false;
 
 		ImGui::Separator();
 		ImGui::Text("Selected element: %s", m_Layer.GetSelectedPeriodicElement().c_str());

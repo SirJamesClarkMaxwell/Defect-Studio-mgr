@@ -66,4 +66,49 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(SelectionHitTest::PointInCircle(glm::vec2(60.0f, 50.0f), center, 10.0f));
 		EXPECT_FALSE(SelectionHitTest::PointInCircle(glm::vec2(61.0f, 50.0f), center, 10.0f));
 	}
+
+	// Regression for a real bug: the segment parameter was computed with the closed-form RAY
+	// parameter formula from a two-segment solve instead of its own (they only agree when the
+	// segment has unit length or is perpendicular to the ray in a way that zeroes the cross term),
+	// so bond-click hit-testing (which uses this against real bonds - arbitrary length, arbitrary
+	// camera angle) picked the wrong point along the bond far more often than not. This case has
+	// neither degeneracy: a length-2 segment at an oblique angle to the ray.
+	TEST(SelectionHitTestTests, ClosestPointsRaySegmentFindsTrueClosestPointOnNonUnitObliqueSegment)
+	{
+		const glm::vec3 rayOrigin(0.0f, 0.0f, -5.0f);
+		const glm::vec3 rayDir(0.0f, 0.0f, 1.0f);
+		const glm::vec3 segA(1.0f, -1.0f, 0.0f);
+		const glm::vec3 segB(1.0f, 1.0f, 0.0f);
+
+		float t = 0.0f;
+		glm::vec3 closestOnSegment(0.0f);
+		SelectionHitTest::ClosestPointsRaySegment(rayOrigin, rayDir, segA, segB, t, closestOnSegment);
+
+		// True closest point on the segment is its midpoint (1,0,0) at ray parameter t=5 - the buggy
+		// formula instead landed on segB (1,1,0), a full half-length of the bond away.
+		EXPECT_NEAR(closestOnSegment.x, 1.0f, 0.001f);
+		EXPECT_NEAR(closestOnSegment.y, 0.0f, 0.001f);
+		EXPECT_NEAR(closestOnSegment.z, 0.0f, 0.001f);
+		EXPECT_NEAR(t, 5.0f, 0.001f);
+	}
+
+	TEST(SelectionHitTestTests, ClosestPointsRaySegmentClampsToSegmentEndpoint)
+	{
+		// The ray's closest approach to the segment's infinite line is at x=0 (the ray sits on the
+		// z-axis), which lies beyond segB along the segment's direction - the unclamped solution
+		// would put s outside [0,1], and the clamp should snap it to segB rather than leaving it
+		// out of range.
+		const glm::vec3 rayOrigin(0.0f, 0.0f, -5.0f);
+		const glm::vec3 rayDir(0.0f, 0.0f, 1.0f);
+		const glm::vec3 segA(-3.0f, 0.0f, 0.0f);
+		const glm::vec3 segB(-2.0f, 0.0f, 0.0f);
+
+		float t = 0.0f;
+		glm::vec3 closestOnSegment(0.0f);
+		SelectionHitTest::ClosestPointsRaySegment(rayOrigin, rayDir, segA, segB, t, closestOnSegment);
+
+		EXPECT_NEAR(closestOnSegment.x, -2.0f, 0.001f);
+		EXPECT_NEAR(closestOnSegment.y, 0.0f, 0.001f);
+		EXPECT_NEAR(closestOnSegment.z, 0.0f, 0.001f);
+	}
 } // namespace DefectStudio::Tests

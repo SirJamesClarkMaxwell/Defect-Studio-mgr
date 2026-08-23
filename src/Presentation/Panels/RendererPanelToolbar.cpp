@@ -481,11 +481,11 @@ namespace DefectStudio
 			}
 			else
 			{
-				// No icon asset for this button yet - auto-fit the label instead of forcing it into
-				// the square icon size, which silently clips anything longer than ~2 characters (e.g.
-				// "Add" rendered as "Ad") without any visual indication that text was cut off.
-				const float minWidth = std::max(buttonSize.x, ImGui::CalcTextSize(fallback).x + ImGui::GetStyle().FramePadding.x * 2.0f);
-				pressed = ImGui::Button(fallback, ImVec2(minWidth, buttonSize.y));
+				// No icon asset for this button yet - every button in this column is the same
+				// icon-sized square regardless of its fallback label's length, so the column reads as
+				// one clean aligned grid instead of a ragged mix of widths. Fallback labels are kept to
+				// 2-3 characters precisely so they fit inside that square instead of clipping.
+				pressed = ImGui::Button(fallback, buttonSize);
 			}
 
 			if (active)
@@ -603,14 +603,6 @@ namespace DefectStudio
 				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
 				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(true, true, true);
-
-		ImGui::Spacing();
-
-		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "Add", "Add atom at coordinates...", false))
-		{
-			m_AddAtomPopupRequested = true;
-			m_AddAtomPopupWindowId = windowState.windowId;
-		}
 
 		ImGui::EndChild();
 	}

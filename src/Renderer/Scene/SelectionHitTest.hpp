@@ -18,4 +18,13 @@ namespace DefectStudio::SelectionHitTest
 	[[nodiscard]] bool PointInRect(glm::vec2 point, glm::vec2 rectMin, glm::vec2 rectMax);
 
 	[[nodiscard]] bool PointInCircle(glm::vec2 point, glm::vec2 center, float radius);
+
+	// Closest points between an infinite ray (rayOrigin + t*rayDir, rayDir normalized) and a finite
+	// segment [segA, segB] - the segment parameter is clamped to [0,1], the ray parameter is left
+	// unclamped (callers check outT > 0 for "in front of camera"). Used for bond hit-testing - a bond
+	// has no analytic ray intersection like a sphere does, so picking it is "is the ray's closest
+	// approach to this cylinder's axis within its radius".
+	void ClosestPointsRaySegment(
+		const glm::vec3 &rayOrigin, const glm::vec3 &rayDir, const glm::vec3 &segA, const glm::vec3 &segB,
+		float &outT, glm::vec3 &outClosestOnSegment);
 } // namespace DefectStudio::SelectionHitTest

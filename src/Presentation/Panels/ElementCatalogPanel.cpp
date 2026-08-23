@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <map>
@@ -162,12 +163,23 @@ namespace DefectStudio
 		ImGui::Separator();
 		// A single Property/Value table instead of a stack of Text lines - asked for explicitly ("the
 		// whole thing was supposed to be in a table"), also gives the values a consistent aligned
-		// column instead of each line's number landing wherever its label happened to end.
+		// column instead of each line's number landing wherever its label happened to end. The label
+		// column is sized to fit the longest label at the CURRENT font (not a guessed constant) - a
+		// hardcoded 220px clipped "Electronegativity (Pauling)" to "Electronegativity (Pauling" with
+		// no wrap and no visual indication anything was cut off.
+		static const char *const kPropertyLabels[] = {
+			"Atomic number", "Atomic mass", "Covalent radius", "Van der Waals radius", "Electronegativity"};
+		float labelColumnWidth = 0.0f;
+		for (const char *label : kPropertyLabels)
+			labelColumnWidth = std::max(labelColumnWidth, ImGui::CalcTextSize(label).x);
+		labelColumnWidth += ImGui::GetStyle().CellPadding.x * 2.0f + 6.0f;
+
 		if (ImGui::BeginTable(
-				"##ElementProperties", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+				"##ElementProperties", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 		{
-			ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 220.0f);
-			ImGui::TableSetupColumn("Value");
+			ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, labelColumnWidth);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
 			auto propertyRow = [](const char *label, const std::string &value)
 			{
 				ImGui::TableNextRow();
@@ -187,12 +199,12 @@ namespace DefectStudio
 			propertyRow("Van der Waals radius", buffer);
 			if (properties.electronegativity > 0.0f)
 			{
-				std::snprintf(buffer, sizeof(buffer), "%.2f", properties.electronegativity);
-				propertyRow("Electronegativity (Pauling)", buffer);
+				std::snprintf(buffer, sizeof(buffer), "%.2f (Pauling)", properties.electronegativity);
+				propertyRow("Electronegativity", buffer);
 			}
 			else
 			{
-				propertyRow("Electronegativity (Pauling)", "n/a");
+				propertyRow("Electronegativity", "n/a");
 			}
 			ImGui::EndTable();
 		}
