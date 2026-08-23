@@ -486,20 +486,15 @@ namespace DefectStudio
 		ImGui::BeginChild(
 			"##ViewportVerticalToolbar", ImVec2(columnWidth, ImGui::GetContentRegionAvail().y), false, ImGuiWindowFlags_NoScrollbar);
 
-		// The button stack is naturally top-aligned by ImGui's default layout, leaving a dead gap
-		// below it whenever the strip (full viewport height) is taller than the stack itself - which
-		// is almost always. Centers it vertically using last frame's measured stack height instead:
-		// that height only depends on iconExtent and the fixed button/Spacing() list below, so it's
-		// identical across every viewport window and self-corrects within one frame if iconExtent
-		// changes - no manual height bookkeeping to keep in sync with the button list.
-		static float s_ToolStackHeight = 0.0f;
-		const float availableColumnHeight = ImGui::GetContentRegionAvail().y;
-		if (s_ToolStackHeight > 0.0f && availableColumnHeight > s_ToolStackHeight)
-			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (availableColumnHeight - s_ToolStackHeight) * 0.5f);
-		const float toolStackStartY = ImGui::GetCursorPosY();
+		// Centers each button horizontally within whatever width BeginChild actually gave the child
+		// this frame, rather than trusting columnWidth's padding math to land exactly on center - this
+		// is correct by construction regardless of where any extra horizontal slack comes from.
+		const float buttonIndentX = std::max(0.0f, (ImGui::GetContentRegionAvail().x - iconExtent) * 0.5f);
 
 		auto toolButton = [&](const char *id, const char *iconFileName, const char *fallback, const char *tooltip, bool active) -> bool
 		{
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + buttonIndentX);
+
 			if (active)
 				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 
@@ -649,8 +644,6 @@ namespace DefectStudio
 				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
 				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(true, true, true);
-
-		s_ToolStackHeight = ImGui::GetCursorPosY() - toolStackStartY;
 
 		ImGui::EndChild();
 	}
