@@ -18,11 +18,17 @@ namespace DefectStudio
 		{
 			const glm::vec3 styleColor = colorForSymbol(symbol);
 			const ImVec4 color(styleColor.x, styleColor.y, styleColor.z, 1.0f);
+			// Perceived luminance (Rec. 601) picks black or white text - a light background (pale
+			// category colors, or a light custom atom style) with ImGui's default light text was
+			// unreadable.
+			const float luminance = 0.299f * styleColor.x + 0.587f * styleColor.y + 0.114f * styleColor.z;
+			const ImVec4 textColor = luminance > 0.6f ? ImVec4(0.05f, 0.05f, 0.05f, 1.0f) : ImVec4(0.95f, 0.95f, 0.95f, 1.0f);
 			ImGui::PushStyleColor(ImGuiCol_Button, color);
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color);
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
+			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 			const bool clicked = ImGui::Button(symbol.c_str(), cellSize);
-			ImGui::PopStyleColor(3);
+			ImGui::PopStyleColor(4);
 			if (symbol == selectedSymbol)
 				ImGui::GetWindowDrawList()->AddRect(
 					ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(255, 215, 0, 255), 0.0f, 0, 2.5f);

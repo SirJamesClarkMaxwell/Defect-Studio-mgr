@@ -30,6 +30,8 @@ namespace DefectStudio
 				properties.mass = propertiesNode["mass"].as<float>(0.0f);
 				properties.covalentRadius = propertiesNode["covalent_radius"].as<float>(0.77f);
 				properties.vanDerWaalsRadius = propertiesNode["vdw_radius"].as<float>(1.50f);
+				properties.electronegativity = propertiesNode["electronegativity"].as<float>(0.0f);
+				properties.electronConfiguration = propertiesNode["electron_configuration"].as<std::string>("");
 				outEntries[symbol] = properties;
 			}
 

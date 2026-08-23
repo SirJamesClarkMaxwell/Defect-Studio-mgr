@@ -12,6 +12,14 @@ namespace DefectStudio
 		float mass = 0.0f;
 		float covalentRadius = 0.77f;
 		float vanDerWaalsRadius = 1.50f;
+		// Pauling scale; 0 = not defined (noble gases and a few others have no meaningful value -
+		// see pymatgen's Element.X, the source this and electronConfiguration were generated from).
+		float electronegativity = 0.0f;
+		// Ground-state subshell filling, space-separated "<n><subshell><count>" tokens in fill order
+		// (e.g. "1s2 2s2 2p2" for carbon) - kept as the raw string rather than parsed here since the
+		// only consumer is ElementCatalogPanel's electron-configuration table; see
+		// ElementCatalogPanel.cpp's ParseElectronConfiguration.
+		std::string electronConfiguration;
 	};
 
 	class ElementPropertiesTable

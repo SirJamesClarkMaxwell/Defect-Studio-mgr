@@ -1,86 +1,86 @@
 schema_version: 1
 kind: element_physics_properties
 elements:
-  H:  { atomic_number: 1, mass: 1.008, covalent_radius: 0.31, vdw_radius: 1.20 }
-  He: { atomic_number: 2, mass: 4.003, covalent_radius: 0.28, vdw_radius: 1.40 }
-  Li: { atomic_number: 3, mass: 6.941, covalent_radius: 1.28, vdw_radius: 1.82 }
-  Be: { atomic_number: 4, mass: 9.012, covalent_radius: 0.96, vdw_radius: 1.53 }
-  B:  { atomic_number: 5, mass: 10.811, covalent_radius: 0.84, vdw_radius: 1.85 }
-  C:  { atomic_number: 6, mass: 12.011, covalent_radius: 0.76, vdw_radius: 1.70 }
-  N:  { atomic_number: 7, mass: 14.007, covalent_radius: 0.71, vdw_radius: 1.55 }
-  O:  { atomic_number: 8, mass: 15.999, covalent_radius: 0.66, vdw_radius: 1.52 }
-  F:  { atomic_number: 9, mass: 18.998, covalent_radius: 0.57, vdw_radius: 1.47 }
-  Ne: { atomic_number: 10, mass: 20.180, covalent_radius: 0.58, vdw_radius: 1.54 }
-  Na: { atomic_number: 11, mass: 22.990, covalent_radius: 1.66, vdw_radius: 2.27 }
-  Mg: { atomic_number: 12, mass: 24.305, covalent_radius: 1.41, vdw_radius: 1.73 }
-  Al: { atomic_number: 13, mass: 26.982, covalent_radius: 1.21, vdw_radius: 1.84 }
-  Si: { atomic_number: 14, mass: 28.086, covalent_radius: 1.11, vdw_radius: 2.10 }
-  P:  { atomic_number: 15, mass: 30.974, covalent_radius: 1.07, vdw_radius: 1.80 }
-  S:  { atomic_number: 16, mass: 32.065, covalent_radius: 1.05, vdw_radius: 1.80 }
-  Cl: { atomic_number: 17, mass: 35.453, covalent_radius: 1.02, vdw_radius: 1.75 }
-  Ar: { atomic_number: 18, mass: 39.948, covalent_radius: 1.06, vdw_radius: 1.88 }
-  K:  { atomic_number: 19, mass: 39.098, covalent_radius: 2.03, vdw_radius: 2.75 }
-  Ca: { atomic_number: 20, mass: 40.078, covalent_radius: 1.76, vdw_radius: 2.31 }
-  Sc: { atomic_number: 21, mass: 44.956, covalent_radius: 1.70, vdw_radius: 2.15 }
-  Ti: { atomic_number: 22, mass: 47.867, covalent_radius: 1.60, vdw_radius: 2.11 }
-  V:  { atomic_number: 23, mass: 50.942, covalent_radius: 1.53, vdw_radius: 2.07 }
-  Cr: { atomic_number: 24, mass: 51.996, covalent_radius: 1.39, vdw_radius: 2.06 }
-  Mn: { atomic_number: 25, mass: 54.938, covalent_radius: 1.50, vdw_radius: 2.05 }
-  Fe: { atomic_number: 26, mass: 55.845, covalent_radius: 1.42, vdw_radius: 2.04 }
-  Co: { atomic_number: 27, mass: 58.933, covalent_radius: 1.38, vdw_radius: 2.00 }
-  Ni: { atomic_number: 28, mass: 58.693, covalent_radius: 1.24, vdw_radius: 1.63 }
-  Cu: { atomic_number: 29, mass: 63.546, covalent_radius: 1.32, vdw_radius: 1.40 }
-  Zn: { atomic_number: 30, mass: 65.380, covalent_radius: 1.22, vdw_radius: 1.39 }
-  Ga: { atomic_number: 31, mass: 69.723, covalent_radius: 1.22, vdw_radius: 1.87 }
-  Ge: { atomic_number: 32, mass: 72.630, covalent_radius: 1.20, vdw_radius: 2.11 }
-  As: { atomic_number: 33, mass: 74.922, covalent_radius: 1.19, vdw_radius: 1.85 }
-  Se: { atomic_number: 34, mass: 78.971, covalent_radius: 1.20, vdw_radius: 1.90 }
-  Br: { atomic_number: 35, mass: 79.904, covalent_radius: 1.20, vdw_radius: 1.85 }
-  Kr: { atomic_number: 36, mass: 83.798, covalent_radius: 1.16, vdw_radius: 2.02 }
-  Rb: { atomic_number: 37, mass: 85.468, covalent_radius: 2.20, vdw_radius: 3.03 }
-  Sr: { atomic_number: 38, mass: 87.620, covalent_radius: 1.95, vdw_radius: 2.49 }
-  Y:  { atomic_number: 39, mass: 88.906, covalent_radius: 1.90, vdw_radius: 2.32 }
-  Zr: { atomic_number: 40, mass: 91.224, covalent_radius: 1.75, vdw_radius: 2.23 }
-  Nb: { atomic_number: 41, mass: 92.906, covalent_radius: 1.64, vdw_radius: 2.18 }
-  Mo: { atomic_number: 42, mass: 95.950, covalent_radius: 1.54, vdw_radius: 2.17 }
-  Tc: { atomic_number: 43, mass: 98.000, covalent_radius: 1.47, vdw_radius: 2.16 }
-  Ru: { atomic_number: 44, mass: 101.070, covalent_radius: 1.46, vdw_radius: 2.13 }
-  Rh: { atomic_number: 45, mass: 102.910, covalent_radius: 1.42, vdw_radius: 2.10 }
-  Pd: { atomic_number: 46, mass: 106.420, covalent_radius: 1.39, vdw_radius: 1.63 }
-  Ag: { atomic_number: 47, mass: 107.870, covalent_radius: 1.45, vdw_radius: 1.72 }
-  Cd: { atomic_number: 48, mass: 112.410, covalent_radius: 1.44, vdw_radius: 1.58 }
-  In: { atomic_number: 49, mass: 114.820, covalent_radius: 1.42, vdw_radius: 1.93 }
-  Sn: { atomic_number: 50, mass: 118.710, covalent_radius: 1.39, vdw_radius: 2.17 }
-  Sb: { atomic_number: 51, mass: 121.760, covalent_radius: 1.39, vdw_radius: 2.06 }
-  Te: { atomic_number: 52, mass: 127.600, covalent_radius: 1.38, vdw_radius: 2.06 }
-  I:  { atomic_number: 53, mass: 126.900, covalent_radius: 1.39, vdw_radius: 1.98 }
-  Xe: { atomic_number: 54, mass: 131.290, covalent_radius: 1.40, vdw_radius: 2.16 }
-  Cs: { atomic_number: 55, mass: 132.910, covalent_radius: 2.44, vdw_radius: 3.43 }
-  Ba: { atomic_number: 56, mass: 137.330, covalent_radius: 2.15, vdw_radius: 2.68 }
-  La: { atomic_number: 57, mass: 138.910, covalent_radius: 2.07, vdw_radius: 2.43 }
-  Ce: { atomic_number: 58, mass: 140.120, covalent_radius: 2.04, vdw_radius: 2.42 }
-  Pr: { atomic_number: 59, mass: 140.910, covalent_radius: 2.03, vdw_radius: 2.40 }
-  Nd: { atomic_number: 60, mass: 144.240, covalent_radius: 2.01, vdw_radius: 2.39 }
-  Sm: { atomic_number: 62, mass: 150.360, covalent_radius: 1.98, vdw_radius: 2.36 }
-  Eu: { atomic_number: 63, mass: 151.960, covalent_radius: 1.98, vdw_radius: 2.35 }
-  Gd: { atomic_number: 64, mass: 157.250, covalent_radius: 1.96, vdw_radius: 2.34 }
-  Tb: { atomic_number: 65, mass: 158.930, covalent_radius: 1.94, vdw_radius: 2.33 }
-  Dy: { atomic_number: 66, mass: 162.500, covalent_radius: 1.92, vdw_radius: 2.31 }
-  Ho: { atomic_number: 67, mass: 164.930, covalent_radius: 1.92, vdw_radius: 2.30 }
-  Er: { atomic_number: 68, mass: 167.260, covalent_radius: 1.89, vdw_radius: 2.29 }
-  Tm: { atomic_number: 69, mass: 168.930, covalent_radius: 1.90, vdw_radius: 2.27 }
-  Yb: { atomic_number: 70, mass: 173.040, covalent_radius: 1.87, vdw_radius: 2.26 }
-  Lu: { atomic_number: 71, mass: 174.970, covalent_radius: 1.87, vdw_radius: 2.24 }
-  Hf: { atomic_number: 72, mass: 178.490, covalent_radius: 1.75, vdw_radius: 2.23 }
-  Ta: { atomic_number: 73, mass: 180.950, covalent_radius: 1.70, vdw_radius: 2.22 }
-  W:  { atomic_number: 74, mass: 183.840, covalent_radius: 1.62, vdw_radius: 2.18 }
-  Re: { atomic_number: 75, mass: 186.210, covalent_radius: 1.51, vdw_radius: 2.16 }
-  Os: { atomic_number: 76, mass: 190.230, covalent_radius: 1.44, vdw_radius: 2.16 }
-  Ir: { atomic_number: 77, mass: 192.220, covalent_radius: 1.41, vdw_radius: 2.13 }
-  Pt: { atomic_number: 78, mass: 195.080, covalent_radius: 1.36, vdw_radius: 1.75 }
-  Au: { atomic_number: 79, mass: 196.970, covalent_radius: 1.36, vdw_radius: 1.66 }
-  Hg: { atomic_number: 80, mass: 200.590, covalent_radius: 1.32, vdw_radius: 1.55 }
-  Tl: { atomic_number: 81, mass: 204.380, covalent_radius: 1.45, vdw_radius: 1.96 }
-  Pb: { atomic_number: 82, mass: 207.200, covalent_radius: 1.46, vdw_radius: 2.02 }
-  Bi: { atomic_number: 83, mass: 208.980, covalent_radius: 1.48, vdw_radius: 2.07 }
-  U:  { atomic_number: 92, mass: 238.030, covalent_radius: 1.96, vdw_radius: 1.86 }
+  H: { atomic_number: 1, mass: 1.008, covalent_radius: 0.31, vdw_radius: 1.20, electronegativity: 2.2, electron_configuration: "1s1" }
+  He: { atomic_number: 2, mass: 4.003, covalent_radius: 0.28, vdw_radius: 1.40, electronegativity: 0.0, electron_configuration: "1s2" }
+  Li: { atomic_number: 3, mass: 6.941, covalent_radius: 1.28, vdw_radius: 1.82, electronegativity: 0.98, electron_configuration: "1s2 2s1" }
+  Be: { atomic_number: 4, mass: 9.012, covalent_radius: 0.96, vdw_radius: 1.53, electronegativity: 1.57, electron_configuration: "1s2 2s2" }
+  B: { atomic_number: 5, mass: 10.811, covalent_radius: 0.84, vdw_radius: 1.85, electronegativity: 2.04, electron_configuration: "1s2 2s2 2p1" }
+  C: { atomic_number: 6, mass: 12.011, covalent_radius: 0.76, vdw_radius: 1.70, electronegativity: 2.55, electron_configuration: "1s2 2s2 2p2" }
+  N: { atomic_number: 7, mass: 14.007, covalent_radius: 0.71, vdw_radius: 1.55, electronegativity: 3.04, electron_configuration: "1s2 2s2 2p3" }
+  O: { atomic_number: 8, mass: 15.999, covalent_radius: 0.66, vdw_radius: 1.52, electronegativity: 3.44, electron_configuration: "1s2 2s2 2p4" }
+  F: { atomic_number: 9, mass: 18.998, covalent_radius: 0.57, vdw_radius: 1.47, electronegativity: 3.98, electron_configuration: "1s2 2s2 2p5" }
+  Ne: { atomic_number: 10, mass: 20.180, covalent_radius: 0.58, vdw_radius: 1.54, electronegativity: 0.0, electron_configuration: "1s2 2s2 2p6" }
+  Na: { atomic_number: 11, mass: 22.990, covalent_radius: 1.66, vdw_radius: 2.27, electronegativity: 0.93, electron_configuration: "1s2 2s2 2p6 3s1" }
+  Mg: { atomic_number: 12, mass: 24.305, covalent_radius: 1.41, vdw_radius: 1.73, electronegativity: 1.31, electron_configuration: "1s2 2s2 2p6 3s2" }
+  Al: { atomic_number: 13, mass: 26.982, covalent_radius: 1.21, vdw_radius: 1.84, electronegativity: 1.61, electron_configuration: "1s2 2s2 2p6 3s2 3p1" }
+  Si: { atomic_number: 14, mass: 28.086, covalent_radius: 1.11, vdw_radius: 2.10, electronegativity: 1.9, electron_configuration: "1s2 2s2 2p6 3s2 3p2" }
+  P: { atomic_number: 15, mass: 30.974, covalent_radius: 1.07, vdw_radius: 1.80, electronegativity: 2.19, electron_configuration: "1s2 2s2 2p6 3s2 3p3" }
+  S: { atomic_number: 16, mass: 32.065, covalent_radius: 1.05, vdw_radius: 1.80, electronegativity: 2.58, electron_configuration: "1s2 2s2 2p6 3s2 3p4" }
+  Cl: { atomic_number: 17, mass: 35.453, covalent_radius: 1.02, vdw_radius: 1.75, electronegativity: 3.16, electron_configuration: "1s2 2s2 2p6 3s2 3p5" }
+  Ar: { atomic_number: 18, mass: 39.948, covalent_radius: 1.06, vdw_radius: 1.88, electronegativity: 0.0, electron_configuration: "1s2 2s2 2p6 3s2 3p6" }
+  K: { atomic_number: 19, mass: 39.098, covalent_radius: 2.03, vdw_radius: 2.75, electronegativity: 0.82, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s1" }
+  Ca: { atomic_number: 20, mass: 40.078, covalent_radius: 1.76, vdw_radius: 2.31, electronegativity: 1.0, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2" }
+  Sc: { atomic_number: 21, mass: 44.956, covalent_radius: 1.70, vdw_radius: 2.15, electronegativity: 1.36, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d1" }
+  Ti: { atomic_number: 22, mass: 47.867, covalent_radius: 1.60, vdw_radius: 2.11, electronegativity: 1.54, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d2" }
+  V: { atomic_number: 23, mass: 50.942, covalent_radius: 1.53, vdw_radius: 2.07, electronegativity: 1.63, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d3" }
+  Cr: { atomic_number: 24, mass: 51.996, covalent_radius: 1.39, vdw_radius: 2.06, electronegativity: 1.66, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s1 3d5" }
+  Mn: { atomic_number: 25, mass: 54.938, covalent_radius: 1.50, vdw_radius: 2.05, electronegativity: 1.55, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d5" }
+  Fe: { atomic_number: 26, mass: 55.845, covalent_radius: 1.42, vdw_radius: 2.04, electronegativity: 1.83, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d6" }
+  Co: { atomic_number: 27, mass: 58.933, covalent_radius: 1.38, vdw_radius: 2.00, electronegativity: 1.88, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d7" }
+  Ni: { atomic_number: 28, mass: 58.693, covalent_radius: 1.24, vdw_radius: 1.63, electronegativity: 1.91, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d8" }
+  Cu: { atomic_number: 29, mass: 63.546, covalent_radius: 1.32, vdw_radius: 1.40, electronegativity: 1.9, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s1 3d10" }
+  Zn: { atomic_number: 30, mass: 65.380, covalent_radius: 1.22, vdw_radius: 1.39, electronegativity: 1.65, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10" }
+  Ga: { atomic_number: 31, mass: 69.723, covalent_radius: 1.22, vdw_radius: 1.87, electronegativity: 1.81, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p1" }
+  Ge: { atomic_number: 32, mass: 72.630, covalent_radius: 1.20, vdw_radius: 2.11, electronegativity: 2.01, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p2" }
+  As: { atomic_number: 33, mass: 74.922, covalent_radius: 1.19, vdw_radius: 1.85, electronegativity: 2.18, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p3" }
+  Se: { atomic_number: 34, mass: 78.971, covalent_radius: 1.20, vdw_radius: 1.90, electronegativity: 2.55, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p4" }
+  Br: { atomic_number: 35, mass: 79.904, covalent_radius: 1.20, vdw_radius: 1.85, electronegativity: 2.96, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p5" }
+  Kr: { atomic_number: 36, mass: 83.798, covalent_radius: 1.16, vdw_radius: 2.02, electronegativity: 3.0, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6" }
+  Rb: { atomic_number: 37, mass: 85.468, covalent_radius: 2.20, vdw_radius: 3.03, electronegativity: 0.82, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s1" }
+  Sr: { atomic_number: 38, mass: 87.620, covalent_radius: 1.95, vdw_radius: 2.49, electronegativity: 0.95, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2" }
+  Y: { atomic_number: 39, mass: 88.906, covalent_radius: 1.90, vdw_radius: 2.32, electronegativity: 1.22, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d1" }
+  Zr: { atomic_number: 40, mass: 91.224, covalent_radius: 1.75, vdw_radius: 2.23, electronegativity: 1.33, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d2" }
+  Nb: { atomic_number: 41, mass: 92.906, covalent_radius: 1.64, vdw_radius: 2.18, electronegativity: 1.6, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s1 4d4" }
+  Mo: { atomic_number: 42, mass: 95.950, covalent_radius: 1.54, vdw_radius: 2.17, electronegativity: 2.16, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s1 4d5" }
+  Tc: { atomic_number: 43, mass: 98.000, covalent_radius: 1.47, vdw_radius: 2.16, electronegativity: 1.9, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d5" }
+  Ru: { atomic_number: 44, mass: 101.070, covalent_radius: 1.46, vdw_radius: 2.13, electronegativity: 2.2, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s1 4d7" }
+  Rh: { atomic_number: 45, mass: 102.910, covalent_radius: 1.42, vdw_radius: 2.10, electronegativity: 2.28, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s1 4d8" }
+  Pd: { atomic_number: 46, mass: 106.420, covalent_radius: 1.39, vdw_radius: 1.63, electronegativity: 2.2, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 4d10" }
+  Ag: { atomic_number: 47, mass: 107.870, covalent_radius: 1.45, vdw_radius: 1.72, electronegativity: 1.93, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s1 4d10" }
+  Cd: { atomic_number: 48, mass: 112.410, covalent_radius: 1.44, vdw_radius: 1.58, electronegativity: 1.69, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10" }
+  In: { atomic_number: 49, mass: 114.820, covalent_radius: 1.42, vdw_radius: 1.93, electronegativity: 1.78, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p1" }
+  Sn: { atomic_number: 50, mass: 118.710, covalent_radius: 1.39, vdw_radius: 2.17, electronegativity: 1.96, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p2" }
+  Sb: { atomic_number: 51, mass: 121.760, covalent_radius: 1.39, vdw_radius: 2.06, electronegativity: 2.05, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p3" }
+  Te: { atomic_number: 52, mass: 127.600, covalent_radius: 1.38, vdw_radius: 2.06, electronegativity: 2.1, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p4" }
+  I: { atomic_number: 53, mass: 126.900, covalent_radius: 1.39, vdw_radius: 1.98, electronegativity: 2.66, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p5" }
+  Xe: { atomic_number: 54, mass: 131.290, covalent_radius: 1.40, vdw_radius: 2.16, electronegativity: 2.6, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6" }
+  Cs: { atomic_number: 55, mass: 132.910, covalent_radius: 2.44, vdw_radius: 3.43, electronegativity: 0.79, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s1" }
+  Ba: { atomic_number: 56, mass: 137.330, covalent_radius: 2.15, vdw_radius: 2.68, electronegativity: 0.89, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2" }
+  La: { atomic_number: 57, mass: 138.910, covalent_radius: 2.07, vdw_radius: 2.43, electronegativity: 1.1, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 5d1" }
+  Ce: { atomic_number: 58, mass: 140.120, covalent_radius: 2.04, vdw_radius: 2.42, electronegativity: 1.12, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f1 5d1" }
+  Pr: { atomic_number: 59, mass: 140.910, covalent_radius: 2.03, vdw_radius: 2.40, electronegativity: 1.13, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f3" }
+  Nd: { atomic_number: 60, mass: 144.240, covalent_radius: 2.01, vdw_radius: 2.39, electronegativity: 1.14, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f4" }
+  Sm: { atomic_number: 62, mass: 150.360, covalent_radius: 1.98, vdw_radius: 2.36, electronegativity: 1.17, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f6" }
+  Eu: { atomic_number: 63, mass: 151.960, covalent_radius: 1.98, vdw_radius: 2.35, electronegativity: 1.2, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f7" }
+  Gd: { atomic_number: 64, mass: 157.250, covalent_radius: 1.96, vdw_radius: 2.34, electronegativity: 1.2, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f7 5d1" }
+  Tb: { atomic_number: 65, mass: 158.930, covalent_radius: 1.94, vdw_radius: 2.33, electronegativity: 1.1, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f9" }
+  Dy: { atomic_number: 66, mass: 162.500, covalent_radius: 1.92, vdw_radius: 2.31, electronegativity: 1.22, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f10" }
+  Ho: { atomic_number: 67, mass: 164.930, covalent_radius: 1.92, vdw_radius: 2.30, electronegativity: 1.23, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f11" }
+  Er: { atomic_number: 68, mass: 167.260, covalent_radius: 1.89, vdw_radius: 2.29, electronegativity: 1.24, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f12" }
+  Tm: { atomic_number: 69, mass: 168.930, covalent_radius: 1.90, vdw_radius: 2.27, electronegativity: 1.25, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f13" }
+  Yb: { atomic_number: 70, mass: 173.040, covalent_radius: 1.87, vdw_radius: 2.26, electronegativity: 1.1, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14" }
+  Lu: { atomic_number: 71, mass: 174.970, covalent_radius: 1.87, vdw_radius: 2.24, electronegativity: 1.27, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d1" }
+  Hf: { atomic_number: 72, mass: 178.490, covalent_radius: 1.75, vdw_radius: 2.23, electronegativity: 1.3, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d2" }
+  Ta: { atomic_number: 73, mass: 180.950, covalent_radius: 1.70, vdw_radius: 2.22, electronegativity: 1.5, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d3" }
+  W: { atomic_number: 74, mass: 183.840, covalent_radius: 1.62, vdw_radius: 2.18, electronegativity: 2.36, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d4" }
+  Re: { atomic_number: 75, mass: 186.210, covalent_radius: 1.51, vdw_radius: 2.16, electronegativity: 1.9, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d5" }
+  Os: { atomic_number: 76, mass: 190.230, covalent_radius: 1.44, vdw_radius: 2.16, electronegativity: 2.2, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d6" }
+  Ir: { atomic_number: 77, mass: 192.220, covalent_radius: 1.41, vdw_radius: 2.13, electronegativity: 2.2, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d7" }
+  Pt: { atomic_number: 78, mass: 195.080, covalent_radius: 1.36, vdw_radius: 1.75, electronegativity: 2.28, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s1 4f14 5d9" }
+  Au: { atomic_number: 79, mass: 196.970, covalent_radius: 1.36, vdw_radius: 1.66, electronegativity: 2.54, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s1 4f14 5d10" }
+  Hg: { atomic_number: 80, mass: 200.590, covalent_radius: 1.32, vdw_radius: 1.55, electronegativity: 2.0, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d10" }
+  Tl: { atomic_number: 81, mass: 204.380, covalent_radius: 1.45, vdw_radius: 1.96, electronegativity: 1.62, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d10 6p1" }
+  Pb: { atomic_number: 82, mass: 207.200, covalent_radius: 1.46, vdw_radius: 2.02, electronegativity: 2.33, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d10 6p2" }
+  Bi: { atomic_number: 83, mass: 208.980, covalent_radius: 1.48, vdw_radius: 2.07, electronegativity: 2.02, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d10 6p3" }
+  U: { atomic_number: 92, mass: 238.030, covalent_radius: 1.96, vdw_radius: 1.86, electronegativity: 1.38, electron_configuration: "1s2 2s2 2p6 3s2 3p6 4s2 3d10 4p6 5s2 4d10 5p6 6s2 4f14 5d10 6p6 7s2 5f3 6d1" }

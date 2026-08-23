@@ -35,5 +35,5 @@ namespace DefectStudio
 		RendererLayer &layer,
 		const std::function<glm::vec3(const std::string &)> &colorForSymbol,
 		const std::string &selectedSymbol,
-		ImVec2 cellSize = ImVec2(32.0f, 28.0f));
+		ImVec2 cellSize = ImVec2(38.0f, 32.0f));
 } // namespace DefectStudio
