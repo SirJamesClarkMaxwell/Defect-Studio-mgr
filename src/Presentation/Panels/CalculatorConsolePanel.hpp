@@ -57,6 +57,10 @@ namespace DefectStudio
 		std::vector<Segment> m_Segments;
 		std::string m_StartError;
 		bool m_StartAttempted = false;
+		// True once IPython has printed anything at all (its first prompt, at minimum) - distinct
+		// from `!m_Segments.empty()`, which the Clear button resets to true even though the
+		// running session is still perfectly ready for more input.
+		bool m_ReceivedFirstOutput = false;
 
 		std::string m_ProjectRoot;
 		std::vector<std::string> m_ProjectRoots;

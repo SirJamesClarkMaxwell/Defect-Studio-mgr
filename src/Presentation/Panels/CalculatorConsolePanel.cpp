@@ -183,7 +183,10 @@ namespace DefectStudio
 			m_InputEditor.SetFocus();
 
 		ensureStarted();
-		appendSegment(m_Process.PollOutput(), false);
+		std::string polled = m_Process.PollOutput();
+		if (!polled.empty())
+			m_ReceivedFirstOutput = true;
+		appendSegment(std::move(polled), false);
 
 		if (!m_StartError.empty())
 		{
@@ -224,16 +227,18 @@ namespace DefectStudio
 		}
 		ImGui::EndChild();
 
-		// Ctrl+Enter submits the cell (like Jupyter/VSCode Interactive Window) - plain Enter stays
-		// the editor's own "insert newline", needed for multi-line if/for/def blocks.
+		// Ctrl+Enter or Shift+Enter submits the cell (both are "run this cell" in Jupyter/VSCode -
+		// we don't distinguish "advance to a new cell" from "stay put", so both just submit). Plain
+		// Enter stays the editor's own "insert newline", needed for multi-line if/for/def blocks.
 		m_InputEditor.Render("ConsoleInput", ImVec2(0.0f, inputHeight));
 		const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		const ImGuiIO &io = ImGui::GetIO();
-		// Guarded on m_Segments not being empty yet - submitting before IPython has printed even
-		// its first prompt (process just spawned, cold start can take a moment) would show the
-		// echoed input before anything invited it.
-		if (focused && !m_Segments.empty() && io.KeyCtrl &&
-			(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
+		const bool enterPressed = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+		// Guarded on having seen IPython's first prompt - submitting any earlier (process just
+		// spawned, cold start can take a moment) would show the echoed input before anything
+		// invited it. Deliberately NOT `!m_Segments.empty()`: Clear empties that vector without the
+		// session becoming any less ready.
+		if (focused && m_ReceivedFirstOutput && (io.KeyCtrl || io.KeyShift) && enterPressed)
 			submitCurrentCell();
 
 		if (monospaceFont != nullptr)
