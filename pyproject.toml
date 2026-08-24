@@ -11,6 +11,7 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    "ipython>=8.0",
 ]
 scientific-core = [
     "numpy>=2.0",
