@@ -45,15 +45,6 @@ namespace DefectStudio::Platform
 #endif
 	}
 
-	static Path getVenvPythonExecutable()
-	{
-#if defined(DS_PLATFORM_WINDOWS)
-		return resolveExistingFromCurrentOrAncestor(Path(".venv") / "Scripts" / "python.exe");
-#else
-		return resolveExistingFromCurrentOrAncestor(Path(".venv") / "bin" / "python");
-#endif
-	}
-
 	Path GetAppPythonRoot()
 	{
 		return resolveExistingFromCurrentOrAncestor(Path("install") / "app" / "python");
@@ -82,11 +73,20 @@ namespace DefectStudio::Platform
 		if (FileSystem::Exists(genericPython.Native()))
 			return genericPython;
 
-		const Path venvPython = getVenvPythonExecutable();
+		const Path venvPython = ResolveVenvPythonExecutable();
 		if (FileSystem::Exists(venvPython.Native()))
 			return venvPython;
 
 		return Path("python");
+	}
+
+	Path ResolveVenvPythonExecutable()
+	{
+#if defined(DS_PLATFORM_WINDOWS)
+		return resolveExistingFromCurrentOrAncestor(Path(".venv") / "Scripts" / "python.exe");
+#else
+		return resolveExistingFromCurrentOrAncestor(Path(".venv") / "bin" / "python");
+#endif
 	}
 
 	Path ResolveEmbeddedPythonHome()

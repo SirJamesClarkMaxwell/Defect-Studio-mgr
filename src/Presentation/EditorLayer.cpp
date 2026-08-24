@@ -33,6 +33,7 @@
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
+#include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/ExportImagePanel.hpp"
@@ -582,6 +583,7 @@ namespace DefectStudio
 		}
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
+		registerPanel<CalculatorConsolePanel>("Calculator", false);
 		if (auto commandRegistry = m_CommandRegistry.lock())
 		{
 			const auto registerTerminalCommand =
