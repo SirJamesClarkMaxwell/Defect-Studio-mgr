@@ -369,24 +369,10 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 > zakładać że "plik jest, bo picker go pokazał" — patrz T07.5.2 (odporność na zerwane połączenie).
 > Poza tym zero zmian w parserze z powodu mountu — to jedyny punkt styku.
 
-- [ ] proste drzewko projektu, trochę jak w blenderze gdzie jest scene outline (zmiana potem w następnym etapie prac)
-- [ ] POSCAR/CONTCAR parser natywny C++ (VASP5/6, Selective Dynamics, Direct/Cartesian,
-      skala ujemna → przeliczenie na docelową objętość, auto-przeskalowanie kartezjańskich
-      przez współczynnik sieciowy) — obecnie import idzie wyłącznie przez `PymatgenBridge`
-      (Python); natywny C++ parser w `IOLayer` nadal nie istnieje (zgodnie z zasadą z pamięci:
-      podstawowy parsing strukturalny → C++ `IOLayer`, wzbogacone dane → `ScientificRuntime`/ASE)
-- [ ] POSCAR serializer – precyzja i format bez noisy diff; `canonicalizeDirectTranslation = false`
-      domyślnie (znany błąd ze starego repo — pilnować przy porcie)
-- [ ] Sortowanie species w POSCAR malejąco po liczbie atomów. Użytkownik może zdefiniować swoją kolejność (zapisywać jako własność projektu)
-- [ ] `StructureSerializer` – serializacja do YAML na potrzeby projektu
 - [ ] Multi-import: kolejny POSCAR otwiera **nowe renderer window** (nie dokłada do istniejącej
       sceny) — **decyzja 2026-08-22: Collections odrzucone (zob. T08), oddzielne okna już dają
       izolację, po którą sięgały Collections.** Auto-konwersja układu współrzędnych (Direct ↔
       Cartesian) przy imporcie zostaje.
-- [ ] Multi-structure support (wiele POSCAR w jednym projekcie, każdy we własnym oknie) —
-      częściowo pokryte przez `StructureRegistry` (istnieje i jest wpięte w startup rendererowy,
-      patrz T06.5), workflow projektu (lista otwartych struktur, przełączanie) w `ProjectTreePanel`
-- [ ] Parser unit tests: POSCAR roundtrip, edge cases (Selective Dynamics, puste struktury)
 <!-- - [ ] CIF parser – import, konwersja do modelu wewnętrznego (pymatgen backend przez T05) —
       **zweryfikowane: brak w kodzie**
 - [ ] XYZ / extended XYZ parser (ASE-compatible) — **zweryfikowane: brak w kodzie** -->
@@ -518,28 +504,28 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 
 ## T08 – Scene, ECS, Atom Rendering, Selection (`task/08-scene`)
 
-> ECS (entt) jako fundament sceny od początku. **Zweryfikowane: entt jest zvendorowany, ale
-> `entt::registry`/`entt::entity` nie występuje NIGDZIE w `src/` — to zadanie zaczyna się od zera**,
-> mimo że część funkcjonalności (selekcja, auto-bond) już działa poza ECS na poziomie renderera
-> (zob. T06). Trzeba zdecydować: migrować istniejącą ad-hoc selekcję do ECS, czy budować równolegle
-> i podmienić — to jest decyzja architektoniczna, nie tylko implementacja.
+> **Aktualizacja 2026-08-24: sekcja poniżej była mocno nieaktualna — checkboxy skorygowane po
+> weryfikacji w kodzie (grep, nie tylko lektura), nie po samej treści tego pliku.** ECS **istnieje**
+> (`src/Renderer/Scene/SceneRegistry.hpp`, `SceneComponents.hpp`, `SceneSystem.{hpp,cpp}`) —
+> pierwotna notatka "to zadanie zaczyna się od zera" jest nieaktualna.
 
-- [ ] `SceneRegistry` – entt registry jako właściciel wszystkich obiektów sceny
-- [ ] Komponenty ECS: `TransformComponent`, `AtomComponent`, `BondComponent`, `VisibilityComponent`,
-      `SelectionComponent`, `CollectionComponent`
-- [ ] `SceneSystem` – update loop iterujący po komponentach
-- [ ] Załaduj POSCAR → utwórz encje w registry → wyświetl atomy (instanced render z T06)
-- [ ] **PARTIAL → zweryfikowane:** click-select atomu (raycasting-podobne, przez
-      `AtomSelectionRequested`) i Shift+klik toggle **już działają**, ale na poziomie
-      `RendererWindowState::selectedAtomIndices`, nie przez `SelectionComponent` w ECS — do migracji
-- [ ] Box-select (B), circle-select (C), RMB context menu
-- [ ] Multi-select (Shift+click) — toggle już częściowo istnieje (zob. wyżej), box/circle brak
-- [ ] Undo/Redo stack dla akcji sceny (Ctrl+Z / Ctrl+Y) — snapshot-based na start. **Uwaga:**
-      nie mylić z lokalnym view-undo renderera (`viewUndoHistory`) opisanym w T06.5 — to ma iść
-      przez globalny `Core/Undo`/`UndoStack`
-- [ ] Dodaj atom przez wpisanie współrzędnych (frakcyjne/kartezjańskie); popup: pierwiastek + tryb
-      koordynat; wstawienie pod 3D cursorem lub w centrum selekcji (`old-ds-functionality.md` §3.3)
-      — **nie zrobione jeszcze, potrzebuje popupu UI**, zob. notatka niżej.
+- [x] `SceneRegistry` – **zrobione**, `src/Renderer/Scene/SceneRegistry.hpp`.
+- [x] Komponenty ECS: `TransformComponent`/`AtomComponent`/`BondComponent`/`VisibilityComponent`/
+      `SelectionComponent`/`CollectionComponent` — **zrobione**, `SceneComponents.hpp`
+      (`CollectionComponent` zostaje jako martwy placeholder, Collections odrzucone 2026-08-22).
+- [x] `SceneSystem` – **zrobione**, `SceneSystem.{hpp,cpp}` (`SyncSceneWithStructure`,
+      `ApplySelectionAndVisibilityToScene`, `PushSelectionAndVisibilityToWindowState`).
+- [x] Załaduj POSCAR → utwórz encje w registry → wyświetl atomy — **zrobione**, pokrywa się z wyżej.
+- [x] click-select atomu + Shift+klik toggle + **box-select (`B`) + circle-select (`C`) + RMB
+      context menu — wszystko zrobione**, w tym bond-picking (`hitTestRectBonds`/
+      `hitTestCircleBonds`, `RendererPanel.cpp`), nie tylko atomy jak poprzednia notatka sugerowała.
+- [x] Multi-select (Shift+click, box, circle) — **zrobione**, zob. wyżej.
+- [x] Undo/Redo stack dla akcji sceny (Ctrl+Z/Ctrl+Y) — **zrobione**, globalny `Core/Undo`/
+      `UndoStack`, każda komenda edycji atomów/wiązań (`RendererAtomEditCommands.cpp`) jest
+      prawdziwym `ICommand` z `Undo()`, nie snapshot-based fire-and-forget.
+- [x] Dodaj atom przez wpisanie współrzędnych (frakcyjne/kartezjańskie), popup z elementem +
+      trybem koordynat, wstawienie pod 3D cursorem lub w centrum selekcji — **zrobione**
+      (`AddAtomAtCoordinatesCommand`, `RendererPanel::drawAddAtomPopup`, Shift+A).
 - [x] **Usuń atom (`Delete`) i duplikuj (`Ctrl+D`, zob. poprawka 2026-08-22 niżej) — zrobione 2026-08-21.** Nowy
       `src/Renderer/Commands/RendererAtomEditCommands.{hpp,cpp}` — pierwsza realna hydraulika
       mutująca żywą `CrystalStructure` otwartego okna (wcześniej nic tego nie robiło, sprawdzone w
@@ -562,21 +548,17 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       **Nie zrobione w tym przejściu:** Change type (brak dedykowanego klawisza — flagowane już w
       planie sesji, wystawić jako pole/popup, nie globalny skrót), kopiuj/wklej (`Ctrl+C/V`),
       Add atom popup (wyżej) — obie potrzebują nowego UI (element combo + pola), osobny krok.
-- [ ] Ukryj (`H`) / odkryj wszystkie (`Alt+H`) — toggle `VisibilityComponent` per okno/struktura
-      (Collections odrzucone 2026-08-22, zob. T08 niżej — nie ma per-kolekcja podziału)
-- [ ] `SceneOutliner` panel – lista struktur z entt view (jedna struktura na okno), toggle
-      widoczności, F2 rename
-- [ ] `ObjectProperties` panel – właściwości wybranego atomu/struktury (translate przez pola numeryczne,
-      uniform XYZ snap)
-- [ ] Auto-bond generation z modelem trwałym: global cutoff + **per-para pierwiastków z override**
-      (dziś jest tylko global cutoff na poziomie renderera — per-para override z
-      `old-ds-functionality.md` §4.2 brak), spatial hash grid (jedna struktura per okno, więc bez
-      dodatkowego "między kolekcjami" wykluczenia — Collections odrzucone 2026-08-22, zob. T08)
-- [ ] Manual bond add/remove z persystencją w projekcie — **decyzja 2026-08-22: skrót `J`** (zaznacz
-      2 atomy → `J` łączy je wiązaniem; pierwotny wybór `F` z 2026-08-21 odrzucony — zajęty przez
-      "flip pinu etykiety o 180°", zob. rozwiązaną kolizję niżej); ukryj pojedyncze wiązanie bez
-      usuwania z modelu, auto-ukrycie przy usunięciu atomu; etykiety długości wiązań w 3D (§4.4,
-      zob. też "Pomiary" niżej — to ten sam etykietowy mechanizm)
+- [x] Ukryj (`H`) / odkryj wszystkie (`Alt+H`) — **zrobione**, `RendererCommandRegistration.cpp`.
+- [x] `SceneOutliner` panel — **zrobione**, `src/Presentation/Panels/SceneOutlinerPanel.{hpp,cpp}`
+      (lista okien rendererowych, nie entt-view-po-strukturach — jedna struktura per okno po
+      odrzuceniu Collections, więc to jest właściwy zakres, nie skrócony).
+- [x] `ObjectProperties` panel — **zrobione**, `src/Presentation/Panels/ObjectPropertiesPanel.{hpp,cpp}`.
+- [x] Auto-bond generation z modelem trwałym: global cutoff + **per-para override — zrobione**
+      (`BondSettingsPanel`, `BondGenerationSettings::perPairCutoffOverride`, komenda
+      `renderer.bonds.set_settings`). Spatial hash grid (wydajność dla bardzo dużych struktur)
+      **niezweryfikowane w tej korekcie** — do sprawdzenia osobno, nie blokuje reszty.
+- [x] Manual bond add/remove — **zrobione**, skrót `J` (`ConnectSelectedAtomsCommand`,
+      `RendererAtomEditCommands.cpp`), ukrycie pojedynczego wiązania bez usuwania z modelu.
 - [x] ImGuizmo transform (G/R/S) dla zaznaczonych atomów — zrobione 2026-08-21, branch
       `task/08-scene/imguizmo-transform`. Vendorowany **`sjcmdev/ImGuizmo`** (nie ImViewGuizmo —
       to inny fork, kamera-nawigacja/compass, nie ma translate/rotate/scale w ogóle; ustalone przy
@@ -614,11 +596,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
       od uniknięcia przewiązania). Copy/Paste = in-process clipboard (`std::vector<AtomSite>`,
       anonimowa przestrzeń nazw w `RendererAtomEditCommands.cpp`), nie system schowka OS, nie
       persystowany.
-- [ ] Blender-like Shift+A add menu (menu kontekstowe też) - context menu Copy/Paste/Duplicate/
-      Delete/Hide/Change type/Select All/Clear Selection/3D Cursor zrobione 2026-08-22
-      (`RendererPanel::renderViewportContextMenu`); Shift+A "add" menu i Empty/Groups submenu
-      ze starego projektu nadal nie zrobione (Empty/Groups nie mają odpowiednika w domain modelu
-      tego projektu - wymaga decyzji, nie samego UI).
+- [x] Blender-like Shift+A add menu — **zrobione** (Add Atom popup + Periodic Table picker,
+      rozbudowane przez kilka rund tej sesji: Enter/double-click do zatwierdzenia, Fractional+3D
+      cursor jako domyślne). Context menu Copy/Paste/Duplicate/Delete/Hide/Change type/Select
+      All/Clear Selection/3D Cursor zrobione 2026-08-22 (`RendererPanel::renderViewportContextMenu`).
+      **Nadal brak:** Empty/Groups submenu pod Shift+A (zależne od "Scene Objects – Empty" niżej,
+      wciąż nie zrobione).
 <!-- - [ ] N side-panel (toggle + strip) -->
 - [ ] **Pomiary — rozszerzone 2026-08-21, teraz oparte o etykiety-encje (zob. MSDF w T09):**
       odległość między ostatnimi 2 zaznaczonymi atomami, kąt między ostatnimi 3, centrum masy
