@@ -86,7 +86,8 @@ Nowy typ `Core/Platform/InteractiveProcess` (siostrzany do `ProcessRunner`, nie 
 ## 3. Integrated PowerShell terminal
 
 - Dockowalny panel (`IPanel`, wzorzec `TextEditorPanel`) nad `InteractiveProcess` odpalającym
-  `powershell.exe -NoLogo -NoExit`.
+  `powershell.exe -NoLogo -NoExit`. **Decyzja 2026-08-24: na razie zwykły `powershell.exe`, bez
+  próby wykrycia `pwsh.exe` (PowerShell 7)** — prostsze, wystarczające na start.
 - **Cel użytkownika: łatwe logowanie na serwer** — to znaczy zwykłe `ssh user@host` wpisane w tym
   panelu (Windows ma OpenSSH client wbudowany od 1809+) albo komenda mount/sshfs-win z T07.5.2 —
   panel jest ogólnym shellem, appka nie musi nic wiedzieć o "serwerach" na tym poziomie (to inna
@@ -105,8 +106,12 @@ przeprowadzać obliczenia, trochę jak za pomocą kalkulatora". Zero `ds` moduł
 sceny/ECS, zero IPC do żywej appki — to jest **dokładnie ten sam mechanizm co terminal PS
 (sekcja 3), tylko odpala inny proces**.
 
-- Panel nad `InteractiveProcess` odpalającym `ipython` (jeśli jest na PATH — lepszy UX za darmo:
-  `?`/`??`/magic commands appka dostaje bez pisania własnego kodu) albo `python -i` (fallback).
+- **Decyzja 2026-08-24: zawsze `.venv` appki, nigdy systemowy Python.** `ipython` ma być dodane do
+  tego venv jeśli go tam jeszcze nie ma (`uv`-zarządzany, zob. `scripts/Tooling.*`/`setup.py`) —
+  **pierwszy krok implementacji tej sekcji to sprawdzić `.venv/Lib/site-packages/` i dopisać
+  `ipython` jeśli brakuje**, nie zakładać z góry że jest/nie ma go. Panel odpala `<venv>/Scripts/
+  ipython.exe` jeśli obecny, inaczej `<venv>/Scripts/python.exe -i` (fallback, nigdy `python.exe`
+  spoza venv).
 - Użytkownik może w tej sesji zrobić zwykłe `import puntukas`/`from puntukas.vasp import
   VaspOutput` samodzielnie — to już działa, appka nie musi nic specjalnego robić żeby to umożliwić
   (venv z `puntukas` już istnieje, zob. `.venv/Lib/site-packages/puntukas-0.1.0.dist-info`).
@@ -156,11 +161,12 @@ Reference", T07.5.5) albo przez otwarcie wprost ze ścieżki.
 - **Symetria/grupa przestrzenna:** `puntukas.Symmetry(atoms)` (użyte już wewnątrz `Vasprun.
   find_equivalent_by_symmetry_kpoints`) — dodatkowy, tani insight o wynikowej strukturze.
 
-**Nowy skrypt** (`scripts/python/examples/calculation_summary_load.py`, wzorzec
-`vasp_output_load.py`) zwracający JSON z powyższym; nowy C++ bridge (`CalculationSummaryBridge`) +
-`Job` + panel. **Nie duplikować** logiki `VaspOutputBridge` — ten nowy bridge to superset (dodaje
-historię zbieżności), rozważyć czy `VaspOutputBridge` powinien zostać rozszerzony zamiast
-tworzenia równoległego bytu (decyzja przy starcie implementacji, nie tutaj).
+**Decyzja 2026-08-24: rozszerzyć istniejący `VaspOutputBridge`/`VaspOutputJob`, NIE tworzyć nowego
+bytu.** Uzasadnienie użytkownika: `VaspOutputBridge` jest naszym własnym kodem ("po naszej
+stronie"), nie czymś z `punktukas` — bezpieczne do rozszerzenia bez ryzyka kolizji z upstreamem.
+Nowy skrypt/rozszerzenie `scripts/python/examples/vasp_output_load.py` dokłada historię zbieżności
+(pkt wyżej) do istniejącego payloadu; panel (`CalculationSummaryPanel`) nowy, ale konsumuje
+rozszerzony `VaspOutputJob`, nie osobny bridge.
 
 ---
 
@@ -238,15 +244,21 @@ duplikować — wydzielić `dispatchOrbitalForBand(...)` jeśli dziś jest wklej
    symmetry labels" (`irreps`), dwa floaty `irrep_tol`/`symprec` — przekazywane 1:1 do bridge'a.
 2. **Wyświetlanie w `ElectronicStructurePanel` i `OccupationDiagramPanel`:** irrep string obok
    energii bandu w tabeli/przy linii poziomu.
-3. **W rendererze 3D:** MSDF label (reużyty mechanizm z T09/pomiarów) przy/na izopowierzchni
-   orbitalu — pokazuje ten sam string.
-4. **Custom label mapping — nowość, nie ma odpowiednika dziś.** Mała, edytowalna tabela
-   (irrep → własny label użytkownika, np. `"b_1*" → "\pi*"`), **wyświetlana OBOK automatycznego
-   labela, nie zamiast** (dosłowne życzenie: "powinno być obok tego b_1* b_1 itd"). Persystencja:
-   nowy mały plik (wzorzec `AtomStyleIO`/`panel_visibility.txt` — prosty, dedykowany format, nie
-   przez `YamlConfigSerializer`), per-projekt albo per-structure (do ustalenia — prawdopodobnie
-   per-projekt, bo grupa punktowa/nazewnictwo irrepów jest własnością materiału/defektu, nie
-   pojedynczej struktury w oknie).
+3. **W rendererze 3D — decyzja 2026-08-24: ta sama encja co inne etykiety** (MSDF
+   `LabelComponent`/`TransformComponent`, dokładnie wzorzec pinned bond/angle measurement labels z
+   T09), nie osobny, bespoke mechanizm rysowania. Użytkownik wprost: dokładna pozycja względem
+   izopowierzchni "trudno określić z góry, każdy przypadek inny, ale spróbuj" — czyli best-effort
+   domyślny offset (ten sam co istniejące pinned labele), bez projektowania idealnych reguł
+   umiejscowienia na start; jeśli istniejący label-entity mechanizm wspiera ręczne
+   przeciąganie/offset (do zweryfikowania w kodzie przy implementacji), to naturalna "ucieczka"
+   gdy domyślna pozycja nie pasuje w konkretnym przypadku.
+4. **Custom label mapping — nowość, nie ma odpowiednika dziś. Persystencja: per-projekt
+   (potwierdzone 2026-08-24).** Mała, edytowalna tabela (irrep → własny label użytkownika, np.
+   `"b_1*" → "\pi*"`), **wyświetlana OBOK automatycznego labela, nie zamiast** (dosłowne życzenie:
+   "powinno być obok tego b_1* b_1 itd"). Nowy mały plik (wzorzec `AtomStyleIO`/
+   `panel_visibility.txt` — prosty, dedykowany format, nie przez `YamlConfigSerializer`), bo
+   grupa punktowa/nazewnictwo irrepów jest własnością materiału/defektu (projektu), nie pojedynczej
+   struktury w jednym oknie.
 
 ---
 
@@ -294,12 +306,14 @@ dobrze zdefiniowanego sensu — porównanie różnych superkomórek to inny, nie
    to naturalne miejsce), **nie zachłanny najbliższy-sąsiad** — zachłanny łatwo tworzy "skrzyżowane"
    przypisania w gęstych regionach (atom X bierze najbliższego, zostawiając atomowi Y gorszy wybór
    niż istniał), optymalne przypisanie minimalizuje sumę przemieszczeń globalnie.
-3. **Próg odcięcia** (max przemieszczenie, konfigurowalny przez użytkownika, w duchu bond-cutoff z
-   `BondSettingsPanel`) — dopasowanie powyżej progu odrzucone jako przypadkowe, nie prawdziwa
-   korespondencja.
-4. **Species:** domyślnie dopasowanie **tego samego pierwiastka** (osobna macierz/przypisanie per
-   gatunek) — dopuszczenie dopasowań międzygatunkowych (np. śledzenie podstawienia C→B) jako opcja,
-   nie domyślne zachowanie (do potwierdzenia, zob. pytania niżej).
+3. **Próg odcięcia — decyzja 2026-08-24: NIE hardkodowany domyślny, żywy slider w UI, per para
+   porównywanych struktur.** Hungarian assignment liczony raz na szeroki/permisywny próg; slider
+   filtruje TYLKO co się rysuje (chowa pary powyżej aktualnej wartości), nie przelicza dopasowania
+   na nowo przy każdym ruchu. Ostatnia wartość slidera + która para plików zapisywana per-projekt
+   (ten sam wzorzec co custom irrep labels, sekcja 8 pkt 4/pytanie 3).
+4. **Species — decyzja 2026-08-24: dopasowania międzygatunkowe (np. C→B) WŁĄCZONE domyślnie**
+   (odwraca wcześniejszą rekomendację tego planu — świadomy wybór użytkownika: permisywny domyślny
+   tryb jest bezpieczny, bo slider z pkt 3 daje pełną kontrolę nad tym co faktycznie widać).
 5. **Niedopasowane atomy:** obecne w A, brak w B → **wakancja** (reużyć istniejący koncept
    "widmowego" renderowania z `AtomStyleTable`/`VacancyRenderStyle`, wspomniany w poprzednim
    planie). Obecne w B, brak w A → **interstitial-like** marker (nowy atom bez pochodzenia).
@@ -335,35 +349,39 @@ samych dwóch plików wejściowych — do potwierdzenia przy implementacji (fono
 
 ---
 
-## 12. Lista pytań dla użytkownika (skonsolidowana 2026-08-24)
+## 12. Decyzje użytkownika (2026-08-24) — zamyka poprzednią listę pytań
 
-**Fonony (sekcja 6) — ŚWIADOMIE POMINIĘTE tutaj, czeka na odpowiedź od Lukasa. Nie odpowiadać
-teraz.**
+**Fonony (sekcja 6) nadal świadomie odłożone — czeka na odpowiedź od Lukasa, nie decydujemy tu.**
 
-1. **Calculation Summary (sekcja 5) — czy lista pól jest OK, czy coś dodać/usunąć?**
-   Proponowane: zbieżność (energia per krok jonowy+elektronowy), energia końcowa, zbieżność sił
-   (max |F| per krok vs próg), band gap, CPU/user/system/elapsed time, total drift, magnetyzacja/
-   NELECT, ciśnienie/stress, symetria/grupa przestrzenna.
-2. **Calculation Summary — nowy bridge (`CalculationSummaryBridge`) czy rozszerzenie istniejącego
-   `VaspOutputBridge`?** Rekomendacja: rozszerzenie (superset tej samej logiki), ale to zmienia
-   istniejący, już używany kod — potwierdź czy to akceptowalne teraz czy wolisz osobny byt.
-3. **Custom irrep label mapping (sekcja 8, pkt 4) — persystencja per-projekt czy per-structure?**
-   Rekomendacja: per-projekt (nazewnictwo grupy punktowej to własność materiału/defektu, nie
-   pojedynczego okna).
-4. **Irrep labels w 3D (renderer) — gdzie dokładnie względem izopowierzchni orbitalu?** (obok,
-   nad, z linią wskazującą jak istniejące pinned-measurement labele) — czysto wizualna decyzja,
-   łatwo zmienić później, ale warto ustalić punkt odniesienia przed kodem.
-5. **Displacement, przypadek ogólny (sekcja 10) — dopuszczać dopasowania międzygatunkowe
-   (np. C→B podstawienie) domyślnie, czy tylko ten sam pierwiastek chyba że user włączy opcję?**
-   Rekomendacja: domyślnie tylko ten sam pierwiastek, przełącznik do rozszerzenia.
-6. **Displacement — domyślny próg odcięcia dopasowania** (jaka wartość ma sens fizyczny dla
-   Twoich typowych struktur — ułamek stałej sieci? promień kowalencyjny × jakiś mnożnik, podobnie
-   do bond cutoff?).
-7. **Terminal PS (sekcja 3) — wystarczy zwykły `powershell.exe`, czy od razu chcesz PowerShell 7
-   (`pwsh.exe`) jeśli jest zainstalowany?** Wpływa tylko na to, co panel próbuje odpalić najpierw.
-8. **Konsola-kalkulator (sekcja 4) — czy masz `ipython` zainstalowany w venv appki, czy panel ma
-   zakładać zwykły `python -i`?** (Sprawdzę sam przy implementacji, ale daj znać jeśli wiesz już
-   teraz — oszczędzi jeden krok.)
+1. **Calculation Summary — lista pól z sekcji 5 zaakceptowana bez zmian.**
+2. **`VaspOutputBridge` rozszerzany, nie nowy byt** — uzasadnienie użytkownika: to nasz własny
+   kod ("po naszej stronie"), nie coś od `punktukas`, więc bezpieczne do rozszerzenia bez ryzyka
+   kolizji z upstreamem.
+3. **Custom irrep label mapping — per-projekt.** Potwierdzone.
+4. **Irrep labels w 3D — ta sama encja co inne etykiety (MSDF `LabelComponent`/`TransformComponent`,
+   wzorzec pinned bond/angle measurement labels z T09), nie osobny mechanizm.** Użytkownik wprost:
+   "trudno dokładnie określić pozycję, każdy przypadek inny, ale spróbuj" — czyli: best-effort
+   domyślne umiejscowienie (blisko izopowierzchni orbitalu, ten sam wzorzec offsetu co istniejące
+   pinned labele), bez dążenia do idealnych reguł na start; jeśli istniejący mechanizm etykiet
+   wspiera ręczne przeciąganie/offset (do zweryfikowania), to wystarczy jako "ucieczka" gdy
+   domyślna pozycja nie pasuje w konkretnym przypadku.
+5. **Displacement, dopasowania międzygatunkowe (np. C→B) — domyślnie WŁĄCZONE** (odwraca
+   rekomendację z poprzedniej listy — świadoma decyzja użytkownika, nie mój błąd w odczytaniu:
+   permisywny domyślny tryb jest bezpieczny, bo próg z pkt 6 daje użytkownikowi kontrolę nad tym co
+   faktycznie się pokazuje).
+6. **Displacement, próg odcięcia dopasowania — NIE hardkodowany domyślny, tylko żywy slider w UI**,
+   dostrajany post-factum, **osobno per para porównywanych struktur** (nie jeden globalny ustawiony
+   raz) — bo "trudno z góry określić, każdy przypadek inny" (ten sam duch co pkt 4). Implementacja:
+   dopasowanie liczone raz (Hungarian, sekcja 10) na szeroki/permisywny próg, slider w UI filtruje
+   które dopasowania są RYSOWANE (ukrywa te powyżej aktualnej wartości slidera) — nie przelicza
+   Hungarian assignment za każdym ruchem slidera, tylko chowa/pokazuje już policzone pary. Zapisany
+   per-projekt razem z resztą stanu porównania (który plik A, który plik B, ostatnia wartość
+   slidera) — analogicznie do custom irrep labels z pkt 3.
+7. **Terminal — na razie zwykły `powershell.exe`**, bez próby wykrycia `pwsh.exe` (PS7) na start.
+8. **Konsola-kalkulator — z `.venv` appki, nie systemowy Python.** `ipython` ma zostać dodany do
+   tego venv jeśli go tam jeszcze nie ma (`uv`-zarządzany, zob. `scripts/Tooling.*`/`setup.py`) —
+   do sprawdzenia i ewentualnego dopisania jako pierwszy krok implementacji sekcji 4, nie założenie
+   że coś jest już zainstalowane bez weryfikacji.
 
 ---
 
