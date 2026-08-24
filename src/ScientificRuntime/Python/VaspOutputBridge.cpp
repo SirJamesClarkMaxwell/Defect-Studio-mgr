@@ -70,6 +70,8 @@ namespace DefectStudio
 			}
 			data.spaceGroupSymbol = GetOptional<std::string>(summary, "space_group_symbol");
 			data.spaceGroupNumber = GetOptional<int>(summary, "space_group_number");
+			data.pointGroupSymbol = GetOptional<std::string>(summary, "point_group_symbol");
+			data.pointGroupSchoenflies = GetOptional<std::string>(summary, "point_group_schoenflies");
 			return data;
 		}
 
@@ -155,23 +157,30 @@ namespace DefectStudio
 				"python.vasp_output.load.empty_output");
 		}
 
-		try
+		Result<VaspOutputData> parsed = ParseVaspOutputJson(jsonLine);
+		if (parsed)
 		{
-			const nlohmann::json payload = nlohmann::json::parse(jsonLine);
-			VaspOutputData outputData = ParseVaspOutputPayloadJson(payload);
-
 			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 				Time::NowSteady() - startTime).count();
 			DS_LOG_DEBUG("VaspOutputBridge: parsed VASP output in {} ms", elapsedMs);
-			return outputData;
+		}
+		return parsed;
+	}
+
+	Result<VaspOutputData> ParseVaspOutputJson(const std::string &jsonPayload)
+	{
+		try
+		{
+			const nlohmann::json payload = nlohmann::json::parse(jsonPayload);
+			return ParseVaspOutputPayloadJson(payload);
 		}
 		catch (const std::exception &exception)
 		{
 			return MakePythonExecutionError(
-				"VASP output loader output parsing failed.",
-				std::string("JSON parse/schema error: ") + exception.what() + "\nPayload: " + jsonLine,
-				"Ensure the bridge script prints exactly one JSON line with output data.",
-				"python.vasp_output.load.invalid_json");
+				"VASP output JSON parsing failed.",
+				std::string("JSON parse/schema error: ") + exception.what() + "\nPayload: " + jsonPayload,
+				"Ensure the payload matches vasp_output_load.py's output contract.",
+				"python.vasp_output.parse.invalid_json");
 		}
 	}
 } // namespace DefectStudio

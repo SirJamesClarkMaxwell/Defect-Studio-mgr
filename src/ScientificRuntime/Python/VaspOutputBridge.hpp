@@ -54,6 +54,11 @@ namespace DefectStudio
 		std::optional<std::array<std::array<double, 3>, 3>> stressTensorKilobar;
 		std::optional<std::string> spaceGroupSymbol;
 		std::optional<int> spaceGroupNumber;
+		// Crystallographic point group, Schoenflies notation (C2v, D3h, ...) with its Hermann-
+		// Mauguin equivalent (mm2, -6m2, ...) - distinct from the space group above (space groups
+		// include translation/glide/screw symmetry, point groups don't).
+		std::optional<std::string> pointGroupSymbol;
+		std::optional<std::string> pointGroupSchoenflies;
 	};
 
 	struct VaspOutputData
@@ -93,4 +98,10 @@ namespace DefectStudio
 	private:
 		ScriptRunner m_ScriptRunner;
 	};
+
+	// Parses a JSON payload matching vasp_output_load.py's output schema - the same parsing
+	// LoadOutput itself uses on the subprocess's stdout, exposed separately so a cached copy of
+	// that payload (CalculationSummaryPanel's on-disk cache) can be parsed back without re-running
+	// the subprocess.
+	[[nodiscard]] Result<VaspOutputData> ParseVaspOutputJson(const std::string &jsonPayload);
 } // namespace DefectStudio

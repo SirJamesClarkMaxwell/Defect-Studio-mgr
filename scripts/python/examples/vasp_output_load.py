@@ -16,6 +16,18 @@ except ImportError as exc:
     raise SystemExit(1)
 
 
+# Hermann-Mauguin (spglib's `dataset["pointgroup"]`) -> Schoenflies, the 32 crystallographic point
+# groups. spglib/puntukas expose no Schoenflies symbol directly - this is a static, well-known
+# bijection, not something worth a dependency for.
+_POINT_GROUP_HM_TO_SCHOENFLIES = {
+    "1": "C1", "-1": "Ci", "2": "C2", "m": "Cs", "2/m": "C2h", "222": "D2", "mm2": "C2v",
+    "mmm": "D2h", "4": "C4", "-4": "S4", "4/m": "C4h", "422": "D4", "4mm": "C4v", "-42m": "D2d",
+    "4/mmm": "D4h", "3": "C3", "-3": "C3i", "32": "D3", "3m": "C3v", "-3m": "D3d", "6": "C6",
+    "-6": "C3h", "6/m": "C6h", "622": "D6", "6mm": "C6v", "-6m2": "D3h", "6/mmm": "D6h", "23": "T",
+    "m-3": "Th", "432": "O", "-43m": "Td", "m-3m": "Oh",
+}
+
+
 def _parse_eigenval_bandgap(directory: str) -> dict | None:
     # Fallback for when vasprun.xml's own eigenvalues/occupations are unavailable (seen on real
     # fixtures - Vasprun.homo/lumo raise TypeError because vasprun.eigenvalues is None even
@@ -136,6 +148,18 @@ def _summary_payload(output) -> dict:
     except (ImportError, AttributeError, TypeError):
         summary["space_group_symbol"] = None
         summary["space_group_number"] = None
+
+    try:
+        # sym.dataset is spglib's raw dataset dict - no public Symmetry property wraps
+        # "pointgroup" the way international_symbol/spacegroup_number wrap "international"/
+        # "number", so read it directly (same class of private-ish access already used for
+        # Vasprun._etot above).
+        point_group_hm = str(sym.dataset["pointgroup"])
+        summary["point_group_symbol"] = point_group_hm
+        summary["point_group_schoenflies"] = _POINT_GROUP_HM_TO_SCHOENFLIES.get(point_group_hm)
+    except (ImportError, AttributeError, TypeError, KeyError, NameError):
+        summary["point_group_symbol"] = None
+        summary["point_group_schoenflies"] = None
 
     return summary
 
