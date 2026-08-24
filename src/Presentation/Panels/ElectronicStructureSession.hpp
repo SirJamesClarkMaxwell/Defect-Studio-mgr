@@ -55,6 +55,18 @@ namespace DefectStudio
 			float irrepTol = 0.1f;
 			float irrepSymprec = 1e-3f;
 
+			// What DispatchOutputLoad actually fetched last (via the completed job's own request
+			// params, not these live fields - which the user may keep editing while a job is in
+			// flight). -1 loadedBandStart = nothing loaded yet. If the next requested [bandStart,
+			// bandEnd] is already covered by this with matching irrep settings, DispatchOutputLoad
+			// skips the subprocess entirely instead of re-parsing vasprun.xml for data already in
+			// state.data->orbitals.
+			int loadedBandStart = -1;
+			int loadedBandEnd = -1;
+			bool loadedShowIrreps = false;
+			float loadedIrrepTol = 0.1f;
+			float loadedIrrepSymprec = 1e-3f;
+
 			int selectedBand = -1;
 			// Shared default for orbitals not yet individually tuned - EnsureChannelRendered syncs
 			// this to whatever the just-selected orbital's own remembered value is (see

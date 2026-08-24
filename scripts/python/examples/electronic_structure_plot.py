@@ -82,7 +82,11 @@ def plot_occupation_diagram(bands: list[dict], split_spin_channels: bool, y_labe
     ax.tick_params(axis="x", colors=_TICK_COLOR)
 
     fig.tight_layout()
-    fig.savefig(output_path, facecolor=fig.get_facecolor())
+    # bbox_inches="tight" crops to the actual rendered content (ticks, arrows, AND text labels) -
+    # xlim only controls where data maps onto the axes box, not how much of that box is blank; a
+    # fixed xlim always leaves unused margin (this was the real cause of the "reserved space for a
+    # second channel" look in merged mode - the axes box fills the figure regardless of xlim).
+    fig.savefig(output_path, facecolor=fig.get_facecolor(), bbox_inches="tight", pad_inches=0.15)
     plt.close(fig)
 
 

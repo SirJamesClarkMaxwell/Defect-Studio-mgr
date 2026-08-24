@@ -184,6 +184,10 @@ namespace DefectStudio
 				orbitals.end());
 			if (state.selectedBand == bandToRemove)
 				state.selectedBand = -1;
+			// Otherwise a later Reload of the same range would cache-hit (see DispatchOutputLoad) and
+			// silently keep this band missing instead of re-fetching it.
+			state.loadedBandStart = -1;
+			state.loadedBandEnd = -1;
 		}
 	}
 

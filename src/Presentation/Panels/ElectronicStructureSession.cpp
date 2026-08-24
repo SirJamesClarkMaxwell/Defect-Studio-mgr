@@ -279,6 +279,21 @@ namespace DefectStudio
 
 	void ElectronicStructureSession::DispatchOutputLoad(WindowState &state)
 	{
+		// Cache hit: requested range already covered by what's in state.data->orbitals, same irrep
+		// settings - skip the subprocess (re-parsing vasprun.xml for data we already have). Doesn't
+		// force a hard refresh for a still-running calc; nudge the range or delete-then-reload a row
+		// to force one. See ProjectEvents-style comment in WindowState for the fields this checks.
+		const bool rangeCovered = state.data.has_value() && state.loadedBandStart >= 0 &&
+			state.bandStart >= state.loadedBandStart && state.bandEnd <= state.loadedBandEnd;
+		const bool irrepSettingsMatch = state.showIrreps == state.loadedShowIrreps &&
+			(!state.showIrreps ||
+			 (state.irrepTol == state.loadedIrrepTol && state.irrepSymprec == state.loadedIrrepSymprec));
+		if (rangeCovered && irrepSettingsMatch)
+		{
+			state.lastError.clear();
+			return;
+		}
+
 		const Path csvPath = state.calculationDirectory / "orbitals_export.csv";
 		std::optional<std::vector<OrbitalRecord>> csvOrbitals =
 			ReadOrbitalsCsv(csvPath, state.bandStart, state.bandEnd);
@@ -334,6 +349,11 @@ namespace DefectStudio
 			if (result.has_value())
 			{
 				state.data = ConvertVaspOutputDataToElectronicStructureData(*result);
+				state.loadedBandStart = state.pendingOutputJob->GetBandStart();
+				state.loadedBandEnd = state.pendingOutputJob->GetBandEnd();
+				state.loadedShowIrreps = state.pendingOutputJob->GetIncludeIrreps();
+				state.loadedIrrepTol = state.pendingOutputJob->GetIrrepTol();
+				state.loadedIrrepSymprec = state.pendingOutputJob->GetSymprec();
 				state.lastError.clear();
 			}
 			else

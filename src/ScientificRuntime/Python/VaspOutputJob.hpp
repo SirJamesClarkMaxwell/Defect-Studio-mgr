@@ -27,6 +27,15 @@ namespace DefectStudio
 		[[nodiscard]] const Path &GetCalculationDirectory() const noexcept;
 		[[nodiscard]] const std::optional<VaspOutputData> &GetResult() const noexcept;
 
+		// Request params this job was created with - lets a caller record "what range/settings did
+		// the completed job actually cover" for cache-hit checks (see
+		// ElectronicStructureSession::DispatchOutputLoad).
+		[[nodiscard]] int GetBandStart() const noexcept { return m_BandStart; }
+		[[nodiscard]] int GetBandEnd() const noexcept { return m_BandEnd; }
+		[[nodiscard]] bool GetIncludeIrreps() const noexcept { return m_IncludeIrreps; }
+		[[nodiscard]] float GetIrrepTol() const noexcept { return m_IrrepTol; }
+		[[nodiscard]] float GetSymprec() const noexcept { return m_Symprec; }
+
 	private:
 		Path m_CalculationDirectory;
 		int m_BandStart;
