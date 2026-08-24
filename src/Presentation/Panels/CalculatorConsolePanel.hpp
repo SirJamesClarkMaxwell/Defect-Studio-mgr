@@ -21,10 +21,11 @@ namespace DefectStudio
 	//
 	// Input is a real code cell (ImGuiColorTextEdit, same component TextEditorPanel uses, with its
 	// built-in Python language definition for syntax highlighting) rather than a single-line
-	// InputText - Ctrl+Enter submits the whole cell's lines to IPython in order and clears it,
-	// Enter alone just inserts a newline like any code editor. This drops the earlier plain-
-	// InputText's Up/Down history recall (doesn't translate to a multi-line editor - Up/Down there
-	// means "move the cursor").
+	// InputText - Ctrl+Enter or Shift+Enter submits the whole cell's lines to IPython in order and
+	// clears it, Enter alone just inserts a newline like any code editor. Plain Up/Down recall
+	// history the way a shell does: only while the cell is empty (nothing to conflict with -
+	// there's no cursor-navigation or autocomplete-popup meaning to steal) or while already
+	// mid-recall (any manual edit cancels that and hands Up/Down back to the editor).
 	class CalculatorConsolePanel final : public IPanel
 	{
 	public:
@@ -52,6 +53,18 @@ namespace DefectStudio
 		void ensureStarted();
 		void appendSegment(std::string text, bool isUserInput);
 		void submitCurrentCell();
+		// Plain Up/Down history recall - see class comment for when it applies.
+		void handleHistoryNavigation();
+		// Cheap heuristic scan for `name = ...`/`def name`/`class name` in submitted code, so
+		// session variables/functions become autocomplete-able - not a real parser, see .cpp.
+		void recordIdentifiersFrom(const std::string &code);
+		void addKnownIdentifier(std::string identifier);
+		// Static list only - keywords/builtins/known identifiers. A live-IPython-backed variant
+		// (real `obj.attr` completion) was tried and reverted: it flooded the session with one
+		// In[]/Out[] per render frame the popup stayed open, see git history on this file if
+		// revisiting.
+		void provideSuggestions(TextEditor::AutoCompleteState &state);
+		void pollProcessOutput();
 
 		Platform::InteractiveProcess m_Process;
 		std::vector<Segment> m_Segments;
@@ -64,7 +77,22 @@ namespace DefectStudio
 
 		std::string m_ProjectRoot;
 		std::vector<std::string> m_ProjectRoots;
+		std::vector<std::string> m_KnownIdentifiers;
+
+		std::vector<std::string> m_History;
+		// -1 = not browsing history (editing normally). Otherwise an index into m_History - Up
+		// moves toward 0 (older), Down moves back toward m_History.size() (newer, then off the end
+		// restores m_HistoryDraft).
+		int m_HistoryCursor = -1;
+		std::string m_HistoryDraft;
+		// Exactly what we last wrote into the editor via history recall - if the buffer no longer
+		// matches this, the user edited it manually, which cancels browsing (see
+		// handleHistoryNavigation).
+		std::string m_LastRecalledText;
 
 		TextEditor m_InputEditor;
+		// Must outlive every call the editor makes into it - stored as a member, not a local,
+		// since SetAutoCompleteConfig takes a raw pointer.
+		TextEditor::AutoCompleteConfig m_AutoCompleteConfig;
 	};
 } // namespace DefectStudio
