@@ -164,30 +164,31 @@ tworzenia równoległego bytu (decyzja przy starcie implementacji, nie tutaj).
 
 ---
 
-## 6. Fonony: S, DW, średnie ω, średnia energia — **sprawdzone, nie wynajdywane**
+## 6. Fonony: S, DW, średnie ω, średnia energia — **ODŁOŻONE NA KONIEC (2026-08-24)**
 
-Użytkownik: "mam skrypt na laptopie, ale zobacz czy `punktukas` nie ma czegoś lepszego."
+> **Decyzja użytkownika 2026-08-24: to zaczekaj.** Użytkownik prawdopodobnie dostanie coś od
+> Lukasa (autora `punktukas-tools`) w sprawie `dephonopy` — porównanie niżej jest informacyjne,
+> **nie blokuje reszty tego planu i celowo idzie na sam koniec kolejności (sekcja 11)**.
 
-**Sprawdzone w źródle:** `puntukas.vasp.multidet_relax.calculator.py` **sam importuje**
-`from dephonopy.hr_factors.io import atomic_displacements` — `punktukas`'s własny autor już sięga
-po osobny pakiet `dephonopy` do dokładnie tej klasy obliczeń (nazwa modułu `hr_factors` = Huang-
-Rhys factors). **`dephonopy` nie jest zainstalowany w tym środowisku i nie znaleziono go lokalnie**
-— prawdopodobnie kolejne prywatne narzędzie tego samego środowiska naukowego (jak `punktukas`
-samo), **do potwierdzenia z użytkownikiem gdzie go znaleźć** (może mieć je na tym samym laptopie
-co własny skrypt).
+### Porównanie trzech kandydatów (sprawdzone 2026-08-24, poziom pewności zaznaczony przy każdym)
 
-**Dodatkowo znalezione przez web search (2026-08-24), realna, publiczna alternatywa:**
-**`Lumabi`** — pakiet Python opublikowany w JOSS 2026 (Bouquiaux i in., DOI `10.21105/joss.09145`),
-"streamline the computation of phonon-resolved luminescence spectra of defects and dopants in
-solids" — **liczy dokładnie transition energies, Huang-Rhys factors, effective phonon
-frequencies i lineshapes w modelu 1D configuration-coordinate**, integruje się z `phonopy`.
-**Nie potwierdzono jeszcze dokładnej nazwy pakietu PyPI/repo GitHub** (snippet wyszukiwania nie
-podał wprost) — do zweryfikowania z papieru JOSS przy starcie implementacji.
+| | **`dephonopy`** | **PyPhotonics** | **Lumabi** | Twój stary skrypt |
+|---|---|---|---|---|
+| Status | Prywatny, **nieznaleziony** publicznie ani lokalnie | **Publiczny, ugruntowany** (Comp. Phys. Comm. 2022) | **Publiczny, świeży** (JOSS 2026) | Nieznany appce (nigdy nie pokazany) |
+| Instalacja | Nieznana (nie na PyPI pod tą nazwą) | `pip install pyphotonics` (potwierdzone) | Repo rozwiązuje się do `github.com/abinit/abipy` — **moduł wewnątrz AbiPy**, nie osobny pakiet | — |
+| Ekosystem DFT | Nieznany, ale **`punktukas` (VASP-owe narzędzie) samo po niego sięga** — silna poszlaka że jest VASP-friendly | **VASP natywnie** (`CONTCAR_GS`/`CONTCAR_ES` + phonopy `bands.yaml`) — pasuje 1:1 do tego czym appka już operuje | **AbiPy/ABINIT-centryczny** (workflow `LumiWork` automatyzuje zadania ABINIT DFT) — **ryzyko: może nie przyjmować VASP-a wprost**, niepotwierdzone, mogłoby wymagać konwersji formatu |
+| Co liczy (potwierdzone) | Nieznane (`atomic_displacements` w `hr_factors.io` — sama nazwa sugeruje przemieszczenia atomowe jako wejście do HR, spójne z podejściem 1D config-coordinate) | **Huang-Rhys factor, PL lineshape** (DW i średnie ω nie wymienione wprost w README — prawdopodobnie liczone wewnętrznie jako krok pośredni, do potwierdzenia w kodzie/dokumentacji przy realnej integracji) | Transition energies, Huang-Rhys factors, **effective phonon frequencies**, lineshapes (z papieru JOSS, PDF nieczytelny do dalszych szczegółów) | Nieznane |
+| Wejście | Nieznane | **Dokładnie 2 pliki + jeden phonopy YAML** — pasuje 1:1 do życzenia użytkownika "dwa pliki do wyboru" | Nieznane precyzyjnie (prawdopodobnie phonopy force-constants + dwie geometrie, typowe dla tej klasy metod) | Nieznane |
+| Licencja | Nieznana | MIT (repo) | CC-BY-4.0 (papier JOSS; licencja samego kodu w AbiPy osobno, nieco inna sprawa) | — |
 
-**Rekomendacja:** sprawdzić `Lumabi` jako pierwszy kandydat (publiczny, cytowalny, aktualny
-2026) **zanim** szuka się `dephonopy` (status nieznany) albo reużywa starego skryptu użytkownika.
-Żadna z dwóch opcji nie jest dziś na tyle sprawdzona żeby pisać kod — **to jest decyzja do
-podjęcia z użytkownikiem, nie ustalona przez ten plan** (sekcja 9, pytanie).
+**Wstępna rekomendacja (do potwierdzenia, nie ostateczna decyzja):** **PyPhotonics** wygląda na
+najlepiej dopasowany praktycznie — jawnie VASP-natywny, dokładnie te same 2 pliki + phonopy
+`bands.yaml` czego appka i użytkownik już oczekują, publiczny i pip-installable, więc łatwy do
+zweryfikowania samemu zanim padnie ostateczna decyzja. `Lumabi` ma realne ryzyko integracyjne
+(ekosystem ABINIT, nie VASP). `dephonopy` zostaje czarną skrzynką dopóki nie przyjdzie odpowiedź
+od Lukasa — możliwe że to jest dokładnie ten sam rodzaj narzędzia co PyPhotonics, tylko
+wewnętrzne/nieopublikowane, albo że robi coś innego/lepszego skoro `punktukas` po niego sięga.
+**Nie podejmować decyzji bez tej odpowiedzi** — użytkownik świadomie to odłożył.
 
 **UI, niezależnie od backendu:** mały panel/popup z **dwoma pickerami plików** (użytkownik wybiera
 dokładnie które 2 pliki/foldery wchodzą do obliczenia — zgodnie z wyraźnym życzeniem: "dać
@@ -265,30 +266,53 @@ domyka wprost, teraz z dodatkiem irrep labeli z sekcji 8.
 
 ---
 
-## 10. Atoms-displacement
+## 10. Atoms-displacement — **PEŁNE WSPARCIE (decyzja użytkownika 2026-08-24), nie tylko MVP**
 
-**Otwarta decyzja z poprzedniego planu (`2026-08-23-outliner-bonds-displacement.md`) częściowo
-rozstrzygnięta teraz:** sprawdzone w źródle `punktukas` (`atoms/base.py`) — **istnieje tylko
-`get_distances(p1, p2)` (znane indeksy) i `get_all_distances()` (macierz wewnątrz jednej
-struktury). Zero atom-matchera między dwiema RÓŻNYMI (różny skład) strukturami.**
+**Otwarta decyzja z poprzedniego planu (`2026-08-23-outliner-bonds-displacement.md`) rozstrzygnięta
+2026-08-24: wspieramy CAŁOŚĆ, w tym różny skład (V_2 vs V_2CBCN).** Sprawdzone w źródle `punktukas`
+(`atoms/base.py`) — **istnieje tylko `get_distances(p1, p2)` (znane indeksy) i `get_all_distances()`
+(macierz wewnątrz jednej struktury). Zero atom-matchera między dwiema RÓŻNYMI strukturami** — to
+znaczy dopasowanie atomów **piszemy sami, świadomie, bo zweryfikowaliśmy że nie ma tego gotowego**
+(w przeciwieństwie do reszty tego planu, gdzie prawie wszystko jest gotowe w `punktukas`).
 
-**Rekomendowany zakres MVP:** **tylko struktury o tym samym składzie i tej samej liczbie/kolejności
-atomów** (POSCAR vs własny zrelaksowany CONTCAR, albo dwa warianty tego samego defektu bez zmiany
-składu) — przemieszczenie per-atom to wtedy trywialna, per-indeksowa różnica pozycji (`get_distances`
-z `pbc=True` dla minimum-image, żeby uniknąć artefaktów na granicy komórki). Wizualnie: reużycie
-istniejącego instancingu cylindrów wiązań (inny mesh na czubku — grot strzałki), jeden wektor per
-atom, kolor/długość ~ wielkość przemieszczenia.
+### Przypadek prosty (ten sam skład/liczba/kolejność atomów)
 
-**Przypadek różnego składu (V_2 vs V_2CBCN z oryginalnego przykładu) zostaje jako świadomie
-nieobsłużony na start** — brak gotowego narzędzia w `punktukas`, wymagałby heurystyki
-najbliższego sąsiedztwa pisanej od zera (dokładnie ta opcja odrzucona w poprzednim planie jako
-"budowanie czegoś co `punktukas` może już mieć lepiej przetestowane" — tu already zweryfikowane że
-NIE ma, więc jeśli to jest realnie potrzebne, to świadomy nowy kawałek fizyki do napisania, nie coś
-przeoczonego).
+POSCAR vs własny zrelaksowany CONTCAR, albo dwa warianty tego samego defektu bez zmiany składu —
+przemieszczenie per-atom to trywialna, per-indeksowa różnica pozycji (minimum-image, żeby uniknąć
+artefaktów na granicy komórki periodycznej). Zero dopasowywania potrzebne, indeksy już się zgadzają.
+
+### Przypadek ogólny (różny skład/liczba atomów) — algorytm do napisania
+
+Wymaga **obie struktury na tej samej komórce/sieci** (inaczej "minimum-image displacement" nie ma
+dobrze zdefiniowanego sensu — porównanie różnych superkomórek to inny, nie zaadresowany tu problem).
+
+1. **Macierz odległości cross-structure** (B względem A), PBC-aware (minimum-image przez wektory
+   sieci + zawijanie współrzędnych frakcyjnych — prosta algebra liniowa, nie wymaga `punktukas`,
+   choć można reużyć `puntukas.Atoms`/`Cell` jeśli to wygodniejsze przy implementacji).
+2. **Dopasowanie jeden-do-jednego jako optymalne przypisanie dwudzielne** (Hungarian algorithm,
+   `scipy.optimize.linear_sum_assignment` — appka i tak przechodzi przez Python na tym etapie, więc
+   to naturalne miejsce), **nie zachłanny najbliższy-sąsiad** — zachłanny łatwo tworzy "skrzyżowane"
+   przypisania w gęstych regionach (atom X bierze najbliższego, zostawiając atomowi Y gorszy wybór
+   niż istniał), optymalne przypisanie minimalizuje sumę przemieszczeń globalnie.
+3. **Próg odcięcia** (max przemieszczenie, konfigurowalny przez użytkownika, w duchu bond-cutoff z
+   `BondSettingsPanel`) — dopasowanie powyżej progu odrzucone jako przypadkowe, nie prawdziwa
+   korespondencja.
+4. **Species:** domyślnie dopasowanie **tego samego pierwiastka** (osobna macierz/przypisanie per
+   gatunek) — dopuszczenie dopasowań międzygatunkowych (np. śledzenie podstawienia C→B) jako opcja,
+   nie domyślne zachowanie (do potwierdzenia, zob. pytania niżej).
+5. **Niedopasowane atomy:** obecne w A, brak w B → **wakancja** (reużyć istniejący koncept
+   "widmowego" renderowania z `AtomStyleTable`/`VacancyRenderStyle`, wspomniany w poprzednim
+   planie). Obecne w B, brak w A → **interstitial-like** marker (nowy atom bez pochodzenia).
+6. **Wizualizacja:** reużycie istniejącego instancingu cylindrów wiązań (inny mesh na czubku — grot
+   strzałki), jeden wektor per dopasowaną parę, kolor/długość ~ wielkość przemieszczenia.
+
+**To jest świadomie nowy kawałek algorytmu, nie duplikacja czegoś co `punktukas` już ma** —
+zweryfikowane w sekcji research tego planu, więc zgodne z zasadą "nie wynajdywać koła", nie
+złamanie jej.
 
 **UX wskazania plików:** osobny dialog z dwoma file-pickerami (reference + comparison), wzorzec NFD
 już zvendorowany. Może dzielić UI z sekcją 6 (fonony) jeśli te dwie funkcje faktycznie chcą tych
-samych dwóch plików wejściowych — do potwierdzenia przy implementacji.
+samych dwóch plików wejściowych — do potwierdzenia przy implementacji (fonony i tak odłożone).
 
 ---
 
@@ -303,24 +327,43 @@ samych dwóch plików wejściowych — do potwierdzenia przy implementacji.
 6. **Irrep labels — plumbing + UI + 3 miejsca wyświetlania** (sekcja 8) — średni, ale dobrze
    odgraniczony (domyka istniejące, częściowo zbudowane API).
 7. **Eksport CSV/TSV + matplotlib image** (sekcja 9) — po #6, żeby od razu zawierał irrep labels.
-8. **Fonony S/DW/ω̄/Ē** (sekcja 6) — **blokowane decyzją backendu** (Lumabi vs dephonopy vs stary
-   skrypt użytkownika, sekcja 9 pytań niżej) — zacząć od ustalenia tego, kod dopiero potem.
-9. **Atoms-displacement** (sekcja 10) — MVP (ten sam skład/liczba atomów) może iść równolegle z
-   resztą, niezależne od 1-8.
+8. **Atoms-displacement, pełny zakres** (sekcja 10) — przypadek prosty (ten sam skład) może iść
+   równolegle z resztą; przypadek ogólny (Hungarian assignment) jako drugi krok tego samego
+   zadania, niezależne od 1-7.
+9. **Fonony S/DW/ω̄/Ē** (sekcja 6) — **świadomie na końcu, czeka na odpowiedź od Lukasa
+   (`dephonopy`)** — decyzja użytkownika 2026-08-24, nie techniczna blokada.
 
 ---
 
-## 12. Otwarte decyzje — do ustalenia z użytkownikiem
+## 12. Lista pytań dla użytkownika (skonsolidowana 2026-08-24)
 
-1. **Fonony: `Lumabi` (publiczny, JOSS 2026) vs `dephonopy` (prywatny, status/lokalizacja
-   nieznana) vs istniejący skrypt użytkownika.** Rekomendacja: sprawdzić `Lumabi` najpierw.
-2. **`Vasprun._etot` (prywatny atrybut) — używać wprost, czy poprosić autora `punktukas` o
-   publiczną property?** Wpływa tylko na "ładność" kodu, nie na wykonalność.
-3. **Custom irrep label mapping — per-projekt czy per-structure?** Rekomendacja: per-projekt.
-4. **`CalculationSummaryBridge` jako nowy byt, czy rozszerzenie `VaspOutputBridge`?**
-5. **Displacement + fonony: wspólny 2-file picker UI, czy osobne?** — do potwierdzenia gdy backend
-   fononowy (pkt 1) ujawni dokładnie jakiego wejścia oczekuje.
-6. **Ostateczny zestaw pól w Calculation Summary** — lista z sekcji 5 to propozycja, nie kontrakt.
+**Fonony (sekcja 6) — ŚWIADOMIE POMINIĘTE tutaj, czeka na odpowiedź od Lukasa. Nie odpowiadać
+teraz.**
+
+1. **Calculation Summary (sekcja 5) — czy lista pól jest OK, czy coś dodać/usunąć?**
+   Proponowane: zbieżność (energia per krok jonowy+elektronowy), energia końcowa, zbieżność sił
+   (max |F| per krok vs próg), band gap, CPU/user/system/elapsed time, total drift, magnetyzacja/
+   NELECT, ciśnienie/stress, symetria/grupa przestrzenna.
+2. **Calculation Summary — nowy bridge (`CalculationSummaryBridge`) czy rozszerzenie istniejącego
+   `VaspOutputBridge`?** Rekomendacja: rozszerzenie (superset tej samej logiki), ale to zmienia
+   istniejący, już używany kod — potwierdź czy to akceptowalne teraz czy wolisz osobny byt.
+3. **Custom irrep label mapping (sekcja 8, pkt 4) — persystencja per-projekt czy per-structure?**
+   Rekomendacja: per-projekt (nazewnictwo grupy punktowej to własność materiału/defektu, nie
+   pojedynczego okna).
+4. **Irrep labels w 3D (renderer) — gdzie dokładnie względem izopowierzchni orbitalu?** (obok,
+   nad, z linią wskazującą jak istniejące pinned-measurement labele) — czysto wizualna decyzja,
+   łatwo zmienić później, ale warto ustalić punkt odniesienia przed kodem.
+5. **Displacement, przypadek ogólny (sekcja 10) — dopuszczać dopasowania międzygatunkowe
+   (np. C→B podstawienie) domyślnie, czy tylko ten sam pierwiastek chyba że user włączy opcję?**
+   Rekomendacja: domyślnie tylko ten sam pierwiastek, przełącznik do rozszerzenia.
+6. **Displacement — domyślny próg odcięcia dopasowania** (jaka wartość ma sens fizyczny dla
+   Twoich typowych struktur — ułamek stałej sieci? promień kowalencyjny × jakiś mnożnik, podobnie
+   do bond cutoff?).
+7. **Terminal PS (sekcja 3) — wystarczy zwykły `powershell.exe`, czy od razu chcesz PowerShell 7
+   (`pwsh.exe`) jeśli jest zainstalowany?** Wpływa tylko na to, co panel próbuje odpalić najpierw.
+8. **Konsola-kalkulator (sekcja 4) — czy masz `ipython` zainstalowany w venv appki, czy panel ma
+   zakładać zwykły `python -i`?** (Sprawdzę sam przy implementacji, ale daj znać jeśli wiesz już
+   teraz — oszczędzi jeden krok.)
 
 ---
 
