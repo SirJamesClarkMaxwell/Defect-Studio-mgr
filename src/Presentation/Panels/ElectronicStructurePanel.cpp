@@ -9,8 +9,10 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Platform/FileDialog.hpp"
+#include "Events/ProjectEvents.hpp"
 
 namespace DefectStudio
 {
@@ -84,7 +86,7 @@ namespace DefectStudio
 		}
 
 		constexpr ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY;
-		if (!ImGui::BeginTable("bands", 7, flags, ImVec2(0.0f, 180.0f)))
+		if (!ImGui::BeginTable("bands", 8, flags, ImVec2(0.0f, 180.0f)))
 			return;
 
 		ImGui::TableSetupColumn("Band");
@@ -93,6 +95,7 @@ namespace DefectStudio
 		ImGui::TableSetupColumn("E down");
 		ImGui::TableSetupColumn("Occ down");
 		ImGui::TableSetupColumn("Loc");
+		ImGui::TableSetupColumn("Irrep");
 		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 24.0f);
 		ImGui::TableHeadersRow();
 
@@ -133,6 +136,20 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(5);
 			ImGui::Text("%.2f", std::max(record.up.localization, record.down.localization));
 			ImGui::TableSetColumnIndex(6);
+			// Up/down usually carry the same irrep (same spatial symmetry, different spin) - shown
+			// once when equal, "up/down" when they differ (rare, but real for some open-shell cases).
+			if (record.up.irrep.has_value() || record.down.irrep.has_value())
+			{
+				std::string irrepText = record.up.irrep.has_value() == record.down.irrep.has_value() &&
+						record.up.irrep == record.down.irrep
+					? record.up.irrep.value_or("")
+					: record.up.irrep.value_or("-") + "/" + record.down.irrep.value_or("-");
+				const std::string *override_ = m_Session->FindIrrepLabelOverride(record.up.irrep);
+				if (override_ != nullptr && !override_->empty())
+					irrepText += " (" + *override_ + ")";
+				ImGui::TextUnformatted(irrepText.c_str());
+			}
+			ImGui::TableSetColumnIndex(7);
 			char deleteId[16];
 			std::snprintf(deleteId, sizeof(deleteId), "x##del%d", record.band);
 			if (ImGui::SmallButton(deleteId))
@@ -197,6 +214,82 @@ namespace DefectStudio
 		}
 		if (!m_Session->BulkError().empty())
 			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Session->BulkError().c_str());
+	}
+
+	void ElectronicStructurePanel::renderIrrepLabelEditor()
+	{
+		ImGui::Separator();
+		if (!ImGui::CollapsingHeader("Custom irrep labels (this project)"))
+			return;
+		ImGui::TextDisabled("Shown alongside the automatic irrep (e.g. \"b_1*\"), never replacing it.");
+
+		// Mutated in place, applied+persisted only when something actually changed this frame -
+		// same shape as BondSettingsPanel's per-pair override table (DragFloat mutated live,
+		// applySettings() on IsItemDeactivatedAfterEdit).
+		std::vector<std::pair<std::string, std::string>> overrides = m_Session->IrrepLabelOverrides();
+		bool changed = false;
+		std::size_t rowToRemove = std::string::npos;
+
+		if (ImGui::BeginTable(
+				"##IrrepLabelOverrides", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Irrep", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+			ImGui::TableSetupColumn("Custom label");
+			ImGui::TableSetupColumn("##Remove", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableHeadersRow();
+
+			for (std::size_t row = 0; row < overrides.size(); ++row)
+			{
+				ImGui::PushID(static_cast<int>(row));
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(overrides[row].first.c_str());
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SetNextItemWidth(-1.0f);
+				char labelBuffer[128];
+				std::snprintf(labelBuffer, sizeof(labelBuffer), "%s", overrides[row].second.c_str());
+				if (ImGui::InputText("##Label", labelBuffer, sizeof(labelBuffer)))
+					overrides[row].second = labelBuffer;
+				if (ImGui::IsItemDeactivatedAfterEdit())
+					changed = true;
+				ImGui::TableSetColumnIndex(2);
+				if (ImGui::Button("Remove"))
+				{
+					rowToRemove = row;
+					changed = true;
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+		if (rowToRemove != std::string::npos)
+			overrides.erase(overrides.begin() + static_cast<std::ptrdiff_t>(rowToRemove));
+
+		ImGui::SetNextItemWidth(90.0f);
+		ImGui::InputText("##NewIrrepKey", m_NewIrrepKey, sizeof(m_NewIrrepKey));
+		ImGui::SameLine();
+		ImGui::TextUnformatted("->");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(220.0f);
+		ImGui::InputText("##NewIrrepLabel", m_NewIrrepLabel, sizeof(m_NewIrrepLabel));
+		ImGui::SameLine();
+		ImGui::BeginDisabled(m_NewIrrepKey[0] == '\0');
+		if (ImGui::Button("Add"))
+		{
+			overrides.emplace_back(m_NewIrrepKey, m_NewIrrepLabel);
+			m_NewIrrepKey[0] = '\0';
+			m_NewIrrepLabel[0] = '\0';
+			changed = true;
+		}
+		ImGui::EndDisabled();
+
+		if (changed && m_EventBus != nullptr)
+		{
+			m_Session->SetIrrepLabelOverrides(overrides);
+			ProjectEvents::IrrepLabelOverridesChanged event;
+			event.overrides = std::move(overrides);
+			m_EventBus->Queue(event);
+		}
 	}
 
 	void ElectronicStructurePanel::renderWavefunctionControls(
@@ -288,6 +381,18 @@ namespace DefectStudio
 		ImGui::Separator();
 		if (ImGui::Button("Export orbitals CSV"))
 			m_Session->ExportOrbitalsCsv(state);
+		ImGui::SameLine();
+		if (ImGui::Button("Export orbitals TSV"))
+			m_Session->ExportOrbitalsTsv(state);
+		ImGui::SameLine();
+		if (ImGui::Button("Export image (matplotlib)"))
+		{
+			const BandGapData *referenceGap = m_Session->BulkGap().has_value()
+				? &*m_Session->BulkGap()
+				: (state.data.has_value() && state.data->gap.has_value() ? &*state.data->gap : nullptr);
+			const float vbm = (state.relativeToVbm && referenceGap != nullptr) ? referenceGap->homo : 0.0f;
+			m_Session->ExportOccupationDiagramImage(state, vbm);
+		}
 		if (!state.csvExportMessage.empty())
 		{
 			ImGui::SameLine();
@@ -332,6 +437,20 @@ namespace DefectStudio
 		ImGui::InputInt("Band end (index, inclusive)", &state.bandEnd);
 		state.bandStart = std::max(0, state.bandStart);
 		state.bandEnd = std::max(state.bandStart, state.bandEnd);
+
+		// Real per-band cost (get_symmetry per orbital) - opt-in, off by default, see
+		// vasp_output_load.py's _orbitals_payload comment. Takes effect on the next Load/Reload,
+		// same as band start/end above.
+		ImGui::Checkbox("Show symmetry labels (irrep)", &state.showIrreps);
+		if (state.showIrreps)
+		{
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(90.0f);
+			ImGui::InputFloat("Tol.##irreptol", &state.irrepTol, 0.0f, 0.0f, "%.3f");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(90.0f);
+			ImGui::InputFloat("Symprec##irrepsymprec", &state.irrepSymprec, 0.0f, 0.0f, "%.4f");
+		}
 
 		const bool loadingOutput = state.pendingOutputJob != nullptr;
 		ImGui::BeginDisabled(loadingOutput);
@@ -388,6 +507,7 @@ namespace DefectStudio
 		}
 
 		renderBulkReferenceControls();
+		renderIrrepLabelEditor();
 
 		if (referenceGap != nullptr)
 		{

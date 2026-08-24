@@ -4,6 +4,8 @@
 #include "Core/Utils/Path.hpp"
 
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace DefectStudio::ProjectEvents
 {
@@ -54,5 +56,14 @@ namespace DefectStudio::ProjectEvents
 	struct CalculationSummaryOpenRequested final : public BusEvent
 	{
 		Path directory;
+	};
+
+	// Queued from ElectronicStructurePanel's custom irrep-label editor (add/remove/edit a row).
+	// EditorLayer applies the whole list to ElectronicStructureSession immediately (works even with
+	// no project open) and persists it into the active project's manifest if one exists - same
+	// shape as BulkDirectoryChangeRequested.
+	struct IrrepLabelOverridesChanged final : public BusEvent
+	{
+		std::vector<std::pair<std::string, std::string>> overrides;
 	};
 } // namespace DefectStudio::ProjectEvents

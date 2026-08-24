@@ -26,8 +26,8 @@ namespace DefectStudio
 
 	private:
 		void renderPlot(
-			ElectronicStructureSession::WindowState &state, const std::vector<OrbitalRecord> &filtered, float vbm,
-			bool autofitRequested);
+			ElectronicStructureSession::WindowState &state, RendererWindowState &windowState,
+			const std::vector<OrbitalRecord> &filtered, float vbm, bool autofitRequested);
 
 		Ref<ElectronicStructureSession> m_Session;
 	};

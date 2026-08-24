@@ -38,6 +38,22 @@ namespace DefectStudio
 				outManifest.formatVersion = root["format_version"].as<int>(1);
 				outManifest.bulkDirectory = Path(root["bulk_directory"].as<std::string>(""));
 
+				outManifest.irrepLabelOverrides.clear();
+				const YAML::Node irrepLabelsNode = root["irrep_labels"];
+				if (irrepLabelsNode && irrepLabelsNode.IsSequence())
+				{
+					for (const YAML::Node &node : irrepLabelsNode)
+					{
+						if (!node || !node.IsMap())
+							continue;
+						const std::string irrep = node["irrep"].as<std::string>("");
+						const std::string label = node["label"].as<std::string>("");
+						if (irrep.empty())
+							continue;
+						outManifest.irrepLabelOverrides.emplace_back(irrep, label);
+					}
+				}
+
 				outManifest.roots.clear();
 				const YAML::Node rootsNode = root["roots"];
 				if (rootsNode && rootsNode.IsSequence())
@@ -83,6 +99,15 @@ namespace DefectStudio
 					emit << YAML::Key << "id" << YAML::Value << entry.id;
 					emit << YAML::Key << "path" << YAML::Value << entry.path.String();
 					emit << YAML::Key << "label" << YAML::Value << entry.label;
+					emit << YAML::EndMap;
+				}
+				emit << YAML::EndSeq;
+				emit << YAML::Key << "irrep_labels" << YAML::Value << YAML::BeginSeq;
+				for (const auto &[irrep, label] : manifest.irrepLabelOverrides)
+				{
+					emit << YAML::BeginMap;
+					emit << YAML::Key << "irrep" << YAML::Value << irrep;
+					emit << YAML::Key << "label" << YAML::Value << label;
 					emit << YAML::EndMap;
 				}
 				emit << YAML::EndSeq;

@@ -3,7 +3,9 @@
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <vector>
 
 #include <imgui.h>
@@ -23,8 +25,8 @@ namespace DefectStudio
 	}
 
 	void OccupationDiagramPanel::renderPlot(
-		ElectronicStructureSession::WindowState &state, const std::vector<OrbitalRecord> &filtered, float vbm,
-		bool autofitRequested)
+		ElectronicStructureSession::WindowState &state, RendererWindowState &windowState,
+		const std::vector<OrbitalRecord> &filtered, float vbm, bool autofitRequested)
 	{
 		const BandGapData *referenceGap =
 			m_Session->BulkGap().has_value() ? &*m_Session->BulkGap() : (state.data->gap.has_value() ? &*state.data->gap : nullptr);
@@ -129,18 +131,24 @@ namespace DefectStudio
 				ImVec2(center.x + kArrowHeadPx, tipY + dir * kArrowHeadPx),
 				color);
 		};
-		auto drawLevel = [&](ImVec2 center)
+		const ImU32 selectedTickColor = IM_COL32(255, 230, 90, 255);
+		auto drawLevel = [&](ImVec2 center, bool selected)
 		{
+			// Selected = state.selectedBand, the same band a table row click (ElectronicStructurePanel)
+			// or a diagram click (below) puts on screen in the 3D view - thicker + bright yellow so
+			// it's obvious which level the isosurface currently belongs to.
+			const float halfWidth = selected ? kLevelHalfWidthPx + 4.0f : kLevelHalfWidthPx;
 			drawList->AddLine(
-				ImVec2(center.x - kLevelHalfWidthPx, center.y),
-				ImVec2(center.x + kLevelHalfWidthPx, center.y),
-				tickColor, 1.5f);
+				ImVec2(center.x - halfWidth, center.y),
+				ImVec2(center.x + halfWidth, center.y),
+				selected ? selectedTickColor : tickColor, selected ? 3.0f : 1.5f);
 		};
 		// nr goes on the left of the tick, energy on the right - consistently, for every level.
 		// `extraSpread` (the ladder offset below) only pushes the *labels* further from the tick;
 		// the tick itself always stays kLevelHalfWidthPx (its true, honest position) so the diagram
 		// doesn't lie about how close two levels actually are - only the text needs breathing room.
-		auto drawLevelLabels = [&](ImVec2 center, float extraSpread, int band, float energy)
+		auto drawLevelLabels =
+			[&](ImVec2 center, float extraSpread, int band, float energy, const std::optional<std::string> &irrep)
 		{
 			const float labelOffset = kLevelHalfWidthPx + extraSpread;
 			char nrBuffer[16];
@@ -149,9 +157,24 @@ namespace DefectStudio
 			drawList->AddText(
 				ImVec2(center.x - labelOffset - 6.0f - nrSize.x, center.y - 7.0f), tickColor, nrBuffer);
 
-			char energyBuffer[32];
-			std::snprintf(energyBuffer, sizeof(energyBuffer), "%.3f eV", energy);
-			drawList->AddText(ImVec2(center.x + labelOffset + 6.0f, center.y - 7.0f), tickColor, energyBuffer);
+			std::string energyBuffer(32, '\0');
+			int written = std::snprintf(energyBuffer.data(), energyBuffer.size(), "%.3f eV", energy);
+			energyBuffer.resize(written > 0 ? static_cast<std::size_t>(written) : 0);
+			// Custom override shown alongside the automatic irrep, never replacing it (see
+			// ElectronicStructurePanel::renderIrrepLabelEditor) - "b_1 (pi*)".
+			if (irrep.has_value() && !irrep->empty())
+			{
+				energyBuffer += "  ";
+				energyBuffer += *irrep;
+				if (const std::string *override_ = m_Session->FindIrrepLabelOverride(irrep);
+					override_ != nullptr && !override_->empty())
+				{
+					energyBuffer += " (";
+					energyBuffer += *override_;
+					energyBuffer += ")";
+				}
+			}
+			drawList->AddText(ImVec2(center.x + labelOffset + 6.0f, center.y - 7.0f), tickColor, energyBuffer.c_str());
 		};
 
 		// Levels within 0.1 eV of their neighbor (sorted by energy) stack almost on top of each
@@ -186,40 +209,91 @@ namespace DefectStudio
 		const std::vector<float> upLadder = computeLadderOffsets(false);
 		const std::vector<float> downLadder = state.splitSpinChannels ? computeLadderOffsets(true) : upLadder;
 
+		// Click-to-select: same dispatch ElectronicStructurePanel's band-table row click uses (see
+		// its renderBandTable) - reused here verbatim rather than extracted, since it's an 11-line
+		// wrapper around EnsureChannelRendered either way. Hit-tested in pixel space against the
+		// exact same centers this loop already computes to draw each tick - no separate/duplicate
+		// geometry, and correct by construction for the ladder-spread label offsets (those only move
+		// the label, never the tick, so pixel hit-test on the tick position stays accurate).
+		const bool clickedThisFrame = ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		int clickedBand = -1;
+		float bestDistSq = std::numeric_limits<float>::max();
+		constexpr float kHitHalfWidthPx = kLevelHalfWidthPx + 4.0f;
+		constexpr float kHitHalfHeightPx = 8.0f;
+		const auto testHit = [&](ImVec2 center, int band)
+		{
+			if (!clickedThisFrame)
+				return;
+			if (std::abs(mousePos.x - center.x) > kHitHalfWidthPx || std::abs(mousePos.y - center.y) > kHitHalfHeightPx)
+				return;
+			const float dx = mousePos.x - center.x;
+			const float dy = mousePos.y - center.y;
+			const float distSq = dx * dx + dy * dy;
+			if (distSq < bestDistSq)
+			{
+				bestDistSq = distSq;
+				clickedBand = band;
+			}
+		};
+
 		for (std::size_t index = 0; index < filtered.size(); ++index)
 		{
 			const OrbitalRecord &record = filtered[index];
+			const bool isSelected = record.band == state.selectedBand;
 
 			if (state.splitSpinChannels)
 			{
 				const ImVec2 upCenter = ImPlot::PlotToPixels(0.0, static_cast<double>(record.up.energy) - vbm);
-				drawLevel(upCenter);
-				drawLevelLabels(upCenter, upLadder[index], record.band, record.up.energy - vbm);
+				drawLevel(upCenter, isSelected);
+				drawLevelLabels(upCenter, upLadder[index], record.band, record.up.energy - vbm, record.up.irrep);
 				if (record.up.occupation > 0.5f)
 					drawArrow(upCenter, true, upColor);
+				testHit(upCenter, record.band);
 
 				const ImVec2 downCenter = ImPlot::PlotToPixels(1.0, static_cast<double>(record.down.energy) - vbm);
-				drawLevel(downCenter);
-				drawLevelLabels(downCenter, downLadder[index], record.band, record.down.energy - vbm);
+				drawLevel(downCenter, isSelected);
+				drawLevelLabels(downCenter, downLadder[index], record.band, record.down.energy - vbm, record.down.irrep);
 				if (record.down.occupation > 0.5f)
 					drawArrow(downCenter, false, downColor);
+				testHit(downCenter, record.band);
 			}
 			else
 			{
 				// Merged view: closed-shell levels have up==down energy, so this reads as one
 				// level with both spin arrows overlaid slightly apart, not two separate columns.
 				const ImVec2 center = ImPlot::PlotToPixels(0.0, static_cast<double>(record.up.energy) - vbm);
-				drawLevel(center);
-				drawLevelLabels(center, upLadder[index], record.band, record.up.energy - vbm);
+				drawLevel(center, isSelected);
+				drawLevelLabels(center, upLadder[index], record.band, record.up.energy - vbm, record.up.irrep);
 				if (record.up.occupation > 0.5f)
 					drawArrow(ImVec2(center.x - 6.0f, center.y), true, upColor);
 				if (record.down.occupation > 0.5f)
 					drawArrow(ImVec2(center.x + 6.0f, center.y), false, downColor);
+				testHit(center, record.band);
 			}
 		}
 
 		drawList->PopClipRect();
 		ImPlot::EndPlot();
+
+		if (clickedBand >= 0)
+		{
+			state.selectedBand = clickedBand;
+			// Re-render whichever channels are already on for the new band; if neither is on yet,
+			// default-enable spin up so clicking a level always shows *something* - identical to
+			// ElectronicStructurePanel::renderBandTable's row-click behavior.
+			if (!windowState.orbitalChannelUp.enabled && !windowState.orbitalChannelDown.enabled)
+			{
+				m_Session->EnsureChannelRendered(state, windowState, 0, 0);
+			}
+			else
+			{
+				if (windowState.orbitalChannelUp.enabled)
+					m_Session->EnsureChannelRendered(state, windowState, 0, 0);
+				if (windowState.orbitalChannelDown.enabled)
+					m_Session->EnsureChannelRendered(state, windowState, 1, 1);
+			}
+		}
 	}
 
 	void OccupationDiagramPanel::Render()
@@ -270,7 +344,7 @@ namespace DefectStudio
 		const std::vector<OrbitalRecord> filtered = FilterByLocalizationThreshold(
 			*state.data->orbitals, LocalizationThresholdSettings{state.localizationThreshold});
 
-		renderPlot(state, filtered, vbm, autofitRequested);
+		renderPlot(state, *windowState, filtered, vbm, autofitRequested);
 
 		ImGui::End();
 	}

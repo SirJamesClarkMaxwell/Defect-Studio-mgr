@@ -7,9 +7,12 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <nlohmann/json.hpp>
+
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "IO/TextFileIO.hpp"
+#include "ScientificRuntime/Python/ScriptBridgeUtils.hpp"
 #include "ScientificRuntime/Python/VaspOrbitalGridConversion.hpp"
 #include "ScientificRuntime/Python/VaspOrbitalGridJob.hpp"
 #include "ScientificRuntime/Python/VaspOutputConversion.hpp"
@@ -152,6 +155,9 @@ namespace DefectStudio
 		settings.splitSpinChannels = getBool("split_spin_channels", true);
 		settings.relativeToVbm = getBool("relative_to_vbm", false);
 		settings.isoValue = getFloat("iso_value", 0.03f);
+		settings.showIrreps = getBool("show_irreps", false);
+		settings.irrepTol = getFloat("irrep_tol", 0.1f);
+		settings.irrepSymprec = getFloat("irrep_symprec", 1e-3f);
 		m_LastUsedSettings = settings;
 		m_PersistedSettingsCache = settings;
 
@@ -178,6 +184,9 @@ namespace DefectStudio
 			   << "split_spin_channels=" << (settings.splitSpinChannels ? 1 : 0) << '\n'
 			   << "relative_to_vbm=" << (settings.relativeToVbm ? 1 : 0) << '\n'
 			   << "iso_value=" << settings.isoValue << '\n'
+			   << "show_irreps=" << (settings.showIrreps ? 1 : 0) << '\n'
+			   << "irrep_tol=" << settings.irrepTol << '\n'
+			   << "irrep_symprec=" << settings.irrepSymprec << '\n'
 			   << "bulk_directory=" << m_BulkDirectory.String() << '\n';
 
 		std::string error;
@@ -220,6 +229,9 @@ namespace DefectStudio
 				state.splitSpinChannels = m_LastUsedSettings->splitSpinChannels;
 				state.relativeToVbm = m_LastUsedSettings->relativeToVbm;
 				state.isoValue = m_LastUsedSettings->isoValue;
+				state.showIrreps = m_LastUsedSettings->showIrreps;
+				state.irrepTol = m_LastUsedSettings->irrepTol;
+				state.irrepSymprec = m_LastUsedSettings->irrepSymprec;
 			}
 		}
 
@@ -239,7 +251,8 @@ namespace DefectStudio
 
 		m_LastUsedSettings = LastUsedSettings{
 			state.bandStart, state.bandEnd, state.gapWindowMargin, state.localizationThreshold,
-			state.splitSpinChannels, state.relativeToVbm, state.isoValue};
+			state.splitSpinChannels, state.relativeToVbm, state.isoValue, state.showIrreps, state.irrepTol,
+			state.irrepSymprec};
 		savePersistedDefaultsIfChanged();
 
 		return state;
@@ -282,7 +295,9 @@ namespace DefectStudio
 			state.lastError = "JobSystem unavailable";
 			return;
 		}
-		state.pendingOutputJob = CreateRef<VaspOutputJob>(state.calculationDirectory, state.bandStart, state.bandEnd);
+		state.pendingOutputJob = CreateRef<VaspOutputJob>(
+			state.calculationDirectory, state.bandStart, state.bandEnd, /*includeOrbitals*/ true, state.showIrreps,
+			state.irrepTol, state.irrepSymprec);
 		state.pendingOutputJobId = jobSystem->Submit(state.pendingOutputJob, JobPriority::Normal);
 		state.lastError.clear();
 	}
@@ -509,6 +524,37 @@ namespace DefectStudio
 		return it != state.gridFetchErrors.end() ? &it->second : nullptr;
 	}
 
+	namespace
+	{
+		// Shared by ExportOrbitalsCsv/Tsv - same column names/order/precision as puntukas's own
+		// VaspOutput.save_orbital_data_csv(irreps=True), just with a caller-chosen delimiter. "#"-
+		// prefixed header (numpy comment convention, so numpy/pandas readers skip it same as a real
+		// puntukas export) instead of our own made-up column names. Padding/alignment is cosmetic in
+		// numpy's version and doesn't survive a naive writer anyway - every consumer (numpy, pandas,
+		// our own ReadOrbitalsCsv) splits on the delimiter and ignores whitespace, so skipping exact
+		// byte-for-byte padding costs nothing.
+		void WriteOrbitalsDelimited(std::ofstream &file, const std::vector<OrbitalRecord> &orbitals, char delimiter)
+		{
+			const char d = delimiter;
+			file << "# nr" << d << "e(up)" << d << "occ(up)" << d << "loc(up)" << d << "irrep(up)" << d << "e(down)"
+				 << d << "occ(down)" << d << "loc(down)" << d << "irrep(down)\n";
+			char row[256];
+			const char *fmt = delimiter == '\t' ? "%d\t%.5f\t%.2f\t%.1f\t%s\t%.5f\t%.2f\t%.1f\t%s"
+												 : "%d,%.5f,%.2f,%.1f,%s,%.5f,%.2f,%.1f,%s";
+			for (const OrbitalRecord &record : orbitals)
+			{
+				std::snprintf(
+					row, sizeof(row), fmt,
+					record.band,
+					record.up.energy, record.up.occupation, record.up.localization,
+					record.up.irrep.value_or("").c_str(),
+					record.down.energy, record.down.occupation, record.down.localization,
+					record.down.irrep.value_or("").c_str());
+				file << row << '\n';
+			}
+		}
+	} // namespace
+
 	void ElectronicStructureSession::ExportOrbitalsCsv(WindowState &state)
 	{
 		if (!state.data.has_value() || !state.data->orbitals.has_value())
@@ -525,27 +571,86 @@ namespace DefectStudio
 			return;
 		}
 
-		// Same column names/order/precision as puntukas's own
-		// VaspOutput.save_orbital_data_csv(irreps=True) - "#"-prefixed header (numpy comment
-		// convention, so numpy/pandas readers skip it same as a real puntukas export) instead of
-		// our own made-up column names. Padding/alignment is cosmetic in numpy's version and
-		// doesn't survive a naive writer anyway - every consumer (numpy, pandas, our own
-		// ReadOrbitalsCsv) splits on comma and ignores whitespace, so skipping exact byte-for-byte
-		// padding costs nothing.
-		file << "# nr,e(up),occ(up),loc(up),irrep(up),e(down),occ(down),loc(down),irrep(down)\n";
-		char row[256];
-		for (const OrbitalRecord &record : *state.data->orbitals)
-		{
-			std::snprintf(
-				row, sizeof(row), "%d,%.5f,%.2f,%.1f,%s,%.5f,%.2f,%.1f,%s",
-				record.band,
-				record.up.energy, record.up.occupation, record.up.localization, record.up.irrep.value_or("").c_str(),
-				record.down.energy, record.down.occupation, record.down.localization,
-				record.down.irrep.value_or("").c_str());
-			file << row << '\n';
-		}
+		WriteOrbitalsDelimited(file, *state.data->orbitals, ',');
 		state.csvExportMessage = "Exported: " + outputPath.String();
 		DS_LOG_INFO("ElectronicStructureSession: exported orbitals CSV to {}", outputPath.String());
+	}
+
+	void ElectronicStructureSession::ExportOrbitalsTsv(WindowState &state)
+	{
+		if (!state.data.has_value() || !state.data->orbitals.has_value())
+		{
+			state.csvExportMessage = "No orbital data loaded.";
+			return;
+		}
+
+		const Path outputPath = state.calculationDirectory / "orbitals_export.tsv";
+		std::ofstream file(outputPath.Native());
+		if (!file.is_open())
+		{
+			state.csvExportMessage = "Failed to open " + outputPath.String();
+			return;
+		}
+
+		WriteOrbitalsDelimited(file, *state.data->orbitals, '\t');
+		state.csvExportMessage = "Exported: " + outputPath.String();
+		DS_LOG_INFO("ElectronicStructureSession: exported orbitals TSV to {}", outputPath.String());
+	}
+
+	const std::string *ElectronicStructureSession::FindIrrepLabelOverride(const std::optional<std::string> &irrep) const
+	{
+		if (!irrep.has_value() || irrep->empty())
+			return nullptr;
+		for (const auto &[key, label] : m_IrrepLabelOverrides)
+		{
+			if (key == *irrep)
+				return &label;
+		}
+		return nullptr;
+	}
+
+	void ElectronicStructureSession::ExportOccupationDiagramImage(WindowState &state, float vbm)
+	{
+		if (!state.data.has_value() || !state.data->orbitals.has_value())
+		{
+			state.csvExportMessage = "No orbital data loaded.";
+			return;
+		}
+
+		ScriptRunOptions options;
+		const PythonExampleScript script = ResolvePythonExampleScript("electronic_structure_plot.py");
+		options.scriptPath = script.scriptPath;
+		options.workingDirectory = script.workingDirectory;
+
+		nlohmann::json bands = nlohmann::json::array();
+		for (const OrbitalRecord &record : *state.data->orbitals)
+		{
+			bands.push_back({
+				{"band", record.band},
+				{"up", {{"energy", record.up.energy - vbm}, {"occupation", record.up.occupation},
+						{"irrep", record.up.irrep.has_value() ? nlohmann::json(*record.up.irrep) : nullptr}}},
+				{"down", {{"energy", record.down.energy - vbm}, {"occupation", record.down.occupation},
+						  {"irrep", record.down.irrep.has_value() ? nlohmann::json(*record.down.irrep) : nullptr}}},
+			});
+		}
+		nlohmann::json payload;
+		payload["bands"] = bands;
+		payload["split_spin_channels"] = state.splitSpinChannels;
+		payload["y_label"] = state.relativeToVbm ? "Energy - VBM (eV)" : "Energy (eV)";
+
+		const Path outputPath = state.calculationDirectory / "occupation_diagram.png";
+		options.arguments = {outputPath.String(), payload.dump()};
+
+		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
+		if (!runResult)
+		{
+			state.csvExportMessage = "Image export failed: " + runResult.Error().technicalDetails;
+			DS_LOG_WARN("ElectronicStructureSession: occupation diagram image export failed: {}",
+				runResult.Error().technicalDetails);
+			return;
+		}
+		state.csvExportMessage = "Exported: " + outputPath.String();
+		DS_LOG_INFO("ElectronicStructureSession: exported occupation diagram image to {}", outputPath.String());
 	}
 
 	void ElectronicStructureSession::PrefetchAllOrbitals(WindowState &state, const std::vector<OrbitalRecord> &orbitals)

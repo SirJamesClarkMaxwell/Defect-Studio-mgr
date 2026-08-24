@@ -5,12 +5,14 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "ScientificRuntime/Python/ScriptRunner.hpp"
 
 namespace DefectStudio
 {
@@ -46,6 +48,12 @@ namespace DefectStudio
 			float localizationThreshold = 0.0f;
 			bool splitSpinChannels = true;
 			bool relativeToVbm = false;
+			// Irrep (group-theory) labeling - opt-in, real per-band cost (get_symmetry per orbital),
+			// see vasp_output_load.py's _orbitals_payload comment. irrepTol/symprec passed straight
+			// to puntukas' get_orbital_data_for_two_spins.
+			bool showIrreps = false;
+			float irrepTol = 0.1f;
+			float irrepSymprec = 1e-3f;
 
 			int selectedBand = -1;
 			// Shared default for orbitals not yet individually tuned - EnsureChannelRendered syncs
@@ -145,6 +153,29 @@ namespace DefectStudio
 		// for) - see WindowState::gridFetchErrors.
 		[[nodiscard]] static const std::string *GridFetchError(const WindowState &state, std::uint64_t key);
 		void ExportOrbitalsCsv(WindowState &state);
+		// Same columns/values as ExportOrbitalsCsv, tab-delimited to orbitals_export.tsv - T08.6.3.
+		void ExportOrbitalsTsv(WindowState &state);
+		// Matplotlib rendering of the occupation diagram (same colors/arrows as OccupationDiagramPanel,
+		// plus irrep labels when state.showIrreps/data has them) - one-shot subprocess via
+		// ScriptRunner (scripts/python/examples/electronic_structure_plot.py), not InteractiveProcess;
+		// this is a single result, not a session. Writes occupation_diagram.png next to the
+		// calculation directory, message reported the same way ExportOrbitalsCsv does.
+		void ExportOccupationDiagramImage(WindowState &state, float vbm);
+
+		// Per-project custom irrep label overrides (irrep -> user's own text), pushed by EditorLayer
+		// from the active project's manifest.yaml on project open/create (same trigger points as
+		// SetBulkDirectory) - see ProjectManifest::irrepLabelOverrides. Shared session-wide, not
+		// per-window (same reasoning as bulk directory - one project, one label scheme).
+		void SetIrrepLabelOverrides(std::vector<std::pair<std::string, std::string>> overrides) noexcept
+		{
+			m_IrrepLabelOverrides = std::move(overrides);
+		}
+		[[nodiscard]] const std::vector<std::pair<std::string, std::string>> &IrrepLabelOverrides() const noexcept
+		{
+			return m_IrrepLabelOverrides;
+		}
+		// nullptr if `irrep` has no custom override (or is empty/nullopt).
+		[[nodiscard]] const std::string *FindIrrepLabelOverride(const std::optional<std::string> &irrep) const;
 		// Iso value for grid key `key` (spin+band) - state.isoValue if this orbital hasn't been
 		// individually tuned yet, otherwise its own remembered value.
 		[[nodiscard]] static float ResolveIsoValue(const WindowState &state, std::uint64_t key);
@@ -180,12 +211,17 @@ namespace DefectStudio
 			bool splitSpinChannels;
 			bool relativeToVbm;
 			float isoValue;
+			bool showIrreps;
+			float irrepTol;
+			float irrepSymprec;
 
 			[[nodiscard]] bool operator==(const LastUsedSettings &) const = default;
 		};
 		std::optional<LastUsedSettings> m_LastUsedSettings;
 		std::optional<LastUsedSettings> m_PersistedSettingsCache;
 		Path m_PersistedBulkDirectoryCache;
+
+		std::vector<std::pair<std::string, std::string>> m_IrrepLabelOverrides;
 
 		Path m_BulkDirectory; // empty = unset; see the accessor comment above for how this gets set
 		std::optional<BandGapData> m_BulkGap;
@@ -198,6 +234,7 @@ namespace DefectStudio
 
 		RendererLayer &m_Layer;
 		WeakRef<JobSystem> m_JobSystem;
+		ScriptRunner m_ScriptRunner; // ExportOccupationDiagramImage only - one-shot, not a session.
 		std::unordered_map<std::string, WindowState> m_WindowStates;
 	};
 } // namespace DefectStudio

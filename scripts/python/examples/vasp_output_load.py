@@ -164,7 +164,9 @@ def _summary_payload(output) -> dict:
     return summary
 
 
-def _orbitals_payload(output, band_start: int, band_end: int) -> tuple[list[dict] | None, str | None]:
+def _orbitals_payload(
+    output, band_start: int, band_end: int, irreps: bool = False, irrep_tol: float = 1e-1,
+    symprec: float = 1e-3) -> tuple[list[dict] | None, str | None]:
     # get_orbital_data_for_two_spins raises FileNotFoundError if WAVECAR is absent, and
     # AssertionError if WAVECAR exists but its own internal header is unreadable/inconsistent
     # (observed on a real file: k-point count read as 0, on a network drive - could be a
@@ -174,12 +176,13 @@ def _orbitals_payload(output, band_start: int, band_end: int) -> tuple[list[dict
     # tuple element) so "no WAVECAR" and "WAVECAR present but unreadable" aren't indistinguishable
     # in the UI - a user staring at a folder that plainly has a WAVECAR in it needs to know it's
     # the second case, not go looking for a file that's already there.
-    # irreps=False (puntukas' own default): symmetry-labeling each band is real per-band cost
-    # (get_symmetry over the structure) that this UI doesn't currently display anywhere - a wide
-    # band range with irreps=True was observed to be dramatically slower than the same range
-    # without it.
+    # irreps defaults to False (puntukas' own default): symmetry-labeling each band is real
+    # per-band cost (get_symmetry over the structure) - a wide band range with irreps=True was
+    # observed to be dramatically slower than the same range without it. Caller (ElectronicStructurePanel's
+    # "Show symmetry labels" toggle) opts in explicitly.
     try:
-        rows = output.get_orbital_data_for_two_spins(band_start, band_end, irreps=False)
+        rows = output.get_orbital_data_for_two_spins(
+            band_start, band_end, irreps=irreps, irrep_tol=irrep_tol, symprec=symprec)
     except FileNotFoundError:
         return None, None
     except AssertionError as exc:
@@ -208,11 +211,12 @@ def _orbitals_payload(output, band_start: int, band_end: int) -> tuple[list[dict
 
 
 def load_vasp_output_payload(
-    directory: str, band_start: int, band_end: int, include_orbitals: bool = True) -> dict:
+    directory: str, band_start: int, band_end: int, include_orbitals: bool = True, irreps: bool = False,
+    irrep_tol: float = 1e-1, symprec: float = 1e-3) -> dict:
     resolved = pathlib.Path(directory).resolve()
     output = VaspOutput.from_directory(str(resolved))
     if include_orbitals:
-        orbitals, orbitals_error = _orbitals_payload(output, band_start, band_end)
+        orbitals, orbitals_error = _orbitals_payload(output, band_start, band_end, irreps, irrep_tol, symprec)
     else:
         # Skips the WAVECAR read/per-band diagonalization entirely - CalculationSummaryPanel has
         # no use for orbital data and get_orbital_data_for_two_spins is real per-band cost this
@@ -230,14 +234,18 @@ def load_vasp_output_payload(
 def main() -> int:
     if len(sys.argv) < 2:
         raise SystemExit(
-            "usage: vasp_output_load.py <calculation_directory> [band_start] [band_end] [include_orbitals]")
+            "usage: vasp_output_load.py <calculation_directory> [band_start] [band_end] [include_orbitals] "
+            "[irreps] [irrep_tol] [symprec]")
 
     directory = sys.argv[1]
     band_start = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     band_end = int(sys.argv[3]) if len(sys.argv) > 3 else 10
     include_orbitals = sys.argv[4] != "0" if len(sys.argv) > 4 else True
+    irreps = sys.argv[5] != "0" if len(sys.argv) > 5 else False
+    irrep_tol = float(sys.argv[6]) if len(sys.argv) > 6 else 1e-1
+    symprec = float(sys.argv[7]) if len(sys.argv) > 7 else 1e-3
 
-    payload = load_vasp_output_payload(directory, band_start, band_end, include_orbitals)
+    payload = load_vasp_output_payload(directory, band_start, band_end, include_orbitals, irreps, irrep_tol, symprec)
     print(json.dumps(payload))
     return 0
 

@@ -98,6 +98,7 @@ namespace DefectStudio
 		struct BulkDirectoryChangeRequested;
 		struct TextFileOpenRequested;
 		struct CalculationSummaryOpenRequested;
+		struct IrrepLabelOverridesChanged;
 	}
 
 	namespace RendererEvents::Viewport
@@ -183,6 +184,8 @@ namespace DefectStudio
 		void onTextFileOpenRequested(const ProjectEvents::TextFileOpenRequested &event);
 		// Calculation Summary panel: ProjectTreePanel's per-folder RMB "Show Calculation Summary".
 		void onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event);
+		// Custom (irrep -> label) table in ElectronicStructurePanel - see ProjectManifest::irrepLabelOverrides.
+		void onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event);
 
 		// Minimal stand-in for real T07.5.1 project persistence - see PersistedWindowRecord.
 		// Save happens once, at shutdown (OnDetach) - the alternative (a save call at every one of

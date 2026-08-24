@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Core/Utils/Path.hpp"
@@ -22,6 +23,11 @@ namespace DefectStudio
 		int formatVersion = 1;
 		std::vector<ProjectRootEntry> roots;
 		Path bulkDirectory; // empty = unset, see T07.5.5
+		// Irrep -> user's own custom label (e.g. "b_1*" -> "\pi*"), shown ALONGSIDE the automatic
+		// irrep, never replacing it - point-group/irrep naming is a property of the material/defect
+		// (the project), not any single structure window. Vector, not a map: preserves the user's
+		// own row order and tolerates duplicate/blank-key rows while editing without extra fuss.
+		std::vector<std::pair<std::string, std::string>> irrepLabelOverrides;
 	};
 
 	class ProjectManifestIO

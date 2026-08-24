@@ -88,12 +88,17 @@ namespace DefectStudio
 	public:
 		// includeOrbitals=false skips the WAVECAR read/per-band diagonalization entirely (real
 		// per-band cost) - set false for callers (CalculationSummaryPanel) that only want the
-		// summary/gap fields, never orbitals.
+		// summary/gap fields, never orbitals. includeIrreps=true additionally symmetry-labels each
+		// band (irrep_tol/symprec passed straight to puntukas) - real per-band cost on top of the
+		// orbital load itself, opt-in only (ElectronicStructurePanel's "Show symmetry labels").
 		[[nodiscard]] Result<VaspOutputData> LoadOutput(
 			const Path &directory,
 			int bandStart = 0,
 			int bandEnd = 10,
-			bool includeOrbitals = true) const;
+			bool includeOrbitals = true,
+			bool includeIrreps = false,
+			float irrepTol = 0.1f,
+			float symprec = 1e-3f) const;
 
 	private:
 		ScriptRunner m_ScriptRunner;

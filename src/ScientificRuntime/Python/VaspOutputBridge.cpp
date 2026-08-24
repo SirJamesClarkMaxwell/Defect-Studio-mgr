@@ -117,7 +117,8 @@ namespace DefectStudio
 	} // namespace
 
 	Result<VaspOutputData> VaspOutputBridge::LoadOutput(
-		const Path &directory, int bandStart, int bandEnd, bool includeOrbitals) const
+		const Path &directory, int bandStart, int bandEnd, bool includeOrbitals, bool includeIrreps, float irrepTol,
+		float symprec) const
 	{
 		if (directory.Empty())
 		{
@@ -133,7 +134,8 @@ namespace DefectStudio
 		options.scriptPath = script.scriptPath;
 		options.arguments = {
 			directory.String(), std::to_string(bandStart), std::to_string(bandEnd),
-			includeOrbitals ? "1" : "0"};
+			includeOrbitals ? "1" : "0", includeIrreps ? "1" : "0", std::to_string(irrepTol),
+			std::to_string(symprec)};
 		options.workingDirectory = script.workingDirectory;
 
 		const auto startTime = Time::NowSteady();

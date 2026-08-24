@@ -640,6 +640,8 @@ namespace DefectStudio
 			// exists) - the active project's manifest, if any, owns the bulk reference now (see
 			// T07.5.5); ElectronicStructureSession's own persisted-defaults file stays as a
 			// same-machine convenience fallback for when no project is open.
+			if (m_ActiveProject.has_value())
+				m_ElectronicStructureSession->SetIrrepLabelOverrides(m_ActiveProject->irrepLabelOverrides);
 			if (m_ActiveProject.has_value() && !m_ActiveProject->bulkDirectory.Empty())
 			{
 				m_ElectronicStructureSession->SetBulkDirectory(m_ActiveProject->bulkDirectory);
@@ -1132,6 +1134,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onTextFileOpenRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::CalculationSummaryOpenRequested>(
 			*m_EventBus, *this, &EditorLayer::onCalculationSummaryOpenRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::IrrepLabelOverridesChanged>(
+			*m_EventBus, *this, &EditorLayer::onIrrepLabelOverridesChanged, EventPriority::Normal));
 	}
 
 	void EditorLayer::loadInitialProjectState()
@@ -1205,7 +1209,10 @@ namespace DefectStudio
 		touchAndSaveRecentProject(directory);
 
 		if (m_ElectronicStructureSession != nullptr)
+		{
 			m_ElectronicStructureSession->SetBulkDirectory({});
+			m_ElectronicStructureSession->SetIrrepLabelOverrides({});
+		}
 	}
 
 	void EditorLayer::openProject(const Path &directory)
@@ -1231,6 +1238,7 @@ namespace DefectStudio
 			m_ElectronicStructureSession->SetBulkDirectory(m_ActiveProject->bulkDirectory);
 			if (!m_ActiveProject->bulkDirectory.Empty())
 				m_ElectronicStructureSession->DispatchBulkLoad();
+			m_ElectronicStructureSession->SetIrrepLabelOverrides(m_ActiveProject->irrepLabelOverrides);
 		}
 	}
 
@@ -1333,6 +1341,20 @@ namespace DefectStudio
 			std::string error;
 			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
 				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after bulk reference change: {}", error);
+		}
+	}
+
+	void EditorLayer::onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event)
+	{
+		if (m_ElectronicStructureSession != nullptr)
+			m_ElectronicStructureSession->SetIrrepLabelOverrides(event.overrides);
+
+		if (m_ActiveProject.has_value())
+		{
+			m_ActiveProject->irrepLabelOverrides = event.overrides;
+			std::string error;
+			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
+				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after irrep label change: {}", error);
 		}
 	}
 

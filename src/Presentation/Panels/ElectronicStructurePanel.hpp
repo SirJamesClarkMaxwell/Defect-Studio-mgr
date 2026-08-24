@@ -31,8 +31,13 @@ namespace DefectStudio
 			RendererWindowState &windowState, float vbm);
 		void renderWavefunctionControls(ElectronicStructureSession::WindowState &state, RendererWindowState &windowState);
 		void renderBulkReferenceControls();
+		// Small editable (irrep -> custom label) table, persisted per-project - see
+		// ProjectEvents::IrrepLabelOverridesChanged and ProjectManifest::irrepLabelOverrides.
+		void renderIrrepLabelEditor();
 
 		Ref<ElectronicStructureSession> m_Session;
 		Ref<EventBus> m_EventBus;
+		char m_NewIrrepKey[32]{};
+		char m_NewIrrepLabel[128]{};
 	};
 } // namespace DefectStudio
