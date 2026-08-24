@@ -1333,6 +1333,21 @@ kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
 
 ---
 
+## T16 – Calculation Tools & Terminal (`task/16-calc-tools`)
+
+> Zażądane 2026-08-24. Pełny szczegół w `docs/work/project/plans/2026-08-24-calc-tools.md` (nie
+> duplikowany tutaj) — integrated PowerShell terminal, minimalna konsola Python ("kalkulator", bez
+> `ds`/bindingu do sceny), nowy panel "Calculation Summary" per katalog (zbieżność/energia/wykres,
+> oparty o `punktukas`), fonony (S/DW/średnie ω/energia — `Lumabi` vs `dephonopy`, do ustalenia),
+> klik na poziom w `OccupationDiagramPanel`, group-theory (irrep) labels w 3 miejscach +
+> konfigurowalność + custom labels użytkownika, eksport CSV/TSV pod Origin + eksport obrazka
+> matplotlib (domyka T08.6.3/T08.6.6 niżej), atoms-displacement (MVP: ten sam skład/liczba atomów).
+> **Nie mylić z zamrożonym epikiem Python scripting/`ds`/IPC** (Backlog niżej, plan
+> `2026-08-23-python-scripting-console.md`) — ten task go NIE zawiera, dzieli tylko jeden fundament
+> (`InteractiveProcess`).
+
+---
+
 ## Backlog – po T15
 
 > Dodawać w miarę potrzeb. Nie implementować przed stabilizacją T01–T15.
