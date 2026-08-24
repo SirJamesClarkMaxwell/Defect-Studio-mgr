@@ -158,9 +158,10 @@ namespace DefectStudio
 		// Matplotlib rendering of the occupation diagram (same colors/arrows as OccupationDiagramPanel,
 		// plus irrep labels when state.showIrreps/data has them) - one-shot subprocess via
 		// ScriptRunner (scripts/python/examples/electronic_structure_plot.py), not InteractiveProcess;
-		// this is a single result, not a session. Writes occupation_diagram.png next to the
-		// calculation directory, message reported the same way ExportOrbitalsCsv does.
-		void ExportOccupationDiagramImage(WindowState &state, float vbm);
+		// this is a single result, not a session. outputPath empty = default
+		// (<calculationDirectory>/occupation_diagram.png, ElectronicStructurePanel's "Browse..." lets
+		// the user pick a different one). Message reported the same way ExportOrbitalsCsv does.
+		void ExportOccupationDiagramImage(WindowState &state, float vbm, const Path &outputPath = {});
 
 		// Per-project custom irrep label overrides (irrep -> user's own text), pushed by EditorLayer
 		// from the active project's manifest.yaml on project open/create (same trigger points as

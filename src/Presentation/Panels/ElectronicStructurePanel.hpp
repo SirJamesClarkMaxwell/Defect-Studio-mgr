@@ -39,5 +39,8 @@ namespace DefectStudio
 		Ref<EventBus> m_EventBus;
 		char m_NewIrrepKey[32]{};
 		char m_NewIrrepLabel[128]{};
+		// Empty = use ExportOccupationDiagramImage's own default
+		// (<calculationDirectory>/occupation_diagram.png) - set via the "Browse..." button.
+		Path m_ImageExportPath;
 	};
 } // namespace DefectStudio

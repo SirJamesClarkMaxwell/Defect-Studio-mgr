@@ -66,7 +66,10 @@ def plot_occupation_diagram(bands: list[dict], split_spin_channels: bool, y_labe
                 _draw_arrow(ax, 0.06, up["energy"], False, _DOWN_COLOR)
         ax.set_xticks([0.0])
         ax.set_xticklabels(["Level"])
-        ax.set_xlim(-0.5, 2.4)
+        # Narrower than split mode's -0.5..2.4 (which has two real columns of ticks+labels to fit) -
+        # merged mode has exactly one column, so the same wide range left a big blank strip on the
+        # right as if a second (unused) "Down" column were still reserved there.
+        ax.set_xlim(-0.5, 1.5)
 
     ax.set_ylabel(y_label)
     ax.set_facecolor("#181818")

@@ -609,7 +609,7 @@ namespace DefectStudio
 		return nullptr;
 	}
 
-	void ElectronicStructureSession::ExportOccupationDiagramImage(WindowState &state, float vbm)
+	void ElectronicStructureSession::ExportOccupationDiagramImage(WindowState &state, float vbm, const Path &outputPath)
 	{
 		if (!state.data.has_value() || !state.data->orbitals.has_value())
 		{
@@ -638,8 +638,9 @@ namespace DefectStudio
 		payload["split_spin_channels"] = state.splitSpinChannels;
 		payload["y_label"] = state.relativeToVbm ? "Energy - VBM (eV)" : "Energy (eV)";
 
-		const Path outputPath = state.calculationDirectory / "occupation_diagram.png";
-		options.arguments = {outputPath.String(), payload.dump()};
+		const Path resolvedOutputPath =
+			outputPath.Empty() ? state.calculationDirectory / "occupation_diagram.png" : outputPath;
+		options.arguments = {resolvedOutputPath.String(), payload.dump()};
 
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
 		if (!runResult)
@@ -649,8 +650,8 @@ namespace DefectStudio
 				runResult.Error().technicalDetails);
 			return;
 		}
-		state.csvExportMessage = "Exported: " + outputPath.String();
-		DS_LOG_INFO("ElectronicStructureSession: exported occupation diagram image to {}", outputPath.String());
+		state.csvExportMessage = "Exported: " + resolvedOutputPath.String();
+		DS_LOG_INFO("ElectronicStructureSession: exported occupation diagram image to {}", resolvedOutputPath.String());
 	}
 
 	void ElectronicStructureSession::PrefetchAllOrbitals(WindowState &state, const std::vector<OrbitalRecord> &orbitals)

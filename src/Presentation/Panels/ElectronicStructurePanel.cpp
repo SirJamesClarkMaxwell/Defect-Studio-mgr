@@ -106,6 +106,8 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(0);
 			char label[32];
 			std::snprintf(label, sizeof(label), "%d", record.band);
+			const bool bandLoading = state.pendingGridJobs.contains(ElectronicStructureSession::PackGridKey(0, record.band)) ||
+				state.pendingGridJobs.contains(ElectronicStructureSession::PackGridKey(1, record.band));
 			if (ImGui::Selectable(
 					label, state.selectedBand == record.band,
 					ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap))
@@ -124,6 +126,11 @@ namespace DefectStudio
 					if (windowState.orbitalChannelDown.enabled)
 						m_Session->EnsureChannelRendered(state, windowState, 1, 1);
 				}
+			}
+			if (bandLoading)
+			{
+				ImGui::SameLine();
+				ImGui::TextDisabled("...");
 			}
 			ImGui::TableSetColumnIndex(1);
 			ImGui::Text("%.3f", record.up.energy - vbm);
@@ -391,7 +398,22 @@ namespace DefectStudio
 				? &*m_Session->BulkGap()
 				: (state.data.has_value() && state.data->gap.has_value() ? &*state.data->gap : nullptr);
 			const float vbm = (state.relativeToVbm && referenceGap != nullptr) ? referenceGap->homo : 0.0f;
-			m_Session->ExportOccupationDiagramImage(state, vbm);
+			m_Session->ExportOccupationDiagramImage(state, vbm, m_ImageExportPath);
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Browse..."))
+		{
+			const Path defaultDirectory =
+				m_ImageExportPath.Empty() ? state.calculationDirectory : m_ImageExportPath.parent_path();
+			Result<std::optional<Path>> picked =
+				Platform::PickSaveFile(defaultDirectory, "occupation_diagram.png", "PNG Image", "png");
+			if (picked && picked->has_value())
+				m_ImageExportPath = **picked;
+		}
+		if (!m_ImageExportPath.Empty())
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("-> %s", m_ImageExportPath.String().c_str());
 		}
 		if (!state.csvExportMessage.empty())
 		{
