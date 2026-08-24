@@ -35,7 +35,14 @@ def _label(irrep: str | None) -> str:
 
 
 def plot_occupation_diagram(bands: list[dict], split_spin_channels: bool, y_label: str, output_path: str) -> None:
-    fig, ax = plt.subplots(figsize=(6.0, 8.0), dpi=150)
+    # bbox_inches="tight" (tried first) can't fix this: the axes rectangle (background + spines)
+    # always fills its whole layout-allocated box in display space regardless of how narrow xlim
+    # is, so "tight" cropping - which unions ALL artist bboxes, including that rectangle - has
+    # nothing to trim. The box itself has to be narrower. Split mode needs two columns (xlim
+    # -0.5..2.4, 2.9 data units); merged mode has one (xlim -0.5..1.5, 2.0 units) - scale the
+    # figure width by that same ratio so a single column doesn't sit in a two-column-wide box.
+    figsize = (6.0, 8.0) if split_spin_channels else (4.2, 8.0)
+    fig, ax = plt.subplots(figsize=figsize, dpi=150)
 
     if split_spin_channels:
         for band in bands:
