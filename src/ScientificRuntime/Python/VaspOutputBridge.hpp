@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -31,6 +32,30 @@ namespace DefectStudio
 		float lumo = 0.0f;
 	};
 
+	// Calculation-level summary fields (Calculation Summary panel, docs/work/project/plans/
+	// 2026-08-24-calc-tools.md section 5) - each independently optional since a partial/older
+	// OUTCAR or vasprun.xml can have some of these and not others; see vasp_output_load.py's
+	// _summary_payload for the per-field try/except that produces this.
+	struct VaspOutputSummaryData
+	{
+		// One entry per ionic step (its converged/last SCF energy) - the "how did it converge"
+		// trend. Comes from puntukas' private Vasprun._etot, not a public API - see
+		// _summary_payload's comment.
+		std::optional<std::vector<double>> energyTrend;
+		std::optional<double> finalEnergy;
+		std::optional<double> cpuTimeSeconds;
+		std::optional<double> userTimeSeconds;
+		std::optional<double> systemTimeSeconds;
+		std::optional<double> elapsedTimeSeconds;
+		std::optional<std::array<double, 3>> totalDrift;
+		std::optional<double> nelect;
+		std::optional<int> ispin;
+		std::optional<double> pressureKilobar;
+		std::optional<std::array<std::array<double, 3>, 3>> stressTensorKilobar;
+		std::optional<std::string> spaceGroupSymbol;
+		std::optional<int> spaceGroupNumber;
+	};
+
 	struct VaspOutputData
 	{
 		Path path;
@@ -43,19 +68,27 @@ namespace DefectStudio
 		// incomplete transfer, seen on network drives) - distinguishes that case from WAVECAR simply
 		// being absent, which leaves this nullopt too.
 		std::optional<std::string> orbitalsError;
+		// Always present (never nullopt) when the load itself succeeded - individual fields inside
+		// may still be nullopt, see VaspOutputSummaryData.
+		VaspOutputSummaryData summary;
 	};
 
-	// Loads band-gap (HOMO/LUMO) and per-band orbital data (energy, occupation, localization
-	// factor, irrep, both spin channels) for one VASP calculation directory, via puntukas'
-	// VaspOutput (which itself reads OUTCAR/vasprun.xml/WAVECAR as available). Subprocess-only,
-	// same rationale as PuntukasBridge: this is a low-frequency user action, not a hot loop.
+	// Loads band-gap (HOMO/LUMO), per-band orbital data (energy, occupation, localization factor,
+	// irrep, both spin channels), and calculation-summary fields (convergence trend, timing,
+	// drift, ...) for one VASP calculation directory, via puntukas' VaspOutput (which itself reads
+	// OUTCAR/vasprun.xml/WAVECAR as available). Subprocess-only, same rationale as PuntukasBridge:
+	// this is a low-frequency user action, not a hot loop.
 	class VaspOutputBridge final
 	{
 	public:
+		// includeOrbitals=false skips the WAVECAR read/per-band diagonalization entirely (real
+		// per-band cost) - set false for callers (CalculationSummaryPanel) that only want the
+		// summary/gap fields, never orbitals.
 		[[nodiscard]] Result<VaspOutputData> LoadOutput(
 			const Path &directory,
 			int bandStart = 0,
-			int bandEnd = 10) const;
+			int bandEnd = 10,
+			bool includeOrbitals = true) const;
 
 	private:
 		ScriptRunner m_ScriptRunner;

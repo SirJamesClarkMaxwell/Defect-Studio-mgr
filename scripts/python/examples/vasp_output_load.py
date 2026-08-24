@@ -76,6 +76,70 @@ def _band_gap_payload(output, directory: str) -> dict | None:
         return _parse_eigenval_bandgap(directory)
 
 
+def _summary_payload(output) -> dict:
+    # Each field independently try/excepted - a partial/older OUTCAR or vasprun.xml can have some
+    # of these and not others (e.g. no WAVECAR needed here at all, unlike orbitals below), and one
+    # missing field shouldn't blank out the rest of the summary.
+    summary: dict = {}
+
+    try:
+        # Vasprun._etot is private (no public per-step API - Vasprun.etot only returns the very
+        # last value) but is exactly the "how did it converge" trend the summary panel wants: one
+        # entry per ionic step, itself the array of that step's SCF iterations - last SCF value of
+        # each step is the step's converged energy.
+        summary["energy_trend"] = [float(step[-1]) for step in output.vasprun._etot]
+    except (AttributeError, TypeError, IndexError):
+        summary["energy_trend"] = None
+
+    try:
+        summary["final_energy"] = float(output.etot)
+    except (AttributeError, TypeError):
+        summary["final_energy"] = None
+
+    for field in ("cpu_time", "user_time", "system_time", "elapsed_time"):
+        try:
+            value = getattr(output.outcar, field)
+            summary[field] = float(value) if value is not None else None
+        except (AttributeError, TypeError):
+            summary[field] = None
+
+    try:
+        drift = output.drift
+        summary["total_drift"] = [float(component) for component in drift] if drift is not None else None
+    except (AttributeError, TypeError):
+        summary["total_drift"] = None
+
+    try:
+        summary["nelect"] = float(output.vasprun.NELECT)
+    except (AttributeError, TypeError):
+        summary["nelect"] = None
+    try:
+        summary["ispin"] = int(output.vasprun.ISPIN)
+    except (AttributeError, TypeError):
+        summary["ispin"] = None
+
+    try:
+        summary["pressure"] = float(output.vasprun.get_pressure())
+    except (AttributeError, TypeError):
+        summary["pressure"] = None
+    try:
+        stress = output.vasprun.get_stress_tensor()
+        summary["stress_tensor"] = [[float(v) for v in row] for row in stress] if stress is not None else None
+    except (AttributeError, TypeError):
+        summary["stress_tensor"] = None
+
+    try:
+        from puntukas import Symmetry
+        sym = Symmetry(output.atoms)
+        summary["space_group_symbol"] = str(sym.international_symbol)
+        summary["space_group_number"] = int(sym.spacegroup_number)
+    except (ImportError, AttributeError, TypeError):
+        summary["space_group_symbol"] = None
+        summary["space_group_number"] = None
+
+    return summary
+
+
 def _orbitals_payload(output, band_start: int, band_end: int) -> tuple[list[dict] | None, str | None]:
     # get_orbital_data_for_two_spins raises FileNotFoundError if WAVECAR is absent, and
     # AssertionError if WAVECAR exists but its own internal header is unreadable/inconsistent
@@ -119,27 +183,37 @@ def _orbitals_payload(output, band_start: int, band_end: int) -> tuple[list[dict
     return records, None
 
 
-def load_vasp_output_payload(directory: str, band_start: int, band_end: int) -> dict:
+def load_vasp_output_payload(
+    directory: str, band_start: int, band_end: int, include_orbitals: bool = True) -> dict:
     resolved = pathlib.Path(directory).resolve()
     output = VaspOutput.from_directory(str(resolved))
-    orbitals, orbitals_error = _orbitals_payload(output, band_start, band_end)
+    if include_orbitals:
+        orbitals, orbitals_error = _orbitals_payload(output, band_start, band_end)
+    else:
+        # Skips the WAVECAR read/per-band diagonalization entirely - CalculationSummaryPanel has
+        # no use for orbital data and get_orbital_data_for_two_spins is real per-band cost this
+        # caller shouldn't pay just because it shares a bridge with ElectronicStructurePanel.
+        orbitals, orbitals_error = None, None
     return {
         "path": str(resolved),
         "gap": _band_gap_payload(output, str(resolved)),
         "orbitals": orbitals,
         "orbitals_error": orbitals_error,
+        "summary": _summary_payload(output),
     }
 
 
 def main() -> int:
     if len(sys.argv) < 2:
-        raise SystemExit("usage: vasp_output_load.py <calculation_directory> [band_start] [band_end]")
+        raise SystemExit(
+            "usage: vasp_output_load.py <calculation_directory> [band_start] [band_end] [include_orbitals]")
 
     directory = sys.argv[1]
     band_start = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     band_end = int(sys.argv[3]) if len(sys.argv) > 3 else 10
+    include_orbitals = sys.argv[4] != "0" if len(sys.argv) > 4 else True
 
-    payload = load_vasp_output_payload(directory, band_start, band_end)
+    payload = load_vasp_output_payload(directory, band_start, band_end, include_orbitals)
     print(json.dumps(payload))
     return 0
 

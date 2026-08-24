@@ -34,6 +34,45 @@ namespace DefectStudio
 			return data;
 		}
 
+		template <typename T>
+		[[nodiscard]] std::optional<T> GetOptional(const nlohmann::json &object, const char *key)
+		{
+			const nlohmann::json &value = object.at(key);
+			if (value.is_null())
+				return std::nullopt;
+			return value.get<T>();
+		}
+
+		[[nodiscard]] VaspOutputSummaryData ParseSummaryJson(const nlohmann::json &summary)
+		{
+			VaspOutputSummaryData data;
+			data.energyTrend = GetOptional<std::vector<double>>(summary, "energy_trend");
+			data.finalEnergy = GetOptional<double>(summary, "final_energy");
+			data.cpuTimeSeconds = GetOptional<double>(summary, "cpu_time");
+			data.userTimeSeconds = GetOptional<double>(summary, "user_time");
+			data.systemTimeSeconds = GetOptional<double>(summary, "system_time");
+			data.elapsedTimeSeconds = GetOptional<double>(summary, "elapsed_time");
+			if (const std::optional<std::vector<double>> drift = GetOptional<std::vector<double>>(summary, "total_drift");
+				drift.has_value() && drift->size() == 3)
+				data.totalDrift = std::array<double, 3>{(*drift)[0], (*drift)[1], (*drift)[2]};
+			data.nelect = GetOptional<double>(summary, "nelect");
+			data.ispin = GetOptional<int>(summary, "ispin");
+			data.pressureKilobar = GetOptional<double>(summary, "pressure");
+			if (const std::optional<std::vector<std::vector<double>>> stress =
+					GetOptional<std::vector<std::vector<double>>>(summary, "stress_tensor");
+				stress.has_value() && stress->size() == 3)
+			{
+				std::array<std::array<double, 3>, 3> tensor{};
+				for (std::size_t row = 0; row < 3; ++row)
+					for (std::size_t col = 0; col < 3 && col < (*stress)[row].size(); ++col)
+						tensor[row][col] = (*stress)[row][col];
+				data.stressTensorKilobar = tensor;
+			}
+			data.spaceGroupSymbol = GetOptional<std::string>(summary, "space_group_symbol");
+			data.spaceGroupNumber = GetOptional<int>(summary, "space_group_number");
+			return data;
+		}
+
 		[[nodiscard]] VaspOutputData ParseVaspOutputPayloadJson(const nlohmann::json &payload)
 		{
 			VaspOutputData data;
@@ -69,11 +108,14 @@ namespace DefectStudio
 			if (!orbitalsError.is_null())
 				data.orbitalsError = orbitalsError.get<std::string>();
 
+			data.summary = ParseSummaryJson(payload.at("summary"));
+
 			return data;
 		}
 	} // namespace
 
-	Result<VaspOutputData> VaspOutputBridge::LoadOutput(const Path &directory, int bandStart, int bandEnd) const
+	Result<VaspOutputData> VaspOutputBridge::LoadOutput(
+		const Path &directory, int bandStart, int bandEnd, bool includeOrbitals) const
 	{
 		if (directory.Empty())
 		{
@@ -87,7 +129,9 @@ namespace DefectStudio
 		ScriptRunOptions options;
 		const PythonExampleScript script = ResolvePythonExampleScript("vasp_output_load.py");
 		options.scriptPath = script.scriptPath;
-		options.arguments = {directory.String(), std::to_string(bandStart), std::to_string(bandEnd)};
+		options.arguments = {
+			directory.String(), std::to_string(bandStart), std::to_string(bandEnd),
+			includeOrbitals ? "1" : "0"};
 		options.workingDirectory = script.workingDirectory;
 
 		const auto startTime = Time::NowSteady();

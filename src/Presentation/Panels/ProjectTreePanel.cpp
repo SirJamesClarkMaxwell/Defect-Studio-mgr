@@ -370,6 +370,12 @@ namespace DefectStudio
 			request.directory = directory;
 			m_EventBus->Queue(request);
 		}
+		if (ImGui::MenuItem("Show Calculation Summary") && m_EventBus != nullptr)
+		{
+			ProjectEvents::CalculationSummaryOpenRequested request;
+			request.directory = directory;
+			m_EventBus->Queue(request);
+		}
 		ImGui::EndPopup();
 	}
 } // namespace DefectStudio

@@ -16,7 +16,7 @@ namespace DefectStudio
 	class VaspOutputJob final : public IJob
 	{
 	public:
-		VaspOutputJob(Path calculationDirectory, int bandStart = 0, int bandEnd = 10);
+		VaspOutputJob(Path calculationDirectory, int bandStart = 0, int bandEnd = 10, bool includeOrbitals = true);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -29,6 +29,7 @@ namespace DefectStudio
 		Path m_CalculationDirectory;
 		int m_BandStart;
 		int m_BandEnd;
+		bool m_IncludeOrbitals;
 		VaspOutputBridge m_Bridge;
 		std::optional<VaspOutputData> m_Result;
 	};

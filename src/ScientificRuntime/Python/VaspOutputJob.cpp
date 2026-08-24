@@ -6,8 +6,9 @@
 
 namespace DefectStudio
 {
-	VaspOutputJob::VaspOutputJob(Path calculationDirectory, int bandStart, int bandEnd)
-		: m_CalculationDirectory(std::move(calculationDirectory)), m_BandStart(bandStart), m_BandEnd(bandEnd) {}
+	VaspOutputJob::VaspOutputJob(Path calculationDirectory, int bandStart, int bandEnd, bool includeOrbitals)
+		: m_CalculationDirectory(std::move(calculationDirectory)), m_BandStart(bandStart), m_BandEnd(bandEnd),
+		  m_IncludeOrbitals(includeOrbitals) {}
 
 	std::string VaspOutputJob::GetName() const { return "Load VASP Output: " + m_CalculationDirectory.String(); }
 	std::string VaspOutputJob::GetType() const { return "VaspOutputJob"; }
@@ -18,7 +19,8 @@ namespace DefectStudio
 		context.SetMessage("Loading band-gap/orbital data via puntukas");
 		context.SetProgress(0.0f, 1.0f);
 
-		Result<VaspOutputData> loadResult = m_Bridge.LoadOutput(m_CalculationDirectory, m_BandStart, m_BandEnd);
+		Result<VaspOutputData> loadResult =
+			m_Bridge.LoadOutput(m_CalculationDirectory, m_BandStart, m_BandEnd, m_IncludeOrbitals);
 		if (!loadResult)
 			throw std::runtime_error(loadResult.Error().technicalDetails);
 

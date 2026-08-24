@@ -33,6 +33,7 @@
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
+#include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
@@ -584,6 +585,8 @@ namespace DefectStudio
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
 		m_CalculatorConsolePanelId = registerPanel<CalculatorConsolePanel>("Integrated Python Console", false);
+		m_CalculationSummaryPanelId =
+			registerPanel<CalculationSummaryPanel>(m_JobSystem, "Calculation Summary", false);
 		if (auto commandRegistry = m_CommandRegistry.lock())
 		{
 			const auto registerTerminalCommand =
@@ -1127,6 +1130,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onWavecarDropped, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::TextFileOpenRequested>(
 			*m_EventBus, *this, &EditorLayer::onTextFileOpenRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::CalculationSummaryOpenRequested>(
+			*m_EventBus, *this, &EditorLayer::onCalculationSummaryOpenRequested, EventPriority::Normal));
 	}
 
 	void EditorLayer::loadInitialProjectState()
@@ -1337,6 +1342,15 @@ namespace DefectStudio
 		{
 			if (auto *textEditor = dynamic_cast<TextEditorPanel *>(panel.get()))
 				textEditor->OpenFile(event.path);
+		}
+	}
+
+	void EditorLayer::onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event)
+	{
+		if (auto panel = findPanel(m_CalculationSummaryPanelId).lock())
+		{
+			if (auto *summary = dynamic_cast<CalculationSummaryPanel *>(panel.get()))
+				summary->OpenDirectory(event.directory);
 		}
 	}
 
