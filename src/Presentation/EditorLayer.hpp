@@ -238,6 +238,7 @@ namespace DefectStudio
 		std::vector<ProjectRootEntry> m_AdHocRoots;
 		PanelId m_ProjectTreePanelId = 0;
 		PanelId m_TextEditorPanelId = 0;
+		PanelId m_TerminalPanelId = 0;
 		PanelId m_SettingsPanelId = 0;
 		PanelId m_ExportImagePanelId = 0;
 	};

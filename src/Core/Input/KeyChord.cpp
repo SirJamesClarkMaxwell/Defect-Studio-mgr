@@ -40,6 +40,8 @@ namespace DefectStudio
 			return ".";
 		case KeyCode::Slash:
 			return "/";
+		case KeyCode::GraveAccent:
+			return "`";
 		case KeyCode::Insert:
 			return "Insert";
 		case KeyCode::Left:

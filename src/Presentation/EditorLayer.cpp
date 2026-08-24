@@ -42,6 +42,7 @@
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
+#include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
@@ -341,6 +342,38 @@ namespace DefectStudio
 		std::string m_Description;
 	};
 
+	// Same "reopen if closed, then act" shape as FocusPanelCommand, but for TerminalPanel-
+	// specific actions (new tab, close current, split) that don't fit the generic
+	// SetVisible+SetWindowFocus pattern.
+	class TerminalPanelCommand final : public ICommand
+	{
+	public:
+		TerminalPanelCommand(WeakRef<IPanel> panel, std::function<void(TerminalPanel &)> action, std::string description)
+			: m_Panel(std::move(panel)), m_Action(std::move(action)), m_Description(std::move(description))
+		{
+		}
+
+		Result<void> Execute(CommandContext &) override
+		{
+			Ref<IPanel> panel = m_Panel.lock();
+			if (panel == nullptr)
+				return {};
+			if (auto *terminal = dynamic_cast<TerminalPanel *>(panel.get()))
+				m_Action(*terminal);
+			return {};
+		}
+
+		std::string Description() const override
+		{
+			return m_Description;
+		}
+
+	private:
+		WeakRef<IPanel> m_Panel;
+		std::function<void(TerminalPanel &)> m_Action;
+		std::string m_Description;
+	};
+
 	[[nodiscard]] std::string findShortcutForCommand(
 		const CommandID &id,
 		const KeymapResolver *resolver,
@@ -548,6 +581,34 @@ namespace DefectStudio
 				DS_LOG_WARN("Focus Project Tree command registration failed: {}", result.Error().technicalDetails);
 		}
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
+		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
+		if (auto commandRegistry = m_CommandRegistry.lock())
+		{
+			const auto registerTerminalCommand =
+				[this, &commandRegistry](
+					const char *id, const char *name, const char *description, std::function<void(TerminalPanel &)> action) {
+					auto result = commandRegistry->Register(
+						CommandMeta{CommandID{id}, name, "Terminal", description, {}, CommandFlags::None},
+						[this, action = std::move(action), name](CommandContext &) -> Unique<ICommand> {
+							return CreateUnique<TerminalPanelCommand>(findPanel(m_TerminalPanelId), action, name);
+						});
+					if (!result)
+						DS_LOG_WARN("{} command registration failed: {}", name, result.Error().technicalDetails);
+				};
+
+			registerTerminalCommand(
+				"terminal.focus", "Focus Terminal", "Bring the Terminal panel to focus, reopening it first if it was closed.",
+				[](TerminalPanel &terminal) { terminal.RequestFocus(); });
+			registerTerminalCommand(
+				"terminal.new_tab", "New Terminal Tab", "Open a new terminal tab and focus it.",
+				[](TerminalPanel &terminal) { terminal.OpenNewTab(); });
+			registerTerminalCommand(
+				"terminal.close_current", "Close Current Terminal", "Close the focused terminal pane (or tab, if it's the only pane).",
+				[](TerminalPanel &terminal) { terminal.CloseActiveTab(); });
+			registerTerminalCommand(
+				"terminal.split", "Split Terminal", "Split the active terminal tab, opening a new shell alongside the current one.",
+				[](TerminalPanel &terminal) { terminal.SplitActivePane(); });
+		}
 		loadInitialProjectState();
 		if (auto rendererLayer = m_RendererLayer.lock())
 		{

@@ -482,3 +482,27 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "terminal.focus"
+    chord: "Ctrl+`"
+    command: "terminal.focus"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "terminal.new_tab"
+    chord: "Ctrl+Shift+T"
+    command: "terminal.new_tab"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "terminal.close_current"
+    chord: "Ctrl+Shift+K"
+    command: "terminal.close_current"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "terminal.split"
+    chord: "Ctrl+Shift+5"
+    command: "terminal.split"
+    context: ""
+    layer: 0
+    enabled: true

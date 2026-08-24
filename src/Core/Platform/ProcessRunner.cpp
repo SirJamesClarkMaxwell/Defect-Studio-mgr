@@ -13,6 +13,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+
+#include "Core/Platform/Internal/Win32ProcessSupport.hpp"
 #else
 #include <cerrno>
 #include <csignal>
@@ -39,45 +41,6 @@ namespace DefectStudio::Platform
 				std::move(code)};
 		}
 
-		std::string QuoteCommandArgument(const std::string &argument)
-		{
-			if (argument.empty())
-				return "\"\"";
-
-			bool needsQuoting = false;
-			for (const char ch : argument)
-			{
-				if (std::isspace(static_cast<unsigned char>(ch)) || ch == '"')
-				{
-					needsQuoting = true;
-					break;
-				}
-			}
-			if (!needsQuoting)
-				return argument;
-
-			std::string quoted;
-			quoted.reserve(argument.size() + 2);
-			quoted.push_back('"');
-			for (const char ch : argument)
-			{
-				if (ch == '"')
-					quoted.push_back('\\');
-				quoted.push_back(ch);
-			}
-			quoted.push_back('"');
-			return quoted;
-		}
-
-		std::string BuildCommandLine(const Path &executable, const std::vector<std::string> &arguments)
-		{
-			std::ostringstream command;
-			command << QuoteCommandArgument(executable.String());
-			for (const std::string &argument : arguments)
-				command << ' ' << QuoteCommandArgument(argument);
-			return command.str();
-		}
-
 		bool ShouldTerminateProcess(
 			const ProcessRunOptions &options,
 			const std::chrono::steady_clock::time_point &startedAt,
@@ -102,18 +65,6 @@ namespace DefectStudio::Platform
 		}
 
 #if defined(DS_PLATFORM_WINDOWS)
-		std::wstring ToWideString(const std::string &value)
-		{
-			if (value.empty())
-				return {};
-			const int requiredSize = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
-			if (requiredSize <= 0)
-				return std::wstring(value.begin(), value.end());
-			std::wstring output(static_cast<std::size_t>(requiredSize - 1), L'\0');
-			MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, output.data(), requiredSize);
-			return output;
-		}
-
 		std::string ReadPipeUntilClosed(HANDLE readHandle)
 		{
 			std::string output;
@@ -124,23 +75,15 @@ namespace DefectStudio::Platform
 			return output;
 		}
 
-		struct PipeHandles
+		// Both stdout/stderr pipes here keep the read end in the parent, so the shared helper's
+		// "caller clears inherit on the end it keeps" contract always means the read end. Named
+		// distinctly from Internal::CreateInheritablePipe - ADL made the unqualified name
+		// ambiguous between this overload and the one it wraps.
+		bool CreateParentReadPipe(Internal::PipeHandles &pipe)
 		{
-			HANDLE read = nullptr;
-			HANDLE write = nullptr;
-		};
-
-		bool CreateInheritablePipe(PipeHandles &pipe)
-		{
-			SECURITY_ATTRIBUTES attributes{};
-			attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
-			attributes.bInheritHandle = TRUE;
-			attributes.lpSecurityDescriptor = nullptr;
-			if (!CreatePipe(&pipe.read, &pipe.write, &attributes, 0))
+			if (!Internal::CreateInheritablePipe(pipe))
 				return false;
-			if (!SetHandleInformation(pipe.read, HANDLE_FLAG_INHERIT, 0))
-				return false;
-			return true;
+			return SetHandleInformation(pipe.read, HANDLE_FLAG_INHERIT, 0) != 0;
 		}
 #else
 		bool ReadAvailableFromFd(int fd, std::string &output)
@@ -170,12 +113,12 @@ namespace DefectStudio::Platform
 			return MakeProcessError("Executable path is empty.", "process.executable_missing");
 
 		ProcessRunResult result;
-		result.commandLine = BuildCommandLine(options.executable, options.arguments);
+		result.commandLine = Internal::BuildCommandLine(options.executable, options.arguments);
 
 #if defined(DS_PLATFORM_WINDOWS)
-		PipeHandles stdoutPipe;
-		PipeHandles stderrPipe;
-		if (!CreateInheritablePipe(stdoutPipe) || !CreateInheritablePipe(stderrPipe))
+		Internal::PipeHandles stdoutPipe;
+		Internal::PipeHandles stderrPipe;
+		if (!CreateParentReadPipe(stdoutPipe) || !CreateParentReadPipe(stderrPipe))
 			return MakeProcessError("CreatePipe failed.", "process.pipe_failed");
 
 		STARTUPINFOW startupInfo{};
@@ -186,7 +129,7 @@ namespace DefectStudio::Platform
 		startupInfo.hStdError = stderrPipe.write;
 
 		PROCESS_INFORMATION processInfo{};
-		std::wstring commandLine = ToWideString(result.commandLine);
+		std::wstring commandLine = Internal::ToWideString(result.commandLine);
 		const std::wstring workingDirectory = options.workingDirectory.Empty() ? std::wstring{} : options.workingDirectory.wstring();
 		BOOL created = CreateProcessW(
 			nullptr,

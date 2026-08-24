@@ -15,6 +15,7 @@ namespace DefectStudio
 		Equal = 61,
 		Period = 46,
 		Slash = 47,
+		GraveAccent = 96,
 
 		D0 = 48,
 		D1 = 49,

@@ -52,6 +52,8 @@ namespace DefectStudio
 				return KeyCode::Slash;
 			if (ch == '\'')
 				return KeyCode::Apostrophe;
+			if (ch == '`')
+				return KeyCode::GraveAccent;
 		}
 
 		const std::string lower = toLowerCopy(token);
@@ -79,6 +81,8 @@ namespace DefectStudio
 			return KeyCode::Slash;
 		if (lower == "apostrophe")
 			return KeyCode::Apostrophe;
+		if (lower == "grave" || lower == "graveaccent" || lower == "backtick" || lower == "tilde")
+			return KeyCode::GraveAccent;
 		if (lower == "left")
 			return KeyCode::Left;
 		if (lower == "right")
