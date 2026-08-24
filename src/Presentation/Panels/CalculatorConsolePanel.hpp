@@ -33,6 +33,15 @@ namespace DefectStudio
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
+		// Snapshot pushed by EditorLayer whenever the active project/roots change (see
+		// EditorLayer::refreshProjectDependentPanels) - injected as plain `project_root`/
+		// `project_roots` Python variables the first time the console starts. One-way, one-time:
+		// no live IPC/binding back into the running app (deliberately out of scope, see
+		// docs/work/project/plans/2026-08-24-calc-tools.md section 4) - if the project changes
+		// after the console session is already running, restart the panel to pick up the new
+		// values.
+		void SetProjectContext(std::string projectRoot, std::vector<std::string> projectRoots);
+
 	private:
 		struct Segment
 		{
@@ -48,6 +57,9 @@ namespace DefectStudio
 		std::vector<Segment> m_Segments;
 		std::string m_StartError;
 		bool m_StartAttempted = false;
+
+		std::string m_ProjectRoot;
+		std::vector<std::string> m_ProjectRoots;
 
 		TextEditor m_InputEditor;
 	};

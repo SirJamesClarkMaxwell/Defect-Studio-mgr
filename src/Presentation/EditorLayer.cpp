@@ -583,7 +583,7 @@ namespace DefectStudio
 		}
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
-		registerPanel<CalculatorConsolePanel>("Integrated Python Console", false);
+		m_CalculatorConsolePanelId = registerPanel<CalculatorConsolePanel>("Integrated Python Console", false);
 		if (auto commandRegistry = m_CommandRegistry.lock())
 		{
 			const auto registerTerminalCommand =
@@ -1170,7 +1170,7 @@ namespace DefectStudio
 			}
 		}
 
-		refreshProjectTreePanel();
+		refreshProjectDependentPanels();
 	}
 
 	void EditorLayer::createNewProject(const Path &directory)
@@ -1196,7 +1196,7 @@ namespace DefectStudio
 
 		m_ActiveProject = std::move(manifest);
 		m_ActiveProjectDirectory = directory;
-		refreshProjectTreePanel();
+		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
 
 		if (m_ElectronicStructureSession != nullptr)
@@ -1218,7 +1218,7 @@ namespace DefectStudio
 
 		m_ActiveProject = std::move(manifest);
 		m_ActiveProjectDirectory = directory;
-		refreshProjectTreePanel();
+		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
 
 		if (m_ElectronicStructureSession != nullptr)
@@ -1239,12 +1239,24 @@ namespace DefectStudio
 			DS_LOG_WARN("EditorLayer: failed to persist recent_projects.yaml: {}", error);
 	}
 
-	void EditorLayer::refreshProjectTreePanel()
+	void EditorLayer::refreshProjectDependentPanels()
 	{
 		if (auto panel = findPanel(m_ProjectTreePanelId).lock())
 		{
 			if (auto *treePanel = dynamic_cast<ProjectTreePanel *>(panel.get()))
 				treePanel->SetRoots(currentRootsMutable());
+		}
+
+		if (auto panel = findPanel(m_CalculatorConsolePanelId).lock())
+		{
+			if (auto *console = dynamic_cast<CalculatorConsolePanel *>(panel.get()))
+			{
+				const std::string projectRoot = m_ActiveProject.has_value() ? m_ActiveProjectDirectory.String() : std::string();
+				std::vector<std::string> roots;
+				for (const ProjectRootEntry &entry : currentRootsMutable())
+					roots.push_back(entry.path.String());
+				console->SetProjectContext(projectRoot, std::move(roots));
+			}
 		}
 	}
 
@@ -1277,7 +1289,7 @@ namespace DefectStudio
 		entry.label = event.label;
 		currentRootsMutable().push_back(std::move(entry));
 
-		refreshProjectTreePanel();
+		refreshProjectDependentPanels();
 		persistCurrentRoots();
 	}
 
@@ -1285,7 +1297,7 @@ namespace DefectStudio
 	{
 		std::erase_if(currentRootsMutable(), [&event](const ProjectRootEntry &entry) { return entry.id == event.rootId; });
 
-		refreshProjectTreePanel();
+		refreshProjectDependentPanels();
 		persistCurrentRoots();
 	}
 
@@ -1298,7 +1310,7 @@ namespace DefectStudio
 			return;
 		it->path = event.newPath;
 
-		refreshProjectTreePanel();
+		refreshProjectDependentPanels();
 		persistCurrentRoots();
 	}
 

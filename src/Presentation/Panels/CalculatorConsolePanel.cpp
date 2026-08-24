@@ -15,6 +15,22 @@ namespace DefectStudio
 		// console-like panels rather than picking new arbitrary colors.
 		constexpr ImU32 kInputColor = IM_COL32(0x0D, 0xBC, 0x79, 255);
 		constexpr ImU32 kOutputColor = IM_COL32(0xCD, 0x31, 0x31, 255);
+
+		std::string ToPythonStringLiteral(std::string text)
+		{
+			std::replace(text.begin(), text.end(), '\\', '/');
+			std::string escaped;
+			escaped.reserve(text.size() + 2);
+			escaped += '"';
+			for (const char ch : text)
+			{
+				if (ch == '"' || ch == '\\')
+					escaped += '\\';
+				escaped += ch;
+			}
+			escaped += '"';
+			return escaped;
+		}
 	} // namespace
 
 	CalculatorConsolePanel::CalculatorConsolePanel(std::string title, bool visibleByDefault)
@@ -28,6 +44,12 @@ namespace DefectStudio
 		// A fresh panel with its own process, not a copy - InteractiveProcess isn't copyable (one
 		// pipe pair, one child), same reasoning as TerminalPanel::Clone.
 		return CreateRef<CalculatorConsolePanel>(GetTitle());
+	}
+
+	void CalculatorConsolePanel::SetProjectContext(std::string projectRoot, std::vector<std::string> projectRoots)
+	{
+		m_ProjectRoot = std::move(projectRoot);
+		m_ProjectRoots = std::move(projectRoots);
 	}
 
 	void CalculatorConsolePanel::ensureStarted()
@@ -71,7 +93,33 @@ namespace DefectStudio
 
 		VoidResult started = m_Process.Start(options);
 		if (!started.HasValue())
+		{
 			m_StartError = started.Error().technicalDetails;
+			return;
+		}
+
+		if (m_ProjectRoot.empty() && m_ProjectRoots.empty())
+			return;
+
+		const std::string projectRootLine =
+			"project_root = " + (m_ProjectRoot.empty() ? std::string("None") : ToPythonStringLiteral(m_ProjectRoot));
+
+		std::string projectRootsLine = "project_roots = [";
+		for (std::size_t i = 0; i < m_ProjectRoots.size(); ++i)
+		{
+			if (i != 0)
+				projectRootsLine += ", ";
+			projectRootsLine += ToPythonStringLiteral(m_ProjectRoots[i]);
+		}
+		projectRootsLine += "]";
+
+		m_Process.WriteLine(projectRootLine);
+		m_Process.WriteLine(projectRootsLine);
+
+		appendSegment(
+			"# injected by Defect Studio - see docs/work/project/plans/2026-08-24-calc-tools.md section 4\n" +
+				projectRootLine + "\n" + projectRootsLine + "\n",
+			true);
 	}
 
 	void CalculatorConsolePanel::appendSegment(std::string text, bool isUserInput)
@@ -94,6 +142,8 @@ namespace DefectStudio
 		if (trimmed.find_first_not_of(" \t\r\n") == std::string::npos)
 			return;
 
+		const bool isMultiLine = trimmed.find('\n') != std::string::npos;
+
 		std::size_t start = 0;
 		while (start <= trimmed.size())
 		{
@@ -103,9 +153,13 @@ namespace DefectStudio
 				break;
 			start = end + 1;
 		}
-		// Forces IPython to close any pending multi-line block (if/for/def) - harmless no-op at a
-		// fresh prompt otherwise.
-		m_Process.WriteLine("");
+		// A single statement never needs this - IPython executes it as soon as that one line
+		// arrives. A real if/for/def block does: without a trailing blank line it stays "...:",
+		// waiting for one more (possibly empty) line before it'll run. Only sending this for
+		// multi-line cells avoids provoking IPython into reprinting the prompt for no reason on
+		// the (overwhelmingly common) single-line case.
+		if (isMultiLine)
+			m_Process.WriteLine("");
 
 		appendSegment(trimmed + "\n", true);
 		m_InputEditor.SetText("");
@@ -139,6 +193,9 @@ namespace DefectStudio
 			return;
 		}
 
+		if (ImGui::SmallButton("Clear"))
+			m_Segments.clear();
+
 		ImFont *monospaceFont = GetEditorMonospaceFont();
 		if (monospaceFont != nullptr)
 			ImGui::PushFont(monospaceFont);
@@ -151,15 +208,16 @@ namespace DefectStudio
 
 		if (ImGui::BeginChild("Transcript", ImVec2(0.0f, -inputHeight), true))
 		{
-			bool previousEndsWithNewline = true;
+			// Deliberately not trying to keep e.g. "In [3]: " and the echoed code on the same
+			// visual row (which needs matching ImGui::SameLine calls keyed on trailing-newline
+			// state) - proved fragile under real typing/process-startup timing, garbling into
+			// fused, misordered text. Each segment gets its own line; less exactly REPL-shaped,
+			// reliably correct.
 			for (const Segment &segment : m_Segments)
 			{
-				if (!previousEndsWithNewline)
-					ImGui::SameLine(0.0f, 0.0f);
 				ImGui::PushStyleColor(ImGuiCol_Text, segment.isUserInput ? kInputColor : kOutputColor);
 				ImGui::TextUnformatted(segment.text.c_str(), segment.text.c_str() + segment.text.size());
 				ImGui::PopStyleColor();
-				previousEndsWithNewline = segment.text.back() == '\n';
 			}
 			if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 5.0f)
 				ImGui::SetScrollHereY(1.0f);
@@ -171,7 +229,10 @@ namespace DefectStudio
 		m_InputEditor.Render("ConsoleInput", ImVec2(0.0f, inputHeight));
 		const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 		const ImGuiIO &io = ImGui::GetIO();
-		if (focused && io.KeyCtrl &&
+		// Guarded on m_Segments not being empty yet - submitting before IPython has printed even
+		// its first prompt (process just spawned, cold start can take a moment) would show the
+		// echoed input before anything invited it.
+		if (focused && !m_Segments.empty() && io.KeyCtrl &&
 			(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
 			submitCurrentCell();
 

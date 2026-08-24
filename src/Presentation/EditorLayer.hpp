@@ -165,7 +165,11 @@ namespace DefectStudio
 		void touchAndSaveRecentProject(const Path &directory);
 		// Pushes whichever root list is currently authoritative (active project's manifest, or
 		// the ad-hoc list) into the single ProjectTreePanel instance.
-		void refreshProjectTreePanel();
+		// Pushes both the tree panel's root list and the calculator console's injected
+		// project_root/project_roots variables (see CalculatorConsolePanel::SetProjectContext) -
+		// same trigger points (project open/create, root add/remove/change), so bundled here rather
+		// than duplicated at every call site.
+		void refreshProjectDependentPanels();
 		[[nodiscard]] std::vector<ProjectRootEntry> &currentRootsMutable();
 		void persistCurrentRoots();
 		void onRootAddRequested(const ProjectEvents::RootAddRequested &event);
@@ -239,6 +243,7 @@ namespace DefectStudio
 		PanelId m_ProjectTreePanelId = 0;
 		PanelId m_TextEditorPanelId = 0;
 		PanelId m_TerminalPanelId = 0;
+		PanelId m_CalculatorConsolePanelId = 0;
 		PanelId m_SettingsPanelId = 0;
 		PanelId m_ExportImagePanelId = 0;
 	};
