@@ -583,7 +583,7 @@ namespace DefectStudio
 		}
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
-		registerPanel<CalculatorConsolePanel>("Calculator", false);
+		registerPanel<CalculatorConsolePanel>("Integrated Python Console", false);
 		if (auto commandRegistry = m_CommandRegistry.lock())
 		{
 			const auto registerTerminalCommand =

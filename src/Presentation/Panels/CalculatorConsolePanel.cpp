@@ -2,14 +2,25 @@
 
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 
+#include <algorithm>
+
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 #include "Presentation/EditorFonts.hpp"
 
 namespace DefectStudio
 {
+	namespace
+	{
+		// Same tones as TerminalPanel's ANSI palette (green/red), kept consistent across the two
+		// console-like panels rather than picking new arbitrary colors.
+		constexpr ImU32 kInputColor = IM_COL32(0x0D, 0xBC, 0x79, 255);
+		constexpr ImU32 kOutputColor = IM_COL32(0xCD, 0x31, 0x31, 255);
+	} // namespace
+
 	CalculatorConsolePanel::CalculatorConsolePanel(std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault)
 	{
+		m_InputEditor.SetLanguage(TextEditor::Language::Python());
 	}
 
 	Ref<IPanel> CalculatorConsolePanel::Clone() const
@@ -63,36 +74,42 @@ namespace DefectStudio
 			m_StartError = started.Error().technicalDetails;
 	}
 
-	int CalculatorConsolePanel::HistoryCallback(ImGuiInputTextCallbackData *data)
+	void CalculatorConsolePanel::appendSegment(std::string text, bool isUserInput)
 	{
-		if (data->EventFlag != ImGuiInputTextFlags_CallbackHistory)
-			return 0;
+		if (text.empty())
+			return;
+		if (!m_Segments.empty() && m_Segments.back().isUserInput == isUserInput)
+			m_Segments.back().text += text;
+		else
+			m_Segments.push_back(Segment{std::move(text), isUserInput});
+	}
 
-		auto *self = static_cast<CalculatorConsolePanel *>(data->UserData);
-		const int previousCursor = self->m_HistoryCursor;
-		const int historySize = static_cast<int>(self->m_History.size());
+	void CalculatorConsolePanel::submitCurrentCell()
+	{
+		std::string trimmed = m_InputEditor.GetText();
+		// The editor reports a trailing newline for its implicit empty last line - drop it so
+		// splitting below doesn't produce a spurious empty final WriteLine.
+		if (!trimmed.empty() && trimmed.back() == '\n')
+			trimmed.pop_back();
+		if (trimmed.find_first_not_of(" \t\r\n") == std::string::npos)
+			return;
 
-		if (data->EventKey == ImGuiKey_UpArrow)
+		std::size_t start = 0;
+		while (start <= trimmed.size())
 		{
-			if (self->m_HistoryCursor == -1)
-				self->m_HistoryCursor = historySize - 1;
-			else if (self->m_HistoryCursor > 0)
-				--self->m_HistoryCursor;
+			const std::size_t end = trimmed.find('\n', start);
+			m_Process.WriteLine(trimmed.substr(start, end == std::string::npos ? std::string::npos : end - start));
+			if (end == std::string::npos)
+				break;
+			start = end + 1;
 		}
-		else if (data->EventKey == ImGuiKey_DownArrow && self->m_HistoryCursor != -1)
-		{
-			if (++self->m_HistoryCursor >= historySize)
-				self->m_HistoryCursor = -1;
-		}
+		// Forces IPython to close any pending multi-line block (if/for/def) - harmless no-op at a
+		// fresh prompt otherwise.
+		m_Process.WriteLine("");
 
-		if (previousCursor != self->m_HistoryCursor)
-		{
-			const std::string replacement =
-				self->m_HistoryCursor >= 0 ? self->m_History[static_cast<std::size_t>(self->m_HistoryCursor)] : std::string();
-			data->DeleteChars(0, data->BufTextLen);
-			data->InsertChars(0, replacement.c_str());
-		}
-		return 0;
+		appendSegment(trimmed + "\n", true);
+		m_InputEditor.SetText("");
+		m_InputEditor.SetFocus();
 	}
 
 	void CalculatorConsolePanel::Render()
@@ -108,8 +125,11 @@ namespace DefectStudio
 			return;
 		}
 
+		if (ImGui::IsWindowAppearing())
+			m_InputEditor.SetFocus();
+
 		ensureStarted();
-		m_Output += m_Process.PollOutput();
+		appendSegment(m_Process.PollOutput(), false);
 
 		if (!m_StartError.empty())
 		{
@@ -123,34 +143,37 @@ namespace DefectStudio
 		if (monospaceFont != nullptr)
 			ImGui::PushFont(monospaceFont);
 
-		const float inputHeight = ImGui::GetFrameHeightWithSpacing();
-		if (ImGui::BeginChild("Output", ImVec2(0.0f, -inputHeight), true))
+		// Input cell grows with its content (Jupyter/VSCode Interactive Window style), clamped to
+		// a sane range so a long paste doesn't swallow the whole panel.
+		const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+		const int inputRows = std::clamp(static_cast<int>(m_InputEditor.GetLineCount()) + 1, 3, 12);
+		const float inputHeight = lineHeight * static_cast<float>(inputRows);
+
+		if (ImGui::BeginChild("Transcript", ImVec2(0.0f, -inputHeight), true))
 		{
-			ImGui::TextUnformatted(m_Output.c_str(), m_Output.c_str() + m_Output.size());
+			bool previousEndsWithNewline = true;
+			for (const Segment &segment : m_Segments)
+			{
+				if (!previousEndsWithNewline)
+					ImGui::SameLine(0.0f, 0.0f);
+				ImGui::PushStyleColor(ImGuiCol_Text, segment.isUserInput ? kInputColor : kOutputColor);
+				ImGui::TextUnformatted(segment.text.c_str(), segment.text.c_str() + segment.text.size());
+				ImGui::PopStyleColor();
+				previousEndsWithNewline = segment.text.back() == '\n';
+			}
 			if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 5.0f)
 				ImGui::SetScrollHereY(1.0f);
 		}
 		ImGui::EndChild();
 
-		ImGui::SetNextItemWidth(-1.0f);
-		constexpr ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory;
-		bool reclaimFocus = ImGui::IsWindowAppearing();
-		if (ImGui::InputText(
-				"##CalculatorInput", m_InputBuffer.data(), m_InputBuffer.size(), flags, &HistoryCallback, this))
-		{
-			const std::string line(m_InputBuffer.data());
-			// No local echo over a plain pipe (unlike a real tty) - we have to print what we typed
-			// ourselves so the transcript still reads like a normal REPL session.
-			m_Output += line + "\n";
-			m_Process.WriteLine(line);
-			if (!line.empty())
-				m_History.push_back(line);
-			m_HistoryCursor = -1;
-			m_InputBuffer[0] = '\0';
-			reclaimFocus = true;
-		}
-		if (reclaimFocus)
-			ImGui::SetKeyboardFocusHere(-1);
+		// Ctrl+Enter submits the cell (like Jupyter/VSCode Interactive Window) - plain Enter stays
+		// the editor's own "insert newline", needed for multi-line if/for/def blocks.
+		m_InputEditor.Render("ConsoleInput", ImVec2(0.0f, inputHeight));
+		const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+		const ImGuiIO &io = ImGui::GetIO();
+		if (focused && io.KeyCtrl &&
+			(ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
+			submitCurrentCell();
 
 		if (monospaceFont != nullptr)
 			ImGui::PopFont();
