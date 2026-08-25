@@ -16,6 +16,7 @@ out vec3 vNormal;
 out vec4 vColorA;
 out vec4 vColorB;
 out float vGradientT;
+out vec3 vWorldPos;
 
 void main()
 {
@@ -28,4 +29,5 @@ void main()
     vColorA = aColorA;
     vColorB = aColorB;
     vGradientT = aGradientT;
+    vWorldPos = worldPosition.xyz;
 }

@@ -525,6 +525,12 @@ namespace DefectStudio
 		m_DraftConfig.renderer.lighting.keyIntensity = std::clamp(m_DraftConfig.renderer.lighting.keyIntensity, 0.0f, 1.5f);
 		m_DraftConfig.renderer.lighting.fillIntensity = std::clamp(m_DraftConfig.renderer.lighting.fillIntensity, 0.0f, 1.5f);
 		m_DraftConfig.renderer.lighting.backIntensity = std::clamp(m_DraftConfig.renderer.lighting.backIntensity, 0.0f, 1.5f);
+		m_DraftConfig.renderer.lighting.specularIntensity =
+			std::clamp(m_DraftConfig.renderer.lighting.specularIntensity, 0.0f, 1.5f);
+		m_DraftConfig.renderer.lighting.shininess = std::clamp(m_DraftConfig.renderer.lighting.shininess, 1.0f, 256.0f);
+		m_DraftConfig.renderer.lighting.rimIntensity =
+			std::clamp(m_DraftConfig.renderer.lighting.rimIntensity, 0.0f, 1.5f);
+		m_DraftConfig.renderer.lighting.rimPower = std::clamp(m_DraftConfig.renderer.lighting.rimPower, 0.5f, 8.0f);
 		if (m_DraftConfig.renderer.defaultProjection != "perspective" &&
 			m_DraftConfig.renderer.defaultProjection != "orthographic")
 		{
@@ -1871,6 +1877,40 @@ namespace DefectStudio
 			ImGui::TextUnformatted("Two-sided lighting");
 			ImGui::TableSetColumnIndex(1);
 			if (ImGui::Checkbox("##TwoSidedLighting", &m_DraftConfig.renderer.lighting.twoSided))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Specular intensity");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##SpecularIntensity", &m_DraftConfig.renderer.lighting.specularIntensity, 0.0f, 1.5f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Shininess");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##Shininess", &m_DraftConfig.renderer.lighting.shininess, 1.0f, 256.0f, "%.0f",
+					ImGuiSliderFlags_Logarithmic))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Isosurface rim intensity");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##RimIntensity", &m_DraftConfig.renderer.lighting.rimIntensity, 0.0f, 1.5f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Isosurface rim power");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##RimPower", &m_DraftConfig.renderer.lighting.rimPower, 0.5f, 8.0f, "%.2f"))
 				markDirty();
 
 			ImGui::TableNextRow();

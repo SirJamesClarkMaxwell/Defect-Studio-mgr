@@ -681,6 +681,26 @@ namespace DefectStudio
 				{rendererSection, rendererLightingKey, Name(RendererLightingKey::TwoSided)},
 				{},
 				config.renderer.lighting.twoSided);
+			config.renderer.lighting.specularIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::Specular)},
+				{},
+				config.renderer.lighting.specularIntensity);
+			config.renderer.lighting.shininess = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::Shininess)},
+				{},
+				config.renderer.lighting.shininess);
+			config.renderer.lighting.rimIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::RimIntensity)},
+				{},
+				config.renderer.lighting.rimIntensity);
+			config.renderer.lighting.rimPower = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::RimPower)},
+				{},
+				config.renderer.lighting.rimPower);
 			config.renderer.lighting.keyDirection = ReadVec3(
 				root,
 				{rendererSection, rendererLightingKey, Name(RendererLightingKey::KeyDirection)},
@@ -912,6 +932,26 @@ namespace DefectStudio
 				{rendererSection, rendererLightingKey, Name(RendererLightingKey::TwoSided)},
 				{},
 				config.renderer.lighting.twoSided);
+			config.renderer.lighting.specularIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::Specular)},
+				{},
+				config.renderer.lighting.specularIntensity);
+			config.renderer.lighting.shininess = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::Shininess)},
+				{},
+				config.renderer.lighting.shininess);
+			config.renderer.lighting.rimIntensity = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::RimIntensity)},
+				{},
+				config.renderer.lighting.rimIntensity);
+			config.renderer.lighting.rimPower = ReadValue(
+				root,
+				{rendererSection, rendererLightingKey, Name(RendererLightingKey::RimPower)},
+				{},
+				config.renderer.lighting.rimPower);
 			config.renderer.lighting.keyDirection = ReadVec3(
 				root,
 				{rendererSection, rendererLightingKey, Name(RendererLightingKey::KeyDirection)},

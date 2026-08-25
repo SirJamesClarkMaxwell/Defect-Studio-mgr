@@ -36,6 +36,10 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "fill" << YAML::Value << renderer.lighting.fillIntensity;
 		out << YAML::Key << "back" << YAML::Value << renderer.lighting.backIntensity;
 		out << YAML::Key << "two_sided" << YAML::Value << renderer.lighting.twoSided;
+		out << YAML::Key << "specular" << YAML::Value << renderer.lighting.specularIntensity;
+		out << YAML::Key << "shininess" << YAML::Value << renderer.lighting.shininess;
+		out << YAML::Key << "rim_intensity" << YAML::Value << renderer.lighting.rimIntensity;
+		out << YAML::Key << "rim_power" << YAML::Value << renderer.lighting.rimPower;
 		out << YAML::Key << "key_direction" << YAML::Value;
 		EmitVec3(out, renderer.lighting.keyDirection);
 		out << YAML::Key << "fill_direction" << YAML::Value;

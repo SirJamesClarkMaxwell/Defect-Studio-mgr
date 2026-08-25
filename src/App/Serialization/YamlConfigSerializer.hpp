@@ -59,6 +59,10 @@ namespace DefectStudio
 			KeyDirection,
 			KeyIntensity,
 			TwoSided,
+			Specular,
+			Shininess,
+			RimIntensity,
+			RimPower,
 		};
 
 		enum class RendererViewportKey
@@ -253,6 +257,10 @@ namespace DefectStudio
 			{RendererLightingKey::KeyDirection, "key_direction"},
 			{RendererLightingKey::KeyIntensity, "key"},
 			{RendererLightingKey::TwoSided, "two_sided"},
+			{RendererLightingKey::Specular, "specular"},
+			{RendererLightingKey::Shininess, "shininess"},
+			{RendererLightingKey::RimIntensity, "rim_intensity"},
+			{RendererLightingKey::RimPower, "rim_power"},
 		};
 
 		inline const std::unordered_map<RendererViewportKey, const char *> RendererViewportKeyNames = {

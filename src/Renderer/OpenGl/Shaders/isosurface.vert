@@ -8,10 +8,12 @@ uniform mat4 u_ViewProjection;
 
 out vec3 vNormal;
 out float vSign;
+out vec3 vWorldPos;
 
 void main()
 {
 	gl_Position = u_ViewProjection * vec4(aPosition, 1.0);
 	vNormal = normalize(aNormal);
 	vSign = aSign;
+	vWorldPos = aPosition; // no model matrix here - aPosition already is world space
 }

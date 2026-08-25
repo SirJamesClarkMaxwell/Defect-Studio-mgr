@@ -925,6 +925,10 @@ namespace DefectStudio
 		m_GlobalRenderSettings.lighting.fillIntensity = config.lighting.fillIntensity;
 		m_GlobalRenderSettings.lighting.backIntensity = config.lighting.backIntensity;
 		m_GlobalRenderSettings.lighting.twoSided = config.lighting.twoSided;
+		m_GlobalRenderSettings.lighting.specularIntensity = config.lighting.specularIntensity;
+		m_GlobalRenderSettings.lighting.shininess = config.lighting.shininess;
+		m_GlobalRenderSettings.lighting.rimIntensity = config.lighting.rimIntensity;
+		m_GlobalRenderSettings.lighting.rimPower = config.lighting.rimPower;
 		m_GlobalRenderSettings.lighting.keyDirection = glm::vec3(
 			config.lighting.keyDirection[0],
 			config.lighting.keyDirection[1],

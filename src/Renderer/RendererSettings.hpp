@@ -23,6 +23,16 @@ namespace DefectStudio
 		float fillIntensity = 0.25f;
 		float backIntensity = 0.12f;
 		bool twoSided = true;
+		// Blinn-Phong specular from the key light only (fill/back stay pure diffuse - a second and
+		// third highlight would just look noisy on small spheres). Applies to atoms, bonds, and
+		// isosurfaces.
+		float specularIntensity = 0.35f;
+		float shininess = 32.0f;
+		// Fresnel rim glow, isosurface only - brightens a lobe's silhouette edge at grazing view
+		// angles, the common "misty" look for electron-density isosurfaces (rim tinted by the lobe's
+		// own color, not a fixed color).
+		float rimIntensity = 0.35f;
+		float rimPower = 2.5f;
 	};
 
 	struct RendererViewportSettings

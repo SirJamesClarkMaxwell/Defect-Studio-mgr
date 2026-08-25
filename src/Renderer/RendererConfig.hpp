@@ -16,6 +16,10 @@ namespace DefectStudio
 		float fillIntensity = 0.25f;
 		float backIntensity = 0.12f;
 		bool twoSided = true;
+		float specularIntensity = 0.35f;
+		float shininess = 32.0f;
+		float rimIntensity = 0.35f;
+		float rimPower = 2.5f;
 	};
 
 	struct RendererViewportConfig

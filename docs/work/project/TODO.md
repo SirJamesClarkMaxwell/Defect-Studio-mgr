@@ -781,9 +781,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
         viewport nietknięty).
       - [ ] Nadpisanie kolorów atomów przy eksporcie — §12, wciąż tylko toggle widoczności warstw
         (atoms/bonds/cell/grid/labels), nie per-atom color override.
-      - [ ] Podstawowa kontrola oświetlenia (pozycja/intensywność/kolor ambient-diffuse-specular) —
-        §11.3. Prawdopodobnie prerekwizyt dla "PBR lighting" z T09, nie ten sam zakres: to jest zwykłe
-        Phong/Blinn światło konfigurowalne z UI, PBR to osobny, większy krok jakości.
+      - [x] Blinn-Phong specular (key light, `atoms`/`bonds`/`isosurface` shadery) + fresnel rim glow
+        na isosurface — §11.3, `RendererLightingSettings::specularIntensity/shininess/rimIntensity/
+        rimPower`, konfigurowalne w Settings + YAML persistence, ten sam wzorzec co istniejące
+        ambient/key/fill/back. Nie jest to jeszcze pełna kontrola pozycji/koloru per-light z §11.3 —
+        kierunki trzech świateł już były konfigurowalne wcześniej, brakującym elementem był
+        wyłącznie specular/rim. PBR z T09 to dalej osobny, większy krok jakości.
   - [ ] Stats panel (liczba atomów/wiązań/wydajność) i Viewport Info (diagnostyka) — z §13, oba
         zero trackingu, oba niski priorytet (informacyjne, nie blokują niczego).
 

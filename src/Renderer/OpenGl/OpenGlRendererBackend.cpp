@@ -1187,6 +1187,9 @@ namespace DefectStudio
 		const int fillIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_FillIntensity");
 		const int backIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_BackIntensity");
 		const int twoSidedLocation = m_ShaderLibrary.Uniform("atoms", "u_TwoSidedLighting");
+		const int cameraPositionLocation = m_ShaderLibrary.Uniform("atoms", "u_CameraPosition");
+		const int specularIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_SpecularIntensity");
+		const int shininessLocation = m_ShaderLibrary.Uniform("atoms", "u_Shininess");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1203,6 +1206,15 @@ namespace DefectStudio
 			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
 		if (twoSidedLocation >= 0)
 			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+		if (cameraPositionLocation >= 0)
+		{
+			const glm::vec3 cameraPosition = camera.Position();
+			glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
+		}
+		if (specularIntensityLocation >= 0)
+			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
+		if (shininessLocation >= 0)
+			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
 
 		glBindVertexArray(m_SphereMesh.vao);
 		glDrawElementsInstanced(
@@ -1312,6 +1324,9 @@ namespace DefectStudio
 		const int fillIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_FillIntensity");
 		const int backIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_BackIntensity");
 		const int twoSidedLocation = m_ShaderLibrary.Uniform("bonds", "u_TwoSidedLighting");
+		const int cameraPositionLocation = m_ShaderLibrary.Uniform("bonds", "u_CameraPosition");
+		const int specularIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularIntensity");
+		const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1328,6 +1343,15 @@ namespace DefectStudio
 			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
 		if (twoSidedLocation >= 0)
 			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+		if (cameraPositionLocation >= 0)
+		{
+			const glm::vec3 cameraPosition = camera.Position();
+			glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
+		}
+		if (specularIntensityLocation >= 0)
+			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
+		if (shininessLocation >= 0)
+			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
 
 		glBindVertexArray(m_CylinderMesh.vao);
 		glDrawElementsInstanced(
@@ -1730,6 +1754,11 @@ namespace DefectStudio
 		const int fillIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_FillIntensity");
 		const int backIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_BackIntensity");
 		const int twoSidedLocation = m_ShaderLibrary.Uniform("isosurface", "u_TwoSidedLighting");
+		const int cameraPositionLocation = m_ShaderLibrary.Uniform("isosurface", "u_CameraPosition");
+		const int specularIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_SpecularIntensity");
+		const int shininessLocation = m_ShaderLibrary.Uniform("isosurface", "u_Shininess");
+		const int rimIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimIntensity");
+		const int rimPowerLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimPower");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1746,6 +1775,19 @@ namespace DefectStudio
 			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
 		if (twoSidedLocation >= 0)
 			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+		if (cameraPositionLocation >= 0)
+		{
+			const glm::vec3 cameraPosition = camera.Position();
+			glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
+		}
+		if (specularIntensityLocation >= 0)
+			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
+		if (shininessLocation >= 0)
+			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
+		if (rimIntensityLocation >= 0)
+			glUniform1f(rimIntensityLocation, globalSettings.lighting.rimIntensity);
+		if (rimPowerLocation >= 0)
+			glUniform1f(rimPowerLocation, globalSettings.lighting.rimPower);
 
 		// Hardcoded debug colors/alpha (T08.6.3 will make these Control Panel sliders) - blue for
 		// the positive lobe, orange-red for the negative lobe, a common orbital-visualization
@@ -1801,6 +1843,11 @@ namespace DefectStudio
 		const int fillIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_FillIntensity");
 		const int backIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_BackIntensity");
 		const int twoSidedLocation = m_ShaderLibrary.Uniform("isosurface", "u_TwoSidedLighting");
+		const int cameraPositionLocation = m_ShaderLibrary.Uniform("isosurface", "u_CameraPosition");
+		const int specularIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_SpecularIntensity");
+		const int shininessLocation = m_ShaderLibrary.Uniform("isosurface", "u_Shininess");
+		const int rimIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimIntensity");
+		const int rimPowerLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimPower");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1817,6 +1864,19 @@ namespace DefectStudio
 			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
 		if (twoSidedLocation >= 0)
 			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+		if (cameraPositionLocation >= 0)
+		{
+			const glm::vec3 cameraPosition = camera.Position();
+			glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
+		}
+		if (specularIntensityLocation >= 0)
+			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
+		if (shininessLocation >= 0)
+			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
+		if (rimIntensityLocation >= 0)
+			glUniform1f(rimIntensityLocation, globalSettings.lighting.rimIntensity);
+		if (rimPowerLocation >= 0)
+			glUniform1f(rimPowerLocation, globalSettings.lighting.rimPower);
 
 		const int positiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_PositiveLobeColor");
 		const int negativeLocation = m_ShaderLibrary.Uniform("isosurface", "u_NegativeLobeColor");
