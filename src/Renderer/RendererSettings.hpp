@@ -70,6 +70,20 @@ namespace DefectStudio
 	struct RendererGlobalRenderSettings
 	{
 		glm::vec4 backgroundColor = glm::vec4(0.06f, 0.07f, 0.08f, 1.0f);
+		// Uniform scale on every bond cylinder's radius, applied in bonds.vert (radial local axes
+		// only, so orientation/length/normals stay correct) - live like the lighting sliders below,
+		// no cache invalidation needed.
+		float bondRadiusMultiplier = 1.0f;
+		// Luma-preserving saturation multiplier (1 = unchanged, 0 = grayscale, >1 = boosted) applied
+		// in atoms/bonds/isosurface fragment shaders to the already-lit color, right before the
+		// final clamp - fixes the "washed out / pastel" look some users see on a light background by
+		// letting them punch color back in without touching per-element AtomStyleTable colors.
+		float colorSaturation = 1.0f;
+		// Interactive-viewport supersample factor - the FBO is rendered at viewportSize * this, then
+		// ImGui::Image displays it back down at the panel's native size, same idea as SSAA. 1 = off
+		// (native resolution, default). Export has its own separate resolution presets
+		// (RenderExportDialogState) - this only affects the live/interactive view.
+		float viewportSupersample = 1.0f;
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;

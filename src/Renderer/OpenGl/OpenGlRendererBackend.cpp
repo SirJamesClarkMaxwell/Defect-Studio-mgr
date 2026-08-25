@@ -565,7 +565,8 @@ namespace DefectStudio
 		const std::vector<std::size_t> &selectedBondIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp,
-		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown)
+		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown,
+		const glm::vec3 &sceneOffset)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -717,11 +718,12 @@ namespace DefectStudio
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[0], orbitalChannelUp->vertexCount, camera, globalSettings,
-				orbitalChannelUp->positiveLobeColor, orbitalChannelUp->negativeLobeColor, orbitalChannelUp->lobeAlpha);
+				orbitalChannelUp->positiveLobeColor, orbitalChannelUp->negativeLobeColor, orbitalChannelUp->lobeAlpha,
+				sceneOffset);
 		if (orbitalChannelDown != nullptr && orbitalChannelDown->enabled && orbitalChannelDown->vertexCount > 0)
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[1], orbitalChannelDown->vertexCount, camera, globalSettings,
 				orbitalChannelDown->positiveLobeColor, orbitalChannelDown->negativeLobeColor,
-				orbitalChannelDown->lobeAlpha);
+				orbitalChannelDown->lobeAlpha, sceneOffset);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -1190,6 +1192,7 @@ namespace DefectStudio
 		const int cameraPositionLocation = m_ShaderLibrary.Uniform("atoms", "u_CameraPosition");
 		const int specularIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_SpecularIntensity");
 		const int shininessLocation = m_ShaderLibrary.Uniform("atoms", "u_Shininess");
+		const int saturationLocation = m_ShaderLibrary.Uniform("atoms", "u_Saturation");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1215,6 +1218,8 @@ namespace DefectStudio
 			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
 		if (shininessLocation >= 0)
 			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
+		if (saturationLocation >= 0)
+			glUniform1f(saturationLocation, globalSettings.colorSaturation);
 
 		glBindVertexArray(m_SphereMesh.vao);
 		glDrawElementsInstanced(
@@ -1258,6 +1263,12 @@ namespace DefectStudio
 				const float axisLength = glm::length(axis);
 				if (!std::isfinite(axisLength) || axisLength <= 0.0001f)
 					continue;
+				// ponytail: shrink/trim below is computed from the un-multiplied bond.radius, not
+				// globalSettings.bondRadiusMultiplier (applied later, live, in bonds.vert) - the
+				// atom/cylinder junction can show a hairline gap (multiplier < 1) or slight overlap
+				// (> 1) at extreme settings. Re-bake here + force bondsDirty from Settings.cpp if that
+				// ever becomes visible in practice; not worth the extra invalidation plumbing for a
+				// cosmetic figure-prep slider.
 				const float bondRadius = std::max(bond.radius, 0.001f);
 				const glm::vec3 direction = axis / axisLength;
 				const float rawShrinkA = std::sqrt(
@@ -1327,6 +1338,8 @@ namespace DefectStudio
 		const int cameraPositionLocation = m_ShaderLibrary.Uniform("bonds", "u_CameraPosition");
 		const int specularIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularIntensity");
 		const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
+		const int saturationLocation = m_ShaderLibrary.Uniform("bonds", "u_Saturation");
+		const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1352,6 +1365,10 @@ namespace DefectStudio
 			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
 		if (shininessLocation >= 0)
 			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
+		if (saturationLocation >= 0)
+			glUniform1f(saturationLocation, globalSettings.colorSaturation);
+		if (bondRadiusMultiplierLocation >= 0)
+			glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
 
 		glBindVertexArray(m_CylinderMesh.vao);
 		glDrawElementsInstanced(
@@ -1759,6 +1776,7 @@ namespace DefectStudio
 		const int shininessLocation = m_ShaderLibrary.Uniform("isosurface", "u_Shininess");
 		const int rimIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimIntensity");
 		const int rimPowerLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimPower");
+		const int saturationLocation = m_ShaderLibrary.Uniform("isosurface", "u_Saturation");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1788,6 +1806,8 @@ namespace DefectStudio
 			glUniform1f(rimIntensityLocation, globalSettings.lighting.rimIntensity);
 		if (rimPowerLocation >= 0)
 			glUniform1f(rimPowerLocation, globalSettings.lighting.rimPower);
+		if (saturationLocation >= 0)
+			glUniform1f(saturationLocation, globalSettings.colorSaturation);
 
 		// Hardcoded debug colors/alpha (T08.6.3 will make these Control Panel sliders) - blue for
 		// the positive lobe, orange-red for the negative lobe, a common orbital-visualization
@@ -1820,7 +1840,8 @@ namespace DefectStudio
 		const RendererGlobalRenderSettings &globalSettings,
 		const glm::vec3 &positiveLobeColor,
 		const glm::vec3 &negativeLobeColor,
-		float lobeAlpha)
+		float lobeAlpha,
+		const glm::vec3 &sceneOffset)
 	{
 		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
 		// (resources.isosurfaceVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
@@ -1848,6 +1869,8 @@ namespace DefectStudio
 		const int shininessLocation = m_ShaderLibrary.Uniform("isosurface", "u_Shininess");
 		const int rimIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimIntensity");
 		const int rimPowerLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimPower");
+		const int saturationLocation = m_ShaderLibrary.Uniform("isosurface", "u_Saturation");
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("isosurface", "u_SceneOffset");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1877,6 +1900,10 @@ namespace DefectStudio
 			glUniform1f(rimIntensityLocation, globalSettings.lighting.rimIntensity);
 		if (rimPowerLocation >= 0)
 			glUniform1f(rimPowerLocation, globalSettings.lighting.rimPower);
+		if (saturationLocation >= 0)
+			glUniform1f(saturationLocation, globalSettings.colorSaturation);
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
 		const int positiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_PositiveLobeColor");
 		const int negativeLocation = m_ShaderLibrary.Uniform("isosurface", "u_NegativeLobeColor");

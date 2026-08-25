@@ -143,7 +143,12 @@ namespace DefectStudio
 			// orbital panel exists. Not part of the real per-window structure render path.
 			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr,
 			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp = nullptr,
-			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown = nullptr);
+			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown = nullptr,
+			// Non-destructive whole-structure offset (RendererWindowState::viewOffset) - atoms/bonds
+			// already carry it baked into their positions by the time they reach here, this is only
+			// for the isosurface overlay, which is a separate grid/compute pipeline that doesn't
+			// share RendererStructureData.
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -220,7 +225,8 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &positiveLobeColor,
 			const glm::vec3 &negativeLobeColor,
-			float lobeAlpha);
+			float lobeAlpha,
+			const glm::vec3 &sceneOffset);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.

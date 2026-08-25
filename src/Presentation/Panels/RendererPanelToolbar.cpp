@@ -449,6 +449,11 @@ namespace DefectStudio
 				// they silently never appear in the export.
 				dialog.previewState.pinnedMeasurements = windowState.pinnedMeasurements;
 				dialog.previewState.bondLabelsAlignToDirection = windowState.bondLabelsAlignToDirection;
+				// Same reasoning: previewState is a fresh RendererWindowState, and the isosurface
+				// overlay's u_SceneOffset uniform is read from whichever windowState RenderWindow was
+				// given (see RendererLayer::RenderToFbo) - without this copy, an exported orbital
+				// would silently detach from a structure the user repositioned for framing.
+				dialog.previewState.viewOffset = windowState.viewOffset;
 
 				const std::string stem = windowState.structure.sourcePath.Native().stem().string();
 				dialog.filename = (stem.empty() ? "structure" : stem) + "_export";
@@ -463,6 +468,34 @@ namespace DefectStudio
 		}
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
 			ImGui::SetTooltip("Export viewport as PNG (F12)");
+
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Object offset");
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+		{
+			ImGui::SetTooltip(
+				"Non-destructive reposition for framing a shot - moves atoms/bonds/orbitals together "
+				"without touching the saved structure or undo stack. Reset on any real edit/reload.");
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(200.0f);
+		glm::vec3 offsetBefore = windowState.viewOffset;
+		if (ImGui::DragFloat3("##ObjectOffset", &windowState.viewOffset.x, 0.01f, 0.0f, 0.0f, "%.3f"))
+		{
+			const glm::vec3 delta = windowState.viewOffset - offsetBefore;
+			for (RendererAtomData &atom : windowState.structure.atoms)
+				atom.cartesianPosition += delta;
+		}
+		sameLineTight();
+		ImGui::BeginDisabled(windowState.viewOffset == glm::vec3(0.0f));
+		if (ImGui::Button("Reset##ObjectOffset"))
+		{
+			const glm::vec3 delta = -windowState.viewOffset;
+			for (RendererAtomData &atom : windowState.structure.atoms)
+				atom.cartesianPosition += delta;
+			windowState.viewOffset = glm::vec3(0.0f);
+		}
+		ImGui::EndDisabled();
 
 		ImGui::EndChild();
 	}

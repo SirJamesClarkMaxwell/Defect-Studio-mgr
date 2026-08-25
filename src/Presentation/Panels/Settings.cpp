@@ -457,6 +457,9 @@ namespace DefectStudio
 
 		for (float &channel : m_DraftConfig.renderer.backgroundColor)
 			channel = std::clamp(channel, 0.0f, 1.0f);
+		m_DraftConfig.renderer.bondRadiusMultiplier = std::clamp(m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f);
+		m_DraftConfig.renderer.colorSaturation = std::clamp(m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f);
+		m_DraftConfig.renderer.viewportSupersample = std::clamp(m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f);
 		m_DraftConfig.renderer.orbitSensitivity = std::clamp(m_DraftConfig.renderer.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.panSensitivity = std::clamp(m_DraftConfig.renderer.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.zoomSensitivity = std::clamp(m_DraftConfig.renderer.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -1839,6 +1842,32 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(1);
 			if (ImGui::ColorEdit4("##RendererBackground", m_DraftConfig.renderer.backgroundColor.data()))
 				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Bond thickness");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##BondRadiusMultiplier", &m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f, "%.2fx"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Color saturation");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##ColorSaturation", &m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f, "%.2f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Viewport supersample");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##ViewportSupersample", &m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f, "%.1fx"))
+				markDirty();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip("Renders the interactive viewport at a higher resolution than the panel and downscales it - sharper edges/orbitals, costs GPU time. 1x = off.");
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);

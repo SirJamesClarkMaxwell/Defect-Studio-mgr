@@ -441,13 +441,19 @@ namespace DefectStudio
 		if (m_RendererBackend == nullptr || windowState.camera == nullptr)
 			return 0;
 
+		// Render at viewportSize * supersample, then ImGui::Image (RendererPanel.cpp) displays the
+		// resulting texture back down at the panel's native viewportSize regardless of its actual
+		// pixel dimensions - the FBO's GL_LINEAR min filter (OpenGlFrameBuffer.cpp) does the
+		// downsample for free, same idea as SSAA. 1x is a no-op (identical to before this setting
+		// existed).
+		const float supersample = std::max(1.0f, settings.viewportSupersample);
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,
 			*windowState.camera,
 			settings,
-			static_cast<int>(windowState.viewportSize.x),
-			static_cast<int>(windowState.viewportSize.y),
+			static_cast<int>(windowState.viewportSize.x * supersample),
+			static_cast<int>(windowState.viewportSize.y * supersample),
 			windowState.showAtoms,
 			windowState.showBonds,
 			windowState.showCellBox,
@@ -459,7 +465,8 @@ namespace DefectStudio
 			windowState.selectedBondIndices,
 			nullptr,
 			&windowState.orbitalChannelUp,
-			&windowState.orbitalChannelDown);
+			&windowState.orbitalChannelDown,
+			windowState.viewOffset);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(
@@ -908,6 +915,9 @@ namespace DefectStudio
 			config.backgroundColor[1],
 			config.backgroundColor[2],
 			config.backgroundColor[3]);
+		m_GlobalRenderSettings.bondRadiusMultiplier = config.bondRadiusMultiplier;
+		m_GlobalRenderSettings.colorSaturation = config.colorSaturation;
+		m_GlobalRenderSettings.viewportSupersample = config.viewportSupersample;
 		m_GlobalRenderSettings.orbitSensitivity = config.orbitSensitivity;
 		m_GlobalRenderSettings.panSensitivity = config.panSensitivity;
 		m_GlobalRenderSettings.zoomSensitivity = config.zoomSensitivity;
@@ -964,6 +974,9 @@ namespace DefectStudio
 		if (glm::length(m_GlobalRenderSettings.lighting.backDirection) <= 0.001f)
 			m_GlobalRenderSettings.lighting.backDirection = glm::normalize(glm::vec3(0.0f, -0.4f, -0.8f));
 
+		m_GlobalRenderSettings.bondRadiusMultiplier = std::clamp(m_GlobalRenderSettings.bondRadiusMultiplier, 0.1f, 4.0f);
+		m_GlobalRenderSettings.colorSaturation = std::clamp(m_GlobalRenderSettings.colorSaturation, 0.0f, 2.0f);
+		m_GlobalRenderSettings.viewportSupersample = std::clamp(m_GlobalRenderSettings.viewportSupersample, 1.0f, 3.0f);
 		m_GlobalRenderSettings.orbitSensitivity = std::clamp(m_GlobalRenderSettings.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.panSensitivity = std::clamp(m_GlobalRenderSettings.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.zoomSensitivity = std::clamp(m_GlobalRenderSettings.zoomSensitivity, kMinSensitivity, kMaxSensitivity);

@@ -19,6 +19,13 @@ uniform int u_TwoSidedLighting;
 uniform vec3 u_CameraPosition;
 uniform float u_SpecularIntensity;
 uniform float u_Shininess;
+uniform float u_Saturation;
+
+vec3 ApplySaturation(vec3 color)
+{
+	float luma = dot(color, vec3(0.299, 0.587, 0.114));
+	return mix(vec3(luma), color, u_Saturation);
+}
 
 float ComputeDiffuse(vec3 normalVector, vec3 lightDirection)
 {
@@ -43,7 +50,7 @@ void main()
 {
 	vec3 N = normalize(vNormal);
 	vec3 viewDir = normalize(u_CameraPosition - vWorldPos);
-	vec3 baseColor = mix(vColorA.rgb, vColorB.rgb, clamp(vGradientT, 0.0, 1.0));
+	vec3 baseColor = ApplySaturation(mix(vColorA.rgb, vColorB.rgb, clamp(vGradientT, 0.0, 1.0)));
 	float dKey = ComputeDiffuse(N, u_KeyDirection) * u_KeyIntensity;
 	float dFill = ComputeDiffuse(N, u_FillDirection) * u_FillIntensity;
 	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;

@@ -42,6 +42,11 @@ namespace DefectStudio
 		const RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
 		if (dialog.useCustomBackground)
 			settings.backgroundColor = dialog.backgroundColor;
+		// Export already renders at the dialog's own exact resolution preset/custom size - stacking
+		// the live interactive-viewport supersample multiplier (RendererLayer::RenderToFbo) on top
+		// would silently inflate the output past what the preset promises (e.g. "1080p" coming out
+		// larger). Export has its own separate detail knob for orbitals (orbitalSupersample).
+		settings.viewportSupersample = 1.0f;
 		return settings;
 	}
 

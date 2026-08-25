@@ -228,6 +228,18 @@ namespace DefectStudio
 		// like pinnedMeasurements - not a domain concept, not persisted with the project yet.
 		glm::vec3 cursor3DPosition = glm::vec3(0.0f);
 		bool cursor3DPlaced = false;
+		// Non-destructive whole-structure reposition for framing a shot (viewport toolbar "Object
+		// offset" field) - added directly to every atom's cartesianPosition (same field the gizmo
+		// drag/nudge already mutate live, see RendererPanelInput.cpp), so it's picked up for free by
+		// picking/gizmo/measurements/export (they all read this same RendererStructureData) and by
+		// the per-frame position-hash dirty check (OpenGlRendererBackend::RenderWindow) with zero
+		// extra renderer code. Never touches the domain CrystalStructure/undo stack. Only tracked
+		// here so the UI knows the current value and can compute a delta on the next edit; wiped out
+		// (silently, by design - "view only") by the next RebuildAndSync (any real atom edit, undo/
+		// redo, or reload), which rebuilds structure fresh from the untouched domain. The isosurface
+		// overlay doesn't share this struct (separate WAVECAR-grid pipeline) so it gets the same
+		// value via its own u_SceneOffset uniform instead - see RendererLayer::RenderToFbo.
+		glm::vec3 viewOffset = glm::vec3(0.0f);
 		// GPU compute-shader isosurface mesh for one spin channel's rendered orbital
 		// (ElectronicStructurePanel, via RendererLayer::RegenerateOrbitalIsosurface). Two
 		// independent channels so spin-up and spin-down can be shown simultaneously - `enabled`

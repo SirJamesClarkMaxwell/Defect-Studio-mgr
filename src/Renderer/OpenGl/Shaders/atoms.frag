@@ -17,6 +17,13 @@ uniform int u_TwoSidedLighting;
 uniform vec3 u_CameraPosition;
 uniform float u_SpecularIntensity;
 uniform float u_Shininess;
+uniform float u_Saturation;
+
+vec3 ApplySaturation(vec3 color)
+{
+	float luma = dot(color, vec3(0.299, 0.587, 0.114));
+	return mix(vec3(luma), color, u_Saturation);
+}
 
 float ComputeDiffuse(vec3 normalVector, vec3 lightDirection)
 {
@@ -51,5 +58,6 @@ void main()
 	// still push a pixel toward white, and only right at the highlight itself.
 	float intensity = min(u_AmbientIntensity + dKey + dFill + dBack, 1.0);
 	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity;
-	oColor = vec4(clamp(vColor.rgb * intensity + vec3(specular), 0.0, 1.0), vColor.a);
+	vec3 saturatedColor = ApplySaturation(vColor.rgb);
+	oColor = vec4(clamp(saturatedColor * intensity + vec3(specular), 0.0, 1.0), vColor.a);
 }

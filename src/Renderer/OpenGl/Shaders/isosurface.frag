@@ -22,6 +22,13 @@ uniform float u_SpecularIntensity;
 uniform float u_Shininess;
 uniform float u_RimIntensity;
 uniform float u_RimPower;
+uniform float u_Saturation;
+
+vec3 ApplySaturation(vec3 color)
+{
+	float luma = dot(color, vec3(0.299, 0.587, 0.114));
+	return mix(vec3(luma), color, u_Saturation);
+}
 
 float ComputeDiffuse(vec3 normalVector, vec3 lightDirection)
 {
@@ -51,7 +58,7 @@ void main()
 	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;
 	float intensity = min(u_AmbientIntensity + dKey + dFill + dBack, 1.0);
 	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity;
-	vec3 baseColor = vSign > 0.0 ? u_PositiveLobeColor : u_NegativeLobeColor;
+	vec3 baseColor = ApplySaturation(vSign > 0.0 ? u_PositiveLobeColor : u_NegativeLobeColor);
 	// Fresnel rim - grazing-angle glow tinted by the lobe's own color, the "misty" edge look common
 	// in electron-density isosurface renders (VESTA/VMD-style), not just a flat-shaded blob.
 	float facing = u_TwoSidedLighting == 1 ? abs(dot(N, viewDir)) : max(dot(N, viewDir), 0.0);

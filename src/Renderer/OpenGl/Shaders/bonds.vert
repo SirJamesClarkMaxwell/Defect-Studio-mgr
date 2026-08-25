@@ -11,6 +11,12 @@ layout(location = 7) in vec4 aColorA;
 layout(location = 8) in vec4 aColorB;
 
 uniform mat4 u_ViewProjection;
+// Scales only the cylinder's local radial (x/y) axes before the per-instance model matrix, which
+// already bakes radius into those same axes (see OpenGlRendererBackend::buildBondTransform's
+// glm::scale(radius, radius, length)) - a live global thickness knob without re-baking cached
+// instance data. Local z (length) is untouched, and since x/y scale equally the surface normal
+// direction is unaffected (no normal-matrix correction needed).
+uniform float u_BondRadiusMultiplier;
 
 out vec3 vNormal;
 out vec4 vColorA;
@@ -21,7 +27,7 @@ out vec3 vWorldPos;
 void main()
 {
     mat4 model = mat4(aModelCol0, aModelCol1, aModelCol2, aModelCol3);
-    vec4 worldPosition = model * vec4(aPosition, 1.0);
+    vec4 worldPosition = model * vec4(aPosition.xy * u_BondRadiusMultiplier, aPosition.z, 1.0);
     gl_Position = u_ViewProjection * worldPosition;
 
     mat3 normalMatrix = transpose(inverse(mat3(model)));

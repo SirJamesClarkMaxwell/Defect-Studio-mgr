@@ -461,6 +461,9 @@ namespace DefectStudio
 			const char *growthStepKey = Name(EventQueueKey::GrowthStep);
 			const char *rendererSection = Name(SectionKey::Renderer);
 			const char *rendererBackgroundKey = Name(RendererKey::Background);
+			const char *rendererBondRadiusMultiplierKey = Name(RendererKey::BondRadiusMultiplier);
+			const char *rendererColorSaturationKey = Name(RendererKey::ColorSaturation);
+			const char *rendererViewportSupersampleKey = Name(RendererKey::ViewportSupersample);
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
@@ -595,6 +598,21 @@ namespace DefectStudio
 				{rendererSection, rendererBackgroundKey},
 				{},
 				config.renderer.backgroundColor);
+			config.renderer.bondRadiusMultiplier = ReadValue(
+				root,
+				{rendererSection, rendererBondRadiusMultiplierKey},
+				{},
+				config.renderer.bondRadiusMultiplier);
+			config.renderer.colorSaturation = ReadValue(
+				root,
+				{rendererSection, rendererColorSaturationKey},
+				{},
+				config.renderer.colorSaturation);
+			config.renderer.viewportSupersample = ReadValue(
+				root,
+				{rendererSection, rendererViewportSupersampleKey},
+				{},
+				config.renderer.viewportSupersample);
 			config.renderer.orbitSensitivity = ReadValue(
 				root,
 				{rendererSection, rendererOrbitKey},
@@ -785,6 +803,9 @@ namespace DefectStudio
 			const char *settingsAutoSaveOnPreviewKey = Name(UiKey::SettingsAutoSaveOnPreview);
 			const char *rendererSection = Name(SectionKey::Renderer);
 			const char *rendererBackgroundKey = Name(RendererKey::Background);
+			const char *rendererBondRadiusMultiplierKey = Name(RendererKey::BondRadiusMultiplier);
+			const char *rendererColorSaturationKey = Name(RendererKey::ColorSaturation);
+			const char *rendererViewportSupersampleKey = Name(RendererKey::ViewportSupersample);
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
@@ -846,6 +867,21 @@ namespace DefectStudio
 				{rendererSection, rendererBackgroundKey},
 				{},
 				config.renderer.backgroundColor);
+			config.renderer.bondRadiusMultiplier = ReadValue(
+				root,
+				{rendererSection, rendererBondRadiusMultiplierKey},
+				{},
+				config.renderer.bondRadiusMultiplier);
+			config.renderer.colorSaturation = ReadValue(
+				root,
+				{rendererSection, rendererColorSaturationKey},
+				{},
+				config.renderer.colorSaturation);
+			config.renderer.viewportSupersample = ReadValue(
+				root,
+				{rendererSection, rendererViewportSupersampleKey},
+				{},
+				config.renderer.viewportSupersample);
 			config.renderer.orbitSensitivity = ReadValue(
 				root,
 				{rendererSection, rendererOrbitKey},

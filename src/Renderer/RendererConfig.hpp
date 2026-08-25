@@ -46,6 +46,9 @@ namespace DefectStudio
 	struct RendererConfig
 	{
 		std::array<float, 4> backgroundColor = {0.06f, 0.07f, 0.08f, 1.0f};
+		float bondRadiusMultiplier = 1.0f;
+		float colorSaturation = 1.0f;
+		float viewportSupersample = 1.0f;
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;

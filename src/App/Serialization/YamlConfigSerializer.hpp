@@ -32,6 +32,8 @@ namespace DefectStudio
 		{
 			AutoApplyDefaultViewOnOpen,
 			Background,
+			BondRadiusMultiplier,
+			ColorSaturation,
 			DefaultProjection,
 			FocusSelectedAtomDistance,
 			FocusSelectedAtomTransitionSeconds,
@@ -46,6 +48,7 @@ namespace DefectStudio
 			TouchpadNavigation,
 			ToolbarWheel,
 			Viewport,
+			ViewportSupersample,
 			ZoomSensitivity,
 		};
 
@@ -231,6 +234,8 @@ namespace DefectStudio
 		inline const std::unordered_map<RendererKey, const char *> RendererKeyNames = {
 			{RendererKey::AutoApplyDefaultViewOnOpen, "auto_apply_default_view_on_open"},
 			{RendererKey::Background, "background"},
+			{RendererKey::BondRadiusMultiplier, "bond_radius_multiplier"},
+			{RendererKey::ColorSaturation, "color_saturation"},
 			{RendererKey::DefaultProjection, "default_projection"},
 			{RendererKey::FocusSelectedAtomDistance, "focus_selected_atom_distance"},
 			{RendererKey::FocusSelectedAtomTransitionSeconds, "focus_selected_atom_transition_seconds"},
@@ -245,6 +250,7 @@ namespace DefectStudio
 			{RendererKey::TouchpadNavigation, "touchpad_navigation"},
 			{RendererKey::ToolbarWheel, "toolbar_wheel"},
 			{RendererKey::Viewport, "viewport"},
+			{RendererKey::ViewportSupersample, "viewport_supersample"},
 			{RendererKey::ZoomSensitivity, "zoom_sensitivity"},
 		};
 
