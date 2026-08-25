@@ -136,6 +136,8 @@ namespace DefectStudio
 			bool showLabels = false,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements = {},
 			int selectedPinnedMeasurement = -1,
+			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
+			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			const std::vector<std::size_t> &selectedBondIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
@@ -198,13 +200,22 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {});
+		// Figure-annotation arrows (RendererWindowState::sceneArrows) - reuses the bond cylinder
+		// mesh/shader (shaft only, see that struct's comment for why there's no arrowhead cone yet).
+		// No dirty-cache: rebuilt every call like pinnedInstances in renderLabels, cheap for the
+		// handful of arrows a figure needs.
+		void renderSceneArrows(
+			const std::vector<RendererWindowState::SceneArrow> &arrows,
+			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings);
 		void renderLabels(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			bool showAllLabels,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
-			int selectedPinnedMeasurement);
+			int selectedPinnedMeasurement,
+			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {});
 		void renderCellBox(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,

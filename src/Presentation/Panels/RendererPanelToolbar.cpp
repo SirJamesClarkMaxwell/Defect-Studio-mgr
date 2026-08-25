@@ -448,6 +448,8 @@ namespace DefectStudio
 				// fresh RendererWindowState, so pinned bond/angle labels need an explicit copy or
 				// they silently never appear in the export.
 				dialog.previewState.pinnedMeasurements = windowState.pinnedMeasurements;
+				dialog.previewState.freeLabels = windowState.freeLabels;
+				dialog.previewState.sceneArrows = windowState.sceneArrows;
 				dialog.previewState.bondLabelsAlignToDirection = windowState.bondLabelsAlignToDirection;
 				// Same reasoning: previewState is a fresh RendererWindowState, and the isosurface
 				// overlay's u_SceneOffset uniform is read from whichever windowState RenderWindow was

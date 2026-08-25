@@ -168,6 +168,20 @@ namespace DefectStudio
 		return text;
 	}
 
+	// Free-label text comes from an ImGui InputText buffer - plain byte-widening (same approach
+	// FormatBondLengthLabel/FormatAngleLabel already use for their glyphs), not real UTF-8 decoding.
+	// Correct for the ASCII/Latin-1 range the MSDF atlas's charset actually covers; a multi-byte
+	// UTF-8 codepoint would come out as several wrong glyphs instead of one - not attempting that
+	// here since v1's label text is expected to be short ASCII call-outs.
+	[[nodiscard]] std::u32string ToU32String(const std::string &text)
+	{
+		std::u32string result;
+		result.reserve(text.size());
+		for (const char character : text)
+			result.push_back(static_cast<char32_t>(static_cast<unsigned char>(character)));
+		return result;
+	}
+
 	constexpr glm::vec4 kLabelColor(0.92f, 0.92f, 0.85f, 1.0f);
 	// Matches kSelectionHighlightColor used for atom selection below - same accent, reused here so
 	// a selected pinned measurement reads as "selected" the same way a selected atom does.
@@ -561,6 +575,8 @@ namespace DefectStudio
 		bool showLabels,
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 		int selectedPinnedMeasurement,
+		const std::vector<RendererWindowState::FreeLabel> &freeLabels,
+		const std::vector<RendererWindowState::SceneArrow> &sceneArrows,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<std::size_t> &selectedBondIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
@@ -710,8 +726,14 @@ namespace DefectStudio
 			renderCellBox(structure, camera, resources);
 		if (showBonds)
 			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices);
-		if (showLabels || !pinnedMeasurements.empty())
-			renderLabels(structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurement);
+		if (!sceneArrows.empty())
+			renderSceneArrows(sceneArrows, camera, globalSettings);
+		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
+		{
+			renderLabels(
+				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurement,
+				freeLabels);
+		}
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
@@ -1381,6 +1403,108 @@ namespace DefectStudio
 		resources.bondsDirty = false;
 	}
 
+	void OpenGlRendererBackend::renderSceneArrows(
+		const std::vector<RendererWindowState::SceneArrow> &arrows,
+		const RendererViewCamera &camera,
+		const RendererGlobalRenderSettings &globalSettings)
+	{
+		std::vector<OpenGlBondInstance> instances;
+		instances.reserve(arrows.size());
+		for (const RendererWindowState::SceneArrow &arrow : arrows)
+		{
+			const float length = glm::length(arrow.end - arrow.start);
+			if (!std::isfinite(length) || length <= 0.0001f)
+				continue;
+			constexpr float kArrowShaftRadius = 0.06f;
+			OpenGlBondInstance instance;
+			instance.model = buildBondTransform(arrow.start, arrow.end, kArrowShaftRadius);
+			instance.colorA = glm::vec4(arrow.color, 1.0f);
+			instance.colorB = glm::vec4(arrow.color, 1.0f);
+			instances.push_back(instance);
+		}
+		if (instances.empty())
+			return;
+
+		const unsigned int program = m_ShaderLibrary.Program("bonds");
+		if (program == 0)
+			return;
+
+#if defined(TRACY_ENABLE)
+		TracyGpuZone("Renderer.SceneArrows");
+#endif
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
+		const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(instances.size() * sizeof(OpenGlBondInstance));
+		GLint currentSize = 0;
+		glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
+		if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
+		{
+			const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
+			glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
+		}
+		glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, instances.data());
+
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+		glUseProgram(program);
+		const int viewProjectionLocation = m_ShaderLibrary.Uniform("bonds", "u_ViewProjection");
+		if (viewProjectionLocation >= 0)
+			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		const int keyDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyDirection");
+		const int fillDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_FillDirection");
+		const int backDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_BackDirection");
+		const int ambientLocation = m_ShaderLibrary.Uniform("bonds", "u_AmbientIntensity");
+		const int keyIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyIntensity");
+		const int fillIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_FillIntensity");
+		const int backIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_BackIntensity");
+		const int twoSidedLocation = m_ShaderLibrary.Uniform("bonds", "u_TwoSidedLighting");
+		const int cameraPositionLocation = m_ShaderLibrary.Uniform("bonds", "u_CameraPosition");
+		const int specularIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularIntensity");
+		const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
+		const int saturationLocation = m_ShaderLibrary.Uniform("bonds", "u_Saturation");
+		// Arrows are a fixed user-chosen color, not derived from AtomStyleTable like bonds - the
+		// thickness/saturation sliders (RendererGlobalRenderSettings) still apply for visual
+		// consistency with the rest of the scene, same uniforms renderBonds uploads.
+		const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
+		if (keyDirectionLocation >= 0)
+			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
+		if (fillDirectionLocation >= 0)
+			glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
+		if (backDirectionLocation >= 0)
+			glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
+		if (ambientLocation >= 0)
+			glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
+		if (keyIntensityLocation >= 0)
+			glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
+		if (fillIntensityLocation >= 0)
+			glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
+		if (backIntensityLocation >= 0)
+			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
+		if (twoSidedLocation >= 0)
+			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+		if (cameraPositionLocation >= 0)
+		{
+			const glm::vec3 cameraPosition = camera.Position();
+			glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
+		}
+		if (specularIntensityLocation >= 0)
+			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
+		if (shininessLocation >= 0)
+			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
+		if (saturationLocation >= 0)
+			glUniform1f(saturationLocation, globalSettings.colorSaturation);
+		if (bondRadiusMultiplierLocation >= 0)
+			glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
+
+		glBindVertexArray(m_CylinderMesh.vao);
+		glDrawElementsInstanced(
+			GL_TRIANGLES,
+			m_CylinderMesh.indexCount,
+			GL_UNSIGNED_INT,
+			nullptr,
+			static_cast<int>(instances.size()));
+		glBindVertexArray(0);
+	}
+
 	// Auto bond-length labels, one MSDF billboard per bond, always regenerated from live atom
 	// positions (no separate ECS label entity yet - see docs/work/project/TODO.md T09 for why that
 	// part is deferred to Etap F alongside real selection-mode support). Runs inside RenderWindow
@@ -1392,7 +1516,8 @@ namespace DefectStudio
 		OpenGlViewportResources &resources,
 		bool showAllLabels,
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
-		int selectedPinnedMeasurement)
+		int selectedPinnedMeasurement,
+		const std::vector<RendererWindowState::FreeLabel> &freeLabels)
 	{
 		if (m_LabelFont == nullptr)
 		{
@@ -1436,7 +1561,7 @@ namespace DefectStudio
 			}
 			instancesToDraw = &resources.cachedLabelInstances;
 		}
-		else if (!pinnedMeasurements.empty())
+		else if (!pinnedMeasurements.empty() || !freeLabels.empty())
 		{
 			// worldOffset (see PinnedMeasurement) is a fixed 3D world-space nudge as of Etap F, not a
 			// camera-relative one - a dragged-apart label now stays put in world space regardless of
@@ -1559,6 +1684,12 @@ namespace DefectStudio
 							pin.rotationOffsetRadians, pin.scale);
 					}
 				}
+			}
+			for (const RendererWindowState::FreeLabel &label : freeLabels)
+			{
+				AppendLabelInstances(
+					*m_LabelFont, label.worldPosition, ToU32String(label.text), pinnedInstances, kLabelColor,
+					label.rotationRadians, label.scale);
 			}
 			instancesToDraw = &pinnedInstances;
 		}

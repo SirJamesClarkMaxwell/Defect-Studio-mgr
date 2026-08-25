@@ -92,6 +92,35 @@ namespace DefectStudio
 			glm::vec3 bondPeriodicOffset = glm::vec3(0.0f);
 		};
 		std::vector<PinnedMeasurement> pinnedMeasurements;
+		// Free-floating annotation label (ObjectPropertiesPanel "Free labels" section) - arbitrary
+		// user text at an arbitrary world position, for figure-prep call-outs that aren't tied to any
+		// bond/angle the way PinnedMeasurement is. Renders through the same MSDF label pipeline
+		// (OpenGlRendererBackend::renderLabels -> AppendLabelInstances, which already takes a plain
+		// std::string - bond/angle labels are just this same function fed a formatted number).
+		// v1: reposition via typed X/Y/Z, no gizmo drag yet - see ObjectPropertiesPanel. Renderer-
+		// only like PinnedMeasurement/cursor3D, not persisted with the project yet.
+		struct FreeLabel
+		{
+			std::string text = "Label";
+			glm::vec3 worldPosition = glm::vec3(0.0f);
+			float scale = 1.0f;
+			float rotationRadians = 0.0f;
+		};
+		std::vector<FreeLabel> freeLabels;
+		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - a straight directional
+		// line from start to end, for pointing at a displacement/direction in an export shot.
+		// ponytail: shaft only, no arrowhead cone yet (would need a new procedural mesh + GPU
+		// pipeline - reused the existing bond cylinder mesh/shader instead to ship this without new,
+		// unverified geometry code). Add a small cone mesh + OpenGlRendererBackend::
+		// renderSceneArrows head pass when the plain shaft isn't legible enough. Renderer-only like
+		// FreeLabel/PinnedMeasurement, not persisted with the project yet.
+		struct SceneArrow
+		{
+			glm::vec3 start = glm::vec3(0.0f);
+			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
+			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
+		};
+		std::vector<SceneArrow> sceneArrows;
 		// Local per-window undo/redo for pinnedMeasurements (Ctrl+Alt+U / Ctrl+Alt+Shift+U) - snapshot-
 		// based (whole-vector copies, cheap given how few pins there typically are), pushed by
 		// PushPinnedMeasurementUndoSnapshot before every add/remove/flip/drag-start, one entry per

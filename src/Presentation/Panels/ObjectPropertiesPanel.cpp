@@ -283,6 +283,81 @@ namespace DefectStudio
 			}
 		}
 
+		// Independent of the atom-selection branch above (0/1/many atoms selected doesn't matter
+		// here) - free labels are scene-wide annotations, not a per-atom property. v1: reposition via
+		// typed X/Y/Z, no gizmo drag yet (see RendererWindowState::FreeLabel's comment for why).
+		if (windowState != nullptr)
+		{
+			ImGui::Separator();
+			ImGui::Text("Free labels");
+			if (ImGui::Button("+ Add label"))
+			{
+				RendererWindowState::FreeLabel label;
+				label.worldPosition = windowState->cursor3DPlaced ? windowState->cursor3DPosition : glm::vec3(0.0f);
+				windowState->freeLabels.push_back(std::move(label));
+			}
+			int labelToRemove = -1;
+			for (int labelIndex = 0; labelIndex < static_cast<int>(windowState->freeLabels.size()); ++labelIndex)
+			{
+				RendererWindowState::FreeLabel &label = windowState->freeLabels[labelIndex];
+				ImGui::PushID(labelIndex);
+
+				char textBuffer[128];
+				std::snprintf(textBuffer, sizeof(textBuffer), "%s", label.text.c_str());
+				ImGui::SetNextItemWidth(120.0f);
+				if (ImGui::InputText("##LabelText", textBuffer, sizeof(textBuffer)))
+					label.text = textBuffer;
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(200.0f);
+				ImGui::InputFloat3("##LabelPos", &label.worldPosition.x, "%.3f");
+				ImGui::SameLine();
+				if (ImGui::Button("X##RemoveLabel"))
+					labelToRemove = labelIndex;
+
+				ImGui::PopID();
+			}
+			if (labelToRemove >= 0)
+				windowState->freeLabels.erase(windowState->freeLabels.begin() + labelToRemove);
+
+			ImGui::Separator();
+			ImGui::Text("Arrows");
+			if (ImGui::Button("+ Add arrow"))
+			{
+				RendererWindowState::SceneArrow arrow;
+				if (windowState->cursor3DPlaced)
+				{
+					arrow.start = glm::vec3(0.0f);
+					arrow.end = windowState->cursor3DPosition;
+				}
+				windowState->sceneArrows.push_back(arrow);
+			}
+			int arrowToRemove = -1;
+			for (int arrowIndex = 0; arrowIndex < static_cast<int>(windowState->sceneArrows.size()); ++arrowIndex)
+			{
+				RendererWindowState::SceneArrow &arrow = windowState->sceneArrows[arrowIndex];
+				ImGui::PushID(arrowIndex);
+
+				ImGui::TextUnformatted("Start");
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(200.0f);
+				ImGui::InputFloat3("##ArrowStart", &arrow.start.x, "%.3f");
+				ImGui::SameLine();
+				ImGui::ColorEdit3("##ArrowColor", &arrow.color.x, ImGuiColorEditFlags_NoInputs);
+				ImGui::SameLine();
+				if (ImGui::Button("X##RemoveArrow"))
+					arrowToRemove = arrowIndex;
+
+				ImGui::TextUnformatted("End  ");
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(200.0f);
+				ImGui::InputFloat3("##ArrowEnd", &arrow.end.x, "%.3f");
+
+				ImGui::PopID();
+			}
+			if (arrowToRemove >= 0)
+				windowState->sceneArrows.erase(windowState->sceneArrows.begin() + arrowToRemove);
+		}
+
 		ImGui::End();
 		SetVisible(windowOpen);
 	}

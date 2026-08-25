@@ -461,6 +461,8 @@ namespace DefectStudio
 			windowState.showLabels,
 			windowState.pinnedMeasurements,
 			windowState.selectedPinnedMeasurement,
+			windowState.freeLabels,
+			windowState.sceneArrows,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
 			nullptr,
