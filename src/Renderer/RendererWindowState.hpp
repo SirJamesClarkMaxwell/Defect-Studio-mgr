@@ -283,6 +283,11 @@ namespace DefectStudio
 		// FBO passes - the live viewport and other windows are untouched.
 		bool useCustomBackground = false;
 		glm::vec4 backgroundColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+		// 1 = native WAVECAR grid (matches the interactive view). 2/3 = trilinear-upsample the grid
+		// before meshing (see UpsampleOrbitalGrid) for a smoother-looking lobe in the export/batch-
+		// export image - export-only, since upsampling costs real CPU time per band and the
+		// interactive view needs to stay responsive while scrubbing.
+		int orbitalSupersample = 1;
 		// Owns its own camera (copied from the target window's live camera when the dialog opens,
 		// then mutated in place each frame by the preset/pan controls) - kept separate from the
 		// canonical RendererWindowState list, never touches the live window's own camera/state.

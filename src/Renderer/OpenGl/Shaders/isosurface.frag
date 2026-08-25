@@ -49,13 +49,13 @@ void main()
 	float dKey = ComputeDiffuse(N, u_KeyDirection) * u_KeyIntensity;
 	float dFill = ComputeDiffuse(N, u_FillDirection) * u_FillIntensity;
 	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;
-	float intensity = u_AmbientIntensity + dKey + dFill + dBack;
+	float intensity = min(u_AmbientIntensity + dKey + dFill + dBack, 1.0);
 	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity;
 	vec3 baseColor = vSign > 0.0 ? u_PositiveLobeColor : u_NegativeLobeColor;
 	// Fresnel rim - grazing-angle glow tinted by the lobe's own color, the "misty" edge look common
 	// in electron-density isosurface renders (VESTA/VMD-style), not just a flat-shaded blob.
 	float facing = u_TwoSidedLighting == 1 ? abs(dot(N, viewDir)) : max(dot(N, viewDir), 0.0);
 	float rim = pow(1.0 - facing, u_RimPower) * u_RimIntensity;
-	vec3 finalColor = baseColor * intensity + vec3(specular) + baseColor * rim;
+	vec3 finalColor = clamp(baseColor * intensity + vec3(specular) + baseColor * rim, 0.0, 1.0);
 	oColor = vec4(finalColor, clamp(u_LobeAlpha + rim, 0.0, 1.0));
 }

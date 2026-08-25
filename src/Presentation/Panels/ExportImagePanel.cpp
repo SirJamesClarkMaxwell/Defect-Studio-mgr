@@ -64,6 +64,25 @@ namespace DefectStudio
 		if ((wantUp && gridUp == nullptr) || (wantDown && gridDown == nullptr))
 			return false; // still pending (or just failed - caller checks GridFetchError first)
 
+		// Export-only mesh smoothing (see the "Orbital mesh detail" combo) - upsample a local copy
+		// rather than touching the session's cached grid, which the interactive view still reads at
+		// native resolution.
+		OrbitalGridData upsampledUp;
+		OrbitalGridData upsampledDown;
+		if (dialog.orbitalSupersample > 1)
+		{
+			if (gridUp != nullptr)
+			{
+				upsampledUp = UpsampleOrbitalGrid(*gridUp, dialog.orbitalSupersample);
+				gridUp = &upsampledUp;
+			}
+			if (gridDown != nullptr)
+			{
+				upsampledDown = UpsampleOrbitalGrid(*gridDown, dialog.orbitalSupersample);
+				gridDown = &upsampledDown;
+			}
+		}
+
 		dialog.previewState.viewportSize = glm::vec2(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
 		if (dialog.previewState.camera != nullptr)
 			dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
@@ -160,6 +179,19 @@ namespace DefectStudio
 
 		if (!upEnabled && !downEnabled)
 			return;
+
+		static const char *supersampleLabels[] = {"1x (native)", "2x", "3x"};
+		int supersampleIndex = std::clamp(dialog.orbitalSupersample, 1, 3) - 1;
+		ImGui::SetNextItemWidth(140.0f);
+		if (ImGui::Combo("Orbital mesh detail##export", &supersampleIndex, supersampleLabels, IM_ARRAYSIZE(supersampleLabels)))
+			dialog.orbitalSupersample = supersampleIndex + 1;
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(
+				"Smooths visible facets on the isosurface by trilinear-upsampling the WAVECAR grid "
+				"before meshing. Export/batch export only - the live preview always uses the native "
+				"grid so it stays responsive. 3x can take a few seconds per band.");
 
 		constexpr ImGuiColorEditFlags kSwatchFlags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
 		ImGui::TextUnformatted("Spin up colors");

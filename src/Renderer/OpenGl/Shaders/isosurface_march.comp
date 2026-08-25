@@ -5,6 +5,12 @@ layout(local_size_x = 64) in;
 // cube decomposition), kept structurally identical so the two are easy to compare/keep in sync.
 // One invocation per cube cell; dispatched once per lobe sign (see u_LobeSign) with the same
 // output buffer/counter across both dispatches (call site does the memory barrier between them).
+//
+// Normals are the interpolated density-gradient at each vertex (central differences on the grid,
+// transformed into world space via the cell Jacobian), not the flat per-triangle face normal -
+// this is what makes a coarse WAVECAR grid still look like a smooth lobe instead of visible facets;
+// see IsosurfaceMesher.cpp's flat cross-product normal for the (deliberately simpler, non-rendered
+// reference) alternative.
 
 layout(std430, binding = 0) readonly buffer GridBuffer
 {
@@ -52,31 +58,59 @@ vec3 CellPosition(ivec3 p)
 	return u_Cell[0] * fractional.x + u_Cell[1] * fractional.y + u_Cell[2] * fractional.z;
 }
 
-vec3 EdgeCrossing(float iso, vec3 posA, float valA, vec3 posB, float valB)
+float SampleGrid(ivec3 p)
+{
+	p = clamp(p, ivec3(0), u_Dimensions - ivec3(1));
+	return uGrid.values[GridIndex(p)];
+}
+
+// Central-difference gradient in grid-index space, transformed to world space by `gradientToWorld`
+// (see main() - the inverse-transpose of the cell Jacobian, correct for non-orthogonal cells too).
+vec3 GradientAt(ivec3 p, mat3 gradientToWorld)
+{
+	vec3 gridGradient = vec3(
+		SampleGrid(p + ivec3(1, 0, 0)) - SampleGrid(p - ivec3(1, 0, 0)),
+		SampleGrid(p + ivec3(0, 1, 0)) - SampleGrid(p - ivec3(0, 1, 0)),
+		SampleGrid(p + ivec3(0, 0, 1)) - SampleGrid(p - ivec3(0, 0, 1)));
+	return gradientToWorld * gridGradient;
+}
+
+struct EdgePoint
+{
+	vec3 position;
+	vec3 normal;
+};
+
+EdgePoint ComputeEdgePoint(
+	float iso, vec3 posA, float valA, vec3 gradA, vec3 posB, float valB, vec3 gradB)
 {
 	float denominator = valB - valA;
 	float t = abs(denominator) > 1e-12 ? (iso - valA) / denominator : 0.5;
-	return mix(posA, posB, clamp(t, 0.0, 1.0));
+	t = clamp(t, 0.0, 1.0);
+	EdgePoint result;
+	result.position = mix(posA, posB, t);
+	// Density increases toward the lobe's interior, so -gradient points outward - same convention
+	// the flat cross-product normal ends up with via the winding flips below.
+	vec3 mixedGradient = mix(gradA, gradB, t);
+	float gradientLength = length(mixedGradient);
+	result.normal = gradientLength > 1e-12 ? -mixedGradient / gradientLength : vec3(0.0, 1.0, 0.0);
+	return result;
 }
 
-void EmitTriangle(vec3 p0, vec3 p1, vec3 p2, float sign_)
+void EmitTriangle(EdgePoint p0, EdgePoint p1, EdgePoint p2, float sign_)
 {
-	vec3 crossProduct = cross(p1 - p0, p2 - p0);
-	float crossLength = length(crossProduct);
-	vec3 normal = crossLength > 1e-12 ? crossProduct / crossLength : vec3(0.0, 1.0, 0.0);
-
 	uint base = atomicAdd(uCounter.count, 3u);
 	if (base + 3u > u_MaxVertices)
 		return;
 
-	uOutput.vertices[base + 0u] = OutVertex(vec4(p0, 1.0), vec4(normal, sign_));
-	uOutput.vertices[base + 1u] = OutVertex(vec4(p1, 1.0), vec4(normal, sign_));
-	uOutput.vertices[base + 2u] = OutVertex(vec4(p2, 1.0), vec4(normal, sign_));
+	uOutput.vertices[base + 0u] = OutVertex(vec4(p0.position, 1.0), vec4(p0.normal, sign_));
+	uOutput.vertices[base + 1u] = OutVertex(vec4(p1.position, 1.0), vec4(p1.normal, sign_));
+	uOutput.vertices[base + 2u] = OutVertex(vec4(p2.position, 1.0), vec4(p2.normal, sign_));
 }
 
 // Mirrors PolygoniseTetrahedron in IsosurfaceMesher.cpp exactly (same case split, same edge
 // choices, same winding rules) - see that file for the reasoning behind each branch.
-void Polygonise(vec3 pos[4], float val[4], float iso, float sign_)
+void Polygonise(vec3 pos[4], float val[4], vec3 grad[4], float iso, float sign_)
 {
 	int inMask = 0;
 	for (int v = 0; v < 4; ++v)
@@ -102,9 +136,12 @@ void Polygonise(vec3 pos[4], float val[4], float iso, float sign_)
 			if (v != singleton)
 				others[cursor++] = v;
 
-		vec3 p0 = EdgeCrossing(iso, pos[singleton], val[singleton], pos[others[0]], val[others[0]]);
-		vec3 p1 = EdgeCrossing(iso, pos[singleton], val[singleton], pos[others[1]], val[others[1]]);
-		vec3 p2 = EdgeCrossing(iso, pos[singleton], val[singleton], pos[others[2]], val[others[2]]);
+		EdgePoint p0 = ComputeEdgePoint(
+			iso, pos[singleton], val[singleton], grad[singleton], pos[others[0]], val[others[0]], grad[others[0]]);
+		EdgePoint p1 = ComputeEdgePoint(
+			iso, pos[singleton], val[singleton], grad[singleton], pos[others[1]], val[others[1]], grad[others[1]]);
+		EdgePoint p2 = ComputeEdgePoint(
+			iso, pos[singleton], val[singleton], grad[singleton], pos[others[2]], val[others[2]], grad[others[2]]);
 
 		if (singletonIsIn)
 			EmitTriangle(p0, p1, p2, sign_);
@@ -130,10 +167,10 @@ void Polygonise(vec3 pos[4], float val[4], float iso, float sign_)
 		int c = outsideVertices[0];
 		int d = outsideVertices[1];
 
-		vec3 pac = EdgeCrossing(iso, pos[a], val[a], pos[c], val[c]);
-		vec3 pad = EdgeCrossing(iso, pos[a], val[a], pos[d], val[d]);
-		vec3 pbd = EdgeCrossing(iso, pos[b], val[b], pos[d], val[d]);
-		vec3 pbc = EdgeCrossing(iso, pos[b], val[b], pos[c], val[c]);
+		EdgePoint pac = ComputeEdgePoint(iso, pos[a], val[a], grad[a], pos[c], val[c], grad[c]);
+		EdgePoint pad = ComputeEdgePoint(iso, pos[a], val[a], grad[a], pos[d], val[d], grad[d]);
+		EdgePoint pbd = ComputeEdgePoint(iso, pos[b], val[b], grad[b], pos[d], val[d], grad[d]);
+		EdgePoint pbc = ComputeEdgePoint(iso, pos[b], val[b], grad[b], pos[c], val[c], grad[c]);
 
 		EmitTriangle(pac, pad, pbd, sign_);
 		EmitTriangle(pac, pbd, pbc, sign_);
@@ -156,25 +193,38 @@ void main()
 	int j = remainder / cellsZ;
 	int k = remainder % cellsZ;
 
+	// d(position)/d(gridIndex) per axis - constant over the whole grid, so the gradient transform
+	// below only needs computing once per invocation, not once per corner.
+	mat3 jacobian = mat3(
+		u_Cell[0] / float(u_Dimensions.x), u_Cell[1] / float(u_Dimensions.y), u_Cell[2] / float(u_Dimensions.z));
+	mat3 gradientToWorld = transpose(inverse(jacobian));
+
 	vec3 cornerPos[8];
 	float cornerRaw[8];
+	vec3 cornerGrad[8];
 	for (int c = 0; c < 8; ++c)
 	{
 		ivec3 offset = kCornerOffsets[c] + ivec3(i, j, k);
 		cornerPos[c] = CellPosition(offset);
 		cornerRaw[c] = uGrid.values[GridIndex(offset)];
+		cornerGrad[c] = GradientAt(offset, gradientToWorld);
 	}
 
 	for (int t = 0; t < 6; ++t)
 	{
 		vec3 pos[4];
 		float val[4];
+		vec3 grad[4];
 		for (int v = 0; v < 4; ++v)
 		{
 			int idx = kTetrahedra[t][v];
 			pos[v] = cornerPos[idx];
 			val[v] = u_LobeSign * cornerRaw[idx];
+			// Gradient of (sign * raw) is sign * gradient(raw) - the sign flip for the negative
+			// lobe also flips which way is "outward", which is correct: it mirrors the winding
+			// flip PolygoniseTetrahedron already does for that lobe.
+			grad[v] = u_LobeSign * cornerGrad[idx];
 		}
-		Polygonise(pos, val, u_IsoValue, u_LobeSign);
+		Polygonise(pos, val, grad, u_IsoValue, u_LobeSign);
 	}
 }

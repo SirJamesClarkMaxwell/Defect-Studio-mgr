@@ -47,7 +47,7 @@ void main()
 	float dKey = ComputeDiffuse(N, u_KeyDirection) * u_KeyIntensity;
 	float dFill = ComputeDiffuse(N, u_FillDirection) * u_FillIntensity;
 	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;
-	float intensity = u_AmbientIntensity + dKey + dFill + dBack;
+	float intensity = min(u_AmbientIntensity + dKey + dFill + dBack, 1.0);
 	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity;
-	oColor = vec4(baseColor * intensity + vec3(specular), 1.0);
+	oColor = vec4(clamp(baseColor * intensity + vec3(specular), 0.0, 1.0), 1.0);
 }

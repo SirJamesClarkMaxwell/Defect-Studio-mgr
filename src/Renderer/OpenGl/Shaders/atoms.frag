@@ -44,7 +44,12 @@ void main()
 	float dKey = ComputeDiffuse(N, u_KeyDirection) * u_KeyIntensity;
 	float dFill = ComputeDiffuse(N, u_FillDirection) * u_FillIntensity;
 	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;
-	float intensity = u_AmbientIntensity + dKey + dFill + dBack;
+	// Clamped to 1 before the color multiply: three full-strength diffuse terms can sum past 1 for
+	// some normals, which multiplies every channel up together and washes the color toward white
+	// (most visible on light backgrounds, where there's no dark contrast to hide it) - clamp keeps
+	// the base color true, so only the specular term (added after, its own additive highlight) can
+	// still push a pixel toward white, and only right at the highlight itself.
+	float intensity = min(u_AmbientIntensity + dKey + dFill + dBack, 1.0);
 	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity;
-	oColor = vec4(vColor.rgb * intensity + vec3(specular), vColor.a);
+	oColor = vec4(clamp(vColor.rgb * intensity + vec3(specular), 0.0, 1.0), vColor.a);
 }

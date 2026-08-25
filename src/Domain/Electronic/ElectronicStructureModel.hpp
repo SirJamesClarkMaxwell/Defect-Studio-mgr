@@ -75,6 +75,14 @@ namespace DefectStudio
 		const std::vector<OrbitalRecord> &orbitals,
 		const LocalizationThresholdSettings &settings);
 
+	// Trilinear-interpolates `grid` up to ((dim - 1) * factor + 1) samples per axis (exactly
+	// preserves the original grid points; cell/energy/occupation are copied through unchanged) -
+	// a smoother isosurface mesh from the same WAVECAR data, without re-reading anything from
+	// Python. factor <= 1 returns `grid` unchanged. Export-only (see ExportImagePanel) - the
+	// interactive view stays at native WAVECAR resolution so it doesn't fall off the frame budget
+	// while scrubbing iso-value/orbitals live.
+	[[nodiscard]] OrbitalGridData UpsampleOrbitalGrid(const OrbitalGridData &grid, int factor);
+
 	// First-pass heuristic (NOT yet validated against real defect calculations): sums occupation
 	// per spin channel across the given (already band-windowed) records. If only one channel is
 	// populated at all (non-spin-polarized calculation, or puntukas mirroring one channel into

@@ -27,7 +27,7 @@ namespace DefectStudio
 		// third highlight would just look noisy on small spheres). Applies to atoms, bonds, and
 		// isosurfaces.
 		float specularIntensity = 0.35f;
-		float shininess = 32.0f;
+		float shininess = 72.0f;
 		// Fresnel rim glow, isosurface only - brightens a lobe's silhouette edge at grazing view
 		// angles, the common "misty" look for electron-density isosurfaces (rim tinted by the lobe's
 		// own color, not a fixed color).
@@ -38,7 +38,7 @@ namespace DefectStudio
 	struct RendererViewportSettings
 	{
 		float axisButtonSize = 20.0f;
-		float iconButtonSize = 18.0f;
+		float iconButtonSize = 25.0f;
 	};
 
 	struct RendererToolbarWheelSettings
