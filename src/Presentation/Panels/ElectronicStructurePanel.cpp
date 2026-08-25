@@ -402,7 +402,8 @@ namespace DefectStudio
 				? &*m_Session->BulkGap()
 				: (state.data.has_value() && state.data->gap.has_value() ? &*state.data->gap : nullptr);
 			const float vbm = (state.relativeToVbm && referenceGap != nullptr) ? referenceGap->homo : 0.0f;
-			m_Session->ExportOccupationDiagramImage(state, vbm, m_ImageExportPath);
+			m_Session->ExportOccupationDiagramImage(
+				state, vbm, referenceGap, m_ImageExportLightBackground, m_ImageExportPath);
 		}
 		ImGui::SameLine();
 		if (ImGui::SmallButton("Browse..."))
@@ -414,6 +415,8 @@ namespace DefectStudio
 			if (picked && picked->has_value())
 				m_ImageExportPath = **picked;
 		}
+		ImGui::SameLine();
+		ImGui::Checkbox("White background##ImageExport", &m_ImageExportLightBackground);
 		if (!m_ImageExportPath.Empty())
 		{
 			ImGui::SameLine();

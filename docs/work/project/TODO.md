@@ -1083,13 +1083,14 @@ kolejności, jeśli inna osoba/sesja ciągnie je równolegle.
       bandów wokół ostatnio klikniętego, low-priority w `JobSystem` (nie blokować głównego joba)
 
 ### T08.6.6 — Matplotlib static export
-- [ ] Nowy skrypt (`scripts/python/examples/electronic_structure_plot.py` albo we wspólnym module)
-      — bierze band window / VBM-CBM shading / split-spin-channel / localization threshold jak
-      `OccupationDiagramPanel`, żeby nie duplikować logiki filtrowania po stronie C++ **i** Python
-      osobno: albo czyta CSV/TSV z eksportu T08.6.3 (kolejność: **CSV/TSV export najpierw**, ten
-      skrypt na nim, nie na surowym JSON-line z `VaspOutputBridge`), albo bierze te same argumenty
-      CLI co `VaspOutputBridge`'owy Python-side call i filtruje identycznie
-- [ ] Output PNG/SVG, kolory/strzałki 1:1 z `OccupationDiagramPanel` (nie osobna paleta)
+- [x] `electronic_structure_plot.py` bierze band window (gap ± 10%/floor 0.05 eV, jak
+      `OccupationDiagramPanel::renderPlot`) i localization-threshold filtr (`ExportOccupationDiagramImage`
+      woła `FilterByLocalizationThreshold` zamiast surowego `state.data->orbitals` — poprzednio
+      eksport dostawał więcej pasm niż to co widać na ekranie); VBM/CBM gradient shading dodany,
+      kolory 1:1 z panelu (`drawReferenceLine`'s `IM_COL32(120,200,255,...)` / `(255,160,120,...)`)
+- [x] Output PNG, kolory/strzałki 1:1 z `OccupationDiagramPanel`
+- [ ] e_x/e_y-style fan-out osobnych kolumn dla bliskich-energetycznie poziomów w merged mode
+      (dziś: ladder tylko na etykiecie tekstowej jak w panelu, tick zostaje w miejscu) — odłożone
 
 ---
 

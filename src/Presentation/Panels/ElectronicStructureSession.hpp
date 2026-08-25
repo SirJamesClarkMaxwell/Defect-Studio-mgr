@@ -173,7 +173,9 @@ namespace DefectStudio
 		// this is a single result, not a session. outputPath empty = default
 		// (<calculationDirectory>/occupation_diagram.png, ElectronicStructurePanel's "Browse..." lets
 		// the user pick a different one). Message reported the same way ExportOrbitalsCsv does.
-		void ExportOccupationDiagramImage(WindowState &state, float vbm, const Path &outputPath = {});
+		void ExportOccupationDiagramImage(
+			WindowState &state, float vbm, const BandGapData *referenceGap, bool lightBackground,
+			const Path &outputPath = {});
 
 		// Per-project custom irrep label overrides (irrep -> user's own text), pushed by EditorLayer
 		// from the active project's manifest.yaml on project open/create (same trigger points as

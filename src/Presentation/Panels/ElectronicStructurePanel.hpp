@@ -42,5 +42,6 @@ namespace DefectStudio
 		// Empty = use ExportOccupationDiagramImage's own default
 		// (<calculationDirectory>/occupation_diagram.png) - set via the "Browse..." button.
 		Path m_ImageExportPath;
+		bool m_ImageExportLightBackground = false;
 	};
 } // namespace DefectStudio

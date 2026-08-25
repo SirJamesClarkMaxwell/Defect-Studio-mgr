@@ -629,7 +629,9 @@ namespace DefectStudio
 		return nullptr;
 	}
 
-	void ElectronicStructureSession::ExportOccupationDiagramImage(WindowState &state, float vbm, const Path &outputPath)
+	void ElectronicStructureSession::ExportOccupationDiagramImage(
+		WindowState &state, float vbm, const BandGapData *referenceGap, bool lightBackground,
+		const Path &outputPath)
 	{
 		if (!state.data.has_value() || !state.data->orbitals.has_value())
 		{
@@ -642,8 +644,14 @@ namespace DefectStudio
 		options.scriptPath = script.scriptPath;
 		options.workingDirectory = script.workingDirectory;
 
+		// Same localization-threshold filter OccupationDiagramPanel plots on screen - exporting the
+		// unfiltered list here previously dumped every fetched band (including far-away, non-defect
+		// states) into the image regardless of what the user was actually looking at.
+		const std::vector<OrbitalRecord> filtered = FilterByLocalizationThreshold(
+			*state.data->orbitals, LocalizationThresholdSettings{state.localizationThreshold});
+
 		nlohmann::json bands = nlohmann::json::array();
-		for (const OrbitalRecord &record : *state.data->orbitals)
+		for (const OrbitalRecord &record : filtered)
 		{
 			bands.push_back({
 				{"band", record.band},
@@ -657,6 +665,12 @@ namespace DefectStudio
 		payload["bands"] = bands;
 		payload["split_spin_channels"] = state.splitSpinChannels;
 		payload["y_label"] = state.relativeToVbm ? "Energy - VBM (eV)" : "Energy (eV)";
+		// homo/lumo shifted by the same vbm as the levels above, so the CBM/VBM shading lines up with
+		// them - null when no gap is known (script just skips drawing the shading in that case).
+		payload["gap"] = referenceGap != nullptr
+			? nlohmann::json({{"homo", referenceGap->homo - vbm}, {"lumo", referenceGap->lumo - vbm}})
+			: nlohmann::json(nullptr);
+		payload["light_background"] = lightBackground;
 
 		const Path resolvedOutputPath =
 			outputPath.Empty() ? state.calculationDirectory / "occupation_diagram.png" : outputPath;
