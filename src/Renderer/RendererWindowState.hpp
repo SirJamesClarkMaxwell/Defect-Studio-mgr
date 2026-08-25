@@ -277,6 +277,12 @@ namespace DefectStudio
 		float cropRight = 0.0f;
 		float cropTop = 0.0f;
 		float cropBottom = 0.0f;
+		// Off = export uses the live viewport's own background (RendererGlobalRenderSettings::
+		// backgroundColor), same as every other render. On = ExportImagePanel builds its own copy of
+		// the global settings with backgroundColor replaced by this one, just for the export/preview
+		// FBO passes - the live viewport and other windows are untouched.
+		bool useCustomBackground = false;
+		glm::vec4 backgroundColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 		// Owns its own camera (copied from the target window's live camera when the dialog opens,
 		// then mutated in place each frame by the preset/pan controls) - kept separate from the
 		// canonical RendererWindowState list, never touches the live window's own camera/state.

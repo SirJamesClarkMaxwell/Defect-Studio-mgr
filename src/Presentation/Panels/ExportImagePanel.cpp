@@ -36,6 +36,15 @@ namespace DefectStudio
 		return CreateRef<ExportImagePanel>(*this);
 	}
 
+	RendererGlobalRenderSettings ExportImagePanel::resolveExportSettings() const
+	{
+		RendererGlobalRenderSettings settings = m_Layer.GetGlobalSettings();
+		const RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
+		if (dialog.useCustomBackground)
+			settings.backgroundColor = dialog.backgroundColor;
+		return settings;
+	}
+
 	bool ExportImagePanel::renderOrbitalBandForCapture(
 		const std::string &windowKey,
 		int band,
@@ -60,7 +69,7 @@ namespace DefectStudio
 			dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
 
 		// Pass 1: establish/refresh windowKey's viewport (see this method's header comment).
-		(void)m_Layer.RenderToFbo(windowKey, targetWindow.structure, dialog.previewState, m_Layer.GetGlobalSettings());
+		(void)m_Layer.RenderToFbo(windowKey, targetWindow.structure, dialog.previewState, resolveExportSettings());
 
 		if (wantUp)
 		{
@@ -78,7 +87,7 @@ namespace DefectStudio
 		}
 
 		// Pass 2: now the freshly-regenerated mesh actually gets drawn.
-		(void)m_Layer.RenderToFbo(windowKey, targetWindow.structure, dialog.previewState, m_Layer.GetGlobalSettings());
+		(void)m_Layer.RenderToFbo(windowKey, targetWindow.structure, dialog.previewState, resolveExportSettings());
 		return true;
 	}
 
@@ -404,6 +413,14 @@ namespace DefectStudio
 		ImGui::SameLine();
 		ImGui::Checkbox("Labels##export", &dialog.previewState.showLabels);
 
+		ImGui::Checkbox("Custom background##export", &dialog.useCustomBackground);
+		if (dialog.useCustomBackground)
+		{
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(160.0f);
+			ImGui::ColorEdit3("##exportBackground", &dialog.backgroundColor.x);
+		}
+
 		ImGui::Separator();
 		float zoomDistance = dialog.previewState.camera->Distance();
 		ImGui::SetNextItemWidth(220.0f);
@@ -454,7 +471,7 @@ namespace DefectStudio
 					dialog.previewState.viewportSize = glm::vec2(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
 					dialog.previewState.camera->SetViewport(static_cast<float>(exportWidth), static_cast<float>(exportHeight));
 					(void)m_Layer.RenderToFbo(
-						"__export_full__", targetWindow->structure, dialog.previewState, m_Layer.GetGlobalSettings());
+						"__export_full__", targetWindow->structure, dialog.previewState, resolveExportSettings());
 				}
 
 				if (!ready)
@@ -523,7 +540,7 @@ namespace DefectStudio
 		try
 		{
 			previewTexture = m_Layer.RenderToFbo(
-				"__export_preview__", targetWindow->structure, dialog.previewState, m_Layer.GetGlobalSettings());
+				"__export_preview__", targetWindow->structure, dialog.previewState, resolveExportSettings());
 		}
 		catch (const std::exception &exception)
 		{

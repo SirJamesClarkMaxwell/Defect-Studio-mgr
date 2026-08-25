@@ -57,6 +57,11 @@ namespace DefectStudio
 			RendererWindowState &targetWindow,
 			int exportWidth,
 			int exportHeight);
+		// m_Layer.GetGlobalSettings() as-is, unless dialog.useCustomBackground is set, in which case
+		// backgroundColor is swapped for dialog.backgroundColor - a local copy, so this never mutates
+		// the live viewport's own settings. Every RenderToFbo call this panel makes should go through
+		// this instead of GetGlobalSettings() directly.
+		[[nodiscard]] RendererGlobalRenderSettings resolveExportSettings() const;
 
 		RendererLayer &m_Layer;
 		Ref<ElectronicStructureSession> m_Session;

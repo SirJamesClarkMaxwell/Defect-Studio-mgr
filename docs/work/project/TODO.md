@@ -775,9 +775,12 @@ brak `entt::registry`/`entt::entity` w całym `src/`; ECS zaplanowany dopiero w 
 - [ ] **Drobne luki z przeglądu `old-ds-functionality.md` (2026-08-22):**
   - [ ] Axis overlay: tryb **relatywny** (osie liczone względem zaznaczonych atomów, nie tylko
         globalny) — §2.2, dziś gizmo osi w rogu viewportu jest tylko globalne.
-      - [ ] Render Image: tryb override tła (białe tło) i nadpisania kolorów atomów przy eksporcie —
-        §12, `ExportImagePanel` dziś ma tylko toggle widoczności warstw (atoms/bonds/cell/grid/
-        labels), nie color override.
+      - [x] Render Image: override tła (dowolny kolor, nie tylko białe) przy eksporcie — §12,
+        `RenderExportDialogState::useCustomBackground`/`backgroundColor`, `ExportImagePanel::
+        resolveExportSettings()` podmienia `backgroundColor` tylko dla export/preview FBO (żywy
+        viewport nietknięty).
+      - [ ] Nadpisanie kolorów atomów przy eksporcie — §12, wciąż tylko toggle widoczności warstw
+        (atoms/bonds/cell/grid/labels), nie per-atom color override.
       - [ ] Podstawowa kontrola oświetlenia (pozycja/intensywność/kolor ambient-diffuse-specular) —
         §11.3. Prawdopodobnie prerekwizyt dla "PBR lighting" z T09, nie ten sam zakres: to jest zwykłe
         Phong/Blinn światło konfigurowalne z UI, PBR to osobny, większy krok jakości.
