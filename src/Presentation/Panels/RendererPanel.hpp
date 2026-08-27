@@ -60,6 +60,19 @@ namespace DefectStudio
 			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
 		[[nodiscard]] std::vector<std::size_t> hitTestCircleBonds(
 			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
+		// Label counterparts of the above - pinned bond/angle measurements and free labels
+		// (selectedPinnedMeasurements/selectedFreeLabels) are multi-select just like atoms/bonds.
+		[[nodiscard]] std::vector<std::size_t> hitTestRectPinnedMeasurements(
+			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
+		[[nodiscard]] std::vector<std::size_t> hitTestCirclePinnedMeasurements(
+			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
+		[[nodiscard]] std::vector<std::size_t> hitTestRectFreeLabels(
+			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
+		[[nodiscard]] std::vector<std::size_t> hitTestCircleFreeLabels(
+			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
+		void applyLabelRegionSelection(
+			RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
+			const std::vector<std::size_t> &freeHits, RendererEvents::Viewport::RegionSelectMode mode);
 		[[nodiscard]] static RendererEvents::Viewport::RegionSelectMode resolveRegionSelectMode(bool additive, bool subtractive);
 		void publishRegionSelection(
 			RendererWindowState &windowState,
@@ -70,11 +83,19 @@ namespace DefectStudio
 		// Modal opened by the vertical toolbar's "Add" button (drawViewportVerticalToolbar) - state
 		// lives here rather than per-window since only one instance can be open at a time.
 		void drawAddAtomPopup();
+		// Blender-style Shift+A/"Add" toolbar button menu - see m_AddMenuRequested's comment.
+		void drawAddMenu();
 		[[nodiscard]] bool renderTransformGizmo(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool renderLabelTransformGizmo(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool handlePinnedMeasurementInteraction(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		// F flip / Delete / Ctrl+Shift+</> scale-step for the selected pin - keyboard-only, no mouse
+		// hit-test, so unlike handlePinnedMeasurementInteraction's click/drag half it must run every
+		// frame regardless of whether a gizmo already captured this frame's mouse.
+		void handlePinnedMeasurementKeyboardShortcuts(RendererWindowState &windowState, bool hovered);
+		[[nodiscard]] bool handleFreeLabelInteraction(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool handleCursor3DPlacement(
 			RendererWindowState &windowState, float relX, float relY);
@@ -107,5 +128,16 @@ namespace DefectStudio
 		std::string m_AddAtomPopupWindowId;
 		bool m_AddAtomPopupFractional = false;
 		glm::vec3 m_AddAtomPopupPosition = glm::vec3(0.0f);
+
+		// Blender-style Shift+A "what to add" menu (drawAddMenu) - opens at the mouse position with a
+		// short list (Atom.../Label), picking one either opens that type's own dialog (Atom) or adds
+		// it immediately (Label, same as the right-click "Add" submenu in renderViewportContextMenu).
+		// One-shot request like m_AddAtomPopupRequested's toggle event, not a persistent open flag -
+		// ImGui::OpenPopup/BeginPopup own the popup's actual open/closed state once shown.
+		bool m_AddMenuRequested = false;
+		std::string m_AddMenuWindowId;
+		glm::vec3 m_AddMenuPosition = glm::vec3(0.0f);
+		bool m_AddMenuPositionFractional = false;
+		ImVec2 m_AddMenuScreenPos = ImVec2(0.0f, 0.0f);
 	};
 } // namespace DefectStudio

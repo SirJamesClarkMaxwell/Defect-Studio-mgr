@@ -110,6 +110,14 @@ def mode_all() -> None:
     save(image, "tool-mode-all.png")
 
 
+def mode_labels_only() -> None:
+    # Just the tag, larger and centered - no atoms/bonds, since this mode picks labels exclusively.
+    image = new_canvas()
+    draw = ImageDraw.Draw(image)
+    draw_tag(draw, (256, 256), 320)
+    save(image, "tool-mode-labels.png")
+
+
 def main() -> None:
     ICONS_DIR.mkdir(parents=True, exist_ok=True)
     for letter in ("a", "b", "c"):
@@ -119,6 +127,7 @@ def main() -> None:
     mode_atoms_bonds()
     mode_bonds_labels()
     mode_all()
+    mode_labels_only()
 
 
 if __name__ == "__main__":

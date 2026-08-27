@@ -621,6 +621,13 @@ namespace DefectStudio
 			std::bind_front(MakeSelectionModeSetCommand, eventBus, true, true, true));
 		RegisterRendererCommand(
 			registry,
+			"renderer.selection.mode_labels_only",
+			"Renderer: Selection mode - Labels only",
+			"Clicking in the active renderer viewport can only select pinned bond/angle labels, not "
+			"atoms or bonds - for multi-selecting labels to edit their style together.",
+			std::bind_front(MakeSelectionModeSetCommand, eventBus, false, false, true));
+		RegisterRendererCommand(
+			registry,
 			"renderer.atoms.open_add_popup",
 			"Renderer: Add atom...",
 			"Open the Add Atom popup for the active renderer viewport.",

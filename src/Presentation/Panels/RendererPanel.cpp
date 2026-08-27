@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <vector>
@@ -76,6 +77,41 @@ namespace DefectStudio
 				windowState.fallbackNumericInput.pop_back();
 		}
 
+		// Resolves the same anchor point renderLabels() draws a pin at (bond midpoint / angle vertex),
+		// worldOffset already applied - ignores the bond's periodic-image shift for a 2-atom pin (only
+		// matters for bonds crossing a periodic cell boundary), fine for a hit-test. Shared by the
+		// region-select (box/circle) hit-testers below; handlePinnedMeasurementInteraction keeps its
+		// own equivalent local lambda since it predates this and touching working click/drag code for
+		// a pure de-dup isn't worth the risk.
+		[[nodiscard]] bool ResolvePinnedMeasurementAnchor(
+			const RendererStructureData &structure, const RendererWindowState::PinnedMeasurement &pin,
+			glm::vec3 &outAnchor)
+		{
+			const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(), [&](const std::size_t index) {
+				return index < structure.atoms.size();
+			});
+			if (!inRange)
+				return false;
+			if (pin.atomIndices.size() == 2)
+			{
+				outAnchor =
+					(structure.atoms[pin.atomIndices[0]].cartesianPosition +
+						structure.atoms[pin.atomIndices[1]].cartesianPosition) *
+					0.5f;
+			}
+			else if (pin.atomIndices.size() == 3)
+			{
+				const std::size_t vertexIndex = ResolveAngleVertexIndex(structure, pin.atomIndices);
+				outAnchor = structure.atoms[vertexIndex].cartesianPosition;
+			}
+			else
+			{
+				return false;
+			}
+			outAnchor += pin.worldOffset;
+			return true;
+		}
+
 		// Mean of a frozen position snapshot - used by the numeric-override rotate/scale paths below
 		// to get a pivot that stays fixed for the whole typed-number entry instead of the live
 		// per-frame selection centroid (see call sites: mixing a frozen snapshot with a pivot that is
@@ -136,6 +172,7 @@ namespace DefectStudio
 			m_Layer.RemoveWindow(windowId);
 
 		drawPeriodicTableWindow();
+		drawAddMenu();
 		drawAddAtomPopup();
 		m_Layer.CollectProfilingData();
 	}
@@ -253,9 +290,11 @@ namespace DefectStudio
 		// with an empty selection). Doesn't try to cancel/revert a drag already in progress - only
 		// acts when nothing is actively being dragged, so it can't leave a transform half-applied.
 		if (hovered && !windowState.fallbackGizmoDragging && !windowState.pinnedMeasurementDragging &&
-			!windowState.selectionDragActive && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+			!windowState.freeLabelDragging && !windowState.selectionDragActive &&
+			ImGui::IsKeyPressed(ImGuiKey_Escape, false))
 		{
-			windowState.selectedPinnedMeasurement = -1;
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedFreeLabels.clear();
 			Ref<EventBus> eventBus = m_Layer.GetEventBus();
 			if (eventBus != nullptr)
 			{
@@ -280,31 +319,46 @@ namespace DefectStudio
 		// playback), so a stale transform would visibly lag a frame behind the label's own draw.
 		SceneSystem::UpdateLabelTransforms(windowState.sceneRegistry, windowState);
 
+		// Keyboard-only pin shortcuts (F flip / Delete / Ctrl+Shift+</>) run unconditionally - they
+		// have no mouse hit-test of their own, so short-circuiting them behind an earlier gizmo's
+		// mouse-capture (below) would silently drop them whenever the mouse happens to be hovering
+		// that gizmo's pick band.
+		handlePinnedMeasurementKeyboardShortcuts(windowState, hovered);
+
+		// Short-circuiting `||` is intentional here (unlike the keyboard call above): each function's
+		// mouse click/drag-start logic must NOT also run once an earlier one already claimed this
+		// frame's click - e.g. clicking an atom gizmo handle must not also be reinterpreted as a pin
+		// pick by handlePinnedMeasurementInteraction's own hit-test underneath it.
 		const bool gizmoCapturing = renderTransformGizmo(windowState, imageOrigin, viewportSize, hovered) ||
 			renderLabelTransformGizmo(windowState, imageOrigin, viewportSize, hovered) ||
-			handlePinnedMeasurementInteraction(windowState, imageOrigin, viewportSize, hovered);
+			handlePinnedMeasurementInteraction(windowState, imageOrigin, viewportSize, hovered) ||
+			handleFreeLabelInteraction(windowState, imageOrigin, viewportSize, hovered);
 
 		// Shift+A (RendererEvents::Viewport::AddAtomPopupToggleRequested) can only flag intent on
 		// RendererWindowState - it has no access to this panel's own popup-request members, so it's
-		// picked up and forwarded here, once per frame.
+		// picked up and forwarded here, once per frame. Opens the Blender-style "what to add" menu
+		// (drawAddMenu) rather than jumping straight to the Add Atom dialog - Atom is one choice
+		// among others (Label) now, not the only thing Shift+A can mean.
 		if (windowState.addAtomPopupRequested)
 		{
 			windowState.addAtomPopupRequested = false;
-			m_AddAtomPopupRequested = true;
-			m_AddAtomPopupWindowId = windowState.windowId;
+			m_AddMenuRequested = true;
+			m_AddMenuWindowId = windowState.windowId;
+			m_AddMenuScreenPos = ImGui::GetMousePos();
 			// Defaults: if a 3D cursor is already placed, start from there (Cartesian, since the
 			// cursor's own position is stored Cartesian) - otherwise Fractional is a more useful
-			// starting point than Cartesian (0,0,0) is, since fractional (0,0,0) is a real cell corner
-			// while Cartesian (0,0,0) is often nowhere near the visible structure.
+			// starting point than Cartesian (0,0,0) is for an ATOM (fractional (0,0,0) is a real cell
+			// corner, Cartesian (0,0,0) is often nowhere near the visible structure); a Label reuses
+			// this same vector as a plain Cartesian position either way, see drawAddMenu.
 			if (windowState.cursor3DPlaced)
 			{
-				m_AddAtomPopupPosition = windowState.cursor3DPosition;
-				m_AddAtomPopupFractional = false;
+				m_AddMenuPosition = windowState.cursor3DPosition;
+				m_AddMenuPositionFractional = false;
 			}
 			else
 			{
-				m_AddAtomPopupPosition = glm::vec3(0.0f);
-				m_AddAtomPopupFractional = true;
+				m_AddMenuPosition = glm::vec3(0.0f);
+				m_AddMenuPositionFractional = true;
 			}
 		}
 
@@ -867,6 +921,31 @@ namespace DefectStudio
 				DS_LOG_WARN("Viewport context menu command '{}' failed: {}", commandId, result.Error().technicalDetails);
 		};
 
+		if (ImGui::BeginMenu("Add"))
+		{
+			// Reuses the same Add Atom popup Shift+A opens (drawAddAtomPopup) rather than a separate
+			// flow - mirrors the flag-setting Render() already does when addAtomPopupRequested comes
+			// in via that event, just seeded with this menu's own click position instead of the 3D
+			// cursor/origin default.
+			if (ImGui::MenuItem("Atom..."))
+			{
+				m_AddAtomPopupRequested = true;
+				m_AddAtomPopupWindowId = windowState.windowId;
+				m_AddAtomPopupPosition = m_ContextMenuWorldPosition;
+				m_AddAtomPopupFractional = false;
+			}
+			if (ImGui::MenuItem("Label"))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				RendererWindowState::FreeLabel label;
+				label.worldPosition = m_ContextMenuWorldPosition;
+				windowState.freeLabels.push_back(std::move(label));
+			}
+			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+
 		if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSelection))
 			runCommand("renderer.selection.copy");
 		if (ImGui::MenuItem("Paste", "Ctrl+V"))
@@ -983,6 +1062,7 @@ namespace DefectStudio
 				std::max(windowState.selectionDragStart.y, windowState.selectionDragCurrent.y));
 
 			ImGuiIO &io = ImGui::GetIO();
+			const RendererEvents::Viewport::RegionSelectMode mode = resolveRegionSelectMode(io.KeyShift, io.KeyCtrl);
 			// Gated on pickAtoms/pickBonds the same way handleViewportPick's plain click already is -
 			// box-select previously always matched atoms regardless of the active selection mode, and
 			// never matched bonds at all even when the mode allowed picking them.
@@ -990,7 +1070,15 @@ namespace DefectStudio
 				windowState,
 				windowState.pickAtoms ? hitTestRect(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
 				windowState.pickBonds ? hitTestRectBonds(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
-				resolveRegionSelectMode(io.KeyShift, io.KeyCtrl));
+				mode);
+			// Labels aren't part of the atom/bond region-select event above (single-select fields, not
+			// an entity list) - applied directly here instead, same pickLabels gate as everywhere else.
+			if (windowState.pickLabels)
+			{
+				applyLabelRegionSelection(
+					windowState, hitTestRectPinnedMeasurements(windowState, rectMin, rectMax),
+					hitTestRectFreeLabels(windowState, rectMin, rectMax), mode);
+			}
 		}
 	}
 
@@ -1008,6 +1096,9 @@ namespace DefectStudio
 		const ImVec2 mousePos = ImGui::GetMousePos();
 		const glm::vec2 center(mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
 		const ImGuiIO &io = ImGui::GetIO();
+		const RendererEvents::Viewport::RegionSelectMode mode = io.KeyShift
+			? RendererEvents::Viewport::RegionSelectMode::Subtract
+			: RendererEvents::Viewport::RegionSelectMode::Add;
 
 		publishRegionSelection(
 			windowState,
@@ -1015,9 +1106,13 @@ namespace DefectStudio
 								   : std::vector<std::size_t>{},
 			windowState.pickBonds ? hitTestCircleBonds(windowState, center, windowState.circleSelectRadius)
 								   : std::vector<std::size_t>{},
-			io.KeyShift
-				? RendererEvents::Viewport::RegionSelectMode::Subtract
-				: RendererEvents::Viewport::RegionSelectMode::Add);
+			mode);
+		if (windowState.pickLabels)
+		{
+			applyLabelRegionSelection(
+				windowState, hitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius),
+				hitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius), mode);
+		}
 	}
 
 	// G/R/S transform gizmo for the current selection. Pivot is the live centroid of selected
@@ -1666,37 +1761,108 @@ namespace DefectStudio
 		return false;
 	}
 
-	// Gizmo for the selected pinned measurement label (sibling of renderTransformGizmo above, see
-	// PinnedMeasurement::worldOffset/rotationOffsetRadians/scale) - same screen-space pick/drag
-	// philosophy as the atom gizmo (ImGuizmo's own picking is unreliable here too, see that
-	// function's big comment), just for one point instead of a multi-atom selection. Translate draws
-	// the familiar shaft+arrowhead 3-axis handles and moves worldOffset. Rotate/Scale use a single
-	// ring-drag around the pivot instead - no per-axis handles, since a camera-facing billboard has
-	// only one meaningful rotation axis (its own normal) and one meaningful scale (uniform glyph
-	// size), so there is nothing for X/Y/Z to choose between. Every drag pushes one undo snapshot at
-	// its start via PushPinnedMeasurementUndoSnapshot (Ctrl+Alt+U/Ctrl+Alt+Shift+U - see
-	// RendererEvents::Viewport::UndoLabelsRequested), never mid-drag, so a whole drag is one step.
-	// Reads its pivot from the label entity's TransformComponent (kept current by
-	// SceneSystem::UpdateLabelTransforms, called once per frame before this).
+	// Gizmo for the current label selection - any mix of pinned measurements (PinnedMeasurement::
+	// worldOffset/rotationOffsetRadians/style.scale) and free labels (FreeLabel::worldPosition/
+	// rotationRadians/style.scale) - sibling of renderTransformGizmo above, same screen-space
+	// pick/drag philosophy as the atom gizmo (ImGuizmo's own picking is unreliable here too, see that
+	// function's big comment). Pivot is the live centroid of every selected item, same "recomputed
+	// every frame" convention the atom gizmo's pivot uses. Translate draws the familiar
+	// shaft+arrowhead 3-axis handles and moves every selected item's own position field by the same
+	// world-space delta (a rigid group move). Rotate/Scale use a single ring-drag around the pivot
+	// instead - no per-axis handles, since a camera-facing billboard has only one meaningful rotation
+	// axis (its own normal) and one meaningful scale (uniform glyph size) - and apply their delta to
+	// each selected item's OWN rotation/scale field in place (spin/grow each independently, not
+	// orbit their positions around the shared centroid the way a rigid-body atom rotate/scale would -
+	// a label's rotation only ever means "this text's own orientation", never a position transform).
+	// Pushes one undo snapshot at drag start via PushPinnedMeasurementUndoSnapshot (Ctrl+Alt+U/
+	// Ctrl+Alt+Shift+U - see RendererEvents::Viewport::UndoLabelsRequested), covering both kinds
+	// together (LabelUndoSnapshot) regardless of which are in this drag.
 	bool RendererPanel::renderLabelTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
-		const bool pinSelected = windowState.selectedPinnedMeasurement >= 0 &&
-			windowState.selectedPinnedMeasurement < static_cast<int>(windowState.pinnedMeasurements.size());
-		if (!pinSelected || windowState.camera == nullptr)
+		if (windowState.camera == nullptr)
 		{
 			windowState.labelGizmoDragging = false;
+			windowState.labelGizmoModalDrag = false;
 			windowState.labelGizmoAxis = -1;
 			return false;
 		}
 
-		Entity labelEntity =
-			windowState.sceneRegistry.LabelEntityAt(static_cast<std::size_t>(windowState.selectedPinnedMeasurement));
-		if (!labelEntity || !labelEntity.HasComponent<TransformComponent>())
+		if (windowState.selectedPinnedMeasurements.empty() && windowState.selectedFreeLabels.empty())
+		{
+			windowState.labelGizmoDragging = false;
+			windowState.labelGizmoModalDrag = false;
+			windowState.labelGizmoAxis = -1;
 			return false;
-		const glm::vec3 pivot = labelEntity.GetComponent<TransformComponent>().position;
-		RendererWindowState::PinnedMeasurement &pin =
-			windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)];
+		}
+
+		// A pin's live position is its label entity's TransformComponent (anchor + worldOffset, kept
+		// current by SceneSystem::UpdateLabelTransforms, called once per frame before this) rather than
+		// resolving the anchor itself - a free label has no such entity, so its position is just its
+		// own worldPosition directly, always live, nothing to keep in sync.
+		auto resolvePosition = [&](bool isPin, std::size_t index, glm::vec3 &outPosition) -> bool {
+			if (isPin)
+			{
+				if (index >= windowState.pinnedMeasurements.size())
+					return false;
+				Entity labelEntity = windowState.sceneRegistry.LabelEntityAt(index);
+				if (!labelEntity || !labelEntity.HasComponent<TransformComponent>())
+					return false;
+				outPosition = labelEntity.GetComponent<TransformComponent>().position;
+				return true;
+			}
+			if (index >= windowState.freeLabels.size())
+				return false;
+			outPosition = windowState.freeLabels[index].worldPosition;
+			return true;
+		};
+		// The mutable fields a drag actually writes to - PinnedMeasurement and FreeLabel are
+		// different struct types so there's no single "the object" pointer to return, just the three
+		// fields both happen to have.
+		auto resolveMutableFields = [&](bool isPin, std::size_t index, glm::vec3 *&outPosition,
+			float *&outRotation, float *&outScale) -> bool {
+			if (isPin)
+			{
+				if (index >= windowState.pinnedMeasurements.size())
+					return false;
+				RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[index];
+				outPosition = &pin.worldOffset;
+				outRotation = &pin.rotationOffsetRadians;
+				outScale = &pin.style.scale;
+				return true;
+			}
+			if (index >= windowState.freeLabels.size())
+				return false;
+			RendererWindowState::FreeLabel &label = windowState.freeLabels[index];
+			outPosition = &label.worldPosition;
+			outRotation = &label.rotationRadians;
+			outScale = &label.style.scale;
+			return true;
+		};
+
+		glm::vec3 pivot(0.0f);
+		int pivotCount = 0;
+		for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+		{
+			glm::vec3 position(0.0f);
+			if (resolvePosition(true, pinIndex, position))
+			{
+				pivot += position;
+				++pivotCount;
+			}
+		}
+		for (const std::size_t labelIndex : windowState.selectedFreeLabels)
+		{
+			glm::vec3 position(0.0f);
+			if (resolvePosition(false, labelIndex, position))
+			{
+				pivot += position;
+				++pivotCount;
+			}
+		}
+		if (pivotCount == 0)
+			return false;
+		pivot /= static_cast<float>(pivotCount);
 
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
@@ -1720,6 +1886,28 @@ namespace DefectStudio
 		constexpr float kPickMinDistance = 20.0f;
 		constexpr float kPickMaxDistance = 100.0f;
 
+		// Snapshots every selected item's current position/rotation/scale into
+		// windowState.labelGizmoDragTargets (for cancel-revert and Scale's ratio-from-start math) and
+		// pushes the one undo entry for the whole drag - called once, right as a ring or axis drag
+		// starts.
+		auto beginDrag = [&]() {
+			windowState.labelGizmoDragTargets.clear();
+			auto captureTarget = [&](bool isPin, std::size_t index) {
+				glm::vec3 *positionPtr = nullptr;
+				float *rotationPtr = nullptr;
+				float *scalePtr = nullptr;
+				if (!resolveMutableFields(isPin, index, positionPtr, rotationPtr, scalePtr))
+					return;
+				windowState.labelGizmoDragTargets.push_back(
+					RendererWindowState::LabelGizmoDragTarget{isPin, index, *positionPtr, *rotationPtr, *scalePtr});
+			};
+			for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+				captureTarget(true, pinIndex);
+			for (const std::size_t labelIndex : windowState.selectedFreeLabels)
+				captureTarget(false, labelIndex);
+			PushPinnedMeasurementUndoSnapshot(windowState);
+		};
+
 		if (windowState.gizmoOperation == GizmoOperation::Rotate || windowState.gizmoOperation == GizmoOperation::Scale)
 		{
 			const bool isRotate = windowState.gizmoOperation == GizmoOperation::Rotate;
@@ -1736,12 +1924,11 @@ namespace DefectStudio
 
 			if (hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
+				beginDrag();
 				windowState.labelGizmoDragging = true;
+				windowState.labelGizmoModalDrag = false; // no keyboard-modal path for Rotate/Scale
 				windowState.labelGizmoAxis = -2; // sentinel: ring drag, no X/Y/Z handle
 				windowState.labelGizmoLastMousePos = mousePos;
-				windowState.labelGizmoDragStartRotation = pin.rotationOffsetRadians;
-				windowState.labelGizmoDragStartScale = pin.scale;
 				windowState.labelGizmoDragStartRadial = std::max(kPickMinDistance, radialNow);
 			}
 
@@ -1751,12 +1938,20 @@ namespace DefectStudio
 					ImGui::GetWindowDrawList()->AddCircle(
 						ImVec2(pivotScreen.x, pivotScreen.y), kPickMaxDistance, kRingActiveColor, 48, 3.0f);
 
-				// Cancel: Escape or right-click reverts to the pre-drag snapshot, same convention as
-				// the atom gizmo's fallback drag.
+				// Cancel: Escape or right-click reverts every target to its pre-drag snapshot, same
+				// convention as the atom gizmo's fallback drag.
 				if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
 				{
-					pin.rotationOffsetRadians = windowState.labelGizmoDragStartRotation;
-					pin.scale = windowState.labelGizmoDragStartScale;
+					for (const RendererWindowState::LabelGizmoDragTarget &target : windowState.labelGizmoDragTargets)
+					{
+						glm::vec3 *positionPtr = nullptr;
+						float *rotationPtr = nullptr;
+						float *scalePtr = nullptr;
+						if (!resolveMutableFields(target.isPin, target.index, positionPtr, rotationPtr, scalePtr))
+							continue;
+						*rotationPtr = target.startRotation;
+						*scalePtr = target.startScale;
+					}
 					windowState.labelGizmoDragging = false;
 					windowState.labelGizmoAxis = -1;
 					return true;
@@ -1780,17 +1975,35 @@ namespace DefectStudio
 								deltaAngle -= glm::two_pi<float>();
 							while (deltaAngle < -glm::pi<float>())
 								deltaAngle += glm::two_pi<float>();
-							pin.rotationOffsetRadians += deltaAngle;
+							// Incremental (each selected item spins by the same per-frame delta), unlike
+							// Scale below which recomputes from the frozen start value every frame.
+							for (const RendererWindowState::LabelGizmoDragTarget &target :
+								windowState.labelGizmoDragTargets)
+							{
+								glm::vec3 *positionPtr = nullptr;
+								float *rotationPtr = nullptr;
+								float *scalePtr = nullptr;
+								if (resolveMutableFields(target.isPin, target.index, positionPtr, rotationPtr, scalePtr))
+									*rotationPtr += deltaAngle;
+							}
 						}
 					}
 					else
 					{
 						// Blender S-style: scale ratio is the current radial distance from the pivot
 						// over the distance at drag start, not a per-frame delta - dragging back to the
-						// start radius always returns exactly to the start scale.
+						// start radius always returns exactly to each target's own start scale.
 						const float currentRadial = std::max(1.0f, glm::length(mousePos - pivotScreen));
 						const float ratio = currentRadial / windowState.labelGizmoDragStartRadial;
-						pin.scale = glm::clamp(windowState.labelGizmoDragStartScale * ratio, 0.1f, 8.0f);
+						for (const RendererWindowState::LabelGizmoDragTarget &target :
+							windowState.labelGizmoDragTargets)
+						{
+							glm::vec3 *positionPtr = nullptr;
+							float *rotationPtr = nullptr;
+							float *scalePtr = nullptr;
+							if (resolveMutableFields(target.isPin, target.index, positionPtr, rotationPtr, scalePtr))
+								*scalePtr = glm::clamp(target.startScale * ratio, 0.1f, 8.0f);
+						}
 					}
 					windowState.labelGizmoLastMousePos = mousePos;
 					return true;
@@ -1881,14 +2094,37 @@ namespace DefectStudio
 
 			if (hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
+				beginDrag();
 				windowState.labelGizmoDragging = true;
+				windowState.labelGizmoModalDrag = false;
 				windowState.labelGizmoAxis = hoveredAxis;
 				windowState.labelGizmoLastMousePos = mousePos;
 				windowState.labelGizmoDragAxisScreenDir = axisScreenDir[hoveredAxis];
 				windowState.labelGizmoDragAxisWorldDir = kWorldAxes[hoveredAxis];
 				windowState.labelGizmoDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[hoveredAxis]);
-				windowState.labelGizmoDragStartOffset = pin.worldOffset;
+			}
+		}
+
+		// Blender-style modal axis-locked translate: pressing X/Y/Z with no mouse button held starts a
+		// drag constrained to that world axis, following the mouse without needing to click the handle
+		// first - same modal convention as the atom gizmo's fallbackModalDrag (confirm with a
+		// left-click, cancel with Escape/right-click, handled below).
+		if (hovered && pivotOnScreen && !windowState.labelGizmoDragging)
+		{
+			constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (!axisValid[axis] || !ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+					continue;
+				beginDrag();
+				windowState.labelGizmoDragging = true;
+				windowState.labelGizmoModalDrag = true;
+				windowState.labelGizmoAxis = axis;
+				windowState.labelGizmoLastMousePos = mousePos;
+				windowState.labelGizmoDragAxisScreenDir = axisScreenDir[axis];
+				windowState.labelGizmoDragAxisWorldDir = kWorldAxes[axis];
+				windowState.labelGizmoDragPixelsPerWorld = std::max(1.0f, axisPixelsPerWorld[axis]);
+				break;
 			}
 		}
 
@@ -1903,28 +2139,59 @@ namespace DefectStudio
 				drawList->AddLine(farA, farB, kAxisLockColors[windowState.labelGizmoAxis], 2.5f);
 			}
 
-			// Cancel: Escape or right-click reverts to the pre-drag snapshot, same convention as the
-			// atom gizmo's fallback drag.
+			// Cancel: Escape or right-click reverts every target to its pre-drag snapshot, same
+			// convention as the atom gizmo's fallback drag.
 			if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
 			{
-				pin.worldOffset = windowState.labelGizmoDragStartOffset;
+				for (const RendererWindowState::LabelGizmoDragTarget &target : windowState.labelGizmoDragTargets)
+				{
+					glm::vec3 *positionPtr = nullptr;
+					float *rotationPtr = nullptr;
+					float *scalePtr = nullptr;
+					if (resolveMutableFields(target.isPin, target.index, positionPtr, rotationPtr, scalePtr))
+						*positionPtr = target.startPosition;
+				}
 				windowState.labelGizmoDragging = false;
+				windowState.labelGizmoModalDrag = false;
 				windowState.labelGizmoAxis = -1;
 				return true;
 			}
 
-			if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			// Modal drag (started via X/Y/Z, see above) confirms on a left-click instead of on
+			// release - the live value below is already applied, so confirming is just stopping.
+			if (windowState.labelGizmoModalDrag && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			{
+				windowState.labelGizmoDragging = false;
+				windowState.labelGizmoModalDrag = false;
+				windowState.labelGizmoAxis = -1;
+				return true;
+			}
+
+			if (windowState.labelGizmoModalDrag || ImGui::IsMouseDown(ImGuiMouseButton_Left))
 			{
 				const glm::vec2 delta = mousePos - windowState.labelGizmoLastMousePos;
 				windowState.labelGizmoLastMousePos = mousePos;
 				const float deltaOnAxisPixels = glm::dot(delta, windowState.labelGizmoDragAxisScreenDir);
 				const float deltaOnAxisWorld = deltaOnAxisPixels / windowState.labelGizmoDragPixelsPerWorld;
-				pin.worldOffset += windowState.labelGizmoDragAxisWorldDir * deltaOnAxisWorld;
+				const glm::vec3 worldDelta = windowState.labelGizmoDragAxisWorldDir * deltaOnAxisWorld;
+				// Rigid group move - every selected item's own position field shifts by the same
+				// world-space delta, incrementally each frame (matches the single-select code this
+				// replaced; see the Rotate/Scale branch above for why rotation/scale instead apply
+				// per-item in place rather than moving anyone's position).
+				for (const RendererWindowState::LabelGizmoDragTarget &target : windowState.labelGizmoDragTargets)
+				{
+					glm::vec3 *positionPtr = nullptr;
+					float *rotationPtr = nullptr;
+					float *scalePtr = nullptr;
+					if (resolveMutableFields(target.isPin, target.index, positionPtr, rotationPtr, scalePtr))
+						*positionPtr += worldDelta;
+				}
 				return true;
 			}
 
-			// Button released - commit (the drag already mutated worldOffset live, nothing further to
-			// apply) and consume this one release frame same as the atom gizmo does.
+			// Button released (non-modal only - a modal drag never reaches here, it only stops via
+			// confirm/cancel above) - commit (the drag already mutated positions live, nothing further
+			// to apply) and consume this one release frame same as the atom gizmo does.
 			windowState.labelGizmoDragging = false;
 			windowState.labelGizmoAxis = -1;
 			return true;
@@ -1933,63 +2200,110 @@ namespace DefectStudio
 		return hoveredAxis >= 0;
 	}
 
-	// Click-select + drag-to-nudge for pinned measurement labels (`M`, see
-	// RendererLayer::onLabelsToggleSelectedBondRequested). The gizmo above (renderLabelTransformGizmo)
-	// handles precise axis-locked moves via its handles; this is the looser "grab the label glyph
-	// itself and drag" path along the camera plane, plus click-to-select and Delete-to-unpin.
-	// Returns true if this frame's click/drag was consumed here, so the caller can suppress
-	// atom-pick the same way it already does for the transform gizmo (gizmoCapturing).
-	bool RendererPanel::handlePinnedMeasurementInteraction(
-		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
+	// Keyboard-only shortcuts for the selected pinned measurement label (`M`, see
+	// RendererLayer::onLabelsToggleSelectedBondRequested, pins the current atom selection) - F flip,
+	// Delete-to-unpin, Ctrl+Shift+</> scale-step. Also Delete for the selected free label. No mouse
+	// hit-test of its own (that's handlePinnedMeasurementInteraction/handleFreeLabelInteraction), so
+	// the caller runs this unconditionally every frame rather than folding it into their
+	// short-circuiting OR chain.
+	void RendererPanel::handlePinnedMeasurementKeyboardShortcuts(RendererWindowState &windowState, bool hovered)
 	{
 		if (!windowState.pickLabels)
-			return false;
+			return;
 
-		// F flips the selected pin's bond-aligned label 180 degrees (item 5) - independent of
+		// F flips every selected pin's bond-aligned label 180 degrees (item 5) - independent of
 		// hover/drag state below since it acts on whatever is already selected, not the cursor.
 		// TODO: also expose as a toolbar button once one exists (see toolbar proposal).
-		const bool pinSelected = windowState.selectedPinnedMeasurement >= 0 &&
-			windowState.selectedPinnedMeasurement < static_cast<int>(windowState.pinnedMeasurements.size());
+		const bool pinSelected = !windowState.selectedPinnedMeasurements.empty();
 		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_F, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
-			windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)].flipped ^= true;
+			for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+			{
+				if (pinIndex < windowState.pinnedMeasurements.size())
+					windowState.pinnedMeasurements[pinIndex].flipped ^= true;
+			}
 		}
-		// Delete removes just the selected pin - M/Shift+M are add-only (a bulk press over a growing
+		// Delete removes every selected pin - M/Shift+M are add-only (a bulk press over a growing
 		// selection used to also silently unpin anything already pinned within it, which made
 		// "select more, press M again" an unpredictable mix of adding and removing), so this is now
-		// the only way to unpin a single label; click a label to select it first.
+		// the only way to unpin a label; click (or box/circle-select) to select it/them first.
 		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
-			windowState.pinnedMeasurements.erase(
-				windowState.pinnedMeasurements.begin() + windowState.selectedPinnedMeasurement);
-			windowState.selectedPinnedMeasurement = -1;
+			// Descending order so earlier erases don't invalidate the indices still queued below.
+			std::vector<std::size_t> sortedSelection = windowState.selectedPinnedMeasurements;
+			std::sort(sortedSelection.begin(), sortedSelection.end(), std::greater<>());
+			for (const std::size_t pinIndex : sortedSelection)
+			{
+				if (pinIndex < windowState.pinnedMeasurements.size())
+					windowState.pinnedMeasurements.erase(windowState.pinnedMeasurements.begin() + pinIndex);
+			}
+			windowState.selectedPinnedMeasurements.clear();
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
-		// Ctrl+Shift+>/< steps the selected pin's size (the same RendererWindowState::PinnedMeasurement
-		// ::scale the label transform gizmo's Scale handle drags) by a fixed increment - a quicker
-		// alternative to dragging that handle when only a nudge is needed. > / < are Shift+Period/
-		// Shift+Comma on a standard layout, so this checks the base keys plus KeyShift explicitly
-		// rather than relying on ImGui to resolve the shifted glyph.
+		// Ctrl+Shift+>/< steps every selected pin's size (the same RendererWindowState::
+		// PinnedMeasurement::scale the label transform gizmo's Scale handle drags) by a fixed
+		// increment - a quicker alternative to dragging that handle when only a nudge is needed. > / <
+		// are Shift+Period/Shift+Comma on a standard layout, so this checks the base keys plus
+		// KeyShift explicitly rather than relying on ImGui to resolve the shifted glyph.
 		if (pinSelected && hovered && ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift)
 		{
 			constexpr float kScaleStep = 0.1f;
 			constexpr float kMinScale = 0.2f;
 			constexpr float kMaxScale = 5.0f;
-			RendererWindowState::PinnedMeasurement &selectedPin =
-				windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)];
 			if (ImGui::IsKeyPressed(ImGuiKey_Period, false))
 			{
 				PushPinnedMeasurementUndoSnapshot(windowState);
-				selectedPin.scale = std::min(kMaxScale, selectedPin.scale + kScaleStep);
+				for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+				{
+					if (pinIndex < windowState.pinnedMeasurements.size())
+					{
+						float &scale = windowState.pinnedMeasurements[pinIndex].style.scale;
+						scale = std::min(kMaxScale, scale + kScaleStep);
+					}
+				}
 			}
 			else if (ImGui::IsKeyPressed(ImGuiKey_Comma, false))
 			{
 				PushPinnedMeasurementUndoSnapshot(windowState);
-				selectedPin.scale = std::max(kMinScale, selectedPin.scale - kScaleStep);
+				for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+				{
+					if (pinIndex < windowState.pinnedMeasurements.size())
+					{
+						float &scale = windowState.pinnedMeasurements[pinIndex].style.scale;
+						scale = std::max(kMinScale, scale - kScaleStep);
+					}
+				}
 			}
 		}
+
+		// Delete removes every selected free label - same rationale as the pin Delete above.
+		const bool freeLabelSelected = !windowState.selectedFreeLabels.empty();
+		if (freeLabelSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			std::vector<std::size_t> sortedSelection = windowState.selectedFreeLabels;
+			std::sort(sortedSelection.begin(), sortedSelection.end(), std::greater<>());
+			for (const std::size_t labelIndex : sortedSelection)
+			{
+				if (labelIndex < windowState.freeLabels.size())
+					windowState.freeLabels.erase(windowState.freeLabels.begin() + labelIndex);
+			}
+			windowState.selectedFreeLabels.clear();
+		}
+	}
+
+	// Click-select + drag-to-nudge for pinned measurement labels only (mouse path) - the keyboard
+	// shortcuts that used to live in this function moved to handlePinnedMeasurementKeyboardShortcuts
+	// above, which the caller runs unconditionally every frame; this half still short-circuits behind
+	// gizmoCapturing (see Render()) so a click already claimed by the atom/label transform gizmo can't
+	// also be reinterpreted here as a pin pick/drag-start.
+	bool RendererPanel::handlePinnedMeasurementInteraction(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
+	{
+		if (!windowState.pickLabels)
+			return false;
 
 		if (windowState.camera == nullptr)
 			return false;
@@ -2040,18 +2354,23 @@ namespace DefectStudio
 
 		if (windowState.pinnedMeasurementDragging)
 		{
-			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) ||
-				windowState.selectedPinnedMeasurement < 0 ||
-				windowState.selectedPinnedMeasurement >= static_cast<int>(windowState.pinnedMeasurements.size()))
+			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || windowState.selectedPinnedMeasurements.empty())
 			{
 				windowState.pinnedMeasurementDragging = false;
 				return false;
 			}
 
-			RendererWindowState::PinnedMeasurement &pin =
-				windowState.pinnedMeasurements[static_cast<std::size_t>(windowState.selectedPinnedMeasurement)];
+			// Uses the most-recently-selected pin (back()) purely as the reference point for
+			// converting screen-pixel mouse movement into a world-space delta - the SAME resulting
+			// delta then applies to every selected pin's worldOffset below (rigid group drag).
+			const std::size_t referenceIndex = windowState.selectedPinnedMeasurements.back();
+			if (referenceIndex >= windowState.pinnedMeasurements.size())
+			{
+				windowState.pinnedMeasurementDragging = false;
+				return false;
+			}
 			glm::vec3 anchor(0.0f);
-			if (resolveAnchor(pin, anchor))
+			if (resolveAnchor(windowState.pinnedMeasurements[referenceIndex], anchor))
 			{
 				glm::vec2 rightProbe, upProbe, anchorScreen;
 				if (projectToScreen(anchor, anchorScreen) && projectToScreen(anchor + cameraRight, rightProbe) &&
@@ -2062,8 +2381,13 @@ namespace DefectStudio
 					const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 					const glm::vec2 deltaPixels = mousePos - windowState.pinnedMeasurementDragLastMouse;
 					// screen Y is flipped vs cameraUp - same convention as the gizmo axis drag below.
-					pin.worldOffset += cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
+					const glm::vec3 worldDelta = cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
 						cameraUp * (deltaPixels.y / pixelsPerWorldUp);
+					for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+					{
+						if (pinIndex < windowState.pinnedMeasurements.size())
+							windowState.pinnedMeasurements[pinIndex].worldOffset += worldDelta;
+					}
 					windowState.pinnedMeasurementDragLastMouse = mousePos;
 				}
 			}
@@ -2073,6 +2397,7 @@ namespace DefectStudio
 		if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			return false;
 
+		const bool additive = ImGui::GetIO().KeyCtrl;
 		const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 		// An unpinned/undragged label's anchor sits exactly at its bond's midpoint (or angle's
 		// vertex) - this pick test runs before handleViewportPick's own atom/bond hit-test and
@@ -2097,14 +2422,173 @@ namespace DefectStudio
 			}
 		}
 
-		windowState.selectedPinnedMeasurement = hitIndex;
-		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		std::vector<std::size_t> &selection = windowState.selectedPinnedMeasurements;
 		if (hitIndex < 0)
+		{
+			// Ctrl+click on empty space is a no-op (matches handleAtomPick's additive convention) -
+			// only a plain click clears the selection.
+			if (!additive)
+				selection.clear();
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 			return false;
+		}
+
+		const std::size_t hitPin = static_cast<std::size_t>(hitIndex);
+		const auto existing = std::find(selection.begin(), selection.end(), hitPin);
+		// Mutual exclusivity with free-label selection below - both live in the same OR chain in
+		// Render() and short-circuit, so a pin hit here would otherwise leave a stale free-label
+		// selection in place instead of replacing it the way clicking a different pin already does.
+		windowState.selectedFreeLabels.clear();
+
+		if (additive)
+		{
+			// Ctrl+click toggles selection (same convention as handleAtomPick) but never starts a
+			// drag on its own - it's a pure select/deselect gesture, same as Blender/most DCC tools;
+			// dragging the resulting group needs its own separate plain click-and-hold afterward.
+			if (existing != selection.end())
+				selection.erase(existing);
+			else
+				selection.push_back(hitPin);
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+			return true;
+		}
+
+		if (existing == selection.end())
+		{
+			// Plain click on an UNSELECTED pin replaces the whole selection. Plain click on one
+			// that's already part of a multi-selection leaves the group as-is - same "click-and-drag
+			// the group you already have" convention most DCC tools use, so a multi-select doesn't
+			// collapse to one item just from grabbing it.
+			selection.clear();
+			selection.push_back(hitPin);
+		}
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 
 		PushPinnedMeasurementUndoSnapshot(windowState);
 		windowState.pinnedMeasurementDragging = true;
 		windowState.pinnedMeasurementDragLastMouse = mousePos;
+		return true;
+	}
+
+	// Click-select + drag-along-camera-plane for freeLabels - same shape as
+	// handlePinnedMeasurementInteraction's mouse half above, simplified: a free label's own
+	// worldPosition IS the anchor (no bond/angle to resolve, no periodic offset), so this drags that
+	// field directly instead of a separate worldOffset.
+	bool RendererPanel::handleFreeLabelInteraction(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
+	{
+		if (!windowState.pickLabels || windowState.camera == nullptr)
+			return false;
+
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		auto projectToScreen = [&](const glm::vec3 &world, glm::vec2 &outScreen) -> bool {
+			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+			if (clip.w <= 0.0001f)
+				return false;
+			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+			outScreen = glm::vec2(
+				imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
+				imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * imageSize.y);
+			return true;
+		};
+
+		const glm::mat4 view = windowState.camera->ViewMatrix();
+		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+		const glm::vec3 cameraUp(view[0][1], view[1][1], view[2][1]);
+
+		if (windowState.freeLabelDragging)
+		{
+			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || windowState.selectedFreeLabels.empty())
+			{
+				windowState.freeLabelDragging = false;
+				return false;
+			}
+
+			// Reference point for the pixel->world conversion only - the resulting delta applies to
+			// every selected free label below (rigid group drag), same convention as the pinned
+			// measurement drag above.
+			const std::size_t referenceIndex = windowState.selectedFreeLabels.back();
+			if (referenceIndex >= windowState.freeLabels.size())
+			{
+				windowState.freeLabelDragging = false;
+				return false;
+			}
+			const glm::vec3 referencePosition = windowState.freeLabels[referenceIndex].worldPosition;
+			glm::vec2 anchorScreen, rightProbe, upProbe;
+			if (projectToScreen(referencePosition, anchorScreen) &&
+				projectToScreen(referencePosition + cameraRight, rightProbe) &&
+				projectToScreen(referencePosition + cameraUp, upProbe))
+			{
+				const float pixelsPerWorldRight = std::max(1.0f, glm::length(rightProbe - anchorScreen));
+				const float pixelsPerWorldUp = std::max(1.0f, glm::length(upProbe - anchorScreen));
+				const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+				const glm::vec2 deltaPixels = mousePos - windowState.freeLabelDragLastMouse;
+				const glm::vec3 worldDelta = cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
+					cameraUp * (deltaPixels.y / pixelsPerWorldUp);
+				for (const std::size_t labelIndex : windowState.selectedFreeLabels)
+				{
+					if (labelIndex < windowState.freeLabels.size())
+						windowState.freeLabels[labelIndex].worldPosition += worldDelta;
+				}
+				windowState.freeLabelDragLastMouse = mousePos;
+			}
+			return true;
+		}
+
+		if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			return false;
+
+		const bool additive = ImGui::GetIO().KeyCtrl;
+		const glm::vec2 mousePos(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+		constexpr float kPickRadius = 16.0f;
+		int hitIndex = -1;
+		float bestDistance = kPickRadius;
+		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
+		{
+			glm::vec2 labelScreen;
+			if (!projectToScreen(windowState.freeLabels[i].worldPosition, labelScreen))
+				continue;
+			const float distance = glm::length(mousePos - labelScreen);
+			if (distance < bestDistance)
+			{
+				bestDistance = distance;
+				hitIndex = static_cast<int>(i);
+			}
+		}
+
+		std::vector<std::size_t> &selection = windowState.selectedFreeLabels;
+		if (hitIndex < 0)
+		{
+			if (!additive)
+				selection.clear();
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+			return false;
+		}
+
+		const std::size_t hitLabel = static_cast<std::size_t>(hitIndex);
+		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
+		windowState.selectedPinnedMeasurements.clear();
+
+		if (additive)
+		{
+			if (existing != selection.end())
+				selection.erase(existing);
+			else
+				selection.push_back(hitLabel);
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+			return true;
+		}
+
+		if (existing == selection.end())
+		{
+			selection.clear();
+			selection.push_back(hitLabel);
+		}
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+
+		PushPinnedMeasurementUndoSnapshot(windowState);
+		windowState.freeLabelDragging = true;
+		windowState.freeLabelDragLastMouse = mousePos;
 		return true;
 	}
 
@@ -2202,6 +2686,119 @@ namespace DefectStudio
 				hitIndices.push_back(i);
 		}
 		return hitIndices;
+	}
+
+	// Label counterparts of hitTestRect/hitTestCircle above - same "return every match" shape now
+	// that label selection is multi-select too (selectedPinnedMeasurements/selectedFreeLabels).
+	std::vector<std::size_t> RendererPanel::hitTestRectPinnedMeasurements(
+		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
+		{
+			glm::vec3 anchor(0.0f);
+			if (!ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+				continue;
+			const std::optional<glm::vec2> screen =
+				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
+			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	std::vector<std::size_t> RendererPanel::hitTestCirclePinnedMeasurements(
+		const RendererWindowState &windowState, glm::vec2 center, float radius) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
+		{
+			glm::vec3 anchor(0.0f);
+			if (!ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+				continue;
+			const std::optional<glm::vec2> screen =
+				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
+			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	std::vector<std::size_t> RendererPanel::hitTestRectFreeLabels(
+		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
+		{
+			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
+				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
+			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	std::vector<std::size_t> RendererPanel::hitTestCircleFreeLabels(
+		const RendererWindowState &windowState, glm::vec2 center, float radius) const
+	{
+		std::vector<std::size_t> hitIndices;
+		if (windowState.camera == nullptr)
+			return hitIndices;
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
+		{
+			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
+				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
+			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
+				hitIndices.push_back(i);
+		}
+		return hitIndices;
+	}
+
+	// Applies one box/circle-select result to the label selection vectors - mirrors
+	// RendererLayer::onRegionSelectionRequested's atom/bond semantics exactly: Replace clears
+	// everything first then adds every hit, Add only adds what isn't already there, Subtract only
+	// removes what's found.
+	void RendererPanel::applyLabelRegionSelection(
+		RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
+		const std::vector<std::size_t> &freeHits, RendererEvents::Viewport::RegionSelectMode mode)
+	{
+		using RendererEvents::Viewport::RegionSelectMode;
+		if (mode == RegionSelectMode::Replace)
+		{
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedFreeLabels.clear();
+		}
+
+		auto applyHits = [](std::vector<std::size_t> &selection, const std::vector<std::size_t> &hits, bool subtract) {
+			for (const std::size_t hit : hits)
+			{
+				const auto existing = std::find(selection.begin(), selection.end(), hit);
+				if (subtract)
+				{
+					if (existing != selection.end())
+						selection.erase(existing);
+				}
+				else if (existing == selection.end())
+				{
+					selection.push_back(hit);
+				}
+			}
+		};
+		const bool subtract = mode == RegionSelectMode::Subtract;
+		applyHits(windowState.selectedPinnedMeasurements, pinnedHits, subtract);
+		applyHits(windowState.selectedFreeLabels, freeHits, subtract);
+
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 	}
 
 	RendererEvents::Viewport::RegionSelectMode RendererPanel::resolveRegionSelectMode(bool additive, bool subtractive)

@@ -460,8 +460,9 @@ namespace DefectStudio
 			windowState.showGrid,
 			windowState.showLabels,
 			windowState.pinnedMeasurements,
-			windowState.selectedPinnedMeasurement,
+			windowState.selectedPinnedMeasurements,
 			windowState.freeLabels,
+			windowState.selectedFreeLabels,
 			windowState.sceneArrows,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
@@ -1484,7 +1485,8 @@ namespace DefectStudio
 
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState)
 	{
-		windowState.pinnedMeasurementUndoHistory.push_back(windowState.pinnedMeasurements);
+		windowState.pinnedMeasurementUndoHistory.push_back(
+			RendererWindowState::LabelUndoSnapshot{windowState.pinnedMeasurements, windowState.freeLabels});
 		if (windowState.pinnedMeasurementUndoHistory.size() > kMaxPinnedMeasurementHistoryEntries)
 			windowState.pinnedMeasurementUndoHistory.erase(windowState.pinnedMeasurementUndoHistory.begin());
 		windowState.pinnedMeasurementRedoHistory.clear();
@@ -1496,16 +1498,22 @@ namespace DefectStudio
 		if (windowState == nullptr || windowState->pinnedMeasurementUndoHistory.empty())
 			return;
 
-		windowState->pinnedMeasurementRedoHistory.push_back(windowState->pinnedMeasurements);
-		windowState->pinnedMeasurements = std::move(windowState->pinnedMeasurementUndoHistory.back());
+		windowState->pinnedMeasurementRedoHistory.push_back(
+			RendererWindowState::LabelUndoSnapshot{windowState->pinnedMeasurements, windowState->freeLabels});
+		RendererWindowState::LabelUndoSnapshot restored = std::move(windowState->pinnedMeasurementUndoHistory.back());
 		windowState->pinnedMeasurementUndoHistory.pop_back();
+		windowState->pinnedMeasurements = std::move(restored.pinnedMeasurements);
+		windowState->freeLabels = std::move(restored.freeLabels);
 		// Selection index isn't meaningfully preserved across an undo (the restored vector may have a
 		// different size/order than what was selected a moment ago) - same simple reset RemovePinsWithinSet
 		// already does when the selected pin itself is the one that disappears.
-		windowState->selectedPinnedMeasurement = -1;
+		windowState->selectedPinnedMeasurements.clear();
+		windowState->selectedFreeLabels.clear();
 		windowState->labelGizmoDragging = false;
+		windowState->labelGizmoModalDrag = false;
 		windowState->labelGizmoAxis = -1;
 		windowState->pinnedMeasurementDragging = false;
+		windowState->freeLabelDragging = false;
 		SceneSystem::SyncLabelEntities(windowState->sceneRegistry, *windowState);
 	}
 
@@ -1515,13 +1523,19 @@ namespace DefectStudio
 		if (windowState == nullptr || windowState->pinnedMeasurementRedoHistory.empty())
 			return;
 
-		windowState->pinnedMeasurementUndoHistory.push_back(windowState->pinnedMeasurements);
-		windowState->pinnedMeasurements = std::move(windowState->pinnedMeasurementRedoHistory.back());
+		windowState->pinnedMeasurementUndoHistory.push_back(
+			RendererWindowState::LabelUndoSnapshot{windowState->pinnedMeasurements, windowState->freeLabels});
+		RendererWindowState::LabelUndoSnapshot restored = std::move(windowState->pinnedMeasurementRedoHistory.back());
 		windowState->pinnedMeasurementRedoHistory.pop_back();
-		windowState->selectedPinnedMeasurement = -1;
+		windowState->pinnedMeasurements = std::move(restored.pinnedMeasurements);
+		windowState->freeLabels = std::move(restored.freeLabels);
+		windowState->selectedPinnedMeasurements.clear();
+		windowState->selectedFreeLabels.clear();
 		windowState->labelGizmoDragging = false;
+		windowState->labelGizmoModalDrag = false;
 		windowState->labelGizmoAxis = -1;
 		windowState->pinnedMeasurementDragging = false;
+		windowState->freeLabelDragging = false;
 		SceneSystem::SyncLabelEntities(windowState->sceneRegistry, *windowState);
 	}
 
@@ -1624,8 +1638,8 @@ namespace DefectStudio
 		// Pinned bond/angle labels were rendered live but silently dropped from every export until
 		// now - previewState is a fresh RendererWindowState, not a copy of the real window, so its
 		// pinnedMeasurements stayed empty and renderLabels() had nothing to draw regardless of the
-		// "Labels" checkbox. No selection highlight in the exported image (selectedPinnedMeasurement
-		// left at its default -1) since a click-selection is interaction state, not part of the scene.
+		// "Labels" checkbox. No selection highlight in the exported image (selectedPinnedMeasurements
+		// left at its default empty) since a click-selection is interaction state, not part of the scene.
 		m_ExportDialog.previewState.pinnedMeasurements = windowState->pinnedMeasurements;
 		m_ExportDialog.previewState.bondLabelsAlignToDirection = windowState->bondLabelsAlignToDirection;
 
@@ -1825,6 +1839,25 @@ namespace DefectStudio
 
 	namespace
 	{
+		// Keeps a multi-select vector consistent after erasing pinnedMeasurements[removedIndex]: drops
+		// the removed index from the selection (if present) and shifts every index past it down by one
+		// (whatever the erase already did to the vector itself) - shared by both places below that
+		// delete a pin outside of the normal click/Delete-key path (bulk M/Shift+M and Ctrl+Shift+M).
+		void RemoveIndexFromSelection(std::vector<std::size_t> &selection, std::size_t removedIndex)
+		{
+			for (std::size_t i = 0; i < selection.size();)
+			{
+				if (selection[i] == removedIndex)
+					selection.erase(selection.begin() + static_cast<std::ptrdiff_t>(i));
+				else
+				{
+					if (selection[i] > removedIndex)
+						--selection[i];
+					++i;
+				}
+			}
+		}
+
 		// A pin's identity is its atom SET, not the order the caller happened to list them in -
 		// callers pass raw bond endpoints or raw selection order, so this sorts before
 		// comparing/storing. removeIfPresent=true (the single-pair M/Shift+M press) toggles: pressing
@@ -1871,10 +1904,8 @@ namespace DefectStudio
 					return;
 				const auto removedIndex = std::distance(windowState.pinnedMeasurements.begin(), existing);
 				windowState.pinnedMeasurements.erase(existing);
-				if (windowState.selectedPinnedMeasurement == static_cast<int>(removedIndex))
-					windowState.selectedPinnedMeasurement = -1;
-				else if (windowState.selectedPinnedMeasurement > static_cast<int>(removedIndex))
-					--windowState.selectedPinnedMeasurement;
+				RemoveIndexFromSelection(
+					windowState.selectedPinnedMeasurements, static_cast<std::size_t>(removedIndex));
 			}
 			else
 			{
@@ -2013,10 +2044,7 @@ namespace DefectStudio
 					continue;
 				}
 				pins.erase(pins.begin() + static_cast<std::ptrdiff_t>(i));
-				if (windowState.selectedPinnedMeasurement == static_cast<int>(i))
-					windowState.selectedPinnedMeasurement = -1;
-				else if (windowState.selectedPinnedMeasurement > static_cast<int>(i))
-					--windowState.selectedPinnedMeasurement;
+				RemoveIndexFromSelection(windowState.selectedPinnedMeasurements, i);
 			}
 			// See AddBondPinsWithinSet's matching comment - drop the no-op snapshot if nothing matched.
 			if (windowState.pinnedMeasurements.size() == countBefore)

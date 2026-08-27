@@ -57,6 +57,35 @@ namespace DefectStudio
 		// moves worldOffset along a world axis, Rotate/Scale drive rotationOffsetRadians/scale below
 		// via a ring-drag around the pivot instead of per-axis handles, since a billboard label has
 		// only one meaningful rotation axis - its own camera-facing normal - and one meaningful scale).
+		// Shared styling for every label kind - free labels, pinned bond/angle labels, and (Phase 4)
+		// arrow-attached labels - rendered through the same MSDF pipeline
+		// (OpenGlRendererBackend::AppendLabelInstances/renderLabels), so one style struct instead of
+		// hardcoded constants (kLabelColor) duplicated per label kind. `scale` folds in what used to
+		// be a standalone field on PinnedMeasurement/FreeLabel - one style path, not three.
+		struct LabelStyle
+		{
+			glm::vec3 textColor = glm::vec3(0.92f, 0.92f, 0.85f); // today's kLabelColor
+			float textAlpha = 1.0f;
+			glm::vec3 backgroundColor = glm::vec3(0.0f);
+			float backgroundAlpha = 0.0f; // 0 = no background quad drawn
+			// Border around the background quad's own edge (label_background.frag's rounded-rect SDF)
+			// - not a glyph stroke (see strokeColor/strokeWidth below). World units, same space as
+			// padding/cornerRadius; 0 = no border.
+			glm::vec3 outlineColor = glm::vec3(0.0f);
+			float outlineWidth = 0.0f;
+			float cornerRadius = 0.0f;    // world units, background quad corner rounding; 0 = sharp
+			glm::vec2 padding = glm::vec2(0.05f); // world units, background bbox margin, local x/y independent
+			// MSDF stroke around the glyph itself (labels.frag), independent of the background border
+			// above. Screen pixels, NOT world units like outlineWidth/padding/cornerRadius and NOT
+			// normalized SDF units either - a fixed on-screen thickness regardless of zoom or glyph
+			// size (a median-space width would shrink to sub-pixel invisibility on a small on-screen
+			// label, since the SDF's own screenPxRange scales with rendered glyph size). ~1.5-4px is a
+			// typical visible range; 0 = no stroke.
+			glm::vec3 strokeColor = glm::vec3(0.0f);
+			float strokeWidth = 0.0f;
+			float scale = 1.0f;
+		};
+
 		struct PinnedMeasurement
 		{
 			std::vector<std::size_t> atomIndices; // size 2 = bond length, size 3 = angle
@@ -77,10 +106,12 @@ namespace DefectStudio
 			// renderLabelTransformGizmo), added to the computed rotationRadians in
 			// OpenGlRendererBackend::renderLabels.
 			float rotationOffsetRadians = 0.0f;
-			// Uniform multiplier on the label's rendered glyph size - gizmo Scale (RendererPanel::
-			// renderLabelTransformGizmo), applied in OpenGlRendererBackend::AppendLabelInstances around
-			// the label's own anchor (so it grows/shrinks in place, not toward world origin).
-			float scale = 1.0f;
+			// Text color/alpha/outline/background/padding, plus the uniform glyph-size multiplier
+			// (style.scale - gizmo Scale, RendererPanel::renderLabelTransformGizmo, applied in
+			// OpenGlRendererBackend::AppendLabelInstances around the label's own anchor so it grows/
+			// shrinks in place, not toward world origin). Editable from ObjectPropertiesPanel's
+			// "Pinned measurement" section.
+			LabelStyle style;
 			// Bond-length pins only (size 2): the specific RendererBondData::secondAtomPeriodicOffset
 			// this pin was created from (zero for a direct/non-periodic bond), relative to
 			// atomIndices[0]->atomIndices[1] after the identity sort below. Two atoms can be joined by
@@ -97,16 +128,26 @@ namespace DefectStudio
 		// bond/angle the way PinnedMeasurement is. Renders through the same MSDF label pipeline
 		// (OpenGlRendererBackend::renderLabels -> AppendLabelInstances, which already takes a plain
 		// std::string - bond/angle labels are just this same function fed a formatted number).
-		// v1: reposition via typed X/Y/Z, no gizmo drag yet - see ObjectPropertiesPanel. Renderer-
-		// only like PinnedMeasurement/cursor3D, not persisted with the project yet.
+		// Reposition via typed X/Y/Z in ObjectPropertiesPanel, click-drag in the viewport
+		// (selectedFreeLabels/RendererPanel::handleFreeLabelInteraction below), or the same
+		// Translate/Rotate/Scale gizmo PinnedMeasurement gets (RendererPanel::
+		// renderLabelTransformGizmo treats the two kinds interchangeably). Participates in the shared
+		// label undo stack (RendererWindowState::LabelUndoSnapshot) the same way pins do.
 		struct FreeLabel
 		{
 			std::string text = "Label";
 			glm::vec3 worldPosition = glm::vec3(0.0f);
-			float scale = 1.0f;
 			float rotationRadians = 0.0f;
+			LabelStyle style;
 		};
 		std::vector<FreeLabel> freeLabels;
+		// Click-select + drag-to-move for freeLabels (RendererPanel::handleFreeLabelInteraction) - same
+		// click-drag-along-camera-plane shape as PinnedMeasurement's worldOffset drag above, but
+		// mutates worldPosition directly since a free label has no anchor to offset from. Multi-select,
+		// same convention as selectedPinnedMeasurements above (back() is the drag/gizmo anchor).
+		std::vector<std::size_t> selectedFreeLabels;
+		bool freeLabelDragging = false;
+		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
 		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - a straight directional
 		// line from start to end, for pointing at a displacement/direction in an export shot.
 		// ponytail: shaft only, no arrowhead cone yet (would need a new procedural mesh + GPU
@@ -121,18 +162,34 @@ namespace DefectStudio
 			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
 		};
 		std::vector<SceneArrow> sceneArrows;
-		// Local per-window undo/redo for pinnedMeasurements (Ctrl+Alt+U / Ctrl+Alt+Shift+U) - snapshot-
-		// based (whole-vector copies, cheap given how few pins there typically are), pushed by
-		// PushPinnedMeasurementUndoSnapshot before every add/remove/flip/drag-start, one entry per
-		// logical edit. Separate from the global Core/Undo Ctrl+Z stack and from viewUndoHistory below
-		// - see RendererEvents::Viewport::UndoLabelsRequested for why.
-		std::vector<std::vector<PinnedMeasurement>> pinnedMeasurementUndoHistory;
-		std::vector<std::vector<PinnedMeasurement>> pinnedMeasurementRedoHistory;
+		// One entry in the label undo/redo stack below - both label kinds together, since a single
+		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
+		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).
+		struct LabelUndoSnapshot
+		{
+			std::vector<PinnedMeasurement> pinnedMeasurements;
+			std::vector<FreeLabel> freeLabels;
+		};
+		// Local per-window undo/redo for pinnedMeasurements AND freeLabels together (Ctrl+Alt+U /
+		// Ctrl+Alt+Shift+U) - snapshot-based (whole-vector copies, cheap given how few labels there
+		// typically are), pushed by PushPinnedMeasurementUndoSnapshot before every add/remove/flip/
+		// drag-start on either kind, one entry per logical edit - the two kinds share this one stack the
+		// same way they now share renderLabelTransformGizmo, rather than FreeLabel having no undo of
+		// its own. Separate from the global Core/Undo Ctrl+Z stack and from viewUndoHistory below - see
+		// RendererEvents::Viewport::UndoLabelsRequested for why.
+		std::vector<LabelUndoSnapshot> pinnedMeasurementUndoHistory;
+		std::vector<LabelUndoSnapshot> pinnedMeasurementRedoHistory;
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
 			// `flipped` above.
 			bool bondLabelsAlignToDirection = true;
-		int selectedPinnedMeasurement = -1;
+		// Multi-select (Ctrl-click/box/circle-select add to this the same way selectedAtomIndices
+		// below works for atoms) - primarily so ObjectPropertiesPanel can bulk-edit style across
+		// several pins/free labels at once. Gizmo/keyboard-shortcut code still needs "the" pivot/anchor
+		// for drag math - by convention that's selectedPinnedMeasurements.back() (the most recently
+		// added/clicked one), same "last clicked is primary" convention selectedAtomIndices doesn't
+		// need since atoms don't have their own gizmo picking a single representative.
+		std::vector<std::size_t> selectedPinnedMeasurements;
 		bool pinnedMeasurementDragging = false;
 		glm::vec2 pinnedMeasurementDragLastMouse = glm::vec2(0.0f);
 		std::vector<std::size_t> selectedAtomIndices;
@@ -219,23 +276,40 @@ namespace DefectStudio
 		// the mouse" (the pre-existing behavior). Never set during the free trackball rotate
 		// (fallbackGizmoAxis == -2), which has no single axis for a typed number to mean anything.
 		std::string fallbackNumericInput;
-		// Translate-only gizmo for the selected pinned measurement label (RendererPanel::
-		// renderLabelTransformGizmo) - same click-a-handle-and-drag shape as the fallback atom gizmo
-		// above but its own state, since it drags a single PinnedMeasurement::worldOffset rather than
-		// a list of atom positions. No modal (keypress-only) variant and no axis-lock override - one
-		// point, not worth the extra state atoms' multi-select version justifies.
+		// Gizmo for the current label selection (RendererPanel::renderLabelTransformGizmo) - same
+		// click-a-handle-and-drag shape as the fallback atom gizmo above but its own state, since it
+		// drags PinnedMeasurement::worldOffset/FreeLabel::worldPosition fields rather than atom
+		// positions. No axis-lock override (X/Y/Z mid-drag re-pick) - not worth the extra state atoms'
+		// version justifies - but DOES have the Blender-style modal start (X/Y/Z with no mouse button
+		// held, translate only) via labelGizmoModalDrag below, same convention as the atom gizmo's
+		// fallbackModalDrag.
 		bool labelGizmoDragging = false;
+		// True when this drag was started by pressing X/Y/Z with no mouse button held (modal - follows
+		// the mouse every frame regardless of button state, confirms on left-click, cancels on
+		// right-click/Escape) rather than by clicking a handle (click-drag - follows only while the
+		// button is held, commits on release). See the atom gizmo's fallbackModalDrag for the same
+		// distinction; no numeric-typed-value entry here though, unlike that one.
+		bool labelGizmoModalDrag = false;
 		int labelGizmoAxis = -1;
 		glm::vec2 labelGizmoLastMousePos = glm::vec2(0.0f);
 		glm::vec2 labelGizmoDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
 		glm::vec3 labelGizmoDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
 		float labelGizmoDragPixelsPerWorld = 1.0f;
-		glm::vec3 labelGizmoDragStartOffset = glm::vec3(0.0f);
-		// Rotate/Scale ring-drag start snapshot (labelGizmoAxis == -2, no X/Y/Z handle - see
-		// renderLabelTransformGizmo) - used only for Escape/right-click cancel; the live update itself
-		// is incremental (Rotate) or ratio-of-radial-distance (Scale), not computed from these.
-		float labelGizmoDragStartRotation = 0.0f;
-		float labelGizmoDragStartScale = 1.0f;
+		// One entry per label in the selection at drag-start (mixing pins and free labels is fine -
+		// isPin picks which vector `index` refers to). Translate/Rotate apply their delta to every
+		// target's live field incrementally each frame (same shape as the old single-select code just
+		// looped); Scale recomputes from startScale * radial-ratio every frame, so needs the frozen
+		// start value same as before. All three also feed Escape/right-click cancel (revert every
+		// target to its start* value).
+		struct LabelGizmoDragTarget
+		{
+			bool isPin = false;
+			std::size_t index = 0;
+			glm::vec3 startPosition = glm::vec3(0.0f);
+			float startRotation = 0.0f;
+			float startScale = 1.0f;
+		};
+		std::vector<LabelGizmoDragTarget> labelGizmoDragTargets;
 		float labelGizmoDragStartRadial = 0.0f;
 		// Continuous Ctrl+Shift+Arrow nudge - polled every frame (RendererPanel::applyViewportInputNavigation)
 		// instead of riding GLFW's own key-repeat cadence, which is OS-repeat-rate limited (~10-15Hz)

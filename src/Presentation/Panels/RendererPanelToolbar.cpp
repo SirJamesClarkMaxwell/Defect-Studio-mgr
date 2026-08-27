@@ -646,6 +646,12 @@ namespace DefectStudio
 				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
 				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(true, true, true);
+		if (toolButton(
+				"##ModeLabelsOnly", "tool-mode-labels.png", "5",
+				"Selection mode: Pinned labels only, no atoms/bonds - for multi-selecting bond/angle "
+				"labels to edit their style together (Ctrl+5)",
+				!windowState.pickAtoms && !windowState.pickBonds && windowState.pickLabels))
+			publishSelectionMode(false, false, true);
 
 		ImGui::EndChild();
 	}
@@ -764,5 +770,48 @@ namespace DefectStudio
 			m_AddAtomPopupRequested = false;
 
 		ImGui::End();
+	}
+
+	// Blender-style Shift+A "what to add" menu - a short list at the mouse position; picking an entry
+	// either opens that type's own dialog (Atom -> drawAddAtomPopup, same position/fractional seed
+	// this menu was opened with) or adds it immediately (Label, same as the right-click "Add" submenu
+	// in RendererPanel::renderViewportContextMenu does for a click position instead of this menu's
+	// cursor3D/origin default).
+	void RendererPanel::drawAddMenu()
+	{
+		constexpr const char *kPopupId = "##AddMenu";
+		if (m_AddMenuRequested)
+		{
+			m_AddMenuRequested = false;
+			ImGui::SetNextWindowPos(m_AddMenuScreenPos);
+			ImGui::OpenPopup(kPopupId);
+		}
+
+		if (!ImGui::BeginPopup(kPopupId))
+			return;
+
+		if (ImGui::MenuItem("Atom..."))
+		{
+			m_AddAtomPopupRequested = true;
+			m_AddAtomPopupWindowId = m_AddMenuWindowId;
+			m_AddAtomPopupPosition = m_AddMenuPosition;
+			m_AddAtomPopupFractional = m_AddMenuPositionFractional;
+		}
+
+		if (ImGui::MenuItem("Label"))
+		{
+			for (RendererWindowState &candidate : m_Layer.GetWindows())
+			{
+				if (candidate.windowId != m_AddMenuWindowId)
+					continue;
+				PushPinnedMeasurementUndoSnapshot(candidate);
+				RendererWindowState::FreeLabel label;
+				label.worldPosition = m_AddMenuPosition;
+				candidate.freeLabels.push_back(std::move(label));
+				break;
+			}
+		}
+
+		ImGui::EndPopup();
 	}
 } // namespace DefectStudio

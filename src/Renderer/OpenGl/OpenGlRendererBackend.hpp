@@ -60,6 +60,18 @@ namespace DefectStudio
 		// In-plane rotation (radians) applied within the billboard's own cameraRight/cameraUp basis
 		// before placing the glyph - see PinnedMeasurement::alignToBondDirection.
 		float rotationRadians = 0.0f;
+		// LabelStyle::outlineColor/outlineWidth/cornerRadius - the background quad's own border
+		// stroke and corner rounding (label_background.frag's rounded-rect SDF). Unused - always 0 -
+		// on glyph instances (the "labels" program's shader doesn't read them), but shared here since
+		// both instance kinds go through the same VAO/instance layout; see AppendLabelBackgroundInstance.
+		glm::vec3 outlineColor = glm::vec3(0.0f);
+		float outlineWidth = 0.0f;
+		float cornerRadius = 0.0f;
+		// LabelStyle::strokeColor/strokeWidth - the glyph's own MSDF stroke (labels.frag), independent
+		// of the background border above. Unused - always 0 - on background instances (label_background
+		// .frag doesn't read them), same sharing rationale as outlineColor/outlineWidth/cornerRadius.
+		glm::vec3 strokeColor = glm::vec3(0.0f);
+		float strokeWidth = 0.0f;
 	};
 
 	struct OpenGlViewportResources
@@ -95,6 +107,11 @@ namespace DefectStudio
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
 		std::vector<OpenGlLabelInstance> cachedLabelInstances;
+		// LabelStyle::backgroundAlpha > 0 quads, one per label - drawn via the "label_background"
+		// program before cachedLabelInstances' glyph pass so glyphs composite on top (see renderLabels).
+		// Same labelsDirty lifecycle as cachedLabelInstances - rebuilt together, always empty in
+		// practice today since "every bond" mode has no per-bond style to opt into a background.
+		std::vector<OpenGlLabelInstance> cachedLabelBackgroundInstances;
 		std::vector<glm::vec3> cachedGridVertices;
 		std::vector<glm::vec3> cachedCellEdgeVertices;
 
@@ -139,8 +156,9 @@ namespace DefectStudio
 			bool showGrid,
 			bool showLabels = false,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements = {},
-			int selectedPinnedMeasurement = -1,
+			const std::vector<std::size_t> &selectedPinnedMeasurements = {},
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
+			const std::vector<std::size_t> &selectedFreeLabels = {},
 			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			const std::vector<std::size_t> &selectedBondIndices = {},
@@ -221,8 +239,9 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			bool showAllLabels,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
-			int selectedPinnedMeasurement,
+			const std::vector<std::size_t> &selectedPinnedMeasurements,
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
+			const std::vector<std::size_t> &selectedFreeLabels = {},
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderCellBox(
 			const RendererStructureData &structure,

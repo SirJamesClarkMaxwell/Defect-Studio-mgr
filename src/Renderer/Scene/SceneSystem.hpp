@@ -55,8 +55,8 @@ namespace DefectStudio
 		// relaxation playback), so a stale transform would visibly lag behind the label's own draw.
 		void UpdateLabelTransforms(SceneRegistry &scene, const RendererWindowState &windowState);
 
-		// Mirrors windowState.selectedPinnedMeasurement into the matching label entity's
-		// SelectionComponent (all others cleared). Call after any change to selectedPinnedMeasurement.
+		// Mirrors windowState.selectedPinnedMeasurements into the matching label entities'
+		// SelectionComponent (all others cleared). Call after any change to selectedPinnedMeasurements.
 		void SyncLabelSelection(SceneRegistry &scene, const RendererWindowState &windowState);
 	} // namespace SceneSystem
 } // namespace DefectStudio

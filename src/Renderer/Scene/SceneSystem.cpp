@@ -195,8 +195,10 @@ namespace DefectStudio::SceneSystem
 			(void)ResolveLabelAnchor(windowState.structure, windowState.pinnedMeasurements[index], anchor);
 			entity.AddComponent<TransformComponent>(TransformComponent{anchor});
 			entity.AddComponent<LabelComponent>(LabelComponent{index});
-			entity.AddComponent<SelectionComponent>(
-				SelectionComponent{index == static_cast<std::size_t>(windowState.selectedPinnedMeasurement)});
+			const bool isSelected = std::find(
+				windowState.selectedPinnedMeasurements.begin(), windowState.selectedPinnedMeasurements.end(), index) !=
+				windowState.selectedPinnedMeasurements.end();
+			entity.AddComponent<SelectionComponent>(SelectionComponent{isSelected});
 			scene.LabelEntities().push_back(static_cast<entt::entity>(entity));
 		}
 	}
@@ -220,7 +222,9 @@ namespace DefectStudio::SceneSystem
 		for (std::size_t index = 0; index < labelEntities.size(); ++index)
 		{
 			Entity entity(labelEntities[index], &scene);
-			entity.GetComponent<SelectionComponent>().selected = index == static_cast<std::size_t>(windowState.selectedPinnedMeasurement);
+			entity.GetComponent<SelectionComponent>().selected = std::find(
+				windowState.selectedPinnedMeasurements.begin(), windowState.selectedPinnedMeasurements.end(), index) !=
+				windowState.selectedPinnedMeasurements.end();
 		}
 	}
 } // namespace DefectStudio::SceneSystem

@@ -12,9 +12,82 @@
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
+	// Shared by every label kind (free labels, pinned bond/angle labels) - one editor for
+	// RendererWindowState::LabelStyle instead of a separate control block per label kind. Outline/
+	// background rows read "0 = off" like the shader they feed (labels.frag/label_background.frag).
+	static void drawLabelStyleEditor(RendererWindowState::LabelStyle &style)
+	{
+		ImGui::TextUnformatted("Text");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::ColorEdit3("##StyleTextColor", &style.textColor.x, ImGuiColorEditFlags_NoInputs);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(80.0f);
+		ImGui::SliderFloat("Alpha##StyleTextAlpha", &style.textAlpha, 0.0f, 1.0f, "%.2f");
+
+		// Checkbox is a thin view over backgroundAlpha/outlineWidth themselves (0 = off, same meaning
+		// the shader already gives that value) rather than a separate enabled flag - one source of
+		// truth. Toggling on restores a sensible default rather than 0, since the slider/drag below
+		// would otherwise show "on" at a still-invisible value.
+		bool backgroundEnabled = style.backgroundAlpha > 0.0f;
+		if (ImGui::Checkbox("##StyleBackgroundEnabled", &backgroundEnabled))
+			style.backgroundAlpha = backgroundEnabled ? 0.85f : 0.0f;
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Background");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::BeginDisabled(!backgroundEnabled);
+		ImGui::ColorEdit3("##StyleBackgroundColor", &style.backgroundColor.x, ImGuiColorEditFlags_NoInputs);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(80.0f);
+		ImGui::SliderFloat("Alpha##StyleBackgroundAlpha", &style.backgroundAlpha, 0.01f, 1.0f, "%.2f");
+		ImGui::EndDisabled();
+
+		bool borderEnabled = style.outlineWidth > 0.0f;
+		if (ImGui::Checkbox("##StyleBorderEnabled", &borderEnabled))
+			style.outlineWidth = borderEnabled ? 0.02f : 0.0f;
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Border");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::ColorEdit3("##StyleOutlineColor", &style.outlineColor.x, ImGuiColorEditFlags_NoInputs);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(80.0f);
+		ImGui::BeginDisabled(!borderEnabled);
+		ImGui::DragFloat("Width##StyleOutlineWidth", &style.outlineWidth, 0.002f, 0.001f, 0.2f, "%.3f");
+		ImGui::EndDisabled();
+
+		// Glyph stroke (labels.frag), independent of the Border row above which only frames the
+		// background quad. Screen pixels, not world units and not normalized SDF units - stays a
+		// constant on-screen thickness regardless of zoom, unlike Border's 0.001-0.2 world-unit range.
+		bool strokeEnabled = style.strokeWidth > 0.0f;
+		if (ImGui::Checkbox("##StyleStrokeEnabled", &strokeEnabled))
+			style.strokeWidth = strokeEnabled ? 2.0f : 0.0f;
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Stroke");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::ColorEdit3("##StyleStrokeColor", &style.strokeColor.x, ImGuiColorEditFlags_NoInputs);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(80.0f);
+		ImGui::BeginDisabled(!strokeEnabled);
+		ImGui::DragFloat("Width (px)##StyleStrokeWidth", &style.strokeWidth, 0.05f, 0.1f, 8.0f, "%.2f");
+		ImGui::EndDisabled();
+
+		ImGui::SetNextItemWidth(100.0f);
+		ImGui::DragFloat("Corner radius##StyleCornerRadius", &style.cornerRadius, 0.005f, 0.0f, 0.3f, "%.3f");
+
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::DragFloat2("Padding X/Y##StylePadding", &style.padding.x, 0.005f, 0.0f, 1.0f, "%.3f");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(100.0f);
+		ImGui::DragFloat("Scale##StyleScale", &style.scale, 0.02f, 0.1f, 8.0f, "%.2f");
+	}
+
 	ObjectPropertiesPanel::ObjectPropertiesPanel(
 		RendererLayer &layer,
 		WeakRef<CommandRegistry> commandRegistry,
@@ -284,14 +357,15 @@ namespace DefectStudio
 		}
 
 		// Independent of the atom-selection branch above (0/1/many atoms selected doesn't matter
-		// here) - free labels are scene-wide annotations, not a per-atom property. v1: reposition via
-		// typed X/Y/Z, no gizmo drag yet (see RendererWindowState::FreeLabel's comment for why).
+		// here) - free labels are scene-wide annotations, not a per-atom property. Reposition via
+		// typed X/Y/Z here, or click-drag in the viewport (RendererPanel::handleFreeLabelInteraction).
 		if (windowState != nullptr)
 		{
 			ImGui::Separator();
 			ImGui::Text("Free labels");
 			if (ImGui::Button("+ Add label"))
 			{
+				PushPinnedMeasurementUndoSnapshot(*windowState);
 				RendererWindowState::FreeLabel label;
 				label.worldPosition = windowState->cursor3DPlaced ? windowState->cursor3DPosition : glm::vec3(0.0f);
 				windowState->freeLabels.push_back(std::move(label));
@@ -314,10 +388,68 @@ namespace DefectStudio
 				if (ImGui::Button("X##RemoveLabel"))
 					labelToRemove = labelIndex;
 
+				if (ImGui::TreeNode("Style##FreeLabelStyle"))
+				{
+					drawLabelStyleEditor(label.style);
+					ImGui::TreePop();
+				}
+
 				ImGui::PopID();
 			}
 			if (labelToRemove >= 0)
+			{
+				PushPinnedMeasurementUndoSnapshot(*windowState);
 				windowState->freeLabels.erase(windowState->freeLabels.begin() + labelToRemove);
+			}
+
+			// Pinned bond/angle labels and free labels are the same kind of object for style purposes
+			// (RendererWindowState::LabelStyle) even though they live in separate vectors - selecting
+			// several of either/both here edits their style together, same "click, or box/circle-
+			// select, then edit" flow RendererPanel::handlePinnedMeasurementInteraction/
+			// handleFreeLabelInteraction/applyLabelRegionSelection build the selection with.
+			ImGui::Separator();
+			ImGui::Text("Selected labels");
+			const std::size_t pinCount = windowState->selectedPinnedMeasurements.size();
+			const std::size_t freeCount = windowState->selectedFreeLabels.size();
+			if (pinCount == 0 && freeCount == 0)
+			{
+				ImGui::TextDisabled("Click, or box/circle-select, a label in the viewport to select it.");
+			}
+			else
+			{
+				// Per-pin controls only make sense for exactly one selected pin and nothing else.
+				if (pinCount == 1 && freeCount == 0)
+				{
+					RendererWindowState::PinnedMeasurement &pin =
+						windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[0]];
+					ImGui::TextUnformatted(pin.atomIndices.size() == 2 ? "Bond length" : "Angle");
+					if (pin.atomIndices.size() == 2)
+					{
+						ImGui::SameLine();
+						ImGui::Checkbox("Align to bond##PinAlign", &pin.alignToBondDirection);
+					}
+				}
+				else
+				{
+					ImGui::Text("%zu label(s) selected - style below applies to all of them", pinCount + freeCount);
+				}
+
+				// Bulk style edit: edit one representative item's style, then broadcast that same
+				// value to every other selected item every frame - simplest correct way to edit N
+				// independent LabelStyle structs together in immediate-mode UI without per-widget
+				// delta tracking. Snaps the whole selection to the representative's starting style
+				// immediately (before any edit), same "pick one, it becomes the shared value" behavior
+				// as most bulk-editors, rather than showing a "mixed" state.
+				const bool usedPinAsRepresentative = pinCount > 0;
+				RendererWindowState::LabelStyle &representative = usedPinAsRepresentative
+					? windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[0]].style
+					: windowState->freeLabels[windowState->selectedFreeLabels[0]].style;
+				drawLabelStyleEditor(representative);
+				for (std::size_t i = usedPinAsRepresentative ? 1 : 0; i < pinCount; ++i)
+					windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[i]].style = representative;
+				for (std::size_t i = usedPinAsRepresentative ? 0 : 1; i < freeCount; ++i)
+					windowState->freeLabels[windowState->selectedFreeLabels[i]].style = representative;
+			}
 
 			ImGui::Separator();
 			ImGui::Text("Arrows");

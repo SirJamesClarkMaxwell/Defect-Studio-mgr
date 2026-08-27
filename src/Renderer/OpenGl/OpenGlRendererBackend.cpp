@@ -182,22 +182,31 @@ namespace DefectStudio
 		return result;
 	}
 
-	constexpr glm::vec4 kLabelColor(0.92f, 0.92f, 0.85f, 1.0f);
 	// Matches kSelectionHighlightColor used for atom selection below - same accent, reused here so
-	// a selected pinned measurement reads as "selected" the same way a selected atom does.
-	constexpr glm::vec4 kPinnedLabelSelectedColor(0.91f, 0.52f, 0.02f, 1.0f);
+	// a selected pinned measurement reads as "selected" the same way a selected atom does. Not part
+	// of LabelStyle - it's a transient render-time override, not a persisted per-label style.
+	constexpr glm::vec3 kPinnedLabelSelectedColor(0.91f, 0.52f, 0.02f);
+
+	// Local-space (pre style.scale) bounding box of one label's glyphs, for sizing its optional
+	// background quad (AppendLabelBackgroundInstance) - hasBounds stays false for empty/all-
+	// whitespace text, which the caller treats as "no background to draw".
+	struct LabelLocalBounds
+	{
+		glm::vec2 min = glm::vec2(0.0f);
+		glm::vec2 max = glm::vec2(0.0f);
+		bool hasBounds = false;
+	};
 
 	// Shared by every label call site below - lays out one string's glyph quads (pen-advance +
 	// centering) around `worldCenter` and appends them to whichever instance list the caller is
-	// building.
-	void AppendLabelInstances(
+	// building. Returns the label's local bounding box for AppendLabelBackgroundInstance.
+	LabelLocalBounds AppendLabelInstances(
 		const MsdfFont &font,
 		const glm::vec3 &worldCenter,
 		const std::u32string &text,
 		std::vector<OpenGlLabelInstance> &outInstances,
-		const glm::vec4 &color = kLabelColor,
-		float rotationRadians = 0.0f,
-		float scale = 1.0f)
+		const RendererWindowState::LabelStyle &style = {},
+		float rotationRadians = 0.0f)
 	{
 		// World-space label height (em units -> world units) and a rough baseline centering
 		// offset (typical glyph ascent/descent split) - tuned by eye, not derived from font
@@ -209,50 +218,94 @@ namespace DefectStudio
 		for (const char32_t codepoint : text)
 			totalAdvance += font.GetGlyphQuad(codepoint).advance;
 
+		const glm::vec4 textColor(style.textColor, style.textAlpha);
+		LabelLocalBounds bounds;
 		float penX = -totalAdvance * 0.5f * kWorldFontSize;
 		for (const char32_t codepoint : text)
 		{
 			const MsdfGlyphQuad glyph = font.GetGlyphQuad(codepoint);
 			if (glyph.found && glyph.planeMax.x > glyph.planeMin.x && glyph.planeMax.y > glyph.planeMin.y)
 			{
+				const glm::vec2 glyphMin(
+					penX + glyph.planeMin.x * kWorldFontSize, kBaselineOffset + glyph.planeMin.y * kWorldFontSize);
+				const glm::vec2 glyphMax(
+					penX + glyph.planeMax.x * kWorldFontSize, kBaselineOffset + glyph.planeMax.y * kWorldFontSize);
+				if (!bounds.hasBounds)
+				{
+					bounds.min = glyphMin;
+					bounds.max = glyphMax;
+					bounds.hasBounds = true;
+				}
+				else
+				{
+					bounds.min = glm::min(bounds.min, glyphMin);
+					bounds.max = glm::max(bounds.max, glyphMax);
+				}
+
 				OpenGlLabelInstance instance;
 				instance.worldCenter = worldCenter;
-				instance.localOffsetSize = scale * glm::vec4(
-					penX + glyph.planeMin.x * kWorldFontSize,
-					kBaselineOffset + glyph.planeMin.y * kWorldFontSize,
-					(glyph.planeMax.x - glyph.planeMin.x) * kWorldFontSize,
-					(glyph.planeMax.y - glyph.planeMin.y) * kWorldFontSize);
+				instance.localOffsetSize = style.scale * glm::vec4(glyphMin, glyphMax - glyphMin);
 				instance.atlasUvMinMax = glm::vec4(glyph.atlasUvMin, glyph.atlasUvMax);
-				instance.color = color;
+				instance.color = textColor;
 				instance.rotationRadians = rotationRadians;
+				// outlineColor/outlineWidth/cornerRadius stay zero-initialized here - they style the
+				// background quad's frame (see AppendLabelBackgroundInstance below), not glyphs.
+				instance.strokeColor = style.strokeColor;
+				instance.strokeWidth = style.strokeWidth;
 				outInstances.push_back(instance);
 			}
 			penX += glyph.advance * kWorldFontSize;
 		}
+		return bounds;
 	}
 
-	void AppendBondLabelInstances(
+	// LabelStyle::backgroundAlpha <= 0 (the default) or empty text (no bounds) - no-op, so call
+	// sites can invoke this unconditionally right after AppendLabelInstances without their own guard.
+	void AppendLabelBackgroundInstance(
+		const glm::vec3 &worldCenter,
+		const LabelLocalBounds &bounds,
+		const RendererWindowState::LabelStyle &style,
+		float rotationRadians,
+		std::vector<OpenGlLabelInstance> &outInstances)
+	{
+		if (style.backgroundAlpha <= 0.0f || !bounds.hasBounds)
+			return;
+
+		const glm::vec2 paddedMin = bounds.min - style.padding;
+		const glm::vec2 paddedMax = bounds.max + style.padding;
+		OpenGlLabelInstance instance;
+		instance.worldCenter = worldCenter;
+		instance.localOffsetSize = style.scale * glm::vec4(paddedMin, paddedMax - paddedMin);
+		instance.color = glm::vec4(style.backgroundColor, style.backgroundAlpha);
+		instance.rotationRadians = rotationRadians;
+		instance.outlineColor = style.outlineColor;
+		// Scaled the same way the box itself is (style.scale), so the border/corner radius grow and
+		// shrink in proportion to the label instead of staying a fixed size while the box scales.
+		instance.outlineWidth = style.scale * style.outlineWidth;
+		instance.cornerRadius = style.scale * style.cornerRadius;
+		outInstances.push_back(instance);
+	}
+
+	LabelLocalBounds AppendBondLabelInstances(
 		const MsdfFont &font,
 		const glm::vec3 &midpoint,
 		float lengthAngstrom,
 		std::vector<OpenGlLabelInstance> &outInstances,
-		const glm::vec4 &color = kLabelColor,
-		float rotationRadians = 0.0f,
-		float scale = 1.0f)
+		const RendererWindowState::LabelStyle &style = {},
+		float rotationRadians = 0.0f)
 	{
-		AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, color, rotationRadians, scale);
+		return AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, style, rotationRadians);
 	}
 
-	void AppendAngleLabelInstances(
+	LabelLocalBounds AppendAngleLabelInstances(
 		const MsdfFont &font,
 		const glm::vec3 &vertex,
 		float angleDeg,
 		std::vector<OpenGlLabelInstance> &outInstances,
-		const glm::vec4 &color = kLabelColor,
-		float rotationRadians = 0.0f,
-		float scale = 1.0f)
+		const RendererWindowState::LabelStyle &style = {},
+		float rotationRadians = 0.0f)
 	{
-		AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, color, rotationRadians, scale);
+		return AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, style, rotationRadians);
 	}
 
 	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
@@ -496,6 +549,16 @@ namespace DefectStudio
 		if (!labelsLoaded.HasValue())
 			return labelsLoaded.Error();
 
+		// Same vertex stage as "labels" (billboard positioning, identical instance layout) paired
+		// with a flat-color fragment shader instead of MSDF glyph sampling - draws LabelStyle
+		// background quads (see AppendLabelBackgroundInstance) through the same m_LabelQuadMesh.
+		Result<void> labelBackgroundLoaded = m_ShaderLibrary.LoadGraphicsProgram(
+			"label_background",
+			m_ShaderDirectory / Path("labels.vert"),
+			m_ShaderDirectory / Path("label_background.frag"));
+		if (!labelBackgroundLoaded.HasValue())
+			return labelBackgroundLoaded.Error();
+
 		Result<void> geometryResult = createStaticGeometry(primitiveMeshes);
 		if (!geometryResult.HasValue())
 		{
@@ -574,8 +637,9 @@ namespace DefectStudio
 		bool showGrid,
 		bool showLabels,
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
-		int selectedPinnedMeasurement,
+		const std::vector<std::size_t> &selectedPinnedMeasurements,
 		const std::vector<RendererWindowState::FreeLabel> &freeLabels,
+		const std::vector<std::size_t> &selectedFreeLabels,
 		const std::vector<RendererWindowState::SceneArrow> &sceneArrows,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<std::size_t> &selectedBondIndices,
@@ -733,12 +797,6 @@ namespace DefectStudio
 			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset);
 		if (!sceneArrows.empty())
 			renderSceneArrows(sceneArrows, camera, globalSettings, sceneOffset);
-		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
-		{
-			renderLabels(
-				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurement,
-				freeLabels, sceneOffset);
-		}
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
@@ -751,6 +809,14 @@ namespace DefectStudio
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[1], orbitalChannelDown->vertexCount, camera, globalSettings,
 				orbitalChannelDown->positiveLobeColor, orbitalChannelDown->negativeLobeColor,
 				orbitalChannelDown->lobeAlpha, sceneOffset);
+		// Drawn last and depth-test-disabled (see renderLabels) so an annotation always reads clearly
+		// on top of the structure, regardless of where in 3D space it's anchored.
+		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
+		{
+			renderLabels(
+				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
+				freeLabels, selectedFreeLabels, sceneOffset);
+		}
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -1047,6 +1113,26 @@ namespace DefectStudio
 		glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
 			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, rotationRadians)));
 		glVertexAttribDivisor(5, 1);
+		glEnableVertexAttribArray(6);
+		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, outlineColor)));
+		glVertexAttribDivisor(6, 1);
+		glEnableVertexAttribArray(7);
+		glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, outlineWidth)));
+		glVertexAttribDivisor(7, 1);
+		glEnableVertexAttribArray(8);
+		glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, cornerRadius)));
+		glVertexAttribDivisor(8, 1);
+		glEnableVertexAttribArray(9);
+		glVertexAttribPointer(9, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, strokeColor)));
+		glVertexAttribDivisor(9, 1);
+		glEnableVertexAttribArray(10);
+		glVertexAttribPointer(10, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, strokeWidth)));
+		glVertexAttribDivisor(10, 1);
 
 		glBindVertexArray(0);
 		m_LabelQuadMesh.indexCount = 6;
@@ -1537,8 +1623,9 @@ namespace DefectStudio
 		OpenGlViewportResources &resources,
 		bool showAllLabels,
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
-		int selectedPinnedMeasurement,
+		const std::vector<std::size_t> &selectedPinnedMeasurements,
 		const std::vector<RendererWindowState::FreeLabel> &freeLabels,
+		const std::vector<std::size_t> &selectedFreeLabels,
 		const glm::vec3 &sceneOffset)
 	{
 		if (m_LabelFont == nullptr)
@@ -1556,13 +1643,17 @@ namespace DefectStudio
 		// few and cheap (a handful of glyphs each) to just rebuild every frame - adding a second
 		// dirty-tracking axis keyed on the pin list would cost more than it saves here.
 		std::vector<OpenGlLabelInstance> pinnedInstances;
+		std::vector<OpenGlLabelInstance> pinnedBackgroundInstances;
 		const std::vector<OpenGlLabelInstance> *instancesToDraw = nullptr;
+		const std::vector<OpenGlLabelInstance> *backgroundInstancesToDraw = nullptr;
 
 		if (showAllLabels)
 		{
 			if (resources.labelsDirty)
 			{
 				resources.cachedLabelInstances.clear();
+				resources.cachedLabelBackgroundInstances.clear();
+				const RendererWindowState::LabelStyle kDefaultBondLabelStyle;
 				for (const RendererBondData &bond : structure.bonds)
 				{
 					if (!bond.visible)
@@ -1577,11 +1668,15 @@ namespace DefectStudio
 					const glm::vec3 secondPosition = second.cartesianPosition + bond.secondAtomPeriodicOffset;
 					const float lengthAngstrom = glm::length(secondPosition - first.cartesianPosition);
 					const glm::vec3 midpoint = (first.cartesianPosition + secondPosition) * 0.5f;
-					AppendBondLabelInstances(*m_LabelFont, midpoint, lengthAngstrom, resources.cachedLabelInstances);
+					const LabelLocalBounds bounds = AppendBondLabelInstances(
+						*m_LabelFont, midpoint, lengthAngstrom, resources.cachedLabelInstances, kDefaultBondLabelStyle);
+					AppendLabelBackgroundInstance(
+						midpoint, bounds, kDefaultBondLabelStyle, 0.0f, resources.cachedLabelBackgroundInstances);
 				}
 				resources.labelsDirty = false;
 			}
 			instancesToDraw = &resources.cachedLabelInstances;
+			backgroundInstancesToDraw = &resources.cachedLabelBackgroundInstances;
 		}
 		else if (!pinnedMeasurements.empty() || !freeLabels.empty())
 		{
@@ -1598,8 +1693,15 @@ namespace DefectStudio
 			for (std::size_t pinIndex = 0; pinIndex < pinnedMeasurements.size(); ++pinIndex)
 			{
 				const RendererWindowState::PinnedMeasurement &pin = pinnedMeasurements[pinIndex];
-				const glm::vec4 &color =
-					static_cast<int>(pinIndex) == selectedPinnedMeasurement ? kPinnedLabelSelectedColor : kLabelColor;
+				// Selection highlight overrides just the text color/alpha, layered on top of the
+				// pin's own style (outline/background/padding/scale all still apply while selected).
+				RendererWindowState::LabelStyle effectiveStyle = pin.style;
+				if (std::find(selectedPinnedMeasurements.begin(), selectedPinnedMeasurements.end(), pinIndex) !=
+					selectedPinnedMeasurements.end())
+				{
+					effectiveStyle.textColor = kPinnedLabelSelectedColor;
+					effectiveStyle.textAlpha = 1.0f;
+				}
 				const glm::vec3 offset = pin.worldOffset;
 
 				if (pin.atomIndices.size() == 2)
@@ -1639,9 +1741,12 @@ namespace DefectStudio
 							if (pin.flipped)
 								rotationRadians += glm::pi<float>();
 						}
-						AppendBondLabelInstances(
-							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, color,
-							rotationRadians + pin.rotationOffsetRadians, pin.scale);
+						const float totalRotation = rotationRadians + pin.rotationOffsetRadians;
+						const LabelLocalBounds bounds = AppendBondLabelInstances(
+							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, effectiveStyle,
+							totalRotation);
+						AppendLabelBackgroundInstance(
+							midpoint + offset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances);
 					};
 
 					constexpr float kPeriodicOffsetEpsilon = 1.0e-3f;
@@ -1701,27 +1806,100 @@ namespace DefectStudio
 					{
 						const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 						const float angleDeg = glm::degrees(std::acos(cosAngle));
-						AppendAngleLabelInstances(
-							*m_LabelFont, vertexAtom.cartesianPosition + offset, angleDeg, pinnedInstances, color,
-							pin.rotationOffsetRadians, pin.scale);
+						const glm::vec3 anglePosition = vertexAtom.cartesianPosition + offset;
+						const LabelLocalBounds bounds = AppendAngleLabelInstances(
+							*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle,
+							pin.rotationOffsetRadians);
+						AppendLabelBackgroundInstance(
+							anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances);
 					}
 				}
 			}
-			for (const RendererWindowState::FreeLabel &label : freeLabels)
+			for (std::size_t labelIndex = 0; labelIndex < freeLabels.size(); ++labelIndex)
 			{
-				AppendLabelInstances(
-					*m_LabelFont, label.worldPosition, ToU32String(label.text), pinnedInstances, kLabelColor,
-					label.rotationRadians, label.scale);
+				const RendererWindowState::FreeLabel &label = freeLabels[labelIndex];
+				RendererWindowState::LabelStyle effectiveStyle = label.style;
+				if (std::find(selectedFreeLabels.begin(), selectedFreeLabels.end(), labelIndex) !=
+					selectedFreeLabels.end())
+				{
+					effectiveStyle.textColor = kPinnedLabelSelectedColor;
+					effectiveStyle.textAlpha = 1.0f;
+				}
+				const LabelLocalBounds bounds = AppendLabelInstances(
+					*m_LabelFont, label.worldPosition, ToU32String(label.text), pinnedInstances, effectiveStyle,
+					label.rotationRadians);
+				AppendLabelBackgroundInstance(
+					label.worldPosition, bounds, effectiveStyle, label.rotationRadians, pinnedBackgroundInstances);
 			}
 			instancesToDraw = &pinnedInstances;
+			backgroundInstancesToDraw = &pinnedBackgroundInstances;
 		}
 
 		if (instancesToDraw == nullptr || instancesToDraw->empty())
 			return;
 
+		const glm::mat4 view = camera.ViewMatrix();
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * view;
+
+		// Labels always render on top of the scene (atoms/bonds/cell box/isosurfaces) rather than
+		// depth-testing against it - an annotation anchored inside a structure (e.g. a free label
+		// placed at the origin of a cluster of atoms) would otherwise get partially carved up by
+		// whatever 3D geometry happens to be nearer the camera at that point, which reads as a
+		// rendering glitch rather than the "3D label" effect it technically is. RenderWindow already
+		// draws labels last (after atoms/isosurfaces) so this only needs to disable testing, not
+		// worry about later passes drawing over these pixels. Depth test still applies between the
+		// background quad and glyph pass below via plain draw order (background first), so no
+		// z-fighting risk even without the depth buffer's help.
+		glDisable(GL_DEPTH_TEST);
+
+		if (backgroundInstancesToDraw != nullptr && !backgroundInstancesToDraw->empty())
+		{
+			const unsigned int backgroundProgram = m_ShaderLibrary.Program("label_background");
+			if (backgroundProgram != 0)
+			{
+#if defined(TRACY_ENABLE)
+				TracyGpuZone("Renderer.LabelBackgrounds");
+#endif
+				glBindBuffer(GL_ARRAY_BUFFER, m_LabelQuadMesh.instanceVbo);
+				const GLsizeiptr requiredBackgroundBytes =
+					static_cast<GLsizeiptr>(backgroundInstancesToDraw->size() * sizeof(OpenGlLabelInstance));
+				GLint currentBackgroundSize = 0;
+				glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentBackgroundSize);
+				if (static_cast<GLsizeiptr>(currentBackgroundSize) < requiredBackgroundBytes)
+				{
+					const GLsizeiptr newSize = requiredBackgroundBytes + requiredBackgroundBytes / 2;
+					glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
+				}
+				glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBackgroundBytes, backgroundInstancesToDraw->data());
+
+				glUseProgram(backgroundProgram);
+				const int bgViewProjectionLocation = m_ShaderLibrary.Uniform("label_background", "u_ViewProjection");
+				if (bgViewProjectionLocation >= 0)
+					glUniformMatrix4fv(bgViewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+				const int bgViewLocation = m_ShaderLibrary.Uniform("label_background", "u_View");
+				if (bgViewLocation >= 0)
+					glUniformMatrix4fv(bgViewLocation, 1, GL_FALSE, &view[0][0]);
+				const int bgSceneOffsetLocation = m_ShaderLibrary.Uniform("label_background", "u_SceneOffset");
+				if (bgSceneOffsetLocation >= 0)
+					glUniform3fv(bgSceneOffsetLocation, 1, &sceneOffset.x);
+
+				glBindVertexArray(m_LabelQuadMesh.vao);
+				glDrawElementsInstanced(
+					GL_TRIANGLES,
+					m_LabelQuadMesh.indexCount,
+					GL_UNSIGNED_INT,
+					nullptr,
+					static_cast<int>(backgroundInstancesToDraw->size()));
+				glBindVertexArray(0);
+			}
+		}
+
 		const unsigned int program = m_ShaderLibrary.Program("labels");
 		if (program == 0)
+		{
+			glEnable(GL_DEPTH_TEST);
 			return;
+		}
 
 #if defined(TRACY_ENABLE)
 		TracyGpuZone("Renderer.Labels");
@@ -1739,8 +1917,6 @@ namespace DefectStudio
 		}
 		glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, instancesToDraw->data());
 
-		const glm::mat4 view = camera.ViewMatrix();
-		const glm::mat4 viewProjection = camera.ProjectionMatrix() * view;
 		glUseProgram(program);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("labels", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
@@ -1770,6 +1946,7 @@ namespace DefectStudio
 			static_cast<int>(instancesToDraw->size()));
 		glBindVertexArray(0);
 		glBindTexture(GL_TEXTURE_2D, 0);
+		glEnable(GL_DEPTH_TEST);
 	}
 
 	void OpenGlRendererBackend::renderCellBox(

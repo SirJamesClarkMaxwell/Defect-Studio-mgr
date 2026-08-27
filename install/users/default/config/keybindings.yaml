@@ -476,6 +476,12 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.mode_labels_only"
+    chord: "Ctrl+5"
+    command: "renderer.selection.mode_labels_only"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "electronic_structure.load_focused"
     chord: "L"
     command: "electronic_structure.load_focused"

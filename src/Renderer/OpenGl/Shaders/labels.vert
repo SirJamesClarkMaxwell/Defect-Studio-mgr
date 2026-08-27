@@ -7,6 +7,16 @@ layout(location = 2) in vec4 aLocalOffsetSize; // xy = offset, zw = size (label-
 layout(location = 3) in vec4 aAtlasUvMinMax; // xy = uvMin, zw = uvMax
 layout(location = 4) in vec4 aColor;
 layout(location = 5) in float aRotationRadians; // in-plane rotation within the billboard's own basis
+// aOutlineColor/aOutlineWidth/aCornerRadius style the label_background pass's rounded-rect quad
+// (label_background.frag) - unused by labels.frag's glyph rendering, but shared here since both
+// instance kinds go through this one vertex shader/instance layout.
+layout(location = 6) in vec3 aOutlineColor;
+layout(location = 7) in float aOutlineWidth;
+layout(location = 8) in float aCornerRadius;
+// aStrokeColor/aStrokeWidth style labels.frag's own glyph MSDF stroke - unused by the
+// label_background pass, same sharing rationale as aOutlineColor/aOutlineWidth/aCornerRadius above.
+layout(location = 9) in vec3 aStrokeColor;
+layout(location = 10) in float aStrokeWidth;
 
 uniform mat4 u_ViewProjection;
 uniform mat4 u_View;
@@ -17,6 +27,16 @@ uniform vec3 u_SceneOffset;
 
 out vec2 vUv;
 out vec4 vColor;
+out vec3 vOutlineColor;
+out float vOutlineWidth;
+// Local rect-space position/half-size/radius for label_background.frag's rounded-rect SDF - in the
+// same post-scale world units as aLocalOffsetSize.zw, centered on the quad's own middle (not the
+// glyph billboard's rotation/offset math above, which stays untouched by this).
+out vec2 vLocalPos;
+out vec2 vBoxHalfSize;
+out float vCornerRadius;
+out vec3 vStrokeColor;
+out float vStrokeWidth;
 
 void main()
 {
@@ -40,4 +60,11 @@ void main()
 	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
 	vUv = mix(aAtlasUvMinMax.xy, aAtlasUvMinMax.zw, aVertexPosition);
 	vColor = aColor;
+	vOutlineColor = aOutlineColor;
+	vOutlineWidth = aOutlineWidth;
+	vLocalPos = (aVertexPosition - 0.5) * aLocalOffsetSize.zw;
+	vBoxHalfSize = aLocalOffsetSize.zw * 0.5;
+	vCornerRadius = aCornerRadius;
+	vStrokeColor = aStrokeColor;
+	vStrokeWidth = aStrokeWidth;
 }
