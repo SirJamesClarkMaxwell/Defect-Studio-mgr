@@ -5,10 +5,10 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in float aSign;
 
 uniform mat4 u_ViewProjection;
-// RendererWindowState::viewOffset - atoms/bonds get this baked directly into their positions
-// (StructureRendererDataBuilder/gizmo drag share that field already), but the orbital grid is a
-// separate WAVECAR-derived pipeline with no such position to nudge, so it gets the same value
-// here instead. Translate-only, so it doesn't touch aNormal.
+// Non-destructive whole-scene reposition (RendererWindowState::viewOffset, export-preview-only as
+// of Etap F Phase 1) - every geometry pass (atoms/bonds/cell box/grid/labels/isosurface) applies
+// this same value via its own u_SceneOffset uniform, so the whole scene stays rigidly attached
+// under it. Translate-only, so it doesn't touch aNormal.
 uniform vec3 u_SceneOffset;
 
 out vec3 vNormal;

@@ -705,6 +705,11 @@ namespace DefectStudio
 			resources.bondsDirty = true;
 			resources.lastColorHash = colorHash;
 		}
+		if (resources.lastBondRadiusMultiplier != globalSettings.bondRadiusMultiplier)
+		{
+			resources.bondsDirty = true;
+			resources.lastBondRadiusMultiplier = globalSettings.bondRadiusMultiplier;
+		}
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
 		glClearColor(
@@ -721,21 +726,21 @@ namespace DefectStudio
 #endif
 
 		if (showGrid)
-			renderGrid(structure, camera, resources, globalSettings);
+			renderGrid(structure, camera, resources, globalSettings, sceneOffset);
 		if (showCellBox)
-			renderCellBox(structure, camera, resources);
+			renderCellBox(structure, camera, resources, sceneOffset);
 		if (showBonds)
-			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices);
+			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset);
 		if (!sceneArrows.empty())
-			renderSceneArrows(sceneArrows, camera, globalSettings);
+			renderSceneArrows(sceneArrows, camera, globalSettings, sceneOffset);
 		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
 		{
 			renderLabels(
 				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurement,
-				freeLabels);
+				freeLabels, sceneOffset);
 		}
 		if (showAtoms)
-			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices);
+			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
@@ -1144,7 +1149,8 @@ namespace DefectStudio
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
-		const std::vector<std::size_t> &selectedIndices)
+		const std::vector<std::size_t> &selectedIndices,
+		const glm::vec3 &sceneOffset)
 	{
 		if (resources.atomsDirty)
 		{
@@ -1215,6 +1221,7 @@ namespace DefectStudio
 		const int specularIntensityLocation = m_ShaderLibrary.Uniform("atoms", "u_SpecularIntensity");
 		const int shininessLocation = m_ShaderLibrary.Uniform("atoms", "u_Shininess");
 		const int saturationLocation = m_ShaderLibrary.Uniform("atoms", "u_Saturation");
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("atoms", "u_SceneOffset");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1242,6 +1249,8 @@ namespace DefectStudio
 			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
 		if (saturationLocation >= 0)
 			glUniform1f(saturationLocation, globalSettings.colorSaturation);
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
 		glBindVertexArray(m_SphereMesh.vao);
 		glDrawElementsInstanced(
@@ -1259,7 +1268,8 @@ namespace DefectStudio
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
-		const std::vector<std::size_t> &selectedIndices)
+		const std::vector<std::size_t> &selectedIndices,
+		const glm::vec3 &sceneOffset)
 	{
 		if (resources.bondsDirty)
 		{
@@ -1285,19 +1295,23 @@ namespace DefectStudio
 				const float axisLength = glm::length(axis);
 				if (!std::isfinite(axisLength) || axisLength <= 0.0001f)
 					continue;
-				// ponytail: shrink/trim below is computed from the un-multiplied bond.radius, not
-				// globalSettings.bondRadiusMultiplier (applied later, live, in bonds.vert) - the
-				// atom/cylinder junction can show a hairline gap (multiplier < 1) or slight overlap
-				// (> 1) at extreme settings. Re-bake here + force bondsDirty from Settings.cpp if that
-				// ever becomes visible in practice; not worth the extra invalidation plumbing for a
-				// cosmetic figure-prep slider.
+				// bondRadius (unmultiplied) still feeds buildBondTransform below, matching bonds.vert's
+				// own "model matrix bakes bond.radius, shader multiplies by u_BondRadiusMultiplier on
+				// top" split (see bonds.vert:16-19) - a live thickness knob without re-baking cached
+				// instance data. The shrink/trim math, however, must use the *rendered* radius
+				// (trimRadius) since that's the cylinder surface actually visible on screen -
+				// otherwise the trim point diverges from it whenever the multiplier != 1, showing a
+				// gap (multiplier < 1) or overlap (> 1) at the atom junction. See
+				// lastBondRadiusMultiplier in OpenGlViewportResources for the cache invalidation this
+				// depends on.
 				const float bondRadius = std::max(bond.radius, 0.001f);
+				const float trimRadius = bondRadius * globalSettings.bondRadiusMultiplier;
 				const glm::vec3 direction = axis / axisLength;
 				const float rawShrinkA = std::sqrt(
-					std::max(firstAtom.radius * firstAtom.radius - bondRadius * bondRadius, 0.0f));
+					std::max(firstAtom.radius * firstAtom.radius - trimRadius * trimRadius, 0.0f));
 				const float shrinkA = std::min(rawShrinkA, axisLength * 0.45f);
 				const float rawShrinkB = std::sqrt(
-					std::max(secondAtom.radius * secondAtom.radius - bondRadius * bondRadius, 0.0f));
+					std::max(secondAtom.radius * secondAtom.radius - trimRadius * trimRadius, 0.0f));
 				const float shrinkB = std::min(rawShrinkB, axisLength * 0.45f);
 				const float trimmedLength = axisLength - shrinkA - shrinkB;
 				if (trimmedLength <= 0.001f)
@@ -1362,6 +1376,7 @@ namespace DefectStudio
 		const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
 		const int saturationLocation = m_ShaderLibrary.Uniform("bonds", "u_Saturation");
 		const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1391,6 +1406,8 @@ namespace DefectStudio
 			glUniform1f(saturationLocation, globalSettings.colorSaturation);
 		if (bondRadiusMultiplierLocation >= 0)
 			glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
 		glBindVertexArray(m_CylinderMesh.vao);
 		glDrawElementsInstanced(
@@ -1406,7 +1423,8 @@ namespace DefectStudio
 	void OpenGlRendererBackend::renderSceneArrows(
 		const std::vector<RendererWindowState::SceneArrow> &arrows,
 		const RendererViewCamera &camera,
-		const RendererGlobalRenderSettings &globalSettings)
+		const RendererGlobalRenderSettings &globalSettings,
+		const glm::vec3 &sceneOffset)
 	{
 		std::vector<OpenGlBondInstance> instances;
 		instances.reserve(arrows.size());
@@ -1465,6 +1483,7 @@ namespace DefectStudio
 		// thickness/saturation sliders (RendererGlobalRenderSettings) still apply for visual
 		// consistency with the rest of the scene, same uniforms renderBonds uploads.
 		const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -1494,6 +1513,8 @@ namespace DefectStudio
 			glUniform1f(saturationLocation, globalSettings.colorSaturation);
 		if (bondRadiusMultiplierLocation >= 0)
 			glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
 		glBindVertexArray(m_CylinderMesh.vao);
 		glDrawElementsInstanced(
@@ -1517,7 +1538,8 @@ namespace DefectStudio
 		bool showAllLabels,
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 		int selectedPinnedMeasurement,
-		const std::vector<RendererWindowState::FreeLabel> &freeLabels)
+		const std::vector<RendererWindowState::FreeLabel> &freeLabels,
+		const glm::vec3 &sceneOffset)
 	{
 		if (m_LabelFont == nullptr)
 		{
@@ -1729,6 +1751,9 @@ namespace DefectStudio
 		const int pixelRangeLocation = m_ShaderLibrary.Uniform("labels", "u_PixelRange");
 		if (pixelRangeLocation >= 0)
 			glUniform1f(pixelRangeLocation, static_cast<float>(m_LabelFont->PixelRange()));
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("labels", "u_SceneOffset");
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, m_LabelFont->AtlasTextureId());
@@ -1750,7 +1775,8 @@ namespace DefectStudio
 	void OpenGlRendererBackend::renderCellBox(
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
-		OpenGlViewportResources &resources)
+		OpenGlViewportResources &resources,
+		const glm::vec3 &sceneOffset)
 	{
 		if (resources.cellEdgesDirty)
 		{
@@ -1781,10 +1807,13 @@ namespace DefectStudio
 		glUseProgram(program);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("lines", "u_ViewProjection");
 		const int colorLocation = m_ShaderLibrary.Uniform("lines", "u_LineColor");
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("lines", "u_SceneOffset");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
 		if (colorLocation >= 0)
 			glUniform4f(colorLocation, 0.85f, 0.85f, 0.9f, 1.0f);
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 		glLineWidth(1.0f);
 
 		glBindVertexArray(m_LineVao);
@@ -1798,7 +1827,8 @@ namespace DefectStudio
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
-		const RendererGlobalRenderSettings &globalSettings)
+		const RendererGlobalRenderSettings &globalSettings,
+		const glm::vec3 &sceneOffset)
 	{
 		if (resources.gridDirty)
 		{
@@ -1866,8 +1896,11 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("grid", "u_ViewProjection");
+		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("grid", "u_SceneOffset");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+		if (sceneOffsetLocation >= 0)
+			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 		glBindVertexArray(m_LineVao);
 		glBindBuffer(GL_ARRAY_BUFFER, m_LineVbo);
 		glBufferData(

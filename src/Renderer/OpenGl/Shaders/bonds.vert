@@ -17,6 +17,10 @@ uniform mat4 u_ViewProjection;
 // instance data. Local z (length) is untouched, and since x/y scale equally the surface normal
 // direction is unaffected (no normal-matrix correction needed).
 uniform float u_BondRadiusMultiplier;
+// Non-destructive whole-structure reposition (RendererWindowState::viewOffset, export-preview-only
+// as of Etap F Phase 1) - render-time-only, applied after the per-instance model transform so it
+// never touches the baked cylinder geometry/orientation.
+uniform vec3 u_SceneOffset;
 
 out vec3 vNormal;
 out vec4 vColorA;
@@ -28,6 +32,7 @@ void main()
 {
     mat4 model = mat4(aModelCol0, aModelCol1, aModelCol2, aModelCol3);
     vec4 worldPosition = model * vec4(aPosition.xy * u_BondRadiusMultiplier, aPosition.z, 1.0);
+    worldPosition.xyz += u_SceneOffset;
     gl_Position = u_ViewProjection * worldPosition;
 
     mat3 normalMatrix = transpose(inverse(mat3(model)));

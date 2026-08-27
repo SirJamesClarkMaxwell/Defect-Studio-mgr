@@ -6,6 +6,9 @@ layout(location = 2) in vec4 aInstancePositionRadius;
 layout(location = 3) in vec4 aInstanceColor;
 
 uniform mat4 u_ViewProjection;
+// Non-destructive whole-structure reposition (RendererWindowState::viewOffset, export-preview-only
+// as of Etap F Phase 1) - render-time-only, never baked into aInstancePositionRadius itself.
+uniform vec3 u_SceneOffset;
 
 out vec3 vNormal;
 out vec4 vColor;
@@ -14,7 +17,7 @@ out vec3 vWorldPos;
 void main()
 {
 	vec3 worldPosition = aPosition * aInstancePositionRadius.w
-		+ aInstancePositionRadius.xyz;
+		+ aInstancePositionRadius.xyz + u_SceneOffset;
 	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
 	vNormal = normalize(aNormal);
 	vColor = aInstanceColor;

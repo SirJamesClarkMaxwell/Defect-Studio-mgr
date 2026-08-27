@@ -10,6 +10,10 @@ layout(location = 5) in float aRotationRadians; // in-plane rotation within the 
 
 uniform mat4 u_ViewProjection;
 uniform mat4 u_View;
+// Non-destructive whole-structure reposition (RendererWindowState::viewOffset, export-preview-only
+// as of Etap F Phase 1) - covers free labels, bond/angle labels, and arrow-attached labels alike,
+// since they all go through this one shader.
+uniform vec3 u_SceneOffset;
 
 out vec2 vUv;
 out vec4 vColor;
@@ -31,7 +35,7 @@ void main()
 	vec2 rotatedPosition = vec2(
 		localPosition.x * cosR - localPosition.y * sinR,
 		localPosition.x * sinR + localPosition.y * cosR);
-	vec3 worldPosition = aWorldCenter + cameraRight * rotatedPosition.x + cameraUp * rotatedPosition.y;
+	vec3 worldPosition = aWorldCenter + u_SceneOffset + cameraRight * rotatedPosition.x + cameraUp * rotatedPosition.y;
 
 	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
 	vUv = mix(aAtlasUvMinMax.xy, aAtlasUvMinMax.zw, aVertexPosition);

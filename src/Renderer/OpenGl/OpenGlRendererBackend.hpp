@@ -87,6 +87,10 @@ namespace DefectStudio
 		// unrelated dirty condition above happens to also fire - same class of bug as lastPositionHash
 		// above, just for appearance instead of geometry.
 		std::size_t lastColorHash = 0;
+		// Bond radius multiplier is a global render setting, not per-structure data - the cylinder
+		// trim math in renderBonds bakes it into cachedBondInstances, so a change needs its own
+		// dirty check here (see the shrinkA/shrinkB comment at that call site for why).
+		float lastBondRadiusMultiplier = 1.0f;
 		std::string lastSourcePath;
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
@@ -146,10 +150,10 @@ namespace DefectStudio
 			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr,
 			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp = nullptr,
 			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown = nullptr,
-			// Non-destructive whole-structure offset (RendererWindowState::viewOffset) - atoms/bonds
-			// already carry it baked into their positions by the time they reach here, this is only
-			// for the isosurface overlay, which is a separate grid/compute pipeline that doesn't
-			// share RendererStructureData.
+			// Non-destructive whole-structure offset (RendererWindowState::viewOffset, export-preview-
+			// only as of Etap F Phase 1) - forwarded as a render-time uniform (u_SceneOffset) to every
+			// geometry pass (atoms/bonds/cell box/grid/labels/isosurface), never baked into any CPU-
+			// side position data. See each shader's own u_SceneOffset comment for the per-pass detail.
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
@@ -193,13 +197,15 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
-			const std::vector<std::size_t> &selectedIndices = {});
+			const std::vector<std::size_t> &selectedIndices = {},
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderBonds(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
-			const std::vector<std::size_t> &selectedIndices = {});
+			const std::vector<std::size_t> &selectedIndices = {},
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		// Figure-annotation arrows (RendererWindowState::sceneArrows) - reuses the bond cylinder
 		// mesh/shader (shaft only, see that struct's comment for why there's no arrowhead cone yet).
 		// No dirty-cache: rebuilt every call like pinnedInstances in renderLabels, cheap for the
@@ -207,7 +213,8 @@ namespace DefectStudio
 		void renderSceneArrows(
 			const std::vector<RendererWindowState::SceneArrow> &arrows,
 			const RendererViewCamera &camera,
-			const RendererGlobalRenderSettings &globalSettings);
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
@@ -215,16 +222,19 @@ namespace DefectStudio
 			bool showAllLabels,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 			int selectedPinnedMeasurement,
-			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {});
+			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderCellBox(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
-			OpenGlViewportResources &resources);
+			OpenGlViewportResources &resources,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderGrid(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
-			const RendererGlobalRenderSettings &globalSettings);
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderIsosurfaceOverlay(
 			const std::vector<IsosurfaceVertex> &vertices,
 			const RendererViewCamera &camera,

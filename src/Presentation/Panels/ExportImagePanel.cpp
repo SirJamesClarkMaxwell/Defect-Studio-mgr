@@ -467,6 +467,29 @@ namespace DefectStudio
 		if (ImGui::SmallButton("Reset View") && targetWindow->camera != nullptr)
 			*dialog.previewState.camera = *targetWindow->camera;
 
+		// Non-destructive whole-scene reposition for framing a shot - export-preview-only (Etap F
+		// Phase 1): a pure value edit on dialog.previewState.viewOffset, forwarded to every render
+		// pass as a render-time uniform (u_SceneOffset, see OpenGlRendererBackend), never touching
+		// atom/bond/domain data or the main viewport's own undo stack. Was previously a viewport
+		// toolbar control that mutated atom.cartesianPosition directly - moved here and made
+		// non-mutating because export framing is the only place this offset is actually needed.
+		ImGui::TextUnformatted("Object offset");
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+		{
+			ImGui::SetTooltip(
+				"Non-destructive reposition for framing a shot - moves atoms/bonds/cell box/grid/"
+				"labels/orbitals together in this export preview only. Reset on close has no effect on "
+				"the saved structure.");
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(200.0f);
+		ImGui::DragFloat3("##ObjectOffset", &dialog.previewState.viewOffset.x, 0.01f, 0.0f, 0.0f, "%.3f");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(dialog.previewState.viewOffset == glm::vec3(0.0f));
+		if (ImGui::SmallButton("Reset##ObjectOffset"))
+			dialog.previewState.viewOffset = glm::vec3(0.0f);
+		ImGui::EndDisabled();
+
 		ImGui::TextDisabled("Crop (trims pixels from each edge - changes output aspect ratio):");
 		auto cropSlider = [](const char *label, float &fraction)
 		{
