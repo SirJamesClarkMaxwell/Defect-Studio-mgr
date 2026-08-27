@@ -1833,8 +1833,8 @@ namespace DefectStudio
 			ImGui::EndTable();
 		}
 
-		ImGui::SeparatorText("Lighting");
-		if (beginRendererTable("RendererLighting"))
+		ImGui::SeparatorText("Rendering");
+		if (beginRendererTable("RendererDisplay"))
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -1869,6 +1869,12 @@ namespace DefectStudio
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
 				ImGui::SetTooltip("Renders the interactive viewport at a higher resolution than the panel and downscales it - sharper edges/orbitals, costs GPU time. 1x = off.");
 
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Lighting");
+		if (beginRendererTable("RendererLighting"))
+		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Ambient intensity");
