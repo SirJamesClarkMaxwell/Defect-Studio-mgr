@@ -74,6 +74,45 @@ namespace DefectStudio
 		float strokeWidth = 0.0f;
 	};
 
+	// One SceneArrow Arrow2D quad. right/up are fully resolved world-space basis vectors, computed
+	// CPU-side in renderSceneArrows/ComputeArrowQuadBasis (camera-facing-plane projection of the
+	// arrow direction for Billboard, fixed world-plane axes for FixedPlane) - so unlike
+	// OpenGlLabelInstance's billboard math, arrow_quad.vert needs no camera uniform of its own.
+	// halfSize/outlineWidth/headHalfWidth/headLength all arrive here already converted from
+	// SceneArrow::ArrowStyle's screen-space pixel units to this arrow's own local world-space scale
+	// (renderSceneArrows does that conversion via a projection probe, same idea as
+	// RendererPanel::handleFreeLabelInteraction's pixel<->world drag conversion) - the shader itself
+	// stays entirely unit-agnostic, same as before.
+	struct OpenGlArrowQuadInstance
+	{
+		glm::vec3 worldCenter = glm::vec3(0.0f);
+		glm::vec3 right = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+		glm::vec2 halfSize = glm::vec2(0.0f); // x = half arrow length, y = half shaft width
+		glm::vec4 color = glm::vec4(1.0f);
+		glm::vec3 outlineColor = glm::vec3(0.0f);
+		float outlineWidth = 0.0f;
+		float headHalfWidth = 0.0f; // 0 collapses the SDF union's head triangle to a point (no head)
+		float headLength = 0.0f;
+	};
+
+	// One SceneArrow Arrow3D's welded shaft+head mesh (see BuildWeldedArrowMesh) - unlike bonds'
+	// shared unit m_CylinderMesh/m_ConeMesh, each arrow's mesh has its own proportions (shaftRadius/
+	// headRadius/headLength/length all vary per-arrow), so it can't be instanced from one shared
+	// buffer - every arrow gets its own small VAO/VBO/EBO, indexed by its position in
+	// RendererWindowState::sceneArrows. Rebuilt only when the 4 params below actually change (a
+	// position/orientation-only drag reuses the same geometry through the draw transform) - the
+	// negative defaults guarantee the very first frame for a slot always rebuilds.
+	struct OpenGlSceneArrowMeshCache
+	{
+		float shaftRadius = -1.0f;
+		float headRadius = -1.0f;
+		float headLength = -1.0f;
+		float length = -1.0f;
+		float bulgeStrength = -1.0f;
+		OpenGlMeshHandles mesh;
+	};
+
 	struct OpenGlViewportResources
 	{
 		OpenGlFrameBuffer frameBuffer;
@@ -114,6 +153,9 @@ namespace DefectStudio
 		std::vector<OpenGlLabelInstance> cachedLabelBackgroundInstances;
 		std::vector<glm::vec3> cachedGridVertices;
 		std::vector<glm::vec3> cachedCellEdgeVertices;
+		// One entry per Arrow3D SceneArrow, indexed by its position in sceneArrows - see
+		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
+		std::vector<OpenGlSceneArrowMeshCache> sceneArrow3DMeshCache;
 
 		// Per-window orbital isosurface GPU buffers. Was 2 backend-global slots shared by every
 		// window; regenerating one window's orbital mesh (e.g. dragging its iso-value slider)
@@ -160,6 +202,7 @@ namespace DefectStudio
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
 			const std::vector<std::size_t> &selectedFreeLabels = {},
 			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
+			const std::vector<std::size_t> &selectedSceneArrows = {},
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			const std::vector<std::size_t> &selectedBondIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
@@ -203,7 +246,9 @@ namespace DefectStudio
 		void releaseStaticGeometry();
 		Result<void> createSphereMesh(const RendererStaticMeshData &meshData);
 		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
+		Result<void> createConeMesh(const RendererStaticMeshData &meshData);
 		void createLabelQuadMesh();
+		void createArrowQuadMesh();
 		void createScreenGrid();
 		void createIsosurfaceGeometry();
 		// Lazily allocates `resources`'s per-window isosurface GPU buffers on first use - no-op if
@@ -224,14 +269,29 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
-		// Figure-annotation arrows (RendererWindowState::sceneArrows) - reuses the bond cylinder
-		// mesh/shader (shaft only, see that struct's comment for why there's no arrowhead cone yet).
-		// No dirty-cache: rebuilt every call like pinnedInstances in renderLabels, cheap for the
-		// handful of arrows a figure needs.
+		// Figure-annotation arrows (RendererWindowState::sceneArrows). Line draws its shaft through
+		// the shared bond cylinder mesh/shader like before; Arrow3D draws through its own per-arrow
+		// welded shaft+head mesh (BuildWeldedArrowMesh, cached in resources.sceneArrow3DMeshCache -
+		// rebuilt only when that arrow's shaftWidth/headWidth/headLength/length actually change, not
+		// every frame); Arrow2D draws through the arrow_quad SDF shader. No dirty-cache for the first
+		// two lists below (shaftInstances/quadInstances) - rebuilt every call like pinnedInstances in
+		// renderLabels, cheap for the handful of arrows a figure needs.
+		// Called twice per frame with opposite `renderArrow2D` values (see RenderWindow) so Line/
+		// Arrow3D (world-space, depth-tested, drawn with bonds) and Arrow2D (screen-space sized,
+		// depth-disabled, drawn late with labels - docs/scene_arrow_rework_plan_corrected.md
+		// Section 10) each land in the GL state their own semantics need, without either pass paying
+		// for the other kind's work. viewportPixelSize is the actual framebuffer resolution
+		// (resources.frameBuffer.Width/Height) - needed only by the Arrow2D pass to convert
+		// ArrowStyle's pixel-space geometry into this arrow's local world-space scale via a
+		// projection probe.
 		void renderSceneArrows(
 			const std::vector<RendererWindowState::SceneArrow> &arrows,
+			const std::vector<std::size_t> &selectedArrows,
 			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
+			bool renderArrow2D,
+			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,
@@ -273,6 +333,11 @@ namespace DefectStudio
 		void dispatchBondCompute(const RendererStructureData &structure);
 		[[nodiscard]] OpenGlViewportResources &viewportResources(const std::string &windowKey, int width, int height);
 		[[nodiscard]] glm::mat4 buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const;
+		// Same translate+rotate (local +Z -> direction) as buildBondTransform, but no scale at all -
+		// for BuildWeldedArrowMesh's output, whose vertices already have absolute world-unit radii
+		// and length baked in, so scaling Z by `length` again (as buildBondTransform's radius overload
+		// would) or radius by anything but 1 would double the arrow's real size.
+		[[nodiscard]] glm::mat4 buildArrowRevolutionTransform(const glm::vec3 &start, const glm::vec3 &end) const;
 
 	private:
 		bool m_Initialized = false;
@@ -280,7 +345,9 @@ namespace DefectStudio
 		OpenGlShaderLibrary m_ShaderLibrary;
 		OpenGlMeshHandles m_SphereMesh;
 		OpenGlMeshHandles m_CylinderMesh;
+		OpenGlMeshHandles m_ConeMesh;
 		OpenGlMeshHandles m_LabelQuadMesh;
+		OpenGlMeshHandles m_ArrowQuadMesh;
 		// Lazily constructed on first renderLabels() call with showLabels=true - atlas generation
 		// (FreeType + msdfgen) costs real time, no reason to pay it for windows/sessions that never
 		// toggle labels on. Bundled font (see resolveLabelFontPath) same as the app's own UI font.

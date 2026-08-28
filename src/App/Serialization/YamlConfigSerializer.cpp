@@ -464,6 +464,10 @@ namespace DefectStudio
 			const char *rendererBondRadiusMultiplierKey = Name(RendererKey::BondRadiusMultiplier);
 			const char *rendererColorSaturationKey = Name(RendererKey::ColorSaturation);
 			const char *rendererViewportSupersampleKey = Name(RendererKey::ViewportSupersample);
+			const char *rendererArrowHeadBulgeStrengthKey = Name(RendererKey::ArrowHeadBulgeStrength);
+			const char *rendererArrowDefaultShaftWidthRatioKey = Name(RendererKey::ArrowDefaultShaftWidthRatio);
+			const char *rendererArrowDefaultHeadWidthRatioKey = Name(RendererKey::ArrowDefaultHeadWidthRatio);
+			const char *rendererArrowDefaultHeadLengthRatioKey = Name(RendererKey::ArrowDefaultHeadLengthRatio);
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
@@ -613,6 +617,26 @@ namespace DefectStudio
 				{rendererSection, rendererViewportSupersampleKey},
 				{},
 				config.renderer.viewportSupersample);
+			config.renderer.arrowHeadBulgeStrength = ReadValue(
+				root,
+				{rendererSection, rendererArrowHeadBulgeStrengthKey},
+				{},
+				config.renderer.arrowHeadBulgeStrength);
+			config.renderer.arrowDefaultShaftWidthRatio = ReadValue(
+				root,
+				{rendererSection, rendererArrowDefaultShaftWidthRatioKey},
+				{},
+				config.renderer.arrowDefaultShaftWidthRatio);
+			config.renderer.arrowDefaultHeadWidthRatio = ReadValue(
+				root,
+				{rendererSection, rendererArrowDefaultHeadWidthRatioKey},
+				{},
+				config.renderer.arrowDefaultHeadWidthRatio);
+			config.renderer.arrowDefaultHeadLengthRatio = ReadValue(
+				root,
+				{rendererSection, rendererArrowDefaultHeadLengthRatioKey},
+				{},
+				config.renderer.arrowDefaultHeadLengthRatio);
 			config.renderer.orbitSensitivity = ReadValue(
 				root,
 				{rendererSection, rendererOrbitKey},
@@ -806,6 +830,10 @@ namespace DefectStudio
 			const char *rendererBondRadiusMultiplierKey = Name(RendererKey::BondRadiusMultiplier);
 			const char *rendererColorSaturationKey = Name(RendererKey::ColorSaturation);
 			const char *rendererViewportSupersampleKey = Name(RendererKey::ViewportSupersample);
+			const char *rendererArrowHeadBulgeStrengthKey = Name(RendererKey::ArrowHeadBulgeStrength);
+			const char *rendererArrowDefaultShaftWidthRatioKey = Name(RendererKey::ArrowDefaultShaftWidthRatio);
+			const char *rendererArrowDefaultHeadWidthRatioKey = Name(RendererKey::ArrowDefaultHeadWidthRatio);
+			const char *rendererArrowDefaultHeadLengthRatioKey = Name(RendererKey::ArrowDefaultHeadLengthRatio);
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
@@ -882,6 +910,26 @@ namespace DefectStudio
 				{rendererSection, rendererViewportSupersampleKey},
 				{},
 				config.renderer.viewportSupersample);
+			config.renderer.arrowHeadBulgeStrength = ReadValue(
+				root,
+				{rendererSection, rendererArrowHeadBulgeStrengthKey},
+				{},
+				config.renderer.arrowHeadBulgeStrength);
+			config.renderer.arrowDefaultShaftWidthRatio = ReadValue(
+				root,
+				{rendererSection, rendererArrowDefaultShaftWidthRatioKey},
+				{},
+				config.renderer.arrowDefaultShaftWidthRatio);
+			config.renderer.arrowDefaultHeadWidthRatio = ReadValue(
+				root,
+				{rendererSection, rendererArrowDefaultHeadWidthRatioKey},
+				{},
+				config.renderer.arrowDefaultHeadWidthRatio);
+			config.renderer.arrowDefaultHeadLengthRatio = ReadValue(
+				root,
+				{rendererSection, rendererArrowDefaultHeadLengthRatioKey},
+				{},
+				config.renderer.arrowDefaultHeadLengthRatio);
 			config.renderer.orbitSensitivity = ReadValue(
 				root,
 				{rendererSection, rendererOrbitKey},

@@ -316,6 +316,14 @@ namespace DefectStudio
 		return value / length;
 	}
 
+	[[nodiscard]] glm::vec2 SafeNormalize(const glm::vec2 &value, const glm::vec2 &fallback)
+	{
+		const float length = glm::length(value);
+		if (!std::isfinite(length) || length <= 0.00001f)
+			return fallback;
+		return value / length;
+	}
+
 	[[nodiscard]] bool ValidateIndexRange(
 		const std::vector<std::uint32_t> &indices,
 		std::size_t vertexCount,
@@ -482,6 +490,382 @@ namespace DefectStudio
 		return mesh;
 	}
 
+	struct RefinedConeMesh
+	{
+		std::vector<glm::vec3> positions;
+		std::vector<glm::vec3> normals;
+		std::vector<float> gradientT;
+		std::vector<std::uint32_t> indices;
+	};
+
+	// Procedural smooth cone from the coarse cone.obj's bounds only (radius/height), same trick
+	// BuildRefinedCylinderMesh above uses - the asset just gates "a valid cone-shaped mesh exists",
+	// the actual triangle data comes from here. Base ring at z=minZ, apex at z=maxZ. Lateral normal
+	// at angle theta is normalize(cos theta, sin theta, radius/height) for every z along that
+	// generatrix (a real cone's side normal doesn't vary with z - see the tangent-plane derivation
+	// this was checked against), shared by the base and apex copy of each column exactly like the
+	// cylinder's per-column radial normal above.
+	// includeBaseCap=false (SceneArrow's only caller, m_ConeMesh) - a flat cap plugging the base ring
+	// looked right when the shaft ended exactly at that plane, but showed as a visible disc
+	// ("suction cup") sitting on top of the shaft; the fix is to skip the cap and instead let the
+	// shaft extend slightly INTO the cone's (now open) base by a geometry-limited overlap (see
+	// renderSceneArrows) - the cone's own lateral surface, wider than the shaft near its base, then
+	// hides the shaft's open end from every side angle without ever needing a cap plane at all.
+	[[nodiscard]] RefinedConeMesh BuildRefinedConeMesh(const RendererStaticMeshData &meshData, bool includeBaseCap)
+	{
+		constexpr std::uint32_t SegmentCount = 32u;
+		constexpr float TwoPi = 6.283185307f;
+
+		float minZ = meshData.positions.front().z;
+		float maxZ = meshData.positions.front().z;
+		float radius = 0.0f;
+		for (const glm::vec3 &position : meshData.positions)
+		{
+			minZ = std::min(minZ, position.z);
+			maxZ = std::max(maxZ, position.z);
+			radius = std::max(radius, glm::length(glm::vec2(position.x, position.y)));
+		}
+		if (radius <= 0.0001f)
+			radius = 1.0f;
+		if (maxZ - minZ <= 0.0001f)
+			maxZ = minZ + 1.0f;
+		const float height = maxZ - minZ;
+
+		const std::uint32_t verticesPerSegment = includeBaseCap ? 3u : 2u;
+
+		RefinedConeMesh mesh;
+		mesh.positions.reserve(static_cast<std::size_t>(SegmentCount) * verticesPerSegment + 1u);
+		mesh.normals.reserve(static_cast<std::size_t>(SegmentCount) * verticesPerSegment + 1u);
+		mesh.gradientT.reserve(static_cast<std::size_t>(SegmentCount) * verticesPerSegment + 1u);
+		mesh.indices.reserve(static_cast<std::size_t>(SegmentCount) * (includeBaseCap ? 6u : 3u));
+
+		for (std::uint32_t segment = 0; segment < SegmentCount; ++segment)
+		{
+			const float angle = TwoPi * static_cast<float>(segment) / static_cast<float>(SegmentCount);
+			const float cosAngle = std::cos(angle);
+			const float sinAngle = std::sin(angle);
+			const glm::vec3 slantNormal =
+				SafeNormalize(glm::vec3(cosAngle, sinAngle, radius / height), glm::vec3(0.0f, 0.0f, 1.0f));
+
+			mesh.positions.emplace_back(cosAngle * radius, sinAngle * radius, minZ); // base (side)
+			mesh.normals.push_back(slantNormal);
+			mesh.gradientT.push_back(0.0f);
+			mesh.positions.emplace_back(0.0f, 0.0f, maxZ); // apex (side)
+			mesh.normals.push_back(slantNormal);
+			mesh.gradientT.push_back(1.0f);
+			if (includeBaseCap)
+			{
+				mesh.positions.emplace_back(cosAngle * radius, sinAngle * radius, minZ); // base (cap)
+				mesh.normals.emplace_back(0.0f, 0.0f, -1.0f);
+				mesh.gradientT.push_back(0.0f);
+			}
+		}
+
+		std::uint32_t baseCenter = 0;
+		if (includeBaseCap)
+		{
+			baseCenter = static_cast<std::uint32_t>(mesh.positions.size());
+			mesh.positions.emplace_back(0.0f, 0.0f, minZ);
+			mesh.normals.emplace_back(0.0f, 0.0f, -1.0f);
+			mesh.gradientT.push_back(0.0f);
+		}
+
+		for (std::uint32_t segment = 0; segment < SegmentCount; ++segment)
+		{
+			const std::uint32_t next = (segment + 1u) % SegmentCount;
+			const std::uint32_t base = segment * verticesPerSegment;
+			const std::uint32_t apex = base + 1u;
+			const std::uint32_t nextBase = next * verticesPerSegment;
+
+			mesh.indices.push_back(base);
+			mesh.indices.push_back(apex);
+			mesh.indices.push_back(nextBase);
+
+			if (includeBaseCap)
+			{
+				const std::uint32_t capBase = base + 2u;
+				const std::uint32_t nextCapBase = nextBase + 2u;
+				mesh.indices.push_back(baseCenter);
+				mesh.indices.push_back(nextCapBase);
+				mesh.indices.push_back(capBase);
+			}
+		}
+
+		return mesh;
+	}
+
+	// Composes SceneArrow's Arrow3D shaft+head into ONE mesh instead of two separately-instanced draw
+	// calls that share no vertices (the earlier capless-cone-plus-overlap approach could hide the gap
+	// between them but could never make the *shading* continuous across it). Three segments, each
+	// with its own normal (no blending across a segment's own boundary, same "duplicate the vertex,
+	// vary only the normal" trick BuildRefinedConeMesh already uses at its own cap/apex):
+	//   1) shaft - a plain cylinder (constant shaftRadius, radial normal).
+	//   2) shoulder - the shaft/head transition, shape controlled by bulgeStrength (Settings >
+	//      Renderer > Scene arrows > Head bulge strength, 0..1): at 0 this is a flat annular disc
+	//      (shaftRadius -> headRadius at the same Z, the classic sharp corner every arrow with
+	//      headWidth > shaftWidth has at its shoulder); above 0 it becomes a handful of rings spread
+	//      over bulgeStrength * kMaxBulgeFraction * headLength, each ring's normal blended from its
+	//      two neighboring segments, rounding the corner into the "bulge" look some users prefer.
+	//      Still meets the shaft with the shaft's own unblended radial normal and the head with the
+	//      head's own unblended slant normal either way - only the interior optionally curves.
+	//   3) head - a plain straight cone (headRadius -> 0 at the tip, linear profile, slant normal).
+	// Absolute world units baked directly into the vertices (not normalized) - see this function's
+	// only caller (renderSceneArrows) for why: any shaftWidth/headWidth/headLength/length/bulge-
+	// strength edit rebuilds this arrow's mesh, but a position/orientation-only drag reuses it
+	// unchanged through the draw transform.
+	[[nodiscard]] RefinedConeMesh BuildWeldedArrowMesh(
+		float shaftRadius,
+		float headRadius,
+		float headLength,
+		float totalLength,
+		std::uint32_t radialSegments,
+		float bulgeStrength)
+	{
+		constexpr float TwoPi = 6.283185307f;
+		radialSegments = std::max(radialSegments, 3u);
+		const float shaftEnd = std::max(totalLength - headLength, 0.0f);
+
+		RefinedConeMesh mesh;
+		const std::size_t vertexBudget = static_cast<std::size_t>(radialSegments) * 11u + 1u;
+		mesh.positions.reserve(vertexBudget);
+		mesh.normals.reserve(vertexBudget);
+		mesh.gradientT.reserve(vertexBudget);
+
+		// normalRadial/normalZ are the SAME for every column of a ring - only cosAngle/sinAngle vary -
+		// since every segment here is either a plain cylinder or a plain cone (constant slant along
+		// its whole length), unlike the old blended-profile version this never needs to change from
+		// ring to ring within one segment.
+		auto emitRadialRing = [&](float z, float radius, float normalRadial, float normalZ) -> std::uint32_t {
+			const std::uint32_t start = static_cast<std::uint32_t>(mesh.positions.size());
+			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
+			{
+				const float angle = TwoPi * static_cast<float>(segment) / static_cast<float>(radialSegments);
+				const float cosAngle = std::cos(angle);
+				const float sinAngle = std::sin(angle);
+				mesh.positions.emplace_back(cosAngle * radius, sinAngle * radius, z);
+				mesh.normals.emplace_back(cosAngle * normalRadial, sinAngle * normalRadial, normalZ);
+				mesh.gradientT.push_back(totalLength > 0.0001f ? z / totalLength : 0.0f);
+			}
+			return start;
+		};
+		auto emitFlatRing = [&](float z, float radius, float normalZ) -> std::uint32_t {
+			const std::uint32_t start = static_cast<std::uint32_t>(mesh.positions.size());
+			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
+			{
+				const float angle = TwoPi * static_cast<float>(segment) / static_cast<float>(radialSegments);
+				mesh.positions.emplace_back(std::cos(angle) * radius, std::sin(angle) * radius, z);
+				mesh.normals.emplace_back(0.0f, 0.0f, normalZ);
+				mesh.gradientT.push_back(totalLength > 0.0001f ? z / totalLength : 0.0f);
+			}
+			return start;
+		};
+		auto connectRings = [&](std::uint32_t ringA, std::uint32_t ringB) {
+			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
+			{
+				const std::uint32_t next = (segment + 1u) % radialSegments;
+				const std::uint32_t bottom = ringA + segment;
+				const std::uint32_t top = ringB + segment;
+				const std::uint32_t nextBottom = ringA + next;
+				const std::uint32_t nextTop = ringB + next;
+				mesh.indices.push_back(bottom);
+				mesh.indices.push_back(top);
+				mesh.indices.push_back(nextTop);
+				mesh.indices.push_back(bottom);
+				mesh.indices.push_back(nextTop);
+				mesh.indices.push_back(nextBottom);
+			}
+		};
+
+		// Tail cap fan.
+		const std::uint32_t tailCenter = static_cast<std::uint32_t>(mesh.positions.size());
+		mesh.positions.emplace_back(0.0f, 0.0f, 0.0f);
+		mesh.normals.emplace_back(0.0f, 0.0f, -1.0f);
+		mesh.gradientT.push_back(0.0f);
+		const std::uint32_t tailCapRing = emitFlatRing(0.0f, shaftRadius, -1.0f);
+		for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
+		{
+			const std::uint32_t next = (segment + 1u) % radialSegments;
+			mesh.indices.push_back(tailCenter);
+			mesh.indices.push_back(tailCapRing + next);
+			mesh.indices.push_back(tailCapRing + segment);
+		}
+
+		// Shaft - plain cylinder, purely radial normal.
+		const std::uint32_t shaftBottom = emitRadialRing(0.0f, shaftRadius, 1.0f, 0.0f);
+		const std::uint32_t shaftTop = emitRadialRing(shaftEnd, shaftRadius, 1.0f, 0.0f);
+		connectRings(shaftBottom, shaftTop);
+
+		// Shoulder - the shaft/head transition. bulgeStrength <= 0 (the classic default) collapses this
+		// to a flat annular disc at the shaft/head boundary, facing back toward the tail (-Z) when the
+		// head is wider than the shaft (the normal case), forward otherwise - derived, not assumed, so
+		// an unusual headWidth < shaftWidth arrow still shades correctly instead of showing an
+		// inverted-normal patch. bulgeStrength > 0 spreads the same radius jump across a handful of
+		// rings instead, each one's normal blended from its two neighboring edges in the (z, radius)
+		// cross-section - a standard "vertex normal = average of adjacent face normals" approximation
+		// of a curved profile, same idea as BuildRefinedSphereMesh's subdivision, just applied to a
+		// revolved profile instead of a sphere.
+		constexpr float kMaxBulgeFraction = 0.5f;
+		const float bulgeZoneLength =
+			std::clamp(bulgeStrength, 0.0f, 1.0f) * kMaxBulgeFraction * headLength;
+		const float headBaseZ = shaftEnd + bulgeZoneLength;
+		const float coneRunLength = std::max(totalLength - headBaseZ, 0.0001f);
+		const glm::vec2 coneNormal2D =
+			SafeNormalize(glm::vec2(coneRunLength, headRadius), glm::vec2(0.0f, 1.0f));
+
+		std::uint32_t transitionEndRing = shaftTop;
+		bool hasTransitionStrip = false;
+		if (bulgeZoneLength <= 0.0001f)
+		{
+			const float shoulderNormalZ = (headRadius >= shaftRadius) ? -1.0f : 1.0f;
+			const std::uint32_t shoulderInner = emitFlatRing(shaftEnd, shaftRadius, shoulderNormalZ);
+			const std::uint32_t shoulderOuter = emitFlatRing(shaftEnd, headRadius, shoulderNormalZ);
+			connectRings(shoulderInner, shoulderOuter);
+		}
+		else
+		{
+			constexpr std::uint32_t kInteriorRings = 4;
+			constexpr std::uint32_t kSampleCount = kInteriorRings + 2u;
+			std::array<float, kSampleCount> sampleZ{};
+			std::array<float, kSampleCount> sampleR{};
+			for (std::uint32_t i = 0; i < kSampleCount; ++i)
+			{
+				const float t = static_cast<float>(i) / static_cast<float>(kSampleCount - 1u);
+				const float eased = t * t * (3.0f - 2.0f * t); // smoothstep
+				sampleZ[i] = shaftEnd + bulgeZoneLength * t;
+				sampleR[i] = shaftRadius + (headRadius - shaftRadius) * eased;
+			}
+
+			std::uint32_t previousRing = shaftTop;
+			for (std::uint32_t i = 1; i < kSampleCount - 1u; ++i)
+			{
+				const glm::vec2 edgeIn = SafeNormalize(
+					glm::vec2(sampleZ[i] - sampleZ[i - 1u], -(sampleR[i] - sampleR[i - 1u])), coneNormal2D);
+				const glm::vec2 edgeOut = SafeNormalize(
+					glm::vec2(sampleZ[i + 1u] - sampleZ[i], -(sampleR[i + 1u] - sampleR[i])), coneNormal2D);
+				const glm::vec2 blended = SafeNormalize(edgeIn + edgeOut, coneNormal2D);
+				const std::uint32_t ring = emitRadialRing(sampleZ[i], sampleR[i], blended.x, blended.y);
+				connectRings(previousRing, ring);
+				previousRing = ring;
+			}
+			transitionEndRing = previousRing;
+			hasTransitionStrip = true;
+		}
+
+		// Head - plain straight cone down to a single tip point (radius 0), same slant-normal
+		// construction as BuildRefinedConeMesh (verified algebraically against it when this function
+		// was first written): tangent (dRadius, dZ) = (-headRadius, coneRunLength) rotates to
+		// (coneRunLength, headRadius) - linear the whole way, no interior rings, so the silhouette
+		// past the shoulder is always a plain triangle in profile.
+		const std::uint32_t headBase = emitRadialRing(headBaseZ, headRadius, coneNormal2D.x, coneNormal2D.y);
+		if (hasTransitionStrip)
+			connectRings(transitionEndRing, headBase);
+		const std::uint32_t tip = emitRadialRing(totalLength, 0.0f, coneNormal2D.x, coneNormal2D.y);
+		connectRings(headBase, tip);
+
+		return mesh;
+	}
+
+	// Uploads a freshly-built welded arrow mesh into `cache.mesh`'s GPU buffers - same
+	// {position,normal,gradientT} vertex layout and instanced {model,colorA,colorB} attributes as
+	// m_CylinderMesh/m_ConeMesh (see createCylinderMesh) so it draws through the same "bonds"
+	// program, just GL_DYNAMIC_DRAW and rebuildable instead of a one-time static upload. VAO/buffers
+	// are created once per cache slot (mesh.vao == 0 the first time) and reused on every later
+	// rebuild via glBufferData - never deleted and recreated, so an interactive drag that changes
+	// shaftWidth every frame doesn't churn GL object allocations.
+	void UploadSceneArrowMesh(OpenGlMeshHandles &mesh, const RefinedConeMesh &welded)
+	{
+		std::vector<CylinderVertex> vertices(welded.positions.size());
+		for (std::size_t index = 0; index < welded.positions.size(); ++index)
+		{
+			vertices[index].position = welded.positions[index];
+			vertices[index].normal = SafeNormalize(welded.normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
+			vertices[index].gradientT = welded.gradientT[index];
+		}
+
+		const bool firstTime = mesh.vao == 0;
+		if (firstTime)
+		{
+			glGenVertexArrays(1, &mesh.vao);
+			glGenBuffers(1, &mesh.vbo);
+			glGenBuffers(1, &mesh.ebo);
+			glGenBuffers(1, &mesh.instanceVbo);
+		}
+
+		glBindVertexArray(mesh.vao);
+		glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+		glBufferData(
+			GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(CylinderVertex)), vertices.data(),
+			GL_DYNAMIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
+		glBufferData(
+			GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(welded.indices.size() * sizeof(std::uint32_t)),
+			welded.indices.data(), GL_DYNAMIC_DRAW);
+
+		if (firstTime)
+		{
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(
+				0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, position)));
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(
+				1, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, normal)));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(
+				2, 1, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, gradientT)));
+
+			glBindBuffer(GL_ARRAY_BUFFER, mesh.instanceVbo);
+			glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(sizeof(OpenGlBondInstance)), nullptr, GL_DYNAMIC_DRAW);
+			for (int column = 0; column < 4; ++column)
+			{
+				glEnableVertexAttribArray(3 + column);
+				glVertexAttribPointer(
+					3 + column, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance),
+					reinterpret_cast<void *>(
+						offsetof(OpenGlBondInstance, model) + sizeof(glm::vec4) * static_cast<std::size_t>(column)));
+				glVertexAttribDivisor(3 + column, 1);
+			}
+			glEnableVertexAttribArray(7);
+			glVertexAttribPointer(
+				7, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorA)));
+			glVertexAttribDivisor(7, 1);
+			glEnableVertexAttribArray(8);
+			glVertexAttribPointer(
+				8, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorB)));
+			glVertexAttribDivisor(8, 1);
+		}
+
+		glBindVertexArray(0);
+		mesh.indexCount = static_cast<int>(welded.indices.size());
+	}
+
+	// Deletes one mesh's GL objects and zeroes the handles - shared by OpenGlSceneArrowMeshCache
+	// slots dropped on shrink (renderSceneArrows) and by releaseStaticGeometry's final cleanup, same
+	// 4-handle pattern releaseStaticGeometry already uses inline for the shared static meshes.
+	void DeleteMeshHandles(OpenGlMeshHandles &mesh)
+	{
+		if (mesh.instanceVbo != 0)
+		{
+			glDeleteBuffers(1, &mesh.instanceVbo);
+			mesh.instanceVbo = 0;
+		}
+		if (mesh.ebo != 0)
+		{
+			glDeleteBuffers(1, &mesh.ebo);
+			mesh.ebo = 0;
+		}
+		if (mesh.vbo != 0)
+		{
+			glDeleteBuffers(1, &mesh.vbo);
+			mesh.vbo = 0;
+		}
+		if (mesh.vao != 0)
+		{
+			glDeleteVertexArrays(1, &mesh.vao);
+			mesh.vao = 0;
+		}
+		mesh.indexCount = 0;
+	}
+
 	OpenGlRendererBackend::~OpenGlRendererBackend()
 	{
 		Shutdown();
@@ -558,6 +942,18 @@ namespace DefectStudio
 			m_ShaderDirectory / Path("label_background.frag"));
 		if (!labelBackgroundLoaded.HasValue())
 			return labelBackgroundLoaded.Error();
+
+		// SceneArrow Arrow2D quad - its own fragment shader (a shaft-rect + head-triangle SDF union,
+		// forked from label_background.frag rather than editing it in place - real labels have no
+		// head triangle to draw), paired with its own vertex stage instead of labels.vert because the
+		// basis (camera-facing plane vs. a fixed world plane) is resolved CPU-side per instance, see
+		// OpenGlArrowQuadInstance/ComputeArrowQuadBasis.
+		Result<void> arrowQuadLoaded = m_ShaderLibrary.LoadGraphicsProgram(
+			"arrow_quad",
+			m_ShaderDirectory / Path("arrow_quad.vert"),
+			m_ShaderDirectory / Path("arrow_quad.frag"));
+		if (!arrowQuadLoaded.HasValue())
+			return arrowQuadLoaded.Error();
 
 		Result<void> geometryResult = createStaticGeometry(primitiveMeshes);
 		if (!geometryResult.HasValue())
@@ -641,6 +1037,7 @@ namespace DefectStudio
 		const std::vector<RendererWindowState::FreeLabel> &freeLabels,
 		const std::vector<std::size_t> &selectedFreeLabels,
 		const std::vector<RendererWindowState::SceneArrow> &sceneArrows,
+		const std::vector<std::size_t> &selectedSceneArrows,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<std::size_t> &selectedBondIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
@@ -795,8 +1192,12 @@ namespace DefectStudio
 			renderCellBox(structure, camera, resources, sceneOffset);
 		if (showBonds)
 			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset);
+		const glm::vec2 viewportPixelSize(
+			static_cast<float>(resources.frameBuffer.Width()), static_cast<float>(resources.frameBuffer.Height()));
 		if (!sceneArrows.empty())
-			renderSceneArrows(sceneArrows, camera, globalSettings, sceneOffset);
+			renderSceneArrows(
+				sceneArrows, selectedSceneArrows, camera, resources, globalSettings, false, viewportPixelSize,
+				sceneOffset);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
@@ -817,6 +1218,12 @@ namespace DefectStudio
 				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
 				freeLabels, selectedFreeLabels, sceneOffset);
 		}
+		// Arrow2D's own late, depth-disabled pass (see renderSceneArrows's declaration comment) -
+		// same "annotation always reads on top" reasoning as renderLabels just above.
+		if (!sceneArrows.empty())
+			renderSceneArrows(
+				sceneArrows, selectedSceneArrows, camera, resources, globalSettings, true, viewportPixelSize,
+				sceneOffset);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -833,9 +1240,14 @@ namespace DefectStudio
 		if (!cylinderResult.HasValue())
 			return cylinderResult.Error();
 
+		Result<void> coneResult = createConeMesh(primitiveMeshes.cone);
+		if (!coneResult.HasValue())
+			return coneResult.Error();
+
 		createScreenGrid();
 		createIsosurfaceGeometry();
 		createLabelQuadMesh();
+		createArrowQuadMesh();
 		glGenBuffers(1, &m_ComputeInputSsbo);
 		glGenBuffers(1, &m_ComputeOutputSsbo);
 		return {};
@@ -900,11 +1312,15 @@ namespace DefectStudio
 					resources.isosurfaceVao[slot] = 0;
 				}
 			}
+			for (OpenGlSceneArrowMeshCache &cacheEntry : resources.sceneArrow3DMeshCache)
+				DeleteMeshHandles(cacheEntry.mesh);
+			resources.sceneArrow3DMeshCache.clear();
 		}
 
 		m_LabelFont.reset();
 
-		const std::array<OpenGlMeshHandles *, 3> meshes = {&m_SphereMesh, &m_CylinderMesh, &m_LabelQuadMesh};
+		const std::array<OpenGlMeshHandles *, 5> meshes = {
+			&m_SphereMesh, &m_CylinderMesh, &m_ConeMesh, &m_LabelQuadMesh, &m_ArrowQuadMesh};
 		for (OpenGlMeshHandles *mesh : meshes)
 		{
 			if (mesh->instanceVbo != 0)
@@ -1071,12 +1487,91 @@ namespace DefectStudio
 		return {};
 	}
 
+	Result<void> OpenGlRendererBackend::createConeMesh(const RendererStaticMeshData &meshData)
+	{
+		if (meshData.positions.empty() || meshData.indices.empty())
+		{
+			return MakeMeshAssetError(
+				"renderer.mesh.cone.empty",
+				"Cone mesh asset is empty.",
+				"Cone mesh positions/indices are empty.");
+		}
+
+		std::string indexError;
+		if (!ValidateIndexRange(meshData.indices, meshData.positions.size(), indexError))
+		{
+			return MakeMeshAssetError(
+				"renderer.mesh.cone.indices_out_of_range",
+				"Cone mesh asset is invalid.",
+				"Cone mesh has invalid indices: " + indexError);
+		}
+
+		// Capless - m_ConeMesh is only ever used for SceneArrow's Arrow3D head (see
+		// BuildRefinedConeMesh's declaration comment for why a flat base cap was removed).
+		const RefinedConeMesh refinedMesh = BuildRefinedConeMesh(meshData, false);
+
+		// Reuses CylinderVertex - same {position, normal, gradientT} layout, and the cone head is
+		// drawn through the same "bonds" program/OpenGlBondInstance as the shaft (see
+		// renderSceneArrows), so the vertex format has to match exactly.
+		std::vector<CylinderVertex> vertices;
+		vertices.resize(refinedMesh.positions.size());
+		for (std::size_t index = 0; index < refinedMesh.positions.size(); ++index)
+		{
+			vertices[index].position = refinedMesh.positions[index];
+			vertices[index].normal = SafeNormalize(refinedMesh.normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
+			vertices[index].gradientT = refinedMesh.gradientT[index];
+		}
+
+		glGenVertexArrays(1, &m_ConeMesh.vao);
+		glGenBuffers(1, &m_ConeMesh.vbo);
+		glGenBuffers(1, &m_ConeMesh.ebo);
+		glGenBuffers(1, &m_ConeMesh.instanceVbo);
+		glBindVertexArray(m_ConeMesh.vao);
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_ConeMesh.vbo);
+		glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(CylinderVertex)), vertices.data(), GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ConeMesh.ebo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(refinedMesh.indices.size() * sizeof(std::uint32_t)), refinedMesh.indices.data(), GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, position)));
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, normal)));
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(CylinderVertex), reinterpret_cast<void *>(offsetof(CylinderVertex, gradientT)));
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_ConeMesh.instanceVbo);
+		glBufferData(GL_ARRAY_BUFFER, 1, nullptr, GL_DYNAMIC_DRAW);
+		for (int column = 0; column < 4; ++column)
+		{
+			glEnableVertexAttribArray(3 + column);
+			glVertexAttribPointer(
+				3 + column,
+				4,
+				GL_FLOAT,
+				GL_FALSE,
+				sizeof(OpenGlBondInstance),
+				reinterpret_cast<void *>(offsetof(OpenGlBondInstance, model) + sizeof(glm::vec4) * static_cast<std::size_t>(column)));
+			glVertexAttribDivisor(3 + column, 1);
+		}
+		glEnableVertexAttribArray(7);
+		glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorA)));
+		glVertexAttribDivisor(7, 1);
+		glEnableVertexAttribArray(8);
+		glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorB)));
+		glVertexAttribDivisor(8, 1);
+
+		glBindVertexArray(0);
+		m_ConeMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
+		return {};
+	}
+
+	constexpr glm::vec2 kQuadVertices[4] = {
+		glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 0.0f), glm::vec2(1.0f, 1.0f), glm::vec2(0.0f, 1.0f)};
+	constexpr std::uint32_t kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+
 	void OpenGlRendererBackend::createLabelQuadMesh()
 	{
-		constexpr glm::vec2 kQuadVertices[4] = {
-			glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 0.0f), glm::vec2(1.0f, 1.0f), glm::vec2(0.0f, 1.0f)};
-		constexpr std::uint32_t kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-
 		glGenVertexArrays(1, &m_LabelQuadMesh.vao);
 		glGenBuffers(1, &m_LabelQuadMesh.vbo);
 		glGenBuffers(1, &m_LabelQuadMesh.ebo);
@@ -1136,6 +1631,69 @@ namespace DefectStudio
 
 		glBindVertexArray(0);
 		m_LabelQuadMesh.indexCount = 6;
+	}
+
+	// SceneArrow Arrow2D quad - shares the same static kQuadVertices/kQuadIndices geometry as
+	// m_LabelQuadMesh above, but OpenGlArrowQuadInstance is a different layout than
+	// OpenGlLabelInstance (world-space right/up basis instead of a camera-derived billboard), so it
+	// needs its own VAO/instance VBO rather than reusing m_LabelQuadMesh's.
+	void OpenGlRendererBackend::createArrowQuadMesh()
+	{
+		glGenVertexArrays(1, &m_ArrowQuadMesh.vao);
+		glGenBuffers(1, &m_ArrowQuadMesh.vbo);
+		glGenBuffers(1, &m_ArrowQuadMesh.ebo);
+		glGenBuffers(1, &m_ArrowQuadMesh.instanceVbo);
+		glBindVertexArray(m_ArrowQuadMesh.vao);
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_ArrowQuadMesh.vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(kQuadVertices), kQuadVertices, GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ArrowQuadMesh.ebo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(kQuadIndices), kQuadIndices, GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+
+		glBindBuffer(GL_ARRAY_BUFFER, m_ArrowQuadMesh.instanceVbo);
+		glBufferData(GL_ARRAY_BUFFER, 1, nullptr, GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, worldCenter)));
+		glVertexAttribDivisor(1, 1);
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, right)));
+		glVertexAttribDivisor(2, 1);
+		glEnableVertexAttribArray(3);
+		glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, up)));
+		glVertexAttribDivisor(3, 1);
+		glEnableVertexAttribArray(4);
+		glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, halfSize)));
+		glVertexAttribDivisor(4, 1);
+		glEnableVertexAttribArray(5);
+		glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, color)));
+		glVertexAttribDivisor(5, 1);
+		glEnableVertexAttribArray(6);
+		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, outlineColor)));
+		glVertexAttribDivisor(6, 1);
+		glEnableVertexAttribArray(7);
+		glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, outlineWidth)));
+		glVertexAttribDivisor(7, 1);
+		glEnableVertexAttribArray(8);
+		glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, headHalfWidth)));
+		glVertexAttribDivisor(8, 1);
+		glEnableVertexAttribArray(9);
+		glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, headLength)));
+		glVertexAttribDivisor(9, 1);
+
+		glBindVertexArray(0);
+		m_ArrowQuadMesh.indexCount = 6;
 	}
 
 	void OpenGlRendererBackend::createScreenGrid()
@@ -1461,6 +2019,7 @@ namespace DefectStudio
 		const int specularIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularIntensity");
 		const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
 		const int saturationLocation = m_ShaderLibrary.Uniform("bonds", "u_Saturation");
+		const int specularScaleLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularScale");
 		const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
 		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
 		if (keyDirectionLocation >= 0)
@@ -1490,6 +2049,8 @@ namespace DefectStudio
 			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
 		if (saturationLocation >= 0)
 			glUniform1f(saturationLocation, globalSettings.colorSaturation);
+		if (specularScaleLocation >= 0)
+			glUniform1f(specularScaleLocation, 1.0f);
 		if (bondRadiusMultiplierLocation >= 0)
 			glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
 		if (sceneOffsetLocation >= 0)
@@ -1506,110 +2067,374 @@ namespace DefectStudio
 		resources.bondsDirty = false;
 	}
 
+	// Right/up in-plane basis for an Arrow2D quad: right follows the arrow's own direction projected
+	// onto the given plane (so the quad points where the arrow points, same intent as
+	// PinnedMeasurement::alignToBondDirection for labels), up is perpendicular within that same
+	// plane. Used for both orientations - Billboard passes the camera's forward vector as
+	// planeNormal, FixedPlane passes the chosen world axis - so this has no camera-specific logic of
+	// its own, and the sign of planeNormal doesn't matter (a flat color quad is symmetric).
+	void ComputeArrowQuadBasis(
+		const glm::vec3 &direction,
+		const glm::vec3 &planeNormal,
+		glm::vec3 &outRight,
+		glm::vec3 &outUp)
+	{
+		const glm::vec3 projected = direction - planeNormal * glm::dot(direction, planeNormal);
+		glm::vec3 fallbackRight = glm::vec3(1.0f, 0.0f, 0.0f);
+		if (std::abs(glm::dot(planeNormal, fallbackRight)) > 0.97f)
+			fallbackRight = glm::vec3(0.0f, 1.0f, 0.0f);
+		outRight = SafeNormalize(projected, fallbackRight);
+		outUp = SafeNormalize(glm::cross(planeNormal, outRight), glm::vec3(0.0f, 0.0f, 1.0f));
+	}
+
 	void OpenGlRendererBackend::renderSceneArrows(
 		const std::vector<RendererWindowState::SceneArrow> &arrows,
+		const std::vector<std::size_t> &selectedArrows,
 		const RendererViewCamera &camera,
+		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
+		bool renderArrow2D,
+		const glm::vec2 &viewportPixelSize,
 		const glm::vec3 &sceneOffset)
 	{
-		std::vector<OpenGlBondInstance> instances;
-		instances.reserve(arrows.size());
-		for (const RendererWindowState::SceneArrow &arrow : arrows)
+		using ArrowKind = RendererWindowState::ArrowKind;
+		using Arrow2DOrientation = RendererWindowState::Arrow2DOrientation;
+		using WorldPlane = RendererWindowState::WorldPlane;
+
+		const glm::mat4 view = camera.ViewMatrix();
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * view;
+		const glm::vec3 cameraForward(view[0][2], view[1][2], view[2][2]);
+
+		// Local rather than SelectionHitTest::ProjectToScreen - needs the raw clip.w test inline and
+		// returns a plain glm::vec2 for the pixel-delta arithmetic right below each call.
+		auto projectToPixels = [&](const glm::vec3 &world, glm::vec2 &outPixels) -> bool {
+			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+			if (clip.w <= 0.0001f)
+				return false;
+			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+			outPixels = glm::vec2(
+				(ndc.x * 0.5f + 0.5f) * viewportPixelSize.x, (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportPixelSize.y);
+			return true;
+		};
+
+		// Arrow3D mesh cache is indexed by position in `arrows` - synced to arrows.size() up front
+		// (shrink frees GL objects for the dropped tail; grow must also happen here, never lazily
+		// inside the loop below) so std::vector::resize's potential reallocation can never invalidate
+		// an `Arrow3DDrawJob::mesh` pointer captured for an earlier index in the same call - e.g.
+		// pasting 2 new Arrow3D arrows used to grow this vector one index at a time mid-loop, moving
+		// already-queued jobs' mesh pointers to freed memory and feeding glDrawElementsInstanced a
+		// garbage index count (GL_INVALID_VALUE/GL_INVALID_OPERATION). Runs on every call (this
+		// function fires twice per frame) but is a no-op once already in sync - cheap size compare,
+		// not worth guarding further.
+		if (resources.sceneArrow3DMeshCache.size() > arrows.size())
 		{
-			const float length = glm::length(arrow.end - arrow.start);
+			for (std::size_t i = arrows.size(); i < resources.sceneArrow3DMeshCache.size(); ++i)
+				DeleteMeshHandles(resources.sceneArrow3DMeshCache[i].mesh);
+			resources.sceneArrow3DMeshCache.resize(arrows.size());
+		}
+		else if (resources.sceneArrow3DMeshCache.size() < arrows.size())
+		{
+			resources.sceneArrow3DMeshCache.resize(arrows.size());
+		}
+
+		std::vector<OpenGlBondInstance> shaftInstances;
+		std::vector<OpenGlArrowQuadInstance> quadInstances;
+		shaftInstances.reserve(arrows.size());
+		// One draw job per Arrow3D - each has its own welded mesh (see OpenGlSceneArrowMeshCache), so
+		// unlike shaftInstances/quadInstances above these can't be batched into a single instanced
+		// draw call across arrows.
+		struct Arrow3DDrawJob
+		{
+			const OpenGlMeshHandles *mesh;
+			OpenGlBondInstance instance;
+		};
+		std::vector<Arrow3DDrawJob> arrow3DJobs;
+		// Whole Line/Arrow3D batch drawn with depth writes off if any one arrow is translucent (see the
+		// draw block below) - simple unsorted transparency, not a sorted system, per
+		// docs/scene_arrow_rework_plan_corrected.md Step 8's "keep it simple" option.
+		bool anyTransparent = false;
+
+		for (std::size_t arrowIndex = 0; arrowIndex < arrows.size(); ++arrowIndex)
+		{
+			const RendererWindowState::SceneArrow &arrow = arrows[arrowIndex];
+			// Two passes per frame (see this function's declaration comment) - each skips the kind it
+			// doesn't own so building/uploading/drawing the other kind's instances never happens twice.
+			const bool isArrow2D = arrow.kind == ArrowKind::Arrow2D;
+			if (isArrow2D != renderArrow2D)
+				continue;
+
+			const glm::vec3 axis = arrow.end - arrow.start;
+			const float length = glm::length(axis);
 			if (!std::isfinite(length) || length <= 0.0001f)
 				continue;
-			constexpr float kArrowShaftRadius = 0.06f;
-			OpenGlBondInstance instance;
-			instance.model = buildBondTransform(arrow.start, arrow.end, kArrowShaftRadius);
-			instance.colorA = glm::vec4(arrow.color, 1.0f);
-			instance.colorB = glm::vec4(arrow.color, 1.0f);
-			instances.push_back(instance);
-		}
-		if (instances.empty())
-			return;
+			const glm::vec3 direction = axis / length;
+			const RendererWindowState::ArrowStyle &style = arrow.style;
+			// Same accent/blend as atom and bond selection highlighting - SceneArrow never had an
+			// equivalent before (RendererPanel's hit-test/drag already worked, but nothing ever showed
+			// which arrow that state referred to).
+			constexpr glm::vec3 kSelectionHighlightColor(0.91f, 0.52f, 0.02f);
+			const bool isSelected =
+				std::find(selectedArrows.begin(), selectedArrows.end(), arrowIndex) != selectedArrows.end();
+			const glm::vec4 color(
+				isSelected ? glm::mix(style.color, kSelectionHighlightColor, 0.55f) : style.color, style.alpha);
 
-		const unsigned int program = m_ShaderLibrary.Program("bonds");
-		if (program == 0)
+			if (isArrow2D)
+			{
+				const glm::vec3 worldCenter = (arrow.start + arrow.end) * 0.5f;
+				const glm::vec3 planeNormal = arrow.orientation2D == Arrow2DOrientation::Billboard
+					? cameraForward
+					: arrow.fixedPlane == WorldPlane::XY   ? glm::vec3(0.0f, 0.0f, 1.0f)
+					: arrow.fixedPlane == WorldPlane::XZ   ? glm::vec3(0.0f, 1.0f, 0.0f)
+															: glm::vec3(1.0f, 0.0f, 0.0f);
+				glm::vec3 right(0.0f), up(0.0f);
+				ComputeArrowQuadBasis(direction, planeNormal, right, up);
+
+				// ArrowStyle's shaftWidth/headWidth/headLength/outlineWidth are screen-space pixels
+				// for every Arrow2D orientation (docs/scene_arrow_rework_plan_corrected.md Section 8)
+				// - convert to this arrow's own local world-space scale via a projection probe, same
+				// pixel<->world idea RendererPanel::handleFreeLabelInteraction already uses for its
+				// drag delta. Skip the arrow (rather than divide by ~0) if any of the three points
+				// needed for the probe project behind the camera.
+				glm::vec2 centerPixels(0.0f), rightProbePixels(0.0f), upProbePixels(0.0f);
+				if (!projectToPixels(worldCenter, centerPixels) ||
+					!projectToPixels(worldCenter + right, rightProbePixels) ||
+					!projectToPixels(worldCenter + up, upProbePixels))
+					continue;
+				const float worldPerPixelRight = 1.0f / std::max(glm::length(rightProbePixels - centerPixels), 0.0001f);
+				const float worldPerPixelUp = 1.0f / std::max(glm::length(upProbePixels - centerPixels), 0.0001f);
+
+				// Clamped so a long requested head doesn't consume more than half a short arrow.
+				const float headLengthWorld = std::min(style.headLength * worldPerPixelRight, 0.45f * length);
+
+				OpenGlArrowQuadInstance quad;
+				quad.worldCenter = worldCenter;
+				quad.right = right;
+				quad.up = up;
+				quad.halfSize = glm::vec2(length * 0.5f, style.shaftWidth * 0.5f * worldPerPixelUp);
+				quad.color = color;
+				quad.outlineColor = style.outlineColor;
+				quad.outlineWidth = style.outlineWidth * worldPerPixelUp;
+				quad.headHalfWidth = style.headWidth * 0.5f * worldPerPixelUp;
+				quad.headLength = headLengthWorld;
+				quadInstances.push_back(quad);
+				continue;
+			}
+
+			if (color.a < 0.999f)
+				anyTransparent = true;
+
+			// shaftWidth/headWidth are full diameters (docs/scene_arrow_rework_plan_corrected.md
+			// Section 8's global semantic rule) - buildBondTransform/BuildWeldedArrowMesh want a radius.
+			const float shaftRadius = 0.5f * style.shaftWidth;
+
+			if (arrow.kind == ArrowKind::Line)
+			{
+				OpenGlBondInstance shaft;
+				shaft.model = buildBondTransform(arrow.start, arrow.end, shaftRadius);
+				shaft.colorA = color;
+				shaft.colorB = color;
+				shaftInstances.push_back(shaft);
+				continue;
+			}
+
+			// Arrow3D: one welded shaft+head mesh per arrow (BuildWeldedArrowMesh) instead of the
+			// shared cylinder+cone instanced separately - see that function's declaration comment for
+			// why two independently-instanced meshes could never share a seam vertex/normal. Head
+			// capped at 0.6*length (not the whole arrow) so a short arrow always keeps a visible shaft.
+			const float headRadius = 0.5f * style.headWidth;
+			const float headLength = std::min(style.headLength, length * 0.6f);
+
+			// No resize here - the cache is already sized to arrows.size() above, before this loop
+			// took any `&cacheEntry.mesh` addresses (see that block's comment for why resizing here
+			// instead used to dangle earlier jobs' mesh pointers).
+			OpenGlSceneArrowMeshCache &cacheEntry = resources.sceneArrow3DMeshCache[arrowIndex];
+			if (cacheEntry.shaftRadius != shaftRadius || cacheEntry.headRadius != headRadius ||
+				cacheEntry.headLength != headLength || cacheEntry.length != length ||
+				cacheEntry.bulgeStrength != globalSettings.arrowHeadBulgeStrength)
+			{
+				constexpr std::uint32_t kArrow3DRadialSegments = 24u;
+				const RefinedConeMesh welded = BuildWeldedArrowMesh(
+					shaftRadius, headRadius, headLength, length, kArrow3DRadialSegments,
+					globalSettings.arrowHeadBulgeStrength);
+				UploadSceneArrowMesh(cacheEntry.mesh, welded);
+				cacheEntry.shaftRadius = shaftRadius;
+				cacheEntry.headRadius = headRadius;
+				cacheEntry.headLength = headLength;
+				cacheEntry.length = length;
+				cacheEntry.bulgeStrength = globalSettings.arrowHeadBulgeStrength;
+			}
+
+			if (cacheEntry.mesh.indexCount > 0)
+			{
+				Arrow3DDrawJob job;
+				job.mesh = &cacheEntry.mesh;
+				// No length/radius scale - BuildWeldedArrowMesh already bakes absolute world-unit
+				// dimensions into its vertices (see buildArrowRevolutionTransform's declaration comment).
+				job.instance.model = buildArrowRevolutionTransform(arrow.start, arrow.end);
+				job.instance.colorA = color;
+				job.instance.colorB = color;
+				arrow3DJobs.push_back(job);
+			}
+		}
+
+		if (shaftInstances.empty() && arrow3DJobs.empty() && quadInstances.empty())
 			return;
 
 #if defined(TRACY_ENABLE)
 		TracyGpuZone("Renderer.SceneArrows");
 #endif
 
-		glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
-		const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(instances.size() * sizeof(OpenGlBondInstance));
-		GLint currentSize = 0;
-		glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
-		if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
+		if (!shaftInstances.empty() || !arrow3DJobs.empty())
 		{
-			const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
-			glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
-		}
-		glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, instances.data());
+			const unsigned int program = m_ShaderLibrary.Program("bonds");
+			if (program != 0)
+			{
+				if (!shaftInstances.empty())
+				{
+					glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
+					const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(shaftInstances.size() * sizeof(OpenGlBondInstance));
+					GLint currentSize = 0;
+					glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
+					if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
+					{
+						const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
+						glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
+					}
+					glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, shaftInstances.data());
+				}
 
-		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
-		glUseProgram(program);
-		const int viewProjectionLocation = m_ShaderLibrary.Uniform("bonds", "u_ViewProjection");
-		if (viewProjectionLocation >= 0)
-			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
-		const int keyDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyDirection");
-		const int fillDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_FillDirection");
-		const int backDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_BackDirection");
-		const int ambientLocation = m_ShaderLibrary.Uniform("bonds", "u_AmbientIntensity");
-		const int keyIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyIntensity");
-		const int fillIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_FillIntensity");
-		const int backIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_BackIntensity");
-		const int twoSidedLocation = m_ShaderLibrary.Uniform("bonds", "u_TwoSidedLighting");
-		const int cameraPositionLocation = m_ShaderLibrary.Uniform("bonds", "u_CameraPosition");
-		const int specularIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularIntensity");
-		const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
-		const int saturationLocation = m_ShaderLibrary.Uniform("bonds", "u_Saturation");
-		// Arrows are a fixed user-chosen color, not derived from AtomStyleTable like bonds - the
-		// thickness/saturation sliders (RendererGlobalRenderSettings) still apply for visual
-		// consistency with the rest of the scene, same uniforms renderBonds uploads.
-		const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
-		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
-		if (keyDirectionLocation >= 0)
-			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
-		if (fillDirectionLocation >= 0)
-			glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
-		if (backDirectionLocation >= 0)
-			glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
-		if (ambientLocation >= 0)
-			glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
-		if (keyIntensityLocation >= 0)
-			glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
-		if (fillIntensityLocation >= 0)
-			glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
-		if (backIntensityLocation >= 0)
-			glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
-		if (twoSidedLocation >= 0)
-			glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
-		if (cameraPositionLocation >= 0)
+				glUseProgram(program);
+				const int viewProjectionLocation = m_ShaderLibrary.Uniform("bonds", "u_ViewProjection");
+				if (viewProjectionLocation >= 0)
+					glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+				const int keyDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyDirection");
+				const int fillDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_FillDirection");
+				const int backDirectionLocation = m_ShaderLibrary.Uniform("bonds", "u_BackDirection");
+				const int ambientLocation = m_ShaderLibrary.Uniform("bonds", "u_AmbientIntensity");
+				const int keyIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_KeyIntensity");
+				const int fillIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_FillIntensity");
+				const int backIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_BackIntensity");
+				const int twoSidedLocation = m_ShaderLibrary.Uniform("bonds", "u_TwoSidedLighting");
+				const int cameraPositionLocation = m_ShaderLibrary.Uniform("bonds", "u_CameraPosition");
+				const int specularIntensityLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularIntensity");
+				const int shininessLocation = m_ShaderLibrary.Uniform("bonds", "u_Shininess");
+				const int saturationLocation = m_ShaderLibrary.Uniform("bonds", "u_Saturation");
+				const int specularScaleLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularScale");
+				// Arrows are a fixed user-chosen color, not derived from AtomStyleTable like bonds -
+				// the thickness/saturation sliders (RendererGlobalRenderSettings) still apply for
+				// visual consistency with the rest of the scene, same uniforms renderBonds uploads.
+				const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
+				const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
+				if (keyDirectionLocation >= 0)
+					glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
+				if (fillDirectionLocation >= 0)
+					glUniform3fv(fillDirectionLocation, 1, &globalSettings.lighting.fillDirection.x);
+				if (backDirectionLocation >= 0)
+					glUniform3fv(backDirectionLocation, 1, &globalSettings.lighting.backDirection.x);
+				if (ambientLocation >= 0)
+					glUniform1f(ambientLocation, globalSettings.lighting.ambientIntensity);
+				if (keyIntensityLocation >= 0)
+					glUniform1f(keyIntensityLocation, globalSettings.lighting.keyIntensity);
+				if (fillIntensityLocation >= 0)
+					glUniform1f(fillIntensityLocation, globalSettings.lighting.fillIntensity);
+				if (backIntensityLocation >= 0)
+					glUniform1f(backIntensityLocation, globalSettings.lighting.backIntensity);
+				if (twoSidedLocation >= 0)
+					glUniform1i(twoSidedLocation, globalSettings.lighting.twoSided ? 1 : 0);
+				if (cameraPositionLocation >= 0)
+				{
+					const glm::vec3 cameraPosition = camera.Position();
+					glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
+				}
+				if (specularIntensityLocation >= 0)
+					glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
+				if (shininessLocation >= 0)
+					glUniform1f(shininessLocation, globalSettings.lighting.shininess);
+				if (saturationLocation >= 0)
+					glUniform1f(saturationLocation, globalSettings.colorSaturation);
+				if (specularScaleLocation >= 0)
+					glUniform1f(specularScaleLocation, 0.25f);
+				if (bondRadiusMultiplierLocation >= 0)
+					glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
+				if (sceneOffsetLocation >= 0)
+					glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
+
+				// Alpha blending on translucent arrows still writes depth by default, which would let a
+				// see-through arrow wrongly occlude whatever is behind it. Not a full sorted-transparency
+				// system (docs/scene_arrow_rework_plan_corrected.md Step 8 explicitly rules that out for
+				// this rework) - just depth writes off for the pass, restored right after, same
+				// GL_BLEND/GL_DEPTH_TEST the rest of the scene already has enabled.
+				if (anyTransparent)
+					glDepthMask(GL_FALSE);
+
+				if (!shaftInstances.empty())
+				{
+					glBindVertexArray(m_CylinderMesh.vao);
+					glDrawElementsInstanced(
+						GL_TRIANGLES, m_CylinderMesh.indexCount, GL_UNSIGNED_INT, nullptr,
+						static_cast<int>(shaftInstances.size()));
+				}
+				// Each Arrow3D has its own mesh (different shaft/head proportions), so unlike the
+				// shaft's shared m_CylinderMesh above, this can't be one instanced call across arrows -
+				// one draw per job, instance count 1 (reuses the exact same instanced VAO layout/
+				// uniforms, just with a single-element instance buffer instead of a batch).
+				for (const Arrow3DDrawJob &job : arrow3DJobs)
+				{
+					glBindBuffer(GL_ARRAY_BUFFER, job.mesh->instanceVbo);
+					glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(OpenGlBondInstance), &job.instance);
+					glBindVertexArray(job.mesh->vao);
+					glDrawElementsInstanced(GL_TRIANGLES, job.mesh->indexCount, GL_UNSIGNED_INT, nullptr, 1);
+				}
+				glBindVertexArray(0);
+
+				if (anyTransparent)
+					glDepthMask(GL_TRUE);
+			}
+		}
+
+		if (!quadInstances.empty())
 		{
-			const glm::vec3 cameraPosition = camera.Position();
-			glUniform3fv(cameraPositionLocation, 1, &cameraPosition.x);
-		}
-		if (specularIntensityLocation >= 0)
-			glUniform1f(specularIntensityLocation, globalSettings.lighting.specularIntensity);
-		if (shininessLocation >= 0)
-			glUniform1f(shininessLocation, globalSettings.lighting.shininess);
-		if (saturationLocation >= 0)
-			glUniform1f(saturationLocation, globalSettings.colorSaturation);
-		if (bondRadiusMultiplierLocation >= 0)
-			glUniform1f(bondRadiusMultiplierLocation, globalSettings.bondRadiusMultiplier);
-		if (sceneOffsetLocation >= 0)
-			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
+			const unsigned int quadProgram = m_ShaderLibrary.Program("arrow_quad");
+			if (quadProgram != 0)
+			{
+				glBindBuffer(GL_ARRAY_BUFFER, m_ArrowQuadMesh.instanceVbo);
+				const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(quadInstances.size() * sizeof(OpenGlArrowQuadInstance));
+				GLint currentSize = 0;
+				glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
+				if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
+				{
+					const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
+					glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
+				}
+				glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, quadInstances.data());
 
-		glBindVertexArray(m_CylinderMesh.vao);
-		glDrawElementsInstanced(
-			GL_TRIANGLES,
-			m_CylinderMesh.indexCount,
-			GL_UNSIGNED_INT,
-			nullptr,
-			static_cast<int>(instances.size()));
-		glBindVertexArray(0);
+				glUseProgram(quadProgram);
+				const int viewProjectionLocation = m_ShaderLibrary.Uniform("arrow_quad", "u_ViewProjection");
+				if (viewProjectionLocation >= 0)
+					glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
+				const int sceneOffsetLocation = m_ShaderLibrary.Uniform("arrow_quad", "u_SceneOffset");
+				if (sceneOffsetLocation >= 0)
+					glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
+
+				// FixedPlane orientation picks a constant world-axis normal regardless of which side
+				// the camera ends up on (Billboard's camera-facing normal always faces the viewer by
+				// construction, but a fixed plane's does not) - back-face culling was silently
+				// discarding the whole quad from the "wrong" side, same fix already applied to the
+				// isosurface's translucent shell below. Depth test is also off for this pass -
+				// Arrow2D is drawn late, alongside labels (see this function's declaration comment /
+				// RenderWindow), so an annotation always reads on top regardless of where it's
+				// anchored in 3D.
+				glDisable(GL_CULL_FACE);
+				glDisable(GL_DEPTH_TEST);
+				glBindVertexArray(m_ArrowQuadMesh.vao);
+				glDrawElementsInstanced(
+					GL_TRIANGLES, m_ArrowQuadMesh.indexCount, GL_UNSIGNED_INT, nullptr,
+					static_cast<int>(quadInstances.size()));
+				glBindVertexArray(0);
+				glEnable(GL_DEPTH_TEST);
+				glEnable(GL_CULL_FACE);
+			}
+		}
 	}
 
 	// Auto bond-length labels, one MSDF billboard per bond, always regenerated from live atom
@@ -2517,5 +3342,39 @@ namespace DefectStudio
 		const glm::mat4 translation = glm::translate(glm::mat4(1.0f), start);
 		const glm::mat4 scaling = glm::scale(glm::mat4(1.0f), glm::vec3(radius, radius, length));
 		return translation * rotation * scaling;
+	}
+
+	glm::mat4 OpenGlRendererBackend::buildArrowRevolutionTransform(const glm::vec3 &start, const glm::vec3 &end) const
+	{
+		if (!IsFiniteVec3(start) || !IsFiniteVec3(end))
+			return glm::mat4(1.0f);
+
+		const glm::vec3 direction = end - start;
+		const float length = glm::length(direction);
+		if (!std::isfinite(length) || length <= 0.00001f)
+			return glm::mat4(1.0f);
+		const glm::vec3 zAxis = direction / length;
+		glm::vec3 helperUp = glm::vec3(0.0f, 1.0f, 0.0f);
+		if (std::abs(glm::dot(zAxis, helperUp)) > 0.97f)
+			helperUp = glm::vec3(1.0f, 0.0f, 0.0f);
+		const glm::vec3 xCandidate = glm::cross(helperUp, zAxis);
+		const float xLength = glm::length(xCandidate);
+		if (!std::isfinite(xLength) || xLength <= 0.00001f)
+			return glm::mat4(1.0f);
+		const glm::vec3 xAxis = xCandidate / xLength;
+		const glm::vec3 yCandidate = glm::cross(zAxis, xAxis);
+		const float yLength = glm::length(yCandidate);
+		if (!std::isfinite(yLength) || yLength <= 0.00001f)
+			return glm::mat4(1.0f);
+		const glm::vec3 yAxis = yCandidate / yLength;
+		if (!IsFiniteVec3(xAxis) || !IsFiniteVec3(yAxis) || !IsFiniteVec3(zAxis))
+			return glm::mat4(1.0f);
+
+		glm::mat4 rotation(1.0f);
+		rotation[0] = glm::vec4(xAxis, 0.0f);
+		rotation[1] = glm::vec4(yAxis, 0.0f);
+		rotation[2] = glm::vec4(zAxis, 0.0f);
+
+		return glm::translate(glm::mat4(1.0f), start) * rotation;
 	}
 } // namespace DefectStudio

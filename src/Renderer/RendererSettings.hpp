@@ -84,6 +84,16 @@ namespace DefectStudio
 		// (native resolution, default). Export has its own separate resolution presets
 		// (RenderExportDialogState) - this only affects the live/interactive view.
 		float viewportSupersample = 1.0f;
+		// Rounds Arrow3D's shaft/head shoulder instead of leaving it a sharp corner - see
+		// BuildWeldedArrowMesh (OpenGlRendererBackend.cpp) for how this feeds the mesh. 0 = classic
+		// hard-edged corner, 1 = a wide rounded bulge spread across up to half of headLength.
+		float arrowHeadBulgeStrength = 0.16f;
+		// Default SceneArrow proportions for new/kind-switched Arrow3D and Line arrows, as a fraction
+		// of the arrow's own length L (ApplySceneArrowKindChange multiplies these by L) - not fixed
+		// absolute sizes, so an arrow keeps the same silhouette regardless of how long it is.
+		float arrowDefaultShaftWidthRatio = 0.025f;
+		float arrowDefaultHeadWidthRatio = 0.047f;
+		float arrowDefaultHeadLengthRatio = 0.166f;
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;

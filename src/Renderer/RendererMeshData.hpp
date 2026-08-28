@@ -19,5 +19,6 @@ namespace DefectStudio
 	{
 		RendererStaticMeshData sphere;
 		RendererStaticMeshData cylinder;
+		RendererStaticMeshData cone; // SceneArrow Arrow3D head, see OpenGlRendererBackend::createConeMesh
 	};
 } // namespace DefectStudio

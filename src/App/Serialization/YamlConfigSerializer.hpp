@@ -30,6 +30,10 @@ namespace DefectStudio
 
 		enum class RendererKey
 		{
+			ArrowDefaultHeadLengthRatio,
+			ArrowDefaultHeadWidthRatio,
+			ArrowDefaultShaftWidthRatio,
+			ArrowHeadBulgeStrength,
 			AutoApplyDefaultViewOnOpen,
 			Background,
 			BondRadiusMultiplier,
@@ -232,6 +236,10 @@ namespace DefectStudio
 		};
 
 		inline const std::unordered_map<RendererKey, const char *> RendererKeyNames = {
+			{RendererKey::ArrowDefaultHeadLengthRatio, "arrow_default_head_length_ratio"},
+			{RendererKey::ArrowDefaultHeadWidthRatio, "arrow_default_head_width_ratio"},
+			{RendererKey::ArrowDefaultShaftWidthRatio, "arrow_default_shaft_width_ratio"},
+			{RendererKey::ArrowHeadBulgeStrength, "arrow_head_bulge_strength"},
 			{RendererKey::AutoApplyDefaultViewOnOpen, "auto_apply_default_view_on_open"},
 			{RendererKey::Background, "background"},
 			{RendererKey::BondRadiusMultiplier, "bond_radius_multiplier"},

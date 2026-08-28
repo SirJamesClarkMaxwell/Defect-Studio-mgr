@@ -57,6 +57,32 @@ namespace DefectStudio
 				registry.get<VisibilityComponent>(entity).visible = visible;
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
+
+		// Selection highlight tint - ImGuiTreeNodeFlags_Selected's default background reads as
+		// barely-there on this theme (see ProjectTreePanel.cpp's identical fix), so a selected
+		// label/pin/arrow row gets a solid, more opaque tint pushed just for that one item.
+		void PushSelectedRowColors()
+		{
+			ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.85f, 0.42f, 0.05f, 0.85f));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.95f, 0.50f, 0.10f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.95f, 0.50f, 0.10f, 0.9f));
+		}
+
+		// Selecting any one of the three annotation kinds from the outliner clears the other two -
+		// same three-way mutual exclusivity RendererPanel::handleFreeLabelInteraction/
+		// handlePinnedMeasurementInteraction/handleSceneArrowInteraction already enforce for a
+		// viewport click, so outliner-driven selection can't leave a stale cross-kind selection a
+		// viewport click never would.
+		void ClearOtherAnnotationSelections(
+			RendererWindowState &windowState, std::vector<std::size_t> *keep)
+		{
+			if (&windowState.selectedFreeLabels != keep)
+				windowState.selectedFreeLabels.clear();
+			if (&windowState.selectedPinnedMeasurements != keep)
+				windowState.selectedPinnedMeasurements.clear();
+			if (&windowState.selectedSceneArrows != keep)
+				windowState.selectedSceneArrows.clear();
+		}
 	} // namespace
 
 	SceneOutlinerPanel::SceneOutlinerPanel(RendererLayer &layer, std::string title, bool visibleByDefault)
@@ -126,6 +152,151 @@ namespace DefectStudio
 				for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
 					drawAtomRow(windowState, atomIndices[static_cast<std::size_t>(row)]);
 			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawFreeLabelRow(RendererWindowState &windowState, std::size_t labelIndex)
+	{
+		// "Free"/"Pin" discriminator prefix, not just the numeric index - drawLabelsGroup draws both
+		// kinds' rows as siblings under the same tree node, and each restarts its own index from 0.
+		ImGui::PushID("Free");
+		ImGui::PushID(static_cast<int>(labelIndex));
+		std::vector<std::size_t> &selection = windowState.selectedFreeLabels;
+		const bool isSelected = std::find(selection.begin(), selection.end(), labelIndex) != selection.end();
+		const std::string &text = windowState.freeLabels[labelIndex].text;
+		char rowLabel[96];
+		std::snprintf(rowLabel, sizeof(rowLabel), "%s", text.empty() ? "(no text)" : text.c_str());
+
+		if (isSelected)
+			PushSelectedRowColors();
+		ImGui::Selectable(rowLabel, isSelected);
+		if (isSelected)
+			ImGui::PopStyleColor(3);
+		if (ImGui::IsItemClicked())
+		{
+			ClearOtherAnnotationSelections(windowState, &selection);
+			if (ImGui::GetIO().KeyCtrl)
+			{
+				const auto existing = std::find(selection.begin(), selection.end(), labelIndex);
+				if (existing != selection.end())
+					selection.erase(existing);
+				else
+					selection.push_back(labelIndex);
+			}
+			else
+			{
+				selection = {labelIndex};
+			}
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		}
+		ImGui::PopID();
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawPinnedMeasurementRow(RendererWindowState &windowState, std::size_t pinIndex)
+	{
+		ImGui::PushID("Pin");
+		ImGui::PushID(static_cast<int>(pinIndex));
+		std::vector<std::size_t> &selection = windowState.selectedPinnedMeasurements;
+		const bool isSelected = std::find(selection.begin(), selection.end(), pinIndex) != selection.end();
+		const RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[pinIndex];
+		char rowLabel[32];
+		std::snprintf(rowLabel, sizeof(rowLabel), "%s #%zu", pin.atomIndices.size() == 2 ? "Bond length" : "Angle", pinIndex);
+
+		if (isSelected)
+			PushSelectedRowColors();
+		ImGui::Selectable(rowLabel, isSelected);
+		if (isSelected)
+			ImGui::PopStyleColor(3);
+		if (ImGui::IsItemClicked())
+		{
+			ClearOtherAnnotationSelections(windowState, &selection);
+			if (ImGui::GetIO().KeyCtrl)
+			{
+				const auto existing = std::find(selection.begin(), selection.end(), pinIndex);
+				if (existing != selection.end())
+					selection.erase(existing);
+				else
+					selection.push_back(pinIndex);
+			}
+			else
+			{
+				selection = {pinIndex};
+			}
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		}
+		ImGui::PopID();
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawLabelsGroup(RendererWindowState &windowState)
+	{
+		ImGui::PushID("##labelsGroup");
+		char groupLabel[32];
+		std::snprintf(
+			groupLabel, sizeof(groupLabel), "Labels (%zu)",
+			windowState.freeLabels.size() + windowState.pinnedMeasurements.size());
+		const bool open = ImGui::TreeNodeEx(
+			"##labels", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
+		if (open)
+		{
+			for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
+				drawFreeLabelRow(windowState, i);
+			for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
+				drawPinnedMeasurementRow(windowState, i);
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex)
+	{
+		ImGui::PushID(static_cast<int>(arrowIndex));
+		std::vector<std::size_t> &selection = windowState.selectedSceneArrows;
+		const bool isSelected = std::find(selection.begin(), selection.end(), arrowIndex) != selection.end();
+		const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
+		const char *kindLabel = arrow.kind == RendererWindowState::ArrowKind::Line ? "Line"
+			: arrow.kind == RendererWindowState::ArrowKind::Arrow2D ? "Arrow 2D" : "Arrow 3D";
+		char rowLabel[32];
+		std::snprintf(rowLabel, sizeof(rowLabel), "%s #%zu", kindLabel, arrowIndex);
+
+		if (isSelected)
+			PushSelectedRowColors();
+		ImGui::Selectable(rowLabel, isSelected);
+		if (isSelected)
+			ImGui::PopStyleColor(3);
+		if (ImGui::IsItemClicked())
+		{
+			ClearOtherAnnotationSelections(windowState, &selection);
+			if (ImGui::GetIO().KeyCtrl)
+			{
+				const auto existing = std::find(selection.begin(), selection.end(), arrowIndex);
+				if (existing != selection.end())
+					selection.erase(existing);
+				else
+					selection.push_back(arrowIndex);
+			}
+			else
+			{
+				selection = {arrowIndex};
+			}
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawArrowsGroup(RendererWindowState &windowState)
+	{
+		ImGui::PushID("##arrowsGroup");
+		char groupLabel[32];
+		std::snprintf(groupLabel, sizeof(groupLabel), "Arrows (%zu)", windowState.sceneArrows.size());
+		const bool open = ImGui::TreeNodeEx(
+			"##arrows", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
+		if (open)
+		{
+			for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
+				drawSceneArrowRow(windowState, i);
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -216,6 +387,9 @@ namespace DefectStudio
 
 					for (const auto &[species, atomIndices] : speciesGroups)
 						drawSpeciesGroup(windowState, species, atomIndices);
+
+					drawLabelsGroup(windowState);
+					drawArrowsGroup(windowState);
 
 					ImGui::TreePop();
 				}

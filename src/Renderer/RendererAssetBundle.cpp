@@ -19,6 +19,7 @@ namespace DefectStudio
 		Path startupLayoutPath;
 		Path sphereMeshPath;
 		Path cylinderMeshPath;
+		Path coneMeshPath;
 	};
 
 	[[nodiscard]] StructuredError MakeRendererAssetError(
@@ -77,6 +78,11 @@ namespace DefectStudio
 		if (!cylinderMeshPath.HasValue())
 			return cylinderMeshPath.Error();
 		paths.cylinderMeshPath = cylinderMeshPath.Value();
+
+		Result<Path> coneMeshPath = ResolveAssetPath(assetManager, "assets/renderer/meshes/cone.obj");
+		if (!coneMeshPath.HasValue())
+			return coneMeshPath.Error();
+		paths.coneMeshPath = coneMeshPath.Value();
 
 		return paths;
 	}
@@ -198,6 +204,16 @@ namespace DefectStudio
 			"Check cylinder OBJ syntax and availability.");
 		if (!cylinderMeshResult.HasValue())
 			return cylinderMeshResult.Error();
+
+		Result<void> coneMeshResult = LoadPrimitiveMesh(
+			paths.coneMeshPath,
+			bundle.primitiveMeshes.cone,
+			true,
+			"renderer.assets.mesh.cone.load_failed",
+			"Renderer cone mesh asset could not be loaded.",
+			"Check cone OBJ syntax and availability.");
+		if (!coneMeshResult.HasValue())
+			return coneMeshResult.Error();
 
 		Result<Path> periodicTablePath = ResolveAssetPath(assetManager, "assets/config/periodic_table.yaml");
 		if (periodicTablePath)

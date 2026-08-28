@@ -20,6 +20,10 @@ uniform vec3 u_CameraPosition;
 uniform float u_SpecularIntensity;
 uniform float u_Shininess;
 uniform float u_Saturation;
+// 1.0 for normal bonds, ~0.25 for SceneArrow shafts/heads (see renderSceneArrows) - an annotation
+// arrow is a fixed flat color, not atom/bond material, so it shouldn't carry the same shiny
+// highlight (docs/scene_arrow_rework_plan_corrected.md Step 8).
+uniform float u_SpecularScale;
 
 vec3 ApplySaturation(vec3 color)
 {
@@ -55,6 +59,7 @@ void main()
 	float dFill = ComputeDiffuse(N, u_FillDirection) * u_FillIntensity;
 	float dBack = ComputeDiffuse(N, u_BackDirection) * u_BackIntensity;
 	float intensity = min(u_AmbientIntensity + dKey + dFill + dBack, 1.0);
-	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity;
-	oColor = vec4(clamp(baseColor * intensity + vec3(specular), 0.0, 1.0), 1.0);
+	float specular = ComputeSpecular(N, u_KeyDirection, viewDir) * u_SpecularIntensity * u_SpecularScale;
+	float alpha = mix(vColorA.a, vColorB.a, clamp(vGradientT, 0.0, 1.0));
+	oColor = vec4(clamp(baseColor * intensity + vec3(specular), 0.0, 1.0), alpha);
 }

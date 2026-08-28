@@ -21,6 +21,10 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "bond_radius_multiplier" << YAML::Value << renderer.bondRadiusMultiplier;
 		out << YAML::Key << "color_saturation" << YAML::Value << renderer.colorSaturation;
 		out << YAML::Key << "viewport_supersample" << YAML::Value << renderer.viewportSupersample;
+		out << YAML::Key << "arrow_head_bulge_strength" << YAML::Value << renderer.arrowHeadBulgeStrength;
+		out << YAML::Key << "arrow_default_shaft_width_ratio" << YAML::Value << renderer.arrowDefaultShaftWidthRatio;
+		out << YAML::Key << "arrow_default_head_width_ratio" << YAML::Value << renderer.arrowDefaultHeadWidthRatio;
+		out << YAML::Key << "arrow_default_head_length_ratio" << YAML::Value << renderer.arrowDefaultHeadLengthRatio;
 		out << YAML::Key << "orbit_sensitivity" << YAML::Value << renderer.orbitSensitivity;
 		out << YAML::Key << "pan_sensitivity" << YAML::Value << renderer.panSensitivity;
 		out << YAML::Key << "zoom_sensitivity" << YAML::Value << renderer.zoomSensitivity;

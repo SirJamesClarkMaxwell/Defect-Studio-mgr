@@ -70,9 +70,17 @@ namespace DefectStudio
 			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
 		[[nodiscard]] std::vector<std::size_t> hitTestCircleFreeLabels(
 			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
+		// sceneArrows are a segment (start/end), not a single point like the anchors above - "hit"
+		// means either endpoint or the midpoint lands in the rect/circle (good enough for a box/
+		// circle-select convenience feature, not full segment-vs-region clipping).
+		[[nodiscard]] std::vector<std::size_t> hitTestRectSceneArrows(
+			const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax) const;
+		[[nodiscard]] std::vector<std::size_t> hitTestCircleSceneArrows(
+			const RendererWindowState &windowState, glm::vec2 center, float radius) const;
 		void applyLabelRegionSelection(
 			RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
-			const std::vector<std::size_t> &freeHits, RendererEvents::Viewport::RegionSelectMode mode);
+			const std::vector<std::size_t> &freeHits, const std::vector<std::size_t> &arrowHits,
+			RendererEvents::Viewport::RegionSelectMode mode);
 		[[nodiscard]] static RendererEvents::Viewport::RegionSelectMode resolveRegionSelectMode(bool additive, bool subtractive);
 		void publishRegionSelection(
 			RendererWindowState &windowState,
@@ -97,6 +105,18 @@ namespace DefectStudio
 		void handlePinnedMeasurementKeyboardShortcuts(RendererWindowState &windowState, bool hovered);
 		[[nodiscard]] bool handleFreeLabelInteraction(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		// Drawn translate/rotate/scale gizmo for the current SceneArrow selection - sibling of
+		// renderLabelTransformGizmo above, called before handleSceneArrowInteraction below in the same
+		// short-circuiting `||` chain so grabbing a gizmo handle is never also reinterpreted as a plain
+		// endpoint/shaft click by that function's own proximity hit-test.
+		[[nodiscard]] bool renderSceneArrowTransformGizmo(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		// Click-select + drag for sceneArrows - a plain click near an already-selected arrow's
+		// start/end/midpoint (when the gizmo above didn't already claim the click) decides what the
+		// following drag moves, same screen-space-proximity idea as isBondUnderScreenPosition, just
+		// resolved once at click time instead of every frame.
+		[[nodiscard]] bool handleSceneArrowInteraction(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 		[[nodiscard]] bool handleCursor3DPlacement(
 			RendererWindowState &windowState, float relX, float relY);
 		[[nodiscard]] glm::vec3 computeViewportWorldPosition(
@@ -107,6 +127,10 @@ namespace DefectStudio
 			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPos) const;
 		void renderViewportContextMenu(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+		// Blender-style "adjust last operation" popup for a just-added SceneArrow - see
+		// RendererWindowState::sceneArrowQuickEditActive.
+		void renderSceneArrowQuickEditPanel(
+			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);
 
 	private:
 		RendererLayer &m_Layer;

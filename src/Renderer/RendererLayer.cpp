@@ -464,6 +464,7 @@ namespace DefectStudio
 			windowState.freeLabels,
 			windowState.selectedFreeLabels,
 			windowState.sceneArrows,
+			windowState.selectedSceneArrows,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
 			nullptr,
@@ -523,6 +524,25 @@ namespace DefectStudio
 	RenderExportDialogState &RendererLayer::GetExportDialogState()
 	{
 		return m_ExportDialog;
+	}
+
+	void RendererLayer::PopulateExportPreviewState(
+		RendererWindowState &previewState, const RendererWindowState &source) const
+	{
+		previewState.camera = CreateUnique<RendererViewCamera>(*source.camera);
+		previewState.showAtoms = source.showAtoms;
+		previewState.showBonds = source.showBonds;
+		previewState.showCellBox = source.showCellBox;
+		previewState.showGrid = source.showGrid;
+		previewState.selectedAtomIndices = source.selectedAtomIndices;
+		// previewState is a fresh RendererWindowState, not a copy of the real window - every one of
+		// these needs an explicit copy here or it silently renders as empty/default in the export,
+		// regardless of what the live viewport shows. See this method's declaration comment for why
+		// this is centralized instead of inlined at each of the two call sites.
+		previewState.pinnedMeasurements = source.pinnedMeasurements;
+		previewState.freeLabels = source.freeLabels;
+		previewState.sceneArrows = source.sceneArrows;
+		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
 	}
 
 	bool RendererLayer::CaptureWindowToPng(
@@ -921,6 +941,10 @@ namespace DefectStudio
 		m_GlobalRenderSettings.bondRadiusMultiplier = config.bondRadiusMultiplier;
 		m_GlobalRenderSettings.colorSaturation = config.colorSaturation;
 		m_GlobalRenderSettings.viewportSupersample = config.viewportSupersample;
+		m_GlobalRenderSettings.arrowHeadBulgeStrength = config.arrowHeadBulgeStrength;
+		m_GlobalRenderSettings.arrowDefaultShaftWidthRatio = config.arrowDefaultShaftWidthRatio;
+		m_GlobalRenderSettings.arrowDefaultHeadWidthRatio = config.arrowDefaultHeadWidthRatio;
+		m_GlobalRenderSettings.arrowDefaultHeadLengthRatio = config.arrowDefaultHeadLengthRatio;
 		m_GlobalRenderSettings.orbitSensitivity = config.orbitSensitivity;
 		m_GlobalRenderSettings.panSensitivity = config.panSensitivity;
 		m_GlobalRenderSettings.zoomSensitivity = config.zoomSensitivity;
@@ -980,6 +1004,10 @@ namespace DefectStudio
 		m_GlobalRenderSettings.bondRadiusMultiplier = std::clamp(m_GlobalRenderSettings.bondRadiusMultiplier, 0.1f, 4.0f);
 		m_GlobalRenderSettings.colorSaturation = std::clamp(m_GlobalRenderSettings.colorSaturation, 0.0f, 2.0f);
 		m_GlobalRenderSettings.viewportSupersample = std::clamp(m_GlobalRenderSettings.viewportSupersample, 1.0f, 3.0f);
+		m_GlobalRenderSettings.arrowHeadBulgeStrength = std::clamp(m_GlobalRenderSettings.arrowHeadBulgeStrength, 0.0f, 1.0f);
+		m_GlobalRenderSettings.arrowDefaultShaftWidthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultShaftWidthRatio, 0.001f, 0.5f);
+		m_GlobalRenderSettings.arrowDefaultHeadWidthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultHeadWidthRatio, 0.001f, 1.0f);
+		m_GlobalRenderSettings.arrowDefaultHeadLengthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultHeadLengthRatio, 0.001f, 1.0f);
 		m_GlobalRenderSettings.orbitSensitivity = std::clamp(m_GlobalRenderSettings.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.panSensitivity = std::clamp(m_GlobalRenderSettings.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.zoomSensitivity = std::clamp(m_GlobalRenderSettings.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -1485,8 +1513,8 @@ namespace DefectStudio
 
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState)
 	{
-		windowState.pinnedMeasurementUndoHistory.push_back(
-			RendererWindowState::LabelUndoSnapshot{windowState.pinnedMeasurements, windowState.freeLabels});
+		windowState.pinnedMeasurementUndoHistory.push_back(RendererWindowState::LabelUndoSnapshot{
+			windowState.pinnedMeasurements, windowState.freeLabels, windowState.sceneArrows});
 		if (windowState.pinnedMeasurementUndoHistory.size() > kMaxPinnedMeasurementHistoryEntries)
 			windowState.pinnedMeasurementUndoHistory.erase(windowState.pinnedMeasurementUndoHistory.begin());
 		windowState.pinnedMeasurementRedoHistory.clear();
@@ -1498,22 +1526,26 @@ namespace DefectStudio
 		if (windowState == nullptr || windowState->pinnedMeasurementUndoHistory.empty())
 			return;
 
-		windowState->pinnedMeasurementRedoHistory.push_back(
-			RendererWindowState::LabelUndoSnapshot{windowState->pinnedMeasurements, windowState->freeLabels});
+		windowState->pinnedMeasurementRedoHistory.push_back(RendererWindowState::LabelUndoSnapshot{
+			windowState->pinnedMeasurements, windowState->freeLabels, windowState->sceneArrows});
 		RendererWindowState::LabelUndoSnapshot restored = std::move(windowState->pinnedMeasurementUndoHistory.back());
 		windowState->pinnedMeasurementUndoHistory.pop_back();
 		windowState->pinnedMeasurements = std::move(restored.pinnedMeasurements);
 		windowState->freeLabels = std::move(restored.freeLabels);
+		windowState->sceneArrows = std::move(restored.sceneArrows);
 		// Selection index isn't meaningfully preserved across an undo (the restored vector may have a
 		// different size/order than what was selected a moment ago) - same simple reset RemovePinsWithinSet
 		// already does when the selected pin itself is the one that disappears.
 		windowState->selectedPinnedMeasurements.clear();
 		windowState->selectedFreeLabels.clear();
+		windowState->selectedSceneArrows.clear();
 		windowState->labelGizmoDragging = false;
 		windowState->labelGizmoModalDrag = false;
 		windowState->labelGizmoAxis = -1;
 		windowState->pinnedMeasurementDragging = false;
 		windowState->freeLabelDragging = false;
+		windowState->sceneArrowDragging = false;
+		windowState->sceneArrowQuickEditActive = false;
 		SceneSystem::SyncLabelEntities(windowState->sceneRegistry, *windowState);
 	}
 
@@ -1523,19 +1555,23 @@ namespace DefectStudio
 		if (windowState == nullptr || windowState->pinnedMeasurementRedoHistory.empty())
 			return;
 
-		windowState->pinnedMeasurementUndoHistory.push_back(
-			RendererWindowState::LabelUndoSnapshot{windowState->pinnedMeasurements, windowState->freeLabels});
+		windowState->pinnedMeasurementUndoHistory.push_back(RendererWindowState::LabelUndoSnapshot{
+			windowState->pinnedMeasurements, windowState->freeLabels, windowState->sceneArrows});
 		RendererWindowState::LabelUndoSnapshot restored = std::move(windowState->pinnedMeasurementRedoHistory.back());
 		windowState->pinnedMeasurementRedoHistory.pop_back();
 		windowState->pinnedMeasurements = std::move(restored.pinnedMeasurements);
 		windowState->freeLabels = std::move(restored.freeLabels);
+		windowState->sceneArrows = std::move(restored.sceneArrows);
 		windowState->selectedPinnedMeasurements.clear();
 		windowState->selectedFreeLabels.clear();
+		windowState->selectedSceneArrows.clear();
 		windowState->labelGizmoDragging = false;
 		windowState->labelGizmoModalDrag = false;
 		windowState->labelGizmoAxis = -1;
 		windowState->pinnedMeasurementDragging = false;
 		windowState->freeLabelDragging = false;
+		windowState->sceneArrowDragging = false;
+		windowState->sceneArrowQuickEditActive = false;
 		SceneSystem::SyncLabelEntities(windowState->sceneRegistry, *windowState);
 	}
 
@@ -1629,19 +1665,7 @@ namespace DefectStudio
 		// ImGuiWindow::GetID otherwise). drawExportDialog() opens the popup once it sees `open`.
 		m_ExportDialog.open = true;
 		m_ExportDialog.targetWindowId = windowState->windowId;
-		m_ExportDialog.previewState.camera = CreateUnique<RendererViewCamera>(*windowState->camera);
-		m_ExportDialog.previewState.showAtoms = windowState->showAtoms;
-		m_ExportDialog.previewState.showBonds = windowState->showBonds;
-		m_ExportDialog.previewState.showCellBox = windowState->showCellBox;
-		m_ExportDialog.previewState.showGrid = windowState->showGrid;
-		m_ExportDialog.previewState.selectedAtomIndices = windowState->selectedAtomIndices;
-		// Pinned bond/angle labels were rendered live but silently dropped from every export until
-		// now - previewState is a fresh RendererWindowState, not a copy of the real window, so its
-		// pinnedMeasurements stayed empty and renderLabels() had nothing to draw regardless of the
-		// "Labels" checkbox. No selection highlight in the exported image (selectedPinnedMeasurements
-		// left at its default empty) since a click-selection is interaction state, not part of the scene.
-		m_ExportDialog.previewState.pinnedMeasurements = windowState->pinnedMeasurements;
-		m_ExportDialog.previewState.bondLabelsAlignToDirection = windowState->bondLabelsAlignToDirection;
+		PopulateExportPreviewState(m_ExportDialog.previewState, *windowState);
 
 		m_ExportDialog.filename = windowState->title.empty() ? "structure" : windowState->title;
 	}

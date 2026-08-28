@@ -14,6 +14,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -438,19 +439,7 @@ namespace DefectStudio
 				RenderExportDialogState &dialog = m_Layer.GetExportDialogState();
 				dialog.open = true;
 				dialog.targetWindowId = windowState.windowId;
-				dialog.previewState.camera = CreateUnique<RendererViewCamera>(*windowState.camera);
-				dialog.previewState.showAtoms = windowState.showAtoms;
-				dialog.previewState.showBonds = windowState.showBonds;
-				dialog.previewState.showCellBox = windowState.showCellBox;
-				dialog.previewState.showGrid = windowState.showGrid;
-				dialog.previewState.selectedAtomIndices = windowState.selectedAtomIndices;
-				// See RendererLayer::onExportImageRequested's matching comment - previewState is a
-				// fresh RendererWindowState, so pinned bond/angle labels need an explicit copy or
-				// they silently never appear in the export.
-				dialog.previewState.pinnedMeasurements = windowState.pinnedMeasurements;
-				dialog.previewState.freeLabels = windowState.freeLabels;
-				dialog.previewState.sceneArrows = windowState.sceneArrows;
-				dialog.previewState.bondLabelsAlignToDirection = windowState.bondLabelsAlignToDirection;
+				m_Layer.PopulateExportPreviewState(dialog.previewState, windowState);
 
 				const std::string stem = windowState.structure.sourcePath.Native().stem().string();
 				dialog.filename = (stem.empty() ? "structure" : stem) + "_export";
@@ -601,6 +590,28 @@ namespace DefectStudio
 		if (toolButton(
 				"##ToolScale", "tool-scale.png", "Scl", "Scale (S)", windowState.gizmoOperation == GizmoOperation::Scale))
 			publishGizmoOperation(GizmoOperation::Scale);
+
+		// Rotate-only pivot toggle for the SceneArrow gizmo (RendererPanel::renderSceneArrowTransformGizmo)
+		// - meaningless for Translate/Scale (thickness-only, no pivot concept) or for the atom/label
+		// gizmos, so only shown when it would actually do something. Pure toolbar-local UI state (like
+		// rotationStepDeg/pixelStepPx/percentStep above), mutated directly rather than through a
+		// GizmoOperationRequested-style event - nothing else (no keybinding) needs to reach it. No icon
+		// asset - "tool-pivot-cursor.png" doesn't exist, so toolButton's plain-text fallback always
+		// renders, same as the "1"/"2"/"3"/"4" selection-mode buttons above.
+		using ArrowGizmoPivotMode = RendererWindowState::ArrowGizmoPivotMode;
+		if (!windowState.selectedSceneArrows.empty() && windowState.gizmoOperation == GizmoOperation::Rotate)
+		{
+			const bool cursorPivot = windowState.sceneArrowGizmoPivotMode == ArrowGizmoPivotMode::Cursor3D;
+			if (toolButton(
+					"##ToolArrowPivot", "tool-pivot-cursor.png", cursorPivot ? "Csr" : "Mid",
+					cursorPivot ? "Arrow rotate pivot: 3D Cursor (click for Midpoint)"
+								: "Arrow rotate pivot: Midpoint (click for 3D Cursor)",
+					cursorPivot))
+			{
+				windowState.sceneArrowGizmoPivotMode =
+					cursorPivot ? ArrowGizmoPivotMode::Midpoint : ArrowGizmoPivotMode::Cursor3D;
+			}
+		}
 
 		ImGui::Spacing();
 
@@ -808,6 +819,22 @@ namespace DefectStudio
 				RendererWindowState::FreeLabel label;
 				label.worldPosition = m_AddMenuPosition;
 				candidate.freeLabels.push_back(std::move(label));
+				break;
+			}
+		}
+
+		if (ImGui::MenuItem("Arrow"))
+		{
+			for (RendererWindowState &candidate : m_Layer.GetWindows())
+			{
+				if (candidate.windowId != m_AddMenuWindowId)
+					continue;
+				PushPinnedMeasurementUndoSnapshot(candidate);
+				candidate.sceneArrows.push_back(MakeDefaultSceneArrow(candidate, m_AddMenuPosition));
+				const std::size_t newIndex = candidate.sceneArrows.size() - 1;
+				candidate.selectedSceneArrows = {newIndex};
+				candidate.sceneArrowQuickEditActive = true;
+				candidate.sceneArrowQuickEditIndex = newIndex;
 				break;
 			}
 		}

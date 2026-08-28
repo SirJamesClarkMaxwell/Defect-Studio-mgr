@@ -29,6 +29,46 @@ namespace DefectStudio::SelectionHitTest
 		return glm::length(point - center) <= radius;
 	}
 
+	float DistancePointToSegment(glm::vec2 point, glm::vec2 segA, glm::vec2 segB)
+	{
+		const glm::vec2 segment = segB - segA;
+		const float segmentLengthSq = glm::dot(segment, segment);
+		const float t = segmentLengthSq > 0.0001f
+			? std::clamp(glm::dot(point - segA, segment) / segmentLengthSq, 0.0f, 1.0f)
+			: 0.0f;
+		const glm::vec2 closest = segA + segment * t;
+		return glm::length(point - closest);
+	}
+
+	namespace
+	{
+		float Cross2D(glm::vec2 a, glm::vec2 b)
+		{
+			return a.x * b.y - a.y * b.x;
+		}
+	} // namespace
+
+	bool PointInTriangle(glm::vec2 point, glm::vec2 a, glm::vec2 b, glm::vec2 c)
+	{
+		const float d1 = Cross2D(b - a, point - a);
+		const float d2 = Cross2D(c - b, point - b);
+		const float d3 = Cross2D(a - c, point - c);
+		const bool hasNeg = (d1 < 0.0f) || (d2 < 0.0f) || (d3 < 0.0f);
+		const bool hasPos = (d1 > 0.0f) || (d2 > 0.0f) || (d3 > 0.0f);
+		return !(hasNeg && hasPos);
+	}
+
+	float DistancePointToTriangle2D(glm::vec2 point, glm::vec2 a, glm::vec2 b, glm::vec2 c)
+	{
+		if (PointInTriangle(point, a, b, c))
+			return 0.0f;
+		return std::min({
+			DistancePointToSegment(point, a, b),
+			DistancePointToSegment(point, b, c),
+			DistancePointToSegment(point, c, a),
+		});
+	}
+
 	void ClosestPointsRaySegment(
 		const glm::vec3 &rayOrigin, const glm::vec3 &rayDir, const glm::vec3 &segA, const glm::vec3 &segB,
 		float &outT, glm::vec3 &outClosestOnSegment)

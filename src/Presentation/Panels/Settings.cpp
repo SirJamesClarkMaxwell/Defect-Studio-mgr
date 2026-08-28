@@ -460,6 +460,10 @@ namespace DefectStudio
 		m_DraftConfig.renderer.bondRadiusMultiplier = std::clamp(m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f);
 		m_DraftConfig.renderer.colorSaturation = std::clamp(m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f);
 		m_DraftConfig.renderer.viewportSupersample = std::clamp(m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f);
+		m_DraftConfig.renderer.arrowHeadBulgeStrength = std::clamp(m_DraftConfig.renderer.arrowHeadBulgeStrength, 0.0f, 1.0f);
+		m_DraftConfig.renderer.arrowDefaultShaftWidthRatio = std::clamp(m_DraftConfig.renderer.arrowDefaultShaftWidthRatio, 0.001f, 0.5f);
+		m_DraftConfig.renderer.arrowDefaultHeadWidthRatio = std::clamp(m_DraftConfig.renderer.arrowDefaultHeadWidthRatio, 0.001f, 1.0f);
+		m_DraftConfig.renderer.arrowDefaultHeadLengthRatio = std::clamp(m_DraftConfig.renderer.arrowDefaultHeadLengthRatio, 0.001f, 1.0f);
 		m_DraftConfig.renderer.orbitSensitivity = std::clamp(m_DraftConfig.renderer.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.panSensitivity = std::clamp(m_DraftConfig.renderer.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.zoomSensitivity = std::clamp(m_DraftConfig.renderer.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -1868,6 +1872,48 @@ namespace DefectStudio
 				markDirty();
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
 				ImGui::SetTooltip("Renders the interactive viewport at a higher resolution than the panel and downscales it - sharper edges/orbitals, costs GPU time. 1x = off.");
+
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Scene arrows");
+		if (beginRendererTable("RendererArrows"))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Head bulge strength");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat("##ArrowHeadBulgeStrength", &m_DraftConfig.renderer.arrowHeadBulgeStrength, 0.0f, 1.0f, "%.2f"))
+				markDirty();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip("Rounds Arrow3D's shaft/head shoulder. 0 = sharp classic corner, 1 = a wide rounded bulge.");
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Default shaft width");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::DragFloat("##ArrowDefaultShaftWidthRatio", &m_DraftConfig.renderer.arrowDefaultShaftWidthRatio, 0.001f, 0.001f, 0.5f, "%.3fx length"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Default head width");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::DragFloat("##ArrowDefaultHeadWidthRatio", &m_DraftConfig.renderer.arrowDefaultHeadWidthRatio, 0.001f, 0.001f, 1.0f, "%.3fx length"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Default head length");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::DragFloat("##ArrowDefaultHeadLengthRatio", &m_DraftConfig.renderer.arrowDefaultHeadLengthRatio, 0.001f, 0.001f, 1.0f, "%.3fx length"))
+				markDirty();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip("New Arrow3D/Line arrows scale shaftWidth/headWidth/headLength from these ratios times the arrow's own length.");
 
 			ImGui::EndTable();
 		}

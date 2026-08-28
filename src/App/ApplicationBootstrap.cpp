@@ -520,6 +520,7 @@ namespace DefectStudio
 		m_AssetManager->RegisterAsset(AssetDescriptor{"data/renderer/startup_layout.yaml", AssetType::Data, AssetCriticality::Critical, "1", "renderer.startup_layout"});
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/sphere.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.sphere"});
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/cylinder.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.cylinder"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/renderer/meshes/cone.obj", AssetType::Data, AssetCriticality::Critical, "1", "renderer.mesh.cone"});
 
 		AssetValidationReport report;
 		{

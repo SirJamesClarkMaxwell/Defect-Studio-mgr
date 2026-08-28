@@ -126,6 +126,14 @@ namespace DefectStudio
 		// Enter) should also apply it to the current selection before closing, or just close.
 		bool &GetPeriodicTableApplyOnConfirm();
 		RenderExportDialogState &GetExportDialogState();
+		// Copies every field of `source` the export dialog's preview render actually reads
+		// (previewState is a fresh RendererWindowState, not a view of the real window) into
+		// `previewState`. Single source of truth for both places that open the export dialog
+		// (onExportImageRequested's F12 path and RendererPanelToolbar's "Export PNG..." button) -
+		// they drifted out of sync once already (freeLabels/sceneArrows silently missing from the
+		// F12 path only), so this is the fix for that whole class of bug, not just this one field.
+		void PopulateExportPreviewState(
+			RendererWindowState &previewState, const RendererWindowState &source) const;
 		// Reads back windowKey's last-rendered frame (via RenderToFbo) and writes it to a PNG.
 		// Returns false + fills error on missing viewport or write failure. crop* are fractions
 		// (0..1) trimmed from each edge before writing.

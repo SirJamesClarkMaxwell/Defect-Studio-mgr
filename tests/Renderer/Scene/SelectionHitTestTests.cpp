@@ -67,6 +67,50 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(SelectionHitTest::PointInCircle(glm::vec2(61.0f, 50.0f), center, 10.0f));
 	}
 
+	TEST(SelectionHitTestTests, DistancePointToSegmentProjectsOntoInterior)
+	{
+		const glm::vec2 segA(0.0f, 0.0f);
+		const glm::vec2 segB(10.0f, 0.0f);
+
+		EXPECT_NEAR(SelectionHitTest::DistancePointToSegment(glm::vec2(5.0f, 3.0f), segA, segB), 3.0f, 0.001f);
+		EXPECT_NEAR(SelectionHitTest::DistancePointToSegment(glm::vec2(5.0f, 0.0f), segA, segB), 0.0f, 0.001f);
+	}
+
+	TEST(SelectionHitTestTests, DistancePointToSegmentClampsPastEndpoints)
+	{
+		const glm::vec2 segA(0.0f, 0.0f);
+		const glm::vec2 segB(10.0f, 0.0f);
+
+		// Closest point on the infinite line would be (13,0), off the far end of the segment - must
+		// clamp to segB=(10,0) instead (3-4-5 triangle to it), same reasoning as
+		// ClosestPointsRaySegmentClampsToSegmentEndpoint below but for this function's screen-space 2D
+		// counterpart.
+		EXPECT_NEAR(SelectionHitTest::DistancePointToSegment(glm::vec2(13.0f, 4.0f), segA, segB), 5.0f, 0.001f);
+	}
+
+	TEST(SelectionHitTestTests, PointInTriangleInsideAndOutside)
+	{
+		const glm::vec2 a(0.0f, 0.0f);
+		const glm::vec2 b(10.0f, 0.0f);
+		const glm::vec2 c(5.0f, 10.0f);
+
+		EXPECT_TRUE(SelectionHitTest::PointInTriangle(glm::vec2(5.0f, 3.0f), a, b, c));
+		EXPECT_FALSE(SelectionHitTest::PointInTriangle(glm::vec2(5.0f, -1.0f), a, b, c));
+		// Same triangle, opposite winding (a/b swapped) - the sign-of-cross test must not depend on it.
+		EXPECT_TRUE(SelectionHitTest::PointInTriangle(glm::vec2(5.0f, 3.0f), b, a, c));
+	}
+
+	TEST(SelectionHitTestTests, DistancePointToTriangle2DZeroInsideDistanceOutside)
+	{
+		const glm::vec2 a(0.0f, 0.0f);
+		const glm::vec2 b(10.0f, 0.0f);
+		const glm::vec2 c(5.0f, 10.0f);
+
+		EXPECT_NEAR(SelectionHitTest::DistancePointToTriangle2D(glm::vec2(5.0f, 3.0f), a, b, c), 0.0f, 0.001f);
+		// Straight below the a-b edge (which runs along y=0) - nearest edge distance is exactly 2.
+		EXPECT_NEAR(SelectionHitTest::DistancePointToTriangle2D(glm::vec2(5.0f, -2.0f), a, b, c), 2.0f, 0.001f);
+	}
+
 	// Regression for a real bug: the segment parameter was computed with the closed-form RAY
 	// parameter formula from a two-segment solve instead of its own (they only agree when the
 	// segment has unit length or is perpendicular to the ray in a way that zeroes the cross term),

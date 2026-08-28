@@ -49,6 +49,10 @@ namespace DefectStudio
 		float bondRadiusMultiplier = 1.0f;
 		float colorSaturation = 1.0f;
 		float viewportSupersample = 1.0f;
+		float arrowHeadBulgeStrength = 0.16f;
+		float arrowDefaultShaftWidthRatio = 0.025f;
+		float arrowDefaultHeadWidthRatio = 0.047f;
+		float arrowDefaultHeadLengthRatio = 0.166f;
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;

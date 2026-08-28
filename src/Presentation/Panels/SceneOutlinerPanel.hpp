@@ -31,6 +31,15 @@ namespace DefectStudio
 	private:
 		void drawSpeciesGroup(RendererWindowState &windowState, const std::string &species, const std::vector<std::size_t> &atomIndices);
 		void drawAtomRow(RendererWindowState &windowState, std::size_t atomIndex);
+		// Free labels + pinned bond/angle measurements together ("Labels") and sceneArrows
+		// ("Arrows") - two more child groups under a window row, same nesting shape as
+		// drawSpeciesGroup/drawAtomRow above but no per-row visibility checkbox (neither kind has a
+		// `visible` field). Row click selects in the viewport the same way an atom row's does.
+		void drawLabelsGroup(RendererWindowState &windowState);
+		void drawFreeLabelRow(RendererWindowState &windowState, std::size_t labelIndex);
+		void drawPinnedMeasurementRow(RendererWindowState &windowState, std::size_t pinIndex);
+		void drawArrowsGroup(RendererWindowState &windowState);
+		void drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex);
 
 		RendererLayer &m_Layer;
 		// Index into m_Layer.GetWindows(), not a stable windowId - fine since both editing state and

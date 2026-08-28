@@ -150,25 +150,67 @@ namespace DefectStudio
 		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
 		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - a straight directional
 		// line from start to end, for pointing at a displacement/direction in an export shot.
-		// ponytail: shaft only, no arrowhead cone yet (would need a new procedural mesh + GPU
-		// pipeline - reused the existing bond cylinder mesh/shader instead to ship this without new,
-		// unverified geometry code). Add a small cone mesh + OpenGlRendererBackend::
-		// renderSceneArrows head pass when the plain shaft isn't legible enough. Renderer-only like
-		// FreeLabel/PinnedMeasurement, not persisted with the project yet.
+		// Line: shaft only (bond cylinder mesh/shader, reused as-is). Arrow3D: shaft + a cone head
+		// (OpenGlRendererBackend::createConeMesh, "bonds" program reused - bonds.vert is a generic
+		// model-transform shader, not cylinder-specific). Arrow2D: a flat quad instead of a shaft,
+		// either camera-facing (Billboard) or lying flat in a chosen world plane (FixedPlane) - see
+		// OpenGlRendererBackend::renderSceneArrows/ComputeArrowQuadBasis. Renderer-only like
+		// FreeLabel/PinnedMeasurement, not persisted with the project yet. Gizmo/attached
+		// label/undo for arrows are a later phase - labels already have all three
+		// (renderLabelTransformGizmo/AttachedLabel/pinnedMeasurementUndoHistory), arrows don't yet.
+		enum class ArrowKind { Line, Arrow2D, Arrow3D };
+		enum class Arrow2DOrientation { Billboard, FixedPlane };
+		enum class WorldPlane { XY, XZ, YZ };
+
+		struct ArrowStyle
+		{
+			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
+			float alpha = 1.0f;
+			float shaftWidth = 0.06f; // radius; was the old hardcoded kArrowShaftRadius
+			glm::vec3 outlineColor = glm::vec3(0.0f);
+			float outlineWidth = 0.0f;
+			float headWidth = 0.14f;  // Arrow3D cone base diameter / Arrow2D has no head, unused there
+			float headLength = 0.22f; // Arrow3D cone height, unused for Line/Arrow2D
+		};
+
 		struct SceneArrow
 		{
+			ArrowKind kind = ArrowKind::Arrow3D;
+			Arrow2DOrientation orientation2D = Arrow2DOrientation::Billboard;
+			WorldPlane fixedPlane = WorldPlane::XY;
 			glm::vec3 start = glm::vec3(0.0f);
 			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
-			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
+			ArrowStyle style;
 		};
 		std::vector<SceneArrow> sceneArrows;
+		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
+		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single
+		// selected arrow's drag actually grabs (irrelevant once more than one is selected - a
+		// multi-selection always moves every selected arrow's start AND end together, same rigid
+		// group-drag convention as labels).
+		std::vector<std::size_t> selectedSceneArrows;
+		bool sceneArrowDragging = false;
+		glm::vec2 sceneArrowDragLastMouse = glm::vec2(0.0f);
+		enum class SceneArrowDragTarget { Start, End, Both };
+		SceneArrowDragTarget sceneArrowDragTarget = SceneArrowDragTarget::Both;
+		// Drives the Blender-style "adjust last operation" quick-edit window (RendererPanel::
+		// renderSceneArrowQuickEditPanel) - set right after an arrow is added via Shift+A/right-click
+		// Add/ObjectPropertiesPanel's own "+ Add arrow"; cleared on Escape, on selection changing away
+		// from this arrow, or when another arrow is added. Bool+index pair rather than
+		// std::optional<std::size_t> - same convention as cursor3DPlaced/cursor3DPosition above, no
+		// new include needed.
+		bool sceneArrowQuickEditActive = false;
+		std::size_t sceneArrowQuickEditIndex = 0;
 		// One entry in the label undo/redo stack below - both label kinds together, since a single
 		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
 		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).
+		// sceneArrows joined this same snapshot/stack for the same reason (see PushPinnedMeasurement
+		// UndoSnapshot in RendererLayer.cpp) - one shared "labels" undo scope, not three parallel ones.
 		struct LabelUndoSnapshot
 		{
 			std::vector<PinnedMeasurement> pinnedMeasurements;
 			std::vector<FreeLabel> freeLabels;
+			std::vector<SceneArrow> sceneArrows;
 		};
 		// Local per-window undo/redo for pinnedMeasurements AND freeLabels together (Ctrl+Alt+U /
 		// Ctrl+Alt+Shift+U) - snapshot-based (whole-vector copies, cheap given how few labels there
@@ -229,6 +271,8 @@ namespace DefectStudio
 		// the show*/visibility flags above (those hide things from view; these gate what a click can
 		// select once shown). Ctrl+1 atoms-only, Ctrl+2 +bonds, Ctrl+3 bonds+labels (no atoms - lets
 		// a label be gizmo-dragged without risking an accidental atom drag), Ctrl+4 everything.
+		// sceneArrows share this same flag rather than getting a pickArrows of their own - one more
+		// "label-like annotation" kind under the same umbrella, not a new axis of selection-mode UI.
 		bool pickAtoms = true;
 		bool pickBonds = true;
 		bool pickLabels = true;
@@ -311,6 +355,59 @@ namespace DefectStudio
 		};
 		std::vector<LabelGizmoDragTarget> labelGizmoDragTargets;
 		float labelGizmoDragStartRadial = 0.0f;
+		// Gizmo for the current SceneArrow selection (RendererPanel::renderSceneArrowTransformGizmo) -
+		// same shape as the label gizmo above (own state, no ICommand/UndoStack, PushPinnedMeasurement-
+		// UndoSnapshot on drag start), except Translate can target a SINGLE endpoint instead of always
+		// moving the whole item: exactly one arrow selected draws three translate pick points (Start,
+		// End, and the midpoint for a rigid whole-arrow move); more than one selected only draws the
+		// group-centroid pivot (every selected arrow's both endpoints move together, matching the
+		// existing raw-drag system's "multi-selection is always rigid" rule - see sceneArrowDragTarget
+		// above). sceneArrowGizmoEndpointTarget records which of the three was actually grabbed so the
+		// active drag (and its cancel-revert) knows which field(s) to touch without re-hit-testing every
+		// frame. Reuses SceneArrowDragTarget (Start/End/Both, declared above for the raw-drag system) -
+		// same three-way meaning, no need for a second identical enum.
+		bool sceneArrowGizmoDragging = false;
+		bool sceneArrowGizmoModalDrag = false;
+		int sceneArrowGizmoAxis = -1;
+		SceneArrowDragTarget sceneArrowGizmoEndpointTarget = SceneArrowDragTarget::Both;
+		glm::vec2 sceneArrowGizmoLastMousePos = glm::vec2(0.0f);
+		glm::vec2 sceneArrowGizmoDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
+		glm::vec3 sceneArrowGizmoDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
+		float sceneArrowGizmoDragPixelsPerWorld = 1.0f;
+		// One entry per selected arrow at drag-start - Translate(Both)/Rotate apply their delta to every
+		// target's start/end incrementally each frame; Scale recomputes shaftWidth/headWidth/headLength
+		// from the frozen start* value * radial-ratio every frame (same reasoning as the label gizmo's
+		// LabelGizmoDragTarget::startScale). All also feed Escape/right-click cancel.
+		struct SceneArrowGizmoDragTarget
+		{
+			std::size_t index = 0;
+			glm::vec3 startPosition = glm::vec3(0.0f);
+			glm::vec3 endPosition = glm::vec3(0.0f);
+			float startShaftWidth = 0.0f;
+			float startHeadWidth = 0.0f;
+			float startHeadLength = 0.0f;
+		};
+		std::vector<SceneArrowGizmoDragTarget> sceneArrowGizmoDragTargets;
+		float sceneArrowGizmoDragStartRadial = 0.0f;
+		// Rotate-only pivot choice (Settings has no bearing here - this is a live per-window toggle, same
+		// tier as gizmoOperation itself): Midpoint rotates around the live centroid of the selection
+		// (default, matches the label gizmo's rotate); Cursor3D rotates around windowState.cursor3DPosition
+		// instead, letting the user stage the cursor at an arrow's own start/end (viewport context menu's
+		// "3D Cursor > Move to Arrow Start/End") for an off-center pivot. Scale has no pivot concept
+		// (thickness-only, never touches position) so this toggle doesn't affect it.
+		enum class ArrowGizmoPivotMode
+		{
+			Midpoint,
+			Cursor3D
+		};
+		ArrowGizmoPivotMode sceneArrowGizmoPivotMode = ArrowGizmoPivotMode::Midpoint;
+		// Which Start/End/midpoint candidate currently owns the drawn/hit-tested axis-triad on a single
+		// selected arrow (renderSceneArrowTransformGizmo) - the other two candidates render as plain
+		// click-to-activate dots instead of also drawing their own triad, so only one gizmo is ever
+		// visible/interactive at a time. Reset to Both (the whole-arrow midpoint) whenever
+		// sceneArrowGizmoActiveArrowIndex no longer matches the current single-arrow selection.
+		SceneArrowDragTarget sceneArrowGizmoActiveTarget = SceneArrowDragTarget::Both;
+		std::size_t sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(-1);
 		// Continuous Ctrl+Shift+Arrow nudge - polled every frame (RendererPanel::applyViewportInputNavigation)
 		// instead of riding GLFW's own key-repeat cadence, which is OS-repeat-rate limited (~10-15Hz)
 		// and visibly steps rather than glides. Same start-snapshot/commit-on-release shape as the
