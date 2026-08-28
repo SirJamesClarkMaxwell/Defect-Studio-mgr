@@ -2,6 +2,8 @@
 
 #include "Domain/Crystal/BondGenerator.hpp"
 
+#include "Domain/Crystal/PeriodicGeometry.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -116,29 +118,6 @@ namespace DefectStudio
 			if (shift.y != 0)
 				return shift.y > 0;
 			return shift.z > 0;
-		}
-
-		[[nodiscard]] std::array<glm::ivec3, 26> BuildNonZeroLatticeShifts()
-		{
-			std::array<glm::ivec3, 26> shifts{};
-			std::size_t index = 0;
-			for (int dx = -1; dx <= 1; ++dx)
-				for (int dy = -1; dy <= 1; ++dy)
-					for (int dz = -1; dz <= 1; ++dz)
-					{
-						if (dx == 0 && dy == 0 && dz == 0)
-							continue;
-						shifts[index] = glm::ivec3(dx, dy, dz);
-						++index;
-					}
-			return shifts;
-		}
-
-		[[nodiscard]] glm::vec3 CartesianShift(const glm::mat3 &latticeMatrix, const glm::ivec3 &shift)
-		{
-			return latticeMatrix[0] * static_cast<float>(shift.x) +
-				latticeMatrix[1] * static_cast<float>(shift.y) +
-				latticeMatrix[2] * static_cast<float>(shift.z);
 		}
 
 		[[nodiscard]] float CutoffScaleForPair(

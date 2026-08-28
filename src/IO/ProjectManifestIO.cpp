@@ -37,6 +37,8 @@ namespace DefectStudio
 				outManifest.lastModified = root["last_modified"].as<std::int64_t>(0);
 				outManifest.formatVersion = root["format_version"].as<int>(1);
 				outManifest.bulkDirectory = Path(root["bulk_directory"].as<std::string>(""));
+				outManifest.displacementComparisonPath = Path(root["displacement_comparison_path"].as<std::string>(""));
+				outManifest.displacementThresholdAngstrom = root["displacement_threshold_angstrom"].as<float>(0.0f);
 
 				outManifest.irrepLabelOverrides.clear();
 				const YAML::Node irrepLabelsNode = root["irrep_labels"];
@@ -92,6 +94,8 @@ namespace DefectStudio
 				emit << YAML::Key << "last_modified" << YAML::Value << manifest.lastModified;
 				emit << YAML::Key << "format_version" << YAML::Value << manifest.formatVersion;
 				emit << YAML::Key << "bulk_directory" << YAML::Value << manifest.bulkDirectory.String();
+				emit << YAML::Key << "displacement_comparison_path" << YAML::Value << manifest.displacementComparisonPath.String();
+				emit << YAML::Key << "displacement_threshold_angstrom" << YAML::Value << manifest.displacementThresholdAngstrom;
 				emit << YAML::Key << "roots" << YAML::Value << YAML::BeginSeq;
 				for (const ProjectRootEntry &entry : manifest.roots)
 				{

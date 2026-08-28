@@ -28,6 +28,12 @@ namespace DefectStudio
 		// (the project), not any single structure window. Vector, not a map: preserves the user's
 		// own row order and tolerates duplicate/blank-key rows while editing without extra fuss.
 		std::vector<std::pair<std::string, std::string>> irrepLabelOverrides;
+		// Atoms-displacement comparison (T08 item 0 / T16 item 8) - last comparison file + slider
+		// value, remembered per-project so reopening doesn't lose what was being compared. The
+		// computed result itself is NOT persisted (recomputed by pressing "Compare" again) - see
+		// DisplacementComparisonPanel.
+		Path displacementComparisonPath; // empty = none
+		float displacementThresholdAngstrom = 0.0f;
 	};
 
 	class ProjectManifestIO

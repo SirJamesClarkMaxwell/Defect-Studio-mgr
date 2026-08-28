@@ -39,6 +39,12 @@ namespace DefectStudio
 		// keyboard nav below).
 		void SetRoots(std::vector<ProjectRootEntry> roots);
 
+		// Arms picker mode (DisplacementComparisonPanel's in-app "Browse...", routed through
+		// EditorLayer) - makes this panel visible; the next file the user confirms (Enter, or a
+		// single click while picking) fires ProjectEvents::DisplacementComparisonFilePicked and
+		// disarms picker mode. Esc cancels without firing anything.
+		void RequestFilePick();
+
 	private:
 		void renderToolbar();
 		void renderAddRootPopup();
@@ -55,6 +61,7 @@ namespace DefectStudio
 		// needs to be per-section.
 		void handleKeyboardNavigation();
 		void openDefectAt(const Path &directory);
+		void confirmFilePick(const Path &filePath);
 
 		Ref<EventBus> m_EventBus;
 		std::vector<ProjectRootEntry> m_Roots;
@@ -64,6 +71,13 @@ namespace DefectStudio
 		// Rebuilt every Render() pass across all sections, in on-screen order - only entries under
 		// currently-expanded folders appear, same as what's actually visible/clickable.
 		std::vector<Path> m_VisibleFlatList;
+		// Set for one frame whenever keyboard navigation moves the selection, so the newly-selected
+		// row can scroll itself into view (ImGui doesn't do this automatically) - without this,
+		// Down/Up across a root-section boundary looked "stuck" once the target row was off-screen
+		// (2026-08-28 feedback: "nie mozna strzalkami przechodzic miedzy dyskami").
+		bool m_ScrollToSelectedPending = false;
+		// See RequestFilePick() above.
+		bool m_FilePickModeActive = false;
 
 		// "+ Add Root" popup state - path is picked synchronously (native dialog), label is typed
 		// afterwards so it defaults to something sensible without forcing a second click-through.

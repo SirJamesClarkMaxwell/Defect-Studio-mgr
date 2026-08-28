@@ -470,6 +470,7 @@ namespace DefectStudio
 			nullptr,
 			&windowState.orbitalChannelUp,
 			&windowState.orbitalChannelDown,
+			windowState.displacementComparison ? &*windowState.displacementComparison : nullptr,
 			windowState.viewOffset);
 	}
 

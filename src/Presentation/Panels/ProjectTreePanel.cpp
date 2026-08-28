@@ -69,6 +69,22 @@ namespace DefectStudio
 		m_Roots = std::move(roots);
 	}
 
+	void ProjectTreePanel::RequestFilePick()
+	{
+		m_FilePickModeActive = true;
+		SetVisible(true);
+	}
+
+	void ProjectTreePanel::confirmFilePick(const Path &filePath)
+	{
+		m_FilePickModeActive = false;
+		if (m_EventBus == nullptr)
+			return;
+		ProjectEvents::DisplacementComparisonFilePicked event;
+		event.filePath = filePath;
+		m_EventBus->Queue(event);
+	}
+
 	void ProjectTreePanel::Render()
 	{
 		if (!IsVisible())
@@ -85,6 +101,11 @@ namespace DefectStudio
 		SetVisible(visible);
 
 		renderToolbar();
+		if (m_FilePickModeActive)
+		{
+			ImGui::TextColored(
+				ImVec4(0.95f, 0.7f, 0.2f, 1.0f), "Picking comparison file - Enter/click selects, Esc cancels");
+		}
 		ImGui::Separator();
 
 		if (m_Roots.empty())
@@ -116,6 +137,12 @@ namespace DefectStudio
 
 	void ProjectTreePanel::handleKeyboardNavigation()
 	{
+		if (m_FilePickModeActive && ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			m_FilePickModeActive = false;
+			return;
+		}
+
 		if (m_VisibleFlatList.empty())
 			return;
 
@@ -133,12 +160,14 @@ namespace DefectStudio
 		{
 			selectedIndex = std::clamp(selectedIndex + 1, 0, static_cast<int>(m_VisibleFlatList.size()) - 1);
 			m_SelectedPath = m_VisibleFlatList[selectedIndex].String();
+			m_ScrollToSelectedPending = true;
 			return;
 		}
 		if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
 		{
 			selectedIndex = std::clamp(selectedIndex - 1, 0, static_cast<int>(m_VisibleFlatList.size()) - 1);
 			m_SelectedPath = m_VisibleFlatList[selectedIndex].String();
+			m_ScrollToSelectedPending = true;
 			return;
 		}
 		if (selectedIndex < 0)
@@ -161,7 +190,10 @@ namespace DefectStudio
 			{
 				const std::string parentKey = selected.parent_path().String();
 				if (!parentKey.empty() && parentKey != selected.String())
+				{
 					m_SelectedPath = parentKey;
+					m_ScrollToSelectedPending = true;
+				}
 			}
 		}
 		else if (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_Enter))
@@ -172,6 +204,8 @@ namespace DefectStudio
 		{
 			if (isDirectory)
 				m_ExpandedPaths[selected.String()] = !isOpen;
+			else if (m_FilePickModeActive)
+				confirmFilePick(selected);
 		}
 	}
 
@@ -313,8 +347,17 @@ namespace DefectStudio
 				if (isSelected)
 					leafFlags |= ImGuiTreeNodeFlags_Selected;
 				ImGui::TreeNodeEx(idLabel.c_str(), leafFlags, "%s", label.c_str());
+				if (isSelected && m_ScrollToSelectedPending)
+				{
+					ImGui::SetScrollHereY(0.5f);
+					m_ScrollToSelectedPending = false;
+				}
 				if (ImGui::IsItemClicked())
+				{
 					m_SelectedPath = pathKey;
+					if (m_FilePickModeActive)
+						confirmFilePick(entryPath);
+				}
 				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && m_EventBus != nullptr)
 				{
 					ProjectEvents::TextFileOpenRequested request;
@@ -343,6 +386,11 @@ namespace DefectStudio
 			if (isSelected)
 				flags |= ImGuiTreeNodeFlags_Selected;
 			const bool open = ImGui::TreeNodeEx(idLabel.c_str(), flags, "%s", label.c_str());
+			if (isSelected && m_ScrollToSelectedPending)
+			{
+				ImGui::SetScrollHereY(0.5f);
+				m_ScrollToSelectedPending = false;
+			}
 			ImGui::PopStyleColor(pushedColors);
 			if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
 				m_SelectedPath = pathKey;
@@ -374,6 +422,12 @@ namespace DefectStudio
 		{
 			ProjectEvents::CalculationSummaryOpenRequested request;
 			request.directory = directory;
+			m_EventBus->Queue(request);
+		}
+		if (ImGui::MenuItem("Set as Displacement Comparison", nullptr, false, hasDefectFile) && m_EventBus != nullptr)
+		{
+			ProjectEvents::DisplacementComparisonFileRequested request;
+			request.filePath = ResolveDefectFile(directory);
 			m_EventBus->Queue(request);
 		}
 		ImGui::EndPopup();

@@ -39,6 +39,7 @@
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/ExportImagePanel.hpp"
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
+#include "Presentation/Panels/DisplacementComparisonPanel.hpp"
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 #include "Presentation/Panels/ObjectPropertiesPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
@@ -624,13 +625,17 @@ namespace DefectStudio
 				m_CommandRegistry,
 				"Renderer",
 				true);
-			registerPanel<SceneOutlinerPanel>(*rendererLayer, "Scene Outliner", true);
+			registerPanel<SceneOutlinerPanel>(
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, "Scene Outliner", true);
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);
+			m_DisplacementComparisonPanelId = registerPanel<DisplacementComparisonPanel>(
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_EventBus, m_ElementPropertiesTable,
+				"Atoms Displacement", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
@@ -1136,6 +1141,16 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onCalculationSummaryOpenRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::IrrepLabelOverridesChanged>(
 			*m_EventBus, *this, &EditorLayer::onIrrepLabelOverridesChanged, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonStateChanged>(
+			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonStateChanged, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonFileRequested>(
+			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonFileRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::DisplacementComparisonPanelRequested>(
+			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonPanelRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonFilePickRequested>(
+			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonFilePickRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonFilePicked>(
+			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonFilePicked, EventPriority::Normal));
 	}
 
 	void EditorLayer::loadInitialProjectState()
@@ -1239,6 +1254,12 @@ namespace DefectStudio
 			if (!m_ActiveProject->bulkDirectory.Empty())
 				m_ElectronicStructureSession->DispatchBulkLoad();
 			m_ElectronicStructureSession->SetIrrepLabelOverrides(m_ActiveProject->irrepLabelOverrides);
+		}
+		if (auto panel = findPanel(m_DisplacementComparisonPanelId).lock())
+		{
+			if (auto *displacementPanel = dynamic_cast<DisplacementComparisonPanel *>(panel.get()))
+				displacementPanel->SetPersistedState(
+					m_ActiveProject->displacementComparisonPath, m_ActiveProject->displacementThresholdAngstrom);
 		}
 	}
 
@@ -1355,6 +1376,54 @@ namespace DefectStudio
 			std::string error;
 			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
 				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after irrep label change: {}", error);
+		}
+	}
+
+	void EditorLayer::onDisplacementComparisonStateChanged(const ProjectEvents::DisplacementComparisonStateChanged &event)
+	{
+		if (!m_ActiveProject.has_value())
+			return;
+
+		m_ActiveProject->displacementComparisonPath = event.comparisonFilePath;
+		m_ActiveProject->displacementThresholdAngstrom = event.thresholdAngstrom;
+		std::string error;
+		if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
+			DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after displacement comparison change: {}", error);
+	}
+
+	void EditorLayer::onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event)
+	{
+		if (auto panel = findPanel(m_DisplacementComparisonPanelId).lock())
+		{
+			if (auto *displacementPanel = dynamic_cast<DisplacementComparisonPanel *>(panel.get()))
+				displacementPanel->SetComparisonFile(event.filePath);
+		}
+	}
+
+	void EditorLayer::onDisplacementComparisonPanelRequested(const RendererEvents::Viewport::DisplacementComparisonPanelRequested &event)
+	{
+		if (auto panel = findPanel(m_DisplacementComparisonPanelId).lock())
+		{
+			if (auto *displacementPanel = dynamic_cast<DisplacementComparisonPanel *>(panel.get()))
+				displacementPanel->OpenForWindow(event.windowId);
+		}
+	}
+
+	void EditorLayer::onDisplacementComparisonFilePickRequested(const ProjectEvents::DisplacementComparisonFilePickRequested &)
+	{
+		if (auto panel = findPanel(m_ProjectTreePanelId).lock())
+		{
+			if (auto *treePanel = dynamic_cast<ProjectTreePanel *>(panel.get()))
+				treePanel->RequestFilePick();
+		}
+	}
+
+	void EditorLayer::onDisplacementComparisonFilePicked(const ProjectEvents::DisplacementComparisonFilePicked &event)
+	{
+		if (auto panel = findPanel(m_DisplacementComparisonPanelId).lock())
+		{
+			if (auto *displacementPanel = dynamic_cast<DisplacementComparisonPanel *>(panel.get()))
+				displacementPanel->SetComparisonFile(event.filePath);
 		}
 	}
 
