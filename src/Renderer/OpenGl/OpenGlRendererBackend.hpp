@@ -216,7 +216,12 @@ namespace DefectStudio
 			// only as of Etap F Phase 1) - forwarded as a render-time uniform (u_SceneOffset) to every
 			// geometry pass (atoms/bonds/cell box/grid/labels/isosurface), never baked into any CPU-
 			// side position data. See each shader's own u_SceneOffset comment for the per-pass detail.
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			// notes.txt pt. 7 - see RendererWindowState::bondLabelAutoOffsetEnabled/Magnitude.
+			bool bondLabelAutoOffsetEnabled = true,
+			float bondLabelAutoOffsetMagnitude = 0.3f,
+			// notes.txt pt. 8 - see renderLabels' own comment on this same parameter.
+			float bondLabelAlignThresholdDeg = 45.0f);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -319,7 +324,15 @@ namespace DefectStudio
 			const std::vector<std::size_t> &selectedPinnedMeasurements,
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
 			const std::vector<std::size_t> &selectedFreeLabels = {},
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			// notes.txt pt. 7 - see RendererWindowState::bondLabelAutoOffsetEnabled/Magnitude.
+			bool bondLabelAutoOffsetEnabled = true,
+			float bondLabelAutoOffsetMagnitude = 0.3f,
+			// notes.txt pt. 8 - live threshold (RendererWindowState::bondLabelAlignThresholdDeg):
+			// every bond-length pin whose current in-plane bond-alignment angle exceeds this many
+			// degrees from horizontal renders flat instead, recomputed fresh every frame - no
+			// persistent mutation, so it reacts to the slider immediately and reverts on its own.
+			float bondLabelAlignThresholdDeg = 45.0f);
 		void renderCellBox(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,

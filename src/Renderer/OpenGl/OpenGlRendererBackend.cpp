@@ -1044,7 +1044,10 @@ namespace DefectStudio
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp,
 		const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown,
 		const RendererWindowState::DisplacementComparisonState *displacementComparison,
-		const glm::vec3 &sceneOffset)
+		const glm::vec3 &sceneOffset,
+		bool bondLabelAutoOffsetEnabled,
+		float bondLabelAutoOffsetMagnitude,
+		float bondLabelAlignThresholdDeg)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -1218,7 +1221,8 @@ namespace DefectStudio
 		{
 			renderLabels(
 				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
-				freeLabels, selectedFreeLabels, sceneOffset);
+				freeLabels, selectedFreeLabels, sceneOffset, bondLabelAutoOffsetEnabled,
+				bondLabelAutoOffsetMagnitude, bondLabelAlignThresholdDeg);
 		}
 		// Arrow2D's own late, depth-disabled pass (see renderSceneArrows's declaration comment) -
 		// same "annotation always reads on top" reasoning as renderLabels just above.
@@ -2732,7 +2736,10 @@ namespace DefectStudio
 		const std::vector<std::size_t> &selectedPinnedMeasurements,
 		const std::vector<RendererWindowState::FreeLabel> &freeLabels,
 		const std::vector<std::size_t> &selectedFreeLabels,
-		const glm::vec3 &sceneOffset)
+		const glm::vec3 &sceneOffset,
+		bool bondLabelAutoOffsetEnabled,
+		float bondLabelAutoOffsetMagnitude,
+		float bondLabelAlignThresholdDeg)
 	{
 		if (m_LabelFont == nullptr)
 		{
@@ -2796,6 +2803,25 @@ namespace DefectStudio
 			const glm::vec3 cameraRight(offsetView[0][0], offsetView[1][0], offsetView[2][0]);
 			const glm::vec3 cameraUp(offsetView[0][1], offsetView[1][1], offsetView[2][1]);
 
+			// notes.txt pt. 7 - average position of every currently-visible atom, used below as the
+			// "toward the interior of the structure" direction for the bond-label auto-offset. Cheap
+			// enough to recompute per renderLabels call (only pinned/free-label counts are ever large
+			// enough to reach this branch at all) - no caching needed.
+			glm::vec3 structureCentroid(0.0f);
+			if (bondLabelAutoOffsetEnabled)
+			{
+				std::size_t visibleAtomCount = 0;
+				for (const RendererAtomData &atom : structure.atoms)
+				{
+					if (!atom.visible)
+						continue;
+					structureCentroid += atom.cartesianPosition;
+					++visibleAtomCount;
+				}
+				if (visibleAtomCount > 0)
+					structureCentroid /= static_cast<float>(visibleAtomCount);
+			}
+
 			for (std::size_t pinIndex = 0; pinIndex < pinnedMeasurements.size(); ++pinIndex)
 			{
 				const RendererWindowState::PinnedMeasurement &pin = pinnedMeasurements[pinIndex];
@@ -2821,7 +2847,8 @@ namespace DefectStudio
 					// only the two endpoint positions differ between them.
 					auto appendLengthLabel = [&](const glm::vec3 &posA, const glm::vec3 &posB)
 					{
-						const float lengthAngstrom = glm::length(posB - posA);
+						const glm::vec3 bondDir = posB - posA;
+						const float lengthAngstrom = glm::length(bondDir);
 						const glm::vec3 midpoint = (posA + posB) * 0.5f;
 
 						float rotationRadians = 0.0f;
@@ -2830,7 +2857,6 @@ namespace DefectStudio
 							// In-plane angle of the bond direction within the billboard's own basis
 							// (project onto cameraRight/cameraUp, not screen space - keeps the label
 							// readable without perspective skew at extreme angles).
-							const glm::vec3 bondDir = posB - posA;
 							const float dx = glm::dot(bondDir, cameraRight);
 							const float dy = glm::dot(bondDir, cameraUp);
 							if (dx != 0.0f || dy != 0.0f)
@@ -2844,15 +2870,47 @@ namespace DefectStudio
 								while (rotationRadians <= -glm::half_pi<float>())
 									rotationRadians += glm::pi<float>();
 							}
-							if (pin.flipped)
+							// notes.txt pt. 8 - live "align to camera" threshold: recomputed from the
+							// CURRENT wrapped angle every frame (not a one-shot bake into persistent
+							// state), so it reacts instantly to the threshold slider, to the camera
+							// orbiting, or to the structure itself changing - and reverts to normal
+							// bond-tracking on its own the moment the angle drops back under threshold.
+							// flipped is skipped while clamped (there's no bond-direction reading left to
+							// flip) and resumes normally once back under threshold.
+							if (std::abs(rotationRadians) > glm::radians(bondLabelAlignThresholdDeg))
+								rotationRadians = 0.0f;
+							else if (pin.flipped)
 								rotationRadians += glm::pi<float>();
 						}
 						const float totalRotation = rotationRadians + pin.rotationOffsetRadians;
+
+						// notes.txt pt. 7 - perpendicular-to-bond nudge toward the structure's centroid,
+						// ADDED to the pin's own manual worldOffset (not replacing it - a subsequent
+						// gizmo drag still works, just starting from an already-offset base). Direction
+						// is deterministic: project (centroid - midpoint) onto the plane perpendicular
+						// to the bond, with a world-up (or world-right, if the bond IS world-up) fallback
+						// for the degenerate case where the bond passes through the centroid.
+						glm::vec3 renderOffset = offset;
+						if (bondLabelAutoOffsetEnabled)
+						{
+							const glm::vec3 bondDirNormalized = SafeNormalize(bondDir, glm::vec3(0.0f, 0.0f, 1.0f));
+							glm::vec3 fallbackPerp = glm::vec3(0.0f, 1.0f, 0.0f);
+							if (std::abs(glm::dot(bondDirNormalized, fallbackPerp)) > 0.97f)
+								fallbackPerp = glm::vec3(1.0f, 0.0f, 0.0f);
+							fallbackPerp = SafeNormalize(
+								fallbackPerp - bondDirNormalized * glm::dot(fallbackPerp, bondDirNormalized),
+								glm::vec3(1.0f, 0.0f, 0.0f));
+							const glm::vec3 towardCentroid = structureCentroid - midpoint;
+							const glm::vec3 projected =
+								towardCentroid - bondDirNormalized * glm::dot(towardCentroid, bondDirNormalized);
+							renderOffset += SafeNormalize(projected, fallbackPerp) * bondLabelAutoOffsetMagnitude;
+						}
+
 						const LabelLocalBounds bounds = AppendBondLabelInstances(
-							*m_LabelFont, midpoint + offset, lengthAngstrom, pinnedInstances, effectiveStyle,
+							*m_LabelFont, midpoint + renderOffset, lengthAngstrom, pinnedInstances, effectiveStyle,
 							totalRotation);
 						AppendLabelBackgroundInstance(
-							midpoint + offset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances);
+							midpoint + renderOffset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances);
 					};
 
 					constexpr float kPeriodicOffsetEpsilon = 1.0e-3f;

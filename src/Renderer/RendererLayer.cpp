@@ -16,6 +16,7 @@
 #include <unordered_set>
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glad/gl.h>
 #include <stb_image.h>
@@ -471,7 +472,10 @@ namespace DefectStudio
 			&windowState.orbitalChannelUp,
 			&windowState.orbitalChannelDown,
 			windowState.displacementComparison ? &*windowState.displacementComparison : nullptr,
-			windowState.viewOffset);
+			windowState.viewOffset,
+			windowState.bondLabelAutoOffsetEnabled,
+			windowState.bondLabelAutoOffsetMagnitude,
+			windowState.bondLabelAlignThresholdDeg);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(
@@ -1519,6 +1523,63 @@ namespace DefectStudio
 		if (windowState.pinnedMeasurementUndoHistory.size() > kMaxPinnedMeasurementHistoryEntries)
 			windowState.pinnedMeasurementUndoHistory.erase(windowState.pinnedMeasurementUndoHistory.begin());
 		windowState.pinnedMeasurementRedoHistory.clear();
+	}
+
+	// notes.txt pt. 8 - explicit single-pin "Align to camera": disable this pin's bond-direction
+	// tracking and clear any leftover manual rotation, so the label renders permanently horizontal
+	// even below the live threshold (labels.vert is always a camera-facing billboard - there's no 3D
+	// tilt to correct, just the in-plane bond-follow rotation alignToBondDirection drives). Position
+	// and bond attachment untouched. The bulk "above threshold" behavior is NOT a command anymore -
+	// see OpenGlRendererBackend::renderLabels, which applies bondLabelAlignThresholdDeg live every
+	// frame (2026-08-29 feedback: a one-shot bake didn't react to the slider or revert when the
+	// angle dropped back below threshold - a per-frame render-time clamp does both for free, same
+	// pattern as the pt. 7 auto-offset). Caller pushes the undo snapshot first
+	// (PushPinnedMeasurementUndoSnapshot).
+	void AlignBondLabelToCamera(RendererWindowState &windowState, std::size_t pinIndex)
+	{
+		if (pinIndex >= windowState.pinnedMeasurements.size())
+			return;
+		RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[pinIndex];
+		if (pin.atomIndices.size() != 2)
+			return;
+		pin.alignToBondDirection = false;
+		pin.rotationOffsetRadians = 0.0f;
+	}
+
+	// notes.txt pt. 15 - single in-process style clipboard shared by every pinned/free label, mirroring
+	// GetArrowStyleClipboard (SceneArrowEditorWidget.hpp/ObjectPropertiesPanel.cpp, 29469cb). Unlike
+	// arrows, LabelStyle has no separate "geometry" fields to split out - it IS the whole style - so
+	// there's only one clipboard, not a Geometry/Style pair.
+	std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard()
+	{
+		static std::optional<RendererWindowState::LabelStyle> clipboard;
+		return clipboard;
+	}
+
+	void CopyLabelStyle(const RendererWindowState::LabelStyle &style)
+	{
+		GetLabelStyleClipboard() = style;
+	}
+
+	bool PasteLabelStyle(
+		RendererWindowState &windowState,
+		const std::vector<std::size_t> &pinIndices,
+		const std::vector<std::size_t> &freeLabelIndices)
+	{
+		const std::optional<RendererWindowState::LabelStyle> &clipboard = GetLabelStyleClipboard();
+		if (!clipboard.has_value() || (pinIndices.empty() && freeLabelIndices.empty()))
+			return false;
+		for (const std::size_t index : pinIndices)
+		{
+			if (index < windowState.pinnedMeasurements.size())
+				windowState.pinnedMeasurements[index].style = *clipboard;
+		}
+		for (const std::size_t index : freeLabelIndices)
+		{
+			if (index < windowState.freeLabels.size())
+				windowState.freeLabels[index].style = *clipboard;
+		}
+		return true;
 	}
 
 	void RendererLayer::UndoLabelsChange(const std::string &windowId)

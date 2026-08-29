@@ -218,7 +218,7 @@ namespace DefectStudio
 			Path comparisonFilePath;
 			// Live UI slider (DisplacementComparisonPanel) - hides matches whose magnitudeAngstrom is
 			// ABOVE this value. Hungarian assignment is computed once (permissive cutoff in
-			// BuildDisplacementCostMatrix); this only changes what's drawn, no recompute.
+			// BuildLocalMatchingPlan); this only changes what's drawn, no recompute.
 			float displayThresholdAngstrom = 0.0f;
 			bool visible = true;
 			// Skip arrows whose reference atom is hidden (RendererAtomData::visible), so H/Alt+H'ing
@@ -260,6 +260,20 @@ namespace DefectStudio
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
 			// `flipped` above.
 			bool bondLabelsAlignToDirection = true;
+			// Auto-offset (notes.txt pt. 7) - a bond-length pin's rendered position gets an extra
+			// perpendicular-to-bond nudge toward the visible structure's centroid, computed live in
+			// OpenGlRendererBackend::renderLabels, ADDED to (not replacing) the pin's own manual
+			// worldOffset - dragging a pin still works exactly as before, just starting from an
+			// already-offset base instead of dead-center on the bond. Per-window like
+			// bondLabelsAlignToDirection above, not per-pin - per-pin correction is what worldOffset
+			// already is.
+			bool bondLabelAutoOffsetEnabled = true;
+			float bondLabelAutoOffsetMagnitude = 0.3f; // world units (Angstrom)
+			// Align-to-camera (notes.txt pt. 8) - "Align all above threshold" (ObjectPropertiesPanel)
+			// flattens every bond-length pin whose current on-screen bond-alignment angle (the same
+			// atan2 computation renderLabels uses for alignToBondDirection) exceeds this many degrees
+			// from horizontal. Purely a UI-side filter value, no renderer involvement.
+			float bondLabelAlignThresholdDeg = 45.0f;
 		// Multi-select (Ctrl-click/box/circle-select add to this the same way selectedAtomIndices
 		// below works for atoms) - primarily so ObjectPropertiesPanel can bulk-edit style across
 		// several pins/free labels at once. Gizmo/keyboard-shortcut code still needs "the" pivot/anchor

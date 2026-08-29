@@ -44,6 +44,23 @@ namespace DefectStudio
 	// click/drag edits) can call it without routing through a layer method for no reason.
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState);
 
+	// notes.txt pt. 8 - explicit single-pin override: force this one label flat regardless of the
+	// live threshold (OpenGlRendererBackend::renderLabels applies bondLabelAlignThresholdDeg to every
+	// bond-length pin every frame - see that function - so there's no bulk/threshold command here
+	// anymore, only this permanent per-pin one). Caller pushes the undo snapshot first
+	// (PushPinnedMeasurementUndoSnapshot), same convention as the paste-style functions below.
+	void AlignBondLabelToCamera(RendererWindowState &windowState, std::size_t pinIndex);
+
+	// notes.txt pt. 15 - in-process LabelStyle clipboard shared by pinned measurements and free
+	// labels, mirroring GetArrowStyleClipboard (SceneArrowEditorWidget.hpp). Caller pushes the undo
+	// snapshot before PasteLabelStyle, same convention as PasteArrowStyle.
+	[[nodiscard]] std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard();
+	void CopyLabelStyle(const RendererWindowState::LabelStyle &style);
+	bool PasteLabelStyle(
+		RendererWindowState &windowState,
+		const std::vector<std::size_t> &pinIndices,
+		const std::vector<std::size_t> &freeLabelIndices);
+
 	struct RendererStartupConfig
 	{
 		Path assetsDirectory;
