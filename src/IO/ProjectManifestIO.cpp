@@ -39,6 +39,7 @@ namespace DefectStudio
 				outManifest.bulkDirectory = Path(root["bulk_directory"].as<std::string>(""));
 				outManifest.displacementComparisonPath = Path(root["displacement_comparison_path"].as<std::string>(""));
 				outManifest.displacementThresholdAngstrom = root["displacement_threshold_angstrom"].as<float>(0.0f);
+				outManifest.materialsLibraryPath = Path(root["materials_library_path"].as<std::string>(""));
 
 				outManifest.irrepLabelOverrides.clear();
 				const YAML::Node irrepLabelsNode = root["irrep_labels"];
@@ -96,6 +97,7 @@ namespace DefectStudio
 				emit << YAML::Key << "bulk_directory" << YAML::Value << manifest.bulkDirectory.String();
 				emit << YAML::Key << "displacement_comparison_path" << YAML::Value << manifest.displacementComparisonPath.String();
 				emit << YAML::Key << "displacement_threshold_angstrom" << YAML::Value << manifest.displacementThresholdAngstrom;
+				emit << YAML::Key << "materials_library_path" << YAML::Value << manifest.materialsLibraryPath.String();
 				emit << YAML::Key << "roots" << YAML::Value << YAML::BeginSeq;
 				for (const ProjectRootEntry &entry : manifest.roots)
 				{
@@ -140,6 +142,7 @@ namespace DefectStudio
 		manifest.createdAt = NowEpochSeconds();
 		manifest.lastModified = manifest.createdAt;
 		manifest.formatVersion = 1;
+		manifest.materialsLibraryPath = Path("materials/materials.db");
 		return manifest;
 	}
 
