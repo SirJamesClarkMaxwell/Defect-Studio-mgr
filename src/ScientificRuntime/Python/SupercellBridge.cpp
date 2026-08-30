@@ -24,7 +24,7 @@ namespace DefectStudio
 				("ds_supercell_bridge_" + ToString(GenerateUuid()) + ".json");
 		}
 
-		void WriteStructurePayload(const Path &payloadPath, const CrystalStructure &structure)
+		[[nodiscard]] Result<void> WriteStructurePayload(const Path &payloadPath, const CrystalStructure &structure)
 		{
 			nlohmann::json lattice = nlohmann::json::array();
 			for (const glm::vec3 &vector : structure.cell.vectors)
@@ -35,8 +35,18 @@ namespace DefectStudio
 				sites.push_back({{"element", atom.species}, {"fractional", {atom.fractional.x, atom.fractional.y, atom.fractional.z}}});
 
 			nlohmann::json payload = {{"lattice", lattice}, {"sites", sites}};
-			std::ofstream file(payloadPath.String());
+
+			std::ofstream file(payloadPath.Native(), std::ios::binary | std::ios::trunc);
+			if (!file)
+			{
+				return MakePythonExecutionError(
+					"Could not write the unit cell to a temp file.",
+					"Failed to open " + payloadPath.String() + " for writing.",
+					"Verify the OS temp directory is writable.",
+					"python.ase.surface_supercell.temp_write_failed");
+			}
 			file << payload.dump();
+			return {};
 		}
 	} // namespace
 
@@ -46,7 +56,9 @@ namespace DefectStudio
 		int layers) const
 	{
 		const Path payloadPath = MakeTempStructurePayloadPath();
-		WriteStructurePayload(payloadPath, unitCell);
+		Result<void> writeResult = WriteStructurePayload(payloadPath, unitCell);
+		if (!writeResult)
+			return writeResult.Error();
 
 		ScriptRunOptions options;
 		const PythonExampleScript script = ResolvePythonExampleScript("ase_surface_supercell.py");
