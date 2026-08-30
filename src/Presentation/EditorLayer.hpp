@@ -99,11 +99,16 @@ namespace DefectStudio
 		struct TextFileOpenRequested;
 		struct CalculationSummaryOpenRequested;
 		struct IrrepLabelOverridesChanged;
+		struct DisplacementComparisonStateChanged;
+		struct DisplacementComparisonFileRequested;
+		struct DisplacementComparisonFilePickRequested;
+		struct DisplacementComparisonFilePicked;
 	}
 
 	namespace RendererEvents::Viewport
 	{
 		struct WavecarDropped;
+		struct DisplacementComparisonPanelRequested;
 	}
 
 	class EditorLayer final : public Layer, public EventReceiver
@@ -186,6 +191,16 @@ namespace DefectStudio
 		void onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event);
 		// Custom (irrep -> label) table in ElectronicStructurePanel - see ProjectManifest::irrepLabelOverrides.
 		void onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event);
+		// Atoms-displacement comparison panel - see ProjectManifest::displacementComparisonPath.
+		void onDisplacementComparisonStateChanged(const ProjectEvents::DisplacementComparisonStateChanged &event);
+		// ProjectTreePanel's per-directory RMB "Set as Displacement Comparison".
+		void onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event);
+		// This window's vertical-toolbar quick-launch button.
+		void onDisplacementComparisonPanelRequested(const RendererEvents::Viewport::DisplacementComparisonPanelRequested &event);
+		// DisplacementComparisonPanel's in-app "Browse..." - arms ProjectTreePanel's file-pick mode.
+		void onDisplacementComparisonFilePickRequested(const ProjectEvents::DisplacementComparisonFilePickRequested &event);
+		// ProjectTreePanel confirming a pick made while file-pick mode was armed.
+		void onDisplacementComparisonFilePicked(const ProjectEvents::DisplacementComparisonFilePicked &event);
 
 		// Minimal stand-in for real T07.5.1 project persistence - see PersistedWindowRecord.
 		// Save happens once, at shutdown (OnDetach) - the alternative (a save call at every one of
@@ -253,6 +268,7 @@ namespace DefectStudio
 		PanelId m_CalculationSummaryPanelId = 0;
 		PanelId m_SettingsPanelId = 0;
 		PanelId m_ExportImagePanelId = 0;
+		PanelId m_DisplacementComparisonPanelId = 0;
 	};
 
 	template <typename TPanel, typename... Args>

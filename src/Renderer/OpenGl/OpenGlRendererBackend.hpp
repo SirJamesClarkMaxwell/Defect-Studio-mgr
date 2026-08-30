@@ -211,11 +211,17 @@ namespace DefectStudio
 			const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh = nullptr,
 			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelUp = nullptr,
 			const RendererWindowState::OrbitalOverlayChannel *orbitalChannelDown = nullptr,
+			const RendererWindowState::DisplacementComparisonState *displacementComparison = nullptr,
 			// Non-destructive whole-structure offset (RendererWindowState::viewOffset, export-preview-
 			// only as of Etap F Phase 1) - forwarded as a render-time uniform (u_SceneOffset) to every
 			// geometry pass (atoms/bonds/cell box/grid/labels/isosurface), never baked into any CPU-
 			// side position data. See each shader's own u_SceneOffset comment for the per-pass detail.
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			// notes.txt pt. 7 - see RendererWindowState::bondLabelAutoOffsetEnabled/Magnitude.
+			bool bondLabelAutoOffsetEnabled = true,
+			float bondLabelAutoOffsetMagnitude = 0.3f,
+			// notes.txt pt. 8 - see renderLabels' own comment on this same parameter.
+			float bondLabelAlignThresholdDeg = 45.0f);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -269,6 +275,22 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		// Atoms-displacement comparison arrows (RendererWindowState::displacementComparison) - one
+		// batched instanced draw for all visible shafts (shared m_CylinderMesh, like renderBonds)
+		// plus one for all visible cone heads (shared m_ConeMesh, already instance-layout-compatible
+		// via createConeMesh but otherwise unused for instancing today - see that function). Unlike
+		// sceneArrows this can be hundreds-to-thousands of auto-generated arrows, so no per-arrow
+		// welded mesh (BuildWeldedArrowMesh) - two shared meshes, CPU-filtered by
+		// displacementComparison->displayThresholdAngstrom each call (no dirty-cache, same choice
+		// renderSceneArrows already makes for its own per-call instance lists). Also draws a ghost
+		// marker (shared m_SphereMesh/"atoms" program) per interstitial-like unmatched comparison
+		// atom. nullptr = no comparison active for this window.
+		void renderDisplacementArrows(
+			const RendererStructureData &structure,
+			const RendererWindowState::DisplacementComparisonState *displacementComparison,
+			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		// Figure-annotation arrows (RendererWindowState::sceneArrows). Line draws its shaft through
 		// the shared bond cylinder mesh/shader like before; Arrow3D draws through its own per-arrow
 		// welded shaft+head mesh (BuildWeldedArrowMesh, cached in resources.sceneArrow3DMeshCache -
@@ -302,7 +324,15 @@ namespace DefectStudio
 			const std::vector<std::size_t> &selectedPinnedMeasurements,
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
 			const std::vector<std::size_t> &selectedFreeLabels = {},
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			// notes.txt pt. 7 - see RendererWindowState::bondLabelAutoOffsetEnabled/Magnitude.
+			bool bondLabelAutoOffsetEnabled = true,
+			float bondLabelAutoOffsetMagnitude = 0.3f,
+			// notes.txt pt. 8 - live threshold (RendererWindowState::bondLabelAlignThresholdDeg):
+			// every bond-length pin whose current in-plane bond-alignment angle exceeds this many
+			// degrees from horizontal renders flat instead, recomputed fresh every frame - no
+			// persistent mutation, so it reacts to the slider immediately and reverts on its own.
+			float bondLabelAlignThresholdDeg = 45.0f);
 		void renderCellBox(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,

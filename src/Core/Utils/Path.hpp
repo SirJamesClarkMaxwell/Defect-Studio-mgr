@@ -33,6 +33,18 @@ public:
 	static bool Remove(const FilePath &path, std::error_code &error);
 	static std::uintmax_t RemoveAll(const FilePath &path);
 	static std::uintmax_t RemoveAll(const FilePath &path, std::error_code &error);
+
+	// Recursive, overwrites existing files at the destination (caller is responsible for any
+	// overwrite confirmation before calling this - see ProjectTreePanel's paste-conflict prompt).
+	// Works for both a single file and a whole directory tree; source and destination may be on
+	// different mounts/drives (project roots can be on different SMB/SFTP mounts - T07.5.2) since
+	// this never needs a same-volume-only primitive the way Rename below does.
+	static bool Copy(const FilePath &source, const FilePath &destination, std::error_code &error);
+	// std::filesystem::rename requires source and destination on the SAME volume - it throws/sets
+	// EXDEV otherwise (e.g. moving between two different mounted project roots). Falls back to
+	// Copy + RemoveAll(source) when the direct rename fails for that reason, so a cut+paste between
+	// roots on different mounts still works instead of silently failing.
+	static bool Rename(const FilePath &source, const FilePath &destination, std::error_code &error);
 };
 
 namespace DefectStudio

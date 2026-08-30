@@ -4,6 +4,7 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Domain/Crystal/StructureComparison.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
@@ -201,6 +203,39 @@ namespace DefectStudio
 		// new include needed.
 		bool sceneArrowQuickEditActive = false;
 		std::size_t sceneArrowQuickEditIndex = 0;
+		// Atoms-displacement comparison (T08 item 0 / T16 item 8) - this window is the "reference"
+		// structure; comparisonFilePath is a second, differently-composed-or-not structure loaded
+		// once (off the main thread, CompareStructuresJob) and matched against it. Unlike
+		// sceneArrows this is auto-generated (hundreds-to-thousands of pairs, not a handful of
+		// hand-placed annotations) and drawn as a single batched instanced draw call
+		// (OpenGlRendererBackend::renderDisplacementArrows), not per-arrow welded meshes. Renderer-
+		// only, like sceneArrows - the file path + threshold are the only two fields mirrored into
+		// ProjectManifest (EditorLayer::onDisplacementComparisonStateChanged), the computed result
+		// itself is not persisted and is recomputed by pressing "Compare" again after reopening a
+		// project.
+		struct DisplacementComparisonState
+		{
+			Path comparisonFilePath;
+			// Live UI slider (DisplacementComparisonPanel) - hides matches whose magnitudeAngstrom is
+			// ABOVE this value. Hungarian assignment is computed once (permissive cutoff in
+			// BuildLocalMatchingPlan); this only changes what's drawn, no recompute.
+			float displayThresholdAngstrom = 0.0f;
+			bool visible = true;
+			// Skip arrows whose reference atom is hidden (RendererAtomData::visible), so H/Alt+H'ing
+			// a species also hides its outgoing displacement arrows - see 2026-08-28 feedback.
+			bool onlyForVisibleAtoms = true;
+			StructureComparisonResult result;
+			// Arrow color ramp (DisplacementComparisonPanel's "Arrow settings") - small/large
+			// displacement endpoints of a linear gradient.
+			glm::vec3 lowMagnitudeColor = glm::vec3(0.25f, 0.75f, 0.35f);
+			glm::vec3 highMagnitudeColor = glm::vec3(0.85f, 0.2f, 0.2f);
+			// true = ramp normalizes against the largest currently-visible match (rescales as the
+			// threshold slider moves); false = ramp normalizes against a fixed, user-set ceiling
+			// (fixedNormalizationMaxAngstrom) so colors stay stable while the slider moves.
+			bool normalizeColorToVisibleMax = true;
+			float fixedNormalizationMaxAngstrom = 0.5f;
+		};
+		std::optional<DisplacementComparisonState> displacementComparison;
 		// One entry in the label undo/redo stack below - both label kinds together, since a single
 		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
 		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).
@@ -225,6 +260,20 @@ namespace DefectStudio
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
 			// `flipped` above.
 			bool bondLabelsAlignToDirection = true;
+			// Auto-offset (notes.txt pt. 7) - a bond-length pin's rendered position gets an extra
+			// perpendicular-to-bond nudge toward the visible structure's centroid, computed live in
+			// OpenGlRendererBackend::renderLabels, ADDED to (not replacing) the pin's own manual
+			// worldOffset - dragging a pin still works exactly as before, just starting from an
+			// already-offset base instead of dead-center on the bond. Per-window like
+			// bondLabelsAlignToDirection above, not per-pin - per-pin correction is what worldOffset
+			// already is.
+			bool bondLabelAutoOffsetEnabled = true;
+			float bondLabelAutoOffsetMagnitude = 0.3f; // world units (Angstrom)
+			// Align-to-camera (notes.txt pt. 8) - "Align all above threshold" (ObjectPropertiesPanel)
+			// flattens every bond-length pin whose current on-screen bond-alignment angle (the same
+			// atan2 computation renderLabels uses for alignToBondDirection) exceeds this many degrees
+			// from horizontal. Purely a UI-side filter value, no renderer involvement.
+			float bondLabelAlignThresholdDeg = 45.0f;
 		// Multi-select (Ctrl-click/box/circle-select add to this the same way selectedAtomIndices
 		// below works for atoms) - primarily so ObjectPropertiesPanel can bulk-edit style across
 		// several pins/free labels at once. Gizmo/keyboard-shortcut code still needs "the" pivot/anchor

@@ -66,4 +66,42 @@ namespace DefectStudio::ProjectEvents
 	{
 		std::vector<std::pair<std::string, std::string>> overrides;
 	};
+
+	// Queued from ProjectTreePanel's per-directory RMB "Set as Displacement Comparison" (same context
+	// menu as "Open Defect"/"Set as Bulk Reference"/"Show Calculation Summary", same
+	// ResolveDefectFile(directory) file resolution "Open Defect" uses) - EditorLayer routes it to the
+	// single DisplacementComparisonPanel instance (DisplacementComparisonPanel::SetComparisonFile).
+	// Exists because navigating an OS file dialog to a file already visible in the project tree
+	// (especially on a mounted network drive) is slower than just picking it from the tree.
+	struct DisplacementComparisonFileRequested final : public BusEvent
+	{
+		Path filePath;
+	};
+
+	// Queued from DisplacementComparisonPanel whenever the comparison file changes, or the display
+	// threshold slider settles (on release, not every frame it moves). EditorLayer persists both
+	// into the active project's manifest if one exists - same shape as IrrepLabelOverridesChanged.
+	struct DisplacementComparisonStateChanged final : public BusEvent
+	{
+		Path comparisonFilePath;
+		float thresholdAngstrom = 0.0f;
+	};
+
+	// Queued from DisplacementComparisonPanel's "Browse..." (in-app) button - EditorLayer routes it
+	// to the single ProjectTreePanel instance (ProjectTreePanel::RequestFilePick), arming picker
+	// mode: arrow keys navigate, Enter (or a single click) on a file confirms and fires
+	// DisplacementComparisonFilePicked below, Esc cancels. Exists because the per-directory RMB
+	// "Set as Displacement Comparison" only resolves CONTCAR/POSCAR - a comparison file with a
+	// different name (or not the "defect file" in its directory) still needed an OS dialog before
+	// this, defeating the whole point of picking from the tree (2026-08-28 feedback).
+	struct DisplacementComparisonFilePickRequested final : public BusEvent
+	{
+	};
+
+	// Queued from ProjectTreePanel when a file is confirmed while picker mode (armed by
+	// DisplacementComparisonFilePickRequested above) is active.
+	struct DisplacementComparisonFilePicked final : public BusEvent
+	{
+		Path filePath;
+	};
 } // namespace DefectStudio::ProjectEvents

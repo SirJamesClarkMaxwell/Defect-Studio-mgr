@@ -16,6 +16,7 @@
 #include <unordered_set>
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glad/gl.h>
 #include <stb_image.h>
@@ -470,7 +471,11 @@ namespace DefectStudio
 			nullptr,
 			&windowState.orbitalChannelUp,
 			&windowState.orbitalChannelDown,
-			windowState.viewOffset);
+			windowState.displacementComparison ? &*windowState.displacementComparison : nullptr,
+			windowState.viewOffset,
+			windowState.bondLabelAutoOffsetEnabled,
+			windowState.bondLabelAutoOffsetMagnitude,
+			windowState.bondLabelAlignThresholdDeg);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(
@@ -1520,6 +1525,63 @@ namespace DefectStudio
 		windowState.pinnedMeasurementRedoHistory.clear();
 	}
 
+	// notes.txt pt. 8 - explicit single-pin "Align to camera": disable this pin's bond-direction
+	// tracking and clear any leftover manual rotation, so the label renders permanently horizontal
+	// even below the live threshold (labels.vert is always a camera-facing billboard - there's no 3D
+	// tilt to correct, just the in-plane bond-follow rotation alignToBondDirection drives). Position
+	// and bond attachment untouched. The bulk "above threshold" behavior is NOT a command anymore -
+	// see OpenGlRendererBackend::renderLabels, which applies bondLabelAlignThresholdDeg live every
+	// frame (2026-08-29 feedback: a one-shot bake didn't react to the slider or revert when the
+	// angle dropped back below threshold - a per-frame render-time clamp does both for free, same
+	// pattern as the pt. 7 auto-offset). Caller pushes the undo snapshot first
+	// (PushPinnedMeasurementUndoSnapshot).
+	void AlignBondLabelToCamera(RendererWindowState &windowState, std::size_t pinIndex)
+	{
+		if (pinIndex >= windowState.pinnedMeasurements.size())
+			return;
+		RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[pinIndex];
+		if (pin.atomIndices.size() != 2)
+			return;
+		pin.alignToBondDirection = false;
+		pin.rotationOffsetRadians = 0.0f;
+	}
+
+	// notes.txt pt. 15 - single in-process style clipboard shared by every pinned/free label, mirroring
+	// GetArrowStyleClipboard (SceneArrowEditorWidget.hpp/ObjectPropertiesPanel.cpp, 29469cb). Unlike
+	// arrows, LabelStyle has no separate "geometry" fields to split out - it IS the whole style - so
+	// there's only one clipboard, not a Geometry/Style pair.
+	std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard()
+	{
+		static std::optional<RendererWindowState::LabelStyle> clipboard;
+		return clipboard;
+	}
+
+	void CopyLabelStyle(const RendererWindowState::LabelStyle &style)
+	{
+		GetLabelStyleClipboard() = style;
+	}
+
+	bool PasteLabelStyle(
+		RendererWindowState &windowState,
+		const std::vector<std::size_t> &pinIndices,
+		const std::vector<std::size_t> &freeLabelIndices)
+	{
+		const std::optional<RendererWindowState::LabelStyle> &clipboard = GetLabelStyleClipboard();
+		if (!clipboard.has_value() || (pinIndices.empty() && freeLabelIndices.empty()))
+			return false;
+		for (const std::size_t index : pinIndices)
+		{
+			if (index < windowState.pinnedMeasurements.size())
+				windowState.pinnedMeasurements[index].style = *clipboard;
+		}
+		for (const std::size_t index : freeLabelIndices)
+		{
+			if (index < windowState.freeLabels.size())
+				windowState.freeLabels[index].style = *clipboard;
+		}
+		return true;
+	}
+
 	void RendererLayer::UndoLabelsChange(const std::string &windowId)
 	{
 		RendererWindowState *windowState = findWindowById(windowId);
@@ -2255,14 +2317,44 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		// Only visible atoms - selecting hidden ones too would let a subsequent M/gizmo/delete act on
-		// atoms the user can't see or intended to exclude via H (matches InvertSelectionModifier's
-		// same visible-only rule below).
+		// Only entity kinds the active pick mode actually allows picking (2026-08-29 feedback: this
+		// previously matched every atom+bond unconditionally, so a bonds+labels-only mode - Ctrl+3 -
+		// still selected every atom too). Entities of a kind the mode excludes are left untouched
+		// rather than forced unselected, so switching mode to also grab labels doesn't silently wipe
+		// an atom selection made under a different mode. Only visible entities within an included kind
+		// - selecting hidden ones too would let a subsequent M/gizmo/delete act on something the user
+		// can't see or intended to exclude via H (matches InvertSelectionModifier's same rule).
 		SceneRegistry &scene = windowState->sceneRegistry;
 		entt::registry &registry = scene.Registry();
-		for (const entt::entity entity : registry.view<SelectionComponent, const VisibilityComponent>())
-			registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		if (windowState->pickAtoms)
+		{
+			for (const entt::entity entity : registry.view<AtomComponent, SelectionComponent, const VisibilityComponent>())
+				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		}
+		if (windowState->pickBonds)
+		{
+			for (const entt::entity entity : registry.view<BondComponent, SelectionComponent, const VisibilityComponent>())
+				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		}
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+
+		// Labels aren't part of the ECS selection sync above (plain std::vector fields, not entities)
+		// - same pickLabels-gated trio (pinned measurements + free labels + scene arrows) box/circle-
+		// select already treats as one group (RendererPanel::handleBoxSelectDrag/handleCircleSelectDrag),
+		// and the reason "select all bond-labels" (2026-08-29 feedback) needs no new shortcut of its
+		// own - Ctrl+A while in labels-pickable mode now covers it directly.
+		if (windowState->pickLabels)
+		{
+			windowState->selectedPinnedMeasurements.clear();
+			for (std::size_t index = 0; index < windowState->pinnedMeasurements.size(); ++index)
+				windowState->selectedPinnedMeasurements.push_back(index);
+			windowState->selectedFreeLabels.clear();
+			for (std::size_t index = 0; index < windowState->freeLabels.size(); ++index)
+				windowState->selectedFreeLabels.push_back(index);
+			windowState->selectedSceneArrows.clear();
+			for (std::size_t index = 0; index < windowState->sceneArrows.size(); ++index)
+				windowState->selectedSceneArrows.push_back(index);
+		}
 	}
 
 	void RendererLayer::onCursor3DSetPositionRequested(const RendererEvents::Viewport::Cursor3DSetPositionRequested &event)

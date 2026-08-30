@@ -31,7 +31,63 @@
       "Bash(tasklist //FI \"IMAGENAME eq cl.exe\")",
       "Bash(tasklist //FI \"IMAGENAME eq MSBuild.exe\")",
       "Bash(python -m scripts.python.build --config Debug)",
-      "Bash(python -m scripts.python.generate_projects)"
+      "Bash(python -m scripts.python.generate_projects)",
+      "WebSearch",
+      "WebFetch(domain:api.github.com)",
+      "Bash(\"./build/bin/Release-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\")",
+      "Bash(.venv/Scripts/ipython.exe --simple-prompt --no-banner)",
+      "Bash(git status *)",
+      "Bash(git commit -m ' *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.python.generate_projects)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe\" build/generated/vs2022/DefectStudio.sln -p:Configuration=Debug -p:Platform=x64 -m -v:minimal)",
+      "Bash(tee /tmp/build_debug3.log)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" build\\\\generated\\\\vs2022\\\\DefectStudio.sln /t:DefectStudio /p:Configuration=Debug /p:Platform=x64 /m /nologo /v:minimal)",
+      "PowerShell(& \"build\\\\bin\\\\Debug-windows-x86_64\\\\DefectStudioTests\\\\DefectStudioTests.exe\")",
+      "Bash(python scripts/python/build.py --target DefectStudio --config Debug)",
+      "Bash(python scripts/python/build.py --target DefectStudioTests --config Debug)",
+      "Bash(\"build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\" --gtest_filter=\"SelectionHitTestTests.*\")",
+      "Bash(./DefectStudioTests.exe)",
+      "PowerShell(& \"c:\\\\Users\\\\fzabi\\\\Desktop\\\\STUDIA\\\\Defect-Studio-mgr\\\\scripts\\\\Windows\\\\GenerateProjects.bat\" 2>&1)",
+      "Bash(MSBuild.exe build/generated/vs2022/DefectStudio.sln /t:DefectStudio /p:Configuration=Debug /p:Platform=x64 /m /nologo /v:minimal)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"c:\\\\Users\\\\fzabi\\\\Desktop\\\\STUDIA\\\\Defect-Studio-mgr\\\\build\\\\generated\\\\vs2022\\\\DefectStudio.sln\" /t:DefectStudio /p:Configuration=Debug /p:Platform=x64 /m /nologo /v:minimal 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"c:\\\\Users\\\\fzabi\\\\Desktop\\\\STUDIA\\\\Defect-Studio-mgr\\\\build\\\\generated\\\\vs2022\\\\DefectStudio.sln\" /t:DefectStudioTests /p:Configuration=Debug /p:Platform=x64 /m /nologo /v:minimal 2>&1)",
+      "Bash(\"./build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\" --gtest_filter=\"StructureComparisonTests.*\" --gtest_brief=0)",
+      "PowerShell(Get-Process -Name DefectStudio -ErrorAction SilentlyContinue)",
+      "Bash(\"./build/bin/Release-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\" --gtest_brief=1)",
+      "Bash(where msbuild.exe)",
+      "Bash(find \"/c/Program Files/Microsoft Visual Studio/2022\" -iname \"MSBuild.exe\" 2>/dev/null)",
+      "Read(//c/Program Files/Microsoft Visual Studio/**)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" build/generated/vs2022/DefectStudioTests.vcxproj //p:Configuration=Debug //p:Platform=x64 //m)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" build/generated/vs2022/DefectStudioTests.vcxproj //p:Configuration=Debug //p:Platform=x64 //m //v:minimal)",
+      "Bash(\"./build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe\")",
+      "Bash(grep -n \"tool_input\\\\|file_path\\\\|systemMessage\\\\|decision\\\\|permissionDecision\\\\|command'\" \"/c/Users/fzabi/.claude/plugins/cache/claude-plugins-official/hookify/0620a687ddd5/core/rule_engine.py\" | head -40)",
+      "Read(//c/Users/fzabi/.claude/plugins/cache/claude-plugins-official/hookify/0620a687ddd5/core/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/post_write_premake_reminder.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_merge_build_reminder.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

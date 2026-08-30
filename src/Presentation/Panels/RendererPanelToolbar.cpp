@@ -664,6 +664,20 @@ namespace DefectStudio
 				!windowState.pickAtoms && !windowState.pickBonds && windowState.pickLabels))
 			publishSelectionMode(false, false, true);
 
+		ImGui::Spacing();
+
+		// Quick-launch for the Atoms Displacement panel, pinning THIS window as the reference -
+		// unambiguous by construction (no "which viewport is focused" guessing), see
+		// DisplacementComparisonPanel::OpenForWindow.
+		if (toolButton(
+				"##ToolDisplacementComparison", "tool-displacement.png", "Cmp",
+				"Compare this structure against another (atoms-displacement arrows)", false))
+		{
+			RendererEvents::Viewport::DisplacementComparisonPanelRequested event;
+			event.windowId = windowState.windowId;
+			eventBus->Publish(event);
+		}
+
 		ImGui::EndChild();
 	}
 

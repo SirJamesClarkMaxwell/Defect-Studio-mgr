@@ -2,14 +2,22 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/Utils/Memory.hpp"
+#include "Domain/Crystal/ElementProperties.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
+	class DomainLayer;
+	class JobSystem;
+	class CopyWindowStateJob;
+
 	// Lists open renderer windows (one structure per window - no Collections, see docs/work/
 	// project/plans/2026-08-23-outliner-bonds-displacement.md). Per-window visibility toggle
 	// (show/hide every atom+bond in that window, same VisibilityComponent mechanism as H/Alt+H) and
@@ -22,7 +30,13 @@ namespace DefectStudio
 	class SceneOutlinerPanel final : public IPanel
 	{
 	public:
-		explicit SceneOutlinerPanel(RendererLayer &layer, std::string title = "Scene Outliner", bool visibleByDefault = false);
+		explicit SceneOutlinerPanel(
+			RendererLayer &layer,
+			WeakRef<DomainLayer> domainLayer,
+			WeakRef<JobSystem> jobSystem,
+			ElementPropertiesTable elementPropertiesTable,
+			std::string title = "Scene Outliner",
+			bool visibleByDefault = false);
 		SceneOutlinerPanel(const SceneOutlinerPanel &other) = default;
 
 		void Render() override;
@@ -41,7 +55,23 @@ namespace DefectStudio
 		void drawArrowsGroup(RendererWindowState &windowState);
 		void drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex);
 
+		// "Copy view + visibility to..." (RMB on a window row) - atom-matches source against target
+		// (both already-open windows, unlike DisplacementComparisonPanel's file-based comparison) via
+		// CopyWindowStateJob, then on completion copies the matched atoms' visibility and does an
+		// animated camera transition to source's current view. Async (scipy subprocess), so dispatch
+		// + poll like every other job-backed panel in this codebase.
+		void dispatchCopyViewAndVisibility(const RendererWindowState &source, const std::string &targetWindowId);
+		void pollCopyJob();
+
 		RendererLayer &m_Layer;
+		WeakRef<DomainLayer> m_DomainLayer;
+		WeakRef<JobSystem> m_JobSystem;
+		ElementPropertiesTable m_ElementPropertiesTable;
+		Ref<CopyWindowStateJob> m_PendingCopyJob;
+		JobId m_PendingCopyJobId = 0;
+		std::string m_CopySourceWindowId;
+		std::string m_CopyTargetWindowId;
+		std::string m_CopyError;
 		// Index into m_Layer.GetWindows(), not a stable windowId - fine since both editing state and
 		// active-row tracking are cleared the moment the window list changes shape (see Render()).
 		int m_EditingWindowIndex = -1;

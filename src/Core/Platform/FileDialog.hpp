@@ -17,4 +17,10 @@ namespace DefectStudio::Platform
 		const std::string &defaultName,
 		const std::string &filterName,
 		const std::string &filterExtension);
+
+	// nullopt = user cancelled (not an error). StructuredError = dialog/init failure.
+	[[nodiscard]] Result<std::optional<Path>> PickOpenFile(
+		const Path &defaultDirectory,
+		const std::string &filterName,
+		const std::string &filterExtension);
 } // namespace DefectStudio::Platform

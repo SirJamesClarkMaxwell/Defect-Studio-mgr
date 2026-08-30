@@ -871,6 +871,26 @@ namespace DefectStudio
 		// typed X/Y/Z here, or click-drag in the viewport (RendererPanel::handleFreeLabelInteraction).
 		if (windowState != nullptr)
 		{
+			// notes.txt pt. 7/8 - window-level bond-length-label controls, not tied to any particular
+			// selection (auto-offset and the align threshold both apply to every pinned bond-length
+			// label at once). Both sliders are live - OpenGlRendererBackend::renderLabels recomputes
+			// from them every frame, no "apply" button, no persistent mutation, reverts on its own
+			// when dragged back (2026-08-29 feedback - a one-shot bake-on-click design wasn't hot and
+			// didn't revert). Per-pin "Align to camera" permanent override lives next to "Align to
+			// bond" in the single-pin branch of "Selected labels" below.
+			ImGui::Separator();
+			ImGui::Text("Bond labels");
+			ImGui::Checkbox("Auto-offset##BondLabelAutoOffset", &windowState->bondLabelAutoOffsetEnabled);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(120.0f);
+			ImGui::SliderFloat(
+				"Magnitude##BondLabelAutoOffsetMagnitude", &windowState->bondLabelAutoOffsetMagnitude, 0.0f, 2.0f,
+				"%.2f A");
+			ImGui::SetNextItemWidth(120.0f);
+			ImGui::SliderFloat(
+				"Align threshold##BondLabelAlignThreshold", &windowState->bondLabelAlignThresholdDeg, 0.0f, 90.0f,
+				"%.0f deg (90 = off)");
+
 			ImGui::Separator();
 			ImGui::Text("Free labels");
 			if (ImGui::Button("+ Add label"))
@@ -937,12 +957,39 @@ namespace DefectStudio
 					{
 						ImGui::SameLine();
 						ImGui::Checkbox("Align to bond##PinAlign", &pin.alignToBondDirection);
+						ImGui::SameLine();
+						// notes.txt pt. 8 - permanent single-item override, independent of the live
+						// threshold above (Bond labels section): forces this one pin flat even when its
+						// angle is below threshold. Unlike the threshold, this does persist (unchecking
+						// "Align to bond" has the same effect and survives regardless of angle).
+						if (ImGui::Button("Align to camera##PinAlignToCamera"))
+						{
+							PushPinnedMeasurementUndoSnapshot(*windowState);
+							AlignBondLabelToCamera(*windowState, windowState->selectedPinnedMeasurements[0]);
+						}
 					}
 				}
 				else
 				{
 					ImGui::Text("%zu label(s) selected - style below applies to all of them", pinCount + freeCount);
 				}
+
+				// notes.txt pt. 15 - copies/pastes the representative style computed just below (same
+				// one the bulk editor edits), so "Copy Style" always grabs what's currently shown.
+				// Paste Style is disabled until something has actually been copied.
+				if (ImGui::Button("Copy Style##LabelStyleCopy"))
+				{
+					CopyLabelStyle(pinCount > 0 ? windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[0]].style
+												 : windowState->freeLabels[windowState->selectedFreeLabels[0]].style);
+				}
+				ImGui::SameLine();
+				ImGui::BeginDisabled(!GetLabelStyleClipboard().has_value());
+				if (ImGui::Button("Paste Style##LabelStylePaste"))
+				{
+					PushPinnedMeasurementUndoSnapshot(*windowState);
+					PasteLabelStyle(*windowState, windowState->selectedPinnedMeasurements, windowState->selectedFreeLabels);
+				}
+				ImGui::EndDisabled();
 
 				// Bulk style edit: edit one representative item's style, then broadcast that same
 				// value to every other selected item every frame - simplest correct way to edit N

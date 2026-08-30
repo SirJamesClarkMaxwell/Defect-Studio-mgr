@@ -1099,6 +1099,30 @@ namespace DefectStudio
 			ImGui::EndMenu();
 		}
 
+		// notes.txt pt. 15 - mirrors the "Arrow" submenu above, but LabelStyle has no separate
+		// geometry to split out, so just one Copy/Paste Style pair. Applies to whichever label kind is
+		// selected (pinned bond/angle labels and free labels share this one clipboard, same as the
+		// "Selected labels" bulk editor in ObjectPropertiesPanel).
+		const bool hasLabelSelection =
+			!windowState.selectedPinnedMeasurements.empty() || !windowState.selectedFreeLabels.empty();
+		if (ImGui::BeginMenu("Label", hasLabelSelection || GetLabelStyleClipboard().has_value()))
+		{
+			if (ImGui::MenuItem("Copy Style", nullptr, false, hasLabelSelection))
+			{
+				CopyLabelStyle(
+					!windowState.selectedPinnedMeasurements.empty()
+						? windowState.pinnedMeasurements[windowState.selectedPinnedMeasurements.front()].style
+						: windowState.freeLabels[windowState.selectedFreeLabels.front()].style);
+			}
+			const bool canPasteLabelStyle = hasLabelSelection && GetLabelStyleClipboard().has_value();
+			if (ImGui::MenuItem("Paste Style", nullptr, false, canPasteLabelStyle))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				PasteLabelStyle(windowState, windowState.selectedPinnedMeasurements, windowState.selectedFreeLabels);
+			}
+			ImGui::EndMenu();
+		}
+
 		ImGui::Separator();
 
 		if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
@@ -3061,6 +3085,26 @@ namespace DefectStudio
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			PasteArrowStyle(windowState, windowState.selectedSceneArrows);
+		}
+
+		// notes.txt pt. 15 - label-style equivalent of the arrow Alt+C/Alt+Shift+V pair just above,
+		// same keys since a selection is either arrows or labels in practice (viewport selection
+		// modes - RendererPanelToolbar's Ctrl+1..5 - separate atoms/bonds/labels from each other, and
+		// arrows aren't part of any pick mode, so this only guards against a stale multi-kind
+		// selection surviving a mode switch, not a normal simultaneous pick).
+		const bool labelSelected = pinSelected || freeLabelSelected;
+		if (labelSelected && !sceneArrowSelected && hovered && altHeld && !shiftHeld &&
+			ImGui::IsKeyPressed(ImGuiKey_C, false))
+		{
+			CopyLabelStyle(
+				pinSelected ? windowState.pinnedMeasurements[windowState.selectedPinnedMeasurements.front()].style
+							: windowState.freeLabels[windowState.selectedFreeLabels.front()].style);
+		}
+		if (labelSelected && !sceneArrowSelected && hovered && altHeld && shiftHeld &&
+			ImGui::IsKeyPressed(ImGuiKey_V, false) && GetLabelStyleClipboard().has_value())
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			PasteLabelStyle(windowState, windowState.selectedPinnedMeasurements, windowState.selectedFreeLabels);
 		}
 
 		// Shift+R toggles the Rotate pivot (Midpoint <-> 3D Cursor) - keyboard equivalent of the toolbar

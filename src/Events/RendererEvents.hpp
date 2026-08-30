@@ -385,6 +385,15 @@ namespace DefectStudio::RendererEvents::Viewport
 		Path wavecarPath;
 	};
 
+	// Quick-launch button on this window's vertical toolbar (RendererPanel::drawViewportVerticalToolbar)
+	// - EditorLayer routes it to the single DisplacementComparisonPanel instance and binds windowId as
+	// its reference window (DisplacementComparisonPanel::OpenForWindow), same "route to one Presentation
+	// panel" shape as WavecarDropped above.
+	struct DisplacementComparisonPanelRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
 } // namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows

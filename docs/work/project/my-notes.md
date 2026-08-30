@@ -115,3 +115,4 @@ Komentarze:
 (1) wiele zagnieżdżonych pętl for, nie podoba mi się to, może lepiej by było aby najpierw za pomocą catesian-product wygenerować długi wektor potencjalnych par do sprawdzanie a potem zrobić to w jednej pętli? 
 
 (2) może warto to odrazu przenieść do compute-shader? 
+m from

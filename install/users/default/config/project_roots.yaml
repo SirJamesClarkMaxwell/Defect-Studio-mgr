@@ -8,3 +8,9 @@ roots:
   - id: root-0231fc3c2580aeab
     path: O:\hBN\convergance_test\882\V_2\obliczenia
     label: obliczenia
+  - id: root-e3c2163e2daca35b
+    path: C:\Users\fzabi\Desktop\STUDIA\Defect-Studio-mgr\test-directory\dimer\exc_ms
+    label: exc_ms
+  - id: root-88f621514660c6e8
+    path: K:\sjcm_mgr\hBN\convergance_test\991-PL\a_sweep_from_bulk
+    label: a_sweep_from_bulk

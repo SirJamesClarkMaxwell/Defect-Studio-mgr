@@ -85,6 +85,32 @@ std::uintmax_t FileSystem::RemoveAll(const FilePath &path, std::error_code &erro
 	return std::filesystem::remove_all(path, error);
 }
 
+bool FileSystem::Copy(const FilePath &source, const FilePath &destination, std::error_code &error)
+{
+	constexpr std::filesystem::copy_options options = std::filesystem::copy_options::recursive
+		| std::filesystem::copy_options::overwrite_existing;
+	std::filesystem::copy(source, destination, options, error);
+	return !error;
+}
+
+bool FileSystem::Rename(const FilePath &source, const FilePath &destination, std::error_code &error)
+{
+	std::filesystem::rename(source, destination, error);
+	if (!error)
+		return true;
+
+	// EXDEV ("Invalid cross-device link") is the one failure mode worth a fallback - anything else
+	// (permission denied, destination exists as a non-empty directory, etc.) should surface as-is.
+	if (error != std::errc::cross_device_link)
+		return false;
+
+	error.clear();
+	if (!Copy(source, destination, error))
+		return false;
+	std::uintmax_t removed = RemoveAll(source, error);
+	return !error && removed > 0;
+}
+
 namespace DefectStudio
 	{
 	Path::Path(std::filesystem::path path) : m_Path(std::move(path))
