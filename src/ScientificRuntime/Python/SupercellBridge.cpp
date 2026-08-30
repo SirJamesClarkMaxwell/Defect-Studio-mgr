@@ -103,4 +103,55 @@ namespace DefectStudio
 		}
 		return matrix;
 	}
+
+	Result<SymmetryInfo> SupercellBridge::GetSymmetryInfo(
+		const CrystalStructure &structure,
+		float symprecAngstrom) const
+	{
+		const Path payloadPath = MakeTempStructurePayloadPath();
+		Result<void> writeResult = WriteStructurePayload(payloadPath, structure);
+		if (!writeResult)
+			return writeResult.Error();
+
+		ScriptRunOptions options;
+		const PythonExampleScript script = ResolvePythonExampleScript("spglib_symmetry_info.py");
+		options.scriptPath = script.scriptPath;
+		options.arguments = { payloadPath.String(), std::to_string(symprecAngstrom) };
+		options.workingDirectory = script.workingDirectory;
+
+		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
+		std::error_code removeError;
+		FileSystem::Remove(payloadPath.Native(), removeError);
+		if (!runResult)
+			return runResult.Error();
+
+		const std::string jsonLine = ExtractJsonLineFromOutput(runResult->standardOutput);
+		if (jsonLine.empty())
+		{
+			return MakePythonExecutionError(
+				"spglib symmetry info returned no output.",
+				"Expected a JSON payload in stdout but received nothing.",
+				"Verify scripts/python/examples/spglib_symmetry_info.py output contract.",
+				"python.spglib.symmetry_info.empty_output");
+		}
+
+		SymmetryInfo info;
+		try
+		{
+			const nlohmann::json payload = nlohmann::json::parse(jsonLine);
+			info.spacegroupNumber = payload.at("spacegroup_number").get<int>();
+			info.spacegroupSymbol = payload.at("spacegroup_symbol").get<std::string>();
+			info.pointGroupSymbol = payload.at("point_group_symbol").get<std::string>();
+			info.wyckoffLetters = payload.at("wyckoffs").get<std::vector<std::string>>();
+		}
+		catch (const std::exception &exception)
+		{
+			return MakePythonExecutionError(
+				"spglib symmetry info parsing failed.",
+				std::string("JSON parse error: ") + exception.what() + "\nPayload: " + jsonLine,
+				"Ensure the bridge script prints spacegroup/point-group/wyckoffs as one JSON line.",
+				"python.spglib.symmetry_info.invalid_json");
+		}
+		return info;
+	}
 } // namespace DefectStudio
