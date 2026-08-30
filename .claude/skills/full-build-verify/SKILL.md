@@ -29,18 +29,27 @@ the generator output - that's just premake's action name):
    ```
    If it's running, ask the user to close it before continuing (never kill it unilaterally).
 
-3. **Build both targets, both configs** (run DefectStudioTests first - it's a separate exe, so it
-   still validates compile correctness even if DefectStudio.exe is locked):
+3. **Build both targets, both configs, ONE invocation at a time** (never batch these into
+   parallel tool calls - this machine has 14 logical cores / 16GB RAM, and unlimited `//m` lets
+   MSBuild spawn up to 14 concurrent cl.exe compiling template-heavy headers (glm/GoogleTest/
+   ImPlot) at once; that plus the IDE/browser/Claude Code already resident is what drove the
+   2026-08-28 OOM crash and a second near-OOM on 2026-08-29 - confirmed via Windows'
+   Resource-Exhaustion-Detector event log. `//m:4` caps concurrency to a safe level; `//nr:false`
+   stops MSBuild worker nodes from staying resident (and accumulating memory) between these four
+   sequential invocations. Run DefectStudioTests first - it's a separate exe, so it still
+   validates compile correctness even if DefectStudio.exe is locked):
    ```
-   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudioTests.vcxproj //p:Configuration=Debug   //p:Platform=x64 //m //v:minimal
-   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudio.vcxproj      //p:Configuration=Debug   //p:Platform=x64 //m //v:minimal
-   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudioTests.vcxproj //p:Configuration=Release //p:Platform=x64 //m //v:minimal
-   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudio.vcxproj      //p:Configuration=Release //p:Platform=x64 //m //v:minimal
+   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudioTests.vcxproj //p:Configuration=Debug   //p:Platform=x64 //m:4 //nr:false //v:minimal
+   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudio.vcxproj      //p:Configuration=Debug   //p:Platform=x64 //m:4 //nr:false //v:minimal
+   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudioTests.vcxproj //p:Configuration=Release //p:Platform=x64 //m:4 //nr:false //v:minimal
+   "/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/generated/vs2022/DefectStudio.vcxproj      //p:Configuration=Release //p:Platform=x64 //m:4 //nr:false //v:minimal
    ```
    Each must end with `<Project>.vcxproj -> ...exe` and no `error` lines. Look at the tail of
    output only - the full MSBuild log is long and mostly noise.
 
-4. **Run the test suite, both configs**:
+4. **Run the test suite, both configs, one at a time (never both at once)** - GoogleTest itself
+   runs in-process/single-threaded here so this isn't the parallelism risk step 3 is, but two
+   full exe's worth of loaded DLLs/heap at once is still unnecessary peak memory to carry:
    ```
    "./build/bin/Debug-windows-x86_64/DefectStudioTests/DefectStudioTests.exe"
    "./build/bin/Release-windows-x86_64/DefectStudioTests/DefectStudioTests.exe"

@@ -2,7 +2,7 @@ schema_version: 1
 ui:
   font:
     path: app/assets/fonts/segoeui.ttf
-  font_scale: 1.9999999
+  font_scale: 2.34
   font_scale_step: 0.34
   settings_preview_enabled: true
   settings_auto_save_on_preview: true
@@ -53,7 +53,14 @@ appearance:
     disabled_alpha: 0.45
     disabled_background_mix: 0.55
 renderer:
-  background: [0.44705883, 0.44705883, 0.44705883, 1]
+  background: [0.3164014, 0.3176324, 0.31764707, 1]
+  bond_radius_multiplier: 2.41
+  color_saturation: 2
+  viewport_supersample: 1
+  arrow_head_bulge_strength: 0.16
+  arrow_default_shaft_width_ratio: 0.025
+  arrow_default_head_width_ratio: 0.047
+  arrow_default_head_length_ratio: 0.166
   orbit_sensitivity: 1
   pan_sensitivity: 1
   zoom_sensitivity: 1
@@ -68,16 +75,20 @@ renderer:
   auto_apply_default_view_on_open: false
   lighting:
     ambient: 0.45
-    key: 0.47
-    fill: 0.11
-    back: 0.13
+    key: 0.46
+    fill: 0.1
+    back: 0.08
     two_sided: true
+    specular: 0.75
+    shininess: 6
+    rim_intensity: 1.5
+    rim_power: 0.5
     key_direction: [0.6, 0.8, 0.5]
     fill_direction: [-0.7, 0.3, 0.2]
     back_direction: [0, -0.4, -0.8]
   viewport:
-    axis_button_size: 32
-    icon_button_size: 32
+    axis_button_size: 34
+    icon_button_size: 33
   toolbar_wheel:
     rotation_step_delta: 1
     zoom_step_delta: 1
@@ -85,5 +96,5 @@ renderer:
   grid:
     auto_fit_to_structure_bounds: true
     padding_percent: 25.3
-    spacing: 0.99
-    plane_z: -7.9
+    spacing: 1.11
+    plane_z: -5.4
