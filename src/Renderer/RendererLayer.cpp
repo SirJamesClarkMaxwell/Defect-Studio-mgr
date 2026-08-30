@@ -2317,14 +2317,44 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		// Only visible atoms - selecting hidden ones too would let a subsequent M/gizmo/delete act on
-		// atoms the user can't see or intended to exclude via H (matches InvertSelectionModifier's
-		// same visible-only rule below).
+		// Only entity kinds the active pick mode actually allows picking (2026-08-29 feedback: this
+		// previously matched every atom+bond unconditionally, so a bonds+labels-only mode - Ctrl+3 -
+		// still selected every atom too). Entities of a kind the mode excludes are left untouched
+		// rather than forced unselected, so switching mode to also grab labels doesn't silently wipe
+		// an atom selection made under a different mode. Only visible entities within an included kind
+		// - selecting hidden ones too would let a subsequent M/gizmo/delete act on something the user
+		// can't see or intended to exclude via H (matches InvertSelectionModifier's same rule).
 		SceneRegistry &scene = windowState->sceneRegistry;
 		entt::registry &registry = scene.Registry();
-		for (const entt::entity entity : registry.view<SelectionComponent, const VisibilityComponent>())
-			registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		if (windowState->pickAtoms)
+		{
+			for (const entt::entity entity : registry.view<AtomComponent, SelectionComponent, const VisibilityComponent>())
+				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		}
+		if (windowState->pickBonds)
+		{
+			for (const entt::entity entity : registry.view<BondComponent, SelectionComponent, const VisibilityComponent>())
+				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
+		}
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
+
+		// Labels aren't part of the ECS selection sync above (plain std::vector fields, not entities)
+		// - same pickLabels-gated trio (pinned measurements + free labels + scene arrows) box/circle-
+		// select already treats as one group (RendererPanel::handleBoxSelectDrag/handleCircleSelectDrag),
+		// and the reason "select all bond-labels" (2026-08-29 feedback) needs no new shortcut of its
+		// own - Ctrl+A while in labels-pickable mode now covers it directly.
+		if (windowState->pickLabels)
+		{
+			windowState->selectedPinnedMeasurements.clear();
+			for (std::size_t index = 0; index < windowState->pinnedMeasurements.size(); ++index)
+				windowState->selectedPinnedMeasurements.push_back(index);
+			windowState->selectedFreeLabels.clear();
+			for (std::size_t index = 0; index < windowState->freeLabels.size(); ++index)
+				windowState->selectedFreeLabels.push_back(index);
+			windowState->selectedSceneArrows.clear();
+			for (std::size_t index = 0; index < windowState->sceneArrows.size(); ++index)
+				windowState->selectedSceneArrows.push_back(index);
+		}
 	}
 
 	void RendererLayer::onCursor3DSetPositionRequested(const RendererEvents::Viewport::Cursor3DSetPositionRequested &event)
