@@ -66,6 +66,15 @@ namespace DefectStudio
 	MaterialLibraryIO::MaterialLibraryIO(Path libraryPath)
 		: m_LibraryPath(std::move(libraryPath))
 	{
+		// ase.db (sqlite3) creates the .db FILE lazily on first write, but it does not create
+		// missing parent directories - the project-scoped default ("materials/materials.db") lives
+		// in a subdirectory a fresh project never had a reason to create. Done once here (not just
+		// in AddMaterial) so ListMaterials/LoadMaterial/RemoveMaterial also work against a
+		// never-touched library path instead of failing with "unable to open database file".
+		// Idempotent and cheap - unconditional on every construction, no need to check existence
+		// first.
+		std::error_code directoryError;
+		FileSystem::CreateDirectories(m_LibraryPath.parent_path().Native(), directoryError);
 	}
 
 	Result<MaterialLibraryEntry> MaterialLibraryIO::AddMaterial(
@@ -77,12 +86,6 @@ namespace DefectStudio
 		Result<void> writeResult = WriteMaterialPayload(payloadPath, structure, name, notes);
 		if (!writeResult)
 			return writeResult.Error();
-
-		// ase.db (sqlite3) creates the .db FILE lazily on first write, but it does not create
-		// missing parent directories - the project-scoped default ("materials/materials.db") lives
-		// in a subdirectory that a fresh project never had a reason to create until now.
-		std::error_code directoryError;
-		FileSystem::CreateDirectories(m_LibraryPath.parent_path().Native(), directoryError);
 
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(
 			MakeRunOptions({m_LibraryPath.String(), "add", payloadPath.String()}));
@@ -246,11 +249,24 @@ namespace DefectStudio
 				"python.ase.material_library.remove.empty_output");
 		}
 
-		if (!nlohmann::json::accept(jsonLine))
+		try
+		{
+			const nlohmann::json payload = nlohmann::json::parse(jsonLine);
+			const std::string removedId = payload.at("removed_id").get<std::string>();
+			if (removedId != entryId)
+			{
+				return MakePythonExecutionError(
+					"Material-library remove acknowledged the wrong entry.",
+					"Requested id " + entryId + " but the bridge script acknowledged " + removedId + ".\nPayload: " + jsonLine,
+					"Ensure the bridge script prints removed_id matching the requested entry.",
+					"python.ase.material_library.remove.id_mismatch");
+			}
+		}
+		catch (const std::exception &exception)
 		{
 			return MakePythonExecutionError(
 				"Material-library remove output parsing failed.",
-				"Expected exactly one JSON line acknowledging the removal.\nPayload: " + jsonLine,
+				std::string("JSON parse error: ") + exception.what() + "\nPayload: " + jsonLine,
 				"Ensure the bridge script prints exactly one JSON line with removed_id.",
 				"python.ase.material_library.remove.invalid_json");
 		}

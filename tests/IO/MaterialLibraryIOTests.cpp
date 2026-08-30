@@ -14,6 +14,17 @@ namespace DefectStudio::Tests
 			return Path::FromResolved(FileSystem::TempDirectoryPath()) /
 				("defectstudio_material_library_" + std::to_string(Time::NowSteady().time_since_epoch().count()) + ".db");
 		}
+
+		// A path inside a directory that does not exist yet - mirrors the real project-scoped
+		// default ("materials/materials.db"), whose "materials" subdirectory ProjectManifest's
+		// CreateNew() never creates on disk. Returns the .db path; the parent directory is the
+		// caller's to clean up.
+		[[nodiscard]] Path MakeFreshLibraryPathInMissingDirectory()
+		{
+			const Path missingDirectory = Path::FromResolved(FileSystem::TempDirectoryPath()) /
+				("defectstudio_material_library_fresh_" + std::to_string(Time::NowSteady().time_since_epoch().count()));
+			return missingDirectory / "materials.db";
+		}
 	} // namespace
 
 	TEST(MaterialLibraryIOTests, AddListLoadRemoveRoundtrip)
@@ -48,5 +59,28 @@ namespace DefectStudio::Tests
 
 		std::error_code removeError;
 		FileSystem::Remove(libraryPath.Native(), removeError);
+	}
+
+	// Regression test for the fresh-project gap: Task 9 will call ListMaterials() (and
+	// LoadMaterial/RemoveMaterial) against a project's default materials library path before
+	// AddMaterial() has ever run there, so the "materials" subdirectory does not exist on disk yet.
+	// Previously only AddMaterial created that missing directory as a side effect, so this call
+	// failed with a generic sqlite "unable to open database file" subprocess error instead of
+	// succeeding with an empty list.
+	TEST(MaterialLibraryIOTests, ListSucceedsAgainstNeverTouchedLibraryDirectory)
+	{
+		const Path libraryPath = MakeFreshLibraryPathInMissingDirectory();
+		const Path libraryDirectory = libraryPath.parent_path();
+		ASSERT_FALSE(FileSystem::Exists(libraryDirectory.Native()));
+
+		MaterialLibraryIO library(libraryPath);
+
+		const Result<std::vector<MaterialLibraryEntry>> listed = library.ListMaterials();
+		if (!listed)
+			GTEST_SKIP() << "ase unavailable in current environment: " << listed.Error().technicalDetails;
+		EXPECT_TRUE(listed->empty());
+
+		std::error_code removeError;
+		FileSystem::RemoveAll(libraryDirectory.Native(), removeError);
 	}
 } // namespace DefectStudio::Tests
