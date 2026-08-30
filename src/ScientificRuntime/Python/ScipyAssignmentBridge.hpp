@@ -14,11 +14,16 @@ namespace DefectStudio
 	class ScipyAssignmentBridge final
 	{
 	public:
-		// Returns comparisonToReferenceAssignment[comparisonIndex] = referenceIndex, or -1 for a
-		// comparison row scipy's rectangular assignment couldn't map to any column (only possible
-		// when referenceCount < comparisonCount). Feed the result straight to
-		// BuildComparisonResultFromAssignment (StructureComparison.hpp).
-		[[nodiscard]] Result<std::vector<int>> SolveAssignment(const DisplacementCostMatrix &costMatrix) const;
+		// Solves every supplied matrix in ONE subprocess call (one JSON payload in, one JSON payload
+		// out) instead of one call per matrix - local spatial matching (StructureComparison.hpp's
+		// BuildLocalMatchingPlan) can produce many small independent components, and a Python cold
+		// start (import scipy) per component would dominate over the actual solve. Result[i]
+		// corresponds to costMatrices[i]: comparisonToReferenceAssignment[comparisonIndex] =
+		// referenceIndex, or -1 for a comparison row scipy's rectangular assignment couldn't map to
+		// any column (only possible when that matrix's referenceCount < comparisonCount). Feed
+		// straight to BuildComparisonResultFromLocalPlan (StructureComparison.hpp).
+		[[nodiscard]] Result<std::vector<std::vector<int>>> SolveAssignments(
+			const std::vector<DisplacementCostMatrix> &costMatrices) const;
 
 	private:
 		ScriptRunner m_ScriptRunner;
