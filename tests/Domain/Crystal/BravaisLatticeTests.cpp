@@ -76,4 +76,20 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(basis.size(), 4u);
 		EXPECT_EQ(basis[0], glm::vec3(0.0f));
 	}
+
+	TEST(BravaisLatticeTests, IsPresetSupportedForCubicSupportsAllFourHexagonalOnlyPrimitive)
+	{
+		EXPECT_TRUE(IsPresetSupportedFor(CrystalSystem::Cubic, BravaisCenteringPreset::Primitive));
+		EXPECT_TRUE(IsPresetSupportedFor(CrystalSystem::Cubic, BravaisCenteringPreset::BodyCentered));
+		EXPECT_TRUE(IsPresetSupportedFor(CrystalSystem::Cubic, BravaisCenteringPreset::FaceCentered));
+		EXPECT_TRUE(IsPresetSupportedFor(CrystalSystem::Cubic, BravaisCenteringPreset::BaseCentered));
+
+		EXPECT_TRUE(IsPresetSupportedFor(CrystalSystem::Hexagonal, BravaisCenteringPreset::Primitive));
+		EXPECT_FALSE(IsPresetSupportedFor(CrystalSystem::Hexagonal, BravaisCenteringPreset::BodyCentered));
+		EXPECT_FALSE(IsPresetSupportedFor(CrystalSystem::Hexagonal, BravaisCenteringPreset::FaceCentered));
+		EXPECT_FALSE(IsPresetSupportedFor(CrystalSystem::Hexagonal, BravaisCenteringPreset::BaseCentered));
+
+		EXPECT_TRUE(IsPresetSupportedFor(CrystalSystem::Trigonal, BravaisCenteringPreset::Primitive));
+		EXPECT_FALSE(IsPresetSupportedFor(CrystalSystem::Trigonal, BravaisCenteringPreset::BodyCentered));
+	}
 } // namespace DefectStudio::Tests

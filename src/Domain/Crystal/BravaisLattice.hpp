@@ -63,4 +63,11 @@ namespace DefectStudio
 		BaseCentered  // 2 points: (0,0,0) + (0.5,0.5,0)
 	};
 	[[nodiscard]] std::vector<glm::vec3> GetCenteringPresetBasis(BravaisCenteringPreset preset);
+
+	// Which centering presets the New Structure wizard should offer as a starting basis for a
+	// given crystal system - a UI convenience gate, not a physical Bravais-lattice-count authority
+	// (e.g. Cubic offers all four including base-centered, which doesn't preserve cubic symmetry
+	// as a distinct Bravais class, but is still a valid convenience starting point per
+	// GetCenteringPresetBasis's own doc comment above).
+	[[nodiscard]] bool IsPresetSupportedFor(CrystalSystem system, BravaisCenteringPreset preset);
 } // namespace DefectStudio

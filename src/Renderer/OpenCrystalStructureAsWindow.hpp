@@ -9,7 +9,7 @@ namespace DefectStudio
 {
 	class DomainLayer;
 	class RendererLayer;
-	struct AtomStyleTable;
+	class AtomStyleTable;
 
 	// Registers `structure` in the active project's StructureRegistry and opens it as a new
 	// renderer window - the same three-step sequence RendererRuntimeOpenCoordinator::

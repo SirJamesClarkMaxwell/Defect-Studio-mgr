@@ -115,4 +115,23 @@ namespace DefectStudio
 		}
 		return { glm::vec3(0.0f, 0.0f, 0.0f) };
 	}
+
+	bool IsPresetSupportedFor(CrystalSystem system, BravaisCenteringPreset preset)
+	{
+		switch (system)
+		{
+			case CrystalSystem::Cubic:
+			case CrystalSystem::Orthorhombic:
+				return true; // both genuinely support P/I/F/C as conventional-cell centerings
+			case CrystalSystem::Tetragonal:
+				return preset == BravaisCenteringPreset::Primitive || preset == BravaisCenteringPreset::BodyCentered;
+			case CrystalSystem::Monoclinic:
+				return preset == BravaisCenteringPreset::Primitive || preset == BravaisCenteringPreset::BaseCentered;
+			case CrystalSystem::Hexagonal:
+			case CrystalSystem::Trigonal:
+			case CrystalSystem::Triclinic:
+				return preset == BravaisCenteringPreset::Primitive;
+		}
+		return preset == BravaisCenteringPreset::Primitive;
+	}
 } // namespace DefectStudio
