@@ -180,9 +180,16 @@ def _orbitals_payload(
     # per-band cost (get_symmetry over the structure) - a wide band range with irreps=True was
     # observed to be dramatically slower than the same range without it. Caller (ElectronicStructurePanel's
     # "Show symmetry labels" toggle) opts in explicitly.
+    # band_start/band_end are VASP's own 1-based, inclusive band numbers (matching OUTCAR/EIGENVAL
+    # - what a user actually cross-checks against), but get_orbital_data_for_two_spins indexes the
+    # WAVECAR's band array 0-based (see Wavecar.band_energy/read_pw_coefficients: self._bands[..][
+    # band] direct indexing) and its "nr" column is that same raw 0-based index. Only band_start
+    # needs the -1 shift going in - range(start, end)'s exclusive end already happens to line up
+    # with an inclusive 1-based band_end. "nr" gets +1 coming back out so the reported band numbers
+    # match VASP's, not the WAVECAR array position.
     try:
         rows = output.get_orbital_data_for_two_spins(
-            band_start, band_end, irreps=irreps, irrep_tol=irrep_tol, symprec=symprec)
+            max(band_start - 1, 0), band_end, irreps=irreps, irrep_tol=irrep_tol, symprec=symprec)
     except FileNotFoundError:
         return None, None
     except AssertionError as exc:
@@ -193,7 +200,7 @@ def _orbitals_payload(
     records = []
     for row in rows:
         records.append({
-            "band": int(row["nr"]),
+            "band": int(row["nr"]) + 1,
             "up": {
                 "energy": float(row["e(up)"]),
                 "occupation": float(row["occ(up)"]),

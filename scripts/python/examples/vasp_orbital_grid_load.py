@@ -28,7 +28,11 @@ def load_orbital_grid_payload(directory: str, ispin: int, ikpt: int, band: int) 
     # FFTs those onto a real-space grid (RSWavefunction, complex128, already normalized). The real
     # part keeps the wavefunction's sign - needed for +/- lobe isosurface coloring, unlike |psi|^2
     # which discards it.
-    phi = output.wavecar.phi(ispin, ikpt, band)
+    # `band` here is VASP's own 1-based number (matching OUTCAR/EIGENVAL and the orbital table in
+    # vasp_output_load.py's _orbitals_payload) - Wavecar.phi indexes the WAVECAR band array
+    # 0-based, hence the -1. Keep this in sync with that other conversion: this is the grid-fetch
+    # counterpart to the same band the table already displays.
+    phi = output.wavecar.phi(ispin, ikpt, max(band - 1, 0))
     real_space = phi.real_space_wfs()
     grid = real_space.data.real.astype("float32")
 
