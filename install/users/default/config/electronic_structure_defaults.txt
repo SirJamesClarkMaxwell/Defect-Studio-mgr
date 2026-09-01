@@ -1,10 +1,10 @@
-band_start=1014
-band_end=1026
+band_start=1017
+band_end=1023
 gap_window_margin=3
-localization_threshold=6.02
+localization_threshold=10.2
 split_spin_channels=0
 relative_to_vbm=1
-iso_value=0.304
+iso_value=0.236
 show_irreps=0
 irrep_tol=0.1
 irrep_symprec=0.001

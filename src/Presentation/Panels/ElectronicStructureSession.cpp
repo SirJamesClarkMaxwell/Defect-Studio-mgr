@@ -124,7 +124,7 @@ namespace DefectStudio
 			const std::size_t eq = line.find('=');
 			if (eq == std::string::npos)
 				continue;
-			values[line.substr(0, eq)] = line.substr(eq + 1);
+			values[line.substr(0, eq)] = Trim(line.substr(eq + 1));
 		}
 
 		const auto getInt = [&values](const char *key, int fallback)
@@ -325,7 +325,7 @@ namespace DefectStudio
 			m_BulkError = "JobSystem unavailable";
 			return;
 		}
-		m_PendingBulkJob = CreateRef<VaspOutputJob>(m_BulkDirectory, 0, 1);
+		m_PendingBulkJob = CreateRef<VaspOutputJob>(m_BulkDirectory, 0, 1, /*includeOrbitals*/ false);
 		m_PendingBulkJobId = jobSystem->Submit(m_PendingBulkJob, JobPriority::Normal);
 		m_BulkError.clear();
 	}
