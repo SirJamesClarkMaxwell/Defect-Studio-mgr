@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Domain/Crystal/FormulaParser.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Presentation/Panels/PeriodicTableGrid.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
@@ -373,6 +374,8 @@ namespace DefectStudio
 		ImGui::Separator();
 		drawBasisTable();
 		ImGui::Separator();
+		drawFormulaAndMappingSection();
+		ImGui::Separator();
 		drawSymmetrySection();
 		ImGui::Separator();
 
@@ -409,5 +412,35 @@ namespace DefectStudio
 
 		ImGui::End();
 		SetVisible(windowOpen);
+	}
+
+	void NewStructureWizardPanel::drawFormulaAndMappingSection()
+	{
+		ImGui::TextUnformatted("Chemical Formula:");
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::InputText("##formula", m_FormulaBuffer.data(), m_FormulaBuffer.size());
+
+		if (m_FormulaBuffer[0] == '\0')
+			return; // Empty formula
+
+		std::string formulaStr(m_FormulaBuffer.data());
+		const auto elements = FormulaParser::Parse(formulaStr);
+
+		if (elements.empty())
+		{
+			ImGui::TextDisabled("(empty formula)");
+			return;
+		}
+
+		ImGui::Text("Parsed: ");
+		ImGui::SameLine();
+		for (size_t i = 0; i < elements.size(); ++i)
+		{
+			ImGui::Text("%s%d", elements[i].symbol.c_str(), elements[i].count > 1 ? elements[i].count : 0);
+			if (i < elements.size() - 1)
+				ImGui::SameLine(0.0f, 4.0f);
+		}
+
+		ImGui::TextDisabled("(site mapping table coming in phase 2.5)");
 	}
 } // namespace DefectStudio

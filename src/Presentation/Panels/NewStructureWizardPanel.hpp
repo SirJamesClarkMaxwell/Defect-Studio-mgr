@@ -68,6 +68,7 @@ namespace DefectStudio
 		void drawSymmetrySection();
 		void dispatchSymmetryCheck();
 		void pollSymmetryJob();
+		void drawFormulaAndMappingSection();
 
 		RendererLayer &m_RendererLayer;
 		WeakRef<DomainLayer> m_DomainLayer;
@@ -84,5 +85,7 @@ namespace DefectStudio
 		JobId m_PendingSymmetryJobId = 0;
 		std::optional<SymmetryInfo> m_SymmetryResult;
 		std::string m_SymmetryError;
+
+		std::array<char, 128> m_FormulaBuffer{}; // e.g., "GaAs", "Al2O3"
 	};
 } // namespace DefectStudio
