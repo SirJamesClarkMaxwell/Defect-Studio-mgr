@@ -2,6 +2,7 @@
 
 #include "IO/PoscarWriter.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <sstream>
@@ -14,28 +15,50 @@ namespace DefectStudio
 {
 	Result<void> PoscarWriter::Write(const CrystalStructure &structure, const Path &outputPath)
 	{
-		// Build JSON input for Python script: species, positions, cell
+		// Sort atoms by species (groups same elements together) for POSCAR output.
+		// Defect-pattern key sorting (prototype + defect SET) deferred to when DefectConfiguration
+		// is actively linked to structures; for now, group by species + position.
+		std::vector<std::size_t> atomIndices;
+		for (std::size_t i = 0; i < structure.atoms.size(); ++i)
+			atomIndices.push_back(i);
+
+		std::sort(atomIndices.begin(), atomIndices.end(), [&](std::size_t a, std::size_t b) {
+			const auto &specA = structure.atoms[a].species;
+			const auto &specB = structure.atoms[b].species;
+			if (specA != specB)
+				return specA < specB; // Sort by species alphabetically
+			// Same species: sort by fractional position (x, y, z)
+			const auto &posA = structure.atoms[a].fractional;
+			const auto &posB = structure.atoms[b].fractional;
+			if (posA.x != posB.x)
+				return posA.x < posB.x;
+			if (posA.y != posB.y)
+				return posA.y < posB.y;
+			return posA.z < posB.z;
+		});
+
+		// Build JSON input for Python script: species, positions, cell (in sorted order)
 		std::ostringstream json;
 		json << "{\n";
 		json << "  \"output_path\": \"" << outputPath.string() << "\",\n";
 
-		// Species list (element symbols)
+		// Species list (element symbols, sorted by atom order)
 		json << "  \"species\": [";
-		for (std::size_t i = 0; i < structure.atoms.size(); ++i)
+		for (std::size_t i = 0; i < atomIndices.size(); ++i)
 		{
 			if (i > 0)
 				json << ", ";
-			json << "\"" << structure.atoms[i].species << "\"";
+			json << "\"" << structure.atoms[atomIndices[i]].species << "\"";
 		}
 		json << "],\n";
 
-		// Positions (fractional coordinates)
+		// Positions (fractional coordinates, sorted by atom order)
 		json << "  \"positions\": [";
-		for (std::size_t i = 0; i < structure.atoms.size(); ++i)
+		for (std::size_t i = 0; i < atomIndices.size(); ++i)
 		{
 			if (i > 0)
 				json << ", ";
-			const auto &pos = structure.atoms[i].fractional;
+			const auto &pos = structure.atoms[atomIndices[i]].fractional;
 			json << "[" << pos.x << ", " << pos.y << ", " << pos.z << "]";
 		}
 		json << "],\n";
