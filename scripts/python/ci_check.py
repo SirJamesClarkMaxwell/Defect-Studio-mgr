@@ -8,6 +8,7 @@ import build as build_script
 import check_include_directions as checker_script
 import generate_projects as generate_script
 import run as run_script
+import run_clang_tidy as clang_tidy_script
 from scripts.python.common.paths import project_name
 
 
@@ -58,6 +59,9 @@ def run(args: argparse.Namespace) -> int:
         )
         if code != 0:
             return code
+
+    # Run clang-tidy (advisory mode - does not block CI)
+    clang_tidy_script.main()
 
     return run_script.run(
         argparse.Namespace(
