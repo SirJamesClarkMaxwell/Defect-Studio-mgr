@@ -1,0 +1,87 @@
+{
+  "allowed": {
+    "App": [
+      "App",
+      "Core",
+      "Domain",
+      "Events",
+      "IO",
+      "Presentation",
+      "Renderer",
+      "ScientificRuntime",
+      "Storage"
+    ],
+    "Core": [
+      "Core"
+    ],
+    "Debug": [
+      "Core",
+      "Debug"
+    ],
+    "Demo": [
+      "Core",
+      "Demo"
+    ],
+    "Domain": [
+      "Core",
+      "Domain"
+    ],
+    "Events": [
+      "App",
+      "Core",
+      "Renderer"
+    ],
+    "IO": [
+      "App",
+      "Core",
+      "Domain",
+      "Events",
+      "IO",
+      "Renderer",
+      "ScientificRuntime"
+    ],
+    "Presentation": [
+      "App",
+      "Core",
+      "Domain",
+      "Events",
+      "IO",
+      "Presentation",
+      "Renderer",
+      "ScientificRuntime"
+    ],
+    "Renderer": [
+      "Core",
+      "Domain",
+      "Events",
+      "IO",
+      "Renderer"
+    ],
+    "ScientificRuntime": [
+      "Core",
+      "Domain",
+      "ScientificRuntime"
+    ],
+    "Storage": [
+      "Core",
+      "Storage"
+    ]
+  },
+  "known_exceptions": [
+    {
+      "from": "Events",
+      "to": "Renderer",
+      "reason": "finding 1 - cykl Renderer<->Events, do usuniecia w Etapie III"
+    },
+    {
+      "from": "IO",
+      "to": "Renderer",
+      "reason": "finding 1 - cykl IO<->Renderer, do usuniecia w Etapie III"
+    },
+    {
+      "from": "IO",
+      "to": "App",
+      "reason": "finding 1 - cykl IO<->App, do usuniecia w Etapie III"
+    }
+  ]
+}

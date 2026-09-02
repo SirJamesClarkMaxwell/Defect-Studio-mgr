@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 import build as build_script
+import check_include_directions as checker_script
 import generate_projects as generate_script
 import run as run_script
 from scripts.python.common.paths import project_name
@@ -20,6 +22,15 @@ def make_parser() -> argparse.ArgumentParser:
 
 def run(args: argparse.Namespace) -> int:
     print("== CI Check ==")
+
+    # Check include directions (architecture firewall)
+    rules_path = Path(__file__).parent / "include_rules.json"
+    src_path = Path(__file__).parent.parent.parent / "src"
+    checker = checker_script.CheckIncludeDirections(src_path, checker_script.load_rules(rules_path))
+    violations = checker.check()
+    if violations:
+        print(f"Include direction violations found ({len(violations)} total)")
+        return 1
 
     code = generate_script.run(
         argparse.Namespace(
