@@ -29,6 +29,7 @@
 #include "Events/ProjectEvents.hpp"
 #include "Events/RendererEvents.hpp"
 #include "IO/PoscarWriter.hpp"
+#include "IO/POTCARWriter.hpp"
 #include "IO/ProjectManifestIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/RecentProjectsIO.hpp"
@@ -1622,6 +1623,34 @@ namespace DefectStudio
 			const auto mutableRecord = mutableRecordWeak.lock();
 			if (mutableRecord)
 				const_cast<StructureRecord &>(*mutableRecord).savedRevision = mutableRecord->revision;
+
+			if (structureRecord->exportPotcar)
+			{
+				const bool pseudodirConfigured =
+					m_CurrentConfig != nullptr && !m_CurrentConfig->ui.pseudopotentialDir.Empty();
+				if (!pseudodirConfigured)
+				{
+					DS_LOG_WARN(
+						"POTCAR export requested for '{}' but no pseudopotential directory is "
+						"configured (Settings -> ui.pseudopotential_dir) - skipping",
+						structureRecord->displayName);
+				}
+				else
+				{
+					const Path potcarPath = projectDir / (structureRecord->displayName + ".potcar");
+					auto potcarResult = POTCARWriter::Write(
+						structureRecord->structure,
+						potcarPath,
+						m_CurrentConfig->ui.pseudopotentialDir);
+
+					if (!potcarResult.HasValue())
+					{
+						DS_LOG_WARN("POTCAR write failed for '{}': {}",
+							structureRecord->displayName,
+							potcarResult.Error().userMessage);
+					}
+				}
+			}
 		}
 		else
 		{

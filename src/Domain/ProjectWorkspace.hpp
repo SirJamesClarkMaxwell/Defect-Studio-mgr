@@ -19,6 +19,7 @@ namespace DefectStudio
 		std::string displayName;
 		int revision = 0;         // dirty flag: bumped on every mutation, compared to savedRevision
 		int savedRevision = 0;    // revision at last save time
+		bool exportPotcar = false; // export POTCAR file on save (if pseudodir configured)
 	};
 
 	class StructureRegistry

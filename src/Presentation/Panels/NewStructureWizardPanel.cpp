@@ -441,7 +441,8 @@ namespace DefectStudio
 				m_ElementPropertiesTable,
 				m_AtomStyleTable,
 				/*showCellBox=*/true,
-				/*showGrid=*/true);
+				/*showGrid=*/true,
+				m_ExportPotcar);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Preview basis only"))

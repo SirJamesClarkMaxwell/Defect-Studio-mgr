@@ -27,5 +27,6 @@ namespace DefectStudio
 		const ElementPropertiesTable &elementPropertiesTable,
 		const AtomStyleTable &atomStyleTable,
 		bool showCellBox = true,
-		bool showGrid = true);
+		bool showGrid = true,
+		bool exportPotcar = false);
 } // namespace DefectStudio

@@ -24,7 +24,8 @@ namespace DefectStudio
 		const ElementPropertiesTable &elementPropertiesTable,
 		const AtomStyleTable &atomStyleTable,
 		bool showCellBox,
-		bool showGrid)
+		bool showGrid,
+		bool exportPotcar)
 	{
 		// Same three-step sequence RendererRuntimeOpenCoordinator::onJobCompleted runs for
 		// file-imported structures, made callable for in-app-built ones: RegenerateAutoBonds ->
@@ -34,6 +35,12 @@ namespace DefectStudio
 
 		Ref<const StructureRecord> structureRecord =
 			domainLayer.Workspace().Structures().Add(std::move(structure), Path{}, displayName);
+
+		if (exportPotcar)
+		{
+			if (auto record = domainLayer.Workspace().Structures().FindMutable(structureRecord->id).lock())
+				record->exportPotcar = true;
+		}
 
 		RendererStartupWindowInput input;
 		input.definition.title = displayName;

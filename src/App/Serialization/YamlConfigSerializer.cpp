@@ -815,6 +815,7 @@ namespace DefectStudio
 			const char *uiSection = Name(SectionKey::UI);
 			const char *fontKey = Name(UiKey::Font);
 			const char *fontPathKey = Name(UiKey::FontPath);
+			const char *pseudopotentialDirKey = Name(UiKey::PseudopotentialDir);
 			const char *fontScaleKey = Name(UiKey::FontScale);
 			const char *fontScaleStepKey = Name(UiKey::FontScaleStep);
 			const char *windowSection = Name(SectionKey::Window);
@@ -885,6 +886,14 @@ namespace DefectStudio
 			config.ui.fontPath = ResolvePortablePathValue(
 				config,
 				ReadString(root, fontPath, Name(LegacyKey::UiFontPath), config.ui.fontPath));
+
+			Path2 pseudopotentialPath = {uiSection, pseudopotentialDirKey};
+			config.ui.pseudopotentialDir = Path::FromResolved(
+				ResolvePortablePathValue(
+					config,
+					ReadString(root, pseudopotentialPath, {},
+						config.ui.pseudopotentialDir.Empty() ? "" : config.ui.pseudopotentialDir.String())));
+
 			ApplyAppearanceYaml(root, config.appearance);
 
 			config.ui.fontScale = std::clamp( config.ui.fontScale, config.ui.fontScaleMin, config.ui.fontScaleMax);
@@ -1784,6 +1793,7 @@ namespace DefectStudio
 			out << YAML::Key << "font_scale_step" << YAML::Value << config.ui.fontScaleStep;
 			out << YAML::Key << "settings_preview_enabled" << YAML::Value << config.ui.settingsPreviewEnabled;
 			out << YAML::Key << "settings_auto_save_on_preview" << YAML::Value << config.ui.settingsAutoSaveOnPreview;
+			out << YAML::Key << "pseudopotential_dir" << YAML::Value << toPortablePathValue(config, config.ui.pseudopotentialDir.String());
 			out << YAML::EndMap;
 			out << YAML::Key << WindowSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "x" << YAML::Value << config.window.x;
@@ -1825,6 +1835,7 @@ namespace DefectStudio
 			out << YAML::Key << "font_scale_step" << YAML::Value << config.ui.fontScaleStep;
 			out << YAML::Key << "settings_preview_enabled" << YAML::Value << config.ui.settingsPreviewEnabled;
 			out << YAML::Key << "settings_auto_save_on_preview" << YAML::Value << config.ui.settingsAutoSaveOnPreview;
+			out << YAML::Key << "pseudopotential_dir" << YAML::Value << toPortablePathValue(config, config.ui.pseudopotentialDir.String());
 			out << YAML::EndMap;
 
 			emitAppearance(out, config.appearance);

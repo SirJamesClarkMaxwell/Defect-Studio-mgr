@@ -279,6 +279,38 @@ TEST(ConfigManagerTests, SaveDefaultAndUserSettingsStaySeparate)
 	RemoveTempDirectory(tempDirectory);
 }
 
+TEST(ConfigManagerTests, PseudopotentialDirSurvivesUserSettingsRoundTrip)
+{
+	DefectStudio::ApplicationConfig config;
+	config.ui.pseudopotentialDir = DefectStudio::Path::FromResolved("C:/vasp/potpaw_PBE");
+
+	std::string error;
+	std::string serialized;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeUserSettings(config, serialized, error)) << error;
+	EXPECT_NE(serialized.find("pseudopotential_dir"), std::string::npos);
+
+	DefectStudio::ApplicationConfig restored;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().DeserializeUserSettings(serialized, restored, error)) << error;
+	// Compared as filesystem paths, not strings - the portable-path round trip normalises
+	// separators to the native form ("C:/x" comes back as "C:\x"), which is the same path.
+	EXPECT_EQ(restored.ui.pseudopotentialDir.Native(), config.ui.pseudopotentialDir.Native());
+}
+
+TEST(ConfigManagerTests, PseudopotentialDirDefaultsToEmpty)
+{
+	DefectStudio::ApplicationConfig config;
+	EXPECT_TRUE(config.ui.pseudopotentialDir.Empty());
+
+	std::string error;
+	std::string serialized;
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().SerializeUserSettings(config, serialized, error)) << error;
+
+	DefectStudio::ApplicationConfig restored;
+	restored.ui.pseudopotentialDir = DefectStudio::Path::FromResolved("C:/stale");
+	ASSERT_TRUE(DefectStudio::YamlCodecFacade::Default().DeserializeUserSettings(serialized, restored, error)) << error;
+	EXPECT_TRUE(restored.ui.pseudopotentialDir.Empty());
+}
+
 TEST(ConfigManagerTests, LocalFontPathIsSavedPortableAndResolved)
 {
 	const Path tempDirectory = CreateTempDirectory();

@@ -180,6 +180,7 @@ namespace DefectStudio
 			FontScaleStepMax,
 			FontScaleStepMin,
 			FontScaleStepSliderMax,
+			PseudopotentialDir,
 		};
 
 		enum class WindowKey
@@ -373,6 +374,7 @@ namespace DefectStudio
 			{UiKey::FontScaleStepMax, "max"},
 			{UiKey::FontScaleStepMin, "min"},
 			{UiKey::FontScaleStepSliderMax, "slider_max"},
+			{UiKey::PseudopotentialDir, "pseudopotential_dir"},
 		};
 
 		inline const std::unordered_map<WindowKey, const char *> WindowKeyNames = {

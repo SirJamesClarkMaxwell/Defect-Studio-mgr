@@ -19,6 +19,7 @@ namespace DefectStudio
 		float fontScaleStepMin = 0.01f;
 		float fontScaleStepMax = 1.0f;
 		float fontScaleStepSliderMax = 0.5f;
+		Path pseudopotentialDir;
 	};
 
 	struct AppearanceStateRules
