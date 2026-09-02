@@ -3,6 +3,8 @@
 #include "Presentation/Panels/RendererPanel.hpp"
 
 #include <algorithm>
+
+#include "Domain/DomainLayer.hpp"
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -138,13 +140,15 @@ namespace DefectStudio
 		Ref<EventBus> eventBus,
 		WeakRef<ContextManager> contextManager,
 		WeakRef<CommandRegistry> commandRegistry,
+		WeakRef<DomainLayer> domainLayer,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
 		  m_EventBus(std::move(eventBus)),
 		  m_ContextManager(std::move(contextManager)),
-		  m_CommandRegistry(std::move(commandRegistry))
+		  m_CommandRegistry(std::move(commandRegistry)),
+		  m_DomainLayer(std::move(domainLayer))
 	{
 	}
 
@@ -189,7 +193,19 @@ namespace DefectStudio
 		// the stable windowId regardless of the visible label - two windows that happen to share
 		// a display name (e.g. both opened from a "singlet_HSE" leaf folder) no longer collide
 		// into the same ImGui window, and renaming a window's title is safe.
-		const std::string imguiWindowLabel = windowState.title + "###RendererWindow_" + windowState.windowId;
+		std::string displayTitle = windowState.title;
+
+		// Append "*" if structure is dirty (revision != savedRevision)
+		if (auto domainLayer = m_DomainLayer.lock())
+		{
+			if (auto structureRecord = domainLayer->Workspace().Structures().Find(windowState.structureId).lock())
+			{
+				if (structureRecord->revision != structureRecord->savedRevision)
+					displayTitle += "*";
+			}
+		}
+
+		const std::string imguiWindowLabel = displayTitle + "###RendererWindow_" + windowState.windowId;
 
 		if (!windowState.dockingInitialized)
 		{

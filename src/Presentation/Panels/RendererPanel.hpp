@@ -13,6 +13,7 @@ namespace DefectStudio
 {
 	class CommandRegistry;
 	class ContextManager;
+	class DomainLayer;
 	class EventBus;
 
 	class RendererPanel final : public IPanel
@@ -22,7 +23,8 @@ namespace DefectStudio
 			RendererLayer &layer,
 			Ref<EventBus> eventBus,
 			WeakRef<ContextManager> contextManager,
-			WeakRef<CommandRegistry> commandRegistry = {},
+			WeakRef<CommandRegistry> commandRegistry,
+			WeakRef<DomainLayer> domainLayer,
 			std::string title = "Renderer",
 			bool visibleByDefault = true);
 
@@ -137,6 +139,7 @@ namespace DefectStudio
 		Ref<EventBus> m_EventBus;
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
+		WeakRef<DomainLayer> m_DomainLayer;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 		// Snapshot of the right-click's world position, taken the frame the viewport context menu
 		// opens (ImGui::IsWindowAppearing()) - "Set 3D cursor here" reads it later, when the user

@@ -624,6 +624,7 @@ namespace DefectStudio
 				m_EventBus,
 				m_ContextManager,
 				m_CommandRegistry,
+				m_DomainLayer,
 				"Renderer",
 				true);
 			registerPanel<SceneOutlinerPanel>(
