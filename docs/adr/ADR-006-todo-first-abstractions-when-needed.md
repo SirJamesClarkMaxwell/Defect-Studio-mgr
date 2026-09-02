@@ -208,6 +208,11 @@ This ADR should be considered successfully applied when:
 
 ## Follow-up ADRs
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Partially holds.
+The code uses direct free-function and module APIs in several places, but this process decision is
+not mechanically enforceable from the current source.
+
 Possible future ADRs may cover:
 
 - formal analysis execution model,

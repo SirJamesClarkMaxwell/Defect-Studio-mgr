@@ -39,7 +39,7 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def generate_plantuml_diagrams(args: argparse.Namespace, docs_dir: Path) -> int:
-    diagrams_dir = docs_dir / "mdbook" / "diagrams"
+    diagrams_dir = docs_dir / "archive" / "mdbook" / "diagrams"
     source_files = sorted(diagrams_dir.glob("*.puml"))
     if not source_files:
         return 0
@@ -91,6 +91,7 @@ def run(args: argparse.Namespace) -> int:
 
     print_header("Build Documentation")
     docs_dir = repo_root() / "docs"
+    book_dir = docs_dir / "archive"
 
     if not docs_dir.exists():
         print(f"[error] docs directory not found: {docs_dir}")
@@ -104,7 +105,7 @@ def run(args: argparse.Namespace) -> int:
     print_step("Building documentation with mdbook")
     code = run_command(
         [mdbook, "build"],
-        cwd=docs_dir,
+        cwd=book_dir,
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
@@ -119,7 +120,7 @@ def run(args: argparse.Namespace) -> int:
         print_step(f"Serving documentation on {preview_url}")
         return run_command(
             [mdbook, "serve", "--hostname", "127.0.0.1", "--port", str(args.port)],
-            cwd=docs_dir,
+            cwd=book_dir,
             dry_run=args.dry_run,
             verbose=args.verbose,
         )
@@ -129,7 +130,7 @@ def run(args: argparse.Namespace) -> int:
         import platform
 
         if platform.system() == "Windows":
-            html_index = docs_dir / "book" / "index.html"
+            html_index = book_dir / "book" / "index.html"
             run_command(
                 ["cmd", "/c", "start", "", str(html_index)],
                 cwd=repo_root(),
@@ -137,7 +138,7 @@ def run(args: argparse.Namespace) -> int:
                 verbose=args.verbose,
             )
         else:
-            html_index = docs_dir / "book" / "index.html"
+            html_index = book_dir / "book" / "index.html"
             run_command(
                 ["xdg-open", str(html_index)],
                 cwd=repo_root(),

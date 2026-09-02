@@ -158,6 +158,11 @@ This means:
 
 ## Acceptance criteria
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Partially holds.
+Python work is exposed through `ScientificRuntime/Python` bridges and `ScriptRunner`; the current
+build disables the C API, so the active path is subprocess execution.
+
 This ADR should be considered successfully applied when:
 
 - the rest of the application depends on capability-based ports

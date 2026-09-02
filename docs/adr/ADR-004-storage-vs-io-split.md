@@ -249,6 +249,11 @@ This ADR should be considered successfully applied when:
 
 ## Follow-up ADRs
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Drifted.
+`src/Storage` contains only `StorageLayer`; `ProjectRootsIO`, `RecentProjectsIO`, and
+`ProjectManifestIO` are in `src/IO`, and no `SaveProject` or `LoadProject` symbol exists.
+
 Closely related follow-up decisions include:
 
 - selective technical library extraction,

@@ -83,6 +83,11 @@ Thread-affinity checks should be explicit in critical areas, for example through
 
 ## Acceptance criteria
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Holds.
+`JobSystem` owns background execution and job events, while renderer view/state commits are handled
+on the application side and the renderer exposes a snapshot-oriented structure boundary.
+
 This ADR is applied successfully when:
 
 - renderer and UI remain main-thread only

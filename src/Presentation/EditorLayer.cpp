@@ -33,6 +33,7 @@
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
+#include "Presentation/Panels/NewStructureWizardPanel.hpp" // TEMP for manual verification, revert before commit
 #include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
@@ -630,6 +631,10 @@ namespace DefectStudio
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
+			// TEMP for manual verification, revert before commit (Task 10 owns the real wiring)
+			registerPanel<NewStructureWizardPanel>(
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
+				"New Structure", true);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);

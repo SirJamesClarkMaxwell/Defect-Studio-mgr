@@ -34,6 +34,11 @@ namespace DefectStudio
 		// DisplacementComparisonPanel.
 		Path displacementComparisonPath; // empty = none
 		float displacementThresholdAngstrom = 0.0f;
+		// Materials Collection (Faza 3 of the supercell-generation plan) - project-scoped ase.db
+		// library, relative to the project dir. "materials/materials.db" once CreateNew() has run;
+		// empty = not yet created (older manifests loaded before this field existed). The .db file
+		// itself is created lazily by MaterialLibraryIO on the first AddMaterial(), not here.
+		Path materialsLibraryPath; // "materials/materials.db" relative to the project dir when set
 	};
 
 	class ProjectManifestIO

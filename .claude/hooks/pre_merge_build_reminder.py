@@ -25,7 +25,8 @@ def main():
                 "systemMessage": (
                     "Project rule (TODO.md, \"Zasady pracy\"): merge to main only after a full "
                     "Debug + Release build (DefectStudio.exe + DefectStudioTests.exe) with the test "
-                    "suite passing in both configs. Confirm that ran before this merge/push."
+                    "suite passing in both configs, AND after active review of AI-generated code. "
+                    "Confirm both ran before this merge/push."
                 )
             }))
     except Exception:
