@@ -17,6 +17,8 @@ namespace DefectStudio
 		CrystalStructure structure;
 		Path sourcePath;
 		std::string displayName;
+		int revision = 0;         // dirty flag: bumped on every mutation, compared to savedRevision
+		int savedRevision = 0;    // revision at last save time
 	};
 
 	class StructureRegistry
