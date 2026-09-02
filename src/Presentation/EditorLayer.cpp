@@ -24,6 +24,7 @@
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Domain/DomainLayer.hpp"
 #include "Events/EditorUiEvents.hpp"
 #include "Events/ProjectEvents.hpp"
 #include "Events/RendererEvents.hpp"
@@ -1511,6 +1512,19 @@ namespace DefectStudio
 	void EditorLayer::onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &)
 	{
 		persistCurrentRoots();
+
+		// Mark all open structures as saved (clear dirty flag)
+		if (auto domainLayer = m_DomainLayer.lock())
+		{
+			auto &structures = domainLayer->Workspace().Structures();
+			for (auto structureRecord : structures.Records())
+			{
+				// savedRevision = revision means structure is clean (not dirty)
+				// TODO: actually write POSCAR via Python (ase/punktukas)
+				const_cast<StructureRecord &>(*structureRecord).savedRevision =
+					structureRecord->revision;
+			}
+		}
 	}
 
 	void EditorLayer::onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &)
