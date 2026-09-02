@@ -505,6 +505,42 @@ namespace DefectStudio
 			KeymapLayer::Global,
 			true});
 
+		registerCommand(
+			CommandMeta{
+				CommandID{"project.save_as"},
+				"Save Project As",
+				"Project",
+				"Save the current project with a new name.",
+				{},
+				CommandFlags::None},
+			std::bind_front(&CoreLayer::createSaveProjectCommand, this));
+
+		registerBinding({
+			"system.save_as",
+			KeyChord{KeyCode::S, KeyModifiers::Ctrl | KeyModifiers::Shift},
+			CommandID{"project.save_as"},
+			{},
+			KeymapLayer::Global,
+			true});
+
+		registerCommand(
+			CommandMeta{
+				CommandID{"file.save"},
+				"Save File",
+				"File",
+				"Save the focused file (structure or text document).",
+				{},
+				CommandFlags::None},
+			std::bind_front(&CoreLayer::createSaveProjectCommand, this));
+
+		registerBinding({
+			"system.save_file",
+			KeyChord{KeyCode::S, KeyModifiers::Ctrl | KeyModifiers::Alt},
+			CommandID{"file.save"},
+			{},
+			KeymapLayer::Global,
+			true});
+
 		DS_LOG_INFO("CoreLayer: system commands and bindings registered");
 	}
 } // namespace DefectStudio
