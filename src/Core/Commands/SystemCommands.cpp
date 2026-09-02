@@ -66,4 +66,30 @@ namespace DefectStudio
 		m_EventBus->Queue(CoreEvents::ProjectSaveRequested{});
 		return Result<void>{};
 	}
+
+	SaveProjectAsCommand::SaveProjectAsCommand(Ref<EventBus> eventBus)
+		: m_EventBus(std::move(eventBus))
+	{
+		DS_ASSERT(m_EventBus != nullptr, "SaveProjectAsCommand requires EventBus");
+	}
+
+	Result<void> SaveProjectAsCommand::Execute(CommandContext &)
+	{
+		// TODO: implement save-as dialog (directory + project name selection)
+		m_EventBus->Queue(CoreEvents::ProjectSaveRequested{});
+		return Result<void>{};
+	}
+
+	SaveStructureFileCommand::SaveStructureFileCommand(Ref<EventBus> eventBus)
+		: m_EventBus(std::move(eventBus))
+	{
+		DS_ASSERT(m_EventBus != nullptr, "SaveStructureFileCommand requires EventBus");
+	}
+
+	Result<void> SaveStructureFileCommand::Execute(CommandContext &)
+	{
+		// TODO: implement single-structure POSCAR save (focused window only)
+		m_EventBus->Queue(CoreEvents::ProjectSaveRequested{});
+		return Result<void>{};
+	}
 } // namespace DefectStudio

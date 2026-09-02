@@ -71,6 +71,8 @@ namespace DefectStudio
 		[[nodiscard]] Unique<ICommand> createOpenCommandPaletteCommand(CommandContext &context);
 		[[nodiscard]] Unique<ICommand> createQuitCommand(CommandContext &context);
 		[[nodiscard]] Unique<ICommand> createSaveProjectCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createSaveProjectAsCommand(CommandContext &context);
+		[[nodiscard]] Unique<ICommand> createSaveStructureFileCommand(CommandContext &context);
 		void registerCommand(CommandMeta meta, CommandFactory factory);
 		void registerBinding(KeyBinding binding);
 

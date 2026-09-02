@@ -392,6 +392,16 @@ namespace DefectStudio
 		return CreateUnique<SaveProjectCommand>(m_EventBus);
 	}
 
+	Unique<ICommand> CoreLayer::createSaveProjectAsCommand(CommandContext &)
+	{
+		return CreateUnique<SaveProjectAsCommand>(m_EventBus);
+	}
+
+	Unique<ICommand> CoreLayer::createSaveStructureFileCommand(CommandContext &)
+	{
+		return CreateUnique<SaveStructureFileCommand>(m_EventBus);
+	}
+
 	void CoreLayer::registerCommand(CommandMeta meta, CommandFactory factory)
 	{
 		if (m_CommandRegistry == nullptr)
@@ -513,7 +523,7 @@ namespace DefectStudio
 				"Save the current project with a new name.",
 				{},
 				CommandFlags::None},
-			std::bind_front(&CoreLayer::createSaveProjectCommand, this));
+			std::bind_front(&CoreLayer::createSaveProjectAsCommand, this));
 
 		registerBinding({
 			"system.save_as",
@@ -531,7 +541,7 @@ namespace DefectStudio
 				"Save the focused file (structure or text document).",
 				{},
 				CommandFlags::None},
-			std::bind_front(&CoreLayer::createSaveProjectCommand, this));
+			std::bind_front(&CoreLayer::createSaveStructureFileCommand, this));
 
 		registerBinding({
 			"system.save_file",

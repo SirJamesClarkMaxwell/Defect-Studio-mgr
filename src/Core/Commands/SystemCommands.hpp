@@ -62,4 +62,26 @@ namespace DefectStudio
 	private:
 		Ref<EventBus> m_EventBus;
 	};
+
+	class SaveProjectAsCommand final : public ICommand
+	{
+	public:
+		explicit SaveProjectAsCommand(Ref<EventBus> eventBus);
+		Result<void> Execute(CommandContext &context) override;
+		std::string Description() const override { return "Save Project As"; }
+
+	private:
+		Ref<EventBus> m_EventBus;
+	};
+
+	class SaveStructureFileCommand final : public ICommand
+	{
+	public:
+		explicit SaveStructureFileCommand(Ref<EventBus> eventBus);
+		Result<void> Execute(CommandContext &context) override;
+		std::string Description() const override { return "Save Structure"; }
+
+	private:
+		Ref<EventBus> m_EventBus;
+	};
 } // namespace DefectStudio
