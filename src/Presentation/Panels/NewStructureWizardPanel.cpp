@@ -38,6 +38,49 @@ namespace DefectStudio
 			PresetButtonSpec{BravaisCenteringPreset::BodyCentered, "I"},
 			PresetButtonSpec{BravaisCenteringPreset::FaceCentered, "F"},
 			PresetButtonSpec{BravaisCenteringPreset::BaseCentered, "C"}};
+
+		std::vector<PrototypeDefinition> getBuiltInPrototypes()
+		{
+			return {
+				PrototypeDefinition{
+					"diamond",
+					"Diamond cubic structure",
+					"Cubic",
+					"Face-centered",
+					{SiteDefinition{"A", glm::vec3(0.0f), 8}, SiteDefinition{"B", glm::vec3(0.25f), 8}},
+					"a * sqrt(3) / 4"},
+				PrototypeDefinition{
+					"zincblende",
+					"Zincblende structure",
+					"Cubic",
+					"Face-centered",
+					{SiteDefinition{"A", glm::vec3(0.0f), 4}, SiteDefinition{"B", glm::vec3(0.25f), 4}},
+					"a * sqrt(3) / 4"},
+				PrototypeDefinition{
+					"wurtzite",
+					"Wurtzite hexagonal structure",
+					"Hexagonal",
+					"Primitive",
+					{SiteDefinition{"A", glm::vec3(0.333333f, 0.666667f, 0.0f), 2},
+					 SiteDefinition{"B", glm::vec3(0.333333f, 0.666667f, 0.5f), 2}},
+					"a / sqrt(3)"},
+				PrototypeDefinition{
+					"rocksalt",
+					"Rock salt (NaCl) structure",
+					"Cubic",
+					"Face-centered",
+					{SiteDefinition{"A", glm::vec3(0.0f), 4}, SiteDefinition{"B", glm::vec3(0.5f), 4}},
+					"a / 2"},
+				PrototypeDefinition{
+					"hBN",
+					"Hexagonal boron nitride",
+					"Hexagonal",
+					"Primitive",
+					{SiteDefinition{"A", glm::vec3(0.333333f, 0.666667f, 0.0f), 2},
+					 SiteDefinition{"B", glm::vec3(0.666667f, 0.333333f, 0.0f), 2}},
+					"a"},
+			};
+		}
 	} // namespace
 
 	NewStructureWizardPanel::NewStructureWizardPanel(
@@ -417,6 +460,28 @@ namespace DefectStudio
 
 	void NewStructureWizardPanel::drawFormulaAndMappingSection()
 	{
+		const auto prototypes = getBuiltInPrototypes();
+
+		ImGui::TextUnformatted("Prototype:");
+		ImGui::SetNextItemWidth(-1.0f);
+		if (ImGui::BeginCombo("##prototype", prototypes[m_SelectedPrototypeIndex].name.c_str()))
+		{
+			for (size_t i = 0; i < prototypes.size(); ++i)
+			{
+				const bool isSelected = m_SelectedPrototypeIndex == static_cast<int>(i);
+				if (ImGui::Selectable(prototypes[i].name.c_str(), isSelected))
+				{
+					m_SelectedPrototypeIndex = static_cast<int>(i);
+					// Clear site buffers when prototype changes
+					for (auto &buf : m_SiteSpeciesBuffers)
+						buf[0] = '\0';
+				}
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+
 		ImGui::TextUnformatted("Chemical Formula:");
 		ImGui::SetNextItemWidth(-1.0f);
 		ImGui::InputText("##formula", m_FormulaBuffer.data(), m_FormulaBuffer.size());
@@ -433,15 +498,10 @@ namespace DefectStudio
 			return;
 		}
 
-		// Hardcoded diamond prototype for testing (phase 2.5: prototype dropdown)
-		PrototypeDefinition diamondProto;
-		diamondProto.name = "diamond";
-		diamondProto.sites = {
-			SiteDefinition{"A", glm::vec3(0.0f), 8},
-			SiteDefinition{"B", glm::vec3(0.25f), 8}};
+		const PrototypeDefinition &selectedProto = prototypes[m_SelectedPrototypeIndex];
 
 		// Match formula to prototype sites
-		const auto matching = PrototypeMatcher::MatchFormulaToPrototype(elements, diamondProto);
+		const auto matching = PrototypeMatcher::MatchFormulaToPrototype(elements, selectedProto);
 		if (!matching)
 		{
 			ImGui::TextDisabled("(formula count does not match prototype)");
@@ -471,7 +531,7 @@ namespace DefectStudio
 			ImGui::TableSetupColumn("Species", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableHeadersRow();
 
-			for (size_t i = 0; i < diamondProto.sites.size(); ++i)
+			for (size_t i = 0; i < selectedProto.sites.size(); ++i)
 			{
 				ImGui::TableNextRow();
 
@@ -479,7 +539,7 @@ namespace DefectStudio
 				ImGui::Text("%zu", i + 1);
 
 				ImGui::TableSetColumnIndex(1);
-				ImGui::TextUnformatted(diamondProto.sites[i].name.c_str());
+				ImGui::TextUnformatted(selectedProto.sites[i].name.c_str());
 
 				ImGui::TableSetColumnIndex(2);
 				ImGui::SetNextItemWidth(-1.0f);
