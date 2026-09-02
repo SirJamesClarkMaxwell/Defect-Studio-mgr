@@ -1552,8 +1552,32 @@ namespace DefectStudio
 
 	void EditorLayer::onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &)
 	{
-		// TODO: implement save-as dialog (directory selection, project name input)
-		// For now, save to current project directory like regular save
+		Path suggestedDir = m_ActiveProjectDirectory.empty()
+			? Path::FromResolved(FileSystem::CurrentPath())
+			: m_ActiveProjectDirectory.parent_path();
+
+		auto dialogResult = Platform::PickFolder(suggestedDir);
+		if (!dialogResult.HasValue())
+		{
+			DS_LOG_WARN("EditorLayer: save-as dialog failed: {}", dialogResult.Error().suggestion);
+			return;
+		}
+
+		const std::optional<Path> &picked = dialogResult.Value();
+		if (!picked.has_value())
+			return; // User cancelled
+
+		const Path selectedDir = *picked;
+		const std::string projectName = m_ActiveProjectDirectory.empty()
+			? "NewProject"
+			: m_ActiveProjectDirectory.filename().String();
+
+		const Path newProjectDir = selectedDir / projectName;
+
+		if (!FileSystem::Exists(newProjectDir.Native()))
+			FileSystem::CreateDirectories(newProjectDir.Native());
+
+		createNewProject(newProjectDir);
 		onProjectSaveRequested(CoreEvents::ProjectSaveRequested{});
 	}
 
