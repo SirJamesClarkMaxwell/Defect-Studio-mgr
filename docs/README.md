@@ -9,6 +9,14 @@
 | [conventions.md](conventions.md) | You are writing or reviewing code, commits, or cross-layer behavior. |
 | [adr/README.md](adr/README.md) | A change needs an architectural decision or you need recorded decisions. |
 
+## Active work
+
+| Document | Read it when |
+|---|---|
+| [remediation-plan-2026-09-02.md](remediation-plan-2026-09-02.md) | You are picking up architecture or test debt. 12 ordered steps, TDD-first. |
+| [new-structure-wizard-design-2026-09-02.md](new-structure-wizard-design-2026-09-02.md) | You are touching the New Structure wizard, structure persistence, transforms, or the undo model. Decided, not yet implemented. |
+| [architecture-code-review-2026-09-01.md](architecture-code-review-2026-09-01.md) · [test-suite-review-2026-09-01.md](test-suite-review-2026-09-01.md) | You need the evidence behind the remediation plan. |
+
 ## Hard rules
 
 - [AGENTS.md](../AGENTS.md) is authoritative for graphify, Ponytail mode, and systems to reuse.

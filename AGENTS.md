@@ -48,3 +48,35 @@ Before adding a new mechanism, check whether one of these existing systems alrea
 - `IO`: loading/saving project, renderer, keymap, and app data.
 - `Renderer` events and `RendererLayer`: renderer state changes and viewport actions.
 - `Presentation` panels and `EditorLayer`: UI composition and runtime UI state.
+
+## External Library Docs (Context7 MCP)
+
+`graphify` knows this repository. It does not know ImGui, ASE, or OpenGL. For any question about a
+third-party library's API, behaviour, or version differences, query the Context7 MCP server instead
+of reading `Vendor/` sources or guessing from memory.
+
+Use `mcp__context7__query-docs` with a pinned ID below — **skip `resolve-library-id`**, it is a
+wasted round trip when the ID is already known. Only resolve when the library is not on this list.
+
+| Library | Context7 ID | Ask it about |
+|---|---|---|
+| Dear ImGui | `/ocornut/imgui` | widgets, tables, docking, `DockBuilder`, `IsItem*`, styling, ID stack |
+| ImGuizmo | `/cedricguillemet/imguizmo` | `Manipulate`, operation/mode flags, view matrix conventions |
+| GLFW | `/glfw/glfw` | window/context creation, input callbacks, monitor and cursor APIs |
+| GLM | `/g-truc/glm` | `vec`/`mat`/`quat` semantics, transform and projection helpers, column-major layout |
+| OpenGL (reference) | `/websites/gl` | exact signatures and errors of a `gl*` call, GLSL builtins |
+| OpenGL (technique) | `/websites/learnopengl` | how to structure FBOs, instancing, picking, lighting |
+| EnTT | `/skypjack/entt` | registry, views, groups, component lifetime, signals |
+| nanobind | `/wjakob/nanobind` | module/class bindings, ndarray, ownership and lifetime rules |
+| ASE | `/websites/ase_gitlab_io_ase` | `Atoms`, `ase.db`, cell/PBC conventions, IO formats |
+| pymatgen | `/materialsproject/pymatgen` | `Structure`, `Lattice`, `SpacegroupAnalyzer`, VASP IO |
+| spglib | `/spglib/spglib` | symmetry detection, Wyckoff letters, primitive/standardized cells |
+| phonopy | `/phonopy/phonopy` | `find_mic`, supercell conventions (reached through punktukas-tools) |
+
+Not on Context7: **ImPlot** (`Vendor/ImPlot`) — only third-party wrappers are indexed, so read
+`Vendor/ImPlot/implot.h` for that one. Everything else vendored here (spdlog, yaml-cpp, GoogleTest,
+Tracy, stb, stduuid, json, nativefiledialog-extended, msdf-atlas-gen) is unpinned: resolve on
+demand, then use it.
+
+Do not open `Vendor/**` to answer an API question. Those trees are large, and reading them costs an
+order of magnitude more context than one Context7 query.

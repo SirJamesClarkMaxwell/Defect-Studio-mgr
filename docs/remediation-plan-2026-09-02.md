@@ -296,6 +296,55 @@ python scripts\python\run_clang_tidy.py
 
 ---
 
+## Dodatkowo w Etapie I — narzędzia agenta
+
+Dwie pozycje spoza audytów, z przeglądu automatyzacji Claude Code z 2026-09-02. Bez testów
+jednostkowych — to konfiguracja, nie kod. Kolejność względem kroków 1–5 dowolna.
+
+### Zamelduj context7 w repo (`.mcp.json`)
+
+`AGENTS.md` ma sekcję „External Library Docs (Context7 MCP)" z przypiętymi ID bibliotek, ale
+**w repozytorium nie ma `.mcp.json`**. Serwer jest skonfigurowany tylko na poziomie użytkownika, więc
+ta instrukcja jest częściowo fikcją: Codex albo druga maszyna mogą go nie mieć włączonego i będą
+zamiast tego czytać `Vendor/`, czyli dokładnie to, czego tamta sekcja zabrania.
+
+Utwórz `.mcp.json` w katalogu głównym z wpisem serwera context7 i zacommituj go. Weryfikacja:
+w świeżej sesji narzędzia `mcp__context7__*` są dostępne bez konfiguracji użytkownika.
+
+**Commit:** `chore(mcp): check context7 server into the repo so pinned library IDs resolve`
+
+### Subagent `python-bridge-reviewer` (`.claude/agents/`)
+
+Katalog `.claude/agents/` nie istnieje. Każdy realny błąd znaleziony w sesjach z 2026-09-01 i
+2026-09-02 leżał na granicy C++/Python: przesunięcie indeksu pasma między konwencją VASP (1-based)
+a WAVECAR (0-based), uszkodzenie ścieżki sieciowej przez CRLF w parserze konfiguracji. Żadnego nie
+łapie ani kompilator, ani testy.
+
+Subagent read-only, który dla wskazanej zmiany czyta `src/ScientificRuntime/Python/*Bridge.{hpp,cpp}`
+razem z odpowiadającym skryptem w `scripts/python/examples/` i porównuje: nazwy pól w payloadzie
+JSON, kolejność argumentów pozycyjnych, konwencje indeksowania (0- kontra 1-based) oraz obsługę
+ścieżek. Raportuje `plik:linia`, nie proponuje poprawek.
+
+Pilne dlatego, że `docs/new-structure-wizard-design-2026-09-02.md` przepuszcza przez tę granicę dwa
+nowe kontrakty — zapis POSCAR i generację POTCAR.
+
+**Commit:** `chore(agents): add python-bridge-reviewer for C++/Python contract drift`
+
+### Świadomie odłożone z tego samego przeglądu
+
+- **Hook `clang-format` na edytowanych liniach** — dopiero po tym, jak krok 5 wpuści `clang-tidy`.
+  Dwa narzędzia stylu w jednym tygodniu dają jedną falę zmian formatujących, w której nie widać,
+  które ostrzeżenia są realne. Gdy wejdzie: formatuj **tylko zmienione linie** (`--lines=N:M`),
+  nigdy cały plik — `RendererPanel.cpp` ma 4041 linii.
+- **Skill `new-panel`** — kształt panelu zmienia się właśnie teraz (podgląd efemeryczny z własnym
+  `windowId`, dokowanie przez `DockBuilder`, dirty per dokument). Szablon zrobiony dziś utrwaliłby
+  wersję do przepisania.
+- **Blokada edycji `Vendor/**`** — piąty hook przeciw czemuś, co się jeszcze nie zdarzyło.
+- **Subagent `test-oracle-reviewer`** — pilnuje właściwości, którą przegląd testów uznał za już
+  zdrową. Wróć po Etapie II, gdy dojdą testy cofania i round-tripy.
+
+---
+
 **KONIEC ETAPU I.** Uruchom `full-build-verify` (Debug + Release, oba binaria, testy zielone
 w obu konfiguracjach), zmerguj `task/18-arch-cleanup` do `main`.
 
