@@ -7,10 +7,10 @@ computing (scipy, pymatgen, punktukas-tools).
 This file exists because `AGENTS.md` at the repo root carries the load-bearing project rules
 (Ponytail mode, reuse-first checklist, graphify) but is NOT auto-loaded by Claude Code - only
 `CLAUDE.md` is. Read `AGENTS.md` in full; the rest of this file is workflow rules from
-`docs/work/project/TODO.md` ("Zasady pracy" / "Granice architektoniczne") that aren't restated
+`docs/archive/work/project/TODO.md` ("Zasady pracy" / "Granice architektoniczne") that aren't restated
 there.
 
-## Zasady pracy (docs/work/project/TODO.md)
+## Zasady pracy (docs/archive/work/project/TODO.md)
 
 - Jeden branch per task: `task/NN-short-name`
 - Merge do main tylko po pełnym Debug + Release build (both DefectStudio.exe AND

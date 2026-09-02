@@ -284,6 +284,11 @@ This ADR should be considered successfully applied when:
 
 ## Follow-up ADRs
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Partially holds.
+The repository is still one premake workspace with top-level modules, but current includes contain
+known cycles such as `Renderer`/`IO` and `Renderer`/`Events`.
+
 The following decisions should be tracked in separate ADRs:
 
 - domain as source of truth and ECS boundary,

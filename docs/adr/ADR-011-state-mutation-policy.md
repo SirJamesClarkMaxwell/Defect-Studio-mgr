@@ -1,4 +1,4 @@
-% State Mutation Policy (ADR 0001)
+# ADR-011 – State Mutation Policy
 
 ## Context
 DefectStudio needs a deterministic channel for application state changes so undo/redo, scripting, and async jobs behave consistently.
@@ -14,4 +14,12 @@ DefectStudio needs a deterministic channel for application state changes so undo
 - Undo/Redo semantics require centralization of state mutation.
 
 ## Status
-Draft — to be reviewed and accepted by maintainers.
+Accepted
+
+The renderer's `RendererWindowState::viewUndoHistory` and `viewRedoHistory` are deliberately
+per-window local UI state and remain outside the global `UndoStack`.
+
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Partially holds.
+`RendererLayer` owns view undo/redo and command registration routes user actions through commands,
+but the decision's claim that all persistent mutations already use that runtime needs continued review.

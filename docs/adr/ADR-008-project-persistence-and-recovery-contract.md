@@ -71,6 +71,11 @@ When a project is opened, the system should detect missing references and suppor
 
 ## Acceptance criteria
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Drifted.
+Project manifest and session-related file adapters are in `src/IO`; the current `StorageLayer` is
+empty apart from its layer shell and the documented save/load contract is not implemented.
+
 This ADR is applied successfully when:
 
 - all persistent project files have explicit format versions

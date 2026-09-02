@@ -113,6 +113,11 @@ A single plot or single number is not a separate analysis record by itself.
 
 ## Acceptance criteria
 
+## Verified 2026-09-02 (HEAD 817ae09ed6f169825a992ea1960af3fcea682fa7)
+Partially holds.
+`ProjectWorkspace` and `StructureRegistry` exist as described, while the complete entity set and
+runtime behavior remain broader than the currently verified implementation surface.
+
 This ADR is applied successfully when:
 
 - `ProjectWorkspace` exists as the runtime domain container
