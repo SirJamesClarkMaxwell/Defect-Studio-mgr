@@ -12,6 +12,7 @@
 #include "Domain/Crystal/BravaisLattice.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
+#include "Domain/Crystal/PrototypeDefinition.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -87,5 +88,6 @@ namespace DefectStudio
 		std::string m_SymmetryError;
 
 		std::array<char, 128> m_FormulaBuffer{}; // e.g., "GaAs", "Al2O3"
+		std::array<std::array<char, 16>, 8> m_SiteSpeciesBuffers{}; // up to 8 sites, 16 chars each
 	};
 } // namespace DefectStudio

@@ -10,6 +10,7 @@
 
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Domain/Crystal/FormulaParser.hpp"
+#include "Domain/Crystal/PrototypeMatcher.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Presentation/Panels/PeriodicTableGrid.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
@@ -432,15 +433,65 @@ namespace DefectStudio
 			return;
 		}
 
-		ImGui::Text("Parsed: ");
-		ImGui::SameLine();
-		for (size_t i = 0; i < elements.size(); ++i)
+		// Hardcoded diamond prototype for testing (phase 2.5: prototype dropdown)
+		PrototypeDefinition diamondProto;
+		diamondProto.name = "diamond";
+		diamondProto.sites = {
+			SiteDefinition{"A", glm::vec3(0.0f), 8},
+			SiteDefinition{"B", glm::vec3(0.25f), 8}};
+
+		// Match formula to prototype sites
+		const auto matching = PrototypeMatcher::MatchFormulaToPrototype(elements, diamondProto);
+		if (!matching)
 		{
-			ImGui::Text("%s%d", elements[i].symbol.c_str(), elements[i].count > 1 ? elements[i].count : 0);
-			if (i < elements.size() - 1)
-				ImGui::SameLine(0.0f, 4.0f);
+			ImGui::TextDisabled("(formula count does not match prototype)");
+			return;
 		}
 
-		ImGui::TextDisabled("(site mapping table coming in phase 2.5)");
+		const auto &assignment = *matching;
+
+		// Initialize site species buffers from matcher
+		static bool bufferInitialized = false;
+		if (!bufferInitialized && !assignment.species.empty())
+		{
+			for (size_t i = 0; i < assignment.species.size() && i < m_SiteSpeciesBuffers.size(); ++i)
+			{
+				std::snprintf(m_SiteSpeciesBuffers[i].data(), m_SiteSpeciesBuffers[i].size(), "%s",
+					assignment.species[i].c_str());
+			}
+			bufferInitialized = true;
+		}
+
+		// Editable site mapping table
+		ImGui::TextUnformatted("Site Mapping:");
+		if (ImGui::BeginTable("site_mapping", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+		{
+			ImGui::TableSetupColumn("Site", ImGuiTableColumnFlags_WidthFixed, 40.0f);
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Species", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			for (size_t i = 0; i < diamondProto.sites.size(); ++i)
+			{
+				ImGui::TableNextRow();
+
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("%zu", i + 1);
+
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextUnformatted(diamondProto.sites[i].name.c_str());
+
+				ImGui::TableSetColumnIndex(2);
+				ImGui::SetNextItemWidth(-1.0f);
+				std::string label = "##site_species_" + std::to_string(i);
+				ImGui::InputText(label.c_str(), m_SiteSpeciesBuffers[i].data(),
+					m_SiteSpeciesBuffers[i].size(), ImGuiInputTextFlags_EnterReturnsTrue);
+			}
+
+			ImGui::EndTable();
+		}
+
+		if (assignment.isAmbiguous)
+			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Ambiguous mapping - please resolve above");
 	}
 } // namespace DefectStudio
