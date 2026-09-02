@@ -423,6 +423,12 @@ namespace DefectStudio
 		drawSymmetrySection();
 		ImGui::Separator();
 
+		ImGui::Checkbox("Export POTCAR##potcar_export", &m_ExportPotcar);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(requires pseudopotential directory configured)");
+
+		ImGui::Separator();
+
 		Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
 		ImGui::BeginDisabled(domainLayer == nullptr || m_BasisRows.empty());
 		if (ImGui::Button("Create"))

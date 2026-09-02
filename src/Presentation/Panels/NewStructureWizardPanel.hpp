@@ -90,5 +90,7 @@ namespace DefectStudio
 		std::array<char, 128> m_FormulaBuffer{}; // e.g., "GaAs", "Al2O3"
 		std::array<std::array<char, 16>, 8> m_SiteSpeciesBuffers{}; // up to 8 sites, 16 chars each
 		int m_SelectedPrototypeIndex = 0; // index into v1 prototype list
+
+		bool m_ExportPotcar = false; // POTCAR export flag (disabled if pseudodir not configured)
 	};
 } // namespace DefectStudio
