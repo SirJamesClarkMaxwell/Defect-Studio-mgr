@@ -49,6 +49,7 @@
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
+#include "Presentation/Panels/SupercellBuilderPanel.hpp"
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -639,6 +640,9 @@ namespace DefectStudio
 			registerPanel<NewStructureWizardPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
 				"New Structure", true);
+			registerPanel<SupercellBuilderPanel>(
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
+				"Supercell Builder", false);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);
