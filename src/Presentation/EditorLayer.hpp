@@ -83,6 +83,8 @@ namespace DefectStudio
 	{
 		struct OpenCommandPaletteRequested;
 		struct ProjectSaveRequested;
+		struct ProjectSaveAsRequested;
+		struct StructureFileSaveRequested;
 	}
 
 	namespace AppEvents::Config
@@ -159,6 +161,8 @@ namespace DefectStudio
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 		void onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &event);
+		void onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &event);
+		void onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &event);
 
 		// T07.5.1/T07.5.4/T07.5.5 project system - a project is a user-chosen directory holding
 		// manifest.yaml (ProjectManifestIO), distinct from the data `roots` it references. With no

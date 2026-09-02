@@ -75,8 +75,7 @@ namespace DefectStudio
 
 	Result<void> SaveProjectAsCommand::Execute(CommandContext &)
 	{
-		// TODO: implement save-as dialog (directory + project name selection)
-		m_EventBus->Queue(CoreEvents::ProjectSaveRequested{});
+		m_EventBus->Queue(CoreEvents::ProjectSaveAsRequested{});
 		return Result<void>{};
 	}
 
@@ -88,8 +87,7 @@ namespace DefectStudio
 
 	Result<void> SaveStructureFileCommand::Execute(CommandContext &)
 	{
-		// TODO: implement single-structure POSCAR save (focused window only)
-		m_EventBus->Queue(CoreEvents::ProjectSaveRequested{});
+		m_EventBus->Queue(CoreEvents::StructureFileSaveRequested{});
 		return Result<void>{};
 	}
 } // namespace DefectStudio

@@ -1122,6 +1122,10 @@ namespace DefectStudio
 		// save too, instead of deleting the shortcut or leaving it dead.
 		AddSubscription(subscribeEditorLayer<CoreEvents::ProjectSaveRequested>(
 			*m_EventBus, *this, &EditorLayer::onProjectSaveRequested));
+		AddSubscription(subscribeEditorLayer<CoreEvents::ProjectSaveAsRequested>(
+			*m_EventBus, *this, &EditorLayer::onProjectSaveAsRequested));
+		AddSubscription(subscribeEditorLayer<CoreEvents::StructureFileSaveRequested>(
+			*m_EventBus, *this, &EditorLayer::onStructureFileSaveRequested));
 		DS_LOG_INFO("EditorLayer config event handlers bound");
 	}
 
@@ -1544,6 +1548,20 @@ namespace DefectStudio
 				}
 			}
 		}
+	}
+
+	void EditorLayer::onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &)
+	{
+		// TODO: implement save-as dialog (directory selection, project name input)
+		// For now, save to current project directory like regular save
+		onProjectSaveRequested(CoreEvents::ProjectSaveRequested{});
+	}
+
+	void EditorLayer::onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &)
+	{
+		// TODO: implement single-file save (save focused renderer window's structure only)
+		// For now, save all structures like regular save
+		onProjectSaveRequested(CoreEvents::ProjectSaveRequested{});
 	}
 
 	void EditorLayer::onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &)

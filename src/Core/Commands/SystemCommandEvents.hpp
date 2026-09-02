@@ -15,4 +15,12 @@ namespace DefectStudio::CoreEvents
 	struct ProjectSaveRequested final : public BusEvent
 	{
 	};
+
+	struct ProjectSaveAsRequested final : public BusEvent
+	{
+	};
+
+	struct StructureFileSaveRequested final : public BusEvent
+	{
+	};
 } // namespace DefectStudio::CoreEvents
