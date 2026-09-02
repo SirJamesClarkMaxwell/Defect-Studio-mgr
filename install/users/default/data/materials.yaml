@@ -1,0 +1,78 @@
+materials:
+  - name: "Diamond"
+    description: "Elemental carbon"
+    polytypes:
+      cubic: "diamond"
+    constants:
+      exp:
+        a: 3.567
+      PBE:
+        a: 3.593
+      HSE06:
+        a: 3.548
+      r2SCAN:
+        a: 3.571
+    default_site_mapping:
+      cubic: ["C", "C"]
+
+  - name: "GaAs"
+    description: "Gallium arsenide"
+    polytypes:
+      "3C": "zincblende"
+    constants:
+      exp:
+        a: 5.6532
+      PBE:
+        a: 5.7065
+      HSE06:
+        a: 5.6815
+      r2SCAN:
+        a: 5.6925
+    default_site_mapping:
+      "3C": ["Ga", "As"]
+
+  - name: "ZnS"
+    description: "Zinc sulfide"
+    polytypes:
+      "3C": "zincblende"
+      "2H": "wurtzite"
+    constants:
+      exp:
+        a: 5.4693
+        c: 9.039
+        u: 0.375
+      PBE:
+        a: 5.5162
+        c: 9.1378
+        u: 0.375
+    default_site_mapping:
+      "3C": ["Zn", "S"]
+      "2H": ["Zn", "S"]
+
+  - name: "SiC"
+    description: "Silicon carbide"
+    polytypes:
+      "3C": "zincblende"
+      "2H": "wurtzite"
+    constants:
+      exp:
+        a: 4.3596
+        c: 7.1157
+        u: 0.375
+      PBE:
+        a: 4.4098
+        c: 7.2024
+        u: 0.375
+    default_site_mapping:
+      "3C": ["Si", "C"]
+      "2H": ["Si", "C"]
+
+  - name: "hBN"
+    description: "Hexagonal boron nitride"
+    polytypes:
+      "2H": "hBN"
+    constants:
+      exp:
+        a: 2.5045
+    default_site_mapping:
+      "2H": ["B", "N"]

@@ -1,0 +1,65 @@
+prototypes:
+  - name: diamond
+    description: "Diamond cubic structure"
+    crystal_system: "Cubic"
+    centering: "Face-centered"
+    bond_length_formula: "a * sqrt(3) / 4"
+    sites:
+      - name: "A"
+        fractional: [0.0, 0.0, 0.0]
+        multiplicity: 8
+      - name: "B"
+        fractional: [0.25, 0.25, 0.25]
+        multiplicity: 8
+
+  - name: zincblende
+    description: "Zincblende (sphalerite) structure"
+    crystal_system: "Cubic"
+    centering: "Face-centered"
+    bond_length_formula: "a * sqrt(3) / 4"
+    sites:
+      - name: "A"
+        fractional: [0.0, 0.0, 0.0]
+        multiplicity: 4
+      - name: "B"
+        fractional: [0.25, 0.25, 0.25]
+        multiplicity: 4
+
+  - name: wurtzite
+    description: "Wurtzite hexagonal structure"
+    crystal_system: "Hexagonal"
+    centering: "Primitive"
+    bond_length_formula: "a / sqrt(3)"
+    sites:
+      - name: "A"
+        fractional: [0.333333, 0.666667, 0.0]
+        multiplicity: 2
+      - name: "B"
+        fractional: [0.333333, 0.666667, 0.5]
+        multiplicity: 2
+
+  - name: rocksalt
+    description: "Rock salt (NaCl) structure"
+    crystal_system: "Cubic"
+    centering: "Face-centered"
+    bond_length_formula: "a / 2"
+    sites:
+      - name: "A"
+        fractional: [0.0, 0.0, 0.0]
+        multiplicity: 4
+      - name: "B"
+        fractional: [0.5, 0.5, 0.5]
+        multiplicity: 4
+
+  - name: hBN
+    description: "Hexagonal boron nitride"
+    crystal_system: "Hexagonal"
+    centering: "Primitive"
+    bond_length_formula: "a"
+    sites:
+      - name: "A"
+        fractional: [0.333333, 0.666667, 0.0]
+        multiplicity: 2
+      - name: "B"
+        fractional: [0.666667, 0.333333, 0.0]
+        multiplicity: 2
