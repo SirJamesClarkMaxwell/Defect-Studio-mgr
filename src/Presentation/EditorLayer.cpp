@@ -28,6 +28,7 @@
 #include "Events/EditorUiEvents.hpp"
 #include "Events/ProjectEvents.hpp"
 #include "Events/RendererEvents.hpp"
+#include "IO/PoscarWriter.hpp"
 #include "IO/ProjectManifestIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/RecentProjectsIO.hpp"
@@ -1513,16 +1514,34 @@ namespace DefectStudio
 	{
 		persistCurrentRoots();
 
-		// Mark all open structures as saved (clear dirty flag)
+		// Write POSCAR files for all open structures via Python subprocess
 		if (auto domainLayer = m_DomainLayer.lock())
 		{
 			auto &structures = domainLayer->Workspace().Structures();
 			for (auto structureRecord : structures.Records())
 			{
-				// savedRevision = revision means structure is clean (not dirty)
-				// TODO: actually write POSCAR via Python (ase/punktukas)
-				const_cast<StructureRecord &>(*structureRecord).savedRevision =
-					structureRecord->revision;
+				if (!structureRecord->sourcePath.Empty())
+					continue; // Skip structures loaded from files (already have POSCAR source)
+
+				// In-app-built structures get POSCAR written to project directory
+				const Path projectDir = m_ActiveProject
+					? m_ActiveProjectDirectory
+					: Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default");
+				const Path outputPath = projectDir / (structureRecord->displayName + ".vasp");
+
+				auto result = PoscarWriter::Write(structureRecord->structure, outputPath);
+				if (result.HasValue())
+				{
+					// Mark as saved
+					const_cast<StructureRecord &>(*structureRecord).savedRevision =
+						structureRecord->revision;
+				}
+				else
+				{
+					DS_LOG_WARN("POSCAR write failed for '{}': {}",
+						structureRecord->displayName,
+						result.Error().userMessage);
+				}
 			}
 		}
 	}

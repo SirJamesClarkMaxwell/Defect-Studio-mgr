@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Write POSCAR structure file via ASE (ase.io.write)."""
+
+import sys
+import json
+import tempfile
+import os
+import shutil
+from pathlib import Path
+
+try:
+    from ase.io import write
+    from ase import Atoms
+except ImportError as e:
+    sys.stderr.write(f"ERROR: ASE not available: {e}\n")
+    sys.exit(1)
+
+
+def write_poscar(
+    output_path: str,
+    species: list[str],
+    positions: list[list[float]],
+    cell: list[list[float]],
+    pbc: list[bool] = None,
+) -> None:
+    """Write POSCAR file from structure data.
+
+    Args:
+        output_path: Target POSCAR file path
+        species: List of element symbols, one per atom
+        positions: Atomic positions [Natom x 3] (fractional coords)
+        cell: Unit cell vectors [3 x 3] (Angstrom)
+        pbc: Periodic boundary conditions [3] (default: [True, True, True])
+    """
+    if pbc is None:
+        pbc = [True, True, True]
+
+    if len(species) != len(positions):
+        raise ValueError(f"species count {len(species)} != positions count {len(positions)}")
+
+    atoms = Atoms(symbols=species, positions=positions, cell=cell, pbc=pbc)
+
+    # Write to temp file first, then atomic rename
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=str(Path(output_path).parent))
+    try:
+        os.close(tmp_fd)
+        write(tmp_path, atoms, format='vasp')
+        shutil.move(tmp_path, output_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+
+
+def main() -> None:
+    """CLI entry point: read JSON from first arg (file path), write POSCAR."""
+    try:
+        if len(sys.argv) < 2:
+            raise ValueError("Usage: write_poscar.py <json_input_file>")
+
+        json_file = sys.argv[1]
+        with open(json_file, "r") as f:
+            input_data = json.load(f)
+
+        output_path = input_data.get("output_path")
+        if not output_path:
+            raise ValueError("Missing 'output_path' in input JSON")
+
+        species = input_data.get("species", [])
+        positions = input_data.get("positions", [])
+        cell = input_data.get("cell", [])
+        pbc = input_data.get("pbc", [True, True, True])
+
+        write_poscar(output_path, species, positions, cell, pbc)
+        print(json.dumps({"success": True, "output_path": output_path}))
+    except Exception as e:
+        sys.stderr.write(f"ERROR: {e}\n")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
