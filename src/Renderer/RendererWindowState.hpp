@@ -14,6 +14,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureComparison.hpp"
+#include "Domain/DomainIds.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
@@ -509,6 +510,9 @@ namespace DefectStudio
 		// dockspace's central node (ImGuiCond_FirstUseEver) instead of opening free-floating -
 		// never reapplied afterwards, so a later manual re-dock by the user sticks.
 		bool dockingInitialized = false;
+
+		// Link to StructureRecord for dirty flag checking
+		StructureId structureId;
 	};
 
 	// T15-lite export dialog: resolution preset + filename proposed from the structure's source

@@ -54,6 +54,7 @@ namespace DefectStudio
 			RendererWindowState window = std::move(windows.front());
 			window.showCellBox = showCellBox;
 			window.showGrid = showGrid;
+			window.structureId = structureRecord->id;
 			rendererLayer.AddWindow(std::move(window));
 		}
 		else
