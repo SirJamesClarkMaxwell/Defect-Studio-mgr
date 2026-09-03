@@ -273,6 +273,7 @@ namespace DefectStudio
 		PanelId m_SettingsPanelId = 0;
 		PanelId m_ExportImagePanelId = 0;
 		PanelId m_DisplacementComparisonPanelId = 0;
+		PanelId m_MaterialsCollectionPanelId = 0;
 	};
 
 	template <typename TPanel, typename... Args>

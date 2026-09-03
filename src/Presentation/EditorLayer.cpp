@@ -49,6 +49,7 @@
 #include "Presentation/Panels/RendererPanel.hpp"
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
+#include "Presentation/Panels/MaterialsCollectionPanel.hpp"
 #include "Presentation/Panels/SupercellBuilderPanel.hpp"
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
@@ -640,6 +641,10 @@ namespace DefectStudio
 			registerPanel<NewStructureWizardPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
 				"New Structure", true);
+			m_MaterialsCollectionPanelId = registerPanel<MaterialsCollectionPanel>(
+				*rendererLayer, m_DomainLayer, m_ElementPropertiesTable, m_AtomStyleTable,
+				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "materials" / "materials.db"),
+				"Materials Collection", false);
 			registerPanel<SupercellBuilderPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
 				"Supercell Builder", false);
@@ -1296,6 +1301,17 @@ namespace DefectStudio
 		{
 			if (auto *treePanel = dynamic_cast<ProjectTreePanel *>(panel.get()))
 				treePanel->SetRoots(currentRootsMutable());
+		}
+
+		if (auto panel = findPanel(m_MaterialsCollectionPanelId).lock())
+		{
+			if (auto *materials = dynamic_cast<MaterialsCollectionPanel *>(panel.get()))
+			{
+				materials->SetProjectLibraryPath(
+					m_ActiveProject.has_value()
+						? m_ActiveProjectDirectory / m_ActiveProject->materialsLibraryPath
+						: Path{});
+			}
 		}
 
 		if (auto panel = findPanel(m_CalculatorConsolePanelId).lock())
