@@ -38,7 +38,9 @@ def write_poscar(
     if len(species) != len(positions):
         raise ValueError(f"species count {len(species)} != positions count {len(positions)}")
 
-    atoms = Atoms(symbols=species, positions=positions, cell=cell, pbc=pbc)
+    # positions arrive as FRACTIONAL coords, so scaled_positions - `positions=` would
+    # treat them as Angstrom cartesians and silently write a wrong structure.
+    atoms = Atoms(symbols=species, scaled_positions=positions, cell=cell, pbc=pbc)
 
     # Write to temp file first, then atomic rename
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=str(Path(output_path).parent))

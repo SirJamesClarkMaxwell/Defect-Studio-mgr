@@ -5,7 +5,8 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
-#include <sstream>
+
+#include <nlohmann/json.hpp>
 
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
@@ -37,50 +38,31 @@ namespace DefectStudio
 			return posA.z < posB.z;
 		});
 
-		// Build JSON input for Python script: species, positions, cell (in sorted order)
-		std::ostringstream json;
-		json << "{\n";
-		json << "  \"output_path\": \"" << outputPath.string() << "\",\n";
-
-		// Species list (element symbols, sorted by atom order)
-		json << "  \"species\": [";
-		for (std::size_t i = 0; i < atomIndices.size(); ++i)
+		// nlohmann::json, not hand-rolled string building - a Windows output path is full of
+		// backslashes, and pasting it raw into a JSON string produced invalid escapes ("\U", "\N"),
+		// which made every single save fail in json.load on the Python side.
+		nlohmann::json species = nlohmann::json::array();
+		nlohmann::json positions = nlohmann::json::array();
+		for (const std::size_t index : atomIndices)
 		{
-			if (i > 0)
-				json << ", ";
-			json << "\"" << structure.atoms[atomIndices[i]].species << "\"";
+			const AtomSite &atom = structure.atoms[index];
+			species.push_back(atom.species);
+			positions.push_back({atom.fractional.x, atom.fractional.y, atom.fractional.z});
 		}
-		json << "],\n";
 
-		// Positions (fractional coordinates, sorted by atom order)
-		json << "  \"positions\": [";
-		for (std::size_t i = 0; i < atomIndices.size(); ++i)
-		{
-			if (i > 0)
-				json << ", ";
-			const auto &pos = structure.atoms[atomIndices[i]].fractional;
-			json << "[" << pos.x << ", " << pos.y << ", " << pos.z << "]";
-		}
-		json << "],\n";
+		nlohmann::json cell = nlohmann::json::array();
+		for (const glm::vec3 &vector : structure.cell.vectors)
+			cell.push_back({vector.x, vector.y, vector.z});
 
-		// Cell vectors (Angstrom)
-		json << "  \"cell\": [\n";
-		for (int i = 0; i < 3; ++i)
-		{
-			const auto &vec = structure.cell.vectors[i];
-			json << "    [" << vec.x << ", " << vec.y << ", " << vec.z << "]";
-			if (i < 2)
-				json << ",";
-			json << "\n";
-		}
-		json << "  ],\n";
-
-		// PBC (periodic boundary conditions)
-		json << "  \"pbc\": [true, true, true]\n";
-		json << "}\n";
+		const nlohmann::json payload = {
+			{"output_path", outputPath.String()},
+			{"species", std::move(species)},
+			{"positions", std::move(positions)},
+			{"cell", std::move(cell)},
+			{"pbc", {true, true, true}}};
 
 		// Write JSON to temp file
-		const std::string jsonStr = json.str();
+		const std::string jsonStr = payload.dump();
 		const Path tempDir = Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "temp");
 		FileSystem::CreateDirectories(tempDir);
 		const Path jsonPath = tempDir / "poscar_input.json";

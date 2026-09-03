@@ -115,6 +115,16 @@ namespace DefectStudio
 		}
 
 		drawSaveCurrentPopup();
+
+		// The Delete button lives inside a tab item and a PushID(entry.id) scope, so calling
+		// OpenPopup there produced an ID the window-level BeginPopupModal never matched and the
+		// confirm dialog never opened. The button only raises a flag; the popup is opened here.
+		if (m_DeleteRequested)
+		{
+			m_DeleteRequested = false;
+			m_DeletePopupOpen = true;
+			ImGui::OpenPopup("Delete material");
+		}
 		drawDeleteConfirmPopup();
 
 		ImGui::Separator();
@@ -222,8 +232,7 @@ namespace DefectStudio
 				m_DeleteScope = scope;
 				m_DeleteEntryId = entry.id;
 				m_DeleteEntryName = entry.name;
-				m_DeletePopupOpen = true;
-				ImGui::OpenPopup("Delete material");
+				m_DeleteRequested = true;
 			}
 
 			ImGui::PopID();

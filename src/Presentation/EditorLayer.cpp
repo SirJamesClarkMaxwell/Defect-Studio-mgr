@@ -1650,9 +1650,20 @@ namespace DefectStudio
 		}
 		else
 		{
-			DS_LOG_WARN("POSCAR write failed for '{}': {}",
+			// technicalDetails, not userMessage - userMessage is a fixed string, so logging it
+			// alone hid the actual Python failure behind "POSCAR write failed".
+			DS_LOG_WARN("POSCAR write failed for '{}': {} | {}",
 				structureRecord->displayName,
-				result.Error().userMessage);
+				result.Error().userMessage,
+				result.Error().technicalDetails);
+			if (m_EventBus != nullptr)
+			{
+				Notification notification = ToNotification(result.Error());
+				notification.title = "Structure save failed";
+				notification.source = "EditorLayer";
+				notification.pinned = true;
+				m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
+			}
 		}
 	}
 

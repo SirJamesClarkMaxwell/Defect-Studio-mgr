@@ -5,8 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
-#include <sstream>
 #include <set>
+
+#include <nlohmann/json.hpp>
 
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
@@ -33,27 +34,15 @@ namespace DefectStudio
 		for (const auto &atom : structure.atoms)
 			uniqueSpecies.insert(atom.species);
 
-		// Build JSON input for Python script: species list, pseudodir, output path
-		std::ostringstream json;
-		json << "{\n";
-		json << "  \"output_path\": \"" << outputPath.string() << "\",\n";
-		json << "  \"pseudopotential_dir\": \"" << pseudopotentialDir.string() << "\",\n";
-
-		// Species list (unique elements)
-		json << "  \"species\": [";
-		bool first = true;
-		for (const auto &species : uniqueSpecies)
-		{
-			if (!first)
-				json << ", ";
-			json << "\"" << species << "\"";
-			first = false;
-		}
-		json << "]\n";
-		json << "}\n";
+		// nlohmann::json, not hand-rolled string building - Windows paths are full of backslashes
+		// and pasting them raw into a JSON string produces invalid escapes.
+		const nlohmann::json payload = {
+			{"output_path", outputPath.String()},
+			{"pseudopotential_dir", pseudopotentialDir.String()},
+			{"species", uniqueSpecies}};
 
 		// Write JSON to temp file
-		const std::string jsonStr = json.str();
+		const std::string jsonStr = payload.dump();
 		const Path tempDir = Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "temp");
 		FileSystem::CreateDirectories(tempDir);
 		const Path jsonPath = tempDir / "potcar_input.json";

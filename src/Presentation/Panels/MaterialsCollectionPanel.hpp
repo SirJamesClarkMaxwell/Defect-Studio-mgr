@@ -85,6 +85,7 @@ namespace DefectStudio
 		std::string m_DeleteEntryId;
 		std::string m_DeleteEntryName;
 		bool m_DeletePopupOpen = false;
+		bool m_DeleteRequested = false;
 
 		std::string m_StatusMessage;
 	};
