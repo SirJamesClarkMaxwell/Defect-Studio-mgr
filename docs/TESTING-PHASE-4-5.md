@@ -15,9 +15,12 @@ Branch: `task/18-phase-4-5`, three commits on top of `main`:
 the `pseudopotential_dir` config round trip. `write_potcar.py` was exercised directly against a
 synthetic pseudopotential tree for all three paths (success, missing element, missing directory).
 
-**Not verified:** every UI interaction below. No panel was clicked, no supercell was generated
-through the GUI, no POTCAR was produced by the running app. The panels compile and are registered,
-which is not the same as working. Everything under "Manual checks" is genuinely unchecked.
+**Not verified:** every UI interaction below. **The application was never launched** — starting a
+GUI process from the agent environment is blocked, so not even "does it reach the main window" was
+confirmed. No panel was clicked, no supercell was generated, no POTCAR was produced by the running
+app. The panels compile and are registered, which is not the same as working. Everything under
+"Manual checks" is genuinely unchecked, so **start with launching the app**: two newly registered
+panels are two new ways for startup to fail.
 
 **Unrelated pre-existing breakage:** `DefectStudioPythonBridge.vcxproj` fails to link
 (`__imp_PyComplex_AsCComplex` and three more nanobind symbols unresolved against `python3.lib`).
