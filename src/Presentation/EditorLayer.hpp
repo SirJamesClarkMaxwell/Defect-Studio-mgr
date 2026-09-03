@@ -38,6 +38,7 @@ namespace DefectStudio
 	class KeymapResolver;
 	class RendererLayer;
 	class DomainLayer;
+	struct StructureRecord;
 	struct CommandID;
 	struct ApplicationConfig;
 
@@ -163,6 +164,7 @@ namespace DefectStudio
 		void onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &event);
 		void onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &event);
 		void onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &event);
+		void exportPotcarNextToPoscar(const StructureRecord &structureRecord, const Path &projectDir);
 
 		// T07.5.1/T07.5.4/T07.5.5 project system - a project is a user-chosen directory holding
 		// manifest.yaml (ProjectManifestIO), distinct from the data `roots` it references. With no

@@ -58,29 +58,30 @@ potpaw_PBE/
 ```
 
 An uppercase directory name (`AL/POTCAR`) is tried as a fallback. Anything else — the flat
-`Al_POTCAR` style, or the `potpaw_PBE.54` variant suffixes (`Al_GW`, `O_h`) — is **not** handled
-and will report the element as missing. If your distribution is laid out that way, say so and the
-lookup can be widened.
+`Al_POTCAR` style, or the `potpaw_PBE.54` variant suffixes (`Al_GW`, `O_h`) — reports the element
+as missing, and that is deliberate: the assumption is that you have a normal per-element
+distribution, and anything else is an error the app tells you about rather than guesses around.
 
 ### Manual checks
 
 - [ ] Open the **New Structure** wizard, build any cell, tick **Export POTCAR**, click **Create**.
 - [ ] Focus the new window and press **Ctrl+Alt+S** (`file.save` — note: *not* Ctrl+S, which is
       `project.save`).
-- [ ] Two files appear next to each other: `<name>.vasp` and `<name>.potcar`. With a project open
+- [ ] Two files appear next to each other: `<name>.vasp` and a bare `POTCAR`. With a project open
       they land in the project directory; with none, in `install/users/default/`.
-- [ ] `<name>.potcar` is the per-element POTCAR files concatenated, in the same alphabetical
-      species order the POSCAR uses.
-- [ ] Untick the checkbox, create another structure, save it → only `.vasp`, no `.potcar`.
+- [ ] `POTCAR` is the per-element POTCAR files concatenated, in the same alphabetical species
+      order the POSCAR uses.
+- [ ] Untick the checkbox, create another structure, save it → only `.vasp`, no `POTCAR`.
+- [ ] Save a **second** structure with the box ticked into the same directory → the `POTCAR` is
+      overwritten, because VASP wants exactly one bare `POTCAR` per input directory. One structure
+      per directory is the working assumption.
 - [ ] Blank out `pseudopotential_dir`, restart, save a structure created with the box ticked →
-      the POSCAR is still written, and the log carries
-      `POTCAR export requested ... but no pseudopotential directory is configured`.
+      the POSCAR is still written, and a pinned **error notification** appears:
+      `POTCAR export failed: no pseudopotential directory configured`.
       **A failed POTCAR must never cost you the POSCAR** — that is the whole point of the split.
 - [ ] Point `pseudopotential_dir` at a directory missing one of your elements → POSCAR written,
-      log shows `POTCAR not found for element X`.
-- [ ] **Open question:** the file is named `<name>.potcar`, mirroring `<name>.vasp`. VASP itself
-      wants a bare `POTCAR` sitting next to a bare `POSCAR`. Tell me which convention you want and
-      it is a one-line change.
+      error notification names the element: `POTCAR export failed: ERROR: POTCAR not found for
+      element X in ...`.
 
 ---
 
@@ -142,12 +143,11 @@ Both are `ase.db` SQLite files; parent directories are created on first use.
 
 ## Known gaps
 
-1. **The POTCAR checkbox is never disabled.** The plan called for greying it out when no
-   pseudopotential directory is configured. Doing that means giving the wizard panel a live handle
-   on `ApplicationConfig`, and panels are constructed *after* `ApplyConfig` runs — so the naive
-   wiring reads a config that is not there yet. Instead the checkbox stays live, the hint text next
-   to it states the requirement, and an unconfigured export logs a warning rather than failing
-   silently. Worth revisiting if it trips you up in practice.
+1. **The POTCAR checkbox is never disabled** — by decision. The assumption is that you have
+   pseudopotentials; if you do not, the export fails loudly with a pinned error notification
+   instead of the checkbox being greyed out. That also avoids giving the wizard panel a live handle
+   on `ApplicationConfig`, which panels cannot have cleanly today (they are constructed *after*
+   `ApplyConfig` runs).
 
 2. **No automated coverage of the two new panels.** They are ImGui render loops against live
    renderer/domain state; there is no panel-test harness in this repo to hang a test on, and

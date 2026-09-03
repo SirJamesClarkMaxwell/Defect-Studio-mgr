@@ -101,12 +101,22 @@ namespace DefectStudio
 				"Check if POTCAR concatenation is slow");
 
 		if (scriptResult.exitCode != 0)
+		{
+			// The script's stderr names the missing element, which is the only thing the user can act
+			// on - keep it in the user-facing message instead of burying it in technical details.
+			std::string reason = scriptResult.standardError;
+			if (const std::size_t newline = reason.find_first_of("\r\n"); newline != std::string::npos)
+				reason.erase(newline);
+			if (reason.empty())
+				reason = "write_potcar.py exited with code " + std::to_string(scriptResult.exitCode);
+
 			return StructuredError(
 				ErrorCategory::IO,
 				Severity::Error,
-				"POTCAR write subprocess error",
+				"POTCAR export failed: " + reason,
 				scriptResult.standardError,
-				"Verify pseudopotentials exist in directory for all species");
+				"Verify pseudopotentials exist in " + pseudopotentialDir.String() + " for every species");
+		}
 
 		return Result<void>{};
 	}

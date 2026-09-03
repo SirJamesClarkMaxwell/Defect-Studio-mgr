@@ -23,6 +23,7 @@
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Events/EditorUiEvents.hpp"
@@ -1645,32 +1646,7 @@ namespace DefectStudio
 				const_cast<StructureRecord &>(*mutableRecord).savedRevision = mutableRecord->revision;
 
 			if (structureRecord->exportPotcar)
-			{
-				const bool pseudodirConfigured =
-					m_CurrentConfig != nullptr && !m_CurrentConfig->ui.pseudopotentialDir.Empty();
-				if (!pseudodirConfigured)
-				{
-					DS_LOG_WARN(
-						"POTCAR export requested for '{}' but no pseudopotential directory is "
-						"configured (Settings -> ui.pseudopotential_dir) - skipping",
-						structureRecord->displayName);
-				}
-				else
-				{
-					const Path potcarPath = projectDir / (structureRecord->displayName + ".potcar");
-					auto potcarResult = POTCARWriter::Write(
-						structureRecord->structure,
-						potcarPath,
-						m_CurrentConfig->ui.pseudopotentialDir);
-
-					if (!potcarResult.HasValue())
-					{
-						DS_LOG_WARN("POTCAR write failed for '{}': {}",
-							structureRecord->displayName,
-							potcarResult.Error().userMessage);
-					}
-				}
-			}
+				exportPotcarNextToPoscar(*structureRecord, projectDir);
 		}
 		else
 		{
@@ -1678,6 +1654,39 @@ namespace DefectStudio
 				structureRecord->displayName,
 				result.Error().userMessage);
 		}
+	}
+
+	// POTCAR is written with its bare VASP name next to the POSCAR, so an input directory holding one
+	// structure is ready to run. Failures are surfaced as error notifications rather than log lines -
+	// a missing pseudopotential is the user's to fix, and a silent skip looks like a successful export.
+	void EditorLayer::exportPotcarNextToPoscar(const StructureRecord &structureRecord, const Path &projectDir)
+	{
+		const auto reportFailure = [this, &structureRecord](const StructuredError &error) {
+			DS_LOG_WARN("POTCAR write failed for '{}': {}", structureRecord.displayName, error.userMessage);
+			if (m_EventBus == nullptr)
+				return;
+			Notification notification = ToNotification(error);
+			notification.title = "POTCAR export failed";
+			notification.source = "EditorLayer";
+			notification.pinned = true;
+			m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
+		};
+
+		if (m_CurrentConfig == nullptr || m_CurrentConfig->ui.pseudopotentialDir.Empty())
+		{
+			reportFailure(StructuredError(
+				ErrorCategory::IO,
+				Severity::Error,
+				"POTCAR export failed: no pseudopotential directory configured",
+				"structure: " + structureRecord.displayName,
+				"Set ui.pseudopotential_dir to your VASP pseudopotential directory"));
+			return;
+		}
+
+		auto potcarResult = POTCARWriter::Write(
+			structureRecord.structure, projectDir / "POTCAR", m_CurrentConfig->ui.pseudopotentialDir);
+		if (!potcarResult.HasValue())
+			reportFailure(potcarResult.Error());
 	}
 
 	void EditorLayer::onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &)
