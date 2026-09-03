@@ -90,6 +90,10 @@ namespace DefectStudio
 		void closePreviews();
 		[[nodiscard]] std::size_t computePreviewSignature() const;
 		void drawPreviewControls();
+		// Reads atom positions the gizmo moved in the preview window back into the basis table.
+		// The fields stay the single source of truth: the very next rebuild regenerates the
+		// window from them, so without this a drag would simply be undone on the next keystroke.
+		bool pullGizmoEditsFromPreview();
 
 		RendererLayer &m_RendererLayer;
 		WeakRef<DomainLayer> m_DomainLayer;

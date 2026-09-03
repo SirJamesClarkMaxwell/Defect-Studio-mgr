@@ -1933,6 +1933,13 @@ namespace DefectStudio
 
 		windowState.gizmoDragActive = false;
 
+		// An unregistered preview window (New Structure wizard) has no domain structure to commit
+		// to, and ResolveAtomEditTarget rightly refuses it. The drag has already moved the atoms in
+		// windowState; the wizard reads those positions back into its basis table, which is the
+		// single source of truth there. Committing would only log a failure every time.
+		if (windowState.structure.domainStructureId.empty())
+			return false;
+
 		Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
 		if (commandRegistry == nullptr)
 			return false;

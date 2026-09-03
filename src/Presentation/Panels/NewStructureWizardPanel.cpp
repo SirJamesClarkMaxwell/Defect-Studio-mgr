@@ -6,6 +6,8 @@
 #include <array>
 #include <cstdio>
 #include <optional>
+
+#include <glm/gtc/epsilon.hpp>
 #include <utility>
 
 #include <imgui.h>
@@ -18,6 +20,7 @@
 #include "Domain/Crystal/PrimitiveCell.hpp"
 #include "Domain/Crystal/Supercell.hpp"
 #include "Renderer/CrystalStructurePreviewWindow.hpp"
+#include "Renderer/RendererWindowState.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
 #include "ScientificRuntime/Python/GetSymmetryInfoJob.hpp"
 
@@ -424,6 +427,50 @@ namespace DefectStudio
 		return signature;
 	}
 
+	bool NewStructureWizardPanel::pullGizmoEditsFromPreview()
+	{
+		if (m_PreviewWindowId.empty())
+			return false;
+
+		std::vector<RendererWindowState> &windows = m_RendererLayer.GetWindows();
+		const auto it = std::find_if(windows.begin(), windows.end(), [&](const RendererWindowState &window) {
+			return window.windowId == m_PreviewWindowId;
+		});
+		if (it == windows.end())
+			return false;
+
+		// The preview is built straight from m_BasisRows in order, and neither RegenerateAutoBonds
+		// nor BuildRendererStructureData reorders atoms, so index i is row i. A mismatch means the
+		// window is showing something else entirely - bail rather than write coordinates into the
+		// wrong rows.
+		if (it->structure.atoms.size() != m_BasisRows.size())
+			return false;
+
+		const glm::mat3 lattice = BuildLatticeCell(m_System, m_Params).ToMatrix();
+		if (std::abs(glm::determinant(lattice)) < 1e-6f)
+			return false;
+		const glm::mat3 inverseLattice = glm::inverse(lattice);
+
+		bool changed = false;
+		for (std::size_t i = 0; i < m_BasisRows.size(); ++i)
+		{
+			const glm::vec3 fractional = inverseLattice * it->structure.atoms[i].cartesianPosition;
+			if (glm::all(glm::epsilonEqual(fractional, m_BasisRows[i].fractional, 1e-5f)))
+				continue;
+			m_BasisRows[i].fractional = fractional;
+			changed = true;
+		}
+
+		if (changed)
+		{
+			// Adopt the new state as the preview's own signature: the window already shows exactly
+			// these positions, so rebuilding it would be pure work, and rebuilding mid-drag would
+			// yank the atoms out from under the cursor.
+			m_PreviewSignature = computePreviewSignature();
+		}
+		return it->gizmoDragActive;
+	}
+
 	void NewStructureWizardPanel::refreshPreview()
 	{
 		if (!m_LivePreview || m_BasisRows.empty())
@@ -595,7 +642,10 @@ namespace DefectStudio
 
 		// After the widgets, so an edit made this frame lands in the same frame rather than one
 		// behind - and outside Begin/End, since it touches renderer windows, not this one.
-		refreshPreview();
+		// The gizmo is read back first: a drag in progress owns the atom positions, and rebuilding
+		// the window underneath it would fight the mouse.
+		if (!pullGizmoEditsFromPreview())
+			refreshPreview();
 		if (!windowOpen)
 			closePreviews();
 		SetVisible(windowOpen);
