@@ -39,7 +39,8 @@ namespace DefectStudio
 		const ElementPropertiesTable &elementPropertiesTable,
 		const AtomStyleTable &atomStyleTable,
 		bool showCellBox,
-		bool showGrid)
+		bool showGrid,
+		const std::optional<glm::mat3> &overlayCellVectors)
 	{
 		CrystalStructure bonded = structure;
 		RegenerateAutoBonds(bonded, elementPropertiesTable);
@@ -48,6 +49,8 @@ namespace DefectStudio
 		// ResolveAtomEditTarget rejects a window without one rather than editing a phantom record.
 		RendererStructureData structureData =
 			BuildRendererStructureData(bonded, Path{}, displayName, atomStyleTable, std::string{});
+		if (overlayCellVectors.has_value())
+			structureData.overlayCellEdges = BuildCellEdges(*overlayCellVectors);
 
 		if (RendererWindowState *existing = FindWindow(rendererLayer, existingWindowId))
 		{

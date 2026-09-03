@@ -13,27 +13,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		[[nodiscard]] std::vector<RendererCellEdge> BuildCellEdges(const glm::mat3 &lattice)
-		{
-			const glm::vec3 a = lattice[0];
-			const glm::vec3 b = lattice[1];
-			const glm::vec3 c = lattice[2];
-			const glm::vec3 p000 = glm::vec3(0.0f, 0.0f, 0.0f);
-			const glm::vec3 p100 = a;
-			const glm::vec3 p010 = b;
-			const glm::vec3 p001 = c;
-			const glm::vec3 p110 = a + b;
-			const glm::vec3 p101 = a + c;
-			const glm::vec3 p011 = b + c;
-			const glm::vec3 p111 = a + b + c;
-
-			return std::vector<RendererCellEdge>{
-				{p000, p100}, {p000, p010}, {p000, p001},
-				{p100, p110}, {p100, p101}, {p010, p110},
-				{p010, p011}, {p001, p101}, {p001, p011},
-				{p110, p111}, {p101, p111}, {p011, p111}};
-		}
-
 		[[nodiscard]] std::vector<RendererBondData> BuildRendererBonds(
 			const CrystalStructure &structure,
 			const std::vector<RendererAtomData> &atoms,
@@ -67,6 +46,27 @@ namespace DefectStudio
 			}
 			return bonds;
 		}
+	}
+
+	std::vector<RendererCellEdge> BuildCellEdges(const glm::mat3 &lattice)
+	{
+		const glm::vec3 a = lattice[0];
+		const glm::vec3 b = lattice[1];
+		const glm::vec3 c = lattice[2];
+		const glm::vec3 p000 = glm::vec3(0.0f, 0.0f, 0.0f);
+		const glm::vec3 p100 = a;
+		const glm::vec3 p010 = b;
+		const glm::vec3 p001 = c;
+		const glm::vec3 p110 = a + b;
+		const glm::vec3 p101 = a + c;
+		const glm::vec3 p011 = b + c;
+		const glm::vec3 p111 = a + b + c;
+
+		return std::vector<RendererCellEdge>{
+			{p000, p100}, {p000, p010}, {p000, p001},
+			{p100, p110}, {p100, p101}, {p010, p110},
+			{p010, p011}, {p001, p101}, {p001, p011},
+			{p110, p111}, {p101, p111}, {p011, p111}};
 	}
 
 	RendererStructureData BuildRendererStructureData(

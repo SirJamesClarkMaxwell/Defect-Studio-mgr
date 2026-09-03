@@ -3122,8 +3122,16 @@ namespace DefectStudio
 		if (resources.cellEdgesDirty)
 		{
 			resources.cachedCellEdgeVertices.clear();
-			resources.cachedCellEdgeVertices.reserve(structure.cellEdges.size() * 2);
+			resources.cachedCellEdgeVertices.reserve((structure.cellEdges.size() + structure.overlayCellEdges.size()) * 2);
 			for (const RendererCellEdge &edge : structure.cellEdges)
+			{
+				resources.cachedCellEdgeVertices.push_back(edge.start);
+				resources.cachedCellEdgeVertices.push_back(edge.finish);
+			}
+			// Overlay edges share the buffer and are told apart by where they start, so the second
+			// colour costs one more draw call rather than a second VBO.
+			resources.cachedOverlayEdgeFirstVertex = resources.cachedCellEdgeVertices.size();
+			for (const RendererCellEdge &edge : structure.overlayCellEdges)
 			{
 				resources.cachedCellEdgeVertices.push_back(edge.start);
 				resources.cachedCellEdgeVertices.push_back(edge.finish);
@@ -3160,7 +3168,16 @@ namespace DefectStudio
 		glBindVertexArray(m_LineVao);
 		glBindBuffer(GL_ARRAY_BUFFER, m_LineVbo);
 		glBufferData(GL_ARRAY_BUFFER, static_cast<long long>(vertices.size() * sizeof(glm::vec3)), vertices.data(), GL_DYNAMIC_DRAW);
-		glDrawArrays(GL_LINES, 0, static_cast<int>(vertices.size()));
+
+		const std::size_t overlayFirst = std::min(resources.cachedOverlayEdgeFirstVertex, vertices.size());
+		glDrawArrays(GL_LINES, 0, static_cast<int>(overlayFirst));
+		if (overlayFirst < vertices.size())
+		{
+			if (colorLocation >= 0)
+				glUniform4f(colorLocation, 0.35f, 0.8f, 1.0f, 1.0f);
+			glDrawArrays(
+				GL_LINES, static_cast<int>(overlayFirst), static_cast<int>(vertices.size() - overlayFirst));
+		}
 		glBindVertexArray(0);
 	}
 

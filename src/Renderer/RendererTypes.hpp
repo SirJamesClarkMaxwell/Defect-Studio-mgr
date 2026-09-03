@@ -58,6 +58,10 @@ namespace DefectStudio
 		std::vector<RendererAtomData> atoms;
 		std::vector<RendererBondData> bonds;
 		std::vector<RendererCellEdge> cellEdges;
+		// A second cell drawn inside the first in a contrasting colour - the primitive cell of a
+		// centred lattice, which is a different cell over the SAME atoms, not a transformation of
+		// them. Empty for every structure that has no such overlay to show.
+		std::vector<RendererCellEdge> overlayCellEdges;
 		glm::mat3 lattice = glm::mat3(1.0f);
 		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
 	};

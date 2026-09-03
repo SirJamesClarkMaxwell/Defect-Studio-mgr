@@ -153,6 +153,8 @@ namespace DefectStudio
 		std::vector<OpenGlLabelInstance> cachedLabelBackgroundInstances;
 		std::vector<glm::vec3> cachedGridVertices;
 		std::vector<glm::vec3> cachedCellEdgeVertices;
+		// Index into cachedCellEdgeVertices where the overlay (primitive-cell) edges begin.
+		std::size_t cachedOverlayEdgeFirstVertex = 0;
 		// One entry per Arrow3D SceneArrow, indexed by its position in sceneArrows - see
 		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
 		std::vector<OpenGlSceneArrowMeshCache> sceneArrow3DMeshCache;

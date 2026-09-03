@@ -1,6 +1,9 @@
 #pragma once
 
+#include <optional>
 #include <string>
+
+#include <glm/glm.hpp>
 
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
@@ -31,7 +34,10 @@ namespace DefectStudio
 		const ElementPropertiesTable &elementPropertiesTable,
 		const AtomStyleTable &atomStyleTable,
 		bool showCellBox = true,
-		bool showGrid = true);
+		bool showGrid = true,
+		// Lattice vectors of a second cell drawn inside the first in a contrasting colour - the
+		// primitive cell of a centred lattice. The atoms are untouched.
+		const std::optional<glm::mat3> &overlayCellVectors = std::nullopt);
 
 	// Closes a preview window if it is still open. No-op on an empty or unknown id, so a caller can
 	// hand over whatever it last got back without checking first.

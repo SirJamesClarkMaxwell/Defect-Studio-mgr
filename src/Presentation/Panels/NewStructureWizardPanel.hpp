@@ -133,5 +133,10 @@ namespace DefectStudio
 		bool m_LivePreview = true;
 		bool m_PreviewBasisOnly = false; // hides the cell box and grid on the preview
 		glm::ivec3 m_SupercellCounts{1, 1, 1};
+		bool m_ShowPrimitiveCell = false;
+		// Set by the centering preset buttons and by the selected prototype. Kept because the
+		// primitive cell follows from the CHOSEN centering - reading it back out of a hand-edited
+		// basis is an spglib job, not arithmetic.
+		std::optional<BravaisCenteringPreset> m_Centering;
 	};
 } // namespace DefectStudio

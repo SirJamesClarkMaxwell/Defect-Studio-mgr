@@ -9,6 +9,10 @@
 
 namespace DefectStudio
 {
+	// The 12 edges of the parallelepiped spanned by a lattice's three vectors. Public because a
+	// window can carry a second, overlaid cell (RendererStructureData::overlayCellEdges).
+	[[nodiscard]] std::vector<RendererCellEdge> BuildCellEdges(const glm::mat3 &lattice);
+
 	[[nodiscard]] RendererStructureData BuildRendererStructureData(
 		const CrystalStructure &structure,
 		const Path &sourcePath,

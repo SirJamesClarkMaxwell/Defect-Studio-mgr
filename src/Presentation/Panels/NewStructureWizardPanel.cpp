@@ -15,6 +15,7 @@
 #include "Domain/Crystal/PrototypeMatcher.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Presentation/Panels/PeriodicTableGrid.hpp"
+#include "Domain/Crystal/PrimitiveCell.hpp"
 #include "Domain/Crystal/Supercell.hpp"
 #include "Renderer/CrystalStructurePreviewWindow.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
@@ -224,6 +225,7 @@ namespace DefectStudio
 			ImGui::BeginDisabled(!supported);
 			if (ImGui::Button(spec.label))
 			{
+				m_Centering = spec.preset;
 				m_BasisRows.clear();
 				for (const glm::vec3 &fractional : GetCenteringPresetBasis(spec.preset))
 					m_BasisRows.push_back(BasisRow{"X", fractional});
@@ -417,6 +419,8 @@ namespace DefectStudio
 		mix(static_cast<float>(m_SupercellCounts.y));
 		mix(static_cast<float>(m_SupercellCounts.z));
 		mix(m_PreviewBasisOnly ? 1.0f : 0.0f);
+		mix(m_ShowPrimitiveCell ? 1.0f : 0.0f);
+		mix(static_cast<float>(m_Centering.has_value() ? static_cast<int>(*m_Centering) + 1 : 0));
 		return signature;
 	}
 
@@ -431,6 +435,11 @@ namespace DefectStudio
 		m_PreviewSignature = signature;
 
 		const CrystalStructure unitCell = buildStructure();
+
+		std::optional<glm::mat3> primitiveOverlay;
+		if (m_ShowPrimitiveCell && m_Centering.has_value())
+			primitiveOverlay = PrimitiveCellVectors(unitCell.cell.ToMatrix(), *m_Centering);
+
 		m_PreviewWindowId = ShowCrystalStructurePreview(
 			m_PreviewWindowId,
 			unitCell,
@@ -439,7 +448,8 @@ namespace DefectStudio
 			m_ElementPropertiesTable,
 			m_AtomStyleTable,
 			/*showCellBox=*/!m_PreviewBasisOnly,
-			/*showGrid=*/!m_PreviewBasisOnly);
+			/*showGrid=*/!m_PreviewBasisOnly,
+			primitiveOverlay);
 
 		const bool wantsSupercell = m_SupercellCounts.x > 1 || m_SupercellCounts.y > 1 || m_SupercellCounts.z > 1;
 		if (!wantsSupercell)
@@ -483,6 +493,22 @@ namespace DefectStudio
 		// button was the direct cause of the pile of duplicate tabs: its only difference from Create
 		// was the cell-box and grid flags.
 		ImGui::Checkbox("Basis only (no cell box)", &m_PreviewBasisOnly);
+
+		// Greyed out when the centering is unknown: for a hand-edited basis the primitive cell is
+		// something spglib has to READ BACK from the atoms, not a formula - and drawing the wrong
+		// smaller box is worse than drawing none.
+		const bool primitiveAvailable =
+			m_Centering.has_value() && *m_Centering != BravaisCenteringPreset::Primitive;
+		ImGui::BeginDisabled(!primitiveAvailable);
+		ImGui::Checkbox("Show primitive cell", &m_ShowPrimitiveCell);
+		ImGui::EndDisabled();
+		if (!primitiveAvailable && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		{
+			ImGui::SetTooltip(
+				m_Centering.has_value()
+					? "A primitive lattice already IS its primitive cell"
+					: "Pick a prototype or a centering preset first - the primitive cell follows from the centering");
+		}
 
 		ImGui::TextUnformatted("Supercell preview");
 		ImGui::SetNextItemWidth(180.0f);
@@ -618,6 +644,7 @@ namespace DefectStudio
 
 		if (const std::optional<CrystalSystem> system = parseCrystalSystem(prototype->crystalSystem))
 			m_System = *system;
+		m_Centering = ParseCenteringName(prototype->centering);
 	}
 
 	void NewStructureWizardPanel::applySelectedMaterial()
