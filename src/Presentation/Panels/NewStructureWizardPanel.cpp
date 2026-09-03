@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <optional>
+#include <utility>
 
 #include <imgui.h>
 
@@ -39,47 +41,21 @@ namespace DefectStudio
 			PresetButtonSpec{BravaisCenteringPreset::FaceCentered, "F"},
 			PresetButtonSpec{BravaisCenteringPreset::BaseCentered, "C"}};
 
-		std::vector<PrototypeDefinition> getBuiltInPrototypes()
+		// prototypes.yaml spells the system out; CrystalSystem is what BuildLatticeCell takes.
+		std::optional<CrystalSystem> parseCrystalSystem(const std::string &name)
 		{
-			return {
-				PrototypeDefinition{
-					"diamond",
-					"Diamond cubic structure",
-					"Cubic",
-					"Face-centered",
-					{SiteDefinition{"A", glm::vec3(0.0f), 8}, SiteDefinition{"B", glm::vec3(0.25f), 8}},
-					"a * sqrt(3) / 4"},
-				PrototypeDefinition{
-					"zincblende",
-					"Zincblende structure",
-					"Cubic",
-					"Face-centered",
-					{SiteDefinition{"A", glm::vec3(0.0f), 4}, SiteDefinition{"B", glm::vec3(0.25f), 4}},
-					"a * sqrt(3) / 4"},
-				PrototypeDefinition{
-					"wurtzite",
-					"Wurtzite hexagonal structure",
-					"Hexagonal",
-					"Primitive",
-					{SiteDefinition{"A", glm::vec3(0.333333f, 0.666667f, 0.0f), 2},
-					 SiteDefinition{"B", glm::vec3(0.333333f, 0.666667f, 0.5f), 2}},
-					"a / sqrt(3)"},
-				PrototypeDefinition{
-					"rocksalt",
-					"Rock salt (NaCl) structure",
-					"Cubic",
-					"Face-centered",
-					{SiteDefinition{"A", glm::vec3(0.0f), 4}, SiteDefinition{"B", glm::vec3(0.5f), 4}},
-					"a / 2"},
-				PrototypeDefinition{
-					"hBN",
-					"Hexagonal boron nitride",
-					"Hexagonal",
-					"Primitive",
-					{SiteDefinition{"A", glm::vec3(0.333333f, 0.666667f, 0.0f), 2},
-					 SiteDefinition{"B", glm::vec3(0.666667f, 0.333333f, 0.0f), 2}},
-					"a"},
-			};
+			static const std::array<std::pair<const char *, CrystalSystem>, 7> kNames = {
+				std::pair{"Cubic", CrystalSystem::Cubic},
+				std::pair{"Tetragonal", CrystalSystem::Tetragonal},
+				std::pair{"Orthorhombic", CrystalSystem::Orthorhombic},
+				std::pair{"Hexagonal", CrystalSystem::Hexagonal},
+				std::pair{"Trigonal", CrystalSystem::Trigonal},
+				std::pair{"Monoclinic", CrystalSystem::Monoclinic},
+				std::pair{"Triclinic", CrystalSystem::Triclinic}};
+			for (const auto &[label, system] : kNames)
+				if (name == label)
+					return system;
+			return std::nullopt;
 		}
 	} // namespace
 
@@ -279,7 +255,7 @@ namespace DefectStudio
 				ImGui::TableNextRow();
 
 				ImGui::TableSetColumnIndex(0);
-				if (ImGui::Button(row.species.c_str(), ImVec2(-1.0f, 0.0f)))
+				if (ImGui::Button(row.species.empty() ? "(select)" : row.species.c_str(), ImVec2(-1.0f, 0.0f)))
 					ImGui::OpenPopup("##ElementPicker");
 				drawElementPickerPopup("##ElementPicker", row.species);
 
@@ -410,8 +386,11 @@ namespace DefectStudio
 			return;
 		}
 
+		ensureCatalogLoaded();
 		pollSymmetryJob();
 
+		drawMaterialSection();
+		ImGui::Separator();
 		drawLatticeSection();
 		ImGui::Separator();
 		drawCenteringPresetRow();
@@ -430,7 +409,11 @@ namespace DefectStudio
 		ImGui::Separator();
 
 		Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
-		ImGui::BeginDisabled(domainLayer == nullptr || m_BasisRows.empty());
+		// A row with no species would reach the renderer as an atom of element "", so Create waits
+		// until every row has one rather than quietly inventing a default.
+		const bool speciesMissing = std::any_of(
+			m_BasisRows.begin(), m_BasisRows.end(), [](const BasisRow &row) { return row.species.empty(); });
+		ImGui::BeginDisabled(domainLayer == nullptr || m_BasisRows.empty() || speciesMissing);
 		if (ImGui::Button("Create"))
 		{
 			OpenCrystalStructureAsWindow(
@@ -460,105 +443,268 @@ namespace DefectStudio
 		ImGui::EndDisabled();
 		if (domainLayer == nullptr)
 			ImGui::TextDisabled("DomainLayer unavailable.");
+		else if (speciesMissing)
+			ImGui::TextDisabled("Every basis row needs a species before the structure can be created.");
 
 		ImGui::End();
 		SetVisible(windowOpen);
 	}
 
-	void NewStructureWizardPanel::drawFormulaAndMappingSection()
+	void NewStructureWizardPanel::ensureCatalogLoaded()
 	{
-		const auto prototypes = getBuiltInPrototypes();
+		if (m_CatalogLoaded)
+			return;
+		m_CatalogLoaded = true;
 
-		ImGui::TextUnformatted("Prototype:");
-		ImGui::SetNextItemWidth(-1.0f);
-		if (ImGui::BeginCombo("##prototype", prototypes[m_SelectedPrototypeIndex].name.c_str()))
+		Result<PrototypesAndMaterials> loaded = PrototypeLoader::LoadBuiltIn();
+		if (!loaded)
 		{
-			for (size_t i = 0; i < prototypes.size(); ++i)
+			m_CatalogError = loaded.Error().userMessage;
+			return;
+		}
+		m_Catalog = std::move(loaded).Value();
+		if (!m_Catalog.prototypes.empty())
+			m_SelectedPrototypeIndex = 0;
+		m_SiteSpecies.clear();
+	}
+
+	const PrototypeDefinition *NewStructureWizardPanel::selectedPrototype() const
+	{
+		if (m_SelectedPrototypeIndex < 0 || m_SelectedPrototypeIndex >= static_cast<int>(m_Catalog.prototypes.size()))
+			return nullptr;
+		return &m_Catalog.prototypes[static_cast<std::size_t>(m_SelectedPrototypeIndex)];
+	}
+
+	void NewStructureWizardPanel::applyPrototypeToBasis()
+	{
+		const PrototypeDefinition *prototype = selectedPrototype();
+		if (prototype == nullptr)
+			return;
+
+		m_SiteSpecies.resize(prototype->sites.size());
+
+		m_BasisRows.clear();
+		for (std::size_t siteIndex = 0; siteIndex < prototype->sites.size(); ++siteIndex)
+		{
+			const SiteDefinition &site = prototype->sites[siteIndex];
+			for (const glm::vec3 &fractional : site.positions)
+				m_BasisRows.push_back(BasisRow{m_SiteSpecies[siteIndex], fractional});
+		}
+
+		if (const std::optional<CrystalSystem> system = parseCrystalSystem(prototype->crystalSystem))
+			m_System = *system;
+	}
+
+	void NewStructureWizardPanel::applySelectedMaterial()
+	{
+		if (m_SelectedMaterialIndex < 0)
+			return;
+		const MaterialDefinition &material = m_Catalog.materials[static_cast<std::size_t>(m_SelectedMaterialIndex)];
+
+		const auto polytypeIt = material.polytypes.find(m_SelectedPolytype);
+		if (polytypeIt == material.polytypes.end())
+			return;
+
+		const auto prototypeIt = std::find_if(
+			m_Catalog.prototypes.begin(),
+			m_Catalog.prototypes.end(),
+			[&](const PrototypeDefinition &prototype) { return prototype.name == polytypeIt->second; });
+		if (prototypeIt == m_Catalog.prototypes.end())
+		{
+			m_CatalogError = "materials.yaml references unknown prototype: " + polytypeIt->second;
+			return;
+		}
+		m_SelectedPrototypeIndex = static_cast<int>(std::distance(m_Catalog.prototypes.begin(), prototypeIt));
+
+		// The lattice constant is the whole reason to pick a material rather than a bare prototype.
+		// Without it the wizard built every structure at the LatticeParameters default of a = 1 A,
+		// which is below a single covalent radius - hence the ball of overlapping spheres.
+		const auto constantsIt = material.constants.find(m_SelectedFunctional);
+		if (constantsIt != material.constants.end())
+		{
+			if (constantsIt->second.a > 0.0f)
+				m_Params.a = constantsIt->second.a;
+			if (constantsIt->second.c > 0.0f)
+				m_Params.c = constantsIt->second.c;
+		}
+
+		const auto mappingIt = material.defaultSiteMapping.find(m_SelectedPolytype);
+		m_SiteSpecies = mappingIt != material.defaultSiteMapping.end()
+			? mappingIt->second
+			: std::vector<std::string>(prototypeIt->sites.size());
+		m_SiteSpecies.resize(prototypeIt->sites.size());
+
+		std::snprintf(m_StructureNameBuffer.data(), m_StructureNameBuffer.size(), "%s", material.name.c_str());
+		m_FormulaBuffer[0] = '\0';
+		applyPrototypeToBasis();
+	}
+
+	void NewStructureWizardPanel::drawMaterialSection()
+	{
+		if (!m_CatalogError.empty())
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_CatalogError.c_str());
+		if (m_Catalog.materials.empty())
+			return;
+
+		ImGui::TextUnformatted("Material:");
+		const char *materialLabel = m_SelectedMaterialIndex >= 0
+			? m_Catalog.materials[static_cast<std::size_t>(m_SelectedMaterialIndex)].name.c_str()
+			: "(none)";
+		ImGui::SetNextItemWidth(-1.0f);
+		if (ImGui::BeginCombo("##material", materialLabel))
+		{
+			for (std::size_t i = 0; i < m_Catalog.materials.size(); ++i)
 			{
-				const bool isSelected = m_SelectedPrototypeIndex == static_cast<int>(i);
-				if (ImGui::Selectable(prototypes[i].name.c_str(), isSelected))
+				const MaterialDefinition &material = m_Catalog.materials[i];
+				if (ImGui::Selectable(material.name.c_str(), m_SelectedMaterialIndex == static_cast<int>(i)))
 				{
-					m_SelectedPrototypeIndex = static_cast<int>(i);
-					// Clear site buffers when prototype changes
-					for (auto &buf : m_SiteSpeciesBuffers)
-						buf[0] = '\0';
+					m_SelectedMaterialIndex = static_cast<int>(i);
+					m_SelectedPolytype = material.polytypes.empty() ? std::string{} : material.polytypes.begin()->first;
+					applySelectedMaterial();
 				}
-				if (isSelected)
-					ImGui::SetItemDefaultFocus();
 			}
 			ImGui::EndCombo();
 		}
 
+		if (m_SelectedMaterialIndex < 0)
+			return;
+		const MaterialDefinition &material = m_Catalog.materials[static_cast<std::size_t>(m_SelectedMaterialIndex)];
+
+		ImGui::SetNextItemWidth(140.0f);
+		if (ImGui::BeginCombo("Polytype", m_SelectedPolytype.c_str()))
+		{
+			for (const auto &polytypeEntry : material.polytypes)
+			{
+				if (ImGui::Selectable(polytypeEntry.first.c_str(), polytypeEntry.first == m_SelectedPolytype))
+				{
+					m_SelectedPolytype = polytypeEntry.first;
+					applySelectedMaterial();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(140.0f);
+		if (ImGui::BeginCombo("Functional", m_SelectedFunctional.c_str()))
+		{
+			for (const auto &constantsEntry : material.constants)
+			{
+				if (ImGui::Selectable(constantsEntry.first.c_str(), constantsEntry.first == m_SelectedFunctional))
+				{
+					m_SelectedFunctional = constantsEntry.first;
+					applySelectedMaterial();
+				}
+			}
+			ImGui::EndCombo();
+		}
+	}
+
+	void NewStructureWizardPanel::drawFormulaAndMappingSection()
+	{
+		if (m_Catalog.prototypes.empty())
+			return;
+
+		ImGui::TextUnformatted("Prototype:");
+		const PrototypeDefinition *prototype = selectedPrototype();
+		ImGui::SetNextItemWidth(-1.0f);
+		if (ImGui::BeginCombo("##prototype", prototype != nullptr ? prototype->name.c_str() : "(none)"))
+		{
+			for (std::size_t i = 0; i < m_Catalog.prototypes.size(); ++i)
+			{
+				if (ImGui::Selectable(m_Catalog.prototypes[i].name.c_str(), m_SelectedPrototypeIndex == static_cast<int>(i)))
+				{
+					m_SelectedPrototypeIndex = static_cast<int>(i);
+					m_SelectedMaterialIndex = -1; // a bare prototype carries no chemistry
+					m_SiteSpecies.assign(m_Catalog.prototypes[i].sites.size(), std::string{});
+					applyPrototypeToBasis();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		prototype = selectedPrototype();
+		if (prototype == nullptr)
+			return;
+		if (!prototype->description.empty())
+			ImGui::TextDisabled("%s", prototype->description.c_str());
+
 		ImGui::TextUnformatted("Chemical Formula:");
 		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::InputText("##formula", m_FormulaBuffer.data(), m_FormulaBuffer.size());
-
-		if (m_FormulaBuffer[0] == '\0')
-			return; // Empty formula
-
-		std::string formulaStr(m_FormulaBuffer.data());
-		const auto elements = FormulaParser::Parse(formulaStr);
-
-		if (elements.empty())
+		if (ImGui::InputText("##formula", m_FormulaBuffer.data(), m_FormulaBuffer.size()))
 		{
-			ImGui::TextDisabled("(empty formula)");
-			return;
-		}
-
-		const PrototypeDefinition &selectedProto = prototypes[m_SelectedPrototypeIndex];
-
-		// Match formula to prototype sites
-		const auto matching = PrototypeMatcher::MatchFormulaToPrototype(elements, selectedProto);
-		if (!matching)
-		{
-			ImGui::TextDisabled("(formula count does not match prototype)");
-			return;
-		}
-
-		const auto &assignment = *matching;
-
-		// Initialize site species buffers from matcher
-		static bool bufferInitialized = false;
-		if (!bufferInitialized && !assignment.species.empty())
-		{
-			for (size_t i = 0; i < assignment.species.size() && i < m_SiteSpeciesBuffers.size(); ++i)
+			// Re-matched on every edit. This used to sit behind a function-local `static bool`,
+			// which is per-process, not per-panel or per-formula: the mapping table was filled once
+			// for the first formula the app ever saw and never updated again.
+			const std::vector<Element> elements = FormulaParser::Parse(m_FormulaBuffer.data());
+			if (const std::optional<SiteAssignment> matched =
+					PrototypeMatcher::MatchFormulaToPrototype(elements, *prototype))
 			{
-				std::snprintf(m_SiteSpeciesBuffers[i].data(), m_SiteSpeciesBuffers[i].size(), "%s",
-					assignment.species[i].c_str());
+				m_SiteSpecies = matched->species;
+				applyPrototypeToBasis();
 			}
-			bufferInitialized = true;
 		}
 
-		// Editable site mapping table
+		if (m_FormulaBuffer[0] != '\0')
+		{
+			const std::vector<Element> elements = FormulaParser::Parse(m_FormulaBuffer.data());
+			const std::optional<SiteAssignment> matched =
+				PrototypeMatcher::MatchFormulaToPrototype(elements, *prototype);
+			if (!matched)
+			{
+				int siteTotal = 0;
+				for (const SiteDefinition &site : prototype->sites)
+					siteTotal += site.Multiplicity();
+				ImGui::TextColored(
+					ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+					"Formula does not divide into the %d sites of %s - set the mapping below instead.",
+					siteTotal,
+					prototype->name.c_str());
+			}
+			else if (matched->isAmbiguous)
+			{
+				ImGui::TextColored(
+					ImVec4(1.0f, 1.0f, 0.0f, 1.0f),
+					"Every site has the same multiplicity, so formula order decided the mapping - check it.");
+			}
+		}
+
+		m_SiteSpecies.resize(prototype->sites.size());
+
 		ImGui::TextUnformatted("Site Mapping:");
 		if (ImGui::BeginTable("site_mapping", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
 		{
-			ImGui::TableSetupColumn("Site", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Site", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+			ImGui::TableSetupColumn("Atoms", ImGuiTableColumnFlags_WidthFixed, 60.0f);
 			ImGui::TableSetupColumn("Species", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableHeadersRow();
 
-			for (size_t i = 0; i < selectedProto.sites.size(); ++i)
+			for (std::size_t i = 0; i < prototype->sites.size(); ++i)
 			{
 				ImGui::TableNextRow();
+				ImGui::PushID(static_cast<int>(i));
 
 				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("%zu", i + 1);
+				ImGui::TextUnformatted(prototype->sites[i].name.c_str());
 
 				ImGui::TableSetColumnIndex(1);
-				ImGui::TextUnformatted(selectedProto.sites[i].name.c_str());
+				ImGui::Text("%d", prototype->sites[i].Multiplicity());
 
 				ImGui::TableSetColumnIndex(2);
-				ImGui::SetNextItemWidth(-1.0f);
-				std::string label = "##site_species_" + std::to_string(i);
-				ImGui::InputText(label.c_str(), m_SiteSpeciesBuffers[i].data(),
-					m_SiteSpeciesBuffers[i].size(), ImGuiInputTextFlags_EnterReturnsTrue);
-			}
+				const bool speciesEmpty = m_SiteSpecies[i].empty();
+				if (ImGui::Button(speciesEmpty ? "(select)" : m_SiteSpecies[i].c_str(), ImVec2(-1.0f, 0.0f)))
+					ImGui::OpenPopup("##SiteElementPicker");
+				std::string picked = m_SiteSpecies[i];
+				drawElementPickerPopup("##SiteElementPicker", picked);
+				if (picked != m_SiteSpecies[i])
+				{
+					m_SiteSpecies[i] = picked;
+					applyPrototypeToBasis();
+				}
 
+				ImGui::PopID();
+			}
 			ImGui::EndTable();
 		}
-
-		if (assignment.isAmbiguous)
-			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Ambiguous mapping - please resolve above");
 	}
 } // namespace DefectStudio

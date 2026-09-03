@@ -6,6 +6,8 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "Core/Utils/Path.hpp"
+
 namespace DefectStudio
 {
 	static PrototypeDefinition parsePrototype(const YAML::Node &node)
@@ -23,11 +25,13 @@ namespace DefectStudio
 			{
 				SiteDefinition s;
 				s.name = site["name"].as<std::string>();
-				auto frac = site["fractional"].as<std::vector<float>>();
-				if (frac.size() >= 3)
-					s.fractional = glm::vec3(frac[0], frac[1], frac[2]);
-				s.multiplicity = site["multiplicity"].as<int>(1);
-				proto.sites.push_back(s);
+				for (const auto &position : site["positions"])
+				{
+					const auto fractional = position.as<std::vector<float>>();
+					if (fractional.size() >= 3)
+						s.positions.emplace_back(fractional[0], fractional[1], fractional[2]);
+				}
+				proto.sites.push_back(std::move(s));
 			}
 		}
 
@@ -75,10 +79,19 @@ namespace DefectStudio
 
 	Result<PrototypesAndMaterials> PrototypeLoader::LoadBuiltIn()
 	{
-		// Load from installed prototypes.yaml and materials.yaml
-		// For now, return empty to compile
-		PrototypesAndMaterials data;
-		return data;
+		const Path dataDirectory = Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "data");
+
+		Result<PrototypesAndMaterials> prototypes = LoadFromFile((dataDirectory / "prototypes.yaml").String());
+		if (!prototypes)
+			return prototypes.Error();
+
+		// Materials live in their own file because they are user-editable while prototypes are not;
+		// a missing materials.yaml leaves the prototype list usable rather than failing the load.
+		Result<PrototypesAndMaterials> materials = LoadFromFile((dataDirectory / "materials.yaml").String());
+		if (materials)
+			prototypes->materials = std::move(materials->materials);
+
+		return prototypes;
 	}
 
 	Result<PrototypesAndMaterials> PrototypeLoader::LoadFromFile(const std::string &path)

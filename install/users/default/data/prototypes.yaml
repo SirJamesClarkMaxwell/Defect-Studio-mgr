@@ -1,3 +1,9 @@
+# Structural prototypes: pure topology, no chemistry. Each site lists EVERY position it occupies in
+# the CONVENTIONAL cell, in fractional coordinates - not one representative position plus a
+# multiplicity. Expanding a representative position would mean re-deriving the centering
+# translations (and, for wurtzite, the 6_3 screw axis) at load time, which is a symmetry engine this
+# project deliberately does not have: spglib is on the other side of a Python subprocess. Listing
+# the positions is a handful of lines per prototype and cannot silently produce a wrong basis.
 prototypes:
   - name: diamond
     description: "Diamond cubic structure"
@@ -6,11 +12,17 @@ prototypes:
     bond_length_formula: "a * sqrt(3) / 4"
     sites:
       - name: "A"
-        fractional: [0.0, 0.0, 0.0]
-        multiplicity: 8
+        positions:
+          - [0.00, 0.00, 0.00]
+          - [0.00, 0.50, 0.50]
+          - [0.50, 0.00, 0.50]
+          - [0.50, 0.50, 0.00]
       - name: "B"
-        fractional: [0.25, 0.25, 0.25]
-        multiplicity: 8
+        positions:
+          - [0.25, 0.25, 0.25]
+          - [0.25, 0.75, 0.75]
+          - [0.75, 0.25, 0.75]
+          - [0.75, 0.75, 0.25]
 
   - name: zincblende
     description: "Zincblende (sphalerite) structure"
@@ -19,24 +31,17 @@ prototypes:
     bond_length_formula: "a * sqrt(3) / 4"
     sites:
       - name: "A"
-        fractional: [0.0, 0.0, 0.0]
-        multiplicity: 4
+        positions:
+          - [0.00, 0.00, 0.00]
+          - [0.00, 0.50, 0.50]
+          - [0.50, 0.00, 0.50]
+          - [0.50, 0.50, 0.00]
       - name: "B"
-        fractional: [0.25, 0.25, 0.25]
-        multiplicity: 4
-
-  - name: wurtzite
-    description: "Wurtzite hexagonal structure"
-    crystal_system: "Hexagonal"
-    centering: "Primitive"
-    bond_length_formula: "a / sqrt(3)"
-    sites:
-      - name: "A"
-        fractional: [0.333333, 0.666667, 0.0]
-        multiplicity: 2
-      - name: "B"
-        fractional: [0.333333, 0.666667, 0.5]
-        multiplicity: 2
+        positions:
+          - [0.25, 0.25, 0.25]
+          - [0.25, 0.75, 0.75]
+          - [0.75, 0.25, 0.75]
+          - [0.75, 0.75, 0.25]
 
   - name: rocksalt
     description: "Rock salt (NaCl) structure"
@@ -45,21 +50,46 @@ prototypes:
     bond_length_formula: "a / 2"
     sites:
       - name: "A"
-        fractional: [0.0, 0.0, 0.0]
-        multiplicity: 4
+        positions:
+          - [0.00, 0.00, 0.00]
+          - [0.00, 0.50, 0.50]
+          - [0.50, 0.00, 0.50]
+          - [0.50, 0.50, 0.00]
       - name: "B"
-        fractional: [0.5, 0.5, 0.5]
-        multiplicity: 4
+        positions:
+          - [0.50, 0.50, 0.50]
+          - [0.50, 0.00, 0.00]
+          - [0.00, 0.50, 0.00]
+          - [0.00, 0.00, 0.50]
+
+  # ponytail: the internal parameter u is baked at its ideal 3/8. materials.yaml already carries a
+  # per-functional `u`, so the ceiling is real for a relaxed wurtzite - substituting it means the
+  # loader has to know which coordinate of which site u drives, which is per-prototype metadata this
+  # schema does not have yet. Add a `u_axis` field on the site when the first material needs it.
+  - name: wurtzite
+    description: "Wurtzite hexagonal structure (ideal u = 3/8)"
+    crystal_system: "Hexagonal"
+    centering: "Primitive"
+    bond_length_formula: "a / sqrt(3)"
+    sites:
+      - name: "A"
+        positions:
+          - [0.333333, 0.666667, 0.000]
+          - [0.666667, 0.333333, 0.500]
+      - name: "B"
+        positions:
+          - [0.333333, 0.666667, 0.375]
+          - [0.666667, 0.333333, 0.875]
 
   - name: hBN
-    description: "Hexagonal boron nitride"
+    description: "Hexagonal boron nitride, single layer per cell"
     crystal_system: "Hexagonal"
     centering: "Primitive"
     bond_length_formula: "a"
     sites:
       - name: "A"
-        fractional: [0.333333, 0.666667, 0.0]
-        multiplicity: 2
+        positions:
+          - [0.333333, 0.666667, 0.0]
       - name: "B"
-        fractional: [0.666667, 0.333333, 0.0]
-        multiplicity: 2
+        positions:
+          - [0.666667, 0.333333, 0.0]

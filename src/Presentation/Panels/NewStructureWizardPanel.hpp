@@ -13,6 +13,7 @@
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
 #include "Domain/Crystal/PrototypeDefinition.hpp"
+#include "Domain/Crystal/PrototypeLoader.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -51,7 +52,10 @@ namespace DefectStudio
 	private:
 		struct BasisRow
 		{
-			std::string species = "X";
+			// Empty, not "X": a default species silently puts an element nobody asked for into the
+			// structure, and "X" reads as a delete affordance. Create stays disabled until every
+			// row has one.
+			std::string species;
 			glm::vec3 fractional{0.0f};
 		};
 
@@ -70,6 +74,15 @@ namespace DefectStudio
 		void dispatchSymmetryCheck();
 		void pollSymmetryJob();
 		void drawFormulaAndMappingSection();
+		void drawMaterialSection();
+		void applySelectedMaterial();
+		void ensureCatalogLoaded();
+		// Writes the selected prototype's conventional-cell basis into m_BasisRows, one row per
+		// listed position, taking each row's species from the site mapping. Called on the events
+		// that can change the answer (material applied, prototype switched, mapping edited) rather
+		// than every frame, so it never fights a hand-edited basis table.
+		void applyPrototypeToBasis();
+		[[nodiscard]] const PrototypeDefinition *selectedPrototype() const;
 
 		RendererLayer &m_RendererLayer;
 		WeakRef<DomainLayer> m_DomainLayer;
@@ -88,8 +101,19 @@ namespace DefectStudio
 		std::string m_SymmetryError;
 
 		std::array<char, 128> m_FormulaBuffer{}; // e.g., "GaAs", "Al2O3"
-		std::array<std::array<char, 16>, 8> m_SiteSpeciesBuffers{}; // up to 8 sites, 16 chars each
-		int m_SelectedPrototypeIndex = 0; // index into v1 prototype list
+		std::vector<std::string> m_SiteSpecies; // one per site of the selected prototype
+		int m_SelectedPrototypeIndex = -1; // index into m_Catalog.prototypes, -1 = none
+
+		// prototypes.yaml + materials.yaml, loaded once on first render. Previously the panel
+		// carried its own hardcoded copy of the prototype list while the loader returned an empty
+		// vector, so neither the YAML files nor the lattice constants in them were ever read.
+		PrototypesAndMaterials m_Catalog;
+		bool m_CatalogLoaded = false;
+		std::string m_CatalogError;
+
+		int m_SelectedMaterialIndex = -1; // index into m_Catalog.materials, -1 = none
+		std::string m_SelectedPolytype;
+		std::string m_SelectedFunctional = "exp";
 
 		bool m_ExportPotcar = false; // POTCAR export flag (disabled if pseudodir not configured)
 	};

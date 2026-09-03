@@ -11,8 +11,14 @@ namespace DefectStudio
 	struct SiteDefinition
 	{
 		std::string name; // "A", "B", etc
-		glm::vec3 fractional; // fractional coordinates
-		int multiplicity = 1; // count of equivalent sites
+		// Every position this site occupies in the CONVENTIONAL cell, fractional. Listed in full
+		// rather than derived from one representative position plus the centering, because
+		// deriving it is a symmetry expansion this project has no local engine for (spglib lives
+		// behind a Python subprocess) - and getting it wrong yields a plausible-looking, wrong
+		// structure. Multiplicity is simply positions.size().
+		std::vector<glm::vec3> positions;
+
+		[[nodiscard]] int Multiplicity() const { return static_cast<int>(positions.size()); }
 	};
 
 	struct PrototypeDefinition
