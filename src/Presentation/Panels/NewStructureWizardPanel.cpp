@@ -15,6 +15,8 @@
 #include "Domain/Crystal/PrototypeMatcher.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Presentation/Panels/PeriodicTableGrid.hpp"
+#include "Domain/Crystal/Supercell.hpp"
+#include "Renderer/CrystalStructurePreviewWindow.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
 #include "ScientificRuntime/Python/GetSymmetryInfoJob.hpp"
 
@@ -154,47 +156,60 @@ namespace DefectStudio
 		const LatticeFieldConstraints constraints = GetFieldConstraints(m_System);
 		const LatticeParameters effective = computeEffectiveParameters();
 
-		ImGui::SetNextItemWidth(120.0f);
-		ImGui::DragFloat("a", &m_Params.a, 0.01f, kMinLength, 1000.0f, "%.4f A");
-		m_Params.a = std::max(m_Params.a, kMinLength);
+		// Lengths and angles as two tables side by side, each with the label in a fixed left column.
+		// One row of six fields wraps into nonsense the moment the panel is docked narrow, and the
+		// labels ImGui puts to the RIGHT of a DragFloat read as if they belong to the next field.
+		const float labelWidth = ImGui::CalcTextSize("gamma").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+		const auto drawParameterRow =
+			[&](const char *label, float *value, bool locked, float lockedValue, float step, float minimum, float maximum, const char *format)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted(label);
+			ImGui::TableSetColumnIndex(1);
+			ImGui::PushID(label);
+			ImGui::BeginDisabled(locked);
+			float shown = locked ? lockedValue : *value;
+			ImGui::SetNextItemWidth(-1.0f);
+			if (ImGui::DragFloat("##value", &shown, step, minimum, maximum, format) && !locked)
+				*value = std::clamp(shown, minimum, maximum);
+			ImGui::EndDisabled();
+			ImGui::PopID();
+			if (locked && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Derived from the free parameters by the crystal system");
+		};
 
-		ImGui::BeginDisabled(constraints.bLocked);
-		ImGui::SetNextItemWidth(120.0f);
-		float bValue = constraints.bLocked ? effective.b : m_Params.b;
-		if (ImGui::DragFloat("b", &bValue, 0.01f, kMinLength, 1000.0f, "%.4f A") && !constraints.bLocked)
-			m_Params.b = std::max(bValue, kMinLength);
-		ImGui::EndDisabled();
+		constexpr ImGuiTableFlags kParameterTableFlags = ImGuiTableFlags_SizingStretchProp;
+		const float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
 
-		ImGui::BeginDisabled(constraints.cLocked);
-		ImGui::SetNextItemWidth(120.0f);
-		float cValue = constraints.cLocked ? effective.c : m_Params.c;
-		if (ImGui::DragFloat("c", &cValue, 0.01f, kMinLength, 1000.0f, "%.4f A") && !constraints.cLocked)
-			m_Params.c = std::max(cValue, kMinLength);
-		ImGui::EndDisabled();
+		if (ImGui::BeginTable("##lattice_lengths", 2, kParameterTableFlags, ImVec2(halfWidth, 0.0f)))
+		{
+			ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthFixed, labelWidth);
+			ImGui::TableSetupColumn("##value", ImGuiTableColumnFlags_WidthStretch);
+			drawParameterRow("a", &m_Params.a, false, effective.a, 0.01f, kMinLength, 1000.0f, "%.4f A");
+			drawParameterRow("b", &m_Params.b, constraints.bLocked, effective.b, 0.01f, kMinLength, 1000.0f, "%.4f A");
+			drawParameterRow("c", &m_Params.c, constraints.cLocked, effective.c, 0.01f, kMinLength, 1000.0f, "%.4f A");
+			ImGui::EndTable();
+		}
 
-		ImGui::BeginDisabled(constraints.alphaLocked);
-		ImGui::SetNextItemWidth(120.0f);
-		float alphaValue = constraints.alphaLocked ? effective.alphaDegrees : m_Params.alphaDegrees;
-		if (ImGui::DragFloat("alpha", &alphaValue, 0.1f, kMinAngleDegrees, kMaxAngleDegrees, "%.2f deg") &&
-			!constraints.alphaLocked)
-			m_Params.alphaDegrees = std::clamp(alphaValue, kMinAngleDegrees, kMaxAngleDegrees);
-		ImGui::EndDisabled();
+		ImGui::SameLine();
 
-		ImGui::BeginDisabled(constraints.betaLocked);
-		ImGui::SetNextItemWidth(120.0f);
-		float betaValue = constraints.betaLocked ? effective.betaDegrees : m_Params.betaDegrees;
-		if (ImGui::DragFloat("beta", &betaValue, 0.1f, kMinAngleDegrees, kMaxAngleDegrees, "%.2f deg") &&
-			!constraints.betaLocked)
-			m_Params.betaDegrees = std::clamp(betaValue, kMinAngleDegrees, kMaxAngleDegrees);
-		ImGui::EndDisabled();
-
-		ImGui::BeginDisabled(constraints.gammaLocked);
-		ImGui::SetNextItemWidth(120.0f);
-		float gammaValue = constraints.gammaLocked ? effective.gammaDegrees : m_Params.gammaDegrees;
-		if (ImGui::DragFloat("gamma", &gammaValue, 0.1f, kMinAngleDegrees, kMaxAngleDegrees, "%.2f deg") &&
-			!constraints.gammaLocked)
-			m_Params.gammaDegrees = std::clamp(gammaValue, kMinAngleDegrees, kMaxAngleDegrees);
-		ImGui::EndDisabled();
+		if (ImGui::BeginTable("##lattice_angles", 2, kParameterTableFlags, ImVec2(halfWidth, 0.0f)))
+		{
+			ImGui::TableSetupColumn("##label", ImGuiTableColumnFlags_WidthFixed, labelWidth);
+			ImGui::TableSetupColumn("##value", ImGuiTableColumnFlags_WidthStretch);
+			drawParameterRow(
+				"alpha", &m_Params.alphaDegrees, constraints.alphaLocked, effective.alphaDegrees,
+				0.1f, kMinAngleDegrees, kMaxAngleDegrees, "%.2f deg");
+			drawParameterRow(
+				"beta", &m_Params.betaDegrees, constraints.betaLocked, effective.betaDegrees,
+				0.1f, kMinAngleDegrees, kMaxAngleDegrees, "%.2f deg");
+			drawParameterRow(
+				"gamma", &m_Params.gammaDegrees, constraints.gammaLocked, effective.gammaDegrees,
+				0.1f, kMinAngleDegrees, kMaxAngleDegrees, "%.2f deg");
+			ImGui::EndTable();
+		}
 	}
 
 	void NewStructureWizardPanel::drawCenteringPresetRow()
@@ -236,16 +251,21 @@ namespace DefectStudio
 
 	void NewStructureWizardPanel::drawBasisTable()
 	{
-		ImGui::TextUnformatted("Atomic basis (fractional coordinates):");
+		ImGui::TextUnformatted("Atomic basis");
+		ImGui::SameLine();
+		ImGui::TextDisabled("(fractional, 0 to 1 inside the cell)");
 		int rowToRemove = -1;
 		if (ImGui::BeginTable(
 				"##BasisRows", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
-			ImGui::TableSetupColumn("Element", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-			ImGui::TableSetupColumn("x");
-			ImGui::TableSetupColumn("y");
-			ImGui::TableSetupColumn("z");
-			ImGui::TableSetupColumn("##Remove", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+			// One shared width for x/y/z: stretch columns give three different widths for three
+			// fields that hold the same kind of number, which reads as if they were different fields.
+			const float coordinateWidth = ImGui::CalcTextSize("-0.00000").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+			ImGui::TableSetupColumn("Element", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("(select)").x + 16.0f);
+			ImGui::TableSetupColumn("x", ImGuiTableColumnFlags_WidthFixed, coordinateWidth);
+			ImGui::TableSetupColumn("y", ImGuiTableColumnFlags_WidthFixed, coordinateWidth);
+			ImGui::TableSetupColumn("z", ImGuiTableColumnFlags_WidthFixed, coordinateWidth);
+			ImGui::TableSetupColumn("##Remove", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize("Remove").x + 16.0f);
 			ImGui::TableHeadersRow();
 
 			for (std::size_t i = 0; i < m_BasisRows.size(); ++i)
@@ -261,15 +281,15 @@ namespace DefectStudio
 
 				ImGui::TableSetColumnIndex(1);
 				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::DragFloat("##X", &row.fractional.x, 0.01f, -10.0f, 10.0f, "%.4f");
+				ImGui::DragFloat("##X", &row.fractional.x, 0.005f, -1.0f, 2.0f, "%.4f");
 
 				ImGui::TableSetColumnIndex(2);
 				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::DragFloat("##Y", &row.fractional.y, 0.01f, -10.0f, 10.0f, "%.4f");
+				ImGui::DragFloat("##Y", &row.fractional.y, 0.005f, -1.0f, 2.0f, "%.4f");
 
 				ImGui::TableSetColumnIndex(3);
 				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::DragFloat("##Z", &row.fractional.z, 0.01f, -10.0f, 10.0f, "%.4f");
+				ImGui::DragFloat("##Z", &row.fractional.z, 0.005f, -1.0f, 2.0f, "%.4f");
 
 				ImGui::TableSetColumnIndex(4);
 				if (ImGui::Button("Remove"))
@@ -372,6 +392,111 @@ namespace DefectStudio
 		}
 	}
 
+	std::size_t NewStructureWizardPanel::computePreviewSignature() const
+	{
+		// Hashing the inputs beats a hand-maintained dirty flag on each widget: a field added later
+		// cannot be forgotten here, it simply changes the hash.
+		std::size_t signature = std::hash<int>{}(static_cast<int>(m_System));
+		const auto mix = [&signature](float value) {
+			signature ^= std::hash<float>{}(value) + 0x9e3779b97f4a7c15ULL + (signature << 6) + (signature >> 2);
+		};
+		mix(m_Params.a);
+		mix(m_Params.b);
+		mix(m_Params.c);
+		mix(m_Params.alphaDegrees);
+		mix(m_Params.betaDegrees);
+		mix(m_Params.gammaDegrees);
+		for (const BasisRow &row : m_BasisRows)
+		{
+			signature ^= std::hash<std::string>{}(row.species) + 0x9e3779b97f4a7c15ULL + (signature << 6) + (signature >> 2);
+			mix(row.fractional.x);
+			mix(row.fractional.y);
+			mix(row.fractional.z);
+		}
+		mix(static_cast<float>(m_SupercellCounts.x));
+		mix(static_cast<float>(m_SupercellCounts.y));
+		mix(static_cast<float>(m_SupercellCounts.z));
+		mix(m_PreviewBasisOnly ? 1.0f : 0.0f);
+		return signature;
+	}
+
+	void NewStructureWizardPanel::refreshPreview()
+	{
+		if (!m_LivePreview || m_BasisRows.empty())
+			return;
+
+		const std::size_t signature = computePreviewSignature();
+		if (signature == m_PreviewSignature && !m_PreviewWindowId.empty())
+			return;
+		m_PreviewSignature = signature;
+
+		const CrystalStructure unitCell = buildStructure();
+		m_PreviewWindowId = ShowCrystalStructurePreview(
+			m_PreviewWindowId,
+			unitCell,
+			std::string(m_StructureNameBuffer.data()) + " (preview)",
+			m_RendererLayer,
+			m_ElementPropertiesTable,
+			m_AtomStyleTable,
+			/*showCellBox=*/!m_PreviewBasisOnly,
+			/*showGrid=*/!m_PreviewBasisOnly);
+
+		const bool wantsSupercell = m_SupercellCounts.x > 1 || m_SupercellCounts.y > 1 || m_SupercellCounts.z > 1;
+		if (!wantsSupercell)
+		{
+			CloseCrystalStructurePreview(m_SupercellPreviewWindowId, m_RendererLayer);
+			m_SupercellPreviewWindowId.clear();
+			return;
+		}
+
+		Result<CrystalStructure> supercell = BuildSupercell(
+			unitCell, SupercellMatrix::Diagonal(m_SupercellCounts.x, m_SupercellCounts.y, m_SupercellCounts.z));
+		if (!supercell)
+			return;
+
+		m_SupercellPreviewWindowId = ShowCrystalStructurePreview(
+			m_SupercellPreviewWindowId,
+			std::move(supercell).Value(),
+			std::string(m_StructureNameBuffer.data()) + " (supercell preview)",
+			m_RendererLayer,
+			m_ElementPropertiesTable,
+			m_AtomStyleTable,
+			/*showCellBox=*/!m_PreviewBasisOnly,
+			/*showGrid=*/!m_PreviewBasisOnly);
+	}
+
+	void NewStructureWizardPanel::closePreviews()
+	{
+		CloseCrystalStructurePreview(m_PreviewWindowId, m_RendererLayer);
+		CloseCrystalStructurePreview(m_SupercellPreviewWindowId, m_RendererLayer);
+		m_PreviewWindowId.clear();
+		m_SupercellPreviewWindowId.clear();
+		m_PreviewSignature = 0;
+	}
+
+	void NewStructureWizardPanel::drawPreviewControls()
+	{
+		if (ImGui::Checkbox("Live preview", &m_LivePreview) && !m_LivePreview)
+			closePreviews();
+		ImGui::SameLine();
+		// A checkbox on the one preview window, not a second button opening a second window. That
+		// button was the direct cause of the pile of duplicate tabs: its only difference from Create
+		// was the cell-box and grid flags.
+		ImGui::Checkbox("Basis only (no cell box)", &m_PreviewBasisOnly);
+
+		ImGui::TextUnformatted("Supercell preview");
+		ImGui::SetNextItemWidth(180.0f);
+		if (ImGui::InputInt3("n x k x l##supercell_counts", &m_SupercellCounts.x))
+			m_SupercellCounts = glm::max(m_SupercellCounts, glm::ivec3(1));
+
+		const int cells = m_SupercellCounts.x * m_SupercellCounts.y * m_SupercellCounts.z;
+		if (cells > 1)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("%d atoms in a second window", static_cast<int>(m_BasisRows.size()) * cells);
+		}
+	}
+
 	void NewStructureWizardPanel::Render()
 	{
 		if (!IsVisible())
@@ -402,6 +527,9 @@ namespace DefectStudio
 		drawSymmetrySection();
 		ImGui::Separator();
 
+		drawPreviewControls();
+		ImGui::Separator();
+
 		ImGui::Checkbox("Export POTCAR##potcar_export", &m_ExportPotcar);
 		ImGui::SameLine();
 		ImGui::TextDisabled("(requires pseudopotential directory configured)");
@@ -426,19 +554,10 @@ namespace DefectStudio
 				/*showCellBox=*/true,
 				/*showGrid=*/true,
 				m_ExportPotcar);
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Preview basis only"))
-		{
-			OpenCrystalStructureAsWindow(
-				buildStructure(),
-				std::string(m_StructureNameBuffer.data()) + " (basis)",
-				*domainLayer,
-				m_RendererLayer,
-				m_ElementPropertiesTable,
-				m_AtomStyleTable,
-				/*showCellBox=*/false,
-				/*showGrid=*/false);
+
+			// The preview has served its purpose; leaving it open beside the real window is the
+			// duplicate-tab complaint in a new costume.
+			closePreviews();
 		}
 		ImGui::EndDisabled();
 		if (domainLayer == nullptr)
@@ -447,6 +566,12 @@ namespace DefectStudio
 			ImGui::TextDisabled("Every basis row needs a species before the structure can be created.");
 
 		ImGui::End();
+
+		// After the widgets, so an edit made this frame lands in the same frame rather than one
+		// behind - and outside Begin/End, since it touches renderer windows, not this one.
+		refreshPreview();
+		if (!windowOpen)
+			closePreviews();
 		SetVisible(windowOpen);
 	}
 

@@ -39,7 +39,9 @@ namespace DefectStudio
 		RendererLayer &layer,
 		const std::function<glm::vec3(const std::string &)> &colorForSymbol,
 		const std::string &selectedSymbol,
-		ImVec2 cellSize = ImVec2(38.0f, 32.0f),
+		// Zero (the default) sizes a cell from the current font via CalcTextSize, so the grid
+		// survives a font or DPI change instead of clipping two-letter symbols at 38x32 px.
+		ImVec2 cellSize = ImVec2(0.0f, 0.0f),
 		std::string *outDoubleClickedSymbol = nullptr);
 
 	// Classic textbook periodic-table category, shared by every panel that colors elements by

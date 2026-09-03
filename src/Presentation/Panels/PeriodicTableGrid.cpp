@@ -93,6 +93,15 @@ namespace DefectStudio
 		ImVec2 cellSize,
 		std::string *outDoubleClickedSymbol)
 	{
+		if (cellSize.x <= 0.0f || cellSize.y <= 0.0f)
+		{
+			// "Mg" is the widest a symbol actually gets; the padding matches what Button adds so a
+			// cell is square-ish at any font size.
+			const ImVec2 widest = ImGui::CalcTextSize("Mg");
+			const ImVec2 padding = ImGui::GetStyle().FramePadding;
+			cellSize = ImVec2(widest.x + padding.x * 4.0f, widest.y + padding.y * 2.0f);
+		}
+
 		std::string clickedSymbol;
 		if (outDoubleClickedSymbol != nullptr)
 			outDoubleClickedSymbol->clear();

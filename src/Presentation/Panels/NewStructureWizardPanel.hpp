@@ -83,6 +83,13 @@ namespace DefectStudio
 		// than every frame, so it never fights a hand-edited basis table.
 		void applyPrototypeToBasis();
 		[[nodiscard]] const PrototypeDefinition *selectedPrototype() const;
+		// Rebuilds the ephemeral preview window(s) only when the inputs feeding them actually changed.
+		// A per-frame rebuild would run RegenerateAutoBonds and BuildRendererStructureData on every
+		// repaint, and the bond search is quadratic in atom count against a supercell.
+		void refreshPreview();
+		void closePreviews();
+		[[nodiscard]] std::size_t computePreviewSignature() const;
+		void drawPreviewControls();
 
 		RendererLayer &m_RendererLayer;
 		WeakRef<DomainLayer> m_DomainLayer;
@@ -116,5 +123,15 @@ namespace DefectStudio
 		std::string m_SelectedFunctional = "exp";
 
 		bool m_ExportPotcar = false; // POTCAR export flag (disabled if pseudodir not configured)
+
+
+		// One window for the unit cell, a second for the supercell that appears only once n,k,l
+		// differ from 1,1,1. Both are unregistered previews - see CrystalStructurePreviewWindow.
+		std::string m_PreviewWindowId;
+		std::string m_SupercellPreviewWindowId;
+		std::size_t m_PreviewSignature = 0;
+		bool m_LivePreview = true;
+		bool m_PreviewBasisOnly = false; // hides the cell box and grid on the preview
+		glm::ivec3 m_SupercellCounts{1, 1, 1};
 	};
 } // namespace DefectStudio
