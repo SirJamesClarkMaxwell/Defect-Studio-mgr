@@ -12,6 +12,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Platform/FileDialog.hpp"
+#include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Events/ProjectEvents.hpp"
 #include "Events/RendererEvents.hpp"
 
@@ -419,6 +420,26 @@ namespace DefectStudio
 		m_SelectedPath = pathKey;
 		m_SelectedPaths = {pathKey};
 		m_KeyboardCursorPath = pathKey;
+
+		if (m_EventBus != nullptr)
+		{
+			Path selectedPath{pathKey};
+			DomainEvents::ProjectTreeSelectionChanged event;
+			event.selectedPath = selectedPath.Native();
+
+			if (FileSystem::IsDirectory(selectedPath.Native()))
+			{
+				event.kind = DomainEvents::ProjectTreeSelectionChanged::Kind::Directory;
+				event.resolvedTargetDirectory = selectedPath.Native();
+			}
+			else
+			{
+				event.kind = DomainEvents::ProjectTreeSelectionChanged::Kind::File;
+				event.resolvedTargetDirectory = Path(selectedPath.Native().parent_path()).Native();
+			}
+
+			m_EventBus->Queue(event);
+		}
 	}
 
 	void ProjectTreePanel::rebuildVisibleFlatList()

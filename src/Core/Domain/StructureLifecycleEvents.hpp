@@ -6,7 +6,7 @@
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Domain/DomainIds.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
-#include "Domain/Common/StructuredError.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
 
 namespace DefectStudio::DomainEvents
 {

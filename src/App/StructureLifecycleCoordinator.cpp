@@ -101,9 +101,10 @@ namespace DefectStudio
 
 		// Publish failure event
 		DomainEvents::ProjectStructureAddFailed failureEvent;
-		failureEvent.error = event.error;
+		failureEvent.error.technicalDetails = event.errorMessage;
+		failureEvent.error.userMessage = "Failed to add structure to project";
 		m_EventBus->Publish(failureEvent);
 
-		DS_LOG_WARNING("Add Structure: job {} failed: {}", event.id, event.error.technicalDetails);
+		DS_LOG_WARN("Add Structure: job {} failed: {}", event.id, event.errorMessage);
 	}
 } // namespace DefectStudio

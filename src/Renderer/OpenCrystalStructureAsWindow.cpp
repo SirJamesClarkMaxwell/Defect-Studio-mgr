@@ -69,4 +69,43 @@ namespace DefectStudio
 			DS_LOG_ERROR("Open Crystal Structure: failed to build renderer window for '{}'", displayName);
 		}
 	}
+
+	void OpenRegisteredStructureAsWindow(
+		StructureId id,
+		DomainLayer &domainLayer,
+		RendererLayer &rendererLayer,
+		const AtomStyleTable &atomStyleTable)
+	{
+		Ref<const StructureRecord> structureRecord = domainLayer.Workspace().Structures().Find(id).lock();
+		if (structureRecord == nullptr)
+		{
+			DS_LOG_ERROR("Open Registered Structure: structure id {} not found in registry", ToString(id));
+			return;
+		}
+
+		RendererStartupWindowInput input;
+		input.definition.title = structureRecord->displayName;
+		input.definition.structureName = structureRecord->displayName;
+		input.definition.poscarPath = structureRecord->sourcePath;
+		input.structure = BuildRendererStructureData(
+			structureRecord->structure,
+			structureRecord->sourcePath,
+			structureRecord->displayName,
+			atomStyleTable,
+			ToString(id));
+
+		std::vector<RendererStartupWindowInput> inputs;
+		inputs.push_back(std::move(input));
+		std::vector<RendererWindowState> windows = BuildRendererStartupWindows(std::move(inputs));
+		if (!windows.empty())
+		{
+			RendererWindowState window = std::move(windows.front());
+			window.structureId = id;
+			rendererLayer.AddWindow(std::move(window));
+		}
+		else
+		{
+			DS_LOG_ERROR("Open Registered Structure: failed to build renderer window for id {}", ToString(id));
+		}
+	}
 } // namespace DefectStudio

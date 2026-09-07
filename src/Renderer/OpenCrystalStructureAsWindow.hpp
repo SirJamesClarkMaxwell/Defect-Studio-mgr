@@ -4,6 +4,7 @@
 
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
+#include "Domain/DomainIds.hpp"
 
 namespace DefectStudio
 {
@@ -29,4 +30,14 @@ namespace DefectStudio
 		bool showCellBox = true,
 		bool showGrid = true,
 		bool exportPotcar = false);
+
+	// Opens a registered structure window by StructureId lookup. The structure must already be
+	// registered in DomainLayer - this function does not register, only opens a renderer window.
+	// Used when opening from project tree (already-registered structures) or other UI that knows
+	// the StructureId.
+	void OpenRegisteredStructureAsWindow(
+		StructureId id,
+		DomainLayer &domainLayer,
+		RendererLayer &rendererLayer,
+		const AtomStyleTable &atomStyleTable);
 } // namespace DefectStudio

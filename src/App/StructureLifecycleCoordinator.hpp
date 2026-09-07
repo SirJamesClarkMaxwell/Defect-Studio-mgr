@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 
+#include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
