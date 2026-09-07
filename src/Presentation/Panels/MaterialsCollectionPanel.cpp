@@ -180,12 +180,10 @@ namespace DefectStudio
 
 		constexpr ImGuiTableFlags tableFlags =
 			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-		if (!ImGui::BeginTable("##materials", 4, tableFlags))
+		if (!ImGui::BeginTable("##materials", 2, tableFlags))
 			return;
 
 		ImGui::TableSetupColumn("Name");
-		ImGui::TableSetupColumn("Formula");
-		ImGui::TableSetupColumn("Notes");
 		ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 140.0f);
 		ImGui::TableHeadersRow();
 
@@ -196,10 +194,6 @@ namespace DefectStudio
 
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(entry.name.c_str());
-			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(entry.reducedFormula.c_str());
-			ImGui::TableNextColumn();
-			ImGui::TextWrapped("%s", entry.notes.c_str());
 
 			ImGui::TableNextColumn();
 			if (ImGui::SmallButton("Open"))

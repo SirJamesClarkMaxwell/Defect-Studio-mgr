@@ -110,9 +110,7 @@ namespace DefectStudio
 			const nlohmann::json payload = nlohmann::json::parse(jsonLine);
 			MaterialLibraryEntry entry;
 			entry.id = payload.at("id").get<std::string>();
-			entry.name = payload.value("name", std::string{});
-			entry.reducedFormula = payload.value("reduced_formula", std::string{});
-			entry.notes = payload.value("notes", std::string{});
+			entry.name = payload.at("name").get<std::string>();
 			return entry;
 		}
 		catch (const std::exception &exception)
@@ -120,7 +118,7 @@ namespace DefectStudio
 			return MakePythonExecutionError(
 				"Material-library add output parsing failed.",
 				std::string("JSON parse error: ") + exception.what() + "\nPayload: " + jsonLine,
-				"Ensure the bridge script prints exactly one JSON line with the new entry.",
+				"Ensure the bridge script prints exactly one JSON line with id and name.",
 				"python.ase.material_library.add.invalid_json");
 		}
 	}
@@ -150,9 +148,7 @@ namespace DefectStudio
 			{
 				MaterialLibraryEntry entry;
 				entry.id = item.at("id").get<std::string>();
-				entry.name = item.value("name", std::string{});
-				entry.reducedFormula = item.value("reduced_formula", std::string{});
-				entry.notes = item.value("notes", std::string{});
+				entry.name = item.at("name").get<std::string>();
 				entries.push_back(std::move(entry));
 			}
 			return entries;
@@ -162,7 +158,7 @@ namespace DefectStudio
 			return MakePythonExecutionError(
 				"Material-library list output parsing failed.",
 				std::string("JSON parse error: ") + exception.what() + "\nPayload: " + jsonLine,
-				"Ensure the bridge script prints exactly one JSON line with the entry list.",
+				"Ensure the bridge script prints exactly one JSON line with the entry list (id and name).",
 				"python.ase.material_library.list.invalid_json");
 		}
 	}

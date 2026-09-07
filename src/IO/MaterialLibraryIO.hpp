@@ -12,10 +12,8 @@ namespace DefectStudio
 {
 	struct MaterialLibraryEntry
 	{
-		std::string id; // ase.db row id, as string
-		std::string name;
-		std::string reducedFormula;
-		std::string notes;
+		std::string id;   // ase.db row id, as string
+		std::string name; // user-provided name (raw data, not formatted)
 	};
 
 	// Thin subprocess wrapper over ase.db (SQLite-backed) - one library file per scope (project vs
