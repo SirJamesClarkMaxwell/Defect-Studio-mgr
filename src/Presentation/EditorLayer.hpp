@@ -13,6 +13,7 @@
 #include <glm/glm.hpp>
 
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
+#include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/Layer.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
@@ -189,6 +190,8 @@ namespace DefectStudio
 		void onRootRemoveRequested(const ProjectEvents::RootRemoveRequested &event);
 		void onRootPathChangedRequested(const ProjectEvents::RootPathChangedRequested &event);
 		void onBulkDirectoryChangeRequested(const ProjectEvents::BulkDirectoryChangeRequested &event);
+		// ProjectTreePanel selection changed - wire target directory to Structure Hub panel.
+		void onProjectTreeSelectionChanged(const DomainEvents::ProjectTreeSelectionChanged &event);
 		// T08.6.4: WAVECAR dragged from ProjectTreePanel onto an open structure's viewport.
 		void onWavecarDropped(const RendererEvents::Viewport::WavecarDropped &event);
 		// Text editor panel: double-click on any project-tree leaf file.
@@ -276,6 +279,7 @@ namespace DefectStudio
 		PanelId m_ExportImagePanelId = 0;
 		PanelId m_DisplacementComparisonPanelId = 0;
 		PanelId m_MaterialsCollectionPanelId = 0;
+		PanelId m_StructureHubPanelId = 0;
 	};
 
 	template <typename TPanel, typename... Args>

@@ -25,6 +25,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Events/EditorUiEvents.hpp"
 #include "Events/ProjectEvents.hpp"
@@ -52,6 +53,7 @@
 #include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/MaterialsCollectionPanel.hpp"
 #include "Presentation/Panels/SupercellBuilderPanel.hpp"
+#include "Presentation/Panels/StructureHubPanel.hpp"
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -646,6 +648,10 @@ namespace DefectStudio
 				*rendererLayer, m_DomainLayer, m_ElementPropertiesTable, m_AtomStyleTable,
 				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "materials" / "materials.db"),
 				"Materials Collection", false);
+			m_StructureHubPanelId = registerPanel<StructureHubPanel>(
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
+				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "materials" / "materials.db"),
+				"Structure Hub", true);
 			registerPanel<SupercellBuilderPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
 				"Supercell Builder", false);
@@ -1156,6 +1162,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onRootPathChangedRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::BulkDirectoryChangeRequested>(
 			*m_EventBus, *this, &EditorLayer::onBulkDirectoryChangeRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<DomainEvents::ProjectTreeSelectionChanged>(
+			*m_EventBus, *this, &EditorLayer::onProjectTreeSelectionChanged, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::WavecarDropped>(
 			*m_EventBus, *this, &EditorLayer::onWavecarDropped, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::TextFileOpenRequested>(
@@ -1315,6 +1323,14 @@ namespace DefectStudio
 			}
 		}
 
+		if (auto panel = findPanel(m_StructureHubPanelId).lock())
+		{
+			if (auto *hub = dynamic_cast<StructureHubPanel *>(panel.get()))
+			{
+				hub->SetTargetDirectory(Path{});
+			}
+		}
+
 		if (auto panel = findPanel(m_CalculatorConsolePanelId).lock())
 		{
 			if (auto *console = dynamic_cast<CalculatorConsolePanel *>(panel.get()))
@@ -1396,6 +1412,17 @@ namespace DefectStudio
 			std::string error;
 			if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
 				DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after bulk reference change: {}", error);
+		}
+	}
+
+	void EditorLayer::onProjectTreeSelectionChanged(const DomainEvents::ProjectTreeSelectionChanged &event)
+	{
+		if (auto panel = findPanel(m_StructureHubPanelId).lock())
+		{
+			if (auto *hub = dynamic_cast<StructureHubPanel *>(panel.get()))
+			{
+				hub->SetTargetDirectory(Path::FromResolved(event.resolvedTargetDirectory));
+			}
 		}
 	}
 
