@@ -127,7 +127,7 @@ namespace DefectStudio
 		ImGui::BulletText("Click 'Add to Project'");
 
 		ImGui::Separator();
-		ImGui::TextDisabled("(Full Material Library integration coming in Step 10)");
+		ImGui::TextDisabled("(Full Create/Library mode integration deferred to Step 10b)");
 	}
 
 	void StructureHubPanel::drawImportTab()
