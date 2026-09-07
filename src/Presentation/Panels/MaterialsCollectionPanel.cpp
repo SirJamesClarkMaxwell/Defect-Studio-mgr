@@ -136,11 +136,6 @@ namespace DefectStudio
 				drawScopeTab(Scope::Project);
 				ImGui::EndTabItem();
 			}
-			if (ImGui::BeginTabItem("My Library"))
-			{
-				drawScopeTab(Scope::Personal);
-				ImGui::EndTabItem();
-			}
 			ImGui::EndTabBar();
 		}
 
@@ -243,14 +238,8 @@ namespace DefectStudio
 		ImGui::InputText("Name", m_SaveNameBuffer.data(), m_SaveNameBuffer.size());
 		ImGui::InputText("Notes", m_SaveNotesBuffer.data(), m_SaveNotesBuffer.size());
 
-		const bool projectAvailable = !m_ProjectLibraryPath.Empty();
-		ImGui::BeginDisabled(!projectAvailable);
-		if (ImGui::RadioButton("This Project", m_SaveScope == Scope::Project))
-			m_SaveScope = Scope::Project;
-		ImGui::EndDisabled();
-		ImGui::SameLine();
-		if (ImGui::RadioButton("My Library", m_SaveScope == Scope::Personal))
-			m_SaveScope = Scope::Personal;
+		// Legacy personal library removed in Step 11. Only project-scoped library now.
+		m_SaveScope = Scope::Project;
 
 		if (!m_SaveError.empty())
 			ImGui::TextWrapped("%s", m_SaveError.c_str());

@@ -1563,37 +1563,8 @@ namespace DefectStudio
 	void EditorLayer::onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &)
 	{
 		persistCurrentRoots();
-
-		// Write POSCAR files for all open structures via Python subprocess
-		if (auto domainLayer = m_DomainLayer.lock())
-		{
-			auto &structures = domainLayer->Workspace().Structures();
-			for (auto structureRecord : structures.Records())
-			{
-				if (!structureRecord->sourcePath.Empty())
-					continue; // Skip structures loaded from files (already have POSCAR source)
-
-				// In-app-built structures get POSCAR written to project directory
-				const Path projectDir = m_ActiveProject
-					? m_ActiveProjectDirectory
-					: Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default");
-				const Path outputPath = projectDir / (structureRecord->displayName + ".vasp");
-
-				auto result = PoscarWriter::Write(structureRecord->structure, outputPath);
-				if (result.HasValue())
-				{
-					// Mark as saved
-					const_cast<StructureRecord &>(*structureRecord).savedRevision =
-						structureRecord->revision;
-				}
-				else
-				{
-					DS_LOG_WARN("POSCAR write failed for '{}': {}",
-						structureRecord->displayName,
-						result.Error().userMessage);
-				}
-			}
-		}
+		// Legacy in-app-built structure export removed in Step 11. All new structures flow
+		// through StructureLifecycleCoordinator (AddStructureToProjectRequested event).
 	}
 
 	void EditorLayer::onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &)
@@ -1629,66 +1600,8 @@ namespace DefectStudio
 
 	void EditorLayer::onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &)
 	{
-		auto rendererLayer = m_RendererLayer.lock();
-		auto domainLayer = m_DomainLayer.lock();
-		if (rendererLayer == nullptr || domainLayer == nullptr)
-			return;
-
-		const std::string focusedWindowId = rendererLayer->GetLastFocusedViewportWindowId();
-		if (focusedWindowId.empty())
-			return;
-
-		const auto &windows = rendererLayer->GetWindows();
-		const auto it = std::find_if(windows.begin(), windows.end(),
-			[&focusedWindowId](const RendererWindowState &w) { return w.windowId == focusedWindowId; });
-
-		if (it == windows.end())
-			return; // Window not found
-
-		const RendererWindowState &focusedWindow = *it;
-		const auto structureRecordWeak = domainLayer->Workspace().Structures().Find(focusedWindow.structureId);
-		const auto structureRecord = structureRecordWeak.lock();
-		if (!structureRecord)
-			return; // Structure not found
-
-		if (!structureRecord->sourcePath.Empty())
-			return; // Skip structures loaded from files
-
-		// Export to project directory
-		const Path projectDir = m_ActiveProject
-			? m_ActiveProjectDirectory
-			: Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default");
-		const Path outputPath = projectDir / (structureRecord->displayName + ".vasp");
-
-		auto result = PoscarWriter::Write(structureRecord->structure, outputPath);
-		if (result.HasValue())
-		{
-			// Mark as saved
-			const auto mutableRecordWeak = domainLayer->Workspace().Structures().FindMutable(focusedWindow.structureId);
-			const auto mutableRecord = mutableRecordWeak.lock();
-			if (mutableRecord)
-				const_cast<StructureRecord &>(*mutableRecord).savedRevision = mutableRecord->revision;
-
-			if (structureRecord->exportPotcar)
-				exportPotcarNextToPoscar(*structureRecord, projectDir);
-		}
-		else
-		{
-			// technicalDetails, not userMessage - userMessage is a fixed string, so logging it
-			// alone hid the actual Python failure behind "POSCAR write failed".
-			DS_LOG_WARN("POSCAR write failed for '{}': {} | {}",
-				structureRecord->displayName,
-				result.Error().userMessage,
-				result.Error().technicalDetails);
-			if (m_EventBus != nullptr)
-			{
-				Notification notification = ToNotification(result.Error());
-				notification.title = "Structure save failed";
-				notification.source = "EditorLayer";
-				notification.pinned = true;
-				m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
-			}
-		}
+		// Legacy in-app-built structure export removed in Step 11. To save a structure, use
+		// StructureHubPanel "Add to Project" workflow (publishes AddStructureToProjectRequested).
 	}
 
 	// POTCAR is written with its bare VASP name next to the POSCAR, so an input directory holding one
