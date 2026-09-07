@@ -52,7 +52,6 @@
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/MaterialsCollectionPanel.hpp"
-#include "Presentation/Panels/SupercellBuilderPanel.hpp"
 #include "Presentation/Panels/StructureHubPanel.hpp"
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
@@ -651,10 +650,8 @@ namespace DefectStudio
 			m_StructureHubPanelId = registerPanel<StructureHubPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
 				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "materials" / "materials.db"),
+				m_EventBus,
 				"Structure Hub", true);
-			registerPanel<SupercellBuilderPanel>(
-				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
-				"Supercell Builder", false);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);

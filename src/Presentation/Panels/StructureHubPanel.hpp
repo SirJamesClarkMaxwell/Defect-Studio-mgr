@@ -17,6 +17,7 @@ namespace DefectStudio
 {
 	class DomainLayer;
 	class JobSystem;
+	class EventBus;
 	class NewStructureWizardPanel;
 
 	// Unified Structure Hub: three entry modes (Create New, From Library, Import File)
@@ -33,6 +34,7 @@ namespace DefectStudio
 			ElementPropertiesTable elementPropertiesTable,
 			AtomStyleTable atomStyleTable,
 			Path personalLibraryPath,
+			Ref<EventBus> eventBus,
 			std::string title = "Structure Hub",
 			bool visibleByDefault = false);
 		StructureHubPanel(const StructureHubPanel &other) = default;
@@ -66,6 +68,7 @@ namespace DefectStudio
 		ElementPropertiesTable m_ElementPropertiesTable;
 		AtomStyleTable m_AtomStyleTable;
 		Path m_PersonalLibraryPath;
+		Ref<EventBus> m_EventBus;
 
 		Mode m_SelectedMode = Mode::Create;
 		Path m_TargetDirectory; // Set by ProjectTreeSelectionChanged listener

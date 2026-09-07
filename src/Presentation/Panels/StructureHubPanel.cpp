@@ -9,6 +9,7 @@
 
 #include "Core/Logging/Logger.hpp"
 #include "Core/Domain/StructureLifecycleEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
@@ -27,6 +28,7 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable,
 		AtomStyleTable atomStyleTable,
 		Path personalLibraryPath,
+		Ref<EventBus> eventBus,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
@@ -35,7 +37,8 @@ namespace DefectStudio
 		  m_JobSystem(std::move(jobSystem)),
 		  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
 		  m_AtomStyleTable(std::move(atomStyleTable)),
-		  m_PersonalLibraryPath(std::move(personalLibraryPath))
+		  m_PersonalLibraryPath(std::move(personalLibraryPath)),
+		  m_EventBus(std::move(eventBus))
 	{
 		std::fill(m_StructureNameBuffer.begin(), m_StructureNameBuffer.end(), '\0');
 		m_StructureNameBuffer[0] = 'U';
@@ -250,9 +253,14 @@ namespace DefectStudio
 			return;
 		}
 
-		// TODO: Publish AddStructureToProjectRequested event (requires EventBus member + app layer coordinator)
-		// For now, show success - event publication will be wired in Step 10 integration
-		m_StatusMessage = "Structure ready to add to project. Coordinator will handle add-to-project flow (Step 10).";
+		// Publish AddStructureToProjectRequested event - coordinator will handle persistence + project registration
+		DomainEvents::AddStructureToProjectRequested event;
+		event.structure = structure.value();
+		event.displayName = displayName;
+		event.targetDirectory = m_TargetDirectory.Native();
+		m_EventBus->Publish(event);
+
+		m_StatusMessage = "Structure submitted to project. Coordinator will finalize add-to-project flow.";
 		m_ErrorMessage.clear();
 
 		// Clear the form for the next structure

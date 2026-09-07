@@ -49,6 +49,10 @@ namespace DefectStudio
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
+		// Retrieve the currently-built structure (if valid). Called by StructureHubPanel to collect
+		// structures created in this wizard for add-to-project flow.
+		[[nodiscard]] std::optional<CrystalStructure> GetBuiltStructure() const;
+
 	private:
 		struct BasisRow
 		{

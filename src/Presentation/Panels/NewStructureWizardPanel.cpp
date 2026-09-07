@@ -146,6 +146,22 @@ namespace DefectStudio
 		return structure;
 	}
 
+	std::optional<CrystalStructure> NewStructureWizardPanel::GetBuiltStructure() const
+	{
+		const std::string name(m_StructureNameBuffer.data());
+		if (name.empty() || m_BasisRows.empty())
+			return std::nullopt;
+
+		// Validate that all basis rows have species assigned
+		for (const BasisRow &row : m_BasisRows)
+		{
+			if (row.species.empty())
+				return std::nullopt;
+		}
+
+		return buildStructure();
+	}
+
 	void NewStructureWizardPanel::drawLatticeSection()
 	{
 		ImGui::InputText("Name", m_StructureNameBuffer.data(), m_StructureNameBuffer.size());
