@@ -61,4 +61,14 @@ namespace DefectStudio
 	{
 		return m_WrittenPoscarPath;
 	}
+
+	const CrystalStructure &AddStructureToProjectJob::GetStructure() const noexcept
+	{
+		return m_Structure;
+	}
+
+	const std::string &AddStructureToProjectJob::GetDisplayName() const noexcept
+	{
+		return m_DisplayName;
+	}
 } // namespace DefectStudio

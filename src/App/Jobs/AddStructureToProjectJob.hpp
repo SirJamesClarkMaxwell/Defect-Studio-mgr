@@ -26,6 +26,8 @@ namespace DefectStudio
 		void Execute(JobContext &context) override;
 
 		[[nodiscard]] const std::optional<Path> &GetResult() const noexcept;
+		[[nodiscard]] const CrystalStructure &GetStructure() const noexcept;
+		[[nodiscard]] const std::string &GetDisplayName() const noexcept;
 
 	private:
 		CrystalStructure m_Structure;
