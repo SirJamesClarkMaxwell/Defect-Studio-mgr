@@ -20,6 +20,49 @@ namespace DefectStudio
 		return record;
 	}
 
+	Ref<const StructureRecord> StructureRegistry::RegisterAsProjectMember(
+		CrystalStructure structure,
+		Path sourcePath,
+		std::string displayName)
+	{
+		Ref<StructureRecord> record = CreateRef<StructureRecord>();
+		record->id = GenerateUuid();
+		record->displayName = displayName.empty() ? structure.name : std::move(displayName);
+		record->sourcePath = std::move(sourcePath);
+		record->structure = std::move(structure);
+		// For project members, savedRevision is initialized to 0 (dirty from start until saved)
+		record->revision = 0;
+		record->savedRevision = 0;
+		m_Records.push_back(record);
+		return record;
+	}
+
+	bool StructureRegistry::UpdateSourcePath(const StructureId &id, Path newPath)
+	{
+		for (Ref<StructureRecord> &record : m_Records)
+		{
+			if (record != nullptr && record->id == id)
+			{
+				record->sourcePath = std::move(newPath);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool StructureRegistry::UpdateSavedRevision(const StructureId &id, int newRevision)
+	{
+		for (Ref<StructureRecord> &record : m_Records)
+		{
+			if (record != nullptr && record->id == id)
+			{
+				record->savedRevision = newRevision;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	WeakRef<const StructureRecord> StructureRegistry::Find(const StructureId &id) const
 	{
 		for (const Ref<StructureRecord> &record : m_Records)

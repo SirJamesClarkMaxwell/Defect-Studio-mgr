@@ -69,4 +69,73 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(workspace.DefectConfigurations().Find(configurationRecord->id).lock(), configurationRecord);
 		EXPECT_EQ(workspace.Calculations().Find(calculationRecord->id).lock(), calculationRecord);
 	}
+
+	TEST(ProjectWorkspaceTests, RegistersProjectMemberWithSourcePath)
+	{
+		ProjectWorkspace workspace;
+		CrystalStructure structure;
+		structure.name = "GaAs";
+
+		const Ref<const StructureRecord> record = workspace.Structures().RegisterAsProjectMember(
+			std::move(structure),
+			Path("project/structures/GaAs/POSCAR"),
+			"GaAs bulk");
+
+		ASSERT_NE(record, nullptr);
+		EXPECT_FALSE(record->id.is_nil());
+		EXPECT_EQ(record->displayName, "GaAs bulk");
+		EXPECT_EQ(record->sourcePath.String(), "project/structures/GaAs/POSCAR");
+		EXPECT_EQ(record->revision, 0);
+		EXPECT_EQ(record->savedRevision, 0);
+
+		const Ref<const StructureRecord> found = workspace.Structures().Find(record->id).lock();
+		ASSERT_NE(found, nullptr);
+		EXPECT_EQ(found->structure.name, "GaAs");
+	}
+
+	TEST(ProjectWorkspaceTests, UpdateSourcePathOnExistingStructure)
+	{
+		ProjectWorkspace workspace;
+		const Ref<const StructureRecord> record = workspace.Structures().RegisterAsProjectMember(
+			CrystalStructure{},
+			Path("old/path/POSCAR"),
+			"structure");
+
+		EXPECT_TRUE(workspace.Structures().UpdateSourcePath(record->id, Path("new/path/POSCAR")));
+
+		const Ref<const StructureRecord> updated = workspace.Structures().Find(record->id).lock();
+		ASSERT_NE(updated, nullptr);
+		EXPECT_EQ(updated->sourcePath.String(), "new/path/POSCAR");
+	}
+
+	TEST(ProjectWorkspaceTests, UpdateSourcePathReturnsFalseForNonExistentId)
+	{
+		ProjectWorkspace workspace;
+		const StructureId nonExistentId = GenerateUuid();
+
+		EXPECT_FALSE(workspace.Structures().UpdateSourcePath(nonExistentId, Path("some/path")));
+	}
+
+	TEST(ProjectWorkspaceTests, UpdateSavedRevisionOnExistingStructure)
+	{
+		ProjectWorkspace workspace;
+		const Ref<const StructureRecord> record = workspace.Structures().RegisterAsProjectMember(
+			CrystalStructure{},
+			Path("POSCAR"),
+			"structure");
+
+		EXPECT_TRUE(workspace.Structures().UpdateSavedRevision(record->id, 5));
+
+		const Ref<const StructureRecord> updated = workspace.Structures().Find(record->id).lock();
+		ASSERT_NE(updated, nullptr);
+		EXPECT_EQ(updated->savedRevision, 5);
+	}
+
+	TEST(ProjectWorkspaceTests, UpdateSavedRevisionReturnsFalseForNonExistentId)
+	{
+		ProjectWorkspace workspace;
+		const StructureId nonExistentId = GenerateUuid();
+
+		EXPECT_FALSE(workspace.Structures().UpdateSavedRevision(nonExistentId, 5));
+	}
 } // namespace DefectStudio::Tests

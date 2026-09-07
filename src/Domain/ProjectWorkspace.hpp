@@ -31,6 +31,19 @@ namespace DefectStudio
 			CrystalStructure structure,
 			Path sourcePath = {},
 			std::string displayName = {});
+
+		// Lifecycle operations - these are the ONLY way to set sourcePath going forward
+		[[nodiscard]] Ref<const StructureRecord> RegisterAsProjectMember(
+			CrystalStructure structure,
+			Path sourcePath,
+			std::string displayName);
+
+		// Update the source path of an existing structure (e.g., if file moved)
+		bool UpdateSourcePath(const StructureId &id, Path newPath);
+
+		// Update the saved revision (e.g., after successful save)
+		bool UpdateSavedRevision(const StructureId &id, int newRevision);
+
 		[[nodiscard]] WeakRef<const StructureRecord> Find(const StructureId &id) const;
 		// Non-const counterpart to Find - for in-place edits of an already-registered structure
 		// (atom add/delete/duplicate/change-type), which Add-only/const-Find can't support.
