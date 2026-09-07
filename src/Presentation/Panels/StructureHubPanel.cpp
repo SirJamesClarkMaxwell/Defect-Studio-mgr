@@ -13,6 +13,7 @@
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
+#include "IO/MaterialLibraryIO.hpp"
 #include "Presentation/Panels/MaterialsCollectionPanel.hpp"
 #include "Presentation/Panels/NewStructureWizardPanel.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
@@ -114,20 +115,111 @@ namespace DefectStudio
 
 	void StructureHubPanel::drawCreateTab()
 	{
-		ImGui::TextWrapped(
-			"Not yet implemented. Use 'New Structure' panel for now, then add the result to the project via 'Add Existing' or save it to the library first.");
+		if (!m_WizardPanel)
+		{
+			m_WizardPanel = CreateRef<NewStructureWizardPanel>(
+				m_RendererLayer,
+				m_DomainLayer,
+				m_JobSystem,
+				m_ElementPropertiesTable,
+				m_AtomStyleTable,
+				"Create Structure",
+				false);
+		}
+
+		// Render wizard inline
+		m_WizardPanel->Render();
+
+		// Retrieve built structure if wizard has one
+		if (auto built = m_WizardPanel->GetBuiltStructure())
+		{
+			m_CreatedStructure = built;
+			ImGui::Separator();
+			ImGui::TextColored({0.0f, 1.0f, 0.0f, 1.0f}, "Structure ready in wizard. Proceed to 'Add to Project' below.");
+		}
 	}
 
 	void StructureHubPanel::drawLibraryTab()
 	{
-		ImGui::TextWrapped("Material library structures are available in the separate 'Materials Collection' panel. To add a structure from your library:");
-		ImGui::BulletText("Open the Materials Collection panel (if not visible, enable it via View menu)");
-		ImGui::BulletText("Click 'Open' to preview a structure");
-		ImGui::BulletText("Return here and select the structure in the 'Use Library Entry' field below");
-		ImGui::BulletText("Click 'Add to Project'");
+		ImGui::TextUnformatted("Available structures in personal library:");
 
-		ImGui::Separator();
-		ImGui::TextDisabled("(Full Create/Library mode integration deferred to Step 10b)");
+		if (ImGui::Button("Refresh Library", {-1, 0}))
+		{
+			MaterialLibraryIO io(m_PersonalLibraryPath);
+			auto result = io.ListMaterials();
+			if (result)
+			{
+				m_LibraryEntries = result.Value();
+				m_LibraryError.clear();
+				m_SelectedLibraryEntryIndex = -1;
+			}
+			else
+			{
+				m_LibraryError = result.Error().userMessage;
+				m_LibraryEntries.clear();
+			}
+		}
+
+		if (!m_LibraryError.empty())
+		{
+			ImGui::TextColored({1.0f, 0.0f, 0.0f, 1.0f}, "Error: %s", m_LibraryError.c_str());
+		}
+
+		if (!m_LibraryEntries.empty())
+		{
+			ImGui::Separator();
+			ImGui::TextUnformatted("Select a structure:");
+
+			if (ImGui::BeginListBox("##library_entries", {-1, 200}))
+			{
+				for (int i = 0; i < static_cast<int>(m_LibraryEntries.size()); ++i)
+				{
+					const auto &entry = m_LibraryEntries[i];
+					const bool selected = (m_SelectedLibraryEntryIndex == i);
+					if (ImGui::Selectable(entry.name.c_str(), selected))
+					{
+						m_SelectedLibraryEntryIndex = i;
+						// Load the selected structure
+						MaterialLibraryIO io(m_PersonalLibraryPath);
+						auto loaded = io.LoadMaterial(entry.id);
+						if (loaded)
+						{
+							m_SelectedStructure = loaded.Value();
+						}
+						else
+						{
+							m_LibraryError = "Failed to load: " + loaded.Error().userMessage;
+							m_SelectedStructure.reset();
+						}
+					}
+				}
+				ImGui::EndListBox();
+			}
+
+			if (m_SelectedStructure)
+			{
+				ImGui::Separator();
+				ImGui::TextColored({0.0f, 1.0f, 0.0f, 1.0f}, "Selected: %zu atoms", m_SelectedStructure->atoms.size());
+				if (ImGui::Button("Preview##library"))
+				{
+					Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+					if (domainLayer != nullptr)
+					{
+						OpenCrystalStructureAsWindow(
+							m_SelectedStructure.value(),
+							m_LibraryEntries[m_SelectedLibraryEntryIndex].name,
+							*domainLayer,
+							m_RendererLayer,
+							m_ElementPropertiesTable,
+							m_AtomStyleTable);
+					}
+				}
+			}
+		}
+		else if (m_LibraryError.empty())
+		{
+			ImGui::TextDisabled("Click 'Refresh Library' to load available structures.");
+		}
 	}
 
 	void StructureHubPanel::drawImportTab()

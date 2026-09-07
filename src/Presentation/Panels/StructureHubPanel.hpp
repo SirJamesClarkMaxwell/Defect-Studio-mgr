@@ -9,6 +9,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
+#include "IO/MaterialLibraryIO.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -19,6 +20,7 @@ namespace DefectStudio
 	class JobSystem;
 	class EventBus;
 	class NewStructureWizardPanel;
+	class MaterialsCollectionPanel;
 
 	// Unified Structure Hub: three entry modes (Create New, From Library, Import File)
 	// all converge on a single "Add to project" workflow. Replaces NewStructureWizardPanel
@@ -77,8 +79,12 @@ namespace DefectStudio
 		Ref<NewStructureWizardPanel> m_WizardPanel;
 		std::optional<CrystalStructure> m_CreatedStructure;
 
-		// Library mode: selected from materials panel
+		// Library mode: library panel + selection
+		Ref<MaterialsCollectionPanel> m_LibraryPanel;
+		std::vector<MaterialLibraryEntry> m_LibraryEntries;
+		int m_SelectedLibraryEntryIndex = -1;
 		std::optional<CrystalStructure> m_SelectedStructure;
+		std::string m_LibraryError;
 
 		// Import mode: file path input
 		std::array<char, 512> m_ImportFilePathBuffer{};
