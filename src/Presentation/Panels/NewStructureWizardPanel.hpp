@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+#include "App/CreationSession.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Domain/Crystal/BravaisLattice.hpp"
@@ -23,7 +24,9 @@ namespace DefectStudio
 {
 	class DomainLayer;
 	class JobSystem;
+	class EventBus;
 	class GetSymmetryInfoJob;
+	class OpenDefectJob;
 
 	// "New Structure" wizard - builds a CrystalStructure from scratch (crystal system + lattice
 	// parameters + an optional centering preset + a hand-edited atomic basis table) and opens it as
@@ -42,6 +45,8 @@ namespace DefectStudio
 			WeakRef<JobSystem> jobSystem,
 			ElementPropertiesTable elementPropertiesTable,
 			AtomStyleTable atomStyleTable,
+			Ref<CreationSessionRegistry> sessionRegistry,
+			Ref<EventBus> eventBus,
 			std::string title = "New Structure",
 			bool visibleByDefault = false);
 		NewStructureWizardPanel(const NewStructureWizardPanel &other) = default;
@@ -49,11 +54,24 @@ namespace DefectStudio
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
-		// Retrieve the currently-built structure (if valid). Called by StructureHubPanel to collect
-		// structures created in this wizard for add-to-project flow.
+		// Retrieve the currently-built structure (if valid).
 		[[nodiscard]] std::optional<CrystalStructure> GetBuiltStructure() const;
 
 	private:
+		void drawModeSelector();
+		// Analyze Existing / Import File: the file load runs as an OpenDefectJob, never inline in
+		// Render() - parsing a POSCAR goes through a Python subprocess, which would stall the frame.
+		void drawFileLoadSection();
+		void dispatchFileLoad();
+		void pollFileLoadJob();
+		// Hands the current draft to the Structure Hub: creates the session if this is the first
+		// hand-off, pushes the draft into it, and publishes SessionReadyForStructureHub so the App
+		// layer opens the 2+1 preview tab. Replaces the old "Create" button, which registered
+		// straight into the domain and bypassed the whole add-to-project workflow.
+		void moveToStructureHub();
+		// Keeps the registry's copy of the draft current while the user edits.
+		void syncDraftToSession();
+
 		struct BasisRow
 		{
 			// Empty, not "X": a default species silently puts an element nobody asked for into the
@@ -104,6 +122,20 @@ namespace DefectStudio
 		WeakRef<JobSystem> m_JobSystem;
 		ElementPropertiesTable m_ElementPropertiesTable;
 		AtomStyleTable m_AtomStyleTable;
+		Ref<CreationSessionRegistry> m_SessionRegistry;
+		Ref<EventBus> m_EventBus;
+
+		// The four entry modes. They differ only in how the draft gets its initial contents; from
+		// "Move to Structure Hub" onwards every mode follows the identical path.
+		CreationMode m_Mode = CreationMode::FromTemplate;
+		// Set once this draft has been handed to the Structure Hub; until then it lives only here.
+		std::optional<Uuid> m_SessionId;
+
+		std::array<char, 512> m_LoadFilePathBuffer{};
+		Ref<OpenDefectJob> m_PendingLoadJob;
+		JobId m_PendingLoadJobId = 0;
+		std::string m_LoadError;
+		std::string m_LoadStatus;
 
 		std::array<char, 128> m_StructureNameBuffer{}; // filled with "New Structure" in the ctor
 		CrystalSystem m_System = CrystalSystem::Cubic;

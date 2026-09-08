@@ -40,7 +40,8 @@ namespace DefectStudio
 		const AtomStyleTable &atomStyleTable,
 		bool showCellBox,
 		bool showGrid,
-		const std::optional<glm::mat3> &overlayCellVectors)
+		const std::optional<glm::mat3> &overlayCellVectors,
+		const std::string &sessionId)
 	{
 		CrystalStructure bonded = structure;
 		RegenerateAutoBonds(bonded, elementPropertiesTable);
@@ -60,6 +61,7 @@ namespace DefectStudio
 			existing->structure = std::move(structureData);
 			existing->showCellBox = showCellBox;
 			existing->showGrid = showGrid;
+			existing->sessionId = sessionId;
 			SceneSystem::SyncSceneWithStructure(existing->sceneRegistry, existing->structure);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(existing->sceneRegistry, *existing);
 			return existingWindowId;
@@ -83,6 +85,7 @@ namespace DefectStudio
 		RendererWindowState window = std::move(windows.front());
 		window.showCellBox = showCellBox;
 		window.showGrid = showGrid;
+		window.sessionId = sessionId;
 		rendererLayer.AddWindow(std::move(window));
 
 		// AddWindow rewrites windowId on a collision with an already-open window, so the id is read

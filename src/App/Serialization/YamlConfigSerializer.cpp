@@ -896,6 +896,18 @@ namespace DefectStudio
 
 			ApplyAppearanceYaml(root, config.appearance);
 
+			const char *structureCreationSection = Name(SectionKey::StructureCreation);
+			config.structureCreation.closeRendererTabAfterSave = ReadValue(
+				root,
+				Path2{structureCreationSection, Name(StructureCreationKey::CloseRendererTabAfterSave)},
+				{},
+				config.structureCreation.closeRendererTabAfterSave);
+			config.structureCreation.resetNewStructureAfterSave = ReadValue(
+				root,
+				Path2{structureCreationSection, Name(StructureCreationKey::ResetNewStructureAfterSave)},
+				{},
+				config.structureCreation.resetNewStructureAfterSave);
+
 			config.ui.fontScale = std::clamp( config.ui.fontScale, config.ui.fontScaleMin, config.ui.fontScaleMax);
 			config.ui.fontScaleStep = std::clamp( config.ui.fontScaleStep, config.ui.fontScaleStepMin, config.ui.fontScaleStepMax);
 
@@ -1471,6 +1483,12 @@ namespace DefectStudio
 			out << YAML::Key << maximizedKey << YAML::Value << config.window.maximized;
 			out << YAML::EndMap;
 			EmitAppearance(out, config.appearance);
+			out << YAML::Key << Name(SectionKey::StructureCreation) << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << Name(StructureCreationKey::CloseRendererTabAfterSave) << YAML::Value
+				<< config.structureCreation.closeRendererTabAfterSave;
+			out << YAML::Key << Name(StructureCreationKey::ResetNewStructureAfterSave) << YAML::Value
+				<< config.structureCreation.resetNewStructureAfterSave;
+			out << YAML::EndMap;
 			out << YAML::EndMap;
 
 			return WriteEmitterToFile(path, out, error);
@@ -1804,6 +1822,12 @@ namespace DefectStudio
 			out << YAML::EndMap;
 			emitAppearance(out, config.appearance);
 			ConfigYaml::EmitRendererConfig(out, config.renderer);
+			out << YAML::Key << ConfigSchema::Name(ConfigSchema::SectionKey::StructureCreation) << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << ConfigSchema::Name(ConfigSchema::StructureCreationKey::CloseRendererTabAfterSave)
+				<< YAML::Value << config.structureCreation.closeRendererTabAfterSave;
+			out << YAML::Key << ConfigSchema::Name(ConfigSchema::StructureCreationKey::ResetNewStructureAfterSave)
+				<< YAML::Value << config.structureCreation.resetNewStructureAfterSave;
+			out << YAML::EndMap;
 			out << YAML::EndMap;
 		}
 

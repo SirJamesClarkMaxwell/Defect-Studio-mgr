@@ -12,6 +12,7 @@
 
 #include <glm/glm.hpp>
 
+#include "App/CreationSession.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/Layer.hpp"
@@ -131,7 +132,8 @@ namespace DefectStudio
 		                         AtomStyleTable atomStyleTable = {},
 		                         Path atomStylesPath = {},
 		                         WeakRef<DomainLayer> domainLayer = {},
-		                         ElementPropertiesTable elementPropertiesTable = {});
+		                         ElementPropertiesTable elementPropertiesTable = {},
+		                         Ref<CreationSessionRegistry> creationSessionRegistry = {});
 		[[nodiscard]] WeakRef<EditorUiState> GetUiStateHandle() const;
 		void ApplyConfig(const ApplicationConfig &config);
 		void ExportConfig(ApplicationConfig &config) const;
@@ -280,6 +282,10 @@ namespace DefectStudio
 		PanelId m_DisplacementComparisonPanelId = 0;
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
+
+		// Shared with App's StructureLifecycleCoordinator: the one place in-progress creation
+		// sessions live. Panels read through this instead of keeping their own draft copies.
+		Ref<CreationSessionRegistry> m_CreationSessionRegistry;
 	};
 
 	template <typename TPanel, typename... Args>

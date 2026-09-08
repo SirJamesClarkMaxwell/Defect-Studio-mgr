@@ -22,7 +22,11 @@
 #include "Renderer/CrystalStructurePreviewWindow.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/OpenCrystalStructureAsWindow.hpp"
+#include "Core/Domain/StructureLifecycleEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "ScientificRuntime/Python/GetSymmetryInfoJob.hpp"
+#include "ScientificRuntime/Python/OpenDefectJob.hpp"
+#include "ScientificRuntime/Python/PymatgenConversion.hpp"
 
 namespace DefectStudio
 {
@@ -71,6 +75,8 @@ namespace DefectStudio
 		WeakRef<JobSystem> jobSystem,
 		ElementPropertiesTable elementPropertiesTable,
 		AtomStyleTable atomStyleTable,
+		Ref<CreationSessionRegistry> sessionRegistry,
+		Ref<EventBus> eventBus,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
@@ -78,7 +84,9 @@ namespace DefectStudio
 		  m_DomainLayer(std::move(domainLayer)),
 		  m_JobSystem(std::move(jobSystem)),
 		  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
-		  m_AtomStyleTable(std::move(atomStyleTable))
+		  m_AtomStyleTable(std::move(atomStyleTable)),
+		  m_SessionRegistry(std::move(sessionRegistry)),
+		  m_EventBus(std::move(eventBus))
 	{
 		std::snprintf(m_StructureNameBuffer.data(), m_StructureNameBuffer.size(), "New Structure");
 	}

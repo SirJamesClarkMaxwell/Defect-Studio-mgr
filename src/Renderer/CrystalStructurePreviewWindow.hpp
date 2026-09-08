@@ -37,7 +37,12 @@ namespace DefectStudio
 		bool showGrid = true,
 		// Lattice vectors of a second cell drawn inside the first in a contrasting colour - the
 		// primitive cell of a centred lattice. The atoms are untouched.
-		const std::optional<glm::mat3> &overlayCellVectors = std::nullopt);
+		const std::optional<glm::mat3> &overlayCellVectors = std::nullopt,
+		// Tags the window as belonging to a structure creation session (CreationSession::sessionId,
+		// stringified). A tagged window is docked by StructureCreationTabsPanel into that session's
+		// 2+1 layout instead of the main central node, and dies with the session. Empty = a plain
+		// free-standing preview, which is what every pre-session caller gets.
+		const std::string &sessionId = {});
 
 	// Closes a preview window if it is still open. No-op on an empty or unknown id, so a caller can
 	// hand over whatever it last got back without checking first.

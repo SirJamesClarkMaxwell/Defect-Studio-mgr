@@ -443,7 +443,8 @@ namespace DefectStudio
 	                                      AtomStyleTable atomStyleTable,
 	                                      Path atomStylesPath,
 	                                      WeakRef<DomainLayer> domainLayer,
-	                                      ElementPropertiesTable elementPropertiesTable)
+	                                      ElementPropertiesTable elementPropertiesTable,
+	                                      Ref<CreationSessionRegistry> creationSessionRegistry)
 	{
 		m_EventBus = std::move(eventBus);
 		m_LogRegistry = std::move(logRegistry);
@@ -458,6 +459,7 @@ namespace DefectStudio
 		m_AtomStylesPath = std::move(atomStylesPath);
 		m_DomainLayer = std::move(domainLayer);
 		m_ElementPropertiesTable = std::move(elementPropertiesTable);
+		m_CreationSessionRegistry = std::move(creationSessionRegistry);
 		bindConfigEvents();
 		bindProjectRootEvents();
 		DS_LOG_INFO(
@@ -1338,6 +1340,16 @@ namespace DefectStudio
 					roots.push_back(entry.path.String());
 				console->SetProjectContext(projectRoot, std::move(roots));
 			}
+		}
+
+		// App-layer coordinators authorize write targets against this list; they must not reach into
+		// the UI's copy, so the roots are pushed out as an event from this one funnel.
+		if (m_EventBus != nullptr)
+		{
+			ProjectEvents::ProjectRootsChanged rootsEvent;
+			for (const ProjectRootEntry &entry : currentRootsMutable())
+				rootsEvent.roots.push_back(entry.path);
+			m_EventBus->Publish(rootsEvent);
 		}
 	}
 

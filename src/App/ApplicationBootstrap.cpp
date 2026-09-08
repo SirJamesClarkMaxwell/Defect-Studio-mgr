@@ -936,6 +936,19 @@ namespace DefectStudio
 		}
 
 		{
+			ZoneScopedN("Application.CreateStructureLifecycleCoordinator");
+			ApplicationDetail::StartupStepTimer timer("Application.CreateStructureLifecycleCoordinator");
+			m_CreationSessionRegistry = CreateRef<CreationSessionRegistry>();
+			m_StructureLifecycleCoordinator = CreateUnique<StructureLifecycleCoordinator>(
+				m_EventBus,
+				coreLayer->GetJobSystemHandle(),
+				m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain),
+				m_CreationSessionRegistry,
+				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "temp" / "structure_creation"));
+			timer.Finish(true);
+		}
+
+		{
 			ZoneScopedN("Application.RegisterRendererCommands");
 			ApplicationDetail::StartupStepTimer timer("Application.RegisterRendererCommands");
 			if (auto commandRegistry = coreLayer->GetCommandRegistryHandle().lock())
@@ -967,7 +980,8 @@ namespace DefectStudio
 					m_RendererAtomStyleTable,
 					m_RendererAtomStylesPath,
 					m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain),
-					m_RendererElementPropertiesTable);
+					m_RendererElementPropertiesTable,
+					m_CreationSessionRegistry);
 				timer.Finish(true);
 			}
 			{

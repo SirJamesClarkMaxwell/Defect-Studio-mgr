@@ -6,8 +6,10 @@
 
 #include "App/ApplicationLifecycle.hpp"
 #include "App/ApplicationState.hpp"
+#include "App/CreationSession.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/RendererRuntimeOpenCoordinator.hpp"
+#include "App/StructureLifecycleCoordinator.hpp"
 #include "App/Window.hpp"
 #include "Core/Capabilities/CapabilityService.hpp"
 #include "Core/Assets/AssetManager.hpp"
@@ -160,6 +162,11 @@ namespace DefectStudio
 		Path m_RendererAtomStylesPath;
 		ElementPropertiesTable m_RendererElementPropertiesTable;
 		Unique<RendererRuntimeOpenCoordinator> m_RendererRuntimeOpenCoordinator;
+
+		// Structure creation lifecycle: the registry is the single source of truth for in-progress
+		// creation sessions (shared with the UI), the coordinator owns the add-to-project workflow.
+		Ref<CreationSessionRegistry> m_CreationSessionRegistry;
+		Unique<StructureLifecycleCoordinator> m_StructureLifecycleCoordinator;
 
 
 		// Singleton ownership

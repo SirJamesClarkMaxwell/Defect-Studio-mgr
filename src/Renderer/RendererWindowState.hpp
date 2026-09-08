@@ -513,6 +513,14 @@ namespace DefectStudio
 
 		// Link to StructureRecord for dirty flag checking
 		StructureId structureId;
+
+		// Set on the ephemeral preview windows of a structure creation session (see CreationSession).
+		// Such a window is deliberately NOT domain-backed - structureId stays empty - and its whole
+		// lifecycle belongs to the session, which is why it needs an identity of its own rather than
+		// borrowing a StructureId it has no right to. Empty for every normal, domain-backed window.
+		// StructureCreationTabsPanel docks these into the session's own 2+1 layout, so RendererPanel
+		// leaves their initial docking alone.
+		std::string sessionId;
 	};
 
 	// T15-lite export dialog: resolution preset + filename proposed from the structure's source

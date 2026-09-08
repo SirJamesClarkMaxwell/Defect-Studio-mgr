@@ -45,6 +45,13 @@ public:
 	// Copy + RemoveAll(source) when the direct rename fails for that reason, so a cut+paste between
 	// roots on different mounts still works instead of silently failing.
 	static bool Rename(const FilePath &source, const FilePath &destination, std::error_code &error);
+	// Fail-if-destination-exists rename. Unlike Rename above (which silently replaces the destination
+	// and falls back to copy+delete across volumes), this NEVER replaces an existing destination and
+	// never crosses volumes: it is the commit step of the staging-directory write contract, where an
+	// existing destination is a collision that must surface as std::errc::file_exists, not an
+	// overwrite. Windows: MoveFileExW without MOVEFILE_REPLACE_EXISTING (local NTFS only; network
+	// redirectors are out of scope). Linux: renameat2(RENAME_NOREPLACE).
+	static bool RenameNoReplace(const FilePath &source, const FilePath &destination, std::error_code &error);
 };
 
 namespace DefectStudio

@@ -207,7 +207,9 @@ namespace DefectStudio
 
 		const std::string imguiWindowLabel = displayTitle + "###RendererWindow_" + windowState.windowId;
 
-		if (!windowState.dockingInitialized)
+		// A session preview window has already been placed by StructureCreationTabsPanel's 2+1
+		// DockBuilder layout; sending it to the central node here would tear it straight back out.
+		if (!windowState.dockingInitialized && windowState.sessionId.empty())
 		{
 			windowState.dockingInitialized = true;
 			// Looked up fresh (not cached) since dock node IDs can be reshuffled by manual
