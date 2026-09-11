@@ -4,14 +4,17 @@
 
 #include <algorithm>
 
+#include "Core/Logging/Logger.hpp"
+#include "Domain/Crystal/Supercell.hpp"
+
 namespace DefectStudio
 {
 	const char *ToString(CreationMode mode) noexcept
 	{
 		switch (mode)
 		{
-			case CreationMode::FromTemplate: return "From Template";
-			case CreationMode::FromScratch: return "From Scratch";
+			case CreationMode::FromTemplate: return "From Library";
+			case CreationMode::FromScratch: return "Create New";
 			case CreationMode::AnalyzeExisting: return "Analyze Existing";
 			case CreationMode::ImportFile: return "Import File";
 		}
@@ -31,6 +34,24 @@ namespace DefectStudio
 			case CreationSessionState::Closing: return "Closing";
 		}
 		return "Unknown";
+	}
+
+	CrystalStructure BuildSessionExportStructure(const CreationSession &session)
+	{
+		if (session.draftStructure.atoms.empty() || session.supercellCounts == glm::ivec3(1))
+			return session.draftStructure;
+
+		Result<CrystalStructure> built = BuildSupercell(
+			session.draftStructure,
+			SupercellMatrix::Diagonal(
+				session.supercellCounts.x, session.supercellCounts.y, session.supercellCounts.z));
+		if (!built)
+		{
+			DS_LOG_WARN("CreationSession: supercell expansion failed, using the unit cell: {}",
+				built.Error().technicalDetails);
+			return session.draftStructure;
+		}
+		return std::move(built.Value());
 	}
 
 	Ref<CreationSession> CreationSessionRegistry::Create(CreationMode mode)

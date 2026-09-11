@@ -42,6 +42,10 @@ namespace DefectStudio
 		bool showGrid = true;
 		bool showCellBox = true;
 		bool showBonds = true;
+		// Bonds that cross a periodic cell boundary (Bond::periodicShift) run to an image atom that is
+		// not drawn, so they read as stubs poking out of the cell. Correct, and the only way a 2D
+		// sheet shows its edge connectivity - but noise on a supercell, hence the switch.
+		bool showPeriodicBonds = true;
 		bool showAtoms = true;
 		// Auto bond-length MSDF labels (Etap E) - toggled by `Alt+M`, off by default so existing
 		// structures don't suddenly grow new clutter on every bond until a user opts in.

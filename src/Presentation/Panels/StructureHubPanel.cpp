@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/StructureHubPanel.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
@@ -122,7 +123,14 @@ namespace DefectStudio
 			+ "##session_header";
 		if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::Text("Atoms: %zu", session.draftStructure.atoms.size());
+			// The atom count of what gets written, not of the unit cell it was expanded from.
+			const int cells = std::max(
+				1, session.supercellCounts.x * session.supercellCounts.y * session.supercellCounts.z);
+			ImGui::Text("Atoms: %zu", session.draftStructure.atoms.size() * static_cast<std::size_t>(cells));
+			if (cells > 1)
+				ImGui::TextDisabled("supercell %dx%dx%d of a %zu-atom cell",
+					session.supercellCounts.x, session.supercellCounts.y, session.supercellCounts.z,
+					session.draftStructure.atoms.size());
 
 			std::array<char, 128> &nameBuffer = nameBufferFor(session);
 			ImGui::TextUnformatted("Structure name:");
@@ -210,7 +218,7 @@ namespace DefectStudio
 
 		DomainEvents::AddStructureToProjectRequested event;
 		event.sessionId = session.sessionId;
-		event.structure = session.draftStructure;
+		event.structure = BuildSessionExportStructure(session);
 		event.displayName = displayName;
 		event.targetDirectory = target.Native();
 		m_EventBus->Publish(event);

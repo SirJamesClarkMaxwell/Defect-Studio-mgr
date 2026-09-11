@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -44,13 +45,34 @@ namespace DefectStudio
 	{
 		Uuid sessionId;
 		CreationMode mode = CreationMode::FromTemplate;
+		// The EXPANDED conventional cell - `lattice (x) basis`, i.e. what reaches POSCAR.
 		CrystalStructure draftStructure;
+		// The motif alone, without the centering expansion. The basis pane renders this, and the
+		// session is the only thing the creation tabs panel can read.
+		CrystalStructure motifStructure;
 		std::string displayName;
 		Path targetDirectory;
-		// Renderer window keys of the ephemeral 2+1 preview tab; no StructureId, by design.
+		// Renderer window keys of the three preview panes; no StructureId, by design.
 		std::vector<std::string> previewWindowIds;
-		// h x k x l of the supercell shown in the second preview window, and part of the tab title.
+		// Which of the three panes (basis, unit cell, supercell) are shown. Toggled from the
+		// NewStructure panel; a hidden pane keeps its renderer window and is purely a layout
+		// decision - destroying windows on toggle is what used to crash ImGui's DockBuilder.
+		std::array<bool, 3> previewVisible{true, true, true};
+		// Splitter proportions and active pane of the three-pane creation window. UI layout state
+		// in an App-layer type, deliberately: it is per-session view state with no domain meaning,
+		// and the session is the only place the panes can persist it across frames.
+		float leftFraction = 0.5f;
+		float bottomFraction = 0.4f;
+		int activePaneIndex = 1;
+		// Primitive cell of a centred lattice, drawn inside the conventional cell box. Set by the
+		// NewStructure panel - the chosen centering is only known there.
+		std::optional<glm::mat3> primitiveCellOverlay;
+		// h x k x l of the supercell shown in the third preview window, part of the tab title, and -
+		// via BuildSessionExportStructure below - what Add to Project actually writes.
 		glm::ivec3 supercellCounts{1, 1, 1};
+		// Write a POTCAR next to the POSCAR once the structure is registered. Needs
+		// ui.pseudopotential_dir; a missing one is reported as a notification, never a silent skip.
+		bool exportPotcar = false;
 		bool dirty = false;
 		CreationSessionState state = CreationSessionState::Draft;
 		std::optional<StructuredError> lastError; // Preserved across failures so the user can retry
@@ -60,6 +82,12 @@ namespace DefectStudio
 		Time::TimePoint createdAt{};
 		Time::TimePoint lastModifiedAt{};
 	};
+
+	// What the session commits: the conventional cell repeated supercellCounts times. draftStructure
+	// stays the UNIT cell because the middle preview pane renders it, so the expansion has to happen
+	// where the whole structure is needed - in the supercell pane and in Add to Project alike, which
+	// is why this lives here instead of in either of them.
+	[[nodiscard]] CrystalStructure BuildSessionExportStructure(const CreationSession &session);
 
 	// Single source of truth for active creation sessions, owned by the composition root. NewStructure
 	// and StructureHub both read through this instead of holding their own copies of the draft.

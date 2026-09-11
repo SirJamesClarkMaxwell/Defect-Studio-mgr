@@ -99,3 +99,6 @@ renderer:
     padding_percent: 25.3
     spacing: 1.11
     plane_z: -5.4
+structure_creation:
+  close_renderer_tab_after_save: true
+  reset_new_structure_after_save: false

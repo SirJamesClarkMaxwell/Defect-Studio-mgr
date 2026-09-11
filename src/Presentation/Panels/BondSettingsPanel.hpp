@@ -1,10 +1,10 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include "Domain/Crystal/CrystalPrimitives.hpp"
 #include "Domain/Crystal/ElementProperties.hpp"
+#include "Presentation/Panels/BondSettingsEditor.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
@@ -18,6 +18,10 @@ namespace DefectStudio
 	// settings/regeneration logic already ran automatically after every atom add/delete/type-change
 	// (BondGenerator.cpp), just with no way to see or change the cutoffs it uses, or to force a
 	// rebuild on demand.
+	//
+	// Structures in the project only. A structure still being created has no domain record for the
+	// command to act on, so the New Structure wizard draws DrawBondSettingsEditor itself against the
+	// draft instead of this panel reaching into a creation session.
 	class BondSettingsPanel final : public IPanel
 	{
 	public:
@@ -35,7 +39,6 @@ namespace DefectStudio
 
 	private:
 		void applySettings();
-		void drawPairPickerPopup(const char *popupId, char *targetBuffer, std::size_t targetSize);
 
 		RendererLayer &m_Layer;
 		WeakRef<CommandRegistry> m_CommandRegistry;
@@ -49,17 +52,12 @@ namespace DefectStudio
 		// through an undoable command anyway).
 		std::string m_EditedForWindowId;
 		BondGenerationSettings m_EditedSettings;
+		BondSettingsEditorState m_EditorState;
 
 		// When true (default), any edit to m_EditedSettings immediately calls applySettings() instead
 		// of waiting for the "Rebuild bonds" button - that button still exists to force a rebuild on
 		// demand (e.g. after external structure changes) even with auto-rebuild on.
 		bool m_AutoRebuild = true;
-
-		// Add-new-pair-override row (not part of BondGenerationSettings itself until "Add" commits it
-		// into m_EditedSettings.perPairCutoffOverride).
-		char m_NewPairFirst[8] = "";
-		char m_NewPairSecond[8] = "";
-		float m_NewPairScale = 1.18f;
 		std::string m_StatusMessage;
 	};
 } // namespace DefectStudio

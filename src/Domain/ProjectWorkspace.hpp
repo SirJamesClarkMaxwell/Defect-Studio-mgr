@@ -44,6 +44,11 @@ namespace DefectStudio
 			Path sourcePath,
 			std::string displayName);
 
+		// Drops a record. Currently used for exactly one case: a record whose file has been deleted
+		// from the Project Tree, which would otherwise block re-adding the structure under the same
+		// path for the rest of the session. Returns false for an unknown id.
+		bool Remove(const StructureId &id);
+
 		// Update the source path of an existing structure (e.g., if file moved)
 		bool UpdateSourcePath(const StructureId &id, Path newPath);
 

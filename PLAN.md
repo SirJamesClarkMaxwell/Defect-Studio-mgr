@@ -1,610 +1,268 @@
-# Plan: Structure Lifecycle Refactor — Steps 10-11 Redesign
+# Plan: Structure Creation UI Redesign — lattice × basis, single-window 3-pane preview
 
-_Locked via grill — by Claude Haiku + user (pzabier@gmail.com)_
+_Locked via grill — by Claude Opus 5 + pzabier@gmail.com, 2026-09-10_
+
+Branch: `task/18-structure-lifecycle-redesign`.
+
+The previous plan (Structure Lifecycle Refactor, Steps 10-11) is archived at
+`docs/work/project/plans/2026-09-08-structure-lifecycle-steps-10-11.md`. Its session/registry model,
+event contracts, path validation and atomic staging-write contract are **implemented and remain
+binding** — this plan changes only the crystallography model and the creation UI on top of them.
+
+---
 
 ## Goal
 
-Redesign Structure Hub and NewStructure panels to provide 4 distinct creation modes (from template, from scratch, analyze existing, import file), each with a unified 3-window resizable renderer layout for supercell preview and hxkxl configuration. Structure Hub coordinates creation sessions and manages "Add to Project" workflow; NewStructure handles mode selection and has "Move to StructureHub" button. After commit, structure writes to active ProjectTree folder as POSCAR and appears in ProjectTree automatically.
+Fix two structural mistakes in the structure-creation UI and finish the surrounding UX.
 
-## Data Model
+The first is a domain error: the panel conflates the **Bravais lattice** with the **atomic basis**.
+Today the `Face-centered (F)` button *overwrites* the basis table with the four FCC lattice points and
+calls them atoms, so a user who wants diamond gets simple-cubic-with-FCC-atoms (spacegroup 221 Pm-3m)
+instead of diamond (227 Fd-3m), and would have to hand-type eight rows to get the real thing. A
+crystal structure is `lattice ⊗ basis`: diamond is the FCC lattice with a two-atom carbon basis at
+`(0,0,0)` and `(¼,¼,¼)`. Centering becomes a property of the lattice section; the basis table holds
+only the motif; `buildStructure()` convolves them.
 
-### CreationSession
-```
-struct CreationSession {
-  uuid sessionId;                        // Unique ephemeral session identifier
-  enum mode { FromTemplate, FromScratch, AnalyzeExisting, ImportFile };
-  CrystalStructure draftStructure;       // Current working structure (may be invalid)
-  string displayName;                    // User-provided name (validated, sanitized)
-  Path targetDirectory;                  // Active ProjectTree folder (validated)
-  std::vector<RendererWindowId> previewWindowIds;  // 3 ephemeral renderer windows (NO StructureId — not in domain yet)
-  bool dirty;                            // Unsaved changes flag
-  enum state { Draft, Ready, Submitted, Completing, Success, Failed, Closing };
-  // Draft -> Ready (after "Move to StructureHub": tab open, no attempt yet)
-  //       -> Submitted (attemptId assigned, Add-to-Project in flight)
-  //       -> Completing -> Success|Failed -> Closing.
-  // Invariant: activeAttemptId is set iff state in {Submitted, Completing} — Ready has no attempt yet.
-  // Closing waits for any pending attempt to finish (or timeout) before the
-  // session is removed from the registry — see RendererTabClosed handling.
-  optional<StructuredError> lastError;   // Preserved for retry
-  optional<uuid> activeAttemptId;        // Set while Submitted/Completing; empty otherwise
-  timestamp createdAt;
-  timestamp lastModifiedAt;
-};
-```
+The second is a UI-architecture error: the three preview views are three separate renderer windows
+docked side by side, so the user sees three title bars and three full toolbar sets. They must be
+three *panes inside one renderer window* sharing one horizontal and one vertical toolbar.
 
-**Single-in-flight-attempt constraint:** a session has at most one `activeAttemptId` at a time.
-**Enforced by the coordinator, not just the UI:** on `AddStructureToProjectRequested`, the
-coordinator's event handler checks `session.activeAttemptId` and rejects (with a structured error,
-no job spawned) if one is already set — a plain check-and-set, no CAS needed since the coordinator
-runs on the single main thread. StructureHub disabling the "Add to Project" button is defense in
-depth on top of this, not the enforcement mechanism itself. This removes the need for a
-generation/CAS scheme to arbitrate concurrent retries — there are none, by construction — and
-reduces "stale completion" to a single case: the renderer tab closed while the sole in-flight
-attempt was still running (handled explicitly by the Closing-state protocol below).
-
-Invariants:
-- `sessionId` is globally unique for the lifetime of the app.
-- `targetDirectory` is revalidated before every write (not cached).
-- `previewWindowIds` are ephemeral; renderer windows close when session closes or Add-to-Project succeeds.
-- `draftStructure` persists after submission failure (supports retry).
-- Only main thread creates/modifies sessions.
+Alongside those: previews must exist from the first valid draft rather than waiting for the Structure
+Hub hand-off, file loading must use real pickers instead of a raw text field, and the mode's name
+must be the same string everywhere.
 
 ---
 
 ## Approach
 
-### 1. Session Registry & Lifecycle (NEW)
+### 1. Domain — separate lattice from basis
 
-- Add `CreationSessionRegistry` in `App/` (composition root owns it).
-- NewStructure registers a session on mode selection.
-- StructureHub reads all active sessions and displays them.
-- Renderer tabs are managed by session lifecycle, not free-floating.
-- Session closed event → clears NewStructure + StructureHub references.
-- Session submitted event → StructureHub marks it "Pending".
-- Session success/failure event → StructureHub updates display, preserves draft if failed.
+`Domain/Crystal/BravaisLattice.hpp:65` already exposes
+`GetCenteringPresetBasis(BravaisCenteringPreset) -> std::vector<glm::vec3>`, which returns **lattice
+points**, not atoms. The name is part of the confusion.
 
----
+1. Rename it to `GetCenteringTranslations()` so the return value says what it is. Keep the same
+   values (`P` → `{(0,0,0)}`, `I` → `+(½,½,½)`, `F` → `+(½,½,0),(½,0,½),(0,½,½)`, `C` → `+(½,½,0)`).
+2. Add `Domain/Crystal/LatticeBasisExpansion.{hpp,cpp}`:
+   ```
+   [[nodiscard]] std::vector<AtomSite> ExpandBasisOverLattice(
+       std::span<const AtomSite> basis,
+       BravaisCenteringPreset centering);
+   ```
+   For each centering translation `t`, for each basis atom `b`: emit an atom at
+   `frac(b.fractional + t)`, species carried through. Wrap into `[0,1)`. Result count is
+   `translations × basis`.
+3. `NewStructureWizardPanel::buildStructure()` calls this instead of turning `m_BasisRows` straight
+   into atoms. `m_BasisRows` is now the motif only.
 
-### 2. NewStructure Panel Refactor
+**Diamond acceptance case:** Cubic, `a = 3.567`, centering `F`, basis rows `C(0,0,0)` and
+`C(¼,¼,¼)` → 8 atoms, spacegroup 227 (Fd-3m) from the existing `Show symmetry` button. This is the
+single test that proves the model is right; it fails today.
 
-- Add mode selector: "Create from Template" | "Create from Scratch" | "Analyze Existing" | "Import File"
-- Each mode has its own form, **validates independently** (no blocking I/O in Render()).
-- Mode "Import File": file selection + parsing moved to async job; Render() displays progress/status.
-- Mode "Analyze Existing": call PuntukasBridge to parse, display lattice + atoms, allow editing.
-- Add "Move to StructureHub" button (publishes `MoveSessionToStructureHub` event; creates ephemeral renderer tab).
-- Two-way binding: reads active session ID from registry; updates draft structure on form changes.
-- On close: publishes `RendererTabClosed` (the single, shared close event — same one the renderer
-  tab's own X button publishes; NewStructure panel close and renderer-tab close both route through
-  the one Closing-state protocol in Section 7, never an immediate unconditional removal).
+### 2. NewStructure panel — three sections
 
----
+- **Lattice section** — crystal system, `a/b/c`, angles, and now the centering radio group
+  (`Primitive (P)` / `Body-centered (I)` / `Face-centered (F)` / `Base-centered (C)`). `IsPresetSupportedFor()`
+  still greys out presets the system does not admit. Selecting a centering no longer touches the basis.
+- **Atomic basis section** — the motif. Unchanged widget (`drawBasisTable()`), changed meaning: these
+  are the atoms attached to *one* lattice point. Header text must say so.
+- **Generated atoms** — new collapsing header, collapsed by default, listing every atom
+  `ExpandBasisOverLattice` produced with its fractional coordinates. Read-only. This is what goes to
+  the renderer and to POSCAR, so it is the user's check that the convolution did what they meant.
 
-### 3. Renderer Layout — Exact Specification
+`drawCenteringPresetRow()`'s current body (clear `m_BasisRows`, refill from the preset) is deleted —
+that mutation is the bug.
 
-**Layout: 2+1 split (2 windows top, 1 bottom, resizable separator)**
-- Top pane: 2 renderer windows side-by-side (e.g., original + transformed supercell)
-- Bottom pane: 1 renderer window (full width)
-- All 3 share a single vertical toolbar (left) + horizontal toolbar (top).
-- Separators are draggable; proportions persist in session state.
-- Tab title: `[Session] Mode — (h×k×l)`, e.g., `Session-xyz From Template — (2×2×2)`.
-- Each renderer window is ephemeral (no domain StructureId) and tagged with `sessionId`.
-- On tab close: publishes `RendererTabClosed` event; session handles cleanup.
+### 3. Session lifecycle — previews from the first valid draft
 
----
+Currently `StructureCreationTabsPanel::Render()` skips sessions in `Draft` state, so nothing appears
+until "Move to Structure Hub" flips the state to `Ready`. Change:
 
-### 4. Path Validation & Sanitization (NEW)
+- `NewStructureWizardPanel` creates its session as soon as the draft is valid — at least one basis row
+  with a non-empty species — not on hand-off. `syncDraftToSession()` already runs every frame and
+  keeps the registry copy current.
+- The creation window renders for `Draft` sessions too. It is the draft's viewport for the whole
+  editing session.
+- **"Move to Structure Hub" no longer opens anything.** It publishes `SessionReadyForStructureHub`,
+  which sets `state = Ready` and puts the draft on the Hub's list with its `Add to Project` button.
+  The button label reflects this: it is a submit action, not a window-opening action.
+- Closing the New Structure panel still publishes `RendererTabClosed` (the shared idempotent close
+  path from the archived lifecycle plan, Section 7) — unchanged.
 
-**Generic validation (Core layer — PathValidation module):**
-```
-function ValidateAndSanitizeName(userInput: string) -> Result<string> {
-  // Reject:
-  // - Empty or all-whitespace
-  // - Separators / invalid NTFS chars: / \ : | ? * < > " and all control chars (0x00-0x1F)
-  // - Traversal: . .\ .. ..\ ~ 
-  // - Reserved (Windows, case-insensitive, WITH or WITHOUT any extension):
-  //   CON, PRN, AUX, NUL, COM0-9, LPT0-9 — "con.txt" and "CoM1.tar.gz" are both rejected
-  // - Trailing dot(s) or trailing space(s) in the component (Windows strips these silently,
-  //   which can make two visually-different names collide on disk)
-  // - Length > 255 UTF-16 code units (NTFS component-name limit — chars, not bytes)
-  // Return: cleaned string, safe to use as a directory component
-}
+### 4. Renderer — one window, three panes
 
-function IsAncestor(canonicalAncestor, canonicalPath) -> bool {
-  // Component-wise comparison, not string prefix.
-  // Resolves both to absolute canonical form (no symlinks, no .).
-  // Returns true iff ancestor is a directory component prefix of path.
-  // Rejects lexical tricks (C:\project vs C:\project-other).
-}
-```
+This is a rewrite of `Presentation/Panels/StructureCreationTabsPanel.cpp`. The DockBuilder 2+1 layout
+and the `m_SessionDockNodes` / `m_LaidOutSessions` bookkeeping all go away.
 
-**Project-root authorization (App layer — StructureLifecycleCoordinator):**
-```
-function ValidateProjectTarget(proposedPath, registeredProjectRoots) -> Result<Path> {
-  // 1. Resolve to canonical path (reject symlinks/junctions in proposedPath's own components).
-  // 2. Check it exists and is readable.
-  // 3. For each registered root: if IsAncestor(root, proposedPath) → valid.
-  // 4. Return canonical path or "not under any project root" error.
-  // Executed twice: on selection change + inside job before write.
-}
-```
+Established from the code, and what makes this cheap: a `RendererWindowState`
+(`Renderer/RendererWindowState.hpp:40`) owns its own `RendererViewCamera` and `viewportSize`, and
+`RendererLayer::RenderToFbo(windowId, structure, windowState, globalSettings)` returns a texture id.
+`RendererPanel::renderStructureWindow()` is just `Begin` → `drawViewportToolbar` →
+`drawViewportVerticalToolbar` → `SetViewportSize` → `RenderToFbo` → `ImGui::Image`. Three panes
+therefore need three `RendererWindowState`s for camera+FBO, but only one ImGui window and one
+`ImGui::Image` per pane.
 
-**Symlinked project-root policy (resolves Round 6 contradiction):** a project root is canonicalized
-exactly once, at registration time, and registration is REJECTED if that canonical root path is
-itself a symlink/junction. Every later check (selection, submission, in-job revalidation) operates
-against that already-canonical, already-non-symlink root — so "reject symlink components before
-canonicalizing" and "roots are canonicalized" are the same policy applied at different times, not
-two competing ones. A symlink appearing *under* a registered root (not the root itself) is still
-rejected by the component-inspection step, per the existing out-of-scope note on symlinked project
-trees.
+1. **Exclude session windows from the normal loop.** `RendererPanel::render()` iterates
+   `m_Layer.GetWindows()` unconditionally (`RendererPanel.cpp:174`). Skip any window whose
+   `sessionId` is non-empty — those are drawn by the creation panel. The existing
+   `dockingInitialized` special-case for session windows at `RendererPanel.cpp:212` becomes dead and
+   is removed.
+2. **Expose the two toolbar draw calls and the viewport draw** so the creation panel can reuse them
+   rather than duplicating. `drawViewportToolbar` / `drawViewportVerticalToolbar` are currently
+   private members of `RendererPanel`; lift the shared body into a small
+   `Presentation/Panels/ViewportToolbars.{hpp,cpp}` free-function pair taking
+   `(RendererWindowState&, RendererLayer&)`. Both panels call it. No behaviour change for normal
+   windows.
+3. **The creation window body:**
+   ```
+   Begin("<StructureName> (h x k x l)###StructureCreationSession_<sessionId>")
+     DrawViewportToolbar(activePane)          // one horizontal toolbar
+     Separator
+     DrawViewportVerticalToolbar(activePane)  // one vertical toolbar
+     SameLine
+     BeginChild("panes")
+       top row    (child, height = 1 - bottomFraction)
+         BeginChild("basis",     width = leftFraction) -> Image(RenderToFbo(basisWindow))
+         vertical splitter
+         BeginChild("unitcell",  rest)                 -> Image(RenderToFbo(cellWindow))
+       horizontal splitter
+       bottom row (child)
+         BeginChild("supercell", full width)           -> Image(RenderToFbo(superWindow))
+     EndChild
+   End
+   ```
+   Layout: **basis + unit cell on top, supercell full-width below.** Increasing size order; the
+   supercell is the one that grows to hundreds of atoms and needs the width.
+4. **Splitters** are draggable; `leftFraction` and `bottomFraction` live in `CreationSession` so a
+   session remembers its own proportions.
+5. **Active pane.** Clicking a pane makes it active; it gets a highlight border. The toolbars and
+   mouse input act on the active pane only, and **each pane keeps its own camera** — rotating the
+   supercell must not move the unit-cell view. Store `activePaneIndex` in `CreationSession`.
+6. **Pane visibility.** The three checkboxes in NewStructure hide a pane; the remaining panes stretch
+   to fill (hide the basis → unit cell spans the top; hide two → the last one takes the window). A
+   hidden pane no longer destroys and recreates a renderer window — it is now purely a layout
+   decision, which also removes the `DockBuilderRemoveNode` crash this replaces.
 
-Split responsibility: Core owns sanitization, App owns authorization.
+**The three panes:**
 
----
+| Pane | Content |
+|------|---------|
+| Basis | The motif alone — `m_BasisRows` as atoms, no centering expansion, no cell box |
+| Unit cell | The conventional cell — full expanded structure, cell box, optional primitive-cell overlay |
+| Supercell | `BuildSupercell(unitCell, h×k×l)`; at `1×1×1` it shows the same content as the unit cell rather than disappearing, so the layout never jumps |
 
-### 5. Atomic Write & Rollback (NEW)
+`Show primitive cell` stays, as a contrasting second cell frame drawn inside the unit-cell pane
+(`CreationSession::primitiveCellOverlay`, already plumbed). Now that centering is an explicit lattice
+property it is always known, so the checkbox stops being greyed out for catalog structures.
 
-**Contract:**
-```
-struct AddStructureToProjectJob {
-  uuid sessionId;
-  uuid attemptId;  // Unique per retry; used to ignore stale completions
-  CrystalStructure structure;
-  string sanitizedName;
-  Path targetDirectory;      // Validated, canonical (revalidated here)
-  Path authorizedRootSnapshot;  // Immutable project-root context from coordinator
+### 5. File selection — four routes
 
-  Result<Path> Run() {
-    // This is the SOLE authoritative write contract — staging-directory based.
-    // No direct-in-place write is ever performed.
+`Core/Platform/FileDialog.cpp` already wraps NFD (`Vendor/nativefiledialog-extended`, built in
+`premake5.lua:250-263`) but only exposes a folder picker (`NFD_PickFolderN`). All four routes below
+feed the same `dispatchFileLoad()` → `OpenDefectJob` (PuntukasBridge) → `adoptLoadedStructure()` path
+that already exists.
 
-    1. Revalidate targetDirectory against authorizedRootSnapshot (IsAncestor, second check).
-       Reject if any path component is a symlink/reparse point (component-by-component inspection).
-    1b. Revalidate sanitizedName via ValidateAndSanitizeName() again, independent of the caller —
-        the job never trusts a pre-sanitized string handed to it; this is its own security boundary.
-    2. Construct destinationPath = targetDirectory / sanitizedName.
-    3. If destinationPath already exists → error (collision), no filesystem changes made.
-    4. Create a unique staging directory, REQUIRED to be a sibling of destinationPath (i.e. also
-       directly under targetDirectory) so the later rename is guaranteed same-volume/same-device:
-       stagingPath = targetDirectory / "_poscar_staging_<sessionId>_<attemptId>_<uuid>"
-       (create-or-fail; collision here is treated as a transient error, job may retry with new uuid).
-    5. Write structure to stagingPath/POSCAR via `PoscarWriter`, passing a per-attempt unique input
-       path living OUTSIDE stagingPath entirely — e.g. a scratch directory keyed by
-       `<sessionId>_<attemptId>` — never the shared `install/users/default/temp/poscar_input.json`
-       and never a file inside stagingPath itself. Keeping it outside stagingPath means a failed
-       cleanup of that scratch file can never leak it into the committed directory (stagingPath, and
-       therefore destinationPath after rename, only ever contains POSCAR). This requires the
-       `PoscarWriter`/`ScriptRunner` API to accept a caller-supplied input-path (Phase 0 blocking
-       task, see below). Cleanup of the scratch input file is best-effort and does not gate the job's
-       success/failure result.
-    5b. Write a `.pending_registration` sentinel file inside stagingPath (survives the rename into
-        destinationPath). The coordinator deletes this sentinel only immediately after
-        `Domain::Register` succeeds (Section 7). Its presence in a structure directory means
-        "written to disk but never confirmed registered" — the durable fact a crash-recovery
-        startup scan (deferred implementation, contract defined here) uses to find unregistered
-        directories without needing the coordinator to have survived long enough to log anything.
-    6. On write failure:
-       - Delete stagingPath entirely (best-effort).
-       - Return error. destinationPath was never created; no cleanup needed there.
-    7. On write success:
-       - Rename stagingPath → destinationPath using a fail-if-destination-exists primitive per
-         platform this project actually builds for (`premake5.lua` has real `system:linux`
-         (`gmake2`, `DS_PLATFORM_LINUX`) support alongside Windows — narrowing to Windows-only in an
-         earlier draft of this plan was a mistake, corrected here):
-         - **Windows:** `MoveFileExW` WITHOUT `MOVEFILE_REPLACE_EXISTING`. Check the return value;
-           `ERROR_ALREADY_EXISTS` is the collision/quarantine path below. Local NTFS only — network
-           redirectors (SMB/UNC targets) are explicitly out of scope/untested.
-         - **Linux:** `renameat2(..., RENAME_NOREPLACE)`.
-         Never `std::filesystem::rename` used bare on either platform — it silently overwrites an
-         existing destination, reopening the collision window this step exists to close.
-       - Same-volume placement (step 4) guarantees this is a single-volume rename; a cross-volume
-         result is treated as an unexpected fatal error, never a copy-then-delete fallback.
-       - If rename fails (destination now exists, or any other reason): leave stagingPath in place,
-         write a `.quarantine` marker file next to it (attemptId, timestamp, reason — see Section 7
-         Closing-protocol quarantine note), return error. Never delete stagingPath on a failed
-         rename — it holds the only copy of the written data pending investigation.
-    8. Return destinationPath/POSCAR or error.
+1. **NFD open-file dialog** — add `PickFile(filters)` next to the existing `PickFolder`, using
+   `NFD_OpenDialogN` with filters for `POSCAR`/`CONTCAR`/`*.vasp`/`*.cif`. `Browse` button.
+2. **Project Tree selection** — "Use Project Tree selection" button. The panel subscribes to
+   `ProjectTreeSelectionChanged` (already defined in `Core/Domain/StructureLifecycleEvents.hpp`) and
+   keeps the last selected *file* path.
+3. **Active renderer window** — "Use active viewport" button: copies the structure out of the
+   last-focused `RendererWindowState` directly, no disk read and no Python round-trip.
+4. **Drag and drop** onto the panel. `RendererPanel` already has the pattern with the
+   `DS_WAVECAR_PATH` payload; add a `DS_STRUCTURE_PATH` payload emitted by `ProjectTreePanel` for
+   structure files.
 
-    Durability note: this contract guarantees **visibility atomicity** — no reader ever observes a
-    partially-written POSCAR — NOT crash durability. No fsync of the file or parent directory is
-    performed before rename; a crash before the OS flushes to disk can lose the write entirely, in
-    which case the user retries. This is an accepted, explicit limitation, not an implied stronger
-    guarantee.
+`adoptLoadedStructure()` must now also populate the *basis* correctly: a loaded file gives a full
+atom list, not a motif. It sets centering to `Primitive (P)` and puts every loaded atom in the basis
+table — `P` has a single identity translation, so `lattice ⊗ basis` reproduces the file exactly.
+Recovering a smaller motif from a loaded structure is a symmetry-detection problem (spglib), not
+arithmetic, and is out of scope.
 
-    Invariant: destinationPath exists with a valid POSCAR only if Run() returned success.
-               On any Run() failure, destinationPath is never created or modified.
-               A leftover "_poscar_staging_*" directory only occurs on rename failure or a crash
-               mid-step-7; both are quarantine cases (marked with a `.quarantine` file) handled by a
-               future startup scan, never silently deleted.
-  }
-};
-```
+### 6. Naming
 
-Job returns `Result<Path>`. Coordinator must check Result before publishing success event.
-Staging-directory write is the only atomic-write contract in this plan; the acceptance criteria,
-Phase 0, and Phase 4 checklists below all refer back to this sequence — there is no separate
-"direct write" variant anywhere else in the plan.
+`ToString(CreationMode::FromScratch)` returns `"Create New"`, matching the tab. Same for the other
+three (`"From Library"`, `"Import File"`, `"Analyze Existing"`). The enum keeps its internal names.
+The creation window title is `<structure name> (h×k×l)`.
+
+### 7. From Library
+
+Selecting a prototype fills the lattice section (system, parameters, centering) **and** the basis
+table from the catalog, and everything stays editable — pick `Diamond`, change the second basis
+atom's species to `Zn`, and you have zincblende. Same `lattice ⊗ basis` model as Create New, just
+pre-filled. `applyPrototypeToBasis()` is rewritten to split the prototype's conventional-cell
+positions into centering + motif rather than writing all positions as basis rows.
 
 ---
-
-### 6. StructureHub Panel — Session Manager
-
-- Display all active sessions (registry).
-- Highlight active session (currently rendered tab).
-- **Only StructureHub has "Add to Project" button** (applies only to active session).
-- On "Add to Project" click: validate name + folder again, submit `AddStructureToProjectRequested` event.
-- Listen to session lifecycle events (success/failure) and update UI.
-- Failed sessions: keep draft + error in UI; user can edit and retry.
-- No recent/history display.
-
----
-
-### 7. Workflow Integration & Event Flow
-
-**Key invariant:** Domain registration happens BEFORE success event is published.
-
-```
-User selects mode in NewStructure
-  → NewStructure.OnModeSelected() creates session + registers it
-  → Publishes SessionCreated(sessionId)
-  
-User fills form, clicks "Move to StructureHub"
-  → StructureHub captures targetDirectory (current active ProjectTree folder)
-  → Publishes SessionReadyForStructureHub(sessionId, targetDirectory)
-  → App layer: creates renderer tab, tags it with sessionId; session.state = Ready (no attemptId yet)
-  → NewStructure two-way binding: reads/updates active session draft
-  
-User in StructureHub, clicks "Add to Project"
-  → StructureHub reads session's captured targetDirectory
-  → StructureHub compares captured target to current ProjectTree selection (canonical path comparison)
-  → If different: display warning "Target folder has changed" + show original target + option to use new target or keep original
-  → User confirms (keeps original or switches to new target)
-  → Validates name + targetDirectory (2nd check, coordinator via ValidateProjectTarget)
-  → Publishes AddStructureToProjectRequested(sessionId, structure, name, targetDirectory)
-    — no attemptId here; the UI doesn't own attempt identity, the coordinator does (next step)
-  → Coordinator's handler, atomically (single main thread step):
-    1. Reject if session.activeAttemptId is already set (single-in-flight enforcement)
-    2. Generate a fresh attemptId, set it as session.activeAttemptId, session.state = Submitted
-    3. Spawn AddStructureToProjectJob(sessionId, attemptId, ...) via JobSystem
-  
-Job runs in background, calls Run():
-  → If Run() returns success Path:
-    → Job completes with internal-only AddStructureToProjectJobCompleted(sessionId, attemptId, Result::success(path))
-  → If Run() returns error:
-    → Job completes with internal-only AddStructureToProjectJobCompleted(sessionId, attemptId, Result::error(err))
-  (AddStructureToProjectJobCompleted is not a new EventBus event type — it names how the coordinator
-   consumes JobSystem's existing `JobCompletedEvent`: the Phase 4 session/attempt-keyed job-tracking
-   map resolves `JobCompletedEvent.jobId` back to `(sessionId, attemptId)` and extracts the job's
-   `Result<Path>` payload on the main thread. This is deliberately distinct from the public
-   ProjectStructureAdded/Failed events below, so the coordinator's stale/activeAttemptId gating and
-   Domain::Register both happen BEFORE any public event is even constructed. ProjectStructureAdded,
-   once published, is by definition already registered and already current — it never carries a
-   stale attempt.)
-
-App coordinator (main thread) receives AddStructureToProjectJobCompleted:
-  → Checks attemptId == session.activeAttemptId (and session.state != Closing) FIRST, before
-    touching Domain at all. If it doesn't match: this is the Closing/timeout case — see the
-    Closing-state protocol below, no public event is published.
-  → If it matches and result is success (staging already renamed to destinationPath by the job — see Section 5):
-    1. Call Domain::RegisterStructureInProject(structure) → Result<StructureId>
-       (this requires wrapping/changing the current `RegisterAsProjectMember` API, which returns a
-       bare reference with no failure signal today — Phase 0 blocking task, see Implementation phases)
-    2. If registration fails: delete destinationPath/POSCAR (best-effort); if delete fails, leave
-       destinationPath in place — its `.pending_registration` sentinel (Section 5) already marks it
-       as quarantine-worthy for the future startup scan, so no separate marker file is needed here.
-       Publish ProjectStructureAddFailed(sessionId, attemptId, error).
-    3. If registration succeeds: delete the `.pending_registration` sentinel from destinationPath
-       (this is the confirmation step the startup scan's contract depends on), then publish
-       ProjectStructureAdded(sessionId, attemptId, newStructureId, poscarPath)
-    → ProjectTree updates automatically (structure appears)
-    → StructureHub: marks session "Success"
-    → NewStructure: optionally resets (configurable in Settings)
-    → 3-window tab: optionally closes (configurable in Settings)
-  
-  → If failure:
-    → Publish ProjectStructureAddFailed(sessionId, attemptId, error)
-    → StructureHub: displays error, preserves draft for retry
-    → NewStructure: shows error, user can edit and retry
-    → Tab stays open
-  
-Tab closed (user clicks X) — Closing-state protocol (also entered from NewStructure panel close per
-Section 2, AND from Settings-driven auto-close after a successful Add — all three publish this same
-event; the handler is idempotent: if sessionId is already absent from the registry, no-op + log,
-never an error, so duplicate/out-of-order close events are safe):
-  → Publishes RendererTabClosed(sessionId); session.state = Closing
-  → No new AddStructureToProjectRequested is accepted for a Closing session (coordinator-enforced,
-    see single-in-flight-attempt constraint in Data Model).
-  → If session.activeAttemptId is empty (no attempt in flight): remove session from registry immediately.
-  → If an attempt IS in flight:
-    - Session is detached from UI-visible state immediately (NewStructure/StructureHub stop
-      referencing it, freeing the "slot" a user perceives) — but the coordinator keeps a minimal
-      pending-cleanup record `{sessionId, attemptId}` alive until the job's
-      AddStructureToProjectJobCompleted payload actually arrives or a configurable timeout
-      (default e.g. 30s) elapses first.
-    - On payload arrives before timeout:
-      - Success → destinationPath now exists but is UNREGISTERED (Domain::Register is skipped for a
-        Closing session, per the check above) → coordinator deletes destinationPath (safe: nothing
-        ever referenced it, it was never domain-registered) → pending-cleanup record discarded.
-      - Failure → nothing on disk to clean up (job's own failure path already cleaned its staging
-        dir) → pending-cleanup record discarded, error logged.
-    - On timeout (payload not yet arrived): pending-cleanup record is NOT discarded — it stays
-      alive specifically to catch the late payload when it eventually arrives (the job itself is
-      not forcibly killed; JobSystem cooperative-cancel is out of scope here). When the late payload
-      does arrive, the same success/failure handling above runs against the still-alive
-      pending-cleanup record. This means an unregistered destinationPath can never survive
-      unresolved — it is always either deleted (late success) or was never created (late failure);
-      the only persistent artifact from a timeout is a `.quarantine` marker file if the coordinator
-      itself cannot complete the cleanup (e.g. delete fails), for the future startup scan.
-```
-
-**Event contracts updated:**
-
-| Event | sessionId | attemptId | Coordinator Action |
-|-------|-----------|-----------|-------------------|
-| `SessionCreated` | yes | — | register session in CreationSessionRegistry; state=Draft |
-| `SessionReadyForStructureHub` | yes | — | create renderer tab; state=Submitted |
-| `AddStructureToProjectRequested` | yes | — (assigned by coordinator on receipt, not carried inbound) | reject if activeAttemptId already set; else generate attemptId, set activeAttemptId, spawn AddStructureToProjectJob; state=Submitted |
-| `AddStructureToProjectJob::Complete(Result)` | yes | yes | (internal job result, not published) |
-| `ProjectStructureAdded` | yes | yes | Coordinator checks attemptId == session.activeAttemptId BEFORE calling Domain::Register; if session is Closing/attemptId stale, skip registration, treat write as orphaned (Closing protocol); else **Coordinator performs** Domain::Register (before publishing), then update consumers (ProjectTree, etc.); state=Completing→Success |
-| `ProjectStructureAddFailed` | yes | yes | if attemptId == session.activeAttemptId, display error + preserve draft; state=Completing→Failed; else (session Closing) log only, per Closing protocol |
-| `RendererTabClosed` | yes | — | wait for pending attempts to complete (or timeout); then remove session from registry; state=Closing |
-
-- Non-attempt events (`SessionCreated`, `RendererTabClosed`) carry sessionId only.
-- Attempt-related events carry sessionId + attemptId, EXCEPT the inbound `AddStructureToProjectRequested` (UI intent), which carries only sessionId — attemptId is coordinator-assigned on receipt, never client-supplied (Section 7).
-- Domain registration is `Result<StructureId>`, not void.
-- Success event published only after successful domain registration (on main thread, before ProjectStructureAdded).
-
----
-
-### 8. Import & Analyze Modes (SPECIFIED)
-
-**Import File:**
-- UI: file browser + progress indicator.
-- Job: LoadStructureFromFileJob (async, cancellable, uses PuntukasBridge).
-- On success: result structure loaded into draft; UI shows lattice/atoms.
-- On failure: error displayed; user can retry with different file.
-
-**Analyze Existing:**
-- UI: file browser (load existing POSCAR from disk or ProjectTree).
-- Parsing: `PuntukasBridge.LoadStructure()` (actual current API — verify its return shape gives the
-  lattice + species breakdown this display needs; if not, scope a follow-up bridge method rather
-  than inventing one here, see Phase 0 verification task).
-- Display: lattice info, atoms, optional bond visualization.
-- Editability: allow atom position tweaks, supercell hxkxl changes (optional; can be read-only in MVP).
-- Workflow: editable draft → "Move to StructureHub" → Add to Project (same convergence as other modes).
-- Note: Saving to material library is a separate workflow, not in scope for this plan.
-
-**Structure validation is a hard precondition, not a soft check:** the Phase 0 validation contract
-(finite non-degenerate cell, valid species, valid coordinates, renderer-safe) is enforced at (a) the
-"Move to StructureHub" button — disabled/erroring on an invalid draft — and (b) again inside
-`AddStructureToProjectJob::Run()` before any staging write. A draft may be transiently invalid while
-the user is mid-edit in NewStructure, but it can never cross either of those two gates while invalid.
-
----
-
-### 9. Settings Schema (NEW)
-
-```yaml
-# install/users/default/config/ui_settings.yaml
-structure_creation:
-  close_renderer_tab_after_save: true  # bool, default true
-  reset_new_structure_after_save: false  # bool, default false
-```
-
-Persistence: YAML in user config directory. Defaults if missing. Migration: no version yet (v1 implicit).
-
-**Removed from MVP:** `max_concurrent_sessions` (memory-limited by OS; not worth config overhead). Removed `temp_file_retention_on_failure` (all temps are deleted; crash cleanup is future work).
-
----
-
-### 10. Testing Strategy (EXPLICIT)
-
-**Unit tests:**
-- `PathValidationTests`: name sanitization (all rejection cases: traversal, separators, reserved, empty, length).
-- `PathAncestorTests`: component-wise ancestor checks, rejection of lexical prefixes (C:\project vs C:\project-other).
-- `CreationSessionTests`: lifecycle transitions, state invariants, sessionId uniqueness.
-- `AtomicWriteContractTests`: temp file creation, directory creation, atomic move, cleanup on failure, collision detection.
-
-**Integration tests:**
-- `AddStructureToProjectJobTests`: end-to-end write + rollback, TOCTOU races (mock concurrent deletes after validation).
-- `SessionRegistryTests`: create/close/switch sessions, event publishing with sessionId + attemptId, stale completion ignoring.
-- `DomainRegistrationTests`: coordinator registers structure on main thread before publishing success, cleanup on registration failure.
-
-**Platform-specific security tests (Windows + Unix variants):**
-- Symlink/junction substitution (Windows: create link in target folder, then symlink attack during write; expected outcome is unconditional rejection — test asserts the job returns an error, never a partial or misdirected write).
-- Lexical-prefix traversal (C:\project-2 vs C:\project, verify ancestor check fails).
-- Concurrent same-name creation (two sessions create the same structure name simultaneously; one succeeds, one fails with collision).
-- Attacker/race-created destination is never silently overwritten: pre-create destinationPath between the job's collision check and its rename step; expected outcome is the fail-if-exists rename returns a collision error — the pre-existing destination's content is asserted unchanged after the job runs. This is the oracle for the documented best-effort TOCTOU mitigation, not "rejected or handled" (either outcome).
-
-**UI / acceptance tests (manual + future automation):**
-- Create from Template → Move to StructureHub → Add to Project → verify POSCAR in ProjectTree.
-- Analyze Existing → load POSCAR → edit → Move to StructureHub → Add → verify in ProjectTree.
-- Multiple concurrent sessions → close one → verify others unaffected.
-- Failed save → edit + retry with same/different name → verify only successful attempt registers.
-- ProjectTree folder changed after session creation → StructureHub warns before Add.
-- Renderer tab close → NewStructure clears binding safely.
-
-**Deferred to later phases:**
-- Crash recovery (startup scan for orphaned directories/temp files).
-- Symlink/reparse junctions *in project tree* (rejection of symlinks in path validation is in scope; supporting symlinked folders as project roots is future work).
-- Structure validation contract (Phase 0: define what "valid" means — non-zero cell vectors, valid species, coordinate bounds, etc.).
-- Renderer toolbar per-pane vs. broadcast action routing (UI-specific; detailed in Phase 2).
-
----
-
-### 11. Renderer Contract Alignment (NEW)
-
-Ephemeral renderer windows opened during structure creation are **not** registered in domain. They have temporary `RendererWindowId`s linked to sessions, not `StructureId`s. On "Add to Project" success, a new domain registration creates a real `StructureId`, and the app may open a new permanent renderer window if desired (out of scope for now; user manually opens it via ProjectTree). Ephemeral windows close when session ends.
 
 ## Key decisions & tradeoffs
 
 | Decision | Rationale | Tradeoff |
 |----------|-----------|----------|
-| **Session registry at composition root** | Guarantees single source of truth for all active creation sessions. Avoids UI state scattering across NewStructure/StructureHub/Renderer. | Adds App layer responsibility; requires session lifecycle events. |
-| **Ephemeral renderer windows (no StructureId)** | Honors domain boundary: renders can preview without committing to domain registry. On success, a new real StructureId is created. | Requires careful cleanup on session close; must not leak resources. Mitigation: publish RendererTabClosed event. |
-| **2+1 split layout (exact, not configurable)** | Eliminates ambiguity; 2 windows for comparison (original + modified), 1 for analysis. Resizable separators provide flexibility without adding complexity. | Locks layout; users can't choose 3x1 or other arrangements. Acceptable: can extend later if needed. |
-| **Path validation twice (at submission + inside job)** | Defends against the common case (target folder deleted/moved between selection and write). Documented as **best-effort mitigation, not a full TOCTOU guarantee** — a true guarantee needs OS-level no-follow directory-handle operations (open-relative-to-fd, `O_NOFOLLOW`/Windows equivalents), out of scope here. Second check is inside the job, close to the write. | Marginal performance cost. Residual race window between the second check and the write is accepted and documented, not silently claimed away. |
-| **Atomic write with temp file + move** | Ensures no partial POSCAR on disk if process crashes or write fails. Rollback is automatic (temp file not renamed). | Requires filesystem support for atomic rename (Windows, Unix both have it). |
-| **Settings configurable, not hardcoded** | Different workflows need different close/reset behavior. Users can tune for their use case. | More config surface; settings must be documented and migrated. Mitigated by sensible defaults. |
-| **Draft preserved after failure** | Honors lifecycle contract: user can edit and retry without losing work. | Must track which attempt failed and which succeeded (requires attempt IDs in events). |
+| **Centering is a lattice property; basis is the motif** | It is the actual crystallography. Diamond becomes FCC + 2 rows instead of 8 hand-typed rows, and the spacegroup comes out right. | Existing saved drafts that used the old "centering fills the basis" behaviour will re-expand and gain atoms. No such drafts are persisted today (drafts are ephemeral), so no migration is written. |
+| **Read-only generated-atoms list, collapsed by default** | The convolution is invisible otherwise — the user types 2 rows and 8 atoms reach POSCAR. | One more widget and a per-frame expansion when expanded. The expansion is `translations × basis`, trivially small at unit-cell scale. |
+| **One window, three panes, one toolbar set** | Directly what was asked, and three toolbar sets ate most of the vertical space. | The panes are no longer independently dockable. Accepted deliberately: they are views of one structure, not three documents. |
+| **Camera per pane, toolbar acts on the active pane** | Rotating the supercell must not disturb the unit-cell view; comparing two orientations is a real need. | A user who *wants* locked cameras has to orbit twice. A "link cameras" toggle is a cheap later addition, not built now. |
+| **Previews from the first valid draft, not from hand-off** | The preview is the feedback loop for editing; making it wait until submission inverts the workflow. | A session exists earlier, so `CreationSessionRegistry` holds drafts that may never be submitted. They are removed by the same idempotent `RendererTabClosed` path. |
+| **"Move to Structure Hub" becomes submit-only** | With previews already open, the button's only remaining job is putting the draft on the Hub's list. | Two-step commit (Move, then Add to Project) survives. Kept because the Hub is where the target folder is confirmed. |
+| **Supercell pane persists at 1×1×1** | The layout must not jump every time h×k×l crosses 1. | Two panes briefly show the same content. Cheaper than a re-laying-out window. |
+| **Loaded files land in the basis under `P` centering** | Reproduces the file byte-exactly with no symmetry guessing. | No motif reduction on import — a loaded FCC file shows 4 basis rows, not 1. Correct, just not minimal. |
+| **All of it in `task/18`** | The domain fix and the layout fix both change what `buildStructure()` feeds the renderer; splitting means merging a state that is still wrong. | One larger review. Mitigated by the acceptance list below. |
+
+---
 
 ## Risks / open questions
 
-1. **Atomic database availability:** Create from Scratch mode requires lookup of atomic database (elements, radii, valence). Verify whether PuntukasBridge or a new service provides this. If not, scope changes to "manual element entry" or defer to later phase.
+1. **`RenderToFbo` three times per frame.** Three FBOs at pane resolution instead of one at window
+   resolution. Panes are smaller than a full window, so the pixel count is comparable, but this is
+   unverified — measure before assuming, and reuse the existing Tracy instrumentation.
+2. **Toolbar extraction touches normal renderer windows.** Lifting `drawViewportToolbar` /
+   `drawViewportVerticalToolbar` out of `RendererPanel` risks regressing every ordinary viewport.
+   The functions must move without edits; any behaviour change belongs in a separate commit.
+3. **`ExpandBasisOverLattice` and overlapping atoms.** A user can type a basis atom at `(½,½,0)` with
+   `F` centering and land two atoms on the same site. Detect coincident positions and warn in the
+   generated-atoms list — do not silently deduplicate, since the user may be mid-edit.
+4. **`applyPrototypeToBasis` splitting prototypes into centering + motif** is the one genuinely
+   uncertain piece: `prototypes.yaml` stores conventional-cell positions, and factoring them back
+   into centering × motif is a small pattern match, not a general algorithm. If a prototype does not
+   factor cleanly, fall back to `P` + all positions (correct, just not minimal) and log it.
+5. **Splitter fractions in `CreationSession`** put UI layout state in an App-layer type. Acceptable —
+   it is per-session view state with no domain meaning — but it is a boundary smell worth noting.
 
-2. ~~PoscarWriter temp-file unification~~ — resolved: elevated to a Phase 0 blocking task (see Implementation phases). No longer an open risk.
-
-3. **Component-wise canonical path on Windows:** Implementation must handle drive letters, relative vs. absolute, UNC paths, symlinks, and junctions correctly. Recommend using `std::filesystem::canonical()` + component-by-component comparison, with symlink rejection at each step.
-
-4. **Settings persistence location:** Settings are in `install/users/default/config/ui_settings.yaml`. Confirm this is the canonical location for UI preferences (not elsewhere in config tree).
-
-5. **Supercell hxkxl UI:** Existing NewStructureWizardPanel has hxkxl entry; verify it's suitable for all 4 modes or if mode-specific tweaks are needed (e.g., "Create from Scratch" might constrain h/k/l ranges).
-
-6. **SessionRegistry cleanup on app exit:** Sessions are ephemeral; on app shutdown, open sessions should be cleaned up and their renderer tabs closed. Confirm App::Shutdown() handles this.
-
-7. ~~Stale completion ignoring~~ — resolved: single-in-flight-attempt constraint (see Data Model) makes concurrent retries impossible by construction; the only remaining case (tab closed mid-attempt) is handled by the explicit Closing-state protocol in Section 7.
+---
 
 ## Out of scope
 
-- Changes to rest of application (wavefunctions, bonds, defect analysis, rendering outside structure-creation workflow).
-- ProjectTree active-folder mechanism (already implemented; this plan only uses it).
-- Export to formats other than POSCAR (POSCAR only for now; extensible later).
-- Undo/redo within a single supercell session (single linear redo stack acceptable; session is transient anyway).
-- Collaborative editing or multi-user structure sharing.
-- Saving to material library from "Analyze Existing" mode (listed as a mode, but save-to-library is deferred).
-- Custom renderer layouts beyond 2+1 split (not user-configurable; fixed for MVP).
+- Symmetry-based motif reduction on import (finding the minimal basis of a loaded structure).
+- Linked cameras across panes.
+- User-configurable pane arrangements beyond the fixed 2-over-1 and hiding panes.
+- Non-diagonal supercell matrices (`SupercellMatrix::Diagonal` only, as today).
+- Anything in the archived lifecycle plan that is already implemented: session registry, event
+  contracts, path validation, the staging-directory atomic write, `Add to Project`, ProjectTree
+  integration.
+- Export formats other than POSCAR.
 
 ---
 
-## Implementation phases
+## Acceptance
 
-1. **Phase 0 (Foundation):**
-   - **Blocking, do first:** amend `docs/structure-lifecycle-contracts-2026-09-07.md` to add
-     `sessionId`/`attemptId` to the relevant event definitions. No consumer/producer code in later
-     phases should be written against the old (un-amended) contract.
-   - **Blocking:** redesign `PoscarWriter`/`ScriptRunner` call surface to accept a caller-supplied,
-     per-attempt-unique input JSON path, replacing the shared
-     `install/users/default/temp/poscar_input.json`. `write_poscar.py`'s `shutil.move` is replaced
-     with a fail-if-exists rename primitive (see Section 5).
-   - **Blocking:** extend `UIConfig` (and its serializer) with a typed `structure_creation` section
-     (`close_renderer_tab_after_save`, `reset_new_structure_after_save`) — the current serializer
-     only emits known sections, so an untyped/undeclared subtree would silently fail to persist.
-     Add a round-trip (de)serialize test.
-   - Add CreationSession model + CreationSessionRegistry
-     - Session state machine: Draft → Submitted → Completing → Success/Failed → Closing
-     - Don't remove session until all pending attempts complete or timeout (see Closing-state
-       protocol in Section 7) — single-in-flight-attempt constraint means at most one attempt to wait for.
-   - Add PathValidation module, split by layer:
-     - **Core:** generic name sanitization (length, separators, traversal, reserved words) +
-       symlink/reparse component inspection (walk each path component, reject if any is a
-       symlink/junction — this check does NOT know about project roots).
-     - **App (StructureLifecycleCoordinator):** project-root membership via `IsAncestor()` —
-       the only layer that knows the set of registered project roots.
-     - Explicit symlink rejection happens via the Core component-inspection above, before any
-       `canonical()` call — `canonical()` itself never "fails" on a symlink, it resolves it, so
-       rejection must happen first (platform-specific: Windows junctions, Unix symlinks).
-   - Wire events (SessionCreated, SessionClosed, RendererTabClosed, etc.)
-   - Define structure validation contract:
-     - Finite, non-degenerate cell vectors (volume > 0)
-     - Valid species (in periodic table or element database)
-     - Valid atomic coordinates (within/near cell)
-     - Renderer preconditions (safe for OpenGL display, no NaN/inf)
-   - Verify PuntukasBridge atomic-database support (or scope to manual entry)
-   - Verify `PuntukasBridge.LoadStructure()`'s return shape covers Analyze-Existing's needs
-     (lattice, species, coordinates); scope a follow-up method if it doesn't
-   - **Blocking:** wrap or change the domain-registration entry point (`RegisterAsProjectMember`,
-     which currently returns a bare reference with no failure signal) so the coordinator has a
-     genuine `Result<StructureId>` API with named failure cases (duplicate id, invalid structure,
-     registry unavailable) to call in Section 7's workflow
-   - Define AddStructureToProjectJob:
-     - Accepts immutable authorized-root snapshot as context
-     - Uses staging directory strategy: unique per sessionId + attemptId
+- [ ] **Diamond:** Cubic, `a = 3.567`, centering `F`, basis `C(0,0,0)` + `C(¼,¼,¼)` → 8 atoms,
+      `Show symmetry` reports spacegroup 227 (Fd-3m).
+- [ ] **BCC iron:** Cubic, centering `I`, basis `Fe(0,0,0)` → 2 atoms, spacegroup 229 (Im-3m).
+- [ ] **Rocksalt:** Cubic, centering `F`, basis `Na(0,0,0)` + `Cl(½,½,½)` → 8 atoms, spacegroup 225.
+- [ ] Selecting a centering never modifies the basis table.
+- [ ] Generated-atoms list matches the atom count and positions in the written POSCAR.
+- [ ] The creation window has exactly one horizontal and one vertical toolbar.
+- [ ] Three panes: basis and unit cell on top, supercell full width below; splitters drag.
+- [ ] Clicking a pane makes it active; orbiting it leaves the other panes' cameras untouched.
+- [ ] Unchecking a view collapses its pane and the others stretch; re-checking restores it. No crash.
+- [ ] Panes appear as soon as the first basis row has a species — before any Structure Hub hand-off.
+- [ ] `Move to Structure Hub` opens no window; it puts the draft on the Hub list as `Ready`.
+- [ ] All four file-selection routes load a POSCAR into the basis table.
+- [ ] The mode reads `Create New` in the tab, in the session state line, and in the Hub list.
+- [ ] Release build green; test suite still 293 passed / 2 skipped, plus new
+      `LatticeBasisExpansionTests` covering P/I/F/C expansion, wrap-around, and coincident-atom
+      detection.
 
-2. **Phase 1 (NewStructure):**
-   - Mode selector UI (radio buttons or tabs: Template, Scratch, Analyze, Import)
-   - Mode-specific forms (each with independent validation, no blocking I/O in Render())
-   - Import/Analyze as async jobs (not blocking in Render())
-   - "Move to StructureHub" button (publishes event, does NOT create renderer tab yet)
-   - Two-way session binding
-
-3. **Phase 2 (Renderer):**
-   - **Renderer contract amendment** (same doc as the Phase 0 event-contract change): current
-     contract states renderer windows open by `StructureId` only. Add an explicit session-owned
-     ephemeral-window path — `RendererWindowId` tagged with `sessionId`, no `StructureId`, distinct
-     lifecycle from domain-backed windows — as a first-class amendment, not an app-side workaround.
-   - 2+1 split layout (top: 2 windows, bottom: 1, resizable separators)
-   - Ephemeral window IDs tagged with sessionId (no domain StructureId)
-   - Shared toolbar for all 3 (rotation, zoom, display modes)
-   - Tab lifecycle: open on SessionReadyForStructureHub, close on RendererTabClosed or user click
-   - Tab title reflects mode + hxkxl
-
-4. **Phase 3 (StructureHub):**
-   - Session manager UI: list active sessions, highlight active
-   - "Add to Project" button (only in StructureHub; triggers validation + job submission)
-   - Display session state (Draft, Ready, Submitted, Completing, Success, Failed, Closing)
-   - Error display + retry UX for failed sessions
-
-5. **Phase 4 (Integration & Job):**
-   - Refactor `StructureLifecycleCoordinator`'s pending-job tracking from JobId-only to
-     session/attempt-keyed records; add an explicit `ProjectStructureAddFailed` emission path for
-     "JobSystem unavailable" / "Domain unavailable" so those failures are never silent file leaks.
-   - AddStructureToProjectJob implementation:
-     - Receive immutable authorized-root snapshot from coordinator
-     - Second-check validation: IsAncestor + symlink rejection
-     - Use staging directory: `<targetDir>/_poscar_staging_<sessionId>_<attemptId>_<uuid>/`
-     - Write temp → move staging to final location (atomic)
-     - On failure: delete temp; leave staging (quarantine); coordinator handles cleanup
-   - Event handling:
-     - Job completion (Result<Path>) passed to coordinator
-     - Coordinator registers structure (Result<StructureId>) **before** publishing ProjectStructureAdded
-     - Stale-completion handling: coordinator checks attemptId against active session state
-   - Settings schema + load (close_renderer_tab_after_save, reset_new_structure_after_save, etc.)
-   - ProjectTree integration: structure appears after successful write
-   - Session cleanup: wait for pending attempts on RendererTabClosed; timeout handling defined
-
-6. **Phase 5 (Testing):**
-   - Unit: PathValidation, CreationSession, AtomicWrite
-   - Integration: AddStructureToProjectJob, SessionRegistry, TOCTOU scenarios
-   - Acceptance: end-to-end workflows (Create → Move → Add → verify in ProjectTree)
-
----
-
-## Acceptance Criteria
-
-**Data Integrity:**
-- [ ] No partial POSCAR on disk if write fails (temp file deleted, POSCAR never created).
-- [ ] Destination directory: if write fails, directory is empty or deleted; if registration fails after write, POSCAR is deleted (directory may remain empty).
-- [ ] Domain registration is Result-based; failure does not register structure. ProjectStructureAdded NOT published if registration fails.
-- [ ] Crash after directory creation: orphan directory may persist; handled in future cleanup phase.
-- [ ] Attempt-related events carry sessionId + attemptId, except inbound `AddStructureToProjectRequested` (coordinator assigns attemptId on receipt); stale completions ignored by coordinator.
-- [ ] Non-attempt events (SessionCreated, RendererTabClosed) carry sessionId only.
-
-**Security:**
-- [ ] Path traversal (../, ..\, ~) rejected at sanitization boundary.
-- [ ] Component-wise path-ancestor check prevents lexical tricks (C:\project-2 cannot bypass C:\project).
-- [ ] Destination directory validation executed twice: before job submission and inside job before write. Documented as best-effort TOCTOU mitigation, not a full guarantee (no OS-level no-follow handles in scope).
-- [ ] Symlinks/junctions in the destination path are rejected by explicit component-by-component inspection performed before canonicalization (not by relying on `canonical()` to fail — it resolves symlinks rather than rejecting them).
-- [ ] Note: Symlink-in-project-tree (e.g., project root itself is a symlink) is not in scope for Phase 1; future work.
-
-**Session Management:**
-- [ ] Multiple concurrent sessions exist independently; closing one does not affect others.
-- [ ] Renderer tabs tagged with sessionId; tab close publishes RendererTabClosed event.
-- [ ] Failed adds preserve draft + error; user can edit and retry without losing work.
-- [ ] ProjectTree folder selection after session creation results in warning in StructureHub (confirms target before Add).
-
-**Architecture:**
-- [ ] NewStructure and StructureHub have no direct coupling (only via session registry + events).
-- [ ] CreationSessionRegistry owned by App layer (composition root).
-- [ ] PathValidation split: generic checks in Core, project-root authorization in App coordinator.
-- [ ] 3-window renderer tab lifecycle managed by session (opens on SessionReadyForStructureHub, closes on RendererTabClosed or user click).
-
-**Behavior:**
-- [ ] Settings for close_renderer_tab_after_save and reset_new_structure_after_save are discoverable + persisted.
-- [ ] ProjectTree shows structure immediately after "Add to Project" succeeds.
-- [ ] Analyze Existing mode converges on same StructureHub → Add workflow (no parallel save-to-library path).
-
-**Testing:**
-- [ ] All unit tests pass (PathValidation, CreationSession, AtomicWrite, SessionRegistry).
-- [ ] Integration tests pass (AddStructureToProjectJob, DomainRegistration, TOCTOU races, stale completions).
-- [ ] Platform-specific security tests pass (symlink attacks, lexical-prefix bypass, concurrent collision).
-- [ ] All existing tests continue to pass (no regression).
-- [ ] Manual acceptance tests pass (Template → Add, Analyze → Add, concurrent sessions, failed retry, folder warning).
+**Build and test only through `scripts/Windows/BuildErrorsOnly.bat` and `scripts/Windows/Build.bat`
+— never raw MSBuild.** Release configuration only during active development.

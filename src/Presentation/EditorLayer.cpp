@@ -38,7 +38,7 @@
 #include "IO/TextFileIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
-#include "Presentation/Panels/NewStructureWizardPanel.hpp" // TEMP for manual verification, revert before commit
+#include "Presentation/Panels/NewStructureWizardPanel.hpp"
 #include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
@@ -52,6 +52,7 @@
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 #include "Presentation/Panels/MaterialsCollectionPanel.hpp"
+#include "Presentation/Panels/StructureCreationTabsPanel.hpp"
 #include "Presentation/Panels/StructureHubPanel.hpp"
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
@@ -125,6 +126,10 @@ namespace DefectStudio
 		stream << "view=" << SerializeViewSnapshot(record.view) << '\n';
 		stream << "show=" << record.showAtoms << ',' << record.showBonds << ',' << record.showCellBox << ','
 			   << record.showGrid << '\n';
+		// Its own line rather than a fifth field in "show=": that one is read back only when it splits
+		// into exactly 4 parts, so widening it would silently reset every toggle in every file written
+		// before today.
+		stream << "show_periodic_bonds=" << record.showPeriodicBonds << '\n';
 		stream << "orbital_up=" << record.orbitalUpEnabled << ',' << record.orbitalUpPositiveColor.x << ','
 			   << record.orbitalUpPositiveColor.y << ',' << record.orbitalUpPositiveColor.z << ','
 			   << record.orbitalUpNegativeColor.x << ',' << record.orbitalUpNegativeColor.y << ','
@@ -186,6 +191,8 @@ namespace DefectStudio
 					record.showGrid = parts[3] == "1";
 				}
 			}
+			if (fields.contains("show_periodic_bonds"))
+				record.showPeriodicBonds = fields["show_periodic_bonds"] == "1";
 			const auto parseOrbital =
 				[&](const char *key, bool &enabled, glm::vec3 &pos, glm::vec3 &neg, float &alpha) {
 					if (!fields.contains(key))
@@ -641,19 +648,28 @@ namespace DefectStudio
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
-			// TEMP for manual verification, revert before commit (Task 10 owns the real wiring)
-			registerPanel<NewStructureWizardPanel>(
+			m_NewStructureWizardPanelId = registerPanel<NewStructureWizardPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
+				m_CreationSessionRegistry, m_EventBus,
 				"New Structure", true);
+			// Config is normally applied before the panels exist, so the fresh wizard has to be told
+			// once here as well as on every later apply.
+			pushPseudopotentialStateToWizard(
+				m_CurrentConfig != nullptr && !m_CurrentConfig->ui.pseudopotentialDir.Empty());
 			m_MaterialsCollectionPanelId = registerPanel<MaterialsCollectionPanel>(
 				*rendererLayer, m_DomainLayer, m_ElementPropertiesTable, m_AtomStyleTable,
 				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "materials" / "materials.db"),
 				"Materials Collection", false);
 			m_StructureHubPanelId = registerPanel<StructureHubPanel>(
-				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_AtomStyleTable,
-				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "materials" / "materials.db"),
+				m_CreationSessionRegistry,
 				m_EventBus,
 				"Structure Hub", true);
+			// Hosts the three-pane preview window for every open creation session. Without it the
+			// session preview windows are never drawn at all - RendererPanel skips them.
+			registerPanel<StructureCreationTabsPanel>(
+				*rendererLayer, m_CreationSessionRegistry, m_EventBus, m_ContextManager, m_CommandRegistry,
+				m_ElementPropertiesTable, m_AtomStyleTable,
+				"Structure Creation", true);
 			registerPanel<ElementCatalogPanel>(
 				*rendererLayer, m_CommandRegistry, m_AtomStyleTable, m_ElementPropertiesTable, m_AtomStylesPath,
 				"Element Catalog", false);
@@ -751,6 +767,7 @@ namespace DefectStudio
 				record.view = *snapshot;
 			record.showAtoms = windowState.showAtoms;
 			record.showBonds = windowState.showBonds;
+			record.showPeriodicBonds = windowState.showPeriodicBonds;
 			record.showCellBox = windowState.showCellBox;
 			record.showGrid = windowState.showGrid;
 			record.orbitalUpEnabled = windowState.orbitalChannelUp.enabled;
@@ -837,6 +854,7 @@ namespace DefectStudio
 			rendererLayer->ApplyWindowViewSnapshot(windowState.windowId, record.view);
 			windowState.showAtoms = record.showAtoms;
 			windowState.showBonds = record.showBonds;
+			windowState.showPeriodicBonds = record.showPeriodicBonds;
 			windowState.showCellBox = record.showCellBox;
 			windowState.showGrid = record.showGrid;
 			windowState.orbitalChannelUp.enabled = record.orbitalUpEnabled;
@@ -1163,6 +1181,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onBulkDirectoryChangeRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<DomainEvents::ProjectTreeSelectionChanged>(
 			*m_EventBus, *this, &EditorLayer::onProjectTreeSelectionChanged, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<DomainEvents::ProjectStructureAdded>(
+			*m_EventBus, *this, &EditorLayer::onProjectStructureAdded, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::WavecarDropped>(
 			*m_EventBus, *this, &EditorLayer::onWavecarDropped, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::TextFileOpenRequested>(
@@ -1433,6 +1453,19 @@ namespace DefectStudio
 				hub->SetTargetDirectory(Path::FromResolved(event.resolvedTargetDirectory));
 			}
 		}
+
+		// The wizard gets the selected FILE (one of its four load routes). Forwarded from here
+		// rather than subscribed a second time: this handler already runs for exactly this event.
+		if (auto panel = findPanel(m_NewStructureWizardPanelId).lock())
+		{
+			if (auto *wizard = dynamic_cast<NewStructureWizardPanel *>(panel.get()))
+			{
+				wizard->SetProjectTreeSelection(
+					event.kind == DomainEvents::ProjectTreeSelectionChanged::Kind::File
+						? Path::FromResolved(event.selectedPath)
+						: Path{});
+			}
+		}
 	}
 
 	void EditorLayer::onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event)
@@ -1538,8 +1571,18 @@ namespace DefectStudio
 		}
 	}
 
+	void EditorLayer::pushPseudopotentialStateToWizard(bool configured)
+	{
+		Ref<IPanel> panel = findPanel(m_NewStructureWizardPanelId).lock();
+		if (auto *wizard = dynamic_cast<NewStructureWizardPanel *>(panel.get()); wizard != nullptr)
+			wizard->SetPseudopotentialDirConfigured(configured);
+	}
+
 	void EditorLayer::applyConfigToUiState(const ApplicationConfig &config)
 	{
+		// Before the m_UiState guard below: the wizard needs this whether or not the UI state exists.
+		pushPseudopotentialStateToWizard(!config.ui.pseudopotentialDir.Empty());
+
 		if (m_UiState == nullptr)
 		{
 			DS_LOG_WARN("EditorLayer config apply skipped: UI state unavailable");
@@ -1614,6 +1657,21 @@ namespace DefectStudio
 	{
 		// Legacy in-app-built structure export removed in Step 11. To save a structure, use
 		// StructureHubPanel "Add to Project" workflow (publishes AddStructureToProjectRequested).
+	}
+
+	// The only POTCAR trigger left after Step 11 removed the legacy save path: a structure that was
+	// created with "Export POTCAR" ticked, the moment it becomes a project member.
+	void EditorLayer::onProjectStructureAdded(const DomainEvents::ProjectStructureAdded &event)
+	{
+		Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+		if (domainLayer == nullptr)
+			return;
+		Ref<const StructureRecord> record =
+			domainLayer->Workspace().Structures().Find(event.newStructureId).lock();
+		if (record == nullptr || !record->exportPotcar)
+			return;
+
+		exportPotcarNextToPoscar(*record, Path::FromResolved(event.poscarPath.parent_path()));
 	}
 
 	// POTCAR is written with its bare VASP name next to the POSCAR, so an input directory holding one

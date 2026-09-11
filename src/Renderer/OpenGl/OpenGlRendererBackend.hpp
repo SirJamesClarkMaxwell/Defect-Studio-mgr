@@ -120,7 +120,6 @@ namespace DefectStudio
 		bool atomsDirty = true;
 		bool bondsDirty = true;
 		bool gridDirty = true;
-		bool cellEdgesDirty = true;
 		bool labelsDirty = true;
 		std::size_t lastAtomCount = 0;
 		std::size_t lastBondCount = 0;
@@ -142,6 +141,9 @@ namespace DefectStudio
 		// trim math in renderBonds bakes it into cachedBondInstances, so a change needs its own
 		// dirty check here (see the shrinkA/shrinkB comment at that call site for why).
 		float lastBondRadiusMultiplier = 1.0f;
+		// Same reason as lastBondRadiusMultiplier: the periodic-bond filter runs while
+		// cachedBondInstances is built, so flipping it has to invalidate that cache.
+		bool lastShowPeriodicBonds = true;
 		std::string lastSourcePath;
 		std::vector<OpenGlAtomInstance> cachedAtomInstances;
 		std::vector<OpenGlBondInstance> cachedBondInstances;
@@ -223,7 +225,10 @@ namespace DefectStudio
 			bool bondLabelAutoOffsetEnabled = true,
 			float bondLabelAutoOffsetMagnitude = 0.3f,
 			// notes.txt pt. 8 - see renderLabels' own comment on this same parameter.
-			float bondLabelAlignThresholdDeg = 45.0f);
+			float bondLabelAlignThresholdDeg = 45.0f,
+			// See RendererWindowState::showPeriodicBonds. Last in the list only because everything
+			// above it is already positional at the call sites.
+			bool showPeriodicBonds = true);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -276,7 +281,8 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			bool showPeriodicBonds = true);
 		// Atoms-displacement comparison arrows (RendererWindowState::displacementComparison) - one
 		// batched instanced draw for all visible shafts (shared m_CylinderMesh, like renderBonds)
 		// plus one for all visible cone heads (shared m_ConeMesh, already instance-layout-compatible

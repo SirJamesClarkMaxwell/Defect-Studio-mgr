@@ -4,6 +4,8 @@
 
 #include <utility>
 
+#include "Core/Logging/Logger.hpp"
+#include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureValidation.hpp"
 
 namespace DefectStudio
@@ -39,16 +41,22 @@ namespace DefectStudio
 		if (Result<void> valid = ValidateStructureForPersistence(structure); !valid)
 			return valid.Error();
 
+		// Note this cannot tell a real duplicate from a record left dangling by a deleted folder:
+		// by the time it runs, the caller has already written a file at exactly this path. Dangling
+		// records are dropped earlier, by StructureLifecycleCoordinator's pre-flight, which runs
+		// before anything is written and can still see that the file was missing.
 		for (const Ref<StructureRecord> &existing : m_Records)
 		{
-			if (existing != nullptr && !existing->sourcePath.Empty() && existing->sourcePath == sourcePath)
-				return StructuredError(
-					ErrorCategory::Validation,
-					Severity::Error,
-					"A structure from this file is already in the project",
-					"Duplicate sourcePath: " + sourcePath.String(),
-					"Open the existing structure, or add this one under a different name.",
-					"StructureRegistry::RegisterAsProjectMember");
+			if (existing == nullptr || existing->sourcePath.Empty() || existing->sourcePath != sourcePath)
+				continue;
+
+			return StructuredError(
+				ErrorCategory::Validation,
+				Severity::Error,
+				"A structure from this file is already in the project",
+				"Duplicate sourcePath: " + sourcePath.String(),
+				"Open the existing structure, or add this one under a different name.",
+				"StructureRegistry::RegisterAsProjectMember");
 		}
 
 		Ref<StructureRecord> record = CreateRef<StructureRecord>();
@@ -61,6 +69,19 @@ namespace DefectStudio
 		record->savedRevision = 0;
 		m_Records.push_back(record);
 		return record->id;
+	}
+
+	bool StructureRegistry::Remove(const StructureId &id)
+	{
+		for (auto it = m_Records.begin(); it != m_Records.end(); ++it)
+		{
+			if (*it != nullptr && (*it)->id == id)
+			{
+				m_Records.erase(it);
+				return true;
+			}
+		}
+		return false;
 	}
 
 	bool StructureRegistry::UpdateSourcePath(const StructureId &id, Path newPath)

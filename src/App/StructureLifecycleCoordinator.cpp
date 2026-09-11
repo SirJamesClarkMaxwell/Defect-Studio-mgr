@@ -204,6 +204,51 @@ namespace DefectStudio
 			return;
 		}
 
+		// Pre-flight the duplicate check that the registry repeats at the END of the flow. It has to
+		// happen HERE, before anything is written, for two reasons:
+		//
+		//  - a real duplicate is then reported without creating a directory, writing a POSCAR and
+		//    deleting both again (which used to leave an empty folder and its .pending_registration
+		//    sentinel in the project tree after every refused add), and
+		//  - a record whose file has since been DELETED from the Project Tree is only recognisable
+		//    while the file is still missing. By registration time this attempt has written a new
+		//    file at that exact path, and the dangling record is indistinguishable from a live one -
+		//    which is what made a deleted structure impossible to re-add for the rest of the session.
+		const Path plannedPoscarPath = Path::FromResolved(
+			authorized.Value().first.Native() / sanitizedName.Value() / "POSCAR");
+		if (Ref<DomainLayer> domainLayer = m_DomainLayer.lock(); domainLayer != nullptr)
+		{
+			StructureRegistry &structures = domainLayer->Workspace().Structures();
+			std::optional<StructureId> danglingId;
+			for (const Ref<StructureRecord> &record : structures.Records())
+			{
+				if (record == nullptr || record->sourcePath != plannedPoscarPath)
+					continue;
+
+				if (FileSystem::Exists(record->sourcePath.Native()))
+				{
+					StructuredError error(
+						ErrorCategory::Validation,
+						Severity::Error,
+						"A structure from this file is already in the project",
+						"Duplicate sourcePath (pre-flight): " + plannedPoscarPath.String(),
+						"Open the existing structure, or add this one under a different name.",
+						"StructureLifecycleCoordinator::onAddStructureToProjectRequested");
+					session->lastError = error;
+					publishFailure(event.sessionId, Uuid{}, std::move(error));
+					return;
+				}
+				danglingId = record->id;
+				break;
+			}
+			if (danglingId.has_value())
+			{
+				DS_LOG_INFO("Structure Lifecycle: dropping dangling record for deleted file {}",
+					plannedPoscarPath.String());
+				structures.Remove(*danglingId);
+			}
+		}
+
 		Ref<JobSystem> jobSystem = m_JobSystem.lock();
 		if (jobSystem == nullptr)
 		{
@@ -355,16 +400,31 @@ namespace DefectStudio
 
 		if (!registered)
 		{
-			// Written but unregistered: drop the POSCAR so the directory cannot masquerade as a
-			// structure directory. Its .pending_registration sentinel already marks whatever remains.
+			// Written but unregistered: this attempt created the whole directory (the job refuses to
+			// write into an existing one), so the whole directory goes. Removing only the POSCAR used
+			// to leave an empty folder carrying a .pending_registration sentinel in the project tree
+			// for every failed add.
 			std::error_code error;
-			FileSystem::Remove(poscarPath.Native(), error);
+			FileSystem::RemoveAll(poscarPath.Native().parent_path(), error);
+			if (error)
+				DS_LOG_WARN("Structure Lifecycle: could not remove unregistered structure directory '{}': {}",
+					poscarPath.Native().parent_path().string(), error.message());
 
 			session->activeAttemptId.reset();
 			session->state = CreationSessionState::Failed;
 			session->lastError = registered.Error();
 			publishFailure(sessionId, attemptId, registered.Error());
 			return;
+		}
+
+		// The POTCAR request rides along on the record: EditorLayer writes the file when it sees
+		// ProjectStructureAdded, because POTCAR generation is an IO/config concern (it needs
+		// ui.pseudopotential_dir) and does not belong in the lifecycle coordinator.
+		if (Ref<StructureRecord> record =
+				domainLayer->Workspace().Structures().FindMutable(registered.Value()).lock();
+			record != nullptr)
+		{
+			record->exportPotcar = session->exportPotcar;
 		}
 
 		// Registration confirmed - clear the sentinel. This is the step a future startup scan's

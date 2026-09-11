@@ -51,10 +51,10 @@ namespace DefectStudio
 	// angles (same convention pymatgen/ASE use for Lattice.from_parameters).
 	[[nodiscard]] LatticeCell BuildLatticeCell(CrystalSystem system, const LatticeParameters &params);
 
-	// Starting-point atomic basis for the classic centering types, as fractional coordinates in
-	// the CONVENTIONAL cell - a convenience preset the New Structure wizard inserts before the
-	// user edits further, not a constraint BuildLatticeCell enforces. Species/labels are left to
-	// the caller - this only returns positions.
+	// The lattice-point translations of the classic centering types, as fractional coordinates in
+	// the CONVENTIONAL cell. These are LATTICE POINTS, not atoms: a structure is `lattice (x)
+	// basis`, so every atom of the basis (motif) is repeated at every translation returned here.
+	// See Domain/Crystal/LatticeBasisExpansion.hpp for the convolution.
 	enum class BravaisCenteringPreset
 	{
 		Primitive,    // 1 point: (0,0,0)
@@ -62,12 +62,11 @@ namespace DefectStudio
 		FaceCentered, // 4 points: (0,0,0) + 3 face centers
 		BaseCentered  // 2 points: (0,0,0) + (0.5,0.5,0)
 	};
-	[[nodiscard]] std::vector<glm::vec3> GetCenteringPresetBasis(BravaisCenteringPreset preset);
+	[[nodiscard]] std::vector<glm::vec3> GetCenteringTranslations(BravaisCenteringPreset preset);
 
-	// Which centering presets the New Structure wizard should offer as a starting basis for a
-	// given crystal system - a UI convenience gate, not a physical Bravais-lattice-count authority
-	// (e.g. Cubic offers all four including base-centered, which doesn't preserve cubic symmetry
-	// as a distinct Bravais class, but is still a valid convenience starting point per
-	// GetCenteringPresetBasis's own doc comment above).
+	// Which centering presets the New Structure wizard should offer for a given crystal system -
+	// a UI convenience gate, not a physical Bravais-lattice-count authority (e.g. Cubic offers all
+	// four including base-centered, which doesn't preserve cubic symmetry as a distinct Bravais
+	// class, but is still a valid convenience starting point).
 	[[nodiscard]] bool IsPresetSupportedFor(CrystalSystem system, BravaisCenteringPreset preset);
 } // namespace DefectStudio

@@ -38,6 +38,12 @@ namespace DefectStudio
 		// Lattice vectors of a second cell drawn inside the first in a contrasting colour - the
 		// primitive cell of a centred lattice. The atoms are untouched.
 		const std::optional<glm::mat3> &overlayCellVectors = std::nullopt,
+		// How many times to repeat that overlay cell along its own three vectors. The supercell pane
+		// passes its h x k x l and gets the textbook lattice framework - every unit cell outlined,
+		// not just the one at the origin, which is what makes a block of identical atoms readable as
+		// a repeat of something. 1x1x1 draws the single cell, which is what the primitive-cell
+		// overlay wants.
+		const glm::ivec3 &overlayCellRepeat = glm::ivec3(1),
 		// Tags the window as belonging to a structure creation session (CreationSession::sessionId,
 		// stringified). A tagged window is docked by StructureCreationTabsPanel into that session's
 		// 2+1 layout instead of the main central node, and dies with the session. Empty = a plain

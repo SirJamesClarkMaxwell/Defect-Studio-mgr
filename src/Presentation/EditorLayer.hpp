@@ -56,6 +56,7 @@ namespace DefectStudio
 		RendererViewSnapshot view;
 		bool showAtoms = true;
 		bool showBonds = true;
+		bool showPeriodicBonds = true;
 		bool showCellBox = true;
 		bool showGrid = true;
 		bool orbitalUpEnabled = false;
@@ -162,11 +163,15 @@ namespace DefectStudio
 		void executeCommandFromPalette(const CommandID &id);
 		void bindConfigEvents();
 		void applyConfigToUiState(const ApplicationConfig &config);
+		// The wizard greys out its "Export POTCAR" tick without a pseudopotential directory. It is
+		// pushed rather than read because m_CurrentConfig is REPLACED on every apply.
+		void pushPseudopotentialStateToWizard(bool configured);
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 		void onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &event);
 		void onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &event);
 		void onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &event);
+		void onProjectStructureAdded(const DomainEvents::ProjectStructureAdded &event);
 		void exportPotcarNextToPoscar(const StructureRecord &structureRecord, const Path &projectDir);
 
 		// T07.5.1/T07.5.4/T07.5.5 project system - a project is a user-chosen directory holding
@@ -282,6 +287,7 @@ namespace DefectStudio
 		PanelId m_DisplacementComparisonPanelId = 0;
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
+		PanelId m_NewStructureWizardPanelId = 0;
 
 		// Shared with App's StructureLifecycleCoordinator: the one place in-progress creation
 		// sessions live. Panels read through this instead of keeping their own draft copies.
