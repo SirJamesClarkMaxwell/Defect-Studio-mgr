@@ -77,4 +77,22 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(result);
 		EXPECT_TRUE(result->bonds.empty());
 	}
+
+	// The bonds are dropped (above) but the RULES that regenerate them are not: without this the
+	// supercell re-bonded at the stock global scale, so every per-pair cutoff the user had set on
+	// the unit cell was silently ignored in the supercell view and in the exported file.
+	TEST(SupercellTests, BondSettingsCarryOverToTheSupercell)
+	{
+		CrystalStructure unitCell;
+		unitCell.cell.vectors = { glm::vec3(2, 0, 0), glm::vec3(0, 2, 0), glm::vec3(0, 0, 2) };
+		unitCell.atoms = { AtomSite{"C", glm::vec3(0, 0, 0), glm::vec3(0, 0, 0), 0} };
+		unitCell.bondSettings.globalCutoffScale = 1.42f;
+		unitCell.bondSettings.perPairCutoffOverride["C-C"] = 0.75f;
+
+		const Result<CrystalStructure> result = BuildSupercell(unitCell, SupercellMatrix::Diagonal(2, 1, 1));
+		ASSERT_TRUE(result);
+		EXPECT_FLOAT_EQ(result->bondSettings.globalCutoffScale, 1.42f);
+		ASSERT_TRUE(result->bondSettings.perPairCutoffOverride.contains("C-C"));
+		EXPECT_FLOAT_EQ(result->bondSettings.perPairCutoffOverride.at("C-C"), 0.75f);
+	}
 } // namespace DefectStudio::Tests

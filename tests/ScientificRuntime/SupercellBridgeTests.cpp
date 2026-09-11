@@ -28,7 +28,7 @@ namespace DefectStudio::Tests
 		CrystalStructure structure;
 		structure.cell = BuildLatticeCell(CrystalSystem::Cubic, LatticeParameters{.a = 3.615f});
 		// Cu is FCC (Fm-3m, #225) - use the FaceCentered preset basis from Task 1 directly.
-		for (const glm::vec3 &fractional : GetCenteringPresetBasis(BravaisCenteringPreset::FaceCentered))
+		for (const glm::vec3 &fractional : GetCenteringTranslations(BravaisCenteringPreset::FaceCentered))
 			structure.atoms.push_back(AtomSite{"Cu", structure.FractionalToCartesian(fractional), fractional, 0});
 
 		SupercellBridge bridge;

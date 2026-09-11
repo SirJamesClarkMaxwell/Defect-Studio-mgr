@@ -6,6 +6,7 @@ ui:
   font_scale_step: 0.34
   settings_preview_enabled: true
   settings_auto_save_on_preview: true
+  pseudopotential_dir: ""
 window:
   x: 0
   y: 34
@@ -98,3 +99,6 @@ renderer:
     padding_percent: 25.3
     spacing: 1.11
     plane_z: -5.4
+structure_creation:
+  close_renderer_tab_after_save: true
+  reset_new_structure_after_save: false

@@ -3,6 +3,7 @@
 #include <deque>
 #include <string>
 
+#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
@@ -32,11 +33,21 @@ namespace DefectStudio
 			Path sourcePath = {},
 			std::string displayName = {});
 
-		// Lifecycle operations - these are the ONLY way to set sourcePath going forward
-		[[nodiscard]] Ref<const StructureRecord> RegisterAsProjectMember(
+		// Lifecycle operations - these are the ONLY way to set sourcePath going forward.
+		// Result-based, not a bare reference: the caller (StructureLifecycleCoordinator) has already
+		// committed a directory to disk by the time it calls this, so it needs to know whether the
+		// registration actually took, in order to clean that directory up when it did not.
+		// Fails on: an empty sourcePath, a structure that fails ValidateStructureForPersistence, or a
+		// sourcePath already registered by another record.
+		[[nodiscard]] Result<StructureId> RegisterAsProjectMember(
 			CrystalStructure structure,
 			Path sourcePath,
 			std::string displayName);
+
+		// Drops a record. Currently used for exactly one case: a record whose file has been deleted
+		// from the Project Tree, which would otherwise block re-adding the structure under the same
+		// path for the rest of the session. Returns false for an unknown id.
+		bool Remove(const StructureId &id);
 
 		// Update the source path of an existing structure (e.g., if file moved)
 		bool UpdateSourcePath(const StructureId &id, Path newPath);

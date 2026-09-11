@@ -2,6 +2,18 @@
 
 #include "Core/Utils/Path.hpp"
 
+#ifdef DS_PLATFORM_WINDOWS
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+#elif defined(DS_PLATFORM_LINUX)
+	#include <fcntl.h>
+	#include <sys/syscall.h>
+	#include <unistd.h>
+	#ifndef RENAME_NOREPLACE
+		#define RENAME_NOREPLACE (1 << 0)
+	#endif
+#endif
+
 FilePath FileSystem::CurrentPath()
 {
 	return std::filesystem::current_path();
@@ -109,6 +121,38 @@ bool FileSystem::Rename(const FilePath &source, const FilePath &destination, std
 		return false;
 	std::uintmax_t removed = RemoveAll(source, error);
 	return !error && removed > 0;
+}
+
+bool FileSystem::RenameNoReplace(const FilePath &source, const FilePath &destination, std::error_code &error)
+{
+	error.clear();
+
+#ifdef DS_PLATFORM_WINDOWS
+	if (::MoveFileExW(source.c_str(), destination.c_str(), 0) != 0)
+		return true;
+
+	const DWORD lastError = ::GetLastError();
+	// MoveFileExW reports a pre-existing destination as ERROR_ALREADY_EXISTS or ERROR_ACCESS_DENIED
+	// (directories); both mean "collision", which callers distinguish via std::errc::file_exists.
+	if (lastError == ERROR_ALREADY_EXISTS || lastError == ERROR_FILE_EXISTS)
+		error = std::make_error_code(std::errc::file_exists);
+	else
+		error = std::error_code(static_cast<int>(lastError), std::system_category());
+	return false;
+#elif defined(DS_PLATFORM_LINUX)
+	// glibc only grew a renameat2() wrapper in 2.28; the raw syscall works on every kernel >= 3.15.
+	if (::syscall(SYS_renameat2, AT_FDCWD, source.c_str(), AT_FDCWD, destination.c_str(), RENAME_NOREPLACE) == 0)
+		return true;
+
+	error = std::error_code(errno, std::generic_category());
+	return false;
+#else
+	// No no-replace primitive available: refuse rather than silently overwriting the destination.
+	(void)source;
+	(void)destination;
+	error = std::make_error_code(std::errc::function_not_supported);
+	return false;
+#endif
 }
 
 namespace DefectStudio

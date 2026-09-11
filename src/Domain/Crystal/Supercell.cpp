@@ -34,6 +34,10 @@ namespace DefectStudio
 		CrystalStructure result;
 		result.name = unitCell.name + " supercell";
 		result.isPeriodic = unitCell.isPeriodic;
+		// Carried over, not defaulted: the cutoffs are a property of the material, and dropping them
+		// made every supercell re-bond at the stock 1.18 scale - the creation window's supercell pane
+		// ignored every per-pair bond length the user had just set on the unit cell.
+		result.bondSettings = unitCell.bondSettings;
 
 		const std::array<glm::vec3, 3> &oldVectors = unitCell.cell.vectors;
 		std::array<glm::vec3, 3> newVectors;

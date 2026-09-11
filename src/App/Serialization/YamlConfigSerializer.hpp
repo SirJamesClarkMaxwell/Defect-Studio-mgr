@@ -24,8 +24,15 @@ namespace DefectStudio
 			Jobs,
 			Log,
 			Renderer,
+			StructureCreation,
 			UI,
 			Window,
+		};
+
+		enum class StructureCreationKey
+		{
+			CloseRendererTabAfterSave,
+			ResetNewStructureAfterSave,
 		};
 
 		enum class RendererKey
@@ -232,8 +239,14 @@ namespace DefectStudio
 			{SectionKey::Jobs, "jobs"},
 			{SectionKey::Log, "log"},
 			{SectionKey::Renderer, "renderer"},
+			{SectionKey::StructureCreation, "structure_creation"},
 			{SectionKey::UI, "ui"},
 			{SectionKey::Window, "window"},
+		};
+
+		inline const std::unordered_map<StructureCreationKey, const char *> StructureCreationKeyNames = {
+			{StructureCreationKey::CloseRendererTabAfterSave, "close_renderer_tab_after_save"},
+			{StructureCreationKey::ResetNewStructureAfterSave, "reset_new_structure_after_save"},
 		};
 
 		inline const std::unordered_map<RendererKey, const char *> RendererKeyNames = {
@@ -434,6 +447,7 @@ namespace DefectStudio
 		inline const char *Name(EventQueueKey key) { return NameFromMap(EventQueueKeyNames, key); }
 		inline const char *Name(JobsKey key) { return NameFromMap(JobsKeyNames, key); }
 		inline const char *Name(LogKey key) { return NameFromMap(LogKeyNames, key); }
+		inline const char *Name(StructureCreationKey key) { return NameFromMap(StructureCreationKeyNames, key); }
 		inline const char *Name(UiKey key) { return NameFromMap(UiKeyNames, key); }
 		inline const char *Name(WindowKey key) { return NameFromMap(WindowKeyNames, key); }
 		inline const char *Name(LegacyKey key) { return NameFromMap(LegacyKeyNames, key); }

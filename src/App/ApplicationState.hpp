@@ -85,6 +85,7 @@ namespace DefectStudio
 		WindowConfig window;
 		LogConfig log;
 		UIConfig ui;
+		StructureCreationConfig structureCreation;
 		AppearanceConfig appearance;
 		JobsConfig jobs;
 		EventQueueConfig eventQueue;

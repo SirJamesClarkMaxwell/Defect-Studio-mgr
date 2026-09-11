@@ -1,98 +1,54 @@
 #pragma once
 
 #include <array>
-#include <optional>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
+#include "App/CreationSession.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
-#include "Domain/Crystal/CrystalStructure.hpp"
-#include "Domain/Crystal/ElementProperties.hpp"
-#include "IO/MaterialLibraryIO.hpp"
 #include "Presentation/Panels/IPanel.hpp"
-#include "Renderer/AtomStyleTable.hpp"
-#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
-	class DomainLayer;
-	class JobSystem;
 	class EventBus;
-	class NewStructureWizardPanel;
-	class MaterialsCollectionPanel;
 
-	// Unified Structure Hub: three entry modes (Create New, From Library, Import File)
-	// all converge on a single "Add to project" workflow. Replaces NewStructureWizardPanel
-	// and MaterialsCollectionPanel. Listen to ProjectTreeSelectionChanged to populate
-	// target directory selector.
+	// Session manager for structure creation. Lists every creation session that has been handed over
+	// from New Structure, shows its state and last error, and owns the ONE "Add to Project" button in
+	// the application.
+	//
+	// It holds no draft of its own: the draft lives in CreationSessionRegistry, which the New
+	// Structure panel edits and this panel reads. That is what keeps the two panels decoupled - they
+	// share a registry and events, never each other.
 	class StructureHubPanel final : public IPanel
 	{
 	public:
-		explicit StructureHubPanel(
-			RendererLayer &rendererLayer,
-			WeakRef<DomainLayer> domainLayer,
-			WeakRef<JobSystem> jobSystem,
-			ElementPropertiesTable elementPropertiesTable,
-			AtomStyleTable atomStyleTable,
-			Path personalLibraryPath,
+		StructureHubPanel(
+			Ref<CreationSessionRegistry> sessionRegistry,
 			Ref<EventBus> eventBus,
 			std::string title = "Structure Hub",
-			bool visibleByDefault = false);
+			bool visibleByDefault = true);
 		StructureHubPanel(const StructureHubPanel &other) = default;
 
 		void Render() override;
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
-		// Called when ProjectTreeSelectionChanged fires; sets the target directory for "Add to project"
+		// Current Project Tree selection, pushed in on ProjectTreeSelectionChanged. This is compared
+		// against what each session captured at hand-off time, not silently substituted for it.
 		void SetTargetDirectory(const Path &targetDirectory);
 
 	private:
-		enum class Mode
-		{
-			Create,   // Build structure from scratch (reuse wizard)
-			Library,  // Select from library (reuse materials panel)
-			Import    // Load from file
-		};
+		void drawSession(CreationSession &session);
+		void drawTargetSection(CreationSession &session);
+		void dispatchAddToProject(CreationSession &session);
+		[[nodiscard]] std::array<char, 128> &nameBufferFor(const CreationSession &session);
 
-		void drawModeTab(Mode mode);
-		void drawCreateTab();
-		void drawLibraryTab();
-		void drawImportTab();
-		void drawAddToProjectSection();
-
-		// Validates that a structure and target directory are set, publishes AddStructureToProjectRequested
-		void dispatchAddToProject();
-
-		RendererLayer &m_RendererLayer;
-		WeakRef<DomainLayer> m_DomainLayer;
-		WeakRef<JobSystem> m_JobSystem;
-		ElementPropertiesTable m_ElementPropertiesTable;
-		AtomStyleTable m_AtomStyleTable;
-		Path m_PersonalLibraryPath;
+		Ref<CreationSessionRegistry> m_SessionRegistry;
 		Ref<EventBus> m_EventBus;
+		Path m_TargetDirectory;
 
-		Mode m_SelectedMode = Mode::Create;
-		Path m_TargetDirectory; // Set by ProjectTreeSelectionChanged listener
-
-		// Create mode: wizard sub-panel (lazy-init on first render)
-		Ref<NewStructureWizardPanel> m_WizardPanel;
-		std::optional<CrystalStructure> m_CreatedStructure;
-
-		// Library mode: library panel + selection
-		Ref<MaterialsCollectionPanel> m_LibraryPanel;
-		std::vector<MaterialLibraryEntry> m_LibraryEntries;
-		int m_SelectedLibraryEntryIndex = -1;
-		std::optional<CrystalStructure> m_SelectedStructure;
-		std::string m_LibraryError;
-
-		// Import mode: file path input
-		std::array<char, 512> m_ImportFilePathBuffer{};
-		std::optional<CrystalStructure> m_ImportedStructure;
-
-		// Common
-		std::array<char, 128> m_StructureNameBuffer{}; // User-provided name for the structure
-		std::string m_StatusMessage;
-		std::string m_ErrorMessage;
+		// Per-session name entry, keyed by stringified sessionId so several open sessions do not
+		// fight over one buffer.
+		std::unordered_map<std::string, std::array<char, 128>> m_NameBuffers;
 	};
 } // namespace DefectStudio

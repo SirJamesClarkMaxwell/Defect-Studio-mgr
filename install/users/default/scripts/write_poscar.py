@@ -5,7 +5,6 @@ import sys
 import json
 import tempfile
 import os
-import shutil
 from pathlib import Path
 
 try:
@@ -42,12 +41,20 @@ def write_poscar(
     # treat them as Angstrom cartesians and silently write a wrong structure.
     atoms = Atoms(symbols=species, scaled_positions=positions, cell=cell, pbc=pbc)
 
-    # Write to temp file first, then atomic rename
+    # Write to temp file first, then atomically commit it. The commit must FAIL if the destination
+    # already exists rather than replacing it - shutil.move/os.replace would silently overwrite a
+    # POSCAR that appeared between the caller's collision check and this write.
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=str(Path(output_path).parent))
     try:
         os.close(tmp_fd)
         write(tmp_path, atoms, format='vasp')
-        shutil.move(tmp_path, output_path)
+        if os.name == "nt":
+            # Windows os.rename already refuses an existing destination.
+            os.rename(tmp_path, output_path)
+        else:
+            # POSIX os.rename silently replaces; link+unlink is the no-replace equivalent.
+            os.link(tmp_path, output_path)
+            os.unlink(tmp_path)
     except Exception:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)

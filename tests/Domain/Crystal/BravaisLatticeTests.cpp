@@ -72,7 +72,7 @@ namespace DefectStudio::Tests
 
 	TEST(BravaisLatticeTests, FaceCenteredPresetReturnsFourFractionalPositions)
 	{
-		const std::vector<glm::vec3> basis = GetCenteringPresetBasis(BravaisCenteringPreset::FaceCentered);
+		const std::vector<glm::vec3> basis = GetCenteringTranslations(BravaisCenteringPreset::FaceCentered);
 		ASSERT_EQ(basis.size(), 4u);
 		EXPECT_EQ(basis[0], glm::vec3(0.0f));
 	}

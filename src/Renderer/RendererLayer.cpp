@@ -475,7 +475,8 @@ namespace DefectStudio
 			windowState.viewOffset,
 			windowState.bondLabelAutoOffsetEnabled,
 			windowState.bondLabelAutoOffsetMagnitude,
-			windowState.bondLabelAlignThresholdDeg);
+			windowState.bondLabelAlignThresholdDeg,
+			windowState.showPeriodicBonds);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(
@@ -537,6 +538,7 @@ namespace DefectStudio
 		previewState.camera = CreateUnique<RendererViewCamera>(*source.camera);
 		previewState.showAtoms = source.showAtoms;
 		previewState.showBonds = source.showBonds;
+		previewState.showPeriodicBonds = source.showPeriodicBonds;
 		previewState.showCellBox = source.showCellBox;
 		previewState.showGrid = source.showGrid;
 		previewState.selectedAtomIndices = source.selectedAtomIndices;

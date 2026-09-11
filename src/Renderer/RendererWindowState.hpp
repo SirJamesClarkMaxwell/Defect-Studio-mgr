@@ -42,6 +42,10 @@ namespace DefectStudio
 		bool showGrid = true;
 		bool showCellBox = true;
 		bool showBonds = true;
+		// Bonds that cross a periodic cell boundary (Bond::periodicShift) run to an image atom that is
+		// not drawn, so they read as stubs poking out of the cell. Correct, and the only way a 2D
+		// sheet shows its edge connectivity - but noise on a supercell, hence the switch.
+		bool showPeriodicBonds = true;
 		bool showAtoms = true;
 		// Auto bond-length MSDF labels (Etap E) - toggled by `Alt+M`, off by default so existing
 		// structures don't suddenly grow new clutter on every bond until a user opts in.
@@ -513,6 +517,14 @@ namespace DefectStudio
 
 		// Link to StructureRecord for dirty flag checking
 		StructureId structureId;
+
+		// Set on the ephemeral preview windows of a structure creation session (see CreationSession).
+		// Such a window is deliberately NOT domain-backed - structureId stays empty - and its whole
+		// lifecycle belongs to the session, which is why it needs an identity of its own rather than
+		// borrowing a StructureId it has no right to. Empty for every normal, domain-backed window.
+		// StructureCreationTabsPanel docks these into the session's own 2+1 layout, so RendererPanel
+		// leaves their initial docking alone.
+		std::string sessionId;
 	};
 
 	// T15-lite export dialog: resolution preset + filename proposed from the structure's source

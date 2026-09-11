@@ -32,6 +32,15 @@ namespace DefectStudio::ProjectEvents
 		Path newPath;
 	};
 
+	// Published by EditorLayer whenever the set of project roots changes (loaded at startup, root
+	// added/removed/repointed, project opened). App-layer coordinators that must AUTHORIZE a path -
+	// StructureLifecycleCoordinator deciding whether a write target is inside a project - subscribe
+	// to this instead of reaching into the UI's copy of the roots.
+	struct ProjectRootsChanged final : public BusEvent
+	{
+		std::vector<Path> roots;
+	};
+
 	// Queued from ProjectTreePanel's per-node RMB "Set as Bulk Reference" (any folder, any depth -
 	// same context menu as "Open Defect"). EditorLayer applies it to the live
 	// ElectronicStructureSession immediately (works even with no project open) and persists it

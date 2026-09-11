@@ -22,6 +22,15 @@ namespace DefectStudio
 		Path pseudopotentialDir;
 	};
 
+	// Post-"Add to Project" behaviour of a structure creation session. Two workflows want opposite
+	// things here - one structure then back to work (close + reset), or a batch of related supercells
+	// off one draft (keep both) - so this is configuration, not a hardcoded choice.
+	struct StructureCreationConfig
+	{
+		bool closeRendererTabAfterSave = true;
+		bool resetNewStructureAfterSave = false;
+	};
+
 	struct AppearanceStateRules
 	{
 		float neutralHoverLighten = 0.08f;

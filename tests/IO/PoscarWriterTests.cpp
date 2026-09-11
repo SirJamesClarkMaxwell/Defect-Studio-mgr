@@ -33,7 +33,9 @@ namespace DefectStudio::Tests
 		};
 
 		const Path outputPath = MakeTempPoscarPath();
-		const Result<void> written = PoscarWriter::Write(structure, outputPath);
+		const Path inputJsonPath = Path::FromResolved(FileSystem::TempDirectoryPath()) /
+			("poscar_input_" + std::to_string(Time::NowSteady().time_since_epoch().count()) + ".json");
+		const Result<void> written = PoscarWriter::Write(structure, outputPath, inputJsonPath);
 		if (!written)
 			GTEST_SKIP() << "ase unavailable in current environment: " << written.Error().technicalDetails;
 

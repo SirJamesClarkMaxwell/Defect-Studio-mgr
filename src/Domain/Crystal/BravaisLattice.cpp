@@ -96,7 +96,7 @@ namespace DefectStudio
 		return cell;
 	}
 
-	std::vector<glm::vec3> GetCenteringPresetBasis(BravaisCenteringPreset preset)
+	std::vector<glm::vec3> GetCenteringTranslations(BravaisCenteringPreset preset)
 	{
 		switch (preset)
 		{

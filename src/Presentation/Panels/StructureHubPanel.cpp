@@ -2,54 +2,49 @@
 
 #include "Presentation/Panels/StructureHubPanel.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
 #include <imgui.h>
 
-#include "Core/Logging/Logger.hpp"
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Domain/Crystal/CrystalStructure.hpp"
-#include "Domain/DomainLayer.hpp"
-#include "Domain/ProjectWorkspace.hpp"
-#include "IO/MaterialLibraryIO.hpp"
-#include "Presentation/Panels/MaterialsCollectionPanel.hpp"
-#include "Presentation/Panels/NewStructureWizardPanel.hpp"
-#include "Renderer/OpenCrystalStructureAsWindow.hpp"
-#include "ScientificRuntime/Python/PuntukasBridge.hpp"
-#include "ScientificRuntime/Python/PymatgenConversion.hpp"
+#include "Core/Utils/PathValidation.hpp"
 
 namespace DefectStudio
 {
+	namespace
+	{
+		constexpr ImVec4 SuccessColor{0.0f, 1.0f, 0.0f, 1.0f};
+		constexpr ImVec4 ErrorColor{1.0f, 0.35f, 0.35f, 1.0f};
+		constexpr ImVec4 WarningColor{1.0f, 0.8f, 0.2f, 1.0f};
+
+		[[nodiscard]] bool SamePath(const Path &left, const Path &right)
+		{
+			if (left.Empty() || right.Empty())
+				return left.Empty() && right.Empty();
+
+			std::error_code error;
+			const FilePath leftCanonical = std::filesystem::weakly_canonical(left.Native(), error);
+			if (error)
+				return left == right;
+			const FilePath rightCanonical = std::filesystem::weakly_canonical(right.Native(), error);
+			if (error)
+				return left == right;
+			return leftCanonical == rightCanonical;
+		}
+	} // namespace
+
 	StructureHubPanel::StructureHubPanel(
-		RendererLayer &rendererLayer,
-		WeakRef<DomainLayer> domainLayer,
-		WeakRef<JobSystem> jobSystem,
-		ElementPropertiesTable elementPropertiesTable,
-		AtomStyleTable atomStyleTable,
-		Path personalLibraryPath,
+		Ref<CreationSessionRegistry> sessionRegistry,
 		Ref<EventBus> eventBus,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
-		  m_RendererLayer(rendererLayer),
-		  m_DomainLayer(std::move(domainLayer)),
-		  m_JobSystem(std::move(jobSystem)),
-		  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
-		  m_AtomStyleTable(std::move(atomStyleTable)),
-		  m_PersonalLibraryPath(std::move(personalLibraryPath)),
+		  m_SessionRegistry(std::move(sessionRegistry)),
 		  m_EventBus(std::move(eventBus))
 	{
-		std::fill(m_StructureNameBuffer.begin(), m_StructureNameBuffer.end(), '\0');
-		m_StructureNameBuffer[0] = 'U';
-		m_StructureNameBuffer[1] = 'n';
-		m_StructureNameBuffer[2] = 't';
-		m_StructureNameBuffer[3] = 'i';
-		m_StructureNameBuffer[4] = 't';
-		m_StructureNameBuffer[5] = 'l';
-		m_StructureNameBuffer[6] = 'e';
-		m_StructureNameBuffer[7] = 'd';
 	}
 
 	Ref<IPanel> StructureHubPanel::Clone() const
@@ -60,6 +55,19 @@ namespace DefectStudio
 	void StructureHubPanel::SetTargetDirectory(const Path &targetDirectory)
 	{
 		m_TargetDirectory = targetDirectory;
+	}
+
+	std::array<char, 128> &StructureHubPanel::nameBufferFor(const CreationSession &session)
+	{
+		const std::string key = ToString(session.sessionId);
+		auto it = m_NameBuffers.find(key);
+		if (it != m_NameBuffers.end())
+			return it->second;
+
+		std::array<char, 128> buffer{};
+		const std::string initial = session.displayName.empty() ? session.draftStructure.name : session.displayName;
+		std::snprintf(buffer.data(), buffer.size(), "%s", initial.c_str());
+		return m_NameBuffers.emplace(key, buffer).first->second;
 	}
 
 	void StructureHubPanel::Render()
@@ -75,290 +83,144 @@ namespace DefectStudio
 			return;
 		}
 
-		// Status messages
-		if (!m_StatusMessage.empty())
+		if (m_SessionRegistry == nullptr || m_SessionRegistry->Sessions().empty())
 		{
-			ImGui::TextColored({0.0f, 1.0f, 0.0f, 1.0f}, "%s", m_StatusMessage.c_str());
-		}
-		if (!m_ErrorMessage.empty())
-		{
-			ImGui::TextColored({1.0f, 0.0f, 0.0f, 1.0f}, "Error: %s", m_ErrorMessage.c_str());
-		}
-
-		// Tab bar for three entry modes
-		if (ImGui::BeginTabBar("##structure_hub_modes"))
-		{
-			if (ImGui::BeginTabItem("Create New"))
-			{
-				drawCreateTab();
-				ImGui::EndTabItem();
-			}
-			if (ImGui::BeginTabItem("From Library"))
-			{
-				drawLibraryTab();
-				ImGui::EndTabItem();
-			}
-			if (ImGui::BeginTabItem("Import File"))
-			{
-				drawImportTab();
-				ImGui::EndTabItem();
-			}
-			ImGui::EndTabBar();
+			ImGui::TextWrapped(
+				"No structures in progress. Build one in the New Structure panel and press "
+				"\"Move to Structure Hub\".");
+			ImGui::End();
+			SetVisible(windowOpen);
+			return;
 		}
 
+		ImGui::TextUnformatted("Project Tree selection:");
+		ImGui::SameLine();
+		if (m_TargetDirectory.Empty())
+			ImGui::TextDisabled("(none - click a folder in the Project Tree)");
+		else
+			ImGui::TextWrapped("%s", m_TargetDirectory.String().c_str());
 		ImGui::Separator();
-		drawAddToProjectSection();
+
+		// Copied: adding a structure can close its own session (settings-driven auto-close).
+		const CreationSessionRegistry::SessionList sessions = m_SessionRegistry->Sessions();
+		for (const Ref<CreationSession> &session : sessions)
+		{
+			if (session == nullptr || session->state == CreationSessionState::Draft)
+				continue; // Still being built in New Structure; not handed over yet
+			drawSession(*session);
+		}
 
 		ImGui::End();
 		SetVisible(windowOpen);
 	}
 
-	void StructureHubPanel::drawCreateTab()
+	void StructureHubPanel::drawSession(CreationSession &session)
 	{
-		if (!m_WizardPanel)
+		const std::string key = ToString(session.sessionId);
+		ImGui::PushID(key.c_str());
+
+		const std::string header = std::string(ToString(session.mode)) + "  -  " + ToString(session.state)
+			+ "##session_header";
+		if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			m_WizardPanel = CreateRef<NewStructureWizardPanel>(
-				m_RendererLayer,
-				m_DomainLayer,
-				m_JobSystem,
-				m_ElementPropertiesTable,
-				m_AtomStyleTable,
-				"Create Structure",
-				false);
+			// The atom count of what gets written, not of the unit cell it was expanded from.
+			const int cells = std::max(
+				1, session.supercellCounts.x * session.supercellCounts.y * session.supercellCounts.z);
+			ImGui::Text("Atoms: %zu", session.draftStructure.atoms.size() * static_cast<std::size_t>(cells));
+			if (cells > 1)
+				ImGui::TextDisabled("supercell %dx%dx%d of a %zu-atom cell",
+					session.supercellCounts.x, session.supercellCounts.y, session.supercellCounts.z,
+					session.draftStructure.atoms.size());
+
+			std::array<char, 128> &nameBuffer = nameBufferFor(session);
+			ImGui::TextUnformatted("Structure name:");
+			if (ImGui::InputText("##structure_name", nameBuffer.data(), nameBuffer.size()))
+				session.displayName = nameBuffer.data();
+
+			drawTargetSection(session);
+
+			if (session.lastError.has_value())
+			{
+				ImGui::TextColored(ErrorColor, "%s", session.lastError->userMessage.c_str());
+				if (!session.lastError->suggestion.empty())
+					ImGui::TextWrapped("%s", session.lastError->suggestion.c_str());
+			}
+			else if (session.state == CreationSessionState::Success)
+			{
+				ImGui::TextColored(SuccessColor, "Added to the project.");
+			}
+
+			// The button is disabled for an in-flight attempt, but that is only a courtesy: the
+			// coordinator refuses a second attempt regardless of what the UI allows.
+			const bool busy = session.activeAttemptId.has_value();
+			const bool hasName = nameBuffer[0] != '\0';
+			const bool hasTarget = !session.targetDirectory.Empty() || !m_TargetDirectory.Empty();
+			ImGui::BeginDisabled(busy || !hasName || !hasTarget || session.draftStructure.atoms.empty());
+			if (ImGui::Button("Add to Project", {-1, 0}))
+				dispatchAddToProject(session);
+			ImGui::EndDisabled();
+
+			if (busy)
+				ImGui::TextDisabled("Writing structure...");
 		}
 
-		// Render wizard inline
-		m_WizardPanel->Render();
-
-		// Retrieve built structure if wizard has one
-		if (auto built = m_WizardPanel->GetBuiltStructure())
-		{
-			m_CreatedStructure = built;
-			ImGui::Separator();
-			ImGui::TextColored({0.0f, 1.0f, 0.0f, 1.0f}, "Structure ready in wizard. Proceed to 'Add to Project' below.");
-		}
+		ImGui::PopID();
+		ImGui::Separator();
 	}
 
-	void StructureHubPanel::drawLibraryTab()
+	void StructureHubPanel::drawTargetSection(CreationSession &session)
 	{
-		ImGui::TextUnformatted("Available structures in personal library:");
-
-		if (ImGui::Button("Refresh Library", {-1, 0}))
+		ImGui::TextUnformatted("Target folder:");
+		if (session.targetDirectory.Empty())
 		{
-			MaterialLibraryIO io(m_PersonalLibraryPath);
-			auto result = io.ListMaterials();
-			if (result)
-			{
-				m_LibraryEntries = result.Value();
-				m_LibraryError.clear();
-				m_SelectedLibraryEntryIndex = -1;
-			}
-			else
-			{
-				m_LibraryError = result.Error().userMessage;
-				m_LibraryEntries.clear();
-			}
+			ImGui::TextDisabled("(none captured; the current Project Tree selection will be used)");
+			return;
 		}
 
-		if (!m_LibraryError.empty())
+		ImGui::TextWrapped("%s", session.targetDirectory.String().c_str());
+
+		// The folder the session was started against can drift from what the user has since clicked.
+		// Silently following the new selection would write the structure somewhere they never asked
+		// for, so the change is surfaced and the choice is theirs.
+		if (m_TargetDirectory.Empty() || SamePath(session.targetDirectory, m_TargetDirectory))
+			return;
+
+		ImGui::TextColored(WarningColor, "Target folder has changed since this structure was started.");
+		ImGui::TextWrapped("Project Tree now points at: %s", m_TargetDirectory.String().c_str());
+		if (ImGui::Button("Use the new folder"))
 		{
-			ImGui::TextColored({1.0f, 0.0f, 0.0f, 1.0f}, "Error: %s", m_LibraryError.c_str());
+			session.targetDirectory = m_TargetDirectory;
+			session.lastModifiedAt = Time::Now();
 		}
-
-		if (!m_LibraryEntries.empty())
-		{
-			ImGui::Separator();
-			ImGui::TextUnformatted("Select a structure:");
-
-			if (ImGui::BeginListBox("##library_entries", {-1, 200}))
-			{
-				for (int i = 0; i < static_cast<int>(m_LibraryEntries.size()); ++i)
-				{
-					const auto &entry = m_LibraryEntries[i];
-					const bool selected = (m_SelectedLibraryEntryIndex == i);
-					if (ImGui::Selectable(entry.name.c_str(), selected))
-					{
-						m_SelectedLibraryEntryIndex = i;
-						// Load the selected structure
-						MaterialLibraryIO io(m_PersonalLibraryPath);
-						auto loaded = io.LoadMaterial(entry.id);
-						if (loaded)
-						{
-							m_SelectedStructure = loaded.Value();
-						}
-						else
-						{
-							m_LibraryError = "Failed to load: " + loaded.Error().userMessage;
-							m_SelectedStructure.reset();
-						}
-					}
-				}
-				ImGui::EndListBox();
-			}
-
-			if (m_SelectedStructure)
-			{
-				ImGui::Separator();
-				ImGui::TextColored({0.0f, 1.0f, 0.0f, 1.0f}, "Selected: %zu atoms", m_SelectedStructure->atoms.size());
-				if (ImGui::Button("Preview##library"))
-				{
-					Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
-					if (domainLayer != nullptr)
-					{
-						OpenCrystalStructureAsWindow(
-							m_SelectedStructure.value(),
-							m_LibraryEntries[m_SelectedLibraryEntryIndex].name,
-							*domainLayer,
-							m_RendererLayer,
-							m_ElementPropertiesTable,
-							m_AtomStyleTable);
-					}
-				}
-			}
-		}
-		else if (m_LibraryError.empty())
-		{
-			ImGui::TextDisabled("Click 'Refresh Library' to load available structures.");
-		}
-	}
-
-	void StructureHubPanel::drawImportTab()
-	{
-		ImGui::TextUnformatted("File path:");
-		ImGui::InputText("##import_path", m_ImportFilePathBuffer.data(), m_ImportFilePathBuffer.size());
-
 		ImGui::SameLine();
-		if (ImGui::Button("Browse"))
-		{
-			ImGui::OpenPopup("##import_file_dialog");
-		}
-
-		// TODO: actual file dialog (would use platform-specific API or simple filename input for now)
-		ImGui::TextDisabled("(Full path to .vasp, .poscar, or other structure file)");
-
-		if (ImGui::Button("Load"))
-		{
-			const std::string filePath(m_ImportFilePathBuffer.data());
-			if (filePath.empty())
-			{
-				m_ErrorMessage = "Please enter a file path.";
-				return;
-			}
-
-			// Load via PuntukasBridge
-			PuntukasBridge bridge;
-			Result<PymatgenStructureData> loaded = bridge.LoadStructure(Path::FromResolved(filePath));
-			if (!loaded)
-			{
-				m_ErrorMessage = loaded.Error().userMessage;
-				DS_LOG_WARN("Structure Hub: import failed: {}", loaded.Error().technicalDetails);
-			}
-			else
-			{
-				m_ImportedStructure = ConvertPymatgenStructureToCrystalStructure(loaded.Value());
-				m_StatusMessage = "Loaded structure from " + filePath;
-				m_ErrorMessage.clear();
-			}
-		}
-
-		if (m_ImportedStructure)
-		{
-			ImGui::Separator();
-			ImGui::Text("Loaded: %zu atoms", m_ImportedStructure->atoms.size());
-			if (ImGui::Button("Preview##import"))
-			{
-				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
-				if (domainLayer != nullptr)
-				{
-					OpenCrystalStructureAsWindow(
-						m_ImportedStructure.value(),
-						"Imported Structure",
-						*domainLayer,
-						m_RendererLayer,
-						m_ElementPropertiesTable,
-						m_AtomStyleTable);
-				}
-			}
-		}
+		ImGui::TextDisabled("or leave it to keep the original");
 	}
 
-	void StructureHubPanel::drawAddToProjectSection()
+	void StructureHubPanel::dispatchAddToProject(CreationSession &session)
 	{
-		ImGui::TextUnformatted("Structure Name:");
-		ImGui::InputText("##structure_name", m_StructureNameBuffer.data(), m_StructureNameBuffer.size());
+		if (m_EventBus == nullptr)
+			return;
 
-		ImGui::TextUnformatted("Target Directory:");
-		if (m_TargetDirectory.Empty())
-		{
-			ImGui::TextWrapped("Click a directory in the Project Tree to select where to add this structure.");
-		}
-		else
-		{
-			ImGui::TextWrapped("%s", m_TargetDirectory.String().c_str());
-		}
+		const Path target = session.targetDirectory.Empty() ? m_TargetDirectory : session.targetDirectory;
+		const std::string displayName = nameBufferFor(session).data();
 
-		const bool hasStructure = m_ImportedStructure.has_value(); // TODO: check other modes too
-		const bool hasTarget = !m_TargetDirectory.Empty();
-		const bool hasName = m_StructureNameBuffer[0] != '\0';
-
-		ImGui::BeginDisabled(!hasStructure || !hasTarget || !hasName);
-		if (ImGui::Button("Add to Project", {-1, 0}))
+		// Cheap local feedback for the obvious mistakes. The coordinator and the job both validate
+		// again - this check exists so a typo does not have to round-trip through a background job.
+		if (Result<std::string> validated = PathValidation::ValidateAndSanitizeName(displayName); !validated)
 		{
-			dispatchAddToProject();
-		}
-		ImGui::EndDisabled();
-	}
-
-	void StructureHubPanel::dispatchAddToProject()
-	{
-		// Collect the structure from whichever mode is active
-		std::optional<CrystalStructure> structure;
-		switch (m_SelectedMode)
-		{
-			case Mode::Create:
-				structure = m_CreatedStructure;
-				break;
-			case Mode::Library:
-				structure = m_SelectedStructure;
-				break;
-			case Mode::Import:
-				structure = m_ImportedStructure;
-				break;
-		}
-
-		if (!structure)
-		{
-			m_ErrorMessage = "No structure selected. Create, select from library, or import a file first.";
+			session.lastError = validated.Error();
 			return;
 		}
 
-		if (m_TargetDirectory.Empty())
-		{
-			m_ErrorMessage = "No target directory selected. Click a directory in the Project Tree.";
-			return;
-		}
+		session.displayName = displayName;
+		session.targetDirectory = target;
+		session.lastError.reset();
 
-		const std::string displayName(m_StructureNameBuffer.data());
-		if (displayName.empty())
-		{
-			m_ErrorMessage = "Please enter a structure name.";
-			return;
-		}
-
-		// Publish AddStructureToProjectRequested event - coordinator will handle persistence + project registration
 		DomainEvents::AddStructureToProjectRequested event;
-		event.structure = structure.value();
+		event.sessionId = session.sessionId;
+		event.structure = BuildSessionExportStructure(session);
 		event.displayName = displayName;
-		event.targetDirectory = m_TargetDirectory.Native();
+		event.targetDirectory = target.Native();
 		m_EventBus->Publish(event);
-
-		m_StatusMessage = "Structure submitted to project. Coordinator will finalize add-to-project flow.";
-		m_ErrorMessage.clear();
-
-		// Clear the form for the next structure
-		m_StructureNameBuffer.fill('\0');
-		m_CreatedStructure.reset();
-		m_SelectedStructure.reset();
-		m_ImportedStructure.reset();
 	}
 } // namespace DefectStudio

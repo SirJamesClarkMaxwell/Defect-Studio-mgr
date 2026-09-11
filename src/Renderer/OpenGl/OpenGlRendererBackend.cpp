@@ -1047,7 +1047,8 @@ namespace DefectStudio
 		const glm::vec3 &sceneOffset,
 		bool bondLabelAutoOffsetEnabled,
 		float bondLabelAutoOffsetMagnitude,
-		float bondLabelAlignThresholdDeg)
+		float bondLabelAlignThresholdDeg,
+		bool showPeriodicBonds)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -1059,7 +1060,6 @@ namespace DefectStudio
 			resources.atomsDirty = true;
 			resources.bondsDirty = true;
 			resources.gridDirty = true;
-			resources.cellEdgesDirty = true;
 			resources.labelsDirty = true;
 			resources.lastSourcePath = sourcePathKey;
 		}
@@ -1175,6 +1175,11 @@ namespace DefectStudio
 			resources.bondsDirty = true;
 			resources.lastBondRadiusMultiplier = globalSettings.bondRadiusMultiplier;
 		}
+		if (resources.lastShowPeriodicBonds != showPeriodicBonds)
+		{
+			resources.bondsDirty = true;
+			resources.lastShowPeriodicBonds = showPeriodicBonds;
+		}
 		resources.frameBuffer.Bind();
 		glViewport(0, 0, resources.frameBuffer.Width(), resources.frameBuffer.Height());
 		glClearColor(
@@ -1195,7 +1200,8 @@ namespace DefectStudio
 		if (showCellBox)
 			renderCellBox(structure, camera, resources, sceneOffset);
 		if (showBonds)
-			renderBonds(structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset);
+			renderBonds(
+				structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset, showPeriodicBonds);
 		renderDisplacementArrows(structure, displacementComparison, camera, globalSettings, sceneOffset);
 		const glm::vec2 viewportPixelSize(
 			static_cast<float>(resources.frameBuffer.Width()), static_cast<float>(resources.frameBuffer.Height()));
@@ -1919,7 +1925,8 @@ namespace DefectStudio
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
 		const std::vector<std::size_t> &selectedIndices,
-		const glm::vec3 &sceneOffset)
+		const glm::vec3 &sceneOffset,
+		bool showPeriodicBonds)
 	{
 		if (resources.bondsDirty)
 		{
@@ -1929,6 +1936,10 @@ namespace DefectStudio
 			{
 				const RendererBondData &bond = structure.bonds[bondIndex];
 				if (!bond.visible)
+					continue;
+				// A nonzero offset means the far end is a periodic image nobody draws - the bond would
+				// end in empty space outside the cell.
+				if (!showPeriodicBonds && bond.secondAtomPeriodicOffset != glm::vec3(0.0f))
 					continue;
 				if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
 					continue;
@@ -3119,24 +3130,26 @@ namespace DefectStudio
 		OpenGlViewportResources &resources,
 		const glm::vec3 &sceneOffset)
 	{
-		if (resources.cellEdgesDirty)
+		// Rebuilt every frame rather than behind a dirty flag. The flag was only ever raised when
+		// the window's source path changed, which never happens for a structure creation preview
+		// (all three panes carry an empty path): a cell box kept its first-frame size through every
+		// lattice-constant edit, and an overlay framework added later - the supercell's lattice
+		// skeleton - never appeared at all. The buffer below is re-uploaded with glBufferData every
+		// frame regardless, so caching the CPU copy saved nothing worth a staleness bug.
+		resources.cachedCellEdgeVertices.clear();
+		resources.cachedCellEdgeVertices.reserve((structure.cellEdges.size() + structure.overlayCellEdges.size()) * 2);
+		for (const RendererCellEdge &edge : structure.cellEdges)
 		{
-			resources.cachedCellEdgeVertices.clear();
-			resources.cachedCellEdgeVertices.reserve((structure.cellEdges.size() + structure.overlayCellEdges.size()) * 2);
-			for (const RendererCellEdge &edge : structure.cellEdges)
-			{
-				resources.cachedCellEdgeVertices.push_back(edge.start);
-				resources.cachedCellEdgeVertices.push_back(edge.finish);
-			}
-			// Overlay edges share the buffer and are told apart by where they start, so the second
-			// colour costs one more draw call rather than a second VBO.
-			resources.cachedOverlayEdgeFirstVertex = resources.cachedCellEdgeVertices.size();
-			for (const RendererCellEdge &edge : structure.overlayCellEdges)
-			{
-				resources.cachedCellEdgeVertices.push_back(edge.start);
-				resources.cachedCellEdgeVertices.push_back(edge.finish);
-			}
-			resources.cellEdgesDirty = false;
+			resources.cachedCellEdgeVertices.push_back(edge.start);
+			resources.cachedCellEdgeVertices.push_back(edge.finish);
+		}
+		// Overlay edges share the buffer and are told apart by where they start, so the second
+		// colour costs one more draw call rather than a second VBO.
+		resources.cachedOverlayEdgeFirstVertex = resources.cachedCellEdgeVertices.size();
+		for (const RendererCellEdge &edge : structure.overlayCellEdges)
+		{
+			resources.cachedCellEdgeVertices.push_back(edge.start);
+			resources.cachedCellEdgeVertices.push_back(edge.finish);
 		}
 
 		if (resources.cachedCellEdgeVertices.empty())

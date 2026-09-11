@@ -14,7 +14,10 @@
 
 namespace DefectStudio
 {
-	Result<void> PoscarWriter::Write(const CrystalStructure &structure, const Path &outputPath)
+	Result<void> PoscarWriter::Write(
+		const CrystalStructure &structure,
+		const Path &outputPath,
+		const Path &inputJsonPath)
 	{
 		// Sort atoms by species (groups same elements together) for POSCAR output.
 		// Defect-pattern key sorting (prototype + defect SET) deferred to when DefectConfiguration
@@ -61,11 +64,11 @@ namespace DefectStudio
 			{"cell", std::move(cell)},
 			{"pbc", {true, true, true}}};
 
-		// Write JSON to temp file
+		// Write JSON to the caller-supplied scratch file (unique per attempt - see the header note).
 		const std::string jsonStr = payload.dump();
-		const Path tempDir = Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "temp");
-		FileSystem::CreateDirectories(tempDir);
-		const Path jsonPath = tempDir / "poscar_input.json";
+		const Path jsonPath = inputJsonPath;
+		if (!jsonPath.Native().parent_path().empty())
+			FileSystem::CreateDirectories(jsonPath.Native().parent_path());
 
 		std::ofstream jsonFile(jsonPath.String());
 		if (!jsonFile)
