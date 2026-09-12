@@ -73,6 +73,34 @@ designed against the answer.
   (script lookup, `scripts/python/examples/`).
 - The physics: `C:\Users\fzabi\Desktop\dev\groupy\tutorial\7_NV_center.ipynb`.
 
+## Contract (written before dispatch - do not change)
+
+`PointGroupAnalysis.hpp`, `GroupTheoryBridge.hpp`, `ReducePointGroupRepresentationJob.hpp` and
+`GroupTheoryBridgeTests.cpp` are already written and are the contract. Only the two `.cpp` files and
+the Python script are open. Verified: everything compiles, and the only unresolved external is
+`GroupTheoryBridge::ReduceRepresentation`.
+
+Three design decisions were made while writing it that deviate from the text above:
+
+1. **Positions, not matrices.** The request carries the point-group label plus named basis sites with
+   Cartesian positions; the Python side builds the permutation representation itself, exactly as
+   tutorial cell 3 does. Sending element matrices instead would force both languages to agree on the
+   order of `pg.elements`. Ceiling, recorded in the header: this covers permutation bases only - an
+   orbital basis (p, d, ...) transforms by rotation and will need explicit matrices, which is a field
+   to add in workstream 5/6, not a thing to fake with positions now.
+2. **Neutral labels.** The bridge returns `irrepLabel` + `occurrenceIndex` + `irrepRow`, not `a1'` /
+   `a1` / `ex` / `ey`. Which A1 copy is "lower" is an energy ordering that group theory alone cannot
+   determine - it takes the Hamiltonian - so naming them at this layer would be a guess dressed as a
+   result. Acceptance criterion 2 is therefore checked as "two A1 occurrences plus both E rows, each
+   with an exact and a numeric form", and physical naming moves to the UI in workstream 8, marked as
+   an assumption.
+3. **The basis must be closed under the group.** The tutorial's `argmin` accepts any nearest site,
+   however far. The request carries `matchTolerance` and the script must reject a basis whose rotated
+   sites do not land on real sites. Two extra tests cover this and the empty-basis case.
+
+Because C++ cannot evaluate a SymPy string, "numeric matches exact" is checked structurally instead:
+zero iff zero, unit norm, and mutual orthogonality of the projected vectors.
+
 ## Notes
 
 _(fill in during implementation: how groupy was installed into the venv, what the payload actually
