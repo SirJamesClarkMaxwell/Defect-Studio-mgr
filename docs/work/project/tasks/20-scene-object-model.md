@@ -105,6 +105,43 @@ path. After this task the first four collapse into registering one kind.
   `ObjectPropertiesPanel.cpp` at 1100, so any block touched there comes out into its own file.
 - Run `scripts\Windows\GenerateProjects.bat` after adding sources.
 
+## Contract (written before dispatch - do not change)
+
+`SceneObject.hpp`, the additions to `SceneRegistry.hpp` / `SceneSystem.hpp`, the three `id` fields
+and three selection-vector type changes in `RendererWindowState.hpp`, and
+`tests/Renderer/Scene/SceneObjectModelTests.cpp` are the contract. Everything else - the two new
+`.cpp` bodies and the mechanical call-site sweep - is open.
+
+Five decisions taken while writing it that deviate from the text above:
+
+1. **The backend is bridged, not touched.** `OpenGlRendererBackend` takes the three selection lists
+   as `std::vector<std::size_t>` parameters and only ever does `std::find` on them for a highlight.
+   Its signatures stay exactly as they are; the render call sites convert with
+   `SceneSystem::ResolveSourceIndices` immediately before the draw. That keeps the "must NOT be
+   touched" list honest, which it otherwise would not have been - the backend reads all three
+   vectors.
+2. **Ids are allocated at creation, not at sync.** `SceneRegistry::AllocateObjectId()` is called at
+   every `push_back` into `sceneArrows` / `freeLabels` / `pinnedMeasurements`, so a newly added
+   object is selectable in the same frame it is created. `SyncLabelEntities` still back-fills an
+   unset id as a safety net, but a creation site that relies on that back-fill is a bug.
+3. **`SyncLabelEntities` widens instead of gaining a sibling.** It already runs after every
+   annotation add/remove at all seven call sites; making it mirror arrows and free labels alongside
+   pins is one function change instead of a new function plus seven new calls. The name is now
+   narrower than what it does - that is the price.
+4. **No provenance enum, no stale flag.** Both are in the workstream file and neither has a
+   consumer: the outliner shows name + kind, the properties panel dispatches on kind. Recorded as a
+   `ponytail:` comment in `SceneObject.hpp` naming the trigger for adding each.
+5. **Atom and bond ids are keyed by index, annotation ids by the object.** Atoms and bonds are
+   rebuilt wholesale from the structure on every resync, so their identity can only be "the atom
+   that is still at index i"; `SyncSceneWithStructure` captures the previous ids by index and reuses
+   them. Annotations carry their own id in their struct, which is what makes them survive a
+   deletion elsewhere in the vector and an undo snapshot restore.
+
+Deviation from the `dispatch-codex-task` skill, deliberately: the usual "build once, confirm the
+tests compile and fail for the right reason" step is impossible here. Changing the selection vectors
+to `SceneObjectId` breaks every one of the ~169 call sites by design - the compiler error list *is*
+the worklist. The contract was reviewed by reading instead, and the build runs at verification.
+
 ## Reference
 
 - `src/Renderer/Scene/SceneSystem.cpp` - `SyncSceneWithStructure` (13-54) and `SyncLabelEntities`

@@ -5,11 +5,15 @@
 // No Hazel source files copied into this repo.
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <entt/entt.hpp>
 
 #include "Renderer/Scene/Entity.hpp"
+#include "Renderer/Scene/SceneObject.hpp"
 
 namespace DefectStudio
 {
@@ -30,11 +34,30 @@ namespace DefectStudio
 			return Entity(m_Registry.create(), this);
 		}
 
-		void DestroyEntity(Entity entity)
-		{
-			if (entity)
-				m_Registry.destroy(static_cast<entt::entity>(entity));
-		}
+		// Out-of-line since task 20: destroying an entity must also drop its SceneObjectId from the
+		// lookup below, so a destroyed id never resolves again (and is never handed out again -
+		// m_NextObjectId only ever counts up).
+		void DestroyEntity(Entity entity);
+
+		// --- Stable object identity ---
+
+		// Next unused id for this window. Call at the point an object is *created* (a push_back into
+		// sceneArrows/freeLabels/pinnedMeasurements), not at sync time, so the object is addressable
+		// before the next sync runs.
+		[[nodiscard]] SceneObjectId AllocateObjectId();
+
+		// Creates an entity carrying a SceneObjectComponent and records it in the id lookup. Pass an
+		// existing id to keep an object's identity across a resync; pass {} to allocate a fresh one.
+		Entity CreateObject(SceneObjectKind kind, std::size_t sourceIndex, std::string displayName, SceneObjectId id = {});
+
+		// Invalid Entity if the id was never issued or its object has been destroyed.
+		[[nodiscard]] Entity FindObject(SceneObjectId id);
+
+		[[nodiscard]] bool IsAlive(SceneObjectId id) const;
+
+		// entt::null if the id was never issued or its object is gone. The const half of FindObject,
+		// for read-only consumers (SceneSystem::ResolveSourceIndices).
+		[[nodiscard]] entt::entity EntityForObjectId(SceneObjectId id) const;
 
 		[[nodiscard]] entt::registry &Registry()
 		{
@@ -103,11 +126,52 @@ namespace DefectStudio
 			return Entity(m_LabelEntities[index], this);
 		}
 
+		// Index -> entity lookup for scene arrows and free labels, same shape as the three above.
+		// Populated by SceneSystem::SyncLabelEntities, which mirrors all three annotation kinds since
+		// task 20 - before it, arrows and free labels had no entity at all.
+		[[nodiscard]] std::vector<entt::entity> &ArrowEntities()
+		{
+			return m_ArrowEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &ArrowEntities() const
+		{
+			return m_ArrowEntities;
+		}
+
+		[[nodiscard]] std::vector<entt::entity> &FreeLabelEntities()
+		{
+			return m_FreeLabelEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &FreeLabelEntities() const
+		{
+			return m_FreeLabelEntities;
+		}
+
+		[[nodiscard]] Entity ArrowEntityAt(std::size_t index)
+		{
+			if (index >= m_ArrowEntities.size())
+				return Entity{};
+			return Entity(m_ArrowEntities[index], this);
+		}
+
+		[[nodiscard]] Entity FreeLabelEntityAt(std::size_t index)
+		{
+			if (index >= m_FreeLabelEntities.size())
+				return Entity{};
+			return Entity(m_FreeLabelEntities[index], this);
+		}
+
 	private:
 		entt::registry m_Registry;
 		std::vector<entt::entity> m_AtomEntities;
 		std::vector<entt::entity> m_BondEntities;
 		std::vector<entt::entity> m_LabelEntities;
+		std::vector<entt::entity> m_ArrowEntities;
+		std::vector<entt::entity> m_FreeLabelEntities;
+		std::unordered_map<std::uint64_t, entt::entity> m_ObjectEntities;
+		std::uint64_t m_NextObjectId = 1;
 	};
 
 	template <typename T, typename... Args>

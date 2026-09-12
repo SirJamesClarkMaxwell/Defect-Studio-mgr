@@ -95,6 +95,10 @@ namespace DefectStudio
 
 		struct PinnedMeasurement
 		{
+			// Stable identity, allocated by SceneRegistry::AllocateObjectId at creation (task 20).
+			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
+			// object's position in the vector, which does not.
+			SceneObjectId id;
 			std::vector<std::size_t> atomIndices; // size 2 = bond length, size 3 = angle
 			// Free 3D world-space nudge from the resolved anchor (bond midpoint / angle vertex) - was a
 			// camera-plane-only vec2 before Etap F, widened to a full vec3 so the gizmo can also push a
@@ -142,6 +146,10 @@ namespace DefectStudio
 		// label undo stack (RendererWindowState::LabelUndoSnapshot) the same way pins do.
 		struct FreeLabel
 		{
+			// Stable identity, allocated by SceneRegistry::AllocateObjectId at creation (task 20).
+			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
+			// object's position in the vector, which does not.
+			SceneObjectId id;
 			std::string text = "Label";
 			glm::vec3 worldPosition = glm::vec3(0.0f);
 			float rotationRadians = 0.0f;
@@ -152,7 +160,7 @@ namespace DefectStudio
 		// click-drag-along-camera-plane shape as PinnedMeasurement's worldOffset drag above, but
 		// mutates worldPosition directly since a free label has no anchor to offset from. Multi-select,
 		// same convention as selectedPinnedMeasurements above (back() is the drag/gizmo anchor).
-		std::vector<std::size_t> selectedFreeLabels;
+		std::vector<SceneObjectId> selectedFreeLabels;
 		bool freeLabelDragging = false;
 		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
 		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - a straight directional
@@ -182,6 +190,10 @@ namespace DefectStudio
 
 		struct SceneArrow
 		{
+			// Stable identity, allocated by SceneRegistry::AllocateObjectId at creation (task 20).
+			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
+			// object's position in the vector, which does not.
+			SceneObjectId id;
 			ArrowKind kind = ArrowKind::Arrow3D;
 			Arrow2DOrientation orientation2D = Arrow2DOrientation::Billboard;
 			WorldPlane fixedPlane = WorldPlane::XY;
@@ -195,7 +207,7 @@ namespace DefectStudio
 		// selected arrow's drag actually grabs (irrelevant once more than one is selected - a
 		// multi-selection always moves every selected arrow's start AND end together, same rigid
 		// group-drag convention as labels).
-		std::vector<std::size_t> selectedSceneArrows;
+		std::vector<SceneObjectId> selectedSceneArrows;
 		bool sceneArrowDragging = false;
 		glm::vec2 sceneArrowDragLastMouse = glm::vec2(0.0f);
 		enum class SceneArrowDragTarget { Start, End, Both };
@@ -285,7 +297,7 @@ namespace DefectStudio
 		// for drag math - by convention that's selectedPinnedMeasurements.back() (the most recently
 		// added/clicked one), same "last clicked is primary" convention selectedAtomIndices doesn't
 		// need since atoms don't have their own gizmo picking a single representative.
-		std::vector<std::size_t> selectedPinnedMeasurements;
+		std::vector<SceneObjectId> selectedPinnedMeasurements;
 		bool pinnedMeasurementDragging = false;
 		glm::vec2 pinnedMeasurementDragLastMouse = glm::vec2(0.0f);
 		std::vector<std::size_t> selectedAtomIndices;
