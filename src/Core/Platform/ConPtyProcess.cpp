@@ -103,7 +103,7 @@ namespace DefectStudio::Platform
 			nullptr,
 			nullptr,
 			FALSE,
-			EXTENDED_STARTUPINFO_PRESENT,
+			EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED,
 			nullptr,
 			workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
 			&startupInfo.StartupInfo,
@@ -128,6 +128,8 @@ namespace DefectStudio::Platform
 		CloseHandle(inputRead);
 		CloseHandle(outputWrite);
 
+		m_JobHandle = Internal::CreateKillOnCloseJob();
+		Internal::AdoptChildAndResume(static_cast<HANDLE>(m_JobHandle), processInfo);
 		CloseHandle(processInfo.hThread);
 		m_PseudoConsole = pseudoConsole;
 		m_InputWrite = inputWrite;
@@ -211,6 +213,13 @@ namespace DefectStudio::Platform
 		{
 			CloseHandle(static_cast<HANDLE>(m_ProcessHandle));
 			m_ProcessHandle = nullptr;
+		}
+		// Last, and after the shell itself is gone: this is what takes down whatever the user
+		// started inside the terminal (a python REPL, an ssh session) instead of orphaning it.
+		if (m_JobHandle != nullptr)
+		{
+			CloseHandle(static_cast<HANDLE>(m_JobHandle));
+			m_JobHandle = nullptr;
 		}
 		m_Running = false;
 	}

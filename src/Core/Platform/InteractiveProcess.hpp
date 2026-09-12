@@ -53,6 +53,8 @@ namespace DefectStudio::Platform
 		void *m_StdinWrite = nullptr;
 		void *m_StdoutRead = nullptr;
 		void *m_ProcessHandle = nullptr;
+		// Kills the child *and its grandchildren* when closed - see CreateKillOnCloseJob.
+		void *m_JobHandle = nullptr;
 
 		std::thread m_ReaderThread;
 		std::mutex m_OutputMutex;

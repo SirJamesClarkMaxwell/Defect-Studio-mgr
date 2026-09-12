@@ -137,7 +137,7 @@ namespace DefectStudio::Platform
 			nullptr,
 			nullptr,
 			TRUE,
-			CREATE_NO_WINDOW,
+			CREATE_NO_WINDOW | CREATE_SUSPENDED,
 			nullptr,
 			workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
 			&startupInfo,
@@ -152,6 +152,9 @@ namespace DefectStudio::Platform
 			CloseHandle(stderrPipe.read);
 			return MakeProcessError("CreateProcessW failed with code " + std::to_string(GetLastError()), "process.create_failed");
 		}
+
+		HANDLE job = Internal::CreateKillOnCloseJob();
+		Internal::AdoptChildAndResume(job, processInfo);
 
 		std::thread stdoutReader([&]() { result.standardOutput = ReadPipeUntilClosed(stdoutPipe.read); });
 		std::thread stderrReader([&]() { result.standardError = ReadPipeUntilClosed(stderrPipe.read); });
@@ -181,6 +184,10 @@ namespace DefectStudio::Platform
 		CloseHandle(stderrPipe.read);
 		CloseHandle(processInfo.hThread);
 		CloseHandle(processInfo.hProcess);
+		// Kills anything the script spawned and left behind - and, on a timeout, whatever the
+		// TerminateProcess above could not reach.
+		if (job != nullptr)
+			CloseHandle(job);
 #else
 		int stdoutPipe[2]{};
 		int stderrPipe[2]{};
