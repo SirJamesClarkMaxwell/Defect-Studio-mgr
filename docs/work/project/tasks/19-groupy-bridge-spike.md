@@ -103,5 +103,61 @@ zero iff zero, unit norm, and mutual orthogonality of the projected vectors.
 
 ## Notes
 
-_(fill in during implementation: how groupy was installed into the venv, what the payload actually
-looks like, anything the spike disproved)_
+### How groupy reaches the app (the thing this spike actually cost time on)
+
+`ScriptRunner` does **not** run the project `.venv`. It runs the bundled runtime at
+`install/app/python/windows/python.exe`, which has its own `Lib/site-packages`. Installing a package
+into `.venv` therefore does nothing for any bridge. The runtime is not pip-installable either - it is
+uv-managed and rejects `pip install` and `uv pip install --python ...` with
+`externally-managed-environment`.
+
+The supported path is `scripts/python/prepare_app_python_runtime.py`, which copies `.venv`'s
+site-packages into the runtime tree. So: install into `.venv` first (here:
+`uv pip install C:/Users/fzabi/Desktop/dev/groupy`, plus `symengine`), then re-run the prepare
+script. The first run failed with `WinError 32` on a handful of files; a second run went through.
+
+This mattered beyond convenience. With `groupy` missing from the runtime, the two positive tests
+skipped and the three negative tests **passed for the wrong reason** - the script was dying on
+`import groupy` before it ever reached the unknown-group, non-closed-basis or empty-basis guards. A
+green run that proves nothing is worse than a red one. Any future bridge test needs the same check:
+confirm the negative case fails where you think it fails.
+
+### The payload
+
+NV(-) four-bond basis in C3v, sites `d` (N, on the axis) and `a`/`b`/`c` (carbons):
+
+```json
+{"pointGroupLabel":"C3v","siteLabels":["d","a","b","c"],"groupOrder":6,
+ "decomposition":[{"irrepLabel":"A1","multiplicity":2,"dimension":1},
+                  {"irrepLabel":"E","multiplicity":1,"dimension":2}],
+ "projectedVectors":[
+  {"irrepLabel":"A1","occurrenceIndex":0,"irrepRow":0,"coefficients":[
+    {"exact":"1","numeric":1.0},{"exact":"0","numeric":0.0},{"exact":"0","numeric":0.0},{"exact":"0","numeric":0.0}]},
+  {"irrepLabel":"A1","occurrenceIndex":1,"irrepRow":0,"coefficients":[
+    {"exact":"0","numeric":0.0},{"exact":"sqrt(3)/3","numeric":0.5773502691896257},
+    {"exact":"sqrt(3)/3","numeric":0.5773502691896257},{"exact":"sqrt(3)/3","numeric":0.5773502691896257}]},
+  {"irrepLabel":"E","occurrenceIndex":0,"irrepRow":0,"coefficients":[
+    {"exact":"0","numeric":0.0},{"exact":"sqrt(6)/3","numeric":0.816496580927726},
+    {"exact":"-sqrt(6)/6","numeric":-0.408248290463863},{"exact":"-sqrt(6)/6","numeric":-0.408248290463863}]},
+  {"irrepLabel":"E","occurrenceIndex":0,"irrepRow":1,"coefficients":[
+    {"exact":"0","numeric":0.0},{"exact":"0","numeric":0.0},
+    {"exact":"sqrt(2)/2","numeric":0.7071067811865476},{"exact":"-sqrt(2)/2","numeric":-0.7071067811865476}]}]}
+```
+
+The spike's question is answered: **yes**, exact SymPy results cross the boundary intact as strings
+paired with doubles. `sqrt(3)/3`, `sqrt(6)/3`, `sqrt(2)/2` survive; nothing is rounded on the way out.
+The N contributes one A1 alone, the three carbons the second A1 and the E pair - which is the
+physically expected split, so the transport is not just well-formed but right.
+
+### What it costs
+
+One subprocess per request, ~700 ms wall clock (measured 682-1142 ms across the five tests) dominated
+by the cold `import groupy`. That is the real argument for keeping the bridge batched: a UI that
+reduces ten representations must send one request with ten, not ten requests.
+
+### Not disproved, but newly visible
+
+`occurrenceIndex` restarts per irrep row, not per irrep. For a 1-D irrep that reads naturally (A1
+occurrences 0 and 1). For E it means both rows report `occurrenceIndex: 0` - correct, since there is
+one E copy with two rows, but a consumer that groups by `occurrenceIndex` alone across rows will
+merge things it should not. Group by the `(irrepLabel, occurrenceIndex, irrepRow)` triple.
