@@ -180,7 +180,8 @@ namespace DefectStudio
 			{"sites", std::move(sites)},
 			{"symmetryTolerance", request.symmetryTolerance},
 			{"activeOrbitalIrreps", request.activeOrbitalIrreps},
-			{"activeElectronCount", request.activeElectronCount}};
+			{"activeElectronCount", request.activeElectronCount},
+			{"activeOrbitalLabels", request.activeOrbitalLabels}};
 
 		{
 			std::ofstream stream(payloadPath.Native(), std::ios::binary | std::ios::trunc);
@@ -271,6 +272,29 @@ namespace DefectStudio
 			result.tensorPower = json.value("tensorPower", 0);
 			for (const auto &entry : json.value("tensorPowerDecomposition", nlohmann::json::array()))
 				result.tensorPowerDecomposition.push_back({entry.at("irrepLabel"), entry.at("multiplicity"), entry.at("dimension")});
+			for (const auto &entry : json.value("activeShells", nlohmann::json::array()))
+				result.activeShells.push_back({entry.at("irrepLabel"), entry.at("label"), entry.at("firstOrbital"), entry.at("dimension")});
+			result.activeOrbitalLabels = json.value("activeOrbitalLabels", std::vector<std::string>{});
+			result.wavefunctionsSkippedReason = json.value("wavefunctionsSkippedReason", "");
+			for (const auto &entry : json.value("wavefunctions", nlohmann::json::array()))
+			{
+				MultipletWavefunction state;
+				state.irrepLabel = entry.at("irrepLabel").get<std::string>();
+				state.spinMultiplicity = entry.at("spinMultiplicity").get<int>();
+				state.copyIndex = entry.at("copyIndex").get<int>();
+				state.irrepRow = entry.at("irrepRow").get<int>();
+				state.twiceMs = entry.at("twiceMs").get<int>();
+				state.configuration = entry.at("configuration").get<std::vector<int>>();
+				for (const auto &determinant : entry.at("determinants"))
+				{
+					DeterminantTerm term;
+					term.coefficient = ParseCoefficient(determinant.at("coefficient"));
+					for (const auto &orbital : determinant.at("occupied"))
+						term.occupied.push_back({orbital.at("orbitalIndex"), orbital.at("spinUp")});
+					state.determinants.push_back(std::move(term));
+				}
+				result.wavefunctions.push_back(std::move(state));
+			}
 			return result;
 		}
 		catch (const std::exception &exception)

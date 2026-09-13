@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Domain/Symmetry/PointGroupAnalysis.hpp"
 #include "Domain/Symmetry/PointGroupBasis.hpp"
+#include "Domain/Symmetry/DirectProducts.hpp"
 #include "Presentation/Panels/GroupTheoryFormatting.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -71,15 +73,17 @@ namespace DefectStudio
 		std::optional<BasisKey> m_BasisKey;
 		int m_GroupIndex = 0;
 		double m_Tolerance = 0.1;
-		std::array<char, 256> m_ActiveIrreps{};
 		int m_Electrons = 0;
 
 		Ref<AnalyzePointGroupJob> m_PendingJob;
 		JobId m_PendingJobId = 0;
 		std::optional<BasisKey> m_SubmittedKey;
 		std::optional<PointGroupAnalysisResult> m_Result;
+		std::vector<std::vector<std::vector<IrrepMultiplicity>>> m_DirectProducts;
 		std::optional<StructuredError> m_Error;
 		std::vector<std::array<char, 128>> m_PhysicalBuffers;
 		std::vector<std::size_t> m_VectorOrder;
+		std::vector<std::uint8_t> m_ActiveVectors;
+		std::optional<std::pair<std::string, int>> m_SelectedTerm;
 	};
 } // namespace DefectStudio

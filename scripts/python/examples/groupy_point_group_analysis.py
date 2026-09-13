@@ -126,6 +126,60 @@ def reduce_representation(point_group: PointGroup, positions: np.ndarray, elemen
     return {"decomposition": decomposition, "projectedVectors": projected_vectors}, permutations
 
 
+def active_shells(orbitals: list[str], space: ActiveSpace) -> list[dict]:
+    shells = []
+    first = 0
+    occurrences: dict[str, int] = {}
+    for irrep in orbitals:
+        dimension = int(point_group_dimension(space, first))
+        occurrence = occurrences.get(irrep, 0)
+        occurrences[irrep] = occurrence + 1
+        if dimension == 1:
+            shell_label = space.orbital_names[first]
+        else:
+            import re
+            match = re.match(r"([A-Za-z])(.*)", irrep)
+            letter, rest = (match.group(1).lower(), match.group(2).lower()) if match else (irrep.lower(), "")
+            shell_label = letter + rest + ("'" * occurrence)
+            if rest:
+                shell_label = letter + "_{" + rest + "}" + ("'" * occurrence)
+        shells.append({"irrepLabel": irrep, "label": shell_label, "firstOrbital": first, "dimension": dimension})
+        first += dimension
+    return shells
+
+
+def point_group_dimension(space: ActiveSpace, orbital_index: int) -> int:
+    for representation in space.orbital_reps:
+        dimension = int(representation.shape[-1])
+        if orbital_index < dimension:
+            return dimension
+        orbital_index -= dimension
+    return 1
+
+
+def wavefunction_payload(space: ActiveSpace, orbitals: list[str], terms) -> tuple[list[dict], list[dict]]:
+    shells = active_shells(orbitals, space)
+    states = []
+    for irrep, spin, dimension, count, _ in terms.entries:
+        for row in range(int(dimension)):
+            for twice_ms in range(int(2 * spin), int(-2 * spin) - 1, -2):
+                for copy_index, state in enumerate(space.terms(str(irrep), spin, sp.Rational(twice_ms, 2), row, numeric=False)):
+                    determinants = []
+                    first_configuration = None
+                    for coefficient, determinant in state.nonzero_terms():
+                        occupied = [{"orbitalIndex": int(j) // 2, "spinUp": int(j) % 2 == 0}
+                                    for j in determinant.occupied_indices]
+                        if first_configuration is None:
+                            first_configuration = [sum(1 for item in occupied if shell["firstOrbital"] <= item["orbitalIndex"] < shell["firstOrbital"] + shell["dimension"])
+                                                   for shell in shells]
+                        determinants.append({"coefficient": coefficient_payload(coefficient), "occupied": occupied})
+                    if first_configuration is not None:
+                        states.append({"irrepLabel": str(irrep), "spinMultiplicity": int(2 * spin + 1),
+                                       "copyIndex": copy_index, "irrepRow": row, "twiceMs": twice_ms,
+                                       "configuration": first_configuration, "determinants": determinants})
+    return states, shells
+
+
 def detect_group(elements: list[str], positions: np.ndarray, tolerance: float) -> tuple[str, str, PointGroupAnalyzer]:
     analyzer = PointGroupAnalyzer(Molecule(elements, positions), tolerance=tolerance)
     symbol = str(analyzer.sch_symbol)
@@ -217,16 +271,36 @@ def analyze(payload: dict) -> dict:
 
     multiplets = []
     total_states = 0
+    active_shell_result = []
+    active_orbital_labels_result = []
+    wavefunctions = []
+    wavefunctions_skipped_reason = ""
     active = payload.get("activeOrbitalIrreps", [])
     if active and electron_count:
         try:
-            terms = ActiveSpace.from_orbitals(point_group, active, nel=electron_count).term_table()
+            automatic_space = ActiveSpace.from_orbitals(point_group, active, nel=electron_count)
+            automatic_labels = list(automatic_space.orbital_names)
+            requested_labels = [str(value) for value in payload.get("activeOrbitalLabels", [])]
+            if requested_labels and len(requested_labels) != len(automatic_labels):
+                fail("activeOrbitalLabels must contain one label per spatial orbital.", "invalid_active_space")
+            final_labels = [requested if requested else automatic
+                            for requested, automatic in zip(requested_labels, automatic_labels)] if requested_labels else automatic_labels
+            space = ActiveSpace.from_orbitals(point_group, active, nel=electron_count,
+                                              labels=final_labels if requested_labels else None)
+            active_orbital_labels_result = list(space.orbital_names)
+            terms = space.term_table()
             for term in terms.entries:
                 irrep, spin, dimension, count, total = term
                 entry = {"irrepLabel": str(irrep), "spinMultiplicity": int(2 * spin + 1),
                          "irrepDimension": int(dimension), "countPerRow": int(count), "totalStates": int(total)}
                 multiplets.append(entry)
                 total_states += int(total)
+            wavefunction_dimension = space.dim
+            active_shell_result = active_shells([str(value) for value in active], space)
+            if wavefunction_dimension <= 1000:
+                wavefunctions, _ = wavefunction_payload(space, [str(value) for value in active], terms)
+            else:
+                wavefunctions_skipped_reason = f"Slater basis too large (D={wavefunction_dimension})"
         except Exception as exc:
             fail(str(exc), "invalid_active_space")
 
@@ -245,6 +319,10 @@ def analyze(payload: dict) -> dict:
         "multipletTotalStates": total_states,
         "tensorPower": tensor_power,
         "tensorPowerDecomposition": tensor_power_decomposition,
+        "activeShells": active_shell_result,
+        "activeOrbitalLabels": active_orbital_labels_result,
+        "wavefunctions": wavefunctions,
+        "wavefunctionsSkippedReason": wavefunctions_skipped_reason,
     }
 
 

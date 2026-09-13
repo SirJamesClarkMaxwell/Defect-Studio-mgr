@@ -3,6 +3,8 @@
 #include "Presentation/Panels/GroupTheoryFormatting.hpp"
 
 #include <cctype>
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 
@@ -212,42 +214,108 @@ namespace DefectStudio
 	std::vector<MathSegment> SplitMathSegments(std::string_view latex)
 	{
 		std::vector<MathSegment> result;
-		const auto append = [&result](std::string text, int level) {
+		const auto append = [&result](std::string text, int level, bool overline) {
 			if (text.empty()) return;
-			if (!result.empty() && result.back().level == level) result.back().text += text;
-			else result.push_back({std::move(text), level});
+			if (!result.empty() && result.back().level == level && result.back().overline == overline) result.back().text += text;
+			else result.push_back({std::move(text), level, overline});
 		};
-		for (std::size_t index = 0; index < latex.size();)
-		{
-			if ((latex[index] == '_' || latex[index] == '^') && index + 1 < latex.size())
+		const auto parse = [&](const auto &self, std::size_t &index, int level, bool overline) -> void {
+			while (index < latex.size())
 			{
-				const int level = latex[index++] == '^' ? 1 : -1;
-				std::string text;
-				if (latex[index] == '{')
+				if (latex[index] == '}')
 				{
 					++index;
-					while (index < latex.size() && latex[index] != '}') text += latex[index++];
-					if (index < latex.size()) ++index;
+					return;
 				}
-				else text += latex[index++];
-				for (const auto &segment : SplitMathSegments(text)) append(segment.text, level + segment.level);
-				continue;
+				if ((latex[index] == '_' || latex[index] == '^') && index + 1 < latex.size())
+				{
+					const int childLevel = latex[index++] == '^' ? level + 1 : level - 1;
+					if (latex[index] == '{') ++index;
+					if (latex[index - 1] == '{') self(self, index, childLevel, overline);
+					else
+					{
+						std::string text(1, latex[index++]);
+						append(std::move(text), childLevel, overline);
+					}
+					continue;
+				}
+				if (latex[index] == '\\')
+				{
+					const std::size_t begin = ++index;
+					while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index]))) ++index;
+					const std::string command(latex.substr(begin, index - begin));
+					if (command == "bar")
+					{
+						if (index < latex.size() && latex[index] == '{')
+							++index;
+						self(self, index, level, true);
+					}
+					else if (command == "Gamma") append("Γ", level, overline);
+					else if (command == "sigma") append("σ", level, overline);
+					else if (command == "oplus") append("⊕", level, overline);
+					else if (command == "otimes") append("⊗", level, overline);
+					else if (command == "rangle") append("⟩", level, overline);
+					else if (command == "langle") append("⟨", level, overline);
+					else append("\\" + command, level, overline);
+					continue;
+				}
+				if (level != 0 && latex[index] == ' ')
+				{
+					++index;
+					continue;
+				}
+				append(std::string(1, latex[index++]), level, overline);
 			}
-			if (latex[index] == '\\')
-			{
-				const std::size_t begin = ++index;
-				while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index]))) ++index;
-				const std::string command(latex.substr(begin, index - begin));
-				if (command == "Gamma") append("Γ", 0);
-				else if (command == "sigma") append("σ", 0);
-				else if (command == "oplus") append("⊕", 0);
-				else if (command == "otimes") append("⊗", 0);
-				else append("\\" + command, 0);
-				continue;
-			}
-			append(std::string(1, latex[index++]), 0);
-		}
+		};
+		std::size_t index = 0;
+		parse(parse, index, 0, false);
 		return result;
+	}
+
+	ActiveSpaceSelection BuildActiveSpaceSelection(const PointGroupReduction &reduction, const std::vector<std::size_t> &order,
+		const std::vector<bool> &activeVectors, const std::vector<std::string> &physicalLabels)
+	{
+		ActiveSpaceSelection selection;
+		struct Copy
+		{
+			std::string irrep;
+			int occurrence;
+			std::size_t first;
+		};
+		std::vector<Copy> copies;
+		for (std::size_t display : order)
+			if (display < reduction.projectedVectors.size() && display < activeVectors.size() && activeVectors[display])
+			{
+				const auto &vector = reduction.projectedVectors[display];
+				const bool exists = std::any_of(
+					copies.begin(), copies.end(), [&](const Copy &copy) {
+						return copy.irrep == vector.irrepLabel &&
+							copy.occurrence == vector.occurrenceIndex;
+					});
+				if (!exists) copies.push_back({vector.irrepLabel, vector.occurrenceIndex, display});
+			}
+		for (const Copy &copy : copies)
+		{
+			selection.irreps.push_back(copy.irrep);
+			int dimension = 0;
+			for (const auto &vector : reduction.projectedVectors)
+				if (vector.irrepLabel == copy.irrep && vector.occurrenceIndex == copy.occurrence)
+					dimension = std::max(dimension, vector.irrepRow + 1);
+			for (int row = 0; row < dimension; ++row)
+				for (std::size_t index = 0; index < reduction.projectedVectors.size(); ++index)
+					if (reduction.projectedVectors[index].irrepLabel == copy.irrep &&
+						reduction.projectedVectors[index].occurrenceIndex == copy.occurrence &&
+						reduction.projectedVectors[index].irrepRow == row)
+						selection.orbitalLabels.push_back(index < physicalLabels.size() ? physicalLabels[index] : "");
+		}
+		for (std::string &label : selection.orbitalLabels)
+			if (!label.empty())
+				label = FormatIrrepLabel(label, LabelStyle::Latex);
+		if (std::all_of(
+				selection.orbitalLabels.begin(), selection.orbitalLabels.end(),
+				[](const std::string &label) { return label.empty(); }))
+			selection.orbitalLabels.clear();
+		return selection;
 	}
 
 	std::string FormatProjectedVectors(

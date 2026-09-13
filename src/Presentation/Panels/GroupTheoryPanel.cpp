@@ -54,7 +54,6 @@ namespace DefectStudio
 		  m_DomainLayer(std::move(domainLayer)),
 		  m_JobSystem(std::move(jobSystem))
 	{
-		m_ActiveIrreps[0] = '\0';
 	}
 
 	Ref<IPanel> GroupTheoryPanel::Clone() const
@@ -101,8 +100,28 @@ namespace DefectStudio
 		}
 		else
 		{
-			drawBasis(focusedWindowId, *windowState, *record);
-			drawGroupControls();
+			const bool wideLayout = ImGui::GetContentRegionAvail().x >= 700.0f;
+			const bool showCharacterTable = m_Result.has_value() && m_Result->detection.determined;
+			if (wideLayout && ImGui::BeginTable(
+					"##group_settings_and_characters", 2,
+					ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				drawBasis(focusedWindowId, *windowState, *record);
+				drawGroupControls();
+				ImGui::TableSetColumnIndex(1);
+				if (showCharacterTable)
+					drawCharacterTable();
+				ImGui::EndTable();
+			}
+			else
+			{
+				drawBasis(focusedWindowId, *windowState, *record);
+				drawGroupControls();
+				if (showCharacterTable)
+					drawCharacterTable();
+			}
 		}
 
 		const std::optional<BasisKey> currentKey = currentBasisKey();
@@ -190,9 +209,11 @@ namespace DefectStudio
 		m_Tolerance = std::max(1.0e-6, m_Tolerance);
 		ImGui::InputDouble("Tolerance (Å)", &m_Tolerance, 0.0, 0.0, "%.6g");
 		m_Tolerance = std::max(1.0e-6, m_Tolerance);
-		ImGui::InputText("Active irreps", m_ActiveIrreps.data(), m_ActiveIrreps.size());
 		ImGui::InputInt("Electrons", &m_Electrons);
 		m_Electrons = std::max(0, m_Electrons);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
+		ImGui::TextWrapped("Tick Active orbitals in Projected vectors, then Compute again for multiplets.");
+		ImGui::PopStyleColor();
 
 		const bool jobRunning = m_PendingJob != nullptr;
 		ImGui::BeginDisabled(!m_Basis.has_value() || jobRunning);
@@ -275,7 +296,19 @@ namespace DefectStudio
 		request.pointGroupLabel = m_GroupIndex == 0 ? "" : kGroups[m_GroupIndex];
 		request.sites = m_Basis->sites;
 		request.symmetryTolerance = m_Tolerance;
-		request.activeOrbitalIrreps = SplitLabels(m_ActiveIrreps.data());
+		std::vector<bool> active(m_ActiveVectors.size());
+		for (std::size_t index = 0; index < active.size(); ++index)
+			active[index] = m_ActiveVectors[index] != 0;
+		const ActiveSpaceSelection selection = m_Result.has_value()
+			? BuildActiveSpaceSelection(m_Result->reduction, m_VectorOrder, active, [&]() {
+				std::vector<std::string> labels;
+				labels.reserve(m_PhysicalBuffers.size());
+				for (const auto &buffer : m_PhysicalBuffers) labels.emplace_back(buffer.data());
+				return labels;
+			}())
+			: ActiveSpaceSelection{};
+		request.activeOrbitalIrreps = selection.irreps;
+		request.activeOrbitalLabels = selection.orbitalLabels;
 		request.activeElectronCount = m_Electrons;
 
 		m_PendingJob = CreateRef<AnalyzePointGroupJob>(std::move(request));
@@ -324,10 +357,28 @@ namespace DefectStudio
 		{
 			if (m_PendingJob->GetResult().has_value() && m_SubmittedKey == m_BasisKey)
 			{
-				m_Result = m_PendingJob->GetResult();
-				m_PhysicalBuffers.assign(m_Result->reduction.projectedVectors.size(), {});
-				m_VectorOrder.resize(m_Result->reduction.projectedVectors.size());
-				std::iota(m_VectorOrder.begin(), m_VectorOrder.end(), 0);
+				const auto oldIdentity = m_Result.has_value() ? m_Result->reduction.projectedVectors : std::vector<SymmetryAdaptedVector>{};
+				const PointGroupAnalysisResult newResult = *m_PendingJob->GetResult();
+				const bool sameIdentity = oldIdentity.size() == newResult.reduction.projectedVectors.size() &&
+					std::equal(oldIdentity.begin(), oldIdentity.end(), newResult.reduction.projectedVectors.begin(), [](const auto &left, const auto &right) {
+						return left.irrepLabel == right.irrepLabel && left.occurrenceIndex == right.occurrenceIndex && left.irrepRow == right.irrepRow;
+					});
+				m_Result = newResult;
+				m_DirectProducts = ComputeDirectProducts(m_Result->characterTable);
+				if (m_SelectedTerm.has_value() && !std::any_of(
+						m_Result->multiplets.begin(), m_Result->multiplets.end(),
+						[&](const MultipletTerm &term) {
+							return term.irrepLabel == m_SelectedTerm->first &&
+								term.spinMultiplicity == m_SelectedTerm->second;
+						}))
+					m_SelectedTerm.reset();
+				if (!sameIdentity)
+				{
+					m_PhysicalBuffers.assign(m_Result->reduction.projectedVectors.size(), {});
+					m_ActiveVectors.assign(m_Result->reduction.projectedVectors.size(), 0);
+					m_VectorOrder.resize(m_Result->reduction.projectedVectors.size());
+					std::iota(m_VectorOrder.begin(), m_VectorOrder.end(), 0);
+				}
 				m_Error.reset();
 			}
 		}
