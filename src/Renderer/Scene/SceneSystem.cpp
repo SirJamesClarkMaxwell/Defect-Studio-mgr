@@ -3,6 +3,7 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "Renderer/RendererWindowState.hpp"
@@ -12,6 +13,18 @@ namespace DefectStudio::SceneSystem
 {
 	void SyncSceneWithStructure(SceneRegistry &scene, const RendererStructureData &structure)
 	{
+		std::vector<SceneObjectId> atomIds;
+		atomIds.reserve(scene.AtomEntities().size());
+		for (const entt::entity entity : scene.AtomEntities())
+			atomIds.push_back(Entity(entity, &scene).GetComponent<SceneObjectComponent>().id);
+		std::unordered_map<std::size_t, SceneObjectId> bondIds;
+		for (const entt::entity entity : scene.BondEntities())
+		{
+			Entity bondEntity(entity, &scene);
+			const SceneObjectComponent &object = bondEntity.GetComponent<SceneObjectComponent>();
+			bondIds.emplace(object.sourceIndex, object.id);
+		}
+
 		for (const entt::entity entity : scene.AtomEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		for (const entt::entity entity : scene.BondEntities())
@@ -23,7 +36,8 @@ namespace DefectStudio::SceneSystem
 		for (std::size_t index = 0; index < structure.atoms.size(); ++index)
 		{
 			const RendererAtomData &atom = structure.atoms[index];
-			Entity entity = scene.CreateEntity();
+			const SceneObjectId id = index < atomIds.size() ? atomIds[index] : SceneObjectId{};
+			Entity entity = scene.CreateObject(SceneObjectKind::Atom, index, atom.element + " " + std::to_string(index), id);
 			entity.AddComponent<TransformComponent>(TransformComponent{atom.cartesianPosition});
 			entity.AddComponent<AtomComponent>(AtomComponent{index, atom.element, atom.radius, atom.color});
 			entity.AddComponent<VisibilityComponent>(VisibilityComponent{atom.visible});
@@ -39,7 +53,9 @@ namespace DefectStudio::SceneSystem
 			if (bond.firstAtomIndex >= scene.AtomEntities().size() || bond.secondAtomIndex >= scene.AtomEntities().size())
 				continue;
 
-			Entity entity = scene.CreateEntity();
+			const auto oldId = bondIds.find(index);
+			Entity entity = scene.CreateObject(
+				SceneObjectKind::Bond, index, "bond " + std::to_string(index), oldId == bondIds.end() ? SceneObjectId{} : oldId->second);
 			BondComponent component;
 			component.bondIndex = index;
 			component.firstAtomEntity = scene.AtomEntities()[bond.firstAtomIndex];
@@ -186,21 +202,75 @@ namespace DefectStudio::SceneSystem
 		for (const entt::entity entity : scene.LabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.LabelEntities().clear();
+		for (const entt::entity entity : scene.ArrowEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.ArrowEntities().clear();
+		for (const entt::entity entity : scene.FreeLabelEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.FreeLabelEntities().clear();
 
 		scene.LabelEntities().reserve(windowState.pinnedMeasurements.size());
 		for (std::size_t index = 0; index < windowState.pinnedMeasurements.size(); ++index)
 		{
-			Entity entity = scene.CreateEntity();
+			RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[index];
+			if (!pin.id.IsValid())
+				pin.id = scene.AllocateObjectId();
+			Entity entity = scene.CreateObject(SceneObjectKind::PinnedMeasurement, index, "measurement " + std::to_string(index), pin.id);
+			pin.id = entity.GetComponent<SceneObjectComponent>().id;
 			glm::vec3 anchor(0.0f);
-			(void)ResolveLabelAnchor(windowState.structure, windowState.pinnedMeasurements[index], anchor);
+			(void)ResolveLabelAnchor(windowState.structure, pin, anchor);
 			entity.AddComponent<TransformComponent>(TransformComponent{anchor});
 			entity.AddComponent<LabelComponent>(LabelComponent{index});
 			const bool isSelected = std::find(
-				windowState.selectedPinnedMeasurements.begin(), windowState.selectedPinnedMeasurements.end(), index) !=
+				windowState.selectedPinnedMeasurements.begin(), windowState.selectedPinnedMeasurements.end(), pin.id) !=
 				windowState.selectedPinnedMeasurements.end();
 			entity.AddComponent<SelectionComponent>(SelectionComponent{isSelected});
 			scene.LabelEntities().push_back(static_cast<entt::entity>(entity));
 		}
+
+		scene.FreeLabelEntities().reserve(windowState.freeLabels.size());
+		for (std::size_t index = 0; index < windowState.freeLabels.size(); ++index)
+		{
+			RendererWindowState::FreeLabel &label = windowState.freeLabels[index];
+			if (!label.id.IsValid())
+				label.id = scene.AllocateObjectId();
+			Entity entity = scene.CreateObject(SceneObjectKind::FreeLabel, index, "label " + std::to_string(index), label.id);
+			label.id = entity.GetComponent<SceneObjectComponent>().id;
+			entity.AddComponent<TransformComponent>(TransformComponent{label.worldPosition});
+			entity.AddComponent<SelectionComponent>(SelectionComponent{
+				std::find(windowState.selectedFreeLabels.begin(), windowState.selectedFreeLabels.end(), label.id) !=
+				windowState.selectedFreeLabels.end()});
+			scene.FreeLabelEntities().push_back(static_cast<entt::entity>(entity));
+		}
+
+		scene.ArrowEntities().reserve(windowState.sceneArrows.size());
+		for (std::size_t index = 0; index < windowState.sceneArrows.size(); ++index)
+		{
+			RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[index];
+			if (!arrow.id.IsValid())
+				arrow.id = scene.AllocateObjectId();
+			Entity entity = scene.CreateObject(SceneObjectKind::SceneArrow, index, "arrow " + std::to_string(index), arrow.id);
+			arrow.id = entity.GetComponent<SceneObjectComponent>().id;
+			entity.AddComponent<TransformComponent>(TransformComponent{(arrow.start + arrow.end) * 0.5f});
+			entity.AddComponent<SelectionComponent>(SelectionComponent{
+				std::find(windowState.selectedSceneArrows.begin(), windowState.selectedSceneArrows.end(), arrow.id) !=
+				windowState.selectedSceneArrows.end()});
+			scene.ArrowEntities().push_back(static_cast<entt::entity>(entity));
+		}
+	}
+
+	std::vector<std::size_t> ResolveSourceIndices(const SceneRegistry &scene, const std::vector<SceneObjectId> &ids)
+	{
+		std::vector<std::size_t> result;
+		result.reserve(ids.size());
+		for (const SceneObjectId id : ids)
+		{
+			const entt::entity entity = scene.EntityForObjectId(id);
+			if (entity == entt::null)
+				continue;
+			result.push_back(scene.Registry().get<SceneObjectComponent>(entity).sourceIndex);
+		}
+		return result;
 	}
 
 	void UpdateLabelTransforms(SceneRegistry &scene, const RendererWindowState &windowState)
@@ -214,17 +284,26 @@ namespace DefectStudio::SceneSystem
 			Entity entity(labelEntities[index], &scene);
 			entity.GetComponent<TransformComponent>().position = anchor;
 		}
+		for (std::size_t index = 0; index < scene.FreeLabelEntities().size() && index < windowState.freeLabels.size(); ++index)
+			Entity(scene.FreeLabelEntities()[index], &scene).GetComponent<TransformComponent>().position = windowState.freeLabels[index].worldPosition;
+		for (std::size_t index = 0; index < scene.ArrowEntities().size() && index < windowState.sceneArrows.size(); ++index)
+			Entity(scene.ArrowEntities()[index], &scene).GetComponent<TransformComponent>().position =
+				(windowState.sceneArrows[index].start + windowState.sceneArrows[index].end) * 0.5f;
 	}
 
 	void SyncLabelSelection(SceneRegistry &scene, const RendererWindowState &windowState)
 	{
-		const std::vector<entt::entity> &labelEntities = scene.LabelEntities();
-		for (std::size_t index = 0; index < labelEntities.size(); ++index)
-		{
-			Entity entity(labelEntities[index], &scene);
-			entity.GetComponent<SelectionComponent>().selected = std::find(
-				windowState.selectedPinnedMeasurements.begin(), windowState.selectedPinnedMeasurements.end(), index) !=
-				windowState.selectedPinnedMeasurements.end();
-		}
+		const auto sync = [&](const std::vector<entt::entity> &entities, const std::vector<SceneObjectId> &selection) {
+			for (const entt::entity handle : entities)
+			{
+				Entity entity(handle, &scene);
+				const SceneObjectId id = entity.GetComponent<SceneObjectComponent>().id;
+				entity.GetComponent<SelectionComponent>().selected =
+					std::find(selection.begin(), selection.end(), id) != selection.end();
+			}
+		};
+		sync(scene.LabelEntities(), windowState.selectedPinnedMeasurements);
+		sync(scene.FreeLabelEntities(), windowState.selectedFreeLabels);
+		sync(scene.ArrowEntities(), windowState.selectedSceneArrows);
 	}
 } // namespace DefectStudio::SceneSystem

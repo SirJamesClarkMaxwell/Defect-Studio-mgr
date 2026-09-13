@@ -41,6 +41,12 @@
 
 namespace DefectStudio
 {
+	[[nodiscard]] static std::size_t ArrowIndex(const RendererWindowState &windowState, const SceneObjectId id)
+	{
+		const auto found = std::find_if(windowState.sceneArrows.begin(), windowState.sceneArrows.end(), [id](const auto &arrow) { return arrow.id == id; });
+		return found == windowState.sceneArrows.end() ? windowState.sceneArrows.size() : static_cast<std::size_t>(std::distance(windowState.sceneArrows.begin(), found));
+	}
+
 	namespace
 	{
 		constexpr float kViewportMinSize = 64.0f;
@@ -306,8 +312,9 @@ namespace DefectStudio
 			constexpr float kActiveHandleRadius = 7.0f;
 			const bool singleDragging = windowState.sceneArrowDragging && windowState.selectedSceneArrows.size() == 1;
 			using DragTarget = RendererWindowState::SceneArrowDragTarget;
-			for (const std::size_t arrowIndex : windowState.selectedSceneArrows)
+			for (const SceneObjectId id : windowState.selectedSceneArrows)
 			{
+				const std::size_t arrowIndex = ArrowIndex(windowState, id);
 				if (arrowIndex >= windowState.sceneArrows.size())
 					continue;
 				const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
@@ -547,7 +554,7 @@ namespace DefectStudio
 			return;
 		if (windowState.sceneArrowQuickEditIndex >= windowState.sceneArrows.size() ||
 			windowState.selectedSceneArrows.size() != 1 ||
-			windowState.selectedSceneArrows[0] != windowState.sceneArrowQuickEditIndex)
+			ArrowIndex(windowState, windowState.selectedSceneArrows[0]) != windowState.sceneArrowQuickEditIndex)
 		{
 			windowState.sceneArrowQuickEditActive = false;
 			return;
@@ -620,15 +627,18 @@ namespace DefectStudio
 			{
 				PushPinnedMeasurementUndoSnapshot(windowState);
 				RendererWindowState::FreeLabel label;
+				label.id = windowState.sceneRegistry.AllocateObjectId();
 				label.worldPosition = m_ContextMenuWorldPosition;
 				windowState.freeLabels.push_back(std::move(label));
 			}
 			if (ImGui::MenuItem("Arrow"))
 			{
 				PushPinnedMeasurementUndoSnapshot(windowState);
-				windowState.sceneArrows.push_back(MakeDefaultSceneArrow(windowState, m_ContextMenuWorldPosition));
+				RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, m_ContextMenuWorldPosition);
+				arrow.id = windowState.sceneRegistry.AllocateObjectId();
+				windowState.sceneArrows.push_back(std::move(arrow));
 				const std::size_t newIndex = windowState.sceneArrows.size() - 1;
-				windowState.selectedSceneArrows = {newIndex};
+				windowState.selectedSceneArrows = {windowState.sceneArrows[newIndex].id};
 				windowState.sceneArrowQuickEditActive = true;
 				windowState.sceneArrowQuickEditIndex = newIndex;
 			}
@@ -653,13 +663,13 @@ namespace DefectStudio
 										   GetArrowStyleClipboard().has_value()))
 		{
 			if (ImGui::MenuItem("Copy Geometry", nullptr, false, hasArrowSelection))
-				CopyArrowGeometry(windowState.sceneArrows[windowState.selectedSceneArrows.front()].style);
+				CopyArrowGeometry(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].style);
 			if (ImGui::MenuItem("Copy Style", nullptr, false, hasArrowSelection))
-				CopyArrowStyle(windowState.sceneArrows[windowState.selectedSceneArrows.front()].style);
+				CopyArrowStyle(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].style);
 			if (ImGui::MenuItem("Copy Geometry + Style", nullptr, false, hasArrowSelection))
 			{
 				const RendererWindowState::ArrowStyle &style =
-					windowState.sceneArrows[windowState.selectedSceneArrows.front()].style;
+					windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].style;
 				CopyArrowGeometry(style);
 				CopyArrowStyle(style);
 			}
@@ -698,10 +708,18 @@ namespace DefectStudio
 		{
 			if (ImGui::MenuItem("Copy Style", nullptr, false, hasLabelSelection))
 			{
-				CopyLabelStyle(
-					!windowState.selectedPinnedMeasurements.empty()
-						? windowState.pinnedMeasurements[windowState.selectedPinnedMeasurements.front()].style
-						: windowState.freeLabels[windowState.selectedFreeLabels.front()].style);
+				const RendererWindowState::LabelStyle *style = nullptr;
+				if (!windowState.selectedPinnedMeasurements.empty())
+				{
+					if (const auto *pin = FindAnnotation(windowState.pinnedMeasurements, windowState.selectedPinnedMeasurements.front()))
+						style = &pin->style;
+				}
+				else if (const auto *label = FindAnnotation(windowState.freeLabels, windowState.selectedFreeLabels.front()))
+				{
+					style = &label->style;
+				}
+				if (style != nullptr)
+					CopyLabelStyle(*style);
 			}
 			const bool canPasteLabelStyle = hasLabelSelection && GetLabelStyleClipboard().has_value();
 			if (ImGui::MenuItem("Paste Style", nullptr, false, canPasteLabelStyle))
@@ -790,9 +808,9 @@ namespace DefectStudio
 
 			const bool hasOneArrowSelected = windowState.selectedSceneArrows.size() == 1;
 			if (ImGui::MenuItem("Move to Arrow Start", nullptr, false, hasOneArrowSelected))
-				publishCursor(windowState.sceneArrows[windowState.selectedSceneArrows.front()].start);
+				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].start);
 			if (ImGui::MenuItem("Move to Arrow End", nullptr, false, hasOneArrowSelected))
-				publishCursor(windowState.sceneArrows[windowState.selectedSceneArrows.front()].end);
+				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].end);
 
 			ImGui::EndMenu();
 		}

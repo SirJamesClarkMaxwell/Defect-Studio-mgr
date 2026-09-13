@@ -112,8 +112,9 @@ namespace DefectStudio
 
 		glm::vec3 pivot(0.0f);
 		int pivotCount = 0;
-		for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+		for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
 		{
+			const std::size_t pinIndex = AnnotationIndex(windowState.pinnedMeasurements, id);
 			glm::vec3 position(0.0f);
 			if (resolvePosition(true, pinIndex, position))
 			{
@@ -121,8 +122,9 @@ namespace DefectStudio
 				++pivotCount;
 			}
 		}
-		for (const std::size_t labelIndex : windowState.selectedFreeLabels)
+		for (const SceneObjectId id : windowState.selectedFreeLabels)
 		{
+			const std::size_t labelIndex = AnnotationIndex(windowState.freeLabels, id);
 			glm::vec3 position(0.0f);
 			if (resolvePosition(false, labelIndex, position))
 			{
@@ -171,10 +173,10 @@ namespace DefectStudio
 				windowState.labelGizmoDragTargets.push_back(
 					RendererWindowState::LabelGizmoDragTarget{isPin, index, *positionPtr, *rotationPtr, *scalePtr});
 			};
-			for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
-				captureTarget(true, pinIndex);
-			for (const std::size_t labelIndex : windowState.selectedFreeLabels)
-				captureTarget(false, labelIndex);
+			for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
+				captureTarget(true, AnnotationIndex(windowState.pinnedMeasurements, id));
+			for (const SceneObjectId id : windowState.selectedFreeLabels)
+				captureTarget(false, AnnotationIndex(windowState.freeLabels, id));
 			PushPinnedMeasurementUndoSnapshot(windowState);
 		};
 

@@ -171,6 +171,7 @@ namespace DefectStudio
 					continue;
 				PushPinnedMeasurementUndoSnapshot(candidate);
 				RendererWindowState::FreeLabel label;
+				label.id = candidate.sceneRegistry.AllocateObjectId();
 				label.worldPosition = m_AddMenuPosition;
 				candidate.freeLabels.push_back(std::move(label));
 				break;
@@ -184,9 +185,11 @@ namespace DefectStudio
 				if (candidate.windowId != m_AddMenuWindowId)
 					continue;
 				PushPinnedMeasurementUndoSnapshot(candidate);
-				candidate.sceneArrows.push_back(MakeDefaultSceneArrow(candidate, m_AddMenuPosition));
+				RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(candidate, m_AddMenuPosition);
+				arrow.id = candidate.sceneRegistry.AllocateObjectId();
+				candidate.sceneArrows.push_back(std::move(arrow));
 				const std::size_t newIndex = candidate.sceneArrows.size() - 1;
-				candidate.selectedSceneArrows = {newIndex};
+				candidate.selectedSceneArrows = {candidate.sceneArrows[newIndex].id};
 				candidate.sceneArrowQuickEditActive = true;
 				candidate.sceneArrowQuickEditIndex = newIndex;
 				break;

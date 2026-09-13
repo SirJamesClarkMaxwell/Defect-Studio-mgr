@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace DefectStudio
 {
@@ -55,6 +57,32 @@ namespace DefectStudio
 		std::size_t sourceIndex = 0;
 		std::string displayName;
 	};
+
+	// Annotations are addressed by SceneObjectId everywhere the user can reach them, but the arrays
+	// they live in are still position-indexed. These two are the only sanctioned way to cross that
+	// gap. FindAnnotation is the one to reach for: an id whose object is gone yields nullptr, which
+	// a caller cannot accidentally index with. AnnotationIndex is for the few places that must store
+	// a position (drag targets), and returns objects.size() for a dead id - check before indexing.
+	template <typename T>
+	[[nodiscard]] T *FindAnnotation(std::vector<T> &objects, const SceneObjectId id)
+	{
+		const auto found = std::find_if(objects.begin(), objects.end(), [id](const T &object) { return object.id == id; });
+		return found == objects.end() ? nullptr : &*found;
+	}
+
+	template <typename T>
+	[[nodiscard]] const T *FindAnnotation(const std::vector<T> &objects, const SceneObjectId id)
+	{
+		const auto found = std::find_if(objects.begin(), objects.end(), [id](const T &object) { return object.id == id; });
+		return found == objects.end() ? nullptr : &*found;
+	}
+
+	template <typename T>
+	[[nodiscard]] std::size_t AnnotationIndex(const std::vector<T> &objects, const SceneObjectId id)
+	{
+		const T *found = FindAnnotation(objects, id);
+		return found == nullptr ? objects.size() : static_cast<std::size_t>(found - objects.data());
+	}
 } // namespace DefectStudio
 
 template <>

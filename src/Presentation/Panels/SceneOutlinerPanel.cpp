@@ -71,13 +71,30 @@ namespace DefectStudio
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.95f, 0.50f, 0.10f, 0.9f));
 		}
 
+		// The scene registry is the one enumeration point for annotations, but an entt view walks its
+		// pool, and destroy() swap-and-pops - so rows would jump around every time an annotation is
+		// added or deleted. Sorting by sourceIndex restores the vector order the user sees everywhere
+		// else (properties panel, creation order in the viewport).
+		[[nodiscard]] std::vector<std::size_t> CollectSourceIndices(const SceneRegistry &scene, SceneObjectKind kind)
+		{
+			std::vector<std::size_t> indices;
+			const auto view = scene.Registry().view<const SceneObjectComponent>();
+			for (const entt::entity entity : view)
+			{
+				const SceneObjectComponent &object = view.get<const SceneObjectComponent>(entity);
+				if (object.kind == kind)
+					indices.push_back(object.sourceIndex);
+			}
+			std::sort(indices.begin(), indices.end());
+			return indices;
+		}
+
 		// Selecting any one of the three annotation kinds from the outliner clears the other two -
 		// same three-way mutual exclusivity RendererPanel::handleFreeLabelInteraction/
 		// handlePinnedMeasurementInteraction/handleSceneArrowInteraction already enforce for a
 		// viewport click, so outliner-driven selection can't leave a stale cross-kind selection a
 		// viewport click never would.
-		void ClearOtherAnnotationSelections(
-			RendererWindowState &windowState, std::vector<std::size_t> *keep)
+		void ClearOtherAnnotationSelections(RendererWindowState &windowState, const std::vector<SceneObjectId> *keep)
 		{
 			if (&windowState.selectedFreeLabels != keep)
 				windowState.selectedFreeLabels.clear();
@@ -176,8 +193,9 @@ namespace DefectStudio
 		// kinds' rows as siblings under the same tree node, and each restarts its own index from 0.
 		ImGui::PushID("Free");
 		ImGui::PushID(static_cast<int>(labelIndex));
-		std::vector<std::size_t> &selection = windowState.selectedFreeLabels;
-		const bool isSelected = std::find(selection.begin(), selection.end(), labelIndex) != selection.end();
+		std::vector<SceneObjectId> &selection = windowState.selectedFreeLabels;
+		const SceneObjectId id = windowState.freeLabels[labelIndex].id;
+		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
 		const std::string &text = windowState.freeLabels[labelIndex].text;
 		char rowLabel[96];
 		std::snprintf(rowLabel, sizeof(rowLabel), "%s", text.empty() ? "(no text)" : text.c_str());
@@ -192,15 +210,15 @@ namespace DefectStudio
 			ClearOtherAnnotationSelections(windowState, &selection);
 			if (ImGui::GetIO().KeyCtrl)
 			{
-				const auto existing = std::find(selection.begin(), selection.end(), labelIndex);
+				const auto existing = std::find(selection.begin(), selection.end(), id);
 				if (existing != selection.end())
 					selection.erase(existing);
 				else
-					selection.push_back(labelIndex);
+					selection.push_back(id);
 			}
 			else
 			{
-				selection = {labelIndex};
+				selection = {id};
 			}
 			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 		}
@@ -212,8 +230,9 @@ namespace DefectStudio
 	{
 		ImGui::PushID("Pin");
 		ImGui::PushID(static_cast<int>(pinIndex));
-		std::vector<std::size_t> &selection = windowState.selectedPinnedMeasurements;
-		const bool isSelected = std::find(selection.begin(), selection.end(), pinIndex) != selection.end();
+		std::vector<SceneObjectId> &selection = windowState.selectedPinnedMeasurements;
+		const SceneObjectId id = windowState.pinnedMeasurements[pinIndex].id;
+		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
 		const RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[pinIndex];
 		char rowLabel[32];
 		std::snprintf(rowLabel, sizeof(rowLabel), "%s #%zu", pin.atomIndices.size() == 2 ? "Bond length" : "Angle", pinIndex);
@@ -228,15 +247,15 @@ namespace DefectStudio
 			ClearOtherAnnotationSelections(windowState, &selection);
 			if (ImGui::GetIO().KeyCtrl)
 			{
-				const auto existing = std::find(selection.begin(), selection.end(), pinIndex);
+				const auto existing = std::find(selection.begin(), selection.end(), id);
 				if (existing != selection.end())
 					selection.erase(existing);
 				else
-					selection.push_back(pinIndex);
+					selection.push_back(id);
 			}
 			else
 			{
-				selection = {pinIndex};
+				selection = {id};
 			}
 			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 		}
@@ -255,10 +274,10 @@ namespace DefectStudio
 			"##labels", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
 		if (open)
 		{
-			for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
-				drawFreeLabelRow(windowState, i);
-			for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
-				drawPinnedMeasurementRow(windowState, i);
+			for (const std::size_t index : CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::FreeLabel))
+				drawFreeLabelRow(windowState, index);
+			for (const std::size_t index : CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement))
+				drawPinnedMeasurementRow(windowState, index);
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -267,8 +286,9 @@ namespace DefectStudio
 	void SceneOutlinerPanel::drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex)
 	{
 		ImGui::PushID(static_cast<int>(arrowIndex));
-		std::vector<std::size_t> &selection = windowState.selectedSceneArrows;
-		const bool isSelected = std::find(selection.begin(), selection.end(), arrowIndex) != selection.end();
+		std::vector<SceneObjectId> &selection = windowState.selectedSceneArrows;
+		const SceneObjectId id = windowState.sceneArrows[arrowIndex].id;
+		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
 		const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
 		const char *kindLabel = arrow.kind == RendererWindowState::ArrowKind::Line ? "Line"
 			: arrow.kind == RendererWindowState::ArrowKind::Arrow2D ? "Arrow 2D" : "Arrow 3D";
@@ -285,15 +305,15 @@ namespace DefectStudio
 			ClearOtherAnnotationSelections(windowState, &selection);
 			if (ImGui::GetIO().KeyCtrl)
 			{
-				const auto existing = std::find(selection.begin(), selection.end(), arrowIndex);
+				const auto existing = std::find(selection.begin(), selection.end(), id);
 				if (existing != selection.end())
 					selection.erase(existing);
 				else
-					selection.push_back(arrowIndex);
+					selection.push_back(id);
 			}
 			else
 			{
-				selection = {arrowIndex};
+				selection = {id};
 			}
 		}
 		ImGui::PopID();
@@ -308,8 +328,8 @@ namespace DefectStudio
 			"##arrows", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
 		if (open)
 		{
-			for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
-				drawSceneArrowRow(windowState, i);
+			for (const std::size_t index : CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneArrow))
+				drawSceneArrowRow(windowState, index);
 			ImGui::TreePop();
 		}
 		ImGui::PopID();

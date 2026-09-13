@@ -309,8 +309,18 @@ namespace DefectStudio
 		arrow.kind = newKind;
 	}
 
-	void EraseSceneArrows(RendererWindowState &windowState, std::vector<std::size_t> indices)
+	template <typename T>
+	[[nodiscard]] std::size_t FindObjectIndex(const std::vector<T> &objects, const SceneObjectId id)
 	{
+		const auto found = std::find_if(objects.begin(), objects.end(), [id](const T &object) { return object.id == id; });
+		return found == objects.end() ? objects.size() : static_cast<std::size_t>(std::distance(objects.begin(), found));
+	}
+
+	void EraseSceneArrows(RendererWindowState &windowState, std::vector<SceneObjectId> ids)
+	{
+		std::vector<std::size_t> indices;
+		for (const SceneObjectId id : ids)
+			indices.push_back(FindObjectIndex(windowState.sceneArrows, id));
 		std::sort(indices.begin(), indices.end(), std::greater<>());
 		indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
 
@@ -339,9 +349,12 @@ namespace DefectStudio
 	{
 		std::vector<RendererWindowState::SceneArrow> &clipboard = GetSceneArrowClipboard();
 		clipboard.clear();
-		for (const std::size_t index : windowState.selectedSceneArrows)
+		for (const SceneObjectId id : windowState.selectedSceneArrows)
+		{
+			const std::size_t index = FindObjectIndex(windowState.sceneArrows, id);
 			if (index < windowState.sceneArrows.size())
 				clipboard.push_back(windowState.sceneArrows[index]);
+		}
 	}
 
 	// Flat world-space offset so the copy doesn't land exactly on top of the original - same constant
@@ -354,19 +367,21 @@ namespace DefectStudio
 			return;
 		PushPinnedMeasurementUndoSnapshot(windowState);
 
-		std::vector<std::size_t> newIndices;
-		newIndices.reserve(windowState.selectedSceneArrows.size());
-		for (const std::size_t index : windowState.selectedSceneArrows)
+		std::vector<SceneObjectId> newIds;
+		newIds.reserve(windowState.selectedSceneArrows.size());
+		for (const SceneObjectId id : windowState.selectedSceneArrows)
 		{
+			const std::size_t index = FindObjectIndex(windowState.sceneArrows, id);
 			if (index >= windowState.sceneArrows.size())
 				continue;
 			RendererWindowState::SceneArrow copy = windowState.sceneArrows[index];
+			copy.id = windowState.sceneRegistry.AllocateObjectId();
+			newIds.push_back(copy.id);
 			copy.start += kArrowDuplicateOffset;
 			copy.end += kArrowDuplicateOffset;
 			windowState.sceneArrows.push_back(std::move(copy));
-			newIndices.push_back(windowState.sceneArrows.size() - 1);
 		}
-		windowState.selectedSceneArrows = std::move(newIndices);
+		windowState.selectedSceneArrows = std::move(newIds);
 	}
 
 	void PasteSceneArrowsFromClipboard(RendererWindowState &windowState)
@@ -376,17 +391,18 @@ namespace DefectStudio
 			return;
 		PushPinnedMeasurementUndoSnapshot(windowState);
 
-		std::vector<std::size_t> newIndices;
-		newIndices.reserve(clipboard.size());
+		std::vector<SceneObjectId> newIds;
+		newIds.reserve(clipboard.size());
 		for (const RendererWindowState::SceneArrow &arrow : clipboard)
 		{
 			RendererWindowState::SceneArrow copy = arrow;
+			copy.id = windowState.sceneRegistry.AllocateObjectId();
+			newIds.push_back(copy.id);
 			copy.start += kArrowDuplicateOffset;
 			copy.end += kArrowDuplicateOffset;
 			windowState.sceneArrows.push_back(std::move(copy));
-			newIndices.push_back(windowState.sceneArrows.size() - 1);
 		}
-		windowState.selectedSceneArrows = std::move(newIndices);
+		windowState.selectedSceneArrows = std::move(newIds);
 	}
 
 	std::optional<RendererWindowState::ArrowStyle> &GetArrowGeometryClipboard()
@@ -411,13 +427,14 @@ namespace DefectStudio
 		GetArrowStyleClipboard() = style;
 	}
 
-	bool PasteArrowGeometry(RendererWindowState &windowState, const std::vector<std::size_t> &targets)
+	bool PasteArrowGeometry(RendererWindowState &windowState, const std::vector<SceneObjectId> &targets)
 	{
 		const std::optional<RendererWindowState::ArrowStyle> &clipboard = GetArrowGeometryClipboard();
 		if (!clipboard.has_value() || targets.empty())
 			return false;
-		for (const std::size_t index : targets)
+		for (const SceneObjectId id : targets)
 		{
+			const std::size_t index = FindObjectIndex(windowState.sceneArrows, id);
 			if (index >= windowState.sceneArrows.size())
 				continue;
 			RendererWindowState::ArrowStyle &style = windowState.sceneArrows[index].style;
@@ -429,13 +446,14 @@ namespace DefectStudio
 		return true;
 	}
 
-	bool PasteArrowStyle(RendererWindowState &windowState, const std::vector<std::size_t> &targets)
+	bool PasteArrowStyle(RendererWindowState &windowState, const std::vector<SceneObjectId> &targets)
 	{
 		const std::optional<RendererWindowState::ArrowStyle> &clipboard = GetArrowStyleClipboard();
 		if (!clipboard.has_value() || targets.empty())
 			return false;
-		for (const std::size_t index : targets)
+		for (const SceneObjectId id : targets)
 		{
+			const std::size_t index = FindObjectIndex(windowState.sceneArrows, id);
 			if (index >= windowState.sceneArrows.size())
 				continue;
 			RendererWindowState::ArrowStyle &style = windowState.sceneArrows[index].style;
@@ -897,6 +915,7 @@ namespace DefectStudio
 			{
 				PushPinnedMeasurementUndoSnapshot(*windowState);
 				RendererWindowState::FreeLabel label;
+				label.id = windowState->sceneRegistry.AllocateObjectId();
 				label.worldPosition = windowState->cursor3DPlaced ? windowState->cursor3DPosition : glm::vec3(0.0f);
 				windowState->freeLabels.push_back(std::move(label));
 			}
@@ -951,7 +970,7 @@ namespace DefectStudio
 				if (pinCount == 1 && freeCount == 0)
 				{
 					RendererWindowState::PinnedMeasurement &pin =
-						windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[0]];
+						windowState->pinnedMeasurements[FindObjectIndex(windowState->pinnedMeasurements, windowState->selectedPinnedMeasurements[0])];
 					ImGui::TextUnformatted(pin.atomIndices.size() == 2 ? "Bond length" : "Angle");
 					if (pin.atomIndices.size() == 2)
 					{
@@ -965,7 +984,7 @@ namespace DefectStudio
 						if (ImGui::Button("Align to camera##PinAlignToCamera"))
 						{
 							PushPinnedMeasurementUndoSnapshot(*windowState);
-							AlignBondLabelToCamera(*windowState, windowState->selectedPinnedMeasurements[0]);
+							AlignBondLabelToCamera(*windowState, FindObjectIndex(windowState->pinnedMeasurements, windowState->selectedPinnedMeasurements[0]));
 						}
 					}
 				}
@@ -979,8 +998,8 @@ namespace DefectStudio
 				// Paste Style is disabled until something has actually been copied.
 				if (ImGui::Button("Copy Style##LabelStyleCopy"))
 				{
-					CopyLabelStyle(pinCount > 0 ? windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[0]].style
-												 : windowState->freeLabels[windowState->selectedFreeLabels[0]].style);
+					CopyLabelStyle(pinCount > 0 ? windowState->pinnedMeasurements[FindObjectIndex(windowState->pinnedMeasurements, windowState->selectedPinnedMeasurements[0])].style
+											 : windowState->freeLabels[FindObjectIndex(windowState->freeLabels, windowState->selectedFreeLabels[0])].style);
 				}
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!GetLabelStyleClipboard().has_value());
@@ -999,13 +1018,13 @@ namespace DefectStudio
 				// as most bulk-editors, rather than showing a "mixed" state.
 				const bool usedPinAsRepresentative = pinCount > 0;
 				RendererWindowState::LabelStyle &representative = usedPinAsRepresentative
-					? windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[0]].style
-					: windowState->freeLabels[windowState->selectedFreeLabels[0]].style;
+					? windowState->pinnedMeasurements[FindObjectIndex(windowState->pinnedMeasurements, windowState->selectedPinnedMeasurements[0])].style
+					: windowState->freeLabels[FindObjectIndex(windowState->freeLabels, windowState->selectedFreeLabels[0])].style;
 				drawLabelStyleEditor(representative);
 				for (std::size_t i = usedPinAsRepresentative ? 1 : 0; i < pinCount; ++i)
-					windowState->pinnedMeasurements[windowState->selectedPinnedMeasurements[i]].style = representative;
+					windowState->pinnedMeasurements[FindObjectIndex(windowState->pinnedMeasurements, windowState->selectedPinnedMeasurements[i])].style = representative;
 				for (std::size_t i = usedPinAsRepresentative ? 0 : 1; i < freeCount; ++i)
-					windowState->freeLabels[windowState->selectedFreeLabels[i]].style = representative;
+					windowState->freeLabels[FindObjectIndex(windowState->freeLabels, windowState->selectedFreeLabels[i])].style = representative;
 			}
 
 			ImGui::Separator();
@@ -1014,9 +1033,11 @@ namespace DefectStudio
 			{
 				PushPinnedMeasurementUndoSnapshot(*windowState);
 				const glm::vec3 seed = windowState->cursor3DPlaced ? windowState->cursor3DPosition : glm::vec3(0.0f);
-				windowState->sceneArrows.push_back(MakeDefaultSceneArrow(*windowState, seed));
+				RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(*windowState, seed);
+				arrow.id = windowState->sceneRegistry.AllocateObjectId();
+				windowState->sceneArrows.push_back(std::move(arrow));
 				const std::size_t newIndex = windowState->sceneArrows.size() - 1;
-				windowState->selectedSceneArrows = {newIndex};
+				windowState->selectedSceneArrows = {windowState->sceneArrows[newIndex].id};
 				windowState->sceneArrowQuickEditActive = true;
 				windowState->sceneArrowQuickEditIndex = newIndex;
 			}
@@ -1029,10 +1050,10 @@ namespace DefectStudio
 				// Selectable row syncs both ways with viewport selection (RendererPanel::
 				// handleSceneArrowInteraction) - same clear+select/Ctrl-toggle semantics as a plain
 				// viewport click, just triggered from the list instead.
-				const std::size_t rowIndex = static_cast<std::size_t>(arrowIndex);
+				const SceneObjectId rowId = arrow.id;
 				const bool isSelected = std::find(
 					windowState->selectedSceneArrows.begin(), windowState->selectedSceneArrows.end(),
-					rowIndex) != windowState->selectedSceneArrows.end();
+					rowId) != windowState->selectedSceneArrows.end();
 				const char *kindLabel = arrow.kind == RendererWindowState::ArrowKind::Line ? "Line"
 					: arrow.kind == RendererWindowState::ArrowKind::Arrow2D ? "Arrow 2D" : "Arrow 3D";
 				char rowLabel[32];
@@ -1043,32 +1064,32 @@ namespace DefectStudio
 				// confirmed as the reason the remove button silently did nothing.
 				if (ImGui::Selectable(rowLabel, isSelected, ImGuiSelectableFlags_AllowOverlap))
 				{
-					std::vector<std::size_t> &selection = windowState->selectedSceneArrows;
+					std::vector<SceneObjectId> &selection = windowState->selectedSceneArrows;
 					if (ImGui::GetIO().KeyCtrl)
 					{
-						const auto existing = std::find(selection.begin(), selection.end(), rowIndex);
+						const auto existing = std::find(selection.begin(), selection.end(), rowId);
 						if (existing != selection.end())
 							selection.erase(existing);
 						else
-							selection.push_back(rowIndex);
+							selection.push_back(rowId);
 					}
 					else
 					{
-						selection = {rowIndex};
+						selection = {rowId};
 					}
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("X##RemoveArrow"))
 					arrowToRemove = arrowIndex;
 
-				DrawSceneArrowEditor(*windowState, rowIndex, SceneArrowEditorMode::Full, m_Layer.GetGlobalSettings());
+				DrawSceneArrowEditor(*windowState, static_cast<std::size_t>(arrowIndex), SceneArrowEditorMode::Full, m_Layer.GetGlobalSettings());
 
 				ImGui::PopID();
 			}
 			if (arrowToRemove >= 0)
 			{
 				PushPinnedMeasurementUndoSnapshot(*windowState);
-				EraseSceneArrows(*windowState, {static_cast<std::size_t>(arrowToRemove)});
+				EraseSceneArrows(*windowState, {windowState->sceneArrows[static_cast<std::size_t>(arrowToRemove)].id});
 			}
 
 			// Mirrors "Selected labels" above - own section since ArrowStyle isn't LabelStyle, so it
@@ -1085,12 +1106,12 @@ namespace DefectStudio
 				if (arrowSelectedCount > 1)
 					ImGui::Text("%zu arrow(s) selected - style below applies to all of them", arrowSelectedCount);
 				RendererWindowState::SceneArrow &representativeArrow =
-					windowState->sceneArrows[windowState->selectedSceneArrows[0]];
+					windowState->sceneArrows[FindObjectIndex(windowState->sceneArrows, windowState->selectedSceneArrows[0])];
 				const ArrowUndoFn snapshot = [windowState]() { PushPinnedMeasurementUndoSnapshot(*windowState); };
 				drawArrowGeometrySection(representativeArrow.style, representativeArrow.kind, snapshot);
 				drawArrowAppearanceSection(representativeArrow.style, representativeArrow.kind, snapshot);
 				for (std::size_t i = 1; i < arrowSelectedCount; ++i)
-					windowState->sceneArrows[windowState->selectedSceneArrows[i]].style = representativeArrow.style;
+					windowState->sceneArrows[FindObjectIndex(windowState->sceneArrows, windowState->selectedSceneArrows[i])].style = representativeArrow.style;
 			}
 		}
 

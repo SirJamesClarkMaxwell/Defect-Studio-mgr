@@ -48,6 +48,8 @@ namespace DefectStudio
 
 		// Creates an entity carrying a SceneObjectComponent and records it in the id lookup. Pass an
 		// existing id to keep an object's identity across a resync; pass {} to allocate a fresh one.
+		// An explicit id advances the allocator past it; an id that is already alive is replaced by a
+		// fresh one, so read the final id from the returned entity's SceneObjectComponent.
 		Entity CreateObject(SceneObjectKind kind, std::size_t sourceIndex, std::string displayName, SceneObjectId id = {});
 
 		// Invalid Entity if the id was never issued or its object has been destroyed.

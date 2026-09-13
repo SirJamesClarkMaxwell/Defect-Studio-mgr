@@ -178,6 +178,25 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(windowState.sceneRegistry.FindObject(pinId));
 	}
 
+	// Ids restored from disk arrive explicitly: the allocator must skip past them, and a copied object
+	// that still carries a live id must not steal it.
+	TEST(SceneObjectModelTests, ExplicitIdsAdvanceAllocatorAndDuplicatesGetFreshIds)
+	{
+		SceneRegistry scene;
+		Entity loaded = scene.CreateObject(SceneObjectKind::FreeLabel, 0, "loaded", SceneObjectId{42});
+		EXPECT_EQ(loaded.GetComponent<SceneObjectComponent>().id, SceneObjectId{42});
+		EXPECT_GT(scene.AllocateObjectId().value, 42u);
+
+		RendererWindowState windowState = BuildAnnotatedWindow();
+		RendererWindowState::SceneArrow copy = windowState.sceneArrows.front();
+		windowState.sceneArrows.push_back(copy);
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+
+		EXPECT_NE(windowState.sceneArrows.back().id, windowState.sceneArrows.front().id);
+		EXPECT_TRUE(windowState.sceneRegistry.FindObject(windowState.sceneArrows.front().id));
+		EXPECT_TRUE(windowState.sceneRegistry.FindObject(windowState.sceneArrows.back().id));
+	}
+
 	// Stale ids are dropped, not mapped onto a wrong object - the contract the render call sites
 	// depend on when they convert back to indices for OpenGlRendererBackend.
 	TEST(SceneObjectModelTests, ResolveSourceIndicesDropsDeadIds)
