@@ -146,15 +146,146 @@ namespace
 			{
 				EXPECT_EQ(actual[i].text, expected[i].text) << latex << " segment " << i;
 				EXPECT_EQ(actual[i].level, expected[i].level) << latex << " segment " << i;
+				EXPECT_EQ(actual[i].overline, expected[i].overline) << latex << " segment " << i;
 			}
 		};
+		check("|\\bar{a_{1}}e_{x}\\rangle", {{"|", 0}, {"a", 0, true}, {"1", -1, true}, {"e", 0}, {"x", -1}, {"⟩", 0}});
 		check("E", {{"E", 0}});
 		check("3\\sigma_{v}", {{"3\u03C3", 0}, {"v", -1}});
 		check("^{3}A_{2}", {{"3", 1}, {"A", 0}, {"2", -1}});
 		check("C_{3v}", {{"C", 0}, {"3v", -1}});
 		check("A_{1}'", {{"A", 0}, {"1", -1}, {"'", 0}});
 		check("\\Gamma = 2A_{1} \\oplus E", {{"\u0393 = 2A", 0}, {"1", -1}, {" \u2295 E", 0}});
-		check("\\Gamma^{\\otimes 6} = 715A_{1}", {{"\u0393", 0}, {"\u2297 6", 1}, {" = 715A", 0}, {"1", -1}});
+		check("\\Gamma^{\\otimes 6} = 715A_{1}", {{"\u0393", 0}, {"\u2297" "6", 1}, {" = 715A", 0}, {"1", -1}});
+	}
+
+	TEST(GroupTheoryFormattingTests, IrrepSumAndDirectProductTable)
+	{
+		EXPECT_EQ(FormatIrrepSum({{"A1", 1, 1}, {"A2", 1, 1}, {"E", 1, 2}}, LabelStyle::Latex), "A_{1} \\oplus A_{2} \\oplus E");
+		EXPECT_EQ(FormatIrrepSum({{"E", 2, 2}}, LabelStyle::Unicode), "2E");
+		EXPECT_EQ(FormatIrrepSum({}, LabelStyle::Unicode), "0");
+
+		const std::vector<IrrepMultiplicity> a1{{"A1", 1, 1}}, a2{{"A2", 1, 1}}, e{{"E", 1, 2}};
+		const std::vector<IrrepMultiplicity> all{{"A1", 1, 1}, {"A2", 1, 1}, {"E", 1, 2}};
+		const std::vector<std::vector<std::vector<IrrepMultiplicity>>> products{{a1, a2, e}, {a2, a1, e}, {e, e, all}};
+		EXPECT_EQ(
+			FormatDirectProductTable(MakeC3vTable(), products, TableFormat::Markdown),
+			"| C\u2083v \u2297 C\u2083v | A\u2081 | A\u2082 | E |\n"
+			"|---|---|---|---|\n"
+			"| A\u2081 | A\u2081 | A\u2082 | E |\n"
+			"| A\u2082 | A\u2082 | A\u2081 | E |\n"
+			"| E | E | E | A\u2081 \u2295 A\u2082 \u2295 E |\n");
+		EXPECT_EQ(
+			FormatDirectProductTable(MakeC3vTable(), products, TableFormat::Latex),
+			"\\begin{tabular}{l|ccc}\n"
+			"$C_{3v} \\otimes C_{3v}$ & $A_{1}$ & $A_{2}$ & $E$ \\\\\n"
+			"\\hline\n"
+			"$A_{1}$ & $A_{1}$ & $A_{2}$ & $E$ \\\\\n"
+			"$A_{2}$ & $A_{2}$ & $A_{1}$ & $E$ \\\\\n"
+			"$E$ & $E$ & $E$ & $A_{1} \\oplus A_{2} \\oplus E$ \\\\\n"
+			"\\end{tabular}\n");
+	}
+
+	PointGroupReduction MakeNvReduction()
+	{
+		PointGroupReduction reduction;
+		reduction.pointGroupLabel = "C3v";
+		reduction.siteLabels = {"C1", "N", "C2", "C3"};
+		reduction.projectedVectors = {{"A1", 0, 0, {}}, {"A1", 1, 0, {}}, {"E", 0, 0, {}}, {"E", 0, 1, {}}};
+		return reduction;
+	}
+
+	TEST(GroupTheoryFormattingTests, ActiveSpaceFromCheckboxes)
+	{
+		const PointGroupReduction reduction = MakeNvReduction();
+		// Displayed: A1 copy 2, A1 copy 1, E row 2, E row 1. Only E row 2 is flagged - the whole E copy is active.
+		const std::vector<std::size_t> order{1, 0, 3, 2};
+		ActiveSpaceSelection selection =
+			BuildActiveSpaceSelection(reduction, order, {true, false, false, true}, {"a1", "a1'", "ex", "ey"});
+		EXPECT_EQ(selection.irreps, (std::vector<std::string>{"A1", "E"}));
+		EXPECT_EQ(selection.orbitalLabels, (std::vector<std::string>{"a_{1}", "e_{x}", "e_{y}"}));
+
+		// Shell order follows the display: A1 copy 2 (N) is shown first.
+		selection = BuildActiveSpaceSelection(reduction, order, {true, true, false, false}, {"a1", "", "", ""});
+		EXPECT_EQ(selection.irreps, (std::vector<std::string>{"A1", "A1"}));
+		EXPECT_EQ(selection.orbitalLabels, (std::vector<std::string>{"", "a_{1}"}));
+
+		selection = BuildActiveSpaceSelection(reduction, order, {false, false, true, false}, {});
+		EXPECT_EQ(selection.irreps, (std::vector<std::string>{"E"}));
+		EXPECT_TRUE(selection.orbitalLabels.empty());
+
+		EXPECT_TRUE(BuildActiveSpaceSelection(reduction, order, {}, {}).irreps.empty());
+	}
+
+	const ExactCoefficient kOne{"1", 1.0, 0.0, "1"};
+	const ExactCoefficient kHalfSqrt2{"sqrt(2)/2", 0.7071067811865476, 0.0, "\\frac{\\sqrt{2}}{2}"};
+	const ExactCoefficient kMinusHalfSqrt2{"-sqrt(2)/2", -0.7071067811865476, 0.0, "- \\frac{\\sqrt{2}}{2}"};
+	const std::vector<std::string> kNvLabels{"a_{1}", "e_{x}", "e_{y}"};
+
+	MultipletWavefunction TripletA2(int twiceMs)
+	{
+		MultipletWavefunction state{"A2", 3, 0, 0, twiceMs, {2, 2}, {}};
+		if (twiceMs == 2)
+			state.determinants = {{kOne, {{0, true}, {0, false}, {1, true}, {2, true}}}};
+		else
+			state.determinants = {
+				{kHalfSqrt2, {{0, true}, {0, false}, {1, true}, {2, false}}},
+				{kHalfSqrt2, {{0, true}, {0, false}, {1, false}, {2, true}}}};
+		return state;
+	}
+
+	TEST(GroupTheoryFormattingTests, Configurations)
+	{
+		const std::vector<ActiveShell> shells{{"A1", "a_{1}", 0, 1}, {"E", "e", 1, 2}};
+		EXPECT_EQ(FormatConfiguration(shells, {2, 2}), "a_{1}^{2}e^{2}");
+		EXPECT_EQ(FormatConfiguration(shells, {1, 3}), "a_{1}e^{3}");
+		EXPECT_EQ(FormatConfiguration(shells, {0, 4}), "e^{4}");
+	}
+
+	TEST(GroupTheoryFormattingTests, Wavefunctions)
+	{
+		EXPECT_EQ(
+			FormatWavefunction(TripletA2(2), kNvLabels, LabelStyle::Latex),
+			"|^{3}A_{2}; m_{s}=1\\rangle = |a_{1}\\bar{a_{1}}e_{x}e_{y}|");
+		EXPECT_EQ(
+			FormatWavefunction(TripletA2(0), kNvLabels, LabelStyle::Latex),
+			"|^{3}A_{2}; m_{s}=0\\rangle = \\frac{\\sqrt{2}}{2} (|a_{1}\\bar{a_{1}}e_{x}\\bar{e_{y}}| + |a_{1}\\bar{a_{1}}\\bar{e_{x}}e_{y}|)");
+		EXPECT_EQ(
+			FormatWavefunction(TripletA2(0), kNvLabels, LabelStyle::Unicode),
+			"|^{3}A_{2}; m_{s}=0\\rangle = \u221A2/2 (|a_{1}\\bar{a_{1}}e_{x}\\bar{e_{y}}| + |a_{1}\\bar{a_{1}}\\bar{e_{x}}e_{y}|)");
+
+		// Degenerate irrep, second copy, relative minus sign.
+		const MultipletWavefunction singletE{
+			"E", 1, 1, 1, 0, {2, 2},
+			{{kHalfSqrt2, {{0, true}, {0, false}, {1, true}, {1, false}}},
+			 {kMinusHalfSqrt2, {{0, true}, {0, false}, {2, true}, {2, false}}}}};
+		EXPECT_EQ(
+			FormatWavefunction(singletE, kNvLabels, LabelStyle::Latex),
+			"|^{1}E(2); i=2, m_{s}=0\\rangle = \\frac{\\sqrt{2}}{2} (|a_{1}\\bar{a_{1}}e_{x}\\bar{e_{x}}| - |a_{1}\\bar{a_{1}}e_{y}\\bar{e_{y}}|)");
+
+		// Unequal magnitudes are not factored; half-integer m_s.
+		const MultipletWavefunction doublet{
+			"A1", 2, 0, 0, -1, {1, 0},
+			{{{"sqrt(3)/2", 0.866, 0.0, "\\frac{\\sqrt{3}}{2}"}, {{0, false}}},
+			 {{"-1/2", -0.5, 0.0, "- \\frac{1}{2}"}, {{1, false}}}}};
+		EXPECT_EQ(
+			FormatWavefunction(doublet, kNvLabels, LabelStyle::Unicode),
+			"|^{2}A_{1}; m_{s}=-1/2\\rangle = \u221A3/2|\\bar{a_{1}}| - 1/2|\\bar{e_{x}}|");
+	}
+
+	TEST(GroupTheoryFormattingTests, TermWavefunctionsBlock)
+	{
+		PointGroupAnalysisResult result;
+		result.activeShells = {{"A1", "a_{1}", 0, 1}, {"E", "e", 1, 2}};
+		result.activeOrbitalLabels = kNvLabels;
+		result.wavefunctions = {TripletA2(2), TripletA2(0), MultipletWavefunction{"E", 1, 0, 0, 0, {1, 3}, {}}};
+		EXPECT_EQ(
+			FormatTermWavefunctions(result, "A2", 3),
+			"\\begin{aligned}\n"
+			"a_{1}^{2}e^{2} & |^{3}A_{2}; m_{s}=1\\rangle = |a_{1}\\bar{a_{1}}e_{x}e_{y}| \\\\\n"
+			" & |^{3}A_{2}; m_{s}=0\\rangle = \\frac{\\sqrt{2}}{2} (|a_{1}\\bar{a_{1}}e_{x}\\bar{e_{y}}| + |a_{1}\\bar{a_{1}}\\bar{e_{x}}e_{y}|) \\\\\n"
+			"\\end{aligned}\n");
+		EXPECT_EQ(FormatTermWavefunctions(result, "T2", 3), "");
 	}
 
 	TEST(GroupTheoryFormattingTests, ProjectedVectorsInUserOrder)

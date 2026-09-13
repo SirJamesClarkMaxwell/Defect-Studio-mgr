@@ -131,6 +131,51 @@ namespace DefectStudio
 		// activeElectronCount == 0 = no multiplet computation.
 		std::vector<std::string> activeOrbitalIrreps;
 		int activeElectronCount = 0;
+		// Optional LaTeX name per spatial orbital of the active space, in shell order and irrep-row
+		// order within a shell (an E shell takes two), e.g. {"a_{1}", "e_{x}", "e_{y}"}. Empty = groupy's
+		// automatic names; an empty entry = automatic name for that orbital. Wrong length = invalid_active_space.
+		std::vector<std::string> activeOrbitalLabels;
+	};
+
+	// One shell of the active space = one entry of activeOrbitalIrreps.
+	struct ActiveShell
+	{
+		std::string irrepLabel;  // "A1", "E"
+		std::string label;       // LaTeX shell name for configurations: the orbital name for 1-D shells
+		                         // ("a_{1}"), lower-case irrep + primes for degenerate ones ("e", "e'")
+		int firstOrbital = 0;    // index of its first spatial orbital
+		int dimension = 0;       // spatial orbitals in the shell
+	};
+
+	// One spin-orbital of a Slater determinant.
+	struct SpinOrbital
+	{
+		int orbitalIndex = 0; // spatial orbital, index into PointGroupAnalysisResult::activeOrbitalLabels
+		bool spinUp = true;   // false = spin down, drawn with a bar
+	};
+
+	struct DeterminantTerm
+	{
+		ExactCoefficient coefficient;
+		// Occupied spin-orbitals in ascending groupy order (orbital, then up before down) - the order
+		// the determinant's sign refers to.
+		std::vector<SpinOrbital> occupied;
+	};
+
+	// One symmetry-adapted many-electron state |(2S+1)Γ, copy, row; m_s> as a sum of Slater determinants.
+	// Overall phase: groupy's canonical one (first non-zero coefficient positive), chosen per state -
+	// partners (other rows / m_s) are NOT phase-linked by ladder operators.
+	struct MultipletWavefunction
+	{
+		std::string irrepLabel;
+		int spinMultiplicity = 0;
+		int copyIndex = 0; // 0-based among states of the same (Γ, S, row, m_s)
+		int irrepRow = 0;  // 0-based
+		int twiceMs = 0;   // 2·m_s, so half-integer spins stay integers
+		// Electrons per active shell (ActiveShell order); every determinant of the state shares it,
+		// because symmetry and spin projectors never move electrons between shells.
+		std::vector<int> configuration;
+		std::vector<DeterminantTerm> determinants;
 	};
 
 	struct PointGroupAnalysisResult
@@ -148,5 +193,14 @@ namespace DefectStudio
 		// representation, reduced with χ(g)^n. No Pauli exclusion or spin - that is what `multiplets` is.
 		int tensorPower = 0;
 		std::vector<IrrepMultiplicity> tensorPowerDecomposition; // multiplicity > 0 only, irrep order
+
+		// Filled together with `multiplets`. Echoed active space (final orbital names, automatic ones
+		// filled in) and every state of every term, in term_table order; within a term rows ascending,
+		// then m_s descending, then copies. Their count equals multipletTotalStates.
+		std::vector<ActiveShell> activeShells;
+		std::vector<std::string> activeOrbitalLabels; // LaTeX, one per spatial orbital
+		std::vector<MultipletWavefunction> wavefunctions;
+		// Non-empty when multiplets were computed but wavefunctions were not (Slater basis above 1000).
+		std::string wavefunctionsSkippedReason;
 	};
 } // namespace DefectStudio

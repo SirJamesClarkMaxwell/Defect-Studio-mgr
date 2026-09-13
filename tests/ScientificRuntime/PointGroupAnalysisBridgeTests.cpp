@@ -229,6 +229,93 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(result->tensorPower, 6);
 	}
 
+	// a1² e² ³A₂ for active {A1, E}, 4 e⁻. Every (row, m_s, copy) state is listed once, so their count
+	// equals multipletTotalStates.
+	TEST(PointGroupAnalysisBridgeTests, WavefunctionsForNvTripletA2)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3v";
+		request.activeOrbitalIrreps = {"A1", "E"};
+		request.activeElectronCount = 4;
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		EXPECT_TRUE(result->wavefunctionsSkippedReason.empty());
+		EXPECT_EQ(static_cast<int>(result->wavefunctions.size()), result->multipletTotalStates);
+
+		ASSERT_EQ(result->activeShells.size(), 2u);
+		EXPECT_EQ(result->activeShells[0].irrepLabel, "A1");
+		EXPECT_EQ(result->activeShells[0].dimension, 1);
+		EXPECT_EQ(result->activeShells[1].irrepLabel, "E");
+		EXPECT_EQ(result->activeShells[1].firstOrbital, 1);
+		EXPECT_EQ(result->activeShells[1].dimension, 2);
+		ASSERT_EQ(result->activeOrbitalLabels.size(), 3u);
+
+		std::vector<const MultipletWavefunction *> triplet;
+		for (const MultipletWavefunction &state : result->wavefunctions)
+			if (state.irrepLabel == "A2" && state.spinMultiplicity == 3)
+				triplet.push_back(&state);
+		ASSERT_EQ(triplet.size(), 3u);
+		EXPECT_EQ(triplet[0]->twiceMs, 2);
+		EXPECT_EQ(triplet[1]->twiceMs, 0);
+		EXPECT_EQ(triplet[2]->twiceMs, -2);
+		for (const MultipletWavefunction *state : triplet)
+		{
+			EXPECT_EQ(state->configuration, (std::vector<int>{2, 2}));
+			EXPECT_EQ(state->irrepRow, 0);
+			EXPECT_EQ(state->copyIndex, 0);
+		}
+
+		// m_s = +1: the single determinant |a1 ā1 ex ey|.
+		ASSERT_EQ(triplet[0]->determinants.size(), 1u);
+		const std::vector<SpinOrbital> &occupied = triplet[0]->determinants[0].occupied;
+		ASSERT_EQ(occupied.size(), 4u);
+		EXPECT_EQ(occupied[0].orbitalIndex, 0);
+		EXPECT_TRUE(occupied[0].spinUp);
+		EXPECT_EQ(occupied[1].orbitalIndex, 0);
+		EXPECT_FALSE(occupied[1].spinUp);
+		EXPECT_TRUE(occupied[2].spinUp);
+		EXPECT_TRUE(occupied[3].spinUp);
+		EXPECT_NEAR(std::abs(triplet[0]->determinants[0].coefficient.numeric), 1.0, 1e-9);
+
+		// m_s = 0: two determinants with |c| = 1/√2.
+		ASSERT_EQ(triplet[1]->determinants.size(), 2u);
+		for (const DeterminantTerm &term : triplet[1]->determinants)
+		{
+			EXPECT_NEAR(std::abs(term.coefficient.numeric), std::sqrt(0.5), 1e-9);
+			EXPECT_FALSE(term.coefficient.latex.empty());
+		}
+	}
+
+	TEST(PointGroupAnalysisBridgeTests, ActiveOrbitalLabelsAreUsedAndEmptyEntriesFilled)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3v";
+		request.activeOrbitalIrreps = {"A1", "E"};
+		request.activeElectronCount = 2;
+		request.activeOrbitalLabels = {"a_{1}'", "", "e_{y}"};
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		ASSERT_EQ(result->activeOrbitalLabels.size(), 3u);
+		EXPECT_EQ(result->activeOrbitalLabels[0], "a_{1}'");
+		EXPECT_FALSE(result->activeOrbitalLabels[1].empty());
+		EXPECT_EQ(result->activeOrbitalLabels[2], "e_{y}");
+		ASSERT_EQ(result->activeShells.size(), 2u);
+		EXPECT_EQ(result->activeShells[0].label, "a_{1}'");
+		EXPECT_EQ(result->activeShells[1].label, "e");
+	}
+
+	TEST(PointGroupAnalysisBridgeTests, RejectsActiveOrbitalLabelsOfWrongLength)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3v";
+		request.activeOrbitalIrreps = {"A1", "E"};
+		request.activeElectronCount = 2;
+		request.activeOrbitalLabels = {"a_{1}", "e_{x}"};
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.Error().code, "python.groupy.analysis.invalid_active_space");
+	}
+
 	// --- Negative cases. Each asserts the exact code, which proves the script got past
 	// `import groupy` and failed at the guard named in the test. ---
 
