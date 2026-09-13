@@ -12,6 +12,7 @@
 #include "Domain/ProjectWorkspace.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/StructureRendererDataBuilder.hpp"
 
@@ -127,29 +128,18 @@ namespace DefectStudio
 		// Rebuilds RendererStructureData from record.structure and re-syncs windowState's ECS
 		// scene - the common tail every atom-edit command needs after mutating the domain
 		// structure. selectAfter (atom indices in the *new* structure) becomes the selection once
-		// synced; empty leaves nothing selected. BuildRendererStructureData always defaults every
-		// atom to visible (visibility isn't a domain concept), so hidden atoms are captured from
-		// windowState's pre-rebuild state and reapplied by index - exact for commands that don't
-		// change atom count/order (transform, undo paths that restore a saved atom array).
+		// synced; empty leaves nothing selected. Hidden state is captured before rebuilding unless
+		// the caller supplies a remapped override for non-append atom changes.
 		void RebuildAndSync(
 			RendererWindowState &windowState,
 			const StructureRecord &record,
 			const AtomStyleTable &atomStyleTable,
 			const std::vector<std::size_t> &selectAfter,
-			const std::vector<std::size_t> &selectBondsAfter = {})
+			const std::vector<std::size_t> &selectBondsAfter = {},
+			const HiddenSceneState *hiddenOverride = nullptr)
 		{
-			std::vector<std::size_t> hiddenBefore;
-			for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
-				if (!windowState.structure.atoms[index].visible)
-					hiddenBefore.push_back(index);
-			// Bond ephemeral hide (VisibilityComponent) is exact only when the rebuild doesn't
-			// change bond count/order (mirrors the atom hiddenBefore contract above) - fine for
-			// every current caller (transform/type-change keep bond identity; delete/duplicate/
-			// paste/connect regenerate bonds and pass an explicit selectBondsAfter instead).
-			std::vector<std::size_t> hiddenBondsBefore;
-			for (std::size_t index = 0; index < windowState.structure.bonds.size(); ++index)
-				if (!windowState.structure.bonds[index].visible)
-					hiddenBondsBefore.push_back(index);
+			const HiddenSceneState capturedState =
+				hiddenOverride == nullptr ? CaptureHiddenSceneState(windowState.structure) : *hiddenOverride;
 
 			windowState.structure = BuildRendererStructureData(
 				record.structure,
@@ -157,10 +147,16 @@ namespace DefectStudio
 				windowState.structure.name,
 				atomStyleTable,
 				windowState.structure.domainStructureId);
+			std::vector<std::size_t> hiddenAtoms;
+			for (const std::size_t atomIndex : capturedState.atomIndices)
+				if (atomIndex < windowState.structure.atoms.size())
+					hiddenAtoms.push_back(atomIndex);
+			const std::vector<std::size_t> hiddenBonds =
+				ResolveHiddenBondIndices(windowState.structure, capturedState.bondEndpoints);
 			SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
-			if (!selectAfter.empty() || !hiddenBefore.empty() || !selectBondsAfter.empty() || !hiddenBondsBefore.empty())
+			if (!selectAfter.empty() || !hiddenAtoms.empty() || !selectBondsAfter.empty() || !hiddenBonds.empty())
 				SceneSystem::ApplySelectionAndVisibilityToScene(
-					windowState.sceneRegistry, selectAfter, hiddenBefore, selectBondsAfter, hiddenBondsBefore);
+					windowState.sceneRegistry, selectAfter, hiddenAtoms, selectBondsAfter, hiddenBonds);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 
@@ -239,6 +235,7 @@ namespace DefectStudio
 				m_WindowIdResolved = windowState.windowId;
 				m_PreviousAtoms = target->record->structure.atoms;
 				m_PreviousBonds = target->record->structure.bonds;
+				m_HiddenBefore = CaptureHiddenSceneState(windowState.structure);
 				m_DeletedIndices = windowState.selectedAtomIndices;
 				std::sort(m_DeletedIndices.begin(), m_DeletedIndices.end());
 
@@ -282,7 +279,9 @@ namespace DefectStudio
 						return result.Error();
 				}
 
-				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, {});
+				const HiddenSceneState hiddenAfterDelete =
+					RemapHiddenSceneStateAfterAtomRemoval(m_HiddenBefore, m_DeletedIndices);
+				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, {}, {}, &hiddenAfterDelete);
 				return {};
 			}
 
@@ -304,7 +303,8 @@ namespace DefectStudio
 
 				target->record->structure.atoms = m_PreviousAtoms;
 				target->record->structure.bonds = m_PreviousBonds;
-				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_DeletedIndices);
+				RebuildAndSync(
+					*target->windowState, *target->record, m_AtomStyleTable, m_DeletedIndices, {}, &m_HiddenBefore);
 				return {};
 			}
 
@@ -328,6 +328,7 @@ namespace DefectStudio
 			std::vector<AtomSite> m_PreviousAtoms;
 			std::vector<Bond> m_PreviousBonds;
 			std::vector<std::size_t> m_DeletedIndices;
+			HiddenSceneState m_HiddenBefore;
 		};
 
 		class DuplicateSelectedAtomsCommand final : public ICommand
