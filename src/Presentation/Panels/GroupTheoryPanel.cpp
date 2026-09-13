@@ -3,6 +3,7 @@
 #include "Presentation/Panels/GroupTheoryPanel.hpp"
 
 #include <algorithm>
+#include <numeric>
 #include <sstream>
 #include <utility>
 
@@ -167,11 +168,8 @@ namespace DefectStudio
 			for (std::size_t index = 0; index < m_Basis->sites.size(); ++index)
 			{
 				if (index != 0)
-					ImGui::SameLine();
-				ImGui::TextDisabled(
-					"%s%s",
-					index == 0 ? "" : ", ",
-					m_Basis->sites[index].label.c_str());
+					ImGui::SameLine(0.0f, 0.0f);
+				ImGui::TextDisabled("%s%s", index == 0 ? "" : ", ", m_Basis->sites[index].label.c_str());
 			}
 		}
 		ImGui::Separator();
@@ -328,6 +326,8 @@ namespace DefectStudio
 			{
 				m_Result = m_PendingJob->GetResult();
 				m_PhysicalBuffers.assign(m_Result->reduction.projectedVectors.size(), {});
+				m_VectorOrder.resize(m_Result->reduction.projectedVectors.size());
+				std::iota(m_VectorOrder.begin(), m_VectorOrder.end(), 0);
 				m_Error.reset();
 			}
 		}

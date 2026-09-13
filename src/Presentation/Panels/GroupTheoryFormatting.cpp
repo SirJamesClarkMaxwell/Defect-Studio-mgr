@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <string>
+#include <utility>
 
 namespace DefectStudio
 {
@@ -18,6 +19,21 @@ namespace DefectStudio
 			{
 				if (character >= '0' && character <= '9')
 					result += subscripts[character - '0'];
+				else
+					result += character;
+			}
+			return result;
+		}
+
+		[[nodiscard]] std::string FormatUnicodeSuperscript(std::string_view digits)
+		{
+			static constexpr const char *superscripts[] = {
+				"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
+			std::string result;
+			for (const char character : digits)
+			{
+				if (character >= '0' && character <= '9')
+					result += superscripts[character - '0'];
 				else
 					result += character;
 			}
@@ -85,6 +101,11 @@ namespace DefectStudio
 			return multiplicity + head + suffix;
 		return multiplicity + head + "_{" + subscript + "}" + suffix;
 		}
+
+		[[nodiscard]] std::string FormatLatexCell(const ExactCoefficient &value)
+		{
+			return value.latex.empty() ? value.exact : "$" + value.latex + "$";
+		}
 	}
 
 	std::string FormatIrrepLabel(std::string_view label, LabelStyle style)
@@ -132,6 +153,143 @@ namespace DefectStudio
 		return result;
 	}
 
+	std::string FormatTensorPower(
+		int power, const std::vector<IrrepMultiplicity> &decomposition, LabelStyle style)
+	{
+		const std::string prefix = style == LabelStyle::Unicode ? "Γ⊗" : "\\Gamma^{\\otimes ";
+		const std::string exponent = style == LabelStyle::Unicode ? FormatUnicodeSuperscript(std::to_string(power)) : std::to_string(power) + "}";
+		std::string result = prefix + exponent;
+		if (decomposition.empty())
+			return result + (style == LabelStyle::Unicode ? ": dimension too large" : ": dimension too large");
+		result += " = ";
+		for (std::size_t index = 0; index < decomposition.size(); ++index)
+		{
+			if (index != 0)
+				result += style == LabelStyle::Unicode ? " ⊕ " : " \\oplus ";
+			if (decomposition[index].multiplicity != 1)
+				result += std::to_string(decomposition[index].multiplicity);
+			result += FormatIrrepLabel(decomposition[index].irrepLabel, style);
+		}
+		return result;
+	}
+
+	std::string ActiveIrrepsFromDecomposition(const std::vector<IrrepMultiplicity> &decomposition)
+	{
+		std::string result;
+		for (const IrrepMultiplicity &entry : decomposition)
+			for (int index = 0; index < entry.multiplicity; ++index)
+			{
+				if (!result.empty())
+					result += ", ";
+				result += entry.irrepLabel;
+			}
+		return result;
+	}
+
+	std::string FormatExactValue(const ExactCoefficient &value, LabelStyle style)
+	{
+		if (style == LabelStyle::Latex)
+			return value.latex.empty() ? value.exact : value.latex;
+		std::string result = value.exact;
+		std::string::size_type position = 0;
+		while ((position = result.find("sqrt(", position)) != std::string::npos)
+		{
+			const auto close = result.find(')', position + 5);
+			if (close == std::string::npos)
+				break;
+			result.replace(position, close - position + 1, "√" + result.substr(position + 5, close - position - 5));
+			position += 1;
+		}
+		while ((position = result.find("*I")) != std::string::npos)
+			result.replace(position, 2, "i");
+		while ((position = result.find("I")) != std::string::npos)
+			result.replace(position, 1, "i");
+		while ((position = result.find('*')) != std::string::npos)
+			result.replace(position, 1, "·");
+		return result;
+	}
+
+	std::vector<MathSegment> SplitMathSegments(std::string_view latex)
+	{
+		std::vector<MathSegment> result;
+		const auto append = [&result](std::string text, int level) {
+			if (text.empty()) return;
+			if (!result.empty() && result.back().level == level) result.back().text += text;
+			else result.push_back({std::move(text), level});
+		};
+		for (std::size_t index = 0; index < latex.size();)
+		{
+			if ((latex[index] == '_' || latex[index] == '^') && index + 1 < latex.size())
+			{
+				const int level = latex[index++] == '^' ? 1 : -1;
+				std::string text;
+				if (latex[index] == '{')
+				{
+					++index;
+					while (index < latex.size() && latex[index] != '}') text += latex[index++];
+					if (index < latex.size()) ++index;
+				}
+				else text += latex[index++];
+				for (const auto &segment : SplitMathSegments(text)) append(segment.text, level + segment.level);
+				continue;
+			}
+			if (latex[index] == '\\')
+			{
+				const std::size_t begin = ++index;
+				while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index]))) ++index;
+				const std::string command(latex.substr(begin, index - begin));
+				if (command == "Gamma") append("Γ", 0);
+				else if (command == "sigma") append("σ", 0);
+				else if (command == "oplus") append("⊕", 0);
+				else if (command == "otimes") append("⊗", 0);
+				else append("\\" + command, 0);
+				continue;
+			}
+			append(std::string(1, latex[index++]), 0);
+		}
+		return result;
+	}
+
+	std::string FormatProjectedVectors(
+		const PointGroupReduction &reduction, const std::vector<std::size_t> &order,
+		const std::vector<std::string> &physicalLabels, TableFormat format)
+	{
+		const bool markdown = format == TableFormat::Markdown;
+		std::string output = markdown ? "| Irrep | Copy | Row |" : "\\begin{tabular}{lll|";
+		if (!markdown)
+			output += std::string(reduction.siteLabels.size(), 'l') + "|l}\nIrrep & Copy & Row & ";
+		for (std::size_t index = 0; index < reduction.siteLabels.size(); ++index)
+		{
+			if (markdown) output += " " + reduction.siteLabels[index] + " |";
+			else output += std::string(index ? " & " : "") + reduction.siteLabels[index];
+		}
+		if (markdown) output += " Label |\n|---|---|---|";
+		else output += " & Label \\\\\n\\hline\n";
+		if (markdown)
+			for (std::size_t index = 0; index < reduction.siteLabels.size() + 1; ++index) output += "---|";
+		for (const std::size_t vectorIndex : order)
+		{
+			if (vectorIndex >= reduction.projectedVectors.size()) continue;
+			const auto &vector = reduction.projectedVectors[vectorIndex];
+			const std::string label = vectorIndex < physicalLabels.size() ? physicalLabels[vectorIndex] : "";
+			if (markdown)
+			{
+				output += "\n| " + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Unicode) + " | " + std::to_string(vector.occurrenceIndex + 1) + " | " + std::to_string(vector.irrepRow + 1) + " |";
+				for (const auto &value : vector.coefficients) output += " " + FormatExactValue(value, LabelStyle::Unicode) + " |";
+				output += " " + label + " |";
+			}
+			else
+			{
+				output += "$" + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Latex) + "$ & " + std::to_string(vector.occurrenceIndex + 1) + " & " + std::to_string(vector.irrepRow + 1);
+				for (const auto &value : vector.coefficients) output += " & " + FormatLatexCell(value);
+				output += " & " + label + " \\\\\n";
+			}
+		}
+		if (!markdown) output += "\\end{tabular}\n";
+		else output += "\n";
+		return output;
+	}
+
 	std::string FormatCharacterTable(
 		const CharacterTable &table,
 		const std::vector<ExactCoefficient> &reducible,
@@ -173,14 +331,14 @@ namespace DefectStudio
 		{
 			output += "$" + FormatIrrepLabel(table.irrepLabels[row], LabelStyle::Latex) + "$";
 			for (const ExactCoefficient &value : table.characters[row])
-				output += " & " + value.exact;
+				output += " & " + FormatLatexCell(value);
 			output += " \\\\\n";
 		}
 		if (!reducible.empty())
 		{
 			output += "$\\Gamma$";
 			for (const ExactCoefficient &value : reducible)
-				output += " & " + value.exact;
+				output += " & " + FormatLatexCell(value);
 			output += " \\\\\n";
 		}
 		output += "\\end{tabular}\n";

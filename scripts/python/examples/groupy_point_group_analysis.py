@@ -33,6 +33,7 @@ def coefficient_payload(value: sp.Expr) -> dict:
     real, imaginary = sp.expand_complex(value).as_real_imag()
     return {
         "exact": str(value),
+        "latex": sp.latex(value),
         "numeric": float(real),
         "numericImaginary": float(imaginary),
     }
@@ -191,10 +192,32 @@ def analyze(payload: dict) -> dict:
         permutation = permutations[representative]
         reducible.append(coefficient_payload(sum(1 for index, target in enumerate(permutation) if index == target)))
 
+    tensor_power = 0
+    tensor_power_decomposition = []
+    electron_count = int(payload.get("activeElectronCount", 0))
+    if electron_count > 0:
+        identity_character = int(reducible[class_labels.index("E")]["numeric"])
+        if identity_character ** electron_count <= 2**31 - 1:
+            tensor_power = electron_count
+            class_characters = [sp.sympify(value["exact"]) for value in reducible]
+            group_order = len(point_group.elements)
+            for irrep_label in irrep_labels:
+                characters_for_irrep = [sp.sympify(value["exact"]) for value in characters[irrep_labels.index(irrep_label)]]
+                multiplicity = sum(
+                    class_size * sp.conjugate(irrep_character) * reducible_character ** electron_count
+                    for class_size, irrep_character, reducible_character in zip(
+                        class_sizes, characters_for_irrep, class_characters)) / group_order
+                multiplicity = int(sp.simplify(multiplicity))
+                if multiplicity > 0:
+                    tensor_power_decomposition.append({
+                        "irrepLabel": irrep_label,
+                        "multiplicity": multiplicity,
+                        "dimension": int(point_group.ireps[irrep_label].get_repr().shape[-1]),
+                    })
+
     multiplets = []
     total_states = 0
     active = payload.get("activeOrbitalIrreps", [])
-    electron_count = int(payload.get("activeElectronCount", 0))
     if active and electron_count:
         try:
             terms = ActiveSpace.from_orbitals(point_group, active, nel=electron_count).term_table()
@@ -220,6 +243,8 @@ def analyze(payload: dict) -> dict:
                        "groupOrder": len(point_group.elements), **reduction},
         "multiplets": multiplets,
         "multipletTotalStates": total_states,
+        "tensorPower": tensor_power,
+        "tensorPowerDecomposition": tensor_power_decomposition,
     }
 
 

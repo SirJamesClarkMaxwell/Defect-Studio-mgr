@@ -68,6 +68,13 @@ namespace DefectStudio
 						std::string("python.groupy.analysis.") + knownCode);
 			return error;
 		}
+
+		[[nodiscard]] ExactCoefficient ParseCoefficient(const nlohmann::json &value)
+		{
+			return {
+				value.at("exact").get<std::string>(), value.at("numeric").get<double>(),
+				value.value("numericImaginary", 0.0), value.value("latex", "")};
+		}
 	}
 
 	Result<PointGroupReduction> GroupTheoryBridge::ReduceRepresentation(
@@ -143,7 +150,7 @@ namespace DefectStudio
 				vector.occurrenceIndex = entry.at("occurrenceIndex").get<int>();
 				vector.irrepRow = entry.at("irrepRow").get<int>();
 				for (const auto &coefficient : entry.at("coefficients"))
-					vector.coefficients.push_back({coefficient.at("exact"), coefficient.at("numeric")});
+					vector.coefficients.push_back(ParseCoefficient(coefficient));
 				result.projectedVectors.push_back(std::move(vector));
 			}
 			return result;
@@ -236,11 +243,11 @@ namespace DefectStudio
 			{
 				std::vector<ExactCoefficient> values;
 				for (const auto &value : row)
-					values.push_back({value.at("exact"), value.at("numeric"), value.value("numericImaginary", 0.0)});
+					values.push_back(ParseCoefficient(value));
 				result.characterTable.characters.push_back(std::move(values));
 			}
 			for (const auto &value : json.at("reducibleCharacters"))
-				result.reducibleCharacters.push_back({value.at("exact"), value.at("numeric"), value.value("numericImaginary", 0.0)});
+				result.reducibleCharacters.push_back(ParseCoefficient(value));
 
 			const auto &reduction = json.at("reduction");
 			result.reduction.pointGroupLabel = reduction.at("pointGroupLabel").get<std::string>();
@@ -255,12 +262,15 @@ namespace DefectStudio
 				vector.occurrenceIndex = entry.at("occurrenceIndex").get<int>();
 				vector.irrepRow = entry.at("irrepRow").get<int>();
 				for (const auto &value : entry.at("coefficients"))
-					vector.coefficients.push_back({value.at("exact"), value.at("numeric"), value.value("numericImaginary", 0.0)});
+					vector.coefficients.push_back(ParseCoefficient(value));
 				result.reduction.projectedVectors.push_back(std::move(vector));
 			}
 			for (const auto &entry : json.at("multiplets"))
 				result.multiplets.push_back({entry.at("irrepLabel"), entry.at("spinMultiplicity"), entry.at("irrepDimension"), entry.at("countPerRow"), entry.at("totalStates")});
 			result.multipletTotalStates = json.at("multipletTotalStates").get<int>();
+			result.tensorPower = json.value("tensorPower", 0);
+			for (const auto &entry : json.value("tensorPowerDecomposition", nlohmann::json::array()))
+				result.tensorPowerDecomposition.push_back({entry.at("irrepLabel"), entry.at("multiplicity"), entry.at("dimension")});
 			return result;
 		}
 		catch (const std::exception &exception)

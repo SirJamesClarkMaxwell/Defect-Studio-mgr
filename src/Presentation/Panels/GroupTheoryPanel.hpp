@@ -80,5 +80,6 @@ namespace DefectStudio
 		std::optional<PointGroupAnalysisResult> m_Result;
 		std::optional<StructuredError> m_Error;
 		std::vector<std::array<char, 128>> m_PhysicalBuffers;
+		std::vector<std::size_t> m_VectorOrder;
 	};
 } // namespace DefectStudio
