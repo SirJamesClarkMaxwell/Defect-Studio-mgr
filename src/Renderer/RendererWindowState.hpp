@@ -132,6 +132,16 @@ namespace DefectStudio
 			// or the label would render at whichever bond the lookup happened to find first regardless
 			// of which one was actually pinned.
 			glm::vec3 bondPeriodicOffset = glm::vec3(0.0f);
+			// Task 24 persistence: file-stable identity (32 hex chars, SceneObjectPersistence), shared by
+			// every window's copy of the same saved object - unlike `id`, which is per window. A
+			// duplicated object must get a new one (clear it; the next sync assigns it).
+			std::string persistKey;
+			// Set on load when the stored atom references no longer bind (SceneObjectPersistence::
+			// AtomReferenceBinds). The pin then anchors at frozenAtomPositions, ignores atomIndices,
+			// and ObjectPropertiesPanel shows the broken link.
+			bool linkBroken = false;
+			std::vector<glm::vec3> frozenAtomPositions; // same order/size as atomIndices, valid when linkBroken
+			std::vector<std::string> frozenAtomElements;
 		};
 		std::vector<PinnedMeasurement> pinnedMeasurements;
 		// Free-floating annotation label (ObjectPropertiesPanel "Free labels" section) - arbitrary
@@ -154,6 +164,7 @@ namespace DefectStudio
 			glm::vec3 worldPosition = glm::vec3(0.0f);
 			float rotationRadians = 0.0f;
 			LabelStyle style;
+			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<FreeLabel> freeLabels;
 		// Click-select + drag-to-move for freeLabels (RendererPanel::handleFreeLabelInteraction) - same
@@ -200,6 +211,7 @@ namespace DefectStudio
 			glm::vec3 start = glm::vec3(0.0f);
 			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
 			ArrowStyle style;
+			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<SceneArrow> sceneArrows;
 		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same

@@ -55,6 +55,10 @@ namespace DefectStudio
 		// Update the saved revision (e.g., after successful save)
 		bool UpdateSavedRevision(const StructureId &id, int newRevision);
 
+		// Bumps revision by one (never decreases it - undo/redo call this too, so undo-after-save is
+		// dirty). Returns false for an unknown id.
+		bool MarkModified(const StructureId &id);
+
 		[[nodiscard]] WeakRef<const StructureRecord> Find(const StructureId &id) const;
 		// Non-const counterpart to Find - for in-place edits of an already-registered structure
 		// (atom add/delete/duplicate/change-type), which Add-only/const-Find can't support.
