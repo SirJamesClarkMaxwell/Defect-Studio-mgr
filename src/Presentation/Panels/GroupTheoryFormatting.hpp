@@ -37,8 +37,42 @@ namespace DefectStudio
 	// "Γ = 2A₁ ⊕ E"; multiplicity 1 omitted; empty decomposition -> "Γ = 0".
 	[[nodiscard]] std::string FormatDecomposition(const std::vector<IrrepMultiplicity> &decomposition, LabelStyle style);
 
+	// Γ^⊗n line: "Γ⊗⁶ = 715A₁ ⊕ 651A₂ ⊕ 1365E" / "\Gamma^{\otimes 6} = 715A_{1} \oplus 651A_{2} \oplus 1365E".
+	// Empty decomposition (dimension overflowed) -> "Γ⊗⁶: dimension too large" / "\Gamma^{\otimes 6}: dimension too large".
+	[[nodiscard]] std::string FormatTensorPower(
+		int power, const std::vector<IrrepMultiplicity> &decomposition, LabelStyle style);
+
+	// Decomposition expanded into the "Active irreps" input text: {A1 x2, E x1} -> "A1, A1, E".
+	[[nodiscard]] std::string ActiveIrrepsFromDecomposition(const std::vector<IrrepMultiplicity> &decomposition);
+
+	// One coefficient for display.
+	// Unicode: exact prettified - "sqrt(3)/3" -> "√3/3", "I" / "*I" -> "i", remaining "*" -> "·".
+	// Latex: ExactCoefficient::latex, or exact when latex is empty (no $ delimiters).
+	[[nodiscard]] std::string FormatExactValue(const ExactCoefficient &value, LabelStyle style);
+
+	// A LaTeX-style label split into runs drawn at one baseline level, for the on-screen renderer
+	// (ImGui has no sub/superscript). level: -1 subscript, 0 baseline, +1 superscript.
+	struct MathSegment
+	{
+		std::string text; // UTF-8, commands already replaced (\Gamma -> Γ, \sigma -> σ, \oplus -> ⊕, \otimes -> ⊗)
+		int level = 0;
+	};
+
+	// Parses the Latex output of the formatters above: `_{...}`, `^{...}` and the four commands.
+	// Adjacent runs at the same level are merged. "3\sigma_{v}" -> {"3σ",0},{"v",-1}.
+	[[nodiscard]] std::vector<MathSegment> SplitMathSegments(std::string_view latex);
+
+	// Projected vectors in a user-chosen row order. `order` holds indices into
+	// reduction.projectedVectors; `physicalLabels` is indexed by the ORIGINAL vector index (missing
+	// entries = empty). Columns: Irrep, Copy (1-based), Row (1-based), one per site, Label.
+	// Markdown uses FormatExactValue Unicode; LaTeX puts irreps and non-empty-latex values in $...$.
+	[[nodiscard]] std::string FormatProjectedVectors(
+		const PointGroupReduction &reduction, const std::vector<std::size_t> &order,
+		const std::vector<std::string> &physicalLabels, TableFormat format);
+
 	// Character table with a final Γ row of reducible characters when `reducibleCharacters` is
-	// non-empty. Characters use ExactCoefficient::exact verbatim. Output ends with a newline.
+	// non-empty. Markdown uses ExactCoefficient::exact verbatim; LaTeX wraps a value in $...$ only when
+	// its latex is non-empty. Output ends with a newline.
 	[[nodiscard]] std::string FormatCharacterTable(
 		const CharacterTable &table, const std::vector<ExactCoefficient> &reducibleCharacters, TableFormat format);
 

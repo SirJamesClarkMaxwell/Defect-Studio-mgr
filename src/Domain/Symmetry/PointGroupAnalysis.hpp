@@ -18,6 +18,7 @@ namespace DefectStudio
 		std::string exact;    // SymPy str(), e.g. "sqrt(2)/2", "-1/2", "0"
 		double numeric = 0.0; // float() of that same expression (real part for complex characters)
 		double numericImaginary = 0.0; // non-zero only for complex characters (e.g. C3, C4h irreps)
+		std::string latex;             // SymPy latex(), e.g. "\\frac{\\sqrt{2}}{2}"; empty when not supplied
 	};
 
 	// One named site of the basis a representation is built on. For the NV- dangling-bond basis
@@ -143,5 +144,9 @@ namespace DefectStudio
 		PointGroupReduction reduction;
 		std::vector<MultipletTerm> multiplets; // term_table order
 		int multipletTotalStates = 0;
+		// Γ^⊗n with n = activeElectronCount (0 = not computed): plain direct-product power of the basis
+		// representation, reduced with χ(g)^n. No Pauli exclusion or spin - that is what `multiplets` is.
+		int tensorPower = 0;
+		std::vector<IrrepMultiplicity> tensorPowerDecomposition; // multiplicity > 0 only, irrep order
 	};
 } // namespace DefectStudio

@@ -167,6 +167,66 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
 		EXPECT_TRUE(result->multiplets.empty());
 		EXPECT_EQ(result->multipletTotalStates, 0);
+		EXPECT_EQ(result->tensorPower, 0);
+		EXPECT_TRUE(result->tensorPowerDecomposition.empty());
+	}
+
+	// Γ = 2A1 ⊕ E, χ = (4, 1, 2). χ² = (16, 1, 4) -> 5A1 ⊕ A2 ⊕ 5E; χ⁶ = (4096, 1, 64) -> 715A1 ⊕ 651A2 ⊕ 1365E.
+	// Needs only the electron count - no active irreps, and no multiplets come out of it.
+	TEST(PointGroupAnalysisBridgeTests, TensorPowerOfNvBasis)
+	{
+		const auto check = [](int electrons, const std::vector<IrrepMultiplicity> &expected) {
+			PointGroupAnalysisRequest request = MakeNvCluster();
+			request.pointGroupLabel = "C3v";
+			request.activeElectronCount = electrons;
+			const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+			ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+			EXPECT_EQ(result->tensorPower, electrons);
+			EXPECT_TRUE(result->multiplets.empty());
+			ASSERT_EQ(result->tensorPowerDecomposition.size(), expected.size()) << electrons;
+			for (std::size_t index = 0; index < expected.size(); ++index)
+			{
+				EXPECT_EQ(result->tensorPowerDecomposition[index].irrepLabel, expected[index].irrepLabel);
+				EXPECT_EQ(result->tensorPowerDecomposition[index].multiplicity, expected[index].multiplicity);
+				EXPECT_EQ(result->tensorPowerDecomposition[index].dimension, expected[index].dimension);
+			}
+		};
+		check(2, {{"A1", 5, 1}, {"A2", 1, 1}, {"E", 5, 2}});
+		check(6, {{"A1", 715, 1}, {"A2", 651, 1}, {"E", 1365, 2}});
+	}
+
+	TEST(PointGroupAnalysisBridgeTests, ProjectedCoefficientsCarryLatex)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3v";
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		bool anyRadical = false;
+		for (const SymmetryAdaptedVector &vector : result->reduction.projectedVectors)
+			for (const ExactCoefficient &coefficient : vector.coefficients)
+			{
+				EXPECT_FALSE(coefficient.latex.empty()) << coefficient.exact;
+				anyRadical = anyRadical || coefficient.latex.find("\\sqrt") != std::string::npos;
+			}
+		EXPECT_TRUE(anyRadical);
+		EXPECT_FALSE(result->characterTable.characters.at(0).at(0).latex.empty());
+	}
+
+	// NV- with the full dangling-bond space: a1, a1', e (8 spin-orbitals), 6 electrons -> C(8,6) = 28 states.
+	TEST(PointGroupAnalysisBridgeTests, MultipletsForNvSixElectrons)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3v";
+		request.activeOrbitalIrreps = {"A1", "A1", "E"};
+		request.activeElectronCount = 6;
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		EXPECT_EQ(result->multipletTotalStates, 28);
+		bool hasTripletA2 = false;
+		for (const MultipletTerm &term : result->multiplets)
+			hasTripletA2 = hasTripletA2 || (term.irrepLabel == "A2" && term.spinMultiplicity == 3);
+		EXPECT_TRUE(hasTripletA2);
+		EXPECT_EQ(result->tensorPower, 6);
 	}
 
 	// --- Negative cases. Each asserts the exact code, which proves the script got past
