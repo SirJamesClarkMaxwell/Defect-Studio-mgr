@@ -72,6 +72,40 @@ namespace DefectStudio::Platform::Internal
 		return command.str();
 	}
 
+	// Every child we spawn gets its own job object with KILL_ON_JOB_CLOSE, and job membership is
+	// inherited by anything that child spawns. Closing the handle therefore kills the whole tree -
+	// whether we close it deliberately in Terminate() or the OS closes it for us because
+	// DefectStudio crashed or was killed from Task Manager. Both gaps are real: destructors cannot
+	// run on a hard kill, and TerminateProcess only ever reaches the one handle we hold, so a venv
+	// console script like ipython.exe (a launcher stub that re-spawns the real python.exe) left
+	// that python.exe running forever. Returns nullptr if the job could not be created; callers
+	// treat that as "no cleanup guarantee" and carry on rather than failing the spawn.
+	inline HANDLE CreateKillOnCloseJob()
+	{
+		HANDLE job = CreateJobObjectW(nullptr, nullptr);
+		if (job == nullptr)
+			return nullptr;
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+		limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+		if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
+		{
+			CloseHandle(job);
+			return nullptr;
+		}
+		return job;
+	}
+
+	// Call right after a CreateProcessW that passed CREATE_SUSPENDED. Suspension is what closes the
+	// race: an unsuspended launcher can spawn its grandchild before we manage to assign it, and
+	// that grandchild would then be outside the job. The child is resumed even when assignment
+	// failed - a child that escapes cleanup beats a child frozen forever.
+	inline void AdoptChildAndResume(HANDLE job, const PROCESS_INFORMATION &processInfo)
+	{
+		if (job != nullptr)
+			AssignProcessToJobObject(job, processInfo.hProcess);
+		ResumeThread(processInfo.hThread);
+	}
+
 	// Both ends start inheritable; caller clears HANDLE_FLAG_INHERIT on whichever end it keeps
 	// for itself (the other end is handed to the child and closed in the parent afterwards).
 	inline bool CreateInheritablePipe(PipeHandles &pipe)

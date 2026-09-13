@@ -65,7 +65,7 @@ namespace DefectStudio::Platform
 			nullptr,
 			nullptr,
 			TRUE,
-			CREATE_NO_WINDOW,
+			CREATE_NO_WINDOW | CREATE_SUSPENDED,
 			nullptr,
 			workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
 			&startupInfo,
@@ -82,6 +82,8 @@ namespace DefectStudio::Platform
 				"CreateProcessW failed with code " + std::to_string(GetLastError()), "interactive_process.create_failed");
 		}
 
+		m_JobHandle = Internal::CreateKillOnCloseJob();
+		Internal::AdoptChildAndResume(static_cast<HANDLE>(m_JobHandle), processInfo);
 		CloseHandle(processInfo.hThread);
 		m_StdinWrite = stdinPipe.write;
 		m_StdoutRead = stdoutPipe.read;
@@ -154,6 +156,13 @@ namespace DefectStudio::Platform
 		{
 			CloseHandle(static_cast<HANDLE>(m_ProcessHandle));
 			m_ProcessHandle = nullptr;
+		}
+		// Last, and after the direct child is already gone: this is what takes the grandchildren
+		// (the real python.exe behind ipython.exe) down with it.
+		if (m_JobHandle != nullptr)
+		{
+			CloseHandle(static_cast<HANDLE>(m_JobHandle));
+			m_JobHandle = nullptr;
 		}
 		m_Running = false;
 	}

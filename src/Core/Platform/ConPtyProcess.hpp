@@ -61,6 +61,8 @@ namespace DefectStudio::Platform
 		void *m_InputWrite = nullptr;
 		void *m_OutputRead = nullptr;
 		void *m_ProcessHandle = nullptr;
+		// Kills the shell *and everything it launched* when closed - see CreateKillOnCloseJob.
+		void *m_JobHandle = nullptr;
 
 		std::thread m_ReaderThread;
 		std::mutex m_OutputMutex;
