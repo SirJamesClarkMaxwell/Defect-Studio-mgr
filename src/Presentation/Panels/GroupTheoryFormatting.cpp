@@ -214,14 +214,21 @@ namespace DefectStudio
 	std::vector<MathSegment> SplitMathSegments(std::string_view latex)
 	{
 		std::vector<MathSegment> result;
-		const auto append = [&result](std::string text, int level, bool overline, std::string denominator = "") {
+		const auto append = [&result](
+			std::string text,
+			int level,
+			bool overline,
+			int overlineGroup,
+			std::string denominator = "")
+		{
 			if (text.empty())
 				return;
 			if (denominator.empty() && !result.empty() && result.back().denominator.empty() &&
-				result.back().level == level && result.back().overline == overline)
+				result.back().level == level && result.back().overline == overline &&
+				result.back().overlineGroup == overlineGroup)
 				result.back().text += text;
 			else
-				result.push_back({std::move(text), level, overline, std::move(denominator)});
+				result.push_back({std::move(text), level, overline, std::move(denominator), overlineGroup});
 		};
 		const auto parseText = [&](const auto &self, std::size_t &index) -> std::string {
 			std::string text;
@@ -285,7 +292,14 @@ namespace DefectStudio
 				return std::string(1, latex[index++]);
 			return std::string{};
 		};
-		const auto parse = [&](const auto &self, std::size_t &index, int level, bool overline) -> void {
+		int nextOverlineGroup = 0;
+		const auto parse = [&](
+			const auto &self,
+			std::size_t &index,
+			int level,
+			bool overline,
+			int overlineGroup) -> void
+		{
 			while (index < latex.size())
 			{
 				if (latex[index] == '}')
@@ -298,11 +312,12 @@ namespace DefectStudio
 					const int childLevel = latex[index++] == '^' ? level + 1 : level - 1;
 					if (latex[index] == '{')
 						++index;
-					if (latex[index - 1] == '{') self(self, index, childLevel, overline);
+					if (latex[index - 1] == '{')
+						self(self, index, childLevel, overline, overlineGroup);
 					else
 					{
 						std::string text(1, latex[index++]);
-						append(std::move(text), childLevel, overline);
+						append(std::move(text), childLevel, overline, overlineGroup);
 					}
 					continue;
 				}
@@ -315,29 +330,31 @@ namespace DefectStudio
 					{
 						const std::string numerator = parseArgument(index);
 						const std::string denominator = parseArgument(index);
-						append(numerator, level, overline, denominator);
+						append(numerator, level, overline, overlineGroup, denominator);
 					}
 					else if (command == "sqrt")
-						append("√" + parseArgument(index), level, overline);
+						append("√" + parseArgument(index), level, overline, overlineGroup);
 					else if (command == "bar")
 					{
+						const int group = ++nextOverlineGroup;
 						if (index < latex.size() && latex[index] == '{')
 							++index;
-						self(self, index, level, true);
+						self(self, index, level, true, group);
 					}
 					else if (command == "Gamma")
-						append("Γ", level, overline);
+						append("Γ", level, overline, overlineGroup);
 					else if (command == "sigma")
-						append("σ", level, overline);
+						append("σ", level, overline, overlineGroup);
 					else if (command == "oplus")
-						append("⊕", level, overline);
+						append("⊕", level, overline, overlineGroup);
 					else if (command == "otimes")
-						append("⊗", level, overline);
+						append("⊗", level, overline, overlineGroup);
 					else if (command == "rangle")
-						append("⟩", level, overline);
+						append("⟩", level, overline, overlineGroup);
 					else if (command == "langle")
-						append("⟨", level, overline);
-					else append("\\" + command, level, overline);
+						append("⟨", level, overline, overlineGroup);
+					else
+						append("\\" + command, level, overline, overlineGroup);
 					continue;
 				}
 				if (level != 0 && latex[index] == ' ')
@@ -345,11 +362,11 @@ namespace DefectStudio
 					++index;
 					continue;
 				}
-				append(std::string(1, latex[index++]), level, overline);
+				append(std::string(1, latex[index++]), level, overline, overlineGroup);
 			}
 		};
 		std::size_t index = 0;
-		parse(parse, index, 0, false);
+		parse(parse, index, 0, false, 0);
 		return result;
 	}
 
@@ -397,59 +414,6 @@ namespace DefectStudio
 				[](const std::string &label) { return label.empty(); }))
 			selection.orbitalLabels.clear();
 		return selection;
-	}
-
-	std::string FormatProjectedVectors(
-		const PointGroupReduction &reduction, const std::vector<std::size_t> &order,
-		const std::vector<std::string> &physicalLabels, TableFormat format)
-	{
-		const bool markdown = format == TableFormat::Markdown;
-		std::string output = markdown ? "| Irrep | Copy | Row |" : "\\begin{tabular}{lll|";
-		if (!markdown)
-			output += std::string(reduction.siteLabels.size(), 'l') + "|l}\nIrrep & Copy & Row & ";
-		for (std::size_t index = 0; index < reduction.siteLabels.size(); ++index)
-		{
-			if (markdown)
-				output += " " + reduction.siteLabels[index] + " |";
-			else
-				output += std::string(index ? " & " : "") + reduction.siteLabels[index];
-		}
-		if (markdown)
-			output += " Label |\n|---|---|---|";
-		else
-			output += " & Label \\\\\n\\hline\n";
-		if (markdown)
-			for (std::size_t index = 0; index < reduction.siteLabels.size() + 1; ++index)
-				output += "---|";
-		for (const std::size_t vectorIndex : order)
-		{
-			if (vectorIndex >= reduction.projectedVectors.size())
-				continue;
-			const auto &vector = reduction.projectedVectors[vectorIndex];
-			const std::string label =
-				vectorIndex < physicalLabels.size() ? physicalLabels[vectorIndex] : "";
-			if (markdown)
-			{
-				output += "\n| " + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Unicode) +
-					" | " + std::to_string(vector.occurrenceIndex + 1) +
-					" | " + std::to_string(vector.irrepRow + 1) + " |";
-				for (const auto &value : vector.coefficients)
-					output += " " + FormatExactValue(value, LabelStyle::Unicode) + " |";
-				output += " " + label + " |";
-			}
-			else
-			{
-				output += "$" + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Latex) + "$ & " + std::to_string(vector.occurrenceIndex + 1) + " & " + std::to_string(vector.irrepRow + 1);
-				for (const auto &value : vector.coefficients)
-					output += " & " + FormatLatexCell(value);
-				output += " & " + label + " \\\\\n";
-			}
-		}
-		if (!markdown)
-			output += "\\end{tabular}\n";
-		else
-			output += "\n";
-		return output;
 	}
 
 	std::string FormatMultiplets(const std::vector<MultipletTerm> &multiplets, TableFormat format)

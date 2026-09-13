@@ -102,26 +102,7 @@ namespace DefectStudio
 		{
 			const float contentWidth = ImGui::GetContentRegionAvail().x;
 			const bool showCharacterTable = m_Result.has_value() && m_Result->detection.determined;
-			if (contentWidth >= 900.0f && ImGui::BeginTable(
-					"##group_settings_and_characters", 3,
-					ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoBordersInBody))
-			{
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				drawBasis(focusedWindowId, *windowState, *record);
-				drawGroupControls();
-				ImGui::TableSetColumnIndex(1);
-				if (showCharacterTable)
-				{
-					ImGui::TextDisabled("Character table");
-					drawCharacterTable();
-				}
-				ImGui::TableSetColumnIndex(2);
-				if (showCharacterTable)
-					drawDirectProducts();
-				ImGui::EndTable();
-			}
-			else if (contentWidth >= 550.0f && ImGui::BeginTable(
+			if (contentWidth >= 550.0f && ImGui::BeginTable(
 					"##group_settings_and_characters", 2,
 					ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoBordersInBody))
 			{
@@ -134,6 +115,7 @@ namespace DefectStudio
 				{
 					ImGui::TextDisabled("Character table");
 					drawCharacterTable();
+					ImGui::Spacing();
 					drawDirectProducts();
 				}
 				ImGui::EndTable();
@@ -146,6 +128,7 @@ namespace DefectStudio
 				{
 					ImGui::TextDisabled("Character table");
 					drawCharacterTable();
+					ImGui::Spacing();
 					drawDirectProducts();
 				}
 			}

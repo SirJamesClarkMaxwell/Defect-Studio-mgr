@@ -30,21 +30,28 @@ namespace DefectStudio
 			bool first = true;
 			float overlineStart = 0.0f;
 			float overlineEnd = 0.0f;
-			bool hasOverline = false;
+			int activeOverlineGroup = 0;
+			bool hasOverlineSegment = false;
 			const auto drawOverline = [&]() {
-				if (hasOverline)
+				if (activeOverlineGroup != 0)
+				{
 					ImGui::GetWindowDrawList()->AddLine(
-						{overlineStart, baseScreenY + 0.08f * baseSize},
-						{overlineEnd, baseScreenY + 0.08f * baseSize},
+						{overlineStart + 1.0f, baseScreenY + 0.02f * baseSize},
+						{overlineEnd - 1.0f, baseScreenY + 0.02f * baseSize},
 						ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
-				hasOverline = false;
+				}
+				activeOverlineGroup = 0;
+				hasOverlineSegment = false;
 			};
 			for (const MathSegment &segment : SplitMathSegments(latex))
 			{
 				if (!first)
 					ImGui::SameLine(0.0f, 0.0f);
-				if (!segment.overline)
+				if (segment.overlineGroup != activeOverlineGroup)
+				{
 					drawOverline();
+					activeOverlineGroup = segment.overlineGroup;
+				}
 				if (!segment.denominator.empty())
 				{
 					const float padding = 3.0f;
@@ -74,12 +81,14 @@ namespace DefectStudio
 					ImGui::SetCursorPosX(startX);
 					ImGui::SetCursorPosY(baseY + baseSize);
 					ImGui::Dummy({width, baseSize * 0.5f});
-					if (segment.overline)
+					if (segment.overlineGroup != 0)
 					{
-						if (!hasOverline)
+						if (!hasOverlineSegment)
+						{
 							overlineStart = ImGui::GetItemRectMin().x;
+							hasOverlineSegment = true;
+						}
 						overlineEnd = ImGui::GetItemRectMax().x;
-						hasOverline = true;
 					}
 				}
 				else
@@ -90,12 +99,14 @@ namespace DefectStudio
 					if (pushed)
 						ImGui::PushFont(font, MathSegmentFontSize(segment, sizeScale));
 					ImGui::TextUnformatted(segment.text.c_str());
-					if (segment.overline)
+					if (segment.overlineGroup != 0)
 					{
-						if (!hasOverline)
+						if (!hasOverlineSegment)
+						{
 							overlineStart = ImGui::GetItemRectMin().x;
+							hasOverlineSegment = true;
+						}
 						overlineEnd = ImGui::GetItemRectMax().x;
-						hasOverline = true;
 					}
 					if (pushed)
 						ImGui::PopFont();
@@ -176,13 +187,14 @@ namespace DefectStudio
 		}
 		const std::string pointGroup = FormatIrrepLabel(m_Result->detection.pointGroupLabel, LabelStyle::Latex);
 		const std::string decomposition = FormatDecomposition(m_Result->reduction.decomposition, LabelStyle::Latex);
-		std::string header = pointGroup + "   " + decomposition;
+		std::string header = pointGroup + "      " + decomposition;
 		if (m_Result->tensorPower > 0)
-			header += "   " + FormatTensorPower(
+			header += "      " + FormatTensorPower(
 				m_Result->tensorPower, m_Result->tensorPowerDecomposition, LabelStyle::Latex);
 		CenteredMathLabel(header, 1.5f);
 		if (m_Result->tensorPower > 0 && ImGui::IsItemHovered())
 			ImGui::SetTooltip("Plain direct-product power of the basis representation: no Pauli exclusion, no spin. Physical many-electron states are the Multiplets below.");
+		ImGui::Spacing();
 		std::string detectionInfo;
 		if (!m_Result->detection.ran)
 			detectionInfo = "(manual)";
@@ -199,6 +211,7 @@ namespace DefectStudio
 			ImGui::GetCursorPosX() +
 			std::max(0.0f, (ImGui::GetContentRegionAvail().x - infoWidth) * 0.5f));
 		ImGui::TextDisabled("%s", detectionInfo.c_str());
+		ImGui::Spacing();
 		drawProjectedVectors();
 		drawMultiplets();
 		if (ImGui::Button("Copy as Markdown"))
@@ -411,10 +424,13 @@ namespace DefectStudio
 					const std::string configuration = FormatConfiguration(m_Result->activeShells, state.configuration);
 					if (configuration != previous)
 					{
+						ImGui::Dummy({0.0f, ImGui::GetTextLineHeight() * 0.4f});
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
 						MathLabel(configuration, 1.25f);
 						ImGui::PopStyleColor();
 					}
+					else
+						ImGui::Dummy({0.0f, ImGui::GetTextLineHeight() * 0.4f});
 					MathLabel(
 						FormatWavefunction(state, m_Result->activeOrbitalLabels, LabelStyle::Latex), 1.25f);
 					previous = configuration;
