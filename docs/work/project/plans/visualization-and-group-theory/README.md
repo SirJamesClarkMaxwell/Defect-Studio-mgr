@@ -14,26 +14,29 @@ repeatable visualization while keeping the provenance and limits of computed res
 
 ## Workstreams
 
-Each workstream is one branch (`task/NN-short-name`), merged to `main` on its own after a green
-build. No long-lived epic branch — the app must work after every merge.
+Each workstream is one branch (`task/NN-short-name`), merged to `dev` on its own after a green
+build (`main` later). No long-lived epic branch — the app must work after every merge.
+
+Branch numbering and order now follow the 2026-09-13 plan
+[scene tools + group-theory panel](../2026-09-13-scene-tools-and-group-theory.md), which supersedes
+the branch names first assigned here.
 
 | # | File | Branch | Status |
 |---|------|--------|--------|
-| 1 | [groupy-bridge.md](01-groupy-bridge.md) | `task/19-groupy-bridge-spike` | contract landed, implementation in progress |
-| 2 | [scene-object-model.md](02-scene-object-model.md) | `task/20-scene-object-model` | spec written, not implemented |
-| 3 | [planes-and-labels.md](03-planes-and-labels.md) | `task/21-planes-and-labels` | not started |
-| 4 | [paths-and-arrows.md](04-paths-and-arrows.md) | `task/23-paths-and-arrows` | not started |
-| 5 | [bonds-and-orbitals.md](05-bonds-and-orbitals.md) | — | not started |
-| 6 | [electronic-structure-integration.md](06-electronic-structure-integration.md) | — | not started |
-| 7 | [basis-objects.md](07-basis-objects.md) | — | not started |
-| 8 | [point-group-analysis.md](08-point-group-analysis.md) | — | not started |
-| 9 | [nv-acceptance.md](09-nv-acceptance.md) | — | not started |
-| 10 | [result-presentation.md](10-result-presentation.md) | — | not started |
+| 1 | [groupy-bridge.md](01-groupy-bridge.md) | `task/19-groupy-bridge-spike` | merged to `dev` |
+| 2 | [scene-object-model.md](02-scene-object-model.md) | `task/20-scene-object-model` | merged to `dev` |
+| 3 | [planes-and-labels.md](03-planes-and-labels.md) | `task/31-planes` (labels landed with task/20) | not started |
+| 4 | [paths-and-arrows.md](04-paths-and-arrows.md) | `task/30-bezier-curves` | not started |
+| 5 | [bonds-and-orbitals.md](05-bonds-and-orbitals.md) | `task/26-bonds-and-orbitals` | not started |
+| 6 | [electronic-structure-integration.md](06-electronic-structure-integration.md) | — | out of scope for now (WAVECAR bases) |
+| 7 | [basis-objects.md](07-basis-objects.md) | `task/27-basis-objects` | not started |
+| 8 | [point-group-analysis.md](08-point-group-analysis.md) | `task/23-group-theory-panel` (atom basis), `task/28-group-theory-panel-v2` (orbital basis) | task/23 backend in progress |
+| 9 | [nv-acceptance.md](09-nv-acceptance.md) | `task/28-group-theory-panel-v2` | not started (multiplet table checked in task/23) |
+| 10 | [result-presentation.md](10-result-presentation.md) | `task/23-group-theory-panel` (tables, copy as Markdown/LaTeX) | not started; full rendering out of scope |
 | 11 | [deferred.md](11-deferred.md) | — | deferred by decision |
 
 Numbering note: `task/22-process-tree-cleanup` is **not** part of this plan — it is the Windows
-Job Object fix for zombie Python grandchildren, branched off while this plan was being sliced.
-Workstream 4 therefore takes 23, and every later workstream numbers from there.
+Job Object fix for zombie Python grandchildren (merged to `dev`).
 
 Serialization note: workstreams 2, 3, 4 and 5 all land on `SceneComponents.hpp` and
 `ObjectPropertiesPanel.cpp`. They are **not** parallelizable — 2 is the foundation and the rest
