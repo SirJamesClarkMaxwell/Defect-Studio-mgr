@@ -148,12 +148,14 @@ namespace
 				EXPECT_EQ(actual[i].level, expected[i].level) << latex << " segment " << i;
 				EXPECT_EQ(actual[i].overline, expected[i].overline) << latex << " segment " << i;
 				EXPECT_EQ(actual[i].denominator, expected[i].denominator) << latex << " segment " << i;
+				EXPECT_EQ(actual[i].overlineGroup, expected[i].overlineGroup) << latex << " segment " << i;
 			}
 		};
 		check("-\\frac{\\sqrt{3}}{2}|a|", {{"-", 0}, {"√3", 0, false, "2"}, {"|a|", 0}});
 		check("\\frac{1}{2}\\frac{1}{2}", {{"1", 0, false, "2"}, {"1", 0, false, "2"}});
 		check("\\sqrt{2}", {{"√2", 0}});
-		check("|\\bar{a_{1}}e_{x}\\rangle", {{"|", 0}, {"a", 0, true}, {"1", -1, true}, {"e", 0}, {"x", -1}, {"⟩", 0}});
+		check("|\\bar{a_{1}}e_{x}\\rangle", {{"|", 0}, {"a", 0, true, "", 1}, {"1", -1, true, "", 1}, {"e", 0}, {"x", -1}, {"⟩", 0}});
+		check("\\bar{e}\\bar{e}a", {{"e", 0, true, "", 1}, {"e", 0, true, "", 2}, {"a", 0}});
 		check("E", {{"E", 0}});
 		check("3\\sigma_{v}", {{"3\u03C3", 0}, {"v", -1}});
 		check("^{3}A_{2}", {{"3", 1}, {"A", 0}, {"2", -1}});

@@ -60,6 +60,9 @@ namespace DefectStudio
 		bool overline = false; // inside \bar{...}: spin-down orbital
 		// Non-empty = a stacked fraction: `text` is the numerator, this the denominator (both plain text).
 		std::string denominator;
+		// 0 outside \bar; each \bar{...} gets the next id (1, 2, ...) so the renderer draws one bar per
+		// orbital. Segments with different ids are never merged.
+		int overlineGroup = 0;
 	};
 
 	// Parses the Latex output of the formatters in this header: `_{...}`, `^{...}`, `\bar{...}` (may
