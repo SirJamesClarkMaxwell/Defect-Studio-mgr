@@ -7,6 +7,17 @@ namespace DefectStudio
 	namespace
 	{
 		ImFont *s_MonospaceFont = nullptr;
+		ImFont *s_MathFont = nullptr;
+	}
+
+	ImFont *GetEditorMathFont()
+	{
+		return s_MathFont;
+	}
+
+	void SetEditorMathFont(ImFont *font)
+	{
+		s_MathFont = font;
 	}
 
 	ImFont *GetEditorMonospaceFont()
