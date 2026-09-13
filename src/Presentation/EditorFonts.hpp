@@ -13,4 +13,9 @@ namespace DefectStudio
 	// pointer that's only ever read during Render().
 	[[nodiscard]] ImFont *GetEditorMonospaceFont();
 	void SetEditorMonospaceFont(ImFont *font);
+	// Font with Greek, sub/superscript digits and math operators (Γ, σ, ₁, ³, ⊕) for panels that show
+	// group-theory notation; the default ProggyClean UI font has none of them. Never null after the
+	// first atlas build (falls back to the UI font).
+	[[nodiscard]] ImFont *GetEditorMathFont();
+	void SetEditorMathFont(ImFont *font);
 } // namespace DefectStudio

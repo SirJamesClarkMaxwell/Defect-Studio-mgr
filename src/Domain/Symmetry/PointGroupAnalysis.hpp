@@ -16,7 +16,9 @@ namespace DefectStudio
 	struct ExactCoefficient
 	{
 		std::string exact;    // SymPy str(), e.g. "sqrt(2)/2", "-1/2", "0"
-		double numeric = 0.0; // float() of that same expression
+		double numeric = 0.0; // float() of that same expression (real part for complex characters)
+		double numericImaginary = 0.0; // non-zero only for complex characters (e.g. C3, C4h irreps)
+		std::string latex;             // SymPy latex(), e.g. "\\frac{\\sqrt{2}}{2}"; empty when not supplied
 	};
 
 	// One named site of the basis a representation is built on. For the NV- dangling-bond basis
@@ -24,7 +26,11 @@ namespace DefectStudio
 	struct BasisSite
 	{
 		std::string label;                  // "d", "a", "b", "c"
-		glm::dvec3 position{0.0, 0.0, 0.0}; // Cartesian, expressed in the point group's own frame
+		glm::dvec3 position{0.0, 0.0, 0.0}; // Cartesian. Spike request: point group's own frame.
+		                                    // Analysis request: any frame, centred on the analysis centre.
+		// Empty = match any site. When set, a group element may only map a site onto a site of the
+		// same element (N never permutes with C).
+		std::string element;
 	};
 
 	// A permutation representation: the point group permutes the basis sites among themselves, and
@@ -75,5 +81,126 @@ namespace DefectStudio
 		// Only irreps with multiplicity > 0, in the point group's own irrep order.
 		std::vector<IrrepMultiplicity> decomposition;
 		std::vector<SymmetryAdaptedVector> projectedVectors;
+	};
+
+	// --- Task 23: full analysis for the group-theory panel -------------------------------------
+
+	struct CharacterTable
+	{
+		std::string pointGroupLabel;
+		int groupOrder = 0;
+		std::vector<std::string> classLabels; // groupy class names, e.g. {"E", "2C3", "3sv"}
+		std::vector<int> classSizes;          // parallel to classLabels, e.g. {1, 2, 3}
+		std::vector<std::string> irrepLabels; // groupy irrep order, e.g. {"A1", "A2", "E"}
+		std::vector<int> irrepDimensions;     // parallel to irrepLabels
+		// characters[irrep][class], same orders as irrepLabels / classLabels.
+		std::vector<std::vector<ExactCoefficient>> characters;
+	};
+
+	struct PointGroupDetection
+	{
+		bool ran = false;        // false when the request named a group manually
+		bool determined = false; // false = Undetermined; `reason` says why, nothing else is filled
+		std::string pointGroupLabel; // groupy label the rest of the result uses, e.g. "C3v"
+		std::string detectorSymbol;  // raw pymatgen PointGroupAnalyzer sch_symbol, e.g. "C3v"
+		double tolerance = 0.0;      // Å, the tolerance the detector ran with
+		std::string reason;
+	};
+
+	// One many-electron term from groupy ActiveSpace.term_table().
+	struct MultipletTerm
+	{
+		std::string irrepLabel;   // "A2", "E", "A1"
+		int spinMultiplicity = 0; // 2S+1
+		int irrepDimension = 0;   // dΓ
+		int countPerRow = 0;      // how many times this (Γ, S) term occurs
+		int totalStates = 0;      // countPerRow * dΓ * (2S+1)
+	};
+
+	struct PointGroupAnalysisRequest
+	{
+		// Empty = detect with pymatgen PointGroupAnalyzer on the sites; otherwise a groupy label.
+		std::string pointGroupLabel;
+		// Centred on the analysis centre, in the structure's Cartesian frame. The bridge rotates them
+		// into groupy's standard frame itself (see PointGroupAnalysisResult::frameRotation).
+		std::vector<BasisSite> sites;
+		// Å. Used by detection AND by the permutation closure check - relaxed defect geometries are
+		// never closed at 1e-6.
+		double symmetryTolerance = 0.1;
+		// Multiplets: orbital irreps the user marks active + electron count. Empty irreps or
+		// activeElectronCount == 0 = no multiplet computation.
+		std::vector<std::string> activeOrbitalIrreps;
+		int activeElectronCount = 0;
+		// Optional LaTeX name per spatial orbital of the active space, in shell order and irrep-row
+		// order within a shell (an E shell takes two), e.g. {"a_{1}", "e_{x}", "e_{y}"}. Empty = groupy's
+		// automatic names; an empty entry = automatic name for that orbital. Wrong length = invalid_active_space.
+		std::vector<std::string> activeOrbitalLabels;
+	};
+
+	// One shell of the active space = one entry of activeOrbitalIrreps.
+	struct ActiveShell
+	{
+		std::string irrepLabel;  // "A1", "E"
+		std::string label;       // LaTeX shell name for configurations: the orbital name for 1-D shells
+		                         // ("a_{1}"), lower-case irrep + primes for degenerate ones ("e", "e'")
+		int firstOrbital = 0;    // index of its first spatial orbital
+		int dimension = 0;       // spatial orbitals in the shell
+	};
+
+	// One spin-orbital of a Slater determinant.
+	struct SpinOrbital
+	{
+		int orbitalIndex = 0; // spatial orbital, index into PointGroupAnalysisResult::activeOrbitalLabels
+		bool spinUp = true;   // false = spin down, drawn with a bar
+	};
+
+	struct DeterminantTerm
+	{
+		ExactCoefficient coefficient;
+		// Occupied spin-orbitals in ascending groupy order (orbital, then up before down) - the order
+		// the determinant's sign refers to.
+		std::vector<SpinOrbital> occupied;
+	};
+
+	// One symmetry-adapted many-electron state |(2S+1)Γ, copy, row; m_s> as a sum of Slater determinants.
+	// Overall phase: groupy's canonical one (first non-zero coefficient positive), chosen per state -
+	// partners (other rows / m_s) are NOT phase-linked by ladder operators.
+	struct MultipletWavefunction
+	{
+		std::string irrepLabel;
+		int spinMultiplicity = 0;
+		int copyIndex = 0; // 0-based among states of the same (Γ, S, row, m_s)
+		int irrepRow = 0;  // 0-based
+		int twiceMs = 0;   // 2·m_s, so half-integer spins stay integers
+		// Electrons per active shell (ActiveShell order); every determinant of the state shares it,
+		// because symmetry and spin projectors never move electrons between shells.
+		std::vector<int> configuration;
+		std::vector<DeterminantTerm> determinants;
+	};
+
+	struct PointGroupAnalysisResult
+	{
+		PointGroupDetection detection;
+		// Maps request Cartesian coordinates into groupy's standard frame: p_groupy = frameRotation * p.
+		// Identity when the sites already are in that frame.
+		glm::dmat3 frameRotation{1.0};
+		CharacterTable characterTable;
+		std::vector<ExactCoefficient> reducibleCharacters; // one per class, characterTable order
+		PointGroupReduction reduction;
+		std::vector<MultipletTerm> multiplets; // term_table order
+		int multipletTotalStates = 0;
+		// Γ^⊗n with n = activeElectronCount (0 = not computed): plain direct-product power of the basis
+		// representation, reduced with χ(g)^n. No Pauli exclusion or spin - that is what `multiplets` is.
+		int tensorPower = 0;
+		std::vector<IrrepMultiplicity> tensorPowerDecomposition; // multiplicity > 0 only, irrep order
+
+		// Filled together with `multiplets`. Echoed active space (final orbital names, automatic ones
+		// filled in) and every state of every term, in term_table order; within a term rows ascending,
+		// then m_s descending, then copies. Their count equals multipletTotalStates.
+		std::vector<ActiveShell> activeShells;
+		std::vector<std::string> activeOrbitalLabels; // LaTeX, one per spatial orbital
+		std::vector<MultipletWavefunction> wavefunctions;
+		// Non-empty when multiplets were computed but wavefunctions were not (Slater basis above 1000).
+		std::string wavefunctionsSkippedReason;
 	};
 } // namespace DefectStudio

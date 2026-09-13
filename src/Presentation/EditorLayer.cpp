@@ -46,6 +46,7 @@
 #include "Presentation/Panels/ExportImagePanel.hpp"
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/DisplacementComparisonPanel.hpp"
+#include "Presentation/Panels/GroupTheoryPanel.hpp"
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 #include "Presentation/Panels/ObjectPropertiesPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
@@ -676,6 +677,7 @@ namespace DefectStudio
 			m_DisplacementComparisonPanelId = registerPanel<DisplacementComparisonPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_EventBus, m_ElementPropertiesTable,
 				"Atoms Displacement", false);
+			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member

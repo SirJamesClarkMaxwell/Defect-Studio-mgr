@@ -689,6 +689,23 @@ namespace DefectStudio
 		}
 		SetEditorMonospaceFont(monospaceFont != nullptr ? monospaceFont : font);
 
+		// Group-theory notation (Γ, σ, ₁, ³, ⊕) for the Group Theory panel. ImGui 1.92 loads glyphs on
+		// demand, so no glyph ranges are needed - only a face that has them.
+		// ponytail: Windows system Cambria only; bundle a math-capable TTF under assets/fonts when the
+		// app ships on another platform.
+		ImFont *mathFont = nullptr;
+		const Path mathFontPath = Path::FromResolved(std::filesystem::path("C:/Windows/Fonts/cambria.ttc"));
+		if (FileSystem::Exists(mathFontPath))
+		{
+			ImFontConfig mathConfig;
+			mathConfig.FontNo = 1; // face 1 of cambria.ttc is Cambria Math (has ⊕; plain Cambria does not)
+			mathFont = io.Fonts->AddFontFromFileTTF(
+				mathFontPath.String().c_str(), ImGuiLayerDetail::FontPixelSize, &mathConfig);
+		}
+		else
+			DS_LOG_WARN("Math font missing: {}", mathFontPath.String());
+		SetEditorMathFont(mathFont != nullptr ? mathFont : font);
+
 		io.FontDefault = font;
 
 		ImGui_ImplOpenGL3_DestroyDeviceObjects();

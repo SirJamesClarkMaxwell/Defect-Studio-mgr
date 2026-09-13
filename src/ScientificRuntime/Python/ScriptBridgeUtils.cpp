@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
+#include "Core/Platform/PlatformPaths.hpp"
+
 namespace DefectStudio
 {
 	namespace
@@ -96,17 +98,22 @@ namespace DefectStudio
 	PythonExampleScript ResolvePythonExampleScript(const char *fileName)
 	{
 		const Path relativePath = Path("scripts") / "python" / "examples" / fileName;
-		Path cursor = Path::FromResolved(FileSystem::CurrentPath());
-		for (int depth = 0; depth < 10; ++depth)
+		// The executable's own checkout first, so a build started from another repo's directory still
+		// runs the scripts it was built with; then the working directory (tests, custom launches).
+		for (const Path &start : {Platform::GetExecutableDirectory(), Path::FromResolved(FileSystem::CurrentPath())})
 		{
-			const Path candidate = cursor / relativePath;
-			if (FileSystem::Exists(candidate.Native()))
-				return PythonExampleScript{candidate, cursor};
+			Path cursor = start;
+			for (int depth = 0; depth < 10 && !cursor.Empty(); ++depth)
+			{
+				const Path candidate = cursor / relativePath;
+				if (FileSystem::Exists(candidate.Native()))
+					return PythonExampleScript{candidate, cursor};
 
-			const Path parent = cursor.parent_path();
-			if (parent.Empty() || parent == cursor)
-				break;
-			cursor = parent;
+				const Path parent = cursor.parent_path();
+				if (parent.Empty() || parent == cursor)
+					break;
+				cursor = parent;
+			}
 		}
 
 		return PythonExampleScript{relativePath, Path::FromResolved(FileSystem::CurrentPath())};

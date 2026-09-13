@@ -1,0 +1,463 @@
+#include "Core/dspch.hpp"
+
+#include "Presentation/Panels/GroupTheoryFormatting.hpp"
+
+#include <cctype>
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <utility>
+
+namespace DefectStudio
+{
+	namespace
+	{
+		[[nodiscard]] std::string FormatUnicodeSubscript(std::string_view digits)
+		{
+			static constexpr const char *subscripts[] = {
+				"₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"};
+			std::string result;
+			for (const char character : digits)
+			{
+				if (character >= '0' && character <= '9')
+					result += subscripts[character - '0'];
+				else
+					result += character;
+			}
+			return result;
+		}
+
+		[[nodiscard]] std::string FormatUnicodeSuperscript(std::string_view digits)
+		{
+			static constexpr const char *superscripts[] = {
+				"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
+			std::string result;
+			for (const char character : digits)
+			{
+				if (character >= '0' && character <= '9')
+					result += superscripts[character - '0'];
+				else
+					result += character;
+			}
+			return result;
+		}
+
+		[[nodiscard]] std::string FormatLabel(std::string_view label, LabelStyle style, bool classLabel)
+		{
+			std::size_t firstCharacter = 0;
+			std::string multiplicity;
+			while (
+				firstCharacter < label.size() &&
+				std::isdigit(static_cast<unsigned char>(label[firstCharacter])))
+			{
+				multiplicity += label[firstCharacter++];
+			}
+
+			std::string rest(label.substr(firstCharacter));
+			if (classLabel && rest.starts_with("sv"))
+				rest = "σv";
+			else if (classLabel && rest.starts_with("sh"))
+				rest = "σh";
+			else if (classLabel && rest.starts_with('s'))
+				rest = "σ" + rest.substr(1);
+
+			if (classLabel && rest.starts_with("σ"))
+			{
+				if (style == LabelStyle::Unicode)
+					return multiplicity + rest;
+
+				const std::string sigmaSuffix = rest.substr(2);
+				return multiplicity + "\\sigma" +
+					(sigmaSuffix.empty() ? "" : "_{" + sigmaSuffix + "}");
+			}
+
+			if (rest.empty())
+				return multiplicity;
+
+			std::size_t subscriptEnd = 1;
+			if (style == LabelStyle::Latex)
+			{
+				while (
+					subscriptEnd < rest.size() &&
+					std::isalnum(static_cast<unsigned char>(rest[subscriptEnd])))
+				{
+					++subscriptEnd;
+				}
+			}
+			else
+			{
+				while (
+					subscriptEnd < rest.size() &&
+					std::isdigit(static_cast<unsigned char>(rest[subscriptEnd])))
+				{
+					++subscriptEnd;
+				}
+			}
+
+			const std::string head = rest.substr(0, 1);
+			const std::string subscript = rest.substr(1, subscriptEnd - 1);
+			const std::string suffix = rest.substr(subscriptEnd);
+			if (style == LabelStyle::Unicode)
+				return multiplicity + head + FormatUnicodeSubscript(subscript) + suffix;
+			if (subscript.empty())
+				return multiplicity + head + suffix;
+			return multiplicity + head + "_{" + subscript + "}" + suffix;
+		}
+
+		[[nodiscard]] std::string FormatLatexCell(const ExactCoefficient &value)
+		{
+			return value.latex.empty() ? value.exact : "$" + value.latex + "$";
+		}
+	}
+
+	std::string FormatIrrepLabel(std::string_view label, LabelStyle style)
+	{
+		return FormatLabel(label, style, false);
+	}
+
+	std::string FormatClassLabel(std::string_view label, LabelStyle style)
+	{
+		return FormatLabel(label, style, true);
+	}
+
+	std::string FormatTermLabel(int spinMultiplicity, std::string_view irrepLabel, LabelStyle style)
+	{
+		if (style == LabelStyle::Unicode)
+		{
+			static constexpr const char *superscripts[] = {
+				"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
+			const std::string digits = std::to_string(spinMultiplicity);
+			std::string result;
+			for (const char digit : digits)
+				result += superscripts[digit - '0'];
+			return result + FormatIrrepLabel(irrepLabel, style);
+		}
+		return "^{" + std::to_string(spinMultiplicity) + "}" +
+			FormatIrrepLabel(irrepLabel, style);
+	}
+
+	std::string FormatDecomposition(const std::vector<IrrepMultiplicity> &decomposition, LabelStyle style)
+	{
+		std::string result = style == LabelStyle::Unicode ? "Γ = " : "\\Gamma = ";
+		if (decomposition.empty())
+			return result + "0";
+
+		bool first = true;
+		for (const IrrepMultiplicity &term : decomposition)
+		{
+			if (!first)
+				result += style == LabelStyle::Unicode ? " ⊕ " : " \\oplus ";
+			first = false;
+			if (term.multiplicity != 1)
+				result += std::to_string(term.multiplicity);
+			result += FormatIrrepLabel(term.irrepLabel, style);
+		}
+		return result;
+	}
+
+	std::string FormatTensorPower(
+		int power, const std::vector<IrrepMultiplicity> &decomposition, LabelStyle style)
+	{
+		const std::string prefix = style == LabelStyle::Unicode ? "Γ⊗" : "\\Gamma^{\\otimes ";
+		const std::string exponent = style == LabelStyle::Unicode ? FormatUnicodeSuperscript(std::to_string(power)) : std::to_string(power) + "}";
+		std::string result = prefix + exponent;
+		if (decomposition.empty())
+			return result + (style == LabelStyle::Unicode ? ": dimension too large" : ": dimension too large");
+		result += " = ";
+		for (std::size_t index = 0; index < decomposition.size(); ++index)
+		{
+			if (index != 0)
+				result += style == LabelStyle::Unicode ? " ⊕ " : " \\oplus ";
+			if (decomposition[index].multiplicity != 1)
+				result += std::to_string(decomposition[index].multiplicity);
+			result += FormatIrrepLabel(decomposition[index].irrepLabel, style);
+		}
+		return result;
+	}
+
+	std::string ActiveIrrepsFromDecomposition(const std::vector<IrrepMultiplicity> &decomposition)
+	{
+		std::string result;
+		for (const IrrepMultiplicity &entry : decomposition)
+			for (int index = 0; index < entry.multiplicity; ++index)
+			{
+				if (!result.empty())
+					result += ", ";
+				result += entry.irrepLabel;
+			}
+		return result;
+	}
+
+	std::string FormatExactValue(const ExactCoefficient &value, LabelStyle style)
+	{
+		if (style == LabelStyle::Latex)
+			return value.latex.empty() ? value.exact : value.latex;
+		std::string result = value.exact;
+		std::string::size_type position = 0;
+		while ((position = result.find("sqrt(", position)) != std::string::npos)
+		{
+			const auto close = result.find(')', position + 5);
+			if (close == std::string::npos)
+				break;
+			result.replace(position, close - position + 1, "√" + result.substr(position + 5, close - position - 5));
+			position += 1;
+		}
+		while ((position = result.find("*I")) != std::string::npos)
+			result.replace(position, 2, "i");
+		while ((position = result.find("I")) != std::string::npos)
+			result.replace(position, 1, "i");
+		while ((position = result.find('*')) != std::string::npos)
+			result.replace(position, 1, "·");
+		return result;
+	}
+
+	std::vector<MathSegment> SplitMathSegments(std::string_view latex)
+	{
+		std::vector<MathSegment> result;
+		const auto append = [&result](
+			std::string text,
+			int level,
+			bool overline,
+			int overlineGroup,
+			std::string denominator = "")
+		{
+			if (text.empty())
+				return;
+			if (denominator.empty() && !result.empty() && result.back().denominator.empty() &&
+				result.back().level == level && result.back().overline == overline &&
+				result.back().overlineGroup == overlineGroup)
+				result.back().text += text;
+			else
+				result.push_back({std::move(text), level, overline, std::move(denominator), overlineGroup});
+		};
+		const auto parseText = [&](const auto &self, std::size_t &index) -> std::string {
+			std::string text;
+			while (index < latex.size() && latex[index] != '}')
+			{
+				if (latex[index] == '{')
+				{
+					++index;
+					text += self(self, index);
+					if (index < latex.size() && latex[index] == '}')
+						++index;
+					continue;
+				}
+				if (latex[index] == '\\')
+				{
+					const std::size_t begin = ++index;
+					while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index])))
+						++index;
+					const std::string command(latex.substr(begin, index - begin));
+					if (command == "sqrt")
+					{
+						text += "√";
+						if (index < latex.size() && latex[index] == '{')
+						{
+							++index;
+							text += self(self, index);
+							if (index < latex.size() && latex[index] == '}')
+								++index;
+						}
+					}
+					else if (command == "Gamma")
+						text += "Γ";
+					else if (command == "sigma")
+						text += "σ";
+					else if (command == "oplus")
+						text += "⊕";
+					else if (command == "otimes")
+						text += "⊗";
+					else if (command == "rangle")
+						text += "⟩";
+					else if (command == "langle")
+						text += "⟨";
+					else
+						text += "\\" + command;
+					continue;
+				}
+				text += latex[index++];
+			}
+			return text;
+		};
+		const auto parseArgument = [&](std::size_t &index) {
+			if (index < latex.size() && latex[index] == '{')
+			{
+				++index;
+				std::string text = parseText(parseText, index);
+				if (index < latex.size() && latex[index] == '}')
+					++index;
+				return text;
+			}
+			if (index < latex.size())
+				return std::string(1, latex[index++]);
+			return std::string{};
+		};
+		int nextOverlineGroup = 0;
+		const auto parse = [&](
+			const auto &self,
+			std::size_t &index,
+			int level,
+			bool overline,
+			int overlineGroup) -> void
+		{
+			while (index < latex.size())
+			{
+				if (latex[index] == '}')
+				{
+					++index;
+					return;
+				}
+				if ((latex[index] == '_' || latex[index] == '^') && index + 1 < latex.size())
+				{
+					const int childLevel = latex[index++] == '^' ? level + 1 : level - 1;
+					if (latex[index] == '{')
+						++index;
+					if (latex[index - 1] == '{')
+						self(self, index, childLevel, overline, overlineGroup);
+					else
+					{
+						std::string text(1, latex[index++]);
+						append(std::move(text), childLevel, overline, overlineGroup);
+					}
+					continue;
+				}
+				if (latex[index] == '\\')
+				{
+					const std::size_t begin = ++index;
+					while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index]))) ++index;
+					const std::string command(latex.substr(begin, index - begin));
+					if (command == "frac")
+					{
+						const std::string numerator = parseArgument(index);
+						const std::string denominator = parseArgument(index);
+						append(numerator, level, overline, overlineGroup, denominator);
+					}
+					else if (command == "sqrt")
+						append("√" + parseArgument(index), level, overline, overlineGroup);
+					else if (command == "bar")
+					{
+						const int group = ++nextOverlineGroup;
+						if (index < latex.size() && latex[index] == '{')
+							++index;
+						self(self, index, level, true, group);
+					}
+					else if (command == "Gamma")
+						append("Γ", level, overline, overlineGroup);
+					else if (command == "sigma")
+						append("σ", level, overline, overlineGroup);
+					else if (command == "oplus")
+						append("⊕", level, overline, overlineGroup);
+					else if (command == "otimes")
+						append("⊗", level, overline, overlineGroup);
+					else if (command == "rangle")
+						append("⟩", level, overline, overlineGroup);
+					else if (command == "langle")
+						append("⟨", level, overline, overlineGroup);
+					else
+						append("\\" + command, level, overline, overlineGroup);
+					continue;
+				}
+				if (level != 0 && latex[index] == ' ')
+				{
+					++index;
+					continue;
+				}
+				append(std::string(1, latex[index++]), level, overline, overlineGroup);
+			}
+		};
+		std::size_t index = 0;
+		parse(parse, index, 0, false, 0);
+		return result;
+	}
+
+	ActiveSpaceSelection BuildActiveSpaceSelection(const PointGroupReduction &reduction, const std::vector<std::size_t> &order,
+		const std::vector<bool> &activeVectors, const std::vector<std::string> &physicalLabels)
+	{
+		ActiveSpaceSelection selection;
+		struct Copy
+		{
+			std::string irrep;
+			int occurrence;
+			std::size_t first;
+		};
+		std::vector<Copy> copies;
+		for (std::size_t display : order)
+			if (display < reduction.projectedVectors.size() && display < activeVectors.size() && activeVectors[display])
+			{
+				const auto &vector = reduction.projectedVectors[display];
+				const bool exists = std::any_of(
+					copies.begin(), copies.end(), [&](const Copy &copy) {
+						return copy.irrep == vector.irrepLabel &&
+							copy.occurrence == vector.occurrenceIndex;
+					});
+				if (!exists) copies.push_back({vector.irrepLabel, vector.occurrenceIndex, display});
+			}
+		for (const Copy &copy : copies)
+		{
+			selection.irreps.push_back(copy.irrep);
+			int dimension = 0;
+			for (const auto &vector : reduction.projectedVectors)
+				if (vector.irrepLabel == copy.irrep && vector.occurrenceIndex == copy.occurrence)
+					dimension = std::max(dimension, vector.irrepRow + 1);
+			for (int row = 0; row < dimension; ++row)
+				for (std::size_t index = 0; index < reduction.projectedVectors.size(); ++index)
+					if (reduction.projectedVectors[index].irrepLabel == copy.irrep &&
+						reduction.projectedVectors[index].occurrenceIndex == copy.occurrence &&
+						reduction.projectedVectors[index].irrepRow == row)
+						selection.orbitalLabels.push_back(index < physicalLabels.size() ? physicalLabels[index] : "");
+		}
+		for (std::string &label : selection.orbitalLabels)
+			if (!label.empty())
+				label = FormatIrrepLabel(label, LabelStyle::Latex);
+		if (std::all_of(
+				selection.orbitalLabels.begin(), selection.orbitalLabels.end(),
+				[](const std::string &label) { return label.empty(); }))
+			selection.orbitalLabels.clear();
+		return selection;
+	}
+
+	std::string FormatMultiplets(const std::vector<MultipletTerm> &multiplets, TableFormat format)
+	{
+		std::string output;
+		if (format == TableFormat::Markdown)
+		{
+			output = "| Term | Count per row | States |\n|---|---|---|\n";
+		}
+		else
+		{
+			output = "\\begin{tabular}{lcc}\nTerm & Count per row & States \\\\\n\\hline\n";
+		}
+
+		for (const MultipletTerm &term : multiplets)
+		{
+			const LabelStyle style =
+				format == TableFormat::Markdown ? LabelStyle::Unicode : LabelStyle::Latex;
+			const std::string label =
+				FormatTermLabel(term.spinMultiplicity, term.irrepLabel, style);
+			if (format == TableFormat::Markdown)
+			{
+				output += "| " + label + " | " + std::to_string(term.countPerRow) +
+					" | " + std::to_string(term.totalStates) + " |\n";
+			}
+			else
+			{
+				output += "$" + label + "$ & " + std::to_string(term.countPerRow) +
+					" & " + std::to_string(term.totalStates) + " \\\\\n";
+			}
+		}
+		if (format == TableFormat::Latex)
+			output += "\\end{tabular}\n";
+		return output;
+	}
+
+	std::string DescribeErrorCategory(std::string_view code)
+	{
+		if (code.starts_with("symmetry.basis."))
+			return "Selection";
+		if (code.starts_with("python.groupy.analysis."))
+			return "Analysis";
+		if (code.starts_with("python."))
+			return "Python runtime";
+		return "Error";
+	}
+} // namespace DefectStudio
