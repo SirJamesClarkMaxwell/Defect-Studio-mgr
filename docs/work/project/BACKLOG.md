@@ -11,4 +11,4 @@ Open items found during manual testing that are not yet scheduled into a task.
   (`ResolvePythonExampleScript`, `ScientificRuntime/Python/ScriptBridgeUtils.cpp`). An exe built in one
   checkout but started from another repo's directory silently uses that repo's scripts ("Python script
   file was not found" for scripts that only exist in the exe's own checkout). Also search upward from the
-  executable's directory.
+  executable's directory. *Fixed on task/23-group-theory-panel (executable directory searched first).*
