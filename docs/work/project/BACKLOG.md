@@ -7,6 +7,10 @@ Open items found during manual testing that are not yet scheduled into a task.
   a tiny amount with the gizmo / G, then Ctrl+Z, and compare coordinates before/after. Suspects: float
   round-trip of Cartesian vs fractional positions in the transform command's undo, or a gizmo drag
   producing several commands.
+- **Flaky `JobSystemControlTests.RetryResubmitsFinishedJob`** (2026-09-13, full Release run on
+  task/23-group-theory-panel). Failed once in the full suite at `JobSystemControlTests.cpp:84` (got 1, expected 0),
+  passed 5/5 when run alone. Timing-dependent - likely waits on job state without a condition wait; look for a
+  sleep/poll race with other tests' load.
 - **Python example scripts are found relative to the working directory, not the executable**
   (`ResolvePythonExampleScript`, `ScientificRuntime/Python/ScriptBridgeUtils.cpp`). An exe built in one
   checkout but started from another repo's directory silently uses that repo's scripts ("Python script
