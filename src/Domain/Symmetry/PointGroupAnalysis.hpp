@@ -16,7 +16,8 @@ namespace DefectStudio
 	struct ExactCoefficient
 	{
 		std::string exact;    // SymPy str(), e.g. "sqrt(2)/2", "-1/2", "0"
-		double numeric = 0.0; // float() of that same expression
+		double numeric = 0.0; // float() of that same expression (real part for complex characters)
+		double numericImaginary = 0.0; // non-zero only for complex characters (e.g. C3, C4h irreps)
 	};
 
 	// One named site of the basis a representation is built on. For the NV- dangling-bond basis
@@ -24,7 +25,11 @@ namespace DefectStudio
 	struct BasisSite
 	{
 		std::string label;                  // "d", "a", "b", "c"
-		glm::dvec3 position{0.0, 0.0, 0.0}; // Cartesian, expressed in the point group's own frame
+		glm::dvec3 position{0.0, 0.0, 0.0}; // Cartesian. Spike request: point group's own frame.
+		                                    // Analysis request: any frame, centred on the analysis centre.
+		// Empty = match any site. When set, a group element may only map a site onto a site of the
+		// same element (N never permutes with C).
+		std::string element;
 	};
 
 	// A permutation representation: the point group permutes the basis sites among themselves, and
@@ -75,5 +80,68 @@ namespace DefectStudio
 		// Only irreps with multiplicity > 0, in the point group's own irrep order.
 		std::vector<IrrepMultiplicity> decomposition;
 		std::vector<SymmetryAdaptedVector> projectedVectors;
+	};
+
+	// --- Task 23: full analysis for the group-theory panel -------------------------------------
+
+	struct CharacterTable
+	{
+		std::string pointGroupLabel;
+		int groupOrder = 0;
+		std::vector<std::string> classLabels; // groupy class names, e.g. {"E", "2C3", "3sv"}
+		std::vector<int> classSizes;          // parallel to classLabels, e.g. {1, 2, 3}
+		std::vector<std::string> irrepLabels; // groupy irrep order, e.g. {"A1", "A2", "E"}
+		std::vector<int> irrepDimensions;     // parallel to irrepLabels
+		// characters[irrep][class], same orders as irrepLabels / classLabels.
+		std::vector<std::vector<ExactCoefficient>> characters;
+	};
+
+	struct PointGroupDetection
+	{
+		bool ran = false;        // false when the request named a group manually
+		bool determined = false; // false = Undetermined; `reason` says why, nothing else is filled
+		std::string pointGroupLabel; // groupy label the rest of the result uses, e.g. "C3v"
+		std::string detectorSymbol;  // raw pymatgen PointGroupAnalyzer sch_symbol, e.g. "C3v"
+		double tolerance = 0.0;      // Å, the tolerance the detector ran with
+		std::string reason;
+	};
+
+	// One many-electron term from groupy ActiveSpace.term_table().
+	struct MultipletTerm
+	{
+		std::string irrepLabel;   // "A2", "E", "A1"
+		int spinMultiplicity = 0; // 2S+1
+		int irrepDimension = 0;   // dΓ
+		int countPerRow = 0;      // how many times this (Γ, S) term occurs
+		int totalStates = 0;      // countPerRow * dΓ * (2S+1)
+	};
+
+	struct PointGroupAnalysisRequest
+	{
+		// Empty = detect with pymatgen PointGroupAnalyzer on the sites; otherwise a groupy label.
+		std::string pointGroupLabel;
+		// Centred on the analysis centre, in the structure's Cartesian frame. The bridge rotates them
+		// into groupy's standard frame itself (see PointGroupAnalysisResult::frameRotation).
+		std::vector<BasisSite> sites;
+		// Å. Used by detection AND by the permutation closure check - relaxed defect geometries are
+		// never closed at 1e-6.
+		double symmetryTolerance = 0.1;
+		// Multiplets: orbital irreps the user marks active + electron count. Empty irreps or
+		// activeElectronCount == 0 = no multiplet computation.
+		std::vector<std::string> activeOrbitalIrreps;
+		int activeElectronCount = 0;
+	};
+
+	struct PointGroupAnalysisResult
+	{
+		PointGroupDetection detection;
+		// Maps request Cartesian coordinates into groupy's standard frame: p_groupy = frameRotation * p.
+		// Identity when the sites already are in that frame.
+		glm::dmat3 frameRotation{1.0};
+		CharacterTable characterTable;
+		std::vector<ExactCoefficient> reducibleCharacters; // one per class, characterTable order
+		PointGroupReduction reduction;
+		std::vector<MultipletTerm> multiplets; // term_table order
+		int multipletTotalStates = 0;
 	};
 } // namespace DefectStudio

@@ -22,6 +22,7 @@ scientific-core = [
     "seekpath>=2.1",
     "matplotlib>=3.9",
     "pandas>=2.2",
+    "symengine>=0.11",
 ]
 scientific-extended = [
     "phonopy>=2.0",
