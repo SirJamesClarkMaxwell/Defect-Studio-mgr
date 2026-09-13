@@ -17,7 +17,7 @@ namespace DefectStudio
 	struct HiddenSceneState
 	{
 		std::vector<std::size_t> atomIndices;                            // ascending
-		std::vector<std::pair<std::size_t, std::size_t>> bondEndpoints; // (min, max) atom index, ascending
+		std::vector<std::pair<std::size_t, std::size_t>> bondEndpoints; // (min, max) atom index, in bond order
 		bool operator==(const HiddenSceneState &) const = default;
 	};
 
