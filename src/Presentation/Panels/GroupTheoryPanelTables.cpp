@@ -24,27 +24,85 @@ namespace DefectStudio
 		{
 			const float baseY = ImGui::GetCursorPosY();
 			const float baseSize = ImGui::GetFontSize() * sizeScale;
+			const float baseScreenY = ImGui::GetCursorScreenPos().y;
 			ImFont *font = ImGui::GetFont();
 			ImGui::BeginGroup();
 			bool first = true;
+			float overlineStart = 0.0f;
+			float overlineEnd = 0.0f;
+			bool hasOverline = false;
+			const auto drawOverline = [&]() {
+				if (hasOverline)
+					ImGui::GetWindowDrawList()->AddLine(
+						{overlineStart, baseScreenY + 0.08f * baseSize},
+						{overlineEnd, baseScreenY + 0.08f * baseSize},
+						ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
+				hasOverline = false;
+			};
 			for (const MathSegment &segment : SplitMathSegments(latex))
 			{
 				if (!first)
 					ImGui::SameLine(0.0f, 0.0f);
-				ImGui::SetCursorPosY(baseY + (segment.level > 0 ? -0.1f : segment.level < 0 ? 0.4f : 0.0f) * baseSize);
-				const bool pushed = sizeScale != 1.0f || segment.level != 0;
-				if (pushed)
-					ImGui::PushFont(font, MathSegmentFontSize(segment, sizeScale));
-				ImGui::TextUnformatted(segment.text.c_str());
-				if (segment.overline)
+				if (!segment.overline)
+					drawOverline();
+				if (!segment.denominator.empty())
 				{
-					const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-					ImGui::GetWindowDrawList()->AddLine({min.x, min.y + 0.12f * baseSize}, {max.x, min.y + 0.12f * baseSize}, ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
-				}
-				if (pushed)
+					const float padding = 3.0f;
+					const float fontSize = ImGui::GetStyle().FontSizeBase * sizeScale * 0.75f;
+					ImGui::PushFont(font, fontSize);
+					const float numeratorWidth = ImGui::CalcTextSize(segment.text.c_str()).x;
+					const float denominatorWidth = ImGui::CalcTextSize(segment.denominator.c_str()).x;
 					ImGui::PopFont();
+					const float width = std::max(numeratorWidth, denominatorWidth) + padding * 2.0f;
+					const float startX = ImGui::GetCursorPosX();
+					const float startScreenX = ImGui::GetCursorScreenPos().x;
+					ImGui::SetCursorPosY(baseY - 0.25f * baseSize);
+					ImGui::PushFont(font, fontSize);
+					ImGui::SetCursorPosX(startX + (width - numeratorWidth) * 0.5f);
+					ImGui::TextUnformatted(segment.text.c_str());
+					ImGui::PopFont();
+					const float lineY = ImGui::GetItemRectMax().y + 1.0f;
+					ImGui::SetCursorPosY(baseY + 0.42f * baseSize);
+					ImGui::PushFont(font, fontSize);
+					ImGui::SetCursorPosX(startX + (width - denominatorWidth) * 0.5f);
+					ImGui::TextUnformatted(segment.denominator.c_str());
+					ImGui::PopFont();
+					ImGui::GetWindowDrawList()->AddLine(
+						{startScreenX, lineY},
+						{startScreenX + width, lineY},
+						ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
+					ImGui::SetCursorPosX(startX);
+					ImGui::SetCursorPosY(baseY + baseSize);
+					ImGui::Dummy({width, baseSize * 0.5f});
+					if (segment.overline)
+					{
+						if (!hasOverline)
+							overlineStart = ImGui::GetItemRectMin().x;
+						overlineEnd = ImGui::GetItemRectMax().x;
+						hasOverline = true;
+					}
+				}
+				else
+				{
+					ImGui::SetCursorPosY(
+						baseY + (segment.level > 0 ? -0.1f : segment.level < 0 ? 0.4f : 0.0f) * baseSize);
+					const bool pushed = sizeScale != 1.0f || segment.level != 0;
+					if (pushed)
+						ImGui::PushFont(font, MathSegmentFontSize(segment, sizeScale));
+					ImGui::TextUnformatted(segment.text.c_str());
+					if (segment.overline)
+					{
+						if (!hasOverline)
+							overlineStart = ImGui::GetItemRectMin().x;
+						overlineEnd = ImGui::GetItemRectMax().x;
+						hasOverline = true;
+					}
+					if (pushed)
+						ImGui::PopFont();
+				}
 				first = false;
 			}
+			drawOverline();
 			ImGui::SetCursorPosY(baseY);
 			ImGui::EndGroup();
 		}
@@ -57,7 +115,14 @@ namespace DefectStudio
 				const bool pushed = sizeScale != 1.0f || segment.level != 0;
 				if (pushed)
 					ImGui::PushFont(ImGui::GetFont(), MathSegmentFontSize(segment, sizeScale));
-				width += ImGui::CalcTextSize(segment.text.c_str()).x;
+				if (segment.denominator.empty())
+					width += ImGui::CalcTextSize(segment.text.c_str()).x;
+				else
+				{
+					const float numeratorWidth = ImGui::CalcTextSize(segment.text.c_str()).x;
+					const float denominatorWidth = ImGui::CalcTextSize(segment.denominator.c_str()).x;
+					width += std::max(numeratorWidth, denominatorWidth) + 6.0f;
+				}
 				if (pushed)
 					ImGui::PopFont();
 			}
@@ -109,7 +174,15 @@ namespace DefectStudio
 			ImGui::TextWrapped("%s", detectionText.c_str());
 			return;
 		}
-		CenteredMathLabel(FormatIrrepLabel(m_Result->detection.pointGroupLabel, LabelStyle::Latex), 1.5f);
+		const std::string pointGroup = FormatIrrepLabel(m_Result->detection.pointGroupLabel, LabelStyle::Latex);
+		const std::string decomposition = FormatDecomposition(m_Result->reduction.decomposition, LabelStyle::Latex);
+		std::string header = pointGroup + "   " + decomposition;
+		if (m_Result->tensorPower > 0)
+			header += "   " + FormatTensorPower(
+				m_Result->tensorPower, m_Result->tensorPowerDecomposition, LabelStyle::Latex);
+		CenteredMathLabel(header, 1.5f);
+		if (m_Result->tensorPower > 0 && ImGui::IsItemHovered())
+			ImGui::SetTooltip("Plain direct-product power of the basis representation: no Pauli exclusion, no spin. Physical many-electron states are the Multiplets below.");
 		std::string detectionInfo;
 		if (!m_Result->detection.ran)
 			detectionInfo = "(manual)";
@@ -126,14 +199,6 @@ namespace DefectStudio
 			ImGui::GetCursorPosX() +
 			std::max(0.0f, (ImGui::GetContentRegionAvail().x - infoWidth) * 0.5f));
 		ImGui::TextDisabled("%s", detectionInfo.c_str());
-		CenteredMathLabel(FormatDecomposition(m_Result->reduction.decomposition, LabelStyle::Latex), 1.5f);
-		if (m_Result->tensorPower > 0)
-		{
-			CenteredMathLabel(
-				FormatTensorPower(m_Result->tensorPower, m_Result->tensorPowerDecomposition, LabelStyle::Latex), 1.0f);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Plain direct-product power of the basis representation: no Pauli exclusion, no spin. Physical many-electron states are the Multiplets below.");
-		}
 		drawProjectedVectors();
 		drawMultiplets();
 		if (ImGui::Button("Copy as Markdown"))
@@ -303,19 +368,30 @@ namespace DefectStudio
 			ImGui::TextUnformatted("Count per row");
 			ImGui::TableSetColumnIndex(2);
 			ImGui::TextUnformatted("States");
-			for (const MultipletTerm &term : m_Result->multiplets)
+			for (std::size_t termIndex = 0; termIndex < m_Result->multiplets.size(); ++termIndex)
 			{
+				const MultipletTerm &term = m_Result->multiplets[termIndex];
 				ImGui::TableNextRow();
+				ImGui::PushID(static_cast<int>(termIndex));
 				ImGui::TableSetColumnIndex(0);
-				const bool selected = m_SelectedTerm.has_value() && m_SelectedTerm->first == term.irrepLabel && m_SelectedTerm->second == term.spinMultiplicity;
-				if (ImGui::Selectable(("##term" + term.irrepLabel + std::to_string(term.spinMultiplicity)).c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
+				const bool selected = m_SelectedTerm.has_value() &&
+					m_SelectedTerm->first == term.irrepLabel &&
+					m_SelectedTerm->second == term.spinMultiplicity;
+				if (selected)
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(ImGuiCol_Header, 0.35f));
+				const ImVec2 labelPos = ImGui::GetCursorPos();
+				ImGui::SetNextItemAllowOverlap();
+				if (ImGui::Selectable(
+						"##term", selected, ImGuiSelectableFlags_SpanAllColumns,
+						{0.0f, ImGui::GetTextLineHeightWithSpacing()}))
 					m_SelectedTerm = std::make_pair(term.irrepLabel, term.spinMultiplicity);
-				ImGui::SameLine();
+				ImGui::SetCursorPos(labelPos);
 				MathLabel(FormatTermLabel(term.spinMultiplicity, term.irrepLabel, LabelStyle::Latex));
 				ImGui::TableSetColumnIndex(1);
 				ImGui::Text("%d", term.countPerRow);
 				ImGui::TableSetColumnIndex(2);
 				ImGui::Text("%d", term.totalStates);
+				ImGui::PopID();
 			}
 			ImGui::EndTable();
 		}
@@ -336,10 +412,11 @@ namespace DefectStudio
 					if (configuration != previous)
 					{
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
-						MathLabel(configuration);
+						MathLabel(configuration, 1.25f);
 						ImGui::PopStyleColor();
 					}
-					MathLabel(FormatWavefunction(state, m_Result->activeOrbitalLabels, LabelStyle::Unicode));
+					MathLabel(
+						FormatWavefunction(state, m_Result->activeOrbitalLabels, LabelStyle::Latex), 1.25f);
 					previous = configuration;
 				}
 			if (!m_Result->wavefunctionsSkippedReason.empty())
@@ -348,30 +425,37 @@ namespace DefectStudio
 				ImGui::SetClipboardText(
 					FormatTermWavefunctions(*m_Result, m_SelectedTerm->first, m_SelectedTerm->second).c_str());
 		}
-		if (ImGui::CollapsingHeader("Direct products Γᵢ ⊗ Γⱼ"))
+	}
+
+	void GroupTheoryPanel::drawDirectProducts()
+	{
+		ImGui::TextDisabled("Direct products");
+		const int columns = static_cast<int>(m_Result->characterTable.irrepLabels.size()) + 1;
+		const ImGuiTableFlags flags =
+			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+			ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame;
+		if (ImGui::BeginTable("##group_direct_products", columns, flags))
 		{
-			if (ImGui::BeginTable("##group_direct_products", static_cast<int>(m_Result->characterTable.irrepLabels.size()) + 1, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchSame))
+			for (std::size_t i = 0; i <= m_Result->characterTable.irrepLabels.size(); ++i)
+				ImGui::TableSetupColumn("");
+			for (std::size_t row = 0; row <= m_Result->characterTable.irrepLabels.size(); ++row)
 			{
-				for (std::size_t i = 0; i <= m_Result->characterTable.irrepLabels.size(); ++i)
-					ImGui::TableSetupColumn("");
-				for (std::size_t row = 0; row <= m_Result->characterTable.irrepLabels.size(); ++row)
+				ImGui::TableNextRow();
+				for (std::size_t column = 0; column <= m_Result->characterTable.irrepLabels.size(); ++column)
 				{
-					ImGui::TableNextRow();
-					for (std::size_t column = 0; column <= m_Result->characterTable.irrepLabels.size(); ++column)
-					{
-						ImGui::TableSetColumnIndex(static_cast<int>(column));
-						if (row == 0 && column == 0)
-							MathLabel(FormatIrrepLabel(m_Result->characterTable.pointGroupLabel, LabelStyle::Latex) +
-								" \\otimes " + FormatIrrepLabel(m_Result->characterTable.pointGroupLabel, LabelStyle::Latex));
-						else if (row == 0)
-							MathLabel(FormatIrrepLabel(m_Result->characterTable.irrepLabels[column - 1], LabelStyle::Latex));
-						else if (column == 0)
-							MathLabel(FormatIrrepLabel(m_Result->characterTable.irrepLabels[row - 1], LabelStyle::Latex));
-						else MathLabel(FormatIrrepSum(m_DirectProducts[row - 1][column - 1], LabelStyle::Latex));
-					}
+					ImGui::TableSetColumnIndex(static_cast<int>(column));
+					if (row == 0 && column == 0)
+						MathLabel(FormatIrrepLabel(m_Result->characterTable.pointGroupLabel, LabelStyle::Latex) +
+							" \\otimes " + FormatIrrepLabel(m_Result->characterTable.pointGroupLabel, LabelStyle::Latex));
+					else if (row == 0)
+						MathLabel(FormatIrrepLabel(m_Result->characterTable.irrepLabels[column - 1], LabelStyle::Latex));
+					else if (column == 0)
+						MathLabel(FormatIrrepLabel(m_Result->characterTable.irrepLabels[row - 1], LabelStyle::Latex));
+					else
+						MathLabel(FormatIrrepSum(m_DirectProducts[row - 1][column - 1], LabelStyle::Latex));
 				}
-				ImGui::EndTable();
 			}
+			ImGui::EndTable();
 		}
 	}
 

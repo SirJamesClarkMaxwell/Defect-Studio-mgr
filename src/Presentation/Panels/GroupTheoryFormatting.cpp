@@ -96,12 +96,12 @@ namespace DefectStudio
 
 			const std::string head = rest.substr(0, 1);
 			const std::string subscript = rest.substr(1, subscriptEnd - 1);
-		const std::string suffix = rest.substr(subscriptEnd);
-		if (style == LabelStyle::Unicode)
-			return multiplicity + head + FormatUnicodeSubscript(subscript) + suffix;
-		if (subscript.empty())
-			return multiplicity + head + suffix;
-		return multiplicity + head + "_{" + subscript + "}" + suffix;
+			const std::string suffix = rest.substr(subscriptEnd);
+			if (style == LabelStyle::Unicode)
+				return multiplicity + head + FormatUnicodeSubscript(subscript) + suffix;
+			if (subscript.empty())
+				return multiplicity + head + suffix;
+			return multiplicity + head + "_{" + subscript + "}" + suffix;
 		}
 
 		[[nodiscard]] std::string FormatLatexCell(const ExactCoefficient &value)
@@ -214,10 +214,76 @@ namespace DefectStudio
 	std::vector<MathSegment> SplitMathSegments(std::string_view latex)
 	{
 		std::vector<MathSegment> result;
-		const auto append = [&result](std::string text, int level, bool overline) {
-			if (text.empty()) return;
-			if (!result.empty() && result.back().level == level && result.back().overline == overline) result.back().text += text;
-			else result.push_back({std::move(text), level, overline});
+		const auto append = [&result](std::string text, int level, bool overline, std::string denominator = "") {
+			if (text.empty())
+				return;
+			if (denominator.empty() && !result.empty() && result.back().denominator.empty() &&
+				result.back().level == level && result.back().overline == overline)
+				result.back().text += text;
+			else
+				result.push_back({std::move(text), level, overline, std::move(denominator)});
+		};
+		const auto parseText = [&](const auto &self, std::size_t &index) -> std::string {
+			std::string text;
+			while (index < latex.size() && latex[index] != '}')
+			{
+				if (latex[index] == '{')
+				{
+					++index;
+					text += self(self, index);
+					if (index < latex.size() && latex[index] == '}')
+						++index;
+					continue;
+				}
+				if (latex[index] == '\\')
+				{
+					const std::size_t begin = ++index;
+					while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index])))
+						++index;
+					const std::string command(latex.substr(begin, index - begin));
+					if (command == "sqrt")
+					{
+						text += "√";
+						if (index < latex.size() && latex[index] == '{')
+						{
+							++index;
+							text += self(self, index);
+							if (index < latex.size() && latex[index] == '}')
+								++index;
+						}
+					}
+					else if (command == "Gamma")
+						text += "Γ";
+					else if (command == "sigma")
+						text += "σ";
+					else if (command == "oplus")
+						text += "⊕";
+					else if (command == "otimes")
+						text += "⊗";
+					else if (command == "rangle")
+						text += "⟩";
+					else if (command == "langle")
+						text += "⟨";
+					else
+						text += "\\" + command;
+					continue;
+				}
+				text += latex[index++];
+			}
+			return text;
+		};
+		const auto parseArgument = [&](std::size_t &index) {
+			if (index < latex.size() && latex[index] == '{')
+			{
+				++index;
+				std::string text = parseText(parseText, index);
+				if (index < latex.size() && latex[index] == '}')
+					++index;
+				return text;
+			}
+			if (index < latex.size())
+				return std::string(1, latex[index++]);
+			return std::string{};
 		};
 		const auto parse = [&](const auto &self, std::size_t &index, int level, bool overline) -> void {
 			while (index < latex.size())
@@ -230,7 +296,8 @@ namespace DefectStudio
 				if ((latex[index] == '_' || latex[index] == '^') && index + 1 < latex.size())
 				{
 					const int childLevel = latex[index++] == '^' ? level + 1 : level - 1;
-					if (latex[index] == '{') ++index;
+					if (latex[index] == '{')
+						++index;
 					if (latex[index - 1] == '{') self(self, index, childLevel, overline);
 					else
 					{
@@ -244,18 +311,32 @@ namespace DefectStudio
 					const std::size_t begin = ++index;
 					while (index < latex.size() && std::isalpha(static_cast<unsigned char>(latex[index]))) ++index;
 					const std::string command(latex.substr(begin, index - begin));
-					if (command == "bar")
+					if (command == "frac")
+					{
+						const std::string numerator = parseArgument(index);
+						const std::string denominator = parseArgument(index);
+						append(numerator, level, overline, denominator);
+					}
+					else if (command == "sqrt")
+						append("√" + parseArgument(index), level, overline);
+					else if (command == "bar")
 					{
 						if (index < latex.size() && latex[index] == '{')
 							++index;
 						self(self, index, level, true);
 					}
-					else if (command == "Gamma") append("Γ", level, overline);
-					else if (command == "sigma") append("σ", level, overline);
-					else if (command == "oplus") append("⊕", level, overline);
-					else if (command == "otimes") append("⊗", level, overline);
-					else if (command == "rangle") append("⟩", level, overline);
-					else if (command == "langle") append("⟨", level, overline);
+					else if (command == "Gamma")
+						append("Γ", level, overline);
+					else if (command == "sigma")
+						append("σ", level, overline);
+					else if (command == "oplus")
+						append("⊕", level, overline);
+					else if (command == "otimes")
+						append("⊗", level, overline);
+					else if (command == "rangle")
+						append("⟩", level, overline);
+					else if (command == "langle")
+						append("⟨", level, overline);
 					else append("\\" + command, level, overline);
 					continue;
 				}
@@ -328,88 +409,46 @@ namespace DefectStudio
 			output += std::string(reduction.siteLabels.size(), 'l') + "|l}\nIrrep & Copy & Row & ";
 		for (std::size_t index = 0; index < reduction.siteLabels.size(); ++index)
 		{
-			if (markdown) output += " " + reduction.siteLabels[index] + " |";
-			else output += std::string(index ? " & " : "") + reduction.siteLabels[index];
+			if (markdown)
+				output += " " + reduction.siteLabels[index] + " |";
+			else
+				output += std::string(index ? " & " : "") + reduction.siteLabels[index];
 		}
-		if (markdown) output += " Label |\n|---|---|---|";
-		else output += " & Label \\\\\n\\hline\n";
 		if (markdown)
-			for (std::size_t index = 0; index < reduction.siteLabels.size() + 1; ++index) output += "---|";
+			output += " Label |\n|---|---|---|";
+		else
+			output += " & Label \\\\\n\\hline\n";
+		if (markdown)
+			for (std::size_t index = 0; index < reduction.siteLabels.size() + 1; ++index)
+				output += "---|";
 		for (const std::size_t vectorIndex : order)
 		{
-			if (vectorIndex >= reduction.projectedVectors.size()) continue;
+			if (vectorIndex >= reduction.projectedVectors.size())
+				continue;
 			const auto &vector = reduction.projectedVectors[vectorIndex];
-			const std::string label = vectorIndex < physicalLabels.size() ? physicalLabels[vectorIndex] : "";
+			const std::string label =
+				vectorIndex < physicalLabels.size() ? physicalLabels[vectorIndex] : "";
 			if (markdown)
 			{
-				output += "\n| " + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Unicode) + " | " + std::to_string(vector.occurrenceIndex + 1) + " | " + std::to_string(vector.irrepRow + 1) + " |";
-				for (const auto &value : vector.coefficients) output += " " + FormatExactValue(value, LabelStyle::Unicode) + " |";
+				output += "\n| " + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Unicode) +
+					" | " + std::to_string(vector.occurrenceIndex + 1) +
+					" | " + std::to_string(vector.irrepRow + 1) + " |";
+				for (const auto &value : vector.coefficients)
+					output += " " + FormatExactValue(value, LabelStyle::Unicode) + " |";
 				output += " " + label + " |";
 			}
 			else
 			{
 				output += "$" + FormatIrrepLabel(vector.irrepLabel, LabelStyle::Latex) + "$ & " + std::to_string(vector.occurrenceIndex + 1) + " & " + std::to_string(vector.irrepRow + 1);
-				for (const auto &value : vector.coefficients) output += " & " + FormatLatexCell(value);
+				for (const auto &value : vector.coefficients)
+					output += " & " + FormatLatexCell(value);
 				output += " & " + label + " \\\\\n";
 			}
 		}
-		if (!markdown) output += "\\end{tabular}\n";
-		else output += "\n";
-		return output;
-	}
-
-	std::string FormatCharacterTable(
-		const CharacterTable &table,
-		const std::vector<ExactCoefficient> &reducible,
-		TableFormat format)
-	{
-		std::string output;
-		if (format == TableFormat::Markdown)
-		{
-			output += "| " + FormatIrrepLabel(table.pointGroupLabel, LabelStyle::Unicode);
-			for (const std::string &label : table.classLabels)
-				output += " | " + FormatClassLabel(label, LabelStyle::Unicode);
-			output += " |\n|---|";
-			for (std::size_t index = 0; index < table.classLabels.size(); ++index)
-				output += "---|";
+		if (!markdown)
+			output += "\\end{tabular}\n";
+		else
 			output += "\n";
-			for (std::size_t row = 0; row < table.irrepLabels.size(); ++row)
-			{
-				output += "| " + FormatIrrepLabel(table.irrepLabels[row], LabelStyle::Unicode);
-				for (const ExactCoefficient &value : table.characters[row])
-					output += " | " + value.exact;
-				output += " |\n";
-			}
-			if (!reducible.empty())
-			{
-				output += "| Γ";
-				for (const ExactCoefficient &value : reducible)
-					output += " | " + value.exact;
-				output += " |\n";
-			}
-			return output;
-		}
-
-		output += "\\begin{tabular}{l|" + std::string(table.classLabels.size(), 'c') + "}\n$";
-		output += FormatIrrepLabel(table.pointGroupLabel, LabelStyle::Latex) + "$";
-		for (const std::string &label : table.classLabels)
-			output += " & $" + FormatClassLabel(label, LabelStyle::Latex) + "$";
-		output += " \\\\\n\\hline\n";
-		for (std::size_t row = 0; row < table.irrepLabels.size(); ++row)
-		{
-			output += "$" + FormatIrrepLabel(table.irrepLabels[row], LabelStyle::Latex) + "$";
-			for (const ExactCoefficient &value : table.characters[row])
-				output += " & " + FormatLatexCell(value);
-			output += " \\\\\n";
-		}
-		if (!reducible.empty())
-		{
-			output += "$\\Gamma$";
-			for (const ExactCoefficient &value : reducible)
-				output += " & " + FormatLatexCell(value);
-			output += " \\\\\n";
-		}
-		output += "\\end{tabular}\n";
 		return output;
 	}
 

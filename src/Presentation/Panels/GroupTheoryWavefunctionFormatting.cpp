@@ -7,20 +7,27 @@
 
 namespace DefectStudio
 {
-	std::string FormatConfiguration(const std::vector<ActiveShell> &shells, const std::vector<int> &configuration)
+	std::string FormatConfiguration(
+		const std::vector<ActiveShell> &shells,
+		const std::vector<int> &configuration)
 	{
 		std::string result;
 		for (std::size_t index = 0; index < shells.size() && index < configuration.size(); ++index)
+		{
 			if (configuration[index] > 0)
 			{
 				result += shells[index].label;
 				if (configuration[index] != 1)
 					result += "^{" + std::to_string(configuration[index]) + "}";
 			}
+		}
 		return result;
 	}
 
-	std::string FormatWavefunction(const MultipletWavefunction &state, const std::vector<std::string> &orbitalLabels, LabelStyle style)
+	std::string FormatWavefunction(
+		const MultipletWavefunction &state,
+		const std::vector<std::string> &orbitalLabels,
+		LabelStyle style)
 	{
 		std::string prefix = "|" + FormatTermLabel(state.spinMultiplicity, state.irrepLabel, LabelStyle::Latex);
 		if (state.copyIndex > 0)
@@ -41,7 +48,10 @@ namespace DefectStudio
 			std::string ket = "|";
 			for (const SpinOrbital &orbital : determinant.occupied)
 			{
-				const std::string label = orbital.orbitalIndex < static_cast<int>(orbitalLabels.size()) ? orbitalLabels[orbital.orbitalIndex] : "?";
+				const std::string label =
+					orbital.orbitalIndex < static_cast<int>(orbitalLabels.size())
+						? orbitalLabels[orbital.orbitalIndex]
+						: "?";
 				ket += orbital.spinUp ? label : "\\bar{" + label + "}";
 			}
 			determinants.push_back(ket + "|");
@@ -78,7 +88,10 @@ namespace DefectStudio
 		return prefix + expansion;
 	}
 
-	std::string FormatTermWavefunctions(const PointGroupAnalysisResult &result, std::string_view irrepLabel, int spinMultiplicity)
+	std::string FormatTermWavefunctions(
+		const PointGroupAnalysisResult &result,
+		std::string_view irrepLabel,
+		int spinMultiplicity)
 	{
 		std::string output;
 		std::string previous;

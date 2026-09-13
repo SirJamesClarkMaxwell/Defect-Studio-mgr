@@ -100,11 +100,11 @@ namespace DefectStudio
 		}
 		else
 		{
-			const bool wideLayout = ImGui::GetContentRegionAvail().x >= 700.0f;
+			const float contentWidth = ImGui::GetContentRegionAvail().x;
 			const bool showCharacterTable = m_Result.has_value() && m_Result->detection.determined;
-			if (wideLayout && ImGui::BeginTable(
-					"##group_settings_and_characters", 2,
-					ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
+			if (contentWidth >= 900.0f && ImGui::BeginTable(
+					"##group_settings_and_characters", 3,
+					ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoBordersInBody))
 			{
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
@@ -112,7 +112,30 @@ namespace DefectStudio
 				drawGroupControls();
 				ImGui::TableSetColumnIndex(1);
 				if (showCharacterTable)
+				{
+					ImGui::TextDisabled("Character table");
 					drawCharacterTable();
+				}
+				ImGui::TableSetColumnIndex(2);
+				if (showCharacterTable)
+					drawDirectProducts();
+				ImGui::EndTable();
+			}
+			else if (contentWidth >= 550.0f && ImGui::BeginTable(
+					"##group_settings_and_characters", 2,
+					ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoBordersInBody))
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				drawBasis(focusedWindowId, *windowState, *record);
+				drawGroupControls();
+				ImGui::TableSetColumnIndex(1);
+				if (showCharacterTable)
+				{
+					ImGui::TextDisabled("Character table");
+					drawCharacterTable();
+					drawDirectProducts();
+				}
 				ImGui::EndTable();
 			}
 			else
@@ -120,7 +143,11 @@ namespace DefectStudio
 				drawBasis(focusedWindowId, *windowState, *record);
 				drawGroupControls();
 				if (showCharacterTable)
+				{
+					ImGui::TextDisabled("Character table");
 					drawCharacterTable();
+					drawDirectProducts();
+				}
 			}
 		}
 
@@ -303,7 +330,8 @@ namespace DefectStudio
 			? BuildActiveSpaceSelection(m_Result->reduction, m_VectorOrder, active, [&]() {
 				std::vector<std::string> labels;
 				labels.reserve(m_PhysicalBuffers.size());
-				for (const auto &buffer : m_PhysicalBuffers) labels.emplace_back(buffer.data());
+				for (const auto &buffer : m_PhysicalBuffers)
+					labels.emplace_back(buffer.data());
 				return labels;
 			}())
 			: ActiveSpaceSelection{};

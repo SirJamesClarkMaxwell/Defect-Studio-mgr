@@ -60,6 +60,7 @@ namespace DefectStudio
 		[[nodiscard]] std::optional<BasisKey> currentBasisKey() const;
 
 		void drawCharacterTable();
+		void drawDirectProducts();
 		void drawProjectedVectors();
 		void drawMultiplets();
 		void copyResults(TableFormat format);
