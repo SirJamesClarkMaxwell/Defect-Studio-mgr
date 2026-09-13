@@ -51,8 +51,9 @@ namespace DefectStudio
 		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_F, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
-			for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+			for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
 			{
+				const std::size_t pinIndex = AnnotationIndex(windowState.pinnedMeasurements, id);
 				if (pinIndex < windowState.pinnedMeasurements.size())
 					windowState.pinnedMeasurements[pinIndex].flipped ^= true;
 			}
@@ -64,14 +65,9 @@ namespace DefectStudio
 		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
-			// Descending order so earlier erases don't invalidate the indices still queued below.
-			std::vector<std::size_t> sortedSelection = windowState.selectedPinnedMeasurements;
-			std::sort(sortedSelection.begin(), sortedSelection.end(), std::greater<>());
-			for (const std::size_t pinIndex : sortedSelection)
-			{
-				if (pinIndex < windowState.pinnedMeasurements.size())
-					windowState.pinnedMeasurements.erase(windowState.pinnedMeasurements.begin() + pinIndex);
-			}
+			for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
+				windowState.pinnedMeasurements.erase(std::remove_if(windowState.pinnedMeasurements.begin(), windowState.pinnedMeasurements.end(),
+					[id](const auto &pin) { return pin.id == id; }), windowState.pinnedMeasurements.end());
 			windowState.selectedPinnedMeasurements.clear();
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
@@ -88,8 +84,9 @@ namespace DefectStudio
 			if (ImGui::IsKeyPressed(ImGuiKey_Period, false))
 			{
 				PushPinnedMeasurementUndoSnapshot(windowState);
-				for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+				for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
 				{
+					const std::size_t pinIndex = AnnotationIndex(windowState.pinnedMeasurements, id);
 					if (pinIndex < windowState.pinnedMeasurements.size())
 					{
 						float &scale = windowState.pinnedMeasurements[pinIndex].style.scale;
@@ -100,8 +97,9 @@ namespace DefectStudio
 			else if (ImGui::IsKeyPressed(ImGuiKey_Comma, false))
 			{
 				PushPinnedMeasurementUndoSnapshot(windowState);
-				for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+				for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
 				{
+					const std::size_t pinIndex = AnnotationIndex(windowState.pinnedMeasurements, id);
 					if (pinIndex < windowState.pinnedMeasurements.size())
 					{
 						float &scale = windowState.pinnedMeasurements[pinIndex].style.scale;
@@ -116,14 +114,11 @@ namespace DefectStudio
 		if (freeLabelSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
-			std::vector<std::size_t> sortedSelection = windowState.selectedFreeLabels;
-			std::sort(sortedSelection.begin(), sortedSelection.end(), std::greater<>());
-			for (const std::size_t labelIndex : sortedSelection)
-			{
-				if (labelIndex < windowState.freeLabels.size())
-					windowState.freeLabels.erase(windowState.freeLabels.begin() + labelIndex);
-			}
+			for (const SceneObjectId id : windowState.selectedFreeLabels)
+				windowState.freeLabels.erase(std::remove_if(windowState.freeLabels.begin(), windowState.freeLabels.end(),
+					[id](const auto &label) { return label.id == id; }), windowState.freeLabels.end());
 			windowState.selectedFreeLabels.clear();
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 
 		// Delete removes every selected scene arrow - same rationale as the pin/free-label Delete above.
@@ -168,7 +163,11 @@ namespace DefectStudio
 		const bool altHeld = ImGui::GetIO().KeyAlt;
 		const bool shiftHeld = ImGui::GetIO().KeyShift;
 		if (sceneArrowSelected && hovered && ctrlHeld && shiftHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
-			CopyArrowGeometry(windowState.sceneArrows[windowState.selectedSceneArrows.front()].style);
+		{
+			if (const RendererWindowState::SceneArrow *arrow =
+					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front()))
+				CopyArrowGeometry(arrow->style);
+		}
 		if (sceneArrowSelected && hovered && ctrlHeld && shiftHeld && ImGui::IsKeyPressed(ImGuiKey_V, false) &&
 			GetArrowGeometryClipboard().has_value())
 		{
@@ -176,7 +175,11 @@ namespace DefectStudio
 			PasteArrowGeometry(windowState, windowState.selectedSceneArrows);
 		}
 		if (sceneArrowSelected && hovered && altHeld && !shiftHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
-			CopyArrowStyle(windowState.sceneArrows[windowState.selectedSceneArrows.front()].style);
+		{
+			if (const RendererWindowState::SceneArrow *arrow =
+					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front()))
+				CopyArrowStyle(arrow->style);
+		}
 		if (sceneArrowSelected && hovered && altHeld && shiftHeld && ImGui::IsKeyPressed(ImGuiKey_V, false) &&
 			GetArrowStyleClipboard().has_value())
 		{
@@ -193,9 +196,18 @@ namespace DefectStudio
 		if (labelSelected && !sceneArrowSelected && hovered && altHeld && !shiftHeld &&
 			ImGui::IsKeyPressed(ImGuiKey_C, false))
 		{
-			CopyLabelStyle(
-				pinSelected ? windowState.pinnedMeasurements[windowState.selectedPinnedMeasurements.front()].style
-							: windowState.freeLabels[windowState.selectedFreeLabels.front()].style);
+			const RendererWindowState::LabelStyle *style = nullptr;
+			if (pinSelected)
+			{
+				if (const auto *pin = FindAnnotation(windowState.pinnedMeasurements, windowState.selectedPinnedMeasurements.front()))
+					style = &pin->style;
+			}
+			else if (const auto *label = FindAnnotation(windowState.freeLabels, windowState.selectedFreeLabels.front()))
+			{
+				style = &label->style;
+			}
+			if (style != nullptr)
+				CopyLabelStyle(*style);
 		}
 		if (labelSelected && !sceneArrowSelected && hovered && altHeld && shiftHeld &&
 			ImGui::IsKeyPressed(ImGuiKey_V, false) && GetLabelStyleClipboard().has_value())
@@ -226,10 +238,13 @@ namespace DefectStudio
 			if (eventBus != nullptr)
 			{
 				using DragTarget = RendererWindowState::SceneArrowDragTarget;
-				const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[windowState.selectedSceneArrows.front()];
-				const glm::vec3 position = windowState.sceneArrowGizmoActiveTarget == DragTarget::Start ? arrow.start
-					: windowState.sceneArrowGizmoActiveTarget == DragTarget::End                        ? arrow.end
-																										  : (arrow.start + arrow.end) * 0.5f;
+				const RendererWindowState::SceneArrow *arrow =
+					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front());
+				if (arrow == nullptr)
+					return;
+				const glm::vec3 position = windowState.sceneArrowGizmoActiveTarget == DragTarget::Start ? arrow->start
+					: windowState.sceneArrowGizmoActiveTarget == DragTarget::End                        ? arrow->end
+																						  : (arrow->start + arrow->end) * 0.5f;
 				RendererEvents::Viewport::Cursor3DSetPositionRequested event;
 				event.windowId = windowState.windowId;
 				event.position = position;
@@ -307,7 +322,7 @@ namespace DefectStudio
 			// Uses the most-recently-selected pin (back()) purely as the reference point for
 			// converting screen-pixel mouse movement into a world-space delta - the SAME resulting
 			// delta then applies to every selected pin's worldOffset below (rigid group drag).
-			const std::size_t referenceIndex = windowState.selectedPinnedMeasurements.back();
+			const std::size_t referenceIndex = AnnotationIndex(windowState.pinnedMeasurements, windowState.selectedPinnedMeasurements.back());
 			if (referenceIndex >= windowState.pinnedMeasurements.size())
 			{
 				windowState.pinnedMeasurementDragging = false;
@@ -327,8 +342,9 @@ namespace DefectStudio
 					// screen Y is flipped vs cameraUp - same convention as the gizmo axis drag below.
 					const glm::vec3 worldDelta = cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
 						cameraUp * (deltaPixels.y / pixelsPerWorldUp);
-					for (const std::size_t pinIndex : windowState.selectedPinnedMeasurements)
+					for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
 					{
+						const std::size_t pinIndex = AnnotationIndex(windowState.pinnedMeasurements, id);
 						if (pinIndex < windowState.pinnedMeasurements.size())
 							windowState.pinnedMeasurements[pinIndex].worldOffset += worldDelta;
 					}
@@ -366,7 +382,7 @@ namespace DefectStudio
 			}
 		}
 
-		std::vector<std::size_t> &selection = windowState.selectedPinnedMeasurements;
+		std::vector<SceneObjectId> &selection = windowState.selectedPinnedMeasurements;
 		if (hitIndex < 0)
 		{
 			// Ctrl+click on empty space is a no-op (matches HandleAtomPick's additive convention) -
@@ -377,7 +393,7 @@ namespace DefectStudio
 			return false;
 		}
 
-		const std::size_t hitPin = static_cast<std::size_t>(hitIndex);
+		const SceneObjectId hitPin = windowState.pinnedMeasurements[static_cast<std::size_t>(hitIndex)].id;
 		const auto existing = std::find(selection.begin(), selection.end(), hitPin);
 		// Mutual exclusivity with free-label/arrow selection below - all three live in the same OR
 		// chain in Render() and short-circuit, so a pin hit here would otherwise leave a stale
@@ -453,7 +469,7 @@ namespace DefectStudio
 			// Reference point for the pixel->world conversion only - the resulting delta applies to
 			// every selected free label below (rigid group drag), same convention as the pinned
 			// measurement drag above.
-			const std::size_t referenceIndex = windowState.selectedFreeLabels.back();
+			const std::size_t referenceIndex = AnnotationIndex(windowState.freeLabels, windowState.selectedFreeLabels.back());
 			if (referenceIndex >= windowState.freeLabels.size())
 			{
 				windowState.freeLabelDragging = false;
@@ -471,8 +487,9 @@ namespace DefectStudio
 				const glm::vec2 deltaPixels = mousePos - windowState.freeLabelDragLastMouse;
 				const glm::vec3 worldDelta = cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
 					cameraUp * (deltaPixels.y / pixelsPerWorldUp);
-				for (const std::size_t labelIndex : windowState.selectedFreeLabels)
+				for (const SceneObjectId id : windowState.selectedFreeLabels)
 				{
+					const std::size_t labelIndex = AnnotationIndex(windowState.freeLabels, id);
 					if (labelIndex < windowState.freeLabels.size())
 						windowState.freeLabels[labelIndex].worldPosition += worldDelta;
 				}
@@ -502,7 +519,7 @@ namespace DefectStudio
 			}
 		}
 
-		std::vector<std::size_t> &selection = windowState.selectedFreeLabels;
+		std::vector<SceneObjectId> &selection = windowState.selectedFreeLabels;
 		if (hitIndex < 0)
 		{
 			if (!additive)
@@ -511,7 +528,7 @@ namespace DefectStudio
 			return false;
 		}
 
-		const std::size_t hitLabel = static_cast<std::size_t>(hitIndex);
+		const SceneObjectId hitLabel = windowState.freeLabels[static_cast<std::size_t>(hitIndex)].id;
 		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneArrows.clear();

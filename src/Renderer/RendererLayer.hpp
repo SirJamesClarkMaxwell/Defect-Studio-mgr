@@ -58,8 +58,8 @@ namespace DefectStudio
 	void CopyLabelStyle(const RendererWindowState::LabelStyle &style);
 	bool PasteLabelStyle(
 		RendererWindowState &windowState,
-		const std::vector<std::size_t> &pinIndices,
-		const std::vector<std::size_t> &freeLabelIndices);
+		const std::vector<SceneObjectId> &pinIds,
+		const std::vector<SceneObjectId> &freeLabelIds);
 
 	struct RendererStartupConfig
 	{

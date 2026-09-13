@@ -19,10 +19,10 @@ build. No long-lived epic branch — the app must work after every merge.
 
 | # | File | Branch | Status |
 |---|------|--------|--------|
-| 1 | [groupy-bridge.md](01-groupy-bridge.md) | `task/19-groupy-bridge-spike` | in progress |
-| 2 | [scene-object-model.md](02-scene-object-model.md) | `task/20-scene-object-model` | not started |
+| 1 | [groupy-bridge.md](01-groupy-bridge.md) | `task/19-groupy-bridge-spike` | contract landed, implementation in progress |
+| 2 | [scene-object-model.md](02-scene-object-model.md) | `task/20-scene-object-model` | spec written, not implemented |
 | 3 | [planes-and-labels.md](03-planes-and-labels.md) | `task/21-planes-and-labels` | not started |
-| 4 | [paths-and-arrows.md](04-paths-and-arrows.md) | — | not started |
+| 4 | [paths-and-arrows.md](04-paths-and-arrows.md) | `task/23-paths-and-arrows` | not started |
 | 5 | [bonds-and-orbitals.md](05-bonds-and-orbitals.md) | — | not started |
 | 6 | [electronic-structure-integration.md](06-electronic-structure-integration.md) | — | not started |
 | 7 | [basis-objects.md](07-basis-objects.md) | — | not started |
@@ -30,6 +30,15 @@ build. No long-lived epic branch — the app must work after every merge.
 | 9 | [nv-acceptance.md](09-nv-acceptance.md) | — | not started |
 | 10 | [result-presentation.md](10-result-presentation.md) | — | not started |
 | 11 | [deferred.md](11-deferred.md) | — | deferred by decision |
+
+Numbering note: `task/22-process-tree-cleanup` is **not** part of this plan — it is the Windows
+Job Object fix for zombie Python grandchildren, branched off while this plan was being sliced.
+Workstream 4 therefore takes 23, and every later workstream numbers from there.
+
+Serialization note: workstreams 2, 3, 4 and 5 all land on `SceneComponents.hpp` and
+`ObjectPropertiesPanel.cpp`. They are **not** parallelizable — 2 is the foundation and the rest
+queue behind it. Workstream 1 is the only one independent of that file set, which is why it and
+2 are the only two in flight.
 
 Ordering note: the locked plan put the `groupy` bridge last. It runs **first** as a thin vertical
 spike instead, because the bridge payload contract is the largest unknown in the plan (see Risks)

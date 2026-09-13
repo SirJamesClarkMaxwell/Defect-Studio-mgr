@@ -448,6 +448,12 @@ namespace DefectStudio
 		// downsample for free, same idea as SSAA. 1x is a no-op (identical to before this setting
 		// existed).
 		const float supersample = std::max(1.0f, settings.viewportSupersample);
+		const std::vector<std::size_t> selectedPinnedMeasurements =
+			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedPinnedMeasurements);
+		const std::vector<std::size_t> selectedFreeLabels =
+			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedFreeLabels);
+		const std::vector<std::size_t> selectedSceneArrows =
+			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,
@@ -461,11 +467,11 @@ namespace DefectStudio
 			windowState.showGrid,
 			windowState.showLabels,
 			windowState.pinnedMeasurements,
-			windowState.selectedPinnedMeasurements,
+			selectedPinnedMeasurements,
 			windowState.freeLabels,
-			windowState.selectedFreeLabels,
+			selectedFreeLabels,
 			windowState.sceneArrows,
-			windowState.selectedSceneArrows,
+			selectedSceneArrows,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
 			nullptr,
@@ -1565,21 +1571,23 @@ namespace DefectStudio
 
 	bool PasteLabelStyle(
 		RendererWindowState &windowState,
-		const std::vector<std::size_t> &pinIndices,
-		const std::vector<std::size_t> &freeLabelIndices)
+		const std::vector<SceneObjectId> &pinIds,
+		const std::vector<SceneObjectId> &freeLabelIds)
 	{
 		const std::optional<RendererWindowState::LabelStyle> &clipboard = GetLabelStyleClipboard();
-		if (!clipboard.has_value() || (pinIndices.empty() && freeLabelIndices.empty()))
+		if (!clipboard.has_value() || (pinIds.empty() && freeLabelIds.empty()))
 			return false;
-		for (const std::size_t index : pinIndices)
+		for (const SceneObjectId id : pinIds)
 		{
-			if (index < windowState.pinnedMeasurements.size())
-				windowState.pinnedMeasurements[index].style = *clipboard;
+			for (RendererWindowState::PinnedMeasurement &pin : windowState.pinnedMeasurements)
+				if (pin.id == id)
+					pin.style = *clipboard;
 		}
-		for (const std::size_t index : freeLabelIndices)
+		for (const SceneObjectId id : freeLabelIds)
 		{
-			if (index < windowState.freeLabels.size())
-				windowState.freeLabels[index].style = *clipboard;
+			for (RendererWindowState::FreeLabel &label : windowState.freeLabels)
+				if (label.id == id)
+					label.style = *clipboard;
 		}
 		return true;
 	}
@@ -1927,25 +1935,6 @@ namespace DefectStudio
 
 	namespace
 	{
-		// Keeps a multi-select vector consistent after erasing pinnedMeasurements[removedIndex]: drops
-		// the removed index from the selection (if present) and shifts every index past it down by one
-		// (whatever the erase already did to the vector itself) - shared by both places below that
-		// delete a pin outside of the normal click/Delete-key path (bulk M/Shift+M and Ctrl+Shift+M).
-		void RemoveIndexFromSelection(std::vector<std::size_t> &selection, std::size_t removedIndex)
-		{
-			for (std::size_t i = 0; i < selection.size();)
-			{
-				if (selection[i] == removedIndex)
-					selection.erase(selection.begin() + static_cast<std::ptrdiff_t>(i));
-				else
-				{
-					if (selection[i] > removedIndex)
-						--selection[i];
-					++i;
-				}
-			}
-		}
-
 		// A pin's identity is its atom SET, not the order the caller happened to list them in -
 		// callers pass raw bond endpoints or raw selection order, so this sorts before
 		// comparing/storing. removeIfPresent=true (the single-pair M/Shift+M press) toggles: pressing
@@ -1990,14 +1979,12 @@ namespace DefectStudio
 			{
 				if (!removeIfPresent)
 					return;
-				const auto removedIndex = std::distance(windowState.pinnedMeasurements.begin(), existing);
 				windowState.pinnedMeasurements.erase(existing);
-				RemoveIndexFromSelection(
-					windowState.selectedPinnedMeasurements, static_cast<std::size_t>(removedIndex));
 			}
 			else
 			{
 				RendererWindowState::PinnedMeasurement pin;
+				pin.id = windowState.sceneRegistry.AllocateObjectId();
 				pin.atomIndices = std::move(atomIndices);
 				pin.alignToBondDirection = pin.atomIndices.size() == 2 && windowState.bondLabelsAlignToDirection;
 				pin.bondPeriodicOffset = periodicOffset;
@@ -2131,8 +2118,11 @@ namespace DefectStudio
 					++i;
 					continue;
 				}
+				const SceneObjectId removedId = pin.id;
 				pins.erase(pins.begin() + static_cast<std::ptrdiff_t>(i));
-				RemoveIndexFromSelection(windowState.selectedPinnedMeasurements, i);
+				windowState.selectedPinnedMeasurements.erase(
+					std::remove(windowState.selectedPinnedMeasurements.begin(), windowState.selectedPinnedMeasurements.end(), removedId),
+					windowState.selectedPinnedMeasurements.end());
 			}
 			// See AddBondPinsWithinSet's matching comment - drop the no-op snapshot if nothing matched.
 			if (windowState.pinnedMeasurements.size() == countBefore)
@@ -2349,13 +2339,13 @@ namespace DefectStudio
 		{
 			windowState->selectedPinnedMeasurements.clear();
 			for (std::size_t index = 0; index < windowState->pinnedMeasurements.size(); ++index)
-				windowState->selectedPinnedMeasurements.push_back(index);
+				windowState->selectedPinnedMeasurements.push_back(windowState->pinnedMeasurements[index].id);
 			windowState->selectedFreeLabels.clear();
 			for (std::size_t index = 0; index < windowState->freeLabels.size(); ++index)
-				windowState->selectedFreeLabels.push_back(index);
+				windowState->selectedFreeLabels.push_back(windowState->freeLabels[index].id);
 			windowState->selectedSceneArrows.clear();
 			for (std::size_t index = 0; index < windowState->sceneArrows.size(); ++index)
-				windowState->selectedSceneArrows.push_back(index);
+				windowState->selectedSceneArrows.push_back(windowState->sceneArrows[index].id);
 		}
 	}
 

@@ -70,7 +70,7 @@ namespace DefectStudio
 	// the specific erased index matched the quick-edit target, since a cleared selection already
 	// fails the quick-edit panel's own "exactly one, matching" guard either way). Caller is
 	// responsible for pushing the undo snapshot first.
-	void EraseSceneArrows(RendererWindowState &windowState, std::vector<std::size_t> indices);
+	void EraseSceneArrows(RendererWindowState &windowState, std::vector<SceneObjectId> ids);
 
 	// In-process whole-arrow clipboard for Ctrl+C/Ctrl+V/Ctrl+D on SceneArrow selections (RendererPanel's
 	// raw key checks, mirroring the Delete-key precedent - see RendererAtomEditCommands.cpp's
@@ -94,6 +94,6 @@ namespace DefectStudio
 	// clipboard is empty. Like EraseSceneArrows, the caller pushes the undo snapshot first - so a
 	// combined "Paste Geometry + Style" call site can push exactly one snapshot covering both instead of
 	// two (one per function) that would need two Undos to fully revert.
-	bool PasteArrowGeometry(RendererWindowState &windowState, const std::vector<std::size_t> &targets);
-	bool PasteArrowStyle(RendererWindowState &windowState, const std::vector<std::size_t> &targets);
+	bool PasteArrowGeometry(RendererWindowState &windowState, const std::vector<SceneObjectId> &targets);
+	bool PasteArrowStyle(RendererWindowState &windowState, const std::vector<SceneObjectId> &targets);
 } // namespace DefectStudio

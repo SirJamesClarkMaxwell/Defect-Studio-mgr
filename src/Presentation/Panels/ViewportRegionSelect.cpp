@@ -408,10 +408,13 @@ namespace DefectStudio
 			windowState.selectedSceneArrows.clear();
 		}
 
-		auto applyHits = [](std::vector<std::size_t> &selection, const std::vector<std::size_t> &hits, bool subtract) {
+		auto applyHits = [](auto &selection, const auto &objects, const std::vector<std::size_t> &hits, bool subtract) {
 			for (const std::size_t hit : hits)
 			{
-				const auto existing = std::find(selection.begin(), selection.end(), hit);
+				if (hit >= objects.size())
+					continue;
+				const SceneObjectId id = objects[hit].id;
+				const auto existing = std::find(selection.begin(), selection.end(), id);
 				if (subtract)
 				{
 					if (existing != selection.end())
@@ -419,14 +422,14 @@ namespace DefectStudio
 				}
 				else if (existing == selection.end())
 				{
-					selection.push_back(hit);
+					selection.push_back(id);
 				}
 			}
 		};
 		const bool subtract = mode == RegionSelectMode::Subtract;
-		applyHits(windowState.selectedPinnedMeasurements, pinnedHits, subtract);
-		applyHits(windowState.selectedFreeLabels, freeHits, subtract);
-		applyHits(windowState.selectedSceneArrows, arrowHits, subtract);
+		applyHits(windowState.selectedPinnedMeasurements, windowState.pinnedMeasurements, pinnedHits, subtract);
+		applyHits(windowState.selectedFreeLabels, windowState.freeLabels, freeHits, subtract);
+		applyHits(windowState.selectedSceneArrows, windowState.sceneArrows, arrowHits, subtract);
 
 		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 	}

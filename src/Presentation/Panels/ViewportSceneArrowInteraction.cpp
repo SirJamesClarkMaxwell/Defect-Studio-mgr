@@ -31,6 +31,12 @@
 
 namespace DefectStudio
 {
+	[[nodiscard]] static std::size_t ArrowIndex(const RendererWindowState &windowState, const SceneObjectId id)
+	{
+		const auto found = std::find_if(windowState.sceneArrows.begin(), windowState.sceneArrows.end(), [id](const auto &arrow) { return arrow.id == id; });
+		return found == windowState.sceneArrows.end() ? windowState.sceneArrows.size() : static_cast<std::size_t>(std::distance(windowState.sceneArrows.begin(), found));
+	}
+
 	// Click-select + drag for sceneArrows - same click/Ctrl-toggle/drag shape as
 	// HandleFreeLabelInteraction above, but the hit-test is against a SEGMENT (start->end), not a
 	// single anchor point, and a single selected arrow's drag moves only whichever endpoint was
@@ -72,7 +78,7 @@ namespace DefectStudio
 				return false;
 			}
 
-			const std::size_t referenceIndex = windowState.selectedSceneArrows.back();
+			const std::size_t referenceIndex = ArrowIndex(windowState, windowState.selectedSceneArrows.back());
 			if (referenceIndex >= windowState.sceneArrows.size())
 			{
 				windowState.sceneArrowDragging = false;
@@ -97,8 +103,9 @@ namespace DefectStudio
 				const glm::vec2 deltaPixels = mousePos - windowState.sceneArrowDragLastMouse;
 				const glm::vec3 worldDelta = cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
 					cameraUp * (deltaPixels.y / pixelsPerWorldUp);
-				for (const std::size_t arrowIndex : windowState.selectedSceneArrows)
+				for (const SceneObjectId arrowId : windowState.selectedSceneArrows)
 				{
+					const std::size_t arrowIndex = ArrowIndex(windowState, arrowId);
 					if (arrowIndex >= windowState.sceneArrows.size())
 						continue;
 					SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
@@ -192,7 +199,7 @@ namespace DefectStudio
 			}
 		}
 
-		std::vector<std::size_t> &selection = windowState.selectedSceneArrows;
+		std::vector<SceneObjectId> &selection = windowState.selectedSceneArrows;
 		if (hitIndex < 0)
 		{
 			if (!additive)
@@ -200,7 +207,7 @@ namespace DefectStudio
 			return false;
 		}
 
-		const std::size_t hitArrow = static_cast<std::size_t>(hitIndex);
+		const SceneObjectId hitArrow = windowState.sceneArrows[static_cast<std::size_t>(hitIndex)].id;
 		const auto existing = std::find(selection.begin(), selection.end(), hitArrow);
 		// Mutual exclusivity with label selection, same convention as pin/free-label clicks above.
 		windowState.selectedPinnedMeasurements.clear();

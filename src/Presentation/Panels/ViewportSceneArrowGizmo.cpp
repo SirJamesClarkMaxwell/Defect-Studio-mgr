@@ -31,6 +31,12 @@
 
 namespace DefectStudio
 {
+	[[nodiscard]] static std::size_t ArrowIndex(const RendererWindowState &windowState, const SceneObjectId id)
+	{
+		const auto found = std::find_if(windowState.sceneArrows.begin(), windowState.sceneArrows.end(), [id](const auto &arrow) { return arrow.id == id; });
+		return found == windowState.sceneArrows.end() ? windowState.sceneArrows.size() : static_cast<std::size_t>(std::distance(windowState.sceneArrows.begin(), found));
+	}
+
 	// Drawn translate/rotate/scale gizmo for the current SceneArrow selection - sibling of
 	// RenderLabelTransformGizmo above (own state, no ICommand/UndoStack, PushPinnedMeasurementUndoSnapshot
 	// on drag start). Translate differs from every other gizmo in this file: exactly one arrow selected
@@ -60,8 +66,9 @@ namespace DefectStudio
 
 		glm::vec3 centroid(0.0f);
 		int centroidCount = 0;
-		for (const std::size_t index : windowState.selectedSceneArrows)
+		for (const SceneObjectId id : windowState.selectedSceneArrows)
 		{
+			const std::size_t index = ArrowIndex(windowState, id);
 			if (index >= windowState.sceneArrows.size())
 				continue;
 			centroid += windowState.sceneArrows[index].start;
@@ -73,7 +80,7 @@ namespace DefectStudio
 		centroid /= static_cast<float>(centroidCount);
 
 		const bool isSingleArrow = windowState.selectedSceneArrows.size() == 1 &&
-			windowState.selectedSceneArrows.front() < windowState.sceneArrows.size();
+			ArrowIndex(windowState, windowState.selectedSceneArrows.front()) < windowState.sceneArrows.size();
 
 		using DragTarget = RendererWindowState::SceneArrowDragTarget;
 		constexpr glm::vec3 kWorldAxes[3] = {
@@ -86,7 +93,7 @@ namespace DefectStudio
 		// to the whole-arrow midpoint whenever the selection changes to a different arrow (or stops
 		// being a single-arrow selection), so switching arrows never leaves a stale sub-target active.
 		const std::size_t currentSingleArrowIndex =
-			isSingleArrow ? windowState.selectedSceneArrows.front() : static_cast<std::size_t>(-1);
+			isSingleArrow ? ArrowIndex(windowState, windowState.selectedSceneArrows.front()) : static_cast<std::size_t>(-1);
 		if (windowState.sceneArrowGizmoActiveArrowIndex != currentSingleArrowIndex)
 		{
 			windowState.sceneArrowGizmoActiveArrowIndex = currentSingleArrowIndex;
@@ -112,8 +119,9 @@ namespace DefectStudio
 		// once, right as a handle/ring drag starts.
 		auto beginDrag = [&]() {
 			windowState.sceneArrowGizmoDragTargets.clear();
-			for (const std::size_t index : windowState.selectedSceneArrows)
+			for (const SceneObjectId id : windowState.selectedSceneArrows)
 			{
+				const std::size_t index = ArrowIndex(windowState, id);
 				if (index >= windowState.sceneArrows.size())
 					continue;
 				const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[index];
@@ -444,7 +452,7 @@ namespace DefectStudio
 		std::vector<Candidate> candidates;
 		if (isSingleArrow)
 		{
-			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[windowState.selectedSceneArrows.front()];
+			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())];
 			candidates.push_back({arrow.start, DragTarget::Start, 60.0f, false});
 			candidates.push_back({arrow.end, DragTarget::End, 60.0f, false});
 			candidates.push_back({(arrow.start + arrow.end) * 0.5f, DragTarget::Both, 100.0f, true});

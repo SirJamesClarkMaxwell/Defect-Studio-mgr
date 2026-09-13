@@ -44,10 +44,20 @@ namespace DefectStudio
 			const std::vector<glm::vec3> &positions,
 			float tolerance = 0.35f);
 
-		// (Re)builds one entity per pinned measurement from windowState.pinnedMeasurements, destroying
-		// any label entities from a previous sync first - same "resync on structural change" shape as
-		// SyncSceneWithStructure, not a per-frame rebuild. Call after any pin add/remove.
+		// (Re)builds one entity per annotation - pinned measurement, free label AND scene arrow -
+		// from the three vectors on windowState, destroying the previous set first; same "resync on
+		// structural change" shape as SyncSceneWithStructure, not a per-frame rebuild. Call after any
+		// add/remove on any of the three. Since task 20 it also assigns a SceneObjectId to any
+		// annotation whose id is still unset, so an object created without one is addressable from the
+		// next sync on.
 		void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState);
+
+		// Ids -> positions in the matching flat array, for the code that must still speak indices:
+		// OpenGlRendererBackend's signatures are deliberately untouched by task 20, so the render call
+		// sites convert right before the draw. Ids that no longer resolve are dropped rather than
+		// mapped to a wrong object - that is the whole point of the id.
+		[[nodiscard]] std::vector<std::size_t> ResolveSourceIndices(
+			const SceneRegistry &scene, const std::vector<SceneObjectId> &ids);
 
 		// Refreshes every label entity's TransformComponent.position from its pin's CURRENT anchor
 		// (bond midpoint / angle vertex) + worldOffset. Cheap enough to call every frame - pinned
