@@ -58,11 +58,15 @@ namespace DefectStudio
 		                  // \rangle -> ⟩, \langle -> ⟨)
 		int level = 0;
 		bool overline = false; // inside \bar{...}: spin-down orbital
+		// Non-empty = a stacked fraction: `text` is the numerator, this the denominator (both plain text).
+		std::string denominator;
 	};
 
 	// Parses the Latex output of the formatters in this header: `_{...}`, `^{...}`, `\bar{...}` (may
-	// contain `_{...}`) and the commands above. Spaces inside `_{}` / `^{}` are dropped. Adjacent runs
-	// with the same level and overline are merged. "3\sigma_{v}" -> {"3σ",0},{"v",-1}.
+	// contain `_{...}`), `\frac{num}{den}` (one fraction segment, never merged), `\sqrt{x}` -> "√x" and
+	// the commands above. Spaces inside `_{}` / `^{}` are dropped. Adjacent non-fraction runs with the
+	// same level and overline are merged. "3\sigma_{v}" -> {"3σ",0},{"v",-1};
+	// "-\frac{\sqrt{3}}{2}|a|" -> {"-",0},{"√3",0,false,"2"},{"|a|",0}.
 	[[nodiscard]] std::vector<MathSegment> SplitMathSegments(std::string_view latex);
 
 	// "A₁ ⊕ A₂ ⊕ E" / "A_{1} \oplus A_{2} \oplus E"; multiplicity 1 omitted; empty -> "0".
