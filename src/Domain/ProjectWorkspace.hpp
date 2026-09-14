@@ -21,6 +21,9 @@ namespace DefectStudio
 		int revision = 0;         // dirty flag: bumped on every mutation, compared to savedRevision
 		int savedRevision = 0;    // revision at last save time
 		bool exportPotcar = false; // export POTCAR file on save (if pseudodir configured)
+		// Atoms/cell changed since the POSCAR at sourcePath was last written. Separate from revision,
+		// which scene-object edits bump too: Ctrl+S rewrites the POSCAR only when this is set.
+		bool structureFileDirty = false;
 	};
 
 	class StructureRegistry
@@ -58,6 +61,13 @@ namespace DefectStudio
 		// Bumps revision by one (never decreases it - undo/redo call this too, so undo-after-save is
 		// dirty). Returns false for an unknown id.
 		bool MarkModified(const StructureId &id);
+
+		// Atom-edit commands (Execute/Undo/Redo): MarkModified plus structureFileDirty = true.
+		// Returns false for an unknown id.
+		bool MarkStructureFileModified(const StructureId &id);
+
+		// After the POSCAR was written successfully. Returns false for an unknown id.
+		bool ClearStructureFileDirty(const StructureId &id);
 
 		[[nodiscard]] WeakRef<const StructureRecord> Find(const StructureId &id) const;
 		// Non-const counterpart to Find - for in-place edits of an already-registered structure

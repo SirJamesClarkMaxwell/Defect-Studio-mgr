@@ -20,9 +20,14 @@ namespace DefectStudio
 		// two concurrent writes would overwrite under each other. Callers pass a path unique to their
 		// attempt, and one that lives OUTSIDE any directory that will be committed - a failed cleanup
 		// of this file must never be able to leak into a finished structure directory.
+		//
+		// Atoms are written sorted by species, then fractional x/y/z, so indices in the file can differ
+		// from the in-memory order. `overwriteExisting` = false refuses an existing outputPath (new
+		// structure directories); true atomically replaces it (Ctrl+S of an edited project structure).
 		[[nodiscard]] static Result<void> Write(
 			const CrystalStructure &structure,
 			const Path &outputPath,
-			const Path &inputJsonPath);
+			const Path &inputJsonPath,
+			bool overwriteExisting = false);
 	};
 } // namespace DefectStudio

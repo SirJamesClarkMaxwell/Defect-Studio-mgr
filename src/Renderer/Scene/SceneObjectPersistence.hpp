@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +20,14 @@ namespace DefectStudio
 		const PersistedAtomRef &reference,
 		float toleranceAngstrom = kSceneAtomLinkToleranceAngstrom);
 
+	// Index to bind a persisted reference to: reference.index when AtomReferenceBinds holds there,
+	// otherwise the nearest atom with the same element within the tolerance (atoms were reordered,
+	// e.g. by the species sort when the POSCAR was saved). nullopt when neither exists.
+	[[nodiscard]] std::optional<std::size_t> ResolveAtomReference(
+		const RendererStructureData &structure,
+		const PersistedAtomRef &reference,
+		float toleranceAngstrom = kSceneAtomLinkToleranceAngstrom);
+
 	// Random 128-bit key as 32 lowercase hex chars.
 	[[nodiscard]] std::string GenerateScenePersistKey();
 
@@ -32,7 +42,8 @@ namespace DefectStudio
 	// File -> window. Replaces the window's pinnedMeasurements/freeLabels/sceneArrows, clears their
 	// selections and the label undo/redo stacks. Every object gets a freshly allocated SceneObjectId
 	// from window.sceneRegistry (file ids are never reused); persistKey is kept as-is (a new one is
-	// generated when empty). A pin whose atom references do not all bind gets linkBroken = true, its
+	// generated when empty). Pin atom indices come from ResolveAtomReference, so a reordered structure
+	// rebinds silently. A pin whose atom references do not all resolve gets linkBroken = true, its
 	// frozen atom data filled from the file, and one Severity::Warning StructuredError with code
 	// "scene_objects.link_broken" is appended to outWarnings.
 	void ApplyPersistedSceneObjects(

@@ -49,6 +49,34 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(AtomReferenceBinds(window.structure, {2, "C", glm::vec3(0.0f)}));
 	}
 
+	TEST(SceneObjectPersistenceTests, ResolveAtomReferenceFallsBackToElementAndPosition)
+	{
+		const RendererWindowState window = MakeWindow();
+		EXPECT_EQ(ResolveAtomReference(window.structure, {1, "N", glm::vec3(1.5f, 0.0f, 0.0f)}), std::optional<std::size_t>(1));
+		// Reordered: index 2 now holds a different C, the saved one moved to index 0.
+		EXPECT_EQ(ResolveAtomReference(window.structure, {2, "C", glm::vec3(0.01f, 0.0f, 0.0f)}), std::optional<std::size_t>(0));
+		EXPECT_EQ(ResolveAtomReference(window.structure, {9, "N", glm::vec3(1.5f, 0.0f, 0.0f)}), std::optional<std::size_t>(1));
+		// Element changed at that position (unsaved substitution): no binding.
+		EXPECT_EQ(ResolveAtomReference(window.structure, {1, "C", glm::vec3(1.5f, 0.0f, 0.0f)}), std::nullopt);
+		EXPECT_EQ(ResolveAtomReference(window.structure, {0, "C", glm::vec3(5.0f, 5.0f, 5.0f)}), std::nullopt);
+	}
+
+	TEST(SceneObjectPersistenceTests, ApplyRebindsPinToReorderedAtoms)
+	{
+		RendererWindowState window = MakeWindow();
+		PersistedPinnedMeasurement pin;
+		pin.persistKey = "sorted";
+		pin.atomRefs = {{2, "C", glm::vec3(0.0f)}, {0, "N", glm::vec3(1.5f, 0.0f, 0.0f)}};
+
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(window, {pin}, warnings);
+
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(window.pinnedMeasurements.size(), 1u);
+		EXPECT_FALSE(window.pinnedMeasurements[0].linkBroken);
+		EXPECT_EQ(window.pinnedMeasurements[0].atomIndices, (std::vector<std::size_t>{0, 1}));
+	}
+
 	TEST(SceneObjectPersistenceTests, PersistKeysAreFilledOnceAndAreHex128)
 	{
 		RendererWindowState window = MakeWindow();
