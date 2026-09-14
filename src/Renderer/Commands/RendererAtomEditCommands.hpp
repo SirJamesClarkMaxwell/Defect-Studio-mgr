@@ -78,6 +78,7 @@ namespace DefectStudio
 		WeakRef<DomainLayer> domainLayer,
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
 		GizmoTransformPayload payload);
 
 	// Keyboard nudge (Shift+Arrows) for the current selection - one undoable step per press, moving
@@ -89,6 +90,7 @@ namespace DefectStudio
 		WeakRef<DomainLayer> domainLayer,
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
 		glm::vec2 screenDirection);
 
 	// Copies the current selection into an in-process clipboard (shared across every window/command
