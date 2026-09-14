@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 
 namespace DefectStudio::SceneSystem
@@ -172,6 +173,18 @@ namespace DefectStudio::SceneSystem
 		[[nodiscard]] bool ResolveLabelAnchor(
 			const RendererStructureData &structure, const RendererWindowState::PinnedMeasurement &pin, glm::vec3 &outAnchor)
 		{
+			if (pin.linkBroken)
+			{
+				if (pin.frozenAtomPositions.size() != pin.atomIndices.size() ||
+					(pin.atomIndices.size() != 2 && pin.atomIndices.size() != 3))
+					return false;
+				if (pin.atomIndices.size() == 2)
+					outAnchor = (pin.frozenAtomPositions[0] + pin.frozenAtomPositions[1]) * 0.5f;
+				else
+					outAnchor = pin.frozenAtomPositions[1];
+				outAnchor += pin.worldOffset;
+				return true;
+			}
 			const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(),
 				[&](const std::size_t index) { return index < structure.atoms.size(); });
 			if (!inRange)
@@ -199,6 +212,7 @@ namespace DefectStudio::SceneSystem
 
 	void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState)
 	{
+		EnsureScenePersistKeys(windowState);
 		for (const entt::entity entity : scene.LabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.LabelEntities().clear();

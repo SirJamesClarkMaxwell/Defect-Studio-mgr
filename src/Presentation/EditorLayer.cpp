@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <sstream>
@@ -25,6 +26,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Core/Utils/Uuid.hpp"
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Events/EditorUiEvents.hpp"
@@ -35,7 +37,11 @@
 #include "IO/ProjectManifestIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/RecentProjectsIO.hpp"
+#include "IO/SceneObjectsIO.hpp"
 #include "IO/TextFileIO.hpp"
+#include "Presentation/ProjectSceneSave.hpp"
+#include "Renderer/Scene/SceneObjectPersistence.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
 #include "Presentation/Panels/NewStructureWizardPanel.hpp"
@@ -749,6 +755,96 @@ namespace DefectStudio
 		loadAndQueueProjectWindowRestores();
 	}
 
+	void EditorLayer::onSceneObjectsModified(const ProjectEvents::SceneObjectsModified &event)
+	{
+		// Scene objects only persist inside a project, so outside one there is nothing to mark dirty.
+		if (m_ActiveProject.has_value() && !event.structureId.is_nil())
+		{
+			if (auto domainLayer = m_DomainLayer.lock())
+			{
+				domainLayer->Workspace().Structures().MarkModified(event.structureId);
+			}
+		}
+	}
+
+	void EditorLayer::loadSceneObjectsForProject()
+	{
+		m_KeptSceneObjects = {};
+		m_AppliedSceneObjectWindows.clear();
+		if (!m_ActiveProject.has_value())
+			return;
+		std::vector<StructuredError> warnings;
+		std::string error;
+		if (!SceneObjectsIO::Load(m_ActiveProjectDirectory, m_KeptSceneObjects, warnings, error))
+		{
+			DS_LOG_WARN("EditorLayer: scene object load failed: {}", error);
+			return;
+		}
+		for (const StructuredError &warning : warnings)
+		{
+			DS_LOG_WARN("EditorLayer: {}", warning.technicalDetails);
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
+		}
+		if (auto rendererLayer = m_RendererLayer.lock())
+		{
+			for (RendererWindowState &window : rendererLayer->GetWindows())
+			{
+				applySceneObjectsToWindow(window);
+			}
+		}
+	}
+
+	void EditorLayer::applySceneObjectsToWindow(RendererWindowState &windowState)
+	{
+		if (!m_ActiveProject.has_value() || windowState.structureId.is_nil() || m_AppliedSceneObjectWindows.contains(windowState.windowId))
+			return;
+		auto domainLayer = m_DomainLayer.lock();
+		if (domainLayer == nullptr)
+			return;
+		const auto record = domainLayer->Workspace().Structures().Find(windowState.structureId).lock();
+		if (record == nullptr)
+			return;
+		const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+		std::vector<PersistedSceneObject> objects;
+		bool found = false;
+		if (auto rendererLayer = m_RendererLayer.lock())
+		{
+			for (const RendererWindowState &other : rendererLayer->GetWindows())
+			{
+				if (other.windowId != windowState.windowId && other.structureId == windowState.structureId && m_AppliedSceneObjectWindows.contains(other.windowId))
+				{
+					objects = ExtractPersistedSceneObjects(other);
+					found = true;
+					break;
+				}
+			}
+		}
+		if (!found)
+		{
+			for (const PersistedStructureSceneObjects &entry : m_KeptSceneObjects.structures)
+			{
+				if (entry.structureKey == key)
+				{
+					objects = entry.objects;
+					found = true;
+					break;
+				}
+			}
+		}
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(windowState, objects, warnings);
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		for (const StructuredError &warning : warnings)
+		{
+			if (m_EventBus != nullptr)
+			{
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
+			}
+		}
+		m_AppliedSceneObjectWindows.insert(windowState.windowId);
+	}
+
 	void EditorLayer::saveProjectWindowState()
 	{
 		auto rendererLayer = m_RendererLayer.lock();
@@ -839,15 +935,15 @@ namespace DefectStudio
 
 	void EditorLayer::pollPendingWindowRestores()
 	{
-		if (m_PendingWindowRestores.empty())
-			return;
-
 		auto rendererLayer = m_RendererLayer.lock();
 		if (rendererLayer == nullptr)
 			return;
 
 		for (RendererWindowState &windowState : rendererLayer->GetWindows())
 		{
+			applySceneObjectsToWindow(windowState);
+			if (m_PendingWindowRestores.empty())
+				continue;
 			const auto it = m_PendingWindowRestores.find(windowState.windowId);
 			if (it == m_PendingWindowRestores.end())
 				continue;
@@ -1185,6 +1281,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onProjectTreeSelectionChanged, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<DomainEvents::ProjectStructureAdded>(
 			*m_EventBus, *this, &EditorLayer::onProjectStructureAdded, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::SceneObjectsModified>(
+			*m_EventBus, *this, &EditorLayer::onSceneObjectsModified, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::WavecarDropped>(
 			*m_EventBus, *this, &EditorLayer::onWavecarDropped, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::TextFileOpenRequested>(
@@ -1220,6 +1318,7 @@ namespace DefectStudio
 			{
 				m_ActiveProject = std::move(manifest);
 				m_ActiveProjectDirectory = recents.front().projectDirectory;
+				loadSceneObjectsForProject();
 				opened = true;
 			}
 			else
@@ -1272,6 +1371,7 @@ namespace DefectStudio
 
 		m_ActiveProject = std::move(manifest);
 		m_ActiveProjectDirectory = directory;
+		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
 
@@ -1297,6 +1397,7 @@ namespace DefectStudio
 
 		m_ActiveProject = std::move(manifest);
 		m_ActiveProjectDirectory = directory;
+		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
 
@@ -1619,7 +1720,80 @@ namespace DefectStudio
 
 	void EditorLayer::onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &)
 	{
-		persistCurrentRoots();
+		if (!m_ActiveProject.has_value())
+		{
+			persistCurrentRoots();
+			return;
+		}
+		SceneObjectsFile sceneObjects = m_KeptSceneObjects;
+		std::vector<StructureId> savedStructures;
+		if (auto domainLayer = m_DomainLayer.lock())
+		{
+			if (auto rendererLayer = m_RendererLayer.lock())
+			{
+				std::unordered_map<std::string, std::vector<std::pair<std::string, std::vector<PersistedSceneObject>>>>
+					grouped;
+				std::unordered_map<std::string, StructureId> ids;
+				for (const RendererWindowState &window : rendererLayer->GetWindows())
+				{
+					if (window.structureId.is_nil())
+						continue;
+					const auto record = domainLayer->Workspace().Structures().Find(window.structureId).lock();
+					if (record == nullptr)
+						continue;
+					const std::string key =
+						SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+					grouped[key].push_back({window.windowId, ExtractPersistedSceneObjects(window)});
+					ids[key] = window.structureId;
+				}
+				for (auto &[key, windows] : grouped)
+				{
+					const std::string &active = rendererLayer->GetLastFocusedViewportWindowId();
+					std::vector<std::vector<PersistedSceneObject>> ordered;
+					for (const auto &window : windows)
+						if (window.first != active)
+							ordered.push_back(window.second);
+					for (const auto &window : windows)
+						if (window.first == active)
+							ordered.push_back(window.second);
+					const auto merged = MergeWindowSceneObjects(ordered);
+					auto entry = std::find_if(sceneObjects.structures.begin(), sceneObjects.structures.end(),
+											  [&](const auto &candidate) { return candidate.structureKey == key; });
+					if (entry == sceneObjects.structures.end())
+						sceneObjects.structures.push_back({key, merged});
+					else
+						entry->objects = merged;
+					savedStructures.push_back(ids[key]);
+				}
+			}
+		}
+		std::string error;
+		auto domainLayer = m_DomainLayer.lock();
+		std::vector<StructuredError> warnings;
+		const StructureFileWriter writeStructureFile = [](const CrystalStructure &structure, const Path &path) {
+			const Path scratch = Path::FromResolved(
+				std::filesystem::temp_directory_path() / ("defectstudio_poscar_" + ToString(GenerateUuid()) + ".json"));
+			return PoscarWriter::Write(structure, path, scratch, true);
+		};
+		if (domainLayer == nullptr ||
+			!SaveProjectWithSceneObjects(m_ActiveProjectDirectory, *m_ActiveProject, sceneObjects,
+										 domainLayer->Workspace().Structures(), savedStructures, writeStructureFile, warnings, error))
+		{
+			DS_LOG_WARN("EditorLayer: project scene save failed: {}", error);
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{
+					ToNotification(StructuredError{ErrorCategory::IO, Severity::Warning, "Project scene save failed",
+												   error, "Fix the project path or permissions and try again.",
+													   "EditorLayer", "scene_objects.save_failed"})});
+			for (const StructuredError &warning : warnings)
+				if (m_EventBus != nullptr)
+					m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
+			return;
+		}
+		for (const StructuredError &warning : warnings)
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
+		m_KeptSceneObjects = std::move(sceneObjects);
 		// Legacy in-app-built structure export removed in Step 11. All new structures flow
 		// through StructureLifecycleCoordinator (AddStructureToProjectRequested event).
 	}

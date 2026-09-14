@@ -12,6 +12,7 @@
 #include <glm/geometric.hpp>
 
 #include "Core/Logging/Logger.hpp"
+#include "Core/Utils/Uuid.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -112,6 +113,10 @@ namespace DefectStudio
 				input.definition,
 				std::move(input.structure),
 				input.definition.direction);
+			// Every domain-backed window links back to its StructureRecord here, once, so the dirty
+			// marker and scene-object persistence work no matter which open path built the window.
+			if (const std::optional<Uuid> structureId = ParseUuid(window.structure.domainStructureId))
+				window.structureId = *structureId;
 			windows.push_back(std::move(window));
 		}
 

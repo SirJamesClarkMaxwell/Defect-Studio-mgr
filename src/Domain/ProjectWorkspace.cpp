@@ -110,6 +110,46 @@ namespace DefectStudio
 		return false;
 	}
 
+	bool StructureRegistry::MarkModified(const StructureId &id)
+	{
+		for (const Ref<StructureRecord> &record : m_Records)
+		{
+			if (record != nullptr && record->id == id)
+			{
+				++record->revision;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool StructureRegistry::MarkStructureFileModified(const StructureId &id)
+	{
+		for (const Ref<StructureRecord> &record : m_Records)
+		{
+			if (record != nullptr && record->id == id)
+			{
+				++record->revision;
+				record->structureFileDirty = true;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool StructureRegistry::ClearStructureFileDirty(const StructureId &id)
+	{
+		for (const Ref<StructureRecord> &record : m_Records)
+		{
+			if (record != nullptr && record->id == id)
+			{
+				record->structureFileDirty = false;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	WeakRef<const StructureRecord> StructureRegistry::Find(const StructureId &id) const
 	{
 		for (const Ref<StructureRecord> &record : m_Records)

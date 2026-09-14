@@ -21,6 +21,7 @@ def write_poscar(
     positions: list[list[float]],
     cell: list[list[float]],
     pbc: list[bool] = None,
+    overwrite: bool = False,
 ) -> None:
     """Write POSCAR file from structure data.
 
@@ -48,7 +49,9 @@ def write_poscar(
     try:
         os.close(tmp_fd)
         write(tmp_path, atoms, format='vasp')
-        if os.name == "nt":
+        if overwrite:
+            os.replace(tmp_path, output_path)
+        elif os.name == "nt":
             # Windows os.rename already refuses an existing destination.
             os.rename(tmp_path, output_path)
         else:
@@ -79,8 +82,9 @@ def main() -> None:
         positions = input_data.get("positions", [])
         cell = input_data.get("cell", [])
         pbc = input_data.get("pbc", [True, True, True])
+        overwrite = input_data.get("overwrite", False)
 
-        write_poscar(output_path, species, positions, cell, pbc)
+        write_poscar(output_path, species, positions, cell, pbc, overwrite)
         print(json.dumps({"success": True, "output_path": output_path}))
     except Exception as e:
         sys.stderr.write(f"ERROR: {e}\n")

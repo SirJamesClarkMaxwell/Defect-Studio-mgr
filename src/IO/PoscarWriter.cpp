@@ -5,10 +5,12 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <filesystem>
 
 #include <nlohmann/json.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "Core/Platform/PlatformPaths.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
 #include "ScientificRuntime/Python/ScriptRunner.hpp"
 
@@ -17,7 +19,8 @@ namespace DefectStudio
 	Result<void> PoscarWriter::Write(
 		const CrystalStructure &structure,
 		const Path &outputPath,
-		const Path &inputJsonPath)
+		const Path &inputJsonPath,
+		bool overwriteExisting)
 	{
 		// Sort atoms by species (groups same elements together) for POSCAR output.
 		// Defect-pattern key sorting (prototype + defect SET) deferred to when DefectConfiguration
@@ -62,7 +65,8 @@ namespace DefectStudio
 			{"species", std::move(species)},
 			{"positions", std::move(positions)},
 			{"cell", std::move(cell)},
-			{"pbc", {true, true, true}}};
+			{"pbc", {true, true, true}},
+			{"overwrite", overwriteExisting}};
 
 		// Write JSON to the caller-supplied scratch file (unique per attempt - see the header note).
 		const std::string jsonStr = payload.dump();
@@ -85,10 +89,34 @@ namespace DefectStudio
 		// Invoke Python script with JSON file as argument
 		ScriptRunner runner;
 		ScriptRunOptions options;
-		options.scriptPath =
-			Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "scripts" / "write_poscar.py");
+		const std::filesystem::path relativeScript =
+			std::filesystem::path("install") / "users" / "default" / "scripts" / "write_poscar.py";
+		for (const Path &start : {Platform::GetExecutableDirectory(), Path::FromResolved(FileSystem::CurrentPath())})
+		{
+			Path cursor = start;
+			for (int depth = 0; depth < 10 && !cursor.Empty(); ++depth)
+			{
+				const Path candidate = cursor / relativeScript;
+				if (FileSystem::Exists(candidate.Native()))
+				{
+					options.scriptPath = candidate;
+					options.workingDirectory = cursor;
+					break;
+				}
+				const Path parent = cursor.parent_path();
+				if (parent.Empty() || parent == cursor)
+					break;
+				cursor = parent;
+			}
+			if (!options.scriptPath.Empty())
+				break;
+		}
+		if (options.scriptPath.Empty())
+		{
+			options.scriptPath = Path::FromResolved(FileSystem::CurrentPath() / relativeScript);
+			options.workingDirectory = Path::FromResolved(FileSystem::CurrentPath());
+		}
 		options.arguments.push_back(jsonPath.String());
-		options.workingDirectory = Path::FromResolved(FileSystem::CurrentPath());
 		options.timeout = std::chrono::milliseconds(5000);
 		options.requireZeroExitCode = true;
 

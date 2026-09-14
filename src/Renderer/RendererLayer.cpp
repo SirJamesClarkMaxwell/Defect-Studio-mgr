@@ -34,9 +34,24 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
+#include "Events/ProjectEvents.hpp"
 
 namespace DefectStudio
 {
+	namespace
+	{
+		EventBus *g_SceneObjectEventBus = nullptr;
+
+		void QueueSceneObjectsModified(const RendererWindowState &windowState)
+		{
+			if (g_SceneObjectEventBus == nullptr || windowState.structureId.is_nil())
+				return;
+
+			ProjectEvents::SceneObjectsModified event;
+			event.structureId = windowState.structureId;
+			g_SceneObjectEventBus->Queue(event);
+		}
+	} // namespace
 
 	constexpr float kMinSensitivity = 0.05f;
 	constexpr float kMaxSensitivity = 4.0f;
@@ -325,6 +340,7 @@ namespace DefectStudio
 	{
 		DS_ASSERT(!m_Attached, "BindEventBus must be called before OnAttach");
 		m_EventBus = std::move(eventBus);
+		g_SceneObjectEventBus = m_EventBus.get();
 	}
 
 	Ref<EventBus> RendererLayer::GetEventBus() const
@@ -926,6 +942,7 @@ namespace DefectStudio
 			m_RendererBackend->Shutdown();
 		m_RendererBackend.reset();
 		m_Windows.clear();
+		g_SceneObjectEventBus = nullptr;
 		m_Attached = false;
 		DS_LOG_INFO("RendererLayer detached");
 	}
@@ -1508,15 +1525,21 @@ namespace DefectStudio
 	void RendererLayer::onUndoLabelsRequested(const RendererEvents::Viewport::UndoLabelsRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState != nullptr)
+		if (windowState != nullptr && !windowState->pinnedMeasurementUndoHistory.empty())
+		{
 			UndoLabelsChange(windowState->windowId);
+			QueueSceneObjectsModified(*windowState);
+		}
 	}
 
 	void RendererLayer::onRedoLabelsRequested(const RendererEvents::Viewport::RedoLabelsRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState != nullptr)
+		if (windowState != nullptr && !windowState->pinnedMeasurementRedoHistory.empty())
+		{
 			RedoLabelsChange(windowState->windowId);
+			QueueSceneObjectsModified(*windowState);
+		}
 	}
 
 	namespace
@@ -1531,6 +1554,7 @@ namespace DefectStudio
 		if (windowState.pinnedMeasurementUndoHistory.size() > kMaxPinnedMeasurementHistoryEntries)
 			windowState.pinnedMeasurementUndoHistory.erase(windowState.pinnedMeasurementUndoHistory.begin());
 		windowState.pinnedMeasurementRedoHistory.clear();
+		QueueSceneObjectsModified(windowState);
 	}
 
 	// notes.txt pt. 8 - explicit single-pin "Align to camera": disable this pin's bond-direction

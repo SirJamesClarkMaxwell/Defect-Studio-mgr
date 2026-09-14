@@ -376,6 +376,7 @@ namespace DefectStudio
 				continue;
 			RendererWindowState::SceneArrow copy = windowState.sceneArrows[index];
 			copy.id = windowState.sceneRegistry.AllocateObjectId();
+			copy.persistKey.clear();
 			newIds.push_back(copy.id);
 			copy.start += kArrowDuplicateOffset;
 			copy.end += kArrowDuplicateOffset;
@@ -397,6 +398,7 @@ namespace DefectStudio
 		{
 			RendererWindowState::SceneArrow copy = arrow;
 			copy.id = windowState.sceneRegistry.AllocateObjectId();
+			copy.persistKey.clear();
 			newIds.push_back(copy.id);
 			copy.start += kArrowDuplicateOffset;
 			copy.end += kArrowDuplicateOffset;
@@ -972,6 +974,8 @@ namespace DefectStudio
 					RendererWindowState::PinnedMeasurement &pin =
 						windowState->pinnedMeasurements[FindObjectIndex(windowState->pinnedMeasurements, windowState->selectedPinnedMeasurements[0])];
 					ImGui::TextUnformatted(pin.atomIndices.size() == 2 ? "Bond length" : "Angle");
+					if (pin.linkBroken)
+						ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.2f, 1.0f), "link broken");
 					if (pin.atomIndices.size() == 2)
 					{
 						ImGui::SameLine();

@@ -2,6 +2,7 @@
 
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Domain/DomainIds.hpp"
 
 #include <string>
 #include <utility>
@@ -9,6 +10,10 @@
 
 namespace DefectStudio::ProjectEvents
 {
+	struct SceneObjectsModified final : public BusEvent
+	{
+		StructureId structureId;
+	};
 	// Queued from ProjectTreePanel's "+ Add Root..." popup - EditorLayer generates the persisted
 	// id, spawns the new panel instance, and saves project_roots.yaml.
 	struct RootAddRequested final : public BusEvent
