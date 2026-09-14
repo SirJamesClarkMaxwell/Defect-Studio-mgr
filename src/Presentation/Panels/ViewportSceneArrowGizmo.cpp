@@ -38,7 +38,7 @@ namespace DefectStudio
 	}
 
 	// Drawn translate/rotate/scale gizmo for the current SceneArrow selection - sibling of
-	// RenderLabelTransformGizmo above (own state, no ICommand/UndoStack, PushPinnedMeasurementUndoSnapshot
+	// RenderLabelTransformGizmo above (PushPinnedMeasurementUndoSnapshot
 	// on drag start). Translate differs from every other gizmo in this file: exactly one arrow selected
 	// draws THREE pick points (Start, End, and the midpoint for a rigid whole-arrow move) instead of one,
 	// since an arrow (unlike an atom or a label) is defined by two independent positions. More than one
