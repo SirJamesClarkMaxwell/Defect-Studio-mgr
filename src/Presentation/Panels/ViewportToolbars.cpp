@@ -84,13 +84,16 @@ namespace DefectStudio
 
 	void DrawViewportToolbar(RendererWindowState &windowState, RendererLayer &layer)
 	{
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 2.0f));
+		const float uiScale = ImGui::GetIO().FontGlobalScale;
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * uiScale, 4.0f * uiScale));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * uiScale, 2.0f * uiScale));
 
-		const float iconExtent = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
+		const float iconExtentBase = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
+		const float iconExtent = iconExtentBase * uiScale;
 		const ImVec2 iconButtonSize(iconExtent, iconExtent);
 
-		const float axisExtent = std::clamp(layer.GetGlobalSettings().viewport.axisButtonSize, 12.0f, 40.0f);
+		const float axisExtentBase = std::clamp(layer.GetGlobalSettings().viewport.axisButtonSize, 12.0f, 40.0f);
+		const float axisExtent = axisExtentBase * uiScale;
 		const ImVec2 axisButtonSize(axisExtent, axisExtent);
 
 		const auto rotationStepRadians = [&windowState]()
@@ -106,7 +109,7 @@ namespace DefectStudio
 			return rotationDeltaRadians() / kOrbitMouseScale;
 		};
 
-		const float toolbarRowHeight = std::max(axisButtonSize.y, iconButtonSize.y) + 25.0f;
+		const float toolbarRowHeight = std::max(axisButtonSize.y, iconButtonSize.y) + 25.0f * uiScale;
 
 		ImGui::BeginChild(
 			"##ViewportToolbarRow",
@@ -291,7 +294,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##RollLeft", "rotate-left.png", "Rl-", "Roll left (Q)"))
+		if (iconButton("##RollLeft", "rotate-left.png", "Rl-", "Roll left (Q, hold Alt for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(+rotationDeltaRadians());
@@ -299,7 +302,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		if (iconButton("##RollRight", "rotate-right.png", "Rl+", "Roll right (E)"))
+		if (iconButton("##RollRight", "rotate-right.png", "Rl+", "Roll right (E, hold Alt for continuous)"))
 		{
 			RendererViewCamera animated = *windowState.camera;
 			animated.Roll(-rotationDeltaRadians());

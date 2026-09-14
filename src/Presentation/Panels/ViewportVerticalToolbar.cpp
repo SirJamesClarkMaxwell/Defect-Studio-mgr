@@ -33,9 +33,14 @@ namespace DefectStudio
 		if (eventBus == nullptr)
 			return;
 
-		const float iconExtent = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
+		const float uiScale = ImGui::GetIO().FontGlobalScale;
+		const float iconExtentBase = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
+		const float iconExtent = iconExtentBase * uiScale;
 		const ImVec2 buttonSize(iconExtent, iconExtent);
 		const float columnWidth = iconExtent + ImGui::GetStyle().WindowPadding.x * 2.0f ;//+ 4.0f;
+		const ImVec2 itemSpacing = ImGui::GetStyle().ItemSpacing;
+		ImGui::PushStyleVar(
+			ImGuiStyleVar_ItemSpacing, ImVec2(itemSpacing.x * uiScale, itemSpacing.y * uiScale));
 
 		ImGui::BeginChild(
 			"##ViewportVerticalToolbar", ImVec2(columnWidth, ImGui::GetContentRegionAvail().y), false, ImGuiWindowFlags_NoScrollbar);
@@ -242,5 +247,6 @@ namespace DefectStudio
 		}
 
 		ImGui::EndChild();
+		ImGui::PopStyleVar();
 	}
 } // namespace DefectStudio
