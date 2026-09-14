@@ -27,19 +27,31 @@
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Utils/Time.hpp"
 #include "IO/TextFileIO.hpp"
-#include "IO/SceneObjectsIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
-#include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 #include "Events/ProjectEvents.hpp"
 
 namespace DefectStudio
 {
+	namespace
+	{
+		EventBus *g_SceneObjectEventBus = nullptr;
+
+		void QueueSceneObjectsModified(const RendererWindowState &windowState)
+		{
+			if (g_SceneObjectEventBus == nullptr || windowState.structureId.is_nil())
+				return;
+
+			ProjectEvents::SceneObjectsModified event;
+			event.structureId = windowState.structureId;
+			g_SceneObjectEventBus->Queue(event);
+		}
+	} // namespace
 
 	constexpr float kMinSensitivity = 0.05f;
 	constexpr float kMaxSensitivity = 4.0f;
@@ -328,6 +340,7 @@ namespace DefectStudio
 	{
 		DS_ASSERT(!m_Attached, "BindEventBus must be called before OnAttach");
 		m_EventBus = std::move(eventBus);
+		g_SceneObjectEventBus = m_EventBus.get();
 	}
 
 	Ref<EventBus> RendererLayer::GetEventBus() const
@@ -365,7 +378,6 @@ namespace DefectStudio
 
 	void RendererLayer::RemoveWindow(const std::string &windowId)
 	{
-		m_SceneObjectHashes.erase(windowId);
 		m_Windows.erase(
 			std::remove_if(
 				m_Windows.begin(), m_Windows.end(),
@@ -930,7 +942,7 @@ namespace DefectStudio
 			m_RendererBackend->Shutdown();
 		m_RendererBackend.reset();
 		m_Windows.clear();
-		m_SceneObjectHashes.clear();
+		g_SceneObjectEventBus = nullptr;
 		m_Attached = false;
 		DS_LOG_INFO("RendererLayer detached");
 	}
@@ -938,22 +950,6 @@ namespace DefectStudio
 	void RendererLayer::OnUpdate(float deltaTime)
 	{
 		m_LastDeltaTime = deltaTime;
-		for (const RendererWindowState &window : m_Windows)
-		{
-			if (window.structureId.is_nil() || m_EventBus == nullptr)
-				continue;
-			SceneObjectsFile snapshot;
-			snapshot.structures.push_back({window.windowId, ExtractPersistedSceneObjects(window)});
-			const std::size_t hash = std::hash<std::string>{}(SceneObjectsIO::Serialize(snapshot));
-			const auto it = m_SceneObjectHashes.find(window.windowId);
-			if (it != m_SceneObjectHashes.end() && it->second != hash)
-			{
-				ProjectEvents::SceneObjectsModified event;
-				event.structureId = window.structureId;
-				m_EventBus->Queue(event);
-			}
-			m_SceneObjectHashes[window.windowId] = hash;
-		}
 		if (m_RendererBackend != nullptr)
 			m_RendererBackend->ReloadShadersIfNeeded();
 		UpdateCameraTransitions(deltaTime);
@@ -1529,15 +1525,21 @@ namespace DefectStudio
 	void RendererLayer::onUndoLabelsRequested(const RendererEvents::Viewport::UndoLabelsRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState != nullptr)
+		if (windowState != nullptr && !windowState->pinnedMeasurementUndoHistory.empty())
+		{
 			UndoLabelsChange(windowState->windowId);
+			QueueSceneObjectsModified(*windowState);
+		}
 	}
 
 	void RendererLayer::onRedoLabelsRequested(const RendererEvents::Viewport::RedoLabelsRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState != nullptr)
+		if (windowState != nullptr && !windowState->pinnedMeasurementRedoHistory.empty())
+		{
 			RedoLabelsChange(windowState->windowId);
+			QueueSceneObjectsModified(*windowState);
+		}
 	}
 
 	namespace
@@ -1552,6 +1554,7 @@ namespace DefectStudio
 		if (windowState.pinnedMeasurementUndoHistory.size() > kMaxPinnedMeasurementHistoryEntries)
 			windowState.pinnedMeasurementUndoHistory.erase(windowState.pinnedMeasurementUndoHistory.begin());
 		windowState.pinnedMeasurementRedoHistory.clear();
+		QueueSceneObjectsModified(windowState);
 	}
 
 	// notes.txt pt. 8 - explicit single-pin "Align to camera": disable this pin's bond-direction

@@ -794,7 +794,7 @@ namespace DefectStudio
 
 	void EditorLayer::applySceneObjectsToWindow(RendererWindowState &windowState)
 	{
-		if (windowState.structureId.is_nil() || m_AppliedSceneObjectWindows.contains(windowState.windowId))
+		if (!m_ActiveProject.has_value() || windowState.structureId.is_nil() || m_AppliedSceneObjectWindows.contains(windowState.windowId))
 			return;
 		auto domainLayer = m_DomainLayer.lock();
 		if (domainLayer == nullptr)
@@ -1728,7 +1728,8 @@ namespace DefectStudio
 		{
 			if (auto rendererLayer = m_RendererLayer.lock())
 			{
-				std::unordered_map<std::string, std::vector<std::pair<std::string, std::vector<PersistedSceneObject>>>> grouped;
+				std::unordered_map<std::string, std::vector<std::pair<std::string, std::vector<PersistedSceneObject>>>>
+					grouped;
 				std::unordered_map<std::string, StructureId> ids;
 				for (const RendererWindowState &window : rendererLayer->GetWindows())
 				{
@@ -1737,7 +1738,8 @@ namespace DefectStudio
 					const auto record = domainLayer->Workspace().Structures().Find(window.structureId).lock();
 					if (record == nullptr)
 						continue;
-					const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+					const std::string key =
+						SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
 					grouped[key].push_back({window.windowId, ExtractPersistedSceneObjects(window)});
 					ids[key] = window.structureId;
 				}
@@ -1745,22 +1747,35 @@ namespace DefectStudio
 				{
 					const std::string &active = rendererLayer->GetLastFocusedViewportWindowId();
 					std::vector<std::vector<PersistedSceneObject>> ordered;
-					for (const auto &window : windows) if (window.first != active) ordered.push_back(window.second);
-					for (const auto &window : windows) if (window.first == active) ordered.push_back(window.second);
+					for (const auto &window : windows)
+						if (window.first != active)
+							ordered.push_back(window.second);
+					for (const auto &window : windows)
+						if (window.first == active)
+							ordered.push_back(window.second);
 					const auto merged = MergeWindowSceneObjects(ordered);
-					auto entry = std::find_if(sceneObjects.structures.begin(), sceneObjects.structures.end(), [&](const auto &candidate) { return candidate.structureKey == key; });
-					if (entry == sceneObjects.structures.end()) sceneObjects.structures.push_back({key, merged}); else entry->objects = merged;
+					auto entry = std::find_if(sceneObjects.structures.begin(), sceneObjects.structures.end(),
+											  [&](const auto &candidate) { return candidate.structureKey == key; });
+					if (entry == sceneObjects.structures.end())
+						sceneObjects.structures.push_back({key, merged});
+					else
+						entry->objects = merged;
 					savedStructures.push_back(ids[key]);
 				}
 			}
 		}
 		std::string error;
 		auto domainLayer = m_DomainLayer.lock();
-		if (domainLayer == nullptr || !SaveProjectWithSceneObjects(m_ActiveProjectDirectory, *m_ActiveProject, sceneObjects, domainLayer->Workspace().Structures(), savedStructures, error))
+		if (domainLayer == nullptr ||
+			!SaveProjectWithSceneObjects(m_ActiveProjectDirectory, *m_ActiveProject, sceneObjects,
+										 domainLayer->Workspace().Structures(), savedStructures, error))
 		{
 			DS_LOG_WARN("EditorLayer: project scene save failed: {}", error);
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(StructuredError{ErrorCategory::IO, Severity::Warning, "Project scene save failed", error, "Fix the project path or permissions and try again.", "EditorLayer", "scene_objects.save_failed"})});
+				m_EventBus->Queue(NotificationRequestedEvent{
+					ToNotification(StructuredError{ErrorCategory::IO, Severity::Warning, "Project scene save failed",
+												   error, "Fix the project path or permissions and try again.",
+												   "EditorLayer", "scene_objects.save_failed"})});
 			return;
 		}
 		m_KeptSceneObjects = std::move(sceneObjects);
