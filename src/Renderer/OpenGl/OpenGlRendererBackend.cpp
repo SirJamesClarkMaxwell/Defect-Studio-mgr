@@ -2923,6 +2923,13 @@ namespace DefectStudio
 						AppendLabelBackgroundInstance(
 							midpoint + renderOffset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances);
 					};
+					if (pin.linkBroken)
+					{
+						if (pin.frozenAtomPositions.size() != 2)
+							continue;
+						appendLengthLabel(pin.frozenAtomPositions[0], pin.frozenAtomPositions[1]);
+						continue;
+					}
 
 					constexpr float kPeriodicOffsetEpsilon = 1.0e-3f;
 					bool matchedBond = false;
@@ -2961,6 +2968,24 @@ namespace DefectStudio
 				}
 				else if (pin.atomIndices.size() == 3)
 				{
+					if (pin.linkBroken)
+					{
+						if (pin.frozenAtomPositions.size() != 3)
+							continue;
+						const glm::vec3 toA = pin.frozenAtomPositions[0] - pin.frozenAtomPositions[1];
+						const glm::vec3 toC = pin.frozenAtomPositions[2] - pin.frozenAtomPositions[1];
+						const float lengthA = glm::length(toA);
+						const float lengthC = glm::length(toC);
+						if (lengthA > 0.0001f && lengthC > 0.0001f)
+						{
+							const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
+							const float angleDeg = glm::degrees(std::acos(cosAngle));
+							const glm::vec3 anglePosition = pin.frozenAtomPositions[1] + offset;
+							const LabelLocalBounds bounds = AppendAngleLabelInstances(*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle, pin.rotationOffsetRadians);
+							AppendLabelBackgroundInstance(anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances);
+						}
+						continue;
+					}
 					const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(), [&](const std::size_t index) {
 						return index < structure.atoms.size();
 					});

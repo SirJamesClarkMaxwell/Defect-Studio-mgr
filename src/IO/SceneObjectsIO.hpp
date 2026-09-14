@@ -112,7 +112,8 @@ namespace DefectStudio
 	//       objects:
 	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
-	//           enums as their enumerator name, style as a nested map)
+	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
+	//           written as `arrowKind` so it does not collide with the entry tag)
 	class SceneObjectsIO
 	{
 	public:

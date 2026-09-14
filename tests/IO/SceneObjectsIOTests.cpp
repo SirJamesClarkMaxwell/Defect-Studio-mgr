@@ -133,7 +133,9 @@ structures:
         kind2: nope
         start: [0, 0, 0]
       - kind: SceneArrow
-        kind: Arrow9D
+        arrowKind: Arrow9D
+        start: [0, 0, 0]
+        end: [1, 0, 0]
   - objects:
       - kind: FreeLabel
         position: [0, 0, 0]

@@ -302,5 +302,6 @@ namespace DefectStudio
 		// two different defects on the same viewing angle), so the list itself is layer-level.
 		std::vector<RendererViewSnapshot> m_SharedSavedViews;
 		std::size_t m_ActiveSharedSavedViewIndex = 0;
+		std::unordered_map<std::string, std::size_t> m_SceneObjectHashes;
 	};
 } // namespace DefectStudio

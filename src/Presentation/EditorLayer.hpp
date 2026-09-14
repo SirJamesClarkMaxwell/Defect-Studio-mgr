@@ -7,6 +7,7 @@
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "IO/ProjectManifestIO.hpp"
+#include "IO/SceneObjectsIO.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/EditorUiState.hpp"
@@ -40,6 +42,7 @@ namespace DefectStudio
 	class KeymapResolver;
 	class RendererLayer;
 	class DomainLayer;
+	struct RendererWindowState;
 	struct StructureRecord;
 	struct CommandID;
 	struct ApplicationConfig;
@@ -89,6 +92,11 @@ namespace DefectStudio
 		struct ProjectSaveRequested;
 		struct ProjectSaveAsRequested;
 		struct StructureFileSaveRequested;
+	}
+
+	namespace ProjectEvents
+	{
+		struct SceneObjectsModified;
 	}
 
 	namespace AppEvents::Config
@@ -169,6 +177,7 @@ namespace DefectStudio
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 		void onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &event);
+		void onSceneObjectsModified(const ProjectEvents::SceneObjectsModified &event);
 		void onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &event);
 		void onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &event);
 		void onProjectStructureAdded(const DomainEvents::ProjectStructureAdded &event);
@@ -183,6 +192,8 @@ namespace DefectStudio
 		void loadInitialProjectState();
 		void createNewProject(const Path &directory);
 		void openProject(const Path &directory);
+		void loadSceneObjectsForProject();
+		void applySceneObjectsToWindow(RendererWindowState &windowState);
 		void touchAndSaveRecentProject(const Path &directory);
 		// Pushes whichever root list is currently authoritative (active project's manifest, or
 		// the ad-hoc list) into the single ProjectTreePanel instance.
@@ -277,6 +288,8 @@ namespace DefectStudio
 		std::optional<ProjectManifest> m_ActiveProject;
 		Path m_ActiveProjectDirectory;
 		std::vector<ProjectRootEntry> m_AdHocRoots;
+		SceneObjectsFile m_KeptSceneObjects;
+		std::unordered_set<std::string> m_AppliedSceneObjectWindows;
 		PanelId m_ProjectTreePanelId = 0;
 		PanelId m_TextEditorPanelId = 0;
 		PanelId m_TerminalPanelId = 0;
