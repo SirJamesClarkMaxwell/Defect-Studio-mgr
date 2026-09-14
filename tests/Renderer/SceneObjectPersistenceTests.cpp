@@ -102,7 +102,6 @@ namespace DefectStudio::Tests
 		window.freeLabels.push_back({});
 		window.freeLabels.back().id = taken;
 		window.selectedFreeLabels.push_back(taken);
-		window.pinnedMeasurementUndoHistory.push_back({});
 
 		std::vector<StructuredError> warnings;
 		ApplyPersistedSceneObjects(window, {MakeLabel("k1", "one"), MakeLabel("", "two"), MakeBondPin("k3")}, warnings);
@@ -120,7 +119,6 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(window.pinnedMeasurements[0].atomIndices, (std::vector<std::size_t>{0, 1}));
 		EXPECT_FALSE(window.pinnedMeasurements[0].linkBroken);
 		EXPECT_TRUE(window.selectedFreeLabels.empty());
-		EXPECT_TRUE(window.pinnedMeasurementUndoHistory.empty());
 	}
 
 	TEST(SceneObjectPersistenceTests, BrokenLinkFreezesAnchorWarnsAndSurvivesResave)

@@ -51,6 +51,7 @@ namespace DefectStudio
 		[[nodiscard]] WeakRef<KeymapResolver> GetKeymapResolverHandle() const;
 		[[nodiscard]] WeakRef<ContextManager> GetContextManagerHandle() const;
 		[[nodiscard]] WeakRef<CommandRegistry> GetCommandRegistryHandle() const;
+		[[nodiscard]] WeakRef<UndoStack> GetUndoStackHandle() const;
 
 	private:
 		void applyJobConfig(const JobsConfig &jobsConfig);
