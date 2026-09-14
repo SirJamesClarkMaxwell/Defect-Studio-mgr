@@ -755,7 +755,8 @@ namespace DefectStudio
 
 	void EditorLayer::onSceneObjectsModified(const ProjectEvents::SceneObjectsModified &event)
 	{
-		if (!event.structureId.is_nil())
+		// Scene objects only persist inside a project, so outside one there is nothing to mark dirty.
+		if (m_ActiveProject.has_value() && !event.structureId.is_nil())
 		{
 			if (auto domainLayer = m_DomainLayer.lock())
 			{
