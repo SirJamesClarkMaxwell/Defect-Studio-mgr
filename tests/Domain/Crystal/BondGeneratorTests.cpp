@@ -44,6 +44,26 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(structure.bonds[0].secondAtomIndex, 1u);
 	}
 
+	TEST(BondGeneratorTests, RefreshesManualBondLengthAfterAtomsMove)
+	{
+		CrystalStructure structure;
+		structure.atoms = {
+			AtomSite{"C", glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0},
+			AtomSite{"O", glm::vec3(5.0f, 0.0f, 0.0f), glm::vec3(0.5f, 0.0f, 0.0f), 1}};
+		structure.bonds.push_back(Bond{0u, 1u, 5.0f, BondOrigin::Manual, true});
+		structure.atoms[1].position = glm::vec3(0.0f, 6.0f, 8.0f);
+
+		ElementPropertiesTable properties;
+		properties.ReplaceData({
+			{"C", ElementProperties{6, 12.0f, 0.80f, 1.70f}},
+			{"O", ElementProperties{8, 16.0f, 0.73f, 1.52f}}});
+
+		RegenerateAutoBonds(structure, properties);
+
+		ASSERT_EQ(structure.bonds.size(), 1u);
+		EXPECT_NEAR(structure.bonds[0].lengthAngstrom, 10.0f, 1e-4f);
+	}
+
 	TEST(BondGeneratorTests, PreservesHiddenAutoBondVisibilityAcrossRegen)
 	{
 		CrystalStructure structure;

@@ -281,6 +281,17 @@ namespace DefectStudio
 			}),
 			structure.bonds.end());
 
+		// Manual bonds keep their topology but not a stale length - atoms may have moved since they were made.
+		const glm::mat3 latticeMatrix = structure.cell.ToMatrix();
+		for (Bond &bond : structure.bonds)
+		{
+			if (bond.firstAtomIndex >= structure.atoms.size() || bond.secondAtomIndex >= structure.atoms.size())
+				continue;
+			const glm::vec3 secondPosition =
+				structure.atoms[bond.secondAtomIndex].position + CartesianShift(latticeMatrix, bond.periodicShift);
+			bond.lengthAngstrom = glm::length(structure.atoms[bond.firstAtomIndex].position - secondPosition);
+		}
+
 		const auto tryAddBond = [&](std::size_t first, std::size_t second, const glm::ivec3 &shift, const glm::vec3 &secondPosition)
 		{
 			if (HasBondBetween(structure.bonds, first, second, shift))
@@ -317,7 +328,6 @@ namespace DefectStudio
 		for (const PotentialBondPair &pair : BuildPotentialBondPairs(structure.atoms, buckets))
 			tryAddBond(pair.first, pair.second, glm::ivec3(0), structure.atoms[pair.second].position);
 
-		const glm::mat3 latticeMatrix = structure.cell.ToMatrix();
 		const float maxCutoff = ComputeMaxPossibleCutoff(structure.atoms, structure.bondSettings, elementPropertiesTable);
 		if (structure.isPeriodic && LatticeCellIsLargeEnoughForPeriodicBonding(latticeMatrix, maxCutoff))
 		{
