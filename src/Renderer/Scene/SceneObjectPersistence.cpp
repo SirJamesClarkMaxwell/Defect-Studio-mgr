@@ -21,6 +21,30 @@ bool AtomReferenceBinds(const RendererStructureData &structure, const PersistedA
 	return glm::dot(delta, delta) <= tolerance * tolerance;
 }
 
+std::optional<std::size_t> ResolveAtomReference(
+	const RendererStructureData &structure, const PersistedAtomRef &reference, float tolerance)
+{
+	if (AtomReferenceBinds(structure, reference, tolerance))
+		return reference.index;
+
+	const float toleranceSquared = tolerance * tolerance;
+	std::optional<std::size_t> nearest;
+	float nearestDistanceSquared = toleranceSquared;
+	for (std::size_t index = 0; index < structure.atoms.size(); ++index)
+	{
+		if (structure.atoms[index].element != reference.element)
+			continue;
+		const glm::vec3 delta = structure.atoms[index].cartesianPosition - reference.position;
+		const float distanceSquared = glm::dot(delta, delta);
+		if (distanceSquared <= nearestDistanceSquared)
+		{
+			nearest = index;
+			nearestDistanceSquared = distanceSquared;
+		}
+	}
+	return nearest;
+}
+
 std::string GenerateScenePersistKey()
 {
 	std::string key = ToString(GenerateUuid());
@@ -184,10 +208,15 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					p.rotationOffsetRadians = value.rotationOffsetRadians;
 					p.bondPeriodicOffset = value.bondPeriodicOffset;
 					p.style = FromPersisted(value.style);
+					std::vector<std::optional<std::size_t>> resolvedIndices;
+					resolvedIndices.reserve(value.atomRefs.size());
 					for (const auto &ref : value.atomRefs)
-						p.atomIndices.push_back(ref.index);
-					const bool binds = std::all_of(value.atomRefs.begin(), value.atomRefs.end(), [&](const auto &ref)
-												   { return AtomReferenceBinds(window.structure, ref); });
+						resolvedIndices.push_back(ResolveAtomReference(window.structure, ref));
+					const bool binds = std::all_of(resolvedIndices.begin(), resolvedIndices.end(),
+													 [](const auto &index) { return index.has_value(); });
+					// A broken pin keeps the file's indices so a re-save writes the same references back.
+					for (std::size_t i = 0; i < value.atomRefs.size(); ++i)
+						p.atomIndices.push_back(resolvedIndices[i].value_or(value.atomRefs[i].index));
 					p.linkBroken = value.linkBroken || !binds;
 					if (p.linkBroken)
 					{

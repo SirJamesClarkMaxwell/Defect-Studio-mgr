@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <sstream>
@@ -25,6 +26,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Core/Utils/Uuid.hpp"
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Events/EditorUiEvents.hpp"
@@ -1767,18 +1769,30 @@ namespace DefectStudio
 		}
 		std::string error;
 		auto domainLayer = m_DomainLayer.lock();
+		std::vector<StructuredError> warnings;
+		const StructureFileWriter writeStructureFile = [](const CrystalStructure &structure, const Path &path) {
+			const Path scratch = Path::FromResolved(
+				std::filesystem::temp_directory_path() / ("defectstudio_poscar_" + ToString(GenerateUuid()) + ".json"));
+			return PoscarWriter::Write(structure, path, scratch, true);
+		};
 		if (domainLayer == nullptr ||
 			!SaveProjectWithSceneObjects(m_ActiveProjectDirectory, *m_ActiveProject, sceneObjects,
-										 domainLayer->Workspace().Structures(), savedStructures, error))
+										 domainLayer->Workspace().Structures(), savedStructures, writeStructureFile, warnings, error))
 		{
 			DS_LOG_WARN("EditorLayer: project scene save failed: {}", error);
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(NotificationRequestedEvent{
 					ToNotification(StructuredError{ErrorCategory::IO, Severity::Warning, "Project scene save failed",
 												   error, "Fix the project path or permissions and try again.",
-												   "EditorLayer", "scene_objects.save_failed"})});
+													   "EditorLayer", "scene_objects.save_failed"})});
+			for (const StructuredError &warning : warnings)
+				if (m_EventBus != nullptr)
+					m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
 			return;
 		}
+		for (const StructuredError &warning : warnings)
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
 		m_KeptSceneObjects = std::move(sceneObjects);
 		// Legacy in-app-built structure export removed in Step 11. All new structures flow
 		// through StructureLifecycleCoordinator (AddStructureToProjectRequested event).

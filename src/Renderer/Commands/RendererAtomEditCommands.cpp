@@ -281,6 +281,10 @@ namespace DefectStudio
 
 				const HiddenSceneState hiddenAfterDelete =
 					RemapHiddenSceneStateAfterAtomRemoval(m_HiddenBefore, m_DeletedIndices);
+				if (!m_DeletedIndices.empty())
+					domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
+				else
+					domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, {}, {}, &hiddenAfterDelete);
 				return {};
 			}
@@ -303,6 +307,10 @@ namespace DefectStudio
 
 				target->record->structure.atoms = m_PreviousAtoms;
 				target->record->structure.bonds = m_PreviousBonds;
+				if (!m_DeletedIndices.empty())
+					domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
+				else
+					domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(
 					*target->windowState, *target->record, m_AtomStyleTable, m_DeletedIndices, {}, &m_HiddenBefore);
 				return {};
@@ -401,6 +409,7 @@ namespace DefectStudio
 				}
 
 				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, newIndices);
 				return {};
 			}
@@ -423,6 +432,7 @@ namespace DefectStudio
 
 				target->record->structure.atoms = m_PreviousAtoms;
 				target->record->structure.bonds = m_PreviousBonds;
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_SourceIndices);
 				return {};
 			}
@@ -492,6 +502,7 @@ namespace DefectStudio
 					structure.atoms[atomIndex].fractional = structure.CartesianToFractional(m_Payload.afterPositions[i]);
 				}
 
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_Payload.atomIndices);
 				return {};
 			}
@@ -513,6 +524,7 @@ namespace DefectStudio
 					return target.Error();
 
 				target->record->structure.atoms = m_PreviousAtoms;
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_Payload.atomIndices);
 				return {};
 			}
@@ -750,6 +762,7 @@ namespace DefectStudio
 				}
 
 				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, newIndices);
 				return {};
 			}
@@ -772,6 +785,7 @@ namespace DefectStudio
 
 				target->record->structure.atoms = m_PreviousAtoms;
 				target->record->structure.bonds = m_PreviousBonds;
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, {});
 				return {};
 			}
@@ -854,6 +868,7 @@ namespace DefectStudio
 					return result.Error();
 
 				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, {newIndex});
 				return {};
 			}
@@ -876,6 +891,7 @@ namespace DefectStudio
 
 				target->record->structure.atoms = m_PreviousAtoms;
 				target->record->structure.bonds = m_PreviousBonds;
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, {});
 				return {};
 			}
@@ -967,6 +983,7 @@ namespace DefectStudio
 				}
 
 				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, m_ChangedIndices);
 				return {};
 			}
@@ -988,6 +1005,7 @@ namespace DefectStudio
 					return target.Error();
 
 				target->record->structure.atoms = m_PreviousAtoms;
+				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_ChangedIndices);
 				return {};
 			}
@@ -1060,6 +1078,7 @@ namespace DefectStudio
 				structure.bondSettings = m_Payload.settings;
 
 				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, m_SelectionBefore);
 				return {};
 			}
@@ -1083,6 +1102,7 @@ namespace DefectStudio
 				CrystalStructure &structure = target->record->structure;
 				structure.bondSettings = m_PreviousSettings;
 				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
+				domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_SelectionBefore);
 				return {};
 			}
@@ -1189,6 +1209,7 @@ namespace DefectStudio
 				bond.visible = true;
 				structure.bonds.push_back(bond);
 
+				domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, windowState.selectedAtomIndices);
 				return {};
 			}
@@ -1210,6 +1231,7 @@ namespace DefectStudio
 					return target.Error();
 
 				target->record->structure.bonds = m_PreviousBonds;
+				domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, {});
 				return {};
 			}
@@ -1274,6 +1296,7 @@ namespace DefectStudio
 				m_WindowIdResolved = target->windowState->windowId;
 				m_Previous = structure.atoms[m_Payload.atomIndex];
 				applyPayload(structure.atoms[m_Payload.atomIndex]);
+				domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				return {};
 			}
 
@@ -1303,6 +1326,7 @@ namespace DefectStudio
 				}
 
 				structure.atoms[m_Payload.atomIndex] = m_Previous;
+				domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				return {};
 			}
 
