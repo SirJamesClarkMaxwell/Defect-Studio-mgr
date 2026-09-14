@@ -215,7 +215,9 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					// A broken pin keeps the file's indices so a re-save writes the same references back.
 					for (std::size_t i = 0; i < value.atomRefs.size(); ++i)
 						p.atomIndices.push_back(resolvedIndices[i].value_or(value.atomRefs[i].index));
-					p.linkBroken = value.linkBroken || !binds;
+					// Re-evaluated on every load: a pin saved broken heals once its references resolve again,
+					// otherwise it would stay frozen and never follow its atoms.
+					p.linkBroken = !binds;
 					if (p.linkBroken)
 					{
 						for (const auto &ref : value.atomRefs)
