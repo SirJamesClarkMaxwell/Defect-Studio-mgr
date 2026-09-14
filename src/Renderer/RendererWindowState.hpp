@@ -183,7 +183,7 @@ namespace DefectStudio
 		// OpenGlRendererBackend::renderSceneArrows/ComputeArrowQuadBasis. Renderer-only like
 		// FreeLabel/PinnedMeasurement, not persisted with the project yet. Gizmo/attached
 		// label/undo for arrows are a later phase - labels already have all three
-		// (renderLabelTransformGizmo/AttachedLabel/pinnedMeasurementUndoHistory), arrows don't yet.
+		// (renderLabelTransformGizmo/AttachedLabel), arrows don't yet.
 		enum class ArrowKind { Line, Arrow2D, Arrow3D };
 		enum class Arrow2DOrientation { Billboard, FixedPlane };
 		enum class WorldPlane { XY, XZ, YZ };
@@ -265,26 +265,16 @@ namespace DefectStudio
 			float fixedNormalizationMaxAngstrom = 0.5f;
 		};
 		std::optional<DisplacementComparisonState> displacementComparison;
-		// One entry in the label undo/redo stack below - both label kinds together, since a single
+		// One entry in the scene-object undo snapshot - both label kinds together, since a single
 		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
 		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).
-		// sceneArrows joined this same snapshot/stack for the same reason (see PushPinnedMeasurement
-		// UndoSnapshot in RendererLayer.cpp) - one shared "labels" undo scope, not three parallel ones.
+		// sceneArrows joined this same snapshot for the same reason - one shared scene-object scope.
 		struct LabelUndoSnapshot
 		{
 			std::vector<PinnedMeasurement> pinnedMeasurements;
 			std::vector<FreeLabel> freeLabels;
 			std::vector<SceneArrow> sceneArrows;
 		};
-		// Local per-window undo/redo for pinnedMeasurements AND freeLabels together (Ctrl+Alt+U /
-		// Ctrl+Alt+Shift+U) - snapshot-based (whole-vector copies, cheap given how few labels there
-		// typically are), pushed by PushPinnedMeasurementUndoSnapshot before every add/remove/flip/
-		// drag-start on either kind, one entry per logical edit - the two kinds share this one stack the
-		// same way they now share renderLabelTransformGizmo, rather than FreeLabel having no undo of
-		// its own. Separate from the global Core/Undo Ctrl+Z stack and from viewUndoHistory below - see
-		// RendererEvents::Viewport::UndoLabelsRequested for why.
-		std::vector<LabelUndoSnapshot> pinnedMeasurementUndoHistory;
-		std::vector<LabelUndoSnapshot> pinnedMeasurementRedoHistory;
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
 			// `flipped` above.

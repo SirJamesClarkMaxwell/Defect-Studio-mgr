@@ -40,7 +40,7 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWindowState &window);
 
 	// File -> window. Replaces the window's pinnedMeasurements/freeLabels/sceneArrows, clears their
-	// selections and the label undo/redo stacks. Every object gets a freshly allocated SceneObjectId
+	// selections (the global UndoStack is left alone). Every object gets a freshly allocated SceneObjectId
 	// from window.sceneRegistry (file ids are never reused); persistKey is kept as-is (a new one is
 	// generated when empty). Pin atom indices come from ResolveAtomReference, so a reordered structure
 	// rebinds silently. A pin whose atom references do not all resolve gets linkBroken = true, its

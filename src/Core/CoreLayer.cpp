@@ -229,6 +229,13 @@ namespace DefectStudio
 		return CreateWeakRef(m_CommandRegistry);
 	}
 
+	WeakRef<UndoStack> CoreLayer::GetUndoStackHandle() const
+	{
+		if (m_UndoStack == nullptr)
+			return {};
+		return CreateWeakRef(m_UndoStack);
+	}
+
 	void CoreLayer::applyJobConfig(const JobsConfig &jobsConfig)
 	{
 		if (m_JobSystem == nullptr)

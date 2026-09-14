@@ -909,6 +909,8 @@ namespace DefectStudio
 			DS_LOG_ERROR("Init: Core runtime services failed");
 			return false;
 		}
+		if (auto renderer = rendererLayer.lock())
+			renderer->BindUndoStack(coreLayer->GetUndoStackHandle());
 
 		// Sanity-check: force asserts if any core service failed to initialize.
 		{

@@ -189,8 +189,6 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
 	window.selectedSceneArrows.clear();
-	window.pinnedMeasurementUndoHistory.clear();
-	window.pinnedMeasurementRedoHistory.clear();
 	for (const auto &object : objects)
 	{
 		std::visit(

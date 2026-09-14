@@ -9,6 +9,7 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/RendererConfig.hpp"
 #include "Renderer/RendererMeshData.hpp"
@@ -35,14 +36,13 @@ namespace DefectStudio
 	[[nodiscard]] std::string SerializeViewSnapshot(const RendererViewSnapshot &snapshot);
 	[[nodiscard]] std::optional<RendererViewSnapshot> DeserializeViewSnapshot(const std::string &line);
 
-	// Snapshots windowState.pinnedMeasurements onto its undo history and clears the redo history -
+	// Pushes a scene-object snapshot onto the app-global undo stack -
 	// call once BEFORE any pin mutation (add/remove/flip/drag-start), never per-frame during a drag,
-	// so a whole drag/bulk-add/bulk-remove collapses into one undo step (Ctrl+Alt+U/Ctrl+Alt+Shift+U,
-	// see RendererEvents::Viewport::UndoLabelsRequested for why this is a separate local stack from
-	// the global Ctrl+Z domain undo). Free function, not a RendererLayer member, so both
+	// so a whole drag/bulk-add/bulk-remove collapses into one undo step. Free function, not a RendererLayer member, so both
 	// RendererLayer.cpp's internal pin-mutation helpers and RendererPanel (which owns the actual
 	// click/drag edits) can call it without routing through a layer method for no reason.
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState);
+	void PushSceneObjectsUndoSnapshot(RendererWindowState &windowState, RendererWindowState::LabelUndoSnapshot before);
 
 	// notes.txt pt. 8 - explicit single-pin override: force this one label flat regardless of the
 	// live threshold (OpenGlRendererBackend::renderLabels applies bondLabelAlignThresholdDeg to every
@@ -85,6 +85,7 @@ namespace DefectStudio
 		void OnImGuiRender() override;
 		void ApplyConfig(const RendererConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
+		void BindUndoStack(WeakRef<UndoStack> undoStack);
 		[[nodiscard]] Ref<EventBus> GetEventBus() const;
 		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
 		void CommitViewInteraction(const std::string &windowId);
@@ -100,10 +101,6 @@ namespace DefectStudio
 		void UpdateCameraTransitions(float deltaTime);
 		void UndoViewChange(const std::string &windowId);
 		void RedoViewChange(const std::string &windowId);
-		// Local per-window undo/redo for pinned measurement labels - see RendererEvents::Viewport::
-		// UndoLabelsRequested's comment for why this is its own stack instead of the global Ctrl+Z.
-		void UndoLabelsChange(const std::string &windowId);
-		void RedoLabelsChange(const std::string &windowId);
 		void SetViewportSize(const std::string &windowId, glm::vec2 size);
 		// Appends a runtime-opened window (e.g. Project Tree "Open Defect") - main thread only,
 		// callers must have already built a fully-formed RendererWindowState (see
@@ -218,8 +215,6 @@ namespace DefectStudio
 		void onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event);
 		void onUndoViewRequested(const RendererEvents::Viewport::UndoViewRequested &event);
 		void onRedoViewRequested(const RendererEvents::Viewport::RedoViewRequested &event);
-		void onUndoLabelsRequested(const RendererEvents::Viewport::UndoLabelsRequested &event);
-		void onRedoLabelsRequested(const RendererEvents::Viewport::RedoLabelsRequested &event);
 		void onSaveCurrentViewRequested(const RendererEvents::Viewport::SaveCurrentViewRequested &event);
 		void onCycleSavedViewRequested(const RendererEvents::Viewport::CycleSavedViewRequested &event);
 		void onExportImageRequested(const RendererEvents::Viewport::ExportImageRequested &event);
@@ -276,6 +271,7 @@ namespace DefectStudio
 	private:
 		RendererStartupConfig m_StartupConfig;
 		Ref<EventBus> m_EventBus;
+		WeakRef<UndoStack> m_UndoStack;
 		Unique<OpenGlRendererBackend> m_RendererBackend;
 		std::vector<RendererWindowState> m_Windows;
 		std::vector<std::string> m_PeriodicTableSymbols;

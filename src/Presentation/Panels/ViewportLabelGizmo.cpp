@@ -44,8 +44,7 @@ namespace DefectStudio
 	// each selected item's OWN rotation/scale field in place (spin/grow each independently, not
 	// orbit their positions around the shared centroid the way a rigid-body atom rotate/scale would -
 	// a label's rotation only ever means "this text's own orientation", never a position transform).
-	// Pushes one undo snapshot at drag start via PushPinnedMeasurementUndoSnapshot (Ctrl+Alt+U/
-	// Ctrl+Alt+Shift+U - see RendererEvents::Viewport::UndoLabelsRequested), covering both kinds
+	// Pushes one undo snapshot at drag start via PushPinnedMeasurementUndoSnapshot, covering both kinds
 	// together (LabelUndoSnapshot) regardless of which are in this drag.
 	bool RenderLabelTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
@@ -386,7 +385,7 @@ namespace DefectStudio
 			constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 			for (int axis = 0; axis < 3; ++axis)
 			{
-				if (!axisValid[axis] || !ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+				if (!axisValid[axis] || !IsUnmodifiedModalAxisKeyPressed(kModalAxisKeys[axis]))
 					continue;
 				beginDrag();
 				windowState.labelGizmoDragging = true;
