@@ -17,6 +17,7 @@
 
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -356,7 +357,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (!ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+					if (!IsUnmodifiedModalAxisKeyPressed(kModalAxisKeys[axis]))
 						continue;
 					windowState.fallbackGizmoDragging = true;
 					windowState.fallbackModalDrag = true;
@@ -396,7 +397,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kRotateAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (axis != windowState.fallbackGizmoAxis && ImGui::IsKeyPressed(kRotateAxisKeys[axis], false))
+					if (axis != windowState.fallbackGizmoAxis && IsUnmodifiedModalAxisKeyPressed(kRotateAxisKeys[axis]))
 						windowState.fallbackGizmoAxis = axis;
 				}
 
@@ -556,7 +557,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (!axisValid[axis] || !ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+					if (!axisValid[axis] || !IsUnmodifiedModalAxisKeyPressed(kModalAxisKeys[axis]))
 						continue;
 					windowState.fallbackGizmoDragging = true;
 					windowState.fallbackModalDrag = true;
@@ -632,7 +633,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (ImGui::IsKeyPressed(kAxisKeys[axis], false))
+					if (IsUnmodifiedModalAxisKeyPressed(kAxisKeys[axis]))
 						windowState.fallbackAxisLockOverride = windowState.fallbackAxisLockOverride == axis ? -1 : axis;
 				}
 

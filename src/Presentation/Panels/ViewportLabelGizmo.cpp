@@ -385,7 +385,7 @@ namespace DefectStudio
 			constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 			for (int axis = 0; axis < 3; ++axis)
 			{
-				if (!axisValid[axis] || !ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+				if (!axisValid[axis] || !IsUnmodifiedModalAxisKeyPressed(kModalAxisKeys[axis]))
 					continue;
 				beginDrag();
 				windowState.labelGizmoDragging = true;

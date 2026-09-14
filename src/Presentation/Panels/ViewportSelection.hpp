@@ -6,12 +6,21 @@
 #include <glm/glm.hpp>
 #include <imgui.h>
 
+#include "Core/Utils/Input.hpp"
 #include "Events/RendererEvents.hpp"
 
 namespace DefectStudio
 {
 	class RendererLayer;
 	struct RendererWindowState;
+
+	[[nodiscard]] inline bool IsUnmodifiedModalAxisKeyPressed(ImGuiKey key)
+	{
+		const KeyModifiers modifiers = Input::GetCurrentKeyModifiers();
+		if (HasModifier(modifiers, KeyModifiers::Ctrl) || HasModifier(modifiers, KeyModifiers::Alt))
+			return false;
+		return ImGui::IsKeyPressed(key, false);
+	}
 
 	// Box/circle region select, the label and scene-arrow gizmos, and the click/drag handling for
 	// both - all of it used to live as RendererPanel members. A viewport is not always a

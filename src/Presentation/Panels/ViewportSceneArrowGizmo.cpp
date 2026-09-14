@@ -199,7 +199,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (!ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+					if (!IsUnmodifiedModalAxisKeyPressed(kModalAxisKeys[axis]))
 						continue;
 					beginDrag();
 					windowState.sceneArrowGizmoDragging = true;
@@ -224,7 +224,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kRotateAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (axis != windowState.sceneArrowGizmoAxis && ImGui::IsKeyPressed(kRotateAxisKeys[axis], false))
+					if (axis != windowState.sceneArrowGizmoAxis && IsUnmodifiedModalAxisKeyPressed(kRotateAxisKeys[axis]))
 						windowState.sceneArrowGizmoAxis = axis;
 				}
 
@@ -578,7 +578,7 @@ namespace DefectStudio
 				constexpr ImGuiKey kModalAxisKeys[3] = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
 				for (int axis = 0; axis < 3; ++axis)
 				{
-					if (!axisValid[axis] || !ImGui::IsKeyPressed(kModalAxisKeys[axis], false))
+					if (!axisValid[axis] || !IsUnmodifiedModalAxisKeyPressed(kModalAxisKeys[axis]))
 						continue;
 					beginDrag();
 					windowState.sceneArrowGizmoDragging = true;
