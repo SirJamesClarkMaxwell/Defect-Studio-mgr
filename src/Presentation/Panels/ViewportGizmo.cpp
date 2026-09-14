@@ -14,6 +14,7 @@
 #include <ImGuizmo.h>
 
 #include "Presentation/Panels/ViewportModalTransform.hpp"
+#include "Presentation/Panels/ViewportOrientationTriad.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
@@ -25,10 +26,6 @@ namespace DefectStudio
 	{
 		constexpr float kPickMinDistance = 20.0f;
 		constexpr float kPickMaxDistance = 130.0f;
-		constexpr std::array<glm::vec3, 3> kWorldAxes = {
-			glm::vec3(1.0f, 0.0f, 0.0f),
-			glm::vec3(0.0f, 1.0f, 0.0f),
-			glm::vec3(0.0f, 0.0f, 1.0f)};
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
@@ -148,13 +145,13 @@ namespace DefectStudio
 
 		[[nodiscard]] std::array<AxisProjection, 3> ProjectAxes(
 			const glm::mat4 &viewProjection, const ImVec2 &imageOrigin, const ImVec2 &imageSize,
-			const glm::vec3 &pivot, const glm::vec2 &pivotScreen)
+			const glm::vec3 &pivot, const glm::vec2 &pivotScreen, const OrientationAxes &worldAxes)
 		{
 			std::array<AxisProjection, 3> axes;
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				const std::optional<glm::vec2> probe =
-					ProjectAbsolute(viewProjection, imageOrigin, imageSize, pivot + kWorldAxes[axis]);
+					ProjectAbsolute(viewProjection, imageOrigin, imageSize, pivot + worldAxes[axis]);
 				if (!probe.has_value())
 					continue;
 				const glm::vec2 projected = *probe - pivotScreen;
@@ -328,8 +325,11 @@ namespace DefectStudio
 			return hoveringRing;
 		}
 
+		TransformBases bases;
+		bases.lattice = windowState.structure.lattice;
+		const OrientationAxes worldAxes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
 		const std::array<AxisProjection, 3> axes =
-			ProjectAxes(viewProjection, imageOrigin, imageSize, *pivot, *pivotScreen);
+			ProjectAxes(viewProjection, imageOrigin, imageSize, *pivot, *pivotScreen, worldAxes);
 		DrawAxisHandles(*pivotScreen, axes);
 		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
 		if (hovered && hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))

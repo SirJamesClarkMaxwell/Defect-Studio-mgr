@@ -70,3 +70,29 @@ gizmo only feeds input into it. Labels and arrows move onto the core in 25c.
 - Layer boundaries (CLAUDE.md): Renderer must not include Presentation; ModalTransform.cpp includes no ImGui.
 - `#include "Core/dspch.hpp"` first in every .cpp. No exceptions in render paths.
 - Known ceiling: labels/arrows keep their bare X/Y/Z start until 25c.
+
+## Round 2 (user test feedback)
+
+### A. Bond lengths after moving atoms
+
+Already completed in commit `84762c5`. Do not touch `RendererAtomEditCommands.*` or
+`RendererCommandRegistration.cpp`.
+
+### B. Clickable orientation triad (VESTA-like)
+
+- Draw a small red/green/blue orientation triad in the bottom-left of every viewport image that
+  runs `RunViewportGizmoChain`, and make it the first handler so clicks never fall through to
+  selection.
+- Show `windowState.transformOrientation`: lattice a/b/c vectors or global x/y/z axes, projected
+  with camera rotation only at a fixed, font-scaled length, with axis labels and a Lattice/Global
+  caption.
+- On hover, show `Transform orientation: <name> - click to switch`; clicking toggles Global and
+  Lattice. Ignore clicks while a modal transform is active.
+- Make atom gizmo arrows follow the normalized columns of `ResolveBasis` using the structure
+  lattice, and start handle drags with an Axis constraint in the current transform orientation.
+- Keep the triad in its own Presentation source files if existing gizmo files would exceed about
+  500 lines. Regenerate projects after adding files and verify ImGuizmo remains at `3bc79f2`.
+
+Keep the modal core contract files and the parallel-branch Presentation/keybinding files listed in
+the task request untouched. Build Release `DefectStudioTests` once; if MSB4018, FileTracker, or
+access denied indicates sandbox interference, report `build blocked by sandbox` and stop building.

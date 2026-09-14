@@ -149,7 +149,7 @@ namespace DefectStudio
 
 	void BeginAtomModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> globalAxis, bool startedFromHandle)
+		std::optional<int> axis, bool startedFromHandle)
 	{
 		if (windowState.camera == nullptr || windowState.modalTransform.has_value())
 			return;
@@ -175,9 +175,9 @@ namespace DefectStudio
 		TransformBases bases;
 		bases.lattice = windowState.structure.lattice;
 		windowState.modalTransform = BeginModalTransform(op, windowState.transformOrientation, bases, pivot, mouse);
-		if (globalAxis.has_value())
+		if (axis.has_value())
 			windowState.modalTransform->constraint =
-				TransformConstraint{ConstraintKind::Axis, *globalAxis, TransformOrientation::Global};
+				TransformConstraint{ConstraintKind::Axis, *axis, windowState.transformOrientation};
 		windowState.modalTransformStartedFromHandle = startedFromHandle;
 		windowState.fallbackGizmoDragging = true;
 		windowState.fallbackGizmoAxis = -1;

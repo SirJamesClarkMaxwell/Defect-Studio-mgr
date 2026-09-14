@@ -16,7 +16,7 @@ namespace DefectStudio
 
 	void BeginAtomModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> globalAxis = std::nullopt, bool startedFromHandle = false);
+		std::optional<int> axis = std::nullopt, bool startedFromHandle = false);
 
 	[[nodiscard]] bool UpdateAtomModalTransform(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize,
