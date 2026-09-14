@@ -229,6 +229,7 @@ namespace DefectStudio::RendererEvents::Viewport
 	{
 		std::string windowId;
 		GizmoOperation operation = GizmoOperation::Translate;
+		bool startModal = false;
 	};
 
 	// Shift+A (Blender convention) / the vertical toolbar's "Add" button - opens

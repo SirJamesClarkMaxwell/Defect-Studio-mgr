@@ -240,6 +240,7 @@ namespace DefectStudio
 			[operation](EventBus &bus) {
 				RendererEvents::Viewport::GizmoOperationRequested event;
 				event.operation = operation;
+				event.startModal = true;
 				bus.Publish(event);
 			});
 	}
