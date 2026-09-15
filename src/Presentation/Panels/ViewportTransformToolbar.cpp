@@ -20,12 +20,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		[[nodiscard]] std::uint32_t IconId(RendererLayer &layer, const char *fileName)
-		{
-			const RendererToolbarIconTexture *icon = layer.GetToolbarIcon(fileName);
-			return icon != nullptr ? icon->rendererId : 0u;
-		}
-
 		void SelectOrientationRow(
 			RendererWindowState &windowState, TransformOrientation value, const char *icon, const char *name)
 		{
@@ -66,14 +60,12 @@ namespace DefectStudio
 		ImGui::EndDisabled();
 
 		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x * 0.70f);
-		const char *pivotIcon = windowState.transformPivotMode == TransformPivotMode::Cursor3D
-			? "tool-cursor3d.png"
-			: windowState.transformPivotMode == TransformPivotMode::IndividualOrigins
-				? "tool-mode-all.png"
-				: "tool-select.png";
+		const char *pivotGlyph = windowState.transformPivotMode == TransformPivotMode::Cursor3D
+			? ICON_FA_CROSSHAIRS
+			: windowState.transformPivotMode == TransformPivotMode::IndividualOrigins ? ICON_FA_BRAILLE : ICON_FA_CIRCLE_DOT;
 		ImGui::BeginDisabled(windowState.modalTransform.has_value());
 		if (BeginViewportToolbarPopover({
-				"##TransformPivotButton", "##TransformPivotPopup", IconId(layer, pivotIcon), "P", nullptr,
+				"##TransformPivotButton", "##TransformPivotPopup", 0u, pivotGlyph, nullptr,
 				"Transform Pivot", uiScale, iconExtent, 190.0f}))
 		{
 			ImGui::SeparatorText("Pivot Point");

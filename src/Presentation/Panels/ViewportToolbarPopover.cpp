@@ -17,7 +17,7 @@ namespace DefectStudio
 		const float iconExtent = std::max(spec.iconExtent, 12.0f * scale);
 		const bool hasText = spec.text != nullptr && spec.text[0] != '\0';
 		const ImVec2 textSize = hasText ? ImGui::CalcTextSize(spec.text) : ImVec2(0.0f, 0.0f);
-		const float arrowWidth = 8.0f * scale;
+		const float arrowWidth = 11.0f * scale;
 		const float innerGap = 5.0f * scale;
 		const float width = style.FramePadding.x * 2.0f + iconExtent + arrowWidth +
 			(hasText ? innerGap + textSize.x : 0.0f);
@@ -63,9 +63,9 @@ namespace DefectStudio
 		const float arrowX = maximum.x - style.FramePadding.x - arrowWidth * 0.5f;
 		const float arrowY = minimum.y + height * 0.5f;
 		drawList->AddTriangleFilled(
-			ImVec2(arrowX - 3.0f * scale, arrowY - 1.5f * scale),
-			ImVec2(arrowX + 3.0f * scale, arrowY - 1.5f * scale),
-			ImVec2(arrowX, arrowY + 2.5f * scale), ImGui::GetColorU32(ImGuiCol_Text));
+			ImVec2(arrowX - 4.5f * scale, arrowY - 2.0f * scale),
+			ImVec2(arrowX + 4.5f * scale, arrowY - 2.0f * scale),
+			ImVec2(arrowX, arrowY + 3.5f * scale), ImGui::GetColorU32(ImGuiCol_TextDisabled));
 
 		if (hovered && spec.tooltip != nullptr && spec.tooltip[0] != '\0')
 			ImGui::SetTooltip("%s", spec.tooltip);

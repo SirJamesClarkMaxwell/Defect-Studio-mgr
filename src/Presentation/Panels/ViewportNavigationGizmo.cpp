@@ -8,8 +8,12 @@
 #include <optional>
 #include <string>
 
+#include <cfloat>
+
 #include <glm/geometric.hpp>
 #include <imgui.h>
+
+#include "IconsFontAwesome6.h"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Events/RendererEvents.hpp"
@@ -33,7 +37,8 @@ namespace DefectStudio
 		}
 
 		void PublishTransition(
-			RendererWindowState &windowState, RendererLayer &layer, const RendererViewCamera &camera)
+			RendererWindowState &windowState, RendererLayer &layer, const RendererViewCamera &camera,
+			const char *sourceAction)
 		{
 			Ref<EventBus> eventBus = layer.GetEventBus();
 			if (eventBus == nullptr)
@@ -46,7 +51,7 @@ namespace DefectStudio
 			event.targetView.pitch = camera.Pitch();
 			event.targetView.roll = camera.Roll();
 			event.targetView.projection = camera.Projection();
-			event.sourceAction = "navigation_gizmo.axis";
+			event.sourceAction = sourceAction;
 			eventBus->Publish(event);
 		}
 
@@ -86,6 +91,7 @@ namespace DefectStudio
 			Projection,
 			Pan,
 			Zoom,
+			Home,
 		};
 		struct RoundButtonResult
 		{
@@ -114,38 +120,18 @@ namespace DefectStudio
 			ImDrawList *drawList = ImGui::GetWindowDrawList();
 			drawList->AddCircleFilled(
 				ImVec2(center.x, center.y), radius,
-				ImGui::GetColorU32(result.hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button));
-			const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
-			if (icon == RoundButtonIcon::Projection)
-			{
-				if (orthographic)
-					drawList->AddRect(
-						ImVec2(center.x - radius * 0.40f, center.y - radius * 0.32f),
-						ImVec2(center.x + radius * 0.40f, center.y + radius * 0.32f), color, 1.0f, 0, 1.5f);
-				else
-					drawList->AddQuad(
-						ImVec2(center.x - radius * 0.22f, center.y - radius * 0.32f),
-						ImVec2(center.x + radius * 0.22f, center.y - radius * 0.32f),
-						ImVec2(center.x + radius * 0.42f, center.y + radius * 0.32f),
-						ImVec2(center.x - radius * 0.42f, center.y + radius * 0.32f), color, 1.5f);
-			}
-			else if (icon == RoundButtonIcon::Pan)
-			{
-				drawList->AddRect(
-					ImVec2(center.x - radius * 0.28f, center.y - radius * 0.12f),
-					ImVec2(center.x + radius * 0.30f, center.y + radius * 0.35f), color, 2.0f, 0, 1.5f);
-				for (int finger = -2; finger <= 1; ++finger)
-					drawList->AddLine(
-						ImVec2(center.x + finger * radius * 0.13f, center.y - radius * 0.38f),
-						ImVec2(center.x + finger * radius * 0.13f, center.y + radius * 0.05f), color, 1.5f);
-			}
-			else
-			{
-				drawList->AddCircle(ImVec2(center.x - radius * 0.10f, center.y - radius * 0.10f), radius * 0.34f, color, 16, 1.5f);
-				drawList->AddLine(
-					ImVec2(center.x + radius * 0.16f, center.y + radius * 0.16f),
-					ImVec2(center.x + radius * 0.43f, center.y + radius * 0.43f), color, 1.8f);
-			}
+				result.hovered ? IM_COL32(90, 90, 100, 200) : IM_COL32(40, 40, 46, 150));
+			// Font Awesome glyphs, sized to ~55% of the button so they read at any UI scale.
+			const char *glyph = icon == RoundButtonIcon::Projection
+				? (orthographic ? ICON_FA_BORDER_ALL : ICON_FA_CUBE)
+				: icon == RoundButtonIcon::Pan ? ICON_FA_HAND
+				: icon == RoundButtonIcon::Zoom ? ICON_FA_MAGNIFYING_GLASS
+				: ICON_FA_HOUSE;
+			const float glyphSize = radius * 1.1f;
+			const ImVec2 glyphExtent = ImGui::GetFont()->CalcTextSizeA(glyphSize, FLT_MAX, 0.0f, glyph);
+			drawList->AddText(
+				ImGui::GetFont(), glyphSize, ImVec2(center.x - glyphExtent.x * 0.5f, center.y - glyphExtent.y * 0.5f),
+				IM_COL32(235, 235, 240, 255), glyph);
 			if (result.hovered && tooltip != nullptr)
 				ImGui::SetTooltip("%s", tooltip);
 			ImGui::SetCursorScreenPos(oldCursor);
@@ -200,25 +186,30 @@ namespace DefectStudio
 			const bool markerHovered = hit.has_value() && *hit == index;
 			const ImU32 lineColor = kAxisColors[static_cast<std::size_t>(marker.axis)] &
 				(front ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 115));
-			drawList->AddLine(ImVec2(center.x, center.y), ImVec2(marker.center.x, marker.center.y), lineColor, 1.5f * scale);
 			const float radius = marker.sign > 0 ? positiveRadius : negativeRadius;
-			if (marker.sign > 0)
-				drawList->AddCircleFilled(
-					ImVec2(marker.center.x, marker.center.y), radius,
-					markerHovered ? IM_COL32(255, 205, 80, 255) : lineColor);
-			else
-				drawList->AddCircle(
-					ImVec2(marker.center.x, marker.center.y), radius,
-					markerHovered ? IM_COL32(255, 205, 80, 255) : lineColor, 16, 2.0f * scale);
-			const std::string markerLabel = marker.sign < 0
-				? std::string("-") + labels[static_cast<std::size_t>(marker.axis)]
-				: labels[static_cast<std::size_t>(marker.axis)];
-			const ImVec2 textSize = ImGui::CalcTextSize(markerLabel.c_str());
-			drawList->AddText(
-				ImVec2(marker.center.x - textSize.x * 0.5f, marker.center.y - textSize.y * 0.5f),
-				ImGui::GetColorU32(ImGuiCol_Text), markerLabel.c_str());
+			const ImVec2 markerCenter(marker.center.x, marker.center.y);
+			// Blender style: positive = solid disc with a dark letter, negative = faded disc, letter
+			// only on hover - two labels at the same spot (axis toward the camera) never overlap.
+			if (marker.sign > 0 && marker.axis >= 0)
+				drawList->AddLine(ImVec2(center.x, center.y), markerCenter, lineColor, 2.0f * scale);
+			drawList->AddCircleFilled(
+				markerCenter, radius,
+				markerHovered ? IM_COL32(255, 255, 255, 255)
+					: marker.sign > 0 ? lineColor
+					: (lineColor & IM_COL32(255, 255, 255, 0)) | IM_COL32(0, 0, 0, front ? 110 : 60));
+			if (marker.sign > 0 || markerHovered)
+			{
+				const std::string markerLabel = marker.sign < 0
+					? std::string("-") + labels[static_cast<std::size_t>(marker.axis)]
+					: labels[static_cast<std::size_t>(marker.axis)];
+				const float fontSize = positiveRadius * 1.45f;
+				const ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, markerLabel.c_str());
+				drawList->AddText(
+					ImGui::GetFont(), fontSize,
+					ImVec2(markerCenter.x - textSize.x * 0.5f, markerCenter.y - textSize.y * 0.5f),
+					IM_COL32(20, 20, 24, 255), markerLabel.c_str());
+			}
 		}
-		drawList->AddCircleFilled(ImVec2(center.x, center.y), 2.5f * scale, ImGui::GetColorU32(ImGuiCol_Text));
 		drawList->PopClipRect();
 
 		bool capturing = viewportHovered && PointInCircle(mouse, center, gizmoRadius);
@@ -233,7 +224,7 @@ namespace DefectStudio
 				? glm::vec3(0.0f, 1.0f, 0.0f)
 				: glm::vec3(0.0f, 0.0f, 1.0f);
 			target.SetAlignToAxis(-viewSide, up);
-			PublishTransition(windowState, layer, target);
+			PublishTransition(windowState, layer, target, "navigation_gizmo.axis");
 		}
 
 		using Mode = RendererWindowState::NavigationGizmoDragMode;
@@ -251,8 +242,8 @@ namespace DefectStudio
 		if (!hit.has_value() && viewportHovered && capturing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			beginDrag(Mode::Orbit, "navigation_gizmo.orbit");
 
-		const float buttonRadius = 12.0f * scale;
-		const float buttonGap = 7.0f * scale;
+		const float buttonRadius = 16.0f * scale;
+		const float buttonGap = 6.0f * scale;
 		glm::vec2 buttonCenter(center.x, center.y + gizmoRadius + buttonRadius + buttonGap);
 		const RoundButtonResult projectionButton = RoundButton(
 			"##NavigationProjection", buttonCenter, buttonRadius, RoundButtonIcon::Projection,
@@ -294,6 +285,14 @@ namespace DefectStudio
 		if (zoomButton.pressed)
 			beginDrag(Mode::Zoom, "navigation_gizmo.zoom");
 		capturing = capturing || zoomButton.hovered;
+
+		buttonCenter.y += buttonRadius * 2.0f + buttonGap;
+		const RoundButtonResult homeButton = RoundButton(
+			"##NavigationHome", buttonCenter, buttonRadius, RoundButtonIcon::Home, "Reset view (frame all atoms)",
+			viewportHovered);
+		if (homeButton.pressed)
+			PublishTransition(windowState, layer, ComputeResetViewCamera(windowState), "navigation_gizmo.reset_view");
+		capturing = capturing || homeButton.hovered;
 
 		if (windowState.navigationGizmoDragMode != Mode::None)
 		{

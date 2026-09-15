@@ -11,11 +11,14 @@
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
+#include "IconsFontAwesome6.h"
+
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ViewportToolbarPopover.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererTypes.hpp"
@@ -82,6 +85,21 @@ namespace DefectStudio
 
 	}
 
+	RendererViewCamera ComputeResetViewCamera(const RendererWindowState &windowState)
+	{
+		RendererViewCamera camera = *windowState.camera;
+		glm::vec3 minimum(1e6f, 1e6f, 1e6f);
+		glm::vec3 maximum(-1e6f, -1e6f, -1e6f);
+		for (const RendererAtomData &atom : windowState.structure.atoms)
+		{
+			minimum = glm::min(minimum, atom.cartesianPosition);
+			maximum = glm::max(maximum, atom.cartesianPosition);
+		}
+		camera.FocusBounds(minimum, maximum);
+		camera.SetFromDirection(glm::normalize(glm::vec3(1.0f, 1.0f, 0.9f)));
+		return camera;
+	}
+
 	void DrawViewportToolbar(RendererWindowState &windowState, RendererLayer &layer)
 	{
 		const float uiScale = ImGui::GetIO().FontGlobalScale / kViewportToolbarFontScaleBaseline;
@@ -109,7 +127,9 @@ namespace DefectStudio
 			return rotationDeltaRadians() / kOrbitMouseScale;
 		};
 
-		const float toolbarRowHeight = std::max(axisButtonSize.y, iconButtonSize.y) + 25.0f * uiScale;
+		// Every control on the row shares one height (image buttons are extent + frame padding).
+		const float buttonHeight = std::max(axisButtonSize.y, iconButtonSize.y) + ImGui::GetStyle().FramePadding.y * 2.0f;
+		const float toolbarRowHeight = buttonHeight + ImGui::GetStyle().ScrollbarSize + 2.0f * uiScale;
 
 		ImGui::BeginChild(
 			"##ViewportToolbarRow",
@@ -120,6 +140,39 @@ namespace DefectStudio
 		auto sameLineTight = []()
 		{
 			ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x * 0.70f);
+		};
+
+		auto groupSeparator = [&]()
+		{
+			const float gap = 6.0f * uiScale;
+			ImGui::SameLine(0.0f, gap);
+			const ImVec2 position = ImGui::GetCursorScreenPos();
+			ImGui::GetWindowDrawList()->AddLine(
+				ImVec2(position.x, position.y + buttonHeight * 0.2f), ImVec2(position.x, position.y + buttonHeight * 0.8f),
+				ImGui::GetColorU32(ImGuiCol_Separator), std::max(1.0f, uiScale));
+			ImGui::Dummy(ImVec2(1.0f, buttonHeight));
+			ImGui::SameLine(0.0f, gap);
+		};
+
+		// Text-sized controls (numeric fields, glyph buttons) padded to the image buttons' height.
+		const float textFramePadY = std::max(0.0f, (buttonHeight - ImGui::GetFontSize()) * 0.5f);
+		auto stepField = [&](const char *id, float &value, const char *format, const char *tooltip)
+		{
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * uiScale, textFramePadY));
+			ImGui::SetNextItemWidth(ImGui::CalcTextSize("0000.0").x + 8.0f * uiScale);
+			ImGui::InputFloat(id, &value, 0.0f, 0.0f, format);
+			ImGui::PopStyleVar();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip("%s", tooltip);
+		};
+		auto glyphButton = [&](const char *label, const char *tooltip) -> bool
+		{
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(5.0f * uiScale, textFramePadY));
+			const bool pressed = ImGui::Button(label);
+			ImGui::PopStyleVar();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip("%s", tooltip);
+			return pressed;
 		};
 
 		auto iconButton = [&](const char *id, const char *iconFileName, const char *fallback, const char *tooltip) -> bool
@@ -218,7 +271,7 @@ namespace DefectStudio
 			}
 		};
 
-		if (ImGui::SmallButton("Rename"))
+		if (glyphButton(ICON_FA_PEN "##RenameView", "Rename this view"))
 			ImGui::OpenPopup("##RendererWindowRenamePopup");
 		if (ImGui::BeginPopup("##RendererWindowRenamePopup"))
 		{
@@ -234,7 +287,7 @@ namespace DefectStudio
 			}
 			ImGui::EndPopup();
 		}
-		sameLineTight();
+		groupSeparator();
 
 		const glm::mat3 &lattice = windowState.structure.lattice;
 		const glm::mat3 &reciprocal = windowState.structure.reciprocalLattice;
@@ -260,7 +313,7 @@ namespace DefectStudio
 		axisButton(
 			"##AxisCStar", "tool-axis-c-star.png", "c*", reciprocal[2], "toolbar.align_axis_c_star",
 			"Align to c* (reciprocal) axis (Alt+3)");
-		sameLineTight();
+		groupSeparator();
 
 		if (iconButton("##OrbitUp", "rotate-arrow-z-in.png", "^", "Orbit up relative to camera (Up, hold Alt for continuous)"))
 		{
@@ -310,9 +363,7 @@ namespace DefectStudio
 		}
 		sameLineTight();
 
-		// sameLineTight();
-		ImGui::SetNextItemWidth(90.0f);
-		ImGui::InputFloat("##step_deg", &windowState.rotationStepDeg, 0.0f, 0.0f, "%.1f");
+		stepField("##step_deg", windowState.rotationStepDeg, "%.1f", "Rotation step [deg] (wheel to change, Ctrl+wheel presets)");
 		windowState.rotationStepDeg = std::clamp(windowState.rotationStepDeg, 0.0f, 180.0f);
 		const bool rotationStepHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
 		ImGuiIO &io = ImGui::GetIO();
@@ -327,7 +378,7 @@ namespace DefectStudio
 				180.0f,
 				windowState.rotationStepDeg);
 		}
-		sameLineTight();
+		groupSeparator();
 
 		if (iconButton("##PanUp", "up-arrow.png", "P^", "Pan up (Shift+Up, hold Alt+Shift for continuous)"))
 		{
@@ -362,11 +413,10 @@ namespace DefectStudio
 
 		sameLineTight();
 
-		ImGui::SetNextItemWidth(90.0f);
-		ImGui::InputFloat("##step_px", &windowState.pixelStepPx, 0.0f, 0.0f, "%.0f");
+		stepField("##step_px", windowState.pixelStepPx, "%.0f", "Pan step [px]");
 		windowState.pixelStepPx = std::clamp(windowState.pixelStepPx, 1.0f, 512.0f);
 
-		sameLineTight();
+		groupSeparator();
 		if (iconButton("##ZoomOut", "minus.png", "-", "Zoom out (-)"))
 		{
 			publishZoomStep(-std::max(0.5f, windowState.percentStep * 0.1f));
@@ -377,47 +427,33 @@ namespace DefectStudio
 		{
 			publishZoomStep(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
-		sameLineTight();
-		ImGui::TextDisabled("|");
-		sameLineTight();
+		groupSeparator();
 
 		DrawViewportTransformControls(windowState, layer, uiScale);
+		groupSeparator();
 
-		ImGui::PopStyleVar(2);
-
-		ImGui::Checkbox("Atoms", &windowState.showAtoms);
-		ImGui::SameLine();
-		ImGui::Checkbox("Bonds", &windowState.showBonds);
-		ImGui::SameLine();
-		ImGui::BeginDisabled(!windowState.showBonds);
-		ImGui::Checkbox("Periodic", &windowState.showPeriodicBonds);
-		ImGui::EndDisabled();
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Bonds that cross the cell boundary into a periodic image.");
-		ImGui::SameLine();
-		ImGui::Checkbox("Cell", &windowState.showCellBox);
-		ImGui::SameLine();
-		ImGui::Checkbox("Grid", &windowState.showGrid);
-		ImGui::SameLine();
-		if (ImGui::Button("Reset View"))
+		if (BeginViewportToolbarPopover({
+				"##ViewportOverlaysButton", "##ViewportOverlaysPopup", 0u, ICON_FA_EYE, nullptr, "Viewport Overlays",
+				uiScale, iconExtent, 200.0f}))
 		{
-			RendererViewCamera animated = *windowState.camera;
-			glm::vec3 minimum(1e6f, 1e6f, 1e6f);
-			glm::vec3 maximum(-1e6f, -1e6f, -1e6f);
-			for (const RendererAtomData &atom : windowState.structure.atoms)
-			{
-				minimum = glm::min(minimum, atom.cartesianPosition);
-				maximum = glm::max(maximum, atom.cartesianPosition);
-			}
-			animated.FocusBounds(minimum, maximum);
-			animated.SetFromDirection(glm::normalize(glm::vec3(1.0f, 1.0f, 0.9f)));
-			queueTransition(animated, "toolbar.reset_view");
+			ImGui::SeparatorText("Structure");
+			ImGui::Checkbox("Atoms", &windowState.showAtoms);
+			ImGui::Checkbox("Bonds", &windowState.showBonds);
+			ImGui::BeginDisabled(!windowState.showBonds);
+			ImGui::Checkbox("Periodic bonds", &windowState.showPeriodicBonds);
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Bonds that cross the cell boundary into a periodic image.");
+			ImGui::SeparatorText("Guides");
+			ImGui::Checkbox("Cell", &windowState.showCellBox);
+			ImGui::Checkbox("Grid", &windowState.showGrid);
+			ImGui::EndPopup();
 		}
-		ImGui::SameLine();
-		if (ImGui::Button("Periodic Table"))
+		sameLineTight();
+		if (glyphButton(ICON_FA_TABLE_CELLS "##PeriodicTable", "Periodic Table"))
 			layer.GetShowPeriodicTableWindow() = true;
-		ImGui::SameLine();
-		if (ImGui::Button("Export PNG..."))
+		sameLineTight();
+		if (glyphButton(ICON_FA_CAMERA "##ExportPng", "Export viewport as PNG (F12)"))
 		{
 			try
 			{
@@ -437,9 +473,8 @@ namespace DefectStudio
 				DS_LOG_ERROR("Export dialog open failed: {}", exception.what());
 			}
 		}
-		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
-			ImGui::SetTooltip("Export viewport as PNG (F12)");
 
+		ImGui::PopStyleVar(2);
 		ImGui::EndChild();
 	}
 } // namespace DefectStudio
