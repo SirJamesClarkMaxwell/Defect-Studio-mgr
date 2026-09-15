@@ -378,6 +378,11 @@ namespace DefectStudio
 		};
 		NavigationGizmoDragMode navigationGizmoDragMode = NavigationGizmoDragMode::None;
 		glm::vec2 navigationGizmoLastMouse = glm::vec2(0.0f);
+		// Pan/Zoom round buttons: drag on the button = one-shot, click without moving = toggle a
+		// latched mode where every LMB drag in the viewport pans/zooms until clicked off or Esc.
+		NavigationGizmoDragMode navigationGizmoLatchedMode = NavigationGizmoDragMode::None;
+		glm::vec2 navigationGizmoDragStartMouse = glm::vec2(0.0f);
+		bool navigationGizmoDragFromButton = false;
 		// Continuous Ctrl+Shift+Arrow nudge - polled every frame (RendererPanel::applyViewportInputNavigation)
 		// instead of riding GLFW's own key-repeat cadence, which is OS-repeat-rate limited (~10-15Hz)
 		// and visibly steps rather than glides. Same start-snapshot/commit-on-release shape as the

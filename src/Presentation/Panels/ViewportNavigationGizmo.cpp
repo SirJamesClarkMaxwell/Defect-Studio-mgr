@@ -106,7 +106,8 @@ namespace DefectStudio
 			RoundButtonIcon icon,
 			const char *tooltip,
 			bool interactive,
-			bool orthographic = false)
+			bool orthographic = false,
+			bool active = false)
 		{
 			const ImVec2 oldCursor = ImGui::GetCursorScreenPos();
 			RoundButtonResult result;
@@ -120,7 +121,8 @@ namespace DefectStudio
 			ImDrawList *drawList = ImGui::GetWindowDrawList();
 			drawList->AddCircleFilled(
 				ImVec2(center.x, center.y), radius,
-				result.hovered ? IM_COL32(90, 90, 100, 200) : IM_COL32(40, 40, 46, 150));
+				active ? IM_COL32(70, 120, 200, 230)
+					: result.hovered ? IM_COL32(90, 90, 100, 200) : IM_COL32(40, 40, 46, 150));
 			// Font Awesome glyphs, sized to ~55% of the button so they read at any UI scale.
 			const char *glyph = icon == RoundButtonIcon::Projection
 				? (orthographic ? ICON_FA_BORDER_ALL : ICON_FA_CUBE)
@@ -228,7 +230,7 @@ namespace DefectStudio
 		}
 
 		using Mode = RendererWindowState::NavigationGizmoDragMode;
-		const auto beginDrag = [&](Mode mode, const char *source)
+		const auto beginDrag = [&](Mode mode, const char *source, bool fromButton = false)
 		{
 			if (windowState.transitionActive)
 			{
@@ -237,6 +239,8 @@ namespace DefectStudio
 			}
 			windowState.navigationGizmoDragMode = mode;
 			windowState.navigationGizmoLastMouse = mouse;
+			windowState.navigationGizmoDragStartMouse = mouse;
+			windowState.navigationGizmoDragFromButton = fromButton;
 			layer.BeginViewInteraction(windowState.windowId, source);
 		};
 		if (!hit.has_value() && viewportHovered && capturing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -273,17 +277,20 @@ namespace DefectStudio
 
 		buttonCenter.y += buttonRadius * 2.0f + buttonGap;
 		const RoundButtonResult panButton = RoundButton(
-			"##NavigationPan", buttonCenter, buttonRadius, RoundButtonIcon::Pan, "Pan view (Shift+MMB)", viewportHovered);
+			"##NavigationPan", buttonCenter, buttonRadius, RoundButtonIcon::Pan,
+			"Pan view: drag, or click to toggle LMB pan (Shift+MMB)", viewportHovered, false,
+			windowState.navigationGizmoLatchedMode == Mode::Pan);
 		if (panButton.pressed)
-			beginDrag(Mode::Pan, "navigation_gizmo.pan");
+			beginDrag(Mode::Pan, "navigation_gizmo.pan", true);
 		capturing = capturing || panButton.hovered;
 
 		buttonCenter.y += buttonRadius * 2.0f + buttonGap;
 		const RoundButtonResult zoomButton = RoundButton(
 			"##NavigationZoom", buttonCenter, buttonRadius, RoundButtonIcon::Zoom,
-			"Zoom view (Ctrl+MMB / wheel)", viewportHovered);
+			"Zoom view: drag, or click to toggle LMB zoom (Ctrl+MMB / wheel)", viewportHovered, false,
+			windowState.navigationGizmoLatchedMode == Mode::Zoom);
 		if (zoomButton.pressed)
-			beginDrag(Mode::Zoom, "navigation_gizmo.zoom");
+			beginDrag(Mode::Zoom, "navigation_gizmo.zoom", true);
 		capturing = capturing || zoomButton.hovered;
 
 		buttonCenter.y += buttonRadius * 2.0f + buttonGap;
@@ -293,6 +300,21 @@ namespace DefectStudio
 		if (homeButton.pressed)
 			PublishTransition(windowState, layer, ComputeResetViewCamera(windowState), "navigation_gizmo.reset_view");
 		capturing = capturing || homeButton.hovered;
+
+		const Mode latched = windowState.navigationGizmoLatchedMode;
+		if (latched != Mode::None)
+		{
+			if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+				windowState.navigationGizmoLatchedMode = Mode::None;
+			else if (viewportHovered)
+			{
+				// Latched: the whole viewport is a pan/zoom surface, so selection tools stay out.
+				capturing = true;
+				if (windowState.navigationGizmoDragMode == Mode::None && !ImGui::IsAnyItemHovered() &&
+					ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+					beginDrag(latched, latched == Mode::Pan ? "navigation_gizmo.pan" : "navigation_gizmo.zoom");
+			}
+		}
 
 		if (windowState.navigationGizmoDragMode != Mode::None)
 		{
@@ -306,6 +328,12 @@ namespace DefectStudio
 			else
 			{
 				layer.CommitViewInteraction(windowState.windowId);
+				constexpr float kClickSlopPixels = 3.0f;
+				const Mode released = windowState.navigationGizmoDragMode;
+				if (windowState.navigationGizmoDragFromButton && released != Mode::Orbit &&
+					glm::distance(mouse, windowState.navigationGizmoDragStartMouse) <= kClickSlopPixels)
+					windowState.navigationGizmoLatchedMode =
+						windowState.navigationGizmoLatchedMode == released ? Mode::None : released;
 				windowState.navigationGizmoDragMode = Mode::None;
 			}
 		}
