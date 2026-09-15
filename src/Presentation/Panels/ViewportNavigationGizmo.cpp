@@ -151,13 +151,13 @@ namespace DefectStudio
 		ImGui::PushID(windowState.windowId.c_str());
 		const float scale = std::max(
 			ImGui::GetIO().FontGlobalScale / kViewportToolbarFontScaleBaseline, 0.01f);
-		const float gizmoRadius = 42.0f * scale;
-		const float axisLength = 29.0f * scale;
-		const float positiveRadius = 10.0f * scale;
-		const float negativeRadius = 7.0f * scale;
+		const float gizmoRadius = 60.0f * scale;
+		const float axisLength = 41.0f * scale;
+		const float positiveRadius = 14.0f * scale;
+		const float negativeRadius = 10.0f * scale;
 		const glm::vec2 center(
-			imageOrigin.x + imageSize.x - gizmoRadius - 10.0f * scale,
-			imageOrigin.y + gizmoRadius + 10.0f * scale);
+			imageOrigin.x + imageSize.x - gizmoRadius - 14.0f * scale,
+			imageOrigin.y + gizmoRadius + 14.0f * scale);
 		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 
 		TransformBases bases;
@@ -242,8 +242,8 @@ namespace DefectStudio
 		if (!hit.has_value() && viewportHovered && capturing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			beginDrag(Mode::Orbit, "navigation_gizmo.orbit");
 
-		const float buttonRadius = 16.0f * scale;
-		const float buttonGap = 6.0f * scale;
+		const float buttonRadius = 21.0f * scale;
+		const float buttonGap = 8.0f * scale;
 		glm::vec2 buttonCenter(center.x, center.y + gizmoRadius + buttonRadius + buttonGap);
 		const RoundButtonResult projectionButton = RoundButton(
 			"##NavigationProjection", buttonCenter, buttonRadius, RoundButtonIcon::Projection,
