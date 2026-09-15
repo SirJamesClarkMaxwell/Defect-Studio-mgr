@@ -22,6 +22,10 @@ namespace DefectStudio
 		// this call.
 		void PushSelectionAndVisibilityToWindowState(const SceneRegistry &scene, RendererWindowState &windowState);
 
+		// Deselects every atom and bond (entities + window mirrors). A plain click on a label/arrow
+		// replaces the selection, so a stale atom selection can't drag the transform pivot away.
+		void ClearStructureSelection(SceneRegistry &scene, RendererWindowState &windowState);
+
 		// The reverse of PushSelectionAndVisibilityToWindowState - sets SelectionComponent/
 		// VisibilityComponent from index lists (e.g. a restored RendererViewSnapshot). Caller is
 		// responsible for following up with PushSelectionAndVisibilityToWindowState to sync the

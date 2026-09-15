@@ -389,6 +389,8 @@ namespace DefectStudio
 		// pin already does.
 		windowState.selectedFreeLabels.clear();
 		windowState.selectedSceneArrows.clear();
+		if (!additive)
+			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 
 		if (additive)
 		{
@@ -520,6 +522,8 @@ namespace DefectStudio
 		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneArrows.clear();
+		if (!additive)
+			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 
 		if (additive)
 		{

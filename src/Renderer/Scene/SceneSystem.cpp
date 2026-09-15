@@ -70,6 +70,17 @@ namespace DefectStudio::SceneSystem
 		}
 	}
 
+	void ClearStructureSelection(SceneRegistry &scene, RendererWindowState &windowState)
+	{
+		entt::registry &registry = scene.Registry();
+		for (const entt::entity entity : registry.view<const AtomComponent, SelectionComponent>())
+			registry.get<SelectionComponent>(entity).selected = false;
+		for (const entt::entity entity : registry.view<const BondComponent, SelectionComponent>())
+			registry.get<SelectionComponent>(entity).selected = false;
+		windowState.selectedAtomIndices.clear();
+		windowState.selectedBondIndices.clear();
+	}
+
 	void PushSelectionAndVisibilityToWindowState(const SceneRegistry &scene, RendererWindowState &windowState)
 	{
 		windowState.selectedAtomIndices.clear();
