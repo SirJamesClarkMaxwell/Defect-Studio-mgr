@@ -14,5 +14,5 @@ namespace DefectStudio
 	// they only ever needed a window state and the layer.
 	void DrawViewportToolbar(RendererWindowState &windowState, RendererLayer &layer);
 	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer);
-	void DrawViewportTransformControls(RendererWindowState &windowState, float uiScale);
+	void DrawViewportTransformControls(RendererWindowState &windowState, RendererLayer &layer, float uiScale);
 } // namespace DefectStudio

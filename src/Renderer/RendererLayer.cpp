@@ -1946,6 +1946,7 @@ namespace DefectStudio
 			return;
 
 		windowState->addAtomPopupRequested = true;
+		windowState->addMenuScreenPosition = event.screenPosition;
 	}
 
 	void RendererLayer::onLabelsToggleRequested(const RendererEvents::Viewport::LabelsToggleRequested &event)

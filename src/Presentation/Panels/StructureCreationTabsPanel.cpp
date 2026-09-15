@@ -14,6 +14,7 @@
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportInput.hpp"
 #include "Presentation/Panels/ViewportInteraction.hpp"
+#include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
 #include "Presentation/Panels/ViewportToolbars.hpp"
 #include "Renderer/CrystalStructurePreviewWindow.hpp"
@@ -299,6 +300,8 @@ namespace DefectStudio
 		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			session.activePaneIndex = paneIndex;
 		const bool isActive = session.activePaneIndex == paneIndex;
+		if (!isActive)
+			(void)RenderViewportNavigationGizmo(*windowState, imageOrigin, imageSize, false, m_RendererLayer);
 
 		// Selection and the transform gizmo, in the order the main viewport uses them: the gizmo gets
 		// first refusal on the frame's mouse, and only a click it did not claim becomes a pick. Panes

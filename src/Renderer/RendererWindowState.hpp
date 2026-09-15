@@ -345,9 +345,9 @@ namespace DefectStudio
 		bool pickBonds = true;
 		bool pickLabels = true;
 		// Set by RendererLayer::onAddAtomPopupToggleRequested (Shift+A), read and cleared by
-		// RendererPanel's per-window Render loop, which forwards it into its own popup-request
-		// members (drawAddAtomPopup can only be triggered from within RendererPanel itself).
+		// RendererPanel's shared request consumer, which forwards it into the one app-wide Add menu.
 		bool addAtomPopupRequested = false;
+		std::optional<glm::vec2> addMenuScreenPosition;
 		// Box/circle drag-select (Alt+B / Alt+C). Coordinates are viewport-relative pixels, same
 		// space as RendererPanel::handleAtomPick's relX/relY.
 		SelectionToolMode activeSelectionTool = SelectionToolMode::None;
@@ -369,6 +369,15 @@ namespace DefectStudio
 		// sceneArrowGizmoActiveArrowIndex no longer matches the current single-arrow selection.
 		SceneArrowDragTarget sceneArrowGizmoActiveTarget = SceneArrowDragTarget::Both;
 		std::size_t sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(-1);
+		enum class NavigationGizmoDragMode
+		{
+			None,
+			Orbit,
+			Pan,
+			Zoom,
+		};
+		NavigationGizmoDragMode navigationGizmoDragMode = NavigationGizmoDragMode::None;
+		glm::vec2 navigationGizmoLastMouse = glm::vec2(0.0f);
 		// Continuous Ctrl+Shift+Arrow nudge - polled every frame (RendererPanel::applyViewportInputNavigation)
 		// instead of riding GLFW's own key-repeat cadence, which is OS-repeat-rate limited (~10-15Hz)
 		// and visibly steps rather than glides. Same start-snapshot/commit-on-release shape as the

@@ -378,37 +378,10 @@ namespace DefectStudio
 			publishZoomStep(+std::max(0.5f, windowState.percentStep * 0.1f));
 		}
 		sameLineTight();
-
-		const bool isOrtho = windowState.camera->Projection() == CameraProjection::Orthographic;
-		if (ImGui::Button(isOrtho ? "ORTHO" : "PERSP"))
-		{
-			Ref<EventBus> eventBus = layer.GetEventBus();
-			if (eventBus != nullptr)
-			{
-				RendererEvents::Viewport::ProjectionToggleRequested event;
-				event.windowId = windowState.windowId;
-				eventBus->Publish(event);
-			}
-		}
+		ImGui::TextDisabled("|");
 		sameLineTight();
 
-		ImGui::SetNextItemWidth(90.0f);
-		ImGui::InputFloat("##step_pct", &windowState.percentStep, 0.0f, 0.0f, "%.0f");
-		windowState.percentStep = std::clamp(windowState.percentStep, 0.0f, 180.0f);
-		const bool zoomStepHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
-		if (zoomStepHovered)
-		{
-			ApplyToolbarWheelStep(
-				io.MouseWheel,
-				io.KeyCtrl,
-				layer.GetGlobalSettings().toolbarWheel.zoomStepDelta,
-				layer.GetGlobalSettings().toolbarWheel.ctrlPresetValues,
-				0.0f,
-				180.0f,
-				windowState.percentStep);
-		}
-		sameLineTight();
-		DrawViewportTransformControls(windowState, uiScale);
+		DrawViewportTransformControls(windowState, layer, uiScale);
 
 		ImGui::PopStyleVar(2);
 

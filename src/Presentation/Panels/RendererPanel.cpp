@@ -95,6 +95,7 @@ namespace DefectStudio
 		if (!m_Layer.IsAttached())
 			return;
 
+		consumeAddMenuRequests();
 		std::vector<std::string> windowsToClose;
 		for (RendererWindowState &windowState : m_Layer.GetWindows())
 		{
@@ -107,6 +108,7 @@ namespace DefectStudio
 		}
 		for (const std::string &windowId : windowsToClose)
 			m_Layer.RemoveWindow(windowId);
+		consumeAddMenuRequests();
 
 		drawPeriodicTableWindow();
 		drawAddMenu();
@@ -257,34 +259,6 @@ namespace DefectStudio
 		// the one order they work in - shared with the creation panes (ViewportInteraction.hpp).
 		const bool gizmoCapturing =
 			RunViewportGizmoChain(windowState, imageOrigin, viewportSize, hovered, m_Layer, m_CommandRegistry);
-
-		// Shift+A (RendererEvents::Viewport::AddAtomPopupToggleRequested) can only flag intent on
-		// RendererWindowState - it has no access to this panel's own popup-request members, so it's
-		// picked up and forwarded here, once per frame. Opens the Blender-style "what to add" menu
-		// (drawAddMenu) rather than jumping straight to the Add Atom dialog - Atom is one choice
-		// among others (Label) now, not the only thing Shift+A can mean.
-		if (windowState.addAtomPopupRequested)
-		{
-			windowState.addAtomPopupRequested = false;
-			m_AddMenuRequested = true;
-			m_AddMenuWindowId = windowState.windowId;
-			m_AddMenuScreenPos = ImGui::GetMousePos();
-			// Defaults: if a 3D cursor is already placed, start from there (Cartesian, since the
-			// cursor's own position is stored Cartesian) - otherwise Fractional is a more useful
-			// starting point than Cartesian (0,0,0) is for an ATOM (fractional (0,0,0) is a real cell
-			// corner, Cartesian (0,0,0) is often nowhere near the visible structure); a Label reuses
-			// this same vector as a plain Cartesian position either way, see drawAddMenu.
-			if (windowState.cursor3DPlaced)
-			{
-				m_AddMenuPosition = windowState.cursor3DPosition;
-				m_AddMenuPositionFractional = false;
-			}
-			else
-			{
-				m_AddMenuPosition = glm::vec3(0.0f);
-				m_AddMenuPositionFractional = true;
-			}
-		}
 
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
 		renderSceneArrowQuickEditPanel(windowState, imageOrigin, viewportSize);

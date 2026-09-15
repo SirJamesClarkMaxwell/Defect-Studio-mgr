@@ -29,6 +29,10 @@ namespace DefectStudio
 		struct AppearanceApplyRequested;
 		struct ThemeLoaded;
 	}
+	namespace RendererEvents::Config
+	{
+		struct TransformSnapStepsChanged;
+	}
 
 	class ApplicationConfigController final : public EventReceiver
 	{
@@ -63,6 +67,7 @@ namespace DefectStudio
 		void onProfileExportRequested(const AppEvents::Config::ProfileExportRequested &event);
 		void onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event);
 		void onThemeLoaded(const EditorUiEvents::ThemeLoaded &event);
+		void onTransformSnapStepsChanged(const RendererEvents::Config::TransformSnapStepsChanged &event);
 
 	private:
 		Ref<EventBus> m_EventBus;

@@ -107,6 +107,17 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
+		if (toolButton("##ToolAdd", "plus.png", "+", "Add (Shift+A)", false))
+		{
+			RendererEvents::Viewport::AddAtomPopupToggleRequested event;
+			event.windowId = windowState.windowId;
+			const ImVec2 itemMinimum = ImGui::GetItemRectMin();
+			const ImVec2 itemMaximum = ImGui::GetItemRectMax();
+			event.screenPosition = glm::vec2(itemMaximum.x + 4.0f * uiScale, itemMinimum.y);
+			eventBus->Publish(event);
+		}
+		ImGui::Spacing();
+
 		if (toolButton(
 				"##ToolNone", "tool-select.png", "Sel", "Selection tool - plain click-select, no drag tool active",
 				windowState.activeSelectionTool == SelectionToolMode::None))

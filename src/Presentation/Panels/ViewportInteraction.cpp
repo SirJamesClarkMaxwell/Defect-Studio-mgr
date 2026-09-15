@@ -10,7 +10,7 @@
 #include <imgui.h>
 
 #include "Presentation/Panels/ViewportGizmo.hpp"
-#include "Presentation/Panels/ViewportOrientationTriad.hpp"
+#include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -40,7 +40,7 @@ namespace DefectStudio
 		// mouse click/drag-start logic must NOT also run once an earlier one already claimed this
 		// frame's click - e.g. clicking an atom gizmo handle must not also be reinterpreted as a pin
 		// pick by HandlePinnedMeasurementInteraction's own hit-test underneath it.
-		return RenderViewportOrientationTriad(windowState, imageOrigin, imageSize, hovered) ||
+		return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, layer) ||
 			RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry) ||
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||

@@ -24,6 +24,15 @@ namespace DefectStudio::RendererEvents::Config
 		RendererConfig config;
 		bool wasPersisted = false;
 	};
+
+	// Header snap popover request. The application config controller folds this into the current
+	// config and reuses the normal user-settings apply/persist pipeline.
+	struct TransformSnapStepsChanged final : public BusEvent
+	{
+		float translate = 0.1f;
+		float rotateDegrees = 5.0f;
+		float scale = 0.1f;
+	};
 } // namespace DefectStudio::RendererEvents::Config
 
 namespace DefectStudio::RendererEvents::Viewport
@@ -232,14 +241,14 @@ namespace DefectStudio::RendererEvents::Viewport
 		bool startModal = false;
 	};
 
-	// Shift+A (Blender convention) / the vertical toolbar's "Add" button - opens
-	// RendererPanel::drawAddAtomPopup for the target window (empty = focused viewport, same
-	// convention as GizmoOperationRequested). The toolbar button still sets RendererPanel's own
-	// popup-request members directly since it already has the instance in hand; this event exists so
-	// a keybinding (no RendererPanel access) can reach the same popup.
+	// Shift+A (Blender convention) and the vertical toolbar's Add button both request the same
+	// RendererPanel::drawAddMenu flow for the target window (empty = focused viewport).
 	struct AddAtomPopupToggleRequested final : public BusEvent
 	{
 		std::string windowId;
+		// Toolbar requests anchor to the button's right edge; keyboard requests leave this empty and
+		// the menu opens at the current mouse position.
+		std::optional<glm::vec2> screenPosition;
 	};
 
 	// Toggles auto bond-length label visibility for every bond (Etap E, `Alt+M`) on the active

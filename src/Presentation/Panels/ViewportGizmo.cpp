@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "Presentation/Panels/ViewportModalTransform.hpp"
-#include "Presentation/Panels/ViewportOrientationTriad.hpp"
+#include "Renderer/Scene/ViewportNavigationMath.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
