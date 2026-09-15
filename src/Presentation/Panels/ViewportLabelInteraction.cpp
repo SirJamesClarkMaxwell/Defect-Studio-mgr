@@ -142,8 +142,8 @@ namespace DefectStudio
 		if (sceneArrowSelected && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false))
 			DuplicateSelectedSceneArrows(windowState);
 
-		// Tab cycles which single point (Start -> End -> whole arrow) owns
-		// RenderSceneArrowTransformGizmo's drawn/hit-tested axis-triad - keyboard equivalent of clicking
+		// Tab cycles which single point (Start -> End -> whole arrow) owns the unified transform
+		// gizmo's axis triad - keyboard equivalent of clicking
 		// the plain dots it draws for the inactive candidates (item 3 of the prior feedback round).
 		const bool oneArrowSelected = windowState.selectedSceneArrows.size() == 1;
 		if (oneArrowSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Tab, false))
@@ -214,18 +214,6 @@ namespace DefectStudio
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			PasteLabelStyle(windowState, windowState.selectedPinnedMeasurements, windowState.selectedFreeLabels);
-		}
-
-		// Shift+R toggles the Rotate pivot (Midpoint <-> 3D Cursor) - keyboard equivalent of the toolbar
-		// pivot-mode button (RendererPanelToolbar.cpp), only meaningful while an arrow is selected and
-		// Rotate is the active gizmo mode, same visibility condition that toolbar button uses.
-		if (sceneArrowSelected && hovered && windowState.gizmoOperation == GizmoOperation::Rotate && shiftHeld &&
-			ImGui::IsKeyPressed(ImGuiKey_R, false))
-		{
-			using PivotMode = RendererWindowState::ArrowGizmoPivotMode;
-			windowState.sceneArrowGizmoPivotMode = windowState.sceneArrowGizmoPivotMode == PivotMode::Midpoint
-				? PivotMode::Cursor3D
-				: PivotMode::Midpoint;
 		}
 
 		// Ctrl+Home sets the 3D cursor to the selected arrow's currently active gizmo point (Start/End/

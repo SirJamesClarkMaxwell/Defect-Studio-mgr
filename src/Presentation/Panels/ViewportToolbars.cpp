@@ -408,6 +408,7 @@ namespace DefectStudio
 				windowState.percentStep);
 		}
 		sameLineTight();
+		DrawViewportTransformControls(windowState, uiScale);
 
 		ImGui::PopStyleVar(2);
 

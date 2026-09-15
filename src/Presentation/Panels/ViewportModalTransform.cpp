@@ -2,20 +2,24 @@
 
 #include "Presentation/Panels/ViewportModalTransform.hpp"
 
-#include <algorithm>
 #include <array>
+#include <cmath>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
-
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
+#include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
+#include "Renderer/Scene/SceneTransform.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
@@ -37,34 +41,29 @@ namespace DefectStudio
 		{
 			switch (operation)
 			{
-				case ModalTransformOp::Translate: return "Move selected atoms";
-				case ModalTransformOp::Rotate: return "Rotate selected atoms";
-				case ModalTransformOp::Scale: return "Scale selected atoms";
+				case ModalTransformOp::Translate: return "Move selection";
+				case ModalTransformOp::Rotate: return "Rotate selection";
+				case ModalTransformOp::Scale: return "Scale selection";
 			}
-			return "Transform selected atoms";
+			return "Transform selection";
+		}
+
+		[[nodiscard]] TransformSnapSteps SnapSteps(const RendererLayer &layer)
+		{
+			const RendererViewportSettings &viewport = layer.GetGlobalSettings().viewport;
+			return {
+				viewport.transformTranslateSnap,
+				viewport.transformRotateSnapDegrees,
+				viewport.transformScaleSnap};
 		}
 
 		void ResetModalTransform(RendererWindowState &windowState)
 		{
 			windowState.modalTransform.reset();
-			windowState.modalTransformAtomIndices.clear();
-			windowState.modalTransformStartPositions.clear();
+			windowState.modalTransformSelection = {};
+			windowState.modalTransformSceneObjectsBefore.reset();
 			windowState.modalTransformStartedFromHandle = false;
-			windowState.fallbackGizmoDragging = false;
-			windowState.fallbackGizmoAxis = -1;
 			windowState.gizmoDragActive = false;
-		}
-
-		void RestoreStartPositions(RendererWindowState &windowState)
-		{
-			const std::size_t count = std::min(
-				windowState.modalTransformAtomIndices.size(), windowState.modalTransformStartPositions.size());
-			for (std::size_t i = 0; i < count; ++i)
-			{
-				const std::size_t atomIndex = windowState.modalTransformAtomIndices[i];
-				if (atomIndex < windowState.structure.atoms.size())
-					windowState.structure.atoms[atomIndex].cartesianPosition = windowState.modalTransformStartPositions[i];
-			}
 		}
 
 		void CaptureNumericInput(ModalTransformSession &session)
@@ -127,7 +126,8 @@ namespace DefectStudio
 		{
 			constexpr std::array<ImU32, 3> colors = {
 				IM_COL32(230, 70, 70, 220), IM_COL32(90, 210, 90, 220), IM_COL32(90, 150, 240, 220)};
-			if (session.constraint.kind != ConstraintKind::None && session.constraint.axis >= 0 && session.constraint.axis < 3)
+			if (session.constraint.kind != ConstraintKind::None && session.constraint.axis >= 0 &&
+				session.constraint.axis < 3)
 			{
 				const glm::mat3 basis = ResolveBasis(session.constraint.space, session.bases);
 				for (int axis = 0; axis < 3; ++axis)
@@ -145,97 +145,143 @@ namespace DefectStudio
 				ImVec2(view.viewportOrigin.x + 12.0f, view.viewportOrigin.y + 12.0f),
 				IM_COL32(255, 240, 150, 255), header.c_str());
 		}
+
+		[[nodiscard]] float RotationAmount(
+			const ModalTransformSession &session, SnapMode snap, const TransformSnapSteps &steps)
+		{
+			if (!session.numericText.empty())
+				return glm::radians(NumericValue(session).value_or(0.0f));
+			float degrees = glm::degrees(session.accumulatedAngleRadians);
+			const float step = ResolveSnapStep(ModalTransformOp::Rotate, snap, steps);
+			if (step > 0.0f)
+				degrees = SnapValue(degrees, step);
+			return glm::radians(degrees);
+		}
+
+		[[nodiscard]] float ScaleFactor(
+			const TransformDelta &delta, const ModalTransformSession &session)
+		{
+			const TransformOrientation space = session.constraint.kind == ConstraintKind::None
+				? session.orientation
+				: session.constraint.space;
+			const glm::mat3 basis = ResolveBasis(space, session.bases);
+			if (std::abs(glm::determinant(basis)) <= 1.0e-6f)
+				return 1.0f;
+			const glm::mat3 local = glm::inverse(basis) * delta.linear * basis;
+			if (session.constraint.kind == ConstraintKind::Axis)
+				return local[session.constraint.axis][session.constraint.axis];
+			if (session.constraint.kind == ConstraintKind::Plane)
+			{
+				for (int axis = 0; axis < 3; ++axis)
+					if (axis != session.constraint.axis)
+						return local[axis][axis];
+			}
+			return local[0][0];
+		}
+
+		void CommitAtomPreview(
+			RendererWindowState &windowState, const SceneTransformSelectionSnapshot &snapshot,
+			const WeakRef<CommandRegistry> &commandRegistryRef, std::string_view description)
+		{
+			if (windowState.structure.domainStructureId.empty())
+				return;
+			Ref<CommandRegistry> commandRegistry = commandRegistryRef.lock();
+			if (commandRegistry == nullptr)
+				return;
+
+			GizmoTransformPayload payload;
+			payload.windowId = windowState.windowId;
+			payload.description = description;
+			for (const AtomTransformStart &start : snapshot.atoms)
+			{
+				if (start.index >= windowState.structure.atoms.size())
+					continue;
+				payload.atomIndices.push_back(start.index);
+				payload.afterPositions.push_back(windowState.structure.atoms[start.index].cartesianPosition);
+			}
+			if (payload.atomIndices.empty())
+				return;
+
+			CommandContext context;
+			context.Set<GizmoTransformPayload>("gizmo.transform_payload", std::move(payload));
+			Result<CommandOutcome> result =
+				commandRegistry->Execute(CommandID{"renderer.gizmo.commit_transform"}, std::move(context));
+			if (!result)
+				DS_LOG_WARN("Gizmo transform commit failed: {}", result.Error().technicalDetails);
+		}
+
+		void CommitTransform(
+			RendererWindowState &windowState, RendererLayer &layer,
+			const WeakRef<CommandRegistry> &commandRegistryRef, std::string_view description)
+		{
+			const bool hasAtoms = HasAtomTransformTargets(windowState.modalTransformSelection);
+			const bool hasSceneObjects = HasSceneObjectTransformTargets(windowState.modalTransformSelection) &&
+				windowState.modalTransformSceneObjectsBefore.has_value();
+			Ref<UndoStack> undoStack = layer.GetUndoStackHandle().lock();
+			std::optional<UndoScope> group;
+			if (hasAtoms && hasSceneObjects && undoStack != nullptr)
+				group.emplace(*undoStack, std::string(description));
+
+			if (hasSceneObjects)
+				PushSceneObjectsUndoSnapshot(windowState, std::move(*windowState.modalTransformSceneObjectsBefore));
+			if (hasAtoms)
+				CommitAtomPreview(windowState, windowState.modalTransformSelection, commandRegistryRef, description);
+			if (group.has_value())
+			{
+				const Result<void> committed = group->Commit();
+				if (!committed)
+					DS_LOG_WARN("Transform undo group commit failed: {}", committed.Error().technicalDetails);
+			}
+		}
 	} // namespace
 
-	void BeginAtomModalTransform(
+	void BeginViewportModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> axis, bool startedFromHandle)
+		std::optional<int> axis, bool startedFromHandle, SceneArrowTransformTarget arrowTarget)
 	{
 		if (windowState.camera == nullptr || windowState.modalTransform.has_value())
 			return;
 
-		windowState.modalTransformAtomIndices.clear();
-		windowState.modalTransformStartPositions.clear();
-		for (const std::size_t atomIndex : windowState.selectedAtomIndices)
-		{
-			if (atomIndex >= windowState.structure.atoms.size())
-				continue;
-			windowState.modalTransformAtomIndices.push_back(atomIndex);
-			windowState.modalTransformStartPositions.push_back(
-				windowState.structure.atoms[atomIndex].cartesianPosition);
-		}
-		if (windowState.modalTransformStartPositions.empty())
+		SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState, arrowTarget);
+		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
+		if (positions.empty())
 			return;
 
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;
-		const glm::vec3 pivot = ComputeTransformPivot(
-			windowState.transformPivotMode, windowState.modalTransformStartPositions, cursor);
+		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
 		TransformBases bases;
+		bases.local = SceneTransformLocalBasis(snapshot);
 		bases.lattice = windowState.structure.lattice;
 		windowState.modalTransform = BeginModalTransform(op, windowState.transformOrientation, bases, pivot, mouse);
 		if (axis.has_value())
-			windowState.modalTransform->constraint =
-				TransformConstraint{ConstraintKind::Axis, *axis, windowState.transformOrientation};
+			windowState.modalTransform->constraint = CycleConstraint(
+				{}, *axis, false, windowState.transformOrientation, bases);
+		windowState.modalTransformSelection = std::move(snapshot);
+		if (HasSceneObjectTransformTargets(windowState.modalTransformSelection))
+			windowState.modalTransformSceneObjectsBefore = CaptureSceneObjectsSnapshot(windowState);
 		windowState.modalTransformStartedFromHandle = startedFromHandle;
-		windowState.fallbackGizmoDragging = true;
-		windowState.fallbackGizmoAxis = -1;
 		windowState.gizmoDragActive = true;
 	}
 
-	void CommitAtomGizmoPreview(
-		RendererWindowState &windowState, const WeakRef<CommandRegistry> &commandRegistryRef,
-		std::string_view description)
-	{
-		if (windowState.structure.domainStructureId.empty())
-			return;
-		Ref<CommandRegistry> commandRegistry = commandRegistryRef.lock();
-		if (commandRegistry == nullptr)
-			return;
-
-		GizmoTransformPayload payload;
-		payload.windowId = windowState.windowId;
-		payload.atomIndices = windowState.modalTransformAtomIndices.empty()
-			? windowState.selectedAtomIndices
-			: windowState.modalTransformAtomIndices;
-		payload.afterPositions.reserve(payload.atomIndices.size());
-		for (const std::size_t atomIndex : payload.atomIndices)
-		{
-			if (atomIndex < windowState.structure.atoms.size())
-				payload.afterPositions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
-		}
-		if (payload.afterPositions.size() != payload.atomIndices.size())
-			return;
-		payload.description = description;
-
-		CommandContext context;
-		context.Set<GizmoTransformPayload>("gizmo.transform_payload", std::move(payload));
-		Result<CommandOutcome> result =
-			commandRegistry->Execute(CommandID{"renderer.gizmo.commit_transform"}, std::move(context));
-		if (!result)
-			DS_LOG_WARN("Gizmo transform commit failed: {}", result.Error().technicalDetails);
-	}
-
-	bool UpdateAtomModalTransform(
+	bool UpdateViewportModalTransform(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize,
-		const WeakRef<CommandRegistry> &commandRegistryRef)
+		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef)
 	{
-		const bool startRequested = windowState.modalTransformStartRequested;
-		windowState.modalTransformStartRequested = false;
+		const bool startRequested = std::exchange(windowState.modalTransformStartRequested, false);
 		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 		if (startRequested && !windowState.modalTransform.has_value())
-			BeginAtomModalTransform(windowState, ToModalOperation(windowState.gizmoOperation), mouse);
+			BeginViewportModalTransform(windowState, ToModalOperation(windowState.gizmoOperation), mouse);
 		if (!windowState.modalTransform.has_value())
 			return false;
 
 		ImGui::GetIO().WantCaptureKeyboard = true;
-		windowState.fallbackGizmoDragging = true;
 		windowState.gizmoDragActive = true;
 		ModalTransformSession &session = *windowState.modalTransform;
 		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
 		{
-			RestoreStartPositions(windowState);
+			RestoreSceneTransformSelection(windowState, windowState.modalTransformSelection);
 			ResetModalTransform(windowState);
 			return true;
 		}
@@ -252,26 +298,19 @@ namespace DefectStudio
 		}
 		CaptureNumericInput(session);
 
+		const TransformSnapSteps steps = SnapSteps(layer);
 		const SnapMode snap = SnapModeFromModifiers(ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
 		const ModalTransformView view{
 			windowState.camera->ViewMatrix(), windowState.camera->ProjectionMatrix(),
 			glm::vec2(imageOrigin.x, imageOrigin.y), glm::vec2(imageSize.x, imageSize.y)};
-		const TransformDelta delta =
-			EvaluateModalTransform(session, view, mouse, snap, windowState.transformSnapSteps);
-		const std::size_t count = std::min(
-			windowState.modalTransformAtomIndices.size(), windowState.modalTransformStartPositions.size());
-		for (std::size_t i = 0; i < count; ++i)
-		{
-			const std::size_t atomIndex = windowState.modalTransformAtomIndices[i];
-			if (atomIndex >= windowState.structure.atoms.size())
-				continue;
-			const glm::vec3 pivot = windowState.transformPivotMode == TransformPivotMode::IndividualOrigins
-				? windowState.modalTransformStartPositions[i]
-				: session.pivot;
-			windowState.structure.atoms[atomIndex].cartesianPosition =
-				ApplyTransformDelta(delta, windowState.modalTransformStartPositions[i], pivot);
-		}
-		DrawModalOverlay(session, delta, snap, windowState.transformSnapSteps, view);
+		SceneTransformDelta delta;
+		delta.spatial = EvaluateModalTransform(session, view, mouse, snap, steps);
+		delta.rotationRadians = RotationAmount(session, snap, steps);
+		delta.scaleFactor = ScaleFactor(delta.spatial, session);
+		ApplySceneTransformSelection(
+			windowState, windowState.modalTransformSelection, delta, session.op,
+			windowState.transformPivotMode, session.pivot);
+		DrawModalOverlay(session, delta.spatial, snap, steps, view);
 
 		const bool enterPressed =
 			ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
@@ -281,8 +320,7 @@ namespace DefectStudio
 		if (!confirmed)
 			return true;
 
-		const std::string_view description = CommitDescription(session.op);
-		CommitAtomGizmoPreview(windowState, commandRegistryRef, description);
+		CommitTransform(windowState, layer, commandRegistryRef, CommitDescription(session.op));
 		ResetModalTransform(windowState);
 		return true;
 	}

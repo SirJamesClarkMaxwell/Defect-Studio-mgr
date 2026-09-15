@@ -491,6 +491,12 @@ namespace DefectStudio
 			m_DraftConfig.renderer.viewport.iconButtonSize,
 			kMinViewportButtonSize,
 			kMaxViewportButtonSize);
+		m_DraftConfig.renderer.viewport.transformTranslateSnap = std::clamp(
+			m_DraftConfig.renderer.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
+		m_DraftConfig.renderer.viewport.transformRotateSnapDegrees = std::clamp(
+			m_DraftConfig.renderer.viewport.transformRotateSnapDegrees, 0.0001f, 180.0f);
+		m_DraftConfig.renderer.viewport.transformScaleSnap = std::clamp(
+			m_DraftConfig.renderer.viewport.transformScaleSnap, 0.0001f, 10.0f);
 		m_DraftConfig.renderer.toolbarWheel.rotationStepDelta = std::clamp(
 			m_DraftConfig.renderer.toolbarWheel.rotationStepDelta,
 			kMinWheelStepDelta,
@@ -1614,6 +1620,35 @@ namespace DefectStudio
 				m_DraftDirty = true;
 			ImGui::PopItemWidth();
 
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Transform snapping");
+		ImGui::TextWrapped(
+			"Ctrl snaps modal transforms to these increments; Ctrl+Shift uses one tenth of the configured step.");
+		if (ImGui::BeginTable(
+				"ViewportTransformSnap", 2,
+				ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			auto snapRow = [this](const char *label, const char *id, float &value, float maximum, const char *format)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(label);
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SetNextItemWidth(-1.0f);
+				if (ImGui::DragFloat(id, &value, value < 1.0f ? 0.01f : 0.1f, 0.0001f, maximum, format))
+					m_DraftDirty = true;
+			};
+			snapRow(
+				"Translate (Angstrom)", "##TransformTranslateSnap",
+				m_DraftConfig.renderer.viewport.transformTranslateSnap, 1000.0f, "%.4g A");
+			snapRow(
+				"Rotate (degrees)", "##TransformRotateSnap",
+				m_DraftConfig.renderer.viewport.transformRotateSnapDegrees, 180.0f, "%.4g deg");
+			snapRow(
+				"Scale", "##TransformScaleSnap",
+				m_DraftConfig.renderer.viewport.transformScaleSnap, 10.0f, "%.4g");
 			ImGui::EndTable();
 		}
 	}

@@ -164,51 +164,48 @@ namespace DefectStudio::SceneSystem
 		return resolvedIndices;
 	}
 
-	namespace
+	bool ResolvePinnedMeasurementPosition(
+		const RendererStructureData &structure, const RendererWindowState::PinnedMeasurement &pin,
+		glm::vec3 &outAnchor)
 	{
 		// Same anchor formula as RendererPanel::handlePinnedMeasurementInteraction's resolveAnchor
 		// lambda (bond midpoint / angle vertex + worldOffset) - ignores a bond's periodic-image shift
 		// like that lambda does, fine for a gizmo pivot/hit-test, not the precise render (see
 		// OpenGlRendererBackend::renderLabels, which matches the exact periodic bond image instead).
-		[[nodiscard]] bool ResolveLabelAnchor(
-			const RendererStructureData &structure, const RendererWindowState::PinnedMeasurement &pin, glm::vec3 &outAnchor)
+		if (pin.linkBroken)
 		{
-			if (pin.linkBroken)
-			{
-				if (pin.frozenAtomPositions.size() != pin.atomIndices.size() ||
-					(pin.atomIndices.size() != 2 && pin.atomIndices.size() != 3))
-					return false;
-				if (pin.atomIndices.size() == 2)
-					outAnchor = (pin.frozenAtomPositions[0] + pin.frozenAtomPositions[1]) * 0.5f;
-				else
-					outAnchor = pin.frozenAtomPositions[1];
-				outAnchor += pin.worldOffset;
-				return true;
-			}
-			const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(),
-				[&](const std::size_t index) { return index < structure.atoms.size(); });
-			if (!inRange)
+			if (pin.frozenAtomPositions.size() != pin.atomIndices.size() ||
+				(pin.atomIndices.size() != 2 && pin.atomIndices.size() != 3))
 				return false;
-
 			if (pin.atomIndices.size() == 2)
-			{
-				outAnchor =
-					(structure.atoms[pin.atomIndices[0]].cartesianPosition + structure.atoms[pin.atomIndices[1]].cartesianPosition) *
-					0.5f;
-			}
-			else if (pin.atomIndices.size() == 3)
-			{
-				const std::size_t vertexIndex = ResolveAngleVertexIndex(structure, pin.atomIndices);
-				outAnchor = structure.atoms[vertexIndex].cartesianPosition;
-			}
+				outAnchor = (pin.frozenAtomPositions[0] + pin.frozenAtomPositions[1]) * 0.5f;
 			else
-			{
-				return false;
-			}
+				outAnchor = pin.frozenAtomPositions[1];
 			outAnchor += pin.worldOffset;
 			return true;
 		}
-	} // namespace
+		const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(),
+			[&](const std::size_t index) { return index < structure.atoms.size(); });
+		if (!inRange)
+			return false;
+
+		if (pin.atomIndices.size() == 2)
+		{
+			outAnchor = (structure.atoms[pin.atomIndices[0]].cartesianPosition +
+				structure.atoms[pin.atomIndices[1]].cartesianPosition) * 0.5f;
+		}
+		else if (pin.atomIndices.size() == 3)
+		{
+			const std::size_t vertexIndex = ResolveAngleVertexIndex(structure, pin.atomIndices);
+			outAnchor = structure.atoms[vertexIndex].cartesianPosition;
+		}
+		else
+		{
+			return false;
+		}
+		outAnchor += pin.worldOffset;
+		return true;
+	}
 
 	void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState)
 	{
@@ -232,7 +229,7 @@ namespace DefectStudio::SceneSystem
 			Entity entity = scene.CreateObject(SceneObjectKind::PinnedMeasurement, index, "measurement " + std::to_string(index), pin.id);
 			pin.id = entity.GetComponent<SceneObjectComponent>().id;
 			glm::vec3 anchor(0.0f);
-			(void)ResolveLabelAnchor(windowState.structure, pin, anchor);
+			(void)ResolvePinnedMeasurementPosition(windowState.structure, pin, anchor);
 			entity.AddComponent<TransformComponent>(TransformComponent{anchor});
 			entity.AddComponent<LabelComponent>(LabelComponent{index});
 			const bool isSelected = std::find(
@@ -293,7 +290,7 @@ namespace DefectStudio::SceneSystem
 		for (std::size_t index = 0; index < labelEntities.size() && index < windowState.pinnedMeasurements.size(); ++index)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!ResolveLabelAnchor(windowState.structure, windowState.pinnedMeasurements[index], anchor))
+			if (!ResolvePinnedMeasurementPosition(windowState.structure, windowState.pinnedMeasurements[index], anchor))
 				continue;
 			Entity entity(labelEntities[index], &scene);
 			entity.GetComponent<TransformComponent>().position = anchor;

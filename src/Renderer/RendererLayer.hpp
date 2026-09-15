@@ -90,6 +90,7 @@ namespace DefectStudio
 		void ApplyConfig(const RendererConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
 		void BindUndoStack(WeakRef<UndoStack> undoStack);
+		[[nodiscard]] WeakRef<UndoStack> GetUndoStackHandle() const noexcept { return m_UndoStack; }
 		[[nodiscard]] Ref<EventBus> GetEventBus() const;
 		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
 		void CommitViewInteraction(const std::string &windowId);

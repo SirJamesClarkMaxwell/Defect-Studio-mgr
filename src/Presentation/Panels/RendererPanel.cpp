@@ -226,8 +226,8 @@ namespace DefectStudio
 		// (the gizmo disappears once nothing is selected, since RenderTransformGizmo() early-returns
 		// with an empty selection). Doesn't try to cancel/revert a drag already in progress - only
 		// acts when nothing is actively being dragged, so it can't leave a transform half-applied.
-		if (hovered && !windowState.fallbackGizmoDragging && !windowState.pinnedMeasurementDragging &&
-			!windowState.freeLabelDragging && !windowState.sceneArrowDragging && !windowState.sceneArrowGizmoDragging &&
+		if (hovered && !windowState.modalTransform.has_value() && !windowState.pinnedMeasurementDragging &&
+			!windowState.freeLabelDragging && !windowState.sceneArrowDragging &&
 			!windowState.selectionDragActive && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
 		{
 			windowState.selectedPinnedMeasurements.clear();

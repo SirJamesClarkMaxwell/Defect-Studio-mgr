@@ -17,6 +17,7 @@
 #include "Domain/DomainIds.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
+#include "Renderer/Scene/SceneTransform.hpp"
 
 namespace DefectStudio
 {
@@ -61,10 +62,8 @@ namespace DefectStudio
 		// while selected" behaviour. Not persisted with the project yet (see TODO.md T09 "Tryby
 		// zaznaczania"). Real ECS entity as of Etap F (LabelComponent/TransformComponent/
 		// SelectionComponent, synced by SceneSystem::SyncLabelEntities/UpdateLabelTransforms/
-		// SyncLabelSelection) - gizmo-draggable (RendererPanel::renderLabelTransformGizmo: Translate
-		// moves worldOffset along a world axis, Rotate/Scale drive rotationOffsetRadians/scale below
-		// via a ring-drag around the pivot instead of per-axis handles, since a billboard label has
-		// only one meaningful rotation axis - its own camera-facing normal - and one meaningful scale).
+		// SyncLabelSelection) - the unified modal transform moves worldOffset, while Rotate/Scale
+		// preserve the label-specific rotationOffsetRadians/style.scale meanings below.
 		// Shared styling for every label kind - free labels, pinned bond/angle labels, and (Phase 4)
 		// arrow-attached labels - rendered through the same MSDF pipeline
 		// (OpenGlRendererBackend::AppendLabelInstances/renderLabels), so one style struct instead of
@@ -355,107 +354,18 @@ namespace DefectStudio
 		bool selectionDragActive = false;
 		// Viewport transform gizmo (G/R/S). Keyboard commands set the operation and request a modal
 		// transform; the Presentation gizmo owns the per-frame input and renderer-side preview while
-		// the existing commit command remains the single domain/undo boundary.
+		// atom and scene-object commands share one grouped undo boundary.
 		GizmoOperation gizmoOperation = GizmoOperation::Translate;
 		bool gizmoDragActive = false;
 		bool modalTransformStartRequested = false;
 		std::optional<ModalTransformSession> modalTransform;
-		std::vector<std::size_t> modalTransformAtomIndices;
-		std::vector<glm::vec3> modalTransformStartPositions;
+		SceneTransformSelectionSnapshot modalTransformSelection;
+		std::optional<LabelUndoSnapshot> modalTransformSceneObjectsBefore;
 		bool modalTransformStartedFromHandle = false;
 		TransformOrientation transformOrientation = TransformOrientation::Global;
 		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
-		TransformSnapSteps transformSnapSteps;
-		// ImGuizmo's picking remains disabled. This flag and the two values below are now only the
-		// existing free-trackball rotation state; translate/axis-scale handles use modalTransform.
-		bool fallbackGizmoDragging = false;
-		int fallbackGizmoAxis = -1;
-		glm::vec2 fallbackLastMousePos = glm::vec2(0.0f);
-		// Gizmo for the current label selection (RendererPanel::renderLabelTransformGizmo) - same
-		// click-a-handle-and-drag shape as the fallback atom gizmo above but its own state, since it
-		// drags PinnedMeasurement::worldOffset/FreeLabel::worldPosition fields rather than atom
-		// positions. No axis-lock override (X/Y/Z mid-drag re-pick) - not worth the extra state atoms'
-		// version justifies - but DOES have the Blender-style modal start (X/Y/Z with no mouse button
-		// held, translate only) via labelGizmoModalDrag below, same convention as the atom gizmo's
-		// key-started modal transform.
-		bool labelGizmoDragging = false;
-		// True when this drag was started by pressing X/Y/Z with no mouse button held (modal - follows
-		// the mouse every frame regardless of button state, confirms on left-click, cancels on
-		// right-click/Escape) rather than by clicking a handle (click-drag - follows only while the
-		// button is held, commits on release). See the atom gizmo's modal transform for the same
-		// distinction; no numeric-typed-value entry here though, unlike that one.
-		bool labelGizmoModalDrag = false;
-		int labelGizmoAxis = -1;
-		glm::vec2 labelGizmoLastMousePos = glm::vec2(0.0f);
-		glm::vec2 labelGizmoDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
-		glm::vec3 labelGizmoDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
-		float labelGizmoDragPixelsPerWorld = 1.0f;
-		// One entry per label in the selection at drag-start (mixing pins and free labels is fine -
-		// isPin picks which vector `index` refers to). Translate/Rotate apply their delta to every
-		// target's live field incrementally each frame (same shape as the old single-select code just
-		// looped); Scale recomputes from startScale * radial-ratio every frame, so needs the frozen
-		// start value same as before. All three also feed Escape/right-click cancel (revert every
-		// target to its start* value).
-		struct LabelGizmoDragTarget
-		{
-			bool isPin = false;
-			std::size_t index = 0;
-			glm::vec3 startPosition = glm::vec3(0.0f);
-			float startRotation = 0.0f;
-			float startScale = 1.0f;
-		};
-		std::vector<LabelGizmoDragTarget> labelGizmoDragTargets;
-		float labelGizmoDragStartRadial = 0.0f;
-		// Gizmo for the current SceneArrow selection (RendererPanel::renderSceneArrowTransformGizmo) -
-		// same shape as the label gizmo above (own state, no ICommand/UndoStack, PushPinnedMeasurement-
-		// UndoSnapshot on drag start), except Translate can target a SINGLE endpoint instead of always
-		// moving the whole item: exactly one arrow selected draws three translate pick points (Start,
-		// End, and the midpoint for a rigid whole-arrow move); more than one selected only draws the
-		// group-centroid pivot (every selected arrow's both endpoints move together, matching the
-		// existing raw-drag system's "multi-selection is always rigid" rule - see sceneArrowDragTarget
-		// above). sceneArrowGizmoEndpointTarget records which of the three was actually grabbed so the
-		// active drag (and its cancel-revert) knows which field(s) to touch without re-hit-testing every
-		// frame. Reuses SceneArrowDragTarget (Start/End/Both, declared above for the raw-drag system) -
-		// same three-way meaning, no need for a second identical enum.
-		bool sceneArrowGizmoDragging = false;
-		bool sceneArrowGizmoModalDrag = false;
-		int sceneArrowGizmoAxis = -1;
-		SceneArrowDragTarget sceneArrowGizmoEndpointTarget = SceneArrowDragTarget::Both;
-		glm::vec2 sceneArrowGizmoLastMousePos = glm::vec2(0.0f);
-		glm::vec2 sceneArrowGizmoDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
-		glm::vec3 sceneArrowGizmoDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
-		float sceneArrowGizmoDragPixelsPerWorld = 1.0f;
-		// One entry per selected arrow at drag-start - Translate(Both)/Rotate apply their delta to every
-		// target's start/end incrementally each frame; Scale recomputes shaftWidth/headWidth/headLength
-		// from the frozen start* value * radial-ratio every frame (same reasoning as the label gizmo's
-		// LabelGizmoDragTarget::startScale). All also feed Escape/right-click cancel.
-		struct SceneArrowGizmoDragTarget
-		{
-			std::size_t index = 0;
-			glm::vec3 startPosition = glm::vec3(0.0f);
-			glm::vec3 endPosition = glm::vec3(0.0f);
-			float startShaftWidth = 0.0f;
-			float startHeadWidth = 0.0f;
-			float startHeadLength = 0.0f;
-		};
-		std::vector<SceneArrowGizmoDragTarget> sceneArrowGizmoDragTargets;
-		float sceneArrowGizmoDragStartRadial = 0.0f;
-		// Rotate-only pivot choice (Settings has no bearing here - this is a live per-window toggle, same
-		// tier as gizmoOperation itself): Midpoint rotates around the live centroid of the selection
-		// (default, matches the label gizmo's rotate); Cursor3D rotates around windowState.cursor3DPosition
-		// instead, letting the user stage the cursor at an arrow's own start/end (viewport context menu's
-		// "3D Cursor > Move to Arrow Start/End") for an off-center pivot. Scale has no pivot concept
-		// (thickness-only, never touches position) so this toggle doesn't affect it.
-		enum class ArrowGizmoPivotMode
-		{
-			Midpoint,
-			Cursor3D
-		};
-		ArrowGizmoPivotMode sceneArrowGizmoPivotMode = ArrowGizmoPivotMode::Midpoint;
-		// Which Start/End/midpoint candidate currently owns the drawn/hit-tested axis-triad on a single
-		// selected arrow (renderSceneArrowTransformGizmo) - the other two candidates render as plain
-		// click-to-activate dots instead of also drawing their own triad, so only one gizmo is ever
-		// visible/interactive at a time. Reset to Both (the whole-arrow midpoint) whenever
+		// Which Start/End/midpoint candidate owns the unified transform gizmo for a single arrow.
+		// The other two render as activation dots. Reset to Both whenever
 		// sceneArrowGizmoActiveArrowIndex no longer matches the current single-arrow selection.
 		SceneArrowDragTarget sceneArrowGizmoActiveTarget = SceneArrowDragTarget::Both;
 		std::size_t sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(-1);

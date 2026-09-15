@@ -1033,6 +1033,12 @@ namespace DefectStudio
 			config.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
+		m_GlobalRenderSettings.viewport.transformTranslateSnap = std::clamp(
+			config.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
+		m_GlobalRenderSettings.viewport.transformRotateSnapDegrees = std::clamp(
+			config.viewport.transformRotateSnapDegrees, 0.0001f, 180.0f);
+		m_GlobalRenderSettings.viewport.transformScaleSnap = std::clamp(
+			config.viewport.transformScaleSnap, 0.0001f, 10.0f);
 		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = config.toolbarWheel.rotationStepDelta;
 		m_GlobalRenderSettings.toolbarWheel.zoomStepDelta = config.toolbarWheel.zoomStepDelta;
 		m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues = config.toolbarWheel.ctrlPresetValues;

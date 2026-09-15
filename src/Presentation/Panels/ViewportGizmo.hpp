@@ -7,9 +7,10 @@
 namespace DefectStudio
 {
 	class CommandRegistry;
+	class RendererLayer;
 	struct RendererWindowState;
 
-	// G/R/S transform gizmo for one viewport's atom selection. Returns true while it owns the
+	// G/R/S transform gizmo for one viewport's atom/label/arrow selection. Returns true while it owns the
 	// frame's mouse, so the caller can suppress its own picking underneath the handles.
 	//
 	// A free function rather than a RendererPanel member because a viewport is not always a
@@ -17,5 +18,5 @@ namespace DefectStudio
 	// its panes had a selection but no way to move it.
 	[[nodiscard]] bool RenderTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered,
-		const WeakRef<CommandRegistry> &commandRegistryRef);
+		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef);
 } // namespace DefectStudio

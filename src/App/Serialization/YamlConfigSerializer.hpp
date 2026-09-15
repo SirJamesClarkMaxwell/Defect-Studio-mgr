@@ -83,6 +83,9 @@ namespace DefectStudio
 		{
 			AxisButtonSize,
 			IconButtonSize,
+			TransformRotateSnapDegrees,
+			TransformScaleSnap,
+			TransformTranslateSnap,
 		};
 
 		enum class RendererToolbarWheelKey
@@ -294,6 +297,9 @@ namespace DefectStudio
 		inline const std::unordered_map<RendererViewportKey, const char *> RendererViewportKeyNames = {
 			{RendererViewportKey::AxisButtonSize, "axis_button_size"},
 			{RendererViewportKey::IconButtonSize, "icon_button_size"},
+			{RendererViewportKey::TransformRotateSnapDegrees, "transform_rotate_snap_degrees"},
+			{RendererViewportKey::TransformScaleSnap, "transform_scale_snap"},
+			{RendererViewportKey::TransformTranslateSnap, "transform_translate_snap"},
 		};
 
 		inline const std::unordered_map<RendererToolbarWheelKey, const char *> RendererToolbarWheelKeyNames = {

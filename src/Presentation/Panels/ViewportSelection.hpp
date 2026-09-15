@@ -22,8 +22,8 @@ namespace DefectStudio
 		return ImGui::IsKeyPressed(key, false);
 	}
 
-	// Box/circle region select, the label and scene-arrow gizmos, and the click/drag handling for
-	// both - all of it used to live as RendererPanel members. A viewport is not always a
+	// Box/circle region select and label/scene-arrow click/drag handling used to live as
+	// RendererPanel members. A viewport is not always a
 	// RendererPanel window: the three-pane structure creation window draws its own, so as members
 	// none of this existed there. Same regression shape as the keybindings, the atom picking and the
 	// atom gizmo before them, which is why this is the last of RendererPanel's per-frame input half
@@ -70,10 +70,6 @@ namespace DefectStudio
 		RendererEvents::Viewport::RegionSelectMode mode,
 		RendererLayer &layer);
 
-	[[nodiscard]] bool RenderLabelTransformGizmo(
-		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
-	[[nodiscard]] bool RenderSceneArrowTransformGizmo(
-		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 	[[nodiscard]] bool HandlePinnedMeasurementInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 	// F flip / Delete / Ctrl+Shift+</> scale-step for the selected pin - keyboard-only, no mouse

@@ -8,6 +8,7 @@
 
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneTransform.hpp"
 
 namespace DefectStudio
 {
@@ -90,18 +91,19 @@ namespace DefectStudio
 			triadMin.x + padding + axisLength,
 			triadMin.y + padding + axisLength);
 
-		const bool lattice = windowState.transformOrientation == TransformOrientation::Lattice;
-		const TransformOrientation orientation = lattice
-			? TransformOrientation::Lattice
-			: TransformOrientation::Global;
+		const TransformOrientation orientation = windowState.transformOrientation;
 		TransformBases bases;
 		bases.lattice = windowState.structure.lattice;
+		bases.local = windowState.modalTransform.has_value()
+			? windowState.modalTransform->bases.local
+			: SceneTransformLocalBasis(CaptureSceneTransformSelection(windowState));
 		const OrientationScreenAxes projected = ProjectOrientationAxes(
 			windowState.camera->ViewMatrix(), ResolveNormalizedOrientationAxes(orientation, bases));
 
 		ImDrawList &drawList = *ImGui::GetWindowDrawList();
 		drawList.PushClipRect(imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
 		drawList.AddRectFilled(triadMin, triadMax, IM_COL32(18, 18, 22, 115), 4.0f * scale);
+		const bool lattice = orientation == TransformOrientation::Lattice;
 		const std::array<const char *, 3> labels = lattice
 			? std::array<const char *, 3>{"a", "b", "c"}
 			: std::array<const char *, 3>{"x", "y", "z"};
@@ -109,7 +111,11 @@ namespace DefectStudio
 			DrawAxis(drawList, axisOrigin, projected[axis], axisLength, scale, kAxisColors[axis], labels[axis]);
 		drawList.AddCircleFilled(ImVec2(axisOrigin.x, axisOrigin.y), 3.0f * scale, IM_COL32(235, 235, 235, 255));
 
-		const char *caption = lattice ? "Lattice" : "Global";
+		const char *caption = "Global";
+		if (orientation == TransformOrientation::Local)
+			caption = "Local";
+		else if (orientation == TransformOrientation::Lattice)
+			caption = "Lattice";
 		const ImVec2 captionSize = ImGui::CalcTextSize(caption);
 		drawList.AddText(
 			ImVec2(
