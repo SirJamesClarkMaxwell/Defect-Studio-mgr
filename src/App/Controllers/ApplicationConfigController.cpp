@@ -100,6 +100,8 @@ namespace DefectStudio
 		AddSubscription(subscribeConfigController<ProfileExportRequested>(*m_EventBus, *this, &ApplicationConfigController::onProfileExportRequested));
 		AddSubscription(subscribeConfigController<EditorUiEvents::AppearanceApplyRequested>(*m_EventBus, *this, &ApplicationConfigController::onAppearanceApplyRequested));
 		AddSubscription(subscribeConfigController<EditorUiEvents::ThemeLoaded>(*m_EventBus, *this, &ApplicationConfigController::onThemeLoaded));
+		AddSubscription(subscribeConfigController<RendererEvents::Config::TransformSnapStepsChanged>(
+			*m_EventBus, *this, &ApplicationConfigController::onTransformSnapStepsChanged));
 		DS_LOG_INFO("ApplicationConfigController event handlers bound");
 	}
 
@@ -374,5 +376,14 @@ namespace DefectStudio
 		m_Config.appearance = event.appearance;
 		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
 		DS_LOG_INFO("Appearance theme loaded; user config save queued: {}", event.path.String());
+	}
+
+	void ApplicationConfigController::onTransformSnapStepsChanged(
+		const RendererEvents::Config::TransformSnapStepsChanged &event)
+	{
+		m_Config.renderer.viewport.transformTranslateSnap = std::clamp(event.translate, 0.0001f, 1000.0f);
+		m_Config.renderer.viewport.transformRotateSnapDegrees = std::clamp(event.rotateDegrees, 0.0001f, 180.0f);
+		m_Config.renderer.viewport.transformScaleSnap = std::clamp(event.scale, 0.0001f, 10.0f);
+		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
 	}
 } // namespace DefectStudio

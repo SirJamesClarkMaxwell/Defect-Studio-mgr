@@ -1,12 +1,11 @@
 #pragma once
 
+#include "Renderer/RendererWindowState.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
 {
-	struct RendererWindowState;
-
 	// The ECS<->flat-array boundary. RendererStructureData::atoms/bonds and
 	// RendererWindowState::selectedAtomIndices stay the GPU-instanced-rendering hot path
 	// (OpenGlRendererBackend reads them unchanged) - SceneSystem is the only place that syncs
@@ -43,6 +42,13 @@ namespace DefectStudio
 			const RendererStructureData &targetStructure,
 			const std::vector<glm::vec3> &positions,
 			float tolerance = 0.35f);
+
+		// Resolves a pinned label's live world position (measurement anchor + worldOffset). Shared by
+		// ECS synchronization and the modal-transform adapter so both use identical anchor semantics.
+		[[nodiscard]] bool ResolvePinnedMeasurementPosition(
+			const RendererStructureData &structure,
+			const RendererWindowState::PinnedMeasurement &pin,
+			glm::vec3 &outPosition);
 
 		// (Re)builds one entity per annotation - pinned measurement, free label AND scene arrow -
 		// from the three vectors on windowState, destroying the previous set first; same "resync on

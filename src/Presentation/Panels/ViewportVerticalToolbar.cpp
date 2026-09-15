@@ -107,6 +107,17 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
+		if (toolButton("##ToolAdd", "plus.png", "+", "Add (Shift+A)", false))
+		{
+			RendererEvents::Viewport::AddAtomPopupToggleRequested event;
+			event.windowId = windowState.windowId;
+			const ImVec2 itemMinimum = ImGui::GetItemRectMin();
+			const ImVec2 itemMaximum = ImGui::GetItemRectMax();
+			event.screenPosition = glm::vec2(itemMaximum.x + 4.0f * uiScale, itemMinimum.y);
+			eventBus->Publish(event);
+		}
+		ImGui::Spacing();
+
 		if (toolButton(
 				"##ToolNone", "tool-select.png", "Sel", "Selection tool - plain click-select, no drag tool active",
 				windowState.activeSelectionTool == SelectionToolMode::None))
@@ -158,28 +169,6 @@ namespace DefectStudio
 		if (toolButton(
 				"##ToolScale", "tool-scale.png", "Scl", "Scale (S)", windowState.gizmoOperation == GizmoOperation::Scale))
 			publishGizmoOperation(GizmoOperation::Scale);
-
-		// Rotate-only pivot toggle for the SceneArrow gizmo (RendererPanel::renderSceneArrowTransformGizmo)
-		// - meaningless for Translate/Scale (thickness-only, no pivot concept) or for the atom/label
-		// gizmos, so only shown when it would actually do something. Pure toolbar-local UI state (like
-		// rotationStepDeg/pixelStepPx/percentStep above), mutated directly rather than through a
-		// GizmoOperationRequested-style event - nothing else (no keybinding) needs to reach it. No icon
-		// asset - "tool-pivot-cursor.png" doesn't exist, so toolButton's plain-text fallback always
-		// renders, same as the "1"/"2"/"3"/"4" selection-mode buttons above.
-		using ArrowGizmoPivotMode = RendererWindowState::ArrowGizmoPivotMode;
-		if (!windowState.selectedSceneArrows.empty() && windowState.gizmoOperation == GizmoOperation::Rotate)
-		{
-			const bool cursorPivot = windowState.sceneArrowGizmoPivotMode == ArrowGizmoPivotMode::Cursor3D;
-			if (toolButton(
-					"##ToolArrowPivot", "tool-pivot-cursor.png", cursorPivot ? "Csr" : "Mid",
-					cursorPivot ? "Arrow rotate pivot: 3D Cursor (click for Midpoint)"
-								: "Arrow rotate pivot: Midpoint (click for 3D Cursor)",
-					cursorPivot))
-			{
-				windowState.sceneArrowGizmoPivotMode =
-					cursorPivot ? ArrowGizmoPivotMode::Midpoint : ArrowGizmoPivotMode::Cursor3D;
-			}
-		}
 
 		ImGui::Spacing();
 

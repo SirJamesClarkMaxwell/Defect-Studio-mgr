@@ -161,7 +161,7 @@ namespace DefectStudio
 
 		// Claims the keyboard for this frame so app-wide shortcuts (single-letter view/axis
 		// commands) don't fire on every keystroke typed at the shell - same pattern and same
-		// one-frame-lag caveat as RendererPanel's fallbackGizmoDragging flag.
+		// one-frame-lag caveat as the viewport modal-transform capture.
 		io.WantCaptureKeyboard = true;
 
 		for (int i = 0; i < io.InputQueueCharacters.Size; ++i)

@@ -6,18 +6,15 @@
 #include <array>
 #include <cmath>
 #include <optional>
-#include <vector>
-
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <ImGuizmo.h>
+#include <utility>
 
 #include "Presentation/Panels/ViewportModalTransform.hpp"
-#include "Presentation/Panels/ViewportOrientationTriad.hpp"
+#include "Renderer/Scene/ViewportNavigationMath.hpp"
+#include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
+#include "Renderer/Scene/SceneTransform.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
@@ -25,7 +22,7 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr float kPickMinDistance = 20.0f;
-		constexpr float kPickMaxDistance = 130.0f;
+		constexpr float kPickMaxDistance = 100.0f;
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
@@ -67,10 +64,10 @@ namespace DefectStudio
 			return Ray{nearPoint, glm::normalize(direction)};
 		}
 
-		[[nodiscard]] bool IsAtomUnderScreenPosition(
-			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPosition)
+		[[nodiscard]] bool IsAtomOrBondUnderMouse(
+			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &mouse)
 		{
-			const std::optional<Ray> ray = MakeScreenRay(windowState, imageOrigin, screenPosition);
+			const std::optional<Ray> ray = MakeScreenRay(windowState, imageOrigin, mouse);
 			if (!ray.has_value())
 				return false;
 			for (const RendererAtomData &atom : windowState.structure.atoms)
@@ -81,37 +78,24 @@ namespace DefectStudio
 				const float b = 2.0f * glm::dot(offset, ray->direction);
 				const float radius = atom.radius * 1.35f;
 				const float discriminant = b * b - 4.0f * (glm::dot(offset, offset) - radius * radius);
-				if (discriminant >= 0.0f && (-b - std::sqrt(discriminant)) * 0.5f > 0.001f)
+				if (discriminant >= 0.0f && (-b + std::sqrt(discriminant)) * 0.5f > 0.001f)
 					return true;
 			}
-			return false;
-		}
-
-		[[nodiscard]] bool IsBondUnderScreenPosition(
-			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPosition)
-		{
-			const std::optional<Ray> ray = MakeScreenRay(windowState, imageOrigin, screenPosition);
-			if (!ray.has_value())
-				return false;
 			for (const RendererBondData &bond : windowState.structure.bonds)
 			{
 				if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
 					bond.secondAtomIndex >= windowState.structure.atoms.size())
 					continue;
-				const RendererAtomData &first = windowState.structure.atoms[bond.firstAtomIndex];
-				const RendererAtomData &second = windowState.structure.atoms[bond.secondAtomIndex];
-				if (!first.visible || !second.visible)
-					continue;
-
 				float rayDistance = 0.0f;
 				glm::vec3 closestOnBond(0.0f);
 				SelectionHitTest::ClosestPointsRaySegment(
-					ray->origin, ray->direction, first.cartesianPosition,
-					second.cartesianPosition + bond.secondAtomPeriodicOffset, rayDistance, closestOnBond);
-				if (rayDistance <= 0.001f)
-					continue;
+					ray->origin, ray->direction,
+					windowState.structure.atoms[bond.firstAtomIndex].cartesianPosition,
+					windowState.structure.atoms[bond.secondAtomIndex].cartesianPosition + bond.secondAtomPeriodicOffset,
+					rayDistance, closestOnBond);
 				const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
-				if (glm::distance(ray->origin + ray->direction * rayDistance, closestOnBond) <= pickRadius)
+				if (rayDistance > 0.001f &&
+					glm::distance(ray->origin + ray->direction * rayDistance, closestOnBond) <= pickRadius)
 					return true;
 			}
 			return false;
@@ -128,21 +112,6 @@ namespace DefectStudio
 				: std::nullopt;
 		}
 
-		[[nodiscard]] std::optional<glm::vec3> SelectionPivot(const RendererWindowState &windowState)
-		{
-			std::vector<glm::vec3> positions;
-			positions.reserve(windowState.selectedAtomIndices.size());
-			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
-				if (atomIndex < windowState.structure.atoms.size())
-					positions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
-			if (positions.empty())
-				return std::nullopt;
-			const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
-				? std::optional<glm::vec3>(windowState.cursor3DPosition)
-				: std::nullopt;
-			return ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
-		}
-
 		[[nodiscard]] std::array<AxisProjection, 3> ProjectAxes(
 			const glm::mat4 &viewProjection, const ImVec2 &imageOrigin, const ImVec2 &imageSize,
 			const glm::vec3 &pivot, const glm::vec2 &pivotScreen, const OrientationAxes &worldAxes)
@@ -155,9 +124,8 @@ namespace DefectStudio
 				if (!probe.has_value())
 					continue;
 				const glm::vec2 projected = *probe - pivotScreen;
-				if (glm::dot(projected, projected) <= 1.0f)
-					continue;
-				axes[axis] = AxisProjection{glm::normalize(projected), true};
+				if (glm::dot(projected, projected) > 1.0f)
+					axes[axis] = AxisProjection{glm::normalize(projected), true};
 			}
 			return axes;
 		}
@@ -165,8 +133,6 @@ namespace DefectStudio
 		void DrawAxisHandles(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes)
 		{
 			ImDrawList &drawList = *ImGui::GetWindowDrawList();
-			constexpr float headLength = 16.0f;
-			constexpr float headHalfWidth = 6.0f;
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				if (!axes[axis].valid)
@@ -174,13 +140,11 @@ namespace DefectStudio
 				const glm::vec2 direction = axes[axis].direction;
 				const glm::vec2 perpendicular(-direction.y, direction.x);
 				const glm::vec2 tip = pivot + direction * kPickMaxDistance;
-				const glm::vec2 headBase = tip - direction * headLength;
-				const glm::vec2 headLeft = headBase + perpendicular * headHalfWidth;
-				const glm::vec2 headRight = headBase - perpendicular * headHalfWidth;
+				const glm::vec2 headBase = tip - direction * 16.0f;
 				drawList.AddLine(ImVec2(pivot.x, pivot.y), ImVec2(headBase.x, headBase.y), kAxisColors[axis], 3.5f);
 				drawList.AddTriangleFilled(
-					ImVec2(tip.x, tip.y), ImVec2(headLeft.x, headLeft.y), ImVec2(headRight.x, headRight.y),
-					kAxisColors[axis]);
+					ImVec2(tip.x, tip.y), ImVec2(headBase.x + perpendicular.x * 6.0f, headBase.y + perpendicular.y * 6.0f),
+					ImVec2(headBase.x - perpendicular.x * 6.0f, headBase.y - perpendicular.y * 6.0f), kAxisColors[axis]);
 			}
 			drawList.AddCircleFilled(ImVec2(pivot.x, pivot.y), 5.0f, IM_COL32(235, 235, 235, 255));
 		}
@@ -192,19 +156,15 @@ namespace DefectStudio
 			const float radial = glm::length(fromPivot);
 			if (radial < kPickMinDistance || radial > kPickMaxDistance)
 				return -1;
-
-			constexpr float pickTolerance = 16.0f;
-			float bestDistance = pickTolerance;
+			float bestDistance = 16.0f;
 			int bestAxis = -1;
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				if (!axes[axis].valid)
 					continue;
 				const float along = glm::dot(fromPivot, axes[axis].direction);
-				if (along <= 0.0f)
-					continue;
 				const float distance = glm::length(fromPivot - axes[axis].direction * along);
-				if (distance < bestDistance)
+				if (along > 0.0f && distance < bestDistance)
 				{
 					bestDistance = distance;
 					bestAxis = axis;
@@ -213,128 +173,104 @@ namespace DefectStudio
 			return bestAxis;
 		}
 
-		void ApplyTrackballRotation(
-			RendererWindowState &windowState, const glm::mat4 &view, const glm::vec3 &pivot,
-			const glm::vec2 &mouse)
-		{
-			const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
-			const glm::vec3 cameraUp(view[0][1], view[1][1], view[2][1]);
-			const glm::vec3 cameraForward = -glm::vec3(view[0][2], view[1][2], view[2][2]);
-			const glm::vec2 screenDelta = mouse - windowState.fallbackLastMousePos;
-			windowState.fallbackLastMousePos = mouse;
-			const glm::vec3 dragDirection = cameraRight * screenDelta.x - cameraUp * screenDelta.y;
-			if (glm::dot(dragDirection, dragDirection) <= 1.0e-8f)
-				return;
-
-			const glm::vec3 rotationAxis = glm::normalize(glm::cross(cameraForward, dragDirection));
-			const glm::quat rotation = glm::angleAxis(glm::length(screenDelta) * 0.006f, rotationAxis);
-			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
-			{
-				if (atomIndex < windowState.structure.atoms.size())
-				{
-					RendererAtomData &atom = windowState.structure.atoms[atomIndex];
-					atom.cartesianPosition = pivot + rotation * (atom.cartesianPosition - pivot);
-				}
-			}
-		}
 	} // namespace
 
 	bool RenderTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered,
-		const WeakRef<CommandRegistry> &commandRegistryRef)
+		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef)
 	{
-		if (UpdateAtomModalTransform(windowState, imageOrigin, imageSize, commandRegistryRef))
+		if (UpdateViewportModalTransform(windowState, imageOrigin, imageSize, layer, commandRegistryRef))
 			return true;
+		if (windowState.camera == nullptr)
+			return false;
 
-		const std::optional<glm::vec3> pivot = SelectionPivot(windowState);
-		if (!pivot.has_value() || windowState.camera == nullptr)
+		SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState);
+		if (SceneTransformPivotPositions(snapshot).empty())
 		{
 			windowState.gizmoDragActive = false;
-			windowState.fallbackGizmoDragging = false;
-			windowState.fallbackGizmoAxis = -1;
 			return false;
 		}
 
-		const glm::mat4 view = windowState.camera->ViewMatrix();
-		const glm::mat4 projection = windowState.camera->ProjectionMatrix();
-		const glm::mat4 viewProjection = projection * view;
-		const std::optional<glm::vec2> pivotScreen =
-			ProjectAbsolute(viewProjection, imageOrigin, imageSize, *pivot);
+		const bool singleArrowOnly = snapshot.atoms.empty() && snapshot.labels.empty() && snapshot.arrows.size() == 1;
+		if (singleArrowOnly)
+		{
+			const std::size_t index = snapshot.arrows.front().index;
+			if (windowState.sceneArrowGizmoActiveArrowIndex != index)
+			{
+				windowState.sceneArrowGizmoActiveArrowIndex = index;
+				windowState.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::Both;
+			}
+		}
+
+		const ModalTransformOp operation = windowState.gizmoOperation == GizmoOperation::Rotate
+			? ModalTransformOp::Rotate
+			: windowState.gizmoOperation == GizmoOperation::Scale
+				? ModalTransformOp::Scale
+				: ModalTransformOp::Translate;
+		snapshot = CaptureSceneTransformSelectionForOperation(windowState, operation);
+		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
+		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
+			? std::optional<glm::vec3>(windowState.cursor3DPosition)
+			: std::nullopt;
+		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
+		const glm::mat4 viewProjection =
+			windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		const std::optional<glm::vec2> pivotScreen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, pivot);
 		if (!pivotScreen.has_value())
 			return false;
 
-		ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE;
-		ModalTransformOp modalOperation = ModalTransformOp::Translate;
-		if (windowState.gizmoOperation == GizmoOperation::Rotate)
-		{
-			operation = ImGuizmo::ROTATE;
-			modalOperation = ModalTransformOp::Rotate;
-		}
-		else if (windowState.gizmoOperation == GizmoOperation::Scale)
-		{
-			operation = ImGuizmo::SCALE;
-			modalOperation = ModalTransformOp::Scale;
-		}
-
-		glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), *pivot);
-		glm::mat4 deltaMatrix(1.0f);
-		ImGuizmo::PushID(windowState.windowId.c_str());
-		ImGuizmo::SetDrawlist();
-		ImGuizmo::SetOrthographic(windowState.camera->Projection() == CameraProjection::Orthographic);
-		ImGuizmo::Enable(false);
-		ImGuizmo::SetRect(imageOrigin.x, imageOrigin.y, imageSize.x, imageSize.y);
-		if (operation == ImGuizmo::ROTATE)
-		{
-			ImGuizmo::Manipulate(
-				glm::value_ptr(view), glm::value_ptr(projection), operation, ImGuizmo::WORLD,
-				glm::value_ptr(gizmoMatrix), glm::value_ptr(deltaMatrix));
-		}
-		ImGuizmo::PopID();
-
 		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-		const bool pointerOnGeometry = !windowState.fallbackGizmoDragging &&
-			(IsAtomUnderScreenPosition(windowState, imageOrigin, mouse) ||
-				IsBondUnderScreenPosition(windowState, imageOrigin, mouse));
-		if (operation == ImGuizmo::ROTATE)
+		if (singleArrowOnly && windowState.gizmoOperation == GizmoOperation::Translate)
 		{
-			const float radial = glm::length(mouse - *pivotScreen);
-			const bool hoveringRing = !pointerOnGeometry && radial >= kPickMinDistance && radial <= kPickMaxDistance;
-			if (!windowState.fallbackGizmoDragging && hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			using Target = RendererWindowState::SceneArrowDragTarget;
+			const ArrowTransformStart &arrow = snapshot.arrows.front();
+			const std::array<std::pair<glm::vec3, Target>, 3> points = {{
+				{arrow.start, Target::Start}, {arrow.end, Target::End}, {(arrow.start + arrow.end) * 0.5f, Target::Both}}};
+			for (const auto &[world, target] : points)
 			{
-				windowState.fallbackGizmoDragging = true;
-				windowState.fallbackGizmoAxis = -2;
-				windowState.fallbackLastMousePos = mouse;
-				windowState.gizmoDragActive = true;
-			}
-			if (windowState.fallbackGizmoDragging && windowState.fallbackGizmoAxis == -2)
-			{
-				ImGui::GetIO().WantCaptureKeyboard = true;
-				if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+				if (target == windowState.sceneArrowGizmoActiveTarget)
+					continue;
+				const std::optional<glm::vec2> screen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, world);
+				if (!screen.has_value())
+					continue;
+				ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(screen->x, screen->y), 5.0f, IM_COL32(190, 190, 190, 190));
+				if (hovered && glm::distance(mouse, *screen) <= 10.0f)
 				{
-					ApplyTrackballRotation(windowState, view, *pivot, mouse);
-					windowState.gizmoDragActive = true;
+					if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+						windowState.sceneArrowGizmoActiveTarget = target;
 					return true;
 				}
-				windowState.fallbackGizmoDragging = false;
-				windowState.fallbackGizmoAxis = -1;
-				windowState.gizmoDragActive = false;
-				CommitAtomGizmoPreview(windowState, commandRegistryRef, "Rotate selected atoms");
+			}
+		}
+
+		const bool pointerOnGeometry = IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
+		if (windowState.gizmoOperation == GizmoOperation::Rotate)
+		{
+			const float radial = glm::length(mouse - *pivotScreen);
+			const bool hoveringRing = hovered && !pointerOnGeometry &&
+				radial >= kPickMinDistance && radial <= kPickMaxDistance;
+			ImGui::GetWindowDrawList()->AddCircle(
+				ImVec2(pivotScreen->x, pivotScreen->y), kPickMaxDistance,
+				hoveringRing ? IM_COL32(255, 200, 60, 220) : IM_COL32(235, 235, 235, 200), 48, 2.5f);
+			if (hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			{
+				BeginViewportModalTransform(windowState, ModalTransformOp::Rotate, mouse, std::nullopt, true);
 				return true;
 			}
-			windowState.gizmoDragActive = false;
 			return hoveringRing;
 		}
 
 		TransformBases bases;
+		bases.local = SceneTransformLocalBasis(snapshot);
 		bases.lattice = windowState.structure.lattice;
 		const OrientationAxes worldAxes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
 		const std::array<AxisProjection, 3> axes =
-			ProjectAxes(viewProjection, imageOrigin, imageSize, *pivot, *pivotScreen, worldAxes);
+			ProjectAxes(viewProjection, imageOrigin, imageSize, pivot, *pivotScreen, worldAxes);
 		DrawAxisHandles(*pivotScreen, axes);
 		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
 		if (hovered && hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 		{
-			BeginAtomModalTransform(windowState, modalOperation, mouse, hoveredAxis, true);
+			BeginViewportModalTransform(windowState, operation, mouse, hoveredAxis, true);
 			return true;
 		}
 

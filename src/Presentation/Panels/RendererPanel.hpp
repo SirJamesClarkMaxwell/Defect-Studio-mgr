@@ -44,6 +44,7 @@ namespace DefectStudio
 		void drawAddAtomPopup();
 		// Blender-style Shift+A/"Add" toolbar button menu - see m_AddMenuRequested's comment.
 		void drawAddMenu();
+		void consumeAddMenuRequests();
 		[[nodiscard]] bool handleCursor3DPlacement(
 			RendererWindowState &windowState, float relX, float relY);
 		[[nodiscard]] glm::vec3 computeViewportWorldPosition(

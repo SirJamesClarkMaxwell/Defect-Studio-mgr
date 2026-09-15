@@ -57,6 +57,11 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "axis_button_size" << YAML::Value << renderer.viewport.axisButtonSize;
 		out << YAML::Key << "icon_button_size" << YAML::Value << renderer.viewport.iconButtonSize;
+		out << YAML::Key << "transform_translate_snap" << YAML::Value
+			<< renderer.viewport.transformTranslateSnap;
+		out << YAML::Key << "transform_rotate_snap_degrees" << YAML::Value
+			<< renderer.viewport.transformRotateSnapDegrees;
+		out << YAML::Key << "transform_scale_snap" << YAML::Value << renderer.viewport.transformScaleSnap;
 		out << YAML::EndMap;
 		out << YAML::Key << "toolbar_wheel" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "rotation_step_delta" << YAML::Value << renderer.toolbarWheel.rotationStepDelta;

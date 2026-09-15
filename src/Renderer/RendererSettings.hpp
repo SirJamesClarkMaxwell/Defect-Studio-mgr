@@ -39,6 +39,9 @@ namespace DefectStudio
 	{
 		float axisButtonSize = 20.0f;
 		float iconButtonSize = 25.0f;
+		float transformTranslateSnap = 0.1f;
+		float transformRotateSnapDegrees = 5.0f;
+		float transformScaleSnap = 0.1f;
 	};
 
 	struct RendererToolbarWheelSettings

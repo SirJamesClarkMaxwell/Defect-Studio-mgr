@@ -241,6 +241,8 @@ namespace DefectStudio
 			windowState.sceneArrowDragTarget = DragTarget::End;
 		else
 			windowState.sceneArrowDragTarget = DragTarget::Both;
+		windowState.sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(hitIndex);
+		windowState.sceneArrowGizmoActiveTarget = windowState.sceneArrowDragTarget;
 
 		PushPinnedMeasurementUndoSnapshot(windowState);
 		windowState.sceneArrowDragging = true;

@@ -769,6 +769,21 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.viewport.transformTranslateSnap = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformTranslateSnap)},
+				{},
+				config.renderer.viewport.transformTranslateSnap);
+			config.renderer.viewport.transformRotateSnapDegrees = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformRotateSnapDegrees)},
+				{},
+				config.renderer.viewport.transformRotateSnapDegrees);
+			config.renderer.viewport.transformScaleSnap = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformScaleSnap)},
+				{},
+				config.renderer.viewport.transformScaleSnap);
 			config.renderer.toolbarWheel.rotationStepDelta = ReadValue(
 				root,
 				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::RotationStepDelta)},
@@ -1083,6 +1098,21 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.viewport.transformTranslateSnap = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformTranslateSnap)},
+				{},
+				config.renderer.viewport.transformTranslateSnap);
+			config.renderer.viewport.transformRotateSnapDegrees = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformRotateSnapDegrees)},
+				{},
+				config.renderer.viewport.transformRotateSnapDegrees);
+			config.renderer.viewport.transformScaleSnap = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformScaleSnap)},
+				{},
+				config.renderer.viewport.transformScaleSnap);
 			config.renderer.toolbarWheel.rotationStepDelta = ReadValue(
 				root,
 				{rendererSection, rendererToolbarWheelKey, Name(RendererToolbarWheelKey::RotationStepDelta)},

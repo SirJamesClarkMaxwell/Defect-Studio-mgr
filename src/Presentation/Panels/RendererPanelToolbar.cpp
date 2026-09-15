@@ -21,6 +21,32 @@
 
 namespace DefectStudio
 {
+	void RendererPanel::consumeAddMenuRequests()
+	{
+		for (RendererWindowState &windowState : m_Layer.GetWindows())
+		{
+			if (!windowState.addAtomPopupRequested)
+				continue;
+			windowState.addAtomPopupRequested = false;
+			m_AddMenuRequested = true;
+			m_AddMenuWindowId = windowState.windowId;
+			m_AddMenuScreenPos = windowState.addMenuScreenPosition.has_value()
+				? ImVec2(windowState.addMenuScreenPosition->x, windowState.addMenuScreenPosition->y)
+				: ImGui::GetMousePos();
+			windowState.addMenuScreenPosition.reset();
+			if (windowState.cursor3DPlaced)
+			{
+				m_AddMenuPosition = windowState.cursor3DPosition;
+				m_AddMenuPositionFractional = false;
+			}
+			else
+			{
+				m_AddMenuPosition = glm::vec3(0.0f);
+				m_AddMenuPositionFractional = true;
+			}
+		}
+	}
+
 	// "Use 3D Cursor"/"Use Selection Center" below always fill a CARTESIAN position and force
 	// Cartesian mode - simplest correct behavior without needing a fractional<->cartesian
 	// conversion here (RendererStructureData carries the lattice matrices but not the domain

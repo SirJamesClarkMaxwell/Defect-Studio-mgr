@@ -107,9 +107,11 @@ namespace DefectStudio
 		window.selectedPinnedMeasurements.clear();
 		window.selectedFreeLabels.clear();
 		window.selectedSceneArrows.clear();
-		window.labelGizmoDragging = false;
-		window.labelGizmoModalDrag = false;
-		window.labelGizmoAxis = -1;
+		window.modalTransform.reset();
+		window.modalTransformSelection = {};
+		window.modalTransformSceneObjectsBefore.reset();
+		window.modalTransformStartedFromHandle = false;
+		window.gizmoDragActive = false;
 		window.pinnedMeasurementDragging = false;
 		window.freeLabelDragging = false;
 		window.sceneArrowDragging = false;

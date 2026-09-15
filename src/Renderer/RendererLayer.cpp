@@ -35,6 +35,7 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneTransform.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 #include "Events/ProjectEvents.hpp"
@@ -1033,6 +1034,12 @@ namespace DefectStudio
 			config.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
+		m_GlobalRenderSettings.viewport.transformTranslateSnap = std::clamp(
+			config.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
+		m_GlobalRenderSettings.viewport.transformRotateSnapDegrees = std::clamp(
+			config.viewport.transformRotateSnapDegrees, 0.0001f, 180.0f);
+		m_GlobalRenderSettings.viewport.transformScaleSnap = std::clamp(
+			config.viewport.transformScaleSnap, 0.0001f, 10.0f);
 		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = config.toolbarWheel.rotationStepDelta;
 		m_GlobalRenderSettings.toolbarWheel.zoomStepDelta = config.toolbarWheel.zoomStepDelta;
 		m_GlobalRenderSettings.toolbarWheel.ctrlPresetValues = config.toolbarWheel.ctrlPresetValues;
@@ -1514,24 +1521,39 @@ namespace DefectStudio
 	void RendererLayer::onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->camera == nullptr || windowState->selectedAtomIndices.empty())
+		if (windowState == nullptr || windowState->camera == nullptr)
 			return;
 
-		const std::size_t selectedIndex = windowState->selectedAtomIndices.back();
-		if (selectedIndex >= windowState->structure.atoms.size())
-			return;
-
-		const RendererAtomData &atom = windowState->structure.atoms[selectedIndex];
 		float desiredDistance = m_GlobalRenderSettings.focusSelectedAtomDistance;
-		if (m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius)
+		glm::vec3 target(0.0f);
+		if (!windowState->selectedAtomIndices.empty())
 		{
-			const float radiusDistance = atom.radius * m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier;
-			desiredDistance = std::max(desiredDistance, radiusDistance);
+			const std::size_t selectedIndex = windowState->selectedAtomIndices.back();
+			if (selectedIndex >= windowState->structure.atoms.size())
+				return;
+			const RendererAtomData &atom = windowState->structure.atoms[selectedIndex];
+			target = atom.cartesianPosition;
+			if (m_GlobalRenderSettings.focusSelectedAtomRespectAtomRadius)
+			{
+				const float radiusDistance = atom.radius * m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier;
+				desiredDistance = std::max(desiredDistance, radiusDistance);
+			}
+		}
+		else
+		{
+			// No atom selected: frame the selected labels/arrows (arrow = both endpoints) instead.
+			const std::vector<glm::vec3> positions =
+				SceneTransformPivotPositions(CaptureSceneTransformSelection(*windowState));
+			if (positions.empty())
+				return;
+			target = ComputeTransformPivot(TransformPivotMode::Median, positions, std::nullopt);
+			for (const glm::vec3 &position : positions)
+				desiredDistance = std::max(desiredDistance, 2.0f * glm::distance(position, target));
 		}
 
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		RendererViewSnapshot after = before;
-		after.target = atom.cartesianPosition;
+		after.target = target;
 		after.distance = desiredDistance;
 		pushViewChange(*windowState, before, after, "keyboard.focus_selected_atom");
 		restoreViewSnapshot(*windowState, after, "keyboard.focus_selected_atom");
@@ -1940,6 +1962,7 @@ namespace DefectStudio
 			return;
 
 		windowState->addAtomPopupRequested = true;
+		windowState->addMenuScreenPosition = event.screenPosition;
 	}
 
 	void RendererLayer::onLabelsToggleRequested(const RendererEvents::Viewport::LabelsToggleRequested &event)
