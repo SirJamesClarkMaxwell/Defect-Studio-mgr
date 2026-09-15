@@ -156,12 +156,26 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.roll_left_continuous"
+    chord: "Alt+Q"
+    command: "renderer.roll_left"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
   - id: "renderer.roll_right"
     chord: "E"
     command: "renderer.roll_right"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.roll_right_continuous"
+    chord: "Alt+E"
+    command: "renderer.roll_right"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+    repeatable: true
   - id: "renderer.zoom_in"
     chord: "Equal"
     command: "renderer.zoom_in"
