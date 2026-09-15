@@ -11,8 +11,9 @@ namespace DefectStudio
 	void HideSelectionModifier::Apply(SceneRegistry &scene, RendererWindowState &windowState) const
 	{
 		entt::registry &registry = scene.Registry();
-		for (const entt::entity entity : registry.view<SelectionComponent>())
-			if (registry.get<SelectionComponent>(entity).selected)
+		// Scene objects (labels, arrows) carry SelectionComponent but no VisibilityComponent.
+		for (const entt::entity entity : registry.view<const SelectionComponent, VisibilityComponent>())
+			if (registry.get<const SelectionComponent>(entity).selected)
 				registry.get<VisibilityComponent>(entity).visible = false;
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, windowState);
 	}
