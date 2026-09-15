@@ -1723,6 +1723,17 @@ namespace DefectStudio
 		if (!m_ActiveProject.has_value())
 		{
 			persistCurrentRoots();
+			if (m_EventBus != nullptr)
+			{
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(StructuredError{
+					ErrorCategory::Validation,
+					Severity::Warning,
+					"No project open - scene objects (labels, arrows) were not saved. Open or create a project.",
+					"Project save was requested without an active project; only project roots were persisted.",
+					"Open or create a project before saving scene objects.",
+					"EditorLayer",
+					"project.save.no_project"})});
+			}
 			return;
 		}
 		SceneObjectsFile sceneObjects = m_KeptSceneObjects;

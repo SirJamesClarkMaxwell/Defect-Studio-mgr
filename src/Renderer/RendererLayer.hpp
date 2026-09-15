@@ -22,6 +22,7 @@ namespace DefectStudio
 	class OpenGlRendererBackend;
 	class RendererViewCamera;
 	class EventBus;
+	struct HiddenSceneState;
 	struct OrbitalGridData;
 
 	namespace RendererEvents::Config
@@ -43,6 +44,9 @@ namespace DefectStudio
 	// click/drag edits) can call it without routing through a layer method for no reason.
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState);
 	void PushSceneObjectsUndoSnapshot(RendererWindowState &windowState, RendererWindowState::LabelUndoSnapshot before);
+	// Pushes only when the hide/show operation changed the hidden atom or bond set.
+	void PushSceneVisibilityUndoSnapshot(
+		RendererWindowState &windowState, HiddenSceneState before, std::string description);
 
 	// notes.txt pt. 8 - explicit single-pin override: force this one label flat regardless of the
 	// live threshold (OpenGlRendererBackend::renderLabels applies bondLabelAlignThresholdDeg to every

@@ -2,6 +2,7 @@
 
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
+#include "Renderer/Commands/SceneVisibilitySnapshotCommand.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Utils/Assert.hpp"
@@ -32,6 +33,7 @@
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
+#include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
@@ -42,8 +44,8 @@ namespace DefectStudio
 	namespace
 	{
 		EventBus *g_SceneObjectEventBus = nullptr;
-		WeakRef<UndoStack> g_SceneObjectUndoStack;
-		RendererLayer *g_SceneObjectRendererLayer = nullptr;
+		WeakRef<UndoStack> g_RendererUndoStack;
+		RendererLayer *g_RendererLayer = nullptr;
 
 		void QueueSceneObjectsModified(const RendererWindowState &windowState)
 		{
@@ -351,8 +353,8 @@ namespace DefectStudio
 		// Bound after OnAttach: CoreLayer creates the UndoStack in InitializeSystems, which runs once every
 		// layer is already pushed (and attached). Only read lazily when a scene edit pushes a snapshot.
 		m_UndoStack = std::move(undoStack);
-		g_SceneObjectUndoStack = m_UndoStack;
-		g_SceneObjectRendererLayer = this;
+		g_RendererUndoStack = m_UndoStack;
+		g_RendererLayer = this;
 	}
 
 	Ref<EventBus> RendererLayer::GetEventBus() const
@@ -951,8 +953,8 @@ namespace DefectStudio
 		m_RendererBackend.reset();
 		m_Windows.clear();
 		g_SceneObjectEventBus = nullptr;
-		g_SceneObjectUndoStack.reset();
-		g_SceneObjectRendererLayer = nullptr;
+		g_RendererUndoStack.reset();
+		g_RendererLayer = nullptr;
 		m_UndoStack.reset();
 		m_Attached = false;
 		DS_LOG_INFO("RendererLayer detached");
@@ -1535,11 +1537,11 @@ namespace DefectStudio
 
 	void PushSceneObjectsUndoSnapshot(RendererWindowState &windowState, SceneObjectsSnapshot before)
 	{
-		Ref<UndoStack> undoStack = g_SceneObjectUndoStack.lock();
-		if (undoStack == nullptr || undoStack->IsApplying() || g_SceneObjectRendererLayer == nullptr)
+		Ref<UndoStack> undoStack = g_RendererUndoStack.lock();
+		if (undoStack == nullptr || undoStack->IsApplying() || g_RendererLayer == nullptr)
 			return;
 
-		RendererLayer *rendererLayer = g_SceneObjectRendererLayer;
+		RendererLayer *rendererLayer = g_RendererLayer;
 		const bool pushed = undoStack->PushExecuted(CreateSceneObjectsSnapshotCommand(
 			[rendererLayer](const std::string &windowId) -> RendererWindowState * {
 				for (RendererWindowState &window : rendererLayer->GetWindows())
@@ -1557,6 +1559,30 @@ namespace DefectStudio
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState)
 	{
 		PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
+	}
+
+	void PushSceneVisibilityUndoSnapshot(
+		RendererWindowState &windowState, HiddenSceneState before, std::string description)
+	{
+		Ref<UndoStack> undoStack = g_RendererUndoStack.lock();
+		if (undoStack == nullptr || undoStack->IsApplying() || g_RendererLayer == nullptr)
+			return;
+
+		if (CaptureHiddenSceneState(windowState.structure) == before)
+			return;
+
+		RendererLayer &rendererLayer = *g_RendererLayer;
+		(void)undoStack->PushExecuted(CreateSceneVisibilitySnapshotCommand(
+			[rendererLayer = std::ref(rendererLayer)](const std::string &windowId)
+				-> std::optional<std::reference_wrapper<RendererWindowState>> {
+				for (RendererWindowState &window : rendererLayer.get().GetWindows())
+					if (window.windowId == windowId)
+						return std::ref(window);
+				return std::nullopt;
+			},
+			windowState.windowId,
+			std::move(before),
+			std::move(description)));
 	}
 
 	// notes.txt pt. 8 - explicit single-pin "Align to camera": disable this pin's bond-direction
@@ -2240,10 +2266,9 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
 		HideSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
-		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
-		pushViewChange(*windowState, before, after, "keyboard.hide_selection");
+		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Hide selection");
 	}
 
 	void RendererLayer::onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event)
@@ -2252,10 +2277,9 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
+		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
 		ShowAllModifier{}.Apply(windowState->sceneRegistry, *windowState);
-		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
-		pushViewChange(*windowState, before, after, "keyboard.show_all");
+		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Show all");
 	}
 
 	void RendererLayer::onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event)
