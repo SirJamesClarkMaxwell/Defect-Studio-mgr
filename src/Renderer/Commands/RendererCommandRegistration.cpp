@@ -140,13 +140,15 @@ namespace DefectStudio
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
 			AtomStyleTable atomStyleTable,
+			ElementPropertiesTable elementPropertiesTable,
 			CommandContext &context)
 		{
 			GizmoTransformPayload *payload = context.TryGet<GizmoTransformPayload>("gizmo.transform_payload");
 			if (payload == nullptr)
 				return nullptr;
 			return CreateTransformSelectedAtomsCommand(
-				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), *payload);
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable),
+				std::move(elementPropertiesTable), *payload);
 		}
 
 		Unique<ICommand> MakeLabelsToggleCommand(Ref<EventBus> eventBus, CommandContext &)
@@ -274,11 +276,13 @@ namespace DefectStudio
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
 			AtomStyleTable atomStyleTable,
+			ElementPropertiesTable elementPropertiesTable,
 			glm::vec2 screenDirection,
 			CommandContext &)
 		{
 			return CreateNudgeSelectedAtomsCommand(
-				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), screenDirection);
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable),
+				std::move(elementPropertiesTable), screenDirection);
 		}
 
 		Unique<ICommand> MakeCopySelectedAtomsCommand(
@@ -693,7 +697,7 @@ namespace DefectStudio
 			"renderer.gizmo.commit_transform",
 			"Renderer: Commit gizmo transform",
 			"Apply a completed viewport gizmo drag to the domain structure (undoable).",
-			std::bind_front(MakeCommitGizmoTransformCommand, domainLayer, rendererLayer, atomStyleTable),
+			std::bind_front(MakeCommitGizmoTransformCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,
@@ -803,25 +807,25 @@ namespace DefectStudio
 			"renderer.selection.nudge_up",
 			"Renderer: Nudge selection up",
 			"Move the currently selected atoms one small step along the viewport camera's up axis (undoable).",
-			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, glm::vec2(0.0f, 1.0f)));
+			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable, glm::vec2(0.0f, 1.0f)));
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.nudge_down",
 			"Renderer: Nudge selection down",
 			"Move the currently selected atoms one small step against the viewport camera's up axis (undoable).",
-			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, glm::vec2(0.0f, -1.0f)));
+			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable, glm::vec2(0.0f, -1.0f)));
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.nudge_left",
 			"Renderer: Nudge selection left",
 			"Move the currently selected atoms one small step against the viewport camera's right axis (undoable).",
-			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, glm::vec2(-1.0f, 0.0f)));
+			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable, glm::vec2(-1.0f, 0.0f)));
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.nudge_right",
 			"Renderer: Nudge selection right",
 			"Move the currently selected atoms one small step along the viewport camera's right axis (undoable).",
-			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, glm::vec2(1.0f, 0.0f)));
+			std::bind_front(MakeNudgeSelectedAtomsCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable, glm::vec2(1.0f, 0.0f)));
 		RegisterRendererCommand(
 			registry,
 			"renderer.view.set_as_project_default",

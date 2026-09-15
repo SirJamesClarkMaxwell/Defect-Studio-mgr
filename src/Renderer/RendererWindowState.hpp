@@ -15,6 +15,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
+#include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 
 namespace DefectStudio
@@ -352,54 +353,36 @@ namespace DefectStudio
 		// space as RendererPanel::handleAtomPick's relX/relY.
 		SelectionToolMode activeSelectionTool = SelectionToolMode::None;
 		bool selectionDragActive = false;
-		// Viewport transform gizmo (G/R/S). Rendered whenever selectedAtomIndices is non-empty -
-		// see RendererPanel::renderTransformGizmo. Pivot is recomputed as the selection's live
-		// centroid every frame rather than cached, so no start-of-drag snapshot is kept here: the
-		// domain "before" state for Undo is captured by the commit command itself on drag release.
+		// Viewport transform gizmo (G/R/S). Keyboard commands set the operation and request a modal
+		// transform; the Presentation gizmo owns the per-frame input and renderer-side preview while
+		// the existing commit command remains the single domain/undo boundary.
 		GizmoOperation gizmoOperation = GizmoOperation::Translate;
 		bool gizmoDragActive = false;
-		// Fallback screen-space axis pick/drag - see RendererPanel::renderTransformGizmo. ImGuizmo's
-		// own IsOver()/IsUsing() picking has proven unreliable in this app, so this hand-rolled path
-		// (ported from an earlier iteration of this project that hit the same problem) is the drag
-		// mechanism that actually runs in practice, not a rare-case backup.
+		bool modalTransformStartRequested = false;
+		std::optional<ModalTransformSession> modalTransform;
+		std::vector<std::size_t> modalTransformAtomIndices;
+		std::vector<glm::vec3> modalTransformStartPositions;
+		bool modalTransformStartedFromHandle = false;
+		TransformOrientation transformOrientation = TransformOrientation::Global;
+		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
+		TransformSnapSteps transformSnapSteps;
+		// ImGuizmo's picking remains disabled. This flag and the two values below are now only the
+		// existing free-trackball rotation state; translate/axis-scale handles use modalTransform.
 		bool fallbackGizmoDragging = false;
 		int fallbackGizmoAxis = -1;
-		// Blender-style X/Y/Z axis lock during an active fallback drag - overrides fallbackGizmoAxis
-		// while held; -1 means no override (drag follows the originally-grabbed axis).
-		int fallbackAxisLockOverride = -1;
-		glm::vec2 fallbackDragAxisScreenDir = glm::vec2(1.0f, 0.0f);
-		glm::vec3 fallbackDragAxisWorldDir = glm::vec3(1.0f, 0.0f, 0.0f);
-		float fallbackDragPixelsPerWorld = 1.0f;
 		glm::vec2 fallbackLastMousePos = glm::vec2(0.0f);
-		// True when the current fallback drag was started by pressing X/Y/Z with no mouse button
-		// held (Blender-style modal move/scale) rather than by clicking a handle. A modal drag
-		// applies its delta every frame regardless of mouse-button state, confirms on left-click and
-		// cancels (reverting to fallbackDragStartPositions) on right-click/Escape - a click-drag
-		// instead keeps applying only while the button is held and always commits on release.
-		bool fallbackModalDrag = false;
-		// Snapshot of selected atoms' cartesian positions taken when ANY fallback drag starts (both
-		// click and modal) - the only way to revert on cancel, since the live drag mutates
-		// windowState.structure directly before anything is committed to the domain.
-		std::vector<glm::vec3> fallbackDragStartPositions;
-		// Blender-style numeric override: while a locked-axis fallback drag is active, typed digits
-		// accumulate here and replace the mouse-driven delta with an exact typed value (applied from
-		// fallbackDragStartPositions, absolute rather than incremental) - Enter confirms, Backspace
-		// edits, Escape/right-click cancels same as any other drag. Empty means "no override, follow
-		// the mouse" (the pre-existing behavior). Never set during the free trackball rotate
-		// (fallbackGizmoAxis == -2), which has no single axis for a typed number to mean anything.
-		std::string fallbackNumericInput;
 		// Gizmo for the current label selection (RendererPanel::renderLabelTransformGizmo) - same
 		// click-a-handle-and-drag shape as the fallback atom gizmo above but its own state, since it
 		// drags PinnedMeasurement::worldOffset/FreeLabel::worldPosition fields rather than atom
 		// positions. No axis-lock override (X/Y/Z mid-drag re-pick) - not worth the extra state atoms'
 		// version justifies - but DOES have the Blender-style modal start (X/Y/Z with no mouse button
 		// held, translate only) via labelGizmoModalDrag below, same convention as the atom gizmo's
-		// fallbackModalDrag.
+		// key-started modal transform.
 		bool labelGizmoDragging = false;
 		// True when this drag was started by pressing X/Y/Z with no mouse button held (modal - follows
 		// the mouse every frame regardless of button state, confirms on left-click, cancels on
 		// right-click/Escape) rather than by clicking a handle (click-drag - follows only while the
-		// button is held, commits on release). See the atom gizmo's fallbackModalDrag for the same
+		// button is held, commits on release). See the atom gizmo's modal transform for the same
 		// distinction; no numeric-typed-value entry here though, unlike that one.
 		bool labelGizmoModalDrag = false;
 		int labelGizmoAxis = -1;

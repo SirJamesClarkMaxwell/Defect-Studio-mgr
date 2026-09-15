@@ -121,6 +121,20 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(window.selectedFreeLabels.empty());
 	}
 
+	TEST(SceneObjectPersistenceTests, PinSavedBrokenHealsWhenReferencesResolveAgain)
+	{
+		RendererWindowState window = MakeWindow();
+		PersistedPinnedMeasurement pin = MakeBondPin("healed");
+		pin.linkBroken = true;
+
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(window, {pin}, warnings);
+		ASSERT_EQ(window.pinnedMeasurements.size(), 1u);
+		EXPECT_FALSE(window.pinnedMeasurements[0].linkBroken);
+		EXPECT_TRUE(window.pinnedMeasurements[0].frozenAtomPositions.empty());
+		EXPECT_TRUE(warnings.empty());
+	}
+
 	TEST(SceneObjectPersistenceTests, BrokenLinkFreezesAnchorWarnsAndSurvivesResave)
 	{
 		RendererWindowState window = MakeWindow();

@@ -1884,6 +1884,8 @@ namespace DefectStudio
 			return;
 
 		windowState->gizmoOperation = event.operation;
+		if (event.startModal)
+			windowState->modalTransformStartRequested = true;
 	}
 
 	void RendererLayer::onAddAtomPopupToggleRequested(const RendererEvents::Viewport::AddAtomPopupToggleRequested &event)

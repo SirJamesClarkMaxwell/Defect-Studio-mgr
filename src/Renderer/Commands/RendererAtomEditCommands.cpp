@@ -465,10 +465,12 @@ namespace DefectStudio
 				WeakRef<DomainLayer> domainLayer,
 				WeakRef<RendererLayer> rendererLayer,
 				AtomStyleTable atomStyleTable,
+				ElementPropertiesTable elementPropertiesTable,
 				GizmoTransformPayload payload)
 				: m_DomainLayer(std::move(domainLayer)),
 				  m_RendererLayer(std::move(rendererLayer)),
 				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
 				  m_Payload(std::move(payload))
 			{
 			}
@@ -492,6 +494,7 @@ namespace DefectStudio
 				m_WindowIdResolved = target->windowState->windowId;
 				CrystalStructure &structure = target->record->structure;
 				m_PreviousAtoms = structure.atoms;
+				m_PreviousBonds = structure.bonds;
 
 				for (std::size_t i = 0; i < m_Payload.atomIndices.size(); ++i)
 				{
@@ -502,6 +505,8 @@ namespace DefectStudio
 					structure.atoms[atomIndex].fractional = structure.CartesianToFractional(m_Payload.afterPositions[i]);
 				}
 
+				// Moved atoms change distances, so Auto bonds (topology and stored lengths) follow.
+				RegenerateAutoBonds(structure, m_ElementPropertiesTable);
 				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_Payload.atomIndices);
 				return {};
@@ -524,6 +529,7 @@ namespace DefectStudio
 					return target.Error();
 
 				target->record->structure.atoms = m_PreviousAtoms;
+				target->record->structure.bonds = m_PreviousBonds;
 				domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				RebuildAndSync(*target->windowState, *target->record, m_AtomStyleTable, m_Payload.atomIndices);
 				return {};
@@ -543,9 +549,11 @@ namespace DefectStudio
 			WeakRef<DomainLayer> m_DomainLayer;
 			WeakRef<RendererLayer> m_RendererLayer;
 			AtomStyleTable m_AtomStyleTable;
+			ElementPropertiesTable m_ElementPropertiesTable;
 			GizmoTransformPayload m_Payload;
 			std::string m_WindowIdResolved;
 			std::vector<AtomSite> m_PreviousAtoms;
+			std::vector<Bond> m_PreviousBonds;
 		};
 		class NudgeSelectedAtomsCommand final : public ICommand
 		{
@@ -554,10 +562,12 @@ namespace DefectStudio
 				WeakRef<DomainLayer> domainLayer,
 				WeakRef<RendererLayer> rendererLayer,
 				AtomStyleTable atomStyleTable,
+				ElementPropertiesTable elementPropertiesTable,
 				glm::vec2 screenDirection)
 				: m_DomainLayer(std::move(domainLayer)),
 				  m_RendererLayer(std::move(rendererLayer)),
 				  m_AtomStyleTable(std::move(atomStyleTable)),
+				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
 				  m_ScreenDirection(screenDirection)
 			{
 			}
@@ -605,7 +615,8 @@ namespace DefectStudio
 				}
 				payload.description = "Move selected atoms";
 
-				m_Inner = CreateTransformSelectedAtomsCommand(m_DomainLayer, m_RendererLayer, m_AtomStyleTable, std::move(payload));
+				m_Inner = CreateTransformSelectedAtomsCommand(
+					m_DomainLayer, m_RendererLayer, m_AtomStyleTable, m_ElementPropertiesTable, std::move(payload));
 				return m_Inner->Execute(context);
 			}
 
@@ -628,6 +639,7 @@ namespace DefectStudio
 			WeakRef<DomainLayer> m_DomainLayer;
 			WeakRef<RendererLayer> m_RendererLayer;
 			AtomStyleTable m_AtomStyleTable;
+			ElementPropertiesTable m_ElementPropertiesTable;
 			glm::vec2 m_ScreenDirection;
 			Unique<ICommand> m_Inner;
 		};
@@ -1475,20 +1487,24 @@ namespace DefectStudio
 		WeakRef<DomainLayer> domainLayer,
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
 		GizmoTransformPayload payload)
 	{
 		return CreateUnique<TransformSelectedAtomsCommand>(
-			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(payload));
+			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable),
+			std::move(elementPropertiesTable), std::move(payload));
 	}
 
 	Unique<ICommand> CreateNudgeSelectedAtomsCommand(
 		WeakRef<DomainLayer> domainLayer,
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
+		ElementPropertiesTable elementPropertiesTable,
 		glm::vec2 screenDirection)
 	{
 		return CreateUnique<NudgeSelectedAtomsCommand>(
-			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), screenDirection);
+			std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable),
+			std::move(elementPropertiesTable), screenDirection);
 	}
 
 	Unique<ICommand> CreateCopySelectedAtomsCommand(
