@@ -84,7 +84,7 @@ namespace DefectStudio
 
 	void DrawViewportToolbar(RendererWindowState &windowState, RendererLayer &layer)
 	{
-		const float uiScale = ImGui::GetIO().FontGlobalScale;
+		const float uiScale = ImGui::GetIO().FontGlobalScale / kViewportToolbarFontScaleBaseline;
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * uiScale, 4.0f * uiScale));
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * uiScale, 2.0f * uiScale));
 

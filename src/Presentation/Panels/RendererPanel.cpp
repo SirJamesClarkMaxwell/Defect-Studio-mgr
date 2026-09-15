@@ -345,6 +345,7 @@ namespace DefectStudio
 			DrawAndDispatchSelectionTools(windowState, imageOrigin, hovered, gizmoCapturing, m_Layer);
 
 		ApplyContinuousKeyboardNudge(windowState, deltaTime, m_Layer, m_CommandRegistry);
+		CommitFinishedKeyboardViewInteraction(windowState, m_Layer);
 		ApplyContinuousKeyboardPan(windowState, deltaTime, m_Layer);
 
 		if (hovered && !gizmoCapturing)

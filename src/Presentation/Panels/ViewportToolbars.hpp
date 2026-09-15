@@ -4,6 +4,8 @@ namespace DefectStudio
 {
 	class RendererLayer;
 	struct RendererWindowState;
+	// Toolbar sizes were tuned at this shipped text scale before they became proportional.
+	inline constexpr float kViewportToolbarFontScaleBaseline = 2.34f;
 
 	// The horizontal and vertical viewport toolbars, drawn identically by every viewport - the
 	// ordinary renderer windows (RendererPanel) and the three-pane structure-creation window

@@ -338,6 +338,7 @@ namespace DefectStudio
 		{
 			const float deltaTime = ImGui::GetIO().DeltaTime;
 			ApplyContinuousKeyboardNudge(*windowState, deltaTime, m_RendererLayer, m_CommandRegistry);
+			CommitFinishedKeyboardViewInteraction(*windowState, m_RendererLayer);
 			ApplyContinuousKeyboardPan(*windowState, deltaTime, m_RendererLayer);
 		}
 

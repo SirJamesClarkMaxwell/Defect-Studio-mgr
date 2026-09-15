@@ -47,5 +47,9 @@ namespace DefectStudio
 		RendererLayer &layer,
 		const WeakRef<CommandRegistry> &commandRegistry);
 
+	// Completes the interaction opened by repeatable orbit/roll/zoom commands once their chord is
+	// released. Called before continuous pan so a changed chord can start a fresh interaction.
+	void CommitFinishedKeyboardViewInteraction(RendererWindowState &windowState, RendererLayer &layer);
+
 	void ApplyContinuousKeyboardPan(RendererWindowState &windowState, float deltaTime, RendererLayer &layer);
 } // namespace DefectStudio

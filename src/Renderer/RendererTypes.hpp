@@ -125,9 +125,8 @@ namespace DefectStudio
 		float pitch = 0.0f;
 		float roll = 0.0f;
 		CameraProjection projection = CameraProjection::Perspective;
-		// Indices are only meaningful within the structure they were captured from - valid for
-		// same-window operations (undo/redo, align-axis, cycle-saved-view, ...) where before/after
-		// always share one structure, and cheap for pushViewChange's before/after dedup compare.
+		// Indices are only meaningful within the structure they were captured from. Persisted and
+		// cross-window restores use the position lists below instead.
 		std::vector<std::size_t> selectedAtomIndices;
 		std::vector<std::size_t> hiddenAtomIndices;
 		// Positions of the same atoms, captured alongside the indices above. Restoring a snapshot

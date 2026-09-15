@@ -262,6 +262,10 @@ namespace DefectStudio
 			RendererWindowState &windowState,
 			const RendererViewSnapshot &snapshot,
 			const char *sourceAction);
+		void restoreCameraSnapshot(
+			RendererWindowState &windowState,
+			const RendererViewSnapshot &snapshot,
+			const char *sourceAction);
 		void pushViewChange(
 			RendererWindowState &windowState,
 			const RendererViewSnapshot &before,

@@ -295,4 +295,39 @@ namespace DefectStudio
 			layer.CommitViewInteraction(windowState.windowId);
 		}
 	}
+
+	void CommitFinishedKeyboardViewInteraction(RendererWindowState &windowState, RendererLayer &layer)
+	{
+		if (!windowState.viewInteractionActive || windowState.transitionActive)
+			return;
+
+		ImGuiIO &io = ImGui::GetIO();
+		const bool focused = layer.GetFocusedViewportWindowId() == windowState.windowId;
+		const bool onlyAlt = io.KeyAlt && !io.KeyCtrl && !io.KeyShift && !io.KeySuper;
+		bool chordHeld = false;
+		if (windowState.viewInteractionSource == "keyboard.orbit")
+		{
+			chordHeld = focused && onlyAlt &&
+				(ImGui::IsKeyDown(ImGuiKey_LeftArrow) || ImGui::IsKeyDown(ImGuiKey_RightArrow) ||
+				 ImGui::IsKeyDown(ImGuiKey_UpArrow) || ImGui::IsKeyDown(ImGuiKey_DownArrow));
+		}
+		else if (windowState.viewInteractionSource == "keyboard.roll")
+		{
+			chordHeld = focused && onlyAlt &&
+				(ImGui::IsKeyDown(ImGuiKey_Q) || ImGui::IsKeyDown(ImGuiKey_E));
+		}
+		else if (windowState.viewInteractionSource == "keyboard.zoom")
+		{
+			const bool noModifiers = !io.KeyAlt && !io.KeyCtrl && !io.KeyShift && !io.KeySuper;
+			chordHeld = focused && noModifiers &&
+				(ImGui::IsKeyDown(ImGuiKey_Equal) || ImGui::IsKeyDown(ImGuiKey_Minus));
+		}
+		else
+		{
+			return;
+		}
+
+		if (!chordHeld)
+			layer.CommitViewInteraction(windowState.windowId);
+	}
 } // namespace DefectStudio

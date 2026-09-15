@@ -3,6 +3,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Renderer/Commands/SceneVisibilitySnapshotCommand.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
@@ -132,5 +133,34 @@ namespace DefectStudio::Tests
 		ASSERT_FALSE(result.HasValue());
 		EXPECT_EQ(result.Error().code, "scene_visibility.undo_target_unavailable");
 		EXPECT_EQ(stack.GetUndoDepth(), 1u);
+	}
+
+	TEST_F(SceneVisibilitySnapshotCommandTests, ViewUndoRestoresOnlyCameraAfterGlobalVisibilityChange)
+	{
+		renderer.AddWindow(MakeWindow());
+		RendererWindowState &window = renderer.GetWindows().front();
+		window.camera = CreateUnique<RendererViewCamera>();
+		const float originalRoll = window.camera->Roll();
+
+		renderer.BeginViewInteraction(window.windowId, "keyboard.roll_step");
+		window.camera->Roll(0.25f);
+		renderer.CommitViewInteraction(window.windowId);
+		ASSERT_EQ(window.viewUndoHistory.size(), 1u);
+
+		const HiddenSceneState before = CaptureHiddenSceneState(window.structure);
+		HideSelectionModifier{}.Apply(window.sceneRegistry, window);
+		PushSceneVisibilityUndoSnapshot(window, before, "Hide selection");
+		ASSERT_FALSE(window.structure.atoms[0].visible);
+
+		window.sceneRegistry.AtomEntityAt(0).GetComponent<SelectionComponent>().selected = false;
+		window.sceneRegistry.AtomEntityAt(1).GetComponent<SelectionComponent>().selected = true;
+		SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
+
+		renderer.UndoViewChange(window.windowId);
+		renderer.UpdateCameraTransitions(1.0f);
+
+		EXPECT_FALSE(window.structure.atoms[0].visible);
+		EXPECT_EQ(window.selectedAtomIndices, (std::vector<std::size_t>{1}));
+		EXPECT_NEAR(window.camera->Roll(), originalRoll, 0.0001f);
 	}
 } // namespace DefectStudio::Tests

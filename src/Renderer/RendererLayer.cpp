@@ -759,7 +759,11 @@ namespace DefectStudio
 					RadiansToDegrees(roll));
 
 				windowState.transitionActive = false;
-				CommitViewInteraction(windowState.windowId);
+				const bool waitForHeldKeyRelease =
+					windowState.viewInteractionSource == "keyboard.orbit" ||
+					windowState.viewInteractionSource == "keyboard.roll";
+				if (!waitForHeldKeyRelease)
+					CommitViewInteraction(windowState.windowId);
 			}
 		}
 	}
@@ -777,7 +781,7 @@ namespace DefectStudio
 
 		RendererViewStateChange change = std::move(windowState->viewUndoHistory.back());
 		windowState->viewUndoHistory.pop_back();
-		restoreViewSnapshot(*windowState, change.before, "view.undo");
+		restoreCameraSnapshot(*windowState, change.before, "view.undo");
 		windowState->viewRedoHistory.push_back(std::move(change));
 	}
 
@@ -794,7 +798,7 @@ namespace DefectStudio
 
 		RendererViewStateChange change = std::move(windowState->viewRedoHistory.back());
 		windowState->viewRedoHistory.pop_back();
-		restoreViewSnapshot(*windowState, change.after, "view.redo");
+		restoreCameraSnapshot(*windowState, change.after, "view.redo");
 		windowState->viewUndoHistory.push_back(std::move(change));
 	}
 
@@ -1203,12 +1207,11 @@ namespace DefectStudio
 	{
 		if (windowState.camera == nullptr)
 			return;
-		windowState.camera->SetProjection(snapshot.projection);
 
 		// Resolve by position, not by reusing snapshot indices directly: restoring commonly
 		// crosses structures (session default view copy/pasted to a different window, or
 		// auto-applied to a newly-opened one), where atom N in one structure isn't atom N in
-		// another. For same-structure restores (undo/redo, align-axis, cycle-saved-view, ...) this
+		// another. For same-structure restores (align-axis, cycle-saved-view, ...) this
 		// resolves back to the exact same indices at ~zero distance, so one code path covers both.
 		const std::vector<std::size_t> resolvedSelected = SceneSystem::ResolveAtomIndicesByPosition(
 			windowState.structure, snapshot.selectedAtomPositions);
@@ -1216,6 +1219,17 @@ namespace DefectStudio
 			windowState.structure, snapshot.hiddenAtomPositions);
 		SceneSystem::ApplySelectionAndVisibilityToScene(windowState.sceneRegistry, resolvedSelected, resolvedHidden);
 		SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
+		restoreCameraSnapshot(windowState, snapshot, sourceAction);
+	}
+
+	void RendererLayer::restoreCameraSnapshot(
+		RendererWindowState &windowState,
+		const RendererViewSnapshot &snapshot,
+		const char *sourceAction)
+	{
+		if (windowState.camera == nullptr)
+			return;
+		windowState.camera->SetProjection(snapshot.projection);
 
 		const char *resolvedSourceAction =
 			(sourceAction != nullptr && sourceAction[0] != '\0')
@@ -1246,9 +1260,7 @@ namespace DefectStudio
 			std::abs(RendererViewCamera::NormalizeAngleRadians(before.pitch - after.pitch)) <= kEpsilon &&
 			std::abs(RendererViewCamera::NormalizeAngleRadians(before.roll - after.roll)) <= kEpsilon &&
 			before.projection == after.projection;
-		const bool sameSelection = before.selectedAtomIndices == after.selectedAtomIndices;
-		const bool sameVisibility = before.hiddenAtomIndices == after.hiddenAtomIndices;
-		if (sameTarget && sameScalars && sameSelection && sameVisibility)
+		if (sameTarget && sameScalars)
 			return;
 
 		RendererViewStateChange change;
@@ -1337,6 +1349,7 @@ namespace DefectStudio
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr)
 			return;
+		BeginViewInteraction(windowState->windowId, "keyboard.orbit");
 
 		const float rotationStepRadians = std::clamp(windowState->rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
 		const float orbitInputDelta = rotationStepRadians / kOrbitMouseScale;
@@ -1392,6 +1405,7 @@ namespace DefectStudio
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr)
 			return;
+		BeginViewInteraction(windowState->windowId, "keyboard.roll");
 
 		const float rotationStepRadians = std::clamp(windowState->rotationStepDeg, 0.0f, 180.0f) * 3.1415926535f / 180.0f;
 		RendererEvents::Viewport::RollStepRequested stepEvent;
@@ -1407,6 +1421,7 @@ namespace DefectStudio
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr)
 			return;
+		BeginViewInteraction(windowState->windowId, "keyboard.zoom");
 
 		const float zoomAmount = std::max(0.5f, windowState->percentStep * 0.1f);
 		RendererEvents::Viewport::ZoomStepRequested stepEvent;
@@ -1427,7 +1442,8 @@ namespace DefectStudio
 		RendererViewCamera targetCamera = *windowState->camera;
 		targetCamera.Orbit(event.dx, event.dy);
 		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
-		pushViewChange(*windowState, before, after, "keyboard.orbit_step");
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "keyboard.orbit_step");
 		restoreViewSnapshot(*windowState, after, "keyboard.orbit_step");
 	}
 
@@ -1461,7 +1477,8 @@ namespace DefectStudio
 		RendererViewCamera targetCamera = *windowState->camera;
 		targetCamera.Pan(event.dx, event.dy);
 		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
-		pushViewChange(*windowState, before, after, "keyboard.pan_step");
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "keyboard.pan_step");
 		restoreViewSnapshot(*windowState, after, "keyboard.pan_step");
 	}
 
@@ -1475,7 +1492,8 @@ namespace DefectStudio
 		RendererViewCamera targetCamera = *windowState->camera;
 		targetCamera.Roll(event.delta);
 		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
-		pushViewChange(*windowState, before, after, "keyboard.roll_step");
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "keyboard.roll_step");
 		restoreViewSnapshot(*windowState, after, "keyboard.roll_step");
 	}
 
@@ -1489,7 +1507,8 @@ namespace DefectStudio
 		windowState->transitionActive = false;
 		windowState->camera->Zoom(event.amount);
 		const RendererViewSnapshot after = captureViewSnapshot(*windowState);
-		pushViewChange(*windowState, before, after, "keyboard.zoom_step");
+		if (!windowState->viewInteractionActive)
+			pushViewChange(*windowState, before, after, "keyboard.zoom_step");
 	}
 
 	void RendererLayer::onFocusSelectedAtomRequested(const RendererEvents::Viewport::FocusSelectedAtomRequested &event)

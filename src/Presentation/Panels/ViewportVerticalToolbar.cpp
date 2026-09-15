@@ -33,7 +33,7 @@ namespace DefectStudio
 		if (eventBus == nullptr)
 			return;
 
-		const float uiScale = ImGui::GetIO().FontGlobalScale;
+		const float uiScale = ImGui::GetIO().FontGlobalScale / kViewportToolbarFontScaleBaseline;
 		const float iconExtentBase = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f);
 		const float iconExtent = iconExtentBase * uiScale;
 		const ImVec2 buttonSize(iconExtent, iconExtent);
