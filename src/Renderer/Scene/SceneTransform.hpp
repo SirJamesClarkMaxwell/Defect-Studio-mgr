@@ -66,6 +66,10 @@ namespace DefectStudio
 	[[nodiscard]] SceneTransformSelectionSnapshot CaptureSceneTransformSelection(
 		const RendererWindowState &window,
 		SceneArrowTransformTarget arrowTarget = SceneArrowTransformTarget::Both);
+	// A single active endpoint is its own Translate item. Rotate and Scale retain the whole-arrow
+	// meanings used before the unified modal driver.
+	[[nodiscard]] SceneTransformSelectionSnapshot CaptureSceneTransformSelectionForOperation(
+		const RendererWindowState &window, ModalTransformOp operation);
 	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
 		const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] std::optional<glm::mat3> SceneTransformLocalBasis(

@@ -98,6 +98,40 @@ namespace DefectStudio::Tests
 		ExpectVec3Near(window.sceneArrows[0].end, snapshot.arrows[0].end + delta.spatial.translation);
 	}
 
+	TEST(SceneTransformTests, SelectedArrowTipTranslatesAloneAndCancelRestoresIt)
+	{
+		RendererWindowState window;
+		window.sceneArrows.push_back(MakeArrow(SceneObjectId{4}, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}));
+		window.selectedSceneArrows = {SceneObjectId{4}};
+		window.sceneArrowGizmoActiveArrowIndex = 0;
+		window.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::End;
+		const SceneTransformSelectionSnapshot snapshot =
+			CaptureSceneTransformSelectionForOperation(window, ModalTransformOp::Translate);
+		const std::vector<glm::vec3> pivotPositions = SceneTransformPivotPositions(snapshot);
+		ASSERT_EQ(pivotPositions.size(), 1u);
+		ExpectVec3Near(pivotPositions.front(), glm::vec3(4.0f, 5.0f, 6.0f));
+
+		TransformBases bases;
+		ModalTransformSession session = BeginModalTransform(
+			ModalTransformOp::Translate, TransformOrientation::Global, bases,
+			pivotPositions.front(), glm::vec2(0.0f));
+		session.constraint = TransformConstraint{
+			ConstraintKind::Axis, 0, TransformOrientation::Global};
+		session.numericText = "2";
+		SceneTransformDelta delta;
+		delta.spatial = EvaluateModalTransform(
+			session, ModalTransformView{}, glm::vec2(0.0f), SnapMode::Off, TransformSnapSteps{});
+		ApplySceneTransformSelection(
+			window, snapshot, delta, ModalTransformOp::Translate,
+			TransformPivotMode::Median, pivotPositions.front());
+
+		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 3.0f));
+		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(6.0f, 5.0f, 6.0f));
+		RestoreSceneTransformSelection(window, snapshot);
+		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 3.0f));
+		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(4.0f, 5.0f, 6.0f));
+	}
+
 	TEST(SceneTransformTests, ArrowRotateUsesMedianPivot)
 	{
 		RendererWindowState window;

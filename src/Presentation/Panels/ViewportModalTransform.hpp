@@ -6,7 +6,6 @@
 #include <imgui.h>
 
 #include "Core/Utils/Memory.hpp"
-#include "Renderer/Scene/SceneTransform.hpp"
 
 namespace DefectStudio
 {
@@ -17,8 +16,7 @@ namespace DefectStudio
 
 	void BeginViewportModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> axis = std::nullopt, bool startedFromHandle = false,
-		SceneArrowTransformTarget arrowTarget = SceneArrowTransformTarget::Both);
+		std::optional<int> axis = std::nullopt, bool startedFromHandle = false);
 
 	[[nodiscard]] bool UpdateViewportModalTransform(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize,

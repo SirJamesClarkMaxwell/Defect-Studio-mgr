@@ -51,6 +51,24 @@ namespace DefectStudio
 			pin.worldOffset = glm::vec3(0.0f);
 			return SceneSystem::ResolvePinnedMeasurementPosition(window.structure, pin, position);
 		}
+
+		[[nodiscard]] SceneArrowTransformTarget ResolveSceneArrowTransformTarget(
+			const RendererWindowState &window, ModalTransformOp operation)
+		{
+			if (operation != ModalTransformOp::Translate || window.selectedSceneArrows.size() != 1)
+				return SceneArrowTransformTarget::Both;
+
+			const std::size_t index = AnnotationIndex(window.sceneArrows, window.selectedSceneArrows.front());
+			if (index >= window.sceneArrows.size() || window.sceneArrowGizmoActiveArrowIndex != index)
+				return SceneArrowTransformTarget::Both;
+
+			using Target = RendererWindowState::SceneArrowDragTarget;
+			if (window.sceneArrowGizmoActiveTarget == Target::Start)
+				return SceneArrowTransformTarget::Start;
+			if (window.sceneArrowGizmoActiveTarget == Target::End)
+				return SceneArrowTransformTarget::End;
+			return SceneArrowTransformTarget::Both;
+		}
 	} // namespace
 
 	SceneTransformSelectionSnapshot CaptureSceneTransformSelection(
@@ -95,6 +113,12 @@ namespace DefectStudio
 					arrow.style.headLength, arrowTarget});
 		}
 		return snapshot;
+	}
+
+	SceneTransformSelectionSnapshot CaptureSceneTransformSelectionForOperation(
+		const RendererWindowState &window, ModalTransformOp operation)
+	{
+		return CaptureSceneTransformSelection(window, ResolveSceneArrowTransformTarget(window, operation));
 	}
 
 	std::vector<glm::vec3> SceneTransformPivotPositions(const SceneTransformSelectionSnapshot &snapshot)

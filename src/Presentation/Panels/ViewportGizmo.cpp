@@ -173,15 +173,6 @@ namespace DefectStudio
 			return bestAxis;
 		}
 
-		[[nodiscard]] SceneArrowTransformTarget ActiveArrowTarget(const RendererWindowState &windowState)
-		{
-			using Target = RendererWindowState::SceneArrowDragTarget;
-			if (windowState.sceneArrowGizmoActiveTarget == Target::Start)
-				return SceneArrowTransformTarget::Start;
-			if (windowState.sceneArrowGizmoActiveTarget == Target::End)
-				return SceneArrowTransformTarget::End;
-			return SceneArrowTransformTarget::Both;
-		}
 	} // namespace
 
 	bool RenderTransformGizmo(
@@ -201,7 +192,6 @@ namespace DefectStudio
 		}
 
 		const bool singleArrowOnly = snapshot.atoms.empty() && snapshot.labels.empty() && snapshot.arrows.size() == 1;
-		SceneArrowTransformTarget arrowTarget = SceneArrowTransformTarget::Both;
 		if (singleArrowOnly)
 		{
 			const std::size_t index = snapshot.arrows.front().index;
@@ -210,11 +200,14 @@ namespace DefectStudio
 				windowState.sceneArrowGizmoActiveArrowIndex = index;
 				windowState.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::Both;
 			}
-			if (windowState.gizmoOperation == GizmoOperation::Translate)
-				arrowTarget = ActiveArrowTarget(windowState);
 		}
 
-		snapshot = CaptureSceneTransformSelection(windowState, arrowTarget);
+		const ModalTransformOp operation = windowState.gizmoOperation == GizmoOperation::Rotate
+			? ModalTransformOp::Rotate
+			: windowState.gizmoOperation == GizmoOperation::Scale
+				? ModalTransformOp::Scale
+				: ModalTransformOp::Translate;
+		snapshot = CaptureSceneTransformSelectionForOperation(windowState, operation);
 		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
@@ -261,8 +254,7 @@ namespace DefectStudio
 				hoveringRing ? IM_COL32(255, 200, 60, 220) : IM_COL32(235, 235, 235, 200), 48, 2.5f);
 			if (hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			{
-				BeginViewportModalTransform(
-					windowState, ModalTransformOp::Rotate, mouse, std::nullopt, true, arrowTarget);
+				BeginViewportModalTransform(windowState, ModalTransformOp::Rotate, mouse, std::nullopt, true);
 				return true;
 			}
 			return hoveringRing;
@@ -278,10 +270,7 @@ namespace DefectStudio
 		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
 		if (hovered && hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 		{
-			const ModalTransformOp operation = windowState.gizmoOperation == GizmoOperation::Scale
-				? ModalTransformOp::Scale
-				: ModalTransformOp::Translate;
-			BeginViewportModalTransform(windowState, operation, mouse, hoveredAxis, true, arrowTarget);
+			BeginViewportModalTransform(windowState, operation, mouse, hoveredAxis, true);
 			return true;
 		}
 

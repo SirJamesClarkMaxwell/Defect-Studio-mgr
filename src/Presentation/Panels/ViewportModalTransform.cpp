@@ -237,12 +237,13 @@ namespace DefectStudio
 
 	void BeginViewportModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> axis, bool startedFromHandle, SceneArrowTransformTarget arrowTarget)
+		std::optional<int> axis, bool startedFromHandle)
 	{
 		if (windowState.camera == nullptr || windowState.modalTransform.has_value())
 			return;
 
-		SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState, arrowTarget);
+		SceneTransformSelectionSnapshot snapshot =
+			CaptureSceneTransformSelectionForOperation(windowState, op);
 		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
 		if (positions.empty())
 			return;
