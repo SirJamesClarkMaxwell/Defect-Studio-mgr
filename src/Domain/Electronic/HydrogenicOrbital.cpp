@@ -61,7 +61,7 @@ namespace DefectStudio
 
 	float RealSphericalHarmonic(int l, int m, const glm::vec3 &offset)
 	{
-		if (l < 0 || std::abs(m) > l || l > 2)
+		if (l < 0 || std::abs(m) > l || l > 3)
 			return 0.0f;
 
 		constexpr float pi = std::numbers::pi_v<float>;
@@ -88,13 +88,28 @@ namespace DefectStudio
 			}
 		}
 
+		if (l == 2)
+		{
+			switch (m)
+			{
+				case -2: return std::sqrt(15.0f / (4.0f * pi)) * x * y;
+				case -1: return std::sqrt(15.0f / (4.0f * pi)) * y * z;
+				case 0: return std::sqrt(5.0f / (16.0f * pi)) * (3.0f * z * z - 1.0f);
+				case 1: return std::sqrt(15.0f / (4.0f * pi)) * x * z;
+				case 2: return std::sqrt(15.0f / (16.0f * pi)) * (x * x - y * y);
+				default: return 0.0f;
+			}
+		}
+
 		switch (m)
 		{
-			case -2: return std::sqrt(15.0f / (4.0f * pi)) * x * y;
-			case -1: return std::sqrt(15.0f / (4.0f * pi)) * y * z;
-			case 0: return std::sqrt(5.0f / (16.0f * pi)) * (3.0f * z * z - 1.0f);
-			case 1: return std::sqrt(15.0f / (4.0f * pi)) * x * z;
-			case 2: return std::sqrt(15.0f / (16.0f * pi)) * (x * x - y * y);
+			case -3: return std::sqrt(35.0f / (32.0f * pi)) * y * (3.0f * x * x - y * y);
+			case -2: return std::sqrt(105.0f / (4.0f * pi)) * x * y * z;
+			case -1: return std::sqrt(21.0f / (32.0f * pi)) * y * (5.0f * z * z - 1.0f);
+			case 0: return std::sqrt(7.0f / (16.0f * pi)) * (5.0f * z * z * z - 3.0f * z);
+			case 1: return std::sqrt(21.0f / (32.0f * pi)) * x * (5.0f * z * z - 1.0f);
+			case 2: return std::sqrt(105.0f / (16.0f * pi)) * z * (x * x - y * y);
+			case 3: return std::sqrt(35.0f / (32.0f * pi)) * x * (x * x - 3.0f * y * y);
 			default: return 0.0f;
 		}
 	}

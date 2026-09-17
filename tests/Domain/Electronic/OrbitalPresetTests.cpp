@@ -428,7 +428,7 @@ namespace DefectStudio::Tests
 	TEST(OrbitalPresetNameTests, NamesRoundTrip)
 	{
 		constexpr OrbitalPreset kAll[] = {
-			OrbitalPreset::S, OrbitalPreset::P, OrbitalPreset::D,
+			OrbitalPreset::S, OrbitalPreset::P, OrbitalPreset::D, OrbitalPreset::F,
 			OrbitalPreset::Sp, OrbitalPreset::Sp2, OrbitalPreset::Sp3,
 			OrbitalPreset::Sigma, OrbitalPreset::SigmaStar,
 			OrbitalPreset::Pi, OrbitalPreset::PiStar,
@@ -468,5 +468,169 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(preset, OrbitalPreset::Pi);
 		EXPECT_FALSE(ParseOrbitalPreset("", preset));
 		EXPECT_EQ(preset, OrbitalPreset::Pi);
+	}
+
+	// --- f orbitals -----------------------------------------------------------------------------
+
+	namespace
+	{
+		// Fibonacci-sphere quadrature. The real harmonics are smooth, so an equal-area point set
+		// integrates them to a few parts in ten thousand at this count - enough to tell an
+		// orthonormal set from a mis-normalised one, which is the whole point of the check.
+		[[nodiscard]] float SphereIntegral(int lA, int mA, int lB, int mB)
+		{
+			constexpr int kCount = 40000;
+			const float golden = std::numbers::pi_v<float> * (3.0f - std::sqrt(5.0f));
+			float sum = 0.0f;
+			for (int i = 0; i < kCount; ++i)
+			{
+				const float z = 1.0f - 2.0f * (static_cast<float>(i) + 0.5f) / static_cast<float>(kCount);
+				const float radius = std::sqrt(std::max(0.0f, 1.0f - z * z));
+				const float theta = golden * static_cast<float>(i);
+				const glm::vec3 direction(radius * std::cos(theta), radius * std::sin(theta), z);
+				sum += RealSphericalHarmonic(lA, mA, direction) * RealSphericalHarmonic(lB, mB, direction);
+			}
+			return 4.0f * std::numbers::pi_v<float> * sum / static_cast<float>(kCount);
+		}
+	} // namespace
+
+	TEST(RealSphericalHarmonicTests, TheSevenFHarmonicsAreOrthonormal)
+	{
+		for (int m = -3; m <= 3; ++m)
+			EXPECT_NEAR(SphereIntegral(3, m, 3, m), 1.0f, 0.02f) << "m = " << m;
+
+		for (int mA = -3; mA <= 3; ++mA)
+		{
+			for (int mB = mA + 1; mB <= 3; ++mB)
+				EXPECT_NEAR(SphereIntegral(3, mA, 3, mB), 0.0f, 0.02f) << mA << " vs " << mB;
+			// And orthogonal to the lower shells, which is what stops an f from leaking into a
+			// hybrid built beside it.
+			EXPECT_NEAR(SphereIntegral(3, mA, 1, 0), 0.0f, 0.02f) << mA;
+			EXPECT_NEAR(SphereIntegral(3, mA, 2, 0), 0.0f, 0.02f) << mA;
+		}
+	}
+
+	TEST(RealSphericalHarmonicTests, FzCubedHasItsTwoConesAsWellAsItsTwoLobes)
+	{
+		// Y_30 goes as z(5z^2 - 3) on the unit sphere: positive up the axis, negative down it, and
+		// - the part that makes an f orbital look like an f orbital - negative again in a cone
+		// around +z inside the node at z = sqrt(3/5). A d_z2 has no such sign change.
+		EXPECT_GT(RealSphericalHarmonic(3, 0, glm::vec3(0.0f, 0.0f, 1.0f)), 0.0f);
+		EXPECT_LT(RealSphericalHarmonic(3, 0, glm::vec3(0.0f, 0.0f, -1.0f)), 0.0f);
+		EXPECT_NEAR(RealSphericalHarmonic(3, 0, glm::vec3(1.0f, 0.0f, 0.0f)), 0.0f, 1e-5f);
+
+		const glm::vec3 insideTheNode = glm::normalize(glm::vec3(std::sqrt(3.0f), 0.0f, 1.0f)); // z = 0.5
+		EXPECT_LT(RealSphericalHarmonic(3, 0, insideTheNode), 0.0f);
+	}
+
+	TEST(RealSphericalHarmonicTests, StopsAboveF)
+	{
+		EXPECT_FLOAT_EQ(RealSphericalHarmonic(4, 0, glm::vec3(0.0f, 0.0f, 1.0f)), 0.0f);
+		EXPECT_FLOAT_EQ(RealSphericalHarmonic(3, 4, glm::vec3(0.0f, 0.0f, 1.0f)), 0.0f);
+	}
+
+	TEST(OrbitalPresetTests, TheFPresetBuildsAnFTermAndClampsTheShellUpToFour)
+	{
+		OrbitalPresetSettings settings;
+		settings.shell = 2; // no 2f exists; the preset must lift it, not return nothing
+		const OrbitalWavefunction wavefunction = MakeOrbitalPreset(OrbitalPreset::F, settings);
+		ASSERT_EQ(wavefunction.terms.size(), 1u);
+		EXPECT_EQ(wavefunction.terms[0].orbital.l, 3);
+		EXPECT_GE(wavefunction.terms[0].orbital.n, 4);
+		EXPECT_GT(SuggestOrbitalExtent(wavefunction), 0.0f);
+	}
+
+	TEST(OrbitalPresetTests, TheSevenFLobesAreSevenDifferentOrbitals)
+	{
+		std::vector<int> seenM;
+		for (int lobe = 0; lobe < 7; ++lobe)
+		{
+			OrbitalPresetSettings settings;
+			settings.shell = 4;
+			settings.lobeIndex = lobe;
+			const OrbitalWavefunction wavefunction = MakeOrbitalPreset(OrbitalPreset::F, settings);
+			ASSERT_EQ(wavefunction.terms.size(), 1u) << "lobe " << lobe;
+			const int m = wavefunction.terms[0].orbital.m;
+			EXPECT_LE(std::abs(m), 3) << "lobe " << lobe;
+			EXPECT_EQ(std::find(seenM.begin(), seenM.end(), m), seenM.end()) << "lobe " << lobe;
+			seenM.push_back(m);
+		}
+		// Out-of-range lobes clamp instead of producing an invalid orbital.
+		OrbitalPresetSettings settings;
+		settings.shell = 4;
+		settings.lobeIndex = 99;
+		const OrbitalWavefunction clamped = MakeOrbitalPreset(OrbitalPreset::F, settings);
+		ASSERT_EQ(clamped.terms.size(), 1u);
+		EXPECT_LE(std::abs(clamped.terms[0].orbital.m), 3);
+	}
+
+	TEST(OrbitalPresetNameTests, TheFPresetPersistsAsF)
+	{
+		EXPECT_STREQ(OrbitalPresetName(OrbitalPreset::F), "f");
+		OrbitalPreset parsed = OrbitalPreset::S;
+		ASSERT_TRUE(ParseOrbitalPreset("f", parsed));
+		EXPECT_EQ(parsed, OrbitalPreset::F);
+	}
+
+	// --- grouping -------------------------------------------------------------------------------
+
+	TEST(OrbitalPresetGroupTests, EveryPresetIsFiledInExactlyOneGroup)
+	{
+		constexpr OrbitalPreset kEveryPreset[] = {
+			OrbitalPreset::S, OrbitalPreset::P, OrbitalPreset::D, OrbitalPreset::F,
+			OrbitalPreset::Sp, OrbitalPreset::Sp2, OrbitalPreset::Sp3,
+			OrbitalPreset::Sigma, OrbitalPreset::SigmaStar,
+			OrbitalPreset::Pi, OrbitalPreset::PiStar,
+			OrbitalPreset::Delta, OrbitalPreset::DeltaStar,
+			OrbitalPreset::SpSigma, OrbitalPreset::SpSigmaStar,
+			OrbitalPreset::Sp2Sigma, OrbitalPreset::Sp2SigmaStar,
+			OrbitalPreset::Sp3Sigma, OrbitalPreset::Sp3SigmaStar};
+
+		std::vector<OrbitalPreset> flattened;
+		for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
+		{
+			const std::vector<OrbitalPreset> members = OrbitalPresetsInGroup(group);
+			EXPECT_FALSE(members.empty()) << OrbitalPresetGroupName(group);
+			for (const OrbitalPreset preset : members)
+			{
+				EXPECT_EQ(OrbitalPresetGroupOf(preset), group) << OrbitalPresetName(preset);
+				flattened.push_back(preset);
+			}
+		}
+
+		// The menu is generated from these groups, so "every preset appears exactly once" is the
+		// property that keeps a newly added preset from silently never being drawable.
+		ASSERT_EQ(flattened.size(), std::size(kEveryPreset));
+		for (const OrbitalPreset preset : kEveryPreset)
+		{
+			EXPECT_EQ(std::count(flattened.begin(), flattened.end(), preset), 1)
+				<< OrbitalPresetName(preset);
+		}
+	}
+
+	TEST(OrbitalPresetGroupTests, GroupsComeInMenuOrderWithDistinctNames)
+	{
+		const std::vector<OrbitalPresetGroup> groups = AllOrbitalPresetGroups();
+		ASSERT_EQ(groups.size(), 5u);
+		EXPECT_EQ(groups.front(), OrbitalPresetGroup::Atomic);
+		EXPECT_EQ(groups.back(), OrbitalPresetGroup::HybridBonding);
+
+		std::vector<std::string> seen;
+		for (const OrbitalPresetGroup group : groups)
+		{
+			const std::string name = OrbitalPresetGroupName(group);
+			EXPECT_FALSE(name.empty());
+			EXPECT_EQ(std::find(seen.begin(), seen.end(), name), seen.end()) << "duplicate " << name;
+			seen.push_back(name);
+		}
+	}
+
+	TEST(OrbitalPresetGroupTests, TheObviousMembershipsAreTheOnesTheUserExpects)
+	{
+		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::F), OrbitalPresetGroup::Atomic);
+		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::Sp3), OrbitalPresetGroup::Hybrid);
+		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::Pi), OrbitalPresetGroup::Bonding);
+		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::DeltaStar), OrbitalPresetGroup::Antibonding);
+		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::Sp2SigmaStar), OrbitalPresetGroup::HybridBonding);
 	}
 } // namespace DefectStudio::Tests

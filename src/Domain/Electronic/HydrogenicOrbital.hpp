@@ -67,9 +67,9 @@ namespace DefectStudio
 	// on AtomicOrbital. Normalised so that the integral of Y^2 over the unit sphere is 1. Returns 0
 	// for l < 0 or |m| > l, and for a zero-length `offset` unless l == 0.
 	//
-	// ponytail: also returns 0 above l = 2, where the implementation stops - nothing task 26 asks
-	// for needs an f orbital, and the explicit low-order forms are cheaper and far clearer than a
-	// general recurrence. Adding f means extending that one switch, nothing else.
+	// ponytail: also returns 0 above l = 3, where the implementation stops. The explicit
+	// closed forms up to f are cheaper and far clearer than a general recurrence, and nothing
+	// past f has a picture anyone draws. Adding g means extending that one switch, nothing else.
 	[[nodiscard]] float RealSphericalHarmonic(int l, int m, const glm::vec3 &offset);
 
 	// R_nl * Y_lm at `offset` = point - centre, already in the orbital's own frame. Normalised so
@@ -130,6 +130,9 @@ namespace DefectStudio
 		S,
 		P,
 		D,
+		// The seven real f orbitals, lobeIndex selecting m as documented on OrbitalPresetSettings.
+		// Needs shell >= 4, and is clamped up to it - there is no 3f.
+		F,
 		// One lobe of a hybrid on a single centre; OrbitalPresetSettings::lobeIndex picks which of
 		// the 2 / 3 / 4 equivalent lobes. Drawing a whole sp3 centre means four scene orbitals, one
 		// per lobe, because each lobe is genuinely a separate wavefunction.
@@ -173,6 +176,8 @@ namespace DefectStudio
 		// Which member of a degenerate or multi-lobe set, clamped into range:
 		//   P   -> 0 = p_z, 1 = p_x, 2 = p_y
 		//   D   -> 0 = d_z2, 1 = d_xz, 2 = d_yz, 3 = d_x2-y2, 4 = d_xy
+	//   F   -> 0 = f_z3, 1 = f_xz2, 2 = f_yz2, 3 = f_z(x2-y2), 4 = f_xyz, 5 = f_x(x2-3y2),
+	//          6 = f_y(3x2-y2)  (m = 0, +1, -1, +2, -2, +3, -3 in that order)
 		//   Sp  -> 0..1, Sp2 -> 0..2, Sp3 -> 0..3 (which hybrid lobe)
 		//   Pi / PiStar / Delta / DeltaStar -> 0..1 (which of the two degenerate orientations)
 		// Ignored by S, Sigma and SigmaStar, which have only one member.
@@ -197,4 +202,33 @@ namespace DefectStudio
 	// Inverse of OrbitalPresetName. Returns false and leaves `preset` untouched for an unknown
 	// name, so a file written by a newer version degrades instead of being guessed at.
 	[[nodiscard]] bool ParseOrbitalPreset(const std::string &name, OrbitalPreset &preset);
+
+	// How the presets are filed in the Add menu and in the properties-panel combo. Eighteen-plus
+	// entries in one flat list is not a menu anyone reads, and the grouping is a property of the
+	// physics (an antibonding combination is antibonding wherever it is shown), not of ImGui -
+	// which is why it lives here beside the presets rather than being hand-listed in the panel
+	// that happens to draw them today.
+	enum class OrbitalPresetGroup
+	{
+		Atomic,         // s, p, d, f
+		Hybrid,         // sp, sp2, sp3
+		Bonding,        // sigma, pi, delta
+		Antibonding,    // sigma*, pi*, delta*
+		HybridBonding   // sp-sigma .. sp3-sigma*, both members
+	};
+
+	// Display name, e.g. "Atomowe". Non-empty and distinct for every group.
+	[[nodiscard]] const char *OrbitalPresetGroupName(OrbitalPresetGroup group);
+
+	// Which drawer a preset belongs in. Total: every preset has exactly one group.
+	[[nodiscard]] OrbitalPresetGroup OrbitalPresetGroupOf(OrbitalPreset preset);
+
+	// The presets of one group, in the order they should be listed. Concatenating all five groups
+	// yields every preset exactly once - that is the invariant the menu relies on to stay complete
+	// when a preset is added, and it is what the tests check.
+	[[nodiscard]] std::vector<OrbitalPreset> OrbitalPresetsInGroup(OrbitalPresetGroup group);
+
+	// All five groups in menu order. Provided so a caller can render the whole menu without
+	// naming the enumerators itself, and so adding a group cannot leave one silently undrawn.
+	[[nodiscard]] std::vector<OrbitalPresetGroup> AllOrbitalPresetGroups();
 } // namespace DefectStudio

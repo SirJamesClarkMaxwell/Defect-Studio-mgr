@@ -172,6 +172,16 @@ namespace DefectStudio
 				settings.centerA, settings.orientation, 1.0f);
 			return wavefunction;
 		}
+		if (preset == OrbitalPreset::F)
+		{
+			constexpr std::array<int, 7> mValues = {0, 1, -1, 2, -2, 3, -3};
+			const int shell = std::clamp(settings.shell, 4, kMaximumShell);
+			const int lobe = std::clamp(settings.lobeIndex, 0, 6);
+			AddTerm(
+				wavefunction, MakeAtomicOrbital(shell, 3, mValues[lobe], settings.effectiveCharge),
+				settings.centerA, settings.orientation, 1.0f);
+			return wavefunction;
+		}
 		if (preset == OrbitalPreset::Sp || preset == OrbitalPreset::Sp2 || preset == OrbitalPreset::Sp3)
 		{
 			const int shell = std::clamp(settings.shell, 2, kMaximumShell);
@@ -235,16 +245,16 @@ namespace DefectStudio
 
 	const char *OrbitalPresetName(OrbitalPreset preset)
 	{
-		constexpr std::array<const char *, 18> names = {
-			"s", "p", "d", "sp", "sp2", "sp3", "sigma", "sigma*", "pi", "pi*", "delta", "delta*",
-			"sp-sigma", "sp-sigma*", "sp2-sigma", "sp2-sigma*", "sp3-sigma", "sp3-sigma*"};
+		constexpr std::array<const char *, 19> names = {
+			"s", "p", "d", "f", "sp", "sp2", "sp3", "sigma", "sigma*", "pi", "pi*", "delta",
+			"delta*", "sp-sigma", "sp-sigma*", "sp2-sigma", "sp2-sigma*", "sp3-sigma", "sp3-sigma*"};
 		const int index = static_cast<int>(preset);
 		return index >= 0 && index < static_cast<int>(names.size()) ? names[index] : "";
 	}
 
 	bool ParseOrbitalPreset(const std::string &name, OrbitalPreset &preset)
 	{
-		for (int index = 0; index < 18; ++index)
+		for (int index = 0; index < 19; ++index)
 		{
 			const auto candidate = static_cast<OrbitalPreset>(index);
 			if (name == OrbitalPresetName(candidate))
@@ -254,5 +264,76 @@ namespace DefectStudio
 			}
 		}
 		return false;
+	}
+
+	const char *OrbitalPresetGroupName(OrbitalPresetGroup group)
+	{
+		switch (group)
+		{
+			case OrbitalPresetGroup::Atomic: return "Atomowe";
+			case OrbitalPresetGroup::Hybrid: return "Hybrydy";
+			case OrbitalPresetGroup::Bonding: return "Wiazace";
+			case OrbitalPresetGroup::Antibonding: return "Antywiazace";
+			case OrbitalPresetGroup::HybridBonding: return "Wiazania z hybryd";
+			default: return "";
+		}
+	}
+
+	OrbitalPresetGroup OrbitalPresetGroupOf(OrbitalPreset preset)
+	{
+		switch (preset)
+		{
+			case OrbitalPreset::S:
+			case OrbitalPreset::P:
+			case OrbitalPreset::D:
+			case OrbitalPreset::F: return OrbitalPresetGroup::Atomic;
+			case OrbitalPreset::Sp:
+			case OrbitalPreset::Sp2:
+			case OrbitalPreset::Sp3: return OrbitalPresetGroup::Hybrid;
+			case OrbitalPreset::Sigma:
+			case OrbitalPreset::Pi:
+			case OrbitalPreset::Delta: return OrbitalPresetGroup::Bonding;
+			case OrbitalPreset::SigmaStar:
+			case OrbitalPreset::PiStar:
+			case OrbitalPreset::DeltaStar: return OrbitalPresetGroup::Antibonding;
+			case OrbitalPreset::SpSigma:
+			case OrbitalPreset::SpSigmaStar:
+			case OrbitalPreset::Sp2Sigma:
+			case OrbitalPreset::Sp2SigmaStar:
+			case OrbitalPreset::Sp3Sigma:
+			case OrbitalPreset::Sp3SigmaStar: return OrbitalPresetGroup::HybridBonding;
+			default: return OrbitalPresetGroup::Atomic;
+		}
+	}
+
+	std::vector<OrbitalPreset> OrbitalPresetsInGroup(OrbitalPresetGroup group)
+	{
+		switch (group)
+		{
+			case OrbitalPresetGroup::Atomic:
+				return {OrbitalPreset::S, OrbitalPreset::P, OrbitalPreset::D, OrbitalPreset::F};
+			case OrbitalPresetGroup::Hybrid:
+				return {OrbitalPreset::Sp, OrbitalPreset::Sp2, OrbitalPreset::Sp3};
+			case OrbitalPresetGroup::Bonding:
+				return {OrbitalPreset::Sigma, OrbitalPreset::Pi, OrbitalPreset::Delta};
+			case OrbitalPresetGroup::Antibonding:
+				return {OrbitalPreset::SigmaStar, OrbitalPreset::PiStar, OrbitalPreset::DeltaStar};
+			case OrbitalPresetGroup::HybridBonding:
+				return {
+					OrbitalPreset::SpSigma, OrbitalPreset::SpSigmaStar,
+					OrbitalPreset::Sp2Sigma, OrbitalPreset::Sp2SigmaStar,
+					OrbitalPreset::Sp3Sigma, OrbitalPreset::Sp3SigmaStar};
+			default: return {};
+		}
+	}
+
+	std::vector<OrbitalPresetGroup> AllOrbitalPresetGroups()
+	{
+		return {
+			OrbitalPresetGroup::Atomic,
+			OrbitalPresetGroup::Hybrid,
+			OrbitalPresetGroup::Bonding,
+			OrbitalPresetGroup::Antibonding,
+			OrbitalPresetGroup::HybridBonding};
 	}
 } // namespace DefectStudio
