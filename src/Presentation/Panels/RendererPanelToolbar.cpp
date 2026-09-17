@@ -18,6 +18,8 @@
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -220,6 +222,31 @@ namespace DefectStudio
 				candidate.sceneArrowQuickEditIndex = newIndex;
 				break;
 			}
+		}
+
+		if (ImGui::BeginMenu("Orbital"))
+		{
+			for (int presetIndex = static_cast<int>(OrbitalPreset::S);
+				presetIndex <= static_cast<int>(OrbitalPreset::Sp3SigmaStar); ++presetIndex)
+			{
+				const OrbitalPreset preset = static_cast<OrbitalPreset>(presetIndex);
+				if (!ImGui::MenuItem(OrbitalPresetName(preset)))
+					continue;
+				for (RendererWindowState &candidate : m_Layer.GetWindows())
+				{
+					if (candidate.windowId != m_AddMenuWindowId)
+						continue;
+					PushPinnedMeasurementUndoSnapshot(candidate);
+					RendererWindowState::SceneOrbital orbital =
+						MakeDefaultSceneOrbital(candidate, preset, m_AddMenuPosition);
+					orbital.id = candidate.sceneRegistry.AllocateObjectId();
+					candidate.sceneOrbitals.push_back(std::move(orbital));
+					candidate.selectedSceneOrbitals = {candidate.sceneOrbitals.back().id};
+					SceneSystem::SyncLabelEntities(candidate.sceneRegistry, candidate);
+					break;
+				}
+			}
+			ImGui::EndMenu();
 		}
 
 		ImGui::EndPopup();

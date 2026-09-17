@@ -128,9 +128,8 @@ namespace DefectStudio
 			return Entity(m_LabelEntities[index], this);
 		}
 
-		// Index -> entity lookup for scene arrows and free labels, same shape as the three above.
-		// Populated by SceneSystem::SyncLabelEntities, which mirrors all three annotation kinds since
-		// task 20 - before it, arrows and free labels had no entity at all.
+		// Index -> entity lookup for scene arrows, free labels and scene orbitals, same shape as the
+		// three above. Populated by SceneSystem::SyncLabelEntities.
 		[[nodiscard]] std::vector<entt::entity> &ArrowEntities()
 		{
 			return m_ArrowEntities;
@@ -151,6 +150,16 @@ namespace DefectStudio
 			return m_FreeLabelEntities;
 		}
 
+		[[nodiscard]] std::vector<entt::entity> &OrbitalEntities()
+		{
+			return m_OrbitalEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &OrbitalEntities() const
+		{
+			return m_OrbitalEntities;
+		}
+
 		[[nodiscard]] Entity ArrowEntityAt(std::size_t index)
 		{
 			if (index >= m_ArrowEntities.size())
@@ -165,6 +174,13 @@ namespace DefectStudio
 			return Entity(m_FreeLabelEntities[index], this);
 		}
 
+		[[nodiscard]] Entity OrbitalEntityAt(std::size_t index)
+		{
+			if (index >= m_OrbitalEntities.size())
+				return Entity{};
+			return Entity(m_OrbitalEntities[index], this);
+		}
+
 	private:
 		entt::registry m_Registry;
 		std::vector<entt::entity> m_AtomEntities;
@@ -172,6 +188,7 @@ namespace DefectStudio
 		std::vector<entt::entity> m_LabelEntities;
 		std::vector<entt::entity> m_ArrowEntities;
 		std::vector<entt::entity> m_FreeLabelEntities;
+		std::vector<entt::entity> m_OrbitalEntities;
 		std::unordered_map<std::uint64_t, entt::entity> m_ObjectEntities;
 		std::uint64_t m_NextObjectId = 1;
 	};

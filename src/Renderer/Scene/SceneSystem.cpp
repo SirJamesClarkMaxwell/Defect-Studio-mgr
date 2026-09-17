@@ -9,6 +9,7 @@
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 
 namespace DefectStudio::SceneSystem
 {
@@ -230,6 +231,9 @@ namespace DefectStudio::SceneSystem
 		for (const entt::entity entity : scene.FreeLabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.FreeLabelEntities().clear();
+		for (const entt::entity entity : scene.OrbitalEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.OrbitalEntities().clear();
 
 		scene.LabelEntities().reserve(windowState.pinnedMeasurements.size());
 		for (std::size_t index = 0; index < windowState.pinnedMeasurements.size(); ++index)
@@ -279,6 +283,23 @@ namespace DefectStudio::SceneSystem
 				windowState.selectedSceneArrows.end()});
 			scene.ArrowEntities().push_back(static_cast<entt::entity>(entity));
 		}
+
+		scene.OrbitalEntities().reserve(windowState.sceneOrbitals.size());
+		for (std::size_t index = 0; index < windowState.sceneOrbitals.size(); ++index)
+		{
+			RendererWindowState::SceneOrbital &orbital = windowState.sceneOrbitals[index];
+			if (!orbital.id.IsValid())
+				orbital.id = scene.AllocateObjectId();
+			Entity entity = scene.CreateObject(
+				SceneObjectKind::SceneOrbital, index, OrbitalPresetName(orbital.preset), orbital.id);
+			orbital.id = entity.GetComponent<SceneObjectComponent>().id;
+			entity.AddComponent<TransformComponent>(
+				TransformComponent{ResolveSceneOrbitalCenters(orbital, windowState.structure).centroid});
+			entity.AddComponent<SelectionComponent>(SelectionComponent{
+				std::find(windowState.selectedSceneOrbitals.begin(), windowState.selectedSceneOrbitals.end(), orbital.id) !=
+				windowState.selectedSceneOrbitals.end()});
+			scene.OrbitalEntities().push_back(static_cast<entt::entity>(entity));
+		}
 	}
 
 	std::vector<std::size_t> ResolveSourceIndices(const SceneRegistry &scene, const std::vector<SceneObjectId> &ids)
@@ -311,6 +332,9 @@ namespace DefectStudio::SceneSystem
 		for (std::size_t index = 0; index < scene.ArrowEntities().size() && index < windowState.sceneArrows.size(); ++index)
 			Entity(scene.ArrowEntities()[index], &scene).GetComponent<TransformComponent>().position =
 				(windowState.sceneArrows[index].start + windowState.sceneArrows[index].end) * 0.5f;
+		for (std::size_t index = 0; index < scene.OrbitalEntities().size() && index < windowState.sceneOrbitals.size(); ++index)
+			Entity(scene.OrbitalEntities()[index], &scene).GetComponent<TransformComponent>().position =
+				ResolveSceneOrbitalCenters(windowState.sceneOrbitals[index], windowState.structure).centroid;
 	}
 
 	void SyncLabelSelection(SceneRegistry &scene, const RendererWindowState &windowState)
@@ -327,5 +351,6 @@ namespace DefectStudio::SceneSystem
 		sync(scene.LabelEntities(), windowState.selectedPinnedMeasurements);
 		sync(scene.FreeLabelEntities(), windowState.selectedFreeLabels);
 		sync(scene.ArrowEntities(), windowState.selectedSceneArrows);
+		sync(scene.OrbitalEntities(), windowState.selectedSceneOrbitals);
 	}
 } // namespace DefectStudio::SceneSystem

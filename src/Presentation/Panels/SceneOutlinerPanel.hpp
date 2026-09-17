@@ -45,8 +45,8 @@ namespace DefectStudio
 	private:
 		void drawSpeciesGroup(RendererWindowState &windowState, const std::string &species, const std::vector<std::size_t> &atomIndices);
 		void drawAtomRow(RendererWindowState &windowState, std::size_t atomIndex);
-		// Free labels + pinned bond/angle measurements together ("Labels") and sceneArrows
-		// ("Arrows") - two more child groups under a window row, same nesting shape as
+		// Free labels + pinned bond/angle measurements together ("Labels"), sceneArrows
+		// ("Arrows") and sceneOrbitals ("Orbitals") - child groups under a window row, same nesting shape as
 		// drawSpeciesGroup/drawAtomRow above but no per-row visibility checkbox (neither kind has a
 		// `visible` field). Row click selects in the viewport the same way an atom row's does.
 		void drawLabelsGroup(RendererWindowState &windowState);
@@ -54,6 +54,8 @@ namespace DefectStudio
 		void drawPinnedMeasurementRow(RendererWindowState &windowState, std::size_t pinIndex);
 		void drawArrowsGroup(RendererWindowState &windowState);
 		void drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex);
+		void drawOrbitalsGroup(RendererWindowState &windowState);
+		void drawSceneOrbitalRow(RendererWindowState &windowState, std::size_t orbitalIndex);
 
 		// "Copy view + visibility to..." (RMB on a window row) - atom-matches source against target
 		// (both already-open windows, unlike DisplacementComparisonPanel's file-based comparison) via

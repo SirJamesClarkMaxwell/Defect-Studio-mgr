@@ -503,6 +503,7 @@ namespace DefectStudio
 			selectedFreeLabels,
 			windowState.sceneArrows,
 			selectedSceneArrows,
+			windowState.sceneOrbitals,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
 			nullptr,
@@ -586,6 +587,7 @@ namespace DefectStudio
 		previewState.pinnedMeasurements = source.pinnedMeasurements;
 		previewState.freeLabels = source.freeLabels;
 		previewState.sceneArrows = source.sceneArrows;
+		previewState.sceneOrbitals = source.sceneOrbitals;
 		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
 	}
 

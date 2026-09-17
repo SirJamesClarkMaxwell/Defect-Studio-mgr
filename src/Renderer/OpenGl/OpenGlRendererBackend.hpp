@@ -18,6 +18,7 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 
 namespace DefectStudio
 {
@@ -113,6 +114,16 @@ namespace DefectStudio
 		OpenGlMeshHandles mesh;
 	};
 
+	struct OpenGlSceneOrbitalMeshCache
+	{
+		SceneOrbitalMeshKey key;
+		bool initialized = false;
+		OpenGlMeshHandles mesh;
+	};
+
+	// Shared cleanup for per-object cached meshes and the backend's static meshes.
+	void DeleteMeshHandles(OpenGlMeshHandles &mesh);
+
 	struct OpenGlViewportResources
 	{
 		OpenGlFrameBuffer frameBuffer;
@@ -160,6 +171,8 @@ namespace DefectStudio
 		// One entry per Arrow3D SceneArrow, indexed by its position in sceneArrows - see
 		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
 		std::vector<OpenGlSceneArrowMeshCache> sceneArrow3DMeshCache;
+		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
+		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
 
 		// Per-window orbital isosurface GPU buffers. Was 2 backend-global slots shared by every
 		// window; regenerating one window's orbital mesh (e.g. dragging its iso-value slider)
@@ -207,6 +220,7 @@ namespace DefectStudio
 			const std::vector<std::size_t> &selectedFreeLabels = {},
 			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
 			const std::vector<std::size_t> &selectedSceneArrows = {},
+			const std::vector<RendererWindowState::SceneOrbital> &sceneOrbitals = {},
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			const std::vector<std::size_t> &selectedBondIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
@@ -322,6 +336,13 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			bool renderArrow2D,
 			const glm::vec2 &viewportPixelSize,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		void renderSceneOrbitals(
+			const std::vector<RendererWindowState::SceneOrbital> &orbitals,
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,

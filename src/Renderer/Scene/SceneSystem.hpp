@@ -54,10 +54,10 @@ namespace DefectStudio
 			const RendererWindowState::PinnedMeasurement &pin,
 			glm::vec3 &outPosition);
 
-		// (Re)builds one entity per annotation - pinned measurement, free label AND scene arrow -
-		// from the three vectors on windowState, destroying the previous set first; same "resync on
+		// (Re)builds one entity per annotation - pinned measurement, free label, scene arrow and scene
+		// orbital - from the vectors on windowState, destroying the previous set first; same "resync on
 		// structural change" shape as SyncSceneWithStructure, not a per-frame rebuild. Call after any
-		// add/remove on any of the three. Since task 20 it also assigns a SceneObjectId to any
+		// add/remove on any annotation vector. Since task 20 it also assigns a SceneObjectId to any
 		// annotation whose id is still unset, so an object created without one is addressable from the
 		// next sync on.
 		void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState);

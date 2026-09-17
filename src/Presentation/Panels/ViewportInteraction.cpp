@@ -13,6 +13,7 @@
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
@@ -25,6 +26,7 @@ namespace DefectStudio
 		RendererLayer &layer,
 		const WeakRef<CommandRegistry> &commandRegistry)
 	{
+		ResolveAnchoredOrbitals(windowState);
 		// Keeps each label entity's TransformComponent current before the gizmo/hit-test below read
 		// it - anchors move every frame with the atoms they measure (gizmo drag, nudge, relaxation
 		// playback), so a stale transform would visibly lag a frame behind the label's own draw.

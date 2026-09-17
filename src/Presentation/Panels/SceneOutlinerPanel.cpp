@@ -28,6 +28,9 @@ namespace DefectStudio
 			for (const RendererBondData &bond : windowState.structure.bonds)
 				if (!bond.visible)
 					return true;
+			for (const RendererWindowState::SceneOrbital &orbital : windowState.sceneOrbitals)
+				if (!orbital.visible)
+					return true;
 			return false;
 		}
 
@@ -58,6 +61,8 @@ namespace DefectStudio
 			entt::registry &registry = windowState.sceneRegistry.Registry();
 			for (const entt::entity entity : registry.view<VisibilityComponent>())
 				registry.get<VisibilityComponent>(entity).visible = visible;
+			for (RendererWindowState::SceneOrbital &orbital : windowState.sceneOrbitals)
+				orbital.visible = visible;
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 
@@ -89,8 +94,8 @@ namespace DefectStudio
 			return indices;
 		}
 
-		// Selecting any one of the three annotation kinds from the outliner clears the other two -
-		// same three-way mutual exclusivity RendererPanel::handleFreeLabelInteraction/
+		// Selecting any one of the four annotation kinds from the outliner clears the other three -
+		// the same mutual-exclusion rule RendererPanel::handleFreeLabelInteraction/
 		// handlePinnedMeasurementInteraction/handleSceneArrowInteraction already enforce for a
 		// viewport click, so outliner-driven selection can't leave a stale cross-kind selection a
 		// viewport click never would.
@@ -102,6 +107,8 @@ namespace DefectStudio
 				windowState.selectedPinnedMeasurements.clear();
 			if (&windowState.selectedSceneArrows != keep)
 				windowState.selectedSceneArrows.clear();
+			if (&windowState.selectedSceneOrbitals != keep)
+				windowState.selectedSceneOrbitals.clear();
 		}
 	} // namespace
 
@@ -330,6 +337,58 @@ namespace DefectStudio
 		{
 			for (const std::size_t index : CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneArrow))
 				drawSceneArrowRow(windowState, index);
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawSceneOrbitalRow(RendererWindowState &windowState, std::size_t orbitalIndex)
+	{
+		ImGui::PushID(static_cast<int>(orbitalIndex));
+		std::vector<SceneObjectId> &selection = windowState.selectedSceneOrbitals;
+		const SceneObjectId id = windowState.sceneOrbitals[orbitalIndex].id;
+		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
+		char rowLabel[48];
+		std::snprintf(
+			rowLabel, sizeof(rowLabel), "%s #%zu",
+			OrbitalPresetName(windowState.sceneOrbitals[orbitalIndex].preset), orbitalIndex);
+
+		if (isSelected)
+			PushSelectedRowColors();
+		ImGui::Selectable(rowLabel, isSelected);
+		if (isSelected)
+			ImGui::PopStyleColor(3);
+		if (ImGui::IsItemClicked())
+		{
+			ClearOtherAnnotationSelections(windowState, &selection);
+			if (ImGui::GetIO().KeyCtrl)
+			{
+				const auto existing = std::find(selection.begin(), selection.end(), id);
+				if (existing != selection.end())
+					selection.erase(existing);
+				else
+					selection.push_back(id);
+			}
+			else
+			{
+				selection = {id};
+			}
+			SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawOrbitalsGroup(RendererWindowState &windowState)
+	{
+		ImGui::PushID("##orbitalsGroup");
+		char groupLabel[32];
+		std::snprintf(groupLabel, sizeof(groupLabel), "Orbitals (%zu)", windowState.sceneOrbitals.size());
+		const bool open = ImGui::TreeNodeEx(
+			"##orbitals", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
+		if (open)
+		{
+			for (const std::size_t index : CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneOrbital))
+				drawSceneOrbitalRow(windowState, index);
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -577,6 +636,7 @@ namespace DefectStudio
 
 					drawLabelsGroup(windowState);
 					drawArrowsGroup(windowState);
+					drawOrbitalsGroup(windowState);
 
 					ImGui::TreePop();
 				}
