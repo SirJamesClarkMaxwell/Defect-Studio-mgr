@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <functional>
+#include <utility>
+
+#include <imgui.h>
 
 #include "Renderer/RendererLayer.hpp"
 
@@ -107,6 +110,94 @@ namespace DefectStudio
 		windowState.selectedSceneArrows = std::move(newIds);
 	}
 
+	SceneArrowAtomMatchDescription DescribeSceneArrowAtomMatch(const std::size_t validSelectedAtomCount)
+	{
+		SceneArrowAtomMatchDescription description;
+		description.canMatchPosition = validSelectedAtomCount == 2;
+		description.canMatchColor = validSelectedAtomCount == 1 || validSelectedAtomCount == 2;
+		if (!description.canMatchPosition)
+			description.positionTooltip = "Zaznacz dokladnie dwa atomy, aby dopasowac pozycje.";
+		if (!description.canMatchColor)
+			description.colorTooltip = "Zaznacz jeden lub dwa atomy, aby dopasowac kolor.";
+		return description;
+	}
+
+	void MatchSceneArrowPositionToAtoms(
+		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom)
+	{
+		arrow.start = startAtom.cartesianPosition;
+		arrow.end = endAtom.cartesianPosition;
+	}
+
+	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom)
+	{
+		arrow.style.useGradient = false;
+		arrow.style.color = atom.color;
+	}
+
+	void MatchSceneArrowColorToAtoms(
+		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom)
+	{
+		arrow.style.useGradient = true;
+		arrow.style.gradient.start = startAtom.color;
+		arrow.style.gradient.finish = endAtom.color;
+	}
+
+	void ReverseSceneArrow(RendererWindowState::SceneArrow &arrow)
+	{
+		std::swap(arrow.start, arrow.end);
+	}
+
+	void DrawSceneArrowAtomMatchActions(RendererWindowState &windowState, const std::size_t arrowIndex)
+	{
+		if (arrowIndex >= windowState.sceneArrows.size())
+			return;
+
+		std::vector<std::size_t> validAtomIndices;
+		validAtomIndices.reserve(windowState.selectedAtomIndices.size());
+		for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+			if (atomIndex < windowState.structure.atoms.size())
+				validAtomIndices.push_back(atomIndex);
+
+		const SceneArrowAtomMatchDescription description = DescribeSceneArrowAtomMatch(validAtomIndices.size());
+		ImGui::BeginDisabled(!description.canMatchPosition);
+		const bool matchPosition = ImGui::Button("Match position##SceneArrowMatchPosition");
+		ImGui::EndDisabled();
+		if (!description.canMatchPosition &&
+			ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+		{
+			ImGui::SetTooltip("%s", description.positionTooltip.c_str());
+		}
+		RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
+		if (matchPosition)
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			MatchSceneArrowPositionToAtoms(
+				arrow,
+				windowState.structure.atoms[validAtomIndices[0]],
+				windowState.structure.atoms[validAtomIndices[1]]);
+		}
+
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!description.canMatchColor);
+		const bool matchColor = ImGui::Button("Match colour##SceneArrowMatchColor");
+		ImGui::EndDisabled();
+		if (!description.canMatchColor &&
+			ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
+		{
+			ImGui::SetTooltip("%s", description.colorTooltip.c_str());
+		}
+		if (!matchColor)
+			return;
+
+		PushPinnedMeasurementUndoSnapshot(windowState);
+		const RendererAtomData &firstAtom = windowState.structure.atoms[validAtomIndices[0]];
+		if (validAtomIndices.size() == 1)
+			MatchSceneArrowColorToAtom(arrow, firstAtom);
+		else
+			MatchSceneArrowColorToAtoms(arrow, firstAtom, windowState.structure.atoms[validAtomIndices[1]]);
+	}
+
 	std::optional<RendererWindowState::ArrowStyle> &GetArrowGeometryClipboard()
 	{
 		static std::optional<RendererWindowState::ArrowStyle> clipboard;
@@ -167,4 +258,3 @@ namespace DefectStudio
 	}
 
 } // namespace DefectStudio
-

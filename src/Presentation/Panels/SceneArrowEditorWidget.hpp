@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "Renderer/RendererWindowState.hpp"
@@ -87,6 +88,26 @@ namespace DefectStudio
 	void CopySceneArrowsToClipboard(const RendererWindowState &windowState);
 	void DuplicateSelectedSceneArrows(RendererWindowState &windowState);
 	void PasteSceneArrowsFromClipboard(RendererWindowState &windowState);
+
+	struct SceneArrowAtomMatchDescription
+	{
+		bool canMatchPosition = false;
+		bool canMatchColor = false;
+		std::string positionTooltip;
+		std::string colorTooltip;
+	};
+
+	// ImGui-free one-shot arrow operations used by Object Properties and the viewport shortcut.
+	// RendererAtomData::color is already the renderer-resolved element colour, including user style
+	// overrides, so matching never needs its own palette lookup.
+	[[nodiscard]] SceneArrowAtomMatchDescription DescribeSceneArrowAtomMatch(std::size_t validSelectedAtomCount);
+	void MatchSceneArrowPositionToAtoms(
+		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom);
+	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom);
+	void MatchSceneArrowColorToAtoms(
+		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom);
+	void ReverseSceneArrow(RendererWindowState::SceneArrow &arrow);
+	void DrawSceneArrowAtomMatchActions(RendererWindowState &windowState, std::size_t arrowIndex);
 
 	// Geometry (shaftWidth/headWidth/headLength/outlineWidth) and Style (color/alpha/outlineColor)
 	// clipboards for the viewport context menu's "Copy/Paste Geometry|Style|Geometry+Style" actions -

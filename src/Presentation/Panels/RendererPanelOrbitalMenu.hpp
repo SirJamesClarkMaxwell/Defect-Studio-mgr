@@ -15,6 +15,8 @@ namespace DefectStudio
 		std::string lineLabel;
 		std::string arrowLabel;
 		std::string planeLabel;
+		std::string segmentTooltip;
+		std::string planeTooltip;
 		bool canDrawSegment = false;
 		bool canDrawPlane = false;
 	};
@@ -40,5 +42,6 @@ namespace DefectStudio
 	void DrawOrbitalAddMenu(
 		RendererWindowState &windowState,
 		const glm::vec3 &contextMenuWorldPosition,
-		bool &anchorOrbitalToSelection);
+		bool &anchorOrbitalToSelection,
+		bool drawSubmenu = true);
 } // namespace DefectStudio

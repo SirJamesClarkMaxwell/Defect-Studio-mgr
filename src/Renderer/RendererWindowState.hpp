@@ -510,6 +510,9 @@ namespace DefectStudio
 		// like pinnedMeasurements - not a domain concept, not persisted with the project yet.
 		glm::vec3 cursor3DPosition = glm::vec3(0.0f);
 		bool cursor3DPlaced = false;
+		// Shared sticky preference for both right-click Add > Orbital and the vertical toolbar's
+		// orbital popup. Per-window UI state; it does not need project persistence.
+		bool anchorOrbitalToSelection = true;
 		// Non-destructive whole-scene reposition for framing an export shot (Etap F Phase 1) -
 		// forwarded as a render-time uniform (u_SceneOffset) to every geometry pass (atoms/bonds/
 		// cell box/grid/labels/isosurface, see OpenGlRendererBackend::RenderWindow), never baked

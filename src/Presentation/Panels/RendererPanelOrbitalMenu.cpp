@@ -54,6 +54,10 @@ namespace DefectStudio
 			description.canDrawSegment ? "Strzalka" : "Strzalka (wymaga dokladnie 2 atomow)";
 		description.planeLabel =
 			description.canDrawPlane ? "Plaszczyzna" : "Plaszczyzna (wymaga co najmniej 2 atomow)";
+		if (!description.canDrawSegment)
+			description.segmentTooltip = "Zaznacz dokladnie dwa atomy, aby dodac linie lub strzalke.";
+		if (!description.canDrawPlane)
+			description.planeTooltip = "Zaznacz co najmniej dwa atomy, aby dodac plaszczyzne.";
 		return description;
 	}
 
@@ -106,9 +110,11 @@ namespace DefectStudio
 	void DrawOrbitalAddMenu(
 		RendererWindowState &windowState,
 		const glm::vec3 &contextMenuWorldPosition,
-		bool &anchorOrbitalToSelection)
+		bool &anchorOrbitalToSelection,
+		const bool drawSubmenu)
 	{
-		if (ImGui::BeginMenu("Orbital"))
+		if (drawSubmenu && !ImGui::BeginMenu("Orbital"))
+			return;
 		{
 			// Where it lands is decided once, above the presets, instead of being inferred from
 			// whatever happened to be selected - which is what made "add on this atom" feel like
@@ -253,7 +259,8 @@ namespace DefectStudio
 				}
 				ImGui::EndMenu();
 			}
-			ImGui::EndMenu();
+			if (drawSubmenu)
+				ImGui::EndMenu();
 		}
 	}
 } // namespace DefectStudio

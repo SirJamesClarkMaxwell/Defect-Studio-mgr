@@ -1,133 +1,159 @@
-"""Generates the 10 toolbar icon PNGs that had no artwork yet (axis-align a/b/c/a*/b*/c* and the
-4 atom/bond/label selection-mode buttons) - solid black glyph on a transparent 512x512 canvas,
-same convention as the existing hand-picked icons in install/app/assets/icons (see e.g.
-tool-move.png: a bold, simple pictogram with a generous margin, no outline/gradient).
-
-Re-runnable: always overwrites the same 10 files, no state carried between runs.
-"""
+"""Generate the selection-mode and add-object toolbar alpha-mask icons."""
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ICONS_DIR = REPO_ROOT / "install" / "app" / "assets" / "icons"
-FONT_PATH = (
-    REPO_ROOT
-    / "install"
-    / "app"
-    / "python"
-    / "windows"
-    / "Lib"
-    / "site-packages"
-    / "matplotlib"
-    / "mpl-data"
-    / "fonts"
-    / "ttf"
-    / "DejaVuSans-Bold.ttf"
-)
 
 SIZE = 512
-BLACK = (0, 0, 0, 255)
+SCALE = 4
+CANVAS = SIZE * SCALE
 
 
-def new_canvas() -> Image.Image:
-    return Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+def scaled(value: int) -> int:
+    return value * SCALE
 
 
-def save(image: Image.Image, name: str) -> None:
-    path = ICONS_DIR / name
-    image.save(path)
-    print(f"Wrote {path}")
+def point(x: int, y: int) -> tuple[int, int]:
+    return scaled(x), scaled(y)
 
 
-def draw_axis_letter(text: str, filename: str) -> None:
-    image = new_canvas()
-    draw = ImageDraw.Draw(image)
-    font_size = 360 if len(text) == 1 else 300
-    font = ImageFont.truetype(str(FONT_PATH), font_size)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = (SIZE - width) / 2 - bbox[0]
-    y = (SIZE - height) / 2 - bbox[1]
-    draw.text((x, y), text, font=font, fill=BLACK)
-    save(image, filename)
+def new_mask() -> tuple[Image.Image, ImageDraw.ImageDraw]:
+    mask = Image.new("L", (CANVAS, CANVAS), 0)
+    return mask, ImageDraw.Draw(mask)
 
 
-def draw_atom(draw: ImageDraw.ImageDraw, center: tuple[float, float], radius: float) -> None:
-    x, y = center
-    draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=BLACK)
+def save(mask: Image.Image, output_dir: Path, name: str) -> None:
+    alpha = mask.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+    icon = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    icon.putalpha(alpha)
+    icon.save(output_dir / name, optimize=True)
 
 
-def draw_bond(draw: ImageDraw.ImageDraw, a: tuple[float, float], b: tuple[float, float], width: float) -> None:
-    draw.line((a, b), fill=BLACK, width=int(width))
+def circle(draw: ImageDraw.ImageDraw, x: int, y: int, radius: int) -> None:
+    draw.ellipse(
+        (scaled(x - radius), scaled(y - radius), scaled(x + radius), scaled(y + radius)),
+        fill=255,
+    )
 
 
-def draw_tag(draw: ImageDraw.ImageDraw, center: tuple[float, float], size: float) -> None:
-    x, y = center
-    half = size / 2
-    draw.rounded_rectangle((x - half, y - half * 0.6, x + half, y + half * 0.6), radius=half * 0.25, fill=BLACK)
+def thick_line(draw: ImageDraw.ImageDraw, points: list[tuple[int, int]], width: int = 42) -> None:
+    draw.line([point(x, y) for x, y in points], fill=255, width=scaled(width), joint="curve")
 
 
-def mode_atoms() -> None:
-    image = new_canvas()
-    draw = ImageDraw.Draw(image)
-    radius = 78
-    for cx, cy in ((256, 150), (150, 340), (362, 340)):
-        draw_atom(draw, (cx, cy), radius)
-    save(image, "tool-mode-atoms.png")
+def label_tag(draw: ImageDraw.ImageDraw, left: int, top: int, right: int, bottom: int) -> None:
+    draw.rounded_rectangle(
+        (scaled(left), scaled(top), scaled(right), scaled(bottom)),
+        radius=scaled(28),
+        fill=255,
+    )
+    draw.polygon(
+        [point(left + 36, bottom - 2), point(left + 76, bottom - 2), point(left + 40, bottom + 48)],
+        fill=255,
+    )
+    draw.rounded_rectangle(
+        (scaled(left + 42), scaled(top + 42), scaled(right - 42), scaled(top + 70)),
+        radius=scaled(12),
+        fill=0,
+    )
 
 
-def mode_atoms_bonds() -> None:
-    image = new_canvas()
-    draw = ImageDraw.Draw(image)
-    a, b = (150, 360), (362, 152)
-    draw_bond(draw, a, b, 46)
-    draw_atom(draw, a, 82)
-    draw_atom(draw, b, 82)
-    save(image, "tool-mode-atoms-bonds.png")
+def mode_atoms(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    circle(draw, 256, 118, 68)
+    circle(draw, 154, 344, 68)
+    circle(draw, 358, 344, 68)
+    save(mask, output_dir, "tool-mode-atoms.png")
 
 
-def mode_bonds_labels() -> None:
-    # Bond line plus a separate floating tag - kept apart (not merged into one blob) so both read
-    # as distinct elements at a glance.
-    image = new_canvas()
-    draw = ImageDraw.Draw(image)
-    a, b = (100, 430), (270, 260)
-    draw_bond(draw, a, b, 40)
-    draw_tag(draw, (370, 130), 220)
-    save(image, "tool-mode-bonds-labels.png")
+def mode_atoms_bonds(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    thick_line(draw, [(122, 356), (256, 138), (390, 356)], 46)
+    circle(draw, 256, 128, 61)
+    circle(draw, 112, 374, 61)
+    circle(draw, 400, 374, 61)
+    save(mask, output_dir, "tool-mode-atoms-bonds.png")
 
 
-def mode_all() -> None:
-    image = new_canvas()
-    draw = ImageDraw.Draw(image)
-    a, b = (110, 420), (280, 280)
-    draw_bond(draw, a, b, 38)
-    draw_atom(draw, a, 62)
-    draw_atom(draw, b, 62)
-    draw_tag(draw, (390, 120), 200)
-    save(image, "tool-mode-all.png")
+def mode_bonds_labels(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    thick_line(draw, [(80, 386), (286, 116)], 54)
+    thick_line(draw, [(166, 422), (372, 152)], 54)
+    label_tag(draw, 272, 244, 466, 402)
+    save(mask, output_dir, "tool-mode-bonds-labels.png")
 
 
-def mode_labels_only() -> None:
-    # Just the tag, larger and centered - no atoms/bonds, since this mode picks labels exclusively.
-    image = new_canvas()
-    draw = ImageDraw.Draw(image)
-    draw_tag(draw, (256, 256), 320)
-    save(image, "tool-mode-labels.png")
+def mode_all(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    thick_line(draw, [(112, 372), (250, 132), (386, 372)], 38)
+    circle(draw, 250, 126, 53)
+    circle(draw, 106, 382, 53)
+    circle(draw, 396, 382, 53)
+    label_tag(draw, 280, 204, 466, 348)
+    save(mask, output_dir, "tool-mode-all.png")
+
+
+def mode_labels(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    label_tag(draw, 76, 86, 436, 270)
+    label_tag(draw, 142, 276, 436, 424)
+    save(mask, output_dir, "tool-mode-labels.png")
+
+
+def add_arrow(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    thick_line(draw, [(74, 386), (390, 126)], 48)
+    draw.polygon([point(282, 94), point(446, 80), point(412, 242)], fill=255)
+    circle(draw, 80, 382, 42)
+    save(mask, output_dir, "tool-add-arrow.png")
+
+
+def add_plane(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    polygon = [point(72, 356), point(196, 116), point(442, 168), point(318, 408)]
+    draw.line(polygon + [polygon[0]], fill=255, width=scaled(42), joint="curve")
+    thick_line(draw, [(136, 332), (376, 186)], 28)
+    circle(draw, 72, 356, 35)
+    circle(draw, 196, 116, 35)
+    circle(draw, 442, 168, 35)
+    save(mask, output_dir, "tool-add-plane.png")
+
+
+def add_atom(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    circle(draw, 248, 266, 166)
+    circle(draw, 188, 202, 42)
+    draw.ellipse((scaled(154), scaled(168), scaled(222), scaled(236)), fill=0)
+    thick_line(draw, [(356, 76), (356, 190)], 34)
+    thick_line(draw, [(300, 132), (412, 132)], 34)
+    save(mask, output_dir, "tool-add-atom.png")
+
+
+def add_orbital(output_dir: Path) -> None:
+    mask, draw = new_mask()
+    draw.ellipse((scaled(58), scaled(174), scaled(270), scaled(338)), fill=255)
+    draw.ellipse((scaled(242), scaled(174), scaled(454), scaled(338)), fill=255)
+    circle(draw, 256, 256, 42)
+    thick_line(draw, [(256, 72), (256, 132)], 30)
+    thick_line(draw, [(226, 102), (286, 102)], 30)
+    save(mask, output_dir, "tool-add-orbital.png")
 
 
 def main() -> None:
-    ICONS_DIR.mkdir(parents=True, exist_ok=True)
-    for letter in ("a", "b", "c"):
-        draw_axis_letter(letter, f"tool-axis-{letter}.png")
-        draw_axis_letter(f"{letter}*", f"tool-axis-{letter}-star.png")
-    mode_atoms()
-    mode_atoms_bonds()
-    mode_bonds_labels()
-    mode_all()
-    mode_labels_only()
+    output_dir = Path(__file__).resolve().parents[2] / "install" / "app" / "assets" / "icons"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for renderer in (
+        mode_atoms,
+        mode_atoms_bonds,
+        mode_bonds_labels,
+        mode_all,
+        mode_labels,
+        add_arrow,
+        add_plane,
+        add_atom,
+        add_orbital,
+    ):
+        renderer(output_dir)
 
 
 if __name__ == "__main__":

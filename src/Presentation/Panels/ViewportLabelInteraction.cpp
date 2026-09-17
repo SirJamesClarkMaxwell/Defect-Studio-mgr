@@ -122,6 +122,19 @@ namespace DefectStudio
 
 		// Delete removes every selected scene arrow - same rationale as the pin/free-label Delete above.
 		const bool sceneArrowSelected = !windowState.selectedSceneArrows.empty();
+		const ImGuiIO &io = ImGui::GetIO();
+		const bool plainX = !io.KeyCtrl && !io.KeyAlt && !io.KeyShift &&
+			ImGui::IsKeyPressed(ImGuiKey_X, false);
+		if (sceneArrowSelected && hovered && !windowState.modalTransform.has_value() && plainX)
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			for (const SceneObjectId id : windowState.selectedSceneArrows)
+			{
+				const std::size_t arrowIndex = AnnotationIndex(windowState.sceneArrows, id);
+				if (arrowIndex < windowState.sceneArrows.size())
+					ReverseSceneArrow(windowState.sceneArrows[arrowIndex]);
+			}
+		}
 		if (sceneArrowSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);

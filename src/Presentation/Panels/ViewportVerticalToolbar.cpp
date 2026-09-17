@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 #include <imgui.h>
@@ -13,6 +14,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -21,6 +23,31 @@
 
 namespace DefectStudio
 {
+	const std::array<ViewportSelectionModeEntry, 5> &ViewportSelectionModeEntries()
+	{
+		static constexpr std::array<ViewportSelectionModeEntry, 5> entries = {{
+			{"Atoms only", "Ctrl+1", "tool-mode-atoms.png", true, false, false},
+			{"Atoms + Bonds", "Ctrl+2", "tool-mode-atoms-bonds.png", true, true, false},
+			{"Bonds + Labels", "Ctrl+3", "tool-mode-bonds-labels.png", false, true, true},
+			{"All", "Ctrl+4", "tool-mode-all.png", true, true, true},
+			{"Labels only", "Ctrl+5", "tool-mode-labels.png", false, false, true},
+		}};
+		return entries;
+	}
+
+	std::size_t ResolveViewportSelectionModeEntryIndex(
+		const bool pickAtoms, const bool pickBonds, const bool pickLabels)
+	{
+		const auto &entries = ViewportSelectionModeEntries();
+		for (std::size_t index = 0; index < entries.size(); ++index)
+		{
+			const ViewportSelectionModeEntry &entry = entries[index];
+			if (entry.pickAtoms == pickAtoms && entry.pickBonds == pickBonds && entry.pickLabels == pickLabels)
+				return index;
+		}
+		return 3; // The only masks produced by the keymap are listed above; use All as a safe fallback.
+	}
+
 	// VESTA-style vertical icon strip along the viewport's left edge: one click each for the tool
 	// modes that would otherwise only be reachable via keyboard shortcut (G/R/S/B/C/M/Shift+M) or
 	// not at all (3D cursor placement, "nothing"/idle tool). Publishes the same events those
@@ -107,7 +134,48 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
-		if (toolButton("##ToolAdd", "plus.png", "+", "Add (Shift+A)", false))
+		auto disabledToolButton = [&](const char *id, const char *iconFileName, const char *fallback,
+			const char *tooltip, bool active, bool enabled) -> bool
+		{
+			ImGui::BeginDisabled(!enabled);
+			const bool pressed = toolButton(id, iconFileName, fallback, tooltip, active);
+			ImGui::EndDisabled();
+			return pressed;
+		};
+
+		const DrawSelectionDescription drawSelection = DescribeDrawSelection(windowState);
+
+		const bool segmentPressed = disabledToolButton(
+			"##ToolAddSegment", "tool-add-arrow.png", "Arr",
+			drawSelection.canDrawSegment ? "Add line or arrow" : drawSelection.segmentTooltip.c_str(), false,
+			drawSelection.canDrawSegment);
+		const ImVec2 segmentPopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (segmentPressed)
+			ImGui::OpenPopup("##AddSegmentPopup");
+		ImGui::SetNextWindowPos(segmentPopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##AddSegmentPopup"))
+		{
+			DrawSegmentAddItems(windowState);
+			ImGui::EndPopup();
+		}
+
+		const bool planePressed = disabledToolButton(
+			"##ToolAddPlane", "tool-add-plane.png", "Pln",
+			drawSelection.canDrawPlane ? "Add plane from selected atoms" : drawSelection.planeTooltip.c_str(), false,
+			drawSelection.canDrawPlane);
+		const ImVec2 planePopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (planePressed)
+			ImGui::OpenPopup("##AddPlanePopup");
+		ImGui::SetNextWindowPos(planePopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##AddPlanePopup"))
+		{
+			DrawPlaneAddItem(windowState);
+			ImGui::EndPopup();
+		}
+
+		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "+", "Add atom", false))
 		{
 			RendererEvents::Viewport::AddAtomPopupToggleRequested event;
 			event.windowId = windowState.windowId;
@@ -115,6 +183,20 @@ namespace DefectStudio
 			const ImVec2 itemMaximum = ImGui::GetItemRectMax();
 			event.screenPosition = glm::vec2(itemMaximum.x + 4.0f * uiScale, itemMinimum.y);
 			eventBus->Publish(event);
+		}
+
+		const bool orbitalPressed =
+			toolButton("##ToolAddOrbital", "tool-add-orbital.png", "Orb", "Add orbital at the 3D cursor", false);
+		const ImVec2 orbitalPopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (orbitalPressed)
+			ImGui::OpenPopup("##AddOrbitalPopup");
+		ImGui::SetNextWindowPos(orbitalPopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##AddOrbitalPopup"))
+		{
+			DrawOrbitalAddMenu(
+				windowState, windowState.cursor3DPosition, windowState.anchorOrbitalToSelection, false);
+			ImGui::EndPopup();
 		}
 		ImGui::Spacing();
 
@@ -198,28 +280,45 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
-		if (toolButton(
-				"##ModeAtoms", "tool-mode-atoms.png", "1", "Selection mode: Atoms only (Ctrl+1)",
-				windowState.pickAtoms && !windowState.pickBonds && !windowState.pickLabels))
-			publishSelectionMode(true, false, false);
-		if (toolButton(
-				"##ModeAtomsBonds", "tool-mode-atoms-bonds.png", "2", "Selection mode: Atoms + Bonds (Ctrl+2)",
-				windowState.pickAtoms && windowState.pickBonds && !windowState.pickLabels))
-			publishSelectionMode(true, true, false);
-		if (toolButton(
-				"##ModeBondsLabels", "tool-mode-bonds-labels.png", "3", "Selection mode: Bonds + Labels, no atoms (Ctrl+3)",
-				!windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
-			publishSelectionMode(false, true, true);
-		if (toolButton(
-				"##ModeAll", "tool-mode-all.png", "4", "Selection mode: Atoms + Bonds + Labels (Ctrl+4)",
-				windowState.pickAtoms && windowState.pickBonds && windowState.pickLabels))
-			publishSelectionMode(true, true, true);
-		if (toolButton(
-				"##ModeLabelsOnly", "tool-mode-labels.png", "5",
-				"Selection mode: Pinned labels only, no atoms/bonds - for multi-selecting bond/angle "
-				"labels to edit their style together (Ctrl+5)",
-				!windowState.pickAtoms && !windowState.pickBonds && windowState.pickLabels))
-			publishSelectionMode(false, false, true);
+		const auto &selectionModeEntries = ViewportSelectionModeEntries();
+		const std::size_t currentSelectionModeIndex = ResolveViewportSelectionModeEntryIndex(
+			windowState.pickAtoms, windowState.pickBonds, windowState.pickLabels);
+		const ViewportSelectionModeEntry &currentSelectionMode = selectionModeEntries[currentSelectionModeIndex];
+		const char fallback[] = {currentSelectionMode.shortcut.back(), '\0'};
+		const std::string selectionModeTooltip = "Selection mode: " + std::string(currentSelectionMode.name) +
+			" (" + std::string(currentSelectionMode.shortcut) + ")";
+		const bool selectionModePressed = toolButton(
+			"##SelectionModeMenu", currentSelectionMode.iconFileName.data(), fallback,
+			selectionModeTooltip.c_str(), false);
+		const ImVec2 selectionModePopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (selectionModePressed)
+			ImGui::OpenPopup("##SelectionModePopup");
+		ImGui::SetNextWindowPos(selectionModePopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##SelectionModePopup"))
+		{
+			const float popupIconExtent = iconExtent * 0.70f;
+			for (std::size_t index = 0; index < selectionModeEntries.size(); ++index)
+			{
+				const ViewportSelectionModeEntry &entry = selectionModeEntries[index];
+				ImGui::PushID(static_cast<int>(index));
+				if (const RendererToolbarIconTexture *icon = layer.GetToolbarIcon(entry.iconFileName.data());
+					icon != nullptr && icon->rendererId != 0)
+				{
+					const ImTextureRef textureRef(
+						reinterpret_cast<void *>(static_cast<uintptr_t>(icon->rendererId)));
+					ImGui::Image(textureRef, ImVec2(popupIconExtent, popupIconExtent));
+					ImGui::SameLine();
+				}
+				if (ImGui::MenuItem(
+						entry.name.data(), entry.shortcut.data(), index == currentSelectionModeIndex))
+				{
+					publishSelectionMode(entry.pickAtoms, entry.pickBonds, entry.pickLabels);
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndPopup();
+		}
 
 		ImGui::Spacing();
 

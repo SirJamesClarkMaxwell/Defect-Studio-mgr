@@ -636,7 +636,8 @@ namespace DefectStudio
 				DrawPlaneAddItem(windowState);
 				ImGui::EndMenu();
 			}
-			DrawOrbitalAddMenu(windowState, m_ContextMenuWorldPosition, m_AnchorOrbitalToSelection);
+			DrawOrbitalAddMenu(
+				windowState, m_ContextMenuWorldPosition, windowState.anchorOrbitalToSelection);
 			ImGui::EndMenu();
 		}
 

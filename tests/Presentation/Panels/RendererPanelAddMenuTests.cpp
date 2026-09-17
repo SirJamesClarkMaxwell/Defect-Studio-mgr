@@ -14,6 +14,8 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(description.lineLabel, "Linia");
 		EXPECT_EQ(description.arrowLabel, "Strzalka");
 		EXPECT_EQ(description.planeLabel, "Plaszczyzna");
+		EXPECT_TRUE(description.segmentTooltip.empty());
+		EXPECT_TRUE(description.planeTooltip.empty());
 	}
 
 	TEST(DrawSelectionDescriptionTests, OneAtomKeepsTheMenuOpenAndExplainsDisabledItems)
@@ -26,6 +28,8 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(description.lineLabel, "Linia (wymaga dokladnie 2 atomow)");
 		EXPECT_EQ(description.arrowLabel, "Strzalka (wymaga dokladnie 2 atomow)");
 		EXPECT_EQ(description.planeLabel, "Plaszczyzna (wymaga co najmniej 2 atomow)");
+		EXPECT_EQ(description.segmentTooltip, "Zaznacz dokladnie dwa atomy, aby dodac linie lub strzalke.");
+		EXPECT_EQ(description.planeTooltip, "Zaznacz co najmniej dwa atomy, aby dodac plaszczyzne.");
 	}
 
 	TEST(DrawSelectionDescriptionTests, ThreeAtomsEnableOnlyThePlane)

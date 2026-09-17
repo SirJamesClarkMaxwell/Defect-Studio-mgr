@@ -277,6 +277,7 @@ namespace DefectStudio
 
 		if (selectedCount == 1)
 		{
+			DrawSceneArrowAtomMatchActions(windowState, representativeIndex);
 			DrawSceneArrowEditor(windowState, representativeIndex, SceneArrowEditorMode::Full, globalSettings);
 			return;
 		}
