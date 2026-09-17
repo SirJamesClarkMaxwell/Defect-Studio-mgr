@@ -1,24 +1,258 @@
 #include "Core/dspch.hpp"
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+
 namespace DefectStudio
 {
-	// STUB - see HydrogenicOrbital.cpp. tests/Domain/Electronic/OrbitalPresetTests.cpp is the
-	// contract for everything in this file.
+	namespace
+	{
+		constexpr int kMaximumShell = 4;
+
+		[[nodiscard]] AtomicOrbital MakeAtomicOrbital(
+			int n, int l, int m, float effectiveCharge)
+		{
+			return AtomicOrbital{n, l, m, effectiveCharge};
+		}
+
+		void AddTerm(
+			OrbitalWavefunction &wavefunction, const AtomicOrbital &orbital, const glm::vec3 &center,
+			const glm::mat3 &orientation, float coefficient)
+		{
+			wavefunction.terms.push_back(OrbitalTerm{orbital, center, orientation, coefficient});
+		}
+
+		[[nodiscard]] glm::vec3 HybridDirection(int pCount, int lobeIndex)
+		{
+			if (pCount == 1)
+				return lobeIndex == 0 ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 0.0f, -1.0f);
+
+			if (pCount == 2)
+			{
+				constexpr float rootThreeOverTwo = 0.866025403784f;
+				const std::array<glm::vec3, 3> directions = {
+					glm::vec3(0.0f, 0.0f, 1.0f),
+					glm::vec3(rootThreeOverTwo, 0.0f, -0.5f),
+					glm::vec3(-rootThreeOverTwo, 0.0f, -0.5f)};
+				return directions[std::clamp(lobeIndex, 0, 2)];
+			}
+
+			constexpr float radial = 0.942809041582f; // 2 * sqrt(2) / 3
+			constexpr float z = -1.0f / 3.0f;
+			const std::array<glm::vec3, 4> directions = {
+				glm::vec3(0.0f, 0.0f, 1.0f),
+				glm::vec3(radial, 0.0f, z),
+				glm::vec3(-0.5f * radial, 0.866025403784f * radial, z),
+				glm::vec3(-0.5f * radial, -0.866025403784f * radial, z)};
+			return directions[std::clamp(lobeIndex, 0, 3)];
+		}
+
+		void AddHybrid(
+			OrbitalWavefunction &wavefunction, int pCount, int shell, float effectiveCharge,
+			const glm::vec3 &center, const glm::mat3 &orientation, const glm::vec3 &direction,
+			float overallCoefficient)
+		{
+			const float sCoefficient = -overallCoefficient / std::sqrt(static_cast<float>(pCount + 1));
+			const float pCoefficient = overallCoefficient *
+				std::sqrt(static_cast<float>(pCount) / static_cast<float>(pCount + 1));
+			AddTerm(
+				wavefunction, MakeAtomicOrbital(shell, 0, 0, effectiveCharge), center, orientation, sCoefficient);
+
+			if (pCount >= 2)
+			{
+				AddTerm(
+					wavefunction, MakeAtomicOrbital(shell, 1, 1, effectiveCharge), center, orientation,
+					pCoefficient * direction.x);
+			}
+			if (pCount >= 3)
+			{
+				AddTerm(
+					wavefunction, MakeAtomicOrbital(shell, 1, -1, effectiveCharge), center, orientation,
+					pCoefficient * direction.y);
+			}
+			AddTerm(
+				wavefunction, MakeAtomicOrbital(shell, 1, 0, effectiveCharge), center, orientation,
+				pCoefficient * direction.z);
+		}
+
+		[[nodiscard]] glm::mat3 OrientationFromZ(const glm::vec3 &direction)
+		{
+			const glm::vec3 z = glm::normalize(direction);
+			const glm::vec3 helper =
+				std::abs(z.z) > 0.999f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(0.0f, 0.0f, 1.0f);
+			const glm::vec3 x = glm::normalize(glm::cross(helper, z));
+			const glm::vec3 y = glm::cross(z, x);
+			return glm::mat3(x, y, z);
+		}
+
+		struct BondFrame
+		{
+			glm::vec3 centerB;
+			glm::vec3 direction;
+			glm::mat3 orientation;
+		};
+
+		[[nodiscard]] BondFrame MakeBondFrame(const OrbitalPresetSettings &settings)
+		{
+			glm::vec3 centerB = settings.centerB;
+			glm::vec3 offset = centerB - settings.centerA;
+			if (glm::dot(offset, offset) <= 1e-12f)
+			{
+				centerB = settings.centerA + glm::vec3(1.0f, 0.0f, 0.0f);
+				offset = centerB - settings.centerA;
+			}
+			const glm::vec3 direction = glm::normalize(offset);
+			return BondFrame{centerB, direction, OrientationFromZ(direction)};
+		}
+
+		[[nodiscard]] bool IsAntibonding(OrbitalPreset preset)
+		{
+			switch (preset)
+			{
+				case OrbitalPreset::SigmaStar:
+				case OrbitalPreset::PiStar:
+				case OrbitalPreset::DeltaStar:
+				case OrbitalPreset::SpSigmaStar:
+				case OrbitalPreset::Sp2SigmaStar:
+				case OrbitalPreset::Sp3SigmaStar: return true;
+				default: return false;
+			}
+		}
+
+		[[nodiscard]] int HybridPCount(OrbitalPreset preset)
+		{
+			switch (preset)
+			{
+				case OrbitalPreset::Sp:
+				case OrbitalPreset::SpSigma:
+				case OrbitalPreset::SpSigmaStar: return 1;
+				case OrbitalPreset::Sp2:
+				case OrbitalPreset::Sp2Sigma:
+				case OrbitalPreset::Sp2SigmaStar: return 2;
+				case OrbitalPreset::Sp3:
+				case OrbitalPreset::Sp3Sigma:
+				case OrbitalPreset::Sp3SigmaStar: return 3;
+				default: return 0;
+			}
+		}
+	} // namespace
 
 	OrbitalWavefunction MakeOrbitalPreset(
-		OrbitalPreset /*preset*/, const OrbitalPresetSettings & /*settings*/)
+		OrbitalPreset preset, const OrbitalPresetSettings &settings)
 	{
-		return OrbitalWavefunction{};
+		OrbitalWavefunction wavefunction;
+		const int hybridPCount = HybridPCount(preset);
+		if (preset == OrbitalPreset::S)
+		{
+			const int shell = std::clamp(settings.shell, 1, kMaximumShell);
+			AddTerm(
+				wavefunction, MakeAtomicOrbital(shell, 0, 0, settings.effectiveCharge), settings.centerA,
+				settings.orientation, 1.0f);
+			return wavefunction;
+		}
+		if (preset == OrbitalPreset::P)
+		{
+			constexpr std::array<int, 3> mValues = {0, 1, -1};
+			const int shell = std::clamp(settings.shell, 2, kMaximumShell);
+			const int lobe = std::clamp(settings.lobeIndex, 0, 2);
+			AddTerm(
+				wavefunction, MakeAtomicOrbital(shell, 1, mValues[lobe], settings.effectiveCharge),
+				settings.centerA, settings.orientation, 1.0f);
+			return wavefunction;
+		}
+		if (preset == OrbitalPreset::D)
+		{
+			constexpr std::array<int, 5> mValues = {0, 1, -1, 2, -2};
+			const int shell = std::clamp(settings.shell, 3, kMaximumShell);
+			const int lobe = std::clamp(settings.lobeIndex, 0, 4);
+			AddTerm(
+				wavefunction, MakeAtomicOrbital(shell, 2, mValues[lobe], settings.effectiveCharge),
+				settings.centerA, settings.orientation, 1.0f);
+			return wavefunction;
+		}
+		if (preset == OrbitalPreset::Sp || preset == OrbitalPreset::Sp2 || preset == OrbitalPreset::Sp3)
+		{
+			const int shell = std::clamp(settings.shell, 2, kMaximumShell);
+			const int lobe = std::clamp(settings.lobeIndex, 0, hybridPCount);
+			AddHybrid(
+				wavefunction, hybridPCount, shell, settings.effectiveCharge, settings.centerA,
+				settings.orientation, HybridDirection(hybridPCount, lobe), 1.0f);
+			return wavefunction;
+		}
+
+		const BondFrame bond = MakeBondFrame(settings);
+		constexpr float centreCoefficient = 0.707106781187f;
+		if (preset == OrbitalPreset::Sigma || preset == OrbitalPreset::SigmaStar)
+		{
+			const int shell = std::clamp(settings.shell, 1, kMaximumShell);
+			const int angularMomentum = shell == 1 ? 0 : 1;
+			const AtomicOrbital orbital =
+				MakeAtomicOrbital(shell, angularMomentum, 0, settings.effectiveCharge);
+			const float bondingB = angularMomentum == 0 ? centreCoefficient : -centreCoefficient;
+			AddTerm(wavefunction, orbital, settings.centerA, bond.orientation, centreCoefficient);
+			AddTerm(
+				wavefunction, orbital, bond.centerB, bond.orientation,
+				IsAntibonding(preset) ? -bondingB : bondingB);
+			return wavefunction;
+		}
+		if (preset == OrbitalPreset::Pi || preset == OrbitalPreset::PiStar)
+		{
+			const int shell = std::clamp(settings.shell, 2, kMaximumShell);
+			const int m = std::clamp(settings.lobeIndex, 0, 1) == 0 ? 1 : -1;
+			const AtomicOrbital orbital = MakeAtomicOrbital(shell, 1, m, settings.effectiveCharge);
+			AddTerm(wavefunction, orbital, settings.centerA, bond.orientation, centreCoefficient);
+			AddTerm(
+				wavefunction, orbital, bond.centerB, bond.orientation,
+				IsAntibonding(preset) ? -centreCoefficient : centreCoefficient);
+			return wavefunction;
+		}
+		if (preset == OrbitalPreset::Delta || preset == OrbitalPreset::DeltaStar)
+		{
+			const int shell = std::clamp(settings.shell, 3, kMaximumShell);
+			const int m = std::clamp(settings.lobeIndex, 0, 1) == 0 ? 2 : -2;
+			const AtomicOrbital orbital = MakeAtomicOrbital(shell, 2, m, settings.effectiveCharge);
+			AddTerm(wavefunction, orbital, settings.centerA, bond.orientation, centreCoefficient);
+			AddTerm(
+				wavefunction, orbital, bond.centerB, bond.orientation,
+				IsAntibonding(preset) ? -centreCoefficient : centreCoefficient);
+			return wavefunction;
+		}
+		if (hybridPCount > 0)
+		{
+			const int shell = std::clamp(settings.shell, 2, kMaximumShell);
+			AddHybrid(
+				wavefunction, hybridPCount, shell, settings.effectiveCharge, settings.centerA,
+				bond.orientation, glm::vec3(0.0f, 0.0f, 1.0f), centreCoefficient);
+			AddHybrid(
+				wavefunction, hybridPCount, shell, settings.effectiveCharge, bond.centerB,
+				OrientationFromZ(-bond.direction), glm::vec3(0.0f, 0.0f, 1.0f),
+				IsAntibonding(preset) ? -centreCoefficient : centreCoefficient);
+		}
+		return wavefunction;
 	}
 
-	const char *OrbitalPresetName(OrbitalPreset /*preset*/)
+	const char *OrbitalPresetName(OrbitalPreset preset)
 	{
-		return "";
+		constexpr std::array<const char *, 18> names = {
+			"s", "p", "d", "sp", "sp2", "sp3", "sigma", "sigma*", "pi", "pi*", "delta", "delta*",
+			"sp-sigma", "sp-sigma*", "sp2-sigma", "sp2-sigma*", "sp3-sigma", "sp3-sigma*"};
+		const int index = static_cast<int>(preset);
+		return index >= 0 && index < static_cast<int>(names.size()) ? names[index] : "";
 	}
 
-	bool ParseOrbitalPreset(const std::string & /*name*/, OrbitalPreset & /*preset*/)
+	bool ParseOrbitalPreset(const std::string &name, OrbitalPreset &preset)
 	{
+		for (int index = 0; index < 18; ++index)
+		{
+			const auto candidate = static_cast<OrbitalPreset>(index);
+			if (name == OrbitalPresetName(candidate))
+			{
+				preset = candidate;
+				return true;
+			}
+		}
 		return false;
 	}
 } // namespace DefectStudio

@@ -3528,6 +3528,7 @@ namespace DefectStudio
 		glUseProgram(program);
 		const int dimensionsLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Dimensions");
 		const int cellLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Cell");
+		const int originLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Origin");
 		const int isoLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_IsoValue");
 		const int signLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_LobeSign");
 		const int maxVerticesLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_MaxVertices");
@@ -3535,6 +3536,8 @@ namespace DefectStudio
 			glUniform3i(dimensionsLocation, grid.dimensions.x, grid.dimensions.y, grid.dimensions.z);
 		if (cellLocation >= 0)
 			glUniformMatrix3fv(cellLocation, 1, GL_FALSE, &grid.cell[0][0]);
+		if (originLocation >= 0)
+			glUniform3fv(originLocation, 1, &grid.origin[0]);
 		if (isoLocation >= 0)
 			glUniform1f(isoLocation, isoValue);
 		if (maxVerticesLocation >= 0)

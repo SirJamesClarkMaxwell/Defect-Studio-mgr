@@ -143,7 +143,8 @@ namespace DefectStudio
 								static_cast<float>(offset.y) / static_cast<float>(dims.y),
 								static_cast<float>(offset.z) / static_cast<float>(dims.z));
 							const glm::vec3 position =
-								grid.cell[0] * fractional.x + grid.cell[1] * fractional.y + grid.cell[2] * fractional.z;
+								grid.origin + grid.cell[0] * fractional.x + grid.cell[1] * fractional.y +
+								grid.cell[2] * fractional.z;
 							const float rawValue = grid.values[GridIndex(dims, offset.x, offset.y, offset.z)];
 							cubeCorners[corner] = GridSample{position, sign * rawValue};
 						}

@@ -268,11 +268,11 @@ namespace DefectStudio::Tests
 
 	TEST(EvaluateOrbitalTests, OrientationRotatesTheLobeIntoSceneSpace)
 	{
-		// A p_z turned onto +x by a -90 degree rotation about y must now peak along x and vanish
+		// A p_z turned onto +x by a +90 degree rotation about y must now peak along x and vanish
 		// along z, which is what lets a bond point anywhere.
 		OrbitalWavefunction wavefunction = SingleTerm(MakeOrbital(2, 1, 0));
 		wavefunction.terms[0].orientation = glm::mat3(
-			glm::rotate(glm::mat4(1.0f), -glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)));
+			glm::rotate(glm::mat4(1.0f), glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)));
 
 		const float alongX = EvaluateOrbital(wavefunction, glm::vec3(2.0f * kA0, 0.0f, 0.0f));
 		EXPECT_GT(alongX, 0.0f);

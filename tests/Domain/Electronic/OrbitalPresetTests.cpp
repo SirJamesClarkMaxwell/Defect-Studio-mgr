@@ -219,7 +219,7 @@ namespace DefectStudio::Tests
 	{
 		OrbitalPresetSettings settings;
 		settings.orientation = glm::mat3(
-			glm::rotate(glm::mat4(1.0f), -glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)));
+			glm::rotate(glm::mat4(1.0f), glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)));
 		const OrbitalWavefunction wavefunction = MakeOrbitalPreset(OrbitalPreset::Sp3, settings);
 		// Lobe 0 left +z and landed on +x.
 		EXPECT_LT(AngleBetweenDegrees(PeakDirection(wavefunction, 2.0f), glm::vec3(1.0f, 0.0f, 0.0f)), 5.0f);

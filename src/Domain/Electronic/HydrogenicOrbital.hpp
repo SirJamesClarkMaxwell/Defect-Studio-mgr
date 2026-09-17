@@ -66,6 +66,10 @@ namespace DefectStudio
 	// Real spherical harmonic Y_lm for the direction of `offset`, using the m convention documented
 	// on AtomicOrbital. Normalised so that the integral of Y^2 over the unit sphere is 1. Returns 0
 	// for l < 0 or |m| > l, and for a zero-length `offset` unless l == 0.
+	//
+	// ponytail: also returns 0 above l = 2, where the implementation stops - nothing task 26 asks
+	// for needs an f orbital, and the explicit low-order forms are cheaper and far clearer than a
+	// general recurrence. Adding f means extending that one switch, nothing else.
 	[[nodiscard]] float RealSphericalHarmonic(int l, int m, const glm::vec3 &offset);
 
 	// R_nl * Y_lm at `offset` = point - centre, already in the orbital's own frame. Normalised so
@@ -101,6 +105,13 @@ namespace DefectStudio
 	// existing GPU marching-tetrahedra renderer (RendererLayer::RegenerateOrbitalIsosurface) with
 	// no new render path. `energy` and `occupation` stay 0: an analytic drawing orbital has no
 	// calculated energy, and nothing downstream requires one.
+	//
+	// ponytail: the box is sampled corner to corner (sample i sits at i / (dimensions - 1) of the
+	// way across), while the mesher maps a grid point to i / dimensions - correct for a WAVECAR
+	// grid, which is periodic and whose last sample is NOT a repeat of the first. So a meshed
+	// analytic orbital comes out smaller than the sampled one by (N - 1) / N: 1.6% at the default
+	// 64 samples, shrinking as the grid grows, and invisible on a drawing aid. The fix when it
+	// stops being invisible is a per-grid periodic flag the mesher reads, not a second mesher.
 	[[nodiscard]] OrbitalGridData SampleOrbitalToGrid(
 		const OrbitalWavefunction &wavefunction, const OrbitalSamplingSettings &settings);
 
