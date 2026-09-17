@@ -15,6 +15,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
+#include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
@@ -214,6 +215,57 @@ namespace DefectStudio
 			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<SceneArrow> sceneArrows;
+
+		// A hydrogenic orbital drawn as a scene annotation (task 26): the user picks a preset -
+		// s/p/d, an sp/sp2/sp3 hybrid lobe, or a sigma/pi/delta molecular orbital with its
+		// antibonding partner - and it is evaluated analytically and meshed as an isosurface with
+		// its two phases coloured separately. Nothing here is read from a calculation; this is a
+		// drawing object, which is why it lives beside the labels and arrows rather than in the
+		// electronic-structure session that owns WAVECAR orbitals.
+		struct SceneOrbital
+		{
+			// Same stable identity as SceneArrow::id, from the same SceneRegistry.
+			SceneObjectId id;
+			OrbitalPreset preset = OrbitalPreset::P;
+			// Fed straight to OrbitalPresetSettings - see HydrogenicOrbital.hpp for what each one
+			// selects and how each is clamped.
+			int shell = 2;
+			int lobeIndex = 0;
+			float effectiveCharge = 1.0f;
+			glm::vec3 centerA = glm::vec3(0.0f);
+			// Only read by the two-centre presets. For a single-centre one it is left alone rather
+			// than hidden, so switching preset back and forth does not lose the bond the user set up.
+			glm::vec3 centerB = glm::vec3(1.5f, 0.0f, 0.0f);
+			// Optional atom anchoring, indices into structure.atoms: one entry drives centerA, two
+			// drive centerA and centerB. Resolved every frame like SceneArrow::anchorAtoms, so an
+			// orbital sits on its atom through gizmo drags, nudges and relaxation playback. Anchors
+			// that no longer resolve are ignored, never indexed.
+			std::vector<std::size_t> anchorAtoms;
+			// Euler angles in degrees, applied to single-centre presets only - the two-centre ones
+			// take their orientation from centerB - centerA. Degrees rather than a matrix so the
+			// properties panel and the YAML both stay readable.
+			glm::vec3 rotationEuler = glm::vec3(0.0f);
+			// Uniform mesh scale about the orbital's centroid, purely for composing a figure. It
+			// does NOT change the physics - effectiveCharge is the knob that actually contracts or
+			// expands the wavefunction. Kept separate so a drawing that was scaled to look right
+			// next to an atom stays honest about which number is which.
+			float scale = 1.0f;
+			// Iso value as a fraction of the sampled grid's peak amplitude (SuggestOrbitalIsoValue),
+			// not an absolute value - a diffuse 3d and a tight 1s then both come out looking like
+			// the textbook picture at the same setting.
+			float isoFraction = 0.2f;
+			// Samples per axis for the sampling cube. Meshing is CPU-side and runs on the main
+			// thread whenever a parameter changes, so this is the frame-hitch knob.
+			int resolution = 48;
+			glm::vec3 positiveLobeColor = glm::vec3(0.85f, 0.25f, 0.25f);
+			glm::vec3 negativeLobeColor = glm::vec3(0.25f, 0.35f, 0.9f);
+			float alpha = 0.75f;
+			bool visible = true;
+			std::string persistKey; // see PinnedMeasurement::persistKey
+		};
+		std::vector<SceneOrbital> sceneOrbitals;
+		std::vector<SceneObjectId> selectedSceneOrbitals;
+
 		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
 		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single
 		// selected arrow's drag actually grabs (irrelevant once more than one is selected - a
@@ -274,6 +326,7 @@ namespace DefectStudio
 			std::vector<PinnedMeasurement> pinnedMeasurements;
 			std::vector<FreeLabel> freeLabels;
 			std::vector<SceneArrow> sceneArrows;
+			std::vector<SceneOrbital> sceneOrbitals;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
