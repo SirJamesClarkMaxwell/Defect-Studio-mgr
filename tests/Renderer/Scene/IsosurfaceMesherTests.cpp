@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "Renderer/Scene/IsosurfaceMesher.hpp"
 
@@ -93,5 +94,29 @@ namespace DefectStudio::Tests
 		ASSERT_FALSE(vertices.empty());
 		for (const IsosurfaceVertex &vertex : vertices)
 			EXPECT_GT(vertex.sign, 0.0f);
+	}
+	// An analytic orbital's sampling box is centred on whichever atom it belongs to, not on the
+	// scene origin (see HydrogenicOrbital.hpp), so the mesh has to follow OrbitalGridData::origin.
+	// A WAVECAR grid leaves it at zero, which is why every case above is unaffected.
+	TEST(IsosurfaceMesherTests, GridOriginOffsetsTheWholeMesh)
+	{
+		OrbitalGridData grid = BuildLinearGradientGrid();
+		const std::vector<IsosurfaceVertex> atOrigin = GenerateIsosurfaceMesh(grid, 1.0f);
+		ASSERT_FALSE(atOrigin.empty());
+
+		const glm::vec3 offset(3.0f, -7.0f, 0.5f);
+		grid.origin = offset;
+		const std::vector<IsosurfaceVertex> shifted = GenerateIsosurfaceMesh(grid, 1.0f);
+
+		ASSERT_EQ(shifted.size(), atOrigin.size());
+		for (std::size_t index = 0; index < shifted.size(); ++index)
+		{
+			EXPECT_NEAR(shifted[index].position.x, atOrigin[index].position.x + offset.x, 1e-5f);
+			EXPECT_NEAR(shifted[index].position.y, atOrigin[index].position.y + offset.y, 1e-5f);
+			EXPECT_NEAR(shifted[index].position.z, atOrigin[index].position.z + offset.z, 1e-5f);
+			// A translation cannot turn a surface, so the normals and the phase tags stay put.
+			EXPECT_NEAR(glm::length(shifted[index].normal - atOrigin[index].normal), 0.0f, 1e-5f);
+			EXPECT_EQ(shifted[index].sign, atOrigin[index].sign);
+		}
 	}
 } // namespace DefectStudio::Tests
