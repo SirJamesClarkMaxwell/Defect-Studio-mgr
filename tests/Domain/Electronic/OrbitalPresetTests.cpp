@@ -633,4 +633,76 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::DeltaStar), OrbitalPresetGroup::Antibonding);
 		EXPECT_EQ(OrbitalPresetGroupOf(OrbitalPreset::Sp2SigmaStar), OrbitalPresetGroup::HybridBonding);
 	}
+
+	// --- what the lobe index actually selects -----------------------------------------------------
+
+	TEST(OrbitalPresetMemberTests, TheCountMatchesHowManyDistinctOrbitalsThePresetCanMake)
+	{
+		// The number the UI offers has to be the number the preset really has, or someone dials a
+		// lobe that silently clamps back onto one they already drew.
+		const std::pair<OrbitalPreset, int> kExpected[] = {
+			{OrbitalPreset::S, 1}, {OrbitalPreset::P, 3}, {OrbitalPreset::D, 5}, {OrbitalPreset::F, 7},
+			{OrbitalPreset::Sp, 2}, {OrbitalPreset::Sp2, 3}, {OrbitalPreset::Sp3, 4},
+			{OrbitalPreset::Sigma, 1}, {OrbitalPreset::SigmaStar, 1},
+			{OrbitalPreset::Pi, 2}, {OrbitalPreset::PiStar, 2},
+			{OrbitalPreset::Delta, 2}, {OrbitalPreset::DeltaStar, 2},
+			{OrbitalPreset::Sp3Sigma, 1}};
+
+		for (const auto &[preset, expected] : kExpected)
+			EXPECT_EQ(OrbitalPresetMemberCount(preset), expected) << OrbitalPresetName(preset);
+	}
+
+	TEST(OrbitalPresetMemberTests, EveryMemberHasItsOwnNameAndOutOfRangeClamps)
+	{
+		constexpr OrbitalPreset kMultiMember[] = {OrbitalPreset::P, OrbitalPreset::D, OrbitalPreset::F,
+			OrbitalPreset::Sp, OrbitalPreset::Sp2, OrbitalPreset::Sp3, OrbitalPreset::Pi,
+			OrbitalPreset::Delta};
+
+		for (const OrbitalPreset preset : kMultiMember)
+		{
+			const int count = OrbitalPresetMemberCount(preset);
+			std::vector<std::string> seen;
+			for (int lobe = 0; lobe < count; ++lobe)
+			{
+				const std::string name = OrbitalPresetMemberName(preset, lobe);
+				EXPECT_FALSE(name.empty()) << OrbitalPresetName(preset) << " lobe " << lobe;
+				EXPECT_EQ(std::find(seen.begin(), seen.end(), name), seen.end())
+					<< "duplicate member name " << name;
+				seen.push_back(name);
+			}
+			// A stale index left over from switching preset must still render something, not crash
+			// or return null.
+			EXPECT_STREQ(OrbitalPresetMemberName(preset, 999), OrbitalPresetMemberName(preset, count - 1));
+			EXPECT_STREQ(OrbitalPresetMemberName(preset, -5), OrbitalPresetMemberName(preset, 0));
+		}
+	}
+
+	TEST(OrbitalPresetMemberTests, TheNamesDescribeTheOrbitalThatIsActuallyBuilt)
+	{
+		// p_z must really be the m = 0 p orbital, not just be labelled that way. Same for d_z2.
+		OrbitalPresetSettings settings;
+		settings.shell = 3;
+		settings.lobeIndex = 0;
+		EXPECT_STREQ(OrbitalPresetMemberName(OrbitalPreset::P, 0), "p_z");
+		const OrbitalWavefunction pz = MakeOrbitalPreset(OrbitalPreset::P, settings);
+		ASSERT_EQ(pz.terms.size(), 1u);
+		EXPECT_EQ(pz.terms[0].orbital.l, 1);
+		EXPECT_EQ(pz.terms[0].orbital.m, 0);
+
+		EXPECT_STREQ(OrbitalPresetMemberName(OrbitalPreset::D, 0), "d_z2");
+		const OrbitalWavefunction dz2 = MakeOrbitalPreset(OrbitalPreset::D, settings);
+		ASSERT_EQ(dz2.terms.size(), 1u);
+		EXPECT_EQ(dz2.terms[0].orbital.l, 2);
+		EXPECT_EQ(dz2.terms[0].orbital.m, 0);
+
+		// And the two pi members really are the two different perpendiculars, not the same one
+		// twice under two labels.
+		OrbitalPresetSettings bond = BondSettings(/*shell=*/2, /*lobeIndex=*/0);
+		const OrbitalWavefunction piX = MakeOrbitalPreset(OrbitalPreset::Pi, bond);
+		bond.lobeIndex = 1;
+		const OrbitalWavefunction piY = MakeOrbitalPreset(OrbitalPreset::Pi, bond);
+		ASSERT_FALSE(piX.terms.empty());
+		ASSERT_FALSE(piY.terms.empty());
+		EXPECT_NE(piX.terms[0].orbital.m, piY.terms[0].orbital.m);
+	}
 } // namespace DefectStudio::Tests

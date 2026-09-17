@@ -26,27 +26,6 @@ namespace DefectStudio
 				PushPinnedMeasurementUndoSnapshot(windowState);
 		}
 
-		// How many members the preset's lobeIndex actually selects, so the control offers the real
-		// range instead of letting someone dial a d orbital's lobe 4 on an s.
-		[[nodiscard]] int LobeCount(OrbitalPreset preset)
-		{
-			switch (preset)
-			{
-				case OrbitalPreset::S: return 1;
-				case OrbitalPreset::P: return 3;
-				case OrbitalPreset::D: return 5;
-				case OrbitalPreset::F: return 7;
-				case OrbitalPreset::Sp: return 2;
-				case OrbitalPreset::Sp2: return 3;
-				case OrbitalPreset::Sp3: return 4;
-				case OrbitalPreset::Pi:
-				case OrbitalPreset::PiStar:
-				case OrbitalPreset::Delta:
-				case OrbitalPreset::DeltaStar: return 2;
-				default: return 1;
-			}
-		}
-
 		[[nodiscard]] bool IsTwoCenter(OrbitalPreset preset)
 		{
 			switch (preset)
@@ -77,7 +56,7 @@ namespace DefectStudio
 					{
 						PushPinnedMeasurementUndoSnapshot(windowState);
 						orbital.preset = preset;
-						orbital.lobeIndex = std::clamp(orbital.lobeIndex, 0, LobeCount(preset) - 1);
+						orbital.lobeIndex = std::clamp(orbital.lobeIndex, 0, OrbitalPresetMemberCount(preset) - 1);
 					}
 					if (selected)
 						ImGui::SetItemDefaultFocus();
@@ -142,12 +121,31 @@ namespace DefectStudio
 				orbital.shell = std::clamp(orbital.shell, 1, 5);
 			SnapshotOnActivation(windowState);
 
-			const int lobeCount = LobeCount(orbital.preset);
-			ImGui::BeginDisabled(lobeCount <= 1);
-			if (ImGui::SliderInt("Platek", &orbital.lobeIndex, 0, std::max(0, lobeCount - 1)))
-				orbital.lobeIndex = std::clamp(orbital.lobeIndex, 0, lobeCount - 1);
-			SnapshotOnActivation(windowState);
+			// A number told you nothing: for a hybrid it picked one of 2/3/4 lobes, for a pi or a
+			// delta one of two degenerate perpendiculars, and for an s or a sigma nothing at all.
+			// The names come from the physics (HydrogenicOrbital.hpp), so they cannot drift from
+			// what the preset actually builds - a test pins that down.
+			const int memberCount = OrbitalPresetMemberCount(orbital.preset);
+			orbital.lobeIndex = std::clamp(orbital.lobeIndex, 0, std::max(0, memberCount - 1));
+			ImGui::BeginDisabled(memberCount <= 1);
+			if (ImGui::BeginCombo("Czlon", OrbitalPresetMemberName(orbital.preset, orbital.lobeIndex)))
+			{
+				for (int lobe = 0; lobe < memberCount; ++lobe)
+				{
+					const bool selected = lobe == orbital.lobeIndex;
+					if (ImGui::Selectable(OrbitalPresetMemberName(orbital.preset, lobe), selected) && !selected)
+					{
+						PushPinnedMeasurementUndoSnapshot(windowState);
+						orbital.lobeIndex = lobe;
+					}
+					if (selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
 			ImGui::EndDisabled();
+			if (memberCount <= 1 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Ten preset ma tylko jeden czlon.");
 
 			ImGui::DragFloat("Z_eff", &orbital.effectiveCharge, 0.05f, 0.1f, 30.0f, "%.2f");
 			SnapshotOnActivation(windowState);

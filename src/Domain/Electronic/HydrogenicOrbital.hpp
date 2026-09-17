@@ -220,6 +220,18 @@ namespace DefectStudio
 	// Display name, e.g. "Atomowe". Non-empty and distinct for every group.
 	[[nodiscard]] const char *OrbitalPresetGroupName(OrbitalPresetGroup group);
 
+	// How many members OrbitalPresetSettings::lobeIndex actually selects for this preset, and what
+	// each one is called. One number meant three different things depending on the preset - which of
+	// the 2/3/4 lobes of a hybrid, which of the two degenerate perpendicular orientations of a pi or
+	// delta, or nothing at all for an s or a sigma - and a bare index gave the reader no way to tell
+	// which. Naming the members is the whole fix; the count is here so a caller cannot offer a
+	// lobe 4 on an orbital that has one.
+	[[nodiscard]] int OrbitalPresetMemberCount(OrbitalPreset preset);
+
+	// Name of member `lobeIndex`, e.g. "p_z", "d_x2-y2", "sp3 #3 (tetraedryczny)", "pi (y)". Clamped
+	// into range rather than returning null, so a stale index from a preset change still renders.
+	[[nodiscard]] const char *OrbitalPresetMemberName(OrbitalPreset preset, int lobeIndex);
+
 	// Which drawer a preset belongs in. Total: every preset has exactly one group.
 	[[nodiscard]] OrbitalPresetGroup OrbitalPresetGroupOf(OrbitalPreset preset);
 

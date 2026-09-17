@@ -2,6 +2,7 @@
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 
 #include <algorithm>
+#include <span>
 #include <array>
 #include <cmath>
 
@@ -264,6 +265,67 @@ namespace DefectStudio
 			}
 		}
 		return false;
+	}
+
+	namespace
+	{
+		// The members lobeIndex selects, in its own order. Kept beside the preset table rather than
+		// in the panel that draws them: which orbitals a preset is made of is physics, and the same
+		// list is needed by the properties combo and by "add every lobe at once".
+		[[nodiscard]] std::span<const char *const> PresetMembers(OrbitalPreset preset)
+		{
+			static const char *const kS[] = {"s"};
+			static const char *const kP[] = {"p_z", "p_x", "p_y"};
+			static const char *const kD[] = {"d_z2", "d_xz", "d_yz", "d_x2-y2", "d_xy"};
+			static const char *const kF[] = {
+				"f_z3", "f_xz2", "f_yz2", "f_z(x2-y2)", "f_xyz", "f_x(x2-3y2)", "f_y(3x2-y2)"};
+			// Lobe 0 is always +z and the set is symmetric about z - see the axis convention on
+			// OrbitalPreset - so the angles below are the real directions, not decoration.
+			static const char *const kSp[] = {"sp #1 (+z)", "sp #2 (-z)"};
+			static const char *const kSp2[] = {"sp2 #1 (+z)", "sp2 #2 (120 st.)", "sp2 #3 (240 st.)"};
+			static const char *const kSp3[] = {
+				"sp3 #1 (+z)", "sp3 #2 (tetraedryczny)", "sp3 #3 (tetraedryczny)", "sp3 #4 (tetraedryczny)"};
+			static const char *const kSigma[] = {"sigma (wzdluz wiazania)"};
+			static const char *const kSigmaStar[] = {"sigma* (wzdluz wiazania)"};
+			// The two degenerate perpendiculars to the bond axis. Which one reads as "in the
+			// molecular plane" depends on where the rest of the molecule is, which this layer does
+			// not know - hence the axis, not a claim about the plane.
+			static const char *const kPi[] = {"pi (prostopadly x)", "pi (prostopadly y)"};
+			static const char *const kPiStar[] = {"pi* (prostopadly x)", "pi* (prostopadly y)"};
+			static const char *const kDelta[] = {"delta (x2-y2)", "delta (xy)"};
+			static const char *const kDeltaStar[] = {"delta* (x2-y2)", "delta* (xy)"};
+			static const char *const kHybridSigma[] = {"sigma z hybryd"};
+
+			switch (preset)
+			{
+				case OrbitalPreset::S: return kS;
+				case OrbitalPreset::P: return kP;
+				case OrbitalPreset::D: return kD;
+				case OrbitalPreset::F: return kF;
+				case OrbitalPreset::Sp: return kSp;
+				case OrbitalPreset::Sp2: return kSp2;
+				case OrbitalPreset::Sp3: return kSp3;
+				case OrbitalPreset::Sigma: return kSigma;
+				case OrbitalPreset::SigmaStar: return kSigmaStar;
+				case OrbitalPreset::Pi: return kPi;
+				case OrbitalPreset::PiStar: return kPiStar;
+				case OrbitalPreset::Delta: return kDelta;
+				case OrbitalPreset::DeltaStar: return kDeltaStar;
+				default: return kHybridSigma;
+			}
+		}
+	} // namespace
+
+	int OrbitalPresetMemberCount(OrbitalPreset preset)
+	{
+		return static_cast<int>(PresetMembers(preset).size());
+	}
+
+	const char *OrbitalPresetMemberName(OrbitalPreset preset, int lobeIndex)
+	{
+		const std::span<const char *const> members = PresetMembers(preset);
+		return members[static_cast<std::size_t>(
+			std::clamp(lobeIndex, 0, static_cast<int>(members.size()) - 1))];
 	}
 
 	const char *OrbitalPresetGroupName(OrbitalPresetGroup group)
