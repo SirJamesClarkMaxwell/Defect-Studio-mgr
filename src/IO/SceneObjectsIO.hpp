@@ -40,6 +40,26 @@ namespace DefectStudio
 		float outlineWidth = 0.0f;
 		float headWidth = 0.14f;
 		float headLength = 0.22f;
+		// Optional two-stop ramp along the shaft. Absent in files written before it existed, which
+		// is why it defaults to off - an old arrow keeps its flat colour.
+		bool useGradient = false;
+		glm::vec3 gradientStart = glm::vec3(0.6f, 0.6f, 0.6f);
+		glm::vec3 gradientFinish = glm::vec3(0.9f, 0.9f, 0.9f);
+	};
+
+	// RendererWindowState::ScenePlane, field for field. No atom references: a plane is fitted
+	// through points once, at creation, and then owns its own numbers.
+	struct PersistedScenePlane
+	{
+		std::string persistKey;
+		glm::vec3 center = glm::vec3(0.0f);          // required
+		glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f); // required
+		glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec2 halfExtents = glm::vec2(2.0f);
+		glm::vec3 color = glm::vec3(0.35f, 0.65f, 0.9f);
+		float alpha = 0.35f;
+		bool showBorder = true;
+		bool visible = true;
 	};
 
 	// No stable atom id exists in the domain, so a reference is index + element + Cartesian position.
@@ -119,7 +139,8 @@ namespace DefectStudio
 	};
 
 	using PersistedSceneObject = std::variant<
-		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital>;
+		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital,
+		PersistedScenePlane>;
 
 	struct PersistedStructureSceneObjects
 	{
@@ -138,7 +159,7 @@ namespace DefectStudio
 	//   structures:
 	//     - structureKey: structures/NV/POSCAR
 	//       objects:
-	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital
+	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital | ScenePlane
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
 	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
 	//           written as `arrowKind` so it does not collide with the entry tag)

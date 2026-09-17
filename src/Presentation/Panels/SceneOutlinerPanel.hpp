@@ -57,6 +57,9 @@ namespace DefectStudio
 		void drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex);
 		void drawOrbitalsGroup(RendererWindowState &windowState);
 		void drawSceneOrbitalRow(RendererWindowState &windowState, std::size_t orbitalIndex);
+		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
+		// SceneRegistry entity, because nothing about it needs a transform or a selection component.
+		void drawPlanesGroup(RendererWindowState &windowState);
 
 		// "Copy view + visibility to..." (RMB on a window row) - atom-matches source against target
 		// (both already-open windows, unlike DisplacementComparisonPanel's file-based comparison) via

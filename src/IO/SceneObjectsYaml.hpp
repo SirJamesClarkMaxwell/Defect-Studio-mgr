@@ -24,4 +24,9 @@ namespace DefectStudio::SceneObjectsYaml
 	// file written by an older version loads.
 	[[nodiscard]] bool ParseOrbital(const YAML::Node &node, PersistedSceneOrbital &orbital);
 	void EmitOrbital(YAML::Emitter &emit, const PersistedSceneOrbital &orbital);
+
+	// Returns false without `center` or `normal`, or for a normal of zero length - a plane with no
+	// orientation has no quad to draw and is dropped with a warning rather than rendered edge-on.
+	[[nodiscard]] bool ParsePlane(const YAML::Node &node, PersistedScenePlane &plane);
+	void EmitPlane(YAML::Emitter &emit, const PersistedScenePlane &plane);
 } // namespace DefectStudio::SceneObjectsYaml

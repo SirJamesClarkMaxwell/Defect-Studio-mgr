@@ -182,6 +182,74 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(got->resolution, 48);
 	}
 
+	TEST(SceneObjectsIOTests, ScenePlaneRoundTrips)
+	{
+		PersistedScenePlane plane;
+		plane.persistKey = "00112233445566778899aabbccddeeff";
+		plane.center = glm::vec3(1.5f, -0.5f, 3.0f);
+		plane.normal = glm::vec3(0.0f, 1.0f, 0.0f);
+		plane.tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+		plane.halfExtents = glm::vec2(4.0f, 2.5f);
+		plane.color = glm::vec3(0.2f, 0.8f, 0.4f);
+		plane.alpha = 0.5f;
+		plane.showBorder = false;
+		plane.visible = false;
+
+		std::vector<StructuredError> warnings;
+		const SceneObjectsFile loaded = RoundTrip(SingleObject(plane), warnings);
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto *got = std::get_if<PersistedScenePlane>(&loaded.structures[0].objects[0]);
+		ASSERT_NE(got, nullptr);
+		EXPECT_EQ(got->persistKey, plane.persistKey);
+		EXPECT_EQ(got->center, plane.center);
+		EXPECT_EQ(got->normal, plane.normal);
+		EXPECT_EQ(got->tangent, plane.tangent);
+		EXPECT_EQ(got->halfExtents, plane.halfExtents);
+		EXPECT_EQ(got->color, plane.color);
+		EXPECT_FLOAT_EQ(got->alpha, 0.5f);
+		EXPECT_FALSE(got->showBorder);
+		EXPECT_FALSE(got->visible);
+	}
+
+	TEST(SceneObjectsIOTests, AnArrowGradientSurvivesAndAnOldArrowStaysFlat)
+	{
+		PersistedSceneArrow arrow;
+		arrow.start = glm::vec3(0.0f);
+		arrow.end = glm::vec3(0.0f, 0.0f, 2.0f);
+		arrow.style.useGradient = true;
+		arrow.style.gradientStart = glm::vec3(1.0f, 0.0f, 0.0f);
+		arrow.style.gradientFinish = glm::vec3(0.0f, 0.0f, 1.0f);
+
+		std::vector<StructuredError> warnings;
+		const SceneObjectsFile loaded = RoundTrip(SingleObject(arrow), warnings);
+		const auto *got = std::get_if<PersistedSceneArrow>(&loaded.structures[0].objects[0]);
+		ASSERT_NE(got, nullptr);
+		EXPECT_TRUE(got->style.useGradient);
+		EXPECT_EQ(got->style.gradientStart, arrow.style.gradientStart);
+		EXPECT_EQ(got->style.gradientFinish, arrow.style.gradientFinish);
+
+		// A file written before the gradient existed has no such keys; the arrow must come back
+		// flat rather than with a gradient nobody asked for.
+		SceneObjectsFile parsed;
+		std::string error;
+		std::vector<StructuredError> oldWarnings;
+		const std::string legacy =
+			"formatVersion: 1\n"
+			"structures:\n"
+			"  - structureKey: structures/NV/POSCAR\n"
+			"    objects:\n"
+			"      - kind: SceneArrow\n"
+			"        arrowKind: Arrow3D\n"
+			"        start: [0, 0, 0]\n"
+			"        end: [0, 0, 1]\n";
+		ASSERT_TRUE(SceneObjectsIO::Parse(legacy, parsed, oldWarnings, error)) << error;
+		ASSERT_EQ(parsed.structures[0].objects.size(), 1u);
+		const auto *legacyArrow = std::get_if<PersistedSceneArrow>(&parsed.structures[0].objects[0]);
+		ASSERT_NE(legacyArrow, nullptr);
+		EXPECT_FALSE(legacyArrow->style.useGradient);
+	}
+
 	TEST(SceneObjectsIOTests, UnknownKindAndInvalidEntriesAreSkippedWithWarningsAndDroppedOnResave)
 	{
 		const std::string text = R"(formatVersion: 1

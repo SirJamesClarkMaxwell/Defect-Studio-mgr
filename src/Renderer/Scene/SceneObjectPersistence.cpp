@@ -66,6 +66,9 @@ void EnsureScenePersistKeys(RendererWindowState &window)
 	for (auto &orbital : window.sceneOrbitals)
 		if (orbital.persistKey.empty())
 			orbital.persistKey = GenerateScenePersistKey();
+	for (auto &plane : window.scenePlanes)
+		if (plane.persistKey.empty())
+			plane.persistKey = GenerateScenePersistKey();
 }
 
 static PersistedLabelStyle ToPersisted(const RendererWindowState::LabelStyle &s)
@@ -110,6 +113,9 @@ static PersistedArrowStyle ToPersisted(const RendererWindowState::ArrowStyle &s)
 	p.outlineWidth = s.outlineWidth;
 	p.headWidth = s.headWidth;
 	p.headLength = s.headLength;
+	p.useGradient = s.useGradient;
+	p.gradientStart = s.gradient.start;
+	p.gradientFinish = s.gradient.finish;
 	return p;
 }
 static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &s)
@@ -122,6 +128,9 @@ static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &
 	p.outlineWidth = s.outlineWidth;
 	p.headWidth = s.headWidth;
 	p.headLength = s.headLength;
+	p.useGradient = s.useGradient;
+	p.gradient.start = s.gradientStart;
+	p.gradient.finish = s.gradientFinish;
 	return p;
 }
 
@@ -213,6 +222,20 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.visible = orbital.visible;
 		result.emplace_back(std::move(p));
 	}
+	for (const auto &plane : window.scenePlanes)
+	{
+		PersistedScenePlane p;
+		p.persistKey = plane.persistKey;
+		p.center = plane.center;
+		p.normal = plane.normal;
+		p.tangent = plane.tangent;
+		p.halfExtents = plane.halfExtents;
+		p.color = plane.color;
+		p.alpha = plane.alpha;
+		p.showBorder = plane.showBorder;
+		p.visible = plane.visible;
+		result.emplace_back(std::move(p));
+	}
 	return result;
 }
 
@@ -223,6 +246,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.freeLabels.clear();
 	window.sceneArrows.clear();
 	window.sceneOrbitals.clear();
+	window.scenePlanes.clear();
+	window.selectedScenePlanes.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
 	window.selectedSceneArrows.clear();
@@ -295,7 +320,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					a.style = FromPersisted(value.style);
 					window.sceneArrows.push_back(std::move(a));
 				}
-				else
+				else if constexpr (std::is_same_v<T, PersistedSceneOrbital>)
 				{
 					RendererWindowState::SceneOrbital o;
 					o.id = window.sceneRegistry.AllocateObjectId();
@@ -334,6 +359,29 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					o.alpha = value.alpha;
 					o.visible = value.visible;
 					window.sceneOrbitals.push_back(std::move(o));
+				}
+				else
+				{
+					RendererWindowState::ScenePlane pl;
+					pl.id = window.sceneRegistry.AllocateObjectId();
+					pl.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					pl.center = value.center;
+					pl.normal = glm::normalize(value.normal);
+					// Re-orthogonalise on load: the file could have been hand-edited, and a tangent
+					// that is not perpendicular to the normal makes ScenePlaneCorners produce a
+					// skewed parallelogram rather than the rectangle everything else assumes.
+					const glm::vec3 projected = value.tangent - glm::dot(value.tangent, pl.normal) * pl.normal;
+					pl.tangent = glm::dot(projected, projected) > 1e-8f
+						? glm::normalize(projected)
+						: glm::normalize(glm::cross(pl.normal, std::abs(pl.normal.x) < 0.9f
+															   ? glm::vec3(1.0f, 0.0f, 0.0f)
+															   : glm::vec3(0.0f, 1.0f, 0.0f)));
+					pl.halfExtents = value.halfExtents;
+					pl.color = value.color;
+					pl.alpha = value.alpha;
+					pl.showBorder = value.showBorder;
+					pl.visible = value.visible;
+					window.scenePlanes.push_back(std::move(pl));
 				}
 			},
 			object);

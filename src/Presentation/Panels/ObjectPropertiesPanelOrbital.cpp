@@ -269,4 +269,92 @@ namespace DefectStudio
 		PushPinnedMeasurementUndoSnapshot(windowState);
 		EraseSceneOrbitals(windowState, toRemove);
 	}
+
+	void DrawScenePlaneSection(RendererWindowState &windowState)
+	{
+		ImGui::Separator();
+		ImGui::Text("Plaszczyzny (%zu)", windowState.scenePlanes.size());
+		if (windowState.scenePlanes.empty())
+		{
+			ImGui::TextDisabled("Zaznacz dwa atomy lub wiecej, potem prawy przycisk > Add > Rysuj > Plaszczyzna.");
+			return;
+		}
+
+		std::vector<SceneObjectId> toRemove;
+		for (std::size_t index = 0; index < windowState.scenePlanes.size(); ++index)
+		{
+			RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
+			ImGui::PushID(static_cast<int>(1000 + index));
+
+			auto &selection = windowState.selectedScenePlanes;
+			const bool selected = std::find(selection.begin(), selection.end(), plane.id) != selection.end();
+			const std::string label = "Plaszczyzna #" + std::to_string(index);
+			if (ImGui::Selectable(label.c_str(), selected))
+			{
+				if (ImGui::GetIO().KeyCtrl)
+				{
+					const auto found = std::find(selection.begin(), selection.end(), plane.id);
+					if (found == selection.end())
+						selection.push_back(plane.id);
+					else
+						selection.erase(found);
+				}
+				else
+				{
+					selection = {plane.id};
+				}
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("X##RemovePlane"))
+				toRemove.push_back(plane.id);
+
+			if (selected)
+			{
+				ImGui::DragFloat3("Srodek", &plane.center.x, 0.05f);
+				SnapshotOnActivation(windowState);
+
+				if (ImGui::DragFloat3("Normalna", &plane.normal.x, 0.02f))
+				{
+					// Typing a normal by hand is how someone lines a plane up with a crystal
+					// direction, so it is renormalised and the tangent re-squared against it here
+					// rather than left to produce a skewed parallelogram downstream.
+					if (glm::dot(plane.normal, plane.normal) > 1e-8f)
+					{
+						plane.normal = glm::normalize(plane.normal);
+						const glm::vec3 projected =
+							plane.tangent - glm::dot(plane.tangent, plane.normal) * plane.normal;
+						if (glm::dot(projected, projected) > 1e-8f)
+							plane.tangent = glm::normalize(projected);
+					}
+				}
+				SnapshotOnActivation(windowState);
+
+				ImGui::DragFloat2("Polowa rozmiaru", &plane.halfExtents.x, 0.05f, 0.01f, 1000.0f, "%.2f");
+				SnapshotOnActivation(windowState);
+				ImGui::ColorEdit3("Kolor", &plane.color.x);
+				SnapshotOnActivation(windowState);
+				ImGui::SliderFloat("Przezroczystosc", &plane.alpha, 0.02f, 1.0f, "%.2f");
+				SnapshotOnActivation(windowState);
+				ImGui::Checkbox("Ramka", &plane.showBorder);
+				SnapshotOnActivation(windowState);
+				ImGui::SameLine();
+				ImGui::Checkbox("Widoczna", &plane.visible);
+				SnapshotOnActivation(windowState);
+				ImGui::TextDisabled("Uwaga: wszystkie plaszczyzny rysuja sie jednym wywolaniem i dziela "
+									"kolor pierwszej widocznej.");
+			}
+
+			ImGui::PopID();
+		}
+
+		if (toRemove.empty())
+			return;
+		PushPinnedMeasurementUndoSnapshot(windowState);
+		const auto removed = std::remove_if(
+			windowState.scenePlanes.begin(), windowState.scenePlanes.end(),
+			[&toRemove](const RendererWindowState::ScenePlane &plane)
+			{ return std::find(toRemove.begin(), toRemove.end(), plane.id) != toRemove.end(); });
+		windowState.scenePlanes.erase(removed, windowState.scenePlanes.end());
+		windowState.selectedScenePlanes.clear();
+	}
 } // namespace DefectStudio

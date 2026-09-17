@@ -141,4 +141,45 @@ namespace DefectStudio::SceneObjectsYaml
 		emit << YAML::Key << "alpha" << YAML::Value << orbital.alpha << YAML::Key << "visible" << YAML::Value
 			 << orbital.visible;
 	}
+
+	bool ParsePlane(const YAML::Node &node, PersistedScenePlane &plane)
+	{
+		try
+		{
+			if (!node["center"] || !Vec3(node["center"], plane.center))
+				return false;
+			if (!node["normal"] || !Vec3(node["normal"], plane.normal))
+				return false;
+			if (glm::dot(plane.normal, plane.normal) <= 1e-8f)
+				return false;
+			if (node["tangent"] && !Vec3(node["tangent"], plane.tangent))
+				return false;
+			if (node["halfExtents"] && !Vec2(node["halfExtents"], plane.halfExtents))
+				return false;
+			if (node["color"] && !Vec3(node["color"], plane.color))
+				return false;
+			plane.persistKey = node["persistKey"].as<std::string>("");
+			plane.alpha = node["alpha"].as<float>(plane.alpha);
+			plane.showBorder = node["showBorder"].as<bool>(plane.showBorder);
+			plane.visible = node["visible"].as<bool>(plane.visible);
+			return true;
+		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
+
+	void EmitPlane(YAML::Emitter &emit, const PersistedScenePlane &plane)
+	{
+		emit << YAML::Key << "kind" << YAML::Value << "ScenePlane" << YAML::Key << "persistKey" << YAML::Value
+			 << plane.persistKey;
+		EmitVec3(emit, "center", plane.center);
+		EmitVec3(emit, "normal", plane.normal);
+		EmitVec3(emit, "tangent", plane.tangent);
+		EmitVec2(emit, "halfExtents", plane.halfExtents);
+		EmitVec3(emit, "color", plane.color);
+		emit << YAML::Key << "alpha" << YAML::Value << plane.alpha << YAML::Key << "showBorder" << YAML::Value
+			 << plane.showBorder << YAML::Key << "visible" << YAML::Value << plane.visible;
+	}
 } // namespace DefectStudio::SceneObjectsYaml

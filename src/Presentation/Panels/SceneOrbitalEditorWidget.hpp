@@ -25,6 +25,12 @@ namespace DefectStudio
 	// "N orbitals selected" bulk note. Draws nothing when there are no orbitals.
 	void DrawSceneOrbitalSection(RendererWindowState &windowState);
 
+	// The "Plaszczyzny" section: one row per ScenePlane with select/remove chrome, and for the
+	// selected one its centre, orientation, size, colour, alpha and border. Kept beside the orbital
+	// section because both are scene objects the properties panel grew after it was already too
+	// large to take another one inline.
+	void DrawScenePlaneSection(RendererWindowState &windowState);
+
 	// Sorts descending, de-duplicates, ignores out-of-range ids, and clears the selection - same
 	// contract as EraseSceneArrows, including that the caller pushes the undo snapshot first.
 	void EraseSceneOrbitals(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);

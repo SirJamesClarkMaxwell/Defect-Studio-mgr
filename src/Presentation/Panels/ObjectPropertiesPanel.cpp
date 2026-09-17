@@ -190,6 +190,32 @@ namespace DefectStudio
 		drawUndoableVec3(style.color, snapshot, [](glm::vec3 &v) {
 			return ImGui::ColorEdit3("##ArrowStyleColor", &v.x, ImGuiColorEditFlags_NoInputs);
 		});
+
+		// The flat colour above stays visible and editable while the gradient is on, so switching
+		// the gradient off gets the arrow back rather than leaving whatever it was before lost.
+		bool useGradient = style.useGradient;
+		if (ImGui::Checkbox("Gradient", &useGradient))
+		{
+			snapshot();
+			style.useGradient = useGradient;
+		}
+		if (style.useGradient)
+		{
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(90.0f);
+			drawUndoableVec3(style.gradient.start, snapshot, [](glm::vec3 &v) {
+				return ImGui::ColorEdit3("##ArrowGradientStart", &v.x, ImGuiColorEditFlags_NoInputs);
+			});
+			ImGui::SameLine();
+			ImGui::TextUnformatted("->");
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(90.0f);
+			drawUndoableVec3(style.gradient.finish, snapshot, [](glm::vec3 &v) {
+				return ImGui::ColorEdit3("##ArrowGradientFinish", &v.x, ImGuiColorEditFlags_NoInputs);
+			});
+			if (kind == RendererWindowState::ArrowKind::Arrow2D)
+				ImGui::TextDisabled("Arrow2D rysuje sie plaskim shaderem - gradient dziala na Linii i Strzalce 3D.");
+		}
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(80.0f);
 		drawUndoableFloat(style.alpha, snapshot, [](float &v) {
@@ -1120,6 +1146,7 @@ namespace DefectStudio
 			}
 
 			DrawSceneOrbitalSection(*windowState);
+			DrawScenePlaneSection(*windowState);
 		}
 
 		ImGui::End();

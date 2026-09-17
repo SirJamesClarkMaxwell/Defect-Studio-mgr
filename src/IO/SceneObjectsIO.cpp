@@ -181,6 +181,11 @@ void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
 		arrow.style.outlineWidth = node["style"]["outlineWidth"].as<float>(arrow.style.outlineWidth);
 		arrow.style.headWidth = node["style"]["headWidth"].as<float>(arrow.style.headWidth);
 		arrow.style.headLength = node["style"]["headLength"].as<float>(arrow.style.headLength);
+		arrow.style.useGradient = node["style"]["useGradient"].as<bool>(arrow.style.useGradient);
+		if (node["style"]["gradientStart"] && !Vec3(node["style"]["gradientStart"], arrow.style.gradientStart))
+			return false;
+		if (node["style"]["gradientFinish"] && !Vec3(node["style"]["gradientFinish"], arrow.style.gradientFinish))
+			return false;
 		return true;
 	}
 	catch (const YAML::Exception &)
@@ -197,7 +202,11 @@ void EmitStyle(YAML::Emitter &emit, const PersistedArrowStyle &style)
 		 << style.shaftWidth;
 	EmitVec3(emit, "outlineColor", style.outlineColor);
 	emit << YAML::Key << "outlineWidth" << YAML::Value << style.outlineWidth << YAML::Key << "headWidth" << YAML::Value
-		 << style.headWidth << YAML::Key << "headLength" << YAML::Value << style.headLength << YAML::EndMap;
+		 << style.headWidth << YAML::Key << "headLength" << YAML::Value << style.headLength << YAML::Key
+		 << "useGradient" << YAML::Value << style.useGradient;
+	EmitVec3(emit, "gradientStart", style.gradientStart);
+	EmitVec3(emit, "gradientFinish", style.gradientFinish);
+	emit << YAML::EndMap;
 }
 } // namespace
 
@@ -309,6 +318,12 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 					valid = SceneObjectsYaml::ParseOrbital(node, value);
 					object = std::move(value);
 				}
+				else if (kind == "ScenePlane")
+				{
+					PersistedScenePlane value;
+					valid = SceneObjectsYaml::ParsePlane(node, value);
+					object = std::move(value);
+				}
 				if (valid)
 					structure.objects.push_back(std::move(object));
 				else
@@ -387,9 +402,13 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 						EmitVec3(emit, "end", value.end);
 						EmitStyle(emit, value.style);
 					}
-					else
+					else if constexpr (std::is_same_v<T, PersistedSceneOrbital>)
 					{
 						SceneObjectsYaml::EmitOrbital(emit, value);
+					}
+					else
+					{
+						SceneObjectsYaml::EmitPlane(emit, value);
 					}
 				},
 				object);

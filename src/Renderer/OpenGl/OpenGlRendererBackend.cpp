@@ -2483,6 +2483,19 @@ namespace DefectStudio
 				std::find(selectedArrows.begin(), selectedArrows.end(), arrowIndex) != selectedArrows.end();
 			const glm::vec4 color(
 				isSelected ? glm::mix(style.color, kSelectionHighlightColor, 0.55f) : style.color, style.alpha);
+			// The bond fragment shader already blends colorA into colorB smoothly along the shaft
+			// (vGradientT), which is exactly the ramp a gradient wants - so an arrow gradient costs
+			// two assignments here and no shader work at all. Arrow2D goes through the flat
+			// arrow_quad shader instead and keeps the single colour; see the note at its draw call.
+			const auto highlight = [&](const glm::vec3 &base) {
+				return isSelected ? glm::mix(base, kSelectionHighlightColor, 0.55f) : base;
+			};
+			const glm::vec4 shaftColorStart = style.useGradient
+				? glm::vec4(highlight(style.gradient.start), style.alpha)
+				: color;
+			const glm::vec4 shaftColorEnd = style.useGradient
+				? glm::vec4(highlight(style.gradient.finish), style.alpha)
+				: color;
 
 			if (isArrow2D)
 			{
@@ -2537,8 +2550,8 @@ namespace DefectStudio
 			{
 				OpenGlBondInstance shaft;
 				shaft.model = buildBondTransform(arrow.start, arrow.end, shaftRadius);
-				shaft.colorA = color;
-				shaft.colorB = color;
+				shaft.colorA = shaftColorStart;
+				shaft.colorB = shaftColorEnd;
 				shaftInstances.push_back(shaft);
 				continue;
 			}
@@ -2577,8 +2590,8 @@ namespace DefectStudio
 				// No length/radius scale - BuildWeldedArrowMesh already bakes absolute world-unit
 				// dimensions into its vertices (see buildArrowRevolutionTransform's declaration comment).
 				job.instance.model = buildArrowRevolutionTransform(arrow.start, arrow.end);
-				job.instance.colorA = color;
-				job.instance.colorB = color;
+				job.instance.colorA = shaftColorEnd;
+				job.instance.colorB = shaftColorEnd;
 				arrow3DJobs.push_back(job);
 			}
 		}

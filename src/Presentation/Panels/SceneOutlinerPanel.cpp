@@ -394,6 +394,47 @@ namespace DefectStudio
 		ImGui::PopID();
 	}
 
+	void SceneOutlinerPanel::drawPlanesGroup(RendererWindowState &windowState)
+	{
+		ImGui::PushID("##planesGroup");
+		char groupLabel[32];
+		std::snprintf(groupLabel, sizeof(groupLabel), "Planes (%zu)", windowState.scenePlanes.size());
+		const bool open = ImGui::TreeNodeEx(
+			"##planes", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
+		if (open)
+		{
+			for (std::size_t index = 0; index < windowState.scenePlanes.size(); ++index)
+			{
+				RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
+				ImGui::PushID(static_cast<int>(index));
+				char rowLabel[32];
+				std::snprintf(rowLabel, sizeof(rowLabel), "Plane #%zu", index);
+				auto &selection = windowState.selectedScenePlanes;
+				const bool selected =
+					std::find(selection.begin(), selection.end(), plane.id) != selection.end();
+				if (ImGui::Selectable(rowLabel, selected))
+				{
+					// Ctrl-click adds, same as every other row in this panel and in the viewport.
+					if (ImGui::GetIO().KeyCtrl)
+					{
+						const auto found = std::find(selection.begin(), selection.end(), plane.id);
+						if (found == selection.end())
+							selection.push_back(plane.id);
+						else
+							selection.erase(found);
+					}
+					else
+					{
+						selection = {plane.id};
+					}
+				}
+				ImGui::PopID();
+			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
 	void SceneOutlinerPanel::dispatchCopyViewAndVisibility(const RendererWindowState &source, const std::string &targetWindowId)
 	{
 		if (source.structure.domainStructureId.empty())
@@ -637,6 +678,7 @@ namespace DefectStudio
 					drawLabelsGroup(windowState);
 					drawArrowsGroup(windowState);
 					drawOrbitalsGroup(windowState);
+					drawPlanesGroup(windowState);
 
 					ImGui::TreePop();
 				}
