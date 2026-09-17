@@ -36,6 +36,7 @@ namespace DefectStudio
 		GroupTheoryPanel(const GroupTheoryPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:

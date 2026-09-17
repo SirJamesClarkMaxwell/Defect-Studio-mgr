@@ -34,6 +34,7 @@ namespace DefectStudio
 		LoggingPanel(const LoggingPanel &other);
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Console; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:

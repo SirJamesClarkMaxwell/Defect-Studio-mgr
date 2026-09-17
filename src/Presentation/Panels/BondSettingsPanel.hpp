@@ -35,6 +35,7 @@ namespace DefectStudio
 		BondSettingsPanel(const BondSettingsPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Scene; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:

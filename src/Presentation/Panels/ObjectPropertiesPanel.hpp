@@ -32,6 +32,7 @@ namespace DefectStudio
 		ObjectPropertiesPanel(const ObjectPropertiesPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Scene; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:

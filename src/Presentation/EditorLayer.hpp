@@ -159,10 +159,12 @@ namespace DefectStudio
 		WeakRef<IPanel> findPanel(PanelId panelId);
 		WeakRef<const IPanel> findPanel(PanelId panelId) const;
 
+		using CommandMenuExecutor = std::function<void(const char *)>;
 		void renderMainMenuBar();
-		void renderFileMenu();
-		void renderEditMenu();
+		void renderFileMenu(const CommandMenuExecutor &executeCommand);
+		void renderEditMenu(const CommandMenuExecutor &executeCommand);
 		void renderViewMenu();
+		void renderCommandMenu(const CommandMenuExecutor &executeCommand);
 		void renderToolsMenu();
 		void renderHelpMenu();
 		void initializePanelsIfNeeded();

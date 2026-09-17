@@ -30,6 +30,7 @@ namespace DefectStudio
 		ProjectTreePanel(const ProjectTreePanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Project; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Replaces the displayed root list wholesale - called by EditorLayer whenever the

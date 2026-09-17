@@ -32,6 +32,7 @@ namespace DefectStudio
 		explicit CalculatorConsolePanel(std::string title = "Integrated Python Console", bool visibleByDefault = false);
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Console; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Snapshot pushed by EditorLayer whenever the active project/roots change (see

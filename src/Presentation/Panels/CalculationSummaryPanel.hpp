@@ -30,6 +30,7 @@ namespace DefectStudio
 		CalculationSummaryPanel(const CalculationSummaryPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Targets `directory`, dispatches a fresh load (replacing any previously loaded directory/

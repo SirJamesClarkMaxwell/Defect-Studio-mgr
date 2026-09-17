@@ -43,6 +43,7 @@ namespace DefectStudio
 		ElementCatalogPanel(const ElementCatalogPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Structure; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
