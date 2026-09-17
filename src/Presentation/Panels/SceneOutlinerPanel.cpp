@@ -2,6 +2,8 @@
 
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 
+#include "Presentation/Panels/SceneOutlinerVisibilityColumns.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <map>
@@ -20,49 +22,131 @@ namespace DefectStudio
 {
 	namespace
 	{
-		[[nodiscard]] bool AnyContentHidden(const RendererWindowState &windowState)
+		// What a parent row saw under it. Accumulated rather than returned per collection, so a header
+		// spanning two vectors (Labels) reads exactly like one spanning a single vector.
+		struct ColumnFlags
 		{
-			for (const RendererAtomData &atom : windowState.structure.atoms)
-				if (!atom.visible)
-					return true;
-			for (const RendererBondData &bond : windowState.structure.bonds)
-				if (!bond.visible)
-					return true;
-			for (const RendererWindowState::SceneOrbital &orbital : windowState.sceneOrbitals)
-				if (!orbital.visible)
-					return true;
-			return false;
+			bool anyVisible = false;
+			bool anyHidden = false;
+			bool anyRenderable = false;
+			bool anyNotRenderable = false;
+
+			void Add(bool visible, bool renderable)
+			{
+				anyVisible = anyVisible || visible;
+				anyHidden = anyHidden || !visible;
+				anyRenderable = anyRenderable || renderable;
+				anyNotRenderable = anyNotRenderable || !renderable;
+			}
+		};
+
+		// On when everything under the row agrees, mixed when it does not. An empty row reads as on.
+		[[nodiscard]] SceneVisibilityColumnState ColumnStateFrom(const ColumnFlags &flags)
+		{
+			SceneVisibilityColumnState state;
+			state.visible = !flags.anyHidden;
+			state.renderable = !flags.anyNotRenderable;
+			state.visibleMixed = flags.anyVisible && flags.anyHidden;
+			state.renderableMixed = flags.anyRenderable && flags.anyNotRenderable;
+			return state;
 		}
 
-		[[nodiscard]] bool AnyAtomHidden(const RendererWindowState &windowState, const std::vector<std::size_t> &atomIndices)
+		template <typename Objects>
+		void AddObjectColumnFlags(const Objects &objects, ColumnFlags &flags)
 		{
+			for (const auto &object : objects)
+				flags.Add(object.visible, object.renderable);
+		}
+
+		// A species row's two columns.
+		[[nodiscard]] SceneVisibilityColumnState AtomGroupColumnState(
+			const RendererWindowState &windowState, const std::vector<std::size_t> &atomIndices)
+		{
+			ColumnFlags flags;
 			for (const std::size_t index : atomIndices)
-				if (index < windowState.structure.atoms.size() && !windowState.structure.atoms[index].visible)
-					return true;
-			return false;
+			{
+				if (index >= windowState.structure.atoms.size())
+					continue;
+				const RendererAtomData &atom = windowState.structure.atoms[index];
+				flags.Add(atom.visible, atom.renderable);
+			}
+			return ColumnStateFrom(flags);
+		}
+
+		// The same two columns over any vector of scene objects that carries the pair of flags.
+		template <typename Objects>
+		[[nodiscard]] SceneVisibilityColumnState ObjectGroupColumnState(const Objects &objects)
+		{
+			ColumnFlags flags;
+			AddObjectColumnFlags(objects, flags);
+			return ColumnStateFrom(flags);
+		}
+
+		template <typename Objects>
+		void ApplyGroupColumnEdit(Objects &objects, const SceneVisibilityColumnEdit &edit)
+		{
+			for (auto &object : objects)
+			{
+				if (edit.visibleChanged)
+					object.visible = edit.visible;
+				if (edit.renderableChanged)
+					object.renderable = edit.renderable;
+			}
 		}
 
 		// Same mechanism as H (hide selected)/Alt+H (show all) - see ViewModifier.cpp - just applied
-		// to an explicit set of atom entities instead of only the current selection.
-		void SetAtomsVisible(RendererWindowState &windowState, const std::vector<std::size_t> &atomIndices, bool visible)
+		// to an explicit set of atom entities instead of only the current selection. Atoms are owned
+		// by the ECS mirror, so both columns are written on the component and pushed back out; see
+		// Renderer/Scene/SceneVisibility.hpp.
+		void SetAtomVisibilityColumns(
+			RendererWindowState &windowState, const std::vector<std::size_t> &atomIndices, bool visible,
+			bool renderable)
 		{
 			SceneRegistry &scene = windowState.sceneRegistry;
 			for (const std::size_t index : atomIndices)
 			{
 				Entity atomEntity = scene.AtomEntityAt(index);
-				if (atomEntity)
-					atomEntity.GetComponent<VisibilityComponent>().visible = visible;
+				if (!atomEntity)
+					continue;
+				VisibilityComponent &visibility = atomEntity.GetComponent<VisibilityComponent>();
+				visibility.visible = visible;
+				visibility.renderable = renderable;
 			}
 			SceneSystem::PushSelectionAndVisibilityToWindowState(scene, windowState);
 		}
 
-		void SetWindowContentVisible(RendererWindowState &windowState, bool visible)
+		// The window row stands for everything under it, in both columns.
+		[[nodiscard]] SceneVisibilityColumnState WindowContentColumnState(const RendererWindowState &windowState)
 		{
+			ColumnFlags flags;
+			AddObjectColumnFlags(windowState.structure.atoms, flags);
+			AddObjectColumnFlags(windowState.structure.bonds, flags);
+			AddObjectColumnFlags(windowState.pinnedMeasurements, flags);
+			AddObjectColumnFlags(windowState.freeLabels, flags);
+			AddObjectColumnFlags(windowState.sceneArrows, flags);
+			AddObjectColumnFlags(windowState.sceneOrbitals, flags);
+			AddObjectColumnFlags(windowState.scenePlanes, flags);
+			return ColumnStateFrom(flags);
+		}
+
+		void ApplyWindowContentColumnEdit(RendererWindowState &windowState, const SceneVisibilityColumnEdit &edit)
+		{
+			if (!edit.visibleChanged && !edit.renderableChanged)
+				return;
 			entt::registry &registry = windowState.sceneRegistry.Registry();
 			for (const entt::entity entity : registry.view<VisibilityComponent>())
-				registry.get<VisibilityComponent>(entity).visible = visible;
-			for (RendererWindowState::SceneOrbital &orbital : windowState.sceneOrbitals)
-				orbital.visible = visible;
+			{
+				VisibilityComponent &visibility = registry.get<VisibilityComponent>(entity);
+				if (edit.visibleChanged)
+					visibility.visible = edit.visible;
+				if (edit.renderableChanged)
+					visibility.renderable = edit.renderable;
+			}
+			ApplyGroupColumnEdit(windowState.pinnedMeasurements, edit);
+			ApplyGroupColumnEdit(windowState.freeLabels, edit);
+			ApplyGroupColumnEdit(windowState.sceneArrows, edit);
+			ApplyGroupColumnEdit(windowState.sceneOrbitals, edit);
+			ApplyGroupColumnEdit(windowState.scenePlanes, edit);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 
@@ -140,9 +224,9 @@ namespace DefectStudio
 
 		ImGui::PushID(static_cast<int>(atomIndex));
 		bool visible = windowState.structure.atoms[atomIndex].visible;
-		if (ImGui::Checkbox("##atomVisible", &visible))
-			SetAtomsVisible(windowState, {atomIndex}, visible);
-		ImGui::SameLine();
+		bool renderable = windowState.structure.atoms[atomIndex].renderable;
+		if (DrawSceneVisibilityColumns(visible, renderable))
+			SetAtomVisibilityColumns(windowState, {atomIndex}, visible, renderable);
 
 		const bool isSelected = std::find(
 									 windowState.selectedAtomIndices.begin(), windowState.selectedAtomIndices.end(), atomIndex) !=
@@ -170,10 +254,22 @@ namespace DefectStudio
 	{
 		ImGui::PushID(species.c_str());
 
-		bool visible = !AnyAtomHidden(windowState, atomIndices);
-		if (ImGui::Checkbox("##speciesVisible", &visible))
-			SetAtomsVisible(windowState, atomIndices, visible);
-		ImGui::SameLine();
+		const SceneVisibilityColumnEdit speciesEdit = DrawSceneVisibilityColumns(
+			AtomGroupColumnState(windowState, atomIndices));
+		if (speciesEdit.visibleChanged || speciesEdit.renderableChanged)
+		{
+			// A parent row writes one value onto every atom under it; the column that was not
+			// clicked keeps each atom's own value, which is what the per-atom read below preserves.
+			for (const std::size_t index : atomIndices)
+			{
+				if (index >= windowState.structure.atoms.size())
+					continue;
+				const RendererAtomData &atom = windowState.structure.atoms[index];
+				SetAtomVisibilityColumns(
+					windowState, {index}, speciesEdit.visibleChanged ? speciesEdit.visible : atom.visible,
+					speciesEdit.renderableChanged ? speciesEdit.renderable : atom.renderable);
+			}
+		}
 
 		char groupLabel[48];
 		std::snprintf(groupLabel, sizeof(groupLabel), "%s (%zu)", species.c_str(), atomIndices.size());
@@ -205,6 +301,8 @@ namespace DefectStudio
 		std::vector<SceneObjectId> &selection = windowState.selectedFreeLabels;
 		const SceneObjectId id = windowState.freeLabels[labelIndex].id;
 		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
+		DrawSceneVisibilityColumns(
+			windowState.freeLabels[labelIndex].visible, windowState.freeLabels[labelIndex].renderable);
 		const std::string &text = windowState.freeLabels[labelIndex].text;
 		char rowLabel[96];
 		std::snprintf(rowLabel, sizeof(rowLabel), "%s", text.empty() ? "(no text)" : text.c_str());
@@ -242,6 +340,8 @@ namespace DefectStudio
 		std::vector<SceneObjectId> &selection = windowState.selectedPinnedMeasurements;
 		const SceneObjectId id = windowState.pinnedMeasurements[pinIndex].id;
 		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
+		DrawSceneVisibilityColumns(
+			windowState.pinnedMeasurements[pinIndex].visible, windowState.pinnedMeasurements[pinIndex].renderable);
 		const RendererWindowState::PinnedMeasurement &pin = windowState.pinnedMeasurements[pinIndex];
 		char rowLabel[32];
 		std::snprintf(rowLabel, sizeof(rowLabel), "%s #%zu", pin.atomIndices.size() == 2 ? "Bond length" : "Angle", pinIndex);
@@ -276,6 +376,15 @@ namespace DefectStudio
 	{
 		ImGui::PushID("##labelsGroup");
 		char groupLabel[32];
+		// One header over two collections - free labels and pinned measurements both live under it.
+		{
+			ColumnFlags flags;
+			AddObjectColumnFlags(windowState.freeLabels, flags);
+			AddObjectColumnFlags(windowState.pinnedMeasurements, flags);
+			const SceneVisibilityColumnEdit edit = DrawSceneVisibilityColumns(ColumnStateFrom(flags));
+			ApplyGroupColumnEdit(windowState.freeLabels, edit);
+			ApplyGroupColumnEdit(windowState.pinnedMeasurements, edit);
+		}
 		std::snprintf(
 			groupLabel, sizeof(groupLabel), "Labels (%zu)",
 			windowState.freeLabels.size() + windowState.pinnedMeasurements.size());
@@ -298,6 +407,8 @@ namespace DefectStudio
 		std::vector<SceneObjectId> &selection = windowState.selectedSceneArrows;
 		const SceneObjectId id = windowState.sceneArrows[arrowIndex].id;
 		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
+		DrawSceneVisibilityColumns(
+			windowState.sceneArrows[arrowIndex].visible, windowState.sceneArrows[arrowIndex].renderable);
 		const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
 		const char *kindLabel = arrow.kind == RendererWindowState::ArrowKind::Line ? "Line"
 			: arrow.kind == RendererWindowState::ArrowKind::Arrow2D ? "Arrow 2D" : "Arrow 3D";
@@ -332,6 +443,8 @@ namespace DefectStudio
 	{
 		ImGui::PushID("##arrowsGroup");
 		char groupLabel[32];
+		ApplyGroupColumnEdit(
+			windowState.sceneArrows, DrawSceneVisibilityColumns(ObjectGroupColumnState(windowState.sceneArrows)));
 		std::snprintf(groupLabel, sizeof(groupLabel), "Arrows (%zu)", windowState.sceneArrows.size());
 		const bool open = ImGui::TreeNodeEx(
 			"##arrows", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
@@ -350,6 +463,8 @@ namespace DefectStudio
 		std::vector<SceneObjectId> &selection = windowState.selectedSceneOrbitals;
 		const SceneObjectId id = windowState.sceneOrbitals[orbitalIndex].id;
 		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
+		DrawSceneVisibilityColumns(
+			windowState.sceneOrbitals[orbitalIndex].visible, windowState.sceneOrbitals[orbitalIndex].renderable);
 		char rowLabel[48];
 		std::snprintf(
 			rowLabel, sizeof(rowLabel), "%s #%zu",
@@ -384,6 +499,8 @@ namespace DefectStudio
 	{
 		ImGui::PushID("##orbitalsGroup");
 		char groupLabel[32];
+		ApplyGroupColumnEdit(
+			windowState.sceneOrbitals, DrawSceneVisibilityColumns(ObjectGroupColumnState(windowState.sceneOrbitals)));
 		std::snprintf(groupLabel, sizeof(groupLabel), "Orbitals (%zu)", windowState.sceneOrbitals.size());
 		const bool open = ImGui::TreeNodeEx(
 			"##orbitals", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
@@ -400,6 +517,8 @@ namespace DefectStudio
 	{
 		ImGui::PushID("##planesGroup");
 		char groupLabel[32];
+		ApplyGroupColumnEdit(
+			windowState.scenePlanes, DrawSceneVisibilityColumns(ObjectGroupColumnState(windowState.scenePlanes)));
 		std::snprintf(groupLabel, sizeof(groupLabel), "Planes (%zu)", windowState.scenePlanes.size());
 		const bool open = ImGui::TreeNodeEx(
 			"##planes", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
@@ -409,6 +528,7 @@ namespace DefectStudio
 			{
 				RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
 				ImGui::PushID(static_cast<int>(index));
+				DrawSceneVisibilityColumns(plane.visible, plane.renderable);
 				char rowLabel[32];
 				std::snprintf(rowLabel, sizeof(rowLabel), "Plane #%zu", index);
 				auto &selection = windowState.selectedScenePlanes;
@@ -603,10 +723,8 @@ namespace DefectStudio
 			RendererWindowState &windowState = windows[static_cast<std::size_t>(i)];
 			ImGui::PushID(i);
 
-			bool visible = !AnyContentHidden(windowState);
-			if (ImGui::Checkbox("##visible", &visible))
-				SetWindowContentVisible(windowState, visible);
-			ImGui::SameLine();
+			ApplyWindowContentColumnEdit(
+				windowState, DrawSceneVisibilityColumns(WindowContentColumnState(windowState)));
 
 			if (m_EditingWindowIndex == i)
 			{

@@ -19,8 +19,10 @@ namespace DefectStudio
 	class CopyWindowStateJob;
 
 	// Lists open renderer windows (one structure per window - no Collections, see docs/work/
-	// project/plans/2026-08-23-outliner-bonds-displacement.md). Per-window visibility toggle
-	// (show/hide every atom+bond in that window, same VisibilityComponent mechanism as H/Alt+H) and
+	// project/plans/2026-08-23-outliner-bonds-displacement.md). Every row carries Blender's two
+	// visibility columns - the eye (drawn in the viewport, what H/Alt+H toggle) and the camera
+	// (drawn in an exported render), see Presentation/Panels/SceneOutlinerVisibilityColumns.hpp -
+	// a parent row applying its value to everything under it, and
 	// name rename (double-click, or F2 on the last-clicked row - writes RendererWindowState::title,
 	// which already drives the docked viewport window's own tab label). Expanding a window's tree
 	// arrow lists its atoms grouped by species (a flat per-atom list doesn't scale to a supercell's
@@ -48,8 +50,8 @@ namespace DefectStudio
 		void drawAtomRow(RendererWindowState &windowState, std::size_t atomIndex);
 		// Free labels + pinned bond/angle measurements together ("Labels"), sceneArrows
 		// ("Arrows") and sceneOrbitals ("Orbitals") - child groups under a window row, same nesting shape as
-		// drawSpeciesGroup/drawAtomRow above but no per-row visibility checkbox (neither kind has a
-		// `visible` field). Row click selects in the viewport the same way an atom row's does.
+		// drawSpeciesGroup/drawAtomRow above, both visibility columns included. Row click selects in
+		// the viewport the same way an atom row's does.
 		void drawLabelsGroup(RendererWindowState &windowState);
 		void drawFreeLabelRow(RendererWindowState &windowState, std::size_t labelIndex);
 		void drawPinnedMeasurementRow(RendererWindowState &windowState, std::size_t pinIndex);

@@ -36,6 +36,7 @@
 #include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
+#include "Renderer/Scene/SceneVisibility.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 #include "Events/ProjectEvents.hpp"
@@ -603,6 +604,11 @@ namespace DefectStudio
 		previewState.sceneOrbitals = source.sceneOrbitals;
 		previewState.scenePlanes = source.scenePlanes;
 		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
+		// What an export contains is the outliner's camera column alone, independent of what H hid
+		// in the viewport. This is the only place that channel is consumed, and previewState is a
+		// throwaway, so collapsing the two columns onto `visible` here costs the live window
+		// nothing. See Renderer/Scene/SceneVisibility.hpp.
+		ApplyRenderPassVisibility(previewState);
 	}
 
 	bool RendererLayer::CaptureWindowToPng(
@@ -2324,7 +2330,16 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
+		// Atoms and bonds are hidden through the ECS mirror, the other scene objects through their
+		// own flags - see Renderer/Scene/SceneVisibility.hpp for why the two halves stay separate.
 		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
+		if (!windowState->selectedPinnedMeasurements.empty() || !windowState->selectedFreeLabels.empty() ||
+			!windowState->selectedSceneArrows.empty() || !windowState->selectedSceneOrbitals.empty() ||
+			!windowState->selectedScenePlanes.empty())
+		{
+			PushPinnedMeasurementUndoSnapshot(*windowState);
+			SetSelectedSceneObjectsVisible(*windowState, false);
+		}
 		HideSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
 		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Hide selection");
 	}
@@ -2336,6 +2351,8 @@ namespace DefectStudio
 			return;
 
 		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
+		PushPinnedMeasurementUndoSnapshot(*windowState);
+		ShowAllSceneObjects(*windowState);
 		ShowAllModifier{}.Apply(windowState->sceneRegistry, *windowState);
 		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Show all");
 	}

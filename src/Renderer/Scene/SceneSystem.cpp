@@ -42,7 +42,7 @@ namespace DefectStudio::SceneSystem
 			Entity entity = scene.CreateObject(SceneObjectKind::Atom, index, atom.element + " " + std::to_string(index), id);
 			entity.AddComponent<TransformComponent>(TransformComponent{atom.cartesianPosition});
 			entity.AddComponent<AtomComponent>(AtomComponent{index, atom.element, atom.radius, atom.color});
-			entity.AddComponent<VisibilityComponent>(VisibilityComponent{atom.visible});
+			entity.AddComponent<VisibilityComponent>(VisibilityComponent{atom.visible, atom.renderable});
 			entity.AddComponent<SelectionComponent>();
 			entity.AddComponent<CollectionComponent>();
 			scene.AtomEntities().push_back(static_cast<entt::entity>(entity));
@@ -65,7 +65,7 @@ namespace DefectStudio::SceneSystem
 			component.radius = bond.radius;
 			component.gradient = bond.gradient;
 			entity.AddComponent<BondComponent>(component);
-			entity.AddComponent<VisibilityComponent>(VisibilityComponent{bond.visible});
+			entity.AddComponent<VisibilityComponent>(VisibilityComponent{bond.visible, bond.renderable});
 			entity.AddComponent<SelectionComponent>();
 			scene.BondEntities().push_back(static_cast<entt::entity>(entity));
 		}
@@ -98,6 +98,7 @@ namespace DefectStudio::SceneSystem
 				continue;
 
 			windowState.structure.atoms[atomComponent.atomIndex].visible = visibilityComponent.visible;
+			windowState.structure.atoms[atomComponent.atomIndex].renderable = visibilityComponent.renderable;
 			if (selectionComponent.selected)
 				windowState.selectedAtomIndices.push_back(atomComponent.atomIndex);
 		}
@@ -112,6 +113,7 @@ namespace DefectStudio::SceneSystem
 				continue;
 
 			windowState.structure.bonds[bondComponent.bondIndex].visible = visibilityComponent.visible;
+			windowState.structure.bonds[bondComponent.bondIndex].renderable = visibilityComponent.renderable;
 			if (selectionComponent.selected)
 				windowState.selectedBondIndices.push_back(bondComponent.bondIndex);
 		}

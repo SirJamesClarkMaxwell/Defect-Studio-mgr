@@ -36,7 +36,9 @@
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
+#include "Presentation/Panels/ViewportSidePanel.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneVisibility.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
@@ -397,6 +399,10 @@ namespace DefectStudio
 			}
 		}
 
+		// Last, so the N panel floats over everything already drawn on the image.
+		DrawViewportSidePanel(
+			windowState, imageOrigin, viewportSize, deltaTime, m_Layer, m_CommandRegistry, m_DomainLayer);
+
 		ImGui::SetCursorScreenPos(imageOrigin);
 		ImGui::End();
 	}
@@ -730,7 +736,8 @@ namespace DefectStudio
 
 		if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
 			runCommand("renderer.selection.delete");
-		if (ImGui::MenuItem("Hide", "H", false, hasSelection))
+		// H hides every selected kind, not only atoms - see Renderer/Scene/SceneVisibility.hpp.
+		if (ImGui::MenuItem("Hide", "H", false, AnySceneObjectSelected(windowState)))
 			runCommand("renderer.selection.hide");
 
 		if (ImGui::BeginMenu("Change type", hasSelection))

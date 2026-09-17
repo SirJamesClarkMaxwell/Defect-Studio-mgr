@@ -53,17 +53,29 @@ namespace DefectStudio
 			return;
 		}
 
+		DrawObjectPropertiesContent(m_Layer, m_CommandRegistry, m_DomainLayer);
+
+		ImGui::End();
+		SetVisible(windowOpen);
+	}
+
+	// Everything between the panel's Begin/End, so the viewport's N panel draws the same widgets
+	// rather than a second copy of them.
+	void DrawObjectPropertiesContent(
+		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef,
+		const WeakRef<DomainLayer> &domainLayerRef)
+	{
 		// GetLastFocusedViewportWindowId, not GetFocusedViewportWindowId - the latter clears the
 		// instant ImGui focus leaves the viewport (it's meant for camera-input gating), which is
 		// exactly what happens the moment this panel's own fields are clicked to edit them. Using it
 		// here made every field un-editable: clicking into any InputFloat/InputText immediately
 		// dropped the "no viewport focused" message before the click could even register on the
 		// widget. Same fix ElectronicStructureSession.cpp already applies for the same reason.
-		const std::string &focusedWindowId = m_Layer.GetLastFocusedViewportWindowId();
+		const std::string &focusedWindowId = layer.GetLastFocusedViewportWindowId();
 		RendererWindowState *windowState = nullptr;
 		if (!focusedWindowId.empty())
 		{
-			for (RendererWindowState &candidate : m_Layer.GetWindows())
+			for (RendererWindowState &candidate : layer.GetWindows())
 			{
 				if (candidate.windowId == focusedWindowId)
 				{
@@ -97,8 +109,8 @@ namespace DefectStudio
 				else
 				{
 				RendererAtomData &atom = windowState->structure.atoms[atomIndex];
-				Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
-				Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+				Ref<CommandRegistry> commandRegistry = commandRegistryRef.lock();
+				Ref<DomainLayer> domainLayer = domainLayerRef.lock();
 
 				// Domain-only fields (label/charge/magnetization/occupancy/selective dynamics) have no
 				// renderer-side representation at all - resolved straight from the live domain
@@ -108,7 +120,7 @@ namespace DefectStudio
 				Ref<StructureRecord> domainRecord;
 				if (domainLayer != nullptr)
 				{
-					Result<AtomEditTarget> target = ResolveAtomEditTarget(m_Layer, *domainLayer, windowState->windowId);
+					Result<AtomEditTarget> target = ResolveAtomEditTarget(layer, *domainLayer, windowState->windowId);
 					if (target)
 						domainRecord = target->record;
 				}
@@ -145,9 +157,9 @@ namespace DefectStudio
 					// Seeds the shared Periodic Table window with this atom's current element and asks
 					// it to apply the pick back to the selection (rather than just close) once
 					// confirmed - see drawPeriodicTableWindow's GetPeriodicTableApplyOnConfirm comment.
-					m_Layer.GetSelectedPeriodicElement() = atom.element;
-					m_Layer.GetShowPeriodicTableWindow() = true;
-					m_Layer.GetPeriodicTableApplyOnConfirm() = true;
+					layer.GetSelectedPeriodicElement() = atom.element;
+					layer.GetShowPeriodicTableWindow() = true;
+					layer.GetPeriodicTableApplyOnConfirm() = true;
 				}
 
 				ImGui::Separator();
@@ -306,26 +318,19 @@ namespace DefectStudio
 			if (sections.labels)
 				DrawSelectedLabelProperties(*windowState);
 			if (sections.arrows)
-				DrawSelectedSceneArrowProperties(*windowState, m_Layer.GetGlobalSettings());
+				DrawSelectedSceneArrowProperties(*windowState, layer.GetGlobalSettings());
 			if (sections.orbitals)
 				DrawSelectedSceneOrbitalSection(*windowState);
 			if (sections.planes)
 				DrawSelectedScenePlaneSection(*windowState);
 
 			if (!ImGui::CollapsingHeader("Wszystkie obiekty"))
-			{
-				ImGui::End();
-				SetVisible(windowOpen);
 				return;
-			}
 
 			DrawAllLabelRows(*windowState);
 			DrawAllArrowRows(*windowState);
 			DrawAllSceneOrbitalRows(*windowState);
 			DrawAllScenePlaneRows(*windowState);
 		}
-
-		ImGui::End();
-		SetVisible(windowOpen);
 	}
 } // namespace DefectStudio

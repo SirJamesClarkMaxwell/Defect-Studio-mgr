@@ -11,6 +11,12 @@ namespace DefectStudio
 	class CommandRegistry;
 	class DomainLayer;
 
+	// The panel's body without its ImGui window - drawn both by ObjectPropertiesPanel and by the
+	// viewport's N side panel (ViewportSidePanel.hpp), which must show the same widgets, not copies.
+	void DrawObjectPropertiesContent(
+		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef,
+		const WeakRef<DomainLayer> &domainLayerRef);
+
 	// Properties of the single selected atom in the focused renderer viewport. Cartesian/fractional
 	// position (translate X/Y/Z, kept in sync via CrystalStructure::CartesianToFractional/
 	// FractionalToCartesian) and element both commit through the same commands the viewport gizmo
