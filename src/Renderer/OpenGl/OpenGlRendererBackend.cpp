@@ -1039,6 +1039,7 @@ namespace DefectStudio
 		const std::vector<RendererWindowState::SceneArrow> &sceneArrows,
 		const std::vector<std::size_t> &selectedSceneArrows,
 		const std::vector<RendererWindowState::SceneOrbital> &sceneOrbitals,
+		const std::vector<RendererWindowState::ScenePlane> &scenePlanes,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<std::size_t> &selectedBondIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
@@ -1212,6 +1213,7 @@ namespace DefectStudio
 				sceneOffset);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
+		renderScenePlanes(scenePlanes, camera, resources, globalSettings, sceneOffset);
 		renderSceneOrbitals(sceneOrbitals, structure, camera, resources, globalSettings, sceneOffset);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
