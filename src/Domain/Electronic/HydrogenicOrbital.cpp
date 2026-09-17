@@ -139,17 +139,75 @@ namespace DefectStudio
 		if (wavefunction.terms.empty())
 			return 0.0f;
 
+		// Measured, not derived from a formula. The obvious analytic choice - the classical outer
+		// turning point, 6 n^2 a0 / Z - overshoots badly: for a 2sp hybrid at Z = 1 it asks for a
+		// 25 A box around a lobe under 4 A wide, so at the default 48 samples per axis the orbital
+		// gets about a dozen samples across itself and meshes into a faceted blob. Sweeping
+		// outwards and asking where the amplitude actually dies costs a few thousand evaluations
+		// once per re-bake and gets the box within about twice the visible lobe.
+		constexpr float kTailFraction = 0.02f;
+		constexpr int kRadialSteps = 256;
+		// A Fibonacci sphere rather than the axes and cube diagonals. Those coincide exactly with
+		// the nodal planes of the very orbitals that need measuring - a delta* probed along +-x,
+		// +-y, +-z and the body diagonals reads as identically zero and the box collapses to
+		// nothing. An irrational-angle spiral cannot line up with any of these symmetries.
+		static const std::vector<glm::vec3> kProbeDirections = [] {
+			constexpr int kCount = 64;
+			const float golden = std::numbers::pi_v<float> * (3.0f - std::sqrt(5.0f));
+			std::vector<glm::vec3> directions;
+			directions.reserve(kCount);
+			for (int index = 0; index < kCount; ++index)
+			{
+				const float z = 1.0f - 2.0f * (static_cast<float>(index) + 0.5f) / static_cast<float>(kCount);
+				const float radius = std::sqrt(std::max(0.0f, 1.0f - z * z));
+				const float theta = golden * static_cast<float>(index);
+				directions.push_back({radius * std::cos(theta), radius * std::sin(theta), z});
+			}
+			return directions;
+		}();
+
 		const glm::vec3 centroid = OrbitalCentroid(wavefunction);
-		float extent = 0.0f;
+		// Far enough out that the sweep is guaranteed to pass the tail of the most diffuse term,
+		// plus whatever spread the centres themselves have.
+		float ceiling = 0.0f;
 		for (const OrbitalTerm &term : wavefunction.terms)
 		{
 			if (term.orbital.n < 1 || term.orbital.effectiveCharge <= 0.0f)
 				continue;
 			const float n = static_cast<float>(term.orbital.n);
-			const float tailRadius = 6.0f * n * n * kBohrRadiusAngstrom / term.orbital.effectiveCharge;
-			extent = std::max(extent, glm::length(term.center - centroid) + tailRadius);
+			ceiling = std::max(
+				ceiling,
+				glm::length(term.center - centroid) + 8.0f * n * n * kBohrRadiusAngstrom / term.orbital.effectiveCharge);
 		}
-		return extent;
+		if (ceiling <= 0.0f)
+			return 0.0f;
+
+		const float step = ceiling / static_cast<float>(kRadialSteps);
+		float peak = 0.0f;
+		float extent = 0.0f;
+		std::vector<float> shellPeaks(kRadialSteps + 1, 0.0f);
+		for (int radialIndex = 0; radialIndex <= kRadialSteps; ++radialIndex)
+		{
+			const float radius = static_cast<float>(radialIndex) * step;
+			float shellPeak = 0.0f;
+			for (const glm::vec3 &direction : kProbeDirections)
+				shellPeak = std::max(shellPeak, std::abs(EvaluateOrbital(wavefunction, centroid + direction * radius)));
+			shellPeaks[static_cast<std::size_t>(radialIndex)] = shellPeak;
+			peak = std::max(peak, shellPeak);
+		}
+		if (peak <= 0.0f)
+			return 0.0f;
+
+		for (int radialIndex = kRadialSteps; radialIndex >= 0; --radialIndex)
+		{
+			if (shellPeaks[static_cast<std::size_t>(radialIndex)] >= kTailFraction * peak)
+			{
+				extent = static_cast<float>(radialIndex) * step;
+				break;
+			}
+		}
+		// One step of slack so the outermost contour is not clipped by the box wall itself.
+		return extent + step;
 	}
 
 	OrbitalGridData SampleOrbitalToGrid(

@@ -563,15 +563,25 @@ namespace DefectStudio
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
 		(void)imageSize;
-		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-		{
-			const ImVec2 mousePos = ImGui::GetMousePos();
-			m_ContextMenuWorldPosition =
-				computeViewportWorldPosition(windowState, mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
-		}
+		(void)hovered;
 
 		if (!ImGui::BeginPopupContextItem("##RendererViewportContextMenu"))
 			return;
+
+		// Recorded here, on the frame the popup actually appears, rather than in a separate
+		// "hovered && right-clicked" branch outside it. Those were two different conditions deciding
+		// one event, and whenever they disagreed - a gizmo or overlay under the cursor eating the
+		// panel's hover flag while ImGui still opened the menu - this field silently kept its
+		// initial value and every object added from the menu (Atom, Label, Arrow, Orbital) landed at
+		// the world origin, off-screen for anything but a structure sitting at 0,0,0.
+		// GetMousePosOnOpeningCurrentPopup is ImGui's own record of where the popup was opened, so
+		// the two can no longer drift apart.
+		if (ImGui::IsWindowAppearing())
+		{
+			const ImVec2 openedAt = ImGui::GetMousePosOnOpeningCurrentPopup();
+			m_ContextMenuWorldPosition =
+				computeViewportWorldPosition(windowState, openedAt.x - imageOrigin.x, openedAt.y - imageOrigin.y);
+		}
 
 		Ref<EventBus> eventBus = m_Layer.GetEventBus();
 		Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
