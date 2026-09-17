@@ -18,7 +18,11 @@ namespace DefectStudio
 		glm::vec3 cartesianPosition = glm::vec3(0.0f, 0.0f, 0.0f);
 		glm::vec3 color = glm::vec3(0.7f, 0.7f, 0.7f);
 		float radius = 0.35f;
+		// The Scene Outliner's eye column (H / Alt+H).
 		bool visible = true;
+		// Its camera column: drawn in an exported render. Independent of `visible` - see
+		// Renderer/Scene/SceneVisibility.hpp.
+		bool renderable = true;
 	};
 
 	struct RendererColorGradient
@@ -42,6 +46,8 @@ namespace DefectStudio
 		// (BuildRendererBonds filters it out), so this always starts true and only this renderer-
 		// side toggle can flip it back off. Mirrors RendererAtomData::visible.
 		bool visible = true;
+		// Camera column, mirroring RendererAtomData::renderable.
+		bool renderable = true;
 	};
 
 	struct RendererCellEdge

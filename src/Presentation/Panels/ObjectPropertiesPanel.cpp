@@ -3,6 +3,7 @@
 #include "Presentation/Panels/ObjectPropertiesPanel.hpp"
 
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -1117,6 +1118,8 @@ namespace DefectStudio
 				for (std::size_t i = 1; i < arrowSelectedCount; ++i)
 					windowState->sceneArrows[FindObjectIndex(windowState->sceneArrows, windowState->selectedSceneArrows[i])].style = representativeArrow.style;
 			}
+
+			DrawSceneOrbitalSection(*windowState);
 		}
 
 		ImGui::End();

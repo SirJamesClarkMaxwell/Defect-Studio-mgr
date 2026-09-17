@@ -63,6 +63,9 @@ void EnsureScenePersistKeys(RendererWindowState &window)
 	for (auto &arrow : window.sceneArrows)
 		if (arrow.persistKey.empty())
 			arrow.persistKey = GenerateScenePersistKey();
+	for (auto &orbital : window.sceneOrbitals)
+		if (orbital.persistKey.empty())
+			orbital.persistKey = GenerateScenePersistKey();
 }
 
 static PersistedLabelStyle ToPersisted(const RendererWindowState::LabelStyle &s)
@@ -177,6 +180,39 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.style = ToPersisted(arrow.style);
 		result.emplace_back(std::move(p));
 	}
+	for (const auto &orbital : window.sceneOrbitals)
+	{
+		PersistedSceneOrbital p;
+		p.persistKey = orbital.persistKey;
+		p.preset = OrbitalPresetName(orbital.preset);
+		p.shell = orbital.shell;
+		p.lobeIndex = orbital.lobeIndex;
+		p.effectiveCharge = orbital.effectiveCharge;
+		p.centerA = orbital.centerA;
+		p.centerB = orbital.centerB;
+		// Each anchor is written as index + element + position, the same triple a pinned
+		// measurement stores, so a reordered or edited structure can still be matched against it
+		// on load instead of the index silently pointing at a different atom.
+		for (const std::size_t atomIndex : orbital.anchorAtoms)
+		{
+			if (atomIndex >= window.structure.atoms.size())
+				continue;
+			PersistedAtomRef ref;
+			ref.index = atomIndex;
+			ref.element = window.structure.atoms[atomIndex].element;
+			ref.position = window.structure.atoms[atomIndex].cartesianPosition;
+			p.anchorAtoms.push_back(std::move(ref));
+		}
+		p.rotationEuler = orbital.rotationEuler;
+		p.scale = orbital.scale;
+		p.isoFraction = orbital.isoFraction;
+		p.resolution = orbital.resolution;
+		p.positiveLobeColor = orbital.positiveLobeColor;
+		p.negativeLobeColor = orbital.negativeLobeColor;
+		p.alpha = orbital.alpha;
+		p.visible = orbital.visible;
+		result.emplace_back(std::move(p));
+	}
 	return result;
 }
 
@@ -186,9 +222,11 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.pinnedMeasurements.clear();
 	window.freeLabels.clear();
 	window.sceneArrows.clear();
+	window.sceneOrbitals.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
 	window.selectedSceneArrows.clear();
+	window.selectedSceneOrbitals.clear();
 	for (const auto &object : objects)
 	{
 		std::visit(
@@ -244,7 +282,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					l.style = FromPersisted(value.style);
 					window.freeLabels.push_back(std::move(l));
 				}
-				else
+				else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
 				{
 					RendererWindowState::SceneArrow a;
 					a.id = window.sceneRegistry.AllocateObjectId();
@@ -256,6 +294,46 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					a.end = value.end;
 					a.style = FromPersisted(value.style);
 					window.sceneArrows.push_back(std::move(a));
+				}
+				else
+				{
+					RendererWindowState::SceneOrbital o;
+					o.id = window.sceneRegistry.AllocateObjectId();
+					o.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					// A preset name this build does not know about degrades to p and says so,
+					// rather than failing the whole load or being guessed at - a project written by
+					// a newer version stays openable.
+					if (!ParseOrbitalPreset(value.preset, o.preset))
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Unknown orbital preset",
+											  "Orbital preset '" + value.preset + "' is not known to this build",
+											  "The orbital was loaded as a p orbital.", "SceneObjectPersistence",
+											  "scene_objects.unknown_orbital_preset");
+					o.shell = value.shell;
+					o.lobeIndex = value.lobeIndex;
+					o.effectiveCharge = value.effectiveCharge;
+					o.centerA = value.centerA;
+					o.centerB = value.centerB;
+					for (const PersistedAtomRef &ref : value.anchorAtoms)
+					{
+						const std::optional<std::size_t> resolved =
+							ResolveAtomReference(window.structure, ref);
+						if (resolved)
+							o.anchorAtoms.push_back(*resolved);
+					}
+					// Partially resolved anchors would put one end of a two-centre orbital on an
+					// atom and leave the other at a stale saved position, which reads as a bug
+					// rather than as a broken link. All or nothing.
+					if (o.anchorAtoms.size() != value.anchorAtoms.size())
+						o.anchorAtoms.clear();
+					o.rotationEuler = value.rotationEuler;
+					o.scale = value.scale;
+					o.isoFraction = value.isoFraction;
+					o.resolution = value.resolution;
+					o.positiveLobeColor = value.positiveLobeColor;
+					o.negativeLobeColor = value.negativeLobeColor;
+					o.alpha = value.alpha;
+					o.visible = value.visible;
+					window.sceneOrbitals.push_back(std::move(o));
 				}
 			},
 			object);

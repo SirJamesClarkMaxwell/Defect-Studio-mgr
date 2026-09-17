@@ -44,7 +44,11 @@ namespace DefectStudio
 
 	struct VisibilityComponent
 	{
+		// The Scene Outliner's eye column, and what H / Alt+H toggle.
 		bool visible = true;
+		// Its camera column: drawn in an exported render (RendererLayer::RenderToFbo).
+		// Independent of `visible` - see Renderer/Scene/SceneVisibility.hpp for why.
+		bool renderable = true;
 	};
 
 	struct SelectionComponent

@@ -143,6 +143,11 @@ namespace DefectStudio
 			bool linkBroken = false;
 			std::vector<glm::vec3> frozenAtomPositions; // same order/size as atomIndices, valid when linkBroken
 			std::vector<std::string> frozenAtomElements;
+			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
+			// the eye (drawn in the viewport, what H toggles), `renderable` the camera (drawn in an
+			// exported render). Independent on purpose.
+			bool visible = true;
+			bool renderable = true;
 		};
 		std::vector<PinnedMeasurement> pinnedMeasurements;
 		// Free-floating annotation label (ObjectPropertiesPanel "Free labels" section) - arbitrary
@@ -166,6 +171,11 @@ namespace DefectStudio
 			float rotationRadians = 0.0f;
 			LabelStyle style;
 			std::string persistKey; // see PinnedMeasurement::persistKey
+			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
+			// the eye (drawn in the viewport, what H toggles), `renderable` the camera (drawn in an
+			// exported render). Independent on purpose.
+			bool visible = true;
+			bool renderable = true;
 		};
 		std::vector<FreeLabel> freeLabels;
 		// Click-select + drag-to-move for freeLabels (RendererPanel::handleFreeLabelInteraction) - same
@@ -192,6 +202,12 @@ namespace DefectStudio
 		struct ArrowStyle
 		{
 			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
+			// Two-stop colour ramp along the shaft, start -> end, reusing the same
+			// RendererColorGradient that already drives structure bond colouring rather than
+			// inventing a second gradient type. Off by default, so every arrow that existed
+			// before keeps using the flat `color` above and nothing changes under it.
+			bool useGradient = false;
+			RendererColorGradient gradient;
 			float alpha = 1.0f;
 			float shaftWidth = 0.06f; // radius; was the old hardcoded kArrowShaftRadius
 			glm::vec3 outlineColor = glm::vec3(0.0f);
@@ -213,6 +229,11 @@ namespace DefectStudio
 			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
 			ArrowStyle style;
 			std::string persistKey; // see PinnedMeasurement::persistKey
+			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
+			// the eye (drawn in the viewport, what H toggles), `renderable` the camera (drawn in an
+			// exported render). Independent on purpose.
+			bool visible = true;
+			bool renderable = true;
 		};
 		std::vector<SceneArrow> sceneArrows;
 
@@ -260,11 +281,43 @@ namespace DefectStudio
 			glm::vec3 positiveLobeColor = glm::vec3(0.85f, 0.25f, 0.25f);
 			glm::vec3 negativeLobeColor = glm::vec3(0.25f, 0.35f, 0.9f);
 			float alpha = 0.75f;
+			// The outliner's eye column - see Renderer/Scene/SceneVisibility.hpp.
 			bool visible = true;
+			// ...and its camera column: drawn in an exported render. Independent of `visible`.
+			bool renderable = true;
 			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<SceneOrbital> sceneOrbitals;
 		std::vector<SceneObjectId> selectedSceneOrbitals;
+
+		// A flat quad drawn through a set of points - a molecular plane, a slip plane, a mirror
+		// plane for the group-theory panel to point at. Like SceneArrow it is a drawing, not a
+		// measurement: the points it was fitted through are consumed at creation and not kept, so
+		// nothing here is linked to an atom and nothing has to be unlinked later.
+		struct ScenePlane
+		{
+			// Same stable identity as SceneArrow::id, from the same SceneRegistry.
+			SceneObjectId id;
+			glm::vec3 center = glm::vec3(0.0f);
+			// Unit normal. With `tangent` (unit, perpendicular to it) this fixes the quad's frame;
+			// the second in-plane axis is the cross product, so there is no third vector to keep
+			// consistent.
+			glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f);
+			glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+			// Half-width along `tangent` and half-height along normal x tangent, Angstrom.
+			glm::vec2 halfExtents = glm::vec2(2.0f);
+			glm::vec3 color = glm::vec3(0.35f, 0.65f, 0.9f);
+			float alpha = 0.35f;
+			// Drawn on top of the outline of the quad. Off gives a plain translucent sheet.
+			bool showBorder = true;
+			// The Scene Outliner's two columns - see Renderer/Scene/SceneVisibility.hpp.
+			bool visible = true;
+			bool renderable = true;
+			std::string persistKey; // see PinnedMeasurement::persistKey
+		};
+		std::vector<ScenePlane> scenePlanes;
+		// Same multi-select shape as selectedSceneArrows; back() is the gizmo anchor.
+		std::vector<SceneObjectId> selectedScenePlanes;
 
 		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
 		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single
@@ -327,6 +380,7 @@ namespace DefectStudio
 			std::vector<FreeLabel> freeLabels;
 			std::vector<SceneArrow> sceneArrows;
 			std::vector<SceneOrbital> sceneOrbitals;
+			std::vector<ScenePlane> scenePlanes;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like

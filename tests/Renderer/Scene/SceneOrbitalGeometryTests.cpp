@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -443,5 +444,115 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(ValenceShell("Xx"), 1);
 		EXPECT_FLOAT_EQ(ValenceEffectiveCharge("Xx"), 1.0f);
 		EXPECT_EQ(ValenceShell(""), 1);
+	}
+
+	// --- picking --------------------------------------------------------------------------------
+
+	namespace
+	{
+		[[nodiscard]] RendererWindowState::SceneOrbital PlacedOrbital(
+			OrbitalPreset preset, const glm::vec3 &center, SceneObjectId id)
+		{
+			RendererWindowState::SceneOrbital orbital = MakeOrbital(preset);
+			orbital.id = id;
+			orbital.centerA = center;
+			orbital.centerB = center + glm::vec3(1.5f, 0.0f, 0.0f);
+			return orbital;
+		}
+	} // namespace
+
+	TEST(SceneOrbitalBoundsTests, TheSphereCoversTheMeshItIsStandingInFor)
+	{
+		const RendererStructureData structure = MakeStructure();
+		const RendererWindowState::SceneOrbital orbital = MakeOrbital(OrbitalPreset::Sp3);
+
+		const SceneOrbitalBounds bounds = SceneOrbitalWorldBounds(orbital, structure);
+		ASSERT_GT(bounds.radius, 0.0f);
+
+		// Every drawn vertex has to be inside the sphere used to pick it, or clicking the tip of a
+		// lobe would select nothing. Small slack for the mesher landing a vertex on the box face.
+		const std::vector<IsosurfaceVertex> mesh = BuildSceneOrbitalMesh(orbital, structure);
+		ASSERT_FALSE(mesh.empty());
+		for (const IsosurfaceVertex &vertex : mesh)
+			EXPECT_LE(glm::length(vertex.position - bounds.center), bounds.radius * 1.05f);
+	}
+
+	TEST(SceneOrbitalBoundsTests, ScaleGrowsTheSphereWithTheDrawing)
+	{
+		const RendererStructureData structure = MakeStructure();
+		RendererWindowState::SceneOrbital orbital = MakeOrbital(OrbitalPreset::P);
+		const float unscaled = SceneOrbitalWorldBounds(orbital, structure).radius;
+
+		orbital.scale = 3.0f;
+		const float scaled = SceneOrbitalWorldBounds(orbital, structure).radius;
+		EXPECT_NEAR(scaled, unscaled * 3.0f, unscaled * 0.05f);
+	}
+
+	TEST(PickSceneOrbitalTests, ARayThroughTheOrbitalFindsIt)
+	{
+		const RendererStructureData structure = MakeStructure();
+		RendererWindowState windowState;
+		windowState.sceneOrbitals.push_back(
+			PlacedOrbital(OrbitalPreset::P, glm::vec3(0.0f), SceneObjectId{1}));
+
+		const SceneOrbitalBounds bounds =
+			SceneOrbitalWorldBounds(windowState.sceneOrbitals[0], structure);
+		const glm::vec3 origin = bounds.center + glm::vec3(0.0f, 0.0f, bounds.radius * 4.0f);
+
+		const std::optional<std::size_t> hit =
+			PickSceneOrbital(windowState, structure, origin, glm::vec3(0.0f, 0.0f, -1.0f));
+		ASSERT_TRUE(hit.has_value());
+		EXPECT_EQ(*hit, 0u);
+
+		// A ray that never approaches it misses, and a direction that need not be normalised is
+		// still handled.
+		EXPECT_FALSE(
+			PickSceneOrbital(windowState, structure, origin, glm::vec3(0.0f, 0.0f, 17.0f)).has_value());
+		EXPECT_TRUE(
+			PickSceneOrbital(windowState, structure, origin, glm::vec3(0.0f, 0.0f, -17.0f)).has_value());
+	}
+
+	TEST(PickSceneOrbitalTests, HiddenOrbitalsAreNotPickable)
+	{
+		const RendererStructureData structure = MakeStructure();
+		RendererWindowState windowState;
+		windowState.sceneOrbitals.push_back(
+			PlacedOrbital(OrbitalPreset::P, glm::vec3(0.0f), SceneObjectId{1}));
+		windowState.sceneOrbitals[0].visible = false;
+
+		const SceneOrbitalBounds bounds =
+			SceneOrbitalWorldBounds(windowState.sceneOrbitals[0], structure);
+		const glm::vec3 origin = bounds.center + glm::vec3(0.0f, 0.0f, bounds.radius * 4.0f);
+		EXPECT_FALSE(
+			PickSceneOrbital(windowState, structure, origin, glm::vec3(0.0f, 0.0f, -1.0f)).has_value());
+	}
+
+	TEST(PickSceneOrbitalTests, TheNearerOfTwoOverlappingOrbitalsWins)
+	{
+		const RendererStructureData structure = MakeStructure();
+		RendererWindowState windowState;
+		windowState.sceneOrbitals.push_back(
+			PlacedOrbital(OrbitalPreset::P, glm::vec3(0.0f), SceneObjectId{1}));
+
+		const float radius = SceneOrbitalWorldBounds(windowState.sceneOrbitals[0], structure).radius;
+		// Second one squarely in front of the first along the ray, and listed after it - so index
+		// order cannot be what decides the answer.
+		windowState.sceneOrbitals.push_back(PlacedOrbital(
+			OrbitalPreset::P, glm::vec3(0.0f, 0.0f, radius * 1.5f), SceneObjectId{2}));
+
+		const glm::vec3 origin(0.0f, 0.0f, radius * 8.0f);
+		const std::optional<std::size_t> hit =
+			PickSceneOrbital(windowState, structure, origin, glm::vec3(0.0f, 0.0f, -1.0f));
+		ASSERT_TRUE(hit.has_value());
+		EXPECT_EQ(*hit, 1u);
+	}
+
+	TEST(PickSceneOrbitalTests, AnEmptyScenePicksNothing)
+	{
+		const RendererStructureData structure = MakeStructure();
+		const RendererWindowState windowState;
+		EXPECT_FALSE(PickSceneOrbital(
+			windowState, structure, glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f))
+						 .has_value());
 	}
 } // namespace DefectStudio::Tests

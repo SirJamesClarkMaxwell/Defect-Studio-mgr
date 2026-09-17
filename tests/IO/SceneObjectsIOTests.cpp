@@ -115,6 +115,73 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(got->style.headLength, 0.5f);
 	}
 
+	TEST(SceneObjectsIOTests, SceneOrbitalRoundTrips)
+	{
+		PersistedSceneOrbital orbital;
+		orbital.persistKey = "fedcba9876543210fedcba9876543210";
+		orbital.preset = "sp3-sigma*";
+		orbital.shell = 3;
+		orbital.lobeIndex = 2;
+		orbital.effectiveCharge = 3.25f;
+		orbital.centerA = glm::vec3(1.0f, -2.0f, 0.5f);
+		orbital.centerB = glm::vec3(2.5f, -2.0f, 0.5f);
+		orbital.anchorAtoms = {{4, "C", glm::vec3(1.0f, -2.0f, 0.5f)}, {8, "N", glm::vec3(2.5f, -2.0f, 0.5f)}};
+		orbital.rotationEuler = glm::vec3(30.0f, 0.0f, -45.0f);
+		orbital.scale = 1.75f;
+		orbital.isoFraction = 0.35f;
+		orbital.resolution = 64;
+		orbital.positiveLobeColor = glm::vec3(0.9f, 0.1f, 0.2f);
+		orbital.negativeLobeColor = glm::vec3(0.2f, 0.3f, 0.95f);
+		orbital.alpha = 0.6f;
+		orbital.visible = false;
+
+		std::vector<StructuredError> warnings;
+		const SceneObjectsFile loaded = RoundTrip(SingleObject(orbital), warnings);
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto *got = std::get_if<PersistedSceneOrbital>(&loaded.structures[0].objects[0]);
+		ASSERT_NE(got, nullptr);
+		EXPECT_EQ(got->persistKey, orbital.persistKey);
+		EXPECT_EQ(got->preset, "sp3-sigma*");
+		EXPECT_EQ(got->shell, 3);
+		EXPECT_EQ(got->lobeIndex, 2);
+		EXPECT_FLOAT_EQ(got->effectiveCharge, 3.25f);
+		EXPECT_EQ(got->centerA, orbital.centerA);
+		EXPECT_EQ(got->centerB, orbital.centerB);
+		ASSERT_EQ(got->anchorAtoms.size(), 2u);
+		EXPECT_EQ(got->anchorAtoms[0].index, 4u);
+		EXPECT_EQ(got->anchorAtoms[1].element, "N");
+		EXPECT_EQ(got->rotationEuler, orbital.rotationEuler);
+		EXPECT_FLOAT_EQ(got->scale, 1.75f);
+		EXPECT_FLOAT_EQ(got->isoFraction, 0.35f);
+		EXPECT_EQ(got->resolution, 64);
+		EXPECT_EQ(got->positiveLobeColor, orbital.positiveLobeColor);
+		EXPECT_EQ(got->negativeLobeColor, orbital.negativeLobeColor);
+		EXPECT_FLOAT_EQ(got->alpha, 0.6f);
+		EXPECT_FALSE(got->visible);
+	}
+
+	TEST(SceneObjectsIOTests, AnUnanchoredOrbitalKeepsItsOwnCentres)
+	{
+		PersistedSceneOrbital orbital;
+		orbital.preset = "f";
+		orbital.centerA = glm::vec3(-3.0f, 0.25f, 7.5f);
+
+		std::vector<StructuredError> warnings;
+		const SceneObjectsFile loaded = RoundTrip(SingleObject(orbital), warnings);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto *got = std::get_if<PersistedSceneOrbital>(&loaded.structures[0].objects[0]);
+		ASSERT_NE(got, nullptr);
+		EXPECT_TRUE(got->anchorAtoms.empty());
+		EXPECT_EQ(got->centerA, orbital.centerA);
+		EXPECT_EQ(got->preset, "f");
+		// Everything the writer left at its default comes back at that default rather than zeroed.
+		EXPECT_TRUE(got->visible);
+		EXPECT_FLOAT_EQ(got->scale, 1.0f);
+		EXPECT_EQ(got->resolution, 48);
+	}
+
 	TEST(SceneObjectsIOTests, UnknownKindAndInvalidEntriesAreSkippedWithWarningsAndDroppedOnResave)
 	{
 		const std::string text = R"(formatVersion: 1

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -86,4 +87,29 @@ namespace DefectStudio
 	// plausible size. Unknown elements fall back to hydrogen (1.0, shell 1).
 	[[nodiscard]] float ValenceEffectiveCharge(const std::string &element);
 	[[nodiscard]] int ValenceShell(const std::string &element);
+
+	// World-space bounding sphere of the orbital as it is actually drawn - centroid of the
+	// resolved centres, radius = SuggestOrbitalExtent scaled by SceneOrbital::scale. Cheap: it
+	// does not mesh anything.
+	struct SceneOrbitalBounds
+	{
+		glm::vec3 center = glm::vec3(0.0f);
+		float radius = 0.0f;
+	};
+	[[nodiscard]] SceneOrbitalBounds SceneOrbitalWorldBounds(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	// Click-pick. Returns the index into windowState.sceneOrbitals of the frontmost visible orbital
+	// the ray enters, or nullopt. `rayDirection` need not be normalised.
+	//
+	// ponytail: the test is ray-vs-bounding-sphere, not ray-vs-mesh. A p orbital's sphere covers
+	// the empty waist between its two lobes, so clicking there selects it - which is the forgiving
+	// behaviour for a drawing object anyway, and it costs one dot product instead of walking
+	// fourteen thousand triangles on the UI thread. Exact picking means testing cache.mesh in the
+	// backend, where the triangles already live; nothing else here would change.
+	[[nodiscard]] std::optional<std::size_t> PickSceneOrbital(
+		const RendererWindowState &windowState,
+		const RendererStructureData &structure,
+		const glm::vec3 &rayOrigin,
+		const glm::vec3 &rayDirection);
 } // namespace DefectStudio

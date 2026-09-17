@@ -69,6 +69,11 @@ namespace DefectStudio
 		// actually clicks that menu item and the live mouse position no longer points at the click.
 		// Only one context menu can be open at a time app-wide, so a single field is enough.
 		glm::vec3 m_ContextMenuWorldPosition = glm::vec3(0.0f);
+		// Add > Orbital: place the new orbital on the selected atom(s) rather than at the
+		// point that was right-clicked. Sticky between uses, because someone decorating a
+		// molecule wants every orbital on an atom and someone composing a figure wants none
+		// of them there - flipping back on every use would be wrong for both.
+		bool m_AnchorOrbitalToSelection = true;
 
 		// Add Atom popup (drawAddAtomPopup) - only one instance can be open app-wide, so single
 		// fields are enough, same reasoning as m_ContextMenuWorldPosition above. Doubles as the

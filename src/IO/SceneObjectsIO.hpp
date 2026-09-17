@@ -91,7 +91,35 @@ namespace DefectStudio
 		PersistedArrowStyle style;
 	};
 
-	using PersistedSceneObject = std::variant<PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow>;
+	// RendererWindowState::SceneOrbital, field for field. `preset` is the stable string from
+	// OrbitalPresetName rather than the enumerator's ordinal, so inserting a preset into the enum
+	// - which task 26d does, in the middle - cannot silently turn everyone's saved sp3 into a
+	// sigma. An unknown preset string loads as the default `p` and is reported, not guessed at.
+	struct PersistedSceneOrbital
+	{
+		std::string persistKey;
+		std::string preset = "p"; // required
+		int shell = 2;
+		int lobeIndex = 0;
+		float effectiveCharge = 1.0f;
+		glm::vec3 centerA = glm::vec3(0.0f); // required
+		glm::vec3 centerB = glm::vec3(1.5f, 0.0f, 0.0f);
+		// Empty for a free-floating orbital, one entry anchored to a single atom, two for a
+		// two-centre preset. Matched back to atom indices the same way a pinned measurement's
+		// atomRefs are, so an anchor survives a reordered structure file.
+		std::vector<PersistedAtomRef> anchorAtoms;
+		glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees
+		float scale = 1.0f;
+		float isoFraction = 0.2f;
+		int resolution = 48;
+		glm::vec3 positiveLobeColor = glm::vec3(0.85f, 0.25f, 0.25f);
+		glm::vec3 negativeLobeColor = glm::vec3(0.25f, 0.35f, 0.9f);
+		float alpha = 0.75f;
+		bool visible = true;
+	};
+
+	using PersistedSceneObject = std::variant<
+		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital>;
 
 	struct PersistedStructureSceneObjects
 	{
@@ -110,7 +138,7 @@ namespace DefectStudio
 	//   structures:
 	//     - structureKey: structures/NV/POSCAR
 	//       objects:
-	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow
+	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
 	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
 	//           written as `arrowKind` so it does not collide with the entry tag)

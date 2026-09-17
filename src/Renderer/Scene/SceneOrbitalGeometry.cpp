@@ -5,6 +5,8 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <optional>
+#include <limits>
 #include <cstdint>
 #include <iterator>
 #include <string_view>
@@ -222,6 +224,69 @@ namespace DefectStudio
 		orbital.effectiveCharge = chargeSum / static_cast<float>(orbital.anchorAtoms.size());
 		orbital.shell = shell;
 		return orbital;
+	}
+
+	SceneOrbitalBounds SceneOrbitalWorldBounds(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
+	{
+		SceneOrbitalBounds bounds;
+		bounds.center = ResolveSceneOrbitalCenters(orbital, structure).centroid;
+		// SuggestOrbitalExtent is a measured radius: the outermost distance from the centroid at
+		// which the wavefunction still carries 2% of its peak amplitude. The drawn isosurface sits
+		// at 20% by default and so lies strictly inside it - which is exactly what makes this a
+		// sound bounding sphere rather than a guess that happens to work for the shapes tried.
+		const float extent = SuggestOrbitalExtent(BuildOrbitalWavefunction(orbital, structure));
+		const float scale = std::isfinite(orbital.scale) && orbital.scale > 0.0f ? orbital.scale : 1.0f;
+		bounds.radius = std::isfinite(extent) && extent > 0.0f ? extent * scale : 0.0f;
+		return bounds;
+	}
+
+	std::optional<std::size_t> PickSceneOrbital(
+		const RendererWindowState &windowState,
+		const RendererStructureData &structure,
+		const glm::vec3 &rayOrigin,
+		const glm::vec3 &rayDirection)
+	{
+		const float directionLength = glm::length(rayDirection);
+		if (!std::isfinite(directionLength) || directionLength <= 0.0f)
+			return std::nullopt;
+		const glm::vec3 direction = rayDirection / directionLength;
+
+		std::optional<std::size_t> nearest;
+		float nearestDistance = std::numeric_limits<float>::max();
+		for (std::size_t index = 0; index < windowState.sceneOrbitals.size(); ++index)
+		{
+			const RendererWindowState::SceneOrbital &orbital = windowState.sceneOrbitals[index];
+			if (!orbital.visible)
+				continue;
+
+			const SceneOrbitalBounds bounds = SceneOrbitalWorldBounds(orbital, structure);
+			if (bounds.radius <= 0.0f)
+				continue;
+
+			const glm::vec3 toCenter = bounds.center - rayOrigin;
+			const float alongRay = glm::dot(toCenter, direction);
+			const float perpendicularSquared = glm::dot(toCenter, toCenter) - alongRay * alongRay;
+			const float radiusSquared = bounds.radius * bounds.radius;
+			if (perpendicularSquared > radiusSquared)
+				continue;
+
+			// Distance to where the ray enters the sphere. Standing inside one counts as a hit at
+			// zero rather than as a miss behind the camera, so an orbital you have flown into is
+			// still clickable.
+			const float halfChord = std::sqrt(radiusSquared - perpendicularSquared);
+			const float entry = alongRay - halfChord;
+			const float exit = alongRay + halfChord;
+			if (exit < 0.0f)
+				continue;
+			const float distance = std::max(0.0f, entry);
+			if (distance < nearestDistance)
+			{
+				nearestDistance = distance;
+				nearest = index;
+			}
+		}
+		return nearest;
 	}
 
 	int ValenceShell(const std::string &element)

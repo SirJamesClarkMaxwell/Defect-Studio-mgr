@@ -46,7 +46,8 @@ namespace DefectStudio
 			RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry) ||
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
-			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered);
+			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered);
 	}
 
 	bool DrawAndDispatchSelectionTools(

@@ -630,19 +630,60 @@ namespace DefectStudio
 			}
 			if (ImGui::BeginMenu("Orbital"))
 			{
-				for (int presetIndex = static_cast<int>(OrbitalPreset::S);
-					presetIndex <= static_cast<int>(OrbitalPreset::Sp3SigmaStar); ++presetIndex)
+				// Where it lands is decided once, above the presets, instead of being inferred from
+				// whatever happened to be selected - which is what made "add on this atom" feel like
+				// a side effect rather than a choice.
+				const std::size_t selectedAtoms = windowState.selectedAtomIndices.size();
+				const bool canAnchor = selectedAtoms == 1 || selectedAtoms == 2;
+				std::string anchorLabel = "Na zaznaczonym atomie";
+				if (canAnchor)
 				{
-					const OrbitalPreset preset = static_cast<OrbitalPreset>(presetIndex);
-					if (!ImGui::MenuItem(OrbitalPresetName(preset)))
+					anchorLabel += " (";
+					for (std::size_t i = 0; i < selectedAtoms; ++i)
+					{
+						const std::size_t atomIndex = windowState.selectedAtomIndices[i];
+						if (atomIndex >= windowState.structure.atoms.size())
+							continue;
+						if (i > 0)
+							anchorLabel += ", ";
+						anchorLabel += windowState.structure.atoms[atomIndex].element;
+						anchorLabel += " #" + std::to_string(atomIndex);
+					}
+					anchorLabel += ")";
+				}
+				bool anchorToSelection = m_AnchorOrbitalToSelection && canAnchor;
+				if (ImGui::MenuItem(anchorLabel.c_str(), nullptr, &anchorToSelection, canAnchor))
+					m_AnchorOrbitalToSelection = anchorToSelection;
+				if (!canAnchor && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("Zaznacz jeden atom (orbital atomowy lub hybryda) albo dwa (orbital molekularny).");
+				ImGui::Separator();
+
+				// Drawn from the physics' own filing (HydrogenicOrbital.hpp), not a list retyped
+				// here - a preset added there appears in exactly one of these drawers without this
+				// file being touched, and a test pins that down.
+				for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
+				{
+					if (!ImGui::BeginMenu(OrbitalPresetGroupName(group)))
 						continue;
-					PushPinnedMeasurementUndoSnapshot(windowState);
-					RendererWindowState::SceneOrbital orbital =
-						MakeDefaultSceneOrbital(windowState, preset, m_ContextMenuWorldPosition);
-					orbital.id = windowState.sceneRegistry.AllocateObjectId();
-					windowState.sceneOrbitals.push_back(std::move(orbital));
-					windowState.selectedSceneOrbitals = {windowState.sceneOrbitals.back().id};
-					SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+					for (const OrbitalPreset preset : OrbitalPresetsInGroup(group))
+					{
+						if (!ImGui::MenuItem(OrbitalPresetName(preset)))
+							continue;
+						PushPinnedMeasurementUndoSnapshot(windowState);
+						RendererWindowState::SceneOrbital orbital =
+							MakeDefaultSceneOrbital(windowState, preset, m_ContextMenuWorldPosition);
+						if (!anchorToSelection)
+						{
+							orbital.anchorAtoms.clear();
+							orbital.centerA = m_ContextMenuWorldPosition;
+							orbital.centerB = m_ContextMenuWorldPosition + glm::vec3(1.5f, 0.0f, 0.0f);
+						}
+						orbital.id = windowState.sceneRegistry.AllocateObjectId();
+						windowState.sceneOrbitals.push_back(std::move(orbital));
+						windowState.selectedSceneOrbitals = {windowState.sceneOrbitals.back().id};
+						SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+					}
+					ImGui::EndMenu();
 				}
 				ImGui::EndMenu();
 			}

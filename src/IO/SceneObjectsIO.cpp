@@ -11,6 +11,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "IO/SceneObjectsYaml.hpp"
 #include "IO/TextFileIO.hpp"
 
 namespace DefectStudio
@@ -24,46 +25,10 @@ void Warn(std::vector<StructuredError> &warnings, const std::string &message)
 						  "scene_objects.entry_skipped");
 }
 
-[[nodiscard]] bool Vec3(const YAML::Node &node, glm::vec3 &out)
-{
-	if (!node || !node.IsSequence() || node.size() != 3)
-		return false;
-	try
-	{
-		out = glm::vec3(node[0].as<float>(), node[1].as<float>(), node[2].as<float>());
-		return true;
-	}
-	catch (const YAML::Exception &)
-	{
-		return false;
-	}
-}
-
-[[nodiscard]] bool Vec2(const YAML::Node &node, glm::vec2 &out)
-{
-	if (!node || !node.IsSequence() || node.size() != 2)
-		return false;
-	try
-	{
-		out = glm::vec2(node[0].as<float>(), node[1].as<float>());
-		return true;
-	}
-	catch (const YAML::Exception &)
-	{
-		return false;
-	}
-}
-
-void EmitVec3(YAML::Emitter &emit, const char *key, const glm::vec3 &value)
-{
-	emit << YAML::Key << key << YAML::Value << YAML::Flow << YAML::BeginSeq << value.x << value.y << value.z
-		 << YAML::EndSeq;
-}
-
-void EmitVec2(YAML::Emitter &emit, const char *key, const glm::vec2 &value)
-{
-	emit << YAML::Key << key << YAML::Value << YAML::Flow << YAML::BeginSeq << value.x << value.y << YAML::EndSeq;
-}
+using SceneObjectsYaml::EmitVec2;
+using SceneObjectsYaml::EmitVec3;
+using SceneObjectsYaml::Vec2;
+using SceneObjectsYaml::Vec3;
 
 void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
 {
@@ -338,6 +303,12 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 					valid = ParseArrow(node, value);
 					object = std::move(value);
 				}
+				else if (kind == "SceneOrbital")
+				{
+					PersistedSceneOrbital value;
+					valid = SceneObjectsYaml::ParseOrbital(node, value);
+					object = std::move(value);
+				}
 				if (valid)
 					structure.objects.push_back(std::move(object));
 				else
@@ -398,7 +369,7 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 						emit << YAML::Key << "rotationRadians" << YAML::Value << value.rotationRadians;
 						EmitLabelStyle(emit, value.style);
 					}
-					else
+					else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
 					{
 						const char *arrowKind = value.kind == PersistedArrowKind::Line		? "Line"
 												: value.kind == PersistedArrowKind::Arrow2D ? "Arrow2D"
@@ -415,6 +386,10 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 						EmitVec3(emit, "start", value.start);
 						EmitVec3(emit, "end", value.end);
 						EmitStyle(emit, value.style);
+					}
+					else
+					{
+						SceneObjectsYaml::EmitOrbital(emit, value);
 					}
 				},
 				object);
