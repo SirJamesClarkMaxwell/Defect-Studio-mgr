@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "Core/Utils/Memory.hpp"
+#include "Presentation/MenuBarModel.hpp"
 
 namespace DefectStudio
 {
@@ -35,6 +36,14 @@ namespace DefectStudio
 		void SetVisible(bool visible)
 		{
 			m_Visible = visible;
+		}
+
+		// Which drawer of the Widok menu this panel is listed under. Defaults to Other rather than
+		// being pure, so a newly added panel is reachable from the menu the moment it is registered
+		// - it just lands in the catch-all group until someone files it.
+		[[nodiscard]] virtual PanelCategory GetCategory() const
+		{
+			return PanelCategory::Other;
 		}
 
 		[[nodiscard]] virtual Ref<IPanel> Clone() const = 0;

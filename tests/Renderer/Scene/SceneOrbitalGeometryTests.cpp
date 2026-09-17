@@ -367,6 +367,72 @@ namespace DefectStudio::Tests
 		EXPECT_GT(onCarbon.shell, onHydrogen.shell);
 	}
 
+	// The path the Add menu actually takes: MakeDefaultSceneOrbital, then straight to the mesher.
+	// Every preset a user can pick has to come back with something to draw, from a cold scene with
+	// nothing selected and from an anchored atom - "I clicked sp2 and nothing happened" is exactly
+	// what this catches, and the geometry tests above did not, because they all set their own
+	// centres and resolutions instead of using the defaults.
+	TEST(MakeDefaultSceneOrbitalTests, EveryPresetFromTheMenuProducesAVisibleMesh)
+	{
+		constexpr OrbitalPreset kAll[] = {OrbitalPreset::S, OrbitalPreset::P, OrbitalPreset::D,
+			OrbitalPreset::Sp, OrbitalPreset::Sp2, OrbitalPreset::Sp3, OrbitalPreset::Sigma,
+			OrbitalPreset::SigmaStar, OrbitalPreset::Pi, OrbitalPreset::PiStar, OrbitalPreset::Delta,
+			OrbitalPreset::DeltaStar, OrbitalPreset::SpSigma, OrbitalPreset::SpSigmaStar,
+			OrbitalPreset::Sp2Sigma, OrbitalPreset::Sp2SigmaStar, OrbitalPreset::Sp3Sigma,
+			OrbitalPreset::Sp3SigmaStar};
+
+		// RendererWindowState owns a Unique<RendererViewCamera> and so is non-copyable - three
+		// separate windows rather than copies of one.
+		RendererWindowState empty;
+		empty.structure = MakeStructure();
+		RendererWindowState onOneAtom;
+		onOneAtom.structure = MakeStructure();
+		onOneAtom.selectedAtomIndices = {0};
+		RendererWindowState onTwoAtoms;
+		onTwoAtoms.structure = MakeStructure();
+		onTwoAtoms.selectedAtomIndices = {0, 1};
+
+		for (const OrbitalPreset preset : kAll)
+		{
+			for (const RendererWindowState *window : {&empty, &onOneAtom, &onTwoAtoms})
+			{
+				const RendererWindowState::SceneOrbital orbital =
+					MakeDefaultSceneOrbital(*window, preset, glm::vec3(0.0f));
+				const std::vector<IsosurfaceVertex> mesh = BuildSceneOrbitalMesh(orbital, window->structure);
+				EXPECT_FALSE(mesh.empty())
+					<< OrbitalPresetName(preset) << " with " << window->selectedAtomIndices.size()
+					<< " atom(s) selected meshed to nothing";
+			}
+		}
+	}
+
+	// A sampling box far bigger than the orbital is the quiet way to mesh nothing: the shape ends up
+	// spanning a handful of samples and the iso value falls between them. Pin the box to the size of
+	// what is actually in it.
+	TEST(MakeDefaultSceneOrbitalTests, DefaultBoxIsNotWildlyBiggerThanTheOrbitalInIt)
+	{
+		const RendererStructureData structure = MakeStructure();
+		RendererWindowState window;
+		window.structure = structure;
+
+		for (const OrbitalPreset preset : {OrbitalPreset::S, OrbitalPreset::Sp2, OrbitalPreset::Pi})
+		{
+			const RendererWindowState::SceneOrbital orbital =
+				MakeDefaultSceneOrbital(window, preset, glm::vec3(0.0f));
+			const std::vector<IsosurfaceVertex> mesh = BuildSceneOrbitalMesh(orbital, structure);
+			ASSERT_FALSE(mesh.empty()) << OrbitalPresetName(preset);
+
+			const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, structure);
+			const float drawnRadius = MeshRadius(mesh, centers.centroid);
+			const float boxRadius = SuggestOrbitalExtent(BuildOrbitalWavefunction(orbital, structure));
+			ASSERT_GT(drawnRadius, 0.0f) << OrbitalPresetName(preset);
+			// The visible lobe should fill a decent share of the box it was sampled in.
+			EXPECT_LT(boxRadius / drawnRadius, 3.0f)
+				<< OrbitalPresetName(preset) << ": box radius " << boxRadius << " for a lobe of "
+				<< drawnRadius;
+		}
+	}
+
 	TEST(ValenceTests, KnownElementsDifferAndUnknownFallsBackToHydrogen)
 	{
 		EXPECT_EQ(ValenceShell("H"), 1);
