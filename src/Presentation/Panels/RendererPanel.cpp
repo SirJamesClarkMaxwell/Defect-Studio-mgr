@@ -16,7 +16,6 @@
 #include <cstdio>
 #include <functional>
 #include <limits>
-#include <optional>
 #include <vector>
 
 #include <glm/gtc/constants.hpp>
@@ -37,8 +36,6 @@
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
-#include "Renderer/Scene/ScenePlaneGeometry.hpp"
-#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
@@ -238,6 +235,8 @@ namespace DefectStudio
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
 			windowState.selectedSceneArrows.clear();
+			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedScenePlanes.clear();
 			windowState.sceneArrowQuickEditActive = false;
 			Ref<EventBus> eventBus = m_Layer.GetEventBus();
 			if (eventBus != nullptr)
@@ -630,59 +629,12 @@ namespace DefectStudio
 				windowState.sceneArrowQuickEditActive = true;
 				windowState.sceneArrowQuickEditIndex = newIndex;
 			}
-			// Draw a line, an arrow or a plane through whatever is selected. The result is a
-			// plain drawing object at those world positions: the atoms are read once, at creation,
-			// and then forgotten. Nothing is anchored, nothing is called a bond, and nothing has to
-			// be unlinked later - which is the whole reason the bond-flavoured version of this was
-			// dropped rather than finished.
+			const DrawSelectionDescription drawSelection = DescribeDrawSelection(windowState);
+			if (ImGui::BeginMenu(drawSelection.menuLabel.c_str()))
 			{
-				const std::vector<std::size_t> &selected = windowState.selectedAtomIndices;
-				std::vector<glm::vec3> positions;
-				for (const std::size_t atomIndex : selected)
-					if (atomIndex < windowState.structure.atoms.size())
-						positions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
-
-				const bool canDrawSegment = positions.size() == 2;
-				const bool canDrawPlane = positions.size() >= 2;
-				if (ImGui::BeginMenu("Rysuj", canDrawPlane))
-				{
-					const auto addSegment = [&](RendererWindowState::ArrowKind kind) {
-						PushPinnedMeasurementUndoSnapshot(windowState);
-						RendererWindowState::SceneArrow arrow =
-							MakeDefaultSceneArrow(windowState, positions.front());
-						arrow.kind = kind;
-						arrow.start = positions.front();
-						arrow.end = positions.back();
-						arrow.id = windowState.sceneRegistry.AllocateObjectId();
-						windowState.sceneArrows.push_back(std::move(arrow));
-						windowState.selectedSceneArrows = {windowState.sceneArrows.back().id};
-					};
-
-					if (ImGui::MenuItem("Linia", nullptr, false, canDrawSegment))
-						addSegment(RendererWindowState::ArrowKind::Line);
-					if (ImGui::MenuItem("Strzalka", nullptr, false, canDrawSegment))
-						addSegment(RendererWindowState::ArrowKind::Arrow3D);
-					if (ImGui::MenuItem("Plaszczyzna", nullptr, false, canDrawPlane))
-					{
-						// Three or more points determine a plane outright; two do not, and
-						// FitScenePlane then picks the one plane through them that this camera is
-						// looking straight at rather than refusing or drawing an edge-on sliver.
-						const glm::vec3 viewDirection = windowState.camera != nullptr
-							? glm::normalize(windowState.camera->Target() - windowState.camera->Position())
-							: glm::vec3(0.0f, 0.0f, -1.0f);
-						if (const std::optional<ScenePlaneFit> fit = FitScenePlane(positions, viewDirection))
-						{
-							PushPinnedMeasurementUndoSnapshot(windowState);
-							RendererWindowState::ScenePlane plane = MakeScenePlane(*fit);
-							plane.id = windowState.sceneRegistry.AllocateObjectId();
-							windowState.scenePlanes.push_back(std::move(plane));
-							windowState.selectedScenePlanes = {windowState.scenePlanes.back().id};
-						}
-					}
-					ImGui::EndMenu();
-				}
-				if (!canDrawPlane && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-					ImGui::SetTooltip("Zaznacz dwa atomy (linia, strzalka, plaszczyzna) albo trzy i wiecej (plaszczyzna).");
+				DrawSegmentAddItems(windowState);
+				DrawPlaneAddItem(windowState);
+				ImGui::EndMenu();
 			}
 			DrawOrbitalAddMenu(windowState, m_ContextMenuWorldPosition, m_AnchorOrbitalToSelection);
 			ImGui::EndMenu();

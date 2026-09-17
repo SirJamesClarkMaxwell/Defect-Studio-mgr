@@ -21,17 +21,23 @@ namespace DefectStudio
 	// the one control that can visibly hitch: meshing is on the main thread.
 	void DrawSceneOrbitalEditor(RendererWindowState &windowState, std::size_t orbitalIndex);
 
-	// The whole section: one collapsible row per orbital with select/remove chrome, plus the
-	// "N orbitals selected" bulk note. Draws nothing when there are no orbitals.
-	void DrawSceneOrbitalSection(RendererWindowState &windowState);
+	// Selection-focused editors used by Object Properties' primary view. These never enumerate
+	// unselected objects, so selecting one arrow cannot leave a wall of orbital/plane controls below
+	// it. The full lists remain available through the panel's "Wszystkie obiekty" drawer.
+	void DrawSelectedSceneOrbitalSection(RendererWindowState &windowState);
+	void DrawSelectedScenePlaneSection(RendererWindowState &windowState);
+
+	// Scene-wide select/remove rows used only inside "Wszystkie obiekty". Selecting a row makes its
+	// editor appear in the primary selection-focused area on the next frame.
+	void DrawAllSceneOrbitalRows(RendererWindowState &windowState);
+	void DrawAllScenePlaneRows(RendererWindowState &windowState);
 
 	// The "Plaszczyzny" section: one row per ScenePlane with select/remove chrome, and for the
 	// selected one its centre, orientation, size, colour, alpha and border. Kept beside the orbital
 	// section because both are scene objects the properties panel grew after it was already too
 	// large to take another one inline.
-	void DrawScenePlaneSection(RendererWindowState &windowState);
-
 	// Sorts descending, de-duplicates, ignores out-of-range ids, and clears the selection - same
 	// contract as EraseSceneArrows, including that the caller pushes the undo snapshot first.
 	void EraseSceneOrbitals(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
+	void EraseScenePlanes(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 } // namespace DefectStudio

@@ -8,6 +8,8 @@
 
 #include <glad/gl.h>
 
+#include "Renderer/Scene/SceneObjectAppearance.hpp"
+
 namespace DefectStudio
 {
 	namespace
@@ -52,6 +54,7 @@ namespace DefectStudio
 
 	void OpenGlRendererBackend::renderSceneOrbitals(
 		const std::vector<RendererWindowState::SceneOrbital> &orbitals,
+		const std::vector<std::size_t> &selectedOrbitals,
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
@@ -73,8 +76,9 @@ namespace DefectStudio
 			cacheIt = resources.sceneOrbitalMeshCache.erase(cacheIt);
 		}
 
-		for (const RendererWindowState::SceneOrbital &orbital : orbitals)
+		for (std::size_t orbitalIndex = 0; orbitalIndex < orbitals.size(); ++orbitalIndex)
 		{
+			const RendererWindowState::SceneOrbital &orbital = orbitals[orbitalIndex];
 			if (!orbital.id.IsValid())
 				continue;
 
@@ -89,13 +93,15 @@ namespace DefectStudio
 
 			if (!orbital.visible || cache.mesh.indexCount <= 0)
 				continue;
+			const bool selected =
+				std::find(selectedOrbitals.begin(), selectedOrbitals.end(), orbitalIndex) != selectedOrbitals.end();
 			renderIsosurfaceGpuOverlay(
 				cache.mesh.vao,
 				cache.mesh.indexCount,
 				camera,
 				globalSettings,
-				orbital.positiveLobeColor,
-				orbital.negativeLobeColor,
+				ApplySceneSelectionHighlight(orbital.positiveLobeColor, selected),
+				ApplySceneSelectionHighlight(orbital.negativeLobeColor, selected),
 				orbital.alpha,
 				sceneOffset);
 		}

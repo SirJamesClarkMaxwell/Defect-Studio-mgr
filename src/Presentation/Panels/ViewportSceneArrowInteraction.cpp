@@ -212,6 +212,8 @@ namespace DefectStudio
 		// Mutual exclusivity with label selection, same convention as pin/free-label clicks above.
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedFreeLabels.clear();
+		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedScenePlanes.clear();
 		if (!additive)
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 

@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -9,13 +10,99 @@
 #include <imgui.h>
 
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
+#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
+	namespace
+	{
+		[[nodiscard]] std::vector<glm::vec3> SelectedAtomPositions(const RendererWindowState &windowState)
+		{
+			std::vector<glm::vec3> positions;
+			positions.reserve(windowState.selectedAtomIndices.size());
+			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+				if (atomIndex < windowState.structure.atoms.size())
+					positions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+			return positions;
+		}
+
+		[[nodiscard]] const char *AtomCountSuffix(const std::size_t count)
+		{
+			if (count == 1)
+				return "atom";
+			if (count >= 2 && count <= 4)
+				return "atomy";
+			return "atomow";
+		}
+	} // namespace
+
+	DrawSelectionDescription DescribeDrawSelection(const std::size_t validSelectedAtomCount)
+	{
+		DrawSelectionDescription description;
+		description.canDrawSegment = validSelectedAtomCount == 2;
+		description.canDrawPlane = validSelectedAtomCount >= 2;
+		description.menuLabel = "Rysuj (" + std::to_string(validSelectedAtomCount) + " " +
+			AtomCountSuffix(validSelectedAtomCount) + ")";
+		description.lineLabel = description.canDrawSegment ? "Linia" : "Linia (wymaga dokladnie 2 atomow)";
+		description.arrowLabel =
+			description.canDrawSegment ? "Strzalka" : "Strzalka (wymaga dokladnie 2 atomow)";
+		description.planeLabel =
+			description.canDrawPlane ? "Plaszczyzna" : "Plaszczyzna (wymaga co najmniej 2 atomow)";
+		return description;
+	}
+
+	DrawSelectionDescription DescribeDrawSelection(const RendererWindowState &windowState)
+	{
+		return DescribeDrawSelection(SelectedAtomPositions(windowState).size());
+	}
+
+	void DrawSegmentAddItems(RendererWindowState &windowState)
+	{
+		const std::vector<glm::vec3> positions = SelectedAtomPositions(windowState);
+		const DrawSelectionDescription description = DescribeDrawSelection(positions.size());
+		const auto addSegment = [&](const RendererWindowState::ArrowKind kind) {
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, positions.front());
+			arrow.kind = kind;
+			arrow.start = positions.front();
+			arrow.end = positions.back();
+			arrow.id = windowState.sceneRegistry.AllocateObjectId();
+			windowState.sceneArrows.push_back(std::move(arrow));
+			windowState.selectedSceneArrows = {windowState.sceneArrows.back().id};
+		};
+
+		if (ImGui::MenuItem(description.lineLabel.c_str(), nullptr, false, description.canDrawSegment))
+			addSegment(RendererWindowState::ArrowKind::Line);
+		if (ImGui::MenuItem(description.arrowLabel.c_str(), nullptr, false, description.canDrawSegment))
+			addSegment(RendererWindowState::ArrowKind::Arrow3D);
+	}
+
+	void DrawPlaneAddItem(RendererWindowState &windowState)
+	{
+		const std::vector<glm::vec3> positions = SelectedAtomPositions(windowState);
+		const DrawSelectionDescription description = DescribeDrawSelection(positions.size());
+		if (!ImGui::MenuItem(description.planeLabel.c_str(), nullptr, false, description.canDrawPlane))
+			return;
+
+		const glm::vec3 viewDirection = windowState.camera != nullptr
+			? glm::normalize(windowState.camera->Target() - windowState.camera->Position())
+			: glm::vec3(0.0f, 0.0f, -1.0f);
+		if (const std::optional<ScenePlaneFit> fit = FitScenePlane(positions, viewDirection))
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			RendererWindowState::ScenePlane plane = MakeScenePlane(*fit);
+			plane.id = windowState.sceneRegistry.AllocateObjectId();
+			windowState.scenePlanes.push_back(std::move(plane));
+			windowState.selectedScenePlanes = {windowState.scenePlanes.back().id};
+		}
+	}
+
 	void DrawOrbitalAddMenu(
 		RendererWindowState &windowState,
 		const glm::vec3 &contextMenuWorldPosition,

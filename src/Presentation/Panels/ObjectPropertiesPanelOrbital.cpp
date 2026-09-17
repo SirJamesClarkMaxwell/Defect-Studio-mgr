@@ -17,13 +17,18 @@ namespace DefectStudio
 	{
 		using SceneOrbital = RendererWindowState::SceneOrbital;
 
-		// ImGui reports "this widget was just released" separately from "its value changed this
-		// frame". Snapshotting on activation rather than on every changed frame is what makes one
-		// drag of a slider one Undo instead of sixty - the same rule the arrow editor follows.
-		void SnapshotOnActivation(RendererWindowState &windowState)
+		// Work on a local copy so activation snapshots the value from before ImGui applies the first
+		// click/drag delta. One activation is one global Undo entry, matching the arrow editor.
+		template <typename T, typename WidgetFn>
+		bool DrawUndoableValue(RendererWindowState &windowState, T &modelValue, WidgetFn &&widget)
 		{
+			T edited = modelValue;
+			const bool changed = widget(edited);
 			if (ImGui::IsItemActivated())
 				PushPinnedMeasurementUndoSnapshot(windowState);
+			if (changed)
+				modelValue = edited;
+			return changed;
 		}
 
 		[[nodiscard]] bool IsTwoCenter(OrbitalPreset preset)
@@ -117,9 +122,10 @@ namespace DefectStudio
 		{
 			DrawPresetCombo(windowState, orbital);
 
-			if (ImGui::SliderInt("Powloka (n)", &orbital.shell, 1, 5))
+			if (DrawUndoableValue(windowState, orbital.shell, [](int &value) {
+					return ImGui::SliderInt("Powloka (n)", &value, 1, 5);
+				}))
 				orbital.shell = std::clamp(orbital.shell, 1, 5);
-			SnapshotOnActivation(windowState);
 
 			// A number told you nothing: for a hybrid it picked one of 2/3/4 lobes, for a pi or a
 			// delta one of two degenerate perpendiculars, and for an s or a sigma nothing at all.
@@ -147,8 +153,9 @@ namespace DefectStudio
 			if (memberCount <= 1 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				ImGui::SetTooltip("Ten preset ma tylko jeden czlon.");
 
-			ImGui::DragFloat("Z_eff", &orbital.effectiveCharge, 0.05f, 0.1f, 30.0f, "%.2f");
-			SnapshotOnActivation(windowState);
+			DrawUndoableValue(windowState, orbital.effectiveCharge, [](float &value) {
+				return ImGui::DragFloat("Z_eff", &value, 0.05f, 0.1f, 30.0f, "%.2f");
+			});
 			ImGui::SetItemTooltip(
 				"Ladunek efektywny. To jest pokretlo, ktore naprawde sciaga lub rozdyma funkcje falowa "
 				"- w odroznieniu od skali nizej, ktora tylko powieksza rysunek.");
@@ -159,49 +166,59 @@ namespace DefectStudio
 			DrawAnchoring(windowState, orbital);
 			const bool anchored = !orbital.anchorAtoms.empty();
 			ImGui::BeginDisabled(anchored);
-			ImGui::DragFloat3("Srodek A", &orbital.centerA.x, 0.05f);
-			SnapshotOnActivation(windowState);
+			DrawUndoableValue(windowState, orbital.centerA, [](glm::vec3 &value) {
+				return ImGui::DragFloat3("Srodek A", &value.x, 0.05f);
+			});
 			if (IsTwoCenter(orbital.preset))
 			{
-				ImGui::DragFloat3("Srodek B", &orbital.centerB.x, 0.05f);
-				SnapshotOnActivation(windowState);
+				DrawUndoableValue(windowState, orbital.centerB, [](glm::vec3 &value) {
+					return ImGui::DragFloat3("Srodek B", &value.x, 0.05f);
+				});
 			}
 			ImGui::EndDisabled();
 
 			// Two-centre presets take their orientation from centerB - centerA, so a rotation here
 			// would be silently ignored rather than doing nothing visible for a reason.
 			ImGui::BeginDisabled(IsTwoCenter(orbital.preset));
-			ImGui::DragFloat3("Obrot (stopnie)", &orbital.rotationEuler.x, 1.0f);
-			SnapshotOnActivation(windowState);
+			DrawUndoableValue(windowState, orbital.rotationEuler, [](glm::vec3 &value) {
+				return ImGui::DragFloat3("Obrot (stopnie)", &value.x, 1.0f);
+			});
 			ImGui::EndDisabled();
 		}
 
 		if (ImGui::CollapsingHeader("Wyglad##OrbitalAppearance", kOpen))
 		{
-			ImGui::ColorEdit3("Faza +", &orbital.positiveLobeColor.x);
-			SnapshotOnActivation(windowState);
-			ImGui::ColorEdit3("Faza -", &orbital.negativeLobeColor.x);
-			SnapshotOnActivation(windowState);
-			ImGui::SliderFloat("Przezroczystosc", &orbital.alpha, 0.05f, 1.0f, "%.2f");
-			SnapshotOnActivation(windowState);
-			ImGui::DragFloat("Skala rysunku", &orbital.scale, 0.02f, 0.05f, 20.0f, "%.2f");
-			SnapshotOnActivation(windowState);
+			DrawUndoableValue(windowState, orbital.positiveLobeColor, [](glm::vec3 &value) {
+				return ImGui::ColorEdit3("Faza +", &value.x);
+			});
+			DrawUndoableValue(windowState, orbital.negativeLobeColor, [](glm::vec3 &value) {
+				return ImGui::ColorEdit3("Faza -", &value.x);
+			});
+			DrawUndoableValue(windowState, orbital.alpha, [](float &value) {
+				return ImGui::SliderFloat("Przezroczystosc", &value, 0.05f, 1.0f, "%.2f");
+			});
+			DrawUndoableValue(windowState, orbital.scale, [](float &value) {
+				return ImGui::DragFloat("Skala rysunku", &value, 0.02f, 0.05f, 20.0f, "%.2f");
+			});
 			ImGui::SetItemTooltip("Powieksza siatke, nie zmienia fizyki. Od tego jest Z_eff.");
 
-			if (ImGui::SliderFloat("Izopowierzchnia", &orbital.isoFraction, 0.02f, 0.9f, "%.2f"))
+			if (DrawUndoableValue(windowState, orbital.isoFraction, [](float &value) {
+					return ImGui::SliderFloat("Izopowierzchnia", &value, 0.02f, 0.9f, "%.2f");
+				}))
 				orbital.isoFraction = std::clamp(orbital.isoFraction, 0.01f, 0.95f);
-			SnapshotOnActivation(windowState);
 			ImGui::SetItemTooltip("Ulamek szczytowej amplitudy, nie wartosc bezwzgledna - dzieki temu "
 								  "rozmyte 3d i ciasne 1s wygladaja jak w podreczniku przy tym samym ustawieniu.");
 
-			if (ImGui::SliderInt("Rozdzielczosc", &orbital.resolution, 16, 96))
+			if (DrawUndoableValue(windowState, orbital.resolution, [](int &value) {
+					return ImGui::SliderInt("Rozdzielczosc", &value, 16, 96);
+				}))
 				orbital.resolution = std::clamp(orbital.resolution, 8, 128);
-			SnapshotOnActivation(windowState);
 			ImGui::SetItemTooltip("Probki na os. Siatka liczy sie na glownym watku, wiec to jest pokretlo "
 								  "od przyciec przy przeciaganiu.");
 
-			ImGui::Checkbox("Widoczny", &orbital.visible);
-			SnapshotOnActivation(windowState);
+			DrawUndoableValue(windowState, orbital.visible, [](bool &value) {
+				return ImGui::Checkbox("Widoczny", &value);
+			});
 		}
 	}
 
@@ -213,15 +230,46 @@ namespace DefectStudio
 			windowState.sceneOrbitals.begin(), windowState.sceneOrbitals.end(),
 			[&ids](const SceneOrbital &orbital)
 			{ return std::find(ids.begin(), ids.end(), orbital.id) != ids.end(); });
-		if (removed == windowState.sceneOrbitals.end())
-			return;
-		windowState.sceneOrbitals.erase(removed, windowState.sceneOrbitals.end());
+		if (removed != windowState.sceneOrbitals.end())
+			windowState.sceneOrbitals.erase(removed, windowState.sceneOrbitals.end());
 		windowState.selectedSceneOrbitals.clear();
 	}
 
-	void DrawSceneOrbitalSection(RendererWindowState &windowState)
+	void EraseScenePlanes(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids)
+	{
+		if (ids.empty())
+			return;
+		const auto removed = std::remove_if(
+			windowState.scenePlanes.begin(), windowState.scenePlanes.end(),
+			[&ids](const RendererWindowState::ScenePlane &plane)
+			{ return std::find(ids.begin(), ids.end(), plane.id) != ids.end(); });
+		if (removed != windowState.scenePlanes.end())
+			windowState.scenePlanes.erase(removed, windowState.scenePlanes.end());
+		windowState.selectedScenePlanes.clear();
+	}
+
+	void DrawSelectedSceneOrbitalSection(RendererWindowState &windowState)
 	{
 		ImGui::Separator();
+		ImGui::Text("Orbitale (%zu zaznaczonych)", windowState.selectedSceneOrbitals.size());
+		ImGui::PushID("SelectedOrbitals");
+		for (const SceneObjectId id : windowState.selectedSceneOrbitals)
+		{
+			const std::size_t index = AnnotationIndex(windowState.sceneOrbitals, id);
+			if (index >= windowState.sceneOrbitals.size())
+				continue;
+			ImGui::PushID(static_cast<int>(index));
+			const std::string label =
+				std::string(OrbitalPresetName(windowState.sceneOrbitals[index].preset)) + " #" + std::to_string(index);
+			ImGui::SeparatorText(label.c_str());
+			DrawSceneOrbitalEditor(windowState, index);
+			ImGui::PopID();
+		}
+		ImGui::PopID();
+	}
+
+	void DrawAllSceneOrbitalRows(RendererWindowState &windowState)
+	{
 		ImGui::Text("Orbitale (%zu)", windowState.sceneOrbitals.size());
 		if (windowState.sceneOrbitals.empty())
 		{
@@ -229,6 +277,7 @@ namespace DefectStudio
 			return;
 		}
 
+		ImGui::PushID("AllOrbitals");
 		std::vector<SceneObjectId> toRemove;
 		for (std::size_t index = 0; index < windowState.sceneOrbitals.size(); ++index)
 		{
@@ -258,11 +307,9 @@ namespace DefectStudio
 			if (ImGui::SmallButton("X##RemoveOrbital"))
 				toRemove.push_back(orbital.id);
 
-			if (selected)
-				DrawSceneOrbitalEditor(windowState, index);
-
 			ImGui::PopID();
 		}
+		ImGui::PopID();
 
 		if (toRemove.empty())
 			return;
@@ -270,9 +317,71 @@ namespace DefectStudio
 		EraseSceneOrbitals(windowState, toRemove);
 	}
 
-	void DrawScenePlaneSection(RendererWindowState &windowState)
+	namespace
+	{
+		void DrawScenePlaneEditor(RendererWindowState &windowState, const std::size_t index)
+		{
+			if (index >= windowState.scenePlanes.size())
+				return;
+			RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
+			DrawUndoableValue(windowState, plane.center, [](glm::vec3 &value) {
+				return ImGui::DragFloat3("Srodek", &value.x, 0.05f);
+			});
+
+			if (DrawUndoableValue(windowState, plane.normal, [](glm::vec3 &value) {
+					return ImGui::DragFloat3("Normalna", &value.x, 0.02f);
+				}))
+			{
+				if (glm::dot(plane.normal, plane.normal) > 1e-8f)
+				{
+					plane.normal = glm::normalize(plane.normal);
+					const glm::vec3 projected =
+						plane.tangent - glm::dot(plane.tangent, plane.normal) * plane.normal;
+					if (glm::dot(projected, projected) > 1e-8f)
+						plane.tangent = glm::normalize(projected);
+				}
+			}
+
+			DrawUndoableValue(windowState, plane.halfExtents, [](glm::vec2 &value) {
+				return ImGui::DragFloat2("Polowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
+			});
+			DrawUndoableValue(windowState, plane.color, [](glm::vec3 &value) {
+				return ImGui::ColorEdit3("Kolor", &value.x);
+			});
+			DrawUndoableValue(windowState, plane.alpha, [](float &value) {
+				return ImGui::SliderFloat("Przezroczystosc", &value, 0.02f, 1.0f, "%.2f");
+			});
+			DrawUndoableValue(windowState, plane.showBorder, [](bool &value) {
+				return ImGui::Checkbox("Ramka", &value);
+			});
+			ImGui::SameLine();
+			DrawUndoableValue(windowState, plane.visible, [](bool &value) {
+				return ImGui::Checkbox("Widoczna", &value);
+			});
+		}
+	} // namespace
+
+	void DrawSelectedScenePlaneSection(RendererWindowState &windowState)
 	{
 		ImGui::Separator();
+		ImGui::Text("Plaszczyzny (%zu zaznaczonych)", windowState.selectedScenePlanes.size());
+		ImGui::PushID("SelectedPlanes");
+		for (const SceneObjectId id : windowState.selectedScenePlanes)
+		{
+			const std::size_t index = AnnotationIndex(windowState.scenePlanes, id);
+			if (index >= windowState.scenePlanes.size())
+				continue;
+			ImGui::PushID(static_cast<int>(index));
+			const std::string label = "Plaszczyzna #" + std::to_string(index);
+			ImGui::SeparatorText(label.c_str());
+			DrawScenePlaneEditor(windowState, index);
+			ImGui::PopID();
+		}
+		ImGui::PopID();
+	}
+
+	void DrawAllScenePlaneRows(RendererWindowState &windowState)
+	{
 		ImGui::Text("Plaszczyzny (%zu)", windowState.scenePlanes.size());
 		if (windowState.scenePlanes.empty())
 		{
@@ -280,6 +389,7 @@ namespace DefectStudio
 			return;
 		}
 
+		ImGui::PushID("AllPlanes");
 		std::vector<SceneObjectId> toRemove;
 		for (std::size_t index = 0; index < windowState.scenePlanes.size(); ++index)
 		{
@@ -308,53 +418,13 @@ namespace DefectStudio
 			if (ImGui::SmallButton("X##RemovePlane"))
 				toRemove.push_back(plane.id);
 
-			if (selected)
-			{
-				ImGui::DragFloat3("Srodek", &plane.center.x, 0.05f);
-				SnapshotOnActivation(windowState);
-
-				if (ImGui::DragFloat3("Normalna", &plane.normal.x, 0.02f))
-				{
-					// Typing a normal by hand is how someone lines a plane up with a crystal
-					// direction, so it is renormalised and the tangent re-squared against it here
-					// rather than left to produce a skewed parallelogram downstream.
-					if (glm::dot(plane.normal, plane.normal) > 1e-8f)
-					{
-						plane.normal = glm::normalize(plane.normal);
-						const glm::vec3 projected =
-							plane.tangent - glm::dot(plane.tangent, plane.normal) * plane.normal;
-						if (glm::dot(projected, projected) > 1e-8f)
-							plane.tangent = glm::normalize(projected);
-					}
-				}
-				SnapshotOnActivation(windowState);
-
-				ImGui::DragFloat2("Polowa rozmiaru", &plane.halfExtents.x, 0.05f, 0.01f, 1000.0f, "%.2f");
-				SnapshotOnActivation(windowState);
-				ImGui::ColorEdit3("Kolor", &plane.color.x);
-				SnapshotOnActivation(windowState);
-				ImGui::SliderFloat("Przezroczystosc", &plane.alpha, 0.02f, 1.0f, "%.2f");
-				SnapshotOnActivation(windowState);
-				ImGui::Checkbox("Ramka", &plane.showBorder);
-				SnapshotOnActivation(windowState);
-				ImGui::SameLine();
-				ImGui::Checkbox("Widoczna", &plane.visible);
-				SnapshotOnActivation(windowState);
-				ImGui::TextDisabled("Uwaga: wszystkie plaszczyzny rysuja sie jednym wywolaniem i dziela "
-									"kolor pierwszej widocznej.");
-			}
-
 			ImGui::PopID();
 		}
+		ImGui::PopID();
 
 		if (toRemove.empty())
 			return;
 		PushPinnedMeasurementUndoSnapshot(windowState);
-		const auto removed = std::remove_if(
-			windowState.scenePlanes.begin(), windowState.scenePlanes.end(),
-			[&toRemove](const RendererWindowState::ScenePlane &plane)
-			{ return std::find(toRemove.begin(), toRemove.end(), plane.id) != toRemove.end(); });
-		windowState.scenePlanes.erase(removed, windowState.scenePlanes.end());
-		windowState.selectedScenePlanes.clear();
+		EraseScenePlanes(windowState, toRemove);
 	}
 } // namespace DefectStudio

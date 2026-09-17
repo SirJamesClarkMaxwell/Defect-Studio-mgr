@@ -485,6 +485,16 @@ namespace DefectStudio
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedFreeLabels);
 		const std::vector<std::size_t> selectedSceneArrows =
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
+		const std::vector<std::size_t> selectedSceneOrbitals =
+			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneOrbitals);
+		std::vector<std::size_t> selectedScenePlanes;
+		selectedScenePlanes.reserve(windowState.selectedScenePlanes.size());
+		for (const SceneObjectId id : windowState.selectedScenePlanes)
+		{
+			const std::size_t index = AnnotationIndex(windowState.scenePlanes, id);
+			if (index < windowState.scenePlanes.size())
+				selectedScenePlanes.push_back(index);
+		}
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,
@@ -504,7 +514,9 @@ namespace DefectStudio
 			windowState.sceneArrows,
 			selectedSceneArrows,
 			windowState.sceneOrbitals,
+			selectedSceneOrbitals,
 			windowState.scenePlanes,
+			selectedScenePlanes,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
 			nullptr,

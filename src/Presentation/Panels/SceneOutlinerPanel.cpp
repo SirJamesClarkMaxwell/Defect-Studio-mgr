@@ -94,7 +94,7 @@ namespace DefectStudio
 			return indices;
 		}
 
-		// Selecting any one of the four annotation kinds from the outliner clears the other three -
+		// Selecting any one annotation kind from the outliner clears the others -
 		// the same mutual-exclusion rule RendererPanel::handleFreeLabelInteraction/
 		// handlePinnedMeasurementInteraction/handleSceneArrowInteraction already enforce for a
 		// viewport click, so outliner-driven selection can't leave a stale cross-kind selection a
@@ -109,6 +109,8 @@ namespace DefectStudio
 				windowState.selectedSceneArrows.clear();
 			if (&windowState.selectedSceneOrbitals != keep)
 				windowState.selectedSceneOrbitals.clear();
+			if (&windowState.selectedScenePlanes != keep)
+				windowState.selectedScenePlanes.clear();
 		}
 	} // namespace
 
@@ -412,8 +414,14 @@ namespace DefectStudio
 				auto &selection = windowState.selectedScenePlanes;
 				const bool selected =
 					std::find(selection.begin(), selection.end(), plane.id) != selection.end();
-				if (ImGui::Selectable(rowLabel, selected))
+				if (selected)
+					PushSelectedRowColors();
+				ImGui::Selectable(rowLabel, selected);
+				if (selected)
+					ImGui::PopStyleColor(3);
+				if (ImGui::IsItemClicked())
 				{
+					ClearOtherAnnotationSelections(windowState, &selection);
 					// Ctrl-click adds, same as every other row in this panel and in the viewport.
 					if (ImGui::GetIO().KeyCtrl)
 					{
@@ -427,6 +435,7 @@ namespace DefectStudio
 					{
 						selection = {plane.id};
 					}
+					SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 				}
 				ImGui::PopID();
 			}

@@ -53,6 +53,13 @@ namespace DefectStudio
 		SceneArrowEditorMode mode,
 		const RendererGlobalRenderSettings &globalSettings = {});
 
+	// Object Properties' selection-focused arrow section. A single selection gets the complete
+	// editor; a multi-selection gets the shared geometry/appearance editor and one undo snapshot per
+	// logical edit before the representative style is broadcast to the remaining selected arrows.
+	void DrawSelectedSceneArrowProperties(
+		RendererWindowState &windowState,
+		const RendererGlobalRenderSettings &globalSettings = {});
+
 	// Arrow2D's geometry fields are screen-space pixels; Line/Arrow3D's are world-space full
 	// diameters - the same numbers can never be reinterpreted across that boundary. Switching
 	// ArrowKind must go through this helper (never a raw `arrow.kind = newKind`), which applies the

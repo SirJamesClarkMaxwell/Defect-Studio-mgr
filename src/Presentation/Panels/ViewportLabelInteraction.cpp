@@ -28,16 +28,15 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
 {
-	// Keyboard-only shortcuts for the selected pinned measurement label (`M`, see
-	// RendererLayer::onLabelsToggleSelectedBondRequested, pins the current atom selection) - F flip,
-	// Delete-to-unpin, Ctrl+Shift+</> scale-step. Also Delete for the selected free label. No mouse
-	// hit-test of its own (that's HandlePinnedMeasurementInteraction/HandleFreeLabelInteraction), so
-	// the caller runs this unconditionally every frame rather than folding it into their
-	// short-circuiting OR chain.
+	// Keyboard-only shortcuts for selected scene objects: pin flip/scale, arrow clipboard actions,
+	// and Delete for pins, free labels, arrows, orbitals and planes. No mouse hit-test of its own, so
+	// the caller runs this unconditionally every frame rather than folding it into the
+	// short-circuiting interaction chain.
 	void HandlePinnedMeasurementKeyboardShortcuts(
 		RendererWindowState &windowState, bool hovered, RendererLayer &layer)
 	{
@@ -127,6 +126,20 @@ namespace DefectStudio
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			EraseSceneArrows(windowState, windowState.selectedSceneArrows);
+		}
+
+		const bool sceneOrbitalSelected = !windowState.selectedSceneOrbitals.empty();
+		if (sceneOrbitalSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			EraseSceneOrbitals(windowState, windowState.selectedSceneOrbitals);
+		}
+
+		const bool scenePlaneSelected = !windowState.selectedScenePlanes.empty();
+		if (scenePlaneSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			EraseScenePlanes(windowState, windowState.selectedScenePlanes);
 		}
 
 		// Ctrl+C/V/D for scene arrows - same "raw ImGui key check, bypass CoreLayer entirely" shape as
@@ -389,6 +402,8 @@ namespace DefectStudio
 		// pin already does.
 		windowState.selectedFreeLabels.clear();
 		windowState.selectedSceneArrows.clear();
+		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedScenePlanes.clear();
 		if (!additive)
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 
@@ -522,6 +537,8 @@ namespace DefectStudio
 		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneArrows.clear();
+		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedScenePlanes.clear();
 		if (!additive)
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 

@@ -222,7 +222,9 @@ namespace DefectStudio
 			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
 			const std::vector<std::size_t> &selectedSceneArrows = {},
 			const std::vector<RendererWindowState::SceneOrbital> &sceneOrbitals = {},
+			const std::vector<std::size_t> &selectedSceneOrbitals = {},
 			const std::vector<RendererWindowState::ScenePlane> &scenePlanes = {},
+			const std::vector<std::size_t> &selectedScenePlanes = {},
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			const std::vector<std::size_t> &selectedBondIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
@@ -341,16 +343,17 @@ namespace DefectStudio
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderSceneOrbitals(
 			const std::vector<RendererWindowState::SceneOrbital> &orbitals,
+			const std::vector<std::size_t> &selectedOrbitals,
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
-		// Every visible ScenePlane in one translucent triangle soup, drawn through the same
-		// isosurface overlay the orbitals use - a plane is two triangles plus an optional frame,
-		// which is not worth a pipeline of its own.
+		// ScenePlanes reuse the orbital isosurface overlay - a plane is two triangles plus an
+		// optional frame, uploaded and drawn per plane so its own colour and selection tint survive.
 		void renderScenePlanes(
 			const std::vector<RendererWindowState::ScenePlane> &planes,
+			const std::vector<std::size_t> &selectedPlanes,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,

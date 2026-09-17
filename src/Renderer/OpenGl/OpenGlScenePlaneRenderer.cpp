@@ -2,11 +2,13 @@
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
+#include <algorithm>
 #include <vector>
 
 #include <glad/gl.h>
 
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SceneObjectAppearance.hpp"
 
 namespace DefectStudio
 {
@@ -70,6 +72,7 @@ namespace DefectStudio
 
 	void OpenGlRendererBackend::renderScenePlanes(
 		const std::vector<RendererWindowState::ScenePlane> &planes,
+		const std::vector<std::size_t> &selectedPlanes,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
@@ -78,72 +81,57 @@ namespace DefectStudio
 		if (planes.empty())
 			return;
 
-		// ponytail: rebuilt and re-uploaded every frame, no per-plane mesh cache. A plane is
-		// thirty-six vertices where an orbital is fourteen thousand, so the cache that pays for
-		// itself there would be pure bookkeeping here. If someone ever drops a thousand planes in
-		// one scene, the cache shape from renderSceneOrbitals is the thing to copy.
-		std::vector<IsosurfaceVertex> mesh;
-		for (const RendererWindowState::ScenePlane &plane : planes)
-		{
-			if (!plane.visible)
-				continue;
-			const std::vector<IsosurfaceVertex> planeMesh = BuildScenePlaneMesh(plane);
-			mesh.insert(mesh.end(), planeMesh.begin(), planeMesh.end());
-		}
-		if (mesh.empty())
-			return;
-
 		OpenGlMeshHandles &handles = resources.scenePlaneMesh;
 		if (handles.vao == 0)
 			glGenVertexArrays(1, &handles.vao);
 		if (handles.vbo == 0)
 			glGenBuffers(1, &handles.vbo);
 
-		glBindVertexArray(handles.vao);
-		glBindBuffer(GL_ARRAY_BUFFER, handles.vbo);
-		glBufferData(
-			GL_ARRAY_BUFFER,
-			static_cast<GLsizeiptr>(mesh.size() * sizeof(IsosurfaceVertex)),
-			mesh.data(),
-			GL_DYNAMIC_DRAW);
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(
-			0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
-			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, position)));
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(
-			1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
-			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, normal)));
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(
-			2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
-			reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
-		glBindVertexArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		handles.indexCount = static_cast<int>(mesh.size());
+		// A plane is at most 36 vertices, so one upload/draw per visible plane keeps selection and
+		// per-plane colours honest without introducing a cache or a new material-index attribute.
+		for (std::size_t planeIndex = 0; planeIndex < planes.size(); ++planeIndex)
+		{
+			const RendererWindowState::ScenePlane &plane = planes[planeIndex];
+			if (!plane.visible)
+				continue;
+			const std::vector<IsosurfaceVertex> mesh = BuildScenePlaneMesh(plane);
+			if (mesh.empty())
+				continue;
 
-		// One draw for every plane in the window. They share the first visible plane's colour and
-		// alpha, which is the cost of batching them into a single soup - per-plane colours would
-		// mean one draw call each, and planes are a figure-composition tool where a consistent
-		// colour is the common case. Border takes the negative slot, darkened.
-		const RendererWindowState::ScenePlane *first = nullptr;
-		for (const RendererWindowState::ScenePlane &plane : planes)
-			if (plane.visible)
-			{
-				first = &plane;
-				break;
-			}
-		if (first == nullptr)
-			return;
+			glBindVertexArray(handles.vao);
+			glBindBuffer(GL_ARRAY_BUFFER, handles.vbo);
+			glBufferData(
+				GL_ARRAY_BUFFER,
+				static_cast<GLsizeiptr>(mesh.size() * sizeof(IsosurfaceVertex)),
+				mesh.data(),
+				GL_DYNAMIC_DRAW);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(
+				0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+				reinterpret_cast<void *>(offsetof(IsosurfaceVertex, position)));
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(
+				1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+				reinterpret_cast<void *>(offsetof(IsosurfaceVertex, normal)));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(
+				2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+				reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
+			glBindVertexArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			handles.indexCount = static_cast<int>(mesh.size());
 
-		renderIsosurfaceGpuOverlay(
-			handles.vao,
-			handles.indexCount,
-			camera,
-			globalSettings,
-			first->color,
-			first->color * 0.45f,
-			first->alpha,
-			sceneOffset);
+			const bool selected =
+				std::find(selectedPlanes.begin(), selectedPlanes.end(), planeIndex) != selectedPlanes.end();
+			renderIsosurfaceGpuOverlay(
+				handles.vao,
+				handles.indexCount,
+				camera,
+				globalSettings,
+				ApplySceneSelectionHighlight(plane.color, selected),
+				ApplySceneSelectionHighlight(plane.color * 0.45f, selected),
+				plane.alpha,
+				sceneOffset);
+		}
 	}
 } // namespace DefectStudio

@@ -2,6 +2,8 @@
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
+#include "Renderer/Scene/SceneObjectAppearance.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -1039,7 +1041,9 @@ namespace DefectStudio
 		const std::vector<RendererWindowState::SceneArrow> &sceneArrows,
 		const std::vector<std::size_t> &selectedSceneArrows,
 		const std::vector<RendererWindowState::SceneOrbital> &sceneOrbitals,
+		const std::vector<std::size_t> &selectedSceneOrbitals,
 		const std::vector<RendererWindowState::ScenePlane> &scenePlanes,
+		const std::vector<std::size_t> &selectedScenePlanes,
 		const std::vector<std::size_t> &selectedAtomIndices,
 		const std::vector<std::size_t> &selectedBondIndices,
 		const std::vector<IsosurfaceVertex> *debugIsosurfaceMesh,
@@ -1213,8 +1217,9 @@ namespace DefectStudio
 				sceneOffset);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
-		renderScenePlanes(scenePlanes, camera, resources, globalSettings, sceneOffset);
-		renderSceneOrbitals(sceneOrbitals, structure, camera, resources, globalSettings, sceneOffset);
+		renderScenePlanes(scenePlanes, selectedScenePlanes, camera, resources, globalSettings, sceneOffset);
+		renderSceneOrbitals(
+			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
@@ -2478,24 +2483,15 @@ namespace DefectStudio
 			// Same accent/blend as atom and bond selection highlighting - SceneArrow never had an
 			// equivalent before (RendererPanel's hit-test/drag already worked, but nothing ever showed
 			// which arrow that state referred to).
-			constexpr glm::vec3 kSelectionHighlightColor(0.91f, 0.52f, 0.02f);
 			const bool isSelected =
 				std::find(selectedArrows.begin(), selectedArrows.end(), arrowIndex) != selectedArrows.end();
 			const glm::vec4 color(
-				isSelected ? glm::mix(style.color, kSelectionHighlightColor, 0.55f) : style.color, style.alpha);
+				ApplySceneSelectionHighlight(style.color, isSelected), style.alpha);
 			// The bond fragment shader already blends colorA into colorB smoothly along the shaft
 			// (vGradientT), which is exactly the ramp a gradient wants - so an arrow gradient costs
 			// two assignments here and no shader work at all. Arrow2D goes through the flat
 			// arrow_quad shader instead and keeps the single colour; see the note at its draw call.
-			const auto highlight = [&](const glm::vec3 &base) {
-				return isSelected ? glm::mix(base, kSelectionHighlightColor, 0.55f) : base;
-			};
-			const glm::vec4 shaftColorStart = style.useGradient
-				? glm::vec4(highlight(style.gradient.start), style.alpha)
-				: color;
-			const glm::vec4 shaftColorEnd = style.useGradient
-				? glm::vec4(highlight(style.gradient.finish), style.alpha)
-				: color;
+			const SceneArrowRenderColors shaftColors = ResolveSceneArrowRenderColors(style, isSelected);
 
 			if (isArrow2D)
 			{
@@ -2550,8 +2546,8 @@ namespace DefectStudio
 			{
 				OpenGlBondInstance shaft;
 				shaft.model = buildBondTransform(arrow.start, arrow.end, shaftRadius);
-				shaft.colorA = shaftColorStart;
-				shaft.colorB = shaftColorEnd;
+				shaft.colorA = shaftColors.start;
+				shaft.colorB = shaftColors.finish;
 				shaftInstances.push_back(shaft);
 				continue;
 			}
@@ -2590,8 +2586,8 @@ namespace DefectStudio
 				// No length/radius scale - BuildWeldedArrowMesh already bakes absolute world-unit
 				// dimensions into its vertices (see buildArrowRevolutionTransform's declaration comment).
 				job.instance.model = buildArrowRevolutionTransform(arrow.start, arrow.end);
-				job.instance.colorA = shaftColorEnd;
-				job.instance.colorB = shaftColorEnd;
+				job.instance.colorA = shaftColors.start;
+				job.instance.colorB = shaftColors.finish;
 				arrow3DJobs.push_back(job);
 			}
 		}

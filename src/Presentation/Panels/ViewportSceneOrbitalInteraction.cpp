@@ -75,6 +75,7 @@ namespace DefectStudio
 		windowState.selectedFreeLabels.clear();
 		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
+		windowState.selectedScenePlanes.clear();
 		return true;
 	}
 } // namespace DefectStudio
