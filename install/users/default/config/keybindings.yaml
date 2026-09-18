@@ -26,6 +26,12 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "editor.focus_scene_outliner"
+    chord: "Ctrl+Shift+O"
+    command: "editor.focus_scene_outliner"
+    context: ""
+    layer: 0
+    enabled: true
   - id: "system.quit"
     chord: "Ctrl+Shift+W"
     command: "app.quit"
@@ -277,6 +283,12 @@ bindings:
   - id: "renderer.gizmo.mode_rotate"
     chord: "R"
     command: "renderer.gizmo.mode_rotate"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.scene_arrow.reverse"
+    chord: "Alt+R"
+    command: "renderer.scene_arrow.reverse"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true

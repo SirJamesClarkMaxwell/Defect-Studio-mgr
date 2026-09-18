@@ -1,9 +1,125 @@
 #include <gtest/gtest.h>
 
+#include <utility>
+
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ViewportSelection.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio::Tests
 {
+	namespace
+	{
+		[[nodiscard]] RendererStartupConfig EmptyRendererConfig()
+		{
+			RendererStartupConfig config;
+			config.loadDefaultScene = false;
+			return config;
+		}
+
+		[[nodiscard]] RendererWindowState MakeSelectedArrowWindow()
+		{
+			RendererWindowState window;
+			window.windowId = "scene-arrows";
+
+			RendererWindowState::SceneArrow first;
+			first.id = window.sceneRegistry.AllocateObjectId();
+			first.start = glm::vec3(1.0f, 2.0f, 3.0f);
+			first.end = glm::vec3(4.0f, 5.0f, 6.0f);
+			first.startAnchorAtom = 2;
+			first.endAnchorAtom = 5;
+
+			RendererWindowState::SceneArrow second;
+			second.id = window.sceneRegistry.AllocateObjectId();
+			second.start = glm::vec3(-1.0f, -2.0f, -3.0f);
+			second.end = glm::vec3(-4.0f, -5.0f, -6.0f);
+			second.startAnchorAtom = 7;
+			second.endAnchorAtom = 11;
+
+			window.sceneArrows = {first, second};
+			window.selectedSceneArrows = {first.id, second.id};
+			return window;
+		}
+	} // namespace
+
+	class SceneArrowReverseCommandTests : public testing::Test
+	{
+	protected:
+		void SetUp() override
+		{
+			renderer.BindUndoStack(undoStack);
+			RegisterViewportSceneObjectCommands(registry, renderer);
+		}
+
+		void TearDown() override
+		{
+			renderer.OnDetach();
+		}
+
+		[[nodiscard]] Result<CommandOutcome> ExecuteReverse()
+		{
+			return registry.Execute(CommandID{"renderer.scene_arrow.reverse"});
+		}
+
+		Ref<UndoStack> undoStack = CreateRef<UndoStack>();
+		RendererLayer renderer{EmptyRendererConfig()};
+		CommandRegistry registry;
+	};
+
+	TEST_F(SceneArrowReverseCommandTests, ReversesEverySelectedArrowAndOneUndoRestoresTheBatch)
+	{
+		renderer.AddWindow(MakeSelectedArrowWindow());
+		RendererWindowState &window = renderer.GetWindows().front();
+		const std::vector<RendererWindowState::SceneArrow> before = window.sceneArrows;
+
+		ASSERT_TRUE(ExecuteReverse());
+
+		ASSERT_EQ(window.sceneArrows.size(), 2u);
+		EXPECT_EQ(window.sceneArrows[0].start, before[0].end);
+		EXPECT_EQ(window.sceneArrows[0].end, before[0].start);
+		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, before[0].endAnchorAtom);
+		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, before[0].startAnchorAtom);
+		EXPECT_EQ(window.sceneArrows[1].start, before[1].end);
+		EXPECT_EQ(window.sceneArrows[1].end, before[1].start);
+		EXPECT_EQ(window.sceneArrows[1].startAnchorAtom, before[1].endAnchorAtom);
+		EXPECT_EQ(window.sceneArrows[1].endAnchorAtom, before[1].startAnchorAtom);
+		ASSERT_EQ(undoStack->GetUndoDepth(), 1u);
+
+		ASSERT_TRUE(undoStack->Undo());
+		ASSERT_EQ(window.sceneArrows.size(), before.size());
+		for (std::size_t index = 0; index < before.size(); ++index)
+		{
+			EXPECT_EQ(window.sceneArrows[index].start, before[index].start);
+			EXPECT_EQ(window.sceneArrows[index].end, before[index].end);
+			EXPECT_EQ(window.sceneArrows[index].startAnchorAtom, before[index].startAnchorAtom);
+			EXPECT_EQ(window.sceneArrows[index].endAnchorAtom, before[index].endAnchorAtom);
+		}
+	}
+
+	TEST_F(SceneArrowReverseCommandTests, EmptyArrowSelectionDoesNothingAndPushesNoUndo)
+	{
+		RendererWindowState windowState = MakeSelectedArrowWindow();
+		windowState.selectedSceneArrows.clear();
+		renderer.AddWindow(std::move(windowState));
+		RendererWindowState &window = renderer.GetWindows().front();
+		const std::vector<RendererWindowState::SceneArrow> before = window.sceneArrows;
+
+		ASSERT_TRUE(ExecuteReverse());
+
+		ASSERT_EQ(window.sceneArrows.size(), before.size());
+		for (std::size_t index = 0; index < before.size(); ++index)
+		{
+			EXPECT_EQ(window.sceneArrows[index].start, before[index].start);
+			EXPECT_EQ(window.sceneArrows[index].end, before[index].end);
+			EXPECT_EQ(window.sceneArrows[index].startAnchorAtom, before[index].startAnchorAtom);
+			EXPECT_EQ(window.sceneArrows[index].endAnchorAtom, before[index].endAnchorAtom);
+		}
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+		EXPECT_FALSE(undoStack->CanUndo());
+	}
+
 	TEST(SceneArrowAtomMatchTests, PositionUsesTheTwoAtomPositionsInSelectionOrder)
 	{
 		RendererWindowState::SceneArrow arrow;

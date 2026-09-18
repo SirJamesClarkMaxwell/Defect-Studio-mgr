@@ -5,6 +5,7 @@
 #include "Presentation/Panels/ViewportInput.hpp"
 #include "Presentation/Panels/ViewportInteraction.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
+#include "Presentation/Panels/ViewportSelection.hpp"
 #include "Presentation/Panels/ViewportToolbars.hpp"
 
 #include <algorithm>
@@ -77,6 +78,8 @@ namespace DefectStudio
 		  m_CommandRegistry(std::move(commandRegistry)),
 		  m_DomainLayer(std::move(domainLayer))
 	{
+		if (Ref<CommandRegistry> registry = m_CommandRegistry.lock())
+			RegisterViewportSceneObjectCommands(*registry, m_Layer);
 	}
 
 	Ref<IPanel> RendererPanel::Clone() const

@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <vector>
@@ -19,6 +20,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
+#include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
@@ -33,6 +35,23 @@
 
 namespace DefectStudio
 {
+	void RegisterViewportSceneObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer)
+	{
+		auto result = registry.Register(
+			CommandMeta{
+				CommandID{"renderer.scene_arrow.reverse"},
+				"Renderer: Reverse selected arrows",
+				"Renderer",
+				"Swap the start and end of every selected scene arrow in the focused viewport.",
+				{},
+				CommandFlags::None},
+			[rendererLayer = std::ref(rendererLayer)](CommandContext &) -> Unique<ICommand> {
+				return CreateReverseSelectedSceneArrowsCommand(rendererLayer.get());
+			});
+		if (!result)
+			DS_LOG_WARN("Reverse selected scene arrows command registration failed: {}", result.Error().technicalDetails);
+	}
+
 	// Keyboard-only shortcuts for selected scene objects: pin flip/scale, arrow clipboard actions,
 	// and Delete for pins, free labels, arrows, orbitals and planes. No mouse hit-test of its own, so
 	// the caller runs this unconditionally every frame rather than folding it into the
@@ -122,19 +141,6 @@ namespace DefectStudio
 
 		// Delete removes every selected scene arrow - same rationale as the pin/free-label Delete above.
 		const bool sceneArrowSelected = !windowState.selectedSceneArrows.empty();
-		const ImGuiIO &io = ImGui::GetIO();
-		const bool plainX = !io.KeyCtrl && !io.KeyAlt && !io.KeyShift &&
-			ImGui::IsKeyPressed(ImGuiKey_X, false);
-		if (sceneArrowSelected && hovered && !windowState.modalTransform.has_value() && plainX)
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			for (const SceneObjectId id : windowState.selectedSceneArrows)
-			{
-				const std::size_t arrowIndex = AnnotationIndex(windowState.sceneArrows, id);
-				if (arrowIndex < windowState.sceneArrows.size())
-					ReverseSceneArrow(windowState.sceneArrows[arrowIndex]);
-			}
-		}
 		if (sceneArrowSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);

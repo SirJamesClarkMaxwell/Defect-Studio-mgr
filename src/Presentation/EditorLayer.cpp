@@ -650,8 +650,24 @@ namespace DefectStudio
 				m_DomainLayer,
 				"Renderer",
 				true);
-			registerPanel<SceneOutlinerPanel>(
+			const PanelId sceneOutlinerPanelId = registerPanel<SceneOutlinerPanel>(
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, "Scene Outliner", true);
+			if (auto commandRegistry = m_CommandRegistry.lock())
+			{
+				auto result = commandRegistry->Register(
+					CommandMeta{
+						CommandID{"editor.focus_scene_outliner"},
+						"Focus Scene Outliner",
+						"Editor",
+						"Bring the Scene Outliner panel to focus, reopening it first if it was closed.",
+						{},
+						CommandFlags::None},
+					[this, sceneOutlinerPanelId](CommandContext &) -> Unique<ICommand> {
+						return CreateUnique<FocusPanelCommand>(findPanel(sceneOutlinerPanelId), "Focus Scene Outliner");
+					});
+				if (!result)
+					DS_LOG_WARN("Focus Scene Outliner command registration failed: {}", result.Error().technicalDetails);
+			}
 			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);

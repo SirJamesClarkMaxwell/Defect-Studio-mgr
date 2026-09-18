@@ -9,6 +9,9 @@
 
 namespace DefectStudio
 {
+	class ICommand;
+	class RendererLayer;
+
 	// Default SceneArrow anchored at seedPosition (typically the 3D cursor if placed, else world
 	// origin) - shared by every "Add Arrow" entry point (ObjectPropertiesPanel's button, Shift+A
 	// menu, right-click Add submenu) so they all seed a visible, non-zero-length arrow the same way.
@@ -117,6 +120,7 @@ namespace DefectStudio
 	void MatchSceneArrowColorToAtoms(
 		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom);
 	void ReverseSceneArrow(RendererWindowState::SceneArrow &arrow);
+	[[nodiscard]] Unique<ICommand> CreateReverseSelectedSceneArrowsCommand(RendererLayer &rendererLayer);
 	void DrawSceneArrowAtomMatchActions(RendererWindowState &windowState, std::size_t arrowIndex);
 
 	// Geometry (shaftWidth/headWidth/headLength/outlineWidth) and Style (color/alpha/outlineColor)

@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "Core/Commands/Command.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -18,6 +19,62 @@ namespace DefectStudio
 	{
 		const auto found = std::find_if(objects.begin(), objects.end(), [id](const T &object) { return object.id == id; });
 		return found == objects.end() ? objects.size() : static_cast<std::size_t>(std::distance(objects.begin(), found));
+	}
+
+	namespace
+	{
+		class ReverseSelectedSceneArrowsCommand final : public ICommand
+		{
+		public:
+			explicit ReverseSelectedSceneArrowsCommand(RendererLayer &rendererLayer)
+				: m_RendererLayer(rendererLayer)
+			{
+			}
+
+			Result<void> Execute(CommandContext &) override
+			{
+				std::vector<RendererWindowState> &windows = m_RendererLayer.get().GetWindows();
+				const std::string &focusedWindowId = m_RendererLayer.get().GetFocusedViewportWindowId();
+				auto window = focusedWindowId.empty() && windows.size() == 1
+					? windows.begin()
+					: std::find_if(
+						windows.begin(), windows.end(),
+						[&focusedWindowId](const RendererWindowState &candidate) {
+							return candidate.windowId == focusedWindowId;
+						});
+				if (window == windows.end() || window->selectedSceneArrows.empty())
+					return {};
+
+				std::vector<std::size_t> selectedIndices;
+				selectedIndices.reserve(window->selectedSceneArrows.size());
+				for (const SceneObjectId id : window->selectedSceneArrows)
+				{
+					const std::size_t index = FindObjectIndex(window->sceneArrows, id);
+					if (index < window->sceneArrows.size())
+						selectedIndices.push_back(index);
+				}
+				if (selectedIndices.empty())
+					return {};
+
+				PushPinnedMeasurementUndoSnapshot(*window);
+				for (const std::size_t index : selectedIndices)
+					ReverseSceneArrow(window->sceneArrows[index]);
+				return {};
+			}
+
+			[[nodiscard]] std::string Description() const override
+			{
+				return "Reverse selected scene arrows";
+			}
+
+		private:
+			std::reference_wrapper<RendererLayer> m_RendererLayer;
+		};
+	} // namespace
+
+	Unique<ICommand> CreateReverseSelectedSceneArrowsCommand(RendererLayer &rendererLayer)
+	{
+		return CreateUnique<ReverseSelectedSceneArrowsCommand>(rendererLayer);
 	}
 
 	void EraseSceneArrows(RendererWindowState &windowState, std::vector<SceneObjectId> ids)

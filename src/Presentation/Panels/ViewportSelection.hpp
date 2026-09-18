@@ -11,8 +11,13 @@
 
 namespace DefectStudio
 {
+	class CommandRegistry;
 	class RendererLayer;
 	struct RendererWindowState;
+
+	// Registers commands whose target is the currently focused viewport and whose implementation
+	// lives with the scene-object interaction code below.
+	void RegisterViewportSceneObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer);
 
 	[[nodiscard]] inline bool IsUnmodifiedModalAxisKeyPressed(ImGuiKey key)
 	{
