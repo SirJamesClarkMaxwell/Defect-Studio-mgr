@@ -46,11 +46,11 @@ namespace DefectStudio
 	[[nodiscard]] SceneOrbitalCenters ResolveSceneOrbitalCenters(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
 
-	// Samples the orbital, extracts both phase lobes and applies SceneOrbital::scale about the
-	// centroid. Returns flat GL_TRIANGLES triplets exactly as GenerateIsosurfaceMesh does, with
-	// IsosurfaceVertex::sign carrying the phase - so the existing isosurface shader draws this with
-	// no change. Empty when the orbital cannot be meshed (degenerate resolution, zero extent, an
-	// iso value no sample reaches).
+	// Samples the orbital, extracts both phase lobes and applies SceneOrbital::stretch in the
+	// orbital's own frame, then SceneOrbital::scale, both about the centroid. Returns flat
+	// GL_TRIANGLES triplets exactly as GenerateIsosurfaceMesh does, with IsosurfaceVertex::sign
+	// carrying the phase - so the existing isosurface shader draws this with no change. Empty when
+	// the orbital cannot be meshed (degenerate resolution, zero extent, an iso value no sample reaches).
 	//
 	// This runs on the main thread whenever a parameter changes, NOT every frame - see
 	// SceneOrbitalMeshKey below for how a caller knows when to re-run it.
@@ -117,8 +117,8 @@ namespace DefectStudio
 	[[nodiscard]] int ValenceShell(const std::string &element);
 
 	// World-space bounding sphere of the orbital as it is actually drawn - centroid of the
-	// resolved centres, radius = SuggestOrbitalExtent scaled by SceneOrbital::scale. Cheap: it
-	// does not mesh anything.
+	// resolved centres, radius = SuggestOrbitalExtent scaled by SceneOrbital::scale and the largest
+	// valid stretch component. Cheap: it does not mesh anything.
 	struct SceneOrbitalBounds
 	{
 		glm::vec3 center = glm::vec3(0.0f);

@@ -280,6 +280,10 @@ namespace DefectStudio
 			// expands the wavefunction. Kept separate so a drawing that was scaled to look right
 			// next to an atom stays honest about which number is which.
 			float scale = 1.0f;
+			// Per-axis stretch in the orbital's own frame, on top of the uniform scale. x and y
+			// span the lobe while z runs along it. This changes only the drawing, not the orbital
+			// preset or the physical meaning of effectiveCharge and isoFraction.
+			glm::vec3 stretch = glm::vec3(1.0f);
 			// Iso value as a fraction of the sampled grid's peak amplitude (SuggestOrbitalIsoValue),
 			// not an absolute value - a diffuse 3d and a tight 1s then both come out looking like
 			// the textbook picture at the same setting.

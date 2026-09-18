@@ -103,6 +103,8 @@ namespace DefectStudio::SceneObjectsYaml
 				return false;
 			if (node["rotationEuler"] && !Vec3(node["rotationEuler"], orbital.rotationEuler))
 				return false;
+			if (node["stretch"] && !Vec3(node["stretch"], orbital.stretch))
+				return false;
 			if (node["positiveLobeColor"] && !Vec3(node["positiveLobeColor"], orbital.positiveLobeColor))
 				return false;
 			if (node["negativeLobeColor"] && !Vec3(node["negativeLobeColor"], orbital.negativeLobeColor))
@@ -136,8 +138,10 @@ namespace DefectStudio::SceneObjectsYaml
 		EmitVec3(emit, "centerB", orbital.centerB);
 		EmitAnchors(emit, "anchorAtoms", orbital.anchorAtoms);
 		EmitVec3(emit, "rotationEuler", orbital.rotationEuler);
-		emit << YAML::Key << "scale" << YAML::Value << orbital.scale << YAML::Key << "isoFraction" << YAML::Value
-			 << orbital.isoFraction << YAML::Key << "resolution" << YAML::Value << orbital.resolution;
+		emit << YAML::Key << "scale" << YAML::Value << orbital.scale;
+		EmitVec3(emit, "stretch", orbital.stretch);
+		emit << YAML::Key << "isoFraction" << YAML::Value << orbital.isoFraction << YAML::Key << "resolution"
+			 << YAML::Value << orbital.resolution;
 		EmitVec3(emit, "positiveLobeColor", orbital.positiveLobeColor);
 		EmitVec3(emit, "negativeLobeColor", orbital.negativeLobeColor);
 		emit << YAML::Key << "alpha" << YAML::Value << orbital.alpha << YAML::Key << "visible" << YAML::Value

@@ -139,6 +139,7 @@ namespace DefectStudio
 		std::vector<PersistedAtomRef> anchorAtoms;
 		glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees
 		float scale = 1.0f;
+		glm::vec3 stretch = glm::vec3(1.0f);
 		float isoFraction = 0.2f;
 		int resolution = 48;
 		glm::vec3 positiveLobeColor = glm::vec3(0.85f, 0.25f, 0.25f);

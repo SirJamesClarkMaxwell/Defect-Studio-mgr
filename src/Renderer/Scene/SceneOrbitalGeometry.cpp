@@ -35,6 +35,47 @@ namespace DefectStudio
 			HashFloat(hash, value.z);
 		}
 
+		[[nodiscard]] glm::vec3 SanitizedStretch(const glm::vec3 &stretch)
+		{
+			glm::vec3 result = stretch;
+			for (int axis = 0; axis < 3; ++axis)
+				if (!std::isfinite(result[axis]) || result[axis] <= 0.0f)
+					result[axis] = 1.0f;
+			return result;
+		}
+
+		[[nodiscard]] glm::mat3 RotationFrame(const glm::vec3 &rotationEuler)
+		{
+			const glm::vec3 radians = glm::radians(rotationEuler);
+			glm::mat4 rotation(1.0f);
+			rotation = glm::rotate(rotation, radians.x, glm::vec3(1.0f, 0.0f, 0.0f));
+			rotation = glm::rotate(rotation, radians.y, glm::vec3(0.0f, 1.0f, 0.0f));
+			rotation = glm::rotate(rotation, radians.z, glm::vec3(0.0f, 0.0f, 1.0f));
+			return glm::mat3(rotation);
+		}
+
+		[[nodiscard]] glm::mat3 OrbitalFrame(
+			const RendererWindowState::SceneOrbital &orbital, const SceneOrbitalCenters &centers)
+		{
+			if (!IsTwoCenterPreset(orbital.preset))
+				return RotationFrame(orbital.rotationEuler);
+
+			glm::vec3 bond = centers.centerB - centers.centerA;
+			if (glm::dot(bond, bond) <= 1e-12f)
+				bond = glm::vec3(1.0f, 0.0f, 0.0f);
+
+			const glm::vec3 zAxis = glm::normalize(bond);
+			// A fixed reference makes this frame deterministic. Fall back only when it is nearly
+			// parallel to the bond, where their cross product would be numerically unstable. These
+			// choices mirror OrbitalPresets' two-centre frame, including its coincident-centre fallback.
+			const glm::vec3 reference = std::abs(zAxis.z) > 0.999f
+				? glm::vec3(0.0f, 1.0f, 0.0f)
+				: glm::vec3(0.0f, 0.0f, 1.0f);
+			const glm::vec3 xAxis = glm::normalize(glm::cross(reference, zAxis));
+			const glm::vec3 yAxis = glm::cross(zAxis, xAxis);
+			return glm::mat3(xAxis, yAxis, zAxis);
+		}
+
 		[[nodiscard]] int AtomicNumber(std::string_view element)
 		{
 			constexpr std::array<std::string_view, 118> symbols = {
@@ -138,14 +179,7 @@ namespace DefectStudio
 		settings.lobeIndex = orbital.lobeIndex;
 		settings.shell = orbital.shell;
 		if (!IsTwoCenterPreset(orbital.preset))
-		{
-			const glm::vec3 radians = glm::radians(orbital.rotationEuler);
-			glm::mat4 rotation(1.0f);
-			rotation = glm::rotate(rotation, radians.x, glm::vec3(1.0f, 0.0f, 0.0f));
-			rotation = glm::rotate(rotation, radians.y, glm::vec3(0.0f, 1.0f, 0.0f));
-			rotation = glm::rotate(rotation, radians.z, glm::vec3(0.0f, 0.0f, 1.0f));
-			settings.orientation = glm::mat3(rotation);
-		}
+			settings.orientation = RotationFrame(orbital.rotationEuler);
 		return MakeOrbitalPreset(orbital.preset, settings);
 	}
 
@@ -164,7 +198,12 @@ namespace DefectStudio
 			return {};
 
 		std::vector<IsosurfaceVertex> mesh = GenerateIsosurfaceMesh(grid, isoValue);
-		const glm::vec3 centroid = ResolveSceneOrbitalCenters(orbital, structure).centroid;
+		const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, structure);
+		const glm::vec3 centroid = centers.centroid;
+		const glm::vec3 stretch = SanitizedStretch(orbital.stretch);
+		const glm::vec3 inverseStretch = glm::vec3(1.0f) / stretch;
+		const glm::mat3 frame = OrbitalFrame(orbital, centers);
+		const glm::mat3 inverseFrame = glm::transpose(frame);
 		// GenerateIsosurfaceMesh uses periodic-grid i/N coordinates while the analytic sampler uses
 		// endpoint-inclusive i/(N-1). Keep the documented (N-1)/N size difference, but translate the
 		// shrunken box back onto its physical centroid instead of leaving it half a voxel off-centre.
@@ -173,7 +212,11 @@ namespace DefectStudio
 			grid.cell[1] * (0.5f / static_cast<float>(grid.dimensions.y)) +
 			grid.cell[2] * (0.5f / static_cast<float>(grid.dimensions.z));
 		for (IsosurfaceVertex &vertex : mesh)
-			vertex.position = centroid + (vertex.position + centeringOffset - centroid) * orbital.scale;
+		{
+			const glm::vec3 offset = vertex.position + centeringOffset - centroid;
+			vertex.position = centroid + frame * (inverseFrame * offset * stretch) * orbital.scale;
+			vertex.normal = glm::normalize(frame * (inverseFrame * vertex.normal * inverseStretch));
+		}
 		return mesh;
 	}
 
@@ -190,6 +233,7 @@ namespace DefectStudio
 		HashVec3(hash, centers.centerB);
 		HashVec3(hash, orbital.rotationEuler);
 		HashFloat(hash, orbital.scale);
+		HashVec3(hash, orbital.stretch);
 		HashFloat(hash, orbital.isoFraction);
 		HashValue(hash, static_cast<std::uint64_t>(orbital.resolution));
 		return SceneOrbitalMeshKey{hash};
@@ -259,7 +303,9 @@ namespace DefectStudio
 		// sound bounding sphere rather than a guess that happens to work for the shapes tried.
 		const float extent = SuggestOrbitalExtent(BuildOrbitalWavefunction(orbital, structure));
 		const float scale = std::isfinite(orbital.scale) && orbital.scale > 0.0f ? orbital.scale : 1.0f;
-		bounds.radius = std::isfinite(extent) && extent > 0.0f ? extent * scale : 0.0f;
+		const glm::vec3 stretch = SanitizedStretch(orbital.stretch);
+		const float largestStretch = std::max({stretch.x, stretch.y, stretch.z});
+		bounds.radius = std::isfinite(extent) && extent > 0.0f ? extent * scale * largestStretch : 0.0f;
 		return bounds;
 	}
 

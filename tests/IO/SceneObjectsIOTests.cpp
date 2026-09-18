@@ -142,6 +142,7 @@ namespace DefectStudio::Tests
 		orbital.anchorAtoms = {{4, "C", glm::vec3(1.0f, -2.0f, 0.5f)}, {8, "N", glm::vec3(2.5f, -2.0f, 0.5f)}};
 		orbital.rotationEuler = glm::vec3(30.0f, 0.0f, -45.0f);
 		orbital.scale = 1.75f;
+		orbital.stretch = glm::vec3(0.75f, 1.25f, 2.5f);
 		orbital.isoFraction = 0.35f;
 		orbital.resolution = 64;
 		orbital.positiveLobeColor = glm::vec3(0.9f, 0.1f, 0.2f);
@@ -168,6 +169,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(got->anchorAtoms[1].element, "N");
 		EXPECT_EQ(got->rotationEuler, orbital.rotationEuler);
 		EXPECT_FLOAT_EQ(got->scale, 1.75f);
+		EXPECT_EQ(got->stretch, orbital.stretch);
 		EXPECT_FLOAT_EQ(got->isoFraction, 0.35f);
 		EXPECT_EQ(got->resolution, 64);
 		EXPECT_EQ(got->positiveLobeColor, orbital.positiveLobeColor);
@@ -194,6 +196,23 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(got->visible);
 		EXPECT_FLOAT_EQ(got->scale, 1.0f);
 		EXPECT_EQ(got->resolution, 48);
+	}
+
+	TEST(SceneObjectsIOTests, OrbitalWithoutStretchLoadsWithUnitStretch)
+	{
+		std::vector<StructuredError> warnings;
+		std::string error;
+		SceneObjectsFile loaded;
+		ASSERT_TRUE(SceneObjectsIO::Parse(
+			"formatVersion: 1\nstructures:\n  - structureKey: k\n    objects:\n"
+			"      - {kind: SceneOrbital, preset: p, centerA: [0, 0, 0], scale: 1.5}\n",
+			loaded, warnings, error)) << error;
+		ASSERT_TRUE(warnings.empty());
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto &orbital = std::get<PersistedSceneOrbital>(loaded.structures[0].objects[0]);
+		EXPECT_EQ(orbital.stretch, glm::vec3(1.0f));
+		EXPECT_FLOAT_EQ(orbital.scale, 1.5f);
 	}
 
 	TEST(SceneObjectsIOTests, ScenePlaneRoundTrips)

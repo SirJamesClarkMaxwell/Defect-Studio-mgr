@@ -260,6 +260,7 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.anchorAtoms = PersistAtomReferences(window.structure, orbital.anchorAtoms);
 		p.rotationEuler = orbital.rotationEuler;
 		p.scale = orbital.scale;
+		p.stretch = orbital.stretch;
 		p.isoFraction = orbital.isoFraction;
 		p.resolution = orbital.resolution;
 		p.positiveLobeColor = orbital.positiveLobeColor;
@@ -391,6 +392,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					o.anchorAtoms = ResolveAtomReferences(window.structure, value.anchorAtoms);
 					o.rotationEuler = value.rotationEuler;
 					o.scale = value.scale;
+					o.stretch = value.stretch;
 					o.isoFraction = value.isoFraction;
 					o.resolution = value.resolution;
 					o.positiveLobeColor = value.positiveLobeColor;

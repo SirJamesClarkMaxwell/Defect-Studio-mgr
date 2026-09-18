@@ -183,10 +183,6 @@ namespace DefectStudio
 			DrawUndoableValue(windowState, orbital.alpha, [](float &value) {
 				return ImGui::SliderFloat("Przezroczystosc", &value, 0.05f, 1.0f, "%.2f");
 			});
-			DrawUndoableValue(windowState, orbital.scale, [](float &value) {
-				return ImGui::DragFloat("Skala rysunku", &value, 0.02f, 0.05f, 20.0f, "%.2f");
-			});
-			ImGui::SetItemTooltip("Powieksza siatke, nie zmienia fizyki. Od tego jest Z_eff.");
 
 			if (DrawUndoableValue(windowState, orbital.isoFraction, [](float &value) {
 					return ImGui::SliderFloat("Izopowierzchnia", &value, 0.02f, 0.9f, "%.2f");
@@ -201,6 +197,39 @@ namespace DefectStudio
 				orbital.resolution = std::clamp(orbital.resolution, 8, 128);
 			ImGui::SetItemTooltip("Probki na os. Siatka liczy sie na glownym watku, wiec to jest pokretlo "
 								  "od przyciec przy przeciaganiu.");
+
+			ImGui::SeparatorText("Korekta rysunku");
+			ImGui::TextDisabled("Te ustawienia zmieniaja rysunek, nie fizyke orbitalu.");
+			DrawUndoableValue(windowState, orbital.scale, [](float &value) {
+				return ImGui::DragFloat("Skala rysunku", &value, 0.02f, 0.05f, 20.0f, "%.2f");
+			});
+
+			float width = (orbital.stretch.x + orbital.stretch.y) * 0.5f;
+			if (DrawUndoableValue(windowState, width, [](float &value) {
+					return ImGui::DragFloat(
+						"Szerokosc", &value, 0.01f, 0.1f, 5.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+				}))
+				orbital.stretch.x = orbital.stretch.y = width;
+			DrawUndoableValue(windowState, orbital.stretch.z, [](float &value) {
+				return ImGui::DragFloat(
+					"Dlugosc", &value, 0.01f, 0.1f, 5.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			});
+
+			if (ImGui::CollapsingHeader("Zaawansowane##OrbitalStretch"))
+			{
+				DrawUndoableValue(windowState, orbital.stretch.x, [](float &value) {
+					return ImGui::DragFloat("X##OrbitalStretch", &value, 0.01f, 0.1f, 5.0f, "%.2f",
+						ImGuiSliderFlags_AlwaysClamp);
+				});
+				DrawUndoableValue(windowState, orbital.stretch.y, [](float &value) {
+					return ImGui::DragFloat("Y##OrbitalStretch", &value, 0.01f, 0.1f, 5.0f, "%.2f",
+						ImGuiSliderFlags_AlwaysClamp);
+				});
+				DrawUndoableValue(windowState, orbital.stretch.z, [](float &value) {
+					return ImGui::DragFloat("Z##OrbitalStretch", &value, 0.01f, 0.1f, 5.0f, "%.2f",
+						ImGuiSliderFlags_AlwaysClamp);
+				});
+			}
 
 			DrawUndoableValue(windowState, orbital.visible, [](bool &value) {
 				return ImGui::Checkbox("Widoczny", &value);

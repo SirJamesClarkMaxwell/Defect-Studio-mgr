@@ -249,6 +249,33 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
 	}
 
+	TEST(SceneObjectPersistenceTests, OrbitalStretchSurvivesProjectFileRoundTrip)
+	{
+		RendererWindowState source = MakeWindow();
+		RendererWindowState::SceneOrbital orbital;
+		orbital.preset = OrbitalPreset::Sp3Sigma;
+		orbital.centerA = glm::vec3(0.0f);
+		orbital.centerB = glm::vec3(1.5f, 0.0f, 0.0f);
+		orbital.stretch = glm::vec3(0.6f, 1.4f, 2.25f);
+		source.sceneOrbitals.push_back(orbital);
+
+		SceneObjectsFile file;
+		file.structures.push_back({"structure", ExtractPersistedSceneObjects(source)});
+		SceneObjectsFile parsed;
+		std::vector<StructuredError> ioWarnings;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(SceneObjectsIO::Serialize(file), parsed, ioWarnings, error)) << error;
+		ASSERT_TRUE(ioWarnings.empty());
+
+		RendererWindowState target = MakeWindow();
+		std::vector<StructuredError> applyWarnings;
+		ApplyPersistedSceneObjects(target, parsed.structures.at(0).objects, applyWarnings);
+
+		EXPECT_TRUE(applyWarnings.empty());
+		ASSERT_EQ(target.sceneOrbitals.size(), 1u);
+		EXPECT_EQ(target.sceneOrbitals[0].stretch, orbital.stretch);
+	}
+
 	TEST(SceneObjectPersistenceTests, ArrowEndpointReferencesRebindAfterAtomsAreReordered)
 	{
 		RendererWindowState source = MakeWindow();
