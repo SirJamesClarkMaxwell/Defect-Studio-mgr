@@ -17,6 +17,23 @@
 
 namespace DefectStudio
 {
+	namespace
+	{
+		// A plain (non-additive) click on an atom, a bond or empty space means "this is now the
+		// selection" - so the annotations selected by the handlers upstream of this one have to go,
+		// or an orbital picked a minute ago stays selected forever with no way to click it off.
+		// Ctrl-click keeps them: that is the "add to what I already have" gesture.
+		void ClearAnnotationSelections(RendererWindowState &windowState)
+		{
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedFreeLabels.clear();
+			windowState.selectedSceneArrows.clear();
+			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedScenePlanes.clear();
+			windowState.sceneArrowQuickEditActive = false;
+		}
+	} // namespace
+
 	void HandleAtomPick(
 		RendererWindowState &windowState, float relX, float relY, bool additive, RendererLayer &layer)
 	{
@@ -183,6 +200,13 @@ namespace DefectStudio
 		// along, even if the bond surface was the nearer of the two along the ray.
 		const bool atomHit = hitAtomIndex != std::numeric_limits<std::size_t>::max();
 		const bool bondHit = hitBondIndex != std::numeric_limits<std::size_t>::max();
+		// Empty space is the gesture that means "deselect everything"; landing on an atom or a bond
+		// is not. Clearing on an atom hit as well made "Match position" unreachable - the buttons
+		// need an arrow and its two atoms selected at once, and picking the atoms threw the arrow
+		// away. Atoms and annotations coexist in the selection; SceneTransform decides which of
+		// them the gizmo actually moves.
+		if (!additive && !atomHit && !bondHit)
+			ClearAnnotationSelections(windowState);
 		if (atomHit && (!bondHit || bestAtomT <= bestBondT))
 		{
 			HandleAtomPick(windowState, relX, relY, additive, layer);

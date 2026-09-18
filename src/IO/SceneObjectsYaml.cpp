@@ -47,15 +47,14 @@ namespace DefectStudio::SceneObjectsYaml
 
 	namespace
 	{
-		// Zero, one or two entries - unlike a pinned measurement's atomRefs, which must be exactly
-		// two or three. An orbital with no anchors is the normal case (it floats where it was
-		// dropped), so an absent or empty node is success, not a parse failure.
+		// An absent or empty anchor list is normal for free-standing objects. Cardinality belongs to
+		// the object parser: orbitals cap it at two, while a fitted plane may keep every selected atom.
 		[[nodiscard]] bool ParseAnchors(const YAML::Node &node, std::vector<PersistedAtomRef> &refs)
 		{
 			refs.clear();
 			if (!node)
 				return true;
-			if (!node.IsSequence() || node.size() > 2)
+			if (!node.IsSequence())
 				return false;
 			try
 			{
@@ -78,6 +77,19 @@ namespace DefectStudio::SceneObjectsYaml
 				return false;
 			}
 		}
+
+		void EmitAnchors(YAML::Emitter &emit, const std::vector<PersistedAtomRef> &refs)
+		{
+			emit << YAML::Key << "anchorAtoms" << YAML::Value << YAML::BeginSeq;
+			for (const PersistedAtomRef &ref : refs)
+			{
+				emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key
+					 << "element" << YAML::Value << ref.element;
+				EmitVec3(emit, "position", ref.position);
+				emit << YAML::EndMap;
+			}
+			emit << YAML::EndSeq;
+		}
 	} // namespace
 
 	bool ParseOrbital(const YAML::Node &node, PersistedSceneOrbital &orbital)
@@ -97,7 +109,7 @@ namespace DefectStudio::SceneObjectsYaml
 				return false;
 			if (node["negativeLobeColor"] && !Vec3(node["negativeLobeColor"], orbital.negativeLobeColor))
 				return false;
-			if (!ParseAnchors(node["anchorAtoms"], orbital.anchorAtoms))
+			if (!ParseAnchors(node["anchorAtoms"], orbital.anchorAtoms) || orbital.anchorAtoms.size() > 2)
 				return false;
 			orbital.persistKey = node["persistKey"].as<std::string>("");
 			orbital.shell = node["shell"].as<int>(orbital.shell);
@@ -124,15 +136,7 @@ namespace DefectStudio::SceneObjectsYaml
 			 << YAML::Key << "effectiveCharge" << YAML::Value << orbital.effectiveCharge;
 		EmitVec3(emit, "centerA", orbital.centerA);
 		EmitVec3(emit, "centerB", orbital.centerB);
-		emit << YAML::Key << "anchorAtoms" << YAML::Value << YAML::BeginSeq;
-		for (const PersistedAtomRef &ref : orbital.anchorAtoms)
-		{
-			emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key << "element"
-				 << YAML::Value << ref.element;
-			EmitVec3(emit, "position", ref.position);
-			emit << YAML::EndMap;
-		}
-		emit << YAML::EndSeq;
+		EmitAnchors(emit, orbital.anchorAtoms);
 		EmitVec3(emit, "rotationEuler", orbital.rotationEuler);
 		emit << YAML::Key << "scale" << YAML::Value << orbital.scale << YAML::Key << "isoFraction" << YAML::Value
 			 << orbital.isoFraction << YAML::Key << "resolution" << YAML::Value << orbital.resolution;
@@ -158,6 +162,8 @@ namespace DefectStudio::SceneObjectsYaml
 				return false;
 			if (node["color"] && !Vec3(node["color"], plane.color))
 				return false;
+			if (!ParseAnchors(node["anchorAtoms"], plane.anchorAtoms))
+				return false;
 			plane.persistKey = node["persistKey"].as<std::string>("");
 			plane.alpha = node["alpha"].as<float>(plane.alpha);
 			plane.showBorder = node["showBorder"].as<bool>(plane.showBorder);
@@ -178,6 +184,7 @@ namespace DefectStudio::SceneObjectsYaml
 		EmitVec3(emit, "normal", plane.normal);
 		EmitVec3(emit, "tangent", plane.tangent);
 		EmitVec2(emit, "halfExtents", plane.halfExtents);
+		EmitAnchors(emit, plane.anchorAtoms);
 		EmitVec3(emit, "color", plane.color);
 		emit << YAML::Key << "alpha" << YAML::Value << plane.alpha << YAML::Key << "showBorder" << YAML::Value
 			 << plane.showBorder << YAML::Key << "visible" << YAML::Value << plane.visible;

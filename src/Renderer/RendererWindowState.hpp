@@ -210,6 +210,9 @@ namespace DefectStudio
 			RendererColorGradient gradient;
 			float alpha = 1.0f;
 			float shaftWidth = 0.06f; // radius; was the old hardcoded kArrowShaftRadius
+			bool dashed = false;
+			float dashLength = 0.25f; // world units, along the shaft
+			float gapLength = 0.15f;  // world units
 			glm::vec3 outlineColor = glm::vec3(0.0f);
 			float outlineWidth = 0.0f;
 			float headWidth = 0.14f;  // Arrow3D cone base diameter / Arrow2D has no head, unused there

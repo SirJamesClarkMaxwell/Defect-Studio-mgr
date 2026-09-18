@@ -44,8 +44,27 @@ namespace DefectStudio
 	[[nodiscard]] std::array<glm::vec3, 4> ScenePlaneCorners(
 		const RendererWindowState::ScenePlane &plane);
 
+	// Ray against the drawn quads: the nearest visible plane the ray passes through, or nullopt if
+	// it misses every one. Both faces count - a plane clicked from behind is still the object the
+	// user meant. `rayDirection` need not be normalised.
+	[[nodiscard]] std::optional<std::size_t> PickScenePlane(
+		const RendererWindowState &windowState, const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection);
+
 	// A plane built from a fit, with the drawing defaults filled in. The one place a new plane is
 	// constructed, so the menu, the toolbar and any future command cannot disagree about what a
 	// fresh plane looks like.
 	[[nodiscard]] RendererWindowState::ScenePlane MakeScenePlane(const ScenePlaneFit &fit);
+
+	// A free plane at `center` facing the viewer, for "add a plane" with no atoms selected. Sized
+	// from the same scene metric MakeDefaultSceneArrow uses, so it lands visible rather than as a
+	// speck or a wall.
+	[[nodiscard]] RendererWindowState::ScenePlane MakeDefaultScenePlane(
+		const RendererWindowState &windowState, const glm::vec3 &center);
+
+	// Re-fits every anchored plane's centre, normal, tangent and extents from its atoms, once per
+	// frame, next to ResolveAnchoredOrbitals. Planes with fewer than two resolvable anchors are
+	// left exactly as they are - including their anchor list, which is the user's to clear.
+	// The viewer-facing tie-break FitScenePlane needs for a collinear set comes from the window's
+	// camera when it has one.
+	void ResolveAnchoredScenePlanes(RendererWindowState &windowState);
 } // namespace DefectStudio

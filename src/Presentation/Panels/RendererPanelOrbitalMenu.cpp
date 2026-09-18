@@ -173,11 +173,11 @@ namespace DefectStudio
 			windowState.selectedSceneArrows = {windowState.sceneArrows.back().id};
 		};
 
+		DrawSceneArrowAtomBufferControl();
 		if (ImGui::MenuItem(description.lineLabel.c_str(), nullptr, false, description.canDrawSegment))
 			addSegment(RendererWindowState::ArrowKind::Line);
 		if (ImGui::MenuItem(description.arrowLabel.c_str(), nullptr, false, description.canDrawSegment))
 			addSegment(RendererWindowState::ArrowKind::Arrow3D);
-		DrawSceneArrowAtomBufferControl();
 	}
 
 	void DrawPlaneAddItem(RendererWindowState &windowState)

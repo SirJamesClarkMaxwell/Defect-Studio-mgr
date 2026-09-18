@@ -569,10 +569,25 @@ namespace DefectStudio
 	void RendererPanel::renderViewportContextMenu(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
-		(void)imageSize;
 		(void)hovered;
 
-		if (!ImGui::BeginPopupContextItem("##RendererViewportContextMenu"))
+		// Opened by hand instead of with BeginPopupContextItem. That helper hangs off whichever item
+		// was submitted last, and by the time this runs the drag-drop target, the gizmo chain and the
+		// pin/label/arrow/orbital handlers have all had their chance to submit items of their own -
+		// so the menu attached itself to one of those and stopped opening over the viewport at all.
+		// The image rect does not move, so the hit test uses that.
+		constexpr const char *kContextMenuId = "##RendererViewportContextMenu";
+		const ImVec2 mouse = ImGui::GetMousePos();
+		const bool overImage = mouse.x >= imageOrigin.x && mouse.y >= imageOrigin.y &&
+			mouse.x < imageOrigin.x + imageSize.x && mouse.y < imageOrigin.y + imageSize.y;
+		// Released, not clicked, and only when the button barely moved - a right-drag is a camera
+		// move (ApplyViewportInputNavigation), and it must not end in a popup.
+		const bool rightDragged = ImGui::GetIO().MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] > 25.0f;
+		if (overImage && ImGui::IsWindowHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+			!rightDragged && !ImGui::IsPopupOpen(kContextMenuId))
+			ImGui::OpenPopup(kContextMenuId);
+
+		if (!ImGui::BeginPopup(kContextMenuId))
 			return;
 
 		// Recorded here, on the frame the popup actually appears, rather than in a separate
@@ -624,17 +639,8 @@ namespace DefectStudio
 				label.worldPosition = m_ContextMenuWorldPosition;
 				windowState.freeLabels.push_back(std::move(label));
 			}
-			if (ImGui::MenuItem("Arrow"))
-			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
-				RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, m_ContextMenuWorldPosition);
-				arrow.id = windowState.sceneRegistry.AllocateObjectId();
-				windowState.sceneArrows.push_back(std::move(arrow));
-				const std::size_t newIndex = windowState.sceneArrows.size() - 1;
-				windowState.selectedSceneArrows = {windowState.sceneArrows[newIndex].id};
-				windowState.sceneArrowQuickEditActive = true;
-				windowState.sceneArrowQuickEditIndex = newIndex;
-			}
+			DrawFreeSegmentAddItems(windowState, m_ContextMenuWorldPosition);
+			DrawFreePlaneAddItem(windowState, m_ContextMenuWorldPosition);
 			const DrawSelectionDescription drawSelection = DescribeDrawSelection(windowState);
 			if (ImGui::BeginMenu(drawSelection.menuLabel.c_str()))
 			{
@@ -642,8 +648,7 @@ namespace DefectStudio
 				DrawPlaneAddItem(windowState);
 				ImGui::EndMenu();
 			}
-			DrawOrbitalAddMenu(
-				windowState, m_ContextMenuWorldPosition, windowState.anchorOrbitalToSelection);
+			DrawOrbitalAddMenu(windowState, m_ContextMenuWorldPosition);
 			ImGui::EndMenu();
 		}
 

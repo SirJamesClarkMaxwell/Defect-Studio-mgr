@@ -101,7 +101,7 @@ namespace DefectStudio
 	// shared unit m_CylinderMesh/m_ConeMesh, each arrow's mesh has its own proportions (shaftRadius/
 	// headRadius/headLength/length all vary per-arrow), so it can't be instanced from one shared
 	// buffer - every arrow gets its own small VAO/VBO/EBO, indexed by its position in
-	// RendererWindowState::sceneArrows. Rebuilt only when the 4 params below actually change (a
+	// RendererWindowState::sceneArrows. Rebuilt only when the geometry parameters below actually change (a
 	// position/orientation-only drag reuses the same geometry through the draw transform) - the
 	// negative defaults guarantee the very first frame for a slot always rebuilds.
 	struct OpenGlSceneArrowMeshCache
@@ -111,6 +111,9 @@ namespace DefectStudio
 		float headLength = -1.0f;
 		float length = -1.0f;
 		float bulgeStrength = -1.0f;
+		bool dashed = false;
+		float dashLength = -1.0f;
+		float gapLength = -1.0f;
 		OpenGlMeshHandles mesh;
 	};
 

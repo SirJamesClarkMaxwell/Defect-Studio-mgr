@@ -20,6 +20,7 @@ namespace DefectStudio
 	// to ask for it - but every field below is in that key, which is why dragging `resolution` is
 	// the one control that can visibly hitch: meshing is on the main thread.
 	void DrawSceneOrbitalEditor(RendererWindowState &windowState, std::size_t orbitalIndex);
+	void DrawScenePlaneEditor(RendererWindowState &windowState, std::size_t planeIndex);
 
 	// Selection-focused editors used by Object Properties' primary view. These never enumerate
 	// unselected objects, so selecting one arrow cannot leave a wall of orbital/plane controls below

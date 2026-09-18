@@ -2,12 +2,14 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 namespace DefectStudio
 {
 	struct RendererWindowState;
+	enum class OrbitalPreset;
 
 	struct DrawSelectionDescription
 	{
@@ -26,22 +28,27 @@ namespace DefectStudio
 	[[nodiscard]] DrawSelectionDescription DescribeDrawSelection(std::size_t validSelectedAtomCount);
 	[[nodiscard]] DrawSelectionDescription DescribeDrawSelection(const RendererWindowState &windowState);
 
+	// One-centre presets become one orbital per selected atom; two-centre presets consume exactly
+	// one pair. Cursor placement is represented by one empty anchor group.
+	[[nodiscard]] std::vector<std::vector<std::size_t>> ResolveOrbitalAddAnchorGroups(
+		OrbitalPreset preset, const std::vector<std::size_t> &selectedAtoms, bool anchorToSelection);
+
 	// Shared Rysuj item blocks. Kept beside DrawOrbitalAddMenu so the later vertical-toolbar round
 	// can call the same creation paths instead of copying the viewport context menu.
 	void DrawSegmentAddItems(RendererWindowState &windowState);
 	void DrawPlaneAddItem(RendererWindowState &windowState);
+	void DrawFreeSegmentAddItems(RendererWindowState &windowState, const glm::vec3 &worldPosition);
+	void DrawFreePlaneAddItem(RendererWindowState &windowState, const glm::vec3 &worldPosition);
 
 	// The viewport Add menu's "Orbital" submenu, in its own file because RendererPanel.cpp is far
 	// past the ~500-line limit in AGENTS.md and this is the largest self-contained piece of it.
 	//
-	// `contextMenuWorldPosition` is where the right-click landed; `anchorOrbitalToSelection` is the
-	// panel's sticky "place it on the selected atom" preference, read and written here so the
-	// checkbox and the placement decision cannot disagree.
+	// `worldPosition` is the right-click position or 3D cursor. Placement is chosen explicitly by
+	// entering either the selected-atoms catalogue or the free-standing catalogue.
 	//
 	// Assumes an open ImGui menu; draws BeginMenu("Orbital")...EndMenu() and nothing else.
 	void DrawOrbitalAddMenu(
 		RendererWindowState &windowState,
-		const glm::vec3 &contextMenuWorldPosition,
-		bool &anchorOrbitalToSelection,
+		const glm::vec3 &worldPosition,
 		bool drawSubmenu = true);
 } // namespace DefectStudio

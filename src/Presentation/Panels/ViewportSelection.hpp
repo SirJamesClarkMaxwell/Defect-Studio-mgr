@@ -87,4 +87,9 @@ namespace DefectStudio
 
 	[[nodiscard]] bool HandleSceneArrowInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+
+	// Click-select for scenePlanes: ray against the drawn quad (PickScenePlane), no drag. Runs last
+	// in the chain because a plane is usually the backdrop everything else is drawn in front of.
+	[[nodiscard]] bool HandleScenePlaneInteraction(
+		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 } // namespace DefectStudio

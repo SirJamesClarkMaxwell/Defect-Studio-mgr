@@ -621,14 +621,20 @@ namespace DefectStudio
 		float headLength,
 		float totalLength,
 		std::uint32_t radialSegments,
-		float bulgeStrength)
+		float bulgeStrength,
+		bool dashed,
+		float dashLength,
+		float gapLength)
 	{
 		constexpr float TwoPi = 6.283185307f;
 		radialSegments = std::max(radialSegments, 3u);
 		const float shaftEnd = std::max(totalLength - headLength, 0.0f);
+		const std::vector<SceneArrowShaftSegment> shaftSegments =
+			BuildSceneArrowShaftSegments(shaftEnd, dashed, dashLength, gapLength);
 
 		RefinedConeMesh mesh;
-		const std::size_t vertexBudget = static_cast<std::size_t>(radialSegments) * 11u + 1u;
+		const std::size_t vertexBudget = static_cast<std::size_t>(radialSegments) *
+			(11u + shaftSegments.size() * 4u) + shaftSegments.size() * 2u + 1u;
 		mesh.positions.reserve(vertexBudget);
 		mesh.normals.reserve(vertexBudget);
 		mesh.gradientT.reserve(vertexBudget);
@@ -677,25 +683,42 @@ namespace DefectStudio
 				mesh.indices.push_back(nextBottom);
 			}
 		};
+		auto emitCap = [&](const float z, const float radius, const float normalZ) {
+			const std::uint32_t center = static_cast<std::uint32_t>(mesh.positions.size());
+			mesh.positions.emplace_back(0.0f, 0.0f, z);
+			mesh.normals.emplace_back(0.0f, 0.0f, normalZ);
+			mesh.gradientT.push_back(totalLength > 0.0001f ? z / totalLength : 0.0f);
+			const std::uint32_t ring = emitFlatRing(z, radius, normalZ);
+			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
+			{
+				const std::uint32_t next = (segment + 1u) % radialSegments;
+				mesh.indices.push_back(center);
+				mesh.indices.push_back(normalZ < 0.0f ? ring + next : ring + segment);
+				mesh.indices.push_back(normalZ < 0.0f ? ring + segment : ring + next);
+			}
+		};
 
-		// Tail cap fan.
-		const std::uint32_t tailCenter = static_cast<std::uint32_t>(mesh.positions.size());
-		mesh.positions.emplace_back(0.0f, 0.0f, 0.0f);
-		mesh.normals.emplace_back(0.0f, 0.0f, -1.0f);
-		mesh.gradientT.push_back(0.0f);
-		const std::uint32_t tailCapRing = emitFlatRing(0.0f, shaftRadius, -1.0f);
-		for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
+		std::uint32_t shaftTop = 0;
+		bool shaftMeetsHead = false;
+		for (const SceneArrowShaftSegment &segment : shaftSegments)
 		{
-			const std::uint32_t next = (segment + 1u) % radialSegments;
-			mesh.indices.push_back(tailCenter);
-			mesh.indices.push_back(tailCapRing + next);
-			mesh.indices.push_back(tailCapRing + segment);
+			emitCap(segment.start, shaftRadius, -1.0f);
+			const std::uint32_t shaftBottom = emitRadialRing(segment.start, shaftRadius, 1.0f, 0.0f);
+			const std::uint32_t segmentTop = emitRadialRing(segment.end, shaftRadius, 1.0f, 0.0f);
+			connectRings(shaftBottom, segmentTop);
+			shaftMeetsHead = std::abs(segment.end - shaftEnd) <= 0.0001f;
+			if (shaftMeetsHead)
+				shaftTop = segmentTop;
+			else
+				emitCap(segment.end, shaftRadius, 1.0f);
 		}
-
-		// Shaft - plain cylinder, purely radial normal.
-		const std::uint32_t shaftBottom = emitRadialRing(0.0f, shaftRadius, 1.0f, 0.0f);
-		const std::uint32_t shaftTop = emitRadialRing(shaftEnd, shaftRadius, 1.0f, 0.0f);
-		connectRings(shaftBottom, shaftTop);
+		if (!shaftMeetsHead)
+		{
+			// A gap immediately before the head still needs a closed head base; the shoulder below
+			// only covers the annulus between shaft and head radii.
+			emitCap(shaftEnd, shaftRadius, -1.0f);
+			shaftTop = emitRadialRing(shaftEnd, shaftRadius, 1.0f, 0.0f);
+		}
 
 		// Shoulder - the shaft/head transition. bulgeStrength <= 0 (the classic default) collapses this
 		// to a flat annular disc at the shaft/head boundary, facing back toward the tail (-Z) when the
@@ -2544,11 +2567,17 @@ namespace DefectStudio
 
 			if (arrow.kind == ArrowKind::Line)
 			{
-				OpenGlBondInstance shaft;
-				shaft.model = buildBondTransform(arrow.start, arrow.end, shaftRadius);
-				shaft.colorA = shaftColors.start;
-				shaft.colorB = shaftColors.finish;
-				shaftInstances.push_back(shaft);
+				for (const SceneArrowShaftSegment &segment : BuildSceneArrowShaftSegments(
+						 length, style.dashed, style.dashLength, style.gapLength))
+				{
+					OpenGlBondInstance shaft;
+					shaft.model = buildBondTransform(
+						arrow.start + direction * segment.start, arrow.start + direction * segment.end,
+						shaftRadius);
+					shaft.colorA = glm::mix(shaftColors.start, shaftColors.finish, segment.start / length);
+					shaft.colorB = glm::mix(shaftColors.start, shaftColors.finish, segment.end / length);
+					shaftInstances.push_back(shaft);
+				}
 				continue;
 			}
 
@@ -2565,18 +2594,24 @@ namespace DefectStudio
 			OpenGlSceneArrowMeshCache &cacheEntry = resources.sceneArrow3DMeshCache[arrowIndex];
 			if (cacheEntry.shaftRadius != shaftRadius || cacheEntry.headRadius != headRadius ||
 				cacheEntry.headLength != headLength || cacheEntry.length != length ||
-				cacheEntry.bulgeStrength != globalSettings.arrowHeadBulgeStrength)
+				cacheEntry.bulgeStrength != globalSettings.arrowHeadBulgeStrength ||
+				cacheEntry.dashed != style.dashed || cacheEntry.dashLength != style.dashLength ||
+				cacheEntry.gapLength != style.gapLength)
 			{
 				constexpr std::uint32_t kArrow3DRadialSegments = 24u;
 				const RefinedConeMesh welded = BuildWeldedArrowMesh(
 					shaftRadius, headRadius, headLength, length, kArrow3DRadialSegments,
-					globalSettings.arrowHeadBulgeStrength);
+					globalSettings.arrowHeadBulgeStrength, style.dashed, style.dashLength,
+					style.gapLength);
 				UploadSceneArrowMesh(cacheEntry.mesh, welded);
 				cacheEntry.shaftRadius = shaftRadius;
 				cacheEntry.headRadius = headRadius;
 				cacheEntry.headLength = headLength;
 				cacheEntry.length = length;
 				cacheEntry.bulgeStrength = globalSettings.arrowHeadBulgeStrength;
+				cacheEntry.dashed = style.dashed;
+				cacheEntry.dashLength = style.dashLength;
+				cacheEntry.gapLength = style.gapLength;
 			}
 
 			if (cacheEntry.mesh.indexCount > 0)

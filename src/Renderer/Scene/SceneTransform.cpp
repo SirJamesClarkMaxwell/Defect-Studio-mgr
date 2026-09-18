@@ -6,9 +6,11 @@
 #include <cmath>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
@@ -34,6 +36,31 @@ namespace DefectStudio
 		[[nodiscard]] glm::mat3 LabelBasis(float rotationRadians)
 		{
 			return glm::mat3(glm::rotate(glm::mat4(1.0f), rotationRadians, glm::vec3(0.0f, 0.0f, 1.0f)));
+		}
+
+		[[nodiscard]] glm::mat3 PlaneBasis(const PlaneTransformStart &plane)
+		{
+			return glm::mat3(plane.tangent, glm::cross(plane.normal, plane.tangent), plane.normal);
+		}
+
+		[[nodiscard]] glm::vec3 RotatedEulerDegrees(
+			const glm::vec3 &startEulerDegrees, const glm::quat &rotation)
+		{
+			const glm::quat start = glm::quat(glm::radians(startEulerDegrees));
+			return glm::degrees(glm::eulerAngles(glm::normalize(rotation * start)));
+		}
+
+		void RotatePlaneFrame(
+			RendererWindowState::ScenePlane &plane, const PlaneTransformStart &start, const glm::quat &rotation)
+		{
+			plane.normal = glm::normalize(rotation * start.normal);
+			const glm::vec3 rotatedTangent = rotation * start.tangent;
+			const glm::vec3 projected = rotatedTangent - glm::dot(rotatedTangent, plane.normal) * plane.normal;
+			plane.tangent = glm::dot(projected, projected) > kEpsilon * kEpsilon
+				? glm::normalize(projected)
+				: glm::normalize(glm::cross(
+					std::abs(plane.normal.z) < 0.9f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f),
+					plane.normal));
 		}
 
 		[[nodiscard]] glm::vec3 ItemPivot(
@@ -75,12 +102,6 @@ namespace DefectStudio
 		const RendererWindowState &window, SceneArrowTransformTarget arrowTarget)
 	{
 		SceneTransformSelectionSnapshot snapshot;
-		for (const std::size_t index : window.selectedAtomIndices)
-		{
-			if (index < window.structure.atoms.size())
-				snapshot.atoms.push_back({index, window.structure.atoms[index].cartesianPosition});
-		}
-
 		for (const SceneObjectId id : window.selectedPinnedMeasurements)
 		{
 			const std::size_t index = AnnotationIndex(window.pinnedMeasurements, id);
@@ -108,9 +129,41 @@ namespace DefectStudio
 			if (index >= window.sceneArrows.size())
 				continue;
 			const RendererWindowState::SceneArrow &arrow = window.sceneArrows[index];
-			snapshot.arrows.push_back(
-				{index, arrow.start, arrow.end, arrow.style.shaftWidth, arrow.style.headWidth,
-					arrow.style.headLength, arrowTarget});
+			snapshot.arrows.push_back({index, arrow.start, arrow.end, arrowTarget});
+		}
+		for (const SceneObjectId id : window.selectedSceneOrbitals)
+		{
+			const std::size_t index = AnnotationIndex(window.sceneOrbitals, id);
+			if (index >= window.sceneOrbitals.size())
+				continue;
+			const RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[index];
+			const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, window.structure);
+			snapshot.orbitals.push_back(
+				{index, centers.centerA, centers.centerB, orbital.rotationEuler, orbital.scale,
+					!orbital.anchorAtoms.empty(), IsTwoCenterPreset(orbital.preset)});
+		}
+		for (const SceneObjectId id : window.selectedScenePlanes)
+		{
+			const std::size_t index = AnnotationIndex(window.scenePlanes, id);
+			if (index >= window.scenePlanes.size())
+				continue;
+			const RendererWindowState::ScenePlane &plane = window.scenePlanes[index];
+			snapshot.planes.push_back(
+				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents});
+		}
+
+		// Atoms are the gizmo's target only when nothing in the scene layer is selected. Fitting a
+		// plane to three atoms leaves those atoms selected, and without this a G on the new plane
+		// dragged the structure along with it. Atoms stay selected for everything else - "Match
+		// position", the Add menus - they simply stop being transform targets while a scene object
+		// is.
+		if (!HasSceneObjectTransformTargets(snapshot))
+		{
+			for (const std::size_t index : window.selectedAtomIndices)
+			{
+				if (index < window.structure.atoms.size())
+					snapshot.atoms.push_back({index, window.structure.atoms[index].cartesianPosition});
+			}
 		}
 		return snapshot;
 	}
@@ -124,7 +177,9 @@ namespace DefectStudio
 	std::vector<glm::vec3> SceneTransformPivotPositions(const SceneTransformSelectionSnapshot &snapshot)
 	{
 		std::vector<glm::vec3> positions;
-		positions.reserve(snapshot.atoms.size() + snapshot.labels.size() + snapshot.arrows.size() * 2);
+		positions.reserve(
+			snapshot.atoms.size() + snapshot.labels.size() + snapshot.arrows.size() * 2 +
+			snapshot.orbitals.size() * 2 + snapshot.planes.size());
 		for (const AtomTransformStart &atom : snapshot.atoms)
 			positions.push_back(atom.position);
 		for (const LabelTransformStart &label : snapshot.labels)
@@ -136,6 +191,14 @@ namespace DefectStudio
 			if (arrow.target != SceneArrowTransformTarget::Start)
 				positions.push_back(arrow.end);
 		}
+		for (const OrbitalTransformStart &orbital : snapshot.orbitals)
+		{
+			positions.push_back(orbital.centerA);
+			if (orbital.twoCenter)
+				positions.push_back(orbital.centerB);
+		}
+		for (const PlaneTransformStart &plane : snapshot.planes)
+			positions.push_back(plane.center);
 		return positions;
 	}
 
@@ -145,6 +208,8 @@ namespace DefectStudio
 			return ArrowBasis(snapshot.arrows.back());
 		if (!snapshot.labels.empty())
 			return LabelBasis(snapshot.labels.back().rotationRadians);
+		if (!snapshot.planes.empty())
+			return PlaneBasis(snapshot.planes.back());
 		return std::nullopt;
 	}
 
@@ -155,7 +220,8 @@ namespace DefectStudio
 
 	bool HasSceneObjectTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
 	{
-		return !snapshot.labels.empty() || !snapshot.arrows.empty();
+		return !snapshot.labels.empty() || !snapshot.arrows.empty() || !snapshot.orbitals.empty() ||
+			!snapshot.planes.empty();
 	}
 
 	void ApplySceneTransformSelection(
@@ -229,9 +295,61 @@ namespace DefectStudio
 			}
 			else
 			{
-				arrow.style.shaftWidth = std::clamp(start.shaftWidth * delta.scaleFactor, 0.005f, 1.0f);
-				arrow.style.headWidth = std::clamp(start.headWidth * delta.scaleFactor, 0.01f, 1.0f);
-				arrow.style.headLength = std::clamp(start.headLength * delta.scaleFactor, 0.01f, 2.0f);
+				const glm::vec3 origin = (start.start + start.end) * 0.5f;
+				const glm::vec3 pivot = ItemPivot(pivotMode, origin, selectionPivot);
+				arrow.start = ApplyTransformDelta(delta.spatial, start.start, pivot);
+				arrow.end = ApplyTransformDelta(delta.spatial, start.end, pivot);
+			}
+		}
+
+		for (const OrbitalTransformStart &start : snapshot.orbitals)
+		{
+			if (start.index >= window.sceneOrbitals.size())
+				continue;
+			RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[start.index];
+			if (operation == ModalTransformOp::Translate)
+			{
+				orbital.centerA = ApplyTransformDelta(delta.spatial, start.centerA, selectionPivot);
+				if (start.twoCenter)
+					orbital.centerB = ApplyTransformDelta(delta.spatial, start.centerB, selectionPivot);
+				if (start.anchored)
+					orbital.anchorAtoms.clear();
+			}
+			else if (operation == ModalTransformOp::Rotate)
+			{
+				const glm::vec3 origin =
+					start.twoCenter ? (start.centerA + start.centerB) * 0.5f : start.centerA;
+				const glm::vec3 pivot = ItemPivot(pivotMode, origin, selectionPivot);
+				orbital.centerA = ApplyTransformDelta(delta.spatial, start.centerA, pivot);
+				if (start.twoCenter)
+					orbital.centerB = ApplyTransformDelta(delta.spatial, start.centerB, pivot);
+				orbital.rotationEuler = RotatedEulerDegrees(start.rotationEuler, delta.spatial.rotation);
+			}
+			else
+			{
+				orbital.scale = std::clamp(start.scale * delta.scaleFactor, 0.05f, 20.0f);
+			}
+		}
+
+		for (const PlaneTransformStart &start : snapshot.planes)
+		{
+			if (start.index >= window.scenePlanes.size())
+				continue;
+			RendererWindowState::ScenePlane &plane = window.scenePlanes[start.index];
+			if (operation == ModalTransformOp::Translate)
+			{
+				plane.center = ApplyTransformDelta(delta.spatial, start.center, selectionPivot);
+			}
+			else if (operation == ModalTransformOp::Rotate)
+			{
+				const glm::vec3 pivot = ItemPivot(pivotMode, start.center, selectionPivot);
+				plane.center = ApplyTransformDelta(delta.spatial, start.center, pivot);
+				RotatePlaneFrame(plane, start, delta.spatial.rotation);
+			}
+			else
+			{
+				plane.halfExtents = glm::clamp(
+					start.halfExtents * delta.scaleFactor, glm::vec2(0.01f), glm::vec2(1000.0f));
 			}
 		}
 	}
@@ -266,9 +384,31 @@ namespace DefectStudio
 			RendererWindowState::SceneArrow &arrow = window.sceneArrows[start.index];
 			arrow.start = start.start;
 			arrow.end = start.end;
-			arrow.style.shaftWidth = start.shaftWidth;
-			arrow.style.headWidth = start.headWidth;
-			arrow.style.headLength = start.headLength;
+		}
+		for (const OrbitalTransformStart &start : snapshot.orbitals)
+		{
+			if (start.index >= window.sceneOrbitals.size())
+				continue;
+			RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[start.index];
+			orbital.centerA = start.centerA;
+			orbital.centerB = start.centerB;
+			orbital.rotationEuler = start.rotationEuler;
+			orbital.scale = start.scale;
+			if (start.anchored && window.modalTransformSceneObjectsBefore.has_value() &&
+				start.index < window.modalTransformSceneObjectsBefore->sceneOrbitals.size())
+			{
+				orbital.anchorAtoms = window.modalTransformSceneObjectsBefore->sceneOrbitals[start.index].anchorAtoms;
+			}
+		}
+		for (const PlaneTransformStart &start : snapshot.planes)
+		{
+			if (start.index >= window.scenePlanes.size())
+				continue;
+			RendererWindowState::ScenePlane &plane = window.scenePlanes[start.index];
+			plane.center = start.center;
+			plane.normal = start.normal;
+			plane.tangent = start.tangent;
+			plane.halfExtents = start.halfExtents;
 		}
 	}
 } // namespace DefectStudio

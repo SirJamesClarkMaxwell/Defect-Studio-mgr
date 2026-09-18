@@ -14,12 +14,9 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
-#include "Renderer/RendererViewCamera.hpp"
-#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
-#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -183,6 +180,22 @@ namespace DefectStudio
 		if (!ImGui::BeginPopup(kPopupId))
 			return;
 
+		RendererWindowState *windowState = nullptr;
+		for (RendererWindowState &candidate : m_Layer.GetWindows())
+		{
+			if (candidate.windowId == m_AddMenuWindowId)
+			{
+				windowState = &candidate;
+				break;
+			}
+		}
+		if (windowState == nullptr)
+		{
+			ImGui::TextDisabled("Target window is no longer open.");
+			ImGui::EndPopup();
+			return;
+		}
+
 		if (ImGui::MenuItem("Atom..."))
 		{
 			m_AddAtomPopupRequested = true;
@@ -193,61 +206,25 @@ namespace DefectStudio
 
 		if (ImGui::MenuItem("Label"))
 		{
-			for (RendererWindowState &candidate : m_Layer.GetWindows())
-			{
-				if (candidate.windowId != m_AddMenuWindowId)
-					continue;
-				PushPinnedMeasurementUndoSnapshot(candidate);
-				RendererWindowState::FreeLabel label;
-				label.id = candidate.sceneRegistry.AllocateObjectId();
-				label.worldPosition = m_AddMenuPosition;
-				candidate.freeLabels.push_back(std::move(label));
-				break;
-			}
+			PushPinnedMeasurementUndoSnapshot(*windowState);
+			RendererWindowState::FreeLabel label;
+			label.id = windowState->sceneRegistry.AllocateObjectId();
+			label.worldPosition = m_AddMenuPosition;
+			windowState->freeLabels.push_back(std::move(label));
 		}
 
-		if (ImGui::MenuItem("Arrow"))
-		{
-			for (RendererWindowState &candidate : m_Layer.GetWindows())
-			{
-				if (candidate.windowId != m_AddMenuWindowId)
-					continue;
-				PushPinnedMeasurementUndoSnapshot(candidate);
-				RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(candidate, m_AddMenuPosition);
-				arrow.id = candidate.sceneRegistry.AllocateObjectId();
-				candidate.sceneArrows.push_back(std::move(arrow));
-				const std::size_t newIndex = candidate.sceneArrows.size() - 1;
-				candidate.selectedSceneArrows = {candidate.sceneArrows[newIndex].id};
-				candidate.sceneArrowQuickEditActive = true;
-				candidate.sceneArrowQuickEditIndex = newIndex;
-				break;
-			}
-		}
+		DrawFreeSegmentAddItems(*windowState, m_AddMenuPosition);
+		DrawFreePlaneAddItem(*windowState, m_AddMenuPosition);
 
-		if (ImGui::BeginMenu("Orbital"))
+		const DrawSelectionDescription drawSelection = DescribeDrawSelection(*windowState);
+		if (ImGui::BeginMenu(drawSelection.menuLabel.c_str()))
 		{
-			for (int presetIndex = static_cast<int>(OrbitalPreset::S);
-				presetIndex <= static_cast<int>(OrbitalPreset::Sp3SigmaStar); ++presetIndex)
-			{
-				const OrbitalPreset preset = static_cast<OrbitalPreset>(presetIndex);
-				if (!ImGui::MenuItem(OrbitalPresetName(preset)))
-					continue;
-				for (RendererWindowState &candidate : m_Layer.GetWindows())
-				{
-					if (candidate.windowId != m_AddMenuWindowId)
-						continue;
-					PushPinnedMeasurementUndoSnapshot(candidate);
-					RendererWindowState::SceneOrbital orbital =
-						MakeDefaultSceneOrbital(candidate, preset, m_AddMenuPosition);
-					orbital.id = candidate.sceneRegistry.AllocateObjectId();
-					candidate.sceneOrbitals.push_back(std::move(orbital));
-					candidate.selectedSceneOrbitals = {candidate.sceneOrbitals.back().id};
-					SceneSystem::SyncLabelEntities(candidate.sceneRegistry, candidate);
-					break;
-				}
-			}
+			DrawSegmentAddItems(*windowState);
+			DrawPlaneAddItem(*windowState);
 			ImGui::EndMenu();
 		}
+
+		DrawOrbitalAddMenu(*windowState, m_AddMenuPosition);
 
 		ImGui::EndPopup();
 	}

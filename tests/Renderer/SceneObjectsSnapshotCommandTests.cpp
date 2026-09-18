@@ -40,6 +40,9 @@ namespace DefectStudio::Tests
 	TEST(SceneObjectsSnapshotCommandTests, UndoRestoresBeforeAndRedoRestoresAfter)
 	{
 		RendererWindowState window = MakeWindowWithLabel("before");
+		RendererWindowState::ScenePlane plane;
+		plane.id = SceneObjectId{7};
+		window.scenePlanes.push_back(plane);
 		int restoredCount = 0;
 		UndoStack stack;
 		ASSERT_TRUE(stack.PushExecuted(CreateSceneObjectsSnapshotCommand(
@@ -48,19 +51,26 @@ namespace DefectStudio::Tests
 
 		window.freeLabels[0].text = "after";
 		window.sceneArrows.push_back({});
+		window.scenePlanes[0].alpha = 0.8f;
 		window.selectedFreeLabels.push_back(window.freeLabels[0].id);
+		window.selectedScenePlanes.push_back(plane.id);
 		window.freeLabelDragging = true;
 
 		ASSERT_TRUE(stack.Undo().HasValue());
 		ASSERT_EQ(window.freeLabels.size(), 1u);
 		EXPECT_EQ(window.freeLabels[0].text, "before");
 		EXPECT_TRUE(window.sceneArrows.empty());
+		ASSERT_EQ(window.scenePlanes.size(), 1u);
+		EXPECT_FLOAT_EQ(window.scenePlanes[0].alpha, 0.35f);
 		EXPECT_TRUE(window.selectedFreeLabels.empty());
+		EXPECT_TRUE(window.selectedScenePlanes.empty());
 		EXPECT_FALSE(window.freeLabelDragging);
 
 		ASSERT_TRUE(stack.Redo().HasValue());
 		EXPECT_EQ(window.freeLabels[0].text, "after");
 		EXPECT_EQ(window.sceneArrows.size(), 1u);
+		ASSERT_EQ(window.scenePlanes.size(), 1u);
+		EXPECT_FLOAT_EQ(window.scenePlanes[0].alpha, 0.8f);
 		EXPECT_EQ(restoredCount, 2);
 	}
 

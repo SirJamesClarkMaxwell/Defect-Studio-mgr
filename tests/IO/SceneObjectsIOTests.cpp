@@ -93,26 +93,32 @@ namespace DefectStudio::Tests
 	{
 		PersistedSceneArrow arrow;
 		arrow.persistKey = "00000000000000000000000000000001";
-		arrow.kind = PersistedArrowKind::Arrow2D;
+		arrow.kind = PersistedArrowKind::Arrow3D;
 		arrow.orientation2D = PersistedArrow2DOrientation::FixedPlane;
 		arrow.fixedPlane = PersistedWorldPlane::YZ;
 		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
 		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
 		arrow.style.color = glm::vec3(0.2f, 0.4f, 0.6f);
 		arrow.style.headLength = 0.5f;
+		arrow.style.dashed = true;
+		arrow.style.dashLength = 0.4f;
+		arrow.style.gapLength = 0.2f;
 
 		std::vector<StructuredError> warnings;
 		const SceneObjectsFile loaded = RoundTrip(SingleObject(arrow), warnings);
 		EXPECT_TRUE(warnings.empty());
 		const auto *got = std::get_if<PersistedSceneArrow>(&loaded.structures.at(0).objects.at(0));
 		ASSERT_NE(got, nullptr);
-		EXPECT_EQ(got->kind, PersistedArrowKind::Arrow2D);
+		EXPECT_EQ(got->kind, PersistedArrowKind::Arrow3D);
 		EXPECT_EQ(got->orientation2D, PersistedArrow2DOrientation::FixedPlane);
 		EXPECT_EQ(got->fixedPlane, PersistedWorldPlane::YZ);
 		EXPECT_EQ(got->start, arrow.start);
 		EXPECT_EQ(got->end, arrow.end);
 		EXPECT_EQ(got->style.color, arrow.style.color);
 		EXPECT_FLOAT_EQ(got->style.headLength, 0.5f);
+		EXPECT_TRUE(got->style.dashed);
+		EXPECT_FLOAT_EQ(got->style.dashLength, 0.4f);
+		EXPECT_FLOAT_EQ(got->style.gapLength, 0.2f);
 	}
 
 	TEST(SceneObjectsIOTests, SceneOrbitalRoundTrips)
@@ -190,6 +196,8 @@ namespace DefectStudio::Tests
 		plane.normal = glm::vec3(0.0f, 1.0f, 0.0f);
 		plane.tangent = glm::vec3(0.0f, 0.0f, 1.0f);
 		plane.halfExtents = glm::vec2(4.0f, 2.5f);
+		plane.anchorAtoms = {{2, "C", glm::vec3(1.0f, 2.0f, 3.0f)},
+			{5, "N", glm::vec3(4.0f, 5.0f, 6.0f)}, {9, "O", glm::vec3(7.0f, 8.0f, 9.0f)}};
 		plane.color = glm::vec3(0.2f, 0.8f, 0.4f);
 		plane.alpha = 0.5f;
 		plane.showBorder = false;
@@ -206,6 +214,10 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(got->normal, plane.normal);
 		EXPECT_EQ(got->tangent, plane.tangent);
 		EXPECT_EQ(got->halfExtents, plane.halfExtents);
+		ASSERT_EQ(got->anchorAtoms.size(), 3u);
+		EXPECT_EQ(got->anchorAtoms[0].index, 2u);
+		EXPECT_EQ(got->anchorAtoms[1].element, "N");
+		EXPECT_EQ(got->anchorAtoms[2].position, glm::vec3(7.0f, 8.0f, 9.0f));
 		EXPECT_EQ(got->color, plane.color);
 		EXPECT_FLOAT_EQ(got->alpha, 0.5f);
 		EXPECT_FALSE(got->showBorder);
@@ -248,6 +260,9 @@ namespace DefectStudio::Tests
 		const auto *legacyArrow = std::get_if<PersistedSceneArrow>(&parsed.structures[0].objects[0]);
 		ASSERT_NE(legacyArrow, nullptr);
 		EXPECT_FALSE(legacyArrow->style.useGradient);
+		EXPECT_FALSE(legacyArrow->style.dashed);
+		EXPECT_FLOAT_EQ(legacyArrow->style.dashLength, 0.25f);
+		EXPECT_FLOAT_EQ(legacyArrow->style.gapLength, 0.15f);
 	}
 
 	TEST(SceneObjectsIOTests, UnknownKindAndInvalidEntriesAreSkippedWithWarningsAndDroppedOnResave)

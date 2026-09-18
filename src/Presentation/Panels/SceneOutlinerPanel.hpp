@@ -47,21 +47,55 @@ namespace DefectStudio
 
 	private:
 		void drawSpeciesGroup(RendererWindowState &windowState, const std::string &species, const std::vector<std::size_t> &atomIndices);
-		void drawAtomRow(RendererWindowState &windowState, std::size_t atomIndex);
+		void drawAtomRow(
+			RendererWindowState &windowState, std::size_t atomIndex,
+			const std::vector<std::size_t> &orderedAtomIndices);
 		// Free labels + pinned bond/angle measurements together ("Labels"), sceneArrows
 		// ("Arrows") and sceneOrbitals ("Orbitals") - child groups under a window row, same nesting shape as
 		// drawSpeciesGroup/drawAtomRow above, both visibility columns included. Row click selects in
 		// the viewport the same way an atom row's does.
 		void drawLabelsGroup(RendererWindowState &windowState);
-		void drawFreeLabelRow(RendererWindowState &windowState, std::size_t labelIndex);
-		void drawPinnedMeasurementRow(RendererWindowState &windowState, std::size_t pinIndex);
+		void drawFreeLabelRow(
+			RendererWindowState &windowState, std::size_t labelIndex,
+			const std::vector<SceneObjectId> &orderedIds);
+		void drawPinnedMeasurementRow(
+			RendererWindowState &windowState, std::size_t pinIndex,
+			const std::vector<SceneObjectId> &orderedIds);
 		void drawArrowsGroup(RendererWindowState &windowState);
-		void drawSceneArrowRow(RendererWindowState &windowState, std::size_t arrowIndex);
+		void drawSceneArrowRow(
+			RendererWindowState &windowState, std::size_t arrowIndex,
+			const std::vector<SceneObjectId> &orderedIds);
 		void drawOrbitalsGroup(RendererWindowState &windowState);
-		void drawSceneOrbitalRow(RendererWindowState &windowState, std::size_t orbitalIndex);
+		void drawSceneOrbitalRow(
+			RendererWindowState &windowState, std::size_t orbitalIndex,
+			const std::vector<SceneObjectId> &orderedIds);
 		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
 		// SceneRegistry entity, because nothing about it needs a transform or a selection component.
 		void drawPlanesGroup(RendererWindowState &windowState);
+
+		enum class SelectionRowKind
+		{
+			Atom,
+			FreeLabel,
+			PinnedMeasurement,
+			Arrow,
+			Orbital,
+			Plane
+		};
+		struct SelectionAnchor
+		{
+			std::string windowId;
+			SelectionRowKind kind = SelectionRowKind::Atom;
+			std::size_t atomIndex = 0;
+			SceneObjectId objectId;
+		};
+		void applyAtomRowSelection(
+			RendererWindowState &windowState, const std::vector<std::size_t> &orderedRows,
+			std::size_t clickedIndex);
+		void applyAnnotationRowSelection(
+			RendererWindowState &windowState, SelectionRowKind kind,
+			const std::vector<SceneObjectId> &orderedRows, SceneObjectId clickedId,
+			std::vector<SceneObjectId> &selection);
 
 		// "Copy view + visibility to..." (RMB on a window row) - atom-matches source against target
 		// (both already-open windows, unlike DisplacementComparisonPanel's file-based comparison) via
@@ -70,6 +104,12 @@ namespace DefectStudio
 		// + poll like every other job-backed panel in this codebase.
 		void dispatchCopyViewAndVisibility(const RendererWindowState &source, const std::string &targetWindowId);
 		void pollCopyJob();
+		// Esc: drop every window's selection - atoms, bonds and all five annotation kinds - so the
+		// key means the same thing here as clicking empty space does in the viewport.
+		void clearSelection();
+		// Writes ImGuiConfigFlags_NavEnableKeyboard for the NEXT frame and records the focus it was
+		// derived from. Called once at the end of Render() on every path, including the early one.
+		void applyKeyboardNavFlag(bool enabled);
 
 		RendererLayer &m_Layer;
 		WeakRef<DomainLayer> m_DomainLayer;
@@ -85,6 +125,10 @@ namespace DefectStudio
 		int m_EditingWindowIndex = -1;
 		int m_ActiveWindowIndex = -1;
 		bool m_JustStartedEditing = false;
+		// Whether this panel held keyboard focus last frame - what gates ImGui's Nav flag, which is
+		// read at NewFrame and so cannot be decided from this frame's focus.
+		bool m_HadKeyboardFocus = false;
+		std::optional<SelectionAnchor> m_SelectionAnchor;
 		std::array<char, 128> m_EditingBuffer{};
 	};
 } // namespace DefectStudio

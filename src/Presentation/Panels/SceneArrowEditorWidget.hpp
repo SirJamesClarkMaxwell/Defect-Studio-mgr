@@ -101,8 +101,18 @@ namespace DefectStudio
 	// RendererAtomData::color is already the renderer-resolved element colour, including user style
 	// overrides, so matching never needs its own palette lookup.
 	[[nodiscard]] SceneArrowAtomMatchDescription DescribeSceneArrowAtomMatch(std::size_t validSelectedAtomCount);
+	// radiusBuffer leaves a gap at each end measured in that atom's own radii, so an arrow between
+	// two atoms starts at the sphere's surface rather than buried in it. 0 = centre to centre (the
+	// old behaviour). Both gaps shrink together rather than letting the arrow invert on a short bond.
 	void MatchSceneArrowPositionToAtoms(
-		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom);
+		RendererWindowState::SceneArrow &arrow,
+		const RendererAtomData &startAtom,
+		const RendererAtomData &endAtom,
+		float radiusBuffer = 0.0f);
+	// The one buffer value shared by the "Match position" button and the Draw menu's Line/Arrow
+	// items, so an arrow drawn from the menu and one snapped afterwards land in the same place.
+	[[nodiscard]] float &GetSceneArrowAtomBuffer();
+	void DrawSceneArrowAtomBufferControl();
 	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom);
 	void MatchSceneArrowColorToAtoms(
 		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom);

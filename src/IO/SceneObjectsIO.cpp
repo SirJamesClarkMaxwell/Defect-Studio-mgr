@@ -176,6 +176,9 @@ void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
 			return false;
 		arrow.style.alpha = node["style"]["alpha"].as<float>(arrow.style.alpha);
 		arrow.style.shaftWidth = node["style"]["shaftWidth"].as<float>(arrow.style.shaftWidth);
+		arrow.style.dashed = node["style"]["dashed"].as<bool>(arrow.style.dashed);
+		arrow.style.dashLength = node["style"]["dash_length"].as<float>(arrow.style.dashLength);
+		arrow.style.gapLength = node["style"]["gap_length"].as<float>(arrow.style.gapLength);
 		if (node["style"]["outlineColor"] && !Vec3(node["style"]["outlineColor"], arrow.style.outlineColor))
 			return false;
 		arrow.style.outlineWidth = node["style"]["outlineWidth"].as<float>(arrow.style.outlineWidth);
@@ -199,7 +202,9 @@ void EmitStyle(YAML::Emitter &emit, const PersistedArrowStyle &style)
 	emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap;
 	EmitVec3(emit, "color", style.color);
 	emit << YAML::Key << "alpha" << YAML::Value << style.alpha << YAML::Key << "shaftWidth" << YAML::Value
-		 << style.shaftWidth;
+		 << style.shaftWidth << YAML::Key << "dashed" << YAML::Value << style.dashed << YAML::Key
+		 << "dash_length" << YAML::Value << style.dashLength << YAML::Key << "gap_length" << YAML::Value
+		 << style.gapLength;
 	EmitVec3(emit, "outlineColor", style.outlineColor);
 	emit << YAML::Key << "outlineWidth" << YAML::Value << style.outlineWidth << YAML::Key << "headWidth" << YAML::Value
 		 << style.headWidth << YAML::Key << "headLength" << YAML::Value << style.headLength << YAML::Key

@@ -14,6 +14,7 @@
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
@@ -27,6 +28,7 @@ namespace DefectStudio
 		const WeakRef<CommandRegistry> &commandRegistry)
 	{
 		ResolveAnchoredOrbitals(windowState);
+		ResolveAnchoredScenePlanes(windowState);
 		// Keeps each label entity's TransformComponent current before the gizmo/hit-test below read
 		// it - anchors move every frame with the atoms they measure (gizmo drag, nudge, relaxation
 		// playback), so a stale transform would visibly lag a frame behind the label's own draw.
@@ -47,7 +49,8 @@ namespace DefectStudio
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered) ||
-			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered);
+			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleScenePlaneInteraction(windowState, imageOrigin, imageSize, hovered);
 	}
 
 	bool DrawAndDispatchSelectionTools(

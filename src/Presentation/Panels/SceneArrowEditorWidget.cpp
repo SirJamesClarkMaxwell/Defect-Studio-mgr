@@ -74,6 +74,30 @@ namespace DefectStudio
 			});
 		}
 
+		if (kind != ArrowKind::Arrow2D)
+		{
+			bool dashed = style.dashed;
+			if (ImGui::Checkbox("Dashed##ArrowStyleDashed", &dashed))
+			{
+				snapshot();
+				style.dashed = dashed;
+				changed = true;
+			}
+			if (style.dashed)
+			{
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(90.0f);
+				changed |= drawUndoableFloat(style.dashLength, snapshot, [](float &v) {
+					return ImGui::DragFloat("Dash##ArrowStyleDashLength", &v, 0.01f, 0.01f, 10.0f, "%.2f");
+				});
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(90.0f);
+				changed |= drawUndoableFloat(style.gapLength, snapshot, [](float &v) {
+					return ImGui::DragFloat("Gap##ArrowStyleGapLength", &v, 0.01f, 0.01f, 10.0f, "%.2f");
+				});
+			}
+		}
+
 		if (kind == ArrowKind::Arrow2D || kind == ArrowKind::Arrow3D)
 		{
 			ImGui::SetNextItemWidth(100.0f);

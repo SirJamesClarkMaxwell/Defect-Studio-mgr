@@ -90,6 +90,9 @@ renderer:
   viewport:
     axis_button_size: 34
     icon_button_size: 33
+    transform_translate_snap: 0.1
+    transform_rotate_snap_degrees: 5
+    transform_scale_snap: 0.1
   toolbar_wheel:
     rotation_step_delta: 1
     zoom_step_delta: 1

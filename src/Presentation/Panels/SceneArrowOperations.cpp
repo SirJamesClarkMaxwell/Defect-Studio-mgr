@@ -122,11 +122,47 @@ namespace DefectStudio
 		return description;
 	}
 
+	float &GetSceneArrowAtomBuffer()
+	{
+		// Session-wide, deliberately not per-arrow: it is the setting for the *act* of snapping an
+		// arrow to two atoms, not a property of the arrow that results - once drawn, the endpoints
+		// are ordinary coordinates the user can drag. 1.0 = start exactly at the drawn sphere.
+		static float buffer = 1.0f;
+		return buffer;
+	}
+
 	void MatchSceneArrowPositionToAtoms(
-		RendererWindowState::SceneArrow &arrow, const RendererAtomData &startAtom, const RendererAtomData &endAtom)
+		RendererWindowState::SceneArrow &arrow,
+		const RendererAtomData &startAtom,
+		const RendererAtomData &endAtom,
+		const float radiusBuffer)
 	{
 		arrow.start = startAtom.cartesianPosition;
 		arrow.end = endAtom.cartesianPosition;
+		if (radiusBuffer <= 0.0f)
+			return;
+
+		const glm::vec3 delta = arrow.end - arrow.start;
+		const float distance = glm::length(delta);
+		const float requested = radiusBuffer * (startAtom.radius + endAtom.radius);
+		if (distance <= 1e-4f || requested <= 1e-4f)
+			return;
+
+		// Overlapping spheres - a short bond, or a big buffer - would otherwise trim past the far
+		// end and draw the arrow backwards. Shrink both gaps together so the arrow keeps a tenth
+		// of its length instead of inverting.
+		const float scale = std::min(1.0f, 0.9f * distance / requested);
+		const glm::vec3 direction = delta / distance;
+		arrow.start += direction * (radiusBuffer * startAtom.radius * scale);
+		arrow.end -= direction * (radiusBuffer * endAtom.radius * scale);
+	}
+
+	void DrawSceneArrowAtomBufferControl()
+	{
+		ImGui::SetNextItemWidth(120.0f);
+		ImGui::DragFloat("Bufor##SceneArrowAtomBuffer", &GetSceneArrowAtomBuffer(), 0.02f, 0.0f, 3.0f, "%.2f r");
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+			ImGui::SetTooltip("Odstep od srodka atomu, w promieniach kuli. 0 = od srodka do srodka.");
 	}
 
 	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom)
@@ -160,6 +196,8 @@ namespace DefectStudio
 				validAtomIndices.push_back(atomIndex);
 
 		const SceneArrowAtomMatchDescription description = DescribeSceneArrowAtomMatch(validAtomIndices.size());
+		DrawSceneArrowAtomBufferControl();
+		ImGui::SameLine();
 		ImGui::BeginDisabled(!description.canMatchPosition);
 		const bool matchPosition = ImGui::Button("Match position##SceneArrowMatchPosition");
 		ImGui::EndDisabled();
@@ -175,7 +213,8 @@ namespace DefectStudio
 			MatchSceneArrowPositionToAtoms(
 				arrow,
 				windowState.structure.atoms[validAtomIndices[0]],
-				windowState.structure.atoms[validAtomIndices[1]]);
+				windowState.structure.atoms[validAtomIndices[1]],
+				GetSceneArrowAtomBuffer());
 		}
 
 		ImGui::SameLine();
@@ -232,6 +271,9 @@ namespace DefectStudio
 				continue;
 			RendererWindowState::ArrowStyle &style = windowState.sceneArrows[index].style;
 			style.shaftWidth = clipboard->shaftWidth;
+			style.dashed = clipboard->dashed;
+			style.dashLength = clipboard->dashLength;
+			style.gapLength = clipboard->gapLength;
 			style.headWidth = clipboard->headWidth;
 			style.headLength = clipboard->headLength;
 			style.outlineWidth = clipboard->outlineWidth;

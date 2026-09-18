@@ -207,6 +207,33 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(target.sceneArrows[0].style.alpha, 0.5f);
 	}
 
+	TEST(SceneObjectPersistenceTests, AnchoredPlaneSurvivesExtractAndApply)
+	{
+		RendererWindowState source = MakeWindow();
+		RendererWindowState::ScenePlane plane;
+		plane.anchorAtoms = {0, 1, 2};
+		plane.center = glm::vec3(0.5f, 0.5f, 0.0f);
+		source.scenePlanes.push_back(plane);
+		EnsureScenePersistKeys(source);
+
+		const std::vector<PersistedSceneObject> saved = ExtractPersistedSceneObjects(source);
+		ASSERT_EQ(saved.size(), 1u);
+		const auto &savedPlane = std::get<PersistedScenePlane>(saved[0]);
+		ASSERT_EQ(savedPlane.anchorAtoms.size(), 3u);
+		EXPECT_EQ(savedPlane.anchorAtoms[0].element, "C");
+		EXPECT_EQ(savedPlane.anchorAtoms[1].element, "N");
+		EXPECT_EQ(savedPlane.anchorAtoms[2].position, glm::vec3(0.0f, 1.5f, 0.0f));
+
+		RendererWindowState target = MakeWindow();
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(target, saved, warnings);
+
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(target.scenePlanes.size(), 1u);
+		EXPECT_EQ(target.scenePlanes[0].anchorAtoms, (std::vector<std::size_t>{0, 1, 2}));
+		EXPECT_EQ(target.scenePlanes[0].center, plane.center);
+	}
+
 	TEST(SceneObjectPersistenceTests, MergeDedupsByKeyMostRecentWinsAndKeepsDeletedElsewhere)
 	{
 		const std::vector<PersistedSceneObject> older = {MakeLabel("a", "a-old"), MakeLabel("b", "b-only-in-older"), MakeLabel("", "anon1")};

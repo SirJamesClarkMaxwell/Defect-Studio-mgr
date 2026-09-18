@@ -16,6 +16,36 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(arrow.end, second.cartesianPosition);
 	}
 
+	TEST(SceneArrowAtomMatchTests, TheBufferLeavesAGapOfOneRadiusAtEachEnd)
+	{
+		RendererWindowState::SceneArrow unbuffered;
+		RendererWindowState::SceneArrow buffered;
+		const RendererAtomData first{"C", glm::vec3(0.0f), glm::vec3(0.0f), 0.5f};
+		const RendererAtomData second{"O", glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0.25f};
+
+		MatchSceneArrowPositionToAtoms(unbuffered, first, second, 0.0f);
+		MatchSceneArrowPositionToAtoms(buffered, first, second, 1.0f);
+
+		EXPECT_GT(glm::distance(buffered.start, first.cartesianPosition),
+			glm::distance(unbuffered.start, first.cartesianPosition));
+		EXPECT_GT(glm::distance(buffered.end, second.cartesianPosition),
+			glm::distance(unbuffered.end, second.cartesianPosition));
+		EXPECT_LT(buffered.start.x, buffered.end.x);
+	}
+
+	TEST(SceneArrowAtomMatchTests, ABufferBiggerThanTheGapDoesNotInvertTheArrow)
+	{
+		RendererWindowState::SceneArrow arrow;
+		// Overlapping spheres: 2.0 + 2.0 of trim over a 1.0 separation would put start past end.
+		const RendererAtomData first{"C", glm::vec3(0.0f), glm::vec3(0.0f), 2.0f};
+		const RendererAtomData second{"C", glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f), 2.0f};
+
+		MatchSceneArrowPositionToAtoms(arrow, first, second, 1.0f);
+
+		EXPECT_LT(arrow.start.x, arrow.end.x);
+		EXPECT_NEAR(arrow.end.x - arrow.start.x, 0.1f, 1e-5f);
+	}
+
 	TEST(SceneArrowAtomMatchTests, OneAtomColorCreatesAFlatElementColor)
 	{
 		RendererWindowState::SceneArrow arrow;

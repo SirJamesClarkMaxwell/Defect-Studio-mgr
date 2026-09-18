@@ -100,8 +100,10 @@ namespace DefectStudio
 				cache.mesh.indexCount,
 				camera,
 				globalSettings,
-				ApplySceneSelectionHighlight(orbital.positiveLobeColor, selected),
-				ApplySceneSelectionHighlight(orbital.negativeLobeColor, selected),
+				ApplySceneSelectionHighlight(
+					orbital.positiveLobeColor, selected, kSceneSurfaceSelectionHighlightStrength),
+				ApplySceneSelectionHighlight(
+					orbital.negativeLobeColor, selected, kSceneSurfaceSelectionHighlightStrength),
 				orbital.alpha,
 				sceneOffset);
 		}

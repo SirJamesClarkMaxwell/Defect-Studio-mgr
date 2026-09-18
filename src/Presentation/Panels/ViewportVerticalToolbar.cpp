@@ -134,72 +134,6 @@ namespace DefectStudio
 			eventBus->Publish(event);
 		};
 
-		auto disabledToolButton = [&](const char *id, const char *iconFileName, const char *fallback,
-			const char *tooltip, bool active, bool enabled) -> bool
-		{
-			ImGui::BeginDisabled(!enabled);
-			const bool pressed = toolButton(id, iconFileName, fallback, tooltip, active);
-			ImGui::EndDisabled();
-			return pressed;
-		};
-
-		const DrawSelectionDescription drawSelection = DescribeDrawSelection(windowState);
-
-		const bool segmentPressed = disabledToolButton(
-			"##ToolAddSegment", "tool-add-arrow.png", "Arr",
-			drawSelection.canDrawSegment ? "Add line or arrow" : drawSelection.segmentTooltip.c_str(), false,
-			drawSelection.canDrawSegment);
-		const ImVec2 segmentPopupPosition(
-			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
-		if (segmentPressed)
-			ImGui::OpenPopup("##AddSegmentPopup");
-		ImGui::SetNextWindowPos(segmentPopupPosition, ImGuiCond_Appearing);
-		if (ImGui::BeginPopup("##AddSegmentPopup"))
-		{
-			DrawSegmentAddItems(windowState);
-			ImGui::EndPopup();
-		}
-
-		const bool planePressed = disabledToolButton(
-			"##ToolAddPlane", "tool-add-plane.png", "Pln",
-			drawSelection.canDrawPlane ? "Add plane from selected atoms" : drawSelection.planeTooltip.c_str(), false,
-			drawSelection.canDrawPlane);
-		const ImVec2 planePopupPosition(
-			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
-		if (planePressed)
-			ImGui::OpenPopup("##AddPlanePopup");
-		ImGui::SetNextWindowPos(planePopupPosition, ImGuiCond_Appearing);
-		if (ImGui::BeginPopup("##AddPlanePopup"))
-		{
-			DrawPlaneAddItem(windowState);
-			ImGui::EndPopup();
-		}
-
-		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "+", "Add atom", false))
-		{
-			RendererEvents::Viewport::AddAtomPopupToggleRequested event;
-			event.windowId = windowState.windowId;
-			const ImVec2 itemMinimum = ImGui::GetItemRectMin();
-			const ImVec2 itemMaximum = ImGui::GetItemRectMax();
-			event.screenPosition = glm::vec2(itemMaximum.x + 4.0f * uiScale, itemMinimum.y);
-			eventBus->Publish(event);
-		}
-
-		const bool orbitalPressed =
-			toolButton("##ToolAddOrbital", "tool-add-orbital.png", "Orb", "Add orbital at the 3D cursor", false);
-		const ImVec2 orbitalPopupPosition(
-			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
-		if (orbitalPressed)
-			ImGui::OpenPopup("##AddOrbitalPopup");
-		ImGui::SetNextWindowPos(orbitalPopupPosition, ImGuiCond_Appearing);
-		if (ImGui::BeginPopup("##AddOrbitalPopup"))
-		{
-			DrawOrbitalAddMenu(
-				windowState, windowState.cursor3DPosition, windowState.anchorOrbitalToSelection, false);
-			ImGui::EndPopup();
-		}
-		ImGui::Spacing();
-
 		if (toolButton(
 				"##ToolNone", "tool-select.png", "Sel", "Selection tool - plain click-select, no drag tool active",
 				windowState.activeSelectionTool == SelectionToolMode::None))
@@ -332,6 +266,66 @@ namespace DefectStudio
 			RendererEvents::Viewport::DisplacementComparisonPanelRequested event;
 			event.windowId = windowState.windowId;
 			eventBus->Publish(event);
+		}
+
+		// The add-object tools live at the bottom of the strip and the selection tools at the top:
+		// picking is what a viewport does all day, adding an object is the occasional act, and the
+		// top of a column is where the hand goes first.
+		ImGui::Spacing();
+
+		const bool segmentPressed = toolButton(
+			"##ToolAddSegment", "tool-add-arrow.png", "Arr",
+			"Add line or arrow at the 3D cursor or between two selected atoms", false);
+		const ImVec2 segmentPopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (segmentPressed)
+			ImGui::OpenPopup("##AddSegmentPopup");
+		ImGui::SetNextWindowPos(segmentPopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##AddSegmentPopup"))
+		{
+			DrawFreeSegmentAddItems(windowState, windowState.cursor3DPosition);
+			ImGui::SeparatorText("Z zaznaczenia");
+			DrawSegmentAddItems(windowState);
+			ImGui::EndPopup();
+		}
+
+		const bool planePressed = toolButton(
+			"##ToolAddPlane", "tool-add-plane.png", "Pln",
+			"Add plane at the 3D cursor or fit it to selected atoms", false);
+		const ImVec2 planePopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (planePressed)
+			ImGui::OpenPopup("##AddPlanePopup");
+		ImGui::SetNextWindowPos(planePopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##AddPlanePopup"))
+		{
+			DrawFreePlaneAddItem(windowState, windowState.cursor3DPosition);
+			ImGui::SeparatorText("Z zaznaczenia");
+			DrawPlaneAddItem(windowState);
+			ImGui::EndPopup();
+		}
+
+		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "+", "Add atom", false))
+		{
+			RendererEvents::Viewport::AddAtomPopupToggleRequested event;
+			event.windowId = windowState.windowId;
+			const ImVec2 itemMinimum = ImGui::GetItemRectMin();
+			const ImVec2 itemMaximum = ImGui::GetItemRectMax();
+			event.screenPosition = glm::vec2(itemMaximum.x + 4.0f * uiScale, itemMinimum.y);
+			eventBus->Publish(event);
+		}
+
+		const bool orbitalPressed =
+			toolButton("##ToolAddOrbital", "tool-add-orbital.png", "Orb", "Add orbital - on every selected atom, or at the 3D cursor", false);
+		const ImVec2 orbitalPopupPosition(
+			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
+		if (orbitalPressed)
+			ImGui::OpenPopup("##AddOrbitalPopup");
+		ImGui::SetNextWindowPos(orbitalPopupPosition, ImGuiCond_Appearing);
+		if (ImGui::BeginPopup("##AddOrbitalPopup"))
+		{
+			DrawOrbitalAddMenu(windowState, windowState.cursor3DPosition, false);
+			ImGui::EndPopup();
 		}
 
 		ImGui::EndChild();

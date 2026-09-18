@@ -40,10 +40,34 @@ namespace DefectStudio
 		std::size_t index = 0;
 		glm::vec3 start = glm::vec3(0.0f);
 		glm::vec3 end = glm::vec3(0.0f);
-		float shaftWidth = 0.0f;
-		float headWidth = 0.0f;
-		float headLength = 0.0f;
 		SceneArrowTransformTarget target = SceneArrowTransformTarget::Both;
+	};
+
+	struct OrbitalTransformStart
+	{
+		std::size_t index = 0;
+		glm::vec3 centerA = glm::vec3(0.0f);
+		glm::vec3 centerB = glm::vec3(0.0f);
+		glm::vec3 rotationEuler = glm::vec3(0.0f);
+		float scale = 1.0f;
+		// Whether the orbital was anchored to atoms when the drag began. Translating an anchored
+		// orbital drops the anchor: the anchor is rewritten from the atoms every frame, so keeping
+		// it would silently undo the drag on the next one.
+		bool anchored = false;
+		// A single-centre orbital keeps centerB around unread so switching preset back and forth
+		// does not lose the bond the user set up (RendererWindowState::SceneOrbital). It defaults
+		// to (1.5, 0, 0), so treating it as a real centre put the gizmo halfway to a point nothing
+		// is drawn at. Only a two-centre preset contributes centerB to the pivot, or takes a write.
+		bool twoCenter = false;
+	};
+
+	struct PlaneTransformStart
+	{
+		std::size_t index = 0;
+		glm::vec3 center = glm::vec3(0.0f);
+		glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f);
+		glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec2 halfExtents = glm::vec2(1.0f);
 	};
 
 	struct SceneTransformSelectionSnapshot
@@ -51,11 +75,15 @@ namespace DefectStudio
 		std::vector<AtomTransformStart> atoms;
 		std::vector<LabelTransformStart> labels;
 		std::vector<ArrowTransformStart> arrows;
+		// G/R/S for orbitals and planes: translate moves the centre(s), rotate turns the object
+		// about the pivot (an orbital through its rotationEuler, a plane by carrying its normal and
+		// tangent round), scale grows the drawn size (orbital.scale, plane.halfExtents).
+		std::vector<OrbitalTransformStart> orbitals;
+		std::vector<PlaneTransformStart> planes;
 	};
 
-	// Spatial fields come from the shared ModalTransform core. The two scalar values preserve the
-	// object-kind meanings of R/S: labels rotate in their billboard plane and labels/arrows scale
-	// their own size fields rather than acquiring a general 3D transform component.
+	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label
+	// and orbital meanings of R/S; arrows use the spatial transform for both endpoints.
 	struct SceneTransformDelta
 	{
 		TransformDelta spatial;

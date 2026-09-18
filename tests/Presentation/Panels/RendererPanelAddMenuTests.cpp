@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
 
 namespace DefectStudio::Tests
@@ -48,5 +49,30 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(DescribeDrawSelection(0).menuLabel, "Rysuj (0 atomow)");
 		EXPECT_EQ(DescribeDrawSelection(4).menuLabel, "Rysuj (4 atomy)");
 		EXPECT_EQ(DescribeDrawSelection(5).menuLabel, "Rysuj (5 atomow)");
+	}
+
+	TEST(OrbitalAddAnchorGroupsTests, OneCentrePresetCreatesOneAnchorGroupPerSelectedAtom)
+	{
+		const auto groups = ResolveOrbitalAddAnchorGroups(OrbitalPreset::S, {2, 5}, true);
+
+		ASSERT_EQ(groups.size(), 2u);
+		EXPECT_EQ(groups[0], (std::vector<std::size_t>{2}));
+		EXPECT_EQ(groups[1], (std::vector<std::size_t>{5}));
+	}
+
+	TEST(OrbitalAddAnchorGroupsTests, TwoCentrePresetRequiresExactlyTwoSelectedAtoms)
+	{
+		EXPECT_EQ(
+			ResolveOrbitalAddAnchorGroups(OrbitalPreset::Sigma, {2, 5}, true),
+			(std::vector<std::vector<std::size_t>>{{2, 5}}));
+		EXPECT_TRUE(ResolveOrbitalAddAnchorGroups(OrbitalPreset::Sigma, {2}, true).empty());
+		EXPECT_TRUE(ResolveOrbitalAddAnchorGroups(OrbitalPreset::Sigma, {2, 5, 8}, true).empty());
+	}
+
+	TEST(OrbitalAddAnchorGroupsTests, CursorPlacementCreatesOneFreeOrbital)
+	{
+		EXPECT_EQ(
+			ResolveOrbitalAddAnchorGroups(OrbitalPreset::S, {2, 5}, false),
+			(std::vector<std::vector<std::size_t>>{{}}));
 	}
 } // namespace DefectStudio::Tests

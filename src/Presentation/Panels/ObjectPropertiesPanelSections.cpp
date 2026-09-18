@@ -4,11 +4,15 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 #include <imgui.h>
 
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/SceneObjectMultiSelection.hpp"
+#include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
 
 namespace DefectStudio
 {
@@ -89,6 +93,53 @@ namespace DefectStudio
 	{
 		const auto found = std::find_if(objects.begin(), objects.end(), [id](const T &object) { return object.id == id; });
 		return found == objects.end() ? objects.size() : static_cast<std::size_t>(std::distance(objects.begin(), found));
+	}
+
+	template <typename Object, typename Value, typename WidgetFn>
+	bool DrawSelectedSharedValue(
+		RendererWindowState &windowState, std::vector<Object> &objects,
+		const std::vector<SceneObjectId> &selection, const std::size_t representativeIndex,
+		Value Object::*field, WidgetFn &&widget)
+	{
+		Value edited = objects[representativeIndex].*field;
+		const bool changed = widget(edited);
+		if (ImGui::IsItemActivated())
+			PushPinnedMeasurementUndoSnapshot(windowState);
+		if (!changed)
+			return false;
+		objects[representativeIndex].*field = edited;
+		ApplySelectedSceneObjectField(objects, selection, representativeIndex, field);
+		return true;
+	}
+
+	static void DrawPlaneAnchoring(
+		RendererWindowState &windowState, RendererWindowState::ScenePlane &plane)
+	{
+		if (plane.anchorAtoms.empty())
+		{
+			ImGui::TextDisabled("Nie zakotwiczona - stoi tam, gdzie ja postawiono.");
+			return;
+		}
+
+		std::string description = "Zakotwiczona na: ";
+		bool first = true;
+		for (const std::size_t atomIndex : plane.anchorAtoms)
+		{
+			if (atomIndex >= windowState.structure.atoms.size())
+				continue;
+			if (!first)
+				description += ", ";
+			description += windowState.structure.atoms[atomIndex].element + " #" + std::to_string(atomIndex);
+			first = false;
+		}
+		ImGui::TextUnformatted(description.c_str());
+		if (!ImGui::Button("Odczep"))
+			return;
+
+		// Resolve immediately so detaching between frames freezes the same quad the user sees.
+		PushPinnedMeasurementUndoSnapshot(windowState);
+		ResolveAnchoredScenePlanes(windowState);
+		plane.anchorAtoms.clear();
 	}
 
 	void DrawSelectedLabelProperties(RendererWindowState &windowState)
@@ -274,5 +325,114 @@ namespace DefectStudio
 		}
 	}
 
-} // namespace DefectStudio
+	void DrawSelectedSceneOrbitalSection(RendererWindowState &windowState)
+	{
+		ImGui::Separator();
+		const std::size_t selectedCount = windowState.selectedSceneOrbitals.size();
+		ImGui::Text("Orbitale (%zu zaznaczonych)", selectedCount);
+		const std::size_t representative = FirstSelectedSceneObjectIndex(
+			windowState.sceneOrbitals, windowState.selectedSceneOrbitals);
+		if (representative >= windowState.sceneOrbitals.size())
+			return;
 
+		ImGui::PushID("SelectedOrbitals");
+		if (selectedCount == 1)
+		{
+			DrawSceneOrbitalEditor(windowState, representative);
+			ImGui::PopID();
+			return;
+		}
+
+		using Orbital = RendererWindowState::SceneOrbital;
+		auto draw = [&](auto field, auto &&widget) {
+			return DrawSelectedSharedValue(
+				windowState, windowState.sceneOrbitals, windowState.selectedSceneOrbitals,
+				representative, field, std::forward<decltype(widget)>(widget));
+		};
+		ImGui::TextDisabled("Wspolne pola ponizej sa stosowane do wszystkich zaznaczonych orbitali.");
+		constexpr ImGuiTreeNodeFlags kOpen = ImGuiTreeNodeFlags_DefaultOpen;
+		if (ImGui::CollapsingHeader("Ksztalt##SelectedOrbitalShape", kOpen))
+		{
+			draw(&Orbital::shell, [](int &value) {
+				const bool changed = ImGui::SliderInt("Powloka (n)", &value, 1, 5);
+				value = std::clamp(value, 1, 5);
+				return changed;
+			});
+			draw(&Orbital::effectiveCharge, [](float &value) {
+				return ImGui::DragFloat("Z_eff", &value, 0.05f, 0.1f, 30.0f, "%.2f");
+			});
+		}
+		if (ImGui::CollapsingHeader("Wyglad##SelectedOrbitalAppearance", kOpen))
+		{
+			draw(&Orbital::positiveLobeColor, [](glm::vec3 &value) {
+				return ImGui::ColorEdit3("Faza +", &value.x);
+			});
+			draw(&Orbital::negativeLobeColor, [](glm::vec3 &value) {
+				return ImGui::ColorEdit3("Faza -", &value.x);
+			});
+			draw(&Orbital::alpha, [](float &value) {
+				return ImGui::SliderFloat("Przezroczystosc", &value, 0.05f, 1.0f, "%.2f");
+			});
+			draw(&Orbital::scale, [](float &value) {
+				return ImGui::DragFloat("Skala rysunku", &value, 0.02f, 0.05f, 20.0f, "%.2f");
+			});
+			draw(&Orbital::isoFraction, [](float &value) {
+				const bool changed = ImGui::SliderFloat("Izopowierzchnia", &value, 0.02f, 0.9f, "%.2f");
+				value = std::clamp(value, 0.01f, 0.95f);
+				return changed;
+			});
+			draw(&Orbital::resolution, [](int &value) {
+				const bool changed = ImGui::SliderInt("Rozdzielczosc", &value, 16, 96);
+				value = std::clamp(value, 8, 128);
+				return changed;
+			});
+		}
+		ImGui::PopID();
+	}
+
+	void DrawSelectedScenePlaneSection(RendererWindowState &windowState)
+	{
+		ImGui::Separator();
+		const std::size_t selectedCount = windowState.selectedScenePlanes.size();
+		ImGui::Text("Plaszczyzny (%zu zaznaczonych)", selectedCount);
+		const std::size_t representative = FirstSelectedSceneObjectIndex(
+			windowState.scenePlanes, windowState.selectedScenePlanes);
+		if (representative >= windowState.scenePlanes.size())
+			return;
+
+		ImGui::PushID("SelectedPlanes");
+		if (selectedCount == 1)
+		{
+			DrawPlaneAnchoring(windowState, windowState.scenePlanes[representative]);
+			DrawScenePlaneEditor(windowState, representative);
+			ImGui::PopID();
+			return;
+		}
+
+		using Plane = RendererWindowState::ScenePlane;
+		auto draw = [&](auto field, auto &&widget) {
+			return DrawSelectedSharedValue(
+				windowState, windowState.scenePlanes, windowState.selectedScenePlanes,
+				representative, field, std::forward<decltype(widget)>(widget));
+		};
+		ImGui::TextDisabled("Wspolne pola ponizej sa stosowane do wszystkich zaznaczonych plaszczyzn.");
+		draw(&Plane::halfExtents, [](glm::vec2 &value) {
+			return ImGui::DragFloat2("Polowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
+		});
+		draw(&Plane::color, [](glm::vec3 &value) {
+			return ImGui::ColorEdit3("Kolor", &value.x);
+		});
+		draw(&Plane::alpha, [](float &value) {
+			return ImGui::SliderFloat("Przezroczystosc", &value, 0.02f, 1.0f, "%.2f");
+		});
+		draw(&Plane::showBorder, [](bool &value) {
+			return ImGui::Checkbox("Ramka", &value);
+		});
+		ImGui::SameLine();
+		draw(&Plane::visible, [](bool &value) {
+			return ImGui::Checkbox("Widoczna", &value);
+		});
+		ImGui::PopID();
+	}
+
+} // namespace DefectStudio

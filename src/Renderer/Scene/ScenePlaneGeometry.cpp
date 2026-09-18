@@ -4,11 +4,26 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <vector>
+
+#include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {
 	namespace
 	{
+		// The tie-break FitScenePlane needs when the points do not span a plane on their own. A
+		// window without a camera is a headless one - tests, an export preview being built - and
+		// -z matches the app's default framing.
+		[[nodiscard]] glm::vec3 SceneViewDirection(const RendererWindowState &windowState)
+		{
+			if (windowState.camera == nullptr)
+				return glm::vec3(0.0f, 0.0f, -1.0f);
+			const glm::vec3 delta = windowState.camera->Target() - windowState.camera->Position();
+			return glm::dot(delta, delta) > 1e-8f ? glm::normalize(delta) : glm::vec3(0.0f, 0.0f, -1.0f);
+		}
+
 		// Eigen-decomposition of a 3x3 symmetric matrix by cyclic Jacobi rotations. glm has no
 		// eigensolver and the analytic closed form for a symmetric 3x3 loses badly to cancellation
 		// exactly where it matters here - three nearly collinear atoms - so this is the boring,
@@ -168,6 +183,43 @@ namespace DefectStudio
 			plane.center - alongTangent + alongBitangent};
 	}
 
+	std::optional<std::size_t> PickScenePlane(
+		const RendererWindowState &windowState, const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection)
+	{
+		const float directionLength = glm::length(rayDirection);
+		if (!std::isfinite(directionLength) || directionLength <= 0.0f)
+			return std::nullopt;
+		const glm::vec3 direction = rayDirection / directionLength;
+
+		std::optional<std::size_t> nearest;
+		float nearestDistance = std::numeric_limits<float>::max();
+		for (std::size_t index = 0; index < windowState.scenePlanes.size(); ++index)
+		{
+			const RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
+			if (!plane.visible)
+				continue;
+
+			const float facing = glm::dot(direction, plane.normal);
+			// Edge-on: the quad has no thickness, so there is nothing to hit and no sensible
+			// distance to compare against the other planes.
+			if (std::abs(facing) < 1e-6f)
+				continue;
+			const float distance = glm::dot(plane.center - rayOrigin, plane.normal) / facing;
+			if (distance <= 0.0f || distance >= nearestDistance)
+				continue;
+
+			const glm::vec3 offset = rayOrigin + direction * distance - plane.center;
+			const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
+			if (std::abs(glm::dot(offset, plane.tangent)) > plane.halfExtents.x ||
+				std::abs(glm::dot(offset, bitangent)) > plane.halfExtents.y)
+				continue;
+
+			nearestDistance = distance;
+			nearest = index;
+		}
+		return nearest;
+	}
+
 	RendererWindowState::ScenePlane MakeScenePlane(const ScenePlaneFit &fit)
 	{
 		RendererWindowState::ScenePlane plane;
@@ -178,5 +230,68 @@ namespace DefectStudio
 		// id stays unset: the caller allocates it from the window's SceneRegistry, the same way
 		// every other scene object is created.
 		return plane;
+	}
+
+	RendererWindowState::ScenePlane MakeDefaultScenePlane(
+		const RendererWindowState &windowState, const glm::vec3 &center)
+	{
+		// Same scene-relative sizing MakeDefaultSceneArrow uses, for the same reason: a fresh plane
+		// has to read as a sheet against this particular structure, not against a nominal one.
+		glm::vec3 minimum(std::numeric_limits<float>::max());
+		glm::vec3 maximum(std::numeric_limits<float>::lowest());
+		for (const RendererAtomData &atom : windowState.structure.atoms)
+		{
+			minimum = glm::min(minimum, atom.cartesianPosition);
+			maximum = glm::max(maximum, atom.cartesianPosition);
+		}
+		const float diagonal = windowState.structure.atoms.empty() ? 0.0f : glm::length(maximum - minimum);
+		const float extent =
+			std::isfinite(diagonal) && diagonal > 0.0f ? std::clamp(diagonal * 0.20f, 0.75f, 4.0f) : 1.0f;
+
+		// FitScenePlane already knows how to build an orthonormal frame facing a view direction;
+		// three points around the centre give it one to fit without a second code path here.
+		const glm::vec3 view = SceneViewDirection(windowState);
+		const std::vector<glm::vec3> seed = {center, center + glm::vec3(extent, 0.0f, 0.0f),
+			center + glm::vec3(0.0f, extent, 0.0f)};
+		RendererWindowState::ScenePlane plane;
+		if (const std::optional<ScenePlaneFit> fit = FitScenePlane(seed, view))
+			plane = MakeScenePlane(*fit);
+		plane.center = center;
+		plane.halfExtents = glm::vec2(extent);
+		return plane;
+	}
+
+	void ResolveAnchoredScenePlanes(RendererWindowState &windowState)
+	{
+		if (windowState.scenePlanes.empty())
+			return;
+
+		const glm::vec3 view = SceneViewDirection(windowState);
+		std::vector<glm::vec3> positions;
+		for (RendererWindowState::ScenePlane &plane : windowState.scenePlanes)
+		{
+			if (plane.anchorAtoms.size() < 2)
+				continue;
+
+			positions.clear();
+			for (const std::size_t atomIndex : plane.anchorAtoms)
+			{
+				if (atomIndex < windowState.structure.atoms.size())
+					positions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+			}
+			// Anchors that no longer resolve leave the plane exactly as it is, anchor list included:
+			// a deleted atom is not a reason to silently turn someone's plane into a free one.
+			if (positions.size() < 2)
+				continue;
+
+			const std::optional<ScenePlaneFit> fit = FitScenePlane(positions, view);
+			if (!fit.has_value())
+				continue;
+			plane.center = fit->center;
+			plane.normal = fit->normal;
+			plane.tangent = fit->tangent;
+			// halfExtents deliberately survives: the user's chosen size is a drawing decision, and
+			// re-fitting it every frame would undo any resize the moment an atom twitched.
+		}
 	}
 } // namespace DefectStudio

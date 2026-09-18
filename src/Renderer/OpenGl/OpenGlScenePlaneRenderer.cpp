@@ -128,7 +128,7 @@ namespace DefectStudio
 				handles.indexCount,
 				camera,
 				globalSettings,
-				ApplySceneSelectionHighlight(plane.color, selected),
+				ApplySceneSelectionHighlight(plane.color, selected, kSceneSurfaceSelectionHighlightStrength),
 				ApplySceneSelectionHighlight(plane.color * 0.45f, selected),
 				plane.alpha,
 				sceneOffset);

@@ -82,6 +82,21 @@ namespace DefectStudio
 	[[nodiscard]] RendererWindowState::SceneOrbital MakeDefaultSceneOrbital(
 		const RendererWindowState &windowState, OrbitalPreset preset, const glm::vec3 &seedPosition);
 
+	// Same, but anchored to the atoms named here instead of to the window's selection - what "put
+	// one of these on each of the selected atoms" needs, since that means several orbitals each
+	// anchored to one atom, not one orbital anchored to all of them.
+	[[nodiscard]] RendererWindowState::SceneOrbital MakeDefaultSceneOrbital(
+		const RendererWindowState &windowState,
+		OrbitalPreset preset,
+		const glm::vec3 &seedPosition,
+		const std::vector<std::size_t> &anchorAtoms);
+
+	// True for the molecular presets (sigma/pi/delta and their starred and hybridised partners),
+	// which span two atoms and read centerB. Everything else is a one-centre orbital. One copy for
+	// the whole app - the geometry, the properties panel and the add menu must agree on this or an
+	// orbital anchors to the wrong number of atoms.
+	[[nodiscard]] bool IsTwoCenterPreset(OrbitalPreset preset);
+
 	// Slater effective nuclear charge for an element's valence shell, and the shell that valence
 	// sits in - what MakeDefaultSceneOrbital uses so a preset dropped on an atom starts at a
 	// plausible size. Unknown elements fall back to hydrogen (1.0, shell 1).

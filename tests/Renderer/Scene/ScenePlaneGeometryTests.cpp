@@ -168,4 +168,164 @@ namespace DefectStudio::Tests
 		// Identity is assigned by the caller from the SceneRegistry, not invented here.
 		EXPECT_FALSE(plane.id.IsValid());
 	}
+
+	namespace
+	{
+		// One 4x2 plane in the z=0 sheet, facing +z, so a ray straight down the -z axis hits it and a
+		// ray past its edge does not.
+		RendererWindowState::ScenePlane MakeFacingPlane()
+		{
+			RendererWindowState::ScenePlane plane;
+			plane.id = SceneObjectId{1};
+			plane.center = glm::vec3(0.0f);
+			plane.normal = glm::vec3(0.0f, 0.0f, 1.0f);
+			plane.tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+			plane.halfExtents = glm::vec2(2.0f, 1.0f);
+			return plane;
+		}
+	} // namespace
+
+	TEST(ScenePlanePickTests, RayThroughTheQuadHitsIt)
+	{
+		RendererWindowState window;
+		window.scenePlanes = {MakeFacingPlane()};
+
+		const std::optional<std::size_t> hit =
+			PickScenePlane(window, glm::vec3(0.5f, 0.5f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+		ASSERT_TRUE(hit.has_value());
+		EXPECT_EQ(*hit, 0u);
+	}
+
+	TEST(ScenePlanePickTests, RayPastTheEdgeMisses)
+	{
+		RendererWindowState window;
+		window.scenePlanes = {MakeFacingPlane()};
+
+		// Inside the half-width along the tangent, outside the half-height along the bitangent.
+		EXPECT_FALSE(PickScenePlane(window, glm::vec3(1.0f, 1.5f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f)).has_value());
+	}
+
+	TEST(ScenePlanePickTests, APlaneBehindTheRayOriginMisses)
+	{
+		RendererWindowState window;
+		window.scenePlanes = {MakeFacingPlane()};
+
+		EXPECT_FALSE(PickScenePlane(window, glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, 1.0f)).has_value());
+	}
+
+	TEST(ScenePlanePickTests, TheNearestOfTwoStackedPlanesWins)
+	{
+		RendererWindowState window;
+		RendererWindowState::ScenePlane far = MakeFacingPlane();
+		RendererWindowState::ScenePlane near = MakeFacingPlane();
+		near.id = SceneObjectId{2};
+		near.center = glm::vec3(0.0f, 0.0f, 5.0f);
+		window.scenePlanes = {far, near};
+
+		const std::optional<std::size_t> hit =
+			PickScenePlane(window, glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+		ASSERT_TRUE(hit.has_value());
+		EXPECT_EQ(*hit, 1u);
+	}
+
+	TEST(ScenePlanePickTests, AHiddenPlaneIsNotPickable)
+	{
+		RendererWindowState window;
+		RendererWindowState::ScenePlane plane = MakeFacingPlane();
+		plane.visible = false;
+		window.scenePlanes = {plane};
+
+		EXPECT_FALSE(PickScenePlane(window, glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.0f, 0.0f, -1.0f)).has_value());
+	}
+
+	TEST(ScenePlanePickTests, AnEdgeOnPlaneIsNotPickable)
+	{
+		RendererWindowState window;
+		window.scenePlanes = {MakeFacingPlane()};
+
+		// Ray parallel to the sheet: no thickness to hit.
+		EXPECT_FALSE(PickScenePlane(window, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f)).has_value());
+	}
+
+	namespace
+	{
+		RendererWindowState MakeAnchoredPlaneWindow()
+		{
+			RendererWindowState window;
+			for (const glm::vec3 &position : {glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(4.0f, 0.0f, 0.0f),
+					 glm::vec3(0.0f, 2.0f, 0.0f)})
+			{
+				RendererAtomData atom;
+				atom.cartesianPosition = position;
+				window.structure.atoms.push_back(atom);
+			}
+
+			RendererWindowState::ScenePlane plane;
+			plane.id = SceneObjectId{7};
+			plane.anchorAtoms = {0, 1, 2};
+			window.scenePlanes.push_back(plane);
+			return window;
+		}
+	} // namespace
+
+	TEST(ScenePlaneAnchorTests, AnAnchoredPlaneFollowsItsAtoms)
+	{
+		RendererWindowState window = MakeAnchoredPlaneWindow();
+
+		ResolveAnchoredScenePlanes(window);
+		const glm::vec3 first = window.scenePlanes[0].center;
+		// Centroid of the three, and the frame is the one the atoms span.
+		EXPECT_NEAR(first.x, 4.0f / 3.0f, 1e-4f);
+		EXPECT_NEAR(first.y, 2.0f / 3.0f, 1e-4f);
+		EXPECT_NEAR(std::abs(window.scenePlanes[0].normal.z), 1.0f, 1e-4f);
+
+		window.structure.atoms[1].cartesianPosition = glm::vec3(4.0f, 0.0f, 6.0f);
+		ResolveAnchoredScenePlanes(window);
+		EXPECT_GT(std::abs(window.scenePlanes[0].center.z), 1e-3f);
+		EXPECT_LT(std::abs(window.scenePlanes[0].normal.z), 0.999f);
+		EXPECT_NEAR(glm::length(window.scenePlanes[0].normal), 1.0f, 1e-4f);
+		EXPECT_NEAR(glm::dot(window.scenePlanes[0].normal, window.scenePlanes[0].tangent), 0.0f, 1e-4f);
+	}
+
+	TEST(ScenePlaneAnchorTests, AFreePlaneIsLeftAlone)
+	{
+		RendererWindowState window = MakeAnchoredPlaneWindow();
+		window.scenePlanes[0].anchorAtoms.clear();
+		window.scenePlanes[0].center = glm::vec3(9.0f, 9.0f, 9.0f);
+
+		ResolveAnchoredScenePlanes(window);
+
+		EXPECT_NEAR(window.scenePlanes[0].center.x, 9.0f, 1e-4f);
+	}
+
+	TEST(ScenePlaneAnchorTests, TooFewResolvableAnchorsChangeNothing)
+	{
+		RendererWindowState window = MakeAnchoredPlaneWindow();
+		// One real index and one past the end: not two points, so there is no plane to fit.
+		window.scenePlanes[0].anchorAtoms = {0, 99};
+		window.scenePlanes[0].center = glm::vec3(9.0f, 9.0f, 9.0f);
+
+		ResolveAnchoredScenePlanes(window);
+
+		EXPECT_NEAR(window.scenePlanes[0].center.x, 9.0f, 1e-4f);
+		EXPECT_EQ(window.scenePlanes[0].anchorAtoms.size(), 2u);
+	}
+
+	TEST(ScenePlaneAnchorTests, ADefaultPlaneFacesTheViewerAndHasRoom)
+	{
+		RendererWindowState window = MakeAnchoredPlaneWindow();
+
+		const RendererWindowState::ScenePlane plane =
+			MakeDefaultScenePlane(window, glm::vec3(1.0f, 2.0f, 3.0f));
+
+		EXPECT_NEAR(plane.center.x, 1.0f, 1e-4f);
+		EXPECT_NEAR(plane.center.z, 3.0f, 1e-4f);
+		EXPECT_TRUE(plane.anchorAtoms.empty());
+		EXPECT_GT(plane.halfExtents.x, 0.1f);
+		EXPECT_GT(plane.halfExtents.y, 0.1f);
+		EXPECT_NEAR(glm::length(plane.normal), 1.0f, 1e-4f);
+		EXPECT_NEAR(glm::dot(plane.normal, plane.tangent), 0.0f, 1e-4f);
+	}
 } // namespace DefectStudio::Tests

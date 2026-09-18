@@ -109,6 +109,9 @@ static PersistedArrowStyle ToPersisted(const RendererWindowState::ArrowStyle &s)
 	p.color = s.color;
 	p.alpha = s.alpha;
 	p.shaftWidth = s.shaftWidth;
+	p.dashed = s.dashed;
+	p.dashLength = s.dashLength;
+	p.gapLength = s.gapLength;
 	p.outlineColor = s.outlineColor;
 	p.outlineWidth = s.outlineWidth;
 	p.headWidth = s.headWidth;
@@ -124,6 +127,9 @@ static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &
 	p.color = s.color;
 	p.alpha = s.alpha;
 	p.shaftWidth = s.shaftWidth;
+	p.dashed = s.dashed;
+	p.dashLength = s.dashLength;
+	p.gapLength = s.gapLength;
 	p.outlineColor = s.outlineColor;
 	p.outlineWidth = s.outlineWidth;
 	p.headWidth = s.headWidth;
@@ -132,6 +138,39 @@ static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &
 	p.gradient.start = s.gradientStart;
 	p.gradient.finish = s.gradientFinish;
 	return p;
+}
+
+static std::vector<PersistedAtomRef> PersistAtomReferences(
+	const RendererStructureData &structure, const std::vector<std::size_t> &atomIndices)
+{
+	std::vector<PersistedAtomRef> references;
+	references.reserve(atomIndices.size());
+	for (const std::size_t atomIndex : atomIndices)
+	{
+		if (atomIndex >= structure.atoms.size())
+			continue;
+		PersistedAtomRef reference;
+		reference.index = atomIndex;
+		reference.element = structure.atoms[atomIndex].element;
+		reference.position = structure.atoms[atomIndex].cartesianPosition;
+		references.push_back(std::move(reference));
+	}
+	return references;
+}
+
+static std::vector<std::size_t> ResolveAtomReferences(
+	const RendererStructureData &structure, const std::vector<PersistedAtomRef> &references)
+{
+	std::vector<std::size_t> atomIndices;
+	atomIndices.reserve(references.size());
+	for (const PersistedAtomRef &reference : references)
+	{
+		const std::optional<std::size_t> resolved = ResolveAtomReference(structure, reference);
+		if (!resolved)
+			return {};
+		atomIndices.push_back(*resolved);
+	}
+	return atomIndices;
 }
 
 std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWindowState &window)
@@ -199,19 +238,7 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.effectiveCharge = orbital.effectiveCharge;
 		p.centerA = orbital.centerA;
 		p.centerB = orbital.centerB;
-		// Each anchor is written as index + element + position, the same triple a pinned
-		// measurement stores, so a reordered or edited structure can still be matched against it
-		// on load instead of the index silently pointing at a different atom.
-		for (const std::size_t atomIndex : orbital.anchorAtoms)
-		{
-			if (atomIndex >= window.structure.atoms.size())
-				continue;
-			PersistedAtomRef ref;
-			ref.index = atomIndex;
-			ref.element = window.structure.atoms[atomIndex].element;
-			ref.position = window.structure.atoms[atomIndex].cartesianPosition;
-			p.anchorAtoms.push_back(std::move(ref));
-		}
+		p.anchorAtoms = PersistAtomReferences(window.structure, orbital.anchorAtoms);
 		p.rotationEuler = orbital.rotationEuler;
 		p.scale = orbital.scale;
 		p.isoFraction = orbital.isoFraction;
@@ -230,6 +257,7 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.normal = plane.normal;
 		p.tangent = plane.tangent;
 		p.halfExtents = plane.halfExtents;
+		p.anchorAtoms = PersistAtomReferences(window.structure, plane.anchorAtoms);
 		p.color = plane.color;
 		p.alpha = plane.alpha;
 		p.showBorder = plane.showBorder;
@@ -338,18 +366,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					o.effectiveCharge = value.effectiveCharge;
 					o.centerA = value.centerA;
 					o.centerB = value.centerB;
-					for (const PersistedAtomRef &ref : value.anchorAtoms)
-					{
-						const std::optional<std::size_t> resolved =
-							ResolveAtomReference(window.structure, ref);
-						if (resolved)
-							o.anchorAtoms.push_back(*resolved);
-					}
-					// Partially resolved anchors would put one end of a two-centre orbital on an
-					// atom and leave the other at a stale saved position, which reads as a bug
-					// rather than as a broken link. All or nothing.
-					if (o.anchorAtoms.size() != value.anchorAtoms.size())
-						o.anchorAtoms.clear();
+					o.anchorAtoms = ResolveAtomReferences(window.structure, value.anchorAtoms);
 					o.rotationEuler = value.rotationEuler;
 					o.scale = value.scale;
 					o.isoFraction = value.isoFraction;
@@ -377,6 +394,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 															   ? glm::vec3(1.0f, 0.0f, 0.0f)
 															   : glm::vec3(0.0f, 1.0f, 0.0f)));
 					pl.halfExtents = value.halfExtents;
+					pl.anchorAtoms = ResolveAtomReferences(window.structure, value.anchorAtoms);
 					pl.color = value.color;
 					pl.alpha = value.alpha;
 					pl.showBorder = value.showBorder;

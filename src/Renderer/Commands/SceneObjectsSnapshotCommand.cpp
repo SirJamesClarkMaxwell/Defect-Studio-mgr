@@ -96,7 +96,9 @@ namespace DefectStudio
 
 	SceneObjectsSnapshot CaptureSceneObjectsSnapshot(const RendererWindowState &window)
 	{
-		return {window.pinnedMeasurements, window.freeLabels, window.sceneArrows, window.sceneOrbitals};
+		return {
+			window.pinnedMeasurements, window.freeLabels, window.sceneArrows, window.sceneOrbitals,
+			window.scenePlanes};
 	}
 
 	void RestoreSceneObjectsSnapshot(RendererWindowState &window, SceneObjectsSnapshot snapshot)
@@ -105,10 +107,12 @@ namespace DefectStudio
 		window.freeLabels = std::move(snapshot.freeLabels);
 		window.sceneArrows = std::move(snapshot.sceneArrows);
 		window.sceneOrbitals = std::move(snapshot.sceneOrbitals);
+		window.scenePlanes = std::move(snapshot.scenePlanes);
 		window.selectedPinnedMeasurements.clear();
 		window.selectedFreeLabels.clear();
 		window.selectedSceneArrows.clear();
 		window.selectedSceneOrbitals.clear();
+		window.selectedScenePlanes.clear();
 		window.modalTransform.reset();
 		window.modalTransformSelection = {};
 		window.modalTransformSceneObjectsBefore.reset();

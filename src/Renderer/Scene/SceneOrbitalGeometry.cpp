@@ -17,26 +17,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		[[nodiscard]] bool IsTwoCenterPreset(OrbitalPreset preset)
-		{
-			switch (preset)
-			{
-				case OrbitalPreset::Sigma:
-				case OrbitalPreset::SigmaStar:
-				case OrbitalPreset::Pi:
-				case OrbitalPreset::PiStar:
-				case OrbitalPreset::Delta:
-				case OrbitalPreset::DeltaStar:
-				case OrbitalPreset::SpSigma:
-				case OrbitalPreset::SpSigmaStar:
-				case OrbitalPreset::Sp2Sigma:
-				case OrbitalPreset::Sp2SigmaStar:
-				case OrbitalPreset::Sp3Sigma:
-				case OrbitalPreset::Sp3SigmaStar: return true;
-				default: return false;
-			}
-		}
-
 		[[nodiscard]] glm::vec3 ResolveAnchor(
 			const glm::vec3 &fallback, const std::vector<std::size_t> &anchors, std::size_t anchorIndex,
 			const RendererStructureData &structure)
@@ -101,6 +81,26 @@ namespace DefectStudio
 			return populations;
 		}
 	} // namespace
+
+	[[nodiscard]] bool IsTwoCenterPreset(OrbitalPreset preset)
+	{
+		switch (preset)
+		{
+			case OrbitalPreset::Sigma:
+			case OrbitalPreset::SigmaStar:
+			case OrbitalPreset::Pi:
+			case OrbitalPreset::PiStar:
+			case OrbitalPreset::Delta:
+			case OrbitalPreset::DeltaStar:
+			case OrbitalPreset::SpSigma:
+			case OrbitalPreset::SpSigmaStar:
+			case OrbitalPreset::Sp2Sigma:
+			case OrbitalPreset::Sp2SigmaStar:
+			case OrbitalPreset::Sp3Sigma:
+			case OrbitalPreset::Sp3SigmaStar: return true;
+			default: return false;
+		}
+	}
 
 	SceneOrbitalCenters ResolveSceneOrbitalCenters(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
@@ -196,18 +196,27 @@ namespace DefectStudio
 	RendererWindowState::SceneOrbital MakeDefaultSceneOrbital(
 		const RendererWindowState &windowState, OrbitalPreset preset, const glm::vec3 &seedPosition)
 	{
+		return MakeDefaultSceneOrbital(windowState, preset, seedPosition, windowState.selectedAtomIndices);
+	}
+
+	RendererWindowState::SceneOrbital MakeDefaultSceneOrbital(
+		const RendererWindowState &windowState,
+		OrbitalPreset preset,
+		const glm::vec3 &seedPosition,
+		const std::vector<std::size_t> &anchorAtoms)
+	{
 		RendererWindowState::SceneOrbital orbital;
 		orbital.preset = preset;
 		orbital.centerA = seedPosition;
 		orbital.centerB = seedPosition + glm::vec3(1.5f, 0.0f, 0.0f);
 
 		const std::size_t requiredAtoms = IsTwoCenterPreset(preset) ? 2u : 1u;
-		if (windowState.selectedAtomIndices.size() != requiredAtoms ||
-			!std::all_of(windowState.selectedAtomIndices.begin(), windowState.selectedAtomIndices.end(),
+		if (anchorAtoms.size() != requiredAtoms ||
+			!std::all_of(anchorAtoms.begin(), anchorAtoms.end(),
 				[&](std::size_t index) { return index < windowState.structure.atoms.size(); }))
 			return orbital;
 
-		orbital.anchorAtoms = windowState.selectedAtomIndices;
+		orbital.anchorAtoms = anchorAtoms;
 		orbital.centerA = windowState.structure.atoms[orbital.anchorAtoms[0]].cartesianPosition;
 		orbital.centerB = requiredAtoms == 2
 			? windowState.structure.atoms[orbital.anchorAtoms[1]].cartesianPosition

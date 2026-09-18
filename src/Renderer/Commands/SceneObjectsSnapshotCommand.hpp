@@ -9,7 +9,7 @@
 
 namespace DefectStudio
 {
-	// Pins, free labels, scene arrows and scene orbitals of one window, copied whole.
+	// Pins, free labels, scene arrows, scene orbitals and scene planes of one window, copied whole.
 	using SceneObjectsSnapshot = RendererWindowState::LabelUndoSnapshot;
 	using SceneObjectsWindowResolver = std::function<RendererWindowState *(const std::string &windowId)>;
 	using SceneObjectsRestoredCallback = std::function<void(RendererWindowState &window)>;

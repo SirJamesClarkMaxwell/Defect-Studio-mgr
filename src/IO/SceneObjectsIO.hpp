@@ -36,6 +36,9 @@ namespace DefectStudio
 		glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
 		float alpha = 1.0f;
 		float shaftWidth = 0.06f;
+		bool dashed = false;
+		float dashLength = 0.25f;
+		float gapLength = 0.15f;
 		glm::vec3 outlineColor = glm::vec3(0.0f);
 		float outlineWidth = 0.0f;
 		float headWidth = 0.14f;
@@ -45,21 +48,6 @@ namespace DefectStudio
 		bool useGradient = false;
 		glm::vec3 gradientStart = glm::vec3(0.6f, 0.6f, 0.6f);
 		glm::vec3 gradientFinish = glm::vec3(0.9f, 0.9f, 0.9f);
-	};
-
-	// RendererWindowState::ScenePlane, field for field. No atom references: a plane is fitted
-	// through points once, at creation, and then owns its own numbers.
-	struct PersistedScenePlane
-	{
-		std::string persistKey;
-		glm::vec3 center = glm::vec3(0.0f);          // required
-		glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f); // required
-		glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
-		glm::vec2 halfExtents = glm::vec2(2.0f);
-		glm::vec3 color = glm::vec3(0.35f, 0.65f, 0.9f);
-		float alpha = 0.35f;
-		bool showBorder = true;
-		bool visible = true;
 	};
 
 	// No stable atom id exists in the domain, so a reference is index + element + Cartesian position.
@@ -72,6 +60,22 @@ namespace DefectStudio
 		std::size_t index = 0;
 		std::string element;
 		glm::vec3 position = glm::vec3(0.0f);
+	};
+
+	// RendererWindowState::ScenePlane, field for field. Anchors use the same stable-on-disk atom
+	// references as orbitals and are re-fitted after loading.
+	struct PersistedScenePlane
+	{
+		std::string persistKey;
+		glm::vec3 center = glm::vec3(0.0f);          // required
+		glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f); // required
+		glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec2 halfExtents = glm::vec2(2.0f);
+		std::vector<PersistedAtomRef> anchorAtoms;
+		glm::vec3 color = glm::vec3(0.35f, 0.65f, 0.9f);
+		float alpha = 0.35f;
+		bool showBorder = true;
+		bool visible = true;
 	};
 
 	struct PersistedPinnedMeasurement

@@ -16,13 +16,23 @@ namespace DefectStudio
 {
 	namespace
 	{
-		constexpr float kPanelWidth = 320.0f;
+		constexpr float kDefaultPanelWidth = 320.0f;
+		constexpr float kMinPanelWidth = 180.0f;
 		constexpr float kSlideSeconds = 0.15f;
+		constexpr float kGripWidth = 6.0f;
 
 		struct SlideState
 		{
 			bool open = false;
 			float width = 0.0f;
+			// What the slide animates towards, and what the drag handle edits. Separate from `width`
+			// so a resize mid-slide does not fight the animation, and so the width the user chose
+			// survives closing and reopening the panel.
+			float openWidth = kDefaultPanelWidth;
+			// Set the moment the user drags the grip. Until then the panel widens itself to whatever
+			// it is asked to draw; afterwards the chosen width is the chosen width and the panel
+			// stops second-guessing it.
+			bool userSized = false;
 		};
 
 		// ponytail: the open flag and the animated width are pure UI state, and RendererWindowState is
@@ -52,7 +62,8 @@ namespace DefectStudio
 		// Exponential approach rather than a linear ramp - it starts fast and settles, which is what
 		// reads as a slide. deltaTime is the renderer's own frame time, so the panel keeps the same
 		// timing whatever the frame rate.
-		const float target = state.open ? kPanelWidth : 0.0f;
+		state.openWidth = std::clamp(state.openWidth, kMinPanelWidth, std::max(kMinPanelWidth, viewportSize.x - 40.0f));
+		const float target = state.open ? state.openWidth : 0.0f;
 		state.width += (target - state.width) * std::min(1.0f, deltaTime / kSlideSeconds * 3.0f);
 		if (std::abs(target - state.width) < 0.5f)
 			state.width = target;
@@ -60,13 +71,47 @@ namespace DefectStudio
 			return;
 
 		const ImVec2 panelOrigin(imageOrigin.x + viewportSize.x - state.width, imageOrigin.y);
+
+		// Drag handle on the panel's left edge, drawn before the child so the child does not swallow
+		// the click. Width follows the mouse rather than accumulating deltas, so the edge stays under
+		// the cursor even if a frame is dropped mid-drag.
+		// ponytail: the panel is drawn after the viewport's own pick pass, so the click that starts a
+		// resize also reaches the picker underneath and can change the selection. Six pixels wide, and
+		// the fix is to publish the panel's rect into the pick mask - do that if it becomes a nuisance.
+		ImGui::SetCursorScreenPos(ImVec2(panelOrigin.x - kGripWidth, panelOrigin.y));
+		ImGui::InvisibleButton("##viewportSidePanelGrip", ImVec2(kGripWidth, viewportSize.y));
+		const bool gripActive = ImGui::IsItemActive();
+		if (ImGui::IsItemHovered() || gripActive)
+			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+		if (gripActive)
+		{
+			state.userSized = true;
+			state.openWidth = std::clamp(
+				imageOrigin.x + viewportSize.x - ImGui::GetMousePos().x, kMinPanelWidth,
+				std::max(kMinPanelWidth, viewportSize.x - 40.0f));
+		}
+		if (ImGui::IsItemHovered() || gripActive)
+		{
+			ImGui::GetWindowDrawList()->AddRectFilled(
+				ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+				ImGui::GetColorU32(gripActive ? ImGuiCol_SeparatorActive : ImGuiCol_SeparatorHovered));
+		}
+
 		ImGui::SetCursorScreenPos(panelOrigin);
 		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
 		if (ImGui::BeginChild(
 				"##viewportSidePanel", ImVec2(state.width, viewportSize.y), ImGuiChildFlags_Borders,
-				ImGuiWindowFlags_NoSavedSettings))
+				ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_HorizontalScrollbar))
 		{
 			DrawObjectPropertiesContent(layer, commandRegistry, domainLayer);
+			// Widen by exactly what overflowed, measured after the content was submitted. It settles
+			// in a frame or two and the scrollbar it needs to measure with disappears once it has.
+			// ponytail: this only sees content that actually extends the child's width - a
+			// TextWrapped paragraph re-wraps instead of overflowing, so it never asks for room. If
+			// the descriptions start looking cramped, give them a measured minimum instead.
+			const float overflow = ImGui::GetScrollMaxX();
+			if (!state.userSized && overflow > 1.0f)
+				state.openWidth = std::min(state.openWidth + overflow, std::max(kMinPanelWidth, viewportSize.x - 40.0f));
 		}
 		ImGui::EndChild();
 		ImGui::PopStyleColor();
