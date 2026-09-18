@@ -54,21 +54,6 @@ namespace DefectStudio
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.95f, 0.50f, 0.10f, 0.9f));
 		}
 
-		[[nodiscard]] std::vector<std::size_t> CollectSourceIndices(
-			const SceneRegistry &scene, SceneObjectKind kind)
-		{
-			std::vector<std::size_t> indices;
-			const auto view = scene.Registry().view<const SceneObjectComponent>();
-			for (const entt::entity entity : view)
-			{
-				const SceneObjectComponent &object = view.get<const SceneObjectComponent>(entity);
-				if (object.kind == kind)
-					indices.push_back(object.sourceIndex);
-			}
-			std::sort(indices.begin(), indices.end());
-			return indices;
-		}
-
 		template <typename Object>
 		[[nodiscard]] std::vector<SceneObjectId> CollectIds(
 			const std::vector<Object> &objects, const std::vector<std::size_t> &indices)
@@ -82,6 +67,21 @@ namespace DefectStudio
 		}
 
 	} // namespace
+
+	std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
+		const SceneRegistry &scene, const SceneObjectKind kind)
+	{
+		std::vector<std::size_t> indices;
+		const auto view = scene.Registry().view<const SceneObjectComponent>();
+		for (const entt::entity entity : view)
+		{
+			const SceneObjectComponent &object = view.get<const SceneObjectComponent>(entity);
+			if (object.kind == kind)
+				indices.push_back(object.sourceIndex);
+		}
+		std::sort(indices.begin(), indices.end());
+		return indices;
+	}
 
 	void SceneOutlinerPanel::drawAtomRow(
 		RendererWindowState &windowState, const std::size_t atomIndex,
@@ -236,13 +236,13 @@ namespace DefectStudio
 		if (open)
 		{
 			const std::vector<std::size_t> freeLabelIndices =
-				CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::FreeLabel);
+				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::FreeLabel);
 			const std::vector<SceneObjectId> freeLabelIds =
 				CollectIds(windowState.freeLabels, freeLabelIndices);
 			for (const std::size_t index : freeLabelIndices)
 				drawFreeLabelRow(windowState, index, freeLabelIds);
 			const std::vector<std::size_t> pinIndices =
-				CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
+				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
 			const std::vector<SceneObjectId> pinIds =
 				CollectIds(windowState.pinnedMeasurements, pinIndices);
 			for (const std::size_t index : pinIndices)
@@ -293,7 +293,7 @@ namespace DefectStudio
 		if (open)
 		{
 			const std::vector<std::size_t> indices =
-				CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneArrow);
+				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneArrow);
 			const std::vector<SceneObjectId> ids = CollectIds(windowState.sceneArrows, indices);
 			for (const std::size_t index : indices)
 				drawSceneArrowRow(windowState, index, ids);
@@ -342,7 +342,7 @@ namespace DefectStudio
 		if (open)
 		{
 			const std::vector<std::size_t> indices =
-				CollectSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneOrbital);
+				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneOrbital);
 			const std::vector<SceneObjectId> ids = CollectIds(windowState.sceneOrbitals, indices);
 			for (const std::size_t index : indices)
 				drawSceneOrbitalRow(windowState, index, ids);

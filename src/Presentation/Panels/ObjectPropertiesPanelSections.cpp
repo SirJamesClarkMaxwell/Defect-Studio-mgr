@@ -13,6 +13,7 @@
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -262,6 +263,7 @@ namespace DefectStudio
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			windowState.freeLabels.erase(windowState.freeLabels.begin() + labelToRemove);
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 	}
 

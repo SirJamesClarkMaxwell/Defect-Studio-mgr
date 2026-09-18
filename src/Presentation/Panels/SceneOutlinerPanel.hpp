@@ -18,6 +18,11 @@ namespace DefectStudio
 	class JobSystem;
 	class CopyWindowStateJob;
 
+	// The ordered registry-backed rows used by the label, arrow, and orbital outliner groups.
+	// Planes deliberately bypass this path and walk RendererWindowState::scenePlanes directly.
+	[[nodiscard]] std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
+		const SceneRegistry &scene, SceneObjectKind kind);
+
 	// Lists open renderer windows (one structure per window - no Collections, see docs/work/
 	// project/plans/2026-08-23-outliner-bonds-displacement.md). Every row carries Blender's two
 	// visibility columns - the eye (drawn in the viewport, what H/Alt+H toggle) and the camera

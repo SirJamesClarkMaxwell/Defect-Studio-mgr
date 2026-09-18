@@ -10,6 +10,7 @@
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -215,9 +216,12 @@ namespace DefectStudio
 			windowState.sceneOrbitals.begin(), windowState.sceneOrbitals.end(),
 			[&ids](const SceneOrbital &orbital)
 			{ return std::find(ids.begin(), ids.end(), orbital.id) != ids.end(); });
-		if (removed != windowState.sceneOrbitals.end())
+		const bool erasedAny = removed != windowState.sceneOrbitals.end();
+		if (erasedAny)
 			windowState.sceneOrbitals.erase(removed, windowState.sceneOrbitals.end());
 		windowState.selectedSceneOrbitals.clear();
+		if (erasedAny)
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 	}
 
 	void EraseScenePlanes(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids)

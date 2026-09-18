@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -39,7 +40,10 @@ namespace DefectStudio
 		windowState.selectedSceneArrows.clear();
 		windowState.sceneArrowDragging = false;
 		if (erasedAny)
+		{
 			windowState.sceneArrowQuickEditActive = false;
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		}
 	}
 
 	std::vector<RendererWindowState::SceneArrow> &GetSceneArrowClipboard()
@@ -126,8 +130,9 @@ namespace DefectStudio
 	{
 		// Session-wide, deliberately not per-arrow: it is the setting for the *act* of snapping an
 		// arrow to two atoms, not a property of the arrow that results - once drawn, the endpoints
-		// are ordinary coordinates the user can drag. 1.0 = start exactly at the drawn sphere.
-		static float buffer = 1.0f;
+		// are ordinary coordinates the user can drag. 1.0 is tangent to the drawn sphere; the 1.15
+		// default leaves a visible gap equal to 15% of that atom's radius.
+		static float buffer = 1.15f;
 		return buffer;
 	}
 
@@ -162,7 +167,9 @@ namespace DefectStudio
 		ImGui::SetNextItemWidth(120.0f);
 		ImGui::DragFloat("Bufor##SceneArrowAtomBuffer", &GetSceneArrowAtomBuffer(), 0.02f, 0.0f, 3.0f, "%.2f r");
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-			ImGui::SetTooltip("Odstep od srodka atomu, w promieniach kuli. 0 = od srodka do srodka.");
+			ImGui::SetTooltip(
+				"Odleglosc konca od srodka atomu, w promieniach kuli. "
+				"0 = srodek, 1.0 = powierzchnia, 1.15 = odstep 15%% promienia.");
 	}
 
 	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom)

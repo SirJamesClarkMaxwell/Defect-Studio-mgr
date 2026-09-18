@@ -49,8 +49,20 @@ Open questions to settle before building:
   arrow are both normal in a figure. TikZ's arrow tip vocabulary is the reference the user has in
   mind; it does not need to be exhaustive, it needs to not be one cone.
 
-## Not decided yet
+## Decided 2026-09-18
 
-Whether 32a and 32b are one branch or two. 32b is the larger of the two and overlaps the curve work
-already in the scene-tools plan - check that plan before slicing this, so a second curve object does
-not get built beside the first.
+**32b is one object, not three.** `SceneArrow` gets a list of points instead of `start`/`end`, plus
+a curvature/control point and a tip style per end. A plain arrow is two points with a tip on one
+end; a curved arrow is two points and a control point; a path is N points with both tips set to
+none. One geometry builder, one YAML shape, one outliner row kind, one properties section.
+`ArrowKind` (Line / Arrow2D / Arrow3D) survives only as *how it is drawn*, not as *what it is*.
+
+Checked before deciding: there is no Bezier or curve scene object in `src/` - `grep -rli
+"bezier\|SceneCurve" src/` returns nothing. The editable-curve item in the scene-tools plan was
+never built, so 32b is not duplicating it, it *is* it. Close that plan item when this lands.
+
+**Order.** Task 30c (deletion resync + atom buffer) ships and task 30 merges first. Task 32 starts
+on a clean tree, because 32 adds new scene objects and the 30c deletion fix is the thing that makes
+new scene objects delete correctly for free.
+
+Still open: whether 32a and 32b are one branch or two. 32b is the bigger half.

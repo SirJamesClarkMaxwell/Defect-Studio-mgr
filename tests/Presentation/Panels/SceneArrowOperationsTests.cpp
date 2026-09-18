@@ -33,6 +33,20 @@ namespace DefectStudio::Tests
 		EXPECT_LT(buffered.start.x, buffered.end.x);
 	}
 
+	TEST(SceneArrowAtomMatchTests, DefaultBufferClearsTheDrawnAtomSpheres)
+	{
+		RendererWindowState::SceneArrow arrow;
+		const RendererAtomData first{"C", glm::vec3(0.0f), glm::vec3(0.0f), 0.5f};
+		const RendererAtomData second{"O", glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(0.0f), 0.25f};
+
+		MatchSceneArrowPositionToAtoms(arrow, first, second, GetSceneArrowAtomBuffer());
+
+		EXPECT_NEAR(arrow.start.x, 0.575f, 1e-5f);
+		EXPECT_NEAR(arrow.end.x, 9.7125f, 1e-5f);
+		EXPECT_GT(glm::length(arrow.start - first.cartesianPosition), first.radius);
+		EXPECT_GT(glm::length(arrow.end - second.cartesianPosition), second.radius);
+	}
+
 	TEST(SceneArrowAtomMatchTests, ABufferBiggerThanTheGapDoesNotInvertTheArrow)
 	{
 		RendererWindowState::SceneArrow arrow;

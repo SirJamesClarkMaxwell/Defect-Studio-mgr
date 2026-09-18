@@ -18,6 +18,12 @@
 > - Watch the stored `arrow.start`/`arrow.end` after the action, not the picture. If the values carry
 >   the gap and the drawing does not, the bug is in the renderer, not here.
 >
+> **Items 3 and 5 moved to `30c-scene-object-deletion-and-buffer.md` on 2026-09-18, with sharper
+> diagnoses than the ones below.** The item 5 note that follows is superseded: the registry is not a
+> second source of truth, it is a mirror that `SceneSystem::SyncLabelEntities` rebuilds wholesale
+> from the vectors, and the bug is simply that no erase function calls it. The item 3 leads below
+> were all checked and all three are dead ends. Read 30c, not this.
+>
 > **Item 5, added 2026-09-18, not started: deleting a scene object in the viewport leaves its row in
 > the Scene Outliner.** Reported for orbitals and arrows; assume every scene-object kind until proven
 > otherwise, because the shape of the bug is shared. Verified while writing this down, not fixed:
