@@ -31,24 +31,9 @@ namespace DefectStudio
 			return changed;
 		}
 
-		[[nodiscard]] bool IsTwoCenter(OrbitalPreset preset)
-		{
-			switch (preset)
-			{
-				case OrbitalPreset::S:
-				case OrbitalPreset::P:
-				case OrbitalPreset::D:
-				case OrbitalPreset::F:
-				case OrbitalPreset::Sp:
-				case OrbitalPreset::Sp2:
-				case OrbitalPreset::Sp3: return false;
-				default: return true;
-			}
-		}
-
 		void DrawPresetCombo(RendererWindowState &windowState, SceneOrbital &orbital)
 		{
-			if (!ImGui::BeginCombo("Preset", OrbitalPresetName(orbital.preset)))
+			if (!ImGui::BeginCombo("Preset", OrbitalPresetDisplayName(orbital.preset)))
 				return;
 			// Same five drawers as the Add menu, from the same source - see HydrogenicOrbital.hpp.
 			for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
@@ -57,7 +42,7 @@ namespace DefectStudio
 				for (const OrbitalPreset preset : OrbitalPresetsInGroup(group))
 				{
 					const bool selected = preset == orbital.preset;
-					if (ImGui::Selectable(OrbitalPresetName(preset), selected) && !selected)
+					if (ImGui::Selectable(OrbitalPresetDisplayName(preset), selected) && !selected)
 					{
 						PushPinnedMeasurementUndoSnapshot(windowState);
 						orbital.preset = preset;
@@ -76,7 +61,7 @@ namespace DefectStudio
 			{
 				ImGui::TextDisabled("Nie zakotwiczony - stoi tam, gdzie go postawiono.");
 				const std::size_t selectedAtoms = windowState.selectedAtomIndices.size();
-				const std::size_t required = IsTwoCenter(orbital.preset) ? 2u : 1u;
+				const std::size_t required = IsTwoCenterPreset(orbital.preset) ? 2u : 1u;
 				ImGui::BeginDisabled(selectedAtoms != required);
 				if (ImGui::Button("Zakotwicz na zaznaczonych atomach"))
 				{
@@ -134,12 +119,12 @@ namespace DefectStudio
 			const int memberCount = OrbitalPresetMemberCount(orbital.preset);
 			orbital.lobeIndex = std::clamp(orbital.lobeIndex, 0, std::max(0, memberCount - 1));
 			ImGui::BeginDisabled(memberCount <= 1);
-			if (ImGui::BeginCombo("Czlon", OrbitalPresetMemberName(orbital.preset, orbital.lobeIndex)))
+			if (ImGui::BeginCombo("Czlon", OrbitalPresetMemberDisplayName(orbital.preset, orbital.lobeIndex)))
 			{
 				for (int lobe = 0; lobe < memberCount; ++lobe)
 				{
 					const bool selected = lobe == orbital.lobeIndex;
-					if (ImGui::Selectable(OrbitalPresetMemberName(orbital.preset, lobe), selected) && !selected)
+					if (ImGui::Selectable(OrbitalPresetMemberDisplayName(orbital.preset, lobe), selected) && !selected)
 					{
 						PushPinnedMeasurementUndoSnapshot(windowState);
 						orbital.lobeIndex = lobe;
@@ -169,7 +154,7 @@ namespace DefectStudio
 			DrawUndoableValue(windowState, orbital.centerA, [](glm::vec3 &value) {
 				return ImGui::DragFloat3("Srodek A", &value.x, 0.05f);
 			});
-			if (IsTwoCenter(orbital.preset))
+			if (IsTwoCenterPreset(orbital.preset))
 			{
 				DrawUndoableValue(windowState, orbital.centerB, [](glm::vec3 &value) {
 					return ImGui::DragFloat3("Srodek B", &value.x, 0.05f);
@@ -179,7 +164,7 @@ namespace DefectStudio
 
 			// Two-centre presets take their orientation from centerB - centerA, so a rotation here
 			// would be silently ignored rather than doing nothing visible for a reason.
-			ImGui::BeginDisabled(IsTwoCenter(orbital.preset));
+			ImGui::BeginDisabled(IsTwoCenterPreset(orbital.preset));
 			DrawUndoableValue(windowState, orbital.rotationEuler, [](glm::vec3 &value) {
 				return ImGui::DragFloat3("Obrot (stopnie)", &value.x, 1.0f);
 			});
@@ -248,26 +233,6 @@ namespace DefectStudio
 		windowState.selectedScenePlanes.clear();
 	}
 
-	void DrawSelectedSceneOrbitalSection(RendererWindowState &windowState)
-	{
-		ImGui::Separator();
-		ImGui::Text("Orbitale (%zu zaznaczonych)", windowState.selectedSceneOrbitals.size());
-		ImGui::PushID("SelectedOrbitals");
-		for (const SceneObjectId id : windowState.selectedSceneOrbitals)
-		{
-			const std::size_t index = AnnotationIndex(windowState.sceneOrbitals, id);
-			if (index >= windowState.sceneOrbitals.size())
-				continue;
-			ImGui::PushID(static_cast<int>(index));
-			const std::string label =
-				std::string(OrbitalPresetName(windowState.sceneOrbitals[index].preset)) + " #" + std::to_string(index);
-			ImGui::SeparatorText(label.c_str());
-			DrawSceneOrbitalEditor(windowState, index);
-			ImGui::PopID();
-		}
-		ImGui::PopID();
-	}
-
 	void DrawAllSceneOrbitalRows(RendererWindowState &windowState)
 	{
 		ImGui::Text("Orbitale (%zu)", windowState.sceneOrbitals.size());
@@ -317,67 +282,48 @@ namespace DefectStudio
 		EraseSceneOrbitals(windowState, toRemove);
 	}
 
-	namespace
+	void DrawScenePlaneEditor(RendererWindowState &windowState, const std::size_t index)
 	{
-		void DrawScenePlaneEditor(RendererWindowState &windowState, const std::size_t index)
-		{
-			if (index >= windowState.scenePlanes.size())
-				return;
-			RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
-			DrawUndoableValue(windowState, plane.center, [](glm::vec3 &value) {
-				return ImGui::DragFloat3("Srodek", &value.x, 0.05f);
-			});
+		if (index >= windowState.scenePlanes.size())
+			return;
+		RendererWindowState::ScenePlane &plane = windowState.scenePlanes[index];
+		// The resolver owns an anchored plane's frame; accepting edits here would only record an
+		// undo snapshot and then snap the controls back on the next frame.
+		ImGui::BeginDisabled(!plane.anchorAtoms.empty());
+		DrawUndoableValue(windowState, plane.center, [](glm::vec3 &value) {
+			return ImGui::DragFloat3("Srodek", &value.x, 0.05f);
+		});
 
-			if (DrawUndoableValue(windowState, plane.normal, [](glm::vec3 &value) {
-					return ImGui::DragFloat3("Normalna", &value.x, 0.02f);
-				}))
+		if (DrawUndoableValue(windowState, plane.normal, [](glm::vec3 &value) {
+				return ImGui::DragFloat3("Normalna", &value.x, 0.02f);
+			}))
+		{
+			if (glm::dot(plane.normal, plane.normal) > 1e-8f)
 			{
-				if (glm::dot(plane.normal, plane.normal) > 1e-8f)
-				{
-					plane.normal = glm::normalize(plane.normal);
-					const glm::vec3 projected =
-						plane.tangent - glm::dot(plane.tangent, plane.normal) * plane.normal;
-					if (glm::dot(projected, projected) > 1e-8f)
-						plane.tangent = glm::normalize(projected);
-				}
+				plane.normal = glm::normalize(plane.normal);
+				const glm::vec3 projected =
+					plane.tangent - glm::dot(plane.tangent, plane.normal) * plane.normal;
+				if (glm::dot(projected, projected) > 1e-8f)
+					plane.tangent = glm::normalize(projected);
 			}
-
-			DrawUndoableValue(windowState, plane.halfExtents, [](glm::vec2 &value) {
-				return ImGui::DragFloat2("Polowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
-			});
-			DrawUndoableValue(windowState, plane.color, [](glm::vec3 &value) {
-				return ImGui::ColorEdit3("Kolor", &value.x);
-			});
-			DrawUndoableValue(windowState, plane.alpha, [](float &value) {
-				return ImGui::SliderFloat("Przezroczystosc", &value, 0.02f, 1.0f, "%.2f");
-			});
-			DrawUndoableValue(windowState, plane.showBorder, [](bool &value) {
-				return ImGui::Checkbox("Ramka", &value);
-			});
-			ImGui::SameLine();
-			DrawUndoableValue(windowState, plane.visible, [](bool &value) {
-				return ImGui::Checkbox("Widoczna", &value);
-			});
 		}
-	} // namespace
-
-	void DrawSelectedScenePlaneSection(RendererWindowState &windowState)
-	{
-		ImGui::Separator();
-		ImGui::Text("Plaszczyzny (%zu zaznaczonych)", windowState.selectedScenePlanes.size());
-		ImGui::PushID("SelectedPlanes");
-		for (const SceneObjectId id : windowState.selectedScenePlanes)
-		{
-			const std::size_t index = AnnotationIndex(windowState.scenePlanes, id);
-			if (index >= windowState.scenePlanes.size())
-				continue;
-			ImGui::PushID(static_cast<int>(index));
-			const std::string label = "Plaszczyzna #" + std::to_string(index);
-			ImGui::SeparatorText(label.c_str());
-			DrawScenePlaneEditor(windowState, index);
-			ImGui::PopID();
-		}
-		ImGui::PopID();
+		ImGui::EndDisabled();
+		DrawUndoableValue(windowState, plane.halfExtents, [](glm::vec2 &value) {
+			return ImGui::DragFloat2("Polowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
+		});
+		DrawUndoableValue(windowState, plane.color, [](glm::vec3 &value) {
+			return ImGui::ColorEdit3("Kolor", &value.x);
+		});
+		DrawUndoableValue(windowState, plane.alpha, [](float &value) {
+			return ImGui::SliderFloat("Przezroczystosc", &value, 0.02f, 1.0f, "%.2f");
+		});
+		DrawUndoableValue(windowState, plane.showBorder, [](bool &value) {
+			return ImGui::Checkbox("Ramka", &value);
+		});
+		ImGui::SameLine();
+		DrawUndoableValue(windowState, plane.visible, [](bool &value) {
+			return ImGui::Checkbox("Widoczna", &value);
+		});
 	}
 
 	void DrawAllScenePlaneRows(RendererWindowState &windowState)

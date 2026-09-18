@@ -677,6 +677,40 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	// The display labels are a second table beside the identifiers, so the thing that can rot is
+	// the pairing: a preset gaining a member without gaining a label would clamp two lobes onto one
+	// menu row, and a caller that typesets the subscript run splits on '_'.
+	TEST(OrbitalPresetMemberTests, EveryPresetAndMemberHasADisplayLabelBesideItsIdentifier)
+	{
+		for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
+		{
+			for (const OrbitalPreset preset : OrbitalPresetsInGroup(group))
+			{
+				EXPECT_STRNE(OrbitalPresetDisplayName(preset), "") << OrbitalPresetName(preset);
+				const int count = OrbitalPresetMemberCount(preset);
+				std::vector<std::string> seen;
+				for (int lobe = 0; lobe < count; ++lobe)
+				{
+					const std::string label = OrbitalPresetMemberDisplayName(preset, lobe);
+					EXPECT_FALSE(label.empty()) << OrbitalPresetName(preset) << " lobe " << lobe;
+					EXPECT_EQ(std::find(seen.begin(), seen.end(), label), seen.end())
+						<< "duplicate display label " << label;
+					seen.push_back(label);
+					// A '_' that opens a subscript run must have something in it.
+					const std::size_t mark = label.find('_');
+					if (mark != std::string::npos)
+						EXPECT_NE(label.find_first_not_of(' ', mark + 1), std::string::npos) << label;
+				}
+				EXPECT_STREQ(
+					OrbitalPresetMemberDisplayName(preset, 999), OrbitalPresetMemberDisplayName(preset, count - 1));
+			}
+		}
+
+		// Greek where the identifier spells it out - the whole point of the second table.
+		EXPECT_STREQ(OrbitalPresetDisplayName(OrbitalPreset::PiStar), "π*");
+		EXPECT_STREQ(OrbitalPresetMemberDisplayName(OrbitalPreset::P, 2), "p_y");
+	}
+
 	TEST(OrbitalPresetMemberTests, TheNamesDescribeTheOrbitalThatIsActuallyBuilt)
 	{
 		// p_z must really be the m = 0 p orbital, not just be labelled that way. Same for d_z2.

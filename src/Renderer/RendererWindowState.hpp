@@ -306,6 +306,12 @@ namespace DefectStudio
 			glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
 			// Half-width along `tangent` and half-height along normal x tangent, Angstrom.
 			glm::vec2 halfExtents = glm::vec2(2.0f);
+			// Optional atom anchoring, indices into structure.atoms, same shape and lifetime rules
+			// as SceneOrbital::anchorAtoms - but here the whole frame is re-fitted from the atoms
+			// rather than a centre copied, so a plane through three atoms stays through them while
+			// they move. Needs at least two resolvable entries; anything less is ignored. Empty
+			// means a free plane, which is what "Odczep" leaves behind.
+			std::vector<std::size_t> anchorAtoms;
 			glm::vec3 color = glm::vec3(0.35f, 0.65f, 0.9f);
 			float alpha = 0.35f;
 			// Drawn on top of the outline of the quad. Off gives a plain translucent sheet.
@@ -337,6 +343,11 @@ namespace DefectStudio
 		// new include needed.
 		bool sceneArrowQuickEditActive = false;
 		std::size_t sceneArrowQuickEditIndex = 0;
+		// Add > Orbital: whether a picked preset lands on the selected atoms or at the 3D cursor.
+		// A sticky flag on the window rather than a level of submenu, which is what made that menu
+		// six flyouts deep. Per-window and not persisted - it is a mode for the next click, not a
+		// project setting.
+		bool orbitalAddAnchorToSelection = true;
 		// Atoms-displacement comparison (T08 item 0 / T16 item 8) - this window is the "reference"
 		// structure; comparisonFilePath is a second, differently-composed-or-not structure loaded
 		// once (off the main thread, CompareStructuresJob) and matched against it. Unlike

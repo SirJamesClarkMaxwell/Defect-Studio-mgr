@@ -316,6 +316,67 @@ namespace DefectStudio
 		}
 	} // namespace
 
+	namespace
+	{
+		// Display counterpart of PresetMembers, in the same order. Kept as its own table rather than
+		// derived from the ASCII one: the two differ by more than a character substitution (pi's
+		// members are labelled by the axis they point along, not by the word "prostopadly"), and a
+		// clever transform would have to be read to be believed.
+		[[nodiscard]] std::span<const char *const> PresetMemberDisplays(OrbitalPreset preset)
+		{
+			static const char *const kS[] = {"s"};
+			static const char *const kP[] = {"p_z", "p_x", "p_y"};
+			static const char *const kD[] = {"d_z²", "d_xz", "d_yz", "d_x²-y²", "d_xy"};
+			static const char *const kF[] = {
+				"f_z³", "f_xz²", "f_yz²", "f_z(x²-y²)", "f_xyz", "f_x(x²-3y²)", "f_y(3x²-y²)"};
+			static const char *const kSp[] = {"sp #1 (+z)", "sp #2 (-z)"};
+			static const char *const kSp2[] = {"sp² #1 (+z)", "sp² #2 (120°)", "sp² #3 (240°)"};
+			static const char *const kSp3[] = {
+				"sp³ #1 (+z)", "sp³ #2 (tetraedryczny)", "sp³ #3 (tetraedryczny)", "sp³ #4 (tetraedryczny)"};
+			static const char *const kSigma[] = {"σ (wzdluz wiazania)"};
+			static const char *const kSigmaStar[] = {"σ* (wzdluz wiazania)"};
+			static const char *const kPi[] = {"π_x", "π_y"};
+			static const char *const kPiStar[] = {"π*_x", "π*_y"};
+			static const char *const kDelta[] = {"δ_x²-y²", "δ_xy"};
+			static const char *const kDeltaStar[] = {"δ*_x²-y²", "δ*_xy"};
+			static const char *const kHybridSigma[] = {"σ z hybryd"};
+
+			switch (preset)
+			{
+				case OrbitalPreset::S: return kS;
+				case OrbitalPreset::P: return kP;
+				case OrbitalPreset::D: return kD;
+				case OrbitalPreset::F: return kF;
+				case OrbitalPreset::Sp: return kSp;
+				case OrbitalPreset::Sp2: return kSp2;
+				case OrbitalPreset::Sp3: return kSp3;
+				case OrbitalPreset::Sigma: return kSigma;
+				case OrbitalPreset::SigmaStar: return kSigmaStar;
+				case OrbitalPreset::Pi: return kPi;
+				case OrbitalPreset::PiStar: return kPiStar;
+				case OrbitalPreset::Delta: return kDelta;
+				case OrbitalPreset::DeltaStar: return kDeltaStar;
+				default: return kHybridSigma;
+			}
+		}
+	} // namespace
+
+	const char *OrbitalPresetDisplayName(OrbitalPreset preset)
+	{
+		constexpr std::array<const char *, 19> names = {
+			"s", "p", "d", "f", "sp", "sp²", "sp³", "σ", "σ*", "π", "π*", "δ",
+			"δ*", "sp-σ", "sp-σ*", "sp²-σ", "sp²-σ*", "sp³-σ", "sp³-σ*"};
+		const int index = static_cast<int>(preset);
+		return index >= 0 && index < static_cast<int>(names.size()) ? names[index] : "";
+	}
+
+	const char *OrbitalPresetMemberDisplayName(OrbitalPreset preset, int lobeIndex)
+	{
+		const std::span<const char *const> members = PresetMemberDisplays(preset);
+		return members[static_cast<std::size_t>(
+			std::clamp(lobeIndex, 0, static_cast<int>(members.size()) - 1))];
+	}
+
 	int OrbitalPresetMemberCount(OrbitalPreset preset)
 	{
 		return static_cast<int>(PresetMembers(preset).size());

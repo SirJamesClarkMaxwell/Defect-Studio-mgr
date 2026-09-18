@@ -232,6 +232,17 @@ namespace DefectStudio
 	// into range rather than returning null, so a stale index from a preset change still renders.
 	[[nodiscard]] const char *OrbitalPresetMemberName(OrbitalPreset preset, int lobeIndex);
 
+	// The same preset and member as they should be *shown*: UTF-8, Greek letters and real
+	// super/subscripts where the identifiers above spell them out ("pi*" -> "π*", "sp2" -> "sp²",
+	// "d_x2-y2" -> "d_x²-y²"). Deliberately not the same function as the two above: those are keys
+	// that land in project files and in tests, and a key that changes when someone improves a label
+	// is a key that stops round-tripping.
+	//
+	// In a member label '_' opens a subscript run that ends at the next space or at the end of the
+	// string. A caller that cannot typeset one may print the string as it is and still be readable.
+	[[nodiscard]] const char *OrbitalPresetDisplayName(OrbitalPreset preset);
+	[[nodiscard]] const char *OrbitalPresetMemberDisplayName(OrbitalPreset preset, int lobeIndex);
+
 	// Which drawer a preset belongs in. Total: every preset has exactly one group.
 	[[nodiscard]] OrbitalPresetGroup OrbitalPresetGroupOf(OrbitalPreset preset);
 

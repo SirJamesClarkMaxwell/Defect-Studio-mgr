@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
@@ -22,13 +23,21 @@ namespace DefectStudio
 {
 	namespace
 	{
+		[[nodiscard]] std::vector<std::size_t> ValidSelectedAtoms(const RendererWindowState &windowState)
+		{
+			std::vector<std::size_t> indices;
+			indices.reserve(windowState.selectedAtomIndices.size());
+			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
+				if (atomIndex < windowState.structure.atoms.size())
+					indices.push_back(atomIndex);
+			return indices;
+		}
+
 		[[nodiscard]] std::vector<glm::vec3> SelectedAtomPositions(const RendererWindowState &windowState)
 		{
 			std::vector<glm::vec3> positions;
-			positions.reserve(windowState.selectedAtomIndices.size());
-			for (const std::size_t atomIndex : windowState.selectedAtomIndices)
-				if (atomIndex < windowState.structure.atoms.size())
-					positions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
+			for (const std::size_t atomIndex : ValidSelectedAtoms(windowState))
+				positions.push_back(windowState.structure.atoms[atomIndex].cartesianPosition);
 			return positions;
 		}
 
@@ -39,6 +48,65 @@ namespace DefectStudio
 			if (count >= 2 && count <= 4)
 				return "atomy";
 			return "atomow";
+		}
+
+		// A menu row whose label carries a real subscript: '_' opens the subscript run and it ends at
+		// the next space (the convention OrbitalPresetMemberDisplayName documents). Unicode has no
+		// subscript y and no subscript z, so "pᵧ" would have to be a Greek gamma wearing a wig - the
+		// run is drawn at 72% size on a lowered baseline instead.
+		//
+		// The row is still an ordinary MenuItem, given the full label, so width, hover, keyboard nav
+		// and the auto-close behaviour are ImGui's; only its text is drawn transparent and replaced.
+		bool SubscriptMenuItem(const char *label, const bool enabled = true)
+		{
+			const std::string text = label;
+			const std::size_t mark = text.find('_');
+			if (mark == std::string::npos)
+				return ImGui::MenuItem(label, nullptr, false, enabled);
+
+			const std::size_t subEnd = text.find(' ', mark);
+			const std::string base = text.substr(0, mark);
+			const std::string sub =
+				text.substr(mark + 1, subEnd == std::string::npos ? std::string::npos : subEnd - mark - 1);
+			const std::string tail = subEnd == std::string::npos ? std::string() : text.substr(subEnd);
+
+			const ImVec2 pen = ImGui::GetCursorScreenPos();
+			ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 0));
+			const bool pressed = ImGui::MenuItem(label, nullptr, false, enabled);
+			ImGui::PopStyleColor();
+
+			ImFont *font = ImGui::GetFont();
+			const float size = ImGui::GetFontSize();
+			const float subSize = size * 0.72f;
+			// GetColorU32 folds in style.Alpha, so a row inside an enclosing BeginDisabled dims with
+			// the rest of the group instead of staying bright.
+			const ImU32 color = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+			ImDrawList *draw = ImGui::GetWindowDrawList();
+			float x = pen.x;
+			draw->AddText(font, size, ImVec2(x, pen.y), color, base.c_str());
+			x += font->CalcTextSizeA(size, FLT_MAX, 0.0f, base.c_str()).x;
+			draw->AddText(font, subSize, ImVec2(x, pen.y + size - subSize), color, sub.c_str());
+			if (!tail.empty())
+			{
+				x += font->CalcTextSizeA(subSize, FLT_MAX, 0.0f, sub.c_str()).x;
+				draw->AddText(font, size, ImVec2(x, pen.y), color, tail.c_str());
+			}
+			return pressed;
+		}
+
+		void AddFreeSegment(
+			RendererWindowState &windowState, const glm::vec3 &worldPosition,
+			const RendererWindowState::ArrowKind kind)
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, worldPosition);
+			ApplySceneArrowKindChange(arrow, kind);
+			arrow.id = windowState.sceneRegistry.AllocateObjectId();
+			windowState.sceneArrows.push_back(std::move(arrow));
+			const std::size_t newIndex = windowState.sceneArrows.size() - 1;
+			windowState.selectedSceneArrows = {windowState.sceneArrows[newIndex].id};
+			windowState.sceneArrowQuickEditActive = true;
+			windowState.sceneArrowQuickEditIndex = newIndex;
 		}
 	} // namespace
 
@@ -66,16 +134,40 @@ namespace DefectStudio
 		return DescribeDrawSelection(SelectedAtomPositions(windowState).size());
 	}
 
+	std::vector<std::vector<std::size_t>> ResolveOrbitalAddAnchorGroups(
+		const OrbitalPreset preset, const std::vector<std::size_t> &selectedAtoms,
+		const bool anchorToSelection)
+	{
+		if (!anchorToSelection)
+			return {{}};
+		if (IsTwoCenterPreset(preset))
+			return selectedAtoms.size() == 2
+				? std::vector<std::vector<std::size_t>>{selectedAtoms}
+				: std::vector<std::vector<std::size_t>>{};
+
+		std::vector<std::vector<std::size_t>> groups;
+		groups.reserve(selectedAtoms.size());
+		for (const std::size_t atomIndex : selectedAtoms)
+			groups.push_back({atomIndex});
+		return groups;
+	}
+
 	void DrawSegmentAddItems(RendererWindowState &windowState)
 	{
-		const std::vector<glm::vec3> positions = SelectedAtomPositions(windowState);
-		const DrawSelectionDescription description = DescribeDrawSelection(positions.size());
+		const std::vector<std::size_t> atoms = ValidSelectedAtoms(windowState);
+		const DrawSelectionDescription description = DescribeDrawSelection(atoms.size());
 		const auto addSegment = [&](const RendererWindowState::ArrowKind kind) {
 			PushPinnedMeasurementUndoSnapshot(windowState);
-			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, positions.front());
-			arrow.kind = kind;
-			arrow.start = positions.front();
-			arrow.end = positions.back();
+			RendererWindowState::SceneArrow arrow =
+				MakeDefaultSceneArrow(windowState, windowState.structure.atoms[atoms.front()].cartesianPosition);
+			MatchSceneArrowPositionToAtoms(
+				arrow, windowState.structure.atoms[atoms.front()],
+				windowState.structure.atoms[atoms.back()], GetSceneArrowAtomBuffer());
+			// Endpoints first, then the kind change, and never a bare `arrow.kind = kind`:
+			// MakeDefaultSceneArrow ships Arrow2D's widths, which are *pixels*, and reading 22 of
+			// them as world units is what drew a head the size of the cell across the structure.
+			// ApplySceneArrowKindChange re-derives them from the arrow's own length.
+			ApplySceneArrowKindChange(arrow, kind);
 			arrow.id = windowState.sceneRegistry.AllocateObjectId();
 			windowState.sceneArrows.push_back(std::move(arrow));
 			windowState.selectedSceneArrows = {windowState.sceneArrows.back().id};
@@ -85,6 +177,7 @@ namespace DefectStudio
 			addSegment(RendererWindowState::ArrowKind::Line);
 		if (ImGui::MenuItem(description.arrowLabel.c_str(), nullptr, false, description.canDrawSegment))
 			addSegment(RendererWindowState::ArrowKind::Arrow3D);
+		DrawSceneArrowAtomBufferControl();
 	}
 
 	void DrawPlaneAddItem(RendererWindowState &windowState)
@@ -101,163 +194,146 @@ namespace DefectStudio
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			RendererWindowState::ScenePlane plane = MakeScenePlane(*fit);
+			plane.anchorAtoms = ValidSelectedAtoms(windowState);
 			plane.id = windowState.sceneRegistry.AllocateObjectId();
 			windowState.scenePlanes.push_back(std::move(plane));
 			windowState.selectedScenePlanes = {windowState.scenePlanes.back().id};
 		}
 	}
 
+	void DrawFreeSegmentAddItems(RendererWindowState &windowState, const glm::vec3 &worldPosition)
+	{
+		if (ImGui::MenuItem("Linia swobodna"))
+			AddFreeSegment(windowState, worldPosition, RendererWindowState::ArrowKind::Line);
+		if (ImGui::MenuItem("Strzalka swobodna"))
+			AddFreeSegment(windowState, worldPosition, RendererWindowState::ArrowKind::Arrow3D);
+	}
+
+	void DrawFreePlaneAddItem(RendererWindowState &windowState, const glm::vec3 &worldPosition)
+	{
+		if (!ImGui::MenuItem("Plaszczyzna swobodna"))
+			return;
+
+		PushPinnedMeasurementUndoSnapshot(windowState);
+		RendererWindowState::ScenePlane plane = MakeDefaultScenePlane(windowState, worldPosition);
+		plane.id = windowState.sceneRegistry.AllocateObjectId();
+		windowState.scenePlanes.push_back(std::move(plane));
+		windowState.selectedScenePlanes = {windowState.scenePlanes.back().id};
+	}
+
 	void DrawOrbitalAddMenu(
 		RendererWindowState &windowState,
-		const glm::vec3 &contextMenuWorldPosition,
-		bool &anchorOrbitalToSelection,
+		const glm::vec3 &worldPosition,
 		const bool drawSubmenu)
 	{
 		if (drawSubmenu && !ImGui::BeginMenu("Orbital"))
 			return;
 		{
-			// Where it lands is decided once, above the presets, instead of being inferred from
-			// whatever happened to be selected - which is what made "add on this atom" feel like
-			// a side effect rather than a choice.
-			const std::size_t selectedAtoms = windowState.selectedAtomIndices.size();
-			const bool canAnchor = selectedAtoms == 1 || selectedAtoms == 2;
-			std::string anchorLabel = "Na zaznaczonym atomie";
-			if (canAnchor)
-			{
-				anchorLabel += " (";
-				for (std::size_t i = 0; i < selectedAtoms; ++i)
-				{
-					const std::size_t atomIndex = windowState.selectedAtomIndices[i];
-					if (atomIndex >= windowState.structure.atoms.size())
-						continue;
-					if (i > 0)
-						anchorLabel += ", ";
-					anchorLabel += windowState.structure.atoms[atomIndex].element;
-					anchorLabel += " #" + std::to_string(atomIndex);
-				}
-				anchorLabel += ")";
-			}
-			bool anchorToSelection = anchorOrbitalToSelection && canAnchor;
-			if (ImGui::MenuItem(anchorLabel.c_str(), nullptr, &anchorToSelection, canAnchor))
-				anchorOrbitalToSelection = anchorToSelection;
-			if (!canAnchor && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Zaznacz jeden atom (orbital atomowy lub hybryda) albo dwa (orbital molekularny).");
-			ImGui::Separator();
+			const std::vector<std::size_t> selected = ValidSelectedAtoms(windowState);
+			const std::size_t selectedAtoms = selected.size();
+			// Anchoring with nothing selected resolves to zero anchor groups, i.e. an Add that adds
+			// nothing. The mode follows the selection down rather than silently doing that.
+			if (selectedAtoms == 0)
+				windowState.orbitalAddAnchorToSelection = false;
 
-			// One place that builds and files a new orbital, so the three entry points below
-			// cannot drift apart on anchoring, undo or selection.
-			auto addOrbital = [&](OrbitalPreset preset, int lobeIndex, bool anchor) {
+			// One place that builds and files a new orbital, so the entry points below cannot
+			// drift apart on anchoring, undo or selection.
+			auto addOrbital = [&](OrbitalPreset preset, int lobeIndex, const std::vector<std::size_t> &anchors) {
 				RendererWindowState::SceneOrbital orbital =
-					MakeDefaultSceneOrbital(windowState, preset, contextMenuWorldPosition);
-				if (!anchor)
-				{
-					orbital.anchorAtoms.clear();
-					orbital.centerA = contextMenuWorldPosition;
-					orbital.centerB = contextMenuWorldPosition + glm::vec3(1.5f, 0.0f, 0.0f);
-				}
+					MakeDefaultSceneOrbital(windowState, preset, worldPosition, anchors);
 				orbital.lobeIndex = lobeIndex;
 				orbital.id = windowState.sceneRegistry.AllocateObjectId();
 				windowState.sceneOrbitals.push_back(std::move(orbital));
-				SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 				return windowState.sceneOrbitals.back().id;
 			};
 
-			// The path the textbook picture actually describes: two atoms, one molecular
-			// orbital between them, already lying along the bond because MakeOrbitalPreset
-			// takes its orientation from centerB - centerA. Reaching that through
-			// "Wiazace > sigma" and hoping the selection was right was not a path anyone found.
-			if (selectedAtoms == 2 && ImGui::BeginMenu("Wiazanie miedzy zaznaczonymi atomami"))
-			{
-				for (const OrbitalPresetGroup group : {OrbitalPresetGroup::Bonding,
-						 OrbitalPresetGroup::Antibonding, OrbitalPresetGroup::HybridBonding})
+			// "Put this preset where the user said" - and for a one-centre preset with several
+			// atoms selected, that is one orbital per atom, not one orbital that silently declines
+			// to anchor because the count was not exactly 1. That refusal was the whole of #4.
+			auto addPreset = [&](OrbitalPreset preset, int lobeIndex, bool anchor) {
+				std::vector<SceneObjectId> added;
+				for (const std::vector<std::size_t> &anchors :
+					ResolveOrbitalAddAnchorGroups(preset, selected, anchor))
+					added.push_back(addOrbital(preset, lobeIndex, anchors));
+				return added;
+			};
+
+			auto selectAdded = [&](std::vector<SceneObjectId> added) {
+				windowState.selectedSceneOrbitals = std::move(added);
+				SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+			};
+
+			auto addAllLobes = [&](OrbitalPreset preset, int members, bool anchor) {
+				std::vector<SceneObjectId> added;
+				for (int lobe = 0; lobe < members; ++lobe)
 				{
-					ImGui::SeparatorText(OrbitalPresetGroupName(group));
-					for (const OrbitalPreset preset : OrbitalPresetsInGroup(group))
+					const std::vector<SceneObjectId> lobeIds = addPreset(preset, lobe, anchor);
+					added.insert(added.end(), lobeIds.begin(), lobeIds.end());
+				}
+				return added;
+			};
+
+			// Placement used to be a whole level of flyout ("Na N zaznaczonych atomach" vs "W kursorze
+			// 3D"), duplicating the catalogue under each. It is a mode, so it is a checkbox: a
+			// Checkbox does not auto-close the popup, so mode and pick still happen in one trip.
+			ImGui::BeginDisabled(selectedAtoms == 0);
+			const std::string anchorLabel = selectedAtoms == 0
+				? std::string("Zakotwicz na zaznaczonych atomach (brak zaznaczenia)")
+				: "Zakotwicz na " + std::to_string(selectedAtoms) +
+					(selectedAtoms == 1 ? " zaznaczonym atomie" : " zaznaczonych atomach");
+			ImGui::Checkbox(anchorLabel.c_str(), &windowState.orbitalAddAnchorToSelection);
+			ImGui::EndDisabled();
+
+			const bool anchor = windowState.orbitalAddAnchorToSelection;
+			if (!anchor)
+				ImGui::TextDisabled("Orbital stanie w kursorze 3D.");
+
+			for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
+			{
+				ImGui::SeparatorText(OrbitalPresetGroupName(group));
+				for (const OrbitalPreset preset : OrbitalPresetsInGroup(group))
+				{
+					const bool compatible = !anchor || !IsTwoCenterPreset(preset) || selectedAtoms == 2;
+					const int members = OrbitalPresetMemberCount(preset);
+					// The requirement rides in the label rather than a tooltip, because ImGui does not
+					// hover a disabled item and a greyed row that will not say why is the complaint
+					// this menu already collected once.
+					const std::string presetLabel = compatible
+						? std::string(OrbitalPresetDisplayName(preset))
+						: std::string(OrbitalPresetDisplayName(preset)) + " (wymaga 2 atomow)";
+					ImGui::BeginDisabled(!compatible);
+					if (members <= 1)
 					{
-						const int members = OrbitalPresetMemberCount(preset);
-						// A pi or a delta has two degenerate orientations; offering the named
-						// pair here is the difference between "it drew the wrong one" and a
-						// choice the user made.
-						if (members <= 1)
+						if (ImGui::MenuItem(presetLabel.c_str()))
 						{
-							if (ImGui::MenuItem(OrbitalPresetName(preset)))
-							{
-								PushPinnedMeasurementUndoSnapshot(windowState);
-								windowState.selectedSceneOrbitals = {addOrbital(preset, 0, true)};
-							}
-							continue;
+							PushPinnedMeasurementUndoSnapshot(windowState);
+							selectAdded(addPreset(preset, 0, anchor));
 						}
-						if (!ImGui::BeginMenu(OrbitalPresetName(preset)))
-							continue;
+						ImGui::EndDisabled();
+						continue;
+					}
+					if (ImGui::BeginMenu(presetLabel.c_str()))
+					{
 						for (int lobe = 0; lobe < members; ++lobe)
 						{
-							if (!ImGui::MenuItem(OrbitalPresetMemberName(preset, lobe)))
+							if (!SubscriptMenuItem(OrbitalPresetMemberDisplayName(preset, lobe)))
 								continue;
 							PushPinnedMeasurementUndoSnapshot(windowState);
-							windowState.selectedSceneOrbitals = {addOrbital(preset, lobe, true)};
+							selectAdded(addPreset(preset, lobe, anchor));
+						}
+						ImGui::Separator();
+						const std::string allLabel = "Wszystkie platki (" +
+							std::to_string(members * static_cast<int>(anchor ? std::max<std::size_t>(selectedAtoms, 1) : 1)) +
+							")";
+						if (ImGui::MenuItem(allLabel.c_str()))
+						{
+							PushPinnedMeasurementUndoSnapshot(windowState);
+							selectAdded(addAllLobes(preset, members, anchor));
 						}
 						ImGui::EndMenu();
 					}
+					ImGui::EndDisabled();
 				}
-				ImGui::EndMenu();
-			}
-
-			// A hybridised centre is genuinely several wavefunctions, so drawing one means
-			// adding several orbitals. Doing that by hand four times for an sp3 was the part
-			// that made the feature look broken rather than merely manual.
-			if (selectedAtoms == 1 && ImGui::BeginMenu("Cala hybrydyzacja na atomie"))
-			{
-				for (const OrbitalPreset preset : OrbitalPresetsInGroup(OrbitalPresetGroup::Hybrid))
-				{
-					const int members = OrbitalPresetMemberCount(preset);
-					const std::string label =
-						std::string(OrbitalPresetName(preset)) + " (" + std::to_string(members) + " platki)";
-					if (!ImGui::MenuItem(label.c_str()))
-						continue;
-					PushPinnedMeasurementUndoSnapshot(windowState);
-					std::vector<SceneObjectId> added;
-					for (int lobe = 0; lobe < members; ++lobe)
-						added.push_back(addOrbital(preset, lobe, true));
-					windowState.selectedSceneOrbitals = std::move(added);
-				}
-				ImGui::EndMenu();
-			}
-			if (selectedAtoms == 2 || selectedAtoms == 1)
-				ImGui::Separator();
-
-			// Drawn from the physics' own filing (HydrogenicOrbital.hpp), not a list retyped
-			// here - a preset added there appears in exactly one of these drawers without this
-			// file being touched, and a test pins that down.
-			for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
-			{
-				if (!ImGui::BeginMenu(OrbitalPresetGroupName(group)))
-					continue;
-				for (const OrbitalPreset preset : OrbitalPresetsInGroup(group))
-				{
-					const int members = OrbitalPresetMemberCount(preset);
-					if (members <= 1)
-					{
-						if (ImGui::MenuItem(OrbitalPresetName(preset)))
-						{
-							PushPinnedMeasurementUndoSnapshot(windowState);
-							windowState.selectedSceneOrbitals = {addOrbital(preset, 0, anchorToSelection)};
-						}
-						continue;
-					}
-					// Named members, not a number to guess at afterwards: p_z vs p_x, sp3 #2 vs
-					// #3, pi's two perpendiculars. Same list the properties combo uses.
-					if (!ImGui::BeginMenu(OrbitalPresetName(preset)))
-						continue;
-					for (int lobe = 0; lobe < members; ++lobe)
-					{
-						if (!ImGui::MenuItem(OrbitalPresetMemberName(preset, lobe)))
-							continue;
-						PushPinnedMeasurementUndoSnapshot(windowState);
-						windowState.selectedSceneOrbitals = {addOrbital(preset, lobe, anchorToSelection)};
-					}
-					ImGui::EndMenu();
-				}
-				ImGui::EndMenu();
 			}
 			if (drawSubmenu)
 				ImGui::EndMenu();
