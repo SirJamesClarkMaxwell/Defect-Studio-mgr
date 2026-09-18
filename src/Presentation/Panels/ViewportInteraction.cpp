@@ -27,6 +27,7 @@ namespace DefectStudio
 		RendererLayer &layer,
 		const WeakRef<CommandRegistry> &commandRegistry)
 	{
+		SceneSystem::RefreshAnchoredSceneArrows(windowState);
 		ResolveAnchoredOrbitals(windowState);
 		ResolveAnchoredScenePlanes(windowState);
 		// Keeps each label entity's TransformComponent current before the gizmo/hit-test below read

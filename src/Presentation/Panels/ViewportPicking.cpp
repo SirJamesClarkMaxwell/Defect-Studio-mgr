@@ -201,8 +201,8 @@ namespace DefectStudio
 		const bool atomHit = hitAtomIndex != std::numeric_limits<std::size_t>::max();
 		const bool bondHit = hitBondIndex != std::numeric_limits<std::size_t>::max();
 		// Empty space is the gesture that means "deselect everything"; landing on an atom or a bond
-		// is not. Clearing on an atom hit as well made "Match position" unreachable - the buttons
-		// need an arrow and its two atoms selected at once, and picking the atoms threw the arrow
+		// is not. Clearing on an atom hit as well made the arrow anchor/colour actions unreachable -
+		// the buttons need an arrow and its two atoms selected at once, and picking the atoms threw the arrow
 		// away. Atoms and annotations coexist in the selection; SceneTransform decides which of
 		// them the gizmo actually moves.
 		if (!additive && !atomHit && !bondHit)

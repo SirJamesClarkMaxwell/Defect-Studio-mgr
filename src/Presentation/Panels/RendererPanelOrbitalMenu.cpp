@@ -160,9 +160,13 @@ namespace DefectStudio
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			RendererWindowState::SceneArrow arrow =
 				MakeDefaultSceneArrow(windowState, windowState.structure.atoms[atoms.front()].cartesianPosition);
+			const float atomBuffer = GetSceneArrowAtomBuffer();
+			arrow.startAnchorAtom = atoms.front();
+			arrow.endAnchorAtom = atoms.back();
+			arrow.atomBuffer = atomBuffer;
 			MatchSceneArrowPositionToAtoms(
 				arrow, windowState.structure.atoms[atoms.front()],
-				windowState.structure.atoms[atoms.back()], GetSceneArrowAtomBuffer());
+				windowState.structure.atoms[atoms.back()], atomBuffer);
 			// Endpoints first, then the kind change, and never a bare `arrow.kind = kind`:
 			// MakeDefaultSceneArrow ships Arrow2D's widths, which are *pixels*, and reading 22 of
 			// them as world units is what drew a head the size of the cell across the structure.

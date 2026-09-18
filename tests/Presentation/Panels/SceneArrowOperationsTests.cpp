@@ -90,6 +90,8 @@ namespace DefectStudio::Tests
 		RendererWindowState::SceneArrow arrow;
 		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
 		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.startAnchorAtom = 2;
+		arrow.endAnchorAtom = 5;
 		arrow.style.useGradient = true;
 		arrow.style.gradient.start = glm::vec3(1.0f, 0.0f, 0.0f);
 		arrow.style.gradient.finish = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -98,6 +100,8 @@ namespace DefectStudio::Tests
 
 		EXPECT_EQ(arrow.start, glm::vec3(4.0f, 5.0f, 6.0f));
 		EXPECT_EQ(arrow.end, glm::vec3(1.0f, 2.0f, 3.0f));
+		EXPECT_EQ(arrow.startAnchorAtom, std::optional<std::size_t>(5));
+		EXPECT_EQ(arrow.endAnchorAtom, std::optional<std::size_t>(2));
 		EXPECT_EQ(arrow.style.gradient.start, glm::vec3(1.0f, 0.0f, 0.0f));
 		EXPECT_EQ(arrow.style.gradient.finish, glm::vec3(0.0f, 0.0f, 1.0f));
 	}
@@ -123,5 +127,48 @@ namespace DefectStudio::Tests
 		const SceneArrowAtomMatchDescription three = DescribeSceneArrowAtomMatch(3);
 		EXPECT_FALSE(three.canMatchPosition);
 		EXPECT_FALSE(three.canMatchColor);
+	}
+
+	TEST(SceneArrowClipboardTests, DuplicateOffsetsAndDetachesAnAnchoredArrow)
+	{
+		RendererWindowState window;
+		RendererWindowState::SceneArrow arrow;
+		arrow.id = window.sceneRegistry.AllocateObjectId();
+		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
+		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.startAnchorAtom = 0;
+		arrow.endAnchorAtom = 1;
+		window.sceneArrows.push_back(arrow);
+		window.selectedSceneArrows = {arrow.id};
+
+		DuplicateSelectedSceneArrows(window);
+
+		ASSERT_EQ(window.sceneArrows.size(), 2u);
+		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
+		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
+		EXPECT_EQ(window.sceneArrows[1].start, arrow.start + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_EQ(window.sceneArrows[1].end, arrow.end + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_FALSE(window.sceneArrows[1].startAnchorAtom.has_value());
+		EXPECT_FALSE(window.sceneArrows[1].endAnchorAtom.has_value());
+	}
+
+	TEST(SceneArrowClipboardTests, PasteOffsetsAndDetachesAnAnchoredArrow)
+	{
+		RendererWindowState window;
+		RendererWindowState::SceneArrow arrow;
+		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
+		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.startAnchorAtom = 0;
+		arrow.endAnchorAtom = 1;
+		GetSceneArrowClipboard() = {arrow};
+
+		PasteSceneArrowsFromClipboard(window);
+
+		ASSERT_EQ(window.sceneArrows.size(), 1u);
+		EXPECT_EQ(window.sceneArrows[0].start, arrow.start + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_EQ(window.sceneArrows[0].end, arrow.end + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
+		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
+		GetSceneArrowClipboard().clear();
 	}
 } // namespace DefectStudio::Tests

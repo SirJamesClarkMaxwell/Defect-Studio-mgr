@@ -112,6 +112,11 @@ namespace DefectStudio
 		PersistedWorldPlane fixedPlane = PersistedWorldPlane::XY;
 		glm::vec3 start = glm::vec3(0.0f); // required
 		glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f); // required
+		// Zero or one stable atom reference per endpoint. Separate vectors preserve which end is
+		// free without changing the dense anchor representation used by orbitals and planes.
+		std::vector<PersistedAtomRef> startAnchorAtoms;
+		std::vector<PersistedAtomRef> endAnchorAtoms;
+		float atomBuffer = 1.15f;
 		PersistedArrowStyle style;
 	};
 

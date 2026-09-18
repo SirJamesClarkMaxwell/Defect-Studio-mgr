@@ -318,6 +318,50 @@ namespace DefectStudio::SceneSystem
 		return result;
 	}
 
+	void ApplySceneArrowAtomBuffer(
+		RendererWindowState::SceneArrow &arrow,
+		const float startRadius,
+		const float endRadius,
+		const float radiusBuffer)
+	{
+		if (radiusBuffer <= 0.0f)
+			return;
+
+		const glm::vec3 delta = arrow.end - arrow.start;
+		const float distance = glm::length(delta);
+		const float requested = radiusBuffer * (startRadius + endRadius);
+		if (distance <= 1e-4f || requested <= 1e-4f)
+			return;
+
+		// Keep ten percent of the original direction when the requested gaps overlap rather than
+		// trimming through the far end and drawing the arrow backwards.
+		const float scale = std::min(1.0f, 0.9f * distance / requested);
+		const glm::vec3 direction = delta / distance;
+		arrow.start += direction * (radiusBuffer * startRadius * scale);
+		arrow.end -= direction * (radiusBuffer * endRadius * scale);
+	}
+
+	void RefreshAnchoredSceneArrows(RendererWindowState &windowState)
+	{
+		for (RendererWindowState::SceneArrow &arrow : windowState.sceneArrows)
+		{
+			if (!arrow.startAnchorAtom.has_value() && !arrow.endAnchorAtom.has_value())
+				continue;
+
+			arrow.start = ResolveAnchor(arrow.start, arrow.startAnchorAtom, windowState.structure);
+			arrow.end = ResolveAnchor(arrow.end, arrow.endAnchorAtom, windowState.structure);
+			const float startRadius = arrow.startAnchorAtom.has_value() &&
+				*arrow.startAnchorAtom < windowState.structure.atoms.size()
+				? windowState.structure.atoms[*arrow.startAnchorAtom].radius
+				: 0.0f;
+			const float endRadius = arrow.endAnchorAtom.has_value() &&
+				*arrow.endAnchorAtom < windowState.structure.atoms.size()
+				? windowState.structure.atoms[*arrow.endAnchorAtom].radius
+				: 0.0f;
+			ApplySceneArrowAtomBuffer(arrow, startRadius, endRadius, arrow.atomBuffer);
+		}
+	}
+
 	void UpdateLabelTransforms(SceneRegistry &scene, const RendererWindowState &windowState)
 	{
 		const std::vector<entt::entity> &labelEntities = scene.LabelEntities();

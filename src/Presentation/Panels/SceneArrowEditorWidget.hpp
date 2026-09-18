@@ -109,8 +109,8 @@ namespace DefectStudio
 		const RendererAtomData &startAtom,
 		const RendererAtomData &endAtom,
 		float radiusBuffer = 0.0f);
-	// The one buffer value shared by the "Match position" button and the Draw menu's Line/Arrow
-	// items, so an arrow drawn from the menu and one snapped afterwards land in the same place.
+	// Session default used only when creating a newly anchored arrow from the Draw menu. Existing
+	// arrows own SceneArrow::atomBuffer and never read this value again.
 	[[nodiscard]] float &GetSceneArrowAtomBuffer();
 	void DrawSceneArrowAtomBufferControl();
 	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom);

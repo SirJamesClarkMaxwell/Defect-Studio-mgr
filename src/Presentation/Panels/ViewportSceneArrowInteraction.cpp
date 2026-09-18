@@ -103,6 +103,7 @@ namespace DefectStudio
 				const glm::vec2 deltaPixels = mousePos - windowState.sceneArrowDragLastMouse;
 				const glm::vec3 worldDelta = cameraRight * (deltaPixels.x / pixelsPerWorldRight) -
 					cameraUp * (deltaPixels.y / pixelsPerWorldUp);
+				const bool movedEndpoint = glm::dot(worldDelta, worldDelta) > 0.0f;
 				for (const SceneObjectId arrowId : windowState.selectedSceneArrows)
 				{
 					const std::size_t arrowIndex = ArrowIndex(windowState, arrowId);
@@ -110,13 +111,26 @@ namespace DefectStudio
 						continue;
 					SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
 					if (singleSelection && windowState.sceneArrowDragTarget == DragTarget::Start)
+					{
 						arrow.start += worldDelta;
+						if (movedEndpoint)
+							arrow.startAnchorAtom.reset();
+					}
 					else if (singleSelection && windowState.sceneArrowDragTarget == DragTarget::End)
+					{
 						arrow.end += worldDelta;
+						if (movedEndpoint)
+							arrow.endAnchorAtom.reset();
+					}
 					else
 					{
 						arrow.start += worldDelta;
 						arrow.end += worldDelta;
+						if (movedEndpoint)
+						{
+							arrow.startAnchorAtom.reset();
+							arrow.endAnchorAtom.reset();
+						}
 					}
 				}
 				windowState.sceneArrowDragLastMouse = mousePos;

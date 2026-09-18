@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cctype>
 
+#include "IO/SceneObjectsIO.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -177,6 +179,9 @@ namespace DefectStudio::Tests
 		arrow.kind = RendererWindowState::ArrowKind::Line;
 		arrow.fixedPlane = RendererWindowState::WorldPlane::XZ;
 		arrow.end = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.startAnchorAtom = 0;
+		arrow.endAnchorAtom = 1;
+		arrow.atomBuffer = 0.75f;
 		arrow.style.alpha = 0.5f;
 		source.sceneArrows.push_back(arrow);
 		EnsureScenePersistKeys(source);
@@ -204,7 +209,64 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(target.sceneArrows[0].kind, RendererWindowState::ArrowKind::Line);
 		EXPECT_EQ(target.sceneArrows[0].fixedPlane, RendererWindowState::WorldPlane::XZ);
 		EXPECT_EQ(target.sceneArrows[0].end, arrow.end);
+		EXPECT_EQ(target.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
+		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
+		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
 		EXPECT_FLOAT_EQ(target.sceneArrows[0].style.alpha, 0.5f);
+	}
+
+	TEST(SceneObjectPersistenceTests, HalfDetachedArrowKeepsTheFreeEndThroughProjectFileRoundTrip)
+	{
+		RendererWindowState source = MakeWindow();
+		RendererWindowState::SceneArrow arrow;
+		arrow.start = glm::vec3(-2.0f, 1.0f, 0.0f);
+		arrow.end = glm::vec3(1.25f, 0.0f, 0.0f);
+		arrow.startAnchorAtom.reset();
+		arrow.endAnchorAtom = 1;
+		arrow.atomBuffer = 0.75f;
+		source.sceneArrows.push_back(arrow);
+		SceneSystem::RefreshAnchoredSceneArrows(source);
+		const RendererWindowState::SceneArrow refreshed = source.sceneArrows[0];
+
+		SceneObjectsFile file;
+		file.structures.push_back({"structure", ExtractPersistedSceneObjects(source)});
+		SceneObjectsFile parsed;
+		std::vector<StructuredError> ioWarnings;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(SceneObjectsIO::Serialize(file), parsed, ioWarnings, error)) << error;
+		ASSERT_TRUE(ioWarnings.empty());
+		ASSERT_EQ(parsed.structures.size(), 1u);
+
+		RendererWindowState target = MakeWindow();
+		std::vector<StructuredError> applyWarnings;
+		ApplyPersistedSceneObjects(target, parsed.structures[0].objects, applyWarnings);
+
+		EXPECT_TRUE(applyWarnings.empty());
+		ASSERT_EQ(target.sceneArrows.size(), 1u);
+		EXPECT_EQ(target.sceneArrows[0].start, refreshed.start);
+		EXPECT_FALSE(target.sceneArrows[0].startAnchorAtom.has_value());
+		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
+		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
+	}
+
+	TEST(SceneObjectPersistenceTests, ArrowEndpointReferencesRebindAfterAtomsAreReordered)
+	{
+		RendererWindowState source = MakeWindow();
+		RendererWindowState::SceneArrow arrow;
+		arrow.startAnchorAtom = 0;
+		arrow.endAnchorAtom = 1;
+		source.sceneArrows.push_back(arrow);
+		const std::vector<PersistedSceneObject> saved = ExtractPersistedSceneObjects(source);
+
+		RendererWindowState target = MakeWindow();
+		std::rotate(target.structure.atoms.begin(), target.structure.atoms.begin() + 1, target.structure.atoms.end());
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(target, saved, warnings);
+
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(target.sceneArrows.size(), 1u);
+		EXPECT_EQ(target.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(2));
+		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(0));
 	}
 
 	TEST(SceneObjectPersistenceTests, AnchoredPlaneSurvivesExtractAndApply)

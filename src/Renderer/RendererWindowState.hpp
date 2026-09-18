@@ -230,6 +230,12 @@ namespace DefectStudio
 			WorldPlane fixedPlane = WorldPlane::XY;
 			glm::vec3 start = glm::vec3(0.0f);
 			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
+			// Which atom each end follows. A missing optional is a free coordinate; a stale index
+			// also leaves the stored coordinate untouched, matching the orbital/plane anchor rule.
+			std::optional<std::size_t> startAnchorAtom;
+			std::optional<std::size_t> endAnchorAtom;
+			// Gap at each anchored end in that atom's own radii. 1.0 reaches the sphere surface.
+			float atomBuffer = 1.15f;
 			ArrowStyle style;
 			std::string persistKey; // see PinnedMeasurement::persistKey
 			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
@@ -261,7 +267,7 @@ namespace DefectStudio
 			// than hidden, so switching preset back and forth does not lose the bond the user set up.
 			glm::vec3 centerB = glm::vec3(1.5f, 0.0f, 0.0f);
 			// Optional atom anchoring, indices into structure.atoms: one entry drives centerA, two
-			// drive centerA and centerB. Resolved every frame like SceneArrow::anchorAtoms, so an
+			// drive centerA and centerB. Resolved every frame like SceneArrow's endpoint anchors, so an
 			// orbital sits on its atom through gizmo drags, nudges and relaxation playback. Anchors
 			// that no longer resolve are ignored, never indexed.
 			std::vector<std::size_t> anchorAtoms;

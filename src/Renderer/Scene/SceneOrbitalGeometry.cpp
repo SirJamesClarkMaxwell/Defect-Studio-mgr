@@ -17,15 +17,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		[[nodiscard]] glm::vec3 ResolveAnchor(
-			const glm::vec3 &fallback, const std::vector<std::size_t> &anchors, std::size_t anchorIndex,
-			const RendererStructureData &structure)
-		{
-			if (anchorIndex >= anchors.size() || anchors[anchorIndex] >= structure.atoms.size())
-				return fallback;
-			return structure.atoms[anchors[anchorIndex]].cartesianPosition;
-		}
-
 		void HashValue(std::uint64_t &hash, std::uint64_t value)
 		{
 			hash ^= value;
@@ -81,6 +72,28 @@ namespace DefectStudio
 			return populations;
 		}
 	} // namespace
+
+	glm::vec3 ResolveAnchor(
+		const glm::vec3 &fallback,
+		const std::optional<std::size_t> &anchor,
+		const RendererStructureData &structure)
+	{
+		if (!anchor.has_value() || *anchor >= structure.atoms.size())
+			return fallback;
+		return structure.atoms[*anchor].cartesianPosition;
+	}
+
+	glm::vec3 ResolveAnchor(
+		const glm::vec3 &fallback,
+		const std::vector<std::size_t> &anchors,
+		const std::size_t anchorIndex,
+		const RendererStructureData &structure)
+	{
+		return ResolveAnchor(
+			fallback,
+			anchorIndex < anchors.size() ? std::optional<std::size_t>(anchors[anchorIndex]) : std::nullopt,
+			structure);
+	}
 
 	[[nodiscard]] bool IsTwoCenterPreset(OrbitalPreset preset)
 	{

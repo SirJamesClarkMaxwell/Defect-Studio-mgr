@@ -98,6 +98,9 @@ namespace DefectStudio::Tests
 		arrow.fixedPlane = PersistedWorldPlane::YZ;
 		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
 		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.startAnchorAtoms = {{3, "C", glm::vec3(1.0f, 2.0f, 3.0f)}};
+		arrow.endAnchorAtoms = {{7, "O", glm::vec3(4.0f, 5.0f, 6.0f)}};
+		arrow.atomBuffer = 0.65f;
 		arrow.style.color = glm::vec3(0.2f, 0.4f, 0.6f);
 		arrow.style.headLength = 0.5f;
 		arrow.style.dashed = true;
@@ -114,6 +117,11 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(got->fixedPlane, PersistedWorldPlane::YZ);
 		EXPECT_EQ(got->start, arrow.start);
 		EXPECT_EQ(got->end, arrow.end);
+		ASSERT_EQ(got->startAnchorAtoms.size(), 1u);
+		ASSERT_EQ(got->endAnchorAtoms.size(), 1u);
+		EXPECT_EQ(got->startAnchorAtoms[0].index, 3u);
+		EXPECT_EQ(got->endAnchorAtoms[0].element, "O");
+		EXPECT_FLOAT_EQ(got->atomBuffer, 0.65f);
 		EXPECT_EQ(got->style.color, arrow.style.color);
 		EXPECT_FLOAT_EQ(got->style.headLength, 0.5f);
 		EXPECT_TRUE(got->style.dashed);
@@ -263,6 +271,9 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(legacyArrow->style.dashed);
 		EXPECT_FLOAT_EQ(legacyArrow->style.dashLength, 0.25f);
 		EXPECT_FLOAT_EQ(legacyArrow->style.gapLength, 0.15f);
+		EXPECT_TRUE(legacyArrow->startAnchorAtoms.empty());
+		EXPECT_TRUE(legacyArrow->endAnchorAtoms.empty());
+		EXPECT_FLOAT_EQ(legacyArrow->atomBuffer, 1.15f);
 	}
 
 	TEST(SceneObjectsIOTests, UnknownKindAndInvalidEntriesAreSkippedWithWarningsAndDroppedOnResave)

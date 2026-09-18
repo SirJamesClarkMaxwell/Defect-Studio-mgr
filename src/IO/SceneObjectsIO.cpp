@@ -170,6 +170,12 @@ void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
 		else
 			return false;
 		arrow.persistKey = node["persistKey"].as<std::string>("");
+		if (!SceneObjectsYaml::ParseAnchors(node["startAnchorAtoms"], arrow.startAnchorAtoms) ||
+			arrow.startAnchorAtoms.size() > 1 ||
+			!SceneObjectsYaml::ParseAnchors(node["endAnchorAtoms"], arrow.endAnchorAtoms) ||
+			arrow.endAnchorAtoms.size() > 1)
+			return false;
+		arrow.atomBuffer = node["atom_buffer"].as<float>(arrow.atomBuffer);
 		if (!node["style"] || !node["style"].IsMap())
 			return true;
 		if (node["style"]["color"] && !Vec3(node["style"]["color"], arrow.style.color))
@@ -405,6 +411,9 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 							 << YAML::Value << plane;
 						EmitVec3(emit, "start", value.start);
 						EmitVec3(emit, "end", value.end);
+						SceneObjectsYaml::EmitAnchors(emit, "startAnchorAtoms", value.startAnchorAtoms);
+						SceneObjectsYaml::EmitAnchors(emit, "endAnchorAtoms", value.endAnchorAtoms);
+						emit << YAML::Key << "atom_buffer" << YAML::Value << value.atomBuffer;
 						EmitStyle(emit, value.style);
 					}
 					else if constexpr (std::is_same_v<T, PersistedSceneOrbital>)

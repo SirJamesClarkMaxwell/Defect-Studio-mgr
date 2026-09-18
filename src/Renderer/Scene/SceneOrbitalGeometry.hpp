@@ -30,6 +30,19 @@ namespace DefectStudio
 		glm::vec3 centroid = glm::vec3(0.0f);
 	};
 
+	// Shared anchor resolution rule: a missing or stale anchor leaves the stored coordinate alone.
+	// The vector overload preserves the established orbital slot API; arrows use the optional form
+	// so their two ends can detach independently without allocating in the per-frame refresh.
+	[[nodiscard]] glm::vec3 ResolveAnchor(
+		const glm::vec3 &fallback,
+		const std::optional<std::size_t> &anchor,
+		const RendererStructureData &structure);
+	[[nodiscard]] glm::vec3 ResolveAnchor(
+		const glm::vec3 &fallback,
+		const std::vector<std::size_t> &anchors,
+		std::size_t anchorIndex,
+		const RendererStructureData &structure);
+
 	[[nodiscard]] SceneOrbitalCenters ResolveSceneOrbitalCenters(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
 

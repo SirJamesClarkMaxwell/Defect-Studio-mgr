@@ -328,12 +328,20 @@ namespace DefectStudio
 		ImGui::TextUnformatted("Start");
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(200.0f);
-		drawUndoableVec3(arrow.start, snapshot, [](glm::vec3 &v) { return ImGui::DragFloat3("##ArrowStart", &v.x, 0.01f, 0.0f, 0.0f, "%.3f"); });
+		const bool startChanged = drawUndoableVec3(arrow.start, snapshot, [](glm::vec3 &v) {
+			return ImGui::DragFloat3("##ArrowStart", &v.x, 0.01f, 0.0f, 0.0f, "%.3f");
+		});
+		if (startChanged)
+			arrow.startAnchorAtom.reset();
 
 		ImGui::TextUnformatted("End  ");
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(200.0f);
-		drawUndoableVec3(arrow.end, snapshot, [](glm::vec3 &v) { return ImGui::DragFloat3("##ArrowEnd", &v.x, 0.01f, 0.0f, 0.0f, "%.3f"); });
+		const bool endChanged = drawUndoableVec3(arrow.end, snapshot, [](glm::vec3 &v) {
+			return ImGui::DragFloat3("##ArrowEnd", &v.x, 0.01f, 0.0f, 0.0f, "%.3f");
+		});
+		if (endChanged)
+			arrow.endAnchorAtom.reset();
 
 		ImGui::Text("Length    %.3f", glm::length(arrow.end - arrow.start));
 	}

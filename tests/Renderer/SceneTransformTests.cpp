@@ -74,6 +74,8 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState window;
 		window.sceneArrows.push_back(MakeArrow(SceneObjectId{1}, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}));
+		window.sceneArrows[0].startAnchorAtom = 0;
+		window.sceneArrows[0].endAnchorAtom = 1;
 		window.selectedSceneArrows = {SceneObjectId{1}};
 		const SceneTransformSelectionSnapshot snapshot =
 			CaptureSceneTransformSelection(window, SceneArrowTransformTarget::Both);
@@ -97,12 +99,16 @@ namespace DefectStudio::Tests
 
 		ExpectVec3Near(window.sceneArrows[0].start, snapshot.arrows[0].start + delta.spatial.translation);
 		ExpectVec3Near(window.sceneArrows[0].end, snapshot.arrows[0].end + delta.spatial.translation);
+		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
+		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 	}
 
 	TEST(SceneTransformTests, SelectedArrowTipTranslatesAloneAndCancelRestoresIt)
 	{
 		RendererWindowState window;
 		window.sceneArrows.push_back(MakeArrow(SceneObjectId{4}, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}));
+		window.sceneArrows[0].startAnchorAtom = 0;
+		window.sceneArrows[0].endAnchorAtom = 1;
 		window.selectedSceneArrows = {SceneObjectId{4}};
 		window.sceneArrowGizmoActiveArrowIndex = 0;
 		window.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::End;
@@ -128,15 +134,21 @@ namespace DefectStudio::Tests
 
 		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 3.0f));
 		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(6.0f, 5.0f, 6.0f));
+		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
+		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 		RestoreSceneTransformSelection(window, snapshot);
 		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 3.0f));
 		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(4.0f, 5.0f, 6.0f));
+		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
+		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
 	}
 
 	TEST(SceneTransformTests, ArrowRotateUsesMedianPivot)
 	{
 		RendererWindowState window;
 		window.sceneArrows.push_back(MakeArrow(SceneObjectId{1}, {1.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}));
+		window.sceneArrows[0].startAnchorAtom = 0;
+		window.sceneArrows[0].endAnchorAtom = 1;
 		window.selectedSceneArrows = {SceneObjectId{1}};
 		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
 		const glm::vec3 pivot = ComputeTransformPivot(
@@ -149,6 +161,8 @@ namespace DefectStudio::Tests
 
 		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(2.0f, -1.0f, 0.0f));
 		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(2.0f, 1.0f, 0.0f));
+		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
+		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 	}
 
 	TEST(SceneTransformTests, ArrowScaleAlongAxisMovesEndpointsAndCancelRestoresGeometry)
@@ -159,6 +173,8 @@ namespace DefectStudio::Tests
 		arrow.style.shaftWidth = 0.08f;
 		arrow.style.headWidth = 0.18f;
 		arrow.style.headLength = 0.27f;
+		arrow.startAnchorAtom = 0;
+		arrow.endAnchorAtom = 1;
 		window.sceneArrows.push_back(arrow);
 		window.selectedSceneArrows = {arrow.id};
 		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
@@ -183,10 +199,14 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.shaftWidth, arrow.style.shaftWidth);
 		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.headWidth, arrow.style.headWidth);
 		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.headLength, arrow.style.headLength);
+		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
+		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 
 		RestoreSceneTransformSelection(window, snapshot);
 		ExpectVec3Near(window.sceneArrows[0].start, arrow.start);
 		ExpectVec3Near(window.sceneArrows[0].end, arrow.end);
+		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, arrow.startAnchorAtom);
+		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, arrow.endAnchorAtom);
 	}
 
 	TEST(SceneTransformTests, RestoringSelectionCancelsLabelTransform)

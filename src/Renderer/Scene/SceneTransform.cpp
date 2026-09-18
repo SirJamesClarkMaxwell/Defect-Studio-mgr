@@ -69,6 +69,12 @@ namespace DefectStudio
 			return mode == TransformPivotMode::IndividualOrigins ? origin : selectionPivot;
 		}
 
+		[[nodiscard]] bool EndpointMoved(const glm::vec3 &before, const glm::vec3 &after)
+		{
+			const glm::vec3 delta = after - before;
+			return glm::dot(delta, delta) > kEpsilon * kEpsilon;
+		}
+
 		[[nodiscard]] bool ResolvePinBasePosition(
 			const RendererWindowState &window, std::size_t index, glm::vec3 &position)
 		{
@@ -129,7 +135,8 @@ namespace DefectStudio
 			if (index >= window.sceneArrows.size())
 				continue;
 			const RendererWindowState::SceneArrow &arrow = window.sceneArrows[index];
-			snapshot.arrows.push_back({index, arrow.start, arrow.end, arrowTarget});
+			snapshot.arrows.push_back(
+				{index, arrow.start, arrow.end, arrow.startAnchorAtom, arrow.endAnchorAtom, arrowTarget});
 		}
 		for (const SceneObjectId id : window.selectedSceneOrbitals)
 		{
@@ -282,9 +289,17 @@ namespace DefectStudio
 			if (operation == ModalTransformOp::Translate)
 			{
 				if (start.target != SceneArrowTransformTarget::End)
+				{
 					arrow.start = ApplyTransformDelta(delta.spatial, start.start, selectionPivot);
+					if (EndpointMoved(start.start, arrow.start))
+						arrow.startAnchorAtom.reset();
+				}
 				if (start.target != SceneArrowTransformTarget::Start)
+				{
 					arrow.end = ApplyTransformDelta(delta.spatial, start.end, selectionPivot);
+					if (EndpointMoved(start.end, arrow.end))
+						arrow.endAnchorAtom.reset();
+				}
 			}
 			else if (operation == ModalTransformOp::Rotate)
 			{
@@ -292,6 +307,10 @@ namespace DefectStudio
 				const glm::vec3 pivot = ItemPivot(pivotMode, origin, selectionPivot);
 				arrow.start = ApplyTransformDelta(delta.spatial, start.start, pivot);
 				arrow.end = ApplyTransformDelta(delta.spatial, start.end, pivot);
+				if (EndpointMoved(start.start, arrow.start))
+					arrow.startAnchorAtom.reset();
+				if (EndpointMoved(start.end, arrow.end))
+					arrow.endAnchorAtom.reset();
 			}
 			else
 			{
@@ -299,6 +318,10 @@ namespace DefectStudio
 				const glm::vec3 pivot = ItemPivot(pivotMode, origin, selectionPivot);
 				arrow.start = ApplyTransformDelta(delta.spatial, start.start, pivot);
 				arrow.end = ApplyTransformDelta(delta.spatial, start.end, pivot);
+				if (EndpointMoved(start.start, arrow.start))
+					arrow.startAnchorAtom.reset();
+				if (EndpointMoved(start.end, arrow.end))
+					arrow.endAnchorAtom.reset();
 			}
 		}
 
@@ -384,6 +407,8 @@ namespace DefectStudio
 			RendererWindowState::SceneArrow &arrow = window.sceneArrows[start.index];
 			arrow.start = start.start;
 			arrow.end = start.end;
+			arrow.startAnchorAtom = start.startAnchorAtom;
+			arrow.endAnchorAtom = start.endAnchorAtom;
 		}
 		for (const OrbitalTransformStart &start : snapshot.orbitals)
 		{

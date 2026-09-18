@@ -45,52 +45,50 @@ namespace DefectStudio::SceneObjectsYaml
 		emit << YAML::Key << key << YAML::Value << YAML::Flow << YAML::BeginSeq << value.x << value.y << YAML::EndSeq;
 	}
 
-	namespace
+	// An absent or empty anchor list is normal for free-standing objects. Cardinality belongs to
+	// the object parser: arrows cap each endpoint at one, orbitals at two, and a fitted plane may
+	// keep every selected atom.
+	bool ParseAnchors(const YAML::Node &node, std::vector<PersistedAtomRef> &refs)
 	{
-		// An absent or empty anchor list is normal for free-standing objects. Cardinality belongs to
-		// the object parser: orbitals cap it at two, while a fitted plane may keep every selected atom.
-		[[nodiscard]] bool ParseAnchors(const YAML::Node &node, std::vector<PersistedAtomRef> &refs)
+		refs.clear();
+		if (!node)
+			return true;
+		if (!node.IsSequence())
+			return false;
+		try
 		{
-			refs.clear();
-			if (!node)
-				return true;
-			if (!node.IsSequence())
-				return false;
-			try
+			refs.reserve(node.size());
+			for (const YAML::Node &item : node)
 			{
-				refs.reserve(node.size());
-				for (const YAML::Node &item : node)
-				{
-					if (!item.IsMap() || !item["index"] || !item["element"] || !item["position"])
-						return false;
-					PersistedAtomRef ref;
-					ref.index = item["index"].as<std::size_t>();
-					ref.element = item["element"].as<std::string>();
-					if (!Vec3(item["position"], ref.position))
-						return false;
-					refs.push_back(std::move(ref));
-				}
-				return true;
+				if (!item.IsMap() || !item["index"] || !item["element"] || !item["position"])
+					return false;
+				PersistedAtomRef ref;
+				ref.index = item["index"].as<std::size_t>();
+				ref.element = item["element"].as<std::string>();
+				if (!Vec3(item["position"], ref.position))
+					return false;
+				refs.push_back(std::move(ref));
 			}
-			catch (const YAML::Exception &)
-			{
-				return false;
-			}
+			return true;
 		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
 
-		void EmitAnchors(YAML::Emitter &emit, const std::vector<PersistedAtomRef> &refs)
+	void EmitAnchors(YAML::Emitter &emit, const char *key, const std::vector<PersistedAtomRef> &refs)
+	{
+		emit << YAML::Key << key << YAML::Value << YAML::BeginSeq;
+		for (const PersistedAtomRef &ref : refs)
 		{
-			emit << YAML::Key << "anchorAtoms" << YAML::Value << YAML::BeginSeq;
-			for (const PersistedAtomRef &ref : refs)
-			{
-				emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key
-					 << "element" << YAML::Value << ref.element;
-				EmitVec3(emit, "position", ref.position);
-				emit << YAML::EndMap;
-			}
-			emit << YAML::EndSeq;
+			emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key
+				 << "element" << YAML::Value << ref.element;
+			EmitVec3(emit, "position", ref.position);
+			emit << YAML::EndMap;
 		}
-	} // namespace
+		emit << YAML::EndSeq;
+	}
 
 	bool ParseOrbital(const YAML::Node &node, PersistedSceneOrbital &orbital)
 	{
@@ -136,7 +134,7 @@ namespace DefectStudio::SceneObjectsYaml
 			 << YAML::Key << "effectiveCharge" << YAML::Value << orbital.effectiveCharge;
 		EmitVec3(emit, "centerA", orbital.centerA);
 		EmitVec3(emit, "centerB", orbital.centerB);
-		EmitAnchors(emit, orbital.anchorAtoms);
+		EmitAnchors(emit, "anchorAtoms", orbital.anchorAtoms);
 		EmitVec3(emit, "rotationEuler", orbital.rotationEuler);
 		emit << YAML::Key << "scale" << YAML::Value << orbital.scale << YAML::Key << "isoFraction" << YAML::Value
 			 << orbital.isoFraction << YAML::Key << "resolution" << YAML::Value << orbital.resolution;
@@ -184,7 +182,7 @@ namespace DefectStudio::SceneObjectsYaml
 		EmitVec3(emit, "normal", plane.normal);
 		EmitVec3(emit, "tangent", plane.tangent);
 		EmitVec2(emit, "halfExtents", plane.halfExtents);
-		EmitAnchors(emit, plane.anchorAtoms);
+		EmitAnchors(emit, "anchorAtoms", plane.anchorAtoms);
 		EmitVec3(emit, "color", plane.color);
 		emit << YAML::Key << "alpha" << YAML::Value << plane.alpha << YAML::Key << "showBorder" << YAML::Value
 			 << plane.showBorder << YAML::Key << "visible" << YAML::Value << plane.visible;

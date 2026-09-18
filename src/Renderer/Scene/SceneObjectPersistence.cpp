@@ -173,6 +173,22 @@ static std::vector<std::size_t> ResolveAtomReferences(
 	return atomIndices;
 }
 
+static std::vector<PersistedAtomRef> PersistOptionalAtomReference(
+	const RendererStructureData &structure, const std::optional<std::size_t> &atomIndex)
+{
+	const std::vector<std::size_t> indices = atomIndex.has_value()
+		? std::vector<std::size_t>{*atomIndex}
+		: std::vector<std::size_t>{};
+	return PersistAtomReferences(structure, indices);
+}
+
+static std::optional<std::size_t> ResolveOptionalAtomReference(
+	const RendererStructureData &structure, const std::vector<PersistedAtomRef> &references)
+{
+	const std::vector<std::size_t> indices = ResolveAtomReferences(structure, references);
+	return indices.size() == 1 ? std::optional<std::size_t>(indices.front()) : std::nullopt;
+}
+
 std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWindowState &window)
 {
 	std::vector<PersistedSceneObject> result;
@@ -225,6 +241,9 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.fixedPlane = static_cast<PersistedWorldPlane>(arrow.fixedPlane);
 		p.start = arrow.start;
 		p.end = arrow.end;
+		p.startAnchorAtoms = PersistOptionalAtomReference(window.structure, arrow.startAnchorAtom);
+		p.endAnchorAtoms = PersistOptionalAtomReference(window.structure, arrow.endAnchorAtom);
+		p.atomBuffer = arrow.atomBuffer;
 		p.style = ToPersisted(arrow.style);
 		result.emplace_back(std::move(p));
 	}
@@ -345,6 +364,9 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					a.fixedPlane = static_cast<RendererWindowState::WorldPlane>(value.fixedPlane);
 					a.start = value.start;
 					a.end = value.end;
+					a.startAnchorAtom = ResolveOptionalAtomReference(window.structure, value.startAnchorAtoms);
+					a.endAnchorAtom = ResolveOptionalAtomReference(window.structure, value.endAnchorAtoms);
+					a.atomBuffer = value.atomBuffer;
 					a.style = FromPersisted(value.style);
 					window.sceneArrows.push_back(std::move(a));
 				}

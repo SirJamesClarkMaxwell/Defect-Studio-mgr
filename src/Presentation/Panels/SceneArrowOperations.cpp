@@ -67,6 +67,15 @@ namespace DefectStudio
 	// Flat world-space offset so the copy doesn't land exactly on top of the original - same constant
 	// (and same non-cleverness) as RendererAtomEditCommands.cpp's kDuplicateOffset/kPasteOffset.
 	static constexpr glm::vec3 kArrowDuplicateOffset(0.5f, 0.0f, 0.0f);
+	static void OffsetSceneArrowCopy(RendererWindowState::SceneArrow &arrow)
+	{
+		arrow.start += kArrowDuplicateOffset;
+		arrow.end += kArrowDuplicateOffset;
+		// An anchored copy cannot keep a visible offset: the live refresh would immediately put it
+		// back on the source atoms. The offset therefore becomes a new free placement.
+		arrow.startAnchorAtom.reset();
+		arrow.endAnchorAtom.reset();
+	}
 
 	void DuplicateSelectedSceneArrows(RendererWindowState &windowState)
 	{
@@ -85,8 +94,7 @@ namespace DefectStudio
 			copy.id = windowState.sceneRegistry.AllocateObjectId();
 			copy.persistKey.clear();
 			newIds.push_back(copy.id);
-			copy.start += kArrowDuplicateOffset;
-			copy.end += kArrowDuplicateOffset;
+			OffsetSceneArrowCopy(copy);
 			windowState.sceneArrows.push_back(std::move(copy));
 		}
 		windowState.selectedSceneArrows = std::move(newIds);
@@ -107,8 +115,7 @@ namespace DefectStudio
 			copy.id = windowState.sceneRegistry.AllocateObjectId();
 			copy.persistKey.clear();
 			newIds.push_back(copy.id);
-			copy.start += kArrowDuplicateOffset;
-			copy.end += kArrowDuplicateOffset;
+			OffsetSceneArrowCopy(copy);
 			windowState.sceneArrows.push_back(std::move(copy));
 		}
 		windowState.selectedSceneArrows = std::move(newIds);
@@ -128,10 +135,8 @@ namespace DefectStudio
 
 	float &GetSceneArrowAtomBuffer()
 	{
-		// Session-wide, deliberately not per-arrow: it is the setting for the *act* of snapping an
-		// arrow to two atoms, not a property of the arrow that results - once drawn, the endpoints
-		// are ordinary coordinates the user can drag. 1.0 is tangent to the drawn sphere; the 1.15
-		// default leaves a visible gap equal to 15% of that atom's radius.
+		// Session-wide default for newly anchored arrows only. Existing arrows read their own
+		// SceneArrow::atomBuffer, so changing this cannot rewrite an object already in the scene.
 		static float buffer = 1.15f;
 		return buffer;
 	}
@@ -144,32 +149,22 @@ namespace DefectStudio
 	{
 		arrow.start = startAtom.cartesianPosition;
 		arrow.end = endAtom.cartesianPosition;
-		if (radiusBuffer <= 0.0f)
-			return;
+		SceneSystem::ApplySceneArrowAtomBuffer(arrow, startAtom.radius, endAtom.radius, radiusBuffer);
+	}
 
-		const glm::vec3 delta = arrow.end - arrow.start;
-		const float distance = glm::length(delta);
-		const float requested = radiusBuffer * (startAtom.radius + endAtom.radius);
-		if (distance <= 1e-4f || requested <= 1e-4f)
-			return;
-
-		// Overlapping spheres - a short bond, or a big buffer - would otherwise trim past the far
-		// end and draw the arrow backwards. Shrink both gaps together so the arrow keeps a tenth
-		// of its length instead of inverting.
-		const float scale = std::min(1.0f, 0.9f * distance / requested);
-		const glm::vec3 direction = delta / distance;
-		arrow.start += direction * (radiusBuffer * startAtom.radius * scale);
-		arrow.end -= direction * (radiusBuffer * endAtom.radius * scale);
+	static void DrawSceneArrowAtomBufferTooltip()
+	{
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+			ImGui::SetTooltip(
+				"Odleglosc konca od srodka atomu, w promieniach kuli. "
+				"0 = srodek, 1.0 = powierzchnia, 1.15 = odstep 15%% promienia.");
 	}
 
 	void DrawSceneArrowAtomBufferControl()
 	{
 		ImGui::SetNextItemWidth(120.0f);
 		ImGui::DragFloat("Bufor##SceneArrowAtomBuffer", &GetSceneArrowAtomBuffer(), 0.02f, 0.0f, 3.0f, "%.2f r");
-		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-			ImGui::SetTooltip(
-				"Odleglosc konca od srodka atomu, w promieniach kuli. "
-				"0 = srodek, 1.0 = powierzchnia, 1.15 = odstep 15%% promienia.");
+		DrawSceneArrowAtomBufferTooltip();
 	}
 
 	void MatchSceneArrowColorToAtom(RendererWindowState::SceneArrow &arrow, const RendererAtomData &atom)
@@ -189,6 +184,7 @@ namespace DefectStudio
 	void ReverseSceneArrow(RendererWindowState::SceneArrow &arrow)
 	{
 		std::swap(arrow.start, arrow.end);
+		std::swap(arrow.startAnchorAtom, arrow.endAnchorAtom);
 	}
 
 	void DrawSceneArrowAtomMatchActions(RendererWindowState &windowState, const std::size_t arrowIndex)
@@ -202,29 +198,64 @@ namespace DefectStudio
 			if (atomIndex < windowState.structure.atoms.size())
 				validAtomIndices.push_back(atomIndex);
 
+		RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
 		const SceneArrowAtomMatchDescription description = DescribeSceneArrowAtomMatch(validAtomIndices.size());
-		DrawSceneArrowAtomBufferControl();
-		ImGui::SameLine();
+		const auto drawAnchor = [&](const char *label, std::optional<std::size_t> &anchor) {
+			ImGui::PushID(label);
+			if (!anchor.has_value())
+				ImGui::TextDisabled("%s: wolny", label);
+			else if (*anchor < windowState.structure.atoms.size())
+				ImGui::Text("%s: %s #%zu", label, windowState.structure.atoms[*anchor].element.c_str(), *anchor);
+			else
+				ImGui::Text("%s: brak atomu #%zu", label, *anchor);
+			if (anchor.has_value())
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Odczep"))
+				{
+					PushPinnedMeasurementUndoSnapshot(windowState);
+					anchor.reset();
+				}
+			}
+			ImGui::PopID();
+		};
+		drawAnchor("Start", arrow.startAnchorAtom);
+		drawAnchor("End", arrow.endAnchorAtom);
+
 		ImGui::BeginDisabled(!description.canMatchPosition);
-		const bool matchPosition = ImGui::Button("Match position##SceneArrowMatchPosition");
+		const bool attach = ImGui::Button("Zakotwicz na zaznaczonych atomach");
 		ImGui::EndDisabled();
 		if (!description.canMatchPosition &&
 			ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
-		{
 			ImGui::SetTooltip("%s", description.positionTooltip.c_str());
-		}
-		RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
-		if (matchPosition)
+		if (attach)
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
+			arrow.startAnchorAtom = validAtomIndices[0];
+			arrow.endAnchorAtom = validAtomIndices[1];
 			MatchSceneArrowPositionToAtoms(
 				arrow,
 				windowState.structure.atoms[validAtomIndices[0]],
 				windowState.structure.atoms[validAtomIndices[1]],
-				GetSceneArrowAtomBuffer());
+				arrow.atomBuffer);
 		}
 
-		ImGui::SameLine();
+		const bool freeArrow = !arrow.startAnchorAtom.has_value() && !arrow.endAnchorAtom.has_value();
+		ImGui::BeginDisabled(freeArrow);
+		float editedBuffer = arrow.atomBuffer;
+		ImGui::SetNextItemWidth(120.0f);
+		const bool bufferChanged = ImGui::DragFloat(
+			"Bufor##SceneArrowLiveAtomBuffer", &editedBuffer, 0.02f, 0.0f, 3.0f, "%.2f r");
+		if (ImGui::IsItemActivated())
+			PushPinnedMeasurementUndoSnapshot(windowState);
+		if (bufferChanged)
+		{
+			arrow.atomBuffer = editedBuffer;
+			SceneSystem::RefreshAnchoredSceneArrows(windowState);
+		}
+		DrawSceneArrowAtomBufferTooltip();
+		ImGui::EndDisabled();
+
 		ImGui::BeginDisabled(!description.canMatchColor);
 		const bool matchColor = ImGui::Button("Match colour##SceneArrowMatchColor");
 		ImGui::EndDisabled();

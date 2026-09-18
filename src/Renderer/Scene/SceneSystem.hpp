@@ -69,6 +69,18 @@ namespace DefectStudio
 		[[nodiscard]] std::vector<std::size_t> ResolveSourceIndices(
 			const SceneRegistry &scene, const std::vector<SceneObjectId> &ids);
 
+		// Shared endpoint trimming used by both one-shot atom matching and the live anchored refresh.
+		// A zero radius means that end is free, so its stored coordinate is not trimmed.
+		void ApplySceneArrowAtomBuffer(
+			RendererWindowState::SceneArrow &arrow,
+			float startRadius,
+			float endRadius,
+			float radiusBuffer);
+
+		// Re-resolves anchored arrow ends from the current atom positions and applies each arrow's
+		// live buffer. Free or stale ends keep their stored coordinates. Allocation-free per arrow.
+		void RefreshAnchoredSceneArrows(RendererWindowState &windowState);
+
 		// Refreshes every label entity's TransformComponent.position from its pin's CURRENT anchor
 		// (bond midpoint / angle vertex) + worldOffset. Cheap enough to call every frame - pinned
 		// measurements are few, and the anchor moves with the atoms it measures (gizmo drag, nudge,

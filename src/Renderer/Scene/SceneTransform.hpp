@@ -40,6 +40,8 @@ namespace DefectStudio
 		std::size_t index = 0;
 		glm::vec3 start = glm::vec3(0.0f);
 		glm::vec3 end = glm::vec3(0.0f);
+		std::optional<std::size_t> startAnchorAtom;
+		std::optional<std::size_t> endAnchorAtom;
 		SceneArrowTransformTarget target = SceneArrowTransformTarget::Both;
 	};
 
