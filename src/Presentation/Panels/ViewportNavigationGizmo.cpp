@@ -109,7 +109,12 @@ namespace DefectStudio
 			bool orthographic = false,
 			bool active = false)
 		{
-			const ImVec2 oldCursor = ImGui::GetCursorScreenPos();
+			// Drawing below is all absolute-coordinate drawList calls, not cursor-relative - nothing
+			// in this function needs the ImGui cursor restored to its pre-button position. Restoring
+			// it used to be exactly the bug: a bare SetCursorPos/SetCursorScreenPos with no item
+			// submitted after it is flagged by ImGui as an attempt to grow window/parent boundaries,
+			// and asserts in the enclosing End()/EndChild() - which, for an inactive/unhovered pane,
+			// is the very next call after this function returns.
 			RoundButtonResult result;
 			if (interactive)
 			{
@@ -136,7 +141,6 @@ namespace DefectStudio
 				IM_COL32(235, 235, 240, 255), glyph);
 			if (result.hovered && tooltip != nullptr)
 				ImGui::SetTooltip("%s", tooltip);
-			ImGui::SetCursorScreenPos(oldCursor);
 			return result;
 		}
 	} // namespace
