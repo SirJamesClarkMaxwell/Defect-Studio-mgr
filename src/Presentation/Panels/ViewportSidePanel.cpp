@@ -20,6 +20,13 @@ namespace DefectStudio
 		constexpr float kMinPanelWidth = 180.0f;
 		constexpr float kSlideSeconds = 0.15f;
 		constexpr float kGripWidth = 6.0f;
+		// The auto-grow-from-overflow path (below) has its own, tighter ceiling than a manual drag:
+		// at a high UI font scale, properties content is wider than kDefaultPanelWidth every single
+		// frame, so growing it to "viewportSize.x - 40" (the manual-drag ceiling) means it silently
+		// eats almost the whole viewport the first time a wide row is drawn. A user dragging the grip
+		// still reaches the wider ceiling on purpose; auto-grow should only ever snug the panel to its
+		// content, never swallow the view.
+		constexpr float kMaxAutoGrowFraction = 0.45f;
 
 		struct SlideState
 		{
@@ -111,7 +118,10 @@ namespace DefectStudio
 			// the descriptions start looking cramped, give them a measured minimum instead.
 			const float overflow = ImGui::GetScrollMaxX();
 			if (!state.userSized && overflow > 1.0f)
-				state.openWidth = std::min(state.openWidth + overflow, std::max(kMinPanelWidth, viewportSize.x - 40.0f));
+			{
+				const float autoGrowCeiling = std::max(kMinPanelWidth, viewportSize.x * kMaxAutoGrowFraction);
+				state.openWidth = std::min(state.openWidth + overflow, autoGrowCeiling);
+			}
 		}
 		ImGui::EndChild();
 		ImGui::PopStyleColor();
