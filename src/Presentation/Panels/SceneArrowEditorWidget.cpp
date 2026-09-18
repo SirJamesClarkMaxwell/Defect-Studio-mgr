@@ -267,17 +267,21 @@ namespace DefectStudio
 		else
 		{
 			// Line and Arrow3D share world-space full-diameter semantics - coming from the other
-			// world-space kind, shaftWidth already means the right thing and is kept as-is. Ratios
-			// (not fixed sizes) from Settings > Renderer > Scene arrows, so the new arrow's silhouette
-			// stays consistent regardless of its length.
+			// world-space kind, shaftWidth/headWidth/headLength already mean the right thing and
+			// are kept as-is. Ratios (not fixed sizes) from Settings > Renderer > Scene arrows, so
+			// the new arrow's silhouette stays consistent regardless of its length.
 			if (arrow.kind == ArrowKind::Arrow2D)
 			{
 				arrow.style.shaftWidth =
 					std::clamp(globalSettings.arrowDefaultShaftWidthRatio * length, 0.005f, 0.20f);
 				arrow.style.outlineWidth = 0.0f;
-			}
-			if (newKind == ArrowKind::Arrow3D && arrow.kind != ArrowKind::Arrow3D)
-			{
+				// headWidth/headLength are Arrow2D's pixel-scale values (single/low-double digits -
+				// only sane as screen pixels). Left alone, Line's tip geometry (32b-1: a Line can
+				// carry a tip too, not just Arrow3D) reinterprets them as world units directly and
+				// draws a tip many times the length of the arrow itself. Re-derive them in world
+				// units on every crossing out of Arrow2D, not only when landing on Arrow3D - a Line
+				// defaults its tips to None, but the user can turn one on afterwards and it needs a
+				// sane size already waiting for it.
 				arrow.style.headWidth =
 					std::clamp(globalSettings.arrowDefaultHeadWidthRatio * length, 0.01f, 0.50f);
 				arrow.style.headLength =

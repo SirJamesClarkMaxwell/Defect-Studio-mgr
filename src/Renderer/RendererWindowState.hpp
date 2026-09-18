@@ -218,8 +218,12 @@ namespace DefectStudio
 			float gapLength = 0.15f;  // world units
 			glm::vec3 outlineColor = glm::vec3(0.0f);
 			float outlineWidth = 0.0f;
-			float headWidth = 0.14f;  // Arrow3D cone base diameter / Arrow2D has no head, unused there
-			float headLength = 0.22f; // Arrow3D cone height, unused for Line/Arrow2D
+			// World units for Line/Arrow3D (32b-1: either can carry a tip, not just Arrow3D's cone -
+			// see ArrowTip/GetArrowTipParameters), screen pixels for Arrow2D. Never reinterpret one
+			// unit system as the other - ApplySceneArrowKindChange re-derives both on every switch
+			// that crosses that boundary.
+			float headWidth = 0.14f;
+			float headLength = 0.22f;
 		};
 
 		struct SceneArrow

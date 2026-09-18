@@ -292,4 +292,65 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 		GetSceneArrowClipboard().clear();
 	}
+
+	// Regression: a Line switched to from Arrow2D used to keep Arrow2D's pixel-scale headWidth/
+	// headLength (single/low-double digits) verbatim. 32b-1 made Line capable of drawing a tip too
+	// (not just Arrow3D's cone), and SceneArrowGeometry reads headWidth/headLength as world units
+	// for Line/Arrow3D - so a leftover "22px" read as "22 world units" drew a tip many times the
+	// length of the arrow itself.
+	TEST(ApplySceneArrowKindChangeTests, SwitchingArrow2DToLineRederivesTheHeadInWorldUnits)
+	{
+		RendererGlobalRenderSettings settings;
+		RendererWindowState::SceneArrow arrow;
+		arrow.kind = RendererWindowState::ArrowKind::Arrow2D;
+		arrow.start() = glm::vec3(0.0f);
+		arrow.end() = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.style.headWidth = 22.0f;
+		arrow.style.headLength = 28.0f;
+
+		ApplySceneArrowKindChange(arrow, RendererWindowState::ArrowKind::Line, settings);
+
+		EXPECT_EQ(arrow.kind, RendererWindowState::ArrowKind::Line);
+		// The arrow is 2 world units long - nowhere near big enough to still justify a 22/28 unit
+		// head. Loosely bounded (not pinned to the exact ratio formula) so this test does not
+		// become the thing that breaks if the ratio constants are retuned.
+		EXPECT_LT(arrow.style.headWidth, 1.0f);
+		EXPECT_LT(arrow.style.headLength, 1.5f);
+		EXPECT_GT(arrow.style.headWidth, 0.0f);
+		EXPECT_GT(arrow.style.headLength, 0.0f);
+	}
+
+	TEST(ApplySceneArrowKindChangeTests, SwitchingArrow2DToArrow3DStillRederivesTheHead)
+	{
+		RendererGlobalRenderSettings settings;
+		RendererWindowState::SceneArrow arrow;
+		arrow.kind = RendererWindowState::ArrowKind::Arrow2D;
+		arrow.start() = glm::vec3(0.0f);
+		arrow.end() = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.style.headWidth = 22.0f;
+		arrow.style.headLength = 28.0f;
+
+		ApplySceneArrowKindChange(arrow, RendererWindowState::ArrowKind::Arrow3D, settings);
+
+		EXPECT_EQ(arrow.kind, RendererWindowState::ArrowKind::Arrow3D);
+		EXPECT_LT(arrow.style.headWidth, 1.0f);
+		EXPECT_LT(arrow.style.headLength, 1.5f);
+	}
+
+	TEST(ApplySceneArrowKindChangeTests, SwitchingLineToArrow3DKeepsWorldScaleHeadAsIs)
+	{
+		RendererGlobalRenderSettings settings;
+		RendererWindowState::SceneArrow arrow;
+		arrow.kind = RendererWindowState::ArrowKind::Line;
+		arrow.start() = glm::vec3(0.0f);
+		arrow.end() = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.style.headWidth = 0.09f;
+		arrow.style.headLength = 0.12f;
+
+		ApplySceneArrowKindChange(arrow, RendererWindowState::ArrowKind::Arrow3D, settings);
+
+		// Already world-scale coming from Line - untouched, not re-derived from a ratio.
+		EXPECT_FLOAT_EQ(arrow.style.headWidth, 0.09f);
+		EXPECT_FLOAT_EQ(arrow.style.headLength, 0.12f);
+	}
 } // namespace DefectStudio::Tests
