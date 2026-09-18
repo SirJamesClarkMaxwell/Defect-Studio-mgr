@@ -2286,7 +2286,7 @@ namespace DefectStudio
 		{
 			const RendererWindowState::SceneArrow &arrow = arrows[arrowIndex];
 			const bool isArrow2D = arrow.kind == ArrowKind::Arrow2D;
-			if (isArrow2D != renderArrow2D || arrow.points.size() < 2)
+			if (isArrow2D != renderArrow2D || arrow.points.size() < 2 || !arrow.visible)
 				continue;
 
 			const RendererWindowState::ArrowStyle &style = arrow.style;

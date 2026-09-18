@@ -159,6 +159,8 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
 		{
 			const SceneArrow &candidate = windowState.sceneArrows[i];
+			if (!candidate.visible)
+				continue;
 			glm::vec2 screenStart, screenEnd;
 			if (!projectToScreen(candidate.start(), screenStart) || !projectToScreen(candidate.end(), screenEnd))
 				continue;
