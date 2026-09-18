@@ -38,8 +38,8 @@ namespace DefectStudio
 	struct ArrowTransformStart
 	{
 		std::size_t index = 0;
-		glm::vec3 start = glm::vec3(0.0f);
-		glm::vec3 end = glm::vec3(0.0f);
+		std::vector<glm::vec3> points;
+		std::optional<glm::vec3> controlPoint;
 		std::optional<std::size_t> startAnchorAtom;
 		std::optional<std::size_t> endAnchorAtom;
 		SceneArrowTransformTarget target = SceneArrowTransformTarget::Both;
@@ -85,7 +85,7 @@ namespace DefectStudio
 	};
 
 	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label
-	// and orbital meanings of R/S; arrows use the spatial transform for both endpoints.
+	// and orbital meanings of R/S; arrows use the spatial transform for their complete path.
 	struct SceneTransformDelta
 	{
 		TransformDelta spatial;

@@ -26,15 +26,17 @@ namespace DefectStudio::Tests
 
 			RendererWindowState::SceneArrow first;
 			first.id = window.sceneRegistry.AllocateObjectId();
-			first.start = glm::vec3(1.0f, 2.0f, 3.0f);
-			first.end = glm::vec3(4.0f, 5.0f, 6.0f);
+			first.points = {
+				glm::vec3(1.0f, 2.0f, 3.0f), glm::vec3(2.0f, 8.0f, 4.0f), glm::vec3(4.0f, 5.0f, 6.0f)};
+			first.startTip = RendererWindowState::ArrowTip::Bar;
+			first.endTip = RendererWindowState::ArrowTip::Circle;
 			first.startAnchorAtom = 2;
 			first.endAnchorAtom = 5;
 
 			RendererWindowState::SceneArrow second;
 			second.id = window.sceneRegistry.AllocateObjectId();
-			second.start = glm::vec3(-1.0f, -2.0f, -3.0f);
-			second.end = glm::vec3(-4.0f, -5.0f, -6.0f);
+			second.start() = glm::vec3(-1.0f, -2.0f, -3.0f);
+			second.end() = glm::vec3(-4.0f, -5.0f, -6.0f);
 			second.startAnchorAtom = 7;
 			second.endAnchorAtom = 11;
 
@@ -77,12 +79,15 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(ExecuteReverse());
 
 		ASSERT_EQ(window.sceneArrows.size(), 2u);
-		EXPECT_EQ(window.sceneArrows[0].start, before[0].end);
-		EXPECT_EQ(window.sceneArrows[0].end, before[0].start);
+		EXPECT_EQ(window.sceneArrows[0].start(), before[0].end());
+		EXPECT_EQ(window.sceneArrows[0].end(), before[0].start());
 		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, before[0].endAnchorAtom);
 		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, before[0].startAnchorAtom);
-		EXPECT_EQ(window.sceneArrows[1].start, before[1].end);
-		EXPECT_EQ(window.sceneArrows[1].end, before[1].start);
+		EXPECT_EQ(window.sceneArrows[0].points[1], before[0].points[1]);
+		EXPECT_EQ(window.sceneArrows[0].startTip, before[0].endTip);
+		EXPECT_EQ(window.sceneArrows[0].endTip, before[0].startTip);
+		EXPECT_EQ(window.sceneArrows[1].start(), before[1].end());
+		EXPECT_EQ(window.sceneArrows[1].end(), before[1].start());
 		EXPECT_EQ(window.sceneArrows[1].startAnchorAtom, before[1].endAnchorAtom);
 		EXPECT_EQ(window.sceneArrows[1].endAnchorAtom, before[1].startAnchorAtom);
 		ASSERT_EQ(undoStack->GetUndoDepth(), 1u);
@@ -91,8 +96,8 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(window.sceneArrows.size(), before.size());
 		for (std::size_t index = 0; index < before.size(); ++index)
 		{
-			EXPECT_EQ(window.sceneArrows[index].start, before[index].start);
-			EXPECT_EQ(window.sceneArrows[index].end, before[index].end);
+			EXPECT_EQ(window.sceneArrows[index].start(), before[index].start());
+			EXPECT_EQ(window.sceneArrows[index].end(), before[index].end());
 			EXPECT_EQ(window.sceneArrows[index].startAnchorAtom, before[index].startAnchorAtom);
 			EXPECT_EQ(window.sceneArrows[index].endAnchorAtom, before[index].endAnchorAtom);
 		}
@@ -111,8 +116,8 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(window.sceneArrows.size(), before.size());
 		for (std::size_t index = 0; index < before.size(); ++index)
 		{
-			EXPECT_EQ(window.sceneArrows[index].start, before[index].start);
-			EXPECT_EQ(window.sceneArrows[index].end, before[index].end);
+			EXPECT_EQ(window.sceneArrows[index].start(), before[index].start());
+			EXPECT_EQ(window.sceneArrows[index].end(), before[index].end());
 			EXPECT_EQ(window.sceneArrows[index].startAnchorAtom, before[index].startAnchorAtom);
 			EXPECT_EQ(window.sceneArrows[index].endAnchorAtom, before[index].endAnchorAtom);
 		}
@@ -128,8 +133,8 @@ namespace DefectStudio::Tests
 
 		MatchSceneArrowPositionToAtoms(arrow, first, second);
 
-		EXPECT_EQ(arrow.start, first.cartesianPosition);
-		EXPECT_EQ(arrow.end, second.cartesianPosition);
+		EXPECT_EQ(arrow.start(), first.cartesianPosition);
+		EXPECT_EQ(arrow.end(), second.cartesianPosition);
 	}
 
 	TEST(SceneArrowAtomMatchTests, TheBufferLeavesAGapOfOneRadiusAtEachEnd)
@@ -142,11 +147,11 @@ namespace DefectStudio::Tests
 		MatchSceneArrowPositionToAtoms(unbuffered, first, second, 0.0f);
 		MatchSceneArrowPositionToAtoms(buffered, first, second, 1.0f);
 
-		EXPECT_GT(glm::distance(buffered.start, first.cartesianPosition),
-			glm::distance(unbuffered.start, first.cartesianPosition));
-		EXPECT_GT(glm::distance(buffered.end, second.cartesianPosition),
-			glm::distance(unbuffered.end, second.cartesianPosition));
-		EXPECT_LT(buffered.start.x, buffered.end.x);
+		EXPECT_GT(glm::distance(buffered.start(), first.cartesianPosition),
+			glm::distance(unbuffered.start(), first.cartesianPosition));
+		EXPECT_GT(glm::distance(buffered.end(), second.cartesianPosition),
+			glm::distance(unbuffered.end(), second.cartesianPosition));
+		EXPECT_LT(buffered.start().x, buffered.end().x);
 	}
 
 	TEST(SceneArrowAtomMatchTests, DefaultBufferClearsTheDrawnAtomSpheres)
@@ -157,10 +162,10 @@ namespace DefectStudio::Tests
 
 		MatchSceneArrowPositionToAtoms(arrow, first, second, GetSceneArrowAtomBuffer());
 
-		EXPECT_NEAR(arrow.start.x, 0.575f, 1e-5f);
-		EXPECT_NEAR(arrow.end.x, 9.7125f, 1e-5f);
-		EXPECT_GT(glm::length(arrow.start - first.cartesianPosition), first.radius);
-		EXPECT_GT(glm::length(arrow.end - second.cartesianPosition), second.radius);
+		EXPECT_NEAR(arrow.start().x, 0.575f, 1e-5f);
+		EXPECT_NEAR(arrow.end().x, 9.7125f, 1e-5f);
+		EXPECT_GT(glm::length(arrow.start() - first.cartesianPosition), first.radius);
+		EXPECT_GT(glm::length(arrow.end() - second.cartesianPosition), second.radius);
 	}
 
 	TEST(SceneArrowAtomMatchTests, ABufferBiggerThanTheGapDoesNotInvertTheArrow)
@@ -172,8 +177,8 @@ namespace DefectStudio::Tests
 
 		MatchSceneArrowPositionToAtoms(arrow, first, second, 1.0f);
 
-		EXPECT_LT(arrow.start.x, arrow.end.x);
-		EXPECT_NEAR(arrow.end.x - arrow.start.x, 0.1f, 1e-5f);
+		EXPECT_LT(arrow.start().x, arrow.end().x);
+		EXPECT_NEAR(arrow.end().x - arrow.start().x, 0.1f, 1e-5f);
 	}
 
 	TEST(SceneArrowAtomMatchTests, OneAtomColorCreatesAFlatElementColor)
@@ -204,8 +209,8 @@ namespace DefectStudio::Tests
 	TEST(SceneArrowAtomMatchTests, ReverseSwapsEndpointsWithoutRewritingGradientStops)
 	{
 		RendererWindowState::SceneArrow arrow;
-		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
-		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.start() = glm::vec3(1.0f, 2.0f, 3.0f);
+		arrow.end() = glm::vec3(4.0f, 5.0f, 6.0f);
 		arrow.startAnchorAtom = 2;
 		arrow.endAnchorAtom = 5;
 		arrow.style.useGradient = true;
@@ -214,8 +219,8 @@ namespace DefectStudio::Tests
 
 		ReverseSceneArrow(arrow);
 
-		EXPECT_EQ(arrow.start, glm::vec3(4.0f, 5.0f, 6.0f));
-		EXPECT_EQ(arrow.end, glm::vec3(1.0f, 2.0f, 3.0f));
+		EXPECT_EQ(arrow.start(), glm::vec3(4.0f, 5.0f, 6.0f));
+		EXPECT_EQ(arrow.end(), glm::vec3(1.0f, 2.0f, 3.0f));
 		EXPECT_EQ(arrow.startAnchorAtom, std::optional<std::size_t>(5));
 		EXPECT_EQ(arrow.endAnchorAtom, std::optional<std::size_t>(2));
 		EXPECT_EQ(arrow.style.gradient.start, glm::vec3(1.0f, 0.0f, 0.0f));
@@ -250,8 +255,8 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		RendererWindowState::SceneArrow arrow;
 		arrow.id = window.sceneRegistry.AllocateObjectId();
-		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
-		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.start() = glm::vec3(1.0f, 2.0f, 3.0f);
+		arrow.end() = glm::vec3(4.0f, 5.0f, 6.0f);
 		arrow.startAnchorAtom = 0;
 		arrow.endAnchorAtom = 1;
 		window.sceneArrows.push_back(arrow);
@@ -262,8 +267,8 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(window.sceneArrows.size(), 2u);
 		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
 		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
-		EXPECT_EQ(window.sceneArrows[1].start, arrow.start + glm::vec3(0.5f, 0.0f, 0.0f));
-		EXPECT_EQ(window.sceneArrows[1].end, arrow.end + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_EQ(window.sceneArrows[1].start(), arrow.start() + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_EQ(window.sceneArrows[1].end(), arrow.end() + glm::vec3(0.5f, 0.0f, 0.0f));
 		EXPECT_FALSE(window.sceneArrows[1].startAnchorAtom.has_value());
 		EXPECT_FALSE(window.sceneArrows[1].endAnchorAtom.has_value());
 	}
@@ -272,8 +277,8 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState window;
 		RendererWindowState::SceneArrow arrow;
-		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
-		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.start() = glm::vec3(1.0f, 2.0f, 3.0f);
+		arrow.end() = glm::vec3(4.0f, 5.0f, 6.0f);
 		arrow.startAnchorAtom = 0;
 		arrow.endAnchorAtom = 1;
 		GetSceneArrowClipboard() = {arrow};
@@ -281,8 +286,8 @@ namespace DefectStudio::Tests
 		PasteSceneArrowsFromClipboard(window);
 
 		ASSERT_EQ(window.sceneArrows.size(), 1u);
-		EXPECT_EQ(window.sceneArrows[0].start, arrow.start + glm::vec3(0.5f, 0.0f, 0.0f));
-		EXPECT_EQ(window.sceneArrows[0].end, arrow.end + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_EQ(window.sceneArrows[0].start(), arrow.start() + glm::vec3(0.5f, 0.0f, 0.0f));
+		EXPECT_EQ(window.sceneArrows[0].end(), arrow.end() + glm::vec3(0.5f, 0.0f, 0.0f));
 		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 		GetSceneArrowClipboard().clear();

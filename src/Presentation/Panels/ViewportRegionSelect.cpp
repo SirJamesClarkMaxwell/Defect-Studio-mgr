@@ -27,6 +27,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
@@ -329,9 +330,8 @@ namespace DefectStudio
 		return hitIndices;
 	}
 
-	// sceneArrows counterpart of the point-based hit-testers above - "hit" means the start, end, or
-	// midpoint screen-projects into the rect/circle (good enough for a box/circle-select convenience
-	// feature, not full segment-vs-region clipping).
+	// SceneArrow region selection samples every tessellated Line/Arrow3D span. Arrow2D deliberately
+	// remains its legacy straight endpoint pair until 32b-2.
 	std::vector<std::size_t> HitTestRectSceneArrows(
 		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax)
 	{
@@ -346,15 +346,22 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
 		{
 			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[i];
+			const std::vector<glm::vec3> pathPoints = arrow.kind == RendererWindowState::ArrowKind::Arrow2D
+				? std::vector<glm::vec3>{arrow.start(), arrow.end()}
+				: TessellateSceneArrowPath(arrow).points;
 			bool hit = false;
-			for (const float t : kSampleT)
+			for (std::size_t pointIndex = 1; pointIndex < pathPoints.size() && !hit; ++pointIndex)
 			{
-				const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
-					viewProjection, windowState.viewportSize, glm::mix(arrow.start, arrow.end, t));
-				if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
+				for (const float t : kSampleT)
 				{
-					hit = true;
-					break;
+					const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
+						viewProjection, windowState.viewportSize,
+						glm::mix(pathPoints[pointIndex - 1], pathPoints[pointIndex], t));
+					if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
+					{
+						hit = true;
+						break;
+					}
 				}
 			}
 			if (hit)
@@ -374,15 +381,22 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
 		{
 			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[i];
+			const std::vector<glm::vec3> pathPoints = arrow.kind == RendererWindowState::ArrowKind::Arrow2D
+				? std::vector<glm::vec3>{arrow.start(), arrow.end()}
+				: TessellateSceneArrowPath(arrow).points;
 			bool hit = false;
-			for (const float t : kSampleT)
+			for (std::size_t pointIndex = 1; pointIndex < pathPoints.size() && !hit; ++pointIndex)
 			{
-				const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
-					viewProjection, windowState.viewportSize, glm::mix(arrow.start, arrow.end, t));
-				if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
+				for (const float t : kSampleT)
 				{
-					hit = true;
-					break;
+					const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
+						viewProjection, windowState.viewportSize,
+						glm::mix(pathPoints[pointIndex - 1], pathPoints[pointIndex], t));
+					if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
+					{
+						hit = true;
+						break;
+					}
 				}
 			}
 			if (hit)

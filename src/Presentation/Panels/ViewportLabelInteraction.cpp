@@ -262,9 +262,9 @@ namespace DefectStudio
 					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front());
 				if (arrow == nullptr)
 					return;
-				const glm::vec3 position = windowState.sceneArrowGizmoActiveTarget == DragTarget::Start ? arrow->start
-					: windowState.sceneArrowGizmoActiveTarget == DragTarget::End                        ? arrow->end
-																						  : (arrow->start + arrow->end) * 0.5f;
+				const glm::vec3 position = windowState.sceneArrowGizmoActiveTarget == DragTarget::Start ? arrow->start()
+					: windowState.sceneArrowGizmoActiveTarget == DragTarget::End                        ? arrow->end()
+																						  : (arrow->start() + arrow->end()) * 0.5f;
 				RendererEvents::Viewport::Cursor3DSetPositionRequested event;
 				event.windowId = windowState.windowId;
 				event.position = position;

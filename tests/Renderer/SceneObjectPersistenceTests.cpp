@@ -178,7 +178,7 @@ namespace DefectStudio::Tests
 		RendererWindowState::SceneArrow arrow;
 		arrow.kind = RendererWindowState::ArrowKind::Line;
 		arrow.fixedPlane = RendererWindowState::WorldPlane::XZ;
-		arrow.end = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.end() = glm::vec3(2.0f, 0.0f, 0.0f);
 		arrow.startAnchorAtom = 0;
 		arrow.endAnchorAtom = 1;
 		arrow.atomBuffer = 0.75f;
@@ -208,7 +208,7 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(target.sceneArrows.size(), 1u);
 		EXPECT_EQ(target.sceneArrows[0].kind, RendererWindowState::ArrowKind::Line);
 		EXPECT_EQ(target.sceneArrows[0].fixedPlane, RendererWindowState::WorldPlane::XZ);
-		EXPECT_EQ(target.sceneArrows[0].end, arrow.end);
+		EXPECT_EQ(target.sceneArrows[0].end(), arrow.end());
 		EXPECT_EQ(target.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
 		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
 		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
@@ -219,8 +219,8 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState source = MakeWindow();
 		RendererWindowState::SceneArrow arrow;
-		arrow.start = glm::vec3(-2.0f, 1.0f, 0.0f);
-		arrow.end = glm::vec3(1.25f, 0.0f, 0.0f);
+		arrow.start() = glm::vec3(-2.0f, 1.0f, 0.0f);
+		arrow.end() = glm::vec3(1.25f, 0.0f, 0.0f);
 		arrow.startAnchorAtom.reset();
 		arrow.endAnchorAtom = 1;
 		arrow.atomBuffer = 0.75f;
@@ -243,7 +243,7 @@ namespace DefectStudio::Tests
 
 		EXPECT_TRUE(applyWarnings.empty());
 		ASSERT_EQ(target.sceneArrows.size(), 1u);
-		EXPECT_EQ(target.sceneArrows[0].start, refreshed.start);
+		EXPECT_EQ(target.sceneArrows[0].start(), refreshed.start());
 		EXPECT_FALSE(target.sceneArrows[0].startAnchorAtom.has_value());
 		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
 		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);

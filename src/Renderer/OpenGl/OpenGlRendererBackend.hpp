@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -97,23 +98,13 @@ namespace DefectStudio
 		float headLength = 0.0f;
 	};
 
-	// One SceneArrow Arrow3D's welded shaft+head mesh (see BuildWeldedArrowMesh) - unlike bonds'
-	// shared unit m_CylinderMesh/m_ConeMesh, each arrow's mesh has its own proportions (shaftRadius/
-	// headRadius/headLength/length all vary per-arrow), so it can't be instanced from one shared
-	// buffer - every arrow gets its own small VAO/VBO/EBO, indexed by its position in
-	// RendererWindowState::sceneArrows. Rebuilt only when the geometry parameters below actually change (a
-	// position/orientation-only drag reuses the same geometry through the draw transform) - the
-	// negative defaults guarantee the very first frame for a slot always rebuilds.
+	// One world-space path/tip mesh per Line or Arrow3D SceneArrow. A geometry hash avoids rebuilding
+	// unchanged paths while keeping the variable point list and curve/tip parameters out of this GL
+	// resource type; Renderer/Scene/SceneArrowGeometry owns that renderer data.
 	struct OpenGlSceneArrowMeshCache
 	{
-		float shaftRadius = -1.0f;
-		float headRadius = -1.0f;
-		float headLength = -1.0f;
-		float length = -1.0f;
-		float bulgeStrength = -1.0f;
-		bool dashed = false;
-		float dashLength = -1.0f;
-		float gapLength = -1.0f;
+		std::uint64_t geometryHash = 0;
+		bool initialized = false;
 		OpenGlMeshHandles mesh;
 	};
 
@@ -171,9 +162,9 @@ namespace DefectStudio
 		std::vector<glm::vec3> cachedCellEdgeVertices;
 		// Index into cachedCellEdgeVertices where the overlay (primitive-cell) edges begin.
 		std::size_t cachedOverlayEdgeFirstVertex = 0;
-		// One entry per Arrow3D SceneArrow, indexed by its position in sceneArrows - see
+		// One entry per SceneArrow slot (used by Line/Arrow3D), indexed by its position - see
 		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
-		std::vector<OpenGlSceneArrowMeshCache> sceneArrow3DMeshCache;
+		std::vector<OpenGlSceneArrowMeshCache> sceneArrowMeshCache;
 		OpenGlMeshHandles scenePlaneMesh;
 		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
 		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
@@ -309,7 +300,7 @@ namespace DefectStudio
 		// plus one for all visible cone heads (shared m_ConeMesh, already instance-layout-compatible
 		// via createConeMesh but otherwise unused for instancing today - see that function). Unlike
 		// sceneArrows this can be hundreds-to-thousands of auto-generated arrows, so no per-arrow
-		// welded mesh (BuildWeldedArrowMesh) - two shared meshes, CPU-filtered by
+		// welded mesh - two shared meshes, CPU-filtered by
 		// displacementComparison->displayThresholdAngstrom each call (no dirty-cache, same choice
 		// renderSceneArrows already makes for its own per-call instance lists). Also draws a ghost
 		// marker (shared m_SphereMesh/"atoms" program) per interstitial-like unmatched comparison
@@ -321,12 +312,8 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		// Figure-annotation arrows (RendererWindowState::sceneArrows). Line draws its shaft through
-		// the shared bond cylinder mesh/shader like before; Arrow3D draws through its own per-arrow
-		// welded shaft+head mesh (BuildWeldedArrowMesh, cached in resources.sceneArrow3DMeshCache -
-		// rebuilt only when that arrow's shaftWidth/headWidth/headLength/length actually change, not
-		// every frame); Arrow2D draws through the arrow_quad SDF shader. No dirty-cache for the first
-		// two lists below (shaftInstances/quadInstances) - rebuilt every call like pinnedInstances in
-		// renderLabels, cheap for the handful of arrows a figure needs.
+		// a per-arrow world-space path/tip mesh cached in resources.sceneArrowMeshCache; Arrow2D draws
+		// through the unchanged straight arrow_quad SDF shader.
 		// Called twice per frame with opposite `renderArrow2D` values (see RenderWindow) so Line/
 		// Arrow3D (world-space, depth-tested, drawn with bonds) and Arrow2D (screen-space sized,
 		// depth-disabled, drawn late with labels - docs/scene_arrow_rework_plan_corrected.md
@@ -409,11 +396,6 @@ namespace DefectStudio
 		void dispatchBondCompute(const RendererStructureData &structure);
 		[[nodiscard]] OpenGlViewportResources &viewportResources(const std::string &windowKey, int width, int height);
 		[[nodiscard]] glm::mat4 buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const;
-		// Same translate+rotate (local +Z -> direction) as buildBondTransform, but no scale at all -
-		// for BuildWeldedArrowMesh's output, whose vertices already have absolute world-unit radii
-		// and length baked in, so scaling Z by `length` again (as buildBondTransform's radius overload
-		// would) or radius by anything but 1 would double the arrow's real size.
-		[[nodiscard]] glm::mat4 buildArrowRevolutionTransform(const glm::vec3 &start, const glm::vec3 &end) const;
 
 	private:
 		bool m_Initialized = false;

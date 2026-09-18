@@ -142,8 +142,6 @@ void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
 {
 	try
 	{
-		if (!node["start"] || !node["end"] || !Vec3(node["start"], arrow.start) || !Vec3(node["end"], arrow.end))
-			return false;
 		const std::string kind = node["arrowKind"].as<std::string>("");
 		if (kind == "Line")
 			arrow.kind = PersistedArrowKind::Line;
@@ -153,6 +151,41 @@ void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
 			arrow.kind = PersistedArrowKind::Arrow3D;
 		else
 			return false;
+
+		if (const YAML::Node points = node["points"])
+		{
+			if (!points.IsSequence() || points.size() < 2)
+				return false;
+			arrow.points.clear();
+			arrow.points.reserve(points.size());
+			for (const YAML::Node &pointNode : points)
+			{
+				glm::vec3 point(0.0f);
+				if (!Vec3(pointNode, point))
+					return false;
+				arrow.points.push_back(point);
+			}
+		}
+		else
+		{
+			// Pre-32b migration: old files stored the two endpoints as sibling `start`/`end`
+			// keys. Preserve them verbatim as the first and last path points.
+			glm::vec3 start(0.0f), end(0.0f);
+			if (!node["start"] || !node["end"] || !Vec3(node["start"], start) || !Vec3(node["end"], end))
+				return false;
+			arrow.points = {start, end};
+		}
+		if (node["control_point"])
+		{
+			glm::vec3 controlPoint(0.0f);
+			if (!Vec3(node["control_point"], controlPoint))
+				return false;
+			arrow.controlPoint = controlPoint;
+		}
+		arrow.curveSegments = node["curve_segments"].as<int>(arrow.curveSegments);
+		arrow.startTip = node["start_tip"].as<std::string>("None");
+		const char *legacyEndTip = arrow.kind == PersistedArrowKind::Line ? "None" : "Plain";
+		arrow.endTip = node["end_tip"].as<std::string>(legacyEndTip);
 		const std::string orientation = node["orientation2D"].as<std::string>("Billboard");
 		if (orientation == "Billboard")
 			arrow.orientation2D = PersistedArrow2DOrientation::Billboard;
@@ -409,8 +442,15 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 							 << YAML::Value << value.persistKey << YAML::Key << "arrowKind" << YAML::Value << arrowKind
 							 << YAML::Key << "orientation2D" << YAML::Value << orientation << YAML::Key << "fixedPlane"
 							 << YAML::Value << plane;
-						EmitVec3(emit, "start", value.start);
-						EmitVec3(emit, "end", value.end);
+						emit << YAML::Key << "points" << YAML::Value << YAML::BeginSeq;
+						for (const glm::vec3 &point : value.points)
+							emit << YAML::Flow << YAML::BeginSeq << point.x << point.y << point.z << YAML::EndSeq;
+						emit << YAML::EndSeq;
+						if (value.controlPoint)
+							EmitVec3(emit, "control_point", *value.controlPoint);
+						emit << YAML::Key << "curve_segments" << YAML::Value << value.curveSegments
+							 << YAML::Key << "start_tip" << YAML::Value << value.startTip
+							 << YAML::Key << "end_tip" << YAML::Value << value.endTip;
 						SceneObjectsYaml::EmitAnchors(emit, "startAnchorAtoms", value.startAnchorAtoms);
 						SceneObjectsYaml::EmitAnchors(emit, "endAnchorAtoms", value.endAnchorAtoms);
 						emit << YAML::Key << "atom_buffer" << YAML::Value << value.atomBuffer;

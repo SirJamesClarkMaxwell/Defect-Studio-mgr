@@ -35,8 +35,8 @@ namespace DefectStudio::Tests
 		{
 			RendererWindowState::SceneArrow arrow;
 			arrow.id = id;
-			arrow.start = start;
-			arrow.end = end;
+			arrow.start() = start;
+			arrow.end() = end;
 			return arrow;
 		}
 
@@ -74,6 +74,7 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState window;
 		window.sceneArrows.push_back(MakeArrow(SceneObjectId{1}, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}));
+		window.sceneArrows[0].points.insert(window.sceneArrows[0].points.begin() + 1, glm::vec3(2.0f, 4.0f, 3.0f));
 		window.sceneArrows[0].startAnchorAtom = 0;
 		window.sceneArrows[0].endAnchorAtom = 1;
 		window.selectedSceneArrows = {SceneObjectId{1}};
@@ -97,8 +98,9 @@ namespace DefectStudio::Tests
 		ApplySceneTransformSelection(
 			window, snapshot, delta, ModalTransformOp::Translate, TransformPivotMode::Median, glm::vec3(0.0f));
 
-		ExpectVec3Near(window.sceneArrows[0].start, snapshot.arrows[0].start + delta.spatial.translation);
-		ExpectVec3Near(window.sceneArrows[0].end, snapshot.arrows[0].end + delta.spatial.translation);
+		ExpectVec3Near(window.sceneArrows[0].start(), snapshot.arrows[0].points.front() + delta.spatial.translation);
+		ExpectVec3Near(window.sceneArrows[0].points[1], snapshot.arrows[0].points[1] + delta.spatial.translation);
+		ExpectVec3Near(window.sceneArrows[0].end(), snapshot.arrows[0].points.back() + delta.spatial.translation);
 		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 	}
@@ -132,13 +134,13 @@ namespace DefectStudio::Tests
 			window, snapshot, delta, ModalTransformOp::Translate,
 			TransformPivotMode::Median, pivotPositions.front());
 
-		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 3.0f));
-		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(6.0f, 5.0f, 6.0f));
+		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(1.0f, 2.0f, 3.0f));
+		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(6.0f, 5.0f, 6.0f));
 		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 		RestoreSceneTransformSelection(window, snapshot);
-		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 3.0f));
-		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(4.0f, 5.0f, 6.0f));
+		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(1.0f, 2.0f, 3.0f));
+		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(4.0f, 5.0f, 6.0f));
 		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
 		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
 	}
@@ -159,8 +161,8 @@ namespace DefectStudio::Tests
 		ApplySceneTransformSelection(
 			window, snapshot, delta, ModalTransformOp::Rotate, TransformPivotMode::Median, pivot);
 
-		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(2.0f, -1.0f, 0.0f));
-		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(2.0f, 1.0f, 0.0f));
+		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(2.0f, -1.0f, 0.0f));
+		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(2.0f, 1.0f, 0.0f));
 		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 	}
@@ -194,8 +196,8 @@ namespace DefectStudio::Tests
 		ApplySceneTransformSelection(
 			window, snapshot, delta, ModalTransformOp::Scale, TransformPivotMode::Median, pivot);
 
-		ExpectVec3Near(window.sceneArrows[0].start, glm::vec3(1.0f, 2.0f, 1.0f));
-		ExpectVec3Near(window.sceneArrows[0].end, glm::vec3(3.0f, 4.0f, 5.0f));
+		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(1.0f, 2.0f, 1.0f));
+		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(3.0f, 4.0f, 5.0f));
 		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.shaftWidth, arrow.style.shaftWidth);
 		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.headWidth, arrow.style.headWidth);
 		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.headLength, arrow.style.headLength);
@@ -203,8 +205,8 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
 
 		RestoreSceneTransformSelection(window, snapshot);
-		ExpectVec3Near(window.sceneArrows[0].start, arrow.start);
-		ExpectVec3Near(window.sceneArrows[0].end, arrow.end);
+		ExpectVec3Near(window.sceneArrows[0].start(), arrow.start());
+		ExpectVec3Near(window.sceneArrows[0].end(), arrow.end());
 		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, arrow.startAnchorAtom);
 		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, arrow.endAnchorAtom);
 	}
@@ -260,8 +262,8 @@ namespace DefectStudio::Tests
 
 		ASSERT_TRUE(stack.Undo().HasValue());
 		ExpectVec3Near(window.structure.atoms[0].cartesianPosition, atomBefore);
-		ExpectVec3Near(window.sceneArrows[0].start, sceneBefore.sceneArrows[0].start);
-		ExpectVec3Near(window.sceneArrows[0].end, sceneBefore.sceneArrows[0].end);
+		ExpectVec3Near(window.sceneArrows[0].start(), sceneBefore.sceneArrows[0].start());
+		ExpectVec3Near(window.sceneArrows[0].end(), sceneBefore.sceneArrows[0].end());
 	}
 	// --- Task 31 #14: the gizmo must move orbitals and planes, not only atoms, labels and arrows.
 

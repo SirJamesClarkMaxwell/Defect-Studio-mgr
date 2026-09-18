@@ -185,17 +185,20 @@ namespace DefectStudio
 		std::vector<SceneObjectId> selectedFreeLabels;
 		bool freeLabelDragging = false;
 		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
-		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - a straight directional
-		// line from start to end, for pointing at a displacement/direction in an export shot.
-		// Line: shaft only (bond cylinder mesh/shader, reused as-is). Arrow3D: shaft + a cone head
-		// (OpenGlRendererBackend::createConeMesh, "bonds" program reused - bonds.vert is a generic
-		// model-transform shader, not cylinder-specific). Arrow2D: a flat quad instead of a shaft,
+		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - an ordered path with
+		// independently styled tips, for pointing at a displacement/direction in an export shot.
+		// Line and Arrow3D use the renderer path/tip mesh with the generic bond shader. Arrow2D remains
+		// a flat quad instead of a path mesh,
 		// either camera-facing (Billboard) or lying flat in a chosen world plane (FixedPlane) - see
 		// OpenGlRendererBackend::renderSceneArrows/ComputeArrowQuadBasis. Renderer-only like
-		// FreeLabel/PinnedMeasurement, not persisted with the project yet. Gizmo/attached
+		// FreeLabel/PinnedMeasurement, persisted in scene_objects.yaml. Gizmo/attached
 		// label/undo for arrows are a later phase - labels already have all three
 		// (renderLabelTransformGizmo/AttachedLabel), arrows don't yet.
 		enum class ArrowKind { Line, Arrow2D, Arrow3D };
+		// Tip style is independent of ArrowKind and chosen separately for each end. This deliberately
+		// small TikZ-inspired vocabulary is renderer data; its geometry parameters live in
+		// Renderer/Scene/SceneArrowGeometry rather than in Domain or IO.
+		enum class ArrowTip { None, Plain, Barbed, Open, Bar, Circle };
 		enum class Arrow2DOrientation { Billboard, FixedPlane };
 		enum class WorldPlane { XY, XZ, YZ };
 
@@ -228,8 +231,19 @@ namespace DefectStudio
 			ArrowKind kind = ArrowKind::Arrow3D;
 			Arrow2DOrientation orientation2D = Arrow2DOrientation::Billboard;
 			WorldPlane fixedPlane = WorldPlane::XY;
-			glm::vec3 start = glm::vec3(0.0f);
-			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
+			// Ordered world-space path. Two entries with no control point are the legacy straight arrow.
+			// A single quadratic control point applies only to a two-point path; longer paths bend at
+			// their explicit points.
+			std::vector<glm::vec3> points = {glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
+			std::optional<glm::vec3> controlPoint;
+			int curveSegments = 24;
+			ArrowTip startTip = ArrowTip::None;
+			ArrowTip endTip = ArrowTip::Plain;
+
+			[[nodiscard]] glm::vec3 &start() { return points.front(); }
+			[[nodiscard]] const glm::vec3 &start() const { return points.front(); }
+			[[nodiscard]] glm::vec3 &end() { return points.back(); }
+			[[nodiscard]] const glm::vec3 &end() const { return points.back(); }
 			// Which atom each end follows. A missing optional is a free coordinate; a stale index
 			// also leaves the stored coordinate untouched, matching the orbital/plane anchor rule.
 			std::optional<std::size_t> startAnchorAtom;

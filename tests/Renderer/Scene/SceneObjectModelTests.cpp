@@ -41,8 +41,8 @@ namespace DefectStudio::Tests
 			{
 				RendererWindowState::SceneArrow arrow;
 				arrow.id = windowState.sceneRegistry.AllocateObjectId();
-				arrow.start = glm::vec3(static_cast<float>(index), 0.0f, 0.0f);
-				arrow.end = glm::vec3(static_cast<float>(index), 1.0f, 0.0f);
+				arrow.start() = glm::vec3(static_cast<float>(index), 0.0f, 0.0f);
+				arrow.end() = glm::vec3(static_cast<float>(index), 1.0f, 0.0f);
 				windowState.sceneArrows.push_back(arrow);
 			}
 
@@ -135,7 +135,7 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState windowState = BuildAnnotatedWindow();
 		const SceneObjectId selectedId = windowState.sceneArrows.back().id;
-		const glm::vec3 selectedStart = windowState.sceneArrows.back().start;
+		const glm::vec3 selectedStart = windowState.sceneArrows.back().start();
 		windowState.selectedSceneArrows = {selectedId};
 
 		windowState.sceneArrows.erase(windowState.sceneArrows.begin());
@@ -148,7 +148,7 @@ namespace DefectStudio::Tests
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
 		ASSERT_EQ(indices.size(), 1u);
 		EXPECT_EQ(indices.front(), 0u); // it shifted down, and the id followed it
-		EXPECT_EQ(windowState.sceneArrows[indices.front()].start, selectedStart);
+		EXPECT_EQ(windowState.sceneArrows[indices.front()].start(), selectedStart);
 	}
 
 	// Criterion 5 - the shared label/arrow undo stack snapshots whole vectors, so a restore must not

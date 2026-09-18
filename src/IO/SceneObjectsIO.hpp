@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -110,8 +111,13 @@ namespace DefectStudio
 		PersistedArrowKind kind = PersistedArrowKind::Arrow3D; // required
 		PersistedArrow2DOrientation orientation2D = PersistedArrow2DOrientation::Billboard;
 		PersistedWorldPlane fixedPlane = PersistedWorldPlane::XY;
-		glm::vec3 start = glm::vec3(0.0f); // required
-		glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f); // required
+		std::vector<glm::vec3> points = {glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)}; // at least 2
+		std::optional<glm::vec3> controlPoint;
+		int curveSegments = 24;
+		// IO round-trips stable names only. Renderer/Scene/SceneObjectPersistence owns conversion to
+		// RendererWindowState::ArrowTip and all knowledge of what these names look like.
+		std::string startTip = "None";
+		std::string endTip = "Plain";
 		// Zero or one stable atom reference per endpoint. Separate vectors preserve which end is
 		// free without changing the dense anchor representation used by orbitals and planes.
 		std::vector<PersistedAtomRef> startAnchorAtoms;

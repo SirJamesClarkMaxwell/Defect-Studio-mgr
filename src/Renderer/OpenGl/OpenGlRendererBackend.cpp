@@ -2,6 +2,7 @@
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
+#include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneObjectAppearance.hpp"
 
 #include <algorithm>
@@ -596,215 +597,21 @@ namespace DefectStudio
 		return mesh;
 	}
 
-	// Composes SceneArrow's Arrow3D shaft+head into ONE mesh instead of two separately-instanced draw
-	// calls that share no vertices (the earlier capless-cone-plus-overlap approach could hide the gap
-	// between them but could never make the *shading* continuous across it). Three segments, each
-	// with its own normal (no blending across a segment's own boundary, same "duplicate the vertex,
-	// vary only the normal" trick BuildRefinedConeMesh already uses at its own cap/apex):
-	//   1) shaft - a plain cylinder (constant shaftRadius, radial normal).
-	//   2) shoulder - the shaft/head transition, shape controlled by bulgeStrength (Settings >
-	//      Renderer > Scene arrows > Head bulge strength, 0..1): at 0 this is a flat annular disc
-	//      (shaftRadius -> headRadius at the same Z, the classic sharp corner every arrow with
-	//      headWidth > shaftWidth has at its shoulder); above 0 it becomes a handful of rings spread
-	//      over bulgeStrength * kMaxBulgeFraction * headLength, each ring's normal blended from its
-	//      two neighboring segments, rounding the corner into the "bulge" look some users prefer.
-	//      Still meets the shaft with the shaft's own unblended radial normal and the head with the
-	//      head's own unblended slant normal either way - only the interior optionally curves.
-	//   3) head - a plain straight cone (headRadius -> 0 at the tip, linear profile, slant normal).
-	// Absolute world units baked directly into the vertices (not normalized) - see this function's
-	// only caller (renderSceneArrows) for why: any shaftWidth/headWidth/headLength/length/bulge-
-	// strength edit rebuilds this arrow's mesh, but a position/orientation-only drag reuses it
-	// unchanged through the draw transform.
-	[[nodiscard]] RefinedConeMesh BuildWeldedArrowMesh(
-		float shaftRadius,
-		float headRadius,
-		float headLength,
-		float totalLength,
-		std::uint32_t radialSegments,
-		float bulgeStrength,
-		bool dashed,
-		float dashLength,
-		float gapLength)
-	{
-		constexpr float TwoPi = 6.283185307f;
-		radialSegments = std::max(radialSegments, 3u);
-		const float shaftEnd = std::max(totalLength - headLength, 0.0f);
-		const std::vector<SceneArrowShaftSegment> shaftSegments =
-			BuildSceneArrowShaftSegments(shaftEnd, dashed, dashLength, gapLength);
-
-		RefinedConeMesh mesh;
-		const std::size_t vertexBudget = static_cast<std::size_t>(radialSegments) *
-			(11u + shaftSegments.size() * 4u) + shaftSegments.size() * 2u + 1u;
-		mesh.positions.reserve(vertexBudget);
-		mesh.normals.reserve(vertexBudget);
-		mesh.gradientT.reserve(vertexBudget);
-
-		// normalRadial/normalZ are the SAME for every column of a ring - only cosAngle/sinAngle vary -
-		// since every segment here is either a plain cylinder or a plain cone (constant slant along
-		// its whole length), unlike the old blended-profile version this never needs to change from
-		// ring to ring within one segment.
-		auto emitRadialRing = [&](float z, float radius, float normalRadial, float normalZ) -> std::uint32_t {
-			const std::uint32_t start = static_cast<std::uint32_t>(mesh.positions.size());
-			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
-			{
-				const float angle = TwoPi * static_cast<float>(segment) / static_cast<float>(radialSegments);
-				const float cosAngle = std::cos(angle);
-				const float sinAngle = std::sin(angle);
-				mesh.positions.emplace_back(cosAngle * radius, sinAngle * radius, z);
-				mesh.normals.emplace_back(cosAngle * normalRadial, sinAngle * normalRadial, normalZ);
-				mesh.gradientT.push_back(totalLength > 0.0001f ? z / totalLength : 0.0f);
-			}
-			return start;
-		};
-		auto emitFlatRing = [&](float z, float radius, float normalZ) -> std::uint32_t {
-			const std::uint32_t start = static_cast<std::uint32_t>(mesh.positions.size());
-			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
-			{
-				const float angle = TwoPi * static_cast<float>(segment) / static_cast<float>(radialSegments);
-				mesh.positions.emplace_back(std::cos(angle) * radius, std::sin(angle) * radius, z);
-				mesh.normals.emplace_back(0.0f, 0.0f, normalZ);
-				mesh.gradientT.push_back(totalLength > 0.0001f ? z / totalLength : 0.0f);
-			}
-			return start;
-		};
-		auto connectRings = [&](std::uint32_t ringA, std::uint32_t ringB) {
-			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
-			{
-				const std::uint32_t next = (segment + 1u) % radialSegments;
-				const std::uint32_t bottom = ringA + segment;
-				const std::uint32_t top = ringB + segment;
-				const std::uint32_t nextBottom = ringA + next;
-				const std::uint32_t nextTop = ringB + next;
-				mesh.indices.push_back(bottom);
-				mesh.indices.push_back(top);
-				mesh.indices.push_back(nextTop);
-				mesh.indices.push_back(bottom);
-				mesh.indices.push_back(nextTop);
-				mesh.indices.push_back(nextBottom);
-			}
-		};
-		auto emitCap = [&](const float z, const float radius, const float normalZ) {
-			const std::uint32_t center = static_cast<std::uint32_t>(mesh.positions.size());
-			mesh.positions.emplace_back(0.0f, 0.0f, z);
-			mesh.normals.emplace_back(0.0f, 0.0f, normalZ);
-			mesh.gradientT.push_back(totalLength > 0.0001f ? z / totalLength : 0.0f);
-			const std::uint32_t ring = emitFlatRing(z, radius, normalZ);
-			for (std::uint32_t segment = 0; segment < radialSegments; ++segment)
-			{
-				const std::uint32_t next = (segment + 1u) % radialSegments;
-				mesh.indices.push_back(center);
-				mesh.indices.push_back(normalZ < 0.0f ? ring + next : ring + segment);
-				mesh.indices.push_back(normalZ < 0.0f ? ring + segment : ring + next);
-			}
-		};
-
-		std::uint32_t shaftTop = 0;
-		bool shaftMeetsHead = false;
-		for (const SceneArrowShaftSegment &segment : shaftSegments)
-		{
-			emitCap(segment.start, shaftRadius, -1.0f);
-			const std::uint32_t shaftBottom = emitRadialRing(segment.start, shaftRadius, 1.0f, 0.0f);
-			const std::uint32_t segmentTop = emitRadialRing(segment.end, shaftRadius, 1.0f, 0.0f);
-			connectRings(shaftBottom, segmentTop);
-			shaftMeetsHead = std::abs(segment.end - shaftEnd) <= 0.0001f;
-			if (shaftMeetsHead)
-				shaftTop = segmentTop;
-			else
-				emitCap(segment.end, shaftRadius, 1.0f);
-		}
-		if (!shaftMeetsHead)
-		{
-			// A gap immediately before the head still needs a closed head base; the shoulder below
-			// only covers the annulus between shaft and head radii.
-			emitCap(shaftEnd, shaftRadius, -1.0f);
-			shaftTop = emitRadialRing(shaftEnd, shaftRadius, 1.0f, 0.0f);
-		}
-
-		// Shoulder - the shaft/head transition. bulgeStrength <= 0 (the classic default) collapses this
-		// to a flat annular disc at the shaft/head boundary, facing back toward the tail (-Z) when the
-		// head is wider than the shaft (the normal case), forward otherwise - derived, not assumed, so
-		// an unusual headWidth < shaftWidth arrow still shades correctly instead of showing an
-		// inverted-normal patch. bulgeStrength > 0 spreads the same radius jump across a handful of
-		// rings instead, each one's normal blended from its two neighboring edges in the (z, radius)
-		// cross-section - a standard "vertex normal = average of adjacent face normals" approximation
-		// of a curved profile, same idea as BuildRefinedSphereMesh's subdivision, just applied to a
-		// revolved profile instead of a sphere.
-		constexpr float kMaxBulgeFraction = 0.5f;
-		const float bulgeZoneLength =
-			std::clamp(bulgeStrength, 0.0f, 1.0f) * kMaxBulgeFraction * headLength;
-		const float headBaseZ = shaftEnd + bulgeZoneLength;
-		const float coneRunLength = std::max(totalLength - headBaseZ, 0.0001f);
-		const glm::vec2 coneNormal2D =
-			SafeNormalize(glm::vec2(coneRunLength, headRadius), glm::vec2(0.0f, 1.0f));
-
-		std::uint32_t transitionEndRing = shaftTop;
-		bool hasTransitionStrip = false;
-		if (bulgeZoneLength <= 0.0001f)
-		{
-			const float shoulderNormalZ = (headRadius >= shaftRadius) ? -1.0f : 1.0f;
-			const std::uint32_t shoulderInner = emitFlatRing(shaftEnd, shaftRadius, shoulderNormalZ);
-			const std::uint32_t shoulderOuter = emitFlatRing(shaftEnd, headRadius, shoulderNormalZ);
-			connectRings(shoulderInner, shoulderOuter);
-		}
-		else
-		{
-			constexpr std::uint32_t kInteriorRings = 4;
-			constexpr std::uint32_t kSampleCount = kInteriorRings + 2u;
-			std::array<float, kSampleCount> sampleZ{};
-			std::array<float, kSampleCount> sampleR{};
-			for (std::uint32_t i = 0; i < kSampleCount; ++i)
-			{
-				const float t = static_cast<float>(i) / static_cast<float>(kSampleCount - 1u);
-				const float eased = t * t * (3.0f - 2.0f * t); // smoothstep
-				sampleZ[i] = shaftEnd + bulgeZoneLength * t;
-				sampleR[i] = shaftRadius + (headRadius - shaftRadius) * eased;
-			}
-
-			std::uint32_t previousRing = shaftTop;
-			for (std::uint32_t i = 1; i < kSampleCount - 1u; ++i)
-			{
-				const glm::vec2 edgeIn = SafeNormalize(
-					glm::vec2(sampleZ[i] - sampleZ[i - 1u], -(sampleR[i] - sampleR[i - 1u])), coneNormal2D);
-				const glm::vec2 edgeOut = SafeNormalize(
-					glm::vec2(sampleZ[i + 1u] - sampleZ[i], -(sampleR[i + 1u] - sampleR[i])), coneNormal2D);
-				const glm::vec2 blended = SafeNormalize(edgeIn + edgeOut, coneNormal2D);
-				const std::uint32_t ring = emitRadialRing(sampleZ[i], sampleR[i], blended.x, blended.y);
-				connectRings(previousRing, ring);
-				previousRing = ring;
-			}
-			transitionEndRing = previousRing;
-			hasTransitionStrip = true;
-		}
-
-		// Head - plain straight cone down to a single tip point (radius 0), same slant-normal
-		// construction as BuildRefinedConeMesh (verified algebraically against it when this function
-		// was first written): tangent (dRadius, dZ) = (-headRadius, coneRunLength) rotates to
-		// (coneRunLength, headRadius) - linear the whole way, no interior rings, so the silhouette
-		// past the shoulder is always a plain triangle in profile.
-		const std::uint32_t headBase = emitRadialRing(headBaseZ, headRadius, coneNormal2D.x, coneNormal2D.y);
-		if (hasTransitionStrip)
-			connectRings(transitionEndRing, headBase);
-		const std::uint32_t tip = emitRadialRing(totalLength, 0.0f, coneNormal2D.x, coneNormal2D.y);
-		connectRings(headBase, tip);
-
-		return mesh;
-	}
-
-	// Uploads a freshly-built welded arrow mesh into `cache.mesh`'s GPU buffers - same
+	// Uploads a freshly-built path/tip arrow mesh into `cache.mesh`'s GPU buffers - same
 	// {position,normal,gradientT} vertex layout and instanced {model,colorA,colorB} attributes as
 	// m_CylinderMesh/m_ConeMesh (see createCylinderMesh) so it draws through the same "bonds"
 	// program, just GL_DYNAMIC_DRAW and rebuildable instead of a one-time static upload. VAO/buffers
 	// are created once per cache slot (mesh.vao == 0 the first time) and reused on every later
 	// rebuild via glBufferData - never deleted and recreated, so an interactive drag that changes
 	// shaftWidth every frame doesn't churn GL object allocations.
-	void UploadSceneArrowMesh(OpenGlMeshHandles &mesh, const RefinedConeMesh &welded)
+	void UploadSceneArrowMesh(OpenGlMeshHandles &mesh, const SceneArrowMeshData &arrowMesh)
 	{
-		std::vector<CylinderVertex> vertices(welded.positions.size());
-		for (std::size_t index = 0; index < welded.positions.size(); ++index)
+		std::vector<CylinderVertex> vertices(arrowMesh.positions.size());
+		for (std::size_t index = 0; index < arrowMesh.positions.size(); ++index)
 		{
-			vertices[index].position = welded.positions[index];
-			vertices[index].normal = SafeNormalize(welded.normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
-			vertices[index].gradientT = welded.gradientT[index];
+			vertices[index].position = arrowMesh.positions[index];
+			vertices[index].normal = SafeNormalize(arrowMesh.normals[index], glm::vec3(0.0f, 1.0f, 0.0f));
+			vertices[index].gradientT = arrowMesh.gradientT[index];
 		}
 
 		const bool firstTime = mesh.vao == 0;
@@ -823,8 +630,8 @@ namespace DefectStudio
 			GL_DYNAMIC_DRAW);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
 		glBufferData(
-			GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(welded.indices.size() * sizeof(std::uint32_t)),
-			welded.indices.data(), GL_DYNAMIC_DRAW);
+			GL_ELEMENT_ARRAY_BUFFER, static_cast<long long>(arrowMesh.indices.size() * sizeof(std::uint32_t)),
+			arrowMesh.indices.data(), GL_DYNAMIC_DRAW);
 
 		if (firstTime)
 		{
@@ -860,7 +667,7 @@ namespace DefectStudio
 		}
 
 		glBindVertexArray(0);
-		mesh.indexCount = static_cast<int>(welded.indices.size());
+		mesh.indexCount = static_cast<int>(arrowMesh.indices.size());
 	}
 
 	// Deletes one mesh's GL objects and zeroes the handles - shared by OpenGlSceneArrowMeshCache
@@ -1356,9 +1163,9 @@ namespace DefectStudio
 					resources.isosurfaceVao[slot] = 0;
 				}
 			}
-			for (OpenGlSceneArrowMeshCache &cacheEntry : resources.sceneArrow3DMeshCache)
+			for (OpenGlSceneArrowMeshCache &cacheEntry : resources.sceneArrowMeshCache)
 				DeleteMeshHandles(cacheEntry.mesh);
-			resources.sceneArrow3DMeshCache.clear();
+			resources.sceneArrowMeshCache.clear();
 			for (auto &[id, cacheEntry] : resources.sceneOrbitalMeshCache)
 			{
 				(void)id;
@@ -2451,97 +2258,69 @@ namespace DefectStudio
 			return true;
 		};
 
-		// Arrow3D mesh cache is indexed by position in `arrows` - synced to arrows.size() up front
-		// (shrink frees GL objects for the dropped tail; grow must also happen here, never lazily
-		// inside the loop below) so std::vector::resize's potential reallocation can never invalidate
-		// an `Arrow3DDrawJob::mesh` pointer captured for an earlier index in the same call - e.g.
-		// pasting 2 new Arrow3D arrows used to grow this vector one index at a time mid-loop, moving
-		// already-queued jobs' mesh pointers to freed memory and feeding glDrawElementsInstanced a
-		// garbage index count (GL_INVALID_VALUE/GL_INVALID_OPERATION). Runs on every call (this
-		// function fires twice per frame) but is a no-op once already in sync - cheap size compare,
-		// not worth guarding further.
-		if (resources.sceneArrow3DMeshCache.size() > arrows.size())
+		// The cache is indexed by SceneArrow position for both Line and Arrow3D. Resize before
+		// collecting pointers into draw jobs so vector reallocation cannot invalidate them.
+		if (resources.sceneArrowMeshCache.size() > arrows.size())
 		{
-			for (std::size_t i = arrows.size(); i < resources.sceneArrow3DMeshCache.size(); ++i)
-				DeleteMeshHandles(resources.sceneArrow3DMeshCache[i].mesh);
-			resources.sceneArrow3DMeshCache.resize(arrows.size());
+			for (std::size_t index = arrows.size(); index < resources.sceneArrowMeshCache.size(); ++index)
+				DeleteMeshHandles(resources.sceneArrowMeshCache[index].mesh);
+			resources.sceneArrowMeshCache.resize(arrows.size());
 		}
-		else if (resources.sceneArrow3DMeshCache.size() < arrows.size())
+		else if (resources.sceneArrowMeshCache.size() < arrows.size())
 		{
-			resources.sceneArrow3DMeshCache.resize(arrows.size());
+			resources.sceneArrowMeshCache.resize(arrows.size());
 		}
 
-		std::vector<OpenGlBondInstance> shaftInstances;
 		std::vector<OpenGlArrowQuadInstance> quadInstances;
-		shaftInstances.reserve(arrows.size());
-		// One draw job per Arrow3D - each has its own welded mesh (see OpenGlSceneArrowMeshCache), so
-		// unlike shaftInstances/quadInstances above these can't be batched into a single instanced
-		// draw call across arrows.
-		struct Arrow3DDrawJob
+		struct ArrowMeshDrawJob
 		{
 			const OpenGlMeshHandles *mesh;
 			OpenGlBondInstance instance;
 		};
-		std::vector<Arrow3DDrawJob> arrow3DJobs;
-		// Whole Line/Arrow3D batch drawn with depth writes off if any one arrow is translucent (see the
-		// draw block below) - simple unsorted transparency, not a sorted system, per
-		// docs/scene_arrow_rework_plan_corrected.md Step 8's "keep it simple" option.
+		std::vector<ArrowMeshDrawJob> meshJobs;
+		meshJobs.reserve(arrows.size());
 		bool anyTransparent = false;
 
 		for (std::size_t arrowIndex = 0; arrowIndex < arrows.size(); ++arrowIndex)
 		{
 			const RendererWindowState::SceneArrow &arrow = arrows[arrowIndex];
-			// Two passes per frame (see this function's declaration comment) - each skips the kind it
-			// doesn't own so building/uploading/drawing the other kind's instances never happens twice.
 			const bool isArrow2D = arrow.kind == ArrowKind::Arrow2D;
-			if (isArrow2D != renderArrow2D)
+			if (isArrow2D != renderArrow2D || arrow.points.size() < 2)
 				continue;
 
-			const glm::vec3 axis = arrow.end - arrow.start;
-			const float length = glm::length(axis);
-			if (!std::isfinite(length) || length <= 0.0001f)
-				continue;
-			const glm::vec3 direction = axis / length;
 			const RendererWindowState::ArrowStyle &style = arrow.style;
-			// Same accent/blend as atom and bond selection highlighting - SceneArrow never had an
-			// equivalent before (RendererPanel's hit-test/drag already worked, but nothing ever showed
-			// which arrow that state referred to).
 			const bool isSelected =
 				std::find(selectedArrows.begin(), selectedArrows.end(), arrowIndex) != selectedArrows.end();
-			const glm::vec4 color(
-				ApplySceneSelectionHighlight(style.color, isSelected), style.alpha);
-			// The bond fragment shader already blends colorA into colorB smoothly along the shaft
-			// (vGradientT), which is exactly the ramp a gradient wants - so an arrow gradient costs
-			// two assignments here and no shader work at all. Arrow2D goes through the flat
-			// arrow_quad shader instead and keeps the single colour; see the note at its draw call.
+			const glm::vec4 color(ApplySceneSelectionHighlight(style.color, isSelected), style.alpha);
 			const SceneArrowRenderColors shaftColors = ResolveSceneArrowRenderColors(style, isSelected);
 
 			if (isArrow2D)
 			{
-				const glm::vec3 worldCenter = (arrow.start + arrow.end) * 0.5f;
+				// 32b-1 deliberately preserves Arrow2D's old straight two-endpoint form. Interior points
+				// and controlPoint are ignored until the camera-facing ribbon rewrite in 32b-2.
+				const glm::vec3 axis = arrow.end() - arrow.start();
+				const float length = glm::length(axis);
+				if (!std::isfinite(length) || length <= 0.0001f)
+					continue;
+				const glm::vec3 direction = axis / length;
+				const glm::vec3 worldCenter = (arrow.start() + arrow.end()) * 0.5f;
 				const glm::vec3 planeNormal = arrow.orientation2D == Arrow2DOrientation::Billboard
 					? cameraForward
 					: arrow.fixedPlane == WorldPlane::XY   ? glm::vec3(0.0f, 0.0f, 1.0f)
 					: arrow.fixedPlane == WorldPlane::XZ   ? glm::vec3(0.0f, 1.0f, 0.0f)
-															: glm::vec3(1.0f, 0.0f, 0.0f);
+													: glm::vec3(1.0f, 0.0f, 0.0f);
 				glm::vec3 right(0.0f), up(0.0f);
 				ComputeArrowQuadBasis(direction, planeNormal, right, up);
 
-				// ArrowStyle's shaftWidth/headWidth/headLength/outlineWidth are screen-space pixels
-				// for every Arrow2D orientation (docs/scene_arrow_rework_plan_corrected.md Section 8)
-				// - convert to this arrow's own local world-space scale via a projection probe, same
-				// pixel<->world idea RendererPanel::handleFreeLabelInteraction already uses for its
-				// drag delta. Skip the arrow (rather than divide by ~0) if any of the three points
-				// needed for the probe project behind the camera.
 				glm::vec2 centerPixels(0.0f), rightProbePixels(0.0f), upProbePixels(0.0f);
 				if (!projectToPixels(worldCenter, centerPixels) ||
 					!projectToPixels(worldCenter + right, rightProbePixels) ||
 					!projectToPixels(worldCenter + up, upProbePixels))
 					continue;
-				const float worldPerPixelRight = 1.0f / std::max(glm::length(rightProbePixels - centerPixels), 0.0001f);
-				const float worldPerPixelUp = 1.0f / std::max(glm::length(upProbePixels - centerPixels), 0.0001f);
-
-				// Clamped so a long requested head doesn't consume more than half a short arrow.
+				const float worldPerPixelRight =
+					1.0f / std::max(glm::length(rightProbePixels - centerPixels), 0.0001f);
+				const float worldPerPixelUp =
+					1.0f / std::max(glm::length(upProbePixels - centerPixels), 0.0001f);
 				const float headLengthWorld = std::min(style.headLength * worldPerPixelRight, 0.45f * length);
 
 				OpenGlArrowQuadInstance quad;
@@ -2560,99 +2339,40 @@ namespace DefectStudio
 
 			if (color.a < 0.999f)
 				anyTransparent = true;
-
-			// shaftWidth/headWidth are full diameters (docs/scene_arrow_rework_plan_corrected.md
-			// Section 8's global semantic rule) - buildBondTransform/BuildWeldedArrowMesh want a radius.
-			const float shaftRadius = 0.5f * style.shaftWidth;
-
-			if (arrow.kind == ArrowKind::Line)
+			OpenGlSceneArrowMeshCache &cacheEntry = resources.sceneArrowMeshCache[arrowIndex];
+			const std::uint64_t geometryHash = SceneArrowGeometryHash(arrow, globalSettings.arrowHeadBulgeStrength);
+			if (!cacheEntry.initialized || cacheEntry.geometryHash != geometryHash)
 			{
-				for (const SceneArrowShaftSegment &segment : BuildSceneArrowShaftSegments(
-						 length, style.dashed, style.dashLength, style.gapLength))
-				{
-					OpenGlBondInstance shaft;
-					shaft.model = buildBondTransform(
-						arrow.start + direction * segment.start, arrow.start + direction * segment.end,
-						shaftRadius);
-					shaft.colorA = glm::mix(shaftColors.start, shaftColors.finish, segment.start / length);
-					shaft.colorB = glm::mix(shaftColors.start, shaftColors.finish, segment.end / length);
-					shaftInstances.push_back(shaft);
-				}
-				continue;
+				constexpr std::uint32_t kArrowRadialSegments = 24u;
+				UploadSceneArrowMesh(
+					cacheEntry.mesh,
+					BuildSceneArrowMesh(arrow, kArrowRadialSegments, globalSettings.arrowHeadBulgeStrength));
+				cacheEntry.geometryHash = geometryHash;
+				cacheEntry.initialized = true;
 			}
-
-			// Arrow3D: one welded shaft+head mesh per arrow (BuildWeldedArrowMesh) instead of the
-			// shared cylinder+cone instanced separately - see that function's declaration comment for
-			// why two independently-instanced meshes could never share a seam vertex/normal. Head
-			// capped at 0.6*length (not the whole arrow) so a short arrow always keeps a visible shaft.
-			const float headRadius = 0.5f * style.headWidth;
-			const float headLength = std::min(style.headLength, length * 0.6f);
-
-			// No resize here - the cache is already sized to arrows.size() above, before this loop
-			// took any `&cacheEntry.mesh` addresses (see that block's comment for why resizing here
-			// instead used to dangle earlier jobs' mesh pointers).
-			OpenGlSceneArrowMeshCache &cacheEntry = resources.sceneArrow3DMeshCache[arrowIndex];
-			if (cacheEntry.shaftRadius != shaftRadius || cacheEntry.headRadius != headRadius ||
-				cacheEntry.headLength != headLength || cacheEntry.length != length ||
-				cacheEntry.bulgeStrength != globalSettings.arrowHeadBulgeStrength ||
-				cacheEntry.dashed != style.dashed || cacheEntry.dashLength != style.dashLength ||
-				cacheEntry.gapLength != style.gapLength)
-			{
-				constexpr std::uint32_t kArrow3DRadialSegments = 24u;
-				const RefinedConeMesh welded = BuildWeldedArrowMesh(
-					shaftRadius, headRadius, headLength, length, kArrow3DRadialSegments,
-					globalSettings.arrowHeadBulgeStrength, style.dashed, style.dashLength,
-					style.gapLength);
-				UploadSceneArrowMesh(cacheEntry.mesh, welded);
-				cacheEntry.shaftRadius = shaftRadius;
-				cacheEntry.headRadius = headRadius;
-				cacheEntry.headLength = headLength;
-				cacheEntry.length = length;
-				cacheEntry.bulgeStrength = globalSettings.arrowHeadBulgeStrength;
-				cacheEntry.dashed = style.dashed;
-				cacheEntry.dashLength = style.dashLength;
-				cacheEntry.gapLength = style.gapLength;
-			}
-
 			if (cacheEntry.mesh.indexCount > 0)
 			{
-				Arrow3DDrawJob job;
+				ArrowMeshDrawJob job;
 				job.mesh = &cacheEntry.mesh;
-				// No length/radius scale - BuildWeldedArrowMesh already bakes absolute world-unit
-				// dimensions into its vertices (see buildArrowRevolutionTransform's declaration comment).
-				job.instance.model = buildArrowRevolutionTransform(arrow.start, arrow.end);
+				job.instance.model = glm::mat4(1.0f); // mesh positions are already world-space
 				job.instance.colorA = shaftColors.start;
 				job.instance.colorB = shaftColors.finish;
-				arrow3DJobs.push_back(job);
+				meshJobs.push_back(job);
 			}
 		}
 
-		if (shaftInstances.empty() && arrow3DJobs.empty() && quadInstances.empty())
+		if (meshJobs.empty() && quadInstances.empty())
 			return;
 
 #if defined(TRACY_ENABLE)
 		TracyGpuZone("Renderer.SceneArrows");
 #endif
 
-		if (!shaftInstances.empty() || !arrow3DJobs.empty())
+		if (!meshJobs.empty())
 		{
 			const unsigned int program = m_ShaderLibrary.Program("bonds");
 			if (program != 0)
 			{
-				if (!shaftInstances.empty())
-				{
-					glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
-					const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(shaftInstances.size() * sizeof(OpenGlBondInstance));
-					GLint currentSize = 0;
-					glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &currentSize);
-					if (static_cast<GLsizeiptr>(currentSize) < requiredBytes)
-					{
-						const GLsizeiptr newSize = requiredBytes + requiredBytes / 2;
-						glBufferData(GL_ARRAY_BUFFER, newSize, nullptr, GL_DYNAMIC_DRAW);
-					}
-					glBufferSubData(GL_ARRAY_BUFFER, 0, requiredBytes, shaftInstances.data());
-				}
-
 				glUseProgram(program);
 				const int viewProjectionLocation = m_ShaderLibrary.Uniform("bonds", "u_ViewProjection");
 				if (viewProjectionLocation >= 0)
@@ -2717,18 +2437,8 @@ namespace DefectStudio
 				if (anyTransparent)
 					glDepthMask(GL_FALSE);
 
-				if (!shaftInstances.empty())
-				{
-					glBindVertexArray(m_CylinderMesh.vao);
-					glDrawElementsInstanced(
-						GL_TRIANGLES, m_CylinderMesh.indexCount, GL_UNSIGNED_INT, nullptr,
-						static_cast<int>(shaftInstances.size()));
-				}
-				// Each Arrow3D has its own mesh (different shaft/head proportions), so unlike the
-				// shaft's shared m_CylinderMesh above, this can't be one instanced call across arrows -
-				// one draw per job, instance count 1 (reuses the exact same instanced VAO layout/
-				// uniforms, just with a single-element instance buffer instead of a batch).
-				for (const Arrow3DDrawJob &job : arrow3DJobs)
+				// Each Line/Arrow3D path has its own geometry, so draw one cached mesh per arrow.
+				for (const ArrowMeshDrawJob &job : meshJobs)
 				{
 					glBindBuffer(GL_ARRAY_BUFFER, job.mesh->instanceVbo);
 					glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(OpenGlBondInstance), &job.instance);
@@ -3795,37 +3505,4 @@ namespace DefectStudio
 		return translation * rotation * scaling;
 	}
 
-	glm::mat4 OpenGlRendererBackend::buildArrowRevolutionTransform(const glm::vec3 &start, const glm::vec3 &end) const
-	{
-		if (!IsFiniteVec3(start) || !IsFiniteVec3(end))
-			return glm::mat4(1.0f);
-
-		const glm::vec3 direction = end - start;
-		const float length = glm::length(direction);
-		if (!std::isfinite(length) || length <= 0.00001f)
-			return glm::mat4(1.0f);
-		const glm::vec3 zAxis = direction / length;
-		glm::vec3 helperUp = glm::vec3(0.0f, 1.0f, 0.0f);
-		if (std::abs(glm::dot(zAxis, helperUp)) > 0.97f)
-			helperUp = glm::vec3(1.0f, 0.0f, 0.0f);
-		const glm::vec3 xCandidate = glm::cross(helperUp, zAxis);
-		const float xLength = glm::length(xCandidate);
-		if (!std::isfinite(xLength) || xLength <= 0.00001f)
-			return glm::mat4(1.0f);
-		const glm::vec3 xAxis = xCandidate / xLength;
-		const glm::vec3 yCandidate = glm::cross(zAxis, xAxis);
-		const float yLength = glm::length(yCandidate);
-		if (!std::isfinite(yLength) || yLength <= 0.00001f)
-			return glm::mat4(1.0f);
-		const glm::vec3 yAxis = yCandidate / yLength;
-		if (!IsFiniteVec3(xAxis) || !IsFiniteVec3(yAxis) || !IsFiniteVec3(zAxis))
-			return glm::mat4(1.0f);
-
-		glm::mat4 rotation(1.0f);
-		rotation[0] = glm::vec4(xAxis, 0.0f);
-		rotation[1] = glm::vec4(yAxis, 0.0f);
-		rotation[2] = glm::vec4(zAxis, 0.0f);
-
-		return glm::translate(glm::mat4(1.0f), start) * rotation;
-	}
 } // namespace DefectStudio

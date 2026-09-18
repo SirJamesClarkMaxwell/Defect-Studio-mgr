@@ -225,7 +225,8 @@ namespace DefectStudio
 			using Target = RendererWindowState::SceneArrowDragTarget;
 			const ArrowTransformStart &arrow = snapshot.arrows.front();
 			const std::array<std::pair<glm::vec3, Target>, 3> points = {{
-				{arrow.start, Target::Start}, {arrow.end, Target::End}, {(arrow.start + arrow.end) * 0.5f, Target::Both}}};
+				{arrow.points.front(), Target::Start}, {arrow.points.back(), Target::End},
+				{(arrow.points.front() + arrow.points.back()) * 0.5f, Target::Both}}};
 			for (const auto &[world, target] : points)
 			{
 				if (target == windowState.sceneArrowGizmoActiveTarget)

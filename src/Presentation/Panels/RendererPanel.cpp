@@ -300,7 +300,7 @@ namespace DefectStudio
 					continue;
 				const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
 				ImVec2 startScreen, endScreen;
-				if (projectHandle(arrow.start, startScreen))
+				if (projectHandle(arrow.start(), startScreen))
 				{
 					const bool active = singleDragging &&
 						(windowState.sceneArrowDragTarget == DragTarget::Start || windowState.sceneArrowDragTarget == DragTarget::Both);
@@ -308,7 +308,7 @@ namespace DefectStudio
 					handleDrawList->AddCircleFilled(startScreen, radius, IM_COL32(255, 200, 60, 220));
 					handleDrawList->AddCircle(startScreen, radius, IM_COL32(40, 25, 0, 255), 0, 1.5f);
 				}
-				if (projectHandle(arrow.end, endScreen))
+				if (projectHandle(arrow.end(), endScreen))
 				{
 					const bool active = singleDragging &&
 						(windowState.sceneArrowDragTarget == DragTarget::End || windowState.sceneArrowDragTarget == DragTarget::Both);
@@ -819,9 +819,9 @@ namespace DefectStudio
 
 			const bool hasOneArrowSelected = windowState.selectedSceneArrows.size() == 1;
 			if (ImGui::MenuItem("Move to Arrow Start", nullptr, false, hasOneArrowSelected))
-				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].start);
+				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].start());
 			if (ImGui::MenuItem("Move to Arrow End", nullptr, false, hasOneArrowSelected))
-				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].end);
+				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].end());
 
 			ImGui::EndMenu();
 		}

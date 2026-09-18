@@ -26,6 +26,7 @@
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
+#include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
@@ -38,12 +39,12 @@ namespace DefectStudio
 	}
 
 	// Click-select + drag for sceneArrows - same click/Ctrl-toggle/drag shape as
-	// HandleFreeLabelInteraction above, but the hit-test is against a SEGMENT (start->end), not a
-	// single anchor point, and a single selected arrow's drag moves only whichever endpoint was
+	// HandleFreeLabelInteraction above, but the hit-test follows the tessellated path, not a single
+	// anchor point, and a single selected arrow's drag moves only whichever endpoint was
 	// actually grabbed (screen-space proximity at click time decides that, no drawn gizmo widget
 	// needed - same idea as IsBondUnderScreenPosition's proximity band, just resolved once instead
 	// of every frame). Multiple selected arrows always move rigidly together (every selected arrow's
-	// start AND end shift by the same delta), same group-drag convention as labels.
+	// complete path shifts by the same delta), same group-drag convention as labels.
 	bool HandleSceneArrowInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
@@ -86,11 +87,11 @@ namespace DefectStudio
 			}
 			const bool singleSelection = windowState.selectedSceneArrows.size() == 1;
 			const SceneArrow &referenceArrow = windowState.sceneArrows[referenceIndex];
-			glm::vec3 referencePosition = (referenceArrow.start + referenceArrow.end) * 0.5f;
+			glm::vec3 referencePosition = (referenceArrow.start() + referenceArrow.end()) * 0.5f;
 			if (singleSelection && windowState.sceneArrowDragTarget == DragTarget::Start)
-				referencePosition = referenceArrow.start;
+				referencePosition = referenceArrow.start();
 			else if (singleSelection && windowState.sceneArrowDragTarget == DragTarget::End)
-				referencePosition = referenceArrow.end;
+				referencePosition = referenceArrow.end();
 
 			glm::vec2 anchorScreen, rightProbe, upProbe;
 			if (projectToScreen(referencePosition, anchorScreen) &&
@@ -112,20 +113,22 @@ namespace DefectStudio
 					SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
 					if (singleSelection && windowState.sceneArrowDragTarget == DragTarget::Start)
 					{
-						arrow.start += worldDelta;
+						arrow.start() += worldDelta;
 						if (movedEndpoint)
 							arrow.startAnchorAtom.reset();
 					}
 					else if (singleSelection && windowState.sceneArrowDragTarget == DragTarget::End)
 					{
-						arrow.end += worldDelta;
+						arrow.end() += worldDelta;
 						if (movedEndpoint)
 							arrow.endAnchorAtom.reset();
 					}
 					else
 					{
-						arrow.start += worldDelta;
-						arrow.end += worldDelta;
+						for (glm::vec3 &point : arrow.points)
+							point += worldDelta;
+						if (arrow.controlPoint)
+							*arrow.controlPoint += worldDelta;
 						if (movedEndpoint)
 						{
 							arrow.startAnchorAtom.reset();
@@ -157,7 +160,7 @@ namespace DefectStudio
 		{
 			const SceneArrow &candidate = windowState.sceneArrows[i];
 			glm::vec2 screenStart, screenEnd;
-			if (!projectToScreen(candidate.start, screenStart) || !projectToScreen(candidate.end, screenEnd))
+			if (!projectToScreen(candidate.start(), screenStart) || !projectToScreen(candidate.end(), screenEnd))
 				continue;
 
 			const RendererWindowState::ArrowStyle &style = candidate.style;
@@ -165,7 +168,7 @@ namespace DefectStudio
 			float pixelsPerWorld = 1.0f;
 			if (!isArrow2D)
 			{
-				const glm::vec3 midWorld = (candidate.start + candidate.end) * 0.5f;
+				const glm::vec3 midWorld = (candidate.start() + candidate.end()) * 0.5f;
 				glm::vec2 screenMid, rightProbe;
 				if (projectToScreen(midWorld, screenMid) && projectToScreen(midWorld + cameraRight, rightProbe))
 					pixelsPerWorld = std::max(glm::length(rightProbe - screenMid), 0.0001f);
@@ -173,7 +176,23 @@ namespace DefectStudio
 			const float shaftHalfPx = isArrow2D ? style.shaftWidth * 0.5f : style.shaftWidth * 0.5f * pixelsPerWorld;
 			const float outlinePx = isArrow2D ? style.outlineWidth : 0.0f;
 			const float shaftTolerance = std::max(12.0f, shaftHalfPx + outlinePx + 4.0f);
-			const float shaftDistance = SelectionHitTest::DistancePointToSegment(mousePos, screenStart, screenEnd);
+			float shaftDistance = SelectionHitTest::DistancePointToSegment(mousePos, screenStart, screenEnd);
+			if (!isArrow2D)
+			{
+				const SceneArrowPath path = TessellateSceneArrowPath(candidate);
+				shaftDistance = std::numeric_limits<float>::max();
+				for (std::size_t pointIndex = 1; pointIndex < path.points.size(); ++pointIndex)
+				{
+					glm::vec2 segmentStart(0.0f), segmentEnd(0.0f);
+					if (projectToScreen(path.points[pointIndex - 1], segmentStart) &&
+						projectToScreen(path.points[pointIndex], segmentEnd))
+					{
+						shaftDistance = std::min(
+							shaftDistance,
+							SelectionHitTest::DistancePointToSegment(mousePos, segmentStart, segmentEnd));
+					}
+				}
+			}
 			float bestForCandidate =
 				shaftDistance <= shaftTolerance ? shaftDistance : std::numeric_limits<float>::max();
 
@@ -193,15 +212,21 @@ namespace DefectStudio
 				if (headDistance <= 4.0f)
 					bestForCandidate = std::min(bestForCandidate, headDistance);
 			}
-			else if (candidate.kind == ArrowKind::Arrow3D)
+			else
 			{
-				const float headRadiusPx = style.headWidth * 0.5f * pixelsPerWorld;
-				const float headTolerance = std::max(14.0f, headRadiusPx);
-				const float headDistance = glm::length(mousePos - screenEnd);
-				if (headDistance <= headTolerance)
-					bestForCandidate = std::min(bestForCandidate, headDistance);
+				const auto testTip = [&](const RendererWindowState::ArrowTip tip, const glm::vec2 &screenTip) {
+					const ArrowTipParameters parameters = GetArrowTipParameters(tip);
+					if (!parameters.producesGeometry())
+						return;
+					const float radiusPx = style.headWidth * parameters.widthScale * 0.5f * pixelsPerWorld;
+					const float tolerance = std::max(14.0f, radiusPx);
+					const float distance = glm::length(mousePos - screenTip);
+					if (distance <= tolerance)
+						bestForCandidate = std::min(bestForCandidate, distance);
+				};
+				testTip(candidate.startTip, screenStart);
+				testTip(candidate.endTip, screenEnd);
 			}
-			// Line: no head test (doc Step 9).
 
 			if (bestForCandidate < bestDistance)
 			{

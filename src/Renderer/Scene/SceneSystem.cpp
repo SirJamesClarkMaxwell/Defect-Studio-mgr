@@ -279,7 +279,7 @@ namespace DefectStudio::SceneSystem
 				arrow.id = scene.AllocateObjectId();
 			Entity entity = scene.CreateObject(SceneObjectKind::SceneArrow, index, "arrow " + std::to_string(index), arrow.id);
 			arrow.id = entity.GetComponent<SceneObjectComponent>().id;
-			entity.AddComponent<TransformComponent>(TransformComponent{(arrow.start + arrow.end) * 0.5f});
+			entity.AddComponent<TransformComponent>(TransformComponent{(arrow.start() + arrow.end()) * 0.5f});
 			entity.AddComponent<SelectionComponent>(SelectionComponent{
 				std::find(windowState.selectedSceneArrows.begin(), windowState.selectedSceneArrows.end(), arrow.id) !=
 				windowState.selectedSceneArrows.end()});
@@ -327,7 +327,7 @@ namespace DefectStudio::SceneSystem
 		if (radiusBuffer <= 0.0f)
 			return;
 
-		const glm::vec3 delta = arrow.end - arrow.start;
+		const glm::vec3 delta = arrow.end() - arrow.start();
 		const float distance = glm::length(delta);
 		const float requested = radiusBuffer * (startRadius + endRadius);
 		if (distance <= 1e-4f || requested <= 1e-4f)
@@ -337,8 +337,8 @@ namespace DefectStudio::SceneSystem
 		// trimming through the far end and drawing the arrow backwards.
 		const float scale = std::min(1.0f, 0.9f * distance / requested);
 		const glm::vec3 direction = delta / distance;
-		arrow.start += direction * (radiusBuffer * startRadius * scale);
-		arrow.end -= direction * (radiusBuffer * endRadius * scale);
+		arrow.start() += direction * (radiusBuffer * startRadius * scale);
+		arrow.end() -= direction * (radiusBuffer * endRadius * scale);
 	}
 
 	void RefreshAnchoredSceneArrows(RendererWindowState &windowState)
@@ -348,8 +348,10 @@ namespace DefectStudio::SceneSystem
 			if (!arrow.startAnchorAtom.has_value() && !arrow.endAnchorAtom.has_value())
 				continue;
 
-			arrow.start = ResolveAnchor(arrow.start, arrow.startAnchorAtom, windowState.structure);
-			arrow.end = ResolveAnchor(arrow.end, arrow.endAnchorAtom, windowState.structure);
+			// Anchoring owns only the first and last entries; interior path points are never resized or
+			// rebound in 32b-1.
+			arrow.start() = ResolveAnchor(arrow.start(), arrow.startAnchorAtom, windowState.structure);
+			arrow.end() = ResolveAnchor(arrow.end(), arrow.endAnchorAtom, windowState.structure);
 			const float startRadius = arrow.startAnchorAtom.has_value() &&
 				*arrow.startAnchorAtom < windowState.structure.atoms.size()
 				? windowState.structure.atoms[*arrow.startAnchorAtom].radius
@@ -377,7 +379,7 @@ namespace DefectStudio::SceneSystem
 			Entity(scene.FreeLabelEntities()[index], &scene).GetComponent<TransformComponent>().position = windowState.freeLabels[index].worldPosition;
 		for (std::size_t index = 0; index < scene.ArrowEntities().size() && index < windowState.sceneArrows.size(); ++index)
 			Entity(scene.ArrowEntities()[index], &scene).GetComponent<TransformComponent>().position =
-				(windowState.sceneArrows[index].start + windowState.sceneArrows[index].end) * 0.5f;
+				(windowState.sceneArrows[index].start() + windowState.sceneArrows[index].end()) * 0.5f;
 		for (std::size_t index = 0; index < scene.OrbitalEntities().size() && index < windowState.sceneOrbitals.size(); ++index)
 			Entity(scene.OrbitalEntities()[index], &scene).GetComponent<TransformComponent>().position =
 				ResolveSceneOrbitalCenters(windowState.sceneOrbitals[index], windowState.structure).centroid;

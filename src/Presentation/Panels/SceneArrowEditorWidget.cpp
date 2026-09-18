@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneArrowGeometry.hpp"
 
 namespace DefectStudio
 {
@@ -46,9 +47,8 @@ namespace DefectStudio
 		return changed;
 	}
 
-	// Head width/length now apply to Arrow2D too (its SDF shader grew a real triangular head - see
-	// OpenGlRendererBackend::renderSceneArrows), not just Arrow3D's cone; still hidden for Line,
-	// which has no head geometry at all.
+	// Tip width/length apply to every kind. Line uses them whenever either independent tip is not
+	// None; Arrow2D keeps its legacy single-head interpretation until 32b-2.
 	// Arrow2D's shaftWidth/headWidth/headLength are screen-space pixels (typically single/low-double
 	// digits); Line/Arrow3D's are world-space full diameters (typically a small fraction of a unit
 	// cell) - same fields, unrelated numeric ranges, so the drag step/bounds/format branch on kind
@@ -98,7 +98,7 @@ namespace DefectStudio
 			}
 		}
 
-		if (kind == ArrowKind::Arrow2D || kind == ArrowKind::Arrow3D)
+		if (kind == ArrowKind::Line || kind == ArrowKind::Arrow2D || kind == ArrowKind::Arrow3D)
 		{
 			ImGui::SetNextItemWidth(100.0f);
 			if (isPixelBased)
@@ -202,8 +202,8 @@ namespace DefectStudio
 	RendererWindowState::SceneArrow MakeDefaultSceneArrow(const glm::vec3 &seedPosition)
 	{
 		RendererWindowState::SceneArrow arrow;
-		arrow.start = seedPosition;
-		arrow.end = seedPosition + glm::vec3(0.0f, 0.0f, 1.0f);
+		arrow.start() = seedPosition;
+		arrow.end() = seedPosition + glm::vec3(0.0f, 0.0f, 1.0f);
 		return arrow;
 	}
 
@@ -226,8 +226,8 @@ namespace DefectStudio
 			std::isfinite(diagonal) && diagonal > 0.0f ? std::clamp(diagonal * 0.20f, 0.75f, 4.0f) : 1.0f;
 
 		RendererWindowState::SceneArrow arrow;
-		arrow.start = seedPosition;
-		arrow.end = seedPosition + glm::vec3(length, 0.0f, 0.0f);
+		arrow.start() = seedPosition;
+		arrow.end() = seedPosition + glm::vec3(length, 0.0f, 0.0f);
 		arrow.kind = RendererWindowState::ArrowKind::Arrow2D;
 		arrow.orientation2D = RendererWindowState::Arrow2DOrientation::Billboard;
 		arrow.fixedPlane = RendererWindowState::WorldPlane::XY;
@@ -255,7 +255,7 @@ namespace DefectStudio
 		if (arrow.kind == newKind)
 			return;
 
-		const float length = std::max(glm::length(arrow.end - arrow.start), 0.0001f);
+		const float length = std::max(glm::length(arrow.end() - arrow.start()), 0.0001f);
 
 		if (newKind == ArrowKind::Arrow2D)
 		{
@@ -325,25 +325,87 @@ namespace DefectStudio
 
 	static void drawArrowPlacementSection(RendererWindowState::SceneArrow &arrow, const ArrowUndoFn &snapshot)
 	{
-		ImGui::TextUnformatted("Start");
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(200.0f);
-		const bool startChanged = drawUndoableVec3(arrow.start, snapshot, [](glm::vec3 &v) {
-			return ImGui::DragFloat3("##ArrowStart", &v.x, 0.01f, 0.0f, 0.0f, "%.3f");
-		});
-		if (startChanged)
-			arrow.startAnchorAtom.reset();
+		for (std::size_t index = 0; index < arrow.points.size(); ++index)
+		{
+			ImGui::PushID(static_cast<int>(index));
+			const char *label = index == 0 ? "Start" : index + 1 == arrow.points.size() ? "End  " : "Point";
+			ImGui::Text("%s", label);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(200.0f);
+			const bool changed = drawUndoableVec3(arrow.points[index], snapshot, [](glm::vec3 &value) {
+				return ImGui::DragFloat3("##ArrowPathPoint", &value.x, 0.01f, 0.0f, 0.0f, "%.3f");
+			});
+			if (changed && index == 0)
+				arrow.startAnchorAtom.reset();
+			if (changed && index + 1 == arrow.points.size())
+				arrow.endAnchorAtom.reset();
+			if (index > 0 && index + 1 < arrow.points.size())
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Remove"))
+				{
+					snapshot();
+					arrow.points.erase(arrow.points.begin() + static_cast<std::ptrdiff_t>(index));
+					ImGui::PopID();
+					break;
+				}
+			}
+			ImGui::PopID();
+		}
+		if (ImGui::SmallButton("Add path point"))
+		{
+			snapshot();
+			const glm::vec3 newPoint = glm::mix(arrow.points[arrow.points.size() - 2], arrow.points.back(), 0.5f);
+			arrow.points.insert(arrow.points.end() - 1, newPoint);
+			arrow.controlPoint.reset();
+		}
 
-		ImGui::TextUnformatted("End  ");
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(200.0f);
-		const bool endChanged = drawUndoableVec3(arrow.end, snapshot, [](glm::vec3 &v) {
-			return ImGui::DragFloat3("##ArrowEnd", &v.x, 0.01f, 0.0f, 0.0f, "%.3f");
-		});
-		if (endChanged)
-			arrow.endAnchorAtom.reset();
+		if (arrow.points.size() == 2)
+		{
+			bool curved = arrow.controlPoint.has_value();
+			if (ImGui::Checkbox("Quadratic curve##ArrowControlPointEnabled", &curved))
+			{
+				snapshot();
+				if (curved)
+					arrow.controlPoint = glm::mix(arrow.start(), arrow.end(), 0.5f);
+				else
+					arrow.controlPoint.reset();
+			}
+			if (arrow.controlPoint)
+			{
+				ImGui::SetNextItemWidth(200.0f);
+				drawUndoableVec3(*arrow.controlPoint, snapshot, [](glm::vec3 &value) {
+					return ImGui::DragFloat3("Control point##ArrowControlPoint", &value.x, 0.01f, 0.0f, 0.0f, "%.3f");
+				});
+				int segments = arrow.curveSegments;
+				ImGui::SetNextItemWidth(100.0f);
+				const bool changed = ImGui::DragInt("Curve segments##ArrowCurveSegments", &segments, 1.0f, 1, 256);
+				if (ImGui::IsItemActivated())
+					snapshot();
+				if (changed)
+					arrow.curveSegments = std::clamp(segments, 1, 256);
+			}
+		}
 
-		ImGui::Text("Length    %.3f", glm::length(arrow.end - arrow.start));
+		using ArrowTip = RendererWindowState::ArrowTip;
+		constexpr const char *tipNames[] = {"None", "Plain", "Barbed", "Open", "Bar", "Circle"};
+		int startTip = static_cast<int>(arrow.startTip);
+		int endTip = static_cast<int>(arrow.endTip);
+		ImGui::SetNextItemWidth(110.0f);
+		if (ImGui::Combo("Start tip##ArrowStartTip", &startTip, tipNames, 6))
+		{
+			snapshot();
+			arrow.startTip = static_cast<ArrowTip>(startTip);
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(110.0f);
+		if (ImGui::Combo("End tip##ArrowEndTip", &endTip, tipNames, 6))
+		{
+			snapshot();
+			arrow.endTip = static_cast<ArrowTip>(endTip);
+		}
+
+		ImGui::Text("Length    %.3f", TessellateSceneArrowPath(arrow).totalLength);
 	}
 
 	// Shared by Full's own "2D Orientation" section and Compact's "Advanced" section (doc Section 9

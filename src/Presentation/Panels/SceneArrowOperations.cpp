@@ -126,8 +126,10 @@ namespace DefectStudio
 	static constexpr glm::vec3 kArrowDuplicateOffset(0.5f, 0.0f, 0.0f);
 	static void OffsetSceneArrowCopy(RendererWindowState::SceneArrow &arrow)
 	{
-		arrow.start += kArrowDuplicateOffset;
-		arrow.end += kArrowDuplicateOffset;
+		for (glm::vec3 &point : arrow.points)
+			point += kArrowDuplicateOffset;
+		if (arrow.controlPoint)
+			*arrow.controlPoint += kArrowDuplicateOffset;
 		// An anchored copy cannot keep a visible offset: the live refresh would immediately put it
 		// back on the source atoms. The offset therefore becomes a new free placement.
 		arrow.startAnchorAtom.reset();
@@ -204,8 +206,8 @@ namespace DefectStudio
 		const RendererAtomData &endAtom,
 		const float radiusBuffer)
 	{
-		arrow.start = startAtom.cartesianPosition;
-		arrow.end = endAtom.cartesianPosition;
+		arrow.start() = startAtom.cartesianPosition;
+		arrow.end() = endAtom.cartesianPosition;
 		SceneSystem::ApplySceneArrowAtomBuffer(arrow, startAtom.radius, endAtom.radius, radiusBuffer);
 	}
 
@@ -240,7 +242,8 @@ namespace DefectStudio
 
 	void ReverseSceneArrow(RendererWindowState::SceneArrow &arrow)
 	{
-		std::swap(arrow.start, arrow.end);
+		std::reverse(arrow.points.begin(), arrow.points.end());
+		std::swap(arrow.startTip, arrow.endTip);
 		std::swap(arrow.startAnchorAtom, arrow.endAnchorAtom);
 	}
 

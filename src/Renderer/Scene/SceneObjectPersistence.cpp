@@ -140,6 +140,34 @@ static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &
 	return p;
 }
 
+static std::string ToPersisted(RendererWindowState::ArrowTip tip)
+{
+	using ArrowTip = RendererWindowState::ArrowTip;
+	switch (tip)
+	{
+		case ArrowTip::None: return "None";
+		case ArrowTip::Plain: return "Plain";
+		case ArrowTip::Barbed: return "Barbed";
+		case ArrowTip::Open: return "Open";
+		case ArrowTip::Bar: return "Bar";
+		case ArrowTip::Circle: return "Circle";
+	}
+	return "None";
+}
+
+static RendererWindowState::ArrowTip FromPersisted(
+	const std::string &name, RendererWindowState::ArrowTip fallback)
+{
+	using ArrowTip = RendererWindowState::ArrowTip;
+	if (name == "None") return ArrowTip::None;
+	if (name == "Plain") return ArrowTip::Plain;
+	if (name == "Barbed") return ArrowTip::Barbed;
+	if (name == "Open") return ArrowTip::Open;
+	if (name == "Bar") return ArrowTip::Bar;
+	if (name == "Circle") return ArrowTip::Circle;
+	return fallback;
+}
+
 static std::vector<PersistedAtomRef> PersistAtomReferences(
 	const RendererStructureData &structure, const std::vector<std::size_t> &atomIndices)
 {
@@ -239,8 +267,11 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.kind = static_cast<PersistedArrowKind>(arrow.kind);
 		p.orientation2D = static_cast<PersistedArrow2DOrientation>(arrow.orientation2D);
 		p.fixedPlane = static_cast<PersistedWorldPlane>(arrow.fixedPlane);
-		p.start = arrow.start;
-		p.end = arrow.end;
+		p.points = arrow.points;
+		p.controlPoint = arrow.controlPoint;
+		p.curveSegments = arrow.curveSegments;
+		p.startTip = ToPersisted(arrow.startTip);
+		p.endTip = ToPersisted(arrow.endTip);
 		p.startAnchorAtoms = PersistOptionalAtomReference(window.structure, arrow.startAnchorAtom);
 		p.endAnchorAtoms = PersistOptionalAtomReference(window.structure, arrow.endAnchorAtom);
 		p.atomBuffer = arrow.atomBuffer;
@@ -363,8 +394,15 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					a.kind = static_cast<RendererWindowState::ArrowKind>(value.kind);
 					a.orientation2D = static_cast<RendererWindowState::Arrow2DOrientation>(value.orientation2D);
 					a.fixedPlane = static_cast<RendererWindowState::WorldPlane>(value.fixedPlane);
-					a.start = value.start;
-					a.end = value.end;
+					a.points = value.points;
+					a.controlPoint = value.controlPoint;
+					a.curveSegments = value.curveSegments;
+					a.startTip = FromPersisted(value.startTip, RendererWindowState::ArrowTip::None);
+					const RendererWindowState::ArrowTip defaultEndTip =
+						a.kind == RendererWindowState::ArrowKind::Line
+						? RendererWindowState::ArrowTip::None
+						: RendererWindowState::ArrowTip::Plain;
+					a.endTip = FromPersisted(value.endTip, defaultEndTip);
 					a.startAnchorAtom = ResolveOptionalAtomReference(window.structure, value.startAnchorAtoms);
 					a.endAnchorAtom = ResolveOptionalAtomReference(window.structure, value.endAnchorAtoms);
 					a.atomBuffer = value.atomBuffer;

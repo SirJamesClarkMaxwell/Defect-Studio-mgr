@@ -89,17 +89,75 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(got->style.outlineWidth, 0.02f);
 	}
 
-	TEST(SceneObjectsIOTests, SceneArrowRoundTrips)
+	TEST(SceneObjectsIOTests, Pre32bArrowEndpointsMigrateToPointsAndKindSpecificTips)
+	{
+		const std::string legacy = R"(formatVersion: 1
+structures:
+  - structureKey: structures/NV/POSCAR
+    objects:
+      - kind: SceneArrow
+        arrowKind: Line
+        start: [1, 2, 3]
+        end: [4, 5, 6]
+      - kind: SceneArrow
+        arrowKind: Arrow2D
+        start: [-1, 0, 2]
+        end: [3, 4, 5]
+      - kind: SceneArrow
+        arrowKind: Arrow3D
+        start: [0, 1, 0]
+        end: [0, 1, 7]
+)";
+
+		SceneObjectsFile loaded;
+		std::vector<StructuredError> warnings;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(legacy, loaded, warnings, error)) << error;
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 3u);
+
+		const auto *line = std::get_if<PersistedSceneArrow>(&loaded.structures[0].objects[0]);
+		const auto *arrow2D = std::get_if<PersistedSceneArrow>(&loaded.structures[0].objects[1]);
+		const auto *arrow3D = std::get_if<PersistedSceneArrow>(&loaded.structures[0].objects[2]);
+		ASSERT_NE(line, nullptr);
+		ASSERT_NE(arrow2D, nullptr);
+		ASSERT_NE(arrow3D, nullptr);
+		ASSERT_EQ(line->points.size(), 2u);
+		EXPECT_EQ(line->points[0], glm::vec3(1.0f, 2.0f, 3.0f));
+		EXPECT_EQ(line->points[1], glm::vec3(4.0f, 5.0f, 6.0f));
+		EXPECT_EQ(line->startTip, "None");
+		EXPECT_EQ(line->endTip, "None");
+		ASSERT_EQ(arrow2D->points.size(), 2u);
+		EXPECT_EQ(arrow2D->points[0], glm::vec3(-1.0f, 0.0f, 2.0f));
+		EXPECT_EQ(arrow2D->points[1], glm::vec3(3.0f, 4.0f, 5.0f));
+		EXPECT_EQ(arrow2D->startTip, "None");
+		EXPECT_EQ(arrow2D->endTip, "Plain");
+		ASSERT_EQ(arrow3D->points.size(), 2u);
+		EXPECT_EQ(arrow3D->points[0], glm::vec3(0.0f, 1.0f, 0.0f));
+		EXPECT_EQ(arrow3D->points[1], glm::vec3(0.0f, 1.0f, 7.0f));
+		EXPECT_EQ(arrow3D->startTip, "None");
+		EXPECT_EQ(arrow3D->endTip, "Plain");
+	}
+
+	TEST(SceneObjectsIOTests, FourPointArrowPathRoundTripsEveryFieldAndTipStrings)
 	{
 		PersistedSceneArrow arrow;
 		arrow.persistKey = "00000000000000000000000000000001";
 		arrow.kind = PersistedArrowKind::Arrow3D;
 		arrow.orientation2D = PersistedArrow2DOrientation::FixedPlane;
 		arrow.fixedPlane = PersistedWorldPlane::YZ;
-		arrow.start = glm::vec3(1.0f, 2.0f, 3.0f);
-		arrow.end = glm::vec3(4.0f, 5.0f, 6.0f);
+		arrow.points = {
+			glm::vec3(1.0f, 2.0f, 3.0f),
+			glm::vec3(4.0f, 5.0f, 6.0f),
+			glm::vec3(7.0f, 8.0f, 9.0f),
+			glm::vec3(10.0f, 11.0f, 12.0f)};
+		arrow.controlPoint = glm::vec3(2.0f, 7.0f, 4.0f);
+		arrow.curveSegments = 17;
+		arrow.startTip = "Barbed";
+		arrow.endTip = "Circle";
 		arrow.startAnchorAtoms = {{3, "C", glm::vec3(1.0f, 2.0f, 3.0f)}};
-		arrow.endAnchorAtoms = {{7, "O", glm::vec3(4.0f, 5.0f, 6.0f)}};
+		arrow.endAnchorAtoms = {{7, "O", glm::vec3(10.0f, 11.0f, 12.0f)}};
 		arrow.atomBuffer = 0.65f;
 		arrow.style.color = glm::vec3(0.2f, 0.4f, 0.6f);
 		arrow.style.headLength = 0.5f;
@@ -108,15 +166,25 @@ namespace DefectStudio::Tests
 		arrow.style.gapLength = 0.2f;
 
 		std::vector<StructuredError> warnings;
-		const SceneObjectsFile loaded = RoundTrip(SingleObject(arrow), warnings);
+		const SceneObjectsFile source = SingleObject(arrow);
+		const std::string serialized = SceneObjectsIO::Serialize(source);
+		EXPECT_NE(serialized.find("start_tip: Barbed"), std::string::npos);
+		EXPECT_NE(serialized.find("end_tip: Circle"), std::string::npos);
+		SceneObjectsFile loaded;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(serialized, loaded, warnings, error)) << error;
 		EXPECT_TRUE(warnings.empty());
 		const auto *got = std::get_if<PersistedSceneArrow>(&loaded.structures.at(0).objects.at(0));
 		ASSERT_NE(got, nullptr);
 		EXPECT_EQ(got->kind, PersistedArrowKind::Arrow3D);
 		EXPECT_EQ(got->orientation2D, PersistedArrow2DOrientation::FixedPlane);
 		EXPECT_EQ(got->fixedPlane, PersistedWorldPlane::YZ);
-		EXPECT_EQ(got->start, arrow.start);
-		EXPECT_EQ(got->end, arrow.end);
+		EXPECT_EQ(got->points, arrow.points);
+		ASSERT_TRUE(got->controlPoint.has_value());
+		EXPECT_EQ(*got->controlPoint, *arrow.controlPoint);
+		EXPECT_EQ(got->curveSegments, 17);
+		EXPECT_EQ(got->startTip, "Barbed");
+		EXPECT_EQ(got->endTip, "Circle");
 		ASSERT_EQ(got->startAnchorAtoms.size(), 1u);
 		ASSERT_EQ(got->endAnchorAtoms.size(), 1u);
 		EXPECT_EQ(got->startAnchorAtoms[0].index, 3u);
@@ -254,8 +322,7 @@ namespace DefectStudio::Tests
 	TEST(SceneObjectsIOTests, AnArrowGradientSurvivesAndAnOldArrowStaysFlat)
 	{
 		PersistedSceneArrow arrow;
-		arrow.start = glm::vec3(0.0f);
-		arrow.end = glm::vec3(0.0f, 0.0f, 2.0f);
+		arrow.points = {glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 2.0f)};
 		arrow.style.useGradient = true;
 		arrow.style.gradientStart = glm::vec3(1.0f, 0.0f, 0.0f);
 		arrow.style.gradientFinish = glm::vec3(0.0f, 0.0f, 1.0f);

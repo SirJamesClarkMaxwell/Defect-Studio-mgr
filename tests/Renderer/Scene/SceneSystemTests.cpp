@@ -125,20 +125,23 @@ namespace DefectStudio::Tests
 			RendererAtomData{"C", glm::vec3(0.0f), glm::vec3(1.0f), 0.5f},
 			RendererAtomData{"O", glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(1.0f), 0.25f}};
 		RendererWindowState::SceneArrow arrow;
+		arrow.points = {glm::vec3(0.0f), glm::vec3(5.0f, 2.0f, 0.0f), glm::vec3(10.0f, 0.0f, 0.0f)};
 		arrow.startAnchorAtom = 0;
 		arrow.endAnchorAtom = 1;
 		arrow.atomBuffer = 1.0f;
 		windowState.sceneArrows.push_back(arrow);
 
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		EXPECT_NEAR(windowState.sceneArrows[0].start.x, 0.5f, 1e-5f);
-		EXPECT_NEAR(windowState.sceneArrows[0].end.x, 9.75f, 1e-5f);
+		EXPECT_NEAR(windowState.sceneArrows[0].start().x, 0.5f, 1e-5f);
+		EXPECT_NEAR(windowState.sceneArrows[0].end().x, 9.75f, 1e-5f);
+		ASSERT_EQ(windowState.sceneArrows[0].points.size(), 3u);
+		EXPECT_EQ(windowState.sceneArrows[0].points[1], glm::vec3(5.0f, 2.0f, 0.0f));
 
 		windowState.structure.atoms[1].cartesianPosition.x = 20.0f;
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		EXPECT_NEAR(windowState.sceneArrows[0].end.x, 19.75f, 1e-5f);
+		EXPECT_NEAR(windowState.sceneArrows[0].end().x, 19.75f, 1e-5f);
 		EXPECT_NEAR(
-			glm::distance(windowState.sceneArrows[0].end, windowState.structure.atoms[1].cartesianPosition),
+			glm::distance(windowState.sceneArrows[0].end(), windowState.structure.atoms[1].cartesianPosition),
 			0.25f, 1e-5f);
 	}
 
@@ -155,17 +158,17 @@ namespace DefectStudio::Tests
 		windowState.sceneArrows.push_back(arrow);
 
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		const glm::vec3 firstStart = windowState.sceneArrows[0].start;
-		const glm::vec3 firstEnd = windowState.sceneArrows[0].end;
+		const glm::vec3 firstStart = windowState.sceneArrows[0].start();
+		const glm::vec3 firstEnd = windowState.sceneArrows[0].end();
 		windowState.sceneArrows[0].atomBuffer = 2.0f;
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		EXPECT_NE(windowState.sceneArrows[0].start, firstStart);
-		EXPECT_NE(windowState.sceneArrows[0].end, firstEnd);
+		EXPECT_NE(windowState.sceneArrows[0].start(), firstStart);
+		EXPECT_NE(windowState.sceneArrows[0].end(), firstEnd);
 
 		windowState.sceneArrows[0].atomBuffer = 0.0f;
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		EXPECT_EQ(windowState.sceneArrows[0].start, windowState.structure.atoms[0].cartesianPosition);
-		EXPECT_EQ(windowState.sceneArrows[0].end, windowState.structure.atoms[1].cartesianPosition);
+		EXPECT_EQ(windowState.sceneArrows[0].start(), windowState.structure.atoms[0].cartesianPosition);
+		EXPECT_EQ(windowState.sceneArrows[0].end(), windowState.structure.atoms[1].cartesianPosition);
 	}
 
 	TEST(SceneSystemTests, FreeArrowStartStaysPlacedWhileAnchoredEndTracksItsAtom)
@@ -175,19 +178,19 @@ namespace DefectStudio::Tests
 			RendererAtomData{"C", glm::vec3(0.0f), glm::vec3(1.0f), 0.5f},
 			RendererAtomData{"O", glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(1.0f), 0.25f}};
 		RendererWindowState::SceneArrow arrow;
-		arrow.start = glm::vec3(-2.0f, 1.0f, 0.0f);
+		arrow.start() = glm::vec3(-2.0f, 1.0f, 0.0f);
 		arrow.startAnchorAtom.reset();
 		arrow.endAnchorAtom = 1;
 		arrow.atomBuffer = 1.0f;
 		windowState.sceneArrows.push_back(arrow);
 
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		EXPECT_EQ(windowState.sceneArrows[0].start, glm::vec3(-2.0f, 1.0f, 0.0f));
-		const glm::vec3 firstEnd = windowState.sceneArrows[0].end;
+		EXPECT_EQ(windowState.sceneArrows[0].start(), glm::vec3(-2.0f, 1.0f, 0.0f));
+		const glm::vec3 firstEnd = windowState.sceneArrows[0].end();
 		windowState.structure.atoms[1].cartesianPosition = glm::vec3(12.0f, 3.0f, 0.0f);
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
-		EXPECT_EQ(windowState.sceneArrows[0].start, glm::vec3(-2.0f, 1.0f, 0.0f));
-		EXPECT_NE(windowState.sceneArrows[0].end, firstEnd);
+		EXPECT_EQ(windowState.sceneArrows[0].start(), glm::vec3(-2.0f, 1.0f, 0.0f));
+		EXPECT_NE(windowState.sceneArrows[0].end(), firstEnd);
 	}
 
 	TEST(SceneSystemTests, ArrowBufferClampNeverInvertsCloseAnchors)
@@ -204,7 +207,7 @@ namespace DefectStudio::Tests
 
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
 
-		EXPECT_LT(windowState.sceneArrows[0].start.x, windowState.sceneArrows[0].end.x);
-		EXPECT_NEAR(windowState.sceneArrows[0].end.x - windowState.sceneArrows[0].start.x, 0.1f, 1e-5f);
+		EXPECT_LT(windowState.sceneArrows[0].start().x, windowState.sceneArrows[0].end().x);
+		EXPECT_NEAR(windowState.sceneArrows[0].end().x - windowState.sceneArrows[0].start().x, 0.1f, 1e-5f);
 	}
 } // namespace DefectStudio::Tests
