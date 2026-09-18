@@ -1047,7 +1047,8 @@ namespace DefectStudio
 				sceneOffset);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
-		renderScenePlanes(scenePlanes, selectedScenePlanes, camera, resources, globalSettings, sceneOffset);
+		renderScenePlanes(
+			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		renderSceneOrbitals(
 			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())

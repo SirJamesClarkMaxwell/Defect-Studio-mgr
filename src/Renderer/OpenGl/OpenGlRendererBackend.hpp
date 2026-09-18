@@ -347,6 +347,7 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,

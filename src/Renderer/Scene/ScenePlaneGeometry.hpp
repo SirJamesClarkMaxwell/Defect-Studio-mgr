@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
@@ -60,6 +61,28 @@ namespace DefectStudio
 	// speck or a wall.
 	[[nodiscard]] RendererWindowState::ScenePlane MakeDefaultScenePlane(
 		const RendererWindowState &windowState, const glm::vec3 &center);
+
+	// A screen-space pixel's worth of world units at `worldPoint`, measured by projecting a small
+	// probe offset along `probeDirection` (need not be unit length) through `camera`'s own
+	// view/projection - exact for both perspective (scales with that point's own depth, not the
+	// orbit target's distance) and orthographic (constant everywhere). nullopt when the probe
+	// lands behind the camera or the viewport has no extent.
+	[[nodiscard]] std::optional<float> WorldUnitsPerPixelAt(
+		const RendererViewCamera &camera, const glm::vec3 &worldPoint, const glm::vec3 &probeDirection,
+		const glm::vec2 &viewportPixelSize);
+
+	// The border/frame half-width the renderer should draw around `plane`, in world units. Starts
+	// from the existing world-space proportion (a fraction of the plane's own half-extents) and
+	// floors it, against both in-plane axes independently, so the border's on-screen width never
+	// drops below a small minimum on either one. Without the floor, a plane seen edge-on has a
+	// world-space extent along the view direction that projects to near zero pixels regardless of
+	// how wide the frame is in world units, and the border - the only thing left to see once the
+	// fill vanishes - disappears with it (task 33: "jak patrzy sie na niego z boku to go w ogole
+	// nie widac"). Falls back to the plain world-space width for whichever axis has no valid
+	// projection for `plane.center` (e.g. it is behind the camera).
+	[[nodiscard]] float ScenePlaneBorderWidth(
+		const RendererWindowState::ScenePlane &plane, const RendererViewCamera &camera,
+		const glm::vec2 &viewportPixelSize);
 
 	// Re-fits every anchored plane's centre, normal, tangent and extents from its atoms, once per
 	// frame, next to ResolveAnchoredOrbitals. Planes with fewer than two resolvable anchors are

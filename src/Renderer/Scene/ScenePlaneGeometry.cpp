@@ -294,4 +294,56 @@ namespace DefectStudio
 			// re-fitting it every frame would undo any resize the moment an atom twitched.
 		}
 	}
+
+	std::optional<float> WorldUnitsPerPixelAt(
+		const RendererViewCamera &camera, const glm::vec3 &worldPoint, const glm::vec3 &probeDirection,
+		const glm::vec2 &viewportPixelSize)
+	{
+		if (viewportPixelSize.x <= 0.0f || viewportPixelSize.y <= 0.0f)
+			return std::nullopt;
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+		const auto toPixels = [&](const glm::vec3 &world) -> std::optional<glm::vec2> {
+			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
+			if (clip.w <= 0.0001f)
+				return std::nullopt;
+			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+			return glm::vec2(
+				(ndc.x * 0.5f + 0.5f) * viewportPixelSize.x, (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportPixelSize.y);
+		};
+		// One world unit is comfortably larger than typical floating-point noise yet small next to
+		// any real scene scale, so the probe stays valid whether the plane is angstrom- or
+		// metre-scaled and the ratio below is not sensitive to the exact value.
+		constexpr float kProbeDistance = 1.0f;
+		const std::optional<glm::vec2> origin = toPixels(worldPoint);
+		const std::optional<glm::vec2> probe = toPixels(worldPoint + probeDirection * kProbeDistance);
+		if (!origin.has_value() || !probe.has_value())
+			return std::nullopt;
+		const float pixelDistance = glm::length(*probe - *origin);
+		if (pixelDistance <= 1e-4f)
+			return std::nullopt;
+		return kProbeDistance / pixelDistance;
+	}
+
+	float ScenePlaneBorderWidth(
+		const RendererWindowState::ScenePlane &plane, const RendererViewCamera &camera,
+		const glm::vec2 &viewportPixelSize)
+	{
+		constexpr float kMinBorderScreenPixels = 1.5f;
+		float width = 0.02f * std::max(0.05f, std::max(plane.halfExtents.x, plane.halfExtents.y));
+		// A single global inset width is used for all four border edges, but each pair of edges is
+		// only foreshortened by ONE of the two in-plane axes: rotating the plane to go edge-on
+		// around its tangent collapses the bitangent axis on screen (and leaves tangent untouched),
+		// while rotating around its bitangent collapses tangent instead. Probing both and flooring
+		// against whichever is worse keeps every edge visible regardless of which way the plane
+		// turned edge-on, at the cost of a slightly thicker-than-needed border on the axis that
+		// was not the foreshortened one.
+		const glm::vec3 bitangentProbe = glm::cross(plane.normal, plane.tangent);
+		if (const std::optional<float> worldPerPixel =
+				WorldUnitsPerPixelAt(camera, plane.center, bitangentProbe, viewportPixelSize))
+			width = std::max(width, kMinBorderScreenPixels * (*worldPerPixel));
+		if (const std::optional<float> worldPerPixel =
+				WorldUnitsPerPixelAt(camera, plane.center, plane.tangent, viewportPixelSize))
+			width = std::max(width, kMinBorderScreenPixels * (*worldPerPixel));
+		return width;
+	}
 } // namespace DefectStudio

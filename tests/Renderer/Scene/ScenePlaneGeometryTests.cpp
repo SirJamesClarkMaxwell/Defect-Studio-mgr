@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -249,6 +250,24 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(PickScenePlane(window, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f)).has_value());
 	}
 
+	// Task 33's decision on the open question: only the exact mathematical singularity above -
+	// a ray running perfectly parallel to the sheet - stays unpickable. A ray that grazes the
+	// plane at even a fraction of a degree off parallel (which is what "clicking a plane you can
+	// see edge-on" actually looks like, now that its border keeps a minimum screen-space width
+	// instead of vanishing) still resolves against the real quad geometry unchanged; picking
+	// needed no change for the rendering fix to make edge-on planes usable again.
+	TEST(ScenePlanePickTests, ARayJustBarelyOffParallelStillHitsTheEdgeOnQuad)
+	{
+		RendererWindowState window;
+		window.scenePlanes = {MakeFacingPlane()};
+
+		const std::optional<std::size_t> hit = PickScenePlane(
+			window, glm::vec3(-2.0f, 0.0f, -0.02f), glm::vec3(1.0f, 0.0f, 0.01f));
+
+		ASSERT_TRUE(hit.has_value());
+		EXPECT_EQ(*hit, 0u);
+	}
+
 	namespace
 	{
 		RendererWindowState MakeAnchoredPlaneWindow()
@@ -327,5 +346,130 @@ namespace DefectStudio::Tests
 		EXPECT_GT(plane.halfExtents.y, 0.1f);
 		EXPECT_NEAR(glm::length(plane.normal), 1.0f, 1e-4f);
 		EXPECT_NEAR(glm::dot(plane.normal, plane.tangent), 0.0f, 1e-4f);
+	}
+
+	namespace
+	{
+		// Looking almost exactly down +y (yaw=0, pitch=0 would be exactly down +y - a hair of yaw
+		// keeps every direction this test probes non-degenerate in orthographic projection, where a
+		// probe offset that is *exactly* along the view axis contributes literally zero screen
+		// delta and WorldUnitsPerPixelAt has nothing to measure).
+		[[nodiscard]] RendererViewCamera MakeTestCamera(const glm::vec2 &viewportPixelSize)
+		{
+			RendererViewCamera camera;
+			camera.SetProjection(CameraProjection::Orthographic);
+			camera.SetViewport(viewportPixelSize.x, viewportPixelSize.y);
+			camera.SetOrbitState(glm::vec3(0.0f), 10.0f, 0.001f, 0.0f);
+			return camera;
+		}
+
+		[[nodiscard]] float ScreenPixelsForWorldWidth(
+			const RendererViewCamera &camera, const glm::vec3 &worldPoint, const glm::vec3 &axis, float worldWidth,
+			const glm::vec2 &viewportPixelSize)
+		{
+			const std::optional<float> worldPerPixel = WorldUnitsPerPixelAt(camera, worldPoint, axis, viewportPixelSize);
+			// nullopt only when the axis truly has zero screen extent (the camera setup above avoids
+			// that); a test that hit it would be a broken test, not a passing one.
+			EXPECT_TRUE(worldPerPixel.has_value());
+			return worldWidth / worldPerPixel.value_or(std::numeric_limits<float>::infinity());
+		}
+	} // namespace
+
+	TEST(WorldUnitsPerPixelAtTests, OrthographicRatioIsTheSameEverywhereInTheScene)
+	{
+		const glm::vec2 viewportPixelSize(800.0f, 600.0f);
+		const RendererViewCamera camera = MakeTestCamera(viewportPixelSize);
+
+		const std::optional<float> nearOrigin =
+			WorldUnitsPerPixelAt(camera, glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f), viewportPixelSize);
+		const std::optional<float> farFromOrigin =
+			WorldUnitsPerPixelAt(camera, glm::vec3(5.0f, 0.0f, 5.0f), glm::vec3(1.0f, 0.0f, 0.0f), viewportPixelSize);
+		ASSERT_TRUE(nearOrigin.has_value());
+		ASSERT_TRUE(farFromOrigin.has_value());
+		// Orthographic: no perspective foreshortening, so the ratio does not depend on where in the
+		// scene it is measured - only a genuinely edge-on *direction* (see below) changes it.
+		EXPECT_NEAR(*nearOrigin, *farFromOrigin, 1e-4f);
+	}
+
+	TEST(WorldUnitsPerPixelAtTests, ANearlyEdgeOnDirectionNeedsManyMoreWorldUnitsPerPixel)
+	{
+		const glm::vec2 viewportPixelSize(800.0f, 600.0f);
+		const RendererViewCamera camera = MakeTestCamera(viewportPixelSize);
+
+		// +x is roughly the screen's right axis for this camera (yaw~=0 looks down +y) - a normal,
+		// well-conditioned direction to measure.
+		const std::optional<float> acrossScreen =
+			WorldUnitsPerPixelAt(camera, glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f), viewportPixelSize);
+		// +y is almost exactly the view direction - the direction a plane's in-plane axis points
+		// when that plane has turned edge-on to this camera.
+		const std::optional<float> intoTheScreen =
+			WorldUnitsPerPixelAt(camera, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), viewportPixelSize);
+		ASSERT_TRUE(acrossScreen.has_value());
+		ASSERT_TRUE(intoTheScreen.has_value());
+		EXPECT_GT(*intoTheScreen, *acrossScreen * 10.0f);
+	}
+
+	TEST(ScenePlaneBorderWidthTests, WithoutTheFloorAnEdgeOnPlanesBorderWouldBeSubPixel)
+	{
+		const glm::vec2 viewportPixelSize(800.0f, 600.0f);
+		const RendererViewCamera camera = MakeTestCamera(viewportPixelSize);
+
+		// bitangent = cross(normal, tangent) = (0, -1, 0) here - almost exactly this camera's view
+		// axis, i.e. this plane is (almost) edge-on to it. halfExtents is deliberately small so the
+		// pre-existing "0.02 * halfExtents" world-space proportion is tiny before any flooring.
+		RendererWindowState::ScenePlane plane;
+		plane.center = glm::vec3(0.0f);
+		plane.normal = glm::vec3(1.0f, 0.0f, 0.0f);
+		plane.tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+		plane.halfExtents = glm::vec2(0.3f);
+
+		const float plainWorldWidth = 0.02f * std::max(0.05f, std::max(plane.halfExtents.x, plane.halfExtents.y));
+		const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
+		const float plainScreenPixels =
+			ScreenPixelsForWorldWidth(camera, plane.center, bitangent, plainWorldWidth, viewportPixelSize);
+		EXPECT_LT(plainScreenPixels, 1.5f);
+	}
+
+	TEST(ScenePlaneBorderWidthTests, TheFlooredWidthReachesTheMinimumScreenSpaceWidth)
+	{
+		const glm::vec2 viewportPixelSize(800.0f, 600.0f);
+		const RendererViewCamera camera = MakeTestCamera(viewportPixelSize);
+
+		RendererWindowState::ScenePlane plane;
+		plane.center = glm::vec3(0.0f);
+		plane.normal = glm::vec3(1.0f, 0.0f, 0.0f);
+		plane.tangent = glm::vec3(0.0f, 0.0f, 1.0f);
+		plane.halfExtents = glm::vec2(0.3f);
+
+		const float width = ScenePlaneBorderWidth(plane, camera, viewportPixelSize);
+		const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
+		const float screenPixels = ScreenPixelsForWorldWidth(camera, plane.center, bitangent, width, viewportPixelSize);
+		// A hair under the 1.5px floor to absorb the small-angle rounding MakeTestCamera's yaw
+		// leaves in, not a change of what the floor is meant to guarantee.
+		EXPECT_GE(screenPixels, 1.49f);
+
+		// The axis that was NOT foreshortened (tangent, this camera's near-vertical screen axis)
+		// must not have shrunk - only ever widened, per ScenePlaneBorderWidth's contract.
+		EXPECT_GE(width, 0.02f * std::max(0.05f, std::max(plane.halfExtents.x, plane.halfExtents.y)));
+	}
+
+	TEST(ScenePlaneBorderWidthTests, AWellFramedPlaneKeepsItsPlainWorldSpaceWidth)
+	{
+		const glm::vec2 viewportPixelSize(800.0f, 600.0f);
+		RendererViewCamera camera;
+		camera.SetProjection(CameraProjection::Orthographic);
+		camera.SetViewport(viewportPixelSize.x, viewportPixelSize.y);
+		// Looking straight down at a plane that faces the viewer head-on: neither in-plane axis is
+		// anywhere near the view direction, so the floor should not have anything to do.
+		camera.SetOrbitState(glm::vec3(0.0f), 10.0f, 0.0f, 1.5f);
+
+		RendererWindowState::ScenePlane plane;
+		plane.center = glm::vec3(0.0f);
+		plane.normal = glm::vec3(0.0f, 0.0f, 1.0f);
+		plane.tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+		plane.halfExtents = glm::vec2(5.0f);
+
+		const float width = ScenePlaneBorderWidth(plane, camera, viewportPixelSize);
+		EXPECT_NEAR(width, 0.02f * plane.halfExtents.x, 1e-4f);
 	}
 } // namespace DefectStudio::Tests

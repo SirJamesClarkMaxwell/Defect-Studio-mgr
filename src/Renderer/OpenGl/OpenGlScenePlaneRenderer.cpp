@@ -38,7 +38,8 @@ namespace DefectStudio
 		// border below rides along as eight more triangles in the same soup, taking the negative
 		// slot so it can be a different colour without a second draw call.
 		[[nodiscard]] std::vector<IsosurfaceVertex> BuildScenePlaneMesh(
-			const RendererWindowState::ScenePlane &plane)
+			const RendererWindowState::ScenePlane &plane, const RendererViewCamera &camera,
+			const glm::vec2 &viewportPixelSize)
 		{
 			const std::array<glm::vec3, 4> corners = ScenePlaneCorners(plane);
 			std::vector<IsosurfaceVertex> mesh;
@@ -49,8 +50,9 @@ namespace DefectStudio
 
 			// Inset frame rather than an outline drawn with GL_LINES: line width above 1px is not
 			// portable, and a frame made of quads scales with the plane instead of with the screen.
-			const float width =
-				0.02f * std::max(0.05f, std::max(plane.halfExtents.x, plane.halfExtents.y));
+			// The width itself has a screen-space floor (ScenePlaneBorderWidth) so a plane seen
+			// edge-on keeps a visible line instead of vanishing along with the fill (task 33).
+			const float width = ScenePlaneBorderWidth(plane, camera, viewportPixelSize);
 			const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
 			const glm::vec3 insetTangent = plane.tangent * width;
 			const glm::vec3 insetBitangent = bitangent * width;
@@ -76,6 +78,7 @@ namespace DefectStudio
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
+		const glm::vec2 &viewportPixelSize,
 		const glm::vec3 &sceneOffset)
 	{
 		if (planes.empty())
@@ -94,7 +97,7 @@ namespace DefectStudio
 			const RendererWindowState::ScenePlane &plane = planes[planeIndex];
 			if (!plane.visible)
 				continue;
-			const std::vector<IsosurfaceVertex> mesh = BuildScenePlaneMesh(plane);
+			const std::vector<IsosurfaceVertex> mesh = BuildScenePlaneMesh(plane, camera, viewportPixelSize);
 			if (mesh.empty())
 				continue;
 
