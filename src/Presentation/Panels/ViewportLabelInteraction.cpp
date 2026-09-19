@@ -30,6 +30,7 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
@@ -130,49 +131,47 @@ namespace DefectStudio
 		// Delete removes every selected free label - same rationale as the pin Delete above.
 		const bool freeLabelSelected = !windowState.selectedFreeLabels.empty();
 		if (freeLabelSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			for (const SceneObjectId id : windowState.selectedFreeLabels)
-				windowState.freeLabels.erase(std::remove_if(windowState.freeLabels.begin(), windowState.freeLabels.end(),
-					[id](const auto &label) { return label.id == id; }), windowState.freeLabels.end());
-			windowState.selectedFreeLabels.clear();
-			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-		}
+			ExecuteSceneObjectEditAction(
+				windowState, SceneObjectEditKind::FreeLabel, SceneObjectEditAction::Delete);
 
 		// Delete removes every selected scene arrow - same rationale as the pin/free-label Delete above.
 		const bool sceneArrowSelected = !windowState.selectedSceneArrows.empty();
 		if (sceneArrowSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			EraseSceneArrows(windowState, windowState.selectedSceneArrows);
-		}
+			ExecuteSceneObjectEditAction(
+				windowState, SceneObjectEditKind::Arrow, SceneObjectEditAction::Delete);
 
 		const bool sceneOrbitalSelected = !windowState.selectedSceneOrbitals.empty();
 		if (sceneOrbitalSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			EraseSceneOrbitals(windowState, windowState.selectedSceneOrbitals);
-		}
+			ExecuteSceneObjectEditAction(
+				windowState, SceneObjectEditKind::Orbital, SceneObjectEditAction::Delete);
 
 		const bool scenePlaneSelected = !windowState.selectedScenePlanes.empty();
 		if (scenePlaneSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			EraseScenePlanes(windowState, windowState.selectedScenePlanes);
-		}
+			ExecuteSceneObjectEditAction(
+				windowState, SceneObjectEditKind::Plane, SceneObjectEditAction::Delete);
 
-		// Ctrl+C/V/D for scene arrows - same "raw ImGui key check, bypass CoreLayer entirely" shape as
+		// Ctrl+C/V/D for scene drawings - same "raw ImGui key check, bypass CoreLayer entirely" shape as
 		// Delete just above. renderer.selection.copy/paste/duplicate (CoreLayer-dispatched, bound to the
 		// same chords) only ever touch atoms - there's no fallback chain in CoreLayer::dispatchKeyChord
-		// to make them "also try arrows", so this runs independently, same as Delete already does across
-		// every RendererWindowState-only kind (pins/free labels/arrows) alongside the atom command.
+		// to make them "also try annotations", so this runs independently alongside the atom command.
 		const bool ctrlHeld = ImGui::GetIO().KeyCtrl;
-		if (sceneArrowSelected && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
-			CopySceneArrowsToClipboard(windowState);
+		const std::optional<SceneObjectEditKind> selectedDrawingKind = sceneArrowSelected
+			? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Arrow}
+			: sceneOrbitalSelected ? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Orbital}
+			: scenePlaneSelected ? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Plane}
+			: std::nullopt;
+		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
+			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Copy);
 		if (hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_V, false))
-			PasteSceneArrowsFromClipboard(windowState); // no selection required, mirrors atom Paste
-		if (sceneArrowSelected && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false))
-			DuplicateSelectedSceneArrows(windowState);
+		{
+			// Preserve arrows' established no-selection paste fallback. A selected plane/orbital chooses
+			// its own clipboard, avoiding an ambiguous paste when several kind-specific clipboards exist.
+			ExecuteSceneObjectEditAction(
+				windowState, selectedDrawingKind.value_or(SceneObjectEditKind::Arrow),
+				SceneObjectEditAction::Paste);
+		}
+		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false))
+			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Duplicate);
 
 		// Tab cycles which single point (Start -> End -> whole arrow) owns the unified transform
 		// gizmo's axis triad - keyboard equivalent of clicking

@@ -161,6 +161,21 @@ namespace DefectStudio
 		m_SelectionAnchor = SelectionAnchor{windowState.windowId, kind, 0, clickedId};
 	}
 
+	void SceneOutlinerPanel::selectAnnotationRowForContextMenu(
+		RendererWindowState &windowState,
+		const SelectionRowKind kind,
+		const SceneObjectId clickedId,
+		std::vector<SceneObjectId> &selection)
+	{
+		if (std::find(selection.begin(), selection.end(), clickedId) != selection.end())
+			return;
+		SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
+		ClearOtherAnnotationSelections(windowState, &selection);
+		selection = {clickedId};
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		m_SelectionAnchor = SelectionAnchor{windowState.windowId, kind, 0, clickedId};
+	}
+
 	void SceneOutlinerPanel::clearSelection()
 	{
 		m_SelectionAnchor.reset();

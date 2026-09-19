@@ -60,18 +60,18 @@ namespace DefectStudio
 		// drawSpeciesGroup/drawAtomRow above, both visibility columns included. Row click selects in
 		// the viewport the same way an atom row's does.
 		void drawLabelsGroup(RendererWindowState &windowState);
-		void drawFreeLabelRow(
+		bool drawFreeLabelRow(
 			RendererWindowState &windowState, std::size_t labelIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawPinnedMeasurementRow(
 			RendererWindowState &windowState, std::size_t pinIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawArrowsGroup(RendererWindowState &windowState);
-		void drawSceneArrowRow(
+		bool drawSceneArrowRow(
 			RendererWindowState &windowState, std::size_t arrowIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawOrbitalsGroup(RendererWindowState &windowState);
-		void drawSceneOrbitalRow(
+		bool drawSceneOrbitalRow(
 			RendererWindowState &windowState, std::size_t orbitalIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
@@ -101,6 +101,13 @@ namespace DefectStudio
 			RendererWindowState &windowState, SelectionRowKind kind,
 			const std::vector<SceneObjectId> &orderedRows, SceneObjectId clickedId,
 			std::vector<SceneObjectId> &selection);
+		void selectAnnotationRowForContextMenu(
+			RendererWindowState &windowState, SelectionRowKind kind,
+			SceneObjectId clickedId, std::vector<SceneObjectId> &selection);
+		bool drawSceneObjectContextMenu(
+			RendererWindowState &windowState, SelectionRowKind rowKind,
+			SceneObjectId clickedId, std::vector<SceneObjectId> &selection,
+			bool openRequested);
 
 		// "Copy view + visibility to..." (RMB on a window row) - atom-matches source against target
 		// (both already-open windows, unlike DisplacementComparisonPanel's file-based comparison) via

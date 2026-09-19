@@ -41,4 +41,17 @@ namespace DefectStudio
 	// contract as EraseSceneArrows, including that the caller pushes the undo snapshot first.
 	void EraseSceneOrbitals(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 	void EraseScenePlanes(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
+
+	// Process-wide whole-object clipboards, matching SceneArrow's copy/duplicate/paste contract.
+	// Copies receive fresh ids, lose persistence keys, move by a small world-space offset and detach
+	// from atoms so the anchor resolver cannot snap them back onto the source object.
+	[[nodiscard]] std::vector<RendererWindowState::SceneOrbital> &GetSceneOrbitalClipboard();
+	void CopySceneOrbitalsToClipboard(const RendererWindowState &windowState);
+	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState);
+	void PasteSceneOrbitalsFromClipboard(RendererWindowState &windowState);
+
+	[[nodiscard]] std::vector<RendererWindowState::ScenePlane> &GetScenePlaneClipboard();
+	void CopyScenePlanesToClipboard(const RendererWindowState &windowState);
+	void DuplicateSelectedScenePlanes(RendererWindowState &windowState);
+	void PasteScenePlanesFromClipboard(RendererWindowState &windowState);
 } // namespace DefectStudio

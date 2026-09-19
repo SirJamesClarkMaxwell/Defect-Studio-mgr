@@ -2,10 +2,12 @@
 
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneOutlinerVisibilityColumns.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <string_view>
 
 #include <imgui.h>
 
@@ -83,6 +85,46 @@ namespace DefectStudio
 		return indices;
 	}
 
+	bool SceneOutlinerPanel::drawSceneObjectContextMenu(
+		RendererWindowState &windowState,
+		const SelectionRowKind rowKind,
+		const SceneObjectId clickedId,
+		std::vector<SceneObjectId> &selection,
+		const bool openRequested)
+	{
+		if (openRequested)
+		{
+			selectAnnotationRowForContextMenu(windowState, rowKind, clickedId, selection);
+			ImGui::OpenPopup("##SceneObjectRowContextMenu");
+		}
+		if (!ImGui::BeginPopup("##SceneObjectRowContextMenu"))
+			return false;
+
+		const SceneObjectEditKind editKind = rowKind == SelectionRowKind::FreeLabel
+			? SceneObjectEditKind::FreeLabel
+			: rowKind == SelectionRowKind::Arrow ? SceneObjectEditKind::Arrow
+			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
+			: SceneObjectEditKind::Plane;
+		bool sceneMutated = false;
+		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
+			const SceneObjectEditAction action)
+		{
+			const bool enabled = CanExecuteSceneObjectEditAction(windowState, editKind, action);
+			if (ImGui::MenuItem(label.data(), shortcut.data(), false, enabled))
+			{
+				ExecuteSceneObjectEditAction(windowState, editKind, action);
+				sceneMutated = action != SceneObjectEditAction::Copy;
+				ImGui::CloseCurrentPopup();
+			}
+		};
+		drawAction("Usun", "Delete", SceneObjectEditAction::Delete);
+		drawAction("Duplikuj", "Ctrl+D", SceneObjectEditAction::Duplicate);
+		drawAction("Kopiuj", "Ctrl+C", SceneObjectEditAction::Copy);
+		drawAction("Wklej", "Ctrl+V", SceneObjectEditAction::Paste);
+		ImGui::EndPopup();
+		return sceneMutated;
+	}
+
 	void SceneOutlinerPanel::drawAtomRow(
 		RendererWindowState &windowState, const std::size_t atomIndex,
 		const std::vector<std::size_t> &orderedAtomIndices)
@@ -158,7 +200,7 @@ namespace DefectStudio
 		ImGui::PopID();
 	}
 
-	void SceneOutlinerPanel::drawFreeLabelRow(
+	bool SceneOutlinerPanel::drawFreeLabelRow(
 		RendererWindowState &windowState, const std::size_t labelIndex,
 		const std::vector<SceneObjectId> &orderedIds)
 	{
@@ -177,6 +219,7 @@ namespace DefectStudio
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
 		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);
 		DrawSceneVisibilityColumns(
@@ -184,8 +227,11 @@ namespace DefectStudio
 		if (rowActivated)
 			applyAnnotationRowSelection(
 				windowState, SelectionRowKind::FreeLabel, orderedIds, id, selection);
+		const bool sceneMutated = drawSceneObjectContextMenu(
+			windowState, SelectionRowKind::FreeLabel, id, selection, contextRequested);
 		ImGui::PopID();
 		ImGui::PopID();
+		return sceneMutated;
 	}
 
 	void SceneOutlinerPanel::drawPinnedMeasurementRow(
@@ -240,7 +286,8 @@ namespace DefectStudio
 			const std::vector<SceneObjectId> freeLabelIds =
 				CollectIds(windowState.freeLabels, freeLabelIndices);
 			for (const std::size_t index : freeLabelIndices)
-				drawFreeLabelRow(windowState, index, freeLabelIds);
+				if (drawFreeLabelRow(windowState, index, freeLabelIds))
+					break;
 			const std::vector<std::size_t> pinIndices =
 				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
 			const std::vector<SceneObjectId> pinIds =
@@ -252,7 +299,7 @@ namespace DefectStudio
 		ImGui::PopID();
 	}
 
-	void SceneOutlinerPanel::drawSceneArrowRow(
+	bool SceneOutlinerPanel::drawSceneArrowRow(
 		RendererWindowState &windowState, const std::size_t arrowIndex,
 		const std::vector<SceneObjectId> &orderedIds)
 	{
@@ -270,6 +317,7 @@ namespace DefectStudio
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
 		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);
 		DrawSceneVisibilityColumns(
@@ -277,7 +325,10 @@ namespace DefectStudio
 		if (rowActivated)
 			applyAnnotationRowSelection(
 				windowState, SelectionRowKind::Arrow, orderedIds, id, selection);
+		const bool sceneMutated = drawSceneObjectContextMenu(
+			windowState, SelectionRowKind::Arrow, id, selection, contextRequested);
 		ImGui::PopID();
+		return sceneMutated;
 	}
 
 	void SceneOutlinerPanel::drawArrowsGroup(RendererWindowState &windowState)
@@ -296,13 +347,14 @@ namespace DefectStudio
 				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneArrow);
 			const std::vector<SceneObjectId> ids = CollectIds(windowState.sceneArrows, indices);
 			for (const std::size_t index : indices)
-				drawSceneArrowRow(windowState, index, ids);
+				if (drawSceneArrowRow(windowState, index, ids))
+					break;
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
 	}
 
-	void SceneOutlinerPanel::drawSceneOrbitalRow(
+	bool SceneOutlinerPanel::drawSceneOrbitalRow(
 		RendererWindowState &windowState, const std::size_t orbitalIndex,
 		const std::vector<SceneObjectId> &orderedIds)
 	{
@@ -319,6 +371,7 @@ namespace DefectStudio
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
 		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);
 		DrawSceneVisibilityColumns(
@@ -326,7 +379,10 @@ namespace DefectStudio
 		if (rowActivated)
 			applyAnnotationRowSelection(
 				windowState, SelectionRowKind::Orbital, orderedIds, id, selection);
+		const bool sceneMutated = drawSceneObjectContextMenu(
+			windowState, SelectionRowKind::Orbital, id, selection, contextRequested);
 		ImGui::PopID();
+		return sceneMutated;
 	}
 
 	void SceneOutlinerPanel::drawOrbitalsGroup(RendererWindowState &windowState)
@@ -345,7 +401,8 @@ namespace DefectStudio
 				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneOrbital);
 			const std::vector<SceneObjectId> ids = CollectIds(windowState.sceneOrbitals, indices);
 			for (const std::size_t index : indices)
-				drawSceneOrbitalRow(windowState, index, ids);
+				if (drawSceneOrbitalRow(windowState, index, ids))
+					break;
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -380,13 +437,18 @@ namespace DefectStudio
 					PushSelectedRowColors();
 				ImGui::SetNextItemAllowOverlap();
 				const bool rowActivated = ImGui::Selectable(rowLabel, selected);
+				const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 				if (selected)
 					ImGui::PopStyleColor(3);
 				DrawSceneVisibilityColumns(plane.visible, plane.renderable);
 				if (rowActivated)
 					applyAnnotationRowSelection(
 						windowState, SelectionRowKind::Plane, ids, plane.id, selection);
+				const bool sceneMutated = drawSceneObjectContextMenu(
+					windowState, SelectionRowKind::Plane, plane.id, selection, contextRequested);
 				ImGui::PopID();
+				if (sceneMutated)
+					break;
 			}
 			ImGui::TreePop();
 		}
