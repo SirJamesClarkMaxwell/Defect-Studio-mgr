@@ -150,13 +150,12 @@ namespace DefectStudio
 			if (index >= windowState.sceneArrows.size())
 				continue;
 			RendererWindowState::SceneArrow copy = windowState.sceneArrows[index];
-			copy.id = windowState.sceneRegistry.AllocateObjectId();
 			copy.persistKey.clear();
-			newIds.push_back(copy.id);
 			OffsetSceneArrowCopy(copy);
-			windowState.sceneArrows.push_back(std::move(copy));
+			newIds.push_back(SceneSystem::AppendSceneArrow(windowState, std::move(copy)));
 		}
 		windowState.selectedSceneArrows = std::move(newIds);
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 	}
 
 	void PasteSceneArrowsFromClipboard(RendererWindowState &windowState)
@@ -171,13 +170,12 @@ namespace DefectStudio
 		for (const RendererWindowState::SceneArrow &arrow : clipboard)
 		{
 			RendererWindowState::SceneArrow copy = arrow;
-			copy.id = windowState.sceneRegistry.AllocateObjectId();
 			copy.persistKey.clear();
-			newIds.push_back(copy.id);
 			OffsetSceneArrowCopy(copy);
-			windowState.sceneArrows.push_back(std::move(copy));
+			newIds.push_back(SceneSystem::AppendSceneArrow(windowState, std::move(copy)));
 		}
 		windowState.selectedSceneArrows = std::move(newIds);
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 	}
 
 	SceneArrowAtomMatchDescription DescribeSceneArrowAtomMatch(const std::size_t validSelectedAtomCount)

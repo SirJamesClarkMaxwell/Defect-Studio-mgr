@@ -277,10 +277,10 @@ namespace DefectStudio
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			const glm::vec3 seed = windowState.cursor3DPlaced ? windowState.cursor3DPosition : glm::vec3(0.0f);
 			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, seed);
-			arrow.id = windowState.sceneRegistry.AllocateObjectId();
-			windowState.sceneArrows.push_back(std::move(arrow));
+			const SceneObjectId addedId = SceneSystem::AppendSceneArrow(windowState, std::move(arrow));
 			const std::size_t newIndex = windowState.sceneArrows.size() - 1;
-			windowState.selectedSceneArrows = {windowState.sceneArrows[newIndex].id};
+			windowState.selectedSceneArrows = {addedId};
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 			windowState.sceneArrowQuickEditActive = true;
 			windowState.sceneArrowQuickEditIndex = newIndex;
 		}

@@ -517,7 +517,8 @@ namespace DefectStudio
 		TransformOrientation transformOrientation = TransformOrientation::Global;
 		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
 		// Which Start/End/midpoint candidate owns the unified transform gizmo for a single arrow.
-		// The other two render as activation dots. Reset to Both whenever
+		// All three render as markers; clicking a non-active one moves the gizmo there, while the
+		// active marker still consumes its own visible hit area. Reset to Both whenever
 		// sceneArrowGizmoActiveArrowIndex no longer matches the current single-arrow selection.
 		SceneArrowDragTarget sceneArrowGizmoActiveTarget = SceneArrowDragTarget::Both;
 		std::size_t sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(-1);

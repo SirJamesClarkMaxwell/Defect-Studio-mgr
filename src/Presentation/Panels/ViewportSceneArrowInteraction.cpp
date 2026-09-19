@@ -40,10 +40,9 @@ namespace DefectStudio
 
 	// Click-select + drag for sceneArrows - same click/Ctrl-toggle/drag shape as
 	// HandleFreeLabelInteraction above, but the hit-test follows the tessellated path, not a single
-	// anchor point, and a single selected arrow's drag moves only whichever endpoint was
-	// actually grabbed (screen-space proximity at click time decides that, no drawn gizmo widget
-	// needed - same idea as IsBondUnderScreenPosition's proximity band, just resolved once instead
-	// of every frame). Multiple selected arrows always move rigidly together (every selected arrow's
+	// anchor point. A click handled here always grabs the whole arrow; once it is the sole selection,
+	// its visible marker geometry is hit-tested earlier by RenderTransformGizmo to activate an
+	// endpoint. Multiple selected arrows always move rigidly together (every selected arrow's
 	// complete path shifts by the same delta), same group-drag convention as labels.
 	bool HandleSceneArrowInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
@@ -154,8 +153,6 @@ namespace DefectStudio
 		// same camera-right projection trick the drag code above uses for pixelsPerWorldRight/Up.
 		int hitIndex = -1;
 		float bestDistance = std::numeric_limits<float>::max();
-		glm::vec2 hitScreenStart(0.0f), hitScreenEnd(0.0f);
-		float hitShaftHalfPx = 0.0f;
 		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
 		{
 			const SceneArrow &candidate = windowState.sceneArrows[i];
@@ -234,9 +231,6 @@ namespace DefectStudio
 			{
 				bestDistance = bestForCandidate;
 				hitIndex = static_cast<int>(i);
-				hitScreenStart = screenStart;
-				hitScreenEnd = screenEnd;
-				hitShaftHalfPx = shaftHalfPx;
 			}
 		}
 
@@ -273,19 +267,9 @@ namespace DefectStudio
 			selection.push_back(hitArrow);
 		}
 
-		// Which endpoint this click actually grabbed - only matters once the selection is (or
-		// becomes) exactly this one arrow; a multi-selection drag always moves every selected
-		// arrow's start AND end together regardless of this. Scales with the hit arrow's own shaft
-		// half-width, same reasoning as the shaft/head tolerances above (doc Step 9).
-		const float endpointTolerance = std::max(14.0f, hitShaftHalfPx + 8.0f);
-		const float distanceToStart = glm::length(mousePos - hitScreenStart);
-		const float distanceToEnd = glm::length(mousePos - hitScreenEnd);
-		if (distanceToStart <= endpointTolerance && distanceToStart <= distanceToEnd)
-			windowState.sceneArrowDragTarget = DragTarget::Start;
-		else if (distanceToEnd <= endpointTolerance)
-			windowState.sceneArrowDragTarget = DragTarget::End;
-		else
-			windowState.sceneArrowDragTarget = DragTarget::Both;
+		// Endpoint activation belongs exclusively to the visible marker hit-test that ran earlier.
+		// Reaching this body means the click landed on the arrow shape, not on a marker.
+		windowState.sceneArrowDragTarget = DragTarget::Both;
 		windowState.sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(hitIndex);
 		windowState.sceneArrowGizmoActiveTarget = windowState.sceneArrowDragTarget;
 

@@ -306,9 +306,7 @@ namespace DefectStudio::SceneSystem
 
 	SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow)
 	{
-		// ponytail: task/40 stub - deliberately does NOT allocate a fresh id yet, so the contract
-		// tests in SceneObjectModelTests.cpp fail on assertion (red) rather than at link time.
-		// Codex: replace with an always-fresh-id allocation per the header comment.
+		arrow.id = windowState.sceneRegistry.AllocateObjectId();
 		windowState.sceneArrows.push_back(std::move(arrow));
 		return windowState.sceneArrows.back().id;
 	}

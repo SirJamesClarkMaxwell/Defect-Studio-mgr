@@ -23,6 +23,10 @@ namespace DefectStudio
 	{
 		constexpr float kPickMinDistance = 20.0f;
 		constexpr float kPickMaxDistance = 100.0f;
+		constexpr float kSceneArrowHandleDrawRadius = 5.0f;
+		constexpr float kActiveSceneArrowHandleDrawRadius = 7.0f;
+		constexpr float kSceneArrowHandlePickRadius = 11.0f;
+		constexpr float kActiveSceneArrowHandlePickRadius = 14.0f;
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
@@ -175,12 +179,91 @@ namespace DefectStudio
 
 	} // namespace
 
+	std::array<SceneArrowHandleGeometry, 3> BuildSceneArrowHandleGeometry(
+		const RendererWindowState::SceneArrow &arrow,
+		const RendererViewCamera &camera,
+		const ImVec2 &imageOrigin,
+		const ImVec2 &imageSize,
+		const GizmoOperation operation,
+		const bool showMidpoint,
+		const RendererWindowState::SceneArrowDragTarget activeTarget,
+		const bool active)
+	{
+		using Target = RendererWindowState::SceneArrowDragTarget;
+		std::array<SceneArrowHandleGeometry, 3> handles = {{
+			{Target::Start, glm::vec2(0.0f), kSceneArrowHandleDrawRadius, kSceneArrowHandlePickRadius, false},
+			{Target::End, glm::vec2(0.0f), kSceneArrowHandleDrawRadius, kSceneArrowHandlePickRadius, false},
+			{Target::Both, glm::vec2(0.0f), kSceneArrowHandleDrawRadius, kSceneArrowHandlePickRadius, false}}};
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+		const std::array<glm::vec3, 3> worldPoints = {
+			arrow.start(), arrow.end(), (arrow.start() + arrow.end()) * 0.5f};
+		for (std::size_t index = 0; index < handles.size(); ++index)
+		{
+			SceneArrowHandleGeometry &handle = handles[index];
+			handle.visible = index < 2 || (showMidpoint && operation == GizmoOperation::Translate);
+			if (!handle.visible)
+				continue;
+			const std::optional<glm::vec2> screen =
+				ProjectAbsolute(viewProjection, imageOrigin, imageSize, worldPoints[index]);
+			if (!screen.has_value())
+			{
+				handle.visible = false;
+				continue;
+			}
+			handle.point = *screen;
+			if (active && (activeTarget == Target::Both || activeTarget == handle.target))
+			{
+				handle.drawRadius = kActiveSceneArrowHandleDrawRadius;
+				handle.pickRadius = kActiveSceneArrowHandlePickRadius;
+			}
+		}
+		return handles;
+	}
+
+	void DrawSceneArrowHandleMarkers(
+		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+	{
+		if (windowState.camera == nullptr || windowState.selectedSceneArrows.empty())
+			return;
+
+		ImDrawList &drawList = *ImGui::GetWindowDrawList();
+		constexpr float kHandleOutlineThickness = 1.5f;
+		const bool singleArrow = windowState.selectedSceneArrows.size() == 1;
+		const bool singleDragging = windowState.sceneArrowDragging && singleArrow;
+		for (const SceneObjectId id : windowState.selectedSceneArrows)
+		{
+			const auto arrow = std::find_if(
+				windowState.sceneArrows.begin(), windowState.sceneArrows.end(),
+				[id](const RendererWindowState::SceneArrow &candidate) { return candidate.id == id; });
+			if (arrow == windowState.sceneArrows.end())
+				continue;
+			const auto handles = BuildSceneArrowHandleGeometry(
+				*arrow, *windowState.camera, imageOrigin, imageSize, windowState.gizmoOperation,
+				singleArrow, windowState.sceneArrowDragTarget, singleDragging);
+			for (const SceneArrowHandleGeometry &handle : handles)
+			{
+				if (!handle.visible)
+					continue;
+				const ImVec2 point(handle.point.x, handle.point.y);
+				drawList.AddCircleFilled(point, handle.drawRadius, IM_COL32(255, 200, 60, 220));
+				drawList.AddCircle(
+					point, handle.drawRadius - kHandleOutlineThickness * 0.5f,
+					IM_COL32(40, 25, 0, 255), 0, kHandleOutlineThickness);
+			}
+		}
+	}
+
 	bool RenderTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered,
 		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef)
 	{
 		if (UpdateViewportModalTransform(windowState, imageOrigin, imageSize, layer, commandRegistryRef))
 			return true;
+		// A plain click on the arrow's shaft (not a handle marker - those start a modal transform,
+		// see below) is a screen-plane rigid-move of the whole arrow, continued by
+		// HandleSceneArrowInteraction later in the dispatch chain.
+		if (windowState.sceneArrowDragging)
+			return false;
 		if (windowState.camera == nullptr)
 			return false;
 
@@ -202,6 +285,35 @@ namespace DefectStudio
 			}
 		}
 
+		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+		if (singleArrowOnly && windowState.gizmoOperation == GizmoOperation::Translate)
+		{
+			const RendererWindowState::SceneArrow &arrow =
+				windowState.sceneArrows[snapshot.arrows.front().index];
+			const auto handles = BuildSceneArrowHandleGeometry(
+				arrow, *windowState.camera, imageOrigin, imageSize, windowState.gizmoOperation, true,
+				windowState.sceneArrowDragTarget, windowState.sceneArrowDragging);
+			// UpdateViewportModalTransform already claimed any in-progress axis drag above. A marker
+			// only owns a new frame on an actual click; hover must not hide or interrupt the axis gizmo.
+			const bool handleClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+			for (const SceneArrowHandleGeometry &handle : handles)
+			{
+				if (handle.visible && handleClicked && glm::distance(mouse, handle.point) <= handle.pickRadius)
+				{
+					// Grabbing a marker starts a real modal transform (unconstrained/free, confirmed
+					// on mouse-release like every other handle-started drag) instead of the older
+					// screen-plane-only free-drag in ViewportSceneArrowInteraction.cpp - that one never
+					// engages the X/Y/Z axis constraint keys and computed its delta purely from mouse
+					// pixels via camera-right/camera-up, which is why dragging visibly slid along
+					// whatever direction happened to roughly match "screen up" for the current camera
+					// angle instead of a real 3D axis. This is now the single path a handle drag takes.
+					windowState.sceneArrowGizmoActiveTarget = handle.target;
+					BeginViewportModalTransform(windowState, ModalTransformOp::Translate, mouse, std::nullopt, true);
+					return true;
+				}
+			}
+		}
+
 		const ModalTransformOp operation = windowState.gizmoOperation == GizmoOperation::Rotate
 			? ModalTransformOp::Rotate
 			: windowState.gizmoOperation == GizmoOperation::Scale
@@ -219,32 +331,13 @@ namespace DefectStudio
 		if (!pivotScreen.has_value())
 			return false;
 
-		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-		if (singleArrowOnly && windowState.gizmoOperation == GizmoOperation::Translate)
-		{
-			using Target = RendererWindowState::SceneArrowDragTarget;
-			const ArrowTransformStart &arrow = snapshot.arrows.front();
-			const std::array<std::pair<glm::vec3, Target>, 3> points = {{
-				{arrow.points.front(), Target::Start}, {arrow.points.back(), Target::End},
-				{(arrow.points.front() + arrow.points.back()) * 0.5f, Target::Both}}};
-			for (const auto &[world, target] : points)
-			{
-				if (target == windowState.sceneArrowGizmoActiveTarget)
-					continue;
-				const std::optional<glm::vec2> screen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, world);
-				if (!screen.has_value())
-					continue;
-				ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(screen->x, screen->y), 5.0f, IM_COL32(190, 190, 190, 190));
-				if (hovered && glm::distance(mouse, *screen) <= 10.0f)
-				{
-					if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-						windowState.sceneArrowGizmoActiveTarget = target;
-					return true;
-				}
-			}
-		}
-
-		const bool pointerOnGeometry = IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
+		// Suppressing the gizmo whenever an atom/bond happens to be behind the cursor exists so atom
+		// picking wins when the ATOM gizmo and atom picking visually overlap - it makes no sense for
+		// a scene arrow's own gizmo, where a nearby atom just happening to sit under one of the axis
+		// arrows should never block dragging that axis (confirmed live: this exact overlap was
+		// silently killing the axis-hit-test, falling through to HandleSceneArrowInteraction's own
+		// hit-test, which found no arrow geometry under the cursor and cleared the selection).
+		const bool pointerOnGeometry = !singleArrowOnly && IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
 		if (windowState.gizmoOperation == GizmoOperation::Rotate)
 		{
 			const float radial = glm::length(mouse - *pivotScreen);

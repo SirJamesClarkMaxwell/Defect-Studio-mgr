@@ -270,54 +270,10 @@ namespace DefectStudio
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
 		renderSceneArrowQuickEditPanel(windowState, imageOrigin, viewportSize);
 
-		// Small handle dots at the start/end of every selected SceneArrow - not a transform gizmo,
-		// just a visible answer to "where exactly is the end I can drag" (selection itself had no
-		// visual feedback at all before this - same orange accent as box/circle-select below and as
-		// atom/bond selection highlighting). The endpoint currently targeted by an active single-arrow
-		// drag draws larger so a drag in progress is unambiguous too.
-		if (windowState.camera != nullptr && !windowState.selectedSceneArrows.empty())
-		{
-			const glm::mat4 handleViewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-			auto projectHandle = [&](const glm::vec3 &world, ImVec2 &outScreen) -> bool {
-				const glm::vec4 clip = handleViewProjection * glm::vec4(world, 1.0f);
-				if (clip.w <= 0.0001f)
-					return false;
-				const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-				outScreen = ImVec2(
-					imageOrigin.x + (ndc.x * 0.5f + 0.5f) * viewportSize.x,
-					imageOrigin.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * viewportSize.y);
-				return true;
-			};
-			ImDrawList *handleDrawList = ImGui::GetWindowDrawList();
-			constexpr float kHandleRadius = 5.0f;
-			constexpr float kActiveHandleRadius = 7.0f;
-			const bool singleDragging = windowState.sceneArrowDragging && windowState.selectedSceneArrows.size() == 1;
-			using DragTarget = RendererWindowState::SceneArrowDragTarget;
-			for (const SceneObjectId id : windowState.selectedSceneArrows)
-			{
-				const std::size_t arrowIndex = ArrowIndex(windowState, id);
-				if (arrowIndex >= windowState.sceneArrows.size())
-					continue;
-				const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
-				ImVec2 startScreen, endScreen;
-				if (projectHandle(arrow.start(), startScreen))
-				{
-					const bool active = singleDragging &&
-						(windowState.sceneArrowDragTarget == DragTarget::Start || windowState.sceneArrowDragTarget == DragTarget::Both);
-					const float radius = active ? kActiveHandleRadius : kHandleRadius;
-					handleDrawList->AddCircleFilled(startScreen, radius, IM_COL32(255, 200, 60, 220));
-					handleDrawList->AddCircle(startScreen, radius, IM_COL32(40, 25, 0, 255), 0, 1.5f);
-				}
-				if (projectHandle(arrow.end(), endScreen))
-				{
-					const bool active = singleDragging &&
-						(windowState.sceneArrowDragTarget == DragTarget::End || windowState.sceneArrowDragTarget == DragTarget::Both);
-					const float radius = active ? kActiveHandleRadius : kHandleRadius;
-					handleDrawList->AddCircleFilled(endScreen, radius, IM_COL32(255, 200, 60, 220));
-					handleDrawList->AddCircle(endScreen, radius, IM_COL32(40, 25, 0, 255), 0, 1.5f);
-				}
-			}
-		}
+		// Visible arrow handles use the exact geometry RenderTransformGizmo hit-tests earlier in the
+		// frame. Multi-selection keeps endpoint-only markers; a sole translated arrow also exposes its
+		// whole-arrow midpoint target.
+		DrawSceneArrowHandleMarkers(windowState, imageOrigin, viewportSize);
 
 		// Box/circle overlay, the brush's scroll-wheel radius, and the drag dispatch. Runs before
 		// navigation below because the circle brush eats the wheel event the camera would otherwise

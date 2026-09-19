@@ -101,10 +101,10 @@ namespace DefectStudio
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, worldPosition);
 			ApplySceneArrowKindChange(arrow, kind);
-			arrow.id = windowState.sceneRegistry.AllocateObjectId();
-			windowState.sceneArrows.push_back(std::move(arrow));
+			const SceneObjectId addedId = SceneSystem::AppendSceneArrow(windowState, std::move(arrow));
 			const std::size_t newIndex = windowState.sceneArrows.size() - 1;
-			windowState.selectedSceneArrows = {windowState.sceneArrows[newIndex].id};
+			windowState.selectedSceneArrows = {addedId};
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 			windowState.sceneArrowQuickEditActive = true;
 			windowState.sceneArrowQuickEditIndex = newIndex;
 		}
@@ -172,9 +172,9 @@ namespace DefectStudio
 			// them as world units is what drew a head the size of the cell across the structure.
 			// ApplySceneArrowKindChange re-derives them from the arrow's own length.
 			ApplySceneArrowKindChange(arrow, kind);
-			arrow.id = windowState.sceneRegistry.AllocateObjectId();
-			windowState.sceneArrows.push_back(std::move(arrow));
-			windowState.selectedSceneArrows = {windowState.sceneArrows.back().id};
+			const SceneObjectId addedId = SceneSystem::AppendSceneArrow(windowState, std::move(arrow));
+			windowState.selectedSceneArrows = {addedId};
+			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		};
 
 		DrawSceneArrowAtomBufferControl();

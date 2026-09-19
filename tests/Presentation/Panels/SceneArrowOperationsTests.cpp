@@ -7,6 +7,7 @@
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -271,12 +272,18 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(window.sceneArrows[1].end(), arrow.end() + glm::vec3(0.5f, 0.0f, 0.0f));
 		EXPECT_FALSE(window.sceneArrows[1].startAnchorAtom.has_value());
 		EXPECT_FALSE(window.sceneArrows[1].endAnchorAtom.has_value());
+		EXPECT_NE(window.sceneArrows[1].id, arrow.id);
+		EXPECT_TRUE(window.sceneRegistry.FindObject(arrow.id));
+		EXPECT_TRUE(window.sceneRegistry.FindObject(window.sceneArrows[1].id));
+		EXPECT_EQ(SceneSystem::ResolveSourceIndices(
+			window.sceneRegistry, {arrow.id, window.sceneArrows[1].id}).size(), 2u);
 	}
 
 	TEST(SceneArrowClipboardTests, PasteOffsetsAndDetachesAnAnchoredArrow)
 	{
 		RendererWindowState window;
 		RendererWindowState::SceneArrow arrow;
+		arrow.id = window.sceneRegistry.AllocateObjectId();
 		arrow.start() = glm::vec3(1.0f, 2.0f, 3.0f);
 		arrow.end() = glm::vec3(4.0f, 5.0f, 6.0f);
 		arrow.startAnchorAtom = 0;
@@ -290,6 +297,57 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(window.sceneArrows[0].end(), arrow.end() + glm::vec3(0.5f, 0.0f, 0.0f));
 		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
 		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
+		EXPECT_NE(window.sceneArrows[0].id, arrow.id);
+		EXPECT_TRUE(window.sceneRegistry.FindObject(window.sceneArrows[0].id));
+		EXPECT_EQ(SceneSystem::ResolveSourceIndices(
+			window.sceneRegistry, window.selectedSceneArrows).size(), 1u);
+		GetSceneArrowClipboard().clear();
+	}
+
+	TEST(SceneArrowClipboardTests, DuplicateBatchAssignsDistinctIdsAndSyncsEveryArrow)
+	{
+		RendererWindowState window;
+		RendererWindowState::SceneArrow first;
+		first.id = window.sceneRegistry.AllocateObjectId();
+		RendererWindowState::SceneArrow second;
+		second.id = window.sceneRegistry.AllocateObjectId();
+		window.sceneArrows = {first, second};
+		window.selectedSceneArrows = {first.id, second.id};
+
+		DuplicateSelectedSceneArrows(window);
+
+		ASSERT_EQ(window.sceneArrows.size(), 4u);
+		ASSERT_EQ(window.selectedSceneArrows.size(), 2u);
+		EXPECT_NE(window.selectedSceneArrows[0], first.id);
+		EXPECT_NE(window.selectedSceneArrows[0], second.id);
+		EXPECT_NE(window.selectedSceneArrows[1], first.id);
+		EXPECT_NE(window.selectedSceneArrows[1], second.id);
+		EXPECT_NE(window.selectedSceneArrows[0], window.selectedSceneArrows[1]);
+		EXPECT_EQ(SceneSystem::ResolveSourceIndices(
+			window.sceneRegistry,
+			{first.id, second.id, window.selectedSceneArrows[0], window.selectedSceneArrows[1]}).size(), 4u);
+	}
+
+	TEST(SceneArrowClipboardTests, PasteBatchAssignsDistinctIdsAndSyncsEveryArrow)
+	{
+		RendererWindowState window;
+		RendererWindowState::SceneArrow first;
+		first.id = window.sceneRegistry.AllocateObjectId();
+		RendererWindowState::SceneArrow second;
+		second.id = window.sceneRegistry.AllocateObjectId();
+		GetSceneArrowClipboard() = {first, second};
+
+		PasteSceneArrowsFromClipboard(window);
+
+		ASSERT_EQ(window.sceneArrows.size(), 2u);
+		ASSERT_EQ(window.selectedSceneArrows.size(), 2u);
+		EXPECT_NE(window.selectedSceneArrows[0], first.id);
+		EXPECT_NE(window.selectedSceneArrows[0], second.id);
+		EXPECT_NE(window.selectedSceneArrows[1], first.id);
+		EXPECT_NE(window.selectedSceneArrows[1], second.id);
+		EXPECT_NE(window.selectedSceneArrows[0], window.selectedSceneArrows[1]);
+		EXPECT_EQ(SceneSystem::ResolveSourceIndices(
+			window.sceneRegistry, window.selectedSceneArrows).size(), 2u);
 		GetSceneArrowClipboard().clear();
 	}
 

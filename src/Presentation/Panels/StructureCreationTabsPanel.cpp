@@ -312,6 +312,7 @@ namespace DefectStudio
 		// RenderTransformGizmo silently lost every one of them.
 		const bool gizmoCapturing = isActive &&
 			RunViewportGizmoChain(*windowState, imageOrigin, imageSize, hovered, m_RendererLayer, m_CommandRegistry);
+		DrawSceneArrowHandleMarkers(*windowState, imageOrigin, imageSize);
 
 		// Box/circle select: overlay, brush radius and drag dispatch. Runs before navigation because
 		// the circle brush consumes the wheel event the camera would otherwise zoom with.
