@@ -12,6 +12,7 @@
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -327,6 +328,32 @@ namespace DefectStudio
 		}
 	}
 
+	void AlignSelectedSceneOrbitalOrientations(
+		std::vector<RendererWindowState::SceneOrbital> &orbitals,
+		const std::vector<SceneObjectId> &selection)
+	{
+		std::size_t representative = orbitals.size();
+		for (const SceneObjectId id : selection)
+		{
+			const std::size_t index = AnnotationIndex(orbitals, id);
+			if (index < orbitals.size() && !IsTwoCenterPreset(orbitals[index].preset))
+			{
+				representative = index;
+				break;
+			}
+		}
+		if (representative >= orbitals.size())
+			return;
+
+		const glm::vec3 orientation = orbitals[representative].rotationEuler;
+		for (const SceneObjectId id : selection)
+		{
+			const std::size_t index = AnnotationIndex(orbitals, id);
+			if (index < orbitals.size() && !IsTwoCenterPreset(orbitals[index].preset))
+				orbitals[index].rotationEuler = orientation;
+		}
+	}
+
 	void DrawSelectedSceneOrbitalSection(RendererWindowState &windowState)
 	{
 		ImGui::Separator();
@@ -364,8 +391,23 @@ namespace DefectStudio
 				return ImGui::DragFloat("Z_eff", &value, 0.05f, 0.1f, 30.0f, "%.2f");
 			});
 		}
+		if (ImGui::CollapsingHeader("Polozenie##SelectedOrbitalPlacement", kOpen))
+		{
+			if (ImGui::Button("Wyrownaj orientacje"))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				AlignSelectedSceneOrbitalOrientations(
+					windowState.sceneOrbitals, windowState.selectedSceneOrbitals);
+			}
+			ImGui::SetItemTooltip(
+				"Kopiuje obrot pierwszego zaznaczonego orbitalu jednoosrodkowego. "
+				"Orbitale dwuosrodkowe zachowuja kierunek wyznaczony przez srodki.");
+		}
 		if (ImGui::CollapsingHeader("Wyglad##SelectedOrbitalAppearance", kOpen))
 		{
+			draw(&Orbital::phaseFlipped, [](bool &value) {
+				return ImGui::Checkbox("Odwroc faze", &value);
+			});
 			draw(&Orbital::positiveLobeColor, [](glm::vec3 &value) {
 				return ImGui::ColorEdit3("Faza +", &value.x);
 			});

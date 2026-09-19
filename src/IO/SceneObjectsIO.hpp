@@ -144,6 +144,7 @@ namespace DefectStudio
 		// atomRefs are, so an anchor survives a reordered structure file.
 		std::vector<PersistedAtomRef> anchorAtoms;
 		glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees
+		bool phaseFlipped = false;
 		float scale = 1.0f;
 		glm::vec3 stretch = glm::vec3(1.0f);
 		float isoFraction = 0.2f;

@@ -69,6 +69,31 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(rowIds, expectedRowIds);
 	}
 
+	TEST(SceneObjectEditingTests, AlignOrbitalOrientationsSkipsTwoCentrePresets)
+	{
+		std::vector<RendererWindowState::SceneOrbital> orbitals(4);
+		orbitals[0].id = SceneObjectId{10};
+		orbitals[0].preset = OrbitalPreset::Sigma;
+		orbitals[0].rotationEuler = glm::vec3(90.0f, 80.0f, 70.0f);
+		orbitals[1].id = SceneObjectId{20};
+		orbitals[1].preset = OrbitalPreset::P;
+		orbitals[1].rotationEuler = glm::vec3(10.0f, 20.0f, 30.0f);
+		orbitals[2].id = SceneObjectId{30};
+		orbitals[2].preset = OrbitalPreset::Sp3;
+		orbitals[2].rotationEuler = glm::vec3(-1.0f, -2.0f, -3.0f);
+		orbitals[3].id = SceneObjectId{40};
+		orbitals[3].preset = OrbitalPreset::D;
+		orbitals[3].rotationEuler = glm::vec3(4.0f, 5.0f, 6.0f);
+
+		AlignSelectedSceneOrbitalOrientations(
+			orbitals, {SceneObjectId{10}, SceneObjectId{20}, SceneObjectId{30}});
+
+		EXPECT_EQ(orbitals[0].rotationEuler, glm::vec3(90.0f, 80.0f, 70.0f));
+		EXPECT_EQ(orbitals[1].rotationEuler, glm::vec3(10.0f, 20.0f, 30.0f));
+		EXPECT_EQ(orbitals[2].rotationEuler, glm::vec3(10.0f, 20.0f, 30.0f));
+		EXPECT_EQ(orbitals[3].rotationEuler, glm::vec3(4.0f, 5.0f, 6.0f));
+	}
+
 	TEST(SceneObjectEditingTests, EraseScenePlanesUpdatesTheVectorBackedOutlinerRows)
 	{
 		RendererWindowState window;

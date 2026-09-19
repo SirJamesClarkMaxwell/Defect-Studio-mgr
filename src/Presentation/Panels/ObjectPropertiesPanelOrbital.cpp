@@ -174,6 +174,9 @@ namespace DefectStudio
 
 		if (ImGui::CollapsingHeader("Wyglad##OrbitalAppearance", kOpen))
 		{
+			DrawUndoableValue(windowState, orbital.phaseFlipped, [](bool &value) {
+				return ImGui::Checkbox("Odwroc faze", &value);
+			});
 			DrawUndoableValue(windowState, orbital.positiveLobeColor, [](glm::vec3 &value) {
 				return ImGui::ColorEdit3("Faza +", &value.x);
 			});

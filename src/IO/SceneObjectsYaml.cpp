@@ -115,6 +115,7 @@ namespace DefectStudio::SceneObjectsYaml
 			orbital.shell = node["shell"].as<int>(orbital.shell);
 			orbital.lobeIndex = node["lobeIndex"].as<int>(orbital.lobeIndex);
 			orbital.effectiveCharge = node["effectiveCharge"].as<float>(orbital.effectiveCharge);
+			orbital.phaseFlipped = node["phaseFlipped"].as<bool>(orbital.phaseFlipped);
 			orbital.scale = node["scale"].as<float>(orbital.scale);
 			orbital.isoFraction = node["isoFraction"].as<float>(orbital.isoFraction);
 			orbital.resolution = node["resolution"].as<int>(orbital.resolution);
@@ -138,7 +139,8 @@ namespace DefectStudio::SceneObjectsYaml
 		EmitVec3(emit, "centerB", orbital.centerB);
 		EmitAnchors(emit, "anchorAtoms", orbital.anchorAtoms);
 		EmitVec3(emit, "rotationEuler", orbital.rotationEuler);
-		emit << YAML::Key << "scale" << YAML::Value << orbital.scale;
+		emit << YAML::Key << "phaseFlipped" << YAML::Value << orbital.phaseFlipped << YAML::Key << "scale"
+			 << YAML::Value << orbital.scale;
 		EmitVec3(emit, "stretch", orbital.stretch);
 		emit << YAML::Key << "isoFraction" << YAML::Value << orbital.isoFraction << YAML::Key << "resolution"
 			 << YAML::Value << orbital.resolution;

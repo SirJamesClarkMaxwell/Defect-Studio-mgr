@@ -180,7 +180,13 @@ namespace DefectStudio
 		settings.shell = orbital.shell;
 		if (!IsTwoCenterPreset(orbital.preset))
 			settings.orientation = RotationFrame(orbital.rotationEuler);
-		return MakeOrbitalPreset(orbital.preset, settings);
+		OrbitalWavefunction wavefunction = MakeOrbitalPreset(orbital.preset, settings);
+		if (orbital.phaseFlipped)
+		{
+			for (OrbitalTerm &term : wavefunction.terms)
+				term.coefficient = -term.coefficient;
+		}
+		return wavefunction;
 	}
 
 	std::vector<IsosurfaceVertex> BuildSceneOrbitalMesh(
@@ -232,6 +238,7 @@ namespace DefectStudio
 		HashVec3(hash, centers.centerA);
 		HashVec3(hash, centers.centerB);
 		HashVec3(hash, orbital.rotationEuler);
+		HashValue(hash, static_cast<std::uint64_t>(orbital.phaseFlipped));
 		HashFloat(hash, orbital.scale);
 		HashVec3(hash, orbital.stretch);
 		HashFloat(hash, orbital.isoFraction);

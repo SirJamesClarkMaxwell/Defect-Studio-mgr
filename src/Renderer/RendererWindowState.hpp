@@ -293,6 +293,9 @@ namespace DefectStudio
 			// take their orientation from centerB - centerA. Degrees rather than a matrix so the
 			// properties panel and the YAML both stay readable.
 			glm::vec3 rotationEuler = glm::vec3(0.0f);
+			// Scene-level sign decoration. BuildOrbitalWavefunction applies it after constructing the
+			// physical preset, so the Domain preset builders remain an unmodified description of it.
+			bool phaseFlipped = false;
 			// Uniform mesh scale about the orbital's centroid, purely for composing a figure. It
 			// does NOT change the physics - effectiveCharge is the knob that actually contracts or
 			// expands the wavefunction. Kept separate so a drawing that was scaled to look right

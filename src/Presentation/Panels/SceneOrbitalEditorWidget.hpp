@@ -28,6 +28,13 @@ namespace DefectStudio
 	void DrawSelectedSceneOrbitalSection(RendererWindowState &windowState);
 	void DrawSelectedScenePlaneSection(RendererWindowState &windowState);
 
+	// Copies the first selected single-centre orbital's orientation to the other selected
+	// single-centre orbitals. Two-centre presets derive their frame from their centres and are
+	// deliberately left untouched.
+	void AlignSelectedSceneOrbitalOrientations(
+		std::vector<RendererWindowState::SceneOrbital> &orbitals,
+		const std::vector<SceneObjectId> &selection);
+
 	// Scene-wide select/remove rows used only inside "Wszystkie obiekty". Selecting a row makes its
 	// editor appear in the primary selection-focused area on the next frame.
 	void DrawAllSceneOrbitalRows(RendererWindowState &windowState);

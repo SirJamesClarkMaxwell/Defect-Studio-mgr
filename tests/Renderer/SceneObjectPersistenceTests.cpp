@@ -249,7 +249,7 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
 	}
 
-	TEST(SceneObjectPersistenceTests, OrbitalStretchSurvivesProjectFileRoundTrip)
+	TEST(SceneObjectPersistenceTests, OrbitalSceneDecorationsSurviveProjectFileRoundTrip)
 	{
 		RendererWindowState source = MakeWindow();
 		RendererWindowState::SceneOrbital orbital;
@@ -257,6 +257,7 @@ namespace DefectStudio::Tests
 		orbital.centerA = glm::vec3(0.0f);
 		orbital.centerB = glm::vec3(1.5f, 0.0f, 0.0f);
 		orbital.stretch = glm::vec3(0.6f, 1.4f, 2.25f);
+		orbital.phaseFlipped = true;
 		source.sceneOrbitals.push_back(orbital);
 
 		SceneObjectsFile file;
@@ -274,6 +275,7 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(applyWarnings.empty());
 		ASSERT_EQ(target.sceneOrbitals.size(), 1u);
 		EXPECT_EQ(target.sceneOrbitals[0].stretch, orbital.stretch);
+		EXPECT_TRUE(target.sceneOrbitals[0].phaseFlipped);
 	}
 
 	TEST(SceneObjectPersistenceTests, ArrowEndpointReferencesRebindAfterAtomsAreReordered)

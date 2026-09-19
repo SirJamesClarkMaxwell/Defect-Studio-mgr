@@ -209,6 +209,7 @@ structures:
 		orbital.centerB = glm::vec3(2.5f, -2.0f, 0.5f);
 		orbital.anchorAtoms = {{4, "C", glm::vec3(1.0f, -2.0f, 0.5f)}, {8, "N", glm::vec3(2.5f, -2.0f, 0.5f)}};
 		orbital.rotationEuler = glm::vec3(30.0f, 0.0f, -45.0f);
+		orbital.phaseFlipped = true;
 		orbital.scale = 1.75f;
 		orbital.stretch = glm::vec3(0.75f, 1.25f, 2.5f);
 		orbital.isoFraction = 0.35f;
@@ -236,6 +237,7 @@ structures:
 		EXPECT_EQ(got->anchorAtoms[0].index, 4u);
 		EXPECT_EQ(got->anchorAtoms[1].element, "N");
 		EXPECT_EQ(got->rotationEuler, orbital.rotationEuler);
+		EXPECT_TRUE(got->phaseFlipped);
 		EXPECT_FLOAT_EQ(got->scale, 1.75f);
 		EXPECT_EQ(got->stretch, orbital.stretch);
 		EXPECT_FLOAT_EQ(got->isoFraction, 0.35f);
@@ -262,6 +264,7 @@ structures:
 		EXPECT_EQ(got->preset, "f");
 		// Everything the writer left at its default comes back at that default rather than zeroed.
 		EXPECT_TRUE(got->visible);
+		EXPECT_FALSE(got->phaseFlipped);
 		EXPECT_FLOAT_EQ(got->scale, 1.0f);
 		EXPECT_EQ(got->resolution, 48);
 	}
