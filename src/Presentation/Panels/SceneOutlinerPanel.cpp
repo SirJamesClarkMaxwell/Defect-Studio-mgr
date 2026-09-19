@@ -2,12 +2,14 @@
 
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
 #include "Presentation/Panels/SceneOutlinerVisibilityColumns.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <map>
+#include <optional>
 
 #include <imgui.h>
 
@@ -371,6 +373,34 @@ namespace DefectStudio
 			m_EditingWindowIndex = -1;
 		if (m_ActiveWindowIndex >= static_cast<int>(windows.size()))
 			m_ActiveWindowIndex = -1;
+
+		// Delete/Ctrl+C/Ctrl+D/Ctrl+V for whichever scene-object kind is selected, mirroring the
+		// viewport's own shortcuts (ViewportLabelInteraction.cpp) exactly - same dispatcher, same
+		// chords, just gated on this panel holding focus instead of the mouse hovering the 3D view.
+		// Previously the row context menu was the only way to reach these from the outliner at all.
+		if (m_HadKeyboardFocus && m_ActiveWindowIndex >= 0)
+		{
+			RendererWindowState &activeWindow = windows[static_cast<std::size_t>(m_ActiveWindowIndex)];
+			const std::optional<SceneObjectEditKind> selectedKind = !activeWindow.selectedSceneArrows.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Arrow}
+				: !activeWindow.selectedSceneOrbitals.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Orbital}
+				: !activeWindow.selectedScenePlanes.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Plane}
+				: !activeWindow.selectedFreeLabels.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::FreeLabel}
+				: std::nullopt;
+			const ImGuiIO &io = ImGui::GetIO();
+			if (selectedKind.has_value() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+				ExecuteSceneObjectEditAction(activeWindow, *selectedKind, SceneObjectEditAction::Delete);
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false) && selectedKind.has_value())
+				ExecuteSceneObjectEditAction(activeWindow, *selectedKind, SceneObjectEditAction::Copy);
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D, false) && selectedKind.has_value())
+				ExecuteSceneObjectEditAction(activeWindow, *selectedKind, SceneObjectEditAction::Duplicate);
+			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
+				ExecuteSceneObjectEditAction(
+					activeWindow, selectedKind.value_or(SceneObjectEditKind::Arrow), SceneObjectEditAction::Paste);
+		}
 
 		if (windows.empty())
 			ImGui::TextDisabled("No open structures.");
