@@ -25,8 +25,13 @@ namespace DefectStudio
 		constexpr float kPickMaxDistance = 100.0f;
 		constexpr float kSceneArrowHandleDrawRadius = 5.0f;
 		constexpr float kActiveSceneArrowHandleDrawRadius = 7.0f;
-		constexpr float kSceneArrowHandlePickRadius = 11.0f;
-		constexpr float kActiveSceneArrowHandlePickRadius = 14.0f;
+		// Deliberately much bigger than the drawn dot (see SceneArrowHandleGeometry) - live testing
+		// showed most real clicks aimed at a handle landed 30-135px away from it, missing an 11px
+		// pick radius entirely and falling through to the plain-shaft-click handler, which forces the
+		// target back to Both. 20/26px is comparable to the pre-task-40 tolerance
+		// (ViewportSceneArrowInteraction.cpp's old `max(14px, shaft-half+8px)`), which was usable.
+		constexpr float kSceneArrowHandlePickRadius = 20.0f;
+		constexpr float kActiveSceneArrowHandlePickRadius = 26.0f;
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
