@@ -304,6 +304,15 @@ namespace DefectStudio::SceneSystem
 		}
 	}
 
+	SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow)
+	{
+		// ponytail: task/40 stub - deliberately does NOT allocate a fresh id yet, so the contract
+		// tests in SceneObjectModelTests.cpp fail on assertion (red) rather than at link time.
+		// Codex: replace with an always-fresh-id allocation per the header comment.
+		windowState.sceneArrows.push_back(std::move(arrow));
+		return windowState.sceneArrows.back().id;
+	}
+
 	std::vector<std::size_t> ResolveSourceIndices(const SceneRegistry &scene, const std::vector<SceneObjectId> &ids)
 	{
 		std::vector<std::size_t> result;

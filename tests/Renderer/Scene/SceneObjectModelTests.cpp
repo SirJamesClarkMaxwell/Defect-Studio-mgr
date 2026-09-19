@@ -213,4 +213,64 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(indices.size(), 1u);
 		EXPECT_EQ(indices.front(), 0u);
 	}
+
+	// task/40 Fix A contract - AppendSceneArrow always assigns a fresh id, never reuses whatever the
+	// caller's arrow already carried. A duplicated/pasted arrow arrives with the source's live id;
+	// keeping it would collide with the source in SceneRegistry's id->entity map.
+	TEST(SceneObjectModelTests, AppendSceneArrowAlwaysAssignsAFreshId)
+	{
+		RendererWindowState windowState = BuildAnnotatedWindow();
+		const SceneObjectId sourceId = windowState.sceneArrows.front().id;
+
+		RendererWindowState::SceneArrow duplicate = windowState.sceneArrows.front();
+		ASSERT_EQ(duplicate.id, sourceId); // simulates a copy that still carries the source's id
+
+		const SceneObjectId appendedId = SceneSystem::AppendSceneArrow(windowState, duplicate);
+
+		EXPECT_NE(appendedId, sourceId);
+		EXPECT_EQ(windowState.sceneArrows.back().id, appendedId);
+		// The source arrow (still at its original position) must be untouched.
+		EXPECT_EQ(windowState.sceneArrows.front().id, sourceId);
+	}
+
+	// task/40 Fix A contract - AppendSceneArrow does not itself register a registry entity; the
+	// caller must still call SyncLabelEntities once (per batch) before the new id resolves.
+	TEST(SceneObjectModelTests, AppendSceneArrowDoesNotSyncByItself)
+	{
+		RendererWindowState windowState = BuildAnnotatedWindow();
+		RendererWindowState::SceneArrow arrow;
+		arrow.start() = glm::vec3(5.0f, 0.0f, 0.0f);
+		arrow.end() = glm::vec3(5.0f, 1.0f, 0.0f);
+
+		const SceneObjectId appendedId = SceneSystem::AppendSceneArrow(windowState, arrow);
+		EXPECT_FALSE(windowState.sceneRegistry.FindObject(appendedId));
+
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		EXPECT_TRUE(windowState.sceneRegistry.FindObject(appendedId));
+	}
+
+	// task/40 Fix A contract - two objects appended in the same batch, synced once, both resolve and
+	// keep distinct ids (the failure mode Bug A actually produced: a creation path that never syncs
+	// at all, silently dropping the new arrow from every registry-mediated lookup).
+	TEST(SceneObjectModelTests, BatchAppendThenSingleSyncResolvesEveryNewArrow)
+	{
+		RendererWindowState windowState = BuildAnnotatedWindow();
+		RendererWindowState::SceneArrow first;
+		first.start() = glm::vec3(5.0f, 0.0f, 0.0f);
+		first.end() = glm::vec3(5.0f, 1.0f, 0.0f);
+		RendererWindowState::SceneArrow second;
+		second.start() = glm::vec3(6.0f, 0.0f, 0.0f);
+		second.end() = glm::vec3(6.0f, 1.0f, 0.0f);
+
+		const SceneObjectId firstId = SceneSystem::AppendSceneArrow(windowState, first);
+		const SceneObjectId secondId = SceneSystem::AppendSceneArrow(windowState, second);
+		ASSERT_NE(firstId, secondId);
+
+		windowState.selectedSceneArrows = {firstId, secondId};
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+
+		const std::vector<std::size_t> indices =
+			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
+		EXPECT_EQ(indices.size(), 2u); // this is the exact check that was silently empty in Bug A
+	}
 } // namespace DefectStudio::Tests

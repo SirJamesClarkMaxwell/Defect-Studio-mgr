@@ -62,6 +62,18 @@ namespace DefectStudio
 		// next sync on.
 		void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState);
 
+		// task/40: appends `arrow` to windowState.sceneArrows with a FRESHLY ALLOCATED id - any id
+		// already set on `arrow` is discarded, never reused. A duplicated/pasted arrow arrives here
+		// still carrying its source object's id; keeping that id would collide with the source in
+		// SceneRegistry's id->entity map (task 20's map is keyed by id, one entity per id). Does NOT
+		// call SyncLabelEntities and does NOT touch selection - a caller appending a batch (paste N,
+		// duplicate a multi-selection) should call this once per object, collect the returned ids, set
+		// windowState.selectedSceneArrows to the complete batch, then call
+		// SceneSystem::SyncLabelEntities once for the whole batch. Not for undo/redo restoration
+		// (SceneObjectsSnapshotCommand.cpp), which deliberately preserves original ids - that path
+		// must keep pushing directly to windowState.sceneArrows and calling SyncLabelEntities itself.
+		SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow);
+
 		// Ids -> positions in the matching flat array, for the code that must still speak indices:
 		// OpenGlRendererBackend's signatures are deliberately untouched by task 20, so the render call
 		// sites convert right before the draw. Ids that no longer resolve are dropped rather than
