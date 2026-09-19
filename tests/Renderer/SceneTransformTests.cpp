@@ -269,6 +269,13 @@ namespace DefectStudio::Tests
 
 	namespace
 	{
+		void ExpectPlaneFrameOrthonormal(const RendererWindowState::ScenePlane &plane)
+		{
+			EXPECT_NEAR(glm::length(plane.normal), 1.0f, kEpsilon);
+			EXPECT_NEAR(glm::length(plane.tangent), 1.0f, kEpsilon);
+			EXPECT_NEAR(glm::dot(plane.normal, plane.tangent), 0.0f, kEpsilon);
+		}
+
 		RendererWindowState MakeOrbitalAndPlaneWindow()
 		{
 			RendererWindowState window;
@@ -352,12 +359,53 @@ namespace DefectStudio::Tests
 
 		SceneTransformDelta delta;
 		delta.scaleFactor = 2.0f;
+		delta.spatial.linear = ConstrainedScaleMatrix(
+			delta.scaleFactor, TransformConstraint{}, TransformBases{});
 		ApplySceneTransformSelection(
 			window, snapshot, delta, ModalTransformOp::Scale, TransformPivotMode::Median, glm::vec3(0.0f));
 
 		EXPECT_NEAR(window.sceneOrbitals[0].scale, 2.0f, kEpsilon);
 		EXPECT_NEAR(window.scenePlanes[0].halfExtents.x, 4.0f, kEpsilon);
 		EXPECT_NEAR(window.scenePlanes[0].halfExtents.y, 2.0f, kEpsilon);
+		ExpectPlaneFrameOrthonormal(window.scenePlanes[0]);
+	}
+
+	TEST(SceneObjectGizmoTests, ScaleAlongPlaneTangentChangesOnlyItsWidth)
+	{
+		RendererWindowState window = MakeOrbitalAndPlaneWindow();
+		window.scenePlanes[0].tangent = glm::vec3(0.0f, 1.0f, 0.0f);
+		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
+
+		SceneTransformDelta delta;
+		delta.scaleFactor = 2.0f;
+		delta.spatial.linear = ConstrainedScaleMatrix(
+			delta.scaleFactor,
+			TransformConstraint{ConstraintKind::Axis, 1, TransformOrientation::Global}, TransformBases{});
+		ApplySceneTransformSelection(
+			window, snapshot, delta, ModalTransformOp::Scale, TransformPivotMode::Median, glm::vec3(0.0f));
+
+		EXPECT_NEAR(window.scenePlanes[0].halfExtents.x, 4.0f, kEpsilon);
+		EXPECT_NEAR(window.scenePlanes[0].halfExtents.y, 1.0f, kEpsilon);
+		ExpectPlaneFrameOrthonormal(window.scenePlanes[0]);
+	}
+
+	TEST(SceneObjectGizmoTests, ScaleAlongPlaneBitangentChangesOnlyItsHeight)
+	{
+		RendererWindowState window = MakeOrbitalAndPlaneWindow();
+		window.scenePlanes[0].tangent = glm::vec3(0.0f, 1.0f, 0.0f);
+		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
+
+		SceneTransformDelta delta;
+		delta.scaleFactor = 2.0f;
+		delta.spatial.linear = ConstrainedScaleMatrix(
+			delta.scaleFactor,
+			TransformConstraint{ConstraintKind::Axis, 0, TransformOrientation::Global}, TransformBases{});
+		ApplySceneTransformSelection(
+			window, snapshot, delta, ModalTransformOp::Scale, TransformPivotMode::Median, glm::vec3(0.0f));
+
+		EXPECT_NEAR(window.scenePlanes[0].halfExtents.x, 2.0f, kEpsilon);
+		EXPECT_NEAR(window.scenePlanes[0].halfExtents.y, 2.0f, kEpsilon);
+		ExpectPlaneFrameOrthonormal(window.scenePlanes[0]);
 	}
 
 	TEST(SceneObjectGizmoTests, RotateCarriesThePlaneFrameRoundAndKeepsItOrthonormal)
@@ -374,9 +422,7 @@ namespace DefectStudio::Tests
 
 		const RendererWindowState::ScenePlane &plane = window.scenePlanes[0];
 		ExpectVec3Near(plane.normal, glm::vec3(0.0f, -1.0f, 0.0f));
-		EXPECT_NEAR(glm::length(plane.normal), 1.0f, kEpsilon);
-		EXPECT_NEAR(glm::length(plane.tangent), 1.0f, kEpsilon);
-		EXPECT_NEAR(glm::dot(plane.normal, plane.tangent), 0.0f, kEpsilon);
+		ExpectPlaneFrameOrthonormal(plane);
 	}
 
 	TEST(SceneObjectGizmoTests, RestorePutsOrbitalsAndPlanesBack)

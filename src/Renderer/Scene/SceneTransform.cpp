@@ -45,6 +45,15 @@ namespace DefectStudio
 			return glm::mat3(plane.tangent, glm::cross(plane.normal, plane.tangent), plane.normal);
 		}
 
+		[[nodiscard]] glm::vec2 PlaneExtentScale(
+			const PlaneTransformStart &plane, const glm::mat3 &worldScale)
+		{
+			const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
+			return glm::vec2(
+				glm::dot(plane.tangent, worldScale * plane.tangent),
+				glm::dot(bitangent, worldScale * bitangent));
+		}
+
 		[[nodiscard]] glm::vec3 RotatedEulerDegrees(
 			const glm::vec3 &startEulerDegrees, const glm::quat &rotation)
 		{
@@ -385,8 +394,9 @@ namespace DefectStudio
 			}
 			else
 			{
+				const glm::vec2 extentScale = PlaneExtentScale(start, delta.spatial.linear);
 				plane.halfExtents = glm::clamp(
-					start.halfExtents * delta.scaleFactor, glm::vec2(0.01f), glm::vec2(1000.0f));
+					start.halfExtents * extentScale, glm::vec2(0.01f), glm::vec2(1000.0f));
 			}
 		}
 	}

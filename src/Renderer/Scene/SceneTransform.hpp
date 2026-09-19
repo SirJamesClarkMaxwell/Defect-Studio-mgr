@@ -85,7 +85,8 @@ namespace DefectStudio
 	};
 
 	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label
-	// and orbital meanings of R/S; arrows use the spatial transform for their complete path.
+	// and orbital meanings of R/S; arrows use the spatial transform for their complete path, and
+	// planes resolve its linear component against their tangent/bitangent extents.
 	struct SceneTransformDelta
 	{
 		TransformDelta spatial;
