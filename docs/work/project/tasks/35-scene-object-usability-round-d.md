@@ -171,6 +171,12 @@ quota implementing instead of re-deriving this:
   gizmo ambiguous - if that is the reason, the fix might be "gizmo only in Fixed-plane mode",
   which is a design call, not a pure bug).
 - **#2, #14**: not investigated - too little detail in the report to point at code yet.
+- **Outliner Delete/Ctrl+C/D/V (item #4's follow-up report)**: commit `f8d9334` wired the same
+  dispatcher into `SceneOutlinerPanel::Render` gated on `m_HadKeyboardFocus` - built, tested, but
+  the user re-tested live and it still does not fire. Same category as #1/#12/#15 below: correct
+  on paper, not correct live. Deferred at the user's own request ("odlozmy na pozniej") rather than
+  chased further tonight - do not re-open without a live repro/screen capture, static reading has
+  now struck out four times in a row on this class of bug.
 - **#15 (Arrow2D has no gizmo)**: also checked directly, also comes back clean, same as #12.
   Neither `SceneTransform.cpp`'s `CaptureSceneTransformSelection`/apply path nor
   `ViewportGizmo.cpp` (zero matches for `Arrow2D`/`ArrowKind` in either) branch on arrow kind at
@@ -180,6 +186,16 @@ quota implementing instead of re-deriving this:
   a billboard-oriented Arrow2D specifically) or somewhere not yet checked - not in the transform
   data path itself. Needs a live repro (screenshot with the gizmo toggled on, an Arrow2D selected)
   before spending more time on it.
+
+## 2026-09-19 afternoon: #1 confirmed as part of the arrow/drawing-module grill
+
+User looked at #1's screenshots (an Arrow3D/Line pane whose gizmo widget renders far away from the
+arrow itself, at the origin rather than at the arrow) and confirmed: this is not a quick fix,
+it goes into the planned grill-me-codex design session for the whole arrow/line/plane/curve
+drawing module (see the top-level user message that proposed it - covers #1, likely #12/#15 too
+since they are the same "correct on paper, wrong live" shape, plus the extrude/Bezier-handle asks
+and the Arrow2D-vs-Line/Arrow3D positioning-mode split reported alongside it). Do not start
+implementing anything for this module until that interview + design pass has happened.
 
 ## Suggested triage order
 
