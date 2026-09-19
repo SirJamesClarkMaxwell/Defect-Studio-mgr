@@ -11,7 +11,7 @@
 #include <iterator>
 #include <string_view>
 
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace DefectStudio
 {
@@ -44,14 +44,18 @@ namespace DefectStudio
 			return result;
 		}
 
+		// Must match RotatedEulerDegrees (SceneTransform.cpp) exactly, or the gizmo's rotate delta
+		// and this render-time frame disagree on what a given rotationEuler triple means. That
+		// function composes and decomposes through glm::quat(vec3)/glm::eulerAngles - GLM's own
+		// fixed convention - so this has to go through the same pair rather than a hand-rolled
+		// Rx*Ry*Rz composition (which is a *different* Euler order than glm::quat's, and was the
+        // bug: dragging a rotate handle updates rotationEuler in GLM's convention, but this used
+		// to reinterpret those same numbers as X-then-Y-then-Z, so a Z-axis drag did not read back
+		// as a Z-axis rotation of the mesh - it read as some other axis' worth, which could look
+		// like "no visible rotation" depending on the starting orientation).
 		[[nodiscard]] glm::mat3 RotationFrame(const glm::vec3 &rotationEuler)
 		{
-			const glm::vec3 radians = glm::radians(rotationEuler);
-			glm::mat4 rotation(1.0f);
-			rotation = glm::rotate(rotation, radians.x, glm::vec3(1.0f, 0.0f, 0.0f));
-			rotation = glm::rotate(rotation, radians.y, glm::vec3(0.0f, 1.0f, 0.0f));
-			rotation = glm::rotate(rotation, radians.z, glm::vec3(0.0f, 0.0f, 1.0f));
-			return glm::mat3(rotation);
+			return glm::mat3_cast(glm::quat(glm::radians(rotationEuler)));
 		}
 
 		[[nodiscard]] glm::mat3 OrbitalFrame(
