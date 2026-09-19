@@ -171,6 +171,15 @@ quota implementing instead of re-deriving this:
   gizmo ambiguous - if that is the reason, the fix might be "gizmo only in Fixed-plane mode",
   which is a design call, not a pure bug).
 - **#2, #14**: not investigated - too little detail in the report to point at code yet.
+- **#15 (Arrow2D has no gizmo)**: also checked directly, also comes back clean, same as #12.
+  Neither `SceneTransform.cpp`'s `CaptureSceneTransformSelection`/apply path nor
+  `ViewportGizmo.cpp` (zero matches for `Arrow2D`/`ArrowKind` in either) branch on arrow kind at
+  all - an arrow's snapshot only carries `points`/`controlPoint`/anchors, so the G/R/S gizmo's data
+  path treats Arrow2D identically to Line/Arrow3D as far as this reading can tell. If the report is
+  accurate, the bug is either purely visual (the gizmo widget renders somewhere wrong/invisible for
+  a billboard-oriented Arrow2D specifically) or somewhere not yet checked - not in the transform
+  data path itself. Needs a live repro (screenshot with the gizmo toggled on, an Arrow2D selected)
+  before spending more time on it.
 
 ## Suggested triage order
 
