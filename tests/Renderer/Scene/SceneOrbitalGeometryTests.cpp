@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include <glm/gtc/quaternion.hpp>
+
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 
 namespace DefectStudio::Tests
@@ -134,6 +136,31 @@ namespace DefectStudio::Tests
 		const OrbitalWavefunction spun = BuildOrbitalWavefunction(twoRotated, structure);
 		for (const glm::vec3 probe : {glm::vec3(0.6f, 0.0f, 0.75f), glm::vec3(0.0f, 0.6f, 0.75f)})
 			EXPECT_NEAR(EvaluateOrbital(spun, probe), EvaluateOrbital(plain, probe), 1e-6f);
+	}
+
+	// Regression: the render frame used to compose rotationEuler as Rx*Ry*Rz by hand, a different
+	// Euler convention than glm::quat(vec3)/glm::eulerAngles - the pair RotatedEulerDegrees (the
+	// transform gizmo's rotate handler) round-trips a rotate-delta through. A drag on the Z handle
+	// wrote a rotationEuler in glm::quat's convention that this mismatch then misread, so it looked
+	// like Z rotation "did nothing" while X/Y (closer to that convention already) mostly worked.
+	TEST(SceneOrbitalGeometryTests, RotationFrameUsesTheSameEulerConventionOnEveryAxisIncludingZ)
+	{
+		const RendererStructureData structure = MakeStructure();
+		RendererWindowState::SceneOrbital orbital = MakeOrbital(OrbitalPreset::P);
+		// All three axes nonzero, including a 90-degree Z component - would not have been
+		// distinguishable from a Y-only rotation under the old Rx*Ry*Rz composition if Z were the
+		// one silently dropped.
+		orbital.rotationEuler = glm::vec3(20.0f, -35.0f, 90.0f);
+		const OrbitalWavefunction rotated = BuildOrbitalWavefunction(orbital, structure);
+		ASSERT_FALSE(rotated.terms.empty());
+
+		// p_z's positive lobe sits on local +z. GLM's own quat-from-Euler convention is the
+		// contract RotationFrame must match (not a hand-derived direction) - computed independently
+		// here via a direct glm call, not by calling the function under test.
+		const glm::vec3 expectedLobeDirection =
+			glm::mat3_cast(glm::quat(glm::radians(orbital.rotationEuler))) * glm::vec3(0.0f, 0.0f, 1.0f);
+		EXPECT_GT(EvaluateOrbital(rotated, expectedLobeDirection * 2.0f), 0.0f);
+		EXPECT_LT(EvaluateOrbital(rotated, -expectedLobeDirection * 2.0f), 0.0f);
 	}
 
 	// --- meshing -----------------------------------------------------------------------------
