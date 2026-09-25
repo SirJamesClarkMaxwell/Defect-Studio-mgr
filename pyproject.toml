@@ -17,6 +17,7 @@ scientific-core = [
     "numpy>=2.0",
     "scipy>=1.14",
     "ase>=3.22",
+    "puntukas[symmetry]",
     "pymatgen>=2025.1",
     "spglib>=2.0",
     "seekpath>=2.1",
@@ -37,3 +38,6 @@ docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
 ]
+
+[tool.uv.sources]
+puntukas = { path = "../../../puntukas_tools2", editable = true }

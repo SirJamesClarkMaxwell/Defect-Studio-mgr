@@ -6,14 +6,13 @@
 
 namespace DefectStudio
 {
-	// Structure loader backed by puntukas (C:\Users\fzabi\punktukas-tools, module `puntukas`) instead
+	// Structure loader backed by puntukas (C:\Users\fzabi\puntukas_tools2, module `puntukas`) instead
 	// of pymatgen. Subprocess-only by design (no embedded/nanobind fast path) - this is a low-frequency
 	// user action (Open Defect), not a hot loop. Reuses PymatgenStructureData/Site: both loaders emit
 	// the same JSON contract, so the payload shape is genuinely shared, not pymatgen-specific.
 	//
-	// Known gap: puntukas's own Poscar parser drops per-atom Selective Dynamics flags (parses only the
-	// block header, not the T/T/T columns), so PymatgenStructureSite::selectiveDynamics is always
-	// nullopt via this bridge. That's a limitation in puntukas itself, not this bridge.
+	// Known gap: the bridge does not yet translate ase Selective Dynamics constraints, so
+	// PymatgenStructureSite::selectiveDynamics remains nullopt via this bridge.
 	class PuntukasBridge final
 	{
 	public:

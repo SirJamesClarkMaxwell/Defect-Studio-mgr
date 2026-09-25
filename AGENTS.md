@@ -71,7 +71,7 @@ wasted round trip when the ID is already known. Only resolve when the library is
 | ASE | `/websites/ase_gitlab_io_ase` | `Atoms`, `ase.db`, cell/PBC conventions, IO formats |
 | pymatgen | `/materialsproject/pymatgen` | `Structure`, `Lattice`, `SpacegroupAnalyzer`, VASP IO |
 | spglib | `/spglib/spglib` | symmetry detection, Wyckoff letters, primitive/standardized cells |
-| phonopy | `/phonopy/phonopy` | `find_mic`, supercell conventions (reached through punktukas-tools) |
+| phonopy | `/phonopy/phonopy` | supercell conventions (also used by the optional `puntukas[phonopy]` extra) |
 
 Not on Context7: **ImPlot** (`Vendor/ImPlot`) — only third-party wrappers are indexed, so read
 `Vendor/ImPlot/implot.h` for that one. Everything else vendored here (spdlog, yaml-cpp, GoogleTest,

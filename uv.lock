@@ -467,6 +467,7 @@ scientific-core = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pymatgen" },
+    { name = "puntukas", extra = ["symmetry"] },
     { name = "scipy" },
     { name = "seekpath" },
     { name = "spglib" },
@@ -500,6 +501,7 @@ scientific-core = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pymatgen", specifier = ">=2025.1" },
+    { name = "puntukas", extras = ["symmetry"], editable = "../../../puntukas_tools2" },
     { name = "scipy", specifier = ">=1.14" },
     { name = "seekpath", specifier = ">=2.1" },
     { name = "spglib", specifier = ">=2.0" },
@@ -2071,6 +2073,49 @@ sdist = { url = "https://files.pythonhosted.org/packages/20/e5/16ff212c1e452235a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/22/a6/858897256d0deac81a172289110f31629fc4cee19b6f01283303e18c8db3/ptyprocess-0.7.0-py2.py3-none-any.whl", hash = "sha256:4b41f3967fce3af57cc7e94b888626c18bf37a083e3651ca8feeb66d492fef35", size = 13993, upload-time = "2020-12-28T15:15:28.35Z" },
 ]
+
+[[package]]
+name = "puntukas"
+version = "0.0.1"
+source = { editable = "../../../puntukas_tools2" }
+dependencies = [
+    { name = "ase" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+
+[package.optional-dependencies]
+symmetry = [
+    { name = "spglib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ase", specifier = ">=3.23" },
+    { name = "build", marker = "extra == 'dev'" },
+    { name = "cython", marker = "extra == 'dev'", specifier = ">=3.0" },
+    { name = "furo", marker = "extra == 'docs'" },
+    { name = "h5py", marker = "extra == 'hdf5'" },
+    { name = "matplotlib", marker = "extra == 'gui'" },
+    { name = "matplotlib", marker = "extra == 'plot'" },
+    { name = "matplotlib", marker = "extra == 'viz'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "phonopy", marker = "extra == 'phonopy'" },
+    { name = "pyside6", marker = "extra == 'gui'" },
+    { name = "pyscf", marker = "extra == 'pyscf'" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pyvista", marker = "extra == 'gui'", specifier = ">=0.45" },
+    { name = "pyvista", marker = "extra == 'viz'", specifier = ">=0.45" },
+    { name = "pyvistaqt", marker = "extra == 'gui'" },
+    { name = "qtpy", marker = "extra == 'gui'" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "scipy", specifier = ">=1.11" },
+    { name = "seekpath", marker = "extra == 'bandpath'" },
+    { name = "spglib", marker = "extra == 'symmetry'", specifier = ">=2.5" },
+    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8" },
+]
+provides-extras = ["bandpath", "dev", "docs", "gui", "hdf5", "phonopy", "plot", "pyscf", "symmetry", "viz"]
 
 [[package]]
 name = "pure-eval"

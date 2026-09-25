@@ -90,8 +90,8 @@ namespace DefectStudio
 
 	// First-pass heuristic (NOT yet validated against real defect calculations): sums occupation
 	// per spin channel across the given (already band-windowed) records. If only one channel is
-	// populated at all (non-spin-polarized calculation, or puntukas mirroring one channel into
-	// the other) that's still closed-shell -> Singlet. Otherwise equal sums -> paired spins
+	// populated at all (including the bridge's zero-filled down channel for a single-spin
+	// puntukas table) that's still closed-shell -> Singlet. Otherwise equal sums -> paired spins
 	// (Singlet); unequal -> net spin polarization within the window (Triplet-like, an unpaired
 	// electron pair across the two channels). Both channels empty -> Unknown.
 	[[nodiscard]] SpinMultiplicity ClassifySpinMultiplicity(
