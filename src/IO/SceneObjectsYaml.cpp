@@ -193,4 +193,189 @@ namespace DefectStudio::SceneObjectsYaml
 		emit << YAML::Key << "alpha" << YAML::Value << plane.alpha << YAML::Key << "showBorder" << YAML::Value
 			 << plane.showBorder << YAML::Key << "visible" << YAML::Value << plane.visible;
 	}
+
+	namespace
+	{
+		bool ParseBinding(const YAML::Node &node, PersistedPathBinding &binding)
+		{
+			try
+			{
+				if (!node)
+					return true;
+				if (!node.IsMap())
+					return false;
+				binding.kind = node["kind"].as<std::string>(binding.kind);
+				if (binding.kind != "Free" && binding.kind != "CopyPosition" && binding.kind != "BondMidpoint" && binding.kind != "ObjectOrigin")
+					return false;
+				if (!ParseAnchors(node["atoms"], binding.atoms))
+					return false;
+				if (node["offset"] && !Vec3(node["offset"], binding.offset))
+					return false;
+				binding.buffer = node["buffer"].as<float>(binding.buffer);
+				binding.objectPersistKey = node["objectPersistKey"].as<std::string>(binding.objectPersistKey);
+				if ((binding.kind == "CopyPosition" && binding.atoms.size() != 1) ||
+					(binding.kind == "BondMidpoint" && binding.atoms.size() != 2) ||
+					((binding.kind == "Free" || binding.kind == "ObjectOrigin") && !binding.atoms.empty()))
+					return false;
+				return true;
+			}
+			catch (const YAML::Exception &)
+			{
+				return false;
+			}
+		}
+
+		bool ParsePathStyle(const YAML::Node &node, PersistedPathStyle &style)
+		{
+			try
+			{
+				if (!node)
+					return true;
+				if (!node.IsMap())
+					return false;
+				style.profile = node["profile"].as<std::string>(style.profile);
+				style.join = node["join"].as<std::string>(style.join);
+				style.cap = node["cap"].as<std::string>(style.cap);
+				style.depthMode = node["depthMode"].as<std::string>(style.depthMode);
+				if (style.profile != "Round" && style.profile != "Flat" && style.profile != "CameraFacing") return false;
+				if (style.join != "Bevel" && style.join != "Round") return false;
+				if (style.cap != "Butt" && style.cap != "Square" && style.cap != "Round") return false;
+				if (style.depthMode != "DepthTest" && style.depthMode != "AlwaysOnTop") return false;
+				style.width = node["width"].as<float>(style.width);
+				style.radialSegments = node["radialSegments"].as<int>(style.radialSegments);
+				if (node["color"] && !Vec3(node["color"], style.color)) return false;
+				style.alpha = node["alpha"].as<float>(style.alpha);
+				style.dashEnabled = node["dashEnabled"].as<bool>(style.dashEnabled);
+				style.dashLength = node["dashLength"].as<float>(style.dashLength);
+				style.gapLength = node["gapLength"].as<float>(style.gapLength);
+				style.dashPhase = node["dashPhase"].as<float>(style.dashPhase);
+				style.gradientEnabled = node["gradientEnabled"].as<bool>(style.gradientEnabled);
+				const YAML::Node stops = node["gradientStops"];
+				if (stops)
+				{
+					if (!stops.IsSequence()) return false;
+					style.gradientStops.clear();
+					for (const YAML::Node &stopNode : stops)
+					{
+						PersistedPathGradientStop stop;
+						if (!stopNode.IsMap() || !stopNode["color"] || !Vec3(stopNode["color"], stop.color)) return false;
+						stop.position = stopNode["position"].as<float>(stop.position);
+						stop.alpha = stopNode["alpha"].as<float>(stop.alpha);
+						style.gradientStops.push_back(stop);
+					}
+				}
+				style.startDecoration = node["startDecoration"].as<std::string>(style.startDecoration);
+				style.startDecorationLengthScale = node["startDecorationLengthScale"].as<float>(style.startDecorationLengthScale);
+				style.startDecorationWidthScale = node["startDecorationWidthScale"].as<float>(style.startDecorationWidthScale);
+				style.endDecoration = node["endDecoration"].as<std::string>(style.endDecoration);
+				style.endDecorationLengthScale = node["endDecorationLengthScale"].as<float>(style.endDecorationLengthScale);
+				style.endDecorationWidthScale = node["endDecorationWidthScale"].as<float>(style.endDecorationWidthScale);
+				const auto validDecoration = [](const std::string &name) {
+					return name == "None" || name == "Arrow" || name == "Stealth" || name == "OpenArrow" || name == "Bar" || name == "Circle" || name == "Square" || name == "Diamond";
+				};
+				return validDecoration(style.startDecoration) && validDecoration(style.endDecoration);
+			}
+			catch (const YAML::Exception &)
+			{
+				return false;
+			}
+		}
+
+		void EmitBinding(YAML::Emitter &emit, const PersistedPathBinding &binding)
+		{
+			emit << YAML::Key << "binding" << YAML::Value << YAML::BeginMap << YAML::Key << "kind" << YAML::Value << binding.kind;
+			EmitAnchors(emit, "atoms", binding.atoms);
+			EmitVec3(emit, "offset", binding.offset);
+			emit << YAML::Key << "buffer" << YAML::Value << binding.buffer << YAML::Key << "objectPersistKey" << YAML::Value << binding.objectPersistKey << YAML::EndMap;
+		}
+
+		void EmitPathStyle(YAML::Emitter &emit, const PersistedPathStyle &style)
+		{
+			emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap << YAML::Key << "profile" << YAML::Value << style.profile << YAML::Key << "width" << YAML::Value << style.width << YAML::Key << "join" << YAML::Value << style.join << YAML::Key << "cap" << YAML::Value << style.cap << YAML::Key << "radialSegments" << YAML::Value << style.radialSegments;
+			EmitVec3(emit, "color", style.color);
+			emit << YAML::Key << "alpha" << YAML::Value << style.alpha << YAML::Key << "dashEnabled" << YAML::Value << style.dashEnabled << YAML::Key << "dashLength" << YAML::Value << style.dashLength << YAML::Key << "gapLength" << YAML::Value << style.gapLength << YAML::Key << "dashPhase" << YAML::Value << style.dashPhase << YAML::Key << "gradientEnabled" << YAML::Value << style.gradientEnabled << YAML::Key << "gradientStops" << YAML::Value << YAML::BeginSeq;
+			for (const auto &stop : style.gradientStops)
+			{
+				emit << YAML::BeginMap << YAML::Key << "position" << YAML::Value << stop.position;
+				EmitVec3(emit, "color", stop.color);
+				emit << YAML::Key << "alpha" << YAML::Value << stop.alpha << YAML::EndMap;
+			}
+			emit << YAML::EndSeq << YAML::Key << "startDecoration" << YAML::Value << style.startDecoration << YAML::Key << "startDecorationLengthScale" << YAML::Value << style.startDecorationLengthScale << YAML::Key << "startDecorationWidthScale" << YAML::Value << style.startDecorationWidthScale << YAML::Key << "endDecoration" << YAML::Value << style.endDecoration << YAML::Key << "endDecorationLengthScale" << YAML::Value << style.endDecorationLengthScale << YAML::Key << "endDecorationWidthScale" << YAML::Value << style.endDecorationWidthScale << YAML::Key << "depthMode" << YAML::Value << style.depthMode << YAML::EndMap;
+		}
+	}
+
+	bool ParsePath(const YAML::Node &node, PersistedScenePath &path)
+	{
+		try
+		{
+			const YAML::Node nodes = node["nodes"];
+			const YAML::Node segments = node["segments"];
+			if (!nodes || !nodes.IsSequence() || nodes.size() < 2 || !segments || !segments.IsSequence() || segments.size() != nodes.size() - 1)
+				return false;
+			path.persistKey = node["persistKey"].as<std::string>(path.persistKey);
+			path.name = node["name"].as<std::string>(path.name);
+			path.visible = node["visible"].as<bool>(path.visible);
+			path.renderable = node["renderable"].as<bool>(path.renderable);
+			path.nodes.clear();
+			for (const YAML::Node &nodeNode : nodes)
+			{
+				PersistedPathNode value;
+				if (!nodeNode.IsMap() || !nodeNode["position"] || !Vec3(nodeNode["position"], value.position) || !ParseBinding(nodeNode["binding"], value.binding)) return false;
+				path.nodes.push_back(std::move(value));
+			}
+			path.segments.clear();
+			for (const YAML::Node &segmentNode : segments)
+			{
+				PersistedPathSegment value;
+				if (!segmentNode.IsMap()) return false;
+				const std::string kind = segmentNode["kind"].as<std::string>("Line");
+				if (kind == "Line") value.kind = PersistedPathSegmentKind::Line;
+				else if (kind == "Cubic") value.kind = PersistedPathSegmentKind::Cubic;
+				else if (kind == "Arc") value.kind = PersistedPathSegmentKind::Arc;
+				else return false;
+				if (value.kind == PersistedPathSegmentKind::Cubic && ((!segmentNode["startHandle"] || !Vec3(segmentNode["startHandle"], value.startHandle)) || (!segmentNode["endHandle"] || !Vec3(segmentNode["endHandle"], value.endHandle)))) return false;
+				value.startHandleType = segmentNode["startHandleType"].as<std::string>(value.startHandleType);
+				value.endHandleType = segmentNode["endHandleType"].as<std::string>(value.endHandleType);
+				if (value.kind == PersistedPathSegmentKind::Arc && (!segmentNode["planeNormal"] || !Vec3(segmentNode["planeNormal"], value.planeNormal))) return false;
+				value.signedSweepRadians = segmentNode["signedSweepRadians"].as<float>(value.signedSweepRadians);
+				path.segments.push_back(std::move(value));
+			}
+			return ParsePathStyle(node["style"], path.style);
+		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
+
+	void EmitPath(YAML::Emitter &emit, const PersistedScenePath &path)
+	{
+		emit << YAML::Key << "kind" << YAML::Value << "ScenePath" << YAML::Key << "persistKey" << YAML::Value << path.persistKey << YAML::Key << "name" << YAML::Value << path.name << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
+		for (const auto &node : path.nodes)
+		{
+			emit << YAML::BeginMap;
+			EmitVec3(emit, "position", node.position);
+			EmitBinding(emit, node.binding);
+			emit << YAML::EndMap;
+		}
+		emit << YAML::EndSeq << YAML::Key << "segments" << YAML::Value << YAML::BeginSeq;
+		for (const auto &segment : path.segments)
+		{
+			emit << YAML::BeginMap << YAML::Key << "kind" << YAML::Value << (segment.kind == PersistedPathSegmentKind::Line ? "Line" : segment.kind == PersistedPathSegmentKind::Cubic ? "Cubic" : "Arc");
+			if (segment.kind == PersistedPathSegmentKind::Cubic)
+			{
+				EmitVec3(emit, "startHandle", segment.startHandle);
+				EmitVec3(emit, "endHandle", segment.endHandle);
+				emit << YAML::Key << "startHandleType" << YAML::Value << segment.startHandleType << YAML::Key << "endHandleType" << YAML::Value << segment.endHandleType;
+			}
+			if (segment.kind == PersistedPathSegmentKind::Arc)
+			{
+				EmitVec3(emit, "planeNormal", segment.planeNormal);
+				emit << YAML::Key << "signedSweepRadians" << YAML::Value << segment.signedSweepRadians;
+			}
+			emit << YAML::EndMap;
+		}
+		emit << YAML::EndSeq << YAML::Key << "visible" << YAML::Value << path.visible << YAML::Key << "renderable" << YAML::Value << path.renderable;
+		EmitPathStyle(emit, path.style);
+	}
 } // namespace DefectStudio::SceneObjectsYaml

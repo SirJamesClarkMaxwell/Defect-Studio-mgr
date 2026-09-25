@@ -1,6 +1,8 @@
 #include "Core/dspch.hpp"
 
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
+#include "Renderer/Scene/ScenePathPersistence.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 #include <algorithm>
 #include <iomanip>
@@ -69,6 +71,20 @@ void EnsureScenePersistKeys(RendererWindowState &window)
 	for (auto &plane : window.scenePlanes)
 		if (plane.persistKey.empty())
 			plane.persistKey = GenerateScenePersistKey();
+	if (window.paths != nullptr)
+	{
+		// The store only hands out mutable access through the two revision-bumping mutators, so a
+		// key assignment costs one spurious style revision. It happens once per path, the first time
+		// it is saved, and the alternative is a fresh key on every save - an identity nothing can
+		// reference across a reload.
+		std::vector<SceneObjectId> keyless;
+		window.paths->Store().Visit([&](const ScenePath &path) {
+			if (path.persistKey.empty())
+				keyless.push_back(path.id);
+		});
+		for (const SceneObjectId id : keyless)
+			window.paths->Store().MutateStyle(id, [](ScenePath &path) { path.persistKey = GenerateScenePersistKey(); });
+	}
 }
 
 static PersistedLabelStyle ToPersisted(const RendererWindowState::LabelStyle &s)
@@ -316,6 +332,11 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.visible = plane.visible;
 		result.emplace_back(std::move(p));
 	}
+	if (window.paths != nullptr)
+	{
+		window.paths->Store().Visit(
+			[&](const ScenePath &path) { result.emplace_back(ExtractPersistedScenePath(path, window.structure)); });
+	}
 	return result;
 }
 
@@ -327,6 +348,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.sceneArrows.clear();
 	window.sceneOrbitals.clear();
 	window.scenePlanes.clear();
+	if (window.paths != nullptr)
+		window.paths->Clear();
 	window.selectedScenePlanes.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
@@ -440,6 +463,17 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					o.alpha = value.alpha;
 					o.visible = value.visible;
 					window.sceneOrbitals.push_back(std::move(o));
+				}
+				else if constexpr (std::is_same_v<T, PersistedScenePath>)
+				{
+					const Result<ScenePath> built = BuildScenePath(value, window.structure, warnings);
+					if (built)
+					{
+						ScenePath path = built.Value();
+						path.id = window.sceneRegistry.AllocateObjectId();
+						if (!SceneSystem::EnsurePathSystem(window).Store().Insert(std::move(path)))
+							warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene path was skipped", "The path id collided while applying scene objects.", "The path was not loaded.", "SceneObjectPersistence", "scene_objects.entry_skipped");
+					}
 				}
 				else
 				{

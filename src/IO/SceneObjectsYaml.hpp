@@ -30,4 +30,7 @@ namespace DefectStudio::SceneObjectsYaml
 	// orientation has no quad to draw and is dropped with a warning rather than rendered edge-on.
 	[[nodiscard]] bool ParsePlane(const YAML::Node &node, PersistedScenePlane &plane);
 	void EmitPlane(YAML::Emitter &emit, const PersistedScenePlane &plane);
+
+	[[nodiscard]] bool ParsePath(const YAML::Node &node, PersistedScenePath &path);
+	void EmitPath(YAML::Emitter &emit, const PersistedScenePath &path);
 } // namespace DefectStudio::SceneObjectsYaml

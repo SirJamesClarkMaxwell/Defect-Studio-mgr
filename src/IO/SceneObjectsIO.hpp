@@ -155,9 +155,94 @@ namespace DefectStudio
 		bool visible = true;
 	};
 
+	// ---- v2: paths (task/41 S9) ------------------------------------------------------------------
+	//
+	// Element ids are deliberately absent from every struct below. They are regenerated on load
+	// (plan v2 C11) precisely so that nothing outside a path can hold a reference to one, which in
+	// turn means a file can never carry a stale one.
+
+	enum class PersistedPathSegmentKind { Line, Cubic, Arc };
+
+	// The binding variant flattened for YAML. `kind` is a stable string rather than an ordinal, for
+	// the same reason PersistedSceneOrbital::preset is one: inserting a case into the runtime enum
+	// must not silently reinterpret everyone's saved files.
+	struct PersistedPathBinding
+	{
+		std::string kind = "Free"; // Free | CopyPosition | BondMidpoint | ObjectOrigin
+		std::vector<PersistedAtomRef> atoms; // CopyPosition: 1, BondMidpoint: 2, otherwise empty
+		glm::vec3 offset = glm::vec3(0.0f);
+		float buffer = 0.0f; // endpoint CopyPosition only
+		// ObjectOrigin targets another scene object by its persistKey, not by SceneObjectId: ids are
+		// reallocated on every load and would point at whatever happened to take the number.
+		std::string objectPersistKey;
+	};
+
+	struct PersistedPathNode
+	{
+		glm::vec3 position = glm::vec3(0.0f); // required
+		PersistedPathBinding binding;
+	};
+
+	struct PersistedPathSegment
+	{
+		PersistedPathSegmentKind kind = PersistedPathSegmentKind::Line;
+		// Cubic only. Absolute world positions, matching PathHandle::position - not offsets.
+		glm::vec3 startHandle = glm::vec3(0.0f);
+		glm::vec3 endHandle = glm::vec3(0.0f);
+		std::string startHandleType = "Auto"; // Free | Aligned | Vector | Auto
+		std::string endHandleType = "Auto";
+		// Arc only.
+		glm::vec3 planeNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+		float signedSweepRadians = 0.0f;
+	};
+
+	struct PersistedPathGradientStop
+	{
+		float position = 0.0f;
+		glm::vec3 color = glm::vec3(1.0f);
+		float alpha = 1.0f;
+	};
+
+	// PathStrokeStyle field for field, with every enum written as its enumerator name.
+	struct PersistedPathStyle
+	{
+		std::string profile = "Round"; // Round | Flat | CameraFacing
+		float width = 0.05f;           // full width, as in PathStrokeStyle - not a radius
+		std::string join = "Bevel";    // Bevel | Round
+		std::string cap = "Butt";      // Butt | Square | Round
+		int radialSegments = 12;
+		glm::vec3 color = glm::vec3(1.0f);
+		float alpha = 1.0f;
+		bool dashEnabled = false;
+		float dashLength = 0.1f;
+		float gapLength = 0.05f;
+		float dashPhase = 0.0f;
+		bool gradientEnabled = false;
+		std::vector<PersistedPathGradientStop> gradientStops;
+		// PathDecorationKind names: None | Arrow | Stealth | OpenArrow | Bar | Circle | Square | Diamond
+		std::string startDecoration = "None";
+		float startDecorationLengthScale = 1.0f;
+		float startDecorationWidthScale = 1.0f;
+		std::string endDecoration = "None";
+		float endDecorationLengthScale = 1.0f;
+		float endDecorationWidthScale = 1.0f;
+		std::string depthMode = "DepthTest"; // DepthTest | AlwaysOnTop
+	};
+
+	struct PersistedScenePath
+	{
+		std::string persistKey;
+		std::string name;
+		std::vector<PersistedPathNode> nodes;       // required, at least 2
+		std::vector<PersistedPathSegment> segments; // required, exactly nodes.size() - 1
+		bool visible = true;
+		bool renderable = true;
+		PersistedPathStyle style;
+	};
+
 	using PersistedSceneObject = std::variant<
 		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital,
-		PersistedScenePlane>;
+		PersistedScenePlane, PersistedScenePath>;
 
 	struct PersistedStructureSceneObjects
 	{
@@ -167,7 +252,7 @@ namespace DefectStudio
 
 	struct SceneObjectsFile
 	{
-		int formatVersion = 1;
+		int formatVersion = 2;
 		std::vector<PersistedStructureSceneObjects> structures;
 	};
 
@@ -183,7 +268,11 @@ namespace DefectStudio
 	class SceneObjectsIO
 	{
 	public:
-		static constexpr int kFormatVersion = 1;
+		static constexpr int kFormatVersion = 2;
+
+		// v1 of this file predates paths. It is still read: a v1 arrow is migrated to a path by
+		// Renderer/Scene/ScenePathPersistence, which is where all knowledge of what a v1 arrow meant
+		// lives. IO only tells the two apart.
 
 		[[nodiscard]] static Path FilePath(const Path &projectDirectory); // projectDirectory / "scene_objects.yaml"
 
@@ -191,7 +280,11 @@ namespace DefectStudio
 		// directory with '/' separators when it lies inside it, otherwise the absolute path with '/'.
 		[[nodiscard]] static std::string MakeStructureKey(const Path &projectDirectory, const Path &structureSourcePath);
 
-		// Returns false (outError set) only when the text is not YAML or its root is not a map.
+		// Returns false (outError set) when the text is not YAML, its root is not a map, or its
+		// formatVersion is greater than kFormatVersion. The version is checked BEFORE anything else is
+		// interpreted: a file from a future version may reuse a key with a different meaning, so
+		// parsing it on a best-effort basis and keeping what looked familiar would corrupt it on the
+		// next save. That rejection carries code "scene_objects.future_format_version".
 		// An empty/whitespace text is a valid empty file. An object with an unknown `kind`, a missing
 		// required field or a bad value (wrong atomRefs count, unknown enum name, non-numeric vector)
 		// is skipped and reported as one Severity::Warning, ErrorCategory::IO StructuredError with code
@@ -212,8 +305,16 @@ namespace DefectStudio
 			std::vector<StructuredError> &outWarnings,
 			std::string &outError);
 
+		// Copies an existing v1 scene_objects.yaml to "scene_objects.yaml.v1.bak" before the first v2
+		// write. True also means "there was no v1 file" and "the backup already existed" - the point
+		// is that afterwards, either a backup exists or there was never anything to lose. False means
+		// the copy itself failed, and Save then refuses to write: replacing the only copy of a file
+		// with a format the user's previous version cannot read is not a recoverable mistake.
+		[[nodiscard]] static bool WriteBackupOnce(const Path &projectDirectory, std::string &outError);
+
 		// Writes a sibling temp file then renames it over FilePath(); a failure leaves any existing
-		// file untouched and returns false with outError.
+		// file untouched and returns false with outError. Calls WriteBackupOnce first and aborts
+		// without writing anything if that fails.
 		[[nodiscard]] static bool Save(const Path &projectDirectory, const SceneObjectsFile &file, std::string &outError);
 	};
 } // namespace DefectStudio

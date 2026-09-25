@@ -282,6 +282,14 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 			return false;
 		}
 		outFile.formatVersion = root["formatVersion"].as<int>(kFormatVersion);
+		if (outFile.formatVersion > kFormatVersion)
+		{
+			outError = "scene_objects.yaml uses a future format version: " + std::to_string(outFile.formatVersion);
+			warnings.emplace_back(ErrorCategory::IO, Severity::Error, "Scene object file is from a newer version", outError,
+				"Open this project in a newer DefectStudio build.", "SceneObjectsIO", "scene_objects.future_format_version");
+			outFile = {};
+			return false;
+		}
 		const YAML::Node structures = root["structures"];
 		if (!structures)
 			return true;
@@ -368,6 +376,12 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 					valid = SceneObjectsYaml::ParsePlane(node, value);
 					object = std::move(value);
 				}
+				else if (kind == "ScenePath")
+				{
+					PersistedScenePath value;
+					valid = SceneObjectsYaml::ParsePath(node, value);
+					object = std::move(value);
+				}
 				if (valid)
 					structure.objects.push_back(std::move(object));
 				else
@@ -387,7 +401,7 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 {
 	YAML::Emitter emit;
-	emit << YAML::BeginMap << YAML::Key << "formatVersion" << YAML::Value << file.formatVersion << YAML::Key
+	emit << YAML::BeginMap << YAML::Key << "formatVersion" << YAML::Value << kFormatVersion << YAML::Key
 		 << "structures" << YAML::Value << YAML::BeginSeq;
 	for (const auto &structure : file.structures)
 	{
@@ -460,6 +474,10 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 					{
 						SceneObjectsYaml::EmitOrbital(emit, value);
 					}
+					else if constexpr (std::is_same_v<T, PersistedScenePath>)
+					{
+						SceneObjectsYaml::EmitPath(emit, value);
+					}
 					else
 					{
 						SceneObjectsYaml::EmitPlane(emit, value);
@@ -490,8 +508,12 @@ bool SceneObjectsIO::Load(const Path &projectDirectory, SceneObjectsFile &outFil
 bool SceneObjectsIO::Save(const Path &projectDirectory, const SceneObjectsFile &file, std::string &outError)
 {
 	outError.clear();
+	if (!WriteBackupOnce(projectDirectory, outError))
+		return false;
 	const Path target = FilePath(projectDirectory);
 	const Path temp = Path::FromResolved(target.Native().string() + ".tmp");
+	// Serialize always stamps kFormatVersion, so a whole-scene copy just to overwrite one int would
+	// buy nothing.
 	if (!TextFileIO::Save(temp, Serialize(file), outError))
 		return false;
 	std::error_code error;
@@ -499,6 +521,36 @@ bool SceneObjectsIO::Save(const Path &projectDirectory, const SceneObjectsFile &
 	{
 		outError = error.message();
 		FileSystem::Remove(temp.Native());
+		return false;
+	}
+	return true;
+}
+
+bool SceneObjectsIO::WriteBackupOnce(const Path &projectDirectory, std::string &outError)
+{
+	outError.clear();
+	const Path source = FilePath(projectDirectory);
+	const Path backup = Path::FromResolved(source.Native().string() + ".v1.bak");
+	if (!FileSystem::Exists(source.Native()) || FileSystem::Exists(backup.Native()))
+		return true;
+	std::string text;
+	if (!TextFileIO::Load(source, text, outError))
+		return false;
+	try
+	{
+		const YAML::Node root = YAML::Load(text);
+		if (!root || !root.IsMap() || root["formatVersion"].as<int>(kFormatVersion) != 1)
+			return true;
+	}
+	catch (const YAML::Exception &exception)
+	{
+		outError = exception.what();
+		return false;
+	}
+	std::error_code error;
+	if (!FileSystem::Copy(source.Native(), backup.Native(), error))
+	{
+		outError = error ? error.message() : "Unable to create v1 scene object backup";
 		return false;
 	}
 	return true;

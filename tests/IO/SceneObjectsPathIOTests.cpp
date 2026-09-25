@@ -1,0 +1,130 @@
+#include <gtest/gtest.h>
+
+#include "IO/SceneObjectsIO.hpp"
+#include "IO/TextFileIO.hpp"
+#include "SceneObjectsV1Fixtures.hpp"
+
+namespace DefectStudio::Tests
+{
+	namespace
+	{
+		SceneObjectsFile Parse(const char *text)
+		{
+			SceneObjectsFile file;
+			std::vector<StructuredError> warnings;
+			std::string error;
+			EXPECT_TRUE(SceneObjectsIO::Parse(text, file, warnings, error)) << error;
+			return file;
+		}
+	}
+
+	TEST(SceneObjectsPathIOTests, VersionTwoPathRoundTripsAllSegmentKindsAndStyle)
+	{
+		PersistedScenePath path;
+		path.persistKey = "path";
+		path.nodes = {{{0, 0, 0}}, {{1, 0, 0}}, {{2, 0, 0}}};
+		path.segments.resize(2);
+		path.segments[0].kind = PersistedPathSegmentKind::Cubic;
+		path.segments[0].startHandle = {0.2f, 0.5f, 0.0f};
+		path.segments[0].endHandle = {0.8f, 0.5f, 0.0f};
+		path.segments[0].startHandleType = "Free";
+		path.segments[0].endHandleType = "Aligned";
+		path.segments[1].kind = PersistedPathSegmentKind::Arc;
+		path.segments[1].planeNormal = {0, 0, 1};
+		path.segments[1].signedSweepRadians = 1.2f;
+		path.style.profile = "CameraFacing";
+		path.style.width = 0.25f;
+		path.style.join = "Round";
+		path.style.cap = "Round";
+		path.style.radialSegments = 24;
+		path.style.color = {0.1f, 0.2f, 0.3f};
+		path.style.alpha = 0.7f;
+		path.style.dashEnabled = true;
+		path.style.dashLength = 0.4f;
+		path.style.gapLength = 0.2f;
+		path.style.dashPhase = 0.1f;
+		path.style.gradientEnabled = true;
+		path.style.gradientStops = {{0, {1, 0, 0}, 0.5f}, {0.5f, {0, 1, 0}, 0.75f}, {1, {0, 0, 1}, 1.0f}};
+		path.style.startDecoration = "Circle";
+		path.style.startDecorationLengthScale = 2.0f;
+		path.style.startDecorationWidthScale = 3.0f;
+		path.style.endDecoration = "Diamond";
+		path.style.endDecorationLengthScale = 4.0f;
+		path.style.endDecorationWidthScale = 5.0f;
+		path.style.depthMode = "AlwaysOnTop";
+		SceneObjectsFile file;
+		file.structures.push_back({"k", {path}});
+		const SceneObjectsFile loaded = Parse(SceneObjectsIO::Serialize(file).c_str());
+		ASSERT_EQ(loaded.formatVersion, 2);
+		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_EQ(got.nodes[1].position, path.nodes[1].position);
+		EXPECT_EQ(got.segments[0].startHandleType, "Free");
+		EXPECT_EQ(got.segments[1].planeNormal, path.segments[1].planeNormal);
+		EXPECT_FLOAT_EQ(got.style.gradientStops[1].alpha, 0.75f);
+		EXPECT_EQ(got.style.endDecoration, "Diamond");
+		EXPECT_EQ(got.style.depthMode, "AlwaysOnTop");
+	}
+
+	TEST(SceneObjectsPathIOTests, FutureVersionIsRejectedBeforeInterpretingObjects)
+	{
+		SceneObjectsFile file;
+		file.structures.push_back({"sentinel", {PersistedFreeLabel{}}});
+		std::vector<StructuredError> warnings;
+		std::string error;
+		EXPECT_FALSE(SceneObjectsIO::Parse("formatVersion: 3\nstructures: nope\n", file, warnings, error));
+		EXPECT_TRUE(file.structures.empty());
+		EXPECT_FALSE(error.empty());
+		ASSERT_EQ(warnings.size(), 1u);
+		EXPECT_EQ(warnings[0].code, "scene_objects.future_format_version");
+	}
+
+	TEST(SceneObjectsPathIOTests, InvalidPathEntriesAreSkippedButV1ObjectsStillParse)
+	{
+		const std::string text = "formatVersion: 2\nstructures:\n  - structureKey: k\n    objects:\n      - kind: ScenePath\n        segments: []\n      - kind: FreeLabel\n        position: [1, 2, 3]\n";
+		SceneObjectsFile file = Parse(text.c_str());
+		ASSERT_EQ(file.structures[0].objects.size(), 1u);
+		EXPECT_TRUE(std::holds_alternative<PersistedFreeLabel>(file.structures[0].objects[0]));
+	}
+
+	TEST(SceneObjectsPathIOTests, V1FixturesParseAsArrows)
+	{
+		for (const char *fixture : {SceneObjectsV1Fixtures::Line, SceneObjectsV1Fixtures::Arrow2DBillboard,
+			SceneObjectsV1Fixtures::Arrow2DFixedPlane, SceneObjectsV1Fixtures::Arrow3D,
+			SceneObjectsV1Fixtures::Quadratic, SceneObjectsV1Fixtures::TipsGradientOutline,
+			SceneObjectsV1Fixtures::Anchored})
+		{
+			const SceneObjectsFile file = Parse(fixture);
+			ASSERT_EQ(file.structures.size(), 1u);
+			ASSERT_EQ(file.structures[0].objects.size(), 1u);
+			EXPECT_TRUE(std::holds_alternative<PersistedSceneArrow>(file.structures[0].objects[0]));
+		}
+	}
+
+	TEST(SceneObjectsPathIOTests, V1FixtureCoversEveryLegacyTipName)
+	{
+		const SceneObjectsFile file = Parse(SceneObjectsV1Fixtures::AllTips);
+		ASSERT_EQ(file.structures[0].objects.size(), 6u);
+		for (const auto &object : file.structures[0].objects)
+			EXPECT_TRUE(std::holds_alternative<PersistedSceneArrow>(object));
+	}
+
+	TEST(SceneObjectsPathIOTests, V1BackupIsCreatedOnceAndSaveUsesItBeforeReplacement)
+	{
+		const Path directory = Path::FromResolved(FileSystem::TempDirectoryPath()) / "ds_scene_path_backup";
+		std::error_code ignored;
+		FileSystem::RemoveAll(directory.Native(), ignored);
+		const Path target = SceneObjectsIO::FilePath(directory);
+		const std::string original = "formatVersion: 1\nstructures: []\n";
+		std::string error;
+		ASSERT_TRUE(TextFileIO::Save(target, original, error)) << error;
+		ASSERT_TRUE(SceneObjectsIO::WriteBackupOnce(directory, error)) << error;
+		std::string backup;
+		ASSERT_TRUE(TextFileIO::Load(Path::FromResolved(target.Native().string() + ".v1.bak"), backup, error));
+		EXPECT_EQ(backup, original);
+		ASSERT_TRUE(TextFileIO::Save(Path::FromResolved(target.Native().string() + ".v1.bak"), "keep", error));
+		ASSERT_TRUE(SceneObjectsIO::WriteBackupOnce(directory, error));
+		ASSERT_TRUE(TextFileIO::Load(Path::FromResolved(target.Native().string() + ".v1.bak"), backup, error));
+		EXPECT_EQ(backup, "keep");
+		FileSystem::RemoveAll(directory.Native(), ignored);
+	}
+}
