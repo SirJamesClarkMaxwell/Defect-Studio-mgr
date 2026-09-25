@@ -2,6 +2,8 @@
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
+#include "Renderer/OpenGl/FrameBufferReadback.hpp"
+
 #include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneObjectAppearance.hpp"
 
@@ -3438,21 +3440,11 @@ namespace DefectStudio
 
 		// GL's y-origin is the bottom of the image, so trimming the image's top edge means
 		// skipping rows at the HIGH end of GL's y range - i.e. starting the read at bottomPx.
-		std::vector<unsigned char> pixels(static_cast<std::size_t>(width) * height * 4);
 		frameBuffer.Bind();
-		glReadPixels(leftPx, bottomPx, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		std::vector<unsigned char> flipped = ReadRgba8TopDown(leftPx, bottomPx, width, height);
 		frameBuffer.Unbind();
 
-		// OpenGL's row 0 is the bottom of the image; PNG expects row 0 at the top.
-		std::vector<unsigned char> flipped(pixels.size());
 		const std::size_t rowBytes = static_cast<std::size_t>(width) * 4;
-		for (int row = 0; row < height; ++row)
-		{
-			std::memcpy(
-				flipped.data() + static_cast<std::size_t>(row) * rowBytes,
-				pixels.data() + static_cast<std::size_t>(height - 1 - row) * rowBytes,
-				rowBytes);
-		}
 
 		FileSystem::CreateDirectories(outputPath.parent_path().Native());
 		if (!stbi_write_png(outputPath.String().c_str(), width, height, 4, flipped.data(), static_cast<int>(rowBytes)))

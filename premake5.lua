@@ -755,6 +755,12 @@ project "DefectStudioTests"
             "GLFW_INCLUDE_NONE",
             "IMGUI_IMPL_OPENGL_LOADER_GLAD"
         }
+        -- The GL smoke tests initialize the production backend, which loads its shaders from disk;
+        -- they need the same shader tree next to the test exe that the app gets next to its own.
+        postbuildcommands {
+            'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
+            'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL'
+        }
 
     filter { "system:windows", "action:vs2022" }
         buildoptions { "/utf-8" }
@@ -763,6 +769,10 @@ project "DefectStudioTests"
         pic "On"
         defines { "DS_PLATFORM_LINUX" }
         links { "pthread" }
+        postbuildcommands {
+            'mkdir -p "%{cfg.targetdir}/shaders"',
+            'cp -r src/Renderer/OpenGl/Shaders/. "%{cfg.targetdir}/shaders/"'
+        }
 
     filter "system:macosx"
         defines { "DS_PLATFORM_MACOS" }
