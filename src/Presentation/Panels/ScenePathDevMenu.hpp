@@ -20,7 +20,7 @@ namespace DefectStudio
 
 	// One ScenePath centred on `worldPosition`, roughly two Angstrom across, with a visible default
 	// style (Round tube, an Arrow end decoration). Pure - it allocates no SceneObjectId and touches no
-	// window; AppendScenePath does that.
+	// window; AddScenePath does that.
 	[[nodiscard]] ScenePath MakeDevScenePath(ScenePathDevPreset preset, const glm::vec3 &worldPosition);
 
 	// The viewport Add menu's "Path (dev)" submenu.
@@ -31,7 +31,7 @@ namespace DefectStudio
 	// this comment are the switch until S11 gives paths a real UI and S15 routes annotations through
 	// them; whoever writes S11 deletes this file rather than growing it.
 	//
-	// Appends through SceneSystem::AppendScenePath and resyncs the registry mirror. No undo entry -
-	// that is S8 - so a dev path survives Ctrl+Z only in the sense that undo does not know about it.
+	// Appends through AddScenePath with the renderer's own undo sink, so a dev path is one Ctrl+Z
+	// away exactly like an arrow or a plane - S8 made that the only way a path edit reaches the store.
 	void DrawScenePathDevAddMenu(RendererWindowState &windowState, const glm::vec3 &worldPosition);
 }

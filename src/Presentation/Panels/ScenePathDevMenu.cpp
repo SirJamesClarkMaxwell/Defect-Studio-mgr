@@ -5,7 +5,8 @@
 #include <imgui.h>
 
 #include "Renderer/RendererWindowState.hpp"
-#include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Path/PathCommands.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
@@ -66,11 +67,18 @@ namespace DefectStudio
 		if (!ImGui::BeginMenu("Path (dev)"))
 			return;
 
+		// The same sink every other scene-object edit already uses; without it AddScenePath applies
+		// the edit and records no history, which is exactly what a dev menu must not do.
+		PathEditContext context;
+		context.window = &windowState;
+		context.pushUndo = [](RendererWindowState &window, SceneObjectsSnapshot before, const std::string &) {
+			PushSceneObjectsUndoSnapshot(window, std::move(before));
+		};
+
 		const auto add = [&](const ScenePathDevPreset preset, const char *label) {
 			if (!ImGui::MenuItem(label))
 				return;
-			SceneSystem::AppendScenePath(windowState, MakeDevScenePath(preset, worldPosition));
-			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+			(void)AddScenePath(context, MakeDevScenePath(preset, worldPosition));
 		};
 		add(ScenePathDevPreset::Line, "Line");
 		add(ScenePathDevPreset::Cubic, "Cubic");
