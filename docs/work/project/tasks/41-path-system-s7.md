@@ -209,3 +209,7 @@ Not your job, but it is what this stage is for, so do not break it: right-click 
 Add -> Path (dev) -> Line / Cubic / Arc, orbit and zoom, then export a PNG and compare it to the
 viewport. That export comparison also settles S4's deferred gate (the `FrameBufferReadback`
 extraction must have left PNG export byte-identical).
+
+## Manual round result (2026-09-26)
+Passed. PNG export matches the viewport, which also settles S4's deferred byte-identical
+export gate. **Merge point 1 cleared.**

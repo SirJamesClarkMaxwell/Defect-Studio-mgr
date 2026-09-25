@@ -98,3 +98,5 @@ local `UndoStack`, and must not need a GL context or an ImGui context.
 ## Manual round (user, after the stage)
 Add a dev path from the context menu, press Ctrl+Z, confirm it disappears and Ctrl+Y brings it
 back. This is the first stage where a path edit is undoable.
+
+Result (2026-09-26): passed. Ctrl+Z removes a dev-added path, Ctrl+Y brings it back.
