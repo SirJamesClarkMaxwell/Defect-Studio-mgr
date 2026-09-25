@@ -23,6 +23,14 @@ namespace DefectStudio
 		BrokenBinding,
 		ObjectOriginTargetsPath,
 		InteriorNodeBuffer,
+		// Topology rejections (S2). The model has no repair strategy for these - they are reported,
+		// never guessed around.
+		InvalidSegmentIndex,
+		ParameterOutOfRange,
+		UnknownElement,
+		MergeRequiresLineNeighbours,
+		LastNodeNotRemovable,
+		TangentNotApplicable,
 	};
 
 	[[nodiscard]] const char *PathDiagnosticCodeName(PathDiagnosticCode code);

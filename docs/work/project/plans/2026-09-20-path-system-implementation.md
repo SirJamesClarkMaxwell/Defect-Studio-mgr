@@ -149,7 +149,9 @@ Result<void> MakeTangent(ScenePath&, PathElementId node);
 Result<void> ApplyAutoHandles(ScenePath&);               // v2 s3 rules; never changes a rigid segment's type
 ```
 
-**Tests:** split then re-evaluate equals original curve (positions within 1e-9 on a 64-point sweep) for Line,
+**Tests:** split then re-evaluate equals original curve (positions within 1e-6 on a 64-point sweep - the
+original 1e-9 predates the float-storage decision in v2 C9 and is unreachable once a split node is stored
+as `glm::vec3`) for Line,
 Cubic, Arc; `Reverse∘Reverse` = identity (nodes, handles, sweeps); delete matrix (Line+Line ok, Line+Arc
 rejected with the code, endpoint delete, last-node rejected); extend inherits type; Make-Tangent on
 Cubic–Cubic (opposite rays, ⅓ chord), Cubic–Line, Cubic–Arc (aligns to end tangent), Line–Arc stays a corner,

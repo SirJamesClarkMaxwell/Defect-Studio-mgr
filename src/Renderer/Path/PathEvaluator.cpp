@@ -100,6 +100,12 @@ namespace DefectStudio
 			case PathDiagnosticCode::BrokenBinding: return "path.broken_binding";
 			case PathDiagnosticCode::ObjectOriginTargetsPath: return "path.object_origin_targets_path";
 			case PathDiagnosticCode::InteriorNodeBuffer: return "path.interior_node_buffer";
+			case PathDiagnosticCode::InvalidSegmentIndex: return "path.invalid_segment_index";
+			case PathDiagnosticCode::ParameterOutOfRange: return "path.parameter_out_of_range";
+			case PathDiagnosticCode::UnknownElement: return "path.unknown_element";
+			case PathDiagnosticCode::MergeRequiresLineNeighbours: return "path.merge_requires_line_neighbours";
+			case PathDiagnosticCode::LastNodeNotRemovable: return "path.last_node_not_removable";
+			case PathDiagnosticCode::TangentNotApplicable: return "path.tangent_not_applicable";
 		}
 		return "path.unknown";
 	}
