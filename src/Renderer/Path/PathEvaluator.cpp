@@ -109,6 +109,9 @@ namespace DefectStudio
 			case PathDiagnosticCode::TessellationDepthLimit: return "path.tessellation_depth_limit";
 			case PathDiagnosticCode::TessellationSampleLimit: return "path.tessellation_sample_limit";
 			case PathDiagnosticCode::InvalidTessellationSettings: return "path.invalid_tessellation_settings";
+			case PathDiagnosticCode::InvalidStrokeStyle: return "path.invalid_stroke_style";
+			case PathDiagnosticCode::InvalidGradient: return "path.invalid_gradient";
+			case PathDiagnosticCode::DecorationsExceedPathLength: return "path.decorations_exceed_path_length";
 		}
 		return "path.unknown";
 	}

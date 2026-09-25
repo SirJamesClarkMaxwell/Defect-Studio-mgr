@@ -210,6 +210,18 @@ namespace DefectStudio
 					data.signedSweepRadians = -data.signedSweepRadians;
 			}, segment.data);
 		}
+		std::swap(edited.style.startDecoration, edited.style.endDecoration);
+		for (PathGradientStop &stop : edited.style.gradient.stops)
+			stop.position = 1.0f - stop.position;
+		std::reverse(edited.style.gradient.stops.begin(), edited.style.gradient.stops.end());
+		const double dashLength = static_cast<double>(edited.style.dash.dashLength);
+		const double gapLength = static_cast<double>(edited.style.dash.gapLength);
+		if (edited.style.dash.enabled && std::isfinite(dashLength) && std::isfinite(gapLength) && dashLength > 0.0 && gapLength > 0.0)
+		{
+			const std::vector<double> lengths = CumulativeLengths(edited, ResolveAuthored(edited));
+			if (!lengths.empty())
+				edited.style.dash.phase = static_cast<float>(dashLength - lengths.back() - static_cast<double>(edited.style.dash.phase));
+		}
 		path = std::move(edited);
 		return {};
 	}

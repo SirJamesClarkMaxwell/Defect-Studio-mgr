@@ -7,6 +7,7 @@
 #include <numbers>
 
 #include "Renderer/Path/PathEvaluator.hpp"
+#include "Renderer/Path/PathDash.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 
 namespace DefectStudio::Tests
@@ -220,5 +221,33 @@ namespace DefectStudio::Tests
 		for (std::size_t index = 0; index < path.segments.size(); ++index)
 			ExpectSameSegmentData(path.segments[index], original.segments[index]);
 		EXPECT_EQ(std::get<CircularArcSegmentData>(path.segments[1].data).signedSweepRadians, std::get<CircularArcSegmentData>(original.segments[1].data).signedSweepRadians);
+	}
+
+	TEST(PathTopologyTests, ReverseMirrorsStyledPathDecorationsGradientAndDashPhase)
+	{
+		ScenePath path = MakePath({glm::vec3(0.0f), glm::vec3(10.0f, 0.0f, 0.0f)}, {Line(PathElementId{3})});
+		path.style.startDecoration.kind = PathDecorationKind::Arrow;
+		path.style.endDecoration.kind = PathDecorationKind::Circle;
+		path.style.gradient.enabled = true;
+		path.style.gradient.stops = {{0.2f, glm::vec3(1.0f, 0.0f, 0.0f), 1.0f}, {0.7f, glm::vec3(0.0f, 0.0f, 1.0f), 0.5f}};
+		path.style.dash = {true, 2.0f, 1.0f, 0.25f};
+		const ScenePath original = path;
+		ASSERT_TRUE(ReversePath(path));
+		EXPECT_EQ(path.style.startDecoration.kind, PathDecorationKind::Circle);
+		EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::Arrow);
+		ASSERT_EQ(path.style.gradient.stops.size(), 2u);
+		EXPECT_NEAR(path.style.gradient.stops[0].position, 0.3f, 1e-6f);
+		EXPECT_NEAR(path.style.gradient.stops[1].position, 0.8f, 1e-6f);
+		// The phase value itself is an implementation detail; what has to hold is that a dash covering
+		// world position s before the reversal covers L - s after it.
+		const std::vector<DashInterval> before = BuildDashIntervals(0.0, 10.0, original.style.dash);
+		const std::vector<DashInterval> after = BuildDashIntervals(0.0, 10.0, path.style.dash);
+		ASSERT_EQ(before.size(), after.size());
+		for (std::size_t index = 0; index < before.size(); ++index)
+		{
+			const DashInterval &mirrored = after[after.size() - 1u - index];
+			EXPECT_NEAR(10.0 - before[index].end, mirrored.start, 1e-6);
+			EXPECT_NEAR(10.0 - before[index].start, mirrored.end, 1e-6);
+		}
 	}
 } // namespace DefectStudio::Tests

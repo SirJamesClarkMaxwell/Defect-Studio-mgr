@@ -36,6 +36,11 @@ namespace DefectStudio
 		TessellationDepthLimit,
 		TessellationSampleLimit,
 		InvalidTessellationSettings,
+		// Stroke and decoration rejections (S5). A style that cannot produce geometry is reported once;
+		// the mesher then emits nothing rather than a degenerate strip the renderer would have to guess at.
+		InvalidStrokeStyle,
+		InvalidGradient,
+		DecorationsExceedPathLength,
 	};
 
 	[[nodiscard]] const char *PathDiagnosticCodeName(PathDiagnosticCode code);

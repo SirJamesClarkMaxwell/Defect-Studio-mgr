@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include "Renderer/Path/PathDash.hpp"
+
 namespace DefectStudio
 {
 	glm::vec3 ApplySceneSelectionHighlight(const glm::vec3 &base, const bool selected, const float strength)
@@ -28,14 +30,12 @@ namespace DefectStudio
 			return {};
 		if (!dashed || dashLength <= 0.0001f || gapLength <= 0.0001f)
 			return {{0.0f, shaftLength}};
-
+		const PathDashStyle style{true, dashLength, gapLength, 0.0f};
+		const std::vector<DashInterval> intervals = BuildDashIntervals(0.0, shaftLength, style);
 		std::vector<SceneArrowShaftSegment> segments;
-		for (float start = 0.0f; start < shaftLength; start += dashLength + gapLength)
-		{
-			const float end = std::min(start + dashLength, shaftLength);
-			if (end > start)
-				segments.push_back({start, end});
-		}
+		segments.reserve(intervals.size());
+		for (const DashInterval &interval : intervals)
+			segments.push_back({static_cast<float>(interval.start), static_cast<float>(interval.end)});
 		return segments;
 	}
 } // namespace DefectStudio

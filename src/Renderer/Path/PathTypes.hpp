@@ -8,6 +8,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Renderer/Path/PathStyle.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
 
 namespace DefectStudio
@@ -107,7 +108,6 @@ namespace DefectStudio
 		PathSegmentData data;
 	};
 
-	// Geometry and identity only. Style, decorations and depth mode arrive in S5 - no dead fields now.
 	struct ScenePath
 	{
 		SceneObjectId id;
@@ -118,6 +118,9 @@ namespace DefectStudio
 		std::uint64_t nextElementId = 1;
 		bool visible = true;
 		bool renderable = true;
+		// Style defaults produce a plain opaque round tube, so every pre-S5 construction of a
+		// ScenePath keeps meaning exactly what it meant before.
+		PathStrokeStyle style;
 	};
 
 	[[nodiscard]] inline PathElementId AllocateElementId(ScenePath &path)
