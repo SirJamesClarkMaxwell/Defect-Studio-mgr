@@ -160,6 +160,18 @@ namespace DefectStudio
 			return m_OrbitalEntities;
 		}
 
+		// Same shape again for paths, where the index is the position in the window's PathStore
+		// rather than in a vector on RendererWindowState.
+		[[nodiscard]] std::vector<entt::entity> &PathEntities()
+		{
+			return m_PathEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &PathEntities() const
+		{
+			return m_PathEntities;
+		}
+
 		[[nodiscard]] Entity ArrowEntityAt(std::size_t index)
 		{
 			if (index >= m_ArrowEntities.size())
@@ -181,6 +193,13 @@ namespace DefectStudio
 			return Entity(m_OrbitalEntities[index], this);
 		}
 
+		[[nodiscard]] Entity PathEntityAt(std::size_t index)
+		{
+			if (index >= m_PathEntities.size())
+				return Entity{};
+			return Entity(m_PathEntities[index], this);
+		}
+
 	private:
 		entt::registry m_Registry;
 		std::vector<entt::entity> m_AtomEntities;
@@ -189,6 +208,7 @@ namespace DefectStudio
 		std::vector<entt::entity> m_ArrowEntities;
 		std::vector<entt::entity> m_FreeLabelEntities;
 		std::vector<entt::entity> m_OrbitalEntities;
+		std::vector<entt::entity> m_PathEntities;
 		std::unordered_map<std::uint64_t, entt::entity> m_ObjectEntities;
 		std::uint64_t m_NextObjectId = 1;
 	};

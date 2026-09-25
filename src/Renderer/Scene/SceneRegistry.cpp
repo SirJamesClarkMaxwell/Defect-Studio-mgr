@@ -16,6 +16,7 @@ namespace DefectStudio
 		case SceneObjectKind::FreeLabel: return "Free label";
 		case SceneObjectKind::SceneArrow: return "Scene arrow";
 		case SceneObjectKind::SceneOrbital: return "Scene orbital";
+		case SceneObjectKind::ScenePath: return "Scene path";
 		}
 		return "Object";
 	}

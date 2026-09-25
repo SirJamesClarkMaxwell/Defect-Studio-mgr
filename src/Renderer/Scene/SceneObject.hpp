@@ -17,6 +17,10 @@ namespace DefectStudio
 		FreeLabel,
 		SceneArrow,
 		SceneOrbital,
+		// Mirror entity for a PathStore entry (S6). Paths live in PathSystem, not in a vector on
+		// RendererWindowState - the mirror is what lets the outliner and picking treat one like any
+		// other scene object once S15 exposes it.
+		ScenePath,
 	};
 
 	[[nodiscard]] const char *SceneObjectKindName(SceneObjectKind kind);

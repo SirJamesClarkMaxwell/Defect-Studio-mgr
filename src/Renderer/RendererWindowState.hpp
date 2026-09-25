@@ -16,6 +16,8 @@
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
+#include "Renderer/Path/PathStore.hpp"
+#include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
@@ -356,6 +358,12 @@ namespace DefectStudio
 			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<ScenePlane> scenePlanes;
+
+		// task/41: the window's paths, and the caches derived from them. A Unique rather than a member
+		// by value so that the vector of windows reallocating does not move the caches out from under
+		// anything holding a reference into them; null until the first path is created (see
+		// SceneSystem::EnsurePathSystem). No shipping UI reaches this before S15.
+		Unique<PathSystem> paths;
 		// Same multi-select shape as selectedSceneArrows; back() is the gizmo anchor.
 		std::vector<SceneObjectId> selectedScenePlanes;
 
@@ -426,6 +434,8 @@ namespace DefectStudio
 			std::vector<SceneArrow> sceneArrows;
 			std::vector<SceneOrbital> sceneOrbitals;
 			std::vector<ScenePlane> scenePlanes;
+			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
+			PathStore paths;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like

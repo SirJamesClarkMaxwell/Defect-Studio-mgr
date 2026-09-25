@@ -603,6 +603,7 @@ namespace DefectStudio
 		previewState.sceneArrows = source.sceneArrows;
 		previewState.sceneOrbitals = source.sceneOrbitals;
 		previewState.scenePlanes = source.scenePlanes;
+		if (source.paths != nullptr) SceneSystem::EnsurePathSystem(previewState).ReplaceStore(source.paths->Store());
 		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
 		// What an export contains is the outliner's camera column alone, independent of what H hid
 		// in the viewport. This is the only place that channel is consumed, and previewState is a

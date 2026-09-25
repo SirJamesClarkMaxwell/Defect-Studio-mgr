@@ -210,4 +210,88 @@ namespace DefectStudio::Tests
 		EXPECT_LT(windowState.sceneArrows[0].start().x, windowState.sceneArrows[0].end().x);
 		EXPECT_NEAR(windowState.sceneArrows[0].end().x - windowState.sceneArrows[0].start().x, 0.1f, 1e-5f);
 	}
+
+	TEST(SceneSystemTests, EnsurePathSystemCreatesOnceAndRetainsItsStore)
+	{
+		RendererWindowState window;
+		PathSystem &first = SceneSystem::EnsurePathSystem(window);
+		ASSERT_TRUE(first.Store().Insert(ScenePath{SceneObjectId{1}}));
+		PathSystem &second = SceneSystem::EnsurePathSystem(window);
+		EXPECT_EQ(&first, &second);
+		EXPECT_TRUE(second.Store().Contains(SceneObjectId{1}));
+	}
+
+	TEST(SceneSystemTests, AppendScenePathAlwaysAllocatesFreshIds)
+	{
+		RendererWindowState window;
+		ScenePath path;
+		path.id = SceneObjectId{99};
+		const SceneObjectId first = SceneSystem::AppendScenePath(window, path);
+		const SceneObjectId second = SceneSystem::AppendScenePath(window, path);
+		EXPECT_NE(first, path.id);
+		EXPECT_NE(first, second);
+		EXPECT_NE(first, SceneObjectId{});
+		EXPECT_NE(second, SceneObjectId{});
+		EXPECT_TRUE(window.paths->Store().Contains(first));
+		EXPECT_TRUE(window.paths->Store().Contains(second));
+	}
+
+	TEST(SceneSystemTests, SyncLabelEntitiesMirrorsPathsWithStableIdsAndStoreIndices)
+	{
+		RendererWindowState window;
+		ScenePath first;
+		first.id = SceneObjectId{10};
+		first.name = "named";
+		first.nodes = {{PathElementId{1}, glm::vec3(0.0f), {}}, {PathElementId{2}, glm::vec3(2.0f, 4.0f, 6.0f), {}}};
+		ScenePath second;
+		second.id = SceneObjectId{11};
+		ASSERT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(first));
+		ASSERT_TRUE(window.paths->Store().Insert(second));
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		ASSERT_EQ(window.sceneRegistry.PathEntities().size(), 2u);
+		Entity firstEntity = window.sceneRegistry.PathEntityAt(0);
+		Entity secondEntity = window.sceneRegistry.PathEntityAt(1);
+		EXPECT_EQ(firstEntity.GetComponent<SceneObjectComponent>().kind, SceneObjectKind::ScenePath);
+		EXPECT_EQ(firstEntity.GetComponent<SceneObjectComponent>().sourceIndex, 0u);
+		EXPECT_EQ(firstEntity.GetComponent<SceneObjectComponent>().id, first.id);
+		EXPECT_EQ(firstEntity.GetComponent<SceneObjectComponent>().displayName, "named");
+		EXPECT_EQ(firstEntity.GetComponent<TransformComponent>().position, glm::vec3(1.0f, 2.0f, 3.0f));
+		EXPECT_FALSE(firstEntity.GetComponent<SelectionComponent>().selected);
+		EXPECT_EQ(secondEntity.GetComponent<SceneObjectComponent>().sourceIndex, 1u);
+		EXPECT_EQ(secondEntity.GetComponent<SceneObjectComponent>().id, second.id);
+		EXPECT_EQ(secondEntity.GetComponent<SceneObjectComponent>().displayName, "path 1");
+		EXPECT_EQ(secondEntity.GetComponent<TransformComponent>().position, glm::vec3(0.0f));
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		EXPECT_EQ(window.sceneRegistry.PathEntityAt(0).GetComponent<SceneObjectComponent>().id, first.id);
+		EXPECT_EQ(window.sceneRegistry.PathEntityAt(1).GetComponent<SceneObjectComponent>().id, second.id);
+	}
+
+	TEST(SceneSystemTests, PathMirrorDoesNotDisturbOtherAnnotationKindsAndNullPathsRemainSupported)
+	{
+		RendererWindowState window;
+		window.freeLabels.push_back({});
+		window.sceneArrows.push_back({});
+		window.sceneOrbitals.push_back({});
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		EXPECT_EQ(window.sceneRegistry.FreeLabelEntities().size(), 1u);
+		EXPECT_EQ(window.sceneRegistry.ArrowEntities().size(), 1u);
+		EXPECT_EQ(window.sceneRegistry.OrbitalEntities().size(), 1u);
+		EXPECT_TRUE(window.sceneRegistry.PathEntities().empty());
+		ASSERT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(ScenePath{SceneObjectId{20}}));
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		EXPECT_EQ(window.sceneRegistry.FreeLabelEntities().size(), 1u);
+		EXPECT_EQ(window.sceneRegistry.ArrowEntities().size(), 1u);
+		EXPECT_EQ(window.sceneRegistry.OrbitalEntities().size(), 1u);
+		EXPECT_EQ(window.sceneRegistry.PathEntities().size(), 1u);
+	}
+
+	TEST(SceneSystemTests, WindowVectorReallocationKeepsPathSystemAtTheSameAddress)
+	{
+		std::vector<RendererWindowState> windows;
+		windows.reserve(1);
+		windows.emplace_back();
+		PathSystem *const paths = &SceneSystem::EnsurePathSystem(windows.front());
+		windows.emplace_back();
+		EXPECT_EQ(&SceneSystem::EnsurePathSystem(windows.front()), paths);
+	}
 } // namespace DefectStudio::Tests

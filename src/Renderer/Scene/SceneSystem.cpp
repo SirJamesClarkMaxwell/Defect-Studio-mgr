@@ -236,6 +236,9 @@ namespace DefectStudio::SceneSystem
 		for (const entt::entity entity : scene.OrbitalEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.OrbitalEntities().clear();
+		for (const entt::entity entity : scene.PathEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.PathEntities().clear();
 
 		scene.LabelEntities().reserve(windowState.pinnedMeasurements.size());
 		for (std::size_t index = 0; index < windowState.pinnedMeasurements.size(); ++index)
@@ -302,6 +305,31 @@ namespace DefectStudio::SceneSystem
 				windowState.selectedSceneOrbitals.end()});
 			scene.OrbitalEntities().push_back(static_cast<entt::entity>(entity));
 		}
+
+		if (windowState.paths != nullptr)
+		{
+			const PathStore &paths = windowState.paths->Store();
+			scene.PathEntities().reserve(paths.Size());
+			for (std::size_t index = 0; index < paths.Size(); ++index)
+			{
+				// No unset-id branch like the arrow block has: PathStore::Insert rejects an unset id,
+				// so every stored path already carries one allocated by the window's registry.
+				const ScenePath *storedPath = paths.At(index);
+				if (storedPath == nullptr)
+					continue;
+				glm::vec3 position(0.0f);
+				for (const PathNode &node : storedPath->nodes)
+					position += node.position;
+				if (!storedPath->nodes.empty())
+					position /= static_cast<float>(storedPath->nodes.size());
+				Entity entity = scene.CreateObject(
+					SceneObjectKind::ScenePath, index,
+					storedPath->name.empty() ? "path " + std::to_string(index) : storedPath->name, storedPath->id);
+				entity.AddComponent<TransformComponent>(TransformComponent{position});
+				entity.AddComponent<SelectionComponent>(SelectionComponent{false});
+				scene.PathEntities().push_back(static_cast<entt::entity>(entity));
+			}
+		}
 	}
 
 	SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow)
@@ -309,6 +337,21 @@ namespace DefectStudio::SceneSystem
 		arrow.id = windowState.sceneRegistry.AllocateObjectId();
 		windowState.sceneArrows.push_back(std::move(arrow));
 		return windowState.sceneArrows.back().id;
+	}
+
+	PathSystem &EnsurePathSystem(RendererWindowState &windowState)
+	{
+		if (windowState.paths == nullptr)
+			windowState.paths = CreateUnique<PathSystem>();
+		return *windowState.paths;
+	}
+
+	SceneObjectId AppendScenePath(RendererWindowState &windowState, ScenePath path)
+	{
+		path.id = windowState.sceneRegistry.AllocateObjectId();
+		const SceneObjectId id = path.id;
+		EnsurePathSystem(windowState).Store().Insert(std::move(path));
+		return id;
 	}
 
 	std::vector<std::size_t> ResolveSourceIndices(const SceneRegistry &scene, const std::vector<SceneObjectId> &ids)

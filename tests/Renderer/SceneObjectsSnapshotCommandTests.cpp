@@ -2,6 +2,7 @@
 
 #include "Core/Undo/UndoStack.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -105,5 +106,41 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(result.Error().code, "scene_objects.undo_target_unavailable");
 		EXPECT_TRUE(stack.CanUndo());
 		EXPECT_EQ(stack.GetUndoDepth(), 1u);
+	}
+
+	TEST(SceneObjectsSnapshotCommandTests, RestoreReturnsCapturedPathsAndClearsTheirCache)
+	{
+		RendererWindowState window = MakeWindowWithLabel("before");
+		ScenePath path;
+		path.id = SceneObjectId{1};
+		path.name = "captured";
+		ASSERT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(path));
+		ScenePath unchanged;
+		unchanged.id = SceneObjectId{2};
+		unchanged.name = "unchanged";
+		ASSERT_TRUE(window.paths->Store().Insert(unchanged));
+		const SceneObjectsSnapshot snapshot = CaptureSceneObjectsSnapshot(window);
+		ASSERT_TRUE(window.paths->Store().MutateGeometry(path.id, [](ScenePath &mutated) { mutated.name = "mutated"; }));
+		ScenePath added;
+		added.id = SceneObjectId{3};
+		ASSERT_TRUE(window.paths->Store().Insert(added));
+		window.paths->Caches().Store(path.id, {{1, 1}, 1, 1}, {});
+		RestoreSceneObjectsSnapshot(window, snapshot);
+		ASSERT_NE(window.paths, nullptr);
+		ASSERT_EQ(window.paths->Store().Size(), 2u);
+		EXPECT_EQ(window.paths->Store().Find(path.id)->name, "captured");
+		EXPECT_EQ(window.paths->Store().Find(unchanged.id)->name, "unchanged");
+		EXPECT_EQ(window.paths->Store().Find(added.id), nullptr);
+		EXPECT_EQ(window.paths->Caches().Size(), 0u);
+	}
+
+	TEST(SceneObjectsSnapshotCommandTests, RestoreFromNullPathsCreatesAnEmptyStore)
+	{
+		RendererWindowState window = MakeWindowWithLabel("before");
+		ASSERT_EQ(window.paths, nullptr);
+		const SceneObjectsSnapshot snapshot = CaptureSceneObjectsSnapshot(window);
+		RestoreSceneObjectsSnapshot(window, snapshot);
+		ASSERT_NE(window.paths, nullptr);
+		EXPECT_TRUE(window.paths->Store().Empty());
 	}
 } // namespace DefectStudio::Tests

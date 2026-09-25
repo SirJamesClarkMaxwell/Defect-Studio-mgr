@@ -74,6 +74,17 @@ namespace DefectStudio
 		// must keep pushing directly to windowState.sceneArrows and calling SyncLabelEntities itself.
 		SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow);
 
+		// task/41: the window's PathSystem, created on first use. Every consumer goes through this
+		// rather than dereferencing windowState.paths, so a window that has never held a path costs
+		// nothing and no call site has to repeat the null check.
+		[[nodiscard]] PathSystem &EnsurePathSystem(RendererWindowState &windowState);
+
+		// The AppendSceneArrow rule, applied to paths: the id on `path` is discarded and a fresh one
+		// allocated, because a duplicated path arrives still carrying its source's id and one id maps to
+		// one entity. Does not call SyncLabelEntities and does not touch selection. Undo restoration
+		// deliberately keeps original ids and so goes through PathSystem::ReplaceStore instead.
+		SceneObjectId AppendScenePath(RendererWindowState &windowState, ScenePath path);
+
 		// Ids -> positions in the matching flat array, for the code that must still speak indices:
 		// OpenGlRendererBackend's signatures are deliberately untouched by task 20, so the render call
 		// sites convert right before the draw. Ids that no longer resolve are dropped rather than
