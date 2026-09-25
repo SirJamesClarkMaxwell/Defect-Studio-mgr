@@ -13,7 +13,9 @@ namespace DefectStudio
 	ScenePath MakeDevScenePath(const ScenePathDevPreset preset, const glm::vec3 &worldPosition)
 	{
 		ScenePath path;
-		path.persistKey = "dev-path";
+		// No persistKey here: EnsureScenePersistKeys mints a unique one once the path is in a window,
+		// and a shared literal made every dev path the same saved object - MergeWindowSceneObjects
+		// keys on persistKey, so four of them collapsed into one on save.
 		path.name = "Dev path";
 		path.visible = true;
 		path.renderable = true;

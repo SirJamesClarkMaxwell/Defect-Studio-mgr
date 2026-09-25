@@ -148,6 +148,34 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(ValidatePath(*window.paths->Store().At(0)).empty());
 	}
 
+	// Two keyless paths in one window must not end up sharing an identity: MergeWindowSceneObjects
+	// keys on persistKey, so a shared key silently drops every path but the last one on save.
+	TEST(ScenePathPersistenceTests, KeylessPathsGetDistinctPersistKeys)
+	{
+		RendererWindowState window;
+		window.structure = Structure();
+		PathSystem &paths = SceneSystem::EnsurePathSystem(window);
+		for (int index = 0; index < 2; ++index)
+		{
+			ScenePath path;
+			path.id = window.sceneRegistry.AllocateObjectId();
+			path.nodes = {{AllocateElementId(path), {0, 0, 0}, {}}, {AllocateElementId(path), {1, 0, 0}, {}}};
+			PathSegment segment;
+			segment.id = AllocateElementId(path);
+			segment.data = LineSegmentData{};
+			path.segments.push_back(std::move(segment));
+			ASSERT_TRUE(paths.Store().Insert(std::move(path)));
+		}
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		const auto objects = ExtractPersistedSceneObjects(window);
+		ASSERT_EQ(objects.size(), 2u);
+		const std::string first = std::get<PersistedScenePath>(objects[0]).persistKey;
+		const std::string second = std::get<PersistedScenePath>(objects[1]).persistKey;
+		EXPECT_FALSE(first.empty());
+		EXPECT_FALSE(second.empty());
+		EXPECT_NE(first, second);
+	}
+
 	TEST(ScenePathPersistenceTests, InvalidMigrationHasNoPartialPath)
 	{
 		PersistedSceneArrow arrow;
