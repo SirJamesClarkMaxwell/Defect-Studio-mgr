@@ -496,6 +496,7 @@ namespace DefectStudio
 			if (index < windowState.scenePlanes.size())
 				selectedScenePlanes.push_back(index);
 		}
+		const PathRenderInput pathInput{windowState.paths.get()};
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,
@@ -528,7 +529,8 @@ namespace DefectStudio
 			windowState.bondLabelAutoOffsetEnabled,
 			windowState.bondLabelAutoOffsetMagnitude,
 			windowState.bondLabelAlignThresholdDeg,
-			windowState.showPeriodicBonds);
+			windowState.showPeriodicBonds,
+			&pathInput);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(

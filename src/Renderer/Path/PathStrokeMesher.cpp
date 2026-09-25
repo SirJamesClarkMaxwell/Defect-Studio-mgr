@@ -232,10 +232,14 @@ namespace DefectStudio
 			else
 			{
 				const std::uint32_t first = static_cast<std::uint32_t>(geometry.ribbonVertices.size());
+				// side is 0 here, unlike the shaft's +/-1: a decoration's half width varies from contour
+				// point to contour point, so it cannot be expressed as one shader-side stroke half
+				// width and the offset is baked into the position instead. A non-zero side would make
+				// the ribbon vertex shader widen these vertices a second time.
 				for (const DecorationContourPoint &point : contour.points)
 					for (const float side : {-1.0f, 1.0f})
 						geometry.ribbonVertices.push_back({glm::vec3(endpoint.position + inward * point.s + endpoint.normal * point.halfWidth * static_cast<double>(side)),
-							glm::vec3(endpoint.tangent), glm::vec3(endpoint.normal), SampleStrokeColor(style, endpoint.normalizedT), side,
+							glm::vec3(endpoint.tangent), glm::vec3(endpoint.normal), SampleStrokeColor(style, endpoint.normalizedT), 0.0f,
 							static_cast<float>(endpoint.normalizedT), static_cast<float>(endpoint.arcLength)});
 				for (std::uint32_t point = 0; point + 1u < contour.points.size(); ++point)
 				{

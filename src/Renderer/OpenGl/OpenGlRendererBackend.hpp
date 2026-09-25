@@ -115,6 +115,28 @@ namespace DefectStudio
 		OpenGlMeshHandles mesh;
 	};
 
+	// One uploaded stroke mesh per ScenePath. The CPU geometry itself lives in PathCaches (S6); this
+	// is only its GL mirror, deliberately outside the cache so PathCaches stays unit-testable without
+	// a GL context. `key` is the evaluation key the buffers were built from - a mismatch against the
+	// current frame's key is the only thing that triggers a re-upload, and its lodBucket doubles as
+	// QuantiseLod's `previousBucket`, which is where the zoom hysteresis lives between frames.
+	// Vertex attributes are re-declared on every upload, so one entry can switch between the tube and
+	// the ribbon layout when the style profile changes without carrying a layout flag.
+	struct OpenGlScenePathMeshCache
+	{
+		PathEvaluationKey key;
+		OpenGlMeshHandles mesh;
+	};
+
+	// Paths reach the backend as one struct rather than two more defaulted parameters on RenderWindow,
+	// whose signature is already at its limit. The PathSystem is non-const because the pass fills
+	// PathCaches on a miss - evaluating, tessellating and meshing a path is exactly the work S6's cache
+	// exists to skip on every frame after the first.
+	struct PathRenderInput
+	{
+		PathSystem *paths = nullptr;
+	};
+
 	// Shared cleanup for per-object cached meshes and the backend's static meshes.
 	void DeleteMeshHandles(OpenGlMeshHandles &mesh);
 
@@ -168,6 +190,9 @@ namespace DefectStudio
 		OpenGlMeshHandles scenePlaneMesh;
 		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
 		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
+		// Same reason as the orbital map above: a path keeps its uploaded stroke when the store is
+		// reordered. Entries whose id no longer exists in the store are dropped once per frame.
+		std::unordered_map<SceneObjectId, OpenGlScenePathMeshCache> scenePathMeshCache;
 
 		// Per-window orbital isosurface GPU buffers. Was 2 backend-global slots shared by every
 		// window; regenerating one window's orbital mesh (e.g. dragging its iso-value slider)
@@ -240,7 +265,11 @@ namespace DefectStudio
 			float bondLabelAlignThresholdDeg = 45.0f,
 			// See RendererWindowState::showPeriodicBonds. Last in the list only because everything
 			// above it is already positional at the call sites.
-			bool showPeriodicBonds = true);
+			bool showPeriodicBonds = true,
+			// task/41 S7. A struct rather than the usual pair of defaulted vectors: everything a path
+			// pass needs already lives behind RendererWindowState::paths, and the next stages add to
+			// PathRenderInput instead of to this signature. nullptr = this window owns no paths.
+			const PathRenderInput *pathInput = nullptr);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -347,6 +376,24 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		// ScenePaths (task/41). Called twice per frame with opposite `renderAlwaysOnTop`, for the same
+		// reason renderSceneArrows is: PathDepthMode::DepthTest belongs in the early world-space pass
+		// with the structure, PathDepthMode::AlwaysOnTop in the late depth-disabled pass next to
+		// Arrow2D and the labels, and neither should pay for the other kind's work.
+		//
+		// This is where S1-S6 meet GL: per path, resolve the LOD bucket from screen density, build the
+		// evaluation key from the store's revisions, and take the tessellated + stroked geometry from
+		// PathCaches - recomputing it only on a miss. viewportPixelSize is the framebuffer resolution,
+		// used for the density probe that feeds QuantiseLod (not for stroke width, which is world-space
+		// in S7 - see the task file).
+		void renderScenePaths(
+			const PathRenderInput &input,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			bool renderAlwaysOnTop,
 			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(

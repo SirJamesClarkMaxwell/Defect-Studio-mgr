@@ -789,6 +789,15 @@ namespace DefectStudio
 		if (!arrowQuadLoaded.HasValue())
 			return arrowQuadLoaded.Error();
 
+		Result<void> pathTubeLoaded = m_ShaderLibrary.LoadGraphicsProgram(
+			"path_tube", m_ShaderDirectory / Path("path_tube.vert"), m_ShaderDirectory / Path("path_stroke.frag"));
+		if (!pathTubeLoaded.HasValue())
+			return pathTubeLoaded.Error();
+		Result<void> pathRibbonLoaded = m_ShaderLibrary.LoadGraphicsProgram(
+			"path_ribbon", m_ShaderDirectory / Path("path_ribbon.vert"), m_ShaderDirectory / Path("path_stroke.frag"));
+		if (!pathRibbonLoaded.HasValue())
+			return pathRibbonLoaded.Error();
+
 		Result<void> geometryResult = createStaticGeometry(primitiveMeshes);
 		if (!geometryResult.HasValue())
 		{
@@ -886,7 +895,8 @@ namespace DefectStudio
 		bool bondLabelAutoOffsetEnabled,
 		float bondLabelAutoOffsetMagnitude,
 		float bondLabelAlignThresholdDeg,
-		bool showPeriodicBonds)
+		bool showPeriodicBonds,
+		const PathRenderInput *pathInput)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -1047,6 +1057,8 @@ namespace DefectStudio
 			renderSceneArrows(
 				sceneArrows, selectedSceneArrows, camera, resources, globalSettings, false, viewportPixelSize,
 				sceneOffset);
+		if (pathInput != nullptr && pathInput->paths != nullptr)
+			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
 		if (showAtoms)
 			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
 		renderScenePlanes(
@@ -1078,6 +1090,8 @@ namespace DefectStudio
 			renderSceneArrows(
 				sceneArrows, selectedSceneArrows, camera, resources, globalSettings, true, viewportPixelSize,
 				sceneOffset);
+		if (pathInput != nullptr && pathInput->paths != nullptr)
+			renderScenePaths(*pathInput, camera, resources, globalSettings, true, viewportPixelSize, sceneOffset);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -1175,6 +1189,12 @@ namespace DefectStudio
 				DeleteMeshHandles(cacheEntry.mesh);
 			}
 			resources.sceneOrbitalMeshCache.clear();
+			for (auto &[id, cacheEntry] : resources.scenePathMeshCache)
+			{
+				(void)id;
+				DeleteMeshHandles(cacheEntry.mesh);
+			}
+			resources.scenePathMeshCache.clear();
 		}
 
 		m_LabelFont.reset();

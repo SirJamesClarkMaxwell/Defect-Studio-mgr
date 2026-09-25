@@ -1,5 +1,7 @@
 #include "Core/dspch.hpp"
 
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -153,8 +155,15 @@ namespace DefectStudio::Tests
 		const StrokeGeometry flat = BuildStroke(path, style);
 		EXPECT_TRUE(flat.tubeVertices.empty());
 		EXPECT_FALSE(flat.ribbonVertices.empty());
+		// Shaft vertices carry the shader's expansion sign; decoration vertices carry 0 because their
+		// own varying half width is already baked into the position (see AppendDecoration).
 		for (const StrokeRibbonVertex &vertex : flat.ribbonVertices)
-			EXPECT_TRUE(vertex.side == -1.0f || vertex.side == 1.0f);
+			EXPECT_TRUE(vertex.side == -1.0f || vertex.side == 0.0f || vertex.side == 1.0f);
+		const std::size_t shaftSides = static_cast<std::size_t>(std::count_if(
+			flat.ribbonVertices.begin(), flat.ribbonVertices.end(),
+			[](const StrokeRibbonVertex &vertex) { return vertex.side != 0.0f; }));
+		EXPECT_GT(shaftSides, 0u);
+		EXPECT_LT(shaftSides, flat.ribbonVertices.size()); // this path has an end decoration
 	}
 
 	TEST(PathStrokeMesherTests, BendsOfNinetyAndOneHundredEightyDegreesKeepFiniteUnitNormals)

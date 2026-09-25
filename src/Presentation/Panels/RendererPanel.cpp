@@ -37,6 +37,7 @@
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
+#include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ViewportSidePanel.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SceneVisibility.hpp"
@@ -608,6 +609,7 @@ namespace DefectStudio
 				ImGui::EndMenu();
 			}
 			DrawOrbitalAddMenu(windowState, m_ContextMenuWorldPosition);
+			DrawScenePathDevAddMenu(windowState, m_ContextMenuWorldPosition);
 			ImGui::EndMenu();
 		}
 
