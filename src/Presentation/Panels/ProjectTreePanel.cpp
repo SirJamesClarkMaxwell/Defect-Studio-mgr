@@ -442,20 +442,60 @@ namespace DefectStudio
 		}
 	}
 
+	const ProjectTreePanel::CachedDirectoryListing &ProjectTreePanel::listingFor(const Path &directory)
+	{
+		// No TTL, on purpose. The first version of this cache expired after a second, which is the
+		// right shape when a directory read costs microseconds. It is the wrong shape here: listing
+		// four entries on the user's FUSE mount at K: was measured at 9.2 SECONDS, so a one-second
+		// TTL turned continuous slowness into a nine-second freeze every second - worse than no
+		// cache at all. A read that expensive may only happen when someone asks for it.
+		//
+		// So an entry lives until something invalidates it: a file operation this panel performs,
+		// or the user pressing Refresh. An external change made by another program does not appear
+		// on its own, which is a real cost and the reason Refresh is in the toolbar rather than
+		// buried in a menu.
+		//
+		// ponytail: this keeps the 9-second read, it just stops repeating it - the first expand of a
+		// directory on a slow mount still blocks the UI thread for as long as the filesystem takes.
+		// The real ceiling is synchronous IO on the main thread; the upgrade is to list through
+		// JobSystem and draw from the cache while it runs. That is task 34, not this hotfix.
+		const std::string key = directory.String();
+		const auto now = std::chrono::steady_clock::now();
+		const auto it = m_ListingCache.find(key);
+		if (it != m_ListingCache.end())
+			return it->second;
+
+		CachedDirectoryListing listing;
+		listing.readAt = now;
+		listing.exists = FileSystem::Exists(directory.Native());
+		if (listing.exists)
+		{
+			listing.entries = FileSystem::ListDirectory(directory.Native());
+			SortDirectoryEntries(listing.entries);
+		}
+		return m_ListingCache.insert_or_assign(key, std::move(listing)).first->second;
+	}
+
+	void ProjectTreePanel::invalidateListingCache()
+	{
+		m_ListingCache.clear();
+	}
+
 	void ProjectTreePanel::rebuildVisibleFlatList()
 	{
 		m_VisibleFlatList.clear();
 		for (const ProjectRootEntry &section : m_Roots)
 		{
-			if (FileSystem::Exists(section.path.Native()))
+			if (listingFor(section.path).exists)
 				collectVisibleEntries(section.path);
 		}
 	}
 
 	void ProjectTreePanel::collectVisibleEntries(const Path &directory)
 	{
-		std::vector<DirectoryEntryInfo> entries = FileSystem::ListDirectory(directory.Native());
-		SortDirectoryEntries(entries);
+		// By value on purpose: the recursion below calls listingFor again, which can insert into
+		// m_ListingCache and rehash it, which would leave a reference into the map dangling.
+		const std::vector<DirectoryEntryInfo> entries = listingFor(directory).entries;
 		for (const DirectoryEntryInfo &entry : entries)
 		{
 			const Path entryPath(entry.path);
@@ -574,6 +614,7 @@ namespace DefectStudio
 				std::error_code error;
 				const bool ok = op.isCut ? FileSystem::Rename(op.source.Native(), destination.Native(), error)
 										  : FileSystem::Copy(op.source.Native(), destination.Native(), error);
+			invalidateListingCache();
 				if (!ok)
 				{
 					pushNotification(
@@ -592,6 +633,7 @@ namespace DefectStudio
 					std::error_code error;
 					const bool ok = op.isCut ? FileSystem::Rename(op.source.Native(), destination.Native(), error)
 											  : FileSystem::Copy(op.source.Native(), destination.Native(), error);
+			invalidateListingCache();
 					if (!ok)
 					{
 						pushNotification(
@@ -659,6 +701,13 @@ namespace DefectStudio
 
 	void ProjectTreePanel::renderToolbar()
 	{
+		// The only way a change made outside this panel reaches the tree - see listingFor for why
+		// there is no automatic expiry.
+		if (ImGui::Button(ICON_FA_ROTATE_RIGHT "##ProjectTreeRefresh"))
+			invalidateListingCache();
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+			ImGui::SetTooltip("Odswiez drzewo. Zawartosc katalogow jest pamietana, zeby nie czytac wolnego dysku co klatke.");
+		ImGui::SameLine();
 		if (ImGui::Button(ICON_FA_FOLDER_PLUS " Add Root..."))
 		{
 			Result<std::optional<Path>> picked = Platform::PickFolder({});
@@ -804,6 +853,7 @@ namespace DefectStudio
 			else
 			{
 				ok = FileSystem::CreateDirectories(target.Native(), error);
+				invalidateListingCache();
 				if (ok && m_CreatePopupKind == CreateEntryKind::Defect)
 				{
 					// Stub calc-input files - just POSCAR/KPOINTS for now, more will follow as this
@@ -855,6 +905,7 @@ namespace DefectStudio
 		{
 			const Path destination = m_RenamePopupTarget.parent_path() / std::string(m_RenameNameBuffer.data());
 			std::error_code error;
+			invalidateListingCache();
 			if (!FileSystem::Rename(m_RenamePopupTarget.Native(), destination.Native(), error))
 			{
 				pushNotification(
@@ -908,6 +959,7 @@ namespace DefectStudio
 					FileSystem::RemoveAll(target.Native(), error);
 				else
 					FileSystem::Remove(target.Native(), error);
+				invalidateListingCache();
 				if (error)
 					pushNotification("Failed to delete " + target.filename().String() + ": " + error.message(), true);
 			}
@@ -962,6 +1014,7 @@ namespace DefectStudio
 			std::error_code error;
 			const bool ok = op.isCut ? FileSystem::Rename(op.source.Native(), destination.Native(), error)
 									  : FileSystem::Copy(op.source.Native(), destination.Native(), error);
+			invalidateListingCache();
 			if (!ok)
 			{
 				pushNotification(
@@ -1006,6 +1059,7 @@ namespace DefectStudio
 			std::error_code error;
 			const bool ok = op.isCut ? FileSystem::Rename(op.source.Native(), renamedDestination.Native(), error)
 									  : FileSystem::Copy(op.source.Native(), renamedDestination.Native(), error);
+			invalidateListingCache();
 			if (!ok)
 			{
 				pushNotification(
@@ -1039,7 +1093,7 @@ namespace DefectStudio
 			return;
 
 		ImGui::Indent();
-		if (!FileSystem::Exists(section.path.Native()))
+		if (!listingFor(section.path).exists)
 			ImGui::TextColored(
 				ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Folder not found (mount disconnected?): %s", section.path.String().c_str());
 		else
@@ -1136,8 +1190,9 @@ namespace DefectStudio
 
 	void ProjectTreePanel::renderDirectoryContents(const Path &directory)
 	{
-		std::vector<DirectoryEntryInfo> entries = FileSystem::ListDirectory(directory.Native());
-		SortDirectoryEntries(entries);
+		// By value for the same reason as collectVisibleEntries: this recurses into itself for every
+		// expanded child, and each of those can rehash m_ListingCache.
+		const std::vector<DirectoryEntryInfo> entries = listingFor(directory).entries;
 
 		const TreeClipboardState &clipboard = GetTreeClipboard();
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -126,6 +127,22 @@ namespace DefectStudio
 		std::string m_KeyboardCursorPath;
 		// Absent = collapsed (matches the old implicit-default-closed TreeNodeEx behavior).
 		std::unordered_map<std::string, bool> m_ExpandedPaths;
+		// One directory's contents as last read from disk, plus whether the directory was there at
+		// all. Both tree walks per frame - rebuildVisibleFlatList's and renderDirectoryContents'
+		// - read through listingFor() instead of hitting the filesystem, because they hit it twice
+		// per frame for every expanded directory otherwise. Free on NTFS, and on a FUSE/network
+		// mount it was tens of thousands of readdir+stat round trips per second.
+		struct CachedDirectoryListing
+		{
+			std::vector<DirectoryEntryInfo> entries;
+			std::chrono::steady_clock::time_point readAt{};
+			bool exists = true;
+		};
+		std::unordered_map<std::string, CachedDirectoryListing> m_ListingCache;
+		[[nodiscard]] const CachedDirectoryListing &listingFor(const Path &directory);
+		// After this panel writes to disk (create/rename/delete/paste/drag-move), so the user's own
+		// change is on screen on the very next frame rather than after the TTL.
+		void invalidateListingCache();
 		// Rebuilt fresh at the top of every Render() by rebuildVisibleFlatList(), in on-screen order -
 		// only entries under currently-expanded folders appear, same as what's actually
 		// visible/clickable.
