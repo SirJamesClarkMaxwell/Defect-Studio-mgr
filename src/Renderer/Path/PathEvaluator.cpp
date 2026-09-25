@@ -106,6 +106,9 @@ namespace DefectStudio
 			case PathDiagnosticCode::MergeRequiresLineNeighbours: return "path.merge_requires_line_neighbours";
 			case PathDiagnosticCode::LastNodeNotRemovable: return "path.last_node_not_removable";
 			case PathDiagnosticCode::TangentNotApplicable: return "path.tangent_not_applicable";
+			case PathDiagnosticCode::TessellationDepthLimit: return "path.tessellation_depth_limit";
+			case PathDiagnosticCode::TessellationSampleLimit: return "path.tessellation_sample_limit";
+			case PathDiagnosticCode::InvalidTessellationSettings: return "path.invalid_tessellation_settings";
 		}
 		return "path.unknown";
 	}

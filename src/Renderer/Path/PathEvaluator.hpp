@@ -31,6 +31,11 @@ namespace DefectStudio
 		MergeRequiresLineNeighbours,
 		LastNodeNotRemovable,
 		TangentNotApplicable,
+		// Tessellation limits (S3). Reported, not hidden: the caller decides whether a coarser curve is
+		// acceptable or the tolerance was unreasonable.
+		TessellationDepthLimit,
+		TessellationSampleLimit,
+		InvalidTessellationSettings,
 	};
 
 	[[nodiscard]] const char *PathDiagnosticCodeName(PathDiagnosticCode code);
