@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/vec2.hpp>
@@ -42,6 +43,29 @@ namespace DefectStudio
 	//     axis the sidebar toggles own;
 	//   - anything overlapping central on both axes -> Central.
 	[[nodiscard]] DockRegion ClassifyDockRegion(const DockRectangle &node, const DockRectangle &central);
+
+	// Sticky panel -> region memory.
+	//
+	// A panel only reports a dock node while it is visible, but hiding it is exactly what destroys
+	// that node: ImGui merges away a dock node whose last window stops being submitted, and the
+	// sibling takes the space. So a region recomputed from scratch on every toggle forgets the
+	// panel it just hid - and worse, a panel that was somewhere else can slide into the vacated
+	// spot and be classified into the region instead. Either way the toggle dies after one round
+	// trip. Observations therefore only ever overwrite an entry, never erase one.
+	class DockRegionTracker
+	{
+	public:
+		// Records where a panel is right now. Call only for panels that are visible AND docked -
+		// a hidden or floating panel has nothing to say about its region and must not overwrite
+		// what was remembered while it was docked.
+		void Observe(const std::string &title, DockRegion region);
+
+		// The panel's last known region, or Floating if it has never been seen docked.
+		[[nodiscard]] DockRegion RegionOf(const std::string &title) const;
+
+	private:
+		std::unordered_map<std::string, DockRegion> m_Regions;
+	};
 
 	// One region's hide/restore memory.
 	//

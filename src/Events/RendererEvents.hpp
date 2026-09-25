@@ -393,6 +393,11 @@ namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows
 {
+	// Opens an empty renderer window (e.g. the Project Tree and main menu "+" actions).
+	struct OpenEmptyRequested final : public BusEvent
+	{
+	};
+
 	// Opens filePath as a new renderer window at runtime (e.g. Project Tree "Open Defect").
 	// Handled off the main thread via JobSystem - see RendererLayer::onOpenStructureRequested.
 	struct OpenStructureRequested final : public BusEvent

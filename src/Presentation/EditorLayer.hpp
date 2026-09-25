@@ -24,6 +24,7 @@
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/EditorUiState.hpp"
+#include "Presentation/PanelDockRegions.hpp"
 #include "Presentation/Panels/LoggingPanel.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
 #include "Presentation/Panels/ProjectTreePanel.hpp"
@@ -168,6 +169,10 @@ namespace DefectStudio
 		void renderToolsMenu();
 		void renderHelpMenu();
 		void renderNewSceneWindowButton();
+		void updateDockRegionPanelTitles();
+		void registerDockRegionCommands();
+		void toggleDockRegion(DockRegion region);
+		void applyDockRegionDecision(const DockRegionToggle::Decision &decision);
 		void initializePanelsIfNeeded();
 		void handleFontShortcuts(Event &event);
 		void renderCommandPalettePopup();
@@ -277,6 +282,7 @@ namespace DefectStudio
 		bool m_CommandPaletteOpenRequested = false;
 		int m_CommandPaletteSelection = 0;
 		std::array<char, 128> m_CommandPaletteSearchBuffer{};
+		std::optional<std::string> m_PendingPanelFocusTitle;
 		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
 		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see
 		// RendererStartupBootstrap::GenerateRendererWindowId, which pollPendingWindowRestores
@@ -304,6 +310,13 @@ namespace DefectStudio
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
 		PanelId m_NewStructureWizardPanelId = 0;
+		DockRegionToggle m_LeftDockRegion;
+		DockRegionToggle m_BottomDockRegion;
+		DockRegionToggle m_RightDockRegion;
+		DockRegionTracker m_DockRegionTracker;
+		std::vector<std::string> m_LeftDockTitles;
+		std::vector<std::string> m_BottomDockTitles;
+		std::vector<std::string> m_RightDockTitles;
 
 		// Shared with App's StructureLifecycleCoordinator: the one place in-progress creation
 		// sessions live. Panels read through this instead of keeping their own draft copies.

@@ -32,6 +32,24 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "editor.toggle_left_dock_region"
+    chord: "Ctrl+B"
+    command: "editor.toggle_left_dock_region"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "editor.toggle_bottom_dock_region"
+    chord: "Ctrl+J"
+    command: "editor.toggle_bottom_dock_region"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "editor.toggle_right_dock_region"
+    chord: "Ctrl+Alt+I"
+    command: "editor.toggle_right_dock_region"
+    context: ""
+    layer: 0
+    enabled: true
   - id: "system.quit"
     chord: "Ctrl+Shift+W"
     command: "app.quit"
@@ -504,7 +522,7 @@ bindings:
     enabled: true
   - id: "terminal.focus"
     chord: "Ctrl+`"
-    command: "terminal.focus"
+    command: "terminal.toggle"
     context: ""
     layer: 0
     enabled: true

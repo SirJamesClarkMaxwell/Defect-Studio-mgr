@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -336,14 +337,14 @@ namespace DefectStudio
 		Ref<ElectronicStructureSession> m_Session;
 	};
 
-	// Un-hides the panel if the user had closed it, then focuses it - a closed docked window has no
-	// ImGui window to focus, so SetVisible must run first (that frame's Render() reopens it, then
-	// SetWindowFocus can find it by title).
+	// Un-hides the panel if the user had closed it, then queues focus until after panel rendering.
+	// A closed docked window has no ImGui window to focus during command execution.
 	class FocusPanelCommand final : public ICommand
 	{
 	public:
-		FocusPanelCommand(WeakRef<IPanel> panel, std::string description)
-			: m_Panel(std::move(panel)), m_Description(std::move(description))
+		FocusPanelCommand(WeakRef<IPanel> panel, std::function<void(const std::string &)> requestFocus,
+		                  std::string description)
+			: m_Panel(std::move(panel)), m_RequestFocus(std::move(requestFocus)), m_Description(std::move(description))
 		{
 		}
 
@@ -353,7 +354,7 @@ namespace DefectStudio
 			if (panel == nullptr)
 				return {};
 			panel->SetVisible(true);
-			ImGui::SetWindowFocus(panel->GetTitle().c_str());
+			m_RequestFocus(panel->GetTitle());
 			return {};
 		}
 
@@ -364,6 +365,7 @@ namespace DefectStudio
 
 	private:
 		WeakRef<IPanel> m_Panel;
+		std::function<void(const std::string &)> m_RequestFocus;
 		std::string m_Description;
 	};
 
@@ -577,6 +579,12 @@ namespace DefectStudio
 		{
 			entry.panel->Render();
 		}
+		if (m_PendingPanelFocusTitle.has_value()
+			&& ImGui::FindWindowByName(m_PendingPanelFocusTitle->c_str()) != nullptr)
+		{
+			ImGui::SetWindowFocus(m_PendingPanelFocusTitle->c_str());
+			m_PendingPanelFocusTitle.reset();
+		}
 	}
 
 	void EditorLayer::initializePanelsIfNeeded()
@@ -602,7 +610,10 @@ namespace DefectStudio
 					{},
 					CommandFlags::None},
 				[this](CommandContext &) -> Unique<ICommand> {
-					return CreateUnique<FocusPanelCommand>(findPanel(m_ProjectTreePanelId), "Focus Project Tree");
+					return CreateUnique<FocusPanelCommand>(
+						findPanel(m_ProjectTreePanelId),
+						[this](const std::string &title) { m_PendingPanelFocusTitle = title; },
+						"Focus Project Tree");
 				});
 			if (!result)
 				DS_LOG_WARN("Focus Project Tree command registration failed: {}", result.Error().technicalDetails);
@@ -629,6 +640,19 @@ namespace DefectStudio
 			registerTerminalCommand(
 				"terminal.focus", "Focus Terminal", "Bring the Terminal panel to focus, reopening it first if it was closed.",
 				[](TerminalPanel &terminal) { terminal.RequestFocus(); });
+			registerTerminalCommand(
+				"terminal.toggle", "Toggle Terminal", "Show and focus the Terminal, or hide it when already focused.",
+				[](TerminalPanel &terminal) {
+					ImGuiWindow *terminalWindow = ImGui::FindWindowByName("Terminal###TerminalPanel");
+					ImGuiWindow *focusedWindow = ImGui::GetCurrentContext()->NavWindow;
+					const bool focused = terminalWindow != nullptr
+						&& focusedWindow != nullptr
+						&& (focusedWindow == terminalWindow || focusedWindow->RootWindow == terminalWindow);
+					if (terminal.IsVisible() && focused)
+						terminal.SetVisible(false);
+					else
+						terminal.RequestFocus();
+				});
 			registerTerminalCommand(
 				"terminal.new_tab", "New Terminal Tab", "Open a new terminal tab and focus it.",
 				[](TerminalPanel &terminal) { terminal.OpenNewTab(); });
@@ -663,7 +687,10 @@ namespace DefectStudio
 						{},
 						CommandFlags::None},
 					[this, sceneOutlinerPanelId](CommandContext &) -> Unique<ICommand> {
-						return CreateUnique<FocusPanelCommand>(findPanel(sceneOutlinerPanelId), "Focus Scene Outliner");
+						return CreateUnique<FocusPanelCommand>(
+							findPanel(sceneOutlinerPanelId),
+							[this](const std::string &title) { m_PendingPanelFocusTitle = title; },
+							"Focus Scene Outliner");
 					});
 				if (!result)
 					DS_LOG_WARN("Focus Scene Outliner command registration failed: {}", result.Error().technicalDetails);

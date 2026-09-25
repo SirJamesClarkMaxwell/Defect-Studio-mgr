@@ -9,15 +9,16 @@
 #include <imgui.h>
 
 #include "Core/Commands/CommandRegistry.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/ContextManager.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Platform/FileDialog.hpp"
+#include "Events/RendererEvents.hpp"
 #include "IO/RecentProjectsIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/MenuBarModel.hpp"
-#include "Renderer/OpenCrystalStructureAsWindow.hpp"
-#include "Renderer/RendererLayer.hpp"
+#include "IconsFontAwesome6.h"
 
 namespace DefectStudio
 {
@@ -25,6 +26,9 @@ namespace DefectStudio
 	{
 		if (!ImGui::BeginMainMenuBar())
 			return;
+
+		registerDockRegionCommands();
+		updateDockRegionPanelTitles();
 
 		const auto executeCommand = [this](const char *commandId)
 		{
@@ -45,6 +49,24 @@ namespace DefectStudio
 		renderHelpMenu();
 		renderNewSceneWindowButton();
 
+		const auto renderDockToggle = [this](DockRegion region, const char *visibleIcon, const char *hiddenIcon,
+			const char *id, const char *tooltip) {
+			const char *icon = (region == DockRegion::Left && m_LeftDockRegion.IsHidden())
+				|| (region == DockRegion::Bottom && m_BottomDockRegion.IsHidden())
+				|| (region == DockRegion::Right && m_RightDockRegion.IsHidden())
+				? hiddenIcon
+				: visibleIcon;
+			const std::string label = std::string(icon) + id;
+			if (ImGui::Button(label.c_str()))
+				toggleDockRegion(region);
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+				ImGui::SetTooltip("%s", tooltip);
+			ImGui::SameLine();
+		};
+		renderDockToggle(DockRegion::Left, ICON_FA_ANGLES_LEFT, ICON_FA_ANGLES_RIGHT, "##DockLeft", "Toggle left dock region");
+		renderDockToggle(DockRegion::Bottom, ICON_FA_ANGLES_DOWN, ICON_FA_ANGLES_UP, "##DockBottom", "Toggle bottom dock region");
+		renderDockToggle(DockRegion::Right, ICON_FA_ANGLES_RIGHT, ICON_FA_ANGLES_LEFT, "##DockRight", "Toggle right dock region");
+
 		ImGui::EndMainMenuBar();
 	}
 
@@ -55,8 +77,11 @@ namespace DefectStudio
 	{
 		if (ImGui::MenuItem("+"))
 		{
-			if (auto rendererLayer = m_RendererLayer.lock())
-				OpenEmptyRendererWindow(*rendererLayer, "Pusta scena");
+			if (m_EventBus != nullptr)
+			{
+				RendererEvents::Windows::OpenEmptyRequested request;
+				m_EventBus->Publish(request);
+			}
 		}
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Nowe puste okno renderera");

@@ -48,6 +48,32 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(ClassifyDockRegion(Rect(0.0f, 0.0f, 200.0f, 600.0f), empty), DockRegion::Floating);
 	}
 
+	TEST(PanelDockRegionsTests, TheTrackerRemembersARegionAfterThePanelStopsReportingOne)
+	{
+		DockRegionTracker tracker;
+		tracker.Observe("Project Tree", DockRegion::Left);
+
+		// The panel is hidden now, so nothing observes it this frame - and ImGui has merged away
+		// the dock node it used to live in. It still belongs to the left toggle.
+		EXPECT_EQ(tracker.RegionOf("Project Tree"), DockRegion::Left);
+	}
+
+	TEST(PanelDockRegionsTests, TheTrackerFollowsAPanelDraggedToAnotherEdge)
+	{
+		DockRegionTracker tracker;
+		tracker.Observe("Object Properties", DockRegion::Left);
+		tracker.Observe("Object Properties", DockRegion::Right);
+
+		EXPECT_EQ(tracker.RegionOf("Object Properties"), DockRegion::Right);
+	}
+
+	TEST(PanelDockRegionsTests, AnUnseenPanelBelongsToNoRegion)
+	{
+		const DockRegionTracker tracker;
+
+		EXPECT_EQ(tracker.RegionOf("Terminal"), DockRegion::Floating);
+	}
+
 	TEST(PanelDockRegionsTests, TogglingHidesEveryVisiblePanelInTheRegion)
 	{
 		DockRegionToggle toggle;

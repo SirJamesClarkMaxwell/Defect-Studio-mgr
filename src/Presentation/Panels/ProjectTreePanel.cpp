@@ -738,6 +738,7 @@ namespace DefectStudio
 			{ICON_FA_FOLDER_PLUS, "##NewFolderToolbar", "New Folder"},
 			{ICON_FA_FILE, "##NewFileToolbar", "New File"},
 			{ICON_FA_ATOM, "##CreateDefectToolbar", "Create Defect... (Ctrl+Alt+D)"},
+			{ICON_FA_PLUS, "##NewSceneToolbar", "New Empty Renderer Window"},
 			{ICON_FA_COMPRESS, "##CollapseAll", "Collapse All"},
 		};
 		const ImVec2 iconPadding(8.0f, 6.0f);
@@ -774,10 +775,19 @@ namespace DefectStudio
 		ImGui::EndDisabled();
 
 		ImGui::SameLine();
-		if (ImGui::Button((std::string(icons[3].icon) + icons[3].id).c_str()))
-			m_ExpandedPaths.clear();
+		if (ImGui::Button((std::string(icons[3].icon) + icons[3].id).c_str()) && m_EventBus != nullptr)
+		{
+			RendererEvents::Windows::OpenEmptyRequested request;
+			m_EventBus->Publish(request);
+		}
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("%s", icons[3].tooltip);
+
+		ImGui::SameLine();
+		if (ImGui::Button((std::string(icons[4].icon) + icons[4].id).c_str()))
+			m_ExpandedPaths.clear();
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", icons[4].tooltip);
 
 		ImGui::PopStyleVar();
 	}
