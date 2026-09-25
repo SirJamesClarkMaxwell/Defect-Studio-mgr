@@ -16,6 +16,8 @@
 #include "IO/RecentProjectsIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/MenuBarModel.hpp"
+#include "Renderer/OpenCrystalStructureAsWindow.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
@@ -41,8 +43,23 @@ namespace DefectStudio
 		renderCommandMenu(executeCommand);
 		renderToolsMenu();
 		renderHelpMenu();
+		renderNewSceneWindowButton();
 
 		ImGui::EndMainMenuBar();
+	}
+
+	// Last item on the menu bar, past the menus: one click, one empty renderer window. No
+	// structure, no domain registration - just a camera, the grid, and somewhere to put scene
+	// objects that don't need atoms behind them.
+	void EditorLayer::renderNewSceneWindowButton()
+	{
+		if (ImGui::MenuItem("+"))
+		{
+			if (auto rendererLayer = m_RendererLayer.lock())
+				OpenEmptyRendererWindow(*rendererLayer, "Pusta scena");
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Nowe puste okno renderera");
 	}
 
 	void EditorLayer::renderFileMenu(const CommandMenuExecutor &executeCommand)

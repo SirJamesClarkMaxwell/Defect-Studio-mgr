@@ -167,6 +167,7 @@ namespace DefectStudio
 		void renderCommandMenu(const CommandMenuExecutor &executeCommand);
 		void renderToolsMenu();
 		void renderHelpMenu();
+		void renderNewSceneWindowButton();
 		void initializePanelsIfNeeded();
 		void handleFontShortcuts(Event &event);
 		void renderCommandPalettePopup();

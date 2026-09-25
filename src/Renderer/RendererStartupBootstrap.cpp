@@ -90,6 +90,14 @@ namespace DefectStudio
 			minimum = glm::min(minimum, atom.cartesianPosition);
 			maximum = glm::max(maximum, atom.cartesianPosition);
 		}
+		if (window.structure.atoms.empty())
+		{
+			// Nothing to frame - an empty scene window, or a structure that loaded zero sites. The
+			// sentinels above would survive inverted and put the camera ~4e6 units out, so frame a
+			// unit box on the origin instead and let the grid be what the user sees.
+			minimum = glm::vec3(-1.0f);
+			maximum = glm::vec3(1.0f);
+		}
 		if (glm::length(direction) <= 0.0001f)
 			direction = glm::vec3(1.0f, 1.0f, 1.0f);
 		direction = glm::normalize(direction);

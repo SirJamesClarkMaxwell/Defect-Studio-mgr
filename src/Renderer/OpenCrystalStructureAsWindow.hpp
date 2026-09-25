@@ -35,6 +35,11 @@ namespace DefectStudio
 	// registered in DomainLayer - this function does not register, only opens a renderer window.
 	// Used when opening from project tree (already-registered structures) or other UI that knows
 	// the StructureId.
+	// Opens a renderer window with no structure behind it - an empty scene for the scene objects
+	// that don't need atoms (arrows, labels, planes, orbitals). Nothing is registered in the
+	// domain, so the window's structureId stays unset and it owns no StructureRecord.
+	void OpenEmptyRendererWindow(RendererLayer &rendererLayer, const std::string &title);
+
 	void OpenRegisteredStructureAsWindow(
 		StructureId id,
 		DomainLayer &domainLayer,
