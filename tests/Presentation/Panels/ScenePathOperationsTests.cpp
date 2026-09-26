@@ -173,8 +173,31 @@ namespace DefectStudio::Tests
 		RendererWindowState &live = renderer.GetWindows().front();
 		ScenePathStyleEdit edit;
 		edit.width = 0.4f;
+		const PathDashStyle dash{true, 0.37f, 0.19f, 0.04f};
+		const PathGradient gradient{true, {
+			{0.2f, glm::vec3(0.1f, 0.2f, 0.3f), 0.4f},
+			{0.8f, glm::vec3(0.7f, 0.6f, 0.5f), 0.9f}}};
+		edit.dash = dash;
+		edit.gradient = gradient;
 		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit), 2u);
 		ASSERT_EQ(undoStack->GetUndoDepth(), 1u);
+		for (const SceneObjectId id : live.selectedScenePaths)
+		{
+			const ScenePath *changed = live.paths->Store().Find(id);
+			ASSERT_NE(changed, nullptr);
+			EXPECT_EQ(changed->style.dash.enabled, dash.enabled);
+			EXPECT_FLOAT_EQ(changed->style.dash.dashLength, dash.dashLength);
+			EXPECT_FLOAT_EQ(changed->style.dash.gapLength, dash.gapLength);
+			EXPECT_FLOAT_EQ(changed->style.dash.phase, dash.phase);
+			EXPECT_EQ(changed->style.gradient.enabled, gradient.enabled);
+			ASSERT_EQ(changed->style.gradient.stops.size(), gradient.stops.size());
+			for (std::size_t index = 0; index < gradient.stops.size(); ++index)
+			{
+				EXPECT_FLOAT_EQ(changed->style.gradient.stops[index].position, gradient.stops[index].position);
+				EXPECT_EQ(changed->style.gradient.stops[index].color, gradient.stops[index].color);
+				EXPECT_FLOAT_EQ(changed->style.gradient.stops[index].alpha, gradient.stops[index].alpha);
+			}
+		}
 		ASSERT_TRUE(undoStack->Undo());
 		const ScenePath *restoredFirst = live.paths->Store().Find(first);
 		const ScenePath *restoredSecond = live.paths->Store().Find(second);
@@ -182,6 +205,63 @@ namespace DefectStudio::Tests
 		ASSERT_NE(restoredSecond, nullptr);
 		EXPECT_FLOAT_EQ(restoredFirst->style.width, 0.05f);
 		EXPECT_FLOAT_EQ(restoredSecond->style.width, 0.05f);
+	}
+
+	TEST_F(ScenePathUndoTests, DashAndGradientStyleDragCommitsOneUndoAfterManySilentApplies)
+	{
+		RendererWindowState window;
+		window.windowId = "path-style-dash-gradient-drag";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.selectedScenePaths = {id};
+		window.paths->Store().MutateStyle(id, [](ScenePath &path) {
+			path.style.dash = {true, 0.11f, 0.07f, 0.03f};
+			path.style.gradient = {true, {
+				{0.15f, glm::vec3(1.0f, 0.0f, 0.0f), 0.3f},
+				{0.85f, glm::vec3(0.0f, 0.0f, 1.0f), 0.8f}}};
+		});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		const ScenePath *beforePath = live.paths->Store().Find(id);
+		ASSERT_NE(beforePath, nullptr);
+		const PathDashStyle beforeDash = beforePath->style.dash;
+		const PathGradient beforeGradient = beforePath->style.gradient;
+
+		BeginScenePathStyleDrag(live);
+		ScenePathStyleEdit edit;
+		edit.dash = {true, 0.2f, 0.1f, 0.05f};
+		edit.gradient = {true, {
+			{0.2f, glm::vec3(1.0f, 0.0f, 0.0f), 0.25f},
+			{0.8f, glm::vec3(0.0f, 0.0f, 1.0f), 0.75f}}};
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		edit.dash.dashLength = 0.3f;
+		edit.gradient = {true, {
+			{0.25f, glm::vec3(1.0f, 0.0f, 0.0f), 0.25f},
+			{0.75f, glm::vec3(0.0f, 0.0f, 1.0f), 0.75f}}};
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		edit.dash.dashLength = 0.4f;
+		edit.gradient = {true, {
+			{0.3f, glm::vec3(1.0f, 0.0f, 0.0f), 0.25f},
+			{0.7f, glm::vec3(0.0f, 0.0f, 1.0f), 0.75f}}};
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+
+		ASSERT_TRUE(CommitScenePathStyleDrag(live));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *restored = live.paths->Store().Find(id);
+		ASSERT_NE(restored, nullptr);
+		EXPECT_EQ(restored->style.dash.enabled, beforeDash.enabled);
+		EXPECT_FLOAT_EQ(restored->style.dash.dashLength, beforeDash.dashLength);
+		EXPECT_FLOAT_EQ(restored->style.dash.gapLength, beforeDash.gapLength);
+		EXPECT_FLOAT_EQ(restored->style.dash.phase, beforeDash.phase);
+		EXPECT_EQ(restored->style.gradient.enabled, beforeGradient.enabled);
+		ASSERT_EQ(restored->style.gradient.stops.size(), beforeGradient.stops.size());
+		for (std::size_t index = 0; index < beforeGradient.stops.size(); ++index)
+		{
+			EXPECT_FLOAT_EQ(restored->style.gradient.stops[index].position, beforeGradient.stops[index].position);
+			EXPECT_EQ(restored->style.gradient.stops[index].color, beforeGradient.stops[index].color);
+			EXPECT_FLOAT_EQ(restored->style.gradient.stops[index].alpha, beforeGradient.stops[index].alpha);
+		}
 	}
 
 	TEST_F(ScenePathUndoTests, ScenePathStyleDragCommitsOneUndoAfterManySilentApplies)
