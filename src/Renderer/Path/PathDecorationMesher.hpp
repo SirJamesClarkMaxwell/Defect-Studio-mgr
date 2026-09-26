@@ -15,6 +15,20 @@ namespace DefectStudio::detail
 	// the back is the widest of them, because that is the ring the shaft has to meet.
 	[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour);
 
+	// task/41 S11s: a ring's vertices carry the normal of the SURFACE THEY BELONG TO, which for a
+	// non-circular cross-section means one vertex per face per corner rather than one shared corner
+	// vertex. A circle's corner normal is the radial direction and sharing is right; a box's is a
+	// diagonal, and sharing it shades two flat faces as though they curved into each other. That is
+	// why a thick Flat ribbon reads as a squashed tube instead of a strip of material, and it is the
+	// same cause the manual round reported twice - once as "the render is off" and once as "the
+	// edges look wrong".
+	//
+	// So: Round keeps shared vertices with radial normals. A rectangular ring emits its corners
+	// twice, once for each adjoining face, each with that face's constant normal. Ring cardinality
+	// therefore stops being "the number of corners" and becomes "the number of vertices", which
+	// every caller that indexes a ring has to respect - CrossSectionRingSize is the single place
+	// that answers it.
+	//
 	// Appends one cross-section ring and returns its first vertex. Round uses the configured radial
 	// count; a thick Flat stroke uses four rectangular corners. Shaft and decoration meshing both use
 	// this seam so the shape of a ring cannot diverge between them.
