@@ -168,8 +168,9 @@ namespace DefectStudio
 			built.binding = BuildBinding(node.binding, structure, node.position, outWarnings);
 			path.nodes.push_back(std::move(built));
 		}
-		for (const auto &segment : persisted.segments)
+		for (std::size_t index = 0; index < persisted.segments.size(); ++index)
 		{
+			const auto &segment = persisted.segments[index];
 			PathSegment built;
 			built.id = AllocateElementId(path);
 			if (segment.kind == PersistedPathSegmentKind::Line)
@@ -178,7 +179,8 @@ namespace DefectStudio
 			{
 				BezierHandleType startType, endType;
 				if (!Finite(segment.startHandle) || !Finite(segment.endHandle) || !ParseHandleType(segment.startHandleType, startType) || !ParseHandleType(segment.endHandleType, endType)) return PathError("Scene path contains invalid cubic handle data.");
-				built.data = CubicBezierSegmentData{{AllocateElementId(path), segment.startHandle, startType}, {AllocateElementId(path), segment.endHandle, endType}};
+				built.data = CubicBezierSegmentData{{AllocateElementId(path), segment.startHandle - path.nodes[index].position, startType},
+					{AllocateElementId(path), segment.endHandle - path.nodes[index + 1].position, endType}};
 			}
 			else
 			{
@@ -227,16 +229,17 @@ namespace DefectStudio
 			persisted.nodes.push_back(std::move(saved));
 		}
 		persisted.segments.reserve(path.segments.size());
-		for (const auto &segment : path.segments)
+		for (std::size_t index = 0; index < path.segments.size(); ++index)
 		{
+			const auto &segment = path.segments[index];
 			PersistedPathSegment saved;
 			std::visit([&](const auto &data) {
 				using Data = std::decay_t<decltype(data)>;
 				if constexpr (std::is_same_v<Data, CubicBezierSegmentData>)
 				{
 					saved.kind = PersistedPathSegmentKind::Cubic;
-					saved.startHandle = data.startHandle.position;
-					saved.endHandle = data.endHandle.position;
+					saved.startHandle = path.nodes[index].position + data.startHandle.offset;
+					saved.endHandle = path.nodes[index + 1].position + data.endHandle.offset;
 					saved.startHandleType = HandleTypeName(data.startHandle.type);
 					saved.endHandleType = HandleTypeName(data.endHandle.type);
 				}
