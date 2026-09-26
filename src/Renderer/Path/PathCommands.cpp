@@ -251,15 +251,15 @@ namespace DefectStudio
 		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
 	}
 
-	Result<void> MoveScenePathHandle(const PathEditContext &context, const SceneObjectId path, const PathElementId handle, const glm::vec3 position)
+	Result<void> MoveScenePathHandle(const PathEditContext &context, const SceneObjectId path, const PathElementId handle, const glm::vec3 offset)
 	{
-		if (!IsFinite(position))
-			return MakeEditError("path.edit_non_finite", "The handle position must be finite.");
-		const PathEditReport report = ApplyPathEdit(context, std::span<const SceneObjectId>(&path, 1), PathRevisionKind::Geometry, "Move path handle", [handle, position](ScenePath &edited) {
+		if (!IsFinite(offset))
+			return MakeEditError("path.edit_non_finite", "The handle offset must be finite.");
+		const PathEditReport report = ApplyPathEdit(context, std::span<const SceneObjectId>(&path, 1), PathRevisionKind::Geometry, "Move path handle", [handle, offset](ScenePath &edited) {
 			PathHandle *target = FindHandle(edited, handle);
 			if (target == nullptr)
 				return Result<void>(UnknownElementError());
-			target->position = position;
+			target->offset = offset;
 			return Result<void>{};
 		});
 		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};

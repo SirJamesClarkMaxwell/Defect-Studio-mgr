@@ -143,9 +143,12 @@ namespace DefectStudio
 		system.Store().Visit([&](const ScenePath &path) {
 			if (!path.visible || !path.renderable || path.nodes.size() < 2 || path.style.depthMode == (renderAlwaysOnTop ? PathDepthMode::DepthTest : PathDepthMode::AlwaysOnTop))
 				return;
+			// Resolve once for both the LOD probe and a cache miss. The probe must use world positions;
+			// authored node positions are local once a path has an object transform.
+			const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
 			glm::vec3 centroid(0.0f);
-			for (const PathNode &node : path.nodes)
-				centroid += node.position;
+			for (const glm::vec3 &position : resolved.positions)
+				centroid += position;
 			centroid /= static_cast<float>(path.nodes.size());
 			glm::vec3 centerNdc(0.0f), rightNdc(0.0f);
 			// NDC spans [-1, 1] across the viewport, so half the extent is one viewport in pixels; z
@@ -163,7 +166,6 @@ namespace DefectStudio
 			const CachedPathGeometry *cached = system.Caches().Find(path.id, key);
 			if (cached == nullptr)
 			{
-				const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
 				// Style revision invalidates the mesh and, for Flat, this field also changes tessellation.
 				const FrameSeed frameSeed = path.style.profile == StrokeProfile::Flat
 					? FrameSeed{FrameSeed::Mode::FixedNormal, glm::dvec3(path.style.ribbonNormal)} : FrameSeed{};

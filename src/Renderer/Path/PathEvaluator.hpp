@@ -82,6 +82,9 @@ namespace DefectStudio
 	struct ResolvedNodes
 	{
 		std::vector<glm::vec3> positions;
+		// World-space cubic control points, two per segment (start then end). These are resolved
+		// alongside the nodes so evaluators and picking never need to know about PathTransform.
+		std::vector<glm::vec3> handlePositions;
 		std::vector<PathDiagnostic> diagnostics;
 	};
 

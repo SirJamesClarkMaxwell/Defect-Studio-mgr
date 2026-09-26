@@ -29,6 +29,19 @@ namespace DefectStudio
 			resolved.positions.reserve(path.nodes.size());
 			for (const PathNode &node : path.nodes)
 				resolved.positions.push_back(node.position);
+			resolved.handlePositions.reserve(path.segments.size() * 2);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr || index >= path.nodes.size() || index + 1 >= path.nodes.size())
+				{
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					continue;
+				}
+				resolved.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				resolved.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return resolved;
 		}
 
@@ -43,8 +56,8 @@ namespace DefectStudio
 		{
 			const glm::vec3 delta = b - a;
 			return {AllocateElementId(path), CubicBezierSegmentData{
-				{AllocateElementId(path), a + delta / 3.0f, BezierHandleType::Vector},
-				{AllocateElementId(path), b - delta / 3.0f, BezierHandleType::Vector}}};
+				{AllocateElementId(path), delta / 3.0f, BezierHandleType::Vector},
+				{AllocateElementId(path), -delta / 3.0f, BezierHandleType::Vector}}};
 		}
 	} // namespace
 
@@ -83,16 +96,20 @@ namespace DefectStudio
 			}
 			else if constexpr (std::is_same_v<Data, CubicBezierSegmentData>)
 			{
-				const glm::vec3 p01 = glm::mix(a, data.startHandle.position, static_cast<float>(t));
-				const glm::vec3 p12 = glm::mix(data.startHandle.position, data.endHandle.position, static_cast<float>(t));
-				const glm::vec3 p23 = glm::mix(data.endHandle.position, b, static_cast<float>(t));
+				const glm::vec3 c1 = a + data.startHandle.offset;
+				const glm::vec3 c2 = b + data.endHandle.offset;
+				const glm::vec3 p01 = glm::mix(a, c1, static_cast<float>(t));
+				const glm::vec3 p12 = glm::mix(c1, c2, static_cast<float>(t));
+				const glm::vec3 p23 = glm::mix(c2, b, static_cast<float>(t));
 				const glm::vec3 p012 = glm::mix(p01, p12, static_cast<float>(t));
 				const glm::vec3 p123 = glm::mix(p12, p23, static_cast<float>(t));
 				point = glm::mix(p012, p123, static_cast<float>(t));
 				edited.segments[segment].data = CubicBezierSegmentData{
-					{data.startHandle.id, p01, data.startHandle.type}, {AllocateElementId(edited), p012, data.startHandle.type}};
+					{data.startHandle.id, p01 - a, data.startHandle.type},
+					{AllocateElementId(edited), p012 - point, data.startHandle.type}};
 				right = {AllocateElementId(edited), CubicBezierSegmentData{
-					{AllocateElementId(edited), p123, data.endHandle.type}, {data.endHandle.id, p23, data.endHandle.type}}};
+					{AllocateElementId(edited), p123 - point, data.endHandle.type},
+					{data.endHandle.id, p23 - b, data.endHandle.type}}};
 			}
 			else
 			{

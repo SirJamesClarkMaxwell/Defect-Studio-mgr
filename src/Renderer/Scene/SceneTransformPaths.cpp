@@ -21,50 +21,31 @@ namespace DefectStudio
 
 		glm::vec3 Pivot(const PathTransformStart &start, const TransformPivotMode mode, const glm::vec3 &selectionPivot)
 		{
-			if (mode != TransformPivotMode::IndividualOrigins || start.nodePositions.empty())
+			if (mode != TransformPivotMode::IndividualOrigins)
 				return selectionPivot;
-			return start.nodePositions.front();
+			return start.transform.position;
 		}
 
 		void TransformPath(ScenePath &path, const PathTransformStart &start, const SceneTransformDelta &delta,
 			ModalTransformOp operation, TransformPivotMode pivotMode, const glm::vec3 &selectionPivot)
 		{
 			const glm::vec3 pivot = Pivot(start, pivotMode, selectionPivot);
-			for (std::size_t i = 0; i < start.nodes.size() && i < start.nodePositions.size(); ++i)
-				for (PathNode &node : path.nodes)
-					if (node.id == start.nodes[i])
-						node.position = ApplyTransformDelta(delta.spatial, start.nodePositions[i], pivot);
-			for (std::size_t i = 0; i < start.handles.size() && i < start.handlePositions.size(); ++i)
-				for (PathSegment &segment : path.segments)
-					if (auto *cubic = std::get_if<CubicBezierSegmentData>(&segment.data))
-					{
-						if (cubic->startHandle.id == start.handles[i])
-							cubic->startHandle.position = ApplyTransformDelta(delta.spatial, start.handlePositions[i], pivot);
-						if (cubic->endHandle.id == start.handles[i])
-							cubic->endHandle.position = ApplyTransformDelta(delta.spatial, start.handlePositions[i], pivot);
-					}
-			// Unlike a label or an orbital, a path has no scalar rotation or scale of its own to
-			// carry - V1 paths are points, so the spatial delta is the whole transform and
-			// delta.rotationRadians / delta.scaleFactor have nothing to apply to. `operation` is
-			// taken for signature parity with the other kinds and is deliberately unread.
-			(void)operation;
+			path.transform = start.transform;
+			path.transform.position = ApplyTransformDelta(delta.spatial, start.transform.position, pivot);
+			if (operation == ModalTransformOp::Rotate)
+				path.transform.rotation = glm::normalize(delta.spatial.rotation * start.transform.rotation);
+			else if (operation == ModalTransformOp::Scale)
+			{
+				const glm::mat3 basis(start.transform.rotation);
+				const glm::mat3 localScale = glm::transpose(basis) * delta.spatial.linear * basis;
+				path.transform.scale = start.transform.scale * glm::vec3(
+					localScale[0][0], localScale[1][1], localScale[2][2]);
+			}
 		}
 
 		void RestorePath(ScenePath &path, const PathTransformStart &start)
 		{
-			for (std::size_t i = 0; i < start.nodes.size() && i < start.nodePositions.size(); ++i)
-				for (PathNode &node : path.nodes)
-					if (node.id == start.nodes[i])
-						node.position = start.nodePositions[i];
-			for (std::size_t i = 0; i < start.handles.size() && i < start.handlePositions.size(); ++i)
-				for (PathSegment &segment : path.segments)
-					if (auto *cubic = std::get_if<CubicBezierSegmentData>(&segment.data))
-					{
-						if (cubic->startHandle.id == start.handles[i])
-							cubic->startHandle.position = start.handlePositions[i];
-						if (cubic->endHandle.id == start.handles[i])
-							cubic->endHandle.position = start.handlePositions[i];
-					}
+			path.transform = start.transform;
 		}
 	}
 
@@ -79,19 +60,7 @@ namespace DefectStudio
 				continue;
 			PathTransformStart start;
 			start.id = id;
-			for (const PathNode &node : path->nodes)
-			{
-				start.nodes.push_back(node.id);
-				start.nodePositions.push_back(node.position);
-			}
-			for (const PathSegment &segment : path->segments)
-				if (const auto *cubic = std::get_if<CubicBezierSegmentData>(&segment.data))
-				{
-					start.handles.push_back(cubic->startHandle.id);
-					start.handlePositions.push_back(cubic->startHandle.position);
-					start.handles.push_back(cubic->endHandle.id);
-					start.handlePositions.push_back(cubic->endHandle.position);
-				}
+			start.transform = path->transform;
 			snapshot.paths.push_back(std::move(start));
 		}
 	}

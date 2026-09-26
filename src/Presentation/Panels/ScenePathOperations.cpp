@@ -72,18 +72,10 @@ namespace DefectStudio
 
 	void OffsetAndDetachScenePath(ScenePath &path, const glm::vec3 &offset)
 	{
+		path.transform.position += offset;
 		for (PathNode &node : path.nodes)
 		{
-			node.position += offset;
 			node.binding = PathBinding{};
-		}
-		for (PathSegment &segment : path.segments)
-		{
-			if (auto *cubic = std::get_if<CubicBezierSegmentData>(&segment.data))
-			{
-				cubic->startHandle.position += offset;
-				cubic->endHandle.position += offset;
-			}
 		}
 		// EnsureScenePersistKeys mints a fresh one; a shared key would collapse the copy and the
 		// original into a single saved object (see the S9 persistKey collision).

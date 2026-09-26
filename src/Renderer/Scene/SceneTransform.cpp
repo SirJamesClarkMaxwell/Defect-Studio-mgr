@@ -228,10 +228,7 @@ namespace DefectStudio
 		for (const PlaneTransformStart &plane : snapshot.planes)
 			positions.push_back(plane.center);
 		for (const PathTransformStart &path : snapshot.paths)
-		{
-			positions.insert(positions.end(), path.nodePositions.begin(), path.nodePositions.end());
-			positions.insert(positions.end(), path.handlePositions.begin(), path.handlePositions.end());
-		}
+			positions.push_back(path.transform.position);
 		return positions;
 	}
 
@@ -243,6 +240,8 @@ namespace DefectStudio
 			return LabelBasis(snapshot.labels.back().rotationRadians);
 		if (!snapshot.planes.empty())
 			return PlaneBasis(snapshot.planes.back());
+		if (!snapshot.paths.empty())
+			return glm::mat3(snapshot.paths.back().transform.rotation);
 		return std::nullopt;
 	}
 

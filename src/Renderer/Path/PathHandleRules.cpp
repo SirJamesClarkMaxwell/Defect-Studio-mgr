@@ -32,6 +32,19 @@ namespace DefectStudio
 			resolved.positions.reserve(path.nodes.size());
 			for (const PathNode &node : path.nodes)
 				resolved.positions.push_back(node.position);
+			resolved.handlePositions.reserve(path.segments.size() * 2);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr || index >= path.nodes.size() || index + 1 >= path.nodes.size())
+				{
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					continue;
+				}
+				resolved.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				resolved.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return resolved;
 		}
 
@@ -46,10 +59,10 @@ namespace DefectStudio
 			return chord / length;
 		}
 
-		void SetPosition(PathHandle &handle, glm::dvec3 position, bool autoOnly)
+		void SetOffset(PathHandle &handle, glm::dvec3 offset, bool autoOnly)
 		{
 			if (!autoOnly || handle.type == BezierHandleType::Auto)
-				handle.position = glm::vec3(position);
+				handle.offset = glm::vec3(offset);
 		}
 
 		[[nodiscard]] bool HasAutoAt(const ScenePath &path, std::size_t node)
@@ -70,14 +83,14 @@ namespace DefectStudio
 			if (!incomingCubic && !outgoingCubic)
 				return MakeError(PathDiagnosticCode::TangentNotApplicable, "Neither adjacent segment has a cubic handle.");
 
-			const glm::dvec3 pivot(path.nodes[node].position);
 			if (!hasIncoming)
 			{
 				const Result<glm::dvec3> direction = Direction(path.nodes[node].position, path.nodes[node + 1].position);
 				if (!direction)
 					return direction.Error();
 				auto &handle = std::get<CubicBezierSegmentData>(path.segments[node].data).startHandle;
-				SetPosition(handle, pivot + direction.Value() * (glm::distance(pivot, glm::dvec3(path.nodes[node + 1].position)) / 3.0), autoOnly);
+				SetOffset(handle, direction.Value() * (glm::distance(
+					glm::dvec3(path.nodes[node].position), glm::dvec3(path.nodes[node + 1].position)) / 3.0), autoOnly);
 				return {};
 			}
 			if (!hasOutgoing)
@@ -86,7 +99,8 @@ namespace DefectStudio
 				if (!direction)
 					return direction.Error();
 				auto &handle = std::get<CubicBezierSegmentData>(path.segments[node - 1].data).endHandle;
-				SetPosition(handle, pivot - direction.Value() * (glm::distance(pivot, glm::dvec3(path.nodes[node - 1].position)) / 3.0), autoOnly);
+				SetOffset(handle, -direction.Value() * (glm::distance(
+					glm::dvec3(path.nodes[node].position), glm::dvec3(path.nodes[node - 1].position)) / 3.0), autoOnly);
 				return {};
 			}
 
@@ -103,8 +117,10 @@ namespace DefectStudio
 					return direction.Error();
 				auto &incoming = std::get<CubicBezierSegmentData>(path.segments[node - 1].data).endHandle;
 				auto &outgoing = std::get<CubicBezierSegmentData>(path.segments[node].data).startHandle;
-				SetPosition(incoming, pivot - direction.Value() * (glm::distance(pivot, glm::dvec3(path.nodes[node - 1].position)) / 3.0), autoOnly);
-				SetPosition(outgoing, pivot + direction.Value() * (glm::distance(pivot, glm::dvec3(path.nodes[node + 1].position)) / 3.0), autoOnly);
+				SetOffset(incoming, -direction.Value() * (glm::distance(
+					glm::dvec3(path.nodes[node].position), glm::dvec3(path.nodes[node - 1].position)) / 3.0), autoOnly);
+				SetOffset(outgoing, direction.Value() * (glm::distance(
+					glm::dvec3(path.nodes[node].position), glm::dvec3(path.nodes[node + 1].position)) / 3.0), autoOnly);
 				return {};
 			}
 
@@ -122,7 +138,8 @@ namespace DefectStudio
 				if (!chord)
 					return chord.Error();
 				auto &handle = std::get<CubicBezierSegmentData>(path.segments[node - 1].data).endHandle;
-				SetPosition(handle, pivot - sample->tangent * (glm::distance(pivot, glm::dvec3(path.nodes[node - 1].position)) / 3.0), autoOnly);
+				SetOffset(handle, -sample->tangent * (glm::distance(
+					glm::dvec3(path.nodes[node].position), glm::dvec3(path.nodes[node - 1].position)) / 3.0), autoOnly);
 			}
 			else
 			{
@@ -130,7 +147,8 @@ namespace DefectStudio
 				if (!chord)
 					return chord.Error();
 				auto &handle = std::get<CubicBezierSegmentData>(path.segments[node].data).startHandle;
-				SetPosition(handle, pivot + sample->tangent * (glm::distance(pivot, glm::dvec3(path.nodes[node + 1].position)) / 3.0), autoOnly);
+				SetOffset(handle, sample->tangent * (glm::distance(
+					glm::dvec3(path.nodes[node].position), glm::dvec3(path.nodes[node + 1].position)) / 3.0), autoOnly);
 			}
 			return {};
 		}

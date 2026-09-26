@@ -41,48 +41,51 @@ namespace DefectStudio
 			return {};
 		}
 
-		[[nodiscard]] glm::dvec3 CubicDerivative(const CubicBezierSegmentData &cubic, glm::dvec3 a, glm::dvec3 b, double t)
+		[[nodiscard]] glm::dvec3 CubicDerivative(
+			glm::dvec3 c1, glm::dvec3 c2, glm::dvec3 a, glm::dvec3 b, double t)
 		{
-			const glm::dvec3 c1(cubic.startHandle.position);
-			const glm::dvec3 c2(cubic.endHandle.position);
 			const double u = 1.0 - t;
 			return 3.0 * u * u * (c1 - a) + 6.0 * u * t * (c2 - c1) + 3.0 * t * t * (b - c2);
 		}
 
-		[[nodiscard]] double CubicSpeed(const CubicBezierSegmentData &cubic, glm::dvec3 a, glm::dvec3 b, double t)
+		[[nodiscard]] double CubicSpeed(
+			glm::dvec3 c1, glm::dvec3 c2, glm::dvec3 a, glm::dvec3 b, double t)
 		{
-			return glm::length(CubicDerivative(cubic, a, b, t));
+			return glm::length(CubicDerivative(c1, c2, a, b, t));
 		}
 
-		[[nodiscard]] double GaussLength(const CubicBezierSegmentData &cubic, glm::dvec3 a, glm::dvec3 b, double start, double end)
+		[[nodiscard]] double GaussLength(
+			glm::dvec3 c1, glm::dvec3 c2, glm::dvec3 a, glm::dvec3 b, double start, double end)
 		{
 			const double midpoint = (start + end) * 0.5;
 			const double halfWidth = (end - start) * 0.5;
 			double sum = 0.0;
 			for (std::size_t index = 0; index < kGaussNodes.size(); ++index)
-				sum += kGaussWeights[index] * CubicSpeed(cubic, a, b, midpoint + halfWidth * kGaussNodes[index]);
+				sum += kGaussWeights[index] * CubicSpeed(c1, c2, a, b, midpoint + halfWidth * kGaussNodes[index]);
 			return halfWidth * sum;
 		}
 
 		// Five-point Gauss-Legendre refinement has an explicit local error estimate: the difference
 		// between one interval and its two children. This is integration, not a sum over curve samples.
 		[[nodiscard]] double AdaptiveCubicLength(
-			const CubicBezierSegmentData &cubic, glm::dvec3 a, glm::dvec3 b, double start, double end, double tolerance, int depth)
+			glm::dvec3 c1, glm::dvec3 c2, glm::dvec3 a, glm::dvec3 b,
+			double start, double end, double tolerance, int depth)
 		{
-			const double whole = GaussLength(cubic, a, b, start, end);
+			const double whole = GaussLength(c1, c2, a, b, start, end);
 			const double middle = (start + end) * 0.5;
-			const double split = GaussLength(cubic, a, b, start, middle) + GaussLength(cubic, a, b, middle, end);
+			const double split = GaussLength(c1, c2, a, b, start, middle) + GaussLength(c1, c2, a, b, middle, end);
 			if (depth == 0 || std::abs(split - whole) <= tolerance)
 				return split;
-			return AdaptiveCubicLength(cubic, a, b, start, middle, tolerance * 0.5, depth - 1) +
-				AdaptiveCubicLength(cubic, a, b, middle, end, tolerance * 0.5, depth - 1);
+			return AdaptiveCubicLength(c1, c2, a, b, start, middle, tolerance * 0.5, depth - 1) +
+				AdaptiveCubicLength(c1, c2, a, b, middle, end, tolerance * 0.5, depth - 1);
 		}
 
-		[[nodiscard]] Result<double> CubicLength(const CubicBezierSegmentData &cubic, glm::dvec3 a, glm::dvec3 b, double end = 1.0)
+		[[nodiscard]] Result<double> CubicLength(
+			glm::dvec3 c1, glm::dvec3 c2, glm::dvec3 a, glm::dvec3 b, double end = 1.0)
 		{
-			if (!IsFinite(a) || !IsFinite(b) || !IsFinite(cubic.startHandle.position) || !IsFinite(cubic.endHandle.position))
+			if (!IsFinite(a) || !IsFinite(b) || !IsFinite(c1) || !IsFinite(c2))
 				return MakeError(PathDiagnosticCode::NonFinite, "Cubic control data is not finite.");
-			return AdaptiveCubicLength(cubic, a, b, 0.0, end, 1.0e-12, 20);
+			return AdaptiveCubicLength(c1, c2, a, b, 0.0, end, 1.0e-12, 20);
 		}
 	} // namespace
 
@@ -147,8 +150,8 @@ namespace DefectStudio
 				{
 					checkId(data.startHandle.id);
 					checkId(data.endHandle.id);
-					if (!IsFinite(data.startHandle.position) || !IsFinite(data.endHandle.position))
-						diagnostics.push_back({PathDiagnosticCode::NonFinite, segment.id, "Cubic handle position is not finite."});
+					if (!IsFinite(data.startHandle.offset) || !IsFinite(data.endHandle.offset))
+						diagnostics.push_back({PathDiagnosticCode::NonFinite, segment.id, "Cubic handle offset is not finite."});
 				}
 				else if constexpr (std::is_same_v<Data, CircularArcSegmentData>)
 				{
@@ -199,6 +202,9 @@ namespace DefectStudio
 			return valid.Error();
 		const glm::dvec3 a(resolved.positions[segment]);
 		const glm::dvec3 b(resolved.positions[segment + 1]);
+		const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[segment].data);
+		if (cubic != nullptr && resolved.handlePositions.size() < (segment + 1) * 2)
+			return MakeError(PathDiagnosticCode::NodeCountMismatch, "Resolved cubic control points are missing.");
 		return std::visit([&](const auto &data) -> Result<PathSample> {
 			using Data = std::decay_t<decltype(data)>;
 			if constexpr (std::is_same_v<Data, LineSegmentData>)
@@ -211,10 +217,11 @@ namespace DefectStudio
 			}
 			else if constexpr (std::is_same_v<Data, CubicBezierSegmentData>)
 			{
-				const glm::dvec3 c1(data.startHandle.position), c2(data.endHandle.position);
+				const glm::dvec3 c1(resolved.handlePositions[segment * 2]);
+				const glm::dvec3 c2(resolved.handlePositions[segment * 2 + 1]);
 				const double u = 1.0 - t;
 				const glm::dvec3 position = u * u * u * a + 3.0 * u * u * t * c1 + 3.0 * u * t * t * c2 + t * t * t * b;
-				const glm::dvec3 derivative = CubicDerivative(data, a, b, t);
+				const glm::dvec3 derivative = CubicDerivative(c1, c2, a, b, t);
 				const double length = glm::length(derivative);
 				if (length <= kEpsilon || !IsFinite(position) || !std::isfinite(length))
 					return MakeError(PathDiagnosticCode::NonFinite, "Cubic segment has an invalid tangent.");
@@ -243,7 +250,13 @@ namespace DefectStudio
 			if constexpr (std::is_same_v<Data, LineSegmentData>)
 				return glm::length(b - a);
 			else if constexpr (std::is_same_v<Data, CubicBezierSegmentData>)
-				return CubicLength(data, a, b);
+			{
+				if (resolved.handlePositions.size() < (segment + 1) * 2)
+					return MakeError(PathDiagnosticCode::NodeCountMismatch, "Resolved cubic control points are missing.");
+				return CubicLength(
+					glm::dvec3(resolved.handlePositions[segment * 2]),
+					glm::dvec3(resolved.handlePositions[segment * 2 + 1]), a, b);
+			}
 			else
 			{
 				const Result<ArcGeometry> arc = DeriveArc(a, b, data.planeNormal, data.signedSweepRadians);
@@ -266,13 +279,16 @@ namespace DefectStudio
 		const PathSegmentData &data = path.segments[segment].data;
 		if (std::holds_alternative<LineSegmentData>(data) || std::holds_alternative<CircularArcSegmentData>(data))
 			return std::clamp(s / length.Value(), 0.0, 1.0);
-		const auto &cubic = std::get<CubicBezierSegmentData>(data);
+		if (resolved.handlePositions.size() < (segment + 1) * 2)
+			return MakeError(PathDiagnosticCode::NodeCountMismatch, "Resolved cubic control points are missing.");
 		const glm::dvec3 a(resolved.positions[segment]), b(resolved.positions[segment + 1]);
+		const glm::dvec3 c1(resolved.handlePositions[segment * 2]);
+		const glm::dvec3 c2(resolved.handlePositions[segment * 2 + 1]);
 		double low = 0.0, high = 1.0;
 		for (int iteration = 0; iteration < 80; ++iteration)
 		{
 			const double middle = (low + high) * 0.5;
-			const Result<double> partial = CubicLength(cubic, a, b, middle);
+			const Result<double> partial = CubicLength(c1, c2, a, b, middle);
 			if (!partial)
 				return partial.Error();
 			if (partial.Value() < s)

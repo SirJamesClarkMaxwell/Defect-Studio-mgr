@@ -64,11 +64,12 @@ namespace DefectStudio
 				return markers;
 			nodePositions.push_back(position);
 		}
-		for (const PathSegment &segment : path.segments)
+		for (std::size_t index = 0; index < path.segments.size(); ++index)
 		{
-			if (const auto *cubic = std::get_if<CubicBezierSegmentData>(&segment.data))
+			if (std::get_if<CubicBezierSegmentData>(&path.segments[index].data) != nullptr)
 			{
-				if (!Finite(cubic->startHandle.position) || !Finite(cubic->endHandle.position))
+				if (resolved.handlePositions.size() < (index + 1) * 2 ||
+					!Finite(resolved.handlePositions[index * 2]) || !Finite(resolved.handlePositions[index * 2 + 1]))
 					return markers;
 			}
 		}
@@ -96,8 +97,8 @@ namespace DefectStudio
 			// A handle belongs to the node on its side of the segment: segment i spans nodes i and i+1.
 			const PathElementId startOwner = index < path.nodes.size() ? path.nodes[index].id : PathElementId{};
 			const PathElementId endOwner = index + 1 < path.nodes.size() ? path.nodes[index + 1].id : PathElementId{};
-			append(PathMarkerKind::BezierHandle, cubic->startHandle.id, startOwner, cubic->startHandle.position);
-			append(PathMarkerKind::BezierHandle, cubic->endHandle.id, endOwner, cubic->endHandle.position);
+			append(PathMarkerKind::BezierHandle, cubic->startHandle.id, startOwner, resolved.handlePositions[index * 2]);
+			append(PathMarkerKind::BezierHandle, cubic->endHandle.id, endOwner, resolved.handlePositions[index * 2 + 1]);
 		}
 
 		return markers;

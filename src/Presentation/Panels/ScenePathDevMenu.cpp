@@ -86,10 +86,10 @@ namespace DefectStudio
 		{
 			CubicBezierSegmentData cubic;
 			cubic.startHandle.id = AllocateElementId(path);
-			cubic.startHandle.position = worldPosition + glm::vec3(-0.5f, 1.25f, 0.0f);
+			cubic.startHandle.offset = glm::vec3(0.5f, 1.25f, 0.0f);
 			cubic.startHandle.type = BezierHandleType::Free;
 			cubic.endHandle.id = AllocateElementId(path);
-			cubic.endHandle.position = worldPosition + glm::vec3(0.5f, 1.25f, 0.0f);
+			cubic.endHandle.offset = glm::vec3(-0.5f, 1.25f, 0.0f);
 			cubic.endHandle.type = BezierHandleType::Free;
 			segment.data = cubic;
 			break;

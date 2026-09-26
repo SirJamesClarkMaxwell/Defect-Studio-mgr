@@ -20,20 +20,30 @@ namespace DefectStudio
 			resolved.diagnostics.push_back({code, element, message});
 		}
 
+		[[nodiscard]] glm::vec3 TransformLocalPosition(const ScenePath &path, const glm::vec3 &position)
+		{
+			return path.transform.position + path.transform.rotation * (path.transform.scale * position);
+		}
+
+		[[nodiscard]] glm::vec3 TransformHandleOffset(const ScenePath &path, const glm::vec3 &offset)
+		{
+			return path.transform.rotation * (path.transform.scale * offset);
+		}
+
 		[[nodiscard]] glm::vec3 ResolveUnbuffered(
-			const PathNode &node, const BindingContext &context, ResolvedNodes &resolved)
+			const ScenePath &path, const PathNode &node, const BindingContext &context, ResolvedNodes &resolved)
 		{
 			return std::visit([&](const auto &binding) -> glm::vec3 {
 				using Binding = std::decay_t<decltype(binding)>;
 				if constexpr (std::is_same_v<Binding, PathBinding::Free>)
-					return node.position;
+					return TransformLocalPosition(path, node.position);
 				else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
 				{
 					if (context.atomPosition)
 						if (const std::optional<glm::vec3> atom = context.atomPosition(binding.atomIndex); atom && IsFinite(*atom))
 							return *atom + binding.offset;
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound atom is unavailable.");
-					return node.position;
+					return TransformLocalPosition(path, node.position);
 				}
 				else if constexpr (std::is_same_v<Binding, PathBinding::BondMidpoint>)
 				{
@@ -45,20 +55,20 @@ namespace DefectStudio
 							return (*a + *b) * 0.5f + binding.offset;
 					}
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound atoms are unavailable.");
-					return node.position;
+					return TransformLocalPosition(path, node.position);
 				}
 				else
 				{
 					if (context.isScenePath && context.isScenePath(binding.object))
 					{
 						AddDiagnostic(resolved, PathDiagnosticCode::ObjectOriginTargetsPath, node.id, "Object origin bindings may not target paths.");
-						return node.position;
+						return TransformLocalPosition(path, node.position);
 					}
 					if (context.objectOrigin)
 						if (const std::optional<glm::vec3> origin = context.objectOrigin(binding.object); origin && IsFinite(*origin))
 							return *origin + binding.offset;
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound object origin is unavailable.");
-					return node.position;
+					return TransformLocalPosition(path, node.position);
 				}
 			}, node.binding.value);
 		}
@@ -69,7 +79,7 @@ namespace DefectStudio
 		ResolvedNodes resolved;
 		resolved.positions.reserve(path.nodes.size());
 		for (const PathNode &node : path.nodes)
-			resolved.positions.push_back(ResolveUnbuffered(node, context, resolved));
+			resolved.positions.push_back(ResolveUnbuffered(path, node, context, resolved));
 
 		if (path.nodes.size() < 2)
 			return resolved;
@@ -97,6 +107,22 @@ namespace DefectStudio
 			// Mirror SceneSystem's non-inversion clamp: retain ten percent of the original direction.
 			const float scale = std::min(1.0f, 0.9f * distance / requested);
 			resolved.positions[index] += delta / distance * (requested * scale);
+		}
+
+		resolved.handlePositions.reserve(path.segments.size() * 2);
+		for (std::size_t index = 0; index < path.segments.size(); ++index)
+		{
+			const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+			if (cubic == nullptr || index >= resolved.positions.size() || index + 1 >= resolved.positions.size())
+			{
+				resolved.handlePositions.push_back(glm::vec3(0.0f));
+				resolved.handlePositions.push_back(glm::vec3(0.0f));
+				continue;
+			}
+			resolved.handlePositions.push_back(
+				resolved.positions[index] + TransformHandleOffset(path, cubic->startHandle.offset));
+			resolved.handlePositions.push_back(
+				resolved.positions[index + 1] + TransformHandleOffset(path, cubic->endHandle.offset));
 		}
 		return resolved;
 	}

@@ -93,7 +93,7 @@ namespace DefectStudio
 	[[nodiscard]] Result<void> MoveScenePathNode(
 		const PathEditContext &context, SceneObjectId path, PathElementId node, glm::vec3 position);
 	[[nodiscard]] Result<void> MoveScenePathHandle(
-		const PathEditContext &context, SceneObjectId path, PathElementId handle, glm::vec3 position);
+		const PathEditContext &context, SceneObjectId path, PathElementId handle, glm::vec3 offset);
 	[[nodiscard]] Result<void> SetScenePathHandleType(
 		const PathEditContext &context, SceneObjectId path, PathElementId handle, BezierHandleType type);
 
