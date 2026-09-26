@@ -230,7 +230,10 @@ namespace DefectStudio::detail
 
 	std::uint32_t CrossSectionRingSize(const PathStrokeStyle &style)
 	{
-		return style.profile == StrokeProfile::Round ? style.radialSegments : 8u;
+		if (style.profile == StrokeProfile::Round)
+			return style.radialSegments;
+		return style.profile == StrokeProfile::Flat && std::isfinite(style.ribbonBevel) && style.ribbonBevel > 0.0f
+			? 16u : 8u;
 	}
 
 	std::uint32_t AppendCrossSectionRing(StrokeGeometry &geometry, const glm::dvec3 &centre,
@@ -265,6 +268,36 @@ namespace DefectStudio::detail
 			-normal * halfWidth * scale + binormal * depth,
 			-normal * halfWidth * scale - binormal * depth,
 			normal * halfWidth * scale - binormal * depth};
+		if (style.profile == StrokeProfile::Flat && std::isfinite(style.ribbonBevel) && style.ribbonBevel > 0.0f)
+		{
+			const double maxBevel = std::max(0.0, std::min(halfWidth, std::max(0.0, static_cast<double>(style.ribbonThickness) * 0.5)));
+			const double bevel = std::min(static_cast<double>(style.ribbonBevel), maxBevel) * scale;
+			const double halfWidthScaled = halfWidth * scale;
+			const double bevelAlongWidth = std::min(bevel, halfWidthScaled);
+			const double bevelAlongDepth = std::min(bevel, depth);
+			const std::array<glm::dvec3, 8> positions = {
+				normal * (halfWidthScaled - bevelAlongWidth) + binormal * depth,
+				normal * (-halfWidthScaled + bevelAlongWidth) + binormal * depth,
+				normal * -halfWidthScaled + binormal * (depth - bevelAlongDepth),
+				normal * -halfWidthScaled + binormal * (-depth + bevelAlongDepth),
+				normal * (-halfWidthScaled + bevelAlongWidth) - binormal * depth,
+				normal * (halfWidthScaled - bevelAlongWidth) - binormal * depth,
+				normal * halfWidthScaled + binormal * (-depth + bevelAlongDepth),
+				normal * halfWidthScaled + binormal * (depth - bevelAlongDepth)};
+			const std::array<glm::dvec3, 8> faceNormals = {
+				binormal, -normal + binormal, -normal, -normal - binormal,
+				-binormal, normal - binormal, normal, normal + binormal};
+			for (std::uint32_t face = 0; face < 8u; ++face)
+			{
+				const glm::dvec3 faceNormal = SafeNormal(faceNormals[face], inner ? -normal : normal);
+				for (const std::uint32_t point : {face, (face + 1u) % 8u})
+					geometry.tubeVertices.push_back({glm::vec3(centre + positions[point]),
+						glm::vec3(inner ? -faceNormal : faceNormal),
+						SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT),
+						static_cast<float>(sample.arcLength)});
+			}
+			return first;
+		}
 		const std::array<std::uint32_t, 8> cornerIndices = {0u, 1u, 1u, 2u, 2u, 3u, 3u, 0u};
 		const std::array<glm::dvec3, 8> faceNormals = {
 			binormal, binormal, -normal, -normal, -binormal, -binormal, normal, normal};
