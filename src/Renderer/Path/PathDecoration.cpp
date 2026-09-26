@@ -55,16 +55,15 @@ namespace DefectStudio
 			return empty;
 		const double length = strokeWidth * static_cast<double>(decoration.lengthScale);
 		const double width = strokeWidth * static_cast<double>(decoration.widthScale);
-		const double arrowWidth = width * 0.5;
 		if (!std::isfinite(length) || !std::isfinite(width) || length <= 0.0 || width <= 0.0)
 			return empty;
 		switch (decoration.kind)
 		{
 			case PathDecorationKind::Arrow:
-				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length, arrowWidth}, {length, 0.0}});
+				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length, width}, {length, 0.0}});
 			case PathDecorationKind::Stealth:
 				return MakeContour(length * 1.15, false, decoration.filled,
-					{{0.0, 0.0}, {length * 0.65, arrowWidth * 1.1}, {length * 1.15, arrowWidth * 0.35}, {length * 1.15, 0.0}});
+					{{0.0, 0.0}, {length * 0.65, width}, {length * 1.15, width * 0.35}, {length * 1.15, 0.0}});
 			case PathDecorationKind::Latex:
 			{
 				DecorationContour contour = MakeContour(length, true, decoration.filled, {});
@@ -74,14 +73,15 @@ namespace DefectStudio
 				{
 					const double fraction = static_cast<double>(index) / static_cast<double>(samples - 1u);
 					const double bow = std::sin(std::numbers::pi * fraction);
-					contour.points.push_back({length * fraction, arrowWidth * 1.1 * bow});
+					const double halfWidth = width * (0.35 * fraction + (1.0 - 0.35 * fraction) * bow);
+					contour.points.push_back({length * fraction, halfWidth});
 				}
 				return ValidateContour(std::move(contour));
 			}
 			case PathDecorationKind::Bar:
 			{
-				const double barLength = length;
-				DecorationContour contour = MakeContour(barLength * 0.75, true, decoration.filled,
+				const double barLength = length * 0.3;
+				DecorationContour contour = MakeContour(barLength, true, decoration.filled,
 					{{0.0, width}, {barLength, width}});
 				return ValidateContour(std::move(contour));
 			}
@@ -105,9 +105,9 @@ namespace DefectStudio
 				return MakeContour(length, true, decoration.filled,
 					{{0.0, width}, {length * 0.5, width}, {length, width}});
 			case PathDecorationKind::Diamond:
-				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length * 0.5, arrowWidth}, {length, 0.0}});
+				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length * 0.5, width}, {length, 0.0}});
 			case PathDecorationKind::Kite:
-				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length / 3.0, arrowWidth}, {length, 0.0}});
+				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length / 3.0, width}, {length, 0.0}});
 			case PathDecorationKind::None: break;
 		}
 		return empty;

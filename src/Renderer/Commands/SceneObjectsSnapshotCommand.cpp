@@ -2,6 +2,7 @@
 
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
@@ -23,6 +24,14 @@ namespace DefectStudio
 				"Reopen the scene window and try again.",
 				"SceneObjectsSnapshotCommand",
 				"scene_objects.undo_target_unavailable"};
+		}
+
+		template <typename T>
+		void KeepExistingSelection(std::vector<SceneObjectId> &selection, const std::vector<T> &objects)
+		{
+			std::erase_if(selection, [&objects](const SceneObjectId id) {
+				return FindAnnotation(objects, id) == nullptr;
+			});
 		}
 
 		class SceneObjectsSnapshotCommand final : public ICommand
@@ -109,12 +118,14 @@ namespace DefectStudio
 		window.sceneOrbitals = std::move(snapshot.sceneOrbitals);
 		window.scenePlanes = std::move(snapshot.scenePlanes);
 		SceneSystem::EnsurePathSystem(window).ReplaceStore(std::move(snapshot.paths));
-		window.selectedPinnedMeasurements.clear();
-		window.selectedFreeLabels.clear();
-		window.selectedSceneArrows.clear();
-		window.selectedSceneOrbitals.clear();
-		window.selectedScenePlanes.clear();
-		window.selectedScenePaths.clear();
+		KeepExistingSelection(window.selectedPinnedMeasurements, window.pinnedMeasurements);
+		KeepExistingSelection(window.selectedFreeLabels, window.freeLabels);
+		KeepExistingSelection(window.selectedSceneArrows, window.sceneArrows);
+		KeepExistingSelection(window.selectedSceneOrbitals, window.sceneOrbitals);
+		KeepExistingSelection(window.selectedScenePlanes, window.scenePlanes);
+		std::erase_if(window.selectedScenePaths, [&window](const SceneObjectId id) {
+			return window.paths == nullptr || !window.paths->Store().Contains(id);
+		});
 		window.modalTransform.reset();
 		window.modalTransformSelection = {};
 		window.modalTransformSceneObjectsBefore.reset();
@@ -125,6 +136,7 @@ namespace DefectStudio
 		window.sceneArrowDragging = false;
 		window.sceneArrowQuickEditActive = false;
 		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		SceneSystem::SyncLabelSelection(window.sceneRegistry, window);
 	}
 
 	Unique<ICommand> CreateSceneObjectsSnapshotCommand(

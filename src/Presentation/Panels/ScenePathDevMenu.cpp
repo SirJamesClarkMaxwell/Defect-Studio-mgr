@@ -13,6 +13,42 @@
 
 namespace DefectStudio
 {
+	namespace
+	{
+		void AddDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition)
+		{
+			constexpr std::array<std::pair<PathDecorationKind, const char *>, 8> decorations = {{
+				{PathDecorationKind::Arrow, "Arrow"},
+				{PathDecorationKind::Stealth, "Stealth"},
+				{PathDecorationKind::Latex, "Latex"},
+				{PathDecorationKind::Bar, "Bar"},
+				{PathDecorationKind::Circle, "Circle"},
+				{PathDecorationKind::Square, "Square"},
+				{PathDecorationKind::Diamond, "Diamond"},
+				{PathDecorationKind::Kite, "Kite"},
+			}};
+			constexpr float rowSpacing = 0.5f;
+
+			// Match the multi-path operations: one snapshot, then the normal AddScenePath validation
+			// and insertion path with its per-item undo sink disabled.
+			PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
+			const PathEditContext context = MakeSilentPathEditContext(windowState);
+			for (std::size_t index = 0; index < decorations.size(); ++index)
+			{
+				const auto [kind, name] = decorations[index];
+				const float row = static_cast<float>(index) - (static_cast<float>(decorations.size()) - 1.0f) * 0.5f;
+				ScenePath path = MakeDevScenePath(
+					ScenePathDevPreset::Line,
+					worldPosition + glm::vec3(0.0f, 0.0f, row * rowSpacing),
+					StrokeProfile::Round);
+				path.name = name;
+				path.style.startDecoration.kind = kind;
+				path.style.endDecoration.kind = PathDecorationKind::Arrow;
+				(void)AddScenePath(context, std::move(path));
+			}
+		}
+	} // namespace
+
 	ScenePath MakeDevScenePath(const ScenePathDevPreset preset, const glm::vec3 &worldPosition, const StrokeProfile profile)
 	{
 		ScenePath path;
@@ -79,6 +115,8 @@ namespace DefectStudio
 		// The same sink every other scene-object edit already uses; without it AddScenePath applies
 		// the edit and records no history, which is exactly what a dev menu must not do.
 		const PathEditContext context = MakeWindowPathEditContext(windowState);
+		if (ImGui::MenuItem("Decoration gallery"))
+			AddDecorationGallery(windowState, worldPosition);
 
 		const auto add = [&](const ScenePathDevPreset preset, const StrokeProfile profile, const char *label) {
 			if (!ImGui::MenuItem(label))

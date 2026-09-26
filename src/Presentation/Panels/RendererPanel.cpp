@@ -299,44 +299,6 @@ namespace DefectStudio
 			}
 		}
 
-		if (gizmoCapturing || selectionToolConsumedMouse)
-		{
-			// Nothing else consumes mouse input this frame.
-		}
-		else if (windowState.activeSelectionTool == SelectionToolMode::Cursor3D)
-		{
-			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-			{
-				const ImVec2 mousePos = ImGui::GetMousePos();
-				(void)handleCursor3DPlacement(windowState, mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
-			}
-		}
-		else if (windowState.activeSelectionTool == SelectionToolMode::MeasureBond ||
-			windowState.activeSelectionTool == SelectionToolMode::MeasureAngle)
-		{
-			handleMeasureToolClick(windowState, imageOrigin, hovered);
-		}
-		else if (hovered)
-		{
-			ImGuiIO &io = ImGui::GetIO();
-			const bool leftClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
-				!ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
-				!io.KeyAlt;
-			if (leftClicked)
-			{
-				const ImVec2 mousePos = ImGui::GetMousePos();
-				const float relX = mousePos.x - imageOrigin.x;
-				const float relY = mousePos.y - imageOrigin.y;
-				if (relX >= 0.0f &&
-					relY >= 0.0f &&
-					relX < windowState.viewportSize.x &&
-					relY < windowState.viewportSize.y)
-				{
-					HandleViewportPick(windowState, relX, relY, io.KeyCtrl, m_Layer);
-				}
-			}
-		}
-
 		if (windowState.cursor3DPlaced && windowState.camera != nullptr)
 		{
 			const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
@@ -363,6 +325,60 @@ namespace DefectStudio
 		// Last, so the N panel floats over everything already drawn on the image.
 		DrawViewportSidePanel(
 			windowState, imageOrigin, viewportSize, deltaTime, m_Layer, m_CommandRegistry, m_DomainLayer);
+
+		// The side panel is an overlay drawn after the image. Its grip used to reach the picker because
+		// `hovered` was captured from the image before the overlay existed, so starting a resize could
+		// clear the selection through HandleViewportPick's empty-space branch. Submit the overlay first,
+		// then reject clicks whose press began on the panel or its six-pixel grip.
+		const ImVec2 lastItemMin = ImGui::GetItemRectMin();
+		const ImVec2 lastItemMax = ImGui::GetItemRectMax();
+		const bool sidePanelVisible = lastItemMin.x > imageOrigin.x + 1.0f &&
+			lastItemMin.y <= imageOrigin.y + 1.0f &&
+			lastItemMax.y >= imageOrigin.y + viewportSize.y - 1.0f &&
+			lastItemMax.x >= imageOrigin.x + viewportSize.x - 1.0f;
+		const ImVec2 clickPosition = ImGui::GetIO().MouseClickedPos[ImGuiMouseButton_Left];
+		const bool startedOnSidePanel = sidePanelVisible &&
+			clickPosition.x >= lastItemMin.x - 6.0f && clickPosition.x <= lastItemMax.x &&
+			clickPosition.y >= lastItemMin.y && clickPosition.y <= lastItemMax.y;
+
+		if (gizmoCapturing || selectionToolConsumedMouse)
+		{
+			// Nothing else consumes mouse input this frame.
+		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::Cursor3D)
+		{
+			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !startedOnSidePanel)
+			{
+				const ImVec2 mousePos = ImGui::GetMousePos();
+				(void)handleCursor3DPlacement(windowState, mousePos.x - imageOrigin.x, mousePos.y - imageOrigin.y);
+			}
+		}
+		else if (windowState.activeSelectionTool == SelectionToolMode::MeasureBond ||
+			windowState.activeSelectionTool == SelectionToolMode::MeasureAngle)
+		{
+			if (!startedOnSidePanel)
+				handleMeasureToolClick(windowState, imageOrigin, hovered);
+		}
+		else if (hovered && !startedOnSidePanel)
+		{
+			ImGuiIO &io = ImGui::GetIO();
+			const bool leftClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+				!ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+				!io.KeyAlt;
+			if (leftClicked)
+			{
+				const ImVec2 mousePos = ImGui::GetMousePos();
+				const float relX = mousePos.x - imageOrigin.x;
+				const float relY = mousePos.y - imageOrigin.y;
+				if (relX >= 0.0f &&
+					relY >= 0.0f &&
+					relX < windowState.viewportSize.x &&
+					relY < windowState.viewportSize.y)
+				{
+					HandleViewportPick(windowState, relX, relY, io.KeyCtrl, m_Layer);
+				}
+			}
+		}
 
 		ImGui::SetCursorScreenPos(imageOrigin);
 		ImGui::End();
