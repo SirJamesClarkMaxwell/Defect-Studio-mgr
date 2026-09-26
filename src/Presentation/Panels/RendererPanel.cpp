@@ -243,6 +243,7 @@ namespace DefectStudio
 			windowState.selectedSceneArrows.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedScenePaths.clear();
 			windowState.sceneArrowQuickEditActive = false;
 			Ref<EventBus> eventBus = m_Layer.GetEventBus();
 			if (eventBus != nullptr)

@@ -83,6 +83,8 @@ namespace DefectStudio
 				windowState.selectedSceneOrbitals.clear();
 			if (&windowState.selectedScenePlanes != keep)
 				windowState.selectedScenePlanes.clear();
+			if (&windowState.selectedScenePaths != keep)
+				windowState.selectedScenePaths.clear();
 		}
 
 	} // namespace
@@ -189,6 +191,7 @@ namespace DefectStudio
 			windowState.selectedSceneArrows.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedScenePaths.clear();
 			windowState.sceneArrowQuickEditActive = false;
 			if (eventBus == nullptr)
 				continue;

@@ -52,6 +52,13 @@ namespace DefectStudio
 		// invalidated by the next Store, Erase, RetainOnly or Clear.
 		[[nodiscard]] const CachedPathGeometry *Find(SceneObjectId id, const PathEvaluationKey &key) const;
 
+		// The geometry currently held for `id`, whatever key produced it; nullptr for an unknown id.
+		// Find's key check is what stops the RENDER pass drawing stale geometry. Picking needs the
+		// opposite guarantee - that its hitbox matches the pixels on screen right now - and those
+		// pixels are exactly what the last completed frame left here, at whatever LOD bucket it
+		// chose. Same invalidation rules as Find's pointer.
+		[[nodiscard]] const CachedPathGeometry *FindLastBuilt(SceneObjectId id) const;
+
 		// Replaces whatever that id held. Returns the stored entry so a caller that just missed can
 		// use the result without a second lookup. An invalid id is not stored, and then the returned
 		// reference is to a shared empty entry.

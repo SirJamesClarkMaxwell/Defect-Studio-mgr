@@ -267,6 +267,7 @@ namespace DefectStudio
 		if (removed != windowState.scenePlanes.end())
 			windowState.scenePlanes.erase(removed, windowState.scenePlanes.end());
 		windowState.selectedScenePlanes.clear();
+		windowState.selectedScenePaths.clear();
 	}
 
 	void DrawAllSceneOrbitalRows(RendererWindowState &windowState)

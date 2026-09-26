@@ -135,6 +135,9 @@ namespace DefectStudio
 	struct PathRenderInput
 	{
 		PathSystem *paths = nullptr;
+		// Which paths to draw highlighted. Ids, not indices - unlike planes, a path has no vector to
+		// index into. Null or empty means nothing is highlighted.
+		const std::vector<SceneObjectId> *selected = nullptr;
 	};
 
 	// Shared cleanup for per-object cached meshes and the backend's static meshes.

@@ -16,6 +16,7 @@
 #include "Renderer/Path/PathLod.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
 #include "Renderer/Path/PathTessellator.hpp"
+#include "Renderer/Scene/SceneObjectAppearance.hpp"
 
 namespace DefectStudio
 {
@@ -131,7 +132,9 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		const glm::mat4 view = camera.ViewMatrix();
 		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
-		struct DrawJob { SceneObjectId id; bool tube; bool cameraFacing; float halfWidth; float alpha; };
+		const std::vector<SceneObjectId> emptySelection;
+		const std::vector<SceneObjectId> &selection = input.selected == nullptr ? emptySelection : *input.selected;
+		struct DrawJob { SceneObjectId id; bool tube; bool cameraFacing; float halfWidth; float alpha; bool selected; };
 		std::vector<DrawJob> jobs;
 		bool anyTransparent = false;
 
@@ -177,7 +180,8 @@ namespace DefectStudio
 			if (entry.mesh.indexCount > 0)
 			{
 				const bool tube = path.style.profile == StrokeProfile::Round;
-				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha});
+				const bool selected = std::find(selection.begin(), selection.end(), path.id) != selection.end();
+				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha, selected});
 				const bool gradientTransparent = path.style.gradient.enabled && std::any_of(
 					path.style.gradient.stops.begin(), path.style.gradient.stops.end(), [](const PathGradientStop &stop) {
 						return stop.alpha < 0.999f;
@@ -232,6 +236,17 @@ namespace DefectStudio
 				glUseProgram(program);
 				UploadLighting(m_ShaderLibrary, job.tube ? "path_tube" : "path_ribbon", camera, globalSettings, viewProjection, sceneOffset);
 			}
+			// Per job, not inside UploadLighting: that runs once per program switch, while several
+			// paths share a program and only some of them are selected.
+			const char *programName = job.tube ? "path_tube" : "path_ribbon";
+			const int highlightLocation = m_ShaderLibrary.Uniform(programName, "u_SelectionHighlight");
+			const int strengthLocation = m_ShaderLibrary.Uniform(programName, "u_SelectionStrength");
+			const glm::vec3 highlight = SceneSelectionHighlightColor();
+			if (highlightLocation >= 0)
+				glUniform3fv(highlightLocation, 1, &highlight.x);
+			if (strengthLocation >= 0)
+				glUniform1f(strengthLocation, job.selected ? kSceneSelectionHighlightStrength : 0.0f);
+
 			const auto found = resources.scenePathMeshCache.find(job.id);
 			if (found == resources.scenePathMeshCache.end())
 				continue;

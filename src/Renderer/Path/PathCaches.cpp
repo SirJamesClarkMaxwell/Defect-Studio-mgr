@@ -13,6 +13,12 @@ namespace DefectStudio
 		return found == m_Entries.end() || found->key != key ? nullptr : &found->geometry;
 	}
 
+	const CachedPathGeometry *PathCaches::FindLastBuilt(const SceneObjectId id) const
+	{
+		const auto found = std::find_if(m_Entries.begin(), m_Entries.end(), [id](const Entry &entry) { return entry.id == id; });
+		return found == m_Entries.end() ? nullptr : &found->geometry;
+	}
+
 	const CachedPathGeometry &PathCaches::Store(SceneObjectId id, const PathEvaluationKey &key, CachedPathGeometry geometry)
 	{
 		static const CachedPathGeometry empty;

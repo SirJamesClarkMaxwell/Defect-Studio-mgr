@@ -51,6 +51,7 @@ namespace DefectStudio
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleScenePlaneInteraction(windowState, imageOrigin, imageSize, hovered);
 	}
 

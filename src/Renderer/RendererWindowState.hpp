@@ -366,6 +366,10 @@ namespace DefectStudio
 		Unique<PathSystem> paths;
 		// Same multi-select shape as selectedSceneArrows; back() is the gizmo anchor.
 		std::vector<SceneObjectId> selectedScenePlanes;
+		// task/41 S11a: the selected paths, ids into `paths->Store()` rather than indices into a
+		// vector - a path has no vector to index. Same multi-select shape as the four above, and it
+		// must be cleared everywhere they are: a stale entry here shows the wrong Properties section.
+		std::vector<SceneObjectId> selectedScenePaths;
 
 		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
 		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single

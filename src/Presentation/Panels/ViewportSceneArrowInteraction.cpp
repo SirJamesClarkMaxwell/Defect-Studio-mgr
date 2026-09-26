@@ -249,6 +249,7 @@ namespace DefectStudio
 		windowState.selectedFreeLabels.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedScenePlanes.clear();
+		windowState.selectedScenePaths.clear();
 		if (!additive)
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 

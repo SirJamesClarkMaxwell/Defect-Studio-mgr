@@ -351,6 +351,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	if (window.paths != nullptr)
 		window.paths->Clear();
 	window.selectedScenePlanes.clear();
+	window.selectedScenePaths.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
 	window.selectedSceneArrows.clear();

@@ -114,6 +114,7 @@ namespace DefectStudio
 		window.selectedSceneArrows.clear();
 		window.selectedSceneOrbitals.clear();
 		window.selectedScenePlanes.clear();
+		window.selectedScenePaths.clear();
 		window.modalTransform.reset();
 		window.modalTransformSelection = {};
 		window.modalTransformSceneObjectsBefore.reset();

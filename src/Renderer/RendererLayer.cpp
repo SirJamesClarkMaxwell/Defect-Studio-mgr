@@ -496,7 +496,7 @@ namespace DefectStudio
 			if (index < windowState.scenePlanes.size())
 				selectedScenePlanes.push_back(index);
 		}
-		const PathRenderInput pathInput{windowState.paths.get()};
+		const PathRenderInput pathInput{windowState.paths.get(), &windowState.selectedScenePaths};
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,
