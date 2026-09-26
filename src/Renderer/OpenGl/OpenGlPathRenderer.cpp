@@ -68,6 +68,8 @@ namespace DefectStudio
 			glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(StrokeRibbonVertex), reinterpret_cast<void *>(offsetof(StrokeRibbonVertex, color)));
 			glEnableVertexAttribArray(4);
 			glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(StrokeRibbonVertex), reinterpret_cast<void *>(offsetof(StrokeRibbonVertex, side)));
+			glEnableVertexAttribArray(5);
+			glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(StrokeRibbonVertex), reinterpret_cast<void *>(offsetof(StrokeRibbonVertex, halfWidth)));
 			glBindVertexArray(0);
 			mesh.indexCount = static_cast<int>(geometry.indices.size());
 		}

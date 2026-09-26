@@ -166,6 +166,76 @@ namespace DefectStudio::Tests
 		EXPECT_LT(shaftSides, flat.ribbonVertices.size()); // this path has an end decoration
 	}
 
+	TEST(PathStrokeMesherTests, CameraFacingDecorationAndShaftUseTheSameCameraPlane)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::CameraFacing;
+		style.width = 0.2f;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+		ASSERT_FALSE(geometry.endDecoration.IsEmpty());
+		ASSERT_FALSE(geometry.shaft.IsEmpty());
+
+		for (const glm::vec3 camera : {glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 5.0f, 5.0f)})
+		{
+			const auto expanded = [camera](const StrokeRibbonVertex &vertex) {
+				const glm::vec3 tangent = glm::normalize(vertex.tangent);
+				const glm::vec3 view = glm::normalize(camera - vertex.position);
+				const glm::vec3 axis = glm::normalize(glm::cross(tangent, view));
+				return vertex.position + vertex.side * vertex.halfWidth * axis;
+			};
+			const glm::vec3 endpoint = expanded(geometry.ribbonVertices.front());
+			const glm::vec3 tangent = glm::normalize(geometry.ribbonVertices.front().tangent);
+			const glm::vec3 axis = glm::normalize(glm::cross(tangent, glm::normalize(camera - geometry.ribbonVertices.front().position)));
+			const glm::vec3 planeNormal = glm::normalize(glm::cross(tangent, axis));
+			const auto expectOnPlane = [&](const StrokeRibbonVertex &vertex) {
+				EXPECT_NEAR(glm::dot(expanded(vertex) - endpoint, planeNormal), 0.0f, 1e-5f);
+			};
+
+			for (std::uint32_t index = geometry.endDecoration.firstIndex;
+				index < geometry.endDecoration.firstIndex + geometry.endDecoration.indexCount; ++index)
+				expectOnPlane(geometry.ribbonVertices[geometry.indices[index]]);
+			for (std::uint32_t index = geometry.shaft.firstIndex;
+				index < geometry.shaft.firstIndex + geometry.shaft.indexCount; ++index)
+				expectOnPlane(geometry.ribbonVertices[geometry.indices[index]]);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, FlatAndRoundDecorationVerticesRemainStable)
+	{
+		const auto expectNear = [](const glm::vec3 &actual, const glm::vec3 &expected) {
+			EXPECT_NEAR(actual.x, expected.x, 1e-5f);
+			EXPECT_NEAR(actual.y, expected.y, 1e-5f);
+			EXPECT_NEAR(actual.z, expected.z, 1e-5f);
+		};
+		PathStrokeStyle style;
+		style.width = 0.2f;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+
+		style.profile = StrokeProfile::Flat;
+		const StrokeGeometry flat = BuildStroke(StraightPath(), style);
+		ASSERT_GE(flat.ribbonVertices.size(), 6u);
+		// Recorded from a run, not reasoned out: that is what makes this a pin. The offset axis is
+		// the binormal - Sample() seeds normal (0,0,1) and binormal cross(tangent, normal) = (0,-1,0)
+		// - which is the detail a hand-written expectation gets wrong.
+		expectNear(flat.ribbonVertices[0].position, glm::vec3(2.0f, 0.0f, 0.0f));
+		expectNear(flat.ribbonVertices[2].position, glm::vec3(1.8f, -0.1f, 0.0f));
+		expectNear(flat.ribbonVertices[3].position, glm::vec3(1.8f, 0.1f, 0.0f));
+		expectNear(flat.ribbonVertices[4].position, glm::vec3(1.8f, 0.0f, 0.0f));
+
+		style.profile = StrokeProfile::Round;
+		style.radialSegments = 4;
+		const StrokeGeometry round = BuildStroke(StraightPath(), style);
+		ASSERT_GE(round.tubeVertices.size(), 8u);
+		// The ring's off-axis components land at ~1e-17 rather than exactly zero, so this compares
+		// near rather than equal - EXPECT_EQ on a float that went through a trig function is a test
+		// that fails on a compiler flag change, not on a regression.
+		expectNear(round.tubeVertices[0].position, glm::vec3(2.0f, 0.0f, 0.0f));
+		expectNear(round.tubeVertices[4].position, glm::vec3(1.8f, 0.1f, 0.0f));
+		expectNear(round.tubeVertices[5].position, glm::vec3(1.8f, 0.0f, 0.1f));
+		expectNear(round.tubeVertices[6].position, glm::vec3(1.8f, -0.1f, 0.0f));
+	}
+
 	TEST(PathStrokeMesherTests, BendsOfNinetyAndOneHundredEightyDegreesKeepFiniteUnitNormals)
 	{
 		PathStrokeStyle style;

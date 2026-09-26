@@ -32,6 +32,7 @@ namespace DefectStudio
 		float side = 0.0f; // -1 or +1
 		float arcT = 0.0f;
 		float dashCoord = 0.0f;
+		float halfWidth = 0.0f; // CameraFacing expansion width; ignored by Flat
 	};
 
 	// Where one logical piece lives inside the mesh, so a test can assert "the end decoration produced

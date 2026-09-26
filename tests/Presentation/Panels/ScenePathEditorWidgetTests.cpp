@@ -75,6 +75,29 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(window.paths->Store().Find(ids[1])->style.alpha, 0.4f);
 	}
 
+	TEST(ScenePathEditorWidgetTests, ApplyWritesAllStyleComboValuesToEverySelectedPath)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ScenePathStyleEdit edit;
+		edit.profile = StrokeProfile::CameraFacing;
+		edit.startDecoration = PathDecorationKind::Bar;
+		edit.endDecoration = PathDecorationKind::Diamond;
+		edit.depthMode = PathDepthMode::AlwaysOnTop;
+
+		EXPECT_EQ(ApplyScenePathStyleEdit(window, ids, edit), 2u);
+		for (const SceneObjectId id : ids)
+		{
+			const ScenePath *path = window.paths->Store().Find(id);
+			ASSERT_NE(path, nullptr);
+			EXPECT_EQ(path->style.profile, StrokeProfile::CameraFacing);
+			EXPECT_EQ(path->style.startDecoration.kind, PathDecorationKind::Bar);
+			EXPECT_EQ(path->style.endDecoration.kind, PathDecorationKind::Diamond);
+			EXPECT_EQ(path->style.depthMode, PathDepthMode::AlwaysOnTop);
+		}
+	}
+
 	TEST(ScenePathEditorWidgetTests, DisplayNameUsesNameOrStoreIndex)
 	{
 		RendererWindowState window;

@@ -19,28 +19,34 @@ namespace DefectStudio
 			mixed = mixed || !(first == value);
 		}
 
-		void DrawEnumCombo(const char *label, StrokeProfile &value)
+		[[nodiscard]] bool DrawEnumCombo(const char *label, StrokeProfile &value)
 		{
 			const char *names[] = {"Round", "Flat", "Camera-facing"};
 			int index = static_cast<int>(value);
-			if (ImGui::Combo(label, &index, names, 3))
+			const bool changed = ImGui::Combo(label, &index, names, 3);
+			if (changed)
 				value = static_cast<StrokeProfile>(index);
+			return changed;
 		}
 
-		void DrawEnumCombo(const char *label, PathDecorationKind &value)
+		[[nodiscard]] bool DrawEnumCombo(const char *label, PathDecorationKind &value)
 		{
 			const char *names[] = {"None", "Arrow", "Stealth", "Open arrow", "Bar", "Circle", "Square", "Diamond"};
 			int index = static_cast<int>(value);
-			if (ImGui::Combo(label, &index, names, 8))
+			const bool changed = ImGui::Combo(label, &index, names, 8);
+			if (changed)
 				value = static_cast<PathDecorationKind>(index);
+			return changed;
 		}
 
-		void DrawEnumCombo(const char *label, PathDepthMode &value)
+		[[nodiscard]] bool DrawEnumCombo(const char *label, PathDepthMode &value)
 		{
 			const char *names[] = {"Depth test", "Always on top"};
 			int index = static_cast<int>(value);
-			if (ImGui::Combo(label, &index, names, 2))
+			const bool changed = ImGui::Combo(label, &index, names, 2);
+			if (changed)
 				value = static_cast<PathDepthMode>(index);
+			return changed;
 		}
 	}
 
@@ -130,21 +136,8 @@ namespace DefectStudio
 			return false;
 		ScenePathStyleEdit edit = resolved.values;
 		bool changed = false;
+		bool renamed = false;
 		ImGui::Text("Paths (%zu selected)", resolved.resolved);
-		DrawEnumCombo("Profile", edit.profile);
-		changed = ImGui::IsItemDeactivatedAfterEdit() || changed;
-		changed = ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f") || changed;
-		changed = ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f") || changed;
-		changed = ImGui::ColorEdit3("Color", &edit.color.x) || changed;
-		DrawEnumCombo("Start decoration", edit.startDecoration);
-		changed = ImGui::IsItemDeactivatedAfterEdit() || changed;
-		DrawEnumCombo("End decoration", edit.endDecoration);
-		changed = ImGui::IsItemDeactivatedAfterEdit() || changed;
-		DrawEnumCombo("Depth", edit.depthMode);
-		changed = ImGui::IsItemDeactivatedAfterEdit() || changed;
-		if (changed)
-			return ApplyScenePathStyleEdit(windowState, selection, edit) != 0;
-
 		if (selection.size() == 1 && windowState.paths != nullptr)
 		{
 			const ScenePath *path = windowState.paths->Store().Find(selection.front());
@@ -153,9 +146,18 @@ namespace DefectStudio
 				char name[256]{};
 				std::snprintf(name, sizeof(name), "%s", path->name.c_str());
 				if (ImGui::InputText("Name", name, sizeof(name), ImGuiInputTextFlags_EnterReturnsTrue))
-					return RenameScenePath(windowState, path->id, name);
+					renamed = RenameScenePath(windowState, path->id, name);
 			}
 		}
-		return false;
+		changed = DrawEnumCombo("Profile", edit.profile) || changed;
+		changed = ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f") || changed;
+		changed = ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f") || changed;
+		changed = ImGui::ColorEdit3("Color", &edit.color.x) || changed;
+		changed = DrawEnumCombo("Start decoration", edit.startDecoration) || changed;
+		changed = DrawEnumCombo("End decoration", edit.endDecoration) || changed;
+		changed = DrawEnumCombo("Depth", edit.depthMode) || changed;
+		if (changed)
+			return ApplyScenePathStyleEdit(windowState, selection, edit) != 0 || renamed;
+		return renamed;
 	}
 } // namespace DefectStudio

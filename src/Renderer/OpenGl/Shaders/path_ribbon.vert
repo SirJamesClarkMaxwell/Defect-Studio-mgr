@@ -5,6 +5,7 @@ layout(location = 1) in vec3 aTangent;
 layout(location = 2) in vec3 aNormal;
 layout(location = 3) in vec4 aColor;
 layout(location = 4) in float aSide;
+layout(location = 5) in float aHalfWidth;
 
 uniform mat4 u_ViewProjection;
 uniform vec3 u_SceneOffset;
@@ -33,7 +34,8 @@ void main()
 		offsetDir /= offsetLength;
 	else
 		offsetDir = vec3(0.0);
-	world += aSide * u_HalfWidth * offsetDir;
+	float halfWidth = u_CameraFacing == 1 ? aHalfWidth : u_HalfWidth;
+	world += aSide * halfWidth * offsetDir;
 	vNormal = u_CameraFacing == 1 ? normalize(u_CameraPosition - world) : normalize(aNormal);
 	vColor = aColor;
 	vWorldPos = world;
