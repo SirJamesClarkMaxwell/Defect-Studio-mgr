@@ -177,7 +177,7 @@ namespace DefectStudio
 			if (entry.mesh.vao == 0 || entry.key != key)
 			{
 				DeleteMeshHandles(entry.mesh);
-				if (path.style.profile == StrokeProfile::Round)
+				if (!cached->stroke.tubeVertices.empty())
 					UploadTube(entry.mesh, cached->stroke);
 				else
 					UploadRibbon(entry.mesh, cached->stroke);
@@ -185,7 +185,7 @@ namespace DefectStudio
 			}
 			if (entry.mesh.indexCount > 0)
 			{
-				const bool tube = path.style.profile == StrokeProfile::Round;
+				const bool tube = !cached->stroke.tubeVertices.empty();
 				const bool selected = std::find(selection.begin(), selection.end(), path.id) != selection.end();
 				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha, selected});
 				const bool gradientTransparent = path.style.gradient.enabled && std::any_of(

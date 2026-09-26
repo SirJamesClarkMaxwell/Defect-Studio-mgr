@@ -3,6 +3,7 @@
 #include "Renderer/Path/PathDecorationMesher.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 
@@ -10,40 +11,29 @@ namespace DefectStudio::detail
 {
 	namespace
 	{
+		[[nodiscard]] glm::dvec3 SafeNormal(const glm::dvec3 &value, const glm::dvec3 &fallback)
+		{
+			return glm::dot(value, value) > 1.0e-18 ? glm::normalize(value) : fallback;
+		}
+
 		void AppendRingFan(StrokeGeometry &geometry, const std::uint32_t ring, const PathStrokeStyle &style,
 			const EvaluatedSample &sample, const glm::dvec3 &outward, const bool flip)
 		{
+			const std::uint32_t ringSize = CrossSectionRingSize(style);
 			const std::uint32_t centre = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			glm::dvec3 centrePosition(0.0);
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
+			for (std::uint32_t radial = 0; radial < ringSize; ++radial)
 				centrePosition += glm::dvec3(geometry.tubeVertices[ring + radial].position);
-			centrePosition /= static_cast<double>(style.radialSegments);
+			centrePosition /= static_cast<double>(ringSize);
 			geometry.tubeVertices.push_back({glm::vec3(centrePosition), glm::vec3(outward),
 				SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
+			for (std::uint32_t radial = 0; radial < ringSize; ++radial)
 			{
-				const std::uint32_t next = ring + (radial + 1u) % style.radialSegments;
+				const std::uint32_t next = ring + (radial + 1u) % ringSize;
 				if (flip)
 					geometry.indices.insert(geometry.indices.end(), {centre, ring + radial, next});
 				else
 					geometry.indices.insert(geometry.indices.end(), {centre, next, ring + radial});
-			}
-		}
-
-		void AppendTubeRing(StrokeGeometry &geometry, const DecorationContourPoint &point,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
-			const bool inner)
-		{
-			const double wallRadius = style.width * 0.5;
-			const double radius = inner ? std::max(0.0, point.halfWidth - wallRadius) : point.halfWidth;
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-			{
-				const double angle = 2.0 * std::numbers::pi * radial / style.radialSegments;
-				const glm::dvec3 radialVector = std::cos(angle) * endpoint.normal + std::sin(angle) * endpoint.binormal;
-				const glm::dvec3 position = endpoint.position + inward * point.s + radialVector * radius;
-				geometry.tubeVertices.push_back({glm::vec3(position), glm::vec3(inner ? -radialVector : radialVector),
-					SampleStrokeColor(style, endpoint.normalizedT), static_cast<float>(endpoint.normalizedT),
-					static_cast<float>(endpoint.arcLength)});
 			}
 		}
 
@@ -52,16 +42,14 @@ namespace DefectStudio::detail
 		{
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
-			{
-				AppendTubeRing(geometry, point, endpoint, inward, style, false);
-			}
+				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint, point.halfWidth, style);
 			for (std::size_t ring = 0; ring + 1u < contour.points.size(); ++ring)
-				StitchRings(geometry, first + static_cast<std::uint32_t>(ring) * style.radialSegments,
-					first + static_cast<std::uint32_t>(ring + 1u) * style.radialSegments, style.radialSegments);
+				StitchRings(geometry, first + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style),
+					first + static_cast<std::uint32_t>(ring + 1u) * CrossSectionRingSize(style), CrossSectionRingSize(style));
 			if (contour.points.front().halfWidth > 0.0)
 				AppendRingFan(geometry, first, style, endpoint, -inward, false);
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
-				AppendRingFan(geometry, first + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
+				AppendRingFan(geometry, first + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
 					style, endpoint, inward, true);
 		}
 
@@ -70,24 +58,25 @@ namespace DefectStudio::detail
 		{
 			const std::uint32_t firstOuter = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
-				AppendTubeRing(geometry, point, endpoint, inward, style, false);
+				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint, point.halfWidth, style);
 			const std::uint32_t firstInner = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
-				AppendTubeRing(geometry, point, endpoint, inward, style, true);
+				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint,
+					std::max(0.0, point.halfWidth - static_cast<double>(style.width) * 0.5), style, true);
 
 			for (std::size_t ring = 0; ring + 1u < contour.points.size(); ++ring)
 			{
-				const std::uint32_t outer = firstOuter + static_cast<std::uint32_t>(ring) * style.radialSegments;
-				const std::uint32_t inner = firstInner + static_cast<std::uint32_t>(ring) * style.radialSegments;
-				StitchRings(geometry, outer, outer + style.radialSegments, style.radialSegments);
-				StitchRings(geometry, inner, inner + style.radialSegments, style.radialSegments, true);
+				const std::uint32_t outer = firstOuter + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style);
+				const std::uint32_t inner = firstInner + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style);
+				StitchRings(geometry, outer, outer + CrossSectionRingSize(style), CrossSectionRingSize(style));
+				StitchRings(geometry, inner, inner + CrossSectionRingSize(style), CrossSectionRingSize(style), true);
 			}
 			if (contour.points.front().halfWidth > 0.0)
-				StitchRings(geometry, firstOuter, firstInner, style.radialSegments, true);
+				StitchRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), true);
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
-				StitchRings(geometry, firstOuter + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
-					firstInner + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
-					style.radialSegments);
+				StitchRings(geometry, firstOuter + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
+					firstInner + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
+					CrossSectionRingSize(style));
 		}
 
 		StrokeRibbonVertex MakeRibbonVertex(const DecorationContourPoint &point, const EvaluatedSample &endpoint,
@@ -158,6 +147,59 @@ namespace DefectStudio::detail
 		}
 	}
 
+	bool UsesTubeVertices(const PathStrokeStyle &style)
+	{
+		return style.profile == StrokeProfile::Round ||
+			(style.profile == StrokeProfile::Flat && std::isfinite(style.ribbonThickness) && style.ribbonThickness > 0.0f);
+	}
+
+	std::uint32_t CrossSectionRingSize(const PathStrokeStyle &style)
+	{
+		return style.profile == StrokeProfile::Round ? style.radialSegments : 4u;
+	}
+
+	std::uint32_t AppendCrossSectionRing(StrokeGeometry &geometry, const glm::dvec3 &centre,
+		const EvaluatedSample &sample, const double halfWidth, const PathStrokeStyle &style,
+		const bool inner, const double scale)
+	{
+		const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
+		const glm::dvec3 normal = sample.normal;
+		const glm::dvec3 binormal = sample.binormal;
+		if (style.profile == StrokeProfile::Round)
+		{
+			const double radius = halfWidth * scale;
+			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
+			{
+				const double angle = 2.0 * std::numbers::pi * radial / style.radialSegments;
+				const glm::dvec3 radialVector = std::cos(angle) * normal + std::sin(angle) * binormal;
+				const glm::dvec3 position = centre + radialVector * radius;
+				geometry.tubeVertices.push_back({glm::vec3(position), glm::vec3(inner ? -radialVector : radialVector),
+					SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT),
+					static_cast<float>(sample.arcLength)});
+			}
+			return first;
+		}
+
+		const double halfThickness = std::max(0.0, static_cast<double>(style.ribbonThickness)) * 0.5 * scale;
+		const double innerHalfThickness = inner
+			? std::max(0.0, halfThickness - static_cast<double>(style.width) * 0.5)
+			: halfThickness;
+		const double depth = inner ? innerHalfThickness : halfThickness;
+		const std::array<glm::dvec3, 4> corners = {
+			normal * halfWidth * scale + binormal * depth,
+			-normal * halfWidth * scale + binormal * depth,
+			-normal * halfWidth * scale - binormal * depth,
+			normal * halfWidth * scale - binormal * depth};
+		for (const glm::dvec3 &corner : corners)
+		{
+			const glm::dvec3 cornerNormal = SafeNormal(corner, inner ? -normal : normal);
+			geometry.tubeVertices.push_back({glm::vec3(centre + corner), glm::vec3(inner ? -cornerNormal : cornerNormal),
+				SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT),
+				static_cast<float>(sample.arcLength)});
+		}
+		return first;
+	}
+
 	std::size_t BackContourPoint(const DecorationContour &contour)
 	{
 		if (contour.points.empty())
@@ -194,7 +236,7 @@ namespace DefectStudio::detail
 			return;
 		range.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
 		const glm::dvec3 inward = start ? endpoint.tangent : -endpoint.tangent;
-		if (style.profile == StrokeProfile::Round)
+		if (UsesTubeVertices(style))
 		{
 			if (contour.filled)
 				AppendFilledRoundDecoration(geometry, contour, endpoint, inward, style);

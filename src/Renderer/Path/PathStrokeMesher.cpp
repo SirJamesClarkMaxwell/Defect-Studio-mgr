@@ -114,27 +114,25 @@ namespace DefectStudio
 		{
 			constexpr std::uint32_t kCapRings = 3;
 			const double radius = static_cast<double>(style.width) * 0.5;
+			const std::uint32_t ringSize = detail::CrossSectionRingSize(style);
 			const glm::dvec3 axis = end ? sample.tangent : -sample.tangent;
 			std::uint32_t lower = boundaryRing;
 			for (std::uint32_t ring = 1; ring <= kCapRings; ++ring)
 			{
 				const double theta = 0.5 * std::numbers::pi * static_cast<double>(ring) / static_cast<double>(kCapRings);
-				const double ringRadius = radius * std::cos(theta);
 				const glm::dvec3 centre = sample.position + axis * (radius * std::sin(theta));
-				const std::uint32_t upper = static_cast<std::uint32_t>(geometry.tubeVertices.size());
-				for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
+				const std::uint32_t upper = detail::AppendCrossSectionRing(
+					geometry, centre, sample, radius, style, false, std::cos(theta));
+				for (std::uint32_t radial = 0; radial < ringSize; ++radial)
 				{
-					const double angle = 2.0 * std::numbers::pi * static_cast<double>(radial) / static_cast<double>(style.radialSegments);
-					const glm::dvec3 radialVector = std::cos(angle) * sample.normal + std::sin(angle) * sample.binormal;
 					// The apex ring is a single point on the axis; its normal comes from the axis, not from
 					// a zero-length offset.
-					const glm::dvec3 position = centre + radialVector * ringRadius;
+					const glm::dvec3 position = glm::dvec3(geometry.tubeVertices[upper + radial].position);
 					const glm::dvec3 offset = position - sample.position;
-					geometry.tubeVertices.push_back({glm::vec3(position),
-						glm::vec3(glm::dot(offset, offset) > 1e-18 ? glm::normalize(offset) : axis),
-						SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
+					geometry.tubeVertices[upper + radial].normal = glm::vec3(
+						glm::dot(offset, offset) > 1e-18 ? glm::normalize(offset) : axis);
 				}
-				detail::StitchRings(geometry, lower, upper, style.radialSegments, !end);
+				detail::StitchRings(geometry, lower, upper, ringSize, !end);
 				lower = upper;
 			}
 		}
@@ -146,26 +144,19 @@ namespace DefectStudio
 				return;
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			const float radius = style.width * 0.5f;
+			const std::uint32_t ringSize = detail::CrossSectionRingSize(style);
 			if (style.cap == PathLineCap::Square)
 			{
 				samples.front().position -= samples.front().tangent * static_cast<double>(radius);
 				samples.back().position += samples.back().tangent * static_cast<double>(radius);
 			}
 			for (const EvaluatedSample &sample : samples)
-			{
-				for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-				{
-					const double angle = 2.0 * std::numbers::pi * static_cast<double>(radial) / static_cast<double>(style.radialSegments);
-					const glm::dvec3 normal = std::cos(angle) * sample.normal + std::sin(angle) * sample.binormal;
-					geometry.tubeVertices.push_back({glm::vec3(sample.position + normal * static_cast<double>(radius)), glm::vec3(normal),
-						SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
-				}
-			}
+				detail::AppendCrossSectionRing(geometry, sample.position, sample, radius, style);
 			for (std::size_t ring = 0; ring + 1u < samples.size(); ++ring)
 			{
-				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * style.radialSegments;
-				const std::uint32_t upper = first + static_cast<std::uint32_t>(ring + 1u) * style.radialSegments;
-				detail::StitchRings(geometry, lower, upper, style.radialSegments);
+				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * ringSize;
+				const std::uint32_t upper = first + static_cast<std::uint32_t>(ring + 1u) * ringSize;
+				detail::StitchRings(geometry, lower, upper, ringSize);
 			}
 			if (style.cap == PathLineCap::Round)
 			{
@@ -173,7 +164,7 @@ namespace DefectStudio
 					AppendHemisphereCap(geometry, samples.front(), style, false, first);
 				if (capEnd)
 					AppendHemisphereCap(geometry, samples.back(), style, true,
-						first + static_cast<std::uint32_t>(samples.size() - 1u) * style.radialSegments);
+						first + static_cast<std::uint32_t>(samples.size() - 1u) * ringSize);
 			}
 		}
 
@@ -256,7 +247,7 @@ namespace DefectStudio
 				samples.front() = DecorationBackSample(samples.front(), evaluated.samples.front(), startContour, true);
 			if (endHandoff)
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
-			if (style.profile == StrokeProfile::Round)
+			if (detail::UsesTubeVertices(style))
 				AppendTubePiece(geometry, samples, style, !(atStart && startContour.closesBack), !(atEnd && endContour.closesBack));
 			else
 				AppendRibbonPiece(geometry, samples, style);

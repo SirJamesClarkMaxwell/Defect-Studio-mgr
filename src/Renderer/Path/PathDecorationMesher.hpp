@@ -15,6 +15,17 @@ namespace DefectStudio::detail
 	// the back is the widest of them, because that is the ring the shaft has to meet.
 	[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour);
 
+	// Appends one cross-section ring and returns its first vertex. Round uses the configured radial
+	// count; a thick Flat stroke uses four rectangular corners. Shaft and decoration meshing both use
+	// this seam so the shape of a ring cannot diverge between them.
+	std::uint32_t AppendCrossSectionRing(
+		StrokeGeometry &geometry, const glm::dvec3 &centre, const EvaluatedSample &sample,
+		const double halfWidth, const PathStrokeStyle &style, const bool inner = false,
+		const double scale = 1.0);
+
+	[[nodiscard]] bool UsesTubeVertices(const PathStrokeStyle &style);
+	[[nodiscard]] std::uint32_t CrossSectionRingSize(const PathStrokeStyle &style);
+
 	// One quad band between two rings of `radialSegments` vertices. Both ring starts are explicit
 	// because a cap's rings are appended after the whole shaft rather than next to the ring they
 	// attach to, so assuming `upper == lower + radialSegments` stitches the wrong pair.

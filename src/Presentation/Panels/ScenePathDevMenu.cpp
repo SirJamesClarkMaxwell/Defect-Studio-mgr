@@ -122,6 +122,13 @@ namespace DefectStudio
 		const PathEditContext context = MakeWindowPathEditContext(windowState);
 		if (ImGui::MenuItem("Decoration gallery"))
 			AddScenePathDecorationGallery(windowState, worldPosition);
+		if (ImGui::MenuItem("Thick curved Flat ribbon"))
+		{
+			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Cubic, worldPosition, StrokeProfile::Flat);
+			path.name = "Thick Flat ribbon";
+			path.style.ribbonThickness = 0.12f;
+			(void)AddScenePath(context, std::move(path));
+		}
 
 		const auto add = [&](const ScenePathDevPreset preset, const StrokeProfile profile, const char *label) {
 			if (!ImGui::MenuItem(label))

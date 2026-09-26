@@ -243,6 +243,7 @@ namespace DefectStudio::SceneObjectsYaml
 				if (style.depthMode != "DepthTest" && style.depthMode != "AlwaysOnTop") return false;
 				style.width = node["width"].as<float>(style.width);
 				if (node["ribbon_normal"] && !Vec3(node["ribbon_normal"], style.ribbonNormal)) return false;
+				style.ribbonThickness = node["ribbonThickness"].as<float>(style.ribbonThickness);
 				style.radialSegments = node["radialSegments"].as<int>(style.radialSegments);
 				if (node["color"] && !Vec3(node["color"], style.color)) return false;
 				style.alpha = node["alpha"].as<float>(style.alpha);
@@ -294,7 +295,7 @@ namespace DefectStudio::SceneObjectsYaml
 
 		void EmitPathStyle(YAML::Emitter &emit, const PersistedPathStyle &style)
 		{
-			emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap << YAML::Key << "profile" << YAML::Value << style.profile << YAML::Key << "ribbon_normal" << YAML::Value << YAML::Flow << YAML::BeginSeq << style.ribbonNormal.x << style.ribbonNormal.y << style.ribbonNormal.z << YAML::EndSeq << YAML::Key << "width" << YAML::Value << style.width << YAML::Key << "join" << YAML::Value << style.join << YAML::Key << "cap" << YAML::Value << style.cap << YAML::Key << "radialSegments" << YAML::Value << style.radialSegments;
+			emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap << YAML::Key << "profile" << YAML::Value << style.profile << YAML::Key << "ribbon_normal" << YAML::Value << YAML::Flow << YAML::BeginSeq << style.ribbonNormal.x << style.ribbonNormal.y << style.ribbonNormal.z << YAML::EndSeq << YAML::Key << "ribbonThickness" << YAML::Value << style.ribbonThickness << YAML::Key << "width" << YAML::Value << style.width << YAML::Key << "join" << YAML::Value << style.join << YAML::Key << "cap" << YAML::Value << style.cap << YAML::Key << "radialSegments" << YAML::Value << style.radialSegments;
 			EmitVec3(emit, "color", style.color);
 			emit << YAML::Key << "alpha" << YAML::Value << style.alpha << YAML::Key << "dashEnabled" << YAML::Value << style.dashEnabled << YAML::Key << "dashLength" << YAML::Value << style.dashLength << YAML::Key << "gapLength" << YAML::Value << style.gapLength << YAML::Key << "dashPhase" << YAML::Value << style.dashPhase << YAML::Key << "gradientEnabled" << YAML::Value << style.gradientEnabled << YAML::Key << "gradientStops" << YAML::Value << YAML::BeginSeq;
 			for (const auto &stop : style.gradientStops)

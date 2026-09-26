@@ -76,6 +76,7 @@ namespace DefectStudio
 				first = path;
 				state.values.profile = path->style.profile;
 				state.values.ribbonNormal = path->style.ribbonNormal;
+				state.values.ribbonThickness = path->style.ribbonThickness;
 				state.anyFlatProfile = path->style.profile == StrokeProfile::Flat;
 				state.values.width = path->style.width;
 				state.values.alpha = path->style.alpha;
@@ -90,6 +91,7 @@ namespace DefectStudio
 			state.anyFlatProfile = state.anyFlatProfile || path->style.profile == StrokeProfile::Flat;
 			MarkMixed(state.mixedProfile, state.values.profile, path->style.profile);
 			MarkMixed(state.mixedRibbonNormal, state.values.ribbonNormal, path->style.ribbonNormal);
+			MarkMixed(state.mixedRibbonThickness, state.values.ribbonThickness, path->style.ribbonThickness);
 			MarkMixed(state.mixedWidth, state.values.width, path->style.width);
 			MarkMixed(state.mixedAlpha, state.values.alpha, path->style.alpha);
 			MarkMixed(state.mixedColor, state.values.color, path->style.color);
@@ -114,6 +116,7 @@ namespace DefectStudio
 			[&edit](PathStrokeStyle &style) {
 				style.profile = edit.profile;
 				style.ribbonNormal = edit.ribbonNormal;
+				style.ribbonThickness = edit.ribbonThickness;
 				style.width = edit.width;
 				style.alpha = edit.alpha;
 				style.color = edit.color;
@@ -215,7 +218,10 @@ namespace DefectStudio
 		}
 		applyImmediate(DrawEnumCombo("Profile", edit.profile));
 		if (resolved.values.profile == StrokeProfile::Flat || (resolved.mixedProfile && resolved.anyFlatProfile))
+		{
 			applyDrag(ImGui::DragFloat3("Ribbon normal", &edit.ribbonNormal.x, 0.01f));
+			applyDrag(ImGui::DragFloat("Ribbon thickness", &edit.ribbonThickness, 0.005f, 0.0f, 10.0f, "%.3f"));
+		}
 		applyDrag(ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
 		applyDrag(ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));
 		applyDrag(ImGui::ColorEdit3("Color", &edit.color.x));
