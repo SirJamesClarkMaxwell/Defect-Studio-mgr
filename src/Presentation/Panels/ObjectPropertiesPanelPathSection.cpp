@@ -12,6 +12,7 @@ namespace DefectStudio
 	void DrawSelectedScenePathSection(RendererWindowState &windowState)
 	{
 		ImGui::Separator();
+		DrawScenePathTransformEditor(windowState);
 		DrawScenePathEditor(windowState);
 		if (ImGui::Button("Delete##SelectedPath"))
 			ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Delete);
