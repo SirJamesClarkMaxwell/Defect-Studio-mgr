@@ -105,6 +105,21 @@ namespace DefectStudio
 	//     latent rather than observed - `cap` defaults to Butt and nothing in the UI sets it - but it
 	//     is the same handoff and belongs with it.
 	//   * An unfilled decoration does not close its back, so its end keeps its cap.
+	// - task/41 S11m, a Flat stroke with `style.ribbonThickness > 0`. Its cross-section is a
+	//   `width` by `ribbonThickness` rectangle, so it is built the way Round is built - rings of
+	//   vertices stitched to their neighbours, into `tubeVertices` - with a four-corner rectangular
+	//   ring in place of Round's circular one. The corners are
+	//   `sample.position +/- (width/2) * normal +/- (ribbonThickness/2) * binormal`.
+	//   * Everything downstream already works on rings: the joins, the caps, the decoration meshing
+	//     and the S11h decoration/shaft handoff need no special case for it, and must not grow one.
+	//   * The decorations extrude the same way. A thick ribbon's arrowhead is a solid of the same
+	//     thickness, not a sheet glued to a solid shaft.
+	//   * `style.radialSegments` does not apply: a rectangle has four corners.
+	//   * Zero thickness keeps the existing shader-expanded sheet in `ribbonVertices`, unchanged.
+	//     This is the default, so no existing path changes shape.
+	// - Which vertex array is populated therefore no longer follows from the profile alone, and
+	//   callers must key off the array rather than off `style.profile`. The invariant that exactly
+	//   one of the two is populated still holds.
 	// - Fewer than two samples, or a zero-length path, yields empty geometry and no crash.
 	// - No NaN or Inf ever reaches a vertex field.
 	[[nodiscard]] StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style);

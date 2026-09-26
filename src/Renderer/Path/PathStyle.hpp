@@ -115,6 +115,19 @@ namespace DefectStudio
 		// Which way a Flat ribbon's sheet faces. Seeds the transported frame; ignored by Round and
 		// CameraFacing, which choose their own rotational axis.
 		glm::vec3 ribbonNormal{0.0f, 1.0f, 0.0f};
+		// How thick that sheet is, in world units. Zero - the default - is the flat sheet Flat has
+		// always been: it vanishes when seen edge-on, which is correct for a diagram drawn on a plane
+		// and wrong for a curved arrow meant to read as an object.
+		//
+		// task/41 S11m: a positive value does NOT select a different kind of geometry. Flat still
+		// means "a ribbon in the plane the ribbonNormal picks"; thickness only says how far that
+		// ribbon is extruded along its own normal. A Flat stroke of thickness t is a stroke whose
+		// cross-section is a `width` by `t` rectangle instead of a zero-height line, which is the
+		// same relationship Round's cross-section has to a circle.
+		//
+		// Ignored by Round, whose cross-section is already a disc, and by CameraFacing, which is
+		// expanded in the shader towards the eye and has no stable normal to extrude along.
+		float ribbonThickness = 0.0f;
 		float width = 0.05f; // full width; the tube radius is half of it
 		PathLineJoin join = PathLineJoin::Bevel;
 		PathLineCap cap = PathLineCap::Butt;

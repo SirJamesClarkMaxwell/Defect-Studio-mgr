@@ -208,6 +208,9 @@ namespace DefectStudio
 	{
 		std::string profile = "Round"; // Round | Flat | CameraFacing
 		glm::vec3 ribbonNormal{0.0f, 1.0f, 0.0f};
+		// task/41 S11m. Additive: absent means 0.0, which is the flat sheet every file written before
+		// it meant. The format version does not move.
+		float ribbonThickness = 0.0f;
 		float width = 0.05f;           // full width, as in PathStrokeStyle - not a radius
 		std::string join = "Bevel";    // Bevel | Round
 		std::string cap = "Butt";      // Butt | Square | Round
