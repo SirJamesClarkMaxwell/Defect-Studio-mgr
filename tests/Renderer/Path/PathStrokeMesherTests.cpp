@@ -5,8 +5,11 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <map>
+#include <numbers>
 #include <utility>
+#include <vector>
 
 #include "Renderer/Path/PathDash.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
@@ -95,6 +98,191 @@ namespace DefectStudio::Tests
 			PathDecorationKind::Stealth, PathDecorationKind::Latex, PathDecorationKind::Bar,
 			PathDecorationKind::Circle, PathDecorationKind::Square, PathDecorationKind::Diamond,
 			PathDecorationKind::Kite};
+
+		ScenePath CurvedArcPath()
+		{
+			ScenePath path;
+			path.nodes = {{PathElementId{1u}, glm::vec3(0.0f), {}}, {PathElementId{2u}, glm::vec3(2.0f, 0.0f, 0.0f), {}}};
+			path.segments = {{PathElementId{3u}, CircularArcSegmentData{glm::vec3(0.0f, 0.0f, 1.0f), std::numbers::pi_v<float> / 2.0f}}};
+			return path;
+		}
+
+		ResolvedNodes ResolveNodePositions(const ScenePath &path)
+		{
+			ResolvedNodes resolved;
+			for (const PathNode &node : path.nodes)
+				resolved.positions.push_back(node.position);
+			return resolved;
+		}
+
+		EvaluatedPath TessellatedCurvedArc()
+		{
+			const ScenePath path = CurvedArcPath();
+			TessellationSettings settings;
+			settings.worldTolerance = 1.0e-4;
+			return Tessellate(path, ResolveNodePositions(path), settings);
+		}
+
+		bool RangesOverlap(const StrokeMeshRange &a, const StrokeMeshRange &b)
+		{
+			if (a.IsEmpty() || b.IsEmpty())
+				return false;
+			return a.firstIndex < b.firstIndex + b.indexCount && b.firstIndex < a.firstIndex + a.indexCount;
+		}
+
+		bool AllVertexFieldsFinite(const StrokeGeometry &geometry)
+		{
+			for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+				if (!Finite(vertex.position) || !Finite(vertex.normal) || !Finite(vertex.color) || !std::isfinite(vertex.arcT) || !std::isfinite(vertex.dashCoord))
+					return false;
+			for (const StrokeRibbonVertex &vertex : geometry.ribbonVertices)
+				if (!Finite(vertex.position) || !Finite(vertex.tangent) || !Finite(vertex.normal) || !Finite(vertex.color) ||
+					!std::isfinite(vertex.side) || !std::isfinite(vertex.arcT) || !std::isfinite(vertex.dashCoord) || !std::isfinite(vertex.halfWidth))
+					return false;
+			return true;
+		}
+
+		void AssertAllIndicesInBounds(const StrokeGeometry &geometry, const std::size_t vertexCount)
+		{
+			ASSERT_EQ(geometry.indices.size() % 3u, 0u);
+			for (std::size_t index = 0; index < geometry.indices.size(); ++index)
+			{
+				ASSERT_LT(index, geometry.indices.size());
+				const std::uint32_t vertexIndex = geometry.indices[index];
+				ASSERT_LT(vertexIndex, vertexCount);
+			}
+		}
+
+		void AssertRangeReferencesInBounds(const StrokeGeometry &geometry, const StrokeMeshRange &range, const std::size_t vertexCount)
+		{
+			ASSERT_LE(range.firstIndex, geometry.indices.size());
+			ASSERT_LE(range.indexCount, geometry.indices.size() - range.firstIndex);
+			for (std::uint32_t offset = 0; offset < range.indexCount; ++offset)
+			{
+				const std::size_t indexPosition = static_cast<std::size_t>(range.firstIndex) + offset;
+				ASSERT_LT(indexPosition, geometry.indices.size());
+				const std::uint32_t vertexIndex = geometry.indices[indexPosition];
+				ASSERT_LT(vertexIndex, vertexCount);
+			}
+		}
+
+		void CollectReferencedVertices(const StrokeGeometry &geometry, const StrokeMeshRange &range, const std::size_t vertexCount,
+			std::vector<std::uint32_t> &vertices)
+		{
+			vertices.clear();
+			AssertRangeReferencesInBounds(geometry, range, vertexCount);
+			if (range.firstIndex > geometry.indices.size() || range.indexCount > geometry.indices.size() - range.firstIndex)
+				return;
+			for (std::uint32_t offset = 0; offset < range.indexCount; ++offset)
+			{
+				const std::size_t indexPosition = static_cast<std::size_t>(range.firstIndex) + offset;
+				ASSERT_LT(indexPosition, geometry.indices.size());
+				const std::uint32_t vertexIndex = geometry.indices[indexPosition];
+				ASSERT_LT(vertexIndex, vertexCount);
+				if (std::find(vertices.begin(), vertices.end(), vertexIndex) == vertices.end())
+					vertices.push_back(vertexIndex);
+			}
+		}
+
+		void AssertDecoratedEndSharesBoundary(const StrokeGeometry &geometry, const PathStrokeStyle &style,
+			const EvaluatedSample &endpoint, const bool start)
+		{
+			const std::size_t vertexCount = style.profile == StrokeProfile::Round ? geometry.tubeVertices.size() : geometry.ribbonVertices.size();
+			ASSERT_GT(vertexCount, 0u);
+			ASSERT_FALSE(geometry.shaft.IsEmpty());
+			const StrokeMeshRange &decorationRange = start ? geometry.startDecoration : geometry.endDecoration;
+			ASSERT_FALSE(decorationRange.IsEmpty());
+
+			std::vector<std::uint32_t> decorationVertices;
+			std::vector<std::uint32_t> shaftVertices;
+			CollectReferencedVertices(geometry, decorationRange, vertexCount, decorationVertices);
+			CollectReferencedVertices(geometry, geometry.shaft, vertexCount, shaftVertices);
+			ASSERT_FALSE(decorationVertices.empty());
+			ASSERT_FALSE(shaftVertices.empty());
+
+			const glm::vec3 endpointPosition(endpoint.position);
+			const glm::vec3 inward = glm::vec3(start ? endpoint.tangent : -endpoint.tangent);
+			float backProjection = -std::numeric_limits<float>::infinity();
+			for (const std::uint32_t vertexIndex : decorationVertices)
+			{
+				ASSERT_LT(vertexIndex, vertexCount);
+				const glm::vec3 position = style.profile == StrokeProfile::Round ? geometry.tubeVertices[vertexIndex].position : geometry.ribbonVertices[vertexIndex].position;
+				backProjection = std::max(backProjection, glm::dot(position - endpointPosition, inward));
+			}
+
+			std::vector<std::uint32_t> backCandidates;
+			for (const std::uint32_t vertexIndex : decorationVertices)
+			{
+				ASSERT_LT(vertexIndex, vertexCount);
+				const glm::vec3 position = style.profile == StrokeProfile::Round ? geometry.tubeVertices[vertexIndex].position : geometry.ribbonVertices[vertexIndex].position;
+				if (std::abs(glm::dot(position - endpointPosition, inward) - backProjection) <= 1.0e-5f)
+					backCandidates.push_back(vertexIndex);
+			}
+			ASSERT_FALSE(backCandidates.empty());
+
+			std::vector<std::uint32_t> backVertices;
+			if (style.profile == StrokeProfile::Round)
+			{
+				glm::vec3 centre(0.0f);
+				for (const std::uint32_t vertexIndex : backCandidates)
+				{
+					ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
+					centre += geometry.tubeVertices[vertexIndex].position;
+				}
+				centre /= static_cast<float>(backCandidates.size());
+				for (const std::uint32_t vertexIndex : backCandidates)
+				{
+					ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
+					if (glm::distance(geometry.tubeVertices[vertexIndex].position, centre) > 1.0e-6f)
+						backVertices.push_back(vertexIndex);
+				}
+			}
+			else
+				backVertices = backCandidates;
+
+			ASSERT_EQ(backVertices.size(), style.profile == StrokeProfile::Round ? style.radialSegments : 2u);
+			std::vector<std::uint32_t> usedShaftVertices;
+			for (const std::uint32_t decorationIndex : backVertices)
+			{
+				ASSERT_LT(decorationIndex, vertexCount);
+				bool matched = false;
+				for (const std::uint32_t shaftIndex : shaftVertices)
+				{
+					ASSERT_LT(shaftIndex, vertexCount);
+					if (std::find(usedShaftVertices.begin(), usedShaftVertices.end(), shaftIndex) != usedShaftVertices.end())
+						continue;
+
+					if (style.profile == StrokeProfile::Round)
+					{
+						ASSERT_LT(decorationIndex, geometry.tubeVertices.size());
+						ASSERT_LT(shaftIndex, geometry.tubeVertices.size());
+						const StrokeTubeVertex &decorationVertex = geometry.tubeVertices[decorationIndex];
+						const StrokeTubeVertex &shaftVertex = geometry.tubeVertices[shaftIndex];
+						matched = glm::all(glm::equal(decorationVertex.position, shaftVertex.position)) &&
+							glm::all(glm::equal(decorationVertex.normal, shaftVertex.normal));
+					}
+					else
+					{
+						ASSERT_LT(decorationIndex, geometry.ribbonVertices.size());
+						ASSERT_LT(shaftIndex, geometry.ribbonVertices.size());
+						const StrokeRibbonVertex &decorationVertex = geometry.ribbonVertices[decorationIndex];
+						const StrokeRibbonVertex &shaftVertex = geometry.ribbonVertices[shaftIndex];
+						matched = glm::all(glm::equal(decorationVertex.position, shaftVertex.position)) &&
+							glm::all(glm::equal(decorationVertex.tangent, shaftVertex.tangent));
+						if (style.profile == StrokeProfile::Flat)
+							matched = matched && glm::all(glm::equal(decorationVertex.normal, shaftVertex.normal));
+						else
+							matched = matched && decorationVertex.halfWidth == shaftVertex.halfWidth && decorationVertex.side == shaftVertex.side;
+					}
+					if (matched)
+					{
+						usedShaftVertices.push_back(shaftIndex);
+						break;
+					}
+				}
+				EXPECT_TRUE(matched) << "decoration/shaft handoff has no matching boundary vertex";
+			}
+		}
 	} // namespace
 	TEST(PathStrokeMesherTests, GradientClampsAndInterpolatesStops)
 	{
@@ -200,6 +388,129 @@ namespace DefectStudio::Tests
 				index < geometry.shaft.firstIndex + geometry.shaft.indexCount; ++index)
 				expectOnPlane(geometry.ribbonVertices[geometry.indices[index]]);
 		}
+	}
+
+	TEST(PathStrokeMesherTests, CurvedDecoratedEndHandoffMatchesInEveryProfile)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		for (const StrokeProfile profile : {StrokeProfile::Round, StrokeProfile::Flat, StrokeProfile::CameraFacing})
+		{
+			PathStrokeStyle style;
+			style.profile = profile;
+			style.width = 0.2f;
+			style.radialSegments = 8;
+			style.endDecoration.kind = PathDecorationKind::Arrow;
+			SCOPED_TRACE(static_cast<int>(profile));
+			const StrokeGeometry geometry = BuildStroke(path, style);
+			AssertDecoratedEndSharesBoundary(geometry, style, path.samples.back(), false);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, CurvedDecoratedStartUsesTheSameHandoffInvariant)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		for (const StrokeProfile profile : {StrokeProfile::Round, StrokeProfile::Flat, StrokeProfile::CameraFacing})
+		{
+			PathStrokeStyle style;
+			style.profile = profile;
+			style.width = 0.2f;
+			style.radialSegments = 8;
+			style.startDecoration.kind = PathDecorationKind::Arrow;
+			SCOPED_TRACE(static_cast<int>(profile));
+			const StrokeGeometry geometry = BuildStroke(path, style);
+			AssertDecoratedEndSharesBoundary(geometry, style, path.samples.front(), true);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, CurvedPathWithDecorationsAtBothEndsKeepsDisjointFiniteShaftGeometry)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		for (const StrokeProfile profile : {StrokeProfile::Round, StrokeProfile::Flat, StrokeProfile::CameraFacing})
+		{
+			PathStrokeStyle style;
+			style.profile = profile;
+			style.width = 0.2f;
+			style.radialSegments = 8;
+			style.startDecoration.kind = PathDecorationKind::Arrow;
+			style.endDecoration.kind = PathDecorationKind::Arrow;
+			const StrokeGeometry geometry = BuildStroke(path, style);
+			SCOPED_TRACE(static_cast<int>(profile));
+			ASSERT_FALSE(geometry.shaft.IsEmpty());
+			EXPECT_GT(geometry.shaftRange.end, geometry.shaftRange.start);
+			EXPECT_FALSE(RangesOverlap(geometry.startDecoration, geometry.endDecoration));
+			EXPECT_FALSE(RangesOverlap(geometry.startDecoration, geometry.shaft));
+			EXPECT_FALSE(RangesOverlap(geometry.endDecoration, geometry.shaft));
+
+			const std::size_t vertexCount = profile == StrokeProfile::Round ? geometry.tubeVertices.size() : geometry.ribbonVertices.size();
+			AssertRangeReferencesInBounds(geometry, geometry.startDecoration, vertexCount);
+			AssertRangeReferencesInBounds(geometry, geometry.endDecoration, vertexCount);
+			AssertRangeReferencesInBounds(geometry, geometry.shaft, vertexCount);
+			AssertAllIndicesInBounds(geometry, vertexCount);
+			EXPECT_TRUE(AllVertexFieldsFinite(geometry));
+		}
+	}
+
+	TEST(PathStrokeMesherTests, FilledEndDecorationSuppressesRoundCapAtDecoratedEnd)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		PathStrokeStyle roundStyle;
+		roundStyle.width = 0.2f;
+		roundStyle.radialSegments = 8;
+		roundStyle.cap = PathLineCap::Round;
+		roundStyle.startDecoration.kind = PathDecorationKind::Arrow;
+		roundStyle.endDecoration.kind = PathDecorationKind::Arrow;
+		const StrokeGeometry round = BuildStroke(path, roundStyle);
+
+		PathStrokeStyle buttStyle = roundStyle;
+		buttStyle.cap = PathLineCap::Butt;
+		const StrokeGeometry butt = BuildStroke(path, buttStyle);
+
+		EXPECT_EQ(round.tubeVertices.size(), butt.tubeVertices.size());
+		EXPECT_EQ(round.indices.size(), butt.indices.size());
+	}
+
+	TEST(PathStrokeMesherTests, RoundCapRemainsAtAnUndecoratedEnd)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		PathStrokeStyle roundStyle;
+		roundStyle.width = 0.2f;
+		roundStyle.radialSegments = 8;
+		roundStyle.cap = PathLineCap::Round;
+		roundStyle.startDecoration.kind = PathDecorationKind::Arrow;
+		const StrokeGeometry round = BuildStroke(path, roundStyle);
+
+		PathStrokeStyle buttStyle = roundStyle;
+		buttStyle.cap = PathLineCap::Butt;
+		const StrokeGeometry butt = BuildStroke(path, buttStyle);
+
+		EXPECT_GT(round.tubeVertices.size(), butt.tubeVertices.size());
+		EXPECT_GT(round.indices.size(), butt.indices.size());
+	}
+
+	TEST(PathStrokeMesherTests, RoundCapRemainsAtAnUnfilledDecoratedEnd)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		PathStrokeStyle roundStyle;
+		roundStyle.width = 0.2f;
+		roundStyle.radialSegments = 8;
+		roundStyle.cap = PathLineCap::Round;
+		roundStyle.startDecoration.kind = PathDecorationKind::Arrow;
+		roundStyle.endDecoration.kind = PathDecorationKind::Arrow;
+		roundStyle.endDecoration.filled = false;
+		const StrokeGeometry round = BuildStroke(path, roundStyle);
+
+		PathStrokeStyle buttStyle = roundStyle;
+		buttStyle.cap = PathLineCap::Butt;
+		const StrokeGeometry butt = BuildStroke(path, buttStyle);
+
+		EXPECT_GT(round.tubeVertices.size(), butt.tubeVertices.size());
+		EXPECT_GT(round.indices.size(), butt.indices.size());
 	}
 
 	// ribbonNormal seeds the FRAME, so it acts at tessellation time. BuildStroke is handed an
