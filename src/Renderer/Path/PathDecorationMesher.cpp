@@ -37,6 +37,73 @@ namespace DefectStudio::detail
 			}
 		}
 
+		[[nodiscard]] std::array<std::uint32_t, 4> CollapsedRing(const std::uint32_t ring,
+			const bool normalCollapsed, const bool depthCollapsed)
+		{
+			std::array<std::uint32_t, 4> result = {ring, ring + 1u, ring + 2u, ring + 3u};
+			if (normalCollapsed)
+			{
+				result[1] = result[0];
+				result[3] = result[2];
+			}
+			if (depthCollapsed)
+			{
+				result[2] = result[1];
+				result[3] = result[0];
+			}
+			return result;
+		}
+
+		void AppendTriangleIfDistinct(StrokeGeometry &geometry, const std::uint32_t a,
+			const std::uint32_t b, const std::uint32_t c)
+		{
+			const glm::vec3 &positionA = geometry.tubeVertices[a].position;
+			const glm::vec3 &positionB = geometry.tubeVertices[b].position;
+			const glm::vec3 &positionC = geometry.tubeVertices[c].position;
+			if (positionA == positionB || positionB == positionC || positionC == positionA)
+				return;
+			geometry.indices.insert(geometry.indices.end(), {a, b, c});
+		}
+
+		void StitchFlatCollapsedRings(StrokeGeometry &geometry, const std::uint32_t lower,
+			const std::uint32_t upper, const bool lowerNormalCollapsed, const bool lowerDepthCollapsed,
+			const bool upperNormalCollapsed, const bool upperDepthCollapsed, const bool flip)
+		{
+			const std::array<std::uint32_t, 4> lowerRing =
+				CollapsedRing(lower, lowerNormalCollapsed, lowerDepthCollapsed);
+			const std::array<std::uint32_t, 4> upperRing =
+				CollapsedRing(upper, upperNormalCollapsed, upperDepthCollapsed);
+			for (std::uint32_t radial = 0; radial < 4u; ++radial)
+			{
+				const std::uint32_t next = (radial + 1u) % 4u;
+				const std::uint32_t a = lowerRing[radial];
+				const std::uint32_t b = upperRing[radial];
+				const std::uint32_t c = lowerRing[next];
+				const std::uint32_t d = upperRing[next];
+				if (flip)
+				{
+					AppendTriangleIfDistinct(geometry, a, d, b);
+					AppendTriangleIfDistinct(geometry, a, c, d);
+				}
+				else
+				{
+					AppendTriangleIfDistinct(geometry, a, b, d);
+					AppendTriangleIfDistinct(geometry, a, d, c);
+				}
+			}
+		}
+
+		[[nodiscard]] double InnerHalfWidth(const DecorationContourPoint &point,
+			const PathStrokeStyle &style)
+		{
+			return std::max(0.0, point.halfWidth - static_cast<double>(style.width) * 0.5);
+		}
+
+		[[nodiscard]] bool InnerDepthCollapsed(const PathStrokeStyle &style)
+		{
+			return static_cast<double>(style.ribbonThickness) <= static_cast<double>(style.width);
+		}
+
 		void AppendFilledRoundDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
 			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
 		{
@@ -44,8 +111,16 @@ namespace DefectStudio::detail
 			for (const DecorationContourPoint &point : contour.points)
 				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint, point.halfWidth, style);
 			for (std::size_t ring = 0; ring + 1u < contour.points.size(); ++ring)
-				StitchRings(geometry, first + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style),
-					first + static_cast<std::uint32_t>(ring + 1u) * CrossSectionRingSize(style), CrossSectionRingSize(style));
+			{
+				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style);
+				const std::uint32_t upper = lower + CrossSectionRingSize(style);
+				if (style.profile == StrokeProfile::Flat &&
+					(contour.points[ring].halfWidth == 0.0 || contour.points[ring + 1u].halfWidth == 0.0))
+					StitchFlatCollapsedRings(geometry, lower, upper, contour.points[ring].halfWidth == 0.0,
+						false, contour.points[ring + 1u].halfWidth == 0.0, false, false);
+				else
+					StitchRings(geometry, lower, upper, CrossSectionRingSize(style));
+			}
 			if (contour.points.front().halfWidth > 0.0)
 				AppendRingFan(geometry, first, style, endpoint, -inward, false);
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
@@ -68,15 +143,40 @@ namespace DefectStudio::detail
 			{
 				const std::uint32_t outer = firstOuter + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style);
 				const std::uint32_t inner = firstInner + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style);
-				StitchRings(geometry, outer, outer + CrossSectionRingSize(style), CrossSectionRingSize(style));
-				StitchRings(geometry, inner, inner + CrossSectionRingSize(style), CrossSectionRingSize(style), true);
+				const bool outerCollapsed = contour.points[ring].halfWidth == 0.0 ||
+					contour.points[ring + 1u].halfWidth == 0.0;
+				if (style.profile == StrokeProfile::Flat && outerCollapsed)
+				{
+					const bool lowerInnerCollapsed = InnerHalfWidth(contour.points[ring], style) == 0.0;
+					const bool upperInnerCollapsed = InnerHalfWidth(contour.points[ring + 1u], style) == 0.0;
+					StitchFlatCollapsedRings(geometry, outer, outer + CrossSectionRingSize(style),
+						contour.points[ring].halfWidth == 0.0, false,
+						contour.points[ring + 1u].halfWidth == 0.0, false, false);
+					StitchFlatCollapsedRings(geometry, inner, inner + CrossSectionRingSize(style),
+						lowerInnerCollapsed, InnerDepthCollapsed(style), upperInnerCollapsed,
+						InnerDepthCollapsed(style), true);
+				}
+				else
+				{
+					StitchRings(geometry, outer, outer + CrossSectionRingSize(style), CrossSectionRingSize(style));
+					StitchRings(geometry, inner, inner + CrossSectionRingSize(style), CrossSectionRingSize(style), true);
+				}
 			}
 			if (contour.points.front().halfWidth > 0.0)
 				StitchRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), true);
+			else if (style.profile == StrokeProfile::Flat)
+				StitchFlatCollapsedRings(geometry, firstOuter, firstInner, true, false, true,
+					InnerDepthCollapsed(style), true);
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
 				StitchRings(geometry, firstOuter + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
 					firstInner + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
 					CrossSectionRingSize(style));
+			else if (contour.closesBack && style.profile == StrokeProfile::Flat)
+			{
+				const std::uint32_t last = static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style);
+				StitchFlatCollapsedRings(geometry, firstOuter + last, firstInner + last, true, false, true,
+					InnerDepthCollapsed(style), false);
+			}
 		}
 
 		StrokeRibbonVertex MakeRibbonVertex(const DecorationContourPoint &point, const EvaluatedSample &endpoint,
