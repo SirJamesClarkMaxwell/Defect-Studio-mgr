@@ -253,7 +253,7 @@ namespace DefectStudio
 			centroid += node.position;
 		centroid /= static_cast<float>(path.nodes.size());
 
-		path.transform.position += centroid;
+		path.transform.position += path.transform.rotation * (path.transform.scale * centroid);
 		for (PathNode &node : path.nodes)
 			node.position -= centroid;
 	}
