@@ -120,6 +120,17 @@ namespace DefectStudio
 	// - Which vertex array is populated therefore no longer follows from the profile alone, and
 	//   callers must key off the array rather than off `style.profile`. The invariant that exactly
 	//   one of the two is populated still holds.
+	// - task/41 S11q, gradient sampling. The stroke's colour is evaluated per vertex, and the
+	//   tessellator subdivides on GEOMETRY alone - a straight Line is exact at two samples, so a
+	//   three-stop gradient on one came out as a blend between the first stop and the last, with the
+	//   middle stop never sampled. It showed on a dashed line and not on a solid one, because dashes
+	//   cut the shaft into runs and each run brought its own vertices.
+	//   * When `style.gradient` is enabled, the shaft is additionally subdivided at every stop's arc
+	//     position, so every stop is a real vertex. The extra samples lie on the curve: colour
+	//     resolution changes, shape does not.
+	//   * Two stops sharing a position produce two coincident boundary samples, so the colour steps
+	//     rather than blending. That is what a hard colour edge means, and the ramp can author it.
+	//   * A disabled or empty gradient adds no samples, so nothing without a gradient changes.
 	// - Fewer than two samples, or a zero-length path, yields empty geometry and no crash.
 	// - No NaN or Inf ever reaches a vertex field.
 	[[nodiscard]] StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style);

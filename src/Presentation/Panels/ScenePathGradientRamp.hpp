@@ -30,6 +30,12 @@ namespace DefectStudio
 	// correct and unusable - the thing being edited is a picture, and reading positions as a column
 	// of numbers makes the user do the interpolation in their head.
 	//
+	// Layout, from the manual round: the add and remove buttons sit on the same row as the enable
+	// toggle, above the bar, not below it - they are what you reach for first and they were the
+	// furthest thing away. The markers carry their own colour and the selected one is drawn
+	// distinctly, so the bar says which stop the fields underneath belong to without being read
+	// twice.
+	//
 	// `selectedStop` is an index into `gradient.stops`, kept by the caller across frames. The widget
 	// keeps it pointing at the same stop when a drag reorders the list - dragging a marker past its
 	// neighbour must not silently start editing a different stop - and clamps it into range, so a
