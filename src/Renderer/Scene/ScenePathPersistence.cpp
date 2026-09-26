@@ -82,6 +82,8 @@ namespace DefectStudio
 			};
 			if (!decoration(input.startDecoration, out.startDecoration.kind) || !decoration(input.endDecoration, out.endDecoration.kind)) return false;
 			out.width = input.width;
+			if (Finite(input.ribbonNormal) && glm::length(input.ribbonNormal) > 1e-6f)
+				out.ribbonNormal = input.ribbonNormal;
 			out.radialSegments = input.radialSegments < 3 ? 3u : static_cast<std::uint32_t>(input.radialSegments);
 			out.color = input.color;
 			out.alpha = input.alpha;
@@ -237,6 +239,7 @@ namespace DefectStudio
 			persisted.segments.push_back(std::move(saved));
 		}
 		persisted.style.profile = path.style.profile == StrokeProfile::Round ? "Round" : path.style.profile == StrokeProfile::Flat ? "Flat" : "CameraFacing";
+		persisted.style.ribbonNormal = path.style.ribbonNormal;
 		persisted.style.width = path.style.width;
 		persisted.style.join = path.style.join == PathLineJoin::Bevel ? "Bevel" : "Round";
 		persisted.style.cap = path.style.cap == PathLineCap::Butt ? "Butt" : path.style.cap == PathLineCap::Square ? "Square" : "Round";

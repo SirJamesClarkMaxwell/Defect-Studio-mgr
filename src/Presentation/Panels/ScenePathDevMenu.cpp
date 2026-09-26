@@ -23,6 +23,10 @@ namespace DefectStudio
 		path.visible = true;
 		path.renderable = true;
 		path.style.profile = profile;
+		// The default orbit view uses +X right and +Z up while looking along +Y; +Z makes the X-axis
+		// Flat ribbon lie in that screen plane instead of edge-on.
+		if (profile == StrokeProfile::Flat)
+			path.style.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
 		path.style.width = profile == StrokeProfile::Round ? 0.05f : 0.08f;
 		path.style.color = glm::vec3(0.95f, 0.35f, 0.1f);
 		path.style.endDecoration.kind = PathDecorationKind::Arrow;

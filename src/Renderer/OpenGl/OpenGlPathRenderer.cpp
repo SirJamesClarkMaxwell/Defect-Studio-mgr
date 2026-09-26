@@ -164,7 +164,11 @@ namespace DefectStudio
 			if (cached == nullptr)
 			{
 				const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
-				const EvaluatedPath evaluated = Tessellate(path, resolved, TessellationSettings{ToleranceForLod(lodBucket, 0.5), 12, 4096, {}});
+				// Style revision invalidates the mesh and, for Flat, this field also changes tessellation.
+				const FrameSeed frameSeed = path.style.profile == StrokeProfile::Flat
+					? FrameSeed{FrameSeed::Mode::FixedNormal, glm::dvec3(path.style.ribbonNormal)} : FrameSeed{};
+				const EvaluatedPath evaluated = Tessellate(path, resolved,
+					TessellationSettings{ToleranceForLod(lodBucket, 0.5), 12, 4096, frameSeed});
 				cached = &system.Caches().Store(path.id, key, CachedPathGeometry{evaluated, BuildStroke(evaluated, path.style)});
 			}
 			if (cached->stroke.indices.empty())

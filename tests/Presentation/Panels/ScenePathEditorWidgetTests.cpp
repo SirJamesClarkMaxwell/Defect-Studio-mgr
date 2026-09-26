@@ -62,6 +62,28 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(two.mixedAlpha);
 	}
 
+	TEST(ScenePathEditorWidgetTests, ResolvesAndAppliesMixedRibbonNormals)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		window.paths->Store().MutateStyle(ids[0], [](ScenePath &path) {
+			path.style.profile = StrokeProfile::Flat;
+			path.style.ribbonNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+		});
+		window.paths->Store().MutateStyle(ids[1], [](ScenePath &path) {
+			path.style.profile = StrokeProfile::Flat;
+			path.style.ribbonNormal = glm::vec3(1.0f, 0.0f, 0.0f);
+		});
+		const ScenePathStyleEditState state = ResolveScenePathStyleEdit(window, ids);
+		EXPECT_TRUE(state.mixedRibbonNormal);
+		ScenePathStyleEdit edit = state.values;
+		edit.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+		EXPECT_EQ(ApplyScenePathStyleEdit(window, ids, edit), 2u);
+		for (const SceneObjectId id : ids)
+			EXPECT_EQ(window.paths->Store().Find(id)->style.ribbonNormal, edit.ribbonNormal);
+	}
+
 	TEST(ScenePathEditorWidgetTests, ApplyWritesEveryLiveSelectionAndOneUnknownIsIgnored)
 	{
 		RendererWindowState window;

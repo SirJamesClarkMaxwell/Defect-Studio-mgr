@@ -214,5 +214,20 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Arc, glm::vec3(0.0f), StrokeProfile::CameraFacing).style.profile,
 			StrokeProfile::CameraFacing);
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Cubic, glm::vec3(0.0f)).style.profile, StrokeProfile::Round);
+		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0.0f), StrokeProfile::Flat).style.ribbonNormal,
+			glm::vec3(0.0f, 0.0f, 1.0f));
+	}
+
+	TEST(ScenePathOperationsTests, RibbonNormalStyleEditInvalidatesCachedGeometry)
+	{
+		RendererWindowState window;
+		const SceneObjectId id = Add(window, Path(window, 1));
+		PrimePathCache(window, id);
+		const PathEvaluationKey before{window.paths->Store().RevisionsFor(id), 0, 3};
+		ASSERT_NE(window.paths->Caches().Find(id, before), nullptr);
+		window.paths->Store().MutateStyle(id, [](ScenePath &path) { path.style.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f); });
+		const PathEvaluationKey after{window.paths->Store().RevisionsFor(id), 0, 3};
+		EXPECT_NE(before.revisions.style, after.revisions.style);
+		EXPECT_EQ(window.paths->Caches().Find(id, after), nullptr);
 	}
 }

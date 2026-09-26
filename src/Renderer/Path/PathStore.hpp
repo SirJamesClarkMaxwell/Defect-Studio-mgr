@@ -11,8 +11,11 @@
 namespace DefectStudio
 {
 	// Two counters per path rather than one, because they invalidate different things: moving a node
-	// invalidates the tessellation and everything downstream of it, while changing a colour only
-	// invalidates the mesh. A live path always has both >= 1; {0, 0} means "no such path".
+	// invalidates the tessellation and everything downstream of it, while changing most style fields
+	// only invalidates the mesh. Flat's ribbonNormal is the exception - it seeds the frame, so it
+	// changes the tessellation too - but PathEvaluationKey carries both counters, so the cached
+	// geometry still invalidates correctly. A live path always has both >= 1; {0, 0} means "no such
+	// path".
 	struct PathRevisions
 	{
 		std::uint64_t geometry = 0;

@@ -81,6 +81,21 @@ namespace DefectStudio::Tests
 		EXPECT_DOUBLE_EQ(evaluated.totalLength, 5.0);
 	}
 
+	TEST(PathTessellatorTests, FixedRibbonNormalSeedsTheProjectedFrame)
+	{
+		const ScenePath path = MakePath({glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f)}, {Line(PathElementId{3})});
+		TessellationSettings settings;
+		settings.frameSeed = {FrameSeed::Mode::FixedNormal, glm::dvec3(0.0, 1.0, 1.0)};
+		const EvaluatedPath evaluated = Tessellate(path, ResolveAuthored(path), settings);
+		ASSERT_EQ(evaluated.samples.size(), 2u);
+		for (const EvaluatedSample &sample : evaluated.samples)
+		{
+			const glm::dvec3 projected = glm::normalize(glm::dvec3(0.0, 1.0, 1.0));
+			EXPECT_NEAR(glm::dot(sample.tangent, sample.normal), 0.0, 1.0e-9);
+			EXPECT_GT(glm::dot(sample.normal, projected), 0.99);
+		}
+	}
+
 	TEST(PathTessellatorTests, TolerancesRefineCurvesAndPreserveSharedNodes)
 	{
 		const ScenePath path = MakePath(

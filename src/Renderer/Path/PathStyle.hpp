@@ -90,6 +90,9 @@ namespace DefectStudio
 	struct PathStrokeStyle
 	{
 		StrokeProfile profile = StrokeProfile::Round;
+		// Which way a Flat ribbon's sheet faces. Seeds the transported frame; ignored by Round and
+		// CameraFacing, which choose their own rotational axis.
+		glm::vec3 ribbonNormal{0.0f, 1.0f, 0.0f};
 		float width = 0.05f; // full width; the tube radius is half of it
 		PathLineJoin join = PathLineJoin::Bevel;
 		PathLineCap cap = PathLineCap::Butt;

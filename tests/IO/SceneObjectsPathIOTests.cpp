@@ -33,6 +33,7 @@ namespace DefectStudio::Tests
 		path.segments[1].planeNormal = {0, 0, 1};
 		path.segments[1].signedSweepRadians = 1.2f;
 		path.style.profile = "CameraFacing";
+		path.style.ribbonNormal = {0.2f, 0.3f, 0.4f};
 		path.style.width = 0.25f;
 		path.style.join = "Round";
 		path.style.cap = "Round";
@@ -63,6 +64,35 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(got.style.gradientStops[1].alpha, 0.75f);
 		EXPECT_EQ(got.style.endDecoration, "Diamond");
 		EXPECT_EQ(got.style.depthMode, "AlwaysOnTop");
+		EXPECT_EQ(got.style.ribbonNormal, path.style.ribbonNormal);
+	}
+
+	TEST(SceneObjectsPathIOTests, MissingRibbonNormalKeepsV2AndUsesDefault)
+	{
+		PersistedScenePath path;
+		path.nodes = {{{0, 0, 0}}, {{1, 0, 0}}};
+		path.segments = {{}};
+		SceneObjectsFile source;
+		source.structures.push_back({"k", {path}});
+		std::string text = SceneObjectsIO::Serialize(source);
+		// Erase the WHOLE line, indentation included. Cutting just the key leaves its leading
+		// whitespace behind for the next line to glue itself onto, which yaml-cpp reports as an
+		// illegal map value - a broken fixture masquerading as a broken serializer.
+		const std::size_t key = text.find("ribbon_normal:");
+		ASSERT_NE(key, std::string::npos);
+		const std::size_t lineStart = text.rfind('\n', key);
+		ASSERT_NE(lineStart, std::string::npos);
+		const std::size_t lineEnd = text.find('\n', key);
+		ASSERT_NE(lineEnd, std::string::npos);
+		text.erase(lineStart, lineEnd - lineStart);
+		const SceneObjectsFile loaded = Parse(text.c_str());
+		ASSERT_EQ(loaded.formatVersion, 2);
+		// Asserted, not expected: a parse failure otherwise walks off the end of these vectors and
+		// takes the whole suite process down with an access violation instead of failing one test.
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_EQ(got.style.ribbonNormal, glm::vec3(0.0f, 1.0f, 0.0f));
 	}
 
 	TEST(SceneObjectsPathIOTests, FutureVersionIsRejectedBeforeInterpretingObjects)

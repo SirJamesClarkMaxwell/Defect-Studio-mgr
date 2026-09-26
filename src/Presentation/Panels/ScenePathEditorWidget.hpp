@@ -19,6 +19,7 @@ namespace DefectStudio
 	struct ScenePathStyleEdit
 	{
 		StrokeProfile profile = StrokeProfile::Round;
+		glm::vec3 ribbonNormal{0.0f, 1.0f, 0.0f};
 		float width = 0.05f;
 		float alpha = 1.0f;
 		glm::vec3 color{0.95f, 0.35f, 0.1f};
@@ -35,6 +36,8 @@ namespace DefectStudio
 	{
 		ScenePathStyleEdit values;
 		bool mixedProfile = false;
+		bool mixedRibbonNormal = false;
+		bool anyFlatProfile = false;
 		bool mixedWidth = false;
 		bool mixedAlpha = false;
 		bool mixedColor = false;

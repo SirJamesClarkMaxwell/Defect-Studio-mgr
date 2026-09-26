@@ -201,6 +201,30 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	// ribbonNormal seeds the FRAME, so it acts at tessellation time. BuildStroke is handed an
+	// already-tessellated path and cannot see it at all - testing it here was testing the wrong
+	// layer, and passing two identical EvaluatedPaths made the assertion unfalsifiable as well.
+	TEST(PathStrokeMesherTests, RibbonNormalOnlyChangesGeometryThroughTheFrameSeed)
+	{
+		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle flat;
+		flat.profile = StrokeProfile::Flat;
+		flat.width = 0.2f;
+		PathStrokeStyle rotated = flat;
+		rotated.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+
+		// Same EvaluatedPath, different ribbonNormal: the mesher must not react, because the field
+		// is not its input. The renderer applies it by seeding the tessellation instead - see
+		// OpenGlPathRenderer, and FixedRibbonNormalSeedsTheProjectedFrame in PathTessellatorTests for the
+		// half that does react.
+		const StrokeGeometry a = BuildStroke(path, flat);
+		const StrokeGeometry b = BuildStroke(path, rotated);
+		ASSERT_FALSE(a.ribbonVertices.empty());
+		ASSERT_EQ(a.ribbonVertices.size(), b.ribbonVertices.size());
+		for (std::size_t index = 0; index < a.ribbonVertices.size(); ++index)
+			EXPECT_EQ(a.ribbonVertices[index].position, b.ribbonVertices[index].position);
+	}
+
 	TEST(PathStrokeMesherTests, FlatAndRoundDecorationVerticesRemainStable)
 	{
 		const auto expectNear = [](const glm::vec3 &actual, const glm::vec3 &expected) {

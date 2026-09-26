@@ -62,6 +62,21 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(extracted.nodes[0].binding.atoms[0].element, "C");
 	}
 
+	TEST(ScenePathPersistenceTests, InvalidRibbonNormalFallsBackToDefault)
+	{
+		PersistedScenePath saved;
+		saved.nodes = {{{0, 0, 0}}, {{1, 0, 0}}};
+		saved.segments = {{}};
+		for (const glm::vec3 invalid : {glm::vec3(0.0f), glm::vec3(std::numeric_limits<float>::quiet_NaN(), 1.0f, 0.0f)})
+		{
+			saved.style.ribbonNormal = invalid;
+			std::vector<StructuredError> warnings;
+			const Result<ScenePath> built = BuildScenePath(saved, Structure(), warnings);
+			ASSERT_TRUE(built);
+			EXPECT_EQ(built.Value().style.ribbonNormal, glm::vec3(0.0f, 1.0f, 0.0f));
+		}
+	}
+
 	TEST(ScenePathPersistenceTests, UnresolvedAndObjectOriginBindingsBecomeFreeWithWarnings)
 	{
 		PersistedScenePath saved;
