@@ -77,6 +77,45 @@ namespace DefectStudio
 			return result;
 		}
 
+		[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour)
+		{
+			if (contour.points.empty())
+				return 0u;
+			const double backS = contour.points.back().s;
+			std::size_t result = contour.points.size() - 1u;
+			for (std::size_t point = contour.points.size() - 1u; point > 0u; --point)
+				if (contour.points[point - 1u].s == backS && contour.points[point - 1u].halfWidth > contour.points[result].halfWidth)
+					result = point - 1u;
+			return result;
+		}
+
+		[[nodiscard]] EvaluatedSample DecorationBackSample(const EvaluatedSample &sampled, const EvaluatedSample &endpoint,
+			const DecorationContour &contour, const bool start)
+		{
+			if (contour.points.empty())
+				return sampled;
+			const DecorationContourPoint &back = contour.points[BackContourPoint(contour)];
+			EvaluatedSample result = sampled;
+			const glm::dvec3 inward = start ? endpoint.tangent : -endpoint.tangent;
+			result.position = endpoint.position + inward * back.s;
+			result.tangent = endpoint.tangent;
+			result.normal = endpoint.normal;
+			result.binormal = endpoint.binormal;
+			return result;
+		}
+
+		[[nodiscard]] bool NeedsDecorationHandoff(const EvaluatedSample &sampled, const EvaluatedSample &endpoint,
+			const DecorationContour &contour, const bool start)
+		{
+			if (contour.points.empty())
+				return false;
+			const EvaluatedSample desired = DecorationBackSample(sampled, endpoint, contour, start);
+			return glm::distance(sampled.position, desired.position) > 1.0e-12 ||
+				glm::distance(sampled.tangent, desired.tangent) > 1.0e-12 ||
+				glm::distance(sampled.normal, desired.normal) > 1.0e-12 ||
+				glm::distance(sampled.binormal, desired.binormal) > 1.0e-12;
+		}
+
 		// One quad band between two rings of `radialSegments` vertices. Both ring starts are explicit
 		// because a cap's rings are appended after the whole shaft, not adjacent to the ring they attach
 		// to - assuming `upper == lower + radialSegments` there stitched the wrong pair and left a hole.
@@ -152,7 +191,9 @@ namespace DefectStudio
 			}
 		}
 
-		void AppendTubePiece(StrokeGeometry &geometry, std::vector<EvaluatedSample> samples, const PathStrokeStyle &style)
+		void AppendTubePiece(StrokeGeometry &geometry, std::vector<EvaluatedSample> samples, const PathStrokeStyle &style,
+			const std::vector<std::uint32_t> &startBoundary, const std::vector<std::uint32_t> &endBoundary,
+			const bool capStart, const bool capEnd)
 		{
 			if (samples.size() < 2)
 				return;
@@ -175,13 +216,24 @@ namespace DefectStudio
 			}
 			for (std::size_t ring = 0; ring + 1u < samples.size(); ++ring)
 			{
-				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * style.radialSegments;
-				StitchRings(geometry, lower, lower + style.radialSegments, style.radialSegments);
+				const bool firstRing = ring == 0u && startBoundary.size() == style.radialSegments;
+				const bool lastRing = ring + 1u == samples.size() - 1u && endBoundary.size() == style.radialSegments;
+				const std::uint32_t lower = firstRing ? startBoundary.front() :
+					first + static_cast<std::uint32_t>(ring) * style.radialSegments;
+				const std::uint32_t upper = lastRing ? endBoundary.front() :
+					first + static_cast<std::uint32_t>(ring + 1u) * style.radialSegments;
+				StitchRings(geometry, lower, upper, style.radialSegments);
 			}
 			if (style.cap == PathLineCap::Round)
-				for (const bool end : {false, true})
-					AppendHemisphereCap(geometry, end ? samples.back() : samples.front(), style, end,
-						first + (end ? static_cast<std::uint32_t>(samples.size() - 1u) * style.radialSegments : 0u));
+			{
+				if (capStart)
+					AppendHemisphereCap(geometry, samples.front(), style, false,
+						startBoundary.size() == style.radialSegments ? startBoundary.front() : first);
+				if (capEnd)
+					AppendHemisphereCap(geometry, samples.back(), style, true,
+						endBoundary.size() == style.radialSegments ? endBoundary.front() :
+							first + static_cast<std::uint32_t>(samples.size() - 1u) * style.radialSegments);
+			}
 		}
 
 		void AppendRibbonPiece(StrokeGeometry &geometry, const std::vector<EvaluatedSample> &samples, const PathStrokeStyle &style)
@@ -199,8 +251,9 @@ namespace DefectStudio
 		}
 
 		void AppendDecoration(StrokeGeometry &geometry, const DecorationContour &contour, const EvaluatedSample &endpoint,
-			const bool start, const PathStrokeStyle &style, StrokeMeshRange &range)
+			const bool start, const PathStrokeStyle &style, StrokeMeshRange &range, std::vector<std::uint32_t> &backRing)
 		{
+			backRing.clear();
 			if (contour.points.empty())
 				return;
 			range.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
@@ -228,6 +281,9 @@ namespace DefectStudio
 				if (contour.closesBack && contour.points.back().halfWidth > 0.0)
 					AppendRingFan(geometry, first + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
 						style, endpoint, inward, true);
+				const std::uint32_t back = first + static_cast<std::uint32_t>(BackContourPoint(contour)) * style.radialSegments;
+				for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
+					backRing.push_back(back + radial);
 			}
 			else
 			{
@@ -249,6 +305,8 @@ namespace DefectStudio
 					const std::uint32_t a = first + point * 2u;
 					geometry.indices.insert(geometry.indices.end(), {a, a + 2u, a + 3u, a, a + 3u, a + 1u});
 				}
+				const std::uint32_t back = first + static_cast<std::uint32_t>(BackContourPoint(contour)) * 2u;
+				backRing = {back, back + 1u};
 			}
 			range.indexCount = static_cast<std::uint32_t>(geometry.indices.size()) - range.firstIndex;
 		}
@@ -295,8 +353,10 @@ namespace DefectStudio
 		const DecorationContour startContour = BuildDecorationContour(style.startDecoration, style.width);
 		const DecorationContour endContour = BuildDecorationContour(style.endDecoration, style.width);
 		geometry.shaftRange = TrimmedRange(evaluated.totalLength, style);
-		AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration);
-		AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration);
+		std::vector<std::uint32_t> startBackRing;
+		std::vector<std::uint32_t> endBackRing;
+		AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration, startBackRing);
+		AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration, endBackRing);
 		if (geometry.shaftRange.IsEmpty())
 		{
 			if (startContour.trim + endContour.trim >= evaluated.totalLength)
@@ -308,11 +368,51 @@ namespace DefectStudio
 		geometry.shaft.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
 		for (const DashInterval &interval : intervals)
 		{
-			const std::vector<EvaluatedSample> samples = PieceSamples(evaluated, interval);
+			std::vector<EvaluatedSample> samples = PieceSamples(evaluated, interval);
+			const bool atStart = interval.start == geometry.shaftRange.start;
+			const bool atEnd = interval.end == geometry.shaftRange.end;
+			const bool startHandoff = atStart && NeedsDecorationHandoff(samples.front(), evaluated.samples.front(), startContour, true);
+			const bool endHandoff = atEnd && NeedsDecorationHandoff(samples.back(), evaluated.samples.back(), endContour, false);
+			const std::vector<std::uint32_t> emptyBoundary;
+			const std::vector<std::uint32_t> &pieceStartBoundary = startHandoff ? startBackRing : emptyBoundary;
+			const std::vector<std::uint32_t> &pieceEndBoundary = endHandoff ? endBackRing : emptyBoundary;
+			if (startHandoff)
+				samples.front() = DecorationBackSample(samples.front(), evaluated.samples.front(), startContour, true);
+			if (endHandoff)
+				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (style.profile == StrokeProfile::Round)
-				AppendTubePiece(geometry, samples, style);
+				AppendTubePiece(geometry, samples, style, pieceStartBoundary, pieceEndBoundary,
+					!(atStart && startContour.closesBack), !(atEnd && endContour.closesBack));
 			else
+			{
+				const std::uint32_t firstRibbonVertex = static_cast<std::uint32_t>(geometry.ribbonVertices.size());
+				const std::uint32_t firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
 				AppendRibbonPiece(geometry, samples, style);
+				for (std::uint32_t ring = 0; ring + 1u < samples.size(); ++ring)
+				{
+					const bool firstRing = ring == 0u && pieceStartBoundary.size() == 2u;
+					const bool lastRing = ring + 1u == samples.size() - 1u && pieceEndBoundary.size() == 2u;
+					for (std::uint32_t offset = 0; offset < 6u; ++offset)
+					{
+						std::uint32_t &index = geometry.indices[firstIndex + ring * 6u + offset];
+						if (firstRing)
+						{
+							if (index == firstRibbonVertex + ring * 2u)
+								index = pieceStartBoundary[0];
+							else if (index == firstRibbonVertex + ring * 2u + 1u)
+								index = pieceStartBoundary[1];
+						}
+						if (lastRing)
+						{
+							const std::uint32_t lastRibbonVertex = firstRibbonVertex + static_cast<std::uint32_t>(ring + 1u) * 2u;
+							if (index == lastRibbonVertex)
+								index = pieceEndBoundary[0];
+							else if (index == lastRibbonVertex + 1u)
+								index = pieceEndBoundary[1];
+						}
+					}
+				}
+			}
 		}
 		geometry.shaft.indexCount = static_cast<std::uint32_t>(geometry.indices.size()) - geometry.shaft.firstIndex;
 		return geometry;
