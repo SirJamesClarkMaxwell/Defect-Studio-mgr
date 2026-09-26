@@ -97,8 +97,12 @@ namespace DefectStudio
 	struct PathEndpointDecoration
 	{
 		PathDecorationKind kind = PathDecorationKind::None;
-		float lengthScale = 1.0f;
-		float widthScale = 1.0f;
+		// task/41 S11j: a tip has to be visibly bigger than the line it ends. At 1.0/1.0 an Arrow's
+		// half-width came out equal to the tube's radius, so every arrowhead in the app looked like a
+		// sharpened pencil rather than an arrow. These defaults put it at 3x the stroke width long
+		// and 2.5x the tube radius wide, which is roughly where TikZ and manim sit.
+		float lengthScale = 3.0f;
+		float widthScale = 1.25f;
 		// Solid body, or an outline of the same contour. False is what `OpenArrow` used to mean, and
 		// it applies to every kind, not just Arrow. The outline's thickness is the stroke width, so a
 		// hollow tip carries the same visual weight as the shaft it terminates.

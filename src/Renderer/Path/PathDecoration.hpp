@@ -37,13 +37,23 @@ namespace DefectStudio
 	// Per-kind shape, all of which the S11 manual round found wrong except Arrow and Stealth. These
 	// are the shapes, in the local frame where s runs back from the tip and halfWidth is the radial
 	// offset; `length` is lengthScale * strokeWidth and `width` is widthScale * strokeWidth:
+	// `width` IS the half-width, not the diameter: a contour point's `halfWidth` may reach it
+	// directly. task/41 S11j removed an internal `arrowWidth = width * 0.5` that applied to some
+	// kinds and not others, which made Arrow exactly as wide as the tube it terminated while Square
+	// was twice that. One meaning, every kind.
+	//
 	// - Arrow:   (0,0) -> (length,width), back straight across. Closes back.
 	// - Stealth: Arrow, but the back is notched forward to about a third of `length`, so the two
 	//   barbs trail behind the join. Does NOT close back - that is what distinguishes it from Arrow.
-	// - Latex:   Arrow's silhouette with the sides bowed outward and the back swept, sampled finely
-	//   enough that the curve does not read as a polygon. Closes back.
-	// - Bar:     a tee. halfWidth is `width` over a length of about one stroke width, so it is a
-	//   stub across the tangent rather than a taper. Closes back.
+	// - Latex:   Arrow's silhouette with the sides bowed outward, and a back that is SWEPT, not
+	//   closed to a point: the contour ends at (length, width * 0.35), so it keeps a flat back face
+	//   like TikZ's `latex`. Sampled finely enough that the curve does not read as a polygon. A
+	//   contour that returns to halfWidth 0 at the back is a symmetric lens, which is what S11i
+	//   shipped and is a different shape with a different name. Closes back.
+	// - Bar:     a tee, and a THIN one: halfWidth is `width` over an axial extent of
+	//   `0.3 * lengthScale * strokeWidth`. It stands across the tangent like TikZ's `|`. At the
+	//   full `length` it revolves into a barrel indistinguishable from Square, which is what S11i
+	//   shipped and what the manual round saw as two identical cylinders.
 	// - Circle:  a half-circle of radius `length / 2`, centred at s == length / 2, sampled at no
 	//   fewer than 12 points. It must read as a disc, not as the five-point lens S11 shipped.
 	//   Circle is the one kind that IGNORES widthScale: a disc's width is its length, and honouring
