@@ -3,7 +3,10 @@
 #include <limits>
 #include <unordered_set>
 
+#include <glm/gtc/quaternion.hpp>
+
 #include "IO/SceneObjectsIO.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/ScenePathPersistence.hpp"
@@ -38,6 +41,102 @@ namespace DefectStudio::Tests
 			EXPECT_TRUE(SceneObjectsIO::Parse(fixture, file, warnings, error)) << error;
 			return std::get<PersistedSceneArrow>(file.structures[0].objects[0]);
 		}
+
+		SceneObjectsFile Parse(const char *text)
+		{
+			SceneObjectsFile file;
+			std::vector<StructuredError> warnings;
+			std::string error;
+			EXPECT_TRUE(SceneObjectsIO::Parse(text, file, warnings, error)) << error;
+			return file;
+		}
+
+		void ExpectEquivalentRotation(const glm::quat &actual, const glm::quat &expected)
+		{
+			for (const glm::vec3 basis : {glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)})
+				EXPECT_NEAR(glm::distance(actual * basis, expected * basis), 0.0f, 1.0e-5f);
+		}
+	}
+
+	TEST(ScenePathPersistenceTests, NonIdentityTransformRoundTripsThroughYamlAndScenePersistence)
+	{
+		PersistedScenePath saved = MinimalPath();
+		saved.transformPosition = glm::vec3(3.0f, -2.0f, 5.0f);
+		const glm::quat rotation = glm::normalize(glm::angleAxis(
+			glm::radians(53.0f), glm::normalize(glm::vec3(1.0f, -2.0f, 3.0f))));
+		saved.transformRotation = glm::vec4(rotation.x, rotation.y, rotation.z, rotation.w);
+		saved.transformScale = glm::vec3(1.5f, 0.75f, 2.25f);
+		SceneObjectsFile source;
+		source.structures.push_back({"k", {saved}});
+		const std::string serialized = SceneObjectsIO::Serialize(source);
+		EXPECT_NE(serialized.find("formatVersion: 2"), std::string::npos);
+		EXPECT_NE(serialized.find("transform_position"), std::string::npos);
+
+		const SceneObjectsFile loaded = Parse(serialized.c_str());
+		ASSERT_EQ(loaded.formatVersion, 2);
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_EQ(got.transformPosition, saved.transformPosition);
+		EXPECT_EQ(got.transformScale, saved.transformScale);
+		const glm::quat loadedRotation(got.transformRotation.w, got.transformRotation.x,
+			got.transformRotation.y, got.transformRotation.z);
+		ExpectEquivalentRotation(loadedRotation, rotation);
+
+		std::vector<StructuredError> warnings;
+		const Result<ScenePath> built = BuildScenePath(got, Structure(), warnings);
+		ASSERT_TRUE(built);
+		EXPECT_EQ(built.Value().transform.position, saved.transformPosition);
+		EXPECT_EQ(built.Value().transform.scale, saved.transformScale);
+		ExpectEquivalentRotation(built.Value().transform.rotation, rotation);
+		const PersistedScenePath extracted = ExtractPersistedScenePath(built.Value(), Structure());
+		EXPECT_EQ(extracted.transformPosition, saved.transformPosition);
+		EXPECT_EQ(extracted.transformScale, saved.transformScale);
+		const glm::quat extractedRotation(extracted.transformRotation.w, extracted.transformRotation.x,
+			extracted.transformRotation.y, extracted.transformRotation.z);
+		ExpectEquivalentRotation(extractedRotation, rotation);
+	}
+
+	TEST(ScenePathPersistenceTests, MissingTransformLoadsAsIdentityAndPreservesLegacyResolvedPositions)
+	{
+		const SceneObjectsFile file = Parse(R"yaml(
+formatVersion: 2
+structures:
+  - structureKey: k
+    objects:
+      - kind: ScenePath
+        persistKey: old
+        nodes:
+          - position: [2, 1, 0]
+          - position: [6, 5, 4]
+        segments:
+          - kind: Line
+        style:
+          profile: Round
+)yaml");
+		ASSERT_EQ(file.formatVersion, 2);
+		ASSERT_EQ(file.structures.size(), 1u);
+		ASSERT_EQ(file.structures[0].objects.size(), 1u);
+		const auto &saved = std::get<PersistedScenePath>(file.structures[0].objects[0]);
+		EXPECT_EQ(saved.transformPosition, glm::vec3(0.0f));
+		EXPECT_EQ(saved.transformRotation, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+		EXPECT_EQ(saved.transformScale, glm::vec3(1.0f));
+
+		std::vector<StructuredError> warnings;
+		const Result<ScenePath> built = BuildScenePath(saved, Structure(), warnings);
+		ASSERT_TRUE(built);
+		const ResolvedNodes resolved = ResolveNodePositions(built.Value(), BindingContext{});
+		ASSERT_EQ(resolved.positions.size(), saved.nodes.size());
+		for (std::size_t index = 0; index < resolved.positions.size(); ++index)
+		{
+			ASSERT_LT(index, saved.nodes.size());
+			EXPECT_NEAR(glm::distance(resolved.positions[index], saved.nodes[index].position), 0.0f, 1.0e-5f);
+		}
+		glm::vec3 centroid(0.0f);
+		for (const PersistedPathNode &node : saved.nodes)
+			centroid += node.position;
+		centroid /= static_cast<float>(saved.nodes.size());
+		EXPECT_NEAR(glm::distance(built.Value().transform.position, centroid), 0.0f, 1.0e-5f);
 	}
 
 	TEST(ScenePathPersistenceTests, BuildAllocatesUniqueElementIdsAndExtractsStably)

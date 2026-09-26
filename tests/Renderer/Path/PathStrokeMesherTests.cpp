@@ -346,6 +346,80 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(zeroGeometry.indices.size(), defaultGeometry.indices.size());
 	}
 
+	TEST(PathStrokeMesherTests, FlatRibbonBevelAddsChamferFacesWithConstantFrameNormals)
+	{
+		const EvaluatedPath path = StraightPath();
+		ASSERT_FALSE(path.samples.empty());
+		PathStrokeStyle sharpStyle;
+		sharpStyle.profile = StrokeProfile::Flat;
+		sharpStyle.width = 0.4f;
+		sharpStyle.ribbonThickness = 0.6f;
+		const StrokeGeometry sharp = BuildStroke(path, sharpStyle);
+
+		PathStrokeStyle bevelStyle = sharpStyle;
+		bevelStyle.ribbonBevel = 0.1f;
+		const StrokeGeometry bevel = BuildStroke(path, bevelStyle);
+		ASSERT_FALSE(sharp.tubeVertices.empty());
+		ASSERT_FALSE(bevel.tubeVertices.empty());
+		ASSERT_EQ(sharp.tubeVertices.size() % path.samples.size(), 0u);
+		ASSERT_EQ(bevel.tubeVertices.size() % path.samples.size(), 0u);
+		const std::size_t sharpRingSize = sharp.tubeVertices.size() / path.samples.size();
+		const std::size_t bevelRingSize = bevel.tubeVertices.size() / path.samples.size();
+		EXPECT_GT(bevelRingSize, sharpRingSize);
+		ASSERT_GT(bevelRingSize, 2u);
+
+		const std::size_t faceCount = bevelRingSize / 2u;
+		ASSERT_EQ(bevelRingSize % 2u, 0u);
+		for (std::size_t face = 0; face < faceCount; ++face)
+		{
+			const std::size_t first = face * 2u;
+			const std::size_t next = ((face + 1u) % faceCount) * 2u;
+			ASSERT_LT(first + 1u, bevel.tubeVertices.size());
+			ASSERT_LT(next, bevel.tubeVertices.size());
+			EXPECT_NEAR(glm::dot(bevel.tubeVertices[first].normal, bevel.tubeVertices[first + 1u].normal), 1.0f, 1.0e-5f);
+			EXPECT_LT(std::abs(glm::dot(bevel.tubeVertices[first].normal, bevel.tubeVertices[next].normal)), 1.0f - 1.0e-5f);
+		}
+
+		const EvaluatedSample &sample = path.samples.front();
+		ASSERT_LT(0u, bevel.tubeVertices.size());
+		EXPECT_NEAR(std::abs(glm::dot(bevel.tubeVertices[0].normal, glm::vec3(sample.binormal))), 1.0f, 1.0e-5f);
+
+		PathStrokeStyle cappedStyle = sharpStyle;
+		cappedStyle.ribbonBevel = 0.5f * std::min(sharpStyle.width, sharpStyle.ribbonThickness);
+		PathStrokeStyle overStyle = sharpStyle;
+		overStyle.ribbonBevel = cappedStyle.ribbonBevel * 4.0f;
+		AssertTubeGeometryMatches(BuildStroke(path, cappedStyle), BuildStroke(path, overStyle));
+	}
+
+	TEST(PathStrokeMesherTests, RibbonBevelZeroInvalidAndRoundValuesAreNoOps)
+	{
+		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle zeroStyle;
+		zeroStyle.profile = StrokeProfile::Flat;
+		zeroStyle.width = 0.4f;
+		zeroStyle.ribbonThickness = 0.6f;
+		const StrokeGeometry zero = BuildStroke(path, zeroStyle);
+		PathStrokeStyle explicitZero = zeroStyle;
+		explicitZero.ribbonBevel = 0.0f;
+		AssertTubeGeometryMatches(zero, BuildStroke(path, explicitZero));
+
+		for (const float invalid : {-0.1f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
+		{
+			PathStrokeStyle invalidStyle = zeroStyle;
+			invalidStyle.ribbonBevel = invalid;
+			SCOPED_TRACE(invalid);
+			AssertTubeGeometryMatches(zero, BuildStroke(path, invalidStyle));
+		}
+
+		PathStrokeStyle roundStyle;
+		roundStyle.profile = StrokeProfile::Round;
+		roundStyle.width = zeroStyle.width;
+		roundStyle.radialSegments = 7;
+		const StrokeGeometry round = BuildStroke(path, roundStyle);
+		roundStyle.ribbonBevel = 0.2f;
+		AssertTubeGeometryMatches(round, BuildStroke(path, roundStyle));
+	}
+
 	TEST(PathStrokeMesherTests, PositiveFlatRibbonThicknessUsesTubeVerticesOnly)
 	{
 		PathStrokeStyle style;

@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <glm/gtc/quaternion.hpp>
+
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -59,6 +61,12 @@ namespace DefectStudio::Tests
 				EXPECT_FLOAT_EQ(actual.stops[index].alpha, expected.stops[index].alpha);
 			}
 		}
+
+		void ExpectEquivalentRotation(const glm::quat &actual, const glm::quat &expected)
+		{
+			for (const glm::vec3 basis : {glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)})
+				EXPECT_NEAR(glm::distance(actual * basis, expected * basis), 0.0f, 1.0e-5f);
+		}
 	}
 
 	TEST(ScenePathEditorWidgetTests, EmptySelectionUsesDefaults)
@@ -85,6 +93,78 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(two.resolved, 2u);
 		EXPECT_TRUE(two.mixedWidth);
 		EXPECT_FALSE(two.mixedAlpha);
+	}
+
+	TEST(ScenePathEditorWidgetTests, ResolvesFirstTransformAndMarksOnlyDifferingComponentsMixed)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
+		const glm::quat firstRotation = glm::normalize(glm::angleAxis(
+			glm::radians(37.0f), glm::normalize(glm::vec3(1.0f, -2.0f, 3.0f))));
+		const glm::quat otherRotation = glm::normalize(glm::angleAxis(
+			glm::radians(61.0f), glm::normalize(glm::vec3(-2.0f, 1.0f, 4.0f))));
+		window.paths->Store().MutateGeometry(ids[0], [&](ScenePath &path) {
+			path.transform.position = glm::vec3(3.0f, -4.0f, 2.0f);
+			path.transform.rotation = firstRotation;
+			path.transform.scale = glm::vec3(1.5f, 0.75f, 2.0f);
+		});
+		window.paths->Store().MutateGeometry(ids[1], [&](ScenePath &path) {
+			path.transform.position = glm::vec3(-3.0f, 4.0f, -2.0f);
+			path.transform.rotation = otherRotation;
+			path.transform.scale = glm::vec3(1.5f, 0.75f, 2.0f);
+		});
+
+		const ScenePathTransformEditState state = ResolveScenePathTransformEdit(window, ids);
+		ASSERT_EQ(state.resolved, 2u);
+		EXPECT_EQ(state.values.position, glm::vec3(3.0f, -4.0f, 2.0f));
+		EXPECT_EQ(state.values.scale, glm::vec3(1.5f, 0.75f, 2.0f));
+		const glm::vec3 expectedEuler = glm::degrees(glm::eulerAngles(firstRotation));
+		EXPECT_NEAR(glm::distance(state.values.rotationDegrees, expectedEuler), 0.0f, 1.0e-5f);
+		EXPECT_TRUE(state.mixedPosition);
+		EXPECT_TRUE(state.mixedRotation);
+		EXPECT_FALSE(state.mixedScale);
+	}
+
+	TEST(ScenePathEditorWidgetTests, AppliesTransformToEverySelectedPathAndReportsChangedCount)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
+		ScenePathTransformEdit edit;
+		edit.position = glm::vec3(7.0f, -1.0f, 4.0f);
+		edit.rotationDegrees = glm::vec3(23.0f, -41.0f, 67.0f);
+		edit.scale = glm::vec3(2.0f, 0.5f, 1.25f);
+
+		EXPECT_EQ(ApplyScenePathTransformEdit(window, {ids[0], ids[1], SceneObjectId{999}}, edit), 2u);
+		const glm::quat expectedRotation = glm::normalize(glm::quat(glm::radians(edit.rotationDegrees)));
+		for (const SceneObjectId id : {ids[0], ids[1]})
+		{
+			const ScenePath *path = window.paths->Store().Find(id);
+			ASSERT_NE(path, nullptr);
+			EXPECT_EQ(path->transform.position, edit.position);
+			EXPECT_EQ(path->transform.scale, edit.scale);
+			ExpectEquivalentRotation(path->transform.rotation, expectedRotation);
+		}
+	}
+
+	TEST(ScenePathEditorWidgetTests, EulerTransformResolveRoundTripPreservesRotationAction)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_FALSE(ids.empty());
+		ScenePathTransformEdit edit;
+		edit.rotationDegrees = glm::vec3(31.0f, -52.0f, 74.0f);
+		ASSERT_EQ(ApplyScenePathTransformEdit(window, {ids.front()}, edit), 1u);
+		const ScenePath *applied = window.paths->Store().Find(ids.front());
+		ASSERT_NE(applied, nullptr);
+		const ScenePathTransformEditState resolved = ResolveScenePathTransformEdit(window, {ids.front()});
+		ASSERT_EQ(resolved.resolved, 1u);
+		const glm::quat reconstructed = glm::normalize(glm::quat(glm::radians(resolved.values.rotationDegrees)));
+		ExpectEquivalentRotation(reconstructed, applied->transform.rotation);
 	}
 
 	TEST(ScenePathEditorWidgetTests, ResolvesDashAndGradientFromFirstResolvedPath)

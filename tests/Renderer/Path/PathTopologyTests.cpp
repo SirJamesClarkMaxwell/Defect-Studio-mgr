@@ -6,8 +6,11 @@
 #include <limits>
 #include <numbers>
 
+#include <glm/gtc/quaternion.hpp>
+
 #include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/Path/PathDash.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 
 namespace DefectStudio::Tests
@@ -268,5 +271,102 @@ namespace DefectStudio::Tests
 			EXPECT_NEAR(10.0 - before[index].end, mirrored.start, 1e-6);
 			EXPECT_NEAR(10.0 - before[index].start, mirrored.end, 1e-6);
 		}
+	}
+
+	TEST(PathTopologyTests, MovePathOriginToCentrePreservesResolvedGeometryAndIsIdempotent)
+	{
+		ScenePath path = MakePath(
+			{glm::vec3(2.0f, 1.0f, -3.0f), glm::vec3(8.0f, -3.0f, 5.0f)},
+			{Cubic(PathElementId{3}, {3.0f, 4.0f, -2.0f}, {7.0f, -6.0f, 4.0f})});
+		path.transform.position = glm::vec3(-4.0f, 6.0f, 1.0f);
+		path.transform.rotation = glm::angleAxis(glm::radians(29.0f), glm::normalize(glm::vec3(1.0f, -2.0f, 3.0f)));
+		path.transform.scale = glm::vec3(1.5f, 0.75f, 2.0f);
+		const ScenePath before = path;
+		const ResolvedNodes resolvedBefore = ResolveNodePositions(path, BindingContext{});
+		glm::vec3 centroid(0.0f);
+		for (const PathNode &node : before.nodes)
+			centroid += node.position;
+		centroid /= static_cast<float>(before.nodes.size());
+
+		MovePathOriginToCentre(path);
+		ASSERT_EQ(path.nodes.size(), before.nodes.size());
+		for (std::size_t index = 0; index < path.nodes.size(); ++index)
+		{
+			ASSERT_LT(index, before.nodes.size());
+			EXPECT_NEAR(glm::distance(path.nodes[index].position, before.nodes[index].position - centroid), 0.0f, 1.0e-5f);
+		}
+		const ResolvedNodes resolvedAfter = ResolveNodePositions(path, BindingContext{});
+		ASSERT_EQ(resolvedAfter.positions.size(), resolvedBefore.positions.size());
+		ASSERT_EQ(resolvedAfter.handlePositions.size(), resolvedBefore.handlePositions.size());
+		for (std::size_t index = 0; index < resolvedAfter.positions.size(); ++index)
+		{
+			ASSERT_LT(index, resolvedBefore.positions.size());
+			EXPECT_NEAR(glm::distance(resolvedAfter.positions[index], resolvedBefore.positions[index]), 0.0f, 1.0e-5f);
+		}
+		for (std::size_t index = 0; index < resolvedAfter.handlePositions.size(); ++index)
+		{
+			ASSERT_LT(index, resolvedBefore.handlePositions.size());
+			EXPECT_NEAR(glm::distance(resolvedAfter.handlePositions[index], resolvedBefore.handlePositions[index]), 0.0f, 1.0e-5f);
+		}
+
+		const ScenePath once = path;
+		MovePathOriginToCentre(path);
+		EXPECT_NEAR(glm::distance(path.transform.position, once.transform.position), 0.0f, 1.0e-5f);
+		ASSERT_EQ(path.nodes.size(), once.nodes.size());
+		for (std::size_t index = 0; index < path.nodes.size(); ++index)
+		{
+			ASSERT_LT(index, once.nodes.size());
+			EXPECT_NEAR(glm::distance(path.nodes[index].position, once.nodes[index].position), 0.0f, 1.0e-5f);
+		}
+	}
+
+	TEST(PathTopologyTests, MovePathOriginToCentrePreservesBoundNodeWorldPositions)
+	{
+		ScenePath path = MakePath({glm::vec3(1.0f, 2.0f, 3.0f), glm::vec3(9.0f, -2.0f, 5.0f)}, {Line(PathElementId{3})});
+		path.transform.position = glm::vec3(5.0f, -4.0f, 2.0f);
+		path.transform.rotation = glm::angleAxis(glm::radians(41.0f), glm::normalize(glm::vec3(-2.0f, 1.0f, 3.0f)));
+		path.transform.scale = glm::vec3(0.75f, 1.5f, 2.0f);
+		ASSERT_EQ(path.nodes.size(), 2u);
+		path.nodes[1].binding.value = PathBinding::CopyPosition{0, glm::vec3(-0.5f, 0.25f, 1.0f), 0.0f};
+		BindingContext context;
+		const glm::vec3 atomPosition{20.0f, -7.0f, 11.0f};
+		context.atomPosition = [atomPosition](std::size_t) -> std::optional<glm::vec3> { return atomPosition; };
+		const ScenePath before = path;
+		const ResolvedNodes resolvedBefore = ResolveNodePositions(path, context);
+		glm::vec3 centroid(0.0f);
+		for (const PathNode &node : before.nodes)
+			centroid += node.position;
+		centroid /= static_cast<float>(before.nodes.size());
+
+		MovePathOriginToCentre(path);
+		ASSERT_EQ(path.nodes.size(), before.nodes.size());
+		for (std::size_t index = 0; index < path.nodes.size(); ++index)
+		{
+			ASSERT_LT(index, before.nodes.size());
+			EXPECT_NEAR(glm::distance(path.nodes[index].position, before.nodes[index].position - centroid), 0.0f, 1.0e-5f);
+		}
+		const ResolvedNodes resolvedAfter = ResolveNodePositions(path, context);
+		ASSERT_EQ(resolvedAfter.positions.size(), resolvedBefore.positions.size());
+		for (std::size_t index = 0; index < resolvedAfter.positions.size(); ++index)
+		{
+			ASSERT_LT(index, resolvedBefore.positions.size());
+			EXPECT_NEAR(glm::distance(resolvedAfter.positions[index], resolvedBefore.positions[index]), 0.0f, 1.0e-5f);
+		}
+	}
+
+	TEST(PathTopologyTests, MovePathOriginToCentreLeavesEmptyPathUntouched)
+	{
+		ScenePath path;
+		path.transform.position = glm::vec3(3.0f, -2.0f, 1.0f);
+		path.transform.rotation = glm::angleAxis(glm::radians(17.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		path.transform.scale = glm::vec3(2.0f, 0.5f, 1.25f);
+		const ScenePath before = path;
+
+		MovePathOriginToCentre(path);
+		EXPECT_EQ(path.transform.position, before.transform.position);
+		EXPECT_EQ(path.transform.rotation, before.transform.rotation);
+		EXPECT_EQ(path.transform.scale, before.transform.scale);
+		EXPECT_TRUE(path.nodes.empty());
+		EXPECT_TRUE(path.segments.empty());
 	}
 } // namespace DefectStudio::Tests
