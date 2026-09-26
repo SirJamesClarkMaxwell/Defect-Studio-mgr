@@ -83,6 +83,22 @@ namespace DefectStudio
 	//   InvalidGradient and returns no geometry.
 	// - Decorations longer than the path emit DecorationsExceedPathLength: the decorations are still
 	//   built, the shaft is not.
+	// - task/41 S11h, the decoration/shaft handoff. A decoration is RIGID: it is built in the frame of
+	//   the path's endpoint and does not bend along the path, because an arrowhead is a solid object
+	//   and a curved one looks worse than a detached one. The shaft is what gives way. So:
+	//   * The shaft's boundary ring on a decorated end IS the decoration's back ring - same positions,
+	//     same frame - rather than whatever `AtLength(totalLength - trim)` happens to sample. Trimming
+	//     by arc length lands on the curve; the decoration's back sits on the endpoint tangent; on an
+	//     Arc or a Cubic those are two different places, and the visible result was a head sitting in
+	//     a plane of its own while the shaft twisted away from it.
+	//   * That holds for all three profiles. For Flat and CameraFacing the ribbon's boundary pair has
+	//     the decoration's centreline position, tangent and half-width; for Round the boundary ring
+	//     has the decoration's back ring vertices.
+	//   * A decorated end whose decoration closes its back gets NO shaft cap: the decoration already
+	//     closes the tube, and adding a hemisphere there puts two surfaces in the same place. This is
+	//     latent rather than observed - `cap` defaults to Butt and nothing in the UI sets it - but it
+	//     is the same handoff and belongs with it.
+	//   * An unfilled decoration does not close its back, so its end keeps its cap.
 	// - Fewer than two samples, or a zero-length path, yields empty geometry and no crash.
 	// - No NaN or Inf ever reaches a vertex field.
 	[[nodiscard]] StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style);
