@@ -128,6 +128,14 @@ namespace DefectStudio
 		// Ignored by Round, whose cross-section is already a disc, and by CameraFacing, which is
 		// expanded in the shader towards the eye and has no stable normal to extrude along.
 		float ribbonThickness = 0.0f;
+		// How far the four edges of a thick ribbon's rectangular cross-section are chamfered, in
+		// world units. Zero - the default - keeps the sharp box S11s produced.
+		//
+		// task/41 S11t. It only means anything for a Flat stroke with thickness: Round has no edges
+		// to soften, and a zero-thickness ribbon is a sheet. The value is clamped to less than half
+		// the smaller of `width` and `ribbonThickness`, since a chamfer that ate the whole face
+		// would turn the box into a diamond and then invert it.
+		float ribbonBevel = 0.0f;
 		float width = 0.05f; // full width; the tube radius is half of it
 		PathLineJoin join = PathLineJoin::Bevel;
 		PathLineCap cap = PathLineCap::Butt;

@@ -29,6 +29,14 @@ namespace DefectStudio::detail
 	// every caller that indexes a ring has to respect - CrossSectionRingSize is the single place
 	// that answers it.
 	//
+	// task/41 S11t: a positive `style.ribbonBevel` replaces each of the rectangle's four corners
+	// with a short chamfer face, so the ring has eight corner positions instead of four and a
+	// highlight runs along the edge instead of breaking at it. Each face still carries its own
+	// constant normal, chamfers included - that is S11s and it does not loosen here.
+	//
+	// The count stays behind CrossSectionRingSize, which is what let the S11s doubling land without
+	// touching the shaft mesher, the caps, the S11p closures or the S11h handoff. Same again.
+	//
 	// Appends one cross-section ring and returns its first vertex. Round uses the configured radial
 	// count; a thick Flat stroke uses four rectangular corners. Shaft and decoration meshing both use
 	// this seam so the shape of a ring cannot diverge between them.
