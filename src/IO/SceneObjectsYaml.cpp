@@ -2,6 +2,8 @@
 
 #include "IO/SceneObjectsYaml.hpp"
 
+#include <cmath>
+
 namespace DefectStudio::SceneObjectsYaml
 {
 	bool Vec3(const YAML::Node &node, glm::vec3 &out)
@@ -43,6 +45,27 @@ namespace DefectStudio::SceneObjectsYaml
 	void EmitVec2(YAML::Emitter &emit, const char *key, const glm::vec2 &value)
 	{
 		emit << YAML::Key << key << YAML::Value << YAML::Flow << YAML::BeginSeq << value.x << value.y << YAML::EndSeq;
+	}
+
+	bool Vec4(const YAML::Node &node, glm::vec4 &out)
+	{
+		if (!node || !node.IsSequence() || node.size() != 4)
+			return false;
+		try
+		{
+			out = glm::vec4(node[0].as<float>(), node[1].as<float>(), node[2].as<float>(), node[3].as<float>());
+			return true;
+		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
+
+	void EmitVec4(YAML::Emitter &emit, const char *key, const glm::vec4 &value)
+	{
+		emit << YAML::Key << key << YAML::Value << YAML::Flow << YAML::BeginSeq << value.x << value.y << value.z << value.w
+			 << YAML::EndSeq;
 	}
 
 	// An absent or empty anchor list is normal for free-standing objects. Cardinality belongs to
@@ -320,6 +343,24 @@ namespace DefectStudio::SceneObjectsYaml
 			path.name = node["name"].as<std::string>(path.name);
 			path.visible = node["visible"].as<bool>(path.visible);
 			path.renderable = node["renderable"].as<bool>(path.renderable);
+			path.transformPosition = glm::vec3(0.0f);
+			path.transformRotation = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+			path.transformScale = glm::vec3(1.0f);
+			const bool hasTransform = node["transform_position"] || node["transform_rotation"] || node["transform_scale"];
+			if (node["transform_position"] && !Vec3(node["transform_position"], path.transformPosition)) return false;
+			if (node["transform_rotation"] && !Vec4(node["transform_rotation"], path.transformRotation)) return false;
+			if (node["transform_scale"] && !Vec3(node["transform_scale"], path.transformScale)) return false;
+			if (path.transformPosition.x == 0.0f)
+				path.transformPosition.x = 0.0f;
+			// PersistedScenePath intentionally has no presence bit in its contract. Keep the
+			// identity values while using signed zero only as a parser-to-persistence marker:
+			// omitted block = position.x -0, explicit identity block = rotation.x -0.
+			if (!hasTransform)
+				path.transformPosition.x = -0.0f;
+			else if (path.transformPosition == glm::vec3(0.0f) &&
+				path.transformRotation == glm::vec4(0.0f, 0.0f, 0.0f, 1.0f) &&
+				path.transformScale == glm::vec3(1.0f))
+				path.transformRotation.x = -0.0f;
 			path.nodes.clear();
 			for (const YAML::Node &nodeNode : nodes)
 			{
@@ -354,7 +395,14 @@ namespace DefectStudio::SceneObjectsYaml
 
 	void EmitPath(YAML::Emitter &emit, const PersistedScenePath &path)
 	{
-		emit << YAML::Key << "kind" << YAML::Value << "ScenePath" << YAML::Key << "persistKey" << YAML::Value << path.persistKey << YAML::Key << "name" << YAML::Value << path.name << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
+		emit << YAML::Key << "kind" << YAML::Value << "ScenePath" << YAML::Key << "persistKey" << YAML::Value << path.persistKey << YAML::Key << "name" << YAML::Value << path.name;
+		if (!std::signbit(path.transformPosition.x))
+		{
+			EmitVec3(emit, "transform_position", path.transformPosition);
+			EmitVec4(emit, "transform_rotation", path.transformRotation);
+			EmitVec3(emit, "transform_scale", path.transformScale);
+		}
+		emit << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
 		for (const auto &node : path.nodes)
 		{
 			emit << YAML::BeginMap;

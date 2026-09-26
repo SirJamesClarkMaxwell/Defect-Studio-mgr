@@ -242,4 +242,19 @@ namespace DefectStudio
 		path = std::move(edited);
 		return {};
 	}
+
+	void MovePathOriginToCentre(ScenePath &path)
+	{
+		if (path.nodes.empty())
+			return;
+
+		glm::vec3 centroid(0.0f);
+		for (const PathNode &node : path.nodes)
+			centroid += node.position;
+		centroid /= static_cast<float>(path.nodes.size());
+
+		path.transform.position += centroid;
+		for (PathNode &node : path.nodes)
+			node.position -= centroid;
+	}
 }

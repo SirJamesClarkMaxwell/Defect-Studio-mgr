@@ -7,6 +7,7 @@
 #include <type_traits>
 
 #include "Renderer/Path/PathEvaluator.hpp"
+#include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 
 namespace DefectStudio
@@ -16,6 +17,26 @@ namespace DefectStudio
 		bool Finite(const glm::vec3 &v)
 		{
 			return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+		}
+
+		bool Finite(const glm::vec4 &v)
+		{
+			return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && std::isfinite(v.w);
+		}
+
+		bool IsIdentityTransform(const PersistedScenePath &persisted)
+		{
+			return persisted.transformPosition == glm::vec3(0.0f) &&
+				persisted.transformRotation == glm::vec4(0.0f, 0.0f, 0.0f, 1.0f) &&
+				persisted.transformScale == glm::vec3(1.0f);
+		}
+
+		bool HasTransformBlock(const PersistedScenePath &persisted)
+		{
+			// ParsePath marks an explicitly written identity with a negative zero in x. A plain
+			// default-constructed DTO remains the useful "absent" representation for callers that
+			// build one without YAML, while an explicit identity in a file is not recentered.
+			return !IsIdentityTransform(persisted) || std::signbit(persisted.transformRotation.x);
 		}
 
 		StructuredError PathError(const std::string &detail)
@@ -157,6 +178,12 @@ namespace DefectStudio
 		path.name = persisted.name;
 		path.visible = persisted.visible;
 		path.renderable = persisted.renderable;
+		if (!Finite(persisted.transformPosition) || !Finite(persisted.transformRotation) || !Finite(persisted.transformScale))
+			return PathError("Scene path contains a non-finite transform.");
+		path.transform.position = persisted.transformPosition;
+		path.transform.rotation = glm::quat(
+			persisted.transformRotation.w, persisted.transformRotation.x, persisted.transformRotation.y, persisted.transformRotation.z);
+		path.transform.scale = persisted.transformScale;
 		if (!ParseStyle(persisted.style, path.style))
 			return PathError("Scene path contains an unknown style enum name.");
 		for (const auto &node : persisted.nodes)
@@ -190,12 +217,27 @@ namespace DefectStudio
 			path.segments.push_back(std::move(built));
 		}
 		if (!ValidatePath(path).empty()) return PathError("Scene path geometry violates renderer path invariants.");
+		if (!HasTransformBlock(persisted))
+		{
+			path.transform.position = glm::vec3(0.0f);
+			path.transform.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+			path.transform.scale = glm::vec3(1.0f);
+			MovePathOriginToCentre(path);
+		}
 		return path;
 	}
 
 	PersistedScenePath ExtractPersistedScenePath(const ScenePath &path, const RendererStructureData &structure)
 	{
 		PersistedScenePath persisted;
+		persisted.transformPosition = path.transform.position;
+		if (persisted.transformPosition.x == 0.0f)
+			persisted.transformPosition.x = 0.0f;
+		// Preserve the stored quaternion, including its sign. The file convention is xyzw and
+		// deliberately does not normalize or canonicalize q to -q on save.
+		persisted.transformRotation = glm::vec4(
+			path.transform.rotation.x, path.transform.rotation.y, path.transform.rotation.z, path.transform.rotation.w);
+		persisted.transformScale = path.transform.scale;
 		persisted.persistKey = path.persistKey;
 		persisted.name = path.name;
 		persisted.visible = path.visible;

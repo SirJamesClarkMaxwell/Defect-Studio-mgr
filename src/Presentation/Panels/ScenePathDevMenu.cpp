@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Path/PathTopology.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/RendererLayer.hpp"
 
@@ -104,6 +105,7 @@ namespace DefectStudio
 		}
 		}
 		path.segments.push_back(std::move(segment));
+		MovePathOriginToCentre(path);
 		return path;
 	}
 
