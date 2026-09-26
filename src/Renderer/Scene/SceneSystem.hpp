@@ -81,8 +81,10 @@ namespace DefectStudio
 
 		// The AppendSceneArrow rule, applied to paths: the id on `path` is discarded and a fresh one
 		// allocated, because a duplicated path arrives still carrying its source's id and one id maps to
-		// one entity. Does not call SyncLabelEntities and does not touch selection. Undo restoration
-		// deliberately keeps original ids and so goes through PathSystem::ReplaceStore instead.
+		// one entity. Does not call SyncLabelEntities and does not touch selection. Returns the allocated
+		// id on success, or an unset id when PathStore rejects the insert (for example, an id collision).
+		// Undo restoration deliberately keeps original ids and so goes through PathSystem::ReplaceStore
+		// instead.
 		SceneObjectId AppendScenePath(RendererWindowState &windowState, ScenePath path);
 
 		// Ids -> positions in the matching flat array, for the code that must still speak indices:

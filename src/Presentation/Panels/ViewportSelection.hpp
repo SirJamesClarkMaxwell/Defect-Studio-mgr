@@ -8,6 +8,7 @@
 
 #include "Core/Utils/Input.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Renderer/Scene/SceneObject.hpp" // SceneObjectId, for the path hit-tests below
 
 namespace DefectStudio
 {

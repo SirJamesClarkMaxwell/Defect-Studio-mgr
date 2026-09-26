@@ -323,6 +323,8 @@ namespace DefectStudio
 				DrawSelectedSceneOrbitalSection(*windowState);
 			if (sections.planes)
 				DrawSelectedScenePlaneSection(*windowState);
+			if (sections.paths)
+				DrawSelectedScenePathSection(*windowState);
 
 			if (!ImGui::CollapsingHeader("Wszystkie obiekty"))
 				return;

@@ -115,4 +115,23 @@ namespace DefectStudio
 			renderable = edit.renderable;
 		return edit.visibleChanged || edit.renderableChanged;
 	}
+	SceneVisibilityColumnState SceneVisibilityStateFor(const PathStore &store)
+	{
+		SceneVisibilityColumnAccumulator flags;
+		store.Visit([&flags](const ScenePath &path) { flags.Add(path.visible, path.renderable); });
+		return SceneVisibilityStateFrom(flags);
+	}
+
+	void ApplySceneVisibilityColumnEdit(PathStore &store, const SceneVisibilityColumnEdit &edit)
+	{
+		if (!edit.visibleChanged && !edit.renderableChanged)
+			return;
+		for (const SceneObjectId id : store.Ids())
+			store.MutateStyle(id, [&edit](ScenePath &path) {
+				if (edit.visibleChanged)
+					path.visible = edit.visible;
+				if (edit.renderableChanged)
+					path.renderable = edit.renderable;
+			});
+	}
 } // namespace DefectStudio

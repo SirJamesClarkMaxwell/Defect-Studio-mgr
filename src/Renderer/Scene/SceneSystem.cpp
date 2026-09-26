@@ -350,7 +350,8 @@ namespace DefectStudio::SceneSystem
 	{
 		path.id = windowState.sceneRegistry.AllocateObjectId();
 		const SceneObjectId id = path.id;
-		EnsurePathSystem(windowState).Store().Insert(std::move(path));
+		if (!EnsurePathSystem(windowState).Store().Insert(std::move(path)))
+			return SceneObjectId{};
 		return id;
 	}
 

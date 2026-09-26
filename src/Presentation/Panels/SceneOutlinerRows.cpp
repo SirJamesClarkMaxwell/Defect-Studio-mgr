@@ -104,7 +104,8 @@ namespace DefectStudio
 			? SceneObjectEditKind::FreeLabel
 			: rowKind == SelectionRowKind::Arrow ? SceneObjectEditKind::Arrow
 			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
-			: SceneObjectEditKind::Plane;
+			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
+			: SceneObjectEditKind::Path;
 		bool sceneMutated = false;
 		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
 			const SceneObjectEditAction action)

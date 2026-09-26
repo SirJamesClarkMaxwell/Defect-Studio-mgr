@@ -160,9 +160,11 @@ namespace DefectStudio
 			return MakeEditError("path.edit_invalid_result", "The path to add is invalid.");
 
 		const SceneObjectsSnapshot before = CaptureSceneObjectsSnapshot(*context.window);
+		const SceneObjectId id = SceneSystem::AppendScenePath(*context.window, std::move(path));
+		if (!id.IsValid())
+			return MakeEditError("path.edit_insert_failed", "The path could not be inserted into the scene.");
 		if (context.pushUndo)
 			context.pushUndo(*context.window, before, "Add path");
-		const SceneObjectId id = SceneSystem::AppendScenePath(*context.window, std::move(path));
 		SceneSystem::SyncLabelEntities(context.window->sceneRegistry, *context.window);
 		return id;
 	}

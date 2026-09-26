@@ -70,6 +70,7 @@ namespace DefectStudio
 			outAnchor += pin.worldOffset;
 			return true;
 		}
+
 	} // namespace
 
 	void HandleBoxSelectDrag(
@@ -117,7 +118,8 @@ namespace DefectStudio
 				ApplyLabelRegionSelection(
 					windowState, HitTestRectPinnedMeasurements(windowState, rectMin, rectMax),
 					HitTestRectFreeLabels(windowState, rectMin, rectMax),
-					HitTestRectSceneArrows(windowState, rectMin, rectMax), mode);
+					HitTestRectSceneArrows(windowState, rectMin, rectMax), mode,
+					HitTestRectScenePaths(windowState, rectMin, rectMax));
 			}
 		}
 	}
@@ -154,7 +156,8 @@ namespace DefectStudio
 			ApplyLabelRegionSelection(
 				windowState, HitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius),
 				HitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius),
-				HitTestCircleSceneArrows(windowState, center, windowState.circleSelectRadius), mode);
+				HitTestCircleSceneArrows(windowState, center, windowState.circleSelectRadius), mode,
+				HitTestCircleScenePaths(windowState, center, windowState.circleSelectRadius));
 		}
 	}
 
@@ -412,7 +415,7 @@ namespace DefectStudio
 	void ApplyLabelRegionSelection(
 		RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
 		const std::vector<std::size_t> &freeHits, const std::vector<std::size_t> &arrowHits,
-		RendererEvents::Viewport::RegionSelectMode mode)
+		RendererEvents::Viewport::RegionSelectMode mode, const std::vector<SceneObjectId> &pathHits)
 	{
 		using RendererEvents::Viewport::RegionSelectMode;
 		if (mode == RegionSelectMode::Replace)
@@ -420,6 +423,7 @@ namespace DefectStudio
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
 			windowState.selectedSceneArrows.clear();
+			windowState.selectedScenePaths.clear();
 		}
 
 		auto applyHits = [](auto &selection, const auto &objects, const std::vector<std::size_t> &hits, bool subtract) {
@@ -444,6 +448,17 @@ namespace DefectStudio
 		applyHits(windowState.selectedPinnedMeasurements, windowState.pinnedMeasurements, pinnedHits, subtract);
 		applyHits(windowState.selectedFreeLabels, windowState.freeLabels, freeHits, subtract);
 		applyHits(windowState.selectedSceneArrows, windowState.sceneArrows, arrowHits, subtract);
+		for (const SceneObjectId id : pathHits)
+		{
+			const auto existing = std::find(windowState.selectedScenePaths.begin(), windowState.selectedScenePaths.end(), id);
+			if (subtract)
+			{
+				if (existing != windowState.selectedScenePaths.end())
+					windowState.selectedScenePaths.erase(existing);
+			}
+			else if (existing == windowState.selectedScenePaths.end())
+				windowState.selectedScenePaths.push_back(id);
+		}
 
 		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 	}

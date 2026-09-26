@@ -77,6 +77,7 @@ namespace DefectStudio
 		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
 		// SceneRegistry entity, because nothing about it needs a transform or a selection component.
 		void drawPlanesGroup(RendererWindowState &windowState);
+		void drawPathsGroup(RendererWindowState &windowState);
 
 		enum class SelectionRowKind
 		{
@@ -85,7 +86,8 @@ namespace DefectStudio
 			PinnedMeasurement,
 			Arrow,
 			Orbital,
-			Plane
+			Plane,
+			Path
 		};
 		struct SelectionAnchor
 		{

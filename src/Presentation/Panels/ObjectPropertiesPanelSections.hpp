@@ -8,5 +8,5 @@ namespace DefectStudio
 	void DrawSelectedLabelProperties(RendererWindowState &windowState);
 	void DrawAllLabelRows(RendererWindowState &windowState);
 	void DrawAllArrowRows(RendererWindowState &windowState);
+	void DrawSelectedScenePathSection(RendererWindowState &windowState);
 } // namespace DefectStudio
-

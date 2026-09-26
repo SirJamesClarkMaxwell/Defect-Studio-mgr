@@ -36,6 +36,8 @@ namespace DefectStudio
 			AddSceneVisibilityColumnFlags(windowState.sceneArrows, flags);
 			AddSceneVisibilityColumnFlags(windowState.sceneOrbitals, flags);
 			AddSceneVisibilityColumnFlags(windowState.scenePlanes, flags);
+			if (windowState.paths != nullptr)
+				windowState.paths->Store().Visit([&flags](const ScenePath &path) { flags.Add(path.visible, path.renderable); });
 			return SceneVisibilityStateFrom(flags);
 		}
 
@@ -57,6 +59,8 @@ namespace DefectStudio
 			ApplySceneVisibilityColumnEdit(windowState.sceneArrows, edit);
 			ApplySceneVisibilityColumnEdit(windowState.sceneOrbitals, edit);
 			ApplySceneVisibilityColumnEdit(windowState.scenePlanes, edit);
+			if (windowState.paths != nullptr)
+				ApplySceneVisibilityColumnEdit(windowState.paths->Store(), edit);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
 		}
 
@@ -500,6 +504,7 @@ namespace DefectStudio
 					drawArrowsGroup(windowState);
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
+					drawPathsGroup(windowState);
 
 					ImGui::TreePop();
 				}

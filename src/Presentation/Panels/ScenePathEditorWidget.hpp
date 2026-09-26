@@ -61,9 +61,17 @@ namespace DefectStudio
 	std::size_t ApplyScenePathStyleEdit(
 		RendererWindowState &windowState, const std::vector<SceneObjectId> &selection, const ScenePathStyleEdit &edit);
 
-	// Renames one path. Separate from the style edit because a name is per-object by definition -
-	// there is no sensible multi-selection meaning - and because it must not bump the style
-	// revision and force a re-mesh.
+	// Renames one path. Separate from the style edit because a name is per-object by definition:
+	// there is no sensible multi-selection meaning for it.
+	//
+	//   ponytail: this DOES bump the store's style revision and so costs one re-mesh, because
+	//   MutateStyle is the only mutable access PathStore offers and a name is not style. An ImGui
+	//   text field fires per keystroke, so renaming a path re-meshes it once per character. That is
+	//   nothing for the handful of paths a window holds, and the alternative - a third revision
+	//   counter, or a MutateMetadata the mesher is trusted to ignore - is a change to the store's
+	//   whole invalidation contract for a field nothing downstream reads. Upgrade path if a window
+	//   ever holds hundreds of paths: add PathStore::MutateMetadata bumping neither counter, and
+	//   move persistKey onto it too (SceneObjectPersistence.cpp:86 has the same problem).
 	bool RenameScenePath(RendererWindowState &windowState, SceneObjectId id, std::string name);
 
 	// The label a row or a section header shows for one path: its `name` when it has one, else

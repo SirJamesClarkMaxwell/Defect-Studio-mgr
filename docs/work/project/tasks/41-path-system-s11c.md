@@ -104,8 +104,12 @@ If you believe one of them is wrong, stop and say so instead of editing it.
    make a field look mixed.
 5. `ApplyScenePathStyleEdit` writes every field to every selected path and returns the count.
 6. It pushes exactly one undo entry for a multi-path edit, and undoing once restores every path.
-7. `RenameScenePath` changes the name, returns false for an unknown id, and does NOT bump the
-   style revision (`PathStore::RevisionsFor(...).style` is unchanged).
+7. `RenameScenePath` changes the name and returns false for an unknown id.
+   *Amended after the dispatch: this criterion originally also demanded that renaming not bump
+   the style revision. Codex correctly reported that as impossible - `MutateStyle` is PathStore's
+   only mutable access. The bump is now documented as a deliberate ceiling on `RenameScenePath`
+   in the header, with `MutateMetadata` as the upgrade path. The criterion was wrong, not the
+   implementation.*
 8. `ScenePathDisplayName` returns the name when set and `Path #<index>` when not.
 
 `ScenePathOperations` (in `ScenePathOperationsTests.cpp`, covering the already-written S11b):
@@ -138,8 +142,14 @@ Region select (fold into `ScenePathOperationsTests.cpp` or its own file, your ca
 23. `RestoreSceneTransformSelection` puts every point back exactly, and leaves the store's
     geometry revision consistent (the restore is an edit, so it may bump - just do not leave a
     stale cache entry matching the new revision).
-24. Every write went through PathCommands: after a transform the window has undo history, and
-    after a restore the paths hold their original coordinates.
+24. Every write went through PathCommands, and after a restore the paths hold their original
+    coordinates.
+    *Amended after the dispatch: this criterion originally also demanded that a transform leave
+    undo history. It must not. `ViewportModalTransform` captures one `SceneObjectsSnapshot` when
+    the modal begins and pushes it once on commit, and that snapshot already contains the whole
+    PathStore - so `ApplySceneTransformPaths` runs on a context with no undo sink on purpose.
+    Pushing there would create one undo entry per frame of a drag. The criterion named the wrong
+    owner.*
 
 Dev presets:
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Renderer/Path/PathStore.hpp"
+
 namespace DefectStudio
 {
 	// The Scene Outliner's two per-row columns, Blender's split: the eye (drawn in the viewport,
@@ -76,6 +78,9 @@ namespace DefectStudio
 				object.renderable = edit.renderable;
 		}
 	}
+
+	[[nodiscard]] SceneVisibilityColumnState SceneVisibilityStateFor(const PathStore &store);
+	void ApplySceneVisibilityColumnEdit(PathStore &store, const SceneVisibilityColumnEdit &edit);
 
 	// Draws both toggles over the right edge of the preceding row and restores the cursor below that
 	// row. A mixed column reports the value it was clicked to, so clicking a mixed parent applies one

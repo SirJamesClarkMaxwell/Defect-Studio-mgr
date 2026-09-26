@@ -12,6 +12,7 @@
 #include "Renderer/Scene/SceneObject.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneTransformPaths.hpp"
 
 namespace DefectStudio
 {
@@ -166,9 +167,10 @@ namespace DefectStudio
 			if (index >= window.scenePlanes.size())
 				continue;
 			const RendererWindowState::ScenePlane &plane = window.scenePlanes[index];
-			snapshot.planes.push_back(
+				snapshot.planes.push_back(
 				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents});
 		}
+		CaptureSceneTransformPaths(window, snapshot);
 
 		// Atoms are the gizmo's target only when nothing in the scene layer is selected. Fitting a
 		// plane to three atoms leaves those atoms selected, and without this a G on the new plane
@@ -225,6 +227,11 @@ namespace DefectStudio
 		}
 		for (const PlaneTransformStart &plane : snapshot.planes)
 			positions.push_back(plane.center);
+		for (const PathTransformStart &path : snapshot.paths)
+		{
+			positions.insert(positions.end(), path.nodePositions.begin(), path.nodePositions.end());
+			positions.insert(positions.end(), path.handlePositions.begin(), path.handlePositions.end());
+		}
 		return positions;
 	}
 
@@ -247,7 +254,7 @@ namespace DefectStudio
 	bool HasSceneObjectTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
 	{
 		return !snapshot.labels.empty() || !snapshot.arrows.empty() || !snapshot.orbitals.empty() ||
-			!snapshot.planes.empty();
+			!snapshot.planes.empty() || !snapshot.paths.empty();
 	}
 
 	void ApplySceneTransformSelection(
@@ -399,6 +406,7 @@ namespace DefectStudio
 					start.halfExtents * extentScale, glm::vec2(0.01f), glm::vec2(1000.0f));
 			}
 		}
+		ApplySceneTransformPaths(window, snapshot, delta, operation, pivotMode, selectionPivot);
 	}
 
 	void RestoreSceneTransformSelection(
@@ -459,5 +467,6 @@ namespace DefectStudio
 			plane.tangent = start.tangent;
 			plane.halfExtents = start.halfExtents;
 		}
+		RestoreSceneTransformPaths(window, snapshot);
 	}
 } // namespace DefectStudio
