@@ -36,4 +36,23 @@ namespace DefectStudio
 	// evaluated geometry is identical and only the direction of travel flips. Decorations, gradient and
 	// dash phase join this in S5.
 	[[nodiscard]] Result<void> ReversePath(ScenePath &path);
+
+	// Moves the path's origin to the centre of its authored nodes, without moving the path: the
+	// centroid is added to `transform.position` and subtracted from every node's authored position,
+	// so the resolved geometry is identical to the last float.
+	//
+	// task/41 transform-2, and the user's choice of Blender's model in full. In Blender an object's
+	// origin IS its Location, and its mesh lies around it - move a cube to x = 5 and the panel reads
+	// 5. Here the geometry lived entirely in the node positions and `transform.position` started at
+	// zero, so Location would have read 0 for every path ever drawn, no matter where it was. A field
+	// that always reads zero is not a field.
+	//
+	// Applies to the authored positions, which are local by definition, so a bound node's stored
+	// fallback moves with the rest and keeps resolving where it did. Call it when a path is created
+	// and when one is loaded from a file written before paths had a transform; do NOT call it after
+	// every edit, because Blender does not move an origin when a vertex moves either, and a path
+	// whose origin wandered on every drag would make Location meaningless in the other direction.
+	//
+	// A path with no nodes is left alone.
+	void MovePathOriginToCentre(ScenePath &path);
 }
