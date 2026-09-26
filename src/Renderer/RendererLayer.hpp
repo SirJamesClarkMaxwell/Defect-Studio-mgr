@@ -47,6 +47,7 @@ namespace DefectStudio
 	// Pushes only when the hide/show operation changed the hidden atom or bond set.
 	void PushSceneVisibilityUndoSnapshot(
 		RendererWindowState &windowState, HiddenSceneState before, std::string description);
+	[[nodiscard]] bool HasSelectedSceneObjectsForHide(const RendererWindowState &windowState);
 
 	// notes.txt pt. 8 - explicit single-pin override: force this one label flat regardless of the
 	// live threshold (OpenGlRendererBackend::renderLabels applies bondLabelAlignThresholdDeg to every

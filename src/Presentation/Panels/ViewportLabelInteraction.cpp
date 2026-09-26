@@ -150,16 +150,17 @@ namespace DefectStudio
 			ExecuteSceneObjectEditAction(
 				windowState, SceneObjectEditKind::Plane, SceneObjectEditAction::Delete);
 
+		const bool scenePathSelected = !windowState.selectedScenePaths.empty();
+		if (scenePathSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+			ExecuteSceneObjectEditAction(
+				windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Delete);
+
 		// Ctrl+C/V/D for scene drawings - same "raw ImGui key check, bypass CoreLayer entirely" shape as
 		// Delete just above. renderer.selection.copy/paste/duplicate (CoreLayer-dispatched, bound to the
 		// same chords) only ever touch atoms - there's no fallback chain in CoreLayer::dispatchKeyChord
 		// to make them "also try annotations", so this runs independently alongside the atom command.
 		const bool ctrlHeld = ImGui::GetIO().KeyCtrl;
-		const std::optional<SceneObjectEditKind> selectedDrawingKind = sceneArrowSelected
-			? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Arrow}
-			: sceneOrbitalSelected ? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Orbital}
-			: scenePlaneSelected ? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Plane}
-			: std::nullopt;
+		const std::optional<SceneObjectEditKind> selectedDrawingKind = ResolveSelectedDrawingKind(windowState);
 		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
 			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Copy);
 		if (hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_V, false))
@@ -270,6 +271,19 @@ namespace DefectStudio
 				eventBus->Publish(event);
 			}
 		}
+	}
+
+	std::optional<SceneObjectEditKind> ResolveSelectedDrawingKind(const RendererWindowState &windowState)
+	{
+		if (!windowState.selectedSceneArrows.empty())
+			return SceneObjectEditKind::Arrow;
+		if (!windowState.selectedSceneOrbitals.empty())
+			return SceneObjectEditKind::Orbital;
+		if (!windowState.selectedScenePlanes.empty())
+			return SceneObjectEditKind::Plane;
+		if (!windowState.selectedScenePaths.empty())
+			return SceneObjectEditKind::Path;
+		return std::nullopt;
 	}
 
 	// Click-select + drag-to-nudge for pinned measurement labels only (mouse path) - the keyboard

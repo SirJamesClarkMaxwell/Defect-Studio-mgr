@@ -8,6 +8,7 @@
 
 #include "Core/Utils/Input.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Renderer/Scene/SceneObject.hpp" // SceneObjectId, for the path hit-tests below
 
 namespace DefectStudio
@@ -100,6 +101,8 @@ namespace DefectStudio
 	// handlers it must run every frame regardless of whether a gizmo captured this frame's mouse.
 	void HandlePinnedMeasurementKeyboardShortcuts(
 		RendererWindowState &windowState, bool hovered, RendererLayer &layer);
+	[[nodiscard]] std::optional<SceneObjectEditKind> ResolveSelectedDrawingKind(
+		const RendererWindowState &windowState);
 	[[nodiscard]] bool HandleFreeLabelInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 	// Click-select for sceneOrbitals: plain click replaces, Ctrl-click toggles. Ray-vs-bounding-

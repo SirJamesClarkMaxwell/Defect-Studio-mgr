@@ -2336,15 +2336,20 @@ namespace DefectStudio
 		// Atoms and bonds are hidden through the ECS mirror, the other scene objects through their
 		// own flags - see Renderer/Scene/SceneVisibility.hpp for why the two halves stay separate.
 		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
-		if (!windowState->selectedPinnedMeasurements.empty() || !windowState->selectedFreeLabels.empty() ||
-			!windowState->selectedSceneArrows.empty() || !windowState->selectedSceneOrbitals.empty() ||
-			!windowState->selectedScenePlanes.empty())
+		if (HasSelectedSceneObjectsForHide(*windowState))
 		{
 			PushPinnedMeasurementUndoSnapshot(*windowState);
 			SetSelectedSceneObjectsVisible(*windowState, false);
 		}
 		HideSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
 		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Hide selection");
+	}
+
+	bool HasSelectedSceneObjectsForHide(const RendererWindowState &windowState)
+	{
+		return !windowState.selectedPinnedMeasurements.empty() || !windowState.selectedFreeLabels.empty() ||
+			!windowState.selectedSceneArrows.empty() || !windowState.selectedSceneOrbitals.empty() ||
+			!windowState.selectedScenePlanes.empty() || !windowState.selectedScenePaths.empty();
 	}
 
 	void RendererLayer::onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event)
