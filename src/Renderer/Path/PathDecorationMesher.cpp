@@ -16,6 +16,19 @@ namespace DefectStudio::detail
 			return glm::dot(value, value) > 1.0e-18 ? glm::normalize(value) : fallback;
 		}
 
+		// StitchRings is shared with Round and has no style argument; repeated adjacent face normals
+		// are the Flat ring's marker, while Round keeps its radial normals and original stitching.
+		[[nodiscard]] bool HasFlatFaceVertices(const StrokeGeometry &geometry, const std::uint32_t ring,
+			const std::uint32_t ringSize)
+		{
+			if (ringSize < 2u || ringSize % 2u != 0u)
+				return false;
+			for (std::uint32_t radial = 0; radial < ringSize; radial += 2u)
+				if (geometry.tubeVertices[ring + radial].normal != geometry.tubeVertices[ring + radial + 1u].normal)
+					return false;
+			return true;
+		}
+
 		void AppendRingFan(StrokeGeometry &geometry, const std::uint32_t ring, const PathStrokeStyle &style,
 			const EvaluatedSample &sample, const glm::dvec3 &outward, const bool flip)
 		{
@@ -27,31 +40,15 @@ namespace DefectStudio::detail
 			centrePosition /= static_cast<double>(ringSize);
 			geometry.tubeVertices.push_back({glm::vec3(centrePosition), glm::vec3(outward),
 				SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
-			for (std::uint32_t radial = 0; radial < ringSize; ++radial)
+			const bool flatRing = HasFlatFaceVertices(geometry, ring, ringSize);
+			for (std::uint32_t radial = 0; radial < ringSize; radial += flatRing ? 2u : 1u)
 			{
-				const std::uint32_t next = ring + (radial + 1u) % ringSize;
+				const std::uint32_t next = ring + (flatRing ? radial + 1u : (radial + 1u) % ringSize);
 				if (flip)
 					geometry.indices.insert(geometry.indices.end(), {centre, ring + radial, next});
 				else
 					geometry.indices.insert(geometry.indices.end(), {centre, next, ring + radial});
 			}
-		}
-
-		[[nodiscard]] std::array<std::uint32_t, 4> CollapsedRing(const std::uint32_t ring,
-			const bool normalCollapsed, const bool depthCollapsed)
-		{
-			std::array<std::uint32_t, 4> result = {ring, ring + 1u, ring + 2u, ring + 3u};
-			if (normalCollapsed)
-			{
-				result[1] = result[0];
-				result[3] = result[2];
-			}
-			if (depthCollapsed)
-			{
-				result[2] = result[1];
-				result[3] = result[0];
-			}
-			return result;
 		}
 
 		void AppendTriangleIfDistinct(StrokeGeometry &geometry, const std::uint32_t a,
@@ -66,20 +63,15 @@ namespace DefectStudio::detail
 		}
 
 		void StitchFlatCollapsedRings(StrokeGeometry &geometry, const std::uint32_t lower,
-			const std::uint32_t upper, const bool lowerNormalCollapsed, const bool lowerDepthCollapsed,
-			const bool upperNormalCollapsed, const bool upperDepthCollapsed, const bool flip)
+			const std::uint32_t upper, const std::uint32_t ringSize, const bool flip)
 		{
-			const std::array<std::uint32_t, 4> lowerRing =
-				CollapsedRing(lower, lowerNormalCollapsed, lowerDepthCollapsed);
-			const std::array<std::uint32_t, 4> upperRing =
-				CollapsedRing(upper, upperNormalCollapsed, upperDepthCollapsed);
-			for (std::uint32_t radial = 0; radial < 4u; ++radial)
+			for (std::uint32_t radial = 0; radial < ringSize; radial += 2u)
 			{
-				const std::uint32_t next = (radial + 1u) % 4u;
-				const std::uint32_t a = lowerRing[radial];
-				const std::uint32_t b = upperRing[radial];
-				const std::uint32_t c = lowerRing[next];
-				const std::uint32_t d = upperRing[next];
+				const std::uint32_t next = radial + 1u;
+				const std::uint32_t a = lower + radial;
+				const std::uint32_t b = upper + radial;
+				const std::uint32_t c = lower + next;
+				const std::uint32_t d = upper + next;
 				if (flip)
 				{
 					AppendTriangleIfDistinct(geometry, a, d, b);
@@ -91,17 +83,6 @@ namespace DefectStudio::detail
 					AppendTriangleIfDistinct(geometry, a, d, c);
 				}
 			}
-		}
-
-		[[nodiscard]] double InnerHalfWidth(const DecorationContourPoint &point,
-			const PathStrokeStyle &style)
-		{
-			return std::max(0.0, point.halfWidth - static_cast<double>(style.width) * 0.5);
-		}
-
-		[[nodiscard]] bool InnerDepthCollapsed(const PathStrokeStyle &style)
-		{
-			return static_cast<double>(style.ribbonThickness) <= static_cast<double>(style.width);
 		}
 
 		void AppendFilledRoundDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
@@ -116,8 +97,7 @@ namespace DefectStudio::detail
 				const std::uint32_t upper = lower + CrossSectionRingSize(style);
 				if (style.profile == StrokeProfile::Flat &&
 					(contour.points[ring].halfWidth == 0.0 || contour.points[ring + 1u].halfWidth == 0.0))
-					StitchFlatCollapsedRings(geometry, lower, upper, contour.points[ring].halfWidth == 0.0,
-						false, contour.points[ring + 1u].halfWidth == 0.0, false, false);
+					StitchFlatCollapsedRings(geometry, lower, upper, CrossSectionRingSize(style), false);
 				else
 					StitchRings(geometry, lower, upper, CrossSectionRingSize(style));
 			}
@@ -147,14 +127,10 @@ namespace DefectStudio::detail
 					contour.points[ring + 1u].halfWidth == 0.0;
 				if (style.profile == StrokeProfile::Flat && outerCollapsed)
 				{
-					const bool lowerInnerCollapsed = InnerHalfWidth(contour.points[ring], style) == 0.0;
-					const bool upperInnerCollapsed = InnerHalfWidth(contour.points[ring + 1u], style) == 0.0;
 					StitchFlatCollapsedRings(geometry, outer, outer + CrossSectionRingSize(style),
-						contour.points[ring].halfWidth == 0.0, false,
-						contour.points[ring + 1u].halfWidth == 0.0, false, false);
+						CrossSectionRingSize(style), false);
 					StitchFlatCollapsedRings(geometry, inner, inner + CrossSectionRingSize(style),
-						lowerInnerCollapsed, InnerDepthCollapsed(style), upperInnerCollapsed,
-						InnerDepthCollapsed(style), true);
+						CrossSectionRingSize(style), true);
 				}
 				else
 				{
@@ -165,8 +141,7 @@ namespace DefectStudio::detail
 			if (contour.points.front().halfWidth > 0.0)
 				StitchRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), true);
 			else if (style.profile == StrokeProfile::Flat)
-				StitchFlatCollapsedRings(geometry, firstOuter, firstInner, true, false, true,
-					InnerDepthCollapsed(style), true);
+				StitchFlatCollapsedRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), true);
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
 				StitchRings(geometry, firstOuter + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
 					firstInner + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
@@ -174,8 +149,8 @@ namespace DefectStudio::detail
 			else if (contour.closesBack && style.profile == StrokeProfile::Flat)
 			{
 				const std::uint32_t last = static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style);
-				StitchFlatCollapsedRings(geometry, firstOuter + last, firstInner + last, true, false, true,
-					InnerDepthCollapsed(style), false);
+				StitchFlatCollapsedRings(geometry, firstOuter + last, firstInner + last,
+					CrossSectionRingSize(style), false);
 			}
 		}
 
@@ -255,7 +230,7 @@ namespace DefectStudio::detail
 
 	std::uint32_t CrossSectionRingSize(const PathStrokeStyle &style)
 	{
-		return style.profile == StrokeProfile::Round ? style.radialSegments : 4u;
+		return style.profile == StrokeProfile::Round ? style.radialSegments : 8u;
 	}
 
 	std::uint32_t AppendCrossSectionRing(StrokeGeometry &geometry, const glm::dvec3 &centre,
@@ -290,10 +265,14 @@ namespace DefectStudio::detail
 			-normal * halfWidth * scale + binormal * depth,
 			-normal * halfWidth * scale - binormal * depth,
 			normal * halfWidth * scale - binormal * depth};
-		for (const glm::dvec3 &corner : corners)
+		const std::array<std::uint32_t, 8> cornerIndices = {0u, 1u, 1u, 2u, 2u, 3u, 3u, 0u};
+		const std::array<glm::dvec3, 8> faceNormals = {
+			binormal, binormal, -normal, -normal, -binormal, -binormal, normal, normal};
+		for (std::uint32_t radial = 0; radial < CrossSectionRingSize(style); ++radial)
 		{
-			const glm::dvec3 cornerNormal = SafeNormal(corner, inner ? -normal : normal);
-			geometry.tubeVertices.push_back({glm::vec3(centre + corner), glm::vec3(inner ? -cornerNormal : cornerNormal),
+			const glm::dvec3 faceNormal = SafeNormal(faceNormals[radial], inner ? -normal : normal);
+			geometry.tubeVertices.push_back({glm::vec3(centre + corners[cornerIndices[radial]]),
+				glm::vec3(inner ? -faceNormal : faceNormal),
 				SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT),
 				static_cast<float>(sample.arcLength)});
 		}
@@ -315,9 +294,10 @@ namespace DefectStudio::detail
 	void StitchRings(StrokeGeometry &geometry, const std::uint32_t lower, const std::uint32_t upper,
 		const std::uint32_t radialSegments, const bool flip)
 	{
-		for (std::uint32_t radial = 0; radial < radialSegments; ++radial)
+		const bool flatRing = HasFlatFaceVertices(geometry, lower, radialSegments);
+		for (std::uint32_t radial = 0; radial < radialSegments; radial += flatRing ? 2u : 1u)
 		{
-			const std::uint32_t next = (radial + 1u) % radialSegments;
+			const std::uint32_t next = flatRing ? radial + 1u : (radial + 1u) % radialSegments;
 			const std::uint32_t a = lower + radial;
 			const std::uint32_t b = upper + radial;
 			const std::uint32_t c = lower + next;
