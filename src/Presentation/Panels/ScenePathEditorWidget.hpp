@@ -23,8 +23,11 @@ namespace DefectStudio
 		float width = 0.05f;
 		float alpha = 1.0f;
 		glm::vec3 color{0.95f, 0.35f, 0.1f};
-		PathDecorationKind startDecoration = PathDecorationKind::None;
-		PathDecorationKind endDecoration = PathDecorationKind::None;
+		// task/41 S11i: the whole decoration, not just its kind. The two scales and `filled` are the
+		// shape control the panel was missing - a tip's proportions were editable in the file format
+		// and in code, but nowhere in the UI, so every tip in the app was stuck at 1.0/1.0/solid.
+		PathEndpointDecoration startDecoration;
+		PathEndpointDecoration endDecoration;
 		PathDepthMode depthMode = PathDepthMode::DepthTest;
 	};
 
@@ -41,6 +44,10 @@ namespace DefectStudio
 		bool mixedWidth = false;
 		bool mixedAlpha = false;
 		bool mixedColor = false;
+		// True when ANY field of that endpoint's decoration differs across the selection - kind,
+		// either scale or `filled`. One flag per endpoint rather than four: the panel draws the
+		// endpoint as one group, and a selection where only the scales differ is still a selection
+		// with no single decoration to show.
 		bool mixedStartDecoration = false;
 		bool mixedEndDecoration = false;
 		bool mixedDepthMode = false;
@@ -61,8 +68,32 @@ namespace DefectStudio
 	// the user did not touch still holds the value the editor opened with - which, for a mixed
 	// field, is the first path's. That is the same "editing a mixed field flattens it" behaviour
 	// every other multi-selection editor in this panel has.
+	// `recordUndo == false` applies the edit through the silent context instead, leaving undo
+	// history untouched. That is what a drag in progress uses: see BeginScenePathStyleDrag below.
 	std::size_t ApplyScenePathStyleEdit(
-		RendererWindowState &windowState, const std::vector<SceneObjectId> &selection, const ScenePathStyleEdit &edit);
+		RendererWindowState &windowState, const std::vector<SceneObjectId> &selection,
+		const ScenePathStyleEdit &edit, bool recordUndo = true);
+
+	// The undo boundary for a held widget. ImGui reports a change on every frame a DragFloat,
+	// SliderFloat or ColorEdit is held, and applying each of those with recordUndo == true is what
+	// made one drag of the Width slider cost one Ctrl+Z per frame.
+	//
+	// Contract, and the reason these are exposed rather than kept inside DrawScenePathEditor: they
+	// are the testable half. A test cannot drive ImGui, but it can call Begin, apply N times
+	// silently, call Commit, and assert the stack grew by exactly one entry that restores the
+	// pre-Begin state.
+	//
+	// - Begin captures `windowState.scenePathStyleEditBefore` from the CURRENT state, i.e. before
+	//   the first silent apply. Calling it again while a drag is open is a no-op, so the panel may
+	//   call it unconditionally on activation without tracking which widget is live.
+	// - Commit pushes exactly one undo entry holding that snapshot and clears it. It is a no-op
+	//   returning false when no drag is open, and also when nothing actually changed between Begin
+	//   and Commit - a click that activates a slider without moving it leaves no history.
+	// - An abandoned drag (selection cleared, window closed, panel hidden mid-drag) leaves the
+	//   snapshot behind. Commit is therefore safe to call on a selection that no longer matches the
+	//   one Begin saw: the snapshot restores whole-window scene objects, not a selection.
+	void BeginScenePathStyleDrag(RendererWindowState &windowState);
+	bool CommitScenePathStyleDrag(RendererWindowState &windowState);
 
 	// Renames one path. Separate from the style edit because a name is per-object by definition:
 	// there is no sensible multi-selection meaning for it.

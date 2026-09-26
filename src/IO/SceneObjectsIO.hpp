@@ -220,13 +220,22 @@ namespace DefectStudio
 		float dashPhase = 0.0f;
 		bool gradientEnabled = false;
 		std::vector<PersistedPathGradientStop> gradientStops;
-		// PathDecorationKind names: None | Arrow | Stealth | OpenArrow | Bar | Circle | Square | Diamond
+		// PathDecorationKind names: None | Arrow | Stealth | Latex | Bar | Circle | Square | Diamond
+		// | Kite. `OpenArrow` is a v2 name that no longer has an enumerator: it reads back as
+		// { Arrow, filled = false } and is never written again. Kept accepted, not kept alive -
+		// dropping it would silently turn every saved hollow arrowhead solid.
+		//
+		// The `filled` flags are additive and the format version does NOT move for them. A v2 file
+		// written before task/41 S11i has no `*_decoration_filled` key, and absent means true, which
+		// is what those files meant. Only `OpenArrow` meant otherwise, and it carries its own answer.
 		std::string startDecoration = "None";
 		float startDecorationLengthScale = 1.0f;
 		float startDecorationWidthScale = 1.0f;
+		bool startDecorationFilled = true;
 		std::string endDecoration = "None";
 		float endDecorationLengthScale = 1.0f;
 		float endDecorationWidthScale = 1.0f;
+		bool endDecorationFilled = true;
 		std::string depthMode = "DepthTest"; // DepthTest | AlwaysOnTop
 	};
 

@@ -36,19 +36,32 @@ namespace DefectStudio
 		AlwaysOnTop,
 	};
 
-	// Eight kinds, mapping onto the legacy ArrowTip vocabulary where one exists: Arrow == Plain,
-	// Stealth == Barbed, OpenArrow == Open. The legacy table stays in SceneArrowGeometry until S16;
-	// here a decoration is an axial contour, not a hardcoded triangle count.
+	// The shape family of an endpoint decoration. Each is an axial contour (see PathDecoration.hpp),
+	// not a hardcoded triangle count, so Round revolves it and Flat mirrors it from one description.
+	//
+	// task/41 S11i: this is the manim/TikZ tip vocabulary. Deliberately NOT one enumerator per named
+	// tip - manim spells filled and hollow variants as separate classes (ArrowCircleTip vs
+	// ArrowCircleFilledTip) and that doubles the list for a property that is a boolean. Here the
+	// family is the kind and `PathEndpointDecoration::filled` picks solid or outline, which yields
+	// the whole cross product and keeps persistence to one name per shape.
+	//
+	// `OpenArrow` is gone for the same reason: it was Arrow with filled == false, spelled as a
+	// third thing, and it was the one kind whose `filled` the mesher did not honour. Files that
+	// name it migrate to { Arrow, filled = false } - see ScenePathPersistence.
+	//
+	// Legacy ArrowTip mapping, still needed until S16 removes SceneArrowGeometry:
+	// Plain == Arrow, Barbed == Stealth, Open == Arrow with filled == false.
 	enum class PathDecorationKind
 	{
 		None,
-		Arrow,
-		Stealth,
-		OpenArrow,
-		Bar,
-		Circle,
-		Square,
-		Diamond,
+		Arrow,   // straight-backed triangle. TikZ `>` / `to`, manim ArrowTriangleTip.
+		Stealth, // back notched forward, so the barbs trail. TikZ `stealth`, manim StealthTip.
+		Latex,   // sides bow outward and the back is swept. TikZ `latex`.
+		Bar,     // a tee across the tangent, no length to speak of. TikZ `|`.
+		Circle,  // a disc; the contour is a half-circle, so it reads round at any zoom.
+		Square,  // a box of constant half-width. It must NOT taper - that was the S11 defect.
+		Diamond, // widest at the middle, symmetric front to back.
+		Kite,    // widest a third of the way back: a Diamond with a longer tail.
 	};
 
 	// World-space dashes. Lengths are absolute so a dash does not change size when the path is
@@ -79,12 +92,17 @@ namespace DefectStudio
 	};
 
 	// Scales are relative to the stroke width, matching the legacy ArrowTipParameters proportions, so
-	// a decoration keeps its shape when the stroke is made thicker.
+	// a decoration keeps its shape when the stroke is made thicker. The two scales are the shape
+	// control the user asked for: a long thin Arrow and a stubby one are the same `kind`.
 	struct PathEndpointDecoration
 	{
 		PathDecorationKind kind = PathDecorationKind::None;
 		float lengthScale = 1.0f;
 		float widthScale = 1.0f;
+		// Solid body, or an outline of the same contour. False is what `OpenArrow` used to mean, and
+		// it applies to every kind, not just Arrow. The outline's thickness is the stroke width, so a
+		// hollow tip carries the same visual weight as the shaft it terminates.
+		bool filled = true;
 	};
 
 	struct PathStrokeStyle

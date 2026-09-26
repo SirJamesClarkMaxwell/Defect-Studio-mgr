@@ -527,6 +527,14 @@ namespace DefectStudio
 		std::optional<ModalTransformSession> modalTransform;
 		SceneTransformSelectionSnapshot modalTransformSelection;
 		std::optional<LabelUndoSnapshot> modalTransformSceneObjectsBefore;
+		// task/41 S11g: the scene objects as they were before the Properties panel's current style
+		// drag started, held for as long as the drag lasts. ImGui reports a change on every frame a
+		// slider or colour picker is held, so routing each of those frames through the undo-recording
+		// edit context is what turns a one-second drag into sixty Ctrl+Z presses. The editor applies
+		// the intermediate frames silently and pushes this one snapshot when the widget is released -
+		// the same "capture once, commit once" contract `modalTransformSceneObjectsBefore` gives
+		// G/R/S. Empty means no drag is in flight.
+		std::optional<LabelUndoSnapshot> scenePathStyleEditBefore;
 		bool modalTransformStartedFromHandle = false;
 		TransformOrientation transformOrientation = TransformOrientation::Global;
 		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
