@@ -78,8 +78,25 @@ namespace DefectStudio::Tests
 		PasteScenePathsFromClipboard(window);
 		ASSERT_EQ(window.paths->Store().Size(), 2u);
 		ASSERT_EQ(window.selectedScenePaths.size(), 1u);
-		EXPECT_NE(window.selectedScenePaths.front(), id);
-		EXPECT_EQ(window.paths->Store().At(1)->nodes.front().position.x, -0.5f);
+		const SceneObjectId copyId = window.selectedScenePaths.front();
+		EXPECT_NE(copyId, id);
+		const ScenePath *original = window.paths->Store().Find(id);
+		const ScenePath *copy = window.paths->Store().Find(copyId);
+		ASSERT_NE(original, nullptr);
+		ASSERT_NE(copy, nullptr);
+		ASSERT_FALSE(original->nodes.empty());
+		ASSERT_FALSE(copy->nodes.empty());
+		const ResolvedNodes originalResolved = ResolveNodePositions(*original, BindingContext{});
+		const ResolvedNodes copyResolved = ResolveNodePositions(*copy, BindingContext{});
+		ASSERT_EQ(originalResolved.positions.size(), original->nodes.size());
+		ASSERT_EQ(copyResolved.positions.size(), copy->nodes.size());
+		ASSERT_FALSE(originalResolved.positions.empty());
+		ASSERT_FALSE(copyResolved.positions.empty());
+		const glm::vec3 worldOffset = copyResolved.positions.front() - originalResolved.positions.front();
+		const glm::vec3 transformOffset = copy->transform.position - original->transform.position;
+		EXPECT_NEAR(worldOffset.x, transformOffset.x, 1.0e-5f);
+		EXPECT_NEAR(worldOffset.y, transformOffset.y, 1.0e-5f);
+		EXPECT_NEAR(worldOffset.z, transformOffset.z, 1.0e-5f);
 	}
 
 	TEST(ScenePathOperationsTests, EraseRemovesSelectionAndLeavesOtherIds)

@@ -80,6 +80,18 @@ namespace DefectStudio::Tests
 			ResolvedNodes resolved;
 			for (const PathNode &node : path.nodes)
 				resolved.positions.push_back(node.position);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr)
+				{
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					continue;
+				}
+				resolved.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				resolved.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return resolved;
 		}
 
@@ -180,9 +192,9 @@ namespace DefectStudio::Tests
 		segment.id = AllocateElementId(path);
 		CubicBezierSegmentData cubic;
 		cubic.startHandle.id = AllocateElementId(path);
-		cubic.startHandle.position = path.nodes[0].position; // deliberately on top of the node
+		cubic.startHandle.offset = glm::vec3(0.0f); // deliberately on top of the node
 		cubic.endHandle.id = AllocateElementId(path);
-		cubic.endHandle.position = glm::vec3(0.6f, 0.0f, 0.0f);
+		cubic.endHandle.offset = glm::vec3(-0.4f, 0.0f, 0.0f);
 		segment.data = cubic;
 		path.segments.push_back(segment);
 		path.style.width = kStrokeWidth;
@@ -267,9 +279,9 @@ namespace DefectStudio::Tests
 		segment.id = AllocateElementId(path);
 		CubicBezierSegmentData cubic;
 		cubic.startHandle.id = AllocateElementId(path);
-		cubic.startHandle.position = glm::vec3(-0.5f, 0.0f, 20.0f); // behind the camera at z == 5
+		cubic.startHandle.offset = glm::vec3(0.5f, 0.0f, 20.0f); // authored world point is behind the camera at z == 5
 		cubic.endHandle.id = AllocateElementId(path);
-		cubic.endHandle.position = glm::vec3(0.5f, 0.0f, 20.0f);
+		cubic.endHandle.offset = glm::vec3(-0.5f, 0.0f, 20.0f);
 		segment.data = cubic;
 		path.segments.push_back(segment);
 		path.style.width = kStrokeWidth;

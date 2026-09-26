@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include <algorithm>
+#include <array>
 
 #include <gtest/gtest.h>
 
@@ -367,7 +368,7 @@ namespace DefectStudio::Tests
 		style.radialSegments = 11;
 		const StrokeGeometry geometry = BuildStroke(path, style);
 
-		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 4u);
+		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 8u);
 		EXPECT_TRUE(geometry.ribbonVertices.empty());
 	}
 
@@ -381,18 +382,18 @@ namespace DefectStudio::Tests
 		style.radialSegments = 3;
 		const StrokeGeometry geometry = BuildStroke(path, style);
 
-		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 4u);
+		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 8u);
 		for (std::size_t sampleIndex = 0; sampleIndex < path.samples.size(); ++sampleIndex)
 		{
-			const std::size_t firstVertex = sampleIndex * 4u;
-			ASSERT_LE(firstVertex + 4u, geometry.tubeVertices.size());
-			const glm::vec3 normal(path.samples[sampleIndex].normal);
-			const glm::vec3 binormal(path.samples[sampleIndex].binormal);
+			const std::size_t firstVertex = sampleIndex * 8u;
+			ASSERT_LE(firstVertex + 8u, geometry.tubeVertices.size());
+			const glm::vec3 normal = glm::normalize(glm::vec3(path.samples[sampleIndex].normal));
+			const glm::vec3 binormal = glm::normalize(glm::vec3(path.samples[sampleIndex].binormal));
 			float minimumNormal = std::numeric_limits<float>::infinity();
 			float maximumNormal = -std::numeric_limits<float>::infinity();
 			float minimumBinormal = std::numeric_limits<float>::infinity();
 			float maximumBinormal = -std::numeric_limits<float>::infinity();
-			for (std::size_t corner = 0; corner < 4u; ++corner)
+			for (std::size_t corner = 0; corner < 8u; ++corner)
 			{
 				ASSERT_LT(firstVertex + corner, geometry.tubeVertices.size());
 				const glm::vec3 offset = geometry.tubeVertices[firstVertex + corner].position - glm::vec3(path.samples[sampleIndex].position);
@@ -405,6 +406,27 @@ namespace DefectStudio::Tests
 			}
 			EXPECT_NEAR(maximumNormal - minimumNormal, style.width, 1.0e-5f);
 			EXPECT_NEAR(maximumBinormal - minimumBinormal, style.ribbonThickness, 1.0e-5f);
+
+			std::array<glm::vec3, 4> faceNormals;
+			for (std::size_t face = 0; face < faceNormals.size(); ++face)
+			{
+				const std::size_t firstFaceVertex = firstVertex + face * 2u;
+				ASSERT_LE(firstFaceVertex + 2u, geometry.tubeVertices.size());
+				faceNormals[face] = geometry.tubeVertices[firstFaceVertex].normal;
+				EXPECT_NEAR(glm::dot(faceNormals[face], geometry.tubeVertices[firstFaceVertex + 1u].normal), 1.0f, 1.0e-5f);
+			}
+
+			EXPECT_NEAR(glm::dot(faceNormals[0], binormal), 1.0f, 1.0e-5f);
+			EXPECT_NEAR(glm::dot(faceNormals[1], -normal), 1.0f, 1.0e-5f);
+			EXPECT_NEAR(glm::dot(faceNormals[2], -binormal), 1.0f, 1.0e-5f);
+			EXPECT_NEAR(glm::dot(faceNormals[3], normal), 1.0f, 1.0e-5f);
+			for (std::size_t face = 0; face < faceNormals.size(); ++face)
+			{
+				const std::size_t nextFace = (face + 1u) % faceNormals.size();
+				const std::size_t oppositeFace = (face + 2u) % faceNormals.size();
+				EXPECT_NEAR(glm::dot(faceNormals[face], faceNormals[nextFace]), 0.0f, 1.0e-5f);
+				EXPECT_NEAR(glm::dot(faceNormals[face], faceNormals[oppositeFace]), -1.0f, 1.0e-5f);
+			}
 		}
 	}
 

@@ -126,14 +126,11 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(migrated);
 		ASSERT_TRUE(std::holds_alternative<CubicBezierSegmentData>(migrated.Value().path.segments[0].data));
 		const auto &cubic = std::get<CubicBezierSegmentData>(migrated.Value().path.segments[0].data);
-		// Component-wise: the migration reaches these values through P + 2/3 (Q - P), which lands one
-		// ULP away from the literal thirds an exact comparison would demand.
-		EXPECT_FLOAT_EQ(cubic.startHandle.position.x, 1.0f / 3.0f);
-		EXPECT_FLOAT_EQ(cubic.startHandle.position.y, 2.0f / 3.0f);
-		EXPECT_FLOAT_EQ(cubic.startHandle.position.z, 0.0f);
-		EXPECT_FLOAT_EQ(cubic.endHandle.position.x, 2.0f / 3.0f);
-		EXPECT_FLOAT_EQ(cubic.endHandle.position.y, 2.0f / 3.0f);
-		EXPECT_FLOAT_EQ(cubic.endHandle.position.z, 0.0f);
+		ASSERT_TRUE(arrow.controlPoint.has_value());
+		const glm::vec3 expectedStart = arrow.points[0] + (2.0f / 3.0f) * (*arrow.controlPoint - arrow.points[0]);
+		const glm::vec3 expectedEnd = arrow.points[1] + (2.0f / 3.0f) * (*arrow.controlPoint - arrow.points[1]);
+		EXPECT_NEAR(glm::distance(migrated.Value().path.nodes[0].position + cubic.startHandle.offset, expectedStart), 0.0f, 1.0e-6f);
+		EXPECT_NEAR(glm::distance(migrated.Value().path.nodes[1].position + cubic.endHandle.offset, expectedEnd), 0.0f, 1.0e-6f);
 		EXPECT_FLOAT_EQ(migrated.Value().path.style.width, 0.4f);
 
 		arrow = Arrow(SceneObjectsV1Fixtures::Arrow2DBillboard);

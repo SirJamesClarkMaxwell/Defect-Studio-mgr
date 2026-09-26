@@ -28,8 +28,10 @@ namespace DefectStudio::Tests
 		{
 			ScenePath path = MakeLine(id);
 			CubicBezierSegmentData cubic;
-			cubic.startHandle = {AllocateElementId(path), {0.5f, 1.0f, 0.0f}, BezierHandleType::Free};
-			cubic.endHandle = {AllocateElementId(path), {1.5f, 1.0f, 0.0f}, BezierHandleType::Free};
+			const glm::vec3 start{0.5f, 1.0f, 0.0f};
+			const glm::vec3 end{1.5f, 1.0f, 0.0f};
+			cubic.startHandle = {AllocateElementId(path), start - path.nodes[0].position, BezierHandleType::Free};
+			cubic.endHandle = {AllocateElementId(path), end - path.nodes[1].position, BezierHandleType::Free};
 			path.segments[0].data = cubic;
 			return path;
 		}
@@ -219,7 +221,7 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(MoveScenePathHandle(Context(window, stack, calls), {1}, handle, {0.5f, 4.0f, 0.0f}));
 		ASSERT_TRUE(SetScenePathHandleType(Context(window, stack, calls), {1}, handle, BezierHandleType::Vector));
 		const auto &edited = std::get<CubicBezierSegmentData>(window.paths->Store().Find({1})->segments[0].data);
-		EXPECT_FLOAT_EQ(edited.startHandle.position.y, 4.0f);
+		EXPECT_FLOAT_EQ(edited.startHandle.offset.y, 4.0f);
 		EXPECT_EQ(edited.startHandle.type, BezierHandleType::Vector);
 
 		ASSERT_TRUE(stack.Undo().HasValue());

@@ -20,6 +20,13 @@ namespace DefectStudio::Tests
 			for (std::size_t index = 0; index < positions.size(); ++index)
 				path.nodes.push_back({PathElementId{index + 1u}, positions[index], {}});
 			path.segments = std::move(segments);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+				if (auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data))
+				{
+					// The fixture arguments remain authored world control points; store their local offsets.
+					cubic->startHandle.offset -= path.nodes[index].position;
+					cubic->endHandle.offset -= path.nodes[index + 1].position;
+				}
 			path.nextElementId = 20;
 			return path;
 		}
@@ -29,6 +36,18 @@ namespace DefectStudio::Tests
 			ResolvedNodes result;
 			for (const PathNode &node : path.nodes)
 				result.positions.push_back(node.position);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr)
+				{
+					result.handlePositions.push_back(glm::vec3(0.0f));
+					result.handlePositions.push_back(glm::vec3(0.0f));
+					continue;
+				}
+				result.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				result.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return result;
 		}
 
@@ -47,7 +66,7 @@ namespace DefectStudio::Tests
 			for (std::size_t index = 0; index < actual.nodes.size(); ++index)
 			{
 				EXPECT_EQ(actual.nodes[index].id, expected.nodes[index].id);
-				EXPECT_TRUE(glm::all(glm::equal(actual.nodes[index].position, expected.nodes[index].position)));
+				EXPECT_NEAR(glm::distance(actual.nodes[index].position, expected.nodes[index].position), 0.0f, 1.0e-6f);
 			}
 			for (std::size_t index = 0; index < actual.segments.size(); ++index)
 				EXPECT_EQ(actual.segments[index].id, expected.segments[index].id);
@@ -63,8 +82,8 @@ namespace DefectStudio::Tests
 				EXPECT_EQ(actualCubic->endHandle.id, expectedCubic.endHandle.id);
 				EXPECT_EQ(actualCubic->startHandle.type, expectedCubic.startHandle.type);
 				EXPECT_EQ(actualCubic->endHandle.type, expectedCubic.endHandle.type);
-				EXPECT_TRUE(glm::all(glm::equal(actualCubic->startHandle.position, expectedCubic.startHandle.position)));
-				EXPECT_TRUE(glm::all(glm::equal(actualCubic->endHandle.position, expectedCubic.endHandle.position)));
+				EXPECT_NEAR(glm::distance(actualCubic->startHandle.offset, expectedCubic.startHandle.offset), 0.0f, 1.0e-6f);
+				EXPECT_NEAR(glm::distance(actualCubic->endHandle.offset, expectedCubic.endHandle.offset), 0.0f, 1.0e-6f);
 			}
 			else if (const auto *actualArc = std::get_if<CircularArcSegmentData>(&actual.data))
 			{
@@ -94,7 +113,7 @@ namespace DefectStudio::Tests
 		ScenePath path = original;
 		const Result<PathElementId> inserted = InsertNode(path, 0, 0.25);
 		ASSERT_TRUE(inserted);
-		EXPECT_TRUE(glm::all(glm::equal(path.nodes[1].position, glm::vec3(2.0f, 1.0f, 0.0f))));
+		EXPECT_NEAR(glm::distance(path.nodes[1].position, glm::vec3(2.0f, 1.0f, 0.0f)), 0.0f, 1.0e-6f);
 		ASSERT_TRUE(std::holds_alternative<LineSegmentData>(path.segments[0].data));
 		ASSERT_TRUE(std::holds_alternative<LineSegmentData>(path.segments[1].data));
 		ExpectSplitPreservesCurve(original, path, 0.25);
@@ -107,11 +126,11 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(InsertNode(path, 0, 0.5));
 		const auto &left = std::get<CubicBezierSegmentData>(path.segments[0].data);
 		const auto &right = std::get<CubicBezierSegmentData>(path.segments[1].data);
-		EXPECT_TRUE(glm::all(glm::equal(path.nodes[1].position, glm::vec3(3.0f, 0.0f, 0.0f))));
-		EXPECT_TRUE(glm::all(glm::equal(left.startHandle.position, glm::vec3(0.5f, 1.5f, 0.0f))));
-		EXPECT_TRUE(glm::all(glm::equal(left.endHandle.position, glm::vec3(1.75f, 0.75f, 0.0f))));
-		EXPECT_TRUE(glm::all(glm::equal(right.startHandle.position, glm::vec3(4.25f, -0.75f, 0.0f))));
-		EXPECT_TRUE(glm::all(glm::equal(right.endHandle.position, glm::vec3(5.5f, -1.5f, 0.0f))));
+		EXPECT_NEAR(glm::distance(path.nodes[1].position, glm::vec3(3.0f, 0.0f, 0.0f)), 0.0f, 1.0e-6f);
+		EXPECT_NEAR(glm::distance(path.nodes[0].position + left.startHandle.offset, glm::vec3(0.5f, 1.5f, 0.0f)), 0.0f, 1.0e-6f);
+		EXPECT_NEAR(glm::distance(path.nodes[1].position + left.endHandle.offset, glm::vec3(1.75f, 0.75f, 0.0f)), 0.0f, 1.0e-6f);
+		EXPECT_NEAR(glm::distance(path.nodes[1].position + right.startHandle.offset, glm::vec3(4.25f, -0.75f, 0.0f)), 0.0f, 1.0e-6f);
+		EXPECT_NEAR(glm::distance(path.nodes[2].position + right.endHandle.offset, glm::vec3(5.5f, -1.5f, 0.0f)), 0.0f, 1.0e-6f);
 		EXPECT_EQ(left.startHandle.type, BezierHandleType::Aligned);
 		EXPECT_EQ(right.endHandle.type, BezierHandleType::Aligned);
 		ExpectSplitPreservesCurve(original, path, 0.5);

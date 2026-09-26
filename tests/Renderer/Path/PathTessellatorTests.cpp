@@ -20,6 +20,13 @@ namespace DefectStudio::Tests
 			for (std::size_t index = 0; index < positions.size(); ++index)
 				path.nodes.push_back({PathElementId{index + 1u}, positions[index], {}});
 			path.segments = std::move(segments);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+				if (auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data))
+				{
+					// The fixture arguments remain authored world control points; store their local offsets.
+					cubic->startHandle.offset -= path.nodes[index].position;
+					cubic->endHandle.offset -= path.nodes[index + 1].position;
+				}
 			return path;
 		}
 
@@ -28,6 +35,18 @@ namespace DefectStudio::Tests
 			ResolvedNodes resolved;
 			for (const PathNode &node : path.nodes)
 				resolved.positions.push_back(node.position);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr)
+				{
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					continue;
+				}
+				resolved.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				resolved.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return resolved;
 		}
 

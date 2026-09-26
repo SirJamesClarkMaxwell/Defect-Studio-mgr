@@ -54,9 +54,10 @@ namespace DefectStudio::Tests
 			segment.id = AllocateElementId(path);
 			CubicBezierSegmentData cubic;
 			cubic.startHandle.id = AllocateElementId(path);
-			cubic.startHandle.position = start;
+			const std::size_t owner = path.segments.size();
+			cubic.startHandle.offset = start - path.nodes[owner].position;
 			cubic.endHandle.id = AllocateElementId(path);
-			cubic.endHandle.position = end;
+			cubic.endHandle.offset = end - path.nodes[owner + 1].position;
 			segment.data = cubic;
 			return segment;
 		}
@@ -75,6 +76,18 @@ namespace DefectStudio::Tests
 			ResolvedNodes resolved;
 			for (const PathNode &node : path.nodes)
 				resolved.positions.push_back(node.position);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr)
+				{
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					resolved.handlePositions.push_back(glm::vec3(0.0f));
+					continue;
+				}
+				resolved.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				resolved.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return resolved;
 		}
 

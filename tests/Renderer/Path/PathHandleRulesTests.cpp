@@ -18,6 +18,13 @@ namespace DefectStudio::Tests
 			for (std::size_t index = 0; index < positions.size(); ++index)
 				path.nodes.push_back({PathElementId{index + 1u}, positions[index], {}});
 			path.segments = std::move(segments);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+				if (auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data))
+				{
+					// The fixture arguments remain authored world control points; store their local offsets.
+					cubic->startHandle.offset -= path.nodes[index].position;
+					cubic->endHandle.offset -= path.nodes[index + 1].position;
+				}
 			path.nextElementId = 40;
 			return path;
 		}
@@ -34,6 +41,17 @@ namespace DefectStudio::Tests
 			ResolvedNodes result;
 			for (const PathNode &node : path.nodes)
 				result.positions.push_back(node.position);
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr)
+				{
+					result.handlePositions.insert(result.handlePositions.end(), {glm::vec3(0.0f), glm::vec3(0.0f)});
+					continue;
+				}
+				result.handlePositions.push_back(path.nodes[index].position + cubic->startHandle.offset);
+				result.handlePositions.push_back(path.nodes[index + 1].position + cubic->endHandle.offset);
+			}
 			return result;
 		}
 
@@ -52,8 +70,8 @@ namespace DefectStudio::Tests
 		const glm::vec3 direction = glm::normalize(glm::vec3(3.0f, 4.0f, 0.0f));
 		const auto &incoming = std::get<CubicBezierSegmentData>(path.segments[0].data).endHandle;
 		const auto &outgoing = std::get<CubicBezierSegmentData>(path.segments[1].data).startHandle;
-		ExpectPosition(incoming.position, -direction);
-		ExpectPosition(outgoing.position, direction * (4.0f / 3.0f));
+		ExpectPosition(incoming.offset, -direction);
+		ExpectPosition(outgoing.offset, direction * (4.0f / 3.0f));
 	}
 
 	TEST(PathHandleRulesTests, MakeTangentAlignsCubicToRigidLineAndArc)
@@ -63,7 +81,7 @@ namespace DefectStudio::Tests
 			{Line(PathElementId{4}), Cubic(PathElementId{5}, {1.0f, 0.0f, 0.0f}, {1.0f, 2.0f, 0.0f})});
 		ASSERT_TRUE(MakeTangent(lineCubic, PathElementId{2}));
 		const auto &lineHandle = std::get<CubicBezierSegmentData>(lineCubic.segments[1].data).startHandle;
-		ExpectPosition(lineHandle.position, glm::vec3(glm::length(glm::vec3(2.0f, 2.0f, 0.0f)) / 3.0f, 0.0f, 0.0f));
+		ExpectPosition(lineHandle.offset, glm::vec3(glm::length(glm::vec3(2.0f, 2.0f, 0.0f)) / 3.0f, 0.0f, 0.0f));
 		EXPECT_TRUE(std::holds_alternative<LineSegmentData>(lineCubic.segments[0].data));
 
 		ScenePath cubicArc = MakePath(
@@ -72,7 +90,8 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(MakeTangent(cubicArc, PathElementId{2}));
 		const glm::dvec3 tangent = EvaluateSegment(cubicArc, ResolveAuthored(cubicArc), 1, 0.0).Value().tangent;
 		const auto &arcHandle = std::get<CubicBezierSegmentData>(cubicArc.segments[0].data).endHandle;
-		const glm::dvec3 cubicTangent = glm::normalize(glm::dvec3(cubicArc.nodes[1].position) - glm::dvec3(arcHandle.position));
+		const glm::dvec3 cubicTangent = glm::normalize(glm::dvec3(cubicArc.nodes[1].position) -
+			glm::dvec3(cubicArc.nodes[1].position + arcHandle.offset));
 		EXPECT_NEAR(glm::dot(cubicTangent, tangent), 1.0, 1.0e-6);
 		EXPECT_TRUE(std::holds_alternative<CircularArcSegmentData>(cubicArc.segments[1].data));
 	}
@@ -96,7 +115,8 @@ namespace DefectStudio::Tests
 		const ScenePath before = degenerate;
 		ASSERT_FALSE(MakeTangent(degenerate, PathElementId{2}));
 		EXPECT_EQ(degenerate.nextElementId, before.nextElementId);
-		EXPECT_TRUE(glm::all(glm::equal(std::get<CubicBezierSegmentData>(degenerate.segments[1].data).startHandle.position, std::get<CubicBezierSegmentData>(before.segments[1].data).startHandle.position)));
+		ExpectPosition(std::get<CubicBezierSegmentData>(degenerate.segments[1].data).startHandle.offset,
+			std::get<CubicBezierSegmentData>(before.segments[1].data).startHandle.offset);
 	}
 
 	TEST(PathHandleRulesTests, ApplyAutoHandlesOnlyChangesAutoHandles)
@@ -105,14 +125,14 @@ namespace DefectStudio::Tests
 			{glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f)},
 			{Cubic(PathElementId{4}, {-1.0f, 2.0f, 0.0f}, {-1.0f, 2.0f, 0.0f}, BezierHandleType::Auto), Cubic(PathElementId{5}, {1.0f, 2.0f, 0.0f}, {1.0f, 2.0f, 0.0f}, BezierHandleType::Auto)});
 		std::get<CubicBezierSegmentData>(path.segments[0].data).startHandle.type = BezierHandleType::Free;
-		const glm::vec3 freePosition = std::get<CubicBezierSegmentData>(path.segments[0].data).startHandle.position;
+		const glm::vec3 freeOffset = std::get<CubicBezierSegmentData>(path.segments[0].data).startHandle.offset;
 		std::get<CubicBezierSegmentData>(path.segments[1].data).endHandle.type = BezierHandleType::Vector;
-		const glm::vec3 vectorPosition = std::get<CubicBezierSegmentData>(path.segments[1].data).endHandle.position;
+		const glm::vec3 vectorOffset = std::get<CubicBezierSegmentData>(path.segments[1].data).endHandle.offset;
 		ASSERT_TRUE(ApplyAutoHandles(path));
-		EXPECT_TRUE(glm::all(glm::equal(std::get<CubicBezierSegmentData>(path.segments[0].data).startHandle.position, freePosition)));
-		EXPECT_TRUE(glm::all(glm::equal(std::get<CubicBezierSegmentData>(path.segments[1].data).endHandle.position, vectorPosition)));
-		ExpectPosition(std::get<CubicBezierSegmentData>(path.segments[0].data).endHandle.position, glm::vec3(-2.0f / 3.0f, 0.0f, 0.0f));
-		ExpectPosition(std::get<CubicBezierSegmentData>(path.segments[1].data).startHandle.position, glm::vec3(2.0f / 3.0f, 0.0f, 0.0f));
+		ExpectPosition(std::get<CubicBezierSegmentData>(path.segments[0].data).startHandle.offset, freeOffset);
+		ExpectPosition(std::get<CubicBezierSegmentData>(path.segments[1].data).endHandle.offset, vectorOffset);
+		ExpectPosition(std::get<CubicBezierSegmentData>(path.segments[0].data).endHandle.offset, glm::vec3(-2.0f / 3.0f, 0.0f, 0.0f));
+		ExpectPosition(std::get<CubicBezierSegmentData>(path.segments[1].data).startHandle.offset, glm::vec3(2.0f / 3.0f, 0.0f, 0.0f));
 		EXPECT_TRUE(std::holds_alternative<CubicBezierSegmentData>(path.segments[0].data));
 		EXPECT_TRUE(std::holds_alternative<CubicBezierSegmentData>(path.segments[1].data));
 	}
