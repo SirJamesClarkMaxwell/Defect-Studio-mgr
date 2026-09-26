@@ -25,6 +25,14 @@ namespace DefectStudio
 		float width = 0.05f;
 		float alpha = 1.0f;
 		glm::vec3 color{0.95f, 0.35f, 0.1f};
+		// task/41 S11n. Both have been in the model, in the file format and in the mesher since S5,
+		// and neither had a single control - the same way the decoration scales were unreachable
+		// until S11i. Editing them is the whole of this slice; no new rendering is needed.
+		//
+		// `gradient` overrides `color` along the stroke when it is enabled and has stops. The panel
+		// edits the stop list directly: position in [0,1] of arc length, colour and alpha per stop.
+		PathDashStyle dash;
+		PathGradient gradient;
 		// task/41 S11i: the whole decoration, not just its kind. The two scales and `filled` are the
 		// shape control the panel was missing - a tip's proportions were editable in the file format
 		// and in code, but nowhere in the UI, so every tip in the app was stuck at 1.0/1.0/solid.
@@ -47,6 +55,11 @@ namespace DefectStudio
 		bool mixedWidth = false;
 		bool mixedAlpha = false;
 		bool mixedColor = false;
+		// True when any field of the dash pattern, or any stop of the gradient, differs across the
+		// selection. One flag each: the panel draws them as one group, and a selection whose stops
+		// merely differ in count has no single gradient to show.
+		bool mixedDash = false;
+		bool mixedGradient = false;
 		// True when ANY field of that endpoint's decoration differs across the selection - kind,
 		// either scale or `filled`. One flag per endpoint rather than four: the panel draws the
 		// endpoint as one group, and a selection where only the scales differ is still a selection
@@ -118,6 +131,30 @@ namespace DefectStudio
 	// The label a row or a section header shows for one path: its `name` when it has one, else
 	// "Path #<index>" with the store index, so an unnamed path is still distinguishable.
 	[[nodiscard]] std::string ScenePathDisplayName(const ScenePath &path, std::size_t storeIndex);
+
+	// The line-style presets the panel offers, mapped onto `PathDashStyle`'s two lengths. Named
+	// rather than left as two raw numbers because "dotted" is a thing users ask for and
+	// "dashLength 0.02, gapLength 0.02" is not.
+	//
+	//   ponytail: Solid, Dashed and Dotted are all `PathDashStyle` can express - it is one dash and
+	//   one gap repeated. Dash-dot and dash-dot-dot need a pattern of alternating lengths, which is a
+	//   change to the style, the format and PathDash's arc-length walk. Deliberately not done here;
+	//   the upgrade path is a `std::vector<float>` pattern with the current two lengths as its
+	//   two-element case.
+	enum class ScenePathLineStyle
+	{
+		Solid,
+		Dashed,
+		Dotted,
+		Custom, // the numbers were edited by hand and match no preset
+	};
+
+	// Which preset `dash` corresponds to, or Custom. Pure.
+	[[nodiscard]] ScenePathLineStyle ResolveScenePathLineStyle(const PathDashStyle &dash);
+
+	// Writes the preset's lengths into `dash`, scaled to `strokeWidth` so a dotted line of a thick
+	// stroke has proportionally longer gaps. Custom leaves `dash` alone. Pure.
+	void ApplyScenePathLineStyle(PathDashStyle &dash, ScenePathLineStyle style, float strokeWidth);
 
 	// The ImGui half: draws the editor for the current selection and applies what changed.
 	// Defined in ScenePathEditorWidget.cpp; returns true when it wrote anything.
