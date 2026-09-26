@@ -54,10 +54,11 @@ namespace DefectStudio
 		}
 	} // namespace
 
-	void DrawViewportSidePanel(
+	ViewportSidePanelRect DrawViewportSidePanel(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &viewportSize, float deltaTime,
 		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistry, const WeakRef<DomainLayer> &domainLayer)
 	{
+		ViewportSidePanelRect panelRect;
 		SlideState &state = StateFor(windowState.windowId);
 
 		const ImGuiIO &io = ImGui::GetIO();
@@ -75,16 +76,15 @@ namespace DefectStudio
 		if (std::abs(target - state.width) < 0.5f)
 			state.width = target;
 		if (state.width < 1.0f)
-			return;
+			return panelRect;
 
 		const ImVec2 panelOrigin(imageOrigin.x + viewportSize.x - state.width, imageOrigin.y);
+		panelRect.min = glm::vec2(panelOrigin.x - kGripWidth, panelOrigin.y);
+		panelRect.max = glm::vec2(panelOrigin.x + state.width, panelOrigin.y + viewportSize.y);
 
 		// Drag handle on the panel's left edge, drawn before the child so the child does not swallow
 		// the click. Width follows the mouse rather than accumulating deltas, so the edge stays under
 		// the cursor even if a frame is dropped mid-drag.
-		// ponytail: the panel is drawn after the viewport's own pick pass, so the click that starts a
-		// resize also reaches the picker underneath and can change the selection. Six pixels wide, and
-		// the fix is to publish the panel's rect into the pick mask - do that if it becomes a nuisance.
 		ImGui::SetCursorScreenPos(ImVec2(panelOrigin.x - kGripWidth, panelOrigin.y));
 		ImGui::InvisibleButton("##viewportSidePanelGrip", ImVec2(kGripWidth, viewportSize.y));
 		const bool gripActive = ImGui::IsItemActive();
@@ -125,5 +125,6 @@ namespace DefectStudio
 		}
 		ImGui::EndChild();
 		ImGui::PopStyleColor();
+		return panelRect;
 	}
 } // namespace DefectStudio

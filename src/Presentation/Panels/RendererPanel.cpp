@@ -323,23 +323,15 @@ namespace DefectStudio
 		}
 
 		// Last, so the N panel floats over everything already drawn on the image.
-		DrawViewportSidePanel(
+		const ViewportSidePanelRect sidePanelRect = DrawViewportSidePanel(
 			windowState, imageOrigin, viewportSize, deltaTime, m_Layer, m_CommandRegistry, m_DomainLayer);
 
 		// The side panel is an overlay drawn after the image. Its grip used to reach the picker because
 		// `hovered` was captured from the image before the overlay existed, so starting a resize could
 		// clear the selection through HandleViewportPick's empty-space branch. Submit the overlay first,
 		// then reject clicks whose press began on the panel or its six-pixel grip.
-		const ImVec2 lastItemMin = ImGui::GetItemRectMin();
-		const ImVec2 lastItemMax = ImGui::GetItemRectMax();
-		const bool sidePanelVisible = lastItemMin.x > imageOrigin.x + 1.0f &&
-			lastItemMin.y <= imageOrigin.y + 1.0f &&
-			lastItemMax.y >= imageOrigin.y + viewportSize.y - 1.0f &&
-			lastItemMax.x >= imageOrigin.x + viewportSize.x - 1.0f;
-		const ImVec2 clickPosition = ImGui::GetIO().MouseClickedPos[ImGuiMouseButton_Left];
-		const bool startedOnSidePanel = sidePanelVisible &&
-			clickPosition.x >= lastItemMin.x - 6.0f && clickPosition.x <= lastItemMax.x &&
-			clickPosition.y >= lastItemMin.y && clickPosition.y <= lastItemMax.y;
+		const ImVec2 clickedAt = ImGui::GetIO().MouseClickedPos[ImGuiMouseButton_Left];
+		const bool startedOnSidePanel = sidePanelRect.Contains(glm::vec2(clickedAt.x, clickedAt.y));
 
 		if (gizmoCapturing || selectionToolConsumedMouse)
 		{
