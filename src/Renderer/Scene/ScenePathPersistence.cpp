@@ -301,7 +301,7 @@ namespace DefectStudio
 			{
 				const glm::vec3 c1 = arrow.points[0] + (2.0f / 3.0f) * (*arrow.controlPoint - arrow.points[0]);
 				const glm::vec3 c2 = arrow.points[1] + (2.0f / 3.0f) * (*arrow.controlPoint - arrow.points[1]);
-				segment.data = CubicBezierSegmentData{{AllocateElementId(result.path), c1, BezierHandleType::Free}, {AllocateElementId(result.path), c2, BezierHandleType::Free}};
+				segment.data = CubicBezierSegmentData{{AllocateElementId(result.path), c1 - arrow.points[0], BezierHandleType::Free}, {AllocateElementId(result.path), c2 - arrow.points[1], BezierHandleType::Free}};
 			}
 			else segment.data = LineSegmentData{};
 			result.path.segments.push_back(std::move(segment));
