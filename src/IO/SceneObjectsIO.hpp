@@ -247,6 +247,17 @@ namespace DefectStudio
 
 	struct PersistedScenePath
 	{
+		// task/41 transform-2: the path's own position, rotation and scale, and its node positions are
+		// local to it. Optional and additive - absent means the identity, and under the identity a
+		// local position equals the world position files written before this stored. The format
+		// version does not move.
+		//
+		// Rotation is written as a quaternion in xyzw order, matching how it is stored rather than
+		// how the panel shows it: Euler degrees would have to pick one of several equivalent readings
+		// on every save.
+		glm::vec3 transformPosition{0.0f};
+		glm::vec4 transformRotation{0.0f, 0.0f, 0.0f, 1.0f};
+		glm::vec3 transformScale{1.0f};
 		std::string persistKey;
 		std::string name;
 		std::vector<PersistedPathNode> nodes;       // required, at least 2
