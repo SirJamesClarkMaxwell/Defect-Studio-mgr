@@ -17,7 +17,7 @@ namespace DefectStudio
 			std::uint32_t radialSegments, bool flip = false);
 		void AppendDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
 			const EvaluatedSample &endpoint, bool start, const PathStrokeStyle &style,
-			StrokeMeshRange &range, std::vector<std::uint32_t> &backRing);
+			StrokeMeshRange &range);
 	}
 
 	namespace
@@ -147,7 +147,6 @@ namespace DefectStudio
 		}
 
 		void AppendTubePiece(StrokeGeometry &geometry, std::vector<EvaluatedSample> samples, const PathStrokeStyle &style,
-			const std::vector<std::uint32_t> &startBoundary, const std::vector<std::uint32_t> &endBoundary,
 			const bool capStart, const bool capEnd)
 		{
 			if (samples.size() < 2)
@@ -171,23 +170,17 @@ namespace DefectStudio
 			}
 			for (std::size_t ring = 0; ring + 1u < samples.size(); ++ring)
 			{
-				const bool firstRing = ring == 0u && startBoundary.size() == style.radialSegments;
-				const bool lastRing = ring + 1u == samples.size() - 1u && endBoundary.size() == style.radialSegments;
-				const std::uint32_t lower = firstRing ? startBoundary.front() :
-					first + static_cast<std::uint32_t>(ring) * style.radialSegments;
-				const std::uint32_t upper = lastRing ? endBoundary.front() :
-					first + static_cast<std::uint32_t>(ring + 1u) * style.radialSegments;
+				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * style.radialSegments;
+				const std::uint32_t upper = first + static_cast<std::uint32_t>(ring + 1u) * style.radialSegments;
 				detail::StitchRings(geometry, lower, upper, style.radialSegments);
 			}
 			if (style.cap == PathLineCap::Round)
 			{
 				if (capStart)
-					AppendHemisphereCap(geometry, samples.front(), style, false,
-						startBoundary.size() == style.radialSegments ? startBoundary.front() : first);
+					AppendHemisphereCap(geometry, samples.front(), style, false, first);
 				if (capEnd)
 					AppendHemisphereCap(geometry, samples.back(), style, true,
-						endBoundary.size() == style.radialSegments ? endBoundary.front() :
-							first + static_cast<std::uint32_t>(samples.size() - 1u) * style.radialSegments);
+						first + static_cast<std::uint32_t>(samples.size() - 1u) * style.radialSegments);
 			}
 		}
 
@@ -248,10 +241,8 @@ namespace DefectStudio
 		const DecorationContour startContour = BuildDecorationContour(style.startDecoration, style.width);
 		const DecorationContour endContour = BuildDecorationContour(style.endDecoration, style.width);
 		geometry.shaftRange = TrimmedRange(evaluated.totalLength, style);
-		std::vector<std::uint32_t> startBackRing;
-		std::vector<std::uint32_t> endBackRing;
-		detail::AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration, startBackRing);
-		detail::AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration, endBackRing);
+		detail::AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration);
+		detail::AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration);
 		if (geometry.shaftRange.IsEmpty())
 		{
 			if (startContour.trim + endContour.trim >= evaluated.totalLength)
@@ -268,46 +259,14 @@ namespace DefectStudio
 			const bool atEnd = interval.end == geometry.shaftRange.end;
 			const bool startHandoff = atStart && NeedsDecorationHandoff(samples.front(), evaluated.samples.front(), startContour, true);
 			const bool endHandoff = atEnd && NeedsDecorationHandoff(samples.back(), evaluated.samples.back(), endContour, false);
-			const std::vector<std::uint32_t> emptyBoundary;
-			const std::vector<std::uint32_t> &pieceStartBoundary = startHandoff ? startBackRing : emptyBoundary;
-			const std::vector<std::uint32_t> &pieceEndBoundary = endHandoff ? endBackRing : emptyBoundary;
 			if (startHandoff)
 				samples.front() = DecorationBackSample(samples.front(), evaluated.samples.front(), startContour, true);
 			if (endHandoff)
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (style.profile == StrokeProfile::Round)
-				AppendTubePiece(geometry, samples, style, pieceStartBoundary, pieceEndBoundary,
-					!(atStart && startContour.closesBack), !(atEnd && endContour.closesBack));
+				AppendTubePiece(geometry, samples, style, !(atStart && startContour.closesBack), !(atEnd && endContour.closesBack));
 			else
-			{
-				const std::uint32_t firstRibbonVertex = static_cast<std::uint32_t>(geometry.ribbonVertices.size());
-				const std::uint32_t firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
 				AppendRibbonPiece(geometry, samples, style);
-				for (std::uint32_t ring = 0; ring + 1u < samples.size(); ++ring)
-				{
-					const bool firstRing = ring == 0u && pieceStartBoundary.size() == 2u;
-					const bool lastRing = ring + 1u == samples.size() - 1u && pieceEndBoundary.size() == 2u;
-					for (std::uint32_t offset = 0; offset < 6u; ++offset)
-					{
-						std::uint32_t &index = geometry.indices[firstIndex + ring * 6u + offset];
-						if (firstRing)
-						{
-							if (index == firstRibbonVertex + ring * 2u)
-								index = pieceStartBoundary[0];
-							else if (index == firstRibbonVertex + ring * 2u + 1u)
-								index = pieceStartBoundary[1];
-						}
-						if (lastRing)
-						{
-							const std::uint32_t lastRibbonVertex = firstRibbonVertex + static_cast<std::uint32_t>(ring + 1u) * 2u;
-							if (index == lastRibbonVertex)
-								index = pieceEndBoundary[0];
-							else if (index == lastRibbonVertex + 1u)
-								index = pieceEndBoundary[1];
-						}
-					}
-				}
-			}
 		}
 		geometry.shaft.indexCount = static_cast<std::uint32_t>(geometry.indices.size()) - geometry.shaft.firstIndex;
 		return geometry;

@@ -8,7 +8,6 @@
 
 namespace DefectStudio::detail
 {
-	[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour);
 	void StitchRings(StrokeGeometry &geometry, std::uint32_t lower, std::uint32_t upper,
 		std::uint32_t radialSegments, bool flip = false);
 
@@ -52,8 +51,7 @@ namespace DefectStudio::detail
 		}
 
 		void AppendFilledRoundDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
-			std::vector<std::uint32_t> &backRing)
+			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
 		{
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
@@ -68,14 +66,10 @@ namespace DefectStudio::detail
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
 				AppendRingFan(geometry, first + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
 					style, endpoint, inward, true);
-			const std::uint32_t back = first + static_cast<std::uint32_t>(BackContourPoint(contour)) * style.radialSegments;
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-				backRing.push_back(back + radial);
 		}
 
 		void AppendHollowRoundDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
-			std::vector<std::uint32_t> &backRing)
+			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
 		{
 			const std::uint32_t firstOuter = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
@@ -97,10 +91,6 @@ namespace DefectStudio::detail
 				StitchRings(geometry, firstOuter + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
 					firstInner + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
 					style.radialSegments);
-
-			const std::uint32_t back = firstOuter + static_cast<std::uint32_t>(BackContourPoint(contour)) * style.radialSegments;
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-				backRing.push_back(back + radial);
 		}
 
 		StrokeRibbonVertex MakeRibbonVertex(const DecorationContourPoint &point, const EvaluatedSample &endpoint,
@@ -118,8 +108,7 @@ namespace DefectStudio::detail
 		}
 
 		void AppendFilledRibbonDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
-			std::vector<std::uint32_t> &backRing)
+			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
 		{
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.ribbonVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
@@ -130,13 +119,10 @@ namespace DefectStudio::detail
 				const std::uint32_t a = first + point * 2u;
 				geometry.indices.insert(geometry.indices.end(), {a, a + 2u, a + 3u, a, a + 3u, a + 1u});
 			}
-			const std::uint32_t back = first + static_cast<std::uint32_t>(BackContourPoint(contour)) * 2u;
-			backRing = {back, back + 1u};
 		}
 
 		void AppendHollowRibbonDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
-			std::vector<std::uint32_t> &backRing)
+			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
 		{
 			struct Ring
 			{
@@ -172,9 +158,6 @@ namespace DefectStudio::detail
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
 				geometry.indices.insert(geometry.indices.end(), {rings.back().outerMinus, rings.back().outerPlus, rings.back().innerPlus,
 					rings.back().outerMinus, rings.back().innerPlus, rings.back().innerMinus});
-			const std::size_t backIndex = BackContourPoint(contour);
-			const Ring &back = rings[backIndex];
-			backRing = {back.outerMinus, back.outerPlus};
 		}
 	}
 
@@ -208,9 +191,8 @@ namespace DefectStudio::detail
 	}
 
 	void AppendDecoration(StrokeGeometry &geometry, const DecorationContour &contour, const EvaluatedSample &endpoint,
-		const bool start, const PathStrokeStyle &style, StrokeMeshRange &range, std::vector<std::uint32_t> &backRing)
+		const bool start, const PathStrokeStyle &style, StrokeMeshRange &range)
 	{
-		backRing.clear();
 		if (contour.points.empty())
 			return;
 		range.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
@@ -218,14 +200,14 @@ namespace DefectStudio::detail
 		if (style.profile == StrokeProfile::Round)
 		{
 			if (contour.filled)
-				AppendFilledRoundDecoration(geometry, contour, endpoint, inward, style, backRing);
+				AppendFilledRoundDecoration(geometry, contour, endpoint, inward, style);
 			else
-				AppendHollowRoundDecoration(geometry, contour, endpoint, inward, style, backRing);
+				AppendHollowRoundDecoration(geometry, contour, endpoint, inward, style);
 		}
 		else if (contour.filled)
-			AppendFilledRibbonDecoration(geometry, contour, endpoint, inward, style, backRing);
+			AppendFilledRibbonDecoration(geometry, contour, endpoint, inward, style);
 		else
-			AppendHollowRibbonDecoration(geometry, contour, endpoint, inward, style, backRing);
+			AppendHollowRibbonDecoration(geometry, contour, endpoint, inward, style);
 		range.indexCount = static_cast<std::uint32_t>(geometry.indices.size()) - range.firstIndex;
 	}
 } // namespace DefectStudio::detail
