@@ -3,6 +3,7 @@
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include <imgui.h>
@@ -26,6 +27,68 @@ namespace DefectStudio
 		{
 			mixed = mixed || first.kind != value.kind || first.lengthScale != value.lengthScale ||
 				first.widthScale != value.widthScale || first.filled != value.filled;
+		}
+
+		void ClampGradientStops(PathGradient &gradient)
+		{
+			float previous = 0.0f;
+			for (PathGradientStop &stop : gradient.stops)
+			{
+				if (!std::isfinite(stop.position))
+					stop.position = previous;
+				stop.position = std::clamp(stop.position, previous, 1.0f);
+				previous = stop.position;
+			}
+		}
+
+		[[nodiscard]] bool SameGradient(const PathGradient &first, const PathGradient &value)
+		{
+			if (first.enabled != value.enabled || first.stops.size() != value.stops.size())
+				return false;
+			for (std::size_t index = 0; index < first.stops.size(); ++index)
+			{
+				const PathGradientStop &a = first.stops[index];
+				const PathGradientStop &b = value.stops[index];
+				if (a.position != b.position || a.color != b.color || a.alpha != b.alpha)
+					return false;
+			}
+			return true;
+		}
+
+		void MarkDashMixed(bool &mixed, const PathDashStyle &first, const PathDashStyle &value)
+		{
+			mixed = mixed || first.enabled != value.enabled || first.dashLength != value.dashLength ||
+				first.gapLength != value.gapLength || first.phase != value.phase;
+		}
+
+		[[nodiscard]] bool SameRatio(const float left, const float right, const float ratio)
+		{
+			if (!std::isfinite(left) || !std::isfinite(right) || left <= 0.0f || right <= 0.0f)
+				return false;
+			const float expected = right * ratio;
+			const float tolerance = 1.0e-5f * std::max(1.0f, std::max(std::abs(left), std::abs(expected)));
+			return std::abs(left - expected) <= tolerance;
+		}
+
+		[[nodiscard]] float GradientInsertionPosition(const std::vector<PathGradientStop> &stops)
+		{
+			if (stops.empty())
+				return 0.5f;
+			std::size_t bestGap = 0;
+			float bestWidth = -1.0f;
+			for (std::size_t gap = 0; gap <= stops.size(); ++gap)
+			{
+				const float lower = gap == 0 ? 0.0f : stops[gap - 1].position;
+				const float upper = gap == stops.size() ? 1.0f : stops[gap].position;
+				if (upper - lower > bestWidth)
+				{
+					bestGap = gap;
+					bestWidth = upper - lower;
+				}
+			}
+			const float lower = bestGap == 0 ? 0.0f : stops[bestGap - 1].position;
+			const float upper = bestGap == stops.size() ? 1.0f : stops[bestGap].position;
+			return std::clamp(lower + (upper - lower) * 0.5f, 0.0f, 1.0f);
 		}
 
 		[[nodiscard]] bool DrawEnumCombo(const char *label, StrokeProfile &value)
@@ -57,6 +120,16 @@ namespace DefectStudio
 				value = static_cast<PathDepthMode>(index);
 			return changed;
 		}
+
+		[[nodiscard]] bool DrawEnumCombo(const char *label, ScenePathLineStyle &value)
+		{
+			const char *names[] = {"Solid", "Dashed", "Dotted", "Custom"};
+			int index = static_cast<int>(value);
+			const bool changed = ImGui::Combo(label, &index, names, 4);
+			if (changed)
+				value = static_cast<ScenePathLineStyle>(index);
+			return changed;
+		}
 	}
 
 	ScenePathStyleEditState ResolveScenePathStyleEdit(
@@ -81,6 +154,8 @@ namespace DefectStudio
 				state.values.width = path->style.width;
 				state.values.alpha = path->style.alpha;
 				state.values.color = path->style.color;
+				state.values.dash = path->style.dash;
+				state.values.gradient = path->style.gradient;
 				state.values.startDecoration = path->style.startDecoration;
 				state.values.endDecoration = path->style.endDecoration;
 				state.values.depthMode = path->style.depthMode;
@@ -95,6 +170,8 @@ namespace DefectStudio
 			MarkMixed(state.mixedWidth, state.values.width, path->style.width);
 			MarkMixed(state.mixedAlpha, state.values.alpha, path->style.alpha);
 			MarkMixed(state.mixedColor, state.values.color, path->style.color);
+			MarkDashMixed(state.mixedDash, state.values.dash, path->style.dash);
+			state.mixedGradient = state.mixedGradient || !SameGradient(state.values.gradient, path->style.gradient);
 			MarkDecorationMixed(state.mixedStartDecoration, state.values.startDecoration, path->style.startDecoration);
 			MarkDecorationMixed(state.mixedEndDecoration, state.values.endDecoration, path->style.endDecoration);
 			MarkMixed(state.mixedDepthMode, state.values.depthMode, path->style.depthMode);
@@ -120,6 +197,12 @@ namespace DefectStudio
 				style.width = edit.width;
 				style.alpha = edit.alpha;
 				style.color = edit.color;
+				style.dash = edit.dash;
+				PathGradient gradient = edit.gradient;
+				ClampGradientStops(gradient);
+				if (gradient.stops.empty())
+					gradient.enabled = false;
+				style.gradient = std::move(gradient);
 				style.startDecoration = edit.startDecoration;
 				style.endDecoration = edit.endDecoration;
 				style.depthMode = edit.depthMode;
@@ -179,6 +262,40 @@ namespace DefectStudio
 		return path.name.empty() ? "Path #" + std::to_string(storeIndex) : path.name;
 	}
 
+	ScenePathLineStyle ResolveScenePathLineStyle(const PathDashStyle &dash)
+	{
+		if (!dash.enabled)
+			return ScenePathLineStyle::Solid;
+		if (SameRatio(dash.dashLength, dash.gapLength, 2.0f))
+			return ScenePathLineStyle::Dashed;
+		if (SameRatio(dash.dashLength, dash.gapLength, 1.0f))
+			return ScenePathLineStyle::Dotted;
+		return ScenePathLineStyle::Custom;
+	}
+
+	void ApplyScenePathLineStyle(PathDashStyle &dash, const ScenePathLineStyle style, const float strokeWidth)
+	{
+		if (style == ScenePathLineStyle::Custom)
+			return;
+		if (style == ScenePathLineStyle::Solid)
+		{
+			dash.enabled = false;
+			return;
+		}
+		const float width = std::max(strokeWidth, 0.001f);
+		dash.enabled = true;
+		if (style == ScenePathLineStyle::Dashed)
+		{
+			dash.dashLength = width * 4.0f;
+			dash.gapLength = width * 2.0f;
+		}
+		else
+		{
+			dash.dashLength = width;
+			dash.gapLength = width;
+		}
+	}
+
 	bool DrawScenePathEditor(RendererWindowState &windowState)
 	{
 		const std::vector<SceneObjectId> selection = windowState.selectedScenePaths;
@@ -225,6 +342,85 @@ namespace DefectStudio
 		applyDrag(ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
 		applyDrag(ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));
 		applyDrag(ImGui::ColorEdit3("Color", &edit.color.x));
+		ImGui::Separator();
+		ImGui::Text("Line style");
+		if (resolved.mixedDash)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("(mixed)");
+		}
+		ScenePathLineStyle lineStyle = ResolveScenePathLineStyle(edit.dash);
+		if (DrawEnumCombo("Line style", lineStyle))
+		{
+			ApplyScenePathLineStyle(edit.dash, lineStyle, edit.width);
+			applyImmediate(true);
+		}
+		applyDrag(ImGui::DragFloat("Dash length", &edit.dash.dashLength, 0.01f, 0.001f, 10.0f, "%.3f"));
+		applyDrag(ImGui::DragFloat("Gap length", &edit.dash.gapLength, 0.01f, 0.001f, 10.0f, "%.3f"));
+		applyDrag(ImGui::DragFloat("Dash phase", &edit.dash.phase, 0.01f, -10.0f, 10.0f, "%.3f"));
+
+		ImGui::Separator();
+		ImGui::Text("Gradient");
+		if (resolved.mixedGradient)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("(mixed)");
+		}
+		bool gradientEnabled = edit.gradient.enabled;
+		if (ImGui::Checkbox("Enabled##PathGradient", &gradientEnabled))
+		{
+			edit.gradient.enabled = gradientEnabled && !edit.gradient.stops.empty();
+			applyImmediate(true);
+		}
+		for (std::size_t index = 0; index < edit.gradient.stops.size(); ++index)
+		{
+			ImGui::PushID(static_cast<int>(index));
+			PathGradientStop &stop = edit.gradient.stops[index];
+			ImGui::Text("Stop %zu", index + 1);
+			const float lower = index == 0 ? 0.0f : edit.gradient.stops[index - 1].position;
+			const float upper = index + 1 == edit.gradient.stops.size() ? 1.0f : edit.gradient.stops[index + 1].position;
+			const bool positionChanged = ImGui::DragFloat("Position", &stop.position, 0.01f, lower, upper, "%.3f");
+			if (positionChanged)
+				ClampGradientStops(edit.gradient);
+			applyDrag(positionChanged);
+			applyDrag(ImGui::ColorEdit3("Color", &stop.color.x));
+			applyDrag(ImGui::SliderFloat("Alpha", &stop.alpha, 0.0f, 1.0f, "%.2f"));
+			if (ImGui::Button("Remove"))
+			{
+				edit.gradient.stops.erase(edit.gradient.stops.begin() + static_cast<std::ptrdiff_t>(index));
+				if (edit.gradient.stops.empty())
+					edit.gradient.enabled = false;
+				applyImmediate(true);
+				ImGui::PopID();
+				break;
+			}
+			ImGui::PopID();
+		}
+		if (ImGui::Button("Add stop"))
+		{
+			ClampGradientStops(edit.gradient);
+			const float position = GradientInsertionPosition(edit.gradient.stops);
+			PathGradientStop stop;
+			stop.position = position;
+			if (!edit.gradient.stops.empty())
+			{
+				const auto next = std::lower_bound(edit.gradient.stops.begin(), edit.gradient.stops.end(), position,
+					[](const PathGradientStop &candidate, const float value) { return candidate.position < value; });
+				const std::size_t nextIndex = static_cast<std::size_t>(next - edit.gradient.stops.begin());
+				const PathGradientStop &before = nextIndex == 0 ? edit.gradient.stops.front() : edit.gradient.stops[nextIndex - 1];
+				const PathGradientStop &after = nextIndex == edit.gradient.stops.size() ? edit.gradient.stops.back() : edit.gradient.stops[nextIndex];
+				stop.color = (before.color + after.color) * 0.5f;
+				stop.alpha = (before.alpha + after.alpha) * 0.5f;
+				edit.gradient.stops.insert(edit.gradient.stops.begin() + static_cast<std::ptrdiff_t>(nextIndex), stop);
+			}
+			else
+			{
+				stop.color = edit.color;
+				stop.alpha = edit.alpha;
+				edit.gradient.stops.push_back(stop);
+			}
+			applyImmediate(true);
+		}
 		const auto drawDecoration = [&](const char *prefix, PathEndpointDecoration &decoration) {
 			const std::string kindLabel = std::string(prefix) + " kind";
 			const std::string lengthLabel = std::string(prefix) + " length scale";
