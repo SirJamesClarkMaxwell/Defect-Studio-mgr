@@ -22,6 +22,9 @@ namespace DefectStudio
 		glm::vec3 ribbonNormal{0.0f, 1.0f, 0.0f};
 		// Flat only, and shown only for a Flat selection: zero is the sheet, positive extrudes it.
 		float ribbonThickness = 0.0f;
+		// Flat with thickness only: zero is the sharp box, positive chamfers its four long edges.
+		// Shown only when a thickness is set, because a sheet has no edges to soften.
+		float ribbonBevel = 0.0f;
 		float width = 0.05f;
 		float alpha = 1.0f;
 		glm::vec3 color{0.95f, 0.35f, 0.1f};
@@ -51,6 +54,7 @@ namespace DefectStudio
 		bool mixedProfile = false;
 		bool mixedRibbonNormal = false;
 		bool mixedRibbonThickness = false;
+		bool mixedRibbonBevel = false;
 		bool anyFlatProfile = false;
 		bool mixedWidth = false;
 		bool mixedAlpha = false;
