@@ -23,6 +23,16 @@ namespace DefectStudio::detail
 		const double halfWidth, const PathStrokeStyle &style, const bool inner = false,
 		const double scale = 1.0);
 
+	// task/41 S11p: a contour point of halfWidth 0 closes a CIRCULAR cross-section and does not
+	// close any other. For Round the ring collapses to a single point on the axis, so the band to
+	// its neighbour is a fan and the solid is sealed. For the rectangular ring of a thick Flat
+	// stroke the same point still has thickness, so the ring is a line segment: the band degenerates
+	// on two of its four sides and leaves a triangular hole there. An Arrow's contour starts and
+	// ends at halfWidth 0, so a thick Flat arrowhead had a hole at the tip and another at the back,
+	// and the back one is what the manual round saw as a dark notch where the shaft arrives.
+	//
+	// So a degenerate ring must be closed explicitly rather than by relying on the band. Both ends,
+	// and for every non-circular cross-section.
 	[[nodiscard]] bool UsesTubeVertices(const PathStrokeStyle &style);
 	[[nodiscard]] std::uint32_t CrossSectionRingSize(const PathStrokeStyle &style);
 
