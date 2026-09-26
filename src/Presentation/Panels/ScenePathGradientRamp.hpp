@@ -58,7 +58,10 @@ namespace DefectStudio
 	// a test can reach without ImGui.
 	//
 	// Matches SampleStrokeColor's rule - clamped at both ends, no extrapolation past the first or
-	// last stop - so the bar cannot disagree with what the renderer draws. An empty or disabled
+	// last stop - so the bar cannot disagree with what the renderer draws. "Matches" means to within
+	// a float tolerance, not bit for bit: the two reach the same interpolation by different routes
+	// and the last bit differs. A test comparing them with exact equality is testing the order of
+	// operations, not the contract. An empty or disabled
 	// gradient samples as opaque white, which is what an empty bar shows.
 	[[nodiscard]] glm::vec4 SampleGradientAt(const PathGradient &gradient, float position);
 

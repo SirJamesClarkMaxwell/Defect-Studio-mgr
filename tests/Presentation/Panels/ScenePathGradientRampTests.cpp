@@ -12,6 +12,15 @@
 
 namespace DefectStudio::Tests
 {
+	void ExpectColorNear(const glm::vec4 &actual, const glm::vec4 &expected)
+	{
+		constexpr float kTolerance = 1e-6f;
+		EXPECT_NEAR(actual.r, expected.r, kTolerance);
+		EXPECT_NEAR(actual.g, expected.g, kTolerance);
+		EXPECT_NEAR(actual.b, expected.b, kTolerance);
+		EXPECT_NEAR(actual.a, expected.a, kTolerance);
+	}
+
 	TEST(ScenePathGradientRampTests, SampleGradientAtMatchesStrokeSamplerAtAndBeyondStops)
 	{
 		const PathGradient gradient{true, {
@@ -23,7 +32,7 @@ namespace DefectStudio::Tests
 
 		const std::array<double, 6> positions = {-0.4, 0.2, 0.35, 0.7, 0.9, 1.4};
 		for (const double position : positions)
-			EXPECT_EQ(SampleGradientAt(gradient, static_cast<float>(position)), SampleStrokeColor(style, position));
+			ExpectColorNear(SampleGradientAt(gradient, static_cast<float>(position)), SampleStrokeColor(style, position));
 	}
 
 	TEST(ScenePathGradientRampTests, EmptyOrDisabledGradientSamplesAsOpaqueWhite)
@@ -71,7 +80,7 @@ namespace DefectStudio::Tests
 		const PathGradientStop &inserted = gradient.stops.at(insertedIndex);
 
 		EXPECT_FLOAT_EQ(inserted.position, expectedPosition);
-		EXPECT_EQ(glm::vec4(inserted.color, inserted.alpha), expectedColor);
+		ExpectColorNear(glm::vec4(inserted.color, inserted.alpha), expectedColor);
 	}
 
 	TEST(ScenePathGradientRampTests, EmptyGradientInsertionCreatesStopAtUnitIntervalMidpoint)
@@ -85,7 +94,7 @@ namespace DefectStudio::Tests
 		const PathGradientStop &inserted = gradient.stops.at(insertedIndex);
 		const float expectedPosition = (0.0f + 1.0f) * 0.5f;
 		EXPECT_FLOAT_EQ(inserted.position, expectedPosition);
-		EXPECT_EQ(glm::vec4(inserted.color, inserted.alpha), expectedColor);
+		ExpectColorNear(glm::vec4(inserted.color, inserted.alpha), expectedColor);
 	}
 
 	TEST(ScenePathGradientRampTests, GradientStopInsertionLeavesStopsFiniteSortedAndBounded)
