@@ -112,7 +112,10 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(built);
 		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(built.Value().nodes[0].binding.value));
 		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(built.Value().nodes[1].binding.value));
-		EXPECT_EQ(built.Value().nodes[0].position, glm::vec3(3, 3, 3));
+		const ResolvedNodes resolved = ResolveNodePositions(built.Value(), BindingContext{});
+		ASSERT_EQ(resolved.positions.size(), built.Value().nodes.size());
+		ASSERT_FALSE(resolved.positions.empty());
+		EXPECT_NEAR(glm::distance(resolved.positions[0], glm::vec3(3, 3, 3)), 0.0f, 1.0e-5f);
 		ASSERT_EQ(warnings.size(), 2u);
 		EXPECT_EQ(warnings[0].code, "scene_objects.path_binding_unresolved");
 	}

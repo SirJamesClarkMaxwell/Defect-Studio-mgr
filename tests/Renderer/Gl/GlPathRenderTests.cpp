@@ -127,9 +127,12 @@ namespace DefectStudio::Tests
 		for (const ScenePathDevPreset preset : {ScenePathDevPreset::Line, ScenePathDevPreset::Cubic, ScenePathDevPreset::Arc})
 		{
 			const ScenePath path = MakeDevScenePath(preset, centre);
+			const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
+			ASSERT_EQ(resolved.positions.size(), path.nodes.size());
+			ASSERT_FALSE(resolved.positions.empty());
 			glm::vec3 centroid(0.0f);
-			for (const PathNode &node : path.nodes) { EXPECT_TRUE(Finite(node.position)); centroid += node.position; }
-			EXPECT_NEAR(glm::length(centroid * 0.5f - centre), 0.0f, 1e-4f);
+			for (const glm::vec3 &position : resolved.positions) { EXPECT_TRUE(Finite(position)); centroid += position; }
+			EXPECT_NEAR(glm::length(centroid / static_cast<float>(resolved.positions.size()) - centre), 0.0f, 1e-4f);
 		}
 	}
 

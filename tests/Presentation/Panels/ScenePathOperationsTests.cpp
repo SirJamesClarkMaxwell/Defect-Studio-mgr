@@ -624,6 +624,7 @@ namespace DefectStudio::Tests
 		ASSERT_NE(live.paths, nullptr);
 		ASSERT_EQ(live.paths->Store().Size(), galleryKinds.size());
 		ASSERT_EQ(undoStack->GetUndoDepth(), 1u);
+		const BindingContext bindingContext = SceneSystem::MakePathBindingContext(live);
 
 		for (std::size_t index = 0; index < galleryKinds.size(); ++index)
 		{
@@ -656,8 +657,14 @@ namespace DefectStudio::Tests
 				});
 			ASSERT_NE(previousWidest, previousContour.points.end());
 			ASSERT_NE(currentWidest, currentContour.points.end());
+			const ResolvedNodes previousResolved = ResolveNodePositions(*previous, bindingContext);
+			const ResolvedNodes currentResolved = ResolveNodePositions(*path, bindingContext);
+			ASSERT_EQ(previousResolved.positions.size(), previous->nodes.size());
+			ASSERT_EQ(currentResolved.positions.size(), path->nodes.size());
+			ASSERT_FALSE(previousResolved.positions.empty());
+			ASSERT_FALSE(currentResolved.positions.empty());
 			const double layoutSeparation = std::abs(static_cast<double>(
-				path->nodes.front().position.z - previous->nodes.front().position.z));
+				currentResolved.positions.front().z - previousResolved.positions.front().z));
 			EXPECT_GT(layoutSeparation, previousWidest->halfWidth + currentWidest->halfWidth);
 		}
 	}
