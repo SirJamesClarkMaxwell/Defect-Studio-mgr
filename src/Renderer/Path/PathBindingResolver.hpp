@@ -29,5 +29,27 @@ namespace DefectStudio
 	// neighbour's UNBUFFERED position, with the existing non-inversion clamp (SceneSystem.cpp:328
 	// semantics). An interior node with buffer != 0 keeps the unbuffered position and reports
 	// InteriorNodeBuffer - two neighbours make the direction undefined.
+	// task/41 transform-1: this is where `path.transform` is applied, and the only place. Everything
+	// downstream - tessellation, stroke meshing, picking, the caches - consumes what this returns
+	// and never reads `node.position`, so nothing below learns that a path can be transformed.
+	//
+	// The two spaces, and this is the rule the whole transform rests on:
+	//
+	//     Free node   -> world = transform * node.position      (authored, local)
+	//     Bound node  -> world = whatever the binding resolves to, UNTRANSFORMED
+	//
+	// A bound node is pinned to an atom, a bond midpoint or another object; those are world
+	// positions by nature, and that is the entire point of binding it. So one path can hold nodes in
+	// two spaces at once, and a path whose nodes are all bound does not travel when it is
+	// translated - it deforms, because the bindings win. That looks like a bug the first time and it
+	// is the correct behaviour.
+	//
+	// A handle is an offset from its own node (PathTypes.hpp). Its offset is rotated and scaled by
+	// the transform - it is authored geometry - but it is anchored at whatever world position its
+	// node resolved to. So a handle on a bound node follows the atom while keeping the shape the
+	// author gave it.
+	//
+	// The identity transform leaves every resolved position exactly where it was before paths had
+	// one, which is what makes existing files load unchanged.
 	[[nodiscard]] ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context);
 }
