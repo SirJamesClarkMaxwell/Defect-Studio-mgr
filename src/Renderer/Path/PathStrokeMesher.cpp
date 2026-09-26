@@ -2,6 +2,8 @@
 
 #include "Renderer/Path/PathStrokeMesher.hpp"
 
+#include "Renderer/Path/PathDecorationMesher.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -10,15 +12,6 @@
 
 namespace DefectStudio
 {
-	namespace detail
-	{
-		[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour);
-		void StitchRings(StrokeGeometry &geometry, std::uint32_t lower, std::uint32_t upper,
-			std::uint32_t radialSegments, bool flip = false);
-		void AppendDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, bool start, const PathStrokeStyle &style,
-			StrokeMeshRange &range);
-	}
 
 	namespace
 	{

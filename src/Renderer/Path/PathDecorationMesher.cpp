@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 
-#include "Renderer/Path/PathStrokeMesher.hpp"
+#include "Renderer/Path/PathDecorationMesher.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,9 +8,6 @@
 
 namespace DefectStudio::detail
 {
-	void StitchRings(StrokeGeometry &geometry, std::uint32_t lower, std::uint32_t upper,
-		std::uint32_t radialSegments, bool flip = false);
-
 	namespace
 	{
 		void AppendRingFan(StrokeGeometry &geometry, const std::uint32_t ring, const PathStrokeStyle &style,
