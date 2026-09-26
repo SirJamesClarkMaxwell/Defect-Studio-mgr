@@ -71,6 +71,7 @@ namespace DefectStudio
 			std::vector<std::uint64_t> ids;
 			std::uint64_t nextId = 1;
 			std::uint64_t activeId = 0;
+			float dragOffsetX = 0.0f;
 		};
 
 		std::unordered_map<std::string, MarkerState> markerStates;
@@ -124,6 +125,52 @@ namespace DefectStudio
 					ImGui::ColorConvertFloat4ToU32(ImVec4(color.r, color.g, color.b, color.a)));
 			}
 			drawList.AddRect(minimum, maximum, ImGui::GetColorU32(ImGuiCol_Border));
+		}
+
+		struct MarkerGeometry
+		{
+			float centerX = 0.0f;
+			float top = 0.0f;
+			float bottom = 0.0f;
+			float halfWidth = 0.0f;
+		};
+
+		[[nodiscard]] MarkerGeometry GetMarkerGeometry(const ImVec2 &barMinimum, const ImVec2 &barMaximum,
+			const float width, const std::vector<PathGradientStop> &stops, const std::size_t index,
+			const bool selected, const float itemSpacing)
+		{
+			constexpr float kMarkerHeight = 14.0f;
+			constexpr float kSelectedMarkerBorder = 2.0f;
+			const float baseHalfWidth = std::max(4.0f, width * 0.0125f);
+			const float markerHalfWidth = baseHalfWidth + kSelectedMarkerBorder;
+			const float position = stops[index].position;
+			std::size_t first = index;
+			while (first > 0 && stops[first - 1].position == position)
+				--first;
+			std::size_t last = index;
+			while (last + 1 < stops.size() && stops[last + 1].position == position)
+				++last;
+
+			const std::size_t rank = index - first;
+			const std::size_t count = last - first + 1u;
+			const float spacing = markerHalfWidth * 2.0f + itemSpacing;
+			float offset = 0.0f;
+			if (count > 1u)
+			{
+				const float baseX = barMinimum.x + width * position;
+				if (baseX <= barMinimum.x + baseHalfWidth)
+					offset = static_cast<float>(rank) * spacing;
+				else if (baseX >= barMaximum.x - baseHalfWidth)
+					offset = -static_cast<float>(count - 1u - rank) * spacing;
+				else
+					offset = (static_cast<float>(rank) - static_cast<float>(count - 1u) * 0.5f) * spacing;
+			}
+
+			const float centerX = barMinimum.x + width * position + offset;
+			const float top = barMaximum.y + 1.0f - (selected ? kSelectedMarkerBorder : 0.0f);
+			const float height = kMarkerHeight + (selected ? kSelectedMarkerBorder * 2.0f : 0.0f);
+			return MarkerGeometry{centerX, top, top + height,
+				selected ? markerHalfWidth : baseHalfWidth};
 		}
 	}
 
@@ -203,31 +250,58 @@ namespace DefectStudio
 		ImGui::PushID(stateKey.c_str());
 
 		const ImGuiStyle &style = ImGui::GetStyle();
+		ImGui::SameLine(0.0f, style.ItemSpacing.x);
+		if (ImGui::Button("+"))
+		{
+			selectedStop = static_cast<int>(InsertGradientStopInWidestGap(gradient));
+			markerState.activeId = 0;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("-") && !gradient.stops.empty())
+		{
+			gradient.stops.erase(gradient.stops.begin() + selectedStop);
+			if (gradient.stops.empty())
+			{
+				gradient.enabled = false;
+				selectedStop = -1;
+			}
+			else
+				selectedStop = std::min(selectedStop, static_cast<int>(gradient.stops.size() - 1u));
+			markerState.activeId = 0;
+		}
+		ImGui::NewLine();
+		SyncMarkerIds(markerState, gradient, selectedStop);
+
 		const float width = std::max(80.0f, ImGui::GetContentRegionAvail().x);
 		constexpr float kBarHeight = 24.0f;
 		constexpr float kMarkerHeight = 14.0f;
 		const ImVec2 barMinimum = ImGui::GetCursorScreenPos();
 		const ImVec2 barMaximum(barMinimum.x + width, barMinimum.y + kBarHeight);
-		ImGui::Dummy(ImVec2(width, kBarHeight + kMarkerHeight + style.ItemSpacing.y));
+		ImGui::Dummy(ImVec2(width, kBarHeight + kMarkerHeight + 4.0f + style.ItemSpacing.y));
 		const ImVec2 nextItem = ImGui::GetCursorScreenPos();
 		DrawGradientBar(*ImGui::GetWindowDrawList(), barMinimum, barMaximum, gradient);
 
 		bool reordered = false;
+		const int selectionAtFrameStart = selectedStop;
 		for (std::size_t index = 0; index < gradient.stops.size(); ++index)
 		{
-			const float markerX = barMinimum.x + width * gradient.stops[index].position;
-			ImGui::SetCursorScreenPos(ImVec2(markerX - 6.0f, barMaximum.y - 2.0f));
+			const MarkerGeometry geometry = GetMarkerGeometry(barMinimum, barMaximum, width,
+				gradient.stops, index, static_cast<int>(index) == selectionAtFrameStart, style.ItemSpacing.x);
+			ImGui::SetCursorScreenPos(ImVec2(geometry.centerX - geometry.halfWidth, geometry.top));
 			ImGui::PushID(static_cast<int>(markerState.ids[index]));
-			ImGui::InvisibleButton("##marker", ImVec2(12.0f, kMarkerHeight));
+			ImGui::InvisibleButton("##marker",
+				ImVec2(geometry.halfWidth * 2.0f, geometry.bottom - geometry.top));
 			if (ImGui::IsItemActivated())
 			{
 				selectedStop = static_cast<int>(index);
 				markerState.activeId = markerState.ids[index];
+				markerState.dragOffsetX = ImGui::GetMousePos().x - geometry.centerX;
 				result.dragStarted = true;
 			}
 			if (ImGui::IsItemActive())
 			{
-				const float position = std::clamp((ImGui::GetMousePos().x - barMinimum.x) / width, 0.0f, 1.0f);
+				const float position = std::clamp((ImGui::GetMousePos().x - markerState.dragOffsetX - barMinimum.x) /
+					width, 0.0f, 1.0f);
 				if (position != gradient.stops[index].position)
 				{
 					gradient.stops[index].position = position;
@@ -260,35 +334,26 @@ namespace DefectStudio
 		}
 		ImGui::SetCursorScreenPos(nextItem);
 
-		const float markerWidth = std::max(4.0f, width * 0.0125f);
 		ImDrawList &drawList = *ImGui::GetWindowDrawList();
 		for (std::size_t index = 0; index < gradient.stops.size(); ++index)
 		{
-			const float x = barMinimum.x + width * gradient.stops[index].position;
 			const bool selected = static_cast<int>(index) == selectedStop;
-			const ImU32 markerColor = ImGui::GetColorU32(selected ? ImGuiCol_CheckMark : ImGuiCol_Text);
-			drawList.AddTriangleFilled(ImVec2(x, barMaximum.y + 1.0f),
-				ImVec2(x - markerWidth, barMaximum.y + kMarkerHeight),
-				ImVec2(x + markerWidth, barMaximum.y + kMarkerHeight), markerColor);
-		}
-
-		if (ImGui::Button("+"))
-		{
-			selectedStop = static_cast<int>(InsertGradientStopInWidestGap(gradient));
-			markerState.activeId = 0;
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("-") && !gradient.stops.empty())
-		{
-			gradient.stops.erase(gradient.stops.begin() + selectedStop);
-			if (gradient.stops.empty())
-			{
-				gradient.enabled = false;
-				selectedStop = -1;
-			}
-			else
-				selectedStop = std::min(selectedStop, static_cast<int>(gradient.stops.size() - 1u));
-			markerState.activeId = 0;
+			const MarkerGeometry geometry = GetMarkerGeometry(barMinimum, barMaximum, width,
+				gradient.stops, index, selected, style.ItemSpacing.x);
+			const ImVec2 tip(geometry.centerX, geometry.top);
+			const ImVec2 left(geometry.centerX - geometry.halfWidth, geometry.bottom);
+			const ImVec2 right(geometry.centerX + geometry.halfWidth, geometry.bottom);
+			if (selected)
+				drawList.AddTriangleFilled(tip, left, right, ImGui::GetColorU32(ImGuiCol_Text));
+			const float innerTop = selected ? geometry.top + 2.0f : geometry.top;
+			const float innerBottom = selected ? geometry.bottom - 2.0f : geometry.bottom;
+			const float innerHalfWidth = selected ? geometry.halfWidth - 2.0f : geometry.halfWidth;
+			const ImU32 markerColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+				gradient.stops[index].color.r, gradient.stops[index].color.g,
+				gradient.stops[index].color.b, 1.0f));
+			drawList.AddTriangleFilled(ImVec2(geometry.centerX, innerTop),
+				ImVec2(geometry.centerX - innerHalfWidth, innerBottom),
+				ImVec2(geometry.centerX + innerHalfWidth, innerBottom), markerColor);
 		}
 
 		if (!gradient.stops.empty())
