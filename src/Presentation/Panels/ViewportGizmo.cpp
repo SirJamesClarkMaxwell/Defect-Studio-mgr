@@ -8,6 +8,8 @@
 #include <optional>
 #include <utility>
 
+#include <glm/gtc/constants.hpp>
+
 #include "Presentation/Panels/ViewportModalTransform.hpp"
 #include "Renderer/Scene/ViewportNavigationMath.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -23,6 +25,12 @@ namespace DefectStudio
 	{
 		constexpr float kPickMinDistance = 20.0f;
 		constexpr float kPickMaxDistance = 100.0f;
+		constexpr float kRotateAxisRadius = 72.0f;
+		constexpr float kRotateAxisHitDistance = 10.0f;
+		constexpr float kRotateArcHalfSpan = 1.1f;
+		constexpr float kScaleHandleLength = 100.0f;
+		constexpr float kScaleHandleHalfExtent = 7.0f;
+		constexpr float kScaleCenterRadius = 12.0f;
 		constexpr float kSceneArrowHandleDrawRadius = 5.0f;
 		constexpr float kActiveSceneArrowHandleDrawRadius = 7.0f;
 		// Deliberately much bigger than the drawn dot (see SceneArrowHandleGeometry) - live testing
@@ -139,9 +147,12 @@ namespace DefectStudio
 			return axes;
 		}
 
-		void DrawAxisHandles(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes)
+		void DrawAxisHandles(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes,
+			const ImVec2 &imageOrigin, const ImVec2 &imageSize)
 		{
 			ImDrawList &drawList = *ImGui::GetWindowDrawList();
+			drawList.PushClipRect(
+				imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				if (!axes[axis].valid)
@@ -156,6 +167,7 @@ namespace DefectStudio
 					ImVec2(headBase.x - perpendicular.x * 6.0f, headBase.y - perpendicular.y * 6.0f), kAxisColors[axis]);
 			}
 			drawList.AddCircleFilled(ImVec2(pivot.x, pivot.y), 5.0f, IM_COL32(235, 235, 235, 255));
+			drawList.PopClipRect();
 		}
 
 		[[nodiscard]] int HitTestAxis(
@@ -180,6 +192,96 @@ namespace DefectStudio
 				}
 			}
 			return bestAxis;
+		}
+
+		void DrawRotateGizmo(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes, int hoveredAxis,
+			bool hoveringTrackball, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+		{
+			ImDrawList &drawList = *ImGui::GetWindowDrawList();
+			drawList.PushClipRect(
+				imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
+			drawList.AddCircle(
+				ImVec2(pivot.x, pivot.y), kPickMaxDistance,
+				hoveringTrackball ? IM_COL32(255, 200, 60, 220) : IM_COL32(235, 235, 235, 200), 48, 2.5f);
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (!axes[axis].valid)
+					continue;
+				const ImU32 color = axis == hoveredAxis ? IM_COL32(255, 200, 60, 240) : kAxisColors[axis];
+				const float centerAngle = std::atan2(-axes[axis].direction.y, axes[axis].direction.x);
+				glm::vec2 previous = pivot + kRotateAxisRadius * glm::vec2(
+					std::cos(centerAngle - kRotateArcHalfSpan), -std::sin(centerAngle - kRotateArcHalfSpan));
+				for (int point = 1; point <= 16; ++point)
+				{
+					const float angle = centerAngle - kRotateArcHalfSpan +
+						(2.0f * kRotateArcHalfSpan) * static_cast<float>(point) / 16.0f;
+					const glm::vec2 current = pivot + kRotateAxisRadius * glm::vec2(std::cos(angle), -std::sin(angle));
+					drawList.AddLine(
+						ImVec2(previous.x, previous.y), ImVec2(current.x, current.y), color, 3.0f);
+					previous = current;
+				}
+			}
+			drawList.AddCircleFilled(ImVec2(pivot.x, pivot.y), 5.0f, IM_COL32(235, 235, 235, 255));
+			drawList.PopClipRect();
+		}
+
+		[[nodiscard]] int HitTestRotateArcs(const glm::vec2 &mouse, const glm::vec2 &pivot,
+			const std::array<AxisProjection, 3> &axes)
+		{
+			const glm::vec2 fromPivot = mouse - pivot;
+			const float radial = glm::length(fromPivot);
+			if (radial < kRotateAxisRadius - kRotateAxisHitDistance ||
+				radial > kRotateAxisRadius + kRotateAxisHitDistance)
+				return -1;
+			const float mouseAngle = std::atan2(-fromPivot.y, fromPivot.x);
+			float bestDistance = kRotateArcHalfSpan;
+			int bestAxis = -1;
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (!axes[axis].valid)
+					continue;
+				const float centerAngle = std::atan2(-axes[axis].direction.y, axes[axis].direction.x);
+				float distance = std::abs(mouseAngle - centerAngle);
+				while (distance > glm::pi<float>())
+					distance = glm::two_pi<float>() - distance;
+				if (distance < bestDistance)
+					bestDistance = distance, bestAxis = axis;
+			}
+			return bestAxis;
+		}
+
+		void DrawScaleGizmo(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes, int hoveredAxis,
+			bool hoveringCenter, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+		{
+			ImDrawList &drawList = *ImGui::GetWindowDrawList();
+			drawList.PushClipRect(
+				imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (!axes[axis].valid)
+					continue;
+				const glm::vec2 direction = axes[axis].direction;
+				const glm::vec2 perpendicular(-direction.y, direction.x);
+				const glm::vec2 tip = pivot + direction * kScaleHandleLength;
+				const glm::vec2 shaftEnd = tip - direction * (kScaleHandleHalfExtent + 2.0f);
+				const ImU32 color = axis == hoveredAxis ? IM_COL32(255, 200, 60, 240) : kAxisColors[axis];
+				drawList.AddLine(ImVec2(pivot.x, pivot.y), ImVec2(shaftEnd.x, shaftEnd.y), color, 3.5f);
+				const glm::vec2 along = direction * kScaleHandleHalfExtent;
+				const glm::vec2 across = perpendicular * kScaleHandleHalfExtent;
+				const std::array<ImVec2, 4> box = {
+					ImVec2((tip - along - across).x, (tip - along - across).y),
+					ImVec2((tip + along - across).x, (tip + along - across).y),
+					ImVec2((tip + along + across).x, (tip + along + across).y),
+					ImVec2((tip - along + across).x, (tip - along + across).y)};
+				drawList.AddTriangleFilled(box[0], box[1], box[2], color);
+				drawList.AddTriangleFilled(box[0], box[2], box[3], color);
+				for (int corner = 0; corner < 4; ++corner)
+					drawList.AddLine(box[corner], box[(corner + 1) % 4], IM_COL32(30, 30, 30, 220), 1.0f);
+			}
+			drawList.AddCircleFilled(
+				ImVec2(pivot.x, pivot.y), kScaleCenterRadius,
+				hoveringCenter ? IM_COL32(255, 200, 60, 240) : IM_COL32(235, 235, 235, 255));
+			drawList.PopClipRect();
 		}
 
 	} // namespace
@@ -330,8 +432,7 @@ namespace DefectStudio
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;
 		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
-		const glm::mat4 viewProjection =
-			windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		const std::optional<glm::vec2> pivotScreen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, pivot);
 		if (!pivotScreen.has_value())
 			return false;
@@ -343,29 +444,49 @@ namespace DefectStudio
 		// silently killing the axis-hit-test, falling through to HandleSceneArrowInteraction's own
 		// hit-test, which found no arrow geometry under the cursor and cleared the selection).
 		const bool pointerOnGeometry = !singleArrowOnly && IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
-		if (windowState.gizmoOperation == GizmoOperation::Rotate)
-		{
-			const float radial = glm::length(mouse - *pivotScreen);
-			const bool hoveringRing = hovered && !pointerOnGeometry &&
-				radial >= kPickMinDistance && radial <= kPickMaxDistance;
-			ImGui::GetWindowDrawList()->AddCircle(
-				ImVec2(pivotScreen->x, pivotScreen->y), kPickMaxDistance,
-				hoveringRing ? IM_COL32(255, 200, 60, 220) : IM_COL32(235, 235, 235, 200), 48, 2.5f);
-			if (hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-			{
-				BeginViewportModalTransform(windowState, ModalTransformOp::Rotate, mouse, std::nullopt, true);
-				return true;
-			}
-			return hoveringRing;
-		}
-
 		TransformBases bases;
 		bases.local = SceneTransformLocalBasis(snapshot);
 		bases.lattice = windowState.structure.lattice;
 		const OrientationAxes worldAxes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
-		const std::array<AxisProjection, 3> axes =
-			ProjectAxes(viewProjection, imageOrigin, imageSize, pivot, *pivotScreen, worldAxes);
-		DrawAxisHandles(*pivotScreen, axes);
+		const std::array<AxisProjection, 3> axes = ProjectAxes(
+			viewProjection, imageOrigin, imageSize, pivot, *pivotScreen, worldAxes);
+		if (windowState.gizmoOperation == GizmoOperation::Rotate)
+		{
+			const int hoveredAxis = pointerOnGeometry ? -1 : HitTestRotateArcs(mouse, *pivotScreen, axes);
+			const float radial = glm::length(mouse - *pivotScreen);
+			const bool hoveringTrackball = hovered && !pointerOnGeometry &&
+				radial >= kPickMaxDistance - 7.0f && radial <= kPickMaxDistance + 7.0f;
+			DrawRotateGizmo(*pivotScreen, axes, hoveredAxis, hoveringTrackball, imageOrigin, imageSize);
+			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+				(hoveredAxis >= 0 || hoveringTrackball))
+			{
+				BeginViewportModalTransform(
+					windowState, ModalTransformOp::Rotate, mouse,
+					hoveredAxis >= 0 ? std::optional<int>(hoveredAxis) : std::nullopt, true);
+				return true;
+			}
+			windowState.gizmoDragActive = false;
+			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringTrackball);
+		}
+		if (windowState.gizmoOperation == GizmoOperation::Scale)
+		{
+			const float radial = glm::length(mouse - *pivotScreen);
+			const bool hoveringCenter = hovered && !pointerOnGeometry && radial <= kScaleCenterRadius;
+			const int hoveredAxis = pointerOnGeometry || hoveringCenter ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
+			DrawScaleGizmo(*pivotScreen, axes, hoveredAxis, hoveringCenter, imageOrigin, imageSize);
+			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+				(hoveredAxis >= 0 || hoveringCenter))
+			{
+				BeginViewportModalTransform(
+					windowState, ModalTransformOp::Scale, mouse,
+					hoveredAxis >= 0 ? std::optional<int>(hoveredAxis) : std::nullopt, true);
+				return true;
+			}
+			windowState.gizmoDragActive = false;
+			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringCenter);
+		}
+
+		DrawAxisHandles(*pivotScreen, axes, imageOrigin, imageSize);
 		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
 		if (hovered && hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 		{
@@ -374,6 +495,6 @@ namespace DefectStudio
 		}
 
 		windowState.gizmoDragActive = false;
-		return hoveredAxis >= 0;
+		return hovered && hoveredAxis >= 0;
 	}
 } // namespace DefectStudio
