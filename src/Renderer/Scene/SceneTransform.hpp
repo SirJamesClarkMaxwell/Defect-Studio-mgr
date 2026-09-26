@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Renderer/Path/PathTypes.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
 
 namespace DefectStudio
@@ -72,6 +73,18 @@ namespace DefectStudio
 		glm::vec2 halfExtents = glm::vec2(1.0f);
 	};
 
+	// Every node and every cubic handle of one path, in store order, captured as world points. V1
+	// has no object transform on a path (plan v2): G/R/S move the points themselves, so what has to
+	// be restored on cancel is exactly the list of points that was read.
+	struct PathTransformStart
+	{
+		SceneObjectId id;
+		std::vector<PathElementId> nodes;
+		std::vector<glm::vec3> nodePositions;
+		std::vector<PathElementId> handles;
+		std::vector<glm::vec3> handlePositions;
+	};
+
 	struct SceneTransformSelectionSnapshot
 	{
 		std::vector<AtomTransformStart> atoms;
@@ -82,6 +95,10 @@ namespace DefectStudio
 		// tangent round), scale grows the drawn size (orbital.scale, plane.halfExtents).
 		std::vector<OrbitalTransformStart> orbitals;
 		std::vector<PlaneTransformStart> planes;
+		// Translate moves every captured point; rotate and scale move them about the pivot. A
+		// handle travels with its own point rather than with its node, which is what makes a
+		// rotated cubic keep its shape instead of collapsing towards the node.
+		std::vector<PathTransformStart> paths;
 	};
 
 	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label

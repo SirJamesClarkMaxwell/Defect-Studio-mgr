@@ -63,10 +63,27 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<std::size_t> HitTestCircleSceneArrows(
 		const RendererWindowState &windowState, glm::vec2 center, float radius);
 
+	// Paths return ids, not indices: a path lives in a PathStore and has no index for the caller
+	// to hold on to. Both sample the polyline the render pass last built (PathCaches::FindLastBuilt)
+	// rather than re-tessellating, the same reason PickFrontmostScenePath does - a region that
+	// catches a curve the screen does not show is worse than one that misses it.
+	//   ponytail: a path the render pass has never reached is not region-selectable, exactly as it
+	//   is not click-selectable. Same one-frame window, same upgrade path.
+	// Hidden and non-renderable paths are skipped, so a box drawn over a hidden path selects
+	// nothing - matching the click behaviour rather than the vector kinds', which do not check.
+	[[nodiscard]] std::vector<SceneObjectId> HitTestRectScenePaths(
+		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax);
+	[[nodiscard]] std::vector<SceneObjectId> HitTestCircleScenePaths(
+		const RendererWindowState &windowState, glm::vec2 center, float radius);
+
+	// `pathHits` arrives as ids because that is what the path hit-tests return; the other three are
+	// indices into their vectors. Defaulted so the two existing call sites and any caller that has
+	// no paths stay unchanged.
 	void ApplyLabelRegionSelection(
 		RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
 		const std::vector<std::size_t> &freeHits, const std::vector<std::size_t> &arrowHits,
-		RendererEvents::Viewport::RegionSelectMode mode);
+		RendererEvents::Viewport::RegionSelectMode mode,
+		const std::vector<SceneObjectId> &pathHits = {});
 	[[nodiscard]] RendererEvents::Viewport::RegionSelectMode ResolveRegionSelectMode(bool additive, bool subtractive);
 	void PublishRegionSelection(
 		RendererWindowState &windowState,

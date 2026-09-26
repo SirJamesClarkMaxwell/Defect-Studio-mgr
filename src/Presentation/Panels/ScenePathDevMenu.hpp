@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 
+#include "Renderer/Path/PathStyle.hpp"
 #include "Renderer/Path/PathTypes.hpp"
 
 namespace DefectStudio
@@ -19,9 +20,16 @@ namespace DefectStudio
 	};
 
 	// One ScenePath centred on `worldPosition`, roughly two Angstrom across, with a visible default
-	// style (Round tube, an Arrow end decoration). Pure - it allocates no SceneObjectId and touches no
-	// window; AddScenePath does that.
-	[[nodiscard]] ScenePath MakeDevScenePath(ScenePathDevPreset preset, const glm::vec3 &worldPosition);
+	// style (an Arrow end decoration). Pure - it allocates no SceneObjectId and touches no window;
+	// AddScenePath does that.
+	//
+	// `profile` is the S11 creation-preset axis: Round is the tube, Flat the ribbon in the
+	// transported frame, CameraFacing the ribbon turned towards the eye. It is defaulted so every
+	// pre-S11 call keeps producing exactly the path it produced before. A CameraFacing or Flat
+	// preset is made a little wider than the tube, because a ribbon seen edge-on at the tube's
+	// width is a line one pixel thick and reads as a failed add.
+	[[nodiscard]] ScenePath MakeDevScenePath(
+		ScenePathDevPreset preset, const glm::vec3 &worldPosition, StrokeProfile profile = StrokeProfile::Round);
 
 	// The viewport Add menu's "Path (dev)" submenu.
 	//
