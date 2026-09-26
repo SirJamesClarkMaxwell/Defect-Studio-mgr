@@ -8,6 +8,8 @@
 #include <imgui.h>
 
 #include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
+#include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
@@ -93,12 +95,15 @@ namespace DefectStudio
 
 	std::size_t ApplyScenePathStyleEdit(
 		RendererWindowState &windowState, const std::vector<SceneObjectId> &selection,
-		const ScenePathStyleEdit &edit)
+		const ScenePathStyleEdit &edit, const bool recordUndo)
 	{
 		if (windowState.paths == nullptr || selection.empty())
 			return 0;
+		const PathEditContext context = recordUndo
+			? MakeWindowPathEditContext(windowState)
+			: MakeSilentPathEditContext(windowState);
 		const PathEditReport report = SetScenePathStyle(
-			MakeWindowPathEditContext(windowState), selection,
+			context, selection,
 			[&edit](PathStrokeStyle &style) {
 				style.profile = edit.profile;
 				style.ribbonNormal = edit.ribbonNormal;
@@ -110,6 +115,37 @@ namespace DefectStudio
 				style.depthMode = edit.depthMode;
 			});
 		return report.applied.size();
+	}
+
+	void BeginScenePathStyleDrag(RendererWindowState &windowState)
+	{
+		if (windowState.scenePathStyleEditBefore.has_value())
+			return;
+		windowState.scenePathStyleEditBefore = CaptureSceneObjectsSnapshot(windowState);
+	}
+
+	bool CommitScenePathStyleDrag(RendererWindowState &windowState)
+	{
+		if (!windowState.scenePathStyleEditBefore.has_value())
+			return false;
+
+		RendererWindowState::LabelUndoSnapshot before =
+			std::move(*windowState.scenePathStyleEditBefore);
+		windowState.scenePathStyleEditBefore.reset();
+
+		const PathStore *liveStore = windowState.paths != nullptr ? &windowState.paths->Store() : nullptr;
+		const std::vector<SceneObjectId> beforeIds = before.paths.Ids();
+		const bool changed = liveStore == nullptr
+			? !beforeIds.empty()
+			: beforeIds != liveStore->Ids() || std::any_of(
+				beforeIds.begin(), beforeIds.end(), [&](const SceneObjectId id) {
+					return before.paths.RevisionsFor(id) != liveStore->RevisionsFor(id);
+				});
+		if (!changed)
+			return false;
+
+		PushSceneObjectsUndoSnapshot(windowState, std::move(before));
+		return true;
 	}
 
 	bool RenameScenePath(RendererWindowState &windowState, const SceneObjectId id, std::string name)
@@ -142,6 +178,22 @@ namespace DefectStudio
 		ScenePathStyleEdit edit = resolved.values;
 		bool changed = false;
 		bool renamed = false;
+		const auto applyImmediate = [&](const bool controlChanged) {
+			if (!controlChanged)
+				return;
+			changed = ApplyScenePathStyleEdit(windowState, selection, edit, true) != 0 || changed;
+		};
+		const auto applyDrag = [&](const bool controlChanged) {
+			if (ImGui::IsItemActivated())
+				BeginScenePathStyleDrag(windowState);
+			if (controlChanged)
+			{
+				const bool recordUndo = !windowState.scenePathStyleEditBefore.has_value();
+				changed = ApplyScenePathStyleEdit(windowState, selection, edit, recordUndo) != 0 || changed;
+			}
+			if (ImGui::IsItemDeactivatedAfterEdit())
+				CommitScenePathStyleDrag(windowState);
+		};
 		ImGui::Text("Paths (%zu selected)", resolved.resolved);
 		if (selection.size() == 1 && windowState.paths != nullptr)
 		{
@@ -154,17 +206,15 @@ namespace DefectStudio
 					renamed = RenameScenePath(windowState, path->id, name);
 			}
 		}
-		changed = DrawEnumCombo("Profile", edit.profile) || changed;
+		applyImmediate(DrawEnumCombo("Profile", edit.profile));
 		if (resolved.values.profile == StrokeProfile::Flat || (resolved.mixedProfile && resolved.anyFlatProfile))
-			changed = ImGui::DragFloat3("Ribbon normal", &edit.ribbonNormal.x, 0.01f) || changed;
-		changed = ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f") || changed;
-		changed = ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f") || changed;
-		changed = ImGui::ColorEdit3("Color", &edit.color.x) || changed;
-		changed = DrawEnumCombo("Start decoration", edit.startDecoration) || changed;
-		changed = DrawEnumCombo("End decoration", edit.endDecoration) || changed;
-		changed = DrawEnumCombo("Depth", edit.depthMode) || changed;
-		if (changed)
-			return ApplyScenePathStyleEdit(windowState, selection, edit) != 0 || renamed;
-		return renamed;
+			applyDrag(ImGui::DragFloat3("Ribbon normal", &edit.ribbonNormal.x, 0.01f));
+		applyDrag(ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
+		applyDrag(ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));
+		applyDrag(ImGui::ColorEdit3("Color", &edit.color.x));
+		applyImmediate(DrawEnumCombo("Start decoration", edit.startDecoration));
+		applyImmediate(DrawEnumCombo("End decoration", edit.endDecoration));
+		applyImmediate(DrawEnumCombo("Depth", edit.depthMode));
+		return changed || renamed;
 	}
 } // namespace DefectStudio
