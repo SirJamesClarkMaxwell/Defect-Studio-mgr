@@ -8,6 +8,7 @@
 
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -37,6 +38,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Arrow: return windowState.selectedSceneArrows;
 			case SceneObjectEditKind::Orbital: return windowState.selectedSceneOrbitals;
 			case SceneObjectEditKind::Plane: return windowState.selectedScenePlanes;
+			case SceneObjectEditKind::Path: return windowState.selectedScenePaths;
 			}
 			return windowState.selectedSceneArrows;
 		}
@@ -49,6 +51,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Arrow: return !GetSceneArrowClipboard().empty();
 			case SceneObjectEditKind::Orbital: return !GetSceneOrbitalClipboard().empty();
 			case SceneObjectEditKind::Plane: return !GetScenePlaneClipboard().empty();
+			case SceneObjectEditKind::Path: return !GetScenePathClipboard().empty();
 			}
 			return false;
 		}
@@ -172,6 +175,9 @@ namespace DefectStudio
 			case SceneObjectEditKind::Plane:
 				EraseScenePlanes(windowState, windowState.selectedScenePlanes);
 				break;
+			case SceneObjectEditKind::Path:
+				EraseScenePaths(windowState, windowState.selectedScenePaths);
+				break;
 			}
 			break;
 
@@ -182,6 +188,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Arrow: DuplicateSelectedSceneArrows(windowState); break;
 			case SceneObjectEditKind::Orbital: DuplicateSelectedSceneOrbitals(windowState); break;
 			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState); break;
+			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState); break;
 			}
 			break;
 
@@ -192,6 +199,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Arrow: CopySceneArrowsToClipboard(windowState); break;
 			case SceneObjectEditKind::Orbital: CopySceneOrbitalsToClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: CopyScenePlanesToClipboard(windowState); break;
+			case SceneObjectEditKind::Path: CopyScenePathsToClipboard(windowState); break;
 			}
 			break;
 
@@ -202,6 +210,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Arrow: PasteSceneArrowsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Orbital: PasteSceneOrbitalsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: PasteScenePlanesFromClipboard(windowState); break;
+			case SceneObjectEditKind::Path: PasteScenePathsFromClipboard(windowState); break;
 			}
 			break;
 		}

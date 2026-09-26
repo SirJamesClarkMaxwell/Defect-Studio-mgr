@@ -11,7 +11,8 @@ namespace DefectStudio
 		FreeLabel,
 		Arrow,
 		Orbital,
-		Plane
+		Plane,
+		Path
 	};
 
 	enum class SceneObjectEditAction

@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include "Renderer/Path/PathSystem.hpp"
+
 namespace DefectStudio
 {
 	namespace
@@ -23,6 +25,19 @@ namespace DefectStudio
 				object.visible = visible;
 		}
 
+		// Paths live in a PathStore, not a vector, so they get their own three. MutateStyle is the
+		// only mutable access there is; it bumps the style revision, which costs one re-mesh per
+		// visibility toggle. That is the right trade for a user action that happens by hand - the
+		// alternative is a third revision counter for a flag the mesher never reads.
+		void ForEachPath(RendererWindowState &window, const std::function<void(ScenePath &)> &mutate)
+		{
+			if (window.paths == nullptr)
+				return;
+			PathStore &store = window.paths->Store();
+			for (const SceneObjectId id : store.Ids())
+				store.MutateStyle(id, mutate);
+		}
+
 		template <typename Objects>
 		void CollapseOntoRenderable(Objects &objects)
 		{
@@ -35,7 +50,8 @@ namespace DefectStudio
 	{
 		return !windowState.selectedAtomIndices.empty() || !windowState.selectedPinnedMeasurements.empty() ||
 			!windowState.selectedFreeLabels.empty() || !windowState.selectedSceneArrows.empty() ||
-			!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty();
+			!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty() ||
+			!windowState.selectedScenePaths.empty();
 	}
 
 	void SetSelectedSceneObjectsVisible(RendererWindowState &windowState, const bool visible)
@@ -45,6 +61,11 @@ namespace DefectStudio
 		SetVisibleWhereSelected(windowState.sceneArrows, windowState.selectedSceneArrows, visible);
 		SetVisibleWhereSelected(windowState.sceneOrbitals, windowState.selectedSceneOrbitals, visible);
 		SetVisibleWhereSelected(windowState.scenePlanes, windowState.selectedScenePlanes, visible);
+		const std::vector<SceneObjectId> &selectedPaths = windowState.selectedScenePaths;
+		ForEachPath(windowState, [&selectedPaths, visible](ScenePath &path) {
+			if (std::find(selectedPaths.begin(), selectedPaths.end(), path.id) != selectedPaths.end())
+				path.visible = visible;
+		});
 	}
 
 	void ShowAllSceneObjects(RendererWindowState &windowState)
@@ -54,6 +75,7 @@ namespace DefectStudio
 		SetVisibleEverywhere(windowState.sceneArrows, true);
 		SetVisibleEverywhere(windowState.sceneOrbitals, true);
 		SetVisibleEverywhere(windowState.scenePlanes, true);
+		ForEachPath(windowState, [](ScenePath &path) { path.visible = true; });
 	}
 
 	void ApplyRenderPassVisibility(RendererWindowState &windowState)
@@ -65,5 +87,6 @@ namespace DefectStudio
 		CollapseOntoRenderable(windowState.sceneArrows);
 		CollapseOntoRenderable(windowState.sceneOrbitals);
 		CollapseOntoRenderable(windowState.scenePlanes);
+		ForEachPath(windowState, [](ScenePath &path) { path.visible = path.renderable; });
 	}
 } // namespace DefectStudio
