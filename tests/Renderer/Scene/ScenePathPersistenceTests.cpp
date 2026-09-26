@@ -70,6 +70,20 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(extracted.nodes[0].binding.atoms[0].element, "C");
 	}
 
+	TEST(ScenePathPersistenceTests, RibbonThicknessRoundTripsThroughScenePathPersistence)
+	{
+		PersistedScenePath saved = MinimalPath();
+		saved.style.profile = "Flat";
+		saved.style.ribbonThickness = 0.37f;
+		std::vector<StructuredError> warnings;
+		const Result<ScenePath> built = BuildScenePath(saved, Structure(), warnings);
+		ASSERT_TRUE(built);
+		EXPECT_FLOAT_EQ(built.Value().style.ribbonThickness, saved.style.ribbonThickness);
+
+		const PersistedScenePath extracted = ExtractPersistedScenePath(built.Value(), Structure());
+		EXPECT_FLOAT_EQ(extracted.style.ribbonThickness, saved.style.ribbonThickness);
+	}
+
 	TEST(ScenePathPersistenceTests, InvalidRibbonNormalFallsBackToDefault)
 	{
 		PersistedScenePath saved;

@@ -258,6 +258,43 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(restoredSecond->style.endDecoration.filled, secondBefore.endDecoration.filled);
 	}
 
+	TEST_F(ScenePathUndoTests, FlatRibbonThicknessDragCommitsOneUndo)
+	{
+		RendererWindowState window;
+		window.windowId = "flat-ribbon-thickness-drag";
+		ScenePath path = Path(window, 1);
+		path.style.profile = StrokeProfile::Flat;
+		const SceneObjectId id = Add(window, std::move(path));
+		window.selectedScenePaths = {id};
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		const ScenePathStyleEditState state = ResolveScenePathStyleEdit(live, live.selectedScenePaths);
+		ASSERT_EQ(state.resolved, 1u);
+		EXPECT_TRUE(state.anyFlatProfile);
+		EXPECT_FALSE(state.mixedRibbonThickness);
+		EXPECT_FLOAT_EQ(state.values.ribbonThickness, 0.0f);
+
+		BeginScenePathStyleDrag(live);
+		ScenePathStyleEdit edit = state.values;
+		for (const float thickness : {0.05f, 0.1f, 0.2f})
+		{
+			edit.ribbonThickness = thickness;
+			ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		}
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+		ASSERT_TRUE(CommitScenePathStyleDrag(live));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+
+		const ScenePath *changed = live.paths->Store().Find(id);
+		ASSERT_NE(changed, nullptr);
+		EXPECT_FLOAT_EQ(changed->style.ribbonThickness, 0.2f);
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *restored = live.paths->Store().Find(id);
+		ASSERT_NE(restored, nullptr);
+		EXPECT_FLOAT_EQ(restored->style.ribbonThickness, 0.0f);
+	}
+
 	TEST_F(ScenePathUndoTests, BeginningAnExistingStyleDragDoesNotReplaceItsSnapshot)
 	{
 		RendererWindowState window;
@@ -369,6 +406,16 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Cubic, glm::vec3(0.0f)).style.profile, StrokeProfile::Round);
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0.0f), StrokeProfile::Flat).style.ribbonNormal,
 			glm::vec3(0.0f, 0.0f, 1.0f));
+	}
+
+	TEST(ScenePathOperationsTests, CurvedFlatDevPresetBuildsAFlatArrowPath)
+	{
+		const ScenePath path = MakeDevScenePath(ScenePathDevPreset::Cubic, glm::vec3(2.0f, -1.0f, 3.0f), StrokeProfile::Flat);
+		EXPECT_EQ(path.style.profile, StrokeProfile::Flat);
+		EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::Arrow);
+		ASSERT_EQ(path.nodes.size(), 2u);
+		ASSERT_EQ(path.segments.size(), 1u);
+		ASSERT_TRUE(std::holds_alternative<CubicBezierSegmentData>(path.segments[0].data));
 	}
 
 	TEST_F(ScenePathUndoTests, DecorationGalleryAddsEveryKindNamedAndSpacedInOneUndo)

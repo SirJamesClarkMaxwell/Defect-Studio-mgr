@@ -34,6 +34,7 @@ namespace DefectStudio::Tests
 		path.segments[1].signedSweepRadians = 1.2f;
 		path.style.profile = "CameraFacing";
 		path.style.ribbonNormal = {0.2f, 0.3f, 0.4f};
+		path.style.ribbonThickness = 0.37f;
 		path.style.width = 0.25f;
 		path.style.join = "Round";
 		path.style.cap = "Round";
@@ -69,6 +70,7 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(got.style.endDecorationFilled);
 		EXPECT_EQ(got.style.depthMode, "AlwaysOnTop");
 		EXPECT_EQ(got.style.ribbonNormal, path.style.ribbonNormal);
+		EXPECT_FLOAT_EQ(got.style.ribbonThickness, path.style.ribbonThickness);
 	}
 
 	TEST(SceneObjectsPathIOTests, MissingRibbonNormalKeepsV2AndUsesDefault)
@@ -97,6 +99,33 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
 		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
 		EXPECT_EQ(got.style.ribbonNormal, glm::vec3(0.0f, 1.0f, 0.0f));
+	}
+
+	TEST(SceneObjectsPathIOTests, MissingRibbonThicknessKeepsV2AndUsesZeroDefault)
+	{
+		PersistedScenePath path;
+		path.nodes = {{{0, 0, 0}}, {{1, 0, 0}}};
+		path.segments = {{}};
+		path.style.ribbonThickness = 0.37f;
+		SceneObjectsFile source;
+		source.structures.push_back({"k", {path}});
+		std::string text = SceneObjectsIO::Serialize(source);
+		// Erase the whole line, including indentation. Removing only the key leaves malformed YAML
+		// and tests the fixture surgery instead of the additive default.
+		const std::size_t key = text.find("ribbon_thickness:");
+		ASSERT_NE(key, std::string::npos);
+		const std::size_t lineStart = text.rfind('\n', key);
+		ASSERT_NE(lineStart, std::string::npos);
+		const std::size_t lineEnd = text.find('\n', key);
+		ASSERT_NE(lineEnd, std::string::npos);
+		text.erase(lineStart, lineEnd - lineStart);
+
+		const SceneObjectsFile loaded = Parse(text.c_str());
+		ASSERT_EQ(loaded.formatVersion, 2);
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_FLOAT_EQ(got.style.ribbonThickness, 0.0f);
 	}
 
 	TEST(SceneObjectsPathIOTests, MissingDecorationFilledKeepsV2AndUsesTrueDefault)

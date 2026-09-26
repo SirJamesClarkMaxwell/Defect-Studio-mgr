@@ -187,7 +187,8 @@ namespace DefectStudio::Tests
 		void AssertDecoratedEndHandoffInvariant(const StrokeGeometry &geometry, const PathStrokeStyle &style,
 			const EvaluatedSample &endpoint, const bool start)
 		{
-			const std::size_t vertexCount = style.profile == StrokeProfile::Round ? geometry.tubeVertices.size() : geometry.ribbonVertices.size();
+			const bool usesTube = !geometry.tubeVertices.empty();
+			const std::size_t vertexCount = usesTube ? geometry.tubeVertices.size() : geometry.ribbonVertices.size();
 			ASSERT_GT(vertexCount, 0u);
 			ASSERT_FALSE(geometry.shaft.IsEmpty());
 			std::vector<std::uint32_t> shaftVertices;
@@ -207,13 +208,13 @@ namespace DefectStudio::Tests
 			for (const std::uint32_t vertexIndex : shaftVertices)
 			{
 				ASSERT_LT(vertexIndex, vertexCount);
-				const float dashCoord = style.profile == StrokeProfile::Round ? geometry.tubeVertices[vertexIndex].dashCoord : geometry.ribbonVertices[vertexIndex].dashCoord;
+				const float dashCoord = usesTube ? geometry.tubeVertices[vertexIndex].dashCoord : geometry.ribbonVertices[vertexIndex].dashCoord;
 				if (std::abs(dashCoord - boundaryArc) <= 1.0e-5f)
 					boundaryVertices.push_back(vertexIndex);
 			}
 			ASSERT_FALSE(boundaryVertices.empty());
 
-			if (style.profile == StrokeProfile::Round)
+			if (usesTube && style.profile == StrokeProfile::Round)
 			{
 				const float radius = style.width * 0.5f;
 				for (const std::uint32_t vertexIndex : boundaryVertices)
@@ -245,7 +246,7 @@ namespace DefectStudio::Tests
 					EXPECT_TRUE(matched) << "shaft boundary does not carry the endpoint frame";
 				}
 			}
-			else
+			else if (!usesTube)
 			{
 				for (const std::uint32_t vertexIndex : boundaryVertices)
 				{
@@ -257,8 +258,230 @@ namespace DefectStudio::Tests
 					EXPECT_NEAR(vertex.halfWidth, style.width * 0.5f, 1.0e-5f);
 				}
 			}
+			else
+			{
+				ASSERT_EQ(style.profile, StrokeProfile::Flat);
+				ASSERT_GT(style.ribbonThickness, 0.0f);
+				const glm::vec3 tangent(endpoint.tangent);
+				const glm::vec3 normal(endpoint.normal);
+				const glm::vec3 binormal(endpoint.binormal);
+				float minimumNormal = std::numeric_limits<float>::infinity();
+				float maximumNormal = -std::numeric_limits<float>::infinity();
+				float minimumBinormal = std::numeric_limits<float>::infinity();
+				float maximumBinormal = -std::numeric_limits<float>::infinity();
+				for (const std::uint32_t vertexIndex : boundaryVertices)
+				{
+					ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
+					const glm::vec3 offset = geometry.tubeVertices[vertexIndex].position - expectedPosition;
+					EXPECT_NEAR(glm::dot(offset, tangent), 0.0f, 1.0e-5f);
+					const float normalProjection = glm::dot(offset, normal);
+					const float binormalProjection = glm::dot(offset, binormal);
+					minimumNormal = std::min(minimumNormal, normalProjection);
+					maximumNormal = std::max(maximumNormal, normalProjection);
+					minimumBinormal = std::min(minimumBinormal, binormalProjection);
+					maximumBinormal = std::max(maximumBinormal, binormalProjection);
+				}
+				EXPECT_NEAR(maximumNormal - minimumNormal, style.width, 1.0e-5f);
+				EXPECT_NEAR(maximumBinormal - minimumBinormal, style.ribbonThickness, 1.0e-5f);
+			}
+		}
+
+		void AssertTubeGeometryMatches(const StrokeGeometry &expected, const StrokeGeometry &actual)
+		{
+			ASSERT_EQ(expected.indices, actual.indices);
+			ASSERT_EQ(expected.tubeVertices.size(), actual.tubeVertices.size());
+			ASSERT_EQ(expected.ribbonVertices.size(), actual.ribbonVertices.size());
+			for (std::size_t index = 0; index < expected.tubeVertices.size(); ++index)
+			{
+				ASSERT_LT(index, expected.tubeVertices.size());
+				ASSERT_LT(index, actual.tubeVertices.size());
+				EXPECT_EQ(expected.tubeVertices[index].position, actual.tubeVertices[index].position);
+			}
+			for (std::size_t index = 0; index < expected.ribbonVertices.size(); ++index)
+			{
+				ASSERT_LT(index, expected.ribbonVertices.size());
+				ASSERT_LT(index, actual.ribbonVertices.size());
+				EXPECT_EQ(expected.ribbonVertices[index].position, actual.ribbonVertices[index].position);
+			}
+		}
+
+		void AssertReferencedTubeSpan(const StrokeGeometry &geometry, const StrokeMeshRange &range,
+			const glm::vec3 &axis, const float expectedSpan)
+		{
+			std::vector<std::uint32_t> vertices;
+			CollectReferencedVertices(geometry, range, geometry.tubeVertices.size(), vertices);
+			ASSERT_FALSE(vertices.empty());
+			float minimum = std::numeric_limits<float>::infinity();
+			float maximum = -std::numeric_limits<float>::infinity();
+			for (const std::uint32_t vertexIndex : vertices)
+			{
+				ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
+				const float projection = glm::dot(geometry.tubeVertices[vertexIndex].position, axis);
+				minimum = std::min(minimum, projection);
+				maximum = std::max(maximum, projection);
+			}
+			EXPECT_NEAR(maximum - minimum, expectedSpan, 1.0e-5f);
 		}
 	} // namespace
+
+	TEST(PathStrokeMesherTests, FlatZeroThicknessKeepsTheSheetVertexArray)
+	{
+		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle defaultStyle;
+		defaultStyle.profile = StrokeProfile::Flat;
+		defaultStyle.width = 0.2f;
+		defaultStyle.radialSegments = 7;
+		const StrokeGeometry defaultGeometry = BuildStroke(path, defaultStyle);
+
+		PathStrokeStyle explicitZero = defaultStyle;
+		explicitZero.ribbonThickness = 0.0f;
+		const StrokeGeometry zeroGeometry = BuildStroke(path, explicitZero);
+
+		ASSERT_FALSE(defaultGeometry.ribbonVertices.empty());
+		ASSERT_TRUE(defaultGeometry.tubeVertices.empty());
+		ASSERT_FALSE(zeroGeometry.ribbonVertices.empty());
+		ASSERT_TRUE(zeroGeometry.tubeVertices.empty());
+		EXPECT_EQ(zeroGeometry.ribbonVertices.size(), defaultGeometry.ribbonVertices.size());
+		EXPECT_EQ(zeroGeometry.indices.size(), defaultGeometry.indices.size());
+	}
+
+	TEST(PathStrokeMesherTests, PositiveFlatRibbonThicknessUsesTubeVerticesOnly)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.2f;
+		style.ribbonThickness = 0.3f;
+		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+
+		ASSERT_FALSE(geometry.tubeVertices.empty());
+		EXPECT_TRUE(geometry.ribbonVertices.empty());
+	}
+
+	TEST(PathStrokeMesherTests, ThickFlatRingsHaveFourCornersRegardlessOfRadialSegments)
+	{
+		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.2f;
+		style.ribbonThickness = 0.3f;
+		style.radialSegments = 11;
+		const StrokeGeometry geometry = BuildStroke(path, style);
+
+		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 4u);
+		EXPECT_TRUE(geometry.ribbonVertices.empty());
+	}
+
+	TEST(PathStrokeMesherTests, ThickFlatRingSpansAreTheInputWidthAndThickness)
+	{
+		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.6f;
+		style.ribbonThickness = 0.4f;
+		style.radialSegments = 3;
+		const StrokeGeometry geometry = BuildStroke(path, style);
+
+		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 4u);
+		for (std::size_t sampleIndex = 0; sampleIndex < path.samples.size(); ++sampleIndex)
+		{
+			const std::size_t firstVertex = sampleIndex * 4u;
+			ASSERT_LE(firstVertex + 4u, geometry.tubeVertices.size());
+			const glm::vec3 normal(path.samples[sampleIndex].normal);
+			const glm::vec3 binormal(path.samples[sampleIndex].binormal);
+			float minimumNormal = std::numeric_limits<float>::infinity();
+			float maximumNormal = -std::numeric_limits<float>::infinity();
+			float minimumBinormal = std::numeric_limits<float>::infinity();
+			float maximumBinormal = -std::numeric_limits<float>::infinity();
+			for (std::size_t corner = 0; corner < 4u; ++corner)
+			{
+				ASSERT_LT(firstVertex + corner, geometry.tubeVertices.size());
+				const glm::vec3 offset = geometry.tubeVertices[firstVertex + corner].position - glm::vec3(path.samples[sampleIndex].position);
+				const float normalProjection = glm::dot(offset, normal);
+				const float binormalProjection = glm::dot(offset, binormal);
+				minimumNormal = std::min(minimumNormal, normalProjection);
+				maximumNormal = std::max(maximumNormal, normalProjection);
+				minimumBinormal = std::min(minimumBinormal, binormalProjection);
+				maximumBinormal = std::max(maximumBinormal, binormalProjection);
+			}
+			EXPECT_NEAR(maximumNormal - minimumNormal, style.width, 1.0e-5f);
+			EXPECT_NEAR(maximumBinormal - minimumBinormal, style.ribbonThickness, 1.0e-5f);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, ThickFlatEndDecorationSpansTheRibbonThickness)
+	{
+		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.2f;
+		style.ribbonThickness = 0.35f;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+		const StrokeGeometry geometry = BuildStroke(path, style);
+
+		ASSERT_FALSE(geometry.tubeVertices.empty());
+		ASSERT_TRUE(geometry.ribbonVertices.empty());
+		ASSERT_FALSE(geometry.endDecoration.IsEmpty());
+		const EvaluatedSample &endpoint = path.samples.back();
+		const float decorationFullWidth = 2.0f * style.endDecoration.widthScale * style.width;
+		AssertReferencedTubeSpan(geometry, geometry.endDecoration, glm::vec3(endpoint.normal), decorationFullWidth);
+		AssertReferencedTubeSpan(geometry, geometry.endDecoration, glm::vec3(endpoint.binormal), style.ribbonThickness);
+	}
+
+	TEST(PathStrokeMesherTests, ThickFlatCurvedDecoratedEndUsesTheExistingEndpointHandoff)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.2f;
+		style.ribbonThickness = 0.3f;
+		style.radialSegments = 9;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+		const StrokeGeometry geometry = BuildStroke(path, style);
+
+		ASSERT_FALSE(geometry.tubeVertices.empty());
+		ASSERT_TRUE(geometry.ribbonVertices.empty());
+		AssertDecoratedEndHandoffInvariant(geometry, style, path.samples.back(), false);
+	}
+
+	TEST(PathStrokeMesherTests, RibbonThicknessIsIgnoredByRoundAndCameraFacingProfiles)
+	{
+		for (const StrokeProfile profile : {StrokeProfile::Round, StrokeProfile::CameraFacing})
+		{
+			PathStrokeStyle style;
+			style.profile = profile;
+			style.width = 0.2f;
+			style.radialSegments = 7;
+			style.endDecoration.kind = PathDecorationKind::Arrow;
+			const StrokeGeometry baseline = BuildStroke(StraightPath(), style);
+			style.ribbonThickness = 0.6f;
+			const StrokeGeometry withThickness = BuildStroke(StraightPath(), style);
+			SCOPED_TRACE(static_cast<int>(profile));
+			AssertTubeGeometryMatches(baseline, withThickness);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, NegativeAndNonFiniteRibbonThicknessUsesZeroThicknessGeometry)
+	{
+		PathStrokeStyle zeroStyle;
+		zeroStyle.profile = StrokeProfile::Flat;
+		zeroStyle.width = 0.2f;
+		const StrokeGeometry zero = BuildStroke(StraightPath(), zeroStyle);
+		ASSERT_FALSE(zero.ribbonVertices.empty());
+		ASSERT_TRUE(zero.tubeVertices.empty());
+
+		for (const float thickness : {-0.1f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
+		{
+			PathStrokeStyle invalid = zeroStyle;
+			invalid.ribbonThickness = thickness;
+			const StrokeGeometry geometry = BuildStroke(StraightPath(), invalid);
+			SCOPED_TRACE(thickness);
+			EXPECT_TRUE(geometry.tubeVertices.empty());
+			EXPECT_FALSE(geometry.ribbonVertices.empty());
+			EXPECT_EQ(geometry.ribbonVertices.size(), zero.ribbonVertices.size());
+			EXPECT_EQ(geometry.indices.size(), zero.indices.size());
+		}
+	}
 	TEST(PathStrokeMesherTests, GradientClampsAndInterpolatesStops)
 	{
 		PathStrokeStyle style;
