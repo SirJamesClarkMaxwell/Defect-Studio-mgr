@@ -115,6 +115,55 @@ namespace DefectStudio
 	void BeginScenePathStyleDrag(RendererWindowState &windowState);
 	bool CommitScenePathStyleDrag(RendererWindowState &windowState);
 
+	// Location, Rotation and Scale, as the N panel shows them. Separate from ScenePathStyleEdit
+	// because a transform is not style: it does not invalidate the mesh cache, it is per-object by
+	// nature, and it is the one thing here that survives as a persistent value rather than being
+	// recomputed from the geometry.
+	//
+	// task/41 transform-3. Rotation is Euler XYZ in DEGREES, because that is what a person types.
+	// `ScenePath::transform` stores a quaternion, so this struct converts on the way in and out.
+	// Two consequences to be honest about, both of which Blender shares:
+	//   * The round trip is not the identity. Reading a quaternion as Euler picks one of several
+	//     equivalent triples, so opening the panel on a rotated path may show 90/0/0 where the user
+	//     typed 0/90/0 for the same orientation. That is inherent to showing Euler at all.
+	//   * A field must therefore only be written back when the user actually edits it. Applying all
+	//     three on every frame would re-quantise the rotation continuously and drift.
+	struct ScenePathTransformEdit
+	{
+		glm::vec3 position{0.0f};
+		glm::vec3 rotationDegrees{0.0f};
+		glm::vec3 scale{1.0f};
+	};
+
+	struct ScenePathTransformEditState
+	{
+		ScenePathTransformEdit values;
+		bool mixedPosition = false;
+		bool mixedRotation = false;
+		bool mixedScale = false;
+		std::size_t resolved = 0;
+	};
+
+	// Pure: no ImGui, no window mutation. The first selected path's transform, with `mixed` naming
+	// the components that differ across the selection.
+	[[nodiscard]] ScenePathTransformEditState ResolveScenePathTransformEdit(
+		const RendererWindowState &windowState, const std::vector<SceneObjectId> &selection);
+
+	// Writes `edit` onto every selected path. Returns how many changed.
+	//
+	// A multi-selection flattens, the same way the style editor does: typing a Location applies that
+	// Location to all of them, rather than offsetting each by a delta. That is what the field says
+	// it does, and a delta would need a separate control to mean anything.
+	std::size_t ApplyScenePathTransformEdit(
+		RendererWindowState &windowState, const std::vector<SceneObjectId> &selection,
+		const ScenePathTransformEdit &edit);
+
+	// Draws the Location / Rotation / Scale block for the current selection. Returns true when it
+	// wrote anything. Drags go through BeginScenePathStyleDrag / CommitScenePathStyleDrag, which
+	// despite the name is the window's one in-flight-edit snapshot and is what keeps a drag to a
+	// single undo entry.
+	bool DrawScenePathTransformEditor(RendererWindowState &windowState);
+
 	// Renames one path. Separate from the style edit because a name is per-object by definition:
 	// there is no sensible multi-selection meaning for it.
 	//
