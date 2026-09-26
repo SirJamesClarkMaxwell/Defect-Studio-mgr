@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "Renderer/Path/PathStyle.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
@@ -40,7 +41,16 @@ namespace DefectStudio
 	struct PathHandle
 	{
 		PathElementId id;
-		glm::vec3 position{0.0f}; // absolute world position, not an offset from the node
+		// task/41 transform-1: an OFFSET from the node this handle belongs to, in the path's local
+		// space. It used to be an absolute position, and that stopped working the moment a path got
+		// an object transform: a segment between a free node and a node bound to an atom has one
+		// handle that should follow the transform and one that should follow the atom, and an
+		// absolute handle has to be told which. An offset follows its own node either way, so
+		// neither the transform nor the binding resolver has to ask.
+		//
+		// Files written before this store absolute positions; loading subtracts the node position
+		// once. The conversion is lossless.
+		glm::vec3 offset{0.0f};
 		BezierHandleType type = BezierHandleType::Auto;
 	};
 
@@ -108,6 +118,25 @@ namespace DefectStudio
 		PathSegmentData data;
 	};
 
+	// Where a path sits, which way it faces and how big it is - the same three things Blender's
+	// Object Mode gives every object, and the reason its N panel can show Location, Rotation and
+	// Scale as persistent fields while Edit Mode cannot.
+	//
+	// task/41 transform-1. Before this, node positions were world space and there was no transform
+	// at all, so the Properties panel had nothing to show, `SceneTransformLocalBasis` returned
+	// nullopt for a path-only selection, and Local orientation silently fell back to Global.
+	//
+	// The rotation is stored as a quaternion and displayed as XYZ degrees. Storing the Euler angles
+	// instead would make the panel simpler and the modal transform wrong: `R` rotates about an
+	// arbitrary axis, and composing that onto Euler angles has to round-trip through a matrix and
+	// pick one of several equivalent readings every time.
+	struct PathTransform
+	{
+		glm::vec3 position{0.0f};
+		glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+		glm::vec3 scale{1.0f};
+	};
+
 	struct ScenePath
 	{
 		SceneObjectId id;
@@ -121,6 +150,10 @@ namespace DefectStudio
 		// Style defaults produce a plain opaque round tube, so every pre-S5 construction of a
 		// ScenePath keeps meaning exactly what it meant before.
 		PathStrokeStyle style;
+		// The identity by default, and under the identity a local position equals the world position
+		// it used to be - which is what makes every file written before this load unchanged and the
+		// format version stay where it is.
+		PathTransform transform;
 	};
 
 	[[nodiscard]] inline PathElementId AllocateElementId(ScenePath &path)
