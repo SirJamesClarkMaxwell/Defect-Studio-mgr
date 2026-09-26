@@ -80,6 +80,44 @@ namespace DefectStudio
 			return result;
 		}
 
+		struct GradientPieceSample
+		{
+			EvaluatedSample sample;
+			glm::vec4 color{1.0f};
+			bool isGradientStop = false;
+		};
+
+		[[nodiscard]] std::vector<GradientPieceSample> GradientSamples(const EvaluatedPath &path,
+			const DashInterval &interval, const PathStrokeStyle &style)
+		{
+			std::vector<GradientPieceSample> result;
+			for (const EvaluatedSample &sample : PieceSamples(path, interval))
+				result.push_back({sample, SampleStrokeColor(style, sample.normalizedT), false});
+
+			for (const PathGradientStop &stop : style.gradient.stops)
+			{
+				const double length = static_cast<double>(stop.position) * path.totalLength;
+				if (length < interval.start || length > interval.end)
+					continue;
+				const auto existing = std::find_if(result.begin(), result.end(), [length](const GradientPieceSample &sample) {
+					return !sample.isGradientStop && sample.sample.arcLength == length;
+				});
+				const glm::vec4 color(stop.color, stop.alpha);
+				if (existing != result.end())
+				{
+					existing->color = color;
+					existing->isGradientStop = true;
+				}
+				else
+					result.push_back({AtLength(path, length), color, true});
+			}
+
+			std::stable_sort(result.begin(), result.end(), [](const GradientPieceSample &a, const GradientPieceSample &b) {
+				return a.sample.arcLength < b.sample.arcLength;
+			});
+			return result;
+		}
+
 		[[nodiscard]] EvaluatedSample DecorationBackSample(const EvaluatedSample &sampled, const EvaluatedSample &endpoint,
 			const DecorationContour &contour, const bool start)
 		{
@@ -110,7 +148,8 @@ namespace DefectStudio
 		// A real round cap: latitude rings revolved a quarter turn off the boundary ring. A single
 		// centre fan would have been a flat disc, which is a Butt cap with extra triangles.
 		void AppendHemisphereCap(StrokeGeometry &geometry, const EvaluatedSample &sample,
-			const PathStrokeStyle &style, const bool end, const std::uint32_t boundaryRing)
+			const PathStrokeStyle &style, const bool end, const std::uint32_t boundaryRing,
+			const glm::vec4 *color)
 		{
 			constexpr std::uint32_t kCapRings = 3;
 			const double radius = static_cast<double>(style.width) * 0.5;
@@ -123,6 +162,9 @@ namespace DefectStudio
 				const glm::dvec3 centre = sample.position + axis * (radius * std::sin(theta));
 				const std::uint32_t upper = detail::AppendCrossSectionRing(
 					geometry, centre, sample, radius, style, false, std::cos(theta));
+				if (color != nullptr)
+					for (std::uint32_t radial = 0; radial < ringSize; ++radial)
+						geometry.tubeVertices[upper + radial].color = *color;
 				for (std::uint32_t radial = 0; radial < ringSize; ++radial)
 				{
 					// The apex ring is a single point on the axis; its normal comes from the axis, not from
@@ -138,7 +180,7 @@ namespace DefectStudio
 		}
 
 		void AppendTubePiece(StrokeGeometry &geometry, std::vector<EvaluatedSample> samples, const PathStrokeStyle &style,
-			const bool capStart, const bool capEnd)
+			const bool capStart, const bool capEnd, const std::vector<glm::vec4> *colors = nullptr)
 		{
 			if (samples.size() < 2)
 				return;
@@ -150,8 +192,15 @@ namespace DefectStudio
 				samples.front().position -= samples.front().tangent * static_cast<double>(radius);
 				samples.back().position += samples.back().tangent * static_cast<double>(radius);
 			}
-			for (const EvaluatedSample &sample : samples)
-				detail::AppendCrossSectionRing(geometry, sample.position, sample, radius, style);
+			const bool hasColors = colors != nullptr && colors->size() == samples.size();
+			for (std::size_t index = 0; index < samples.size(); ++index)
+			{
+				const std::uint32_t ring = detail::AppendCrossSectionRing(geometry, samples[index].position,
+					samples[index], radius, style);
+				if (hasColors)
+					for (std::uint32_t radial = 0; radial < ringSize; ++radial)
+						geometry.tubeVertices[ring + radial].color = (*colors)[index];
+			}
 			for (std::size_t ring = 0; ring + 1u < samples.size(); ++ring)
 			{
 				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * ringSize;
@@ -161,20 +210,28 @@ namespace DefectStudio
 			if (style.cap == PathLineCap::Round)
 			{
 				if (capStart)
-					AppendHemisphereCap(geometry, samples.front(), style, false, first);
+					AppendHemisphereCap(geometry, samples.front(), style, false, first,
+						hasColors ? &(*colors)[0] : nullptr);
 				if (capEnd)
 					AppendHemisphereCap(geometry, samples.back(), style, true,
-						first + static_cast<std::uint32_t>(samples.size() - 1u) * ringSize);
+						first + static_cast<std::uint32_t>(samples.size() - 1u) * ringSize,
+						hasColors ? &colors->back() : nullptr);
 			}
 		}
 
-		void AppendRibbonPiece(StrokeGeometry &geometry, const std::vector<EvaluatedSample> &samples, const PathStrokeStyle &style)
+		void AppendRibbonPiece(StrokeGeometry &geometry, const std::vector<EvaluatedSample> &samples, const PathStrokeStyle &style,
+			const std::vector<glm::vec4> *colors = nullptr)
 		{
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.ribbonVertices.size());
-			for (const EvaluatedSample &sample : samples)
+			const bool hasColors = colors != nullptr && colors->size() == samples.size();
+			for (std::size_t index = 0; index < samples.size(); ++index)
+			{
+				const EvaluatedSample &sample = samples[index];
 				for (const float side : {-1.0f, 1.0f})
 					geometry.ribbonVertices.push_back({glm::vec3(sample.position), glm::vec3(sample.tangent), glm::vec3(sample.normal),
-						SampleStrokeColor(style, sample.normalizedT), side, static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength), style.width * 0.5f});
+						hasColors ? (*colors)[index] : SampleStrokeColor(style, sample.normalizedT), side,
+						static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength), style.width * 0.5f});
+			}
 			for (std::uint32_t index = 0; index + 1u < samples.size(); ++index)
 			{
 				const std::uint32_t a = first + index * 2u;
@@ -198,6 +255,8 @@ namespace DefectStudio
 			{
 				const PathGradientStop &a = stops[index - 1];
 				const PathGradientStop &b = stops[index];
+				if (b.position == a.position)
+					return glm::vec4(b.color, b.alpha);
 				const double fraction = (normalizedT - a.position) / (b.position - a.position);
 				return glm::vec4(glm::mix(a.color, b.color, static_cast<float>(fraction)), glm::mix(a.alpha, b.alpha, static_cast<float>(fraction)));
 			}
@@ -236,9 +295,24 @@ namespace DefectStudio
 		const std::vector<DashInterval> intervals = BuildDashIntervals(geometry.shaftRange.start, geometry.shaftRange.end, style.dash);
 		geometry.dashedLength = DashCoverage(intervals);
 		geometry.shaft.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
+		const bool hasGradientSamples = style.gradient.enabled && !style.gradient.stops.empty();
 		for (const DashInterval &interval : intervals)
 		{
-			std::vector<EvaluatedSample> samples = PieceSamples(evaluated, interval);
+			std::vector<EvaluatedSample> samples;
+			std::vector<glm::vec4> sampleColors;
+			if (hasGradientSamples)
+			{
+				const std::vector<GradientPieceSample> gradientSamples = GradientSamples(evaluated, interval, style);
+				samples.reserve(gradientSamples.size());
+				sampleColors.reserve(gradientSamples.size());
+				for (const GradientPieceSample &gradientSample : gradientSamples)
+				{
+					samples.push_back(gradientSample.sample);
+					sampleColors.push_back(gradientSample.color);
+				}
+			}
+			else
+				samples = PieceSamples(evaluated, interval);
 			const bool atStart = interval.start == geometry.shaftRange.start;
 			const bool atEnd = interval.end == geometry.shaftRange.end;
 			const bool startHandoff = atStart && NeedsDecorationHandoff(samples.front(), evaluated.samples.front(), startContour, true);
@@ -248,9 +322,10 @@ namespace DefectStudio
 			if (endHandoff)
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (detail::UsesTubeVertices(style))
-				AppendTubePiece(geometry, samples, style, !(atStart && startContour.closesBack), !(atEnd && endContour.closesBack));
+				AppendTubePiece(geometry, samples, style, !(atStart && startContour.closesBack),
+					!(atEnd && endContour.closesBack), hasGradientSamples ? &sampleColors : nullptr);
 			else
-				AppendRibbonPiece(geometry, samples, style);
+				AppendRibbonPiece(geometry, samples, style, hasGradientSamples ? &sampleColors : nullptr);
 		}
 		geometry.shaft.indexCount = static_cast<std::uint32_t>(geometry.indices.size()) - geometry.shaft.firstIndex;
 		return geometry;
