@@ -172,8 +172,157 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit), 2u);
 		ASSERT_EQ(undoStack->GetUndoDepth(), 1u);
 		ASSERT_TRUE(undoStack->Undo());
-		EXPECT_FLOAT_EQ(live.paths->Store().Find(first)->style.width, 0.05f);
-		EXPECT_FLOAT_EQ(live.paths->Store().Find(second)->style.width, 0.05f);
+		const ScenePath *restoredFirst = live.paths->Store().Find(first);
+		const ScenePath *restoredSecond = live.paths->Store().Find(second);
+		ASSERT_NE(restoredFirst, nullptr);
+		ASSERT_NE(restoredSecond, nullptr);
+		EXPECT_FLOAT_EQ(restoredFirst->style.width, 0.05f);
+		EXPECT_FLOAT_EQ(restoredSecond->style.width, 0.05f);
+	}
+
+	TEST_F(ScenePathUndoTests, ScenePathStyleDragCommitsOneUndoAfterManySilentApplies)
+	{
+		RendererWindowState window;
+		window.windowId = "path-style-drag";
+		const SceneObjectId first = Add(window, Path(window, 1));
+		const SceneObjectId second = Add(window, Path(window, 2, 1.0f));
+		window.paths->Store().MutateStyle(first, [](ScenePath &path) {
+			path.style.alpha = 0.6f;
+			path.style.startDecoration = {PathDecorationKind::Circle, 2.0f, 0.75f, false};
+			path.style.endDecoration = {PathDecorationKind::Square, 1.5f, 0.5f, true};
+		});
+		window.paths->Store().MutateStyle(second, [](ScenePath &path) {
+			path.style.width = 0.15f;
+			path.style.alpha = 0.8f;
+			path.style.startDecoration = {PathDecorationKind::Kite, 1.25f, 1.5f, true};
+			path.style.endDecoration = {PathDecorationKind::Latex, 0.9f, 1.25f, false};
+		});
+		window.selectedScenePaths = {first, second};
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		const ScenePath *firstBeforePath = live.paths->Store().Find(first);
+		const ScenePath *secondBeforePath = live.paths->Store().Find(second);
+		ASSERT_NE(firstBeforePath, nullptr);
+		ASSERT_NE(secondBeforePath, nullptr);
+		const PathStrokeStyle firstBefore = firstBeforePath->style;
+		const PathStrokeStyle secondBefore = secondBeforePath->style;
+
+		BeginScenePathStyleDrag(live);
+		ScenePathStyleEdit edit;
+		edit.width = 0.2f;
+		edit.alpha = 0.25f;
+		edit.startDecoration = {PathDecorationKind::Diamond, 1.1f, 0.4f, true};
+		edit.endDecoration = {PathDecorationKind::Arrow, 1.6f, 0.8f, false};
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 2u);
+		edit.width = 0.3f;
+		edit.startDecoration.lengthScale = 1.7f;
+		edit.endDecoration.widthScale = 1.2f;
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 2u);
+		edit.width = 0.4f;
+		edit.startDecoration.filled = false;
+		edit.endDecoration.filled = true;
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 2u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+
+		ASSERT_TRUE(CommitScenePathStyleDrag(live));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		EXPECT_FALSE(live.scenePathStyleEditBefore.has_value());
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *restoredFirst = live.paths->Store().Find(first);
+		const ScenePath *restoredSecond = live.paths->Store().Find(second);
+		ASSERT_NE(restoredFirst, nullptr);
+		ASSERT_NE(restoredSecond, nullptr);
+		EXPECT_FLOAT_EQ(restoredFirst->style.width, firstBefore.width);
+		EXPECT_FLOAT_EQ(restoredFirst->style.alpha, firstBefore.alpha);
+		EXPECT_EQ(restoredFirst->style.startDecoration.kind, firstBefore.startDecoration.kind);
+		EXPECT_FLOAT_EQ(restoredFirst->style.startDecoration.lengthScale, firstBefore.startDecoration.lengthScale);
+		EXPECT_FLOAT_EQ(restoredFirst->style.startDecoration.widthScale, firstBefore.startDecoration.widthScale);
+		EXPECT_EQ(restoredFirst->style.startDecoration.filled, firstBefore.startDecoration.filled);
+		EXPECT_EQ(restoredFirst->style.endDecoration.kind, firstBefore.endDecoration.kind);
+		EXPECT_FLOAT_EQ(restoredFirst->style.endDecoration.lengthScale, firstBefore.endDecoration.lengthScale);
+		EXPECT_FLOAT_EQ(restoredFirst->style.endDecoration.widthScale, firstBefore.endDecoration.widthScale);
+		EXPECT_EQ(restoredFirst->style.endDecoration.filled, firstBefore.endDecoration.filled);
+		EXPECT_FLOAT_EQ(restoredSecond->style.width, secondBefore.width);
+		EXPECT_FLOAT_EQ(restoredSecond->style.alpha, secondBefore.alpha);
+		EXPECT_EQ(restoredSecond->style.startDecoration.kind, secondBefore.startDecoration.kind);
+		EXPECT_FLOAT_EQ(restoredSecond->style.startDecoration.lengthScale, secondBefore.startDecoration.lengthScale);
+		EXPECT_FLOAT_EQ(restoredSecond->style.startDecoration.widthScale, secondBefore.startDecoration.widthScale);
+		EXPECT_EQ(restoredSecond->style.startDecoration.filled, secondBefore.startDecoration.filled);
+		EXPECT_EQ(restoredSecond->style.endDecoration.kind, secondBefore.endDecoration.kind);
+		EXPECT_FLOAT_EQ(restoredSecond->style.endDecoration.lengthScale, secondBefore.endDecoration.lengthScale);
+		EXPECT_FLOAT_EQ(restoredSecond->style.endDecoration.widthScale, secondBefore.endDecoration.widthScale);
+		EXPECT_EQ(restoredSecond->style.endDecoration.filled, secondBefore.endDecoration.filled);
+	}
+
+	TEST_F(ScenePathUndoTests, BeginningAnExistingStyleDragDoesNotReplaceItsSnapshot)
+	{
+		RendererWindowState window;
+		window.windowId = "path-style-drag-begin";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.selectedScenePaths = {id};
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		const ScenePath *beforePath = live.paths->Store().Find(id);
+		ASSERT_NE(beforePath, nullptr);
+		const float before = beforePath->style.width;
+
+		BeginScenePathStyleDrag(live);
+		ScenePathStyleEdit edit;
+		edit.width = 0.2f;
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		BeginScenePathStyleDrag(live);
+		edit.width = 0.3f;
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		ASSERT_TRUE(CommitScenePathStyleDrag(live));
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *restored = live.paths->Store().Find(id);
+		ASSERT_NE(restored, nullptr);
+		EXPECT_FLOAT_EQ(restored->style.width, before);
+	}
+
+	TEST_F(ScenePathUndoTests, CommittingWithoutAStyleDragDoesNothing)
+	{
+		RendererWindowState window;
+		window.windowId = "path-style-no-drag";
+		Add(window, Path(window, 1));
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		EXPECT_FALSE(CommitScenePathStyleDrag(live));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+	}
+
+	TEST_F(ScenePathUndoTests, UnchangedStyleDragLeavesNoUndoEntry)
+	{
+		RendererWindowState window;
+		window.windowId = "path-style-unchanged";
+		Add(window, Path(window, 1));
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		BeginScenePathStyleDrag(live);
+		EXPECT_FALSE(CommitScenePathStyleDrag(live));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+		EXPECT_FALSE(live.scenePathStyleEditBefore.has_value());
+	}
+
+	TEST_F(ScenePathUndoTests, ImmediateComboStyleEditsStillRecordOneUndoEach)
+	{
+		RendererWindowState window;
+		window.windowId = "path-style-combos";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.selectedScenePaths = {id};
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		ScenePathStyleEdit edit;
+		edit.profile = StrokeProfile::Flat;
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, true), 1u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		edit.depthMode = PathDepthMode::AlwaysOnTop;
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, true), 1u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 2u);
+		edit.startDecoration = {PathDecorationKind::Kite, 1.5f, 0.75f, false};
+		edit.endDecoration = {PathDecorationKind::Circle, 0.8f, 1.25f, true};
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, true), 1u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 3u);
 	}
 
 	TEST_F(ScenePathUndoTests, DuplicateThreePathsUsesOneUndo)
@@ -229,5 +378,37 @@ namespace DefectStudio::Tests
 		const PathEvaluationKey after{window.paths->Store().RevisionsFor(id), 0, 3};
 		EXPECT_NE(before.revisions.style, after.revisions.style);
 		EXPECT_EQ(window.paths->Caches().Find(id, after), nullptr);
+	}
+
+	TEST(ScenePathOperationsTests, StyleDragSnapshotsBelongToTheirOwnWindows)
+	{
+		RendererWindowState firstWindow;
+		RendererWindowState secondWindow;
+		const SceneObjectId firstId = Add(firstWindow, Path(firstWindow, 1));
+		const SceneObjectId secondId = Add(secondWindow, Path(secondWindow, 2));
+		secondWindow.paths->Store().MutateStyle(secondId, [](ScenePath &path) { path.style.width = 0.15f; });
+
+		BeginScenePathStyleDrag(firstWindow);
+		BeginScenePathStyleDrag(secondWindow);
+		ASSERT_TRUE(firstWindow.scenePathStyleEditBefore.has_value());
+		ASSERT_TRUE(secondWindow.scenePathStyleEditBefore.has_value());
+		const ScenePath *firstSnapshot = firstWindow.scenePathStyleEditBefore->paths.Find(firstId);
+		const ScenePath *secondSnapshot = secondWindow.scenePathStyleEditBefore->paths.Find(secondId);
+		ASSERT_NE(firstSnapshot, nullptr);
+		ASSERT_NE(secondSnapshot, nullptr);
+		EXPECT_FLOAT_EQ(firstSnapshot->style.width, 0.05f);
+		EXPECT_FLOAT_EQ(secondSnapshot->style.width, 0.15f);
+
+		ScenePathStyleEdit edit;
+		edit.width = 0.4f;
+		ASSERT_EQ(ApplyScenePathStyleEdit(firstWindow, {firstId}, edit, false), 1u);
+		ASSERT_TRUE(firstWindow.scenePathStyleEditBefore.has_value());
+		ASSERT_TRUE(secondWindow.scenePathStyleEditBefore.has_value());
+		firstSnapshot = firstWindow.scenePathStyleEditBefore->paths.Find(firstId);
+		secondSnapshot = secondWindow.scenePathStyleEditBefore->paths.Find(secondId);
+		ASSERT_NE(firstSnapshot, nullptr);
+		ASSERT_NE(secondSnapshot, nullptr);
+		EXPECT_FLOAT_EQ(firstSnapshot->style.width, 0.05f);
+		EXPECT_FLOAT_EQ(secondSnapshot->style.width, 0.15f);
 	}
 }

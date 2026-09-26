@@ -51,6 +51,7 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		AddPaths(window);
 		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
 		const ScenePathStyleEditState one = ResolveScenePathStyleEdit(window, {ids[0]});
 		EXPECT_EQ(one.resolved, 1u);
 		EXPECT_FLOAT_EQ(one.values.width, 0.05f);
@@ -67,6 +68,7 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		AddPaths(window);
 		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
 		window.paths->Store().MutateStyle(ids[0], [](ScenePath &path) {
 			path.style.profile = StrokeProfile::Flat;
 			path.style.ribbonNormal = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -81,7 +83,11 @@ namespace DefectStudio::Tests
 		edit.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
 		EXPECT_EQ(ApplyScenePathStyleEdit(window, ids, edit), 2u);
 		for (const SceneObjectId id : ids)
-			EXPECT_EQ(window.paths->Store().Find(id)->style.ribbonNormal, edit.ribbonNormal);
+		{
+			const ScenePath *path = window.paths->Store().Find(id);
+			ASSERT_NE(path, nullptr);
+			EXPECT_EQ(path->style.ribbonNormal, edit.ribbonNormal);
+		}
 	}
 
 	TEST(ScenePathEditorWidgetTests, ApplyWritesEveryLiveSelectionAndOneUnknownIsIgnored)
@@ -89,12 +95,17 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		AddPaths(window);
 		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
 		ScenePathStyleEdit edit;
 		edit.width = 0.3f;
 		edit.alpha = 0.4f;
 		EXPECT_EQ(ApplyScenePathStyleEdit(window, {ids[0], ids[1], SceneObjectId{999}}, edit), 2u);
-		EXPECT_FLOAT_EQ(window.paths->Store().Find(ids[0])->style.width, 0.3f);
-		EXPECT_FLOAT_EQ(window.paths->Store().Find(ids[1])->style.alpha, 0.4f);
+		const ScenePath *first = window.paths->Store().Find(ids[0]);
+		const ScenePath *second = window.paths->Store().Find(ids[1]);
+		ASSERT_NE(first, nullptr);
+		ASSERT_NE(second, nullptr);
+		EXPECT_FLOAT_EQ(first->style.width, 0.3f);
+		EXPECT_FLOAT_EQ(second->style.alpha, 0.4f);
 	}
 
 	TEST(ScenePathEditorWidgetTests, ApplyWritesAllStyleComboValuesToEverySelectedPath)
@@ -102,10 +113,11 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		AddPaths(window);
 		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
 		ScenePathStyleEdit edit;
 		edit.profile = StrokeProfile::CameraFacing;
-		edit.startDecoration = PathDecorationKind::Bar;
-		edit.endDecoration = PathDecorationKind::Diamond;
+		edit.startDecoration = {PathDecorationKind::Bar, 2.0f, 0.5f, false};
+		edit.endDecoration = {PathDecorationKind::Diamond, 1.5f, 2.5f, true};
 		edit.depthMode = PathDepthMode::AlwaysOnTop;
 
 		EXPECT_EQ(ApplyScenePathStyleEdit(window, ids, edit), 2u);
@@ -115,19 +127,79 @@ namespace DefectStudio::Tests
 			ASSERT_NE(path, nullptr);
 			EXPECT_EQ(path->style.profile, StrokeProfile::CameraFacing);
 			EXPECT_EQ(path->style.startDecoration.kind, PathDecorationKind::Bar);
+			EXPECT_FLOAT_EQ(path->style.startDecoration.lengthScale, 2.0f);
+			EXPECT_FLOAT_EQ(path->style.startDecoration.widthScale, 0.5f);
+			EXPECT_FALSE(path->style.startDecoration.filled);
 			EXPECT_EQ(path->style.endDecoration.kind, PathDecorationKind::Diamond);
+			EXPECT_FLOAT_EQ(path->style.endDecoration.lengthScale, 1.5f);
+			EXPECT_FLOAT_EQ(path->style.endDecoration.widthScale, 2.5f);
+			EXPECT_TRUE(path->style.endDecoration.filled);
 			EXPECT_EQ(path->style.depthMode, PathDepthMode::AlwaysOnTop);
 		}
+	}
+
+	TEST(ScenePathEditorWidgetTests, ResolvesWholeEndpointDecorationsAndMarksAllFieldDifferencesMixed)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
+		const PathEndpointDecoration start{PathDecorationKind::Latex, 2.0f, 0.75f, false};
+		const PathEndpointDecoration end{PathDecorationKind::Kite, 1.25f, 1.5f, true};
+		for (const SceneObjectId id : ids)
+			window.paths->Store().MutateStyle(id, [&](ScenePath &path) {
+				path.style.startDecoration = start;
+				path.style.endDecoration = end;
+			});
+
+		const ScenePathStyleEditState resolved = ResolveScenePathStyleEdit(window, ids);
+		EXPECT_EQ(resolved.values.startDecoration.kind, start.kind);
+		EXPECT_FLOAT_EQ(resolved.values.startDecoration.lengthScale, start.lengthScale);
+		EXPECT_FLOAT_EQ(resolved.values.startDecoration.widthScale, start.widthScale);
+		EXPECT_EQ(resolved.values.startDecoration.filled, start.filled);
+		EXPECT_EQ(resolved.values.endDecoration.kind, end.kind);
+		EXPECT_FLOAT_EQ(resolved.values.endDecoration.lengthScale, end.lengthScale);
+		EXPECT_FLOAT_EQ(resolved.values.endDecoration.widthScale, end.widthScale);
+		EXPECT_EQ(resolved.values.endDecoration.filled, end.filled);
+		EXPECT_FALSE(resolved.mixedStartDecoration);
+		EXPECT_FALSE(resolved.mixedEndDecoration);
+
+		const auto expectStartMixed = [&](const auto &change) {
+			for (const SceneObjectId id : ids)
+				window.paths->Store().MutateStyle(id, [&](ScenePath &path) { path.style.startDecoration = start; });
+			window.paths->Store().MutateStyle(ids[1], [&](ScenePath &path) { change(path.style.startDecoration); });
+			const ScenePathStyleEditState state = ResolveScenePathStyleEdit(window, ids);
+			EXPECT_TRUE(state.mixedStartDecoration);
+		};
+		expectStartMixed([](PathEndpointDecoration &decoration) { decoration.kind = PathDecorationKind::Arrow; });
+		expectStartMixed([](PathEndpointDecoration &decoration) { decoration.lengthScale = 3.0f; });
+		expectStartMixed([](PathEndpointDecoration &decoration) { decoration.widthScale = 1.25f; });
+		expectStartMixed([](PathEndpointDecoration &decoration) { decoration.filled = true; });
+
+		const auto expectEndMixed = [&](const auto &change) {
+			for (const SceneObjectId id : ids)
+				window.paths->Store().MutateStyle(id, [&](ScenePath &path) { path.style.endDecoration = end; });
+			window.paths->Store().MutateStyle(ids[1], [&](ScenePath &path) { change(path.style.endDecoration); });
+			const ScenePathStyleEditState state = ResolveScenePathStyleEdit(window, ids);
+			EXPECT_TRUE(state.mixedEndDecoration);
+		};
+		expectEndMixed([](PathEndpointDecoration &decoration) { decoration.kind = PathDecorationKind::Arrow; });
+		expectEndMixed([](PathEndpointDecoration &decoration) { decoration.lengthScale = 2.0f; });
+		expectEndMixed([](PathEndpointDecoration &decoration) { decoration.widthScale = 0.5f; });
+		expectEndMixed([](PathEndpointDecoration &decoration) { decoration.filled = false; });
 	}
 
 	TEST(ScenePathEditorWidgetTests, DisplayNameUsesNameOrStoreIndex)
 	{
 		RendererWindowState window;
 		AddPaths(window);
+		ASSERT_GE(window.paths->Store().Size(), 2u);
 		const ScenePath *named = window.paths->Store().At(0);
 		ASSERT_NE(named, nullptr);
 		EXPECT_EQ(ScenePathDisplayName(*named, 0), "First");
-		ScenePath unnamed = *window.paths->Store().At(1);
+		const ScenePath *second = window.paths->Store().At(1);
+		ASSERT_NE(second, nullptr);
+		ScenePath unnamed = *second;
 		unnamed.name.clear();
 		EXPECT_EQ(ScenePathDisplayName(unnamed, 4), "Path #4");
 	}
@@ -136,9 +208,13 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState window;
 		AddPaths(window);
-		const SceneObjectId id = window.paths->Store().Ids().front();
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_FALSE(ids.empty());
+		const SceneObjectId id = ids.front();
 		EXPECT_TRUE(RenameScenePath(window, id, "Renamed"));
-		EXPECT_EQ(window.paths->Store().Find(id)->name, "Renamed");
+		const ScenePath *renamed = window.paths->Store().Find(id);
+		ASSERT_NE(renamed, nullptr);
+		EXPECT_EQ(renamed->name, "Renamed");
 		EXPECT_FALSE(RenameScenePath(window, SceneObjectId{999}, "Nope"));
 	}
 }

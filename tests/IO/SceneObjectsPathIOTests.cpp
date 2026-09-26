@@ -49,9 +49,11 @@ namespace DefectStudio::Tests
 		path.style.startDecoration = "Circle";
 		path.style.startDecorationLengthScale = 2.0f;
 		path.style.startDecorationWidthScale = 3.0f;
+		path.style.startDecorationFilled = false;
 		path.style.endDecoration = "Diamond";
 		path.style.endDecorationLengthScale = 4.0f;
 		path.style.endDecorationWidthScale = 5.0f;
+		path.style.endDecorationFilled = true;
 		path.style.depthMode = "AlwaysOnTop";
 		SceneObjectsFile file;
 		file.structures.push_back({"k", {path}});
@@ -63,6 +65,8 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(got.segments[1].planeNormal, path.segments[1].planeNormal);
 		EXPECT_FLOAT_EQ(got.style.gradientStops[1].alpha, 0.75f);
 		EXPECT_EQ(got.style.endDecoration, "Diamond");
+		EXPECT_FALSE(got.style.startDecorationFilled);
+		EXPECT_TRUE(got.style.endDecorationFilled);
 		EXPECT_EQ(got.style.depthMode, "AlwaysOnTop");
 		EXPECT_EQ(got.style.ribbonNormal, path.style.ribbonNormal);
 	}
@@ -93,6 +97,47 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
 		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
 		EXPECT_EQ(got.style.ribbonNormal, glm::vec3(0.0f, 1.0f, 0.0f));
+	}
+
+	TEST(SceneObjectsPathIOTests, MissingDecorationFilledKeepsV2AndUsesTrueDefault)
+	{
+		PersistedScenePath path;
+		path.nodes = {{{0, 0, 0}}, {{1, 0, 0}}};
+		path.segments = {{}};
+		path.style.startDecoration = "Arrow";
+		path.style.startDecorationFilled = false;
+		path.style.endDecoration = "Circle";
+		path.style.endDecorationFilled = false;
+		SceneObjectsFile source;
+		source.structures.push_back({"k", {path}});
+		std::string text = SceneObjectsIO::Serialize(source);
+		// Remove the whole key line, including indentation. Removing only the key would leave
+		// whitespace that yaml-cpp glues to the following field and turns this into a malformed fixture.
+		const auto eraseWholeLine = [&](const char *field) {
+			const std::size_t key = text.find(field);
+			if (key == std::string::npos)
+				return false;
+			const std::size_t lineStart = text.rfind('\n', key);
+			if (lineStart == std::string::npos)
+				return false;
+			const std::size_t lineEnd = text.find('\n', key);
+			if (lineEnd == std::string::npos)
+				return false;
+			text.erase(lineStart, lineEnd - lineStart);
+			return true;
+		};
+		ASSERT_TRUE(eraseWholeLine("start_decoration_filled:"));
+		ASSERT_TRUE(eraseWholeLine("end_decoration_filled:"));
+
+		const SceneObjectsFile loaded = Parse(text.c_str());
+		ASSERT_EQ(loaded.formatVersion, 2);
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		const auto &got = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_EQ(got.style.startDecoration, "Arrow");
+		EXPECT_TRUE(got.style.startDecorationFilled);
+		EXPECT_EQ(got.style.endDecoration, "Circle");
+		EXPECT_TRUE(got.style.endDecorationFilled);
 	}
 
 	TEST(SceneObjectsPathIOTests, FutureVersionIsRejectedBeforeInterpretingObjects)

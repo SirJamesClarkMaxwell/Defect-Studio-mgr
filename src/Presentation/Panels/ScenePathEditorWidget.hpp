@@ -89,6 +89,10 @@ namespace DefectStudio
 	// - Commit pushes exactly one undo entry holding that snapshot and clears it. It is a no-op
 	//   returning false when no drag is open, and also when nothing actually changed between Begin
 	//   and Commit - a click that activates a slider without moving it leaves no history.
+	//   "Nothing changed" means no path's revision moved, compared against the snapshot's own store.
+	//   PathStore bumps a revision on every mutation and the snapshot carries a whole store, so this
+	//   costs a counter comparison. Do NOT give PathStore an equality operator for this: a drag that
+	//   wanders away and returns to its starting value does record an entry, and that is fine.
 	// - An abandoned drag (selection cleared, window closed, panel hidden mid-drag) leaves the
 	//   snapshot behind. Commit is therefore safe to call on a selection that no longer matches the
 	//   one Begin saw: the snapshot restores whole-window scene objects, not a selection.

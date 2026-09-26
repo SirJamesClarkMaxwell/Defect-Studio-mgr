@@ -46,6 +46,10 @@ namespace DefectStudio
 	//   stub across the tangent rather than a taper. Closes back.
 	// - Circle:  a half-circle of radius `length / 2`, centred at s == length / 2, sampled at no
 	//   fewer than 12 points. It must read as a disc, not as the five-point lens S11 shipped.
+	//   Circle is the one kind that IGNORES widthScale: a disc's width is its length, and honouring
+	//   both scales would make it an ellipse under a name that promises otherwise. Length still
+	//   scales it. (If an ellipse is ever wanted, it is a new kind, not a second meaning for this
+	//   one.)
 	// - Square:  CONSTANT halfWidth == width from s == 0 to s == length. It must not taper to a
 	//   point; that was the defect. Closes back, and its front face is flat.
 	// - Diamond: widest at s == length / 2, back to zero at s == length. Symmetric. Closes back.

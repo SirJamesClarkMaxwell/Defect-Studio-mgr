@@ -92,8 +92,9 @@ namespace DefectStudio::Tests
 		}
 
 		constexpr PathDecorationKind kAllDecorations[] = {PathDecorationKind::None, PathDecorationKind::Arrow,
-			PathDecorationKind::Stealth, PathDecorationKind::OpenArrow, PathDecorationKind::Bar,
-			PathDecorationKind::Circle, PathDecorationKind::Square, PathDecorationKind::Diamond};
+			PathDecorationKind::Stealth, PathDecorationKind::Latex, PathDecorationKind::Bar,
+			PathDecorationKind::Circle, PathDecorationKind::Square, PathDecorationKind::Diamond,
+			PathDecorationKind::Kite};
 	} // namespace
 	TEST(PathStrokeMesherTests, GradientClampsAndInterpolatesStops)
 	{
@@ -258,6 +259,56 @@ namespace DefectStudio::Tests
 		expectNear(round.tubeVertices[4].position, glm::vec3(1.8f, 0.1f, 0.0f));
 		expectNear(round.tubeVertices[5].position, glm::vec3(1.8f, 0.0f, 0.1f));
 		expectNear(round.tubeVertices[6].position, glm::vec3(1.8f, -0.1f, 0.0f));
+	}
+
+	TEST(PathStrokeMesherTests, HollowDecorationHasAnInnerWallRatherThanAClosedSolidFan)
+	{
+		PathStrokeStyle filledStyle;
+		filledStyle.width = 0.2f;
+		filledStyle.radialSegments = 8;
+		filledStyle.endDecoration = {PathDecorationKind::Arrow, 2.0f, 2.0f, true};
+		PathStrokeStyle hollowStyle = filledStyle;
+		hollowStyle.endDecoration.filled = false;
+
+		const StrokeGeometry filled = BuildStroke(StraightPath(), filledStyle);
+		const StrokeGeometry hollow = BuildStroke(StraightPath(), hollowStyle);
+		ASSERT_FALSE(filled.tubeVertices.empty());
+		ASSERT_FALSE(hollow.tubeVertices.empty());
+		ASSERT_FALSE(filled.endDecoration.IsEmpty());
+		ASSERT_FALSE(hollow.endDecoration.IsEmpty());
+		EXPECT_NE(filled.tubeVertices.size(), hollow.tubeVertices.size());
+		EXPECT_NE(filled.endDecoration.indexCount, hollow.endDecoration.indexCount);
+
+		// A hollow body must add an inner wall: at least one indexed hollow vertex is not present in
+		// the filled body's outer contour/fan. This is a geometric hole check, not a count-only check.
+		bool hasInnerVertex = false;
+		for (std::uint32_t hollowIndex = hollow.endDecoration.firstIndex;
+			hollowIndex < hollow.endDecoration.firstIndex + hollow.endDecoration.indexCount; ++hollowIndex)
+		{
+			ASSERT_LT(hollowIndex, hollow.indices.size());
+			const std::uint32_t hollowVertexIndex = hollow.indices[hollowIndex];
+			ASSERT_LT(hollowVertexIndex, hollow.tubeVertices.size());
+			const glm::vec3 &hollowPosition = hollow.tubeVertices[hollowVertexIndex].position;
+			bool matchesFilled = false;
+			for (std::uint32_t filledIndex = filled.endDecoration.firstIndex;
+				filledIndex < filled.endDecoration.firstIndex + filled.endDecoration.indexCount; ++filledIndex)
+			{
+				ASSERT_LT(filledIndex, filled.indices.size());
+				const std::uint32_t filledVertexIndex = filled.indices[filledIndex];
+				ASSERT_LT(filledVertexIndex, filled.tubeVertices.size());
+				if (glm::distance(hollowPosition, filled.tubeVertices[filledVertexIndex].position) <= 1e-6f)
+				{
+					matchesFilled = true;
+					break;
+				}
+			}
+			if (!matchesFilled)
+			{
+				hasInnerVertex = true;
+				break;
+			}
+		}
+		EXPECT_TRUE(hasInnerVertex);
 	}
 
 	TEST(PathStrokeMesherTests, BendsOfNinetyAndOneHundredEightyDegreesKeepFiniteUnitNormals)

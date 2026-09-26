@@ -22,6 +22,14 @@ namespace DefectStudio::Tests
 			return structure;
 		}
 
+		PersistedScenePath MinimalPath()
+		{
+			PersistedScenePath path;
+			path.nodes = {{{0, 0, 0}}, {{1, 0, 0}}};
+			path.segments = {{}};
+			return path;
+		}
+
 		PersistedSceneArrow Arrow(const char *fixture)
 		{
 			SceneObjectsFile file;
@@ -142,6 +150,65 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(std::holds_alternative<PathBinding::CopyPosition>(path.nodes.front().binding.value));
 		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes.back().binding.value).buffer, arrow.atomBuffer);
 		EXPECT_EQ(migrated.Value().warnings.size(), 2u);
+	}
+
+	TEST(ScenePathPersistenceTests, OpenArrowLoadsHollowAndIsWrittenAsArrow)
+	{
+		PersistedScenePath saved = MinimalPath();
+		saved.style.startDecoration = "OpenArrow";
+		saved.style.endDecoration = "OpenArrow";
+		std::vector<StructuredError> warnings;
+		const Result<ScenePath> built = BuildScenePath(saved, Structure(), warnings);
+		ASSERT_TRUE(built);
+		const ScenePath &path = built.Value();
+		EXPECT_EQ(path.style.startDecoration.kind, PathDecorationKind::Arrow);
+		EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::Arrow);
+		EXPECT_FALSE(path.style.startDecoration.filled);
+		EXPECT_FALSE(path.style.endDecoration.filled);
+
+		const PersistedScenePath extracted = ExtractPersistedScenePath(path, Structure());
+		EXPECT_EQ(extracted.style.startDecoration, "Arrow");
+		EXPECT_EQ(extracted.style.endDecoration, "Arrow");
+		EXPECT_FALSE(extracted.style.startDecorationFilled);
+		EXPECT_FALSE(extracted.style.endDecorationFilled);
+		SceneObjectsFile file;
+		file.structures.push_back({"k", {extracted}});
+		const std::string serialized = SceneObjectsIO::Serialize(file);
+		EXPECT_EQ(serialized.find("OpenArrow"), std::string::npos);
+		EXPECT_NE(serialized.find("start_decoration_filled"), std::string::npos);
+		EXPECT_NE(serialized.find("Arrow"), std::string::npos);
+	}
+
+	TEST(ScenePathPersistenceTests, EveryCurrentDecorationNameRoundTrips)
+	{
+		const char *names[] = {"None", "Arrow", "Stealth", "Latex", "Bar", "Circle", "Square", "Diamond", "Kite"};
+		for (const char *name : names)
+		{
+			PersistedScenePath saved = MinimalPath();
+			saved.style.startDecoration = name;
+			saved.style.endDecoration = name;
+			std::vector<StructuredError> warnings;
+			const Result<ScenePath> built = BuildScenePath(saved, Structure(), warnings);
+			ASSERT_TRUE(built) << name;
+			const PersistedScenePath extracted = ExtractPersistedScenePath(built.Value(), Structure());
+			EXPECT_EQ(extracted.style.startDecoration, name);
+			EXPECT_EQ(extracted.style.endDecoration, name);
+		}
+	}
+
+	TEST(ScenePathPersistenceTests, LegacyOpenTipMigratesToHollowArrow)
+	{
+		PersistedSceneArrow arrow;
+		arrow.points = {{0, 0, 0}, {1, 0, 0}};
+		arrow.startTip = "Open";
+		arrow.endTip = "Open";
+		const Result<ScenePathMigration> migrated = MigrateArrowToPath(arrow);
+		ASSERT_TRUE(migrated);
+		const ScenePath &path = migrated.Value().path;
+		EXPECT_EQ(path.style.startDecoration.kind, PathDecorationKind::Arrow);
+		EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::Arrow);
+		EXPECT_FALSE(path.style.startDecoration.filled);
+		EXPECT_FALSE(path.style.endDecoration.filled);
 	}
 
 	TEST(ScenePathPersistenceTests, ApplyAndExtractUseThePathStore)
