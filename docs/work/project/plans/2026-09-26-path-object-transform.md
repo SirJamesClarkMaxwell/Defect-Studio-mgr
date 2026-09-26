@@ -42,11 +42,19 @@ and that has to be explicit rather than accidental:
 
 This is the first acceptance criterion of whatever task implements it, not a footnote.
 
-**The open question is cubic handles.** `CubicBezierSegmentData` carries `startHandle` and
+**Cubic handles: decided 2026-09-26.** `CubicBezierSegmentData` carries `startHandle` and
 `endHandle`. A segment between a free node and a bound node has one handle that should follow the
-transform and one that should follow the atom. Decide this before implementing, not during:
-either handles become offsets relative to their own node - which makes the answer automatic and is
-probably right - or they stay absolute and each one has to be told which space it is in.
+transform and one that should follow the atom, and asking that question per handle per operation
+is how this gets wrong.
+
+Handles become **offsets relative to their own node**. A handle then follows whatever its node
+does, for free and for bound nodes alike, and neither the transform nor the binding resolver has to
+know which case it is in. The alternative - absolute handle positions, each tagged with the space
+it lives in - was rejected: it puts the same decision in every caller.
+
+This is a change to the authored representation, so it needs its own migration: existing files
+store absolute handles, and loading them subtracts the node position once. That conversion is
+lossless and belongs in the same step as the transform itself, not spread across two.
 
 ## What a transformed path means for G/R/S
 
