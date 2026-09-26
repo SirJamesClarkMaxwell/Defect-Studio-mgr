@@ -37,9 +37,17 @@ namespace DefectStudio
 	// dash phase join this in S5.
 	[[nodiscard]] Result<void> ReversePath(ScenePath &path);
 
-	// Moves the path's origin to the centre of its authored nodes, without moving the path: the
-	// centroid is added to `transform.position` and subtracted from every node's authored position,
-	// so the resolved geometry is identical to the last float.
+	// Moves the path's origin to the centre of its authored nodes, without moving the path: every
+	// node's authored position loses the centroid, and `transform.position` gains that centroid
+	// ROTATED AND SCALED BY THE TRANSFORM. The resolved geometry is then identical to the last
+	// float.
+	//
+	// The rotation and scale are not decoration. The resolver computes
+	// `world = position + rotation * (scale * node)`, so adding a raw centroid to `position` while
+	// subtracting it from the nodes only cancels when rotation and scale are the identity - a
+	// rotated path would jump by `centroid - rotation * scale * centroid` the moment its origin was
+	// centred. Identity is the common case, which is exactly why this is easy to get wrong and
+	// stays wrong until someone rotates something.
 	//
 	// task/41 transform-2, and the user's choice of Blender's model in full. In Blender an object's
 	// origin IS its Location, and its mesh lies around it - move a cube to x = 5 and the panel reads
