@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "Presentation/Panels/ScenePathGradientRamp.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -68,27 +69,6 @@ namespace DefectStudio
 			const float expected = right * ratio;
 			const float tolerance = 1.0e-5f * std::max(1.0f, std::max(std::abs(left), std::abs(expected)));
 			return std::abs(left - expected) <= tolerance;
-		}
-
-		[[nodiscard]] float GradientInsertionPosition(const std::vector<PathGradientStop> &stops)
-		{
-			if (stops.empty())
-				return 0.5f;
-			std::size_t bestGap = 0;
-			float bestWidth = -1.0f;
-			for (std::size_t gap = 0; gap <= stops.size(); ++gap)
-			{
-				const float lower = gap == 0 ? 0.0f : stops[gap - 1].position;
-				const float upper = gap == stops.size() ? 1.0f : stops[gap].position;
-				if (upper - lower > bestWidth)
-				{
-					bestGap = gap;
-					bestWidth = upper - lower;
-				}
-			}
-			const float lower = bestGap == 0 ? 0.0f : stops[bestGap - 1].position;
-			const float upper = bestGap == stops.size() ? 1.0f : stops[bestGap].position;
-			return std::clamp(lower + (upper - lower) * 0.5f, 0.0f, 1.0f);
 		}
 
 		[[nodiscard]] bool DrawEnumCombo(const char *label, StrokeProfile &value)
@@ -305,6 +285,7 @@ namespace DefectStudio
 		ScenePathStyleEdit edit = resolved.values;
 		bool changed = false;
 		bool renamed = false;
+		static int selectedGradientStop = -1;
 		const auto applyImmediate = [&](const bool controlChanged) {
 			if (!controlChanged)
 				return;
@@ -372,55 +353,16 @@ namespace DefectStudio
 			edit.gradient.enabled = gradientEnabled && !edit.gradient.stops.empty();
 			applyImmediate(true);
 		}
-		for (std::size_t index = 0; index < edit.gradient.stops.size(); ++index)
+		const GradientRampResult ramp = DrawGradientRamp("PathGradientRamp", edit.gradient, selectedGradientStop);
+		if (ramp.dragStarted)
+			BeginScenePathStyleDrag(windowState);
+		if (ramp.changed)
 		{
-			ImGui::PushID(static_cast<int>(index));
-			PathGradientStop &stop = edit.gradient.stops[index];
-			ImGui::Text("Stop %zu", index + 1);
-			const float lower = index == 0 ? 0.0f : edit.gradient.stops[index - 1].position;
-			const float upper = index + 1 == edit.gradient.stops.size() ? 1.0f : edit.gradient.stops[index + 1].position;
-			const bool positionChanged = ImGui::DragFloat("Position", &stop.position, 0.01f, lower, upper, "%.3f");
-			if (positionChanged)
-				ClampGradientStops(edit.gradient);
-			applyDrag(positionChanged);
-			applyDrag(ImGui::ColorEdit3("Color", &stop.color.x));
-			applyDrag(ImGui::SliderFloat("Alpha", &stop.alpha, 0.0f, 1.0f, "%.2f"));
-			if (ImGui::Button("Remove"))
-			{
-				edit.gradient.stops.erase(edit.gradient.stops.begin() + static_cast<std::ptrdiff_t>(index));
-				if (edit.gradient.stops.empty())
-					edit.gradient.enabled = false;
-				applyImmediate(true);
-				ImGui::PopID();
-				break;
-			}
-			ImGui::PopID();
+			const bool recordUndo = !windowState.scenePathStyleEditBefore.has_value();
+			changed = ApplyScenePathStyleEdit(windowState, selection, edit, recordUndo) != 0 || changed;
 		}
-		if (ImGui::Button("Add stop"))
-		{
-			ClampGradientStops(edit.gradient);
-			const float position = GradientInsertionPosition(edit.gradient.stops);
-			PathGradientStop stop;
-			stop.position = position;
-			if (!edit.gradient.stops.empty())
-			{
-				const auto next = std::lower_bound(edit.gradient.stops.begin(), edit.gradient.stops.end(), position,
-					[](const PathGradientStop &candidate, const float value) { return candidate.position < value; });
-				const std::size_t nextIndex = static_cast<std::size_t>(next - edit.gradient.stops.begin());
-				const PathGradientStop &before = nextIndex == 0 ? edit.gradient.stops.front() : edit.gradient.stops[nextIndex - 1];
-				const PathGradientStop &after = nextIndex == edit.gradient.stops.size() ? edit.gradient.stops.back() : edit.gradient.stops[nextIndex];
-				stop.color = (before.color + after.color) * 0.5f;
-				stop.alpha = (before.alpha + after.alpha) * 0.5f;
-				edit.gradient.stops.insert(edit.gradient.stops.begin() + static_cast<std::ptrdiff_t>(nextIndex), stop);
-			}
-			else
-			{
-				stop.color = edit.color;
-				stop.alpha = edit.alpha;
-				edit.gradient.stops.push_back(stop);
-			}
-			applyImmediate(true);
-		}
+		if (ramp.dragEnded)
+			CommitScenePathStyleDrag(windowState);
 		const auto drawDecoration = [&](const char *prefix, PathEndpointDecoration &decoration) {
 			const std::string kindLabel = std::string(prefix) + " kind";
 			const std::string lengthLabel = std::string(prefix) + " length scale";
