@@ -1,5 +1,9 @@
 #include "Core/dspch.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+
 #include <gtest/gtest.h>
 
 #include <utility>
@@ -365,6 +369,67 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Cubic, glm::vec3(0.0f)).style.profile, StrokeProfile::Round);
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0.0f), StrokeProfile::Flat).style.ribbonNormal,
 			glm::vec3(0.0f, 0.0f, 1.0f));
+	}
+
+	TEST_F(ScenePathUndoTests, DecorationGalleryAddsEveryKindNamedAndSpacedInOneUndo)
+	{
+		constexpr std::array<std::pair<PathDecorationKind, const char *>, 8> galleryKinds = {{
+			{PathDecorationKind::Arrow, "Arrow"},
+			{PathDecorationKind::Stealth, "Stealth"},
+			{PathDecorationKind::Latex, "Latex"},
+			{PathDecorationKind::Bar, "Bar"},
+			{PathDecorationKind::Circle, "Circle"},
+			{PathDecorationKind::Square, "Square"},
+			{PathDecorationKind::Diamond, "Diamond"},
+			{PathDecorationKind::Kite, "Kite"},
+		}};
+
+		RendererWindowState window;
+		window.windowId = "path-decoration-gallery";
+		renderer.AddWindow(std::move(window));
+		ASSERT_FALSE(renderer.GetWindows().empty());
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		AddScenePathDecorationGallery(live, glm::vec3(2.0f, -1.0f, 3.0f));
+		ASSERT_NE(live.paths, nullptr);
+		ASSERT_EQ(live.paths->Store().Size(), galleryKinds.size());
+		ASSERT_EQ(undoStack->GetUndoDepth(), 1u);
+
+		for (std::size_t index = 0; index < galleryKinds.size(); ++index)
+		{
+			const ScenePath *path = live.paths->Store().At(index);
+			ASSERT_NE(path, nullptr);
+			ASSERT_GE(path->nodes.size(), 1u);
+			EXPECT_EQ(path->style.startDecoration.kind, galleryKinds[index].first);
+			EXPECT_EQ(path->style.endDecoration.kind, PathDecorationKind::Arrow);
+			EXPECT_EQ(path->name, galleryKinds[index].second);
+
+			if (index == 0u)
+				continue;
+
+			const ScenePath *previous = live.paths->Store().At(index - 1u);
+			ASSERT_NE(previous, nullptr);
+			ASSERT_GE(previous->nodes.size(), 1u);
+			const DecorationContour previousContour = BuildDecorationContour(
+				previous->style.startDecoration, previous->style.width);
+			const DecorationContour currentContour = BuildDecorationContour(
+				path->style.startDecoration, path->style.width);
+			ASSERT_FALSE(previousContour.points.empty());
+			ASSERT_FALSE(currentContour.points.empty());
+			const auto previousWidest = std::max_element(previousContour.points.begin(), previousContour.points.end(),
+				[](const DecorationContourPoint &a, const DecorationContourPoint &b) {
+					return a.halfWidth < b.halfWidth;
+				});
+			const auto currentWidest = std::max_element(currentContour.points.begin(), currentContour.points.end(),
+				[](const DecorationContourPoint &a, const DecorationContourPoint &b) {
+					return a.halfWidth < b.halfWidth;
+				});
+			ASSERT_NE(previousWidest, previousContour.points.end());
+			ASSERT_NE(currentWidest, currentContour.points.end());
+			const double layoutSeparation = std::abs(static_cast<double>(
+				path->nodes.front().position.z - previous->nodes.front().position.z));
+			EXPECT_GT(layoutSeparation, previousWidest->halfWidth + currentWidest->halfWidth);
+		}
 	}
 
 	TEST(ScenePathOperationsTests, RibbonNormalStyleEditInvalidatesCachedGeometry)

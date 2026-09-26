@@ -52,6 +52,27 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(contour.closesBack);
 	}
 
+	TEST(PathDecorationTests, PointedDecorationsFlareBeyondTubeRadius)
+	{
+		constexpr double strokeWidth = 0.05;
+		constexpr double tubeRadius = strokeWidth / 2.0;
+		constexpr PathDecorationKind pointedKinds[] = {PathDecorationKind::Arrow,
+			PathDecorationKind::Stealth, PathDecorationKind::Latex, PathDecorationKind::Diamond,
+			PathDecorationKind::Kite};
+
+		for (const PathDecorationKind kind : pointedKinds)
+		{
+			const DecorationContour contour = BuildDecorationContour({kind}, strokeWidth);
+			ASSERT_FALSE(contour.points.empty()) << static_cast<int>(kind);
+			const auto widest = std::max_element(contour.points.begin(), contour.points.end(),
+				[](const DecorationContourPoint &a, const DecorationContourPoint &b) {
+					return a.halfWidth < b.halfWidth;
+				});
+			ASSERT_NE(widest, contour.points.end());
+			EXPECT_GT(widest->halfWidth, tubeRadius) << static_cast<int>(kind);
+		}
+	}
+
 	TEST(PathDecorationTests, CircleSamplesTheContractHalfCircle)
 	{
 		constexpr double strokeWidth = 2.0;
@@ -92,6 +113,19 @@ namespace DefectStudio::Tests
 		ASSERT_GT(contour.points.size(), 3u);
 		EXPECT_TRUE(contour.closesBack);
 		ExpectFiniteAndOrdered(contour);
+	}
+
+	TEST(PathDecorationTests, LatexKeepsAFlatSweptBack)
+	{
+		const DecorationContour contour = BuildDecorationContour({PathDecorationKind::Latex}, 0.05);
+		ASSERT_GE(contour.points.size(), 2u);
+		const auto widest = std::max_element(contour.points.begin(), contour.points.end(),
+			[](const DecorationContourPoint &a, const DecorationContourPoint &b) {
+				return a.halfWidth < b.halfWidth;
+			});
+		ASSERT_NE(widest, contour.points.end());
+		EXPECT_GT(contour.points.back().halfWidth, 0.0);
+		EXPECT_LT(contour.points.back().halfWidth, widest->halfWidth);
 	}
 
 	TEST(PathDecorationTests, BarIsAConstantWidthStubShorterThanSquare)
