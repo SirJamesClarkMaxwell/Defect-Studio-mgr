@@ -268,11 +268,13 @@ namespace DefectStudio::SceneObjectsYaml
 				style.startDecoration = node["startDecoration"].as<std::string>(style.startDecoration);
 				style.startDecorationLengthScale = node["startDecorationLengthScale"].as<float>(style.startDecorationLengthScale);
 				style.startDecorationWidthScale = node["startDecorationWidthScale"].as<float>(style.startDecorationWidthScale);
+				style.startDecorationFilled = node["start_decoration_filled"].as<bool>(style.startDecorationFilled);
 				style.endDecoration = node["endDecoration"].as<std::string>(style.endDecoration);
 				style.endDecorationLengthScale = node["endDecorationLengthScale"].as<float>(style.endDecorationLengthScale);
 				style.endDecorationWidthScale = node["endDecorationWidthScale"].as<float>(style.endDecorationWidthScale);
+				style.endDecorationFilled = node["end_decoration_filled"].as<bool>(style.endDecorationFilled);
 				const auto validDecoration = [](const std::string &name) {
-					return name == "None" || name == "Arrow" || name == "Stealth" || name == "OpenArrow" || name == "Bar" || name == "Circle" || name == "Square" || name == "Diamond";
+					return name == "None" || name == "Arrow" || name == "Stealth" || name == "Latex" || name == "Bar" || name == "Circle" || name == "Square" || name == "Diamond" || name == "Kite" || name == "OpenArrow";
 				};
 				return validDecoration(style.startDecoration) && validDecoration(style.endDecoration);
 			}
@@ -301,7 +303,7 @@ namespace DefectStudio::SceneObjectsYaml
 				EmitVec3(emit, "color", stop.color);
 				emit << YAML::Key << "alpha" << YAML::Value << stop.alpha << YAML::EndMap;
 			}
-			emit << YAML::EndSeq << YAML::Key << "startDecoration" << YAML::Value << style.startDecoration << YAML::Key << "startDecorationLengthScale" << YAML::Value << style.startDecorationLengthScale << YAML::Key << "startDecorationWidthScale" << YAML::Value << style.startDecorationWidthScale << YAML::Key << "endDecoration" << YAML::Value << style.endDecoration << YAML::Key << "endDecorationLengthScale" << YAML::Value << style.endDecorationLengthScale << YAML::Key << "endDecorationWidthScale" << YAML::Value << style.endDecorationWidthScale << YAML::Key << "depthMode" << YAML::Value << style.depthMode << YAML::EndMap;
+			emit << YAML::EndSeq << YAML::Key << "startDecoration" << YAML::Value << style.startDecoration << YAML::Key << "startDecorationLengthScale" << YAML::Value << style.startDecorationLengthScale << YAML::Key << "startDecorationWidthScale" << YAML::Value << style.startDecorationWidthScale << YAML::Key << "start_decoration_filled" << YAML::Value << style.startDecorationFilled << YAML::Key << "endDecoration" << YAML::Value << style.endDecoration << YAML::Key << "endDecorationLengthScale" << YAML::Value << style.endDecorationLengthScale << YAML::Key << "endDecorationWidthScale" << YAML::Value << style.endDecorationWidthScale << YAML::Key << "end_decoration_filled" << YAML::Value << style.endDecorationFilled << YAML::Key << "depthMode" << YAML::Value << style.depthMode << YAML::EndMap;
 		}
 	}
 

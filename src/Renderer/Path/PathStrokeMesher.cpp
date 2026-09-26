@@ -10,6 +10,16 @@
 
 namespace DefectStudio
 {
+	namespace detail
+	{
+		[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour);
+		void StitchRings(StrokeGeometry &geometry, std::uint32_t lower, std::uint32_t upper,
+			std::uint32_t radialSegments, bool flip = false);
+		void AppendDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
+			const EvaluatedSample &endpoint, bool start, const PathStrokeStyle &style,
+			StrokeMeshRange &range, std::vector<std::uint32_t> &backRing);
+	}
+
 	namespace
 	{
 		[[nodiscard]] bool IsFinite(const glm::dvec3 &value)
@@ -77,24 +87,12 @@ namespace DefectStudio
 			return result;
 		}
 
-		[[nodiscard]] std::size_t BackContourPoint(const DecorationContour &contour)
-		{
-			if (contour.points.empty())
-				return 0u;
-			const double backS = contour.points.back().s;
-			std::size_t result = contour.points.size() - 1u;
-			for (std::size_t point = contour.points.size() - 1u; point > 0u; --point)
-				if (contour.points[point - 1u].s == backS && contour.points[point - 1u].halfWidth > contour.points[result].halfWidth)
-					result = point - 1u;
-			return result;
-		}
-
 		[[nodiscard]] EvaluatedSample DecorationBackSample(const EvaluatedSample &sampled, const EvaluatedSample &endpoint,
 			const DecorationContour &contour, const bool start)
 		{
 			if (contour.points.empty())
 				return sampled;
-			const DecorationContourPoint &back = contour.points[BackContourPoint(contour)];
+			const DecorationContourPoint &back = contour.points[detail::BackContourPoint(contour)];
 			EvaluatedSample result = sampled;
 			const glm::dvec3 inward = start ? endpoint.tangent : -endpoint.tangent;
 			result.position = endpoint.position + inward * back.s;
@@ -114,49 +112,6 @@ namespace DefectStudio
 				glm::distance(sampled.tangent, desired.tangent) > 1.0e-12 ||
 				glm::distance(sampled.normal, desired.normal) > 1.0e-12 ||
 				glm::distance(sampled.binormal, desired.binormal) > 1.0e-12;
-		}
-
-		// One quad band between two rings of `radialSegments` vertices. Both ring starts are explicit
-		// because a cap's rings are appended after the whole shaft, not adjacent to the ring they attach
-		// to - assuming `upper == lower + radialSegments` there stitched the wrong pair and left a hole.
-		// `flip` reverses the winding for a band that grows against the tangent, i.e. the start cap.
-		void StitchRings(StrokeGeometry &geometry, const std::uint32_t lower, const std::uint32_t upper,
-			const std::uint32_t radialSegments, const bool flip = false)
-		{
-			for (std::uint32_t radial = 0; radial < radialSegments; ++radial)
-			{
-				const std::uint32_t next = (radial + 1u) % radialSegments;
-				const std::uint32_t a = lower + radial;
-				const std::uint32_t b = upper + radial;
-				const std::uint32_t c = lower + next;
-				const std::uint32_t d = upper + next;
-				if (flip)
-					geometry.indices.insert(geometry.indices.end(), {a, d, b, a, c, d});
-				else
-					geometry.indices.insert(geometry.indices.end(), {a, b, d, a, d, c});
-			}
-		}
-
-		// Closes a ring with a centre fan. `outward` is the face normal of the resulting disc; `flip`
-		// picks the winding so the disc faces away from the body it closes.
-		void AppendRingFan(StrokeGeometry &geometry, const std::uint32_t ring, const PathStrokeStyle &style,
-			const EvaluatedSample &sample, const glm::dvec3 &outward, const bool flip)
-		{
-			const std::uint32_t centre = static_cast<std::uint32_t>(geometry.tubeVertices.size());
-			glm::dvec3 centrePosition(0.0);
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-				centrePosition += glm::dvec3(geometry.tubeVertices[ring + radial].position);
-			centrePosition /= static_cast<double>(style.radialSegments);
-			geometry.tubeVertices.push_back({glm::vec3(centrePosition), glm::vec3(outward),
-				SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
-			for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-			{
-				const std::uint32_t next = ring + (radial + 1u) % style.radialSegments;
-				if (flip)
-					geometry.indices.insert(geometry.indices.end(), {centre, ring + radial, next});
-				else
-					geometry.indices.insert(geometry.indices.end(), {centre, next, ring + radial});
-			}
 		}
 
 		// A real round cap: latitude rings revolved a quarter turn off the boundary ring. A single
@@ -186,7 +141,7 @@ namespace DefectStudio
 						glm::vec3(glm::dot(offset, offset) > 1e-18 ? glm::normalize(offset) : axis),
 						SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
 				}
-				StitchRings(geometry, lower, upper, style.radialSegments, !end);
+				detail::StitchRings(geometry, lower, upper, style.radialSegments, !end);
 				lower = upper;
 			}
 		}
@@ -222,7 +177,7 @@ namespace DefectStudio
 					first + static_cast<std::uint32_t>(ring) * style.radialSegments;
 				const std::uint32_t upper = lastRing ? endBoundary.front() :
 					first + static_cast<std::uint32_t>(ring + 1u) * style.radialSegments;
-				StitchRings(geometry, lower, upper, style.radialSegments);
+				detail::StitchRings(geometry, lower, upper, style.radialSegments);
 			}
 			if (style.cap == PathLineCap::Round)
 			{
@@ -250,66 +205,6 @@ namespace DefectStudio
 			}
 		}
 
-		void AppendDecoration(StrokeGeometry &geometry, const DecorationContour &contour, const EvaluatedSample &endpoint,
-			const bool start, const PathStrokeStyle &style, StrokeMeshRange &range, std::vector<std::uint32_t> &backRing)
-		{
-			backRing.clear();
-			if (contour.points.empty())
-				return;
-			range.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
-			const glm::dvec3 inward = start ? endpoint.tangent : -endpoint.tangent;
-			if (style.profile == StrokeProfile::Round)
-			{
-				const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
-				for (const DecorationContourPoint &point : contour.points)
-					for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-					{
-						const double angle = 2.0 * std::numbers::pi * radial / style.radialSegments;
-						const glm::dvec3 radialVector = std::cos(angle) * endpoint.normal + std::sin(angle) * endpoint.binormal;
-						const glm::dvec3 position = endpoint.position + inward * point.s + radialVector * point.halfWidth;
-						geometry.tubeVertices.push_back({glm::vec3(position), glm::vec3(radialVector), SampleStrokeColor(style, endpoint.normalizedT),
-							static_cast<float>(endpoint.normalizedT), static_cast<float>(endpoint.arcLength)});
-					}
-				for (std::size_t ring = 0; ring + 1u < contour.points.size(); ++ring)
-				{
-					const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * style.radialSegments;
-					StitchRings(geometry, lower, lower + style.radialSegments, style.radialSegments);
-				}
-				// A contour that starts wide - Bar, Square - leaves an open disc facing the tip; close it.
-				if (contour.points.front().halfWidth > 0.0)
-					AppendRingFan(geometry, first, style, endpoint, -inward, false);
-				if (contour.closesBack && contour.points.back().halfWidth > 0.0)
-					AppendRingFan(geometry, first + static_cast<std::uint32_t>(contour.points.size() - 1u) * style.radialSegments,
-						style, endpoint, inward, true);
-				const std::uint32_t back = first + static_cast<std::uint32_t>(BackContourPoint(contour)) * style.radialSegments;
-				for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
-					backRing.push_back(back + radial);
-			}
-			else
-			{
-				const std::uint32_t first = static_cast<std::uint32_t>(geometry.ribbonVertices.size());
-				for (const DecorationContourPoint &point : contour.points)
-					for (const float side : {-1.0f, 1.0f})
-					{
-						const bool cameraFacing = style.profile == StrokeProfile::CameraFacing;
-						const glm::dvec3 position = cameraFacing
-							? endpoint.position + inward * point.s
-							: endpoint.position + inward * point.s + endpoint.normal * point.halfWidth * static_cast<double>(side);
-						geometry.ribbonVertices.push_back({glm::vec3(position), glm::vec3(endpoint.tangent), glm::vec3(endpoint.normal),
-							SampleStrokeColor(style, endpoint.normalizedT), cameraFacing ? side : 0.0f,
-							static_cast<float>(endpoint.normalizedT), static_cast<float>(endpoint.arcLength),
-							cameraFacing ? static_cast<float>(point.halfWidth) : 0.0f});
-					}
-				for (std::uint32_t point = 0; point + 1u < contour.points.size(); ++point)
-				{
-					const std::uint32_t a = first + point * 2u;
-					geometry.indices.insert(geometry.indices.end(), {a, a + 2u, a + 3u, a, a + 3u, a + 1u});
-				}
-				const std::uint32_t back = first + static_cast<std::uint32_t>(BackContourPoint(contour)) * 2u;
-				backRing = {back, back + 1u};
-			}
-			range.indexCount = static_cast<std::uint32_t>(geometry.indices.size()) - range.firstIndex;
-		}
 	} // namespace
 
 	glm::vec4 SampleStrokeColor(const PathStrokeStyle &style, const double normalizedT)
@@ -355,8 +250,8 @@ namespace DefectStudio
 		geometry.shaftRange = TrimmedRange(evaluated.totalLength, style);
 		std::vector<std::uint32_t> startBackRing;
 		std::vector<std::uint32_t> endBackRing;
-		AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration, startBackRing);
-		AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration, endBackRing);
+		detail::AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration, startBackRing);
+		detail::AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration, endBackRing);
 		if (geometry.shaftRange.IsEmpty())
 		{
 			if (startContour.trim + endContour.trim >= evaluated.totalLength)

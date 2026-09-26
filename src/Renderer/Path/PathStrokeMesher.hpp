@@ -86,14 +86,20 @@ namespace DefectStudio
 	// - task/41 S11h, the decoration/shaft handoff. A decoration is RIGID: it is built in the frame of
 	//   the path's endpoint and does not bend along the path, because an arrowhead is a solid object
 	//   and a curved one looks worse than a detached one. The shaft is what gives way. So:
-	//   * The shaft's boundary ring on a decorated end IS the decoration's back ring - same positions,
-	//     same frame - rather than whatever `AtLength(totalLength - trim)` happens to sample. Trimming
-	//     by arc length lands on the curve; the decoration's back sits on the endpoint tangent; on an
-	//     Arc or a Cubic those are two different places, and the visible result was a head sitting in
-	//     a plane of its own while the shaft twisted away from it.
-	//   * That holds for all three profiles. For Flat and CameraFacing the ribbon's boundary pair has
-	//     the decoration's centreline position, tangent and half-width; for Round the boundary ring
-	//     has the decoration's back ring vertices.
+	//   * The shaft's boundary on a decorated end sits where the decoration's back sits, rather than
+	//     wherever `AtLength(totalLength - trim)` happens to sample. Trimming by arc length lands on
+	//     the curve; the decoration's back sits on the endpoint tangent; on an Arc or a Cubic those
+	//     are two different places with two different frames, and the visible result was a head
+	//     sitting in a plane of its own while the shaft twisted away from it.
+	//   * What is shared is the POSITION and the FRAME, and nothing else. The shaft keeps its own
+	//     width: a decoration is wider than the stroke it terminates, so a shaft that adopted the
+	//     decoration's half-width would flare into a funnel over its last segment, and a Round tube
+	//     would balloon to the arrowhead's back radius just before reaching it. The two pieces meet
+	//     at a T-junction, not in a continuous surface.
+	//   * Concretely, for all three profiles: the shaft's boundary sample is moved to the
+	//     decoration's back centreline position and given the endpoint's tangent, normal and
+	//     binormal. Its vertices are then built from that sample exactly as any other shaft sample
+	//     is. The decoration's own vertices are NOT reused by the shaft.
 	//   * A decorated end whose decoration closes its back gets NO shaft cap: the decoration already
 	//     closes the tube, and adding a hemisphere there puts two surfaces in the same place. This is
 	//     latent rather than observed - `cap` defaults to Butt and nothing in the UI sets it - but it

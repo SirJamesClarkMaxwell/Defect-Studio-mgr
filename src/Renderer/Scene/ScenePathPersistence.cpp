@@ -68,19 +68,25 @@ namespace DefectStudio
 			if (input.depthMode == "DepthTest") out.depthMode = PathDepthMode::DepthTest;
 			else if (input.depthMode == "AlwaysOnTop") out.depthMode = PathDepthMode::AlwaysOnTop;
 			else return false;
-			const auto decoration = [](const std::string &name, PathDecorationKind &kind) {
-				if (name == "None") kind = PathDecorationKind::None;
-				else if (name == "Arrow") kind = PathDecorationKind::Arrow;
-				else if (name == "Stealth") kind = PathDecorationKind::Stealth;
-				else if (name == "OpenArrow") kind = PathDecorationKind::OpenArrow;
-				else if (name == "Bar") kind = PathDecorationKind::Bar;
-				else if (name == "Circle") kind = PathDecorationKind::Circle;
-				else if (name == "Square") kind = PathDecorationKind::Square;
-				else if (name == "Diamond") kind = PathDecorationKind::Diamond;
+			const auto decoration = [](const std::string &name, PathEndpointDecoration &decoration) {
+				if (name == "None") decoration.kind = PathDecorationKind::None;
+				else if (name == "Arrow") decoration.kind = PathDecorationKind::Arrow;
+				else if (name == "Stealth") decoration.kind = PathDecorationKind::Stealth;
+				else if (name == "Latex") decoration.kind = PathDecorationKind::Latex;
+				else if (name == "Bar") decoration.kind = PathDecorationKind::Bar;
+				else if (name == "Circle") decoration.kind = PathDecorationKind::Circle;
+				else if (name == "Square") decoration.kind = PathDecorationKind::Square;
+				else if (name == "Diamond") decoration.kind = PathDecorationKind::Diamond;
+				else if (name == "Kite") decoration.kind = PathDecorationKind::Kite;
+				else if (name == "OpenArrow")
+				{
+					decoration.kind = PathDecorationKind::Arrow;
+					decoration.filled = false;
+				}
 				else return false;
 				return true;
 			};
-			if (!decoration(input.startDecoration, out.startDecoration.kind) || !decoration(input.endDecoration, out.endDecoration.kind)) return false;
+			if (!decoration(input.startDecoration, out.startDecoration) || !decoration(input.endDecoration, out.endDecoration)) return false;
 			out.width = input.width;
 			if (Finite(input.ribbonNormal) && glm::length(input.ribbonNormal) > 1e-6f)
 				out.ribbonNormal = input.ribbonNormal;
@@ -94,8 +100,12 @@ namespace DefectStudio
 				out.gradient.stops.push_back({stop.position, stop.color, stop.alpha});
 			out.startDecoration.lengthScale = input.startDecorationLengthScale;
 			out.startDecoration.widthScale = input.startDecorationWidthScale;
+			if (input.startDecoration != "OpenArrow")
+				out.startDecoration.filled = input.startDecorationFilled;
 			out.endDecoration.lengthScale = input.endDecorationLengthScale;
 			out.endDecoration.widthScale = input.endDecorationWidthScale;
+			if (input.endDecoration != "OpenArrow")
+				out.endDecoration.filled = input.endDecorationFilled;
 			return true;
 		}
 
@@ -252,12 +262,17 @@ namespace DefectStudio
 		persisted.style.dashPhase = path.style.dash.phase;
 		persisted.style.gradientEnabled = path.style.gradient.enabled;
 		for (const auto &stop : path.style.gradient.stops) persisted.style.gradientStops.push_back({stop.position, stop.color, stop.alpha});
-		const auto decoration = [](const PathEndpointDecoration &value, std::string &kind, float &length, float &width) {
-			const char *names[] = {"None", "Arrow", "Stealth", "OpenArrow", "Bar", "Circle", "Square", "Diamond"};
-			kind = names[static_cast<int>(value.kind)]; length = value.lengthScale; width = value.widthScale;
+		const auto decoration = [](const PathEndpointDecoration &value, std::string &kind, float &length, float &width, bool &filled) {
+			const char *names[] = {"None", "Arrow", "Stealth", "Latex", "Bar", "Circle", "Square", "Diamond", "Kite"};
+			kind = names[static_cast<int>(value.kind)];
+			length = value.lengthScale;
+			width = value.widthScale;
+			filled = value.filled;
 		};
-		decoration(path.style.startDecoration, persisted.style.startDecoration, persisted.style.startDecorationLengthScale, persisted.style.startDecorationWidthScale);
-		decoration(path.style.endDecoration, persisted.style.endDecoration, persisted.style.endDecorationLengthScale, persisted.style.endDecorationWidthScale);
+		decoration(path.style.startDecoration, persisted.style.startDecoration, persisted.style.startDecorationLengthScale,
+			persisted.style.startDecorationWidthScale, persisted.style.startDecorationFilled);
+		decoration(path.style.endDecoration, persisted.style.endDecoration, persisted.style.endDecorationLengthScale,
+			persisted.style.endDecorationWidthScale, persisted.style.endDecorationFilled);
 		persisted.style.depthMode = path.style.depthMode == PathDepthMode::DepthTest ? "DepthTest" : "AlwaysOnTop";
 		return persisted;
 	}
@@ -298,13 +313,15 @@ namespace DefectStudio
 		const auto tip = [](const std::string &name) {
 			if (name == "Plain") return PathDecorationKind::Arrow;
 			if (name == "Barbed") return PathDecorationKind::Stealth;
-			if (name == "Open") return PathDecorationKind::OpenArrow;
+			if (name == "Open") return PathDecorationKind::Arrow;
 			if (name == "Bar") return PathDecorationKind::Bar;
 			if (name == "Circle") return PathDecorationKind::Circle;
 			return PathDecorationKind::None;
 		};
 		result.path.style.startDecoration.kind = tip(arrow.startTip);
 		result.path.style.endDecoration.kind = tip(arrow.endTip);
+		result.path.style.startDecoration.filled = arrow.startTip != "Open";
+		result.path.style.endDecoration.filled = arrow.endTip != "Open";
 		// Both ends share the v1 head size, but not the v1 tip - assigning the whole struct would
 		// overwrite the end tip that was just mapped.
 		const float headLengthScale = result.path.style.width == 0.0f ? 0.0f : arrow.style.headLength / result.path.style.width;

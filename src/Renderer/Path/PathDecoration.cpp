@@ -2,7 +2,10 @@
 
 #include "Renderer/Path/PathDecoration.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <numbers>
+#include <utility>
 
 namespace DefectStudio
 {
@@ -15,50 +18,99 @@ namespace DefectStudio
 				decoration.lengthScale > 0.0f && decoration.widthScale > 0.0f;
 		}
 
-		[[nodiscard]] DecorationContour MakeFilled(const double length, const bool closesBack,
+		[[nodiscard]] DecorationContour ValidateContour(DecorationContour contour)
+		{
+			bool valid = std::isfinite(contour.trim) && contour.trim >= 0.0;
+			for (std::size_t index = 0; valid && index < contour.points.size(); ++index)
+			{
+				const DecorationContourPoint &point = contour.points[index];
+				valid = std::isfinite(point.s) && std::isfinite(point.halfWidth) && point.s >= 0.0 &&
+					point.halfWidth >= 0.0 && (index == 0u || contour.points[index - 1u].s <= point.s);
+			}
+			if (valid)
+				return contour;
+			DecorationContour empty;
+			empty.filled = contour.filled;
+			return empty;
+		}
+
+		[[nodiscard]] DecorationContour MakeContour(const double length, const bool closesBack,
+			const bool filled,
 			std::initializer_list<DecorationContourPoint> points)
 		{
 			DecorationContour contour;
-			contour.filled = true;
-			contour.closesBack = closesBack;
+			contour.filled = filled;
+			contour.closesBack = closesBack && filled;
 			contour.trim = length;
 			contour.points.assign(points.begin(), points.end());
-			return contour;
+			return ValidateContour(std::move(contour));
 		}
 	} // namespace
 
 	DecorationContour BuildDecorationContour(const PathEndpointDecoration &decoration, const double strokeWidth)
 	{
+		DecorationContour empty;
+		empty.filled = decoration.filled;
 		if (!IsUsable(decoration, strokeWidth))
-			return {};
+			return empty;
 		const double length = strokeWidth * static_cast<double>(decoration.lengthScale);
-		const double width = strokeWidth * static_cast<double>(decoration.widthScale) * 0.5;
+		const double width = strokeWidth * static_cast<double>(decoration.widthScale);
+		const double arrowWidth = width * 0.5;
+		if (!std::isfinite(length) || !std::isfinite(width) || length <= 0.0 || width <= 0.0)
+			return empty;
 		switch (decoration.kind)
 		{
 			case PathDecorationKind::Arrow:
-				return MakeFilled(length, true, {{0.0, 0.0}, {length, width}, {length, 0.0}});
+				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length, arrowWidth}, {length, 0.0}});
 			case PathDecorationKind::Stealth:
-				return MakeFilled(length * 1.15, false, {{0.0, 0.0}, {length * 0.65, width * 1.1}, {length * 1.15, width * 0.35}, {length * 1.15, 0.0}});
-			case PathDecorationKind::OpenArrow:
+				return MakeContour(length * 1.15, false, decoration.filled,
+					{{0.0, 0.0}, {length * 0.65, arrowWidth * 1.1}, {length * 1.15, arrowWidth * 0.35}, {length * 1.15, 0.0}});
+			case PathDecorationKind::Latex:
 			{
-				DecorationContour contour;
-				contour.filled = false;
-				contour.closesBack = false;
-				contour.trim = length * 0.7;
-				contour.points = {{0.0, 0.0}, {length, width}, {length, 0.0}};
-				return contour;
+				DecorationContour contour = MakeContour(length, true, decoration.filled, {});
+				constexpr std::size_t samples = 9;
+				contour.points.reserve(samples);
+				for (std::size_t index = 0; index < samples; ++index)
+				{
+					const double fraction = static_cast<double>(index) / static_cast<double>(samples - 1u);
+					const double bow = std::sin(std::numbers::pi * fraction);
+					contour.points.push_back({length * fraction, arrowWidth * 1.1 * bow});
+				}
+				return ValidateContour(std::move(contour));
 			}
 			case PathDecorationKind::Bar:
-				return MakeFilled(length * 0.08, true, {{0.0, width * 1.25}, {length * 0.08, width * 1.25}, {length * 0.08, 0.0}});
+			{
+				const double barLength = length;
+				DecorationContour contour = MakeContour(barLength * 0.75, true, decoration.filled,
+					{{0.0, width}, {barLength, width}});
+				return ValidateContour(std::move(contour));
+			}
 			case PathDecorationKind::Circle:
-				return MakeFilled(length * 0.75, true, {{0.0, 0.0}, {length * 0.1875, width * 0.53}, {length * 0.375, width * 0.75}, {length * 0.5625, width * 0.53}, {length * 0.75, 0.0}});
+			{
+				DecorationContour contour = MakeContour(length, true, decoration.filled, {});
+				constexpr std::size_t segments = 16;
+				const double radius = length * 0.5;
+				const double centre = radius;
+				contour.points.reserve(segments + 1u);
+				for (std::size_t index = 0; index <= segments; ++index)
+				{
+					const double fraction = static_cast<double>(index) / static_cast<double>(segments);
+					const double s = length * fraction;
+					const double squared = std::max(0.0, radius * radius - (s - centre) * (s - centre));
+					contour.points.push_back({s, std::sqrt(squared)});
+				}
+				return ValidateContour(std::move(contour));
+			}
 			case PathDecorationKind::Square:
-				return MakeFilled(length, true, {{0.0, width}, {length, width}, {length, 0.0}});
+				return MakeContour(length, true, decoration.filled,
+					{{0.0, width}, {length * 0.5, width}, {length, width}});
 			case PathDecorationKind::Diamond:
-				return MakeFilled(length, true, {{0.0, 0.0}, {length * 0.5, width}, {length, 0.0}});
+				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length * 0.5, arrowWidth}, {length, 0.0}});
+			case PathDecorationKind::Kite:
+				return MakeContour(length, true, decoration.filled, {{0.0, 0.0}, {length / 3.0, arrowWidth}, {length, 0.0}});
 			case PathDecorationKind::None: break;
 		}
-		return {};
+		return empty;
 	}
 
 	ShaftRange TrimmedRange(const double totalLength, const PathStrokeStyle &style)

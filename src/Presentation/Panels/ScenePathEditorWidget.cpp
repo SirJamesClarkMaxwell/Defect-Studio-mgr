@@ -21,6 +21,13 @@ namespace DefectStudio
 			mixed = mixed || !(first == value);
 		}
 
+		void MarkDecorationMixed(bool &mixed, const PathEndpointDecoration &first,
+			const PathEndpointDecoration &value)
+		{
+			mixed = mixed || first.kind != value.kind || first.lengthScale != value.lengthScale ||
+				first.widthScale != value.widthScale || first.filled != value.filled;
+		}
+
 		[[nodiscard]] bool DrawEnumCombo(const char *label, StrokeProfile &value)
 		{
 			const char *names[] = {"Round", "Flat", "Camera-facing"};
@@ -33,9 +40,9 @@ namespace DefectStudio
 
 		[[nodiscard]] bool DrawEnumCombo(const char *label, PathDecorationKind &value)
 		{
-			const char *names[] = {"None", "Arrow", "Stealth", "Open arrow", "Bar", "Circle", "Square", "Diamond"};
+			const char *names[] = {"None", "Arrow", "Stealth", "Latex", "Bar", "Circle", "Square", "Diamond", "Kite"};
 			int index = static_cast<int>(value);
-			const bool changed = ImGui::Combo(label, &index, names, 8);
+			const bool changed = ImGui::Combo(label, &index, names, 9);
 			if (changed)
 				value = static_cast<PathDecorationKind>(index);
 			return changed;
@@ -73,8 +80,8 @@ namespace DefectStudio
 				state.values.width = path->style.width;
 				state.values.alpha = path->style.alpha;
 				state.values.color = path->style.color;
-				state.values.startDecoration = path->style.startDecoration.kind;
-				state.values.endDecoration = path->style.endDecoration.kind;
+				state.values.startDecoration = path->style.startDecoration;
+				state.values.endDecoration = path->style.endDecoration;
 				state.values.depthMode = path->style.depthMode;
 				state.resolved = 1;
 				continue;
@@ -86,8 +93,8 @@ namespace DefectStudio
 			MarkMixed(state.mixedWidth, state.values.width, path->style.width);
 			MarkMixed(state.mixedAlpha, state.values.alpha, path->style.alpha);
 			MarkMixed(state.mixedColor, state.values.color, path->style.color);
-			MarkMixed(state.mixedStartDecoration, state.values.startDecoration, path->style.startDecoration.kind);
-			MarkMixed(state.mixedEndDecoration, state.values.endDecoration, path->style.endDecoration.kind);
+			MarkDecorationMixed(state.mixedStartDecoration, state.values.startDecoration, path->style.startDecoration);
+			MarkDecorationMixed(state.mixedEndDecoration, state.values.endDecoration, path->style.endDecoration);
 			MarkMixed(state.mixedDepthMode, state.values.depthMode, path->style.depthMode);
 		}
 		return state;
@@ -110,8 +117,8 @@ namespace DefectStudio
 				style.width = edit.width;
 				style.alpha = edit.alpha;
 				style.color = edit.color;
-				style.startDecoration.kind = edit.startDecoration;
-				style.endDecoration.kind = edit.endDecoration;
+				style.startDecoration = edit.startDecoration;
+				style.endDecoration = edit.endDecoration;
 				style.depthMode = edit.depthMode;
 			});
 		return report.applied.size();
@@ -212,8 +219,18 @@ namespace DefectStudio
 		applyDrag(ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
 		applyDrag(ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));
 		applyDrag(ImGui::ColorEdit3("Color", &edit.color.x));
-		applyImmediate(DrawEnumCombo("Start decoration", edit.startDecoration));
-		applyImmediate(DrawEnumCombo("End decoration", edit.endDecoration));
+		const auto drawDecoration = [&](const char *prefix, PathEndpointDecoration &decoration) {
+			const std::string kindLabel = std::string(prefix) + " kind";
+			const std::string lengthLabel = std::string(prefix) + " length scale";
+			const std::string widthLabel = std::string(prefix) + " width scale";
+			const std::string filledLabel = std::string(prefix) + " filled";
+			applyImmediate(DrawEnumCombo(kindLabel.c_str(), decoration.kind));
+			applyDrag(ImGui::DragFloat(lengthLabel.c_str(), &decoration.lengthScale, 0.01f, 0.01f, 10.0f, "%.2f"));
+			applyDrag(ImGui::DragFloat(widthLabel.c_str(), &decoration.widthScale, 0.01f, 0.01f, 10.0f, "%.2f"));
+			applyImmediate(ImGui::Checkbox(filledLabel.c_str(), &decoration.filled));
+		};
+		drawDecoration("Start decoration", edit.startDecoration);
+		drawDecoration("End decoration", edit.endDecoration);
 		applyImmediate(DrawEnumCombo("Depth", edit.depthMode));
 		return changed || renamed;
 	}
