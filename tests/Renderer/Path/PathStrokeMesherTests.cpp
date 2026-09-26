@@ -184,103 +184,78 @@ namespace DefectStudio::Tests
 			}
 		}
 
-		void AssertDecoratedEndSharesBoundary(const StrokeGeometry &geometry, const PathStrokeStyle &style,
+		void AssertDecoratedEndHandoffInvariant(const StrokeGeometry &geometry, const PathStrokeStyle &style,
 			const EvaluatedSample &endpoint, const bool start)
 		{
 			const std::size_t vertexCount = style.profile == StrokeProfile::Round ? geometry.tubeVertices.size() : geometry.ribbonVertices.size();
 			ASSERT_GT(vertexCount, 0u);
 			ASSERT_FALSE(geometry.shaft.IsEmpty());
-			const StrokeMeshRange &decorationRange = start ? geometry.startDecoration : geometry.endDecoration;
-			ASSERT_FALSE(decorationRange.IsEmpty());
-
-			std::vector<std::uint32_t> decorationVertices;
 			std::vector<std::uint32_t> shaftVertices;
-			CollectReferencedVertices(geometry, decorationRange, vertexCount, decorationVertices);
 			CollectReferencedVertices(geometry, geometry.shaft, vertexCount, shaftVertices);
-			ASSERT_FALSE(decorationVertices.empty());
 			ASSERT_FALSE(shaftVertices.empty());
 
-			const glm::vec3 endpointPosition(endpoint.position);
-			const glm::vec3 inward = glm::vec3(start ? endpoint.tangent : -endpoint.tangent);
-			float backProjection = -std::numeric_limits<float>::infinity();
-			for (const std::uint32_t vertexIndex : decorationVertices)
+			const PathEndpointDecoration &decoration = start ? style.startDecoration : style.endDecoration;
+			const DecorationContour contour = BuildDecorationContour(decoration, style.width);
+			ASSERT_FALSE(contour.points.empty());
+			const double backS = contour.points.back().s;
+			const glm::dvec3 inward = start ? endpoint.tangent : -endpoint.tangent;
+			const glm::vec3 expectedPosition(endpoint.position + inward * backS);
+			const glm::vec3 expectedTangent(endpoint.tangent);
+			const glm::vec3 expectedNormal(endpoint.normal);
+			const float boundaryArc = static_cast<float>(start ? geometry.shaftRange.start : geometry.shaftRange.end);
+			std::vector<std::uint32_t> boundaryVertices;
+			for (const std::uint32_t vertexIndex : shaftVertices)
 			{
 				ASSERT_LT(vertexIndex, vertexCount);
-				const glm::vec3 position = style.profile == StrokeProfile::Round ? geometry.tubeVertices[vertexIndex].position : geometry.ribbonVertices[vertexIndex].position;
-				backProjection = std::max(backProjection, glm::dot(position - endpointPosition, inward));
+				const float dashCoord = style.profile == StrokeProfile::Round ? geometry.tubeVertices[vertexIndex].dashCoord : geometry.ribbonVertices[vertexIndex].dashCoord;
+				if (std::abs(dashCoord - boundaryArc) <= 1.0e-5f)
+					boundaryVertices.push_back(vertexIndex);
 			}
+			ASSERT_FALSE(boundaryVertices.empty());
 
-			std::vector<std::uint32_t> backCandidates;
-			for (const std::uint32_t vertexIndex : decorationVertices)
-			{
-				ASSERT_LT(vertexIndex, vertexCount);
-				const glm::vec3 position = style.profile == StrokeProfile::Round ? geometry.tubeVertices[vertexIndex].position : geometry.ribbonVertices[vertexIndex].position;
-				if (std::abs(glm::dot(position - endpointPosition, inward) - backProjection) <= 1.0e-5f)
-					backCandidates.push_back(vertexIndex);
-			}
-			ASSERT_FALSE(backCandidates.empty());
-
-			std::vector<std::uint32_t> backVertices;
 			if (style.profile == StrokeProfile::Round)
 			{
-				glm::vec3 centre(0.0f);
-				for (const std::uint32_t vertexIndex : backCandidates)
+				const float radius = style.width * 0.5f;
+				for (const std::uint32_t vertexIndex : boundaryVertices)
 				{
 					ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
-					centre += geometry.tubeVertices[vertexIndex].position;
+					const StrokeTubeVertex &vertex = geometry.tubeVertices[vertexIndex];
+					const glm::vec3 offset = vertex.position - expectedPosition;
+					const float offsetLength = glm::length(offset);
+					EXPECT_NEAR(offsetLength, radius, 1.0e-5f);
+					ASSERT_GT(offsetLength, 0.0f);
+					EXPECT_NEAR(glm::dot(offset, expectedTangent), 0.0f, 1.0e-5f);
+					EXPECT_NEAR(glm::distance(glm::normalize(offset), vertex.normal), 0.0f, 1.0e-5f);
 				}
-				centre /= static_cast<float>(backCandidates.size());
-				for (const std::uint32_t vertexIndex : backCandidates)
+
+				for (std::uint32_t radial = 0; radial < style.radialSegments; ++radial)
 				{
-					ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
-					if (glm::distance(geometry.tubeVertices[vertexIndex].position, centre) > 1.0e-6f)
-						backVertices.push_back(vertexIndex);
+					const double angle = 2.0 * std::numbers::pi * static_cast<double>(radial) / static_cast<double>(style.radialSegments);
+					const glm::vec3 expectedNormalAtRadial = glm::vec3(std::cos(angle) * endpoint.normal + std::sin(angle) * endpoint.binormal);
+					bool matched = false;
+					for (const std::uint32_t vertexIndex : boundaryVertices)
+					{
+						ASSERT_LT(vertexIndex, geometry.tubeVertices.size());
+						const StrokeTubeVertex &vertex = geometry.tubeVertices[vertexIndex];
+						matched = glm::distance(vertex.normal, expectedNormalAtRadial) <= 1.0e-5f &&
+							glm::distance(vertex.position, expectedPosition + radius * expectedNormalAtRadial) <= 1.0e-5f;
+						if (matched)
+							break;
+					}
+					EXPECT_TRUE(matched) << "shaft boundary does not carry the endpoint frame";
 				}
 			}
 			else
-				backVertices = backCandidates;
-
-			ASSERT_EQ(backVertices.size(), style.profile == StrokeProfile::Round ? style.radialSegments : 2u);
-			std::vector<std::uint32_t> usedShaftVertices;
-			for (const std::uint32_t decorationIndex : backVertices)
 			{
-				ASSERT_LT(decorationIndex, vertexCount);
-				bool matched = false;
-				for (const std::uint32_t shaftIndex : shaftVertices)
+				for (const std::uint32_t vertexIndex : boundaryVertices)
 				{
-					ASSERT_LT(shaftIndex, vertexCount);
-					if (std::find(usedShaftVertices.begin(), usedShaftVertices.end(), shaftIndex) != usedShaftVertices.end())
-						continue;
-
-					if (style.profile == StrokeProfile::Round)
-					{
-						ASSERT_LT(decorationIndex, geometry.tubeVertices.size());
-						ASSERT_LT(shaftIndex, geometry.tubeVertices.size());
-						const StrokeTubeVertex &decorationVertex = geometry.tubeVertices[decorationIndex];
-						const StrokeTubeVertex &shaftVertex = geometry.tubeVertices[shaftIndex];
-						matched = glm::all(glm::equal(decorationVertex.position, shaftVertex.position)) &&
-							glm::all(glm::equal(decorationVertex.normal, shaftVertex.normal));
-					}
-					else
-					{
-						ASSERT_LT(decorationIndex, geometry.ribbonVertices.size());
-						ASSERT_LT(shaftIndex, geometry.ribbonVertices.size());
-						const StrokeRibbonVertex &decorationVertex = geometry.ribbonVertices[decorationIndex];
-						const StrokeRibbonVertex &shaftVertex = geometry.ribbonVertices[shaftIndex];
-						matched = glm::all(glm::equal(decorationVertex.position, shaftVertex.position)) &&
-							glm::all(glm::equal(decorationVertex.tangent, shaftVertex.tangent));
-						if (style.profile == StrokeProfile::Flat)
-							matched = matched && glm::all(glm::equal(decorationVertex.normal, shaftVertex.normal));
-						else
-							matched = matched && decorationVertex.halfWidth == shaftVertex.halfWidth && decorationVertex.side == shaftVertex.side;
-					}
-					if (matched)
-					{
-						usedShaftVertices.push_back(shaftIndex);
-						break;
-					}
+					ASSERT_LT(vertexIndex, geometry.ribbonVertices.size());
+					const StrokeRibbonVertex &vertex = geometry.ribbonVertices[vertexIndex];
+					EXPECT_NEAR(glm::distance(vertex.position, expectedPosition), 0.0f, 1.0e-5f);
+					EXPECT_NEAR(glm::distance(vertex.tangent, expectedTangent), 0.0f, 1.0e-5f);
+					EXPECT_NEAR(glm::distance(vertex.normal, expectedNormal), 0.0f, 1.0e-5f);
+					EXPECT_NEAR(vertex.halfWidth, style.width * 0.5f, 1.0e-5f);
 				}
-				EXPECT_TRUE(matched) << "decoration/shaft handoff has no matching boundary vertex";
 			}
 		}
 	} // namespace
@@ -403,7 +378,7 @@ namespace DefectStudio::Tests
 			style.endDecoration.kind = PathDecorationKind::Arrow;
 			SCOPED_TRACE(static_cast<int>(profile));
 			const StrokeGeometry geometry = BuildStroke(path, style);
-			AssertDecoratedEndSharesBoundary(geometry, style, path.samples.back(), false);
+			AssertDecoratedEndHandoffInvariant(geometry, style, path.samples.back(), false);
 		}
 	}
 
@@ -420,7 +395,7 @@ namespace DefectStudio::Tests
 			style.startDecoration.kind = PathDecorationKind::Arrow;
 			SCOPED_TRACE(static_cast<int>(profile));
 			const StrokeGeometry geometry = BuildStroke(path, style);
-			AssertDecoratedEndSharesBoundary(geometry, style, path.samples.front(), true);
+			AssertDecoratedEndHandoffInvariant(geometry, style, path.samples.front(), true);
 		}
 	}
 
