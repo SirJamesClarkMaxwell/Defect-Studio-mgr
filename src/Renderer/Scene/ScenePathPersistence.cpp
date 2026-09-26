@@ -110,6 +110,7 @@ namespace DefectStudio
 			if (!decoration(input.startDecoration, out.startDecoration) || !decoration(input.endDecoration, out.endDecoration)) return false;
 			out.width = input.width;
 			out.ribbonThickness = input.ribbonThickness;
+			out.ribbonBevel = input.ribbonBevel;
 			if (Finite(input.ribbonNormal) && glm::length(input.ribbonNormal) > 1e-6f)
 				out.ribbonNormal = input.ribbonNormal;
 			out.radialSegments = input.radialSegments < 3 ? 3u : static_cast<std::uint32_t>(input.radialSegments);
@@ -297,6 +298,7 @@ namespace DefectStudio
 		persisted.style.profile = path.style.profile == StrokeProfile::Round ? "Round" : path.style.profile == StrokeProfile::Flat ? "Flat" : "CameraFacing";
 		persisted.style.ribbonNormal = path.style.ribbonNormal;
 		persisted.style.ribbonThickness = path.style.ribbonThickness;
+		persisted.style.ribbonBevel = path.style.ribbonBevel;
 		persisted.style.width = path.style.width;
 		persisted.style.join = path.style.join == PathLineJoin::Bevel ? "Bevel" : "Round";
 		persisted.style.cap = path.style.cap == PathLineCap::Butt ? "Butt" : path.style.cap == PathLineCap::Square ? "Square" : "Round";
