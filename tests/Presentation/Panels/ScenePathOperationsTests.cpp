@@ -11,6 +11,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
+#include "Presentation/Panels/ScenePathGradientRamp.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
@@ -262,6 +263,91 @@ namespace DefectStudio::Tests
 			EXPECT_EQ(restored->style.gradient.stops[index].color, beforeGradient.stops[index].color);
 			EXPECT_FLOAT_EQ(restored->style.gradient.stops[index].alpha, beforeGradient.stops[index].alpha);
 		}
+	}
+
+	TEST_F(ScenePathUndoTests, GradientMarkerDragCommitsOneUndoEntry)
+	{
+		RendererWindowState window;
+		window.windowId = "path-gradient-marker-drag";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.selectedScenePaths = {id};
+		window.paths->Store().MutateStyle(id, [](ScenePath &path) {
+			path.style.gradient = {true, {
+				{0.2f, glm::vec3(1.0f, 0.0f, 0.0f), 0.3f},
+				{0.8f, glm::vec3(0.0f, 0.0f, 1.0f), 0.7f}}};
+		});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		const ScenePath *beforePath = live.paths->Store().Find(id);
+		ASSERT_NE(beforePath, nullptr);
+		const PathGradient beforeGradient = beforePath->style.gradient;
+
+		BeginScenePathStyleDrag(live);
+		ScenePathStyleEdit edit = ResolveScenePathStyleEdit(live, live.selectedScenePaths).values;
+		ASSERT_FALSE(edit.gradient.stops.empty());
+		for (const float position : {0.25f, 0.4f, 0.6f})
+		{
+			edit.gradient.stops.front().position = position;
+			ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, false), 1u);
+		}
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+
+		ASSERT_TRUE(CommitScenePathStyleDrag(live));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *restored = live.paths->Store().Find(id);
+		ASSERT_NE(restored, nullptr);
+		ASSERT_EQ(restored->style.gradient.stops.size(), beforeGradient.stops.size());
+		for (std::size_t index = 0; index < beforeGradient.stops.size(); ++index)
+		{
+			EXPECT_FLOAT_EQ(restored->style.gradient.stops[index].position, beforeGradient.stops[index].position);
+			EXPECT_EQ(restored->style.gradient.stops[index].color, beforeGradient.stops[index].color);
+			EXPECT_FLOAT_EQ(restored->style.gradient.stops[index].alpha, beforeGradient.stops[index].alpha);
+		}
+	}
+
+	TEST_F(ScenePathUndoTests, GradientStopAddAndRemoveEachCommitOneUndoEntry)
+	{
+		RendererWindowState window;
+		window.windowId = "path-gradient-stop-edits";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.selectedScenePaths = {id};
+		window.paths->Store().MutateStyle(id, [](ScenePath &path) {
+			path.style.gradient = {true, {
+				{0.15f, glm::vec3(1.0f, 0.0f, 0.0f), 0.25f},
+				{0.85f, glm::vec3(0.0f, 0.0f, 1.0f), 0.75f}}};
+		});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		const ScenePath *beforePath = live.paths->Store().Find(id);
+		ASSERT_NE(beforePath, nullptr);
+		const PathGradient beforeGradient = beforePath->style.gradient;
+		ScenePathStyleEdit edit = ResolveScenePathStyleEdit(live, live.selectedScenePaths).values;
+
+		PathGradient added = beforeGradient;
+		const std::size_t addedIndex = InsertGradientStopInWidestGap(added);
+		ASSERT_LT(addedIndex, added.stops.size());
+		edit.gradient = added;
+		const std::size_t depthBeforeAdd = undoStack->GetUndoDepth();
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, true), 1u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), depthBeforeAdd + 1u);
+
+		PathGradient removed = added;
+		ASSERT_LT(addedIndex, removed.stops.size());
+		removed.stops.erase(removed.stops.begin() + addedIndex);
+		edit.gradient = removed;
+		const std::size_t depthBeforeRemove = undoStack->GetUndoDepth();
+		ASSERT_EQ(ApplyScenePathStyleEdit(live, live.selectedScenePaths, edit, true), 1u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), depthBeforeRemove + 1u);
+
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *afterRemoveUndo = live.paths->Store().Find(id);
+		ASSERT_NE(afterRemoveUndo, nullptr);
+		EXPECT_EQ(afterRemoveUndo->style.gradient.stops.size(), added.stops.size());
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *afterAddUndo = live.paths->Store().Find(id);
+		ASSERT_NE(afterAddUndo, nullptr);
+		EXPECT_EQ(afterAddUndo->style.gradient.stops.size(), beforeGradient.stops.size());
 	}
 
 	TEST_F(ScenePathUndoTests, ScenePathStyleDragCommitsOneUndoAfterManySilentApplies)
