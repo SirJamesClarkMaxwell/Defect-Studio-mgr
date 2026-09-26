@@ -31,6 +31,16 @@ namespace DefectStudio
 	[[nodiscard]] ScenePath MakeDevScenePath(
 		ScenePathDevPreset preset, const glm::vec3 &worldPosition, StrokeProfile profile = StrokeProfile::Round);
 
+	// Appends one path per PathDecorationKind except None, in enum order, each carrying that kind as
+	// its start decoration and a plain Arrow at the end, parallel and far enough apart that
+	// neighbouring tips do not touch. One undo entry for the whole gallery.
+	//
+	// task/41 S11j: this exists because reading the tip vocabulary off a screenshot is how the last
+	// two rounds of shape defects were found, and rebuilding nine paths by hand to take that
+	// screenshot is the kind of friction that stops it being done. Declared here rather than left in
+	// the .cpp's anonymous namespace so a test can assert what it produced without driving ImGui.
+	void AddScenePathDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition);
+
 	// The viewport Add menu's "Path (dev)" submenu.
 	//
 	// Deliberately NOT the settings-backed switch the plan sketched: a flag on

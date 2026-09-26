@@ -526,13 +526,15 @@ namespace DefectStudio::Tests
 		style.profile = StrokeProfile::Flat;
 		const StrokeGeometry flat = BuildStroke(StraightPath(), style);
 		ASSERT_GE(flat.ribbonVertices.size(), 6u);
-		// Recorded from a run, not reasoned out: that is what makes this a pin. The offset axis is
-		// the binormal - Sample() seeds normal (0,0,1) and binormal cross(tangent, normal) = (0,-1,0)
-		// - which is the detail a hand-written expectation gets wrong.
+		// Recorded from a run, not reasoned out: the decoration's back moved from s == 0.2 to s == 0.6
+		// and its half-width from 0.1 to 0.25, so the arrowhead is now two and a half times the tube's
+		// radius instead of exactly equal to it. The offset axis is the binormal - Sample() seeds normal
+		// (0,0,1) and binormal cross(tangent, normal) = (0,-1,0) - which is the detail a hand-written
+		// expectation gets wrong.
 		expectNear(flat.ribbonVertices[0].position, glm::vec3(2.0f, 0.0f, 0.0f));
-		expectNear(flat.ribbonVertices[2].position, glm::vec3(1.8f, -0.1f, 0.0f));
-		expectNear(flat.ribbonVertices[3].position, glm::vec3(1.8f, 0.1f, 0.0f));
-		expectNear(flat.ribbonVertices[4].position, glm::vec3(1.8f, 0.0f, 0.0f));
+		expectNear(flat.ribbonVertices[2].position, glm::vec3(1.4f, -0.25f, 0.0f));
+		expectNear(flat.ribbonVertices[3].position, glm::vec3(1.4f, 0.25f, 0.0f));
+		expectNear(flat.ribbonVertices[4].position, glm::vec3(1.4f, 0.0f, 0.0f));
 
 		style.profile = StrokeProfile::Round;
 		style.radialSegments = 4;
@@ -542,9 +544,9 @@ namespace DefectStudio::Tests
 		// near rather than equal - EXPECT_EQ on a float that went through a trig function is a test
 		// that fails on a compiler flag change, not on a regression.
 		expectNear(round.tubeVertices[0].position, glm::vec3(2.0f, 0.0f, 0.0f));
-		expectNear(round.tubeVertices[4].position, glm::vec3(1.8f, 0.1f, 0.0f));
-		expectNear(round.tubeVertices[5].position, glm::vec3(1.8f, 0.0f, 0.1f));
-		expectNear(round.tubeVertices[6].position, glm::vec3(1.8f, -0.1f, 0.0f));
+		expectNear(round.tubeVertices[4].position, glm::vec3(1.4f, 0.25f, 0.0f));
+		expectNear(round.tubeVertices[5].position, glm::vec3(1.4f, 0.0f, 0.25f));
+		expectNear(round.tubeVertices[6].position, glm::vec3(1.4f, -0.25f, 0.0f));
 	}
 
 	TEST(PathStrokeMesherTests, HollowDecorationHasAnInnerWallRatherThanAClosedSolidFan)

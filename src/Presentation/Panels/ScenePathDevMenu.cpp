@@ -15,7 +15,7 @@ namespace DefectStudio
 {
 	namespace
 	{
-		void AddDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition)
+		void AddDecorationGalleryImpl(RendererWindowState &windowState, const glm::vec3 &worldPosition)
 		{
 			constexpr std::array<std::pair<PathDecorationKind, const char *>, 8> decorations = {{
 				{PathDecorationKind::Arrow, "Arrow"},
@@ -107,6 +107,11 @@ namespace DefectStudio
 		return path;
 	}
 
+	void AddScenePathDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition)
+	{
+		AddDecorationGalleryImpl(windowState, worldPosition);
+	}
+
 	void DrawScenePathDevAddMenu(RendererWindowState &windowState, const glm::vec3 &worldPosition)
 	{
 		if (!ImGui::BeginMenu("Path (dev)"))
@@ -116,7 +121,7 @@ namespace DefectStudio
 		// the edit and records no history, which is exactly what a dev menu must not do.
 		const PathEditContext context = MakeWindowPathEditContext(windowState);
 		if (ImGui::MenuItem("Decoration gallery"))
-			AddDecorationGallery(windowState, worldPosition);
+			AddScenePathDecorationGallery(windowState, worldPosition);
 
 		const auto add = [&](const ScenePathDevPreset preset, const StrokeProfile profile, const char *label) {
 			if (!ImGui::MenuItem(label))

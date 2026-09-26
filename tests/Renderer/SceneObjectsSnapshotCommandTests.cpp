@@ -26,6 +26,36 @@ namespace DefectStudio::Tests
 		}
 	} // namespace
 
+	TEST(SceneObjectsSnapshotCommandTests, StyleOnlyUndoPreservesExistingSelection)
+	{
+		RendererWindowState window = MakeWindowWithLabel("before");
+		RendererWindowState::ScenePlane plane;
+		plane.id = SceneObjectId{14};
+		window.scenePlanes.push_back(plane);
+		ScenePath path;
+		path.id = SceneObjectId{15};
+		ASSERT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(path));
+		ASSERT_EQ(window.freeLabels.size(), 1u);
+		ASSERT_EQ(window.scenePlanes.size(), 1u);
+		const SceneObjectId labelId = window.freeLabels[0].id;
+		window.selectedFreeLabels = {labelId};
+		window.selectedScenePlanes = {plane.id};
+		window.selectedScenePaths = {path.id};
+
+		UndoStack stack;
+		ASSERT_TRUE(stack.PushExecuted(CreateSceneObjectsSnapshotCommand(
+			ResolverFor(window), "w1", CaptureSceneObjectsSnapshot(window))));
+		window.scenePlanes[0].alpha = 0.8f;
+
+		ASSERT_TRUE(stack.Undo().HasValue());
+		ASSERT_EQ(window.freeLabels.size(), 1u);
+		ASSERT_EQ(window.scenePlanes.size(), 1u);
+		EXPECT_FLOAT_EQ(window.scenePlanes[0].alpha, 0.35f);
+		EXPECT_EQ(window.selectedFreeLabels, std::vector<SceneObjectId>{labelId});
+		EXPECT_EQ(window.selectedScenePlanes, std::vector<SceneObjectId>{plane.id});
+		EXPECT_EQ(window.selectedScenePaths, std::vector<SceneObjectId>{path.id});
+	}
+
 	TEST(SceneObjectsSnapshotCommandTests, ExecuteIsNoOpAndCommandIsUndoable)
 	{
 		RendererWindowState window = MakeWindowWithLabel("before");
@@ -41,9 +71,26 @@ namespace DefectStudio::Tests
 	TEST(SceneObjectsSnapshotCommandTests, UndoRestoresBeforeAndRedoRestoresAfter)
 	{
 		RendererWindowState window = MakeWindowWithLabel("before");
+		ASSERT_EQ(window.freeLabels.size(), 1u);
+		const SceneObjectId labelId = window.freeLabels[0].id;
 		RendererWindowState::ScenePlane plane;
 		plane.id = SceneObjectId{7};
 		window.scenePlanes.push_back(plane);
+		RendererWindowState::ScenePlane deletedPlane;
+		deletedPlane.id = SceneObjectId{8};
+		window.scenePlanes.push_back(deletedPlane);
+		RendererWindowState::SceneArrow existingArrow;
+		existingArrow.id = SceneObjectId{9};
+		window.sceneArrows.push_back(existingArrow);
+		RendererWindowState::PinnedMeasurement pinned;
+		pinned.id = SceneObjectId{10};
+		window.pinnedMeasurements.push_back(pinned);
+		RendererWindowState::SceneOrbital orbital;
+		orbital.id = SceneObjectId{11};
+		window.sceneOrbitals.push_back(orbital);
+		ScenePath existingPath;
+		existingPath.id = SceneObjectId{13};
+		ASSERT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(existingPath));
 		int restoredCount = 0;
 		UndoStack stack;
 		ASSERT_TRUE(stack.PushExecuted(CreateSceneObjectsSnapshotCommand(
@@ -51,27 +98,46 @@ namespace DefectStudio::Tests
 			[&restoredCount](RendererWindowState &) { ++restoredCount; })));
 
 		window.freeLabels[0].text = "after";
-		window.sceneArrows.push_back({});
+		RendererWindowState::SceneArrow createdArrow;
+		createdArrow.id = SceneObjectId{12};
+		window.sceneArrows.push_back(createdArrow);
+		ASSERT_EQ(window.scenePlanes.size(), 2u);
 		window.scenePlanes[0].alpha = 0.8f;
-		window.selectedFreeLabels.push_back(window.freeLabels[0].id);
-		window.selectedScenePlanes.push_back(plane.id);
+		window.scenePlanes.pop_back();
+		window.selectedFreeLabels = {labelId, SceneObjectId{100}};
+		window.selectedScenePlanes = {plane.id, deletedPlane.id, SceneObjectId{101}};
+		window.selectedSceneArrows = {existingArrow.id, createdArrow.id, SceneObjectId{102}};
+		window.selectedPinnedMeasurements = {pinned.id, SceneObjectId{103}};
+		window.selectedSceneOrbitals = {orbital.id, SceneObjectId{104}};
+		window.selectedScenePaths = {existingPath.id, SceneObjectId{105}};
 		window.freeLabelDragging = true;
 
 		ASSERT_TRUE(stack.Undo().HasValue());
 		ASSERT_EQ(window.freeLabels.size(), 1u);
 		EXPECT_EQ(window.freeLabels[0].text, "before");
-		EXPECT_TRUE(window.sceneArrows.empty());
-		ASSERT_EQ(window.scenePlanes.size(), 1u);
+		ASSERT_EQ(window.sceneArrows.size(), 1u);
+		ASSERT_EQ(window.scenePlanes.size(), 2u);
 		EXPECT_FLOAT_EQ(window.scenePlanes[0].alpha, 0.35f);
-		EXPECT_TRUE(window.selectedFreeLabels.empty());
-		EXPECT_TRUE(window.selectedScenePlanes.empty());
+		EXPECT_EQ(window.selectedFreeLabels, std::vector<SceneObjectId>{labelId});
+		EXPECT_EQ(window.selectedScenePlanes, std::vector<SceneObjectId>({plane.id, deletedPlane.id}));
+		EXPECT_EQ(window.selectedSceneArrows, std::vector<SceneObjectId>{existingArrow.id});
+		EXPECT_EQ(window.selectedPinnedMeasurements, std::vector<SceneObjectId>{pinned.id});
+		EXPECT_EQ(window.selectedSceneOrbitals, std::vector<SceneObjectId>{orbital.id});
+		EXPECT_EQ(window.selectedScenePaths, std::vector<SceneObjectId>{existingPath.id});
 		EXPECT_FALSE(window.freeLabelDragging);
 
 		ASSERT_TRUE(stack.Redo().HasValue());
+		ASSERT_EQ(window.freeLabels.size(), 1u);
 		EXPECT_EQ(window.freeLabels[0].text, "after");
-		EXPECT_EQ(window.sceneArrows.size(), 1u);
+		ASSERT_EQ(window.sceneArrows.size(), 2u);
 		ASSERT_EQ(window.scenePlanes.size(), 1u);
 		EXPECT_FLOAT_EQ(window.scenePlanes[0].alpha, 0.8f);
+		EXPECT_EQ(window.selectedFreeLabels, std::vector<SceneObjectId>{labelId});
+		EXPECT_EQ(window.selectedScenePlanes, std::vector<SceneObjectId>{plane.id});
+		EXPECT_EQ(window.selectedSceneArrows, std::vector<SceneObjectId>{existingArrow.id});
+		EXPECT_EQ(window.selectedPinnedMeasurements, std::vector<SceneObjectId>{pinned.id});
+		EXPECT_EQ(window.selectedSceneOrbitals, std::vector<SceneObjectId>{orbital.id});
+		EXPECT_EQ(window.selectedScenePaths, std::vector<SceneObjectId>{existingPath.id});
 		EXPECT_EQ(restoredCount, 2);
 	}
 

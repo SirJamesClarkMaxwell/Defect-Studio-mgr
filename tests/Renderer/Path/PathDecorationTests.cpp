@@ -94,16 +94,20 @@ namespace DefectStudio::Tests
 		ExpectFiniteAndOrdered(contour);
 	}
 
-	TEST(PathDecorationTests, BarIsAConstantWidthStubAboutOneStrokeWidthLong)
+	TEST(PathDecorationTests, BarIsAConstantWidthStubShorterThanSquare)
 	{
 		constexpr double strokeWidth = 0.4;
 		const PathEndpointDecoration decoration{PathDecorationKind::Bar, 1.0f, 1.0f, true};
 		const DecorationContour contour = BuildDecorationContour(decoration, strokeWidth);
+		const DecorationContour square = BuildDecorationContour(
+			{PathDecorationKind::Square, decoration.lengthScale, decoration.widthScale, true}, strokeWidth);
 		ASSERT_FALSE(contour.points.empty());
 		ASSERT_GE(contour.points.size(), 2u);
+		ASSERT_FALSE(square.points.empty());
 		for (const DecorationContourPoint &point : contour.points)
 			EXPECT_NEAR(point.halfWidth, strokeWidth, 1e-12);
-		EXPECT_NEAR(contour.points.back().s, strokeWidth, 1e-12);
+		EXPECT_NEAR(contour.points.back().s, 0.3 * decoration.lengthScale * strokeWidth, 1e-12);
+		EXPECT_LT(contour.points.back().s, square.points.back().s);
 		EXPECT_TRUE(contour.closesBack);
 	}
 
@@ -202,11 +206,21 @@ namespace DefectStudio::Tests
 	{
 		PathStrokeStyle style;
 		style.width = 2.0f;
-		style.startDecoration.kind = PathDecorationKind::Arrow;
-		style.endDecoration.kind = PathDecorationKind::Circle;
+		style.startDecoration = {PathDecorationKind::Arrow, 1.0f, 1.0f, true};
+		style.endDecoration = {PathDecorationKind::Circle, 1.0f, 1.0f, true};
 		const ShaftRange range = TrimmedRange(10.0, style);
 		EXPECT_NEAR(range.start, BuildDecorationContour(style.startDecoration, style.width).trim, 1e-12);
 		EXPECT_NEAR(range.end, 10.0 - BuildDecorationContour(style.endDecoration, style.width).trim, 1e-12);
-		EXPECT_TRUE(TrimmedRange(0.1, style).IsEmpty());
+	}
+
+	TEST(PathDecorationTests, TrimmedRangeCollapsesToAnEmptyNonInvertedRangeWhenDecorationsOverlap)
+	{
+		PathStrokeStyle style;
+		style.width = 2.0f;
+		style.startDecoration = {PathDecorationKind::Arrow, 1.0f, 1.0f, true};
+		style.endDecoration = {PathDecorationKind::Circle, 1.0f, 1.0f, true};
+		const ShaftRange range = TrimmedRange(3.0, style);
+		EXPECT_TRUE(range.IsEmpty());
+		EXPECT_GE(range.end, range.start);
 	}
 } // namespace DefectStudio::Tests
