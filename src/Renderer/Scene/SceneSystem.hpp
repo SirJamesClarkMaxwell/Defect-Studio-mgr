@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
@@ -78,6 +79,7 @@ namespace DefectStudio
 		// rather than dereferencing windowState.paths, so a window that has never held a path costs
 		// nothing and no call site has to repeat the null check.
 		[[nodiscard]] PathSystem &EnsurePathSystem(RendererWindowState &windowState);
+		[[nodiscard]] BindingContext MakePathBindingContext(const RendererWindowState &windowState);
 
 		// The AppendSceneArrow rule, applied to paths: the id on `path` is discarded and a fresh one
 		// allocated, because a duplicated path arrives still carrying its source's id and one id maps to

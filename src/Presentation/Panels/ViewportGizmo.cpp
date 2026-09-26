@@ -273,7 +273,7 @@ namespace DefectStudio
 			return false;
 
 		SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState);
-		if (SceneTransformPivotPositions(snapshot).empty())
+		if (SceneTransformPivotPositions(windowState, snapshot).empty())
 		{
 			windowState.gizmoDragActive = false;
 			return false;
@@ -325,7 +325,7 @@ namespace DefectStudio
 				? ModalTransformOp::Scale
 				: ModalTransformOp::Translate;
 		snapshot = CaptureSceneTransformSelectionForOperation(windowState, operation);
-		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
+		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(windowState, snapshot);
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;

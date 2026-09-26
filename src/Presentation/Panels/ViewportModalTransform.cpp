@@ -129,6 +129,10 @@ namespace DefectStudio
 			if (session.constraint.kind != ConstraintKind::None && session.constraint.axis >= 0 &&
 				session.constraint.axis < 3)
 			{
+				ImDrawList *drawList = ImGui::GetForegroundDrawList();
+				drawList->PushClipRect(
+					ImVec2(view.viewportOrigin.x, view.viewportOrigin.y),
+					ImVec2(view.viewportOrigin.x + view.viewportSize.x, view.viewportOrigin.y + view.viewportSize.y), true);
 				const glm::mat3 basis = ResolveBasis(session.constraint.space, session.bases);
 				for (int axis = 0; axis < 3; ++axis)
 				{
@@ -138,6 +142,7 @@ namespace DefectStudio
 					if (draw)
 						DrawConstraintLine(view, session.pivot, basis[axis], colors[axis]);
 				}
+				drawList->PopClipRect();
 			}
 
 			const std::string header = FormatModalTransformHeader(session, delta, snap, steps);
@@ -244,7 +249,7 @@ namespace DefectStudio
 
 		SceneTransformSelectionSnapshot snapshot =
 			CaptureSceneTransformSelectionForOperation(windowState, op);
-		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
+		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(windowState, snapshot);
 		if (positions.empty())
 			return;
 

@@ -1568,7 +1568,7 @@ namespace DefectStudio
 		{
 			// No atom selected: frame the selected labels/arrows (arrow = both endpoints) instead.
 			const std::vector<glm::vec3> positions =
-				SceneTransformPivotPositions(CaptureSceneTransformSelection(*windowState));
+				SceneTransformPivotPositions(*windowState, CaptureSceneTransformSelection(*windowState));
 			if (positions.empty())
 				return;
 			target = ComputeTransformPivot(TransformPivotMode::Median, positions, std::nullopt);

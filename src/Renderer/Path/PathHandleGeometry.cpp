@@ -50,6 +50,8 @@ namespace DefectStudio
 		std::vector<PathHandleMarker> markers;
 		if (!ViewportUsable(viewportSize) || !Finite(viewProjection))
 			return markers;
+		if (resolved.positions.size() != path.nodes.size())
+			return markers;
 
 		// Gathered before anything is projected: a single non-finite coordinate anywhere means the
 		// path is malformed, and half a marker set is worse than none - the caller would draw and pick
@@ -58,8 +60,7 @@ namespace DefectStudio
 		nodePositions.reserve(path.nodes.size());
 		for (std::size_t index = 0; index < path.nodes.size(); ++index)
 		{
-			const glm::vec3 position =
-				index < resolved.positions.size() ? resolved.positions[index] : path.nodes[index].position;
+			const glm::vec3 position = resolved.positions[index];
 			if (!Finite(position))
 				return markers;
 			nodePositions.push_back(position);

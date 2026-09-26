@@ -9,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -95,6 +96,56 @@ namespace DefectStudio
 			RendererWindowState::PinnedMeasurement pin = window.pinnedMeasurements[index];
 			pin.worldOffset = glm::vec3(0.0f);
 			return SceneSystem::ResolvePinnedMeasurementPosition(window.structure, pin, position);
+		}
+
+		[[nodiscard]] std::vector<glm::vec3> BuildPivotPositions(
+			const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
+			const BindingContext *bindingContext)
+		{
+			std::vector<glm::vec3> positions;
+			positions.reserve(
+				snapshot.atoms.size() + snapshot.labels.size() + snapshot.arrows.size() * 2 +
+				snapshot.orbitals.size() * 2 + snapshot.planes.size());
+			for (const AtomTransformStart &atom : snapshot.atoms)
+				positions.push_back(atom.position);
+			for (const LabelTransformStart &label : snapshot.labels)
+				positions.push_back(label.position);
+			for (const ArrowTransformStart &arrow : snapshot.arrows)
+			{
+				if (arrow.points.size() < 2)
+					continue;
+				if (arrow.target != SceneArrowTransformTarget::End)
+					positions.push_back(arrow.points.front());
+				if (arrow.target != SceneArrowTransformTarget::Start)
+					positions.push_back(arrow.points.back());
+				if (arrow.target == SceneArrowTransformTarget::Both)
+				{
+					positions.insert(positions.end(), arrow.points.begin() + 1, arrow.points.end() - 1);
+					if (arrow.controlPoint)
+						positions.push_back(*arrow.controlPoint);
+				}
+			}
+			for (const OrbitalTransformStart &orbital : snapshot.orbitals)
+			{
+				positions.push_back(orbital.centerA);
+				if (orbital.twoCenter)
+					positions.push_back(orbital.centerB);
+			}
+			for (const PlaneTransformStart &plane : snapshot.planes)
+				positions.push_back(plane.center);
+			for (const PathTransformStart &path : snapshot.paths)
+			{
+				const ScenePath *scenePath = window != nullptr && window->paths != nullptr
+					? window->paths->Store().Find(path.id) : nullptr;
+				if (scenePath != nullptr && bindingContext != nullptr)
+				{
+					const ResolvedNodes resolved = ResolveNodePositions(*scenePath, *bindingContext);
+					positions.insert(positions.end(), resolved.positions.begin(), resolved.positions.end());
+				}
+				else
+					positions.push_back(path.transform.position);
+			}
+			return positions;
 		}
 
 		[[nodiscard]] SceneArrowTransformTarget ResolveSceneArrowTransformTarget(
@@ -196,40 +247,14 @@ namespace DefectStudio
 
 	std::vector<glm::vec3> SceneTransformPivotPositions(const SceneTransformSelectionSnapshot &snapshot)
 	{
-		std::vector<glm::vec3> positions;
-		positions.reserve(
-			snapshot.atoms.size() + snapshot.labels.size() + snapshot.arrows.size() * 2 +
-			snapshot.orbitals.size() * 2 + snapshot.planes.size());
-		for (const AtomTransformStart &atom : snapshot.atoms)
-			positions.push_back(atom.position);
-		for (const LabelTransformStart &label : snapshot.labels)
-			positions.push_back(label.position);
-		for (const ArrowTransformStart &arrow : snapshot.arrows)
-		{
-			if (arrow.points.size() < 2)
-				continue;
-			if (arrow.target != SceneArrowTransformTarget::End)
-				positions.push_back(arrow.points.front());
-			if (arrow.target != SceneArrowTransformTarget::Start)
-				positions.push_back(arrow.points.back());
-			if (arrow.target == SceneArrowTransformTarget::Both)
-			{
-				positions.insert(positions.end(), arrow.points.begin() + 1, arrow.points.end() - 1);
-				if (arrow.controlPoint)
-					positions.push_back(*arrow.controlPoint);
-			}
-		}
-		for (const OrbitalTransformStart &orbital : snapshot.orbitals)
-		{
-			positions.push_back(orbital.centerA);
-			if (orbital.twoCenter)
-				positions.push_back(orbital.centerB);
-		}
-		for (const PlaneTransformStart &plane : snapshot.planes)
-			positions.push_back(plane.center);
-		for (const PathTransformStart &path : snapshot.paths)
-			positions.push_back(path.transform.position);
-		return positions;
+		return BuildPivotPositions(snapshot, nullptr, nullptr);
+	}
+
+	std::vector<glm::vec3> SceneTransformPivotPositions(
+		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot)
+	{
+		const BindingContext bindingContext = SceneSystem::MakePathBindingContext(window);
+		return BuildPivotPositions(snapshot, &window, &bindingContext);
 	}
 
 	std::optional<glm::mat3> SceneTransformLocalBasis(const SceneTransformSelectionSnapshot &snapshot)

@@ -13,6 +13,31 @@
 
 namespace DefectStudio::SceneSystem
 {
+	BindingContext MakePathBindingContext(const RendererWindowState &windowState)
+	{
+		BindingContext context;
+		context.atomPosition = [&windowState](const std::size_t index) -> std::optional<glm::vec3> {
+			if (index >= windowState.structure.atoms.size())
+				return std::nullopt;
+			return windowState.structure.atoms[index].cartesianPosition;
+		};
+		context.atomRadius = [&windowState](const std::size_t index) -> std::optional<float> {
+			if (index >= windowState.structure.atoms.size())
+				return std::nullopt;
+			return windowState.structure.atoms[index].radius;
+		};
+		context.objectOrigin = [&windowState](const SceneObjectId id) -> std::optional<glm::vec3> {
+			const entt::entity entity = windowState.sceneRegistry.EntityForObjectId(id);
+			if (entity == entt::null || !windowState.sceneRegistry.Registry().all_of<TransformComponent>(entity))
+				return std::nullopt;
+			return windowState.sceneRegistry.Registry().get<TransformComponent>(entity).position;
+		};
+		context.isScenePath = [&windowState](const SceneObjectId id) {
+			return windowState.paths != nullptr && windowState.paths->Store().Find(id) != nullptr;
+		};
+		return context;
+	}
+
 	void SyncSceneWithStructure(SceneRegistry &scene, const RendererStructureData &structure)
 	{
 		std::vector<SceneObjectId> atomIds;
@@ -309,6 +334,7 @@ namespace DefectStudio::SceneSystem
 		if (windowState.paths != nullptr)
 		{
 			const PathStore &paths = windowState.paths->Store();
+			const BindingContext bindingContext = MakePathBindingContext(windowState);
 			scene.PathEntities().reserve(paths.Size());
 			for (std::size_t index = 0; index < paths.Size(); ++index)
 			{
@@ -317,11 +343,12 @@ namespace DefectStudio::SceneSystem
 				const ScenePath *storedPath = paths.At(index);
 				if (storedPath == nullptr)
 					continue;
+				const ResolvedNodes resolved = ResolveNodePositions(*storedPath, bindingContext);
 				glm::vec3 position(0.0f);
-				for (const PathNode &node : storedPath->nodes)
-					position += node.position;
-				if (!storedPath->nodes.empty())
-					position /= static_cast<float>(storedPath->nodes.size());
+				for (const glm::vec3 &nodePosition : resolved.positions)
+					position += nodePosition;
+				if (!resolved.positions.empty())
+					position /= static_cast<float>(resolved.positions.size());
 				Entity entity = scene.CreateObject(
 					SceneObjectKind::ScenePath, index,
 					storedPath->name.empty() ? "path " + std::to_string(index) : storedPath->name, storedPath->id);

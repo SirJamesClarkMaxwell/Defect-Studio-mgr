@@ -209,6 +209,8 @@ namespace DefectStudio
 		result.path = path.id;
 		if (!path.visible || !path.renderable || !SettingsUsable(settings))
 			return result;
+		if (resolved.positions.size() != path.nodes.size())
+			return result;
 
 		const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
 			path, resolved, settings.viewProjection, settings.viewportSize, settings.activeElement);
@@ -239,9 +241,7 @@ namespace DefectStudio
 		if (!path.nodes.empty())
 		{
 			const std::size_t lastNode = path.nodes.size() - 1;
-			const auto nodePosition = [&](const std::size_t index) {
-				return index < resolved.positions.size() ? resolved.positions[index] : path.nodes[index].position;
-			};
+			const auto nodePosition = [&](const std::size_t index) { return resolved.positions[index]; };
 			struct End
 			{
 				const PathEndpointDecoration &decoration;

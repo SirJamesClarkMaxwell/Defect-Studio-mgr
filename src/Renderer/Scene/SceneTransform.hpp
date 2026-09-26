@@ -114,6 +114,8 @@ namespace DefectStudio
 		const RendererWindowState &window, ModalTransformOp operation);
 	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
 		const SceneTransformSelectionSnapshot &snapshot);
+	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
+		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] std::optional<glm::mat3> SceneTransformLocalBasis(
 		const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] bool HasAtomTransformTargets(const SceneTransformSelectionSnapshot &snapshot);
