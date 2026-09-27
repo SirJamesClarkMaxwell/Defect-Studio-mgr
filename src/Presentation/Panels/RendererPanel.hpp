@@ -6,7 +6,9 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/RendererTabChrome.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
@@ -16,7 +18,11 @@ namespace DefectStudio
 	class DomainLayer;
 	class EventBus;
 
-	class RendererPanel final : public IPanel
+	// EventReceiver is here for exactly one subscription: Ctrl+W's
+	// RendererEvents::Windows::CloseRequested. It lands here rather than in RendererLayer because
+	// closing a window is a UI decision with a prompt in front of it, and because this panel is
+	// already the one place that owns a deferred close list.
+	class RendererPanel final : public IPanel, public EventReceiver
 	{
 	public:
 		explicit RendererPanel(
@@ -34,8 +40,13 @@ namespace DefectStudio
 
 	private:
 		void render(float deltaTime);
+		// `activeWindowId` is ResolveActiveRendererWindowId's answer for this frame, passed down so
+		// the loop can record the active tab's viewport rectangle without resolving it N times.
 		void renderStructureWindow(
-			RendererWindowState &windowState, float deltaTime, std::vector<std::string> &windowsToClose);
+			RendererWindowState &windowState,
+			float deltaTime,
+			std::vector<std::string> &windowsToClose,
+			const std::string &activeWindowId);
 		void handleMeasureToolClick(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		// Region select, its hit-tests and the label/arrow gizmos moved to ViewportSelection.hpp -
 		// the creation panes are not RendererPanel windows, so as members none of it ran there.
@@ -64,6 +75,12 @@ namespace DefectStudio
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		WeakRef<DomainLayer> m_DomainLayer;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
+		RendererTabCloseCoordinator m_TabClose;
+		// The active tab's viewport image rectangle, recorded by renderStructureWindow as it draws
+		// that window and consumed by DrawViewportToolbarOverlays after the loop. Zero size means no
+		// renderer window was drawn this frame, and the overlays draw nothing.
+		ImVec2 m_ActiveViewportOrigin = ImVec2(0.0f, 0.0f);
+		ImVec2 m_ActiveViewportSize = ImVec2(0.0f, 0.0f);
 		// Snapshot of the right-click's world position, taken the frame the viewport context menu
 		// opens (ImGui::IsWindowAppearing()) - "Set 3D cursor here" reads it later, when the user
 		// actually clicks that menu item and the live mouse position no longer points at the click.
