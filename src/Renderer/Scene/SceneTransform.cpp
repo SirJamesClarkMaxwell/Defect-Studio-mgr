@@ -21,6 +21,8 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<glm::vec3> CollectSceneTransformPathPivotPositions(
 		const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
 		const BindingContext *bindingContext);
+	[[nodiscard]] std::vector<glm::vec3> CollectSceneTransformPathAnchorPositions(
+		const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window, const BindingContext *bindingContext);
 
 	namespace
 	{
@@ -103,9 +105,8 @@ namespace DefectStudio
 			return SceneSystem::ResolvePinnedMeasurementPosition(window.structure, pin, position);
 		}
 
-		[[nodiscard]] std::vector<glm::vec3> BuildPivotPositions(
-			const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
-			const BindingContext *bindingContext)
+		[[nodiscard]] std::vector<glm::vec3> BuildPositions(
+			const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window, const BindingContext *bindingContext, const bool anchors)
 		{
 			std::vector<glm::vec3> positions;
 			positions.reserve(
@@ -138,8 +139,7 @@ namespace DefectStudio
 			}
 			for (const PlaneTransformStart &plane : snapshot.planes)
 				positions.push_back(plane.center);
-			const std::vector<glm::vec3> pathPositions =
-				CollectSceneTransformPathPivotPositions(snapshot, window, bindingContext);
+			const std::vector<glm::vec3> pathPositions = anchors ? CollectSceneTransformPathAnchorPositions(snapshot, window, bindingContext) : CollectSceneTransformPathPivotPositions(snapshot, window, bindingContext);
 			positions.insert(positions.end(), pathPositions.begin(), pathPositions.end());
 			return positions;
 		}
@@ -244,14 +244,19 @@ namespace DefectStudio
 
 	std::vector<glm::vec3> SceneTransformPivotPositions(const SceneTransformSelectionSnapshot &snapshot)
 	{
-		return BuildPivotPositions(snapshot, nullptr, nullptr);
+		return BuildPositions(snapshot, nullptr, nullptr, false);
 	}
 
-	std::vector<glm::vec3> SceneTransformPivotPositions(
-		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot)
+	std::vector<glm::vec3> SceneTransformPivotPositions(const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot)
 	{
 		const BindingContext bindingContext = SceneSystem::MakePathBindingContext(window);
-		return BuildPivotPositions(snapshot, &window, &bindingContext);
+		return BuildPositions(snapshot, &window, &bindingContext, false);
+	}
+
+	std::vector<glm::vec3> SceneTransformAnchorPositions(const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot)
+	{
+		const BindingContext bindingContext = SceneSystem::MakePathBindingContext(window);
+		return BuildPositions(snapshot, &window, &bindingContext, true);
 	}
 
 	std::optional<glm::mat3> SceneTransformLocalBasis(const SceneTransformSelectionSnapshot &snapshot)

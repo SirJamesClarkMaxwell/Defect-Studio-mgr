@@ -427,14 +427,14 @@ namespace DefectStudio
 				? ModalTransformOp::Scale
 				: ModalTransformOp::Translate;
 		snapshot = CaptureSceneTransformSelectionForOperation(windowState, operation);
-		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(windowState, snapshot);
+		const std::vector<glm::vec3> anchorPositions = SceneTransformAnchorPositions(windowState, snapshot);
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;
-		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
+		const glm::vec3 gizmoPosition = ComputeTransformPivot(windowState.transformPivotMode, anchorPositions, cursor);
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		const std::optional<glm::vec2> pivotScreen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, pivot);
-		if (!pivotScreen.has_value())
+		const std::optional<glm::vec2> gizmoScreen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, gizmoPosition);
+		if (!gizmoScreen.has_value())
 			return false;
 
 		// Suppressing the gizmo whenever an atom/bond happens to be behind the cursor exists so atom
@@ -449,14 +449,14 @@ namespace DefectStudio
 		bases.lattice = windowState.structure.lattice;
 		const OrientationAxes worldAxes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
 		const std::array<AxisProjection, 3> axes = ProjectAxes(
-			viewProjection, imageOrigin, imageSize, pivot, *pivotScreen, worldAxes);
+			viewProjection, imageOrigin, imageSize, gizmoPosition, *gizmoScreen, worldAxes);
 		if (windowState.gizmoOperation == GizmoOperation::Rotate)
 		{
-			const int hoveredAxis = pointerOnGeometry ? -1 : HitTestRotateArcs(mouse, *pivotScreen, axes);
-			const float radial = glm::length(mouse - *pivotScreen);
+			const int hoveredAxis = pointerOnGeometry ? -1 : HitTestRotateArcs(mouse, *gizmoScreen, axes);
+			const float radial = glm::length(mouse - *gizmoScreen);
 			const bool hoveringTrackball = hovered && !pointerOnGeometry &&
 				radial >= kPickMaxDistance - 7.0f && radial <= kPickMaxDistance + 7.0f;
-			DrawRotateGizmo(*pivotScreen, axes, hoveredAxis, hoveringTrackball, imageOrigin, imageSize);
+			DrawRotateGizmo(*gizmoScreen, axes, hoveredAxis, hoveringTrackball, imageOrigin, imageSize);
 			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 				(hoveredAxis >= 0 || hoveringTrackball))
 			{
@@ -470,10 +470,10 @@ namespace DefectStudio
 		}
 		if (windowState.gizmoOperation == GizmoOperation::Scale)
 		{
-			const float radial = glm::length(mouse - *pivotScreen);
+			const float radial = glm::length(mouse - *gizmoScreen);
 			const bool hoveringCenter = hovered && !pointerOnGeometry && radial <= kScaleCenterRadius;
-			const int hoveredAxis = pointerOnGeometry || hoveringCenter ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
-			DrawScaleGizmo(*pivotScreen, axes, hoveredAxis, hoveringCenter, imageOrigin, imageSize);
+			const int hoveredAxis = pointerOnGeometry || hoveringCenter ? -1 : HitTestAxis(mouse, *gizmoScreen, axes);
+			DrawScaleGizmo(*gizmoScreen, axes, hoveredAxis, hoveringCenter, imageOrigin, imageSize);
 			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 				(hoveredAxis >= 0 || hoveringCenter))
 			{
@@ -486,8 +486,8 @@ namespace DefectStudio
 			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringCenter);
 		}
 
-		DrawAxisHandles(*pivotScreen, axes, imageOrigin, imageSize);
-		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
+		DrawAxisHandles(*gizmoScreen, axes, imageOrigin, imageSize);
+		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *gizmoScreen, axes);
 		if (hovered && hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 		{
 			BeginViewportModalTransform(windowState, operation, mouse, hoveredAxis, true);

@@ -133,6 +133,22 @@ namespace DefectStudio
 			return std::nullopt;
 		}
 
+		[[nodiscard]] std::optional<glm::vec3> FindResolvedHandlePosition(
+			const ScenePath &path, const ResolvedNodes &resolved, const PathElementId id)
+		{
+			for (std::size_t index = 0; index < path.segments.size(); ++index)
+			{
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path.segments[index].data);
+				if (cubic == nullptr)
+					continue;
+				if (cubic->startHandle.id == id && index * 2 < resolved.handlePositions.size())
+					return resolved.handlePositions[index * 2];
+				if (cubic->endHandle.id == id && index * 2 + 1 < resolved.handlePositions.size())
+					return resolved.handlePositions[index * 2 + 1];
+			}
+			return std::nullopt;
+		}
+
 		// A zero on any scale axis collapses that axis, so the world-to-local divide above has no
 		// finite answer and would write inf or NaN straight into an authored node position - which
 		// then persists to the project file. Object Mode can reach a zero scale with S 0 Enter, so
@@ -224,11 +240,17 @@ namespace DefectStudio
 				}
 			}
 		}
+
+		enum class PathElementPosition
+		{
+			Pivot,
+			Anchor,
+		};
 	} // namespace
 
-	std::vector<glm::vec3> CollectSceneTransformPathPivotPositions(
+	std::vector<glm::vec3> CollectSceneTransformPathPositions(
 		const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
-		const BindingContext *bindingContext)
+		const BindingContext *bindingContext, const PathElementPosition positionKind)
 	{
 		std::vector<glm::vec3> positions;
 		positions.reserve(snapshot.paths.size() + snapshot.pathElements.size());
@@ -265,12 +287,29 @@ namespace DefectStudio
 						positions.push_back(resolved.positions[index]);
 				continue;
 			}
-			if (const std::optional<glm::vec3> ownerPosition =
-				FindResolvedHandleOwnerPosition(*path, resolved, element.element);
-				ownerPosition.has_value())
-				positions.push_back(*ownerPosition);
+			const std::optional<glm::vec3> position = positionKind == PathElementPosition::Anchor
+				? FindResolvedHandlePosition(*path, resolved, element.element)
+				: FindResolvedHandleOwnerPosition(*path, resolved, element.element);
+			if (position.has_value())
+				positions.push_back(*position);
 		}
 		return positions;
+	}
+
+	std::vector<glm::vec3> CollectSceneTransformPathPivotPositions(
+		const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
+		const BindingContext *bindingContext)
+	{
+		return CollectSceneTransformPathPositions(
+			snapshot, window, bindingContext, PathElementPosition::Pivot);
+	}
+
+	std::vector<glm::vec3> CollectSceneTransformPathAnchorPositions(
+		const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
+		const BindingContext *bindingContext)
+	{
+		return CollectSceneTransformPathPositions(
+			snapshot, window, bindingContext, PathElementPosition::Anchor);
 	}
 
 	void CaptureSceneTransformPathElements(

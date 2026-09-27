@@ -131,9 +131,13 @@ namespace DefectStudio
 	// meanings used before the unified modal driver.
 	[[nodiscard]] SceneTransformSelectionSnapshot CaptureSceneTransformSelectionForOperation(
 		const RendererWindowState &window, ModalTransformOp operation);
+	// The anchor is where the gizmo widget stands; the pivot is what the transform maths turns about.
+	// They differ only for Bezier handles: the anchor is the handle and the pivot is its owner node.
 	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
 		const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
+		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot);
+	[[nodiscard]] std::vector<glm::vec3> SceneTransformAnchorPositions(
 		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] std::optional<glm::mat3> SceneTransformLocalBasis(
 		const SceneTransformSelectionSnapshot &snapshot);
