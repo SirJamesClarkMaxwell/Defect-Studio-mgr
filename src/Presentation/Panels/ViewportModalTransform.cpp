@@ -140,7 +140,12 @@ namespace DefectStudio
 						? axis == session.constraint.axis
 						: axis != session.constraint.axis;
 					if (draw)
-						DrawConstraintLine(view, session.pivot, basis[axis], colors[axis]);
+					{
+						const glm::vec3 &lineOrigin = session.op == ModalTransformOp::Rotate
+							? session.pivot
+							: session.anchor;
+						DrawConstraintLine(view, lineOrigin, basis[axis], colors[axis]);
+					}
 				}
 				drawList->PopClipRect();
 			}
@@ -249,18 +254,23 @@ namespace DefectStudio
 
 		SceneTransformSelectionSnapshot snapshot =
 			CaptureSceneTransformSelectionForOperation(windowState, op);
-		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(windowState, snapshot);
-		if (positions.empty())
+		const std::vector<glm::vec3> pivotPositions = SceneTransformPivotPositions(windowState, snapshot);
+		const std::vector<glm::vec3> anchorPositions = SceneTransformAnchorPositions(windowState, snapshot);
+		if (pivotPositions.empty())
 			return;
 
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;
-		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
+		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, pivotPositions, cursor);
+		const glm::vec3 anchor = anchorPositions.empty()
+			? pivot
+			: ComputeTransformPivot(windowState.transformPivotMode, anchorPositions, cursor);
 		TransformBases bases;
 		bases.local = SceneTransformLocalBasis(snapshot);
 		bases.lattice = windowState.structure.lattice;
 		windowState.modalTransform = BeginModalTransform(op, windowState.transformOrientation, bases, pivot, mouse);
+		windowState.modalTransform->anchor = anchor;
 		if (axis.has_value())
 			windowState.modalTransform->constraint = CycleConstraint(
 				{}, *axis, false, windowState.transformOrientation, bases);

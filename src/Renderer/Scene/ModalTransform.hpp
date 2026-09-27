@@ -96,6 +96,8 @@ namespace DefectStudio
 		TransformOrientation orientation = TransformOrientation::Global;
 		TransformBases bases;
 		glm::vec3 pivot = glm::vec3(0.0f);
+		// Anchor is where the thing is; pivot is what it turns about.
+		glm::vec3 anchor = glm::vec3(0.0f);
 		glm::vec2 startMouse = glm::vec2(0.0f);
 		glm::vec2 lastMouse = glm::vec2(0.0f);
 		// Rotate only: signed screen angle summed frame by frame so turns past 180 degrees keep going.
