@@ -13,10 +13,15 @@
 #include "Renderer/Scene/SceneObject.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneTransformPathElements.hpp"
 #include "Renderer/Scene/SceneTransformPaths.hpp"
 
 namespace DefectStudio
 {
+	[[nodiscard]] std::vector<glm::vec3> CollectSceneTransformPathPivotPositions(
+		const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window,
+		const BindingContext *bindingContext);
+
 	namespace
 	{
 		constexpr float kEpsilon = 1.0e-6f;
@@ -133,18 +138,9 @@ namespace DefectStudio
 			}
 			for (const PlaneTransformStart &plane : snapshot.planes)
 				positions.push_back(plane.center);
-			for (const PathTransformStart &path : snapshot.paths)
-			{
-				const ScenePath *scenePath = window != nullptr && window->paths != nullptr
-					? window->paths->Store().Find(path.id) : nullptr;
-				if (scenePath != nullptr && bindingContext != nullptr)
-				{
-					const ResolvedNodes resolved = ResolveNodePositions(*scenePath, *bindingContext);
-					positions.insert(positions.end(), resolved.positions.begin(), resolved.positions.end());
-				}
-				else
-					positions.push_back(path.transform.position);
-			}
+			const std::vector<glm::vec3> pathPositions =
+				CollectSceneTransformPathPivotPositions(snapshot, window, bindingContext);
+			positions.insert(positions.end(), pathPositions.begin(), pathPositions.end());
 			return positions;
 		}
 
@@ -221,7 +217,8 @@ namespace DefectStudio
 				snapshot.planes.push_back(
 				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents});
 		}
-		CaptureSceneTransformPaths(window, snapshot);
+		if (window.pathEdit.IsActive()) CaptureSceneTransformPathElements(window, snapshot);
+		else CaptureSceneTransformPaths(window, snapshot);
 
 		// Atoms are the gizmo's target only when nothing in the scene layer is selected. Fitting a
 		// plane to three atoms leaves those atoms selected, and without this a G on the new plane
@@ -278,7 +275,7 @@ namespace DefectStudio
 	bool HasSceneObjectTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
 	{
 		return !snapshot.labels.empty() || !snapshot.arrows.empty() || !snapshot.orbitals.empty() ||
-			!snapshot.planes.empty() || !snapshot.paths.empty();
+			!snapshot.planes.empty() || !snapshot.paths.empty() || !snapshot.pathElements.empty();
 	}
 
 	void ApplySceneTransformSelection(
@@ -431,6 +428,7 @@ namespace DefectStudio
 			}
 		}
 		ApplySceneTransformPaths(window, snapshot, delta, operation, pivotMode, selectionPivot);
+		ApplySceneTransformPathElements(window, snapshot, delta, operation, pivotMode, selectionPivot);
 	}
 
 	void RestoreSceneTransformSelection(
@@ -492,5 +490,6 @@ namespace DefectStudio
 			plane.halfExtents = start.halfExtents;
 		}
 		RestoreSceneTransformPaths(window, snapshot);
+		RestoreSceneTransformPathElements(window, snapshot);
 	}
 } // namespace DefectStudio
