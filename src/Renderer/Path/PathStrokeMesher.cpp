@@ -149,7 +149,7 @@ namespace DefectStudio
 		// centre fan would have been a flat disc, which is a Butt cap with extra triangles.
 		void AppendHemisphereCap(StrokeGeometry &geometry, const EvaluatedSample &sample,
 			const PathStrokeStyle &style, const bool end, const std::uint32_t boundaryRing,
-			const glm::vec4 *color)
+			const glm::vec4 *color, const bool startHandoff)
 		{
 			constexpr std::uint32_t kCapRings = 3;
 			const double radius = static_cast<double>(style.width) * 0.5;
@@ -175,13 +175,14 @@ namespace DefectStudio
 						glm::dot(offset, offset) > 1e-18 ? glm::normalize(offset) : axis);
 				}
 				detail::StitchRings(geometry, lower, upper, ringSize,
-					style.profile == StrokeProfile::Flat ? end : !end);
+					style.profile == StrokeProfile::Flat ? end : (startHandoff ? end : !end));
 				lower = upper;
 			}
 		}
 
 		void AppendTubePiece(StrokeGeometry &geometry, std::vector<EvaluatedSample> samples, const PathStrokeStyle &style,
-			const bool capStart, const bool capEnd, const std::vector<glm::vec4> *colors = nullptr)
+			const bool capStart, const bool capEnd, const bool startHandoff,
+			const std::vector<glm::vec4> *colors = nullptr)
 		{
 			if (samples.size() < 2)
 				return;
@@ -206,17 +207,18 @@ namespace DefectStudio
 			{
 				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * ringSize;
 				const std::uint32_t upper = first + static_cast<std::uint32_t>(ring + 1u) * ringSize;
-				detail::StitchRings(geometry, lower, upper, ringSize, style.profile == StrokeProfile::Flat);
+				detail::StitchRings(geometry, lower, upper, ringSize,
+					style.profile == StrokeProfile::Flat || (startHandoff && ring == 0u));
 			}
 			if (style.cap == PathLineCap::Round)
 			{
 				if (capStart)
 					AppendHemisphereCap(geometry, samples.front(), style, false, first,
-						hasColors ? &(*colors)[0] : nullptr);
+						hasColors ? &(*colors)[0] : nullptr, startHandoff);
 				if (capEnd)
 					AppendHemisphereCap(geometry, samples.back(), style, true,
 						first + static_cast<std::uint32_t>(samples.size() - 1u) * ringSize,
-						hasColors ? &colors->back() : nullptr);
+						hasColors ? &colors->back() : nullptr, false);
 			}
 		}
 
@@ -324,7 +326,7 @@ namespace DefectStudio
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (detail::UsesTubeVertices(style))
 				AppendTubePiece(geometry, samples, style, !(atStart && startContour.closesBack),
-					!(atEnd && endContour.closesBack), hasGradientSamples ? &sampleColors : nullptr);
+					!(atEnd && endContour.closesBack), startHandoff, hasGradientSamples ? &sampleColors : nullptr);
 			else
 				AppendRibbonPiece(geometry, samples, style, hasGradientSamples ? &sampleColors : nullptr);
 		}
