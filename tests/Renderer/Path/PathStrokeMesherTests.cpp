@@ -141,6 +141,41 @@ namespace DefectStudio::Tests
 			}
 		}
 
+		void AssertRangeTrianglesFaceOutward(const StrokeGeometry &geometry, const StrokeMeshRange &range)
+		{
+			const std::size_t vertexCount = geometry.tubeVertices.empty() ? geometry.ribbonVertices.size() : geometry.tubeVertices.size();
+			ASSERT_EQ(range.indexCount % 3u, 0u);
+			ASSERT_LE(range.firstIndex, geometry.indices.size());
+			if (range.firstIndex > geometry.indices.size())
+				return;
+			ASSERT_LE(range.indexCount, geometry.indices.size() - range.firstIndex);
+			if (range.indexCount > geometry.indices.size() - range.firstIndex)
+				return;
+
+			for (std::size_t offset = 0u; offset < range.indexCount; offset += 3u)
+			{
+				const std::size_t triangleStart = static_cast<std::size_t>(range.firstIndex) + offset;
+				ASSERT_LE(triangleStart + 2u, geometry.indices.size() - 1u);
+				const std::uint32_t triangle[3] = {geometry.indices[triangleStart], geometry.indices[triangleStart + 1u],
+					geometry.indices[triangleStart + 2u]};
+				for (const std::uint32_t vertexIndex : triangle)
+					ASSERT_LT(vertexIndex, vertexCount);
+
+				const glm::vec3 positions[3] = {VertexPosition(geometry, triangle[0]), VertexPosition(geometry, triangle[1]),
+					VertexPosition(geometry, triangle[2])};
+				const glm::vec3 geometricNormal = glm::cross(positions[1] - positions[0], positions[2] - positions[0]);
+				if (glm::dot(geometricNormal, geometricNormal) <= kSurfaceTolerance * kSurfaceTolerance)
+					continue;
+
+				for (const std::uint32_t vertexIndex : triangle)
+				{
+					const glm::vec3 &vertexNormal = geometry.tubeVertices.empty() ? geometry.ribbonVertices[vertexIndex].normal
+						: geometry.tubeVertices[vertexIndex].normal;
+					EXPECT_GT(glm::dot(geometricNormal, vertexNormal), 0.0f);
+				}
+			}
+		}
+
 		void AssertDecoratedBackSharesShaftFrame(const StrokeGeometry &geometry, const PathStrokeStyle &style,
 			const EvaluatedSample &endpoint, const bool start)
 		{
@@ -1177,6 +1212,14 @@ namespace DefectStudio::Tests
 						ASSERT_FALSE(decorationRange.IsEmpty());
 						AssertRangeReferencesInBounds(geometry, geometry.shaft, vertexCount);
 						AssertRangeReferencesInBounds(geometry, decorationRange, vertexCount);
+						{
+							SCOPED_TRACE("range=shaft");
+							AssertRangeTrianglesFaceOutward(geometry, geometry.shaft);
+						}
+						{
+							SCOPED_TRACE("range=decoration");
+							AssertRangeTrianglesFaceOutward(geometry, decorationRange);
+						}
 
 						const DecorationContour contour = BuildDecorationContour(decoration, style.width);
 						ASSERT_FALSE(contour.points.empty());
