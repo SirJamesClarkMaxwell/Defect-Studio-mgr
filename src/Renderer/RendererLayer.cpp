@@ -1359,6 +1359,13 @@ namespace DefectStudio
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
 		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 5)
 			return;
+		// 1/2/3 are bound to align-to-axis, and path Edit Mode gives the same three keys the element
+		// mode - node-handle / segment / whole path. Both would otherwise fire on one press, aligning
+		// the camera while switching mode. Edit Mode wins, the way it does in Blender: inside it the
+		// number keys stop being view presets. a*/b*/c* on 4/5/6 go the same way, hence the whole
+		// handler rather than the first three axes.
+		if (windowState->pathEdit.IsActive())
+			return;
 
 		// axis 0-2 = a/b/c (real lattice), 3-5 = a*/b*/c* (reciprocal lattice) - mirrors the
 		// toolbar axis buttons (RendererPanelToolbar.cpp), which read the same two matrices.

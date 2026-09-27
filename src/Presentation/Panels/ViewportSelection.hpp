@@ -114,9 +114,8 @@ namespace DefectStudio
 	[[nodiscard]] bool HandleSceneArrowInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 
-	// Click-select for the window's paths: screen-space pick against the geometry the render pass
-	// last built (PickFrontmostScenePath), no drag. Object mode only - S12 owns edit mode, so a
-	// click here always selects the whole path, never one of its nodes.
+	// Click-select for the window's paths: Object Mode picks the frontmost whole path; Edit Mode
+	// routes clicks to the one session path and selects its elements with PickPath.
 	[[nodiscard]] bool HandleScenePathInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 

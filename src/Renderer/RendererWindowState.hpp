@@ -16,6 +16,7 @@
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
+#include "Renderer/Path/PathEditSession.hpp"
 #include "Renderer/Path/PathStore.hpp"
 #include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
@@ -370,6 +371,9 @@ namespace DefectStudio
 		// vector - a path has no vector to index. Same multi-select shape as the four above, and it
 		// must be cleared everywhere they are: a stale entry here shows the wrong Properties section.
 		std::vector<SceneObjectId> selectedScenePaths;
+		// Edit Mode state for the one path opened from selectedScenePaths; element selection is kept
+		// separate so leaving the session never changes Object Mode's path selection.
+		PathEditSession pathEdit;
 
 		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
 		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single

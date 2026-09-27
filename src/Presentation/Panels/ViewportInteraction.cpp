@@ -46,7 +46,8 @@ namespace DefectStudio
 		// frame's click - e.g. clicking an atom gizmo handle must not also be reinterpreted as a pin
 		// pick by HandlePinnedMeasurementInteraction's own hit-test underneath it.
 		return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, layer) ||
-			RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry) ||
+			(!windowState.pathEdit.IsActive() &&
+				RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry)) ||
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered) ||

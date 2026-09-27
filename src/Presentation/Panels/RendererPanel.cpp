@@ -5,6 +5,7 @@
 #include "Presentation/Panels/ViewportInput.hpp"
 #include "Presentation/Panels/ViewportInteraction.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
+#include "Presentation/Panels/ViewportPathOverlay.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 
 #include <algorithm>
@@ -242,6 +243,7 @@ namespace DefectStudio
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		if (windowState.windowId == activeWindowId)
 			DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize);
+		DrawViewportPathOverlay(windowState, imageOrigin, viewportSize);
 		ImGui::SetCursorScreenPos(cursorAfterImage);
 
 		// T08.6.4: drop target for a WAVECAR dragged from ProjectTreePanel - see the payload's
@@ -277,7 +279,7 @@ namespace DefectStudio
 		// (the gizmo disappears once nothing is selected, since RenderTransformGizmo() early-returns
 		// with an empty selection). Doesn't try to cancel/revert a drag already in progress - only
 		// acts when nothing is actively being dragged, so it can't leave a transform half-applied.
-		if (hovered && !windowState.modalTransform.has_value() && !windowState.pinnedMeasurementDragging &&
+		if (hovered && !windowState.pathEdit.IsActive() && !windowState.modalTransform.has_value() && !windowState.pinnedMeasurementDragging &&
 			!windowState.freeLabelDragging && !windowState.sceneArrowDragging &&
 			!windowState.selectionDragActive && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
 		{
