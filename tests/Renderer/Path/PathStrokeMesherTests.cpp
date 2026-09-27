@@ -66,6 +66,8 @@ namespace DefectStudio::Tests
 		}
 
 		constexpr float kSurfaceTolerance = 1.0e-5f;
+		constexpr float kRelativeSliverAreaSquared = 1.0e-6f;
+		constexpr float kMinimumOutwardDot = 0.25f;
 
 		struct PositionEdge
 		{
@@ -152,6 +154,11 @@ namespace DefectStudio::Tests
 			if (range.indexCount > geometry.indices.size() - range.firstIndex)
 				return;
 
+			std::vector<std::array<std::uint32_t, 3u>> triangles;
+			std::vector<glm::vec3> geometricNormals;
+			triangles.reserve(range.indexCount / 3u);
+			geometricNormals.reserve(range.indexCount / 3u);
+			float largestGeometricNormalSquared = 0.0f;
 			for (std::size_t offset = 0u; offset < range.indexCount; offset += 3u)
 			{
 				const std::size_t triangleStart = static_cast<std::size_t>(range.firstIndex) + offset;
@@ -164,14 +171,25 @@ namespace DefectStudio::Tests
 				const glm::vec3 positions[3] = {VertexPosition(geometry, triangle[0]), VertexPosition(geometry, triangle[1]),
 					VertexPosition(geometry, triangle[2])};
 				const glm::vec3 geometricNormal = glm::cross(positions[1] - positions[0], positions[2] - positions[0]);
-				if (glm::dot(geometricNormal, geometricNormal) <= kSurfaceTolerance * kSurfaceTolerance)
+				const float normalSquared = glm::dot(geometricNormal, geometricNormal);
+				triangles.push_back({triangle[0], triangle[1], triangle[2]});
+				geometricNormals.push_back(geometricNormal);
+				largestGeometricNormalSquared = std::max(largestGeometricNormalSquared, normalSquared);
+			}
+
+			const float sliverThresholdSquared = largestGeometricNormalSquared * kRelativeSliverAreaSquared;
+			for (std::size_t triangleIndex = 0u; triangleIndex < triangles.size(); ++triangleIndex)
+			{
+				const float normalSquared = glm::dot(geometricNormals[triangleIndex], geometricNormals[triangleIndex]);
+				if (normalSquared <= sliverThresholdSquared)
 					continue;
 
-				for (const std::uint32_t vertexIndex : triangle)
+				const glm::vec3 geometricNormal = glm::normalize(geometricNormals[triangleIndex]);
+				for (const std::uint32_t vertexIndex : triangles[triangleIndex])
 				{
 					const glm::vec3 &vertexNormal = geometry.tubeVertices.empty() ? geometry.ribbonVertices[vertexIndex].normal
 						: geometry.tubeVertices[vertexIndex].normal;
-					EXPECT_GT(glm::dot(geometricNormal, vertexNormal), 0.0f);
+					EXPECT_GT(glm::dot(geometricNormal, vertexNormal), kMinimumOutwardDot);
 				}
 			}
 		}
