@@ -36,6 +36,11 @@ namespace DefectStudio
 		// Opens `path` for editing. Opening a different path replaces the session and clears the
 		// selection - element ids are only meaningful inside the path that owns them, so carrying
 		// them across would select whatever happened to share an id.
+		//
+		// Re-entering the path that is ALREADY open keeps the selection, which makes Enter
+		// idempotent. Tab toggles rather than re-enters, so this only shows up on a path that is
+		// reopened programmatically - after a reload, say - and there, throwing away a selection
+		// nobody asked to lose would be the surprise.
 		void Enter(SceneObjectId path);
 
 		// Back to Object Mode. Clears the selection: a stale element selection surviving into the
@@ -46,6 +51,10 @@ namespace DefectStudio
 		[[nodiscard]] bool IsActive() const noexcept;
 		[[nodiscard]] SceneObjectId Path() const noexcept;
 
+		// Changing the mode CLEARS the selection. A segment id and a node id are both a
+		// PathElementId and neither carries which one it is, so a selection kept across a mode switch
+		// would be a list of ids the new mode reads as its own kind of thing. Setting the mode it is
+		// already in changes nothing, selection included.
 		void SetElementMode(PathElementMode mode) noexcept;
 		[[nodiscard]] PathElementMode ElementMode() const noexcept;
 
