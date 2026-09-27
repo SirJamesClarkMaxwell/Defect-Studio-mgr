@@ -109,6 +109,74 @@ namespace DefectStudio
 		return path;
 	}
 
+	namespace
+	{
+		PathSegment MakeDevCubicSegment(ScenePath &path, const glm::vec3 &startOffset, const glm::vec3 &endOffset)
+		{
+			PathSegment segment;
+			segment.id = AllocateElementId(path);
+			CubicBezierSegmentData cubic;
+			cubic.startHandle.id = AllocateElementId(path);
+			cubic.startHandle.offset = startOffset;
+			cubic.startHandle.type = BezierHandleType::Free;
+			cubic.endHandle.id = AllocateElementId(path);
+			cubic.endHandle.offset = endOffset;
+			cubic.endHandle.type = BezierHandleType::Free;
+			segment.data = std::move(cubic);
+			return segment;
+		}
+
+		ScenePath MakeDevCompositePath(
+			const glm::vec3 &worldPosition, const StrokeProfile profile, const bool mixedSegments)
+		{
+			// Reuse the normal dev-path defaults and origin setup; only replace the local geometry.
+			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, worldPosition, profile);
+			path.nodes.clear();
+			path.segments.clear();
+
+			std::array<glm::vec3, 4> nodePositions;
+			if (mixedSegments)
+				nodePositions = {{
+					glm::vec3(-1.5f, 0.0f, -0.55f), glm::vec3(-0.5f, 0.0f, -0.55f),
+					glm::vec3(0.5f, 0.0f, 0.55f), glm::vec3(1.5f, 0.0f, 0.55f)}};
+			else
+				nodePositions = {{
+					glm::vec3(-1.5f, 0.0f, -0.9f), glm::vec3(-0.5f, 0.0f, 0.9f),
+					glm::vec3(0.5f, 0.0f, -0.9f), glm::vec3(1.5f, 0.0f, 0.9f)}};
+			for (const glm::vec3 &position : nodePositions)
+			{
+				PathNode node;
+				node.id = AllocateElementId(path);
+				node.position = position;
+				path.nodes.push_back(node);
+			}
+
+			if (mixedSegments)
+			{
+				path.segments.push_back({AllocateElementId(path), LineSegmentData{}});
+				path.segments.push_back(
+					MakeDevCubicSegment(path, glm::vec3(0.55f, 0.0f, 0.0f), glm::vec3(-0.55f, 0.0f, 0.0f)));
+
+				PathSegment arc;
+				arc.id = AllocateElementId(path);
+				CircularArcSegmentData arcData;
+				arcData.planeNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+				arcData.signedSweepRadians = glm::half_pi<float>();
+				arc.data = arcData;
+				path.segments.push_back(std::move(arc));
+			}
+			else
+			{
+				for (int index = 0; index < 3; ++index)
+					path.segments.push_back(
+						MakeDevCubicSegment(path, glm::vec3(0.65f, 0.0f, 0.0f), glm::vec3(-0.65f, 0.0f, 0.0f)));
+			}
+
+			MovePathOriginToCentre(path);
+			return path;
+		}
+	} // namespace
+
 	void AddScenePathDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition)
 	{
 		AddDecorationGalleryImpl(windowState, worldPosition);
@@ -124,6 +192,10 @@ namespace DefectStudio
 		const PathEditContext context = MakeWindowPathEditContext(windowState);
 		if (ImGui::MenuItem("Decoration gallery"))
 			AddScenePathDecorationGallery(windowState, worldPosition);
+		if (ImGui::MenuItem("Cubic S-curve"))
+			(void)AddScenePath(context, MakeDevCompositePath(worldPosition, StrokeProfile::Round, false));
+		if (ImGui::MenuItem("Mixed segments"))
+			(void)AddScenePath(context, MakeDevCompositePath(worldPosition, StrokeProfile::Round, true));
 		if (ImGui::MenuItem("Thick curved Flat ribbon"))
 		{
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Cubic, worldPosition, StrokeProfile::Flat);
