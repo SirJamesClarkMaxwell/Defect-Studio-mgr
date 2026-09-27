@@ -249,7 +249,7 @@ namespace DefectStudio
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		if (windowState.windowId == activeWindowId)
 			DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize);
-		DrawViewportPathOverlay(windowState, imageOrigin, viewportSize);
+		DrawViewportPathOverlay(windowState, m_Layer.GetGlobalSettings(), imageOrigin, viewportSize);
 		ImGui::SetCursorScreenPos(cursorAfterImage);
 
 		// T08.6.4: drop target for a WAVECAR dragged from ProjectTreePanel - see the payload's

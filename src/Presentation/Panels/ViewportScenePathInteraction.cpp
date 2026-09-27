@@ -48,8 +48,8 @@ namespace DefectStudio
 		}
 	} // namespace
 
-	// Plain click replaces the selection, Ctrl-click toggles - the same two rules as arrows,
-	// orbitals and planes. Edit Mode keeps the object selection untouched and routes the click to the
+	// Plain click replaces the selection; Ctrl/Shift-click toggles in Edit Mode. Object Mode keeps the
+	// same replace/toggle rules as arrows, orbitals and planes, while Edit Mode routes the click to the
 	// one path opened by the session.
 	bool HandleScenePathInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
@@ -108,7 +108,8 @@ namespace DefectStudio
 				const PathPickResult hit = PickEditedPath(windowState, *path, settings);
 				if (hit.Hit())
 				{
-					const SceneOutlinerSelectionModifier modifier = ImGui::GetIO().KeyCtrl
+					const ImGuiIO &io = ImGui::GetIO();
+					const SceneOutlinerSelectionModifier modifier = (io.KeyCtrl || io.KeyShift)
 						? SceneOutlinerSelectionModifier::Toggle
 						: SceneOutlinerSelectionModifier::Replace;
 					// Range needs an ordered row list and an anchor; a viewport click has neither, so

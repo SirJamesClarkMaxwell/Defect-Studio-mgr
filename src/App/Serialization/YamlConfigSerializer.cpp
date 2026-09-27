@@ -769,6 +769,46 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.viewport.pathEditNodeColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditNodeColor)},
+				{},
+				config.renderer.viewport.pathEditNodeColor);
+			config.renderer.viewport.pathEditHandleColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditHandleColor)},
+				{},
+				config.renderer.viewport.pathEditHandleColor);
+			config.renderer.viewport.pathEditSelectedColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditSelectedColor)},
+				{},
+				config.renderer.viewport.pathEditSelectedColor);
+			config.renderer.viewport.pathEditTetherColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherColor)},
+				{},
+				config.renderer.viewport.pathEditTetherColor);
+			config.renderer.viewport.pathEditOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
+				{},
+				config.renderer.viewport.pathEditOutlineColor);
+			config.renderer.viewport.pathEditTetherThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
+				{},
+				config.renderer.viewport.pathEditTetherThickness);
+			config.renderer.viewport.pathEditOutlineThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
+				{},
+				config.renderer.viewport.pathEditOutlineThickness);
+			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
+				{},
+				config.renderer.viewport.pathEditMarkerSizeMultiplier);
 			config.renderer.viewport.transformTranslateSnap = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformTranslateSnap)},
@@ -1098,6 +1138,46 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.viewport.pathEditNodeColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditNodeColor)},
+				{},
+				config.renderer.viewport.pathEditNodeColor);
+			config.renderer.viewport.pathEditHandleColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditHandleColor)},
+				{},
+				config.renderer.viewport.pathEditHandleColor);
+			config.renderer.viewport.pathEditSelectedColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditSelectedColor)},
+				{},
+				config.renderer.viewport.pathEditSelectedColor);
+			config.renderer.viewport.pathEditTetherColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherColor)},
+				{},
+				config.renderer.viewport.pathEditTetherColor);
+			config.renderer.viewport.pathEditOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
+				{},
+				config.renderer.viewport.pathEditOutlineColor);
+			config.renderer.viewport.pathEditTetherThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
+				{},
+				config.renderer.viewport.pathEditTetherThickness);
+			config.renderer.viewport.pathEditOutlineThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
+				{},
+				config.renderer.viewport.pathEditOutlineThickness);
+			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
+				{},
+				config.renderer.viewport.pathEditMarkerSizeMultiplier);
 			config.renderer.viewport.transformTranslateSnap = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformTranslateSnap)},

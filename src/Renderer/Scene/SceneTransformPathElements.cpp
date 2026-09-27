@@ -156,15 +156,14 @@ namespace DefectStudio
 
 		void TransformHandle(
 			ScenePath &path, PathHandle &handle, const PathElementId owner,
-			const PathElementTransformStart &start, const SceneTransformDelta &delta,
-			const TransformPivotMode pivotMode, const glm::vec3 &selectionPivot)
+			const PathElementTransformStart &start, const SceneTransformDelta &delta)
 		{
 			const PathNode *node = FindNode(path, owner);
 			if (node == nullptr)
 				return;
 			const glm::vec3 worldStart = LocalToWorld(path, node->position + start.position);
 			const glm::vec3 worldTarget = ApplyTransformDelta(
-				delta.spatial, worldStart, Pivot(pivotMode, worldStart, selectionPivot));
+				delta.spatial, worldStart, LocalToWorld(path, node->position));
 			handle.offset = WorldToLocal(path, worldTarget) - node->position;
 		}
 
@@ -207,7 +206,10 @@ namespace DefectStudio
 				PathElementId owner;
 				PathHandle *handle = FindHandle(path, start->element, owner);
 				if (handle != nullptr && !ContainsNode(movingNodes, owner))
-					TransformHandle(path, *handle, owner, *start, delta, pivotMode, selectionPivot);
+				{
+					// Handle rotation and scale always use the owner node as pivot; pivot mode does not apply.
+					TransformHandle(path, *handle, owner, *start, delta);
+				}
 			}
 		}
 	} // namespace

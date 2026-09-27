@@ -457,6 +457,15 @@ namespace DefectStudio
 
 		for (float &channel : m_DraftConfig.renderer.backgroundColor)
 			channel = std::clamp(channel, 0.0f, 1.0f);
+		const auto clampViewportColor = [](std::array<float, 4> &color) {
+			for (float &channel : color)
+				channel = std::clamp(channel, 0.0f, 1.0f);
+		};
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditNodeColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditHandleColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditSelectedColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditTetherColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditOutlineColor);
 		m_DraftConfig.renderer.bondRadiusMultiplier = std::clamp(m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f);
 		m_DraftConfig.renderer.colorSaturation = std::clamp(m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f);
 		m_DraftConfig.renderer.viewportSupersample = std::clamp(m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f);
@@ -491,6 +500,12 @@ namespace DefectStudio
 			m_DraftConfig.renderer.viewport.iconButtonSize,
 			kMinViewportButtonSize,
 			kMaxViewportButtonSize);
+		m_DraftConfig.renderer.viewport.pathEditTetherThickness = std::clamp(
+			m_DraftConfig.renderer.viewport.pathEditTetherThickness, 0.0f, 8.0f);
+		m_DraftConfig.renderer.viewport.pathEditOutlineThickness = std::clamp(
+			m_DraftConfig.renderer.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
+		m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier = std::clamp(
+			m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_DraftConfig.renderer.viewport.transformTranslateSnap = std::clamp(
 			m_DraftConfig.renderer.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
 		m_DraftConfig.renderer.viewport.transformRotateSnapDegrees = std::clamp(
@@ -2070,6 +2085,78 @@ namespace DefectStudio
 			ImGui::TableSetColumnIndex(1);
 			setValueControlWidth();
 			if (ImGui::SliderFloat("##IconButtonSize", &m_DraftConfig.renderer.viewport.iconButtonSize, 10.0f, 48.0f, "%.0f"))
+				markDirty();
+
+			ImGui::EndTable();
+		}
+
+		ImGui::SeparatorText("Path Edit Mode overlay");
+		if (beginRendererTable("RendererPathEditOverlay"))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Node color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditNodeColor", m_DraftConfig.renderer.viewport.pathEditNodeColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Handle color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditHandleColor", m_DraftConfig.renderer.viewport.pathEditHandleColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Selected color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditSelectedColor", m_DraftConfig.renderer.viewport.pathEditSelectedColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Tether color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditTetherColor", m_DraftConfig.renderer.viewport.pathEditTetherColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Outline color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditOutlineColor", m_DraftConfig.renderer.viewport.pathEditOutlineColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Tether thickness");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##PathEditTetherThickness", &m_DraftConfig.renderer.viewport.pathEditTetherThickness, 0.0f, 8.0f, "%.1f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Outline thickness");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##PathEditOutlineThickness", &m_DraftConfig.renderer.viewport.pathEditOutlineThickness, 0.0f, 8.0f, "%.1f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Marker size");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##PathEditMarkerSizeMultiplier",
+					&m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier,
+					0.25f,
+					4.0f,
+					"%.2fx"))
 				markDirty();
 
 			ImGui::EndTable();

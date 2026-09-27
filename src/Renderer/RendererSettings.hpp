@@ -39,6 +39,15 @@ namespace DefectStudio
 	{
 		float axisButtonSize = 20.0f;
 		float iconButtonSize = 25.0f;
+		// Path Edit Mode's overlay appearance. Marker radii are scaled together in PathHandleGeometry.
+		glm::vec4 pathEditNodeColor = glm::vec4(70.0f / 255.0f, 180.0f / 255.0f, 255.0f / 255.0f, 230.0f / 255.0f);
+		glm::vec4 pathEditHandleColor = glm::vec4(255.0f / 255.0f, 170.0f / 255.0f, 70.0f / 255.0f, 230.0f / 255.0f);
+		glm::vec4 pathEditSelectedColor = glm::vec4(255.0f / 255.0f, 210.0f / 255.0f, 70.0f / 255.0f, 255.0f / 255.0f);
+		glm::vec4 pathEditTetherColor = glm::vec4(180.0f / 255.0f, 180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f);
+		glm::vec4 pathEditOutlineColor = glm::vec4(25.0f / 255.0f, 25.0f / 255.0f, 25.0f / 255.0f, 240.0f / 255.0f);
+		float pathEditTetherThickness = 1.0f;
+		float pathEditOutlineThickness = 1.5f;
+		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;
 		float transformScaleSnap = 0.1f;

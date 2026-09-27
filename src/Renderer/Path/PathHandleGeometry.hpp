@@ -16,7 +16,8 @@ namespace DefectStudio
 	// task/40 spent a manual round chasing on scene arrows.
 	//
 	// Nothing here touches ImGui or the camera class: a view-projection matrix and a viewport size are
-	// the whole input, which is what keeps this in Renderer and testable without a GL context.
+	// the whole geometric input, while the renderer-owned size multiplier below is shared style state.
+	// This keeps the geometry in Renderer and testable without a GL context.
 
 	// Draw radii are the dot the user sees; pick radii are deliberately much larger. The numbers come
 	// from task/40's live testing on scene arrow handles (ViewportGizmo.cpp:26-34), where real clicks
@@ -25,6 +26,31 @@ namespace DefectStudio
 	inline constexpr float kPathActiveHandleDrawRadius = 7.0f;
 	inline constexpr float kPathHandlePickRadius = 20.0f;
 	inline constexpr float kPathActiveHandlePickRadius = 26.0f;
+	// Set by RendererLayer when viewport settings are applied. BuildPathHandleMarkers uses this once
+	// for both drawRadius and pickRadius, preserving the single-source draw/pick contract.
+	// ponytail: mutable global state, chosen over a parameter because the draw radius and the pick
+	// radius MUST scale together - that single source is this file's whole reason to exist - and two
+	// callers (the Edit Mode overlay and PathPicking) would each have to remember to pass the same
+	// value. A caller that forgot would make a handle clickable where it is not drawn.
+	//
+	// The price is a hidden input: BuildPathHandleMarkers is no longer a pure function of its
+	// arguments, and a test that sets this leaks into the next one. Ceiling accepted while there are
+	// exactly two callers and one writer (RendererLayer, when viewport settings are applied).
+	//
+	// Upgrade path when a third caller appears, or when a test needs to vary it: make it a required
+	// trailing parameter, so forgetting it is a compile error rather than a silent divergence, and
+	// thread it through PathPickSettings which PathPicking already receives.
+	inline float gPathHandleSizeMultiplier = 1.0f;
+
+	inline void SetPathHandleSizeMultiplier(const float multiplier) noexcept
+	{
+		gPathHandleSizeMultiplier = multiplier;
+	}
+
+	[[nodiscard]] inline float PathHandleSizeMultiplier() noexcept
+	{
+		return gPathHandleSizeMultiplier;
+	}
 
 	enum class PathMarkerKind
 	{

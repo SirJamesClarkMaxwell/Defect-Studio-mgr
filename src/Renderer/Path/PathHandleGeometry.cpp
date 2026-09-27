@@ -82,9 +82,10 @@ namespace DefectStudio
 			if (!screen.has_value() || !Finite(*screen))
 				return;
 			const bool active = activeElement.IsValid() && element == activeElement;
+			const float sizeMultiplier = PathHandleSizeMultiplier();
 			markers.push_back({kind, element, owner, world, *screen,
-				active ? kPathActiveHandleDrawRadius : kPathHandleDrawRadius,
-				active ? kPathActiveHandlePickRadius : kPathHandlePickRadius});
+				(active ? kPathActiveHandleDrawRadius : kPathHandleDrawRadius) * sizeMultiplier,
+				(active ? kPathActiveHandlePickRadius : kPathHandlePickRadius) * sizeMultiplier});
 		};
 
 		for (std::size_t index = 0; index < path.nodes.size(); ++index)

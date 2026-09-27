@@ -26,6 +26,15 @@ namespace DefectStudio
 	{
 		float axisButtonSize = 20.0f;
 		float iconButtonSize = 18.0f;
+		// Path Edit Mode's overlay appearance.
+		std::array<float, 4> pathEditNodeColor = {70.0f / 255.0f, 180.0f / 255.0f, 255.0f / 255.0f, 230.0f / 255.0f};
+		std::array<float, 4> pathEditHandleColor = {255.0f / 255.0f, 170.0f / 255.0f, 70.0f / 255.0f, 230.0f / 255.0f};
+		std::array<float, 4> pathEditSelectedColor = {255.0f / 255.0f, 210.0f / 255.0f, 70.0f / 255.0f, 255.0f / 255.0f};
+		std::array<float, 4> pathEditTetherColor = {180.0f / 255.0f, 180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f};
+		std::array<float, 4> pathEditOutlineColor = {25.0f / 255.0f, 25.0f / 255.0f, 25.0f / 255.0f, 240.0f / 255.0f};
+		float pathEditTetherThickness = 1.0f;
+		float pathEditOutlineThickness = 1.5f;
+		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;
 		float transformScaleSnap = 0.1f;

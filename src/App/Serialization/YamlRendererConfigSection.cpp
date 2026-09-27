@@ -57,6 +57,20 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "axis_button_size" << YAML::Value << renderer.viewport.axisButtonSize;
 		out << YAML::Key << "icon_button_size" << YAML::Value << renderer.viewport.iconButtonSize;
+		out << YAML::Key << "path_edit_node_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditNodeColor);
+		out << YAML::Key << "path_edit_handle_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditHandleColor);
+		out << YAML::Key << "path_edit_selected_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditSelectedColor);
+		out << YAML::Key << "path_edit_tether_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditTetherColor);
+		out << YAML::Key << "path_edit_outline_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditOutlineColor);
+		out << YAML::Key << "path_edit_tether_thickness" << YAML::Value << renderer.viewport.pathEditTetherThickness;
+		out << YAML::Key << "path_edit_outline_thickness" << YAML::Value << renderer.viewport.pathEditOutlineThickness;
+		out << YAML::Key << "path_edit_marker_size_multiplier" << YAML::Value
+			<< renderer.viewport.pathEditMarkerSizeMultiplier;
 		out << YAML::Key << "transform_translate_snap" << YAML::Value
 			<< renderer.viewport.transformTranslateSnap;
 		out << YAML::Key << "transform_rotate_snap_degrees" << YAML::Value

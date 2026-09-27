@@ -47,14 +47,14 @@ namespace DefectStudio
 		renderHelpMenu();
 
 		const ImGuiStyle &style = ImGui::GetStyle();
-		const float iconExtent = ImGui::GetTextLineHeight();
+		const float dockToggleIconExtent = ImGui::GetTextLineHeight() * 1.33f;
 		const ImVec2 buttonSize{
-			iconExtent + 2.0f * style.FramePadding.x,
-			iconExtent + 2.0f * style.FramePadding.y};
+			dockToggleIconExtent + 2.0f * style.FramePadding.x,
+			dockToggleIconExtent + 2.0f * style.FramePadding.y};
 		const float dockTogglesWidth = 3.0f * buttonSize.x + 2.0f * style.ItemSpacing.x;
 		ImGui::SetCursorPosX(ImGui::GetWindowWidth() - dockTogglesWidth - style.WindowPadding.x);
 
-		const auto renderDockToggle = [this, iconExtent, buttonSize](DockRegion region, const char *id,
+		const auto renderDockToggle = [this, dockToggleIconExtent, buttonSize](DockRegion region, const char *id,
 			const char *tooltip) {
 			if (ImGui::Button(id, buttonSize))
 				toggleDockRegion(region);
@@ -66,13 +66,13 @@ namespace DefectStudio
 				(buttonMin.y + buttonMax.y) * 0.5f};
 			const float iconInset = 1.0f;
 			const ImVec2 iconMin{
-				iconCenter.x - iconExtent * 0.5f + iconInset,
-				iconCenter.y - iconExtent * 0.5f + iconInset};
+				iconCenter.x - dockToggleIconExtent * 0.5f + iconInset,
+				iconCenter.y - dockToggleIconExtent * 0.5f + iconInset};
 			const ImVec2 iconMax{
-				iconCenter.x + iconExtent * 0.5f - iconInset,
-				iconCenter.y + iconExtent * 0.5f - iconInset};
+				iconCenter.x + dockToggleIconExtent * 0.5f - iconInset,
+				iconCenter.y + dockToggleIconExtent * 0.5f - iconInset};
 			const float strokeWidth = 1.0f;
-			const float barExtent = iconExtent * 0.35f;
+			const float barExtent = dockToggleIconExtent * 0.35f;
 			const ImVec2 barMin{iconMin.x + strokeWidth, iconMin.y + strokeWidth};
 			const ImVec2 barMax{iconMax.x - strokeWidth, iconMax.y - strokeWidth};
 			const bool hidden = (region == DockRegion::Left && m_LeftDockRegion.IsHidden())

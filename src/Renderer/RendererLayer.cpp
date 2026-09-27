@@ -30,6 +30,7 @@
 #include "Core/Utils/Time.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
+#include "Renderer/Path/PathHandleGeometry.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
@@ -1059,6 +1060,37 @@ namespace DefectStudio
 			config.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
+		m_GlobalRenderSettings.viewport.pathEditNodeColor = glm::vec4(
+			config.viewport.pathEditNodeColor[0],
+			config.viewport.pathEditNodeColor[1],
+			config.viewport.pathEditNodeColor[2],
+			config.viewport.pathEditNodeColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditHandleColor = glm::vec4(
+			config.viewport.pathEditHandleColor[0],
+			config.viewport.pathEditHandleColor[1],
+			config.viewport.pathEditHandleColor[2],
+			config.viewport.pathEditHandleColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditSelectedColor = glm::vec4(
+			config.viewport.pathEditSelectedColor[0],
+			config.viewport.pathEditSelectedColor[1],
+			config.viewport.pathEditSelectedColor[2],
+			config.viewport.pathEditSelectedColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditTetherColor = glm::vec4(
+			config.viewport.pathEditTetherColor[0],
+			config.viewport.pathEditTetherColor[1],
+			config.viewport.pathEditTetherColor[2],
+			config.viewport.pathEditTetherColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditOutlineColor = glm::vec4(
+			config.viewport.pathEditOutlineColor[0],
+			config.viewport.pathEditOutlineColor[1],
+			config.viewport.pathEditOutlineColor[2],
+			config.viewport.pathEditOutlineColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditTetherThickness = std::clamp(
+			config.viewport.pathEditTetherThickness, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.pathEditOutlineThickness = std::clamp(
+			config.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.pathEditMarkerSizeMultiplier = std::clamp(
+			config.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_GlobalRenderSettings.viewport.transformTranslateSnap = std::clamp(
 			config.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
 		m_GlobalRenderSettings.viewport.transformRotateSnapDegrees = std::clamp(
@@ -1106,6 +1138,7 @@ namespace DefectStudio
 			m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier,
 			kMinFocusRadiusMultiplier,
 			kMaxFocusRadiusMultiplier);
+		SetPathHandleSizeMultiplier(m_GlobalRenderSettings.viewport.pathEditMarkerSizeMultiplier);
 		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = std::clamp(
 			m_GlobalRenderSettings.toolbarWheel.rotationStepDelta,
 			kMinWheelStepDelta,

@@ -52,7 +52,23 @@ namespace DefectStudio
 	// - A HANDLE translates by changing its offset. Its node does not move.
 	// - A SEGMENT translates both of its end nodes, under the same rule: a node already moving
 	//   because it is selected, or because another selected segment shares it, moves once.
-	// - Rotate and Scale act on the same set of moving points about the selection pivot.
+	// - Rotate and Scale act on the same set of moving points, but NOT all about the same pivot:
+	//
+	//     a moving NODE turns and scales about the selection pivot, as every other object does;
+	//     a moving HANDLE turns and scales about ITS OWN NODE, whatever the pivot mode says.
+	//
+	//   This is Blender's rule and it is the only one that means anything. A handle is stored as an
+	//   offset from its node, so scaling it about its node is exactly "make this whisker longer or
+	//   shorter" and rotating it is exactly "swing this whisker round" - the two things a person
+	//   reaches for R and S to do. About the selection median instead, S on a lone handle would drag
+	//   it bodily towards a point somewhere else on the curve, which is not an operation anyone
+	//   wants and which the single-selection case degenerates to nothing anyway.
+	//
+	//   Translate is unaffected: a delta does not consult a pivot.
+	//
+	//   The node in question is the handle's owner, at its position for this frame. When the owner is
+	//   itself selected the handle is not transformed at all - see the rule above - so the two never
+	//   have to agree about who moved first.
 	//
 	// After the positions change, re-derive the Auto handles with ApplyAutoHandles. Handles typed
 	// Free, Aligned or Vector are left exactly as they are.

@@ -8,12 +8,14 @@
 
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathHandleGeometry.hpp"
+#include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
 {
 	void DrawViewportPathOverlay(
-		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+		const RendererWindowState &windowState, const RendererGlobalRenderSettings &globalSettings,
+		const ImVec2 &imageOrigin, const ImVec2 &imageSize)
 	{
 		if (!windowState.pathEdit.IsActive() || windowState.camera == nullptr || windowState.paths == nullptr ||
 			imageSize.x <= 0.0f || imageSize.y <= 0.0f)
@@ -24,6 +26,7 @@ namespace DefectStudio
 			return;
 
 		const glm::mat4 view = windowState.camera->ViewMatrix();
+		const RendererViewportSettings &settings = globalSettings.viewport;
 		const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
 			*path,
 			ResolveNodePositions(*path, BindingContext{}),
@@ -35,12 +38,31 @@ namespace DefectStudio
 		drawList.PushClipRect(
 			imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
 
-		constexpr ImU32 kTetherColor = IM_COL32(180, 180, 180, 190);
-		constexpr ImU32 kNodeColor = IM_COL32(70, 180, 255, 230);
-		constexpr ImU32 kHandleColor = IM_COL32(255, 170, 70, 230);
-		constexpr ImU32 kSelectedColor = IM_COL32(255, 210, 70, 255);
-		constexpr ImU32 kOutlineColor = IM_COL32(25, 25, 25, 240);
-		constexpr float kOutlineThickness = 1.5f;
+		const ImU32 tetherColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+			settings.pathEditTetherColor.x,
+			settings.pathEditTetherColor.y,
+			settings.pathEditTetherColor.z,
+			settings.pathEditTetherColor.w));
+		const ImU32 nodeColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+			settings.pathEditNodeColor.x,
+			settings.pathEditNodeColor.y,
+			settings.pathEditNodeColor.z,
+			settings.pathEditNodeColor.w));
+		const ImU32 handleColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+			settings.pathEditHandleColor.x,
+			settings.pathEditHandleColor.y,
+			settings.pathEditHandleColor.z,
+			settings.pathEditHandleColor.w));
+		const ImU32 selectedColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+			settings.pathEditSelectedColor.x,
+			settings.pathEditSelectedColor.y,
+			settings.pathEditSelectedColor.z,
+			settings.pathEditSelectedColor.w));
+		const ImU32 outlineColor = ImGui::ColorConvertFloat4ToU32(ImVec4(
+			settings.pathEditOutlineColor.x,
+			settings.pathEditOutlineColor.y,
+			settings.pathEditOutlineColor.z,
+			settings.pathEditOutlineColor.w));
 
 		for (const PathHandleMarker &handle : markers)
 		{
@@ -52,9 +74,9 @@ namespace DefectStudio
 			if (owner == markers.end())
 				continue;
 			drawList.AddLine(
-				ImVec2(imageOrigin.x + handle.screenPosition.x, imageOrigin.y + handle.screenPosition.y),
-				ImVec2(imageOrigin.x + owner->screenPosition.x, imageOrigin.y + owner->screenPosition.y),
-				kTetherColor, 1.0f);
+					ImVec2(imageOrigin.x + handle.screenPosition.x, imageOrigin.y + handle.screenPosition.y),
+					ImVec2(imageOrigin.x + owner->screenPosition.x, imageOrigin.y + owner->screenPosition.y),
+					tetherColor, settings.pathEditTetherThickness);
 		}
 
 		for (const PathHandleMarker &marker : markers)
@@ -62,12 +84,12 @@ namespace DefectStudio
 			const ImVec2 point(imageOrigin.x + marker.screenPosition.x, imageOrigin.y + marker.screenPosition.y);
 			const bool selected = windowState.pathEdit.IsSelected(marker.element);
 			const ImU32 fill = selected
-				? kSelectedColor
-				: marker.kind == PathMarkerKind::Node ? kNodeColor : kHandleColor;
+				? selectedColor
+				: marker.kind == PathMarkerKind::Node ? nodeColor : handleColor;
 			drawList.AddCircleFilled(point, marker.drawRadius, fill);
 			drawList.AddCircle(
-				point, std::max(0.0f, marker.drawRadius - kOutlineThickness * 0.5f),
-				kOutlineColor, 0, kOutlineThickness);
+				point, std::max(0.0f, marker.drawRadius - settings.pathEditOutlineThickness * 0.5f),
+				outlineColor, 0, settings.pathEditOutlineThickness);
 		}
 
 		drawList.PopClipRect();
