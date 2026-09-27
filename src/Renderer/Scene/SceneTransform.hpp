@@ -81,6 +81,21 @@ namespace DefectStudio
 		PathTransform transform;
 	};
 
+	// One element of one path, as it stood when the drag began. `position` is the node's authored
+	// LOCAL position for a node, and the handle's offset from its node for a handle - both are the
+	// value the element actually stores, so restoring is an assignment rather than a subtraction.
+	//
+	// `path` is repeated on every entry although Edit Mode only ever has one path open, because the
+	// apply reads entries without reaching back for the session, and an entry that cannot say which
+	// path it belongs to is a foot-gun the first time a second path can be edited.
+	struct PathElementTransformStart
+	{
+		SceneObjectId path;
+		PathElementId element;
+		bool isHandle = false;
+		glm::vec3 position{0.0f};
+	};
+
 	struct SceneTransformSelectionSnapshot
 	{
 		std::vector<AtomTransformStart> atoms;
@@ -93,6 +108,10 @@ namespace DefectStudio
 		std::vector<PlaneTransformStart> planes;
 		// G/R/S compose onto each selected path's object transform.
 		std::vector<PathTransformStart> paths;
+		// Edit Mode's elements, inside one path whose own transform does NOT change. `paths` and
+		// this are mutually exclusive by construction - see CaptureSceneTransformPathElements for
+		// why filling both would move a node twice.
+		std::vector<PathElementTransformStart> pathElements;
 	};
 
 	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label
