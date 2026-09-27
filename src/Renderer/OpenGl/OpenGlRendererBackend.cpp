@@ -3458,7 +3458,7 @@ namespace DefectStudio
 		GLint previousCullMode = GL_BACK;
 		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
 		// A translucent surface should show its back faces too. The outline pass instead culls
-		// front faces, leaving the expanded back shell visible behind the unmodified object.
+		// front faces, leaving the view-perpendicular expanded back shell visible behind the object.
 		if (outline)
 		{
 			glDepthMask(GL_FALSE);

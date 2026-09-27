@@ -307,9 +307,11 @@ namespace DefectStudio
 			glBindVertexArray(entry.mesh.vao);
 			glDrawElements(GL_TRIANGLES, entry.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
 		};
-		// ponytail: normal-expanded back faces are the cheap bounded solution for the current path
-		// meshes. If highly concave/self-intersecting ribbons become common, replace this pass with an
-		// offscreen selection mask and screen-space dilation for an exact silhouette.
+		// ponytail: outline expansion uses only the normal component perpendicular to the camera, so
+		// camera-facing flat caps do not grow into solid fills while curved/tubular silhouettes keep
+		// their full width at the contour. This handles locally convex and flat-faced meshes, but not
+		// exact occlusion for highly concave/self-intersecting ribbons; that ceiling needs an offscreen
+		// selection mask and screen-space dilation.
 		glDepthMask(GL_FALSE);
 		for (const DrawJob &job : jobs)
 			drawJob(job, true);

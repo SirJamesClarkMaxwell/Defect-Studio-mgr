@@ -6,6 +6,7 @@ layout(location = 2) in vec4 aColor;
 
 uniform mat4 u_ViewProjection;
 uniform vec3 u_SceneOffset;
+uniform vec3 u_CameraPosition;
 uniform int u_OutlineMode;
 uniform float u_OutlineExpansion;
 
@@ -17,7 +18,12 @@ void main()
 {
 	vec4 world = vec4(aPosition + u_SceneOffset, 1.0);
 	if (u_OutlineMode == 1)
-		world.xyz += normalize(aNormal) * u_OutlineExpansion;
+	{
+		vec3 normal = normalize(aNormal);
+		vec3 viewDirection = normalize(u_CameraPosition - world.xyz);
+		vec3 silhouetteNormal = normal - viewDirection * dot(normal, viewDirection);
+		world.xyz += silhouetteNormal * u_OutlineExpansion;
+	}
 	gl_Position = u_ViewProjection * world;
 	vNormal = aNormal;
 	vColor = aColor;

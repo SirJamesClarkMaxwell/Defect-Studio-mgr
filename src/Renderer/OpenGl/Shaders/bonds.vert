@@ -23,6 +23,7 @@ uniform float u_BondRadiusMultiplier;
 // as of Etap F Phase 1) - render-time-only, applied after the per-instance model transform so it
 // never touches the baked cylinder geometry/orientation.
 uniform vec3 u_SceneOffset;
+uniform vec3 u_CameraPosition;
 uniform int u_OutlineMode;
 
 out vec3 vNormal;
@@ -41,7 +42,11 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(model)));
     vNormal = normalize(normalMatrix * aNormal);
 	if (u_OutlineMode == 1)
-		worldPosition.xyz += vNormal * aOutlineExpansion;
+	{
+		vec3 viewDirection = normalize(u_CameraPosition - worldPosition.xyz);
+		vec3 silhouetteNormal = vNormal - viewDirection * dot(vNormal, viewDirection);
+		worldPosition.xyz += silhouetteNormal * aOutlineExpansion;
+	}
 	gl_Position = u_ViewProjection * worldPosition;
     vColorA = aColorA;
     vColorB = aColorB;
