@@ -432,4 +432,26 @@ namespace DefectStudio
 			});
 	}
 
+	Unique<ICommand> CreateRendererNewWindowCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Open renderer window",
+			[](EventBus &bus) {
+				RendererEvents::Windows::OpenEmptyRequested event;
+				bus.Publish(event);
+			});
+	}
+
+	Unique<ICommand> CreateRendererCloseWindowCommand(Ref<EventBus> eventBus)
+	{
+		return CreateUnique<RendererViewportEventCommand>(
+			std::move(eventBus),
+			"Close renderer window",
+			[](EventBus &bus) {
+				RendererEvents::Windows::CloseRequested event;
+				bus.Publish(event);
+			});
+	}
+
 } // namespace DefectStudio

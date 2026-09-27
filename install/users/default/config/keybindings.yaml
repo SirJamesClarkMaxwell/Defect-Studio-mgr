@@ -62,6 +62,18 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "renderer.new_window"
+    chord: "Ctrl+T"
+    command: "renderer.new_window"
+    context: ""
+    layer: 2
+    enabled: true
+  - id: "renderer.close_window"
+    chord: "Ctrl+W"
+    command: "renderer.close_window"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.align_axis_a"
     chord: "1"
     command: "renderer.align_axis_a"

@@ -33,12 +33,17 @@ namespace DefectStudio
 			WeakRef<DomainLayer> domainLayer,
 			std::string title = "Renderer",
 			bool visibleByDefault = true);
+		// EventReceiver holds move-only SubscriptionHandles, so the implicit copy constructor is
+		// deleted and Clone() no longer compiles without this. Same reason and same shape as
+		// LoggingPanel's: copy the state, re-subscribe rather than copy the subscription.
+		RendererPanel(const RendererPanel &other);
 
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Scene; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
+		void bindWindowEvents();
 		void render(float deltaTime);
 		// `activeWindowId` is ResolveActiveRendererWindowId's answer for this frame, passed down so
 		// the loop can record the active tab's viewport rectangle without resolving it N times.

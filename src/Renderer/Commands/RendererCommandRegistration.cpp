@@ -241,6 +241,16 @@ namespace DefectStudio
 			return CreateRendererApplyDefaultViewCommand(std::move(eventBus));
 		}
 
+		Unique<ICommand> MakeNewWindowCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererNewWindowCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeCloseWindowCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererCloseWindowCommand(std::move(eventBus));
+		}
+
 		Unique<ICommand> MakeDeleteSelectedAtomsCommand(
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer,
@@ -383,6 +393,19 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable)
 	{
 		using namespace RendererEvents::Viewport;
+
+		RegisterRendererCommand(
+			registry,
+			"renderer.new_window",
+			"Renderer: New window",
+			"Open an empty renderer window.",
+			std::bind_front(MakeNewWindowCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.close_window",
+			"Renderer: Close window",
+			"Close the active renderer window.",
+			std::bind_front(MakeCloseWindowCommand, eventBus));
 
 		RegisterRendererCommand(
 			registry,

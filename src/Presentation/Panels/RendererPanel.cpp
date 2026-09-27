@@ -6,7 +6,6 @@
 #include "Presentation/Panels/ViewportInteraction.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
-#include "Presentation/Panels/ViewportToolbars.hpp"
 
 #include <algorithm>
 
@@ -81,6 +80,43 @@ namespace DefectStudio
 	{
 		if (Ref<CommandRegistry> registry = m_CommandRegistry.lock())
 			RegisterViewportSceneObjectCommands(*registry, m_Layer);
+		bindWindowEvents();
+	}
+
+	RendererPanel::RendererPanel(const RendererPanel &other)
+		: IPanel(other.GetTitle(), other.IsVisible()),
+		  m_Layer(other.m_Layer),
+		  m_EventBus(other.m_EventBus),
+		  m_ContextManager(other.m_ContextManager),
+		  m_CommandRegistry(other.m_CommandRegistry),
+		  m_DomainLayer(other.m_DomainLayer),
+		  m_LastMousePositions(other.m_LastMousePositions),
+		  m_ContextMenuWorldPosition(other.m_ContextMenuWorldPosition),
+		  m_AddAtomPopupRequested(other.m_AddAtomPopupRequested),
+		  m_AddAtomPopupWindowId(other.m_AddAtomPopupWindowId),
+		  m_AddAtomPopupFractional(other.m_AddAtomPopupFractional),
+		  m_AddAtomPopupPosition(other.m_AddAtomPopupPosition),
+		  m_AddMenuRequested(other.m_AddMenuRequested),
+		  m_AddMenuWindowId(other.m_AddMenuWindowId),
+		  m_AddMenuPosition(other.m_AddMenuPosition),
+		  m_AddMenuPositionFractional(other.m_AddMenuPositionFractional),
+		  m_AddMenuScreenPos(other.m_AddMenuScreenPos)
+	{
+		// m_TabClose and the active viewport rectangle are deliberately NOT copied: a half-answered
+		// close prompt and a rectangle measured in another panel's frame both belong to the instance
+		// that produced them.
+		bindWindowEvents();
+	}
+
+	void RendererPanel::bindWindowEvents()
+	{
+		if (m_EventBus == nullptr)
+			return;
+		AddSubscription(m_EventBus->Subscribe<RendererEvents::Windows::CloseRequested>(
+			[this](const RendererEvents::Windows::CloseRequested &event)
+			{
+				m_TabClose.Request(event.windowId);
+			}));
 	}
 
 	Ref<IPanel> RendererPanel::Clone() const
@@ -101,6 +137,12 @@ namespace DefectStudio
 		if (!m_Layer.IsAttached())
 			return;
 
+		// Reset before the loop, not after it: a frame that draws no renderer window must leave a
+		// zero rectangle, or the overlays park themselves over whatever took its place.
+		m_ActiveViewportOrigin = ImVec2(0.0f, 0.0f);
+		m_ActiveViewportSize = ImVec2(0.0f, 0.0f);
+		const std::string activeWindowId = ResolveActiveRendererWindowId(m_Layer);
+
 		consumeAddMenuRequests();
 		std::vector<std::string> windowsToClose;
 		for (RendererWindowState &windowState : m_Layer.GetWindows())
@@ -110,10 +152,21 @@ namespace DefectStudio
 			// FBO. Drawing them from this loop would put three stray title bars on screen.
 			if (!windowState.sessionId.empty())
 				continue;
-			renderStructureWindow(windowState, deltaTime, windowsToClose);
+			renderStructureWindow(windowState, deltaTime, windowsToClose, activeWindowId);
 		}
+		m_TabClose.Drain(m_Layer, windowsToClose);
 		for (const std::string &windowId : windowsToClose)
 			m_Layer.RemoveWindow(windowId);
+		// After the removals, so a tab closed this frame cannot be found and drawn over.
+		for (RendererWindowState &activeWindow : m_Layer.GetWindows())
+		{
+			if (activeWindow.windowId != activeWindowId)
+				continue;
+			DrawViewportToolbarOverlays(activeWindow, m_Layer, m_ActiveViewportOrigin, m_ActiveViewportSize);
+			break;
+		}
+		if (m_EventBus != nullptr)
+			DrawRendererTabBarAddButton(m_Layer, *m_EventBus);
 		consumeAddMenuRequests();
 
 		drawPeriodicTableWindow();
@@ -123,7 +176,10 @@ namespace DefectStudio
 	}
 
 	void RendererPanel::renderStructureWindow(
-		RendererWindowState &windowState, float deltaTime, std::vector<std::string> &windowsToClose)
+		RendererWindowState &windowState,
+		float deltaTime,
+		std::vector<std::string> &windowsToClose,
+		const std::string &activeWindowId)
 	{
 		if (windowState.camera == nullptr)
 			return;
@@ -175,12 +231,6 @@ namespace DefectStudio
 			return;
 		}
 
-		DrawViewportToolbar(windowState, m_Layer);
-		ImGui::Separator();
-
-		DrawViewportVerticalToolbar(windowState, m_Layer);
-		ImGui::SameLine();
-
 		const ImVec2 available = ImGui::GetContentRegionAvail();
 		m_Layer.SetViewportSize(
 			windowState.windowId,
@@ -188,6 +238,11 @@ namespace DefectStudio
 		const ImVec2 viewportSize(windowState.viewportSize.x, windowState.viewportSize.y);
 
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
+		if (windowState.windowId == activeWindowId)
+		{
+			m_ActiveViewportOrigin = imageOrigin;
+			m_ActiveViewportSize = viewportSize;
+		}
 
 		const unsigned int textureId = m_Layer.RenderToFbo(
 			windowState.windowId,
