@@ -65,6 +65,153 @@ namespace DefectStudio::Tests
 			return open;
 		}
 
+		constexpr float kSurfaceTolerance = 1.0e-5f;
+
+		struct PositionEdge
+		{
+			glm::vec3 first{0.0f};
+			glm::vec3 second{0.0f};
+			std::size_t references = 0u;
+		};
+
+		glm::vec3 VertexPosition(const StrokeGeometry &geometry, const std::uint32_t vertexIndex)
+		{
+			return geometry.tubeVertices.empty() ? geometry.ribbonVertices[vertexIndex].position : geometry.tubeVertices[vertexIndex].position;
+		}
+
+		float VertexDashCoordinate(const StrokeGeometry &geometry, const std::uint32_t vertexIndex)
+		{
+			return geometry.tubeVertices.empty() ? geometry.ribbonVertices[vertexIndex].dashCoord : geometry.tubeVertices[vertexIndex].dashCoord;
+		}
+
+		void CollectReferencedVertices(const StrokeGeometry &geometry, const StrokeMeshRange &range, std::size_t vertexCount,
+			std::vector<std::uint32_t> &vertices);
+
+		void AssertRangeIsClosedByPosition(const StrokeGeometry &geometry, const StrokeMeshRange &range)
+		{
+			const std::size_t vertexCount = geometry.tubeVertices.empty() ? geometry.ribbonVertices.size() : geometry.tubeVertices.size();
+			const auto samePosition = [](const glm::vec3 &a, const glm::vec3 &b) {
+				return glm::distance(a, b) <= kSurfaceTolerance;
+			};
+			ASSERT_EQ(range.indexCount % 3u, 0u);
+			ASSERT_LE(range.firstIndex, geometry.indices.size());
+			if (range.firstIndex > geometry.indices.size())
+				return;
+			ASSERT_LE(range.indexCount, geometry.indices.size() - range.firstIndex);
+			if (range.indexCount > geometry.indices.size() - range.firstIndex)
+				return;
+
+			std::vector<PositionEdge> edges;
+			for (std::size_t offset = 0u; offset < range.indexCount; offset += 3u)
+			{
+				const std::size_t triangleStart = static_cast<std::size_t>(range.firstIndex) + offset;
+				ASSERT_LE(triangleStart + 2u, geometry.indices.size() - 1u);
+				const std::uint32_t triangle[3] = {geometry.indices[triangleStart], geometry.indices[triangleStart + 1u],
+					geometry.indices[triangleStart + 2u]};
+				for (std::size_t corner = 0u; corner < 3u; ++corner)
+				{
+					ASSERT_LT(triangle[corner], vertexCount);
+				}
+				const glm::vec3 positions[3] = {VertexPosition(geometry, triangle[0]), VertexPosition(geometry, triangle[1]),
+					VertexPosition(geometry, triangle[2])};
+				if (samePosition(positions[0], positions[1]) || samePosition(positions[1], positions[2]) ||
+					samePosition(positions[2], positions[0]))
+					continue;
+
+				for (std::size_t corner = 0u; corner < 3u; ++corner)
+				{
+					const glm::vec3 &first = positions[corner];
+					const glm::vec3 &second = positions[(corner + 1u) % 3u];
+					auto edge = std::find_if(edges.begin(), edges.end(), [&](const PositionEdge &candidate) {
+						return (samePosition(candidate.first, first) && samePosition(candidate.second, second)) ||
+							(samePosition(candidate.first, second) && samePosition(candidate.second, first));
+					});
+					if (edge == edges.end())
+						edges.push_back({first, second, 1u});
+					else
+						++edge->references;
+				}
+			}
+
+			for (const PositionEdge &edge : edges)
+			{
+				EXPECT_EQ(edge.references, 2u) << "surviving edge references=" << edge.references << " (" << edge.first.x << ", "
+					<< edge.first.y << ", " << edge.first.z << ") - (" << edge.second.x << ", " << edge.second.y << ", "
+					<< edge.second.z << ")";
+			}
+		}
+
+		void AssertDecoratedBackSharesShaftFrame(const StrokeGeometry &geometry, const PathStrokeStyle &style,
+			const EvaluatedSample &endpoint, const bool start)
+		{
+			const std::size_t vertexCount = geometry.tubeVertices.empty() ? geometry.ribbonVertices.size() : geometry.tubeVertices.size();
+			ASSERT_GT(vertexCount, 0u);
+			ASSERT_FALSE(geometry.shaft.IsEmpty());
+			const StrokeMeshRange &decorationRange = start ? geometry.startDecoration : geometry.endDecoration;
+			ASSERT_FALSE(decorationRange.IsEmpty());
+
+			std::vector<std::uint32_t> shaftVertices;
+			std::vector<std::uint32_t> decorationVertices;
+			CollectReferencedVertices(geometry, geometry.shaft, vertexCount, shaftVertices);
+			CollectReferencedVertices(geometry, decorationRange, vertexCount, decorationVertices);
+			ASSERT_FALSE(shaftVertices.empty());
+			ASSERT_FALSE(decorationVertices.empty());
+
+			const PathEndpointDecoration &decoration = start ? style.startDecoration : style.endDecoration;
+			const DecorationContour contour = BuildDecorationContour(decoration, style.width);
+			ASSERT_FALSE(contour.points.empty());
+			const double backS = contour.points.back().s;
+			const glm::vec3 tangent = glm::normalize(glm::vec3(endpoint.tangent));
+			const glm::vec3 normal = glm::normalize(glm::vec3(endpoint.normal));
+			const glm::vec3 binormal = glm::normalize(glm::vec3(endpoint.binormal));
+			const glm::vec3 inward = start ? tangent : -tangent;
+			const glm::vec3 expectedCentre = glm::vec3(endpoint.position) + inward * static_cast<float>(backS);
+			const float boundaryArc = static_cast<float>(start ? geometry.shaftRange.start : geometry.shaftRange.end);
+
+			std::vector<glm::vec3> shaftBoundary;
+			for (const std::uint32_t vertexIndex : shaftVertices)
+			{
+				ASSERT_LT(vertexIndex, vertexCount);
+				const glm::vec3 position = VertexPosition(geometry, vertexIndex);
+				if (std::abs(VertexDashCoordinate(geometry, vertexIndex) - boundaryArc) <= kSurfaceTolerance &&
+					std::abs(glm::dot(position - expectedCentre, tangent)) <= kSurfaceTolerance)
+					shaftBoundary.push_back(position);
+			}
+
+			std::vector<glm::vec3> decorationBack;
+			for (const std::uint32_t vertexIndex : decorationVertices)
+			{
+				ASSERT_LT(vertexIndex, vertexCount);
+				const glm::vec3 offset = VertexPosition(geometry, vertexIndex) - expectedCentre;
+				if (std::abs(glm::dot(offset, tangent)) <= kSurfaceTolerance)
+					decorationBack.push_back(VertexPosition(geometry, vertexIndex));
+			}
+			ASSERT_FALSE(shaftBoundary.empty());
+			ASSERT_FALSE(decorationBack.empty());
+
+			const auto centroid = [](const std::vector<glm::vec3> &positions) {
+				glm::vec3 result(0.0f);
+				for (const glm::vec3 &position : positions)
+					result += position;
+				return result / static_cast<float>(positions.size());
+			};
+			EXPECT_NEAR(glm::distance(centroid(shaftBoundary), expectedCentre), 0.0f, kSurfaceTolerance);
+			EXPECT_NEAR(glm::distance(centroid(decorationBack), expectedCentre), 0.0f, kSurfaceTolerance);
+			EXPECT_NEAR(glm::distance(centroid(shaftBoundary), centroid(decorationBack)), 0.0f, kSurfaceTolerance);
+
+			const auto assertFrame = [&](const std::vector<glm::vec3> &positions) {
+				for (const glm::vec3 &position : positions)
+				{
+					const glm::vec3 offset = position - expectedCentre;
+					EXPECT_NEAR(glm::dot(offset, tangent), 0.0f, kSurfaceTolerance);
+					const glm::vec3 projected = glm::dot(offset, normal) * normal + glm::dot(offset, binormal) * binormal;
+					EXPECT_NEAR(glm::distance(offset, projected), 0.0f, kSurfaceTolerance);
+				}
+			};
+			assertFrame(shaftBoundary);
+			assertFrame(decorationBack);
+		}
+
 		bool AllIndicesInBounds(const StrokeGeometry &geometry)
 		{
 			const std::size_t vertexCount = geometry.tubeVertices.empty() ? geometry.ribbonVertices.size() : geometry.tubeVertices.size();
@@ -986,6 +1133,60 @@ namespace DefectStudio::Tests
 				EXPECT_LE(geometry.startDecoration.firstIndex + geometry.startDecoration.indexCount, geometry.indices.size());
 				EXPECT_LE(geometry.endDecoration.firstIndex + geometry.endDecoration.indexCount, geometry.indices.size());
 			}
+	}
+
+	TEST(PathStrokeMesherTests, DecorationMatrixChecksClosedSurfacesAndHandoffFrame)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+		struct ProfileVariant
+		{
+			StrokeProfile profile;
+			bool beveled;
+		};
+		const std::array<ProfileVariant, 3> profiles = {{{StrokeProfile::Round, false}, {StrokeProfile::Flat, false},
+			{StrokeProfile::Flat, true}}};
+
+		for (const PathDecorationKind kind : kAllDecorations)
+		{
+			if (kind == PathDecorationKind::None)
+				continue;
+			for (const bool start : {true, false})
+				for (const ProfileVariant &profile : profiles)
+					for (const bool filled : {true, false})
+					{
+						PathStrokeStyle style;
+						style.profile = profile.profile;
+						style.width = 0.2f;
+						style.ribbonThickness = 0.3f;
+						style.ribbonBevel = profile.beveled ? 0.25f * std::min(style.width, style.ribbonThickness) : 0.0f;
+						style.radialSegments = 8;
+						style.cap = PathLineCap::Round;
+						PathEndpointDecoration &decoration = start ? style.startDecoration : style.endDecoration;
+						decoration.kind = kind;
+						decoration.filled = filled;
+
+						SCOPED_TRACE(::testing::Message() << "kind=" << static_cast<int>(kind) << ", profile="
+							<< static_cast<int>(profile.profile) << ", bevel=" << style.ribbonBevel << ", filled="
+							<< (filled ? "true" : "false") << ", end=" << (start ? "start" : "end"));
+						const StrokeGeometry geometry = BuildStroke(path, style);
+						const std::size_t vertexCount = geometry.tubeVertices.empty() ? geometry.ribbonVertices.size() : geometry.tubeVertices.size();
+						ASSERT_GT(vertexCount, 0u);
+						ASSERT_FALSE(geometry.shaft.IsEmpty());
+						const StrokeMeshRange &decorationRange = start ? geometry.startDecoration : geometry.endDecoration;
+						ASSERT_FALSE(decorationRange.IsEmpty());
+						AssertRangeReferencesInBounds(geometry, geometry.shaft, vertexCount);
+						AssertRangeReferencesInBounds(geometry, decorationRange, vertexCount);
+
+						const DecorationContour contour = BuildDecorationContour(decoration, style.width);
+						ASSERT_FALSE(contour.points.empty());
+						if (contour.closesBack)
+							AssertRangeIsClosedByPosition(geometry, decorationRange);
+						else
+							AssertRangeIsClosedByPosition(geometry, geometry.shaft);
+						AssertDecoratedBackSharesShaftFrame(geometry, style, start ? path.samples.front() : path.samples.back(), start);
+					}
+		}
 	}
 
 	TEST(PathStrokeMesherTests, ArcTRisesWithTheShaftAndCarriesTheGradientColour)
