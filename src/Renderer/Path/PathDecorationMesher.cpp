@@ -5,12 +5,19 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace DefectStudio::detail
 {
 	namespace
 	{
+		[[nodiscard]] std::uint32_t BevelSegmentCount(const PathStrokeStyle &style)
+		{
+			constexpr std::uint32_t maxSegments = std::numeric_limits<std::uint32_t>::max() / 8u - 1u;
+			return std::min(std::max(1u, style.ribbonBevelSegments), maxSegments);
+		}
+
 		[[nodiscard]] glm::dvec3 SafeNormal(const glm::dvec3 &value, const glm::dvec3 &fallback)
 		{
 			return glm::dot(value, value) > 1.0e-18 ? glm::normalize(value) : fallback;
@@ -237,8 +244,10 @@ namespace DefectStudio::detail
 	{
 		if (style.profile == StrokeProfile::Round)
 			return style.radialSegments;
-		return style.profile == StrokeProfile::Flat && std::isfinite(style.ribbonBevel) && style.ribbonBevel > 0.0f
-			? 16u : 8u;
+		if (style.profile != StrokeProfile::Flat || !std::isfinite(style.ribbonBevel) || style.ribbonBevel <= 0.0f)
+			return 8u;
+		const std::uint32_t bevelSegments = BevelSegmentCount(style);
+		return 8u * (bevelSegments + 1u);
 	}
 
 	std::uint32_t AppendCrossSectionRing(StrokeGeometry &geometry, const glm::dvec3 &centre,
@@ -280,6 +289,53 @@ namespace DefectStudio::detail
 			const double halfWidthScaled = halfWidth * scale;
 			const double bevelAlongWidth = std::min(bevel, halfWidthScaled);
 			const double bevelAlongDepth = std::min(bevel, depth);
+			const std::uint32_t bevelSegments = BevelSegmentCount(style);
+			if (bevelSegments > 1u)
+			{
+				const double shape = std::clamp(
+					std::isfinite(style.ribbonBevelShape) ? static_cast<double>(style.ribbonBevelShape) : 0.5,
+					0.0, 1.0);
+				const double profile = 2.0 * shape;
+				const auto appendFace = [&](const glm::dvec3 &firstPosition, const glm::dvec3 &secondPosition,
+					const glm::dvec3 &faceNormal) {
+					const glm::vec3 normalValue = glm::vec3(inner ? -faceNormal : faceNormal);
+					geometry.tubeVertices.push_back({glm::vec3(centre + firstPosition), normalValue,
+						SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT),
+						static_cast<float>(sample.arcLength)});
+					geometry.tubeVertices.push_back({glm::vec3(centre + secondPosition), normalValue,
+						SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT),
+						static_cast<float>(sample.arcLength)});
+				};
+				const auto appendBevelCorner = [&](const glm::dvec3 &corner, const glm::dvec3 &startOffset,
+					const glm::dvec3 &endOffset) {
+					const auto pointAt = [&](const double fraction) {
+						const double angle = 0.5 * std::numbers::pi * fraction;
+						const glm::dvec3 straight = startOffset * (1.0 - fraction) + endOffset * fraction;
+						const glm::dvec3 arc = startOffset * std::cos(angle) + endOffset * std::sin(angle);
+						return corner + straight + (arc - straight) * profile;
+					};
+					glm::dvec3 previous = pointAt(0.0);
+					for (std::uint32_t segment = 0; segment < bevelSegments; ++segment)
+					{
+						const glm::dvec3 next = pointAt(static_cast<double>(segment + 1u) / bevelSegments);
+						const glm::dvec3 edge = next - previous;
+						const glm::dvec3 edgeNormal = glm::dot(edge, binormal) * normal - glm::dot(edge, normal) * binormal;
+						const glm::dvec3 faceNormal = SafeNormal(edgeNormal, inner ? -normal : normal);
+						appendFace(previous, next, faceNormal);
+						previous = next;
+					}
+				};
+
+				appendFace(corners[0] - normal * bevelAlongWidth, corners[1] + normal * bevelAlongWidth, binormal);
+				appendBevelCorner(corners[1], normal * bevelAlongWidth, -binormal * bevelAlongDepth);
+				appendFace(corners[1] - binormal * bevelAlongDepth, corners[2] + binormal * bevelAlongDepth, -normal);
+				appendBevelCorner(corners[2], binormal * bevelAlongDepth, normal * bevelAlongWidth);
+				appendFace(corners[2] + normal * bevelAlongWidth, corners[3] - normal * bevelAlongWidth, -binormal);
+				appendBevelCorner(corners[3], -normal * bevelAlongWidth, binormal * bevelAlongDepth);
+				appendFace(corners[3] + binormal * bevelAlongDepth, corners[0] - binormal * bevelAlongDepth, normal);
+				appendBevelCorner(corners[0], -binormal * bevelAlongDepth, -normal * bevelAlongWidth);
+				return first;
+			}
 			const std::array<glm::dvec3, 8> positions = {
 				normal * (halfWidthScaled - bevelAlongWidth) + binormal * depth,
 				normal * (-halfWidthScaled + bevelAlongWidth) + binormal * depth,
@@ -306,7 +362,7 @@ namespace DefectStudio::detail
 		const std::array<std::uint32_t, 8> cornerIndices = {0u, 1u, 1u, 2u, 2u, 3u, 3u, 0u};
 		const std::array<glm::dvec3, 8> faceNormals = {
 			binormal, binormal, -normal, -normal, -binormal, -binormal, normal, normal};
-		for (std::uint32_t radial = 0; radial < CrossSectionRingSize(style); ++radial)
+		for (std::uint32_t radial = 0; radial < 8u; ++radial)
 		{
 			const glm::dvec3 faceNormal = SafeNormal(faceNormals[radial], inner ? -normal : normal);
 			geometry.tubeVertices.push_back({glm::vec3(centre + corners[cornerIndices[radial]]),

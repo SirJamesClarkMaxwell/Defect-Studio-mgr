@@ -540,6 +540,20 @@ namespace DefectStudio::Tests
 			}
 		}
 
+		bool TubeGeometryPositionsMatch(const StrokeGeometry &first, const StrokeGeometry &second)
+		{
+			if (first.indices != second.indices || first.tubeVertices.size() != second.tubeVertices.size() ||
+				first.ribbonVertices.size() != second.ribbonVertices.size())
+				return false;
+			for (std::size_t index = 0; index < first.tubeVertices.size(); ++index)
+				if (glm::distance(first.tubeVertices[index].position, second.tubeVertices[index].position) > 1.0e-6f)
+					return false;
+			for (std::size_t index = 0; index < first.ribbonVertices.size(); ++index)
+				if (glm::distance(first.ribbonVertices[index].position, second.ribbonVertices[index].position) > 1.0e-6f)
+					return false;
+			return true;
+		}
+
 		void AssertReferencedTubeSpan(const StrokeGeometry &geometry, const StrokeMeshRange &range,
 			const glm::vec3 &axis, const float expectedSpan)
 		{
@@ -652,6 +666,119 @@ namespace DefectStudio::Tests
 		const StrokeGeometry round = BuildStroke(path, roundStyle);
 		roundStyle.ribbonBevel = 0.2f;
 		AssertTubeGeometryMatches(round, BuildStroke(path, roundStyle));
+	}
+
+	TEST(PathStrokeMesherTests, RibbonBevelFieldsAreIgnoredWhenBevelIsZero)
+	{
+		PathStrokeStyle defaultStyle;
+		defaultStyle.profile = StrokeProfile::Flat;
+		defaultStyle.width = 0.4f;
+		defaultStyle.ribbonThickness = 0.6f;
+		defaultStyle.ribbonBevelSegments = 1u;
+		defaultStyle.ribbonBevelShape = 0.5f;
+		const StrokeGeometry defaults = BuildStroke(StraightPath(), defaultStyle);
+
+		PathStrokeStyle variedStyle = defaultStyle;
+		variedStyle.ribbonBevelSegments = 8u;
+		variedStyle.ribbonBevelShape = 1.0f;
+		AssertTubeGeometryMatches(defaults, BuildStroke(StraightPath(), variedStyle));
+	}
+
+	TEST(PathStrokeMesherTests, RaisingRibbonBevelSegmentsRaisesTheBevelledFlatVertexCount)
+	{
+		PathStrokeStyle oneSegment;
+		oneSegment.profile = StrokeProfile::Flat;
+		oneSegment.width = 0.4f;
+		oneSegment.ribbonThickness = 0.6f;
+		oneSegment.ribbonBevel = 0.1f;
+		oneSegment.ribbonBevelSegments = 1u;
+		oneSegment.ribbonBevelShape = 0.5f;
+		const StrokeGeometry one = BuildStroke(StraightPath(), oneSegment);
+
+		PathStrokeStyle moreSegments = oneSegment;
+		moreSegments.ribbonBevelSegments = 4u;
+		const StrokeGeometry more = BuildStroke(StraightPath(), moreSegments);
+
+		ASSERT_FALSE(one.tubeVertices.empty());
+		ASSERT_FALSE(more.tubeVertices.empty());
+		EXPECT_GT(more.tubeVertices.size(), one.tubeVertices.size());
+	}
+
+	TEST(PathStrokeMesherTests, RibbonBevelSegmentsZeroMatchesOne)
+	{
+		PathStrokeStyle oneSegment;
+		oneSegment.profile = StrokeProfile::Flat;
+		oneSegment.width = 0.4f;
+		oneSegment.ribbonThickness = 0.6f;
+		oneSegment.ribbonBevel = 0.1f;
+		oneSegment.ribbonBevelSegments = 1u;
+		oneSegment.ribbonBevelShape = 0.5f;
+		const StrokeGeometry one = BuildStroke(StraightPath(), oneSegment);
+
+		PathStrokeStyle zeroSegments = oneSegment;
+		zeroSegments.ribbonBevelSegments = 0u;
+		AssertTubeGeometryMatches(one, BuildStroke(StraightPath(), zeroSegments));
+	}
+
+	TEST(PathStrokeMesherTests, BevelledFlatMeshesStayClosedAcrossSegmentCountsAndShapes)
+	{
+		for (const std::uint32_t segments : {1u, 3u, 6u})
+			for (const float shape : {0.0f, 0.5f, 1.0f})
+			{
+				PathStrokeStyle style;
+				style.profile = StrokeProfile::Flat;
+				style.width = 0.4f;
+				style.ribbonThickness = 0.6f;
+				style.ribbonBevel = 0.1f;
+				style.ribbonBevelSegments = segments;
+				style.ribbonBevelShape = shape;
+				style.cap = PathLineCap::Round;
+				SCOPED_TRACE(::testing::Message() << "segments=" << segments << ", shape=" << shape);
+				const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+				ASSERT_FALSE(geometry.shaft.IsEmpty());
+				AssertRangeIsClosedByPosition(geometry, geometry.shaft);
+			}
+	}
+
+	TEST(PathStrokeMesherTests, RibbonBevelShapeOnlyChangesGeometryAboveOneSegment)
+	{
+		PathStrokeStyle oneSegment;
+		oneSegment.profile = StrokeProfile::Flat;
+		oneSegment.width = 0.4f;
+		oneSegment.ribbonThickness = 0.6f;
+		oneSegment.ribbonBevel = 0.1f;
+		oneSegment.ribbonBevelSegments = 1u;
+		oneSegment.ribbonBevelShape = 0.0f;
+		const StrokeGeometry oneFlat = BuildStroke(StraightPath(), oneSegment);
+
+		PathStrokeStyle oneBulging = oneSegment;
+		oneBulging.ribbonBevelShape = 1.0f;
+		AssertTubeGeometryMatches(oneFlat, BuildStroke(StraightPath(), oneBulging));
+
+		PathStrokeStyle manyFlat = oneSegment;
+		manyFlat.ribbonBevelSegments = 4u;
+		const StrokeGeometry manyFlatGeometry = BuildStroke(StraightPath(), manyFlat);
+		PathStrokeStyle manyBulging = manyFlat;
+		manyBulging.ribbonBevelShape = 1.0f;
+		const StrokeGeometry manyBulgingGeometry = BuildStroke(StraightPath(), manyBulging);
+		EXPECT_FALSE(TubeGeometryPositionsMatch(manyFlatGeometry, manyBulgingGeometry));
+	}
+
+	TEST(PathStrokeMesherTests, RoundProfileIgnoresRibbonBevelSegmentsAndShape)
+	{
+		PathStrokeStyle defaultStyle;
+		defaultStyle.profile = StrokeProfile::Round;
+		defaultStyle.width = 0.4f;
+		defaultStyle.radialSegments = 7u;
+		defaultStyle.ribbonBevel = 0.1f;
+		defaultStyle.ribbonBevelSegments = 1u;
+		defaultStyle.ribbonBevelShape = 0.5f;
+		const StrokeGeometry defaults = BuildStroke(StraightPath(), defaultStyle);
+
+		PathStrokeStyle variedStyle = defaultStyle;
+		variedStyle.ribbonBevelSegments = 8u;
+		variedStyle.ribbonBevelShape = 0.0f;
+		AssertTubeGeometryMatches(defaults, BuildStroke(StraightPath(), variedStyle));
 	}
 
 	TEST(PathStrokeMesherTests, PositiveFlatRibbonThicknessUsesTubeVerticesOnly)

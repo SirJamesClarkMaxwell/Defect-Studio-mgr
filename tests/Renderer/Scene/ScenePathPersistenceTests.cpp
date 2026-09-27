@@ -8,6 +8,7 @@
 #include "IO/SceneObjectsIO.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathEvaluator.hpp"
+#include "Renderer/Path/PathStrokeMesher.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/ScenePathPersistence.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -55,6 +56,17 @@ namespace DefectStudio::Tests
 		{
 			for (const glm::vec3 basis : {glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)})
 				EXPECT_NEAR(glm::distance(actual * basis, expected * basis), 0.0f, 1.0e-5f);
+		}
+
+		void ExpectSameRenderedGeometry(const StrokeGeometry &expected, const StrokeGeometry &actual)
+		{
+			ASSERT_EQ(expected.indices, actual.indices);
+			ASSERT_EQ(expected.tubeVertices.size(), actual.tubeVertices.size());
+			ASSERT_EQ(expected.ribbonVertices.size(), actual.ribbonVertices.size());
+			for (std::size_t index = 0; index < expected.tubeVertices.size(); ++index)
+				EXPECT_EQ(expected.tubeVertices[index].position, actual.tubeVertices[index].position);
+			for (std::size_t index = 0; index < expected.ribbonVertices.size(); ++index)
+				EXPECT_EQ(expected.ribbonVertices[index].position, actual.ribbonVertices[index].position);
 		}
 	}
 
@@ -181,6 +193,84 @@ structures:
 
 		const PersistedScenePath extracted = ExtractPersistedScenePath(built.Value(), Structure());
 		EXPECT_FLOAT_EQ(extracted.style.ribbonThickness, saved.style.ribbonThickness);
+	}
+
+	TEST(ScenePathPersistenceTests, RibbonBevelProfileFieldsRoundTripThroughYamlAndScenePersistence)
+	{
+		PersistedScenePath saved = MinimalPath();
+		saved.style.profile = "Flat";
+		saved.style.ribbonThickness = 0.6f;
+		saved.style.ribbonBevel = 0.1f;
+		saved.style.ribbonBevelSegments = 5u;
+		saved.style.ribbonBevelShape = 0.25f;
+		SceneObjectsFile source;
+		source.structures.push_back({"k", {saved}});
+		const std::string serialized = SceneObjectsIO::Serialize(source);
+		EXPECT_NE(serialized.find("ribbon_bevel_segments"), std::string::npos);
+		EXPECT_NE(serialized.find("ribbon_bevel_shape"), std::string::npos);
+
+		const SceneObjectsFile loaded = Parse(serialized.c_str());
+		const auto &parsed = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_EQ(parsed.style.ribbonBevelSegments, saved.style.ribbonBevelSegments);
+		EXPECT_FLOAT_EQ(parsed.style.ribbonBevelShape, saved.style.ribbonBevelShape);
+
+		std::vector<StructuredError> warnings;
+		const Result<ScenePath> built = BuildScenePath(parsed, Structure(), warnings);
+		ASSERT_TRUE(built);
+		EXPECT_EQ(built.Value().style.ribbonBevelSegments, saved.style.ribbonBevelSegments);
+		EXPECT_FLOAT_EQ(built.Value().style.ribbonBevelShape, saved.style.ribbonBevelShape);
+
+		const PersistedScenePath extracted = ExtractPersistedScenePath(built.Value(), Structure());
+		EXPECT_EQ(extracted.style.ribbonBevelSegments, saved.style.ribbonBevelSegments);
+		EXPECT_FLOAT_EQ(extracted.style.ribbonBevelShape, saved.style.ribbonBevelShape);
+	}
+
+	TEST(ScenePathPersistenceTests, MissingRibbonBevelProfileFieldsUseDefaultsAndPreserveRenderedGeometry)
+	{
+		const SceneObjectsFile file = Parse(R"yaml(
+formatVersion: 2
+structures:
+  - structureKey: k
+    objects:
+      - kind: ScenePath
+        persistKey: legacy
+        nodes:
+          - position: [0, 0, 0]
+          - position: [1, 0, 0]
+        segments:
+          - kind: Line
+        style:
+          profile: Flat
+          ribbon_thickness: 0.6
+          ribbon_bevel: 0.1
+          width: 0.4
+)yaml");
+		ASSERT_EQ(file.structures.size(), 1u);
+		ASSERT_EQ(file.structures[0].objects.size(), 1u);
+		const auto &legacy = std::get<PersistedScenePath>(file.structures[0].objects[0]);
+		EXPECT_EQ(legacy.style.ribbonBevelSegments, 1u);
+		EXPECT_FLOAT_EQ(legacy.style.ribbonBevelShape, 0.5f);
+
+		PersistedScenePath explicitDefaults = MinimalPath();
+		explicitDefaults.style.profile = "Flat";
+		explicitDefaults.style.ribbonThickness = 0.6f;
+		explicitDefaults.style.ribbonBevel = 0.1f;
+		explicitDefaults.style.width = 0.4f;
+		explicitDefaults.style.ribbonBevelSegments = 1u;
+		explicitDefaults.style.ribbonBevelShape = 0.5f;
+
+		std::vector<StructuredError> legacyWarnings;
+		const Result<ScenePath> legacyPath = BuildScenePath(legacy, Structure(), legacyWarnings);
+		ASSERT_TRUE(legacyPath);
+		std::vector<StructuredError> explicitWarnings;
+		const Result<ScenePath> explicitPath = BuildScenePath(explicitDefaults, Structure(), explicitWarnings);
+		ASSERT_TRUE(explicitPath);
+
+		const auto render = [](const ScenePath &path) {
+			const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
+			return BuildStroke(Tessellate(path, resolved, TessellationSettings{}), path.style);
+		};
+		ExpectSameRenderedGeometry(render(explicitPath.Value()), render(legacyPath.Value()));
 	}
 
 	TEST(ScenePathPersistenceTests, InvalidRibbonNormalFallsBackToDefault)

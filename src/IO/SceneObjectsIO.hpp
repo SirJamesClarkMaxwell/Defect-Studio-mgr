@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <variant>
@@ -217,6 +218,8 @@ namespace DefectStudio
 		// task/41 S11t. Written as `ribbon_bevel`. Additive, absent means 0.0 - the sharp box - and
 		// the format version does not move.
 		float ribbonBevel = 0.0f;
+		int ribbonBevelSegments = 1;
+		float ribbonBevelShape = 0.5f;
 		float width = 0.05f;           // full width, as in PathStrokeStyle - not a radius
 		std::string join = "Bevel";    // Bevel | Round
 		std::string cap = "Butt";      // Butt | Square | Round

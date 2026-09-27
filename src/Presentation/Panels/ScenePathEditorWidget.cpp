@@ -131,6 +131,8 @@ namespace DefectStudio
 				state.values.ribbonNormal = path->style.ribbonNormal;
 				state.values.ribbonThickness = path->style.ribbonThickness;
 				state.values.ribbonBevel = path->style.ribbonBevel;
+				state.values.ribbonBevelSegments = path->style.ribbonBevelSegments;
+				state.values.ribbonBevelShape = path->style.ribbonBevelShape;
 				state.anyFlatProfile = path->style.profile == StrokeProfile::Flat;
 				state.values.width = path->style.width;
 				state.values.alpha = path->style.alpha;
@@ -149,6 +151,8 @@ namespace DefectStudio
 			MarkMixed(state.mixedRibbonNormal, state.values.ribbonNormal, path->style.ribbonNormal);
 			MarkMixed(state.mixedRibbonThickness, state.values.ribbonThickness, path->style.ribbonThickness);
 			MarkMixed(state.mixedRibbonBevel, state.values.ribbonBevel, path->style.ribbonBevel);
+			MarkMixed(state.mixedRibbonBevelSegments, state.values.ribbonBevelSegments, path->style.ribbonBevelSegments);
+			MarkMixed(state.mixedRibbonBevelShape, state.values.ribbonBevelShape, path->style.ribbonBevelShape);
 			MarkMixed(state.mixedWidth, state.values.width, path->style.width);
 			MarkMixed(state.mixedAlpha, state.values.alpha, path->style.alpha);
 			MarkMixed(state.mixedColor, state.values.color, path->style.color);
@@ -177,6 +181,8 @@ namespace DefectStudio
 				style.ribbonNormal = edit.ribbonNormal;
 				style.ribbonThickness = edit.ribbonThickness;
 				style.ribbonBevel = edit.ribbonBevel;
+				style.ribbonBevelSegments = std::max(1u, edit.ribbonBevelSegments);
+				style.ribbonBevelShape = std::clamp(edit.ribbonBevelShape, 0.0f, 1.0f);
 				style.width = edit.width;
 				style.alpha = edit.alpha;
 				style.color = edit.color;
@@ -323,7 +329,18 @@ namespace DefectStudio
 			applyDrag(ImGui::DragFloat3("Ribbon normal", &edit.ribbonNormal.x, 0.01f));
 			applyDrag(ImGui::DragFloat("Ribbon thickness", &edit.ribbonThickness, 0.005f, 0.0f, 10.0f, "%.3f"));
 			if (resolved.values.ribbonThickness > 0.0f || resolved.mixedRibbonThickness)
+			{
 				applyDrag(ImGui::DragFloat("Ribbon bevel", &edit.ribbonBevel, 0.005f, 0.0f, 10.0f, "%.3f"));
+				ImGui::BeginDisabled(edit.ribbonBevel <= 0.0f);
+				int bevelSegments = static_cast<int>(std::min(edit.ribbonBevelSegments, 256u));
+				const bool segmentsChanged = ImGui::DragInt("Ribbon bevel segments", &bevelSegments, 1.0f, 1, 256);
+				if (segmentsChanged)
+					edit.ribbonBevelSegments = static_cast<std::uint32_t>(std::clamp(bevelSegments, 1, 256));
+				applyDrag(segmentsChanged);
+				edit.ribbonBevelShape = std::clamp(edit.ribbonBevelShape, 0.0f, 1.0f);
+				applyDrag(ImGui::DragFloat("Ribbon bevel shape", &edit.ribbonBevelShape, 0.01f, 0.0f, 1.0f, "%.2f"));
+				ImGui::EndDisabled();
+			}
 		}
 		applyDrag(ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
 		applyDrag(ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));

@@ -2,6 +2,7 @@
 
 #include "Renderer/Scene/ScenePathPersistence.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <type_traits>
@@ -111,6 +112,8 @@ namespace DefectStudio
 			out.width = input.width;
 			out.ribbonThickness = input.ribbonThickness;
 			out.ribbonBevel = input.ribbonBevel;
+			out.ribbonBevelSegments = input.ribbonBevelSegments < 1 ? 1u : static_cast<std::uint32_t>(input.ribbonBevelSegments);
+			out.ribbonBevelShape = std::clamp(input.ribbonBevelShape, 0.0f, 1.0f);
 			if (Finite(input.ribbonNormal) && glm::length(input.ribbonNormal) > 1e-6f)
 				out.ribbonNormal = input.ribbonNormal;
 			out.radialSegments = input.radialSegments < 3 ? 3u : static_cast<std::uint32_t>(input.radialSegments);
@@ -299,6 +302,8 @@ namespace DefectStudio
 		persisted.style.ribbonNormal = path.style.ribbonNormal;
 		persisted.style.ribbonThickness = path.style.ribbonThickness;
 		persisted.style.ribbonBevel = path.style.ribbonBevel;
+		persisted.style.ribbonBevelSegments = static_cast<int>(path.style.ribbonBevelSegments);
+		persisted.style.ribbonBevelShape = path.style.ribbonBevelShape;
 		persisted.style.width = path.style.width;
 		persisted.style.join = path.style.join == PathLineJoin::Bevel ? "Bevel" : "Round";
 		persisted.style.cap = path.style.cap == PathLineCap::Butt ? "Butt" : path.style.cap == PathLineCap::Square ? "Square" : "Round";
