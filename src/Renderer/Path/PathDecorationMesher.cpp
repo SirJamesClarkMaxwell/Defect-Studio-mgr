@@ -290,7 +290,7 @@ namespace DefectStudio::detail
 			const double bevelAlongWidth = std::min(bevel, halfWidthScaled);
 			const double bevelAlongDepth = std::min(bevel, depth);
 			const std::uint32_t bevelSegments = BevelSegmentCount(style);
-			if (bevelSegments > 1u)
+			if (bevelSegments > 0u)
 			{
 				const double shape = std::clamp(
 					std::isfinite(style.ribbonBevelShape) ? static_cast<double>(style.ribbonBevelShape) : 0.5,

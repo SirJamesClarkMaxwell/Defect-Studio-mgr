@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <string>
@@ -47,12 +48,15 @@ namespace DefectStudio
 		renderHelpMenu();
 
 		const ImGuiStyle &style = ImGui::GetStyle();
-		const float dockToggleIconExtent = ImGui::GetTextLineHeight() * 1.33f;
+		const float dockToggleIconExtent = std::min(
+			ImGui::GetTextLineHeight() * 1.33f,
+			ImGui::GetWindowHeight() - 2.0f * style.FramePadding.y);
 		const ImVec2 buttonSize{
 			dockToggleIconExtent + 2.0f * style.FramePadding.x,
 			dockToggleIconExtent + 2.0f * style.FramePadding.y};
 		const float dockTogglesWidth = 3.0f * buttonSize.x + 2.0f * style.ItemSpacing.x;
-		ImGui::SetCursorPosX(ImGui::GetWindowWidth() - dockTogglesWidth - style.WindowPadding.x);
+		ImGui::SetCursorPosX(
+			ImGui::GetWindowWidth() - dockTogglesWidth - style.WindowPadding.x - style.ItemSpacing.x);
 
 		const auto renderDockToggle = [this, dockToggleIconExtent, buttonSize](DockRegion region, const char *id,
 			const char *tooltip) {
