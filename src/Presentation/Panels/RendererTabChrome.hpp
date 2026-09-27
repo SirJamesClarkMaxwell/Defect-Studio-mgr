@@ -52,19 +52,22 @@ namespace DefectStudio
 	[[nodiscard]] std::string ParseRendererWindowId(std::string_view imguiWindowName);
 
 
-	// Draws the horizontal and the vertical toolbar as borderless overlays inside the rectangle the
-	// active tab's viewport image occupies.
+	// Draws the horizontal and the vertical toolbar over the active tab's viewport image.
 	//
-	// `viewportOrigin` and `viewportSize` are that image's screen rectangle, which RendererPanel
-	// already computes for the active window while it draws it. Passing the rectangle in rather
-	// than deriving it here is deliberate: it is the same rectangle for a docked tab and for a
-	// renderer window floating on its own, so neither case needs its own branch.
+	// They are CHILD windows of the renderer window, submitted from inside it, and that is the whole
+	// point. The first version made them top-level ImGui windows drawn after the loop over the
+	// renderer windows. A top-level window is always above everything drawn inside another window,
+	// so the toolbars covered the N side panel and clipped the navigation gizmo - both of which live
+	// in the renderer window's own draw list - and, not being clipped by it, they spilled across
+	// neighbouring docked panels. Children are clipped to the parent and take their z-order from the
+	// order they are submitted in, which is what this needs.
 	//
-	// Call this AFTER the loop that draws the renderer windows, never inside it - an overlay is a
-	// window of its own, and the loop holds a reference into RendererLayer::GetWindows() that a
-	// nested draw has no reason to be anywhere near.
+	// Submit this right after the viewport image and before everything drawn on top of it. The side
+	// panel goes last on purpose ("so the N panel floats over everything already drawn on the
+	// image") and must keep winning over these.
 	//
-	// Draws nothing when `viewportSize` has no area, which is the no-active-tab case.
+	// `viewportOrigin` and `viewportSize` are the image's screen rectangle, already to hand at that
+	// point. Draws nothing when the rectangle has no area.
 	void DrawViewportToolbarOverlays(
 		RendererWindowState &windowState,
 		RendererLayer &layer,

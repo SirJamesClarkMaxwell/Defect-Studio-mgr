@@ -20,17 +20,6 @@ namespace DefectStudio
 		constexpr std::string_view kRendererWindowPrefix = "RendererWindow_";
 		constexpr const char *kCloseConfirmPopupId = "Close renderer tab?";
 
-		[[nodiscard]] ImGuiWindowFlags OverlayWindowFlags()
-		{
-			return ImGuiWindowFlags_NoSavedSettings |
-				ImGuiWindowFlags_NoDocking |
-				ImGuiWindowFlags_NoTitleBar |
-				ImGuiWindowFlags_NoResize |
-				ImGuiWindowFlags_NoMove |
-				ImGuiWindowFlags_NoCollapse |
-				ImGuiWindowFlags_NoFocusOnAppearing;
-		}
-
 		[[nodiscard]] RendererWindowState *FindWindow(RendererLayer &layer, const std::string &windowId)
 		{
 			for (RendererWindowState &windowState : layer.GetWindows())
@@ -47,24 +36,23 @@ namespace DefectStudio
 			const ImVec2 viewportOrigin,
 			const ImVec2 viewportSize)
 		{
-			// Width is pinned by a constraint, not by SetNextWindowSize: AlwaysAutoResize overrides an
-			// explicit size, and the toolbar's own BeginChild asks for width 0, meaning "fill the
-			// window". Window sized from content, content sized from window - the two never settle and
-			// the overlay ends up an arbitrary width. Constraining width and letting only the height
-			// auto-size breaks the loop: the child now has a width to fill.
-			ImGui::SetNextWindowPos(viewportOrigin, ImGuiCond_Always);
-			ImGui::SetNextWindowSizeConstraints(
-				ImVec2(viewportSize.x, 0.0f), ImVec2(viewportSize.x, viewportSize.y));
-			if (!ImGui::Begin(
-					"##RendererViewportToolbarOverlay", nullptr, OverlayWindowFlags() | ImGuiWindowFlags_AlwaysAutoResize))
+			// Width is explicit on the outer child, while the toolbar's own BeginChild asks for width 0,
+			// meaning "fill the window". The outer child lets only the height auto-size, so the toolbar
+			// has a stable width to fill.
+			ImGui::SetCursorScreenPos(viewportOrigin);
+			if (!ImGui::BeginChild(
+					"##RendererViewportToolbarOverlay",
+					ImVec2(viewportSize.x, 0.0f),
+					ImGuiChildFlags_AutoResizeY,
+					ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
 			{
-				ImGui::End();
+				ImGui::EndChild();
 				return 0.0f;
 			}
 
 			DrawViewportToolbar(windowState, layer);
 			const float height = ImGui::GetWindowSize().y;
-			ImGui::End();
+			ImGui::EndChild();
 			return height;
 		}
 
@@ -87,20 +75,19 @@ namespace DefectStudio
 			if (height <= 0.0f)
 				return;
 
-			ImGui::SetNextWindowPos(
-				ImVec2(viewportOrigin.x, viewportOrigin.y + horizontalHeight + margin), ImGuiCond_Always);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, height), ImVec2(viewportSize.x, height));
-			if (!ImGui::Begin(
+			ImGui::SetCursorScreenPos(ImVec2(viewportOrigin.x, viewportOrigin.y + horizontalHeight + margin));
+			if (!ImGui::BeginChild(
 					"##RendererViewportVerticalToolbarOverlay",
-					nullptr,
-					OverlayWindowFlags() | ImGuiWindowFlags_AlwaysAutoResize))
+					ImVec2(0.0f, height),
+					ImGuiChildFlags_AutoResizeX,
+					ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
 			{
-				ImGui::End();
+				ImGui::EndChild();
 				return;
 			}
 
 			DrawViewportVerticalToolbar(windowState, layer);
-			ImGui::End();
+			ImGui::EndChild();
 		}
 
 		[[nodiscard]] bool CentralNodeHasRendererWindow(const ImGuiDockNode &node)

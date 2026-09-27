@@ -137,10 +137,6 @@ namespace DefectStudio
 		if (!m_Layer.IsAttached())
 			return;
 
-		// Reset before the loop, not after it: a frame that draws no renderer window must leave a
-		// zero rectangle, or the overlays park themselves over whatever took its place.
-		m_ActiveViewportOrigin = ImVec2(0.0f, 0.0f);
-		m_ActiveViewportSize = ImVec2(0.0f, 0.0f);
 		const std::string activeWindowId = ResolveActiveRendererWindowId(m_Layer);
 
 		consumeAddMenuRequests();
@@ -157,14 +153,6 @@ namespace DefectStudio
 		m_TabClose.Drain(m_Layer, windowsToClose);
 		for (const std::string &windowId : windowsToClose)
 			m_Layer.RemoveWindow(windowId);
-		// After the removals, so a tab closed this frame cannot be found and drawn over.
-		for (RendererWindowState &activeWindow : m_Layer.GetWindows())
-		{
-			if (activeWindow.windowId != activeWindowId)
-				continue;
-			DrawViewportToolbarOverlays(activeWindow, m_Layer, m_ActiveViewportOrigin, m_ActiveViewportSize);
-			break;
-		}
 		if (m_EventBus != nullptr)
 			DrawRendererTabBarAddButton(m_Layer, *m_EventBus);
 		consumeAddMenuRequests();
@@ -238,11 +226,6 @@ namespace DefectStudio
 		const ImVec2 viewportSize(windowState.viewportSize.x, windowState.viewportSize.y);
 
 		const ImVec2 imageOrigin = ImGui::GetCursorScreenPos();
-		if (windowState.windowId == activeWindowId)
-		{
-			m_ActiveViewportOrigin = imageOrigin;
-			m_ActiveViewportSize = viewportSize;
-		}
 
 		const unsigned int textureId = m_Layer.RenderToFbo(
 			windowState.windowId,
@@ -255,6 +238,11 @@ namespace DefectStudio
 			viewportSize,
 			ImVec2(0.0f, 1.0f),
 			ImVec2(1.0f, 0.0f));
+
+		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
+		if (windowState.windowId == activeWindowId)
+			DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize);
+		ImGui::SetCursorScreenPos(cursorAfterImage);
 
 		// T08.6.4: drop target for a WAVECAR dragged from ProjectTreePanel - see the payload's
 		// producer there for why only WAVECAR (not POSCAR/CONTCAR) uses drag-drop at all.

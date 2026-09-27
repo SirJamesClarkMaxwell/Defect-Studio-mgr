@@ -81,11 +81,6 @@ namespace DefectStudio
 		WeakRef<DomainLayer> m_DomainLayer;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 		RendererTabCloseCoordinator m_TabClose;
-		// The active tab's viewport image rectangle, recorded by renderStructureWindow as it draws
-		// that window and consumed by DrawViewportToolbarOverlays after the loop. Zero size means no
-		// renderer window was drawn this frame, and the overlays draw nothing.
-		ImVec2 m_ActiveViewportOrigin = ImVec2(0.0f, 0.0f);
-		ImVec2 m_ActiveViewportSize = ImVec2(0.0f, 0.0f);
 		// Snapshot of the right-click's world position, taken the frame the viewport context menu
 		// opens (ImGui::IsWindowAppearing()) - "Set 3D cursor here" reads it later, when the user
 		// actually clicks that menu item and the live mouse position no longer points at the click.
