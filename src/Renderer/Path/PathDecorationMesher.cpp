@@ -86,8 +86,10 @@ namespace DefectStudio::detail
 		}
 
 		void AppendFilledRoundDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
+			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
+			const bool start)
 		{
+			const bool flip = style.profile == StrokeProfile::Round && start;
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
 				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint, point.halfWidth, style);
@@ -99,7 +101,7 @@ namespace DefectStudio::detail
 					(contour.points[ring].halfWidth == 0.0 || contour.points[ring + 1u].halfWidth == 0.0))
 					StitchFlatCollapsedRings(geometry, lower, upper, CrossSectionRingSize(style), false);
 				else
-					StitchRings(geometry, lower, upper, CrossSectionRingSize(style));
+					StitchRings(geometry, lower, upper, CrossSectionRingSize(style), flip);
 			}
 			if (contour.points.front().halfWidth > 0.0)
 				AppendRingFan(geometry, first, style, endpoint, -inward, false);
@@ -109,8 +111,10 @@ namespace DefectStudio::detail
 		}
 
 		void AppendHollowRoundDecoration(StrokeGeometry &geometry, const DecorationContour &contour,
-			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style)
+			const EvaluatedSample &endpoint, const glm::dvec3 &inward, const PathStrokeStyle &style,
+			const bool start)
 		{
+			const bool flip = style.profile == StrokeProfile::Round && start;
 			const std::uint32_t firstOuter = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
 				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint, point.halfWidth, style);
@@ -134,18 +138,18 @@ namespace DefectStudio::detail
 				}
 				else
 				{
-					StitchRings(geometry, outer, outer + CrossSectionRingSize(style), CrossSectionRingSize(style));
-					StitchRings(geometry, inner, inner + CrossSectionRingSize(style), CrossSectionRingSize(style), true);
+					StitchRings(geometry, outer, outer + CrossSectionRingSize(style), CrossSectionRingSize(style), flip);
+					StitchRings(geometry, inner, inner + CrossSectionRingSize(style), CrossSectionRingSize(style), !flip);
 				}
 			}
 			if (contour.points.front().halfWidth > 0.0)
-				StitchRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), true);
+				StitchRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), !flip);
 			else if (style.profile == StrokeProfile::Flat)
 				StitchFlatCollapsedRings(geometry, firstOuter, firstInner, CrossSectionRingSize(style), true);
 			if (contour.closesBack && contour.points.back().halfWidth > 0.0)
 				StitchRings(geometry, firstOuter + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
 					firstInner + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
-					CrossSectionRingSize(style));
+					CrossSectionRingSize(style), flip);
 			else if (contour.closesBack && style.profile == StrokeProfile::Flat)
 			{
 				const std::uint32_t last = static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style);
@@ -352,9 +356,9 @@ namespace DefectStudio::detail
 		if (UsesTubeVertices(style))
 		{
 			if (contour.filled)
-				AppendFilledRoundDecoration(geometry, contour, endpoint, inward, style);
+				AppendFilledRoundDecoration(geometry, contour, endpoint, inward, style, start);
 			else
-				AppendHollowRoundDecoration(geometry, contour, endpoint, inward, style);
+				AppendHollowRoundDecoration(geometry, contour, endpoint, inward, style, start);
 		}
 		else if (contour.filled)
 			AppendFilledRibbonDecoration(geometry, contour, endpoint, inward, style);
