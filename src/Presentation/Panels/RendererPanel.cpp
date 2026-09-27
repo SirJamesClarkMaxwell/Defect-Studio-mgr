@@ -240,6 +240,12 @@ namespace DefectStudio
 			ImVec2(0.0f, 1.0f),
 			ImVec2(1.0f, 0.0f));
 
+		// Read BEFORE the overlays. IsItemHovered() answers about the last submitted item, and
+		// EndChild submits one, so every overlay drawn between the image and this call would move the
+		// question from "is the cursor over the viewport" to "is it over the last toolbar" - which is
+		// false almost everywhere and silently kills every click the viewport handles.
+		const bool hovered = ImGui::IsItemHovered();
+
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		if (windowState.windowId == activeWindowId)
 			DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize);
@@ -271,8 +277,6 @@ namespace DefectStudio
 			}
 			ImGui::EndDragDropTarget();
 		}
-
-		const bool hovered = ImGui::IsItemHovered();
 
 		// Escape always deselects, regardless of how a click landed you in this state - a reliable
 		// way out when the gizmo's screen-space pick band swallows a click meant to clear selection
