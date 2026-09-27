@@ -84,6 +84,7 @@ namespace DefectStudio
         void renderInputTab();
         void renderKeyBindingsTab();
         void renderSavedViewsTab();
+        bool renderRendererViewportSettings();
 
         void renderAppearanceColors();
         void renderAppearanceMetrics();

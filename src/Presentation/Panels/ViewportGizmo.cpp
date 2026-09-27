@@ -416,13 +416,10 @@ namespace DefectStudio
 		if (!gizmoScreen.has_value())
 			return false;
 
-		// Suppressing the gizmo whenever an atom/bond happens to be behind the cursor exists so atom
-		// picking wins when the ATOM gizmo and atom picking visually overlap - it makes no sense for
-		// a scene arrow's own gizmo, where a nearby atom just happening to sit under one of the axis
-		// arrows should never block dragging that axis (confirmed live: this exact overlap was
-		// silently killing the axis-hit-test, falling through to HandleSceneArrowInteraction's own
-		// hit-test, which found no arrow geometry under the cursor and cleared the selection).
-		const bool pointerOnGeometry = !singleArrowOnly && IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
+		// Atom picking must not swallow a handle belonging to the selected atom(s). Scene-object
+		// gizmos keep the old overlap guard; path-edit markers already get first refusal in the chain.
+		const bool pointerOnGeometry = !singleArrowOnly && !HasAtomTransformTargets(snapshot) &&
+			IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
 		TransformBases bases;
 		bases.local = SceneTransformLocalBasis(snapshot);
 		bases.lattice = windowState.structure.lattice;

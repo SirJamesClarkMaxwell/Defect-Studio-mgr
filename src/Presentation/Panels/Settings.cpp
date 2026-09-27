@@ -2071,27 +2071,8 @@ namespace DefectStudio
 			ImGui::EndTable();
 		}
 
-		ImGui::SeparatorText("Viewport gizmo");
-		if (beginRendererTable("RendererViewport"))
-		{
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Axis button size");
-			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::SliderFloat("##AxisButtonSize", &m_DraftConfig.renderer.viewport.axisButtonSize, 10.0f, 48.0f, "%.0f"))
-				markDirty();
-
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Icon button size");
-			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::SliderFloat("##IconButtonSize", &m_DraftConfig.renderer.viewport.iconButtonSize, 10.0f, 48.0f, "%.0f"))
-				markDirty();
-
-			ImGui::EndTable();
-		}
+		if (renderRendererViewportSettings())
+			rendererSettingsChanged = true;
 
 		ImGui::SeparatorText("Path Edit Mode overlay");
 		if (beginRendererTable("RendererPathEditOverlay"))

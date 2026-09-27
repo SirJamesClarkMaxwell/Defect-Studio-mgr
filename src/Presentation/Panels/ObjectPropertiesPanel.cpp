@@ -6,6 +6,8 @@
 #include "Presentation/Panels/ObjectPropertiesSelection.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathEditorWidget.hpp"
+#include "Presentation/Panels/ViewportGizmo.hpp"
 
 #include <array>
 #include <cstdio>
@@ -167,34 +169,52 @@ namespace DefectStudio
 
 				glm::vec3 cartesian = atom.cartesianPosition;
 				bool cartesianCommitted = false;
-				ImGui::PushItemWidth(110.0f);
-				ImGui::BeginGroup();
-				ImGui::Text("Cartesian (A)");
-				ImGui::InputFloat("X##cart", &cartesian.x, 0.0f, 0.0f, "%.4f");
-				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-				ImGui::InputFloat("Y##cart", &cartesian.y, 0.0f, 0.0f, "%.4f");
-				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-				ImGui::InputFloat("Z##cart", &cartesian.z, 0.0f, 0.0f, "%.4f");
-				cartesianCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-				ImGui::EndGroup();
-
 				bool fractionalCommitted = false;
 				glm::vec3 fractional(0.0f);
 				if (domainRecord != nullptr)
-				{
 					fractional = domainRecord->structure.CartesianToFractional(atom.cartesianPosition);
-					ImGui::SameLine();
-					ImGui::BeginGroup();
-					ImGui::Text("Fractional");
-					ImGui::InputFloat("X##frac", &fractional.x, 0.0f, 0.0f, "%.4f");
-					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-					ImGui::InputFloat("Y##frac", &fractional.y, 0.0f, 0.0f, "%.4f");
-					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-					ImGui::InputFloat("Z##frac", &fractional.z, 0.0f, 0.0f, "%.4f");
-					fractionalCommitted |= ImGui::IsItemDeactivatedAfterEdit();
-					ImGui::EndGroup();
+
+				const char *coordinateLabels[] = {"Cartesian (A)", "Fractional"};
+				const ScenePathEditorLayout coordinateLayout = MeasureScenePathEditorLayout(
+					ImGui::GetContentRegionAvail().x, coordinateLabels, domainRecord != nullptr ? 2 : 1);
+				const char *axisLabels[] = {"X", "Y", "Z"};
+				if (ImGui::BeginTable("##AtomCoordinates", 4,
+					ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+				{
+					ImGui::TableSetupColumn(
+						"##AtomCoordinateLabel", ImGuiTableColumnFlags_WidthFixed, coordinateLayout.labelColumnWidth);
+					for (const char *axisLabel : axisLabels)
+						ImGui::TableSetupColumn(
+							axisLabel, ImGuiTableColumnFlags_WidthStretch, coordinateLayout.componentColumnWidth);
+
+					const auto drawCoordinateRow = [&](const char *label, glm::vec3 &value, const char *id,
+						bool &committed) {
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						DrawScenePathEditorLabel(label, false);
+						ImGui::PushID(id);
+						for (int axis = 0; axis < 3; ++axis)
+						{
+							ImGui::TableSetColumnIndex(axis + 1);
+							ImGui::PushStyleColor(
+								ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(ViewportTransformAxisColor(axis)));
+							ImGui::TextUnformatted(axisLabels[axis]);
+							ImGui::PopStyleColor();
+							ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+							ImGui::SetNextItemWidth(-1.0f);
+							ImGui::PushID(axis);
+							ImGui::InputFloat("##value", &value[axis], 0.0f, 0.0f, "%.4f");
+							committed |= ImGui::IsItemDeactivatedAfterEdit();
+							ImGui::PopID();
+						}
+						ImGui::PopID();
+					};
+
+					drawCoordinateRow("Cartesian (A)", cartesian, "cart", cartesianCommitted);
+					if (domainRecord != nullptr)
+						drawCoordinateRow("Fractional", fractional, "frac", fractionalCommitted);
+					ImGui::EndTable();
 				}
-				ImGui::PopItemWidth();
 
 				if ((cartesianCommitted || fractionalCommitted) && commandRegistry != nullptr)
 				{
