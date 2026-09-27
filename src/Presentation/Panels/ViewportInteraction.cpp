@@ -11,7 +11,6 @@
 
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
-#include "Presentation/Panels/ViewportModalTransform.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
@@ -46,15 +45,14 @@ namespace DefectStudio
 		// mouse click/drag-start logic must NOT also run once an earlier one already claimed this
 		// frame's click - e.g. clicking an atom gizmo handle must not also be reinterpreted as a pin
 		// pick by HandlePinnedMeasurementInteraction's own hit-test underneath it.
+		const bool editedPathMarkerClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+			windowState.pathEdit.IsActive() &&
+			IsScenePathMarkerUnderMouse(windowState, imageOrigin, imageSize);
 		return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, layer) ||
-			// Edit Mode gets the modal driver WITHOUT the gizmo. UpdateViewportModalTransform is the
-			// first thing RenderTransformGizmo does, so suppressing the whole call to keep the object
-			// gizmo off the whiskers also threw away G/R/S: the keys set
-			// modalTransformStartRequested and nothing was left to consume it. Drawing and driving
-			// are two jobs and only the drawing is unwanted here.
-			(windowState.pathEdit.IsActive()
-					? UpdateViewportModalTransform(windowState, imageOrigin, imageSize, layer, commandRegistry)
-					: RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry)) ||
+			// A path marker gets first refusal in Edit Mode. This keeps the smaller marker hitbox ahead
+			// of the gizmo's longer axis hitbox, while non-marker clicks still reach the gizmo below.
+			(editedPathMarkerClicked && HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered)) ||
+			RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry) ||
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered) ||

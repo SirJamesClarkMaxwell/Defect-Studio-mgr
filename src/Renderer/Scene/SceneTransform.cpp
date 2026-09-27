@@ -225,7 +225,7 @@ namespace DefectStudio
 		// dragged the structure along with it. Atoms stay selected for everything else - "Match
 		// position", the Add menus - they simply stop being transform targets while a scene object
 		// is.
-		if (!HasSceneObjectTransformTargets(snapshot))
+		if (!window.pathEdit.IsActive() && !HasSceneObjectTransformTargets(snapshot))
 		{
 			for (const std::size_t index : window.selectedAtomIndices)
 			{

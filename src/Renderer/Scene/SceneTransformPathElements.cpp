@@ -121,6 +121,24 @@ namespace DefectStudio
 			return rotated / path.transform.scale;
 		}
 
+		glm::vec3 TransformHandleOffset(const ScenePath &path, const glm::vec3 &offset)
+		{
+			return path.transform.rotation * (path.transform.scale * offset);
+		}
+
+		[[nodiscard]] std::optional<glm::vec3> FindResolvedHandlePosition(
+			const ScenePath &path, const ResolvedNodes &resolved, const PathElementId id)
+		{
+			PathElementId owner;
+			const PathHandle *handle = FindHandle(path, id, owner);
+			if (handle == nullptr)
+				return std::nullopt;
+			for (std::size_t index = 0; index < path.nodes.size(); ++index)
+				if (path.nodes[index].id == owner && index < resolved.positions.size())
+					return resolved.positions[index] + TransformHandleOffset(path, handle->offset);
+			return std::nullopt;
+		}
+
 		// A zero on any scale axis collapses that axis, so the world-to-local divide above has no
 		// finite answer and would write inf or NaN straight into an authored node position - which
 		// then persists to the project file. Object Mode can reach a zero scale with S 0 Enter, so
@@ -242,7 +260,10 @@ namespace DefectStudio
 			const ScenePath *path = window->paths->Store().Find(element.path);
 			if (path == nullptr)
 				continue;
-			const ResolvedNodes resolved = ResolveNodePositions(*path, *bindingContext);
+			// Edit Mode draws and picks markers from the renderer's empty binding context. The pivot
+			// must use that same resolved geometry or a bound node/handle can show in one place while
+			// the modal constraint line is anchored at the live binding target elsewhere.
+			const ResolvedNodes resolved = ResolveNodePositions(*path, BindingContext{});
 			if (!element.isHandle)
 			{
 				for (std::size_t index = 0; index < path->nodes.size(); ++index)
@@ -250,18 +271,10 @@ namespace DefectStudio
 						positions.push_back(resolved.positions[index]);
 				continue;
 			}
-			for (std::size_t segment = 0; segment < path->segments.size(); ++segment)
-			{
-				const auto *cubic = std::get_if<CubicBezierSegmentData>(&path->segments[segment].data);
-				if (cubic == nullptr || segment * 2 + 1 >= resolved.handlePositions.size())
-					continue;
-				if (cubic->startHandle.id == element.element || cubic->endHandle.id == element.element)
-				{
-					positions.push_back(resolved.handlePositions[segment * 2 +
-						(cubic->endHandle.id == element.element ? 1 : 0)]);
-					break;
-				}
-			}
+			if (const std::optional<glm::vec3> handlePosition =
+				FindResolvedHandlePosition(*path, resolved, element.element);
+				handlePosition.has_value())
+				positions.push_back(*handlePosition);
 		}
 		return positions;
 	}

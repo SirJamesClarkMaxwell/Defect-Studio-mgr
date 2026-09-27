@@ -5,7 +5,12 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <utility>
+#include <variant>
 
+#include "Renderer/Path/PathBindingResolver.hpp"
+#include "Renderer/Path/PathEditSession.hpp"
+#include "Renderer/Path/PathHandleGeometry.hpp"
 #include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -79,6 +84,94 @@ namespace DefectStudio
 				}
 			});
 		}
+
+		template <typename MarkerHit>
+		[[nodiscard]] std::vector<PathElementId> HitTestEditedPathElements(
+			const RendererWindowState &windowState, MarkerHit markerHit)
+		{
+			std::vector<PathElementId> hits;
+			if (!windowState.pathEdit.IsActive() || windowState.camera == nullptr || windowState.paths == nullptr)
+				return hits;
+
+			const ScenePath *path = windowState.paths->Store().Find(windowState.pathEdit.Path());
+			if (path == nullptr || !path->visible || !path->renderable)
+				return hits;
+
+			const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
+				*path,
+				ResolveNodePositions(*path, BindingContext{}),
+				windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix(),
+				windowState.viewportSize,
+				windowState.pathEdit.ActiveElement());
+			const auto appendUnique = [&hits](const PathElementId id) {
+				if (std::find(hits.begin(), hits.end(), id) == hits.end())
+					hits.push_back(id);
+			};
+
+			if (windowState.pathEdit.ElementMode() == PathElementMode::WholePath)
+			{
+				if (std::any_of(markers.begin(), markers.end(), markerHit))
+					for (const PathHandleMarker &marker : markers)
+						appendUnique(marker.element);
+				return hits;
+			}
+
+			if (windowState.pathEdit.ElementMode() == PathElementMode::NodeHandle)
+			{
+				for (const PathHandleMarker &marker : markers)
+					if (markerHit(marker))
+						appendUnique(marker.element);
+				return hits;
+			}
+
+			for (std::size_t segmentIndex = 0; segmentIndex < path->segments.size(); ++segmentIndex)
+			{
+				const PathSegment &segment = path->segments[segmentIndex];
+				const auto *cubic = std::get_if<CubicBezierSegmentData>(&segment.data);
+				const bool hit = std::any_of(markers.begin(), markers.end(), [&](const PathHandleMarker &marker) {
+					if (!markerHit(marker))
+						return false;
+					if (marker.kind == PathMarkerKind::BezierHandle)
+						return cubic != nullptr &&
+							(marker.element == cubic->startHandle.id || marker.element == cubic->endHandle.id);
+					return (segmentIndex < path->nodes.size() && marker.element == path->nodes[segmentIndex].id) ||
+						(segmentIndex + 1 < path->nodes.size() && marker.element == path->nodes[segmentIndex + 1].id);
+				});
+				if (hit)
+					appendUnique(segment.id);
+			}
+			return hits;
+		}
+
+		template <typename MarkerHit>
+		void ApplyEditedPathRegionSelection(
+			RendererWindowState &windowState, MarkerHit markerHit,
+			const RendererEvents::Viewport::RegionSelectMode mode)
+		{
+			const std::vector<PathElementId> hits = HitTestEditedPathElements(windowState, markerHit);
+			const std::vector<PathElementId> current = windowState.pathEdit.Selection();
+			std::vector<PathElementId> selection;
+			if (mode == RendererEvents::Viewport::RegionSelectMode::Subtract)
+			{
+				for (const PathElementId id : current)
+					if (std::find(hits.begin(), hits.end(), id) == hits.end())
+						selection.push_back(id);
+			}
+			else
+			{
+				if (mode == RendererEvents::Viewport::RegionSelectMode::Replace)
+					for (const PathElementId id : current)
+						if (std::find(hits.begin(), hits.end(), id) != hits.end())
+							selection.push_back(id);
+				else
+					selection = current;
+
+				for (const PathElementId id : hits)
+					if (std::find(selection.begin(), selection.end(), id) == selection.end())
+						selection.push_back(id);
+			}
+			windowState.pathEdit.SetSelection(std::move(selection));
+		}
 	}
 
 	std::vector<SceneObjectId> HitTestRectScenePaths(
@@ -103,5 +196,25 @@ namespace DefectStudio
 				SelectionHitTest::PointInCircle(screen, center, radius);
 		}, hits);
 		return hits;
+	}
+
+	void ApplyPathElementRectSelection(
+		RendererWindowState &windowState, const glm::vec2 rectMin, const glm::vec2 rectMax,
+		const RendererEvents::Viewport::RegionSelectMode mode)
+	{
+		ApplyEditedPathRegionSelection(windowState, [&](const PathHandleMarker &marker) {
+			return SelectionHitTest::PointInRect(marker.screenPosition, rectMin, rectMax);
+		}, mode);
+	}
+
+	void ApplyPathElementCircleSelection(
+		RendererWindowState &windowState, const glm::vec2 center, const float radius,
+		const RendererEvents::Viewport::RegionSelectMode mode)
+	{
+		if (radius < 0.0f)
+			return;
+		ApplyEditedPathRegionSelection(windowState, [&](const PathHandleMarker &marker) {
+			return SelectionHitTest::PointInCircle(marker.screenPosition, center, radius);
+		}, mode);
 	}
 }

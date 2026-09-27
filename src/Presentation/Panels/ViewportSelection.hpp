@@ -77,6 +77,12 @@ namespace DefectStudio
 		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax);
 	[[nodiscard]] std::vector<SceneObjectId> HitTestCircleScenePaths(
 		const RendererWindowState &windowState, glm::vec2 center, float radius);
+	void ApplyPathElementRectSelection(
+		RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax,
+		RendererEvents::Viewport::RegionSelectMode mode);
+	void ApplyPathElementCircleSelection(
+		RendererWindowState &windowState, glm::vec2 center, float radius,
+		RendererEvents::Viewport::RegionSelectMode mode);
 
 	// `pathHits` arrives as ids because that is what the path hit-tests return; the other three are
 	// indices into their vectors. Defaulted so the two existing call sites and any caller that has
@@ -118,6 +124,8 @@ namespace DefectStudio
 	// routes clicks to the one session path and selects its elements with PickPath.
 	[[nodiscard]] bool HandleScenePathInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
+	[[nodiscard]] bool IsScenePathMarkerUnderMouse(
+		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);
 
 	// Click-select for scenePlanes: ray against the drawn quad (PickScenePlane), no drag. Runs last
 	// in the chain because a plane is usually the backdrop everything else is drawn in front of.

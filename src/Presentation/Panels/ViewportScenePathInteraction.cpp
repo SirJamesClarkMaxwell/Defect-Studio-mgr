@@ -13,6 +13,7 @@
 
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
+#include "Renderer/Path/PathHandleGeometry.hpp"
 #include "Renderer/Path/PathPicking.hpp"
 #include "Renderer/Path/ScenePathPicking.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -173,5 +174,29 @@ namespace DefectStudio
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedScenePlanes.clear();
 		return true;
+	}
+
+	bool IsScenePathMarkerUnderMouse(
+		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
+	{
+		if (!windowState.pathEdit.IsActive() || windowState.camera == nullptr || windowState.paths == nullptr ||
+			imageSize.x <= 0.0f || imageSize.y <= 0.0f)
+			return false;
+
+		const ScenePath *path = windowState.paths->Store().Find(windowState.pathEdit.Path());
+		if (path == nullptr || !path->visible || !path->renderable)
+			return false;
+
+		const glm::vec2 mouse = glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y) -
+			glm::vec2(imageOrigin.x, imageOrigin.y);
+		const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
+			*path,
+			ResolveNodePositions(*path, BindingContext{}),
+			windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix(),
+			glm::vec2(imageSize.x, imageSize.y),
+			windowState.pathEdit.ActiveElement());
+		return std::any_of(markers.begin(), markers.end(), [&mouse](const PathHandleMarker &marker) {
+			return glm::distance(mouse, marker.screenPosition) <= marker.pickRadius;
+		});
 	}
 } // namespace DefectStudio

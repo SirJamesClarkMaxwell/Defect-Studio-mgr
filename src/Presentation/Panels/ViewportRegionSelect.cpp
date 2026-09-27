@@ -102,6 +102,11 @@ namespace DefectStudio
 
 			ImGuiIO &io = ImGui::GetIO();
 			const RendererEvents::Viewport::RegionSelectMode mode = ResolveRegionSelectMode(io.KeyShift, io.KeyCtrl);
+			if (windowState.pathEdit.IsActive())
+			{
+				ApplyPathElementRectSelection(windowState, rectMin, rectMax, mode);
+				return;
+			}
 			// Gated on pickAtoms/pickBonds the same way HandleViewportPick's plain click already is -
 			// box-select previously always matched atoms regardless of the active selection mode, and
 			// never matched bonds at all even when the mode allowed picking them.
@@ -142,6 +147,11 @@ namespace DefectStudio
 		const RendererEvents::Viewport::RegionSelectMode mode = io.KeyShift
 			? RendererEvents::Viewport::RegionSelectMode::Subtract
 			: RendererEvents::Viewport::RegionSelectMode::Add;
+		if (windowState.pathEdit.IsActive())
+		{
+			ApplyPathElementCircleSelection(windowState, center, windowState.circleSelectRadius, mode);
+			return;
+		}
 
 		PublishRegionSelection(
 			windowState,
