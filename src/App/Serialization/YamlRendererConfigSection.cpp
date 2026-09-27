@@ -72,6 +72,8 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "path_edit_tether_thickness" << YAML::Value << renderer.viewport.pathEditTetherThickness;
 		out << YAML::Key << "path_edit_outline_thickness" << YAML::Value << renderer.viewport.pathEditOutlineThickness;
 		out << YAML::Key << "selection_outline_width" << YAML::Value << renderer.viewport.selectionOutlineWidth;
+		out << YAML::Key << "transform_gizmo_size" << YAML::Value << renderer.viewport.transformGizmoSize;
+		out << YAML::Key << "navigation_gizmo_size" << YAML::Value << renderer.viewport.navigationGizmoSize;
 		out << YAML::Key << "path_edit_marker_size_multiplier" << YAML::Value
 			<< renderer.viewport.pathEditMarkerSizeMultiplier;
 		out << YAML::Key << "transform_translate_snap" << YAML::Value

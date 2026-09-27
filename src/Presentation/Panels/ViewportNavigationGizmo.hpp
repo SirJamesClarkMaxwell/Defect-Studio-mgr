@@ -13,5 +13,6 @@ namespace DefectStudio
 		const ImVec2 &imageOrigin,
 		const ImVec2 &imageSize,
 		bool viewportHovered,
+		float horizontalToolbarOffset,
 		RendererLayer &layer);
 } // namespace DefectStudio

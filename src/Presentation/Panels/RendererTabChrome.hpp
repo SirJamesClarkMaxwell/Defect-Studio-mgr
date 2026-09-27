@@ -67,8 +67,9 @@ namespace DefectStudio
 	// image") and must keep winning over these.
 	//
 	// `viewportOrigin` and `viewportSize` are the image's screen rectangle, already to hand at that
-	// point. Draws nothing when the rectangle has no area.
-	void DrawViewportToolbarOverlays(
+	// point. Returns the measured horizontal overlay height plus its style-derived clearance margin,
+	// or zero when the rectangle has no area.
+	[[nodiscard]] float DrawViewportToolbarOverlays(
 		RendererWindowState &windowState,
 		RendererLayer &layer,
 		ImVec2 viewportOrigin,

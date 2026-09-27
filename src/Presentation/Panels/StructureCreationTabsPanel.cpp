@@ -301,7 +301,7 @@ namespace DefectStudio
 			session.activePaneIndex = paneIndex;
 		const bool isActive = session.activePaneIndex == paneIndex;
 		if (!isActive)
-			(void)RenderViewportNavigationGizmo(*windowState, imageOrigin, imageSize, false, m_RendererLayer);
+			(void)RenderViewportNavigationGizmo(*windowState, imageOrigin, imageSize, false, 0.0f, m_RendererLayer);
 
 		// Selection and the transform gizmo, in the order the main viewport uses them: the gizmo gets
 		// first refusal on the frame's mouse, and only a click it did not claim becomes a pick. Panes
@@ -311,7 +311,8 @@ namespace DefectStudio
 		// shortcuts and the scene-arrow gizmo are viewport features too, and a pane that ran only
 		// RenderTransformGizmo silently lost every one of them.
 		const bool gizmoCapturing = isActive &&
-			RunViewportGizmoChain(*windowState, imageOrigin, imageSize, hovered, m_RendererLayer, m_CommandRegistry);
+			RunViewportGizmoChain(
+				*windowState, imageOrigin, imageSize, hovered, 0.0f, m_RendererLayer, m_CommandRegistry);
 		DrawSceneArrowHandleMarkers(*windowState, imageOrigin, imageSize);
 
 		// Box/circle select: overlay, brush radius and drag dispatch. Runs before navigation because

@@ -26,6 +26,7 @@ namespace DefectStudio
 		const ImVec2 &imageOrigin,
 		const ImVec2 &imageSize,
 		bool hovered,
+		float horizontalToolbarOffset,
 		RendererLayer &layer,
 		const WeakRef<CommandRegistry> &commandRegistry);
 

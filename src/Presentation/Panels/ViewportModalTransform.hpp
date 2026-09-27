@@ -16,7 +16,7 @@ namespace DefectStudio
 
 	void BeginViewportModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> axis = std::nullopt, bool startedFromHandle = false);
+		std::optional<int> axis = std::nullopt, bool startedFromHandle = false, bool planeConstraint = false);
 
 	[[nodiscard]] bool UpdateViewportModalTransform(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize,

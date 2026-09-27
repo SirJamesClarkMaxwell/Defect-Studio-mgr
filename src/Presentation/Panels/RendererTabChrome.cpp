@@ -134,18 +134,19 @@ namespace DefectStudio
 		return layer.GetLastFocusedViewportWindowId();
 	}
 
-	void DrawViewportToolbarOverlays(
+	float DrawViewportToolbarOverlays(
 		RendererWindowState &windowState,
 		RendererLayer &layer,
 		const ImVec2 viewportOrigin,
 		const ImVec2 viewportSize)
 	{
 		if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
-			return;
+			return 0.0f;
 
 		const float horizontalHeight =
 			DrawHorizontalToolbarOverlay(windowState, layer, viewportOrigin, viewportSize);
 		DrawVerticalToolbarOverlay(windowState, layer, viewportOrigin, viewportSize, horizontalHeight);
+		return horizontalHeight + ImGui::GetStyle().WindowPadding.y * 2.0f;
 	}
 
 	void DrawRendererTabBarAddButton(RendererLayer &layer, EventBus &eventBus)

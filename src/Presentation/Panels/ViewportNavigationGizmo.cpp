@@ -17,6 +17,7 @@
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Events/RendererEvents.hpp"
+#include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportToolbars.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -28,8 +29,7 @@ namespace DefectStudio
 {
 	namespace
 	{
-		constexpr std::array<ImU32, 3> kAxisColors = {
-			IM_COL32(225, 70, 70, 255), IM_COL32(75, 190, 90, 255), IM_COL32(70, 125, 235, 255)};
+		constexpr float kDefaultNavigationGizmoSize = 60.0f;
 
 		[[nodiscard]] bool PointInCircle(const glm::vec2 &point, const glm::vec2 &center, float radius)
 		{
@@ -150,20 +150,24 @@ namespace DefectStudio
 		const ImVec2 &imageOrigin,
 		const ImVec2 &imageSize,
 		bool viewportHovered,
+		const float horizontalToolbarOffset,
 		RendererLayer &layer)
 	{
 		if (windowState.camera == nullptr || imageSize.x <= 0.0f || imageSize.y <= 0.0f)
 			return false;
 		ImGui::PushID(windowState.windowId.c_str());
-		const float scale = std::max(
+		const float uiScale = std::max(
 			ImGui::GetIO().FontGlobalScale / kViewportToolbarFontScaleBaseline, 0.01f);
+		const float sizeScale = std::max(
+			layer.GetGlobalSettings().viewport.navigationGizmoSize / kDefaultNavigationGizmoSize, 0.01f);
+		const float scale = uiScale * sizeScale;
 		const float gizmoRadius = 60.0f * scale;
 		const float axisLength = 41.0f * scale;
 		const float positiveRadius = 14.0f * scale;
 		const float negativeRadius = 10.0f * scale;
 		const glm::vec2 center(
 			imageOrigin.x + imageSize.x - gizmoRadius - 14.0f * scale,
-			imageOrigin.y + gizmoRadius + 14.0f * scale);
+			imageOrigin.y + horizontalToolbarOffset + gizmoRadius + 14.0f * scale);
 		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 
 		TransformBases bases;
@@ -190,7 +194,9 @@ namespace DefectStudio
 			const NavigationAxisMarker &marker = markers[index];
 			const bool front = marker.depth >= 0.0f;
 			const bool markerHovered = hit.has_value() && *hit == index;
-			const ImU32 lineColor = kAxisColors[static_cast<std::size_t>(marker.axis)] &
+			const ImU32 axisColor = (ViewportTransformAxisColor(marker.axis) & IM_COL32(255, 255, 255, 0)) |
+				IM_COL32(0, 0, 0, 255);
+			const ImU32 lineColor = axisColor &
 				(front ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 115));
 			const float radius = marker.sign > 0 ? positiveRadius : negativeRadius;
 			const ImVec2 markerCenter(marker.center.x, marker.center.y);
@@ -272,7 +278,7 @@ namespace DefectStudio
 		if (ImGui::BeginPopup("##NavigationProjectionSettings", ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::TextUnformatted("Zoom step [%]");
-			ImGui::SetNextItemWidth(110.0f * scale);
+			ImGui::SetNextItemWidth(110.0f * uiScale);
 			ImGui::InputFloat("##NavigationZoomStep", &windowState.percentStep, 0.0f, 0.0f, "%.0f");
 			windowState.percentStep = std::clamp(windowState.percentStep, 0.0f, 180.0f);
 			ImGui::EndPopup();

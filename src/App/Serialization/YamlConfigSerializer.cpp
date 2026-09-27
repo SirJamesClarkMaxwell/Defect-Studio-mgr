@@ -824,6 +824,16 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineWidth)},
 				{},
 				legacySelectionOutlineWidth);
+			config.renderer.viewport.transformGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformGizmoSize)},
+				{},
+				config.renderer.viewport.transformGizmoSize);
+			config.renderer.viewport.navigationGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::NavigationGizmoSize)},
+				{},
+				config.renderer.viewport.navigationGizmoSize);
 			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
@@ -1213,6 +1223,16 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineWidth)},
 				{},
 				legacySelectionOutlineWidth);
+			config.renderer.viewport.transformGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformGizmoSize)},
+				{},
+				config.renderer.viewport.transformGizmoSize);
+			config.renderer.viewport.navigationGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::NavigationGizmoSize)},
+				{},
+				config.renderer.viewport.navigationGizmoSize);
 			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},

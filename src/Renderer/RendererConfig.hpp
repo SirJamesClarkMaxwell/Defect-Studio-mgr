@@ -36,6 +36,8 @@ namespace DefectStudio
 		float pathEditTetherThickness = 1.0f;
 		float pathEditOutlineThickness = 1.5f;
 		float selectionOutlineWidth = 2.0f;
+		float transformGizmoSize = 100.0f;
+		float navigationGizmoSize = 60.0f;
 		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;

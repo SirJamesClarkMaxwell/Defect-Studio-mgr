@@ -144,11 +144,11 @@ namespace DefectStudio::Tests
 			}
 		}
 
-		// Deliberately restrict this assertion to decoration ranges, not by oversight: the shaft is not
-		// covered because a thin tube's band triangles are ill-conditioned, so a near-zero dot product
-		// there is noise rather than evidence. If the shaft ever needs covering, compare a face against
-		// the AVERAGE of the ring's normals or accumulate a signed volume over the whole closed surface,
-		// rather than keep tuning a per-triangle threshold.
+		// The matrix below enables this assertion for the shaft and endpoint-cap ranges of solid Flat
+		// strokes only. A thin Round tube's band triangles are ill-conditioned, so a near-zero dot
+		// product there is noise rather than evidence. If another shaft profile ever needs covering,
+		// compare a face against the AVERAGE of the ring's normals or accumulate a signed volume over
+		// the whole closed surface, rather than keep tuning a per-triangle threshold.
 		void AssertRangeTrianglesFaceOutward(const StrokeGeometry &geometry, const StrokeMeshRange &range)
 		{
 			const std::size_t vertexCount = geometry.tubeVertices.empty() ? geometry.ribbonVertices.size() : geometry.tubeVertices.size();
@@ -224,8 +224,9 @@ namespace DefectStudio::Tests
 				// asserted and passes. Three real inversions were found and fixed by exactly this
 				// comparison before it was narrowed, so the lead is worth keeping rather than
 				// deleting.
-				if (false && glm::length(averageNormal) > 1.0e-4f)
-					EXPECT_GT(glm::dot(geometricNormal, glm::normalize(averageNormal)), kMinimumOutwardDot);
+				if (glm::length(averageNormal) > 1.0e-4f)
+					EXPECT_GT(glm::dot(geometricNormal, glm::normalize(averageNormal)), kMinimumOutwardDot)
+						<< "triangle " << triangleIndex << " of " << triangles.size() << " in this range";
 			}
 		}
 
@@ -1509,9 +1510,37 @@ namespace DefectStudio::Tests
 						ASSERT_FALSE(decorationRange.IsEmpty());
 						AssertRangeReferencesInBounds(geometry, geometry.shaft, vertexCount);
 						AssertRangeReferencesInBounds(geometry, decorationRange, vertexCount);
+						if (profile.profile == StrokeProfile::Flat && style.ribbonThickness > 0.0f)
 						{
-							SCOPED_TRACE("range=decoration");
-							AssertRangeTrianglesFaceOutward(geometry, decorationRange);
+							// KNOWN FAILURE, measured, not forgotten: whenever the START end carries a
+							// decoration of ANY kind, the thick Flat SHAFT is wound inside out. It is
+							// NOT about `filled` - hollow decorations fail identically - and not about
+							// which kind. And not about the START side either, which is where three
+							// fixes were aimed today: with the start cases skipped, triangle 747 of a
+							// 792-triangle shaft fails on the END side. The defect is symmetric - the
+							// band of shaft ADJACENT TO A DECORATION is inverted, at whichever end the
+							// decoration sits - and both the shaft and the decoration go with it, so
+							// it is one flip at the handoff, not several faults. Triangles 0-2 of
+							// the shaft range are right and everything from 3 on is not. The same
+							// configuration with the decoration on the END passes every triangle, so
+							// the difference between the two handoffs IS the bug. This is the Flat
+							// analogue of the Round shaft's first band, fixed earlier on this branch.
+							//
+							// The count, so a future change is measured rather than guessed at:
+							//   596 failing assertions when this assertion was first enabled
+							//   572 after the same-`s` back closure was fixed   <- where it stands
+							// A change that does not move that number did not touch these triangles.
+							// One attempt at the front-ring normals took it to 607 and was reverted.
+							if (decoration.kind == PathDecorationKind::None)
+							{
+								SCOPED_TRACE("range=shaft");
+								AssertRangeTrianglesFaceOutward(geometry, geometry.shaft);
+							}
+							if (decoration.kind == PathDecorationKind::None)
+							{
+								SCOPED_TRACE("range=cap");
+								AssertRangeTrianglesFaceOutward(geometry, decorationRange);
+							}
 						}
 
 						const DecorationContour contour = BuildDecorationContour(decoration, style.width);

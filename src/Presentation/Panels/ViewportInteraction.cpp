@@ -24,6 +24,7 @@ namespace DefectStudio
 		const ImVec2 &imageOrigin,
 		const ImVec2 &imageSize,
 		bool hovered,
+		const float horizontalToolbarOffset,
 		RendererLayer &layer,
 		const WeakRef<CommandRegistry> &commandRegistry)
 	{
@@ -48,7 +49,8 @@ namespace DefectStudio
 		const bool editedPathMarkerClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 			windowState.pathEdit.IsActive() &&
 			IsScenePathMarkerUnderMouse(windowState, imageOrigin, imageSize);
-		return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, layer) ||
+		return RenderViewportNavigationGizmo(
+			windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
 			// A path marker gets first refusal in Edit Mode. This keeps the smaller marker hitbox ahead
 			// of the gizmo's longer axis hitbox, while non-marker clicks still reach the gizmo below.
 			(editedPathMarkerClicked && HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered)) ||

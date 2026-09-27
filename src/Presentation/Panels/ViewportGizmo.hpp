@@ -13,6 +13,8 @@ namespace DefectStudio
 	class RendererLayer;
 	class RendererViewCamera;
 
+	[[nodiscard]] ImU32 ViewportTransformAxisColor(int axis);
+
 	struct SceneArrowHandleGeometry
 	{
 		RendererWindowState::SceneArrowDragTarget target = RendererWindowState::SceneArrowDragTarget::Both;

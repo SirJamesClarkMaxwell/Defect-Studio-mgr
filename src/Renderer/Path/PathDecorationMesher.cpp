@@ -69,6 +69,13 @@ namespace DefectStudio::detail
 			geometry.indices.insert(geometry.indices.end(), {a, b, c});
 		}
 
+		void SetRingNormals(StrokeGeometry &geometry, const std::uint32_t ring,
+			const std::uint32_t ringSize, const glm::dvec3 &normal)
+		{
+			for (std::uint32_t radial = 0; radial < ringSize; ++radial)
+				geometry.tubeVertices[ring + radial].normal = glm::vec3(normal);
+		}
+
 		void StitchFlatCollapsedRings(StrokeGeometry &geometry, const std::uint32_t lower,
 			const std::uint32_t upper, const std::uint32_t ringSize, const bool flip)
 		{
@@ -100,6 +107,17 @@ namespace DefectStudio::detail
 			const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			for (const DecorationContourPoint &point : contour.points)
 				AppendCrossSectionRing(geometry, endpoint.position + inward * point.s, endpoint, point.halfWidth, style);
+			const bool sameSBackClosure = contour.closesBack && contour.points.size() > 1u &&
+				contour.points.back().halfWidth == 0.0 &&
+				contour.points[contour.points.size() - 2u].s == contour.points.back().s;
+			if (style.profile == StrokeProfile::Flat && sameSBackClosure)
+			{
+				// The closure uses the same start-side winding reversal as the body. Its collapsed
+				// ring is a cap boundary, however, so its normals must follow that reversal too.
+				SetRingNormals(geometry,
+					first + static_cast<std::uint32_t>(contour.points.size() - 1u) * CrossSectionRingSize(style),
+					CrossSectionRingSize(style), inward);
+			}
 			for (std::size_t ring = 0; ring + 1u < contour.points.size(); ++ring)
 			{
 				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * CrossSectionRingSize(style);

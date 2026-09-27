@@ -12,6 +12,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Undo/UndoStack.hpp"
+#include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
@@ -124,8 +125,6 @@ namespace DefectStudio
 			const ModalTransformSession &session, const TransformDelta &delta, SnapMode snap,
 			const TransformSnapSteps &steps, const ModalTransformView &view)
 		{
-			constexpr std::array<ImU32, 3> colors = {
-				IM_COL32(230, 70, 70, 220), IM_COL32(90, 210, 90, 220), IM_COL32(90, 150, 240, 220)};
 			if (session.constraint.kind != ConstraintKind::None && session.constraint.axis >= 0 &&
 				session.constraint.axis < 3)
 			{
@@ -144,7 +143,9 @@ namespace DefectStudio
 						const glm::vec3 &lineOrigin = session.op == ModalTransformOp::Rotate
 							? session.pivot
 							: session.anchor;
-						DrawConstraintLine(view, lineOrigin, basis[axis], colors[axis]);
+						const ImU32 color = (ViewportTransformAxisColor(axis) & IM_COL32(255, 255, 255, 0)) |
+							IM_COL32(0, 0, 0, 220);
+						DrawConstraintLine(view, lineOrigin, basis[axis], color);
 					}
 				}
 				drawList->PopClipRect();
@@ -247,7 +248,7 @@ namespace DefectStudio
 
 	void BeginViewportModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> axis, bool startedFromHandle)
+		std::optional<int> axis, bool startedFromHandle, bool planeConstraint)
 	{
 		if (windowState.camera == nullptr || windowState.modalTransform.has_value())
 			return;
@@ -273,7 +274,7 @@ namespace DefectStudio
 		windowState.modalTransform->anchor = anchor;
 		if (axis.has_value())
 			windowState.modalTransform->constraint = CycleConstraint(
-				{}, *axis, false, windowState.transformOrientation, bases);
+				{}, *axis, planeConstraint, windowState.transformOrientation, bases);
 		windowState.modalTransformSelection = std::move(snapshot);
 		if (HasSceneObjectTransformTargets(windowState.modalTransformSelection))
 			windowState.modalTransformSceneObjectsBefore = CaptureSceneObjectsSnapshot(windowState);

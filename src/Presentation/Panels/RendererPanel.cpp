@@ -247,8 +247,9 @@ namespace DefectStudio
 		const bool hovered = ImGui::IsItemHovered();
 
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
-		if (windowState.windowId == activeWindowId)
-			DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize);
+		const float horizontalToolbarOffset = windowState.windowId == activeWindowId
+			? DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize)
+			: 0.0f;
 		DrawViewportPathOverlay(windowState, m_Layer.GetGlobalSettings(), imageOrigin, viewportSize);
 		ImGui::SetCursorScreenPos(cursorAfterImage);
 
@@ -316,7 +317,8 @@ namespace DefectStudio
 		// Label transforms, the keyboard-only pin shortcuts and the short-circuiting gizmo chain, in
 		// the one order they work in - shared with the creation panes (ViewportInteraction.hpp).
 		const bool gizmoCapturing =
-			RunViewportGizmoChain(windowState, imageOrigin, viewportSize, hovered, m_Layer, m_CommandRegistry);
+			RunViewportGizmoChain(
+				windowState, imageOrigin, viewportSize, hovered, horizontalToolbarOffset, m_Layer, m_CommandRegistry);
 
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
 		renderSceneArrowQuickEditPanel(windowState, imageOrigin, viewportSize);

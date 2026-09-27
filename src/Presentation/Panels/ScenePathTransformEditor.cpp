@@ -8,6 +8,7 @@
 #include <imgui.h>
 
 #include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
@@ -77,13 +78,16 @@ namespace DefectStudio
 		const float labelWidth = widestLabel + style.ItemSpacing.x + mixedWidth + style.CellPadding.x * 2.0f;
 		const float labelMinimumWidth = ImGui::CalcTextSize("...").x + style.CellPadding.x * 2.0f;
 		const float numericWidth = ImGui::CalcTextSize("-0.000").x + style.FramePadding.x * 2.0f;
-		const float componentWidth = numericWidth + style.CellPadding.x * 2.0f;
+		const float axisBadgeWidth = ImGui::CalcTextSize("X").x;
+		const float componentWidth = numericWidth + axisBadgeWidth + style.ItemInnerSpacing.x +
+			style.CellPadding.x * 2.0f;
 		const float enumWidth = std::max({
 			ImGui::CalcTextSize("Camera-facing").x,
 			ImGui::CalcTextSize("Always on top").x,
 			ImGui::CalcTextSize("Path #000").x}) + style.FramePadding.x * 2.0f + style.CellPadding.x * 2.0f;
 		const float fieldMinimumWidth = std::max(
-			enumWidth, numericWidth * 3.0f + style.ItemInnerSpacing.x * 2.0f + style.CellPadding.x * 2.0f);
+			enumWidth, numericWidth * 3.0f + axisBadgeWidth * 3.0f + style.ItemInnerSpacing.x * 3.0f +
+			style.CellPadding.x * 2.0f);
 		const float labelCap = availableWidth * 0.5f;
 		const float labelBudget = availableWidth - fieldMinimumWidth;
 		return {
@@ -161,19 +165,13 @@ namespace DefectStudio
 		ImGui::Separator();
 		ImGui::Text("Transform");
 		if (!ImGui::BeginTable("##ScenePathTransformEditor", 4,
-			ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
+			ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
 			return false;
 		ImGui::TableSetupColumn(
 			"##TransformLabel", ImGuiTableColumnFlags_WidthFixed, layout.labelColumnWidth);
 		for (const char *axisLabel : axisLabels)
 			ImGui::TableSetupColumn(
-				axisLabel, ImGuiTableColumnFlags_WidthFixed, layout.componentColumnWidth);
-		ImGui::TableNextRow();
-		for (int axis = 0; axis < 3; ++axis)
-		{
-			ImGui::TableSetColumnIndex(axis + 1);
-			ImGui::TextUnformatted(axisLabels[axis]);
-		}
+				axisLabel, ImGuiTableColumnFlags_WidthStretch, layout.componentColumnWidth);
 
 		const auto drawField = [&](const char *label, glm::vec3 &value, const bool mixed,
 			const float speed, const unsigned field) {
@@ -189,6 +187,11 @@ namespace DefectStudio
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				ImGui::TableSetColumnIndex(axis + 1);
+				ImGui::PushStyleColor(
+					ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(ViewportTransformAxisColor(axis)));
+				ImGui::TextUnformatted(axisLabels[axis]);
+				ImGui::PopStyleColor();
+				ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 				ImGui::SetNextItemWidth(-1.0f);
 				ImGui::PushID(axis);
 				const bool controlChanged = ImGui::DragFloat("##value", &value[axis], speed, 0.0f, 0.0f, "%.3f");

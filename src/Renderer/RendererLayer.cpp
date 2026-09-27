@@ -1096,6 +1096,10 @@ namespace DefectStudio
 			config.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
 		m_GlobalRenderSettings.viewport.selectionOutlineWidth = std::clamp(
 			config.viewport.selectionOutlineWidth, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.transformGizmoSize = std::clamp(
+			config.viewport.transformGizmoSize, 40.0f, 200.0f);
+		m_GlobalRenderSettings.viewport.navigationGizmoSize = std::clamp(
+			config.viewport.navigationGizmoSize, 24.0f, 120.0f);
 		m_GlobalRenderSettings.viewport.pathEditMarkerSizeMultiplier = std::clamp(
 			config.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_GlobalRenderSettings.viewport.transformTranslateSnap = std::clamp(
