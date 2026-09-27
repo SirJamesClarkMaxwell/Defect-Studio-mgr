@@ -174,7 +174,8 @@ namespace DefectStudio
 					geometry.tubeVertices[upper + radial].normal = glm::vec3(
 						glm::dot(offset, offset) > 1e-18 ? glm::normalize(offset) : axis);
 				}
-				detail::StitchRings(geometry, lower, upper, ringSize, !end);
+				detail::StitchRings(geometry, lower, upper, ringSize,
+					style.profile == StrokeProfile::Flat ? end : !end);
 				lower = upper;
 			}
 		}
@@ -205,7 +206,7 @@ namespace DefectStudio
 			{
 				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * ringSize;
 				const std::uint32_t upper = first + static_cast<std::uint32_t>(ring + 1u) * ringSize;
-				detail::StitchRings(geometry, lower, upper, ringSize);
+				detail::StitchRings(geometry, lower, upper, ringSize, style.profile == StrokeProfile::Flat);
 			}
 			if (style.cap == PathLineCap::Round)
 			{
