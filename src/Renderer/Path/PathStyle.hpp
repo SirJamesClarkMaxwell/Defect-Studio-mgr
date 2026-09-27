@@ -138,11 +138,25 @@ namespace DefectStudio
 		float ribbonBevel = 0.0f;
 		// How many flat faces each chamfer is made of, and how the chamfer's profile curves.
 		//
-		// task/41 S11u, both asked for by name in a manual round. One segment is the single flat
-		// chamfer S11t shipped; more segments round the edge off, the way Blender's bevel modifier
-		// does. `ribbonBevelShape` is the profile parameter in [0, 1]: 0.5 is a circular arc, below
-		// that the profile is chamfered flatter, above it bulges outward. Both are ignored when
-		// `ribbonBevel` is zero.
+		// Both asked for by name in a manual round. One segment is the single flat chamfer that
+		// shipped first; more segments round the edge off.
+		//
+		// `ribbonBevelShape` is Blender's bevel profile, and it means what it means there - the user
+		// asked for Blender's behaviour by name, so the superellipse convention is the contract:
+		//
+		//     0.0   concave. The corner is scooped INWARD, leaving a groove along the edge.
+		//     0.5   a circular arc: the plain rounded corner.
+		//     1.0   convex, running out to the original sharp corner, so the bevel all but vanishes.
+		//
+		// An earlier version of this comment said 0.5 was an arc with "flatter" below and "bulging"
+		// above. That was wrong in both directions and is why the first implementation looked
+		// inside-out: below 0.5 Blender goes concave, not flat.
+		//
+		// The profile must stay a single monotonic curve from one edge-tangent point to the other.
+		// Any parameter that makes it double back produces the self-intersecting crease seen at high
+		// segment counts.
+		//
+		// Both are ignored when `ribbonBevel` is zero.
 		std::uint32_t ribbonBevelSegments = 1;
 		float ribbonBevelShape = 0.5f;
 		float width = 0.05f; // full width; the tube radius is half of it

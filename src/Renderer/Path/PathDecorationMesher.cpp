@@ -295,7 +295,6 @@ namespace DefectStudio::detail
 				const double shape = std::clamp(
 					std::isfinite(style.ribbonBevelShape) ? static_cast<double>(style.ribbonBevelShape) : 0.5,
 					0.0, 1.0);
-				const double profile = 2.0 * shape;
 				const auto appendFace = [&](const glm::dvec3 &firstPosition, const glm::dvec3 &secondPosition,
 					const glm::dvec3 &faceNormal) {
 					const glm::vec3 normalValue = glm::vec3(inner ? -faceNormal : faceNormal);
@@ -309,10 +308,38 @@ namespace DefectStudio::detail
 				const auto appendBevelCorner = [&](const glm::dvec3 &corner, const glm::dvec3 &startOffset,
 					const glm::dvec3 &endOffset) {
 					const auto pointAt = [&](const double fraction) {
-						const double angle = 0.5 * std::numbers::pi * fraction;
-						const glm::dvec3 straight = startOffset * (1.0 - fraction) + endOffset * fraction;
-						const glm::dvec3 arc = startOffset * std::cos(angle) + endOffset * std::sin(angle);
-						return corner + straight + (arc - straight) * profile;
+						double startCoordinate = 0.0;
+						double endCoordinate = 0.0;
+						if (shape == 0.0)
+						{
+							if (fraction <= 0.5)
+								startCoordinate = 1.0 - 2.0 * fraction;
+							else
+								endCoordinate = 2.0 * fraction - 1.0;
+						}
+						else if (shape == 1.0)
+						{
+							if (fraction <= 0.5)
+							{
+								startCoordinate = 1.0;
+								endCoordinate = 2.0 * fraction;
+							}
+							else
+							{
+								startCoordinate = 2.0 - 2.0 * fraction;
+								endCoordinate = 1.0;
+							}
+						}
+						else
+						{
+							const double superellipseExponent = -std::log(2.0) /
+								std::log(std::sqrt(shape));
+							const double power = 2.0 / superellipseExponent;
+							const double angle = 0.5 * std::numbers::pi * fraction;
+							startCoordinate = std::pow(std::cos(angle), power);
+							endCoordinate = std::pow(std::sin(angle), power);
+						}
+						return corner + startOffset * startCoordinate + endOffset * endCoordinate;
 					};
 					glm::dvec3 previous = pointAt(0.0);
 					for (std::uint32_t segment = 0; segment < bevelSegments; ++segment)
