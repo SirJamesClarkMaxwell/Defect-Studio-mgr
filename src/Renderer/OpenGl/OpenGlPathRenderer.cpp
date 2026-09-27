@@ -16,7 +16,6 @@
 #include "Renderer/Path/PathLod.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
 #include "Renderer/Path/PathTessellator.hpp"
-#include "Renderer/Scene/SceneObjectAppearance.hpp"
 
 namespace DefectStudio
 {
@@ -136,7 +135,16 @@ namespace DefectStudio
 		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
 		const std::vector<SceneObjectId> emptySelection;
 		const std::vector<SceneObjectId> &selection = input.selected == nullptr ? emptySelection : *input.selected;
-		struct DrawJob { SceneObjectId id; bool tube; bool cameraFacing; float halfWidth; float alpha; bool selected; };
+		struct DrawJob
+		{
+			SceneObjectId id;
+			bool tube;
+			bool cameraFacing;
+			float halfWidth;
+			float alpha;
+			bool selected;
+			float outlineExpansion;
+		};
 		std::vector<DrawJob> jobs;
 		bool anyTransparent = false;
 
@@ -189,7 +197,10 @@ namespace DefectStudio
 			{
 				const bool tube = !cached->stroke.tubeVertices.empty();
 				const bool selected = std::find(selection.begin(), selection.end(), path.id) != selection.end();
-				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha, selected});
+				const float outlineExpansion = selected && pixelsPerWorldUnit > 0.0
+					? static_cast<float>(globalSettings.viewport.pathSelectionOutlineWidth / pixelsPerWorldUnit)
+					: 0.0f;
+				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha, selected, outlineExpansion});
 				const bool gradientTransparent = path.style.gradient.enabled && std::any_of(
 					path.style.gradient.stops.begin(), path.style.gradient.stops.end(), [](const PathGradientStop &stop) {
 						return stop.alpha < 0.999f;
@@ -221,6 +232,8 @@ namespace DefectStudio
 		glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
 		const GLboolean previousCull = glIsEnabled(GL_CULL_FACE);
 		const GLboolean previousDepth = glIsEnabled(GL_DEPTH_TEST);
+		GLint previousCullMode = GL_BACK;
+		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
 		GLint previousProgram = 0;
 		GLint previousVertexArray = 0;
 		glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
@@ -233,31 +246,34 @@ namespace DefectStudio
 		const unsigned int tubeProgram = m_ShaderLibrary.Program("path_tube");
 		const unsigned int ribbonProgram = m_ShaderLibrary.Program("path_ribbon");
 		unsigned int activeProgram = 0;
-		for (const DrawJob &job : jobs)
+		const glm::vec4 outlineColor = globalSettings.viewport.pathSelectionOutlineColor;
+		const auto drawJob = [&](const DrawJob &job, const bool outline)
 		{
+			if (outline && (!job.selected || job.outlineExpansion <= 0.0f))
+				return;
 			const unsigned int program = job.tube ? tubeProgram : ribbonProgram;
 			if (program == 0)
-				continue;
+				return;
 			if (program != activeProgram)
 			{
 				activeProgram = program;
 				glUseProgram(program);
 				UploadLighting(m_ShaderLibrary, job.tube ? "path_tube" : "path_ribbon", camera, globalSettings, viewProjection, sceneOffset);
 			}
-			// Per job, not inside UploadLighting: that runs once per program switch, while several
-			// paths share a program and only some of them are selected.
 			const char *programName = job.tube ? "path_tube" : "path_ribbon";
-			const int highlightLocation = m_ShaderLibrary.Uniform(programName, "u_SelectionHighlight");
-			const int strengthLocation = m_ShaderLibrary.Uniform(programName, "u_SelectionStrength");
-			const glm::vec3 highlight = SceneSelectionHighlightColor();
-			if (highlightLocation >= 0)
-				glUniform3fv(highlightLocation, 1, &highlight.x);
-			if (strengthLocation >= 0)
-				glUniform1f(strengthLocation, job.selected ? kSceneSelectionHighlightStrength : 0.0f);
+			const int outlineModeLocation = m_ShaderLibrary.Uniform(programName, "u_OutlineMode");
+			const int outlineExpansionLocation = m_ShaderLibrary.Uniform(programName, "u_OutlineExpansion");
+			const int outlineColorLocation = m_ShaderLibrary.Uniform(programName, "u_OutlineColor");
+			if (outlineModeLocation >= 0)
+				glUniform1i(outlineModeLocation, outline ? 1 : 0);
+			if (outlineExpansionLocation >= 0)
+				glUniform1f(outlineExpansionLocation, outline ? job.outlineExpansion : 0.0f);
+			if (outline && outlineColorLocation >= 0)
+				glUniform4fv(outlineColorLocation, 1, &outlineColor.x);
 
 			const auto found = resources.scenePathMeshCache.find(job.id);
 			if (found == resources.scenePathMeshCache.end())
-				continue;
+				return;
 			const OpenGlScenePathMeshCache &entry = found->second;
 			if (!job.tube)
 			{
@@ -268,17 +284,41 @@ namespace DefectStudio
 				if (halfWidth >= 0) glUniform1f(halfWidth, job.halfWidth);
 				if (cameraFacing >= 0) glUniform1i(cameraFacing, job.cameraFacing ? 1 : 0);
 				if (cameraPosition >= 0) glUniform3fv(cameraPosition, 1, &position.x);
-				glDisable(GL_CULL_FACE);
+				if (outline)
+				{
+					glEnable(GL_CULL_FACE);
+					glCullFace(GL_FRONT);
+				}
+				else
+					glDisable(GL_CULL_FACE);
+			}
+			else if (outline)
+			{
+				glEnable(GL_CULL_FACE);
+				glCullFace(GL_FRONT);
 			}
 			else if (previousCull)
+			{
 				glEnable(GL_CULL_FACE);
+				glCullFace(static_cast<GLenum>(previousCullMode));
+			}
 			else
 				glDisable(GL_CULL_FACE);
 			glBindVertexArray(entry.mesh.vao);
 			glDrawElements(GL_TRIANGLES, entry.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
-		}
+		};
+		// ponytail: normal-expanded back faces are the cheap bounded solution for the current path
+		// meshes. If highly concave/self-intersecting ribbons become common, replace this pass with an
+		// offscreen selection mask and screen-space dilation for an exact silhouette.
+		glDepthMask(GL_FALSE);
+		for (const DrawJob &job : jobs)
+			drawJob(job, true);
+		glDepthMask((!renderAlwaysOnTop && anyTransparent) ? GL_FALSE : previousDepthMask);
+		for (const DrawJob &job : jobs)
+			drawJob(job, false);
 		glBindVertexArray(static_cast<unsigned int>(previousVertexArray));
 		glUseProgram(static_cast<unsigned int>(previousProgram));
+		glCullFace(static_cast<GLenum>(previousCullMode));
 		if (previousCull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
 		if (previousDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
 		glDepthMask(previousDepthMask);

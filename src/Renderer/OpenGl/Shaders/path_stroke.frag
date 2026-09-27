@@ -19,9 +19,8 @@ uniform float u_SpecularIntensity;
 uniform float u_Shininess;
 uniform float u_Saturation;
 uniform float u_SpecularScale;
-// Set per draw job, not per program: several paths share one program and only some are selected.
-uniform vec3 u_SelectionHighlight;
-uniform float u_SelectionStrength;
+uniform int u_OutlineMode;
+uniform vec4 u_OutlineColor;
 
 vec3 ApplySaturation(vec3 color)
 {
@@ -45,6 +44,11 @@ float Specular(vec3 normalVector, vec3 lightDirection, vec3 viewDirection)
 
 void main()
 {
+	if (u_OutlineMode == 1)
+	{
+		oColor = u_OutlineColor;
+		return;
+	}
 	vec3 normal = normalize(vNormal);
 	vec3 viewDirection = normalize(u_CameraPosition - vWorldPos);
 	float intensity = min(u_AmbientIntensity + Diffuse(normal, u_KeyDirection) * u_KeyIntensity
@@ -52,8 +56,5 @@ void main()
 		+ Diffuse(normal, u_BackDirection) * u_BackIntensity, 1.0);
 	float specular = Specular(normal, u_KeyDirection, viewDirection) * u_SpecularIntensity * u_SpecularScale;
 	vec3 base = ApplySaturation(vColor.rgb);
-	// Mixed towards the highlight rather than replaced by it, so a gradient stays legible while the
-	// path is selected - the same reason surfaces get a weaker strength than line-art does.
-	base = mix(base, u_SelectionHighlight, clamp(u_SelectionStrength, 0.0, 1.0));
 	oColor = vec4(clamp(base * intensity + vec3(specular), 0.0, 1.0), vColor.a);
 }

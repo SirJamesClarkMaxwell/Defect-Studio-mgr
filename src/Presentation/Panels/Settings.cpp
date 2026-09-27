@@ -466,6 +466,7 @@ namespace DefectStudio
 		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditSelectedColor);
 		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditTetherColor);
 		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditOutlineColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathSelectionOutlineColor);
 		m_DraftConfig.renderer.bondRadiusMultiplier = std::clamp(m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f);
 		m_DraftConfig.renderer.colorSaturation = std::clamp(m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f);
 		m_DraftConfig.renderer.viewportSupersample = std::clamp(m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f);
@@ -504,6 +505,8 @@ namespace DefectStudio
 			m_DraftConfig.renderer.viewport.pathEditTetherThickness, 0.0f, 8.0f);
 		m_DraftConfig.renderer.viewport.pathEditOutlineThickness = std::clamp(
 			m_DraftConfig.renderer.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
+		m_DraftConfig.renderer.viewport.pathSelectionOutlineWidth = std::clamp(
+			m_DraftConfig.renderer.viewport.pathSelectionOutlineWidth, 0.0f, 8.0f);
 		m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier = std::clamp(
 			m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_DraftConfig.renderer.viewport.transformTranslateSnap = std::clamp(
@@ -2130,6 +2133,14 @@ namespace DefectStudio
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Selection outline color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4(
+					"##PathSelectionOutlineColor", m_DraftConfig.renderer.viewport.pathSelectionOutlineColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Tether thickness");
 			ImGui::TableSetColumnIndex(1);
 			setValueControlWidth();
@@ -2144,6 +2155,15 @@ namespace DefectStudio
 			setValueControlWidth();
 			if (ImGui::SliderFloat(
 					"##PathEditOutlineThickness", &m_DraftConfig.renderer.viewport.pathEditOutlineThickness, 0.0f, 8.0f, "%.1f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Selection outline width");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##PathSelectionOutlineWidth", &m_DraftConfig.renderer.viewport.pathSelectionOutlineWidth, 0.0f, 8.0f, "%.1f px"))
 				markDirty();
 
 			ImGui::TableNextRow();

@@ -32,8 +32,10 @@ namespace DefectStudio
 		std::array<float, 4> pathEditSelectedColor = {255.0f / 255.0f, 210.0f / 255.0f, 70.0f / 255.0f, 255.0f / 255.0f};
 		std::array<float, 4> pathEditTetherColor = {180.0f / 255.0f, 180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f};
 		std::array<float, 4> pathEditOutlineColor = {25.0f / 255.0f, 25.0f / 255.0f, 25.0f / 255.0f, 240.0f / 255.0f};
+		std::array<float, 4> pathSelectionOutlineColor = {0.91f, 0.52f, 0.02f, 1.0f};
 		float pathEditTetherThickness = 1.0f;
 		float pathEditOutlineThickness = 1.5f;
+		float pathSelectionOutlineWidth = 2.0f;
 		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;

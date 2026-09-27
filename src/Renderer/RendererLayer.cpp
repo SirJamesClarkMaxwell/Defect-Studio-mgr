@@ -1085,10 +1085,17 @@ namespace DefectStudio
 			config.viewport.pathEditOutlineColor[1],
 			config.viewport.pathEditOutlineColor[2],
 			config.viewport.pathEditOutlineColor[3]);
+		m_GlobalRenderSettings.viewport.pathSelectionOutlineColor = glm::vec4(
+			config.viewport.pathSelectionOutlineColor[0],
+			config.viewport.pathSelectionOutlineColor[1],
+			config.viewport.pathSelectionOutlineColor[2],
+			config.viewport.pathSelectionOutlineColor[3]);
 		m_GlobalRenderSettings.viewport.pathEditTetherThickness = std::clamp(
 			config.viewport.pathEditTetherThickness, 0.0f, 8.0f);
 		m_GlobalRenderSettings.viewport.pathEditOutlineThickness = std::clamp(
 			config.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.pathSelectionOutlineWidth = std::clamp(
+			config.viewport.pathSelectionOutlineWidth, 0.0f, 8.0f);
 		m_GlobalRenderSettings.viewport.pathEditMarkerSizeMultiplier = std::clamp(
 			config.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_GlobalRenderSettings.viewport.transformTranslateSnap = std::clamp(

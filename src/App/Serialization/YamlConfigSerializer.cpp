@@ -794,6 +794,11 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
 				{},
 				config.renderer.viewport.pathEditOutlineColor);
+			config.renderer.viewport.pathSelectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineColor)},
+				{},
+				config.renderer.viewport.pathSelectionOutlineColor);
 			config.renderer.viewport.pathEditTetherThickness = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
@@ -804,6 +809,11 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
 				{},
 				config.renderer.viewport.pathEditOutlineThickness);
+			config.renderer.viewport.pathSelectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineWidth)},
+				{},
+				config.renderer.viewport.pathSelectionOutlineWidth);
 			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
@@ -1163,6 +1173,11 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
 				{},
 				config.renderer.viewport.pathEditOutlineColor);
+			config.renderer.viewport.pathSelectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineColor)},
+				{},
+				config.renderer.viewport.pathSelectionOutlineColor);
 			config.renderer.viewport.pathEditTetherThickness = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
@@ -1173,6 +1188,11 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
 				{},
 				config.renderer.viewport.pathEditOutlineThickness);
+			config.renderer.viewport.pathSelectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineWidth)},
+				{},
+				config.renderer.viewport.pathSelectionOutlineWidth);
 			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},

@@ -12,6 +12,8 @@ uniform vec3 u_SceneOffset;
 uniform float u_HalfWidth;
 uniform int u_CameraFacing;
 uniform vec3 u_CameraPosition;
+uniform int u_OutlineMode;
+uniform float u_OutlineExpansion;
 
 out vec3 vNormal;
 out vec4 vColor;
@@ -35,6 +37,8 @@ void main()
 	else
 		offsetDir = vec3(0.0);
 	float halfWidth = u_CameraFacing == 1 ? aHalfWidth : u_HalfWidth;
+	if (u_OutlineMode == 1)
+		halfWidth += u_OutlineExpansion;
 	world += aSide * halfWidth * offsetDir;
 	vNormal = u_CameraFacing == 1 ? normalize(u_CameraPosition - world) : normalize(aNormal);
 	vColor = aColor;
