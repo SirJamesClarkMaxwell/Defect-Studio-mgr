@@ -272,7 +272,23 @@ namespace DefectStudio
 		ImGui::NewLine();
 		SyncMarkerIds(markerState, gradient, selectedStop);
 
-		const float width = std::max(80.0f, ImGui::GetContentRegionAvail().x);
+		const float width = ImGui::GetContentRegionAvail().x;
+		constexpr float kMinimumWidth = 1.0f;
+		if (!std::isfinite(width) || width < kMinimumWidth)
+		{
+			NormalizeGradient(gradient);
+			if (gradient.stops.empty())
+			{
+				gradient.enabled = false;
+				selectedStop = -1;
+			}
+			else
+				selectedStop = std::clamp(selectedStop, 0, static_cast<int>(gradient.stops.size() - 1u));
+			SyncMarkerIds(markerState, gradient, selectedStop);
+			ImGui::PopID();
+			result.changed = !SameGradient(before, gradient);
+			return result;
+		}
 		constexpr float kBarHeight = 24.0f;
 		constexpr float kMarkerHeight = 14.0f;
 		const ImVec2 barMinimum = ImGui::GetCursorScreenPos();

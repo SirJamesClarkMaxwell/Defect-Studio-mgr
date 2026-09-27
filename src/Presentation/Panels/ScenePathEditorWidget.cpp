@@ -327,8 +327,12 @@ namespace DefectStudio
 			return false;
 		const float fieldWidth = std::max(
 			layout.fieldColumnMinimumWidth, availableWidth - layout.labelColumnWidth);
-		ImGui::TableSetupColumn("##StyleLabel", ImGuiTableColumnFlags_WidthFixed, layout.labelColumnWidth);
-		ImGui::TableSetupColumn("##StyleField", ImGuiTableColumnFlags_WidthFixed, fieldWidth);
+		const auto setupStyleTable = [&] {
+			ImGui::TableSetupColumn("##StyleLabel", ImGuiTableColumnFlags_WidthFixed, layout.labelColumnWidth);
+			ImGui::TableSetupColumn("##StyleField", ImGuiTableColumnFlags_WidthFixed, fieldWidth);
+		};
+		setupStyleTable();
+		// The ramp is a full-width widget; keep the surrounding fields in a two-column table.
 		const auto beginRow = [&](const char *label, const bool mixed = false) {
 			ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
 			DrawScenePathEditorLabel(label, mixed);
@@ -418,7 +422,8 @@ namespace DefectStudio
 			edit.gradient.enabled = gradientEnabled && !edit.gradient.stops.empty();
 			applyImmediate(true);
 		}
-		beginRow("Gradient ramp");
+		ImGui::EndTable();
+		DrawScenePathEditorLabel("Gradient ramp", false);
 		const GradientRampResult ramp = DrawGradientRamp("PathGradientRamp", edit.gradient, selectedGradientStop);
 		if (ramp.dragStarted)
 			BeginScenePathStyleDrag(windowState);
@@ -429,6 +434,11 @@ namespace DefectStudio
 		}
 		if (ramp.dragEnded)
 			CommitScenePathStyleDrag(windowState);
+		ImGui::NewLine();
+		if (!ImGui::BeginTable("##ScenePathStyleEditorAfterRamp", 2,
+			ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
+			return changed || renamed;
+		setupStyleTable();
 		const auto drawDecoration = [&](const char *prefix, PathEndpointDecoration &decoration) {
 			const std::string kindLabel = std::string(prefix) + " kind";
 			const std::string lengthLabel = std::string(prefix) + " length scale";
