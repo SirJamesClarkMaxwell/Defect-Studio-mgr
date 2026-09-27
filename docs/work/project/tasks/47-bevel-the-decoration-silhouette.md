@@ -11,7 +11,11 @@ wants Blender's bevel on it: the edges of the resulting SOLID rounded off, inclu
 run around the arrowhead's outline, with `ribbonBevelSegments` faces per edge and a profile
 controlled by `ribbonBevelShape`.
 
-The user marked their screenshots precisely:
+**The user has pasted their marked screenshots alongside this brief - look at them.** What follows
+is a caption for them, not a substitute: where the text and the images disagree, the images win,
+and the markings are the specification.
+
+Their markings:
 - the chamfers that currently appear run diagonally ACROSS the arrowhead's face, along the sweep
   direction. They are wrong and should not exist.
 - the edges that should be bevelled are the ones tracing the arrowhead's OUTLINE - its two slanted
