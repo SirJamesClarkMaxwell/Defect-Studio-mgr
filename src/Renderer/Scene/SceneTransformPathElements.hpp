@@ -66,6 +66,12 @@ namespace DefectStudio
 	//
 	//   Translate is unaffected: a delta does not consult a pivot.
 	//
+	//   The modal's OWN pivot must agree with this. A selected handle therefore contributes its
+	//   owner node's position to SceneTransformPivotPositions, not its own: the constraint line, the
+	//   pivot the delta is measured against and the point the apply turns about are then one point.
+	//   While they disagreed, the axis line stood on the handle and the rotation happened about the
+	//   node, so the result never matched what was drawn.
+	//
 	//   The node in question is the handle's owner, at its position for this frame. When the owner is
 	//   itself selected the handle is not transformed at all - see the rule above - so the two never
 	//   have to agree about who moved first.

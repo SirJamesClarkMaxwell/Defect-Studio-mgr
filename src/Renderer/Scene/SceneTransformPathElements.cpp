@@ -121,21 +121,15 @@ namespace DefectStudio
 			return rotated / path.transform.scale;
 		}
 
-		glm::vec3 TransformHandleOffset(const ScenePath &path, const glm::vec3 &offset)
-		{
-			return path.transform.rotation * (path.transform.scale * offset);
-		}
-
-		[[nodiscard]] std::optional<glm::vec3> FindResolvedHandlePosition(
+		[[nodiscard]] std::optional<glm::vec3> FindResolvedHandleOwnerPosition(
 			const ScenePath &path, const ResolvedNodes &resolved, const PathElementId id)
 		{
 			PathElementId owner;
-			const PathHandle *handle = FindHandle(path, id, owner);
-			if (handle == nullptr)
+			if (FindHandle(path, id, owner) == nullptr)
 				return std::nullopt;
 			for (std::size_t index = 0; index < path.nodes.size(); ++index)
 				if (path.nodes[index].id == owner && index < resolved.positions.size())
-					return resolved.positions[index] + TransformHandleOffset(path, handle->offset);
+					return resolved.positions[index];
 			return std::nullopt;
 		}
 
@@ -271,10 +265,10 @@ namespace DefectStudio
 						positions.push_back(resolved.positions[index]);
 				continue;
 			}
-			if (const std::optional<glm::vec3> handlePosition =
-				FindResolvedHandlePosition(*path, resolved, element.element);
-				handlePosition.has_value())
-				positions.push_back(*handlePosition);
+			if (const std::optional<glm::vec3> ownerPosition =
+				FindResolvedHandleOwnerPosition(*path, resolved, element.element);
+				ownerPosition.has_value())
+				positions.push_back(*ownerPosition);
 		}
 		return positions;
 	}
