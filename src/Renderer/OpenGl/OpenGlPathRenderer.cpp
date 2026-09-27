@@ -198,7 +198,7 @@ namespace DefectStudio
 				const bool tube = !cached->stroke.tubeVertices.empty();
 				const bool selected = std::find(selection.begin(), selection.end(), path.id) != selection.end();
 				const float outlineExpansion = selected && pixelsPerWorldUnit > 0.0
-					? static_cast<float>(globalSettings.viewport.pathSelectionOutlineWidth / pixelsPerWorldUnit)
+					? static_cast<float>(globalSettings.viewport.selectionOutlineWidth / pixelsPerWorldUnit)
 					: 0.0f;
 				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha, selected, outlineExpansion});
 				const bool gradientTransparent = path.style.gradient.enabled && std::any_of(
@@ -246,7 +246,7 @@ namespace DefectStudio
 		const unsigned int tubeProgram = m_ShaderLibrary.Program("path_tube");
 		const unsigned int ribbonProgram = m_ShaderLibrary.Program("path_ribbon");
 		unsigned int activeProgram = 0;
-		const glm::vec4 outlineColor = globalSettings.viewport.pathSelectionOutlineColor;
+		const glm::vec4 outlineColor = globalSettings.viewport.selectionOutlineColor;
 		const auto drawJob = [&](const DrawJob &job, const bool outline)
 		{
 			if (outline && (!job.selected || job.outlineExpansion <= 0.0f))

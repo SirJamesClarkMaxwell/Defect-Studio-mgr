@@ -5,6 +5,7 @@ in vec4 vColorA;
 in vec4 vColorB;
 in float vGradientT;
 in vec3 vWorldPos;
+in float vSelected;
 
 out vec4 oColor;
 
@@ -24,6 +25,8 @@ uniform float u_Saturation;
 // arrow is a fixed flat color, not atom/bond material, so it shouldn't carry the same shiny
 // highlight (docs/scene_arrow_rework_plan_corrected.md Step 8).
 uniform float u_SpecularScale;
+uniform int u_OutlineMode;
+uniform vec4 u_OutlineColor;
 
 vec3 ApplySaturation(vec3 color)
 {
@@ -52,6 +55,13 @@ float ComputeSpecular(vec3 normalVector, vec3 lightDirection, vec3 viewDirection
 
 void main()
 {
+	if (u_OutlineMode == 1)
+	{
+		if (vSelected < 0.5)
+			discard;
+		oColor = u_OutlineColor;
+		return;
+	}
 	vec3 N = normalize(vNormal);
 	vec3 viewDir = normalize(u_CameraPosition - vWorldPos);
 	vec3 baseColor = ApplySaturation(mix(vColorA.rgb, vColorB.rgb, clamp(vGradientT, 0.0, 1.0)));

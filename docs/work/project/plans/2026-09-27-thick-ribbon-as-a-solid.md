@@ -60,3 +60,34 @@ The black decoration tips and the parked `-0.476` orientation lead both live in 
 replaces. Neither should be chased first: a fix landed in the bevelled-cross-section path is work
 thrown away. Step 1 either resolves them by construction or reproduces them on ground that can be
 reasoned about.
+
+## Status 2026-09-27: attempted in one pass, parked
+
+Built and reverted the same day. The work is preserved in the session scratchpad as
+`parked-solid/` - `PathSolidMesher.{hpp,cpp}`, `PathSolidBeveler.cpp` and `mesher-wiring.patch`
+against `PathStrokeMesher.cpp` / `PathDecorationMesher.cpp`.
+
+What happened, in order:
+
+1. Step 1 and step 2 were done together, at the user's request. That removed the checkpoint this
+   plan asks for, and it cost more than it saved.
+2. The solid closed the PLAIN end caps - `NoDecorationMatrixChecksWholeMeshClosure` passed on it -
+   and removed the black decoration tips by construction, because collapsed tips stopped emitting
+   degenerate faces.
+3. The bevel pass never closed. Four rounds moved it from an edge used by one triangle (a hole) to
+   an edge used by four (a duplicate), which is progress in diagnosis but not a working mesh. The
+   duplicate survived a deduplicated undirected-edge enumeration and was last seen on the cap plane.
+4. With the bevel pass disabled, `DecorationMatrixChecksClosedSurfacesAndHandoffFrame` still failed,
+   so the solid was not closed with decorations either. That is two unfinished pieces, not one.
+
+### What to do differently
+
+- **Take the checkpoint.** Land the solid with no bevel at all, green, as its own commit. Do not
+  start the beveller until then.
+- **Write the failing test first, from the user's own configuration.** The extended matrix passes
+  against the pre-rewrite code, so it does NOT catch the hole visible on screen - a stroke built by
+  the "Thick curved Flat ribbon" dev preset, which is what the screenshots show. Reproduce that
+  exact preset in a test and watch it fail before touching geometry again. A closure test that
+  passes over a mesh with a visible hole is measuring the wrong stroke.
+- **Keep the structural construction.** One shrunk face per face, one strip per undirected edge,
+  one patch per vertex is the right shape; the remaining fault is in its iteration, not its idea.

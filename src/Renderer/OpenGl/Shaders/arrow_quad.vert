@@ -16,6 +16,8 @@ layout(location = 6) in vec3 aOutlineColor;
 layout(location = 7) in float aOutlineWidth;
 layout(location = 8) in float aHeadHalfWidth;
 layout(location = 9) in float aHeadLength;
+layout(location = 10) in float aSelected;
+layout(location = 11) in float aSelectionOutlineWidth;
 
 uniform mat4 u_ViewProjection;
 uniform vec3 u_SceneOffset;
@@ -27,6 +29,8 @@ out float vHeadLength;
 out vec3 vOutlineColor;
 out float vOutlineWidth;
 out vec4 vColor;
+out float vSelected;
+out float vSelectionOutlineWidth;
 
 void main()
 {
@@ -44,4 +48,6 @@ void main()
 	vOutlineColor = aOutlineColor;
 	vOutlineWidth = aOutlineWidth;
 	vColor = aColor;
+	vSelected = aSelected;
+	vSelectionOutlineWidth = aSelectionOutlineWidth;
 }

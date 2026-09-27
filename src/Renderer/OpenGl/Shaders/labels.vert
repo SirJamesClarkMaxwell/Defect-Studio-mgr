@@ -17,6 +17,7 @@ layout(location = 8) in float aCornerRadius;
 // label_background pass, same sharing rationale as aOutlineColor/aOutlineWidth/aCornerRadius above.
 layout(location = 9) in vec3 aStrokeColor;
 layout(location = 10) in float aStrokeWidth;
+layout(location = 11) in float aSelected;
 
 uniform mat4 u_ViewProjection;
 uniform mat4 u_View;
@@ -37,6 +38,7 @@ out vec2 vBoxHalfSize;
 out float vCornerRadius;
 out vec3 vStrokeColor;
 out float vStrokeWidth;
+out float vSelected;
 
 void main()
 {
@@ -67,4 +69,5 @@ void main()
 	vCornerRadius = aCornerRadius;
 	vStrokeColor = aStrokeColor;
 	vStrokeWidth = aStrokeWidth;
+	vSelected = aSelected;
 }

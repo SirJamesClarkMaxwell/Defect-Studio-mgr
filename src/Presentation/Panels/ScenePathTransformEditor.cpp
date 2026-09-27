@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 
+#include <algorithm>
 #include <glm/gtc/quaternion.hpp>
 
 #include <imgui.h>
@@ -17,6 +18,21 @@ namespace DefectStudio
 		void MarkMixed(bool &mixed, const T &first, const T &value)
 		{
 			mixed = mixed || !(first == value);
+		}
+		[[nodiscard]] std::string EllipsizeLabel(const char *label, const float width)
+		{
+			if (ImGui::CalcTextSize(label).x <= width)
+				return label;
+			const std::string ellipsis = "...";
+			std::string result = label;
+			while (!result.empty())
+			{
+				result.pop_back();
+				const std::string candidate = result + ellipsis;
+				if (ImGui::CalcTextSize(candidate.c_str()).x <= width)
+					return candidate;
+			}
+			return ellipsis;
 		}
 
 		enum TransformFields : unsigned
@@ -47,6 +63,48 @@ namespace DefectStudio
 					return Result<void>{};
 				});
 			return report.applied.size();
+		}
+	}
+
+	ScenePathEditorLayout MeasureScenePathEditorLayout(
+		const float availableWidth, const char *const *labels, const std::size_t labelCount)
+	{
+		const ImGuiStyle &style = ImGui::GetStyle();
+		float widestLabel = 0.0f;
+		for (std::size_t index = 0; index < labelCount; ++index)
+			widestLabel = std::max(widestLabel, ImGui::CalcTextSize(labels[index]).x);
+		const float mixedWidth = ImGui::CalcTextSize("(mixed)").x;
+		const float labelWidth = widestLabel + style.ItemSpacing.x + mixedWidth + style.CellPadding.x * 2.0f;
+		const float labelMinimumWidth = ImGui::CalcTextSize("...").x + style.CellPadding.x * 2.0f;
+		const float numericWidth = ImGui::CalcTextSize("-0.000").x + style.FramePadding.x * 2.0f;
+		const float componentWidth = numericWidth + style.CellPadding.x * 2.0f;
+		const float enumWidth = std::max({
+			ImGui::CalcTextSize("Camera-facing").x,
+			ImGui::CalcTextSize("Always on top").x,
+			ImGui::CalcTextSize("Path #000").x}) + style.FramePadding.x * 2.0f + style.CellPadding.x * 2.0f;
+		const float fieldMinimumWidth = std::max(
+			enumWidth, numericWidth * 3.0f + style.ItemInnerSpacing.x * 2.0f + style.CellPadding.x * 2.0f);
+		const float labelCap = availableWidth * 0.5f;
+		const float labelBudget = availableWidth - fieldMinimumWidth;
+		return {
+			std::max(labelMinimumWidth, std::min(labelWidth, std::min(labelCap, labelBudget))),
+			fieldMinimumWidth,
+			componentWidth};
+	}
+
+	void DrawScenePathEditorLabel(const char *label, const bool mixed)
+	{
+		const ImGuiStyle &style = ImGui::GetStyle();
+		const float mixedWidth = ImGui::CalcTextSize("(mixed)").x;
+		const float availableWidth = ImGui::GetContentRegionAvail().x;
+		const float labelWidth = mixed ? std::max(ImGui::CalcTextSize("...").x,
+			availableWidth - style.ItemSpacing.x - mixedWidth) : availableWidth;
+		const std::string visibleLabel = EllipsizeLabel(label, labelWidth);
+		ImGui::TextUnformatted(visibleLabel.c_str());
+		if (mixed)
+		{
+			ImGui::SameLine(0.0f, style.ItemSpacing.x);
+			ImGui::TextDisabled("(mixed)");
 		}
 	}
 
@@ -95,11 +153,9 @@ namespace DefectStudio
 
 		ScenePathTransformEdit edit = resolved.values;
 		bool changed = false;
-		const ImGuiStyle &style = ImGui::GetStyle();
-		const float labelWidth = ImGui::CalcTextSize("Location").x + style.ItemSpacing.x +
-			ImGui::CalcTextSize("(mixed)").x + style.CellPadding.x * 2.0f;
-		const float valueWidth = ImGui::CalcTextSize("-0.000").x +
-			style.FramePadding.x * 2.0f + style.CellPadding.x * 2.0f;
+		const char *transformLabels[] = {"Location", "Rotation", "Scale"};
+		const ScenePathEditorLayout layout = MeasureScenePathEditorLayout(
+			ImGui::GetContentRegionAvail().x, transformLabels, 3);
 		const char *axisLabels[] = {"X", "Y", "Z"};
 
 		ImGui::Separator();
@@ -107,9 +163,11 @@ namespace DefectStudio
 		if (!ImGui::BeginTable("##ScenePathTransformEditor", 4,
 			ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
 			return false;
-		ImGui::TableSetupColumn("##TransformLabel", ImGuiTableColumnFlags_WidthFixed, labelWidth);
+		ImGui::TableSetupColumn(
+			"##TransformLabel", ImGuiTableColumnFlags_WidthFixed, layout.labelColumnWidth);
 		for (const char *axisLabel : axisLabels)
-			ImGui::TableSetupColumn(axisLabel, ImGuiTableColumnFlags_WidthFixed, valueWidth);
+			ImGui::TableSetupColumn(
+				axisLabel, ImGuiTableColumnFlags_WidthFixed, layout.componentColumnWidth);
 		ImGui::TableNextRow();
 		for (int axis = 0; axis < 3; ++axis)
 		{

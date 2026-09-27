@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,17 @@
 
 namespace DefectStudio
 {
+	struct ScenePathEditorLayout
+	{
+		float labelColumnWidth = 0.0f;
+		float fieldColumnMinimumWidth = 0.0f;
+		float componentColumnWidth = 0.0f;
+	};
+
+	[[nodiscard]] ScenePathEditorLayout MeasureScenePathEditorLayout(
+		float availableWidth, const char *const *labels, std::size_t labelCount);
+	void DrawScenePathEditorLabel(const char *label, bool mixed);
+
 	// The stroke fields the Properties panel edits, read off one path and written back to every
 	// selected path. A separate struct rather than a ScenePath copy because a multi-selection has
 	// no single path to copy: the panel shows the first selected path's values and applies whatever

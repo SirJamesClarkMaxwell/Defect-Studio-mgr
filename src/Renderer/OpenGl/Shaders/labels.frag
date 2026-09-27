@@ -4,9 +4,12 @@ in vec2 vUv;
 in vec4 vColor;
 in vec3 vStrokeColor;
 in float vStrokeWidth;
+in float vSelected;
 
 uniform sampler2D u_AtlasTexture;
 uniform float u_PixelRange;
+uniform vec4 u_SelectionOutlineColor;
+uniform float u_SelectionOutlineWidth;
 
 out vec4 FragColor;
 
@@ -38,6 +41,7 @@ void main()
 	// would (screenPxRange scales with on-screen glyph size, so a fixed median-space width doesn't).
 	float screenPxDistance = screenPxRange() * signedDistance;
 	float fillOpacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
+	float ownOpacity = fillOpacity;
 
 	// No stroke (the common case, LabelStyle::strokeWidth == 0 by default): skip the blend entirely
 	// rather than fold width=0 into the formula below - mix(vStrokeColor, vColor.rgb, fillOpacity)
@@ -45,19 +49,18 @@ void main()
 	// class of fringe bug label_background.frag's border already guards against the same way.
 	if (vStrokeWidth <= 0.0)
 	{
-		if (fillOpacity < 0.01)
-			discard;
-		FragColor = vec4(vColor.rgb, vColor.a * fillOpacity);
-		return;
+		ownOpacity = fillOpacity;
 	}
-
-	// Grows the shape outward by strokeWidth screen pixels before computing coverage, then blends
-	// stroke->fill color based on how far inside the ORIGINAL glyph boundary this pixel is -
-	// standard msdfgen-style outline technique.
-	float outerOpacity = clamp(screenPxDistance + vStrokeWidth + 0.5, 0.0, 1.0);
-	if (outerOpacity < 0.01)
+	else
+		ownOpacity = clamp(screenPxDistance + vStrokeWidth + 0.5, 0.0, 1.0);
+	float selectionOpacity = vSelected > 0.5 && u_SelectionOutlineWidth > 0.0
+		? clamp(screenPxDistance + u_SelectionOutlineWidth + 0.5, 0.0, 1.0)
+		: 0.0;
+	if (max(ownOpacity, selectionOpacity) < 0.01)
 		discard;
-
-	vec3 rgb = mix(vStrokeColor, vColor.rgb, fillOpacity);
-	FragColor = vec4(rgb, vColor.a * outerOpacity);
+	vec3 ownRgb = vStrokeWidth > 0.0 ? mix(vStrokeColor, vColor.rgb, fillOpacity) : vColor.rgb;
+	float ownAlpha = vColor.a * ownOpacity;
+	float selectionAlpha = u_SelectionOutlineColor.a * selectionOpacity;
+	vec3 rgb = selectionAlpha > ownAlpha ? u_SelectionOutlineColor.rgb : ownRgb;
+	FragColor = vec4(rgb, max(ownAlpha, selectionAlpha));
 }

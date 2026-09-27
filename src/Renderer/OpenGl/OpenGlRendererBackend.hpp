@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -40,6 +41,9 @@ namespace DefectStudio
 	{
 		glm::vec4 positionRadius = glm::vec4(0.0f);
 		glm::vec4 color = glm::vec4(1.0f);
+		float selected = 0.0f;
+		float outlineExpansion = 0.0f;
+		std::size_t sourceIndex = 0;
 	};
 
 	struct OpenGlBondInstance
@@ -47,6 +51,10 @@ namespace DefectStudio
 		glm::mat4 model = glm::mat4(1.0f);
 		glm::vec4 colorA = glm::vec4(1.0f);
 		glm::vec4 colorB = glm::vec4(1.0f);
+		float selected = 0.0f;
+		float outlineExpansion = 0.0f;
+		glm::vec3 outlineCenter = glm::vec3(0.0f);
+		std::size_t sourceIndex = 0;
 	};
 
 	// One glyph quad. aWorldCenter repeats across every glyph of the same label (the string's
@@ -74,6 +82,7 @@ namespace DefectStudio
 		// .frag doesn't read them), same sharing rationale as outlineColor/outlineWidth/cornerRadius.
 		glm::vec3 strokeColor = glm::vec3(0.0f);
 		float strokeWidth = 0.0f;
+		float selected = 0.0f;
 	};
 
 	// One SceneArrow Arrow2D quad. right/up are fully resolved world-space basis vectors, computed
@@ -96,6 +105,8 @@ namespace DefectStudio
 		float outlineWidth = 0.0f;
 		float headHalfWidth = 0.0f; // 0 collapses the SDF union's head triangle to a point (no head)
 		float headLength = 0.0f;
+		float selected = 0.0f;
+		float selectionOutlineWidth = 0.0f;
 	};
 
 	// One world-space path/tip mesh per Line or Arrow3D SceneArrow. A geometry hash avoids rebuilding
@@ -318,7 +329,8 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
 		void renderBonds(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
@@ -326,7 +338,8 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
-			bool showPeriodicBonds = true);
+			bool showPeriodicBonds = true,
+			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
 		// Atoms-displacement comparison arrows (RendererWindowState::displacementComparison) - one
 		// batched instanced draw for all visible shafts (shared m_CylinderMesh, like renderBonds)
 		// plus one for all visible cone heads (shared m_ConeMesh, already instance-layout-compatible
@@ -370,9 +383,10 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
 		// ScenePlanes reuse the orbital isosurface overlay - a plane is two triangles plus an
-		// optional frame, uploaded and drawn per plane so its own colour and selection tint survive.
+		// optional frame, uploaded and drawn per plane so its own colour and selection outline survive.
 		void renderScenePlanes(
 			const std::vector<RendererWindowState::ScenePlane> &planes,
 			const std::vector<std::size_t> &selectedPlanes,
@@ -403,6 +417,7 @@ namespace DefectStudio
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
 			bool showAllLabels,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 			const std::vector<std::size_t> &selectedPinnedMeasurements,
@@ -440,7 +455,9 @@ namespace DefectStudio
 			const glm::vec3 &positiveLobeColor,
 			const glm::vec3 &negativeLobeColor,
 			float lobeAlpha,
-			const glm::vec3 &sceneOffset);
+			const glm::vec3 &sceneOffset,
+			bool outline = false,
+			float outlineExpansion = 0.0f);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.

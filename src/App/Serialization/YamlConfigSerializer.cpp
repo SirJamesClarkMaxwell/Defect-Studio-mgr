@@ -794,11 +794,16 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
 				{},
 				config.renderer.viewport.pathEditOutlineColor);
-			config.renderer.viewport.pathSelectionOutlineColor = ReadColor(
+			const auto legacySelectionOutlineColor = ReadColor(
 				root,
-				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineColor)},
+				{rendererSection, rendererViewportKey, "path_selection_outline_color"},
+				"path_selection_outline_color",
+				config.renderer.viewport.selectionOutlineColor);
+			config.renderer.viewport.selectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineColor)},
 				{},
-				config.renderer.viewport.pathSelectionOutlineColor);
+				legacySelectionOutlineColor);
 			config.renderer.viewport.pathEditTetherThickness = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
@@ -809,11 +814,16 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
 				{},
 				config.renderer.viewport.pathEditOutlineThickness);
-			config.renderer.viewport.pathSelectionOutlineWidth = ReadValue(
+			const auto legacySelectionOutlineWidth = ReadValue(
 				root,
-				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineWidth)},
+				{rendererSection, rendererViewportKey, "path_selection_outline_width"},
+				"path_selection_outline_width",
+				config.renderer.viewport.selectionOutlineWidth);
+			config.renderer.viewport.selectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineWidth)},
 				{},
-				config.renderer.viewport.pathSelectionOutlineWidth);
+				legacySelectionOutlineWidth);
 			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
@@ -1173,11 +1183,16 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
 				{},
 				config.renderer.viewport.pathEditOutlineColor);
-			config.renderer.viewport.pathSelectionOutlineColor = ReadColor(
+			const auto legacySelectionOutlineColor = ReadColor(
 				root,
-				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineColor)},
+				{rendererSection, rendererViewportKey, "path_selection_outline_color"},
+				"path_selection_outline_color",
+				config.renderer.viewport.selectionOutlineColor);
+			config.renderer.viewport.selectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineColor)},
 				{},
-				config.renderer.viewport.pathSelectionOutlineColor);
+				legacySelectionOutlineColor);
 			config.renderer.viewport.pathEditTetherThickness = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
@@ -1188,11 +1203,16 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
 				{},
 				config.renderer.viewport.pathEditOutlineThickness);
-			config.renderer.viewport.pathSelectionOutlineWidth = ReadValue(
+			const auto legacySelectionOutlineWidth = ReadValue(
 				root,
-				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathSelectionOutlineWidth)},
+				{rendererSection, rendererViewportKey, "path_selection_outline_width"},
+				"path_selection_outline_width",
+				config.renderer.viewport.selectionOutlineWidth);
+			config.renderer.viewport.selectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineWidth)},
 				{},
-				config.renderer.viewport.pathSelectionOutlineWidth);
+				legacySelectionOutlineWidth);
 			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},

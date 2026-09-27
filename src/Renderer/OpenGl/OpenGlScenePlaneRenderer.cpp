@@ -3,12 +3,12 @@
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include <glad/gl.h>
 
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
-#include "Renderer/Scene/SceneObjectAppearance.hpp"
 
 namespace DefectStudio
 {
@@ -70,6 +70,27 @@ namespace DefectStudio
 			(void)insetBitangent;
 			return mesh;
 		}
+
+		[[nodiscard]] std::vector<IsosurfaceVertex> BuildScenePlaneSelectionOutlineMesh(
+			const RendererWindowState::ScenePlane &plane, const float width)
+		{
+			if (width <= 0.0f)
+				return {};
+			const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
+			const glm::vec3 outerTangent = plane.tangent * (plane.halfExtents.x + width);
+			const glm::vec3 outerBitangent = bitangent * (plane.halfExtents.y + width);
+			const std::array<glm::vec3, 4> outer = {
+				plane.center - outerTangent - outerBitangent,
+				plane.center + outerTangent - outerBitangent,
+				plane.center + outerTangent + outerBitangent,
+				plane.center - outerTangent + outerBitangent};
+			const std::array<glm::vec3, 4> inner = ScenePlaneCorners(plane);
+			std::vector<IsosurfaceVertex> mesh;
+			mesh.reserve(24u);
+			for (std::size_t i = 0; i < 4; ++i)
+				AppendQuad(mesh, outer[i], outer[(i + 1) % 4], inner[(i + 1) % 4], inner[i], plane.normal, 1.0f);
+			return mesh;
+		}
 	} // namespace
 
 	void OpenGlRendererBackend::renderScenePlanes(
@@ -101,6 +122,50 @@ namespace DefectStudio
 			if (mesh.empty())
 				continue;
 
+			const bool selected =
+				std::find(selectedPlanes.begin(), selectedPlanes.end(), planeIndex) != selectedPlanes.end();
+			if (selected)
+			{
+				const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
+				float outlineWidth = 0.0f;
+				for (const glm::vec3 &probeDirection : {plane.tangent, bitangent})
+				{
+					const std::optional<float> worldPerPixel =
+						WorldUnitsPerPixelAt(camera, plane.center, probeDirection, viewportPixelSize);
+					if (worldPerPixel.has_value())
+						outlineWidth = std::max(
+							outlineWidth, globalSettings.viewport.selectionOutlineWidth * *worldPerPixel);
+				}
+				const std::vector<IsosurfaceVertex> outlineMesh =
+					BuildScenePlaneSelectionOutlineMesh(plane, outlineWidth);
+				if (!outlineMesh.empty())
+				{
+					glBindVertexArray(handles.vao);
+					glBindBuffer(GL_ARRAY_BUFFER, handles.vbo);
+					glBufferData(
+						GL_ARRAY_BUFFER,
+						static_cast<GLsizeiptr>(outlineMesh.size() * sizeof(IsosurfaceVertex)),
+						outlineMesh.data(), GL_DYNAMIC_DRAW);
+					glEnableVertexAttribArray(0);
+					glVertexAttribPointer(
+						0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+						reinterpret_cast<void *>(offsetof(IsosurfaceVertex, position)));
+					glEnableVertexAttribArray(1);
+					glVertexAttribPointer(
+						1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+						reinterpret_cast<void *>(offsetof(IsosurfaceVertex, normal)));
+					glEnableVertexAttribArray(2);
+					glVertexAttribPointer(
+						2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+						reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
+					glBindVertexArray(0);
+					handles.indexCount = static_cast<int>(outlineMesh.size());
+					renderIsosurfaceGpuOverlay(
+						handles.vao, handles.indexCount, camera, globalSettings, glm::vec3(0.0f),
+						glm::vec3(0.0f), globalSettings.viewport.selectionOutlineColor.a, sceneOffset, true);
+				}
+			}
+
 			glBindVertexArray(handles.vao);
 			glBindBuffer(GL_ARRAY_BUFFER, handles.vbo);
 			glBufferData(
@@ -124,15 +189,13 @@ namespace DefectStudio
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			handles.indexCount = static_cast<int>(mesh.size());
 
-			const bool selected =
-				std::find(selectedPlanes.begin(), selectedPlanes.end(), planeIndex) != selectedPlanes.end();
 			renderIsosurfaceGpuOverlay(
 				handles.vao,
 				handles.indexCount,
 				camera,
 				globalSettings,
-				ApplySceneSelectionHighlight(plane.color, selected, kSceneSurfaceSelectionHighlightStrength),
-				ApplySceneSelectionHighlight(plane.color * 0.45f, selected),
+				plane.color,
+				plane.color * 0.45f,
 				plane.alpha,
 				sceneOffset);
 		}

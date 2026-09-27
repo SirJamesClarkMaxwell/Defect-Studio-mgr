@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 
 #include <imgui.h>
 
@@ -295,6 +296,15 @@ namespace DefectStudio
 		bool changed = false;
 		bool renamed = false;
 		static int selectedGradientStop = -1;
+		const char *styleLabels[] = {"Name", "Profile", "Ribbon normal", "Ribbon thickness", "Ribbon bevel",
+			"Ribbon bevel segments", "Ribbon bevel shape", "Width", "Alpha", "Color", "Line style",
+			"Dash length", "Gap length", "Dash phase", "Enabled", "Gradient ramp", "Start decoration kind",
+			"Start decoration length scale", "Start decoration width scale", "Start decoration filled",
+			"End decoration kind", "End decoration length scale", "End decoration width scale",
+			"End decoration filled", "Depth"};
+		const float availableWidth = ImGui::GetContentRegionAvail().x;
+		const ScenePathEditorLayout layout = MeasureScenePathEditorLayout(
+			availableWidth, styleLabels, std::size(styleLabels));
 		const auto applyImmediate = [&](const bool controlChanged) {
 			if (!controlChanged)
 				return;
@@ -312,6 +322,37 @@ namespace DefectStudio
 				CommitScenePathStyleDrag(windowState);
 		};
 		ImGui::Text("Paths (%zu selected)", resolved.resolved);
+		if (!ImGui::BeginTable("##ScenePathStyleEditor", 2,
+			ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
+			return false;
+		const float fieldWidth = std::max(
+			layout.fieldColumnMinimumWidth, availableWidth - layout.labelColumnWidth);
+		ImGui::TableSetupColumn("##StyleLabel", ImGuiTableColumnFlags_WidthFixed, layout.labelColumnWidth);
+		ImGui::TableSetupColumn("##StyleField", ImGuiTableColumnFlags_WidthFixed, fieldWidth);
+		const auto beginRow = [&](const char *label, const bool mixed = false) {
+			ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+			DrawScenePathEditorLabel(label, mixed);
+			ImGui::TableSetColumnIndex(1); ImGui::SetNextItemWidth(-1.0f);
+		};
+		const auto drawAxisHeader = [&] {
+			ImGui::TableNextRow(); ImGui::TableSetColumnIndex(1);
+			if (ImGui::BeginTable("##ScenePathStyleAxisHeader", 3,
+				ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoSavedSettings))
+			{
+				for (const char *axis : {"X", "Y", "Z"})
+				{
+					ImGui::TableNextColumn(); ImGui::TextUnformatted(axis);
+				}
+				ImGui::EndTable();
+			}
+		};
+		const auto drawSectionHeader = [&](const char *label, const bool mixed) {
+			ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Separator();
+			ImGui::TableSetColumnIndex(1); ImGui::Separator(); ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			DrawScenePathEditorLabel(label, mixed);
+		};
+		drawAxisHeader();
 		if (selection.size() == 1 && windowState.paths != nullptr)
 		{
 			const ScenePath *path = windowState.paths->Store().Find(selection.front());
@@ -319,62 +360,65 @@ namespace DefectStudio
 			{
 				char name[256]{};
 				std::snprintf(name, sizeof(name), "%s", path->name.c_str());
-				if (ImGui::InputText("Name", name, sizeof(name), ImGuiInputTextFlags_EnterReturnsTrue))
+				beginRow("Name");
+				if (ImGui::InputText("##PathName", name, sizeof(name), ImGuiInputTextFlags_EnterReturnsTrue))
 					renamed = RenameScenePath(windowState, path->id, name);
 			}
 		}
-		applyImmediate(DrawEnumCombo("Profile", edit.profile));
+		beginRow("Profile");
+		applyImmediate(DrawEnumCombo("##Profile", edit.profile));
 		if (resolved.values.profile == StrokeProfile::Flat || (resolved.mixedProfile && resolved.anyFlatProfile))
 		{
-			applyDrag(ImGui::DragFloat3("Ribbon normal", &edit.ribbonNormal.x, 0.01f));
-			applyDrag(ImGui::DragFloat("Ribbon thickness", &edit.ribbonThickness, 0.005f, 0.0f, 10.0f, "%.3f"));
+			beginRow("Ribbon normal", resolved.mixedRibbonNormal);
+			applyDrag(ImGui::DragFloat3("##RibbonNormal", &edit.ribbonNormal.x, 0.01f));
+			beginRow("Ribbon thickness", resolved.mixedRibbonThickness);
+			applyDrag(ImGui::DragFloat("##RibbonThickness", &edit.ribbonThickness, 0.005f, 0.0f, 10.0f, "%.3f"));
 			if (resolved.values.ribbonThickness > 0.0f || resolved.mixedRibbonThickness)
 			{
-				applyDrag(ImGui::DragFloat("Ribbon bevel", &edit.ribbonBevel, 0.005f, 0.0f, 10.0f, "%.3f"));
+				beginRow("Ribbon bevel", resolved.mixedRibbonBevel);
+				applyDrag(ImGui::DragFloat("##RibbonBevel", &edit.ribbonBevel, 0.005f, 0.0f, 10.0f, "%.3f"));
 				ImGui::BeginDisabled(edit.ribbonBevel <= 0.0f);
 				int bevelSegments = static_cast<int>(std::min(edit.ribbonBevelSegments, 256u));
-				const bool segmentsChanged = ImGui::DragInt("Ribbon bevel segments", &bevelSegments, 1.0f, 1, 256);
+				beginRow("Ribbon bevel segments", resolved.mixedRibbonBevelSegments);
+				const bool segmentsChanged = ImGui::DragInt("##RibbonBevelSegments", &bevelSegments, 1.0f, 1, 256);
 				if (segmentsChanged)
 					edit.ribbonBevelSegments = static_cast<std::uint32_t>(std::clamp(bevelSegments, 1, 256));
 				applyDrag(segmentsChanged);
 				edit.ribbonBevelShape = std::clamp(edit.ribbonBevelShape, 0.0f, 1.0f);
-				applyDrag(ImGui::DragFloat("Ribbon bevel shape", &edit.ribbonBevelShape, 0.01f, 0.0f, 1.0f, "%.2f"));
+				beginRow("Ribbon bevel shape", resolved.mixedRibbonBevelShape);
+				applyDrag(ImGui::DragFloat("##RibbonBevelShape", &edit.ribbonBevelShape, 0.01f, 0.0f, 1.0f, "%.2f"));
 				ImGui::EndDisabled();
 			}
 		}
-		applyDrag(ImGui::DragFloat("Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
-		applyDrag(ImGui::SliderFloat("Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));
-		applyDrag(ImGui::ColorEdit3("Color", &edit.color.x));
-		ImGui::Separator();
-		ImGui::Text("Line style");
-		if (resolved.mixedDash)
-		{
-			ImGui::SameLine();
-			ImGui::TextDisabled("(mixed)");
-		}
+		beginRow("Width", resolved.mixedWidth);
+		applyDrag(ImGui::DragFloat("##Width", &edit.width, 0.005f, 0.001f, 10.0f, "%.3f"));
+		beginRow("Alpha", resolved.mixedAlpha);
+		applyDrag(ImGui::SliderFloat("##Alpha", &edit.alpha, 0.0f, 1.0f, "%.2f"));
+		beginRow("Color", resolved.mixedColor);
+		applyDrag(ImGui::ColorEdit3("##Color", &edit.color.x));
+		drawSectionHeader("Line style", resolved.mixedDash);
 		ScenePathLineStyle lineStyle = ResolveScenePathLineStyle(edit.dash);
-		if (DrawEnumCombo("Line style", lineStyle))
+		beginRow("Line style");
+		if (DrawEnumCombo("##LineStyle", lineStyle))
 		{
 			ApplyScenePathLineStyle(edit.dash, lineStyle, edit.width);
 			applyImmediate(true);
 		}
-		applyDrag(ImGui::DragFloat("Dash length", &edit.dash.dashLength, 0.01f, 0.001f, 10.0f, "%.3f"));
-		applyDrag(ImGui::DragFloat("Gap length", &edit.dash.gapLength, 0.01f, 0.001f, 10.0f, "%.3f"));
-		applyDrag(ImGui::DragFloat("Dash phase", &edit.dash.phase, 0.01f, -10.0f, 10.0f, "%.3f"));
-
-		ImGui::Separator();
-		ImGui::Text("Gradient");
-		if (resolved.mixedGradient)
-		{
-			ImGui::SameLine();
-			ImGui::TextDisabled("(mixed)");
-		}
+		beginRow("Dash length");
+		applyDrag(ImGui::DragFloat("##DashLength", &edit.dash.dashLength, 0.01f, 0.001f, 10.0f, "%.3f"));
+		beginRow("Gap length");
+		applyDrag(ImGui::DragFloat("##GapLength", &edit.dash.gapLength, 0.01f, 0.001f, 10.0f, "%.3f"));
+		beginRow("Dash phase");
+		applyDrag(ImGui::DragFloat("##DashPhase", &edit.dash.phase, 0.01f, -10.0f, 10.0f, "%.3f"));
+		drawSectionHeader("Gradient", resolved.mixedGradient);
 		bool gradientEnabled = edit.gradient.enabled;
-		if (ImGui::Checkbox("Enabled##PathGradient", &gradientEnabled))
+		beginRow("Enabled");
+		if (ImGui::Checkbox("##PathGradient", &gradientEnabled))
 		{
 			edit.gradient.enabled = gradientEnabled && !edit.gradient.stops.empty();
 			applyImmediate(true);
 		}
+		beginRow("Gradient ramp");
 		const GradientRampResult ramp = DrawGradientRamp("PathGradientRamp", edit.gradient, selectedGradientStop);
 		if (ramp.dragStarted)
 			BeginScenePathStyleDrag(windowState);
@@ -390,14 +434,21 @@ namespace DefectStudio
 			const std::string lengthLabel = std::string(prefix) + " length scale";
 			const std::string widthLabel = std::string(prefix) + " width scale";
 			const std::string filledLabel = std::string(prefix) + " filled";
-			applyImmediate(DrawEnumCombo(kindLabel.c_str(), decoration.kind));
-			applyDrag(ImGui::DragFloat(lengthLabel.c_str(), &decoration.lengthScale, 0.01f, 0.01f, 10.0f, "%.2f"));
-			applyDrag(ImGui::DragFloat(widthLabel.c_str(), &decoration.widthScale, 0.01f, 0.01f, 10.0f, "%.2f"));
-			applyImmediate(ImGui::Checkbox(filledLabel.c_str(), &decoration.filled));
+			const bool mixed = prefix[0] == 'S' ? resolved.mixedStartDecoration : resolved.mixedEndDecoration;
+			beginRow(kindLabel.c_str(), mixed);
+			applyImmediate(DrawEnumCombo((std::string("##") + kindLabel).c_str(), decoration.kind));
+			beginRow(lengthLabel.c_str(), mixed);
+			applyDrag(ImGui::DragFloat((std::string("##") + lengthLabel).c_str(), &decoration.lengthScale, 0.01f, 0.01f, 10.0f, "%.2f"));
+			beginRow(widthLabel.c_str(), mixed);
+			applyDrag(ImGui::DragFloat((std::string("##") + widthLabel).c_str(), &decoration.widthScale, 0.01f, 0.01f, 10.0f, "%.2f"));
+			beginRow(filledLabel.c_str(), mixed);
+			applyImmediate(ImGui::Checkbox((std::string("##") + filledLabel).c_str(), &decoration.filled));
 		};
 		drawDecoration("Start decoration", edit.startDecoration);
 		drawDecoration("End decoration", edit.endDecoration);
-		applyImmediate(DrawEnumCombo("Depth", edit.depthMode));
+		beginRow("Depth", resolved.mixedDepthMode);
+		applyImmediate(DrawEnumCombo("##Depth", edit.depthMode));
+		ImGui::EndTable();
 		return changed || renamed;
 	}
 } // namespace DefectStudio

@@ -10,8 +10,12 @@ in float vHeadLength;
 in vec3 vOutlineColor;
 in float vOutlineWidth;
 in vec4 vColor;
+in float vSelected;
+in float vSelectionOutlineWidth;
 
 out vec4 FragColor;
+
+uniform vec4 u_SelectionOutlineColor;
 
 // Inigo Quilez's plain box SDF (iquilezles.org/articles/distfunctions2d) - sharp corners, no
 // rounding. Used (unioned with a circle, see main()) instead of a symmetric rounded-rect for the
@@ -73,19 +77,28 @@ void main()
 	// correctly regardless of how far the arrow is from the camera.
 	float aa = max(fwidth(dist), 0.0001);
 	float fillMask = 1.0 - smoothstep(-aa, aa, dist);
-	if (fillMask < 0.01)
-		discard;
-
-	vec3 rgb = vColor.rgb;
+	float ownMask = fillMask;
+	float ownCoreMask = 0.0;
 	// No outline (the common case, ArrowStyle::outlineWidth == 0 by default): skip the blend
 	// entirely rather than fold width=0 into the formula below, same fringe-avoidance reasoning as
 	// label_background.frag's own border handling.
 	if (vOutlineWidth > 0.0)
 	{
 		float insideCoreDist = dist + vOutlineWidth;
-		float coreMask = 1.0 - smoothstep(-aa, aa, insideCoreDist);
-		rgb = mix(vOutlineColor, vColor.rgb, coreMask);
+		ownCoreMask = 1.0 - smoothstep(-aa, aa, insideCoreDist);
+		ownMask = max(ownMask, ownCoreMask);
 	}
+	float selectionMask = vSelected > 0.5 && vSelectionOutlineWidth > 0.0
+		? 1.0 - smoothstep(-aa, aa, dist + vSelectionOutlineWidth)
+		: 0.0;
+	if (max(ownMask, selectionMask) < 0.01)
+		discard;
+	vec3 ownRgb = vColor.rgb;
+	if (vOutlineWidth > 0.0)
+		ownRgb = mix(vOutlineColor, vColor.rgb, ownCoreMask);
+	float ownAlpha = vColor.a * fillMask;
+	float selectionAlpha = u_SelectionOutlineColor.a * selectionMask;
+	vec3 rgb = selectionAlpha > ownAlpha ? u_SelectionOutlineColor.rgb : ownRgb;
 
-	FragColor = vec4(rgb, vColor.a * fillMask);
+	FragColor = vec4(rgb, max(ownAlpha, selectionAlpha));
 }

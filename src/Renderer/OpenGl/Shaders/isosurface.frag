@@ -23,6 +23,8 @@ uniform float u_Shininess;
 uniform float u_RimIntensity;
 uniform float u_RimPower;
 uniform float u_Saturation;
+uniform int u_OutlineMode;
+uniform vec4 u_OutlineColor;
 
 vec3 ApplySaturation(vec3 color)
 {
@@ -51,6 +53,11 @@ float ComputeSpecular(vec3 normalVector, vec3 lightDirection, vec3 viewDirection
 
 void main()
 {
+	if (u_OutlineMode == 1)
+	{
+		oColor = u_OutlineColor;
+		return;
+	}
 	vec3 N = normalize(vNormal);
 	vec3 viewDir = normalize(u_CameraPosition - vWorldPos);
 	float dKey = ComputeDiffuse(N, u_KeyDirection) * u_KeyIntensity;

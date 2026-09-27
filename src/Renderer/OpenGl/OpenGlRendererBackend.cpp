@@ -6,12 +6,14 @@
 
 #include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneObjectAppearance.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -67,6 +69,19 @@ namespace DefectStudio
 	[[nodiscard]] static bool IsFiniteVec3(const glm::vec3 &value)
 	{
 		return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+	}
+
+	[[nodiscard]] float SelectionOutlineWorldWidth(
+		const RendererViewCamera &camera, const glm::vec3 &worldPoint, const glm::vec2 &viewportPixelSize,
+		const float widthPixels)
+	{
+		if (widthPixels <= 0.0f)
+			return 0.0f;
+		const glm::mat4 view = camera.ViewMatrix();
+		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+		const std::optional<float> worldPerPixel =
+			WorldUnitsPerPixelAt(camera, worldPoint, cameraRight, viewportPixelSize);
+		return worldPerPixel.has_value() ? widthPixels * *worldPerPixel : 0.0f;
 	}
 
 	static void GLAPIENTRY OpenGlDebugCallback(
@@ -187,11 +202,6 @@ namespace DefectStudio
 		return result;
 	}
 
-	// Matches kSelectionHighlightColor used for atom selection below - same accent, reused here so
-	// a selected pinned measurement reads as "selected" the same way a selected atom does. Not part
-	// of LabelStyle - it's a transient render-time override, not a persisted per-label style.
-	constexpr glm::vec3 kPinnedLabelSelectedColor(0.91f, 0.52f, 0.02f);
-
 	// Local-space (pre style.scale) bounding box of one label's glyphs, for sizing its optional
 	// background quad (AppendLabelBackgroundInstance) - hasBounds stays false for empty/all-
 	// whitespace text, which the caller treats as "no background to draw".
@@ -211,7 +221,8 @@ namespace DefectStudio
 		const std::u32string &text,
 		std::vector<OpenGlLabelInstance> &outInstances,
 		const RendererWindowState::LabelStyle &style = {},
-		float rotationRadians = 0.0f)
+		float rotationRadians = 0.0f,
+		bool selected = false)
 	{
 		// World-space label height (em units -> world units) and a rough baseline centering
 		// offset (typical glyph ascent/descent split) - tuned by eye, not derived from font
@@ -253,6 +264,7 @@ namespace DefectStudio
 				instance.atlasUvMinMax = glm::vec4(glyph.atlasUvMin, glyph.atlasUvMax);
 				instance.color = textColor;
 				instance.rotationRadians = rotationRadians;
+				instance.selected = selected ? 1.0f : 0.0f;
 				// outlineColor/outlineWidth/cornerRadius stay zero-initialized here - they style the
 				// background quad's frame (see AppendLabelBackgroundInstance below), not glyphs.
 				instance.strokeColor = style.strokeColor;
@@ -271,7 +283,8 @@ namespace DefectStudio
 		const LabelLocalBounds &bounds,
 		const RendererWindowState::LabelStyle &style,
 		float rotationRadians,
-		std::vector<OpenGlLabelInstance> &outInstances)
+		std::vector<OpenGlLabelInstance> &outInstances,
+		bool selected = false)
 	{
 		if (style.backgroundAlpha <= 0.0f || !bounds.hasBounds)
 			return;
@@ -288,6 +301,7 @@ namespace DefectStudio
 		// shrink in proportion to the label instead of staying a fixed size while the box scales.
 		instance.outlineWidth = style.scale * style.outlineWidth;
 		instance.cornerRadius = style.scale * style.cornerRadius;
+		instance.selected = selected ? 1.0f : 0.0f;
 		outInstances.push_back(instance);
 	}
 
@@ -297,9 +311,10 @@ namespace DefectStudio
 		float lengthAngstrom,
 		std::vector<OpenGlLabelInstance> &outInstances,
 		const RendererWindowState::LabelStyle &style = {},
-		float rotationRadians = 0.0f)
+		float rotationRadians = 0.0f,
+		bool selected = false)
 	{
-		return AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, style, rotationRadians);
+		return AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, style, rotationRadians, selected);
 	}
 
 	LabelLocalBounds AppendAngleLabelInstances(
@@ -308,9 +323,10 @@ namespace DefectStudio
 		float angleDeg,
 		std::vector<OpenGlLabelInstance> &outInstances,
 		const RendererWindowState::LabelStyle &style = {},
-		float rotationRadians = 0.0f)
+		float rotationRadians = 0.0f,
+		bool selected = false)
 	{
-		return AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, style, rotationRadians);
+		return AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, style, rotationRadians, selected);
 	}
 
 	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
@@ -666,6 +682,14 @@ namespace DefectStudio
 			glVertexAttribPointer(
 				8, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorB)));
 			glVertexAttribDivisor(8, 1);
+			glEnableVertexAttribArray(9);
+			glVertexAttribPointer(
+				9, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, selected)));
+			glVertexAttribDivisor(9, 1);
+			glEnableVertexAttribArray(10);
+			glVertexAttribPointer(
+				10, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, outlineExpansion)));
+			glVertexAttribDivisor(10, 1);
 		}
 
 		glBindVertexArray(0);
@@ -1038,6 +1062,8 @@ namespace DefectStudio
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		configureOpenGlState();
+		const glm::vec2 viewportPixelSize(
+			static_cast<float>(resources.frameBuffer.Width()), static_cast<float>(resources.frameBuffer.Height()));
 
 #if defined(TRACY_ENABLE)
 		TracyGpuZone("Renderer.Pass");
@@ -1049,10 +1075,9 @@ namespace DefectStudio
 			renderCellBox(structure, camera, resources, sceneOffset);
 		if (showBonds)
 			renderBonds(
-				structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset, showPeriodicBonds);
+				structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset, showPeriodicBonds,
+				viewportPixelSize);
 		renderDisplacementArrows(structure, displacementComparison, camera, globalSettings, sceneOffset);
-		const glm::vec2 viewportPixelSize(
-			static_cast<float>(resources.frameBuffer.Width()), static_cast<float>(resources.frameBuffer.Height()));
 		if (!sceneArrows.empty())
 			renderSceneArrows(
 				sceneArrows, selectedSceneArrows, camera, resources, globalSettings, false, viewportPixelSize,
@@ -1060,11 +1085,13 @@ namespace DefectStudio
 		if (pathInput != nullptr && pathInput->paths != nullptr)
 			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
 		if (showAtoms)
-			renderAtoms(structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset);
+			renderAtoms(
+				structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset, viewportPixelSize);
 		renderScenePlanes(
 			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		renderSceneOrbitals(
-			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset);
+			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset,
+			viewportPixelSize);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
@@ -1080,7 +1107,7 @@ namespace DefectStudio
 		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
 		{
 			renderLabels(
-				structure, camera, resources, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
+				structure, camera, resources, globalSettings, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
 				freeLabels, selectedFreeLabels, sceneOffset, bondLabelAutoOffsetEnabled,
 				bondLabelAutoOffsetMagnitude, bondLabelAlignThresholdDeg);
 		}
@@ -1287,6 +1314,12 @@ namespace DefectStudio
 		glEnableVertexAttribArray(3);
 		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlAtomInstance), reinterpret_cast<void *>(offsetof(OpenGlAtomInstance, color)));
 		glVertexAttribDivisor(3, 1);
+		glEnableVertexAttribArray(4);
+		glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlAtomInstance), reinterpret_cast<void *>(offsetof(OpenGlAtomInstance, selected)));
+		glVertexAttribDivisor(4, 1);
+		glEnableVertexAttribArray(5);
+		glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlAtomInstance), reinterpret_cast<void *>(offsetof(OpenGlAtomInstance, outlineExpansion)));
+		glVertexAttribDivisor(5, 1);
 
 		glBindVertexArray(0);
 		m_SphereMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
@@ -1361,6 +1394,12 @@ namespace DefectStudio
 		glEnableVertexAttribArray(8);
 		glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorB)));
 		glVertexAttribDivisor(8, 1);
+		glEnableVertexAttribArray(9);
+		glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, selected)));
+		glVertexAttribDivisor(9, 1);
+		glEnableVertexAttribArray(10);
+		glVertexAttribPointer(10, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, outlineExpansion)));
+		glVertexAttribDivisor(10, 1);
 
 		glBindVertexArray(0);
 		m_CylinderMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
@@ -1440,6 +1479,12 @@ namespace DefectStudio
 		glEnableVertexAttribArray(8);
 		glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, colorB)));
 		glVertexAttribDivisor(8, 1);
+		glEnableVertexAttribArray(9);
+		glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, selected)));
+		glVertexAttribDivisor(9, 1);
+		glEnableVertexAttribArray(10);
+		glVertexAttribPointer(10, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlBondInstance), reinterpret_cast<void *>(offsetof(OpenGlBondInstance, outlineExpansion)));
+		glVertexAttribDivisor(10, 1);
 
 		glBindVertexArray(0);
 		m_ConeMesh.indexCount = static_cast<int>(refinedMesh.indices.size());
@@ -1508,6 +1553,10 @@ namespace DefectStudio
 		glVertexAttribPointer(10, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
 			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, strokeWidth)));
 		glVertexAttribDivisor(10, 1);
+		glEnableVertexAttribArray(11);
+		glVertexAttribPointer(11, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlLabelInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlLabelInstance, selected)));
+		glVertexAttribDivisor(11, 1);
 
 		glBindVertexArray(0);
 		m_LabelQuadMesh.indexCount = 6;
@@ -1571,6 +1620,14 @@ namespace DefectStudio
 		glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
 			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, headLength)));
 		glVertexAttribDivisor(9, 1);
+		glEnableVertexAttribArray(10);
+		glVertexAttribPointer(10, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, selected)));
+		glVertexAttribDivisor(10, 1);
+		glEnableVertexAttribArray(11);
+		glVertexAttribPointer(11, 1, GL_FLOAT, GL_FALSE, sizeof(OpenGlArrowQuadInstance),
+			reinterpret_cast<void *>(offsetof(OpenGlArrowQuadInstance, selectionOutlineWidth)));
+		glVertexAttribDivisor(11, 1);
 
 		glBindVertexArray(0);
 		m_ArrowQuadMesh.indexCount = 6;
@@ -1674,7 +1731,8 @@ namespace DefectStudio
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
 		const std::vector<std::size_t> &selectedIndices,
-		const glm::vec3 &sceneOffset)
+		const glm::vec3 &sceneOffset,
+		const glm::vec2 &viewportPixelSize)
 	{
 		if (resources.atomsDirty)
 		{
@@ -1691,13 +1749,9 @@ namespace DefectStudio
 					selectedIndices.end(),
 					i) != selectedIndices.end();
 				instance.positionRadius = glm::vec4(atom.cartesianPosition, atom.radius);
-				// Blender's selection orange (~#E8850C), blended rather than added so the
-				// element's own color is still legible on the highlighted atom.
-				constexpr glm::vec3 kSelectionHighlightColor(0.91f, 0.52f, 0.02f);
-				const glm::vec3 displayColor = isSelected
-					? glm::mix(atom.color, kSelectionHighlightColor, 0.55f)
-					: atom.color;
-				instance.color = glm::vec4(displayColor, 1.0f);
+				instance.color = glm::vec4(atom.color, 1.0f);
+				instance.selected = isSelected ? 1.0f : 0.0f;
+				instance.sourceIndex = i;
 				resources.cachedAtomInstances.push_back(instance);
 			}
 		}
@@ -1711,6 +1765,15 @@ namespace DefectStudio
 #if defined(TRACY_ENABLE)
 		TracyGpuZone("Renderer.Atoms");
 #endif
+
+		for (OpenGlAtomInstance &instance : resources.cachedAtomInstances)
+		{
+			instance.selected = std::find(selectedIndices.begin(), selectedIndices.end(), instance.sourceIndex) !=
+				selectedIndices.end() ? 1.0f : 0.0f;
+			instance.outlineExpansion = SelectionOutlineWorldWidth(
+				camera, glm::vec3(instance.positionRadius), viewportPixelSize,
+				globalSettings.viewport.selectionOutlineWidth);
+		}
 
 		glBindBuffer(GL_ARRAY_BUFFER, m_SphereMesh.instanceVbo);
 		const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(
@@ -1776,7 +1839,37 @@ namespace DefectStudio
 		if (sceneOffsetLocation >= 0)
 			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
+		const int outlineModeLocation = m_ShaderLibrary.Uniform("atoms", "u_OutlineMode");
+		const int outlineColorLocation = m_ShaderLibrary.Uniform("atoms", "u_OutlineColor");
+		if (outlineColorLocation >= 0)
+			glUniform4fv(outlineColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
+		GLboolean previousDepthMask = GL_FALSE;
+		glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
+		const GLboolean previousCull = glIsEnabled(GL_CULL_FACE);
+		GLint previousCullMode = GL_BACK;
+		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
 		glBindVertexArray(m_SphereMesh.vao);
+		glDepthMask(GL_FALSE);
+		if (outlineModeLocation >= 0)
+			glUniform1i(outlineModeLocation, 1);
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_FRONT);
+		glDrawElementsInstanced(
+			GL_TRIANGLES,
+			m_SphereMesh.indexCount,
+			GL_UNSIGNED_INT,
+			nullptr,
+			static_cast<int>(resources.cachedAtomInstances.size()));
+		glDepthMask(previousDepthMask);
+		if (outlineModeLocation >= 0)
+			glUniform1i(outlineModeLocation, 0);
+		if (previousCull)
+		{
+			glEnable(GL_CULL_FACE);
+			glCullFace(static_cast<GLenum>(previousCullMode));
+		}
+		else
+			glDisable(GL_CULL_FACE);
 		glDrawElementsInstanced(
 			GL_TRIANGLES,
 			m_SphereMesh.indexCount,
@@ -1794,7 +1887,8 @@ namespace DefectStudio
 		const RendererGlobalRenderSettings &globalSettings,
 		const std::vector<std::size_t> &selectedIndices,
 		const glm::vec3 &sceneOffset,
-		bool showPeriodicBonds)
+		bool showPeriodicBonds,
+		const glm::vec2 &viewportPixelSize)
 	{
 		if (resources.bondsDirty)
 		{
@@ -1849,14 +1943,13 @@ namespace DefectStudio
 				const glm::vec3 bondEnd = secondAtomPosition - direction * shrinkB;
 				const bool isSelected = std::find(
 					selectedIndices.begin(), selectedIndices.end(), bondIndex) != selectedIndices.end();
-				// Same Blender selection orange as renderAtoms, blended the same way.
-				constexpr glm::vec3 kSelectionHighlightColor(0.91f, 0.52f, 0.02f);
 				OpenGlBondInstance instance;
 				instance.model = buildBondTransform(bondStart, bondEnd, bondRadius);
-				instance.colorA = glm::vec4(
-					isSelected ? glm::mix(bond.gradient.start, kSelectionHighlightColor, 0.55f) : bond.gradient.start, 1.0f);
-				instance.colorB = glm::vec4(
-					isSelected ? glm::mix(bond.gradient.finish, kSelectionHighlightColor, 0.55f) : bond.gradient.finish, 1.0f);
+				instance.colorA = glm::vec4(bond.gradient.start, 1.0f);
+				instance.colorB = glm::vec4(bond.gradient.finish, 1.0f);
+				instance.selected = isSelected ? 1.0f : 0.0f;
+				instance.outlineCenter = (bondStart + bondEnd) * 0.5f;
+				instance.sourceIndex = bondIndex;
 				resources.cachedBondInstances.push_back(instance);
 			}
 		}
@@ -1870,6 +1963,15 @@ namespace DefectStudio
 #if defined(TRACY_ENABLE)
 		TracyGpuZone("Renderer.Bonds");
 #endif
+
+		for (OpenGlBondInstance &instance : resources.cachedBondInstances)
+		{
+			instance.selected = std::find(selectedIndices.begin(), selectedIndices.end(), instance.sourceIndex) !=
+				selectedIndices.end() ? 1.0f : 0.0f;
+			instance.outlineExpansion = SelectionOutlineWorldWidth(
+				camera, instance.outlineCenter, viewportPixelSize,
+				globalSettings.viewport.selectionOutlineWidth);
+		}
 
 		glBindBuffer(GL_ARRAY_BUFFER, m_CylinderMesh.instanceVbo);
 		const GLsizeiptr requiredBytes = static_cast<GLsizeiptr>(
@@ -1941,7 +2043,37 @@ namespace DefectStudio
 		if (sceneOffsetLocation >= 0)
 			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
 
+		const int outlineModeLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineMode");
+		const int outlineColorLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineColor");
+		if (outlineColorLocation >= 0)
+			glUniform4fv(outlineColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
+		GLboolean previousDepthMask = GL_FALSE;
+		glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
+		const GLboolean previousCull = glIsEnabled(GL_CULL_FACE);
+		GLint previousCullMode = GL_BACK;
+		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
 		glBindVertexArray(m_CylinderMesh.vao);
+		glDepthMask(GL_FALSE);
+		if (outlineModeLocation >= 0)
+			glUniform1i(outlineModeLocation, 1);
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_FRONT);
+		glDrawElementsInstanced(
+			GL_TRIANGLES,
+			m_CylinderMesh.indexCount,
+			GL_UNSIGNED_INT,
+			nullptr,
+			static_cast<int>(resources.cachedBondInstances.size()));
+		glDepthMask(previousDepthMask);
+		if (outlineModeLocation >= 0)
+			glUniform1i(outlineModeLocation, 0);
+		if (previousCull)
+		{
+			glEnable(GL_CULL_FACE);
+			glCullFace(static_cast<GLenum>(previousCullMode));
+		}
+		else
+			glDisable(GL_CULL_FACE);
 		glDrawElementsInstanced(
 			GL_TRIANGLES,
 			m_CylinderMesh.indexCount,
@@ -2103,6 +2235,8 @@ namespace DefectStudio
 				const int specularScaleLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularScale");
 				const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
 				const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
+				const int outlineModeLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineMode");
+				const int outlineColorLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineColor");
 				if (keyDirectionLocation >= 0)
 					glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 				if (fillDirectionLocation >= 0)
@@ -2139,6 +2273,8 @@ namespace DefectStudio
 					glUniform1f(bondRadiusMultiplierLocation, 1.0f);
 				if (sceneOffsetLocation >= 0)
 					glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
+				if (outlineColorLocation >= 0)
+					glUniform4fv(outlineColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
 
 				if (!shaftInstances.empty())
 				{
@@ -2314,8 +2450,8 @@ namespace DefectStudio
 			const RendererWindowState::ArrowStyle &style = arrow.style;
 			const bool isSelected =
 				std::find(selectedArrows.begin(), selectedArrows.end(), arrowIndex) != selectedArrows.end();
-			const glm::vec4 color(ApplySceneSelectionHighlight(style.color, isSelected), style.alpha);
-			const SceneArrowRenderColors shaftColors = ResolveSceneArrowRenderColors(style, isSelected);
+			const glm::vec4 color(style.color, style.alpha);
+			const SceneArrowRenderColors shaftColors = ResolveSceneArrowRenderColors(style, false);
 
 			if (isArrow2D)
 			{
@@ -2356,6 +2492,10 @@ namespace DefectStudio
 				quad.outlineWidth = style.outlineWidth * worldPerPixelUp;
 				quad.headHalfWidth = style.headWidth * 0.5f * worldPerPixelUp;
 				quad.headLength = headLengthWorld;
+				quad.selected = isSelected ? 1.0f : 0.0f;
+				quad.selectionOutlineWidth = isSelected
+					? globalSettings.viewport.selectionOutlineWidth * worldPerPixelUp
+					: 0.0f;
 				quadInstances.push_back(quad);
 				continue;
 			}
@@ -2380,6 +2520,12 @@ namespace DefectStudio
 				job.instance.model = glm::mat4(1.0f); // mesh positions are already world-space
 				job.instance.colorA = shaftColors.start;
 				job.instance.colorB = shaftColors.finish;
+				job.instance.selected = isSelected ? 1.0f : 0.0f;
+				job.instance.outlineExpansion = isSelected
+					? SelectionOutlineWorldWidth(
+							camera, (arrow.start() + arrow.end()) * 0.5f, viewportPixelSize,
+							globalSettings.viewport.selectionOutlineWidth)
+					: 0.0f;
 				meshJobs.push_back(job);
 			}
 		}
@@ -2457,21 +2603,47 @@ namespace DefectStudio
 				// system (docs/scene_arrow_rework_plan_corrected.md Step 8 explicitly rules that out for
 				// this rework) - just depth writes off for the pass, restored right after, same
 				// GL_BLEND/GL_DEPTH_TEST the rest of the scene already has enabled.
-				if (anyTransparent)
-					glDepthMask(GL_FALSE);
-
+				GLboolean previousDepthMask = GL_FALSE;
+				glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
+				const GLboolean previousCull = glIsEnabled(GL_CULL_FACE);
+				GLint previousCullMode = GL_BACK;
+				glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
+				// Looked up here rather than reused from the branch above: that declaration is in a
+				// narrower scope and does not reach this loop. Same shader, so the same uniform name.
+				const int outlineModeLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineMode");
 				// Each Line/Arrow3D path has its own geometry, so draw one cached mesh per arrow.
 				for (const ArrowMeshDrawJob &job : meshJobs)
 				{
 					glBindBuffer(GL_ARRAY_BUFFER, job.mesh->instanceVbo);
 					glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(OpenGlBondInstance), &job.instance);
 					glBindVertexArray(job.mesh->vao);
+					glDepthMask(GL_FALSE);
+					if (outlineModeLocation >= 0)
+						glUniform1i(outlineModeLocation, 1);
+					glEnable(GL_CULL_FACE);
+					glCullFace(GL_FRONT);
+					glDrawElementsInstanced(GL_TRIANGLES, job.mesh->indexCount, GL_UNSIGNED_INT, nullptr, 1);
+					glDepthMask(anyTransparent ? GL_FALSE : previousDepthMask);
+					if (outlineModeLocation >= 0)
+						glUniform1i(outlineModeLocation, 0);
+					if (previousCull)
+					{
+						glEnable(GL_CULL_FACE);
+						glCullFace(static_cast<GLenum>(previousCullMode));
+					}
+					else
+						glDisable(GL_CULL_FACE);
 					glDrawElementsInstanced(GL_TRIANGLES, job.mesh->indexCount, GL_UNSIGNED_INT, nullptr, 1);
 				}
 				glBindVertexArray(0);
-
-				if (anyTransparent)
-					glDepthMask(GL_TRUE);
+				glDepthMask(previousDepthMask);
+				if (previousCull)
+				{
+					glEnable(GL_CULL_FACE);
+					glCullFace(static_cast<GLenum>(previousCullMode));
+				}
+				else
+					glDisable(GL_CULL_FACE);
 			}
 		}
 
@@ -2498,6 +2670,9 @@ namespace DefectStudio
 				const int sceneOffsetLocation = m_ShaderLibrary.Uniform("arrow_quad", "u_SceneOffset");
 				if (sceneOffsetLocation >= 0)
 					glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
+				const int selectionOutlineColorLocation = m_ShaderLibrary.Uniform("arrow_quad", "u_SelectionOutlineColor");
+				if (selectionOutlineColorLocation >= 0)
+					glUniform4fv(selectionOutlineColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
 
 				// FixedPlane orientation picks a constant world-axis normal regardless of which side
 				// the camera ends up on (Billboard's camera-facing normal always faces the viewer by
@@ -2529,6 +2704,7 @@ namespace DefectStudio
 		const RendererStructureData &structure,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
+		const RendererGlobalRenderSettings &globalSettings,
 		bool showAllLabels,
 		const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 		const std::vector<std::size_t> &selectedPinnedMeasurements,
@@ -2623,15 +2799,10 @@ namespace DefectStudio
 			for (std::size_t pinIndex = 0; pinIndex < pinnedMeasurements.size(); ++pinIndex)
 			{
 				const RendererWindowState::PinnedMeasurement &pin = pinnedMeasurements[pinIndex];
-				// Selection highlight overrides just the text color/alpha, layered on top of the
-				// pin's own style (outline/background/padding/scale all still apply while selected).
+				const bool selected = std::find(
+					selectedPinnedMeasurements.begin(), selectedPinnedMeasurements.end(), pinIndex) !=
+					selectedPinnedMeasurements.end();
 				RendererWindowState::LabelStyle effectiveStyle = pin.style;
-				if (std::find(selectedPinnedMeasurements.begin(), selectedPinnedMeasurements.end(), pinIndex) !=
-					selectedPinnedMeasurements.end())
-				{
-					effectiveStyle.textColor = kPinnedLabelSelectedColor;
-					effectiveStyle.textAlpha = 1.0f;
-				}
 				const glm::vec3 offset = pin.worldOffset;
 
 				if (pin.atomIndices.size() == 2)
@@ -2706,9 +2877,9 @@ namespace DefectStudio
 
 						const LabelLocalBounds bounds = AppendBondLabelInstances(
 							*m_LabelFont, midpoint + renderOffset, lengthAngstrom, pinnedInstances, effectiveStyle,
-							totalRotation);
+							totalRotation, selected);
 						AppendLabelBackgroundInstance(
-							midpoint + renderOffset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances);
+							midpoint + renderOffset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances, selected);
 					};
 					if (pin.linkBroken)
 					{
@@ -2768,8 +2939,8 @@ namespace DefectStudio
 							const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 							const float angleDeg = glm::degrees(std::acos(cosAngle));
 							const glm::vec3 anglePosition = pin.frozenAtomPositions[1] + offset;
-							const LabelLocalBounds bounds = AppendAngleLabelInstances(*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle, pin.rotationOffsetRadians);
-							AppendLabelBackgroundInstance(anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances);
+							const LabelLocalBounds bounds = AppendAngleLabelInstances(*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle, pin.rotationOffsetRadians, selected);
+							AppendLabelBackgroundInstance(anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances, selected);
 						}
 						continue;
 					}
@@ -2796,27 +2967,23 @@ namespace DefectStudio
 						const glm::vec3 anglePosition = vertexAtom.cartesianPosition + offset;
 						const LabelLocalBounds bounds = AppendAngleLabelInstances(
 							*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle,
-							pin.rotationOffsetRadians);
+							pin.rotationOffsetRadians, selected);
 						AppendLabelBackgroundInstance(
-							anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances);
+							anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances, selected);
 					}
 				}
 			}
 			for (std::size_t labelIndex = 0; labelIndex < freeLabels.size(); ++labelIndex)
 			{
 				const RendererWindowState::FreeLabel &label = freeLabels[labelIndex];
+				const bool selected = std::find(selectedFreeLabels.begin(), selectedFreeLabels.end(), labelIndex) !=
+					selectedFreeLabels.end();
 				RendererWindowState::LabelStyle effectiveStyle = label.style;
-				if (std::find(selectedFreeLabels.begin(), selectedFreeLabels.end(), labelIndex) !=
-					selectedFreeLabels.end())
-				{
-					effectiveStyle.textColor = kPinnedLabelSelectedColor;
-					effectiveStyle.textAlpha = 1.0f;
-				}
 				const LabelLocalBounds bounds = AppendLabelInstances(
 					*m_LabelFont, label.worldPosition, ToU32String(label.text), pinnedInstances, effectiveStyle,
-					label.rotationRadians);
+					label.rotationRadians, selected);
 				AppendLabelBackgroundInstance(
-					label.worldPosition, bounds, effectiveStyle, label.rotationRadians, pinnedBackgroundInstances);
+					label.worldPosition, bounds, effectiveStyle, label.rotationRadians, pinnedBackgroundInstances, selected);
 			}
 			instancesToDraw = &pinnedInstances;
 			backgroundInstancesToDraw = &pinnedBackgroundInstances;
@@ -2914,6 +3081,12 @@ namespace DefectStudio
 		const int pixelRangeLocation = m_ShaderLibrary.Uniform("labels", "u_PixelRange");
 		if (pixelRangeLocation >= 0)
 			glUniform1f(pixelRangeLocation, static_cast<float>(m_LabelFont->PixelRange()));
+		const int selectionOutlineColorLocation = m_ShaderLibrary.Uniform("labels", "u_SelectionOutlineColor");
+		const int selectionOutlineWidthLocation = m_ShaderLibrary.Uniform("labels", "u_SelectionOutlineWidth");
+		if (selectionOutlineColorLocation >= 0)
+			glUniform4fv(selectionOutlineColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
+		if (selectionOutlineWidthLocation >= 0)
+			glUniform1f(selectionOutlineWidthLocation, globalSettings.viewport.selectionOutlineWidth);
 		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("labels", "u_SceneOffset");
 		if (sceneOffsetLocation >= 0)
 			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
@@ -3124,6 +3297,8 @@ namespace DefectStudio
 		const int rimIntensityLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimIntensity");
 		const int rimPowerLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimPower");
 		const int saturationLocation = m_ShaderLibrary.Uniform("isosurface", "u_Saturation");
+		const int outlineModeLocation = m_ShaderLibrary.Uniform("isosurface", "u_OutlineMode");
+		const int outlineExpansionLocation = m_ShaderLibrary.Uniform("isosurface", "u_OutlineExpansion");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -3155,6 +3330,10 @@ namespace DefectStudio
 			glUniform1f(rimPowerLocation, globalSettings.lighting.rimPower);
 		if (saturationLocation >= 0)
 			glUniform1f(saturationLocation, globalSettings.colorSaturation);
+		if (outlineModeLocation >= 0)
+			glUniform1i(outlineModeLocation, 0);
+		if (outlineExpansionLocation >= 0)
+			glUniform1f(outlineExpansionLocation, 0.0f);
 
 		// Hardcoded debug colors/alpha (T08.6.3 will make these Control Panel sliders) - blue for
 		// the positive lobe, orange-red for the negative lobe, a common orbital-visualization
@@ -3188,7 +3367,9 @@ namespace DefectStudio
 		const glm::vec3 &positiveLobeColor,
 		const glm::vec3 &negativeLobeColor,
 		float lobeAlpha,
-		const glm::vec3 &sceneOffset)
+		const glm::vec3 &sceneOffset,
+		bool outline,
+		float outlineExpansion)
 	{
 		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
 		// (resources.isosurfaceVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
@@ -3218,6 +3399,9 @@ namespace DefectStudio
 		const int rimPowerLocation = m_ShaderLibrary.Uniform("isosurface", "u_RimPower");
 		const int saturationLocation = m_ShaderLibrary.Uniform("isosurface", "u_Saturation");
 		const int sceneOffsetLocation = m_ShaderLibrary.Uniform("isosurface", "u_SceneOffset");
+		const int outlineModeLocation = m_ShaderLibrary.Uniform("isosurface", "u_OutlineMode");
+		const int outlineExpansionLocation = m_ShaderLibrary.Uniform("isosurface", "u_OutlineExpansion");
+		const int outlineColorLocation = m_ShaderLibrary.Uniform("isosurface", "u_OutlineColor");
 		if (keyDirectionLocation >= 0)
 			glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);
 		if (fillDirectionLocation >= 0)
@@ -3251,6 +3435,12 @@ namespace DefectStudio
 			glUniform1f(saturationLocation, globalSettings.colorSaturation);
 		if (sceneOffsetLocation >= 0)
 			glUniform3fv(sceneOffsetLocation, 1, &sceneOffset.x);
+		if (outlineModeLocation >= 0)
+			glUniform1i(outlineModeLocation, outline ? 1 : 0);
+		if (outlineExpansionLocation >= 0)
+			glUniform1f(outlineExpansionLocation, outlineExpansion);
+		if (outlineColorLocation >= 0)
+			glUniform4fv(outlineColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
 
 		const int positiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_PositiveLobeColor");
 		const int negativeLocation = m_ShaderLibrary.Uniform("isosurface", "u_NegativeLobeColor");
@@ -3262,14 +3452,32 @@ namespace DefectStudio
 		if (alphaLocation >= 0)
 			glUniform1f(alphaLocation, lobeAlpha);
 
-		// A translucent surface should show its back faces too (otherwise back-face culling makes
-		// it look like an opaque shell instead of a soft cloud) - disabled only for this draw call,
-		// re-enabled immediately after so atoms/bonds keep their normal culling.
-		glDisable(GL_CULL_FACE);
+		GLboolean previousDepthMask = GL_FALSE;
+		glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
+		const GLboolean previousCull = glIsEnabled(GL_CULL_FACE);
+		GLint previousCullMode = GL_BACK;
+		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
+		// A translucent surface should show its back faces too. The outline pass instead culls
+		// front faces, leaving the expanded back shell visible behind the unmodified object.
+		if (outline)
+		{
+			glDepthMask(GL_FALSE);
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT);
+		}
+		else
+			glDisable(GL_CULL_FACE);
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 		glBindVertexArray(0);
-		glEnable(GL_CULL_FACE);
+		glDepthMask(previousDepthMask);
+		if (previousCull)
+		{
+			glEnable(GL_CULL_FACE);
+			glCullFace(static_cast<GLenum>(previousCullMode));
+		}
+		else
+			glDisable(GL_CULL_FACE);
 	}
 
 	int OpenGlRendererBackend::RegenerateIsosurfaceGpu(

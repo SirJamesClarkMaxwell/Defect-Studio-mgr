@@ -45,10 +45,10 @@ namespace DefectStudio
 		glm::vec4 pathEditSelectedColor = glm::vec4(255.0f / 255.0f, 210.0f / 255.0f, 70.0f / 255.0f, 255.0f / 255.0f);
 		glm::vec4 pathEditTetherColor = glm::vec4(180.0f / 255.0f, 180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f);
 		glm::vec4 pathEditOutlineColor = glm::vec4(25.0f / 255.0f, 25.0f / 255.0f, 25.0f / 255.0f, 240.0f / 255.0f);
-		glm::vec4 pathSelectionOutlineColor = glm::vec4(0.91f, 0.52f, 0.02f, 1.0f);
+		glm::vec4 selectionOutlineColor = glm::vec4(0.91f, 0.52f, 0.02f, 1.0f);
 		float pathEditTetherThickness = 1.0f;
 		float pathEditOutlineThickness = 1.5f;
-		float pathSelectionOutlineWidth = 2.0f;
+		float selectionOutlineWidth = 2.0f;
 		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;

@@ -4,16 +4,28 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include <glad/gl.h>
 
-#include "Renderer/Scene/SceneObjectAppearance.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
 
 namespace DefectStudio
 {
 	namespace
 	{
+		[[nodiscard]] float OrbitalOutlineWorldWidth(
+			const RendererViewCamera &camera, const glm::vec3 &worldPoint, const glm::vec2 &viewportPixelSize,
+			const float widthPixels)
+		{
+			const glm::mat4 view = camera.ViewMatrix();
+			const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+			const std::optional<float> worldPerPixel =
+				WorldUnitsPerPixelAt(camera, worldPoint, cameraRight, viewportPixelSize);
+			return worldPerPixel.has_value() ? widthPixels * *worldPerPixel : 0.0f;
+		}
+
 		void UploadOrbitalMesh(OpenGlMeshHandles &mesh, const std::vector<IsosurfaceVertex> &vertices)
 		{
 			if (vertices.empty())
@@ -59,7 +71,8 @@ namespace DefectStudio
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
-		const glm::vec3 &sceneOffset)
+		const glm::vec3 &sceneOffset,
+		const glm::vec2 &viewportPixelSize)
 	{
 		for (auto cacheIt = resources.sceneOrbitalMeshCache.begin();
 			cacheIt != resources.sceneOrbitalMeshCache.end();)
@@ -95,17 +108,18 @@ namespace DefectStudio
 				continue;
 			const bool selected =
 				std::find(selectedOrbitals.begin(), selectedOrbitals.end(), orbitalIndex) != selectedOrbitals.end();
+			const float outlineExpansion = selected
+				? OrbitalOutlineWorldWidth(
+						camera, orbital.centerA, viewportPixelSize, globalSettings.viewport.selectionOutlineWidth)
+					: 0.0f;
+			if (selected)
+				renderIsosurfaceGpuOverlay(
+					cache.mesh.vao, cache.mesh.indexCount, camera, globalSettings,
+					orbital.positiveLobeColor, orbital.negativeLobeColor, orbital.alpha, sceneOffset, true,
+					outlineExpansion);
 			renderIsosurfaceGpuOverlay(
-				cache.mesh.vao,
-				cache.mesh.indexCount,
-				camera,
-				globalSettings,
-				ApplySceneSelectionHighlight(
-					orbital.positiveLobeColor, selected, kSceneSurfaceSelectionHighlightStrength),
-				ApplySceneSelectionHighlight(
-					orbital.negativeLobeColor, selected, kSceneSurfaceSelectionHighlightStrength),
-				orbital.alpha,
-				sceneOffset);
+				cache.mesh.vao, cache.mesh.indexCount, camera, globalSettings,
+				orbital.positiveLobeColor, orbital.negativeLobeColor, orbital.alpha, sceneOffset);
 		}
 	}
 } // namespace DefectStudio

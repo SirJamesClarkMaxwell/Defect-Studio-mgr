@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "Renderer/Path/PathDash.hpp"
+#include "Renderer/Path/PathDecorationMesher.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
 
 namespace DefectStudio::Tests
@@ -738,6 +739,123 @@ namespace DefectStudio::Tests
 				ASSERT_FALSE(geometry.shaft.IsEmpty());
 				AssertRangeIsClosedByPosition(geometry, geometry.shaft);
 			}
+	}
+
+	TEST(PathStrokeMesherTests, NoDecorationMatrixChecksWholeMeshClosure)
+	{
+		const EvaluatedPath path = TessellatedCurvedArc();
+		ASSERT_GT(path.samples.size(), 2u);
+
+		for (const StrokeProfile profile : {StrokeProfile::Round, StrokeProfile::Flat})
+			for (const float thickness : {0.0f, 0.6f})
+				for (const float bevel : {0.0f, 0.1f})
+					for (const std::uint32_t segments : {1u, 4u, 16u})
+					{
+						// A zero-thickness Flat stroke is a shader-expanded sheet, not a closed solid.
+						if (profile == StrokeProfile::Flat && thickness == 0.0f)
+							continue;
+
+						PathStrokeStyle style;
+						style.profile = profile;
+						style.width = 0.2f;
+						style.ribbonThickness = thickness;
+						style.ribbonBevel = bevel;
+						style.ribbonBevelSegments = segments;
+						style.radialSegments = 8u;
+						style.cap = PathLineCap::Round;
+						style.startDecoration.kind = PathDecorationKind::None;
+						style.endDecoration.kind = PathDecorationKind::None;
+
+						SCOPED_TRACE(::testing::Message() << "profile=" << static_cast<int>(profile) << ", thickness="
+							<< thickness << ", bevel=" << bevel << ", segments=" << segments);
+						const StrokeGeometry geometry = BuildStroke(path, style);
+						ASSERT_TRUE(geometry.startDecoration.IsEmpty());
+						ASSERT_TRUE(geometry.endDecoration.IsEmpty());
+						ASSERT_EQ(geometry.shaft.firstIndex, 0u);
+						ASSERT_EQ(geometry.shaft.indexCount, geometry.indices.size());
+						AssertRangeIsClosedByPosition(geometry, geometry.shaft);
+					}
+	}
+
+	TEST(PathStrokeMesherTests, EmittedBevelRingCardinalityMatchesCrossSectionRingSize)
+	{
+		const EvaluatedPath path = StraightPath();
+		for (const std::uint32_t segments : {1u, 4u, 16u})
+		{
+			PathStrokeStyle style;
+			style.profile = StrokeProfile::Flat;
+			style.width = 0.4f;
+			style.ribbonThickness = 0.6f;
+			style.ribbonBevel = 0.1f;
+			style.ribbonBevelSegments = segments;
+			style.cap = PathLineCap::Butt;
+			style.startDecoration.kind = PathDecorationKind::None;
+			style.endDecoration.kind = PathDecorationKind::None;
+
+			SCOPED_TRACE(::testing::Message() << "segments=" << segments);
+			const StrokeGeometry geometry = BuildStroke(path, style);
+			ASSERT_FALSE(geometry.tubeVertices.empty());
+			ASSERT_EQ(geometry.tubeVertices.size() % path.samples.size(), 0u);
+			const std::size_t emittedRingSize = geometry.tubeVertices.size() / path.samples.size();
+			EXPECT_EQ(emittedRingSize, detail::CrossSectionRingSize(style));
+		}
+	}
+
+	TEST(PathStrokeMesherTests, HighSegmentBevelProfilesNeverDoubleBack)
+	{
+		const EvaluatedPath path = StraightPath();
+		for (const float shape : {0.0f, 0.5f, 1.0f})
+		{
+			PathStrokeStyle style;
+			style.profile = StrokeProfile::Flat;
+			style.width = 0.4f;
+			style.ribbonThickness = 0.6f;
+			style.ribbonBevel = 0.1f;
+			style.ribbonBevelSegments = 16u;
+			style.ribbonBevelShape = shape;
+			style.cap = PathLineCap::Butt;
+			style.startDecoration.kind = PathDecorationKind::None;
+			style.endDecoration.kind = PathDecorationKind::None;
+
+			SCOPED_TRACE(::testing::Message() << "shape=" << shape);
+			const StrokeGeometry geometry = BuildStroke(path, style);
+			ASSERT_FALSE(geometry.tubeVertices.empty());
+			const std::uint32_t ringSize = detail::CrossSectionRingSize(style);
+			const std::uint32_t bevelSegments = std::max(1u, style.ribbonBevelSegments);
+			ASSERT_GE(geometry.tubeVertices.size(), static_cast<std::size_t>(ringSize));
+			ASSERT_EQ(ringSize % 2u, 0u);
+			const std::uint32_t ringPairCount = ringSize / 2u;
+			ASSERT_EQ(ringPairCount % (bevelSegments + 1u), 0u);
+			const std::uint32_t cornerCount = ringPairCount / (bevelSegments + 1u);
+			ASSERT_GT(cornerCount, 0u);
+
+			const auto ringPoint = [&](const std::uint32_t pair, const std::uint32_t endpoint) {
+				return geometry.tubeVertices[pair * 2u + endpoint].position;
+			};
+			for (std::uint32_t corner = 0u; corner < cornerCount; ++corner)
+			{
+				const std::uint32_t pairStart = corner == 0u
+					? ringPairCount - bevelSegments
+					: corner + (corner - 1u) * bevelSegments;
+				ASSERT_LT(pairStart + bevelSegments - 1u, ringPairCount);
+
+				std::vector<glm::vec3> profile;
+				profile.reserve(static_cast<std::size_t>(bevelSegments) + 1u);
+				profile.push_back(ringPoint(pairStart, 0u));
+				for (std::uint32_t segment = 0u; segment < bevelSegments; ++segment)
+					profile.push_back(ringPoint(pairStart + segment, 1u));
+
+				const glm::vec3 direction = profile.back() - profile.front();
+				ASSERT_GT(glm::dot(direction, direction), kSurfaceTolerance * kSurfaceTolerance);
+				float previousProgress = -kSurfaceTolerance;
+				for (const glm::vec3 &point : profile)
+				{
+					const float progress = glm::dot(point - profile.front(), direction);
+					EXPECT_GE(progress, previousProgress);
+					previousProgress = progress;
+				}
+			}
+		}
 	}
 
 	TEST(PathStrokeMesherTests, RibbonBevelShapeOnlyChangesGeometryAboveOneSegment)
