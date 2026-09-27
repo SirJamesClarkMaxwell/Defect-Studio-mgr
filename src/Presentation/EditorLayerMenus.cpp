@@ -14,11 +14,9 @@
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Platform/FileDialog.hpp"
-#include "Events/RendererEvents.hpp"
 #include "IO/RecentProjectsIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/MenuBarModel.hpp"
-#include "IconsFontAwesome6.h"
 
 namespace DefectStudio
 {
@@ -47,44 +45,75 @@ namespace DefectStudio
 		renderCommandMenu(executeCommand);
 		renderToolsMenu();
 		renderHelpMenu();
-		renderNewSceneWindowButton();
 
-		const auto renderDockToggle = [this](DockRegion region, const char *visibleIcon, const char *hiddenIcon,
-			const char *id, const char *tooltip) {
-			const char *icon = (region == DockRegion::Left && m_LeftDockRegion.IsHidden())
-				|| (region == DockRegion::Bottom && m_BottomDockRegion.IsHidden())
-				|| (region == DockRegion::Right && m_RightDockRegion.IsHidden())
-				? hiddenIcon
-				: visibleIcon;
-			const std::string label = std::string(icon) + id;
-			if (ImGui::Button(label.c_str()))
+		const ImGuiStyle &style = ImGui::GetStyle();
+		const float iconExtent = ImGui::GetTextLineHeight();
+		const ImVec2 buttonSize{
+			iconExtent + 2.0f * style.FramePadding.x,
+			iconExtent + 2.0f * style.FramePadding.y};
+		const float dockTogglesWidth = 3.0f * buttonSize.x + 2.0f * style.ItemSpacing.x;
+		ImGui::SetCursorPosX(ImGui::GetWindowWidth() - dockTogglesWidth - style.WindowPadding.x);
+
+		const auto renderDockToggle = [this, iconExtent, buttonSize](DockRegion region, const char *id,
+			const char *tooltip) {
+			if (ImGui::Button(id, buttonSize))
 				toggleDockRegion(region);
+
+			const ImVec2 buttonMin = ImGui::GetItemRectMin();
+			const ImVec2 buttonMax = ImGui::GetItemRectMax();
+			const ImVec2 iconCenter{
+				(buttonMin.x + buttonMax.x) * 0.5f,
+				(buttonMin.y + buttonMax.y) * 0.5f};
+			const float iconInset = 1.0f;
+			const ImVec2 iconMin{
+				iconCenter.x - iconExtent * 0.5f + iconInset,
+				iconCenter.y - iconExtent * 0.5f + iconInset};
+			const ImVec2 iconMax{
+				iconCenter.x + iconExtent * 0.5f - iconInset,
+				iconCenter.y + iconExtent * 0.5f - iconInset};
+			const float strokeWidth = 1.0f;
+			const float barExtent = iconExtent * 0.35f;
+			const ImVec2 barMin{iconMin.x + strokeWidth, iconMin.y + strokeWidth};
+			const ImVec2 barMax{iconMax.x - strokeWidth, iconMax.y - strokeWidth};
+			const bool hidden = (region == DockRegion::Left && m_LeftDockRegion.IsHidden())
+				|| (region == DockRegion::Bottom && m_BottomDockRegion.IsHidden())
+				|| (region == DockRegion::Right && m_RightDockRegion.IsHidden());
+
+			ImVec2 regionBarMin = barMin;
+			ImVec2 regionBarMax = barMax;
+			switch (region)
+			{
+				case DockRegion::Left:
+					regionBarMax.x = barMin.x + barExtent;
+					break;
+				case DockRegion::Bottom:
+					regionBarMin.y = barMax.y - barExtent;
+					break;
+				case DockRegion::Right:
+					regionBarMin.x = barMax.x - barExtent;
+					break;
+				default:
+					break;
+			}
+
+			ImDrawList *drawList = ImGui::GetWindowDrawList();
+			drawList->AddRect(iconMin, iconMax, ImGui::GetColorU32(ImGuiCol_Text), 2.0f, 0, strokeWidth);
+			if (hidden)
+				drawList->AddRect(
+					regionBarMin, regionBarMax, ImGui::GetColorU32(ImGuiCol_TextDisabled), 1.0f, 0, strokeWidth);
+			else
+				drawList->AddRectFilled(regionBarMin, regionBarMax, ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
+
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
 				ImGui::SetTooltip("%s", tooltip);
-			ImGui::SameLine();
 		};
-		renderDockToggle(DockRegion::Left, ICON_FA_ANGLES_LEFT, ICON_FA_ANGLES_RIGHT, "##DockLeft", "Toggle left dock region");
-		renderDockToggle(DockRegion::Bottom, ICON_FA_ANGLES_DOWN, ICON_FA_ANGLES_UP, "##DockBottom", "Toggle bottom dock region");
-		renderDockToggle(DockRegion::Right, ICON_FA_ANGLES_RIGHT, ICON_FA_ANGLES_LEFT, "##DockRight", "Toggle right dock region");
+		renderDockToggle(DockRegion::Left, "##DockLeft", "Toggle left dock region");
+		ImGui::SameLine(0.0f, style.ItemSpacing.x);
+		renderDockToggle(DockRegion::Bottom, "##DockBottom", "Toggle bottom dock region");
+		ImGui::SameLine(0.0f, style.ItemSpacing.x);
+		renderDockToggle(DockRegion::Right, "##DockRight", "Toggle right dock region");
 
 		ImGui::EndMainMenuBar();
-	}
-
-	// Last item on the menu bar, past the menus: one click, one empty renderer window. No
-	// structure, no domain registration - just a camera, the grid, and somewhere to put scene
-	// objects that don't need atoms behind them.
-	void EditorLayer::renderNewSceneWindowButton()
-	{
-		if (ImGui::MenuItem("+"))
-		{
-			if (m_EventBus != nullptr)
-			{
-				RendererEvents::Windows::OpenEmptyRequested request;
-				m_EventBus->Publish(request);
-			}
-		}
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Nowe puste okno renderera");
 	}
 
 	void EditorLayer::renderFileMenu(const CommandMenuExecutor &executeCommand)

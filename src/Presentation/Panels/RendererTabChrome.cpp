@@ -47,8 +47,14 @@ namespace DefectStudio
 			const ImVec2 viewportOrigin,
 			const ImVec2 viewportSize)
 		{
+			// Width is pinned by a constraint, not by SetNextWindowSize: AlwaysAutoResize overrides an
+			// explicit size, and the toolbar's own BeginChild asks for width 0, meaning "fill the
+			// window". Window sized from content, content sized from window - the two never settle and
+			// the overlay ends up an arbitrary width. Constraining width and letting only the height
+			// auto-size breaks the loop: the child now has a width to fill.
 			ImGui::SetNextWindowPos(viewportOrigin, ImGuiCond_Always);
-			ImGui::SetNextWindowSize(ImVec2(viewportSize.x, 0.0f), ImGuiCond_Always);
+			ImGui::SetNextWindowSizeConstraints(
+				ImVec2(viewportSize.x, 0.0f), ImVec2(viewportSize.x, viewportSize.y));
 			if (!ImGui::Begin(
 					"##RendererViewportToolbarOverlay", nullptr, OverlayWindowFlags() | ImGuiWindowFlags_AlwaysAutoResize))
 			{
@@ -69,15 +75,25 @@ namespace DefectStudio
 			const ImVec2 viewportSize,
 			const float horizontalHeight)
 		{
-			const float uiScale = ImGui::GetIO().FontGlobalScale / kViewportToolbarFontScaleBaseline;
-			const float iconExtent = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f) * uiScale;
-			const float columnWidth = iconExtent + ImGui::GetStyle().WindowPadding.x * 2.0f;
+			// The mirror image of the horizontal overlay. This toolbar's BeginChild asks for an
+			// explicit width and GetContentRegionAvail().y for its height, so here the HEIGHT is the
+			// pinned side and the width is left to auto-size.
+			//
+			// Deliberately no second copy of the column-width formula: it lives in
+			// ViewportVerticalToolbar.cpp, and two formulas for one width would drift apart the first
+			// time either one is touched.
 			const float margin = ImGui::GetStyle().WindowPadding.y * 2.0f;
 			const float height = std::max(0.0f, viewportSize.y - horizontalHeight - margin);
+			if (height <= 0.0f)
+				return;
+
 			ImGui::SetNextWindowPos(
 				ImVec2(viewportOrigin.x, viewportOrigin.y + horizontalHeight + margin), ImGuiCond_Always);
-			ImGui::SetNextWindowSize(ImVec2(columnWidth, height), ImGuiCond_Always);
-			if (!ImGui::Begin("##RendererViewportVerticalToolbarOverlay", nullptr, OverlayWindowFlags()))
+			ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, height), ImVec2(viewportSize.x, height));
+			if (!ImGui::Begin(
+					"##RendererViewportVerticalToolbarOverlay",
+					nullptr,
+					OverlayWindowFlags() | ImGuiWindowFlags_AlwaysAutoResize))
 			{
 				ImGui::End();
 				return;
