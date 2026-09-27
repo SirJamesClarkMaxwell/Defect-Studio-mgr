@@ -29,6 +29,16 @@ namespace DefectStudio::detail
 	// every caller that indexes a ring has to respect - CrossSectionRingSize is the single place
 	// that answers it.
 	//
+	// task/41 S11u: every triangle of a ring-built solid must be wound so its geometric normal -
+	// the cross product of its edges - points the same way as the outward normals its vertices
+	// carry. Backface culling then shows the outside, which is the only thing that makes a normal
+	// mean anything.
+	//
+	// This is NOT implied by the surface being closed. A solid turned inside out has every edge
+	// shared by exactly two triangles and passes a closure check unchanged, which is exactly what
+	// happened: a 96-case closure matrix was green while a thick ribbon rendered with its far faces
+	// visible and its near faces culled. Orientation needs its own assertion.
+	//
 	// task/41 S11t: a positive `style.ribbonBevel` replaces each of the rectangle's four corners
 	// with a short chamfer face, so the ring has eight corner positions instead of four and a
 	// highlight runs along the edge instead of breaking at it. Each face still carries its own

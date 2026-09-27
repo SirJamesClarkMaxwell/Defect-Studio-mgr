@@ -136,6 +136,15 @@ namespace DefectStudio
 		// the smaller of `width` and `ribbonThickness`, since a chamfer that ate the whole face
 		// would turn the box into a diamond and then invert it.
 		float ribbonBevel = 0.0f;
+		// How many flat faces each chamfer is made of, and how the chamfer's profile curves.
+		//
+		// task/41 S11u, both asked for by name in a manual round. One segment is the single flat
+		// chamfer S11t shipped; more segments round the edge off, the way Blender's bevel modifier
+		// does. `ribbonBevelShape` is the profile parameter in [0, 1]: 0.5 is a circular arc, below
+		// that the profile is chamfered flatter, above it bulges outward. Both are ignored when
+		// `ribbonBevel` is zero.
+		std::uint32_t ribbonBevelSegments = 1;
+		float ribbonBevelShape = 0.5f;
 		float width = 0.05f; // full width; the tube radius is half of it
 		PathLineJoin join = PathLineJoin::Bevel;
 		PathLineCap cap = PathLineCap::Butt;
