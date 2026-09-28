@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "Renderer/Path/PathStrokeMesher.hpp"
+#include "Renderer/Path/PathSolidBevelTopology.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -155,11 +157,93 @@ namespace DefectStudio::Tests
 			for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
 			{
 				EXPECT_TRUE(InsideOrOnBoundary(glm::dvec2(vertex.position), silhouette))
-					<< "outside silhouette at " << vertex.position.x << "," << vertex.position.y;
+					<< "outside silhouette at " << vertex.position.x << "," << vertex.position.y << ","
+					<< vertex.position.z << " normal=" << vertex.normal.x << "," << vertex.normal.y << ","
+					<< vertex.normal.z;
 				EXPECT_LE(std::abs(vertex.position.z), 0.15f + kPositionTolerance);
 			}
 		}
+
+		[[nodiscard]] detail::ThickFlatMesh Prism(const std::vector<glm::dvec2> &outline)
+		{
+			detail::ThickFlatMesh mesh;
+			for (const double z : {0.1, -0.1})
+				for (const glm::dvec2 point : outline)
+					mesh.vertices.push_back({glm::dvec3(point, z)});
+			std::vector<std::uint32_t> top;
+			std::vector<std::uint32_t> bottom;
+			for (std::uint32_t index = 0u; index < outline.size(); ++index)
+			{
+				top.push_back(index);
+				bottom.push_back(static_cast<std::uint32_t>(outline.size() * 2u - 1u - index));
+			}
+			mesh.faces.push_back({top, std::vector<bool>(top.size(), true)});
+			mesh.faces.push_back({bottom, std::vector<bool>(bottom.size(), true)});
+			for (std::uint32_t index = 0u; index < outline.size(); ++index)
+			{
+				const std::uint32_t next = (index + 1u) % static_cast<std::uint32_t>(outline.size());
+				mesh.faces.push_back({{index, index + static_cast<std::uint32_t>(outline.size()),
+					next + static_cast<std::uint32_t>(outline.size()), next}, std::vector<bool>(4u, true)});
+			}
+			return mesh;
+		}
+
+		[[nodiscard]] std::vector<glm::dvec3> FaceNormals(const detail::ThickFlatMesh &mesh)
+		{
+			std::vector<glm::dvec3> result;
+			for (const detail::ThickFlatMeshFace &face : mesh.faces)
+			{
+				glm::dvec3 normal(0.0);
+				for (std::size_t index = 0u; index < face.vertices.size(); ++index)
+					normal += glm::cross(mesh.vertices[face.vertices[index]].position,
+						mesh.vertices[face.vertices[(index + 1u) % face.vertices.size()]].position);
+				result.push_back(glm::normalize(normal));
+			}
+			return result;
+		}
 	} // namespace
+
+	TEST(PathDecorationBevelTests, SquareCornerTurnProducesConvexPatch)
+	{
+		const detail::ThickFlatMesh mesh = Prism({{-1.0, -1.0}, {1.0, -1.0}, {1.0, 1.0}, {-1.0, 1.0}});
+		detail::ThickFlatBevelTopology topology;
+		ASSERT_TRUE(detail::BuildThickFlatBevelTopology(mesh, FaceNormals(mesh), 0.1, topology));
+		for (const auto &[vertex, info] : topology.vertices)
+		{
+			SCOPED_TRACE(vertex);
+			EXPECT_EQ(info.turn, detail::ThickFlatBevelTurn::Convex);
+		}
+	}
+
+	TEST(PathDecorationBevelTests, ArrowShoulderTurnProducesReentrantPatch)
+	{
+		const std::vector<glm::dvec2> outline = {
+			{0.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 1.0}, {1.0, 2.0}, {0.0, 2.0}};
+		const detail::ThickFlatMesh mesh = Prism(outline);
+		detail::ThickFlatBevelTopology topology;
+		ASSERT_TRUE(detail::BuildThickFlatBevelTopology(mesh, FaceNormals(mesh), 0.1, topology));
+		EXPECT_EQ(topology.vertices.at(3u).turn, detail::ThickFlatBevelTurn::Reflex);
+		EXPECT_EQ(topology.vertices.at(static_cast<std::uint32_t>(outline.size()) + 3u).turn,
+			detail::ThickFlatBevelTurn::Reflex);
+	}
+
+	TEST(PathDecorationBevelTests, CircleShallowTurnsRemainAContinuousChain)
+	{
+		std::vector<glm::dvec2> outline;
+		for (std::size_t index = 0u; index < 32u; ++index)
+		{
+			const double angle = 2.0 * std::numbers::pi * static_cast<double>(index) / 32.0;
+			outline.emplace_back(std::cos(angle), std::sin(angle));
+		}
+		const detail::ThickFlatMesh mesh = Prism(outline);
+		detail::ThickFlatBevelTopology topology;
+		ASSERT_TRUE(detail::BuildThickFlatBevelTopology(mesh, FaceNormals(mesh), 0.1, topology));
+		for (const auto &[vertex, info] : topology.vertices)
+		{
+			SCOPED_TRACE(vertex);
+			EXPECT_EQ(info.turn, detail::ThickFlatBevelTurn::Smooth);
+		}
+	}
 
 	TEST(PathDecorationBevelTests, ArrowReflexShouldersStayInsideTheSharpSilhouette)
 	{
