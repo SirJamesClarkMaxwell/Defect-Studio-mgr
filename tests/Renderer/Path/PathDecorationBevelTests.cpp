@@ -164,10 +164,11 @@ namespace DefectStudio::Tests
 			}
 		}
 
-		[[nodiscard]] detail::ThickFlatMesh Prism(const std::vector<glm::dvec2> &outline)
+		[[nodiscard]] detail::ThickFlatMesh Prism(const std::vector<glm::dvec2> &outline,
+			const double halfThickness = 0.1)
 		{
 			detail::ThickFlatMesh mesh;
-			for (const double z : {0.1, -0.1})
+			for (const double z : {halfThickness, -halfThickness})
 				for (const glm::dvec2 point : outline)
 					mesh.vertices.push_back({glm::dvec3(point, z)});
 			std::vector<std::uint32_t> top;
@@ -242,6 +243,29 @@ namespace DefectStudio::Tests
 		{
 			SCOPED_TRACE(vertex);
 			EXPECT_EQ(info.turn, detail::ThickFlatBevelTurn::Smooth);
+		}
+	}
+
+	TEST(PathDecorationBevelTests, LocalRadiusLimitsArrowDiamondKiteAndShortBarCorners)
+	{
+		struct Case
+		{
+			std::vector<glm::dvec2> outline;
+			std::uint32_t vertex = 0u;
+			double expectedRadius = 0.0;
+		};
+		const std::array cases = {
+			Case{{{0.0, 0.0}, {3.0, -1.25}, {3.0, 1.25}}, 0u, 0.609375},
+			Case{{{0.0, 0.0}, {1.5, -1.25}, {3.0, 0.0}, {1.5, 1.25}}, 0u, 0.732209},
+			Case{{{0.0, 0.0}, {1.0, -1.25}, {3.0, 0.0}, {1.0, 1.25}}, 2u, 0.663327},
+			Case{{{0.0, -1.25}, {0.3, -1.25}, {0.3, 1.25}, {0.0, 1.25}}, 0u, 0.135}};
+
+		for (const Case &testCase : cases)
+		{
+			const detail::ThickFlatMesh mesh = Prism(testCase.outline, 10.0);
+			detail::ThickFlatBevelTopology topology;
+			ASSERT_TRUE(detail::BuildThickFlatBevelTopology(mesh, FaceNormals(mesh), 1.0, topology));
+			EXPECT_NEAR(topology.vertices.at(testCase.vertex).radius, testCase.expectedRadius, 1.0e-5);
 		}
 	}
 

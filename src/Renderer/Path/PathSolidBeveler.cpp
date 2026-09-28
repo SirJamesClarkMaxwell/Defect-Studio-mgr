@@ -52,6 +52,13 @@ namespace DefectStudio::detail
 			return std::numeric_limits<std::size_t>::max();
 		}
 
+		[[nodiscard]] double VertexRadius(const ThickFlatBevelTopology &topology,
+			const std::uint32_t vertex)
+		{
+			const auto found = topology.vertices.find(vertex);
+			return found == topology.vertices.end() ? 0.0 : found->second.radius;
+		}
+
 		[[nodiscard]] ThickFlatFaceOwner DecorationOwner(const ThickFlatFaceOwner first,
 			const ThickFlatFaceOwner second)
 		{
@@ -368,7 +375,8 @@ namespace DefectStudio::detail
 			const ThickFlatMeshFace &face = mesh.faces[faceIndex];
 			FaceInfo &info = faces[faceIndex];
 			for (std::size_t corner = 0u; corner < face.vertices.size(); ++corner)
-				info.inner.push_back(InsetCorner(mesh, face, info.normal, corner, bevel));
+				info.inner.push_back(InsetCorner(mesh, face, info.normal, corner,
+					VertexRadius(topology, face.vertices[corner])));
 			cornerOffsets[faceIndex + 1u] = cornerOffsets[faceIndex] + face.vertices.size();
 		}
 
@@ -430,8 +438,9 @@ namespace DefectStudio::detail
 					const std::size_t secondCorner = FindCorner(mesh, secondIncident.face, vertex);
 					const glm::dvec3 direction = mesh.vertices[other].position - mesh.vertices[vertex].position;
 					const double length = glm::length(direction);
+					const double localRadius = VertexRadius(topology, vertex);
 					const glm::dvec3 anchor = mesh.vertices[vertex].position +
-						SafeNormal(direction, glm::dvec3(0.0)) * std::min(bevel, length * 0.25);
+						SafeNormal(direction, glm::dvec3(0.0)) * std::min(localRadius, length * 0.25);
 					positions[endpoint] = ProfilePoint(anchor, faces[firstIncident.face].inner[firstCorner],
 						faces[secondIncident.face].inner[secondCorner], fraction, shape);
 				}
@@ -487,7 +496,7 @@ namespace DefectStudio::detail
 					const std::array<glm::dvec3, 3u> patchFaceNormals = {
 						faces[faceIds[0]].normal, faces[faceIds[1]].normal, faces[faceIds[2]].normal};
 					EmitTrihedralVertexPatch(outputs[OwnerIndex(owner)], mesh, vertex, arcs, patchFaceNormals,
-						bevel, shape, expectedNormal);
+						info.radius, shape, expectedNormal);
 					continue;
 				}
 			}

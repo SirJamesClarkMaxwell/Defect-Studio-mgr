@@ -168,11 +168,44 @@ namespace DefectStudio::detail
 			info.turn = ThickFlatBevelTurn::Convex;
 			for (const std::size_t edgeId : info.edges)
 				info.turn = MergeTurn(info.turn, topology.edges[edgeId].turn);
+			info.radius = requestedRadius;
 			for (std::size_t faceIndex = 0u; faceIndex < mesh.faces.size(); ++faceIndex)
 				for (std::size_t corner = 0u; corner < mesh.faces[faceIndex].vertices.size(); ++corner)
 					if (mesh.faces[faceIndex].vertices[corner] == vertex)
+					{
 						info.turn = MergeTurn(info.turn, topology.faceCorners[faceIndex][corner]);
-			info.radius = requestedRadius;
+						const ThickFlatMeshFace &face = mesh.faces[faceIndex];
+						const std::size_t previousCorner = (corner + face.vertices.size() - 1u) % face.vertices.size();
+						if (topology.faceCorners[faceIndex][corner] == ThickFlatBevelTurn::Smooth ||
+							(!face.bevelEdges[previousCorner] && !face.bevelEdges[corner]))
+							continue;
+						const glm::dvec3 toPrevious = mesh.vertices[face.vertices[previousCorner]].position -
+							mesh.vertices[vertex].position;
+						const glm::dvec3 toNext = mesh.vertices[face.vertices[(corner + 1u) % face.vertices.size()]].position -
+							mesh.vertices[vertex].position;
+						const double previousLength = glm::length(toPrevious);
+						const double nextLength = glm::length(toNext);
+						if (!(std::isfinite(previousLength) && std::isfinite(nextLength)) ||
+							previousLength * previousLength <= kLengthToleranceSquared ||
+							nextLength * nextLength <= kLengthToleranceSquared)
+						{
+							info.turn = ThickFlatBevelTurn::Unsupported;
+							info.radius = 0.0;
+							continue;
+						}
+						const double cosine = std::clamp(glm::dot(toPrevious / previousLength,
+							toNext / nextLength), -1.0, 1.0);
+						const double cornerAngle = std::acos(cosine);
+						const double faceRadius = 0.45 * std::min(previousLength, nextLength) *
+							std::tan(0.5 * cornerAngle);
+						if (!(std::isfinite(faceRadius) && faceRadius > 0.0))
+						{
+							info.turn = ThickFlatBevelTurn::Unsupported;
+							info.radius = 0.0;
+							continue;
+						}
+						info.radius = std::min(info.radius, faceRadius);
+					}
 		}
 		return true;
 	}
