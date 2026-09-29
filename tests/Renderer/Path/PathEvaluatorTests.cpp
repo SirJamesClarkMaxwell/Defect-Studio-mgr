@@ -117,6 +117,45 @@ namespace DefectStudio::Tests
 		EXPECT_GT(EvaluateSegment(negative, ResolveAuthored(negative), 0, 0.0)->tangent.y, 0.0);
 	}
 
+	TEST(PathEvaluatorTests, NumericArcParametersSolveEndpointsAndRoundTrip)
+	{
+		PathArcParameters authored;
+		authored.center = {1.0, 2.0, 3.0};
+		authored.axis = {0.0, 0.0, 2.0};
+		authored.radius = 2.0;
+		authored.startAngleRadians = std::numbers::pi_v<double> / 6.0;
+		authored.signedSweepRadians = 2.0 * std::numbers::pi_v<double> / 3.0;
+
+		const Result<PathArcEndpoints> endpoints = SolveArcEndpoints(authored);
+		ASSERT_TRUE(endpoints);
+		EXPECT_NEAR(glm::distance(endpoints->start, glm::dvec3(1.0 + std::sqrt(3.0), 3.0, 3.0)), 0.0, 1e-12);
+		EXPECT_NEAR(glm::distance(endpoints->end, glm::dvec3(1.0 - std::sqrt(3.0), 3.0, 3.0)), 0.0, 1e-12);
+
+		const Result<ArcGeometry> derived = DeriveArc(
+			endpoints->start,
+			endpoints->end,
+			glm::vec3(authored.axis),
+			static_cast<float>(authored.signedSweepRadians));
+		ASSERT_TRUE(derived);
+		EXPECT_NEAR(glm::distance(derived->center, authored.center), 0.0, 1e-6);
+		EXPECT_NEAR(derived->radius, authored.radius, 1e-6);
+		EXPECT_NEAR(derived->startAngle, authored.startAngleRadians, 1e-6);
+		EXPECT_NEAR(derived->signedSweep, authored.signedSweepRadians, 1e-6);
+	}
+
+	TEST(PathEvaluatorTests, NumericArcParametersRejectInvalidRadiusAxisAndSweep)
+	{
+		PathArcParameters parameters;
+		parameters.radius = 0.0;
+		EXPECT_FALSE(SolveArcEndpoints(parameters));
+		parameters.radius = 1.0;
+		parameters.axis = glm::dvec3(0.0);
+		EXPECT_FALSE(SolveArcEndpoints(parameters));
+		parameters.axis = {0.0, 0.0, 1.0};
+		parameters.signedSweepRadians = 0.0;
+		EXPECT_FALSE(SolveArcEndpoints(parameters));
+	}
+
 	TEST(PathEvaluatorTests, ArcRejectsInvalidInputsAndMixedLengthsInvert)
 	{
 		const Result<ArcGeometry> zeroChord = DeriveArc(glm::dvec3(0.0), glm::dvec3(0.0), {0.0f, 0.0f, 1.0f}, 1.0f);

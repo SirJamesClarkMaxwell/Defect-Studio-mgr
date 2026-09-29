@@ -34,6 +34,21 @@ namespace DefectStudio
 				"Correct the path data and try again.", "Renderer/Path", PathDiagnosticCodeName(code), DisplayPolicy::Silent};
 		}
 
+		struct ArcPlaneBasis
+		{
+			glm::dvec3 x{1.0, 0.0, 0.0};
+			glm::dvec3 y{0.0, 1.0, 0.0};
+		};
+
+		[[nodiscard]] ArcPlaneBasis MakeArcPlaneBasis(const glm::dvec3 &unitAxis)
+		{
+			const glm::dvec3 reference = std::abs(glm::dot(unitAxis, glm::dvec3(1.0, 0.0, 0.0))) < 0.9
+				? glm::dvec3(1.0, 0.0, 0.0)
+				: glm::dvec3(0.0, 1.0, 0.0);
+			const glm::dvec3 x = glm::normalize(reference - glm::dot(reference, unitAxis) * unitAxis);
+			return {x, glm::cross(unitAxis, x)};
+		}
+
 		[[nodiscard]] Result<void> CheckSegment(const ScenePath &path, const ResolvedNodes &resolved, std::size_t segment)
 		{
 			if (segment >= path.segments.size() || segment + 1 >= resolved.positions.size())
@@ -100,6 +115,8 @@ namespace DefectStudio
 			case PathDiagnosticCode::ArcNormalParallelToChord: return "path.arc_normal_parallel_to_chord";
 			case PathDiagnosticCode::ArcSweepOutOfRange: return "path.arc_sweep_out_of_range";
 			case PathDiagnosticCode::ArcNonFiniteDerived: return "path.arc_non_finite_derived";
+			case PathDiagnosticCode::ArcAxisZero: return "path.arc_axis_zero";
+			case PathDiagnosticCode::ArcRadiusNonPositive: return "path.arc_radius_non_positive";
 			case PathDiagnosticCode::BrokenBinding: return "path.broken_binding";
 			case PathDiagnosticCode::ObjectOriginTargetsPath: return "path.object_origin_targets_path";
 			case PathDiagnosticCode::InteriorNodeBuffer: return "path.interior_node_buffer";
@@ -191,7 +208,42 @@ namespace DefectStudio
 		const glm::dvec3 startDirection = (a - center) / radius;
 		if (!std::isfinite(radius) || !IsFinite(center) || !IsFinite(startDirection))
 			return MakeError(PathDiagnosticCode::ArcNonFiniteDerived, "Arc derivation produced a non-finite value.");
-		return ArcGeometry{center, orthogonalNormal, startDirection, radius, std::atan2(startDirection.y, startDirection.x), signedSweep};
+		const ArcPlaneBasis basis = MakeArcPlaneBasis(orthogonalNormal);
+		const double startAngle = std::atan2(
+			glm::dot(startDirection, basis.y), glm::dot(startDirection, basis.x));
+		return ArcGeometry{center, orthogonalNormal, startDirection, radius, startAngle, signedSweep};
+	}
+
+	Result<PathArcEndpoints> SolveArcEndpoints(const PathArcParameters &parameters)
+	{
+		if (!IsFinite(parameters.center) || !IsFinite(parameters.axis) ||
+			!std::isfinite(parameters.radius) || !std::isfinite(parameters.startAngleRadians) ||
+			!std::isfinite(parameters.signedSweepRadians))
+			return MakeError(PathDiagnosticCode::NonFinite, "Arc parameters must be finite.");
+		if (parameters.radius <= kEpsilon)
+			return MakeError(PathDiagnosticCode::ArcRadiusNonPositive, "Arc radius must be positive.");
+		const double axisLength = glm::length(parameters.axis);
+		if (axisLength <= kEpsilon)
+			return MakeError(PathDiagnosticCode::ArcAxisZero, "Arc axis must have a direction.");
+		const double sweepMagnitude = std::abs(parameters.signedSweepRadians);
+		if (sweepMagnitude < kArcSweepEpsilon ||
+			sweepMagnitude > 2.0 * std::numbers::pi_v<double> - kArcSweepEpsilon)
+			return MakeError(
+				PathDiagnosticCode::ArcSweepOutOfRange,
+				"Arc sweep must be strictly between zero and a full turn.");
+
+		const glm::dvec3 axis = parameters.axis / axisLength;
+		const ArcPlaneBasis basis = MakeArcPlaneBasis(axis);
+		const auto pointAt = [&](const double angle) {
+			return parameters.center + parameters.radius *
+				(std::cos(angle) * basis.x + std::sin(angle) * basis.y);
+		};
+		const PathArcEndpoints endpoints{
+			pointAt(parameters.startAngleRadians),
+			pointAt(parameters.startAngleRadians + parameters.signedSweepRadians)};
+		if (!IsFinite(endpoints.start) || !IsFinite(endpoints.end))
+			return MakeError(PathDiagnosticCode::ArcNonFiniteDerived, "Arc endpoint solving produced a non-finite value.");
+		return endpoints;
 	}
 
 	Result<PathSample> EvaluateSegment(const ScenePath &path, const ResolvedNodes &resolved, std::size_t segment, double t)

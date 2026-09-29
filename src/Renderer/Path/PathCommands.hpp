@@ -16,6 +16,9 @@
 
 namespace DefectStudio
 {
+	enum class PathEnd;
+	struct PathArcParameters;
+
 	// Which of the store's two counters an edit invalidates. Passing the wrong one is not a
 	// correctness bug in the store - it is a stale-mesh bug three layers away - so the caller says it
 	// once, at the operation, instead of every cache site guessing.
@@ -88,7 +91,11 @@ namespace DefectStudio
 
 	[[nodiscard]] Result<PathElementId> InsertScenePathNode(
 		const PathEditContext &context, SceneObjectId path, std::size_t segment, double t);
+	[[nodiscard]] Result<PathElementId> ExtendScenePathEnd(
+		const PathEditContext &context, SceneObjectId path, PathEnd end, glm::vec3 newPosition);
 	[[nodiscard]] Result<void> DeleteScenePathNode(const PathEditContext &context, SceneObjectId path, PathElementId node);
+	[[nodiscard]] Result<void> DeleteScenePathNodes(
+		const PathEditContext &context, SceneObjectId path, std::span<const PathElementId> nodes);
 
 	[[nodiscard]] Result<void> MoveScenePathNode(
 		const PathEditContext &context, SceneObjectId path, PathElementId node, glm::vec3 position);
@@ -96,6 +103,11 @@ namespace DefectStudio
 		const PathEditContext &context, SceneObjectId path, PathElementId handle, glm::vec3 offset);
 	[[nodiscard]] Result<void> SetScenePathHandleType(
 		const PathEditContext &context, SceneObjectId path, PathElementId handle, BezierHandleType type);
+	[[nodiscard]] Result<void> SetScenePathHandleTypes(
+		const PathEditContext &context,
+		SceneObjectId path,
+		std::span<const PathElementId> handles,
+		BezierHandleType type);
 
 	// Sets the two fields an arc segment actually stores, after checking that they describe a real
 	// arc between the segment's existing endpoints (DeriveArc). The numeric editor that moves the
@@ -106,6 +118,11 @@ namespace DefectStudio
 		PathElementId segment,
 		glm::vec3 planeNormal,
 		float signedSweepRadians);
+	[[nodiscard]] Result<void> SetScenePathArcGeometry(
+		const PathEditContext &context,
+		SceneObjectId path,
+		PathElementId segment,
+		const PathArcParameters &parameters);
 
 	// One entry point instead of a Set<Field>Style per field: style has no cross-field invariant the
 	// store can check, so a per-field API would be the same body copied a dozen times.

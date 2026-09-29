@@ -20,6 +20,8 @@ namespace DefectStudio
 		ArcNormalParallelToChord,
 		ArcSweepOutOfRange,
 		ArcNonFiniteDerived,
+		ArcAxisZero,
+		ArcRadiusNonPositive,
 		BrokenBinding,
 		ObjectOriginTargetsPath,
 		InteriorNodeBuffer,
@@ -68,9 +70,31 @@ namespace DefectStudio
 		double signedSweep = 0.0;
 	};
 
+	// Exact values exposed by the numeric arc editor. `startAngleRadians` is measured in a
+	// deterministic plane basis: world X projected onto the plane (world Y when X is nearly
+	// parallel to the axis), with positive angles turning toward cross(axis, basisX).
+	struct PathArcParameters
+	{
+		glm::dvec3 center{0.0};
+		glm::dvec3 axis{0.0, 0.0, 1.0};
+		double radius = 1.0;
+		double startAngleRadians = 0.0;
+		double signedSweepRadians = 0.5;
+	};
+
+	struct PathArcEndpoints
+	{
+		glm::dvec3 start{0.0};
+		glm::dvec3 end{0.0};
+	};
+
 	// r = |AB| / (2 sin(|theta|/2)); rejects zero chord, non-finite input, a normal parallel to the
 	// chord and |theta| outside [epsilon, 2*pi - epsilon]. Never returns NaN in a value.
 	[[nodiscard]] Result<ArcGeometry> DeriveArc(glm::dvec3 a, glm::dvec3 b, glm::vec3 normal, float signedSweep);
+
+	// Inverse of DeriveArc for the numeric editor. Produces both shared node positions together, so
+	// the command layer can commit them atomically or reject the whole edit.
+	[[nodiscard]] Result<PathArcEndpoints> SolveArcEndpoints(const PathArcParameters &parameters);
 
 	struct PathSample
 	{

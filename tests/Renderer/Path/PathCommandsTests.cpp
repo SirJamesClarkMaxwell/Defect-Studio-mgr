@@ -8,6 +8,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Renderer/Path/PathCommands.hpp"
 #include "Renderer/Path/PathEvaluator.hpp"
+#include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
@@ -182,6 +183,53 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(window.paths->Store().Find({1})->nodes.size(), 2u);
 	}
 
+	TEST(PathCommandsTests, ExtendEndIsUndoableAndReturnsTheNewNode)
+	{
+		RendererWindowState window = MakeWindow();
+		UndoStack stack;
+		int calls = 0;
+		InsertPath(window, MakeLine({1}));
+
+		const Result<PathElementId> extended = ExtendScenePathEnd(
+			Context(window, stack, calls), {1}, PathEnd::End, {4.0f, 1.0f, 0.0f});
+
+		ASSERT_TRUE(extended);
+		const ScenePath *path = window.paths->Store().Find({1});
+		ASSERT_NE(path, nullptr);
+		ASSERT_EQ(path->nodes.size(), 3u);
+		EXPECT_EQ(path->nodes.back().id, extended.Value());
+		EXPECT_EQ(path->nodes.back().position, glm::vec3(4.0f, 1.0f, 0.0f));
+		EXPECT_EQ(calls, 1);
+
+		ASSERT_TRUE(stack.Undo().HasValue());
+		EXPECT_EQ(window.paths->Store().Find({1})->nodes.size(), 2u);
+	}
+
+	TEST(PathCommandsTests, DeleteSeveralNodesUsesOneAtomicUndoEntry)
+	{
+		RendererWindowState window = MakeWindow();
+		UndoStack stack;
+		int calls = 0;
+		ScenePath path = MakeLine({1});
+		path.nodes.push_back({AllocateElementId(path), {4.0f, 0.0f, 0.0f}, {}});
+		path.nodes.push_back({AllocateElementId(path), {6.0f, 0.0f, 0.0f}, {}});
+		path.segments.push_back({AllocateElementId(path), LineSegmentData{}});
+		path.segments.push_back({AllocateElementId(path), LineSegmentData{}});
+		const std::array nodes{path.nodes[1].id, path.nodes[2].id};
+		InsertPath(window, std::move(path));
+
+		ASSERT_TRUE(DeleteScenePathNodes(Context(window, stack, calls), {1}, nodes));
+		const ScenePath *edited = window.paths->Store().Find({1});
+		ASSERT_NE(edited, nullptr);
+		ASSERT_EQ(edited->nodes.size(), 2u);
+		EXPECT_EQ(edited->nodes.front().position, glm::vec3(0.0f, 0.0f, 0.0f));
+		EXPECT_EQ(edited->nodes.back().position, glm::vec3(6.0f, 0.0f, 0.0f));
+		EXPECT_EQ(calls, 1);
+
+		ASSERT_TRUE(stack.Undo().HasValue());
+		EXPECT_EQ(window.paths->Store().Find({1})->nodes.size(), 4u);
+	}
+
 	TEST(PathCommandsTests, NodeMoveRejectsNonFiniteAndBindingIsUndoable)
 	{
 		RendererWindowState window = MakeWindow();
@@ -228,6 +276,28 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(std::get<CubicBezierSegmentData>(window.paths->Store().Find({1})->segments[0].data).startHandle.type, BezierHandleType::Free);
 	}
 
+	TEST(PathCommandsTests, SeveralHandleTypesChangeInOneUndoEntry)
+	{
+		RendererWindowState window = MakeWindow();
+		UndoStack stack;
+		int calls = 0;
+		InsertPath(window, MakeCubic({1}));
+		const auto &before = std::get<CubicBezierSegmentData>(window.paths->Store().Find({1})->segments[0].data);
+		const std::array handles{before.startHandle.id, before.endHandle.id};
+
+		ASSERT_TRUE(SetScenePathHandleTypes(
+			Context(window, stack, calls), {1}, handles, BezierHandleType::Aligned));
+		const auto &edited = std::get<CubicBezierSegmentData>(window.paths->Store().Find({1})->segments[0].data);
+		EXPECT_EQ(edited.startHandle.type, BezierHandleType::Aligned);
+		EXPECT_EQ(edited.endHandle.type, BezierHandleType::Aligned);
+		EXPECT_EQ(calls, 1);
+
+		ASSERT_TRUE(stack.Undo().HasValue());
+		const auto &restored = std::get<CubicBezierSegmentData>(window.paths->Store().Find({1})->segments[0].data);
+		EXPECT_EQ(restored.startHandle.type, BezierHandleType::Free);
+		EXPECT_EQ(restored.endHandle.type, BezierHandleType::Free);
+	}
+
 	TEST(PathCommandsTests, ArcParametersRequireAValidDerivedArc)
 	{
 		RendererWindowState window = MakeWindow();
@@ -238,6 +308,65 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(SetScenePathArcParameters(Context(window, stack, calls), {1}, segment, {0.0f, 0.0f, 1.0f}, 0.0f));
 		EXPECT_FALSE(SetScenePathArcParameters(Context(window, stack, calls), {1}, segment, {1.0f, 0.0f, 0.0f}, glm::half_pi<float>()));
 		EXPECT_TRUE(SetScenePathArcParameters(Context(window, stack, calls), {1}, segment, {0.0f, 0.0f, 1.0f}, glm::pi<float>()));
+	}
+
+	TEST(PathCommandsTests, NumericArcGeometryMovesBothNodesInOneUndoEntry)
+	{
+		RendererWindowState window = MakeWindow();
+		UndoStack stack;
+		int calls = 0;
+		InsertPath(window, MakeArc({1}));
+		const ScenePath *before = window.paths->Store().Find({1});
+		ASSERT_NE(before, nullptr);
+		const PathElementId segment = before->segments[0].id;
+		const glm::vec3 oldStart = before->nodes[0].position;
+		const glm::vec3 oldEnd = before->nodes[1].position;
+		PathArcParameters parameters;
+		parameters.center = {1.0, 2.0, 3.0};
+		parameters.axis = {0.0, 0.0, 1.0};
+		parameters.radius = 2.0;
+		parameters.startAngleRadians = 0.0;
+		parameters.signedSweepRadians = 2.0 * glm::pi<double>() / 3.0;
+
+		ASSERT_TRUE(SetScenePathArcGeometry(Context(window, stack, calls), {1}, segment, parameters));
+		const ScenePath *edited = window.paths->Store().Find({1});
+		ASSERT_NE(edited, nullptr);
+		EXPECT_NEAR(glm::distance(edited->nodes[0].position, glm::vec3(3.0f, 2.0f, 3.0f)), 0.0f, 1e-5f);
+		EXPECT_NEAR(glm::distance(
+			edited->nodes[1].position,
+			glm::vec3(0.0f, 2.0f + std::sqrt(3.0f), 3.0f)), 0.0f, 1e-5f);
+		EXPECT_NEAR(
+			std::get<CircularArcSegmentData>(edited->segments[0].data).signedSweepRadians,
+			static_cast<float>(parameters.signedSweepRadians),
+			1e-6f);
+		EXPECT_EQ(calls, 1);
+
+		ASSERT_TRUE(stack.Undo().HasValue());
+		const ScenePath *restored = window.paths->Store().Find({1});
+		ASSERT_NE(restored, nullptr);
+		EXPECT_EQ(restored->nodes[0].position, oldStart);
+		EXPECT_EQ(restored->nodes[1].position, oldEnd);
+	}
+
+	TEST(PathCommandsTests, InvalidNumericArcGeometryLeavesPathAndUndoUntouched)
+	{
+		RendererWindowState window = MakeWindow();
+		UndoStack stack;
+		int calls = 0;
+		InsertPath(window, MakeArc({1}));
+		const ScenePath before = *window.paths->Store().Find({1});
+		PathArcParameters parameters;
+		parameters.radius = 0.0;
+
+		const Result<void> result = SetScenePathArcGeometry(
+			Context(window, stack, calls), {1}, before.segments[0].id, parameters);
+
+		EXPECT_FALSE(result);
+		EXPECT_EQ(result.Error().code, PathDiagnosticCodeName(PathDiagnosticCode::ArcRadiusNonPositive));
+		EXPECT_EQ(window.paths->Store().Find({1})->nodes[0].position, before.nodes[0].position);
+		EXPECT_EQ(window.paths->Store().Find({1})->nodes[1].position, before.nodes[1].position);
+		EXPECT_EQ(calls, 0);
+		EXPECT_FALSE(stack.CanUndo());
 	}
 
 	TEST(PathCommandsTests, DragCommitsOnceAndCancelRestoresWholeScene)

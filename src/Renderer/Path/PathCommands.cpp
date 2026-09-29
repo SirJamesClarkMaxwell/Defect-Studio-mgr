@@ -229,11 +229,53 @@ namespace DefectStudio
 		return report.applied.empty() ? Result<PathElementId>(report.skipped.front().reason) : Result<PathElementId>(inserted);
 	}
 
+	Result<PathElementId> ExtendScenePathEnd(
+		const PathEditContext &context,
+		const SceneObjectId path,
+		const PathEnd end,
+		const glm::vec3 newPosition)
+	{
+		PathElementId inserted;
+		const PathEditReport report = ApplyPathEdit(
+			context,
+			std::span<const SceneObjectId>(&path, 1),
+			PathRevisionKind::Geometry,
+			"Extend path",
+			[&inserted, end, newPosition](ScenePath &edited) {
+				const Result<PathElementId> result = ExtendEnd(edited, end, newPosition);
+				if (result)
+					inserted = result.Value();
+				return result ? Result<void>{} : Result<void>{result.Error()};
+			});
+		return report.applied.empty()
+			? Result<PathElementId>(report.skipped.front().reason)
+			: Result<PathElementId>(inserted);
+	}
+
 	Result<void> DeleteScenePathNode(const PathEditContext &context, const SceneObjectId path, const PathElementId node)
 	{
 		const PathEditReport report = ApplyPathEdit(context, std::span<const SceneObjectId>(&path, 1), PathRevisionKind::Geometry, "Delete path node", [node](ScenePath &edited) {
 			return DeleteNode(edited, node);
 		});
+		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
+	}
+
+	Result<void> DeleteScenePathNodes(
+		const PathEditContext &context,
+		const SceneObjectId path,
+		const std::span<const PathElementId> nodes)
+	{
+		const PathEditReport report = ApplyPathEdit(
+			context,
+			std::span<const SceneObjectId>(&path, 1),
+			PathRevisionKind::Geometry,
+			"Delete path nodes",
+			[nodes](ScenePath &edited) {
+				for (const PathElementId node : nodes)
+					if (const Result<void> result = DeleteNode(edited, node); !result)
+						return result;
+				return Result<void>{};
+			});
 		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
 	}
 
@@ -277,6 +319,30 @@ namespace DefectStudio
 		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
 	}
 
+	Result<void> SetScenePathHandleTypes(
+		const PathEditContext &context,
+		const SceneObjectId path,
+		const std::span<const PathElementId> handles,
+		const BezierHandleType type)
+	{
+		const PathEditReport report = ApplyPathEdit(
+			context,
+			std::span<const SceneObjectId>(&path, 1),
+			PathRevisionKind::Geometry,
+			"Set path handle types",
+			[handles, type](ScenePath &edited) {
+				for (const PathElementId handle : handles)
+				{
+					PathHandle *target = FindHandle(edited, handle);
+					if (target == nullptr)
+						return Result<void>(UnknownElementError());
+					target->type = type;
+				}
+				return Result<void>{};
+			});
+		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
+	}
+
 	Result<void> SetScenePathArcParameters(const PathEditContext &context, const SceneObjectId path, const PathElementId segment, const glm::vec3 planeNormal, const float signedSweepRadians)
 	{
 		const PathEditReport report = ApplyPathEdit(context, std::span<const SceneObjectId>(&path, 1), PathRevisionKind::Geometry, "Set path arc parameters", [segment, planeNormal, signedSweepRadians](ScenePath &edited) {
@@ -299,6 +365,46 @@ namespace DefectStudio
 			arc->signedSweepRadians = signedSweepRadians;
 			return Result<void>{};
 		});
+		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
+	}
+
+	Result<void> SetScenePathArcGeometry(
+		const PathEditContext &context,
+		const SceneObjectId path,
+		const PathElementId segment,
+		const PathArcParameters &parameters)
+	{
+		const Result<PathArcEndpoints> solved = SolveArcEndpoints(parameters);
+		if (!solved)
+			return solved.Error();
+		const glm::vec3 start(solved->start);
+		const glm::vec3 end(solved->end);
+		const glm::vec3 axis(glm::normalize(parameters.axis));
+		const float sweep = static_cast<float>(parameters.signedSweepRadians);
+		if (!IsFinite(start) || !IsFinite(end) || !IsFinite(axis) || !std::isfinite(sweep))
+			return MakeEditError("path.edit_non_finite", "The numeric arc parameters exceed path storage precision.");
+
+		const PathEditReport report = ApplyPathEdit(
+			context,
+			std::span<const SceneObjectId>(&path, 1),
+			PathRevisionKind::Geometry,
+			"Edit path arc geometry",
+			[segment, start, end, axis, sweep](ScenePath &edited) {
+				PathSegment *target = FindSegment(edited, segment);
+				if (target == nullptr)
+					return Result<void>(UnknownElementError());
+				auto *arc = std::get_if<CircularArcSegmentData>(&target->data);
+				if (arc == nullptr)
+					return Result<void>(MakeEditError("path.edit_invalid_result", "The target segment is not an arc."));
+				const std::size_t index = static_cast<std::size_t>(target - edited.segments.data());
+				if (index + 1 >= edited.nodes.size())
+					return Result<void>(UnknownElementError());
+				edited.nodes[index].position = start;
+				edited.nodes[index + 1].position = end;
+				arc->planeNormal = axis;
+				arc->signedSweepRadians = sweep;
+				return Result<void>{};
+			});
 		return report.applied.empty() ? Result<void>(report.skipped.front().reason) : Result<void>{};
 	}
 
