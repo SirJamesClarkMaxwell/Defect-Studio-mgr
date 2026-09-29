@@ -189,12 +189,25 @@ namespace DefectStudio::detail
 
 		void EmitTrihedralVertexPatch(OwnerOutput &output, const ThickFlatMesh &mesh, const std::uint32_t source,
 			const std::array<std::vector<glm::dvec3>, 3u> &arcs,
-			const std::array<glm::dvec3, 3u> &faceNormals, const double bevel, const double shape,
-			const glm::dvec3 expectedNormal)
+			const std::array<glm::dvec3, 3u> &faceNormals, const ThickFlatBevelTurn turn,
+			const double bevel, const double shape, const glm::dvec3 expectedNormal)
 		{
 			if (arcs[0].size() < 2u || arcs[1].size() != arcs[0].size() || arcs[2].size() != arcs[0].size())
 				return;
 			const std::uint32_t segments = static_cast<std::uint32_t>(arcs[0].size() - 1u);
+			if (turn == ThickFlatBevelTurn::Reflex)
+			{
+				const glm::dvec3 sourcePosition = mesh.vertices[source].position;
+				for (std::size_t arcIndex = 0u; arcIndex < arcs.size(); ++arcIndex)
+				{
+					const glm::dvec3 arcNormal = SafeNormal(faceNormals[arcIndex] +
+						faceNormals[(arcIndex + 1u) % faceNormals.size()], expectedNormal);
+					for (std::uint32_t sample = 0u; sample < segments; ++sample)
+						EmitPolygon(output, mesh, {source, source, source},
+							{sourcePosition, arcs[arcIndex][sample], arcs[arcIndex][sample + 1u]}, arcNormal);
+				}
+				return;
+			}
 			const std::array<glm::dvec3, 3u> extremes = {arcs[0].front(), arcs[0].back(), arcs[1].back()};
 			glm::dvec3 centre(0.0);
 			for (std::size_t index = 0u; index < extremes.size(); ++index)
@@ -495,7 +508,7 @@ namespace DefectStudio::detail
 				{
 					const std::array<glm::dvec3, 3u> patchFaceNormals = {
 						faces[faceIds[0]].normal, faces[faceIds[1]].normal, faces[faceIds[2]].normal};
-					EmitTrihedralVertexPatch(outputs[OwnerIndex(owner)], mesh, vertex, arcs, patchFaceNormals,
+					EmitTrihedralVertexPatch(outputs[OwnerIndex(owner)], mesh, vertex, arcs, patchFaceNormals, info.turn,
 						info.radius, shape, expectedNormal);
 					continue;
 				}
