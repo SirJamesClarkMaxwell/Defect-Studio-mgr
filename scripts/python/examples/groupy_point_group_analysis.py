@@ -234,7 +234,7 @@ def analyze(payload: dict) -> dict:
 
     reduction, permutations = reduce_representation(point_group, positions, elements, labels, tolerance)
     class_labels = [str(name) for name in point_group.class_names]
-    class_sizes = [int(size) for size in list(point_group.ireps.class_sizes)]
+    class_sizes = [int(group_class.size) for group_class in point_group.classes]
     irrep_labels = list(point_group.ireps.keys())
     characters = []
     for irrep_label in irrep_labels:

@@ -51,3 +51,7 @@ scripts/Windows/ssh-profiles.local.json
 # Local VASP calculation fixtures: POTCAR is licensed (no redistribution), WAVECAR/CHGCAR/vaspout.h5
 # are large binaries - keep local only, never commit
 test-directory/
+# Private puntukas repos (bitbucket): licensed for local use only, never commit or push
+Vendor/groupy/
+Vendor/puntukas_tools2/
+Vendor/dephonopy/
