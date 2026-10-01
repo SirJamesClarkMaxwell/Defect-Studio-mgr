@@ -580,6 +580,197 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(live.paths->Store().Size(), 2u);
 	}
 
+	TEST_F(ScenePathUndoTests, EditModeExtendExtrapolatesTheSelectedEndpointAndSelectsTheNewNode)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-extend";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.pathEdit.Enter(id);
+		const PathElementId endpoint = window.paths->Store().Find(id)->nodes.back().id;
+		window.pathEdit.SetSelection({endpoint});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		const Result<PathElementId> extended = ExtendSelectedScenePathEnd(live);
+
+		ASSERT_TRUE(extended);
+		const ScenePath *path = live.paths->Store().Find(id);
+		ASSERT_NE(path, nullptr);
+		ASSERT_EQ(path->nodes.size(), 3u);
+		EXPECT_EQ(path->nodes.back().position, glm::vec3(3.0f, 0.0f, 0.0f));
+		EXPECT_EQ(live.pathEdit.Selection(), std::vector<PathElementId>({extended.Value()}));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(ScenePathUndoTests, EditModeInsertSplitsTheSelectedSegmentAtItsMidpoint)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-insert";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.pathEdit.Enter(id);
+		window.pathEdit.SetElementMode(PathElementMode::Segment);
+		const PathElementId segment = window.paths->Store().Find(id)->segments.front().id;
+		window.pathEdit.SetSelection({segment});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		const Result<PathElementId> inserted = InsertSelectedScenePathSegment(live);
+
+		ASSERT_TRUE(inserted);
+		const ScenePath *path = live.paths->Store().Find(id);
+		ASSERT_NE(path, nullptr);
+		ASSERT_EQ(path->nodes.size(), 3u);
+		EXPECT_EQ(path->nodes[1].position, glm::vec3(0.0f));
+		EXPECT_EQ(live.pathEdit.ElementMode(), PathElementMode::NodeHandle);
+		EXPECT_EQ(live.pathEdit.Selection(), std::vector<PathElementId>({inserted.Value()}));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(ScenePathUndoTests, EditModeDeleteRemovesSelectedNodesAtomicallyAndPrunesSelection)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-delete";
+		ScenePath authored = Path(window, 1);
+		authored.nodes.push_back({AllocateElementId(authored), {3.0f, 0.0f, 0.0f}, {}});
+		authored.nodes.push_back({AllocateElementId(authored), {5.0f, 0.0f, 0.0f}, {}});
+		authored.segments.push_back({AllocateElementId(authored), LineSegmentData{}});
+		authored.segments.push_back({AllocateElementId(authored), LineSegmentData{}});
+		const std::vector<PathElementId> selected{authored.nodes[1].id, authored.nodes[2].id};
+		const SceneObjectId id = Add(window, std::move(authored));
+		window.pathEdit.Enter(id);
+		window.pathEdit.SetSelection(selected);
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		ASSERT_TRUE(DeleteSelectedScenePathNodes(live));
+
+		const ScenePath *path = live.paths->Store().Find(id);
+		ASSERT_NE(path, nullptr);
+		ASSERT_EQ(path->nodes.size(), 2u);
+		EXPECT_EQ(path->nodes.front().position, glm::vec3(-1.0f, 0.0f, 0.0f));
+		EXPECT_EQ(path->nodes.back().position, glm::vec3(5.0f, 0.0f, 0.0f));
+		EXPECT_TRUE(live.pathEdit.Selection().empty());
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(ScenePathUndoTests, EditModeHandleTypeChangesOnlySelectedHandlesInOneUndo)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-handles";
+		ScenePath authored = Path(window, 1);
+		CubicBezierSegmentData cubic;
+		cubic.startHandle = {
+			AllocateElementId(authored), {0.5f, 1.0f, 0.0f}, BezierHandleType::Free};
+		cubic.endHandle = {
+			AllocateElementId(authored), {-0.5f, 1.0f, 0.0f}, BezierHandleType::Free};
+		authored.segments[0].data = cubic;
+		const SceneObjectId id = Add(window, std::move(authored));
+		window.pathEdit.Enter(id);
+		window.pathEdit.SetSelection({cubic.startHandle.id, cubic.endHandle.id});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		ASSERT_TRUE(SetSelectedScenePathHandleType(live, BezierHandleType::Aligned));
+
+		const auto &edited = std::get<CubicBezierSegmentData>(
+			live.paths->Store().Find(id)->segments[0].data);
+		EXPECT_EQ(edited.startHandle.type, BezierHandleType::Aligned);
+		EXPECT_EQ(edited.endHandle.type, BezierHandleType::Aligned);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(ScenePathUndoTests, EditModeReverseKeepsStableElementSelection)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-reverse";
+		const SceneObjectId id = Add(window, Path(window, 1));
+		window.pathEdit.Enter(id);
+		const PathElementId selected = window.paths->Store().Find(id)->nodes.front().id;
+		window.pathEdit.SetSelection({selected});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+
+		ASSERT_TRUE(ReverseEditedScenePath(live));
+
+		const ScenePath *path = live.paths->Store().Find(id);
+		ASSERT_NE(path, nullptr);
+		EXPECT_EQ(path->nodes.front().position, glm::vec3(1.0f, 0.0f, 0.0f));
+		EXPECT_EQ(live.pathEdit.Selection(), std::vector<PathElementId>({selected}));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(ScenePathUndoTests, EditModeArcParametersRoundTripExactOneHundredTwentyDegrees)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-arc-resolve";
+		PathArcParameters authored;
+		authored.center = {1.0, 2.0, 3.0};
+		authored.axis = {0.0, 0.0, 2.0};
+		authored.radius = 2.0;
+		authored.startAngleRadians = glm::pi<double>() / 6.0;
+		authored.signedSweepRadians = 2.0 * glm::pi<double>() / 3.0;
+		const Result<PathArcEndpoints> endpoints = SolveArcEndpoints(authored);
+		ASSERT_TRUE(endpoints);
+
+		ScenePath path = Path(window, 1);
+		path.nodes[0].position = glm::vec3(endpoints->start);
+		path.nodes[1].position = glm::vec3(endpoints->end);
+		path.segments[0].data = CircularArcSegmentData{
+			glm::vec3(authored.axis), static_cast<float>(authored.signedSweepRadians)};
+		const PathElementId segment = path.segments[0].id;
+		const SceneObjectId id = Add(window, std::move(path));
+		window.pathEdit.Enter(id);
+		window.pathEdit.SetElementMode(PathElementMode::Segment);
+		window.pathEdit.SetSelection({segment});
+		renderer.AddWindow(std::move(window));
+
+		const Result<PathArcParameters> resolved = ResolveSelectedScenePathArc(renderer.GetWindows().front());
+
+		ASSERT_TRUE(resolved);
+		EXPECT_NEAR(glm::distance(resolved->center, authored.center), 0.0, 1e-6);
+		EXPECT_NEAR(glm::distance(resolved->axis, glm::normalize(authored.axis)), 0.0, 1e-6);
+		EXPECT_NEAR(resolved->radius, authored.radius, 1e-6);
+		EXPECT_NEAR(resolved->startAngleRadians, authored.startAngleRadians, 1e-6);
+		EXPECT_NEAR(resolved->signedSweepRadians, authored.signedSweepRadians, 1e-6);
+	}
+
+	TEST_F(ScenePathUndoTests, EditModeArcApplyMovesBothEndpointsInOneUndo)
+	{
+		RendererWindowState window;
+		window.windowId = "path-edit-arc-apply";
+		ScenePath path = Path(window, 1);
+		path.segments[0].data = CircularArcSegmentData{{0.0f, 0.0f, 1.0f}, glm::half_pi<float>()};
+		const PathElementId segment = path.segments[0].id;
+		const SceneObjectId id = Add(window, std::move(path));
+		window.pathEdit.Enter(id);
+		window.pathEdit.SetElementMode(PathElementMode::Segment);
+		window.pathEdit.SetSelection({segment});
+		renderer.AddWindow(std::move(window));
+		RendererWindowState &live = renderer.GetWindows().front();
+		const ScenePath before = *live.paths->Store().Find(id);
+
+		PathArcParameters edited;
+		edited.center = {1.0, 2.0, 3.0};
+		edited.axis = {0.0, 0.0, 1.0};
+		edited.radius = 2.0;
+		edited.startAngleRadians = 0.0;
+		edited.signedSweepRadians = 2.0 * glm::pi<double>() / 3.0;
+		ASSERT_TRUE(ApplySelectedScenePathArc(live, edited));
+
+		const Result<PathArcEndpoints> endpoints = SolveArcEndpoints(edited);
+		ASSERT_TRUE(endpoints);
+		const ScenePath *changed = live.paths->Store().Find(id);
+		ASSERT_NE(changed, nullptr);
+		EXPECT_NEAR(glm::distance(changed->nodes[0].position, glm::vec3(endpoints->start)), 0.0f, 1e-5f);
+		EXPECT_NEAR(glm::distance(changed->nodes[1].position, glm::vec3(endpoints->end)), 0.0f, 1e-5f);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		ASSERT_TRUE(undoStack->Undo());
+		const ScenePath *restored = live.paths->Store().Find(id);
+		ASSERT_NE(restored, nullptr);
+		EXPECT_EQ(restored->nodes[0].position, before.nodes[0].position);
+		EXPECT_EQ(restored->nodes[1].position, before.nodes[1].position);
+	}
+
 	TEST(ScenePathOperationsTests, DevPresetsKeepTheirStrokeProfile)
 	{
 		EXPECT_EQ(MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0.0f), StrokeProfile::Flat).style.profile,

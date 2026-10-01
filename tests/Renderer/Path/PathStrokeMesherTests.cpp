@@ -47,6 +47,46 @@ namespace DefectStudio::Tests
 			return path;
 		}
 
+		EvaluatedPath UShapedPath()
+		{
+			const std::array<glm::dvec3, 7u> positions = {
+				glm::dvec3(-1.0, 0.8, 0.0), glm::dvec3(-0.9, 0.1, 0.0), glm::dvec3(-0.6, -0.55, 0.0),
+				glm::dvec3(0.0, -0.8, 0.0), glm::dvec3(0.6, -0.55, 0.0), glm::dvec3(0.9, 0.1, 0.0),
+				glm::dvec3(1.0, 0.8, 0.0)};
+			EvaluatedPath path;
+			std::array<double, positions.size()> lengths{};
+			for (std::size_t index = 1u; index < positions.size(); ++index)
+				lengths[index] = lengths[index - 1u] + glm::distance(positions[index - 1u], positions[index]);
+			path.totalLength = lengths.back();
+			for (std::size_t index = 0u; index < positions.size(); ++index)
+			{
+				const glm::dvec3 previous = positions[index == 0u ? index : index - 1u];
+				const glm::dvec3 next = positions[index + 1u == positions.size() ? index : index + 1u];
+				const glm::dvec3 tangent = glm::normalize(next - previous);
+				const glm::dvec3 binormal(0.0, 0.0, 1.0);
+				const glm::dvec3 normal = glm::normalize(glm::cross(binormal, tangent));
+				path.samples.push_back({positions[index], tangent, normal, binormal, {}, 0.0,
+					lengths[index], lengths[index] / path.totalLength});
+			}
+			return path;
+		}
+
+		double PlanarDistanceToPath(const glm::dvec3 &point, const EvaluatedPath &path)
+		{
+			double result = std::numeric_limits<double>::max();
+			for (std::size_t index = 0u; index + 1u < path.samples.size(); ++index)
+			{
+				const glm::dvec3 first = path.samples[index].position;
+				const glm::dvec3 edge = path.samples[index + 1u].position - first;
+				const double fraction = std::clamp(glm::dot(point - first, edge) / glm::dot(edge, edge), 0.0, 1.0);
+				const glm::dvec3 offset = point - (first + edge * fraction);
+				const glm::dvec3 planarOffset = offset - path.samples[index].binormal *
+					glm::dot(offset, path.samples[index].binormal);
+				result = std::min(result, glm::length(planarOffset));
+			}
+			return result;
+		}
+
 		// Edges of the triangle list that belong to exactly one triangle. A closed surface has none with
 		// a non-zero length; the degenerate ones sit on a cap apex where every vertex is the same point.
 		std::size_t OpenBoundaryEdges(const StrokeGeometry &geometry)
@@ -641,6 +681,28 @@ namespace DefectStudio::Tests
 		AssertTubeGeometryMatches(BuildStroke(path, cappedStyle), BuildStroke(path, overStyle));
 	}
 
+	TEST(PathStrokeMesherTests, FlatRibbonBevelChamfersThePlainShaftEndFaces)
+	{
+		const EvaluatedPath path = StraightPath();
+		ASSERT_FALSE(path.samples.empty());
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.6f;
+		style.ribbonThickness = 0.4f;
+		style.ribbonBevel = 0.1f;
+		style.ribbonBevelSegments = 1u;
+		style.ribbonBevelShape = 0.5f;
+
+		const StrokeGeometry geometry = BuildStroke(path, style);
+		const glm::vec3 tangent(path.samples.front().tangent);
+		const auto hasEndChamferNormal = [&](const StrokeTubeVertex &vertex) {
+			const float along = std::abs(glm::dot(vertex.normal, tangent));
+			const float across = std::sqrt(std::max(0.0f, 1.0f - along * along));
+			return along > 0.25f && across > 0.25f;
+		};
+		EXPECT_TRUE(std::any_of(geometry.tubeVertices.begin(), geometry.tubeVertices.end(), hasEndChamferNormal));
+	}
+
 	TEST(PathStrokeMesherTests, RibbonBevelZeroInvalidAndRoundValuesAreNoOps)
 	{
 		const EvaluatedPath path = StraightPath();
@@ -739,7 +801,323 @@ namespace DefectStudio::Tests
 				const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
 				ASSERT_FALSE(geometry.shaft.IsEmpty());
 				AssertRangeIsClosedByPosition(geometry, geometry.shaft);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, BevelledFlatCuboidNeverLeavesItsOriginalBounds)
+	{
+		for (const float shape : {0.0f, 0.5f, 1.0f})
+		{
+			PathStrokeStyle style;
+			style.profile = StrokeProfile::Flat;
+			style.width = 0.4f;
+			style.ribbonThickness = 0.6f;
+			style.ribbonBevel = 0.1f;
+			style.ribbonBevelSegments = 16u;
+			style.ribbonBevelShape = shape;
+			style.cap = PathLineCap::Butt;
+			style.startDecoration.kind = PathDecorationKind::None;
+			style.endDecoration.kind = PathDecorationKind::None;
+
+			SCOPED_TRACE(::testing::Message() << "shape=" << shape);
+			const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+			ASSERT_FALSE(geometry.tubeVertices.empty());
+			for (std::size_t index = 0u; index < geometry.tubeVertices.size(); ++index)
+			{
+				SCOPED_TRACE(::testing::Message() << "vertex=" << index);
+				const glm::vec3 &position = geometry.tubeVertices[index].position;
+				EXPECT_GE(position.x, -kSurfaceTolerance);
+				EXPECT_LE(position.x, 2.0f + kSurfaceTolerance);
+				EXPECT_GE(position.y, -0.2f - kSurfaceTolerance);
+				EXPECT_LE(position.y, 0.2f + kSurfaceTolerance);
+				EXPECT_GE(position.z, -0.3f - kSurfaceTolerance);
+				EXPECT_LE(position.z, 0.3f + kSurfaceTolerance);
 			}
+		}
+	}
+
+	TEST(PathStrokeMesherTests, RibbonBevelProfileBendsPastCircularTowardTheOriginalCuboidCorner)
+	{
+		struct ProfileCase
+		{
+			float shape = 0.5f;
+			glm::vec3 expectedMidpoint{0.0f};
+		};
+		const std::array cases = {
+			ProfileCase{0.25f, {0.1f, 0.15f, 0.25f}},
+			ProfileCase{0.5f, {0.1f, 0.17071068f, 0.27071068f}},
+			ProfileCase{0.75f, {0.1f, 0.18660254f, 0.28660254f}}};
+
+		for (const ProfileCase &profile : cases)
+		{
+			PathStrokeStyle style;
+			style.profile = StrokeProfile::Flat;
+			style.width = 0.4f;
+			style.ribbonThickness = 0.6f;
+			style.ribbonBevel = 0.1f;
+			style.ribbonBevelSegments = 2u;
+			style.ribbonBevelShape = profile.shape;
+			style.cap = PathLineCap::Butt;
+			style.startDecoration.kind = PathDecorationKind::None;
+			style.endDecoration.kind = PathDecorationKind::None;
+
+			SCOPED_TRACE(::testing::Message() << "shape=" << profile.shape);
+			const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+			const auto midpoint = std::find_if(geometry.tubeVertices.begin(), geometry.tubeVertices.end(),
+				[&](const StrokeTubeVertex &vertex) {
+					return glm::distance(vertex.position, profile.expectedMidpoint) <= kSurfaceTolerance;
+				});
+			EXPECT_NE(midpoint, geometry.tubeVertices.end())
+				<< "expected midpoint (" << profile.expectedMidpoint.x << ", " << profile.expectedMidpoint.y
+				<< ", " << profile.expectedMidpoint.z << ")";
+		}
+	}
+
+	TEST(PathStrokeMesherTests, BevelledCuboidCornerUsesA2dPatchInsteadOfOneFanPole)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.4f;
+		style.ribbonThickness = 0.6f;
+		style.ribbonBevel = 0.1f;
+		style.ribbonBevelSegments = 4u;
+		style.ribbonBevelShape = 0.5f;
+		style.cap = PathLineCap::Butt;
+		style.startDecoration.kind = PathDecorationKind::None;
+		style.endDecoration.kind = PathDecorationKind::None;
+
+		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+		std::vector<glm::vec3> interiorCornerPositions;
+		for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+		{
+			const glm::vec3 &position = vertex.position;
+			if (position.x <= kSurfaceTolerance || position.x >= 0.1f - kSurfaceTolerance ||
+				position.y <= 0.1f + kSurfaceTolerance || position.y >= 0.2f - kSurfaceTolerance ||
+				position.z <= 0.2f + kSurfaceTolerance || position.z >= 0.3f - kSurfaceTolerance)
+				continue;
+			if (std::none_of(interiorCornerPositions.begin(), interiorCornerPositions.end(),
+				[&](const glm::vec3 &candidate) {
+					return glm::distance(candidate, position) <= kSurfaceTolerance;
+				}))
+				interiorCornerPositions.push_back(position);
+		}
+
+		// A four-segment triangular patch has three interior lattice points. The old triangle fan
+		// collapses every boundary segment into one averaged pole instead.
+		EXPECT_EQ(interiorCornerPositions.size(), 3u);
+	}
+
+	TEST(PathStrokeMesherTests, BevelShapeMovesCornerVerticesAlongSphericalNormals)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.4f;
+		style.ribbonThickness = 0.6f;
+		style.ribbonBevel = 0.1f;
+		style.ribbonBevelSegments = 4u;
+		style.cap = PathLineCap::Butt;
+		style.startDecoration.kind = PathDecorationKind::None;
+		style.endDecoration.kind = PathDecorationKind::None;
+
+		style.ribbonBevelShape = 0.5f;
+		const StrokeGeometry spherical = BuildStroke(StraightPath(), style);
+		const glm::vec3 sphereCentre(0.1f, 0.1f, 0.2f);
+		for (const auto [shape, movesOutward] :
+			{std::pair{0.25f, false}, std::pair{0.75f, true}})
+		{
+			style.ribbonBevelShape = shape;
+			const StrokeGeometry shaped = BuildStroke(StraightPath(), style);
+			ASSERT_EQ(shaped.tubeVertices.size(), spherical.tubeVertices.size());
+
+			std::size_t checkedVertices = 0u;
+			for (std::size_t index = 0u; index < spherical.tubeVertices.size(); ++index)
+			{
+				const glm::vec3 position = spherical.tubeVertices[index].position;
+				if (position.x < -kSurfaceTolerance || position.x > 0.1f + kSurfaceTolerance ||
+					position.y < 0.1f - kSurfaceTolerance || position.y > 0.2f + kSurfaceTolerance ||
+					position.z < 0.2f - kSurfaceTolerance || position.z > 0.3f + kSurfaceTolerance)
+					continue;
+
+				const glm::vec3 sphericalOffset = position - sphereCentre;
+				const std::size_t activeAxes = static_cast<std::size_t>(std::abs(sphericalOffset.x) > kSurfaceTolerance) +
+					static_cast<std::size_t>(std::abs(sphericalOffset.y) > kSurfaceTolerance) +
+					static_cast<std::size_t>(std::abs(sphericalOffset.z) > kSurfaceTolerance);
+				if (activeAxes < 2u)
+					continue;
+				const glm::vec3 shapedOffset = shaped.tubeVertices[index].position - sphereCentre;
+				ASSERT_GT(glm::length(sphericalOffset), kSurfaceTolerance);
+				ASSERT_GT(glm::length(shapedOffset), kSurfaceTolerance);
+				EXPECT_GT(glm::dot(glm::normalize(sphericalOffset), glm::normalize(shapedOffset)),
+					1.0f - 1.0e-5f);
+				if (movesOutward)
+					EXPECT_GT(glm::length(shapedOffset), glm::length(sphericalOffset) + kSurfaceTolerance);
+				else
+					EXPECT_LT(glm::length(shapedOffset), glm::length(sphericalOffset) - kSurfaceTolerance);
+				++checkedVertices;
+			}
+			EXPECT_GT(checkedVertices, 0u);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, ShadeSmoothAveragesCoincidentBevelNormalsWithoutMovingTheMesh)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.4f;
+		style.ribbonThickness = 0.6f;
+		style.ribbonBevel = 0.1f;
+		style.ribbonBevelSegments = 4u;
+		style.ribbonBevelShape = 0.5f;
+		style.cap = PathLineCap::Butt;
+		style.startDecoration.kind = PathDecorationKind::None;
+		style.endDecoration.kind = PathDecorationKind::None;
+
+		const StrokeGeometry faceted = BuildStroke(StraightPath(), style);
+		style.shadeSmooth = true;
+		const StrokeGeometry smooth = BuildStroke(StraightPath(), style);
+		AssertTubeGeometryMatches(faceted, smooth);
+
+		const glm::vec3 profilePoint(0.1f, 0.17071068f, 0.27071068f);
+		const auto normalsAt = [&](const StrokeGeometry &geometry) {
+			std::vector<glm::vec3> normals;
+			for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+				if (glm::distance(vertex.position, profilePoint) <= kSurfaceTolerance)
+					normals.push_back(vertex.normal);
+			return normals;
+		};
+		const std::vector<glm::vec3> facetedNormals = normalsAt(faceted);
+		const std::vector<glm::vec3> smoothNormals = normalsAt(smooth);
+		ASSERT_GE(facetedNormals.size(), 2u);
+		ASSERT_EQ(smoothNormals.size(), facetedNormals.size());
+		EXPECT_TRUE(std::any_of(facetedNormals.begin() + 1u, facetedNormals.end(), [&](const glm::vec3 &normal) {
+			return glm::dot(facetedNormals.front(), normal) < 0.999f;
+		}));
+		for (const glm::vec3 &normal : smoothNormals)
+		{
+			EXPECT_NEAR(glm::length(normal), 1.0f, 1.0e-5f);
+			EXPECT_GT(glm::dot(smoothNormals.front(), normal), 1.0f - 1.0e-5f);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, BevelledFlatDecoratedStrokeIsOneClosedSurface)
+	{
+		for (const std::uint32_t segments : {1u, 4u})
+			for (const float shape : {0.0f, 0.5f, 1.0f})
+			{
+				PathStrokeStyle style;
+				style.profile = StrokeProfile::Flat;
+				style.width = 0.2f;
+				style.ribbonThickness = 0.3f;
+				style.ribbonBevel = 0.04f;
+				style.ribbonBevelSegments = segments;
+				style.ribbonBevelShape = shape;
+				style.startDecoration.kind = PathDecorationKind::Arrow;
+				style.endDecoration.kind = PathDecorationKind::Arrow;
+
+				SCOPED_TRACE(::testing::Message() << "segments=" << segments << ", shape=" << shape);
+				const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+				ASSERT_FALSE(geometry.startDecoration.IsEmpty());
+				ASSERT_FALSE(geometry.endDecoration.IsEmpty());
+				ASSERT_FALSE(geometry.shaft.IsEmpty());
+				const StrokeMeshRange complete{0u, static_cast<std::uint32_t>(geometry.indices.size())};
+				AssertRangeIsClosedByPosition(geometry, complete);
+				AssertRangeTrianglesFaceOutward(geometry, complete);
+		}
+	}
+
+	TEST(PathStrokeMesherTests, BevelledFlatTopFacesStayInsideAConcaveCurvedSilhouette)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.08f;
+		style.ribbonThickness = 0.105f;
+		style.ribbonBevel = 0.02f;
+		style.ribbonBevelSegments = 1u;
+		style.ribbonBevelShape = 0.5f;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+
+		const EvaluatedPath path = UShapedPath();
+		const StrokeGeometry geometry = BuildStroke(path, style);
+		ASSERT_FALSE(geometry.shaft.IsEmpty());
+		ASSERT_FALSE(geometry.endDecoration.IsEmpty());
+		ASSERT_EQ(geometry.indices.size() % 3u, 0u);
+
+		std::size_t topTriangles = 0u;
+		for (std::size_t index = 0u; index < geometry.indices.size(); index += 3u)
+		{
+			const StrokeTubeVertex &first = geometry.tubeVertices[geometry.indices[index]];
+			const StrokeTubeVertex &second = geometry.tubeVertices[geometry.indices[index + 1u]];
+			const StrokeTubeVertex &third = geometry.tubeVertices[geometry.indices[index + 2u]];
+			const glm::vec3 averageNormal = glm::normalize(first.normal + second.normal + third.normal);
+			if (glm::dot(averageNormal, glm::vec3(path.samples.front().binormal)) < 0.99f)
+				continue;
+			++topTriangles;
+			const glm::dvec3 centroid = (glm::dvec3(first.position) + glm::dvec3(second.position) +
+				glm::dvec3(third.position)) / 3.0;
+			EXPECT_LE(PlanarDistanceToPath(centroid, path), static_cast<double>(style.width) + 1.0e-4)
+				<< "top-face triangle " << index / 3u << " crosses the concave gap";
+		}
+		EXPECT_GT(topTriangles, 0u);
+	}
+
+	TEST(PathStrokeMesherTests, BevelledFlatArrowInsetsTheDecorationAlongItsOutline)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.2f;
+		style.ribbonThickness = 0.3f;
+		style.ribbonBevel = 0.04f;
+		style.ribbonBevelSegments = 4u;
+		style.ribbonBevelShape = 0.5f;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+
+		const EvaluatedPath path = StraightPath();
+		const StrokeGeometry geometry = BuildStroke(path, style);
+		ASSERT_FALSE(geometry.endDecoration.IsEmpty());
+		std::vector<std::uint32_t> decorationVertices;
+		CollectReferencedVertices(geometry, geometry.endDecoration, geometry.tubeVertices.size(), decorationVertices);
+		ASSERT_FALSE(decorationVertices.empty());
+
+		const glm::vec3 endpoint(path.samples.back().position);
+		const glm::vec3 inward(-path.samples.back().tangent);
+		bool hasAxiallyInsetSilhouetteVertex = false;
+		for (const std::uint32_t vertexIndex : decorationVertices)
+		{
+			const float axialInset = glm::dot(geometry.tubeVertices[vertexIndex].position - endpoint, inward);
+			if (axialInset > 1.0e-4f && axialInset < 0.6f - 1.0e-4f)
+			{
+				hasAxiallyInsetSilhouetteVertex = true;
+				break;
+			}
+		}
+		EXPECT_TRUE(hasAxiallyInsetSilhouetteVertex);
+
+		PathStrokeStyle oneSegment = style;
+		oneSegment.ribbonBevelSegments = 1u;
+		EXPECT_GT(geometry.tubeVertices.size(), BuildStroke(path, oneSegment).tubeVertices.size());
+		PathStrokeStyle concaveProfile = style;
+		concaveProfile.ribbonBevelShape = 0.0f;
+		EXPECT_FALSE(TubeGeometryPositionsMatch(geometry, BuildStroke(path, concaveProfile)));
+	}
+
+	TEST(PathStrokeMesherTests, BevelledFlatDecorationsCloseWhenAStartingDashDoesNotReachThem)
+	{
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.2f;
+		style.ribbonThickness = 0.3f;
+		style.ribbonBevel = 0.04f;
+		style.ribbonBevelSegments = 4u;
+		style.dash = {true, 0.2f, 0.3f, 0.2f};
+		style.startDecoration.kind = PathDecorationKind::Arrow;
+		style.endDecoration.kind = PathDecorationKind::Arrow;
+
+		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+		ASSERT_FALSE(geometry.startDecoration.IsEmpty());
+		ASSERT_FALSE(geometry.endDecoration.IsEmpty());
+		ASSERT_FALSE(geometry.shaft.IsEmpty());
+		AssertRangeIsClosedByPosition(geometry,
+			{0u, static_cast<std::uint32_t>(geometry.indices.size())});
 	}
 
 	TEST(PathStrokeMesherTests, NoDecorationMatrixChecksWholeMeshClosure)
@@ -912,21 +1290,53 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(geometry.ribbonVertices.empty());
 	}
 
-	TEST(PathStrokeMesherTests, ThickFlatRingsHaveFourCornersRegardlessOfRadialSegments)
+	TEST(PathStrokeMesherTests, StraightThickFlatButtStrokeIsAClosedCuboid)
 	{
-		const EvaluatedPath path = StraightPath();
+		PathStrokeStyle style;
+		style.profile = StrokeProfile::Flat;
+		style.width = 0.6f;
+		style.ribbonThickness = 0.4f;
+		style.ribbonBevel = 0.0f;
+		style.cap = PathLineCap::Butt;
+		style.startDecoration.kind = PathDecorationKind::None;
+		style.endDecoration.kind = PathDecorationKind::None;
+
+		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+		ASSERT_FALSE(geometry.tubeVertices.empty());
+		ASSERT_EQ(geometry.shaft.firstIndex, 0u);
+		EXPECT_EQ(geometry.indices.size(), 36u);
+
+		std::vector<glm::vec3> uniquePositions;
+		for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+			if (std::none_of(uniquePositions.begin(), uniquePositions.end(), [&](const glm::vec3 &position) {
+				return glm::distance(position, vertex.position) <= 1.0e-6f;
+			}))
+				uniquePositions.push_back(vertex.position);
+		EXPECT_EQ(uniquePositions.size(), 8u);
+		AssertRangeIsClosedByPosition(geometry, geometry.shaft);
+		AssertRangeTrianglesFaceOutward(geometry, geometry.shaft);
+	}
+
+	TEST(PathStrokeMesherTests, StraightThickFlatSolidHasEightCornersRegardlessOfRadialSegments)
+	{
 		PathStrokeStyle style;
 		style.profile = StrokeProfile::Flat;
 		style.width = 0.2f;
 		style.ribbonThickness = 0.3f;
 		style.radialSegments = 11;
-		const StrokeGeometry geometry = BuildStroke(path, style);
+		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
 
-		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 8u);
 		EXPECT_TRUE(geometry.ribbonVertices.empty());
+		std::vector<glm::vec3> uniquePositions;
+		for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+			if (std::none_of(uniquePositions.begin(), uniquePositions.end(), [&](const glm::vec3 &position) {
+				return glm::distance(position, vertex.position) <= 1.0e-6f;
+			}))
+				uniquePositions.push_back(vertex.position);
+		EXPECT_EQ(uniquePositions.size(), 8u);
 	}
 
-	TEST(PathStrokeMesherTests, ThickFlatRingSpansAreTheInputWidthAndThickness)
+	TEST(PathStrokeMesherTests, StraightThickFlatSolidSpansAreTheInputWidthAndThickness)
 	{
 		const EvaluatedPath path = StraightPath();
 		PathStrokeStyle style;
@@ -936,52 +1346,24 @@ namespace DefectStudio::Tests
 		style.radialSegments = 3;
 		const StrokeGeometry geometry = BuildStroke(path, style);
 
-		ASSERT_EQ(geometry.tubeVertices.size(), path.samples.size() * 8u);
-		for (std::size_t sampleIndex = 0; sampleIndex < path.samples.size(); ++sampleIndex)
+		ASSERT_FALSE(geometry.tubeVertices.empty());
+		const glm::vec3 normal = glm::normalize(glm::vec3(path.samples.front().normal));
+		const glm::vec3 binormal = glm::normalize(glm::vec3(path.samples.front().binormal));
+		float minimumNormal = std::numeric_limits<float>::infinity();
+		float maximumNormal = -std::numeric_limits<float>::infinity();
+		float minimumBinormal = std::numeric_limits<float>::infinity();
+		float maximumBinormal = -std::numeric_limits<float>::infinity();
+		for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
 		{
-			const std::size_t firstVertex = sampleIndex * 8u;
-			ASSERT_LE(firstVertex + 8u, geometry.tubeVertices.size());
-			const glm::vec3 normal = glm::normalize(glm::vec3(path.samples[sampleIndex].normal));
-			const glm::vec3 binormal = glm::normalize(glm::vec3(path.samples[sampleIndex].binormal));
-			float minimumNormal = std::numeric_limits<float>::infinity();
-			float maximumNormal = -std::numeric_limits<float>::infinity();
-			float minimumBinormal = std::numeric_limits<float>::infinity();
-			float maximumBinormal = -std::numeric_limits<float>::infinity();
-			for (std::size_t corner = 0; corner < 8u; ++corner)
-			{
-				ASSERT_LT(firstVertex + corner, geometry.tubeVertices.size());
-				const glm::vec3 offset = geometry.tubeVertices[firstVertex + corner].position - glm::vec3(path.samples[sampleIndex].position);
-				const float normalProjection = glm::dot(offset, normal);
-				const float binormalProjection = glm::dot(offset, binormal);
-				minimumNormal = std::min(minimumNormal, normalProjection);
-				maximumNormal = std::max(maximumNormal, normalProjection);
-				minimumBinormal = std::min(minimumBinormal, binormalProjection);
-				maximumBinormal = std::max(maximumBinormal, binormalProjection);
-			}
-			EXPECT_NEAR(maximumNormal - minimumNormal, style.width, 1.0e-5f);
-			EXPECT_NEAR(maximumBinormal - minimumBinormal, style.ribbonThickness, 1.0e-5f);
-
-			std::array<glm::vec3, 4> faceNormals;
-			for (std::size_t face = 0; face < faceNormals.size(); ++face)
-			{
-				const std::size_t firstFaceVertex = firstVertex + face * 2u;
-				ASSERT_LE(firstFaceVertex + 2u, geometry.tubeVertices.size());
-				faceNormals[face] = geometry.tubeVertices[firstFaceVertex].normal;
-				EXPECT_NEAR(glm::dot(faceNormals[face], geometry.tubeVertices[firstFaceVertex + 1u].normal), 1.0f, 1.0e-5f);
-			}
-
-			EXPECT_NEAR(glm::dot(faceNormals[0], binormal), 1.0f, 1.0e-5f);
-			EXPECT_NEAR(glm::dot(faceNormals[1], -normal), 1.0f, 1.0e-5f);
-			EXPECT_NEAR(glm::dot(faceNormals[2], -binormal), 1.0f, 1.0e-5f);
-			EXPECT_NEAR(glm::dot(faceNormals[3], normal), 1.0f, 1.0e-5f);
-			for (std::size_t face = 0; face < faceNormals.size(); ++face)
-			{
-				const std::size_t nextFace = (face + 1u) % faceNormals.size();
-				const std::size_t oppositeFace = (face + 2u) % faceNormals.size();
-				EXPECT_NEAR(glm::dot(faceNormals[face], faceNormals[nextFace]), 0.0f, 1.0e-5f);
-				EXPECT_NEAR(glm::dot(faceNormals[face], faceNormals[oppositeFace]), -1.0f, 1.0e-5f);
-			}
+			const float normalProjection = glm::dot(vertex.position, normal);
+			const float binormalProjection = glm::dot(vertex.position, binormal);
+			minimumNormal = std::min(minimumNormal, normalProjection);
+			maximumNormal = std::max(maximumNormal, normalProjection);
+			minimumBinormal = std::min(minimumBinormal, binormalProjection);
+			maximumBinormal = std::max(maximumBinormal, binormalProjection);
 		}
+		EXPECT_NEAR(maximumNormal - minimumNormal, style.width, 1.0e-5f);
+		EXPECT_NEAR(maximumBinormal - minimumBinormal, style.ribbonThickness, 1.0e-5f);
 	}
 
 	TEST(PathStrokeMesherTests, ThickFlatEndDecorationSpansTheRibbonThickness)
@@ -1545,11 +1927,18 @@ namespace DefectStudio::Tests
 
 						const DecorationContour contour = BuildDecorationContour(decoration, style.width);
 						ASSERT_FALSE(contour.points.empty());
-						if (contour.closesBack)
+						const bool unitedBevelledSolid = profile.profile == StrokeProfile::Flat &&
+							style.ribbonThickness > 0.0f && style.ribbonBevel > 0.0f && decoration.filled && contour.closesBack;
+						if (unitedBevelledSolid)
+							AssertRangeIsClosedByPosition(geometry,
+								{0u, static_cast<std::uint32_t>(geometry.indices.size())});
+						else if (contour.closesBack)
 							AssertRangeIsClosedByPosition(geometry, decorationRange);
 						else
 							AssertRangeIsClosedByPosition(geometry, geometry.shaft);
-						AssertDecoratedBackSharesShaftFrame(geometry, style, start ? path.samples.front() : path.samples.back(), start);
+						if (!unitedBevelledSolid)
+							AssertDecoratedBackSharesShaftFrame(geometry, style,
+								start ? path.samples.front() : path.samples.back(), start);
 					}
 		}
 	}

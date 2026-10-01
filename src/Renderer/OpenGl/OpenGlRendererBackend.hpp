@@ -149,6 +149,9 @@ namespace DefectStudio
 		// Which paths to draw highlighted. Ids, not indices - unlike planes, a path has no vector to
 		// index into. Null or empty means nothing is highlighted.
 		const std::vector<SceneObjectId> *selected = nullptr;
+		// Draw the selected path's actual triangle edges and vertices instead of expanding its
+		// per-face normals into a silhouette. This is diagnostic viewport state, not path style.
+		bool showMeshOverlay = false;
 	};
 
 	// Shared cleanup for per-object cached meshes and the backend's static meshes.

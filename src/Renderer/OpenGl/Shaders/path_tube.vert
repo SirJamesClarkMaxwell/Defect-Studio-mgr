@@ -9,6 +9,7 @@ uniform vec3 u_SceneOffset;
 uniform vec3 u_CameraPosition;
 uniform int u_OutlineMode;
 uniform float u_OutlineExpansion;
+uniform int u_MeshOverlayMode;
 
 out vec3 vNormal;
 out vec4 vColor;
@@ -25,6 +26,10 @@ void main()
 		world.xyz += silhouetteNormal * u_OutlineExpansion;
 	}
 	gl_Position = u_ViewProjection * world;
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
+	else if (u_MeshOverlayMode == 1)
+		gl_Position.z -= 0.0002 * gl_Position.w;
 	vNormal = aNormal;
 	vColor = aColor;
 	vWorldPos = world.xyz;

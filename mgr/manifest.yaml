@@ -1,0 +1,18 @@
+uuid: f1833ad7-2c99-4098-8256-d142a94d77ff
+name: mgr
+created_at: 1789733802
+last_modified: 1790538237
+format_version: 1
+bulk_directory: O:\hBN\bulk
+displacement_comparison_path: K:\sjcm_mgr\VV\CH0\PBE\8x8x2\relax\CONTCAR
+displacement_threshold_angstrom: 0.32891902
+materials_library_path: materials/materials.db
+roots:
+  - id: root-c5371b82f88b8041
+    path: C:\Users\fzabi\Desktop\STUDIA\Defect-Studio-mgr\test-directory
+    label: test-directory
+  - id: root-647b6b2ed85901f9
+    path: K:\sjcm_mgr\VV
+    label: VV
+irrep_labels:
+  []

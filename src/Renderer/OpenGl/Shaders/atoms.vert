@@ -24,6 +24,8 @@ void main()
 	vec3 worldPosition = aPosition * radius
 		+ aInstancePositionRadius.xyz + u_SceneOffset;
 	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
 	vNormal = normalize(aNormal);
 	vColor = aInstanceColor;
 	vWorldPos = worldPosition;

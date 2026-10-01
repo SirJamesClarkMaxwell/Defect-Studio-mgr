@@ -12,6 +12,7 @@
 #include <glad/gl.h>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/constants.hpp>
+#include <stb_image_write.h>
 
 #include "Core/Utils/Path.hpp"
 #include "Renderer/OpenGl/FrameBufferReadback.hpp"
@@ -92,7 +93,9 @@ namespace DefectStudio::Tests
 			return count;
 		}
 
-		[[nodiscard]] std::vector<unsigned char> RenderPath(ScenePath path, RendererViewCamera &camera, OpenGlRendererBackend &backend, PathSystem &system, const RendererStructureData &structure = {}, const bool showAtoms = false)
+		[[nodiscard]] std::vector<unsigned char> RenderPath(ScenePath path, RendererViewCamera &camera,
+			OpenGlRendererBackend &backend, PathSystem &system, const RendererStructureData &structure = {},
+			const bool showAtoms = false, const int width = 256, const int height = 128)
 		{
 			if (!system.Store().Contains(path.id))
 				system.Store().Insert(std::move(path));
@@ -100,10 +103,62 @@ namespace DefectStudio::Tests
 			RendererGlobalRenderSettings settings;
 			settings.backgroundColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 			const unsigned int texture = backend.RenderWindow(
-				"gl-path", structure, camera, settings, 256, 128, showAtoms, false, false, false, false,
+				"gl-path", structure, camera, settings, width, height, showAtoms, false, false, false, false,
 				{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f),
 				true, 0.3f, 45.0f, true, &input);
-			return ReadTextureRgba8TopDown(texture, 256, 128);
+			return ReadTextureRgba8TopDown(texture, width, height);
+		}
+
+		void WriteVisualArtifact(const char *name, const std::vector<unsigned char> &pixels,
+			const int width, const int height)
+		{
+			std::error_code error;
+			const FilePath directory = FileSystem::CurrentPath() / "build" / "test-artifacts";
+			std::filesystem::create_directories(directory, error);
+			ASSERT_FALSE(error);
+			const FilePath output = directory / name;
+			ASSERT_EQ(stbi_write_png(output.string().c_str(), width, height, 4, pixels.data(), width * 4), 1)
+				<< output.string();
+		}
+
+		[[nodiscard]] constexpr std::array<PathDecorationKind, 8u> DecorationKinds()
+		{
+			return {PathDecorationKind::Arrow, PathDecorationKind::Stealth, PathDecorationKind::Latex,
+				PathDecorationKind::Bar, PathDecorationKind::Circle, PathDecorationKind::Square,
+				PathDecorationKind::Diamond, PathDecorationKind::Kite};
+		}
+
+		[[nodiscard]] std::uint64_t ColumnHash(const std::vector<unsigned char> &pixels,
+			const int width, const int height, const int column)
+		{
+			std::uint64_t hash = 1469598103934665603ull;
+			const int firstX = column * width / 3;
+			const int lastX = (column + 1) * width / 3;
+			for (int y = 0; y < height; ++y)
+				for (int x = firstX; x < lastX; ++x)
+				{
+					const Rgba8 pixel = PixelAt(pixels, width, height, x, y);
+					for (const unsigned char component : {pixel.r, pixel.g, pixel.b, pixel.a})
+					{
+						hash ^= component;
+						hash *= 1099511628211ull;
+					}
+				}
+			return hash;
+		}
+
+		[[nodiscard]] std::size_t CountSelectionOrange(const std::vector<unsigned char> &pixels,
+			const int width, const int height)
+		{
+			std::size_t count = 0u;
+			for (int y = 0; y < height; ++y)
+				for (int x = 0; x < width; ++x)
+				{
+					const Rgba8 pixel = PixelAt(pixels, width, height, x, y);
+					if (pixel.r > 220u && pixel.g > 50u && pixel.g < 150u && pixel.b < 50u)
+						++count;
+				}
+			return count;
 		}
 	} // namespace
 
@@ -220,6 +275,169 @@ namespace DefectStudio::Tests
 		PathSystem system;
 		const std::vector<unsigned char> pixels = RenderPath(DevPath(ScenePathDevPreset::Line), camera, backend, system);
 		EXPECT_GT(NonBackground(pixels, kWidth, kHeight, {0, 0, 0, 255}), 0u);
+		backend.Shutdown();
+	}
+
+	TEST_F(GlTest, SharpAndBevelledFlatBoxesRenderToVisualArtifacts)
+	{
+		constexpr int width = 400;
+		constexpr int height = 300;
+		OpenGlRendererBackend backend;
+		ASSERT_TRUE(backend.Initialize(ShaderDirectoryNextToTestExecutable(), PrimitiveMeshes()));
+
+		const auto makeBox = [](const float bevel) {
+			ScenePath path = DevPath(ScenePathDevPreset::Line);
+			path.style.profile = StrokeProfile::Flat;
+			path.style.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+			path.style.width = 0.6f;
+			path.style.ribbonThickness = 0.4f;
+			path.style.ribbonBevel = bevel;
+			path.style.ribbonBevelSegments = 1u;
+			path.style.ribbonBevelShape = 0.5f;
+			path.style.color = glm::vec3(0.1f, 0.45f, 0.95f);
+			path.style.startDecoration.kind = PathDecorationKind::None;
+			path.style.endDecoration.kind = PathDecorationKind::None;
+			path.transform.position = glm::vec3(0.35f, -0.2f, 0.15f); // G
+			path.transform.rotation = glm::angleAxis(glm::radians(25.0f), glm::vec3(0.0f, 0.0f, 1.0f)); // R
+			path.transform.scale = glm::vec3(1.2f, 0.8f, 1.1f); // S
+			return path;
+		};
+
+		RendererViewCamera camera;
+		camera.SetViewport(static_cast<float>(width), static_cast<float>(height));
+		camera.SetOrbitState(glm::vec3(0.35f, -0.2f, 0.15f), 3.3f,
+			glm::radians(-12.0f), glm::radians(48.0f));
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+
+		ScenePath sharp = makeBox(0.0f);
+		PathSystem system;
+		const auto sharpPixels = RenderPath(sharp, camera, backend, system, {}, false, width, height);
+		EXPECT_GT(NonBackground(sharpPixels, width, height, {0, 0, 0, 255}), 0u);
+		WriteVisualArtifact("path-box-sharp-grs.png", sharpPixels, width, height);
+
+		ASSERT_TRUE(system.Store().MutateStyle(sharp.id,
+			[](ScenePath &path) { path.style.ribbonBevel = 0.14f; }));
+		const auto bevelledPixels = RenderPath(sharp, camera, backend, system, {}, false, width, height);
+		EXPECT_GT(NonBackground(bevelledPixels, width, height, {0, 0, 0, 255}), 0u);
+		EXPECT_NE(sharpPixels, bevelledPixels);
+		WriteVisualArtifact("path-box-bevel-grs.png", bevelledPixels, width, height);
+
+		backend.Shutdown();
+	}
+
+	TEST_F(GlTest, SelectedPathMeshOverlayUsesTheSelectionColorWithoutSilhouetteExpansion)
+	{
+		OpenGlRendererBackend backend;
+		ASSERT_TRUE(backend.Initialize(ShaderDirectoryNextToTestExecutable(), PrimitiveMeshes()));
+
+		ScenePath path = DevPath(ScenePathDevPreset::Line);
+		path.style.profile = StrokeProfile::Flat;
+		path.style.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+		path.style.width = 0.6f;
+		path.style.ribbonThickness = 0.4f;
+		path.style.ribbonBevel = 0.0f;
+		path.style.startDecoration.kind = PathDecorationKind::None;
+		path.style.endDecoration.kind = PathDecorationKind::None;
+		PathSystem system;
+		ASSERT_TRUE(system.Store().Insert(path));
+
+		RendererViewCamera camera;
+		camera.SetViewport(kWidth, kHeight);
+		camera.SetOrbitState(glm::vec3(0.0f), 4.0f, glm::radians(-12.0f), glm::radians(48.0f));
+		RendererGlobalRenderSettings settings;
+		settings.backgroundColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+		settings.viewport.selectionOutlineColor = glm::vec4(1.0f, 0.35f, 0.0f, 1.0f);
+		settings.viewport.selectionOutlineWidth = 0.0f;
+		const std::vector<SceneObjectId> selected{path.id};
+		const PathRenderInput input{&system, &selected, true};
+
+		const unsigned int texture = backend.RenderWindow(
+			"gl-path-mesh-overlay", {}, camera, settings, kWidth, kHeight, false, false, false, false, false,
+			{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f),
+			true, 0.3f, 45.0f, true, &input);
+		const std::vector<unsigned char> pixels = ReadTextureRgba8TopDown(texture, kWidth, kHeight);
+		WriteVisualArtifact("path-box-sharp-mesh-overlay.png", pixels, kWidth, kHeight);
+		std::size_t orangePixels = 0u;
+		for (int y = 0; y < kHeight; ++y)
+			for (int x = 0; x < kWidth; ++x)
+			{
+				const Rgba8 pixel = PixelAt(pixels, kWidth, kHeight, x, y);
+				if (pixel.r > 220u && pixel.g > 50u && pixel.g < 140u && pixel.b < 40u)
+					++orangePixels;
+			}
+		// The diagnostic overlay is intentionally x-ray: rear edges and vertices stay visible while
+		// one end of the cuboid moves behind the other. A depth-tested overlay only produces about
+		// 600 orange pixels in this view because the filled surface hides its far topology.
+		EXPECT_GT(orangePixels, 750u);
+
+		backend.Shutdown();
+	}
+
+	TEST_F(GlTest, DecorationBevelGalleryRendersAllKindsAndShapes)
+	{
+		constexpr int width = 1200;
+		constexpr int height = 1000;
+		constexpr std::array shapes = {0.25f, 0.5f, 0.75f};
+		constexpr std::array colors = {
+			glm::vec3(0.20f, 0.55f, 0.95f), glm::vec3(0.20f, 0.80f, 0.70f),
+			glm::vec3(0.55f, 0.78f, 0.25f), glm::vec3(0.95f, 0.72f, 0.20f),
+			glm::vec3(0.95f, 0.42f, 0.22f), glm::vec3(0.88f, 0.30f, 0.58f),
+			glm::vec3(0.62f, 0.38f, 0.92f), glm::vec3(0.30f, 0.65f, 0.95f)};
+
+		OpenGlRendererBackend backend;
+		ASSERT_TRUE(backend.Initialize(ShaderDirectoryNextToTestExecutable(), PrimitiveMeshes()));
+		PathSystem system;
+		std::vector<SceneObjectId> selected;
+		std::uint64_t nextId = 1u;
+		for (std::size_t row = 0u; row < DecorationKinds().size(); ++row)
+			for (std::size_t column = 0u; column < shapes.size(); ++column)
+			{
+				ScenePath path = DevPath(ScenePathDevPreset::Line, SceneObjectId{nextId++});
+				path.style.profile = StrokeProfile::Flat;
+				path.style.ribbonNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+				path.style.width = 0.32f;
+				path.style.ribbonThickness = 0.18f;
+				path.style.ribbonBevel = 0.07f;
+				path.style.ribbonBevelSegments = 4u;
+				path.style.ribbonBevelShape = shapes[column];
+				path.style.shadeSmooth = true;
+				path.style.color = colors[row];
+				path.style.startDecoration = {.kind = DecorationKinds()[row], .filled = true};
+				path.style.endDecoration = {.kind = DecorationKinds()[row], .filled = true};
+				path.transform.position = glm::vec3((static_cast<float>(column) - 1.0f) * 4.2f,
+					(3.5f - static_cast<float>(row)) * 1.15f, 0.0f);
+				selected.push_back(path.id);
+				ASSERT_TRUE(system.Store().Insert(std::move(path)));
+			}
+
+		RendererViewCamera camera;
+		camera.SetViewport(static_cast<float>(width), static_cast<float>(height));
+		camera.SetOrbitState(glm::vec3(0.0f), 13.5f, glm::radians(-8.0f), glm::radians(18.0f));
+		RendererGlobalRenderSettings settings;
+		settings.backgroundColor = glm::vec4(0.025f, 0.03f, 0.045f, 1.0f);
+		const PathRenderInput shadedInput{&system};
+		const unsigned int shadedTexture = backend.RenderWindow(
+			"gl-path-decoration-bevel-gallery", {}, camera, settings, width, height,
+			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+			nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f), true, 0.3f, 45.0f, true, &shadedInput);
+		const std::vector<unsigned char> shaded = ReadTextureRgba8TopDown(shadedTexture, width, height);
+		WriteVisualArtifact("path-decoration-bevel-gallery.png", shaded, width, height);
+		EXPECT_GT(NonBackground(shaded, width, height, {6u, 8u, 11u, 255u}), 0u);
+		EXPECT_NE(ColumnHash(shaded, width, height, 0), ColumnHash(shaded, width, height, 1));
+		EXPECT_NE(ColumnHash(shaded, width, height, 1), ColumnHash(shaded, width, height, 2));
+
+		settings.viewport.selectionOutlineColor = glm::vec4(1.0f, 0.35f, 0.0f, 1.0f);
+		settings.viewport.selectionOutlineWidth = 0.0f;
+		const PathRenderInput meshInput{&system, &selected, true};
+		const unsigned int meshTexture = backend.RenderWindow(
+			"gl-path-decoration-bevel-gallery-mesh", {}, camera, settings, width, height,
+			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+			nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f), true, 0.3f, 45.0f, true, &meshInput);
+		const std::vector<unsigned char> mesh = ReadTextureRgba8TopDown(meshTexture, width, height);
+		WriteVisualArtifact("path-decoration-bevel-gallery-mesh.png", mesh, width, height);
+		EXPECT_GT(CountSelectionOrange(mesh, width, height), 0u);
+
 		backend.Shutdown();
 	}
 

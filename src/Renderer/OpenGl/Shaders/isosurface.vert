@@ -29,6 +29,8 @@ void main()
 		worldPosition += silhouetteNormal * u_OutlineExpansion;
 	}
 	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
 	vNormal = normalize(aNormal);
 	vSign = aSign;
 	vWorldPos = worldPosition;

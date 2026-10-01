@@ -11,6 +11,8 @@
 
 #include <imgui.h>
 
+#include "Core/Logging/Logger.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathHandleGeometry.hpp"
@@ -23,6 +25,13 @@ namespace DefectStudio
 {
 	namespace
 	{
+		template <typename T>
+		void ReportPathEditResult(const Result<T> &result)
+		{
+			if (!result)
+				DS_LOG_WARN("Path edit failed: {}", result.Error().technicalDetails);
+		}
+
 		[[nodiscard]] PathPickSettings BuildPathPickSettings(
 			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize,
 			const bool editMode)
@@ -90,6 +99,39 @@ namespace DefectStudio
 				windowState.pathEdit.SetElementMode(PathElementMode::WholePath);
 				return true;
 			}
+
+			bool keyboardAction = false;
+			const ImGuiIO &shortcutIo = ImGui::GetIO();
+			const bool noModifiers = !shortcutIo.KeyCtrl && !shortcutIo.KeyAlt &&
+				!shortcutIo.KeyShift && !shortcutIo.KeySuper;
+			if (focused && noModifiers && ImGui::IsKeyPressed(ImGuiKey_E, false))
+			{
+				ReportPathEditResult(ExtendSelectedScenePathEnd(windowState));
+				keyboardAction = true;
+			}
+			if (focused && noModifiers && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+			{
+				ReportPathEditResult(DeleteSelectedScenePathNodes(windowState));
+				keyboardAction = true;
+			}
+			if (focused && noModifiers && ImGui::IsKeyPressed(ImGuiKey_V, false))
+			{
+				ImGui::OpenPopup("##PathHandleType");
+				keyboardAction = true;
+			}
+			if (ImGui::BeginPopup("##PathHandleType"))
+			{
+				for (const auto &[label, type] : {
+					std::pair{"Free", BezierHandleType::Free},
+					std::pair{"Aligned", BezierHandleType::Aligned},
+					std::pair{"Vector", BezierHandleType::Vector},
+					std::pair{"Auto", BezierHandleType::Auto}})
+					if (ImGui::MenuItem(label))
+						ReportPathEditResult(SetSelectedScenePathHandleType(windowState, type));
+				ImGui::EndPopup();
+			}
+			if (keyboardAction)
+				return true;
 
 			if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || windowState.camera == nullptr ||
 				windowState.paths == nullptr || imageSize.x <= 0.0f || imageSize.y <= 0.0f)

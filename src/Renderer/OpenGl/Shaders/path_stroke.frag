@@ -21,6 +21,7 @@ uniform float u_Saturation;
 uniform float u_SpecularScale;
 uniform int u_OutlineMode;
 uniform vec4 u_OutlineColor;
+uniform int u_MeshOverlayMode;
 
 vec3 ApplySaturation(vec3 color)
 {
@@ -44,7 +45,7 @@ float Specular(vec3 normalVector, vec3 lightDirection, vec3 viewDirection)
 
 void main()
 {
-	if (u_OutlineMode == 1)
+	if (u_OutlineMode == 1 || u_MeshOverlayMode == 1)
 	{
 		oColor = u_OutlineColor;
 		return;

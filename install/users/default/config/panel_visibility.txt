@@ -1,13 +1,13 @@
 Progress Monitor=0
 Task Monitor=0
 Logging Panel=0
-Project Tree=1
+Project Tree=0
 Text Editor=0
 Terminal=0
 Integrated Python Console=0
 Calculation Summary=0
 Renderer=1
-Scene Outliner=1
+Scene Outliner=0
 Object Properties=0
 Bond Settings=0
 New Structure=0

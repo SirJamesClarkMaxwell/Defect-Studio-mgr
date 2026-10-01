@@ -371,6 +371,9 @@ namespace DefectStudio
 		// vector - a path has no vector to index. Same multi-select shape as the four above, and it
 		// must be cleared everywhere they are: a stale entry here shows the wrong Properties section.
 		std::vector<SceneObjectId> selectedScenePaths;
+		// Blender-like edit aid for validating the generated path mesh. Per viewport and deliberately
+		// not persisted as object data.
+		bool showPathMeshOverlay = true;
 		// Edit Mode state for the one path opened from selectedScenePaths; element selection is kept
 		// separate so leaving the session never changes Object Mode's path selection.
 		PathEditSession pathEdit;

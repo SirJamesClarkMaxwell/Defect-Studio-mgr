@@ -220,6 +220,7 @@ namespace DefectStudio
 		float ribbonBevel = 0.0f;
 		int ribbonBevelSegments = 1;
 		float ribbonBevelShape = 0.5f;
+		bool shadeSmooth = false;
 		float width = 0.05f;           // full width, as in PathStrokeStyle - not a radius
 		std::string join = "Bevel";    // Bevel | Round
 		std::string cap = "Butt";      // Butt | Square | Round

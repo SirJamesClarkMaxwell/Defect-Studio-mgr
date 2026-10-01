@@ -48,6 +48,8 @@ void main()
 		worldPosition.xyz += silhouetteNormal * aOutlineExpansion;
 	}
 	gl_Position = u_ViewProjection * worldPosition;
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
     vColorA = aColorA;
     vColorB = aColorB;
     vGradientT = aGradientT;

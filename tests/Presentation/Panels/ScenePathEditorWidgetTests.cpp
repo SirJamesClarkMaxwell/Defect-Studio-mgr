@@ -287,6 +287,28 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	TEST(ScenePathEditorWidgetTests, ResolvesAndAppliesMixedShadeSmooth)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids = window.paths->Store().Ids();
+		ASSERT_GE(ids.size(), 2u);
+		window.paths->Store().MutateStyle(ids[0], [](ScenePath &path) { path.style.shadeSmooth = false; });
+		window.paths->Store().MutateStyle(ids[1], [](ScenePath &path) { path.style.shadeSmooth = true; });
+
+		const ScenePathStyleEditState state = ResolveScenePathStyleEdit(window, ids);
+		EXPECT_TRUE(state.mixedShadeSmooth);
+		ScenePathStyleEdit edit = state.values;
+		edit.shadeSmooth = true;
+		EXPECT_EQ(ApplyScenePathStyleEdit(window, ids, edit), 2u);
+		for (const SceneObjectId id : ids)
+		{
+			const ScenePath *path = window.paths->Store().Find(id);
+			ASSERT_NE(path, nullptr);
+			EXPECT_TRUE(path->style.shadeSmooth);
+		}
+	}
+
 	TEST(ScenePathEditorWidgetTests, ApplyWritesEveryLiveSelectionAndOneUnknownIsIgnored)
 	{
 		RendererWindowState window;

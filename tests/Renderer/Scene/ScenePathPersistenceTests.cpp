@@ -225,6 +225,27 @@ structures:
 		EXPECT_FLOAT_EQ(extracted.style.ribbonBevelShape, saved.style.ribbonBevelShape);
 	}
 
+	TEST(ScenePathPersistenceTests, ShadeSmoothRoundTripsThroughYamlAndScenePersistence)
+	{
+		PersistedScenePath saved = MinimalPath();
+		saved.style.profile = "Flat";
+		saved.style.shadeSmooth = true;
+		SceneObjectsFile source;
+		source.structures.push_back({"k", {saved}});
+		const std::string serialized = SceneObjectsIO::Serialize(source);
+		EXPECT_NE(serialized.find("shade_smooth"), std::string::npos);
+
+		const SceneObjectsFile loaded = Parse(serialized.c_str());
+		const auto &parsed = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+		EXPECT_TRUE(parsed.style.shadeSmooth);
+
+		std::vector<StructuredError> warnings;
+		const Result<ScenePath> built = BuildScenePath(parsed, Structure(), warnings);
+		ASSERT_TRUE(built);
+		EXPECT_TRUE(built.Value().style.shadeSmooth);
+		EXPECT_TRUE(ExtractPersistedScenePath(built.Value(), Structure()).style.shadeSmooth);
+	}
+
 	TEST(ScenePathPersistenceTests, MissingRibbonBevelProfileFieldsUseDefaultsAndPreserveRenderedGeometry)
 	{
 		const SceneObjectsFile file = Parse(R"yaml(
@@ -250,6 +271,7 @@ structures:
 		const auto &legacy = std::get<PersistedScenePath>(file.structures[0].objects[0]);
 		EXPECT_EQ(legacy.style.ribbonBevelSegments, 1u);
 		EXPECT_FLOAT_EQ(legacy.style.ribbonBevelShape, 0.5f);
+		EXPECT_FALSE(legacy.style.shadeSmooth);
 
 		PersistedScenePath explicitDefaults = MinimalPath();
 		explicitDefaults.style.profile = "Flat";

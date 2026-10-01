@@ -134,6 +134,7 @@ namespace DefectStudio
 				state.values.ribbonBevel = path->style.ribbonBevel;
 				state.values.ribbonBevelSegments = path->style.ribbonBevelSegments;
 				state.values.ribbonBevelShape = path->style.ribbonBevelShape;
+				state.values.shadeSmooth = path->style.shadeSmooth;
 				state.anyFlatProfile = path->style.profile == StrokeProfile::Flat;
 				state.values.width = path->style.width;
 				state.values.alpha = path->style.alpha;
@@ -154,6 +155,7 @@ namespace DefectStudio
 			MarkMixed(state.mixedRibbonBevel, state.values.ribbonBevel, path->style.ribbonBevel);
 			MarkMixed(state.mixedRibbonBevelSegments, state.values.ribbonBevelSegments, path->style.ribbonBevelSegments);
 			MarkMixed(state.mixedRibbonBevelShape, state.values.ribbonBevelShape, path->style.ribbonBevelShape);
+			MarkMixed(state.mixedShadeSmooth, state.values.shadeSmooth, path->style.shadeSmooth);
 			MarkMixed(state.mixedWidth, state.values.width, path->style.width);
 			MarkMixed(state.mixedAlpha, state.values.alpha, path->style.alpha);
 			MarkMixed(state.mixedColor, state.values.color, path->style.color);
@@ -184,6 +186,7 @@ namespace DefectStudio
 				style.ribbonBevel = edit.ribbonBevel;
 				style.ribbonBevelSegments = std::max(1u, edit.ribbonBevelSegments);
 				style.ribbonBevelShape = std::clamp(edit.ribbonBevelShape, 0.0f, 1.0f);
+				style.shadeSmooth = edit.shadeSmooth;
 				style.width = edit.width;
 				style.alpha = edit.alpha;
 				style.color = edit.color;
@@ -296,7 +299,7 @@ namespace DefectStudio
 		bool changed = false;
 		bool renamed = false;
 		static int selectedGradientStop = -1;
-		const char *styleLabels[] = {"Name", "Profile", "Ribbon normal", "Ribbon thickness", "Ribbon bevel",
+		const char *styleLabels[] = {"Name", "Profile", "Mesh overlay", "Ribbon normal", "Ribbon thickness", "Ribbon bevel",
 			"Ribbon bevel segments", "Ribbon bevel shape", "Width", "Alpha", "Color", "Line style",
 			"Dash length", "Gap length", "Dash phase", "Enabled", "Gradient ramp", "Start decoration kind",
 			"Start decoration length scale", "Start decoration width scale", "Start decoration filled",
@@ -371,6 +374,8 @@ namespace DefectStudio
 		}
 		beginRow("Profile");
 		applyImmediate(DrawEnumCombo("##Profile", edit.profile));
+		beginRow("Mesh overlay");
+		ImGui::Checkbox("##PathMeshOverlay", &windowState.showPathMeshOverlay);
 		if (resolved.values.profile == StrokeProfile::Flat || (resolved.mixedProfile && resolved.anyFlatProfile))
 		{
 			beginRow("Ribbon normal", resolved.mixedRibbonNormal);
@@ -391,6 +396,8 @@ namespace DefectStudio
 				edit.ribbonBevelShape = std::clamp(edit.ribbonBevelShape, 0.0f, 1.0f);
 				beginRow("Ribbon bevel shape", resolved.mixedRibbonBevelShape);
 				applyDrag(ImGui::DragFloat("##RibbonBevelShape", &edit.ribbonBevelShape, 0.01f, 0.0f, 1.0f, "%.2f"));
+				beginRow("Shade smooth", resolved.mixedShadeSmooth);
+				applyImmediate(ImGui::Checkbox("##ShadeSmooth", &edit.shadeSmooth));
 				ImGui::EndDisabled();
 			}
 		}

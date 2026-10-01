@@ -236,8 +236,14 @@ namespace DefectStudio
 		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
 		GLint previousProgram = 0;
 		GLint previousVertexArray = 0;
+		GLint previousPolygonMode[2] = {GL_FILL, GL_FILL};
+		GLfloat previousLineWidth = 1.0f;
+		GLfloat previousPointSize = 1.0f;
 		glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
 		glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
+		glGetIntegerv(GL_POLYGON_MODE, previousPolygonMode);
+		glGetFloatv(GL_LINE_WIDTH, &previousLineWidth);
+		glGetFloatv(GL_POINT_SIZE, &previousPointSize);
 		if (renderAlwaysOnTop)
 			glDisable(GL_DEPTH_TEST);
 		if (!renderAlwaysOnTop && anyTransparent)
@@ -247,9 +253,11 @@ namespace DefectStudio
 		const unsigned int ribbonProgram = m_ShaderLibrary.Program("path_ribbon");
 		unsigned int activeProgram = 0;
 		const glm::vec4 outlineColor = globalSettings.viewport.selectionOutlineColor;
-		const auto drawJob = [&](const DrawJob &job, const bool outline)
+		const auto drawJob = [&](const DrawJob &job, const bool outline, const bool meshOverlay = false)
 		{
 			if (outline && (!job.selected || job.outlineExpansion <= 0.0f))
+				return;
+			if (meshOverlay && !job.selected)
 				return;
 			const unsigned int program = job.tube ? tubeProgram : ribbonProgram;
 			if (program == 0)
@@ -264,18 +272,23 @@ namespace DefectStudio
 			const int outlineModeLocation = m_ShaderLibrary.Uniform(programName, "u_OutlineMode");
 			const int outlineExpansionLocation = m_ShaderLibrary.Uniform(programName, "u_OutlineExpansion");
 			const int outlineColorLocation = m_ShaderLibrary.Uniform(programName, "u_OutlineColor");
+			const int meshOverlayModeLocation = m_ShaderLibrary.Uniform(programName, "u_MeshOverlayMode");
 			if (outlineModeLocation >= 0)
 				glUniform1i(outlineModeLocation, outline ? 1 : 0);
 			if (outlineExpansionLocation >= 0)
 				glUniform1f(outlineExpansionLocation, outline ? job.outlineExpansion : 0.0f);
-			if (outline && outlineColorLocation >= 0)
+			if (meshOverlayModeLocation >= 0)
+				glUniform1i(meshOverlayModeLocation, meshOverlay ? 1 : 0);
+			if ((outline || meshOverlay) && outlineColorLocation >= 0)
 				glUniform4fv(outlineColorLocation, 1, &outlineColor.x);
 
 			const auto found = resources.scenePathMeshCache.find(job.id);
 			if (found == resources.scenePathMeshCache.end())
 				return;
 			const OpenGlScenePathMeshCache &entry = found->second;
-			if (!job.tube)
+			if (meshOverlay)
+				glDisable(GL_CULL_FACE);
+			else if (!job.tube)
 			{
 				const int halfWidth = m_ShaderLibrary.Uniform("path_ribbon", "u_HalfWidth");
 				const int cameraFacing = m_ShaderLibrary.Uniform("path_ribbon", "u_CameraFacing");
@@ -305,7 +318,17 @@ namespace DefectStudio
 			else
 				glDisable(GL_CULL_FACE);
 			glBindVertexArray(entry.mesh.vao);
-			glDrawElements(GL_TRIANGLES, entry.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+			if (meshOverlay)
+			{
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+				glLineWidth(1.0f);
+				glDrawElements(GL_TRIANGLES, entry.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+				glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+				glPointSize(6.0f);
+				glDrawElements(GL_TRIANGLES, entry.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+			}
+			else
+				glDrawElements(GL_TRIANGLES, entry.mesh.indexCount, GL_UNSIGNED_INT, nullptr);
 		};
 		// ponytail: outline expansion uses only the normal component perpendicular to the camera, so
 		// camera-facing flat caps do not grow into solid fills while curved/tubular silhouettes keep
@@ -313,13 +336,24 @@ namespace DefectStudio
 		// exact occlusion for highly concave/self-intersecting ribbons; that ceiling needs an offscreen
 		// selection mask and screen-space dilation.
 		glDepthMask(GL_FALSE);
-		for (const DrawJob &job : jobs)
-			drawJob(job, true);
+		if (!input.showMeshOverlay)
+			for (const DrawJob &job : jobs)
+				drawJob(job, true);
 		glDepthMask((!renderAlwaysOnTop && anyTransparent) ? GL_FALSE : previousDepthMask);
 		for (const DrawJob &job : jobs)
 			drawJob(job, false);
+		if (input.showMeshOverlay)
+		{
+			glDepthMask(GL_FALSE);
+			glDisable(GL_DEPTH_TEST);
+			for (const DrawJob &job : jobs)
+				drawJob(job, false, true);
+		}
 		glBindVertexArray(static_cast<unsigned int>(previousVertexArray));
 		glUseProgram(static_cast<unsigned int>(previousProgram));
+		glPolygonMode(GL_FRONT_AND_BACK, static_cast<GLenum>(previousPolygonMode[0]));
+		glLineWidth(previousLineWidth);
+		glPointSize(previousPointSize);
 		glCullFace(static_cast<GLenum>(previousCullMode));
 		if (previousCull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
 		if (previousDepth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);

@@ -270,6 +270,7 @@ namespace DefectStudio::SceneObjectsYaml
 				style.ribbonBevel = node["ribbon_bevel"].as<float>(style.ribbonBevel);
 				style.ribbonBevelSegments = node["ribbon_bevel_segments"].as<int>(style.ribbonBevelSegments);
 				style.ribbonBevelShape = node["ribbon_bevel_shape"].as<float>(style.ribbonBevelShape);
+				style.shadeSmooth = node["shade_smooth"].as<bool>(style.shadeSmooth);
 				style.radialSegments = node["radialSegments"].as<int>(style.radialSegments);
 				if (node["color"] && !Vec3(node["color"], style.color)) return false;
 				style.alpha = node["alpha"].as<float>(style.alpha);
@@ -321,7 +322,7 @@ namespace DefectStudio::SceneObjectsYaml
 
 		void EmitPathStyle(YAML::Emitter &emit, const PersistedPathStyle &style)
 		{
-			emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap << YAML::Key << "profile" << YAML::Value << style.profile << YAML::Key << "ribbon_normal" << YAML::Value << YAML::Flow << YAML::BeginSeq << style.ribbonNormal.x << style.ribbonNormal.y << style.ribbonNormal.z << YAML::EndSeq << YAML::Key << "ribbon_thickness" << YAML::Value << style.ribbonThickness << YAML::Key << "ribbon_bevel" << YAML::Value << style.ribbonBevel << YAML::Key << "ribbon_bevel_segments" << YAML::Value << style.ribbonBevelSegments << YAML::Key << "ribbon_bevel_shape" << YAML::Value << style.ribbonBevelShape << YAML::Key << "width" << YAML::Value << style.width << YAML::Key << "join" << YAML::Value << style.join << YAML::Key << "cap" << YAML::Value << style.cap << YAML::Key << "radialSegments" << YAML::Value << style.radialSegments;
+			emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap << YAML::Key << "profile" << YAML::Value << style.profile << YAML::Key << "ribbon_normal" << YAML::Value << YAML::Flow << YAML::BeginSeq << style.ribbonNormal.x << style.ribbonNormal.y << style.ribbonNormal.z << YAML::EndSeq << YAML::Key << "ribbon_thickness" << YAML::Value << style.ribbonThickness << YAML::Key << "ribbon_bevel" << YAML::Value << style.ribbonBevel << YAML::Key << "ribbon_bevel_segments" << YAML::Value << style.ribbonBevelSegments << YAML::Key << "ribbon_bevel_shape" << YAML::Value << style.ribbonBevelShape << YAML::Key << "shade_smooth" << YAML::Value << style.shadeSmooth << YAML::Key << "width" << YAML::Value << style.width << YAML::Key << "join" << YAML::Value << style.join << YAML::Key << "cap" << YAML::Value << style.cap << YAML::Key << "radialSegments" << YAML::Value << style.radialSegments;
 			EmitVec3(emit, "color", style.color);
 			emit << YAML::Key << "alpha" << YAML::Value << style.alpha << YAML::Key << "dashEnabled" << YAML::Value << style.dashEnabled << YAML::Key << "dashLength" << YAML::Value << style.dashLength << YAML::Key << "gapLength" << YAML::Value << style.gapLength << YAML::Key << "dashPhase" << YAML::Value << style.dashPhase << YAML::Key << "gradientEnabled" << YAML::Value << style.gradientEnabled << YAML::Key << "gradientStops" << YAML::Value << YAML::BeginSeq;
 			for (const auto &stop : style.gradientStops)

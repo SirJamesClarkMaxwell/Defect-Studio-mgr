@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Renderer/Path/PathCommands.hpp"
+#include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
@@ -25,6 +26,19 @@ namespace DefectStudio
 	void DuplicateSelectedScenePaths(RendererWindowState &windowState);
 	void PasteScenePathsFromClipboard(RendererWindowState &windowState);
 	void EraseScenePaths(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
+
+	// Edit Mode topology actions. These resolve the active element from PathEditSession, route the
+	// mutation through PathCommands and repair the element selection after topology changes.
+	[[nodiscard]] Result<PathElementId> ExtendSelectedScenePathEnd(RendererWindowState &windowState);
+	[[nodiscard]] Result<PathElementId> InsertSelectedScenePathSegment(RendererWindowState &windowState);
+	[[nodiscard]] Result<void> DeleteSelectedScenePathNodes(RendererWindowState &windowState);
+	[[nodiscard]] Result<void> SetSelectedScenePathHandleType(
+		RendererWindowState &windowState, BezierHandleType type);
+	[[nodiscard]] Result<void> ReverseEditedScenePath(RendererWindowState &windowState);
+	[[nodiscard]] Result<PathArcParameters> ResolveSelectedScenePathArc(
+		const RendererWindowState &windowState);
+	[[nodiscard]] Result<void> ApplySelectedScenePathArc(
+		RendererWindowState &windowState, const PathArcParameters &parameters);
 
 	// Offsets every node and every cubic handle, drops the bindings and clears the persist key -
 	// what a copy of a path has to have before it is inserted next to the original. A duplicate

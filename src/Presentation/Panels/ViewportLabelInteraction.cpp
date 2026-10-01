@@ -62,6 +62,10 @@ namespace DefectStudio
 	{
 		if (!windowState.pickLabels)
 			return;
+		// Path Edit Mode owns Delete and V. In particular, do not let the same Delete key remove the
+		// selected path object after its selected nodes were already removed by the path editor.
+		if (windowState.pathEdit.IsActive())
+			return;
 
 		// F flips every selected pin's bond-aligned label 180 degrees (item 5) - independent of
 		// hover/drag state below since it acts on whatever is already selected, not the cursor.

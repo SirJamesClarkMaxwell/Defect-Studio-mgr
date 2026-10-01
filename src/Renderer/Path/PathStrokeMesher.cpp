@@ -3,6 +3,7 @@
 #include "Renderer/Path/PathStrokeMesher.hpp"
 
 #include "Renderer/Path/PathDecorationMesher.hpp"
+#include "Renderer/Path/PathSolidMesher.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -287,6 +288,68 @@ namespace DefectStudio
 		const DecorationContour startContour = BuildDecorationContour(style.startDecoration, style.width);
 		const DecorationContour endContour = BuildDecorationContour(style.endDecoration, style.width);
 		geometry.shaftRange = TrimmedRange(evaluated.totalLength, style);
+		const bool plainStroke = startContour.points.empty() && endContour.points.empty();
+		const bool straightPlainSolid = plainStroke && evaluated.samples.size() == 2u &&
+			style.profile == StrokeProfile::Flat && std::isfinite(style.ribbonThickness) &&
+			style.ribbonThickness > 0.0f;
+		const bool bevelledDecoratedSolid = !plainStroke &&
+			detail::UsesThickFlatSolidBevel(style, startContour, endContour);
+		if (straightPlainSolid || bevelledDecoratedSolid)
+		{
+			detail::ThickFlatMesh mesh;
+			if (geometry.shaftRange.IsEmpty())
+			{
+				if (startContour.trim + endContour.trim >= evaluated.totalLength)
+					AddDiagnostic(geometry, PathDiagnosticCode::DecorationsExceedPathLength, "Endpoint decorations leave no shaft.");
+				detail::AppendAttachedThickFlatDecoration(mesh, startContour, evaluated.samples.front(), true,
+					style, detail::ThickFlatFaceOwner::StartDecoration, false);
+				detail::AppendAttachedThickFlatDecoration(mesh, endContour, evaluated.samples.back(), false,
+					style, detail::ThickFlatFaceOwner::EndDecoration, false);
+				detail::FinalizeThickFlatMesh(mesh, style, geometry);
+				return geometry;
+			}
+
+			const std::vector<DashInterval> intervals = BuildDashIntervals(
+				geometry.shaftRange.start, geometry.shaftRange.end, style.dash);
+			geometry.dashedLength = DashCoverage(intervals);
+			const bool hasStartAttachment = !intervals.empty() && intervals.front().start == geometry.shaftRange.start;
+			const bool hasEndAttachment = !intervals.empty() && intervals.back().end == geometry.shaftRange.end;
+			const bool hasGradientSamples = style.gradient.enabled && !style.gradient.stops.empty();
+			for (const DashInterval &interval : intervals)
+			{
+				std::vector<EvaluatedSample> samples;
+				std::vector<glm::vec4> sampleColors;
+				if (hasGradientSamples)
+				{
+					const std::vector<GradientPieceSample> gradientSamples = GradientSamples(evaluated, interval, style);
+					samples.reserve(gradientSamples.size());
+					sampleColors.reserve(gradientSamples.size());
+					for (const GradientPieceSample &gradientSample : gradientSamples)
+					{
+						samples.push_back(gradientSample.sample);
+						sampleColors.push_back(gradientSample.color);
+					}
+				}
+				else
+					samples = PieceSamples(evaluated, interval);
+				const bool atStart = interval.start == geometry.shaftRange.start;
+				const bool atEnd = interval.end == geometry.shaftRange.end;
+				const bool attachStart = atStart && !startContour.points.empty();
+				const bool attachEnd = atEnd && !endContour.points.empty();
+				if (attachStart)
+					samples.front() = DecorationBackSample(samples.front(), evaluated.samples.front(), startContour, true);
+				if (attachEnd)
+					samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
+				detail::AppendThickFlatPiece(mesh, samples, style, !attachStart, !attachEnd,
+					hasGradientSamples ? &sampleColors : nullptr);
+			}
+			detail::AppendAttachedThickFlatDecoration(mesh, startContour, evaluated.samples.front(), true,
+				style, detail::ThickFlatFaceOwner::StartDecoration, hasStartAttachment);
+			detail::AppendAttachedThickFlatDecoration(mesh, endContour, evaluated.samples.back(), false,
+				style, detail::ThickFlatFaceOwner::EndDecoration, hasEndAttachment);
+			detail::FinalizeThickFlatMesh(mesh, style, geometry);
+			return geometry;
+		}
 		detail::AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration);
 		detail::AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration);
 		if (geometry.shaftRange.IsEmpty())

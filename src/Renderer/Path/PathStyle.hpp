@@ -159,6 +159,8 @@ namespace DefectStudio
 		// Both are ignored when `ribbonBevel` is zero.
 		std::uint32_t ribbonBevelSegments = 1;
 		float ribbonBevelShape = 0.5f;
+		// Average the rendered normals of coincident faces without changing the generated mesh.
+		bool shadeSmooth = false;
 		float width = 0.05f; // full width; the tube radius is half of it
 		PathLineJoin join = PathLineJoin::Bevel;
 		PathLineCap cap = PathLineCap::Butt;

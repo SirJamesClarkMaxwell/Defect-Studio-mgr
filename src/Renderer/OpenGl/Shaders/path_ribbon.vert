@@ -14,6 +14,7 @@ uniform int u_CameraFacing;
 uniform vec3 u_CameraPosition;
 uniform int u_OutlineMode;
 uniform float u_OutlineExpansion;
+uniform int u_MeshOverlayMode;
 
 out vec3 vNormal;
 out vec4 vColor;
@@ -44,4 +45,8 @@ void main()
 	vColor = aColor;
 	vWorldPos = world;
 	gl_Position = u_ViewProjection * vec4(world, 1.0);
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
+	else if (u_MeshOverlayMode == 1)
+		gl_Position.z -= 0.0002 * gl_Position.w;
 }
