@@ -2,7 +2,7 @@ workspace "DefectStudio"
     architecture "x86_64"
     startproject "DefectStudio"
     location "build/generated/%{_ACTION}"
-    toolset "msc-v145"
+    toolset(os.getenv("DS_TOOLSET") or "msc-v145")
 
     configurations {
         "Debug",

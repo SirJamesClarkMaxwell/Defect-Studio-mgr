@@ -58,7 +58,14 @@ def main() -> int:
         "/v:minimal",
     ]
     print(f"[cmd] {' '.join(command)}")
-    result = subprocess.run(command, cwd=str(repo_root()), capture_output=True, text=True)
+    result = subprocess.run(
+        command,
+        cwd=str(repo_root()),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
     error_lines = [line for line in result.stdout.splitlines() if _ERROR_PATTERN.search(line)]
     error_lines += [line for line in result.stderr.splitlines() if line.strip()]
