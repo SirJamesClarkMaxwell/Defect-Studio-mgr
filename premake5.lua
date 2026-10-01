@@ -565,9 +565,11 @@ project "DefectStudio"
         postbuildcommands {
             'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
             'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL',
-            -- /D: only copies files newer than the destination, so repeat builds stay fast.
-            'if not exist "%{cfg.targetdir}\\install" mkdir "%{cfg.targetdir}\\install"',
-            'xcopy /E /Y /I /D "' .. windowsInstallSource .. '\\*" "%{cfg.targetdir}\\install\\" >NUL'
+            -- robocopy, not xcopy: the bundled Python runtime under install/app/python has paths that
+            -- pass 254 characters once prefixed with the target dir, and xcopy dies on those with a
+            -- bogus "Insufficient memory". /XO keeps the old xcopy /D behaviour (skip older sources)
+            -- so repeat builds stay fast. robocopy exit codes 0-7 mean success, so map them to 0.
+            'robocopy "' .. windowsInstallSource .. '" "%{cfg.targetdir}\\install" /E /XO /NFL /NDL /NJH /NJS /NP >NUL & if errorlevel 8 (exit /b 1) else (cmd /c exit 0)'
         }
 
     filter { "system:windows", "action:vs2022" }
