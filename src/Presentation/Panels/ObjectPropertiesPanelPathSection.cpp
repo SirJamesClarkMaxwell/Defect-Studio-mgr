@@ -3,6 +3,7 @@
 #include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
 
 #include <numbers>
+#include <type_traits>
 
 #include <imgui.h>
 
@@ -10,6 +11,10 @@
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Presentation/Panels/ScenePathBindingOperations.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
+#include "Renderer/Path/PathSystem.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -22,6 +27,72 @@ namespace DefectStudio
 				return true;
 			DS_LOG_WARN("Path edit failed: {}", result.Error().technicalDetails);
 			return false;
+		}
+
+		void DrawPathNodeBinding(RendererWindowState &windowState)
+		{
+			const Result<PathBinding> current = ResolveActiveScenePathNodeBinding(windowState);
+			if (!current)
+				return;
+			const ScenePath &path = *windowState.paths->Store().Find(windowState.pathEdit.Path());
+			const PathElementId active = windowState.pathEdit.ActiveElement();
+			const bool endpoint = active == path.nodes.front().id || active == path.nodes.back().id;
+			ImGui::SeparatorText("Binding");
+			std::visit([&](const auto &binding) {
+				using Binding = std::decay_t<decltype(binding)>;
+				if constexpr (std::is_same_v<Binding, PathBinding::Free>)
+					ImGui::TextUnformatted("Free");
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+				{
+					const std::string element = binding.atomIndex < windowState.structure.atoms.size()
+						? windowState.structure.atoms[binding.atomIndex].element : "missing";
+					ImGui::Text("Atom #%zu (%s)", binding.atomIndex, element.c_str());
+				}
+				else if constexpr (std::is_same_v<Binding, PathBinding::BondMidpoint>)
+					ImGui::Text("Bond midpoint #%zu-#%zu", binding.atomA, binding.atomB);
+				else
+					ImGui::TextUnformatted("Object origin");
+			}, current.Value().value);
+			const ResolvedNodes resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(windowState));
+			for (const PathDiagnostic &diagnostic : resolved.diagnostics)
+				if (diagnostic.element == active)
+					ImGui::TextWrapped("Warning: %s", diagnostic.message.c_str());
+
+			const std::size_t atomCount = windowState.selectedAtomIndices.size();
+			const bool canBind = atomCount == 1 || atomCount == 2;
+			ImGui::BeginDisabled(!canBind);
+			const bool bind = ImGui::Button("Bind to selected atom(s)");
+			ImGui::EndDisabled();
+			if (!canBind && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Select one atom or Ctrl-click two atoms before selecting the path.");
+			if (bind)
+			{
+				ReportPathEditResult(BindActiveScenePathNodeToSelectedAtoms(windowState));
+				return;
+			}
+
+			PathBinding edited = current.Value();
+			if (std::holds_alternative<PathBinding::Free>(edited.value))
+				return;
+			constexpr ImGuiInputTextFlags commitOnEnter = ImGuiInputTextFlags_EnterReturnsTrue;
+			bool commit = false;
+			std::visit([&](auto &binding) {
+				using Binding = std::decay_t<decltype(binding)>;
+				if constexpr (!std::is_same_v<Binding, PathBinding::Free>)
+				{
+					commit |= ImGui::InputFloat("Offset X", &binding.offset.x, 0.0f, 0.0f, "%.9g", commitOnEnter);
+					commit |= ImGui::InputFloat("Offset Y", &binding.offset.y, 0.0f, 0.0f, "%.9g", commitOnEnter);
+					commit |= ImGui::InputFloat("Offset Z", &binding.offset.z, 0.0f, 0.0f, "%.9g", commitOnEnter);
+					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+						if (endpoint)
+							commit |= ImGui::InputFloat("Buffer", &binding.buffer, 0.0f, 0.0f, "%.9g", commitOnEnter);
+				}
+			}, edited.value);
+			if (commit)
+				ReportPathEditResult(SetActiveScenePathNodeBinding(windowState, edited));
+			ImGui::TextDisabled("Press Enter to commit an exact value.");
+			if (ImGui::Button("Detach (keep position)"))
+				ReportPathEditResult(DetachActiveScenePathNodeKeepingPosition(windowState));
 		}
 
 		void DrawPathEditActions(RendererWindowState &windowState)
@@ -57,6 +128,7 @@ namespace DefectStudio
 					ImGui::SameLine();
 			}
 
+			DrawPathNodeBinding(windowState);
 			const Result<PathArcParameters> resolved = ResolveSelectedScenePathArc(windowState);
 			if (!resolved)
 				return;

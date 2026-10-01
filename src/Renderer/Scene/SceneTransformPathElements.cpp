@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
 
 #include <glm/gtc/epsilon.hpp>
 
@@ -13,9 +14,25 @@
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathHandleRules.hpp"
 #include "Renderer/Path/PathSystem.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
+	glm::vec3 ScenePathWorldToLocal(const ScenePath &path, const glm::vec3 &position)
+	{
+		const glm::vec3 rotated = glm::inverse(path.transform.rotation) * (position - path.transform.position);
+		return rotated / path.transform.scale;
+	}
+
+	// A collapsed scale has no finite inverse. Refuse local writes rather than persisting NaNs.
+	bool HasInvertibleScenePathTransform(const ScenePath &path)
+	{
+		constexpr float kMinScale = 1e-6f;
+		const glm::vec3 &scale = path.transform.scale;
+		return glm::all(glm::greaterThan(glm::abs(scale), glm::vec3(kMinScale))) &&
+			std::isfinite(scale.x) && std::isfinite(scale.y) && std::isfinite(scale.z);
+	}
+
 	namespace
 	{
 		PathEditContext Context(RendererWindowState &window)
@@ -107,18 +124,20 @@ namespace DefectStudio
 			if (ContainsNode(nodes, node.id))
 				return;
 			nodes.push_back(node.id);
-			elements.push_back({path, node.id, false, node.position});
+			PathElementTransformStart start{path, node.id, false, node.position};
+			std::visit([&](const auto &binding) {
+				if constexpr (!std::is_same_v<std::decay_t<decltype(binding)>, PathBinding::Free>)
+				{
+					start.bound = true;
+					start.bindingOffset = binding.offset;
+				}
+			}, node.binding.value);
+			elements.push_back(start);
 		}
 
 		glm::vec3 LocalToWorld(const ScenePath &path, const glm::vec3 &position)
 		{
 			return path.transform.position + path.transform.rotation * (path.transform.scale * position);
-		}
-
-		glm::vec3 WorldToLocal(const ScenePath &path, const glm::vec3 &position)
-		{
-			const glm::vec3 rotated = glm::inverse(path.transform.rotation) * (position - path.transform.position);
-			return rotated / path.transform.scale;
 		}
 
 		[[nodiscard]] std::optional<glm::vec3> FindResolvedHandleOwnerPosition(
@@ -149,22 +168,6 @@ namespace DefectStudio
 			return std::nullopt;
 		}
 
-		// A zero on any scale axis collapses that axis, so the world-to-local divide above has no
-		// finite answer and would write inf or NaN straight into an authored node position - which
-		// then persists to the project file. Object Mode can reach a zero scale with S 0 Enter, so
-		// this is not a theoretical input.
-		//
-		// The whole apply is refused rather than clamped: under a collapsed axis every world point
-		// on it maps to the same local value, so there is no move to express, and a clamp would
-		// invent one.
-		[[nodiscard]] bool HasInvertibleTransform(const ScenePath &path)
-		{
-			constexpr float kMinScale = 1e-6f;
-			const glm::vec3 &scale = path.transform.scale;
-			return glm::all(glm::greaterThan(glm::abs(scale), glm::vec3(kMinScale))) &&
-				std::isfinite(scale.x) && std::isfinite(scale.y) && std::isfinite(scale.z);
-		}
-
 		glm::vec3 Pivot(
 			const TransformPivotMode mode, const glm::vec3 &worldPosition, const glm::vec3 &selectionPivot)
 		{
@@ -173,13 +176,24 @@ namespace DefectStudio
 
 		void TransformNode(
 			ScenePath &path, PathNode &node, const PathElementTransformStart &start,
+			const ResolvedNodes &resolved,
 			const SceneTransformDelta &delta, const TransformPivotMode pivotMode,
 			const glm::vec3 &selectionPivot)
 		{
-			const glm::vec3 worldStart = LocalToWorld(path, start.position);
+			const auto found = std::find_if(path.nodes.begin(), path.nodes.end(),
+				[&](const PathNode &candidate) { return candidate.id == node.id; });
+			const glm::vec3 worldStart = start.bound
+				? resolved.positions[static_cast<std::size_t>(found - path.nodes.begin())]
+				: LocalToWorld(path, start.position);
 			const glm::vec3 worldTarget = ApplyTransformDelta(
 				delta.spatial, worldStart, Pivot(pivotMode, worldStart, selectionPivot));
-			node.position = WorldToLocal(path, worldTarget);
+			if (start.bound)
+				std::visit([&](auto &binding) {
+					if constexpr (!std::is_same_v<std::decay_t<decltype(binding)>, PathBinding::Free>)
+						binding.offset = start.bindingOffset + (worldTarget - worldStart);
+				}, node.binding.value);
+			else
+				node.position = ScenePathWorldToLocal(path, worldTarget);
 		}
 
 		void TransformHandle(
@@ -192,7 +206,7 @@ namespace DefectStudio
 			const glm::vec3 worldStart = LocalToWorld(path, node->position + start.position);
 			const glm::vec3 worldTarget = ApplyTransformDelta(
 				delta.spatial, worldStart, LocalToWorld(path, node->position));
-			handle.offset = WorldToLocal(path, worldTarget) - node->position;
+			handle.offset = ScenePathWorldToLocal(path, worldTarget) - node->position;
 		}
 
 		void RestoreElement(ScenePath &path, const PathElementTransformStart &start)
@@ -200,7 +214,15 @@ namespace DefectStudio
 			if (!start.isHandle)
 			{
 				if (PathNode *node = FindNode(path, start.element); node != nullptr)
-					node->position = start.position;
+				{
+					if (start.bound)
+						std::visit([&](auto &binding) {
+							if constexpr (!std::is_same_v<std::decay_t<decltype(binding)>, PathBinding::Free>)
+								binding.offset = start.bindingOffset;
+						}, node->binding.value);
+					else
+						node->position = start.position;
+				}
 				return;
 			}
 
@@ -211,11 +233,17 @@ namespace DefectStudio
 
 		void TransformPath(
 			ScenePath &path, const std::vector<const PathElementTransformStart *> &elements,
+			const BindingContext &bindingContext,
 			const SceneTransformDelta &delta, const TransformPivotMode pivotMode,
 			const glm::vec3 &selectionPivot)
 		{
-			if (!HasInvertibleTransform(path))
+			if (!HasInvertibleScenePathTransform(path) && std::any_of(elements.begin(), elements.end(),
+				[](const auto &start) { return !start->bound; }))
 				return;
+			// Resolve from the captured offsets, not last frame's preview, so R/S never accumulate.
+			for (const auto &start : elements)
+				RestoreElement(path, *start);
+			const ResolvedNodes resolved = ResolveNodePositions(path, bindingContext);
 
 			std::vector<PathElementId> movingNodes;
 			for (const PathElementTransformStart *start : elements)
@@ -227,7 +255,7 @@ namespace DefectStudio
 				if (!start->isHandle)
 				{
 					if (PathNode *node = FindNode(path, start->element); node != nullptr)
-						TransformNode(path, *node, *start, delta, pivotMode, selectionPivot);
+						TransformNode(path, *node, *start, resolved, delta, pivotMode, selectionPivot);
 					continue;
 				}
 
@@ -368,7 +396,7 @@ namespace DefectStudio
 						elements.push_back(&start);
 				if (elements.empty())
 					return Result<void>{};
-				TransformPath(path, elements, delta, pivotMode, selectionPivot);
+				TransformPath(path, elements, SceneSystem::MakePathBindingContext(window), delta, pivotMode, selectionPivot);
 				const Result<void> handles = ApplyAutoHandles(path);
 				return handles ? Result<void>{} : Result<void>(handles.Error());
 			});

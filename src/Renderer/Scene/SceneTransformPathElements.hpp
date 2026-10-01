@@ -4,6 +4,10 @@
 
 namespace DefectStudio
 {
+	// Shared inverse for authored node positions (Edit Mode transforms and binding detach).
+	[[nodiscard]] bool HasInvertibleScenePathTransform(const ScenePath &path);
+	[[nodiscard]] glm::vec3 ScenePathWorldToLocal(const ScenePath &path, const glm::vec3 &position);
+
 	// G / R / S over the elements selected inside one path, while Edit Mode is on.
 	//
 	// The mirror of SceneTransformPaths, one level down. That file composes a delta onto a whole
@@ -45,6 +49,8 @@ namespace DefectStudio
 	//
 	// Element rules:
 	//
+	// - A BOUND NODE changes its world-space binding offset by the resolved node's displacement;
+	//   its authored fallback position stays untouched, and cancel restores the captured offset.
 	// - A NODE translates by the local delta. Its handles are stored as offsets from it
 	//   (PathHandle::offset), so they follow with no arithmetic of their own - and must not be
 	//   moved a second time even when they are in the selection alongside their node. A node in the

@@ -94,6 +94,11 @@ namespace DefectStudio
 		PathElementId element;
 		bool isHandle = false;
 		glm::vec3 position{0.0f};
+		// S14: a node whose binding is not Free. G/R/S moves its binding OFFSET (world space - a bound
+		// node is untransformed) instead of its authored position, which the binding would override
+		// anyway; `bindingOffset` is the start value restored on cancel. Unused for handles.
+		bool bound = false;
+		glm::vec3 bindingOffset{0.0f};
 	};
 
 	struct SceneTransformSelectionSnapshot
