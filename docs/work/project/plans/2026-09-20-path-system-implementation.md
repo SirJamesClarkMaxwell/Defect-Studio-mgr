@@ -324,6 +324,8 @@ conventions; overlays drawn with the S10 handle helper. Actions go through `Comm
 
 ## S13 — topology UI + numeric arc editor  *(fourth manual round)*
 
+Path Edit Mode keys now route through CommandRegistry + CommandService + keymap (task 48a).
+
 `E` extend, `Delete`, `V` handle type, insert-on-segment, reverse — wired to S2 ops through S8 commands with the
 skip/diagnostic report. Numeric panel shows exact centre/axis/radius/start/sweep of the active arc; edits run
 the atomic solver. **Manual round:** the topology matrix and the exact-120° arc.

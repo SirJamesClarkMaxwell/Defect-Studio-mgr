@@ -556,3 +556,51 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "renderer.path_edit.toggle"
+    chord: "Tab"
+    command: "renderer.path_edit.toggle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.leave"
+    chord: "Escape"
+    command: "renderer.path_edit.leave"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.mode_nodes"
+    chord: "1"
+    command: "renderer.path_edit.mode_nodes"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.mode_segments"
+    chord: "2"
+    command: "renderer.path_edit.mode_segments"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.mode_whole"
+    chord: "3"
+    command: "renderer.path_edit.mode_whole"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.extend"
+    chord: "E"
+    command: "renderer.path_edit.extend"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.delete_nodes"
+    chord: "Delete"
+    command: "renderer.path_edit.delete_nodes"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.handle_type_menu"
+    chord: "V"
+    command: "renderer.path_edit.handle_type_menu"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true

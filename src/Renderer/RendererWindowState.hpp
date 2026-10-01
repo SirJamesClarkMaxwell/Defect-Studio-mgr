@@ -377,6 +377,10 @@ namespace DefectStudio
 		// Edit Mode state for the one path opened from selectedScenePaths; element selection is kept
 		// separate so leaving the session never changes Object Mode's path selection.
 		PathEditSession pathEdit;
+		// Set by renderer.path_edit.handle_type_menu (V); the viewport opens the handle-type popup on
+		// its next frame and clears it. A command cannot call ImGui::OpenPopup itself - it runs outside
+		// the viewport window's ImGui ID scope.
+		bool pathHandleTypeMenuRequested = false;
 
 		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
 		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single

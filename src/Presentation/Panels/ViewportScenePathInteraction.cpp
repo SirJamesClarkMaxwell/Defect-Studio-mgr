@@ -64,60 +64,12 @@ namespace DefectStudio
 	bool HandleScenePathInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered)
 	{
-		const bool focused = windowState.lastFocusedState;
-		if (focused && ImGui::IsKeyPressed(ImGuiKey_Tab, false))
-		{
-			if (windowState.pathEdit.IsActive())
-				windowState.pathEdit.Leave();
-			else if (windowState.selectedScenePaths.size() == 1 && windowState.paths != nullptr &&
-				windowState.paths->Store().Find(windowState.selectedScenePaths.front()) != nullptr)
-				windowState.pathEdit.Enter(windowState.selectedScenePaths.front());
-			else
-				return false;
-			return true;
-		}
-
 		if (windowState.pathEdit.IsActive())
 		{
-			if (focused && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-			{
-				windowState.pathEdit.Leave();
-				return true;
-			}
-			if (focused && ImGui::IsKeyPressed(ImGuiKey_1, false))
-			{
-				windowState.pathEdit.SetElementMode(PathElementMode::NodeHandle);
-				return true;
-			}
-			if (focused && ImGui::IsKeyPressed(ImGuiKey_2, false))
-			{
-				windowState.pathEdit.SetElementMode(PathElementMode::Segment);
-				return true;
-			}
-			if (focused && ImGui::IsKeyPressed(ImGuiKey_3, false))
-			{
-				windowState.pathEdit.SetElementMode(PathElementMode::WholePath);
-				return true;
-			}
-
-			bool keyboardAction = false;
-			const ImGuiIO &shortcutIo = ImGui::GetIO();
-			const bool noModifiers = !shortcutIo.KeyCtrl && !shortcutIo.KeyAlt &&
-				!shortcutIo.KeyShift && !shortcutIo.KeySuper;
-			if (focused && noModifiers && ImGui::IsKeyPressed(ImGuiKey_E, false))
-			{
-				ReportPathEditResult(ExtendSelectedScenePathEnd(windowState));
-				keyboardAction = true;
-			}
-			if (focused && noModifiers && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-			{
-				ReportPathEditResult(DeleteSelectedScenePathNodes(windowState));
-				keyboardAction = true;
-			}
-			if (focused && noModifiers && ImGui::IsKeyPressed(ImGuiKey_V, false))
+			if (windowState.pathHandleTypeMenuRequested)
 			{
 				ImGui::OpenPopup("##PathHandleType");
-				keyboardAction = true;
+				windowState.pathHandleTypeMenuRequested = false;
 			}
 			if (ImGui::BeginPopup("##PathHandleType"))
 			{
@@ -130,9 +82,6 @@ namespace DefectStudio
 						ReportPathEditResult(SetSelectedScenePathHandleType(windowState, type));
 				ImGui::EndPopup();
 			}
-			if (keyboardAction)
-				return true;
-
 			if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || windowState.camera == nullptr ||
 				windowState.paths == nullptr || imageSize.x <= 0.0f || imageSize.y <= 0.0f)
 				return false;
