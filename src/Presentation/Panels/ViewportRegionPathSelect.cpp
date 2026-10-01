@@ -14,6 +14,7 @@
 #include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
@@ -97,9 +98,10 @@ namespace DefectStudio
 			if (path == nullptr || !path->visible || !path->renderable)
 				return hits;
 
+			const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
 			const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
 				*path,
-				ResolveNodePositions(*path, BindingContext{}),
+				ResolveNodePositions(*path, bindings),
 				windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix(),
 				windowState.viewportSize,
 				windowState.pathEdit.ActiveElement());

@@ -10,6 +10,7 @@
 #include "Renderer/Path/PathHandleGeometry.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -27,9 +28,10 @@ namespace DefectStudio
 
 		const glm::mat4 view = windowState.camera->ViewMatrix();
 		const RendererViewportSettings &settings = globalSettings.viewport;
+		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
 		const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
 			*path,
-			ResolveNodePositions(*path, BindingContext{}),
+			ResolveNodePositions(*path, bindings),
 			windowState.camera->ProjectionMatrix() * view,
 			glm::vec2(imageSize.x, imageSize.y),
 			windowState.pathEdit.ActiveElement());

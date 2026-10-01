@@ -20,6 +20,7 @@
 #include "Renderer/Path/ScenePathPicking.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -53,8 +54,9 @@ namespace DefectStudio
 		{
 			const CachedPathGeometry *cached = windowState.paths->Caches().FindLastBuilt(path.id);
 			static const EvaluatedPath empty;
+			const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
 			return PickPath(
-				path, ResolveNodePositions(path, BindingContext{}), cached == nullptr ? empty : cached->evaluated, settings);
+				path, ResolveNodePositions(path, bindings), cached == nullptr ? empty : cached->evaluated, settings);
 		}
 	} // namespace
 
@@ -140,7 +142,8 @@ namespace DefectStudio
 
 		PathPickSettings settings = BuildPathPickSettings(windowState, imageOrigin, imageSize, false);
 		settings.cursor = glm::vec2(relativeX, relativeY);
-		const std::optional<ScenePathPick> hit = PickFrontmostScenePath(*windowState.paths, settings);
+		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
+		const std::optional<ScenePathPick> hit = PickFrontmostScenePath(*windowState.paths, settings, bindings);
 		if (!hit)
 			return false;
 
@@ -180,9 +183,10 @@ namespace DefectStudio
 
 		const glm::vec2 mouse = glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y) -
 			glm::vec2(imageOrigin.x, imageOrigin.y);
+		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
 		const std::vector<PathHandleMarker> markers = BuildPathHandleMarkers(
 			*path,
-			ResolveNodePositions(*path, BindingContext{}),
+			ResolveNodePositions(*path, bindings),
 			windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix(),
 			glm::vec2(imageSize.x, imageSize.y),
 			windowState.pathEdit.ActiveElement());

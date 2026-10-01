@@ -3,6 +3,7 @@
 #include "Renderer/Path/PathBindingResolver.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <type_traits>
 
@@ -125,5 +126,30 @@ namespace DefectStudio
 				resolved.positions[index + 1] + TransformHandleOffset(path, cubic->endHandle.offset));
 		}
 		return resolved;
+	}
+
+	std::uint64_t BindingSourceRevision(const ScenePath &path, const ResolvedNodes &resolved)
+	{
+		std::uint64_t hash = 14695981039346656037ull;
+		bool hasBindings = false;
+		for (std::size_t index = 0; index < path.nodes.size(); ++index)
+		{
+			if (std::holds_alternative<PathBinding::Free>(path.nodes[index].binding.value))
+				continue;
+			hasBindings = true;
+			const glm::vec3 &position = resolved.positions[index];
+			// FNV-1a over the float bit patterns, in node and x/y/z order. Hash components rather
+			// than vec3 storage so padding and alignment cannot affect the revision.
+			for (const float component : {position.x, position.y, position.z})
+			{
+				const std::uint32_t bits = std::bit_cast<std::uint32_t>(component);
+				for (unsigned int shift = 0; shift < 32; shift += 8)
+				{
+					hash ^= (bits >> shift) & 0xffu;
+					hash *= 1099511628211ull;
+				}
+			}
+		}
+		return hasBindings ? (hash == 0 ? 1 : hash) : 0;
 	}
 }

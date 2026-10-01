@@ -276,10 +276,9 @@ namespace DefectStudio
 			const ScenePath *path = window->paths->Store().Find(element.path);
 			if (path == nullptr)
 				continue;
-			// Edit Mode draws and picks markers from the renderer's empty binding context. The pivot
-			// must use that same resolved geometry or a bound node/handle can show in one place while
-			// the modal constraint line is anchored at the live binding target elsewhere.
-			const ResolvedNodes resolved = ResolveNodePositions(*path, BindingContext{});
+			// Markers and the pivot use the same live binding context, so bound nodes and handles
+			// agree with the modal constraint line's anchor.
+			const ResolvedNodes resolved = ResolveNodePositions(*path, *bindingContext);
 			if (!element.isHandle)
 			{
 				for (std::size_t index = 0; index < path->nodes.size(); ++index)

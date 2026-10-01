@@ -24,7 +24,8 @@ namespace DefectStudio
 		}
 	} // namespace
 
-	std::optional<ScenePathPick> PickFrontmostScenePath(const PathSystem &paths, const PathPickSettings &settings)
+	std::optional<ScenePathPick> PickFrontmostScenePath(
+		const PathSystem &paths, const PathPickSettings &settings, const BindingContext &bindings)
 	{
 		std::optional<ScenePathPick> best;
 		paths.Store().Visit([&](const ScenePath &path) {
@@ -32,7 +33,7 @@ namespace DefectStudio
 			// drops out and only the decorations and, in edit mode, the markers remain pickable.
 			const CachedPathGeometry *cached = paths.Caches().FindLastBuilt(path.id);
 			static const EvaluatedPath empty;
-			const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
+			const ResolvedNodes resolved = ResolveNodePositions(path, bindings);
 			const PathPickResult result = PickPath(path, resolved, cached == nullptr ? empty : cached->evaluated, settings);
 			if (!result.Hit())
 				return;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 
@@ -52,4 +53,15 @@ namespace DefectStudio
 	// The identity transform leaves every resolved position exactly where it was before paths had
 	// one, which is what makes existing files load unchanged.
 	[[nodiscard]] ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context);
+
+	// S14: the cache-key component for what a path's BOUND nodes resolved to
+	// (PathEvaluationKey::bindingSourceRevision).
+	//
+	// 0 for a path with no bound node, so a free path keeps the key it has always had. Otherwise a
+	// hash of the resolved positions of the bound nodes (bit patterns, in node order): it changes
+	// exactly when an atom or object a node follows moves - or when a binding breaks and its node
+	// falls back to the authored position - and is equal for equal positions. That is what lets the
+	// render cache follow atom edits without a structure revision counter threaded through the
+	// window. A non-zero hash is forced for bound paths so it can never collide with "no bindings".
+	[[nodiscard]] std::uint64_t BindingSourceRevision(const ScenePath &path, const ResolvedNodes &resolved);
 }

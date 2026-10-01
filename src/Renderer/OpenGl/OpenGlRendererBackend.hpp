@@ -143,6 +143,8 @@ namespace DefectStudio
 	// whose signature is already at its limit. The PathSystem is non-const because the pass fills
 	// PathCaches on a miss - evaluating, tessellating and meshing a path is exactly the work S6's cache
 	// exists to skip on every frame after the first.
+	struct BindingContext;
+
 	struct PathRenderInput
 	{
 		PathSystem *paths = nullptr;
@@ -152,6 +154,11 @@ namespace DefectStudio
 		// Draw the selected path's actual triangle edges and vertices instead of expanding its
 		// per-face normals into a silhouette. This is diagnostic viewport state, not path style.
 		bool showMeshOverlay = false;
+		// S14: the live context bound nodes resolve against - SceneSystem::MakePathBindingContext for
+		// the window actually being rendered (the export preview copy when exporting). Null means an
+		// empty context: every bound node falls back to its authored position. Captures that window
+		// by reference, so it lives only as long as the RenderWindow call it is passed to.
+		const BindingContext *bindings = nullptr;
 	};
 
 	// Shared cleanup for per-object cached meshes and the backend's static meshes.

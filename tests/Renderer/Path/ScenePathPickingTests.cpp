@@ -96,7 +96,7 @@ namespace DefectStudio::Tests
 	TEST(ScenePathPickingTests, EmptySystemPicksNothing)
 	{
 		PathSystem system;
-		EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f))).has_value());
+		EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{}).has_value());
 	}
 
 	// Criterion 3.
@@ -104,7 +104,7 @@ namespace DefectStudio::Tests
 	{
 		PathSystem system;
 		InsertAndPrime(system, StraightPath(1, 0.0f));
-		EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 50.0f))).has_value());
+		EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 50.0f)), BindingContext{}).has_value());
 	}
 
 	// Criterion 4.
@@ -113,7 +113,7 @@ namespace DefectStudio::Tests
 		PathSystem system;
 		InsertAndPrime(system, StraightPath(1, 0.0f));
 
-		const std::optional<ScenePathPick> pick = PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)));
+		const std::optional<ScenePathPick> pick = PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{});
 		ASSERT_TRUE(pick.has_value());
 		EXPECT_EQ(pick->path, SceneObjectId{1});
 		EXPECT_EQ(pick->result.kind, PathPickKind::WholePath);
@@ -128,7 +128,7 @@ namespace DefectStudio::Tests
 			InsertAndPrime(system, StraightPath(1, 0.0f));  // further
 			InsertAndPrime(system, StraightPath(2, 2.0f));  // nearer the camera at z == 5
 			const std::optional<ScenePathPick> pick =
-				PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)));
+				PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{});
 			ASSERT_TRUE(pick.has_value());
 			EXPECT_EQ(pick->path, SceneObjectId{2});
 		}
@@ -137,7 +137,7 @@ namespace DefectStudio::Tests
 			InsertAndPrime(system, StraightPath(2, 2.0f));
 			InsertAndPrime(system, StraightPath(1, 0.0f));
 			const std::optional<ScenePathPick> pick =
-				PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)));
+				PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{});
 			ASSERT_TRUE(pick.has_value());
 			EXPECT_EQ(pick->path, SceneObjectId{2});
 		}
@@ -149,12 +149,12 @@ namespace DefectStudio::Tests
 		PathSystem system;
 		InsertAndPrime(system, StraightPath(1, 0.0f));
 		const std::optional<ScenePathPick> distant =
-			PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)));
+			PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{});
 
 		PathSystem nearSystem;
 		InsertAndPrime(nearSystem, StraightPath(1, 2.0f));
 		const std::optional<ScenePathPick> close =
-			PickFrontmostScenePath(nearSystem, Settings(glm::vec2(400.0f, 300.0f)));
+			PickFrontmostScenePath(nearSystem, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{});
 
 		ASSERT_TRUE(distant.has_value());
 		ASSERT_TRUE(close.has_value());
@@ -171,14 +171,14 @@ namespace DefectStudio::Tests
 			ScenePath path = StraightPath(1, 0.0f);
 			path.visible = false;
 			InsertAndPrime(system, std::move(path));
-			EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f))).has_value());
+			EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{}).has_value());
 		}
 		{
 			PathSystem system;
 			ScenePath path = StraightPath(1, 0.0f);
 			path.renderable = false;
 			InsertAndPrime(system, std::move(path));
-			EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f))).has_value());
+			EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{}).has_value());
 		}
 	}
 
@@ -187,7 +187,7 @@ namespace DefectStudio::Tests
 	{
 		PathSystem system;
 		InsertWithoutPriming(system, StraightPath(1, 0.0f));
-		EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f))).has_value());
+		EXPECT_FALSE(PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{}).has_value());
 	}
 
 	// Criterion 9: a hidden path in front must not shadow a visible one behind it.
@@ -199,7 +199,7 @@ namespace DefectStudio::Tests
 		front.visible = false;
 		InsertAndPrime(system, std::move(front));
 
-		const std::optional<ScenePathPick> pick = PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)));
+		const std::optional<ScenePathPick> pick = PickFrontmostScenePath(system, Settings(glm::vec2(400.0f, 300.0f)), BindingContext{});
 		ASSERT_TRUE(pick.has_value());
 		EXPECT_EQ(pick->path, SceneObjectId{1});
 	}
@@ -212,7 +212,7 @@ namespace DefectStudio::Tests
 
 		PathPickSettings degenerate = Settings(glm::vec2(400.0f, 300.0f));
 		degenerate.viewportSize = glm::vec2(0.0f);
-		EXPECT_FALSE(PickFrontmostScenePath(system, degenerate).has_value());
+		EXPECT_FALSE(PickFrontmostScenePath(system, degenerate, BindingContext{}).has_value());
 	}
 
 	// Criterion 11: edit mode reports the element kind rather than collapsing to WholePath.
@@ -223,9 +223,39 @@ namespace DefectStudio::Tests
 
 		PathPickSettings settings = Settings(glm::vec2(400.0f, 300.0f));
 		settings.editMode = true;
-		const std::optional<ScenePathPick> pick = PickFrontmostScenePath(system, settings);
+		const std::optional<ScenePathPick> pick = PickFrontmostScenePath(system, settings, BindingContext{});
 		ASSERT_TRUE(pick.has_value());
 		EXPECT_NE(pick->result.kind, PathPickKind::WholePath);
 		EXPECT_NE(pick->result.kind, PathPickKind::None);
 	}
-}
+
+	// S14: picking resolves bound nodes against the same live context the render pass uses. The
+	// path is authored far off screen; its end node follows an atom sitting on the origin, which
+	// projects to the middle pixel. Unprimed, so only Edit Mode's node markers are pickable.
+	TEST(ScenePathPickingTests, BoundNodeIsPickedWhereItsAtomIsNotWhereItWasAuthored)
+	{
+		PathSystem system;
+		ScenePath path = StraightPath(1, 0.0f);
+		for (PathNode &node : path.nodes)
+			node.position += glm::vec3(0.0f, 40.0f, 0.0f);
+		path.nodes.back().binding.value = PathBinding::CopyPosition{0, glm::vec3(0.0f), 0.0f};
+		const PathElementId boundNode = path.nodes.back().id;
+		InsertWithoutPriming(system, std::move(path));
+
+		BindingContext atoms;
+		atoms.atomPosition = [](const std::size_t index) -> std::optional<glm::vec3> {
+			return index == 0 ? std::optional<glm::vec3>(glm::vec3(0.0f)) : std::nullopt;
+		};
+		atoms.atomRadius = [](std::size_t) -> std::optional<float> { return 0.5f; };
+
+		PathPickSettings settings = Settings(glm::vec2(400.0f, 300.0f));
+		settings.editMode = true;
+
+		const std::optional<ScenePathPick> bound = PickFrontmostScenePath(system, settings, atoms);
+		ASSERT_TRUE(bound.has_value());
+		EXPECT_EQ(bound->result.kind, PathPickKind::Node);
+		EXPECT_EQ(bound->result.element, boundNode);
+
+		EXPECT_FALSE(PickFrontmostScenePath(system, settings, BindingContext{}).has_value());
+	}
+} // namespace DefectStudio::Tests

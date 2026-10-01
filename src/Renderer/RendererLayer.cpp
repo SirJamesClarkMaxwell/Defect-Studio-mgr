@@ -505,8 +505,9 @@ namespace DefectStudio
 			if (index < windowState.scenePlanes.size())
 				selectedScenePlanes.push_back(index);
 		}
+		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
 		const PathRenderInput pathInput{
-			windowState.paths.get(), &windowState.selectedScenePaths, windowState.showPathMeshOverlay};
+			windowState.paths.get(), &windowState.selectedScenePaths, windowState.showPathMeshOverlay, &bindings};
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,

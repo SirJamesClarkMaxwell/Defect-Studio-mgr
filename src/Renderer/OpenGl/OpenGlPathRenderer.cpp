@@ -130,6 +130,8 @@ namespace DefectStudio
 			return;
 
 		PathSystem &system = *input.paths;
+		const BindingContext emptyBindings;
+		const BindingContext &bindings = input.bindings == nullptr ? emptyBindings : *input.bindings;
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		const glm::mat4 view = camera.ViewMatrix();
 		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
@@ -153,7 +155,7 @@ namespace DefectStudio
 				return;
 			// Resolve once for both the LOD probe and a cache miss. The probe must use world positions;
 			// authored node positions are local once a path has an object transform.
-			const ResolvedNodes resolved = ResolveNodePositions(path, BindingContext{});
+			const ResolvedNodes resolved = ResolveNodePositions(path, bindings);
 			glm::vec3 centroid(0.0f);
 			for (const glm::vec3 &position : resolved.positions)
 				centroid += position;
@@ -169,8 +171,7 @@ namespace DefectStudio
 			const auto found = resources.scenePathMeshCache.find(path.id);
 			const int previousBucket = found == resources.scenePathMeshCache.end() ? kNoLodBucket : found->second.key.lodBucket;
 			const int lodBucket = QuantiseLod(pixelsPerWorldUnit, previousBucket);
-			// S7 resolves against an empty binding context; atom/object binding wiring belongs to S14.
-			const PathEvaluationKey key{system.Store().RevisionsFor(path.id), 0, lodBucket};
+			const PathEvaluationKey key{system.Store().RevisionsFor(path.id), BindingSourceRevision(path, resolved), lodBucket};
 			const CachedPathGeometry *cached = system.Caches().Find(path.id, key);
 			if (cached == nullptr)
 			{
