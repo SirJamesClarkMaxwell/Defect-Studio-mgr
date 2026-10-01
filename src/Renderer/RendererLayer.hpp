@@ -115,6 +115,7 @@ namespace DefectStudio
 		// Closes and discards windowId's window (RendererPanel, on its titlebar X). No-op if
 		// unknown.
 		void RemoveWindow(const std::string &windowId);
+		void ClearUndoHistory();
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();

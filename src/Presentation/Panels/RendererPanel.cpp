@@ -186,6 +186,8 @@ namespace DefectStudio
 		// a display name (e.g. both opened from a "singlet_HSE" leaf folder) no longer collide
 		// into the same ImGui window, and renaming a window's title is safe.
 		std::string displayTitle = windowState.title;
+		if (windowState.isProjectScene && windowState.sceneObjectsDirty)
+			displayTitle += "*";
 
 		// Append "*" if structure is dirty (revision != savedRevision)
 		if (auto domainLayer = m_DomainLayer.lock())

@@ -628,6 +628,15 @@ namespace DefectStudio
 		// Link to StructureRecord for dirty flag checking
 		StructureId structureId;
 
+		// The project's one structure-free scene (Renderer/ProjectSceneWindow.hpp). An explicit flag,
+		// not "structureId is nil": ad-hoc empty windows and creation previews are structure-free too
+		// and must never be saved into the project.
+		bool isProjectScene = false;
+		// Project scene only: set by every scene-object undo entry pushed or replayed for this window,
+		// cleared by ResetProjectSceneWindow and by a successful project save. Drives the title's "*",
+		// the role StructureRecord::revision plays for structure-backed windows.
+		bool sceneObjectsDirty = false;
+
 		// Set on the ephemeral preview windows of a structure creation session (see CreationSession).
 		// Such a window is deliberately NOT domain-backed - structureId stays empty - and its whole
 		// lifecycle belongs to the session, which is why it needs an identity of its own rather than

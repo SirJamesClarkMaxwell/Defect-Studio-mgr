@@ -252,6 +252,153 @@ void EmitStyle(YAML::Emitter &emit, const PersistedArrowStyle &style)
 	EmitVec3(emit, "gradientFinish", style.gradientFinish);
 	emit << YAML::EndMap;
 }
+void ParseObjects(const YAML::Node &objects, std::vector<PersistedSceneObject> &outObjects,
+	std::vector<StructuredError> &warnings)
+{
+	for (const YAML::Node &node : objects)
+	{
+		if (!node.IsMap())
+		{
+			Warn(warnings, "Object is not a map");
+			continue;
+		}
+		std::string kind;
+		try
+		{
+			kind = node["kind"].as<std::string>("");
+		}
+		catch (const YAML::Exception &)
+		{
+			kind.clear();
+		}
+		bool valid = false;
+		PersistedSceneObject object;
+		if (kind == "PinnedMeasurement")
+		{
+			PersistedPinnedMeasurement value;
+			valid = ParsePin(node, value);
+			object = std::move(value);
+		}
+		else if (kind == "FreeLabel")
+		{
+			PersistedFreeLabel value;
+			valid = ParseLabel(node, value);
+			object = std::move(value);
+		}
+		else if (kind == "SceneArrow")
+		{
+			PersistedSceneArrow value;
+			valid = ParseArrow(node, value);
+			object = std::move(value);
+		}
+		else if (kind == "SceneOrbital")
+		{
+			PersistedSceneOrbital value;
+			valid = SceneObjectsYaml::ParseOrbital(node, value);
+			object = std::move(value);
+		}
+		else if (kind == "ScenePlane")
+		{
+			PersistedScenePlane value;
+			valid = SceneObjectsYaml::ParsePlane(node, value);
+			object = std::move(value);
+		}
+		else if (kind == "ScenePath")
+		{
+			PersistedScenePath value;
+			valid = SceneObjectsYaml::ParsePath(node, value);
+			object = std::move(value);
+		}
+		if (valid)
+			outObjects.push_back(std::move(object));
+		else
+			Warn(warnings, "Invalid or unknown scene object kind: " + kind);
+	}
+}
+
+void EmitObjects(YAML::Emitter &emit, const std::vector<PersistedSceneObject> &objects)
+{
+	for (const auto &object : objects)
+	{
+		emit << YAML::BeginMap;
+		std::visit(
+			[&](const auto &value)
+			{
+				using T = std::decay_t<decltype(value)>;
+				if constexpr (std::is_same_v<T, PersistedPinnedMeasurement>)
+				{
+					emit << YAML::Key << "kind" << YAML::Value << "PinnedMeasurement" << YAML::Key << "persistKey"
+						 << YAML::Value << value.persistKey << YAML::Key << "atomRefs" << YAML::Value
+						 << YAML::BeginSeq;
+					for (const auto &ref : value.atomRefs)
+					{
+						emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key
+							 << "element" << YAML::Value << ref.element;
+						EmitVec3(emit, "position", ref.position);
+						emit << YAML::EndMap;
+					}
+					emit << YAML::EndSeq << YAML::Key << "linkBroken" << YAML::Value << value.linkBroken;
+					EmitVec3(emit, "labelOffset", value.labelOffset);
+					emit << YAML::Key << "alignToBondDirection" << YAML::Value << value.alignToBondDirection
+						 << YAML::Key << "flipped" << YAML::Value << value.flipped << YAML::Key
+						 << "rotationOffsetRadians" << YAML::Value << value.rotationOffsetRadians;
+					EmitVec3(emit, "bondPeriodicOffset", value.bondPeriodicOffset);
+					EmitLabelStyle(emit, value.style);
+				}
+				else if constexpr (std::is_same_v<T, PersistedFreeLabel>)
+				{
+					emit << YAML::Key << "kind" << YAML::Value << "FreeLabel" << YAML::Key << "persistKey"
+						 << YAML::Value << value.persistKey << YAML::Key << "text" << YAML::Value << value.text;
+					EmitVec3(emit, "position", value.position);
+					emit << YAML::Key << "rotationRadians" << YAML::Value << value.rotationRadians;
+					EmitLabelStyle(emit, value.style);
+				}
+				else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
+				{
+					const char *arrowKind = value.kind == PersistedArrowKind::Line		? "Line"
+											: value.kind == PersistedArrowKind::Arrow2D ? "Arrow2D"
+																						: "Arrow3D";
+					const char *orientation =
+						value.orientation2D == PersistedArrow2DOrientation::Billboard ? "Billboard" : "FixedPlane";
+					const char *plane = value.fixedPlane == PersistedWorldPlane::XY	  ? "XY"
+										: value.fixedPlane == PersistedWorldPlane::XZ ? "XZ"
+																					  : "YZ";
+					emit << YAML::Key << "kind" << YAML::Value << "SceneArrow" << YAML::Key << "persistKey"
+						 << YAML::Value << value.persistKey << YAML::Key << "arrowKind" << YAML::Value << arrowKind
+						 << YAML::Key << "orientation2D" << YAML::Value << orientation << YAML::Key << "fixedPlane"
+						 << YAML::Value << plane;
+					emit << YAML::Key << "points" << YAML::Value << YAML::BeginSeq;
+					for (const glm::vec3 &point : value.points)
+						emit << YAML::Flow << YAML::BeginSeq << point.x << point.y << point.z << YAML::EndSeq;
+					emit << YAML::EndSeq;
+					if (value.controlPoint)
+						EmitVec3(emit, "control_point", *value.controlPoint);
+					emit << YAML::Key << "curve_segments" << YAML::Value << value.curveSegments
+						 << YAML::Key << "start_tip" << YAML::Value << value.startTip
+						 << YAML::Key << "end_tip" << YAML::Value << value.endTip;
+					SceneObjectsYaml::EmitAnchors(emit, "startAnchorAtoms", value.startAnchorAtoms);
+					SceneObjectsYaml::EmitAnchors(emit, "endAnchorAtoms", value.endAnchorAtoms);
+					emit << YAML::Key << "atom_buffer" << YAML::Value << value.atomBuffer;
+					EmitStyle(emit, value.style);
+				}
+				else if constexpr (std::is_same_v<T, PersistedSceneOrbital>)
+				{
+					SceneObjectsYaml::EmitOrbital(emit, value);
+				}
+				else if constexpr (std::is_same_v<T, PersistedScenePath>)
+				{
+					SceneObjectsYaml::EmitPath(emit, value);
+				}
+				else
+				{
+					SceneObjectsYaml::EmitPlane(emit, value);
+				}
+			},
+			object);
+		emit << YAML::EndMap;
+	}
+}
+
 } // namespace
 
 Path SceneObjectsIO::FilePath(const Path &projectDirectory) { return projectDirectory / "scene_objects.yaml"; }
@@ -291,104 +438,55 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 			return false;
 		}
 		const YAML::Node structures = root["structures"];
-		if (!structures)
-			return true;
-		if (!structures.IsSequence())
+		const YAML::Node projectObjects = root["projectObjects"];
+		if (projectObjects && !projectObjects.IsSequence())
+		{
+			outError = "scene_objects.yaml projectObjects is not a sequence";
+			return false;
+		}
+		if (structures && !structures.IsSequence())
 		{
 			outError = "scene_objects.yaml structures is not a sequence";
 			return false;
 		}
-		for (const YAML::Node &structureNode : structures)
+		if (structures)
 		{
-			std::string structureKey;
-			try
+			for (const YAML::Node &structureNode : structures)
 			{
-				structureKey =
-					structureNode.IsMap() ? structureNode["structureKey"].as<std::string>("") : std::string();
-			}
-			catch (const YAML::Exception &)
-			{
-				structureKey.clear();
-			}
-			if (structureKey.empty())
-			{
-				Warn(warnings, "Structure entry has no structureKey");
-				continue;
-			}
-			PersistedStructureSceneObjects structure;
-			structure.structureKey = std::move(structureKey);
-			const YAML::Node objects = structureNode["objects"];
-			if (!objects)
-			{
-				outFile.structures.push_back(std::move(structure));
-				continue;
-			}
-			if (!objects.IsSequence())
-			{
-				Warn(warnings, "Structure objects is not a sequence");
-				continue;
-			}
-			for (const YAML::Node &node : objects)
-			{
-				if (!node.IsMap())
-				{
-					Warn(warnings, "Object is not a map");
-					continue;
-				}
-				std::string kind;
+				std::string structureKey;
 				try
 				{
-					kind = node["kind"].as<std::string>("");
+					structureKey =
+						structureNode.IsMap() ? structureNode["structureKey"].as<std::string>("") : std::string();
 				}
 				catch (const YAML::Exception &)
 				{
-					kind.clear();
+					structureKey.clear();
 				}
-				bool valid = false;
-				PersistedSceneObject object;
-				if (kind == "PinnedMeasurement")
+				if (structureKey.empty())
 				{
-					PersistedPinnedMeasurement value;
-					valid = ParsePin(node, value);
-					object = std::move(value);
+					Warn(warnings, "Structure entry has no structureKey");
+					continue;
 				}
-				else if (kind == "FreeLabel")
+				PersistedStructureSceneObjects structure;
+				structure.structureKey = std::move(structureKey);
+				const YAML::Node objects = structureNode["objects"];
+				if (!objects)
 				{
-					PersistedFreeLabel value;
-					valid = ParseLabel(node, value);
-					object = std::move(value);
+					outFile.structures.push_back(std::move(structure));
+					continue;
 				}
-				else if (kind == "SceneArrow")
+				if (!objects.IsSequence())
 				{
-					PersistedSceneArrow value;
-					valid = ParseArrow(node, value);
-					object = std::move(value);
+					Warn(warnings, "Structure objects is not a sequence");
+					continue;
 				}
-				else if (kind == "SceneOrbital")
-				{
-					PersistedSceneOrbital value;
-					valid = SceneObjectsYaml::ParseOrbital(node, value);
-					object = std::move(value);
-				}
-				else if (kind == "ScenePlane")
-				{
-					PersistedScenePlane value;
-					valid = SceneObjectsYaml::ParsePlane(node, value);
-					object = std::move(value);
-				}
-				else if (kind == "ScenePath")
-				{
-					PersistedScenePath value;
-					valid = SceneObjectsYaml::ParsePath(node, value);
-					object = std::move(value);
-				}
-				if (valid)
-					structure.objects.push_back(std::move(object));
-				else
-					Warn(warnings, "Invalid or unknown scene object kind: " + kind);
+				ParseObjects(objects, structure.objects, warnings);
+				outFile.structures.push_back(std::move(structure));
 			}
-			outFile.structures.push_back(std::move(structure));
 		}
+		if (projectObjects)
+			ParseObjects(projectObjects, outFile.projectObjects, warnings);
 		return true;
 	}
 	catch (const YAML::Exception &exception)
@@ -407,88 +505,17 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 	{
 		emit << YAML::BeginMap << YAML::Key << "structureKey" << YAML::Value << structure.structureKey << YAML::Key
 			 << "objects" << YAML::Value << YAML::BeginSeq;
-		for (const auto &object : structure.objects)
-		{
-			emit << YAML::BeginMap;
-			std::visit(
-				[&](const auto &value)
-				{
-					using T = std::decay_t<decltype(value)>;
-					if constexpr (std::is_same_v<T, PersistedPinnedMeasurement>)
-					{
-						emit << YAML::Key << "kind" << YAML::Value << "PinnedMeasurement" << YAML::Key << "persistKey"
-							 << YAML::Value << value.persistKey << YAML::Key << "atomRefs" << YAML::Value
-							 << YAML::BeginSeq;
-						for (const auto &ref : value.atomRefs)
-						{
-							emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key
-								 << "element" << YAML::Value << ref.element;
-							EmitVec3(emit, "position", ref.position);
-							emit << YAML::EndMap;
-						}
-						emit << YAML::EndSeq << YAML::Key << "linkBroken" << YAML::Value << value.linkBroken;
-						EmitVec3(emit, "labelOffset", value.labelOffset);
-						emit << YAML::Key << "alignToBondDirection" << YAML::Value << value.alignToBondDirection
-							 << YAML::Key << "flipped" << YAML::Value << value.flipped << YAML::Key
-							 << "rotationOffsetRadians" << YAML::Value << value.rotationOffsetRadians;
-						EmitVec3(emit, "bondPeriodicOffset", value.bondPeriodicOffset);
-						EmitLabelStyle(emit, value.style);
-					}
-					else if constexpr (std::is_same_v<T, PersistedFreeLabel>)
-					{
-						emit << YAML::Key << "kind" << YAML::Value << "FreeLabel" << YAML::Key << "persistKey"
-							 << YAML::Value << value.persistKey << YAML::Key << "text" << YAML::Value << value.text;
-						EmitVec3(emit, "position", value.position);
-						emit << YAML::Key << "rotationRadians" << YAML::Value << value.rotationRadians;
-						EmitLabelStyle(emit, value.style);
-					}
-					else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
-					{
-						const char *arrowKind = value.kind == PersistedArrowKind::Line		? "Line"
-												: value.kind == PersistedArrowKind::Arrow2D ? "Arrow2D"
-																							: "Arrow3D";
-						const char *orientation =
-							value.orientation2D == PersistedArrow2DOrientation::Billboard ? "Billboard" : "FixedPlane";
-						const char *plane = value.fixedPlane == PersistedWorldPlane::XY	  ? "XY"
-											: value.fixedPlane == PersistedWorldPlane::XZ ? "XZ"
-																						  : "YZ";
-						emit << YAML::Key << "kind" << YAML::Value << "SceneArrow" << YAML::Key << "persistKey"
-							 << YAML::Value << value.persistKey << YAML::Key << "arrowKind" << YAML::Value << arrowKind
-							 << YAML::Key << "orientation2D" << YAML::Value << orientation << YAML::Key << "fixedPlane"
-							 << YAML::Value << plane;
-						emit << YAML::Key << "points" << YAML::Value << YAML::BeginSeq;
-						for (const glm::vec3 &point : value.points)
-							emit << YAML::Flow << YAML::BeginSeq << point.x << point.y << point.z << YAML::EndSeq;
-						emit << YAML::EndSeq;
-						if (value.controlPoint)
-							EmitVec3(emit, "control_point", *value.controlPoint);
-						emit << YAML::Key << "curve_segments" << YAML::Value << value.curveSegments
-							 << YAML::Key << "start_tip" << YAML::Value << value.startTip
-							 << YAML::Key << "end_tip" << YAML::Value << value.endTip;
-						SceneObjectsYaml::EmitAnchors(emit, "startAnchorAtoms", value.startAnchorAtoms);
-						SceneObjectsYaml::EmitAnchors(emit, "endAnchorAtoms", value.endAnchorAtoms);
-						emit << YAML::Key << "atom_buffer" << YAML::Value << value.atomBuffer;
-						EmitStyle(emit, value.style);
-					}
-					else if constexpr (std::is_same_v<T, PersistedSceneOrbital>)
-					{
-						SceneObjectsYaml::EmitOrbital(emit, value);
-					}
-					else if constexpr (std::is_same_v<T, PersistedScenePath>)
-					{
-						SceneObjectsYaml::EmitPath(emit, value);
-					}
-					else
-					{
-						SceneObjectsYaml::EmitPlane(emit, value);
-					}
-				},
-				object);
-			emit << YAML::EndMap;
-		}
+		EmitObjects(emit, structure.objects);
 		emit << YAML::EndSeq << YAML::EndMap;
 	}
-	emit << YAML::EndSeq << YAML::EndMap;
+	emit << YAML::EndSeq;
+	if (!file.projectObjects.empty())
+	{
+		emit << YAML::Key << "projectObjects" << YAML::Value << YAML::BeginSeq;
+		EmitObjects(emit, file.projectObjects);
+		emit << YAML::EndSeq;
+	}
+	emit << YAML::EndMap;
 	return emit.c_str();
 }
 

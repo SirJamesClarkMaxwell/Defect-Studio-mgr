@@ -50,8 +50,10 @@ namespace DefectStudio
 		WeakRef<UndoStack> g_RendererUndoStack;
 		RendererLayer *g_RendererLayer = nullptr;
 
-		void QueueSceneObjectsModified(const RendererWindowState &windowState)
+		void QueueSceneObjectsModified(RendererWindowState &windowState)
 		{
+			if (windowState.isProjectScene)
+				windowState.sceneObjectsDirty = true;
 			if (g_SceneObjectEventBus == nullptr || windowState.structureId.is_nil())
 				return;
 
@@ -404,6 +406,12 @@ namespace DefectStudio
 			m_FocusedViewportWindowId.clear();
 		if (m_LastFocusedViewportWindowId == windowId)
 			m_LastFocusedViewportWindowId.clear();
+	}
+
+	void RendererLayer::ClearUndoHistory()
+	{
+		if (auto undoStack = m_UndoStack.lock())
+			undoStack->Clear();
 	}
 
 	std::vector<RendererWindowState> &RendererLayer::GetWindows()

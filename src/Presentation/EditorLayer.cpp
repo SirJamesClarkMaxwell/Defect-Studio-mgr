@@ -41,6 +41,7 @@
 #include "IO/SceneObjectsIO.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Presentation/ProjectSceneSave.hpp"
+#include "Renderer/ProjectSceneWindow.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/EditorLayer.hpp"
@@ -810,33 +811,6 @@ namespace DefectStudio
 		}
 	}
 
-	void EditorLayer::loadSceneObjectsForProject()
-	{
-		m_KeptSceneObjects = {};
-		m_AppliedSceneObjectWindows.clear();
-		if (!m_ActiveProject.has_value())
-			return;
-		std::vector<StructuredError> warnings;
-		std::string error;
-		if (!SceneObjectsIO::Load(m_ActiveProjectDirectory, m_KeptSceneObjects, warnings, error))
-		{
-			DS_LOG_WARN("EditorLayer: scene object load failed: {}", error);
-			return;
-		}
-		for (const StructuredError &warning : warnings)
-		{
-			DS_LOG_WARN("EditorLayer: {}", warning.technicalDetails);
-			if (m_EventBus != nullptr)
-				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
-		}
-		if (auto rendererLayer = m_RendererLayer.lock())
-		{
-			for (RendererWindowState &window : rendererLayer->GetWindows())
-			{
-				applySceneObjectsToWindow(window);
-			}
-		}
-	}
 
 	void EditorLayer::applySceneObjectsToWindow(RendererWindowState &windowState)
 	{
@@ -1346,50 +1320,6 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonFilePicked, EventPriority::Normal));
 	}
 
-	void EditorLayer::loadInitialProjectState()
-	{
-		std::vector<RecentProjectEntry> recents;
-		std::string recentsError;
-		(void)RecentProjectsIO::Load(RecentProjectsIO::DefaultFilePath(), recents, recentsError);
-
-		bool opened = false;
-		if (!recents.empty())
-		{
-			ProjectManifest manifest;
-			std::string manifestError;
-			if (ProjectManifestIO::Load(recents.front().projectDirectory, manifest, manifestError))
-			{
-				m_ActiveProject = std::move(manifest);
-				m_ActiveProjectDirectory = recents.front().projectDirectory;
-				loadSceneObjectsForProject();
-				opened = true;
-			}
-			else
-			{
-				DS_LOG_WARN("EditorLayer: most recent project at '{}' failed to load: {}",
-					recents.front().projectDirectory.String(), manifestError);
-			}
-		}
-
-		if (!opened)
-		{
-			std::string error;
-			if (!ProjectRootsIO::Load(ProjectRootsIO::DefaultFilePath(), m_AdHocRoots, error))
-			{
-				DS_LOG_WARN("EditorLayer: failed to load project_roots.yaml: {}", error);
-				m_AdHocRoots.clear();
-			}
-			else if (!error.empty())
-			{
-				// Load() still returns true after a successful migration even if persisting the
-				// migrated seed failed (session stays usable) - surface that failure here instead
-				// of silently dropping it.
-				DS_LOG_WARN("EditorLayer: {}", error);
-			}
-		}
-
-		refreshProjectDependentPanels();
-	}
 
 	void EditorLayer::createNewProject(const Path &directory)
 	{
@@ -1780,6 +1710,8 @@ namespace DefectStudio
 			return;
 		}
 		SceneObjectsFile sceneObjects = m_KeptSceneObjects;
+		if (auto rendererLayer = m_RendererLayer.lock())
+			sceneObjects.projectObjects = GatherProjectSceneObjects(*rendererLayer);
 		std::vector<StructureId> savedStructures;
 		if (auto domainLayer = m_DomainLayer.lock())
 		{
@@ -1848,6 +1780,10 @@ namespace DefectStudio
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
 		m_KeptSceneObjects = std::move(sceneObjects);
+		if (auto rendererLayer = m_RendererLayer.lock())
+			for (RendererWindowState &window : rendererLayer->GetWindows())
+				if (window.isProjectScene)
+					window.sceneObjectsDirty = false;
 		// Legacy in-app-built structure export removed in Step 11. All new structures flow
 		// through StructureLifecycleCoordinator (AddStructureToProjectRequested event).
 	}

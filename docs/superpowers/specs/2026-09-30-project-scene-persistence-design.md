@@ -103,3 +103,5 @@ artifact tests against it where practical, capture current results, and write
 a concise issue report. A subsequent Blender workflow will create reference
 images that state the intended bevel geometry separately from the observed
 Defect Studio output.
+
+Status: implemented in task 49.

@@ -288,6 +288,10 @@ namespace DefectStudio
 	{
 		int formatVersion = 2;
 		std::vector<PersistedStructureSceneObjects> structures;
+		// The project's one structure-free scene ("Project Scene", see Renderer/ProjectSceneWindow.hpp).
+		// Additive and optional: absent in the file means empty, and an empty list is not written, so
+		// formatVersion does not change and older files and builds are unaffected.
+		std::vector<PersistedSceneObject> projectObjects;
 	};
 
 	// scene_objects.yaml next to manifest.yaml. Schema:
@@ -299,6 +303,9 @@ namespace DefectStudio
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
 	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
 	//           written as `arrowKind` so it does not collide with the entry tag)
+	//   projectObjects:            # optional; same object entries, no structureKey
+	//     - kind: ScenePath
+	//       ...
 	class SceneObjectsIO
 	{
 	public:

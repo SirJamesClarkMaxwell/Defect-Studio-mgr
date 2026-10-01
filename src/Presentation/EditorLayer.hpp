@@ -130,6 +130,7 @@ namespace DefectStudio
 	{
 	public:
 		EditorLayer();
+		void SetStartupProjectDirectory(std::optional<Path> directory);
 		void BindRuntimeServices(Ref<EventBus> eventBus,
 		                         WeakRef<JobSystem> jobSystem,
 		                         WeakRef<ProgressTracker> progressTracker,
@@ -294,6 +295,7 @@ namespace DefectStudio
 		// m_PendingWindowRestores above - root list changes are rare and shouldn't risk being lost
 		// to a crash).
 		std::optional<ProjectManifest> m_ActiveProject;
+		std::optional<Path> m_StartupProjectDirectory;
 		Path m_ActiveProjectDirectory;
 		std::vector<ProjectRootEntry> m_AdHocRoots;
 		SceneObjectsFile m_KeptSceneObjects;
