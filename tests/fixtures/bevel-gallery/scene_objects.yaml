@@ -1,0 +1,1703 @@
+formatVersion: 2
+structures: []
+projectObjects:
+    - kind: ScenePath
+      persistKey: bevel-gallery-r00-c00
+      name: "None | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, 0, 0]
+        - position: [2, 0, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: None
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r00-c01
+      name: "None | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, 0, 0]
+        - position: [5.2, 0, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: None
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r00-c02
+      name: "None | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, 0, 0]
+        - position: [8.4, 0, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: None
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r00-c03
+      name: "None | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, 0, 0]
+        - position: [11.6, 0, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: None
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r00-c04
+      name: "None | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, 0, 0]
+        - position: [14.8, 0, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: None
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r00-c05
+      name: "None | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, 0, 0]
+        - position: [18, 0, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: None
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r01-c00
+      name: "Arrow | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -1.6, 0]
+        - position: [2, -1.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Arrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r01-c01
+      name: "Arrow | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -1.6, 0]
+        - position: [5.2, -1.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Arrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r01-c02
+      name: "Arrow | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -1.6, 0]
+        - position: [8.4, -1.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Arrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r01-c03
+      name: "Arrow | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -1.6, 0]
+        - position: [11.6, -1.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Arrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r01-c04
+      name: "Arrow | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -1.6, 0]
+        - position: [14.8, -1.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Arrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r01-c05
+      name: "Arrow | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -1.6, 0]
+        - position: [18, -1.6, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Arrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r02-c00
+      name: "Stealth | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -3.2, 0]
+        - position: [2, -3.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Stealth
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r02-c01
+      name: "Stealth | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -3.2, 0]
+        - position: [5.2, -3.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Stealth
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r02-c02
+      name: "Stealth | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -3.2, 0]
+        - position: [8.4, -3.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Stealth
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r02-c03
+      name: "Stealth | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -3.2, 0]
+        - position: [11.6, -3.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Stealth
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r02-c04
+      name: "Stealth | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -3.2, 0]
+        - position: [14.8, -3.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Stealth
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r02-c05
+      name: "Stealth | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -3.2, 0]
+        - position: [18, -3.2, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Stealth
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r03-c00
+      name: "Latex | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -4.8, 0]
+        - position: [2, -4.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Latex
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r03-c01
+      name: "Latex | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -4.8, 0]
+        - position: [5.2, -4.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Latex
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r03-c02
+      name: "Latex | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -4.8, 0]
+        - position: [8.4, -4.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Latex
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r03-c03
+      name: "Latex | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -4.8, 0]
+        - position: [11.6, -4.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Latex
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r03-c04
+      name: "Latex | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -4.8, 0]
+        - position: [14.8, -4.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Latex
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r03-c05
+      name: "Latex | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -4.8, 0]
+        - position: [18, -4.8, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Latex
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r04-c00
+      name: "OpenArrow | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -6.4, 0]
+        - position: [2, -6.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: OpenArrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r04-c01
+      name: "OpenArrow | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -6.4, 0]
+        - position: [5.2, -6.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: OpenArrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r04-c02
+      name: "OpenArrow | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -6.4, 0]
+        - position: [8.4, -6.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: OpenArrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r04-c03
+      name: "OpenArrow | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -6.4, 0]
+        - position: [11.6, -6.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: OpenArrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r04-c04
+      name: "OpenArrow | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -6.4, 0]
+        - position: [14.8, -6.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: OpenArrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r04-c05
+      name: "OpenArrow | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -6.4, 0]
+        - position: [18, -6.4, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: OpenArrow
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r05-c00
+      name: "Bar | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -8, 0]
+        - position: [2, -8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Bar
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r05-c01
+      name: "Bar | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -8, 0]
+        - position: [5.2, -8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Bar
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r05-c02
+      name: "Bar | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -8, 0]
+        - position: [8.4, -8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Bar
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r05-c03
+      name: "Bar | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -8, 0]
+        - position: [11.6, -8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Bar
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r05-c04
+      name: "Bar | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -8, 0]
+        - position: [14.8, -8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Bar
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r05-c05
+      name: "Bar | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -8, 0]
+        - position: [18, -8, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Bar
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r06-c00
+      name: "Circle | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -9.6, 0]
+        - position: [2, -9.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Circle
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r06-c01
+      name: "Circle | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -9.6, 0]
+        - position: [5.2, -9.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Circle
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r06-c02
+      name: "Circle | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -9.6, 0]
+        - position: [8.4, -9.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Circle
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r06-c03
+      name: "Circle | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -9.6, 0]
+        - position: [11.6, -9.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Circle
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r06-c04
+      name: "Circle | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -9.6, 0]
+        - position: [14.8, -9.6, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Circle
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r06-c05
+      name: "Circle | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -9.6, 0]
+        - position: [18, -9.6, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Circle
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r07-c00
+      name: "Square | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -11.2, 0]
+        - position: [2, -11.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Square
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r07-c01
+      name: "Square | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -11.2, 0]
+        - position: [5.2, -11.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Square
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r07-c02
+      name: "Square | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -11.2, 0]
+        - position: [8.4, -11.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Square
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r07-c03
+      name: "Square | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -11.2, 0]
+        - position: [11.6, -11.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Square
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r07-c04
+      name: "Square | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -11.2, 0]
+        - position: [14.8, -11.2, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Square
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r07-c05
+      name: "Square | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -11.2, 0]
+        - position: [18, -11.2, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Square
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r08-c00
+      name: "Diamond | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -12.8, 0]
+        - position: [2, -12.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Diamond
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r08-c01
+      name: "Diamond | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -12.8, 0]
+        - position: [5.2, -12.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Diamond
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r08-c02
+      name: "Diamond | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -12.8, 0]
+        - position: [8.4, -12.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Diamond
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r08-c03
+      name: "Diamond | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -12.8, 0]
+        - position: [11.6, -12.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Diamond
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r08-c04
+      name: "Diamond | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -12.8, 0]
+        - position: [14.8, -12.8, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Diamond
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r08-c05
+      name: "Diamond | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -12.8, 0]
+        - position: [18, -12.8, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Diamond
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r09-c00
+      name: "Kite | sharp"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [0, -14.4, 0]
+        - position: [2, -14.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Kite
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r09-c01
+      name: "Kite | chamfer 0.02"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [3.2, -14.4, 0]
+        - position: [5.2, -14.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.02
+        ribbon_bevel_segments: 1
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Kite
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r09-c02
+      name: "Kite | 0.04 x3"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [6.4, -14.4, 0]
+        - position: [8.4, -14.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Kite
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r09-c03
+      name: "Kite | 0.06 x8 round"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [9.6, -14.4, 0]
+        - position: [11.6, -14.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.06
+        ribbon_bevel_segments: 8
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Kite
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r09-c04
+      name: "Kite | 0.04 x4 shape 1.0"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [12.8, -14.4, 0]
+        - position: [14.8, -14.4, 0]
+      segments:
+        - kind: Line
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 4
+        ribbon_bevel_shape: 1
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Kite
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
+    - kind: ScenePath
+      persistKey: bevel-gallery-r09-c05
+      name: "Kite | 0.04 x3 arc"
+      visible: true
+      renderable: true
+      nodes:
+        - position: [16, -14.4, 0]
+        - position: [18, -14.4, 0]
+      segments:
+        - kind: Arc
+          planeNormal: [0, 0, 1]
+          signedSweepRadians: 1.570796
+      style:
+        profile: Flat
+        ribbon_normal: [0, 0, 1]
+        ribbon_thickness: 0.15
+        ribbon_bevel: 0.04
+        ribbon_bevel_segments: 3
+        ribbon_bevel_shape: 0.5
+        width: 0.3
+        join: Bevel
+        cap: Butt
+        depthMode: DepthTest
+        color: [0.85, 0.55, 0.2]
+        alpha: 1
+        startDecoration: None
+        endDecoration: Kite
+        endDecorationLengthScale: 1
+        endDecorationWidthScale: 1
+        end_decoration_filled: true
