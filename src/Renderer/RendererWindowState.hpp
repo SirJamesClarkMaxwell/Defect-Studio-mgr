@@ -278,6 +278,25 @@ namespace DefectStudio
 		// electronic-structure session that owns WAVECAR orbitals.
 		struct SceneOrbital
 		{
+			// task/53: one term of an LCAO orbital - a single-centre preset member on one atom, with
+			// its own orientation and coefficient. See lcaoComponents.
+			struct LcaoComponent
+			{
+				// Index into structure.atoms. The component sits on that atom while the index resolves
+				// and at `center` once it does not - the anchorAtoms rule, so a stale anchor degrades
+				// instead of snapping to atom 0. ResolveAnchoredOrbitals refreshes `center`.
+				std::size_t anchorAtom = 0;
+				glm::vec3 center = glm::vec3(0.0f);
+				// Single-centre presets only; a component whose preset IsTwoCenterPreset contributes
+				// nothing.
+				OrbitalPreset preset = OrbitalPreset::Sp3;
+				int shell = 2;
+				int lobeIndex = 0;
+				float effectiveCharge = 1.0f;
+				glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees, the rotationEuler convention below
+				float coefficient = 1.0f;
+			};
+
 			// Same stable identity as SceneArrow::id, from the same SceneRegistry.
 			SceneObjectId id;
 			OrbitalPreset preset = OrbitalPreset::P;
@@ -326,6 +345,15 @@ namespace DefectStudio
 			// ...and its camera column: drawn in an exported render. Independent of `visible`.
 			bool renderable = true;
 			std::string persistKey; // see PinnedMeasurement::persistKey
+			// task/53: when non-empty the orbital IS this linear combination, psi = sum c_i phi_i,
+			// and preset, shell, lobeIndex, effectiveCharge, centerA/centerB, anchorAtoms and
+			// rotationEuler are not read by BuildOrbitalWavefunction. phaseFlipped, scale, stretch,
+			// isoFraction, resolution, colours and visibility apply as usual. G/R/S: scale only - the
+			// components are pinned to their atoms. Built by BuildSalcSceneOrbital.
+			std::vector<LcaoComponent> lcaoComponents;
+			// Outliner and properties title when non-empty (e.g. "e_x (E #1)"); otherwise the preset
+			// name is shown, as before.
+			std::string displayName;
 		};
 		std::vector<SceneOrbital> sceneOrbitals;
 		std::vector<SceneObjectId> selectedSceneOrbitals;

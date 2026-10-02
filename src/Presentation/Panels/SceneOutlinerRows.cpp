@@ -376,7 +376,8 @@ namespace DefectStudio
 		if (isSelected)
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
-		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const auto &orbital = windowState.sceneOrbitals[orbitalIndex];
+		const bool rowActivated = ImGui::Selectable(orbital.displayName.empty() ? rowLabel : orbital.displayName.c_str(), isSelected);
 		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);

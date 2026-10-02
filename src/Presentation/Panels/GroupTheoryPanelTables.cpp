@@ -270,6 +270,7 @@ namespace DefectStudio
 		if (vectors.empty())
 			return;
 		ImGui::TextUnformatted("Projected vectors");
+		drawSalcBasisCombo();
 		ImGui::TextDisabled("Order starts as projection order (follows atom selection order); reorder freely.");
 		const int columns = static_cast<int>(m_Result->reduction.siteLabels.size()) + 6;
 		if (!ImGui::BeginTable(
@@ -359,6 +360,8 @@ namespace DefectStudio
 			if (ImGui::ArrowButton("##down", ImGuiDir_Down))
 				std::swap(m_VectorOrder[row], m_VectorOrder[row + 1]);
 			ImGui::EndDisabled();
+			ImGui::SameLine();
+			drawSalcButton(vectorIndex);
 			ImGui::PopID();
 		}
 		ImGui::EndTable();

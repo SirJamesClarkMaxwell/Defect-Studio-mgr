@@ -7,6 +7,10 @@
 
 namespace DefectStudio
 {
+	// Shared add path; callers own the undo snapshot, selection and final entity sync (batch adds).
+	[[nodiscard]] SceneObjectId AppendSceneOrbital(
+		RendererWindowState &windowState, RendererWindowState::SceneOrbital orbital);
+
 	// The Object Properties panel's "Orbitals" section. Lives in its own file because
 	// ObjectPropertiesPanel.cpp was already past the ~500-line limit in AGENTS.md before this
 	// existed, and because the quick-edit popup will want the same editor later - the same reason

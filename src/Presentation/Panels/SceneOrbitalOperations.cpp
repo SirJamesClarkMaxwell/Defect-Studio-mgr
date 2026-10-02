@@ -101,6 +101,13 @@ namespace DefectStudio
 		return clipboard;
 	}
 
+	SceneObjectId AppendSceneOrbital(RendererWindowState &windowState, RendererWindowState::SceneOrbital orbital)
+	{
+		orbital.id = windowState.sceneRegistry.AllocateObjectId();
+		windowState.sceneOrbitals.push_back(std::move(orbital));
+		return windowState.sceneOrbitals.back().id;
+	}
+
 	void CopySceneOrbitalsToClipboard(const RendererWindowState &windowState)
 	{
 		CopySelectedObjects(

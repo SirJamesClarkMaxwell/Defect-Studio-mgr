@@ -206,7 +206,7 @@ namespace DefectStudio
 			const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, window.structure);
 			snapshot.orbitals.push_back(
 				{index, centers.centerA, centers.centerB, orbital.rotationEuler, orbital.scale,
-					!orbital.anchorAtoms.empty(), IsTwoCenterPreset(orbital.preset)});
+					!orbital.anchorAtoms.empty(), orbital.lcaoComponents.empty() && IsTwoCenterPreset(orbital.preset)});
 		}
 		for (const SceneObjectId id : window.selectedScenePlanes)
 		{
@@ -386,6 +386,8 @@ namespace DefectStudio
 			if (start.index >= window.sceneOrbitals.size())
 				continue;
 			RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[start.index];
+			if (!orbital.lcaoComponents.empty() && operation != ModalTransformOp::Scale)
+				continue;
 			if (operation == ModalTransformOp::Translate)
 			{
 				orbital.centerA = ApplyTransformDelta(delta.spatial, start.centerA, selectionPivot);
@@ -405,9 +407,7 @@ namespace DefectStudio
 				orbital.rotationEuler = RotatedEulerDegrees(start.rotationEuler, delta.spatial.rotation);
 			}
 			else
-			{
 				orbital.scale = std::clamp(start.scale * delta.scaleFactor, 0.05f, 20.0f);
-			}
 		}
 
 		for (const PlaneTransformStart &start : snapshot.planes)
@@ -474,10 +474,12 @@ namespace DefectStudio
 			if (start.index >= window.sceneOrbitals.size())
 				continue;
 			RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[start.index];
+			orbital.scale = start.scale;
+			if (!orbital.lcaoComponents.empty())
+				continue;
 			orbital.centerA = start.centerA;
 			orbital.centerB = start.centerB;
 			orbital.rotationEuler = start.rotationEuler;
-			orbital.scale = start.scale;
 			if (start.anchored && window.modalTransformSceneObjectsBefore.has_value() &&
 				start.index < window.modalTransformSceneObjectsBefore->sceneOrbitals.size())
 			{

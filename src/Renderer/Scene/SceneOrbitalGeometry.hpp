@@ -17,6 +17,13 @@ namespace DefectStudio
 	// the atoms win - that is what makes an anchored orbital follow its atom. An anchor index that
 	// is out of range is ignored rather than clamped, so a stale anchor degrades to the stored
 	// centre instead of snapping to atom 0.
+	//
+	// task/53: an orbital with lcaoComponents is built from them instead - each component is
+	// MakeOrbitalPreset of its own preset member at its resolved centre in RotationFrame(its
+	// rotationEuler), every term's coefficient multiplied by the component's coefficient, all
+	// concatenated; then phaseFlipped. ResolveSceneOrbitalCenters reports the mean of the resolved
+	// component centres as centerA, centerB and centroid; MakeSceneOrbitalMeshKey hashes the
+	// components; ResolveAnchoredOrbitals refreshes each component's `center` from its atom.
 	[[nodiscard]] OrbitalWavefunction BuildOrbitalWavefunction(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
 

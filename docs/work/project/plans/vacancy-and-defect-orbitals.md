@@ -1,6 +1,7 @@
 # Vacancy model and defect orbitals
 
-Status: planned 2026-10-02. Three tasks, one branch each, chained on `task/50-path-bindings`.
+Status: 51, 52, 53 implemented 2026-10-02 (Release build + full suite green; Debug and the manual
+UI pass still open). One branch each, chained on `task/50-path-bindings`.
 
 ## Why
 

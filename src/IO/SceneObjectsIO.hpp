@@ -131,6 +131,19 @@ namespace DefectStudio
 	// OrbitalPresetName rather than the enumerator's ordinal, so inserting a preset into the enum
 	// - which task 26d does, in the middle - cannot silently turn everyone's saved sp3 into a
 	// sigma. An unknown preset string loads as the default `p` and is reported, not guessed at.
+	// task/53: SceneOrbital::LcaoComponent. `atom` is the anchor as an atom reference (rebound on
+	// load like anchorAtoms); its position doubles as the component's fallback centre.
+	struct PersistedOrbitalLcaoComponent
+	{
+		PersistedAtomRef atom;
+		std::string preset = "sp3"; // OrbitalPresetName; an unknown name skips the whole orbital
+		int shell = 2;
+		int lobeIndex = 0;
+		float effectiveCharge = 1.0f;
+		glm::vec3 rotationEuler = glm::vec3(0.0f);
+		float coefficient = 1.0f;
+	};
+
 	struct PersistedSceneOrbital
 	{
 		std::string persistKey;
@@ -154,6 +167,9 @@ namespace DefectStudio
 		glm::vec3 negativeLobeColor = glm::vec3(0.25f, 0.35f, 0.9f);
 		float alpha = 0.75f;
 		bool visible = true;
+		// task/53, both optional and not written when empty - files without them load unchanged.
+		std::vector<PersistedOrbitalLcaoComponent> lcaoComponents;
+		std::string displayName;
 	};
 
 	// ---- v2: paths (task/41 S9) ------------------------------------------------------------------

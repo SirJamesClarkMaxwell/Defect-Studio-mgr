@@ -61,6 +61,8 @@ namespace DefectStudio
 		[[nodiscard]] glm::mat3 OrbitalFrame(
 			const RendererWindowState::SceneOrbital &orbital, const SceneOrbitalCenters &centers)
 		{
+			if (!orbital.lcaoComponents.empty())
+				return glm::mat3(1.0f);
 			if (!IsTwoCenterPreset(orbital.preset))
 				return RotationFrame(orbital.rotationEuler);
 
@@ -164,6 +166,14 @@ namespace DefectStudio
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
 	{
 		SceneOrbitalCenters centers;
+		if (!orbital.lcaoComponents.empty())
+		{
+			for (const auto &component : orbital.lcaoComponents)
+				centers.centroid += ResolveAnchor(component.center, component.anchorAtom, structure);
+			centers.centroid /= static_cast<float>(orbital.lcaoComponents.size());
+			centers.centerA = centers.centerB = centers.centroid;
+			return centers;
+		}
 		centers.centerA = ResolveAnchor(orbital.centerA, orbital.anchorAtoms, 0, structure);
 		centers.centerB = ResolveAnchor(orbital.centerB, orbital.anchorAtoms, 1, structure);
 		centers.centroid = IsTwoCenterPreset(orbital.preset)
@@ -175,6 +185,29 @@ namespace DefectStudio
 	OrbitalWavefunction BuildOrbitalWavefunction(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
 	{
+		if (!orbital.lcaoComponents.empty())
+		{
+			OrbitalWavefunction combined;
+			for (const auto &component : orbital.lcaoComponents)
+			{
+				if (IsTwoCenterPreset(component.preset))
+					continue;
+				OrbitalPresetSettings settings;
+				settings.centerA = ResolveAnchor(component.center, component.anchorAtom, structure);
+				settings.shell = component.shell;
+				settings.lobeIndex = component.lobeIndex;
+				settings.effectiveCharge = component.effectiveCharge;
+				settings.orientation = RotationFrame(component.rotationEuler);
+				for (OrbitalTerm term : MakeOrbitalPreset(component.preset, settings).terms)
+				{
+					term.coefficient *= component.coefficient;
+					if (orbital.phaseFlipped)
+						term.coefficient = -term.coefficient;
+					combined.terms.push_back(term);
+				}
+			}
+			return combined;
+		}
 		const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, structure);
 		OrbitalPresetSettings settings;
 		settings.centerA = centers.centerA;
@@ -235,13 +268,31 @@ namespace DefectStudio
 	{
 		const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, structure);
 		std::uint64_t hash = 1469598103934665603ull;
-		HashValue(hash, static_cast<std::uint64_t>(orbital.preset));
-		HashValue(hash, static_cast<std::uint64_t>(orbital.shell));
-		HashValue(hash, static_cast<std::uint64_t>(orbital.lobeIndex));
-		HashFloat(hash, orbital.effectiveCharge);
-		HashVec3(hash, centers.centerA);
-		HashVec3(hash, centers.centerB);
-		HashVec3(hash, orbital.rotationEuler);
+		HashValue(hash, orbital.lcaoComponents.size());
+		if (!orbital.lcaoComponents.empty())
+		{
+			for (const auto &component : orbital.lcaoComponents)
+			{
+				HashValue(hash, component.anchorAtom);
+				HashValue(hash, static_cast<std::uint64_t>(component.preset));
+				HashValue(hash, static_cast<std::uint64_t>(component.shell));
+				HashValue(hash, static_cast<std::uint64_t>(component.lobeIndex));
+				HashFloat(hash, component.effectiveCharge);
+				HashFloat(hash, component.coefficient);
+				HashVec3(hash, ResolveAnchor(component.center, component.anchorAtom, structure));
+				HashVec3(hash, component.rotationEuler);
+			}
+		}
+		else
+		{
+			HashValue(hash, static_cast<std::uint64_t>(orbital.preset));
+			HashValue(hash, static_cast<std::uint64_t>(orbital.shell));
+			HashValue(hash, static_cast<std::uint64_t>(orbital.lobeIndex));
+			HashFloat(hash, orbital.effectiveCharge);
+			HashVec3(hash, centers.centerA);
+			HashVec3(hash, centers.centerB);
+			HashVec3(hash, orbital.rotationEuler);
+		}
 		HashValue(hash, static_cast<std::uint64_t>(orbital.phaseFlipped));
 		HashFloat(hash, orbital.scale);
 		HashVec3(hash, orbital.stretch);
@@ -254,6 +305,10 @@ namespace DefectStudio
 	{
 		for (RendererWindowState::SceneOrbital &orbital : windowState.sceneOrbitals)
 		{
+			for (auto &component : orbital.lcaoComponents)
+				component.center = ResolveAnchor(component.center, component.anchorAtom, windowState.structure);
+			if (!orbital.lcaoComponents.empty())
+				continue;
 			if (!orbital.anchorAtoms.empty() && orbital.anchorAtoms[0] < windowState.structure.atoms.size())
 				orbital.centerA = windowState.structure.atoms[orbital.anchorAtoms[0]].cartesianPosition;
 			if (orbital.anchorAtoms.size() >= 2 && orbital.anchorAtoms[1] < windowState.structure.atoms.size())
@@ -312,7 +367,12 @@ namespace DefectStudio
 		// which the wavefunction still carries 2% of its peak amplitude. The drawn isosurface sits
 		// at 20% by default and so lies strictly inside it - which is exactly what makes this a
 		// sound bounding sphere rather than a guess that happens to work for the shapes tried.
-		const float extent = SuggestOrbitalExtent(BuildOrbitalWavefunction(orbital, structure));
+		const OrbitalWavefunction wavefunction = BuildOrbitalWavefunction(orbital, structure);
+		float extent = SuggestOrbitalExtent(wavefunction);
+		// Mixed component presets can have different term counts, so their term centroid differs
+		// from the scene pivot. Expand the same measured sphere to cover that offset.
+		if (!orbital.lcaoComponents.empty() && extent > 0.0f)
+			extent += glm::length(OrbitalCentroid(wavefunction) - bounds.center);
 		const float scale = std::isfinite(orbital.scale) && orbital.scale > 0.0f ? orbital.scale : 1.0f;
 		const glm::vec3 stretch = SanitizedStretch(orbital.stretch);
 		const float largestStretch = std::max({stretch.x, stretch.y, stretch.z});

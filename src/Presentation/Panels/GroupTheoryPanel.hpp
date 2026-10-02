@@ -16,6 +16,7 @@
 #include "Presentation/Panels/GroupTheoryFormatting.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneOrbitalLcao.hpp"
 
 namespace DefectStudio
 {
@@ -40,7 +41,7 @@ namespace DefectStudio
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
-		enum class CentreMode { SelectionCentroid, Cursor, Atom };
+		enum class CentreMode { SelectionCentroid, Cursor, Atom, Vacancy };
 
 		struct BasisKey
 		{
@@ -59,10 +60,14 @@ namespace DefectStudio
 		void buildBasisAndSubmit(const std::string &windowId, const RendererWindowState &windowState, const StructureRecord &record);
 		void submitAnalysis();
 		[[nodiscard]] std::optional<BasisKey> currentBasisKey() const;
+		[[nodiscard]] Result<SelectionBasis> selectionBasis(
+			const RendererWindowState &windowState, const StructureRecord &record) const;
 
 		void drawCharacterTable();
 		void drawDirectProducts();
 		void drawProjectedVectors();
+		void drawSalcBasisCombo();
+		void drawSalcButton(std::size_t vectorIndex);
 		void drawMultiplets();
 		void copyResults(TableFormat format);
 
@@ -71,6 +76,8 @@ namespace DefectStudio
 		WeakRef<JobSystem> m_JobSystem;
 
 		CentreMode m_CentreMode = CentreMode::SelectionCentroid;
+		std::size_t m_VacancyIndex = 0;
+		SalcBasisFunction m_SalcFunction = SalcBasisFunction::Sp3DanglingBond;
 		std::optional<SelectionBasis> m_Basis;
 		std::optional<BasisKey> m_BasisKey;
 		int m_GroupIndex = 0;

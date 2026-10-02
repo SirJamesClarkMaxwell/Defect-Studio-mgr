@@ -12,6 +12,7 @@
 
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -244,9 +245,7 @@ namespace DefectStudio
 			// One place that builds and files a new orbital, so the entry points below cannot
 			// drift apart on anchoring, undo or selection.
 			auto registerOrbital = [&](RendererWindowState::SceneOrbital orbital) {
-				orbital.id = windowState.sceneRegistry.AllocateObjectId();
-				windowState.sceneOrbitals.push_back(std::move(orbital));
-				return windowState.sceneOrbitals.back().id;
+				return AppendSceneOrbital(windowState, std::move(orbital));
 			};
 			auto addOrbital = [&](OrbitalPreset preset, int lobeIndex, const std::vector<std::size_t> &anchors) {
 				auto orbital = MakeDefaultSceneOrbital(windowState, preset, worldPosition, anchors);

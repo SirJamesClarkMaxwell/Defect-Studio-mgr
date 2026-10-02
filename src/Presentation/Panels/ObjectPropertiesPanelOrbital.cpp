@@ -147,8 +147,33 @@ namespace DefectStudio
 			return;
 		SceneOrbital &orbital = windowState.sceneOrbitals[orbitalIndex];
 		constexpr ImGuiTreeNodeFlags kOpen = ImGuiTreeNodeFlags_DefaultOpen;
+		const bool lcao = !orbital.lcaoComponents.empty();
+		if (!orbital.displayName.empty())
+			ImGui::TextUnformatted(orbital.displayName.c_str());
+		if (lcao && ImGui::CollapsingHeader("Składowe", kOpen) &&
+			ImGui::BeginTable("##LcaoComponents", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+		{
+			ImGui::TableSetupColumn("Atom");
+			ImGui::TableSetupColumn("Funkcja");
+			ImGui::TableSetupColumn("Współczynnik");
+			ImGui::TableHeadersRow();
+			for (const auto &component : orbital.lcaoComponents)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				if (component.anchorAtom < windowState.structure.atoms.size())
+					ImGui::Text("%s #%zu", windowState.structure.atoms[component.anchorAtom].element.c_str(), component.anchorAtom + 1);
+				else
+					ImGui::TextDisabled("Atom (missing)");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextUnformatted(OrbitalPresetMemberDisplayName(component.preset, component.lobeIndex));
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text("%.4f", component.coefficient);
+			}
+			ImGui::EndTable();
+		}
 
-		if (ImGui::CollapsingHeader("Ksztalt##OrbitalShape", kOpen))
+		if (!lcao && ImGui::CollapsingHeader("Ksztalt##OrbitalShape", kOpen))
 		{
 			DrawPresetCombo(windowState, orbital);
 
@@ -191,7 +216,7 @@ namespace DefectStudio
 				"- w odroznieniu od skali nizej, ktora tylko powieksza rysunek.");
 		}
 
-		if (ImGui::CollapsingHeader("Polozenie##OrbitalPlacement", kOpen))
+		if (!lcao && ImGui::CollapsingHeader("Polozenie##OrbitalPlacement", kOpen))
 		{
 			DrawAnchoring(windowState, orbital);
 			const bool anchored = !orbital.anchorAtoms.empty();
@@ -333,7 +358,8 @@ namespace DefectStudio
 
 			auto &selection = windowState.selectedSceneOrbitals;
 			const bool selected = std::find(selection.begin(), selection.end(), orbital.id) != selection.end();
-			const std::string label = std::string(OrbitalPresetName(orbital.preset)) + " #" + std::to_string(index);
+			const std::string label = orbital.displayName.empty()
+				? std::string(OrbitalPresetName(orbital.preset)) + " #" + std::to_string(index) : orbital.displayName;
 			if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick))
 			{
 				// Same clear+select / Ctrl-toggle rule as clicking one in the viewport.

@@ -336,7 +336,7 @@ namespace DefectStudio
 		for (const SceneObjectId id : selection)
 		{
 			const std::size_t index = AnnotationIndex(orbitals, id);
-			if (index < orbitals.size() && !IsTwoCenterPreset(orbitals[index].preset))
+			if (index < orbitals.size() && orbitals[index].lcaoComponents.empty() && !IsTwoCenterPreset(orbitals[index].preset))
 			{
 				representative = index;
 				break;
@@ -349,7 +349,7 @@ namespace DefectStudio
 		for (const SceneObjectId id : selection)
 		{
 			const std::size_t index = AnnotationIndex(orbitals, id);
-			if (index < orbitals.size() && !IsTwoCenterPreset(orbitals[index].preset))
+			if (index < orbitals.size() && orbitals[index].lcaoComponents.empty() && !IsTwoCenterPreset(orbitals[index].preset))
 				orbitals[index].rotationEuler = orientation;
 		}
 	}
@@ -372,6 +372,10 @@ namespace DefectStudio
 			return;
 		}
 
+		const bool hasLcao = std::any_of(windowState.selectedSceneOrbitals.begin(), windowState.selectedSceneOrbitals.end(), [&](SceneObjectId id) {
+			const std::size_t index = AnnotationIndex(windowState.sceneOrbitals, id);
+			return index < windowState.sceneOrbitals.size() && !windowState.sceneOrbitals[index].lcaoComponents.empty();
+		});
 		using Orbital = RendererWindowState::SceneOrbital;
 		auto draw = [&](auto field, auto &&widget) {
 			return DrawSelectedSharedValue(
@@ -380,7 +384,7 @@ namespace DefectStudio
 		};
 		ImGui::TextDisabled("Wspolne pola ponizej sa stosowane do wszystkich zaznaczonych orbitali.");
 		constexpr ImGuiTreeNodeFlags kOpen = ImGuiTreeNodeFlags_DefaultOpen;
-		if (ImGui::CollapsingHeader("Ksztalt##SelectedOrbitalShape", kOpen))
+		if (!hasLcao && ImGui::CollapsingHeader("Ksztalt##SelectedOrbitalShape", kOpen))
 		{
 			draw(&Orbital::shell, [](int &value) {
 				const bool changed = ImGui::SliderInt("Powloka (n)", &value, 1, 5);
@@ -391,7 +395,7 @@ namespace DefectStudio
 				return ImGui::DragFloat("Z_eff", &value, 0.05f, 0.1f, 30.0f, "%.2f");
 			});
 		}
-		if (ImGui::CollapsingHeader("Polozenie##SelectedOrbitalPlacement", kOpen))
+		if (!hasLcao && ImGui::CollapsingHeader("Polozenie##SelectedOrbitalPlacement", kOpen))
 		{
 			if (ImGui::Button("Wyrownaj orientacje"))
 			{
