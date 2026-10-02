@@ -541,7 +541,8 @@ namespace DefectStudio
 			windowState.bondLabelAutoOffsetMagnitude,
 			windowState.bondLabelAlignThresholdDeg,
 			windowState.showPeriodicBonds,
-			&pathInput);
+			&pathInput,
+			windowState.showVacancies);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(
@@ -605,6 +606,7 @@ namespace DefectStudio
 		previewState.showBonds = source.showBonds;
 		previewState.showPeriodicBonds = source.showPeriodicBonds;
 		previewState.showCellBox = source.showCellBox;
+		previewState.showVacancies = source.showVacancies;
 		previewState.showGrid = source.showGrid;
 		previewState.selectedAtomIndices = source.selectedAtomIndices;
 		// previewState is a fresh RendererWindowState, not a copy of the real window - every one of

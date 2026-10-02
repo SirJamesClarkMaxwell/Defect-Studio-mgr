@@ -14,6 +14,7 @@
 
 namespace DefectStudio
 {
+	class CommandRegistry;
 	class DomainLayer;
 	class JobSystem;
 	class CopyWindowStateJob;
@@ -42,6 +43,7 @@ namespace DefectStudio
 			WeakRef<DomainLayer> domainLayer,
 			WeakRef<JobSystem> jobSystem,
 			ElementPropertiesTable elementPropertiesTable,
+			WeakRef<CommandRegistry> commandRegistry,
 			std::string title = "Scene Outliner",
 			bool visibleByDefault = false);
 		SceneOutlinerPanel(const SceneOutlinerPanel &other) = default;
@@ -77,6 +79,9 @@ namespace DefectStudio
 		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
 		// SceneRegistry entity, because nothing about it needs a transform or a selection component.
 		void drawPlanesGroup(RendererWindowState &windowState);
+		// task/51: structure.vacancies. Group eye = showVacancies; a row's X removes that vacancy
+		// through renderer.vacancy.set, so it is one undo step like every other domain edit.
+		void drawVacanciesGroup(RendererWindowState &windowState);
 		void drawPathsGroup(RendererWindowState &windowState);
 
 		enum class SelectionRowKind
@@ -129,6 +134,7 @@ namespace DefectStudio
 		WeakRef<DomainLayer> m_DomainLayer;
 		WeakRef<JobSystem> m_JobSystem;
 		ElementPropertiesTable m_ElementPropertiesTable;
+		WeakRef<CommandRegistry> m_CommandRegistry;
 		Ref<CopyWindowStateJob> m_PendingCopyJob;
 		JobId m_PendingCopyJobId = 0;
 		std::string m_CopySourceWindowId;

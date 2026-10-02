@@ -7,6 +7,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 
 #include <functional>
@@ -16,6 +17,15 @@ namespace DefectStudio
 {
 	namespace
 	{
+		Unique<ICommand> MakeSetVacanciesCommand(WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer, AtomStyleTable styles, CommandContext &context)
+		{
+			const auto payload = context.TryGet<SetVacanciesPayload>(kSetVacanciesPayloadKey);
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetVacanciesCommand(std::move(domainLayer), std::move(rendererLayer), std::move(styles), *payload);
+		}
+
 		void RegisterRendererCommand(
 			CommandRegistry &registry,
 			const char *id,
@@ -721,6 +731,10 @@ namespace DefectStudio
 			"Renderer: Commit gizmo transform",
 			"Apply a completed viewport gizmo drag to the domain structure (undoable).",
 			std::bind_front(MakeCommitGizmoTransformCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(registry, kSetVacanciesCommandId, "Renderer: Edit vacancies",
+			"Replace the structure's vacancy list (undoable).",
+			std::bind_front(MakeSetVacanciesCommand, domainLayer, rendererLayer, atomStyleTable),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,

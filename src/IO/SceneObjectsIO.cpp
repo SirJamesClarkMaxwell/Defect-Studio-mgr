@@ -14,6 +14,12 @@
 #include "IO/SceneObjectsYaml.hpp"
 #include "IO/TextFileIO.hpp"
 
+namespace DefectStudio::SceneObjectsYaml
+{
+	bool ParseVacancy(const YAML::Node &node, PersistedVacancy &vacancy);
+	void EmitVacancies(YAML::Emitter &emit, const std::vector<PersistedVacancy> &vacancies);
+}
+
 namespace DefectStudio
 {
 namespace
@@ -470,6 +476,18 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 				}
 				PersistedStructureSceneObjects structure;
 				structure.structureKey = std::move(structureKey);
+				const YAML::Node vacancies = structureNode["vacancies"];
+				if (vacancies && !vacancies.IsSequence())
+					Warn(warnings, "Structure vacancies is not a sequence");
+				else if (vacancies)
+					for (const YAML::Node &node : vacancies)
+					{
+						PersistedVacancy vacancy;
+						if (SceneObjectsYaml::ParseVacancy(node, vacancy))
+							structure.vacancies.push_back(std::move(vacancy));
+						else
+							Warn(warnings, "Invalid vacancy entry");
+					}
 				const YAML::Node objects = structureNode["objects"];
 				if (!objects)
 				{
@@ -506,7 +524,9 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 		emit << YAML::BeginMap << YAML::Key << "structureKey" << YAML::Value << structure.structureKey << YAML::Key
 			 << "objects" << YAML::Value << YAML::BeginSeq;
 		EmitObjects(emit, structure.objects);
-		emit << YAML::EndSeq << YAML::EndMap;
+		emit << YAML::EndSeq;
+		SceneObjectsYaml::EmitVacancies(emit, structure.vacancies);
+		emit << YAML::EndMap;
 	}
 	emit << YAML::EndSeq;
 	if (!file.projectObjects.empty())

@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererSettings.hpp"
 
 namespace DefectStudio
@@ -56,6 +57,22 @@ namespace DefectStudio
 		glm::vec3 finish = glm::vec3(0.0f, 0.0f, 0.0f);
 	};
 
+	// task/51: one domain VacancySite as drawn - a camera-facing disc with a dashed ring
+	// (Renderer/Scene/VacancyMarkerGeometry.hpp). The style is copied in per vacancy by
+	// BuildRendererStructureData, the same way atom colour and radius are, so the backend needs no
+	// AtomStyleTable; a style edit therefore rebuilds the structure data, like an element edit.
+	struct RendererVacancyData
+	{
+		glm::vec3 cartesianPosition = glm::vec3(0.0f);
+		std::string label; // VacancySite::GetLabel(), e.g. "V_C"
+		glm::vec3 color = glm::vec3(0.72f, 0.20f, 0.82f);
+		float radius = 0.45f;
+		float opacity = 0.35f;
+		VacancyRenderMode renderMode = VacancyRenderMode::Ghost;
+		int dashCount = 12;
+		float ringWidth = 0.035f;
+	};
+
 	struct RendererStructureData
 	{
 		std::string domainStructureId;
@@ -64,6 +81,8 @@ namespace DefectStudio
 		std::vector<RendererAtomData> atoms;
 		std::vector<RendererBondData> bonds;
 		std::vector<RendererCellEdge> cellEdges;
+		// structure.vacancies, in the same order - an index here is an index there.
+		std::vector<RendererVacancyData> vacancies;
 		// A second cell drawn inside the first in a contrasting colour - the primitive cell of a
 		// centred lattice, which is a different cell over the SAME atoms, not a transformation of
 		// them. Empty for every structure that has no such overlay to show.

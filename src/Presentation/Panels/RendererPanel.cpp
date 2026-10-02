@@ -35,6 +35,8 @@
 #include "Presentation/Panels/PeriodicTableGrid.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/RendererVacancyCommands.hpp"
+#include "Domain/Defects/DefectModel.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
@@ -775,6 +777,40 @@ namespace DefectStudio
 
 		if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
 			runCommand("renderer.selection.delete");
+		if (ImGui::MenuItem(hasSelection ? "Dodaj wakans (centroid zaznaczenia)" : "Dodaj wakans (kursor 3D)",
+			nullptr, false, !windowState.structure.domainStructureId.empty()))
+		{
+			if (const auto domain = m_DomainLayer.lock(); domain != nullptr && commandRegistry != nullptr)
+			{
+				auto target = ResolveAtomEditTarget(m_Layer, *domain, windowState.windowId);
+				if (target)
+				{
+					glm::vec3 position = windowState.cursor3DPosition;
+					if (hasSelection)
+					{
+						position = glm::vec3(0.0f);
+						std::size_t count = 0;
+						// ponytail: plain mean across cell boundaries; unwrap if boundary selections need it.
+						for (const auto index : windowState.selectedAtomIndices)
+							if (index < target->record->structure.atoms.size())
+							{
+								position += target->record->structure.atoms[index].position;
+								++count;
+							}
+						position = count == 0 ? windowState.cursor3DPosition : position / static_cast<float>(count);
+					}
+					SetVacanciesPayload payload{windowState.windowId, target->record->structure.vacancies, "Add vacancy"};
+					payload.vacancies.push_back(MakeVacancySite(target->record->structure, position));
+					CommandContext context;
+					context.Set<SetVacanciesPayload>(kSetVacanciesPayloadKey, std::move(payload));
+					const auto result = commandRegistry->Execute(CommandID{kSetVacanciesCommandId}, std::move(context));
+					if (!result)
+						DS_LOG_WARN("Add vacancy failed: {}", result.Error().technicalDetails);
+				}
+				else
+					DS_LOG_WARN("Add vacancy failed: {}", target.Error().technicalDetails);
+			}
+		}
 		// H hides every selected kind, not only atoms - see Renderer/Scene/SceneVisibility.hpp.
 		if (ImGui::MenuItem("Hide", "H", false, AnySceneObjectSelected(windowState)))
 			runCommand("renderer.selection.hide");

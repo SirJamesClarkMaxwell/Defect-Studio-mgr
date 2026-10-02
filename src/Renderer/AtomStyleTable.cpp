@@ -22,6 +22,11 @@ namespace DefectStudio
 		m_Styles->clear();
 	}
 
+	void AtomStyleTable::SetVacancyStyle(const VacancyRenderStyle &style)
+	{
+		*m_VacancyStyle = style;
+	}
+
 	const AtomRenderStyle &AtomStyleTable::GetStyle(const std::string &symbol) const
 	{
 		const auto found = m_Styles->find(symbol);

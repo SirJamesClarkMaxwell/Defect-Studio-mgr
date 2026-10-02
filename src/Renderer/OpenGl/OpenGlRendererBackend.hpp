@@ -212,6 +212,7 @@ namespace DefectStudio
 		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
 		std::vector<OpenGlSceneArrowMeshCache> sceneArrowMeshCache;
 		OpenGlMeshHandles scenePlaneMesh;
+		OpenGlMeshHandles vacancyMesh;
 		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
 		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
 		// Same reason as the orbital map above: a path keeps its uploaded stroke when the store is
@@ -293,7 +294,8 @@ namespace DefectStudio
 			// task/41 S7. A struct rather than the usual pair of defaulted vectors: everything a path
 			// pass needs already lives behind RendererWindowState::paths, and the next stages add to
 			// PathRenderInput instead of to this signature. nullptr = this window owns no paths.
-			const PathRenderInput *pathInput = nullptr);
+			const PathRenderInput *pathInput = nullptr,
+			bool showVacancies = true);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -405,6 +407,13 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		void renderVacancyMarkers(
+			const std::vector<RendererVacancyData> &vacancies,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
+			const glm::vec3 &sceneOffset);
 		// ScenePaths (task/41). Called twice per frame with opposite `renderAlwaysOnTop`, for the same
 		// reason renderSceneArrows is: PathDepthMode::DepthTest belongs in the early world-space pass
 		// with the structure, PathDepthMode::AlwaysOnTop in the late depth-disabled pass next to

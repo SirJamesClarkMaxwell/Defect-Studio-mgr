@@ -47,6 +47,9 @@ namespace DefectStudio
 		glm::vec2 viewportSize = glm::vec2(640.0f, 480.0f);
 		bool showGrid = true;
 		bool showCellBox = true;
+		// task/51: the vacancy markers (RendererStructureData::vacancies). Toggled by the Scene
+		// Outliner's "Vacancies" group eye; per window, like showCellBox.
+		bool showVacancies = true;
 		bool showBonds = true;
 		// Bonds that cross a periodic cell boundary (Bond::periodicShift) run to an image atom that is
 		// not drawn, so they read as stubs poking out of the cell. Correct, and the only way a 2D

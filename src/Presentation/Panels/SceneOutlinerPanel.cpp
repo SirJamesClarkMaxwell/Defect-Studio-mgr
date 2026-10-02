@@ -98,13 +98,15 @@ namespace DefectStudio
 		WeakRef<DomainLayer> domainLayer,
 		WeakRef<JobSystem> jobSystem,
 		ElementPropertiesTable elementPropertiesTable,
+		WeakRef<CommandRegistry> commandRegistry,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
 		  m_DomainLayer(std::move(domainLayer)),
 		  m_JobSystem(std::move(jobSystem)),
-		  m_ElementPropertiesTable(std::move(elementPropertiesTable))
+		  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
+		  m_CommandRegistry(std::move(commandRegistry))
 	{
 	}
 
@@ -504,6 +506,7 @@ namespace DefectStudio
 					drawArrowsGroup(windowState);
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
+					drawVacanciesGroup(windowState);
 					drawPathsGroup(windowState);
 
 					ImGui::TreePop();

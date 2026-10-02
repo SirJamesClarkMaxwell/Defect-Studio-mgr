@@ -29,6 +29,10 @@ namespace DefectStudio
 		float displayRadius = 0.45f;
 		float opacity = 0.35f;
 		VacancyRenderMode renderMode = VacancyRenderMode::Ghost;
+		// task/51 marker ring. dashCount 0 draws a continuous ring; clamped to [0, 64] where it is
+		// meshed. ringWidth is in Angstrom, with a screen-space floor applied when it is drawn.
+		int dashCount = 12;
+		float ringWidth = 0.035f;
 	};
 
 	// Copies of this class share their underlying data (Ref-held, shared_ptr semantics) rather than
@@ -57,6 +61,8 @@ namespace DefectStudio
 		// (which would need to carry every OTHER element's already-live style back in from a
 		// caller-held snapshot) for the common case of editing just one element at a time.
 		void SetStyle(const std::string &symbol, const AtomRenderStyle &style);
+		// Same in-place rule for the one vacancy style (Element Catalog's vacancy row).
+		void SetVacancyStyle(const VacancyRenderStyle &style);
 		void Clear();
 
 		[[nodiscard]] const AtomRenderStyle &GetStyle(const std::string &symbol) const;

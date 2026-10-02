@@ -48,6 +48,16 @@ namespace DefectStudio
 		}
 	} // namespace
 
+	VacancySite MakeVacancySite(const CrystalStructure &structure, const glm::vec3 &position, std::string sourceSpecies)
+	{
+		VacancySite vacancy;
+		vacancy.position = position;
+		vacancy.fractional = structure.CartesianToFractional(position);
+		vacancy.sourceSpecies = std::move(sourceSpecies);
+		vacancy.index = -1;
+		return vacancy;
+	}
+
 	Result<void> ApplyVacancy(CrystalStructure &structure, const PointDefectOperation &operation)
 	{
 		if (operation.atomIndex >= structure.atoms.size())

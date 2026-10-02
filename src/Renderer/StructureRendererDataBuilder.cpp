@@ -95,6 +95,11 @@ namespace DefectStudio
 			data.atoms.push_back(std::move(atom));
 		}
 		data.bonds = BuildRendererBonds(structure, data.atoms, data.lattice);
+		const VacancyRenderStyle &style = atomStyleTable.GetVacancyStyle();
+		data.vacancies.reserve(structure.vacancies.size());
+		for (const VacancySite &site : structure.vacancies)
+			data.vacancies.push_back({site.position, site.GetLabel(), style.color, style.displayRadius,
+				style.opacity, style.renderMode, style.dashCount, style.ringWidth});
 
 		const float det = glm::determinant(data.lattice);
 		if (std::abs(det) > 1e-6f)

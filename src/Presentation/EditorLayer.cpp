@@ -66,6 +66,7 @@
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 
 namespace DefectStudio
@@ -676,7 +677,8 @@ namespace DefectStudio
 				"Renderer",
 				true);
 			const PanelId sceneOutlinerPanelId = registerPanel<SceneOutlinerPanel>(
-				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, "Scene Outliner", true);
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_CommandRegistry,
+				"Scene Outliner", true);
 			if (auto commandRegistry = m_CommandRegistry.lock())
 			{
 				auto result = commandRegistry->Register(
@@ -819,10 +821,28 @@ namespace DefectStudio
 		auto domainLayer = m_DomainLayer.lock();
 		if (domainLayer == nullptr)
 			return;
-		const auto record = domainLayer->Workspace().Structures().Find(windowState.structureId).lock();
+		const auto record = domainLayer->Workspace().Structures().FindMutable(windowState.structureId).lock();
 		if (record == nullptr)
 			return;
 		const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+		for (PersistedStructureSceneObjects &entry : m_KeptSceneObjects.structures)
+		{
+			if (entry.structureKey != key || entry.vacancies.empty())
+				continue;
+			if (record->structure.vacancies.empty())
+			{
+				for (const PersistedVacancy &site : entry.vacancies)
+					record->structure.vacancies.push_back({site.position, site.fractional,
+						site.sourceSpecies, site.label, site.index});
+				if (auto renderer = m_RendererLayer.lock())
+					for (RendererWindowState &window : renderer->GetWindows())
+						if (window.structureId == record->id)
+							RebuildAndSync(window, *record, m_AtomStyleTable,
+								window.selectedAtomIndices, window.selectedBondIndices);
+			}
+			// Consume once: opening another window after removing all markers must not restore them.
+			entry.vacancies.clear();
+		}
 		std::vector<PersistedSceneObject> objects;
 		bool found = false;
 		if (auto rendererLayer = m_RendererLayer.lock())
@@ -1709,12 +1729,36 @@ namespace DefectStudio
 			}
 			return;
 		}
+		pollPendingWindowRestores();
 		SceneObjectsFile sceneObjects = m_KeptSceneObjects;
 		if (auto rendererLayer = m_RendererLayer.lock())
 			sceneObjects.projectObjects = GatherProjectSceneObjects(*rendererLayer);
 		std::vector<StructureId> savedStructures;
 		if (auto domainLayer = m_DomainLayer.lock())
 		{
+			for (const auto &record : domainLayer->Workspace().Structures().Records())
+			{
+				if (record->sourcePath.Empty())
+					continue;
+				const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+				auto entry = std::find_if(sceneObjects.structures.begin(), sceneObjects.structures.end(),
+					[&](const auto &candidate) { return candidate.structureKey == key; });
+				// A registered but unopened structure can still have an unconsumed sidecar.
+				if (entry != sceneObjects.structures.end() && !entry->vacancies.empty() &&
+					record->structure.vacancies.empty())
+					continue;
+				if (entry == sceneObjects.structures.end())
+				{
+					if (record->structure.vacancies.empty())
+						continue;
+					sceneObjects.structures.push_back({key, {}, {}});
+					entry = std::prev(sceneObjects.structures.end());
+				}
+				entry->vacancies.clear();
+				for (const VacancySite &site : record->structure.vacancies)
+					entry->vacancies.push_back({site.position, site.fractional, site.sourceSpecies, site.label, site.index});
+				savedStructures.push_back(record->id);
+			}
 			if (auto rendererLayer = m_RendererLayer.lock())
 			{
 				std::unordered_map<std::string, std::vector<std::pair<std::string, std::vector<PersistedSceneObject>>>>
@@ -1780,6 +1824,14 @@ namespace DefectStudio
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
 		m_KeptSceneObjects = std::move(sceneObjects);
+		for (auto &entry : m_KeptSceneObjects.structures)
+			for (const auto &id : savedStructures)
+				if (const auto record = domainLayer->Workspace().Structures().Find(id).lock();
+					record != nullptr && entry.structureKey == SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath))
+				{
+					entry.vacancies.clear();
+					break;
+				}
 		if (auto rendererLayer = m_RendererLayer.lock())
 			for (RendererWindowState &window : rendererLayer->GetWindows())
 				if (window.isProjectScene)

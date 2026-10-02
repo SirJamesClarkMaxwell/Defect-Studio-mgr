@@ -6,6 +6,43 @@
 
 namespace DefectStudio::SceneObjectsYaml
 {
+	bool ParseVacancy(const YAML::Node &node, PersistedVacancy &vacancy)
+	{
+		try
+		{
+			if (!node.IsMap() || !Vec3(node["position"], vacancy.position) ||
+				(node["fractional"] && !Vec3(node["fractional"], vacancy.fractional)))
+				return false;
+			vacancy.sourceSpecies = node["sourceSpecies"].as<std::string>("");
+			vacancy.label = node["label"].as<std::string>("");
+			vacancy.index = node["index"].as<int>(0);
+			return std::isfinite(vacancy.position.x) && std::isfinite(vacancy.position.y) &&
+				std::isfinite(vacancy.position.z) && std::isfinite(vacancy.fractional.x) &&
+				std::isfinite(vacancy.fractional.y) && std::isfinite(vacancy.fractional.z);
+		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
+
+	void EmitVacancies(YAML::Emitter &emit, const std::vector<PersistedVacancy> &vacancies)
+	{
+		if (vacancies.empty())
+			return;
+		emit << YAML::Key << "vacancies" << YAML::Value << YAML::BeginSeq;
+		for (const auto &vacancy : vacancies)
+		{
+			emit << YAML::BeginMap;
+			EmitVec3(emit, "position", vacancy.position);
+			EmitVec3(emit, "fractional", vacancy.fractional);
+			emit << YAML::Key << "sourceSpecies" << YAML::Value << vacancy.sourceSpecies
+				<< YAML::Key << "label" << YAML::Value << vacancy.label
+				<< YAML::Key << "index" << YAML::Value << vacancy.index << YAML::EndMap;
+		}
+		emit << YAML::EndSeq;
+	}
+
 	bool Vec3(const YAML::Node &node, glm::vec3 &out)
 	{
 		if (!node || !node.IsSequence() || node.size() != 3)

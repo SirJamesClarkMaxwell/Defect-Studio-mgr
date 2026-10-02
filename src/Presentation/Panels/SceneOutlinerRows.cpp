@@ -11,6 +11,11 @@
 
 #include <imgui.h>
 
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Logging/Logger.hpp"
+#include "Domain/DomainLayer.hpp"
+#include "Domain/ProjectWorkspace.hpp"
+#include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -452,6 +457,61 @@ namespace DefectStudio
 					break;
 			}
 			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawVacanciesGroup(RendererWindowState &windowState)
+	{
+		if (windowState.structure.vacancies.empty())
+			return;
+		ImGui::PushID("##vacanciesGroup");
+		ImGui::SetNextItemAllowOverlap();
+		const bool open = ImGui::TreeNodeEx(
+			"##vacancies", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "Wakanse (%zu)",
+			windowState.structure.vacancies.size());
+		// One flag behind both columns: a vacancy marker has no separate "in the export" switch yet.
+		const SceneVisibilityColumnEdit edit =
+			DrawSceneVisibilityColumns({windowState.showVacancies, windowState.showVacancies});
+		if (edit.visibleChanged)
+			windowState.showVacancies = edit.visible;
+		else if (edit.renderableChanged)
+			windowState.showVacancies = edit.renderable;
+		if (open)
+		{
+			std::optional<std::size_t> removeIndex;
+			for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
+			{
+				const RendererVacancyData &vacancy = windowState.structure.vacancies[index];
+				ImGui::PushID(static_cast<int>(index));
+				if (ImGui::SmallButton("X"))
+					removeIndex = index;
+				ImGui::SameLine();
+				ImGui::Text(
+					"%s (%.2f, %.2f, %.2f)", vacancy.label.c_str(), vacancy.cartesianPosition.x,
+					vacancy.cartesianPosition.y, vacancy.cartesianPosition.z);
+				ImGui::PopID();
+			}
+			ImGui::TreePop();
+
+			const Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
+			const Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
+			if (removeIndex.has_value() && commandRegistry != nullptr && domainLayer != nullptr)
+			{
+				const auto record = domainLayer->Workspace().Structures().Find(windowState.structureId).lock();
+				// renderer.vacancy.set replaces the whole list, so the edit starts from the domain's.
+				if (record != nullptr && *removeIndex < record->structure.vacancies.size())
+				{
+					SetVacanciesPayload payload{windowState.windowId, record->structure.vacancies, "Remove vacancy"};
+					payload.vacancies.erase(payload.vacancies.begin() + static_cast<std::ptrdiff_t>(*removeIndex));
+					CommandContext context;
+					context.Set<SetVacanciesPayload>(kSetVacanciesPayloadKey, std::move(payload));
+					const Result<CommandOutcome> result =
+						commandRegistry->Execute(CommandID{kSetVacanciesCommandId}, std::move(context));
+					if (!result)
+						DS_LOG_WARN("Remove vacancy failed: {}", result.Error().technicalDetails);
+				}
+			}
 		}
 		ImGui::PopID();
 	}

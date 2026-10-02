@@ -75,4 +75,12 @@ namespace DefectStudio
 		CrystalStructure &structure,
 		const PointDefectOperation &operation,
 		const char *operationName);
+
+	// task/51: a vacancy recorded WITHOUT deleting an atom - the site of a relaxed structure that
+	// was loaded already missing it, placed at the centroid of its neighbours or at the 3D cursor.
+	// `fractional` comes from the structure's cell (CartesianToFractional); `index` is -1, the
+	// marker for "no atom of this structure was removed here", since ApplyVacancy's index is the
+	// removed atom's. `label` is left empty so GetLabel() falls back to "V" / "V_<species>".
+	[[nodiscard]] VacancySite MakeVacancySite(
+		const CrystalStructure &structure, const glm::vec3 &position, std::string sourceSpecies = {});
 } // namespace DefectStudio

@@ -278,10 +278,28 @@ namespace DefectStudio
 		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital,
 		PersistedScenePlane, PersistedScenePath>;
 
+	// task/51: one domain VacancySite. Not a scene object - a vacancy is structure data - but the
+	// structure itself is stored as a POSCAR, which has no way to say "an atom was here", so the
+	// vacancies ride in this sidecar next to the structure's scene objects. Field for field.
+	struct PersistedVacancy
+	{
+		glm::vec3 position = glm::vec3(0.0f);
+		glm::vec3 fractional = glm::vec3(0.0f);
+		std::string sourceSpecies; // optional in the file, empty when absent
+		std::string label;         // optional in the file, empty when absent
+		int index = 0;             // optional in the file, 0 when absent
+	};
+
 	struct PersistedStructureSceneObjects
 	{
 		std::string structureKey; // SceneObjectsIO::MakeStructureKey
 		std::vector<PersistedSceneObject> objects;
+		// Optional `vacancies:` list beside `objects:` - absent means none and an empty list is not
+		// written, so formatVersion does not change and older files and builds are unaffected (the
+		// projectObjects rule). An entry without `position` is skipped with the usual
+		// "scene_objects.entry_skipped" warning. A structure entry may now carry vacancies and no
+		// objects; it is written all the same.
+		std::vector<PersistedVacancy> vacancies;
 	};
 
 	struct SceneObjectsFile
@@ -303,6 +321,12 @@ namespace DefectStudio
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
 	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
 	//           written as `arrowKind` so it does not collide with the entry tag)
+	//       vacancies:             # optional, task/51
+	//         - position: [x, y, z]
+	//           fractional: [x, y, z]
+	//           sourceSpecies: C       # optional
+	//           label: V_C             # optional
+	//           index: 12              # optional
 	//   projectObjects:            # optional; same object entries, no structureKey
 	//     - kind: ScenePath
 	//       ...

@@ -920,7 +920,8 @@ namespace DefectStudio
 		float bondLabelAutoOffsetMagnitude,
 		float bondLabelAlignThresholdDeg,
 		bool showPeriodicBonds,
-		const PathRenderInput *pathInput)
+		const PathRenderInput *pathInput,
+		bool showVacancies)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -1089,6 +1090,8 @@ namespace DefectStudio
 				structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset, viewportPixelSize);
 		renderScenePlanes(
 			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+		if (showVacancies)
+			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		renderSceneOrbitals(
 			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset,
 			viewportPixelSize);
@@ -1210,6 +1213,7 @@ namespace DefectStudio
 			for (OpenGlSceneArrowMeshCache &cacheEntry : resources.sceneArrowMeshCache)
 				DeleteMeshHandles(cacheEntry.mesh);
 			resources.sceneArrowMeshCache.clear();
+			DeleteMeshHandles(resources.vacancyMesh);
 			for (auto &[id, cacheEntry] : resources.sceneOrbitalMeshCache)
 			{
 				(void)id;
