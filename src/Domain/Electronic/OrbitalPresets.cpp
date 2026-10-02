@@ -11,6 +11,9 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr int kMaximumShell = 4;
+		constexpr std::array<int, 3> kPMValues = {0, 1, -1};
+		constexpr std::array<int, 5> kDMValues = {0, 1, -1, 2, -2};
+		constexpr std::array<int, 7> kFMValues = {0, 1, -1, 2, -2, 3, -3};
 
 		[[nodiscard]] AtomicOrbital MakeAtomicOrbital(
 			int n, int l, int m, float effectiveCharge)
@@ -155,31 +158,28 @@ namespace DefectStudio
 		}
 		if (preset == OrbitalPreset::P)
 		{
-			constexpr std::array<int, 3> mValues = {0, 1, -1};
 			const int shell = std::clamp(settings.shell, 2, kMaximumShell);
 			const int lobe = std::clamp(settings.lobeIndex, 0, 2);
 			AddTerm(
-				wavefunction, MakeAtomicOrbital(shell, 1, mValues[lobe], settings.effectiveCharge),
+				wavefunction, MakeAtomicOrbital(shell, 1, kPMValues[lobe], settings.effectiveCharge),
 				settings.centerA, settings.orientation, 1.0f);
 			return wavefunction;
 		}
 		if (preset == OrbitalPreset::D)
 		{
-			constexpr std::array<int, 5> mValues = {0, 1, -1, 2, -2};
 			const int shell = std::clamp(settings.shell, 3, kMaximumShell);
 			const int lobe = std::clamp(settings.lobeIndex, 0, 4);
 			AddTerm(
-				wavefunction, MakeAtomicOrbital(shell, 2, mValues[lobe], settings.effectiveCharge),
+				wavefunction, MakeAtomicOrbital(shell, 2, kDMValues[lobe], settings.effectiveCharge),
 				settings.centerA, settings.orientation, 1.0f);
 			return wavefunction;
 		}
 		if (preset == OrbitalPreset::F)
 		{
-			constexpr std::array<int, 7> mValues = {0, 1, -1, 2, -2, 3, -3};
 			const int shell = std::clamp(settings.shell, 4, kMaximumShell);
 			const int lobe = std::clamp(settings.lobeIndex, 0, 6);
 			AddTerm(
-				wavefunction, MakeAtomicOrbital(shell, 3, mValues[lobe], settings.effectiveCharge),
+				wavefunction, MakeAtomicOrbital(shell, 3, kFMValues[lobe], settings.effectiveCharge),
 				settings.centerA, settings.orientation, 1.0f);
 			return wavefunction;
 		}
@@ -242,6 +242,34 @@ namespace DefectStudio
 				IsAntibonding(preset) ? -centreCoefficient : centreCoefficient);
 		}
 		return wavefunction;
+	}
+
+	std::optional<glm::vec3> OrbitalPresetMemberAxis(OrbitalPreset preset, int lobeIndex)
+	{
+		if (preset == OrbitalPreset::Sp || preset == OrbitalPreset::Sp2 || preset == OrbitalPreset::Sp3)
+		{
+			const int pCount = HybridPCount(preset);
+			return HybridDirection(pCount, std::clamp(lobeIndex, 0, pCount));
+		}
+		if (preset == OrbitalPreset::P)
+		{
+			const int m = kPMValues[std::clamp(lobeIndex, 0, 2)];
+			return m == 0 ? glm::vec3(0, 0, 1) : m == 1 ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+		}
+		if (preset == OrbitalPreset::D)
+		{
+			switch (kDMValues[std::clamp(lobeIndex, 0, 4)])
+			{
+				case 0: return glm::vec3(0, 0, 1);
+				case 1: return glm::normalize(glm::vec3(1, 0, 1));
+				case -1: return glm::normalize(glm::vec3(0, 1, 1));
+				case 2: return glm::vec3(1, 0, 0);
+				case -2: return glm::normalize(glm::vec3(1, 1, 0));
+			}
+		}
+		if (preset == OrbitalPreset::F && kFMValues[std::clamp(lobeIndex, 0, 6)] == 0)
+			return glm::vec3(0, 0, 1);
+		return std::nullopt;
 	}
 
 	const char *OrbitalPresetName(OrbitalPreset preset)

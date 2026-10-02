@@ -15,6 +15,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneOrbitalAim.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -242,13 +243,15 @@ namespace DefectStudio
 
 			// One place that builds and files a new orbital, so the entry points below cannot
 			// drift apart on anchoring, undo or selection.
-			auto addOrbital = [&](OrbitalPreset preset, int lobeIndex, const std::vector<std::size_t> &anchors) {
-				RendererWindowState::SceneOrbital orbital =
-					MakeDefaultSceneOrbital(windowState, preset, worldPosition, anchors);
-				orbital.lobeIndex = lobeIndex;
+			auto registerOrbital = [&](RendererWindowState::SceneOrbital orbital) {
 				orbital.id = windowState.sceneRegistry.AllocateObjectId();
 				windowState.sceneOrbitals.push_back(std::move(orbital));
 				return windowState.sceneOrbitals.back().id;
+			};
+			auto addOrbital = [&](OrbitalPreset preset, int lobeIndex, const std::vector<std::size_t> &anchors) {
+				auto orbital = MakeDefaultSceneOrbital(windowState, preset, worldPosition, anchors);
+				orbital.lobeIndex = lobeIndex;
+				return registerOrbital(std::move(orbital));
 			};
 
 			// "Put this preset where the user said" - and for a one-centre preset with several
@@ -291,6 +294,29 @@ namespace DefectStudio
 			const bool anchor = windowState.orbitalAddAnchorToSelection;
 			if (!anchor)
 				ImGui::TextDisabled("Orbital stanie w kursorze 3D.");
+
+			const auto target = ResolveDanglingBondTarget(windowState, selected);
+			if (ImGui::MenuItem("Wiązania zwisające → wakans (sp³)", nullptr, false, target.has_value()))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				std::vector<SceneObjectId> added;
+				for (auto &orbital : MakeDanglingBondOrbitals(windowState, selected, *target))
+					added.push_back(registerOrbital(std::move(orbital)));
+				selectAdded(std::move(added));
+			}
+			if (target && ImGui::IsItemHovered())
+			{
+				std::string label = "na centroid zaznaczenia";
+				for (std::size_t i = 0; i < windowState.structure.vacancies.size(); ++i)
+				{
+					const auto &vacancy = windowState.structure.vacancies[i];
+					if (vacancy.cartesianPosition != *target)
+						continue;
+					label = "na " + vacancy.label + " #" + std::to_string(i + 1);
+					break;
+				}
+				ImGui::SetTooltip("%s", label.c_str());
+			}
 
 			for (const OrbitalPresetGroup group : AllOrbitalPresetGroups())
 			{

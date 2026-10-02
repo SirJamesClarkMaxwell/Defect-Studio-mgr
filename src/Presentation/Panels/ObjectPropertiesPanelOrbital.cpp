@@ -9,6 +9,7 @@
 
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneOrbitalAim.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -54,6 +55,49 @@ namespace DefectStudio
 				}
 			}
 			ImGui::EndCombo();
+		}
+
+		void DrawAim(RendererWindowState &windowState, SceneOrbital &orbital)
+		{
+			if (IsTwoCenterPreset(orbital.preset))
+				return;
+			const auto targets = CollectOrbitalAimTargets(windowState);
+			auto &storage = *ImGui::GetStateStorage();
+			const ImGuiID key = ImGui::GetID("OrbitalAimTarget");
+			int selected = std::clamp(storage.GetInt(key), 0, static_cast<int>(targets.size()) - 1);
+			const bool hasAxis = OrbitalPresetMemberAxis(orbital.preset, orbital.lobeIndex).has_value();
+			ImGui::BeginDisabled(!hasAxis);
+			if (ImGui::BeginCombo("Skieruj na", targets[selected].label.c_str()))
+			{
+				for (int i = 0; i < static_cast<int>(targets.size()); ++i)
+				{
+					if (ImGui::Selectable(targets[i].label.c_str(), i == selected))
+						storage.SetInt(key, selected = i);
+					if (i == selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			if (!hasAxis && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Ten orbital nie ma osi");
+			const auto euler = AimSceneOrbitalEuler(
+				orbital, ResolveSceneOrbitalCenters(orbital, windowState.structure).centerA, targets[selected].position);
+			ImGui::BeginDisabled(!euler);
+			DrawUndoableValue(windowState, orbital.rotationEuler, [&](glm::vec3 &value) {
+				if (!ImGui::Button("Skieruj") || !euler)
+					return false;
+				value = *euler;
+				return true;
+			});
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			{
+				if (!hasAxis)
+					ImGui::SetTooltip("Ten orbital nie ma osi");
+				else if (!euler)
+					ImGui::SetTooltip("Cel pokrywa sie ze srodkiem orbitalu.");
+			}
+			ImGui::EndDisabled();
 		}
 
 		void DrawAnchoring(RendererWindowState &windowState, SceneOrbital &orbital)
@@ -170,6 +214,7 @@ namespace DefectStudio
 				return ImGui::DragFloat3("Obrot (stopnie)", &value.x, 1.0f);
 			});
 			ImGui::EndDisabled();
+			DrawAim(windowState, orbital);
 		}
 
 		if (ImGui::CollapsingHeader("Wyglad##OrbitalAppearance", kOpen))

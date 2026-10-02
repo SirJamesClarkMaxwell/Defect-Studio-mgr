@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -194,6 +195,17 @@ namespace DefectStudio
 
 	[[nodiscard]] OrbitalWavefunction MakeOrbitalPreset(
 		OrbitalPreset preset, const OrbitalPresetSettings &settings);
+
+	// task/52: the direction, in the orbital's own frame (before OrbitalPresetSettings::orientation),
+	// of member `lobeIndex`'s main lobe - the direction along which the member is largest AND
+	// positive, which is what "point this lobe at X" has to mean (a hybrid's small back lobe has the
+	// opposite sign). Unit length. lobeIndex is clamped exactly as MakeOrbitalPreset clamps it.
+	//   P   -> p_z +z, p_x +x, p_y +y
+	//   D   -> d_z2 +z, d_xz (x+z)/sqrt2, d_yz (y+z)/sqrt2, d_x2-y2 +x, d_xy (x+y)/sqrt2
+	//   F   -> f_z3 +z; the other six members have no single main lobe -> nullopt
+	//   Sp / Sp2 / Sp3 -> that hybrid lobe's direction (lobe 0 is +z, see OrbitalPreset)
+	//   S and every two-centre preset -> nullopt (spherical; orientation comes from the centres)
+	[[nodiscard]] std::optional<glm::vec3> OrbitalPresetMemberAxis(OrbitalPreset preset, int lobeIndex);
 
 	// Stable identifier for a preset, for persistence and for the properties-panel combo - "sp3",
 	// "pi*", "sigma". Round-trips with ParseOrbitalPreset.
