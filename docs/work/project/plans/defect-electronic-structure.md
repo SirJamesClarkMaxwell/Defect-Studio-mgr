@@ -93,6 +93,10 @@ parallel with it.
 
 ## 54 - Correct SALC basis + real basis of complex irreps
 
+Status: implemented 2026-10-03 on `task/54-salc-basis`. Python acceptance (11), task gtest filter
+(74) and the Release full suite are green (only the known 5 bevel failures + 1 skip). Debug build and
+the manual NV / NV-as-C3 drawing check are still open.
+
 Full spec: `docs/work/project/tasks/54-salc-basis.md`.
 
 - **Goal.** Projected vectors are true symmetry-adapted copies (findings 1-3 fixed). Complex

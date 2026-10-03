@@ -5,6 +5,7 @@
 #include <optional>
 #include <utility>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Core/JobSystem/JobSystemTypes.hpp"
@@ -67,7 +68,12 @@ namespace DefectStudio
 		void drawDirectProducts();
 		void drawProjectedVectors();
 		void drawSalcBasisCombo();
-		void drawSalcButton(std::size_t vectorIndex);
+		void drawSalcButton(const SymmetryAdaptedVector &vector, const std::string &name);
+		[[nodiscard]] std::string projectedSalcName(std::size_t vectorIndex) const;
+		void drawRealPairVectors();
+		static void MathLabel(std::string_view latex, float sizeScale = 1.0f);
+		static void CenteredMathLabel(std::string_view latex, float sizeScale);
+		static void Cell(const ExactCoefficient &value);
 		void drawMultiplets();
 		void copyResults(TableFormat format);
 

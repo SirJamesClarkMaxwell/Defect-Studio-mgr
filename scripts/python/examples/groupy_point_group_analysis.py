@@ -8,10 +8,9 @@ try:
     import sympy as sp
     from pymatgen.core import Molecule
     from pymatgen.symmetry.analyzer import PointGroupAnalyzer
-    from sympy import GramSchmidt
     from groupy import PointGroup
     from groupy.multiplets.terms import ActiveSpace
-    from groupy.repr.repr import RepresentationSymb
+    from salc_basis import SalcError, coefficient_payload, symmetry_adapted_basis
 except ImportError as exc:
     print(json.dumps({"error": "groupy_not_installed", "detail": str(exc)}), file=sys.stderr)
     raise SystemExit(1)
@@ -26,17 +25,6 @@ class AnalysisError(RuntimeError):
 
 def fail(message: str, error: str) -> None:
     raise AnalysisError(error, message)
-
-
-def coefficient_payload(value: sp.Expr) -> dict:
-    value = sp.simplify(value)
-    real, imaginary = sp.expand_complex(value).as_real_imag()
-    return {
-        "exact": str(value),
-        "latex": sp.latex(value),
-        "numeric": float(real),
-        "numericImaginary": float(imaginary),
-    }
 
 
 def normalize(vector: np.ndarray) -> np.ndarray:
@@ -71,13 +59,12 @@ def frame_candidates(positions: np.ndarray, analyzer: PointGroupAnalyzer) -> lis
     return candidates
 
 
-def build_representation(point_group: PointGroup, positions: np.ndarray, elements: list[str], tolerance: float) -> tuple[RepresentationSymb, list[list[int]]]:
+def build_representation(point_group: PointGroup, positions: np.ndarray, elements: list[str], tolerance: float) -> list[list[int]]:
     if len(positions) == 0:
         fail("The basis site list is empty.", "empty_basis")
     if tolerance < 0:
         fail("symmetryTolerance must be non-negative.", "invalid_tolerance")
 
-    matrices = []
     permutations = []
     for element in point_group.elements:
         rotated = (np.asarray(element.matrix_num, dtype=float) @ positions.T).T
@@ -90,40 +77,13 @@ def build_representation(point_group: PointGroup, positions: np.ndarray, element
             if len(matches) != 1:
                 fail(f"Group element {source_index} does not map the basis uniquely.", "basis_not_closed")
             permutation.append(matches[0])
-        matrix = sp.zeros(len(positions))
-        for source_index, target_index in enumerate(permutation):
-            matrix[source_index, target_index] = 1
-        matrices.append(matrix)
         permutations.append(permutation)
-    return RepresentationSymb(matrices, point_group=point_group), permutations
+    return permutations
 
 
 def reduce_representation(point_group: PointGroup, positions: np.ndarray, elements: list[str], labels: list[str], tolerance: float) -> tuple[dict, list[list[int]]]:
-    representation, permutations = build_representation(point_group, positions, elements, tolerance)
-    reduction = point_group.ireps.reduce_repr(representation)
-    decomposition = []
-    projected_vectors = []
-    for irrep_label, multiplicity in reduction.items():
-        multiplicity = int(multiplicity)
-        if multiplicity <= 0:
-            continue
-        irrep = point_group.ireps[irrep_label].get_repr()
-        dimension = int(irrep.shape[-1])
-        decomposition.append({"irrepLabel": irrep_label, "multiplicity": multiplicity, "dimension": dimension})
-        for row in range(dimension):
-            occurrence_index = 0
-            projector = irrep.generalized_projection_operator(representation, row, row)
-            _, pivots = projector.rref()
-            vectors = GramSchmidt([projector.col(column) for column in pivots], orthonormal=True)
-            for vector in vectors:
-                projected_vectors.append({
-                    "irrepLabel": irrep_label,
-                    "occurrenceIndex": occurrence_index,
-                    "irrepRow": row,
-                    "coefficients": [coefficient_payload(vector[index]) for index in range(len(labels))],
-                })
-                occurrence_index += 1
-    return {"decomposition": decomposition, "projectedVectors": projected_vectors}, permutations
+    permutations = build_representation(point_group, positions, elements, tolerance)
+    return symmetry_adapted_basis(point_group, permutations), permutations
 
 
 def active_shells(orbitals: list[str], space: ActiveSpace) -> list[dict]:
@@ -335,7 +295,7 @@ def main() -> int:
             payload = json.load(handle)
         print(json.dumps(analyze(payload), separators=(",", ":")))
         return 0
-    except AnalysisError as exc:
+    except (AnalysisError, SalcError) as exc:
         print(json.dumps({"error": exc.code, "detail": exc.detail}), file=sys.stderr)
         return 1
     except Exception as exc:
