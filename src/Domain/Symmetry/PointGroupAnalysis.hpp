@@ -64,6 +64,16 @@ namespace DefectStudio
 	// "lower" vs "upper" A1 in the NV- literature - encode an energy ordering that group theory
 	// alone cannot determine; it takes the actual Hamiltonian. Naming them here would be a guess
 	// dressed as a result. The UI assigns physical labels later, visibly marked as an assumption.
+	//
+	// task/54 invariant, checked by ValidateSymmetryAdaptedBasis at the bridge: for every
+	// decomposition entry (Γ, m, d) there are exactly m*d vectors, occurrences 0..m-1 x rows
+	// 0..d-1, listed irrep (decomposition order) -> occurrence -> row. All rows of one
+	// (irrepLabel, occurrenceIndex) come from the same seed through the transfer operators
+	// P_r0 = (d/|G|) Σ_g Γ_r0(g)* D(g), so they transform as partners:
+	// D(g) v_r = Σ_t Γ_tr(g) v_t. That is what makes "copy k" a meaningful unit for mixing (task 57)
+	// and for active-space orbitals. Which orthonormal basis of the m copies is returned is still
+	// arbitrary (projection order); physical copies need a Hamiltonian.
+	// Phase: the first non-zero coefficient of each copy's row 0 is real and positive.
 	struct SymmetryAdaptedVector
 	{
 		std::string irrepLabel;  // "A1", "E"
@@ -71,6 +81,10 @@ namespace DefectStudio
 		int irrepRow = 0;        // 0-based row of a degenerate irrep (0 and 1 for E)
 		// One coefficient per request site, in request order.
 		std::vector<ExactCoefficient> coefficients;
+		// task/54: empty in projectedVectors. In realPairVectors: Γ*, the complex-conjugate partner of
+		// irrepLabel (Γ); irrepRow is then the component - 0 = u = √2 Re z, 1 = v = √2 Im z, with z
+		// copy occurrenceIndex of Γ - and every coefficient is real (numericImaginary == 0).
+		std::string conjugateIrrepLabel;
 	};
 
 	struct PointGroupReduction
@@ -81,6 +95,14 @@ namespace DefectStudio
 		// Only irreps with multiplicity > 0, in the point group's own irrep order.
 		std::vector<IrrepMultiplicity> decomposition;
 		std::vector<SymmetryAdaptedVector> projectedVectors;
+		// task/54: the real basis of each pair of complex-conjugate irreps (Frobenius-Schur
+		// indicator 0, e.g. E+/E- of C3), two vectors per copy of the pair, ordered pair (table
+		// order of Γ) -> occurrence -> component. Pairs are found by exact character comparison
+		// (χ_Γ* = conj χ_Γ on every class), never by name. projectedVectors of Γ* are the exact
+		// conjugates of those of Γ, copy for copy, so copy k of Γ and of Γ* belong together.
+		// u, v is one choice of real basis among all rotations in the (u, v) plane, not a group-theory
+		// result (e_x/e_y names are a choice too). Empty when the group has no complex irreps.
+		std::vector<SymmetryAdaptedVector> realPairVectors;
 	};
 
 	// --- Task 23: full analysis for the group-theory panel -------------------------------------

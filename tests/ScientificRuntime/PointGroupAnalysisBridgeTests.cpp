@@ -1,6 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <complex>
+#include <string>
+#include <tuple>
+#include <vector>
 
 #include "Domain/Symmetry/PointGroupAnalysis.hpp"
 #include "ScientificRuntime/Python/GroupTheoryBridge.hpp"
@@ -360,5 +364,152 @@ namespace DefectStudio::Tests
 		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
 		ASSERT_FALSE(result);
 		EXPECT_EQ(result.Error().code, "python.groupy.analysis.invalid_active_space");
+	}
+	// --- task/54: consistent copies and the real basis of complex pairs ---------------------------
+
+	namespace
+	{
+		using VectorKey = std::tuple<std::string, int, int>;
+
+		[[nodiscard]] std::vector<VectorKey> Keys(const std::vector<SymmetryAdaptedVector> &vectors)
+		{
+			std::vector<VectorKey> keys;
+			for (const SymmetryAdaptedVector &vector : vectors)
+				keys.emplace_back(vector.irrepLabel, vector.occurrenceIndex, vector.irrepRow);
+			return keys;
+		}
+
+		[[nodiscard]] std::complex<double> Value(const ExactCoefficient &coefficient)
+		{
+			return {coefficient.numeric, coefficient.numericImaginary};
+		}
+
+		// Hermitian inner product <left|right>.
+		[[nodiscard]] std::complex<double> Inner(const SymmetryAdaptedVector &left, const SymmetryAdaptedVector &right)
+		{
+			std::complex<double> sum = 0.0;
+			for (std::size_t i = 0; i < left.coefficients.size(); ++i)
+				sum += std::conj(Value(left.coefficients[i])) * Value(right.coefficients[i]);
+			return sum;
+		}
+
+		// A C3 triangle around z, in groupy's C3 frame.
+		[[nodiscard]] PointGroupAnalysisRequest MakeC3Triangle()
+		{
+			const double half = std::sqrt(3.0) / 2.0;
+			PointGroupAnalysisRequest request;
+			request.pointGroupLabel = "C3";
+			request.sites = {BasisSite{"C0", glm::dvec3(1.0, 0.0, 0.3), "C"},
+				BasisSite{"C1", glm::dvec3(-0.5, half, 0.3), "C"},
+				BasisSite{"C2", glm::dvec3(-0.5, -half, 0.3), "C"}};
+			request.symmetryTolerance = 0.01;
+			return request;
+		}
+	} // namespace
+
+	TEST(PointGroupAnalysisBridgeTests, ProjectedVectorsAreOrderedIrrepOccurrenceRow)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3v";
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		const std::vector<VectorKey> expected = {{"A1", 0, 0}, {"A1", 1, 0}, {"E", 0, 0}, {"E", 0, 1}};
+		EXPECT_EQ(Keys(result->reduction.projectedVectors), expected);
+		EXPECT_TRUE(result->reduction.realPairVectors.empty());
+	}
+
+	// The general C3v orbit holds E twice - the case task 53's per-row projection numbered
+	// inconsistently. The partner property itself is checked in scripts/python/tests/test_salc_basis.py;
+	// here: the bridge delivers both copies, in irrep -> occurrence -> row order, orthonormal.
+	TEST(PointGroupAnalysisBridgeTests, SixSiteOrbitHasTwoECopiesInOrder)
+	{
+		PointGroupAnalysisRequest request;
+		request.pointGroupLabel = "C3v";
+		request.symmetryTolerance = 0.01;
+		const glm::dvec3 positions[] = {{0.9, 0.4, 0.3}, {-0.796410161514, 0.579422863406, 0.3},
+			{-0.103589838486, -0.979422863406, 0.3}, {0.9, -0.4, 0.3}, {-0.796410161514, -0.579422863406, 0.3},
+			{-0.103589838486, 0.979422863406, 0.3}};
+		for (int i = 0; i < 6; ++i)
+			request.sites.push_back(BasisSite{"C" + std::to_string(i), positions[i], "C"});
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+
+		const auto &reduction = result->reduction;
+		ASSERT_EQ(reduction.decomposition.size(), 3u);
+		EXPECT_EQ(reduction.decomposition[2].irrepLabel, "E");
+		EXPECT_EQ(reduction.decomposition[2].multiplicity, 2);
+		const std::vector<VectorKey> expected = {
+			{"A1", 0, 0}, {"A2", 0, 0}, {"E", 0, 0}, {"E", 0, 1}, {"E", 1, 0}, {"E", 1, 1}};
+		EXPECT_EQ(Keys(reduction.projectedVectors), expected);
+		for (std::size_t i = 0; i < reduction.projectedVectors.size(); ++i)
+			for (std::size_t j = 0; j < reduction.projectedVectors.size(); ++j)
+				EXPECT_NEAR(std::abs(Inner(reduction.projectedVectors[i], reduction.projectedVectors[j]) - (i == j ? 1.0 : 0.0)),
+					0.0, 1e-9) << i << "," << j;
+	}
+
+	TEST(PointGroupAnalysisBridgeTests, C3TriangleReturnsRealBasisOfComplexPair)
+	{
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(MakeC3Triangle());
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		const auto &reduction = result->reduction;
+
+		const std::vector<VectorKey> expectedProjected = {{"A", 0, 0}, {"E+", 0, 0}, {"E-", 0, 0}};
+		ASSERT_EQ(Keys(reduction.projectedVectors), expectedProjected);
+		const SymmetryAdaptedVector &a = reduction.projectedVectors[0];
+		const SymmetryAdaptedVector &plus = reduction.projectedVectors[1];
+		const SymmetryAdaptedVector &minus = reduction.projectedVectors[2];
+		bool anyImaginary = false;
+		for (std::size_t i = 0; i < 3; ++i)
+		{
+			anyImaginary = anyImaginary || std::abs(plus.coefficients[i].numericImaginary) > 1e-6;
+			// E- copy k is the exact conjugate of E+ copy k.
+			EXPECT_NEAR(std::abs(Value(minus.coefficients[i]) - std::conj(Value(plus.coefficients[i]))), 0.0, 1e-12);
+		}
+		EXPECT_TRUE(anyImaginary);
+
+		ASSERT_EQ(reduction.realPairVectors.size(), 2u);
+		const SymmetryAdaptedVector &u = reduction.realPairVectors[0];
+		const SymmetryAdaptedVector &v = reduction.realPairVectors[1];
+		for (const SymmetryAdaptedVector *vector : {&u, &v})
+		{
+			EXPECT_EQ(vector->irrepLabel, "E+");
+			EXPECT_EQ(vector->conjugateIrrepLabel, "E-");
+			EXPECT_EQ(vector->occurrenceIndex, 0);
+			ASSERT_EQ(vector->coefficients.size(), 3u);
+			for (const ExactCoefficient &coefficient : vector->coefficients)
+				EXPECT_EQ(coefficient.numericImaginary, 0.0) << coefficient.exact;
+		}
+		EXPECT_EQ(u.irrepRow, 0);
+		EXPECT_EQ(v.irrepRow, 1);
+
+		// Phase rule: z's first coefficient is real positive, so u = (2, -1, -1)/sqrt(6), v = (0, s, -s)/sqrt(2).
+		// The sign s depends on which way groupy's frame turns the C3 - not asserted.
+		const double sqrt6 = std::sqrt(6.0);
+		EXPECT_NEAR(u.coefficients[0].numeric, 2.0 / sqrt6, 1e-9);
+		EXPECT_NEAR(u.coefficients[1].numeric, -1.0 / sqrt6, 1e-9);
+		EXPECT_NEAR(u.coefficients[2].numeric, -1.0 / sqrt6, 1e-9);
+		EXPECT_EQ(u.coefficients[0].exact, "sqrt(6)/3");
+		EXPECT_NEAR(v.coefficients[0].numeric, 0.0, 1e-12);
+		EXPECT_NEAR(std::abs(v.coefficients[1].numeric), std::sqrt(0.5), 1e-9);
+		EXPECT_NEAR(v.coefficients[1].numeric, -v.coefficients[2].numeric, 1e-12);
+		EXPECT_NEAR(std::abs(Inner(u, v)), 0.0, 1e-12);
+		EXPECT_NEAR(std::abs(Inner(u, a)), 0.0, 1e-12);
+		EXPECT_NEAR(std::abs(Inner(v, a)), 0.0, 1e-12);
+	}
+
+	// The NV cluster analysed in its C3 subgroup: A1 -> A, E -> E+ + E-, and the pair gets a real basis.
+	TEST(PointGroupAnalysisBridgeTests, NvClusterAnalysedAsC3HasRealPair)
+	{
+		PointGroupAnalysisRequest request = MakeNvCluster();
+		request.pointGroupLabel = "C3";
+		const Result<PointGroupAnalysisResult> result = GroupTheoryBridge{}.Analyze(request);
+		ASSERT_TRUE(result) << result.Error().code << ": " << result.Error().technicalDetails;
+		ASSERT_EQ(result->reduction.realPairVectors.size(), 2u);
+		for (const SymmetryAdaptedVector &vector : result->reduction.realPairVectors)
+		{
+			EXPECT_FALSE(vector.conjugateIrrepLabel.empty());
+			for (const ExactCoefficient &coefficient : vector.coefficients)
+				EXPECT_EQ(coefficient.numericImaginary, 0.0);
+		}
 	}
 } // namespace DefectStudio::Tests

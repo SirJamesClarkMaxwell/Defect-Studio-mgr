@@ -42,9 +42,10 @@ namespace DefectStudio
 	// Errors (StructuredError, category Validation):
 	//   "orbital.salc.site_count_mismatch" - coefficients.size() != basis.sites.size() or
 	//                                        != basis.atomIndices.size()
-	//   "orbital.salc.complex_coefficient" - any |numericImaginary| >= 1e-9. Complex irreps (C3, C4h
-	//                                        ...) need the real combination of the pair; ponytail
-	//                                        until someone needs it.
+	//   "orbital.salc.complex_coefficient" - any |numericImaginary| >= 1e-9. A complex irrep's
+	//                                        (C3, C4h ...) drawable real basis is
+	//                                        PointGroupReduction::realPairVectors (task/54); this
+	//                                        check is the safety net.
 	//   "orbital.salc.atom_out_of_range"   - a basis atom index >= windowState.structure.atoms.size()
 	//   "orbital.salc.all_zero"            - no component survives
 	[[nodiscard]] Result<RendererWindowState::SceneOrbital> BuildSalcSceneOrbital(

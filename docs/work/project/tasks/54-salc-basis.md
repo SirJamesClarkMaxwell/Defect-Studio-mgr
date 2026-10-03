@@ -135,7 +135,7 @@ def coefficient_payload(value: sp.Expr) -> dict   # moved here from groupy_point
 its own directory, so `import salc_basis` resolves, and `prepare_app_python_runtime.py` copies the
 whole `examples/` folder.
 
-## The C++ contract (written before dispatch)
+## The C++ contract (written before dispatch - already in the tree)
 
 `src/Domain/Symmetry/PointGroupAnalysis.hpp`:
 
@@ -306,8 +306,9 @@ E-, 3 sites, with a real pair).
 | RejectsUnknownIrrep | `symmetry.salc.unknown_irrep` |
 | RejectsMissingRow / RejectsDuplicateRow / RejectsOccurrenceGap | `symmetry.salc.incomplete_copy` |
 | RejectsRowMajorOrder | the old (row -> occurrence) order for an m=2, d=2 irrep -> `symmetry.salc.order` |
+| RejectsIrrepsOutOfDecompositionOrder | E listed before A1 -> `symmetry.salc.order` |
 | RejectsWrongCoefficientCount | `symmetry.salc.coefficient_count` (projected and real-pair lists each) |
-| RejectsRealPairWithImaginaryPart / WithoutConjugateLabel / MissingComponent / UnequalMultiplicity | `symmetry.salc.real_pair` |
+| RejectsRealPairWithImaginaryPart / WithoutConjugateLabel / WithUnknownConjugate / MissingComponent / WithUnequalMultiplicity | `symmetry.salc.real_pair` |
 
 ### C++ - `tests/ScientificRuntime/PointGroupAnalysisBridgeTests.cpp` (real Python, no `GTEST_SKIP`, per the file's rule)
 
@@ -335,7 +336,6 @@ stay green unchanged.
    2. Same selection, group forced to "C3": E+ and E- rows show complex coefficients, their "Rysuj"
       is disabled with the tooltip, the "Baza rzeczywista" table shows u/v, and drawing u and v
       gives two real lobed orbitals that look like e_x/e_y of NV, rotated within the plane.
-   3. The Phase A commit is reviewed before Phase B is started.
 
 ## Constraints
 
