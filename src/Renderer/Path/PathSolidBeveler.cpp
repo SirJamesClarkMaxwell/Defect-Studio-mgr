@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 
-#include "Renderer/Path/PathPolygonTriangulator.hpp"
+#include "Renderer/Path/PathSolidBevelGeometry.hpp"
 #include "Renderer/Path/PathSolidBevelTopology.hpp"
 #include "Renderer/Path/PathSolidMesher.hpp"
 
@@ -8,9 +8,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
-#include <map>
 #include <numbers>
-#include <numeric>
 #include <utility>
 
 namespace DefectStudio::detail
@@ -73,97 +71,12 @@ namespace DefectStudio::detail
 			std::vector<glm::dvec3> inner;
 		};
 
-		[[nodiscard]] glm::dvec3 InsetCorner(const ThickFlatMesh &mesh, const ThickFlatMeshFace &face,
-			const glm::dvec3 normal, const std::size_t corner, const double bevel)
-		{
-			const std::size_t count = face.vertices.size();
-			const glm::dvec3 vertex = mesh.vertices[face.vertices[corner]].position;
-			const glm::dvec3 previous = mesh.vertices[face.vertices[(corner + count - 1u) % count]].position;
-			const glm::dvec3 next = mesh.vertices[face.vertices[(corner + 1u) % count]].position;
-			const glm::dvec3 previousDirection = SafeNormal(vertex - previous, glm::dvec3(0.0));
-			const glm::dvec3 nextDirection = SafeNormal(next - vertex, glm::dvec3(0.0));
-			const bool previousBevel = face.bevelEdges[(corner + count - 1u) % count];
-			const bool nextBevel = face.bevelEdges[corner];
-			if (!previousBevel && !nextBevel)
-				return vertex;
-			const glm::dvec3 previousInward = SafeNormal(glm::cross(normal, previousDirection), glm::dvec3(0.0));
-			const glm::dvec3 nextInward = SafeNormal(glm::cross(normal, nextDirection), glm::dvec3(0.0));
-			const glm::dvec3 firstLine = vertex + previousInward * (previousBevel ? bevel : 0.0);
-			const glm::dvec3 secondLine = vertex + nextInward * (nextBevel ? bevel : 0.0);
-			const double denominator = glm::dot(glm::cross(previousDirection, nextDirection), normal);
-			if (std::abs(denominator) <= 1.0e-12)
-			{
-				glm::dvec3 offset(0.0);
-				if (previousBevel)
-					offset += previousInward;
-				if (nextBevel)
-					offset += nextInward;
-				return vertex + SafeNormal(offset, previousInward) * bevel;
-			}
-			const double distance = glm::dot(glm::cross(secondLine - firstLine, nextDirection), normal) / denominator;
-			const glm::dvec3 result = firstLine + previousDirection * distance;
-			return glm::distance(result, vertex) <= bevel * 8.0 ? result :
-				vertex + SafeNormal((previousBevel ? previousInward : glm::dvec3(0.0)) +
-					(nextBevel ? nextInward : glm::dvec3(0.0)), previousInward) * bevel;
-		}
-
-		struct DisjointSet
-		{
-			explicit DisjointSet(const std::size_t size) : parent(size) { std::iota(parent.begin(), parent.end(), 0u); }
-			std::size_t Find(const std::size_t value) { return parent[value] == value ? value : parent[value] = Find(parent[value]); }
-			void Join(const std::size_t first, const std::size_t second) { parent[Find(first)] = Find(second); }
-			std::vector<std::size_t> parent;
-		};
-
-		struct OwnerOutput
-		{
-			std::vector<StrokeTubeVertex> vertices;
-			std::vector<std::uint32_t> indices;
-		};
-
 		[[nodiscard]] std::size_t OwnerIndex(const ThickFlatFaceOwner owner)
 		{
 			return static_cast<std::size_t>(owner);
 		}
 
-		void EmitPolygon(OwnerOutput &output, const ThickFlatMesh &mesh,
-			std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions, const glm::dvec3 expectedNormal)
-		{
-			if (positions.size() < 3u || positions.size() != sources.size())
-				return;
-			glm::dvec3 polygonNormal(0.0);
-			for (std::size_t index = 0u; index < positions.size(); ++index)
-				polygonNormal += glm::cross(positions[index], positions[(index + 1u) % positions.size()]);
-			if (glm::dot(polygonNormal, expectedNormal) < 0.0)
-			{
-				std::reverse(positions.begin(), positions.end());
-				std::reverse(sources.begin(), sources.end());
-				polygonNormal = -polygonNormal;
-			}
-			const auto emitTriangle = [&](const std::array<std::uint32_t, 3u> &triangleSources,
-				const std::array<glm::dvec3, 3u> &trianglePositions) {
-				glm::dvec3 normal = glm::cross(trianglePositions[1] - trianglePositions[0],
-					trianglePositions[2] - trianglePositions[0]);
-				if (glm::dot(normal, normal) <= kToleranceSquared)
-					return;
-				normal = glm::normalize(normal);
-				for (std::size_t corner = 0u; corner < 3u; ++corner)
-				{
-					const ThickFlatMeshVertex &source = mesh.vertices[triangleSources[corner]];
-					output.indices.push_back(static_cast<std::uint32_t>(output.vertices.size()));
-					output.vertices.push_back({glm::vec3(trianglePositions[corner]), glm::vec3(normal), source.color,
-						source.arcT, source.dashCoord});
-				}
-			};
-			std::vector<std::array<std::size_t, 3u>> triangles;
-			if (!TriangulateSimplePolygon(positions, polygonNormal, triangles))
-				return;
-			for (const auto &triangle : triangles)
-				emitTriangle({sources[triangle[0]], sources[triangle[1]], sources[triangle[2]]},
-					{positions[triangle[0]], positions[triangle[1]], positions[triangle[2]]});
-		}
-
-		void EmitVertexPatch(OwnerOutput &output, const ThickFlatMesh &mesh, const std::uint32_t source,
+		void EmitVertexPatch(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh, const std::uint32_t source,
 			const std::vector<glm::dvec3> &boundary, const glm::dvec3 expectedNormal)
 		{
 			glm::dvec3 centre(0.0);
@@ -171,7 +84,7 @@ namespace DefectStudio::detail
 				centre += position;
 			centre /= static_cast<double>(boundary.size());
 			for (std::size_t index = 0u; index < boundary.size(); ++index)
-				EmitPolygon(output, mesh, {source, source, source},
+				EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
 					{centre, boundary[index], boundary[(index + 1u) % boundary.size()]}, expectedNormal);
 		}
 
@@ -187,7 +100,7 @@ namespace DefectStudio::detail
 			return std::pow(poweredSum, -1.0 / exponent);
 		}
 
-		void EmitTrihedralVertexPatch(OwnerOutput &output, const ThickFlatMesh &mesh, const std::uint32_t source,
+		void EmitTrihedralVertexPatch(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh, const std::uint32_t source,
 			const std::array<std::vector<glm::dvec3>, 3u> &arcs,
 			const std::array<glm::dvec3, 3u> &faceNormals, const ThickFlatBevelTurn turn,
 			const double bevel, const double shape, const glm::dvec3 expectedNormal)
@@ -197,15 +110,25 @@ namespace DefectStudio::detail
 			const std::uint32_t segments = static_cast<std::uint32_t>(arcs[0].size() - 1u);
 			if (turn == ThickFlatBevelTurn::Reflex)
 			{
+				// Reentrant shoulder arcs fold in projection, including at shape zero.
+				// Close them with the source-anchored fan before handling convex pinches.
 				const glm::dvec3 sourcePosition = mesh.vertices[source].position;
 				for (std::size_t arcIndex = 0u; arcIndex < arcs.size(); ++arcIndex)
 				{
 					const glm::dvec3 arcNormal = SafeNormal(faceNormals[arcIndex] +
 						faceNormals[(arcIndex + 1u) % faceNormals.size()], expectedNormal);
 					for (std::uint32_t sample = 0u; sample < segments; ++sample)
-						EmitPolygon(output, mesh, {source, source, source},
+						EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
 							{sourcePosition, arcs[arcIndex][sample], arcs[arcIndex][sample + 1u]}, arcNormal);
 				}
+				return;
+			}
+			if (shape == 0.0 && segments > 1u)
+			{
+				std::vector<glm::dvec3> boundary;
+				for (const auto &arc : arcs)
+					boundary.insert(boundary.end(), arc.begin(), arc.end() - 1);
+				EmitThickFlatPinchedBevelPatch(output, mesh, source, boundary, expectedNormal);
 				return;
 			}
 			const std::array<glm::dvec3, 3u> extremes = {arcs[0].front(), arcs[0].back(), arcs[1].back()};
@@ -254,11 +177,11 @@ namespace DefectStudio::detail
 			for (std::uint32_t first = 0u; first < segments; ++first)
 				for (std::uint32_t second = 0u; second + first < segments; ++second)
 				{
-					EmitPolygon(output, mesh, {source, source, source},
+					EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
 						{points[first][second], points[first + 1u][second], points[first][second + 1u]},
 						expectedNormal);
 					if (second + first + 1u < segments)
-						EmitPolygon(output, mesh, {source, source, source},
+						EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
 							{points[first + 1u][second], points[first + 1u][second + 1u],
 								points[first][second + 1u]}, expectedNormal);
 				}
@@ -282,13 +205,13 @@ namespace DefectStudio::detail
 			return anchor + (first - anchor) * firstWeight + (second - anchor) * secondWeight;
 		}
 
-		void AppendOutputs(const std::array<OwnerOutput, 3u> &outputs, StrokeGeometry &geometry)
+		void AppendOutputs(const std::array<ThickFlatBevelOutput, 3u> &outputs, StrokeGeometry &geometry)
 		{
 			geometry.tubeVertices.clear();
 			geometry.ribbonVertices.clear();
 			geometry.indices.clear();
 			const auto append = [&](const ThickFlatFaceOwner owner, StrokeMeshRange &range) {
-				const OwnerOutput &output = outputs[OwnerIndex(owner)];
+				const ThickFlatBevelOutput &output = outputs[OwnerIndex(owner)];
 				range.firstIndex = static_cast<std::uint32_t>(geometry.indices.size());
 				const std::uint32_t firstVertex = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 				geometry.tubeVertices.insert(geometry.tubeVertices.end(), output.vertices.begin(), output.vertices.end());
@@ -301,50 +224,6 @@ namespace DefectStudio::detail
 			append(ThickFlatFaceOwner::Shaft, geometry.shaft);
 		}
 
-		void SmoothCoincidentNormals(StrokeGeometry &geometry)
-		{
-			using PositionKey = std::array<float, 3u>;
-			const auto key = [](const glm::vec3 &position) {
-				return PositionKey{position.x, position.y, position.z};
-			};
-			std::map<PositionKey, glm::dvec3> normalSums;
-			for (std::size_t index = 0u; index + 2u < geometry.indices.size(); index += 3u)
-			{
-				std::array<glm::dvec3, 3u> positions;
-				bool valid = true;
-				for (std::size_t corner = 0u; corner < positions.size(); ++corner)
-				{
-					const std::uint32_t vertex = geometry.indices[index + corner];
-					if (vertex >= geometry.tubeVertices.size())
-					{
-						valid = false;
-						break;
-					}
-					positions[corner] = geometry.tubeVertices[vertex].position;
-				}
-				if (!valid)
-					continue;
-				const glm::dvec3 cross = glm::cross(positions[1] - positions[0], positions[2] - positions[0]);
-				const glm::dvec3 faceNormal = SafeNormal(cross, glm::dvec3(0.0));
-				if (glm::dot(faceNormal, faceNormal) <= kToleranceSquared)
-					continue;
-				for (std::size_t corner = 0u; corner < positions.size(); ++corner)
-				{
-					const glm::dvec3 first = SafeNormal(positions[(corner + 1u) % 3u] - positions[corner], glm::dvec3(0.0));
-					const glm::dvec3 second = SafeNormal(positions[(corner + 2u) % 3u] - positions[corner], glm::dvec3(0.0));
-					if (glm::dot(first, first) <= kToleranceSquared || glm::dot(second, second) <= kToleranceSquared)
-						continue;
-					const double angle = std::acos(std::clamp(glm::dot(first, second), -1.0, 1.0));
-					normalSums[key(glm::vec3(positions[corner]))] += faceNormal * angle;
-				}
-			}
-			for (StrokeTubeVertex &vertex : geometry.tubeVertices)
-			{
-				const auto found = normalSums.find(key(vertex.position));
-				if (found != normalSums.end())
-					vertex.normal = glm::vec3(SafeNormal(found->second, glm::dvec3(vertex.normal)));
-			}
-		}
 	} // namespace
 
 	void FinalizeThickFlatMesh(const ThickFlatMesh &sourceMesh, const PathStrokeStyle &style,
@@ -382,46 +261,17 @@ namespace DefectStudio::detail
 			return;
 		}
 
-		std::vector<std::size_t> cornerOffsets(mesh.faces.size() + 1u, 0u);
-		for (std::size_t faceIndex = 0u; faceIndex < mesh.faces.size(); ++faceIndex)
+		std::vector<std::vector<glm::dvec3>> insets;
+		if (!BuildThickFlatBevelInsets(mesh, faceNormals, topology, insets))
 		{
-			const ThickFlatMeshFace &face = mesh.faces[faceIndex];
-			FaceInfo &info = faces[faceIndex];
-			for (std::size_t corner = 0u; corner < face.vertices.size(); ++corner)
-				info.inner.push_back(InsetCorner(mesh, face, info.normal, corner,
-					VertexRadius(topology, face.vertices[corner])));
-			cornerOffsets[faceIndex + 1u] = cornerOffsets[faceIndex] + face.vertices.size();
+			FinalizeSharpThickFlatMesh(sourceMesh, geometry);
+			return;
 		}
-
-		DisjointSet cornerGroups(cornerOffsets.back());
-		for (const ThickFlatBevelEdge &edge : topology.edges)
-			if (!edge.bevel)
-				for (const std::uint32_t vertex : {edge.key.first, edge.key.second})
-				{
-					const std::size_t firstCorner = FindCorner(mesh, edge.incidents[0].face, vertex);
-					const std::size_t secondCorner = FindCorner(mesh, edge.incidents[1].face, vertex);
-					cornerGroups.Join(cornerOffsets[edge.incidents[0].face] + firstCorner,
-						cornerOffsets[edge.incidents[1].face] + secondCorner);
-				}
-		std::vector<glm::dvec3> sums(cornerOffsets.back(), glm::dvec3(0.0));
-		std::vector<std::size_t> counts(cornerOffsets.back(), 0u);
-		for (std::size_t faceIndex = 0u; faceIndex < faces.size(); ++faceIndex)
-			for (std::size_t corner = 0u; corner < faces[faceIndex].inner.size(); ++corner)
-			{
-				const std::size_t root = cornerGroups.Find(cornerOffsets[faceIndex] + corner);
-				sums[root] += faces[faceIndex].inner[corner];
-				++counts[root];
-			}
-		for (std::size_t faceIndex = 0u; faceIndex < faces.size(); ++faceIndex)
-			for (std::size_t corner = 0u; corner < faces[faceIndex].inner.size(); ++corner)
-			{
-				const std::size_t root = cornerGroups.Find(cornerOffsets[faceIndex] + corner);
-				faces[faceIndex].inner[corner] = sums[root] / static_cast<double>(counts[root]);
-			}
-
-		std::array<OwnerOutput, 3u> outputs;
+		for (std::size_t face = 0u; face < faces.size(); ++face)
+			faces[face].inner = std::move(insets[face]);
+		std::array<ThickFlatBevelOutput, 3u> outputs;
 		for (std::size_t faceIndex = 0u; faceIndex < mesh.faces.size(); ++faceIndex)
-			EmitPolygon(outputs[OwnerIndex(mesh.faces[faceIndex].owner)], mesh, mesh.faces[faceIndex].vertices,
+			EmitThickFlatBevelPolygon(outputs[OwnerIndex(mesh.faces[faceIndex].owner)], mesh, mesh.faces[faceIndex].vertices,
 				faces[faceIndex].inner, faces[faceIndex].normal);
 
 		const std::uint32_t segments = std::max(1u, style.ribbonBevelSegments);
@@ -460,7 +310,7 @@ namespace DefectStudio::detail
 				profile.push_back(positions);
 			}
 			for (std::uint32_t sample = 0u; sample < segments; ++sample)
-				EmitPolygon(outputs[OwnerIndex(owner)], mesh,
+				EmitThickFlatBevelPolygon(outputs[OwnerIndex(owner)], mesh,
 					{edge.key.first, edge.key.second, edge.key.second, edge.key.first},
 					{profile[sample][0], profile[sample][1], profile[sample + 1u][1],
 						profile[sample + 1u][0]}, expected);
@@ -544,6 +394,6 @@ namespace DefectStudio::detail
 
 		AppendOutputs(outputs, geometry);
 		if (style.shadeSmooth)
-			SmoothCoincidentNormals(geometry);
+			SmoothThickFlatBevelNormals(geometry);
 	}
 }

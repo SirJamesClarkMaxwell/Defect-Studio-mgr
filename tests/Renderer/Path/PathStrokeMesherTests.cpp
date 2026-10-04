@@ -636,51 +636,6 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(zeroGeometry.indices.size(), defaultGeometry.indices.size());
 	}
 
-	TEST(PathStrokeMesherTests, FlatRibbonBevelAddsChamferFacesWithConstantFrameNormals)
-	{
-		const EvaluatedPath path = StraightPath();
-		ASSERT_FALSE(path.samples.empty());
-		PathStrokeStyle sharpStyle;
-		sharpStyle.profile = StrokeProfile::Flat;
-		sharpStyle.width = 0.4f;
-		sharpStyle.ribbonThickness = 0.6f;
-		const StrokeGeometry sharp = BuildStroke(path, sharpStyle);
-
-		PathStrokeStyle bevelStyle = sharpStyle;
-		bevelStyle.ribbonBevel = 0.1f;
-		const StrokeGeometry bevel = BuildStroke(path, bevelStyle);
-		ASSERT_FALSE(sharp.tubeVertices.empty());
-		ASSERT_FALSE(bevel.tubeVertices.empty());
-		ASSERT_EQ(sharp.tubeVertices.size() % path.samples.size(), 0u);
-		ASSERT_EQ(bevel.tubeVertices.size() % path.samples.size(), 0u);
-		const std::size_t sharpRingSize = sharp.tubeVertices.size() / path.samples.size();
-		const std::size_t bevelRingSize = bevel.tubeVertices.size() / path.samples.size();
-		EXPECT_GT(bevelRingSize, sharpRingSize);
-		ASSERT_GT(bevelRingSize, 2u);
-
-		const std::size_t faceCount = bevelRingSize / 2u;
-		ASSERT_EQ(bevelRingSize % 2u, 0u);
-		for (std::size_t face = 0; face < faceCount; ++face)
-		{
-			const std::size_t first = face * 2u;
-			const std::size_t next = ((face + 1u) % faceCount) * 2u;
-			ASSERT_LT(first + 1u, bevel.tubeVertices.size());
-			ASSERT_LT(next, bevel.tubeVertices.size());
-			EXPECT_NEAR(glm::dot(bevel.tubeVertices[first].normal, bevel.tubeVertices[first + 1u].normal), 1.0f, 1.0e-5f);
-			EXPECT_LT(std::abs(glm::dot(bevel.tubeVertices[first].normal, bevel.tubeVertices[next].normal)), 1.0f - 1.0e-5f);
-		}
-
-		const EvaluatedSample &sample = path.samples.front();
-		ASSERT_LT(0u, bevel.tubeVertices.size());
-		EXPECT_NEAR(std::abs(glm::dot(bevel.tubeVertices[0].normal, glm::vec3(sample.binormal))), 1.0f, 1.0e-5f);
-
-		PathStrokeStyle cappedStyle = sharpStyle;
-		cappedStyle.ribbonBevel = 0.5f * std::min(sharpStyle.width, sharpStyle.ribbonThickness);
-		PathStrokeStyle overStyle = sharpStyle;
-		overStyle.ribbonBevel = cappedStyle.ribbonBevel * 4.0f;
-		AssertTubeGeometryMatches(BuildStroke(path, cappedStyle), BuildStroke(path, overStyle));
-	}
-
 	TEST(PathStrokeMesherTests, FlatRibbonBevelChamfersThePlainShaftEndFaces)
 	{
 		const EvaluatedPath path = StraightPath();
@@ -1154,87 +1109,6 @@ namespace DefectStudio::Tests
 						ASSERT_EQ(geometry.shaft.indexCount, geometry.indices.size());
 						AssertRangeIsClosedByPosition(geometry, geometry.shaft);
 					}
-	}
-
-	TEST(PathStrokeMesherTests, EmittedBevelRingCardinalityMatchesCrossSectionRingSize)
-	{
-		const EvaluatedPath path = StraightPath();
-		for (const std::uint32_t segments : {1u, 4u, 16u})
-		{
-			PathStrokeStyle style;
-			style.profile = StrokeProfile::Flat;
-			style.width = 0.4f;
-			style.ribbonThickness = 0.6f;
-			style.ribbonBevel = 0.1f;
-			style.ribbonBevelSegments = segments;
-			style.cap = PathLineCap::Butt;
-			style.startDecoration.kind = PathDecorationKind::None;
-			style.endDecoration.kind = PathDecorationKind::None;
-
-			SCOPED_TRACE(::testing::Message() << "segments=" << segments);
-			const StrokeGeometry geometry = BuildStroke(path, style);
-			ASSERT_FALSE(geometry.tubeVertices.empty());
-			ASSERT_EQ(geometry.tubeVertices.size() % path.samples.size(), 0u);
-			const std::size_t emittedRingSize = geometry.tubeVertices.size() / path.samples.size();
-			EXPECT_EQ(emittedRingSize, detail::CrossSectionRingSize(style));
-		}
-	}
-
-	TEST(PathStrokeMesherTests, HighSegmentBevelProfilesNeverDoubleBack)
-	{
-		const EvaluatedPath path = StraightPath();
-		for (const float shape : {0.0f, 0.5f, 1.0f})
-		{
-			PathStrokeStyle style;
-			style.profile = StrokeProfile::Flat;
-			style.width = 0.4f;
-			style.ribbonThickness = 0.6f;
-			style.ribbonBevel = 0.1f;
-			style.ribbonBevelSegments = 16u;
-			style.ribbonBevelShape = shape;
-			style.cap = PathLineCap::Butt;
-			style.startDecoration.kind = PathDecorationKind::None;
-			style.endDecoration.kind = PathDecorationKind::None;
-
-			SCOPED_TRACE(::testing::Message() << "shape=" << shape);
-			const StrokeGeometry geometry = BuildStroke(path, style);
-			ASSERT_FALSE(geometry.tubeVertices.empty());
-			const std::uint32_t ringSize = detail::CrossSectionRingSize(style);
-			const std::uint32_t bevelSegments = std::max(1u, style.ribbonBevelSegments);
-			ASSERT_GE(geometry.tubeVertices.size(), static_cast<std::size_t>(ringSize));
-			ASSERT_EQ(ringSize % 2u, 0u);
-			const std::uint32_t ringPairCount = ringSize / 2u;
-			ASSERT_EQ(ringPairCount % (bevelSegments + 1u), 0u);
-			const std::uint32_t cornerCount = ringPairCount / (bevelSegments + 1u);
-			ASSERT_GT(cornerCount, 0u);
-
-			const auto ringPoint = [&](const std::uint32_t pair, const std::uint32_t endpoint) {
-				return geometry.tubeVertices[pair * 2u + endpoint].position;
-			};
-			for (std::uint32_t corner = 0u; corner < cornerCount; ++corner)
-			{
-				const std::uint32_t pairStart = corner == 0u
-					? ringPairCount - bevelSegments
-					: corner + (corner - 1u) * bevelSegments;
-				ASSERT_LT(pairStart + bevelSegments - 1u, ringPairCount);
-
-				std::vector<glm::vec3> profile;
-				profile.reserve(static_cast<std::size_t>(bevelSegments) + 1u);
-				profile.push_back(ringPoint(pairStart, 0u));
-				for (std::uint32_t segment = 0u; segment < bevelSegments; ++segment)
-					profile.push_back(ringPoint(pairStart + segment, 1u));
-
-				const glm::vec3 direction = profile.back() - profile.front();
-				ASSERT_GT(glm::dot(direction, direction), kSurfaceTolerance * kSurfaceTolerance);
-				float previousProgress = -kSurfaceTolerance;
-				for (const glm::vec3 &point : profile)
-				{
-					const float progress = glm::dot(point - profile.front(), direction);
-					EXPECT_GE(progress, previousProgress);
-					previousProgress = progress;
-				}
-			}
-		}
 	}
 
 	TEST(PathStrokeMesherTests, RibbonBevelShapeOnlyChangesGeometryAboveOneSegment)

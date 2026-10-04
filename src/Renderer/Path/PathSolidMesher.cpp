@@ -332,12 +332,14 @@ namespace DefectStudio::detail
 		std::reverse(outlineBevels.begin(), outlineBevels.end());
 		std::rotate(outlineBevels.begin(), outlineBevels.begin() + 1u, outlineBevels.end());
 		AddFace(mesh, std::move(reversedBack), -endpoint.binormal, owner, std::move(outlineBevels));
+		// Mirroring the contour at the end reverses its loop winding and side normals.
+		const glm::dvec3 sideAxis = start ? endpoint.binormal : -endpoint.binormal;
 		for (std::size_t index = 0u; index < loop.positions.size(); ++index)
 		{
 			if (attachedToShaft && index == loop.attachmentEdge)
 				continue;
 			const std::size_t next = (index + 1u) % loop.positions.size();
-			const glm::dvec3 outward = SafeNormal(glm::cross(endpoint.binormal,
+			const glm::dvec3 outward = SafeNormal(glm::cross(sideAxis,
 				loop.positions[next] - loop.positions[index]), endpoint.normal);
 			AddFace(mesh, {front[index], front[next], back[next], back[index]}, outward, owner);
 		}
