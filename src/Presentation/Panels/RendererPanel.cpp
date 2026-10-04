@@ -340,12 +340,6 @@ namespace DefectStudio
 			HandleVacancyKeyboardShortcuts(
 				windowState, hovered, m_Layer, m_DomainLayer.lock().get(), m_CommandRegistry.lock().get());
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
-		renderSceneArrowQuickEditPanel(windowState, imageOrigin, viewportSize);
-
-		// Visible arrow handles use the exact geometry RenderTransformGizmo hit-tests earlier in the
-		// frame. Multi-selection keeps endpoint-only markers; a sole translated arrow also exposes its
-		// whole-arrow midpoint target.
-		DrawSceneArrowHandleMarkers(windowState, imageOrigin, viewportSize);
 
 		// Box/circle overlay, the brush's scroll-wheel radius, and the drag dispatch. Runs before
 		// navigation below because the circle brush eats the wheel event the camera would otherwise

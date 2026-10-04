@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <variant>
+
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -38,15 +41,31 @@ namespace DefectStudio::Tests
 		RendererWindowState window = WindowWithVacancy();
 		window.selectedVacancies = {0};
 		ASSERT_EQ(AddVacancyBonds(window), 3u);
-		ASSERT_EQ(window.sceneArrows.size(), 3u);
-		const RendererWindowState::SceneArrow &line = window.sceneArrows.front();
-		EXPECT_EQ(line.kind, RendererWindowState::ArrowKind::Line);
-		EXPECT_EQ(line.startAnchorAtom, std::optional<std::size_t>(0));
-		EXPECT_EQ(line.end(), glm::vec3(0.0f));
-		EXPECT_TRUE(line.style.useGradient);
-		EXPECT_EQ(line.style.gradient.start, glm::vec3(0.0f, 0.0f, 1.0f));
-		EXPECT_EQ(line.style.gradient.finish, glm::vec3(1.0f, 0.0f, 0.0f));
-		EXPECT_EQ(window.selectedSceneArrows.size(), 3u);
+		EXPECT_TRUE(window.sceneArrows.empty());
+		ASSERT_NE(window.paths, nullptr);
+		ASSERT_EQ(window.paths->Store().Size(), 3u);
+		ASSERT_EQ(window.selectedScenePaths.size(), 3u);
+		EXPECT_EQ(window.selectedScenePaths, window.paths->Store().Ids());
+		const ScenePath &line = *window.paths->Store().Find(window.selectedScenePaths.front());
+		ASSERT_EQ(line.segments.size(), 1u);
+		EXPECT_TRUE(std::holds_alternative<LineSegmentData>(line.segments[0].data));
+		ASSERT_EQ(line.nodes.size(), 2u);
+		ASSERT_TRUE(std::holds_alternative<PathBinding::CopyPosition>(line.nodes[0].binding.value));
+		const auto &binding = std::get<PathBinding::CopyPosition>(line.nodes[0].binding.value);
+		EXPECT_EQ(binding.atomIndex, 0u);
+		EXPECT_FLOAT_EQ(binding.buffer, 0.0f);
+		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(line.nodes[1].binding.value));
+		EXPECT_EQ(line.transform.position + line.nodes[1].position, glm::vec3(0.0f));
+		EXPECT_EQ(line.style.profile, StrokeProfile::Round);
+		EXPECT_FLOAT_EQ(line.style.width, 0.18f);
+		EXPECT_EQ(line.style.startDecoration.kind, PathDecorationKind::None);
+		EXPECT_EQ(line.style.endDecoration.kind, PathDecorationKind::None);
+		EXPECT_TRUE(line.style.gradient.enabled);
+		ASSERT_EQ(line.style.gradient.stops.size(), 2u);
+		EXPECT_EQ(line.style.gradient.stops[0].color, glm::vec3(0.0f, 0.0f, 1.0f));
+		EXPECT_EQ(line.style.gradient.stops[1].color, glm::vec3(1.0f, 0.0f, 0.0f));
+		EXPECT_FLOAT_EQ(line.style.gradient.stops[0].position, 0.0f);
+		EXPECT_FLOAT_EQ(line.style.gradient.stops[1].position, 1.0f);
 	}
 
 	TEST(ViewportVacancyAddTests, SelectedAtomsGoToTheirNearestVacancy)
@@ -54,6 +73,9 @@ namespace DefectStudio::Tests
 		RendererWindowState window = WindowWithVacancy();
 		window.selectedAtomIndices = {3};
 		ASSERT_EQ(AddVacancyBonds(window), 1u);
-		EXPECT_EQ(window.sceneArrows.front().start(), glm::vec3(0, 0, 2.5f));
+		ASSERT_NE(window.paths, nullptr);
+		const ScenePath &line = *window.paths->Store().Find(window.selectedScenePaths.front());
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(line.nodes[0].binding.value).atomIndex, 3u);
+		EXPECT_EQ(line.transform.position + line.nodes[0].position, glm::vec3(0, 0, 2.5f));
 	}
 } // namespace DefectStudio::Tests

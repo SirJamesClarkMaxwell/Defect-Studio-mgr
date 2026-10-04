@@ -296,24 +296,28 @@ namespace DefectStudio
 			PushSceneObjectsUndoSnapshot(windowState, std::move(before));
 		}
 
-		void ParentSelectionToDefectFrame(RendererWindowState &windowState)
-		{
-			auto &children = windowState.defectFrameChildren;
-			auto add = [](auto &list, const auto &selected) {
-				for (const auto &item : selected)
-					if (std::find(list.begin(), list.end(), item) == list.end())
-						list.push_back(item);
-			};
-			add(children.freeLabels, windowState.selectedFreeLabels);
-			add(children.arrows, windowState.selectedSceneArrows);
-			add(children.orbitals, windowState.selectedSceneOrbitals);
-			add(children.planes, windowState.selectedScenePlanes);
-			add(children.vacancies, windowState.selectedVacancies);
-		}
+	} // namespace
 
+	void ParentSelectionToDefectFrame(RendererWindowState &windowState)
+	{
+		auto &children = windowState.defectFrameChildren;
+		auto add = [](auto &list, const auto &selected) {
+			for (const auto &item : selected)
+				if (std::find(list.begin(), list.end(), item) == list.end())
+					list.push_back(item);
+		};
+		add(children.freeLabels, windowState.selectedFreeLabels);
+		add(children.paths, windowState.selectedScenePaths);
+		add(children.orbitals, windowState.selectedSceneOrbitals);
+		add(children.planes, windowState.selectedScenePlanes);
+		add(children.vacancies, windowState.selectedVacancies);
+	}
+
+	namespace
+	{
 		[[nodiscard]] bool AnyParentableSelected(const RendererWindowState &windowState)
 		{
-			return !windowState.selectedFreeLabels.empty() || !windowState.selectedSceneArrows.empty() ||
+			return !windowState.selectedFreeLabels.empty() || !windowState.selectedScenePaths.empty() ||
 				!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty() ||
 				!windowState.selectedVacancies.empty();
 		}

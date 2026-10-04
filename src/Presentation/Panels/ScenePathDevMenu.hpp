@@ -9,9 +9,7 @@ namespace DefectStudio
 {
 	struct RendererWindowState;
 
-	// Which demo path the dev submenu appends. Not a user-facing concept: it exists so S7 can put a
-	// Line, a Cubic and an Arc on screen for the manual round without waiting for the real commands
-	// (S8) or the real UI (S11).
+	// Shared Line / Cubic / Arc creation presets.
 	enum class ScenePathDevPreset
 	{
 		Line,
@@ -41,15 +39,7 @@ namespace DefectStudio
 	// the .cpp's anonymous namespace so a test can assert what it produced without driving ImGui.
 	void AddScenePathDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition);
 
-	// The viewport Add menu's "Path (dev)" submenu.
-	//
-	// Deliberately NOT the settings-backed switch the plan sketched: a flag on
-	// RendererGlobalRenderSettings is not reachable from RendererPanel without new plumbing, and on
-	// this branch nothing outside this submenu can reach a ScenePath anyway. The "(dev)" label and
-	// this comment are the switch until S11 gives paths a real UI and S15 routes annotations through
-	// them; whoever writes S11 deletes this file rather than growing it.
-	//
-	// Appends through AddScenePath with the renderer's own undo sink, so a dev path is one Ctrl+Z
-	// away exactly like an arrow or a plane - S8 made that the only way a path edit reaches the store.
+	// The user-facing Path submenu. Diagnostic examples stay under Dev; all additions are selected
+	// and go through AddScenePath with the renderer's undo sink.
 	void DrawScenePathDevAddMenu(RendererWindowState &windowState, const glm::vec3 &worldPosition);
 }

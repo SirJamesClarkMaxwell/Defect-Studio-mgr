@@ -18,7 +18,7 @@ namespace DefectStudio
 	// PoscarWriter::Write(..., overwriteExisting = true) call; tests pass a fake.
 	using StructureFileWriter = std::function<Result<void>(const CrystalStructure &structure, const Path &poscarPath)>;
 
-	// Ctrl+S sequence:
+	// Ctrl+S sequence (first migrate any cached v1 arrow DTOs to paths; reject invalid data):
 	// 1. Every record in `savedStructures` with structureFileDirty:
 	//    - sourcePath inside projectDirectory or inside one of manifest.roots ->
 	//      writeStructureFile(structure, sourcePath); the first failure returns false with outError,

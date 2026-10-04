@@ -185,7 +185,7 @@ namespace DefectStudio
 			return ids;
 		};
 		CaptureSceneTransformLabels(window, snapshot, withChildren(window.selectedFreeLabels, window.defectFrameChildren.freeLabels));
-		for (const SceneObjectId id : withChildren(window.selectedSceneArrows, window.defectFrameChildren.arrows))
+		for (const SceneObjectId id : window.selectedSceneArrows)
 		{
 			const std::size_t index = AnnotationIndex(window.sceneArrows, id);
 			if (index >= window.sceneArrows.size())

@@ -3,6 +3,7 @@
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/ScenePathPersistence.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Path/PathTopology.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -45,7 +46,7 @@ static RendererWindowState::LabelStyle FromPersisted(const PersistedLabelStyle &
 	p.scale = s.scale;
 	return p;
 }
-static PersistedArrowStyle ToPersisted(const RendererWindowState::ArrowStyle &s)
+[[maybe_unused]] static PersistedArrowStyle ToPersisted(const RendererWindowState::ArrowStyle &s)
 {
 	PersistedArrowStyle p;
 	p.color = s.color;
@@ -63,7 +64,7 @@ static PersistedArrowStyle ToPersisted(const RendererWindowState::ArrowStyle &s)
 	p.gradientFinish = s.gradient.finish;
 	return p;
 }
-static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &s)
+[[maybe_unused]] static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &s)
 {
 	RendererWindowState::ArrowStyle p;
 	p.color = s.color;
@@ -82,7 +83,7 @@ static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &
 	return p;
 }
 
-static std::string ToPersisted(RendererWindowState::ArrowTip tip)
+[[maybe_unused]] static std::string ToPersisted(RendererWindowState::ArrowTip tip)
 {
 	using ArrowTip = RendererWindowState::ArrowTip;
 	switch (tip)
@@ -97,7 +98,7 @@ static std::string ToPersisted(RendererWindowState::ArrowTip tip)
 	return "None";
 }
 
-static RendererWindowState::ArrowTip FromPersisted(
+[[maybe_unused]] static RendererWindowState::ArrowTip FromPersisted(
 	const std::string &name, RendererWindowState::ArrowTip fallback)
 {
 	using ArrowTip = RendererWindowState::ArrowTip;
@@ -204,24 +205,6 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.anchorOffset = label.anchorOffset;
 		p.rotationRadians = label.rotationRadians;
 		p.style = ToPersisted(label.style);
-		result.emplace_back(std::move(p));
-	}
-	for (const auto &arrow : window.sceneArrows)
-	{
-		PersistedSceneArrow p;
-		p.persistKey = arrow.persistKey;
-		p.kind = static_cast<PersistedArrowKind>(arrow.kind);
-		p.orientation2D = static_cast<PersistedArrow2DOrientation>(arrow.orientation2D);
-		p.fixedPlane = static_cast<PersistedWorldPlane>(arrow.fixedPlane);
-		p.points = arrow.points;
-		p.controlPoint = arrow.controlPoint;
-		p.curveSegments = arrow.curveSegments;
-		p.startTip = ToPersisted(arrow.startTip);
-		p.endTip = ToPersisted(arrow.endTip);
-		p.startAnchorAtoms = PersistOptionalAtomReference(window.structure, arrow.startAnchorAtom);
-		p.endAnchorAtoms = PersistOptionalAtomReference(window.structure, arrow.endAnchorAtom);
-		p.atomBuffer = arrow.atomBuffer;
-		p.style = ToPersisted(arrow.style);
 		result.emplace_back(std::move(p));
 	}
 	for (const auto &orbital : window.sceneOrbitals)
@@ -368,26 +351,36 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 				}
 				else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
 				{
-					RendererWindowState::SceneArrow a;
-					a.id = window.sceneRegistry.AllocateObjectId();
-					a.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
-					a.kind = static_cast<RendererWindowState::ArrowKind>(value.kind);
-					a.orientation2D = static_cast<RendererWindowState::Arrow2DOrientation>(value.orientation2D);
-					a.fixedPlane = static_cast<RendererWindowState::WorldPlane>(value.fixedPlane);
-					a.points = value.points;
-					a.controlPoint = value.controlPoint;
-					a.curveSegments = value.curveSegments;
-					a.startTip = FromPersisted(value.startTip, RendererWindowState::ArrowTip::None);
-					const RendererWindowState::ArrowTip defaultEndTip =
-						a.kind == RendererWindowState::ArrowKind::Line
-						? RendererWindowState::ArrowTip::None
-						: RendererWindowState::ArrowTip::Plain;
-					a.endTip = FromPersisted(value.endTip, defaultEndTip);
-					a.startAnchorAtom = ResolveOptionalAtomReference(window.structure, value.startAnchorAtoms);
-					a.endAnchorAtom = ResolveOptionalAtomReference(window.structure, value.endAnchorAtoms);
-					a.atomBuffer = value.atomBuffer;
-					a.style = FromPersisted(value.style);
-					window.sceneArrows.push_back(std::move(a));
+					auto migrated = MigrateArrowToPath(value);
+					if (!migrated)
+					{
+						warnings.push_back(migrated.Error());
+						return;
+					}
+					for (const auto &warning : migrated.Value().warnings)
+						warnings.push_back(warning);
+					ScenePath path = std::move(migrated.Value().path);
+					path.name = value.kind == PersistedArrowKind::Line ? "Line" : "Arrow";
+					path.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					const auto rebind = [&](PathNode &node, const std::vector<PersistedAtomRef> &references) {
+						if (references.empty())
+							return;
+						const auto atom = ResolveOptionalAtomReference(window.structure, references);
+						if (atom)
+							node.binding = PathBinding{PathBinding::CopyPosition{*atom, {}, value.atomBuffer}};
+						else
+						{
+							node.binding = PathBinding{};
+							warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene path binding is unresolved",
+								"A migrated arrow endpoint could not bind to the current structure.",
+								"The node keeps its saved position and is treated as free.",
+								"SceneObjectPersistence", "scene_objects.path_binding_unresolved");
+						}
+					};
+					rebind(path.nodes.front(), value.startAnchorAtoms);
+					rebind(path.nodes.back(), value.endAnchorAtoms);
+					MovePathOriginToCentre(path);
+					(void)SceneSystem::AppendScenePath(window, std::move(path));
 				}
 				else if constexpr (std::is_same_v<T, PersistedSceneOrbital>)
 				{

@@ -53,7 +53,12 @@ namespace DefectStudio
 	{
 		if (window.paths == nullptr)
 			return;
-		for (const SceneObjectId id : window.selectedScenePaths)
+		std::vector<SceneObjectId> ids = window.selectedScenePaths;
+		if (window.defectFrameSelected && window.showDefectFrame && window.structure.defectFrame && !window.pathEdit.IsActive())
+			for (const SceneObjectId id : window.defectFrameChildren.paths)
+				if (std::find(ids.begin(), ids.end(), id) == ids.end())
+					ids.push_back(id);
+		for (const SceneObjectId id : ids)
 		{
 			const ScenePath *path = window.paths->Store().Find(id);
 			if (path == nullptr)

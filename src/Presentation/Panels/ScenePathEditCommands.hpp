@@ -40,6 +40,8 @@ namespace DefectStudio
 	// commands is a successful no-op: the modal loop owns Escape, digits and axis keys until it ends,
 	// and Escape must cancel the drag, not also leave Edit Mode underneath it.
 	void RegisterScenePathEditCommands(CommandRegistry &registry, RendererLayer &rendererLayer);
+	// Object Mode reverse plus the existing Alt+R command id as a compatibility alias.
+	void RegisterScenePathObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer);
 
 	// Sets kPathEditActiveContext from the focused viewport window's PathEditSession (false when no
 	// viewport is focused). Called once per frame by the renderer panel.

@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -207,24 +208,10 @@ namespace DefectStudio
 		return arrow;
 	}
 
-	// Scene-relative length (docs/scene_arrow_rework_plan_corrected.md Section 7 Step 5, Section 8):
-	// 20% of the structure's bounding diagonal, clamped to a sane on-screen range, so a fresh arrow
-	// already reads as "an arrow" instead of a speck or a mile-long line. +X (not +Z) so a Billboard
-	// 2D arrow - the new default kind - reads clearly against the app's default camera framing.
 	RendererWindowState::SceneArrow MakeDefaultSceneArrow(
 		const RendererWindowState &windowState, const glm::vec3 &seedPosition)
 	{
-		glm::vec3 minimum(std::numeric_limits<float>::max());
-		glm::vec3 maximum(std::numeric_limits<float>::lowest());
-		for (const RendererAtomData &atom : windowState.structure.atoms)
-		{
-			minimum = glm::min(minimum, atom.cartesianPosition);
-			maximum = glm::max(maximum, atom.cartesianPosition);
-		}
-		const float diagonal = windowState.structure.atoms.empty() ? 0.0f : glm::length(maximum - minimum);
-		const float length =
-			std::isfinite(diagonal) && diagonal > 0.0f ? std::clamp(diagonal * 0.20f, 0.75f, 4.0f) : 1.0f;
-
+		const float length = GetDefaultSceneSegmentLength(windowState);
 		RendererWindowState::SceneArrow arrow;
 		arrow.start() = seedPosition;
 		arrow.end() = seedPosition + glm::vec3(length, 0.0f, 0.0f);

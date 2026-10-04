@@ -378,14 +378,14 @@ namespace DefectStudio
 		struct DefectFrameChildren
 		{
 			std::vector<SceneObjectId> freeLabels;
-			std::vector<SceneObjectId> arrows;
+			std::vector<SceneObjectId> paths;
 			std::vector<SceneObjectId> orbitals;
 			std::vector<SceneObjectId> planes;
 			std::vector<std::size_t> vacancies;
 
 			[[nodiscard]] std::size_t Count() const
 			{
-				return freeLabels.size() + arrows.size() + orbitals.size() + planes.size() + vacancies.size();
+				return freeLabels.size() + paths.size() + orbitals.size() + planes.size() + vacancies.size();
 			}
 		} defectFrameChildren;
 		// Copied from RendererLayer::GetLabelPickQuads after every viewport render, so the label click
@@ -428,7 +428,7 @@ namespace DefectStudio
 		// task/41: the window's paths, and the caches derived from them. A Unique rather than a member
 		// by value so that the vector of windows reallocating does not move the caches out from under
 		// anything holding a reference into them; null until the first path is created (see
-		// SceneSystem::EnsurePathSystem). No shipping UI reaches this before S15.
+		// SceneSystem::EnsurePathSystem).
 		Unique<PathSystem> paths;
 		// Same multi-select shape as selectedSceneArrows; back() is the gizmo anchor.
 		std::vector<SceneObjectId> selectedScenePlanes;

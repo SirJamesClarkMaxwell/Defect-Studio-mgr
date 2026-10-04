@@ -395,8 +395,8 @@ namespace DefectStudio
 		if (m_HadKeyboardFocus && m_ActiveWindowIndex >= 0)
 		{
 			RendererWindowState &activeWindow = windows[static_cast<std::size_t>(m_ActiveWindowIndex)];
-			const std::optional<SceneObjectEditKind> selectedKind = !activeWindow.selectedSceneArrows.empty()
-				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Arrow}
+			const std::optional<SceneObjectEditKind> selectedKind = !activeWindow.selectedScenePaths.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Path}
 				: !activeWindow.selectedSceneOrbitals.empty()
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Orbital}
 				: !activeWindow.selectedScenePlanes.empty()
@@ -413,7 +413,7 @@ namespace DefectStudio
 				ExecuteSceneObjectEditAction(activeWindow, *selectedKind, SceneObjectEditAction::Duplicate);
 			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
 				ExecuteSceneObjectEditAction(
-					activeWindow, selectedKind.value_or(SceneObjectEditKind::Arrow), SceneObjectEditAction::Paste);
+					activeWindow, selectedKind.value_or(SceneObjectEditKind::Path), SceneObjectEditAction::Paste);
 		}
 
 		if (windows.empty())

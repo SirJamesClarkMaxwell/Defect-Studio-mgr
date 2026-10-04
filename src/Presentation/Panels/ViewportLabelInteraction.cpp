@@ -33,6 +33,7 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
+#include "Presentation/Panels/ScenePathEditCommands.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
@@ -87,19 +88,7 @@ namespace DefectStudio
 
 	void RegisterViewportSceneObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer)
 	{
-		auto result = registry.Register(
-			CommandMeta{
-				CommandID{"renderer.scene_arrow.reverse"},
-				"Renderer: Reverse selected arrows",
-				"Renderer",
-				"Swap the start and end of every selected scene arrow in the focused viewport.",
-				{},
-				CommandFlags::None},
-			[rendererLayer = std::ref(rendererLayer)](CommandContext &) -> Unique<ICommand> {
-				return CreateReverseSelectedSceneArrowsCommand(rendererLayer.get());
-			});
-		if (!result)
-			DS_LOG_WARN("Reverse selected scene arrows command registration failed: {}", result.Error().technicalDetails);
+		RegisterScenePathObjectCommands(registry, rendererLayer);
 	}
 
 	// Keyboard-only shortcuts for selected scene objects: pin flip/scale, arrow clipboard actions,
@@ -213,70 +202,24 @@ namespace DefectStudio
 		// same chords) only ever touch atoms - there's no fallback chain in CoreLayer::dispatchKeyChord
 		// to make them "also try annotations", so this runs independently alongside the atom command.
 		const bool ctrlHeld = ImGui::GetIO().KeyCtrl;
-		const std::optional<SceneObjectEditKind> selectedDrawingKind = ResolveSelectedDrawingKind(windowState);
+		std::optional<SceneObjectEditKind> selectedDrawingKind = ResolveSelectedDrawingKind(windowState);
+		if (selectedDrawingKind == SceneObjectEditKind::Arrow)
+			selectedDrawingKind.reset(); // legacy clipboard creation is unreachable after S15
 		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
 			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Copy);
 		if (hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_V, false))
 		{
-			// Preserve arrows' established no-selection paste fallback. A selected plane/orbital chooses
+			// A selected plane/orbital chooses
 			// its own clipboard, avoiding an ambiguous paste when several kind-specific clipboards exist.
 			ExecuteSceneObjectEditAction(
-				windowState, selectedDrawingKind.value_or(SceneObjectEditKind::Arrow),
+				windowState, selectedDrawingKind.value_or(SceneObjectEditKind::Path),
 				SceneObjectEditAction::Paste);
 		}
 		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false))
 			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Duplicate);
 
-		// Tab cycles which single point (Start -> End -> whole arrow) owns the unified transform
-		// gizmo's axis triad - keyboard equivalent of clicking
-		// the plain dots it draws for the inactive candidates (item 3 of the prior feedback round).
-		const bool oneArrowSelected = windowState.selectedSceneArrows.size() == 1;
-		if (oneArrowSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Tab, false))
-		{
-			using DragTarget = RendererWindowState::SceneArrowDragTarget;
-			windowState.sceneArrowGizmoActiveTarget = windowState.sceneArrowGizmoActiveTarget == DragTarget::Both
-				? DragTarget::Start
-				: windowState.sceneArrowGizmoActiveTarget == DragTarget::Start ? DragTarget::End : DragTarget::Both;
-		}
-
-		// Geometry/Style copy-paste shortcuts - keyboard equivalents of the viewport context menu's
-		// "Arrow > Copy/Paste Geometry|Style" items (same GetArrowGeometryClipboard/GetArrowStyleClipboard
-		// pair, see that menu for why two independent slots instead of one tagged one). Paste Style would
-		// naturally be Alt+V to mirror Copy Style's Alt+C, but Alt+V is already renderer.view.cycle_previous
-		// (keybindings.yaml) - Alt+Shift+V instead. Likewise the whole-arrow Ctrl+C/V/D block above already
-		// owns plain Ctrl+C/V, so these are Ctrl+Shift+C/V.
 		const bool altHeld = ImGui::GetIO().KeyAlt;
 		const bool shiftHeld = ImGui::GetIO().KeyShift;
-		if (sceneArrowSelected && hovered && ctrlHeld && shiftHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
-		{
-			if (const RendererWindowState::SceneArrow *arrow =
-					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front()))
-				CopyArrowGeometry(arrow->style);
-		}
-		if (sceneArrowSelected && hovered && ctrlHeld && shiftHeld && ImGui::IsKeyPressed(ImGuiKey_V, false) &&
-			GetArrowGeometryClipboard().has_value())
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			PasteArrowGeometry(windowState, windowState.selectedSceneArrows);
-		}
-		if (sceneArrowSelected && hovered && altHeld && !shiftHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
-		{
-			if (const RendererWindowState::SceneArrow *arrow =
-					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front()))
-				CopyArrowStyle(arrow->style);
-		}
-		if (sceneArrowSelected && hovered && altHeld && shiftHeld && ImGui::IsKeyPressed(ImGuiKey_V, false) &&
-			GetArrowStyleClipboard().has_value())
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			PasteArrowStyle(windowState, windowState.selectedSceneArrows);
-		}
-
-		// notes.txt pt. 15 - label-style equivalent of the arrow Alt+C/Alt+Shift+V pair just above,
-		// same keys since a selection is either arrows or labels in practice (viewport selection
-		// modes - RendererPanelToolbar's Ctrl+1..5 - separate atoms/bonds/labels from each other, and
-		// arrows aren't part of any pick mode, so this only guards against a stale multi-kind
-		// selection surviving a mode switch, not a normal simultaneous pick).
 		const bool labelSelected = pinSelected || freeLabelSelected;
 		if (labelSelected && !sceneArrowSelected && hovered && altHeld && !shiftHeld &&
 			ImGui::IsKeyPressed(ImGuiKey_C, false))
@@ -301,29 +244,6 @@ namespace DefectStudio
 			PasteLabelStyle(windowState, windowState.selectedPinnedMeasurements, windowState.selectedFreeLabels);
 		}
 
-		// Ctrl+Home sets the 3D cursor to the selected arrow's currently active gizmo point (Start/End/
-		// midpoint per sceneArrowGizmoActiveTarget) - keyboard equivalent of the context menu's "3D Cursor >
-		// Move to Arrow Start/End", extended to also cover the midpoint. Plain Home is already
-		// renderer.orbit_left_90 (keybindings.yaml), hence Ctrl+Home instead.
-		if (oneArrowSelected && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_Home, false))
-		{
-			Ref<EventBus> eventBus = layer.GetEventBus();
-			if (eventBus != nullptr)
-			{
-				using DragTarget = RendererWindowState::SceneArrowDragTarget;
-				const RendererWindowState::SceneArrow *arrow =
-					FindAnnotation(windowState.sceneArrows, windowState.selectedSceneArrows.front());
-				if (arrow == nullptr)
-					return;
-				const glm::vec3 position = windowState.sceneArrowGizmoActiveTarget == DragTarget::Start ? arrow->start()
-					: windowState.sceneArrowGizmoActiveTarget == DragTarget::End                        ? arrow->end()
-																						  : (arrow->start() + arrow->end()) * 0.5f;
-				RendererEvents::Viewport::Cursor3DSetPositionRequested event;
-				event.windowId = windowState.windowId;
-				event.position = position;
-				eventBus->Publish(event);
-			}
-		}
 	}
 
 	std::optional<SceneObjectEditKind> ResolveSelectedDrawingKind(const RendererWindowState &windowState)

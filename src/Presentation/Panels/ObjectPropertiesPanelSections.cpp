@@ -12,6 +12,8 @@
 #include <imgui.h>
 
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -279,18 +281,13 @@ namespace DefectStudio
 	void DrawAllArrowRows(RendererWindowState &windowState)
 	{
 		ImGui::Separator();
-		ImGui::Text("Arrows");
+		ImGui::Text("Paths");
 		if (ImGui::Button("+ Add arrow"))
 		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
 			const glm::vec3 seed = windowState.cursor3DPlaced ? windowState.cursor3DPosition : glm::vec3(0.0f);
-			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, seed);
-			const SceneObjectId addedId = SceneSystem::AppendSceneArrow(windowState, std::move(arrow));
-			const std::size_t newIndex = windowState.sceneArrows.size() - 1;
-			windowState.selectedSceneArrows = {addedId};
-			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-			windowState.sceneArrowQuickEditActive = true;
-			windowState.sceneArrowQuickEditIndex = newIndex;
+			const auto result = AddFreeScenePathSegment(windowState, seed, true);
+			if (!result)
+				DS_LOG_WARN("Add arrow path failed: {}", result.Error().technicalDetails);
 		}
 
 		int arrowToRemove = -1;

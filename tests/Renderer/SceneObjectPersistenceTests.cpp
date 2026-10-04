@@ -5,6 +5,7 @@
 
 #include "IO/SceneObjectsIO.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
+#include "Renderer/Scene/ScenePathPersistence.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
@@ -175,15 +176,17 @@ namespace DefectStudio::Tests
 		label.text = "hi";
 		label.worldPosition = glm::vec3(1.0f);
 		source.freeLabels.push_back(label);
-		RendererWindowState::SceneArrow arrow;
-		arrow.kind = RendererWindowState::ArrowKind::Line;
-		arrow.fixedPlane = RendererWindowState::WorldPlane::XZ;
-		arrow.end() = glm::vec3(2.0f, 0.0f, 0.0f);
-		arrow.startAnchorAtom = 0;
-		arrow.endAnchorAtom = 1;
+		PersistedSceneArrow arrow;
+		arrow.kind = PersistedArrowKind::Line;
+		arrow.endTip = "None";
+		arrow.points[1] = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.startAnchorAtoms = {{0, "C", glm::vec3(0)}};
+		arrow.endAnchorAtoms = {{1, "N", glm::vec3(1.5f, 0, 0)}};
 		arrow.atomBuffer = 0.75f;
 		arrow.style.alpha = 0.5f;
-		source.sceneArrows.push_back(arrow);
+		const auto migrated = MigrateArrowToPath(arrow);
+		ASSERT_TRUE(migrated);
+		(void)SceneSystem::AppendScenePath(source, migrated.Value().path);
 		EnsureScenePersistKeys(source);
 
 		const std::vector<PersistedSceneObject> saved = ExtractPersistedSceneObjects(source);
@@ -205,14 +208,15 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(target.freeLabels.size(), 1u);
 		EXPECT_EQ(target.freeLabels[0].text, "hi");
 		EXPECT_EQ(target.freeLabels[0].worldPosition, glm::vec3(1.0f));
-		ASSERT_EQ(target.sceneArrows.size(), 1u);
-		EXPECT_EQ(target.sceneArrows[0].kind, RendererWindowState::ArrowKind::Line);
-		EXPECT_EQ(target.sceneArrows[0].fixedPlane, RendererWindowState::WorldPlane::XZ);
-		EXPECT_EQ(target.sceneArrows[0].end(), arrow.end());
-		EXPECT_EQ(target.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
-		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
-		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
-		EXPECT_FLOAT_EQ(target.sceneArrows[0].style.alpha, 0.5f);
+		EXPECT_TRUE(target.sceneArrows.empty());
+		ASSERT_NE(target.paths, nullptr);
+		ASSERT_EQ(target.paths->Store().Size(), 1u);
+		const ScenePath &path = *target.paths->Store().At(0);
+		EXPECT_EQ(path.transform.position + path.nodes.back().position, arrow.points.back());
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).atomIndex, 0u);
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).atomIndex, 1u);
+		EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).buffer, 0.75f);
+		EXPECT_FLOAT_EQ(path.style.alpha, 0.5f);
 	}
 
 	TEST(SceneObjectPersistenceTests, HalfDetachedArrowKeepsTheFreeEndThroughProjectFileRoundTrip)
@@ -229,7 +233,11 @@ namespace DefectStudio::Tests
 		const RendererWindowState::SceneArrow refreshed = source.sceneArrows[0];
 
 		SceneObjectsFile file;
-		file.structures.push_back({"structure", ExtractPersistedSceneObjects(source)});
+		PersistedSceneArrow legacy;
+		legacy.points = refreshed.points;
+		legacy.endAnchorAtoms = {{1, "N", glm::vec3(1.5f, 0, 0)}};
+		legacy.atomBuffer = refreshed.atomBuffer;
+		file.structures.push_back({"structure", {legacy}});
 		SceneObjectsFile parsed;
 		std::vector<StructuredError> ioWarnings;
 		std::string error;
@@ -242,11 +250,13 @@ namespace DefectStudio::Tests
 		ApplyPersistedSceneObjects(target, parsed.structures[0].objects, applyWarnings);
 
 		EXPECT_TRUE(applyWarnings.empty());
-		ASSERT_EQ(target.sceneArrows.size(), 1u);
-		EXPECT_EQ(target.sceneArrows[0].start(), refreshed.start());
-		EXPECT_FALSE(target.sceneArrows[0].startAnchorAtom.has_value());
-		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
-		EXPECT_FLOAT_EQ(target.sceneArrows[0].atomBuffer, 0.75f);
+		EXPECT_TRUE(target.sceneArrows.empty());
+		ASSERT_NE(target.paths, nullptr);
+		const ScenePath &path = *target.paths->Store().At(0);
+		EXPECT_EQ(path.transform.position + path.nodes.front().position, refreshed.start());
+		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(path.nodes[0].binding.value));
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).atomIndex, 1u);
+		EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).buffer, 0.75f);
 	}
 
 	TEST(SceneObjectPersistenceTests, OrbitalSceneDecorationsSurviveProjectFileRoundTrip)
@@ -281,11 +291,10 @@ namespace DefectStudio::Tests
 	TEST(SceneObjectPersistenceTests, ArrowEndpointReferencesRebindAfterAtomsAreReordered)
 	{
 		RendererWindowState source = MakeWindow();
-		RendererWindowState::SceneArrow arrow;
-		arrow.startAnchorAtom = 0;
-		arrow.endAnchorAtom = 1;
-		source.sceneArrows.push_back(arrow);
-		const std::vector<PersistedSceneObject> saved = ExtractPersistedSceneObjects(source);
+		PersistedSceneArrow arrow;
+		arrow.startAnchorAtoms = {{0, "C", source.structure.atoms[0].cartesianPosition}};
+		arrow.endAnchorAtoms = {{1, "N", source.structure.atoms[1].cartesianPosition}};
+		const std::vector<PersistedSceneObject> saved = {arrow};
 
 		RendererWindowState target = MakeWindow();
 		std::rotate(target.structure.atoms.begin(), target.structure.atoms.begin() + 1, target.structure.atoms.end());
@@ -293,9 +302,11 @@ namespace DefectStudio::Tests
 		ApplyPersistedSceneObjects(target, saved, warnings);
 
 		EXPECT_TRUE(warnings.empty());
-		ASSERT_EQ(target.sceneArrows.size(), 1u);
-		EXPECT_EQ(target.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(2));
-		EXPECT_EQ(target.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(0));
+		EXPECT_TRUE(target.sceneArrows.empty());
+		ASSERT_NE(target.paths, nullptr);
+		const ScenePath &path = *target.paths->Store().At(0);
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).atomIndex, 2u);
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).atomIndex, 0u);
 	}
 
 	TEST(SceneObjectPersistenceTests, AnchoredPlaneSurvivesExtractAndApply)

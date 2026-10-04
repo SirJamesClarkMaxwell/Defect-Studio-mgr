@@ -34,6 +34,7 @@ namespace DefectStudio
 			// and insertion path with its per-item undo sink disabled.
 			PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
 			const PathEditContext context = MakeSilentPathEditContext(windowState);
+			std::vector<SceneObjectId> added;
 			for (std::size_t index = 0; index < decorations.size(); ++index)
 			{
 				const auto [kind, name] = decorations[index];
@@ -45,8 +46,12 @@ namespace DefectStudio
 				path.name = name;
 				path.style.startDecoration.kind = kind;
 				path.style.endDecoration.kind = PathDecorationKind::Arrow;
-				(void)AddScenePath(context, std::move(path));
+				const auto result = AddScenePath(context, std::move(path));
+				if (result)
+					added.push_back(result.Value());
 			}
+			if (!added.empty())
+				SelectAddedScenePaths(windowState, std::move(added));
 		}
 	} // namespace
 
@@ -184,30 +189,41 @@ namespace DefectStudio
 
 	void DrawScenePathDevAddMenu(RendererWindowState &windowState, const glm::vec3 &worldPosition)
 	{
-		if (!ImGui::BeginMenu("Path (dev)"))
+		if (!ImGui::BeginMenu("Path"))
 			return;
 
 		// The same sink every other scene-object edit already uses; without it AddScenePath applies
 		// the edit and records no history, which is exactly what a dev menu must not do.
 		const PathEditContext context = MakeWindowPathEditContext(windowState);
-		if (ImGui::MenuItem("Decoration gallery"))
-			AddScenePathDecorationGallery(windowState, worldPosition);
-		if (ImGui::MenuItem("Cubic S-curve"))
-			(void)AddScenePath(context, MakeDevCompositePath(worldPosition, StrokeProfile::Round, false));
-		if (ImGui::MenuItem("Mixed segments"))
-			(void)AddScenePath(context, MakeDevCompositePath(worldPosition, StrokeProfile::Round, true));
-		if (ImGui::MenuItem("Thick curved Flat ribbon"))
+		const auto append = [&](ScenePath path) {
+			const auto result = AddScenePath(context, std::move(path));
+			if (result)
+				SelectAddedScenePaths(windowState, {result.Value()});
+		};
+		if (ImGui::BeginMenu("Dev"))
 		{
-			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Cubic, worldPosition, StrokeProfile::Flat);
-			path.name = "Thick Flat ribbon";
-			path.style.ribbonThickness = 0.12f;
-			(void)AddScenePath(context, std::move(path));
+			if (ImGui::MenuItem("Decoration gallery"))
+				AddScenePathDecorationGallery(windowState, worldPosition);
+			if (ImGui::MenuItem("Cubic S-curve"))
+				append(MakeDevCompositePath(worldPosition, StrokeProfile::Round, false));
+			if (ImGui::MenuItem("Mixed segments"))
+				append(MakeDevCompositePath(worldPosition, StrokeProfile::Round, true));
+			if (ImGui::MenuItem("Thick curved Flat ribbon"))
+			{
+				ScenePath path = MakeDevScenePath(ScenePathDevPreset::Cubic, worldPosition, StrokeProfile::Flat);
+				path.name = "Thick Flat ribbon";
+				path.style.ribbonThickness = 0.12f;
+				append(std::move(path));
+			}
+			ImGui::EndMenu();
 		}
 
 		const auto add = [&](const ScenePathDevPreset preset, const StrokeProfile profile, const char *label) {
 			if (!ImGui::MenuItem(label))
 				return;
-			(void)AddScenePath(context, MakeDevScenePath(preset, worldPosition, profile));
+			ScenePath path = MakeDevScenePath(preset, worldPosition, profile);
+			path.name = label;
+			append(std::move(path));
 		};
 		const std::array<std::pair<StrokeProfile, const char *>, 3> profiles = {{
 			{StrokeProfile::Round, "Tube 3D"}, {StrokeProfile::Flat, "Flat ribbon"},

@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <variant>
 
 #include "Core/Utils/Time.hpp"
 #include "Presentation/ProjectSceneSave.hpp"
@@ -66,6 +67,26 @@ namespace DefectStudio::Tests
 			std::filesystem::remove_all(root, ignored);
 		}
 	} // namespace
+
+	TEST(ProjectSceneSaveTests, UnopenedLegacyArrowsAreSavedAsPaths)
+	{
+		const auto root = MakeTempRoot("path_cutover");
+		ProjectManifest manifest = ProjectManifestIO::CreateNew("path-cutover");
+		StructureRegistry registry;
+		SceneObjectsFile file;
+		file.structures.push_back({"unopened", {PersistedSceneArrow{}}});
+		FakeWriter writer;
+		std::vector<StructuredError> warnings;
+		std::string error;
+		ASSERT_TRUE(SaveProjectWithSceneObjects(Path::FromResolved(root), manifest, file, registry,
+			{}, writer.Bind(), warnings, error)) << error;
+		SceneObjectsFile loaded;
+		ASSERT_TRUE(SceneObjectsIO::Load(Path::FromResolved(root), loaded, warnings, error)) << error;
+		ASSERT_EQ(loaded.structures.size(), 1u);
+		ASSERT_EQ(loaded.structures[0].objects.size(), 1u);
+		EXPECT_TRUE(std::holds_alternative<PersistedScenePath>(loaded.structures[0].objects[0]));
+		RemoveRoot(root);
+	}
 
 	TEST(ProjectSceneSaveTests, MarkModifiedOnlyIncreasesRevisionAndUndoAfterSaveIsDirty)
 	{

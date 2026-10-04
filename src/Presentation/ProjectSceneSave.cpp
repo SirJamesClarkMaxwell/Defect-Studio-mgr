@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #include "IO/TextFileIO.hpp"
+#include "Renderer/Scene/ScenePathPersistence.hpp"
 
 namespace DefectStudio
 {
@@ -15,6 +16,14 @@ bool SaveProjectWithSceneObjects(const Path &projectDirectory, ProjectManifest &
 								 const StructureFileWriter &writeStructureFile,
 								 std::vector<StructuredError> &outWarnings, std::string &outError)
 {
+	SceneObjectsFile migratedSceneObjects = sceneObjects;
+	const auto migration = MigratePersistedSceneArrows(migratedSceneObjects, outWarnings);
+	if (!migration)
+	{
+		outError = migration.Error().technicalDetails;
+		outWarnings.push_back(migration.Error());
+		return false;
+	}
 	auto insideDirectory = [](const Path &directory, const std::filesystem::path &source) {
 		if (directory.Empty())
 			return false;
@@ -58,7 +67,7 @@ bool SaveProjectWithSceneObjects(const Path &projectDirectory, ProjectManifest &
 		}
 		writtenStructures.push_back(id);
 	}
-	if (!SceneObjectsIO::Save(projectDirectory, sceneObjects, outError))
+	if (!SceneObjectsIO::Save(projectDirectory, migratedSceneObjects, outError))
 		return false;
 	if (!ProjectManifestIO::Save(projectDirectory, manifest, outError))
 		return false;

@@ -75,4 +75,9 @@ namespace DefectStudio
 	};
 
 	[[nodiscard]] Result<ScenePathMigration> MigrateArrowToPath(const PersistedSceneArrow &arrow);
+
+	// Save also carries cached DTOs for unopened structures. Convert those without a live atom
+	// buffer, preserving their stable references. Rejected migration leaves the file unchanged.
+	[[nodiscard]] Result<void> MigratePersistedSceneArrows(
+		SceneObjectsFile &file, std::vector<StructuredError> &outWarnings);
 } // namespace DefectStudio

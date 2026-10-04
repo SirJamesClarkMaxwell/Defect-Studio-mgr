@@ -43,4 +43,5 @@ namespace DefectStudio
 	// selected objects to them (one scene-objects undo step), pin the selection to them (temporary
 	// parenting, RendererWindowState::defectFrameChildren), re-aim x, flip z, show, remove.
 	void DrawDefectFrameMenu(RendererWindowState &windowState, CommandRegistry *commandRegistry);
+	void ParentSelectionToDefectFrame(RendererWindowState &windowState);
 } // namespace DefectStudio

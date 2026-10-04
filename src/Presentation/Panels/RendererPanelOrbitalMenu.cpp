@@ -12,6 +12,8 @@
 
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -96,20 +98,6 @@ namespace DefectStudio
 			return pressed;
 		}
 
-		void AddFreeSegment(
-			RendererWindowState &windowState, const glm::vec3 &worldPosition,
-			const RendererWindowState::ArrowKind kind)
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, worldPosition);
-			ApplySceneArrowKindChange(arrow, kind);
-			const SceneObjectId addedId = SceneSystem::AppendSceneArrow(windowState, std::move(arrow));
-			const std::size_t newIndex = windowState.sceneArrows.size() - 1;
-			windowState.selectedSceneArrows = {addedId};
-			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-			windowState.sceneArrowQuickEditActive = true;
-			windowState.sceneArrowQuickEditIndex = newIndex;
-		}
 	} // namespace
 
 	DrawSelectionDescription DescribeDrawSelection(const std::size_t validSelectedAtomCount)
@@ -158,32 +146,17 @@ namespace DefectStudio
 	{
 		const std::vector<std::size_t> atoms = ValidSelectedAtoms(windowState);
 		const DrawSelectionDescription description = DescribeDrawSelection(atoms.size());
-		const auto addSegment = [&](const RendererWindowState::ArrowKind kind) {
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			RendererWindowState::SceneArrow arrow =
-				MakeDefaultSceneArrow(windowState, windowState.structure.atoms[atoms.front()].cartesianPosition);
-			const float atomBuffer = GetSceneArrowAtomBuffer();
-			arrow.startAnchorAtom = atoms.front();
-			arrow.endAnchorAtom = atoms.back();
-			arrow.atomBuffer = atomBuffer;
-			MatchSceneArrowPositionToAtoms(
-				arrow, windowState.structure.atoms[atoms.front()],
-				windowState.structure.atoms[atoms.back()], atomBuffer);
-			// Endpoints first, then the kind change, and never a bare `arrow.kind = kind`:
-			// MakeDefaultSceneArrow ships Arrow2D's widths, which are *pixels*, and reading 22 of
-			// them as world units is what drew a head the size of the cell across the structure.
-			// ApplySceneArrowKindChange re-derives them from the arrow's own length.
-			ApplySceneArrowKindChange(arrow, kind);
-			const SceneObjectId addedId = SceneSystem::AppendSceneArrow(windowState, std::move(arrow));
-			windowState.selectedSceneArrows = {addedId};
-			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		const auto addSegment = [&](const bool arrow) {
+			const auto result = AddScenePathThroughSelectedAtoms(windowState, arrow);
+			if (!result)
+				DS_LOG_WARN("Add segment failed: {}", result.Error().technicalDetails);
 		};
 
 		DrawSceneArrowAtomBufferControl();
 		if (ImGui::MenuItem(description.lineLabel.c_str(), nullptr, false, description.canDrawSegment))
-			addSegment(RendererWindowState::ArrowKind::Line);
+			addSegment(false);
 		if (ImGui::MenuItem(description.arrowLabel.c_str(), nullptr, false, description.canDrawSegment))
-			addSegment(RendererWindowState::ArrowKind::Arrow3D);
+			addSegment(true);
 	}
 
 	void DrawPlaneAddItem(RendererWindowState &windowState)
@@ -209,10 +182,15 @@ namespace DefectStudio
 
 	void DrawFreeSegmentAddItems(RendererWindowState &windowState, const glm::vec3 &worldPosition)
 	{
+		const auto add = [&](const bool arrow) {
+			const auto result = AddFreeScenePathSegment(windowState, worldPosition, arrow);
+			if (!result)
+				DS_LOG_WARN("Add free segment failed: {}", result.Error().technicalDetails);
+		};
 		if (ImGui::MenuItem("Linia swobodna"))
-			AddFreeSegment(windowState, worldPosition, RendererWindowState::ArrowKind::Line);
+			add(false);
 		if (ImGui::MenuItem("Strzalka swobodna"))
-			AddFreeSegment(windowState, worldPosition, RendererWindowState::ArrowKind::Arrow3D);
+			add(true);
 	}
 
 	void DrawFreePlaneAddItem(RendererWindowState &windowState, const glm::vec3 &worldPosition)

@@ -160,7 +160,9 @@ namespace DefectStudio
 		switch (action)
 		{
 		case SceneObjectEditAction::Delete:
-			PushPinnedMeasurementUndoSnapshot(windowState);
+			// DeleteScenePaths records the whole batch itself.
+			if (kind != SceneObjectEditKind::Path)
+				PushPinnedMeasurementUndoSnapshot(windowState);
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel:

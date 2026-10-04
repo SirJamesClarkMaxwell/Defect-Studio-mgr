@@ -3,11 +3,16 @@
 #include "Presentation/Panels/ScenePathOperations.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <utility>
 #include <variant>
 
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Path/PathTopology.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
+#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathDevMenu.hpp"
 
 namespace DefectStudio
 {
@@ -70,6 +75,76 @@ namespace DefectStudio
 		PathEditContext context;
 		context.window = &windowState;
 		return context;
+	}
+
+	void SelectAddedScenePaths(RendererWindowState &windowState, std::vector<SceneObjectId> ids)
+	{
+		windowState.pathEdit.Leave();
+		windowState.selectedScenePaths = std::move(ids);
+		windowState.selectedPinnedMeasurements.clear();
+		windowState.selectedFreeLabels.clear();
+		windowState.selectedSceneArrows.clear();
+		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedScenePlanes.clear();
+		windowState.selectedVacancies.clear();
+		windowState.defectFrameSelected = false;
+		windowState.sceneArrowQuickEditActive = false;
+		SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
+		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+	}
+
+	float GetDefaultSceneSegmentLength(const RendererWindowState &windowState)
+	{
+		glm::vec3 minimum(std::numeric_limits<float>::max());
+		glm::vec3 maximum(std::numeric_limits<float>::lowest());
+		for (const RendererAtomData &atom : windowState.structure.atoms)
+		{
+			minimum = glm::min(minimum, atom.cartesianPosition);
+			maximum = glm::max(maximum, atom.cartesianPosition);
+		}
+		const float diagonal = windowState.structure.atoms.empty() ? 0.0f : glm::length(maximum - minimum);
+		return std::isfinite(diagonal) && diagonal > 0.0f ? std::clamp(diagonal * 0.20f, 0.75f, 4.0f) : 1.0f;
+	}
+
+	Result<SceneObjectId> AddFreeScenePathSegment(
+		RendererWindowState &windowState, const glm::vec3 &worldPosition, const bool arrow)
+	{
+		const float length = GetDefaultSceneSegmentLength(windowState);
+		ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, worldPosition + glm::vec3(length * 0.5f, 0, 0));
+		path.name = arrow ? "Arrow" : "Line";
+		path.nodes.front().position = glm::vec3(-length * 0.5f, 0, 0);
+		path.nodes.back().position = glm::vec3(length * 0.5f, 0, 0);
+		path.style.endDecoration.kind = arrow ? PathDecorationKind::Arrow : PathDecorationKind::None;
+		const auto added = AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));
+		if (added)
+			SelectAddedScenePaths(windowState, {added.Value()});
+		return added;
+	}
+
+	Result<SceneObjectId> AddScenePathThroughSelectedAtoms(RendererWindowState &windowState, const bool arrow)
+	{
+		std::vector<std::size_t> atoms;
+		for (const auto index : windowState.selectedAtomIndices)
+			if (index < windowState.structure.atoms.size())
+				atoms.push_back(index);
+		if (atoms.size() != 2)
+			return PathEditSelectionError("path.two_atoms_required", "Select exactly two atoms to draw a segment.");
+		const glm::vec3 start = windowState.structure.atoms[atoms[0]].cartesianPosition;
+		const glm::vec3 end = windowState.structure.atoms[atoms[1]].cartesianPosition;
+		ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
+		path.name = arrow ? "Arrow" : "Line";
+		path.transform.position = glm::vec3(0);
+		path.nodes[0].position = start;
+		path.nodes[1].position = end;
+		const float buffer = GetSceneArrowAtomBuffer();
+		path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atoms[0], {}, buffer}};
+		path.nodes[1].binding = PathBinding{PathBinding::CopyPosition{atoms[1], {}, buffer}};
+		path.style.endDecoration.kind = arrow ? PathDecorationKind::Arrow : PathDecorationKind::None;
+		MovePathOriginToCentre(path);
+		const auto added = AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));
+		if (added)
+			SelectAddedScenePaths(windowState, {added.Value()});
+		return added;
 	}
 
 	std::vector<ScenePath> &GetScenePathClipboard()

@@ -10,6 +10,7 @@
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
 #include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
@@ -20,12 +21,6 @@
 
 namespace DefectStudio
 {
-	[[nodiscard]] static std::size_t ArrowIndex(const RendererWindowState &windowState, const SceneObjectId id)
-	{
-		const auto found = std::find_if(windowState.sceneArrows.begin(), windowState.sceneArrows.end(), [id](const auto &arrow) { return arrow.id == id; });
-		return found == windowState.sceneArrows.end() ? windowState.sceneArrows.size() : static_cast<std::size_t>(std::distance(windowState.sceneArrows.begin(), found));
-	}
-
 	glm::vec3 RendererPanel::computeViewportWorldPosition(const RendererWindowState &windowState, float relX, float relY) const
 	{
 		return ComputeViewportWorldPosition(windowState, relX, relY);
@@ -62,7 +57,7 @@ namespace DefectStudio
 			return;
 		if (windowState.sceneArrowQuickEditIndex >= windowState.sceneArrows.size() ||
 			windowState.selectedSceneArrows.size() != 1 ||
-			ArrowIndex(windowState, windowState.selectedSceneArrows[0]) != windowState.sceneArrowQuickEditIndex)
+			AnnotationIndex(windowState.sceneArrows, windowState.selectedSceneArrows[0]) != windowState.sceneArrowQuickEditIndex)
 		{
 			windowState.sceneArrowQuickEditActive = false;
 			return;
@@ -182,58 +177,22 @@ namespace DefectStudio
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSelection))
-			runCommand("renderer.selection.copy");
+		const bool pathSelection = !windowState.selectedScenePaths.empty();
+		const auto editPathOrAtoms = [&](SceneObjectEditAction action, const char *commandId) {
+			if (pathSelection || (action == SceneObjectEditAction::Paste && !hasSelection &&
+				CanExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, action)))
+				ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, action);
+			else
+				runCommand(commandId);
+		};
+		if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSelection || pathSelection))
+			editPathOrAtoms(SceneObjectEditAction::Copy, "renderer.selection.copy");
 		if (ImGui::MenuItem("Paste", "Ctrl+V"))
-			runCommand("renderer.selection.paste");
-		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection))
-			runCommand("renderer.selection.duplicate");
+			editPathOrAtoms(SceneObjectEditAction::Paste, "renderer.selection.paste");
+		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection || pathSelection))
+			editPathOrAtoms(SceneObjectEditAction::Duplicate, "renderer.selection.duplicate");
 
-		// Copies from the first selected arrow (same "first selected wins" convention the 3D Cursor
-		// submenu below already uses); pastes onto every selected arrow as one undo step. Two independent
-		// clipboards (GetArrowGeometryClipboard/GetArrowStyleClipboard) rather than one tagged slot, so
-		// Paste Geometry/Style are only enabled once that specific thing has actually been copied.
-		const bool hasArrowSelection = !windowState.selectedSceneArrows.empty();
-		if (ImGui::BeginMenu("Arrow", hasArrowSelection || GetArrowGeometryClipboard().has_value() ||
-										   GetArrowStyleClipboard().has_value()))
-		{
-			if (ImGui::MenuItem("Copy Geometry", nullptr, false, hasArrowSelection))
-				CopyArrowGeometry(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].style);
-			if (ImGui::MenuItem("Copy Style", nullptr, false, hasArrowSelection))
-				CopyArrowStyle(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].style);
-			if (ImGui::MenuItem("Copy Geometry + Style", nullptr, false, hasArrowSelection))
-			{
-				const RendererWindowState::ArrowStyle &style =
-					windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].style;
-				CopyArrowGeometry(style);
-				CopyArrowStyle(style);
-			}
-
-			ImGui::Separator();
-
-			const bool canPasteGeometry = hasArrowSelection && GetArrowGeometryClipboard().has_value();
-			const bool canPasteStyle = hasArrowSelection && GetArrowStyleClipboard().has_value();
-			if (ImGui::MenuItem("Paste Geometry", nullptr, false, canPasteGeometry))
-			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
-				PasteArrowGeometry(windowState, windowState.selectedSceneArrows);
-			}
-			if (ImGui::MenuItem("Paste Style", nullptr, false, canPasteStyle))
-			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
-				PasteArrowStyle(windowState, windowState.selectedSceneArrows);
-			}
-			if (ImGui::MenuItem("Paste Geometry + Style", nullptr, false, canPasteGeometry && canPasteStyle))
-			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
-				PasteArrowGeometry(windowState, windowState.selectedSceneArrows);
-				PasteArrowStyle(windowState, windowState.selectedSceneArrows);
-			}
-
-			ImGui::EndMenu();
-		}
-
-		// notes.txt pt. 15 - mirrors the "Arrow" submenu above, but LabelStyle has no separate
+		// LabelStyle has no separate
 		// geometry to split out, so just one Copy/Paste Style pair. Applies to whichever label kind is
 		// selected (pinned bond/angle labels and free labels share this one clipboard, same as the
 		// "Selected labels" bulk editor in ObjectPropertiesPanel).
@@ -267,8 +226,8 @@ namespace DefectStudio
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
-			runCommand("renderer.selection.delete");
+		if (ImGui::MenuItem("Delete", "Del", false, hasSelection || pathSelection))
+			editPathOrAtoms(SceneObjectEditAction::Delete, "renderer.selection.delete");
 		DrawDefectFrameMenu(windowState, commandRegistry.get());
 		// H hides every selected kind, not only atoms - see Renderer/Scene/SceneVisibility.hpp.
 		if (ImGui::MenuItem("Hide", "H", false, AnySceneObjectSelected(windowState)))
@@ -344,12 +303,6 @@ namespace DefectStudio
 				publishCursor(windowState.structure.atoms[windowState.selectedAtomIndices.back()].cartesianPosition);
 			if (ImGui::MenuItem("Move to Origin"))
 				publishCursor(glm::vec3(0.0f));
-
-			const bool hasOneArrowSelected = windowState.selectedSceneArrows.size() == 1;
-			if (ImGui::MenuItem("Move to Arrow Start", nullptr, false, hasOneArrowSelected))
-				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].start());
-			if (ImGui::MenuItem("Move to Arrow End", nullptr, false, hasOneArrowSelected))
-				publishCursor(windowState.sceneArrows[ArrowIndex(windowState, windowState.selectedSceneArrows.front())].end());
 
 			ImGui::EndMenu();
 		}

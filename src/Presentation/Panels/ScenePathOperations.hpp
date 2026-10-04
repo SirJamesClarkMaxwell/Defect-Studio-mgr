@@ -18,6 +18,15 @@ namespace DefectStudio
 	// multi-path operations below, which push one snapshot for the whole batch instead of letting
 	// each AddScenePath push its own and leaving a five-path paste needing five undos.
 	[[nodiscard]] PathEditContext MakeSilentPathEditContext(RendererWindowState &windowState);
+	// Shared scene-relative sizing for free segments, including the legacy arrow builder.
+	[[nodiscard]] float GetDefaultSceneSegmentLength(const RendererWindowState &windowState);
+
+	// User-facing segment creation. Both select the new path and record one undo entry.
+	[[nodiscard]] Result<SceneObjectId> AddFreeScenePathSegment(
+		RendererWindowState &windowState, const glm::vec3 &worldPosition, bool arrow);
+	[[nodiscard]] Result<SceneObjectId> AddScenePathThroughSelectedAtoms(
+		RendererWindowState &windowState, bool arrow);
+	void SelectAddedScenePaths(RendererWindowState &windowState, std::vector<SceneObjectId> ids);
 
 	// Clipboard shared across windows, same lifetime and shape as the arrow/orbital/plane ones.
 	[[nodiscard]] std::vector<ScenePath> &GetScenePathClipboard();

@@ -12,7 +12,9 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Domain/Defects/DefectModel.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathDevMenu.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Renderer/Path/PathTopology.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -56,24 +58,25 @@ namespace DefectStudio
 			return nearest;
 		}
 
-		[[nodiscard]] RendererWindowState::SceneArrow MakeVacancyBond(
+		[[nodiscard]] ScenePath MakeVacancyBond(
 			const RendererWindowState &windowState, std::size_t atomIndex, const RendererVacancyData &vacancy)
 		{
 			const RendererAtomData &atom = windowState.structure.atoms[atomIndex];
-			RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(windowState, atom.cartesianPosition);
-			arrow.points = {atom.cartesianPosition, vacancy.cartesianPosition};
-			ApplySceneArrowKindChange(arrow, RendererWindowState::ArrowKind::Line);
-			arrow.startTip = RendererWindowState::ArrowTip::None;
-			arrow.endTip = RendererWindowState::ArrowTip::None;
-			arrow.startAnchorAtom = atomIndex;
-			arrow.atomBuffer = 0.0f;
+			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
+			path.name = "Vacancy bond";
+			path.transform.position = glm::vec3(0);
+			path.nodes[0].position = atom.cartesianPosition;
+			path.nodes[1].position = vacancy.cartesianPosition;
+			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
+			path.style.startDecoration.kind = PathDecorationKind::None;
+			path.style.endDecoration.kind = PathDecorationKind::None;
 			// Same thickness as the structure's own bonds (ponytail: ignores the bond radius multiplier).
 			const float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
-			arrow.style.shaftWidth = 2.0f * bondRadius;
-			arrow.style.useGradient = true;
-			arrow.style.gradient.start = atom.color;
-			arrow.style.gradient.finish = vacancy.color;
-			return arrow;
+			path.style.width = 2.0f * bondRadius;
+			path.style.gradient.enabled = true;
+			path.style.gradient.stops = {{0.0f, atom.color, 1.0f}, {1.0f, vacancy.color, 1.0f}};
+			MovePathOriginToCentre(path);
+			return path;
 		}
 	} // namespace
 
@@ -150,16 +153,23 @@ namespace DefectStudio
 		if (pairs.empty())
 			return 0;
 
-		PushPinnedMeasurementUndoSnapshot(windowState);
+		const SceneObjectsSnapshot before = CaptureSceneObjectsSnapshot(windowState);
 		std::vector<SceneObjectId> added;
 		for (const auto &[atom, vacancy] : pairs)
-			added.push_back(SceneSystem::AppendSceneArrow(windowState, MakeVacancyBond(windowState, atom, vacancies[vacancy])));
+		{
+			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancies[vacancy]));
+			if (result)
+				added.push_back(result.Value());
+			else
+				DS_LOG_WARN("Add vacancy bond failed: {}", result.Error().technicalDetails);
+		}
+		if (added.empty())
+			return 0;
+		PushSceneObjectsUndoSnapshot(windowState, before);
+		const std::size_t count = added.size();
 		// The new lines become the selection, so Object Properties shows their style right away.
-		windowState.selectedSceneArrows = std::move(added);
-		windowState.selectedVacancies.clear();
-		SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-		return pairs.size();
+		SelectAddedScenePaths(windowState, std::move(added));
+		return count;
 	}
 
 	void DrawDefectAddItems(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position)

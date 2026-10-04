@@ -6,6 +6,8 @@
 #include <cmath>
 #include <string>
 #include <type_traits>
+#include <utility>
+#include <variant>
 
 #include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/Path/PathTopology.hpp"
@@ -388,5 +390,43 @@ namespace DefectStudio
 		if (arrow.curveSegments != 24) Warn(result.warnings, "curveSegments was dropped; path tessellation is adaptive");
 		if (arrow.style.outlineWidth != 0.0f) Warn(result.warnings, "outlineWidth was dropped; paths have no per-object outline");
 		return result;
+	}
+
+	Result<void> MigratePersistedSceneArrows(SceneObjectsFile &file, std::vector<StructuredError> &outWarnings)
+	{
+		SceneObjectsFile migratedFile = file;
+		const auto migrate = [&](std::vector<PersistedSceneObject> &objects) -> Result<void> {
+			for (auto &object : objects)
+			{
+				if (!std::holds_alternative<PersistedSceneArrow>(object))
+					continue;
+				const auto &arrow = std::get<PersistedSceneArrow>(object);
+				auto migrated = MigrateArrowToPath(arrow);
+				if (!migrated)
+					return migrated.Error();
+				for (const auto &warning : migrated.Value().warnings)
+					outWarnings.push_back(warning);
+				ScenePath path = std::move(migrated.Value().path);
+				path.name = arrow.kind == PersistedArrowKind::Line ? "Line" : "Arrow";
+				path.persistKey = arrow.persistKey.empty() ? GenerateScenePersistKey() : arrow.persistKey;
+				MovePathOriginToCentre(path);
+				PersistedScenePath saved = ExtractPersistedScenePath(path, RendererStructureData{});
+				saved.nodes.front().binding.atoms = arrow.startAnchorAtoms;
+				saved.nodes.back().binding.atoms = arrow.endAnchorAtoms;
+				object = std::move(saved);
+			}
+			return {};
+		};
+		const auto project = migrate(migratedFile.projectObjects);
+		if (!project)
+			return project.Error();
+		for (auto &structure : migratedFile.structures)
+		{
+			const auto result = migrate(structure.objects);
+			if (!result)
+				return result.Error();
+		}
+		file = std::move(migratedFile);
+		return {};
 	}
 }
