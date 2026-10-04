@@ -16,6 +16,7 @@
 #include "Presentation/Panels/ViewportInteraction.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
+#include "Presentation/Panels/ViewportTextEditor.hpp"
 #include "Presentation/Panels/ViewportToolbars.hpp"
 #include "Renderer/CrystalStructurePreviewWindow.hpp"
 
@@ -334,7 +335,13 @@ namespace DefectStudio
 			const float relX = mousePos.x - imageOrigin.x;
 			const float relY = mousePos.y - imageOrigin.y;
 			if (leftClicked && relX >= 0.0f && relY >= 0.0f && relX < imageSize.x && relY < imageSize.y)
-				HandleViewportPick(*windowState, relX, relY, io.KeyCtrl, m_RendererLayer);
+			{
+				if (windowState->activeSelectionTool == SelectionToolMode::Text)
+					HandleViewportTextToolClick(*windowState, imageOrigin, imageSize,
+						ComputeViewportWorldPosition(*windowState, relX, relY));
+				else
+					HandleViewportPick(*windowState, relX, relY, io.KeyCtrl, m_RendererLayer);
+			}
 		}
 
 		// Held-arrow nudge and pan are NOT gated on hover - they run for as long as the pane is the
@@ -347,6 +354,7 @@ namespace DefectStudio
 			ApplyContinuousKeyboardPan(*windowState, deltaTime, m_RendererLayer);
 		}
 
+		DrawViewportTextEditor(*windowState, imageOrigin, imageSize);
 		ImGui::EndChild();
 		ImGui::PopStyleColor();
 	}

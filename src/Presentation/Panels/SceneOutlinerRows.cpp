@@ -218,13 +218,12 @@ namespace DefectStudio
 		const SceneObjectId id = windowState.freeLabels[labelIndex].id;
 		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
 		const std::string &text = windowState.freeLabels[labelIndex].text;
-		char rowLabel[96];
-		std::snprintf(rowLabel, sizeof(rowLabel), "%s", text.empty() ? "(no text)" : text.c_str());
+		const std::string rowLabel = text.empty() ? "(no text)" : text;
 
 		if (isSelected)
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
-		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const bool rowActivated = ImGui::Selectable(rowLabel.c_str(), isSelected);
 		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);

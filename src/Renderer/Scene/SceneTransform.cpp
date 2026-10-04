@@ -16,6 +16,7 @@
 #include "Renderer/Scene/SceneTransformDefectMarkers.hpp"
 #include "Renderer/Scene/SceneTransformPathElements.hpp"
 #include "Renderer/Scene/SceneTransformPaths.hpp"
+#include "Renderer/Scene/SceneTransformLabels.hpp"
 
 namespace DefectStudio
 {
@@ -96,15 +97,6 @@ namespace DefectStudio
 			return glm::dot(delta, delta) > kEpsilon * kEpsilon;
 		}
 
-		[[nodiscard]] bool ResolvePinBasePosition(
-			const RendererWindowState &window, std::size_t index, glm::vec3 &position)
-		{
-			if (index >= window.pinnedMeasurements.size())
-				return false;
-			RendererWindowState::PinnedMeasurement pin = window.pinnedMeasurements[index];
-			pin.worldOffset = glm::vec3(0.0f);
-			return SceneSystem::ResolvePinnedMeasurementPosition(window.structure, pin, position);
-		}
 
 		// Where the label was drawn last frame (bond labels sit off the bond by the auto-offset), so
 		// the gizmo stands on the label rather than on the bond midpoint it hangs from.
@@ -192,27 +184,7 @@ namespace DefectStudio
 						ids.push_back(id);
 			return ids;
 		};
-		for (const SceneObjectId id : window.selectedPinnedMeasurements)
-		{
-			const std::size_t index = AnnotationIndex(window.pinnedMeasurements, id);
-			if (index >= window.pinnedMeasurements.size())
-				continue;
-			const RendererWindowState::PinnedMeasurement &pin = window.pinnedMeasurements[index];
-			glm::vec3 position(0.0f);
-			if (!SceneSystem::ResolvePinnedMeasurementPosition(window.structure, pin, position))
-				continue;
-			snapshot.labels.push_back(
-				{true, index, position, pin.worldOffset, pin.rotationOffsetRadians, pin.style.scale});
-		}
-		for (const SceneObjectId id : withChildren(window.selectedFreeLabels, window.defectFrameChildren.freeLabels))
-		{
-			const std::size_t index = AnnotationIndex(window.freeLabels, id);
-			if (index >= window.freeLabels.size())
-				continue;
-			const RendererWindowState::FreeLabel &label = window.freeLabels[index];
-			snapshot.labels.push_back(
-				{false, index, label.worldPosition, label.worldPosition, label.rotationRadians, label.style.scale});
-		}
+		CaptureSceneTransformLabels(window, snapshot, withChildren(window.selectedFreeLabels, window.defectFrameChildren.freeLabels));
 		for (const SceneObjectId id : withChildren(window.selectedSceneArrows, window.defectFrameChildren.arrows))
 		{
 			const std::size_t index = AnnotationIndex(window.sceneArrows, id);
@@ -350,43 +322,6 @@ namespace DefectStudio
 				delta.spatial, start.position, ItemPivot(pivotMode, start.position, selectionPivot));
 		}
 
-		for (const LabelTransformStart &start : snapshot.labels)
-		{
-			if (start.pinned)
-			{
-				if (start.index >= window.pinnedMeasurements.size())
-					continue;
-				RendererWindowState::PinnedMeasurement &pin = window.pinnedMeasurements[start.index];
-				if (operation == ModalTransformOp::Translate)
-				{
-					glm::vec3 basePosition(0.0f);
-					if (ResolvePinBasePosition(window, start.index, basePosition))
-					{
-						const glm::vec3 desired = ApplyTransformDelta(
-							delta.spatial, start.position,
-							ItemPivot(pivotMode, start.position, selectionPivot));
-						pin.worldOffset = desired - basePosition;
-					}
-				}
-				else if (operation == ModalTransformOp::Rotate)
-					pin.rotationOffsetRadians = start.rotationRadians + delta.rotationRadians;
-				else
-					pin.style.scale = std::clamp(start.scale * delta.scaleFactor, 0.1f, 8.0f);
-				continue;
-			}
-
-			if (start.index >= window.freeLabels.size())
-				continue;
-			RendererWindowState::FreeLabel &label = window.freeLabels[start.index];
-			if (operation == ModalTransformOp::Translate)
-				label.worldPosition = ApplyTransformDelta(
-					delta.spatial, start.position, ItemPivot(pivotMode, start.position, selectionPivot));
-			else if (operation == ModalTransformOp::Rotate)
-				label.rotationRadians = start.rotationRadians + delta.rotationRadians;
-			else
-				label.style.scale = std::clamp(start.scale * delta.scaleFactor, 0.1f, 8.0f);
-		}
-
 		for (const ArrowTransformStart &start : snapshot.arrows)
 		{
 			if (start.index >= window.sceneArrows.size() || start.points.size() < 2)
@@ -489,6 +424,7 @@ namespace DefectStudio
 		ApplySceneTransformPaths(window, snapshot, delta, operation, pivotMode, selectionPivot);
 		ApplySceneTransformPathElements(window, snapshot, delta, operation, pivotMode, selectionPivot);
 		ApplySceneTransformDefectMarkers(window, snapshot, delta, pivotMode, selectionPivot);
+		ApplySceneTransformLabels(window, snapshot, delta, operation, pivotMode, selectionPivot);
 	}
 
 	void RestoreSceneTransformSelection(
@@ -497,23 +433,7 @@ namespace DefectStudio
 		for (const AtomTransformStart &start : snapshot.atoms)
 			if (start.index < window.structure.atoms.size())
 				window.structure.atoms[start.index].cartesianPosition = start.position;
-		for (const LabelTransformStart &start : snapshot.labels)
-		{
-			if (start.pinned && start.index < window.pinnedMeasurements.size())
-			{
-				RendererWindowState::PinnedMeasurement &pin = window.pinnedMeasurements[start.index];
-				pin.worldOffset = start.storedPosition;
-				pin.rotationOffsetRadians = start.rotationRadians;
-				pin.style.scale = start.scale;
-			}
-			else if (!start.pinned && start.index < window.freeLabels.size())
-			{
-				RendererWindowState::FreeLabel &label = window.freeLabels[start.index];
-				label.worldPosition = start.storedPosition;
-				label.rotationRadians = start.rotationRadians;
-				label.style.scale = start.scale;
-			}
-		}
+		RestoreSceneTransformLabels(window, snapshot);
 		for (const ArrowTransformStart &start : snapshot.arrows)
 		{
 			if (start.index >= window.sceneArrows.size())

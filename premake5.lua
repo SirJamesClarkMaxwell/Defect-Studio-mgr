@@ -364,6 +364,7 @@ include "Vendor/msdf-atlas-gen"
 -- (scripts/Windows/GenerateProjects.bat) silently discards uncommitted edits there. See
 -- src/Presentation/ImGuiUserConfig.hpp for what this actually overrides.
 project "ImGui"
+    files { "Vendor/ImGui/misc/cpp/imgui_stdlib.h", "Vendor/ImGui/misc/cpp/imgui_stdlib.cpp" }
     includedirs { "src" }
     filter "configurations:Debug"
         defines { 'IMGUI_USER_CONFIG="Presentation/ImGuiUserConfig.hpp"' }

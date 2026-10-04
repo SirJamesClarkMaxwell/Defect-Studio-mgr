@@ -3,6 +3,7 @@
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
 #include "Renderer/OpenGl/FrameBufferReadback.hpp"
+#include "Renderer/OpenGl/OpenGlLabelLayout.hpp"
 
 #include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneObjectAppearance.hpp"
@@ -150,183 +151,6 @@ namespace DefectStudio
 		}
 		return Path::FromResolved(
 			FileSystem::CurrentPath() / "install" / "app" / "assets" / "fonts" / "segoeui.ttf");
-	}
-
-	// snprintf keeps this ASCII-only by construction (digits/'.'/space), so the byte->char32_t
-	// widen below is exact - no UTF-8 decoding needed. U+00C5 (the Angstrom sign, same codepoint
-	// as Latin capital A with ring above) is a literal U+00C5 char32_t below, relying on this file
-	// being read as UTF-8 - already required repo-wide (premake sets /utf-8 for MSVC).
-	[[nodiscard]] std::u32string FormatBondLengthLabel(float lengthAngstrom)
-	{
-		char buffer[16];
-		const int written = std::snprintf(buffer, sizeof(buffer), "%.2f ", static_cast<double>(lengthAngstrom));
-
-		std::u32string text;
-		if (written > 0)
-		{
-			text.reserve(static_cast<std::size_t>(written) + 1);
-			for (int i = 0; i < written; ++i)
-				text.push_back(static_cast<char32_t>(static_cast<unsigned char>(buffer[i])));
-		}
-		text.push_back(U'Å');
-		return text;
-	}
-
-	[[nodiscard]] std::u32string FormatAngleLabel(float angleDeg)
-	{
-		char buffer[16];
-		const int written = std::snprintf(buffer, sizeof(buffer), "%.1f", static_cast<double>(angleDeg));
-
-		std::u32string text;
-		if (written > 0)
-		{
-			text.reserve(static_cast<std::size_t>(written) + 1);
-			for (int i = 0; i < written; ++i)
-				text.push_back(static_cast<char32_t>(static_cast<unsigned char>(buffer[i])));
-		}
-		text.push_back(U'°'); // degree sign
-		return text;
-	}
-
-	// Free-label text comes from an ImGui InputText buffer - plain byte-widening (same approach
-	// FormatBondLengthLabel/FormatAngleLabel already use for their glyphs), not real UTF-8 decoding.
-	// Correct for the ASCII/Latin-1 range the MSDF atlas's charset actually covers; a multi-byte
-	// UTF-8 codepoint would come out as several wrong glyphs instead of one - not attempting that
-	// here since v1's label text is expected to be short ASCII call-outs.
-	[[nodiscard]] std::u32string ToU32String(const std::string &text)
-	{
-		std::u32string result;
-		result.reserve(text.size());
-		for (const char character : text)
-			result.push_back(static_cast<char32_t>(static_cast<unsigned char>(character)));
-		return result;
-	}
-
-	// Local-space (pre style.scale) bounding box of one label's glyphs, for sizing its optional
-	// background quad (AppendLabelBackgroundInstance) - hasBounds stays false for empty/all-
-	// whitespace text, which the caller treats as "no background to draw".
-	struct LabelLocalBounds
-	{
-		glm::vec2 min = glm::vec2(0.0f);
-		glm::vec2 max = glm::vec2(0.0f);
-		bool hasBounds = false;
-	};
-
-	// Shared by every label call site below - lays out one string's glyph quads (pen-advance +
-	// centering) around `worldCenter` and appends them to whichever instance list the caller is
-	// building. Returns the label's local bounding box for AppendLabelBackgroundInstance.
-	LabelLocalBounds AppendLabelInstances(
-		const MsdfFont &font,
-		const glm::vec3 &worldCenter,
-		const std::u32string &text,
-		std::vector<OpenGlLabelInstance> &outInstances,
-		const RendererWindowState::LabelStyle &style = {},
-		float rotationRadians = 0.0f,
-		bool selected = false)
-	{
-		// World-space label height (em units -> world units) and a rough baseline centering
-		// offset (typical glyph ascent/descent split) - tuned by eye, not derived from font
-		// metrics, good enough for a fixed-purpose label rather than general text layout.
-		constexpr float kWorldFontSize = 0.28f;
-		constexpr float kBaselineOffset = -0.35f * kWorldFontSize;
-
-		float totalAdvance = 0.0f;
-		for (const char32_t codepoint : text)
-			totalAdvance += font.GetGlyphQuad(codepoint).advance;
-
-		const glm::vec4 textColor(style.textColor, style.textAlpha);
-		LabelLocalBounds bounds;
-		float penX = -totalAdvance * 0.5f * kWorldFontSize;
-		for (const char32_t codepoint : text)
-		{
-			const MsdfGlyphQuad glyph = font.GetGlyphQuad(codepoint);
-			if (glyph.found && glyph.planeMax.x > glyph.planeMin.x && glyph.planeMax.y > glyph.planeMin.y)
-			{
-				const glm::vec2 glyphMin(
-					penX + glyph.planeMin.x * kWorldFontSize, kBaselineOffset + glyph.planeMin.y * kWorldFontSize);
-				const glm::vec2 glyphMax(
-					penX + glyph.planeMax.x * kWorldFontSize, kBaselineOffset + glyph.planeMax.y * kWorldFontSize);
-				if (!bounds.hasBounds)
-				{
-					bounds.min = glyphMin;
-					bounds.max = glyphMax;
-					bounds.hasBounds = true;
-				}
-				else
-				{
-					bounds.min = glm::min(bounds.min, glyphMin);
-					bounds.max = glm::max(bounds.max, glyphMax);
-				}
-
-				OpenGlLabelInstance instance;
-				instance.worldCenter = worldCenter;
-				instance.localOffsetSize = style.scale * glm::vec4(glyphMin, glyphMax - glyphMin);
-				instance.atlasUvMinMax = glm::vec4(glyph.atlasUvMin, glyph.atlasUvMax);
-				instance.color = textColor;
-				instance.rotationRadians = rotationRadians;
-				instance.selected = selected ? 1.0f : 0.0f;
-				// outlineColor/outlineWidth/cornerRadius stay zero-initialized here - they style the
-				// background quad's frame (see AppendLabelBackgroundInstance below), not glyphs.
-				instance.strokeColor = style.strokeColor;
-				instance.strokeWidth = style.strokeWidth;
-				outInstances.push_back(instance);
-			}
-			penX += glyph.advance * kWorldFontSize;
-		}
-		return bounds;
-	}
-
-	// LabelStyle::backgroundAlpha <= 0 (the default) or empty text (no bounds) - no-op, so call
-	// sites can invoke this unconditionally right after AppendLabelInstances without their own guard.
-	void AppendLabelBackgroundInstance(
-		const glm::vec3 &worldCenter,
-		const LabelLocalBounds &bounds,
-		const RendererWindowState::LabelStyle &style,
-		float rotationRadians,
-		std::vector<OpenGlLabelInstance> &outInstances,
-		bool selected = false)
-	{
-		if (style.backgroundAlpha <= 0.0f || !bounds.hasBounds)
-			return;
-
-		const glm::vec2 paddedMin = bounds.min - style.padding;
-		const glm::vec2 paddedMax = bounds.max + style.padding;
-		OpenGlLabelInstance instance;
-		instance.worldCenter = worldCenter;
-		instance.localOffsetSize = style.scale * glm::vec4(paddedMin, paddedMax - paddedMin);
-		instance.color = glm::vec4(style.backgroundColor, style.backgroundAlpha);
-		instance.rotationRadians = rotationRadians;
-		instance.outlineColor = style.outlineColor;
-		// Scaled the same way the box itself is (style.scale), so the border/corner radius grow and
-		// shrink in proportion to the label instead of staying a fixed size while the box scales.
-		instance.outlineWidth = style.scale * style.outlineWidth;
-		instance.cornerRadius = style.scale * style.cornerRadius;
-		instance.selected = selected ? 1.0f : 0.0f;
-		outInstances.push_back(instance);
-	}
-
-	LabelLocalBounds AppendBondLabelInstances(
-		const MsdfFont &font,
-		const glm::vec3 &midpoint,
-		float lengthAngstrom,
-		std::vector<OpenGlLabelInstance> &outInstances,
-		const RendererWindowState::LabelStyle &style = {},
-		float rotationRadians = 0.0f,
-		bool selected = false)
-	{
-		return AppendLabelInstances(font, midpoint, FormatBondLengthLabel(lengthAngstrom), outInstances, style, rotationRadians, selected);
-	}
-
-	LabelLocalBounds AppendAngleLabelInstances(
-		const MsdfFont &font,
-		const glm::vec3 &vertex,
-		float angleDeg,
-		std::vector<OpenGlLabelInstance> &outInstances,
-		const RendererWindowState::LabelStyle &style = {},
-		float rotationRadians = 0.0f,
-		bool selected = false)
-	{
-		return AppendLabelInstances(font, vertex, FormatAngleLabel(angleDeg), outInstances, style, rotationRadians, selected);
 	}
 
 	[[nodiscard]] glm::vec3 SafeNormalize(const glm::vec3 &value, const glm::vec3 &fallback)
@@ -3000,7 +2824,7 @@ namespace DefectStudio
 					selectedFreeLabels.end();
 				RendererWindowState::LabelStyle effectiveStyle = label.style;
 				const LabelLocalBounds bounds = AppendLabelInstances(
-					*m_LabelFont, label.worldPosition, ToU32String(label.text), pinnedInstances, effectiveStyle,
+					*m_LabelFont, label.worldPosition, ParseTexMarkup(label.text), pinnedInstances, effectiveStyle,
 					label.rotationRadians, selected);
 				AppendLabelBackgroundInstance(
 					label.worldPosition, bounds, effectiveStyle, label.rotationRadians, pinnedBackgroundInstances, selected);

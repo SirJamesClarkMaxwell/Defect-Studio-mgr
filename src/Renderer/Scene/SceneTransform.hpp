@@ -34,6 +34,7 @@ namespace DefectStudio
 		glm::vec3 storedPosition = glm::vec3(0.0f);
 		float rotationRadians = 0.0f;
 		float scale = 1.0f;
+		glm::vec3 anchorOffset = glm::vec3(0.0f);
 	};
 
 	struct ArrowTransformStart

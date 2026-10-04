@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -16,6 +17,11 @@ namespace DefectStudio
 	class CommandRegistry;
 	class RendererLayer;
 	struct RendererWindowState;
+	struct LabelPickQuad;
+
+	[[nodiscard]] std::optional<bool> MouseInLabelQuad(const RendererWindowState &windowState,
+		const std::vector<LabelPickQuad> &quads, std::size_t index, const ImVec2 &imageOrigin,
+		const ImVec2 &imageSize, const glm::vec2 &mouse);
 
 	// Registers commands whose target is the currently focused viewport and whose implementation
 	// lives with the scene-object interaction code below.

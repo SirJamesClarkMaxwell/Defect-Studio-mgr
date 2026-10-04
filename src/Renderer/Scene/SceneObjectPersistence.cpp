@@ -196,6 +196,10 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.persistKey = label.persistKey;
 		p.text = label.text;
 		p.position = label.worldPosition;
+		p.anchorAtoms = PersistOptionalAtomReference(window.structure, label.anchorAtom);
+		if (label.anchorVacancy && *label.anchorVacancy <= static_cast<std::size_t>(std::numeric_limits<int>::max()))
+			p.anchorVacancy = static_cast<int>(*label.anchorVacancy);
+		p.anchorOffset = label.anchorOffset;
 		p.rotationRadians = label.rotationRadians;
 		p.style = ToPersisted(label.style);
 		result.emplace_back(std::move(p));
@@ -351,6 +355,10 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					l.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
 					l.text = value.text;
 					l.worldPosition = value.position;
+					l.anchorAtom = ResolveOptionalAtomReference(window.structure, value.anchorAtoms);
+					if (!l.anchorAtom && value.anchorVacancy && *value.anchorVacancy >= 0)
+						l.anchorVacancy = static_cast<std::size_t>(*value.anchorVacancy);
+					l.anchorOffset = value.anchorOffset;
 					l.rotationRadians = value.rotationRadians;
 					l.style = FromPersisted(value.style);
 					window.freeLabels.push_back(std::move(l));

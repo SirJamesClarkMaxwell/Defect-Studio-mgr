@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
 
 namespace DefectStudio
 {
@@ -176,6 +178,35 @@ namespace DefectStudio
 			ImGui::SetTooltip("Zaznaczone atomy -> wakans (zaznaczony albo najbliższy),\n"
 							  "albo zaznaczone wakanse (bez zaznaczenia: wszystkie) -> pierwsza sfera sąsiadów.\n"
 							  "Dwukolorowe linie atom -> wakans, styl każdej osobno.");
+
+		if (ImGui::MenuItem("Vacancy labels", nullptr, false, !windowState.structure.vacancies.empty()))
+		{
+			std::vector<std::size_t> vacancies;
+			for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
+			{
+				if (!windowState.selectedVacancies.empty() &&
+					std::find(windowState.selectedVacancies.begin(), windowState.selectedVacancies.end(), index) == windowState.selectedVacancies.end())
+					continue;
+				if (std::none_of(windowState.freeLabels.begin(), windowState.freeLabels.end(), [index](const auto &label) {
+						return label.anchorVacancy == index;
+					}))
+					vacancies.push_back(index);
+			}
+			if (!vacancies.empty())
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				windowState.selectedFreeLabels = AddVacancyLabels(windowState, vacancies);
+				windowState.selectedPinnedMeasurements.clear();
+				windowState.selectedSceneArrows.clear();
+				windowState.selectedSceneOrbitals.clear();
+				windowState.selectedScenePlanes.clear();
+				windowState.selectedScenePaths.clear();
+				windowState.selectedVacancies.clear();
+				windowState.defectFrameSelected = false;
+				SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
+				SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+			}
+		}
 
 		DrawDefectFrameAddMenu(windowState, registry, position);
 	}

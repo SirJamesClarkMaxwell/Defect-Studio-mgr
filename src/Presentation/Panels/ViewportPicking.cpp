@@ -243,4 +243,35 @@ namespace DefectStudio
 		event.additive = additive;
 		eventBus->Publish(event);
 	}
+	// Ray-casts relX/relY (viewport-relative pixels) into the scene: snaps to the picked atom if the
+	// click landed on one (same ray/pick-radius as HandleAtomPick), otherwise drops onto the plane
+	// through the camera's orbit target, perpendicular to the view direction - a reasonable depth
+	// for "wherever you clicked in empty space" without needing real scene-depth picking. Shared by
+	// the 3D-cursor tool click and the viewport context menu's "Set 3D cursor here".
+	glm::vec3 ComputeViewportWorldPosition(const RendererWindowState &windowState, float relX, float relY)
+	{
+		if (!windowState.camera || windowState.viewportSize.x <= 0.0f || windowState.viewportSize.y <= 0.0f)
+			return glm::vec3(0.0f);
+
+		const float ndcX = (2.0f * relX / windowState.viewportSize.x) - 1.0f;
+		const float ndcY = -((2.0f * relY / windowState.viewportSize.y) - 1.0f);
+
+		const glm::mat4 invVP = glm::inverse(windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix());
+		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
+		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+
+		if (const auto atom = PickAtomAlongRay(windowState, rayOrigin, rayDir))
+			return windowState.structure.atoms[*atom].cartesianPosition;
+		glm::vec3 hitPosition(0.0f);
+		{
+			const glm::vec3 forward = glm::normalize(windowState.camera->Target() - rayOrigin);
+			const float denom = glm::dot(rayDir, forward);
+			const float planeT = std::abs(denom) > 0.0001f ? glm::dot(windowState.camera->Target() - rayOrigin, forward) / denom : 0.0f;
+			hitPosition = rayOrigin + rayDir * planeT;
+		}
+		return hitPosition;
+	}
+
 } // namespace DefectStudio

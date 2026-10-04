@@ -12,11 +12,13 @@
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportTextEditor.hpp"
 #include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
 
 namespace DefectStudio
 {
@@ -30,6 +32,7 @@ namespace DefectStudio
 		const WeakRef<CommandRegistry> &commandRegistry)
 	{
 		SceneSystem::RefreshAnchoredSceneArrows(windowState);
+		RefreshAnchoredFreeLabels(windowState);
 		ResolveAnchoredOrbitals(windowState);
 		ResolveAnchoredScenePlanes(windowState);
 		// Keeps each label entity's TransformComponent current before the gizmo/hit-test below read
@@ -41,6 +44,19 @@ namespace DefectStudio
 		// have no mouse hit-test of their own, so short-circuiting them behind an earlier gizmo's
 		// mouse-capture would silently drop them whenever the mouse happens to be hovering that
 		// gizmo's pick band.
+		if (IsViewportTextEditorActive(windowState))
+		{
+			DrawViewportTextEditor(windowState, imageOrigin, imageSize);
+			return true;
+		}
+		if (ImGui::GetIO().WantTextInput)
+			return true;
+		if (hovered && !windowState.pathEdit.IsActive() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
+			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered))
+			return true;
+		if (windowState.activeSelectionTool == SelectionToolMode::Text)
+			return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
+				HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered);
 		HandlePinnedMeasurementKeyboardShortcuts(windowState, hovered, layer);
 
 		// Short-circuiting `||` is intentional (unlike the keyboard call above): each function's

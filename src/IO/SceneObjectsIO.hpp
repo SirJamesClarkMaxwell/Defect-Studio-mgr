@@ -99,6 +99,9 @@ namespace DefectStudio
 		std::string text = "Label";
 		glm::vec3 position = glm::vec3(0.0f); // required
 		float rotationRadians = 0.0f;
+		std::vector<PersistedAtomRef> anchorAtoms;
+		std::optional<int> anchorVacancy;
+		glm::vec3 anchorOffset = glm::vec3(0.0f);
 		PersistedLabelStyle style;
 	};
 

@@ -157,7 +157,8 @@ namespace DefectStudio
 		// Click 2 (bond) / 3 (angle) atoms in the viewport to auto-pin a measurement label - shares
 		// the enum for the same mutual-exclusion reason as Cursor3D.
 		MeasureBond,
-		MeasureAngle
+		MeasureAngle,
+		Text
 	};
 
 	// Which ImGuizmo::OPERATION the viewport gizmo currently shows for the selection (G/R/S).

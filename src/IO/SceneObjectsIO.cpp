@@ -38,114 +38,6 @@ using SceneObjectsYaml::EmitVec3;
 using SceneObjectsYaml::Vec2;
 using SceneObjectsYaml::Vec3;
 
-void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style)
-{
-	emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap;
-	EmitVec3(emit, "textColor", style.textColor);
-	emit << YAML::Key << "textAlpha" << YAML::Value << style.textAlpha;
-	EmitVec3(emit, "backgroundColor", style.backgroundColor);
-	emit << YAML::Key << "backgroundAlpha" << YAML::Value << style.backgroundAlpha;
-	EmitVec3(emit, "outlineColor", style.outlineColor);
-	emit << YAML::Key << "outlineWidth" << YAML::Value << style.outlineWidth;
-	emit << YAML::Key << "cornerRadius" << YAML::Value << style.cornerRadius;
-	EmitVec2(emit, "padding", style.padding);
-	EmitVec3(emit, "strokeColor", style.strokeColor);
-	emit << YAML::Key << "strokeWidth" << YAML::Value << style.strokeWidth;
-	emit << YAML::Key << "scale" << YAML::Value << style.scale << YAML::EndMap;
-}
-
-[[nodiscard]] bool ParseLabelStyle(const YAML::Node &node, PersistedLabelStyle &style)
-{
-	if (!node || !node.IsMap())
-		return true;
-	try
-	{
-		return (!node["textColor"] || Vec3(node["textColor"], style.textColor)) &&
-			   (!node["backgroundColor"] || Vec3(node["backgroundColor"], style.backgroundColor)) &&
-			   (!node["outlineColor"] || Vec3(node["outlineColor"], style.outlineColor)) &&
-			   (!node["strokeColor"] || Vec3(node["strokeColor"], style.strokeColor)) &&
-			   (!node["padding"] || Vec2(node["padding"], style.padding)) &&
-			   (style.textAlpha = node["textAlpha"].as<float>(style.textAlpha), true) &&
-			   (style.backgroundAlpha = node["backgroundAlpha"].as<float>(style.backgroundAlpha), true) &&
-			   (style.outlineWidth = node["outlineWidth"].as<float>(style.outlineWidth), true) &&
-			   (style.cornerRadius = node["cornerRadius"].as<float>(style.cornerRadius), true) &&
-			   (style.strokeWidth = node["strokeWidth"].as<float>(style.strokeWidth), true) &&
-			   (style.scale = node["scale"].as<float>(style.scale), true);
-	}
-	catch (const YAML::Exception &)
-	{
-		return false;
-	}
-}
-
-[[nodiscard]] bool ParseAtomRefs(const YAML::Node &node, std::vector<PersistedAtomRef> &refs)
-{
-	if (!node || !node.IsSequence() || (node.size() != 2 && node.size() != 3))
-		return false;
-	try
-	{
-		refs.clear();
-		refs.reserve(node.size());
-		for (const YAML::Node &item : node)
-		{
-			if (!item.IsMap() || !item["index"] || !item["element"] || !item["position"])
-				return false;
-			PersistedAtomRef ref;
-			ref.index = item["index"].as<std::size_t>();
-			ref.element = item["element"].as<std::string>();
-			if (!Vec3(item["position"], ref.position))
-				return false;
-			refs.push_back(std::move(ref));
-		}
-		return true;
-	}
-	catch (const YAML::Exception &)
-	{
-		return false;
-	}
-}
-
-[[nodiscard]] bool ParseLabel(const YAML::Node &node, PersistedFreeLabel &label)
-{
-	try
-	{
-		if (!node["position"] || !Vec3(node["position"], label.position) ||
-			!ParseLabelStyle(node["style"], label.style))
-			return false;
-		label.persistKey = node["persistKey"].as<std::string>("");
-		label.text = node["text"].as<std::string>(label.text);
-		label.rotationRadians = node["rotationRadians"].as<float>(label.rotationRadians);
-		return true;
-	}
-	catch (const YAML::Exception &)
-	{
-		return false;
-	}
-}
-
-[[nodiscard]] bool ParsePin(const YAML::Node &node, PersistedPinnedMeasurement &pin)
-{
-	try
-	{
-		if (!ParseAtomRefs(node["atomRefs"], pin.atomRefs) || !ParseLabelStyle(node["style"], pin.style))
-			return false;
-		pin.persistKey = node["persistKey"].as<std::string>("");
-		pin.linkBroken = node["linkBroken"].as<bool>(false);
-		if (node["labelOffset"] && !Vec3(node["labelOffset"], pin.labelOffset))
-			return false;
-		if (node["bondPeriodicOffset"] && !Vec3(node["bondPeriodicOffset"], pin.bondPeriodicOffset))
-			return false;
-		pin.alignToBondDirection = node["alignToBondDirection"].as<bool>(pin.alignToBondDirection);
-		pin.flipped = node["flipped"].as<bool>(pin.flipped);
-		pin.rotationOffsetRadians = node["rotationOffsetRadians"].as<float>(pin.rotationOffsetRadians);
-		return true;
-	}
-	catch (const YAML::Exception &)
-	{
-		return false;
-	}
-}
-
 [[nodiscard]] bool ParseArrow(const YAML::Node &node, PersistedSceneArrow &arrow)
 {
 	try
@@ -284,13 +176,13 @@ void ParseObjects(const YAML::Node &objects, std::vector<PersistedSceneObject> &
 		if (kind == "PinnedMeasurement")
 		{
 			PersistedPinnedMeasurement value;
-			valid = ParsePin(node, value);
+			valid = SceneObjectsYaml::ParsePinnedMeasurement(node, value);
 			object = std::move(value);
 		}
 		else if (kind == "FreeLabel")
 		{
 			PersistedFreeLabel value;
-			valid = ParseLabel(node, value);
+			valid = SceneObjectsYaml::ParseFreeLabel(node, value);
 			object = std::move(value);
 		}
 		else if (kind == "SceneArrow")
@@ -335,31 +227,11 @@ void EmitObjects(YAML::Emitter &emit, const std::vector<PersistedSceneObject> &o
 				using T = std::decay_t<decltype(value)>;
 				if constexpr (std::is_same_v<T, PersistedPinnedMeasurement>)
 				{
-					emit << YAML::Key << "kind" << YAML::Value << "PinnedMeasurement" << YAML::Key << "persistKey"
-						 << YAML::Value << value.persistKey << YAML::Key << "atomRefs" << YAML::Value
-						 << YAML::BeginSeq;
-					for (const auto &ref : value.atomRefs)
-					{
-						emit << YAML::BeginMap << YAML::Key << "index" << YAML::Value << ref.index << YAML::Key
-							 << "element" << YAML::Value << ref.element;
-						EmitVec3(emit, "position", ref.position);
-						emit << YAML::EndMap;
-					}
-					emit << YAML::EndSeq << YAML::Key << "linkBroken" << YAML::Value << value.linkBroken;
-					EmitVec3(emit, "labelOffset", value.labelOffset);
-					emit << YAML::Key << "alignToBondDirection" << YAML::Value << value.alignToBondDirection
-						 << YAML::Key << "flipped" << YAML::Value << value.flipped << YAML::Key
-						 << "rotationOffsetRadians" << YAML::Value << value.rotationOffsetRadians;
-					EmitVec3(emit, "bondPeriodicOffset", value.bondPeriodicOffset);
-					EmitLabelStyle(emit, value.style);
+					SceneObjectsYaml::EmitPinnedMeasurement(emit, value);
 				}
 				else if constexpr (std::is_same_v<T, PersistedFreeLabel>)
 				{
-					emit << YAML::Key << "kind" << YAML::Value << "FreeLabel" << YAML::Key << "persistKey"
-						 << YAML::Value << value.persistKey << YAML::Key << "text" << YAML::Value << value.text;
-					EmitVec3(emit, "position", value.position);
-					emit << YAML::Key << "rotationRadians" << YAML::Value << value.rotationRadians;
-					EmitLabelStyle(emit, value.style);
+					SceneObjectsYaml::EmitFreeLabel(emit, value);
 				}
 				else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
 				{

@@ -175,8 +175,14 @@ namespace DefectStudio
 			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
 			// object's position in the vector, which does not.
 			SceneObjectId id;
+			// TeX-like markup (Renderer/Text/TexMarkup.hpp): V_B, E_g^{(1)}, \alpha.
 			std::string text = "Label";
 			glm::vec3 worldPosition = glm::vec3(0.0f);
+			// Text that follows an atom or a vacancy (at most one set): worldPosition = anchor +
+			// anchorOffset, refreshed every frame (Renderer/Scene/SceneFreeLabelAnchors.hpp).
+			std::optional<std::size_t> anchorAtom;
+			std::optional<std::size_t> anchorVacancy;
+			glm::vec3 anchorOffset = glm::vec3(0.0f);
 			float rotationRadians = 0.0f;
 			LabelStyle style;
 			std::string persistKey; // see PinnedMeasurement::persistKey
@@ -193,6 +199,7 @@ namespace DefectStudio
 		// same convention as selectedPinnedMeasurements above (back() is the drag/gizmo anchor).
 		std::vector<SceneObjectId> selectedFreeLabels;
 		bool freeLabelDragging = false;
+		bool freeLabelDragUndoPushed = false;
 		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
 		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - an ordered path with
 		// independently styled tips, for pointing at a displacement/direction in an export shot.

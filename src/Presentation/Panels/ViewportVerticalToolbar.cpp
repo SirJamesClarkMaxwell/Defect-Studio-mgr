@@ -148,6 +148,13 @@ namespace DefectStudio
 			publishToolToggle(SelectionToolMode::Cursor3D);
 		}
 
+		if (toolButton(
+				"##ToolText", "tool-text.png", "T", "Text (TeX: V_B, x^2, \\alpha)",
+				windowState.activeSelectionTool == SelectionToolMode::Text))
+		{
+			publishToolToggle(SelectionToolMode::Text);
+		}
+
 		ImGui::Spacing();
 
 		if (toolButton(

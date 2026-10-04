@@ -18,6 +18,8 @@ namespace DefectStudio
 	[[nodiscard]] std::optional<std::size_t> PickAtomAlongRay(
 		const RendererWindowState &windowState, const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection);
 
+	[[nodiscard]] glm::vec3 ComputeViewportWorldPosition(const RendererWindowState &windowState, float relX, float relY);
+
 	// Ray-cast atom pick for one viewport, publishing AtomSelectionRequested (a miss publishes an
 	// empty selection, which is how a click on background clears it). Free functions, not
 	// RendererPanel members, for the same reason ViewportInput's are: the three-pane creation window

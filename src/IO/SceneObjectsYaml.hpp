@@ -19,6 +19,13 @@ namespace DefectStudio::SceneObjectsYaml
 	[[nodiscard]] bool ParseAnchors(const YAML::Node &node, std::vector<PersistedAtomRef> &refs);
 	void EmitAnchors(YAML::Emitter &emit, const char *key, const std::vector<PersistedAtomRef> &refs);
 
+	bool ParseLabelStyle(const YAML::Node &node, PersistedLabelStyle &style);
+	void EmitLabelStyle(YAML::Emitter &emit, const PersistedLabelStyle &style);
+	bool ParsePinnedMeasurement(const YAML::Node &node, PersistedPinnedMeasurement &pin);
+	void EmitPinnedMeasurement(YAML::Emitter &emit, const PersistedPinnedMeasurement &pin);
+	bool ParseFreeLabel(const YAML::Node &node, PersistedFreeLabel &label);
+	void EmitFreeLabel(YAML::Emitter &emit, const PersistedFreeLabel &label);
+
 	// Returns false for a node missing a required key (`preset`, `centerA`) or holding a value of
 	// the wrong shape; `orbital` is then left in whatever state it was in and the caller drops it
 	// with a warning. Every other key is optional and falls back to the struct's own default, so a
