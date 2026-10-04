@@ -170,11 +170,9 @@ namespace DefectStudio
 			imageOrigin.y + horizontalToolbarOffset + gizmoRadius + 14.0f * scale);
 		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 
-		TransformBases bases;
-		bases.lattice = windowState.structure.lattice;
-		bases.local = windowState.modalTransform.has_value()
-			? windowState.modalTransform->bases.local
-			: SceneTransformLocalBasis(CaptureSceneTransformSelection(windowState));
+		const TransformBases bases = windowState.modalTransform.has_value()
+			? windowState.modalTransform->bases
+			: SceneTransformBases(windowState, CaptureSceneTransformSelection(windowState));
 		const OrientationAxes axes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
 		const auto markers = ProjectNavigationAxisMarkers(windowState.camera->ViewMatrix(), axes, center, axisLength);
 		const auto order = SortNavigationMarkersBackToFront(markers);

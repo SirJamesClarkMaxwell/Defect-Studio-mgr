@@ -33,6 +33,9 @@ namespace DefectStudio
 		// meshed. ringWidth is in Angstrom, with a screen-space floor applied when it is drawn.
 		int dashCount = 12;
 		float ringWidth = 0.035f;
+		// A vacancy left by a removed atom (VacancySite::sourceSpecies) takes that element's colour,
+		// so V_B and V_N in hBN differ from the start; `color` is for vacancies with no species.
+		bool colorBySpecies = true;
 	};
 
 	// Copies of this class share their underlying data (Ref-held, shared_ptr semantics) rather than
@@ -69,6 +72,12 @@ namespace DefectStudio
 		[[nodiscard]] const VacancyRenderStyle &GetVacancyStyle() const;
 
 		[[nodiscard]] glm::vec3 Color(const std::string &symbol) const;
+		// Marker colour of a vacancy without its own colour: the removed element's colour when
+		// colorBySpecies is on and the species is known, otherwise the vacancy style colour.
+		[[nodiscard]] glm::vec3 VacancyColor(const std::string &sourceSpecies) const
+		{
+			return m_VacancyStyle->colorBySpecies && !sourceSpecies.empty() ? Color(sourceSpecies) : m_VacancyStyle->color;
+		}
 		[[nodiscard]] float DisplayRadius(const std::string &symbol) const;
 		[[nodiscard]] std::size_t Size() const;
 

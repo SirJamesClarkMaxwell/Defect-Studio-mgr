@@ -13,6 +13,7 @@
 #include "Renderer/Scene/SceneObject.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneTransformDefectMarkers.hpp"
 #include "Renderer/Scene/SceneTransformPathElements.hpp"
 #include "Renderer/Scene/SceneTransformPaths.hpp"
 
@@ -105,9 +106,19 @@ namespace DefectStudio
 			return SceneSystem::ResolvePinnedMeasurementPosition(window.structure, pin, position);
 		}
 
+		// Where the label was drawn last frame (bond labels sit off the bond by the auto-offset), so
+		// the gizmo stands on the label rather than on the bond midpoint it hangs from.
+		[[nodiscard]] glm::vec3 DrawnLabelCentre(const RendererWindowState &window, const LabelTransformStart &label)
+		{
+			const std::vector<LabelPickQuad> &quads = label.pinned ? window.labelPickQuads.pinned : window.labelPickQuads.free;
+			return label.index < quads.size() && quads[label.index].valid ? quads[label.index].centre : label.position;
+		}
+
 		[[nodiscard]] std::vector<glm::vec3> BuildPositions(
 			const SceneTransformSelectionSnapshot &snapshot, const RendererWindowState *window, const BindingContext *bindingContext, const bool anchors)
 		{
+			if (snapshot.defectFrame)
+				return {snapshot.defectFrame->origin};
 			std::vector<glm::vec3> positions;
 			positions.reserve(
 				snapshot.atoms.size() + snapshot.labels.size() + snapshot.arrows.size() * 2 +
@@ -115,7 +126,7 @@ namespace DefectStudio
 			for (const AtomTransformStart &atom : snapshot.atoms)
 				positions.push_back(atom.position);
 			for (const LabelTransformStart &label : snapshot.labels)
-				positions.push_back(label.position);
+				positions.push_back(anchors && window != nullptr ? DrawnLabelCentre(*window, label) : label.position);
 			for (const ArrowTransformStart &arrow : snapshot.arrows)
 			{
 				if (arrow.points.size() < 2)
@@ -139,6 +150,10 @@ namespace DefectStudio
 			}
 			for (const PlaneTransformStart &plane : snapshot.planes)
 				positions.push_back(plane.center);
+			for (const VacancyTransformStart &vacancy : snapshot.vacancies)
+				positions.push_back(vacancy.position);
+			if (snapshot.defectFrame)
+				positions.push_back(snapshot.defectFrame->origin);
 			const std::vector<glm::vec3> pathPositions = anchors ? CollectSceneTransformPathAnchorPositions(snapshot, window, bindingContext) : CollectSceneTransformPathPivotPositions(snapshot, window, bindingContext);
 			positions.insert(positions.end(), pathPositions.begin(), pathPositions.end());
 			return positions;
@@ -167,6 +182,16 @@ namespace DefectStudio
 		const RendererWindowState &window, SceneArrowTransformTarget arrowTarget)
 	{
 		SceneTransformSelectionSnapshot snapshot;
+		const bool carryChildren = window.defectFrameSelected && window.showDefectFrame &&
+			window.structure.defectFrame.has_value() && !window.pathEdit.IsActive();
+		auto withChildren = [carryChildren](const std::vector<SceneObjectId> &selected, const std::vector<SceneObjectId> &children) {
+			std::vector<SceneObjectId> ids = selected;
+			if (carryChildren)
+				for (const SceneObjectId id : children)
+					if (std::find(ids.begin(), ids.end(), id) == ids.end())
+						ids.push_back(id);
+			return ids;
+		};
 		for (const SceneObjectId id : window.selectedPinnedMeasurements)
 		{
 			const std::size_t index = AnnotationIndex(window.pinnedMeasurements, id);
@@ -179,7 +204,7 @@ namespace DefectStudio
 			snapshot.labels.push_back(
 				{true, index, position, pin.worldOffset, pin.rotationOffsetRadians, pin.style.scale});
 		}
-		for (const SceneObjectId id : window.selectedFreeLabels)
+		for (const SceneObjectId id : withChildren(window.selectedFreeLabels, window.defectFrameChildren.freeLabels))
 		{
 			const std::size_t index = AnnotationIndex(window.freeLabels, id);
 			if (index >= window.freeLabels.size())
@@ -188,7 +213,7 @@ namespace DefectStudio
 			snapshot.labels.push_back(
 				{false, index, label.worldPosition, label.worldPosition, label.rotationRadians, label.style.scale});
 		}
-		for (const SceneObjectId id : window.selectedSceneArrows)
+		for (const SceneObjectId id : withChildren(window.selectedSceneArrows, window.defectFrameChildren.arrows))
 		{
 			const std::size_t index = AnnotationIndex(window.sceneArrows, id);
 			if (index >= window.sceneArrows.size())
@@ -197,7 +222,7 @@ namespace DefectStudio
 			snapshot.arrows.push_back({
 				index, arrow.points, arrow.controlPoint, arrow.startAnchorAtom, arrow.endAnchorAtom, arrowTarget});
 		}
-		for (const SceneObjectId id : window.selectedSceneOrbitals)
+		for (const SceneObjectId id : withChildren(window.selectedSceneOrbitals, window.defectFrameChildren.orbitals))
 		{
 			const std::size_t index = AnnotationIndex(window.sceneOrbitals, id);
 			if (index >= window.sceneOrbitals.size())
@@ -208,7 +233,7 @@ namespace DefectStudio
 				{index, centers.centerA, centers.centerB, orbital.rotationEuler, orbital.scale,
 					!orbital.anchorAtoms.empty(), orbital.lcaoComponents.empty() && IsTwoCenterPreset(orbital.preset)});
 		}
-		for (const SceneObjectId id : window.selectedScenePlanes)
+		for (const SceneObjectId id : withChildren(window.selectedScenePlanes, window.defectFrameChildren.planes))
 		{
 			const std::size_t index = AnnotationIndex(window.scenePlanes, id);
 			if (index >= window.scenePlanes.size())
@@ -219,13 +244,16 @@ namespace DefectStudio
 		}
 		if (window.pathEdit.IsActive()) CaptureSceneTransformPathElements(window, snapshot);
 		else CaptureSceneTransformPaths(window, snapshot);
+		if (!window.pathEdit.IsActive())
+			CaptureSceneTransformDefectMarkers(window, snapshot);
 
 		// Atoms are the gizmo's target only when nothing in the scene layer is selected. Fitting a
 		// plane to three atoms leaves those atoms selected, and without this a G on the new plane
 		// dragged the structure along with it. Atoms stay selected for everything else - "Match
 		// position", the Add menus - they simply stop being transform targets while a scene object
 		// is.
-		if (!window.pathEdit.IsActive() && !HasSceneObjectTransformTargets(snapshot))
+		if (!window.pathEdit.IsActive() && !HasSceneObjectTransformTargets(snapshot) &&
+			!HasDefectMarkerTransformTargets(snapshot))
 		{
 			for (const std::size_t index : window.selectedAtomIndices)
 			{
@@ -261,6 +289,8 @@ namespace DefectStudio
 
 	std::optional<glm::mat3> SceneTransformLocalBasis(const SceneTransformSelectionSnapshot &snapshot)
 	{
+		if (snapshot.defectFrame)
+			return glm::mat3(snapshot.defectFrame->x, snapshot.defectFrame->y, snapshot.defectFrame->z);
 		if (!snapshot.arrows.empty())
 			return ArrowBasis(snapshot.arrows.back());
 		if (!snapshot.labels.empty())
@@ -272,6 +302,25 @@ namespace DefectStudio
 		return std::nullopt;
 	}
 
+	TransformOrientation SceneTransformOrientation(
+		TransformOrientation chosen, const SceneTransformSelectionSnapshot &snapshot)
+	{
+		return chosen == TransformOrientation::Global && snapshot.defectFrame ? TransformOrientation::Local : chosen;
+	}
+
+	TransformBases SceneTransformBases(const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot)
+	{
+		TransformBases bases;
+		bases.local = SceneTransformLocalBasis(snapshot);
+		bases.lattice = window.structure.lattice;
+		if (const auto &frame = window.structure.defectFrame; frame && window.showDefectFrame)
+			bases.defect = glm::mat3(frame->x, frame->y, frame->z);
+		// Atoms and vacancies have no axes of their own; their Local frame is the defect's.
+		if (!bases.local)
+			bases.local = bases.defect;
+		return bases;
+	}
+
 	bool HasAtomTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
 	{
 		return !snapshot.atoms.empty();
@@ -281,6 +330,11 @@ namespace DefectStudio
 	{
 		return !snapshot.labels.empty() || !snapshot.arrows.empty() || !snapshot.orbitals.empty() ||
 			!snapshot.planes.empty() || !snapshot.paths.empty() || !snapshot.pathElements.empty();
+	}
+
+	bool HasDefectMarkerTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
+	{
+		return !snapshot.vacancies.empty() || snapshot.defectFrame.has_value();
 	}
 
 	void ApplySceneTransformSelection(
@@ -434,6 +488,7 @@ namespace DefectStudio
 		}
 		ApplySceneTransformPaths(window, snapshot, delta, operation, pivotMode, selectionPivot);
 		ApplySceneTransformPathElements(window, snapshot, delta, operation, pivotMode, selectionPivot);
+		ApplySceneTransformDefectMarkers(window, snapshot, delta, pivotMode, selectionPivot);
 	}
 
 	void RestoreSceneTransformSelection(
@@ -498,5 +553,6 @@ namespace DefectStudio
 		}
 		RestoreSceneTransformPaths(window, snapshot);
 		RestoreSceneTransformPathElements(window, snapshot);
+		RestoreSceneTransformDefectMarkers(window, snapshot);
 	}
 } // namespace DefectStudio

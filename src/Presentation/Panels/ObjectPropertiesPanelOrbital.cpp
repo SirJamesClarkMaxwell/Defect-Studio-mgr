@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 
+#include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
@@ -98,6 +99,19 @@ namespace DefectStudio
 					ImGui::SetTooltip("Cel pokrywa sie ze srodkiem orbitalu.");
 			}
 			ImGui::EndDisabled();
+
+			// The orbital's own x/y/z become the defect's: p_z along the N-V axis and so on.
+			const auto &frame = windowState.structure.defectFrame;
+			ImGui::BeginDisabled(!frame);
+			DrawUndoableValue(windowState, orbital.rotationEuler, [&](glm::vec3 &value) {
+				if (!ImGui::Button("Ustaw w osiach defektu") || !frame)
+					return false;
+				value = glm::degrees(glm::eulerAngles(glm::quat_cast(glm::mat3(frame->x, frame->y, frame->z))));
+				return true;
+			});
+			ImGui::EndDisabled();
+			if (!frame && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Struktura nie ma osi defektu - PPM > Osie defektu.");
 		}
 
 		void DrawAnchoring(RendererWindowState &windowState, SceneOrbital &orbital)

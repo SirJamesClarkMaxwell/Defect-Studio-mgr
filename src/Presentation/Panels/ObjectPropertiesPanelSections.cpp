@@ -144,6 +144,85 @@ namespace DefectStudio
 		plane.anchorAtoms.clear();
 	}
 
+	namespace
+	{
+		// Window-wide bond label layout: auto-offset toward the structure centre and the angle past
+		// which a bond-aligned label turns back to the camera.
+		void DrawBondLabelLayoutRows(RendererWindowState &windowState)
+		{
+			ImGui::Checkbox("Auto-offset##BondLabelAutoOffset", &windowState.bondLabelAutoOffsetEnabled);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(120.0f);
+			ImGui::SliderFloat(
+				"Magnitude##BondLabelAutoOffsetMagnitude", &windowState.bondLabelAutoOffsetMagnitude, 0.0f, 2.0f,
+				"%.2f A");
+			ImGui::SetNextItemWidth(120.0f);
+			ImGui::SliderFloat(
+				"Align threshold##BondLabelAlignThreshold", &windowState.bondLabelAlignThresholdDeg, 0.0f, 90.0f,
+				"%.0f deg (90 = off)");
+		}
+
+		// Placement of the selected pins: live while dragging, one undo snapshot when an edit starts.
+		void DrawPinPlacementRows(RendererWindowState &windowState)
+		{
+			std::vector<RendererWindowState::PinnedMeasurement *> pins;
+			for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
+			{
+				const std::size_t index = FindObjectIndex(windowState.pinnedMeasurements, id);
+				if (index < windowState.pinnedMeasurements.size())
+					pins.push_back(&windowState.pinnedMeasurements[index]);
+			}
+			if (pins.empty())
+				return;
+			RendererWindowState::PinnedMeasurement &first = *pins.front();
+			ImGui::SeparatorText("Placement");
+			const bool anyBond = std::any_of(pins.begin(), pins.end(), [](const auto *pin) { return pin->atomIndices.size() == 2; });
+			if (anyBond)
+			{
+				bool align = first.alignToBondDirection;
+				if (ImGui::Checkbox("Align to bond##PinAlignAll", &align))
+				{
+					PushPinnedMeasurementUndoSnapshot(windowState);
+					for (auto *pin : pins)
+						pin->alignToBondDirection = align;
+				}
+				ImGui::SameLine();
+				bool flipped = first.flipped;
+				if (ImGui::Checkbox("Flip (F)##PinFlipAll", &flipped))
+				{
+					PushPinnedMeasurementUndoSnapshot(windowState);
+					for (auto *pin : pins)
+						pin->flipped = flipped;
+				}
+			}
+			glm::vec3 offset = first.worldOffset;
+			if (ImGui::DragFloat3("Offset (A)##PinOffset", &offset.x, 0.01f, -20.0f, 20.0f, "%.2f"))
+				for (auto *pin : pins)
+					pin->worldOffset = offset;
+			if (ImGui::IsItemActivated())
+				PushPinnedMeasurementUndoSnapshot(windowState);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("0##PinOffsetReset"))
+			{
+				PushPinnedMeasurementUndoSnapshot(windowState);
+				for (auto *pin : pins)
+					pin->worldOffset = glm::vec3(0.0f);
+			}
+			float degrees = glm::degrees(first.rotationOffsetRadians);
+			if (ImGui::SliderFloat("Rotation##PinRotation", &degrees, -180.0f, 180.0f, "%.0f deg"))
+				for (auto *pin : pins)
+					pin->rotationOffsetRadians = glm::radians(degrees);
+			if (ImGui::IsItemActivated())
+				PushPinnedMeasurementUndoSnapshot(windowState);
+			if (anyBond)
+			{
+				ImGui::TextDisabled("All bond labels in this view:");
+				DrawBondLabelLayoutRows(windowState);
+			}
+			ImGui::TextDisabled("G / R / S or the gizmo also move, turn and resize them.");
+		}
+	} // namespace
+
 	void DrawSelectedLabelProperties(RendererWindowState &windowState)
 	{
 		ImGui::Separator();
@@ -161,8 +240,6 @@ namespace DefectStudio
 			if (pin.atomIndices.size() == 2)
 			{
 				ImGui::SameLine();
-				ImGui::Checkbox("Align to bond##PinAlign", &pin.alignToBondDirection);
-				ImGui::SameLine();
 				if (ImGui::Button("Align to camera##PinAlignToCamera"))
 				{
 					PushPinnedMeasurementUndoSnapshot(windowState);
@@ -176,6 +253,8 @@ namespace DefectStudio
 		{
 			ImGui::Text("%zu label(s) selected - style below applies to all of them", pinCount + freeCount);
 		}
+		DrawPinPlacementRows(windowState);
+		ImGui::SeparatorText("Style");
 
 		if (ImGui::Button("Copy Style##LabelStyleCopy"))
 		{
@@ -212,16 +291,7 @@ namespace DefectStudio
 	{
 		ImGui::Separator();
 		ImGui::Text("Bond labels");
-		ImGui::Checkbox("Auto-offset##BondLabelAutoOffset", &windowState.bondLabelAutoOffsetEnabled);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(120.0f);
-		ImGui::SliderFloat(
-			"Magnitude##BondLabelAutoOffsetMagnitude", &windowState.bondLabelAutoOffsetMagnitude, 0.0f, 2.0f,
-			"%.2f A");
-		ImGui::SetNextItemWidth(120.0f);
-		ImGui::SliderFloat(
-			"Align threshold##BondLabelAlignThreshold", &windowState.bondLabelAlignThresholdDeg, 0.0f, 90.0f,
-			"%.0f deg (90 = off)");
+		DrawBondLabelLayoutRows(windowState);
 
 		ImGui::Separator();
 		ImGui::Text("Free labels");

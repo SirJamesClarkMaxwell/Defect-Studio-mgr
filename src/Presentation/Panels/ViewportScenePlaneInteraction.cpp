@@ -4,6 +4,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportPicking.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -12,6 +13,7 @@
 
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
 
 namespace DefectStudio
@@ -48,6 +50,12 @@ namespace DefectStudio
 		const glm::vec3 rayOrigin = glm::vec3(nearPoint) / nearPoint.w;
 		const glm::vec3 rayDirection = glm::vec3(farPoint) / farPoint.w - rayOrigin;
 
+		// An atom under the cursor wins: the hit volume here is far larger than the drawn shape and
+		// usually contains the atom the object sits on, which would otherwise be unclickable in the
+		// "All" selection mode.
+		if (windowState.pickAtoms && PickAtomAlongRay(windowState, rayOrigin, rayDirection))
+			return false;
+
 		const std::optional<std::size_t> hit = PickScenePlane(windowState, rayOrigin, rayDirection);
 		if (!hit)
 			return false;
@@ -65,6 +73,8 @@ namespace DefectStudio
 		else
 		{
 			selection = {id};
+			// Same as an arrow click: a leftover atom selection would also be deleted by Delete.
+			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
 
 		// Claiming the click clears the other kinds, so the properties panel shows one thing.
@@ -72,6 +82,8 @@ namespace DefectStudio
 		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedVacancies.clear();
+		windowState.defectFrameSelected = false;
 		return true;
 	}
 } // namespace DefectStudio

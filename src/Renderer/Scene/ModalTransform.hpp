@@ -21,12 +21,14 @@ namespace DefectStudio
 	};
 
 	// Meaning of X/Y/Z. Global = world axes, Local = the object kind's own frame (absent for atoms),
-	// Lattice = cell vectors a/b/c (not necessarily orthogonal or unit length).
+	// Lattice = cell vectors a/b/c (not necessarily orthogonal or unit length), Defect = the
+	// structure's defect axes (CrystalStructure::defectFrame) whatever is selected.
 	enum class TransformOrientation
 	{
 		Global,
 		Local,
-		Lattice
+		Lattice,
+		Defect
 	};
 
 	enum class TransformPivotMode
@@ -55,6 +57,7 @@ namespace DefectStudio
 	{
 		std::optional<glm::mat3> local;
 		std::optional<glm::mat3> lattice;
+		std::optional<glm::mat3> defect;
 	};
 
 	// Axis: move/rotate/scale along basis column `axis`. Plane: `axis` is the EXCLUDED column -
@@ -117,7 +120,8 @@ namespace DefectStudio
 	// One X/Y/Z press (plane = Shift held). Same axis and kind as `current` advances the cycle
 	// primary -> secondary -> None; a different axis or kind restarts at primary.
 	// primary = `orientation` (Global when its frame is missing); secondary = Global when primary is
-	// not Global, otherwise Local; a secondary whose frame is missing is skipped straight to None.
+	// not Global, otherwise Local, or Defect when there is no Local frame; a secondary whose frame is
+	// missing is skipped straight to None.
 	[[nodiscard]] TransformConstraint CycleConstraint(
 		const TransformConstraint &current, int axis, bool plane, TransformOrientation orientation,
 		const TransformBases &bases);

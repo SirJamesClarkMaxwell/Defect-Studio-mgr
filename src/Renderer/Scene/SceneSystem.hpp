@@ -42,7 +42,9 @@ namespace DefectStudio
 		// Translates captured positions into atom indices on `targetStructure` by nearest cartesian
 		// distance, for restoring a view snapshot onto a structure that may differ from the one it
 		// was captured on (e.g. the session default view applied to a different window). A position
-		// with no atom within `tolerance` is dropped rather than mapped to a wrong atom.
+		// with no atom within `tolerance` is dropped rather than mapped to a wrong atom. Distances use
+		// the minimum image of targetStructure.lattice (periodic and not singular), so a site on a cell
+		// face matches whichever side the reloaded file wrapped it to.
 		[[nodiscard]] std::vector<std::size_t> ResolveAtomIndicesByPosition(
 			const RendererStructureData &targetStructure,
 			const std::vector<glm::vec3> &positions,

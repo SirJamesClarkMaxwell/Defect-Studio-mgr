@@ -73,6 +73,23 @@ namespace DefectStudio
 		glm::vec2 halfExtents = glm::vec2(1.0f);
 	};
 
+	// A selected vacancy marker (structure.vacancies index) and the defect axes. Both are domain data:
+	// the drag moves the renderer copies, the commit writes the domain through renderer.vacancy.set /
+	// renderer.defect_frame.set (SceneTransformDefectMarkers.hpp).
+	struct VacancyTransformStart
+	{
+		std::size_t index = 0;
+		glm::vec3 position = glm::vec3(0.0f);
+	};
+
+	struct DefectFrameTransformStart
+	{
+		glm::vec3 origin = glm::vec3(0.0f);
+		glm::vec3 x = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec3 y = glm::vec3(0.0f, 1.0f, 0.0f);
+		glm::vec3 z = glm::vec3(0.0f, 0.0f, 1.0f);
+	};
+
 	// The path transform captured at the start of a modal operation. G/R/S compose onto these nine
 	// authored transform fields; nodes and handles are deliberately not walked or rewritten.
 	struct PathTransformStart
@@ -117,6 +134,10 @@ namespace DefectStudio
 		// this are mutually exclusive by construction - see CaptureSceneTransformPathElements for
 		// why filling both would move a node twice.
 		std::vector<PathElementTransformStart> pathElements;
+		// G moves vacancies and the defect origin; R also turns the defect axes; S only spreads the
+		// points (the axes stay unit vectors).
+		std::vector<VacancyTransformStart> vacancies;
+		std::optional<DefectFrameTransformStart> defectFrame;
 	};
 
 	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label
@@ -137,7 +158,9 @@ namespace DefectStudio
 	[[nodiscard]] SceneTransformSelectionSnapshot CaptureSceneTransformSelectionForOperation(
 		const RendererWindowState &window, ModalTransformOp operation);
 	// The anchor is where the gizmo widget stands; the pivot is what the transform maths turns about.
-	// They differ only for Bezier handles: the anchor is the handle and the pivot is its owner node.
+	// They differ for Bezier handles (the anchor is the handle, the pivot its owner node) and labels
+	// (the anchor is where the label was drawn). With the defect axes in the selection both are the
+	// axes' origin: the axes act as the parent of everything transformed with them.
 	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
 		const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] std::vector<glm::vec3> SceneTransformPivotPositions(
@@ -146,8 +169,18 @@ namespace DefectStudio
 		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] std::optional<glm::mat3> SceneTransformLocalBasis(
 		const SceneTransformSelectionSnapshot &snapshot);
+	// local = SceneTransformLocalBasis, lattice = the cell, defect = the structure's defect axes
+	// (absent when it has none or they are hidden). A selection without axes of its own (atoms,
+	// vacancies) gets the defect axes as its Local frame.
+	// The orientation the gizmo and G/R/S use: the chosen one, except that the defect axes, when
+	// they are being transformed, use their own axes instead of Global (X X still gives Global).
+	[[nodiscard]] TransformOrientation SceneTransformOrientation(
+		TransformOrientation chosen, const SceneTransformSelectionSnapshot &snapshot);
+	[[nodiscard]] TransformBases SceneTransformBases(
+		const RendererWindowState &window, const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] bool HasAtomTransformTargets(const SceneTransformSelectionSnapshot &snapshot);
 	[[nodiscard]] bool HasSceneObjectTransformTargets(const SceneTransformSelectionSnapshot &snapshot);
+	[[nodiscard]] bool HasDefectMarkerTransformTargets(const SceneTransformSelectionSnapshot &snapshot);
 
 	void ApplySceneTransformSelection(
 		RendererWindowState &window,

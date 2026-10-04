@@ -420,10 +420,9 @@ namespace DefectStudio
 		// gizmos keep the old overlap guard; path-edit markers already get first refusal in the chain.
 		const bool pointerOnGeometry = !singleArrowOnly && !HasAtomTransformTargets(snapshot) &&
 			IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
-		TransformBases bases;
-		bases.local = SceneTransformLocalBasis(snapshot);
-		bases.lattice = windowState.structure.lattice;
-		const OrientationAxes worldAxes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
+		const TransformBases bases = SceneTransformBases(windowState, snapshot);
+		const OrientationAxes worldAxes =
+			ResolveNormalizedOrientationAxes(SceneTransformOrientation(windowState.transformOrientation, snapshot), bases);
 		const std::array<AxisProjection, 3> axes = ProjectAxes(
 			viewProjection, imageOrigin, imageSize, gizmoPosition, *gizmoScreen, worldAxes);
 		if (windowState.gizmoOperation == GizmoOperation::Rotate)

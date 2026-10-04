@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -56,6 +57,9 @@ namespace DefectStudio
 		std::string sourceSpecies;
 		std::string label;
 		int index = 0;
+		// Marker colour for this vacancy only (e.g. V_B vs V_N in hBN); empty = the shared vacancy
+		// style. Display data, like `label`, kept here so it is saved and undone with the vacancy.
+		std::optional<glm::vec3> color;
 
 		[[nodiscard]] std::string GetLabel() const
 		{
@@ -65,6 +69,16 @@ namespace DefectStudio
 				return "V";
 			return "V_" + sourceSpecies;
 		}
+	};
+
+	// Local axes of a defect: an origin and a right-handed orthonormal triad, e.g. z along the N-V
+	// axis of NV-. Stored as positions, not atom bindings, so it does not follow a relaxation.
+	struct DefectFrame
+	{
+		glm::vec3 origin = glm::vec3(0.0f);
+		glm::vec3 x = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec3 y = glm::vec3(0.0f, 1.0f, 0.0f);
+		glm::vec3 z = glm::vec3(0.0f, 0.0f, 1.0f);
 	};
 
 	struct LatticeCell

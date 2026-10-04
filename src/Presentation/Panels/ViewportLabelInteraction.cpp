@@ -36,6 +36,56 @@
 
 namespace DefectStudio
 {
+	namespace
+	{
+		// Whether `mouse` lies inside label `index` as it was last drawn (labels.vert's billboard
+		// math on the recorded rect, projected to the viewport image). nullopt when that label has
+		// no recorded quad - not drawn last frame, or drawn by the all-bonds pass - so the caller
+		// falls back to its anchor-radius test.
+		[[nodiscard]] std::optional<bool> MouseInLabelQuad(const RendererWindowState &windowState,
+			const std::vector<LabelPickQuad> &quads, std::size_t index, const ImVec2 &imageOrigin,
+			const ImVec2 &imageSize, const glm::vec2 &mouse)
+		{
+			if (index >= quads.size() || !quads[index].valid || windowState.camera == nullptr)
+				return std::nullopt;
+			const LabelPickQuad &quad = quads[index];
+			const glm::mat4 view = windowState.camera->ViewMatrix();
+			const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * view;
+			const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
+			const glm::vec3 up(view[0][1], view[1][1], view[2][1]);
+			const float cosR = std::cos(quad.rotation);
+			const float sinR = std::sin(quad.rotation);
+			const glm::vec2 local[4] = {
+				quad.min, {quad.max.x, quad.min.y}, quad.max, {quad.min.x, quad.max.y}};
+			glm::vec2 screen[4];
+			for (int corner = 0; corner < 4; ++corner)
+			{
+				const glm::vec2 p(local[corner].x * cosR - local[corner].y * sinR,
+					local[corner].x * sinR + local[corner].y * cosR);
+				const glm::vec4 clip =
+					viewProjection * glm::vec4(quad.centre + windowState.viewOffset + right * p.x + up * p.y, 1.0f);
+				if (clip.w <= 0.0001f)
+					return false;
+				screen[corner] = glm::vec2(imageOrigin.x + (clip.x / clip.w * 0.5f + 0.5f) * imageSize.x,
+					imageOrigin.y + (0.5f - clip.y / clip.w * 0.5f) * imageSize.y);
+			}
+			// Convex quad: the mouse is inside when it is on the same side of all four edges.
+			int sign = 0;
+			for (int corner = 0; corner < 4; ++corner)
+			{
+				const glm::vec2 edge = screen[(corner + 1) % 4] - screen[corner];
+				const glm::vec2 toMouse = mouse - screen[corner];
+				const float cross = edge.x * toMouse.y - edge.y * toMouse.x;
+				const int side = cross > 0.0f ? 1 : cross < 0.0f ? -1 : 0;
+				if (side != 0 && sign != 0 && side != sign)
+					return false;
+				if (side != 0)
+					sign = side;
+			}
+			return true;
+		}
+	} // namespace
+
 	void RegisterViewportSceneObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer)
 	{
 		auto result = registry.Register(
@@ -407,6 +457,16 @@ namespace DefectStudio
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
+			if (const auto inside = MouseInLabelQuad(
+					windowState, windowState.labelPickQuads.pinned, i, imageOrigin, imageSize, mousePos))
+			{
+				if (*inside && bestDistance > 0.0f)
+				{
+					bestDistance = 0.0f;
+					hitIndex = static_cast<int>(i);
+				}
+				continue;
+			}
 			glm::vec3 anchor(0.0f);
 			glm::vec2 anchorScreen;
 			if (!resolveAnchor(windowState.pinnedMeasurements[i], anchor) || !projectToScreen(anchor, anchorScreen))
@@ -439,6 +499,8 @@ namespace DefectStudio
 		windowState.selectedFreeLabels.clear();
 		windowState.selectedSceneArrows.clear();
 		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedVacancies.clear();
+		windowState.defectFrameSelected = false;
 		windowState.selectedScenePlanes.clear();
 		windowState.selectedScenePaths.clear();
 		if (!additive)
@@ -550,6 +612,16 @@ namespace DefectStudio
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
+			if (const auto inside = MouseInLabelQuad(
+					windowState, windowState.labelPickQuads.free, i, imageOrigin, imageSize, mousePos))
+			{
+				if (*inside && bestDistance > 0.0f)
+				{
+					bestDistance = 0.0f;
+					hitIndex = static_cast<int>(i);
+				}
+				continue;
+			}
 			glm::vec2 labelScreen;
 			if (!projectToScreen(windowState.freeLabels[i].worldPosition, labelScreen))
 				continue;
@@ -575,6 +647,8 @@ namespace DefectStudio
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneArrows.clear();
 		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedVacancies.clear();
+		windowState.defectFrameSelected = false;
 		windowState.selectedScenePlanes.clear();
 		windowState.selectedScenePaths.clear();
 		if (!additive)

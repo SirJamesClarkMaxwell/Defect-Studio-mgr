@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Presentation/Panels/ViewportVacancyAdd.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 
 #include <algorithm>
@@ -225,6 +226,8 @@ namespace DefectStudio
 		}
 
 		DrawOrbitalAddMenu(*windowState, m_AddMenuPosition);
+		ImGui::Separator();
+		DrawDefectAddItems(*windowState, m_CommandRegistry.lock().get(), m_AddMenuPosition);
 
 		ImGui::EndPopup();
 	}

@@ -18,6 +18,8 @@ namespace DefectStudio::SceneObjectsYaml
 {
 	bool ParseVacancy(const YAML::Node &node, PersistedVacancy &vacancy);
 	void EmitVacancies(YAML::Emitter &emit, const std::vector<PersistedVacancy> &vacancies);
+	bool ParseDefectFrame(const YAML::Node &node, PersistedDefectFrame &frame);
+	void EmitDefectFrame(YAML::Emitter &emit, const std::optional<PersistedDefectFrame> &frame);
 }
 
 namespace DefectStudio
@@ -488,6 +490,14 @@ bool SceneObjectsIO::Parse(const std::string &text, SceneObjectsFile &outFile, s
 						else
 							Warn(warnings, "Invalid vacancy entry");
 					}
+				if (const YAML::Node frameNode = structureNode["defectFrame"])
+				{
+					PersistedDefectFrame frame;
+					if (SceneObjectsYaml::ParseDefectFrame(frameNode, frame))
+						structure.defectFrame = frame;
+					else
+						Warn(warnings, "Invalid defectFrame entry");
+				}
 				const YAML::Node objects = structureNode["objects"];
 				if (!objects)
 				{
@@ -526,6 +536,7 @@ std::string SceneObjectsIO::Serialize(const SceneObjectsFile &file)
 		EmitObjects(emit, structure.objects);
 		emit << YAML::EndSeq;
 		SceneObjectsYaml::EmitVacancies(emit, structure.vacancies);
+		SceneObjectsYaml::EmitDefectFrame(emit, structure.defectFrame);
 		emit << YAML::EndMap;
 	}
 	emit << YAML::EndSeq;

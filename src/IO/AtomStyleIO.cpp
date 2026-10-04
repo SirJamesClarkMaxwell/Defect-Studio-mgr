@@ -103,6 +103,7 @@ namespace DefectStudio
 				outVacancyStyle.opacity = vacancyNode["opacity"].as<float>(outVacancyStyle.opacity);
 				outVacancyStyle.dashCount = vacancyNode["dash_count"].as<int>(outVacancyStyle.dashCount);
 				outVacancyStyle.ringWidth = vacancyNode["ring_width"].as<float>(outVacancyStyle.ringWidth);
+				outVacancyStyle.colorBySpecies = vacancyNode["color_by_species"].as<bool>(outVacancyStyle.colorBySpecies);
 				outVacancyStyle.renderMode = ParseVacancyRenderMode(vacancyNode["render_mode"].as<std::string>("ghost"));
 			}
 
@@ -164,6 +165,7 @@ namespace DefectStudio
 			emit << YAML::Key << "opacity" << YAML::Value << vacancyStyle.opacity;
 			emit << YAML::Key << "dash_count" << YAML::Value << vacancyStyle.dashCount;
 			emit << YAML::Key << "ring_width" << YAML::Value << vacancyStyle.ringWidth;
+			emit << YAML::Key << "color_by_species" << YAML::Value << vacancyStyle.colorBySpecies;
 			emit << YAML::Key << "render_mode" << YAML::Value << VacancyRenderModeToString(vacancyStyle.renderMode);
 			emit << YAML::EndMap;
 

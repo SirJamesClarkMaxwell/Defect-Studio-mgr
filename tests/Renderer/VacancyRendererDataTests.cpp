@@ -34,6 +34,7 @@ namespace DefectStudio::Tests
 		style.renderMode = VacancyRenderMode::Wireframe;
 		style.dashCount = 9;
 		style.ringWidth = 0.07f;
+		style.colorBySpecies = false;
 		AtomStyleTable table;
 		table.ReplaceStyles({}, style);
 
@@ -53,6 +54,24 @@ namespace DefectStudio::Tests
 			EXPECT_EQ(vacancy.dashCount, 9);
 			EXPECT_FLOAT_EQ(vacancy.ringWidth, 0.07f);
 		}
+	}
+
+	// V_C takes carbon's colour by default; a vacancy's own colour beats both.
+	TEST(VacancyRendererDataTests, VacancyTakesTheRemovedElementsColourUnlessItHasItsOwn)
+	{
+		AtomStyleTable table;
+		AtomRenderStyle carbon;
+		carbon.color = glm::vec3(0.2f, 0.2f, 0.2f);
+		table.SetStyle("C", carbon);
+		CrystalStructure structure = StructureWithVacancies();
+		structure.vacancies[1].color = glm::vec3(1.0f, 0.0f, 0.0f);
+
+		const RendererStructureData data = BuildRendererStructureData(structure, Path("POSCAR"), "NV", table);
+		ASSERT_EQ(data.vacancies.size(), 2u);
+		EXPECT_EQ(data.vacancies[0].color, carbon.color);
+		EXPECT_FALSE(data.vacancies[0].customColor);
+		EXPECT_EQ(data.vacancies[1].color, glm::vec3(1.0f, 0.0f, 0.0f));
+		EXPECT_TRUE(data.vacancies[1].customColor);
 	}
 
 	TEST(VacancyRendererDataTests, NoVacanciesNoMarkers)

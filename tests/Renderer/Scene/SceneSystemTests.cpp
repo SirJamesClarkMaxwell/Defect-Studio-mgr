@@ -118,6 +118,28 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(resolved.empty());
 	}
 
+	// Diamond reopen: a hidden site saved at x = -1e-7 comes back wrapped to x = a.
+	TEST(SceneSystemTests, ResolveAtomIndicesByPositionMatchesAcrossTheCellFace)
+	{
+		RendererStructureData structure;
+		structure.lattice = glm::mat3(3.567f);
+		structure.periodic = true;
+		RendererAtomData wrapped;
+		wrapped.cartesianPosition = glm::vec3(3.567f - 1e-6f, 0.89f, 0.89f);
+		RendererAtomData other;
+		other.cartesianPosition = glm::vec3(1.78f, 1.78f, 0.0f);
+		structure.atoms = {other, wrapped};
+
+		const auto resolved =
+			SceneSystem::ResolveAtomIndicesByPosition(structure, {glm::vec3(-3.1e-7f, 0.89f, 0.89f)});
+		ASSERT_EQ(resolved.size(), 1u);
+		EXPECT_EQ(resolved[0], 1u);
+
+		structure.periodic = false;
+		EXPECT_TRUE(
+			SceneSystem::ResolveAtomIndicesByPosition(structure, {glm::vec3(-3.1e-7f, 0.89f, 0.89f)}).empty());
+	}
+
 	TEST(SceneSystemTests, AnchoredArrowFollowsMovedAtomAndKeepsItsBufferGap)
 	{
 		RendererWindowState windowState;

@@ -3,6 +3,7 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -182,6 +183,17 @@ namespace DefectStudio::SceneSystem
 		std::vector<std::size_t> resolvedIndices;
 		resolvedIndices.reserve(positions.size());
 		const float toleranceSquared = tolerance * tolerance;
+		// Minimum image across the cell: a site saved at x = -1e-7 comes back at x = L once the file
+		// is reloaded and wrapped into [0, 1), and must still resolve to the same atom.
+		const glm::mat3 &lattice = targetStructure.lattice;
+		const bool periodic = targetStructure.periodic && std::abs(glm::determinant(lattice)) > 1e-6f;
+		const glm::mat3 inverseLattice = periodic ? glm::inverse(lattice) : glm::mat3(1.0f);
+		auto minimumImage = [&](const glm::vec3 &delta) {
+			if (!periodic)
+				return delta;
+			const glm::vec3 fractional = inverseLattice * delta;
+			return lattice * (fractional - glm::round(fractional));
+		};
 
 		for (const glm::vec3 &position : positions)
 		{
@@ -189,7 +201,7 @@ namespace DefectStudio::SceneSystem
 			std::size_t bestIndex = targetStructure.atoms.size();
 			for (std::size_t index = 0; index < targetStructure.atoms.size(); ++index)
 			{
-				const glm::vec3 delta = targetStructure.atoms[index].cartesianPosition - position;
+				const glm::vec3 delta = minimumImage(targetStructure.atoms[index].cartesianPosition - position);
 				const float distanceSquared = glm::dot(delta, delta);
 				if (distanceSquared <= bestDistanceSquared)
 				{

@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -290,32 +291,7 @@ namespace DefectStudio
 		ImGui::Separator();
 		drawSelectedElementEditor();
 		if (ImGui::CollapsingHeader("Wakans"))
-		{
-			VacancyRenderStyle style = m_AtomStyleTable.GetVacancyStyle();
-			bool changed = ImGui::ColorEdit3("Color##vacancy", &style.color.x);
-			changed |= ImGui::DragFloat("Radius##vacancy", &style.displayRadius, 0.01f, 0.05f, 3.0f, "%.2f");
-			changed |= ImGui::SliderFloat("Opacity##vacancy", &style.opacity, 0.0f, 1.0f);
-			int mode = static_cast<int>(style.renderMode);
-			changed |= ImGui::Combo("Mode##vacancy", &mode, "Ghost\0Wireframe\0Solid\0");
-			style.renderMode = static_cast<VacancyRenderMode>(mode);
-			changed |= ImGui::SliderInt("Dashes##vacancy", &style.dashCount, 0, 64);
-			changed |= ImGui::DragFloat("Ring width##vacancy", &style.ringWidth, 0.005f, 0.005f, 3.0f, "%.3f");
-			if (changed)
-			{
-				m_AtomStyleTable.SetVacancyStyle(style);
-				// Like element styles, update the baked renderer copies in every open window.
-				for (RendererWindowState &window : m_Layer.GetWindows())
-					for (RendererVacancyData &vacancy : window.structure.vacancies)
-					{
-						vacancy.color = style.color;
-						vacancy.radius = style.displayRadius;
-						vacancy.opacity = style.opacity;
-						vacancy.renderMode = style.renderMode;
-						vacancy.dashCount = style.dashCount;
-						vacancy.ringWidth = style.ringWidth;
-					}
-			}
-		}
+			DrawVacancyStyleEditor(m_AtomStyleTable, m_Layer);
 
 		ImGui::Separator();
 		if (ImGui::Button("Save to file"))

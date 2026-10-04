@@ -12,6 +12,8 @@ namespace DefectStudio
 		bool orbitals = false;
 		bool planes = false;
 		bool paths = false;
+		bool vacancies = false;
+		bool defectFrame = false;
 
 		[[nodiscard]] bool Empty() const;
 	};

@@ -92,6 +92,24 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.align_axis_a_crystal"
+    chord: "Shift+1"
+    command: "renderer.align_axis_a_crystal"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_b_crystal"
+    chord: "Shift+2"
+    command: "renderer.align_axis_b_crystal"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_c_crystal"
+    chord: "Shift+3"
+    command: "renderer.align_axis_c_crystal"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.align_axis_a_star"
     chord: "Alt+1"
     command: "renderer.align_axis_a_star"

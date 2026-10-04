@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "Domain/Crystal/CrystalPrimitives.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererSettings.hpp"
 
@@ -71,6 +73,29 @@ namespace DefectStudio
 		VacancyRenderMode renderMode = VacancyRenderMode::Ghost;
 		int dashCount = 12;
 		float ringWidth = 0.035f;
+		// VacancySite::color was set: the shared style editor leaves `color` alone.
+		bool customColor = false;
+		std::string sourceSpecies; // VacancySite::sourceSpecies, for AtomStyleTable::VacancyColor
+	};
+
+	// Where a pinned measurement or free label was last drawn (renderLabels): billboard centre, its
+	// background rect in label-local units (style.scale and padding applied; x along camera right, y
+	// along camera up before `rotation`). valid = false when that label was not drawn. The viewport
+	// click test uses it, so a label is picked where it is seen, auto-offset and rotation included.
+	struct LabelPickQuad
+	{
+		glm::vec3 centre = glm::vec3(0.0f);
+		glm::vec2 min = glm::vec2(0.0f);
+		glm::vec2 max = glm::vec2(0.0f);
+		float rotation = 0.0f;
+		bool valid = false;
+	};
+
+	// Indexed like the pinnedMeasurements / freeLabels lists of the window, as of the last frame.
+	struct LabelPickQuads
+	{
+		std::vector<LabelPickQuad> pinned;
+		std::vector<LabelPickQuad> free;
 	};
 
 	struct RendererStructureData
@@ -83,12 +108,18 @@ namespace DefectStudio
 		std::vector<RendererCellEdge> cellEdges;
 		// structure.vacancies, in the same order - an index here is an index there.
 		std::vector<RendererVacancyData> vacancies;
+		// CrystalStructure::defectFrame, copied as is. Drawn as an axis triad ("empty") and used by
+		// the 1/2/3 view keys while RendererWindowState::showDefectFrame is on.
+		std::optional<DefectFrame> defectFrame;
 		// A second cell drawn inside the first in a contrasting colour - the primitive cell of a
 		// centred lattice, which is a different cell over the SAME atoms, not a transformation of
 		// them. Empty for every structure that has no such overlay to show.
 		std::vector<RendererCellEdge> overlayCellEdges;
 		glm::mat3 lattice = glm::mat3(1.0f);
 		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
+		// CrystalStructure::isPeriodic. False by default, so hand-built data (tests, previews) is
+		// never treated as a 1 A cell by minimum-image lookups.
+		bool periodic = false;
 	};
 
 	// Which of a 3-atom set is a measured angle's vertex - whichever atom is bonded to the other

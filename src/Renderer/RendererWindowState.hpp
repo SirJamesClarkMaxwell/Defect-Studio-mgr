@@ -50,6 +50,9 @@ namespace DefectStudio
 		// task/51: the vacancy markers (RendererStructureData::vacancies). Toggled by the Scene
 		// Outliner's "Vacancies" group eye; per window, like showCellBox.
 		bool showVacancies = true;
+		// The defect's local axes (RendererStructureData::defectFrame): draws the triad AND makes the
+		// 1/2/3 view keys look along x/y/z instead of a/b/c. Eye menu of the horizontal toolbar.
+		bool showDefectFrame = true;
 		bool showBonds = true;
 		// Bonds that cross a periodic cell boundary (Bond::periodicShift) run to an image atom that is
 		// not drawn, so they read as stubs poking out of the cell. Correct, and the only way a 2D
@@ -357,6 +360,30 @@ namespace DefectStudio
 		};
 		std::vector<SceneOrbital> sceneOrbitals;
 		std::vector<SceneObjectId> selectedSceneOrbitals;
+		// Indices into structure.vacancies (ViewportVacancySelection.hpp). Cleared by the same clicks
+		// that clear the other scene-object selections.
+		std::vector<std::size_t> selectedVacancies;
+		// The defect axes (structure.defectFrame) are selected: gizmo target, Delete, properties.
+		bool defectFrameSelected = false;
+		// Temporary parenting: objects that G/R/S of the selected defect axes carry along, about the
+		// axes' origin. Per session, never saved; stale ids/indices are skipped.
+		//   ponytail: vacancy indices shift when an earlier vacancy is deleted; ids if that bites.
+		struct DefectFrameChildren
+		{
+			std::vector<SceneObjectId> freeLabels;
+			std::vector<SceneObjectId> arrows;
+			std::vector<SceneObjectId> orbitals;
+			std::vector<SceneObjectId> planes;
+			std::vector<std::size_t> vacancies;
+
+			[[nodiscard]] std::size_t Count() const
+			{
+				return freeLabels.size() + arrows.size() + orbitals.size() + planes.size() + vacancies.size();
+			}
+		} defectFrameChildren;
+		// Copied from RendererLayer::GetLabelPickQuads after every viewport render, so the label click
+		// test hits the label where it was drawn.
+		LabelPickQuads labelPickQuads;
 
 		// A flat quad drawn through a set of points - a molecular plane, a slip plane, a mirror
 		// plane for the group-theory panel to point at. Like SceneArrow it is a drawing, not a

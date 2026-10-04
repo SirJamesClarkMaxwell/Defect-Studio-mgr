@@ -38,11 +38,11 @@ namespace DefectStudio
 
 	void DrawViewportTransformControls(RendererWindowState &windowState, RendererLayer &layer, float uiScale)
 	{
-		constexpr std::array<const char *, 3> orientationNames = {"Global", "Local", "Lattice"};
+		constexpr std::array<const char *, 4> orientationNames = {"Global", "Local", "Lattice", "Defect"};
+		constexpr std::array<const char *, 4> orientationGlyphs = {
+			ICON_FA_GLOBE, ICON_FA_ARROWS_ROTATE, ICON_FA_BORDER_ALL, ICON_FA_LOCATION_CROSSHAIRS};
 		const int orientationIndex = static_cast<int>(windowState.transformOrientation);
-		const char *orientationGlyph = orientationIndex == 1
-			? ICON_FA_ARROWS_ROTATE
-			: orientationIndex == 2 ? ICON_FA_BORDER_ALL : ICON_FA_GLOBE;
+		const char *orientationGlyph = orientationGlyphs[static_cast<std::size_t>(orientationIndex)];
 		const float iconExtent = std::clamp(layer.GetGlobalSettings().viewport.iconButtonSize, 12.0f, 40.0f) * uiScale;
 
 		ImGui::BeginDisabled(windowState.modalTransform.has_value());
@@ -55,6 +55,11 @@ namespace DefectStudio
 			SelectOrientationRow(windowState, TransformOrientation::Global, ICON_FA_GLOBE, "Global");
 			SelectOrientationRow(windowState, TransformOrientation::Local, ICON_FA_ARROWS_ROTATE, "Local");
 			SelectOrientationRow(windowState, TransformOrientation::Lattice, ICON_FA_BORDER_ALL, "Lattice");
+			ImGui::BeginDisabled(!windowState.structure.defectFrame.has_value());
+			SelectOrientationRow(windowState, TransformOrientation::Defect, ICON_FA_LOCATION_CROSSHAIRS, "Defect axes");
+			ImGui::EndDisabled();
+			if (!windowState.structure.defectFrame.has_value() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Najpierw dodaj osie defektu: Shift+A albo PPM > Add > Defect axes (empty).");
 			ImGui::EndPopup();
 		}
 		ImGui::EndDisabled();

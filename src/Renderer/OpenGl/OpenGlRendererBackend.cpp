@@ -2735,6 +2735,16 @@ namespace DefectStudio
 		// dirty-tracking axis keyed on the pin list would cost more than it saves here.
 		std::vector<OpenGlLabelInstance> pinnedInstances;
 		std::vector<OpenGlLabelInstance> pinnedBackgroundInstances;
+		resources.labelPickQuads.pinned.assign(pinnedMeasurements.size(), {});
+		resources.labelPickQuads.free.assign(freeLabels.size(), {});
+		// Same rect AppendLabelBackgroundInstance draws, recorded even with no visible background.
+		auto recordPick = [](LabelPickQuad &quad, const glm::vec3 &centre, const LabelLocalBounds &bounds,
+							  const RendererWindowState::LabelStyle &style, float rotation) {
+			if (!bounds.hasBounds)
+				return;
+			quad = {centre, style.scale * (bounds.min - style.padding), style.scale * (bounds.max + style.padding),
+				rotation, true};
+		};
 		const std::vector<OpenGlLabelInstance> *instancesToDraw = nullptr;
 		const std::vector<OpenGlLabelInstance> *backgroundInstancesToDraw = nullptr;
 
@@ -2884,6 +2894,8 @@ namespace DefectStudio
 							totalRotation, selected);
 						AppendLabelBackgroundInstance(
 							midpoint + renderOffset, bounds, effectiveStyle, totalRotation, pinnedBackgroundInstances, selected);
+						recordPick(resources.labelPickQuads.pinned[pinIndex], midpoint + renderOffset, bounds, effectiveStyle,
+							totalRotation);
 					};
 					if (pin.linkBroken)
 					{
@@ -2945,6 +2957,8 @@ namespace DefectStudio
 							const glm::vec3 anglePosition = pin.frozenAtomPositions[1] + offset;
 							const LabelLocalBounds bounds = AppendAngleLabelInstances(*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle, pin.rotationOffsetRadians, selected);
 							AppendLabelBackgroundInstance(anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances, selected);
+							recordPick(resources.labelPickQuads.pinned[pinIndex], anglePosition, bounds, effectiveStyle,
+								pin.rotationOffsetRadians);
 						}
 						continue;
 					}
@@ -2974,6 +2988,8 @@ namespace DefectStudio
 							pin.rotationOffsetRadians, selected);
 						AppendLabelBackgroundInstance(
 							anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances, selected);
+						recordPick(resources.labelPickQuads.pinned[pinIndex], anglePosition, bounds, effectiveStyle,
+							pin.rotationOffsetRadians);
 					}
 				}
 			}
@@ -2988,6 +3004,8 @@ namespace DefectStudio
 					label.rotationRadians, selected);
 				AppendLabelBackgroundInstance(
 					label.worldPosition, bounds, effectiveStyle, label.rotationRadians, pinnedBackgroundInstances, selected);
+				recordPick(resources.labelPickQuads.free[labelIndex], label.worldPosition, bounds, effectiveStyle,
+					label.rotationRadians);
 			}
 			instancesToDraw = &pinnedInstances;
 			backgroundInstancesToDraw = &pinnedBackgroundInstances;
@@ -3040,6 +3058,12 @@ namespace DefectStudio
 				const int bgSceneOffsetLocation = m_ShaderLibrary.Uniform("label_background", "u_SceneOffset");
 				if (bgSceneOffsetLocation >= 0)
 					glUniform3fv(bgSceneOffsetLocation, 1, &sceneOffset.x);
+				const int bgSelectionColorLocation = m_ShaderLibrary.Uniform("label_background", "u_SelectionOutlineColor");
+				if (bgSelectionColorLocation >= 0)
+					glUniform4fv(bgSelectionColorLocation, 1, &globalSettings.viewport.selectionOutlineColor.x);
+				const int bgSelectionWidthLocation = m_ShaderLibrary.Uniform("label_background", "u_SelectionOutlineWidth");
+				if (bgSelectionWidthLocation >= 0)
+					glUniform1f(bgSelectionWidthLocation, globalSettings.viewport.selectionOutlineWidth);
 
 				glBindVertexArray(m_LabelQuadMesh.vao);
 				glDrawElementsInstanced(
@@ -3631,6 +3655,12 @@ namespace DefectStudio
 		const std::uint32_t groups = static_cast<std::uint32_t>((inputs.size() + 63) / 64);
 		glDispatchCompute(groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+	}
+
+	LabelPickQuads OpenGlRendererBackend::GetLabelPickQuads(const std::string &windowKey) const
+	{
+		const auto found = m_Viewports.find(windowKey);
+		return found == m_Viewports.end() ? LabelPickQuads{} : found->second.labelPickQuads;
 	}
 
 	bool OpenGlRendererBackend::CaptureWindowToPng(

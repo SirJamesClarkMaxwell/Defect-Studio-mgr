@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 
+#include "Presentation/Panels/ViewportDefectFrame.hpp"
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
@@ -85,6 +86,8 @@ namespace DefectStudio
 				windowState.selectedSceneArrows.clear();
 			if (&windowState.selectedSceneOrbitals != keep)
 				windowState.selectedSceneOrbitals.clear();
+				windowState.selectedVacancies.clear();
+				windowState.defectFrameSelected = false;
 			if (&windowState.selectedScenePlanes != keep)
 				windowState.selectedScenePlanes.clear();
 			if (&windowState.selectedScenePaths != keep)
@@ -196,6 +199,8 @@ namespace DefectStudio
 			windowState.selectedFreeLabels.clear();
 			windowState.selectedSceneArrows.clear();
 			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedVacancies.clear();
+			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
 			windowState.selectedScenePaths.clear();
 			windowState.sceneArrowQuickEditActive = false;
@@ -507,6 +512,7 @@ namespace DefectStudio
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
 					drawVacanciesGroup(windowState);
+					DrawDefectFrameOutlinerRow(windowState);
 					drawPathsGroup(windowState);
 
 					ImGui::TreePop();

@@ -85,6 +85,9 @@ namespace DefectStudio
 		std::size_t m_VacancyIndex = 0;
 		SalcBasisFunction m_SalcFunction = SalcBasisFunction::Sp3DanglingBond;
 		std::optional<SelectionBasis> m_Basis;
+		// The structure's defect axes when the basis was taken: the request sites are sent in this
+		// frame, so z, e_x and e_y of the result refer to the user's defect axes.
+		std::optional<DefectFrame> m_Frame;
 		std::optional<BasisKey> m_BasisKey;
 		int m_GroupIndex = 0;
 		double m_Tolerance = 0.1;

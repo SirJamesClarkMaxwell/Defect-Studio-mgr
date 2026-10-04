@@ -237,11 +237,6 @@ namespace DefectStudio
 		{
 			const std::vector<std::size_t> selected = ValidSelectedAtoms(windowState);
 			const std::size_t selectedAtoms = selected.size();
-			// Anchoring with nothing selected resolves to zero anchor groups, i.e. an Add that adds
-			// nothing. The mode follows the selection down rather than silently doing that.
-			if (selectedAtoms == 0)
-				windowState.orbitalAddAnchorToSelection = false;
-
 			// One place that builds and files a new orbital, so the entry points below cannot
 			// drift apart on anchoring, undo or selection.
 			auto registerOrbital = [&](RendererWindowState::SceneOrbital orbital) {
@@ -266,6 +261,9 @@ namespace DefectStudio
 
 			auto selectAdded = [&](std::vector<SceneObjectId> added) {
 				windowState.selectedSceneOrbitals = std::move(added);
+				// The atoms the orbitals were built on stay selected otherwise, and the next Delete
+				// would remove them together with the orbitals.
+				SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 				SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 			};
 
@@ -290,7 +288,10 @@ namespace DefectStudio
 			ImGui::Checkbox(anchorLabel.c_str(), &windowState.orbitalAddAnchorToSelection);
 			ImGui::EndDisabled();
 
-			const bool anchor = windowState.orbitalAddAnchorToSelection;
+			// Anchoring with nothing selected resolves to zero anchor groups, i.e. an Add that adds
+			// nothing, so it is off for this Add - but the remembered mode is kept, because adding an
+			// orbital clears the atom selection and the next selection should anchor again.
+			const bool anchor = windowState.orbitalAddAnchorToSelection && selectedAtoms > 0;
 			if (!anchor)
 				ImGui::TextDisabled("Orbital stanie w kursorze 3D.");
 

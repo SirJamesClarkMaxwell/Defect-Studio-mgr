@@ -33,7 +33,11 @@ def normalize(vector: np.ndarray) -> np.ndarray:
 
 
 def frame_candidates(positions: np.ndarray, analyzer: PointGroupAnalyzer) -> list[np.ndarray]:
-    axes = []
+    # The app sends the sites in the user's defect axes when it has them (z = defect axis), so the
+    # input frame itself, then any frame that keeps its z, go first: the result then refers to the
+    # user's z, and to the user's x too when the group allows it.
+    candidates = [np.eye(3)]
+    axes = [np.array([0.0, 0.0, 1.0])]
     for axis in getattr(analyzer, "rot_sym", []):
         axes.append(normalize(np.asarray(axis[0], dtype=float)))
     principal = np.asarray(getattr(analyzer, "principal_axes", np.eye(3)), dtype=float)
@@ -41,7 +45,6 @@ def frame_candidates(positions: np.ndarray, analyzer: PointGroupAnalyzer) -> lis
     axes.extend(normalize(principal[:, index]) for index in range(3))
     axes.extend(normalize(positions[index]) for index in range(len(positions)))
 
-    candidates = []
     for z in axes:
         if np.linalg.norm(z) < 1e-12:
             continue

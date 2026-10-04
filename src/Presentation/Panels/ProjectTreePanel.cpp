@@ -753,7 +753,10 @@ namespace DefectStudio
 		ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), rightEdge - totalWidth));
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, iconPadding);
 
-		const bool hasCreateTarget = !m_SelectedPath.empty();
+		// With nothing selected and a single root there is nothing to guess: create in that root.
+		const std::string createTarget =
+			!m_SelectedPath.empty() ? m_SelectedPath : m_Roots.size() == 1 ? m_Roots.front().path.String() : std::string();
+		const bool hasCreateTarget = !createTarget.empty();
 		ImGui::BeginDisabled(!hasCreateTarget);
 		for (std::size_t index = 0; index < 3; ++index) // Folder/File/Defect - Collapse All below needs no target
 		{
@@ -762,15 +765,15 @@ namespace DefectStudio
 				ImGui::SameLine();
 			if (ImGui::Button((std::string(entry.icon) + entry.id).c_str()))
 			{
-				const Path selected(m_SelectedPath);
+				const Path selected(createTarget);
 				m_CreatePopupKind = index == 0 ? CreateEntryKind::Folder
 					: index == 1 ? CreateEntryKind::File : CreateEntryKind::Defect;
 				m_CreatePopupParent = FileSystem::IsDirectory(selected.Native()) ? selected : selected.parent_path();
 				m_CreateNameBuffer[0] = '\0';
 				m_CreatePopupOpen = true;
 			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", entry.tooltip);
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("%s%s", entry.tooltip, hasCreateTarget ? "" : " - select a folder first");
 		}
 		ImGui::EndDisabled();
 
@@ -855,7 +858,16 @@ namespace DefectStudio
 			const Path target = m_CreatePopupParent / std::string(m_CreateNameBuffer.data());
 			std::error_code error;
 			bool ok;
-			if (m_CreatePopupKind == CreateEntryKind::File)
+			// create_directories returns false without an error for a folder that is already there -
+			// say so instead of the generic failure (it was the second click after a folder that had
+			// been created but not shown).
+			const bool alreadyExists = FileSystem::Exists(target.Native());
+			if (alreadyExists)
+			{
+				ok = false;
+				pushNotification(target.filename().String() + " already exists in " + m_CreatePopupParent.String(), true);
+			}
+			else if (m_CreatePopupKind == CreateEntryKind::File)
 			{
 				std::ofstream file(target.Native());
 				ok = file.good();
@@ -877,8 +889,18 @@ namespace DefectStudio
 					}
 				}
 			}
-			if (!ok)
+			if (!ok && !alreadyExists)
 				pushNotification("Failed to create " + target.String() + (error ? ": " + error.message() : ""), true);
+			// Show what was made (or what was already there): fresh listing, parent expanded, entry
+			// selected - before, a new entry inside a collapsed folder looked like nothing happened.
+			invalidateListingCache();
+			if (ok || alreadyExists)
+			{
+				m_ExpandedPaths[m_CreatePopupParent.String()] = true;
+				m_SelectedPath = target.String();
+				m_SelectedPaths = {m_SelectedPath};
+				m_KeyboardCursorPath = m_SelectedPath;
+			}
 			m_CreatePopupOpen = false;
 			ImGui::CloseCurrentPopup();
 		}

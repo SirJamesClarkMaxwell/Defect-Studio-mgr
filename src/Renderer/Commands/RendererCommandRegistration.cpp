@@ -26,6 +26,15 @@ namespace DefectStudio
 			return CreateSetVacanciesCommand(std::move(domainLayer), std::move(rendererLayer), std::move(styles), *payload);
 		}
 
+		Unique<ICommand> MakeSetDefectFrameCommand(WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer, AtomStyleTable styles, CommandContext &context)
+		{
+			const auto payload = context.TryGet<SetDefectFramePayload>(kSetDefectFramePayloadKey);
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetDefectFrameCommand(std::move(domainLayer), std::move(rendererLayer), std::move(styles), *payload);
+		}
+
 		void RegisterRendererCommand(
 			CommandRegistry &registry,
 			const char *id,
@@ -453,6 +462,25 @@ namespace DefectStudio
 			"Renderer: Align to c* axis",
 			"Align active renderer viewport to reciprocal lattice axis c*.",
 			std::bind_front(MakeAlignAxisCommand, eventBus, 5));
+		// renderer.align_axis_a/b/c follow the defect axes when they are shown; these never do.
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_a_crystal",
+			"Renderer: Align to crystal a axis",
+			"Align active renderer viewport to lattice axis a, even when defect axes are shown.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 6));
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_b_crystal",
+			"Renderer: Align to crystal b axis",
+			"Align active renderer viewport to lattice axis b, even when defect axes are shown.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 7));
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_c_crystal",
+			"Renderer: Align to crystal c axis",
+			"Align active renderer viewport to lattice axis c, even when defect axes are shown.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 8));
 		RegisterRendererCommand(
 			registry,
 			"renderer.orbit_left",
@@ -735,6 +763,10 @@ namespace DefectStudio
 		RegisterRendererCommand(registry, kSetVacanciesCommandId, "Renderer: Edit vacancies",
 			"Replace the structure's vacancy list (undoable).",
 			std::bind_front(MakeSetVacanciesCommand, domainLayer, rendererLayer, atomStyleTable),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(registry, kSetDefectFrameCommandId, "Renderer: Set defect axes",
+			"Replace or remove the structure's local defect axes (undoable).",
+			std::bind_front(MakeSetDefectFrameCommand, domainLayer, rendererLayer, atomStyleTable),
 			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,

@@ -20,18 +20,6 @@ namespace DefectStudio
 		const glm::mat4 view = camera.ViewMatrix();
 		const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
 		const glm::vec3 up(view[0][1], view[1][1], view[2][1]);
-		std::vector<IsosurfaceVertex> fill, ring;
-		for (const auto &vacancy : vacancies)
-		{
-			float width = vacancy.ringWidth;
-			for (const auto &axis : {right, up})
-				if (const auto worldPerPixel = WorldUnitsPerPixelAt(
-					camera, vacancy.cartesianPosition + sceneOffset, axis, viewportPixelSize))
-					width = std::max(width, 1.5f * *worldPerPixel);
-			const auto mesh = BuildVacancyMarkerMesh(vacancy, right, up, width);
-			fill.insert(fill.end(), mesh.fill.begin(), mesh.fill.end());
-			ring.insert(ring.end(), mesh.ring.begin(), mesh.ring.end());
-		}
 		OpenGlMeshHandles &handles = resources.vacancyMesh;
 		if (handles.vao == 0)
 			glGenVertexArrays(1, &handles.vao);
@@ -67,8 +55,18 @@ namespace DefectStudio
 			renderIsosurfaceGpuOverlay(handles.vao, handles.indexCount, camera, markerSettings,
 				color, color, alpha, sceneOffset);
 		};
-		const auto &style = vacancies.front();
-		draw(fill, style.color, style.renderMode == VacancyRenderMode::Solid ? 1.0f : style.opacity);
-		draw(ring, style.color * 0.6f, 1.0f);
+		// One draw pair per marker, so each vacancy keeps its own colour (V_B / V_N, own colours).
+		//   ponytail: two draws per vacancy; batch by colour if structures ever carry hundreds.
+		for (const auto &vacancy : vacancies)
+		{
+			float width = vacancy.ringWidth;
+			for (const auto &axis : {right, up})
+				if (const auto worldPerPixel = WorldUnitsPerPixelAt(
+					camera, vacancy.cartesianPosition + sceneOffset, axis, viewportPixelSize))
+					width = std::max(width, 1.5f * *worldPerPixel);
+			const auto mesh = BuildVacancyMarkerMesh(vacancy, right, up, width);
+			draw(mesh.fill, vacancy.color, vacancy.renderMode == VacancyRenderMode::Solid ? 1.0f : vacancy.opacity);
+			draw(mesh.ring, vacancy.color * 0.6f, 1.0f);
+		}
 	}
 } // namespace DefectStudio

@@ -16,6 +16,8 @@ namespace DefectStudio::SceneObjectsYaml
 			vacancy.sourceSpecies = node["sourceSpecies"].as<std::string>("");
 			vacancy.label = node["label"].as<std::string>("");
 			vacancy.index = node["index"].as<int>(0);
+			if (glm::vec3 color; node["color"] && Vec3(node["color"], color))
+				vacancy.color = color;
 			return std::isfinite(vacancy.position.x) && std::isfinite(vacancy.position.y) &&
 				std::isfinite(vacancy.position.z) && std::isfinite(vacancy.fractional.x) &&
 				std::isfinite(vacancy.fractional.y) && std::isfinite(vacancy.fractional.z);
@@ -38,9 +40,39 @@ namespace DefectStudio::SceneObjectsYaml
 			EmitVec3(emit, "fractional", vacancy.fractional);
 			emit << YAML::Key << "sourceSpecies" << YAML::Value << vacancy.sourceSpecies
 				<< YAML::Key << "label" << YAML::Value << vacancy.label
-				<< YAML::Key << "index" << YAML::Value << vacancy.index << YAML::EndMap;
+				<< YAML::Key << "index" << YAML::Value << vacancy.index;
+			if (vacancy.color)
+				EmitVec3(emit, "color", *vacancy.color);
+			emit << YAML::EndMap;
 		}
 		emit << YAML::EndSeq;
+	}
+
+	bool ParseDefectFrame(const YAML::Node &node, PersistedDefectFrame &frame)
+	{
+		auto finite = [](const glm::vec3 &v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); };
+		try
+		{
+			return node.IsMap() && Vec3(node["origin"], frame.origin) && Vec3(node["x"], frame.x) &&
+				Vec3(node["y"], frame.y) && Vec3(node["z"], frame.z) && finite(frame.origin) && finite(frame.x) &&
+				finite(frame.y) && finite(frame.z);
+		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
+
+	void EmitDefectFrame(YAML::Emitter &emit, const std::optional<PersistedDefectFrame> &frame)
+	{
+		if (!frame)
+			return;
+		emit << YAML::Key << "defectFrame" << YAML::Value << YAML::BeginMap;
+		EmitVec3(emit, "origin", frame->origin);
+		EmitVec3(emit, "x", frame->x);
+		EmitVec3(emit, "y", frame->y);
+		EmitVec3(emit, "z", frame->z);
+		emit << YAML::EndMap;
 	}
 
 	bool Vec3(const YAML::Node &node, glm::vec3 &out)

@@ -223,6 +223,7 @@ namespace DefectStudio
 					ImGui::SameLine(0.0f, 0.0f);
 				ImGui::TextDisabled("%s%s", index == 0 ? "" : ", ", m_Basis->sites[index].label.c_str());
 			}
+			ImGui::TextDisabled(m_Frame ? "Osie: osie defektu (z = oś defektu)" : "Osie: kartezjańskie struktury");
 		}
 		ImGui::Separator();
 	}
@@ -280,6 +281,7 @@ namespace DefectStudio
 		if (m_BasisKey != key)
 			m_Result.reset();
 		m_Basis = basis.Value();
+		m_Frame = record.structure.defectFrame;
 		m_BasisKey = key;
 		m_Error.reset();
 		submitAnalysis();
@@ -308,6 +310,13 @@ namespace DefectStudio
 		PointGroupAnalysisRequest request;
 		request.pointGroupLabel = m_GroupIndex == 0 ? "" : kGroups[m_GroupIndex];
 		request.sites = m_Basis->sites;
+		// Sites are already centred, so only the rotation into the defect axes is applied. The
+		// script tries the identity / same-z frames first, so the result keeps these axes when the
+		// group allows it (see frame_candidates).
+		if (m_Frame)
+			for (BasisSite &site : request.sites)
+				site.position = glm::dvec3(glm::dot(site.position, glm::dvec3(m_Frame->x)),
+					glm::dot(site.position, glm::dvec3(m_Frame->y)), glm::dot(site.position, glm::dvec3(m_Frame->z)));
 		request.symmetryTolerance = m_Tolerance;
 		std::vector<bool> active(m_ActiveVectors.size());
 		for (std::size_t index = 0; index < active.size(); ++index)

@@ -488,9 +488,33 @@ namespace DefectStudio
 				if (ImGui::SmallButton("X"))
 					removeIndex = index;
 				ImGui::SameLine();
-				ImGui::Text(
-					"%s (%.2f, %.2f, %.2f)", vacancy.label.c_str(), vacancy.cartesianPosition.x,
-					vacancy.cartesianPosition.y, vacancy.cartesianPosition.z);
+				char row[96];
+				std::snprintf(row, sizeof(row), "%s (%.2f, %.2f, %.2f)", vacancy.label.c_str(),
+					vacancy.cartesianPosition.x, vacancy.cartesianPosition.y, vacancy.cartesianPosition.z);
+				auto &selected = windowState.selectedVacancies;
+				const bool isSelected = std::find(selected.begin(), selected.end(), index) != selected.end();
+				if (ImGui::Selectable(row, isSelected))
+				{
+					if (ImGui::GetIO().KeyCtrl)
+					{
+						if (isSelected)
+							std::erase(selected, index);
+						else
+							selected.push_back(index);
+					}
+					else
+					{
+						selected = {index};
+						windowState.defectFrameSelected = false;
+						windowState.selectedFreeLabels.clear();
+						windowState.selectedSceneArrows.clear();
+						windowState.selectedPinnedMeasurements.clear();
+						windowState.selectedSceneOrbitals.clear();
+						windowState.selectedScenePlanes.clear();
+						windowState.selectedScenePaths.clear();
+						SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
+					}
+				}
 				ImGui::PopID();
 			}
 			ImGui::TreePop();

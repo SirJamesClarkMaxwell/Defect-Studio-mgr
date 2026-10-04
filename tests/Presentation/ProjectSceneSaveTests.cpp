@@ -180,6 +180,37 @@ namespace DefectStudio::Tests
 		RemoveRoot(root);
 	}
 
+	// "New project" creates the manifest in its own subfolder and registers the folder holding the
+	// structures as a data root, so the edited POSCAR is outside projectDirectory but inside a root.
+	TEST(ProjectSceneSaveTests, EditedStructureInDataRootIsWritten)
+	{
+		const std::filesystem::path root = MakeTempRoot("data_root");
+		const std::filesystem::path project = root / "NewProject";
+		std::filesystem::create_directories(project);
+		std::filesystem::create_directories(root / "NV");
+		const std::filesystem::path poscar = root / "NV" / "POSCAR";
+		std::ofstream(poscar) << "original";
+		StructureRegistry registry;
+		const StructureId id = registry.Add(CrystalStructure{}, Path::FromResolved(poscar))->id;
+		ASSERT_TRUE(registry.MarkStructureFileModified(id));
+		ProjectManifest manifest = ProjectManifestIO::CreateNew("scene-save");
+		manifest.roots.push_back({"root-a", Path::FromResolved(root / "elsewhere"), "elsewhere"});
+		manifest.roots.push_back({"root-b", Path::FromResolved(root), "data"});
+
+		FakeWriter writer;
+		std::vector<StructuredError> warnings;
+		std::string error;
+		const StructureId ids[] = {id};
+		ASSERT_TRUE(SaveProjectWithSceneObjects(
+			Path::FromResolved(project), manifest, OneLabelFile(), registry, ids, writer.Bind(), warnings, error)) << error;
+		ASSERT_EQ(writer.written.size(), 1u);
+		EXPECT_EQ(writer.written[0], poscar);
+		EXPECT_TRUE(warnings.empty());
+		EXPECT_FALSE(FileDirty(registry, id));
+
+		RemoveRoot(root);
+	}
+
 	TEST(ProjectSceneSaveTests, StructureWriteFailureStopsBeforeSceneFiles)
 	{
 		const std::filesystem::path root = MakeTempRoot("writefail");

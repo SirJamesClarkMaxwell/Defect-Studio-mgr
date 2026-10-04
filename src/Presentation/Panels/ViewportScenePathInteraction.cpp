@@ -159,6 +159,8 @@ namespace DefectStudio
 		else
 		{
 			selection = {hit->path};
+			// Same as an arrow click: a leftover atom selection would also be deleted by Delete.
+			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
 
 		// Claiming the click clears the other kinds, so the properties panel shows one thing.
@@ -166,6 +168,8 @@ namespace DefectStudio
 		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneOrbitals.clear();
+		windowState.selectedVacancies.clear();
+		windowState.defectFrameSelected = false;
 		windowState.selectedScenePlanes.clear();
 		return true;
 	}

@@ -81,6 +81,7 @@ namespace DefectStudio
 		data.name = !name.empty() ? std::move(name) : structure.name;
 		data.sourcePath = sourcePath;
 		data.lattice = structure.cell.ToMatrix();
+		data.periodic = structure.isPeriodic;
 		data.cellEdges = BuildCellEdges(data.lattice);
 
 		data.atoms.reserve(structure.atoms.size());
@@ -98,8 +99,10 @@ namespace DefectStudio
 		const VacancyRenderStyle &style = atomStyleTable.GetVacancyStyle();
 		data.vacancies.reserve(structure.vacancies.size());
 		for (const VacancySite &site : structure.vacancies)
-			data.vacancies.push_back({site.position, site.GetLabel(), style.color, style.displayRadius,
-				style.opacity, style.renderMode, style.dashCount, style.ringWidth});
+			data.vacancies.push_back({site.position, site.GetLabel(),
+				site.color.value_or(atomStyleTable.VacancyColor(site.sourceSpecies)), style.displayRadius, style.opacity,
+				style.renderMode, style.dashCount, style.ringWidth, site.color.has_value(), site.sourceSpecies});
+		data.defectFrame = structure.defectFrame;
 
 		const float det = glm::determinant(data.lattice);
 		if (std::abs(det) > 1e-6f)

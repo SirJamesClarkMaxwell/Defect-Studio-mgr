@@ -304,6 +304,16 @@ namespace DefectStudio
 		std::string sourceSpecies; // optional in the file, empty when absent
 		std::string label;         // optional in the file, empty when absent
 		int index = 0;             // optional in the file, 0 when absent
+		std::optional<glm::vec3> color; // optional in the file, VacancySite::color
+	};
+
+	// CrystalStructure::defectFrame, field for field, same reason as PersistedVacancy.
+	struct PersistedDefectFrame
+	{
+		glm::vec3 origin = glm::vec3(0.0f);
+		glm::vec3 x = glm::vec3(1.0f, 0.0f, 0.0f);
+		glm::vec3 y = glm::vec3(0.0f, 1.0f, 0.0f);
+		glm::vec3 z = glm::vec3(0.0f, 0.0f, 1.0f);
 	};
 
 	struct PersistedStructureSceneObjects
@@ -316,6 +326,9 @@ namespace DefectStudio
 		// "scene_objects.entry_skipped" warning. A structure entry may now carry vacancies and no
 		// objects; it is written all the same.
 		std::vector<PersistedVacancy> vacancies;
+		// Optional `defectFrame:` map, same additive rule as `vacancies`. An entry missing an axis or
+		// with a non-finite value is skipped with "scene_objects.entry_skipped".
+		std::optional<PersistedDefectFrame> defectFrame;
 	};
 
 	struct SceneObjectsFile
@@ -343,6 +356,11 @@ namespace DefectStudio
 	//           sourceSpecies: C       # optional
 	//           label: V_C             # optional
 	//           index: 12              # optional
+	//       defectFrame:           # optional
+	//         origin: [x, y, z]
+	//         x: [x, y, z]
+	//         y: [x, y, z]
+	//         z: [x, y, z]
 	//   projectObjects:            # optional; same object entries, no structureKey
 	//     - kind: ScenePath
 	//       ...

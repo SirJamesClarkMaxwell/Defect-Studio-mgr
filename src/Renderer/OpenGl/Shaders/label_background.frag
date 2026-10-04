@@ -10,6 +10,10 @@ in float vCornerRadius;
 in vec3 vOutlineColor;
 in float vOutlineWidth;
 in vec4 vColor;
+in float vSelected;
+
+uniform vec4 u_SelectionOutlineColor;
+uniform float u_SelectionOutlineWidth;
 
 out vec4 FragColor;
 
@@ -43,6 +47,15 @@ void main()
 		float coreMask = 1.0 - smoothstep(-aa, aa, insideCoreDist);
 		rgb = mix(vOutlineColor, vColor.rgb, coreMask);
 	}
+	// A selected label's box gets a selection-coloured frame, u_SelectionOutlineWidth screen pixels
+	// wide (aa is about one pixel in the SDF's units), fully opaque even on a translucent box.
+	float alpha = vColor.a * fillMask;
+	if (vSelected > 0.5 && u_SelectionOutlineWidth > 0.0)
+	{
+		float frameMask = smoothstep(-aa, aa, dist + u_SelectionOutlineWidth * aa);
+		rgb = mix(rgb, u_SelectionOutlineColor.rgb, frameMask);
+		alpha = mix(alpha, u_SelectionOutlineColor.a * fillMask, frameMask);
+	}
 
-	FragColor = vec4(rgb, vColor.a * fillMask);
+	FragColor = vec4(rgb, alpha);
 }

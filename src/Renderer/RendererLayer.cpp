@@ -545,6 +545,11 @@ namespace DefectStudio
 			windowState.showVacancies);
 	}
 
+	LabelPickQuads RendererLayer::GetLabelPickQuads(const std::string &windowKey) const
+	{
+		return m_RendererBackend == nullptr ? LabelPickQuads{} : m_RendererBackend->GetLabelPickQuads(windowKey);
+	}
+
 	int RendererLayer::RegenerateOrbitalIsosurface(
 		const std::string &windowId, const OrbitalGridData &grid, float isoValue, int slot)
 	{
@@ -1413,7 +1418,7 @@ namespace DefectStudio
 	void RendererLayer::onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 5)
+		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 8)
 			return;
 		// 1/2/3 are bound to align-to-axis, and path Edit Mode gives the same three keys the element
 		// mode - node-handle / segment / whole path. Both would otherwise fire on one press, aligning
@@ -1425,15 +1430,27 @@ namespace DefectStudio
 
 		// axis 0-2 = a/b/c (real lattice), 3-5 = a*/b*/c* (reciprocal lattice) - mirrors the
 		// toolbar axis buttons (RendererPanelToolbar.cpp), which read the same two matrices.
-		const bool isReciprocal = event.axis > 2;
-		const glm::mat3 &basis = isReciprocal ? windowState->structure.reciprocalLattice : windowState->structure.lattice;
-		const glm::vec3 axis = basis[static_cast<std::size_t>(event.axis - (isReciprocal ? 3 : 0))];
+		// 0-2 look along the defect's x/y/z instead while its axes are shown; 6-8 = a/b/c always.
+		glm::vec3 axis(0.0f);
+		glm::vec3 up(0.0f, 0.0f, 1.0f);
+		const auto &frame = windowState->structure.defectFrame;
+		if (event.axis <= 2 && frame && windowState->showDefectFrame)
+		{
+			axis = event.axis == 0 ? frame->x : event.axis == 1 ? frame->y : frame->z;
+			up = event.axis == 2 ? frame->y : frame->z;
+		}
+		else
+		{
+			const bool isReciprocal = event.axis >= 3 && event.axis <= 5;
+			const glm::mat3 &basis = isReciprocal ? windowState->structure.reciprocalLattice : windowState->structure.lattice;
+			axis = basis[static_cast<std::size_t>(event.axis % 3)];
+		}
 		if (glm::dot(axis, axis) <= 1e-8f)
 			return;
 
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		RendererViewCamera targetCamera = *windowState->camera;
-		targetCamera.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
+		targetCamera.SetAlignToAxis(glm::normalize(axis), up);
 		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
 		pushViewChange(*windowState, before, after, "keyboard.align_axis");
 		restoreViewSnapshot(*windowState, after, "keyboard.align_axis");

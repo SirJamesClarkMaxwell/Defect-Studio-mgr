@@ -1,11 +1,13 @@
 #pragma once
 
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "Core/Commands/Command.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Domain/Crystal/CrystalPrimitives.hpp"
+#include "Domain/Crystal/CrystalStructure.hpp"
 #include "Renderer/AtomStyleTable.hpp"
 
 namespace DefectStudio
@@ -25,6 +27,9 @@ namespace DefectStudio
 		std::string windowId;
 		std::vector<VacancySite> vacancies;
 		std::string description = "Edit vacancies";
+		// When set, `vacancies` is ignored and the new list is the domain's current one passed
+		// through this (e.g. a gizmo drag that moves two markers and leaves the rest alone).
+		std::function<void(std::vector<VacancySite> &, const CrystalStructure &)> edit;
 	};
 
 	inline constexpr const char *kSetVacanciesCommandId = "renderer.vacancy.set";
@@ -41,4 +46,23 @@ namespace DefectStudio
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
 		SetVacanciesPayload payload);
+
+	// The defect frame twin of renderer.vacancy.set: replace CrystalStructure::defectFrame (nullopt
+	// removes it), one undo entry, MarkModified + RebuildAndSync exactly as above.
+	struct SetDefectFramePayload
+	{
+		std::string windowId; // empty = the focused viewport window
+		std::optional<DefectFrame> frame;
+		std::string description = "Set defect axes";
+		std::function<void(std::optional<DefectFrame> &, const CrystalStructure &)> edit; // as SetVacanciesPayload::edit
+	};
+
+	inline constexpr const char *kSetDefectFrameCommandId = "renderer.defect_frame.set";
+	inline constexpr const char *kSetDefectFramePayloadKey = "defect_frame.set_payload";
+
+	[[nodiscard]] Unique<ICommand> CreateSetDefectFrameCommand(
+		WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer,
+		AtomStyleTable atomStyleTable,
+		SetDefectFramePayload payload);
 } // namespace DefectStudio

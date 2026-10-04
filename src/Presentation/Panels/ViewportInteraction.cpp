@@ -12,6 +12,7 @@
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
@@ -58,6 +59,7 @@ namespace DefectStudio
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleVacancyInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleScenePlaneInteraction(windowState, imageOrigin, imageSize, hovered);

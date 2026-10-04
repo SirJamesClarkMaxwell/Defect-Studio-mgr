@@ -167,6 +167,8 @@ namespace DefectStudio
 	struct OpenGlViewportResources
 	{
 		OpenGlFrameBuffer frameBuffer;
+		LabelPickQuads labelPickQuads; // rewritten by every renderLabels call
+
 		Time::SteadyTimePoint lastRenderTime{};
 		bool atomsDirty = true;
 		bool bondsDirty = true;
@@ -312,6 +314,8 @@ namespace DefectStudio
 		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
 		// from each edge before writing - a real pixel crop (changes output aspect ratio), not the
 		// pan/zoom reframing that keeps the requested resolution's aspect intact.
+		// windowKey's labels as last drawn; empty when that viewport has not rendered yet.
+		[[nodiscard]] LabelPickQuads GetLabelPickQuads(const std::string &windowKey) const;
 		[[nodiscard]] bool CaptureWindowToPng(
 			const std::string &windowKey,
 			const Path &outputPath,

@@ -137,6 +137,8 @@ namespace DefectStudio
 			const RendererStructureData &structure,
 			const RendererWindowState &windowState,
 			const RendererGlobalRenderSettings &settings);
+		// The labels of windowKey as last drawn (OpenGlRendererBackend::GetLabelPickQuads).
+		[[nodiscard]] LabelPickQuads GetLabelPickQuads(const std::string &windowKey) const;
 		void CollectProfilingData();
 		bool &GetShowPeriodicTableWindow();
 		std::string &GetSelectedPeriodicElement();

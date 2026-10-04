@@ -698,7 +698,8 @@ namespace DefectStudio
 				if (!result)
 					DS_LOG_WARN("Focus Scene Outliner command registration failed: {}", result.Error().technicalDetails);
 			}
-			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
+			registerPanel<ObjectPropertiesPanel>(
+				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_AtomStyleTable, "Object Properties", true);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
 			m_NewStructureWizardPanelId = registerPanel<NewStructureWizardPanel>(
@@ -827,13 +828,19 @@ namespace DefectStudio
 		const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
 		for (PersistedStructureSceneObjects &entry : m_KeptSceneObjects.structures)
 		{
-			if (entry.structureKey != key || entry.vacancies.empty())
+			if (entry.structureKey != key || (entry.vacancies.empty() && !entry.defectFrame))
 				continue;
-			if (record->structure.vacancies.empty())
+			const bool restoreVacancies = record->structure.vacancies.empty() && !entry.vacancies.empty();
+			const bool restoreFrame = !record->structure.defectFrame && entry.defectFrame;
+			if (restoreVacancies || restoreFrame)
 			{
-				for (const PersistedVacancy &site : entry.vacancies)
-					record->structure.vacancies.push_back({site.position, site.fractional,
-						site.sourceSpecies, site.label, site.index});
+				if (restoreVacancies)
+					for (const PersistedVacancy &site : entry.vacancies)
+						record->structure.vacancies.push_back({site.position, site.fractional,
+							site.sourceSpecies, site.label, site.index, site.color});
+				if (restoreFrame)
+					record->structure.defectFrame =
+						DefectFrame{entry.defectFrame->origin, entry.defectFrame->x, entry.defectFrame->y, entry.defectFrame->z};
 				if (auto renderer = m_RendererLayer.lock())
 					for (RendererWindowState &window : renderer->GetWindows())
 						if (window.structureId == record->id)
@@ -842,6 +849,7 @@ namespace DefectStudio
 			}
 			// Consume once: opening another window after removing all markers must not restore them.
 			entry.vacancies.clear();
+			entry.defectFrame.reset();
 		}
 		std::vector<PersistedSceneObject> objects;
 		bool found = false;
@@ -1744,19 +1752,24 @@ namespace DefectStudio
 				auto entry = std::find_if(sceneObjects.structures.begin(), sceneObjects.structures.end(),
 					[&](const auto &candidate) { return candidate.structureKey == key; });
 				// A registered but unopened structure can still have an unconsumed sidecar.
-				if (entry != sceneObjects.structures.end() && !entry->vacancies.empty() &&
-					record->structure.vacancies.empty())
+				if (entry != sceneObjects.structures.end() &&
+					((!entry->vacancies.empty() && record->structure.vacancies.empty()) ||
+						(entry->defectFrame && !record->structure.defectFrame)))
 					continue;
 				if (entry == sceneObjects.structures.end())
 				{
-					if (record->structure.vacancies.empty())
+					if (record->structure.vacancies.empty() && !record->structure.defectFrame)
 						continue;
 					sceneObjects.structures.push_back({key, {}, {}});
 					entry = std::prev(sceneObjects.structures.end());
 				}
 				entry->vacancies.clear();
 				for (const VacancySite &site : record->structure.vacancies)
-					entry->vacancies.push_back({site.position, site.fractional, site.sourceSpecies, site.label, site.index});
+					entry->vacancies.push_back(
+						{site.position, site.fractional, site.sourceSpecies, site.label, site.index, site.color});
+				entry->defectFrame.reset();
+				if (const auto &frame = record->structure.defectFrame)
+					entry->defectFrame = PersistedDefectFrame{frame->origin, frame->x, frame->y, frame->z};
 				savedStructures.push_back(record->id);
 			}
 			if (auto rendererLayer = m_RendererLayer.lock())
@@ -1830,6 +1843,7 @@ namespace DefectStudio
 					record != nullptr && entry.structureKey == SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath))
 				{
 					entry.vacancies.clear();
+					entry.defectFrame.reset();
 					break;
 				}
 		if (auto rendererLayer = m_RendererLayer.lock())

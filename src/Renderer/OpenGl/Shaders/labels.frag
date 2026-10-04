@@ -39,7 +39,8 @@ void main()
 	// SDF/median units - constant visible thickness regardless of zoom or glyph size, instead of
 	// shrinking to sub-pixel invisibility on a small on-screen label the way a median-space width
 	// would (screenPxRange scales with on-screen glyph size, so a fixed median-space width doesn't).
-	float screenPxDistance = screenPxRange() * signedDistance;
+	float pxRange = screenPxRange();
+	float screenPxDistance = pxRange * signedDistance;
 	float fillOpacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
 	float ownOpacity = fillOpacity;
 
@@ -53,12 +54,19 @@ void main()
 	}
 	else
 		ownOpacity = clamp(screenPxDistance + vStrokeWidth + 0.5, 0.0, 1.0);
-	float selectionOpacity = vSelected > 0.5 && u_SelectionOutlineWidth > 0.0
-		? clamp(screenPxDistance + u_SelectionOutlineWidth + 0.5, 0.0, 1.0)
+	// The distance field only reaches 0.5 * pxRange screen pixels past the glyph edge; beyond that it
+	// is flat, so a wider outline filled the whole glyph quad and selected labels turned into a row
+	// of boxes. Cap the outline inside that reach; the glyph tint below keeps small labels marked.
+	bool selected = vSelected > 0.5;
+	float selectionWidth = min(u_SelectionOutlineWidth, max(0.5 * pxRange - 1.0, 0.0));
+	float selectionOpacity = selected && selectionWidth > 0.0
+		? clamp(screenPxDistance + selectionWidth + 0.5, 0.0, 1.0)
 		: 0.0;
 	if (max(ownOpacity, selectionOpacity) < 0.01)
 		discard;
 	vec3 ownRgb = vStrokeWidth > 0.0 ? mix(vStrokeColor, vColor.rgb, fillOpacity) : vColor.rgb;
+	if (selected)
+		ownRgb = mix(ownRgb, u_SelectionOutlineColor.rgb, 0.45);
 	float ownAlpha = vColor.a * ownOpacity;
 	float selectionAlpha = u_SelectionOutlineColor.a * selectionOpacity;
 	vec3 rgb = selectionAlpha > ownAlpha ? u_SelectionOutlineColor.rgb : ownRgb;

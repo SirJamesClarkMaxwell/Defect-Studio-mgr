@@ -20,6 +20,8 @@
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Presentation/Panels/ViewportDefectFrame.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
@@ -28,12 +30,14 @@ namespace DefectStudio
 		RendererLayer &layer,
 		WeakRef<CommandRegistry> commandRegistry,
 		WeakRef<DomainLayer> domainLayer,
+		std::optional<AtomStyleTable> atomStyleTable,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Layer(layer),
 		  m_CommandRegistry(std::move(commandRegistry)),
-		  m_DomainLayer(std::move(domainLayer))
+		  m_DomainLayer(std::move(domainLayer)),
+		  m_AtomStyleTable(std::move(atomStyleTable))
 	{
 	}
 
@@ -55,7 +59,8 @@ namespace DefectStudio
 			return;
 		}
 
-		DrawObjectPropertiesContent(m_Layer, m_CommandRegistry, m_DomainLayer);
+		DrawObjectPropertiesContent(
+			m_Layer, m_CommandRegistry, m_DomainLayer, m_AtomStyleTable ? &*m_AtomStyleTable : nullptr);
 
 		ImGui::End();
 		SetVisible(windowOpen);
@@ -65,7 +70,7 @@ namespace DefectStudio
 	// rather than a second copy of them.
 	void DrawObjectPropertiesContent(
 		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef,
-		const WeakRef<DomainLayer> &domainLayerRef)
+		const WeakRef<DomainLayer> &domainLayerRef, AtomStyleTable *styles)
 	{
 		// GetLastFocusedViewportWindowId, not GetFocusedViewportWindowId - the latter clears the
 		// instant ImGui focus leaves the viewport (it's meant for camera-input gating), which is
@@ -345,6 +350,11 @@ namespace DefectStudio
 				DrawSelectedScenePlaneSection(*windowState);
 			if (sections.paths)
 				DrawSelectedScenePathSection(*windowState);
+			if (sections.defectFrame)
+				DrawSelectedDefectFrameSection(*windowState, commandRegistryRef.lock().get());
+			if (sections.vacancies)
+				DrawSelectedVacancySection(*windowState, layer, domainLayerRef.lock().get(),
+					commandRegistryRef.lock().get(), styles);
 
 			if (!ImGui::CollapsingHeader("Wszystkie obiekty"))
 				return;

@@ -5,6 +5,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 
 #include <algorithm>
 #include <array>
@@ -126,6 +127,10 @@ namespace DefectStudio
 					HitTestRectSceneArrows(windowState, rectMin, rectMax), mode,
 					HitTestRectScenePaths(windowState, rectMin, rectMax));
 			}
+			ApplyCentreRegionSelection(windowState,
+				[&](glm::vec2 point) { return SelectionHitTest::PointInRect(point, rectMin, rectMax); },
+				mode == RendererEvents::Viewport::RegionSelectMode::Replace,
+				mode == RendererEvents::Viewport::RegionSelectMode::Subtract);
 		}
 	}
 
@@ -169,6 +174,9 @@ namespace DefectStudio
 				HitTestCircleSceneArrows(windowState, center, windowState.circleSelectRadius), mode,
 				HitTestCircleScenePaths(windowState, center, windowState.circleSelectRadius));
 		}
+		ApplyCentreRegionSelection(windowState,
+			[&](glm::vec2 point) { return glm::length(point - center) <= windowState.circleSelectRadius; }, false,
+			mode == RendererEvents::Viewport::RegionSelectMode::Subtract);
 	}
 
 	std::vector<std::size_t> HitTestRect(

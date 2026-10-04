@@ -5,6 +5,9 @@
 #include "Presentation/Panels/ViewportInput.hpp"
 #include "Presentation/Panels/ViewportInteraction.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
+#include "Presentation/Panels/ViewportDefectFrame.hpp"
+#include "Presentation/Panels/ViewportVacancyAdd.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Presentation/Panels/ViewportPathOverlay.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 
@@ -244,6 +247,7 @@ namespace DefectStudio
 			windowState.structure,
 			windowState,
 			m_Layer.GetGlobalSettings());
+		windowState.labelPickQuads = m_Layer.GetLabelPickQuads(windowState.windowId);
 
 		ImGui::Image(
 			static_cast<ImTextureID>(static_cast<uintptr_t>(textureId)),
@@ -262,6 +266,8 @@ namespace DefectStudio
 			? DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize)
 			: 0.0f;
 		DrawViewportPathOverlay(windowState, m_Layer.GetGlobalSettings(), imageOrigin, viewportSize);
+		DrawViewportDefectFrameOverlay(windowState, imageOrigin, viewportSize);
+		DrawSelectedVacancyOverlay(windowState, imageOrigin, viewportSize);
 		ImGui::SetCursorScreenPos(cursorAfterImage);
 
 		// T08.6.4: drop target for a WAVECAR dragged from ProjectTreePanel - see the payload's
@@ -335,6 +341,8 @@ namespace DefectStudio
 			RunViewportGizmoChain(
 				windowState, imageOrigin, viewportSize, hovered, horizontalToolbarOffset, m_Layer, m_CommandRegistry);
 
+		HandleVacancyKeyboardShortcuts(
+			windowState, hovered, m_Layer, m_DomainLayer.lock().get(), m_CommandRegistry.lock().get());
 		renderViewportContextMenu(windowState, imageOrigin, viewportSize, hovered);
 		renderSceneArrowQuickEditPanel(windowState, imageOrigin, viewportSize);
 
@@ -685,6 +693,8 @@ namespace DefectStudio
 			}
 			DrawOrbitalAddMenu(windowState, m_ContextMenuWorldPosition);
 			DrawScenePathDevAddMenu(windowState, m_ContextMenuWorldPosition);
+			ImGui::Separator();
+			DrawDefectAddItems(windowState, commandRegistry.get(), m_ContextMenuWorldPosition);
 			ImGui::EndMenu();
 		}
 
@@ -777,40 +787,7 @@ namespace DefectStudio
 
 		if (ImGui::MenuItem("Delete", "Del", false, hasSelection))
 			runCommand("renderer.selection.delete");
-		if (ImGui::MenuItem(hasSelection ? "Dodaj wakans (centroid zaznaczenia)" : "Dodaj wakans (kursor 3D)",
-			nullptr, false, !windowState.structure.domainStructureId.empty()))
-		{
-			if (const auto domain = m_DomainLayer.lock(); domain != nullptr && commandRegistry != nullptr)
-			{
-				auto target = ResolveAtomEditTarget(m_Layer, *domain, windowState.windowId);
-				if (target)
-				{
-					glm::vec3 position = windowState.cursor3DPosition;
-					if (hasSelection)
-					{
-						position = glm::vec3(0.0f);
-						std::size_t count = 0;
-						// ponytail: plain mean across cell boundaries; unwrap if boundary selections need it.
-						for (const auto index : windowState.selectedAtomIndices)
-							if (index < target->record->structure.atoms.size())
-							{
-								position += target->record->structure.atoms[index].position;
-								++count;
-							}
-						position = count == 0 ? windowState.cursor3DPosition : position / static_cast<float>(count);
-					}
-					SetVacanciesPayload payload{windowState.windowId, target->record->structure.vacancies, "Add vacancy"};
-					payload.vacancies.push_back(MakeVacancySite(target->record->structure, position));
-					CommandContext context;
-					context.Set<SetVacanciesPayload>(kSetVacanciesPayloadKey, std::move(payload));
-					const auto result = commandRegistry->Execute(CommandID{kSetVacanciesCommandId}, std::move(context));
-					if (!result)
-						DS_LOG_WARN("Add vacancy failed: {}", result.Error().technicalDetails);
-				}
-				else
-					DS_LOG_WARN("Add vacancy failed: {}", target.Error().technicalDetails);
-			}
-		}
+		DrawDefectFrameMenu(windowState, commandRegistry.get());
 		// H hides every selected kind, not only atoms - see Renderer/Scene/SceneVisibility.hpp.
 		if (ImGui::MenuItem("Hide", "H", false, AnySceneObjectSelected(windowState)))
 			runCommand("renderer.selection.hide");
@@ -844,6 +821,8 @@ namespace DefectStudio
 
 		if (ImGui::MenuItem("Select All", "Ctrl+A"))
 			runCommand("renderer.selection.select_all");
+		if (ImGui::MenuItem("Invert Selection", "I"))
+			runCommand("renderer.selection.invert");
 		if (ImGui::MenuItem("Clear Selection", nullptr, false, hasSelection) && eventBus != nullptr)
 		{
 			RendererEvents::Viewport::AtomSelectionRequested event;
