@@ -10,7 +10,7 @@ namespace DefectStudio
 	// and hiding with H does not change what a render contains.
 	//
 	// These functions cover the scene objects that live as plain vectors on RendererWindowState:
-	// pinned measurements, free labels, arrows, orbitals and planes. Atoms and bonds carry the same
+	// pinned measurements, free labels, paths, orbitals and planes, plus the defect axes' show flag. Atoms and bonds carry the same
 	// two flags but are owned by the ECS mirror (VisibilityComponent ->
 	// SceneSystem::PushSelectionAndVisibilityToWindowState), so writing their flags here would be
 	// overwritten on the next push - the atom/bond half of H stays in HideSelectionModifier /

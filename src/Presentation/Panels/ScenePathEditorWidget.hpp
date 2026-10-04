@@ -37,6 +37,7 @@ namespace DefectStudio
 		// Flat with thickness only: zero is the sharp box, positive chamfers its four long edges.
 		// Shown only when a thickness is set, because a sheet has no edges to soften.
 		float ribbonBevel = 0.0f;
+		PathBevelParts ribbonBevelParts = PathBevelParts::Both;
 		std::uint32_t ribbonBevelSegments = 1;
 		float ribbonBevelShape = 0.5f;
 		bool shadeSmooth = false;
@@ -70,6 +71,7 @@ namespace DefectStudio
 		bool mixedRibbonNormal = false;
 		bool mixedRibbonThickness = false;
 		bool mixedRibbonBevel = false;
+		bool mixedRibbonBevelParts = false;
 		bool mixedRibbonBevelSegments = false;
 		bool mixedRibbonBevelShape = false;
 		bool mixedShadeSmooth = false;

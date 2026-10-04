@@ -54,6 +54,7 @@ namespace DefectStudio
 		// Object Mode is the default: nodes and handles are not drawn, so they are not pickable, and
 		// any hit collapses to WholePath. Edit Mode (S12) turns this on and gets element-level hits.
 		bool editMode = false;
+		bool segmentOnly = false; // modal insertion ignores markers and decorations
 	};
 
 	// Arbitration order, highest first: Handle > Node > Decoration > Segment. The first candidate

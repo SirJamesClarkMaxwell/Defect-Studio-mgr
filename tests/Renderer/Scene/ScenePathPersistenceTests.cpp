@@ -70,6 +70,31 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	TEST(ScenePathPersistenceTests, BevelPartsRoundTripAndMissingKeyDefaultsToBoth)
+	{
+		for (const std::string parts : {"Both", "Shaft", "Decorations"})
+		{
+			auto path = MinimalPath();
+			path.style.ribbonBevelParts = parts;
+			SceneObjectsFile source;
+			source.structures.push_back({"k", {path}});
+			auto yaml = SceneObjectsIO::Serialize(source);
+			const auto loaded = Parse(yaml.c_str());
+			const auto &saved = std::get<PersistedScenePath>(loaded.structures[0].objects[0]);
+			EXPECT_EQ(saved.style.ribbonBevelParts, parts);
+			std::vector<StructuredError> warnings;
+			const auto built = BuildScenePath(saved, Structure(), warnings);
+			ASSERT_TRUE(built);
+			EXPECT_EQ(ExtractPersistedScenePath(*built, Structure()).style.ribbonBevelParts, parts);
+			const auto begin = yaml.find("ribbon_bevel_parts:");
+			ASSERT_NE(begin, std::string::npos);
+			const auto lineBegin = yaml.rfind('\n', begin) + 1;
+			yaml.erase(lineBegin, yaml.find('\n', begin) - lineBegin + 1);
+			const auto legacy = Parse(yaml.c_str());
+			EXPECT_EQ(std::get<PersistedScenePath>(legacy.structures[0].objects[0]).style.ribbonBevelParts, "Both");
+		}
+	}
+
 	TEST(ScenePathPersistenceTests, NonIdentityTransformRoundTripsThroughYamlAndScenePersistence)
 	{
 		PersistedScenePath saved = MinimalPath();

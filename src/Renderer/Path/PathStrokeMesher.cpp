@@ -350,8 +350,11 @@ namespace DefectStudio
 			detail::FinalizeThickFlatMesh(mesh, style, geometry);
 			return geometry;
 		}
-		detail::AppendDecoration(geometry, startContour, evaluated.samples.front(), true, style, geometry.startDecoration);
-		detail::AppendDecoration(geometry, endContour, evaluated.samples.back(), false, style, geometry.endDecoration);
+		PathStrokeStyle shaftStyle = style, decorationStyle = style;
+		if (style.ribbonBevelParts == PathBevelParts::Decorations) shaftStyle.ribbonBevel = 0.0f;
+		if (style.ribbonBevelParts == PathBevelParts::Shaft) decorationStyle.ribbonBevel = 0.0f;
+		detail::AppendDecoration(geometry, startContour, evaluated.samples.front(), true, decorationStyle, geometry.startDecoration);
+		detail::AppendDecoration(geometry, endContour, evaluated.samples.back(), false, decorationStyle, geometry.endDecoration);
 		if (geometry.shaftRange.IsEmpty())
 		{
 			if (startContour.trim + endContour.trim >= evaluated.totalLength)
@@ -388,7 +391,7 @@ namespace DefectStudio
 			if (endHandoff)
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (detail::UsesTubeVertices(style))
-				AppendTubePiece(geometry, samples, style, !(atStart && startContour.closesBack),
+				AppendTubePiece(geometry, samples, shaftStyle, !(atStart && startContour.closesBack),
 					!(atEnd && endContour.closesBack), startHandoff, hasGradientSamples ? &sampleColors : nullptr);
 			else
 				AppendRibbonPiece(geometry, samples, style, hasGradientSamples ? &sampleColors : nullptr);

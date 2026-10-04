@@ -28,6 +28,9 @@ namespace DefectStudio
 	bool ExecuteSceneObjectEditAction(
 		RendererWindowState &windowState, SceneObjectEditKind kind, SceneObjectEditAction action);
 
+	// The kind the last Copy put on a clipboard: Ctrl+V with nothing selected pastes that kind.
+	[[nodiscard]] SceneObjectEditKind LastCopiedSceneObjectEditKind();
+
 	[[nodiscard]] std::vector<RendererWindowState::FreeLabel> &GetSceneFreeLabelClipboard();
 	void CopySceneFreeLabelsToClipboard(const RendererWindowState &windowState);
 	void DuplicateSelectedSceneFreeLabels(RendererWindowState &windowState);

@@ -114,6 +114,10 @@ namespace DefectStudio
 			out.width = input.width;
 			out.ribbonThickness = input.ribbonThickness;
 			out.ribbonBevel = input.ribbonBevel;
+			if (input.ribbonBevelParts == "Both") out.ribbonBevelParts = PathBevelParts::Both;
+			else if (input.ribbonBevelParts == "Shaft") out.ribbonBevelParts = PathBevelParts::Shaft;
+			else if (input.ribbonBevelParts == "Decorations") out.ribbonBevelParts = PathBevelParts::Decorations;
+			else return false;
 			out.ribbonBevelSegments = input.ribbonBevelSegments < 1 ? 1u : static_cast<std::uint32_t>(input.ribbonBevelSegments);
 			out.ribbonBevelShape = std::clamp(input.ribbonBevelShape, 0.0f, 1.0f);
 			out.shadeSmooth = input.shadeSmooth;
@@ -302,6 +306,8 @@ namespace DefectStudio
 		persisted.style.ribbonNormal = path.style.ribbonNormal;
 		persisted.style.ribbonThickness = path.style.ribbonThickness;
 		persisted.style.ribbonBevel = path.style.ribbonBevel;
+		persisted.style.ribbonBevelParts = path.style.ribbonBevelParts == PathBevelParts::Shaft ? "Shaft"
+			: path.style.ribbonBevelParts == PathBevelParts::Decorations ? "Decorations" : "Both";
 		persisted.style.ribbonBevelSegments = static_cast<int>(path.style.ribbonBevelSegments);
 		persisted.style.ribbonBevelShape = path.style.ribbonBevelShape;
 		persisted.style.shadeSmooth = path.style.shadeSmooth;

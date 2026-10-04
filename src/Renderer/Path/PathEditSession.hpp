@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vector>
+#include <optional>
+#include <cstddef>
 
 #include "Renderer/Path/PathTypes.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
@@ -33,6 +35,17 @@ namespace DefectStudio
 	class PathEditSession
 	{
 	public:
+		struct InsertState
+		{
+			PathElementId segment;
+			std::size_t count = 1;
+		};
+		void RequestInsert() noexcept;
+		[[nodiscard]] bool InsertRequested() const noexcept { return m_InsertRequested; }
+		void BeginInsert(PathElementId segment) noexcept;
+		void ChangeInsertCount(int delta) noexcept;
+		void CancelInsert() noexcept;
+		[[nodiscard]] const std::optional<InsertState> &InsertPreview() const noexcept { return m_Insert; }
 		// Opens `path` for editing. Opening a different path replaces the session and clears the
 		// selection - element ids are only meaningful inside the path that owns them, so carrying
 		// them across would select whatever happened to share an id.
@@ -86,6 +99,8 @@ namespace DefectStudio
 		void PruneSelection(const ScenePath &path);
 
 	private:
+		bool m_InsertRequested = false;
+		std::optional<InsertState> m_Insert;
 		bool m_Active = false;
 		SceneObjectId m_Path;
 		PathElementMode m_ElementMode = PathElementMode::NodeHandle;

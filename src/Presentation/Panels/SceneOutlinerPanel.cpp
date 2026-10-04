@@ -407,7 +407,7 @@ namespace DefectStudio
 				ExecuteSceneObjectEditAction(activeWindow, *selectedKind, SceneObjectEditAction::Duplicate);
 			if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))
 				ExecuteSceneObjectEditAction(
-					activeWindow, selectedKind.value_or(SceneObjectEditKind::Path), SceneObjectEditAction::Paste);
+					activeWindow, selectedKind.value_or(LastCopiedSceneObjectEditKind()), SceneObjectEditAction::Paste);
 		}
 
 		if (windows.empty())

@@ -152,15 +152,17 @@ namespace DefectStudio::detail
 					return false;
 
 			const std::size_t start = info.edges.front();
-			std::size_t previous = std::numeric_limits<std::size_t>::max();
 			std::size_t current = start;
 			do
 			{
 				info.orderedEdges.push_back(current);
-				const auto &candidates = neighbours[current];
-				const std::size_t next = candidates[0] == previous ? candidates[1] : candidates[0];
-				previous = current;
-				current = next;
+				// Walk outgoing -> incoming in each outward-wound face. The resulting
+				// corner boundary opposes the incident edge strips at every endpoint.
+				const auto next = std::find_if(transitions[vertex].begin(), transitions[vertex].end(),
+					[&](const auto &transition) { return transition.second == current; });
+				if (next == transitions[vertex].end())
+					return false;
+				current = next->first;
 			} while (current != start && info.orderedEdges.size() <= info.edges.size());
 			if (info.orderedEdges.size() != info.edges.size())
 				return false;

@@ -222,7 +222,7 @@ namespace DefectStudio
 			result.screenDistance = candidate.screenDistance;
 		};
 
-		if (settings.editMode)
+		if (settings.editMode && !settings.segmentOnly)
 		{
 			if (const Candidate handle = PickMarker(markers, PathMarkerKind::BezierHandle, settings.cursor); handle.hit)
 			{
@@ -238,7 +238,7 @@ namespace DefectStudio
 
 		// Decorations before the shaft: a tip is drawn on top of the stroke it trims, so a click inside
 		// one means the tip even when the shaft's tolerance also reaches that pixel.
-		if (!path.nodes.empty())
+		if (!settings.segmentOnly && !path.nodes.empty())
 		{
 			const std::size_t lastNode = path.nodes.size() - 1;
 			const auto nodePosition = [&](const std::size_t index) { return resolved.positions[index]; };

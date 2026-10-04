@@ -4,6 +4,7 @@ namespace DefectStudio
 {
 	class CommandRegistry;
 	class ContextManager;
+	class KeymapResolver;
 	class RendererLayer;
 
 	// Keybinding context that is active while the focused viewport has a path open in Edit Mode.
@@ -24,6 +25,7 @@ namespace DefectStudio
 	//   renderer.path_edit.mode_whole        3
 	//   renderer.path_edit.extend            E       ExtendSelectedScenePathEnd
 	//   renderer.path_edit.insert            -       InsertSelectedScenePathSegment
+	//   renderer.path_edit.loop_cut          Ctrl+R  preview/insert on the hovered segment
 	//   renderer.path_edit.delete_nodes      Delete  DeleteSelectedScenePathNodes
 	//   renderer.path_edit.reverse           -       ReverseEditedScenePath
 	//   renderer.path_edit.handle_type_menu  V       asks the viewport to open the handle-type popup
@@ -40,6 +42,7 @@ namespace DefectStudio
 	// commands is a successful no-op: the modal loop owns Escape, digits and axis keys until it ends,
 	// and Escape must cancel the drag, not also leave Edit Mode underneath it.
 	void RegisterScenePathEditCommands(CommandRegistry &registry, RendererLayer &rendererLayer);
+	void RegisterScenePathEditBindings(KeymapResolver &resolver);
 	// Object Mode reverse plus the existing Alt+R command id as a compatibility alias.
 	void RegisterScenePathObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer);
 

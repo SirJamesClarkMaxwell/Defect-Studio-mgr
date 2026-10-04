@@ -143,8 +143,12 @@ namespace DefectStudio
 
 	void DrawSegmentAddItems(RendererWindowState &windowState)
 	{
-		const std::vector<std::size_t> atoms = ValidSelectedAtoms(windowState);
-		const DrawSelectionDescription description = DescribeDrawSelection(atoms.size());
+		// Segment ends may be atoms or vacancy markers (AddScenePathThroughSelectedAtoms).
+		std::size_t vacancies = 0;
+		for (const std::size_t index : windowState.selectedVacancies)
+			vacancies += index < windowState.structure.vacancies.size() ? 1u : 0u;
+		const DrawSelectionDescription description =
+			DescribeDrawSelection(ValidSelectedAtoms(windowState).size() + vacancies);
 		const auto addSegment = [&](const bool arrow) {
 			const auto result = AddScenePathThroughSelectedAtoms(windowState, arrow);
 			if (!result)

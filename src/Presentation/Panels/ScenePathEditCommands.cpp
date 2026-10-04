@@ -9,6 +9,7 @@
 
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Input/ContextManager.hpp"
+#include "Core/Input/KeyBinding.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -33,7 +34,7 @@ namespace DefectStudio
 
 		enum class EditAction
 		{
-			Toggle, Leave, Nodes, Segments, Whole, Extend, Insert, DeleteNodes, Reverse,
+			Toggle, Leave, Nodes, Segments, Whole, Extend, Insert, LoopCut, DeleteNodes, Reverse,
 			HandleMenu, HandleFree, HandleAligned, HandleVector, HandleAuto, ReverseSelection
 		};
 
@@ -61,6 +62,12 @@ namespace DefectStudio
 				}
 				if (m_Action != EditAction::Toggle && !window->pathEdit.IsActive())
 					return {};
+				if (window->pathEdit.InsertPreview())
+				{
+					if (m_Action == EditAction::Leave || m_Action == EditAction::Toggle)
+						window->pathEdit.CancelInsert();
+					return {};
+				}
 
 				switch (m_Action)
 				{
@@ -95,6 +102,9 @@ namespace DefectStudio
 				}
 				case EditAction::DeleteNodes:
 					return DeleteSelectedScenePathNodes(*window);
+				case EditAction::LoopCut:
+					window->pathEdit.RequestInsert();
+					break;
 				case EditAction::Reverse:
 					return ReverseEditedScenePath(*window);
 				case EditAction::HandleMenu:
@@ -151,6 +161,7 @@ namespace DefectStudio
 			{"renderer.path_edit.mode_whole", "Path: Select whole path", EditAction::Whole},
 			{"renderer.path_edit.extend", "Path: Extend selected endpoint", EditAction::Extend},
 			{"renderer.path_edit.insert", "Path: Insert node in selected segment", EditAction::Insert},
+			{"renderer.path_edit.loop_cut", "Path: Insert nodes on hovered segment", EditAction::LoopCut},
 			{"renderer.path_edit.delete_nodes", "Path: Delete selected nodes", EditAction::DeleteNodes},
 			{"renderer.path_edit.reverse", "Path: Reverse edited path", EditAction::Reverse},
 			{"renderer.path_edit.handle_type_menu", "Path: Open handle type menu", EditAction::HandleMenu},
@@ -171,6 +182,19 @@ namespace DefectStudio
 			if (!result)
 				DS_LOG_WARN("Path edit command '{}' registration failed: {}", definition.id, result.Error().technicalDetails);
 		}
+	}
+
+	void RegisterScenePathEditBindings(KeymapResolver &resolver)
+	{
+		const auto bindings = resolver.GetAllBindings();
+		if (std::any_of(bindings.begin(), bindings.end(), [](const KeyBinding &binding) {
+			return binding.commandId.value == "renderer.path_edit.loop_cut" || binding.id == "path_edit.loop_cut";
+		})) return;
+		const auto result = resolver.RegisterBinding({"path_edit.loop_cut", ParseKeyChord("Ctrl+R").value(),
+			CommandID{"renderer.path_edit.loop_cut"},
+			ContextExpr{"renderer.viewport.focused && renderer.path_edit.active && !renderer.modal_transform.active"},
+			KeymapLayer::Global});
+		if (!result) DS_LOG_WARN("Path insert keybinding failed: {}", result.Error().technicalDetails);
 	}
 
 	void UpdateScenePathEditContext(const RendererLayer &rendererLayer, ContextManager &contextManager)

@@ -250,6 +250,11 @@ namespace DefectStudio
 			return CreateRendererSelectionToolToggleCommand(std::move(eventBus), SelectionToolMode::Cursor3D);
 		}
 
+		Unique<ICommand> MakeTextToolToggleCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererSelectionToolToggleCommand(std::move(eventBus), SelectionToolMode::Text);
+		}
+
 		Unique<ICommand> MakeSetAsDefaultViewCommand(Ref<EventBus> eventBus, CommandContext &)
 		{
 			return CreateRendererSetAsDefaultViewCommand(std::move(eventBus));
@@ -871,6 +876,12 @@ namespace DefectStudio
 			"Renderer: Toggle 3D cursor tool",
 			"Toggle the click-to-place 3D cursor tool on the active renderer viewport.",
 			std::bind_front(MakeCursor3DToolToggleCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.text_tool_toggle",
+			"Renderer: Toggle text tool",
+			"Toggle the click-to-place scene text tool on the active renderer viewport.",
+			std::bind_front(MakeTextToolToggleCommand, eventBus));
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.nudge_up",

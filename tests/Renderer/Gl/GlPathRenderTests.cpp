@@ -17,6 +17,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Renderer/OpenGl/FrameBufferReadback.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
+#include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
@@ -323,6 +324,40 @@ namespace DefectStudio::Tests
 		EXPECT_NE(sharpPixels, bevelledPixels);
 		WriteVisualArtifact("path-box-bevel-grs.png", bevelledPixels, width, height);
 
+		backend.Shutdown();
+	}
+
+	TEST_F(GlTest, DefaultSelectedTubeHasASilhouetteWithoutOrangeInteriorStripes)
+	{
+		OpenGlRendererBackend backend;
+		ASSERT_TRUE(backend.Initialize(ShaderDirectoryNextToTestExecutable(), PrimitiveMeshes()));
+		auto path = DevPath(ScenePathDevPreset::Line);
+		path.style.width = 0.6f;
+		path.style.color = glm::vec3(0.0f, 0.2f, 0.9f);
+		path.style.startDecoration.kind = PathDecorationKind::None;
+		path.style.endDecoration.kind = PathDecorationKind::None;
+		PathSystem system;
+		ASSERT_TRUE(system.Store().Insert(path));
+		RendererViewCamera camera;
+		camera.SetViewport(kWidth, kHeight);
+		camera.SetOrbitState(glm::vec3(0.0f), 4.0f, 0.0f, 0.0f);
+		RendererGlobalRenderSettings settings;
+		settings.backgroundColor = glm::vec4(0, 0, 0, 1);
+		settings.viewport.selectionOutlineColor = glm::vec4(1, 0.35f, 0, 1);
+		settings.viewport.selectionOutlineWidth = 2.0f;
+		const std::vector<SceneObjectId> selected{path.id};
+		const PathRenderInput input{&system, &selected, RendererWindowState{}.showPathMeshOverlay};
+		const auto texture = backend.RenderWindow("gl-tube-silhouette", {}, camera, settings, kWidth, kHeight,
+			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+			nullptr, nullptr, nullptr, nullptr, glm::vec3(0), true, 0.3f, 45.0f, true, &input);
+		const auto pixels = ReadTextureRgba8TopDown(texture, kWidth, kHeight);
+		EXPECT_GT(CountSelectionOrange(pixels, kWidth, kHeight), 0u);
+		for (int y = kHeight / 2 - 2; y <= kHeight / 2 + 2; ++y)
+			for (int x = kWidth / 2 - 10; x <= kWidth / 2 + 10; ++x)
+			{
+				const auto pixel = PixelAt(pixels, kWidth, kHeight, x, y);
+				EXPECT_GT(pixel.b, pixel.r);
+			}
 		backend.Shutdown();
 	}
 

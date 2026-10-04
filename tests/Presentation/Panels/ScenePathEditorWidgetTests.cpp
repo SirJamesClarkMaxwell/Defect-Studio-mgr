@@ -13,6 +13,11 @@
 
 namespace DefectStudio::Tests
 {
+	TEST(ScenePathEditorWidgetTests, MeshOverlayDefaultsOff)
+	{
+		EXPECT_FALSE(RendererWindowState{}.showPathMeshOverlay);
+	}
+
 	namespace
 	{
 		ScenePath MakePath(RendererWindowState &window, const char *name, float width)
@@ -67,6 +72,21 @@ namespace DefectStudio::Tests
 			for (const glm::vec3 basis : {glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)})
 				EXPECT_NEAR(glm::distance(actual * basis, expected * basis), 0.0f, 1.0e-5f);
 		}
+	}
+
+	TEST(ScenePathEditorWidgetTests, BevelPartsApplyAndResolveMixedSelections)
+	{
+		RendererWindowState window;
+		AddPaths(window);
+		const std::vector<SceneObjectId> ids{SceneObjectId{1}, SceneObjectId{2}};
+		auto edit = ResolveScenePathStyleEdit(window, ids).values;
+		edit.ribbonBevelParts = PathBevelParts::Shaft;
+		EXPECT_EQ(ApplyScenePathStyleEdit(window, ids, edit, false), 2u);
+		EXPECT_EQ(ResolveScenePathStyleEdit(window, ids).values.ribbonBevelParts, PathBevelParts::Shaft);
+		window.paths->Store().MutateStyle(ids.back(), [](ScenePath &path) {
+			path.style.ribbonBevelParts = PathBevelParts::Decorations;
+		});
+		EXPECT_TRUE(ResolveScenePathStyleEdit(window, ids).mixedRibbonBevelParts);
 	}
 
 	TEST(ScenePathEditorWidgetTests, EmptySelectionUsesDefaults)

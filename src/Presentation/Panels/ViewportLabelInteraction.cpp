@@ -203,7 +203,7 @@ namespace DefectStudio
 			// A selected plane/orbital chooses
 			// its own clipboard, avoiding an ambiguous paste when several kind-specific clipboards exist.
 			ExecuteSceneObjectEditAction(
-				windowState, selectedDrawingKind.value_or(SceneObjectEditKind::Path),
+				windowState, selectedDrawingKind.value_or(LastCopiedSceneObjectEditKind()),
 				SceneObjectEditAction::Paste);
 		}
 		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false))
@@ -245,6 +245,8 @@ namespace DefectStudio
 			return SceneObjectEditKind::Plane;
 		if (!windowState.selectedScenePaths.empty())
 			return SceneObjectEditKind::Path;
+		if (!windowState.selectedFreeLabels.empty())
+			return SceneObjectEditKind::FreeLabel;
 		return std::nullopt;
 	}
 

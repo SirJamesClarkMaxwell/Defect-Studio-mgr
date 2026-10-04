@@ -8,16 +8,45 @@
 
 namespace DefectStudio
 {
+	void PathEditSession::RequestInsert() noexcept
+	{
+		if (m_Active && !m_Insert)
+			m_InsertRequested = true;
+	}
+
+	void PathEditSession::BeginInsert(const PathElementId segment) noexcept
+	{
+		m_InsertRequested = false;
+		if (m_Active && segment.IsValid())
+			m_Insert = InsertState{segment, 1};
+	}
+
+	void PathEditSession::ChangeInsertCount(const int delta) noexcept
+	{
+		if (m_Insert)
+			m_Insert->count = static_cast<std::size_t>(std::clamp(static_cast<long long>(m_Insert->count) + delta, 1LL, 32LL));
+	}
+
+	void PathEditSession::CancelInsert() noexcept
+	{
+		m_InsertRequested = false;
+		m_Insert.reset();
+	}
+
 	void PathEditSession::Enter(const SceneObjectId path)
 	{
 		if (!m_Active || m_Path != path)
+		{
 			m_Selection.clear();
+			CancelInsert();
+		}
 		m_Active = true;
 		m_Path = path;
 	}
 
 	void PathEditSession::Leave()
 	{
+		CancelInsert();
 		m_Active = false;
 		m_Path = {};
 		m_Selection.clear();

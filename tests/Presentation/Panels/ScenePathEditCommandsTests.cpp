@@ -8,6 +8,7 @@
 
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Input/ContextManager.hpp"
+#include "Core/Input/KeyBinding.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/ScenePathEditCommands.hpp"
 #include "Renderer/Path/PathSystem.hpp"
@@ -193,6 +194,40 @@ namespace DefectStudio::Tests
 
 		EXPECT_EQ(StoredPath(window).nodes.front().position, glm::vec3(3.0f, 0.0f, 0.0f));
 		EXPECT_EQ(StoredPath(window).nodes.back().position, glm::vec3(-1.0f, 0.0f, 0.0f));
+	}
+
+	TEST_F(ScenePathEditCommandsTests, LoopCutBindingResolvesOnlyInEditModeAndHonoursUserOverrides)
+	{
+		KeymapResolver resolver;
+		RegisterScenePathEditBindings(resolver);
+		ContextManager contexts;
+		contexts.SetActive("renderer.viewport.focused", true);
+		const auto chord = ParseKeyChord("Ctrl+R").value();
+		EXPECT_FALSE(resolver.Resolve(chord, contexts));
+		contexts.SetActive(kPathEditActiveContext, true);
+		ASSERT_TRUE(resolver.Resolve(chord, contexts));
+		EXPECT_EQ(resolver.Resolve(chord, contexts)->commandId.value, "renderer.path_edit.loop_cut");
+		RegisterScenePathEditBindings(resolver);
+		EXPECT_EQ(resolver.ListBindings().size(), 1u);
+		KeymapResolver customized;
+		ASSERT_TRUE(customized.RegisterBinding({"custom.cut", ParseKeyChord("Ctrl+L").value(),
+			CommandID{"renderer.path_edit.loop_cut"}, ContextExpr{kPathEditActiveContext}}));
+		RegisterScenePathEditBindings(customized);
+		EXPECT_EQ(customized.ListBindings().size(), 1u);
+	}
+
+	TEST_F(ScenePathEditCommandsTests, LoopCutCommandRequestsAPreviewWithoutMutatingOrUndo)
+	{
+		RendererWindowState &window = AddWindowWithPath(true);
+		ASSERT_TRUE(Run("renderer.path_edit.loop_cut"));
+		EXPECT_TRUE(window.pathEdit.InsertRequested());
+		EXPECT_EQ(StoredPath(window).nodes.size(), 3u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+	}
+
+	TEST_F(ScenePathEditCommandsTests, MeshOverlayIsOptIn)
+	{
+		EXPECT_FALSE(AddWindowWithPath(false).showPathMeshOverlay);
 	}
 
 	TEST_F(ScenePathEditCommandsTests, HandleTypeMenuOnlyRequestsThePopup)

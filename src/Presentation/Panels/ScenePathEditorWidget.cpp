@@ -132,6 +132,7 @@ namespace DefectStudio
 				state.values.ribbonNormal = path->style.ribbonNormal;
 				state.values.ribbonThickness = path->style.ribbonThickness;
 				state.values.ribbonBevel = path->style.ribbonBevel;
+				state.values.ribbonBevelParts = path->style.ribbonBevelParts;
 				state.values.ribbonBevelSegments = path->style.ribbonBevelSegments;
 				state.values.ribbonBevelShape = path->style.ribbonBevelShape;
 				state.values.shadeSmooth = path->style.shadeSmooth;
@@ -153,6 +154,7 @@ namespace DefectStudio
 			MarkMixed(state.mixedRibbonNormal, state.values.ribbonNormal, path->style.ribbonNormal);
 			MarkMixed(state.mixedRibbonThickness, state.values.ribbonThickness, path->style.ribbonThickness);
 			MarkMixed(state.mixedRibbonBevel, state.values.ribbonBevel, path->style.ribbonBevel);
+			MarkMixed(state.mixedRibbonBevelParts, state.values.ribbonBevelParts, path->style.ribbonBevelParts);
 			MarkMixed(state.mixedRibbonBevelSegments, state.values.ribbonBevelSegments, path->style.ribbonBevelSegments);
 			MarkMixed(state.mixedRibbonBevelShape, state.values.ribbonBevelShape, path->style.ribbonBevelShape);
 			MarkMixed(state.mixedShadeSmooth, state.values.shadeSmooth, path->style.shadeSmooth);
@@ -184,6 +186,7 @@ namespace DefectStudio
 				style.ribbonNormal = edit.ribbonNormal;
 				style.ribbonThickness = edit.ribbonThickness;
 				style.ribbonBevel = edit.ribbonBevel;
+				style.ribbonBevelParts = edit.ribbonBevelParts;
 				style.ribbonBevelSegments = std::max(1u, edit.ribbonBevelSegments);
 				style.ribbonBevelShape = std::clamp(edit.ribbonBevelShape, 0.0f, 1.0f);
 				style.shadeSmooth = edit.shadeSmooth;
@@ -300,7 +303,7 @@ namespace DefectStudio
 		bool renamed = false;
 		static int selectedGradientStop = -1;
 		const char *styleLabels[] = {"Name", "Profile", "Mesh overlay", "Ribbon normal", "Ribbon thickness", "Ribbon bevel",
-			"Ribbon bevel segments", "Ribbon bevel shape", "Width", "Alpha", "Color", "Line style",
+			"Bevel parts", "Ribbon bevel segments", "Ribbon bevel shape", "Width", "Alpha", "Color", "Line style",
 			"Dash length", "Gap length", "Dash phase", "Enabled", "Gradient ramp", "Start decoration kind",
 			"Start decoration length scale", "Start decoration width scale", "Start decoration filled",
 			"End decoration kind", "End decoration length scale", "End decoration width scale",
@@ -387,6 +390,12 @@ namespace DefectStudio
 				beginRow("Ribbon bevel", resolved.mixedRibbonBevel);
 				applyDrag(ImGui::DragFloat("##RibbonBevel", &edit.ribbonBevel, 0.005f, 0.0f, 10.0f, "%.3f"));
 				ImGui::BeginDisabled(edit.ribbonBevel <= 0.0f);
+				beginRow("Bevel parts", resolved.mixedRibbonBevelParts);
+				int parts = static_cast<int>(edit.ribbonBevelParts);
+				const char *partNames[] = {"Both", "Shaft only", "Decorations only"};
+				const bool partsChanged = ImGui::Combo("##BevelParts", &parts, partNames, 3);
+				if (partsChanged) edit.ribbonBevelParts = static_cast<PathBevelParts>(parts);
+				applyImmediate(partsChanged);
 				int bevelSegments = static_cast<int>(std::min(edit.ribbonBevelSegments, 256u));
 				beginRow("Ribbon bevel segments", resolved.mixedRibbonBevelSegments);
 				const bool segmentsChanged = ImGui::DragInt("##RibbonBevelSegments", &bevelSegments, 1.0f, 1, 256);

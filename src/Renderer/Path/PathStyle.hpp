@@ -109,6 +109,13 @@ namespace DefectStudio
 		bool filled = true;
 	};
 
+	enum class PathBevelParts
+	{
+		Both,
+		Shaft,
+		Decorations,
+	};
+
 	struct PathStrokeStyle
 	{
 		StrokeProfile profile = StrokeProfile::Round;
@@ -136,6 +143,8 @@ namespace DefectStudio
 		// the smaller of `width` and `ribbonThickness`, since a chamfer that ate the whole face
 		// would turn the box into a diamond and then invert it.
 		float ribbonBevel = 0.0f;
+		// In selective modes the bevel tapers to zero at the unchanged part's boundary.
+		PathBevelParts ribbonBevelParts = PathBevelParts::Both;
 		// How many flat faces each chamfer is made of, and how the chamfer's profile curves.
 		//
 		// Both asked for by name in a manual round. One segment is the single flat chamfer that

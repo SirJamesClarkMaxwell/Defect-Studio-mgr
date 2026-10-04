@@ -28,8 +28,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		// Long enough to read past a carbon atom's sphere, short enough not to cross half the cell.
-		constexpr float kAxisLengthAngstrom = 1.6f;
 
 		[[nodiscard]] std::optional<glm::vec3> SelectionCentroid(const RendererWindowState &windowState)
 		{
@@ -80,6 +78,7 @@ namespace DefectStudio
 		{
 			ImVec2 origin;
 			std::optional<ImVec2> tips[3];
+			std::optional<ImVec2> negativeTips[3]; // empty when the negative halves are not drawn
 		};
 
 		[[nodiscard]] std::optional<ProjectedFrame> ProjectFrame(
@@ -102,8 +101,13 @@ namespace DefectStudio
 				return std::nullopt;
 			ProjectedFrame projected{*origin, {}};
 			const glm::vec3 axes[3] = {frame->x, frame->y, frame->z};
+			const float length = windowState.defectFrameAxisLength;
 			for (int axis = 0; axis < 3; ++axis)
-				projected.tips[axis] = project(frame->origin + axes[axis] * kAxisLengthAngstrom);
+			{
+				projected.tips[axis] = project(frame->origin + axes[axis] * length);
+				if (windowState.defectFrameNegativeAxes)
+					projected.negativeTips[axis] = project(frame->origin - axes[axis] * length);
+			}
 			return projected;
 		}
 	} // namespace
@@ -118,7 +122,8 @@ namespace DefectStudio
 		const glm::vec2 origin(projected->origin.x, projected->origin.y);
 		if (glm::length(point - origin) <= 10.0f)
 			return true;
-		for (const auto &tip : projected->tips)
+		for (const auto &tip : {projected->tips[0], projected->tips[1], projected->tips[2], projected->negativeTips[0],
+				 projected->negativeTips[1], projected->negativeTips[2]})
 		{
 			if (!tip)
 				continue;
@@ -146,10 +151,34 @@ namespace DefectStudio
 		if (ImGui::IsItemDeactivatedAfterEdit())
 			SetFrame(windowState, commandRegistry, std::optional<DefectFrame>(*windowState.structure.defectFrame),
 				"Move defect axes");
-		ImGui::Text("x: (%.3f, %.3f, %.3f)", frame->x.x, frame->x.y, frame->x.z);
-		ImGui::Text("y: (%.3f, %.3f, %.3f)", frame->y.x, frame->y.y, frame->y.z);
-		ImGui::Text("z: (%.3f, %.3f, %.3f)", frame->z.x, frame->z.y, frame->z.z);
-		ImGui::Checkbox("Pokaż (klawisze 1/2/3 w osiach defektu)", &windowState.showDefectFrame);
+		// Rotation as XYZ Euler degrees of the frame. The typed angles live in a draft while the field is
+		// dragged (a matrix -> Euler round trip can jump between equivalent triples); one undo on release.
+		static std::optional<glm::vec3> rotationDraft;
+		glm::vec3 degrees = rotationDraft.value_or(
+			glm::degrees(glm::eulerAngles(glm::quat_cast(glm::mat3(frame->x, frame->y, frame->z)))));
+		if (ImGui::DragFloat3("Obrót (°)", &degrees.x, 0.5f, -360.0f, 360.0f, "%.1f"))
+		{
+			const glm::mat3 axes = glm::mat3_cast(glm::quat(glm::radians(degrees)));
+			windowState.structure.defectFrame->x = axes[0];
+			windowState.structure.defectFrame->y = axes[1];
+			windowState.structure.defectFrame->z = axes[2];
+		}
+		rotationDraft = ImGui::IsItemActive() ? std::optional<glm::vec3>(degrees) : std::nullopt;
+		if (ImGui::IsItemDeactivatedAfterEdit())
+			SetFrame(windowState, commandRegistry, std::optional<DefectFrame>(*windowState.structure.defectFrame),
+				"Rotate defect axes");
+		if (ImGui::TreeNode("Kierunki osi"))
+		{
+			ImGui::Text("x: (%.3f, %.3f, %.3f)", frame->x.x, frame->x.y, frame->x.z);
+			ImGui::Text("y: (%.3f, %.3f, %.3f)", frame->y.x, frame->y.y, frame->y.z);
+			ImGui::Text("z: (%.3f, %.3f, %.3f)", frame->z.x, frame->z.y, frame->z.z);
+			ImGui::TreePop();
+		}
+		ImGui::SeparatorText("Wygląd");
+		ImGui::DragFloat("Długość osi (A)", &windowState.defectFrameAxisLength, 0.02f, 0.1f, 20.0f, "%.2f");
+		ImGui::DragFloat("Grubość (px)", &windowState.defectFrameAxisWidth, 0.1f, 0.5f, 12.0f, "%.1f");
+		ImGui::Checkbox("Osie ujemne (-x, -y, -z)", &windowState.defectFrameNegativeAxes);
+		ImGui::Checkbox("Pokaż (H ukrywa, Alt+H pokazuje; klawisze 1/2/3 w osiach defektu)", &windowState.showDefectFrame);
 		if (ImGui::Button("Odwróć z"))
 		{
 			DefectFrame flipped = *frame;
@@ -171,46 +200,28 @@ namespace DefectStudio
 	void DrawViewportDefectFrameOverlay(
 		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
 	{
-		const auto &frame = windowState.structure.defectFrame;
-		if (!frame || !windowState.showDefectFrame || windowState.camera == nullptr || imageSize.x <= 0.0f ||
-			imageSize.y <= 0.0f)
-			return;
-		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		auto project = [&](const glm::vec3 &world) -> std::optional<ImVec2> {
-			const glm::vec4 clip = viewProjection * glm::vec4(world, 1.0f);
-			if (clip.w <= 0.0001f)
-				return std::nullopt;
-			const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-			return ImVec2(imageOrigin.x + (ndc.x * 0.5f + 0.5f) * imageSize.x,
-				imageOrigin.y + (0.5f - ndc.y * 0.5f) * imageSize.y);
-		};
-		const auto origin = project(frame->origin);
-		if (!origin)
+		const auto projected = ProjectFrame(windowState, imageOrigin, imageSize);
+		if (!projected)
 			return;
 		ImDrawList &drawList = *ImGui::GetWindowDrawList();
-		const float thickness = 0.16f * ImGui::GetFontSize();
-		const struct
+		const float thickness = std::max(windowState.defectFrameAxisWidth, 0.5f);
+		constexpr ImU32 kColors[3] = {IM_COL32(235, 80, 80, 255), IM_COL32(90, 200, 90, 255), IM_COL32(80, 140, 245, 255)};
+		constexpr const char *kNames[3] = {"x", "y", "z"};
+		for (int axis = 0; axis < 3; ++axis)
 		{
-			glm::vec3 axis;
-			ImU32 color;
-			const char *name;
-		} axes[] = {
-			{frame->x, IM_COL32(235, 80, 80, 255), "x"},
-			{frame->y, IM_COL32(90, 200, 90, 255), "y"},
-			{frame->z, IM_COL32(80, 140, 245, 255), "z"},
-		};
-		for (const auto &axis : axes)
-		{
-			const auto tip = project(frame->origin + axis.axis * kAxisLengthAngstrom);
-			if (!tip)
-				continue;
-			drawList.AddLine(*origin, *tip, axis.color, thickness);
-			drawList.AddCircleFilled(*tip, thickness * 1.6f, axis.color);
-			drawList.AddText(ImVec2(tip->x + 4.0f, tip->y - ImGui::GetFontSize() * 0.5f), axis.color, axis.name);
+			// The negative half in the same colour, dimmed, so +x and -x read apart.
+			if (const auto &negative = projected->negativeTips[axis])
+				drawList.AddLine(projected->origin, *negative, (kColors[axis] & IM_COL32(255, 255, 255, 0)) | IM_COL32(0, 0, 0, 140),
+					thickness);
+			if (const auto &tip = projected->tips[axis])
+			{
+				drawList.AddLine(projected->origin, *tip, kColors[axis], thickness);
+				drawList.AddText(ImVec2(tip->x + 4.0f, tip->y - ImGui::GetFontSize() * 0.5f), kColors[axis], kNames[axis]);
+			}
 		}
-		drawList.AddCircleFilled(*origin, thickness * 1.4f, IM_COL32(230, 230, 230, 255));
+		drawList.AddCircleFilled(projected->origin, thickness * 1.4f, IM_COL32(230, 230, 230, 255));
 		if (windowState.defectFrameSelected)
-			drawList.AddCircle(*origin, thickness * 4.0f, IM_COL32(255, 200, 60, 255), 32, 2.5f);
+			drawList.AddCircle(projected->origin, thickness * 4.0f, IM_COL32(255, 200, 60, 255), 32, 2.5f);
 	}
 
 	void DrawDefectFrameOutlinerRow(RendererWindowState &windowState)

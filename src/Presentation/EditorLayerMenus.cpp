@@ -18,11 +18,14 @@
 #include "IO/RecentProjectsIO.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/MenuBarModel.hpp"
+#include "Presentation/Panels/ScenePathEditCommands.hpp"
 
 namespace DefectStudio
 {
 	void EditorLayer::renderMainMenuBar()
 	{
+		if (const auto resolver = m_KeymapResolver.lock())
+			RegisterScenePathEditBindings(*resolver);
 		if (!ImGui::BeginMainMenuBar())
 			return;
 

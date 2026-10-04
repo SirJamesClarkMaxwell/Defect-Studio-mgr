@@ -216,7 +216,7 @@ namespace DefectStudio::detail
 			attachable(startContour) && attachable(endContour);
 	}
 
-	void MergeCoplanarThickFlatSeams(ThickFlatMesh &mesh)
+	void MergeCoplanarThickFlatSeams(ThickFlatMesh &mesh, const bool preserveOwners)
 	{
 		bool changed = true;
 		while (changed)
@@ -235,6 +235,8 @@ namespace DefectStudio::detail
 			{
 				if (incidents.size() != 2u || mesh.faces[incidents[0].face].bevelEdges[incidents[0].corner] ||
 					mesh.faces[incidents[1].face].bevelEdges[incidents[1].corner])
+					continue;
+				if (preserveOwners && mesh.faces[incidents[0].face].owner != mesh.faces[incidents[1].face].owner)
 					continue;
 				if (glm::dot(FaceNormal(mesh, mesh.faces[incidents[0].face]),
 					FaceNormal(mesh, mesh.faces[incidents[1].face])) < 1.0 - 1.0e-10)

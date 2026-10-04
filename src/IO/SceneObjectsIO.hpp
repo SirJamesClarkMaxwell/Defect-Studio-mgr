@@ -236,6 +236,7 @@ namespace DefectStudio
 		// task/41 S11t. Written as `ribbon_bevel`. Additive, absent means 0.0 - the sharp box - and
 		// the format version does not move.
 		float ribbonBevel = 0.0f;
+		std::string ribbonBevelParts = "Both";
 		int ribbonBevelSegments = 1;
 		float ribbonBevelShape = 0.5f;
 		bool shadeSmooth = false;

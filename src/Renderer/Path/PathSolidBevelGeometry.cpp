@@ -155,11 +155,11 @@ namespace DefectStudio::detail
 	}
 
 	void EmitThickFlatPinchedBevelPatch(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh,
-		const std::uint32_t source, const std::vector<glm::dvec3> &boundary, const glm::dvec3 expectedNormal)
+		const std::uint32_t source, const std::vector<glm::dvec3> &boundary)
 	{
 		if (boundary.size() < 3u)
 			return;
-		// Shape zero can make two profile arcs share a span. Split the closed walk at
+		// Shape zero and coplanar contour seams can make two profile arcs share a span. Split the closed walk at
 		// its repeated points: the shared span already has its two incident edge strips,
 		// and a zero-area loop there must not acquire an additional pair of patch faces.
 		for (std::size_t second = 1u; second < boundary.size(); ++second)
@@ -169,30 +169,41 @@ namespace DefectStudio::detail
 					const auto a = boundary.begin() + static_cast<std::ptrdiff_t>(first);
 					const auto b = boundary.begin() + static_cast<std::ptrdiff_t>(second);
 					const std::vector<glm::dvec3> loop(a, b);
-					EmitThickFlatPinchedBevelPatch(output, mesh, source, loop, expectedNormal);
+					EmitThickFlatPinchedBevelPatch(output, mesh, source, loop);
 					std::vector<glm::dvec3> remaining(boundary.begin(), a);
 					remaining.insert(remaining.end(), b, boundary.end());
-					EmitThickFlatPinchedBevelPatch(output, mesh, source, remaining, expectedNormal);
+					EmitThickFlatPinchedBevelPatch(output, mesh, source, remaining);
 					return;
 				}
 		EmitThickFlatBevelPolygon(output, mesh, std::vector<std::uint32_t>(boundary.size(), source),
-			boundary, expectedNormal);
+			boundary);
 	}
 
 	void EmitThickFlatBevelPolygon(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh,
-		std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions, const glm::dvec3 expectedNormal)
+		std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions)
 	{
 		if (positions.size() < 3u || positions.size() != sources.size())
+			return;
+		// A strip tapered to zero radius is a triangle with a repeated corner, not
+		// an invalid quad. Keep its boundary while discarding only zero-length edges.
+		std::size_t kept = 0u;
+		for (std::size_t index = 0u; index < positions.size(); ++index)
+			if (kept == 0u || glm::dot(positions[index] - positions[kept - 1u],
+				positions[index] - positions[kept - 1u]) > kToleranceSquared)
+			{
+				positions[kept] = positions[index];
+				sources[kept++] = sources[index];
+			}
+		if (kept > 1u && glm::dot(positions[0] - positions[kept - 1u],
+			positions[0] - positions[kept - 1u]) <= kToleranceSquared)
+			--kept;
+		positions.resize(kept);
+		sources.resize(kept);
+		if (kept < 3u)
 			return;
 		glm::dvec3 polygonNormal(0.0);
 		for (std::size_t index = 0u; index < positions.size(); ++index)
 			polygonNormal += glm::cross(positions[index], positions[(index + 1u) % positions.size()]);
-		if (glm::dot(polygonNormal, expectedNormal) < 0.0)
-		{
-			std::reverse(positions.begin(), positions.end());
-			std::reverse(sources.begin(), sources.end());
-			polygonNormal = -polygonNormal;
-		}
 		const auto emitTriangle = [&](const std::array<std::uint32_t, 3u> &triangleSources,
 			const std::array<glm::dvec3, 3u> &trianglePositions) {
 			glm::dvec3 normal = glm::cross(trianglePositions[1] - trianglePositions[0],
@@ -209,7 +220,7 @@ namespace DefectStudio::detail
 			}
 		};
 		std::vector<std::array<std::size_t, 3u>> triangles;
-		if (!TriangulateSimplePolygon(positions, polygonNormal, triangles))
+		if (!TriangulateSimplePolygon(positions, SafeNormal(polygonNormal, glm::dvec3(0.0)), triangles))
 			return;
 		for (const auto &triangle : triangles)
 			emitTriangle({sources[triangle[0]], sources[triangle[1]], sources[triangle[2]]},

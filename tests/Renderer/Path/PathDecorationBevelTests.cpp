@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "Renderer/Path/PathStrokeMesher.hpp"
+#include "Renderer/Path/PathSolidBevelGeometry.hpp"
 #include "Renderer/Path/PathSolidBevelTopology.hpp"
 
 namespace DefectStudio::Tests
@@ -22,6 +23,7 @@ namespace DefectStudio::Tests
 			glm::vec3 first{0.0f};
 			glm::vec3 second{0.0f};
 			std::size_t references = 0u;
+			int winding = 0;
 		};
 
 		[[nodiscard]] EvaluatedPath StraightPath()
@@ -93,14 +95,20 @@ namespace DefectStudio::Tests
 							(samePosition(edge.first, second) && samePosition(edge.second, first));
 					});
 					if (found == edges.end())
-						edges.push_back({first, second, 1u});
+						edges.push_back({first, second, 1u, 1});
 					else
+					{
 						++found->references;
+						found->winding += samePosition(found->first, first) ? 1 : -1;
+					}
 				}
 			}
 			for (const PositionEdge &edge : edges)
+			{
 				EXPECT_EQ(edge.references, 2u) << "edge " << edge.first.x << "," << edge.first.y << "," << edge.first.z
 					<< " -> " << edge.second.x << "," << edge.second.y << "," << edge.second.z;
+				EXPECT_EQ(edge.winding, 0) << "Adjacent faces must traverse their shared edge in opposite directions.";
+			}
 		}
 
 		void ExpectOutwardWinding(const StrokeGeometry &geometry)
@@ -277,6 +285,132 @@ namespace DefectStudio::Tests
 		ExpectClosedMesh(geometry);
 		ExpectOutwardWinding(geometry);
 		ExpectInsideSharpArrowSilhouette(geometry);
+	}
+
+	TEST(PathDecorationBevelTests, TaperedStripEmitsItsNondegenerateTriangle)
+	{
+		detail::ThickFlatMesh mesh;
+		mesh.vertices = {{{0.0, 0.0, 0.0}}, {{1.0, 0.0, 0.0}}, {{0.0, 1.0, 0.0}}};
+		detail::ThickFlatBevelOutput output;
+		detail::EmitThickFlatBevelPolygon(output, mesh, {0, 1, 2, 0},
+			{{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 0.0}});
+		ASSERT_EQ(output.indices.size(), 3u);
+		for (const auto &vertex : output.vertices) EXPECT_GT(vertex.normal.z, 0.0f);
+	}
+
+	TEST(PathDecorationBevelTests, SingleSegmentArrowKeepsOppositeSharedEdgeWinding)
+	{
+		const auto geometry = BuildStroke(StraightPath(), DecoratedStyle(PathDecorationKind::Arrow, 0.04f, 1u, 0.5f));
+		ExpectClosedMesh(geometry);
+		ExpectOutwardWinding(geometry);
+	}
+
+	TEST(PathDecorationBevelTests, ShapeZeroReflexShouldersKeepTheirFanAtEvenSegmentCounts)
+	{
+		for (const auto segments : {4u, 16u})
+		{
+			SCOPED_TRACE(segments);
+			const auto geometry = BuildStroke(StraightPath(), DecoratedStyle(PathDecorationKind::Arrow, 0.04f, segments, 0.0f));
+			ExpectFiniteMesh(geometry);
+			ExpectClosedMesh(geometry);
+			ExpectOutwardWinding(geometry);
+			ExpectInsideSharpArrowSilhouette(geometry);
+		}
+	}
+
+	TEST(PathDecorationBevelTests, StraightContourMidpointDoesNotAcquireADuplicateCornerPatch)
+	{
+		const auto mesh = Prism({{-1.0, -1.0}, {0.0, -1.0}, {1.0, -1.0}, {1.0, 1.0}, {-1.0, 1.0}});
+		auto style = DecoratedStyle(PathDecorationKind::None, 0.04f, 4u, 0.5f);
+		StrokeGeometry geometry;
+		detail::FinalizeThickFlatMesh(mesh, style, geometry);
+		ExpectFiniteMesh(geometry);
+		ExpectClosedMesh(geometry);
+		ExpectOutwardWinding(geometry);
+	}
+
+	TEST(PathDecorationBevelTests, CornerEdgeOrderFollowsTheOutwardFaceWinding)
+	{
+		const auto mesh = Prism({{-1.0, -1.0}, {1.0, -1.0}, {1.0, 1.0}, {-1.0, 1.0}});
+		detail::ThickFlatBevelTopology topology;
+		ASSERT_TRUE(detail::BuildThickFlatBevelTopology(mesh, FaceNormals(mesh), 0.04, topology));
+		for (const auto &[vertex, info] : topology.vertices)
+			for (std::size_t index = 0; index < info.orderedEdges.size(); ++index)
+			{
+				const auto &incoming = topology.edges[info.orderedEdges[index]];
+				const auto &outgoing = topology.edges[info.orderedEdges[(index + info.orderedEdges.size() - 1) % info.orderedEdges.size()]];
+				bool found = false;
+				for (const auto &first : incoming.incidents)
+					for (const auto &second : outgoing.incidents)
+						if (first.face == second.face)
+						{
+							const auto &face = mesh.faces[first.face];
+							EXPECT_EQ(face.vertices[(first.corner + 1) % face.vertices.size()], vertex);
+							EXPECT_EQ(face.vertices[second.corner], vertex);
+							found = true;
+						}
+				EXPECT_TRUE(found);
+			}
+	}
+
+	TEST(PathDecorationBevelTests, ArrowSquareAndBarBevelStayClosedInsideSharpBounds)
+	{
+		for (const auto kind : {PathDecorationKind::Arrow, PathDecorationKind::Square, PathDecorationKind::Bar})
+			for (const auto segments : {1u, 4u, 16u})
+				for (const float shape : {0.0f, 0.5f, 1.0f})
+				{
+					SCOPED_TRACE(testing::Message() << static_cast<int>(kind) << "," << segments << "," << shape);
+					const auto sharp = BuildStroke(StraightPath(), DecoratedStyle(kind, 0.0f, segments, shape));
+					ASSERT_FALSE(sharp.tubeVertices.empty());
+					glm::vec3 low(1.0e10f), high(-1.0e10f);
+					for (const auto &vertex : sharp.tubeVertices)
+					{
+						low = glm::min(low, vertex.position);
+						high = glm::max(high, vertex.position);
+					}
+					const auto bevel = BuildStroke(StraightPath(), DecoratedStyle(kind, 0.04f, segments, shape));
+					ExpectFiniteMesh(bevel);
+					ExpectClosedMesh(bevel);
+					ExpectOutwardWinding(bevel);
+					double signedVolume = 0.0;
+					for (std::size_t index = 0; index < bevel.indices.size(); index += 3)
+					{
+						const auto a = glm::dvec3(bevel.tubeVertices[bevel.indices[index]].position);
+						const auto b = glm::dvec3(bevel.tubeVertices[bevel.indices[index + 1]].position);
+						const auto c = glm::dvec3(bevel.tubeVertices[bevel.indices[index + 2]].position);
+						signedVolume += glm::dot(a, glm::cross(b, c)) / 6.0;
+					}
+					EXPECT_GT(signedVolume, 0.0); // a consistently wound closed solid must face outward
+					for (const auto &vertex : bevel.tubeVertices)
+						for (int axis = 0; axis < 3; ++axis)
+						{
+							EXPECT_GE(vertex.position[axis], low[axis] - kPositionTolerance);
+							EXPECT_LE(vertex.position[axis], high[axis] + kPositionTolerance);
+						}
+					if (kind == PathDecorationKind::Arrow)
+						ExpectInsideSharpArrowSilhouette(bevel);
+				}
+	}
+
+	TEST(PathDecorationBevelTests, BevelPartsKeepTheOtherPartSharpAndTheSolidClosed)
+	{
+		for (const auto parts : {PathBevelParts::Shaft, PathBevelParts::Decorations})
+		{
+			auto style = DecoratedStyle(PathDecorationKind::Square, 0.04f, 4u, 0.5f);
+			style.ribbonBevelParts = parts;
+			const auto geometry = BuildStroke(StraightPath(), style);
+			ExpectClosedMesh(geometry);
+			ExpectOutwardWinding(geometry);
+			const glm::vec3 sharpPoint = parts == PathBevelParts::Shaft
+				? glm::vec3(0.0f, 0.25f, 0.15f) : glm::vec3(1.0f, 0.1f, 0.15f);
+			EXPECT_TRUE(std::any_of(geometry.tubeVertices.begin(), geometry.tubeVertices.end(),
+				[&](const auto &vertex) {
+					return parts == PathBevelParts::Shaft ? glm::distance(vertex.position, sharpPoint) < kPositionTolerance
+						: std::abs(vertex.position.y - sharpPoint.y) < kPositionTolerance &&
+						std::abs(vertex.position.z - sharpPoint.z) < kPositionTolerance &&
+						vertex.position.x > 0.59f && vertex.position.x < 1.41f;
+				}));
+		}
 	}
 
 	TEST(PathDecorationBevelTests, ExcessiveArrowBevelLocallyClampsTheTip)

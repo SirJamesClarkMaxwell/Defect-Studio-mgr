@@ -91,6 +91,8 @@ namespace DefectStudio
 
 	[[nodiscard]] Result<PathElementId> InsertScenePathNode(
 		const PathEditContext &context, SceneObjectId path, std::size_t segment, double t);
+	[[nodiscard]] Result<std::vector<PathElementId>> InsertScenePathNodes(
+		const PathEditContext &context, SceneObjectId path, std::size_t segment, std::size_t count);
 	[[nodiscard]] Result<PathElementId> ExtendScenePathEnd(
 		const PathEditContext &context, SceneObjectId path, PathEnd end, glm::vec3 newPosition);
 	[[nodiscard]] Result<void> DeleteScenePathNode(const PathEditContext &context, SceneObjectId path, PathElementId node);

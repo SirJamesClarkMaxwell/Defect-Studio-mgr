@@ -58,25 +58,65 @@ namespace DefectStudio
 			return nearest;
 		}
 
-		[[nodiscard]] ScenePath MakeVacancyBond(
-			const RendererWindowState &windowState, std::size_t atomIndex, const RendererVacancyData &vacancy)
+		// A vacancy end stops on the marker's edge, the way a bond between atoms ends inside the sphere
+		// instead of crossing to its centre (the marker is translucent, so a line to the centre shows).
+		[[nodiscard]] glm::vec3 VacancyEnd(const RendererVacancyData &vacancy, const glm::vec3 &from)
 		{
-			const RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+			const glm::vec3 toward = from - vacancy.cartesianPosition;
+			const float length = glm::length(toward);
+			return length > vacancy.radius ? vacancy.cartesianPosition + toward * (vacancy.radius / length)
+											: vacancy.cartesianPosition;
+		}
+
+		[[nodiscard]] ScenePath MakeBondLine(const RendererWindowState &windowState, const glm::vec3 &start,
+			const glm::vec3 &end, const glm::vec3 &startColor, const glm::vec3 &endColor)
+		{
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 			path.name = "Vacancy bond";
 			path.transform.position = glm::vec3(0);
-			path.nodes[0].position = atom.cartesianPosition;
-			path.nodes[1].position = vacancy.cartesianPosition;
-			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
+			path.nodes[0].position = start;
+			path.nodes[1].position = end;
 			path.style.startDecoration.kind = PathDecorationKind::None;
 			path.style.endDecoration.kind = PathDecorationKind::None;
 			// Same thickness as the structure's own bonds (ponytail: ignores the bond radius multiplier).
 			const float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
 			path.style.width = 2.0f * bondRadius;
 			path.style.gradient.enabled = true;
-			path.style.gradient.stops = {{0.0f, atom.color, 1.0f}, {1.0f, vacancy.color, 1.0f}};
+			path.style.gradient.stops = {{0.0f, startColor, 1.0f}, {1.0f, endColor, 1.0f}};
+			return path;
+		}
+
+		[[nodiscard]] ScenePath MakeVacancyBond(
+			const RendererWindowState &windowState, std::size_t atomIndex, const RendererVacancyData &vacancy)
+		{
+			const RendererAtomData &atom = windowState.structure.atoms[atomIndex];
+			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, VacancyEnd(vacancy, atom.cartesianPosition),
+				atom.color, vacancy.color);
+			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
 			MovePathOriginToCentre(path);
 			return path;
+		}
+
+		[[nodiscard]] ScenePath MakeVacancyPairBond(
+			const RendererWindowState &windowState, const RendererVacancyData &first, const RendererVacancyData &second)
+		{
+			ScenePath path = MakeBondLine(windowState, VacancyEnd(first, second.cartesianPosition),
+				VacancyEnd(second, first.cartesianPosition), first.color, second.color);
+			MovePathOriginToCentre(path);
+			return path;
+		}
+
+		[[nodiscard]] float NearestShownAtomDistance(const RendererWindowState &windowState, const glm::vec3 &position)
+		{
+			float nearest = std::numeric_limits<float>::max();
+			for (const RendererAtomData &atom : windowState.structure.atoms)
+				if (atom.visible)
+				{
+					const float distance = glm::length(atom.cartesianPosition - position);
+					if (distance > 1.0e-3f)
+						nearest = std::min(nearest, distance);
+				}
+			return nearest;
 		}
 	} // namespace
 
@@ -98,14 +138,7 @@ namespace DefectStudio
 	std::vector<std::size_t> NeighbourShell(const RendererWindowState &windowState, const glm::vec3 &position)
 	{
 		const auto &atoms = windowState.structure.atoms;
-		float nearest = std::numeric_limits<float>::max();
-		for (const RendererAtomData &atom : atoms)
-			if (atom.visible)
-			{
-				const float distance = glm::length(atom.cartesianPosition - position);
-				if (distance > 1.0e-3f)
-					nearest = std::min(nearest, distance);
-			}
+		const float nearest = NearestShownAtomDistance(windowState, position);
 		std::vector<std::size_t> shell;
 		for (std::size_t index = 0; index < atoms.size(); ++index)
 		{
@@ -124,6 +157,7 @@ namespace DefectStudio
 			if (atom < windowState.structure.atoms.size())
 				atoms.push_back(atom);
 		std::vector<std::pair<std::size_t, std::size_t>> pairs; // atom, vacancy
+		std::vector<std::pair<std::size_t, std::size_t>> vacancyPairs; // vacancy, vacancy (first < second)
 		// Stale atom indices (atoms just deleted to make the vacancies) do not count as a selection.
 		if (!atoms.empty())
 		{
@@ -147,10 +181,19 @@ namespace DefectStudio
 			for (const std::size_t vacancy : chosen)
 				for (const std::size_t atom : NeighbourShell(windowState, vacancies[vacancy].cartesianPosition))
 					pairs.emplace_back(atom, vacancy);
+			// Two chosen vacancies that are first-shell neighbours (V_B - V_N in hBN) get a line too.
+			for (std::size_t a = 0; a < chosen.size(); ++a)
+				for (std::size_t b = a + 1; b < chosen.size(); ++b)
+				{
+					const glm::vec3 &first = vacancies[chosen[a]].cartesianPosition;
+					const float shell = NearestShownAtomDistance(windowState, first) * kShellTolerance;
+					if (glm::length(vacancies[chosen[b]].cartesianPosition - first) <= shell)
+						vacancyPairs.emplace_back(std::min(chosen[a], chosen[b]), std::max(chosen[a], chosen[b]));
+				}
 		}
 		DS_LOG_INFO("Vacancy bonds: {} line(s) from {} selected atom(s), {} selected vacancy(ies), {} vacancy(ies) in total",
 			pairs.size(), atoms.size(), windowState.selectedVacancies.size(), vacancies.size());
-		if (pairs.empty())
+		if (pairs.empty() && vacancyPairs.empty())
 			return 0;
 
 		const SceneObjectsSnapshot before = CaptureSceneObjectsSnapshot(windowState);
@@ -158,6 +201,15 @@ namespace DefectStudio
 		for (const auto &[atom, vacancy] : pairs)
 		{
 			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancies[vacancy]));
+			if (result)
+				added.push_back(result.Value());
+			else
+				DS_LOG_WARN("Add vacancy bond failed: {}", result.Error().technicalDetails);
+		}
+		for (const auto &[first, second] : vacancyPairs)
+		{
+			const auto result = AddScenePath(
+				MakeSilentPathEditContext(windowState), MakeVacancyPairBond(windowState, vacancies[first], vacancies[second]));
 			if (result)
 				added.push_back(result.Value());
 			else

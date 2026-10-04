@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -21,6 +22,8 @@ namespace DefectStudio
 	// Exact split - Line by lerp, Cubic by de Casteljau, Arc by sweep (t*theta / (1-t)*theta in the
 	// same plane). The evaluated curve is unchanged. Returns the new node's id.
 	[[nodiscard]] Result<PathElementId> InsertNode(ScenePath &path, std::size_t segment, double t);
+	// Splits the original parameter interval into count+1 equal pieces, atomically (1..32 nodes).
+	[[nodiscard]] Result<std::vector<PathElementId>> InsertNodes(ScenePath &path, std::size_t segment, std::size_t count);
 
 	// Appends a node past the chosen end. The new segment inherits the terminal segment's type:
 	// Cubic gets Vector handles, Arc inherits normal and sweep as editable initial values. An empty
@@ -33,8 +36,8 @@ namespace DefectStudio
 	[[nodiscard]] Result<void> DeleteNode(ScenePath &path, PathElementId node);
 
 	// Reverses node and segment order, swaps each cubic's handles and negates each arc's sweep, so the
-	// evaluated geometry is identical and only the direction of travel flips. Decorations, gradient and
-	// dash phase join this in S5.
+	// evaluated geometry is identical and only the direction of travel flips. Endpoint decoration
+	// roles stay authored; gradient and dash phase mirror to retain their physical colours/pattern.
 	[[nodiscard]] Result<void> ReversePath(ScenePath &path);
 
 	// Moves the path's origin to the centre of its authored nodes, without moving the path: every

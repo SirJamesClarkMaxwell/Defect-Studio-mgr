@@ -12,6 +12,7 @@
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportPathInsert.hpp"
 #include "Presentation/Panels/ViewportTextEditor.hpp"
 #include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -49,6 +50,8 @@ namespace DefectStudio
 			return true;
 		}
 		if (ImGui::GetIO().WantTextInput)
+			return true;
+		if (HandleViewportPathInsert(windowState, imageOrigin, imageSize, hovered))
 			return true;
 		if (hovered && !windowState.pathEdit.IsActive() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered))

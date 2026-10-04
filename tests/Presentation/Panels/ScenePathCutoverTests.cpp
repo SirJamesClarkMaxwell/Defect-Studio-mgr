@@ -67,8 +67,8 @@ namespace DefectStudio::Tests
 			const ScenePath &reversed = *live.paths->Store().Find(id);
 			EXPECT_EQ(reversed.nodes.front().position, original.nodes.back().position);
 			EXPECT_EQ(reversed.nodes.back().position, original.nodes.front().position);
-			EXPECT_EQ(reversed.style.startDecoration.kind, PathDecorationKind::Arrow);
-			EXPECT_EQ(reversed.style.endDecoration.kind, PathDecorationKind::None);
+			EXPECT_EQ(reversed.style.startDecoration.kind, PathDecorationKind::None);
+			EXPECT_EQ(reversed.style.endDecoration.kind, PathDecorationKind::Arrow);
 		}
 		EXPECT_EQ(live.paths->Store().Find(third)->nodes.front().position, original.nodes.front().position);
 		ASSERT_EQ(undo->GetUndoDepth(), 1u);

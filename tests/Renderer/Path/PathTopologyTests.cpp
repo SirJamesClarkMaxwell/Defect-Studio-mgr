@@ -12,6 +12,7 @@
 #include "Renderer/Path/PathDash.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathTopology.hpp"
+#include "Renderer/Path/PathStrokeMesher.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -245,7 +246,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(std::get<CircularArcSegmentData>(path.segments[1].data).signedSweepRadians, std::get<CircularArcSegmentData>(original.segments[1].data).signedSweepRadians);
 	}
 
-	TEST(PathTopologyTests, ReverseMirrorsStyledPathDecorationsGradientAndDashPhase)
+	TEST(PathTopologyTests, ReverseKeepsEndpointRolesAndMirrorsGradientAndDashPhase)
 	{
 		ScenePath path = MakePath({glm::vec3(0.0f), glm::vec3(10.0f, 0.0f, 0.0f)}, {Line(PathElementId{3})});
 		path.style.startDecoration.kind = PathDecorationKind::Arrow;
@@ -255,11 +256,16 @@ namespace DefectStudio::Tests
 		path.style.dash = {true, 2.0f, 1.0f, 0.25f};
 		const ScenePath original = path;
 		ASSERT_TRUE(ReversePath(path));
-		EXPECT_EQ(path.style.startDecoration.kind, PathDecorationKind::Circle);
-		EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::Arrow);
+		EXPECT_EQ(path.style.startDecoration.kind, PathDecorationKind::Arrow);
+		EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::Circle);
 		ASSERT_EQ(path.style.gradient.stops.size(), 2u);
+		EXPECT_EQ(path.style.gradient.stops[0].color, original.style.gradient.stops[1].color);
+		EXPECT_EQ(path.style.gradient.stops[1].color, original.style.gradient.stops[0].color);
 		EXPECT_NEAR(path.style.gradient.stops[0].position, 0.3f, 1e-6f);
 		EXPECT_NEAR(path.style.gradient.stops[1].position, 0.8f, 1e-6f);
+		for (const double position : {0.0, 0.2, 0.4, 0.7, 1.0})
+			EXPECT_NEAR(glm::distance(SampleStrokeColor(original.style, position),
+				SampleStrokeColor(path.style, 1.0 - position)), 0.0f, 1.0e-5f);
 		// The phase value itself is an implementation detail; what has to hold is that a dash covering
 		// world position s before the reversal covers L - s after it.
 		const std::vector<DashInterval> before = BuildDashIntervals(0.0, 10.0, original.style.dash);

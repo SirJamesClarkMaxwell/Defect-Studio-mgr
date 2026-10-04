@@ -134,7 +134,7 @@ namespace DefectStudio
 		};
 
 		if (toolButton(
-				"##ToolNone", "tool-select.png", "Sel", "Selection tool - plain click-select, no drag tool active",
+				"##ToolNone", "tool-select.png", "Sel", "Selection tool (T) - plain click-select, no drag tool active",
 				windowState.activeSelectionTool == SelectionToolMode::None))
 		{
 			publishToolToggle(SelectionToolMode::None);
@@ -148,7 +148,7 @@ namespace DefectStudio
 		}
 
 		if (toolButton(
-				"##ToolText", "tool-text.png", "T", "Text (TeX: V_B, x^2, \\alpha)",
+				"##ToolText", "tool-text.png", "T", "Text tool (Shift+T) - TeX: V_B, x^2, \\alpha",
 				windowState.activeSelectionTool == SelectionToolMode::Text))
 		{
 			publishToolToggle(SelectionToolMode::Text);

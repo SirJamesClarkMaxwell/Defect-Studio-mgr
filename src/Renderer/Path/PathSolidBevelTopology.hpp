@@ -40,7 +40,7 @@ namespace DefectStudio::detail
 	struct ThickFlatBevelVertex
 	{
 		std::vector<std::size_t> edges;
-		std::vector<std::size_t> orderedEdges;
+		std::vector<std::size_t> orderedEdges; // outward corner boundary: outgoing -> incoming through each face
 		ThickFlatBevelTurn turn = ThickFlatBevelTurn::Unsupported;
 		double radius = 0.0;
 	};

@@ -53,6 +53,12 @@ namespace DefectStudio
 		// The defect's local axes (RendererStructureData::defectFrame): draws the triad AND makes the
 		// 1/2/3 view keys look along x/y/z instead of a/b/c. Eye menu of the horizontal toolbar.
 		bool showDefectFrame = true;
+		// How the defect axes "empty" is drawn (Blender's plain axes): half-length along each axis in
+		// Angstrom, line width in pixels, and whether -x/-y/-z are drawn too.
+		//   ponytail: per window, not saved with the project.
+		float defectFrameAxisLength = 1.6f;
+		float defectFrameAxisWidth = 2.5f;
+		bool defectFrameNegativeAxes = true;
 		bool showBonds = true;
 		// Bonds that cross a periodic cell boundary (Bond::periodicShift) run to an image atom that is
 		// not drawn, so they read as stubs poking out of the cell. Correct, and the only way a 2D
@@ -359,7 +365,7 @@ namespace DefectStudio
 		std::vector<SceneObjectId> selectedScenePaths;
 		// Blender-like edit aid for validating the generated path mesh. Per viewport and deliberately
 		// not persisted as object data.
-		bool showPathMeshOverlay = true;
+		bool showPathMeshOverlay = false;
 		// Edit Mode state for the one path opened from selectedScenePaths; element selection is kept
 		// separate so leaving the session never changes Object Mode's path selection.
 		PathEditSession pathEdit;

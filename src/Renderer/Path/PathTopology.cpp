@@ -128,6 +128,23 @@ namespace DefectStudio
 		return nodeId;
 	}
 
+	Result<std::vector<PathElementId>> InsertNodes(ScenePath &path, const std::size_t segment, const std::size_t count)
+	{
+		if (count < 1 || count > 32)
+			return MakeError(PathDiagnosticCode::ParameterOutOfRange, "Insert count must be between 1 and 32.");
+		ScenePath edited = path;
+		std::vector<PathElementId> inserted;
+		for (std::size_t index = 0; index < count; ++index)
+		{
+			const auto node = InsertNode(edited, segment + index, 1.0 / static_cast<double>(count + 1 - index));
+			if (!node)
+				return node.Error();
+			inserted.push_back(*node);
+		}
+		path = std::move(edited);
+		return inserted;
+	}
+
 	Result<PathElementId> ExtendEnd(ScenePath &path, PathEnd end, glm::vec3 newPosition)
 	{
 		if (!IsFinite(newPosition))
@@ -227,7 +244,7 @@ namespace DefectStudio
 					data.signedSweepRadians = -data.signedSweepRadians;
 			}, segment.data);
 		}
-		std::swap(edited.style.startDecoration, edited.style.endDecoration);
+		// Endpoint roles stay authored: reversing travel moves an end arrow to the other end.
 		for (PathGradientStop &stop : edited.style.gradient.stops)
 			stop.position = 1.0f - stop.position;
 		std::reverse(edited.style.gradient.stops.begin(), edited.style.gradient.stops.end());

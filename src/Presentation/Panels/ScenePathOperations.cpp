@@ -126,22 +126,32 @@ namespace DefectStudio
 
 	Result<SceneObjectId> AddScenePathThroughSelectedAtoms(RendererWindowState &windowState, const bool arrow)
 	{
-		std::vector<std::size_t> atoms;
+		// Ends: the selected atoms (bound, so the line follows them) then the selected vacancies (free
+		// at the marker - a vacancy is not something a node can bind to).
+		struct End
+		{
+			glm::vec3 position;
+			PathBinding binding;
+		};
+		std::vector<End> ends;
+		const float buffer = GetScenePathAtomBuffer();
 		for (const auto index : windowState.selectedAtomIndices)
 			if (index < windowState.structure.atoms.size())
-				atoms.push_back(index);
-		if (atoms.size() != 2)
-			return PathEditSelectionError("path.two_atoms_required", "Select exactly two atoms to draw a segment.");
-		const glm::vec3 start = windowState.structure.atoms[atoms[0]].cartesianPosition;
-		const glm::vec3 end = windowState.structure.atoms[atoms[1]].cartesianPosition;
+				ends.push_back({windowState.structure.atoms[index].cartesianPosition,
+					PathBinding{PathBinding::CopyPosition{index, {}, buffer}}});
+		for (const auto index : windowState.selectedVacancies)
+			if (index < windowState.structure.vacancies.size())
+				ends.push_back({windowState.structure.vacancies[index].cartesianPosition, PathBinding{}});
+		if (ends.size() != 2)
+			return PathEditSelectionError(
+				"path.two_atoms_required", "Select exactly two atoms or vacancies (Ctrl+click) to draw a segment.");
 		ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 		path.name = arrow ? "Arrow" : "Line";
 		path.transform.position = glm::vec3(0);
-		path.nodes[0].position = start;
-		path.nodes[1].position = end;
-		const float buffer = GetScenePathAtomBuffer();
-		path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atoms[0], {}, buffer}};
-		path.nodes[1].binding = PathBinding{PathBinding::CopyPosition{atoms[1], {}, buffer}};
+		path.nodes[0].position = ends[0].position;
+		path.nodes[1].position = ends[1].position;
+		path.nodes[0].binding = ends[0].binding;
+		path.nodes[1].binding = ends[1].binding;
 		path.style.endDecoration.kind = arrow ? PathDecorationKind::Arrow : PathDecorationKind::None;
 		MovePathOriginToCentre(path);
 		const auto added = AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));

@@ -146,6 +146,20 @@ namespace DefectStudio
 		return !SelectionFor(windowState, kind).empty();
 	}
 
+	namespace
+	{
+		SceneObjectEditKind &LastCopiedKind()
+		{
+			static SceneObjectEditKind kind = SceneObjectEditKind::Path;
+			return kind;
+		}
+	} // namespace
+
+	SceneObjectEditKind LastCopiedSceneObjectEditKind()
+	{
+		return LastCopiedKind();
+	}
+
 	bool ExecuteSceneObjectEditAction(
 		RendererWindowState &windowState,
 		const SceneObjectEditKind kind,
@@ -188,6 +202,7 @@ namespace DefectStudio
 			break;
 
 		case SceneObjectEditAction::Copy:
+			LastCopiedKind() = kind;
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: CopySceneFreeLabelsToClipboard(windowState); break;

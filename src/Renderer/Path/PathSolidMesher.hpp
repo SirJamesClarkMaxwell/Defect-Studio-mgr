@@ -39,7 +39,7 @@ namespace DefectStudio::detail
 
 	[[nodiscard]] bool UsesThickFlatSolidBevel(const PathStrokeStyle &style,
 		const DecorationContour &startContour, const DecorationContour &endContour);
-	void MergeCoplanarThickFlatSeams(ThickFlatMesh &mesh);
+	void MergeCoplanarThickFlatSeams(ThickFlatMesh &mesh, bool preserveOwners = false);
 
 	void AppendThickFlatPiece(ThickFlatMesh &mesh, const std::vector<EvaluatedSample> &samples,
 		const PathStrokeStyle &style, bool capStart, bool capEnd,

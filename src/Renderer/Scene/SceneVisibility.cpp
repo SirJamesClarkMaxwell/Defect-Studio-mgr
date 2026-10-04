@@ -51,7 +51,7 @@ namespace DefectStudio
 		return !windowState.selectedAtomIndices.empty() || !windowState.selectedPinnedMeasurements.empty() ||
 			!windowState.selectedFreeLabels.empty() ||
 			!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty() ||
-			!windowState.selectedScenePaths.empty();
+			!windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;
 	}
 
 	void SetSelectedSceneObjectsVisible(RendererWindowState &windowState, const bool visible)
@@ -65,6 +65,12 @@ namespace DefectStudio
 			if (std::find(selectedPaths.begin(), selectedPaths.end(), path.id) != selectedPaths.end())
 				path.visible = visible;
 		});
+		// The defect axes have one show flag; hidden axes cannot stay selected (they are not drawn or picked).
+		if (windowState.defectFrameSelected)
+		{
+			windowState.showDefectFrame = visible;
+			windowState.defectFrameSelected = visible;
+		}
 	}
 
 	void ShowAllSceneObjects(RendererWindowState &windowState)
@@ -74,6 +80,7 @@ namespace DefectStudio
 		SetVisibleEverywhere(windowState.sceneOrbitals, true);
 		SetVisibleEverywhere(windowState.scenePlanes, true);
 		ForEachPath(windowState, [](ScenePath &path) { path.visible = true; });
+		windowState.showDefectFrame = true;
 	}
 
 	void ApplyRenderPassVisibility(RendererWindowState &windowState)
