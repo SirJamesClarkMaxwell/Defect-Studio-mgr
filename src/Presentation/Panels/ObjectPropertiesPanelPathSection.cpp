@@ -3,6 +3,7 @@
 #include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
 
 #include <numbers>
+#include <optional>
 #include <type_traits>
 
 #include <imgui.h>
@@ -20,6 +21,31 @@ namespace DefectStudio
 {
 	namespace
 	{
+		// Exact-value numeric fields that commit once, when a field is left after an edit.
+		struct NumericFieldCommit
+		{
+			bool active = false;
+			bool commit = false;
+
+			void Float(const char *label, float &value)
+			{
+				ImGui::InputFloat(label, &value, 0.0f, 0.0f, "%.9g");
+				Track();
+			}
+			void Double(const char *label, double &value)
+			{
+				ImGui::InputDouble(label, &value, 0.0, 0.0, "%.9g");
+				Track();
+			}
+
+		private:
+			void Track()
+			{
+				active |= ImGui::IsItemActive();
+				commit |= ImGui::IsItemDeactivatedAfterEdit();
+			}
+		};
+
 		template <typename T>
 		bool ReportPathEditResult(const Result<T> &result)
 		{
@@ -83,26 +109,30 @@ namespace DefectStudio
 				return;
 			}
 
-			PathBinding edited = current.Value();
+			// InputScalar does not support EnterReturnsTrue (an ImGui assert), so the typed value lives in
+			// a draft while a field is active and is committed when the field is left after an edit.
+			//   ponytail: one draft for every window; only the focused panel can have an active field.
+			static std::optional<PathBinding> draft;
+			PathBinding edited = draft.value_or(current.Value());
 			if (std::holds_alternative<PathBinding::Free>(edited.value))
 				return;
-			constexpr ImGuiInputTextFlags commitOnEnter = ImGuiInputTextFlags_EnterReturnsTrue;
-			bool commit = false;
+			NumericFieldCommit fields;
 			std::visit([&](auto &binding) {
 				using Binding = std::decay_t<decltype(binding)>;
 				if constexpr (!std::is_same_v<Binding, PathBinding::Free>)
 				{
-					commit |= ImGui::InputFloat("Offset X", &binding.offset.x, 0.0f, 0.0f, "%.9g", commitOnEnter);
-					commit |= ImGui::InputFloat("Offset Y", &binding.offset.y, 0.0f, 0.0f, "%.9g", commitOnEnter);
-					commit |= ImGui::InputFloat("Offset Z", &binding.offset.z, 0.0f, 0.0f, "%.9g", commitOnEnter);
+					fields.Float("Offset X", binding.offset.x);
+					fields.Float("Offset Y", binding.offset.y);
+					fields.Float("Offset Z", binding.offset.z);
 					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
 						if (endpoint)
-							commit |= ImGui::InputFloat("Buffer", &binding.buffer, 0.0f, 0.0f, "%.9g", commitOnEnter);
+							fields.Float("Buffer", binding.buffer);
 				}
 			}, edited.value);
-			if (commit)
+			draft = fields.active && !fields.commit ? std::optional<PathBinding>(edited) : std::nullopt;
+			if (fields.commit)
 				ReportPathEditResult(SetActiveScenePathNodeBinding(windowState, edited));
-			ImGui::TextDisabled("Press Enter to commit an exact value.");
+			ImGui::TextDisabled("Enter, Tab or clicking away commits an exact value.");
 			if (ImGui::Button("Detach (keep position)"))
 				ReportPathEditResult(DetachActiveScenePathNodeKeepingPosition(windowState));
 		}
@@ -146,29 +176,28 @@ namespace DefectStudio
 				return;
 
 			ImGui::SeparatorText("Circular arc");
-			PathArcParameters edited = resolved.Value();
+			// Same draft rule as the binding offsets above.
+			static std::optional<PathArcParameters> draft;
+			PathArcParameters edited = draft.value_or(resolved.Value());
 			constexpr double kRadiansPerDegree = std::numbers::pi_v<double> / 180.0;
 			double startDegrees = edited.startAngleRadians / kRadiansPerDegree;
 			double sweepDegrees = edited.signedSweepRadians / kRadiansPerDegree;
-			constexpr ImGuiInputTextFlags commitOnEnter = ImGuiInputTextFlags_EnterReturnsTrue;
-			bool commit = false;
-			commit |= ImGui::InputDouble("Center X", &edited.center.x, 0.0, 0.0, "%.9g", commitOnEnter);
-			commit |= ImGui::InputDouble("Center Y", &edited.center.y, 0.0, 0.0, "%.9g", commitOnEnter);
-			commit |= ImGui::InputDouble("Center Z", &edited.center.z, 0.0, 0.0, "%.9g", commitOnEnter);
-			commit |= ImGui::InputDouble("Axis X", &edited.axis.x, 0.0, 0.0, "%.9g", commitOnEnter);
-			commit |= ImGui::InputDouble("Axis Y", &edited.axis.y, 0.0, 0.0, "%.9g", commitOnEnter);
-			commit |= ImGui::InputDouble("Axis Z", &edited.axis.z, 0.0, 0.0, "%.9g", commitOnEnter);
-			commit |= ImGui::InputDouble("Radius", &edited.radius, 0.0, 0.0, "%.9g", commitOnEnter);
-			const bool startCommitted = ImGui::InputDouble(
-				"Start angle (deg)", &startDegrees, 0.0, 0.0, "%.9g", commitOnEnter);
-			const bool sweepCommitted = ImGui::InputDouble(
-				"Sweep (deg)", &sweepDegrees, 0.0, 0.0, "%.9g", commitOnEnter);
+			NumericFieldCommit fields;
+			fields.Double("Center X", edited.center.x);
+			fields.Double("Center Y", edited.center.y);
+			fields.Double("Center Z", edited.center.z);
+			fields.Double("Axis X", edited.axis.x);
+			fields.Double("Axis Y", edited.axis.y);
+			fields.Double("Axis Z", edited.axis.z);
+			fields.Double("Radius", edited.radius);
+			fields.Double("Start angle (deg)", startDegrees);
+			fields.Double("Sweep (deg)", sweepDegrees);
 			edited.startAngleRadians = startDegrees * kRadiansPerDegree;
 			edited.signedSweepRadians = sweepDegrees * kRadiansPerDegree;
-			commit |= startCommitted || sweepCommitted;
-			if (commit)
+			draft = fields.active && !fields.commit ? std::optional<PathArcParameters>(edited) : std::nullopt;
+			if (fields.commit)
 				ReportPathEditResult(ApplySelectedScenePathArc(windowState, edited));
-			ImGui::TextDisabled("Press Enter to commit an exact value.");
+			ImGui::TextDisabled("Enter, Tab or clicking away commits an exact value.");
 		}
 	} // namespace
 
