@@ -224,7 +224,10 @@ local function DefineTracyProject()
         includedirs { "Vendor/Tracy/public" }
         defines {
             "TRACY_ENABLE",
-            "TRACY_NO_SYSTEM_TRACING"
+            "TRACY_NO_SYSTEM_TRACING",
+            -- Without ON_DEMAND the client queues every zone from startup until a profiler
+            -- connects, in its own allocator: ~1.5 MB/s idle, 10 GB after a few hours.
+            "TRACY_ON_DEMAND"
         }
 
         filter "system:windows"
@@ -581,7 +584,10 @@ project "DefectStudio"
         defines {
             "DS_PLATFORM_WINDOWS",
             "TRACY_ENABLE",
-            "TRACY_NO_SYSTEM_TRACING"
+            "TRACY_NO_SYSTEM_TRACING",
+            -- Without ON_DEMAND the client queues every zone from startup until a profiler
+            -- connects, in its own allocator: ~1.5 MB/s idle, 10 GB after a few hours.
+            "TRACY_ON_DEMAND"
         }
         files { "install/app/assets/icon.rc" }
         links { "Tracy" }

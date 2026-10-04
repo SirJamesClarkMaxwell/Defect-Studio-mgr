@@ -109,3 +109,10 @@ Open items found during manual testing that are not yet scheduled into a task.
 - **Selected labels drew boxes** (2026-10-04). The glyph selection outline was wider than the MSDF distance reach,
   so each glyph quad filled. *Fixed in labels.frag (capped outline + tint); a label background gets a
   selection-coloured frame.*
+- **Idle memory growth** (2026-10-04). The app's private bytes grow ~1.3-2 MB/s with no input, also with no
+  structure window open; an instance left running for ~2 h reached 10.7 GB. Present already at 27ee4c6 (before
+  tasks 59-64), handle and thread counts stay flat, so it is heap or driver memory grown every frame. Not
+  `EventQueue` (drained). *Fixed: Tracy was built with TRACY_ENABLE but without TRACY_ON_DEMAND, so the client
+  queued every zone from startup in its own allocator (outside the CRT heap - a CRT heap diff showed only
+  ~1 KB/frame and the renderer issued no GL allocations with no window open). With TRACY_ON_DEMAND private bytes
+  stay flat (392 MB over a minute idle).*
