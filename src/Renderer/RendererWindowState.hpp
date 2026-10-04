@@ -491,6 +491,9 @@ namespace DefectStudio
 		// Set by RendererLayer::onAddAtomPopupToggleRequested (Shift+A), read and cleared by
 		// RendererPanel's shared request consumer, which forwards it into the one app-wide Add menu.
 		bool addAtomPopupRequested = false;
+		// The shared Add menu opens the existing coordinate editor at this position.
+		std::optional<glm::vec3> addAtomCoordinatesPopupPosition;
+		bool addAtomCoordinatesPopupFractional = false;
 		std::optional<glm::vec2> addMenuScreenPosition;
 		// Box/circle drag-select (Alt+B / Alt+C). Coordinates are viewport-relative pixels, same
 		// space as RendererPanel::handleAtomPick's relX/relY.

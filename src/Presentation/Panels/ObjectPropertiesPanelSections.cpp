@@ -15,6 +15,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
+#include "Presentation/Panels/SceneOrientationControls.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
@@ -344,7 +345,7 @@ namespace DefectStudio
 				return ImGui::DragFloat("Z_eff", &value, 0.05f, 0.1f, 30.0f, "%.2f");
 			});
 		}
-		if (!hasLcao && ImGui::CollapsingHeader("Polozenie##SelectedOrbitalPlacement", kOpen))
+		if (ImGui::CollapsingHeader("Polozenie##SelectedOrbitalPlacement", kOpen))
 		{
 			if (ImGui::Button("Wyrownaj orientacje"))
 			{
@@ -355,6 +356,8 @@ namespace DefectStudio
 			ImGui::SetItemTooltip(
 				"Kopiuje obrot pierwszego zaznaczonego orbitalu jednoosrodkowego. "
 				"Orbitale dwuosrodkowe zachowuja kierunek wyznaczony przez srodki.");
+			DrawSceneOrbitalAimControls(windowState, windowState.selectedSceneOrbitals);
+			DrawSceneAxisAlignmentControls(windowState);
 		}
 		if (ImGui::CollapsingHeader("Wyglad##SelectedOrbitalAppearance", kOpen))
 		{
@@ -406,6 +409,7 @@ namespace DefectStudio
 			return;
 		}
 
+		DrawSceneAxisAlignmentControls(windowState);
 		using Plane = RendererWindowState::ScenePlane;
 		auto draw = [&](auto field, auto &&widget) {
 			return DrawSelectedSharedValue(

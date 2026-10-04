@@ -187,15 +187,15 @@ namespace DefectStudio
 		{
 			if (samples.size() < 2)
 				return;
-			const std::uint32_t first = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			const float radius = style.width * 0.5f;
 			const std::uint32_t ringSize = detail::CrossSectionRingSize(style);
 			if (style.cap == PathLineCap::Square)
 			{
-				samples.front().position -= samples.front().tangent * static_cast<double>(radius);
-				samples.back().position += samples.back().tangent * static_cast<double>(radius);
+				if (capStart) samples.front().position -= samples.front().tangent * static_cast<double>(radius);
+				if (capEnd) samples.back().position += samples.back().tangent * static_cast<double>(radius);
 			}
 			const bool hasColors = colors != nullptr && colors->size() == samples.size();
+			std::uint32_t previous = 0;
 			for (std::size_t index = 0; index < samples.size(); ++index)
 			{
 				const std::uint32_t ring = detail::AppendCrossSectionRing(geometry, samples[index].position,
@@ -203,23 +203,26 @@ namespace DefectStudio
 				if (hasColors)
 					for (std::uint32_t radial = 0; radial < ringSize; ++radial)
 						geometry.tubeVertices[ring + radial].color = (*colors)[index];
+				if (index > 0)
+					detail::StitchRings(geometry, previous, ring, ringSize,
+						style.profile == StrokeProfile::Flat || (startHandoff && index == 1u));
+				else if (capStart)
+				{
+					// Emit the start cap before later samples so arcT, dash coordinates and
+					// gradient stops retain the shaft's longitudinal vertex order.
+					if (style.cap == PathLineCap::Round)
+						AppendHemisphereCap(geometry, samples.front(), style, false, ring,
+							hasColors ? &(*colors)[0] : nullptr, startHandoff);
+					else detail::AppendFlatCap(geometry, ring, style, samples.front(), false);
+				}
+				previous = ring;
 			}
-			for (std::size_t ring = 0; ring + 1u < samples.size(); ++ring)
+			if (capEnd)
 			{
-				const std::uint32_t lower = first + static_cast<std::uint32_t>(ring) * ringSize;
-				const std::uint32_t upper = first + static_cast<std::uint32_t>(ring + 1u) * ringSize;
-				detail::StitchRings(geometry, lower, upper, ringSize,
-					style.profile == StrokeProfile::Flat || (startHandoff && ring == 0u));
-			}
-			if (style.cap == PathLineCap::Round)
-			{
-				if (capStart)
-					AppendHemisphereCap(geometry, samples.front(), style, false, first,
-						hasColors ? &(*colors)[0] : nullptr, startHandoff);
-				if (capEnd)
-					AppendHemisphereCap(geometry, samples.back(), style, true,
-						first + static_cast<std::uint32_t>(samples.size() - 1u) * ringSize,
+				if (style.cap == PathLineCap::Round)
+					AppendHemisphereCap(geometry, samples.back(), style, true, previous,
 						hasColors ? &colors->back() : nullptr, false);
+				else detail::AppendFlatCap(geometry, previous, style, samples.back(), true);
 			}
 		}
 

@@ -14,7 +14,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
+#include "Presentation/Panels/ViewportAddMenu.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererTypes.hpp"
@@ -53,7 +53,8 @@ namespace DefectStudio
 	// shortcuts do rather than going through CommandRegistry, matching this file's existing style
 	// (see DrawViewportToolbar's iconButton/queueTransition in ViewportToolbars.cpp) - none of these need undo or a
 	// command-palette entry of their own beyond what's already registered for the keybindings.
-	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer)
+	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer,
+		const WeakRef<CommandRegistry> &commandRegistry)
 	{
 		Ref<EventBus> eventBus = layer.GetEventBus();
 		if (eventBus == nullptr)
@@ -289,9 +290,7 @@ namespace DefectStudio
 		ImGui::SetNextWindowPos(segmentPopupPosition, ImGuiCond_Appearing);
 		if (ImGui::BeginPopup("##AddSegmentPopup"))
 		{
-			DrawFreeSegmentAddItems(windowState, windowState.cursor3DPosition);
-			ImGui::SeparatorText("Z zaznaczenia");
-			DrawSegmentAddItems(windowState);
+			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus);
 			ImGui::EndPopup();
 		}
 
@@ -305,9 +304,7 @@ namespace DefectStudio
 		ImGui::SetNextWindowPos(planePopupPosition, ImGuiCond_Appearing);
 		if (ImGui::BeginPopup("##AddPlanePopup"))
 		{
-			DrawFreePlaneAddItem(windowState, windowState.cursor3DPosition);
-			ImGui::SeparatorText("Z zaznaczenia");
-			DrawPlaneAddItem(windowState);
+			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus);
 			ImGui::EndPopup();
 		}
 
@@ -330,7 +327,7 @@ namespace DefectStudio
 		ImGui::SetNextWindowPos(orbitalPopupPosition, ImGuiCond_Appearing);
 		if (ImGui::BeginPopup("##AddOrbitalPopup"))
 		{
-			DrawOrbitalAddMenu(windowState, windowState.cursor3DPosition, false);
+			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus);
 			ImGui::EndPopup();
 		}
 

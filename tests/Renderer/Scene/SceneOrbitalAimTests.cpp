@@ -170,4 +170,68 @@ namespace DefectStudio::Tests
 		}
 		EXPECT_GT(orbitals[1].effectiveCharge, 1.0f); // sized as carbon, not hydrogen
 	}
+
+	TEST(SceneOrbitalAimTests, MultiAimUsesEachAnchoredCentreAndLeavesTheInputUnchanged)
+	{
+		RendererWindowState window = NvWindow();
+		for (std::size_t i = 1; i < 4; ++i)
+		{
+			auto orbital = Orbital(OrbitalPreset::P, 0, glm::vec3(10, 20, 30));
+			orbital.id = SceneObjectId{100 + i};
+			orbital.centerA = glm::vec3(99.0f); // the anchor, not this stale value, is the centre
+			orbital.anchorAtoms = {i};
+			window.sceneOrbitals.push_back(orbital);
+			window.selectedSceneOrbitals.push_back(orbital.id);
+		}
+		const auto result = AimSelectedSceneOrbitals(window, window.selectedSceneOrbitals, glm::vec3(0.0f));
+		ASSERT_EQ(result.size(), 3u);
+		for (std::size_t i = 0; i < result.size(); ++i)
+		{
+			EXPECT_EQ(result[i].id, window.sceneOrbitals[i].id);
+			ExpectAimed(window.sceneOrbitals[i], result[i].eulerDegrees, -window.structure.atoms[i + 1].cartesianPosition);
+			EXPECT_EQ(window.sceneOrbitals[i].rotationEuler, glm::vec3(10, 20, 30));
+		}
+	}
+
+	TEST(SceneOrbitalAimTests, MultiAimSkipsUnsupportedCoincidentAndStaleSelection)
+	{
+		RendererWindowState window;
+		const OrbitalPreset presets[] = {OrbitalPreset::P, OrbitalPreset::S, OrbitalPreset::Sigma, OrbitalPreset::P};
+		for (std::size_t i = 0; i < 4; ++i)
+		{
+			auto orbital = Orbital(presets[i], 0);
+			orbital.id = SceneObjectId{100 + i};
+			window.sceneOrbitals.push_back(orbital);
+		}
+		window.sceneOrbitals[3].lcaoComponents.emplace_back();
+		const std::vector<SceneObjectId> ids = {SceneObjectId{100}, SceneObjectId{101}, SceneObjectId{102}, SceneObjectId{103}, SceneObjectId{999}};
+		const auto result = AimSelectedSceneOrbitals(window, ids, glm::vec3(0, 1, 0));
+		ASSERT_EQ(result.size(), 1u);
+		EXPECT_EQ(result.front().id, SceneObjectId{100});
+		EXPECT_TRUE(AimSelectedSceneOrbitals(window, ids, glm::vec3(0.0f)).empty());
+		EXPECT_TRUE(AimSelectedSceneOrbitals(window, {}, glm::vec3(0, 1, 0)).empty());
+	}
+
+	TEST(SceneOrbitalAimTests, NearestVacancyIsResolvedPerCentreAndDuplicateIdsAreNotRepeated)
+	{
+		RendererWindowState window;
+		RendererVacancyData vacancy;
+		vacancy.cartesianPosition = glm::vec3(-2, 0, 0);
+		window.structure.vacancies.push_back(vacancy);
+		vacancy.cartesianPosition = glm::vec3(12, 0, 0);
+		window.structure.vacancies.push_back(vacancy);
+		auto a = Orbital(OrbitalPreset::P, 0);
+		a.id = SceneObjectId{1};
+		auto b = a;
+		b.id = SceneObjectId{2};
+		b.centerA = glm::vec3(10, 0, 0);
+		window.sceneOrbitals = {a, b};
+		const std::vector<SceneObjectId> ids = {a.id, b.id, a.id};
+		const auto result = AimSelectedSceneOrbitals(window, ids, std::nullopt);
+		ASSERT_EQ(result.size(), 2u);
+		ExpectAimed(a, result[0].eulerDegrees, glm::vec3(-1, 0, 0));
+		ExpectAimed(b, result[1].eulerDegrees, glm::vec3(1, 0, 0));
+		window.structure.vacancies.clear();
+		EXPECT_TRUE(AimSelectedSceneOrbitals(window, ids, std::nullopt).empty());
+	}
 } // namespace DefectStudio::Tests

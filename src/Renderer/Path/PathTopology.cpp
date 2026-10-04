@@ -130,8 +130,8 @@ namespace DefectStudio
 
 	Result<std::vector<PathElementId>> InsertNodes(ScenePath &path, const std::size_t segment, const std::size_t count)
 	{
-		if (count < 1 || count > 32)
-			return MakeError(PathDiagnosticCode::ParameterOutOfRange, "Insert count must be between 1 and 32.");
+		if (count < 1 || count > 64)
+			return MakeError(PathDiagnosticCode::ParameterOutOfRange, "Insert count must be between 1 and 64.");
 		ScenePath edited = path;
 		std::vector<PathElementId> inserted;
 		for (std::size_t index = 0; index < count; ++index)

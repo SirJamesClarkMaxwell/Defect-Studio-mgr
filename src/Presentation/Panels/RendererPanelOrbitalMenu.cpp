@@ -161,17 +161,24 @@ namespace DefectStudio
 			ImGui::SetTooltip(
 				"Odleglosc konca od srodka atomu, w promieniach kuli. "
 				"0 = srodek, 1.0 = powierzchnia, 1.15 = odstep 15%% promienia.");
-		if (ImGui::MenuItem(description.lineLabel.c_str(), nullptr, false, description.canDrawSegment))
+		if (ImGui::MenuItem("Linia", nullptr, false, description.canDrawSegment))
 			addSegment(false);
-		if (ImGui::MenuItem(description.arrowLabel.c_str(), nullptr, false, description.canDrawSegment))
+		if (!description.canDrawSegment && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz dokladnie dwa atomy lub wakanse.");
+		if (ImGui::MenuItem("Strzalka", nullptr, false, description.canDrawSegment))
 			addSegment(true);
+		if (!description.canDrawSegment && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz dokladnie dwa atomy lub wakanse.");
 	}
 
 	void DrawPlaneAddItem(RendererWindowState &windowState)
 	{
 		const std::vector<glm::vec3> positions = SelectedAtomPositions(windowState);
 		const DrawSelectionDescription description = DescribeDrawSelection(positions.size());
-		if (!ImGui::MenuItem(description.planeLabel.c_str(), nullptr, false, description.canDrawPlane))
+		const bool addPlane = ImGui::MenuItem("Plaszczyzna", nullptr, false, description.canDrawPlane);
+		if (!description.canDrawPlane && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz co najmniej dwa atomy.");
+		if (!addPlane)
 			return;
 
 		const glm::vec3 viewDirection = windowState.camera != nullptr
@@ -273,6 +280,8 @@ namespace DefectStudio
 					(selectedAtoms == 1 ? " zaznaczonym atomie" : " zaznaczonych atomach");
 			ImGui::Checkbox(anchorLabel.c_str(), &windowState.orbitalAddAnchorToSelection);
 			ImGui::EndDisabled();
+			if (selectedAtoms == 0 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Zaznacz co najmniej jeden atom, aby zakotwiczyc orbital.");
 
 			// Anchoring with nothing selected resolves to zero anchor groups, i.e. an Add that adds
 			// nothing, so it is off for this Add - but the remembered mode is kept, because adding an
@@ -290,6 +299,8 @@ namespace DefectStudio
 					added.push_back(registerOrbital(std::move(orbital)));
 				selectAdded(std::move(added));
 			}
+			if (!target && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Zaznacz atomy wokol wakansu; bez wakansu celem bedzie centroid atomow.");
 			if (target && ImGui::IsItemHovered())
 			{
 				std::string label = "na centroid zaznaczenia";
@@ -326,6 +337,8 @@ namespace DefectStudio
 							selectAdded(addPreset(preset, 0, anchor));
 						}
 						ImGui::EndDisabled();
+						if (!compatible && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+							ImGui::SetTooltip("Zaznacz dokladnie dwa atomy dla orbitalu dwuosrodkowego.");
 						continue;
 					}
 					if (ImGui::BeginMenu(presetLabel.c_str()))
@@ -349,6 +362,8 @@ namespace DefectStudio
 						ImGui::EndMenu();
 					}
 					ImGui::EndDisabled();
+					if (!compatible && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+						ImGui::SetTooltip("Zaznacz dokladnie dwa atomy dla orbitalu dwuosrodkowego.");
 				}
 			}
 			if (drawSubmenu)

@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
@@ -90,12 +91,6 @@ namespace DefectStudio
 		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 	}
 
-	float &GetScenePathAtomBuffer()
-	{
-		static float buffer = 1.15f;
-		return buffer;
-	}
-
 	float GetDefaultSceneSegmentLength(const RendererWindowState &windowState)
 	{
 		glm::vec3 minimum(std::numeric_limits<float>::max());
@@ -107,21 +102,6 @@ namespace DefectStudio
 		}
 		const float diagonal = windowState.structure.atoms.empty() ? 0.0f : glm::length(maximum - minimum);
 		return std::isfinite(diagonal) && diagonal > 0.0f ? std::clamp(diagonal * 0.20f, 0.75f, 4.0f) : 1.0f;
-	}
-
-	Result<SceneObjectId> AddFreeScenePathSegment(
-		RendererWindowState &windowState, const glm::vec3 &worldPosition, const bool arrow)
-	{
-		const float length = GetDefaultSceneSegmentLength(windowState);
-		ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, worldPosition + glm::vec3(length * 0.5f, 0, 0));
-		path.name = arrow ? "Arrow" : "Line";
-		path.nodes.front().position = glm::vec3(-length * 0.5f, 0, 0);
-		path.nodes.back().position = glm::vec3(length * 0.5f, 0, 0);
-		path.style.endDecoration.kind = arrow ? PathDecorationKind::Arrow : PathDecorationKind::None;
-		const auto added = AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));
-		if (added)
-			SelectAddedScenePaths(windowState, {added.Value()});
-		return added;
 	}
 
 	Result<SceneObjectId> AddScenePathThroughSelectedAtoms(RendererWindowState &windowState, const bool arrow)
@@ -157,6 +137,95 @@ namespace DefectStudio
 		const auto added = AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));
 		if (added)
 			SelectAddedScenePaths(windowState, {added.Value()});
+		return added;
+	}
+
+	Result<SceneObjectId> AddCurvedArrowThroughSelectedAtoms(RendererWindowState &windowState)
+	{
+		struct End { glm::vec3 position; PathBinding binding; };
+		std::vector<End> ends;
+		const float buffer = GetScenePathAtomBuffer();
+		for (const auto index : windowState.selectedAtomIndices)
+			if (index < windowState.structure.atoms.size())
+				ends.push_back({windowState.structure.atoms[index].cartesianPosition,
+					PathBinding{PathBinding::CopyPosition{index, {}, buffer}}});
+		// With two atoms, a selected vacancy defines the axis rather than a third endpoint.
+		if (ends.size() < 2) for (const auto index : windowState.selectedVacancies)
+			if (index < windowState.structure.vacancies.size())
+				ends.push_back({windowState.structure.vacancies[index].cartesianPosition,
+					PathBinding{PathBinding::CopyVacancy{index, {}, buffer}}});
+		if (ends.size() != 2)
+			return PathEditSelectionError("path.two_atoms_required", "Select exactly two atoms or vacancies for a curved arrow.");
+		const glm::vec3 a = ends[0].position, b = ends[1].position, midpoint = (a + b) * 0.5f;
+		glm::vec3 origin = midpoint, axis(0.0f);
+		if (const auto &frame = windowState.structure.defectFrame)
+		{
+			origin = frame->origin;
+			axis = frame->z;
+		}
+		else
+		{
+			// Nearest three other atoms define the fallback plane; the axis passes through
+			// the selected vacancy, otherwise the midpoint. Collinear data uses a world basis.
+			std::vector<glm::vec3> neighbours;
+			for (const auto &atom : windowState.structure.atoms)
+				if (glm::distance(atom.cartesianPosition, a) > 1.0e-5f && glm::distance(atom.cartesianPosition, b) > 1.0e-5f)
+					neighbours.push_back(atom.cartesianPosition);
+			std::stable_sort(neighbours.begin(), neighbours.end(), [midpoint](const auto &x, const auto &y) {
+				return glm::dot(x - midpoint, x - midpoint) < glm::dot(y - midpoint, y - midpoint); });
+			glm::vec3 centroid(0.0f);
+			const auto count = std::min(neighbours.size(), std::size_t{3});
+			for (std::size_t i = 0; i < count; ++i) centroid += neighbours[i] / static_cast<float>(count);
+			if (count == 0) centroid = midpoint;
+			axis = glm::cross(b - a, centroid - midpoint);
+			if (windowState.selectedAtomIndices.size() == 2 && windowState.selectedVacancies.size() == 1 &&
+				windowState.selectedVacancies.front() < windowState.structure.vacancies.size())
+			{
+				origin = windowState.structure.vacancies[windowState.selectedVacancies.front()].cartesianPosition;
+				axis = glm::cross(a - origin, b - origin);
+			}
+			if (glm::length(axis) < 1.0e-5f)
+				axis = glm::cross(b - a, std::abs((b - a).z) < 0.9f * glm::length(b - a) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0));
+		}
+		if (!std::isfinite(glm::length(axis)) || glm::length(axis) < 1.0e-5f)
+			return PathEditSelectionError("path.arc_axis_zero", "A curved arrow needs distinct ends and a valid rotation axis.");
+		axis = glm::normalize(axis);
+		const glm::vec3 ra = a - origin - axis * glm::dot(a - origin, axis), rb = b - origin - axis * glm::dot(b - origin, axis);
+		const float radiusA = glm::length(ra), radiusB = glm::length(rb), radius = (radiusA + radiusB) * 0.5f;
+		if (!(radiusA > 1.0e-5f && radiusB > 1.0e-5f))
+			return PathEditSelectionError("path.arc_radius_nonpositive", "The arrow ends must be away from the rotation axis.");
+		const auto u = ra / radiusA, v = rb / radiusB;
+		const float angle = std::atan2(glm::dot(axis, glm::cross(u, v)), glm::dot(u, v));
+		if (std::abs(angle) < 1.0e-4f)
+			return PathEditSelectionError("path.arc_sweep_out_of_range", "The arrow ends must have different angles around the axis.");
+		ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
+		path.name = "Zakrzywiona strzałka (C_n)";
+		path.transform.position = glm::vec3(0);
+		path.nodes[0].position = a; path.nodes[1].position = b;
+		path.nodes[0].binding = ends[0].binding; path.nodes[1].binding = ends[1].binding;
+		if (buffer <= 0 && std::abs(radiusA - radiusB) < 1.0e-4f && std::abs(glm::dot(b - a, axis)) < 1.0e-4f)
+			path.segments[0].data = CircularArcSegmentData{axis, angle};
+		else
+		{
+			// Unequal radii/heights cannot share a circle. Also, the binding's chord buffer
+			// moves arc ends without reducing its authored sweep. Circular Bezier controls
+			// keep the mean-radius bend while the bound ends/handles follow atom clearance.
+			const auto centre = origin + axis * glm::dot(midpoint - origin, axis);
+			const float k = 4.0f / 3.0f * std::tan(angle * 0.25f);
+			path.segments[0].data = CubicBezierSegmentData{
+				{AllocateElementId(path), centre + radius * (u + k * glm::cross(axis, u)) - a, BezierHandleType::Free},
+				{AllocateElementId(path), centre + radius * (v - k * glm::cross(axis, v)) - b, BezierHandleType::Free}};
+			const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(windowState));
+			const auto shiftA = resolved.positions[0] - a, shiftB = resolved.positions[1] - b;
+			// Retain the circular midpoint even when the two atoms have different radii/clearances.
+			const auto correction = -(shiftA + shiftB) / 6.0f;
+			auto &cubic = std::get<CubicBezierSegmentData>(path.segments[0].data);
+			cubic.startHandle.offset += correction - shiftA;
+			cubic.endHandle.offset += correction - shiftB;
+		}
+		MovePathOriginToCentre(path);
+		const auto added = AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));
+		if (added) SelectAddedScenePaths(windowState, {added.Value()});
 		return added;
 	}
 

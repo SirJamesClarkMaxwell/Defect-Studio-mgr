@@ -40,21 +40,29 @@ namespace DefectStudio::detail
 			const EvaluatedSample &sample, const glm::dvec3 &outward, const bool flip)
 		{
 			const std::uint32_t ringSize = CrossSectionRingSize(style);
+			const bool flatRing = HasFlatFaceVertices(geometry, ring, ringSize);
+			const std::uint32_t boundary = static_cast<std::uint32_t>(geometry.tubeVertices.size());
+			for (std::uint32_t radial = 0; radial < ringSize; ++radial)
+			{
+				auto vertex = geometry.tubeVertices[ring + radial];
+				vertex.normal = glm::vec3(outward);
+				vertex.smoothingGroup = 0;
+				geometry.tubeVertices.push_back(vertex);
+			}
 			const std::uint32_t centre = static_cast<std::uint32_t>(geometry.tubeVertices.size());
 			glm::dvec3 centrePosition(0.0);
 			for (std::uint32_t radial = 0; radial < ringSize; ++radial)
 				centrePosition += glm::dvec3(geometry.tubeVertices[ring + radial].position);
 			centrePosition /= static_cast<double>(ringSize);
 			geometry.tubeVertices.push_back({glm::vec3(centrePosition), glm::vec3(outward),
-				SampleStrokeColor(style, sample.normalizedT), static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
-			const bool flatRing = HasFlatFaceVertices(geometry, ring, ringSize);
+				geometry.tubeVertices[ring].color, static_cast<float>(sample.normalizedT), static_cast<float>(sample.arcLength)});
 			for (std::uint32_t radial = 0; radial < ringSize; radial += flatRing ? 2u : 1u)
 			{
-				const std::uint32_t next = ring + (flatRing ? radial + 1u : (radial + 1u) % ringSize);
+				const std::uint32_t next = boundary + (flatRing ? radial + 1u : (radial + 1u) % ringSize);
 				if (flip)
-					geometry.indices.insert(geometry.indices.end(), {centre, ring + radial, next});
+					geometry.indices.insert(geometry.indices.end(), {centre, boundary + radial, next});
 				else
-					geometry.indices.insert(geometry.indices.end(), {centre, next, ring + radial});
+					geometry.indices.insert(geometry.indices.end(), {centre, next, boundary + radial});
 			}
 		}
 
@@ -250,6 +258,13 @@ namespace DefectStudio::detail
 				geometry.indices.insert(geometry.indices.end(), {rings.back().outerMinus, rings.back().outerPlus, rings.back().innerPlus,
 					rings.back().outerMinus, rings.back().innerPlus, rings.back().innerMinus});
 		}
+	}
+
+	void AppendFlatCap(StrokeGeometry &geometry, const std::uint32_t ring, const PathStrokeStyle &style,
+		const EvaluatedSample &sample, const bool end)
+	{
+		AppendRingFan(geometry, ring, style, sample, end ? sample.tangent : -sample.tangent,
+			end);
 	}
 
 	bool UsesTubeVertices(const PathStrokeStyle &style)

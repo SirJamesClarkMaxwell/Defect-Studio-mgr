@@ -800,11 +800,12 @@ namespace DefectStudio
 				structure, camera, resources, globalSettings, selectedBondIndices, sceneOffset, showPeriodicBonds,
 				viewportPixelSize);
 		renderDisplacementArrows(structure, displacementComparison, camera, globalSettings, sceneOffset);
-		if (pathInput != nullptr && pathInput->paths != nullptr)
-			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
 		if (showAtoms)
 			renderAtoms(
 				structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset, viewportPixelSize);
+		// Transparent paths need the opaque atom depth/color first, just as the other overlays do.
+		if (pathInput != nullptr && pathInput->paths != nullptr)
+			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
 		renderScenePlanes(
 			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		if (showVacancies)
@@ -1874,7 +1875,6 @@ namespace DefectStudio
 				const int specularScaleLocation = m_ShaderLibrary.Uniform("bonds", "u_SpecularScale");
 				const int bondRadiusMultiplierLocation = m_ShaderLibrary.Uniform("bonds", "u_BondRadiusMultiplier");
 				const int sceneOffsetLocation = m_ShaderLibrary.Uniform("bonds", "u_SceneOffset");
-				const int outlineModeLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineMode");
 				const int outlineColorLocation = m_ShaderLibrary.Uniform("bonds", "u_OutlineColor");
 				if (keyDirectionLocation >= 0)
 					glUniform3fv(keyDirectionLocation, 1, &globalSettings.lighting.keyDirection.x);

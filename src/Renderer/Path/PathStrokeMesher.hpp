@@ -19,6 +19,7 @@ namespace DefectStudio
 		glm::vec4 color{1.0f};  // gradient already sampled per vertex
 		float arcT = 0.0f;      // normalised arc length along the whole path
 		float dashCoord = 0.0f; // world arc length, so the shader can discard by dash pattern
+		std::uint64_t smoothingGroup = 0; // CPU normal averaging; zero keeps a face sharp
 	};
 
 	// Flat / CameraFacing profile: a centreline ribbon expanded in the shader. `side` is the expansion

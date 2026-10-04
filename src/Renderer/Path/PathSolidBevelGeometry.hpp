@@ -21,10 +21,12 @@ namespace DefectStudio::detail
 	// Sources and positions carry the outward boundary winding from the source topology.
 	// Never flip individual patches toward an averaged normal: reflex patches can fold.
 	void EmitThickFlatBevelPolygon(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh,
-		std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions);
+		std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions,
+		std::uint64_t smoothingGroup = 0);
 
 	void EmitThickFlatPinchedBevelPatch(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh,
-		std::uint32_t source, const std::vector<glm::dvec3> &boundary);
+		std::uint32_t source, const std::vector<glm::dvec3> &boundary,
+		std::uint64_t smoothingGroup = 0);
 
 	void SmoothThickFlatBevelNormals(StrokeGeometry &geometry);
 }

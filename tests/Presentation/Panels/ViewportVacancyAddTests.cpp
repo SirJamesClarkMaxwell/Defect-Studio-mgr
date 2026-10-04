@@ -54,7 +54,7 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(std::holds_alternative<PathBinding::CopyPosition>(line.nodes[0].binding.value));
 		const auto &binding = std::get<PathBinding::CopyPosition>(line.nodes[0].binding.value);
 		EXPECT_EQ(binding.atomIndex, 0u);
-		EXPECT_FLOAT_EQ(binding.buffer, 0.0f);
+		EXPECT_FLOAT_EQ(binding.buffer, 0.9f);
 		ASSERT_TRUE(std::holds_alternative<PathBinding::CopyVacancy>(line.nodes[1].binding.value));
 		const auto &vacancyBinding = std::get<PathBinding::CopyVacancy>(line.nodes[1].binding.value);
 		EXPECT_EQ(vacancyBinding.vacancyIndex, 0u);
@@ -85,14 +85,14 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(std::get<PathBinding::CopyPosition>(line.nodes[0].binding.value).atomIndex, 3u);
 		EXPECT_EQ(line.transform.position + line.nodes[0].position, glm::vec3(0, 0, 2.5f));
 	}
-	// Two vacancies that are first-shell neighbours get a line between them as well.
+	// A vacancy and a first-shell neighbouring vacancy get a line, even when only one is selected.
 	TEST(ViewportVacancyAddTests, NeighbouringVacanciesAreJoined)
 	{
 		RendererWindowState window = WindowWithVacancy();
 		RendererVacancyData second;
 		second.cartesianPosition = glm::vec3(0.0f, -1.45f, 0.0f);
 		window.structure.vacancies.push_back(second);
-		window.selectedVacancies = {0, 1};
+		window.selectedVacancies = {0};
 		const std::size_t added = AddVacancyBonds(window);
 		ASSERT_NE(window.paths, nullptr);
 		EXPECT_EQ(window.paths->Store().Size(), added);
@@ -127,7 +127,9 @@ namespace DefectStudio::Tests
 		const auto before = ResolveNodePositions(line, context);
 		window.structure.vacancies[0].cartesianPosition = glm::vec3(0, 1, 0);
 		const auto after = ResolveNodePositions(line, context);
-		EXPECT_EQ(after.positions[0], before.positions[0]);
+		// The atom end stays the same buffered distance inside the atom; only its direction turns.
+		const glm::vec3 atom = window.structure.atoms[0].cartesianPosition;
+		EXPECT_NEAR(glm::distance(after.positions[0], atom), glm::distance(before.positions[0], atom), 1e-5f);
 		EXPECT_NE(after.positions[1], before.positions[1]);
 		EXPECT_NEAR(glm::length(after.positions[1] - window.structure.vacancies[0].cartesianPosition), 0.45f, 1e-5f);
 		EXPECT_NE(BindingSourceRevision(line, before), BindingSourceRevision(line, after));

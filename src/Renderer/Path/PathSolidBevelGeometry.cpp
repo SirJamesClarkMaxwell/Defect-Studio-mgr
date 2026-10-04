@@ -155,7 +155,8 @@ namespace DefectStudio::detail
 	}
 
 	void EmitThickFlatPinchedBevelPatch(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh,
-		const std::uint32_t source, const std::vector<glm::dvec3> &boundary)
+		const std::uint32_t source, const std::vector<glm::dvec3> &boundary,
+		const std::uint64_t smoothingGroup)
 	{
 		if (boundary.size() < 3u)
 			return;
@@ -169,21 +170,32 @@ namespace DefectStudio::detail
 					const auto a = boundary.begin() + static_cast<std::ptrdiff_t>(first);
 					const auto b = boundary.begin() + static_cast<std::ptrdiff_t>(second);
 					const std::vector<glm::dvec3> loop(a, b);
-					EmitThickFlatPinchedBevelPatch(output, mesh, source, loop);
+					EmitThickFlatPinchedBevelPatch(output, mesh, source, loop, smoothingGroup);
 					std::vector<glm::dvec3> remaining(boundary.begin(), a);
 					remaining.insert(remaining.end(), b, boundary.end());
-					EmitThickFlatPinchedBevelPatch(output, mesh, source, remaining);
+					EmitThickFlatPinchedBevelPatch(output, mesh, source, remaining, smoothingGroup);
 					return;
 				}
 		EmitThickFlatBevelPolygon(output, mesh, std::vector<std::uint32_t>(boundary.size(), source),
-			boundary);
+			boundary, smoothingGroup);
 	}
 
 	void EmitThickFlatBevelPolygon(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh,
-		std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions)
+		std::vector<std::uint32_t> sources, std::vector<glm::dvec3> positions,
+		const std::uint64_t smoothingGroup)
 	{
 		if (positions.size() < 3u || positions.size() != sources.size())
 			return;
+		// Insets follow the sampled side faces. At a sharply turning terminal ring their
+		// miter/profile can cross the cap plane and form a backwards sliver. Constrain the
+		// shared polygon emitter, including corner patches, rather than just the cap face.
+		for (std::size_t index = 0; index < positions.size(); ++index)
+		{
+			const auto &source = mesh.vertices[sources[index]];
+			if (source.capOutwardNormal)
+				positions[index] -= *source.capOutwardNormal * std::max(0.0,
+					glm::dot(positions[index] - source.position, *source.capOutwardNormal));
+		}
 		// A strip tapered to zero radius is a triangle with a repeated corner, not
 		// an invalid quad. Keep its boundary while discarding only zero-length edges.
 		std::size_t kept = 0u;
@@ -211,12 +223,16 @@ namespace DefectStudio::detail
 			if (glm::dot(normal, normal) <= kToleranceSquared)
 				return;
 			normal = glm::normalize(normal);
+			const bool cap = std::all_of(triangleSources.begin(), triangleSources.end(), [&](const auto source) {
+				const auto &outward = mesh.vertices[source].capOutwardNormal;
+				return outward && glm::dot(normal, *outward) > 1.0 - 1.0e-10;
+			});
 			for (std::size_t corner = 0u; corner < 3u; ++corner)
 			{
 				const ThickFlatMeshVertex &source = mesh.vertices[triangleSources[corner]];
 				output.indices.push_back(static_cast<std::uint32_t>(output.vertices.size()));
 				output.vertices.push_back({glm::vec3(trianglePositions[corner]), glm::vec3(normal), source.color,
-					source.arcT, source.dashCoord});
+					source.arcT, source.dashCoord, cap ? 0u : smoothingGroup});
 			}
 		};
 		std::vector<std::array<std::size_t, 3u>> triangles;
@@ -229,9 +245,9 @@ namespace DefectStudio::detail
 
 	void SmoothThickFlatBevelNormals(StrokeGeometry &geometry)
 	{
-		using PositionKey = std::array<float, 3u>;
-		const auto key = [](const glm::vec3 &position) {
-			return PositionKey{position.x, position.y, position.z};
+		using PositionKey = std::pair<std::array<float, 3u>, std::uint64_t>;
+		const auto key = [](const StrokeTubeVertex &vertex) {
+			return PositionKey{{vertex.position.x, vertex.position.y, vertex.position.z}, vertex.smoothingGroup};
 		};
 		std::map<PositionKey, glm::dvec3> normalSums;
 		for (std::size_t index = 0u; index + 2u < geometry.indices.size(); index += 3u)
@@ -261,12 +277,15 @@ namespace DefectStudio::detail
 				if (glm::dot(first, first) <= kToleranceSquared || glm::dot(second, second) <= kToleranceSquared)
 					continue;
 				const double angle = std::acos(std::clamp(glm::dot(first, second), -1.0, 1.0));
-				normalSums[key(glm::vec3(positions[corner]))] += faceNormal * angle;
+				const auto &vertex = geometry.tubeVertices[geometry.indices[index + corner]];
+				if (vertex.smoothingGroup == 0) continue;
+				const auto entry = normalSums.try_emplace(key(vertex), glm::dvec3(0.0)).first;
+				entry->second += faceNormal * angle;
 			}
 		}
 		for (StrokeTubeVertex &vertex : geometry.tubeVertices)
 		{
-			const auto found = normalSums.find(key(vertex.position));
+			const auto found = normalSums.find(key(vertex));
 			if (found != normalSums.end())
 				vertex.normal = glm::vec3(SafeNormal(found->second, glm::dvec3(vertex.normal)));
 		}

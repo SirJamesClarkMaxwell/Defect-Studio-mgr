@@ -55,6 +55,7 @@ namespace DefectStudio
 		// any hit collapses to WholePath. Edit Mode (S12) turns this on and gets element-level hits.
 		bool editMode = false;
 		bool segmentOnly = false; // modal insertion ignores markers and decorations
+		float strokePickTolerance = kPathStrokePickTolerance; // extra pixels outside the stroke
 	};
 
 	// Arbitration order, highest first: Handle > Node > Decoration > Segment. The first candidate

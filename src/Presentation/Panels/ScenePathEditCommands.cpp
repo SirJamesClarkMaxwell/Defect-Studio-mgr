@@ -60,9 +60,13 @@ namespace DefectStudio
 					return !report.AnyApplied() && !report.skipped.empty()
 						? Result<void>{report.skipped.front().reason} : Result<void>{};
 				}
+				if (m_Action == EditAction::LoopCut && !window->pathEdit.IsActive() &&
+					window->selectedScenePaths.size() == 1 && window->paths != nullptr &&
+					window->paths->Store().Contains(window->selectedScenePaths.front()))
+					window->pathEdit.Enter(window->selectedScenePaths.front());
 				if (m_Action != EditAction::Toggle && !window->pathEdit.IsActive())
 					return {};
-				if (window->pathEdit.InsertPreview())
+				if (window->pathEdit.InsertPreview() || window->pathEdit.InsertRequested())
 				{
 					if (m_Action == EditAction::Leave || m_Action == EditAction::Toggle)
 						window->pathEdit.CancelInsert();
@@ -192,7 +196,7 @@ namespace DefectStudio
 		})) return;
 		const auto result = resolver.RegisterBinding({"path_edit.loop_cut", ParseKeyChord("Ctrl+R").value(),
 			CommandID{"renderer.path_edit.loop_cut"},
-			ContextExpr{"renderer.viewport.focused && renderer.path_edit.active && !renderer.modal_transform.active"},
+			ContextExpr{"renderer.viewport.focused && !renderer.modal_transform.active"},
 			KeymapLayer::Global});
 		if (!result) DS_LOG_WARN("Path insert keybinding failed: {}", result.Error().technicalDetails);
 	}

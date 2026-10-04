@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -22,6 +23,8 @@ namespace DefectStudio::detail
 		glm::vec4 color{1.0f};
 		float arcT = 0.0f;
 		float dashCoord = 0.0f;
+		// A bevel at a flat terminal cap must stay in its inward half-space.
+		std::optional<glm::dvec3> capOutwardNormal;
 	};
 
 	struct ThickFlatMeshFace
@@ -29,6 +32,7 @@ namespace DefectStudio::detail
 		std::vector<std::uint32_t> vertices;
 		std::vector<bool> bevelEdges;
 		ThickFlatFaceOwner owner = ThickFlatFaceOwner::Shaft;
+		std::uint32_t smoothingGroup = 0;
 	};
 
 	struct ThickFlatMesh

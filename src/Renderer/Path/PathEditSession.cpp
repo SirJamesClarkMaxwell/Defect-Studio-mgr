@@ -17,14 +17,14 @@ namespace DefectStudio
 	void PathEditSession::BeginInsert(const PathElementId segment) noexcept
 	{
 		m_InsertRequested = false;
-		if (m_Active && segment.IsValid())
-			m_Insert = InsertState{segment, 1};
+		if (m_Active)
+			m_Insert = InsertState{segment, m_Insert ? m_Insert->count : 1};
 	}
 
 	void PathEditSession::ChangeInsertCount(const int delta) noexcept
 	{
 		if (m_Insert)
-			m_Insert->count = static_cast<std::size_t>(std::clamp(static_cast<long long>(m_Insert->count) + delta, 1LL, 32LL));
+			m_Insert->count = static_cast<std::size_t>(std::clamp(static_cast<long long>(m_Insert->count) + delta, 1LL, 64LL));
 	}
 
 	void PathEditSession::CancelInsert() noexcept

@@ -7,7 +7,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
-#include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
+#include "Presentation/Panels/ViewportAddMenu.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -100,38 +100,7 @@ namespace DefectStudio
 
 		if (ImGui::BeginMenu("Add"))
 		{
-			// Reuses the same Add Atom popup Shift+A opens (drawAddAtomPopup) rather than a separate
-			// flow - mirrors the flag-setting Render() already does when addAtomPopupRequested comes
-			// in via that event, just seeded with this menu's own click position instead of the 3D
-			// cursor/origin default.
-			if (ImGui::MenuItem("Atom..."))
-			{
-				m_AddAtomPopupRequested = true;
-				m_AddAtomPopupWindowId = windowState.windowId;
-				m_AddAtomPopupPosition = m_ContextMenuWorldPosition;
-				m_AddAtomPopupFractional = false;
-			}
-			if (ImGui::MenuItem("Label"))
-			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
-				RendererWindowState::FreeLabel label;
-				label.id = windowState.sceneRegistry.AllocateObjectId();
-				label.worldPosition = m_ContextMenuWorldPosition;
-				windowState.freeLabels.push_back(std::move(label));
-			}
-			DrawFreeSegmentAddItems(windowState, m_ContextMenuWorldPosition);
-			DrawFreePlaneAddItem(windowState, m_ContextMenuWorldPosition);
-			const DrawSelectionDescription drawSelection = DescribeDrawSelection(windowState);
-			if (ImGui::BeginMenu(drawSelection.menuLabel.c_str()))
-			{
-				DrawSegmentAddItems(windowState);
-				DrawPlaneAddItem(windowState);
-				ImGui::EndMenu();
-			}
-			DrawOrbitalAddMenu(windowState, m_ContextMenuWorldPosition);
-			DrawScenePathDevAddMenu(windowState, m_ContextMenuWorldPosition);
-			ImGui::Separator();
-			DrawDefectAddItems(windowState, commandRegistry.get(), m_ContextMenuWorldPosition);
+			DrawSceneAddMenu(windowState, m_CommandRegistry, m_ContextMenuWorldPosition, eventBus);
 			ImGui::EndMenu();
 		}
 

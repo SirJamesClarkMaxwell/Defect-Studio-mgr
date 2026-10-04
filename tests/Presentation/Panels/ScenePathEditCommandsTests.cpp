@@ -196,14 +196,15 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(StoredPath(window).nodes.back().position, glm::vec3(-1.0f, 0.0f, 0.0f));
 	}
 
-	TEST_F(ScenePathEditCommandsTests, LoopCutBindingResolvesOnlyInEditModeAndHonoursUserOverrides)
+	TEST_F(ScenePathEditCommandsTests, LoopCutBindingResolvesInObjectAndEditModeAndHonoursUserOverrides)
 	{
 		KeymapResolver resolver;
 		RegisterScenePathEditBindings(resolver);
 		ContextManager contexts;
 		contexts.SetActive("renderer.viewport.focused", true);
 		const auto chord = ParseKeyChord("Ctrl+R").value();
-		EXPECT_FALSE(resolver.Resolve(chord, contexts));
+		ASSERT_TRUE(resolver.Resolve(chord, contexts));
+		EXPECT_EQ(resolver.Resolve(chord, contexts)->commandId.value, "renderer.path_edit.loop_cut");
 		contexts.SetActive(kPathEditActiveContext, true);
 		ASSERT_TRUE(resolver.Resolve(chord, contexts));
 		EXPECT_EQ(resolver.Resolve(chord, contexts)->commandId.value, "renderer.path_edit.loop_cut");
@@ -223,6 +224,30 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(window.pathEdit.InsertRequested());
 		EXPECT_EQ(StoredPath(window).nodes.size(), 3u);
 		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+	}
+
+	TEST_F(ScenePathEditCommandsTests, LoopCutFromObjectModeEntersTheOnlySelectedPath)
+	{
+		auto &window = AddWindowWithPath(false);
+		ASSERT_TRUE(Run("renderer.path_edit.loop_cut"));
+		EXPECT_TRUE(window.pathEdit.IsActive());
+		EXPECT_EQ(window.pathEdit.Path(), pathId);
+		EXPECT_TRUE(window.pathEdit.InsertRequested());
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+		ASSERT_TRUE(Run("renderer.path_edit.leave"));
+		EXPECT_FALSE(window.pathEdit.InsertRequested());
+		EXPECT_TRUE(window.pathEdit.IsActive());
+	}
+
+	TEST_F(ScenePathEditCommandsTests, LoopCutWithoutExactlyOnePathDoesNotEnterEditMode)
+	{
+		auto &window = AddWindowWithPath(false);
+		window.selectedScenePaths.clear();
+		ASSERT_TRUE(Run("renderer.path_edit.loop_cut"));
+		EXPECT_FALSE(window.pathEdit.IsActive());
+		window.selectedScenePaths = {pathId, SceneObjectId{99}};
+		ASSERT_TRUE(Run("renderer.path_edit.loop_cut"));
+		EXPECT_FALSE(window.pathEdit.IsActive());
 	}
 
 	TEST_F(ScenePathEditCommandsTests, MeshOverlayIsOptIn)

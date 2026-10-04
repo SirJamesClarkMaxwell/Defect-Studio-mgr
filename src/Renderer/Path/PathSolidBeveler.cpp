@@ -92,7 +92,7 @@ namespace DefectStudio::detail
 		void EmitTrihedralVertexPatch(ThickFlatBevelOutput &output, const ThickFlatMesh &mesh, const std::uint32_t source,
 			const std::array<std::vector<glm::dvec3>, 3u> &arcs,
 			const std::array<glm::dvec3, 3u> &faceNormals, const ThickFlatBevelTurn turn,
-			const double bevel, const double shape)
+			const double bevel, const double shape, const std::uint64_t smoothingGroup)
 		{
 			if (arcs[0].size() < 2u || arcs[1].size() != arcs[0].size() || arcs[2].size() != arcs[0].size())
 				return;
@@ -106,7 +106,7 @@ namespace DefectStudio::detail
 				{
 					for (std::uint32_t sample = 0u; sample < segments; ++sample)
 						EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
-							{sourcePosition, arcs[arcIndex][sample], arcs[arcIndex][sample + 1u]});
+							{sourcePosition, arcs[arcIndex][sample], arcs[arcIndex][sample + 1u]}, smoothingGroup);
 				}
 				return;
 			}
@@ -115,7 +115,7 @@ namespace DefectStudio::detail
 				std::vector<glm::dvec3> boundary;
 				for (const auto &arc : arcs)
 					boundary.insert(boundary.end(), arc.begin(), arc.end() - 1);
-				EmitThickFlatPinchedBevelPatch(output, mesh, source, boundary);
+				EmitThickFlatPinchedBevelPatch(output, mesh, source, boundary, smoothingGroup);
 				return;
 			}
 			const std::array<glm::dvec3, 3u> extremes = {arcs[0].front(), arcs[0].back(), arcs[1].back()};
@@ -130,7 +130,7 @@ namespace DefectStudio::detail
 			{
 				std::vector<glm::dvec3> boundary;
 				for (const auto &arc : arcs) boundary.insert(boundary.end(), arc.begin(), arc.end() - 1);
-				EmitThickFlatPinchedBevelPatch(output, mesh, source, boundary);
+				EmitThickFlatPinchedBevelPatch(output, mesh, source, boundary, smoothingGroup);
 				return;
 			}
 			const glm::dvec3 centre = sourcePosition - bevel *
@@ -191,11 +191,11 @@ namespace DefectStudio::detail
 				for (std::uint32_t second = 0u; second + first < segments; ++second)
 				{
 					EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
-						{points[first][second], points[first + 1u][second], points[first][second + 1u]});
+						{points[first][second], points[first + 1u][second], points[first][second + 1u]}, smoothingGroup);
 					if (second + first + 1u < segments)
 						EmitThickFlatBevelPolygon(output, mesh, {source, source, source},
 							{points[first + 1u][second], points[first + 1u][second + 1u],
-								points[first][second + 1u]});
+								points[first][second + 1u]}, smoothingGroup);
 				}
 		}
 
@@ -328,7 +328,7 @@ namespace DefectStudio::detail
 		std::array<ThickFlatBevelOutput, 3u> outputs;
 		for (std::size_t faceIndex = 0u; faceIndex < mesh.faces.size(); ++faceIndex)
 			EmitThickFlatBevelPolygon(outputs[OwnerIndex(mesh.faces[faceIndex].owner)], mesh, mesh.faces[faceIndex].vertices,
-				faces[faceIndex].inner);
+				faces[faceIndex].inner, mesh.faces[faceIndex].smoothingGroup);
 
 		const std::uint32_t segments = std::max(1u, style.ribbonBevelSegments);
 		std::vector<std::vector<std::array<glm::dvec3, 2u>>> edgeProfiles(topology.edges.size());
@@ -374,7 +374,14 @@ namespace DefectStudio::detail
 				std::vector<glm::dvec3> positions = {profile[sample][0], profile[sample][1],
 					profile[sample + 1u][1], profile[sample + 1u][0]};
 				if (reverse) { std::reverse(sources.begin(), sources.end()); std::reverse(positions.begin(), positions.end()); }
-				EmitThickFlatBevelPolygon(outputs[OwnerIndex(owner)], mesh, std::move(sources), std::move(positions));
+				// Faceted strips average longitudinally. Shade Smooth joins the entire
+				// bevel surface, including corner patches, but keeps the main faces separate.
+				const auto a = mesh.faces[firstIncident.face].smoothingGroup;
+				const auto b = mesh.faces[secondIncident.face].smoothingGroup;
+				const auto pair = std::min(a, b) * 8u + std::max(a, b);
+				const std::uint64_t group = style.shadeSmooth ? 100u :
+					100u + static_cast<std::uint64_t>(pair) * (segments + 1ull) + sample;
+				EmitThickFlatBevelPolygon(outputs[OwnerIndex(owner)], mesh, std::move(sources), std::move(positions), group);
 			}
 		}
 
@@ -418,7 +425,7 @@ namespace DefectStudio::detail
 					const std::array<glm::dvec3, 3u> patchFaceNormals = {
 						faces[faceIds[0]].normal, faces[faceIds[1]].normal, faces[faceIds[2]].normal};
 					EmitTrihedralVertexPatch(outputs[OwnerIndex(owner)], mesh, vertex, arcs, patchFaceNormals, info.turn,
-						info.radius, shape);
+						info.radius, shape, style.shadeSmooth ? 100u : 0u);
 					continue;
 				}
 			}
@@ -448,11 +455,11 @@ namespace DefectStudio::detail
 				boundary.pop_back();
 			if (boundary.size() < 3u)
 				continue;
-			EmitThickFlatPinchedBevelPatch(outputs[OwnerIndex(owner)], mesh, vertex, boundary);
+			EmitThickFlatPinchedBevelPatch(outputs[OwnerIndex(owner)], mesh, vertex, boundary,
+				style.shadeSmooth ? 100u : 0u);
 		}
 
 		AppendOutputs(outputs, geometry);
-		if (style.shadeSmooth)
-			SmoothThickFlatBevelNormals(geometry);
+		SmoothThickFlatBevelNormals(geometry);
 	}
 }

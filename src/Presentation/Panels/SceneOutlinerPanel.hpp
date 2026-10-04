@@ -24,7 +24,7 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
 		const SceneRegistry &scene, SceneObjectKind kind);
 
-	// Lists open renderer windows (one structure per window - no Collections, see docs/work/
+	// Lists only the displayed renderer window (one structure per window - no Collections, see docs/work/
 	// project/plans/2026-08-23-outliner-bonds-displacement.md). Every row carries Blender's two
 	// visibility columns - the eye (drawn in the viewport, what H/Alt+H toggle) and the camera
 	// (drawn in an exported render), see Presentation/Panels/SceneOutlinerVisibilityColumns.hpp -
@@ -118,7 +118,7 @@ namespace DefectStudio
 		// + poll like every other job-backed panel in this codebase.
 		void dispatchCopyViewAndVisibility(const RendererWindowState &source, const std::string &targetWindowId);
 		void pollCopyJob();
-		// Esc: drop every window's selection - atoms, bonds and all five annotation kinds - so the
+		// Esc: drop the displayed window's selection - atoms, bonds and all five annotation kinds - so the
 		// key means the same thing here as clicking empty space does in the viewport.
 		void clearSelection();
 		// Writes ImGuiConfigFlags_NavEnableKeyboard for the NEXT frame and records the focus it was
@@ -135,8 +135,9 @@ namespace DefectStudio
 		std::string m_CopySourceWindowId;
 		std::string m_CopyTargetWindowId;
 		std::string m_CopyError;
-		// Index into m_Layer.GetWindows(), not a stable windowId - fine since both editing state and
-		// active-row tracking are cleared the moment the window list changes shape (see Render()).
+		// Indices are re-resolved from the displayed stable windowId every frame.
+		// Switching scenes clears rename and range-selection state.
+		std::string m_DisplayedWindowId;
 		int m_EditingWindowIndex = -1;
 		int m_ActiveWindowIndex = -1;
 		bool m_JustStartedEditing = false;

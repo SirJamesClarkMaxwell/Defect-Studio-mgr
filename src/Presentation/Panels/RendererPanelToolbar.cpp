@@ -15,7 +15,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
+#include "Presentation/Panels/ViewportAddMenu.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
 
@@ -25,6 +25,14 @@ namespace DefectStudio
 	{
 		for (RendererWindowState &windowState : m_Layer.GetWindows())
 		{
+			if (windowState.addAtomCoordinatesPopupPosition)
+			{
+				m_AddAtomPopupRequested = true;
+				m_AddAtomPopupWindowId = windowState.windowId;
+				m_AddAtomPopupPosition = *windowState.addAtomCoordinatesPopupPosition;
+				m_AddAtomPopupFractional = windowState.addAtomCoordinatesPopupFractional;
+				windowState.addAtomCoordinatesPopupPosition.reset();
+			}
 			if (!windowState.addAtomPopupRequested)
 				continue;
 			windowState.addAtomPopupRequested = false;
@@ -197,37 +205,7 @@ namespace DefectStudio
 			return;
 		}
 
-		if (ImGui::MenuItem("Atom..."))
-		{
-			m_AddAtomPopupRequested = true;
-			m_AddAtomPopupWindowId = m_AddMenuWindowId;
-			m_AddAtomPopupPosition = m_AddMenuPosition;
-			m_AddAtomPopupFractional = m_AddMenuPositionFractional;
-		}
-
-		if (ImGui::MenuItem("Label"))
-		{
-			PushPinnedMeasurementUndoSnapshot(*windowState);
-			RendererWindowState::FreeLabel label;
-			label.id = windowState->sceneRegistry.AllocateObjectId();
-			label.worldPosition = m_AddMenuPosition;
-			windowState->freeLabels.push_back(std::move(label));
-		}
-
-		DrawFreeSegmentAddItems(*windowState, m_AddMenuPosition);
-		DrawFreePlaneAddItem(*windowState, m_AddMenuPosition);
-
-		const DrawSelectionDescription drawSelection = DescribeDrawSelection(*windowState);
-		if (ImGui::BeginMenu(drawSelection.menuLabel.c_str()))
-		{
-			DrawSegmentAddItems(*windowState);
-			DrawPlaneAddItem(*windowState);
-			ImGui::EndMenu();
-		}
-
-		DrawOrbitalAddMenu(*windowState, m_AddMenuPosition);
-		ImGui::Separator();
-		DrawDefectAddItems(*windowState, m_CommandRegistry.lock().get(), m_AddMenuPosition);
+		DrawSceneAddMenu(*windowState, m_CommandRegistry, m_AddMenuPosition, m_Layer.GetEventBus(), m_AddMenuPositionFractional);
 
 		ImGui::EndPopup();
 	}

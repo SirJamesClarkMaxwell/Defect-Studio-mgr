@@ -73,6 +73,8 @@ namespace DefectStudio::detail
 	// attach to, so assuming `upper == lower + radialSegments` stitches the wrong pair.
 	void StitchRings(StrokeGeometry &geometry, std::uint32_t lower, std::uint32_t upper,
 		std::uint32_t radialSegments, bool flip = false);
+	void AppendFlatCap(StrokeGeometry &geometry, std::uint32_t ring, const PathStrokeStyle &style,
+		const EvaluatedSample &sample, bool end);
 
 	// Meshes one endpoint decoration in the endpoint's own frame, revolved for Round and mirrored
 	// for the ribbon profiles, hollow when the contour says so. Writes the index span it produced

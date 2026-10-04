@@ -257,7 +257,7 @@ namespace DefectStudio
 
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		const float horizontalToolbarOffset = windowState.windowId == activeWindowId
-			? DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize)
+			? DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize, m_CommandRegistry)
 			: 0.0f;
 		DrawViewportPathOverlay(windowState, m_Layer.GetGlobalSettings(), imageOrigin, viewportSize);
 		DrawViewportDefectFrameOverlay(windowState, imageOrigin, viewportSize);

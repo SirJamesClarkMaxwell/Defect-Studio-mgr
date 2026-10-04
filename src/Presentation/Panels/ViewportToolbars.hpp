@@ -3,9 +3,11 @@
 #include <array>
 #include <cstddef>
 #include <string_view>
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {
+	class CommandRegistry;
 	class RendererLayer;
 	class RendererViewCamera;
 	struct RendererWindowState;
@@ -32,7 +34,8 @@ namespace DefectStudio
 	// Free functions rather than RendererPanel members precisely so the second caller exists:
 	// they only ever needed a window state and the layer.
 	void DrawViewportToolbar(RendererWindowState &windowState, RendererLayer &layer);
-	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer);
+	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer,
+		const WeakRef<CommandRegistry> &commandRegistry);
 	void DrawViewportTransformControls(RendererWindowState &windowState, RendererLayer &layer, float uiScale);
 	// Frames every atom from the default (1, 1, 0.9) direction - toolbar and navigation gizmo "home".
 	[[nodiscard]] RendererViewCamera ComputeResetViewCamera(const RendererWindowState &windowState);

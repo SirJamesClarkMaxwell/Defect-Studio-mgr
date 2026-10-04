@@ -30,6 +30,7 @@ namespace DefectStudio
 	// Through exactly two selected ends: atoms and/or vacancies, with nodes bound to their sources.
 	[[nodiscard]] Result<SceneObjectId> AddScenePathThroughSelectedAtoms(
 		RendererWindowState &windowState, bool arrow);
+	[[nodiscard]] Result<SceneObjectId> AddCurvedArrowThroughSelectedAtoms(RendererWindowState &windowState);
 	void SelectAddedScenePaths(RendererWindowState &windowState, std::vector<SceneObjectId> ids);
 
 	// Clipboard shared across windows, same lifetime and shape as the orbital/plane ones.

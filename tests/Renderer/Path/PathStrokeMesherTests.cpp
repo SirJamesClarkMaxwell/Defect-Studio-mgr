@@ -87,25 +87,6 @@ namespace DefectStudio::Tests
 			return result;
 		}
 
-		// Edges of the triangle list that belong to exactly one triangle. A closed surface has none with
-		// a non-zero length; the degenerate ones sit on a cap apex where every vertex is the same point.
-		std::size_t OpenBoundaryEdges(const StrokeGeometry &geometry)
-		{
-			std::map<std::pair<std::uint32_t, std::uint32_t>, int> edges;
-			for (std::size_t index = 0; index + 2u < geometry.indices.size(); index += 3u)
-				for (std::size_t corner = 0; corner < 3u; ++corner)
-				{
-					const std::uint32_t a = geometry.indices[index + corner];
-					const std::uint32_t b = geometry.indices[index + (corner + 1u) % 3u];
-					++edges[{std::min(a, b), std::max(a, b)}];
-				}
-			std::size_t open = 0;
-			for (const auto &[edge, count] : edges)
-				if (count == 1 && glm::distance(geometry.tubeVertices[edge.first].position, geometry.tubeVertices[edge.second].position) > 1e-6f)
-					++open;
-			return open;
-		}
-
 		constexpr float kSurfaceTolerance = 1.0e-5f;
 		constexpr float kRelativeSliverAreaSquared = 1.0e-6f;
 		constexpr float kMinimumOutwardDot = 0.25f;
@@ -1670,7 +1651,7 @@ namespace DefectStudio::Tests
 		}
 	}
 
-	TEST(PathStrokeMesherTests, CapsCloseTheTubeAndButtAddsNoGeometry)
+	TEST(PathStrokeMesherTests, ButtSquareAndRoundCapsCloseTheTube)
 	{
 		PathStrokeStyle style;
 		style.width = 0.2f;
@@ -1681,13 +1662,13 @@ namespace DefectStudio::Tests
 		style.cap = PathLineCap::Round;
 		const StrokeGeometry round = BuildStroke(StraightPath(), style);
 
-		// Butt is the bare sweep: a square cap only slides the end rings outwards, a round cap adds
-		// hemispheres, and only the round one leaves no hole at either end.
+		// Butt closes the terminal rings; Square extends those rings; Round adds hemispheres.
 		EXPECT_EQ(butt.indices.size(), square.indices.size());
 		EXPECT_EQ(butt.tubeVertices.size(), square.tubeVertices.size());
 		EXPECT_GT(round.indices.size(), butt.indices.size());
-		EXPECT_EQ(OpenBoundaryEdges(butt), 2u * style.radialSegments);
-		EXPECT_EQ(OpenBoundaryEdges(round), 0u);
+		AssertRangeIsClosedByPosition(butt, butt.shaft);
+		AssertRangeIsClosedByPosition(square, square.shaft);
+		AssertRangeIsClosedByPosition(round, round.shaft);
 		EXPECT_TRUE(AllIndicesInBounds(round));
 		EXPECT_GT(glm::distance(square.tubeVertices.front().position, butt.tubeVertices.front().position), 0.0f);
 
@@ -1824,20 +1805,25 @@ namespace DefectStudio::Tests
 		style.radialSegments = 4;
 		style.gradient.enabled = true;
 		style.gradient.stops = {{0.0f, glm::vec3(1.0f, 0.0f, 0.0f), 1.0f}, {0.5f, glm::vec3(0.0f, 1.0f, 0.0f), 0.5f}, {1.0f, glm::vec3(0.0f, 0.0f, 1.0f), 0.0f}};
-		const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
-		ASSERT_FALSE(geometry.tubeVertices.empty());
-		float previous = -1.0f;
-		for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+		for (const auto cap : {PathLineCap::Butt, PathLineCap::Square, PathLineCap::Round})
 		{
-			EXPECT_GE(vertex.arcT, previous);
-			previous = std::max(previous, vertex.arcT);
-			const glm::vec4 expected = SampleStrokeColor(style, vertex.arcT);
-			EXPECT_NEAR(vertex.color.r, expected.r, 1e-6f);
-			EXPECT_NEAR(vertex.color.a, expected.a, 1e-6f);
-			EXPECT_NEAR(vertex.dashCoord, vertex.arcT * static_cast<float>(StraightPath().totalLength), 1e-5f);
+			style.cap = cap;
+			SCOPED_TRACE(static_cast<int>(cap));
+			const StrokeGeometry geometry = BuildStroke(StraightPath(), style);
+			ASSERT_FALSE(geometry.tubeVertices.empty());
+			float previous = -1.0f;
+			for (const StrokeTubeVertex &vertex : geometry.tubeVertices)
+			{
+				EXPECT_GE(vertex.arcT, previous);
+				previous = std::max(previous, vertex.arcT);
+				const glm::vec4 expected = SampleStrokeColor(style, vertex.arcT);
+				EXPECT_NEAR(vertex.color.r, expected.r, 1e-6f);
+				EXPECT_NEAR(vertex.color.a, expected.a, 1e-6f);
+				EXPECT_NEAR(vertex.dashCoord, vertex.arcT * static_cast<float>(StraightPath().totalLength), 1e-5f);
+			}
+			EXPECT_NEAR(geometry.tubeVertices.front().arcT, 0.0f, 1e-6f);
+			EXPECT_NEAR(geometry.tubeVertices.back().arcT, 1.0f, 1e-6f);
 		}
-		EXPECT_NEAR(geometry.tubeVertices.front().arcT, 0.0f, 1e-6f);
-		EXPECT_NEAR(geometry.tubeVertices.back().arcT, 1.0f, 1e-6f);
 	}
 
 	TEST(PathStrokeMesherTests, DecorationsLongerThanThePathLeaveNoShaft)

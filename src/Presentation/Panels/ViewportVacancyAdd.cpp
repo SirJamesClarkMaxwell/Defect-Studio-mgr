@@ -27,6 +27,7 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr float kShellTolerance = 1.15f;
+		constexpr float kAtomEndBuffer = 0.9f; // in atom radii
 
 		[[nodiscard]] std::optional<glm::vec3> SelectedAtomCentroid(const RendererWindowState &windowState)
 		{
@@ -83,7 +84,8 @@ namespace DefectStudio
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[vacancyIndex];
 			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, vacancy.cartesianPosition,
 				atom.color, vacancy.color);
-			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
+			// The atom end starts just inside the sphere (like a bond seen from outside), not at its centre.
+			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, kAtomEndBuffer}};
 			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{vacancyIndex, {}, 1.0f}};
 			MovePathOriginToCentre(path);
 			return path;
@@ -177,15 +179,20 @@ namespace DefectStudio
 			for (const std::size_t vacancy : chosen)
 				for (const std::size_t atom : NeighbourShell(windowState, vacancies[vacancy].cartesianPosition))
 					pairs.emplace_back(atom, vacancy);
-			// Two chosen vacancies that are first-shell neighbours (V_B - V_N in hBN) get a line too.
-			for (std::size_t a = 0; a < chosen.size(); ++a)
-				for (std::size_t b = a + 1; b < chosen.size(); ++b)
+			// A chosen vacancy and any other vacancy in its first shell (V_B - V_N in hBN) get a line too,
+			// so "Wiązania do sąsiadów" on one vacancy of a divacancy also joins the pair.
+			for (const std::size_t a : chosen)
+			{
+				const glm::vec3 &first = vacancies[a].cartesianPosition;
+				const float shell = NearestShownAtomDistance(windowState, first) * kShellTolerance;
+				for (std::size_t b = 0; b < vacancies.size(); ++b)
 				{
-					const glm::vec3 &first = vacancies[chosen[a]].cartesianPosition;
-					const float shell = NearestShownAtomDistance(windowState, first) * kShellTolerance;
-					if (glm::length(vacancies[chosen[b]].cartesianPosition - first) <= shell)
-						vacancyPairs.emplace_back(std::min(chosen[a], chosen[b]), std::max(chosen[a], chosen[b]));
+					const std::pair<std::size_t, std::size_t> pair{std::min(a, b), std::max(a, b)};
+					if (b != a && glm::length(vacancies[b].cartesianPosition - first) <= shell &&
+						std::find(vacancyPairs.begin(), vacancyPairs.end(), pair) == vacancyPairs.end())
+						vacancyPairs.push_back(pair);
 				}
+			}
 		}
 		DS_LOG_INFO("Vacancy bonds: {} line(s) from {} selected atom(s), {} selected vacancy(ies), {} vacancy(ies) in total",
 			pairs.size(), atoms.size(), windowState.selectedVacancies.size(), vacancies.size());
@@ -220,51 +227,5 @@ namespace DefectStudio
 		return count;
 	}
 
-	void DrawDefectAddItems(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position)
-	{
-		const bool editable = !windowState.structure.domainStructureId.empty();
-		const std::optional<glm::vec3> centroid = SelectedAtomCentroid(windowState);
-		if (ImGui::MenuItem(centroid ? "Vacancy (selection centroid)" : "Vacancy", nullptr, false, editable))
-			AddVacancyAt(windowState, registry, centroid.value_or(position));
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Wakans w środku zaznaczonych atomów, a bez zaznaczenia w miejscu kliknięcia / kursora 3D.");
 
-		const bool canBond = !windowState.structure.vacancies.empty();
-		if (ImGui::MenuItem("Vacancy bonds", nullptr, false, canBond))
-			(void)AddVacancyBonds(windowState);
-		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Zaznaczone atomy -> wakans (zaznaczony albo najbliższy),\n"
-							  "albo zaznaczone wakanse (bez zaznaczenia: wszystkie) -> pierwsza sfera sąsiadów.\n"
-							  "Dwukolorowe linie atom -> wakans, styl każdej osobno.");
-
-		if (ImGui::MenuItem("Vacancy labels", nullptr, false, !windowState.structure.vacancies.empty()))
-		{
-			std::vector<std::size_t> vacancies;
-			for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
-			{
-				if (!windowState.selectedVacancies.empty() &&
-					std::find(windowState.selectedVacancies.begin(), windowState.selectedVacancies.end(), index) == windowState.selectedVacancies.end())
-					continue;
-				if (std::none_of(windowState.freeLabels.begin(), windowState.freeLabels.end(), [index](const auto &label) {
-						return label.anchorVacancy == index;
-					}))
-					vacancies.push_back(index);
-			}
-			if (!vacancies.empty())
-			{
-				PushPinnedMeasurementUndoSnapshot(windowState);
-				windowState.selectedFreeLabels = AddVacancyLabels(windowState, vacancies);
-				windowState.selectedPinnedMeasurements.clear();
-				windowState.selectedSceneOrbitals.clear();
-				windowState.selectedScenePlanes.clear();
-				windowState.selectedScenePaths.clear();
-				windowState.selectedVacancies.clear();
-				windowState.defectFrameSelected = false;
-				SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
-				SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
-			}
-		}
-
-		DrawDefectFrameAddMenu(windowState, registry, position);
-	}
 } // namespace DefectStudio

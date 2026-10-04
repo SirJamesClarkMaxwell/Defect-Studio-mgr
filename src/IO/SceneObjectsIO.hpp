@@ -318,6 +318,12 @@ namespace DefectStudio
 		glm::vec3 x = glm::vec3(1.0f, 0.0f, 0.0f);
 		glm::vec3 y = glm::vec3(0.0f, 1.0f, 0.0f);
 		glm::vec3 z = glm::vec3(0.0f, 0.0f, 1.0f);
+		// How the axes are drawn (RendererWindowState::defectFrameAxis*/showDefectFrame). Optional in
+		// the file: absent keys keep the window defaults.
+		std::optional<float> axisLength;
+		std::optional<float> axisWidth;
+		std::optional<bool> negativeAxes;
+		std::optional<bool> shown;
 	};
 
 	struct PersistedStructureSceneObjects
@@ -365,6 +371,10 @@ namespace DefectStudio
 	//         x: [x, y, z]
 	//         y: [x, y, z]
 	//         z: [x, y, z]
+	//         axisLength: 1.6      # optional, display only
+	//         axisWidth: 2.5       # optional
+	//         negativeAxes: true   # optional
+	//         shown: true          # optional
 	//   projectObjects:            # optional; same object entries, no structureKey
 	//     - kind: ScenePath
 	//       ...

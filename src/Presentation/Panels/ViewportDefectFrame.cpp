@@ -14,6 +14,8 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneOutlinerVisibilityColumns.hpp"
+#include "Presentation/Panels/SceneOrientationControls.hpp"
+#include "Renderer/Scene/SceneAxisAlignment.hpp"
 #include "Domain/Defects/DefectModel.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -387,8 +389,12 @@ namespace DefectStudio
 
 	void DrawDefectFrameAddMenu(RendererWindowState &windowState, CommandRegistry *commandRegistry, const glm::vec3 &position)
 	{
-		if (!ImGui::BeginMenu("Defect axes (empty)", !windowState.structure.domainStructureId.empty()))
+		if (!ImGui::BeginMenu("Osie defektu (empty)", commandRegistry != nullptr && !windowState.structure.domainStructureId.empty()))
+		{
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Otworz edytowalna strukture.");
 			return;
+		}
 		const auto centroid = SelectionCentroid(windowState);
 		const bool hasVacancy = !windowState.structure.vacancies.empty();
 		if (windowState.structure.defectFrame)
@@ -415,9 +421,13 @@ namespace DefectStudio
 				MakeDefectFrame(windowState.structure.atoms[selection[0]].cartesianPosition,
 					windowState.structure.atoms[selection[1]].cartesianPosition),
 				"Set defect axes");
+		if (!twoAtoms && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz dokladnie dwa atomy.");
 		if (ImGui::MenuItem("z: kursor 3D → zaznaczenie", nullptr, false, centroid.has_value()))
 			SetFrameFrom(windowState, commandRegistry, MakeDefectFrame(windowState.cursor3DPosition, *centroid),
 				"Set defect axes");
+		if (!centroid && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz co najmniej jeden atom.");
 		// The object's own axes: an arrow/line gives z along it, a plane z along its normal.
 		const std::vector<AlignTarget> objects = AlignTargets(windowState);
 		if (ImGui::MenuItem("Z osi zaznaczonego obiektu", nullptr, false, !objects.empty()))
@@ -427,6 +437,8 @@ namespace DefectStudio
 			SetFrameFrom(windowState, commandRegistry,
 				MakeDefectFrame(origin, origin + object.basis[2], origin + object.basis[0]), "Set defect axes");
 		}
+		if (objects.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz plaszczyzne, orbital lub sciezke z wlasnymi osiami.");
 		ImGui::EndMenu();
 	}
 
@@ -445,11 +457,13 @@ namespace DefectStudio
 
 		if (ImGui::MenuItem("Zaznacz osie"))
 			SelectDefectFrameOnly(windowState);
-		const bool hasObjects = !AlignTargets(windowState).empty();
+		const bool hasObjects = !CollectSceneAxisAlignmentTargets(windowState).empty();
 		const bool hasPoints = !windowState.selectedAtomIndices.empty() || !windowState.selectedVacancies.empty();
 		if (ImGui::MenuItem("Wyrównaj zaznaczone do osi", nullptr, false, hasObjects || hasPoints))
 		{
-			AlignSelectionToDefectFrame(windowState);
+			auto before = CaptureSceneObjectsSnapshot(windowState);
+			if (AlignSelectedSceneObjectAxes(windowState, 0, 0) > 0)
+				PushSceneObjectsUndoSnapshot(windowState, std::move(before));
 			// Points cannot turn: aligning them means moving them along the defect axes.
 			windowState.transformOrientation = TransformOrientation::Defect;
 		}
@@ -457,6 +471,7 @@ namespace DefectStudio
 			ImGui::SetTooltip("Strzałki, linie, płaszczyzny, orbitale, ścieżki: lokalne x/y/z = osie defektu\n"
 							  "(strzałka wzdłuż z, normalna płaszczyzny = z). Obrót wokół własnego środka.\n"
 							  "Atomy i wakanse: gizmo i G/R/S + X/Y/Z przechodzą na osie defektu.");
+		DrawSceneAxisAlignmentMenu(windowState);
 		bool defectOrientation = windowState.transformOrientation == TransformOrientation::Defect;
 		if (ImGui::MenuItem("Gizmo i G/R/S w osiach defektu", nullptr, &defectOrientation))
 			windowState.transformOrientation = defectOrientation ? TransformOrientation::Defect : TransformOrientation::Global;

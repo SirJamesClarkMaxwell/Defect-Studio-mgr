@@ -120,7 +120,7 @@ namespace DefectStudio
 			if (specularIntensityLocation >= 0) glUniform1f(specularIntensityLocation, settings.lighting.specularIntensity);
 			if (shininessLocation >= 0) glUniform1f(shininessLocation, settings.lighting.shininess);
 			if (saturationLocation >= 0) glUniform1f(saturationLocation, settings.colorSaturation);
-			if (specularScaleLocation >= 0) glUniform1f(specularScaleLocation, 0.25f);
+			if (specularScaleLocation >= 0) glUniform1f(specularScaleLocation, 1.0f);
 		}
 	} // namespace
 
@@ -143,12 +143,11 @@ namespace DefectStudio
 			bool tube;
 			bool cameraFacing;
 			float halfWidth;
-			float alpha;
+			bool transparent;
 			bool selected;
 			float outlineExpansion;
 		};
 		std::vector<DrawJob> jobs;
-		bool anyTransparent = false;
 
 		system.Store().Visit([&](const ScenePath &path) {
 			if (!path.visible || !path.renderable || path.nodes.size() < 2 || path.style.depthMode == (renderAlwaysOnTop ? PathDepthMode::DepthTest : PathDepthMode::AlwaysOnTop))
@@ -201,12 +200,12 @@ namespace DefectStudio
 				const float outlineExpansion = selected && pixelsPerWorldUnit > 0.0
 					? static_cast<float>(globalSettings.viewport.selectionOutlineWidth / pixelsPerWorldUnit)
 					: 0.0f;
-				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing, path.style.width * 0.5f, path.style.alpha, selected, outlineExpansion});
 				const bool gradientTransparent = path.style.gradient.enabled && std::any_of(
 					path.style.gradient.stops.begin(), path.style.gradient.stops.end(), [](const PathGradientStop &stop) {
 						return stop.alpha < 0.999f;
 					});
-				anyTransparent = anyTransparent || path.style.alpha < 0.999f || gradientTransparent;
+				jobs.push_back({path.id, tube, path.style.profile == StrokeProfile::CameraFacing,
+					path.style.width * 0.5f, path.style.alpha < 0.999f || gradientTransparent, selected, outlineExpansion});
 			}
 		});
 
@@ -247,8 +246,8 @@ namespace DefectStudio
 		glGetFloatv(GL_POINT_SIZE, &previousPointSize);
 		if (renderAlwaysOnTop)
 			glDisable(GL_DEPTH_TEST);
-		if (!renderAlwaysOnTop && anyTransparent)
-			glDepthMask(GL_FALSE);
+		else
+			glEnable(GL_DEPTH_TEST);
 
 		const unsigned int tubeProgram = m_ShaderLibrary.Program("path_tube");
 		const unsigned int ribbonProgram = m_ShaderLibrary.Program("path_ribbon");
@@ -260,6 +259,8 @@ namespace DefectStudio
 				return;
 			if (meshOverlay && !job.selected)
 				return;
+			if (!outline && !meshOverlay)
+				glDepthMask(!renderAlwaysOnTop && !job.transparent ? GL_TRUE : GL_FALSE);
 			const unsigned int program = job.tube ? tubeProgram : ribbonProgram;
 			if (program == 0)
 				return;
@@ -340,7 +341,7 @@ namespace DefectStudio
 		if (!input.showMeshOverlay)
 			for (const DrawJob &job : jobs)
 				drawJob(job, true);
-		glDepthMask((!renderAlwaysOnTop && anyTransparent) ? GL_FALSE : previousDepthMask);
+		std::stable_partition(jobs.begin(), jobs.end(), [](const DrawJob &job) { return !job.transparent; });
 		for (const DrawJob &job : jobs)
 			drawJob(job, false);
 		if (input.showMeshOverlay)

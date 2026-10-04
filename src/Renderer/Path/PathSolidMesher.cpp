@@ -1,6 +1,8 @@
 #include "Core/dspch.hpp"
 
 #include "Renderer/Path/PathSolidMesher.hpp"
+#include "Renderer/Path/PathPolygonTriangulator.hpp"
+#include "Renderer/Path/PathSolidBevelGeometry.hpp"
 
 #include <algorithm>
 #include <array>
@@ -34,7 +36,7 @@ namespace DefectStudio::detail
 
 		void AddFace(ThickFlatMesh &mesh, std::vector<std::uint32_t> vertices,
 			const glm::dvec3 &expectedNormal, const ThickFlatFaceOwner owner,
-			std::vector<bool> bevelEdges = {})
+			std::vector<bool> bevelEdges = {}, const std::uint32_t smoothingGroup = 0)
 		{
 			std::vector<std::uint32_t> compact;
 			std::vector<bool> compactBevels;
@@ -74,7 +76,7 @@ namespace DefectStudio::detail
 				std::reverse(compactBevels.begin(), compactBevels.end());
 				std::rotate(compactBevels.begin(), compactBevels.begin() + 1u, compactBevels.end());
 			}
-			mesh.faces.push_back({std::move(compact), std::move(compactBevels), owner});
+			mesh.faces.push_back({std::move(compact), std::move(compactBevels), owner, smoothingGroup});
 		}
 
 		struct DecorationLoop
@@ -166,6 +168,7 @@ namespace DefectStudio::detail
 
 			ThickFlatMeshFace merged;
 			merged.owner = first.owner != ThickFlatFaceOwner::Shaft ? first.owner : second.owner;
+			merged.smoothingGroup = first.smoothingGroup;
 			for (std::size_t offset = 1u; offset <= first.vertices.size(); ++offset)
 			{
 				const std::size_t index = (firstCorner + offset) % first.vertices.size();
@@ -192,14 +195,27 @@ namespace DefectStudio::detail
 				normal += glm::cross(mesh.vertices[face.vertices[index]].position,
 					mesh.vertices[face.vertices[(index + 1u) % face.vertices.size()]].position);
 			normal = SafeNormal(normal, glm::dvec3(0.0, 0.0, 1.0));
-			for (std::size_t index = 1u; index + 1u < face.vertices.size(); ++index)
+			std::vector<glm::dvec3> positions;
+			for (const auto vertex : face.vertices) positions.push_back(mesh.vertices[vertex].position);
+			if (positions.size() < 3u) return;
+			std::vector<std::array<std::size_t, 3u>> triangles;
+			// The sharp fallback must retain the source strip's two triangles even when
+			// a rigid decoration handoff folds a quad in projection. Ear clipping is for
+			// the larger simple, concave faces; rejecting a strip quad opens the surface.
+			if (positions.size() <= 4u)
 			{
-				for (const std::size_t corner : {std::size_t{0u}, index, index + 1u})
+				triangles.push_back({0u, 1u, 2u});
+				if (positions.size() == 4u) triangles.push_back({0u, 2u, 3u});
+			}
+			else if (!TriangulateSimplePolygon(positions, normal, triangles)) return;
+			for (const auto &triangle : triangles)
+			{
+				for (const std::size_t corner : triangle)
 				{
 					const ThickFlatMeshVertex &source = mesh.vertices[face.vertices[corner]];
 					output.indices.push_back(static_cast<std::uint32_t>(output.vertices.size()));
 					output.vertices.push_back({glm::vec3(source.position), glm::vec3(normal), source.color,
-						source.arcT, source.dashCoord});
+						source.arcT, source.dashCoord, face.smoothingGroup});
 				}
 			}
 		}
@@ -283,6 +299,10 @@ namespace DefectStudio::detail
 					colors != nullptr && colors->size() == working.size() ? &(*colors)[index] : nullptr);
 			rings.push_back(ring);
 		}
+		if (capStart) for (const auto vertex : rings.front())
+			mesh.vertices[vertex].capOutwardNormal = -working.front().tangent;
+		if (capEnd) for (const auto vertex : rings.back())
+			mesh.vertices[vertex].capOutwardNormal = working.back().tangent;
 		for (std::size_t index = 0u; index + 1u < rings.size(); ++index)
 		{
 			const glm::dvec3 normal = SafeNormal(working[index].normal + working[index + 1u].normal, working[index].normal);
@@ -293,14 +313,15 @@ namespace DefectStudio::detail
 			for (std::size_t edge = 0u; edge < 4u; ++edge)
 				AddFace(mesh, {rings[index][edge], rings[index + 1u][edge],
 					rings[index + 1u][(edge + 1u) % 4u], rings[index][(edge + 1u) % 4u]},
-					hints[edge], ThickFlatFaceOwner::Shaft, {true, bevelEnd, true, bevelStart});
+					hints[edge], ThickFlatFaceOwner::Shaft, {true, bevelEnd, true, bevelStart},
+					static_cast<std::uint32_t>(edge + 1u));
 		}
 		if (capStart)
 			AddFace(mesh, {rings.front()[3], rings.front()[2], rings.front()[1], rings.front()[0]},
-				-working.front().tangent, ThickFlatFaceOwner::Shaft);
+				-working.front().tangent, ThickFlatFaceOwner::Shaft, {}, 5u);
 		if (capEnd)
 			AddFace(mesh, {rings.back()[0], rings.back()[1], rings.back()[2], rings.back()[3]},
-				working.back().tangent, ThickFlatFaceOwner::Shaft);
+				working.back().tangent, ThickFlatFaceOwner::Shaft, {}, 6u);
 	}
 
 	void AppendAttachedThickFlatDecoration(ThickFlatMesh &mesh, const DecorationContour &contour,
@@ -329,11 +350,11 @@ namespace DefectStudio::detail
 		std::vector<bool> outlineBevels(front.size(), true);
 		if (attachedToShaft && loop.attachmentEdge < outlineBevels.size())
 			outlineBevels[loop.attachmentEdge] = false;
-		AddFace(mesh, front, endpoint.binormal, owner, outlineBevels);
+		AddFace(mesh, front, endpoint.binormal, owner, outlineBevels, 1u);
 		std::vector<std::uint32_t> reversedBack(back.rbegin(), back.rend());
 		std::reverse(outlineBevels.begin(), outlineBevels.end());
 		std::rotate(outlineBevels.begin(), outlineBevels.begin() + 1u, outlineBevels.end());
-		AddFace(mesh, std::move(reversedBack), -endpoint.binormal, owner, std::move(outlineBevels));
+		AddFace(mesh, std::move(reversedBack), -endpoint.binormal, owner, std::move(outlineBevels), 3u);
 		// Mirroring the contour at the end reverses its loop winding and side normals.
 		const glm::dvec3 sideAxis = start ? endpoint.binormal : -endpoint.binormal;
 		for (std::size_t index = 0u; index < loop.positions.size(); ++index)
@@ -368,5 +389,6 @@ namespace DefectStudio::detail
 		append(ThickFlatFaceOwner::StartDecoration, geometry.startDecoration);
 		append(ThickFlatFaceOwner::EndDecoration, geometry.endDecoration);
 		append(ThickFlatFaceOwner::Shaft, geometry.shaft);
+		SmoothThickFlatBevelNormals(geometry);
 	}
 }

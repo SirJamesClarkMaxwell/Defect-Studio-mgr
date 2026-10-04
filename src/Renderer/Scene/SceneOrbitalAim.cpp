@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -45,6 +46,39 @@ namespace DefectStudio
 		}
 		targets.push_back({"Kursor 3D", windowState.cursor3DPosition});
 		return targets;
+	}
+
+	std::vector<OrbitalAimRotation> AimSelectedSceneOrbitals(
+		const RendererWindowState &windowState, const std::vector<SceneObjectId> &selection,
+		const std::optional<glm::vec3> &target)
+	{
+		std::vector<OrbitalAimRotation> rotations;
+		for (const auto &orbital : windowState.sceneOrbitals)
+		{
+			if (std::find(selection.begin(), selection.end(), orbital.id) == selection.end() ||
+				!orbital.lcaoComponents.empty())
+				continue;
+			const glm::vec3 centre = ResolveSceneOrbitalCenters(orbital, windowState.structure).centerA;
+			std::optional<glm::vec3> destination = target;
+			if (!destination)
+			{
+				float best = std::numeric_limits<float>::max();
+				for (const auto &vacancy : windowState.structure.vacancies)
+				{
+					const glm::vec3 offset = vacancy.cartesianPosition - centre;
+					const float distance = glm::dot(offset, offset);
+					if (std::isfinite(distance) && distance < best)
+					{
+						best = distance;
+						destination = vacancy.cartesianPosition;
+					}
+				}
+			}
+			if (destination)
+				if (const auto euler = AimSceneOrbitalEuler(orbital, centre, *destination))
+					rotations.push_back({orbital.id, *euler});
+		}
+		return rotations;
 	}
 
 	std::optional<glm::vec3> ResolveDanglingBondTarget(

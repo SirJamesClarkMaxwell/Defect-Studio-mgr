@@ -47,6 +47,17 @@ namespace DefectStudio
 	// present, so the list is never empty.
 	[[nodiscard]] std::vector<OrbitalAimTarget> CollectOrbitalAimTargets(const RendererWindowState &windowState);
 
+	struct OrbitalAimRotation
+	{
+		SceneObjectId id;
+		glm::vec3 eulerDegrees;
+	};
+	// Computes without mutating the scene. nullopt target means each orbital's nearest vacancy.
+	// Stale IDs, LCAO, two-centre and axisless orbitals, and coincident targets are skipped.
+	[[nodiscard]] std::vector<OrbitalAimRotation> AimSelectedSceneOrbitals(
+		const RendererWindowState &windowState, const std::vector<SceneObjectId> &selection,
+		const std::optional<glm::vec3> &target);
+
 	// Where "dangling bonds -> vacancy" points the lobes of `atoms`: the vacancy nearest to the
 	// atoms' centroid when the structure has any, otherwise the centroid itself. Stale indices are
 	// ignored; nullopt when no index resolves.

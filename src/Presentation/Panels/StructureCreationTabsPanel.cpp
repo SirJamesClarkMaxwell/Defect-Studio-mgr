@@ -176,7 +176,7 @@ namespace DefectStudio
 			{
 				DrawViewportToolbar(*activePane, m_RendererLayer);
 				ImGui::Separator();
-				DrawViewportVerticalToolbar(*activePane, m_RendererLayer);
+				DrawViewportVerticalToolbar(*activePane, m_RendererLayer, m_CommandRegistry);
 				ImGui::SameLine();
 			}
 

@@ -839,8 +839,14 @@ namespace DefectStudio
 						record->structure.vacancies.push_back({site.position, site.fractional,
 							site.sourceSpecies, site.label, site.index, site.color});
 				if (restoreFrame)
-					record->structure.defectFrame =
-						DefectFrame{entry.defectFrame->origin, entry.defectFrame->x, entry.defectFrame->y, entry.defectFrame->z};
+				{
+					const PersistedDefectFrame &saved = *entry.defectFrame;
+					record->structure.defectFrame = DefectFrame{saved.origin, saved.x, saved.y, saved.z};
+					windowState.defectFrameAxisLength = saved.axisLength.value_or(windowState.defectFrameAxisLength);
+					windowState.defectFrameAxisWidth = saved.axisWidth.value_or(windowState.defectFrameAxisWidth);
+					windowState.defectFrameNegativeAxes = saved.negativeAxes.value_or(windowState.defectFrameNegativeAxes);
+					windowState.showDefectFrame = saved.shown.value_or(windowState.showDefectFrame);
+				}
 				if (auto renderer = m_RendererLayer.lock())
 					for (RendererWindowState &window : renderer->GetWindows())
 						if (window.structureId == record->id)
@@ -1769,7 +1775,21 @@ namespace DefectStudio
 						{site.position, site.fractional, site.sourceSpecies, site.label, site.index, site.color});
 				entry->defectFrame.reset();
 				if (const auto &frame = record->structure.defectFrame)
-					entry->defectFrame = PersistedDefectFrame{frame->origin, frame->x, frame->y, frame->z};
+				{
+					PersistedDefectFrame saved{frame->origin, frame->x, frame->y, frame->z};
+					// ponytail: the first window showing the structure speaks for all of them.
+					if (auto rendererLayer = m_RendererLayer.lock())
+						for (const RendererWindowState &window : rendererLayer->GetWindows())
+							if (window.structureId == record->id)
+							{
+								saved.axisLength = window.defectFrameAxisLength;
+								saved.axisWidth = window.defectFrameAxisWidth;
+								saved.negativeAxes = window.defectFrameNegativeAxes;
+								saved.shown = window.showDefectFrame;
+								break;
+							}
+					entry->defectFrame = saved;
+				}
 				savedStructures.push_back(record->id);
 			}
 			if (auto rendererLayer = m_RendererLayer.lock())

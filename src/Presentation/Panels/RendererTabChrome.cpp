@@ -61,7 +61,8 @@ namespace DefectStudio
 			RendererLayer &layer,
 			const ImVec2 viewportOrigin,
 			const ImVec2 viewportSize,
-			const float horizontalHeight)
+			const float horizontalHeight,
+			const WeakRef<CommandRegistry> &commandRegistry)
 		{
 			// The mirror image of the horizontal overlay. This toolbar's BeginChild asks for an
 			// explicit width and GetContentRegionAvail().y for its height, so here the HEIGHT is the
@@ -86,7 +87,7 @@ namespace DefectStudio
 				return;
 			}
 
-			DrawViewportVerticalToolbar(windowState, layer);
+			DrawViewportVerticalToolbar(windowState, layer, commandRegistry);
 			ImGui::EndChild();
 		}
 
@@ -138,14 +139,15 @@ namespace DefectStudio
 		RendererWindowState &windowState,
 		RendererLayer &layer,
 		const ImVec2 viewportOrigin,
-		const ImVec2 viewportSize)
+		const ImVec2 viewportSize,
+		const WeakRef<CommandRegistry> &commandRegistry)
 	{
 		if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
 			return 0.0f;
 
 		const float horizontalHeight =
 			DrawHorizontalToolbarOverlay(windowState, layer, viewportOrigin, viewportSize);
-		DrawVerticalToolbarOverlay(windowState, layer, viewportOrigin, viewportSize, horizontalHeight);
+		DrawVerticalToolbarOverlay(windowState, layer, viewportOrigin, viewportSize, horizontalHeight, commandRegistry);
 		return horizontalHeight + ImGui::GetStyle().WindowPadding.y * 2.0f;
 	}
 

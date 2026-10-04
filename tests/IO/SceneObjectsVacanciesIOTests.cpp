@@ -56,6 +56,10 @@ namespace DefectStudio::Tests
 		frame.x = glm::vec3(0.0f, 1.0f, 0.0f);
 		frame.y = glm::vec3(0.0f, 0.0f, 1.0f);
 		frame.z = glm::vec3(1.0f, 0.0f, 0.0f);
+		frame.axisLength = 2.75f;
+		frame.axisWidth = 4.0f;
+		frame.negativeAxes = false;
+		frame.shown = false;
 		entry.defectFrame = frame;
 		file.structures.push_back(entry);
 		file.structures.push_back({"structures/bulk/POSCAR", {}});
@@ -72,6 +76,10 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(loaded.structures[0].defectFrame->x, frame.x);
 		EXPECT_EQ(loaded.structures[0].defectFrame->y, frame.y);
 		EXPECT_EQ(loaded.structures[0].defectFrame->z, frame.z);
+		EXPECT_EQ(loaded.structures[0].defectFrame->axisLength, std::optional<float>(2.75f));
+		EXPECT_EQ(loaded.structures[0].defectFrame->axisWidth, std::optional<float>(4.0f));
+		EXPECT_EQ(loaded.structures[0].defectFrame->negativeAxes, std::optional<bool>(false));
+		EXPECT_EQ(loaded.structures[0].defectFrame->shown, std::optional<bool>(false));
 		EXPECT_FALSE(loaded.structures[1].defectFrame.has_value());
 		EXPECT_EQ(text.find("defectFrame"), text.rfind("defectFrame"));
 	}

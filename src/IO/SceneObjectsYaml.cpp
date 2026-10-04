@@ -53,9 +53,23 @@ namespace DefectStudio::SceneObjectsYaml
 		auto finite = [](const glm::vec3 &v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); };
 		try
 		{
-			return node.IsMap() && Vec3(node["origin"], frame.origin) && Vec3(node["x"], frame.x) &&
-				Vec3(node["y"], frame.y) && Vec3(node["z"], frame.z) && finite(frame.origin) && finite(frame.x) &&
-				finite(frame.y) && finite(frame.z);
+			if (!(node.IsMap() && Vec3(node["origin"], frame.origin) && Vec3(node["x"], frame.x) &&
+					Vec3(node["y"], frame.y) && Vec3(node["z"], frame.z) && finite(frame.origin) && finite(frame.x) &&
+					finite(frame.y) && finite(frame.z)))
+				return false;
+			// Display keys are best-effort: a bad one is dropped, the frame itself still loads.
+			const auto positive = [&](const char *key, std::optional<float> &out) {
+				if (const YAML::Node value = node[key]; value && value.IsScalar())
+					if (const float number = value.as<float>(0.0f); std::isfinite(number) && number > 0.0f)
+						out = number;
+			};
+			positive("axisLength", frame.axisLength);
+			positive("axisWidth", frame.axisWidth);
+			if (const YAML::Node value = node["negativeAxes"]; value && value.IsScalar())
+				frame.negativeAxes = value.as<bool>(true);
+			if (const YAML::Node value = node["shown"]; value && value.IsScalar())
+				frame.shown = value.as<bool>(true);
+			return true;
 		}
 		catch (const YAML::Exception &)
 		{
@@ -72,6 +86,14 @@ namespace DefectStudio::SceneObjectsYaml
 		EmitVec3(emit, "x", frame->x);
 		EmitVec3(emit, "y", frame->y);
 		EmitVec3(emit, "z", frame->z);
+		if (frame->axisLength)
+			emit << YAML::Key << "axisLength" << YAML::Value << *frame->axisLength;
+		if (frame->axisWidth)
+			emit << YAML::Key << "axisWidth" << YAML::Value << *frame->axisWidth;
+		if (frame->negativeAxes)
+			emit << YAML::Key << "negativeAxes" << YAML::Value << *frame->negativeAxes;
+		if (frame->shown)
+			emit << YAML::Key << "shown" << YAML::Value << *frame->shown;
 		emit << YAML::EndMap;
 	}
 

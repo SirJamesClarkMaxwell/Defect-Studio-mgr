@@ -22,7 +22,7 @@ namespace DefectStudio
 	// Exact split - Line by lerp, Cubic by de Casteljau, Arc by sweep (t*theta / (1-t)*theta in the
 	// same plane). The evaluated curve is unchanged. Returns the new node's id.
 	[[nodiscard]] Result<PathElementId> InsertNode(ScenePath &path, std::size_t segment, double t);
-	// Splits the original parameter interval into count+1 equal pieces, atomically (1..32 nodes).
+	// Splits the original parameter interval into count+1 equal pieces, atomically (1..64 nodes).
 	[[nodiscard]] Result<std::vector<PathElementId>> InsertNodes(ScenePath &path, std::size_t segment, std::size_t count);
 
 	// Appends a node past the chosen end. The new segment inherits the terminal segment's type:

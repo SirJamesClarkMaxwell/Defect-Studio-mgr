@@ -3,12 +3,14 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "Core/Utils/Memory.hpp"
 
 #include <imgui.h>
 
 namespace DefectStudio
 {
 	class EventBus;
+	class CommandRegistry;
 	class RendererLayer;
 	struct RendererWindowState;
 
@@ -27,7 +29,7 @@ namespace DefectStudio
 	// StructureCreationTabsPanel already draws ONE pair of toolbars acting on its active pane. That
 	// is the same shape, at a different scale, and it is why DrawViewportToolbar and
 	// DrawViewportVerticalToolbar are free functions over a RendererWindowState in the first place.
-	// Neither of those two functions changes here.
+	// The vertical toolbar receives the same command registry as its viewport.
 
 	// The renderer window whose tab is currently showing, or an empty string when none is.
 	//
@@ -73,7 +75,8 @@ namespace DefectStudio
 		RendererWindowState &windowState,
 		RendererLayer &layer,
 		ImVec2 viewportOrigin,
-		ImVec2 viewportSize);
+		ImVec2 viewportSize,
+		const WeakRef<CommandRegistry> &commandRegistry);
 
 	// Appends a "+" to the central dock node's tab bar and publishes
 	// RendererEvents::Windows::OpenEmptyRequested when it is clicked - the same event Ctrl+T, the

@@ -168,7 +168,8 @@ namespace DefectStudio
 				return candidate;
 
 			const ClosestOnSegment closest = ClosestPointOnSegment2D(settings.cursor, *screenA, *screenB);
-			if (!std::isfinite(closest.distance) || closest.distance > *radius + kPathStrokePickTolerance)
+			if (!std::isfinite(settings.strokePickTolerance) || settings.strokePickTolerance < 0.0f ||
+				!std::isfinite(closest.distance) || closest.distance > *radius + settings.strokePickTolerance)
 				return candidate;
 
 			candidate.hit = true;

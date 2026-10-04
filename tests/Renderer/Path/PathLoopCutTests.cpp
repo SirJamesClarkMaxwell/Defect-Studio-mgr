@@ -38,7 +38,7 @@ namespace DefectStudio::Tests
 	TEST(PathLoopCutTests, EvenSplitsPreserveLineCubicAndArcShape)
 	{
 		for (int kind = 0; kind < 3; ++kind)
-			for (const std::size_t count : {1u, 4u, 32u})
+			for (const std::size_t count : {1u, 3u, 4u, 32u, 64u})
 			{
 				SCOPED_TRACE(testing::Message() << kind << "," << count);
 				const auto original = Curve(kind);
@@ -79,9 +79,24 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(hit.element, path.segments[0].id);
 	}
 
+	TEST(PathLoopCutTests, ModalSegmentToleranceReachesBeyondTheNormalPickBand)
+	{
+		const auto path = Curve(0);
+		const auto resolved = ResolveNodePositions(path, {});
+		const auto evaluated = Tessellate(path, resolved, {});
+		PathPickSettings settings;
+		settings.viewportSize = {200, 200};
+		settings.cursor = {160, 130};
+		settings.editMode = true;
+		settings.segmentOnly = true;
+		EXPECT_FALSE(PickPath(path, resolved, evaluated, settings).Hit());
+		settings.strokePickTolerance = 48;
+		EXPECT_EQ(PickPath(path, resolved, evaluated, settings).element, path.segments[0].id);
+	}
+
 	TEST(PathLoopCutTests, InvalidCountOrSegmentLeavesPathUntouched)
 	{
-		for (const std::size_t count : {0u, 33u})
+		for (const std::size_t count : {0u, 65u})
 		{
 			auto path = Curve(1);
 			EXPECT_FALSE(InsertNodes(path, 0, count));
@@ -119,7 +134,7 @@ namespace DefectStudio::Tests
 
 	TEST(PathLoopCutTests, BufferedBoundEndpointKeepsItsDisplayedPositionAndBinding)
 	{
-		for (const std::size_t count : {1u, 32u})
+		for (const std::size_t count : {1u, 3u, 32u, 64u})
 		{
 			RendererWindowState window;
 			window.windowId = "bound-cut";
@@ -170,6 +185,47 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	TEST(PathLoopCutTests, CommandInsertsThreeNodesWithoutChangingCubicOrArcGeometry)
+	{
+		for (const int kind : {1, 2})
+		{
+			RendererWindowState window;
+			auto original = Curve(kind);
+			original.transform.position = {3, -2, 1};
+			original.transform.scale = {2, 0.7f, 1.3f};
+			SceneSystem::EnsurePathSystem(window).Store().Insert(original);
+			const auto before = ResolveNodePositions(original, {});
+			ASSERT_TRUE(InsertScenePathNodes(PathEditContext{&window, {}}, original.id, 0, 3));
+			const auto &split = *window.paths->Store().Find(original.id);
+			const auto after = ResolveNodePositions(split, {});
+			for (int index = 0; index <= 256; ++index)
+			{
+				const double t = index / 256.0, scaled = t * 4;
+				const auto segment = std::min(std::size_t{3}, static_cast<std::size_t>(scaled));
+				const auto a = EvaluateSegment(original, before, 0, t);
+				const auto b = EvaluateSegment(split, after, segment, scaled - segment);
+				ASSERT_TRUE(a); ASSERT_TRUE(b);
+				EXPECT_LT(glm::distance(a->position, b->position), 1.0e-4);
+			}
+		}
+	}
+
+	TEST(PathLoopCutTests, EmptyPreviewAndRepickingKeepTheModalAndItsCount)
+	{
+		PathEditSession session;
+		session.Enter(SceneObjectId{1});
+		session.RequestInsert();
+		session.BeginInsert({});
+		ASSERT_TRUE(session.InsertPreview());
+		EXPECT_FALSE(session.InsertPreview()->segment.IsValid());
+		session.ChangeInsertCount(2);
+		session.BeginInsert(PathElementId{3});
+		EXPECT_EQ(session.InsertPreview()->count, 3u);
+		session.BeginInsert(PathElementId{4});
+		EXPECT_EQ(session.InsertPreview()->segment, PathElementId{4});
+		EXPECT_EQ(session.InsertPreview()->count, 3u);
+	}
+
 	TEST(PathLoopCutTests, ModalCountClampsAndCancelAndLeaveClearThePreview)
 	{
 		PathEditSession session;
@@ -180,7 +236,7 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(session.InsertPreview());
 		EXPECT_EQ(session.InsertPreview()->count, 1u);
 		session.ChangeInsertCount(100);
-		EXPECT_EQ(session.InsertPreview()->count, 32u);
+		EXPECT_EQ(session.InsertPreview()->count, 64u);
 		session.ChangeInsertCount(-100);
 		EXPECT_EQ(session.InsertPreview()->count, 1u);
 		session.CancelInsert();
