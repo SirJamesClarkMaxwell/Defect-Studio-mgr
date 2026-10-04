@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "Renderer/Scene/SceneVisibility.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -20,9 +21,9 @@ namespace DefectStudio::Tests
 			label.id = SceneObjectId{2};
 			window.freeLabels = {label};
 
-			RendererWindowState::SceneArrow arrow;
-			arrow.id = SceneObjectId{3};
-			window.sceneArrows = {arrow};
+			ScenePath path;
+			path.id = SceneObjectId{3};
+			EXPECT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(path));
 
 			RendererWindowState::SceneOrbital orbital;
 			orbital.id = SceneObjectId{4};
@@ -39,7 +40,7 @@ namespace DefectStudio::Tests
 		{
 			window.selectedPinnedMeasurements = {window.pinnedMeasurements.front().id};
 			window.selectedFreeLabels = {window.freeLabels.front().id};
-			window.selectedSceneArrows = {window.sceneArrows.front().id};
+			window.selectedScenePaths = {window.paths->Store().At(0)->id};
 			window.selectedSceneOrbitals = {window.sceneOrbitals.front().id};
 			window.selectedScenePlanes = {window.scenePlanes.front().id};
 		}
@@ -47,14 +48,14 @@ namespace DefectStudio::Tests
 		bool EveryKindIsVisible(const RendererWindowState &window)
 		{
 			return window.pinnedMeasurements.front().visible && window.freeLabels.front().visible &&
-				window.sceneArrows.front().visible && window.sceneOrbitals.front().visible &&
+				window.paths->Store().At(0)->visible && window.sceneOrbitals.front().visible &&
 				window.scenePlanes.front().visible;
 		}
 
 		bool EveryKindIsRenderable(const RendererWindowState &window)
 		{
 			return window.pinnedMeasurements.front().renderable && window.freeLabels.front().renderable &&
-				window.sceneArrows.front().renderable && window.sceneOrbitals.front().renderable &&
+				window.paths->Store().At(0)->renderable && window.sceneOrbitals.front().renderable &&
 				window.scenePlanes.front().renderable;
 		}
 	} // namespace
@@ -81,9 +82,9 @@ namespace DefectStudio::Tests
 		labels.selectedFreeLabels = {SceneObjectId{2}};
 		EXPECT_TRUE(AnySceneObjectSelected(labels));
 
-		RendererWindowState arrows = MakeSceneWithOneOfEveryKind();
-		arrows.selectedSceneArrows = {SceneObjectId{3}};
-		EXPECT_TRUE(AnySceneObjectSelected(arrows));
+		RendererWindowState paths = MakeSceneWithOneOfEveryKind();
+		paths.selectedScenePaths = {SceneObjectId{3}};
+		EXPECT_TRUE(AnySceneObjectSelected(paths));
 
 		RendererWindowState orbitals = MakeSceneWithOneOfEveryKind();
 		orbitals.selectedSceneOrbitals = {SceneObjectId{4}};
@@ -103,7 +104,7 @@ namespace DefectStudio::Tests
 
 		EXPECT_FALSE(window.pinnedMeasurements.front().visible);
 		EXPECT_FALSE(window.freeLabels.front().visible);
-		EXPECT_FALSE(window.sceneArrows.front().visible);
+		EXPECT_FALSE(window.paths->Store().At(0)->visible);
 		EXPECT_FALSE(window.sceneOrbitals.front().visible);
 		EXPECT_FALSE(window.scenePlanes.front().visible);
 	}
@@ -111,15 +112,15 @@ namespace DefectStudio::Tests
 	TEST(SceneVisibilityTests, HidingTheSelectionLeavesUnselectedObjectsAlone)
 	{
 		RendererWindowState window = MakeSceneWithOneOfEveryKind();
-		RendererWindowState::SceneArrow other;
+		ScenePath other;
 		other.id = SceneObjectId{30};
-		window.sceneArrows.push_back(other);
-		window.selectedSceneArrows = {SceneObjectId{3}};
+		ASSERT_TRUE(window.paths->Store().Insert(other));
+		window.selectedScenePaths = {SceneObjectId{3}};
 
 		SetSelectedSceneObjectsVisible(window, false);
 
-		EXPECT_FALSE(window.sceneArrows.front().visible);
-		EXPECT_TRUE(window.sceneArrows.back().visible);
+		EXPECT_FALSE(window.paths->Store().At(0)->visible);
+		EXPECT_TRUE(window.paths->Store().At(1)->visible);
 		EXPECT_TRUE(window.freeLabels.front().visible);
 		EXPECT_TRUE(window.sceneOrbitals.front().visible);
 	}
@@ -150,7 +151,7 @@ namespace DefectStudio::Tests
 		RendererWindowState window = MakeSceneWithOneOfEveryKind();
 		window.pinnedMeasurements.front().visible = false;
 		window.freeLabels.front().visible = false;
-		window.sceneArrows.front().visible = false;
+		window.paths->Store().MutateStyle(SceneObjectId{3}, [](ScenePath &path) { path.visible = false; });
 		window.sceneOrbitals.front().visible = false;
 		window.scenePlanes.front().visible = false;
 
@@ -162,13 +163,13 @@ namespace DefectStudio::Tests
 	TEST(SceneVisibilityTests, ShowAllLeavesTheCameraColumnAlone)
 	{
 		RendererWindowState window = MakeSceneWithOneOfEveryKind();
-		window.sceneArrows.front().renderable = false;
-		window.sceneArrows.front().visible = false;
+		window.paths->Store().MutateStyle(SceneObjectId{3}, [](ScenePath &path) { path.renderable = false; });
+		window.paths->Store().MutateStyle(SceneObjectId{3}, [](ScenePath &path) { path.visible = false; });
 
 		ShowAllSceneObjects(window);
 
-		EXPECT_TRUE(window.sceneArrows.front().visible);
-		EXPECT_FALSE(window.sceneArrows.front().renderable);
+		EXPECT_TRUE(window.paths->Store().At(0)->visible);
+		EXPECT_FALSE(window.paths->Store().At(0)->renderable);
 	}
 
 	TEST(SceneVisibilityTests, RenderPassVisibilityFollowsTheCameraColumnAlone)
@@ -176,8 +177,8 @@ namespace DefectStudio::Tests
 		RendererWindowState window = MakeSceneWithOneOfEveryKind();
 		// Hidden in the viewport but still in the render, and the other way round - the two columns
 		// are independent, so neither may leak into the other.
-		window.sceneArrows.front().visible = false;
-		window.sceneArrows.front().renderable = true;
+		window.paths->Store().MutateStyle(SceneObjectId{3}, [](ScenePath &path) { path.visible = false; });
+		window.paths->Store().MutateStyle(SceneObjectId{3}, [](ScenePath &path) { path.renderable = true; });
 		window.sceneOrbitals.front().visible = true;
 		window.sceneOrbitals.front().renderable = false;
 
@@ -192,7 +193,7 @@ namespace DefectStudio::Tests
 
 		ApplyRenderPassVisibility(window);
 
-		EXPECT_TRUE(window.sceneArrows.front().visible);
+		EXPECT_TRUE(window.paths->Store().At(0)->visible);
 		EXPECT_FALSE(window.sceneOrbitals.front().visible);
 		EXPECT_TRUE(window.structure.atoms.front().visible);
 		EXPECT_FALSE(window.structure.bonds.front().visible);

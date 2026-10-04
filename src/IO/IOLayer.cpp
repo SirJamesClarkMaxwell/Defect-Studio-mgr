@@ -166,7 +166,8 @@ namespace DefectStudio
 				KeyBinding binding;
 				binding.id = id;
 				binding.chord = *chord;
-				binding.commandId = CommandID{command};
+				// Import saved keymaps into the path command; no legacy runtime command is registered.
+				binding.commandId = CommandID{command == "renderer.scene_arrow.reverse" ? "renderer.scene_path.reverse" : command};
 				binding.when = ContextExpr{context};
 				binding.layer = layer;
 				binding.enabled = enabled;

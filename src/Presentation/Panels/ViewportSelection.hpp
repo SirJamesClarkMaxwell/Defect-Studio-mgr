@@ -35,7 +35,7 @@ namespace DefectStudio
 		return ImGui::IsKeyPressed(key, false);
 	}
 
-	// Box/circle region select and label/scene-arrow click/drag handling used to live as
+	// Box/circle region select and annotation click/drag handling used to live as
 	// RendererPanel members. A viewport is not always a
 	// RendererPanel window: the three-pane structure creation window draws its own, so as members
 	// none of this existed there. Same regression shape as the keybindings, the atom picking and the
@@ -66,11 +66,6 @@ namespace DefectStudio
 		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax);
 	[[nodiscard]] std::vector<std::size_t> HitTestCircleFreeLabels(
 		const RendererWindowState &windowState, glm::vec2 center, float radius);
-	[[nodiscard]] std::vector<std::size_t> HitTestRectSceneArrows(
-		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax);
-	[[nodiscard]] std::vector<std::size_t> HitTestCircleSceneArrows(
-		const RendererWindowState &windowState, glm::vec2 center, float radius);
-
 	// Paths return ids, not indices: a path lives in a PathStore and has no index for the caller
 	// to hold on to. Both sample the polyline the render pass last built (PathCaches::FindLastBuilt)
 	// rather than re-tessellating, the same reason PickFrontmostScenePath does - a region that
@@ -90,12 +85,12 @@ namespace DefectStudio
 		RendererWindowState &windowState, glm::vec2 center, float radius,
 		RendererEvents::Viewport::RegionSelectMode mode);
 
-	// `pathHits` arrives as ids because that is what the path hit-tests return; the other three are
+	// `pathHits` arrives as ids because that is what the path hit-tests return; the other two are
 	// indices into their vectors. Defaulted so the two existing call sites and any caller that has
 	// no paths stay unchanged.
 	void ApplyLabelRegionSelection(
 		RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
-		const std::vector<std::size_t> &freeHits, const std::vector<std::size_t> &arrowHits,
+		const std::vector<std::size_t> &freeHits,
 		RendererEvents::Viewport::RegionSelectMode mode,
 		const std::vector<SceneObjectId> &pathHits = {});
 	[[nodiscard]] RendererEvents::Viewport::RegionSelectMode ResolveRegionSelectMode(bool additive, bool subtractive);
@@ -109,7 +104,7 @@ namespace DefectStudio
 	[[nodiscard]] bool HandlePinnedMeasurementInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 	// F flip / Ctrl+Shift+</> scale-step for selected pins, plus Delete for selected pins, free
-	// labels, arrows, orbitals and planes. Keyboard-only, no mouse hit-test, so unlike the click/drag
+	// labels, paths, orbitals and planes. Keyboard-only, no mouse hit-test, so unlike the click/drag
 	// handlers it must run every frame regardless of whether a gizmo captured this frame's mouse.
 	void HandlePinnedMeasurementKeyboardShortcuts(
 		RendererWindowState &windowState, bool hovered, RendererLayer &layer);
@@ -121,9 +116,6 @@ namespace DefectStudio
 	// sphere (PickSceneOrbital), no drag - an orbital is moved with the transform gizmo, because a
 	// stray drag detaching one from the atom it sits on would be the wrong default.
 	[[nodiscard]] bool HandleSceneOrbitalInteraction(
-		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
-
-	[[nodiscard]] bool HandleSceneArrowInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 
 	// Click-select for the window's paths: Object Mode picks the frontmost whole path; Edit Mode

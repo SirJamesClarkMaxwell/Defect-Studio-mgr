@@ -309,7 +309,7 @@ namespace DefectStudio
 		// had neither - the redesign stopped RendererPanel from drawing them and nothing took over its
 		// per-frame input half, so an atom in a pane could not be selected, let alone moved.
 		// The whole shared chain, not just the atom gizmo: label transforms, the pin keyboard
-		// shortcuts and the scene-arrow gizmo are viewport features too, and a pane that ran only
+		// shortcuts and the scene-object gizmo are viewport features too, and a pane that ran only
 		// RenderTransformGizmo silently lost every one of them.
 		const bool gizmoCapturing = isActive &&
 			RunViewportGizmoChain(

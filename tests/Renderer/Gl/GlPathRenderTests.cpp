@@ -104,7 +104,7 @@ namespace DefectStudio::Tests
 			settings.backgroundColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 			const unsigned int texture = backend.RenderWindow(
 				"gl-path", structure, camera, settings, width, height, showAtoms, false, false, false, false,
-				{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f),
+				{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f),
 				true, 0.3f, 45.0f, true, &input);
 			return ReadTextureRgba8TopDown(texture, width, height);
 		}
@@ -354,7 +354,7 @@ namespace DefectStudio::Tests
 
 		const unsigned int texture = backend.RenderWindow(
 			"gl-path-mesh-overlay", {}, camera, settings, kWidth, kHeight, false, false, false, false, false,
-			{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f),
+			{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f),
 			true, 0.3f, 45.0f, true, &input);
 		const std::vector<unsigned char> pixels = ReadTextureRgba8TopDown(texture, kWidth, kHeight);
 		WriteVisualArtifact("path-box-sharp-mesh-overlay.png", pixels, kWidth, kHeight);
@@ -419,7 +419,7 @@ namespace DefectStudio::Tests
 		const PathRenderInput shadedInput{&system};
 		const unsigned int shadedTexture = backend.RenderWindow(
 			"gl-path-decoration-bevel-gallery", {}, camera, settings, width, height,
-			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
 			nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f), true, 0.3f, 45.0f, true, &shadedInput);
 		const std::vector<unsigned char> shaded = ReadTextureRgba8TopDown(shadedTexture, width, height);
 		WriteVisualArtifact("path-decoration-bevel-gallery.png", shaded, width, height);
@@ -432,7 +432,7 @@ namespace DefectStudio::Tests
 		const PathRenderInput meshInput{&system, &selected, true};
 		const unsigned int meshTexture = backend.RenderWindow(
 			"gl-path-decoration-bevel-gallery-mesh", {}, camera, settings, width, height,
-			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+			false, false, false, false, false, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
 			nullptr, nullptr, nullptr, nullptr, glm::vec3(0.0f), true, 0.3f, 45.0f, true, &meshInput);
 		const std::vector<unsigned char> mesh = ReadTextureRgba8TopDown(meshTexture, width, height);
 		WriteVisualArtifact("path-decoration-bevel-gallery-mesh.png", mesh, width, height);

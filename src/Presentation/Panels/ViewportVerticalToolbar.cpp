@@ -15,7 +15,6 @@
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererTypes.hpp"

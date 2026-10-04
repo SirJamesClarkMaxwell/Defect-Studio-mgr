@@ -21,9 +21,7 @@ uniform vec3 u_CameraPosition;
 uniform float u_SpecularIntensity;
 uniform float u_Shininess;
 uniform float u_Saturation;
-// 1.0 for normal bonds, ~0.25 for SceneArrow shafts/heads (see renderSceneArrows) - an annotation
-// arrow is a fixed flat color, not atom/bond material, so it shouldn't carry the same shiny
-// highlight (docs/scene_arrow_rework_plan_corrected.md Step 8).
+// Multiplies the material specular strength for each geometry pass.
 uniform float u_SpecularScale;
 uniform int u_OutlineMode;
 uniform vec4 u_OutlineColor;

@@ -207,7 +207,6 @@ namespace DefectStudio
 				PushPinnedMeasurementUndoSnapshot(windowState);
 				windowState.selectedFreeLabels = AddVacancyLabels(windowState, vacancies);
 				windowState.selectedPinnedMeasurements.clear();
-				windowState.selectedSceneArrows.clear();
 				windowState.selectedSceneOrbitals.clear();
 				windowState.selectedScenePlanes.clear();
 				windowState.selectedScenePaths.clear();

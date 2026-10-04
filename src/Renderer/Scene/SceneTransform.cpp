@@ -30,22 +30,6 @@ namespace DefectStudio
 	{
 		constexpr float kEpsilon = 1.0e-6f;
 
-		[[nodiscard]] glm::mat3 ArrowBasis(const ArrowTransformStart &arrow)
-		{
-			if (arrow.points.size() < 2)
-				return glm::mat3(1.0f);
-			const glm::vec3 direction = arrow.points.back() - arrow.points.front();
-			if (glm::dot(direction, direction) <= kEpsilon * kEpsilon)
-				return glm::mat3(1.0f);
-
-			const glm::vec3 z = glm::normalize(direction);
-			const glm::vec3 reference = std::abs(z.z) < 0.9f
-				? glm::vec3(0.0f, 0.0f, 1.0f)
-				: glm::vec3(0.0f, 1.0f, 0.0f);
-			const glm::vec3 x = glm::normalize(glm::cross(reference, z));
-			return glm::mat3(x, glm::cross(z, x), z);
-		}
-
 		[[nodiscard]] glm::mat3 LabelBasis(float rotationRadians)
 		{
 			return glm::mat3(glm::rotate(glm::mat4(1.0f), rotationRadians, glm::vec3(0.0f, 0.0f, 1.0f)));
@@ -113,27 +97,12 @@ namespace DefectStudio
 				return {snapshot.defectFrame->origin};
 			std::vector<glm::vec3> positions;
 			positions.reserve(
-				snapshot.atoms.size() + snapshot.labels.size() + snapshot.arrows.size() * 2 +
+				snapshot.atoms.size() + snapshot.labels.size() +
 				snapshot.orbitals.size() * 2 + snapshot.planes.size());
 			for (const AtomTransformStart &atom : snapshot.atoms)
 				positions.push_back(atom.position);
 			for (const LabelTransformStart &label : snapshot.labels)
 				positions.push_back(anchors && window != nullptr ? DrawnLabelCentre(*window, label) : label.position);
-			for (const ArrowTransformStart &arrow : snapshot.arrows)
-			{
-				if (arrow.points.size() < 2)
-					continue;
-				if (arrow.target != SceneArrowTransformTarget::End)
-					positions.push_back(arrow.points.front());
-				if (arrow.target != SceneArrowTransformTarget::Start)
-					positions.push_back(arrow.points.back());
-				if (arrow.target == SceneArrowTransformTarget::Both)
-				{
-					positions.insert(positions.end(), arrow.points.begin() + 1, arrow.points.end() - 1);
-					if (arrow.controlPoint)
-						positions.push_back(*arrow.controlPoint);
-				}
-			}
 			for (const OrbitalTransformStart &orbital : snapshot.orbitals)
 			{
 				positions.push_back(orbital.centerA);
@@ -151,27 +120,10 @@ namespace DefectStudio
 			return positions;
 		}
 
-		[[nodiscard]] SceneArrowTransformTarget ResolveSceneArrowTransformTarget(
-			const RendererWindowState &window, ModalTransformOp operation)
-		{
-			if (operation != ModalTransformOp::Translate || window.selectedSceneArrows.size() != 1)
-				return SceneArrowTransformTarget::Both;
-
-			const std::size_t index = AnnotationIndex(window.sceneArrows, window.selectedSceneArrows.front());
-			if (index >= window.sceneArrows.size() || window.sceneArrowGizmoActiveArrowIndex != index)
-				return SceneArrowTransformTarget::Both;
-
-			using Target = RendererWindowState::SceneArrowDragTarget;
-			if (window.sceneArrowGizmoActiveTarget == Target::Start)
-				return SceneArrowTransformTarget::Start;
-			if (window.sceneArrowGizmoActiveTarget == Target::End)
-				return SceneArrowTransformTarget::End;
-			return SceneArrowTransformTarget::Both;
-		}
 	} // namespace
 
 	SceneTransformSelectionSnapshot CaptureSceneTransformSelection(
-		const RendererWindowState &window, SceneArrowTransformTarget arrowTarget)
+		const RendererWindowState &window)
 	{
 		SceneTransformSelectionSnapshot snapshot;
 		const bool carryChildren = window.defectFrameSelected && window.showDefectFrame &&
@@ -185,15 +137,6 @@ namespace DefectStudio
 			return ids;
 		};
 		CaptureSceneTransformLabels(window, snapshot, withChildren(window.selectedFreeLabels, window.defectFrameChildren.freeLabels));
-		for (const SceneObjectId id : window.selectedSceneArrows)
-		{
-			const std::size_t index = AnnotationIndex(window.sceneArrows, id);
-			if (index >= window.sceneArrows.size())
-				continue;
-			const RendererWindowState::SceneArrow &arrow = window.sceneArrows[index];
-			snapshot.arrows.push_back({
-				index, arrow.points, arrow.controlPoint, arrow.startAnchorAtom, arrow.endAnchorAtom, arrowTarget});
-		}
 		for (const SceneObjectId id : withChildren(window.selectedSceneOrbitals, window.defectFrameChildren.orbitals))
 		{
 			const std::size_t index = AnnotationIndex(window.sceneOrbitals, id);
@@ -211,7 +154,7 @@ namespace DefectStudio
 			if (index >= window.scenePlanes.size())
 				continue;
 			const RendererWindowState::ScenePlane &plane = window.scenePlanes[index];
-				snapshot.planes.push_back(
+			snapshot.planes.push_back(
 				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents});
 		}
 		if (window.pathEdit.IsActive()) CaptureSceneTransformPathElements(window, snapshot);
@@ -236,12 +179,6 @@ namespace DefectStudio
 		return snapshot;
 	}
 
-	SceneTransformSelectionSnapshot CaptureSceneTransformSelectionForOperation(
-		const RendererWindowState &window, ModalTransformOp operation)
-	{
-		return CaptureSceneTransformSelection(window, ResolveSceneArrowTransformTarget(window, operation));
-	}
-
 	std::vector<glm::vec3> SceneTransformPivotPositions(const SceneTransformSelectionSnapshot &snapshot)
 	{
 		return BuildPositions(snapshot, nullptr, nullptr, false);
@@ -263,8 +200,6 @@ namespace DefectStudio
 	{
 		if (snapshot.defectFrame)
 			return glm::mat3(snapshot.defectFrame->x, snapshot.defectFrame->y, snapshot.defectFrame->z);
-		if (!snapshot.arrows.empty())
-			return ArrowBasis(snapshot.arrows.back());
 		if (!snapshot.labels.empty())
 			return LabelBasis(snapshot.labels.back().rotationRadians);
 		if (!snapshot.planes.empty())
@@ -300,7 +235,7 @@ namespace DefectStudio
 
 	bool HasSceneObjectTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
 	{
-		return !snapshot.labels.empty() || !snapshot.arrows.empty() || !snapshot.orbitals.empty() ||
+		return !snapshot.labels.empty() || !snapshot.orbitals.empty() ||
 			!snapshot.planes.empty() || !snapshot.paths.empty() || !snapshot.pathElements.empty();
 	}
 
@@ -320,54 +255,6 @@ namespace DefectStudio
 				continue;
 			window.structure.atoms[start.index].cartesianPosition = ApplyTransformDelta(
 				delta.spatial, start.position, ItemPivot(pivotMode, start.position, selectionPivot));
-		}
-
-		for (const ArrowTransformStart &start : snapshot.arrows)
-		{
-			if (start.index >= window.sceneArrows.size() || start.points.size() < 2)
-				continue;
-			RendererWindowState::SceneArrow &arrow = window.sceneArrows[start.index];
-			if (operation == ModalTransformOp::Translate)
-			{
-				if (start.target == SceneArrowTransformTarget::Start)
-				{
-					arrow.start() = ApplyTransformDelta(delta.spatial, start.points.front(), selectionPivot);
-					if (EndpointMoved(start.points.front(), arrow.start()))
-						arrow.startAnchorAtom.reset();
-				}
-				else if (start.target == SceneArrowTransformTarget::End)
-				{
-					arrow.end() = ApplyTransformDelta(delta.spatial, start.points.back(), selectionPivot);
-					if (EndpointMoved(start.points.back(), arrow.end()))
-						arrow.endAnchorAtom.reset();
-				}
-				else
-				{
-					arrow.points.resize(start.points.size());
-					for (std::size_t index = 0; index < start.points.size(); ++index)
-						arrow.points[index] = ApplyTransformDelta(delta.spatial, start.points[index], selectionPivot);
-					if (start.controlPoint)
-						arrow.controlPoint = ApplyTransformDelta(delta.spatial, *start.controlPoint, selectionPivot);
-					if (EndpointMoved(start.points.front(), arrow.start()))
-						arrow.startAnchorAtom.reset();
-					if (EndpointMoved(start.points.back(), arrow.end()))
-						arrow.endAnchorAtom.reset();
-				}
-			}
-			else
-			{
-				const glm::vec3 origin = (start.points.front() + start.points.back()) * 0.5f;
-				const glm::vec3 pivot = ItemPivot(pivotMode, origin, selectionPivot);
-				arrow.points.resize(start.points.size());
-				for (std::size_t index = 0; index < start.points.size(); ++index)
-					arrow.points[index] = ApplyTransformDelta(delta.spatial, start.points[index], pivot);
-				if (start.controlPoint)
-					arrow.controlPoint = ApplyTransformDelta(delta.spatial, *start.controlPoint, pivot);
-				if (EndpointMoved(start.points.front(), arrow.start()))
-					arrow.startAnchorAtom.reset();
-				if (EndpointMoved(start.points.back(), arrow.end()))
-					arrow.endAnchorAtom.reset();
-			}
 		}
 
 		for (const OrbitalTransformStart &start : snapshot.orbitals)
@@ -434,16 +321,6 @@ namespace DefectStudio
 			if (start.index < window.structure.atoms.size())
 				window.structure.atoms[start.index].cartesianPosition = start.position;
 		RestoreSceneTransformLabels(window, snapshot);
-		for (const ArrowTransformStart &start : snapshot.arrows)
-		{
-			if (start.index >= window.sceneArrows.size())
-				continue;
-			RendererWindowState::SceneArrow &arrow = window.sceneArrows[start.index];
-			arrow.points = start.points;
-			arrow.controlPoint = start.controlPoint;
-			arrow.startAnchorAtom = start.startAnchorAtom;
-			arrow.endAnchorAtom = start.endAnchorAtom;
-		}
 		for (const OrbitalTransformStart &start : snapshot.orbitals)
 		{
 			if (start.index >= window.sceneOrbitals.size())

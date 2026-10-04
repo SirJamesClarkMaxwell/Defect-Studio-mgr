@@ -31,15 +31,6 @@ namespace DefectStudio
 		constexpr float kScaleHandleLength = 100.0f;
 		constexpr float kScaleHandleHalfExtent = 7.0f;
 		constexpr float kScaleCenterRadius = 12.0f;
-		constexpr float kSceneArrowHandleDrawRadius = 5.0f;
-		constexpr float kActiveSceneArrowHandleDrawRadius = 7.0f;
-		// Deliberately much bigger than the drawn dot (see SceneArrowHandleGeometry) - live testing
-		// showed most real clicks aimed at a handle landed 30-135px away from it, missing an 11px
-		// pick radius entirely and falling through to the plain-shaft-click handler, which forces the
-		// target back to Both. 20/26px is comparable to the pre-task-40 tolerance
-		// (ViewportSceneArrowInteraction.cpp's old `max(14px, shaft-half+8px)`), which was usable.
-		constexpr float kSceneArrowHandlePickRadius = 20.0f;
-		constexpr float kActiveSceneArrowHandlePickRadius = 26.0f;
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
@@ -263,149 +254,30 @@ namespace DefectStudio
 		return axis >= 0 && axis < static_cast<int>(kAxisColors.size()) ? kAxisColors[axis] : 0;
 	}
 
-	std::array<SceneArrowHandleGeometry, 3> BuildSceneArrowHandleGeometry(
-		const RendererWindowState::SceneArrow &arrow,
-		const RendererViewCamera &camera,
-		const ImVec2 &imageOrigin,
-		const ImVec2 &imageSize,
-		const GizmoOperation operation,
-		const bool showMidpoint,
-		const RendererWindowState::SceneArrowDragTarget activeTarget,
-		const bool active)
-	{
-		using Target = RendererWindowState::SceneArrowDragTarget;
-		std::array<SceneArrowHandleGeometry, 3> handles = {{
-			{Target::Start, glm::vec2(0.0f), kSceneArrowHandleDrawRadius, kSceneArrowHandlePickRadius, false},
-			{Target::End, glm::vec2(0.0f), kSceneArrowHandleDrawRadius, kSceneArrowHandlePickRadius, false},
-			{Target::Both, glm::vec2(0.0f), kSceneArrowHandleDrawRadius, kSceneArrowHandlePickRadius, false}}};
-		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
-		const std::array<glm::vec3, 3> worldPoints = {
-			arrow.start(), arrow.end(), (arrow.start() + arrow.end()) * 0.5f};
-		for (std::size_t index = 0; index < handles.size(); ++index)
-		{
-			SceneArrowHandleGeometry &handle = handles[index];
-			handle.visible = index < 2 || (showMidpoint && operation == GizmoOperation::Translate);
-			if (!handle.visible)
-				continue;
-			const std::optional<glm::vec2> screen =
-				ProjectAbsolute(viewProjection, imageOrigin, imageSize, worldPoints[index]);
-			if (!screen.has_value())
-			{
-				handle.visible = false;
-				continue;
-			}
-			handle.point = *screen;
-			if (active && (activeTarget == Target::Both || activeTarget == handle.target))
-			{
-				handle.drawRadius = kActiveSceneArrowHandleDrawRadius;
-				handle.pickRadius = kActiveSceneArrowHandlePickRadius;
-			}
-		}
-		return handles;
-	}
-
-	void DrawSceneArrowHandleMarkers(
-		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
-	{
-		if (windowState.camera == nullptr || windowState.selectedSceneArrows.empty())
-			return;
-
-		ImDrawList &drawList = *ImGui::GetWindowDrawList();
-		constexpr float kHandleOutlineThickness = 1.5f;
-		const bool singleArrow = windowState.selectedSceneArrows.size() == 1;
-		const bool singleDragging = windowState.sceneArrowDragging && singleArrow;
-		for (const SceneObjectId id : windowState.selectedSceneArrows)
-		{
-			const auto arrow = std::find_if(
-				windowState.sceneArrows.begin(), windowState.sceneArrows.end(),
-				[id](const RendererWindowState::SceneArrow &candidate) { return candidate.id == id; });
-			if (arrow == windowState.sceneArrows.end())
-				continue;
-			const auto handles = BuildSceneArrowHandleGeometry(
-				*arrow, *windowState.camera, imageOrigin, imageSize, windowState.gizmoOperation,
-				singleArrow, windowState.sceneArrowDragTarget, singleDragging);
-			for (const SceneArrowHandleGeometry &handle : handles)
-			{
-				if (!handle.visible)
-					continue;
-				const ImVec2 point(handle.point.x, handle.point.y);
-				drawList.AddCircleFilled(point, handle.drawRadius, IM_COL32(255, 200, 60, 220));
-				drawList.AddCircle(
-					point, handle.drawRadius - kHandleOutlineThickness * 0.5f,
-					IM_COL32(40, 25, 0, 255), 0, kHandleOutlineThickness);
-			}
-		}
-	}
-
 	bool RenderTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered,
 		RendererLayer &layer, const WeakRef<CommandRegistry> &commandRegistryRef)
 	{
 		if (UpdateViewportModalTransform(windowState, imageOrigin, imageSize, layer, commandRegistryRef))
 			return true;
-		// A plain click on the arrow's shaft (not a handle marker - those start a modal transform,
-		// see below) is a screen-plane rigid-move of the whole arrow, continued by
-		// HandleSceneArrowInteraction later in the dispatch chain.
-		if (windowState.sceneArrowDragging)
-			return false;
 		if (windowState.camera == nullptr)
 			return false;
 		const float gizmoScale = std::max(
 			layer.GetGlobalSettings().viewport.transformGizmoSize / kDefaultTransformGizmoSize, 0.01f);
 
-		SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState);
+		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState);
 		if (SceneTransformPivotPositions(windowState, snapshot).empty())
 		{
 			windowState.gizmoDragActive = false;
 			return false;
 		}
 
-		const bool singleArrowOnly = snapshot.atoms.empty() && snapshot.labels.empty() && snapshot.arrows.size() == 1;
-		if (singleArrowOnly)
-		{
-			const std::size_t index = snapshot.arrows.front().index;
-			if (windowState.sceneArrowGizmoActiveArrowIndex != index)
-			{
-				windowState.sceneArrowGizmoActiveArrowIndex = index;
-				windowState.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::Both;
-			}
-		}
-
 		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-		if (singleArrowOnly && windowState.gizmoOperation == GizmoOperation::Translate)
-		{
-			const RendererWindowState::SceneArrow &arrow =
-				windowState.sceneArrows[snapshot.arrows.front().index];
-			const auto handles = BuildSceneArrowHandleGeometry(
-				arrow, *windowState.camera, imageOrigin, imageSize, windowState.gizmoOperation, true,
-				windowState.sceneArrowDragTarget, windowState.sceneArrowDragging);
-			// UpdateViewportModalTransform already claimed any in-progress axis drag above. A marker
-			// only owns a new frame on an actual click; hover must not hide or interrupt the axis gizmo.
-			const bool handleClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-			for (const SceneArrowHandleGeometry &handle : handles)
-			{
-				if (handle.visible && handleClicked && glm::distance(mouse, handle.point) <= handle.pickRadius)
-				{
-					// Grabbing a marker starts a real modal transform (unconstrained/free, confirmed
-					// on mouse-release like every other handle-started drag) instead of the older
-					// screen-plane-only free-drag in ViewportSceneArrowInteraction.cpp - that one never
-					// engages the X/Y/Z axis constraint keys and computed its delta purely from mouse
-					// pixels via camera-right/camera-up, which is why dragging visibly slid along
-					// whatever direction happened to roughly match "screen up" for the current camera
-					// angle instead of a real 3D axis. This is now the single path a handle drag takes.
-					windowState.sceneArrowGizmoActiveTarget = handle.target;
-					BeginViewportModalTransform(windowState, ModalTransformOp::Translate, mouse, std::nullopt, true);
-					return true;
-				}
-			}
-		}
-
 		const ModalTransformOp operation = windowState.gizmoOperation == GizmoOperation::Rotate
 			? ModalTransformOp::Rotate
 			: windowState.gizmoOperation == GizmoOperation::Scale
 				? ModalTransformOp::Scale
 				: ModalTransformOp::Translate;
-		snapshot = CaptureSceneTransformSelectionForOperation(windowState, operation);
 		const std::vector<glm::vec3> anchorPositions = SceneTransformAnchorPositions(windowState, snapshot);
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
@@ -418,7 +290,7 @@ namespace DefectStudio
 
 		// Atom picking must not swallow a handle belonging to the selected atom(s). Scene-object
 		// gizmos keep the old overlap guard; path-edit markers already get first refusal in the chain.
-		const bool pointerOnGeometry = !singleArrowOnly && !HasAtomTransformTargets(snapshot) &&
+		const bool pointerOnGeometry = !HasAtomTransformTargets(snapshot) &&
 			IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
 		const TransformBases bases = SceneTransformBases(windowState, snapshot);
 		const OrientationAxes worldAxes =

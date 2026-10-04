@@ -12,15 +12,14 @@ namespace DefectStudio
 {
 	// Screen-space markers for a path's directly editable elements: one per node, plus the two bezier
 	// handles of every Cubic segment. This is the single source both Edit Mode's overlay (S12) and
-	// picking (PathPicking) read, so a handle can never be drawn where it cannot be clicked - the bug
-	// task/40 spent a manual round chasing on scene arrows.
+	// picking (PathPicking) read, so a handle can never be drawn where it cannot be clicked.
 	//
 	// Nothing here touches ImGui or the camera class: a view-projection matrix and a viewport size are
 	// the whole geometric input, while the renderer-owned size multiplier below is shared style state.
 	// This keeps the geometry in Renderer and testable without a GL context.
 
 	// Draw radii are the dot the user sees; pick radii are deliberately much larger. The numbers come
-	// from task/40's live testing on scene arrow handles (ViewportGizmo.cpp:26-34), where real clicks
+	// from task/40's live testing of annotation handles, where real clicks
 	// aimed at a handle landed tens of pixels away and an 11px radius missed nearly all of them.
 	inline constexpr float kPathHandleDrawRadius = 5.0f;
 	inline constexpr float kPathActiveHandleDrawRadius = 7.0f;

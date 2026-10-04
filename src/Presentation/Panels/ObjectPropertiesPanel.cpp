@@ -4,7 +4,6 @@
 
 #include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
 #include "Presentation/Panels/ObjectPropertiesSelection.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 #include "Presentation/Panels/ViewportGizmo.hpp"
@@ -342,8 +341,6 @@ namespace DefectStudio
 			const ObjectPropertiesSections sections = ResolveObjectPropertiesSections(*windowState);
 			if (sections.labels)
 				DrawSelectedLabelProperties(*windowState);
-			if (sections.arrows)
-				DrawSelectedSceneArrowProperties(*windowState, layer.GetGlobalSettings());
 			if (sections.orbitals)
 				DrawSelectedSceneOrbitalSection(*windowState);
 			if (sections.planes)
@@ -360,7 +357,6 @@ namespace DefectStudio
 				return;
 
 			DrawAllLabelRows(*windowState);
-			DrawAllArrowRows(*windowState);
 			DrawAllSceneOrbitalRows(*windowState);
 			DrawAllScenePlaneRows(*windowState);
 		}

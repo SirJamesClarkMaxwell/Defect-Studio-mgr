@@ -34,7 +34,6 @@ namespace DefectStudio
 			AddSceneVisibilityColumnFlags(windowState.structure.bonds, flags);
 			AddSceneVisibilityColumnFlags(windowState.pinnedMeasurements, flags);
 			AddSceneVisibilityColumnFlags(windowState.freeLabels, flags);
-			AddSceneVisibilityColumnFlags(windowState.sceneArrows, flags);
 			AddSceneVisibilityColumnFlags(windowState.sceneOrbitals, flags);
 			AddSceneVisibilityColumnFlags(windowState.scenePlanes, flags);
 			if (windowState.paths != nullptr)
@@ -57,7 +56,6 @@ namespace DefectStudio
 			}
 			ApplySceneVisibilityColumnEdit(windowState.pinnedMeasurements, edit);
 			ApplySceneVisibilityColumnEdit(windowState.freeLabels, edit);
-			ApplySceneVisibilityColumnEdit(windowState.sceneArrows, edit);
 			ApplySceneVisibilityColumnEdit(windowState.sceneOrbitals, edit);
 			ApplySceneVisibilityColumnEdit(windowState.scenePlanes, edit);
 			if (windowState.paths != nullptr)
@@ -82,12 +80,10 @@ namespace DefectStudio
 				windowState.selectedFreeLabels.clear();
 			if (&windowState.selectedPinnedMeasurements != keep)
 				windowState.selectedPinnedMeasurements.clear();
-			if (&windowState.selectedSceneArrows != keep)
-				windowState.selectedSceneArrows.clear();
 			if (&windowState.selectedSceneOrbitals != keep)
 				windowState.selectedSceneOrbitals.clear();
-				windowState.selectedVacancies.clear();
-				windowState.defectFrameSelected = false;
+			windowState.selectedVacancies.clear();
+			windowState.defectFrameSelected = false;
 			if (&windowState.selectedScenePlanes != keep)
 				windowState.selectedScenePlanes.clear();
 			if (&windowState.selectedScenePaths != keep)
@@ -197,13 +193,11 @@ namespace DefectStudio
 		{
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
-			windowState.selectedSceneArrows.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
 			windowState.selectedScenePaths.clear();
-			windowState.sceneArrowQuickEditActive = false;
 			if (eventBus == nullptr)
 				continue;
 			// An AtomSelectionRequested with no atomIndex is the renderer's own "select nothing" -
@@ -508,7 +502,6 @@ namespace DefectStudio
 						drawSpeciesGroup(windowState, species, atomIndices);
 
 					drawLabelsGroup(windowState);
-					drawArrowsGroup(windowState);
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
 					drawVacanciesGroup(windowState);

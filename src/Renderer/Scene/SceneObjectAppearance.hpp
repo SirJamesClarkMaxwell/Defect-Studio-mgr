@@ -1,25 +1,9 @@
 #pragma once
 
-#include <vector>
-
 #include <glm/glm.hpp>
-
-#include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
 {
-	struct SceneArrowRenderColors
-	{
-		glm::vec4 start = glm::vec4(1.0f);
-		glm::vec4 finish = glm::vec4(1.0f);
-	};
-
-	struct SceneArrowShaftSegment
-	{
-		float start = 0.0f;
-		float end = 0.0f;
-	};
-
 	[[nodiscard]] constexpr glm::vec3 SceneSelectionHighlightColor()
 	{
 		return glm::vec3(0.91f, 0.52f, 0.02f);
@@ -35,8 +19,4 @@ namespace DefectStudio
 
 	[[nodiscard]] glm::vec3 ApplySceneSelectionHighlight(
 		const glm::vec3 &base, bool selected, float strength = kSceneSelectionHighlightStrength);
-	[[nodiscard]] SceneArrowRenderColors ResolveSceneArrowRenderColors(
-		const RendererWindowState::ArrowStyle &style, bool selected);
-	[[nodiscard]] std::vector<SceneArrowShaftSegment> BuildSceneArrowShaftSegments(
-		float shaftLength, bool dashed, float dashLength, float gapLength);
 } // namespace DefectStudio

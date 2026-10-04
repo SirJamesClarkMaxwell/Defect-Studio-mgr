@@ -58,7 +58,7 @@ namespace DefectStudio
 		}
 
 		// In-process clipboard for the tree panel's Copy/Cut/Paste (notes.txt pt. 18) - process-wide
-		// static, same rationale as GetArrowStyleClipboard/GetLabelStyleClipboard (RendererLayer.hpp):
+		// static, same rationale as GetLabelStyleClipboard (RendererLayer.hpp):
 		// there is only ever one of this panel, but a static keeps the pattern identical to those and
 		// needs no special handling if the panel is ever ImPanel::Clone()'d.
 		struct TreeClipboardState

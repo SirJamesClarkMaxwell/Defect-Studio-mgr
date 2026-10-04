@@ -42,7 +42,7 @@ namespace DefectStudio
 				return BindingError("path.object_origin_targets_path", "Object origin bindings may not target paths.");
 			const auto origin = context.objectOrigin(id);
 			const bool persisted = FindAnnotation(window.pinnedMeasurements, id) != nullptr || FindAnnotation(window.freeLabels, id) != nullptr ||
-				FindAnnotation(window.sceneArrows, id) != nullptr || FindAnnotation(window.sceneOrbitals, id) != nullptr ||
+				FindAnnotation(window.sceneOrbitals, id) != nullptr ||
 				FindAnnotation(window.scenePlanes, id) != nullptr;
 			if (!id.IsValid() || !persisted || !origin || !std::isfinite(origin->x) || !std::isfinite(origin->y) || !std::isfinite(origin->z))
 				return BindingError("path.binding_object_unresolved", "The bound object origin is unavailable.");
@@ -79,7 +79,7 @@ namespace DefectStudio
 		SceneObjectId target;
 		std::size_t count = 0;
 		for (const auto &selection : {std::cref(windowState.selectedPinnedMeasurements), std::cref(windowState.selectedFreeLabels),
-			std::cref(windowState.selectedSceneArrows), std::cref(windowState.selectedSceneOrbitals),
+			std::cref(windowState.selectedSceneOrbitals),
 			std::cref(windowState.selectedScenePlanes), std::cref(windowState.selectedScenePaths)})
 			for (const SceneObjectId id : selection.get())
 				if (id != windowState.pathEdit.Path())

@@ -11,7 +11,6 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 
 namespace DefectStudio
@@ -83,14 +82,18 @@ namespace DefectStudio
 		windowState.selectedScenePaths = std::move(ids);
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedFreeLabels.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedScenePlanes.clear();
 		windowState.selectedVacancies.clear();
 		windowState.defectFrameSelected = false;
-		windowState.sceneArrowQuickEditActive = false;
 		SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+	}
+
+	float &GetScenePathAtomBuffer()
+	{
+		static float buffer = 1.15f;
+		return buffer;
 	}
 
 	float GetDefaultSceneSegmentLength(const RendererWindowState &windowState)
@@ -136,7 +139,7 @@ namespace DefectStudio
 		path.transform.position = glm::vec3(0);
 		path.nodes[0].position = start;
 		path.nodes[1].position = end;
-		const float buffer = GetSceneArrowAtomBuffer();
+		const float buffer = GetScenePathAtomBuffer();
 		path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atoms[0], {}, buffer}};
 		path.nodes[1].binding = PathBinding{PathBinding::CopyPosition{atoms[1], {}, buffer}};
 		path.style.endDecoration.kind = arrow ? PathDecorationKind::Arrow : PathDecorationKind::None;

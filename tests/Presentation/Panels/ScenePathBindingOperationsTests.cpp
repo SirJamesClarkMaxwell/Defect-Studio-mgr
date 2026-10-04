@@ -318,7 +318,7 @@ namespace DefectStudio::Tests
 		const glm::vec3 authoredBefore = Stored(window).nodes[0].position;
 
 		const SceneTransformSelectionSnapshot snapshot =
-			CaptureSceneTransformSelectionForOperation(window, ModalTransformOp::Translate);
+			CaptureSceneTransformSelection(window);
 		SceneTransformDelta delta;
 		delta.spatial.translation = glm::vec3(1.0f, 0.0f, 0.0f);
 		ApplySceneTransformSelection(

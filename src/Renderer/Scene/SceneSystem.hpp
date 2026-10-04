@@ -23,7 +23,7 @@ namespace DefectStudio
 		// this call.
 		void PushSelectionAndVisibilityToWindowState(const SceneRegistry &scene, RendererWindowState &windowState);
 
-		// Deselects every atom and bond (entities + window mirrors). A plain click on a label/arrow
+		// Deselects every atom and bond (entities + window mirrors). A plain click on an annotation
 		// replaces the selection, so a stale atom selection can't drag the transform pivot away.
 		void ClearStructureSelection(SceneRegistry &scene, RendererWindowState &windowState);
 
@@ -57,7 +57,7 @@ namespace DefectStudio
 			const RendererWindowState::PinnedMeasurement &pin,
 			glm::vec3 &outPosition);
 
-		// (Re)builds one entity per annotation - pinned measurement, free label, scene arrow and scene
+		// (Re)builds one entity per annotation - pinned measurement, free label, path and scene
 		// orbital - from the vectors on windowState, destroying the previous set first; same "resync on
 		// structural change" shape as SyncSceneWithStructure, not a per-frame rebuild. Call after any
 		// add/remove on any annotation vector. Since task 20 it also assigns a SceneObjectId to any
@@ -65,25 +65,13 @@ namespace DefectStudio
 		// next sync on.
 		void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState);
 
-		// task/40: appends `arrow` to windowState.sceneArrows with a FRESHLY ALLOCATED id - any id
-		// already set on `arrow` is discarded, never reused. A duplicated/pasted arrow arrives here
-		// still carrying its source object's id; keeping that id would collide with the source in
-		// SceneRegistry's id->entity map (task 20's map is keyed by id, one entity per id). Does NOT
-		// call SyncLabelEntities and does NOT touch selection - a caller appending a batch (paste N,
-		// duplicate a multi-selection) should call this once per object, collect the returned ids, set
-		// windowState.selectedSceneArrows to the complete batch, then call
-		// SceneSystem::SyncLabelEntities once for the whole batch. Not for undo/redo restoration
-		// (SceneObjectsSnapshotCommand.cpp), which deliberately preserves original ids - that path
-		// must keep pushing directly to windowState.sceneArrows and calling SyncLabelEntities itself.
-		SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow);
-
 		// task/41: the window's PathSystem, created on first use. Every consumer goes through this
 		// rather than dereferencing windowState.paths, so a window that has never held a path costs
 		// nothing and no call site has to repeat the null check.
 		[[nodiscard]] PathSystem &EnsurePathSystem(RendererWindowState &windowState);
 		[[nodiscard]] BindingContext MakePathBindingContext(const RendererWindowState &windowState);
 
-		// The AppendSceneArrow rule, applied to paths: the id on `path` is discarded and a fresh one
+		// The id on `path` is discarded and a fresh one
 		// allocated, because a duplicated path arrives still carrying its source's id and one id maps to
 		// one entity. Does not call SyncLabelEntities and does not touch selection. Returns the allocated
 		// id on success, or an unset id when PathStore rejects the insert (for example, an id collision).
@@ -97,18 +85,6 @@ namespace DefectStudio
 		// mapped to a wrong object - that is the whole point of the id.
 		[[nodiscard]] std::vector<std::size_t> ResolveSourceIndices(
 			const SceneRegistry &scene, const std::vector<SceneObjectId> &ids);
-
-		// Shared endpoint trimming used by both one-shot atom matching and the live anchored refresh.
-		// A zero radius means that end is free, so its stored coordinate is not trimmed.
-		void ApplySceneArrowAtomBuffer(
-			RendererWindowState::SceneArrow &arrow,
-			float startRadius,
-			float endRadius,
-			float radiusBuffer);
-
-		// Re-resolves anchored arrow ends from the current atom positions and applies each arrow's
-		// live buffer. Free or stale ends keep their stored coordinates. Allocation-free per arrow.
-		void RefreshAnchoredSceneArrows(RendererWindowState &windowState);
 
 		// Refreshes every label entity's TransformComponent.position from its pin's CURRENT anchor
 		// (bond midpoint / angle vertex) + worldOffset. Cheap enough to call every frame - pinned

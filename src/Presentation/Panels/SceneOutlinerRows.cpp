@@ -107,7 +107,6 @@ namespace DefectStudio
 
 		const SceneObjectEditKind editKind = rowKind == SelectionRowKind::FreeLabel
 			? SceneObjectEditKind::FreeLabel
-			: rowKind == SelectionRowKind::Arrow ? SceneObjectEditKind::Arrow
 			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
 			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
 			: SceneObjectEditKind::Path;
@@ -304,61 +303,6 @@ namespace DefectStudio
 		ImGui::PopID();
 	}
 
-	bool SceneOutlinerPanel::drawSceneArrowRow(
-		RendererWindowState &windowState, const std::size_t arrowIndex,
-		const std::vector<SceneObjectId> &orderedIds)
-	{
-		ImGui::PushID(static_cast<int>(arrowIndex));
-		std::vector<SceneObjectId> &selection = windowState.selectedSceneArrows;
-		const SceneObjectId id = windowState.sceneArrows[arrowIndex].id;
-		const bool isSelected = std::find(selection.begin(), selection.end(), id) != selection.end();
-		const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
-		const char *kindLabel = arrow.kind == RendererWindowState::ArrowKind::Line ? "Line"
-			: arrow.kind == RendererWindowState::ArrowKind::Arrow2D ? "Arrow 2D" : "Arrow 3D";
-		char rowLabel[32];
-		std::snprintf(rowLabel, sizeof(rowLabel), "%s #%zu", kindLabel, arrowIndex);
-
-		if (isSelected)
-			PushSelectedRowColors();
-		ImGui::SetNextItemAllowOverlap();
-		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
-		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
-		if (isSelected)
-			ImGui::PopStyleColor(3);
-		DrawSceneVisibilityColumns(
-			windowState.sceneArrows[arrowIndex].visible, windowState.sceneArrows[arrowIndex].renderable);
-		if (rowActivated)
-			applyAnnotationRowSelection(
-				windowState, SelectionRowKind::Arrow, orderedIds, id, selection);
-		const bool sceneMutated = drawSceneObjectContextMenu(
-			windowState, SelectionRowKind::Arrow, id, selection, contextRequested);
-		ImGui::PopID();
-		return sceneMutated;
-	}
-
-	void SceneOutlinerPanel::drawArrowsGroup(RendererWindowState &windowState)
-	{
-		ImGui::PushID("##arrowsGroup");
-		char groupLabel[32];
-		std::snprintf(groupLabel, sizeof(groupLabel), "Arrows (%zu)", windowState.sceneArrows.size());
-		ImGui::SetNextItemAllowOverlap();
-		const bool open = ImGui::TreeNodeEx(
-			"##arrows", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
-		ApplySceneVisibilityColumnEdit(
-			windowState.sceneArrows, DrawSceneVisibilityColumns(SceneVisibilityStateFor(windowState.sceneArrows)));
-		if (open)
-		{
-			const std::vector<std::size_t> indices =
-				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::SceneArrow);
-			const std::vector<SceneObjectId> ids = CollectIds(windowState.sceneArrows, indices);
-			for (const std::size_t index : indices)
-				if (drawSceneArrowRow(windowState, index, ids))
-					break;
-			ImGui::TreePop();
-		}
-		ImGui::PopID();
-	}
-
 	bool SceneOutlinerPanel::drawSceneOrbitalRow(
 		RendererWindowState &windowState, const std::size_t orbitalIndex,
 		const std::vector<SceneObjectId> &orderedIds)
@@ -506,7 +450,6 @@ namespace DefectStudio
 						selected = {index};
 						windowState.defectFrameSelected = false;
 						windowState.selectedFreeLabels.clear();
-						windowState.selectedSceneArrows.clear();
 						windowState.selectedPinnedMeasurements.clear();
 						windowState.selectedSceneOrbitals.clear();
 						windowState.selectedScenePlanes.clear();

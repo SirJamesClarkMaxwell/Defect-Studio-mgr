@@ -235,7 +235,7 @@ namespace DefectStudio
 	RendererWindowState::ScenePlane MakeDefaultScenePlane(
 		const RendererWindowState &windowState, const glm::vec3 &center)
 	{
-		// Same scene-relative sizing MakeDefaultSceneArrow uses, for the same reason: a fresh plane
+		// Scene-relative sizing, for the same reason: a fresh plane
 		// has to read as a sheet against this particular structure, not against a nominal one.
 		glm::vec3 minimum(std::numeric_limits<float>::max());
 		glm::vec3 maximum(std::numeric_limits<float>::lowest());

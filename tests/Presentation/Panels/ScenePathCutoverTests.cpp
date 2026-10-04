@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <limits>
 #include <string>
@@ -10,7 +11,6 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "IO/SceneObjectsIO.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
@@ -79,20 +79,6 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(live.paths->Store().Find(first)->nodes.front().position, original.nodes.back().position);
 	}
 
-	TEST_F(ScenePathCutoverCommandTests, LegacyAltRCommandIdReversesPaths)
-	{
-		RendererWindowState window;
-		window.windowId = "shortcut";
-		const auto id = SceneSystem::AppendScenePath(window,
-			MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0)));
-		const auto end = window.paths->Store().Find(id)->nodes.back().position;
-		window.selectedScenePaths = {id};
-		renderer.AddWindow(std::move(window));
-		ASSERT_TRUE(registry.Execute(CommandID{"renderer.scene_arrow.reverse"}));
-		EXPECT_EQ(renderer.GetWindows().front().paths->Store().Find(id)->nodes.front().position, end);
-		EXPECT_EQ(undo->GetUndoDepth(), 1u);
-	}
-
 	TEST_F(ScenePathCutoverCommandTests, EmptyPathSelectionPushesNoUndo)
 	{
 		RendererWindowState window;
@@ -136,14 +122,12 @@ namespace DefectStudio::Tests
 				ASSERT_TRUE(std::holds_alternative<PathBinding::CopyPosition>(path.nodes[index].binding.value));
 				const auto &binding = std::get<PathBinding::CopyPosition>(path.nodes[index].binding.value);
 				EXPECT_EQ(binding.atomIndex, 1u - index);
-				EXPECT_FLOAT_EQ(binding.buffer, GetSceneArrowAtomBuffer());
+				EXPECT_FLOAT_EQ(binding.buffer, GetScenePathAtomBuffer());
 				EXPECT_EQ(binding.offset, glm::vec3(0));
 			}
 			EXPECT_EQ(path.style.endDecoration.kind, arrow ? PathDecorationKind::Arrow : PathDecorationKind::None);
 			EXPECT_EQ(window.selectedScenePaths, (std::vector<SceneObjectId>{added.Value()}));
 			EXPECT_TRUE(window.selectedAtomIndices.empty());
-			EXPECT_TRUE(window.sceneArrows.empty());
-			EXPECT_FALSE(window.sceneArrowQuickEditActive);
 		}
 	}
 
@@ -156,7 +140,7 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(window.paths == nullptr || window.paths->Store().Empty());
 	}
 
-	TEST(ScenePathCutoverTests, FreeLineAndArrowHaveLegacyLengthAndFreeNodes)
+	TEST(ScenePathCutoverTests, FreeLineAndArrowUseSceneRelativeLengthAndFreeNodes)
 	{
 		for (const bool arrow : {false, true})
 			for (const float extent : {0.0f, 1.0f, 10.0f, 100.0f})
@@ -165,18 +149,17 @@ namespace DefectStudio::Tests
 				if (extent > 0)
 					window.structure.atoms = {{"C", glm::vec3(0)}, {"C", glm::vec3(extent, 0, 0)}};
 				const glm::vec3 seed(2, 3, 4);
-				const auto legacy = MakeDefaultSceneArrow(window, seed);
+				const float expectedLength = extent > 0.0f ? std::clamp(extent * 0.20f, 0.75f, 4.0f) : 1.0f;
 				const auto added = AddFreeScenePathSegment(window, seed, arrow);
 				ASSERT_TRUE(added);
 				const auto &path = *window.paths->Store().Find(added.Value());
 				ASSERT_EQ(path.nodes.size(), 2u);
 				for (const auto &node : path.nodes)
 					EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(node.binding.value));
-				EXPECT_EQ(path.transform.position + path.nodes.front().position, legacy.start());
-				EXPECT_EQ(path.transform.position + path.nodes.back().position, legacy.end());
+				EXPECT_EQ(path.transform.position + path.nodes.front().position, seed);
+				EXPECT_EQ(path.transform.position + path.nodes.back().position, seed + glm::vec3(expectedLength, 0, 0));
 				EXPECT_EQ(path.style.endDecoration.kind, arrow ? PathDecorationKind::Arrow : PathDecorationKind::None);
 				EXPECT_EQ(window.selectedScenePaths, (std::vector<SceneObjectId>{added.Value()}));
-				EXPECT_TRUE(window.sceneArrows.empty());
 			}
 	}
 
@@ -191,9 +174,7 @@ namespace DefectStudio::Tests
 			std::vector<StructuredError> warnings;
 			ASSERT_TRUE(SceneObjectsIO::Parse(fixture, file, warnings, error)) << error;
 			RendererWindowState window;
-			window.sceneArrows.push_back({}); // load must also clear any previous legacy state
 			ApplyPersistedSceneObjects(window, file.structures[0].objects, warnings);
-			EXPECT_TRUE(window.sceneArrows.empty());
 			ASSERT_NE(window.paths, nullptr);
 			EXPECT_EQ(window.paths->Store().Size(), 1u);
 			file.structures[0].objects = ExtractPersistedSceneObjects(window);
@@ -205,16 +186,14 @@ namespace DefectStudio::Tests
 			ASSERT_TRUE(SceneObjectsIO::Parse(saved, reopened, warnings, error)) << error;
 			RendererWindowState target;
 			ApplyPersistedSceneObjects(target, reopened.structures[0].objects, warnings);
-			EXPECT_TRUE(target.sceneArrows.empty());
 			ASSERT_NE(target.paths, nullptr);
 			EXPECT_EQ(target.paths->Store().Size(), 1u);
 		}
 	}
 
-	TEST(ScenePathCutoverTests, SavingDoesNotExtractLegacyArrows)
+	TEST(ScenePathCutoverTests, SavingExtractsOnlyTheCreatedPath)
 	{
 		RendererWindowState window;
-		window.sceneArrows.push_back({});
 		ASSERT_TRUE(AddFreeScenePathSegment(window, glm::vec3(0), true));
 		const auto saved = ExtractPersistedSceneObjects(window);
 		ASSERT_EQ(saved.size(), 1u);
@@ -267,7 +246,6 @@ namespace DefectStudio::Tests
 		ASSERT_NE(window.paths, nullptr);
 		EXPECT_EQ(window.paths->Store().Size(), 1u);
 		EXPECT_GE(warnings.size(), 2u);
-		EXPECT_TRUE(window.sceneArrows.empty());
 	}
 
 	TEST(ScenePathCutoverTests, MigrationRebindsReorderedAtomsAndDetachesMissingAnchor)

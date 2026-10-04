@@ -14,7 +14,7 @@ namespace DefectStudio
 	void AddVacancyAt(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position);
 
 	// "Bonds" from atoms to a vacancy: one Line scene object per pair, start anchored to the atom,
-	// coloured atom -> vacancy (two-colour gradient), bond thickness. Each is an ordinary scene arrow,
+	// coloured atom -> vacancy (two-colour gradient), bond thickness. Each is an ordinary scene path,
 	// so its style is edited on its own. Pairs:
 	//   atoms selected  -> each atom to the one selected vacancy, else to its nearest vacancy
 	//   otherwise       -> each selected vacancy (none selected: every vacancy) to its

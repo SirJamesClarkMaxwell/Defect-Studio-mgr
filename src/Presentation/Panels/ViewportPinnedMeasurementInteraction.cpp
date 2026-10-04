@@ -168,7 +168,6 @@ namespace DefectStudio
 		// free-label/arrow selection in place instead of replacing it the way clicking a different
 		// pin already does.
 		windowState.selectedFreeLabels.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedVacancies.clear();
 		windowState.defectFrameSelected = false;

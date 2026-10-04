@@ -49,7 +49,7 @@ namespace DefectStudio
 	bool AnySceneObjectSelected(const RendererWindowState &windowState)
 	{
 		return !windowState.selectedAtomIndices.empty() || !windowState.selectedPinnedMeasurements.empty() ||
-			!windowState.selectedFreeLabels.empty() || !windowState.selectedSceneArrows.empty() ||
+			!windowState.selectedFreeLabels.empty() ||
 			!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty() ||
 			!windowState.selectedScenePaths.empty();
 	}
@@ -58,7 +58,6 @@ namespace DefectStudio
 	{
 		SetVisibleWhereSelected(windowState.pinnedMeasurements, windowState.selectedPinnedMeasurements, visible);
 		SetVisibleWhereSelected(windowState.freeLabels, windowState.selectedFreeLabels, visible);
-		SetVisibleWhereSelected(windowState.sceneArrows, windowState.selectedSceneArrows, visible);
 		SetVisibleWhereSelected(windowState.sceneOrbitals, windowState.selectedSceneOrbitals, visible);
 		SetVisibleWhereSelected(windowState.scenePlanes, windowState.selectedScenePlanes, visible);
 		const std::vector<SceneObjectId> &selectedPaths = windowState.selectedScenePaths;
@@ -72,7 +71,6 @@ namespace DefectStudio
 	{
 		SetVisibleEverywhere(windowState.pinnedMeasurements, true);
 		SetVisibleEverywhere(windowState.freeLabels, true);
-		SetVisibleEverywhere(windowState.sceneArrows, true);
 		SetVisibleEverywhere(windowState.sceneOrbitals, true);
 		SetVisibleEverywhere(windowState.scenePlanes, true);
 		ForEachPath(windowState, [](ScenePath &path) { path.visible = true; });
@@ -84,7 +82,6 @@ namespace DefectStudio
 		CollapseOntoRenderable(windowState.structure.bonds);
 		CollapseOntoRenderable(windowState.pinnedMeasurements);
 		CollapseOntoRenderable(windowState.freeLabels);
-		CollapseOntoRenderable(windowState.sceneArrows);
 		CollapseOntoRenderable(windowState.sceneOrbitals);
 		CollapseOntoRenderable(windowState.scenePlanes);
 		ForEachPath(windowState, [](ScenePath &path) { path.visible = path.renderable; });

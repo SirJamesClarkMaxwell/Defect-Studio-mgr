@@ -1,5 +1,5 @@
 // Click-select for ScenePlanes. Last in the short-circuit chain: a plane is the largest thing in
-// the viewport and usually has atoms, arrows and orbitals in front of it, so every smaller object
+// the viewport and usually has atoms, paths and orbitals in front of it, so every smaller object
 // gets first refusal on the click.
 #include "Core/dspch.hpp"
 
@@ -79,7 +79,6 @@ namespace DefectStudio
 
 		// Claiming the click clears the other kinds, so the properties panel shows one thing.
 		windowState.selectedFreeLabels.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedVacancies.clear();

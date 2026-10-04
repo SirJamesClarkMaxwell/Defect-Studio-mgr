@@ -11,7 +11,6 @@
 
 #include <imgui.h>
 
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
@@ -275,61 +274,6 @@ namespace DefectStudio
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			windowState.freeLabels.erase(windowState.freeLabels.begin() + labelToRemove);
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-		}
-	}
-
-	void DrawAllArrowRows(RendererWindowState &windowState)
-	{
-		ImGui::Separator();
-		ImGui::Text("Paths");
-		if (ImGui::Button("+ Add arrow"))
-		{
-			const glm::vec3 seed = windowState.cursor3DPlaced ? windowState.cursor3DPosition : glm::vec3(0.0f);
-			const auto result = AddFreeScenePathSegment(windowState, seed, true);
-			if (!result)
-				DS_LOG_WARN("Add arrow path failed: {}", result.Error().technicalDetails);
-		}
-
-		int arrowToRemove = -1;
-		ImGui::PushID("AllArrows");
-		for (int arrowIndex = 0; arrowIndex < static_cast<int>(windowState.sceneArrows.size()); ++arrowIndex)
-		{
-			RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[arrowIndex];
-			ImGui::PushID(arrowIndex);
-			const SceneObjectId rowId = arrow.id;
-			const bool isSelected = std::find(
-				windowState.selectedSceneArrows.begin(), windowState.selectedSceneArrows.end(), rowId) !=
-				windowState.selectedSceneArrows.end();
-			const char *kindLabel = arrow.kind == RendererWindowState::ArrowKind::Line ? "Line"
-				: arrow.kind == RendererWindowState::ArrowKind::Arrow2D ? "Arrow 2D" : "Arrow 3D";
-			char rowLabel[32];
-			std::snprintf(rowLabel, sizeof(rowLabel), "%s #%d", kindLabel, arrowIndex);
-			if (ImGui::Selectable(rowLabel, isSelected, ImGuiSelectableFlags_AllowOverlap))
-			{
-				std::vector<SceneObjectId> &selection = windowState.selectedSceneArrows;
-				if (ImGui::GetIO().KeyCtrl)
-				{
-					const auto existing = std::find(selection.begin(), selection.end(), rowId);
-					if (existing != selection.end())
-						selection.erase(existing);
-					else
-						selection.push_back(rowId);
-				}
-				else
-				{
-					selection = {rowId};
-				}
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("X##RemoveArrow"))
-				arrowToRemove = arrowIndex;
-			ImGui::PopID();
-		}
-		ImGui::PopID();
-		if (arrowToRemove >= 0)
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			EraseSceneArrows(windowState, {windowState.sceneArrows[static_cast<std::size_t>(arrowToRemove)].id});
 		}
 	}
 

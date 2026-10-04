@@ -11,7 +11,6 @@
 #include <imgui.h>
 
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
@@ -152,7 +151,12 @@ namespace DefectStudio
 				DS_LOG_WARN("Add segment failed: {}", result.Error().technicalDetails);
 		};
 
-		DrawSceneArrowAtomBufferControl();
+		ImGui::SetNextItemWidth(120.0f);
+		ImGui::DragFloat("Bufor##ScenePathAtomBuffer", &GetScenePathAtomBuffer(), 0.02f, 0.0f, 3.0f, "%.2f r");
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+			ImGui::SetTooltip(
+				"Odleglosc konca od srodka atomu, w promieniach kuli. "
+				"0 = srodek, 1.0 = powierzchnia, 1.15 = odstep 15%% promienia.");
 		if (ImGui::MenuItem(description.lineLabel.c_str(), nullptr, false, description.canDrawSegment))
 			addSegment(false);
 		if (ImGui::MenuItem(description.arrowLabel.c_str(), nullptr, false, description.canDrawSegment))

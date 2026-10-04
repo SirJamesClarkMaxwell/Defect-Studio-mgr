@@ -28,7 +28,6 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
-#include "Renderer/Scene/SceneArrowGeometry.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
@@ -124,7 +123,7 @@ namespace DefectStudio
 				ApplyLabelRegionSelection(
 					windowState, HitTestRectPinnedMeasurements(windowState, rectMin, rectMax),
 					HitTestRectFreeLabels(windowState, rectMin, rectMax),
-					HitTestRectSceneArrows(windowState, rectMin, rectMax), mode,
+					mode,
 					HitTestRectScenePaths(windowState, rectMin, rectMax));
 			}
 			ApplyCentreRegionSelection(windowState,
@@ -171,7 +170,7 @@ namespace DefectStudio
 			ApplyLabelRegionSelection(
 				windowState, HitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius),
 				HitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius),
-				HitTestCircleSceneArrows(windowState, center, windowState.circleSelectRadius), mode,
+				mode,
 				HitTestCircleScenePaths(windowState, center, windowState.circleSelectRadius));
 		}
 		ApplyCentreRegionSelection(windowState,
@@ -351,88 +350,13 @@ namespace DefectStudio
 		return hitIndices;
 	}
 
-	// SceneArrow region selection samples every tessellated Line/Arrow3D span. Arrow2D deliberately
-	// remains its legacy straight endpoint pair until 32b-2.
-	std::vector<std::size_t> HitTestRectSceneArrows(
-		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax)
-	{
-		std::vector<std::size_t> hitIndices;
-		if (windowState.camera == nullptr)
-			return hitIndices;
-		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		// 5 evenly-spaced samples along the segment, not just start/end/mid - catches a long arrow
-		// crossing the region without either endpoint or its exact midpoint landing inside it (docs/
-		// scene_arrow_rework_plan_corrected.md Step 9's "simple sampling" option).
-		constexpr std::array<float, 5> kSampleT = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
-		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
-		{
-			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[i];
-			const std::vector<glm::vec3> pathPoints = arrow.kind == RendererWindowState::ArrowKind::Arrow2D
-				? std::vector<glm::vec3>{arrow.start(), arrow.end()}
-				: TessellateSceneArrowPath(arrow).points;
-			bool hit = false;
-			for (std::size_t pointIndex = 1; pointIndex < pathPoints.size() && !hit; ++pointIndex)
-			{
-				for (const float t : kSampleT)
-				{
-					const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
-						viewProjection, windowState.viewportSize,
-						glm::mix(pathPoints[pointIndex - 1], pathPoints[pointIndex], t));
-					if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
-					{
-						hit = true;
-						break;
-					}
-				}
-			}
-			if (hit)
-				hitIndices.push_back(i);
-		}
-		return hitIndices;
-	}
-
-	std::vector<std::size_t> HitTestCircleSceneArrows(
-		const RendererWindowState &windowState, glm::vec2 center, float radius)
-	{
-		std::vector<std::size_t> hitIndices;
-		if (windowState.camera == nullptr)
-			return hitIndices;
-		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		constexpr std::array<float, 5> kSampleT = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
-		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
-		{
-			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[i];
-			const std::vector<glm::vec3> pathPoints = arrow.kind == RendererWindowState::ArrowKind::Arrow2D
-				? std::vector<glm::vec3>{arrow.start(), arrow.end()}
-				: TessellateSceneArrowPath(arrow).points;
-			bool hit = false;
-			for (std::size_t pointIndex = 1; pointIndex < pathPoints.size() && !hit; ++pointIndex)
-			{
-				for (const float t : kSampleT)
-				{
-					const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
-						viewProjection, windowState.viewportSize,
-						glm::mix(pathPoints[pointIndex - 1], pathPoints[pointIndex], t));
-					if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
-					{
-						hit = true;
-						break;
-					}
-				}
-			}
-			if (hit)
-				hitIndices.push_back(i);
-		}
-		return hitIndices;
-	}
-
-	// Applies one box/circle-select result to the label/arrow selection vectors - mirrors
+	// Applies one box/circle-select result to the label/path selection vectors - mirrors
 	// RendererLayer::onRegionSelectionRequested's atom/bond semantics exactly: Replace clears
 	// everything first then adds every hit, Add only adds what isn't already there, Subtract only
 	// removes what's found.
 	void ApplyLabelRegionSelection(
 		RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
-		const std::vector<std::size_t> &freeHits, const std::vector<std::size_t> &arrowHits,
+		const std::vector<std::size_t> &freeHits,
 		RendererEvents::Viewport::RegionSelectMode mode, const std::vector<SceneObjectId> &pathHits)
 	{
 		using RendererEvents::Viewport::RegionSelectMode;
@@ -440,7 +364,6 @@ namespace DefectStudio
 		{
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
-			windowState.selectedSceneArrows.clear();
 			windowState.selectedScenePaths.clear();
 		}
 
@@ -465,7 +388,6 @@ namespace DefectStudio
 		const bool subtract = mode == RegionSelectMode::Subtract;
 		applyHits(windowState.selectedPinnedMeasurements, windowState.pinnedMeasurements, pinnedHits, subtract);
 		applyHits(windowState.selectedFreeLabels, windowState.freeLabels, freeHits, subtract);
-		applyHits(windowState.selectedSceneArrows, windowState.sceneArrows, arrowHits, subtract);
 		for (const SceneObjectId id : pathHits)
 		{
 			const auto existing = std::find(windowState.selectedScenePaths.begin(), windowState.selectedScenePaths.end(), id);

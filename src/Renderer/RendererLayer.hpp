@@ -57,8 +57,7 @@ namespace DefectStudio
 	void AlignBondLabelToCamera(RendererWindowState &windowState, std::size_t pinIndex);
 
 	// notes.txt pt. 15 - in-process LabelStyle clipboard shared by pinned measurements and free
-	// labels, mirroring GetArrowStyleClipboard (SceneArrowEditorWidget.hpp). Caller pushes the undo
-	// snapshot before PasteLabelStyle, same convention as PasteArrowStyle.
+	// labels. Caller pushes the undo snapshot before PasteLabelStyle.
 	[[nodiscard]] std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard();
 	void CopyLabelStyle(const RendererWindowState::LabelStyle &style);
 	bool PasteLabelStyle(
@@ -153,7 +152,7 @@ namespace DefectStudio
 		// (previewState is a fresh RendererWindowState, not a view of the real window) into
 		// `previewState`. Single source of truth for both places that open the export dialog
 		// (onExportImageRequested's F12 path and RendererPanelToolbar's "Export PNG..." button) -
-		// they drifted out of sync once already (freeLabels/sceneArrows silently missing from the
+		// they drifted out of sync once already (free labels silently missing from the
 		// F12 path only), so this is the fix for that whole class of bug, not just this one field.
 		void PopulateExportPreviewState(
 			RendererWindowState &previewState, const RendererWindowState &source) const;

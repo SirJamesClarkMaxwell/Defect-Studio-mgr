@@ -14,8 +14,7 @@ namespace DefectStudio
 		double end = 0.0;
 	};
 
-	// The one dash-interval generator in the renderer. `SceneArrowGeometry`'s legacy shaft spans call
-	// through here, so the two can never disagree about where a dash begins.
+	// The shared dash-interval generator for path geometry.
 	//
 	// Contract:
 	// - Intervals are ordered, disjoint, and clipped to [rangeStart, rangeEnd].

@@ -57,7 +57,7 @@ namespace DefectStudio
 	[[nodiscard]] RendererWindowState::ScenePlane MakeScenePlane(const ScenePlaneFit &fit);
 
 	// A free plane at `center` facing the viewer, for "add a plane" with no atoms selected. Sized
-	// from the same scene metric MakeDefaultSceneArrow uses, so it lands visible rather than as a
+	// from the structure bounds, so it lands visible rather than as a
 	// speck or a wall.
 	[[nodiscard]] RendererWindowState::ScenePlane MakeDefaultScenePlane(
 		const RendererWindowState &windowState, const glm::vec3 &center);

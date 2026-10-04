@@ -201,85 +201,6 @@ namespace DefectStudio
 		bool freeLabelDragging = false;
 		bool freeLabelDragUndoPushed = false;
 		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
-		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - an ordered path with
-		// independently styled tips, for pointing at a displacement/direction in an export shot.
-		// Line and Arrow3D use the renderer path/tip mesh with the generic bond shader. Arrow2D remains
-		// a flat quad instead of a path mesh,
-		// either camera-facing (Billboard) or lying flat in a chosen world plane (FixedPlane) - see
-		// OpenGlRendererBackend::renderSceneArrows/ComputeArrowQuadBasis. Renderer-only like
-		// FreeLabel/PinnedMeasurement, persisted in scene_objects.yaml. Gizmo/attached
-		// label/undo for arrows are a later phase - labels already have all three
-		// (renderLabelTransformGizmo/AttachedLabel), arrows don't yet.
-		enum class ArrowKind { Line, Arrow2D, Arrow3D };
-		// Tip style is independent of ArrowKind and chosen separately for each end. This deliberately
-		// small TikZ-inspired vocabulary is renderer data; its geometry parameters live in
-		// Renderer/Scene/SceneArrowGeometry rather than in Domain or IO.
-		enum class ArrowTip { None, Plain, Barbed, Open, Bar, Circle };
-		enum class Arrow2DOrientation { Billboard, FixedPlane };
-		enum class WorldPlane { XY, XZ, YZ };
-
-		struct ArrowStyle
-		{
-			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
-			// Two-stop colour ramp along the shaft, start -> end, reusing the same
-			// RendererColorGradient that already drives structure bond colouring rather than
-			// inventing a second gradient type. Off by default, so every arrow that existed
-			// before keeps using the flat `color` above and nothing changes under it.
-			bool useGradient = false;
-			RendererColorGradient gradient;
-			float alpha = 1.0f;
-			float shaftWidth = 0.06f; // radius; was the old hardcoded kArrowShaftRadius
-			bool dashed = false;
-			float dashLength = 0.25f; // world units, along the shaft
-			float gapLength = 0.15f;  // world units
-			glm::vec3 outlineColor = glm::vec3(0.0f);
-			float outlineWidth = 0.0f;
-			// World units for Line/Arrow3D (32b-1: either can carry a tip, not just Arrow3D's cone -
-			// see ArrowTip/GetArrowTipParameters), screen pixels for Arrow2D. Never reinterpret one
-			// unit system as the other - ApplySceneArrowKindChange re-derives both on every switch
-			// that crosses that boundary.
-			float headWidth = 0.14f;
-			float headLength = 0.22f;
-		};
-
-		struct SceneArrow
-		{
-			// Stable identity, allocated by SceneRegistry::AllocateObjectId at creation (task 20).
-			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
-			// object's position in the vector, which does not.
-			SceneObjectId id;
-			ArrowKind kind = ArrowKind::Arrow3D;
-			Arrow2DOrientation orientation2D = Arrow2DOrientation::Billboard;
-			WorldPlane fixedPlane = WorldPlane::XY;
-			// Ordered world-space path. Two entries with no control point are the legacy straight arrow.
-			// A single quadratic control point applies only to a two-point path; longer paths bend at
-			// their explicit points.
-			std::vector<glm::vec3> points = {glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)};
-			std::optional<glm::vec3> controlPoint;
-			int curveSegments = 24;
-			ArrowTip startTip = ArrowTip::None;
-			ArrowTip endTip = ArrowTip::Plain;
-
-			[[nodiscard]] glm::vec3 &start() { return points.front(); }
-			[[nodiscard]] const glm::vec3 &start() const { return points.front(); }
-			[[nodiscard]] glm::vec3 &end() { return points.back(); }
-			[[nodiscard]] const glm::vec3 &end() const { return points.back(); }
-			// Which atom each end follows. A missing optional is a free coordinate; a stale index
-			// also leaves the stored coordinate untouched, matching the orbital/plane anchor rule.
-			std::optional<std::size_t> startAnchorAtom;
-			std::optional<std::size_t> endAnchorAtom;
-			// Gap at each anchored end in that atom's own radii. 1.0 reaches the sphere surface.
-			float atomBuffer = 1.15f;
-			ArrowStyle style;
-			std::string persistKey; // see PinnedMeasurement::persistKey
-			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
-			// the eye (drawn in the viewport, what H toggles), `renderable` the camera (drawn in an
-			// exported render). Independent on purpose.
-			bool visible = true;
-			bool renderable = true;
-		};
-		std::vector<SceneArrow> sceneArrows;
-
 		// A hydrogenic orbital drawn as a scene annotation (task 26): the user picks a preset -
 		// s/p/d, an sp/sp2/sp3 hybrid lobe, or a sigma/pi/delta molecular orbital with its
 		// antibonding partner - and it is evaluated analytically and meshed as an isosurface with
@@ -307,7 +228,7 @@ namespace DefectStudio
 				float coefficient = 1.0f;
 			};
 
-			// Same stable identity as SceneArrow::id, from the same SceneRegistry.
+			// Stable identity allocated by SceneRegistry.
 			SceneObjectId id;
 			OrbitalPreset preset = OrbitalPreset::P;
 			// Fed straight to OrbitalPresetSettings - see HydrogenicOrbital.hpp for what each one
@@ -320,7 +241,7 @@ namespace DefectStudio
 			// than hidden, so switching preset back and forth does not lose the bond the user set up.
 			glm::vec3 centerB = glm::vec3(1.5f, 0.0f, 0.0f);
 			// Optional atom anchoring, indices into structure.atoms: one entry drives centerA, two
-			// drive centerA and centerB. Resolved every frame like SceneArrow's endpoint anchors, so an
+			// drive centerA and centerB. Resolved every frame, so an
 			// orbital sits on its atom through gizmo drags, nudges and relaxation playback. Anchors
 			// that no longer resolve are ignored, never indexed.
 			std::vector<std::size_t> anchorAtoms;
@@ -393,12 +314,12 @@ namespace DefectStudio
 		LabelPickQuads labelPickQuads;
 
 		// A flat quad drawn through a set of points - a molecular plane, a slip plane, a mirror
-		// plane for the group-theory panel to point at. Like SceneArrow it is a drawing, not a
+		// plane for the group-theory panel to point at. It is a drawing, not a
 		// measurement: the points it was fitted through are consumed at creation and not kept, so
 		// nothing here is linked to an atom and nothing has to be unlinked later.
 		struct ScenePlane
 		{
-			// Same stable identity as SceneArrow::id, from the same SceneRegistry.
+			// Stable identity allocated by SceneRegistry.
 			SceneObjectId id;
 			glm::vec3 center = glm::vec3(0.0f);
 			// Unit normal. With `tangent` (unit, perpendicular to it) this fixes the quad's frame;
@@ -430,10 +351,10 @@ namespace DefectStudio
 		// anything holding a reference into them; null until the first path is created (see
 		// SceneSystem::EnsurePathSystem).
 		Unique<PathSystem> paths;
-		// Same multi-select shape as selectedSceneArrows; back() is the gizmo anchor.
+		// Multi-select; back() is the gizmo anchor.
 		std::vector<SceneObjectId> selectedScenePlanes;
 		// task/41 S11a: the selected paths, ids into `paths->Store()` rather than indices into a
-		// vector - a path has no vector to index. Same multi-select shape as the four above, and it
+		// vector - a path has no vector to index. Same multi-select shape as the other annotations, and it
 		// must be cleared everywhere they are: a stale entry here shows the wrong Properties section.
 		std::vector<SceneObjectId> selectedScenePaths;
 		// Blender-like edit aid for validating the generated path mesh. Per viewport and deliberately
@@ -447,39 +368,13 @@ namespace DefectStudio
 		// the viewport window's ImGui ID scope.
 		bool pathHandleTypeMenuRequested = false;
 
-		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
-		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single
-		// selected arrow's drag actually grabs (irrelevant once more than one is selected - a
-		// multi-selection always moves every selected arrow's start AND end together, same rigid
-		// group-drag convention as labels).
-		std::vector<SceneObjectId> selectedSceneArrows;
-		bool sceneArrowDragging = false;
-		glm::vec2 sceneArrowDragLastMouse = glm::vec2(0.0f);
-		enum class SceneArrowDragTarget { Start, End, Both };
-		SceneArrowDragTarget sceneArrowDragTarget = SceneArrowDragTarget::Both;
-		// Drives the Blender-style "adjust last operation" quick-edit window (RendererPanel::
-		// renderSceneArrowQuickEditPanel) - set right after an arrow is added via Shift+A/right-click
-		// Add/ObjectPropertiesPanel's own "+ Add arrow"; cleared on Escape, on selection changing away
-		// from this arrow, or when another arrow is added. Bool+index pair rather than
-		// std::optional<std::size_t> - same convention as cursor3DPlaced/cursor3DPosition above, no
-		// new include needed.
-		bool sceneArrowQuickEditActive = false;
-		std::size_t sceneArrowQuickEditIndex = 0;
 		// Add > Orbital: whether a picked preset lands on the selected atoms or at the 3D cursor.
 		// A sticky flag on the window rather than a level of submenu, which is what made that menu
 		// six flyouts deep. Per-window and not persisted - it is a mode for the next click, not a
 		// project setting.
 		bool orbitalAddAnchorToSelection = true;
-		// Atoms-displacement comparison (T08 item 0 / T16 item 8) - this window is the "reference"
-		// structure; comparisonFilePath is a second, differently-composed-or-not structure loaded
-		// once (off the main thread, CompareStructuresJob) and matched against it. Unlike
-		// sceneArrows this is auto-generated (hundreds-to-thousands of pairs, not a handful of
-		// hand-placed annotations) and drawn as a single batched instanced draw call
-		// (OpenGlRendererBackend::renderDisplacementArrows), not per-arrow welded meshes. Renderer-
-		// only, like sceneArrows - the file path + threshold are the only two fields mirrored into
-		// ProjectManifest (EditorLayer::onDisplacementComparisonStateChanged), the computed result
-		// itself is not persisted and is recomputed by pressing "Compare" again after reopening a
-		// project.
+		// Atoms-displacement comparison: generated pairs drawn in a batched instanced pass.
+		// Only the comparison file and threshold are persisted; the result is recomputed on demand.
 		struct DisplacementComparisonState
 		{
 			Path comparisonFilePath;
@@ -506,12 +401,10 @@ namespace DefectStudio
 		// One entry in the scene-object undo snapshot - both label kinds together, since a single
 		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
 		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).
-		// sceneArrows joined this same snapshot for the same reason - one shared scene-object scope.
 		struct LabelUndoSnapshot
 		{
 			std::vector<PinnedMeasurement> pinnedMeasurements;
 			std::vector<FreeLabel> freeLabels;
-			std::vector<SceneArrow> sceneArrows;
 			std::vector<SceneOrbital> sceneOrbitals;
 			std::vector<ScenePlane> scenePlanes;
 			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
@@ -581,7 +474,7 @@ namespace DefectStudio
 		// the show*/visibility flags above (those hide things from view; these gate what a click can
 		// select once shown). Ctrl+1 atoms-only, Ctrl+2 +bonds, Ctrl+3 bonds+labels (no atoms - lets
 		// a label be gizmo-dragged without risking an accidental atom drag), Ctrl+4 everything.
-		// sceneArrows share this same flag rather than getting a pickArrows of their own - one more
+		// Paths share pickLabels - one more
 		// "label-like annotation" kind under the same umbrella, not a new axis of selection-mode UI.
 		bool pickAtoms = true;
 		bool pickBonds = true;
@@ -614,12 +507,6 @@ namespace DefectStudio
 		bool modalTransformStartedFromHandle = false;
 		TransformOrientation transformOrientation = TransformOrientation::Global;
 		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
-		// Which Start/End/midpoint candidate owns the unified transform gizmo for a single arrow.
-		// All three render as markers; clicking a non-active one moves the gizmo there, while the
-		// active marker still consumes its own visible hit area. Reset to Both whenever
-		// sceneArrowGizmoActiveArrowIndex no longer matches the current single-arrow selection.
-		SceneArrowDragTarget sceneArrowGizmoActiveTarget = SceneArrowDragTarget::Both;
-		std::size_t sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(-1);
 		enum class NavigationGizmoDragMode
 		{
 			None,
@@ -666,7 +553,7 @@ namespace DefectStudio
 		// RendererWindowState (RenderExportDialogState::previewState) - always 0 on a real viewport
 		// window's RendererWindowState, since nothing in the interactive viewport writes it anymore
 		// (this replaced an earlier v1 that mutated atom.cartesianPosition directly and only worked
-		// for atoms/bonds/picking - cell box/grid/scene arrows never got that mutation, so they'd
+		// for atoms/bonds/picking - cell box/grid/annotations never got that mutation, so they'd
 		// visibly detach; see RendererLayer::RenderToFbo for how this value reaches RenderWindow).
 		glm::vec3 viewOffset = glm::vec3(0.0f);
 		// GPU compute-shader isosurface mesh for one spin channel's rendered orbital

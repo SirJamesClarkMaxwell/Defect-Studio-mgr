@@ -55,9 +55,6 @@ void EnsureScenePersistKeys(RendererWindowState &window)
 	for (auto &label : window.freeLabels)
 		if (label.persistKey.empty())
 			label.persistKey = GenerateScenePersistKey();
-	for (auto &arrow : window.sceneArrows)
-		if (arrow.persistKey.empty())
-			arrow.persistKey = GenerateScenePersistKey();
 	for (auto &orbital : window.sceneOrbitals)
 		if (orbital.persistKey.empty())
 			orbital.persistKey = GenerateScenePersistKey();

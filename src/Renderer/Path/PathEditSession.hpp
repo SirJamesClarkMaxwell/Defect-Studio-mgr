@@ -60,7 +60,7 @@ namespace DefectStudio
 
 		// Replaces the selection wholesale. Order is meaningful: back() is the active element, the
 		// one that gets the enlarged draw and pick radius and, later, the transform pivot. Same
-		// convention as selectedSceneArrows and selectedScenePaths.
+		// convention as selectedScenePaths.
 		//
 		// Ignored when the session is not active - there is no path for the ids to belong to.
 		void SetSelection(std::vector<PathElementId> selection);

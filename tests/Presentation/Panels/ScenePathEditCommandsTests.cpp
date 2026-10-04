@@ -52,7 +52,7 @@ namespace DefectStudio::Tests
 			renderer.OnDetach();
 		}
 
-		// One unfocused window - the commands fall back to it, as renderer.scene_arrow.reverse does.
+		// One unfocused window - the commands fall back to it, as renderer.scene_path.reverse does.
 		RendererWindowState &AddWindowWithPath(bool openInEditMode)
 		{
 			RendererWindowState window;

@@ -31,7 +31,6 @@
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ScenePathEditCommands.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
@@ -91,8 +90,8 @@ namespace DefectStudio
 		RegisterScenePathObjectCommands(registry, rendererLayer);
 	}
 
-	// Keyboard-only shortcuts for selected scene objects: pin flip/scale, arrow clipboard actions,
-	// and Delete for pins, free labels, arrows, orbitals and planes. No mouse hit-test of its own, so
+	// Keyboard-only shortcuts for selected scene objects: pin flip/scale, scene clipboard actions,
+	// and Delete for pins, free labels, paths, orbitals and planes. No mouse hit-test of its own, so
 	// the caller runs this unconditionally every frame rather than folding it into the
 	// short-circuiting interaction chain.
 	void HandlePinnedMeasurementKeyboardShortcuts(
@@ -176,12 +175,6 @@ namespace DefectStudio
 			ExecuteSceneObjectEditAction(
 				windowState, SceneObjectEditKind::FreeLabel, SceneObjectEditAction::Delete);
 
-		// Delete removes every selected scene arrow - same rationale as the pin/free-label Delete above.
-		const bool sceneArrowSelected = !windowState.selectedSceneArrows.empty();
-		if (sceneArrowSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-			ExecuteSceneObjectEditAction(
-				windowState, SceneObjectEditKind::Arrow, SceneObjectEditAction::Delete);
-
 		const bool sceneOrbitalSelected = !windowState.selectedSceneOrbitals.empty();
 		if (sceneOrbitalSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 			ExecuteSceneObjectEditAction(
@@ -203,8 +196,6 @@ namespace DefectStudio
 		// to make them "also try annotations", so this runs independently alongside the atom command.
 		const bool ctrlHeld = ImGui::GetIO().KeyCtrl;
 		std::optional<SceneObjectEditKind> selectedDrawingKind = ResolveSelectedDrawingKind(windowState);
-		if (selectedDrawingKind == SceneObjectEditKind::Arrow)
-			selectedDrawingKind.reset(); // legacy clipboard creation is unreachable after S15
 		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
 			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Copy);
 		if (hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_V, false))
@@ -221,7 +212,7 @@ namespace DefectStudio
 		const bool altHeld = ImGui::GetIO().KeyAlt;
 		const bool shiftHeld = ImGui::GetIO().KeyShift;
 		const bool labelSelected = pinSelected || freeLabelSelected;
-		if (labelSelected && !sceneArrowSelected && hovered && altHeld && !shiftHeld &&
+		if (labelSelected && hovered && altHeld && !shiftHeld &&
 			ImGui::IsKeyPressed(ImGuiKey_C, false))
 		{
 			const RendererWindowState::LabelStyle *style = nullptr;
@@ -237,7 +228,7 @@ namespace DefectStudio
 			if (style != nullptr)
 				CopyLabelStyle(*style);
 		}
-		if (labelSelected && !sceneArrowSelected && hovered && altHeld && shiftHeld &&
+		if (labelSelected && hovered && altHeld && shiftHeld &&
 			ImGui::IsKeyPressed(ImGuiKey_V, false) && GetLabelStyleClipboard().has_value())
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
@@ -248,8 +239,6 @@ namespace DefectStudio
 
 	std::optional<SceneObjectEditKind> ResolveSelectedDrawingKind(const RendererWindowState &windowState)
 	{
-		if (!windowState.selectedSceneArrows.empty())
-			return SceneObjectEditKind::Arrow;
 		if (!windowState.selectedSceneOrbitals.empty())
 			return SceneObjectEditKind::Orbital;
 		if (!windowState.selectedScenePlanes.empty())
@@ -382,7 +371,6 @@ namespace DefectStudio
 		const SceneObjectId hitLabel = windowState.freeLabels[static_cast<std::size_t>(hitIndex)].id;
 		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
 		windowState.selectedPinnedMeasurements.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedVacancies.clear();
 		windowState.defectFrameSelected = false;

@@ -14,7 +14,7 @@ namespace DefectStudio
 
 	// Every Path Edit Mode action as a registered command (v2 plan C12) instead of raw ImGui key
 	// polling. Each command acts on the focused viewport window - or on the only window when none
-	// is focused, same rule as renderer.scene_arrow.reverse - and does nothing, successfully, when
+	// is focused, same rule as renderer.scene_path.reverse - and does nothing, successfully, when
 	// that window has no path open in Edit Mode (toggle excepted, see below).
 	//
 	//   renderer.path_edit.toggle            Tab     enter on the single selected path / leave

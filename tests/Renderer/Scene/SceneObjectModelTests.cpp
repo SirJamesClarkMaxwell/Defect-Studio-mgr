@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -12,8 +13,7 @@ namespace DefectStudio::Tests
 {
 	namespace
 	{
-		// Three atoms, one bond, one pinned bond-length measurement, one free label, two arrows -
-		// one of every SceneObjectKind, with two of the kind the index-shift bug bites hardest.
+		// Three atoms, one bond, one pinned bond-length measurement, one free label, two paths.
 		[[nodiscard]] RendererWindowState BuildAnnotatedWindow()
 		{
 			RendererWindowState windowState;
@@ -39,11 +39,10 @@ namespace DefectStudio::Tests
 
 			for (int index = 0; index < 2; ++index)
 			{
-				RendererWindowState::SceneArrow arrow;
-				arrow.id = windowState.sceneRegistry.AllocateObjectId();
-				arrow.start() = glm::vec3(static_cast<float>(index), 0.0f, 0.0f);
-				arrow.end() = glm::vec3(static_cast<float>(index), 1.0f, 0.0f);
-				windowState.sceneArrows.push_back(arrow);
+				ScenePath path;
+				path.nodes = {{PathElementId{1}, glm::vec3(static_cast<float>(index), 0.0f, 0.0f), {}},
+					{PathElementId{2}, glm::vec3(static_cast<float>(index), 1.0f, 0.0f), {}}};
+				(void)SceneSystem::AppendScenePath(windowState, path);
 			}
 
 			SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
@@ -65,20 +64,20 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState windowState = BuildAnnotatedWindow();
 		const std::vector<SceneObjectId> atomIdsBefore = CollectAtomIds(windowState.sceneRegistry);
-		const SceneObjectId arrowId = windowState.sceneArrows.front().id;
+		const SceneObjectId pathId = windowState.paths->Store().At(0)->id;
 		const SceneObjectId labelId = windowState.freeLabels.front().id;
 
 		SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
 		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 
 		EXPECT_EQ(CollectAtomIds(windowState.sceneRegistry), atomIdsBefore);
-		EXPECT_EQ(windowState.sceneArrows.front().id, arrowId);
+		EXPECT_EQ(windowState.paths->Store().At(0)->id, pathId);
 		EXPECT_EQ(windowState.freeLabels.front().id, labelId);
 
-		Entity resolvedArrow = windowState.sceneRegistry.FindObject(arrowId);
-		ASSERT_TRUE(resolvedArrow);
-		const SceneObjectComponent &component = resolvedArrow.GetComponent<SceneObjectComponent>();
-		EXPECT_EQ(component.kind, SceneObjectKind::SceneArrow);
+		Entity resolvedPath = windowState.sceneRegistry.FindObject(pathId);
+		ASSERT_TRUE(resolvedPath);
+		const SceneObjectComponent &component = resolvedPath.GetComponent<SceneObjectComponent>();
+		EXPECT_EQ(component.kind, SceneObjectKind::ScenePath);
 		EXPECT_EQ(component.sourceIndex, 0u);
 		EXPECT_TRUE(windowState.sceneRegistry.FindObject(labelId));
 	}
@@ -89,7 +88,7 @@ namespace DefectStudio::Tests
 		RendererWindowState windowState = BuildAnnotatedWindow();
 
 		std::unordered_set<SceneObjectId> seen;
-		std::vector<std::size_t> countsByKind(5, 0);
+		std::vector<std::size_t> countsByKind(static_cast<std::size_t>(SceneObjectKind::ScenePath) + 1, 0);
 		const auto view = windowState.sceneRegistry.Registry().view<const SceneObjectComponent>();
 		for (const entt::entity entity : view)
 		{
@@ -103,78 +102,30 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(countsByKind[static_cast<std::size_t>(SceneObjectKind::Bond)], 1u);
 		EXPECT_EQ(countsByKind[static_cast<std::size_t>(SceneObjectKind::PinnedMeasurement)], 1u);
 		EXPECT_EQ(countsByKind[static_cast<std::size_t>(SceneObjectKind::FreeLabel)], 1u);
-		EXPECT_EQ(countsByKind[static_cast<std::size_t>(SceneObjectKind::SceneArrow)], 2u);
+		EXPECT_EQ(countsByKind[static_cast<std::size_t>(SceneObjectKind::ScenePath)], 2u);
 		EXPECT_EQ(seen.size(), 8u);
 	}
 
-	// Criterion 3 - a dead id stays dead, and its number is never handed out again.
-	TEST(SceneObjectModelTests, DestroyedIdNeverResolvesAndIsNeverReused)
-	{
-		RendererWindowState windowState = BuildAnnotatedWindow();
-		const SceneObjectId removedId = windowState.sceneArrows.back().id;
-
-		windowState.sceneArrows.pop_back();
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-
-		EXPECT_FALSE(windowState.sceneRegistry.IsAlive(removedId));
-		EXPECT_FALSE(windowState.sceneRegistry.FindObject(removedId));
-
-		RendererWindowState::SceneArrow replacement;
-		replacement.id = windowState.sceneRegistry.AllocateObjectId();
-		EXPECT_NE(replacement.id, removedId);
-		windowState.sceneArrows.push_back(replacement);
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-
-		EXPECT_FALSE(windowState.sceneRegistry.FindObject(removedId));
-		EXPECT_TRUE(windowState.sceneRegistry.FindObject(replacement.id));
-	}
-
-	// Criterion 4 - the index-shift bug. Selecting the second arrow and deleting the first used to
-	// leave the selection pointing at whatever slid into the freed slot.
-	TEST(SceneObjectModelTests, SelectionSurvivesDeletingADifferentArrow)
-	{
-		RendererWindowState windowState = BuildAnnotatedWindow();
-		const SceneObjectId selectedId = windowState.sceneArrows.back().id;
-		const glm::vec3 selectedStart = windowState.sceneArrows.back().start();
-		windowState.selectedSceneArrows = {selectedId};
-
-		windowState.sceneArrows.erase(windowState.sceneArrows.begin());
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-
-		ASSERT_EQ(windowState.selectedSceneArrows.size(), 1u);
-		EXPECT_EQ(windowState.selectedSceneArrows.front(), selectedId);
-
-		const std::vector<std::size_t> indices =
-			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
-		ASSERT_EQ(indices.size(), 1u);
-		EXPECT_EQ(indices.front(), 0u); // it shifted down, and the id followed it
-		EXPECT_EQ(windowState.sceneArrows[indices.front()].start(), selectedStart);
-	}
-
-	// Criterion 5 - the shared label/arrow undo stack snapshots whole vectors, so a restore must not
+	// Criterion 5 - the shared scene-object undo stack snapshots whole vectors, so a restore must not
 	// renumber anything.
 	TEST(SceneObjectModelTests, IdsSurviveAnUndoRedoRoundTrip)
 	{
 		RendererWindowState windowState = BuildAnnotatedWindow();
-		RendererWindowState::LabelUndoSnapshot snapshot{
-			windowState.pinnedMeasurements, windowState.freeLabels, windowState.sceneArrows};
-		const SceneObjectId arrowId = windowState.sceneArrows.front().id;
+		const SceneObjectsSnapshot snapshot = CaptureSceneObjectsSnapshot(windowState);
+		const SceneObjectId pathId = windowState.paths->Store().At(0)->id;
 		const SceneObjectId pinId = windowState.pinnedMeasurements.front().id;
 
-		windowState.sceneArrows.clear();
+		windowState.paths->Clear();
 		windowState.freeLabels.clear();
 		windowState.pinnedMeasurements.clear();
 		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-		EXPECT_FALSE(windowState.sceneRegistry.FindObject(arrowId));
+		EXPECT_FALSE(windowState.sceneRegistry.FindObject(pathId));
 
-		windowState.pinnedMeasurements = snapshot.pinnedMeasurements;
-		windowState.freeLabels = snapshot.freeLabels;
-		windowState.sceneArrows = snapshot.sceneArrows;
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		RestoreSceneObjectsSnapshot(windowState, snapshot);
 
-		EXPECT_EQ(windowState.sceneArrows.front().id, arrowId);
+		EXPECT_EQ(windowState.paths->Store().At(0)->id, pathId);
 		EXPECT_EQ(windowState.pinnedMeasurements.front().id, pinId);
-		EXPECT_TRUE(windowState.sceneRegistry.FindObject(arrowId));
+		EXPECT_TRUE(windowState.sceneRegistry.FindObject(pathId));
 		EXPECT_TRUE(windowState.sceneRegistry.FindObject(pinId));
 	}
 
@@ -188,89 +139,13 @@ namespace DefectStudio::Tests
 		EXPECT_GT(scene.AllocateObjectId().value, 42u);
 
 		RendererWindowState windowState = BuildAnnotatedWindow();
-		RendererWindowState::SceneArrow copy = windowState.sceneArrows.front();
-		windowState.sceneArrows.push_back(copy);
+		RendererWindowState::FreeLabel copy = windowState.freeLabels.front();
+		windowState.freeLabels.push_back(copy);
 		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 
-		EXPECT_NE(windowState.sceneArrows.back().id, windowState.sceneArrows.front().id);
-		EXPECT_TRUE(windowState.sceneRegistry.FindObject(windowState.sceneArrows.front().id));
-		EXPECT_TRUE(windowState.sceneRegistry.FindObject(windowState.sceneArrows.back().id));
+		EXPECT_NE(windowState.freeLabels.back().id, windowState.freeLabels.front().id);
+		EXPECT_TRUE(windowState.sceneRegistry.FindObject(windowState.freeLabels.front().id));
+		EXPECT_TRUE(windowState.sceneRegistry.FindObject(windowState.freeLabels.back().id));
 	}
 
-	// Stale ids are dropped, not mapped onto a wrong object - the contract the render call sites
-	// depend on when they convert back to indices for OpenGlRendererBackend.
-	TEST(SceneObjectModelTests, ResolveSourceIndicesDropsDeadIds)
-	{
-		RendererWindowState windowState = BuildAnnotatedWindow();
-		const SceneObjectId liveId = windowState.sceneArrows.front().id;
-		const SceneObjectId deadId = windowState.sceneArrows.back().id;
-
-		windowState.sceneArrows.pop_back();
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-
-		const std::vector<std::size_t> indices =
-			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, {liveId, deadId});
-		ASSERT_EQ(indices.size(), 1u);
-		EXPECT_EQ(indices.front(), 0u);
-	}
-
-	// task/40 Fix A contract - AppendSceneArrow always assigns a fresh id, never reuses whatever the
-	// caller's arrow already carried. A duplicated/pasted arrow arrives with the source's live id;
-	// keeping it would collide with the source in SceneRegistry's id->entity map.
-	TEST(SceneObjectModelTests, AppendSceneArrowAlwaysAssignsAFreshId)
-	{
-		RendererWindowState windowState = BuildAnnotatedWindow();
-		const SceneObjectId sourceId = windowState.sceneArrows.front().id;
-
-		RendererWindowState::SceneArrow duplicate = windowState.sceneArrows.front();
-		ASSERT_EQ(duplicate.id, sourceId); // simulates a copy that still carries the source's id
-
-		const SceneObjectId appendedId = SceneSystem::AppendSceneArrow(windowState, duplicate);
-
-		EXPECT_NE(appendedId, sourceId);
-		EXPECT_EQ(windowState.sceneArrows.back().id, appendedId);
-		// The source arrow (still at its original position) must be untouched.
-		EXPECT_EQ(windowState.sceneArrows.front().id, sourceId);
-	}
-
-	// task/40 Fix A contract - AppendSceneArrow does not itself register a registry entity; the
-	// caller must still call SyncLabelEntities once (per batch) before the new id resolves.
-	TEST(SceneObjectModelTests, AppendSceneArrowDoesNotSyncByItself)
-	{
-		RendererWindowState windowState = BuildAnnotatedWindow();
-		RendererWindowState::SceneArrow arrow;
-		arrow.start() = glm::vec3(5.0f, 0.0f, 0.0f);
-		arrow.end() = glm::vec3(5.0f, 1.0f, 0.0f);
-
-		const SceneObjectId appendedId = SceneSystem::AppendSceneArrow(windowState, arrow);
-		EXPECT_FALSE(windowState.sceneRegistry.FindObject(appendedId));
-
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-		EXPECT_TRUE(windowState.sceneRegistry.FindObject(appendedId));
-	}
-
-	// task/40 Fix A contract - two objects appended in the same batch, synced once, both resolve and
-	// keep distinct ids (the failure mode Bug A actually produced: a creation path that never syncs
-	// at all, silently dropping the new arrow from every registry-mediated lookup).
-	TEST(SceneObjectModelTests, BatchAppendThenSingleSyncResolvesEveryNewArrow)
-	{
-		RendererWindowState windowState = BuildAnnotatedWindow();
-		RendererWindowState::SceneArrow first;
-		first.start() = glm::vec3(5.0f, 0.0f, 0.0f);
-		first.end() = glm::vec3(5.0f, 1.0f, 0.0f);
-		RendererWindowState::SceneArrow second;
-		second.start() = glm::vec3(6.0f, 0.0f, 0.0f);
-		second.end() = glm::vec3(6.0f, 1.0f, 0.0f);
-
-		const SceneObjectId firstId = SceneSystem::AppendSceneArrow(windowState, first);
-		const SceneObjectId secondId = SceneSystem::AppendSceneArrow(windowState, second);
-		ASSERT_NE(firstId, secondId);
-
-		windowState.selectedSceneArrows = {firstId, secondId};
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-
-		const std::vector<std::size_t> indices =
-			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
-		EXPECT_EQ(indices.size(), 2u); // this is the exact check that was silently empty in Bug A
-	}
 } // namespace DefectStudio::Tests

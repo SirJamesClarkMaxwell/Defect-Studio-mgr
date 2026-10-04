@@ -27,13 +27,11 @@ namespace DefectStudio
 		{
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
-			windowState.selectedSceneArrows.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
 			windowState.selectedScenePaths.clear();
-			windowState.sceneArrowQuickEditActive = false;
 		}
 	} // namespace
 

@@ -52,10 +52,6 @@ namespace DefectStudio::Tests
 		labels.selectedFreeLabels = {SceneObjectId{2}};
 		EXPECT_TRUE(HasSelectedSceneObjectsForHide(labels));
 
-		RendererWindowState arrows;
-		arrows.selectedSceneArrows = {SceneObjectId{3}};
-		EXPECT_TRUE(HasSelectedSceneObjectsForHide(arrows));
-
 		RendererWindowState orbitals;
 		orbitals.selectedSceneOrbitals = {SceneObjectId{4}};
 		EXPECT_TRUE(HasSelectedSceneObjectsForHide(orbitals));
@@ -117,23 +113,16 @@ namespace DefectStudio::Tests
 		orbital.selectedSceneOrbitals = {SceneObjectId{3}};
 		EXPECT_EQ(ResolveSelectedDrawingKind(orbital), SceneObjectEditKind::Orbital);
 
-		RendererWindowState arrow;
-		arrow.selectedSceneArrows = {SceneObjectId{4}};
-		EXPECT_EQ(ResolveSelectedDrawingKind(arrow), SceneObjectEditKind::Arrow);
-
 		RendererWindowState mixed;
 		mixed.selectedScenePaths = {SceneObjectId{1}};
 		mixed.selectedScenePlanes = {SceneObjectId{2}};
 		mixed.selectedSceneOrbitals = {SceneObjectId{3}};
-		mixed.selectedSceneArrows = {SceneObjectId{4}};
-		EXPECT_EQ(ResolveSelectedDrawingKind(mixed), SceneObjectEditKind::Arrow);
-		mixed.selectedSceneArrows.clear();
 		EXPECT_EQ(ResolveSelectedDrawingKind(mixed), SceneObjectEditKind::Orbital);
 		mixed.selectedSceneOrbitals.clear();
 		EXPECT_EQ(ResolveSelectedDrawingKind(mixed), SceneObjectEditKind::Plane);
 	}
 
-	TEST(ScenePathShortcutsTests, DeleteRemovesPathsAloneAndAlongsideArrows)
+	TEST(ScenePathShortcutsTests, DeleteRemovesPathsAloneAndAlongsidePlanes)
 	{
 		RendererWindowState pathOnly;
 		const SceneObjectId pathId = AddPath(pathOnly, MakePath(1));
@@ -144,16 +133,16 @@ namespace DefectStudio::Tests
 
 		RendererWindowState mixed;
 		const SceneObjectId mixedPathId = AddPath(mixed, MakePath(2));
-		RendererWindowState::SceneArrow arrow;
-		arrow.id = mixed.sceneRegistry.AllocateObjectId();
-		mixed.sceneArrows.push_back(arrow);
+		RendererWindowState::ScenePlane plane;
+		plane.id = mixed.sceneRegistry.AllocateObjectId();
+		mixed.scenePlanes.push_back(plane);
 		mixed.selectedScenePaths = {mixedPathId};
-		mixed.selectedSceneArrows = {arrow.id};
+		mixed.selectedScenePlanes = {plane.id};
 		EXPECT_TRUE(ExecuteSceneObjectEditAction(
 			mixed, SceneObjectEditKind::Path, SceneObjectEditAction::Delete));
 		EXPECT_TRUE(ExecuteSceneObjectEditAction(
-			mixed, SceneObjectEditKind::Arrow, SceneObjectEditAction::Delete));
+			mixed, SceneObjectEditKind::Plane, SceneObjectEditAction::Delete));
 		EXPECT_TRUE(mixed.paths->Store().Empty());
-		EXPECT_TRUE(mixed.sceneArrows.empty());
+		EXPECT_TRUE(mixed.scenePlanes.empty());
 	}
 } // namespace DefectStudio::Tests

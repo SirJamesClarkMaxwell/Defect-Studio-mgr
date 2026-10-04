@@ -118,8 +118,7 @@ namespace DefectStudio
 		std::vector<glm::vec3> points = {glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)}; // at least 2
 		std::optional<glm::vec3> controlPoint;
 		int curveSegments = 24;
-		// IO round-trips stable names only. Renderer/Scene/SceneObjectPersistence owns conversion to
-		// RendererWindowState::ArrowTip and all knowledge of what these names look like.
+		// IO round-trips the stable v1 tip names; path migration interprets them.
 		std::string startTip = "None";
 		std::string endTip = "Plain";
 		// Zero or one stable atom reference per endpoint. Separate vectors preserve which end is

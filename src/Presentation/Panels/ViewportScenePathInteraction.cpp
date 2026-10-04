@@ -165,7 +165,6 @@ namespace DefectStudio
 
 		// Claiming the click clears the other kinds, so the properties panel shows one thing.
 		windowState.selectedFreeLabels.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedVacancies.clear();

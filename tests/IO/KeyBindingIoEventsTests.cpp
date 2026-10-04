@@ -153,6 +153,7 @@ namespace DefectStudio::Tests
 		ASSERT_NE(reverseBinding, loadedBindings.end());
 		EXPECT_EQ(ToString(outlinerBinding->chord), "Ctrl+Shift+O");
 		EXPECT_EQ(ToString(reverseBinding->chord), "Alt+R");
+		EXPECT_EQ(reverseBinding->commandId.value, "renderer.scene_path.reverse");
 
 		const auto chordCount = [&loadedBindings](const KeyChord &chord) {
 			return std::count_if(

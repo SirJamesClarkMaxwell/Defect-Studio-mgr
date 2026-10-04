@@ -24,7 +24,6 @@ namespace DefectStudio
 			};
 			annotations(window.pinnedMeasurements);
 			annotations(window.freeLabels);
-			annotations(window.sceneArrows);
 			annotations(window.sceneOrbitals);
 			annotations(window.scenePlanes);
 			if (window.paths != nullptr)

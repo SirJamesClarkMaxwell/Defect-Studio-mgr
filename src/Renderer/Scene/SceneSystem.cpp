@@ -268,9 +268,6 @@ namespace DefectStudio::SceneSystem
 		for (const entt::entity entity : scene.LabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.LabelEntities().clear();
-		for (const entt::entity entity : scene.ArrowEntities())
-			scene.DestroyEntity(Entity(entity, &scene));
-		scene.ArrowEntities().clear();
 		for (const entt::entity entity : scene.FreeLabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.FreeLabelEntities().clear();
@@ -315,21 +312,6 @@ namespace DefectStudio::SceneSystem
 			scene.FreeLabelEntities().push_back(static_cast<entt::entity>(entity));
 		}
 
-		scene.ArrowEntities().reserve(windowState.sceneArrows.size());
-		for (std::size_t index = 0; index < windowState.sceneArrows.size(); ++index)
-		{
-			RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[index];
-			if (!arrow.id.IsValid())
-				arrow.id = scene.AllocateObjectId();
-			Entity entity = scene.CreateObject(SceneObjectKind::SceneArrow, index, "arrow " + std::to_string(index), arrow.id);
-			arrow.id = entity.GetComponent<SceneObjectComponent>().id;
-			entity.AddComponent<TransformComponent>(TransformComponent{(arrow.start() + arrow.end()) * 0.5f});
-			entity.AddComponent<SelectionComponent>(SelectionComponent{
-				std::find(windowState.selectedSceneArrows.begin(), windowState.selectedSceneArrows.end(), arrow.id) !=
-				windowState.selectedSceneArrows.end()});
-			scene.ArrowEntities().push_back(static_cast<entt::entity>(entity));
-		}
-
 		scene.OrbitalEntities().reserve(windowState.sceneOrbitals.size());
 		for (std::size_t index = 0; index < windowState.sceneOrbitals.size(); ++index)
 		{
@@ -354,7 +336,7 @@ namespace DefectStudio::SceneSystem
 			scene.PathEntities().reserve(paths.Size());
 			for (std::size_t index = 0; index < paths.Size(); ++index)
 			{
-				// No unset-id branch like the arrow block has: PathStore::Insert rejects an unset id,
+				// PathStore::Insert rejects an unset id,
 				// so every stored path already carries one allocated by the window's registry.
 				const ScenePath *storedPath = paths.At(index);
 				if (storedPath == nullptr)
@@ -373,13 +355,6 @@ namespace DefectStudio::SceneSystem
 				scene.PathEntities().push_back(static_cast<entt::entity>(entity));
 			}
 		}
-	}
-
-	SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow)
-	{
-		arrow.id = windowState.sceneRegistry.AllocateObjectId();
-		windowState.sceneArrows.push_back(std::move(arrow));
-		return windowState.sceneArrows.back().id;
 	}
 
 	PathSystem &EnsurePathSystem(RendererWindowState &windowState)
@@ -412,52 +387,6 @@ namespace DefectStudio::SceneSystem
 		return result;
 	}
 
-	void ApplySceneArrowAtomBuffer(
-		RendererWindowState::SceneArrow &arrow,
-		const float startRadius,
-		const float endRadius,
-		const float radiusBuffer)
-	{
-		if (radiusBuffer <= 0.0f)
-			return;
-
-		const glm::vec3 delta = arrow.end() - arrow.start();
-		const float distance = glm::length(delta);
-		const float requested = radiusBuffer * (startRadius + endRadius);
-		if (distance <= 1e-4f || requested <= 1e-4f)
-			return;
-
-		// Keep ten percent of the original direction when the requested gaps overlap rather than
-		// trimming through the far end and drawing the arrow backwards.
-		const float scale = std::min(1.0f, 0.9f * distance / requested);
-		const glm::vec3 direction = delta / distance;
-		arrow.start() += direction * (radiusBuffer * startRadius * scale);
-		arrow.end() -= direction * (radiusBuffer * endRadius * scale);
-	}
-
-	void RefreshAnchoredSceneArrows(RendererWindowState &windowState)
-	{
-		for (RendererWindowState::SceneArrow &arrow : windowState.sceneArrows)
-		{
-			if (!arrow.startAnchorAtom.has_value() && !arrow.endAnchorAtom.has_value())
-				continue;
-
-			// Anchoring owns only the first and last entries; interior path points are never resized or
-			// rebound in 32b-1.
-			arrow.start() = ResolveAnchor(arrow.start(), arrow.startAnchorAtom, windowState.structure);
-			arrow.end() = ResolveAnchor(arrow.end(), arrow.endAnchorAtom, windowState.structure);
-			const float startRadius = arrow.startAnchorAtom.has_value() &&
-				*arrow.startAnchorAtom < windowState.structure.atoms.size()
-				? windowState.structure.atoms[*arrow.startAnchorAtom].radius
-				: 0.0f;
-			const float endRadius = arrow.endAnchorAtom.has_value() &&
-				*arrow.endAnchorAtom < windowState.structure.atoms.size()
-				? windowState.structure.atoms[*arrow.endAnchorAtom].radius
-				: 0.0f;
-			ApplySceneArrowAtomBuffer(arrow, startRadius, endRadius, arrow.atomBuffer);
-		}
-	}
-
 	void UpdateLabelTransforms(SceneRegistry &scene, const RendererWindowState &windowState)
 	{
 		const std::vector<entt::entity> &labelEntities = scene.LabelEntities();
@@ -471,9 +400,6 @@ namespace DefectStudio::SceneSystem
 		}
 		for (std::size_t index = 0; index < scene.FreeLabelEntities().size() && index < windowState.freeLabels.size(); ++index)
 			Entity(scene.FreeLabelEntities()[index], &scene).GetComponent<TransformComponent>().position = windowState.freeLabels[index].worldPosition;
-		for (std::size_t index = 0; index < scene.ArrowEntities().size() && index < windowState.sceneArrows.size(); ++index)
-			Entity(scene.ArrowEntities()[index], &scene).GetComponent<TransformComponent>().position =
-				(windowState.sceneArrows[index].start() + windowState.sceneArrows[index].end()) * 0.5f;
 		for (std::size_t index = 0; index < scene.OrbitalEntities().size() && index < windowState.sceneOrbitals.size(); ++index)
 			Entity(scene.OrbitalEntities()[index], &scene).GetComponent<TransformComponent>().position =
 				ResolveSceneOrbitalCenters(windowState.sceneOrbitals[index], windowState.structure).centroid;
@@ -492,7 +418,6 @@ namespace DefectStudio::SceneSystem
 		};
 		sync(scene.LabelEntities(), windowState.selectedPinnedMeasurements);
 		sync(scene.FreeLabelEntities(), windowState.selectedFreeLabels);
-		sync(scene.ArrowEntities(), windowState.selectedSceneArrows);
 		sync(scene.OrbitalEntities(), windowState.selectedSceneOrbitals);
 	}
 } // namespace DefectStudio::SceneSystem

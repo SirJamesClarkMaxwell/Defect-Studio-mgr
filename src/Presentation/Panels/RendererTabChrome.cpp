@@ -176,7 +176,6 @@ namespace DefectStudio
 			!windowState.structure.atoms.empty() ||
 			!windowState.pinnedMeasurements.empty() ||
 			!windowState.freeLabels.empty() ||
-			!windowState.sceneArrows.empty() ||
 			!windowState.sceneOrbitals.empty() ||
 			!windowState.scenePlanes.empty() ||
 			(windowState.paths != nullptr && !windowState.paths->Store().Empty());

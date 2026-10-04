@@ -9,7 +9,6 @@ namespace DefectStudio
 	enum class SceneObjectEditKind
 	{
 		FreeLabel,
-		Arrow,
 		Orbital,
 		Plane,
 		Path

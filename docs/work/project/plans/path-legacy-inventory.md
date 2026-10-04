@@ -1,4 +1,14 @@
-# Legacy SceneArrow inventory (PathSystem S14 deliverable)
+# Legacy SceneArrow inventory - S16 done (2026-10-04)
+
+Updated 2026-10-04: **S16 done**. Runtime removal and static checks are complete; caller build,
+tests and manual app validation remain pending. Final PowerShell `Select-String` scan of `src` and
+`tests` for `SceneArrow|sceneArrows|selectedSceneArrows|sceneArrow` finds **66 matching lines in
+13 files**, all class S (v1 DTO/parser/migration/save handling/fixtures and their tests). No other
+hits remain. The inventory below records the historical S14 footprint, not live runtime code.
+
+See [task 64 report](../tasks/64-path-legacy-removal-report.md) for deleted/changed files, test ports,
+decisions and the exact remaining-hit inventory.
+
 
 Generated 2026-10-02 on `task/48-path-s14` with
 `grep -rlE "SceneArrow|sceneArrows|selectedSceneArrows|sceneArrow" src tests` - **81 files**

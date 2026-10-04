@@ -31,7 +31,7 @@ namespace DefectStudio
 	// Random 128-bit key as 32 lowercase hex chars.
 	[[nodiscard]] std::string GenerateScenePersistKey();
 
-	// Gives every pinned measurement / free label / scene arrow with an empty persistKey a fresh one.
+	// Gives every persisted scene annotation with an empty persistKey a fresh one.
 	// Called from SceneSystem's annotation sync, so every creation site is covered in one place.
 	void EnsureScenePersistKeys(RendererWindowState &window);
 

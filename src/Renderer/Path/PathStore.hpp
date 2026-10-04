@@ -34,7 +34,7 @@ namespace DefectStudio
 	// and the things that must NOT be copied (the caches) live in PathSystem, not here.
 	//
 	// Ids come from the window's SceneRegistry and are never allocated here: a path is a scene object
-	// and shares the one id space with atoms, arrows and orbitals.
+	// and shares the one id space with atoms, labels and orbitals.
 	class PathStore
 	{
 	public:

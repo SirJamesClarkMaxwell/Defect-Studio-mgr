@@ -8,7 +8,6 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -41,45 +40,6 @@ namespace DefectStudio
 		event.position = computeViewportWorldPosition(windowState, relX, relY);
 		eventBus->Publish(event);
 		return true;
-	}
-
-	// Blender-style "adjust last operation" panel for a just-added SceneArrow - set active by every
-	// Add Arrow entry point (Shift+A menu, right-click Add submenu, ObjectPropertiesPanel's own
-	// "+ Add arrow" button). Anchored to THIS window's own viewport image (not the whole app), bottom
-	// -left, so it reads as belonging to the arrow just added here. Closes itself - no explicit close
-	// button needed beyond "Done" - the moment selection moves away from the arrow it was opened for
-	// (Escape, clicking something else, deleting it), since at that point selectedSceneArrows no
-	// longer matches sceneArrowQuickEditIndex exactly.
-	void RendererPanel::renderSceneArrowQuickEditPanel(
-		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize)
-	{
-		if (!windowState.sceneArrowQuickEditActive)
-			return;
-		if (windowState.sceneArrowQuickEditIndex >= windowState.sceneArrows.size() ||
-			windowState.selectedSceneArrows.size() != 1 ||
-			AnnotationIndex(windowState.sceneArrows, windowState.selectedSceneArrows[0]) != windowState.sceneArrowQuickEditIndex)
-		{
-			windowState.sceneArrowQuickEditActive = false;
-			return;
-		}
-
-		ImGui::SetNextWindowPos(
-			ImVec2(imageOrigin.x + 12.0f, imageOrigin.y + imageSize.y - 12.0f), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-		constexpr ImGuiWindowFlags kFlags =
-			ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize;
-		// "###..." + windowId keeps this popup's ImGui identity distinct per structure window - same
-		// reason renderStructureWindow's own imguiWindowLabel does, otherwise two windows with an
-		// active quick-edit at once would collide onto the same popup.
-		const std::string popupLabel = "Add Arrow###SceneArrowQuickEdit_" + windowState.windowId;
-		if (ImGui::Begin(popupLabel.c_str(), nullptr, kFlags))
-		{
-			DrawSceneArrowEditor(
-				windowState, windowState.sceneArrowQuickEditIndex, SceneArrowEditorMode::Compact,
-				m_Layer.GetGlobalSettings());
-			if (ImGui::Button("Done"))
-				windowState.sceneArrowQuickEditActive = false;
-		}
-		ImGui::End();
 	}
 
 	// Right-click viewport context menu. Delete/Hide/Duplicate/Copy/Paste/Select All route through

@@ -115,13 +115,13 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		const SceneObjectId id = Add(window, Path(window, 1));
 		window.selectedScenePaths = {SceneObjectId{99}};
-		ApplyLabelRegionSelection(window, {}, {}, {}, RendererEvents::Viewport::RegionSelectMode::Replace,
+		ApplyLabelRegionSelection(window, {}, {}, RendererEvents::Viewport::RegionSelectMode::Replace,
 			{id});
 		EXPECT_EQ(window.selectedScenePaths, std::vector<SceneObjectId>({id}));
-		ApplyLabelRegionSelection(window, {}, {}, {}, RendererEvents::Viewport::RegionSelectMode::Add,
+		ApplyLabelRegionSelection(window, {}, {}, RendererEvents::Viewport::RegionSelectMode::Add,
 			{id});
 		EXPECT_EQ(window.selectedScenePaths.size(), 1u);
-		ApplyLabelRegionSelection(window, {}, {}, {}, RendererEvents::Viewport::RegionSelectMode::Subtract,
+		ApplyLabelRegionSelection(window, {}, {}, RendererEvents::Viewport::RegionSelectMode::Subtract,
 			{id});
 		EXPECT_TRUE(window.selectedScenePaths.empty());
 	}

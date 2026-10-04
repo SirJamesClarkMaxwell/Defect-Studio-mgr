@@ -1,4 +1,4 @@
-﻿#include "Core/dspch.hpp"
+#include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportTextEditor.hpp"
 
@@ -172,7 +172,6 @@ namespace DefectStudio
 		const SceneObjectId id = label.id;
 		window.freeLabels.push_back(std::move(label));
 		window.selectedPinnedMeasurements.clear();
-		window.selectedSceneArrows.clear();
 		window.selectedSceneOrbitals.clear();
 		window.selectedScenePlanes.clear();
 		window.selectedScenePaths.clear();

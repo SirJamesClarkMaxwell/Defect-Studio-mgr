@@ -352,6 +352,10 @@ Displacement arrows untouched.
 
 ## S16 — legacy removal
 
+**Status: S16 done (2026-10-04).** Runtime removal and static reference checks complete; caller
+project regeneration, build/tests and manual app validation pending. See
+[task 64 report](../tasks/64-path-legacy-removal-report.md).
+
 Delete per the inventory: `SceneArrow` types and `RendererWindowState::sceneArrows/selectedSceneArrows/…`,
 `SceneArrowGeometry`, `SceneArrowEditorWidget`, `SceneArrowOperations`, `ViewportSceneArrowInteraction`, arrow
 shaders and draw passes, legacy tests, legacy wrappers, `SceneObjectKind::SceneArrow`. Regenerate projects, Debug +

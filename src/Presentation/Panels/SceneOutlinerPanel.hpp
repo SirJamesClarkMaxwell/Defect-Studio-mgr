@@ -19,7 +19,7 @@ namespace DefectStudio
 	class JobSystem;
 	class CopyWindowStateJob;
 
-	// The ordered registry-backed rows used by the label, arrow, and orbital outliner groups.
+	// The ordered registry-backed rows used by the label, path, and orbital outliner groups.
 	// Planes deliberately bypass this path and walk RendererWindowState::scenePlanes directly.
 	[[nodiscard]] std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
 		const SceneRegistry &scene, SceneObjectKind kind);
@@ -57,8 +57,8 @@ namespace DefectStudio
 		void drawAtomRow(
 			RendererWindowState &windowState, std::size_t atomIndex,
 			const std::vector<std::size_t> &orderedAtomIndices);
-		// Free labels + pinned bond/angle measurements together ("Labels"), sceneArrows
-		// ("Arrows") and sceneOrbitals ("Orbitals") - child groups under a window row, same nesting shape as
+		// Free labels + pinned bond/angle measurements together ("Labels") and sceneOrbitals
+		// ("Orbitals") - child groups under a window row, same nesting shape as
 		// drawSpeciesGroup/drawAtomRow above, both visibility columns included. Row click selects in
 		// the viewport the same way an atom row's does.
 		void drawLabelsGroup(RendererWindowState &windowState);
@@ -67,10 +67,6 @@ namespace DefectStudio
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawPinnedMeasurementRow(
 			RendererWindowState &windowState, std::size_t pinIndex,
-			const std::vector<SceneObjectId> &orderedIds);
-		void drawArrowsGroup(RendererWindowState &windowState);
-		bool drawSceneArrowRow(
-			RendererWindowState &windowState, std::size_t arrowIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawOrbitalsGroup(RendererWindowState &windowState);
 		bool drawSceneOrbitalRow(
@@ -89,7 +85,6 @@ namespace DefectStudio
 			Atom,
 			FreeLabel,
 			PinnedMeasurement,
-			Arrow,
 			Orbital,
 			Plane,
 			Path

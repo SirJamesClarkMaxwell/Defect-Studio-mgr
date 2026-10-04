@@ -85,40 +85,6 @@ namespace DefectStudio
 		float selected = 0.0f;
 	};
 
-	// One SceneArrow Arrow2D quad. right/up are fully resolved world-space basis vectors, computed
-	// CPU-side in renderSceneArrows/ComputeArrowQuadBasis (camera-facing-plane projection of the
-	// arrow direction for Billboard, fixed world-plane axes for FixedPlane) - so unlike
-	// OpenGlLabelInstance's billboard math, arrow_quad.vert needs no camera uniform of its own.
-	// halfSize/outlineWidth/headHalfWidth/headLength all arrive here already converted from
-	// SceneArrow::ArrowStyle's screen-space pixel units to this arrow's own local world-space scale
-	// (renderSceneArrows does that conversion via a projection probe, same idea as
-	// RendererPanel::handleFreeLabelInteraction's pixel<->world drag conversion) - the shader itself
-	// stays entirely unit-agnostic, same as before.
-	struct OpenGlArrowQuadInstance
-	{
-		glm::vec3 worldCenter = glm::vec3(0.0f);
-		glm::vec3 right = glm::vec3(1.0f, 0.0f, 0.0f);
-		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-		glm::vec2 halfSize = glm::vec2(0.0f); // x = half arrow length, y = half shaft width
-		glm::vec4 color = glm::vec4(1.0f);
-		glm::vec3 outlineColor = glm::vec3(0.0f);
-		float outlineWidth = 0.0f;
-		float headHalfWidth = 0.0f; // 0 collapses the SDF union's head triangle to a point (no head)
-		float headLength = 0.0f;
-		float selected = 0.0f;
-		float selectionOutlineWidth = 0.0f;
-	};
-
-	// One world-space path/tip mesh per Line or Arrow3D SceneArrow. A geometry hash avoids rebuilding
-	// unchanged paths while keeping the variable point list and curve/tip parameters out of this GL
-	// resource type; Renderer/Scene/SceneArrowGeometry owns that renderer data.
-	struct OpenGlSceneArrowMeshCache
-	{
-		std::uint64_t geometryHash = 0;
-		bool initialized = false;
-		OpenGlMeshHandles mesh;
-	};
-
 	struct OpenGlSceneOrbitalMeshCache
 	{
 		SceneOrbitalMeshKey key;
@@ -210,9 +176,6 @@ namespace DefectStudio
 		std::vector<glm::vec3> cachedCellEdgeVertices;
 		// Index into cachedCellEdgeVertices where the overlay (primitive-cell) edges begin.
 		std::size_t cachedOverlayEdgeFirstVertex = 0;
-		// One entry per SceneArrow slot (used by Line/Arrow3D), indexed by its position - see
-		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
-		std::vector<OpenGlSceneArrowMeshCache> sceneArrowMeshCache;
 		OpenGlMeshHandles scenePlaneMesh;
 		OpenGlMeshHandles vacancyMesh;
 		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
@@ -265,8 +228,6 @@ namespace DefectStudio
 			const std::vector<std::size_t> &selectedPinnedMeasurements = {},
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
 			const std::vector<std::size_t> &selectedFreeLabels = {},
-			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
-			const std::vector<std::size_t> &selectedSceneArrows = {},
 			const std::vector<RendererWindowState::SceneOrbital> &sceneOrbitals = {},
 			const std::vector<std::size_t> &selectedSceneOrbitals = {},
 			const std::vector<RendererWindowState::ScenePlane> &scenePlanes = {},
@@ -332,7 +293,6 @@ namespace DefectStudio
 		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
 		Result<void> createConeMesh(const RendererStaticMeshData &meshData);
 		void createLabelQuadMesh();
-		void createArrowQuadMesh();
 		void createScreenGrid();
 		void createIsosurfaceGeometry();
 		// Lazily allocates `resources`'s per-window isosurface GPU buffers on first use - no-op if
@@ -356,41 +316,13 @@ namespace DefectStudio
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
 			bool showPeriodicBonds = true,
 			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
-		// Atoms-displacement comparison arrows (RendererWindowState::displacementComparison) - one
-		// batched instanced draw for all visible shafts (shared m_CylinderMesh, like renderBonds)
-		// plus one for all visible cone heads (shared m_ConeMesh, already instance-layout-compatible
-		// via createConeMesh but otherwise unused for instancing today - see that function). Unlike
-		// sceneArrows this can be hundreds-to-thousands of auto-generated arrows, so no per-arrow
-		// welded mesh - two shared meshes, CPU-filtered by
-		// displacementComparison->displayThresholdAngstrom each call (no dirty-cache, same choice
-		// renderSceneArrows already makes for its own per-call instance lists). Also draws a ghost
-		// marker (shared m_SphereMesh/"atoms" program) per interstitial-like unmatched comparison
-		// atom. nullptr = no comparison active for this window.
+		// Batched displacement shafts and cone heads use m_CylinderMesh and m_ConeMesh.
+		// Also draws ghost markers for unmatched comparison atoms; nullptr means no comparison.
 		void renderDisplacementArrows(
 			const RendererStructureData &structure,
 			const RendererWindowState::DisplacementComparisonState *displacementComparison,
 			const RendererViewCamera &camera,
 			const RendererGlobalRenderSettings &globalSettings,
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
-		// Figure-annotation arrows (RendererWindowState::sceneArrows). Line draws its shaft through
-		// a per-arrow world-space path/tip mesh cached in resources.sceneArrowMeshCache; Arrow2D draws
-		// through the unchanged straight arrow_quad SDF shader.
-		// Called twice per frame with opposite `renderArrow2D` values (see RenderWindow) so Line/
-		// Arrow3D (world-space, depth-tested, drawn with bonds) and Arrow2D (screen-space sized,
-		// depth-disabled, drawn late with labels - docs/scene_arrow_rework_plan_corrected.md
-		// Section 10) each land in the GL state their own semantics need, without either pass paying
-		// for the other kind's work. viewportPixelSize is the actual framebuffer resolution
-		// (resources.frameBuffer.Width/Height) - needed only by the Arrow2D pass to convert
-		// ArrowStyle's pixel-space geometry into this arrow's local world-space scale via a
-		// projection probe.
-		void renderSceneArrows(
-			const std::vector<RendererWindowState::SceneArrow> &arrows,
-			const std::vector<std::size_t> &selectedArrows,
-			const RendererViewCamera &camera,
-			OpenGlViewportResources &resources,
-			const RendererGlobalRenderSettings &globalSettings,
-			bool renderArrow2D,
-			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderSceneOrbitals(
 			const std::vector<RendererWindowState::SceneOrbital> &orbitals,
@@ -418,10 +350,8 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset);
-		// ScenePaths (task/41). Called twice per frame with opposite `renderAlwaysOnTop`, for the same
-		// reason renderSceneArrows is: PathDepthMode::DepthTest belongs in the early world-space pass
-		// with the structure, PathDepthMode::AlwaysOnTop in the late depth-disabled pass next to
-		// Arrow2D and the labels, and neither should pay for the other kind's work.
+		// Paths use an early depth-tested pass with the structure and a late depth-disabled pass
+		// with labels for PathDepthMode::AlwaysOnTop. Each pass draws only its matching paths.
 		//
 		// This is where S1-S6 meet GL: per path, resolve the LOD bucket from screen density, build the
 		// evaluation key from the store's revisions, and take the tessellated + stroked geometry from
@@ -496,7 +426,6 @@ namespace DefectStudio
 		OpenGlMeshHandles m_CylinderMesh;
 		OpenGlMeshHandles m_ConeMesh;
 		OpenGlMeshHandles m_LabelQuadMesh;
-		OpenGlMeshHandles m_ArrowQuadMesh;
 		// Lazily constructed on first renderLabels() call with showLabels=true - atlas generation
 		// (FreeType + msdfgen) costs real time, no reason to pay it for windows/sessions that never
 		// toggle labels on. Bundled font (see resolveLabelFontPath) same as the app's own UI font.

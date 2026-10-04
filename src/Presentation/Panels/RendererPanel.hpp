@@ -68,10 +68,6 @@ namespace DefectStudio
 			const RendererWindowState &windowState, float relX, float relY) const;
 		void renderViewportContextMenu(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
-		// Blender-style "adjust last operation" popup for a just-added SceneArrow - see
-		// RendererWindowState::sceneArrowQuickEditActive.
-		void renderSceneArrowQuickEditPanel(
-			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);
 
 	private:
 		RendererLayer &m_Layer;

@@ -10,7 +10,7 @@
 
 // Scene text that follows an atom or a vacancy (RendererWindowState::FreeLabel::anchorAtom /
 // anchorVacancy, at most one set): worldPosition = anchor position + anchorOffset. Refreshed every
-// frame next to RefreshAnchoredSceneArrows. A stale anchor index (the atom or vacancy is gone)
+// frame before the viewport interaction chain. A stale anchor index (the atom or vacancy is gone)
 // leaves worldPosition where it was, like the arrow and orbital anchors.
 //
 // Moving an anchored label with G or the gizmo rewrites anchorOffset, not the anchor, so the label

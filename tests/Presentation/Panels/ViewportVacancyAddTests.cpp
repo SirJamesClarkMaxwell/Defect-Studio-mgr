@@ -41,7 +41,6 @@ namespace DefectStudio::Tests
 		RendererWindowState window = WindowWithVacancy();
 		window.selectedVacancies = {0};
 		ASSERT_EQ(AddVacancyBonds(window), 3u);
-		EXPECT_TRUE(window.sceneArrows.empty());
 		ASSERT_NE(window.paths, nullptr);
 		ASSERT_EQ(window.paths->Store().Size(), 3u);
 		ASSERT_EQ(window.selectedScenePaths.size(), 3u);

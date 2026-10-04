@@ -1,4 +1,4 @@
-// Click-select for SceneOrbitals. Sits beside ViewportSceneArrowInteraction and runs after it in
+// Click-select for scene orbitals in
 // the same short-circuit chain, so an arrow drawn through an orbital still wins the click.
 #include "Core/dspch.hpp"
 
@@ -83,7 +83,6 @@ namespace DefectStudio
 		// Claiming the click also means clearing the other kinds' selections, so the properties
 		// panel shows one thing rather than an orbital and a leftover arrow at once.
 		windowState.selectedFreeLabels.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedScenePlanes.clear();
 		windowState.selectedScenePaths.clear();

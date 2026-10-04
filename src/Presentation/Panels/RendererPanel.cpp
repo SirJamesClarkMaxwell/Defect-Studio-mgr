@@ -37,7 +37,6 @@
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Presentation/Panels/PeriodicTableGrid.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Domain/Defects/DefectModel.hpp"
@@ -301,16 +300,14 @@ namespace DefectStudio
 		const Ref<ContextManager> contexts = m_ContextManager.lock();
 		if (hovered && !IsViewportTextEditorActive(windowState) && !ImGui::GetIO().WantTextInput && !windowState.pathEdit.IsActive() && (!contexts || !contexts->IsActive(kPathEditActiveContext)) &&
 			!windowState.modalTransform.has_value() && !windowState.pinnedMeasurementDragging &&
-			!windowState.freeLabelDragging && !windowState.sceneArrowDragging &&
+			!windowState.freeLabelDragging &&
 			!windowState.selectionDragActive && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
 		{
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
-			windowState.selectedSceneArrows.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();
 			windowState.selectedScenePaths.clear();
-			windowState.sceneArrowQuickEditActive = false;
 			Ref<EventBus> eventBus = m_Layer.GetEventBus();
 			if (eventBus != nullptr)
 			{

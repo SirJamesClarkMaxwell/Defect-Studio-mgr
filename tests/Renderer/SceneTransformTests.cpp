@@ -13,9 +13,11 @@
 #include "Core/Commands/Command.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
+#include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -28,16 +30,6 @@ namespace DefectStudio::Tests
 			EXPECT_NEAR(actual.x, expected.x, kEpsilon);
 			EXPECT_NEAR(actual.y, expected.y, kEpsilon);
 			EXPECT_NEAR(actual.z, expected.z, kEpsilon);
-		}
-
-		RendererWindowState::SceneArrow MakeArrow(
-			SceneObjectId id, const glm::vec3 &start, const glm::vec3 &end)
-		{
-			RendererWindowState::SceneArrow arrow;
-			arrow.id = id;
-			arrow.start() = start;
-			arrow.end() = end;
-			return arrow;
 		}
 
 		class AtomPositionSnapshotCommand final : public ICommand
@@ -70,147 +62,6 @@ namespace DefectStudio::Tests
 		};
 	} // namespace
 
-	TEST(SceneTransformTests, ArrowTranslateAlongLatticeAxisMovesBothEndpoints)
-	{
-		RendererWindowState window;
-		window.sceneArrows.push_back(MakeArrow(SceneObjectId{1}, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}));
-		window.sceneArrows[0].points.insert(window.sceneArrows[0].points.begin() + 1, glm::vec3(2.0f, 4.0f, 3.0f));
-		window.sceneArrows[0].startAnchorAtom = 0;
-		window.sceneArrows[0].endAnchorAtom = 1;
-		window.selectedSceneArrows = {SceneObjectId{1}};
-		const SceneTransformSelectionSnapshot snapshot =
-			CaptureSceneTransformSelection(window, SceneArrowTransformTarget::Both);
-
-		TransformBases bases;
-		bases.lattice = glm::mat3(
-			glm::vec3(1.0f, 0.0f, 0.0f),
-			glm::vec3(-0.5f, std::sqrt(3.0f) * 0.5f, 0.0f),
-			glm::vec3(0.0f, 0.0f, 1.0f));
-		ModalTransformSession session = BeginModalTransform(
-			ModalTransformOp::Translate, TransformOrientation::Lattice, bases,
-			glm::vec3(0.0f), glm::vec2(0.0f));
-		session.constraint = TransformConstraint{
-			ConstraintKind::Axis, 1, TransformOrientation::Lattice};
-		session.numericText = "2";
-		SceneTransformDelta delta;
-		delta.spatial = EvaluateModalTransform(
-			session, ModalTransformView{}, glm::vec2(0.0f), SnapMode::Off, TransformSnapSteps{});
-		ApplySceneTransformSelection(
-			window, snapshot, delta, ModalTransformOp::Translate, TransformPivotMode::Median, glm::vec3(0.0f));
-
-		ExpectVec3Near(window.sceneArrows[0].start(), snapshot.arrows[0].points.front() + delta.spatial.translation);
-		ExpectVec3Near(window.sceneArrows[0].points[1], snapshot.arrows[0].points[1] + delta.spatial.translation);
-		ExpectVec3Near(window.sceneArrows[0].end(), snapshot.arrows[0].points.back() + delta.spatial.translation);
-		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
-		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
-	}
-
-	TEST(SceneTransformTests, SelectedArrowTipTranslatesAloneAndCancelRestoresIt)
-	{
-		RendererWindowState window;
-		window.sceneArrows.push_back(MakeArrow(SceneObjectId{4}, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}));
-		window.sceneArrows[0].startAnchorAtom = 0;
-		window.sceneArrows[0].endAnchorAtom = 1;
-		window.selectedSceneArrows = {SceneObjectId{4}};
-		window.sceneArrowGizmoActiveArrowIndex = 0;
-		window.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::End;
-		const SceneTransformSelectionSnapshot snapshot =
-			CaptureSceneTransformSelectionForOperation(window, ModalTransformOp::Translate);
-		const std::vector<glm::vec3> pivotPositions = SceneTransformPivotPositions(snapshot);
-		ASSERT_EQ(pivotPositions.size(), 1u);
-		ExpectVec3Near(pivotPositions.front(), glm::vec3(4.0f, 5.0f, 6.0f));
-
-		TransformBases bases;
-		ModalTransformSession session = BeginModalTransform(
-			ModalTransformOp::Translate, TransformOrientation::Global, bases,
-			pivotPositions.front(), glm::vec2(0.0f));
-		session.constraint = TransformConstraint{
-			ConstraintKind::Axis, 0, TransformOrientation::Global};
-		session.numericText = "2";
-		SceneTransformDelta delta;
-		delta.spatial = EvaluateModalTransform(
-			session, ModalTransformView{}, glm::vec2(0.0f), SnapMode::Off, TransformSnapSteps{});
-		ApplySceneTransformSelection(
-			window, snapshot, delta, ModalTransformOp::Translate,
-			TransformPivotMode::Median, pivotPositions.front());
-
-		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(1.0f, 2.0f, 3.0f));
-		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(6.0f, 5.0f, 6.0f));
-		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
-		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
-		RestoreSceneTransformSelection(window, snapshot);
-		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(1.0f, 2.0f, 3.0f));
-		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(4.0f, 5.0f, 6.0f));
-		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, std::optional<std::size_t>(0));
-		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, std::optional<std::size_t>(1));
-	}
-
-	TEST(SceneTransformTests, ArrowRotateUsesMedianPivot)
-	{
-		RendererWindowState window;
-		window.sceneArrows.push_back(MakeArrow(SceneObjectId{1}, {1.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}));
-		window.sceneArrows[0].startAnchorAtom = 0;
-		window.sceneArrows[0].endAnchorAtom = 1;
-		window.selectedSceneArrows = {SceneObjectId{1}};
-		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
-		const glm::vec3 pivot = ComputeTransformPivot(
-			TransformPivotMode::Median, SceneTransformPivotPositions(snapshot), std::nullopt);
-		SceneTransformDelta delta;
-		delta.spatial.rotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-		ApplySceneTransformSelection(
-			window, snapshot, delta, ModalTransformOp::Rotate, TransformPivotMode::Median, pivot);
-
-		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(2.0f, -1.0f, 0.0f));
-		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(2.0f, 1.0f, 0.0f));
-		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
-		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
-	}
-
-	TEST(SceneTransformTests, ArrowScaleAlongAxisMovesEndpointsAndCancelRestoresGeometry)
-	{
-		RendererWindowState window;
-		RendererWindowState::SceneArrow arrow =
-			MakeArrow(SceneObjectId{8}, {1.0f, 2.0f, 2.0f}, {3.0f, 4.0f, 4.0f});
-		arrow.style.shaftWidth = 0.08f;
-		arrow.style.headWidth = 0.18f;
-		arrow.style.headLength = 0.27f;
-		arrow.startAnchorAtom = 0;
-		arrow.endAnchorAtom = 1;
-		window.sceneArrows.push_back(arrow);
-		window.selectedSceneArrows = {arrow.id};
-		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
-		const glm::vec3 pivot = ComputeTransformPivot(
-			TransformPivotMode::Median, SceneTransformPivotPositions(snapshot), std::nullopt);
-
-		ModalTransformSession session = BeginModalTransform(
-			ModalTransformOp::Scale, TransformOrientation::Global, TransformBases{}, pivot, glm::vec2(0.0f));
-		session.constraint = TransformConstraint{
-			ConstraintKind::Axis, 2, TransformOrientation::Global};
-		session.numericText = "2";
-		SceneTransformDelta delta;
-		delta.spatial = EvaluateModalTransform(
-			session, ModalTransformView{}, glm::vec2(0.0f), SnapMode::Off, TransformSnapSteps{});
-		delta.scaleFactor = 2.0f;
-
-		ApplySceneTransformSelection(
-			window, snapshot, delta, ModalTransformOp::Scale, TransformPivotMode::Median, pivot);
-
-		ExpectVec3Near(window.sceneArrows[0].start(), glm::vec3(1.0f, 2.0f, 1.0f));
-		ExpectVec3Near(window.sceneArrows[0].end(), glm::vec3(3.0f, 4.0f, 5.0f));
-		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.shaftWidth, arrow.style.shaftWidth);
-		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.headWidth, arrow.style.headWidth);
-		EXPECT_FLOAT_EQ(window.sceneArrows[0].style.headLength, arrow.style.headLength);
-		EXPECT_FALSE(window.sceneArrows[0].startAnchorAtom.has_value());
-		EXPECT_FALSE(window.sceneArrows[0].endAnchorAtom.has_value());
-
-		RestoreSceneTransformSelection(window, snapshot);
-		ExpectVec3Near(window.sceneArrows[0].start(), arrow.start());
-		ExpectVec3Near(window.sceneArrows[0].end(), arrow.end());
-		EXPECT_EQ(window.sceneArrows[0].startAnchorAtom, arrow.startAnchorAtom);
-		EXPECT_EQ(window.sceneArrows[0].endAnchorAtom, arrow.endAnchorAtom);
-	}
-
 	TEST(SceneTransformTests, RestoringSelectionCancelsLabelTransform)
 	{
 		RendererWindowState window;
@@ -235,22 +86,32 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(window.freeLabels[0].style.scale, label.style.scale);
 	}
 
-	TEST(SceneTransformTests, MixedAtomAndArrowConfirmCreatesOneUndoEntryAndRestoresBoth)
+	TEST(SceneTransformTests, MixedAtomAndPathConfirmCreatesOneUndoEntryAndRestoresBoth)
 	{
 		RendererWindowState window;
 		window.windowId = "mixed";
 		window.structure.atoms.emplace_back();
 		window.structure.atoms[0].cartesianPosition = glm::vec3(0.0f);
 		window.selectedAtomIndices = {0};
-		window.sceneArrows.push_back(MakeArrow(SceneObjectId{3}, {0.0f, 1.0f, 0.0f}, {0.0f, 2.0f, 0.0f}));
-		window.selectedSceneArrows = {SceneObjectId{3}};
+		ScenePath path;
+		path.transform.position = glm::vec3(0.0f, 1.0f, 0.0f);
+		path.nodes = {{AllocateElementId(path), glm::vec3(0.0f), {}},
+			{AllocateElementId(path), glm::vec3(0.0f, 1.0f, 0.0f), {}}};
+		path.segments = {{AllocateElementId(path), LineSegmentData{}}};
+		ASSERT_TRUE(ValidatePath(path).empty());
+		const SceneObjectId pathId = SceneSystem::AppendScenePath(window, path);
+		window.selectedScenePaths = {pathId};
 		const glm::vec3 atomBefore = window.structure.atoms[0].cartesianPosition;
 		const SceneObjectsSnapshot sceneBefore = CaptureSceneObjectsSnapshot(window);
-		const SceneTransformSelectionSnapshot transformBefore = CaptureSceneTransformSelection(window);
+		SceneTransformSelectionSnapshot transformBefore = CaptureSceneTransformSelection(window);
+		// The application records atom and scene changes in one group when both are committed.
+		transformBefore.atoms = {{0, atomBefore}};
 		SceneTransformDelta delta;
 		delta.spatial.translation = glm::vec3(2.0f, 0.0f, 0.0f);
 		ApplySceneTransformSelection(
 			window, transformBefore, delta, ModalTransformOp::Translate, TransformPivotMode::Median, glm::vec3(0.0f));
+		ASSERT_EQ(window.structure.atoms[0].cartesianPosition, atomBefore + delta.spatial.translation);
+		ASSERT_EQ(window.paths->Store().Find(pathId)->transform.position, path.transform.position + delta.spatial.translation);
 
 		UndoStack stack;
 		auto group = stack.ScopedGroup("Move selection");
@@ -262,10 +123,12 @@ namespace DefectStudio::Tests
 
 		ASSERT_TRUE(stack.Undo().HasValue());
 		ExpectVec3Near(window.structure.atoms[0].cartesianPosition, atomBefore);
-		ExpectVec3Near(window.sceneArrows[0].start(), sceneBefore.sceneArrows[0].start());
-		ExpectVec3Near(window.sceneArrows[0].end(), sceneBefore.sceneArrows[0].end());
+		ExpectVec3Near(window.paths->Store().Find(pathId)->transform.position, path.transform.position);
+		ASSERT_TRUE(stack.Redo().HasValue());
+		ExpectVec3Near(window.structure.atoms[0].cartesianPosition, atomBefore + delta.spatial.translation);
+		ExpectVec3Near(window.paths->Store().Find(pathId)->transform.position, path.transform.position + delta.spatial.translation);
 	}
-	// --- Task 31 #14: the gizmo must move orbitals and planes, not only atoms, labels and arrows.
+	// --- Task 31 #14: the gizmo must move orbitals and planes, not only atoms, labels and paths.
 
 	namespace
 	{

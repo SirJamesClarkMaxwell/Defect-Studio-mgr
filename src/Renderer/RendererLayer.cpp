@@ -493,8 +493,6 @@ namespace DefectStudio
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedPinnedMeasurements);
 		const std::vector<std::size_t> selectedFreeLabels =
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedFreeLabels);
-		const std::vector<std::size_t> selectedSceneArrows =
-			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
 		const std::vector<std::size_t> selectedSceneOrbitals =
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneOrbitals);
 		std::vector<std::size_t> selectedScenePlanes;
@@ -524,8 +522,6 @@ namespace DefectStudio
 			selectedPinnedMeasurements,
 			windowState.freeLabels,
 			selectedFreeLabels,
-			windowState.sceneArrows,
-			selectedSceneArrows,
 			windowState.sceneOrbitals,
 			selectedSceneOrbitals,
 			windowState.scenePlanes,
@@ -620,7 +616,6 @@ namespace DefectStudio
 		// this is centralized instead of inlined at each of the two call sites.
 		previewState.pinnedMeasurements = source.pinnedMeasurements;
 		previewState.freeLabels = source.freeLabels;
-		previewState.sceneArrows = source.sceneArrows;
 		previewState.sceneOrbitals = source.sceneOrbitals;
 		previewState.scenePlanes = source.scenePlanes;
 		if (source.paths != nullptr) SceneSystem::EnsurePathSystem(previewState).ReplaceStore(source.paths->Store());
@@ -1032,10 +1027,6 @@ namespace DefectStudio
 		m_GlobalRenderSettings.bondRadiusMultiplier = config.bondRadiusMultiplier;
 		m_GlobalRenderSettings.colorSaturation = config.colorSaturation;
 		m_GlobalRenderSettings.viewportSupersample = config.viewportSupersample;
-		m_GlobalRenderSettings.arrowHeadBulgeStrength = config.arrowHeadBulgeStrength;
-		m_GlobalRenderSettings.arrowDefaultShaftWidthRatio = config.arrowDefaultShaftWidthRatio;
-		m_GlobalRenderSettings.arrowDefaultHeadWidthRatio = config.arrowDefaultHeadWidthRatio;
-		m_GlobalRenderSettings.arrowDefaultHeadLengthRatio = config.arrowDefaultHeadLengthRatio;
 		m_GlobalRenderSettings.orbitSensitivity = config.orbitSensitivity;
 		m_GlobalRenderSettings.panSensitivity = config.panSensitivity;
 		m_GlobalRenderSettings.zoomSensitivity = config.zoomSensitivity;
@@ -1143,10 +1134,6 @@ namespace DefectStudio
 		m_GlobalRenderSettings.bondRadiusMultiplier = std::clamp(m_GlobalRenderSettings.bondRadiusMultiplier, 0.1f, 4.0f);
 		m_GlobalRenderSettings.colorSaturation = std::clamp(m_GlobalRenderSettings.colorSaturation, 0.0f, 2.0f);
 		m_GlobalRenderSettings.viewportSupersample = std::clamp(m_GlobalRenderSettings.viewportSupersample, 1.0f, 3.0f);
-		m_GlobalRenderSettings.arrowHeadBulgeStrength = std::clamp(m_GlobalRenderSettings.arrowHeadBulgeStrength, 0.0f, 1.0f);
-		m_GlobalRenderSettings.arrowDefaultShaftWidthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultShaftWidthRatio, 0.001f, 0.5f);
-		m_GlobalRenderSettings.arrowDefaultHeadWidthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultHeadWidthRatio, 0.001f, 1.0f);
-		m_GlobalRenderSettings.arrowDefaultHeadLengthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultHeadLengthRatio, 0.001f, 1.0f);
 		m_GlobalRenderSettings.orbitSensitivity = std::clamp(m_GlobalRenderSettings.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.panSensitivity = std::clamp(m_GlobalRenderSettings.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.zoomSensitivity = std::clamp(m_GlobalRenderSettings.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -1752,10 +1739,7 @@ namespace DefectStudio
 		pin.rotationOffsetRadians = 0.0f;
 	}
 
-	// notes.txt pt. 15 - single in-process style clipboard shared by every pinned/free label, mirroring
-	// GetArrowStyleClipboard (SceneArrowEditorWidget.hpp/ObjectPropertiesPanel.cpp, 29469cb). Unlike
-	// arrows, LabelStyle has no separate "geometry" fields to split out - it IS the whole style - so
-	// there's only one clipboard, not a Geometry/Style pair.
+	// In-process style clipboard shared by pinned measurements and free labels.
 	std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard()
 	{
 		static std::optional<RendererWindowState::LabelStyle> clipboard;
@@ -2428,7 +2412,7 @@ namespace DefectStudio
 	bool HasSelectedSceneObjectsForHide(const RendererWindowState &windowState)
 	{
 		return !windowState.selectedPinnedMeasurements.empty() || !windowState.selectedFreeLabels.empty() ||
-			!windowState.selectedSceneArrows.empty() || !windowState.selectedSceneOrbitals.empty() ||
+			!windowState.selectedSceneOrbitals.empty() ||
 			!windowState.selectedScenePlanes.empty() || !windowState.selectedScenePaths.empty();
 	}
 
@@ -2485,7 +2469,7 @@ namespace DefectStudio
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 
 		// Labels aren't part of the ECS selection sync above (plain std::vector fields, not entities)
-		// - same pickLabels-gated trio (pinned measurements + free labels + scene arrows) box/circle-
+		// - same pickLabels-gated labels (pinned measurements + free labels) box/circle-
 		// select already treats as one group (RendererPanel::handleBoxSelectDrag/handleCircleSelectDrag),
 		// and the reason "select all bond-labels" (2026-08-29 feedback) needs no new shortcut of its
 		// own - Ctrl+A while in labels-pickable mode now covers it directly.
@@ -2497,9 +2481,6 @@ namespace DefectStudio
 			windowState->selectedFreeLabels.clear();
 			for (std::size_t index = 0; index < windowState->freeLabels.size(); ++index)
 				windowState->selectedFreeLabels.push_back(windowState->freeLabels[index].id);
-			windowState->selectedSceneArrows.clear();
-			for (std::size_t index = 0; index < windowState->sceneArrows.size(); ++index)
-				windowState->selectedSceneArrows.push_back(windowState->sceneArrows[index].id);
 		}
 	}
 

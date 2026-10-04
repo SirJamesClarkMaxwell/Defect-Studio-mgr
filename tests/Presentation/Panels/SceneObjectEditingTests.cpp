@@ -1,43 +1,11 @@
 #include <gtest/gtest.h>
 
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
-	TEST(SceneObjectEditingTests, EraseSceneArrowsResyncsRegistryAndOutlinerRows)
-	{
-		RendererWindowState window;
-		for (int index = 0; index < 3; ++index)
-		{
-			RendererWindowState::SceneArrow arrow;
-			arrow.id = window.sceneRegistry.AllocateObjectId();
-			window.sceneArrows.push_back(arrow);
-		}
-		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
-		const SceneObjectId deletedId = window.sceneArrows[1].id;
-		const std::vector<SceneObjectId> expectedRowIds{window.sceneArrows[0].id, window.sceneArrows[2].id};
-		window.selectedSceneArrows = {deletedId};
-
-		EraseSceneArrows(window, {deletedId});
-
-		ASSERT_EQ(window.sceneRegistry.ArrowEntities().size(), 2u);
-		EXPECT_EQ(window.sceneRegistry.ArrowEntityAt(0).GetComponent<SceneObjectComponent>().sourceIndex, 0u);
-		EXPECT_EQ(window.sceneRegistry.ArrowEntityAt(1).GetComponent<SceneObjectComponent>().sourceIndex, 1u);
-		EXPECT_FALSE(window.sceneRegistry.FindObject(deletedId));
-		EXPECT_TRUE(window.selectedSceneArrows.empty());
-
-		const std::vector<std::size_t> rowIndices =
-			CollectSceneOutlinerSourceIndices(window.sceneRegistry, SceneObjectKind::SceneArrow);
-		ASSERT_EQ(rowIndices.size(), 2u);
-		std::vector<SceneObjectId> rowIds;
-		for (const std::size_t index : rowIndices)
-			rowIds.push_back(window.sceneArrows[index].id);
-		EXPECT_EQ(rowIds, expectedRowIds);
-	}
-
 	TEST(SceneObjectEditingTests, EraseSceneOrbitalsResyncsRegistryAndOutlinerRows)
 	{
 		RendererWindowState window;

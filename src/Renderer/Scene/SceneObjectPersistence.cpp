@@ -46,71 +46,6 @@ static RendererWindowState::LabelStyle FromPersisted(const PersistedLabelStyle &
 	p.scale = s.scale;
 	return p;
 }
-[[maybe_unused]] static PersistedArrowStyle ToPersisted(const RendererWindowState::ArrowStyle &s)
-{
-	PersistedArrowStyle p;
-	p.color = s.color;
-	p.alpha = s.alpha;
-	p.shaftWidth = s.shaftWidth;
-	p.dashed = s.dashed;
-	p.dashLength = s.dashLength;
-	p.gapLength = s.gapLength;
-	p.outlineColor = s.outlineColor;
-	p.outlineWidth = s.outlineWidth;
-	p.headWidth = s.headWidth;
-	p.headLength = s.headLength;
-	p.useGradient = s.useGradient;
-	p.gradientStart = s.gradient.start;
-	p.gradientFinish = s.gradient.finish;
-	return p;
-}
-[[maybe_unused]] static RendererWindowState::ArrowStyle FromPersisted(const PersistedArrowStyle &s)
-{
-	RendererWindowState::ArrowStyle p;
-	p.color = s.color;
-	p.alpha = s.alpha;
-	p.shaftWidth = s.shaftWidth;
-	p.dashed = s.dashed;
-	p.dashLength = s.dashLength;
-	p.gapLength = s.gapLength;
-	p.outlineColor = s.outlineColor;
-	p.outlineWidth = s.outlineWidth;
-	p.headWidth = s.headWidth;
-	p.headLength = s.headLength;
-	p.useGradient = s.useGradient;
-	p.gradient.start = s.gradientStart;
-	p.gradient.finish = s.gradientFinish;
-	return p;
-}
-
-[[maybe_unused]] static std::string ToPersisted(RendererWindowState::ArrowTip tip)
-{
-	using ArrowTip = RendererWindowState::ArrowTip;
-	switch (tip)
-	{
-		case ArrowTip::None: return "None";
-		case ArrowTip::Plain: return "Plain";
-		case ArrowTip::Barbed: return "Barbed";
-		case ArrowTip::Open: return "Open";
-		case ArrowTip::Bar: return "Bar";
-		case ArrowTip::Circle: return "Circle";
-	}
-	return "None";
-}
-
-[[maybe_unused]] static RendererWindowState::ArrowTip FromPersisted(
-	const std::string &name, RendererWindowState::ArrowTip fallback)
-{
-	using ArrowTip = RendererWindowState::ArrowTip;
-	if (name == "None") return ArrowTip::None;
-	if (name == "Plain") return ArrowTip::Plain;
-	if (name == "Barbed") return ArrowTip::Barbed;
-	if (name == "Open") return ArrowTip::Open;
-	if (name == "Bar") return ArrowTip::Bar;
-	if (name == "Circle") return ArrowTip::Circle;
-	return fallback;
-}
-
 static std::vector<PersistedAtomRef> PersistAtomReferences(
 	const RendererStructureData &structure, const std::vector<std::size_t> &atomIndices)
 {
@@ -278,7 +213,6 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 {
 	window.pinnedMeasurements.clear();
 	window.freeLabels.clear();
-	window.sceneArrows.clear();
 	window.sceneOrbitals.clear();
 	window.scenePlanes.clear();
 	if (window.paths != nullptr)
@@ -287,7 +221,6 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.selectedScenePaths.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
-	window.selectedSceneArrows.clear();
 	window.selectedSceneOrbitals.clear();
 	std::vector<std::pair<SceneObjectId, std::reference_wrapper<const PersistedScenePath>>> loadedPaths;
 	for (const auto &object : objects)

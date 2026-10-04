@@ -54,8 +54,6 @@ namespace DefectStudio
 		window.gizmoDragActive = false;
 		window.pinnedMeasurementDragging = false;
 		window.freeLabelDragging = false;
-		window.sceneArrowDragging = false;
-		window.sceneArrowQuickEditActive = false;
 		window.selectionDragActive = false;
 		ApplyPersistedSceneObjects(window, objects, warnings);
 		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);

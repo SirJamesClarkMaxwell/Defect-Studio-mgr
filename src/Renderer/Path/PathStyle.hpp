@@ -49,7 +49,7 @@ namespace DefectStudio
 	// third thing, and it was the one kind whose `filled` the mesher did not honour. Files that
 	// name it migrate to { Arrow, filled = false } - see ScenePathPersistence.
 	//
-	// Legacy ArrowTip mapping, still needed until S16 removes SceneArrowGeometry:
+	// Legacy v1 tip mapping used by MigrateArrowToPath:
 	// Plain == Arrow, Barbed == Stealth, Open == Arrow with filled == false.
 	enum class PathDecorationKind
 	{

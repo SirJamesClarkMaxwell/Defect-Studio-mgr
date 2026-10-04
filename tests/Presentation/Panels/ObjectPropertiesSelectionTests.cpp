@@ -21,7 +21,7 @@ namespace DefectStudio::Tests
 		window.selectedAtomIndices = {1, 2};
 		window.selectedPinnedMeasurements = {SceneObjectId{11}};
 		window.selectedFreeLabels = {SceneObjectId{12}};
-		window.selectedSceneArrows = {SceneObjectId{13}};
+		window.selectedScenePaths = {SceneObjectId{13}};
 		window.selectedSceneOrbitals = {SceneObjectId{14}};
 		window.selectedScenePlanes = {SceneObjectId{15}};
 
@@ -29,7 +29,7 @@ namespace DefectStudio::Tests
 
 		EXPECT_TRUE(sections.atoms);
 		EXPECT_TRUE(sections.labels);
-		EXPECT_TRUE(sections.arrows);
+		EXPECT_TRUE(sections.paths);
 		EXPECT_TRUE(sections.orbitals);
 		EXPECT_TRUE(sections.planes);
 		EXPECT_FALSE(sections.Empty());

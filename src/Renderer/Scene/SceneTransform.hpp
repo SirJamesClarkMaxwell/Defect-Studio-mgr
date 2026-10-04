@@ -13,13 +13,6 @@ namespace DefectStudio
 {
 	struct RendererWindowState;
 
-	enum class SceneArrowTransformTarget
-	{
-		Start,
-		End,
-		Both,
-	};
-
 	struct AtomTransformStart
 	{
 		std::size_t index = 0;
@@ -35,16 +28,6 @@ namespace DefectStudio
 		float rotationRadians = 0.0f;
 		float scale = 1.0f;
 		glm::vec3 anchorOffset = glm::vec3(0.0f);
-	};
-
-	struct ArrowTransformStart
-	{
-		std::size_t index = 0;
-		std::vector<glm::vec3> points;
-		std::optional<glm::vec3> controlPoint;
-		std::optional<std::size_t> startAnchorAtom;
-		std::optional<std::size_t> endAnchorAtom;
-		SceneArrowTransformTarget target = SceneArrowTransformTarget::Both;
 	};
 
 	struct OrbitalTransformStart
@@ -123,7 +106,6 @@ namespace DefectStudio
 	{
 		std::vector<AtomTransformStart> atoms;
 		std::vector<LabelTransformStart> labels;
-		std::vector<ArrowTransformStart> arrows;
 		// G/R/S for orbitals and planes: translate moves the centre(s), rotate turns the object
 		// about the pivot (an orbital through its rotationEuler, a plane by carrying its normal and
 		// tangent round), scale grows the drawn size (orbital.scale, plane.halfExtents).
@@ -142,8 +124,8 @@ namespace DefectStudio
 	};
 
 	// Spatial fields come from the shared ModalTransform core. The scalar values preserve the label
-	// and orbital meanings of R/S; arrows use the spatial transform for their complete path, and
-	// planes resolve its linear component against their tangent/bitangent extents.
+	// and orbital meanings of R/S; planes resolve the spatial transform's linear component
+	// against their tangent/bitangent extents.
 	struct SceneTransformDelta
 	{
 		TransformDelta spatial;
@@ -152,12 +134,7 @@ namespace DefectStudio
 	};
 
 	[[nodiscard]] SceneTransformSelectionSnapshot CaptureSceneTransformSelection(
-		const RendererWindowState &window,
-		SceneArrowTransformTarget arrowTarget = SceneArrowTransformTarget::Both);
-	// A single active endpoint is its own Translate item. Rotate and Scale retain the whole-arrow
-	// meanings used before the unified modal driver.
-	[[nodiscard]] SceneTransformSelectionSnapshot CaptureSceneTransformSelectionForOperation(
-		const RendererWindowState &window, ModalTransformOp operation);
+		const RendererWindowState &window);
 	// The anchor is where the gizmo widget stands; the pivot is what the transform maths turns about.
 	// They differ for Bezier handles (the anchor is the handle, the pivot its owner node) and labels
 	// (the anchor is where the label was drawn). With the defect axes in the selection both are the

@@ -227,7 +227,6 @@ namespace DefectStudio
 			{
 				windowState.selectedVacancies.clear();
 				windowState.selectedFreeLabels.clear();
-				windowState.selectedSceneArrows.clear();
 				windowState.selectedPinnedMeasurements.clear();
 				windowState.selectedSceneOrbitals.clear();
 				windowState.selectedScenePlanes.clear();
@@ -262,8 +261,6 @@ namespace DefectStudio
 				if (const auto basis = SceneTransformLocalBasis(one))
 					targets.push_back({std::move(one), *basis});
 			};
-			for (const ArrowTransformStart &arrow : all.arrows)
-				addWithLocalBasis(SceneTransformSelectionSnapshot{.arrows = {arrow}});
 			for (const PlaneTransformStart &plane : all.planes)
 				addWithLocalBasis(SceneTransformSelectionSnapshot{.planes = {plane}});
 			for (const PathTransformStart &path : all.paths)
@@ -326,7 +323,6 @@ namespace DefectStudio
 		{
 			windowState.selectedVacancies.clear();
 			windowState.selectedFreeLabels.clear();
-			windowState.selectedSceneArrows.clear();
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();

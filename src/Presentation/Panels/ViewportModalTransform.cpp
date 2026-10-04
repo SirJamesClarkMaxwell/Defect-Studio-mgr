@@ -297,7 +297,7 @@ namespace DefectStudio
 			return;
 
 		SceneTransformSelectionSnapshot snapshot =
-			CaptureSceneTransformSelectionForOperation(windowState, op);
+			CaptureSceneTransformSelection(windowState);
 		const std::vector<glm::vec3> pivotPositions = SceneTransformPivotPositions(windowState, snapshot);
 		const std::vector<glm::vec3> anchorPositions = SceneTransformAnchorPositions(windowState, snapshot);
 		if (pivotPositions.empty())

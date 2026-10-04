@@ -6,7 +6,6 @@
 #include <iterator>
 #include <utility>
 
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -35,12 +34,11 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: return windowState.selectedFreeLabels;
-			case SceneObjectEditKind::Arrow: return windowState.selectedSceneArrows;
 			case SceneObjectEditKind::Orbital: return windowState.selectedSceneOrbitals;
 			case SceneObjectEditKind::Plane: return windowState.selectedScenePlanes;
 			case SceneObjectEditKind::Path: return windowState.selectedScenePaths;
 			}
-			return windowState.selectedSceneArrows;
+			return windowState.selectedScenePaths;
 		}
 
 		[[nodiscard]] bool ClipboardHasObjects(const SceneObjectEditKind kind)
@@ -48,7 +46,6 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: return !GetSceneFreeLabelClipboard().empty();
-			case SceneObjectEditKind::Arrow: return !GetSceneArrowClipboard().empty();
 			case SceneObjectEditKind::Orbital: return !GetSceneOrbitalClipboard().empty();
 			case SceneObjectEditKind::Plane: return !GetScenePlaneClipboard().empty();
 			case SceneObjectEditKind::Path: return !GetScenePathClipboard().empty();
@@ -168,9 +165,6 @@ namespace DefectStudio
 			case SceneObjectEditKind::FreeLabel:
 				EraseSceneFreeLabels(windowState, windowState.selectedFreeLabels);
 				break;
-			case SceneObjectEditKind::Arrow:
-				EraseSceneArrows(windowState, windowState.selectedSceneArrows);
-				break;
 			case SceneObjectEditKind::Orbital:
 				EraseSceneOrbitals(windowState, windowState.selectedSceneOrbitals);
 				break;
@@ -187,7 +181,6 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: DuplicateSelectedSceneFreeLabels(windowState); break;
-			case SceneObjectEditKind::Arrow: DuplicateSelectedSceneArrows(windowState); break;
 			case SceneObjectEditKind::Orbital: DuplicateSelectedSceneOrbitals(windowState); break;
 			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState); break;
 			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState); break;
@@ -198,7 +191,6 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: CopySceneFreeLabelsToClipboard(windowState); break;
-			case SceneObjectEditKind::Arrow: CopySceneArrowsToClipboard(windowState); break;
 			case SceneObjectEditKind::Orbital: CopySceneOrbitalsToClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: CopyScenePlanesToClipboard(windowState); break;
 			case SceneObjectEditKind::Path: CopyScenePathsToClipboard(windowState); break;
@@ -209,7 +201,6 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: PasteSceneFreeLabelsFromClipboard(windowState); break;
-			case SceneObjectEditKind::Arrow: PasteSceneArrowsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Orbital: PasteSceneOrbitalsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: PasteScenePlanesFromClipboard(windowState); break;
 			case SceneObjectEditKind::Path: PasteScenePathsFromClipboard(windowState); break;

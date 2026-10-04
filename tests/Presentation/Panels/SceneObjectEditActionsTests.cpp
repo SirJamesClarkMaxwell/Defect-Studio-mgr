@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 
@@ -14,7 +14,7 @@ namespace DefectStudio::Tests
 
 		void ClearSceneObjectClipboards()
 		{
-			GetSceneArrowClipboard().clear();
+			GetScenePathClipboard().clear();
 			GetScenePlaneClipboard().clear();
 			GetSceneOrbitalClipboard().clear();
 			GetSceneFreeLabelClipboard().clear();
@@ -117,7 +117,7 @@ namespace DefectStudio::Tests
 		ClearSceneObjectClipboards();
 		RendererWindowState window;
 		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
-			window, SceneObjectEditKind::Arrow, SceneObjectEditAction::Paste));
+			window, SceneObjectEditKind::Path, SceneObjectEditAction::Paste));
 		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::Plane, SceneObjectEditAction::Paste));
 		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
@@ -125,12 +125,12 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::FreeLabel, SceneObjectEditAction::Paste));
 
-		GetSceneArrowClipboard().emplace_back();
+		GetScenePathClipboard().emplace_back();
 		GetScenePlaneClipboard().emplace_back();
 		GetSceneOrbitalClipboard().emplace_back();
 		GetSceneFreeLabelClipboard().emplace_back();
 		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
-			window, SceneObjectEditKind::Arrow, SceneObjectEditAction::Paste));
+			window, SceneObjectEditKind::Path, SceneObjectEditAction::Paste));
 		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::Plane, SceneObjectEditAction::Paste));
 		EXPECT_TRUE(CanExecuteSceneObjectEditAction(

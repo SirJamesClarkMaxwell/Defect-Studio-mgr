@@ -8,7 +8,6 @@ namespace DefectStudio
 	{
 		bool atoms = false;
 		bool labels = false;
-		bool arrows = false;
 		bool orbitals = false;
 		bool planes = false;
 		bool paths = false;

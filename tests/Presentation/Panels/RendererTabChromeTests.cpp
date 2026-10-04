@@ -97,14 +97,6 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(RendererTabHoldsContent(window));
 	}
 
-	TEST(RendererTabHoldsContentTests, SceneArrowMeansWindowHoldsContent)
-	{
-		RendererWindowState window;
-		window.sceneArrows.emplace_back();
-
-		EXPECT_TRUE(RendererTabHoldsContent(window));
-	}
-
 	TEST(RendererTabHoldsContentTests, SceneOrbitalMeansWindowHoldsContent)
 	{
 		RendererWindowState window;
@@ -141,10 +133,10 @@ namespace DefectStudio::Tests
 	TEST(RendererTabHoldsContentTests, RemovingContentLeavesWindowEmpty)
 	{
 		RendererWindowState window;
-		window.sceneArrows.emplace_back();
+		ASSERT_TRUE(SceneSystem::EnsurePathSystem(window).Store().Insert(ScenePath{SceneObjectId{1}}));
 		ASSERT_TRUE(RendererTabHoldsContent(window));
 
-		window.sceneArrows.clear();
+		window.paths->Clear();
 
 		EXPECT_FALSE(RendererTabHoldsContent(window));
 	}

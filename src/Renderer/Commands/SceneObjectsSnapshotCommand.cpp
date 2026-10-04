@@ -106,7 +106,7 @@ namespace DefectStudio
 	SceneObjectsSnapshot CaptureSceneObjectsSnapshot(const RendererWindowState &window)
 	{
 		return {
-			window.pinnedMeasurements, window.freeLabels, window.sceneArrows, window.sceneOrbitals,
+			window.pinnedMeasurements, window.freeLabels, window.sceneOrbitals,
 			window.scenePlanes, window.paths ? window.paths->Store() : PathStore{}};
 	}
 
@@ -114,13 +114,11 @@ namespace DefectStudio
 	{
 		window.pinnedMeasurements = std::move(snapshot.pinnedMeasurements);
 		window.freeLabels = std::move(snapshot.freeLabels);
-		window.sceneArrows = std::move(snapshot.sceneArrows);
 		window.sceneOrbitals = std::move(snapshot.sceneOrbitals);
 		window.scenePlanes = std::move(snapshot.scenePlanes);
 		SceneSystem::EnsurePathSystem(window).ReplaceStore(std::move(snapshot.paths));
 		KeepExistingSelection(window.selectedPinnedMeasurements, window.pinnedMeasurements);
 		KeepExistingSelection(window.selectedFreeLabels, window.freeLabels);
-		KeepExistingSelection(window.selectedSceneArrows, window.sceneArrows);
 		KeepExistingSelection(window.selectedSceneOrbitals, window.sceneOrbitals);
 		KeepExistingSelection(window.selectedScenePlanes, window.scenePlanes);
 		std::erase_if(window.selectedScenePaths, [&window](const SceneObjectId id) {
@@ -133,8 +131,6 @@ namespace DefectStudio
 		window.gizmoDragActive = false;
 		window.pinnedMeasurementDragging = false;
 		window.freeLabelDragging = false;
-		window.sceneArrowDragging = false;
-		window.sceneArrowQuickEditActive = false;
 		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
 		SceneSystem::SyncLabelSelection(window.sceneRegistry, window);
 	}

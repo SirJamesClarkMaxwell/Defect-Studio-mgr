@@ -42,7 +42,7 @@ namespace DefectStudio
 		// --- Stable object identity ---
 
 		// Next unused id for this window. Call at the point an object is *created* (a push_back into
-		// sceneArrows/freeLabels/pinnedMeasurements), not at sync time, so the object is addressable
+		// paths/freeLabels/pinnedMeasurements), not at sync time, so the object is addressable
 		// before the next sync runs.
 		[[nodiscard]] SceneObjectId AllocateObjectId();
 
@@ -128,18 +128,6 @@ namespace DefectStudio
 			return Entity(m_LabelEntities[index], this);
 		}
 
-		// Index -> entity lookup for scene arrows, free labels and scene orbitals, same shape as the
-		// three above. Populated by SceneSystem::SyncLabelEntities.
-		[[nodiscard]] std::vector<entt::entity> &ArrowEntities()
-		{
-			return m_ArrowEntities;
-		}
-
-		[[nodiscard]] const std::vector<entt::entity> &ArrowEntities() const
-		{
-			return m_ArrowEntities;
-		}
-
 		[[nodiscard]] std::vector<entt::entity> &FreeLabelEntities()
 		{
 			return m_FreeLabelEntities;
@@ -172,13 +160,6 @@ namespace DefectStudio
 			return m_PathEntities;
 		}
 
-		[[nodiscard]] Entity ArrowEntityAt(std::size_t index)
-		{
-			if (index >= m_ArrowEntities.size())
-				return Entity{};
-			return Entity(m_ArrowEntities[index], this);
-		}
-
 		[[nodiscard]] Entity FreeLabelEntityAt(std::size_t index)
 		{
 			if (index >= m_FreeLabelEntities.size())
@@ -205,7 +186,6 @@ namespace DefectStudio
 		std::vector<entt::entity> m_AtomEntities;
 		std::vector<entt::entity> m_BondEntities;
 		std::vector<entt::entity> m_LabelEntities;
-		std::vector<entt::entity> m_ArrowEntities;
 		std::vector<entt::entity> m_FreeLabelEntities;
 		std::vector<entt::entity> m_OrbitalEntities;
 		std::vector<entt::entity> m_PathEntities;

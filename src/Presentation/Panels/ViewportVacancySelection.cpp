@@ -117,7 +117,6 @@ namespace DefectStudio
 				windowState.selectedVacancies.clear();
 				SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 				windowState.selectedFreeLabels.clear();
-				windowState.selectedSceneArrows.clear();
 				windowState.selectedPinnedMeasurements.clear();
 				windowState.selectedSceneOrbitals.clear();
 				windowState.selectedScenePlanes.clear();
@@ -156,7 +155,6 @@ namespace DefectStudio
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
 		windowState.selectedFreeLabels.clear();
-		windowState.selectedSceneArrows.clear();
 		windowState.selectedPinnedMeasurements.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedScenePlanes.clear();

@@ -11,14 +11,13 @@
 #include "Core/Input/ContextManager.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
 {
 	namespace
 	{
-		// Match the scene-arrow command's focused-window / sole-window rule for both commands
+		// Use the focused-window / sole-window rule for both commands
 		// and context updates. A stale focused id must not silently target another window.
 		template <typename Layer>
 		[[nodiscard]] auto FindEditWindow(Layer &layer)
@@ -35,7 +34,7 @@ namespace DefectStudio
 		enum class EditAction
 		{
 			Toggle, Leave, Nodes, Segments, Whole, Extend, Insert, DeleteNodes, Reverse,
-			HandleMenu, HandleFree, HandleAligned, HandleVector, HandleAuto, ReverseSelection, LegacyReverseAlias
+			HandleMenu, HandleFree, HandleAligned, HandleVector, HandleAuto, ReverseSelection
 		};
 
 		class ScenePathEditCommand final : public ICommand
@@ -52,18 +51,10 @@ namespace DefectStudio
 				auto window = FindEditWindow(layer);
 				if (window == layer.GetWindows().end() || window->modalTransform.has_value())
 					return {};
-				if (m_Action == EditAction::ReverseSelection || m_Action == EditAction::LegacyReverseAlias)
+				if (m_Action == EditAction::ReverseSelection)
 				{
 					if (window->pathEdit.IsActive())
 						return {};
-					// S16 removes this fallback with the legacy command. It remains testable for
-					// legacy-only windows; shipping creation and loading now populate only paths.
-					if (m_Action == EditAction::LegacyReverseAlias && window->selectedScenePaths.empty() &&
-						!window->selectedSceneArrows.empty())
-					{
-						CommandContext legacyContext;
-						return CreateReverseSelectedSceneArrowsCommand(layer)->Execute(legacyContext);
-					}
 					const auto report = ReverseScenePaths(MakeWindowPathEditContext(*window), window->selectedScenePaths);
 					return !report.AnyApplied() && !report.skipped.empty()
 						? Result<void>{report.skipped.front().reason} : Result<void>{};
@@ -118,7 +109,6 @@ namespace DefectStudio
 				case EditAction::HandleAuto:
 					return SetSelectedScenePathHandleType(*window, BezierHandleType::Auto);
 				case EditAction::ReverseSelection:
-				case EditAction::LegacyReverseAlias:
 					break;
 				}
 				return {};
@@ -135,19 +125,14 @@ namespace DefectStudio
 
 	void RegisterScenePathObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer)
 	{
-		for (const auto &[id, action] : {
-			std::pair{"renderer.scene_path.reverse", EditAction::ReverseSelection},
-			std::pair{"renderer.scene_arrow.reverse", EditAction::LegacyReverseAlias}})
-		{
-			const auto result = registry.Register(
-				CommandMeta{CommandID{id}, "Renderer: Reverse selected paths", "Renderer",
-					"Swap the start and end of every selected path in Object Mode.", {}, CommandFlags::None},
-				[layer = std::ref(rendererLayer), action](CommandContext &) -> Unique<ICommand> {
-					return CreateUnique<ScenePathEditCommand>(layer.get(), action, "Reverse selected paths");
-				});
-			if (!result)
-				DS_LOG_WARN("Path reverse command '{}' registration failed: {}", id, result.Error().technicalDetails);
-		}
+		const auto result = registry.Register(
+			CommandMeta{CommandID{"renderer.scene_path.reverse"}, "Renderer: Reverse selected paths", "Renderer",
+				"Swap the start and end of every selected path in Object Mode.", {}, CommandFlags::None},
+			[layer = std::ref(rendererLayer)](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<ScenePathEditCommand>(layer.get(), EditAction::ReverseSelection, "Reverse selected paths");
+			});
+		if (!result)
+			DS_LOG_WARN("Path reverse command registration failed: {}", result.Error().technicalDetails);
 	}
 
 	void RegisterScenePathEditCommands(CommandRegistry &registry, RendererLayer &rendererLayer)
