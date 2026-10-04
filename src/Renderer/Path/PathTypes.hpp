@@ -82,7 +82,14 @@ namespace DefectStudio
 			glm::vec3 offset{0.0f};
 		};
 
-		std::variant<Free, CopyPosition, BondMidpoint, ObjectOrigin> value = Free{};
+		struct CopyVacancy
+		{
+			std::size_t vacancyIndex = 0;
+			glm::vec3 offset{0.0f};
+			float buffer = 0.0f; // endpoint nodes only, in vacancy marker radii
+		};
+
+		std::variant<Free, CopyPosition, BondMidpoint, ObjectOrigin, CopyVacancy> value = Free{};
 	};
 
 	struct PathNode

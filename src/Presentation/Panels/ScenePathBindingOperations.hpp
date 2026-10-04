@@ -15,6 +15,7 @@ namespace DefectStudio
 	//   path.edit_node_required             no session, or the active element is not a node
 	//   path.binding_atoms_required         Bind... with a selected-atom count other than 1 or 2
 	//   path.binding_atom_out_of_range      a selected atom index the window's structure lacks
+	//   path.binding_vacancy_out_of_range   a vacancy index the window's structure lacks
 	//   path.binding_buffer_endpoint_only   a non-zero buffer on an interior node (v2 plan C8)
 	//   path.binding_object_required        select exactly one other scene object
 	//   path.binding_object_unresolved      the object has no available origin

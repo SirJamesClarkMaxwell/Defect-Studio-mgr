@@ -46,6 +46,14 @@ namespace DefectStudio
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound atom is unavailable.");
 					return TransformLocalPosition(path, node.position);
 				}
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
+				{
+					if (context.vacancyPosition)
+						if (const auto vacancy = context.vacancyPosition(binding.vacancyIndex); vacancy && IsFinite(*vacancy))
+							return *vacancy + binding.offset;
+					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound vacancy is unavailable.");
+					return TransformLocalPosition(path, node.position);
+				}
 				else if constexpr (std::is_same_v<Binding, PathBinding::BondMidpoint>)
 				{
 					if (context.atomPosition)
@@ -84,29 +92,47 @@ namespace DefectStudio
 
 		if (path.nodes.size() < 2)
 			return resolved;
+		const auto unbufferedPositions = resolved.positions;
 		for (std::size_t index = 0; index < path.nodes.size(); ++index)
 		{
-			const auto *binding = std::get_if<PathBinding::CopyPosition>(&path.nodes[index].binding.value);
-			if (binding == nullptr || binding->buffer == 0.0f)
+			float buffer = 0.0f;
+			std::optional<float> radius;
+			std::visit([&](const auto &binding) {
+				using Binding = std::decay_t<decltype(binding)>;
+				if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+				{
+					buffer = binding.buffer;
+					if (buffer > 0.0f && context.atomRadius) radius = context.atomRadius(binding.atomIndex);
+				}
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
+				{
+					buffer = binding.buffer;
+					if (buffer > 0.0f && context.vacancyRadius) radius = context.vacancyRadius(binding.vacancyIndex);
+				}
+			}, path.nodes[index].binding.value);
+			if (buffer == 0.0f)
 				continue;
 			if (index != 0 && index + 1 != path.nodes.size())
 			{
-				AddDiagnostic(resolved, PathDiagnosticCode::InteriorNodeBuffer, path.nodes[index].id, "Only endpoint CopyPosition bindings support a buffer.");
+				AddDiagnostic(resolved, PathDiagnosticCode::InteriorNodeBuffer, path.nodes[index].id, "Only endpoint position bindings support a buffer.");
 				continue;
 			}
-			if (binding->buffer <= 0.0f || !context.atomRadius)
+			if (std::any_of(resolved.diagnostics.begin(), resolved.diagnostics.end(), [&](const PathDiagnostic &diagnostic) {
+				return diagnostic.element == path.nodes[index].id && diagnostic.code == PathDiagnosticCode::BrokenBinding;
+			}))
 				continue;
-			const std::optional<float> radius = context.atomRadius(binding->atomIndex);
-			if (!radius || !std::isfinite(*radius) || *radius <= 0.0f)
+			if (!std::isfinite(buffer) || buffer <= 0.0f || !radius || !std::isfinite(*radius) || *radius <= 0.0f)
 				continue;
 			const std::size_t neighbourIndex = index == 0 ? 1 : index - 1;
-			const glm::vec3 delta = resolved.positions[neighbourIndex] - resolved.positions[index];
+			const glm::vec3 delta = unbufferedPositions[neighbourIndex] - unbufferedPositions[index];
 			const float distance = glm::length(delta);
-			const float requested = binding->buffer * *radius;
-			if (!std::isfinite(distance) || distance <= 1.0e-4f || requested <= 1.0e-4f)
+			const float requested = buffer * *radius;
+			if (!std::isfinite(distance) || !std::isfinite(requested) || distance <= 1.0e-4f || requested <= 1.0e-4f)
 				continue;
-			// Mirror SceneSystem's non-inversion clamp: retain ten percent of the original direction.
-			const float scale = std::min(1.0f, 0.9f * distance / requested);
+			// Keep the existing atom non-inversion clamp. If the neighbour was buffered too,
+			// retain ten percent of the REMAINING gap, while using the unbuffered direction.
+			const float availableDistance = glm::length(resolved.positions[neighbourIndex] - resolved.positions[index]);
+			const float scale = std::min(1.0f, 0.9f * availableDistance / requested);
 			resolved.positions[index] += delta / distance * (requested * scale);
 		}
 

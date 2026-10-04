@@ -58,16 +58,6 @@ namespace DefectStudio
 			return nearest;
 		}
 
-		// A vacancy end stops on the marker's edge, the way a bond between atoms ends inside the sphere
-		// instead of crossing to its centre (the marker is translucent, so a line to the centre shows).
-		[[nodiscard]] glm::vec3 VacancyEnd(const RendererVacancyData &vacancy, const glm::vec3 &from)
-		{
-			const glm::vec3 toward = from - vacancy.cartesianPosition;
-			const float length = glm::length(toward);
-			return length > vacancy.radius ? vacancy.cartesianPosition + toward * (vacancy.radius / length)
-											: vacancy.cartesianPosition;
-		}
-
 		[[nodiscard]] ScenePath MakeBondLine(const RendererWindowState &windowState, const glm::vec3 &start,
 			const glm::vec3 &end, const glm::vec3 &startColor, const glm::vec3 &endColor)
 		{
@@ -87,21 +77,27 @@ namespace DefectStudio
 		}
 
 		[[nodiscard]] ScenePath MakeVacancyBond(
-			const RendererWindowState &windowState, std::size_t atomIndex, const RendererVacancyData &vacancy)
+			const RendererWindowState &windowState, std::size_t atomIndex, std::size_t vacancyIndex)
 		{
 			const RendererAtomData &atom = windowState.structure.atoms[atomIndex];
-			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, VacancyEnd(vacancy, atom.cartesianPosition),
+			const RendererVacancyData &vacancy = windowState.structure.vacancies[vacancyIndex];
+			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, vacancy.cartesianPosition,
 				atom.color, vacancy.color);
 			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
+			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{vacancyIndex, {}, 1.0f}};
 			MovePathOriginToCentre(path);
 			return path;
 		}
 
 		[[nodiscard]] ScenePath MakeVacancyPairBond(
-			const RendererWindowState &windowState, const RendererVacancyData &first, const RendererVacancyData &second)
+			const RendererWindowState &windowState, std::size_t firstIndex, std::size_t secondIndex)
 		{
-			ScenePath path = MakeBondLine(windowState, VacancyEnd(first, second.cartesianPosition),
-				VacancyEnd(second, first.cartesianPosition), first.color, second.color);
+			const RendererVacancyData &first = windowState.structure.vacancies[firstIndex];
+			const RendererVacancyData &second = windowState.structure.vacancies[secondIndex];
+			ScenePath path = MakeBondLine(windowState, first.cartesianPosition,
+				second.cartesianPosition, first.color, second.color);
+			path.nodes[0].binding = PathBinding{PathBinding::CopyVacancy{firstIndex, {}, 1.0f}};
+			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{secondIndex, {}, 1.0f}};
 			MovePathOriginToCentre(path);
 			return path;
 		}
@@ -200,7 +196,7 @@ namespace DefectStudio
 		std::vector<SceneObjectId> added;
 		for (const auto &[atom, vacancy] : pairs)
 		{
-			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancies[vacancy]));
+			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancy));
 			if (result)
 				added.push_back(result.Value());
 			else
@@ -209,7 +205,7 @@ namespace DefectStudio
 		for (const auto &[first, second] : vacancyPairs)
 		{
 			const auto result = AddScenePath(
-				MakeSilentPathEditContext(windowState), MakeVacancyPairBond(windowState, vacancies[first], vacancies[second]));
+				MakeSilentPathEditContext(windowState), MakeVacancyPairBond(windowState, first, second));
 			if (result)
 				added.push_back(result.Value());
 			else

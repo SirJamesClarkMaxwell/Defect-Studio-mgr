@@ -220,7 +220,7 @@ namespace DefectStudio
 		TransformBases bases;
 		bases.local = SceneTransformLocalBasis(snapshot);
 		bases.lattice = window.structure.lattice;
-		if (const auto &frame = window.structure.defectFrame; frame && window.showDefectFrame)
+		if (const auto &frame = window.structure.defectFrame)
 			bases.defect = glm::mat3(frame->x, frame->y, frame->z);
 		// Atoms and vacancies have no axes of their own; their Local frame is the defect's.
 		if (!bases.local)

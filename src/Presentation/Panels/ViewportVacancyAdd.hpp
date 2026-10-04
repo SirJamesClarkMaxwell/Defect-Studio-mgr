@@ -13,14 +13,13 @@ namespace DefectStudio
 	// Adds a vacancy marker at `position` (renderer.vacancy.set, one undo step).
 	void AddVacancyAt(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position);
 
-	// "Bonds" from atoms to a vacancy: one Line scene object per pair, start anchored to the atom,
+	// "Bonds" from atoms to a vacancy: one Line scene object per pair, both ends bound to their sources,
 	// coloured atom -> vacancy (two-colour gradient), bond thickness. Each is an ordinary scene path,
 	// so its style is edited on its own. Pairs:
 	//   atoms selected  -> each atom to the one selected vacancy, else to its nearest vacancy
 	//   otherwise       -> each selected vacancy (none selected: every vacancy) to its
 	//                      nearest-neighbour shell of shown atoms
 	// Returns how many were added (one undo step for all).
-	//   ponytail: the vacancy end is a fixed point, it does not follow a later vacancy move.
 	std::size_t AddVacancyBonds(RendererWindowState &windowState);
 
 	// Atoms within 1.15x the nearest shown atom's distance from `position` (the first shell).

@@ -74,6 +74,8 @@ namespace DefectStudio
 						? windowState.structure.atoms[binding.atomIndex].element : "missing";
 					ImGui::Text("Atom #%zu (%s)", binding.atomIndex, element.c_str());
 				}
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
+					ImGui::Text("Vacancy %zu", binding.vacancyIndex);
 				else if constexpr (std::is_same_v<Binding, PathBinding::BondMidpoint>)
 					ImGui::Text("Bond midpoint #%zu-#%zu", binding.atomA, binding.atomB);
 				else
@@ -124,7 +126,7 @@ namespace DefectStudio
 					fields.Float("Offset X", binding.offset.x);
 					fields.Float("Offset Y", binding.offset.y);
 					fields.Float("Offset Z", binding.offset.z);
-					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition> || std::is_same_v<Binding, PathBinding::CopyVacancy>)
 						if (endpoint)
 							fields.Float("Buffer", binding.buffer);
 				}

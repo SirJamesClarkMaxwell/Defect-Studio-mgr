@@ -4,6 +4,8 @@
 
 #include <cmath>
 #include <algorithm>
+#include <optional>
+#include <type_traits>
 #include <utility>
 #include <glm/gtc/quaternion.hpp>
 
@@ -42,25 +44,40 @@ namespace DefectStudio
 				inserted = *result;
 				// The endpoint buffer follows its neighbour. Splitting a curve changes that
 				// direction (and can trigger the 90% clamp), so solve the offset for the same
-				// displayed endpoint while retaining its atom binding and buffer setting.
+				// displayed endpoint while retaining its atom/vacancy binding and buffer setting.
 				for (const auto endpoint : {std::size_t{0}, edited.nodes.size() - 1})
 				{
-					auto binding = std::get_if<PathBinding::CopyPosition>(&edited.nodes[endpoint].binding.value);
-					if (!binding || binding->buffer <= 0) continue;
-					const auto atom = bindings.atomPosition(binding->atomIndex);
-					const auto radius = bindings.atomRadius(binding->atomIndex);
-					if (!atom || !radius || *radius <= 0) continue;
-					const auto neighbour = endpoint == 0 ? 1 : endpoint - 1;
-					const auto position = edited.nodes[endpoint].position;
-					const auto delta = edited.nodes[neighbour].position - position;
-					const float distance = glm::length(delta);
-					const float requested = binding->buffer * *radius;
-					if (requested > 1.0e-4f)
-					{
-						binding->offset = position - *atom;
-						if (distance > 1.0e-5f)
-							binding->offset -= delta / distance * std::min(requested, 9.0f * distance);
-					}
+					std::visit([&](auto &binding) {
+						using Binding = std::decay_t<decltype(binding)>;
+						if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition> || std::is_same_v<Binding, PathBinding::CopyVacancy>)
+						{
+							if (binding.buffer <= 0) return;
+							std::optional<glm::vec3> source;
+							std::optional<float> radius;
+							if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+							{
+								source = bindings.atomPosition(binding.atomIndex);
+								radius = bindings.atomRadius(binding.atomIndex);
+							}
+							else
+							{
+								source = bindings.vacancyPosition(binding.vacancyIndex);
+								radius = bindings.vacancyRadius(binding.vacancyIndex);
+							}
+							if (!source || !radius || *radius <= 0) return;
+							const auto neighbour = endpoint == 0 ? 1 : endpoint - 1;
+							const auto position = edited.nodes[endpoint].position;
+							const auto delta = edited.nodes[neighbour].position - position;
+							const float distance = glm::length(delta);
+							const float requested = binding.buffer * *radius;
+							if (requested > 1.0e-4f)
+							{
+								binding.offset = position - *source;
+								if (distance > 1.0e-5f)
+									binding.offset -= delta / distance * std::min(requested, 9.0f * distance);
+							}
+						}
+					}, edited.nodes[endpoint].binding.value);
 				}
 				const auto inverseRotation = glm::inverse(edited.transform.rotation);
 				for (auto &node : edited.nodes)

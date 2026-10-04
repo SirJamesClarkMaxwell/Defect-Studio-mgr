@@ -126,8 +126,7 @@ namespace DefectStudio
 
 	Result<SceneObjectId> AddScenePathThroughSelectedAtoms(RendererWindowState &windowState, const bool arrow)
 	{
-		// Ends: the selected atoms (bound, so the line follows them) then the selected vacancies (free
-		// at the marker - a vacancy is not something a node can bind to).
+		// Ends: selected atoms, then selected vacancies, bound so both ends follow their sources.
 		struct End
 		{
 			glm::vec3 position;
@@ -141,7 +140,8 @@ namespace DefectStudio
 					PathBinding{PathBinding::CopyPosition{index, {}, buffer}}});
 		for (const auto index : windowState.selectedVacancies)
 			if (index < windowState.structure.vacancies.size())
-				ends.push_back({windowState.structure.vacancies[index].cartesianPosition, PathBinding{}});
+				ends.push_back({windowState.structure.vacancies[index].cartesianPosition,
+					PathBinding{PathBinding::CopyVacancy{index, {}, buffer}}});
 		if (ends.size() != 2)
 			return PathEditSelectionError(
 				"path.two_atoms_required", "Select exactly two atoms or vacancies (Ctrl+click) to draw a segment.");

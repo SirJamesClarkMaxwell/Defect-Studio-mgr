@@ -157,6 +157,10 @@ namespace DefectStudio
 		PathBinding BuildBinding(const PersistedPathBinding &input, const RendererStructureData &structure,
 			const glm::vec3 &position, std::vector<StructuredError> &warnings)
 		{
+			// Keep the indexed binding even if stale; the resolver supplies the authored fallback
+			// and BrokenBinding diagnostic, without silently losing the binding on load.
+			if (input.kind == "CopyVacancy")
+				return PathBinding{PathBinding::CopyVacancy{input.vacancyIndex, input.offset, input.buffer}};
 			if (input.kind == "CopyPosition" && input.atoms.size() == 1)
 			{
 				const auto index = ResolveAtomReference(structure, input.atoms.front());
@@ -261,6 +265,13 @@ namespace DefectStudio
 				{
 					saved.binding.kind = "CopyPosition";
 					saved.binding.atoms = {AtomRef(structure, binding.atomIndex)};
+					saved.binding.offset = binding.offset;
+					saved.binding.buffer = binding.buffer;
+				}
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
+				{
+					saved.binding.kind = "CopyVacancy";
+					saved.binding.vacancyIndex = binding.vacancyIndex;
 					saved.binding.offset = binding.offset;
 					saved.binding.buffer = binding.buffer;
 				}

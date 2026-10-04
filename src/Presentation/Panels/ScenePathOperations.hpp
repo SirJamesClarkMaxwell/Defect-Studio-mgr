@@ -27,7 +27,7 @@ namespace DefectStudio
 	// User-facing segment creation. Both select the new path and record one undo entry.
 	[[nodiscard]] Result<SceneObjectId> AddFreeScenePathSegment(
 		RendererWindowState &windowState, const glm::vec3 &worldPosition, bool arrow);
-	// Through exactly two selected ends: atoms (nodes bound to them) and/or vacancies (free nodes).
+	// Through exactly two selected ends: atoms and/or vacancies, with nodes bound to their sources.
 	[[nodiscard]] Result<SceneObjectId> AddScenePathThroughSelectedAtoms(
 		RendererWindowState &windowState, bool arrow);
 	void SelectAddedScenePaths(RendererWindowState &windowState, std::vector<SceneObjectId> ids);

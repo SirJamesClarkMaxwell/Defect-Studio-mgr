@@ -50,8 +50,9 @@ namespace DefectStudio
 		// task/51: the vacancy markers (RendererStructureData::vacancies). Toggled by the Scene
 		// Outliner's "Vacancies" group eye; per window, like showCellBox.
 		bool showVacancies = true;
-		// The defect's local axes (RendererStructureData::defectFrame): draws the triad AND makes the
-		// 1/2/3 view keys look along x/y/z instead of a/b/c. Eye menu of the horizontal toolbar.
+		// Draws the defect axes (RendererStructureData::defectFrame) and lets them be picked. Hiding
+		// them changes nothing else: the 1/2/3 keys, the Defect orientation and the group-theory frame
+		// keep using them. Eye menu of the horizontal toolbar, Outliner eye, H / Alt+H.
 		bool showDefectFrame = true;
 		// How the defect axes "empty" is drawn (Blender's plain axes): half-length along each axis in
 		// Angstrom, line width in pixels, and whether -x/-y/-z are drawn too.
@@ -299,6 +300,8 @@ namespace DefectStudio
 		std::vector<std::size_t> selectedVacancies;
 		// The defect axes (structure.defectFrame) are selected: gizmo target, Delete, properties.
 		bool defectFrameSelected = false;
+		// Ctrl+D was pressed: start moving the copies (G) on the next frame, once they are the selection.
+		bool duplicateMovePending = false;
 		// Temporary parenting: objects that G/R/S of the selected defect axes carry along, about the
 		// axes' origin. Per session, never saved; stale ids/indices are skipped.
 		//   ponytail: vacancy indices shift when an earlier vacancy is deleted; ids if that bites.

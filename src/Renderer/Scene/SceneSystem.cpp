@@ -27,6 +27,16 @@ namespace DefectStudio::SceneSystem
 				return std::nullopt;
 			return windowState.structure.atoms[index].radius;
 		};
+		context.vacancyPosition = [&windowState](const std::size_t index) -> std::optional<glm::vec3> {
+			if (index >= windowState.structure.vacancies.size())
+				return std::nullopt;
+			return windowState.structure.vacancies[index].cartesianPosition;
+		};
+		context.vacancyRadius = [&windowState](const std::size_t index) -> std::optional<float> {
+			if (index >= windowState.structure.vacancies.size())
+				return std::nullopt;
+			return windowState.structure.vacancies[index].radius;
+		};
 		context.objectOrigin = [&windowState](const SceneObjectId id) -> std::optional<glm::vec3> {
 			// Planes have stable ids but no ECS mirror; their live center is the origin.
 			const std::size_t plane = AnnotationIndex(windowState.scenePlanes, id);

@@ -4,6 +4,7 @@
 #include <variant>
 
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
@@ -54,9 +55,12 @@ namespace DefectStudio::Tests
 		const auto &binding = std::get<PathBinding::CopyPosition>(line.nodes[0].binding.value);
 		EXPECT_EQ(binding.atomIndex, 0u);
 		EXPECT_FLOAT_EQ(binding.buffer, 0.0f);
-		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(line.nodes[1].binding.value));
+		ASSERT_TRUE(std::holds_alternative<PathBinding::CopyVacancy>(line.nodes[1].binding.value));
+		const auto &vacancyBinding = std::get<PathBinding::CopyVacancy>(line.nodes[1].binding.value);
+		EXPECT_EQ(vacancyBinding.vacancyIndex, 0u);
+		EXPECT_FLOAT_EQ(vacancyBinding.buffer, 1.0f);
 		// The vacancy end stops on the marker edge (radius 0.45 by default), not at its centre.
-		const glm::vec3 end = line.transform.position + line.nodes[1].position;
+		const glm::vec3 end = ResolveNodePositions(line, SceneSystem::MakePathBindingContext(window)).positions[1];
 		EXPECT_NEAR(end.x, 0.45f, 1e-5f);
 		EXPECT_NEAR(end.y, 0.0f, 1e-5f);
 		EXPECT_EQ(line.style.profile, StrokeProfile::Round);
@@ -96,10 +100,36 @@ namespace DefectStudio::Tests
 		for (const SceneObjectId id : window.paths->Store().Ids())
 		{
 			const ScenePath &path = *window.paths->Store().Find(id);
-			const glm::vec3 a = path.transform.position + path.nodes[0].position;
-			const glm::vec3 b = path.transform.position + path.nodes[1].position;
-			joined |= std::abs(a.x) < 1e-4f && std::abs(b.x) < 1e-4f && a.y < 0.0f && b.y < 0.0f; // only V0-V1 lies below y = 0
+			if (!std::holds_alternative<PathBinding::CopyVacancy>(path.nodes[0].binding.value))
+				continue;
+			joined = true;
+			ASSERT_TRUE(std::holds_alternative<PathBinding::CopyVacancy>(path.nodes[1].binding.value));
+			const auto &first = std::get<PathBinding::CopyVacancy>(path.nodes[0].binding.value);
+			const auto &last = std::get<PathBinding::CopyVacancy>(path.nodes[1].binding.value);
+			EXPECT_EQ(first.vacancyIndex, 0u);
+			EXPECT_EQ(last.vacancyIndex, 1u);
+			EXPECT_FLOAT_EQ(first.buffer, 1.0f);
+			EXPECT_FLOAT_EQ(last.buffer, 1.0f);
+			const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+			EXPECT_NEAR(resolved.positions[0].y, -0.45f, 1e-5f);
+			EXPECT_NEAR(resolved.positions[1].y, -1.0f, 1e-5f);
 		}
 		EXPECT_TRUE(joined);
+	}
+
+	TEST(ViewportVacancyAddTests, MovingVacancyUpdatesCreatedBondAndCacheRevision)
+	{
+		RendererWindowState window = WindowWithVacancy();
+		window.selectedAtomIndices = {0};
+		ASSERT_EQ(AddVacancyBonds(window), 1u);
+		const auto &line = *window.paths->Store().Find(window.selectedScenePaths.front());
+		const auto context = SceneSystem::MakePathBindingContext(window);
+		const auto before = ResolveNodePositions(line, context);
+		window.structure.vacancies[0].cartesianPosition = glm::vec3(0, 1, 0);
+		const auto after = ResolveNodePositions(line, context);
+		EXPECT_EQ(after.positions[0], before.positions[0]);
+		EXPECT_NE(after.positions[1], before.positions[1]);
+		EXPECT_NEAR(glm::length(after.positions[1] - window.structure.vacancies[0].cartesianPosition), 0.45f, 1e-5f);
+		EXPECT_NE(BindingSourceRevision(line, before), BindingSourceRevision(line, after));
 	}
 } // namespace DefectStudio::Tests

@@ -148,7 +148,7 @@ namespace DefectStudio
 	[[nodiscard]] std::optional<glm::mat3> SceneTransformLocalBasis(
 		const SceneTransformSelectionSnapshot &snapshot);
 	// local = SceneTransformLocalBasis, lattice = the cell, defect = the structure's defect axes
-	// (absent when it has none or they are hidden). A selection without axes of its own (atoms,
+	// (absent when it has none; hidden axes still count). A selection without axes of its own (atoms,
 	// vacancies) gets the defect axes as its Local frame.
 	// The orientation the gizmo and G/R/S use: the chosen one, except that the defect axes, when
 	// they are being transformed, use their own axes instead of Global (X X still gives Global).

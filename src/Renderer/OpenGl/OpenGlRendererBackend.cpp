@@ -2120,6 +2120,9 @@ namespace DefectStudio
 			for (std::size_t pinIndex = 0; pinIndex < pinnedMeasurements.size(); ++pinIndex)
 			{
 				const RendererWindowState::PinnedMeasurement &pin = pinnedMeasurements[pinIndex];
+				// The Outliner eye / H (the export pass already folded the camera column into this).
+				if (!pin.visible)
+					continue;
 				const bool selected = std::find(
 					selectedPinnedMeasurements.begin(), selectedPinnedMeasurements.end(), pinIndex) !=
 					selectedPinnedMeasurements.end();
@@ -2303,6 +2306,8 @@ namespace DefectStudio
 			for (std::size_t labelIndex = 0; labelIndex < freeLabels.size(); ++labelIndex)
 			{
 				const RendererWindowState::FreeLabel &label = freeLabels[labelIndex];
+				if (!label.visible)
+					continue;
 				const bool selected = std::find(selectedFreeLabels.begin(), selectedFreeLabels.end(), labelIndex) !=
 					selectedFreeLabels.end();
 				RendererWindowState::LabelStyle effectiveStyle = label.style;

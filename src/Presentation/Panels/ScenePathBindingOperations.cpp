@@ -111,10 +111,15 @@ namespace DefectStudio
 			using Binding = std::decay_t<decltype(value)>;
 			if constexpr (std::is_same_v<Binding, PathBinding::ObjectOrigin>)
 				return ValidateObjectOrigin(windowState, value.object);
-			else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+			else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition> || std::is_same_v<Binding, PathBinding::CopyVacancy>)
 			{
-				if (value.atomIndex >= windowState.structure.atoms.size())
-					return BindingError("path.binding_atom_out_of_range", "The bound atom is not in this structure.");
+				if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+				{
+					if (value.atomIndex >= windowState.structure.atoms.size())
+						return BindingError("path.binding_atom_out_of_range", "The bound atom is not in this structure.");
+				}
+				else if (value.vacancyIndex >= windowState.structure.vacancies.size())
+					return BindingError("path.binding_vacancy_out_of_range", "The bound vacancy is not in this structure.");
 				if (value.buffer != 0.0f && index.Value() != 0 && index.Value() + 1 != path.nodes.size())
 					return BindingError("path.binding_buffer_endpoint_only", "Only endpoint nodes support a binding buffer.");
 				if (!std::isfinite(value.buffer))

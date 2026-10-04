@@ -237,8 +237,14 @@ namespace DefectStudio::SceneObjectsYaml
 				if (!node.IsMap())
 					return false;
 				binding.kind = node["kind"].as<std::string>(binding.kind);
-				if (binding.kind != "Free" && binding.kind != "CopyPosition" && binding.kind != "BondMidpoint" && binding.kind != "ObjectOrigin")
+				if (binding.kind != "Free" && binding.kind != "CopyPosition" && binding.kind != "CopyVacancy" && binding.kind != "BondMidpoint" && binding.kind != "ObjectOrigin")
 					return false;
+				if (binding.kind == "CopyVacancy")
+				{
+					if (!node["vacancyIndex"])
+						return false;
+					binding.vacancyIndex = node["vacancyIndex"].as<std::size_t>();
+				}
 				if (!ParseAnchors(node["atoms"], binding.atoms))
 					return false;
 				if (node["offset"] && !Vec3(node["offset"], binding.offset))
@@ -247,7 +253,7 @@ namespace DefectStudio::SceneObjectsYaml
 				binding.objectPersistKey = node["objectPersistKey"].as<std::string>(binding.objectPersistKey);
 				if ((binding.kind == "CopyPosition" && binding.atoms.size() != 1) ||
 					(binding.kind == "BondMidpoint" && binding.atoms.size() != 2) ||
-					((binding.kind == "Free" || binding.kind == "ObjectOrigin") && !binding.atoms.empty()))
+					((binding.kind == "Free" || binding.kind == "ObjectOrigin" || binding.kind == "CopyVacancy") && !binding.atoms.empty()))
 					return false;
 				return true;
 			}
@@ -326,6 +332,8 @@ namespace DefectStudio::SceneObjectsYaml
 		void EmitBinding(YAML::Emitter &emit, const PersistedPathBinding &binding)
 		{
 			emit << YAML::Key << "binding" << YAML::Value << YAML::BeginMap << YAML::Key << "kind" << YAML::Value << binding.kind;
+			if (binding.kind == "CopyVacancy")
+				emit << YAML::Key << "vacancyIndex" << YAML::Value << binding.vacancyIndex;
 			EmitAnchors(emit, "atoms", binding.atoms);
 			EmitVec3(emit, "offset", binding.offset);
 			emit << YAML::Key << "buffer" << YAML::Value << binding.buffer << YAML::Key << "objectPersistKey" << YAML::Value << binding.objectPersistKey << YAML::EndMap;

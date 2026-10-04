@@ -128,6 +128,8 @@ namespace DefectStudio
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
+			if (!windowState.pinnedMeasurements[i].visible)
+				continue;
 			if (const auto inside = MouseInLabelQuad(
 					windowState, windowState.labelPickQuads.pinned, i, imageOrigin, imageSize, mousePos))
 			{

@@ -187,13 +187,14 @@ namespace DefectStudio
 	// must not silently reinterpret everyone's saved files.
 	struct PersistedPathBinding
 	{
-		std::string kind = "Free"; // Free | CopyPosition | BondMidpoint | ObjectOrigin
+		std::string kind = "Free"; // Free | CopyPosition | CopyVacancy | BondMidpoint | ObjectOrigin
 		std::vector<PersistedAtomRef> atoms; // CopyPosition: 1, BondMidpoint: 2, otherwise empty
 		glm::vec3 offset = glm::vec3(0.0f);
-		float buffer = 0.0f; // endpoint CopyPosition only
+		float buffer = 0.0f; // endpoint CopyPosition / CopyVacancy only
 		// ObjectOrigin targets another scene object by its persistKey, not by SceneObjectId: ids are
 		// reallocated on every load and would point at whatever happened to take the number.
 		std::string objectPersistKey;
+		std::size_t vacancyIndex = 0; // CopyVacancy only; index into the structure's vacancies
 	};
 
 	struct PersistedPathNode

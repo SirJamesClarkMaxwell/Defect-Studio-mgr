@@ -1417,11 +1417,11 @@ namespace DefectStudio
 
 		// axis 0-2 = a/b/c (real lattice), 3-5 = a*/b*/c* (reciprocal lattice) - mirrors the
 		// toolbar axis buttons (RendererPanelToolbar.cpp), which read the same two matrices.
-		// 0-2 look along the defect's x/y/z instead while its axes are shown; 6-8 = a/b/c always.
+		// 0-2 look along the defect's x/y/z instead when it has axes (shown or hidden); 6-8 = a/b/c always.
 		glm::vec3 axis(0.0f);
 		glm::vec3 up(0.0f, 0.0f, 1.0f);
 		const auto &frame = windowState->structure.defectFrame;
-		if (event.axis <= 2 && frame && windowState->showDefectFrame)
+		if (event.axis <= 2 && frame)
 		{
 			axis = event.axis == 0 ? frame->x : event.axis == 1 ? frame->y : frame->z;
 			up = event.axis == 2 ? frame->y : frame->z;

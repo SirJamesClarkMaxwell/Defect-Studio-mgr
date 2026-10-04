@@ -6,10 +6,12 @@
 #include "Presentation/Panels/ViewportInteraction.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #include <imgui.h>
 
 #include "Presentation/Panels/ViewportGizmo.hpp"
+#include "Presentation/Panels/ViewportModalTransform.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Presentation/Panels/ViewportPathInsert.hpp"
@@ -59,6 +61,16 @@ namespace DefectStudio
 		if (windowState.activeSelectionTool == SelectionToolMode::Text)
 			return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
 				HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered);
+		// Ctrl+D duplicates (atoms through the keymap command, scene objects in the shortcut handler
+		// below) and the copies then follow the mouse, like Blender's Shift+D. G starts a frame later,
+		// once the copies are the selection; Escape / right click leaves them where they were made.
+		if (std::exchange(windowState.duplicateMovePending, false) && !windowState.modalTransform.has_value())
+			BeginViewportModalTransform(
+				windowState, ModalTransformOp::Translate, glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y));
+		const ImGuiIO &io = ImGui::GetIO();
+		if (hovered && io.KeyCtrl && !io.KeyShift && !io.KeyAlt && !windowState.pathEdit.IsActive() &&
+			ImGui::IsKeyPressed(ImGuiKey_D, false))
+			windowState.duplicateMovePending = true;
 		HandlePinnedMeasurementKeyboardShortcuts(windowState, hovered, layer);
 
 		// Short-circuiting `||` is intentional (unlike the keyboard call above): each function's
