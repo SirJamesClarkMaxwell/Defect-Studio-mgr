@@ -28,6 +28,10 @@ namespace DefectStudio::SceneSystem
 			return windowState.structure.atoms[index].radius;
 		};
 		context.objectOrigin = [&windowState](const SceneObjectId id) -> std::optional<glm::vec3> {
+			// Planes have stable ids but no ECS mirror; their live center is the origin.
+			const std::size_t plane = AnnotationIndex(windowState.scenePlanes, id);
+			if (plane < windowState.scenePlanes.size())
+				return windowState.scenePlanes[plane].center;
 			const entt::entity entity = windowState.sceneRegistry.EntityForObjectId(id);
 			if (entity == entt::null || !windowState.sceneRegistry.Registry().all_of<TransformComponent>(entity))
 				return std::nullopt;

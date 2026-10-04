@@ -184,7 +184,65 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
 	}
 
-	TEST_F(ScenePathBindingOperationsTests, ObjectOriginIsRejectedUntilItCanBeReloaded)
+	TEST_F(ScenePathBindingOperationsTests, SelectedObjectOriginBindsAndDetachesWithOneUndoPerCall)
+	{
+		RendererWindowState &window = MakeWindow(0);
+		RendererWindowState::FreeLabel label;
+		label.worldPosition = {7, 8, 9};
+		window.freeLabels.push_back(label);
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		const SceneObjectId labelId = window.freeLabels[0].id;
+		window.selectedFreeLabels = {labelId};
+		ASSERT_TRUE(ResolveSelectedScenePathBindingObject(window));
+		ASSERT_TRUE(BindActiveScenePathNodeToSelectedObjectOrigin(window));
+		ASSERT_TRUE(std::holds_alternative<PathBinding::ObjectOrigin>(Stored(window).nodes[0].binding.value));
+		EXPECT_EQ(std::get<PathBinding::ObjectOrigin>(Stored(window).nodes[0].binding.value).object, labelId);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		ASSERT_TRUE(DetachActiveScenePathNodeKeepingPosition(window));
+		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(Stored(window).nodes[0].binding.value));
+		EXPECT_EQ(Stored(window).nodes[0].position, label.worldPosition);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 2u);
+		ASSERT_TRUE(undoStack->Undo());
+		ASSERT_TRUE(std::holds_alternative<PathBinding::ObjectOrigin>(Stored(window).nodes[0].binding.value));
+		EXPECT_EQ(std::get<PathBinding::ObjectOrigin>(Stored(window).nodes[0].binding.value).object, labelId);
+		ASSERT_TRUE(undoStack->Undo());
+		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(Stored(window).nodes[0].binding.value));
+		EXPECT_EQ(Stored(window).nodes[0].position, glm::vec3(-1, 0, 0));
+		ASSERT_TRUE(undoStack->Redo());
+		EXPECT_TRUE(std::holds_alternative<PathBinding::ObjectOrigin>(Stored(window).nodes[0].binding.value));
+		ASSERT_TRUE(undoStack->Redo());
+		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(Stored(window).nodes[0].binding.value));
+		EXPECT_EQ(Stored(window).nodes[0].position, label.worldPosition);
+	}
+
+	TEST_F(ScenePathBindingOperationsTests, WrongSelectedObjectCountIsRejectedWithoutUndo)
+	{
+		RendererWindowState &window = MakeWindow(0);
+		EXPECT_FALSE(BindActiveScenePathNodeToSelectedObjectOrigin(window));
+		window.freeLabels.resize(2);
+		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+		window.selectedFreeLabels = {window.freeLabels[0].id, window.freeLabels[1].id};
+		EXPECT_FALSE(ResolveSelectedScenePathBindingObject(window));
+		EXPECT_FALSE(BindActiveScenePathNodeToSelectedObjectOrigin(window));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+	}
+
+	TEST_F(ScenePathBindingOperationsTests, SelectedPlaneOriginBindsAndFollowsWithoutAnEntityMirror)
+	{
+		RendererWindowState &window = MakeWindow(0);
+		RendererWindowState::ScenePlane plane;
+		plane.id = window.sceneRegistry.AllocateObjectId();
+		plane.center = {7, 8, 9};
+		window.scenePlanes.push_back(plane);
+		window.selectedScenePlanes = {plane.id};
+		ASSERT_TRUE(BindActiveScenePathNodeToSelectedObjectOrigin(window));
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		EXPECT_EQ(ResolveNodePositions(Stored(window), SceneSystem::MakePathBindingContext(window)).positions[0], plane.center);
+		window.scenePlanes[0].center += glm::vec3(1, 0, 0);
+		EXPECT_EQ(ResolveNodePositions(Stored(window), SceneSystem::MakePathBindingContext(window)).positions[0], window.scenePlanes[0].center);
+	}
+
+	TEST_F(ScenePathBindingOperationsTests, MissingObjectOriginIsRejectedWithoutUndo)
 	{
 		RendererWindowState &window = MakeWindow(0);
 
@@ -192,7 +250,18 @@ namespace DefectStudio::Tests
 			window, PathBinding{PathBinding::ObjectOrigin{SceneObjectId{42}, glm::vec3(0.0f)}});
 
 		ASSERT_FALSE(result);
-		EXPECT_EQ(result.Error().code, "path.binding_kind_unsupported");
+		EXPECT_EQ(result.Error().code, "path.binding_object_unresolved");
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+	}
+
+	TEST_F(ScenePathBindingOperationsTests, PathObjectOriginIsRejectedWithoutUndo)
+	{
+		RendererWindowState &window = MakeWindow(0);
+		const Result<void> result = SetActiveScenePathNodeBinding(
+			window, PathBinding{PathBinding::ObjectOrigin{pathId}});
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.Error().code, "path.object_origin_targets_path");
+		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
 	}
 
 	TEST_F(ScenePathBindingOperationsTests, DetachWritesTheResolvedPositionBackSoTheNodeDoesNotJump)

@@ -5,8 +5,10 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <type_traits>
+#include <utility>
 
 
 namespace DefectStudio
@@ -283,7 +285,7 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 	if (window.paths != nullptr)
 	{
 		window.paths->Store().Visit(
-			[&](const ScenePath &path) { result.emplace_back(ExtractPersistedScenePath(path, window.structure)); });
+			[&](const ScenePath &path) { result.emplace_back(ExtractPersistedScenePath(path, window)); });
 	}
 	return result;
 }
@@ -304,6 +306,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.selectedFreeLabels.clear();
 	window.selectedSceneArrows.clear();
 	window.selectedSceneOrbitals.clear();
+	std::vector<std::pair<SceneObjectId, std::reference_wrapper<const PersistedScenePath>>> loadedPaths;
 	for (const auto &object : objects)
 	{
 		std::visit(
@@ -445,8 +448,11 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					{
 						ScenePath path = built.Value();
 						path.id = window.sceneRegistry.AllocateObjectId();
+						const SceneObjectId id = path.id;
 						if (!SceneSystem::EnsurePathSystem(window).Store().Insert(std::move(path)))
 							warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene path was skipped", "The path id collided while applying scene objects.", "The path was not loaded.", "SceneObjectPersistence", "scene_objects.entry_skipped");
+						else
+							loadedPaths.emplace_back(id, std::cref(value));
 					}
 				}
 				else
@@ -476,6 +482,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 			},
 			object);
 	}
+	for (const auto &[id, persisted] : loadedPaths)
+		ResolveScenePathObjectOriginBindings(window, id, persisted.get(), warnings);
 }
 
 } // namespace DefectStudio

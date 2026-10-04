@@ -71,6 +71,18 @@ namespace DefectStudio
 				return;
 			}
 
+			const Result<SceneObjectId> objectTarget = ResolveSelectedScenePathBindingObject(windowState);
+			ImGui::BeginDisabled(!objectTarget);
+			const bool bindObject = ImGui::Button("Bind to object origin");
+			ImGui::EndDisabled();
+			if (!objectTarget && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("%s", objectTarget.Error().userMessage.c_str());
+			if (bindObject)
+			{
+				ReportPathEditResult(BindActiveScenePathNodeToSelectedObjectOrigin(windowState));
+				return;
+			}
+
 			PathBinding edited = current.Value();
 			if (std::holds_alternative<PathBinding::Free>(edited.value))
 				return;

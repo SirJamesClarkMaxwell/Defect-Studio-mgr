@@ -310,7 +310,7 @@ structures:
 		}
 	}
 
-	TEST(ScenePathPersistenceTests, UnresolvedAndObjectOriginBindingsBecomeFreeWithWarnings)
+	TEST(ScenePathPersistenceTests, UnresolvedAtomsWarnAndObjectOriginIsDeferredToSceneLoad)
 	{
 		PersistedScenePath saved;
 		saved.nodes = {{{3, 3, 3}}, {{4, 3, 3}}};
@@ -327,7 +327,7 @@ structures:
 		ASSERT_EQ(resolved.positions.size(), built.Value().nodes.size());
 		ASSERT_FALSE(resolved.positions.empty());
 		EXPECT_NEAR(glm::distance(resolved.positions[0], glm::vec3(3, 3, 3)), 0.0f, 1.0e-5f);
-		ASSERT_EQ(warnings.size(), 2u);
+		ASSERT_EQ(warnings.size(), 1u);
 		EXPECT_EQ(warnings[0].code, "scene_objects.path_binding_unresolved");
 	}
 

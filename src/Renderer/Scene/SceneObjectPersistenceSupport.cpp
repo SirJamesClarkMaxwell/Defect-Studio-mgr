@@ -80,6 +80,12 @@ void EnsureScenePersistKeys(RendererWindowState &window)
 	}
 }
 
+std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(RendererWindowState &window)
+{
+	EnsureScenePersistKeys(window);
+	return ExtractPersistedSceneObjects(static_cast<const RendererWindowState &>(window));
+}
+
 std::vector<PersistedSceneObject> MergeWindowSceneObjects(const std::vector<std::vector<PersistedSceneObject>> &windows)
 {
 	std::vector<PersistedSceneObject> merged;

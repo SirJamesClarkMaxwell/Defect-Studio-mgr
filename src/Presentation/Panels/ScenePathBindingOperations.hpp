@@ -16,9 +16,9 @@ namespace DefectStudio
 	//   path.binding_atoms_required         Bind... with a selected-atom count other than 1 or 2
 	//   path.binding_atom_out_of_range      a selected atom index the window's structure lacks
 	//   path.binding_buffer_endpoint_only   a non-zero buffer on an interior node (v2 plan C8)
-	//   path.binding_kind_unsupported       ObjectOrigin: persistence cannot reload it yet
-	//                                       (ScenePathPersistence warns and drops it), so offering
-	//                                       it would silently lose the user's binding on reopen
+	//   path.binding_object_required        select exactly one other scene object
+	//   path.binding_object_unresolved      the object has no available origin
+	//   path.object_origin_targets_path     ObjectOrigin may not target a path (runtime rule)
 
 	// The active node's current binding.
 	[[nodiscard]] Result<PathBinding> ResolveActiveScenePathNodeBinding(const RendererWindowState &windowState);
@@ -27,6 +27,11 @@ namespace DefectStudio
 	// CopyPosition, two -> BondMidpoint in selection order. Offset and buffer start at zero, so the
 	// node lands exactly on the atom / the bond midpoint.
 	[[nodiscard]] Result<void> BindActiveScenePathNodeToSelectedAtoms(RendererWindowState &windowState);
+
+	// Exactly one selected scene object, excluding the path being edited. Shared by the button's
+	// availability and the action; validates the live origin and rejects path targets.
+	[[nodiscard]] Result<SceneObjectId> ResolveSelectedScenePathBindingObject(const RendererWindowState &windowState);
+	[[nodiscard]] Result<void> BindActiveScenePathNodeToSelectedObjectOrigin(RendererWindowState &windowState);
 
 	// Replaces the active node's binding wholesale - the Properties panel's offset / buffer edits.
 	// Validates as listed above; a Free binding is accepted and is the same as Detach WITHOUT the

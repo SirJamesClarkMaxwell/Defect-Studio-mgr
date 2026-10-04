@@ -332,7 +332,7 @@ the atomic solver. **Manual round:** the topology matrix and the exact-120° arc
 
 ## S14 — bindings, export, acceptance  *(fifth manual round)*
 
-Status 2026-10-02: live binding resolution in render/export/pick/overlay/region/pivots and the BindingSourceRevision cache key (task 50a); binding UI, Detach-keeping-position and G/R/S-moves-offset (task 50b); legacy inventory in `path-legacy-inventory.md`. **Open:** ObjectOrigin binding (needs a persistence second pass), the saved C3 acceptance scene, and the manual acceptance run.
+Status 2026-10-04: live binding resolution in render/export/pick/overlay/region/pivots and the BindingSourceRevision cache key (task 50a); binding UI, Detach-keeping-position and G/R/S-moves-offset (task 50b); ObjectOrigin persistence second pass and binding UI (task 62, path targets remain excluded by the runtime rule); legacy inventory in `path-legacy-inventory.md`. **Open:** the saved C3 acceptance scene and the manual acceptance run.
 
 Binding UI (atom, bond midpoint, object origin; buffer only on endpoints; explicit detach-vs-edit-offset choice),
 refresh at the place `RefreshAnchoredSceneArrows` runs (`ViewportInteraction.cpp:30`) as a non-mutating resolve;

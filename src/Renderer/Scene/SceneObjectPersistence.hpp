@@ -38,6 +38,8 @@ namespace DefectStudio
 	// Window -> file. A linked pin stores its atoms' current index/element/position; a pin with
 	// linkBroken stores its frozen atom data instead.
 	[[nodiscard]] std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWindowState &window);
+	// Save entry point: assign stable keys before extracting any binding target.
+	[[nodiscard]] std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(RendererWindowState &window);
 
 	// File -> window. Replaces the window's pinnedMeasurements/freeLabels/sceneArrows, clears their
 	// selections (the global UndoStack is left alone). Every object gets a freshly allocated SceneObjectId

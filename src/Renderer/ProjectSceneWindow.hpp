@@ -34,4 +34,6 @@ namespace DefectStudio
 	// The project-scene window's objects in persisted form; empty when there is no such window.
 	// Never reads any other window - structure-backed and ad-hoc empty windows are not project scene.
 	[[nodiscard]] std::vector<PersistedSceneObject> GatherProjectSceneObjects(const RendererLayer &rendererLayer);
+	// Save entry point: ensure stable keys on the project-scene window before extraction.
+	[[nodiscard]] std::vector<PersistedSceneObject> GatherProjectSceneObjects(RendererLayer &rendererLayer);
 } // namespace DefectStudio

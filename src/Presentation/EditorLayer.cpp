@@ -1777,7 +1777,7 @@ namespace DefectStudio
 				std::unordered_map<std::string, std::vector<std::pair<std::string, std::vector<PersistedSceneObject>>>>
 					grouped;
 				std::unordered_map<std::string, StructureId> ids;
-				for (const RendererWindowState &window : rendererLayer->GetWindows())
+				for (RendererWindowState &window : rendererLayer->GetWindows())
 				{
 					if (window.structureId.is_nil())
 						continue;

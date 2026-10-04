@@ -69,4 +69,11 @@ namespace DefectStudio
 			return ExtractPersistedSceneObjects(*window);
 		return {};
 	}
+
+	std::vector<PersistedSceneObject> GatherProjectSceneObjects(RendererLayer &rendererLayer)
+	{
+		if (const auto window = FindProjectSceneWindow(rendererLayer))
+			return ExtractPersistedSceneObjects(*window);
+		return {};
+	}
 } // namespace DefectStudio

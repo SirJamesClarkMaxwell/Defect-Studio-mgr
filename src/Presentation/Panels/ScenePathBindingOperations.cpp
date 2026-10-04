@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cmath>
+#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -33,6 +34,20 @@ namespace DefectStudio
 							return index;
 			return BindingError("path.edit_node_required", "Select an active node in Path Edit Mode.");
 		}
+
+		Result<void> ValidateObjectOrigin(const RendererWindowState &window, SceneObjectId id)
+		{
+			const BindingContext context = SceneSystem::MakePathBindingContext(window);
+			if (context.isScenePath(id))
+				return BindingError("path.object_origin_targets_path", "Object origin bindings may not target paths.");
+			const auto origin = context.objectOrigin(id);
+			const bool persisted = FindAnnotation(window.pinnedMeasurements, id) != nullptr || FindAnnotation(window.freeLabels, id) != nullptr ||
+				FindAnnotation(window.sceneArrows, id) != nullptr || FindAnnotation(window.sceneOrbitals, id) != nullptr ||
+				FindAnnotation(window.scenePlanes, id) != nullptr;
+			if (!id.IsValid() || !persisted || !origin || !std::isfinite(origin->x) || !std::isfinite(origin->y) || !std::isfinite(origin->z))
+				return BindingError("path.binding_object_unresolved", "The bound object origin is unavailable.");
+			return {};
+		}
 	} // namespace
 
 	Result<PathBinding> ResolveActiveScenePathNodeBinding(const RendererWindowState &windowState)
@@ -56,6 +71,36 @@ namespace DefectStudio
 		return SetActiveScenePathNodeBinding(windowState, PathBinding{PathBinding::BondMidpoint{atoms[0], atoms[1]}});
 	}
 
+	Result<SceneObjectId> ResolveSelectedScenePathBindingObject(const RendererWindowState &windowState)
+	{
+		const Result<std::size_t> index = ActiveNodeIndex(windowState);
+		if (!index)
+			return index.Error();
+		SceneObjectId target;
+		std::size_t count = 0;
+		for (const auto &selection : {std::cref(windowState.selectedPinnedMeasurements), std::cref(windowState.selectedFreeLabels),
+			std::cref(windowState.selectedSceneArrows), std::cref(windowState.selectedSceneOrbitals),
+			std::cref(windowState.selectedScenePlanes), std::cref(windowState.selectedScenePaths)})
+			for (const SceneObjectId id : selection.get())
+				if (id != windowState.pathEdit.Path())
+				{
+					target = id;
+					++count;
+				}
+		if (count != 1)
+			return BindingError("path.binding_object_required", "Select exactly one other scene object to bind the node.");
+		const Result<void> valid = ValidateObjectOrigin(windowState, target);
+		return valid ? Result<SceneObjectId>{target} : Result<SceneObjectId>{valid.Error()};
+	}
+
+	Result<void> BindActiveScenePathNodeToSelectedObjectOrigin(RendererWindowState &windowState)
+	{
+		const Result<SceneObjectId> target = ResolveSelectedScenePathBindingObject(windowState);
+		if (!target)
+			return target.Error();
+		return SetActiveScenePathNodeBinding(windowState, PathBinding{PathBinding::ObjectOrigin{target.Value()}});
+	}
+
 	Result<void> SetActiveScenePathNodeBinding(RendererWindowState &windowState, PathBinding binding)
 	{
 		const Result<std::size_t> index = ActiveNodeIndex(windowState);
@@ -65,7 +110,7 @@ namespace DefectStudio
 		const Result<void> valid = std::visit([&](const auto &value) -> Result<void> {
 			using Binding = std::decay_t<decltype(value)>;
 			if constexpr (std::is_same_v<Binding, PathBinding::ObjectOrigin>)
-				return BindingError("path.binding_kind_unsupported", "Object origin bindings cannot be saved and reloaded yet.");
+				return ValidateObjectOrigin(windowState, value.object);
 			else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
 			{
 				if (value.atomIndex >= windowState.structure.atoms.size())

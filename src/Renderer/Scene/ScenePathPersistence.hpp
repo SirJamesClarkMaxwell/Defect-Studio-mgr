@@ -9,6 +9,7 @@
 
 namespace DefectStudio
 {
+	struct RendererWindowState;
 	// DTO <-> ScenePath, and the v1 arrow importer. The boundary is deliberate: IO parses YAML into
 	// PersistedScenePath and knows nothing about what a v1 arrow meant, while everything here is
 	// renderer knowledge - which profile a Billboard arrow becomes, what a tip is called now, which
@@ -28,6 +29,16 @@ namespace DefectStudio
 	// same way every other anchored kind writes them, so a reordered structure file still rebinds.
 	[[nodiscard]] PersistedScenePath ExtractPersistedScenePath(
 		const ScenePath &path, const RendererStructureData &structure);
+
+	// Window-aware extraction also writes ObjectOrigin targets by persistKey. The caller must
+	// ensure keys first; the structure-only overload cannot resolve scene-object identities.
+	[[nodiscard]] PersistedScenePath ExtractPersistedScenePath(
+		const ScenePath &path, const RendererWindowState &window);
+
+	// BuildScenePath leaves ObjectOrigin nodes free until ALL objects have been applied. Resolve
+	// them against the new ids now; missing/ambiguous keys and path targets warn and remain free.
+	void ResolveScenePathObjectOriginBindings(RendererWindowState &window, SceneObjectId pathId,
+		const PersistedScenePath &persisted, std::vector<StructuredError> &outWarnings);
 
 	// v1 -> v2. Takes the DTO rather than a runtime SceneArrow: the file is the source of truth for
 	// a migration, and a v1 arrow that never became a runtime object still has to convert.

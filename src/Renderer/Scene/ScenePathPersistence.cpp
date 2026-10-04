@@ -164,10 +164,7 @@ namespace DefectStudio
 				if (first && second) return PathBinding{PathBinding::BondMidpoint{*first, *second, input.offset}};
 				warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene path binding is unresolved", "BondMidpoint atom references could not be resolved.", "The node keeps its stored position and is treated as free.", "ScenePathPersistence", "scene_objects.path_binding_unresolved");
 			}
-			else if (input.kind == "ObjectOrigin")
-			{
-				warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene path binding is unresolved", "ObjectOrigin bindings require a second scene-object resolution pass.", "The node keeps its stored position and is treated as free.", "ScenePathPersistence", "scene_objects.path_binding_unresolved");
-			}
+			// ObjectOrigin is deferred until every scene object's new id is available.
 			(void)position;
 			return PathBinding{PathBinding::Free{}};
 		}
