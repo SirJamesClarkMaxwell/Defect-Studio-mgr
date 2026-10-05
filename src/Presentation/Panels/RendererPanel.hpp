@@ -9,6 +9,8 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Presentation/Panels/RendererTabChrome.hpp"
+#include "Presentation/Operators/SceneOperatorRegistry.hpp"
+#include "Presentation/Panels/OperatorRedoPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
@@ -75,6 +77,8 @@ namespace DefectStudio
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		WeakRef<DomainLayer> m_DomainLayer;
+		OperatorRedoPanel m_OperatorRedoPanel;
+		SceneOperatorRegistry m_OperatorRegistry;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
 		RendererTabCloseCoordinator m_TabClose;
 		// Snapshot of the right-click's world position, taken the frame the viewport context menu

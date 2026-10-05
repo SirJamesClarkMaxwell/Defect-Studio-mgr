@@ -54,7 +54,8 @@ namespace DefectStudio
 	// (see DrawViewportToolbar's iconButton/queueTransition in ViewportToolbars.cpp) - none of these need undo or a
 	// command-palette entry of their own beyond what's already registered for the keybindings.
 	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer,
-		const WeakRef<CommandRegistry> &commandRegistry)
+		const WeakRef<CommandRegistry> &commandRegistry, OperatorRedoPanel *redoPanel,
+		SceneOperatorRegistry *operatorRegistry)
 	{
 		Ref<EventBus> eventBus = layer.GetEventBus();
 		if (eventBus == nullptr)
@@ -290,7 +291,8 @@ namespace DefectStudio
 		ImGui::SetNextWindowPos(segmentPopupPosition, ImGuiCond_Appearing);
 		if (ImGui::BeginPopup("##AddSegmentPopup"))
 		{
-			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus);
+			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus, false,
+				redoPanel, operatorRegistry);
 			ImGui::EndPopup();
 		}
 
@@ -304,7 +306,8 @@ namespace DefectStudio
 		ImGui::SetNextWindowPos(planePopupPosition, ImGuiCond_Appearing);
 		if (ImGui::BeginPopup("##AddPlanePopup"))
 		{
-			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus);
+			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus, false,
+				redoPanel, operatorRegistry);
 			ImGui::EndPopup();
 		}
 
@@ -327,7 +330,8 @@ namespace DefectStudio
 		ImGui::SetNextWindowPos(orbitalPopupPosition, ImGuiCond_Appearing);
 		if (ImGui::BeginPopup("##AddOrbitalPopup"))
 		{
-			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus);
+			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus, false,
+				redoPanel, operatorRegistry);
 			ImGui::EndPopup();
 		}
 

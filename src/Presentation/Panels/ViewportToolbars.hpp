@@ -8,6 +8,8 @@
 namespace DefectStudio
 {
 	class CommandRegistry;
+	class OperatorRedoPanel;
+	class SceneOperatorRegistry;
 	class RendererLayer;
 	class RendererViewCamera;
 	struct RendererWindowState;
@@ -35,7 +37,8 @@ namespace DefectStudio
 	// they only ever needed a window state and the layer.
 	void DrawViewportToolbar(RendererWindowState &windowState, RendererLayer &layer);
 	void DrawViewportVerticalToolbar(RendererWindowState &windowState, RendererLayer &layer,
-		const WeakRef<CommandRegistry> &commandRegistry);
+		const WeakRef<CommandRegistry> &commandRegistry, OperatorRedoPanel *redoPanel = nullptr,
+		SceneOperatorRegistry *operatorRegistry = nullptr);
 	void DrawViewportTransformControls(RendererWindowState &windowState, RendererLayer &layer, float uiScale);
 	// Frames every atom from the default (1, 1, 0.9) direction - toolbar and navigation gizmo "home".
 	[[nodiscard]] RendererViewCamera ComputeResetViewCamera(const RendererWindowState &windowState);

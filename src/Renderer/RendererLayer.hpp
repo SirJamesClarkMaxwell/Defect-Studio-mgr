@@ -44,6 +44,7 @@ namespace DefectStudio
 	// click/drag edits) can call it without routing through a layer method for no reason.
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState);
 	void PushSceneObjectsUndoSnapshot(RendererWindowState &windowState, RendererWindowState::LabelUndoSnapshot before);
+	[[nodiscard]] WeakRef<UndoStack> GetBoundRendererUndoStack() noexcept;
 	// Pushes only when the hide/show operation changed the hidden atom or bond set.
 	void PushSceneVisibilityUndoSnapshot(
 		RendererWindowState &windowState, HiddenSceneState before, std::string description);

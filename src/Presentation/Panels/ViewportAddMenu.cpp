@@ -10,6 +10,8 @@
 #include "Events/RendererEvents.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/RendererPanelOrbitalMenu.hpp"
+#include "Presentation/Operators/SceneOperatorRegistry.hpp"
+#include "Presentation/Panels/OperatorRedoPanel.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
@@ -87,7 +89,8 @@ namespace DefectStudio
 	}
 
 	void DrawSceneAddMenu(RendererWindowState &windowState, const WeakRef<CommandRegistry> &commands,
-		const glm::vec3 &position, const Ref<EventBus> &eventBus, bool fractionalAtomPosition)
+		const glm::vec3 &position, const Ref<EventBus> &eventBus, bool fractionalAtomPosition,
+		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry)
 	{
 		const auto registry = commands.lock();
 		const bool editable = registry != nullptr;
@@ -111,9 +114,22 @@ namespace DefectStudio
 				count += index < windowState.structure.vacancies.size() ? 1u : 0u;
 		if (ImGui::MenuItem("Zakrzywiona strzałka (C_n)", nullptr, false, atomArrows || count == 2))
 		{
-			const auto result = AddCurvedArrowThroughSelectedAtoms(windowState);
-			if (!result)
-				DS_LOG_WARN("Add curved arrow failed: {}", result.Error().technicalDetails);
+			if (redoPanel != nullptr && operatorRegistry != nullptr)
+			{
+				const SceneOperator *op = operatorRegistry->Find("scene.curved_arrow");
+				if (op != nullptr)
+				{
+					const Result<void> result = redoPanel->RunAndOpen(*op, windowState);
+					if (!result)
+						DS_LOG_WARN("Add curved arrow failed: {}", result.Error().technicalDetails);
+				}
+			}
+			else
+			{
+				const auto result = AddCurvedArrowThroughSelectedAtoms(windowState);
+				if (!result)
+					DS_LOG_WARN("Add curved arrow failed: {}", result.Error().technicalDetails);
+			}
 		}
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Zaznacz co najmniej dwa atomy. Dwa końce: jedna strzałka; trzy lub więcej atomów: zamknięty cykl w dodatnim kierunku obrotu.\n"

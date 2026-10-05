@@ -1689,6 +1689,11 @@ namespace DefectStudio
 			QueueSceneObjectsModified(windowState);
 	}
 
+	WeakRef<UndoStack> GetBoundRendererUndoStack() noexcept
+	{
+		return g_RendererUndoStack;
+	}
+
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState)
 	{
 		PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));

@@ -80,6 +80,7 @@ namespace DefectStudio
 		  m_CommandRegistry(std::move(commandRegistry)),
 		  m_DomainLayer(std::move(domainLayer))
 	{
+		(void)RegisterCurvedArrowOperator(m_OperatorRegistry);
 		if (Ref<CommandRegistry> registry = m_CommandRegistry.lock())
 		{
 			RegisterViewportSceneObjectCommands(*registry, m_Layer);
@@ -107,6 +108,7 @@ namespace DefectStudio
 		  m_AddMenuPositionFractional(other.m_AddMenuPositionFractional),
 		  m_AddMenuScreenPos(other.m_AddMenuScreenPos)
 	{
+		(void)RegisterCurvedArrowOperator(m_OperatorRegistry);
 		// m_TabClose and the active viewport rectangle are deliberately NOT copied: a half-answered
 		// close prompt and a rectangle measured in another panel's frame both belong to the instance
 		// that produced them.
@@ -257,7 +259,8 @@ namespace DefectStudio
 
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		const float horizontalToolbarOffset = windowState.windowId == activeWindowId
-			? DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize, m_CommandRegistry)
+			? DrawViewportToolbarOverlays(windowState, m_Layer, imageOrigin, viewportSize, m_CommandRegistry,
+				&m_OperatorRedoPanel, &m_OperatorRegistry)
 			: 0.0f;
 		DrawViewportPathOverlay(windowState, m_Layer.GetGlobalSettings(), imageOrigin, viewportSize);
 		DrawViewportDefectFrameOverlay(windowState, imageOrigin, viewportSize);
@@ -443,6 +446,12 @@ namespace DefectStudio
 		}
 
 		DrawViewportTextEditor(windowState, imageOrigin, viewportSize);
+		if (m_OperatorRedoPanel.IsOpen())
+			if (const Ref<UndoStack> undoStack = m_Layer.GetUndoStackHandle().lock())
+			{
+				m_OperatorRedoPanel.PollInvalidation(*undoStack, &windowState);
+				m_OperatorRedoPanel.Draw(windowState);
+			}
 		ImGui::SetCursorScreenPos(imageOrigin);
 		ImGui::End();
 	}

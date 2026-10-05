@@ -100,7 +100,8 @@ namespace DefectStudio
 
 		if (ImGui::BeginMenu("Add"))
 		{
-			DrawSceneAddMenu(windowState, m_CommandRegistry, m_ContextMenuWorldPosition, eventBus);
+			DrawSceneAddMenu(windowState, m_CommandRegistry, m_ContextMenuWorldPosition, eventBus, false,
+				&m_OperatorRedoPanel, &m_OperatorRegistry);
 			ImGui::EndMenu();
 		}
 

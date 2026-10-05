@@ -11,6 +11,8 @@ namespace DefectStudio
 {
 	class EventBus;
 	class CommandRegistry;
+	class OperatorRedoPanel;
+	class SceneOperatorRegistry;
 	class RendererLayer;
 	struct RendererWindowState;
 
@@ -76,7 +78,8 @@ namespace DefectStudio
 		RendererLayer &layer,
 		ImVec2 viewportOrigin,
 		ImVec2 viewportSize,
-		const WeakRef<CommandRegistry> &commandRegistry);
+		const WeakRef<CommandRegistry> &commandRegistry, OperatorRedoPanel *redoPanel = nullptr,
+		SceneOperatorRegistry *operatorRegistry = nullptr);
 
 	// Appends a "+" to the central dock node's tab bar and publishes
 	// RendererEvents::Windows::OpenEmptyRequested when it is clicked - the same event Ctrl+T, the
