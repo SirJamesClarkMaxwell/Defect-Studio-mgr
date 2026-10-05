@@ -78,7 +78,7 @@ namespace DefectStudio
 	}
 
 	Result<std::vector<SceneObjectId>> AddCurvedArrowThroughSelectedAtoms(
-		RendererWindowState &window, const CurvedArrowParameters &parameters)
+		RendererWindowState &window, const CurvedArrowParameters &parameters, SceneOperationUndo undo)
 	{
 		std::vector<End> ends;
 		const float buffer = GetScenePathAtomBuffer();
@@ -249,7 +249,8 @@ namespace DefectStudio
 			}
 			ids.push_back(added.Value());
 		}
-		PushSceneObjectsUndoSnapshot(window, std::move(before));
+		if (undo == SceneOperationUndo::Push)
+			PushSceneObjectsUndoSnapshot(window, std::move(before));
 		SelectAddedScenePaths(window, ids);
 		return ids;
 	}

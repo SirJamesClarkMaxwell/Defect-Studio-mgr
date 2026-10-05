@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Presentation/Operators/SceneOperator.hpp"
 #include "Renderer/Path/CurvedArrowParameters.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
 
@@ -18,5 +19,6 @@ namespace DefectStudio
 	// defect z exactly as before. `CurvedArrowAxisMode::DefectZ` asks for the old two-end behaviour.
 	[[nodiscard]] Result<std::vector<SceneObjectId>> AddCurvedArrowThroughSelectedAtoms(
 		RendererWindowState &windowState,
-		const CurvedArrowParameters &parameters = {});
+		const CurvedArrowParameters &parameters = {},
+		SceneOperationUndo undo = SceneOperationUndo::Push);
 }
