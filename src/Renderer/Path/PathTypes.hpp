@@ -144,6 +144,29 @@ namespace DefectStudio
 		glm::vec3 scale{1.0f};
 	};
 
+	// A whole-object binding, as opposed to the per-node PathBinding above. A ring drawn around a
+	// bond cannot bind node by node - none of its nodes sit on an atom - so what follows the atoms
+	// is the path's origin and orientation, not its vertices. That is the Blender Object Mode model
+	// the paths already use: the nodes stay put in local space and the transform moves under them.
+	struct PathTransformBinding
+	{
+		struct Free
+		{
+		};
+
+		// Origin at the midpoint of atomA..atomB, local +z along the bond. Rotation about the bond
+		// is free: `roll` is the user's rotation parameter, kept here so the binding can be
+		// re-resolved without losing where the user put the arc.
+		struct BondFrame
+		{
+			std::size_t atomA = 0;
+			std::size_t atomB = 0;
+			float rollRadians = 0.0f;
+		};
+
+		std::variant<Free, BondFrame> value = Free{};
+	};
+
 	struct ScenePath
 	{
 		SceneObjectId id;
@@ -161,6 +184,9 @@ namespace DefectStudio
 		// it used to be - which is what makes every file written before this load unchanged and the
 		// format version stay where it is.
 		PathTransform transform;
+		// Free by default, so every path built before this - and every file written before it -
+		// keeps the transform it was given and loads unchanged.
+		PathTransformBinding transformBinding;
 	};
 
 	[[nodiscard]] inline PathElementId AllocateElementId(ScenePath &path)

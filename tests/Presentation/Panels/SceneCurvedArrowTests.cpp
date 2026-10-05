@@ -8,6 +8,7 @@
 
 #include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Renderer/Path/CurvedArrowParameters.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
@@ -55,7 +56,7 @@ namespace DefectStudio::Tests
 		window.structure.defectFrame->z = {0, 0, 1};
 		window.structure.atoms = {{"C", {3, 2, 3}}, {"N", {0, 2 + std::sqrt(3.0f), 3}}};
 		window.selectedAtomIndices = {0, 1};
-		const auto added = AddCurvedArrowThroughSelectedAtoms(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
 		ASSERT_EQ(added->size(), 1u);
 		const auto &path = *window.paths->Store().Find(added->front());
@@ -101,7 +102,7 @@ namespace DefectStudio::Tests
 		window.structure.vacancies.push_back({{0, 0, 0}});
 		window.selectedAtomIndices = {0, 1};
 		window.selectedVacancies = {0};
-		const auto added = AddCurvedArrowThroughSelectedAtoms(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
 		ASSERT_EQ(added->size(), 1u);
 		const auto &path = *window.paths->Store().Find(added->front());
@@ -120,7 +121,7 @@ namespace DefectStudio::Tests
 		window.structure.atoms[0].radius = 0.35f;
 		window.structure.atoms[1].radius = 0.55f;
 		window.selectedAtomIndices = {0, 1};
-		const auto added = AddCurvedArrowThroughSelectedAtoms(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
 		const auto &path = *window.paths->Store().Find(added->front());
 		const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
@@ -161,7 +162,7 @@ namespace DefectStudio::Tests
 		window.structure.defectFrame.emplace();
 		window.structure.defectFrame->z = {0, 0, 1};
 		window.selectedAtomIndices = {1, 0};
-		const auto added = AddCurvedArrowThroughSelectedAtoms(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
 		ASSERT_EQ(added->size(), 1u);
 		const auto &path = *window.paths->Store().Find(added->front());
@@ -243,7 +244,7 @@ namespace DefectStudio::Tests
 		window.structure.defectFrame->z = {0, 0, 1};
 		window.structure.atoms = {{"C", {0, 0, 0}}, {"N", {0, 0, 1}}};
 		window.selectedAtomIndices = {0, 1};
-		EXPECT_FALSE(AddCurvedArrowThroughSelectedAtoms(window));
+		EXPECT_FALSE(AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ}));
 		EXPECT_TRUE(!window.paths || window.paths->Store().Empty());
 	}
 
@@ -298,4 +299,137 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(AddCurvedArrowThroughSelectedAtoms(live));
 		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
 	}
+	// --- task/70: the C_2 ring around the bond axis -------------------------------------------
+	//
+	// These are the contract for the bond-axis mode. They assert the arc's PLANE and its distance
+	// from the axis directly: a node count or a passing sweep value would say nothing about whether
+	// the ring actually encircles the bond.
+
+	namespace
+	{
+		// Two carbons 2 A apart on x, centred on the origin, nothing else in the cell.
+		void PrepareBond(RendererWindowState &window, float radiusA = 0.35f, float radiusB = 0.35f)
+		{
+			window.structure.atoms = {{"C", {-1, 0, 0}}, {"C", {1, 0, 0}}};
+			window.structure.atoms[0].radius = radiusA;
+			window.structure.atoms[1].radius = radiusB;
+			window.selectedAtomIndices = {0, 1};
+		}
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeArcLiesInThePlanePerpendicularToTheBond)
+	{
+		RendererWindowState window;
+		PrepareBond(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
+		ASSERT_TRUE(added);
+		ASSERT_EQ(added->size(), 1u);
+		const auto &path = *window.paths->Store().Find(added->front());
+		const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+		// The bond runs along x, so every point of the ring shares the midpoint's x.
+		for (const auto &position : resolved.positions)
+			EXPECT_NEAR(position.x, 0.0f, 1.0e-4f);
+		ASSERT_TRUE(std::holds_alternative<CircularArcSegmentData>(path.segments.front().data));
+		const auto &arc = std::get<CircularArcSegmentData>(path.segments.front().data);
+		EXPECT_NEAR(std::abs(arc.planeNormal.x), 1.0f, 1.0e-4f);
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeRadiusClearsTheLargerSphere)
+	{
+		RendererWindowState window;
+		PrepareBond(window, 0.35f, 0.70f);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
+		ASSERT_TRUE(added);
+		const auto &path = *window.paths->Store().Find(added->front());
+		const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+		// Distance from the bond line, which is the x axis here.
+		for (const auto &position : resolved.positions)
+			EXPECT_GT(glm::length(glm::vec2(position.y, position.z)), 0.70f);
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeSweepIsClampedBelowAFullTurn)
+	{
+		RendererWindowState window;
+		PrepareBond(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(
+			window, {.axisMode = CurvedArrowAxisMode::Bond, .sweepDegrees = 400.0f});
+		ASSERT_TRUE(added);
+		const auto &path = *window.paths->Store().Find(added->front());
+		float total = 0.0f;
+		for (const auto &segment : path.segments)
+			if (std::holds_alternative<CircularArcSegmentData>(segment.data))
+				total += std::abs(std::get<CircularArcSegmentData>(segment.data).signedSweepRadians);
+		EXPECT_LT(total, 2.0f * std::numbers::pi_v<float>);
+		const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+		EXPECT_GT(glm::distance(resolved.positions.front(), resolved.positions.back()), 1.0e-3f);
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeZeroAtomRadiusStillProducesAVisibleArc)
+	{
+		RendererWindowState window;
+		PrepareBond(window, 0.0f, 0.0f);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
+		ASSERT_TRUE(added);
+		const auto &path = *window.paths->Store().Find(added->front());
+		const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+		// Falls back to the bond-fraction rule rather than collapsing onto the axis.
+		for (const auto &position : resolved.positions)
+			EXPECT_GT(glm::length(glm::vec2(position.y, position.z)), 0.1f);
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeRejectsACoincidentPair)
+	{
+		RendererWindowState window;
+		window.structure.atoms = {{"C", {0, 0, 0}}, {"C", {0, 0, 0}}};
+		window.selectedAtomIndices = {0, 1};
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
+		EXPECT_FALSE(added);
+		EXPECT_TRUE(window.paths->Store().Ids().empty());
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeRingFollowsTheAtomsWhenOneMoves)
+	{
+		RendererWindowState window;
+		PrepareBond(window);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
+		ASSERT_TRUE(added);
+		const auto &path = *window.paths->Store().Find(added->front());
+		ASSERT_TRUE(std::holds_alternative<PathTransformBinding::BondFrame>(path.transformBinding.value));
+		const auto before = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+		// Move the second atom along y: the midpoint rises by half of that, and the ring's plane
+		// tilts with the new bond direction.
+		window.structure.atoms[1].cartesianPosition = {1, 2, 0};
+		const auto after = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+		glm::vec3 centreBefore{0.0f}, centreAfter{0.0f};
+		for (const auto &position : before.positions) centreBefore += position / static_cast<float>(before.positions.size());
+		for (const auto &position : after.positions) centreAfter += position / static_cast<float>(after.positions.size());
+		EXPECT_NEAR(centreAfter.y, 1.0f, 1.0e-3f);
+		EXPECT_GT(glm::distance(centreBefore, centreAfter), 0.5f);
+		// The plane turned: the ring no longer lies perpendicular to x.
+		const auto &arc = std::get<CircularArcSegmentData>(path.segments.front().data);
+		const glm::vec3 bond = glm::normalize(glm::vec3(1, 2, 0) - glm::vec3(-1, 0, 0));
+		EXPECT_NEAR(std::abs(glm::dot(glm::normalize(arc.planeNormal), bond)), 1.0f, 1.0e-3f);
+	}
+
+	TEST(SceneCurvedArrowTests, AutoPicksTheBondForTwoEndsAndTheDefectZAbove)
+	{
+		RendererWindowState window;
+		PrepareBond(window);
+		window.structure.defectFrame.emplace();
+		window.structure.defectFrame->origin = {0, 0, 0};
+		window.structure.defectFrame->z = {0, 0, 1};
+		const auto two = AddCurvedArrowThroughSelectedAtoms(window, {});
+		ASSERT_TRUE(two);
+		ASSERT_EQ(two->size(), 1u);
+		const auto &path = *window.paths->Store().Find(two->front());
+		// Auto chose the bond, not the defect z that is also available.
+		EXPECT_TRUE(std::holds_alternative<PathTransformBinding::BondFrame>(path.transformBinding.value));
+
+		RendererWindowState cycle;
+		PrepareTriangle(cycle);
+		const auto three = AddCurvedArrowThroughSelectedAtoms(cycle, {});
+		ASSERT_TRUE(three);
+		ExpectPositiveTriangle(cycle, *three);
+	}
+
 }

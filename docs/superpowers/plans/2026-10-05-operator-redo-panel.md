@@ -60,10 +60,24 @@ namespace DefectStudio
         float rotationDegrees = 0.0f;   // offset about the axis
         PathDecorationKind decoration = PathDecorationKind::Arrow;
         glm::vec3 color{1.0f, 0.27f, 0.0f};
-        float strokeWidth = 0.04f;
+        float strokeWidth = 0.03f;   // today's value; do not change it in this task
     };
 }
 ```
+
+**Existing expectation this task deliberately inverts.**
+`tests/Presentation/Panels/SceneCurvedArrowTests.cpp` already contains
+`DefectZAxisGivesAShallowOutward120DegreeStepWithBoundEnds`, which selects **two** atoms with a
+defect frame present and asserts the arc is built about the defect z. Under the new `Auto` rule two
+ends resolve to the bond axis, so that test must now pass `CurvedArrowAxisMode::DefectZ`
+explicitly. It keeps its assertions and keeps covering the defect-z path.
+
+This session edits that test as part of writing the contract. **Codex must not touch it, and must
+not change any other test expectation to make a build pass** — if an expectation looks wrong, stop
+and say so.
+
+The decoration scales (`lengthScale` 3.0, `widthScale` 1.0) and `PathDepthMode::DepthTest` stay as
+they are today; this task does not retune them.
 
   and the widened entry point, keeping the old one as a defaulted overload so nothing else has to change:
 

@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Renderer/Path/CurvedArrowParameters.hpp"
 #include "Renderer/Scene/SceneObject.hpp"
 
 namespace DefectStudio
@@ -10,6 +11,12 @@ namespace DefectStudio
 	struct RendererWindowState;
 
 	// Two ends make one arrow; three or more atoms make a positive cycle. One undo step.
+	//
+	// With the default parameters two ends give a C_2 ring about the bond they share - the arc lies
+	// in the plane perpendicular to the bond, centred on its midpoint, and the path's transform is
+	// bound to that bond so the ring follows the atoms. Three or more ends keep the cycle about the
+	// defect z exactly as before. `CurvedArrowAxisMode::DefectZ` asks for the old two-end behaviour.
 	[[nodiscard]] Result<std::vector<SceneObjectId>> AddCurvedArrowThroughSelectedAtoms(
-		RendererWindowState &windowState);
+		RendererWindowState &windowState,
+		const CurvedArrowParameters &parameters = {});
 }
