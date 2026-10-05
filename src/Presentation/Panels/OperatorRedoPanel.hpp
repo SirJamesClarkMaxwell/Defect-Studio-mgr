@@ -46,6 +46,8 @@ namespace DefectStudio
 		void Draw(RendererWindowState &window);
 
 	private:
+		void RefreshHiddenParameters(const RendererWindowState &window, const SceneOperatorValues &values);
+
 		const SceneOperator *m_Operator = nullptr;
 		std::optional<SceneObjectsSnapshot> m_Before;
 		// An Add operation consumes the selection it ran on, so the snapshot alone is not enough to
@@ -53,6 +55,7 @@ namespace DefectStudio
 		std::vector<std::size_t> m_SelectedAtoms;
 		std::vector<std::size_t> m_SelectedVacancies;
 		SceneOperatorValues m_Values;
+		std::vector<std::string> m_HiddenKeys;
 		std::string m_WindowId;
 		std::size_t m_UndoDepth = 0;
 		bool m_Open = false;

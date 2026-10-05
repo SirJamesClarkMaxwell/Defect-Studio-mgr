@@ -11,6 +11,17 @@ namespace DefectStudio
 {
 	struct RendererWindowState;
 
+	enum class CurvedArrowSelectionMode
+	{
+		TwoEnds,
+		Bond,
+		Cycle
+	};
+
+	// Shared by creation and the operator's parameter relevance rule; ignores stale atom indices.
+	[[nodiscard]] CurvedArrowSelectionMode ResolveCurvedArrowSelectionMode(
+		const RendererWindowState &window, CurvedArrowAxisMode axisMode);
+
 	// Two ends make one arrow; three or more atoms make a positive cycle. One undo step.
 	//
 	// With the default parameters two ends give a C_2 ring about the bond they share - the arc lies

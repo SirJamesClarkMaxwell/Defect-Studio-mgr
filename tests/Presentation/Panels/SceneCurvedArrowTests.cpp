@@ -447,6 +447,27 @@ namespace DefectStudio::Tests
 		EXPECT_NEAR(std::abs(angle), std::numbers::pi_v<float> * 0.5f, 1.0e-3f);
 	}
 
+	TEST(SceneCurvedArrowTests, CurvatureClampsAndDefaultsForCyclesAndNonBondPairs)
+	{
+		for (const bool cycle : {false, true})
+			for (const auto &[requested, expected] : std::vector<std::pair<float, float>>{
+				{-1.0f, 0.05f}, {0.0f, 0.05f}, {2.0f, 1.5f}, {std::numeric_limits<float>::quiet_NaN(), 0.5f}})
+			{
+				RendererWindowState window;
+				PrepareTriangle(window);
+				window.structure.defectFrame.emplace();
+				window.structure.defectFrame->z = {0, 0, 1};
+				if (!cycle) window.selectedAtomIndices = {0, 1};
+				const auto added = AddCurvedArrowThroughSelectedAtoms(window,
+					{.axisMode = CurvedArrowAxisMode::DefectZ, .curvature = requested}, SceneOperationUndo::Suppress);
+				ASSERT_TRUE(added);
+				ASSERT_EQ(added->size(), cycle ? 3u : 1u);
+				for (const auto id : *added)
+					EXPECT_NEAR(std::get<CircularArcSegmentData>(window.paths->Store().Find(id)->segments.front().data).signedSweepRadians,
+						2.0f * std::numbers::pi_v<float> / 3.0f * expected, 1.0e-5f);
+			}
+	}
+
 	TEST(SceneCurvedArrowTests, AutoPicksTheBondForTwoEndsAndTheDefectZAbove)
 	{
 		RendererWindowState window;

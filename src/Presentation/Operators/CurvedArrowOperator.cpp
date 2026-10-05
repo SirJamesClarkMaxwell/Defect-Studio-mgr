@@ -55,6 +55,7 @@ namespace DefectStudio
 			parameters.radiusFactor = ReadFiniteFloat(values, "radiusFactor", parameters.radiusFactor);
 			parameters.sweepDegrees = ReadFiniteFloat(values, "sweepDegrees", parameters.sweepDegrees);
 			parameters.rotationDegrees = ReadFiniteFloat(values, "rotationDegrees", parameters.rotationDegrees);
+			parameters.curvature = ReadFiniteFloat(values, "curvature", parameters.curvature);
 			parameters.decoration = ReadEnum(values, "decoration", parameters.decoration, 9);
 			parameters.color = ReadFiniteColor(values, "color", parameters.color);
 			parameters.strokeWidth = ReadFiniteFloat(values, "strokeWidth", parameters.strokeWidth);
@@ -91,6 +92,7 @@ namespace DefectStudio
 			FloatParameter("radiusFactor", "Współczynnik promienia", 0.1f, 5.0f),
 			FloatParameter("sweepDegrees", "Rozpiętość", 1.0f, 350.0f),
 			FloatParameter("rotationDegrees", "Obrót", -360.0f, 360.0f),
+			FloatParameter("curvature", "Wygięcie łuku", 0.05f, 1.5f),
 			EnumParameter("decoration", "Dekoracja", {
 				"Brak", "Strzałka", "Wklęsła", "Latex", "Belka", "Okrąg", "Kwadrat", "Romb", "Klin"}),
 			{.key = "color", .label = "Kolor", .kind = SceneOperatorParameter::Kind::Color},
@@ -101,9 +103,22 @@ namespace DefectStudio
 			{"radiusFactor", defaults.radiusFactor},
 			{"sweepDegrees", defaults.sweepDegrees},
 			{"rotationDegrees", defaults.rotationDegrees},
+			{"curvature", defaults.curvature},
 			{"decoration", static_cast<int>(defaults.decoration)},
 			{"color", defaults.color},
 			{"strokeWidth", defaults.strokeWidth}};
+		op.isParameterRelevant = [](const std::string &key, const SceneOperatorValues &values,
+			const RendererWindowState &window) {
+			const auto mode = ResolveCurvedArrowSelectionMode(window,
+				ReadEnum(values, "axisMode", CurvedArrowAxisMode::Auto, 3));
+			if (key == "decoration" || key == "color" || key == "strokeWidth")
+				return true;
+			if (key == "axisMode")
+				return mode != CurvedArrowSelectionMode::Cycle;
+			if (key == "curvature")
+				return mode != CurvedArrowSelectionMode::Bond;
+			return mode == CurvedArrowSelectionMode::Bond;
+		};
 		op.execute = [](RendererWindowState &window, const SceneOperatorValues &values) {
 			// The runner owns the undo entry: an operator re-runs many times behind a single one.
 			return AddCurvedArrowThroughSelectedAtoms(

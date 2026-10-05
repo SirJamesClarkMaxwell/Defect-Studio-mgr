@@ -36,6 +36,9 @@ namespace DefectStudio
 		// Where the arc starts, measured about the axis. The panel field and the modal rotate both
 		// write this one value, so the two routes cannot drift apart.
 		float rotationDegrees = 0.0f;
+		// Non-bond sweep = curvature x the angle between the ends. Curvature is clamped to [0.05, 1.5].
+		// Half a C_3 step gives the existing 60-degree arc (sagitta/chord about 0.134).
+		float curvature = 0.5f;
 		PathDecorationKind decoration = PathDecorationKind::Arrow;
 		glm::vec3 color{1.0f, 0.27f, 0.0f};
 		// Today's value. This task does not retune the stroke or the decoration scales.

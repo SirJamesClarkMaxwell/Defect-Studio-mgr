@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <gtest/gtest.h>
 
 #include "Presentation/Operators/SceneOperatorRegistry.hpp"
+#include "Presentation/Panels/ScenePathCurvedArrow.hpp"
 #include "Renderer/Path/CurvedArrowParameters.hpp"
 #include "Renderer/RendererLayer.hpp"
 
@@ -195,6 +197,65 @@ namespace DefectStudio::Tests
 		const auto sweep = std::get<CircularArcSegmentData>(path->segments.front().data).signedSweepRadians;
 		// A value map the operator ignored would still read 270 degrees here.
 		EXPECT_NEAR(std::abs(sweep), glm::radians(90.0f), 1.0e-4f);
+	}
+
+	TEST(SceneOperatorRegistryTests, CurvatureChangesCycleSweepAndBondModeShowsSweepInstead)
+	{
+		SceneOperatorRegistry registry;
+		ASSERT_TRUE(RegisterCurvedArrowOperator(registry));
+		ASSERT_NE(registry.Find("scene.curved_arrow"), nullptr);
+		const auto &op = *registry.Find("scene.curved_arrow");
+		ASSERT_NE(FindParameter(op, "curvature"), nullptr);
+		const auto &parameter = *FindParameter(op, "curvature");
+		EXPECT_EQ(parameter.kind, SceneOperatorParameter::Kind::Float);
+		EXPECT_EQ(parameter.label, "Wygięcie łuku");
+		EXPECT_FLOAT_EQ(parameter.minimum, 0.05f);
+		EXPECT_FLOAT_EQ(parameter.maximum, 1.5f);
+		EXPECT_FLOAT_EQ(std::get<float>(op.defaults.at("curvature")), CurvedArrowParameters{}.curvature);
+		ASSERT_TRUE(op.isParameterRelevant);
+		RendererWindowState window;
+		window.structure.atoms = {{"C", {2, 0, 0}}, {"C", {-1, std::sqrt(3.0f), 0}}, {"C", {-1, -std::sqrt(3.0f), 0}}};
+		window.selectedAtomIndices = {0, 1, 2};
+		EXPECT_TRUE(op.isParameterRelevant("curvature", op.defaults, window));
+		EXPECT_FALSE(op.isParameterRelevant("sweepDegrees", op.defaults, window));
+		auto values = op.defaults;
+		values["curvature"] = 1.0f;
+		const auto added = op.execute(window, values);
+		ASSERT_TRUE(added);
+		ASSERT_EQ(added->size(), 3u);
+		for (const auto id : *added)
+		{
+			const auto &path = *window.paths->Store().Find(id);
+			EXPECT_NEAR(std::get<CircularArcSegmentData>(path.segments.front().data).signedSweepRadians,
+				2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
+		}
+		window.selectedAtomIndices = {0, 1};
+		EXPECT_TRUE(op.isParameterRelevant("sweepDegrees", values, window));
+		EXPECT_FALSE(op.isParameterRelevant("curvature", values, window));
+	}
+
+	TEST(SceneOperatorRegistryTests, SelectionModeIgnoresStaleAtomsAndKeepsVacancyPairsNonBond)
+	{
+		SceneOperatorRegistry registry;
+		ASSERT_TRUE(RegisterCurvedArrowOperator(registry));
+		const auto &op = *registry.Find("scene.curved_arrow");
+		RendererWindowState window;
+		window.structure.atoms = {{"C", {-1, 0, 0}}, {"C", {1, 0, 0}}};
+		window.selectedAtomIndices = {0, 1, 99};
+		EXPECT_EQ(ResolveCurvedArrowSelectionMode(window, CurvedArrowAxisMode::Auto), CurvedArrowSelectionMode::Bond);
+		EXPECT_TRUE(op.isParameterRelevant("axisMode", op.defaults, window));
+		EXPECT_TRUE(op.isParameterRelevant("sweepDegrees", op.defaults, window));
+		EXPECT_FALSE(op.isParameterRelevant("curvature", op.defaults, window));
+		const auto added = op.execute(window, op.defaults);
+		ASSERT_TRUE(added);
+		EXPECT_TRUE(std::holds_alternative<PathTransformBinding::BondFrame>(
+			window.paths->Store().Find(added->front())->transformBinding.value));
+		window.structure.vacancies.push_back({{0, 1, 0}});
+		window.selectedAtomIndices = {0};
+		window.selectedVacancies = {0};
+		EXPECT_EQ(ResolveCurvedArrowSelectionMode(window, CurvedArrowAxisMode::Auto), CurvedArrowSelectionMode::TwoEnds);
+		EXPECT_TRUE(op.isParameterRelevant("curvature", op.defaults, window));
+		EXPECT_FALSE(op.isParameterRelevant("sweepDegrees", op.defaults, window));
 	}
 
 	TEST(SceneOperatorRegistryTests, CurvedArrowExecuteFailsWithoutASelection)

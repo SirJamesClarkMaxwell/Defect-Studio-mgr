@@ -30,6 +30,7 @@ namespace DefectStudio
 		m_SelectedVacancies = window.selectedVacancies;
 		m_Values = op.defaults;
 		m_WindowId = window.windowId;
+		RefreshHiddenParameters(window, m_Values);
 
 		const Result<std::vector<SceneObjectId>> result = op.execute(window, m_Values);
 		if (!result)
@@ -61,6 +62,7 @@ namespace DefectStudio
 		window.selectedAtomIndices = m_SelectedAtoms;
 		window.selectedVacancies = m_SelectedVacancies;
 
+		RefreshHiddenParameters(window, values);
 		const Result<std::vector<SceneObjectId>> result = m_Operator->execute(window, values);
 		if (!result)
 		{
@@ -71,6 +73,16 @@ namespace DefectStudio
 
 		m_Values = values;
 		return {};
+	}
+
+	void OperatorRedoPanel::RefreshHiddenParameters(
+		const RendererWindowState &window, const SceneOperatorValues &values)
+	{
+		m_HiddenKeys.clear();
+		if (m_Operator->isParameterRelevant)
+			for (const auto &parameter : m_Operator->schema)
+				if (!m_Operator->isParameterRelevant(parameter.key, values, window))
+					m_HiddenKeys.push_back(parameter.key);
 	}
 
 	void OperatorRedoPanel::PollInvalidation(const UndoStack &undoStack, const RendererWindowState *window) noexcept
@@ -95,6 +107,7 @@ namespace DefectStudio
 		m_SelectedAtoms.clear();
 		m_SelectedVacancies.clear();
 		m_Values.clear();
+		m_HiddenKeys.clear();
 		m_WindowId.clear();
 		m_UndoDepth = 0;
 		m_Open = false;
@@ -149,6 +162,8 @@ namespace DefectStudio
 		{
 			for (const SceneOperatorParameter &parameter : m_Operator->schema)
 			{
+				if (std::find(m_HiddenKeys.begin(), m_HiddenKeys.end(), parameter.key) != m_HiddenKeys.end())
+					continue;
 				auto value = m_Values.find(parameter.key);
 				if (value == m_Values.end())
 					continue;

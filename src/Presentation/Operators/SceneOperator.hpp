@@ -61,5 +61,8 @@ namespace DefectStudio
 		SceneOperatorValues defaults;
 		std::function<Result<std::vector<SceneObjectId>>(RendererWindowState &, const SceneOperatorValues &)>
 			execute;
+		// Empty means all parameters are shown. Evaluated with the operator's input selection.
+		std::function<bool(const std::string &key, const SceneOperatorValues &, const RendererWindowState &)>
+			isParameterRelevant;
 	};
 }

@@ -1,5 +1,7 @@
 #include "Core/dspch.hpp"
 
+#include <algorithm>
+#include <numbers>
 #include <gtest/gtest.h>
 
 #include "Core/Undo/UndoStack.hpp"
@@ -8,6 +10,9 @@
 #include "Presentation/Panels/ScenePathCurvedArrow.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
+#include "Renderer/Path/PathEvaluator.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -146,5 +151,134 @@ namespace DefectStudio::Tests
 		// The ImGui body can outlive a close by a frame; a stale change must not restore a snapshot.
 		EXPECT_FALSE(panel.Reapply(Window(), SceneOperatorValues{}));
 		EXPECT_EQ(PathCount(Window()), 0u);
+	}
+}
+
+namespace DefectStudio::Tests
+{
+	namespace
+	{
+		SceneOperator ObserveRelevance(const SceneOperator &source, const RendererWindowState &window,
+			std::vector<std::string> &hidden)
+		{
+			SceneOperator op = source;
+			op.isParameterRelevant = [rule = source.isParameterRelevant, atoms = window.selectedAtomIndices,
+				vacancies = window.selectedVacancies, firstKey = source.schema.front().key, &hidden]
+				(const std::string &key, const SceneOperatorValues &values, const RendererWindowState &input) {
+				EXPECT_EQ(input.selectedAtomIndices, atoms);
+				EXPECT_EQ(input.selectedVacancies, vacancies);
+				if (key == firstKey) hidden.clear();
+				const bool relevant = rule(key, values, input);
+				if (!relevant) hidden.push_back(key);
+				return relevant;
+			};
+			return op;
+		}
+	}
+
+	TEST_F(OperatorRedoPanelTests, CycleEveryRelevantParameterChangesAllArrows)
+	{
+		auto &window = Window();
+		window.structure.atoms = {{"C", {2, 0, 0}}, {"C", {-1, 1.7320508f, 0}}, {"C", {-1, -1.7320508f, 0}}};
+		window.selectedAtomIndices = {0, 1, 2};
+		std::vector<std::string> hidden;
+		const auto op = ObserveRelevance(CurvedArrow(), window, hidden);
+		ASSERT_TRUE(panel.RunAndOpen(op, window));
+		const std::vector<std::string> expectedHidden{
+			"axisMode", "radiusRule", "radiusFactor", "sweepDegrees", "rotationDegrees"};
+		EXPECT_EQ(hidden, expectedHidden);
+		ASSERT_EQ(PathCount(window), 3u);
+		std::vector<ScenePath> before;
+		for (const auto id : window.paths->Store().Ids()) before.push_back(*window.paths->Store().Find(id));
+		const SceneOperatorValues edits{
+			{"curvature", 1.0f}, {"decoration", 0}, {"color", glm::vec3(0, 1, 0)}, {"strokeWidth", 0.2f}};
+		std::size_t checked = 0;
+		for (const auto &parameter : op.schema)
+		{
+			if (std::find(expectedHidden.begin(), expectedHidden.end(), parameter.key) != expectedHidden.end())
+				continue;
+			SCOPED_TRACE(parameter.key);
+			ASSERT_NE(edits.find(parameter.key), edits.end());
+			auto values = op.defaults;
+			values[parameter.key] = edits.at(parameter.key);
+			ASSERT_TRUE(panel.Reapply(window, values));
+			EXPECT_TRUE(panel.IsOpen());
+			EXPECT_EQ(hidden, expectedHidden);
+			ASSERT_EQ(PathCount(window), 3u);
+			const auto ids = window.paths->Store().Ids();
+			for (std::size_t i = 0; i < ids.size(); ++i)
+			{
+				const auto &path = *window.paths->Store().Find(ids[i]);
+				if (parameter.key == "curvature")
+				{
+					const auto &arc = std::get<CircularArcSegmentData>(path.segments.front().data);
+					EXPECT_NEAR(arc.signedSweepRadians, 2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
+					const auto context = SceneSystem::MakePathBindingContext(window);
+					const auto oldSample = EvaluateSegment(before[i], ResolveNodePositions(before[i], context), 0, 0.5);
+					const auto newSample = EvaluateSegment(path, ResolveNodePositions(path, context), 0, 0.5);
+					ASSERT_TRUE(oldSample);
+					ASSERT_TRUE(newSample);
+					EXPECT_GT(glm::distance(oldSample->position, newSample->position), 1.0e-3);
+				}
+				else if (parameter.key == "decoration")
+				{
+					EXPECT_EQ(path.style.endDecoration.kind, PathDecorationKind::None);
+					EXPECT_NE(path.style.endDecoration.kind, before[i].style.endDecoration.kind);
+				}
+				else if (parameter.key == "color")
+				{
+					EXPECT_EQ(path.style.color, glm::vec3(0, 1, 0));
+					EXPECT_NE(path.style.color, before[i].style.color);
+				}
+				else if (parameter.key == "strokeWidth")
+				{
+					EXPECT_FLOAT_EQ(path.style.width, 0.2f);
+					EXPECT_NE(path.style.width, before[i].style.width);
+				}
+			}
+			++checked;
+		}
+		EXPECT_EQ(checked, edits.size());
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(OperatorRedoPanelTests, AxisSwitchRefreshesBondAndTwoEndParameters)
+	{
+		auto &window = Window();
+		window.structure.atoms = {{"C", {2, 0, 0}}, {"C", {-1, 1.7320508f, 0}}};
+		window.structure.defectFrame.emplace();
+		window.structure.defectFrame->z = {0, 0, 1};
+		std::vector<std::string> hidden;
+		const auto op = ObserveRelevance(CurvedArrow(), window, hidden);
+		ASSERT_TRUE(panel.RunAndOpen(op, window));
+		EXPECT_EQ(hidden, std::vector<std::string>{"curvature"});
+		auto values = panel.Values();
+		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::DefectZ);
+		ASSERT_TRUE(panel.Reapply(window, values));
+		const std::vector<std::string> nonBondHidden{
+			"radiusRule", "radiusFactor", "sweepDegrees", "rotationDegrees"};
+		EXPECT_EQ(hidden, nonBondHidden);
+		values["curvature"] = 1.0f;
+		ASSERT_TRUE(panel.Reapply(window, values));
+		ASSERT_EQ(PathCount(window), 1u);
+		const auto &path = *window.paths->Store().Find(window.paths->Store().Ids().front());
+		EXPECT_NEAR(std::get<CircularArcSegmentData>(path.segments.front().data).signedSweepRadians,
+			2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
+		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::Bond);
+		ASSERT_TRUE(panel.Reapply(window, values));
+		EXPECT_EQ(hidden, std::vector<std::string>{"curvature"});
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+
+	TEST_F(OperatorRedoPanelTests, OperatorWithoutRelevanceRuleStillRunsAndReapplies)
+	{
+		auto op = CurvedArrow();
+		op.isParameterRelevant = {};
+		ASSERT_TRUE(panel.RunAndOpen(op, Window()));
+		auto values = panel.Values();
+		values["sweepDegrees"] = 90.0f;
+		ASSERT_TRUE(panel.Reapply(Window(), values));
+		EXPECT_TRUE(panel.IsOpen());
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
 	}
 }

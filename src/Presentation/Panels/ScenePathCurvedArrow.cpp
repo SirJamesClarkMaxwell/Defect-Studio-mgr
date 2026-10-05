@@ -20,9 +20,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		// Half a C_3 step is a 60-degree arc: sagitta/chord = tan(60/4)/2 = 0.134.
-		constexpr float kCurvedArrowFlatness = 0.5f;
-
 		struct End
 		{
 			glm::vec3 position;
@@ -77,6 +74,18 @@ namespace DefectStudio
 		}
 	}
 
+	CurvedArrowSelectionMode ResolveCurvedArrowSelectionMode(
+		const RendererWindowState &window, CurvedArrowAxisMode axisMode)
+	{
+		const auto atomCount = std::count_if(window.selectedAtomIndices.begin(), window.selectedAtomIndices.end(),
+			[&window](std::size_t index) { return index < window.structure.atoms.size(); });
+		if (atomCount >= 3)
+			return CurvedArrowSelectionMode::Cycle;
+		if (axisMode == CurvedArrowAxisMode::Bond || (axisMode == CurvedArrowAxisMode::Auto && atomCount == 2))
+			return CurvedArrowSelectionMode::Bond;
+		return CurvedArrowSelectionMode::TwoEnds;
+	}
+
 	Result<std::vector<SceneObjectId>> AddCurvedArrowThroughSelectedAtoms(
 		RendererWindowState &window, const CurvedArrowParameters &parameters, SceneOperationUndo undo)
 	{
@@ -86,7 +95,8 @@ namespace DefectStudio
 			if (index < window.structure.atoms.size())
 				ends.push_back({window.structure.atoms[index].cartesianPosition,
 					PathBinding{PathBinding::CopyPosition{index, {}, buffer}}});
-		const bool cycle = ends.size() >= 3;
+		const auto mode = ResolveCurvedArrowSelectionMode(window, parameters.axisMode);
+		const bool cycle = mode == CurvedArrowSelectionMode::Cycle;
 		// Keep atom/vacancy and vacancy/vacancy pairs. For >=2 atoms vacancies only define the axis.
 		if (ends.size() < 2)
 			for (const auto index : window.selectedVacancies)
@@ -99,8 +109,9 @@ namespace DefectStudio
 			if (!IsFinite(end.position))
 				return ArrowError("path.arc_nonfinite", "The arrow ends must have finite positions.");
 
-		const bool bondMode = !cycle && (parameters.axisMode == CurvedArrowAxisMode::Bond ||
-			(parameters.axisMode == CurvedArrowAxisMode::Auto && ends.size() == 2 && window.selectedAtomIndices.size() == 2));
+		const bool bondMode = mode == CurvedArrowSelectionMode::Bond;
+		const float curvature = std::isfinite(parameters.curvature) ?
+			std::clamp(parameters.curvature, 0.05f, 1.5f) : CurvedArrowParameters{}.curvature;
 		glm::vec3 origin(0.0f), axis(0.0f);
 		for (const auto &end : ends)
 			origin += end.position / static_cast<float>(ends.size());
@@ -224,7 +235,7 @@ namespace DefectStudio
 			path.nodes[0].binding = a.binding;
 			path.nodes[1].binding = b.binding;
 			// DeriveArc fits the circle to the resolved (buffered) chord, including unequal radii/heights.
-			path.segments[0].data = CircularArcSegmentData{axis, angle * kCurvedArrowFlatness};
+			path.segments[0].data = CircularArcSegmentData{axis, angle * curvature};
 			path.style.width = parameters.strokeWidth;
 			path.style.color = parameters.color;
 			path.style.endDecoration.kind = parameters.decoration;
