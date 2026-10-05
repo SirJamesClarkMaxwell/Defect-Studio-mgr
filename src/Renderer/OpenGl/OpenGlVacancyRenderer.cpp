@@ -59,6 +59,8 @@ namespace DefectStudio
 		//   ponytail: two draws per vacancy; batch by colour if structures ever carry hundreds.
 		for (const auto &vacancy : vacancies)
 		{
+			if (vacancy.hidden)
+				continue;
 			float width = vacancy.ringWidth;
 			for (const auto &axis : {right, up})
 				if (const auto worldPerPixel = WorldUnitsPerPixelAt(

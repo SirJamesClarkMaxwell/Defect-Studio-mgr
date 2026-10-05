@@ -84,6 +84,8 @@ namespace DefectStudio
 		for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
 		{
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[index];
+			if (vacancy.hidden)
+				continue;
 			const glm::vec3 toCentre = vacancy.cartesianPosition - rayOrigin;
 			const float along = glm::dot(toCentre, direction);
 			const float radius = vacancy.radius * 1.35f;
@@ -211,7 +213,8 @@ namespace DefectStudio
 					apply(windowState.selectedSceneOrbitals, orbital.id);
 		if ((windowState.pickAtoms || windowState.pickLabels) && windowState.showVacancies)
 			for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
-				if (hit(windowState.structure.vacancies[index].cartesianPosition))
+				if (!windowState.structure.vacancies[index].hidden &&
+					hit(windowState.structure.vacancies[index].cartesianPosition))
 					apply(windowState.selectedVacancies, index);
 	}
 

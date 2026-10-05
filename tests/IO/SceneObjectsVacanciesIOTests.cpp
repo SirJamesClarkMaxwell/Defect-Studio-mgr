@@ -91,6 +91,7 @@ namespace DefectStudio::Tests
 		entry.structureKey = "structures/hBN/POSCAR";
 		PersistedVacancy boron;
 		boron.color = glm::vec3(1.0f, 0.5f, 0.25f);
+		boron.hidden = true;
 		entry.vacancies = {boron, PersistedVacancy{}};
 		file.structures.push_back(entry);
 
@@ -103,6 +104,8 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(loaded.structures[0].vacancies.size(), 2u);
 		EXPECT_EQ(loaded.structures[0].vacancies[0].color, boron.color);
 		EXPECT_FALSE(loaded.structures[0].vacancies[1].color.has_value());
+		EXPECT_TRUE(loaded.structures[0].vacancies[0].hidden);
+		EXPECT_FALSE(loaded.structures[0].vacancies[1].hidden);
 	}
 
 	TEST(SceneObjectsVacanciesIOTests, NoVacanciesKeyIsNotWritten)

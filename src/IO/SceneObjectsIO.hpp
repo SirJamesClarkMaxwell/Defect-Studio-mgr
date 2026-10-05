@@ -309,6 +309,7 @@ namespace DefectStudio
 		std::string label;         // optional in the file, empty when absent
 		int index = 0;             // optional in the file, 0 when absent
 		std::optional<glm::vec3> color; // optional in the file, VacancySite::color
+		bool hidden = false;            // optional in the file, VacancySite::hidden
 	};
 
 	// CrystalStructure::defectFrame, field for field, same reason as PersistedVacancy.

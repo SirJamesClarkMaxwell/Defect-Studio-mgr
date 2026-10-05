@@ -60,6 +60,8 @@ namespace DefectStudio
 		// Marker colour for this vacancy only (e.g. V_B vs V_N in hBN); empty = the shared vacancy
 		// style. Display data, like `label`, kept here so it is saved and undone with the vacancy.
 		std::optional<glm::vec3> color;
+		// This marker is hidden (outliner eye), also display data saved and undone with the vacancy.
+		bool hidden = false;
 
 		[[nodiscard]] std::string GetLabel() const
 		{

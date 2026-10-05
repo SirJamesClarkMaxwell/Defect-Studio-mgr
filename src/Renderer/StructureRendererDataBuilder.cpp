@@ -101,7 +101,7 @@ namespace DefectStudio
 		for (const VacancySite &site : structure.vacancies)
 			data.vacancies.push_back({site.position, site.GetLabel(),
 				site.color.value_or(atomStyleTable.VacancyColor(site.sourceSpecies)), style.displayRadius, style.opacity,
-				style.renderMode, style.dashCount, style.ringWidth, site.color.has_value(), site.sourceSpecies});
+				style.renderMode, style.dashCount, style.ringWidth, site.color.has_value(), site.sourceSpecies, site.hidden});
 		data.defectFrame = structure.defectFrame;
 
 		const float det = glm::determinant(data.lattice);

@@ -105,17 +105,20 @@ namespace DefectStudio
 		std::size_t count = 0;
 		for (const auto index : windowState.selectedAtomIndices)
 			count += index < windowState.structure.atoms.size() ? 1u : 0u;
+		const bool atomArrows = count >= 2;
 		if (count < 2)
 			for (const auto index : windowState.selectedVacancies)
 				count += index < windowState.structure.vacancies.size() ? 1u : 0u;
-		if (ImGui::MenuItem("Zakrzywiona strzałka (C_n)", nullptr, false, count == 2))
+		if (ImGui::MenuItem("Zakrzywiona strzałka (C_n)", nullptr, false, atomArrows || count == 2))
 		{
 			const auto result = AddCurvedArrowThroughSelectedAtoms(windowState);
 			if (!result)
 				DS_LOG_WARN("Add curved arrow failed: {}", result.Error().technicalDetails);
 		}
-		if (count != 2 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Zaznacz dokładnie dwa atomy lub wakanse. Oś obrotu: osie defektu (z), inaczej zaznaczony wakans, inaczej normalna do płaszczyzny sąsiadów.");
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Zaznacz co najmniej dwa atomy. Dwa końce: jedna strzałka; trzy lub więcej atomów: zamknięty cykl w dodatnim kierunku obrotu.\n"
+				"Można też zaznaczyć dwa końce będące atomami lub wakansami.\n"
+				"Oś: z układu defektu; inaczej przez zaznaczony wakans lub środek atomów, prostopadle do ich płaszczyzny (dla dwóch końców: płaszczyzny sąsiadów).");
 		DrawFreeSegmentAddItems(windowState, position);
 		DrawScenePathDevAddMenu(windowState, position);
 		DrawPlaneAddItem(windowState);

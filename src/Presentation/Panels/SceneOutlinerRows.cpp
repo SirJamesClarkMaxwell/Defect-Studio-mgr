@@ -424,6 +424,7 @@ namespace DefectStudio
 		if (open)
 		{
 			std::optional<std::size_t> removeIndex;
+			std::optional<std::size_t> toggleHiddenIndex;
 			for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
 			{
 				const RendererVacancyData &vacancy = windowState.structure.vacancies[index];
@@ -436,7 +437,14 @@ namespace DefectStudio
 					vacancy.cartesianPosition.x, vacancy.cartesianPosition.y, vacancy.cartesianPosition.z);
 				auto &selected = windowState.selectedVacancies;
 				const bool isSelected = std::find(selected.begin(), selected.end(), index) != selected.end();
-				if (ImGui::Selectable(row, isSelected))
+				ImGui::SetNextItemAllowOverlap();
+				const bool rowActivated = ImGui::Selectable(row, isSelected);
+				// One flag behind both columns, like the group row above.
+				bool shown = !vacancy.hidden;
+				bool alsoShown = shown;
+				if (DrawSceneVisibilityColumns(shown, alsoShown))
+					toggleHiddenIndex = index;
+				if (rowActivated)
 				{
 					if (ImGui::GetIO().KeyCtrl)
 					{
@@ -462,6 +470,20 @@ namespace DefectStudio
 			ImGui::TreePop();
 
 			const Ref<CommandRegistry> commandRegistry = m_CommandRegistry.lock();
+			if (toggleHiddenIndex.has_value() && commandRegistry != nullptr)
+			{
+				SetVacanciesPayload payload{windowState.windowId, {}, "Hide vacancy"};
+				payload.edit = [index = *toggleHiddenIndex](std::vector<VacancySite> &list, const CrystalStructure &) {
+					if (index < list.size())
+						list[index].hidden = !list[index].hidden;
+				};
+				CommandContext context;
+				context.Set<SetVacanciesPayload>(kSetVacanciesPayloadKey, std::move(payload));
+				const Result<CommandOutcome> result =
+					commandRegistry->Execute(CommandID{kSetVacanciesCommandId}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Hide vacancy failed: {}", result.Error().technicalDetails);
+			}
 			const Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
 			if (removeIndex.has_value() && commandRegistry != nullptr && domainLayer != nullptr)
 			{

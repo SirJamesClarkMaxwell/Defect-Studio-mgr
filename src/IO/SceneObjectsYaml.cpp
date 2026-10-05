@@ -18,6 +18,7 @@ namespace DefectStudio::SceneObjectsYaml
 			vacancy.index = node["index"].as<int>(0);
 			if (glm::vec3 color; node["color"] && Vec3(node["color"], color))
 				vacancy.color = color;
+			vacancy.hidden = node["hidden"].as<bool>(false);
 			return std::isfinite(vacancy.position.x) && std::isfinite(vacancy.position.y) &&
 				std::isfinite(vacancy.position.z) && std::isfinite(vacancy.fractional.x) &&
 				std::isfinite(vacancy.fractional.y) && std::isfinite(vacancy.fractional.z);
@@ -43,6 +44,8 @@ namespace DefectStudio::SceneObjectsYaml
 				<< YAML::Key << "index" << YAML::Value << vacancy.index;
 			if (vacancy.color)
 				EmitVec3(emit, "color", *vacancy.color);
+			if (vacancy.hidden)
+				emit << YAML::Key << "hidden" << YAML::Value << true;
 			emit << YAML::EndMap;
 		}
 		emit << YAML::EndSeq;

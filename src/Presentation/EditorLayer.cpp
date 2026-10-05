@@ -837,7 +837,7 @@ namespace DefectStudio
 				if (restoreVacancies)
 					for (const PersistedVacancy &site : entry.vacancies)
 						record->structure.vacancies.push_back({site.position, site.fractional,
-							site.sourceSpecies, site.label, site.index, site.color});
+							site.sourceSpecies, site.label, site.index, site.color, site.hidden});
 				if (restoreFrame)
 				{
 					const PersistedDefectFrame &saved = *entry.defectFrame;
@@ -1772,7 +1772,7 @@ namespace DefectStudio
 				entry->vacancies.clear();
 				for (const VacancySite &site : record->structure.vacancies)
 					entry->vacancies.push_back(
-						{site.position, site.fractional, site.sourceSpecies, site.label, site.index, site.color});
+						{site.position, site.fractional, site.sourceSpecies, site.label, site.index, site.color, site.hidden});
 				entry->defectFrame.reset();
 				if (const auto &frame = record->structure.defectFrame)
 				{

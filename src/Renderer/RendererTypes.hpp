@@ -76,6 +76,7 @@ namespace DefectStudio
 		// VacancySite::color was set: the shared style editor leaves `color` alone.
 		bool customColor = false;
 		std::string sourceSpecies; // VacancySite::sourceSpecies, for AtomStyleTable::VacancyColor
+		bool hidden = false;       // VacancySite::hidden: not drawn, not pickable
 	};
 
 	// Where a pinned measurement or free label was last drawn (renderLabels): billboard centre, its
