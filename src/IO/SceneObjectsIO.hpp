@@ -203,6 +203,13 @@ namespace DefectStudio
 		PersistedPathBinding binding;
 	};
 
+	struct PersistedPathTransformBinding
+	{
+		std::string kind = "Free"; // Free | BondFrame
+		std::vector<PersistedAtomRef> atoms; // BondFrame: 2
+		float rollRadians = 0.0f;
+	};
+
 	struct PersistedPathSegment
 	{
 		PersistedPathSegmentKind kind = PersistedPathSegmentKind::Line;
@@ -289,6 +296,7 @@ namespace DefectStudio
 		std::string name;
 		std::vector<PersistedPathNode> nodes;       // required, at least 2
 		std::vector<PersistedPathSegment> segments; // required, exactly nodes.size() - 1
+		PersistedPathTransformBinding transformBinding;
 		bool visible = true;
 		bool renderable = true;
 		PersistedPathStyle style;

@@ -7,6 +7,9 @@
 #include <cmath>
 #include <type_traits>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
 namespace DefectStudio
 {
 	namespace
@@ -31,20 +34,41 @@ namespace DefectStudio
 			return path.transform.rotation * (path.transform.scale * offset);
 		}
 
+		[[nodiscard]] PathTransform ResolveTransform(const ScenePath &path, const BindingContext &context)
+		{
+			const auto *bond = std::get_if<PathTransformBinding::BondFrame>(&path.transformBinding.value);
+			if (bond == nullptr || !context.atomPosition)
+				return path.transform;
+			const auto a = context.atomPosition(bond->atomA);
+			const auto b = context.atomPosition(bond->atomB);
+			if (!a || !b || !IsFinite(*a) || !IsFinite(*b))
+				return path.transform;
+			const glm::vec3 delta = *b - *a;
+			const float length = glm::length(delta);
+			if (!std::isfinite(length) || length <= 1.0e-5f)
+				return path.transform;
+			PathTransform transform = path.transform;
+			transform.position = (*a + *b) * 0.5f;
+			transform.rotation = glm::rotation(glm::vec3(0, 0, 1), delta / length) *
+				glm::angleAxis(bond->rollRadians, glm::vec3(0, 0, 1));
+			return transform;
+		}
+
 		[[nodiscard]] glm::vec3 ResolveUnbuffered(
-			const ScenePath &path, const PathNode &node, const BindingContext &context, ResolvedNodes &resolved)
+			const ScenePath &path, const PathTransform &transform, const PathNode &node,
+			const BindingContext &context, ResolvedNodes &resolved)
 		{
 			return std::visit([&](const auto &binding) -> glm::vec3 {
 				using Binding = std::decay_t<decltype(binding)>;
 				if constexpr (std::is_same_v<Binding, PathBinding::Free>)
-					return TransformLocalPosition(path, node.position);
+					return transform.position + transform.rotation * (transform.scale * node.position);
 				else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
 				{
 					if (context.atomPosition)
 						if (const std::optional<glm::vec3> atom = context.atomPosition(binding.atomIndex); atom && IsFinite(*atom))
 							return *atom + binding.offset;
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound atom is unavailable.");
-					return TransformLocalPosition(path, node.position);
+					return transform.position + transform.rotation * (transform.scale * node.position);
 				}
 				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
 				{
@@ -52,7 +76,7 @@ namespace DefectStudio
 						if (const auto vacancy = context.vacancyPosition(binding.vacancyIndex); vacancy && IsFinite(*vacancy))
 							return *vacancy + binding.offset;
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound vacancy is unavailable.");
-					return TransformLocalPosition(path, node.position);
+					return transform.position + transform.rotation * (transform.scale * node.position);
 				}
 				else if constexpr (std::is_same_v<Binding, PathBinding::BondMidpoint>)
 				{
@@ -64,20 +88,20 @@ namespace DefectStudio
 							return (*a + *b) * 0.5f + binding.offset;
 					}
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound atoms are unavailable.");
-					return TransformLocalPosition(path, node.position);
+					return transform.position + transform.rotation * (transform.scale * node.position);
 				}
 				else
 				{
 					if (context.isScenePath && context.isScenePath(binding.object))
 					{
 						AddDiagnostic(resolved, PathDiagnosticCode::ObjectOriginTargetsPath, node.id, "Object origin bindings may not target paths.");
-						return TransformLocalPosition(path, node.position);
+							return transform.position + transform.rotation * (transform.scale * node.position);
 					}
 					if (context.objectOrigin)
 						if (const std::optional<glm::vec3> origin = context.objectOrigin(binding.object); origin && IsFinite(*origin))
 							return *origin + binding.offset;
 					AddDiagnostic(resolved, PathDiagnosticCode::BrokenBinding, node.id, "Bound object origin is unavailable.");
-					return TransformLocalPosition(path, node.position);
+					return transform.position + transform.rotation * (transform.scale * node.position);
 				}
 			}, node.binding.value);
 		}
@@ -86,9 +110,20 @@ namespace DefectStudio
 	ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context)
 	{
 		ResolvedNodes resolved;
+		const PathTransform transform = ResolveTransform(path, context);
+		if (const auto *bond = std::get_if<PathTransformBinding::BondFrame>(&path.transformBinding.value);
+			bond != nullptr)
+		{
+			const glm::vec3 axis = transform.rotation * glm::vec3(0, 0, 1);
+			// The arc evaluator consumes resolved world endpoints and the stored plane normal. Keep
+			// that authored field aligned with the whole-object bond frame so both paths agree.
+			for (PathSegment &segment : const_cast<ScenePath &>(path).segments)
+				if (auto *arc = std::get_if<CircularArcSegmentData>(&segment.data))
+					arc->planeNormal = axis;
+		}
 		resolved.positions.reserve(path.nodes.size());
 		for (const PathNode &node : path.nodes)
-			resolved.positions.push_back(ResolveUnbuffered(path, node, context, resolved));
+			resolved.positions.push_back(ResolveUnbuffered(path, transform, node, context, resolved));
 
 		if (path.nodes.size() < 2)
 			return resolved;
@@ -157,7 +192,20 @@ namespace DefectStudio
 	std::uint64_t BindingSourceRevision(const ScenePath &path, const ResolvedNodes &resolved)
 	{
 		std::uint64_t hash = 14695981039346656037ull;
-		bool hasBindings = false;
+		bool hasBindings = !std::holds_alternative<PathTransformBinding::Free>(path.transformBinding.value);
+		if (std::holds_alternative<PathTransformBinding::BondFrame>(path.transformBinding.value))
+		{
+			for (const glm::vec3 position : resolved.positions)
+				for (const float component : {position.x, position.y, position.z})
+				{
+					const std::uint32_t bits = std::bit_cast<std::uint32_t>(component);
+					for (unsigned int shift = 0; shift < 32; shift += 8)
+					{
+						hash ^= (bits >> shift) & 0xffu;
+						hash *= 1099511628211ull;
+					}
+				}
+		}
 		for (std::size_t index = 0; index < path.nodes.size(); ++index)
 		{
 			if (std::holds_alternative<PathBinding::Free>(path.nodes[index].binding.value))

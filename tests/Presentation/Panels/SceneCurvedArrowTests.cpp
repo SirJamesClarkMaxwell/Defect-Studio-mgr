@@ -384,7 +384,10 @@ namespace DefectStudio::Tests
 		window.selectedAtomIndices = {0, 1};
 		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
 		EXPECT_FALSE(added);
-		EXPECT_TRUE(window.paths->Store().Ids().empty());
+		// A rejected add never reaches the point of creating the path store, so `paths` stays null.
+		// Asserting through it would crash rather than fail - check the rejection itself instead.
+		if (window.paths)
+			EXPECT_TRUE(window.paths->Store().Ids().empty());
 	}
 
 	TEST(SceneCurvedArrowTests, BondModeRingFollowsTheAtomsWhenOneMoves)
@@ -400,15 +403,48 @@ namespace DefectStudio::Tests
 		// tilts with the new bond direction.
 		window.structure.atoms[1].cartesianPosition = {1, 2, 0};
 		const auto after = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
-		glm::vec3 centreBefore{0.0f}, centreAfter{0.0f};
-		for (const auto &position : before.positions) centreBefore += position / static_cast<float>(before.positions.size());
-		for (const auto &position : after.positions) centreAfter += position / static_cast<float>(after.positions.size());
-		EXPECT_NEAR(centreAfter.y, 1.0f, 1.0e-3f);
-		EXPECT_GT(glm::distance(centreBefore, centreAfter), 0.5f);
+		// The centroid of a 270-degree arc's endpoints is NOT the circle's centre - the ends sit
+		// asymmetrically on the ring. Measure what actually defines the ring instead: every node is
+		// equidistant from the new bond midpoint.
+		const glm::vec3 midpoint{0.0f, 1.0f, 0.0f};
+		const float radius = glm::distance(after.positions.front(), midpoint);
+		EXPECT_GT(radius, 1.0e-3f);
+		for (const auto &position : after.positions)
+			EXPECT_NEAR(glm::distance(position, midpoint), radius, 1.0e-3f);
+		// And it really moved: the old ring was centred on the origin.
+		for (const auto &position : before.positions)
+			EXPECT_NEAR(glm::distance(position, glm::vec3(0.0f)), radius, 1.0e-3f);
 		// The plane turned: the ring no longer lies perpendicular to x.
 		const auto &arc = std::get<CircularArcSegmentData>(path.segments.front().data);
 		const glm::vec3 bond = glm::normalize(glm::vec3(1, 2, 0) - glm::vec3(-1, 0, 0));
 		EXPECT_NEAR(std::abs(glm::dot(glm::normalize(arc.planeNormal), bond)), 1.0f, 1.0e-3f);
+	}
+
+	TEST(SceneCurvedArrowTests, BondModeRollTurnsTheRingExactlyOnce)
+	{
+		// Two carbons on x, 2 A apart. A ring at rotationDegrees = 90 must sit exactly 90 degrees
+		// around from the ring at 0 - not 180.
+		RendererWindowState zero;
+		PrepareBond(zero);
+		const auto zeroAdded = AddCurvedArrowThroughSelectedAtoms(zero, {.axisMode = CurvedArrowAxisMode::Bond});
+		ASSERT_TRUE(zeroAdded);
+		const auto zeroResolved = ResolveNodePositions(
+			*zero.paths->Store().Find(zeroAdded->front()), SceneSystem::MakePathBindingContext(zero));
+
+		RendererWindowState quarter;
+		PrepareBond(quarter);
+		const auto quarterAdded = AddCurvedArrowThroughSelectedAtoms(
+			quarter, {.axisMode = CurvedArrowAxisMode::Bond, .rotationDegrees = 90.0f});
+		ASSERT_TRUE(quarterAdded);
+		const auto quarterResolved = ResolveNodePositions(
+			*quarter.paths->Store().Find(quarterAdded->front()), SceneSystem::MakePathBindingContext(quarter));
+
+		const glm::vec3 axis{1.0f, 0.0f, 0.0f};
+		const glm::vec3 midpoint{0.0f, 0.0f, 0.0f};
+		const glm::vec3 first = glm::normalize(zeroResolved.positions.front() - midpoint);
+		const glm::vec3 rotated = glm::normalize(quarterResolved.positions.front() - midpoint);
+		const float angle = std::atan2(glm::dot(axis, glm::cross(first, rotated)), glm::dot(first, rotated));
+		EXPECT_NEAR(std::abs(angle), std::numbers::pi_v<float> * 0.5f, 1.0e-3f);
 	}
 
 	TEST(SceneCurvedArrowTests, AutoPicksTheBondForTwoEndsAndTheDefectZAbove)

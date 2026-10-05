@@ -196,6 +196,15 @@ namespace DefectStudio
 		path.transform.rotation = glm::quat(
 			persisted.transformRotation.w, persisted.transformRotation.x, persisted.transformRotation.y, persisted.transformRotation.z);
 		path.transform.scale = persisted.transformScale;
+		if (persisted.transformBinding.kind == "BondFrame" && persisted.transformBinding.atoms.size() == 2)
+		{
+			const auto first = ResolveAtomReference(structure, persisted.transformBinding.atoms[0]);
+			const auto second = ResolveAtomReference(structure, persisted.transformBinding.atoms[1]);
+			if (first && second)
+				path.transformBinding.value = PathTransformBinding::BondFrame{*first, *second, persisted.transformBinding.rollRadians};
+			else
+				outWarnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene path transform binding is unresolved", "BondFrame atom references could not be resolved; the path keeps its stored transform.", "Review the path binding.", "ScenePathPersistence", "scene_objects.path_binding_unresolved");
+		}
 		if (!ParseStyle(persisted.style, path.style))
 			return PathError("Scene path contains an unknown style enum name.");
 		for (const auto &node : persisted.nodes)
@@ -228,6 +237,10 @@ namespace DefectStudio
 			}
 			path.segments.push_back(std::move(built));
 		}
+		if (std::holds_alternative<PathTransformBinding::BondFrame>(path.transformBinding.value))
+			for (PathSegment &segment : path.segments)
+				if (auto *arc = std::get_if<CircularArcSegmentData>(&segment.data))
+					arc->planeNormal = glm::vec3(0, 0, 1);
 		if (!ValidatePath(path).empty()) return PathError("Scene path geometry violates renderer path invariants.");
 		if (!HasTransformBlock(persisted))
 		{
@@ -250,6 +263,12 @@ namespace DefectStudio
 		persisted.transformRotation = glm::vec4(
 			path.transform.rotation.x, path.transform.rotation.y, path.transform.rotation.z, path.transform.rotation.w);
 		persisted.transformScale = path.transform.scale;
+		if (const auto *bond = std::get_if<PathTransformBinding::BondFrame>(&path.transformBinding.value))
+		{
+			persisted.transformBinding.kind = "BondFrame";
+			persisted.transformBinding.atoms = {AtomRef(structure, bond->atomA), AtomRef(structure, bond->atomB)};
+			persisted.transformBinding.rollRadians = bond->rollRadians;
+		}
 		persisted.persistKey = path.persistKey;
 		persisted.name = path.name;
 		persisted.visible = path.visible;
@@ -311,6 +330,9 @@ namespace DefectStudio
 					saved.signedSweepRadians = data.signedSweepRadians;
 				}
 			}, segment.data);
+			if (std::holds_alternative<PathTransformBinding::BondFrame>(path.transformBinding.value) &&
+				saved.kind == PersistedPathSegmentKind::Arc)
+				saved.planeNormal = glm::vec3(0, 0, 1);
 			persisted.segments.push_back(std::move(saved));
 		}
 		persisted.style.profile = path.style.profile == StrokeProfile::Round ? "Round" : path.style.profile == StrokeProfile::Flat ? "Flat" : "CameraFacing";

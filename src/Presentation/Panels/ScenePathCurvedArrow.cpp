@@ -7,6 +7,9 @@
 #include <numbers>
 #include <utility>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/Path/PathTopology.hpp"
@@ -67,9 +70,15 @@ namespace DefectStudio
 					glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0));
 			return axis;
 		}
+
+		glm::quat BondFrameRotation(const glm::vec3 &axis)
+		{
+			return glm::rotation(glm::vec3(0.0f, 0.0f, 1.0f), axis);
+		}
 	}
 
-	Result<std::vector<SceneObjectId>> AddCurvedArrowThroughSelectedAtoms(RendererWindowState &window)
+	Result<std::vector<SceneObjectId>> AddCurvedArrowThroughSelectedAtoms(
+		RendererWindowState &window, const CurvedArrowParameters &parameters)
 	{
 		std::vector<End> ends;
 		const float buffer = GetScenePathAtomBuffer();
@@ -90,10 +99,23 @@ namespace DefectStudio
 			if (!IsFinite(end.position))
 				return ArrowError("path.arc_nonfinite", "The arrow ends must have finite positions.");
 
+		const bool bondMode = !cycle && (parameters.axisMode == CurvedArrowAxisMode::Bond ||
+			(parameters.axisMode == CurvedArrowAxisMode::Auto && ends.size() == 2 && window.selectedAtomIndices.size() == 2));
 		glm::vec3 origin(0.0f), axis(0.0f);
 		for (const auto &end : ends)
 			origin += end.position / static_cast<float>(ends.size());
-		if (const auto &frame = window.structure.defectFrame)
+		if (bondMode)
+		{
+			const auto *first = std::get_if<PathBinding::CopyPosition>(&ends[0].binding.value);
+			const auto *second = std::get_if<PathBinding::CopyPosition>(&ends[1].binding.value);
+			if (first == nullptr || second == nullptr)
+				return ArrowError("curved_arrow.bond_atoms_required", "A bond-axis arrow needs two selected atoms.");
+			origin = (ends[0].position + ends[1].position) * 0.5f;
+			axis = ends[1].position - ends[0].position;
+			if (glm::length(axis) < 1.0e-5f)
+				return ArrowError("curved_arrow.degenerate_bond", "The selected atoms must not occupy the same position.");
+		}
+		else if (const auto &frame = window.structure.defectFrame)
 		{
 			origin = frame->origin;
 			axis = frame->z;
@@ -125,13 +147,56 @@ namespace DefectStudio
 			const auto delta = position - origin;
 			return delta - axis * glm::dot(delta, axis);
 		};
-		for (const auto &end : ends)
+		std::vector<ScenePath> paths;
+		if (bondMode)
+		{
+			const auto *first = std::get_if<PathBinding::CopyPosition>(&ends[0].binding.value);
+			const auto *second = std::get_if<PathBinding::CopyPosition>(&ends[1].binding.value);
+			const float length = axisLength;
+			const std::size_t atomA = first->atomIndex, atomB = second->atomIndex;
+			const float atomRadius = std::max(window.structure.atoms[atomA].radius,
+				window.structure.atoms[atomB].radius);
+			float radius = parameters.radiusRule == CurvedArrowRadiusRule::BondFraction ?
+				length * parameters.radiusFactor : atomRadius * parameters.radiusFactor;
+			if (!std::isfinite(radius) || radius < 1.0e-4f)
+				radius = 0.35f * length;
+			if (!std::isfinite(radius) || radius <= 1.0e-5f)
+				return ArrowError("curved_arrow.degenerate_bond", "The selected atoms must define a visible bond.");
+			const float sweepDegrees = std::clamp(parameters.sweepDegrees, 1.0f, 350.0f);
+			const float sweep = glm::radians(sweepDegrees);
+			const float rotation = glm::radians(parameters.rotationDegrees);
+			const glm::vec3 u{1, 0, 0};
+			const glm::vec3 v{0, 1, 0};
+			ends[0].position = radius * u;
+			ends[1].position = radius * (std::cos(sweep) * u + std::sin(sweep) * v);
+			ends[0].binding = PathBinding{PathBinding::Free{}};
+			ends[1].binding = PathBinding{PathBinding::Free{}};
+			origin = (window.structure.atoms[atomA].cartesianPosition +
+				window.structure.atoms[atomB].cartesianPosition) * 0.5f;
+			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
+			path.name = "Zakrzywiona strzałka (C_2)";
+			path.nodes[0].position = ends[0].position;
+			path.nodes[1].position = ends[1].position;
+			path.segments[0].data = CircularArcSegmentData{glm::vec3(0, 0, 1), sweep};
+			path.transform.position = origin;
+			path.transform.rotation = BondFrameRotation(axis);
+			path.transformBinding.value = PathTransformBinding::BondFrame{atomA, atomB, rotation};
+			path.style.width = parameters.strokeWidth;
+			path.style.color = parameters.color;
+			path.style.endDecoration.kind = parameters.decoration;
+			path.style.endDecoration.lengthScale = 3.0f;
+			path.style.endDecoration.widthScale = 1.0f;
+			if (!ValidatePath(path).empty())
+				return ArrowError("path.edit_invalid_result", "The generated bond-axis arrow is invalid.");
+			paths.push_back(std::move(path));
+		}
+		else for (const auto &end : ends)
 		{
 			const float radius = glm::length(radial(end.position));
 			if (!std::isfinite(radius) || radius <= 1.0e-5f)
 				return ArrowError("path.arc_radius_nonpositive", "The arrow ends must be away from the rotation axis.");
 		}
-		if (cycle)
+		if (!bondMode && cycle)
 		{
 			const auto u = glm::normalize(radial(ends.front().position)), v = glm::cross(axis, u);
 			for (auto &end : ends)
@@ -143,9 +208,7 @@ namespace DefectStudio
 		}
 
 		// Prepare and validate the whole batch before changing the scene or its undo history.
-		std::vector<ScenePath> paths;
-		const std::size_t count = cycle ? ends.size() : 1;
-		for (std::size_t i = 0; i < count; ++i)
+		if (!bondMode) for (std::size_t i = 0, count = cycle ? ends.size() : 1; i < count; ++i)
 		{
 			const auto &a = ends[i], &b = ends[(i + 1) % ends.size()];
 			const auto u = glm::normalize(radial(a.position)), v = glm::normalize(radial(b.position));
@@ -162,7 +225,9 @@ namespace DefectStudio
 			path.nodes[1].binding = b.binding;
 			// DeriveArc fits the circle to the resolved (buffered) chord, including unequal radii/heights.
 			path.segments[0].data = CircularArcSegmentData{axis, angle * kCurvedArrowFlatness};
-			path.style.width = 0.03f;
+			path.style.width = parameters.strokeWidth;
+			path.style.color = parameters.color;
+			path.style.endDecoration.kind = parameters.decoration;
 			path.style.endDecoration.lengthScale = 3.0f;
 			path.style.endDecoration.widthScale = 1.0f;
 			MovePathOriginToCentre(path);

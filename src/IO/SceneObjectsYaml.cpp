@@ -364,6 +364,38 @@ namespace DefectStudio::SceneObjectsYaml
 			emit << YAML::Key << "buffer" << YAML::Value << binding.buffer << YAML::Key << "objectPersistKey" << YAML::Value << binding.objectPersistKey << YAML::EndMap;
 		}
 
+		bool ParseTransformBinding(const YAML::Node &node, PersistedPathTransformBinding &binding)
+		{
+			try
+			{
+				if (!node)
+					return true;
+				if (!node.IsMap())
+					return false;
+				binding.kind = node["kind"].as<std::string>(binding.kind);
+				if (binding.kind != "Free" && binding.kind != "BondFrame")
+					return false;
+				if (!ParseAnchors(node["atoms"], binding.atoms))
+					return false;
+				binding.rollRadians = node["rollRadians"].as<float>(binding.rollRadians);
+				return std::isfinite(binding.rollRadians) && ((binding.kind == "BondFrame" && binding.atoms.size() == 2) ||
+					(binding.kind == "Free" && binding.atoms.empty()));
+			}
+			catch (const YAML::Exception &)
+			{
+				return false;
+			}
+		}
+
+		void EmitTransformBinding(YAML::Emitter &emit, const PersistedPathTransformBinding &binding)
+		{
+			if (binding.kind == "Free")
+				return;
+			emit << YAML::Key << "transformBinding" << YAML::Value << YAML::BeginMap << YAML::Key << "kind" << YAML::Value << binding.kind;
+			EmitAnchors(emit, "atoms", binding.atoms);
+			emit << YAML::Key << "rollRadians" << YAML::Value << binding.rollRadians << YAML::EndMap;
+		}
+
 		void EmitPathStyle(YAML::Emitter &emit, const PersistedPathStyle &style)
 		{
 			emit << YAML::Key << "style" << YAML::Value << YAML::BeginMap << YAML::Key << "profile" << YAML::Value << style.profile << YAML::Key << "ribbon_normal" << YAML::Value << YAML::Flow << YAML::BeginSeq << style.ribbonNormal.x << style.ribbonNormal.y << style.ribbonNormal.z << YAML::EndSeq << YAML::Key << "ribbon_thickness" << YAML::Value << style.ribbonThickness << YAML::Key << "ribbon_bevel" << YAML::Value << style.ribbonBevel << YAML::Key << "ribbon_bevel_segments" << YAML::Value << style.ribbonBevelSegments << YAML::Key << "ribbon_bevel_shape" << YAML::Value << style.ribbonBevelShape << YAML::Key << "shade_smooth" << YAML::Value << style.shadeSmooth << YAML::Key << "width" << YAML::Value << style.width << YAML::Key << "join" << YAML::Value << style.join << YAML::Key << "cap" << YAML::Value << style.cap << YAML::Key << "radialSegments" << YAML::Value << style.radialSegments;
@@ -399,6 +431,7 @@ namespace DefectStudio::SceneObjectsYaml
 			if (node["transform_position"] && !Vec3(node["transform_position"], path.transformPosition)) return false;
 			if (node["transform_rotation"] && !Vec4(node["transform_rotation"], path.transformRotation)) return false;
 			if (node["transform_scale"] && !Vec3(node["transform_scale"], path.transformScale)) return false;
+			if (!ParseTransformBinding(node["transformBinding"], path.transformBinding)) return false;
 			if (path.transformPosition.x == 0.0f)
 				path.transformPosition.x = 0.0f;
 			// PersistedScenePath intentionally has no presence bit in its contract. Keep the
@@ -451,6 +484,7 @@ namespace DefectStudio::SceneObjectsYaml
 			EmitVec4(emit, "transform_rotation", path.transformRotation);
 			EmitVec3(emit, "transform_scale", path.transformScale);
 		}
+		EmitTransformBinding(emit, path.transformBinding);
 		emit << YAML::Key << "nodes" << YAML::Value << YAML::BeginSeq;
 		for (const auto &node : path.nodes)
 		{
