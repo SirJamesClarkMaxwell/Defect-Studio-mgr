@@ -14,7 +14,9 @@ namespace DefectStudio
 	{
 		Auto,
 		Bond,
-		DefectZ
+		DefectZ,
+		// C_2 axis through the midpoint of two ends, perpendicular to the line joining them.
+		PerpendicularToBond
 	};
 
 	// A ring around a bond has no radius of its own - the bond fixes only the axis and the centre -

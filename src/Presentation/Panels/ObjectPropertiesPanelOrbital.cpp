@@ -229,6 +229,10 @@ namespace DefectStudio
 				orbital.resolution = std::clamp(orbital.resolution, 8, 128);
 			ImGui::SetItemTooltip("Probki na os. Siatka liczy sie na glownym watku, wiec to jest pokretlo "
 								  "od przyciec przy przeciaganiu.");
+			DrawUndoableValue(windowState, orbital.smoothShading, [](bool &value) {
+				return ImGui::Checkbox("Gładkie cieniowanie", &value);
+			});
+			ImGui::SetItemTooltip("Normalne z dokładnej funkcji falowej. Wyłączone: płaskie ścianki siatki.");
 
 			ImGui::SeparatorText("Korekta rysunku");
 			ImGui::TextDisabled("Te ustawienia zmieniaja rysunek, nie fizyke orbitalu.");

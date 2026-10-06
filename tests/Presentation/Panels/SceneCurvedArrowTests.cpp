@@ -73,7 +73,8 @@ namespace DefectStudio::Tests
 		for (const auto &node : path.nodes)
 		{
 			ASSERT_TRUE(std::holds_alternative<PathBinding::CopyPosition>(node.binding.value));
-			EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(node.binding.value).buffer, GetScenePathAtomBuffer());
+			// Circle model: the end is placed by its offset, not by a chord-direction buffer.
+			EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(node.binding.value).buffer, 0.0f);
 		}
 		// No radius callback: measure flatness independently of surface clearance.
 		const auto resolved = ResolveNodePositions(path, {});
@@ -86,7 +87,9 @@ namespace DefectStudio::Tests
 		EXPECT_NEAR(sagitta, expected, 1.0e-5);
 		EXPECT_GT(sagitta / chordLength, 0.12);
 		EXPECT_LT(sagitta / chordLength, 0.15);
-		EXPECT_NEAR(glm::length(glm::dvec2(sample->position) - glm::dvec2(1, 2)), 1.0 + expected, 1.0e-5);
+		// Outward: the arc midpoint lies farther from the axis than the chord midpoint, by the sagitta.
+		EXPECT_NEAR(glm::length(glm::dvec2(sample->position) - glm::dvec2(1, 2)),
+			glm::length(glm::dvec2(chordMidpoint) - glm::dvec2(1, 2)) + expected, 1.0e-4);
 		EXPECT_LT(sagitta, 0.5); // Old orbit: sagitta = 1 at radius 2.
 		EXPECT_NEAR(sample->position.z, 3.0, 1.0e-5);
 		window.structure.atoms[1].cartesianPosition += glm::vec3(0, 0, 1);
@@ -462,9 +465,11 @@ namespace DefectStudio::Tests
 					{.axisMode = CurvedArrowAxisMode::DefectZ, .curvature = requested}, SceneOperationUndo::Suppress);
 				ASSERT_TRUE(added);
 				ASSERT_EQ(added->size(), cycle ? 3u : 2u);
-				for (const auto id : *added)
-					EXPECT_NEAR(std::get<CircularArcSegmentData>(window.paths->Store().Find(id)->segments.front().data).signedSweepRadians,
+				for (std::size_t i = 0; i < added->size(); ++i)
+				{
+					EXPECT_NEAR(std::get<CircularArcSegmentData>(window.paths->Store().Find((*added)[i])->segments.front().data).signedSweepRadians,
 						2.0f * std::numbers::pi_v<float> / 3.0f * expected, 1.0e-5f);
+				}
 			}
 	}
 

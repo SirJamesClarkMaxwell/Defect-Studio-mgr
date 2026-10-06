@@ -93,13 +93,12 @@ namespace DefectStudio
 		const float defaultGap = std::max(0.0f, GetScenePathAtomBuffer() - 1.0f);
 		const float gap = parameters.endGap && std::isfinite(*parameters.endGap) ?
 			std::clamp(*parameters.endGap, 0.0f, 3.0f) : defaultGap;
-		const float buffer = parameters.endGap ? 1.0f + gap : GetScenePathAtomBuffer();
 		const float radiusScale = std::isfinite(parameters.radiusScale) ?
 			std::clamp(parameters.radiusScale, 0.8f, 2.5f) : 1.0f;
 		for (const auto index : window.selectedAtomIndices)
 			if (index < window.structure.atoms.size())
 				ends.push_back({window.structure.atoms[index].cartesianPosition,
-					PathBinding{PathBinding::CopyPosition{index, {}, buffer}}});
+					PathBinding{PathBinding::CopyPosition{index, {}, 0.0f}}});
 		const auto mode = ResolveCurvedArrowSelectionMode(window, parameters.axisMode);
 		const bool cycle = mode == CurvedArrowSelectionMode::Cycle;
 		// Keep atom/vacancy and vacancy/vacancy pairs. For >=2 atoms vacancies only define the axis.
@@ -107,7 +106,7 @@ namespace DefectStudio
 			for (const auto index : window.selectedVacancies)
 				if (index < window.structure.vacancies.size())
 					ends.push_back({window.structure.vacancies[index].cartesianPosition,
-						PathBinding{PathBinding::CopyVacancy{index, {}, buffer}}});
+						PathBinding{PathBinding::CopyVacancy{index, {}, 0.0f}}});
 		if (ends.size() < 2 || (!cycle && ends.size() != 2))
 			return ArrowError("path.two_atoms_required", "Select at least two atoms, or exactly two atom/vacancy ends.");
 		for (const auto &end : ends)
@@ -131,7 +130,8 @@ namespace DefectStudio
 			if (glm::length(axis) < 1.0e-5f)
 				return ArrowError("curved_arrow.degenerate_bond", "The selected atoms must not occupy the same position.");
 		}
-		else if (const auto &frame = window.structure.defectFrame)
+		else if (const auto &frame = window.structure.defectFrame;
+			frame && parameters.axisMode != CurvedArrowAxisMode::PerpendicularToBond)
 		{
 			origin = frame->origin;
 			axis = frame->z;
@@ -232,37 +232,85 @@ namespace DefectStudio
 		}
 
 		// Prepare and validate the whole batch before changing the scene or its undo history.
+		// Circle model: each end sits on a circle of radius radiusScale x (its distance from the axis),
+		// moved along that circle by the smallest angle that keeps it endGap clear of its sphere. The
+		// clearance grows monotonically with that angle, so every parameter changes the geometry
+		// continuously (trimming along the chord instead jumps to the sphere's far exit).
+		const auto endRadius = [&window](const PathBinding &binding) {
+			if (const auto *atom = std::get_if<PathBinding::CopyPosition>(&binding.value))
+				return window.structure.atoms[atom->atomIndex].radius;
+			if (const auto *vacancy = std::get_if<PathBinding::CopyVacancy>(&binding.value))
+				return window.structure.vacancies[vacancy->vacancyIndex].radius;
+			return 0.0f;
+		};
+		const auto placeEnd = [&](const End &end, float direction, float &consumed) -> std::pair<glm::vec3, PathBinding> {
+			const glm::vec3 r = radial(end.position);
+			const float rho = glm::length(r);
+			const float circle = radiusScale * rho;
+			const float clearance = std::max(endRadius(end.binding), 0.0f) * (1.0f + gap);
+			const float outward = circle - rho;
+			float delta = 0.0f;
+			if (outward * outward < clearance * clearance)
+				delta = std::acos(std::clamp(1.0f - (clearance * clearance - outward * outward) /
+					(2.0f * circle * rho), -1.0f, 1.0f));
+			consumed += delta;
+			const glm::vec3 onCircle = glm::angleAxis(direction * delta, axis) * (r / rho) * circle;
+			const glm::vec3 point = end.position - r + onCircle;
+			PathBinding binding = end.binding;
+			std::visit([&](auto &value) {
+				if constexpr (requires { value.offset; value.buffer; })
+				{
+					value.offset = point - end.position;
+					value.buffer = 0.0f;
+				}
+			}, binding.value);
+			return {point, binding};
+		};
+		const int pairCount = std::clamp(parameters.arrowCount, 1, 2);
+		const float tilt = glm::radians(std::isfinite(parameters.tiltDegrees) ?
+			std::clamp(parameters.tiltDegrees, -180.0f, 180.0f) : 0.0f);
+		// Cycles run in the positive sense (sorted by angle). A pair keeps the sense of its first,
+		// shortest A -> B step; its B -> A arrow turns on in that sense with the same arc, so it
+		// passes on the other side of the chord (the C_2 picture: over the top, back underneath).
+		float sense = 1.0f;
 		float pairAngle = 0.0f;
-		if (!bondMode) for (std::size_t i = 0, count = cycle ? ends.size() : std::clamp(parameters.arrowCount, 1, 2); i < count; ++i)
+		if (!bondMode) for (std::size_t i = 0, count = cycle ? ends.size() : static_cast<std::size_t>(pairCount); i < count; ++i)
 		{
 			const auto &a = ends[i], &b = ends[(i + 1) % ends.size()];
 			const auto u = glm::normalize(radial(a.position)), v = glm::normalize(radial(b.position));
 			float angle = std::atan2(glm::dot(axis, glm::cross(u, v)), glm::dot(u, v));
 			if (std::abs(angle) < 1.0e-4f)
 				return ArrowError("path.arc_sweep_out_of_range", "The arrow ends must have different angles around the axis.");
-			if (cycle && angle < 0) angle += 2.0f * std::numbers::pi_v<float>;
-			if (!cycle)
+			if (!cycle && i == 0)
 			{
-				if (i == 0) pairAngle = angle;
-				angle = pairAngle; // Reversing the chord with the same sweep puts the return arc on the other side.
+				sense = angle < 0.0f ? -1.0f : 1.0f;
+				pairAngle = angle;
 			}
+			if (!cycle)
+				angle = pairAngle;
+			else if (angle < 0.0f)
+				angle += 2.0f * std::numbers::pi_v<float>;
+			const float direction = sense;
+			float consumed = 0.0f;
+			const auto [startPoint, startBinding] = placeEnd(a, direction, consumed);
+			const auto [endPoint, endBinding] = placeEnd(b, -direction, consumed);
+			if (glm::distance(startPoint, endPoint) < 1.0e-4f || (cycle && !(std::abs(angle) - consumed > 1.0e-3f)))
+				return ArrowError("path.arc_sweep_out_of_range", "The atoms are too close for this gap; lower Odstęp od atomów or raise Promień okręgu.");
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 			path.name = "Zakrzywiona strzałka (C_n)";
 			path.transform.position = glm::vec3(0);
-			path.nodes[0].position = a.position;
-			path.nodes[1].position = b.position;
-			path.nodes[0].binding = a.binding;
-			path.nodes[1].binding = b.binding;
-			// Keep the clearance-bound ends fixed. Scaling sagitta (h = chord/2 * tan(sweep/4))
-			// moves the arc outward continuously, without the old sphere-exit/zero-trim switch.
-			const float sweep = radiusScale == 1.0f ? angle * curvature :
-				4.0f * std::atan(radiusScale * std::tan(angle * curvature * 0.25f));
-			// A pair shares one orientation for its chord line, so its bulges stay opposite at every tilt.
-			const glm::vec3 chord = glm::normalize(!cycle && i == 1 ? a.position - b.position : b.position - a.position);
-			const glm::vec3 normal = glm::normalize(axis - chord * glm::dot(axis, chord));
-			const float tilt = glm::radians(std::isfinite(parameters.tiltDegrees) ?
-				std::clamp(parameters.tiltDegrees, -180.0f, 180.0f) : 0.0f);
-			path.segments[0].data = CircularArcSegmentData{glm::angleAxis(tilt, chord) * normal, sweep};
+			path.nodes[0].position = startPoint;
+			path.nodes[1].position = endPoint;
+			path.nodes[0].binding = startBinding;
+			path.nodes[1].binding = endBinding;
+			// Same bulge rule as before the circle model: curvature x the angle between the two atoms.
+			const float sweep = angle * curvature;
+			const glm::vec3 chord = glm::normalize(endPoint - startPoint);
+			glm::vec3 normal = axis - chord * glm::dot(axis, chord);
+			normal = glm::length(normal) > 1.0e-5f ? glm::normalize(normal) : axis;
+			// A pair tilts as one rigid circle about the A-B line; cycle arcs each stand up about their chord.
+			const glm::vec3 tiltLine = !cycle && i == 1 ? -chord : chord;
+			path.segments[0].data = CircularArcSegmentData{glm::angleAxis(tilt, tiltLine) * normal, sweep};
 			path.style.shadeSmooth = true;
 			path.style.width = parameters.strokeWidth;
 			path.style.color = parameters.color;

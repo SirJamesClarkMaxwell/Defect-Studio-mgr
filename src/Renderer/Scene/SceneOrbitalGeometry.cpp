@@ -241,28 +241,28 @@ namespace DefectStudio
 
 		OrbitalSamplingSettings sampling;
 		sampling.dimensions = glm::ivec3(orbital.resolution);
-		const OrbitalGridData grid = SampleOrbitalToGrid(BuildOrbitalWavefunction(orbital, structure), sampling);
+		const OrbitalWavefunction wavefunction = BuildOrbitalWavefunction(orbital, structure);
+		const OrbitalGridData grid = SampleOrbitalToGrid(wavefunction, sampling);
 		const float isoValue = SuggestOrbitalIsoValue(grid, orbital.isoFraction);
 		if (!std::isfinite(isoValue) || isoValue <= 0.0f)
 			return {};
 
-		std::vector<IsosurfaceVertex> mesh = GenerateIsosurfaceMesh(grid, isoValue);
+		// The analytic sampler is endpoint-inclusive, and the exact field gives the crossings and
+		// normals (the voxel gradient left the lobes faceted at the default resolution).
+		IsosurfaceMeshOptions options;
+		options.endpointInclusive = true;
+		options.smoothShading = orbital.smoothShading;
+		options.field = [&wavefunction](const glm::vec3 &point) { return EvaluateOrbital(wavefunction, point); };
+		std::vector<IsosurfaceVertex> mesh = GenerateIsosurfaceMesh(grid, isoValue, options);
 		const SceneOrbitalCenters centers = ResolveSceneOrbitalCenters(orbital, structure);
 		const glm::vec3 centroid = centers.centroid;
 		const glm::vec3 stretch = SanitizedStretch(orbital.stretch);
 		const glm::vec3 inverseStretch = glm::vec3(1.0f) / stretch;
 		const glm::mat3 frame = OrbitalFrame(orbital, centers);
 		const glm::mat3 inverseFrame = glm::transpose(frame);
-		// GenerateIsosurfaceMesh uses periodic-grid i/N coordinates while the analytic sampler uses
-		// endpoint-inclusive i/(N-1). Keep the documented (N-1)/N size difference, but translate the
-		// shrunken box back onto its physical centroid instead of leaving it half a voxel off-centre.
-		const glm::vec3 centeringOffset =
-			grid.cell[0] * (0.5f / static_cast<float>(grid.dimensions.x)) +
-			grid.cell[1] * (0.5f / static_cast<float>(grid.dimensions.y)) +
-			grid.cell[2] * (0.5f / static_cast<float>(grid.dimensions.z));
 		for (IsosurfaceVertex &vertex : mesh)
 		{
-			const glm::vec3 offset = vertex.position + centeringOffset - centroid;
+			const glm::vec3 offset = vertex.position - centroid;
 			vertex.position = centroid + frame * (inverseFrame * offset * stretch) * orbital.scale;
 			vertex.normal = glm::normalize(frame * (inverseFrame * vertex.normal * inverseStretch));
 		}
@@ -304,6 +304,7 @@ namespace DefectStudio
 		HashVec3(hash, orbital.stretch);
 		HashFloat(hash, orbital.isoFraction);
 		HashValue(hash, static_cast<std::uint64_t>(orbital.resolution));
+		HashValue(hash, static_cast<std::uint64_t>(orbital.smoothShading));
 		return SceneOrbitalMeshKey{hash};
 	}
 

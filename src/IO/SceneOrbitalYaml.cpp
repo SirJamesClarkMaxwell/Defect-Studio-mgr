@@ -34,6 +34,7 @@ namespace DefectStudio::SceneObjectsYaml
 			orbital.scale = node["scale"].as<float>(orbital.scale);
 			orbital.isoFraction = node["isoFraction"].as<float>(orbital.isoFraction);
 			orbital.resolution = node["resolution"].as<int>(orbital.resolution);
+			orbital.smoothShading = node["smoothShading"].as<bool>(true);
 			orbital.alpha = node["alpha"].as<float>(orbital.alpha);
 			orbital.visible = node["visible"].as<bool>(orbital.visible);
 			orbital.displayName = node["displayName"].as<std::string>("");
@@ -92,6 +93,8 @@ namespace DefectStudio::SceneObjectsYaml
 		EmitVec3(emit, "stretch", orbital.stretch);
 		emit << YAML::Key << "isoFraction" << YAML::Value << orbital.isoFraction << YAML::Key << "resolution"
 			 << YAML::Value << orbital.resolution;
+		if (!orbital.smoothShading)
+			emit << YAML::Key << "smoothShading" << YAML::Value << false;
 		EmitVec3(emit, "positiveLobeColor", orbital.positiveLobeColor);
 		EmitVec3(emit, "negativeLobeColor", orbital.negativeLobeColor);
 		emit << YAML::Key << "alpha" << YAML::Value << orbital.alpha << YAML::Key << "visible" << YAML::Value

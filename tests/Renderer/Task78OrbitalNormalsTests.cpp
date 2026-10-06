@@ -61,6 +61,58 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	TEST(Task81OrbitalNormalsTests, ExactFieldGivesRadialNormalsAndFlatModeGivesFaceNormals)
+	{
+		// Endpoint-inclusive sampling of a sphere, like the analytic orbital sampler.
+		constexpr int n = 13;
+		const glm::vec3 centre(0.5f);
+		const auto field = [centre](const glm::vec3 &p) { return 0.16f - glm::dot(p - centre, p - centre); };
+		OrbitalGridData grid;
+		grid.dimensions = glm::ivec3(n);
+		grid.cell = glm::mat3(1.0f);
+		grid.values.resize(static_cast<std::size_t>(n * n * n));
+		for (int x = 0; x < n; ++x)
+			for (int y = 0; y < n; ++y)
+				for (int z = 0; z < n; ++z)
+					grid.values[(static_cast<std::size_t>(x) * n + y) * n + z] =
+						field(glm::vec3(x, y, z) / static_cast<float>(n - 1));
+		IsosurfaceMeshOptions options;
+		options.endpointInclusive = true;
+		options.field = field;
+		const auto smooth = GenerateIsosurfaceMesh(grid, 0.07f, options);
+		ASSERT_FALSE(smooth.empty());
+		for (const auto &vertex : smooth)
+			if (vertex.sign > 0.0f)
+			{
+				// Crossings sit on the true surface and normals follow the exact gradient.
+				EXPECT_NEAR(glm::length(vertex.position - centre), 0.3f, 1e-3f);
+				EXPECT_GT(glm::dot(vertex.normal, glm::normalize(vertex.position - centre)), 0.9995f);
+			}
+		options.smoothShading = false;
+		const auto flat = GenerateIsosurfaceMesh(grid, 0.07f, options);
+		ASSERT_EQ(flat.size(), smooth.size());
+		for (std::size_t i = 0; i + 2 < flat.size(); i += 3)
+		{
+			EXPECT_EQ(flat[i].normal, flat[i + 1].normal);
+			EXPECT_EQ(flat[i].normal, flat[i + 2].normal);
+		}
+	}
+
+	TEST(Task81OrbitalNormalsTests, SceneOrbitalFlagSwitchesBetweenSmoothAndFlat)
+	{
+		RendererStructureData structure;
+		RendererWindowState::SceneOrbital orbital;
+		orbital.preset = OrbitalPreset::P;
+		orbital.resolution = 16;
+		orbital.smoothShading = false;
+		const auto mesh = BuildSceneOrbitalMesh(orbital, structure);
+		ASSERT_FALSE(mesh.empty());
+		for (std::size_t i = 0; i + 2 < mesh.size(); i += 3)
+			EXPECT_LT(glm::length(mesh[i].normal - mesh[i + 1].normal), 1e-4f);
+		EXPECT_NE(MakeSceneOrbitalMeshKey(orbital, structure).hash,
+			[&] { auto copy = orbital; copy.smoothShading = true; return MakeSceneOrbitalMeshKey(copy, structure).hash; }());
+	}
+
 	TEST(Task78OrbitalPickingTests, SurfaceInFrontOfAnAtomIsHitAndEmptyBoundingSphereSpaceMisses)
 	{
 		RendererWindowState window;

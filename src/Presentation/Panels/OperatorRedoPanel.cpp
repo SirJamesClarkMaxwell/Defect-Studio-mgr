@@ -113,12 +113,35 @@ namespace DefectStudio
 		m_SelectedAtoms.clear();
 		m_SelectedVacancies.clear();
 		m_Values.clear();
+		m_History.clear();
+		m_Future.clear();
+		m_EditStart.reset();
 		m_HiddenKeys.clear();
 		m_ParameterMaximums.clear();
 		m_WindowId.clear();
 		m_UndoDepth = 0;
 		m_Open = false;
 		m_Collapsed = false;
+	}
+
+	void OperatorRedoPanel::CommitEdit(SceneOperatorValues before)
+	{
+		if (before == m_Values)
+			return;
+		m_History.push_back(std::move(before));
+		m_Future.clear();
+	}
+
+	void OperatorRedoPanel::StepHistory(RendererWindowState &window, bool backwards)
+	{
+		auto &from = backwards ? m_History : m_Future;
+		auto &to = backwards ? m_Future : m_History;
+		if (from.empty())
+			return;
+		SceneOperatorValues target = std::move(from.back());
+		from.pop_back();
+		to.push_back(m_Values);
+		(void)Reapply(window, target);
 	}
 
 	bool OperatorRedoPanel::IsOpen() const noexcept
@@ -161,12 +184,38 @@ namespace DefectStudio
 			return;
 		}
 
+		// While the pointer or focus is on the panel, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y step through the
+		// panel's own edits; keep the app-wide undo shortcut from also firing for the same key press.
+		const ImGuiIO &io = ImGui::GetIO();
+		if (!io.WantTextInput && (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) ||
+			ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)))
+		{
+			ImGui::SetNextFrameWantCaptureKeyboard(true);
+			const bool undo = io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false);
+			const bool redo = io.KeyCtrl && ((io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false)) ||
+				ImGui::IsKeyPressed(ImGuiKey_Y, false));
+			if (undo && m_History.empty())
+			{
+				// Nothing left to step back: undo the operation itself (PollInvalidation then closes).
+				if (const Ref<UndoStack> undoStack = GetBoundRendererUndoStack().lock(); undoStack && undoStack->Undo())
+					Close();
+			}
+			else if (undo || redo)
+				StepHistory(window, undo);
+		}
+		if (!m_Open)
+		{
+			ImGui::End();
+			return;
+		}
+
 		const std::string header = m_Operator->label + "##OperatorRedoHeader";
 		const bool expanded = ImGui::CollapsingHeader(
 			header.c_str(), m_Collapsed ? 0 : ImGuiTreeNodeFlags_DefaultOpen);
 		m_Collapsed = !expanded;
 		if (expanded)
 		{
+			const SceneOperatorValues frameStart = m_Values;
 			for (const SceneOperatorParameter &parameter : m_Operator->schema)
 			{
 				if (std::find(m_HiddenKeys.begin(), m_HiddenKeys.end(), parameter.key) != m_HiddenKeys.end())
@@ -218,10 +267,24 @@ namespace DefectStudio
 				// waiting for it means the panel never reacts.
 				// ponytail: one rebuild per drag frame. If a large cycle ever stutters, buffer the
 				// value and re-run on IsItemDeactivatedAfterEdit() || IsItemEdited() instead.
+				// History: a drag is one step (from activation to release); a click widget
+				// (checkbox, combo item) that changes without staying active is one step too.
+				if (ImGui::IsItemActivated())
+					m_EditStart = frameStart;
 				if (changed)
 				{
 					if (!Reapply(window, m_Values))
 						break;
+					if (!ImGui::IsItemActive())
+					{
+						CommitEdit(m_EditStart.value_or(frameStart));
+						m_EditStart.reset();
+					}
+				}
+				if (ImGui::IsItemDeactivatedAfterEdit() && m_EditStart)
+				{
+					CommitEdit(std::move(*m_EditStart));
+					m_EditStart.reset();
 				}
 			}
 		}

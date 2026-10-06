@@ -71,31 +71,32 @@ namespace DefectStudio::Tests
 					ASSERT_EQ(points.size(), added->size() * 3);
 					if (!previous.empty())
 						for (std::size_t i = 0; i < points.size(); ++i)
-							EXPECT_LT(glm::distance(previous[i], points[i]), 0.05);
+							// A change of 0.01 moves a 2 A circle by ~0.02-0.1 A; the old branch jumped by ~0.8 A.
+							EXPECT_LT(glm::distance(previous[i], points[i]), 0.2);
 					previous = points;
 				}
 			}
 	}
 
-	TEST(Task77SceneCurvedArrowTests, ScaleThirteenKeepsEndsAndOnlyEnlargesTheShallowBulge)
+	TEST(Task77SceneCurvedArrowTests, ScaleThirteenMovesTheEndsOutOntoTheLargerCircle)
 	{
-		RendererWindowState before, after;
-		Prepare(before, true);
-		Prepare(after, true);
-		const auto a = AddCurvedArrowThroughSelectedAtoms(before, {}, SceneOperationUndo::Suppress);
-		const auto b = AddCurvedArrowThroughSelectedAtoms(after, {.radiusScale = 1.3f}, SceneOperationUndo::Suppress);
-		ASSERT_TRUE(a);
-		ASSERT_TRUE(b);
-		const auto oldPoints = Geometry(before, *a), newPoints = Geometry(after, *b);
-		ASSERT_EQ(oldPoints.size(), newPoints.size());
-		for (std::size_t i = 0; i < oldPoints.size(); i += 3)
+		RendererWindowState window;
+		Prepare(window, true);
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.radiusScale = 1.3f}, SceneOperationUndo::Suppress);
+		ASSERT_TRUE(added);
+		const auto context = SceneSystem::MakePathBindingContext(window);
+		for (const auto id : *added)
 		{
-			EXPECT_LT(glm::distance(oldPoints[i], newPoints[i]), 1.0e-5);
-			EXPECT_LT(glm::distance(oldPoints[i+2], newPoints[i+2]), 1.0e-5);
-			const auto chordCenter = (oldPoints[i] + oldPoints[i+2]) * 0.5;
-			const double height = glm::distance(oldPoints[i+1], chordCenter);
-			EXPECT_NEAR(glm::distance(newPoints[i+1], chordCenter), height * 1.3, 1.0e-5);
-			EXPECT_GT(glm::length(newPoints[i+1]), glm::length(oldPoints[i+1]));
+			const auto &path = *window.paths->Store().Find(id);
+			const auto ends = ResolveNodePositions(path, context);
+			for (std::size_t i = 0; i < 2; ++i)
+			{
+				const auto atomIndex = std::get<PathBinding::CopyPosition>(path.nodes[i].binding.value).atomIndex;
+				const auto &atom = window.structure.atoms[atomIndex];
+				// On the larger circle, and at least r(1 + gap) from the atom.
+				EXPECT_NEAR(glm::length(glm::vec2(ends.positions[i])), 1.3f * glm::length(glm::vec2(atom.cartesianPosition)), 1.0e-4f);
+				EXPECT_GE(glm::distance(ends.positions[i], atom.cartesianPosition), atom.radius * GetScenePathAtomBuffer() - 1.0e-4f);
+			}
 		}
 	}
 
@@ -127,14 +128,19 @@ namespace DefectStudio::Tests
 				const auto &second = *window.paths->Store().Find(added->back());
 				const auto context = SceneSystem::MakePathBindingContext(window);
 				const auto a = ResolveNodePositions(first, context), b = ResolveNodePositions(second, context);
-				EXPECT_LT(glm::distance(a.positions.front(), b.positions.back()), 1.0e-5f);
-				EXPECT_LT(glm::distance(a.positions.back(), b.positions.front()), 1.0e-5f);
+				// A C_2 pair: A -> B and B -> A turn the same way about the axis and together close the
+				// circle, so the two arcs lie on opposite sides of the A-B chord.
 				const auto ma = EvaluateSegment(first, a, 0, 0.5), mb = EvaluateSegment(second, b, 0, 0.5);
 				ASSERT_TRUE(ma);
 				ASSERT_TRUE(mb);
-				const auto center = (glm::dvec3(a.positions.front()) + glm::dvec3(a.positions.back())) * 0.5;
-				EXPECT_LT(glm::dot(ma->position - center, mb->position - center), 0.0);
-				EXPECT_LT(glm::length(ma->position + mb->position - 2.0 * center), 1.0e-5);
+				const glm::dvec3 chord = glm::dvec3(a.positions.back()) - glm::dvec3(a.positions.front());
+				const glm::dvec3 axis(0, 0, 1);
+				const auto side = [&](const glm::dvec3 &p) {
+					return glm::dot(glm::cross(chord, p - glm::dvec3(a.positions.front())), axis);
+				};
+				if (tilt == 0.0f)
+					EXPECT_LT(side(ma->position) * side(mb->position), 0.0);
+				EXPECT_GT(glm::distance(ma->position, mb->position), 0.5);
 			}
 	}
 
@@ -235,5 +241,40 @@ namespace DefectStudio::Tests
 					EXPECT_NE(std::find(window.selectedScenePaths.begin(), window.selectedScenePaths.end(), id), window.selectedScenePaths.end());
 				}
 			}
+	}
+
+	TEST(Task80SceneCurvedArrowTests, PerpendicularAxisPairGoesOverAndUnderTheBondFromOutsideTheAtoms)
+	{
+		// The user's C_2 sketch: two bonded atoms, axis perpendicular to the bond, a larger circle.
+		RendererWindowState window;
+		window.structure.atoms = {{"C", {-0.77f, 0, 0}}, {"C", {0.77f, 0, 0}}, {"C", {0, 1.0f, 0}}};
+		for (auto &atom : window.structure.atoms) atom.radius = 0.35f;
+		window.structure.defectFrame.emplace(); // ignored by this axis choice
+		window.structure.defectFrame->z = {1, 0, 0};
+		window.selectedAtomIndices = {0, 1};
+		const auto added = AddCurvedArrowThroughSelectedAtoms(window,
+			{.axisMode = CurvedArrowAxisMode::PerpendicularToBond, .arrowCount = 2, .radiusScale = 1.6f},
+			SceneOperationUndo::Suppress);
+		ASSERT_TRUE(added);
+		ASSERT_EQ(added->size(), 2u);
+		const auto context = SceneSystem::MakePathBindingContext(window);
+		std::vector<double> sides;
+		for (const auto id : *added)
+		{
+			const auto &path = *window.paths->Store().Find(id);
+			const auto ends = ResolveNodePositions(path, context);
+			for (std::size_t i = 0; i < 2; ++i)
+			{
+				const auto atomIndex = std::get<PathBinding::CopyPosition>(path.nodes[i].binding.value).atomIndex;
+				EXPECT_GE(glm::distance(ends.positions[i], window.structure.atoms[atomIndex].cartesianPosition),
+					0.35f * GetScenePathAtomBuffer() - 1.0e-4f);
+				EXPECT_NEAR(glm::length(ends.positions[i]), 1.6f * 0.77f, 1.0e-4f); // on the larger circle
+			}
+			const auto middle = EvaluateSegment(path, ends, 0, 0.5);
+			ASSERT_TRUE(middle);
+			EXPECT_LT(std::abs(middle->position.x), 0.3); // crosses the bond's perpendicular bisector
+			sides.push_back(middle->position.y);
+		}
+		EXPECT_LT(sides[0] * sides[1], 0.0); // one over, one under
 	}
 }

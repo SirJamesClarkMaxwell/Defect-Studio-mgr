@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <array>
 #include <cstddef>
@@ -349,7 +349,7 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec2 &viewportPixelSize,
-			const glm::vec3 &sceneOffset);
+			const glm::vec3 &sceneOffset, bool depthOnly = false);
 		// Paths use an early depth-tested pass with the structure and a late depth-disabled pass
 		// with labels for PathDepthMode::AlwaysOnTop. Each pass draws only its matching paths.
 		//

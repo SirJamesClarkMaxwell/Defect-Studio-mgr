@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <variant>
 
 #include "Core/Undo/UndoStack.hpp"
@@ -60,16 +61,17 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(std::holds_alternative<PathBinding::CopyPosition>(line.nodes[0].binding.value));
 		const auto &binding = std::get<PathBinding::CopyPosition>(line.nodes[0].binding.value);
 		EXPECT_EQ(binding.atomIndex, 0u);
-		EXPECT_FLOAT_EQ(binding.buffer, 0.0f);
+		EXPECT_FLOAT_EQ(binding.buffer, VacancyBondAtomBuffer(window.structure.atoms[0].radius, line.style.width * 0.5f));
 		ASSERT_TRUE(std::holds_alternative<PathBinding::CopyVacancy>(line.nodes[1].binding.value));
 		const auto &vacancyBinding = std::get<PathBinding::CopyVacancy>(line.nodes[1].binding.value);
 		EXPECT_EQ(vacancyBinding.vacancyIndex, 0u);
 		EXPECT_FLOAT_EQ(vacancyBinding.buffer, 0.0f);
 		EXPECT_EQ(line.style.depthMode, PathDepthMode::DepthTest);
-		// Both endpoints stay at the sphere centres, even for a tube too thick for the old 0.9 buffer.
+		// The tube rim, rather than its centreline, meets the atom surface.
 		window.structure.atoms[0].radius = 0.15f;
 		const auto resolved = ResolveNodePositions(line, SceneSystem::MakePathBindingContext(window));
-		EXPECT_EQ(resolved.positions.front(), window.structure.atoms[0].cartesianPosition);
+		EXPECT_NEAR(glm::length(resolved.positions.front() - window.structure.atoms[0].cartesianPosition), 0.12f, 1e-5f);
+		EXPECT_NEAR(std::hypot(0.12f, line.style.width * 0.5f), window.structure.atoms[0].radius, 1e-5f);
 		const glm::vec3 end = resolved.positions[1];
 		EXPECT_NEAR(end.x, 0.0f, 1e-5f);
 		EXPECT_NEAR(end.y, 0.0f, 1e-5f);
@@ -137,10 +139,13 @@ namespace DefectStudio::Tests
 		const auto before = ResolveNodePositions(line, context);
 		window.structure.vacancies[0].cartesianPosition = glm::vec3(0, 1, 0);
 		const auto after = ResolveNodePositions(line, context);
-		// The atom end remains at the centre when the bond turns.
+		// Turning the bond keeps the same sphere-surface clearance at the atom end.
 		const glm::vec3 atom = window.structure.atoms[0].cartesianPosition;
-		EXPECT_EQ(before.positions[0], atom);
-		EXPECT_EQ(after.positions[0], atom);
+		const float shrink = std::sqrt(window.structure.atoms[0].radius * window.structure.atoms[0].radius -
+			line.style.width * line.style.width * 0.25f);
+		EXPECT_NEAR(glm::length(before.positions[0] - atom), shrink, 1e-5f);
+		EXPECT_NEAR(glm::length(after.positions[0] - atom), shrink, 1e-5f);
+		EXPECT_NE(before.positions[0], after.positions[0]);
 		EXPECT_NE(after.positions[1], before.positions[1]);
 		EXPECT_NEAR(glm::length(after.positions[1] - window.structure.vacancies[0].cartesianPosition), 0.0f, 1e-5f);
 		EXPECT_NE(BindingSourceRevision(line, before), BindingSourceRevision(line, after));
@@ -156,7 +161,8 @@ namespace DefectStudio::Tests
 			ASSERT_EQ(AddVacancyBonds(window, 2.5f), 1u);
 			const auto &line = *window.paths->Store().Find(window.selectedScenePaths.front());
 			EXPECT_FLOAT_EQ(line.style.width, 2.0f * std::max(radius, 0.001f) * 2.5f);
-			EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(line.nodes.front().binding.value).buffer, 0.0f);
+			EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(line.nodes.front().binding.value).buffer,
+				VacancyBondAtomBuffer(window.structure.atoms[0].radius, line.style.width * 0.5f));
 			EXPECT_FLOAT_EQ(std::get<PathBinding::CopyVacancy>(line.nodes.back().binding.value).buffer, 0.0f);
 		}
 	}
@@ -194,6 +200,75 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(glm::vec3(SampleStrokeColor(path.style, 0.5)), mixed);
 	}
 
+	TEST(ViewportVacancyAddTests, AtomBufferPutsTubeRimOnSphereAndClampsOversizedTubes)
+	{
+		EXPECT_NEAR(VacancyBondAtomBuffer(0.15f, 0.09f), 0.8f, 1e-6f);
+		for (float radius : {0.15f, 0.45f, 1.0f})
+			for (float fraction : {0.0f, 0.2f, 0.6f, 0.99f})
+			{
+				const float tube = radius * fraction;
+				const float shrink = radius * VacancyBondAtomBuffer(radius, tube);
+				EXPECT_NEAR(shrink * shrink + tube * tube, radius * radius, 1e-6f);
+			}
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(0.15f, 0.15f), 0.0f);
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(0.15f, 0.2f), 0.0f);
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(0.0f, 0.09f), 0.0f);
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(-0.15f, 0.09f), 0.0f);
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(0.15f, -0.09f), 0.0f);
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(std::numeric_limits<float>::infinity(), 0.09f), 0.0f);
+		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(0.15f, std::numeric_limits<float>::quiet_NaN()), 0.0f);
+	}
+
+	TEST(ViewportVacancyAddTests, MatcherAcceptsSurfaceAndLegacyAtomBuffersInEitherDirection)
+	{
+		auto window = WindowWithVacancy();
+		window.selectedAtomIndices = {0};
+		ASSERT_EQ(AddVacancyBonds(window), 1u);
+		ScenePath path = *window.paths->Store().Find(window.selectedScenePaths.front());
+		for (float buffer : {0.0f, 0.9f, VacancyBondAtomBuffer(0.15f, 0.09f), 1.0f})
+		{
+			std::get<PathBinding::CopyPosition>(path.nodes.front().binding.value).buffer = buffer;
+			const auto pair = GeneratedVacancyBondPair(path);
+			ASSERT_TRUE(pair);
+			EXPECT_EQ(*pair, (VacancyBondPair{false, 0, 0}));
+			std::swap(path.nodes.front(), path.nodes.back());
+			EXPECT_EQ(GeneratedVacancyBondPair(path), pair);
+			std::swap(path.nodes.front(), path.nodes.back());
+		}
+		for (float buffer : {-0.1f, 1.15f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
+		{
+			std::get<PathBinding::CopyPosition>(path.nodes.front().binding.value).buffer = buffer;
+			EXPECT_FALSE(GeneratedVacancyBondPair(path));
+		}
+	}
+
+	TEST(ViewportVacancyAddTests, SurfaceTrimTracksLiveWidthAndAtomRadiusWithoutMutatingBinding)
+	{
+		auto window = WindowWithVacancy();
+		window.structure.atoms[0].radius = 0.15f;
+		window.selectedAtomIndices = {0};
+		ASSERT_EQ(AddVacancyBonds(window), 1u);
+		ScenePath path = *window.paths->Store().Find(window.selectedScenePaths.front());
+		const auto bindings = SceneSystem::MakePathBindingContext(window);
+		const auto initial = ResolveNodePositions(path, bindings);
+		for (float radius : {0.15f, 0.3f})
+			for (float width : {0.06f, 0.18f, 0.4f})
+			{
+				window.structure.atoms[0].radius = radius;
+				path.style.width = width;
+				const auto resolved = ResolveNodePositions(path, bindings);
+				const float expected = std::sqrt(std::max(radius * radius - width * width * 0.25f, 0.0f));
+				EXPECT_NEAR(glm::length(resolved.positions.front() - window.structure.atoms[0].cartesianPosition), expected, 1e-5f);
+				EXPECT_EQ(resolved.positions.back(), window.structure.vacancies[0].cartesianPosition);
+				if (resolved.positions != initial.positions) // (0.15, default width) is the initial state
+					EXPECT_NE(BindingSourceRevision(path, initial), BindingSourceRevision(path, resolved));
+				EXPECT_NEAR(std::get<PathBinding::CopyPosition>(path.nodes.front().binding.value).buffer, 0.8f, 1e-6f);
+			}
+		// Ordinary authored paths keep their explicit buffer, even after width edits.
+		path.style.gradient.enabled = false;
+		EXPECT_NEAR(glm::length(ResolveNodePositions(path, bindings).positions.front() -
+			window.structure.atoms[0].cartesianPosition), 0.24f, 1e-5f);
+	}
 	class VacancyBondRegenerationTests : public testing::Test
 	{
 	protected:
@@ -242,7 +317,8 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(fixed.name, "My renamed bond");
 		EXPECT_EQ(fixed.persistKey, "keep-this-key");
 		EXPECT_FLOAT_EQ(fixed.style.width, 0.36f);
-		EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(fixed.nodes.front().binding.value).buffer, 0.0f);
+		EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(fixed.nodes.front().binding.value).buffer,
+			VacancyBondAtomBuffer(window.structure.atoms[0].radius, fixed.style.width * 0.5f));
 		EXPECT_FLOAT_EQ(std::get<PathBinding::CopyVacancy>(fixed.nodes.back().binding.value).buffer, 0.0f);
 		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
 

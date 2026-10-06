@@ -52,7 +52,7 @@ namespace DefectStudio
 		CurvedArrowParameters ToCurvedArrowParameters(const SceneOperatorValues &values)
 		{
 			CurvedArrowParameters parameters;
-			parameters.axisMode = ReadEnum(values, "axisMode", parameters.axisMode, 3);
+			parameters.axisMode = ReadEnum(values, "axisMode", parameters.axisMode, 4);
 			parameters.radiusRule = ReadEnum(values, "radiusRule", parameters.radiusRule, 2);
 			parameters.radiusFactor = ReadFiniteFloat(values, "radiusFactor", parameters.radiusFactor);
 			parameters.arrowCount = ReadValue(values, "arrowCount", parameters.arrowCount);
@@ -93,7 +93,7 @@ namespace DefectStudio
 		op.id = "scene.curved_arrow";
 		op.label = "Zakrzywiona strzałka C_n";
 		op.schema = {
-			EnumParameter("axisMode", "Oś", {"Automatyczna", "Wiązanie", "Oś Z defektu"}),
+			EnumParameter("axisMode", "Oś", {"Automatyczna", "Wiązanie", "Oś Z defektu", "Prostopadła do wiązania"}),
 			EnumParameter("radiusRule", "Reguła promienia", {"Względem atomu", "Ułamek wiązania"}),
 			FloatParameter("radiusFactor", "Współczynnik promienia", 0.1f, 5.0f),
 			{.key = "arrowCount", .label = "Liczba strzałek", .kind = SceneOperatorParameter::Kind::Int,
@@ -125,7 +125,7 @@ namespace DefectStudio
 		op.isParameterRelevant = [](const std::string &key, const SceneOperatorValues &values,
 			const RendererWindowState &window) {
 			const auto mode = ResolveCurvedArrowSelectionMode(window,
-				ReadEnum(values, "axisMode", CurvedArrowAxisMode::Auto, 3));
+				ReadEnum(values, "axisMode", CurvedArrowAxisMode::Auto, 4));
 			if (key == "decoration" || key == "color" || key == "strokeWidth")
 				return true;
 			if (key == "axisMode")
@@ -139,7 +139,7 @@ namespace DefectStudio
 		op.parameterMaximum = [](const SceneOperatorParameter &parameter, const SceneOperatorValues &values,
 			const RendererWindowState &window) {
 			return parameter.key == "arrowCount" && ResolveCurvedArrowSelectionMode(window,
-				ReadEnum(values, "axisMode", CurvedArrowAxisMode::Auto, 3)) == CurvedArrowSelectionMode::TwoEnds
+				ReadEnum(values, "axisMode", CurvedArrowAxisMode::Auto, 4)) == CurvedArrowSelectionMode::TwoEnds
 				? 2.0f : parameter.maximum;
 		};
 		op.execute = [](RendererWindowState &window, const SceneOperatorValues &values) {

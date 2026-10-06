@@ -277,6 +277,8 @@ namespace DefectStudio
 			// Samples per axis for the sampling cube. Meshing is CPU-side and runs on the main
 			// thread whenever a parameter changes, so this is the frame-hitch knob.
 			int resolution = 48;
+			// Off = flat face normals (the faceted look); on = normals from the exact field.
+			bool smoothShading = true;
 			glm::vec3 positiveLobeColor = glm::vec3(0.85f, 0.25f, 0.25f);
 			glm::vec3 negativeLobeColor = glm::vec3(0.25f, 0.35f, 0.9f);
 			float alpha = 0.75f;

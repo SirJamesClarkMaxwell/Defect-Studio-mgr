@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 #include "Renderer/Path/PathTypes.hpp"
@@ -15,6 +16,16 @@ namespace DefectStudio
 
 		friend bool operator==(const VacancyBondPair &, const VacancyBondPair &) = default;
 	};
+
+	// Atom-radii buffer: the tube's rim lies on the atom sphere, as in renderBonds.
+	[[nodiscard]] inline float VacancyBondAtomBuffer(float atomRadius, float tubeRadius)
+	{
+		if (!std::isfinite(atomRadius) || atomRadius <= 0.0f ||
+			!std::isfinite(tubeRadius) || tubeRadius < 0.0f)
+			return 0.0f;
+		const float ratio = tubeRadius / atomRadius;
+		return std::sqrt(std::max(1.0f - ratio * ratio, 0.0f));
+	}
 
 	// Recognise the generated style and bindings, including tasks 69/74's buffered endpoints.
 	// Names, saved widths and endpoint colours are authored data, not provenance.
@@ -45,7 +56,9 @@ namespace DefectStudio
 			if (!std::holds_alternative<PathBinding::CopyPosition>(node.binding.value))
 				return std::nullopt;
 			const auto &binding = std::get<PathBinding::CopyPosition>(node.binding.value);
-			if (binding.offset != glm::vec3(0.0f) || (binding.buffer != 0.0f && binding.buffer != 0.9f))
+			// Surface buffers span [0, 1] as the tube radius changes; this includes legacy 0/0.9.
+			if (binding.offset != glm::vec3(0.0f) || !std::isfinite(binding.buffer) ||
+				binding.buffer < 0.0f || binding.buffer > 1.0f)
 				return std::nullopt;
 			return binding.atomIndex;
 		};

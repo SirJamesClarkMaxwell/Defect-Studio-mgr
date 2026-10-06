@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Renderer/Path/PathBindingResolver.hpp"
+#include "Renderer/Path/VacancyBond.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -128,6 +129,7 @@ namespace DefectStudio
 		if (path.nodes.size() < 2)
 			return resolved;
 		const auto unbufferedPositions = resolved.positions;
+		const bool vacancyBond = GeneratedVacancyBondPair(path).has_value();
 		for (std::size_t index = 0; index < path.nodes.size(); ++index)
 		{
 			float buffer = 0.0f;
@@ -137,7 +139,11 @@ namespace DefectStudio
 				if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
 				{
 					buffer = binding.buffer;
-					if (buffer > 0.0f && context.atomRadius) radius = context.atomRadius(binding.atomIndex);
+					if (context.atomRadius && (buffer > 0.0f || vacancyBond))
+						radius = context.atomRadius(binding.atomIndex);
+					// Resolve from the live width/radius, so style edits and atom resizing need no rebinding.
+					if (vacancyBond && radius)
+						buffer = VacancyBondAtomBuffer(*radius, path.style.width * 0.5f);
 				}
 				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
 				{

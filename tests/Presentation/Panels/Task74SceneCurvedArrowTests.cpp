@@ -44,10 +44,14 @@ namespace DefectStudio::Tests
 					const auto &atom = window.structure.atoms[binding.atomIndex];
 					const auto direction = glm::normalize(window.structure.atoms[other.atomIndex].cartesianPosition -
 						atom.cartesianPosition);
-					EXPECT_EQ(binding.offset, glm::vec3(0));
-					EXPECT_FLOAT_EQ(binding.buffer, GetScenePathAtomBuffer());
-					EXPECT_LT(glm::distance(resolved.positions[i],
-						atom.cartesianPosition + direction * atom.radius * GetScenePathAtomBuffer()), 1.0e-5f);
+					(void)direction;
+					// Circle model at scale 1: the end stays on the atom's circle about the axis and
+					// exactly the buffer distance (1 + gap radii) from the atom centre.
+					EXPECT_FLOAT_EQ(binding.buffer, 0.0f);
+					EXPECT_NEAR(glm::distance(resolved.positions[i], atom.cartesianPosition),
+						atom.radius * GetScenePathAtomBuffer(), 1.0e-4f);
+					EXPECT_NEAR(glm::length(glm::vec2(resolved.positions[i])),
+						glm::length(glm::vec2(atom.cartesianPosition)), 1.0e-4f);
 				}
 				const auto midpoint = EvaluateSegment(path, resolved, 0, 0.5);
 				ASSERT_TRUE(midpoint);
@@ -83,8 +87,11 @@ namespace DefectStudio::Tests
 				ASSERT_TRUE(oldSample);
 				ASSERT_TRUE(newSample);
 				EXPECT_GT(glm::length(newSample->position), glm::length(oldSample->position));
-				for (const auto &node : newPath.nodes)
-					EXPECT_EQ(std::get<PathBinding::CopyPosition>(node.binding.value).offset, glm::vec3(0));
+				// The ends move outward with the circle and stay bound (offsets) to their atoms.
+				const auto oldEnds = ResolveNodePositions(oldPath, SceneSystem::MakePathBindingContext(before));
+				const auto newEnds = ResolveNodePositions(newPath, SceneSystem::MakePathBindingContext(after));
+				for (std::size_t end = 0; end < 2; ++end)
+					EXPECT_GT(glm::length(glm::vec2(newEnds.positions[end])), glm::length(glm::vec2(oldEnds.positions[end])));
 				const auto oldNodes = ResolveNodePositions(newPath, SceneSystem::MakePathBindingContext(after));
 				const auto index = std::get<PathBinding::CopyPosition>(newPath.nodes[0].binding.value).atomIndex;
 				after.structure.atoms[index].cartesianPosition.z += 1.0f;

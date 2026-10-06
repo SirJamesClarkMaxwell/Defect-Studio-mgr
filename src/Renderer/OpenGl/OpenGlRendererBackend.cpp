@@ -1,4 +1,4 @@
-﻿#include "Core/dspch.hpp"
+#include "Core/dspch.hpp"
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
@@ -803,6 +803,11 @@ namespace DefectStudio
 		if (showAtoms)
 			renderAtoms(
 				structure, camera, resources, globalSettings, selectedAtomIndices, sceneOffset, viewportPixelSize);
+		// Reserve the marker's front-sphere depth before paths can write colour behind it.
+		// Earlier atoms/bonds keep their colour through the translucent fill; later overlays
+		// already tested against this same marker depth before the pre-pass was added.
+		if (showVacancies)
+			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
 		// Transparent paths need the opaque atom depth/color first, just as the other overlays do.
 		if (pathInput != nullptr && pathInput->paths != nullptr)
 			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);

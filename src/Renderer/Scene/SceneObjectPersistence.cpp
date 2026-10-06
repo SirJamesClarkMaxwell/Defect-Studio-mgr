@@ -159,6 +159,7 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.stretch = orbital.stretch;
 		p.isoFraction = orbital.isoFraction;
 		p.resolution = orbital.resolution;
+		p.smoothShading = orbital.smoothShading;
 		p.positiveLobeColor = orbital.positiveLobeColor;
 		p.negativeLobeColor = orbital.negativeLobeColor;
 		p.alpha = orbital.alpha;
@@ -340,6 +341,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					o.stretch = value.stretch;
 					o.isoFraction = value.isoFraction;
 					o.resolution = value.resolution;
+					o.smoothShading = value.smoothShading;
 					o.positiveLobeColor = value.positiveLobeColor;
 					o.negativeLobeColor = value.negativeLobeColor;
 					o.alpha = value.alpha;

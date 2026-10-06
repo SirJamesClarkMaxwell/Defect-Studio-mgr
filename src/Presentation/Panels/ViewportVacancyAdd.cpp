@@ -85,8 +85,9 @@ namespace DefectStudio
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[vacancyIndex];
 			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, vacancy.cartesianPosition,
 				atom.color, vacancy.color, bondRadiusMultiplier);
-			// Centre-bound ends let the atom sphere hide the tube instead of exposing a buffered rim.
-			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
+			// Match the ordinary bond's sphere-surface trim using the effective rendered tube radius.
+			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {},
+				VacancyBondAtomBuffer(atom.radius, path.style.width * 0.5f)}};
 			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{vacancyIndex, {}, 0.0f}};
 			MovePathOriginToCentre(path);
 			return path;

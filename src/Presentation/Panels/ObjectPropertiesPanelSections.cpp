@@ -386,6 +386,9 @@ namespace DefectStudio
 				value = std::clamp(value, 8, 128);
 				return changed;
 			});
+			draw(&Orbital::smoothShading, [](bool &value) {
+				return ImGui::Checkbox("Gładkie cieniowanie", &value);
+			});
 		}
 		ImGui::PopID();
 	}

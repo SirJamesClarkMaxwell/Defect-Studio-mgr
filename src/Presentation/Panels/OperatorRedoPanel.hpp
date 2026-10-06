@@ -47,6 +47,8 @@ namespace DefectStudio
 		void Draw(RendererWindowState &window);
 
 	private:
+		void CommitEdit(SceneOperatorValues before);
+		void StepHistory(RendererWindowState &window, bool backwards);
 		void RefreshHiddenParameters(const RendererWindowState &window, const SceneOperatorValues &values);
 
 		const SceneOperator *m_Operator = nullptr;
@@ -56,6 +58,11 @@ namespace DefectStudio
 		std::vector<std::size_t> m_SelectedAtoms;
 		std::vector<std::size_t> m_SelectedVacancies;
 		SceneOperatorValues m_Values;
+		// Panel-local undo: Ctrl+Z over the panel steps back one edit; only an empty history undoes
+		// the whole operation (which closes the panel, as before).
+		std::vector<SceneOperatorValues> m_History;
+		std::vector<SceneOperatorValues> m_Future;
+		std::optional<SceneOperatorValues> m_EditStart;
 		std::vector<std::string> m_HiddenKeys;
 		std::unordered_map<std::string, float> m_ParameterMaximums;
 		std::string m_WindowId;

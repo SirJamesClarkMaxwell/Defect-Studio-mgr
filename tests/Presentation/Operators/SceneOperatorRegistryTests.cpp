@@ -93,7 +93,7 @@ namespace DefectStudio::Tests
 		const auto *axisMode = FindParameter(*op, "axisMode");
 		ASSERT_NE(axisMode, nullptr);
 		EXPECT_EQ(axisMode->kind, SceneOperatorParameter::Kind::Enum);
-		EXPECT_EQ(axisMode->enumLabels.size(), 3u);
+		EXPECT_EQ(axisMode->enumLabels.size(), 4u);
 
 		const auto *radiusRule = FindParameter(*op, "radiusRule");
 		ASSERT_NE(radiusRule, nullptr);

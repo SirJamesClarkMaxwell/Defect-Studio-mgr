@@ -13,13 +13,27 @@ namespace DefectStudio
 	void OpenGlRendererBackend::renderVacancyMarkers(
 		const std::vector<RendererVacancyData> &vacancies, const RendererViewCamera &camera,
 		OpenGlViewportResources &resources, const RendererGlobalRenderSettings &globalSettings,
-		const glm::vec2 &viewportPixelSize, const glm::vec3 &sceneOffset)
+		const glm::vec2 &viewportPixelSize, const glm::vec3 &sceneOffset, bool depthOnly)
 	{
 		if (vacancies.empty())
 			return;
 		const unsigned int program = m_ShaderLibrary.Program("isosurface");
 		if (program == 0)
 			return;
+		GLboolean previousColorMask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+		GLboolean previousDepthMask = GL_TRUE;
+		GLint previousDepthFunc = GL_LEQUAL;
+		const GLboolean previousDepthTest = glIsEnabled(GL_DEPTH_TEST);
+		if (depthOnly)
+		{
+			glGetBooleanv(GL_COLOR_WRITEMASK, previousColorMask);
+			glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
+			glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunc);
+			glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+			glEnable(GL_DEPTH_TEST);
+			glDepthFunc(GL_LEQUAL);
+			glDepthMask(GL_TRUE);
+		}
 		const int radiusLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyRadius");
 		const int centerLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyCenter");
 		const int normalLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyNormal");
@@ -86,10 +100,19 @@ namespace DefectStudio
 				glUniform1i(perspectiveLocation, camera.Projection() == CameraProjection::Perspective ? 1 : 0);
 			// The renderer uses LEQUAL: draw the opaque ring last at the same sphere depth.
 			draw(mesh.fill, vacancy.color, vacancy.renderMode == VacancyRenderMode::Solid ? 1.0f : vacancy.opacity);
-			draw(mesh.ring, vacancy.color * 0.6f, 1.0f);
+			// Filled discs cover the ring too; Wireframe keeps only its existing dash depth.
+			if (!depthOnly || mesh.fill.empty())
+				draw(mesh.ring, vacancy.color * 0.6f, 1.0f);
 		}
 		// The shader is shared with orbitals and isosurfaces rendered later in the frame.
 		glUseProgram(program);
 		if (radiusLocation >= 0) glUniform1f(radiusLocation, 0.0f);
+		if (depthOnly)
+		{
+			glColorMask(previousColorMask[0], previousColorMask[1], previousColorMask[2], previousColorMask[3]);
+			glDepthMask(previousDepthMask);
+			glDepthFunc(static_cast<GLenum>(previousDepthFunc));
+			if (!previousDepthTest) glDisable(GL_DEPTH_TEST);
+		}
 	}
 } // namespace DefectStudio
