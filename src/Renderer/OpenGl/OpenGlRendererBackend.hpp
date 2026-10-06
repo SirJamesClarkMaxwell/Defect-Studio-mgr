@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <array>
 #include <cstddef>
@@ -410,7 +410,9 @@ namespace DefectStudio
 			float lobeAlpha,
 			const glm::vec3 &sceneOffset,
 			bool outline = false,
-			float outlineExpansion = 0.0f);
+			float outlineExpansion = 0.0f,
+			bool writeDepth = true,
+			bool twoSidedOutline = false);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.

@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
@@ -806,8 +806,6 @@ namespace DefectStudio
 		// Transparent paths need the opaque atom depth/color first, just as the other overlays do.
 		if (pathInput != nullptr && pathInput->paths != nullptr)
 			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
-		renderScenePlanes(
-			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		if (showVacancies)
 			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		renderSceneOrbitals(
@@ -823,6 +821,8 @@ namespace DefectStudio
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[1], orbitalChannelDown->vertexCount, camera, globalSettings,
 				orbitalChannelDown->positiveLobeColor, orbitalChannelDown->negativeLobeColor,
 				orbitalChannelDown->lobeAlpha, sceneOffset);
+		renderScenePlanes(
+			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		// Drawn last and depth-test-disabled (see renderLabels) so an annotation always reads clearly
 		// on top of the structure, regardless of where in 3D space it's anchored.
 		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
@@ -2709,7 +2709,9 @@ namespace DefectStudio
 		float lobeAlpha,
 		const glm::vec3 &sceneOffset,
 		bool outline,
-		float outlineExpansion)
+		float outlineExpansion,
+		bool writeDepth,
+		bool twoSidedOutline)
 	{
 		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
 		// (resources.isosurfaceVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
@@ -2799,9 +2801,10 @@ namespace DefectStudio
 		glGetIntegerv(GL_CULL_FACE_MODE, &previousCullMode);
 		// A translucent surface should show its back faces too. The outline pass instead culls
 		// front faces, leaving the view-perpendicular expanded back shell visible behind the object.
-		if (outline)
-		{
+		if (outline || !writeDepth)
 			glDepthMask(GL_FALSE);
+		if (outline && !twoSidedOutline)
+		{
 			glEnable(GL_CULL_FACE);
 			glCullFace(GL_FRONT);
 		}

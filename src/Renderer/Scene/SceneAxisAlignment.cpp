@@ -1,9 +1,11 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 #include "Renderer/Scene/SceneAxisAlignment.hpp"
 
 #include <cmath>
+#include <algorithm>
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Path/PathSystem.hpp"
 
 namespace DefectStudio
 {
@@ -77,6 +79,56 @@ namespace DefectStudio
 			SceneTransformDelta delta;
 			delta.spatial.rotation = *rotation;
 			ApplySceneTransformSelection(windowState, target.snapshot, delta, ModalTransformOp::Rotate,
+				TransformPivotMode::IndividualOrigins, glm::vec3(0.0f));
+			++count;
+		}
+		return count;
+	}
+	std::vector<SceneObjectOriginTarget> CollectSceneObjectOriginTargets(const RendererWindowState &window)
+	{
+		const auto all = CaptureSceneTransformSelection(window);
+		std::vector<SceneObjectOriginTarget> targets;
+		const auto selected = [](const auto &ids, SceneObjectId id) {
+			return std::find(ids.begin(), ids.end(), id) != ids.end();
+		};
+		for (const auto &plane : all.planes)
+			if (selected(window.selectedScenePlanes, window.scenePlanes[plane.index].id))
+				targets.push_back({SceneTransformSelectionSnapshot{.planes = {plane}}, plane.center});
+		for (const auto &orbital : all.orbitals)
+			if (selected(window.selectedSceneOrbitals, window.sceneOrbitals[orbital.index].id) &&
+				window.sceneOrbitals[orbital.index].lcaoComponents.empty())
+				targets.push_back({SceneTransformSelectionSnapshot{.orbitals = {orbital}},
+					orbital.twoCenter ? (orbital.centerA + orbital.centerB) * 0.5f : orbital.centerA});
+		if (!all.paths.empty())
+			window.paths->Store().Visit([&](const ScenePath &path) {
+				// BondFrame owns its origin. Do not offer a move the resolver would overwrite.
+				if (selected(window.selectedScenePaths, path.id) &&
+					std::holds_alternative<PathTransformBinding::Free>(path.transformBinding.value))
+					targets.push_back({SceneTransformSelectionSnapshot{.paths = {PathTransformStart{path.id, path.transform}}},
+						path.transform.position});
+			});
+		for (const auto &label : all.labels)
+			if (!label.pinned && selected(window.selectedFreeLabels, window.freeLabels[label.index].id))
+				targets.push_back({SceneTransformSelectionSnapshot{.labels = {label}}, label.position});
+		return targets;
+	}
+
+	std::size_t MoveSelectedSceneObjectOriginsToDefect(RendererWindowState &window)
+	{
+		if (!window.structure.defectFrame) return 0;
+		const auto origin = window.structure.defectFrame->origin;
+		if (!std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z)) return 0;
+		std::size_t count = 0;
+		for (const auto &target : CollectSceneObjectOriginTargets(window))
+		{
+			if (!std::isfinite(target.origin.x) || !std::isfinite(target.origin.y) || !std::isfinite(target.origin.z)) continue;
+			SceneTransformDelta delta;
+			delta.spatial.translation = origin - target.origin;
+			const auto translation = delta.spatial.translation;
+			if (!std::isfinite(translation.x) || !std::isfinite(translation.y) || !std::isfinite(translation.z)) continue;
+			for (const auto &plane : target.snapshot.planes)
+				window.scenePlanes[plane.index].anchorAtoms.clear();
+			ApplySceneTransformSelection(window, target.snapshot, delta, ModalTransformOp::Translate,
 				TransformPivotMode::IndividualOrigins, glm::vec3(0.0f));
 			++count;
 		}

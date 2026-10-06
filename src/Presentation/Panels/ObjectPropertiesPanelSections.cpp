@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
 #include "Presentation/Panels/ObjectPropertiesLabelStyle.hpp"
@@ -52,7 +52,7 @@ namespace DefectStudio
 	{
 		if (plane.anchorAtoms.empty())
 		{
-			ImGui::TextDisabled("Nie zakotwiczona - stoi tam, gdzie ja postawiono.");
+			ImGui::TextDisabled("Nie zakotwiczona - stoi tam, gdzie ją postawiono.");
 			return;
 		}
 
@@ -371,7 +371,7 @@ namespace DefectStudio
 				return ImGui::ColorEdit3("Faza -", &value.x);
 			});
 			draw(&Orbital::alpha, [](float &value) {
-				return ImGui::SliderFloat("Przezroczystosc", &value, 0.05f, 1.0f, "%.2f");
+				return ImGui::SliderFloat("Przezroczystość", &value, 0.05f, 1.0f, "%.2f");
 			});
 			draw(&Orbital::scale, [](float &value) {
 				return ImGui::DragFloat("Skala rysunku", &value, 0.02f, 0.05f, 20.0f, "%.2f");
@@ -394,7 +394,7 @@ namespace DefectStudio
 	{
 		ImGui::Separator();
 		const std::size_t selectedCount = windowState.selectedScenePlanes.size();
-		ImGui::Text("Plaszczyzny (%zu zaznaczonych)", selectedCount);
+		ImGui::Text("Płaszczyzny (%zu zaznaczonych)", selectedCount);
 		const std::size_t representative = FirstSelectedSceneObjectIndex(
 			windowState.scenePlanes, windowState.selectedScenePlanes);
 		if (representative >= windowState.scenePlanes.size())
@@ -409,6 +409,8 @@ namespace DefectStudio
 			return;
 		}
 
+		DrawScenePlaneRotationControls(windowState, windowState.selectedScenePlanes);
+		DrawSceneDefectPlacementControls(windowState, true);
 		DrawSceneAxisAlignmentControls(windowState);
 		using Plane = RendererWindowState::ScenePlane;
 		auto draw = [&](auto field, auto &&widget) {
@@ -416,15 +418,15 @@ namespace DefectStudio
 				windowState, windowState.scenePlanes, windowState.selectedScenePlanes,
 				representative, field, std::forward<decltype(widget)>(widget));
 		};
-		ImGui::TextDisabled("Wspolne pola ponizej sa stosowane do wszystkich zaznaczonych plaszczyzn.");
+		ImGui::TextDisabled("Wspólne pola poniżej są stosowane do wszystkich zaznaczonych płaszczyzn.");
 		draw(&Plane::halfExtents, [](glm::vec2 &value) {
-			return ImGui::DragFloat2("Polowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
+			return ImGui::DragFloat2("Połowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
 		});
 		draw(&Plane::color, [](glm::vec3 &value) {
 			return ImGui::ColorEdit3("Kolor", &value.x);
 		});
 		draw(&Plane::alpha, [](float &value) {
-			return ImGui::SliderFloat("Przezroczystosc", &value, 0.02f, 1.0f, "%.2f");
+			return ImGui::SliderFloat("Przezroczystość", &value, 0.02f, 1.0f, "%.2f");
 		});
 		draw(&Plane::showBorder, [](bool &value) {
 			return ImGui::Checkbox("Ramka", &value);

@@ -26,6 +26,13 @@ uniform float u_Saturation;
 uniform int u_OutlineMode;
 uniform vec4 u_OutlineColor;
 
+// Zero for ordinary isosurfaces. Vacancy discs keep their flat colour and spherical depth.
+uniform float u_VacancyRadius;
+uniform vec3 u_VacancyCenter;
+uniform vec3 u_VacancyNormal;
+uniform int u_VacancyPerspective;
+uniform mat4 u_ViewProjection;
+
 vec3 ApplySaturation(vec3 color)
 {
 	float luma = dot(color, vec3(0.299, 0.587, 0.114));
@@ -53,6 +60,19 @@ float ComputeSpecular(vec3 normalVector, vec3 lightDirection, vec3 viewDirection
 
 void main()
 {
+	// Assign on every path, including the outline return, as required by GLSL.
+	gl_FragDepth = gl_FragCoord.z;
+	if (u_VacancyRadius > 0.0)
+	{
+		vec3 towardCamera = u_VacancyPerspective == 1 ?
+			normalize(u_CameraPosition - vWorldPos) : u_VacancyNormal;
+		vec3 delta = vWorldPos - u_VacancyCenter;
+		float b = dot(delta, towardCamera);
+		float height = -b + sqrt(max(b * b + u_VacancyRadius * u_VacancyRadius -
+			dot(delta, delta), 0.0));
+		vec4 clip = u_ViewProjection * vec4(vWorldPos + towardCamera * height, 1.0);
+		gl_FragDepth = gl_DepthRange.near + gl_DepthRange.diff * (clip.z / clip.w * 0.5 + 0.5);
+	}
 	if (u_OutlineMode == 1)
 	{
 		oColor = u_OutlineColor;

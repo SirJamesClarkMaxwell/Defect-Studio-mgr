@@ -323,7 +323,7 @@ namespace DefectStudio::Tests
 		PrepareBond(window);
 		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::Bond});
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto &path = *window.paths->Store().Find(added->front());
 		const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
 		// The bond runs along x, so every point of the ring shares the midpoint's x.
@@ -403,7 +403,7 @@ namespace DefectStudio::Tests
 		// tilts with the new bond direction.
 		window.structure.atoms[1].cartesianPosition = {1, 2, 0};
 		const auto after = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
-		// The centroid of a 270-degree arc's endpoints is NOT the circle's centre - the ends sit
+		// The centroid of a 150-degree arc's endpoints is NOT the circle's centre - the ends sit
 		// asymmetrically on the ring. Measure what actually defines the ring instead: every node is
 		// equidistant from the new bond midpoint.
 		const glm::vec3 midpoint{0.0f, 1.0f, 0.0f};
@@ -477,7 +477,7 @@ namespace DefectStudio::Tests
 		window.structure.defectFrame->z = {0, 0, 1};
 		const auto two = AddCurvedArrowThroughSelectedAtoms(window, {});
 		ASSERT_TRUE(two);
-		ASSERT_EQ(two->size(), 1u);
+		ASSERT_EQ(two->size(), 2u);
 		const auto &path = *window.paths->Store().Find(two->front());
 		// Auto chose the bond, not the defect z that is also available.
 		EXPECT_TRUE(std::holds_alternative<PathTransformBinding::BondFrame>(path.transformBinding.value));

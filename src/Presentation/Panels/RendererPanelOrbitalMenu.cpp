@@ -50,7 +50,7 @@ namespace DefectStudio
 				return "atom";
 			if (count >= 2 && count <= 4)
 				return "atomy";
-			return "atomow";
+			return "atomów";
 		}
 
 		// A menu row whose label carries a real subscript: '_' opens the subscript run and it ends at
@@ -106,15 +106,15 @@ namespace DefectStudio
 		description.canDrawPlane = validSelectedAtomCount >= 2;
 		description.menuLabel = "Rysuj (" + std::to_string(validSelectedAtomCount) + " " +
 			AtomCountSuffix(validSelectedAtomCount) + ")";
-		description.lineLabel = description.canDrawSegment ? "Linia" : "Linia (wymaga dokladnie 2 atomow)";
+		description.lineLabel = description.canDrawSegment ? "Linia" : "Linia (wymaga dokładnie 2 atomów)";
 		description.arrowLabel =
-			description.canDrawSegment ? "Strzalka" : "Strzalka (wymaga dokladnie 2 atomow)";
+			description.canDrawSegment ? "Strzałka" : "Strzałka (wymaga dokładnie 2 atomów)";
 		description.planeLabel =
-			description.canDrawPlane ? "Plaszczyzna" : "Plaszczyzna (wymaga co najmniej 2 atomow)";
+			description.canDrawPlane ? "Płaszczyzna" : "Płaszczyzna (wymaga co najmniej 2 atomów)";
 		if (!description.canDrawSegment)
-			description.segmentTooltip = "Zaznacz dokladnie dwa atomy, aby dodac linie lub strzalke.";
+			description.segmentTooltip = "Zaznacz dokładnie dwa atomy, aby dodać linię lub strzałkę.";
 		if (!description.canDrawPlane)
-			description.planeTooltip = "Zaznacz co najmniej dwa atomy, aby dodac plaszczyzne.";
+			description.planeTooltip = "Zaznacz co najmniej dwa atomy, aby dodać płaszczyznę.";
 		return description;
 	}
 
@@ -159,23 +159,23 @@ namespace DefectStudio
 		ImGui::DragFloat("Bufor##ScenePathAtomBuffer", &GetScenePathAtomBuffer(), 0.02f, 0.0f, 3.0f, "%.2f r");
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
 			ImGui::SetTooltip(
-				"Odleglosc konca od srodka atomu, w promieniach kuli. "
-				"0 = srodek, 1.0 = powierzchnia, 1.15 = odstep 15%% promienia.");
+				"Odległość końca od środka atomu, w promieniach kuli. "
+				"0 = środek, 1.0 = powierzchnia, 1.15 = odstęp 15%% promienia.");
 		if (ImGui::MenuItem("Linia", nullptr, false, description.canDrawSegment))
 			addSegment(false);
 		if (!description.canDrawSegment && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Zaznacz dokladnie dwa atomy lub wakanse.");
-		if (ImGui::MenuItem("Strzalka", nullptr, false, description.canDrawSegment))
+			ImGui::SetTooltip("Zaznacz dokładnie dwa atomy lub wakanse.");
+		if (ImGui::MenuItem("Strzałka", nullptr, false, description.canDrawSegment))
 			addSegment(true);
 		if (!description.canDrawSegment && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Zaznacz dokladnie dwa atomy lub wakanse.");
+			ImGui::SetTooltip("Zaznacz dokładnie dwa atomy lub wakanse.");
 	}
 
 	void DrawPlaneAddItem(RendererWindowState &windowState)
 	{
 		const std::vector<glm::vec3> positions = SelectedAtomPositions(windowState);
 		const DrawSelectionDescription description = DescribeDrawSelection(positions.size());
-		const bool addPlane = ImGui::MenuItem("Plaszczyzna", nullptr, false, description.canDrawPlane);
+		const bool addPlane = ImGui::MenuItem("Płaszczyzna", nullptr, false, description.canDrawPlane);
 		if (!description.canDrawPlane && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Zaznacz co najmniej dwa atomy.");
 		if (!addPlane)
@@ -202,15 +202,13 @@ namespace DefectStudio
 			if (!result)
 				DS_LOG_WARN("Add free segment failed: {}", result.Error().technicalDetails);
 		};
-		if (ImGui::MenuItem("Linia swobodna"))
-			add(false);
-		if (ImGui::MenuItem("Strzalka swobodna"))
+				if (ImGui::MenuItem("Strzałka swobodna"))
 			add(true);
 	}
 
 	void DrawFreePlaneAddItem(RendererWindowState &windowState, const glm::vec3 &worldPosition)
 	{
-		if (!ImGui::MenuItem("Plaszczyzna swobodna"))
+		if (!ImGui::MenuItem("Płaszczyzna swobodna"))
 			return;
 
 		PushPinnedMeasurementUndoSnapshot(windowState);
@@ -281,7 +279,7 @@ namespace DefectStudio
 			ImGui::Checkbox(anchorLabel.c_str(), &windowState.orbitalAddAnchorToSelection);
 			ImGui::EndDisabled();
 			if (selectedAtoms == 0 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Zaznacz co najmniej jeden atom, aby zakotwiczyc orbital.");
+				ImGui::SetTooltip("Zaznacz co najmniej jeden atom, aby zakotwiczyć orbital.");
 
 			// Anchoring with nothing selected resolves to zero anchor groups, i.e. an Add that adds
 			// nothing, so it is off for this Add - but the remembered mode is kept, because adding an
@@ -300,7 +298,7 @@ namespace DefectStudio
 				selectAdded(std::move(added));
 			}
 			if (!target && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Zaznacz atomy wokol wakansu; bez wakansu celem bedzie centroid atomow.");
+				ImGui::SetTooltip("Zaznacz atomy wokół wakansu; bez wakansu celem będzie centroid atomów.");
 			if (target && ImGui::IsItemHovered())
 			{
 				std::string label = "na centroid zaznaczenia";
@@ -327,7 +325,7 @@ namespace DefectStudio
 					// this menu already collected once.
 					const std::string presetLabel = compatible
 						? std::string(OrbitalPresetDisplayName(preset))
-						: std::string(OrbitalPresetDisplayName(preset)) + " (wymaga 2 atomow)";
+						: std::string(OrbitalPresetDisplayName(preset)) + " (wymaga 2 atomów)";
 					ImGui::BeginDisabled(!compatible);
 					if (members <= 1)
 					{
@@ -338,7 +336,7 @@ namespace DefectStudio
 						}
 						ImGui::EndDisabled();
 						if (!compatible && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-							ImGui::SetTooltip("Zaznacz dokladnie dwa atomy dla orbitalu dwuosrodkowego.");
+							ImGui::SetTooltip("Zaznacz dokładnie dwa atomy dla orbitalu dwuośrodkowego.");
 						continue;
 					}
 					if (ImGui::BeginMenu(presetLabel.c_str()))
@@ -351,7 +349,7 @@ namespace DefectStudio
 							selectAdded(addPreset(preset, lobe, anchor));
 						}
 						ImGui::Separator();
-						const std::string allLabel = "Wszystkie platki (" +
+						const std::string allLabel = "Wszystkie płatki (" +
 							std::to_string(members * static_cast<int>(anchor ? std::max<std::size_t>(selectedAtoms, 1) : 1)) +
 							")";
 						if (ImGui::MenuItem(allLabel.c_str()))
@@ -363,7 +361,7 @@ namespace DefectStudio
 					}
 					ImGui::EndDisabled();
 					if (!compatible && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-						ImGui::SetTooltip("Zaznacz dokladnie dwa atomy dla orbitalu dwuosrodkowego.");
+						ImGui::SetTooltip("Zaznacz dokładnie dwa atomy dla orbitalu dwuośrodkowego.");
 				}
 			}
 			if (drawSubmenu)

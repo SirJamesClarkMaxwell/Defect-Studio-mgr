@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
@@ -8,7 +8,7 @@
 
 #include <glad/gl.h>
 
-#include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/ScenePlanePlacement.hpp"
 
 namespace DefectStudio
 {
@@ -111,93 +111,43 @@ namespace DefectStudio
 		if (handles.vbo == 0)
 			glGenBuffers(1, &handles.vbo);
 
-		// A plane is at most 36 vertices, so one upload/draw per visible plane keeps selection and
-		// per-plane colours honest without introducing a cache or a new material-index attribute.
-		for (std::size_t planeIndex = 0; planeIndex < planes.size(); ++planeIndex)
+		// Fill back to front, then draw all selection frames so nearer fills cannot tint them.
+		const auto order = ScenePlaneBackToFrontOrder(planes, camera.Position() - sceneOffset);
+		for (const bool outlinePass : {false, true})
+		for (const std::size_t planeIndex : order)
 		{
-			const RendererWindowState::ScenePlane &plane = planes[planeIndex];
-			if (!plane.visible)
-				continue;
-			const std::vector<IsosurfaceVertex> mesh = BuildScenePlaneMesh(plane, camera, viewportPixelSize);
-			if (mesh.empty())
-				continue;
-
-			const bool selected =
-				std::find(selectedPlanes.begin(), selectedPlanes.end(), planeIndex) != selectedPlanes.end();
-			if (selected)
+			const auto &plane = planes[planeIndex];
+			std::vector<IsosurfaceVertex> mesh;
+			if (outlinePass)
 			{
+				if (std::find(selectedPlanes.begin(), selectedPlanes.end(), planeIndex) == selectedPlanes.end()) continue;
 				const glm::vec3 bitangent = glm::cross(plane.normal, plane.tangent);
-				float outlineWidth = 0.0f;
-				for (const glm::vec3 &probeDirection : {plane.tangent, bitangent})
-				{
-					const std::optional<float> worldPerPixel =
-						WorldUnitsPerPixelAt(camera, plane.center, probeDirection, viewportPixelSize);
-					if (worldPerPixel.has_value())
-						outlineWidth = std::max(
-							outlineWidth, globalSettings.viewport.selectionOutlineWidth * *worldPerPixel);
-				}
-				const std::vector<IsosurfaceVertex> outlineMesh =
-					BuildScenePlaneSelectionOutlineMesh(plane, outlineWidth);
-				if (!outlineMesh.empty())
-				{
-					glBindVertexArray(handles.vao);
-					glBindBuffer(GL_ARRAY_BUFFER, handles.vbo);
-					glBufferData(
-						GL_ARRAY_BUFFER,
-						static_cast<GLsizeiptr>(outlineMesh.size() * sizeof(IsosurfaceVertex)),
-						outlineMesh.data(), GL_DYNAMIC_DRAW);
-					glEnableVertexAttribArray(0);
-					glVertexAttribPointer(
-						0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
-						reinterpret_cast<void *>(offsetof(IsosurfaceVertex, position)));
-					glEnableVertexAttribArray(1);
-					glVertexAttribPointer(
-						1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
-						reinterpret_cast<void *>(offsetof(IsosurfaceVertex, normal)));
-					glEnableVertexAttribArray(2);
-					glVertexAttribPointer(
-						2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
-						reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
-					glBindVertexArray(0);
-					handles.indexCount = static_cast<int>(outlineMesh.size());
-					renderIsosurfaceGpuOverlay(
-						handles.vao, handles.indexCount, camera, globalSettings, glm::vec3(0.0f),
-						glm::vec3(0.0f), globalSettings.viewport.selectionOutlineColor.a, sceneOffset, true);
-				}
+				float width = 0.0f;
+				for (const auto &probe : {plane.tangent, bitangent})
+					if (const auto worldPerPixel = WorldUnitsPerPixelAt(camera, plane.center, probe, viewportPixelSize))
+						width = std::max(width, globalSettings.viewport.selectionOutlineWidth * *worldPerPixel);
+				mesh = BuildScenePlaneSelectionOutlineMesh(plane, width);
 			}
-
+			else mesh = BuildScenePlaneMesh(plane, camera, viewportPixelSize);
+			if (mesh.empty()) continue;
 			glBindVertexArray(handles.vao);
 			glBindBuffer(GL_ARRAY_BUFFER, handles.vbo);
-			glBufferData(
-				GL_ARRAY_BUFFER,
-				static_cast<GLsizeiptr>(mesh.size() * sizeof(IsosurfaceVertex)),
-				mesh.data(),
-				GL_DYNAMIC_DRAW);
+			glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(mesh.size() * sizeof(IsosurfaceVertex)),
+				mesh.data(), GL_DYNAMIC_DRAW);
 			glEnableVertexAttribArray(0);
-			glVertexAttribPointer(
-				0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
 				reinterpret_cast<void *>(offsetof(IsosurfaceVertex, position)));
 			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(
-				1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
 				reinterpret_cast<void *>(offsetof(IsosurfaceVertex, normal)));
 			glEnableVertexAttribArray(2);
-			glVertexAttribPointer(
-				2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
+			glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceVertex),
 				reinterpret_cast<void *>(offsetof(IsosurfaceVertex, sign)));
 			glBindVertexArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			handles.indexCount = static_cast<int>(mesh.size());
-
-			renderIsosurfaceGpuOverlay(
-				handles.vao,
-				handles.indexCount,
-				camera,
-				globalSettings,
-				plane.color,
-				plane.color * 0.45f,
-				plane.alpha,
-				sceneOffset);
+			renderIsosurfaceGpuOverlay(handles.vao, handles.indexCount, camera, globalSettings,
+				plane.color, plane.color * 0.45f, plane.alpha, sceneOffset, outlinePass, 0.0f, false, true);
 		}
 	}
 } // namespace DefectStudio

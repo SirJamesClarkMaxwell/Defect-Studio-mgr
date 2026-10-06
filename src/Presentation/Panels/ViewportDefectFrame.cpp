@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
 
@@ -438,7 +438,7 @@ namespace DefectStudio
 				MakeDefectFrame(origin, origin + object.basis[2], origin + object.basis[0]), "Set defect axes");
 		}
 		if (objects.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Zaznacz plaszczyzne, orbital lub sciezke z wlasnymi osiami.");
+			ImGui::SetTooltip("Zaznacz płaszczyznę, orbital lub ścieżkę z własnymi osiami.");
 		ImGui::EndMenu();
 	}
 
@@ -471,6 +471,7 @@ namespace DefectStudio
 			ImGui::SetTooltip("Strzałki, linie, płaszczyzny, orbitale, ścieżki: lokalne x/y/z = osie defektu\n"
 							  "(strzałka wzdłuż z, normalna płaszczyzny = z). Obrót wokół własnego środka.\n"
 							  "Atomy i wakanse: gizmo i G/R/S + X/Y/Z przechodzą na osie defektu.");
+		DrawSceneDefectPlacementMenu(windowState);
 		DrawSceneAxisAlignmentMenu(windowState);
 		bool defectOrientation = windowState.transformOrientation == TransformOrientation::Defect;
 		if (ImGui::MenuItem("Gizmo i G/R/S w osiach defektu", nullptr, &defectOrientation))

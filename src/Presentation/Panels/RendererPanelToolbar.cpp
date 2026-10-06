@@ -206,7 +206,7 @@ namespace DefectStudio
 		}
 
 		DrawSceneAddMenu(*windowState, m_CommandRegistry, m_AddMenuPosition, m_Layer.GetEventBus(),
-			m_AddMenuPositionFractional, &m_OperatorRedoPanel, &m_OperatorRegistry);
+			m_AddMenuPositionFractional, &m_OperatorRedoPanel, &m_OperatorRegistry, m_Layer.GetGlobalSettings().bondRadiusMultiplier);
 
 		ImGui::EndPopup();
 	}

@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 #include "Presentation/Panels/ViewportToolbars.hpp"
 
 #include <algorithm>
@@ -25,11 +25,11 @@ namespace DefectStudio
 	const std::array<ViewportSelectionModeEntry, 5> &ViewportSelectionModeEntries()
 	{
 		static constexpr std::array<ViewportSelectionModeEntry, 5> entries = {{
-			{"Atoms only", "Ctrl+1", "tool-mode-atoms.png", true, false, false},
-			{"Atoms + Bonds", "Ctrl+2", "tool-mode-atoms-bonds.png", true, true, false},
-			{"Bonds + Labels", "Ctrl+3", "tool-mode-bonds-labels.png", false, true, true},
-			{"All", "Ctrl+4", "tool-mode-all.png", true, true, true},
-			{"Labels only", "Ctrl+5", "tool-mode-labels.png", false, false, true},
+			{"Tylko atomy", "Ctrl+1", "tool-mode-atoms.png", true, false, false},
+			{"Atomy + wiązania", "Ctrl+2", "tool-mode-atoms-bonds.png", true, true, false},
+			{"Wiązania + etykiety", "Ctrl+3", "tool-mode-bonds-labels.png", false, true, true},
+			{"Wszystko", "Ctrl+4", "tool-mode-all.png", true, true, true},
+			{"Tylko etykiety", "Ctrl+5", "tool-mode-labels.png", false, false, true},
 		}};
 		return entries;
 	}
@@ -136,21 +136,21 @@ namespace DefectStudio
 		};
 
 		if (toolButton(
-				"##ToolNone", "tool-select.png", "Sel", "Selection tool (T) - plain click-select, no drag tool active",
+				"##ToolNone", "tool-select.png", "Sel", "Zaznaczanie (T) - kliknij obiekt",
 				windowState.activeSelectionTool == SelectionToolMode::None))
 		{
 			publishToolToggle(SelectionToolMode::None);
 		}
 
 		if (toolButton(
-				"##ToolCursor3D", "tool-cursor3d.png", "3D", "3D cursor - click in the viewport to place it",
+				"##ToolCursor3D", "tool-cursor3d.png", "3D", "Kursor 3D - kliknij w widoku, aby go ustawić",
 				windowState.activeSelectionTool == SelectionToolMode::Cursor3D))
 		{
 			publishToolToggle(SelectionToolMode::Cursor3D);
 		}
 
 		if (toolButton(
-				"##ToolText", "tool-text.png", "T", "Text tool (Shift+T) - TeX: V_B, x^2, \\alpha",
+				"##ToolText", "tool-text.png", "T", "Narzędzie tekstu (Shift+T) - TeX: V_B, x^2, \\alpha",
 				windowState.activeSelectionTool == SelectionToolMode::Text))
 		{
 			publishToolToggle(SelectionToolMode::Text);
@@ -159,14 +159,14 @@ namespace DefectStudio
 		ImGui::Spacing();
 
 		if (toolButton(
-				"##ToolMeasureBond", "tool-measure-bond.png", "Len", "Measure bond length - click any 2 atoms (M)",
+				"##ToolMeasureBond", "tool-measure-bond.png", "Len", "Długość wiązania (M) - kliknij dwa atomy",
 				windowState.activeSelectionTool == SelectionToolMode::MeasureBond))
 		{
 			publishToolToggle(SelectionToolMode::MeasureBond);
 		}
 
 		if (toolButton(
-				"##ToolMeasureAngle", "tool-measure-angle.png", "Ang", "Measure angle - click any 3 atoms (Shift+M)",
+				"##ToolMeasureAngle", "tool-measure-angle.png", "Ang", "Kąt (Shift+M) - kliknij trzy atomy",
 				windowState.activeSelectionTool == SelectionToolMode::MeasureAngle))
 		{
 			publishToolToggle(SelectionToolMode::MeasureAngle);
@@ -183,28 +183,28 @@ namespace DefectStudio
 		};
 
 		if (toolButton(
-				"##ToolMove", "tool-move.png", "Mov", "Move (G)", windowState.gizmoOperation == GizmoOperation::Translate))
+				"##ToolMove", "tool-move.png", "Mov", "Przenieś (G)", windowState.gizmoOperation == GizmoOperation::Translate))
 			publishGizmoOperation(GizmoOperation::Translate);
 
 		if (toolButton(
-				"##ToolRotate", "tool-rotate.png", "Rot", "Rotate (R)", windowState.gizmoOperation == GizmoOperation::Rotate))
+				"##ToolRotate", "tool-rotate.png", "Rot", "Obróć (R)", windowState.gizmoOperation == GizmoOperation::Rotate))
 			publishGizmoOperation(GizmoOperation::Rotate);
 
 		if (toolButton(
-				"##ToolScale", "tool-scale.png", "Scl", "Scale (S)", windowState.gizmoOperation == GizmoOperation::Scale))
+				"##ToolScale", "tool-scale.png", "Scl", "Skaluj (S)", windowState.gizmoOperation == GizmoOperation::Scale))
 			publishGizmoOperation(GizmoOperation::Scale);
 
 		ImGui::Spacing();
 
 		if (toolButton(
-				"##ToolBoxSelect", "tool-box-select.png", "Box", "Box select (B)",
+				"##ToolBoxSelect", "tool-box-select.png", "Box", "Zaznaczanie prostokątem (B)",
 				windowState.activeSelectionTool == SelectionToolMode::Box))
 		{
 			publishToolToggle(SelectionToolMode::Box);
 		}
 
 		if (toolButton(
-				"##ToolCircleSelect", "tool-circle-select.png", "Cir", "Circle select (C)",
+				"##ToolCircleSelect", "tool-circle-select.png", "Cir", "Zaznaczanie kołem (C)",
 				windowState.activeSelectionTool == SelectionToolMode::Circle))
 		{
 			publishToolToggle(SelectionToolMode::Circle);
@@ -227,7 +227,7 @@ namespace DefectStudio
 			windowState.pickAtoms, windowState.pickBonds, windowState.pickLabels);
 		const ViewportSelectionModeEntry &currentSelectionMode = selectionModeEntries[currentSelectionModeIndex];
 		const char fallback[] = {currentSelectionMode.shortcut.back(), '\0'};
-		const std::string selectionModeTooltip = "Selection mode: " + std::string(currentSelectionMode.name) +
+		const std::string selectionModeTooltip = "Tryb zaznaczania: " + std::string(currentSelectionMode.name) +
 			" (" + std::string(currentSelectionMode.shortcut) + ")";
 		const bool selectionModePressed = toolButton(
 			"##SelectionModeMenu", currentSelectionMode.iconFileName.data(), fallback,
@@ -269,7 +269,7 @@ namespace DefectStudio
 		// DisplacementComparisonPanel::OpenForWindow.
 		if (toolButton(
 				"##ToolDisplacementComparison", "tool-displacement.png", "Cmp",
-				"Compare this structure against another (atoms-displacement arrows)", false))
+				"Porównaj struktury - strzałki przemieszczeń atomów", false))
 		{
 			RendererEvents::Viewport::DisplacementComparisonPanelRequested event;
 			event.windowId = windowState.windowId;
@@ -283,7 +283,7 @@ namespace DefectStudio
 
 		const bool segmentPressed = toolButton(
 			"##ToolAddSegment", "tool-add-arrow.png", "Arr",
-			"Add line or arrow at the 3D cursor or between two selected atoms", false);
+			"Dodaj linię, strzałkę lub krzywą (pełne menu: Shift+A)", false);
 		const ImVec2 segmentPopupPosition(
 			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
 		if (segmentPressed)
@@ -292,13 +292,13 @@ namespace DefectStudio
 		if (ImGui::BeginPopup("##AddSegmentPopup"))
 		{
 			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus, false,
-				redoPanel, operatorRegistry);
+				redoPanel, operatorRegistry, layer.GetGlobalSettings().bondRadiusMultiplier, SceneAddMenuSection::Drawing);
 			ImGui::EndPopup();
 		}
 
 		const bool planePressed = toolButton(
 			"##ToolAddPlane", "tool-add-plane.png", "Pln",
-			"Add plane at the 3D cursor or fit it to selected atoms", false);
+			"Dodaj płaszczyznę: kursor 3D, atomy lub osie defektu (pełne menu: Shift+A)", false);
 		const ImVec2 planePopupPosition(
 			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
 		if (planePressed)
@@ -307,11 +307,11 @@ namespace DefectStudio
 		if (ImGui::BeginPopup("##AddPlanePopup"))
 		{
 			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus, false,
-				redoPanel, operatorRegistry);
+				redoPanel, operatorRegistry, layer.GetGlobalSettings().bondRadiusMultiplier, SceneAddMenuSection::Planes);
 			ImGui::EndPopup();
 		}
 
-		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "+", "Add atom", false))
+		if (toolButton("##ToolAddAtom", "tool-add-atom.png", "+", "Dodaj atom (pełne menu: Shift+A)", false))
 		{
 			RendererEvents::Viewport::AddAtomPopupToggleRequested event;
 			event.windowId = windowState.windowId;
@@ -322,7 +322,7 @@ namespace DefectStudio
 		}
 
 		const bool orbitalPressed =
-			toolButton("##ToolAddOrbital", "tool-add-orbital.png", "Orb", "Add orbital - on every selected atom, or at the 3D cursor", false);
+			toolButton("##ToolAddOrbital", "tool-add-orbital.png", "Orb", "Dodaj orbital na atomach lub przy kursorze 3D (pełne menu: Shift+A)", false);
 		const ImVec2 orbitalPopupPosition(
 			ImGui::GetItemRectMax().x + 4.0f * uiScale, ImGui::GetItemRectMin().y);
 		if (orbitalPressed)
@@ -331,7 +331,7 @@ namespace DefectStudio
 		if (ImGui::BeginPopup("##AddOrbitalPopup"))
 		{
 			DrawSceneAddMenu(windowState, commandRegistry, windowState.cursor3DPosition, eventBus, false,
-				redoPanel, operatorRegistry);
+				redoPanel, operatorRegistry, layer.GetGlobalSettings().bondRadiusMultiplier, SceneAddMenuSection::Orbitals);
 			ImGui::EndPopup();
 		}
 

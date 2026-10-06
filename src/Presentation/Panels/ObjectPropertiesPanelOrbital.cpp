@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 
@@ -180,12 +180,12 @@ namespace DefectStudio
 			const bool anchored = !orbital.anchorAtoms.empty();
 			ImGui::BeginDisabled(anchored);
 			DrawUndoableValue(windowState, orbital.centerA, [](glm::vec3 &value) {
-				return ImGui::DragFloat3("Srodek A", &value.x, 0.05f);
+				return ImGui::DragFloat3("Środek A", &value.x, 0.05f);
 			});
 			if (IsTwoCenterPreset(orbital.preset))
 			{
 				DrawUndoableValue(windowState, orbital.centerB, [](glm::vec3 &value) {
-					return ImGui::DragFloat3("Srodek B", &value.x, 0.05f);
+					return ImGui::DragFloat3("Środek B", &value.x, 0.05f);
 				});
 			}
 			ImGui::EndDisabled();
@@ -213,7 +213,7 @@ namespace DefectStudio
 				return ImGui::ColorEdit3("Faza -", &value.x);
 			});
 			DrawUndoableValue(windowState, orbital.alpha, [](float &value) {
-				return ImGui::SliderFloat("Przezroczystosc", &value, 0.05f, 1.0f, "%.2f");
+				return ImGui::SliderFloat("Przezroczystość", &value, 0.05f, 1.0f, "%.2f");
 			});
 
 			if (DrawUndoableValue(windowState, orbital.isoFraction, [](float &value) {
@@ -358,32 +358,21 @@ namespace DefectStudio
 		// undo snapshot and then snap the controls back on the next frame.
 		ImGui::BeginDisabled(!plane.anchorAtoms.empty());
 		DrawUndoableValue(windowState, plane.center, [](glm::vec3 &value) {
-			return ImGui::DragFloat3("Srodek", &value.x, 0.05f);
+			return ImGui::DragFloat3("Środek", &value.x, 0.05f);
 		});
 
-		if (DrawUndoableValue(windowState, plane.normal, [](glm::vec3 &value) {
-				return ImGui::DragFloat3("Normalna", &value.x, 0.02f);
-			}))
-		{
-			if (glm::dot(plane.normal, plane.normal) > 1e-8f)
-			{
-				plane.normal = glm::normalize(plane.normal);
-				const glm::vec3 projected =
-					plane.tangent - glm::dot(plane.tangent, plane.normal) * plane.normal;
-				if (glm::dot(projected, projected) > 1e-8f)
-					plane.tangent = glm::normalize(projected);
-			}
-		}
 		ImGui::EndDisabled();
+		DrawScenePlaneRotationControls(windowState, {plane.id});
+		DrawSceneDefectPlacementControls(windowState, true);
 		DrawSceneAxisAlignmentControls(windowState);
 		DrawUndoableValue(windowState, plane.halfExtents, [](glm::vec2 &value) {
-			return ImGui::DragFloat2("Polowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
+			return ImGui::DragFloat2("Połowa rozmiaru", &value.x, 0.05f, 0.01f, 1000.0f, "%.2f");
 		});
 		DrawUndoableValue(windowState, plane.color, [](glm::vec3 &value) {
 			return ImGui::ColorEdit3("Kolor", &value.x);
 		});
 		DrawUndoableValue(windowState, plane.alpha, [](float &value) {
-			return ImGui::SliderFloat("Przezroczystosc", &value, 0.02f, 1.0f, "%.2f");
+			return ImGui::SliderFloat("Przezroczystość", &value, 0.02f, 1.0f, "%.2f");
 		});
 		DrawUndoableValue(windowState, plane.showBorder, [](bool &value) {
 			return ImGui::Checkbox("Ramka", &value);
@@ -396,10 +385,10 @@ namespace DefectStudio
 
 	void DrawAllScenePlaneRows(RendererWindowState &windowState)
 	{
-		ImGui::Text("Plaszczyzny (%zu)", windowState.scenePlanes.size());
+		ImGui::Text("Płaszczyzny (%zu)", windowState.scenePlanes.size());
 		if (windowState.scenePlanes.empty())
 		{
-			ImGui::TextDisabled("Zaznacz dwa atomy lub wiecej, potem prawy przycisk > Add > Rysuj > Plaszczyzna.");
+			ImGui::TextDisabled("Zaznacz dwa atomy lub więcej, potem prawy przycisk > Dodaj > Płaszczyzna.");
 			return;
 		}
 
@@ -412,7 +401,7 @@ namespace DefectStudio
 
 			auto &selection = windowState.selectedScenePlanes;
 			const bool selected = std::find(selection.begin(), selection.end(), plane.id) != selection.end();
-			const std::string label = "Plaszczyzna #" + std::to_string(index);
+			const std::string label = "Płaszczyzna #" + std::to_string(index);
 			if (ImGui::Selectable(label.c_str(), selected))
 			{
 				if (ImGui::GetIO().KeyCtrl)

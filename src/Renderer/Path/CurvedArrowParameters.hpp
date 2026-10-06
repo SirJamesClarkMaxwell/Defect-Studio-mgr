@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <glm/glm.hpp>
 
 #include "Renderer/Path/PathStyle.hpp"
@@ -30,12 +32,15 @@ namespace DefectStudio
 		CurvedArrowRadiusRule radiusRule = CurvedArrowRadiusRule::AtomRelative;
 		// x the larger of the two atom radii, or x the bond length, per radiusRule.
 		float radiusFactor = 1.4f;
-		// Clamped to [1, 350] on use: a full turn would put the head back on the tail, which reads as
-		// a closed ring rather than a rotation.
-		float sweepDegrees = 270.0f;
+		// Equal arcs around a bond; the sweep of each stays below 360 / arrowCount - 5 degrees.
+		int arrowCount = 2;
+		float sweepDegrees = 150.0f;
 		// Where the arc starts, measured about the axis. The panel field and the modal rotate both
 		// write this one value, so the two routes cannot drift apart.
 		float rotationDegrees = 0.0f;
+		// Non-bond radial offset. Missing gap uses the session atom buffer minus one radius.
+		float radiusScale = 1.0f;
+		std::optional<float> endGap; // surface clearance in atom radii
 		// Non-bond sweep = curvature x the angle between the ends. Curvature is clamped to [0.05, 1.5].
 		// Half a C_3 step gives the existing 60-degree arc (sagitta/chord about 0.134).
 		float curvature = 0.5f;

@@ -1,4 +1,4 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
 
@@ -11,6 +11,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
+#include "Presentation/Panels/SceneOrientationControls.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/ScenePathBindingOperations.hpp"
 #include "Renderer/Path/PathBindingResolver.hpp"
@@ -207,6 +208,7 @@ namespace DefectStudio
 	{
 		ImGui::Separator();
 		DrawScenePathTransformEditor(windowState);
+		DrawSceneDefectPlacementControls(windowState);
 		DrawScenePathEditor(windowState);
 		DrawPathEditActions(windowState);
 		if (ImGui::Button("Delete##SelectedPath"))

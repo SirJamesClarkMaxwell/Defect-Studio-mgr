@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 
 #include "Presentation/Panels/ViewportToolbars.hpp"
 
@@ -9,16 +9,16 @@ namespace DefectStudio::Tests
 		const auto &entries = ViewportSelectionModeEntries();
 
 		ASSERT_EQ(entries.size(), 5u);
-		EXPECT_EQ(entries[0].name, "Atoms only");
+		EXPECT_EQ(entries[0].name, "Tylko atomy");
 		EXPECT_EQ(entries[0].shortcut, "Ctrl+1");
 		EXPECT_EQ(entries[0].iconFileName, "tool-mode-atoms.png");
-		EXPECT_EQ(entries[1].name, "Atoms + Bonds");
+		EXPECT_EQ(entries[1].name, "Atomy + wiązania");
 		EXPECT_EQ(entries[1].shortcut, "Ctrl+2");
-		EXPECT_EQ(entries[2].name, "Bonds + Labels");
+		EXPECT_EQ(entries[2].name, "Wiązania + etykiety");
 		EXPECT_EQ(entries[2].shortcut, "Ctrl+3");
-		EXPECT_EQ(entries[3].name, "All");
+		EXPECT_EQ(entries[3].name, "Wszystko");
 		EXPECT_EQ(entries[3].shortcut, "Ctrl+4");
-		EXPECT_EQ(entries[4].name, "Labels only");
+		EXPECT_EQ(entries[4].name, "Tylko etykiety");
 		EXPECT_EQ(entries[4].shortcut, "Ctrl+5");
 	}
 

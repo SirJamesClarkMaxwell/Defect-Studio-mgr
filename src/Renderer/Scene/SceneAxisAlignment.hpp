@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <optional>
 #include <vector>
@@ -22,4 +22,14 @@ namespace DefectStudio
 	// Uses the regular individual-origin transform path. Explicitly detaches fitted planes
 	// so their atom resolver cannot overwrite the requested orientation. Caller owns undo.
 	std::size_t AlignSelectedSceneObjectAxes(RendererWindowState &windowState, int ownAxis, int defectAxis);
+	struct SceneObjectOriginTarget
+	{
+		SceneTransformSelectionSnapshot snapshot;
+		glm::vec3 origin;
+	};
+	// Explicitly selected objects only. Pinned measurements, BondFrame paths and atom-owned LCAO have no movable origin.
+	[[nodiscard]] std::vector<SceneObjectOriginTarget> CollectSceneObjectOriginTargets(const RendererWindowState &window);
+	// Position only, using normal G transforms (two-centre orbitals move by their midpoint).
+	// Planes/orbitals detach atom anchors. Caller owns the one batch undo snapshot.
+	std::size_t MoveSelectedSceneObjectOriginsToDefect(RendererWindowState &window);
 }

@@ -360,7 +360,7 @@ namespace DefectStudio
 		if (ImGui::Button("Wiązania do sąsiadów"))
 		{
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
-			(void)AddVacancyBonds(windowState);
+			(void)AddVacancyBonds(windowState, layer.GetGlobalSettings().bondRadiusMultiplier);
 		}
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Dwukolorowa linia atom -> wakans do każdego atomu pierwszej sfery.\n"

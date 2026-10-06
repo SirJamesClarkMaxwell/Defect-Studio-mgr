@@ -20,7 +20,7 @@ namespace DefectStudio
 	//   otherwise       -> each selected vacancy (none selected: every vacancy) to its
 	//                      nearest-neighbour shell of shown atoms
 	// Returns how many were added (one undo step for all).
-	std::size_t AddVacancyBonds(RendererWindowState &windowState);
+	std::size_t AddVacancyBonds(RendererWindowState &windowState, float bondRadiusMultiplier = 1.0f);
 
 	// Atoms within 1.15x the nearest shown atom's distance from `position` (the first shell).
 	[[nodiscard]] std::vector<std::size_t> NeighbourShell(const RendererWindowState &windowState, const glm::vec3 &position);
@@ -28,5 +28,5 @@ namespace DefectStudio
 	// Entries shared by the Shift+A menu and the right-click Add submenu: Vacancy, vacancy bonds and
 	// the Defect axes (empty) submenu. `position` is where the menu was opened (click point, or the
 	// 3D cursor for Shift+A); a vacancy goes to the selected atoms' centroid when there is one.
-	void DrawDefectAddItems(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position);
+	void DrawDefectAddItems(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position, float bondRadiusMultiplier = 1.0f);
 } // namespace DefectStudio

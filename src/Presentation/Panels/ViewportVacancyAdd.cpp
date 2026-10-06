@@ -60,7 +60,7 @@ namespace DefectStudio
 		}
 
 		[[nodiscard]] ScenePath MakeBondLine(const RendererWindowState &windowState, const glm::vec3 &start,
-			const glm::vec3 &end, const glm::vec3 &startColor, const glm::vec3 &endColor)
+			const glm::vec3 &end, const glm::vec3 &startColor, const glm::vec3 &endColor, float bondRadiusMultiplier)
 		{
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 			path.name = "Vacancy bond";
@@ -69,37 +69,37 @@ namespace DefectStudio
 			path.nodes[1].position = end;
 			path.style.startDecoration.kind = PathDecorationKind::None;
 			path.style.endDecoration.kind = PathDecorationKind::None;
-			// Same thickness as the structure's own bonds (ponytail: ignores the bond radius multiplier).
+			// Match the bond renderer's radius clamp and global multiplier.
 			const float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
-			path.style.width = 2.0f * bondRadius;
+			path.style.width = 2.0f * std::max(bondRadius, 0.001f) * bondRadiusMultiplier;
 			path.style.gradient.enabled = true;
 			path.style.gradient.stops = {{0.0f, startColor, 1.0f}, {1.0f, endColor, 1.0f}};
 			return path;
 		}
 
 		[[nodiscard]] ScenePath MakeVacancyBond(
-			const RendererWindowState &windowState, std::size_t atomIndex, std::size_t vacancyIndex)
+			const RendererWindowState &windowState, std::size_t atomIndex, std::size_t vacancyIndex, float bondRadiusMultiplier)
 		{
 			const RendererAtomData &atom = windowState.structure.atoms[atomIndex];
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[vacancyIndex];
 			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, vacancy.cartesianPosition,
-				atom.color, vacancy.color);
+				atom.color, vacancy.color, bondRadiusMultiplier);
 			// The atom end starts just inside the sphere (like a bond seen from outside), not at its centre.
 			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, kAtomEndBuffer}};
-			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{vacancyIndex, {}, 1.0f}};
+			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{vacancyIndex, {}, 0.0f}};
 			MovePathOriginToCentre(path);
 			return path;
 		}
 
 		[[nodiscard]] ScenePath MakeVacancyPairBond(
-			const RendererWindowState &windowState, std::size_t firstIndex, std::size_t secondIndex)
+			const RendererWindowState &windowState, std::size_t firstIndex, std::size_t secondIndex, float bondRadiusMultiplier)
 		{
 			const RendererVacancyData &first = windowState.structure.vacancies[firstIndex];
 			const RendererVacancyData &second = windowState.structure.vacancies[secondIndex];
 			ScenePath path = MakeBondLine(windowState, first.cartesianPosition,
-				second.cartesianPosition, first.color, second.color);
-			path.nodes[0].binding = PathBinding{PathBinding::CopyVacancy{firstIndex, {}, 1.0f}};
-			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{secondIndex, {}, 1.0f}};
+				second.cartesianPosition, first.color, second.color, bondRadiusMultiplier);
+			path.nodes[0].binding = PathBinding{PathBinding::CopyVacancy{firstIndex, {}, 0.0f}};
+			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{secondIndex, {}, 0.0f}};
 			MovePathOriginToCentre(path);
 			return path;
 		}
@@ -147,7 +147,7 @@ namespace DefectStudio
 		return shell;
 	}
 
-	std::size_t AddVacancyBonds(RendererWindowState &windowState)
+	std::size_t AddVacancyBonds(RendererWindowState &windowState, float bondRadiusMultiplier)
 	{
 		const auto &vacancies = windowState.structure.vacancies;
 		std::vector<std::size_t> atoms;
@@ -203,7 +203,7 @@ namespace DefectStudio
 		std::vector<SceneObjectId> added;
 		for (const auto &[atom, vacancy] : pairs)
 		{
-			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancy));
+			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancy, bondRadiusMultiplier));
 			if (result)
 				added.push_back(result.Value());
 			else
@@ -212,7 +212,7 @@ namespace DefectStudio
 		for (const auto &[first, second] : vacancyPairs)
 		{
 			const auto result = AddScenePath(
-				MakeSilentPathEditContext(windowState), MakeVacancyPairBond(windowState, first, second));
+				MakeSilentPathEditContext(windowState), MakeVacancyPairBond(windowState, first, second, bondRadiusMultiplier));
 			if (result)
 				added.push_back(result.Value());
 			else

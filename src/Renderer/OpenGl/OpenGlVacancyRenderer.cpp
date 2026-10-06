@@ -17,6 +17,13 @@ namespace DefectStudio
 	{
 		if (vacancies.empty())
 			return;
+		const unsigned int program = m_ShaderLibrary.Program("isosurface");
+		if (program == 0)
+			return;
+		const int radiusLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyRadius");
+		const int centerLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyCenter");
+		const int normalLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyNormal");
+		const int perspectiveLocation = m_ShaderLibrary.Uniform("isosurface", "u_VacancyPerspective");
 		const glm::mat4 view = camera.ViewMatrix();
 		const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
 		const glm::vec3 up(view[0][1], view[1][1], view[2][1]);
@@ -67,8 +74,21 @@ namespace DefectStudio
 					camera, vacancy.cartesianPosition + sceneOffset, axis, viewportPixelSize))
 					width = std::max(width, 1.5f * *worldPerPixel);
 			const auto mesh = BuildVacancyMarkerMesh(vacancy, right, up, width);
+			const glm::vec3 center = vacancy.cartesianPosition + sceneOffset;
+			const glm::vec3 normal = glm::normalize(glm::cross(right, up));
+			glUseProgram(program);
+			if (radiusLocation >= 0)
+				glUniform1f(radiusLocation, vacancy.renderMode == VacancyRenderMode::Wireframe ? 0.0f : vacancy.radius);
+			if (centerLocation >= 0) glUniform3fv(centerLocation, 1, &center.x);
+			if (normalLocation >= 0) glUniform3fv(normalLocation, 1, &normal.x);
+			if (perspectiveLocation >= 0)
+				glUniform1i(perspectiveLocation, camera.Projection() == CameraProjection::Perspective ? 1 : 0);
+			// The renderer uses LEQUAL: draw the opaque ring last at the same sphere depth.
 			draw(mesh.fill, vacancy.color, vacancy.renderMode == VacancyRenderMode::Solid ? 1.0f : vacancy.opacity);
 			draw(mesh.ring, vacancy.color * 0.6f, 1.0f);
 		}
+		// The shader is shared with orbitals and isosurfaces rendered later in the frame.
+		glUseProgram(program);
+		if (radiusLocation >= 0) glUniform1f(radiusLocation, 0.0f);
 	}
 } // namespace DefectStudio

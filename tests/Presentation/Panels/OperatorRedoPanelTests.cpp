@@ -67,7 +67,7 @@ namespace DefectStudio::Tests
 		}
 		// One entry for the whole session - this is the point of the panel.
 		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
-		EXPECT_EQ(PathCount(Window()), 1u);
+		EXPECT_EQ(PathCount(Window()), 2u);
 	}
 
 	TEST_F(OperatorRedoPanelTests, UndoAfterReapplyRestoresThePreOperationScene)
@@ -76,20 +76,20 @@ namespace DefectStudio::Tests
 		auto values = panel.Values();
 		values["sweepDegrees"] = 120.0f;
 		ASSERT_TRUE(panel.Reapply(Window(), values));
-		ASSERT_EQ(PathCount(Window()), 1u);
+		ASSERT_EQ(PathCount(Window()), 2u);
 
 		ASSERT_TRUE(undoStack->Undo());
 		// Not an intermediate parameter value - the scene as it was before the operator ran.
 		EXPECT_EQ(PathCount(Window()), 0u);
 		ASSERT_TRUE(undoStack->Redo());
-		EXPECT_EQ(PathCount(Window()), 1u);
+		EXPECT_EQ(PathCount(Window()), 2u);
 	}
 
 	TEST_F(OperatorRedoPanelTests, AnUnrelatedUndoEntryClosesThePanel)
 	{
 		ASSERT_TRUE(panel.RunAndOpen(CurvedArrow(), Window()));
 		const auto created = PathCount(Window());
-		ASSERT_EQ(created, 1u);
+		ASSERT_EQ(created, 2u);
 
 		// Any other undoable scene edit while the panel is open. The first run consumed the atom
 		// selection, so re-select before adding a second arrow.
@@ -100,7 +100,7 @@ namespace DefectStudio::Tests
 		panel.PollInvalidation(*undoStack, &Window());
 		EXPECT_FALSE(panel.IsOpen());
 		// The foreign edit must survive: a panel that restored its snapshot here would eat it.
-		EXPECT_EQ(PathCount(Window()), 2u);
+		EXPECT_EQ(PathCount(Window()), 4u);
 	}
 
 	TEST_F(OperatorRedoPanelTests, AClosedWindowClosesThePanel)
@@ -114,7 +114,7 @@ namespace DefectStudio::Tests
 	TEST_F(OperatorRedoPanelTests, AFailingReapplyClosesThePanelAndKeepsTheObjects)
 	{
 		ASSERT_TRUE(panel.RunAndOpen(CurvedArrow(), Window()));
-		ASSERT_EQ(PathCount(Window()), 1u);
+		ASSERT_EQ(PathCount(Window()), 2u);
 
 		// The scene moved under the panel: the two atoms now sit on top of each other, so the bond
 		// the ring turns about no longer exists. Clearing the selection would NOT do it - the panel
@@ -125,7 +125,7 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(panel.Reapply(Window(), values));
 		EXPECT_FALSE(panel.IsOpen());
 		// The last successful result stays on screen rather than vanishing under the user.
-		EXPECT_EQ(PathCount(Window()), 1u);
+		EXPECT_EQ(PathCount(Window()), 2u);
 		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
 	}
 
@@ -185,13 +185,13 @@ namespace DefectStudio::Tests
 		const auto op = ObserveRelevance(CurvedArrow(), window, hidden);
 		ASSERT_TRUE(panel.RunAndOpen(op, window));
 		const std::vector<std::string> expectedHidden{
-			"axisMode", "radiusRule", "radiusFactor", "sweepDegrees", "rotationDegrees"};
+			"axisMode", "radiusRule", "radiusFactor", "arrowCount", "sweepDegrees", "rotationDegrees"};
 		EXPECT_EQ(hidden, expectedHidden);
 		ASSERT_EQ(PathCount(window), 3u);
 		std::vector<ScenePath> before;
 		for (const auto id : window.paths->Store().Ids()) before.push_back(*window.paths->Store().Find(id));
 		const SceneOperatorValues edits{
-			{"curvature", 1.0f}, {"decoration", 0}, {"color", glm::vec3(0, 1, 0)}, {"strokeWidth", 0.2f}};
+			{"radiusScale", 1.3f}, {"endGap", 0.6f}, {"curvature", 1.0f}, {"decoration", 0}, {"color", glm::vec3(0, 1, 0)}, {"strokeWidth", 0.2f}};
 		std::size_t checked = 0;
 		for (const auto &parameter : op.schema)
 		{
@@ -219,6 +219,14 @@ namespace DefectStudio::Tests
 					ASSERT_TRUE(oldSample);
 					ASSERT_TRUE(newSample);
 					EXPECT_GT(glm::distance(oldSample->position, newSample->position), 1.0e-3);
+				}
+				else if (parameter.key == "radiusScale" || parameter.key == "endGap")
+				{
+					const auto context = SceneSystem::MakePathBindingContext(window);
+					const auto oldNodes = ResolveNodePositions(before[i], context);
+					const auto newNodes = ResolveNodePositions(path, context);
+					for (std::size_t node = 0; node < 2; ++node)
+						EXPECT_GT(glm::distance(oldNodes.positions[node], newNodes.positions[node]), 1.0e-3f);
 				}
 				else if (parameter.key == "decoration")
 				{
@@ -251,12 +259,12 @@ namespace DefectStudio::Tests
 		std::vector<std::string> hidden;
 		const auto op = ObserveRelevance(CurvedArrow(), window, hidden);
 		ASSERT_TRUE(panel.RunAndOpen(op, window));
-		EXPECT_EQ(hidden, std::vector<std::string>{"curvature"});
+		EXPECT_EQ(hidden, (std::vector<std::string>{"radiusScale", "endGap", "curvature"}));
 		auto values = panel.Values();
 		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::DefectZ);
 		ASSERT_TRUE(panel.Reapply(window, values));
 		const std::vector<std::string> nonBondHidden{
-			"radiusRule", "radiusFactor", "sweepDegrees", "rotationDegrees"};
+			"radiusRule", "radiusFactor", "arrowCount", "sweepDegrees", "rotationDegrees"};
 		EXPECT_EQ(hidden, nonBondHidden);
 		values["curvature"] = 1.0f;
 		ASSERT_TRUE(panel.Reapply(window, values));
@@ -266,7 +274,7 @@ namespace DefectStudio::Tests
 			2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
 		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::Bond);
 		ASSERT_TRUE(panel.Reapply(window, values));
-		EXPECT_EQ(hidden, std::vector<std::string>{"curvature"});
+		EXPECT_EQ(hidden, (std::vector<std::string>{"radiusScale", "endGap", "curvature"}));
 		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
 	}
 
@@ -280,5 +288,34 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(panel.Reapply(Window(), values));
 		EXPECT_TRUE(panel.IsOpen());
 		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
+	TEST_F(OperatorRedoPanelTests, BondCountSweepAndRotationReapplyTheWholeSetInOneUndoStep)
+	{
+		auto &window = Window();
+		ASSERT_TRUE(panel.RunAndOpen(CurvedArrow(), window));
+		ASSERT_EQ(PathCount(window), 2u);
+		auto values = panel.Values();
+		for (int count : {2, 3, 6})
+		{
+			values["arrowCount"] = count;
+			values["sweepDegrees"] = 350.0f;
+			values["rotationDegrees"] = 45.0f;
+			ASSERT_TRUE(panel.Reapply(window, values));
+			ASSERT_EQ(PathCount(window), static_cast<std::size_t>(count));
+			EXPECT_EQ(window.selectedScenePaths, window.paths->Store().Ids());
+			for (int i = 0; i < count; ++i)
+			{
+				const auto &path = *window.paths->Store().Find(window.selectedScenePaths[i]);
+				EXPECT_NEAR(std::get<CircularArcSegmentData>(path.segments.front().data).signedSweepRadians,
+					glm::radians(360.0f / count - 5.0f), 1.0e-5f);
+				EXPECT_NEAR(std::get<PathTransformBinding::BondFrame>(path.transformBinding.value).rollRadians,
+					glm::radians(45.0f + i * 360.0f / count), 1.0e-5f);
+			}
+			EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		}
+		ASSERT_TRUE(undoStack->Undo());
+		EXPECT_EQ(PathCount(window), 0u);
+		ASSERT_TRUE(undoStack->Redo());
+		EXPECT_EQ(PathCount(window), 6u);
 	}
 }

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <numbers>
 #include <utility>
+#include <type_traits>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -90,7 +91,12 @@ namespace DefectStudio
 		RendererWindowState &window, const CurvedArrowParameters &parameters, SceneOperationUndo undo)
 	{
 		std::vector<End> ends;
-		const float buffer = GetScenePathAtomBuffer();
+		const float defaultGap = std::max(0.0f, GetScenePathAtomBuffer() - 1.0f);
+		const float gap = parameters.endGap && std::isfinite(*parameters.endGap) ?
+			std::clamp(*parameters.endGap, 0.0f, 3.0f) : defaultGap;
+		const float buffer = parameters.endGap ? 1.0f + gap : GetScenePathAtomBuffer();
+		const float radiusScale = std::isfinite(parameters.radiusScale) ?
+			std::clamp(parameters.radiusScale, 0.8f, 2.5f) : 1.0f;
 		for (const auto index : window.selectedAtomIndices)
 			if (index < window.structure.atoms.size())
 				ends.push_back({window.structure.atoms[index].cartesianPosition,
@@ -173,9 +179,13 @@ namespace DefectStudio
 				radius = 0.35f * length;
 			if (!std::isfinite(radius) || radius <= 1.0e-5f)
 				return ArrowError("curved_arrow.degenerate_bond", "The selected atoms must define a visible bond.");
-			const float sweepDegrees = std::clamp(parameters.sweepDegrees, 1.0f, 350.0f);
+			const int arrowCount = std::clamp(parameters.arrowCount, 1, 6);
+			const float spacingDegrees = 360.0f / static_cast<float>(arrowCount);
+			const float requestedSweep = std::isfinite(parameters.sweepDegrees) ?
+				parameters.sweepDegrees : CurvedArrowParameters{}.sweepDegrees;
+			const float sweepDegrees = std::clamp(requestedSweep, 1.0f, spacingDegrees - 5.0f);
 			const float sweep = glm::radians(sweepDegrees);
-			const float rotation = glm::radians(parameters.rotationDegrees);
+			const float rotation = glm::radians(std::isfinite(parameters.rotationDegrees) ? parameters.rotationDegrees : 0.0f);
 			const glm::vec3 u{1, 0, 0};
 			const glm::vec3 v{0, 1, 0};
 			ends[0].position = radius * u;
@@ -184,22 +194,25 @@ namespace DefectStudio
 			ends[1].binding = PathBinding{PathBinding::Free{}};
 			origin = (window.structure.atoms[atomA].cartesianPosition +
 				window.structure.atoms[atomB].cartesianPosition) * 0.5f;
-			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
-			path.name = "Zakrzywiona strzałka (C_2)";
-			path.nodes[0].position = ends[0].position;
-			path.nodes[1].position = ends[1].position;
-			path.segments[0].data = CircularArcSegmentData{glm::vec3(0, 0, 1), sweep};
-			path.transform.position = origin;
-			path.transform.rotation = BondFrameRotation(axis);
-			path.transformBinding.value = PathTransformBinding::BondFrame{atomA, atomB, rotation};
-			path.style.width = parameters.strokeWidth;
-			path.style.color = parameters.color;
-			path.style.endDecoration.kind = parameters.decoration;
-			path.style.endDecoration.lengthScale = 3.0f;
-			path.style.endDecoration.widthScale = 1.0f;
-			if (!ValidatePath(path).empty())
-				return ArrowError("path.edit_invalid_result", "The generated bond-axis arrow is invalid.");
-			paths.push_back(std::move(path));
+			for (int i = 0; i < arrowCount; ++i)
+			{
+				ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
+				path.name = "Zakrzywiona strzałka (C_2)";
+				path.nodes[0].position = ends[0].position;
+				path.nodes[1].position = ends[1].position;
+				path.segments[0].data = CircularArcSegmentData{glm::vec3(0, 0, 1), sweep};
+				path.transform.position = origin;
+				path.transform.rotation = BondFrameRotation(axis);
+				path.transformBinding.value = PathTransformBinding::BondFrame{atomA, atomB, rotation + glm::radians(spacingDegrees * i)};
+				path.style.width = parameters.strokeWidth;
+				path.style.color = parameters.color;
+				path.style.endDecoration.kind = parameters.decoration;
+				path.style.endDecoration.lengthScale = 3.0f;
+				path.style.endDecoration.widthScale = 1.0f;
+				if (!ValidatePath(path).empty())
+					return ArrowError("path.edit_invalid_result", "The generated bond-axis arrow is invalid.");
+				paths.push_back(std::move(path));
+			}
 		}
 		else for (const auto &end : ends)
 		{
@@ -230,10 +243,40 @@ namespace DefectStudio
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 			path.name = "Zakrzywiona strzałka (C_n)";
 			path.transform.position = glm::vec3(0);
-			path.nodes[0].position = a.position;
-			path.nodes[1].position = b.position;
+			path.nodes[0].position = a.position + (radiusScale - 1.0f) * radial(a.position);
+			path.nodes[1].position = b.position + (radiusScale - 1.0f) * radial(b.position);
 			path.nodes[0].binding = a.binding;
 			path.nodes[1].binding = b.binding;
+			for (std::size_t nodeIndex = 0; nodeIndex < 2; ++nodeIndex)
+			{
+				const auto &end = nodeIndex == 0 ? a : b;
+				const glm::vec3 offset = path.nodes[nodeIndex].position - end.position;
+				const glm::vec3 direction = glm::normalize(
+					path.nodes[1 - nodeIndex].position - path.nodes[nodeIndex].position);
+				std::visit([&](auto &binding) {
+					using Binding = std::decay_t<decltype(binding)>;
+					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition> ||
+						std::is_same_v<Binding, PathBinding::CopyVacancy>)
+					{
+						binding.offset = offset;
+						const float radius = [&] {
+							if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+								return window.structure.atoms[binding.atomIndex].radius;
+							else
+								return window.structure.vacancies[binding.vacancyIndex].radius;
+						}();
+						if (radiusScale == 1.0f || radius <= 0.0f)
+							return; // Preserve the existing geometry and binding at scale one.
+						const float target = buffer * radius;
+						const float projection = glm::dot(offset, direction);
+						const float discriminant = projection * projection + target * target - glm::dot(offset, offset);
+						// ponytail: radial offsets already beyond the requested clearance need no trim;
+						// a full orbit constraint would be needed to enforce a smaller gap there.
+						binding.buffer = glm::length(offset) >= target || discriminant < 0.0f ? 0.0f :
+							std::max(0.0f, -projection + std::sqrt(discriminant)) / radius;
+					}
+				}, path.nodes[nodeIndex].binding.value);
+			}
 			// DeriveArc fits the circle to the resolved (buffered) chord, including unequal radii/heights.
 			path.segments[0].data = CircularArcSegmentData{axis, angle * curvature};
 			path.style.width = parameters.strokeWidth;

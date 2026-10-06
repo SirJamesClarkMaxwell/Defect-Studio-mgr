@@ -2,10 +2,12 @@
 
 #include "Presentation/Operators/SceneOperatorRegistry.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
 #include "Presentation/Panels/ScenePathCurvedArrow.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/Path/CurvedArrowParameters.hpp"
 
 namespace DefectStudio
@@ -53,8 +55,11 @@ namespace DefectStudio
 			parameters.axisMode = ReadEnum(values, "axisMode", parameters.axisMode, 3);
 			parameters.radiusRule = ReadEnum(values, "radiusRule", parameters.radiusRule, 2);
 			parameters.radiusFactor = ReadFiniteFloat(values, "radiusFactor", parameters.radiusFactor);
+			parameters.arrowCount = ReadValue(values, "arrowCount", parameters.arrowCount);
 			parameters.sweepDegrees = ReadFiniteFloat(values, "sweepDegrees", parameters.sweepDegrees);
 			parameters.rotationDegrees = ReadFiniteFloat(values, "rotationDegrees", parameters.rotationDegrees);
+			parameters.radiusScale = ReadFiniteFloat(values, "radiusScale", parameters.radiusScale);
+			parameters.endGap = ReadFiniteFloat(values, "endGap", std::max(0.0f, GetScenePathAtomBuffer() - 1.0f));
 			parameters.curvature = ReadFiniteFloat(values, "curvature", parameters.curvature);
 			parameters.decoration = ReadEnum(values, "decoration", parameters.decoration, 9);
 			parameters.color = ReadFiniteColor(values, "color", parameters.color);
@@ -90,8 +95,12 @@ namespace DefectStudio
 			EnumParameter("axisMode", "Oś", {"Automatyczna", "Wiązanie", "Oś Z defektu"}),
 			EnumParameter("radiusRule", "Reguła promienia", {"Względem atomu", "Ułamek wiązania"}),
 			FloatParameter("radiusFactor", "Współczynnik promienia", 0.1f, 5.0f),
+			{.key = "arrowCount", .label = "Liczba strzałek", .kind = SceneOperatorParameter::Kind::Int,
+				.minimum = 1.0f, .maximum = 6.0f},
 			FloatParameter("sweepDegrees", "Rozpiętość", 1.0f, 350.0f),
 			FloatParameter("rotationDegrees", "Obrót", -360.0f, 360.0f),
+			FloatParameter("radiusScale", "Promień okręgu", 0.8f, 2.5f),
+			FloatParameter("endGap", "Odstęp od atomów", 0.0f, 3.0f),
 			FloatParameter("curvature", "Wygięcie łuku", 0.05f, 1.5f),
 			EnumParameter("decoration", "Dekoracja", {
 				"Brak", "Strzałka", "Wklęsła", "Latex", "Belka", "Okrąg", "Kwadrat", "Romb", "Klin"}),
@@ -101,8 +110,11 @@ namespace DefectStudio
 			{"axisMode", static_cast<int>(defaults.axisMode)},
 			{"radiusRule", static_cast<int>(defaults.radiusRule)},
 			{"radiusFactor", defaults.radiusFactor},
+			{"arrowCount", defaults.arrowCount},
 			{"sweepDegrees", defaults.sweepDegrees},
 			{"rotationDegrees", defaults.rotationDegrees},
+			{"radiusScale", defaults.radiusScale},
+			{"endGap", std::max(0.0f, GetScenePathAtomBuffer() - 1.0f)},
 			{"curvature", defaults.curvature},
 			{"decoration", static_cast<int>(defaults.decoration)},
 			{"color", defaults.color},
@@ -115,7 +127,7 @@ namespace DefectStudio
 				return true;
 			if (key == "axisMode")
 				return mode != CurvedArrowSelectionMode::Cycle;
-			if (key == "curvature")
+			if (key == "curvature" || key == "radiusScale" || key == "endGap")
 				return mode != CurvedArrowSelectionMode::Bond;
 			return mode == CurvedArrowSelectionMode::Bond;
 		};

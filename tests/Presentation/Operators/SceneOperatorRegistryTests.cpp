@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <tuple>
 #include <gtest/gtest.h>
 
 #include "Presentation/Operators/SceneOperatorRegistry.hpp"
@@ -168,7 +169,7 @@ namespace DefectStudio::Tests
 
 		const auto added = op->execute(window, op->defaults);
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto *path = window.paths->Store().Find(added->front());
 		ASSERT_NE(path, nullptr);
 		// The defaults route through CurvedArrowParameters, so the bond ring is what comes out.
@@ -190,12 +191,12 @@ namespace DefectStudio::Tests
 		values["sweepDegrees"] = 90.0f;
 		const auto added = op->execute(window, values);
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto *path = window.paths->Store().Find(added->front());
 		ASSERT_NE(path, nullptr);
 		ASSERT_TRUE(std::holds_alternative<CircularArcSegmentData>(path->segments.front().data));
 		const auto sweep = std::get<CircularArcSegmentData>(path->segments.front().data).signedSweepRadians;
-		// A value map the operator ignored would still read 270 degrees here.
+		// A value map the operator ignored would still read 150 degrees here.
 		EXPECT_NEAR(std::abs(sweep), glm::radians(90.0f), 1.0e-4f);
 	}
 
@@ -269,5 +270,37 @@ namespace DefectStudio::Tests
 		const auto added = op->execute(window, op->defaults);
 		// The panel re-runs on every slider move; a lost selection must be a clean rejection.
 		EXPECT_FALSE(added);
+	}
+	TEST(SceneOperatorRegistryTests, NewArrowParametersHaveRequestedRangesAndModeRelevance)
+	{
+		SceneOperatorRegistry registry;
+		ASSERT_TRUE(RegisterCurvedArrowOperator(registry));
+		const auto &op = *registry.Find("scene.curved_arrow");
+		for (const auto &[key, kind, minimum, maximum] :
+			std::vector<std::tuple<std::string, SceneOperatorParameter::Kind, float, float>>{
+				{"radiusScale", SceneOperatorParameter::Kind::Float, 0.8f, 2.5f},
+				{"endGap", SceneOperatorParameter::Kind::Float, 0.0f, 3.0f},
+				{"arrowCount", SceneOperatorParameter::Kind::Int, 1.0f, 6.0f}})
+		{
+			ASSERT_NE(FindParameter(op, key), nullptr);
+			const auto &parameter = *FindParameter(op, key);
+			EXPECT_EQ(parameter.kind, kind);
+			EXPECT_FLOAT_EQ(parameter.minimum, minimum);
+			EXPECT_FLOAT_EQ(parameter.maximum, maximum);
+		}
+		EXPECT_EQ(std::get<int>(op.defaults.at("arrowCount")), 2);
+		EXPECT_FLOAT_EQ(std::get<float>(op.defaults.at("sweepDegrees")), 150.0f);
+		EXPECT_FLOAT_EQ(std::get<float>(op.defaults.at("radiusScale")), 1.0f);
+		EXPECT_NEAR(std::get<float>(op.defaults.at("endGap")), 0.15f, 1.0e-5f);
+		RendererWindowState window;
+		window.structure.atoms = {{"C", {-1, 0, 0}}, {"C", {1, 0, 0}}, {"C", {0, 1, 0}}};
+		for (const auto &selection : {std::vector<std::size_t>{0, 1}, std::vector<std::size_t>{0, 1, 2}})
+		{
+			window.selectedAtomIndices = selection;
+			const bool bond = selection.size() == 2;
+			EXPECT_EQ(op.isParameterRelevant("arrowCount", op.defaults, window), bond);
+			EXPECT_EQ(op.isParameterRelevant("radiusScale", op.defaults, window), !bond);
+			EXPECT_EQ(op.isParameterRelevant("endGap", op.defaults, window), !bond);
+		}
 	}
 }

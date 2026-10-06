@@ -13,8 +13,8 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(description.canDrawSegment);
 		EXPECT_TRUE(description.canDrawPlane);
 		EXPECT_EQ(description.lineLabel, "Linia");
-		EXPECT_EQ(description.arrowLabel, "Strzalka");
-		EXPECT_EQ(description.planeLabel, "Plaszczyzna");
+		EXPECT_EQ(description.arrowLabel, "Strzałka");
+		EXPECT_EQ(description.planeLabel, "Płaszczyzna");
 		EXPECT_TRUE(description.segmentTooltip.empty());
 		EXPECT_TRUE(description.planeTooltip.empty());
 	}
@@ -26,11 +26,11 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(description.menuLabel, "Rysuj (1 atom)");
 		EXPECT_FALSE(description.canDrawSegment);
 		EXPECT_FALSE(description.canDrawPlane);
-		EXPECT_EQ(description.lineLabel, "Linia (wymaga dokladnie 2 atomow)");
-		EXPECT_EQ(description.arrowLabel, "Strzalka (wymaga dokladnie 2 atomow)");
-		EXPECT_EQ(description.planeLabel, "Plaszczyzna (wymaga co najmniej 2 atomow)");
-		EXPECT_EQ(description.segmentTooltip, "Zaznacz dokladnie dwa atomy, aby dodac linie lub strzalke.");
-		EXPECT_EQ(description.planeTooltip, "Zaznacz co najmniej dwa atomy, aby dodac plaszczyzne.");
+		EXPECT_EQ(description.lineLabel, "Linia (wymaga dokładnie 2 atomów)");
+		EXPECT_EQ(description.arrowLabel, "Strzałka (wymaga dokładnie 2 atomów)");
+		EXPECT_EQ(description.planeLabel, "Płaszczyzna (wymaga co najmniej 2 atomów)");
+		EXPECT_EQ(description.segmentTooltip, "Zaznacz dokładnie dwa atomy, aby dodać linię lub strzałkę.");
+		EXPECT_EQ(description.planeTooltip, "Zaznacz co najmniej dwa atomy, aby dodać płaszczyznę.");
 	}
 
 	TEST(DrawSelectionDescriptionTests, ThreeAtomsEnableOnlyThePlane)
@@ -40,15 +40,15 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(description.menuLabel, "Rysuj (3 atomy)");
 		EXPECT_FALSE(description.canDrawSegment);
 		EXPECT_TRUE(description.canDrawPlane);
-		EXPECT_NE(description.lineLabel.find("dokladnie 2"), std::string::npos);
-		EXPECT_EQ(description.planeLabel, "Plaszczyzna");
+		EXPECT_NE(description.lineLabel.find("dokładnie 2"), std::string::npos);
+		EXPECT_EQ(description.planeLabel, "Płaszczyzna");
 	}
 
 	TEST(DrawSelectionDescriptionTests, PolishCountSuffixIsSelfDescribingBeyondFour)
 	{
-		EXPECT_EQ(DescribeDrawSelection(0).menuLabel, "Rysuj (0 atomow)");
+		EXPECT_EQ(DescribeDrawSelection(0).menuLabel, "Rysuj (0 atomów)");
 		EXPECT_EQ(DescribeDrawSelection(4).menuLabel, "Rysuj (4 atomy)");
-		EXPECT_EQ(DescribeDrawSelection(5).menuLabel, "Rysuj (5 atomow)");
+		EXPECT_EQ(DescribeDrawSelection(5).menuLabel, "Rysuj (5 atomów)");
 	}
 
 	TEST(OrbitalAddAnchorGroupsTests, OneCentrePresetCreatesOneAnchorGroupPerSelectedAtom)

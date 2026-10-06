@@ -22,7 +22,8 @@ namespace DefectStudio
 	[[nodiscard]] CurvedArrowSelectionMode ResolveCurvedArrowSelectionMode(
 		const RendererWindowState &window, CurvedArrowAxisMode axisMode);
 
-	// Two ends make one arrow; three or more atoms make a positive cycle. One undo step.
+	// Two atoms make bond-axis arrows; other two ends make one arrow; three or more atoms make
+	// a positive cycle. One undo step for the entire selection.
 	//
 	// With the default parameters two ends give a C_2 ring about the bond they share - the arc lies
 	// in the plane perpendicular to the bond, centred on its midpoint, and the path's transform is

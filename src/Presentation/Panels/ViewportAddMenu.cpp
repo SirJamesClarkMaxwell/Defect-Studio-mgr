@@ -1,5 +1,6 @@
-#include "Core/dspch.hpp"
+﻿#include "Core/dspch.hpp"
 #include "Presentation/Panels/ViewportAddMenu.hpp"
+#include "Presentation/Panels/SceneOrientationControls.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -38,7 +39,7 @@ namespace DefectStudio
 			return count == 0 ? std::nullopt : std::optional<glm::vec3>(sum / static_cast<float>(count));
 		}
 	}
-	void DrawDefectAddItems(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position)
+	void DrawDefectAddItems(RendererWindowState &windowState, CommandRegistry *registry, const glm::vec3 &position, float bondRadiusMultiplier)
 	{
 		const bool editable = registry != nullptr && !windowState.structure.domainStructureId.empty();
 		const std::optional<glm::vec3> centroid = SelectedAtomCentroid(windowState);
@@ -49,7 +50,7 @@ namespace DefectStudio
 
 		const bool canBond = !windowState.structure.vacancies.empty();
 		if (ImGui::MenuItem("Wiązania wakansów", nullptr, false, canBond))
-			(void)AddVacancyBonds(windowState);
+			(void)AddVacancyBonds(windowState, bondRadiusMultiplier);
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Zaznaczone atomy -> wakans (zaznaczony albo najbliższy),\n"
 							  "albo zaznaczone wakanse (bez zaznaczenia: wszystkie) -> pierwsza sfera sąsiadów.\n"
@@ -88,31 +89,59 @@ namespace DefectStudio
 		DrawDefectFrameAddMenu(windowState, registry, position);
 	}
 
+	namespace
+	{
+		void DrawSceneDrawingAddItems(RendererWindowState &windowState, const glm::vec3 &position,
+			const auto &addCurvedArrow)
+		{
+			DrawSegmentAddItems(windowState);
+			std::size_t count = 0;
+			for (const auto index : windowState.selectedAtomIndices)
+				count += index < windowState.structure.atoms.size() ? 1u : 0u;
+			const bool atomArrows = count >= 2;
+			if (count < 2)
+				for (const auto index : windowState.selectedVacancies)
+					count += index < windowState.structure.vacancies.size() ? 1u : 0u;
+			if (ImGui::MenuItem("Zakrzywiona strzałka (C_n)", nullptr, false, atomArrows || count == 2))
+				addCurvedArrow();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Zaznacz co najmniej dwa atomy. Dwa atomy: dwie strzałki wokół wiązania; trzy lub więcej atomów: zamknięty cykl w dodatnim kierunku obrotu.\n"
+					"Można też zaznaczyć dwa końce będące atomami lub wakansami.\n"
+					"Oś: z układu defektu; inaczej przez zaznaczony wakans lub środek atomów, prostopadle do ich płaszczyzny (dla dwóch końców: płaszczyzny sąsiadów).");
+			DrawFreeSegmentAddItems(windowState, position);
+			if (ImGui::BeginMenu("Krzywa"))
+			{
+				const auto add = [&](ScenePathDevPreset preset, const std::string &label) {
+					ScenePath path = MakeDevScenePath(preset, position);
+					path.name = label;
+					path.style.endDecoration.kind = PathDecorationKind::None;
+					const auto result = preset == ScenePathDevPreset::Line ?
+						AddFreeScenePathSegment(windowState, position, false) :
+						AddScenePath(MakeWindowPathEditContext(windowState), std::move(path));
+					if (result)
+						SelectAddedScenePaths(windowState, {result.Value()});
+					else
+						DS_LOG_WARN("Add curve failed: {}", result.Error().technicalDetails);
+				};
+				if (ImGui::MenuItem("Prosta")) add(ScenePathDevPreset::Line, "Prosta");
+				if (ImGui::MenuItem("Krzywa Béziera")) add(ScenePathDevPreset::Cubic, "Krzywa Béziera");
+				if (ImGui::MenuItem("Łuk")) add(ScenePathDevPreset::Arc, "Łuk");
+				ImGui::EndMenu();
+			}
+
+		}
+		void DrawScenePlaneAddItems(RendererWindowState &windowState, const glm::vec3 &position)
+		{
+			DrawPlaneAddItem(windowState);
+			DrawFreePlaneAddItem(windowState, position);
+			if (windowState.structure.defectFrame) DrawScenePlaneDefectPlacementMenu(windowState, true);
+		}
+	}
 	void DrawSceneAddMenu(RendererWindowState &windowState, const WeakRef<CommandRegistry> &commands,
 		const glm::vec3 &position, const Ref<EventBus> &eventBus, bool fractionalAtomPosition,
-		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry)
+		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry, float bondRadiusMultiplier, SceneAddMenuSection section)
 	{
-		const auto registry = commands.lock();
-		const bool editable = registry != nullptr;
-		if (ImGui::MenuItem("Atom...", nullptr, false, editable))
-		{
-			windowState.addAtomCoordinatesPopupPosition = position;
-			windowState.addAtomCoordinatesPopupFractional = fractionalAtomPosition;
-		}
-		if (!editable && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Otwórz edytowalną strukturę.");
-		ImGui::SeparatorText("Defekt");
-		DrawDefectAddItems(windowState, registry.get(), position);
-		ImGui::SeparatorText("Rysuj");
-		DrawSegmentAddItems(windowState);
-		std::size_t count = 0;
-		for (const auto index : windowState.selectedAtomIndices)
-			count += index < windowState.structure.atoms.size() ? 1u : 0u;
-		const bool atomArrows = count >= 2;
-		if (count < 2)
-			for (const auto index : windowState.selectedVacancies)
-				count += index < windowState.structure.vacancies.size() ? 1u : 0u;
-		if (ImGui::MenuItem("Zakrzywiona strzałka (C_n)", nullptr, false, atomArrows || count == 2))
+		const auto addCurvedArrow = [&]()
 		{
 			if (redoPanel != nullptr && operatorRegistry != nullptr)
 			{
@@ -130,15 +159,31 @@ namespace DefectStudio
 				if (!result)
 					DS_LOG_WARN("Add curved arrow failed: {}", result.Error().technicalDetails);
 			}
+		};
+		switch (section)
+		{
+		case SceneAddMenuSection::Drawing:
+			DrawSceneDrawingAddItems(windowState, position, addCurvedArrow); return;
+		case SceneAddMenuSection::Planes:
+			DrawScenePlaneAddItems(windowState, position); return;
+		case SceneAddMenuSection::Orbitals:
+			DrawOrbitalAddMenu(windowState, position, false); return;
+		case SceneAddMenuSection::Full: break;
 		}
-		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			ImGui::SetTooltip("Zaznacz co najmniej dwa atomy. Dwa końce: jedna strzałka; trzy lub więcej atomów: zamknięty cykl w dodatnim kierunku obrotu.\n"
-				"Można też zaznaczyć dwa końce będące atomami lub wakansami.\n"
-				"Oś: z układu defektu; inaczej przez zaznaczony wakans lub środek atomów, prostopadle do ich płaszczyzny (dla dwóch końców: płaszczyzny sąsiadów).");
-		DrawFreeSegmentAddItems(windowState, position);
-		DrawScenePathDevAddMenu(windowState, position);
-		DrawPlaneAddItem(windowState);
-		DrawFreePlaneAddItem(windowState, position);
+		const auto registry = commands.lock();
+		const bool editable = registry != nullptr;
+		if (ImGui::MenuItem("Atom...", nullptr, false, editable))
+		{
+			windowState.addAtomCoordinatesPopupPosition = position;
+			windowState.addAtomCoordinatesPopupFractional = fractionalAtomPosition;
+		}
+		if (!editable && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Otwórz edytowalną strukturę.");
+		ImGui::SeparatorText("Defekt");
+		DrawDefectAddItems(windowState, registry.get(), position, bondRadiusMultiplier);
+		ImGui::SeparatorText("Rysuj");
+		DrawSceneDrawingAddItems(windowState, position, addCurvedArrow);
+		DrawScenePlaneAddItems(windowState, position);
 		DrawOrbitalAddMenu(windowState, position);
 		if (ImGui::MenuItem("Tekst (swobodna etykieta)"))
 		{

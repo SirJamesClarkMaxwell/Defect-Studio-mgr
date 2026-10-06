@@ -39,7 +39,4 @@ namespace DefectStudio
 	// the .cpp's anonymous namespace so a test can assert what it produced without driving ImGui.
 	void AddScenePathDecorationGallery(RendererWindowState &windowState, const glm::vec3 &worldPosition);
 
-	// The user-facing Path submenu. Diagnostic examples stay under Dev; all additions are selected
-	// and go through AddScenePath with the renderer's undo sink.
-	void DrawScenePathDevAddMenu(RendererWindowState &windowState, const glm::vec3 &worldPosition);
 }
