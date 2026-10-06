@@ -69,6 +69,19 @@ namespace
 		ExpectConstraint(c, ConstraintKind::None, -1, TransformOrientation::Global);
 	}
 
+	// Atoms have no Local frame: X X goes to the defect axes when the structure has them.
+	TEST(ModalTransformTests, CycleGlobalWithoutLocalFallsBackToDefectAxes)
+	{
+		TransformBases bases;
+		bases.defect = glm::mat3(glm::vec3(0, 1, 0), glm::vec3(0, 0, 1), glm::vec3(1, 0, 0));
+		TransformConstraint c = CycleConstraint({}, 2, false, TransformOrientation::Global, bases);
+		ExpectConstraint(c, ConstraintKind::Axis, 2, TransformOrientation::Global);
+		c = CycleConstraint(c, 2, false, TransformOrientation::Global, bases);
+		ExpectConstraint(c, ConstraintKind::Axis, 2, TransformOrientation::Defect);
+		EXPECT_EQ(ResolveBasis(TransformOrientation::Defect, bases), *bases.defect);
+		EXPECT_EQ(ResolveBasis(TransformOrientation::Defect, TransformBases{}), glm::mat3(1.0f));
+	}
+
 	TEST(ModalTransformTests, CycleGlobalWithLocalFrameGoesGlobalLocalNone)
 	{
 		TransformBases bases;

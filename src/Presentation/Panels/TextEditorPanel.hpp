@@ -21,6 +21,7 @@ namespace DefectStudio
 		TextEditorPanel(const TextEditorPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Project; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Loads path's contents into the editor, replacing whatever was open (no unsaved-changes

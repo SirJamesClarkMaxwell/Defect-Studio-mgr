@@ -70,6 +70,26 @@ namespace DefectStudio
 		}
 	}
 
+	void OpenEmptyRendererWindow(RendererLayer &rendererLayer, const std::string &title)
+	{
+		// Same bootstrap as every other open path, just with a default-constructed
+		// RendererStructureData: no atoms, no bonds, no domain structure to build it from.
+		RendererStartupWindowInput input;
+		input.definition.title = title;
+		input.definition.structureName = title;
+		input.definition.poscarPath = Path{};
+
+		std::vector<RendererStartupWindowInput> inputs;
+		inputs.push_back(std::move(input));
+		std::vector<RendererWindowState> windows = BuildRendererStartupWindows(std::move(inputs));
+		if (windows.empty())
+		{
+			DS_LOG_ERROR("Open Empty Window: failed to build renderer window '{}'", title);
+			return;
+		}
+		rendererLayer.AddWindow(std::move(windows.front()));
+	}
+
 	void OpenRegisteredStructureAsWindow(
 		StructureId id,
 		DomainLayer &domainLayer,

@@ -26,6 +26,19 @@ namespace DefectStudio
 	{
 		float axisButtonSize = 20.0f;
 		float iconButtonSize = 18.0f;
+		// Path Edit Mode's overlay appearance.
+		std::array<float, 4> pathEditNodeColor = {70.0f / 255.0f, 180.0f / 255.0f, 255.0f / 255.0f, 230.0f / 255.0f};
+		std::array<float, 4> pathEditHandleColor = {255.0f / 255.0f, 170.0f / 255.0f, 70.0f / 255.0f, 230.0f / 255.0f};
+		std::array<float, 4> pathEditSelectedColor = {255.0f / 255.0f, 210.0f / 255.0f, 70.0f / 255.0f, 255.0f / 255.0f};
+		std::array<float, 4> pathEditTetherColor = {180.0f / 255.0f, 180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f};
+		std::array<float, 4> pathEditOutlineColor = {25.0f / 255.0f, 25.0f / 255.0f, 25.0f / 255.0f, 240.0f / 255.0f};
+		std::array<float, 4> selectionOutlineColor = {0.91f, 0.52f, 0.02f, 1.0f};
+		float pathEditTetherThickness = 1.0f;
+		float pathEditOutlineThickness = 1.5f;
+		float selectionOutlineWidth = 2.0f;
+		float transformGizmoSize = 100.0f;
+		float navigationGizmoSize = 60.0f;
+		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;
 		float transformScaleSnap = 0.1f;
@@ -50,12 +63,9 @@ namespace DefectStudio
 	{
 		std::array<float, 4> backgroundColor = {0.06f, 0.07f, 0.08f, 1.0f};
 		float bondRadiusMultiplier = 1.0f;
+		float vacancyBondAtomInset = 0.01f;
 		float colorSaturation = 1.0f;
 		float viewportSupersample = 1.0f;
-		float arrowHeadBulgeStrength = 0.16f;
-		float arrowDefaultShaftWidthRatio = 0.025f;
-		float arrowDefaultHeadWidthRatio = 0.047f;
-		float arrowDefaultHeadLengthRatio = 0.166f;
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;

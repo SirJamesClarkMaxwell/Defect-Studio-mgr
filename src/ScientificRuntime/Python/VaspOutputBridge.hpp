@@ -39,8 +39,7 @@ namespace DefectStudio
 	struct VaspOutputSummaryData
 	{
 		// One entry per ionic step (its converged/last SCF energy) - the "how did it converge"
-		// trend. Comes from puntukas' private Vasprun._etot, not a public API - see
-		// _summary_payload's comment.
+		// trend. Comes from the public VasprunData.energies trajectory.
 		std::optional<std::vector<double>> energyTrend;
 		std::optional<double> finalEnergy;
 		std::optional<double> cpuTimeSeconds;
@@ -64,8 +63,8 @@ namespace DefectStudio
 	struct VaspOutputData
 	{
 		Path path;
-		// nullopt if vasprun.xml is missing/unparsable for this calculation - not fatal, callers
-		// should degrade gracefully (e.g. hide band-gap-relative UI, keep orbital data if present).
+		// nullopt if neither vasprun.xml nor EIGENVAL supplies eigenvalues and occupations - not
+		// fatal; callers should degrade gracefully (hide band-gap-relative UI, keep other data).
 		std::optional<VaspBandGapData> gap;
 		// nullopt if WAVECAR is missing - band gap data above may still be available without it.
 		std::optional<std::vector<VaspOrbitalRecord>> orbitals;
@@ -81,7 +80,7 @@ namespace DefectStudio
 	// Loads band-gap (HOMO/LUMO), per-band orbital data (energy, occupation, localization factor,
 	// irrep, both spin channels), and calculation-summary fields (convergence trend, timing,
 	// drift, ...) for one VASP calculation directory, via puntukas' VaspOutput (which itself reads
-	// OUTCAR/vasprun.xml/WAVECAR as available). Subprocess-only, same rationale as PuntukasBridge:
+	// OUTCAR/vasprun.xml/EIGENVAL/WAVECAR as available). Subprocess-only, same rationale as PuntukasBridge:
 	// this is a low-frequency user action, not a hot loop.
 	class VaspOutputBridge final
 	{

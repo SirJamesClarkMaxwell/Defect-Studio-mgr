@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Presentation/Panels/ViewportVacancyAdd.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
 
 #include <algorithm>
@@ -14,10 +15,9 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
+#include "Presentation/Panels/ViewportAddMenu.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererTypes.hpp"
-#include "Renderer/RendererViewCamera.hpp"
 
 namespace DefectStudio
 {
@@ -25,6 +25,14 @@ namespace DefectStudio
 	{
 		for (RendererWindowState &windowState : m_Layer.GetWindows())
 		{
+			if (windowState.addAtomCoordinatesPopupPosition)
+			{
+				m_AddAtomPopupRequested = true;
+				m_AddAtomPopupWindowId = windowState.windowId;
+				m_AddAtomPopupPosition = *windowState.addAtomCoordinatesPopupPosition;
+				m_AddAtomPopupFractional = windowState.addAtomCoordinatesPopupFractional;
+				windowState.addAtomCoordinatesPopupPosition.reset();
+			}
 			if (!windowState.addAtomPopupRequested)
 				continue;
 			windowState.addAtomPopupRequested = false;
@@ -181,46 +189,24 @@ namespace DefectStudio
 		if (!ImGui::BeginPopup(kPopupId))
 			return;
 
-		if (ImGui::MenuItem("Atom..."))
+		RendererWindowState *windowState = nullptr;
+		for (RendererWindowState &candidate : m_Layer.GetWindows())
 		{
-			m_AddAtomPopupRequested = true;
-			m_AddAtomPopupWindowId = m_AddMenuWindowId;
-			m_AddAtomPopupPosition = m_AddMenuPosition;
-			m_AddAtomPopupFractional = m_AddMenuPositionFractional;
-		}
-
-		if (ImGui::MenuItem("Label"))
-		{
-			for (RendererWindowState &candidate : m_Layer.GetWindows())
+			if (candidate.windowId == m_AddMenuWindowId)
 			{
-				if (candidate.windowId != m_AddMenuWindowId)
-					continue;
-				PushPinnedMeasurementUndoSnapshot(candidate);
-				RendererWindowState::FreeLabel label;
-				label.id = candidate.sceneRegistry.AllocateObjectId();
-				label.worldPosition = m_AddMenuPosition;
-				candidate.freeLabels.push_back(std::move(label));
+				windowState = &candidate;
 				break;
 			}
 		}
-
-		if (ImGui::MenuItem("Arrow"))
+		if (windowState == nullptr)
 		{
-			for (RendererWindowState &candidate : m_Layer.GetWindows())
-			{
-				if (candidate.windowId != m_AddMenuWindowId)
-					continue;
-				PushPinnedMeasurementUndoSnapshot(candidate);
-				RendererWindowState::SceneArrow arrow = MakeDefaultSceneArrow(candidate, m_AddMenuPosition);
-				arrow.id = candidate.sceneRegistry.AllocateObjectId();
-				candidate.sceneArrows.push_back(std::move(arrow));
-				const std::size_t newIndex = candidate.sceneArrows.size() - 1;
-				candidate.selectedSceneArrows = {candidate.sceneArrows[newIndex].id};
-				candidate.sceneArrowQuickEditActive = true;
-				candidate.sceneArrowQuickEditIndex = newIndex;
-				break;
-			}
+			ImGui::TextDisabled("Target window is no longer open.");
+			ImGui::EndPopup();
+			return;
 		}
+
+		DrawSceneAddMenu(*windowState, m_CommandRegistry, m_AddMenuPosition, m_Layer.GetEventBus(),
+			m_AddMenuPositionFractional, &m_OperatorRedoPanel, &m_OperatorRegistry, m_Layer.GetGlobalSettings().bondRadiusMultiplier);
 
 		ImGui::EndPopup();
 	}

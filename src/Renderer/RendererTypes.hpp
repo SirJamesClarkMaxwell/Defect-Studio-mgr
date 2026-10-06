@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "Domain/Crystal/CrystalPrimitives.hpp"
+#include "Renderer/AtomStyleTable.hpp"
 #include "Renderer/RendererSettings.hpp"
 
 namespace DefectStudio
@@ -18,7 +21,11 @@ namespace DefectStudio
 		glm::vec3 cartesianPosition = glm::vec3(0.0f, 0.0f, 0.0f);
 		glm::vec3 color = glm::vec3(0.7f, 0.7f, 0.7f);
 		float radius = 0.35f;
+		// The Scene Outliner's eye column (H / Alt+H).
 		bool visible = true;
+		// Its camera column: drawn in an exported render. Independent of `visible` - see
+		// Renderer/Scene/SceneVisibility.hpp.
+		bool renderable = true;
 	};
 
 	struct RendererColorGradient
@@ -42,12 +49,54 @@ namespace DefectStudio
 		// (BuildRendererBonds filters it out), so this always starts true and only this renderer-
 		// side toggle can flip it back off. Mirrors RendererAtomData::visible.
 		bool visible = true;
+		// Camera column, mirroring RendererAtomData::renderable.
+		bool renderable = true;
 	};
 
 	struct RendererCellEdge
 	{
 		glm::vec3 start = glm::vec3(0.0f, 0.0f, 0.0f);
 		glm::vec3 finish = glm::vec3(0.0f, 0.0f, 0.0f);
+	};
+
+	// task/51: one domain VacancySite as drawn - a camera-facing disc with a dashed ring
+	// (Renderer/Scene/VacancyMarkerGeometry.hpp). The style is copied in per vacancy by
+	// BuildRendererStructureData, the same way atom colour and radius are, so the backend needs no
+	// AtomStyleTable; a style edit therefore rebuilds the structure data, like an element edit.
+	struct RendererVacancyData
+	{
+		glm::vec3 cartesianPosition = glm::vec3(0.0f);
+		std::string label; // VacancySite::GetLabel(), e.g. "V_C"
+		glm::vec3 color = glm::vec3(0.72f, 0.20f, 0.82f);
+		float radius = 0.45f;
+		float opacity = 0.35f;
+		VacancyRenderMode renderMode = VacancyRenderMode::Ghost;
+		int dashCount = 12;
+		float ringWidth = 0.035f;
+		// VacancySite::color was set: the shared style editor leaves `color` alone.
+		bool customColor = false;
+		std::string sourceSpecies; // VacancySite::sourceSpecies, for AtomStyleTable::VacancyColor
+		bool hidden = false;       // VacancySite::hidden: not drawn, not pickable
+	};
+
+	// Where a pinned measurement or free label was last drawn (renderLabels): billboard centre, its
+	// background rect in label-local units (style.scale and padding applied; x along camera right, y
+	// along camera up before `rotation`). valid = false when that label was not drawn. The viewport
+	// click test uses it, so a label is picked where it is seen, auto-offset and rotation included.
+	struct LabelPickQuad
+	{
+		glm::vec3 centre = glm::vec3(0.0f);
+		glm::vec2 min = glm::vec2(0.0f);
+		glm::vec2 max = glm::vec2(0.0f);
+		float rotation = 0.0f;
+		bool valid = false;
+	};
+
+	// Indexed like the pinnedMeasurements / freeLabels lists of the window, as of the last frame.
+	struct LabelPickQuads
+	{
+		std::vector<LabelPickQuad> pinned;
+		std::vector<LabelPickQuad> free;
 	};
 
 	struct RendererStructureData
@@ -58,12 +107,20 @@ namespace DefectStudio
 		std::vector<RendererAtomData> atoms;
 		std::vector<RendererBondData> bonds;
 		std::vector<RendererCellEdge> cellEdges;
+		// structure.vacancies, in the same order - an index here is an index there.
+		std::vector<RendererVacancyData> vacancies;
+		// CrystalStructure::defectFrame, copied as is. Drawn as an axis triad ("empty") and used by
+		// the 1/2/3 view keys while RendererWindowState::showDefectFrame is on.
+		std::optional<DefectFrame> defectFrame;
 		// A second cell drawn inside the first in a contrasting colour - the primitive cell of a
 		// centred lattice, which is a different cell over the SAME atoms, not a transformation of
 		// them. Empty for every structure that has no such overlay to show.
 		std::vector<RendererCellEdge> overlayCellEdges;
 		glm::mat3 lattice = glm::mat3(1.0f);
 		glm::mat3 reciprocalLattice = glm::mat3(1.0f);
+		// CrystalStructure::isPeriodic. False by default, so hand-built data (tests, previews) is
+		// never treated as a 1 A cell by minimum-image lookups.
+		bool periodic = false;
 	};
 
 	// Which of a 3-atom set is a measured angle's vertex - whichever atom is bonded to the other
@@ -101,7 +158,8 @@ namespace DefectStudio
 		// Click 2 (bond) / 3 (angle) atoms in the viewport to auto-pin a measurement label - shares
 		// the enum for the same mutual-exclusion reason as Cursor3D.
 		MeasureBond,
-		MeasureAngle
+		MeasureAngle,
+		Text
 	};
 
 	// Which ImGuizmo::OPERATION the viewport gizmo currently shows for the selection (G/R/S).

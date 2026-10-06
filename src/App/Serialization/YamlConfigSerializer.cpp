@@ -464,10 +464,6 @@ namespace DefectStudio
 			const char *rendererBondRadiusMultiplierKey = Name(RendererKey::BondRadiusMultiplier);
 			const char *rendererColorSaturationKey = Name(RendererKey::ColorSaturation);
 			const char *rendererViewportSupersampleKey = Name(RendererKey::ViewportSupersample);
-			const char *rendererArrowHeadBulgeStrengthKey = Name(RendererKey::ArrowHeadBulgeStrength);
-			const char *rendererArrowDefaultShaftWidthRatioKey = Name(RendererKey::ArrowDefaultShaftWidthRatio);
-			const char *rendererArrowDefaultHeadWidthRatioKey = Name(RendererKey::ArrowDefaultHeadWidthRatio);
-			const char *rendererArrowDefaultHeadLengthRatioKey = Name(RendererKey::ArrowDefaultHeadLengthRatio);
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
@@ -607,6 +603,11 @@ namespace DefectStudio
 				{rendererSection, rendererBondRadiusMultiplierKey},
 				{},
 				config.renderer.bondRadiusMultiplier);
+			config.renderer.vacancyBondAtomInset = ReadValue(
+				root,
+				{rendererSection, "vacancy_bond_atom_inset"},
+				{},
+				config.renderer.vacancyBondAtomInset);
 			config.renderer.colorSaturation = ReadValue(
 				root,
 				{rendererSection, rendererColorSaturationKey},
@@ -617,26 +618,6 @@ namespace DefectStudio
 				{rendererSection, rendererViewportSupersampleKey},
 				{},
 				config.renderer.viewportSupersample);
-			config.renderer.arrowHeadBulgeStrength = ReadValue(
-				root,
-				{rendererSection, rendererArrowHeadBulgeStrengthKey},
-				{},
-				config.renderer.arrowHeadBulgeStrength);
-			config.renderer.arrowDefaultShaftWidthRatio = ReadValue(
-				root,
-				{rendererSection, rendererArrowDefaultShaftWidthRatioKey},
-				{},
-				config.renderer.arrowDefaultShaftWidthRatio);
-			config.renderer.arrowDefaultHeadWidthRatio = ReadValue(
-				root,
-				{rendererSection, rendererArrowDefaultHeadWidthRatioKey},
-				{},
-				config.renderer.arrowDefaultHeadWidthRatio);
-			config.renderer.arrowDefaultHeadLengthRatio = ReadValue(
-				root,
-				{rendererSection, rendererArrowDefaultHeadLengthRatioKey},
-				{},
-				config.renderer.arrowDefaultHeadLengthRatio);
 			config.renderer.orbitSensitivity = ReadValue(
 				root,
 				{rendererSection, rendererOrbitKey},
@@ -769,6 +750,76 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.viewport.pathEditNodeColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditNodeColor)},
+				{},
+				config.renderer.viewport.pathEditNodeColor);
+			config.renderer.viewport.pathEditHandleColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditHandleColor)},
+				{},
+				config.renderer.viewport.pathEditHandleColor);
+			config.renderer.viewport.pathEditSelectedColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditSelectedColor)},
+				{},
+				config.renderer.viewport.pathEditSelectedColor);
+			config.renderer.viewport.pathEditTetherColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherColor)},
+				{},
+				config.renderer.viewport.pathEditTetherColor);
+			config.renderer.viewport.pathEditOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
+				{},
+				config.renderer.viewport.pathEditOutlineColor);
+			const auto legacySelectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, "path_selection_outline_color"},
+				"path_selection_outline_color",
+				config.renderer.viewport.selectionOutlineColor);
+			config.renderer.viewport.selectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineColor)},
+				{},
+				legacySelectionOutlineColor);
+			config.renderer.viewport.pathEditTetherThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
+				{},
+				config.renderer.viewport.pathEditTetherThickness);
+			config.renderer.viewport.pathEditOutlineThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
+				{},
+				config.renderer.viewport.pathEditOutlineThickness);
+			const auto legacySelectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, "path_selection_outline_width"},
+				"path_selection_outline_width",
+				config.renderer.viewport.selectionOutlineWidth);
+			config.renderer.viewport.selectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineWidth)},
+				{},
+				legacySelectionOutlineWidth);
+			config.renderer.viewport.transformGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformGizmoSize)},
+				{},
+				config.renderer.viewport.transformGizmoSize);
+			config.renderer.viewport.navigationGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::NavigationGizmoSize)},
+				{},
+				config.renderer.viewport.navigationGizmoSize);
+			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
+				{},
+				config.renderer.viewport.pathEditMarkerSizeMultiplier);
 			config.renderer.viewport.transformTranslateSnap = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformTranslateSnap)},
@@ -846,10 +897,6 @@ namespace DefectStudio
 			const char *rendererBondRadiusMultiplierKey = Name(RendererKey::BondRadiusMultiplier);
 			const char *rendererColorSaturationKey = Name(RendererKey::ColorSaturation);
 			const char *rendererViewportSupersampleKey = Name(RendererKey::ViewportSupersample);
-			const char *rendererArrowHeadBulgeStrengthKey = Name(RendererKey::ArrowHeadBulgeStrength);
-			const char *rendererArrowDefaultShaftWidthRatioKey = Name(RendererKey::ArrowDefaultShaftWidthRatio);
-			const char *rendererArrowDefaultHeadWidthRatioKey = Name(RendererKey::ArrowDefaultHeadWidthRatio);
-			const char *rendererArrowDefaultHeadLengthRatioKey = Name(RendererKey::ArrowDefaultHeadLengthRatio);
 			const char *rendererOrbitKey = Name(RendererKey::OrbitSensitivity);
 			const char *rendererPanKey = Name(RendererKey::PanSensitivity);
 			const char *rendererZoomKey = Name(RendererKey::ZoomSensitivity);
@@ -936,6 +983,11 @@ namespace DefectStudio
 				{rendererSection, rendererBondRadiusMultiplierKey},
 				{},
 				config.renderer.bondRadiusMultiplier);
+			config.renderer.vacancyBondAtomInset = ReadValue(
+				root,
+				{rendererSection, "vacancy_bond_atom_inset"},
+				{},
+				config.renderer.vacancyBondAtomInset);
 			config.renderer.colorSaturation = ReadValue(
 				root,
 				{rendererSection, rendererColorSaturationKey},
@@ -946,26 +998,6 @@ namespace DefectStudio
 				{rendererSection, rendererViewportSupersampleKey},
 				{},
 				config.renderer.viewportSupersample);
-			config.renderer.arrowHeadBulgeStrength = ReadValue(
-				root,
-				{rendererSection, rendererArrowHeadBulgeStrengthKey},
-				{},
-				config.renderer.arrowHeadBulgeStrength);
-			config.renderer.arrowDefaultShaftWidthRatio = ReadValue(
-				root,
-				{rendererSection, rendererArrowDefaultShaftWidthRatioKey},
-				{},
-				config.renderer.arrowDefaultShaftWidthRatio);
-			config.renderer.arrowDefaultHeadWidthRatio = ReadValue(
-				root,
-				{rendererSection, rendererArrowDefaultHeadWidthRatioKey},
-				{},
-				config.renderer.arrowDefaultHeadWidthRatio);
-			config.renderer.arrowDefaultHeadLengthRatio = ReadValue(
-				root,
-				{rendererSection, rendererArrowDefaultHeadLengthRatioKey},
-				{},
-				config.renderer.arrowDefaultHeadLengthRatio);
 			config.renderer.orbitSensitivity = ReadValue(
 				root,
 				{rendererSection, rendererOrbitKey},
@@ -1098,6 +1130,76 @@ namespace DefectStudio
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::IconButtonSize)},
 				{},
 				config.renderer.viewport.iconButtonSize);
+			config.renderer.viewport.pathEditNodeColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditNodeColor)},
+				{},
+				config.renderer.viewport.pathEditNodeColor);
+			config.renderer.viewport.pathEditHandleColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditHandleColor)},
+				{},
+				config.renderer.viewport.pathEditHandleColor);
+			config.renderer.viewport.pathEditSelectedColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditSelectedColor)},
+				{},
+				config.renderer.viewport.pathEditSelectedColor);
+			config.renderer.viewport.pathEditTetherColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherColor)},
+				{},
+				config.renderer.viewport.pathEditTetherColor);
+			config.renderer.viewport.pathEditOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineColor)},
+				{},
+				config.renderer.viewport.pathEditOutlineColor);
+			const auto legacySelectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, "path_selection_outline_color"},
+				"path_selection_outline_color",
+				config.renderer.viewport.selectionOutlineColor);
+			config.renderer.viewport.selectionOutlineColor = ReadColor(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineColor)},
+				{},
+				legacySelectionOutlineColor);
+			config.renderer.viewport.pathEditTetherThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditTetherThickness)},
+				{},
+				config.renderer.viewport.pathEditTetherThickness);
+			config.renderer.viewport.pathEditOutlineThickness = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditOutlineThickness)},
+				{},
+				config.renderer.viewport.pathEditOutlineThickness);
+			const auto legacySelectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, "path_selection_outline_width"},
+				"path_selection_outline_width",
+				config.renderer.viewport.selectionOutlineWidth);
+			config.renderer.viewport.selectionOutlineWidth = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::SelectionOutlineWidth)},
+				{},
+				legacySelectionOutlineWidth);
+			config.renderer.viewport.transformGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformGizmoSize)},
+				{},
+				config.renderer.viewport.transformGizmoSize);
+			config.renderer.viewport.navigationGizmoSize = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::NavigationGizmoSize)},
+				{},
+				config.renderer.viewport.navigationGizmoSize);
+			config.renderer.viewport.pathEditMarkerSizeMultiplier = ReadValue(
+				root,
+				{rendererSection, rendererViewportKey, Name(RendererViewportKey::PathEditMarkerSizeMultiplier)},
+				{},
+				config.renderer.viewport.pathEditMarkerSizeMultiplier);
 			config.renderer.viewport.transformTranslateSnap = ReadValue(
 				root,
 				{rendererSection, rendererViewportKey, Name(RendererViewportKey::TransformTranslateSnap)},

@@ -12,8 +12,10 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Undo/UndoStack.hpp"
+#include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
@@ -124,11 +126,13 @@ namespace DefectStudio
 			const ModalTransformSession &session, const TransformDelta &delta, SnapMode snap,
 			const TransformSnapSteps &steps, const ModalTransformView &view)
 		{
-			constexpr std::array<ImU32, 3> colors = {
-				IM_COL32(230, 70, 70, 220), IM_COL32(90, 210, 90, 220), IM_COL32(90, 150, 240, 220)};
 			if (session.constraint.kind != ConstraintKind::None && session.constraint.axis >= 0 &&
 				session.constraint.axis < 3)
 			{
+				ImDrawList *drawList = ImGui::GetForegroundDrawList();
+				drawList->PushClipRect(
+					ImVec2(view.viewportOrigin.x, view.viewportOrigin.y),
+					ImVec2(view.viewportOrigin.x + view.viewportSize.x, view.viewportOrigin.y + view.viewportSize.y), true);
 				const glm::mat3 basis = ResolveBasis(session.constraint.space, session.bases);
 				for (int axis = 0; axis < 3; ++axis)
 				{
@@ -136,8 +140,16 @@ namespace DefectStudio
 						? axis == session.constraint.axis
 						: axis != session.constraint.axis;
 					if (draw)
-						DrawConstraintLine(view, session.pivot, basis[axis], colors[axis]);
+					{
+						const glm::vec3 &lineOrigin = session.op == ModalTransformOp::Rotate
+							? session.pivot
+							: session.anchor;
+						const ImU32 color = (ViewportTransformAxisColor(axis) & IM_COL32(255, 255, 255, 0)) |
+							IM_COL32(0, 0, 0, 220);
+						DrawConstraintLine(view, lineOrigin, basis[axis], color);
+					}
 				}
+				drawList->PopClipRect();
 			}
 
 			const std::string header = FormatModalTransformHeader(session, delta, snap, steps);
@@ -210,6 +222,43 @@ namespace DefectStudio
 				DS_LOG_WARN("Gizmo transform commit failed: {}", result.Error().technicalDetails);
 		}
 
+		// Vacancies and the defect axes are domain data: the preview moved the renderer copies, the
+		// commit edits the domain through the undoable set commands (one each), which rebuild the copies.
+		void CommitDefectMarkerPreview(RendererWindowState &windowState, const SceneTransformSelectionSnapshot &snapshot,
+			const WeakRef<CommandRegistry> &commandRegistryRef, std::string_view description)
+		{
+			Ref<CommandRegistry> commandRegistry = commandRegistryRef.lock();
+			if (commandRegistry == nullptr)
+				return;
+			auto run = [&](const char *commandId, const char *payloadKey, auto payload) {
+				CommandContext context;
+				context.Set<decltype(payload)>(payloadKey, std::move(payload));
+				const auto result = commandRegistry->Execute(CommandID{commandId}, std::move(context));
+				if (!result)
+					DS_LOG_WARN("Defect marker transform commit failed: {}", result.Error().technicalDetails);
+			};
+			if (!snapshot.vacancies.empty())
+			{
+				std::vector<std::pair<std::size_t, glm::vec3>> moved;
+				for (const VacancyTransformStart &start : snapshot.vacancies)
+					if (start.index < windowState.structure.vacancies.size())
+						moved.emplace_back(start.index, windowState.structure.vacancies[start.index].cartesianPosition);
+				SetVacanciesPayload payload{windowState.windowId, {}, std::string(description)};
+				payload.edit = [moved](std::vector<VacancySite> &list, const CrystalStructure &structure) {
+					for (const auto &[index, position] : moved)
+						if (index < list.size())
+						{
+							list[index].position = position;
+							list[index].fractional = structure.CartesianToFractional(position);
+						}
+				};
+				run(kSetVacanciesCommandId, kSetVacanciesPayloadKey, std::move(payload));
+			}
+			if (snapshot.defectFrame && windowState.structure.defectFrame)
+				run(kSetDefectFrameCommandId, kSetDefectFramePayloadKey,
+					SetDefectFramePayload{windowState.windowId, windowState.structure.defectFrame, std::string(description)});
+		}
+
 		void CommitTransform(
 			RendererWindowState &windowState, RendererLayer &layer,
 			const WeakRef<CommandRegistry> &commandRegistryRef, std::string_view description)
@@ -217,15 +266,20 @@ namespace DefectStudio
 			const bool hasAtoms = HasAtomTransformTargets(windowState.modalTransformSelection);
 			const bool hasSceneObjects = HasSceneObjectTransformTargets(windowState.modalTransformSelection) &&
 				windowState.modalTransformSceneObjectsBefore.has_value();
+			const SceneTransformSelectionSnapshot &selection = windowState.modalTransformSelection;
+			const int markerCommands = static_cast<int>(!selection.vacancies.empty()) +
+				static_cast<int>(selection.defectFrame.has_value());
 			Ref<UndoStack> undoStack = layer.GetUndoStackHandle().lock();
 			std::optional<UndoScope> group;
-			if (hasAtoms && hasSceneObjects && undoStack != nullptr)
+			if (static_cast<int>(hasAtoms) + static_cast<int>(hasSceneObjects) + markerCommands > 1 && undoStack != nullptr)
 				group.emplace(*undoStack, std::string(description));
 
 			if (hasSceneObjects)
 				PushSceneObjectsUndoSnapshot(windowState, std::move(*windowState.modalTransformSceneObjectsBefore));
 			if (hasAtoms)
 				CommitAtomPreview(windowState, windowState.modalTransformSelection, commandRegistryRef, description);
+			if (markerCommands > 0)
+				CommitDefectMarkerPreview(windowState, selection, commandRegistryRef, description);
 			if (group.has_value())
 			{
 				const Result<void> committed = group->Commit();
@@ -237,28 +291,31 @@ namespace DefectStudio
 
 	void BeginViewportModalTransform(
 		RendererWindowState &windowState, ModalTransformOp op, const glm::vec2 &mouse,
-		std::optional<int> axis, bool startedFromHandle)
+		std::optional<int> axis, bool startedFromHandle, bool planeConstraint)
 	{
 		if (windowState.camera == nullptr || windowState.modalTransform.has_value())
 			return;
 
 		SceneTransformSelectionSnapshot snapshot =
-			CaptureSceneTransformSelectionForOperation(windowState, op);
-		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
-		if (positions.empty())
+			CaptureSceneTransformSelection(windowState);
+		const std::vector<glm::vec3> pivotPositions = SceneTransformPivotPositions(windowState, snapshot);
+		const std::vector<glm::vec3> anchorPositions = SceneTransformAnchorPositions(windowState, snapshot);
+		if (pivotPositions.empty())
 			return;
 
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;
-		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
-		TransformBases bases;
-		bases.local = SceneTransformLocalBasis(snapshot);
-		bases.lattice = windowState.structure.lattice;
-		windowState.modalTransform = BeginModalTransform(op, windowState.transformOrientation, bases, pivot, mouse);
+		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, pivotPositions, cursor);
+		const glm::vec3 anchor = anchorPositions.empty()
+			? pivot
+			: ComputeTransformPivot(windowState.transformPivotMode, anchorPositions, cursor);
+		const TransformBases bases = SceneTransformBases(windowState, snapshot);
+		const TransformOrientation orientation = SceneTransformOrientation(windowState.transformOrientation, snapshot);
+		windowState.modalTransform = BeginModalTransform(op, orientation, bases, pivot, mouse);
+		windowState.modalTransform->anchor = anchor;
 		if (axis.has_value())
-			windowState.modalTransform->constraint = CycleConstraint(
-				{}, *axis, false, windowState.transformOrientation, bases);
+			windowState.modalTransform->constraint = CycleConstraint({}, *axis, planeConstraint, orientation, bases);
 		windowState.modalTransformSelection = std::move(snapshot);
 		if (HasSceneObjectTransformTargets(windowState.modalTransformSelection))
 			windowState.modalTransformSceneObjectsBefore = CaptureSceneObjectsSnapshot(windowState);

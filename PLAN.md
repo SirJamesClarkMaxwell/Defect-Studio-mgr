@@ -1,268 +1,165 @@
-# Plan: Structure Creation UI Redesign — lattice × basis, single-window 3-pane preview
+# Plan: Arrow/drawing module — selection-registry sync audit, handle hit-test fix
 
-_Locked via grill — by Claude Opus 5 + pzabier@gmail.com, 2026-09-10_
+_Locked via grill — by Claude Sonnet 5 + pzabier@gmail.com, 2026-09-19. Round 3: scope cut after
+Codex round 2 found item #13 (per-segment Bezier handles) needs its own design pass (picking
+arbitration, straight-segment fast path, YAML downgrade safety — 12 findings, see
+PLAN-REVIEW-LOG.md). #13 is deferred to a follow-up task, not in this plan._
 
-Branch: `task/18-structure-lifecycle-redesign`.
-
-The previous plan (Structure Lifecycle Refactor, Steps 10-11) is archived at
-`docs/work/project/plans/2026-09-08-structure-lifecycle-steps-10-11.md`. Its session/registry model,
-event contracts, path validation and atomic staging-write contract are **implemented and remain
-binding** — this plan changes only the crystallography model and the creation UI on top of them.
-
----
+Branch: `task/39-orbital-orientation-align-and-phase-flip` (or a fresh `task/40-arrow-module-fixes`
+off it — implementer's call).
 
 ## Goal
 
-Fix two structural mistakes in the structure-creation UI and finish the surrounding UX.
+Fix two confirmed, code-verified bugs in the scene-arrow module:
+- **Bug A**: scene-arrow creation paths allocate a `SceneObjectId` but never register a
+  `SceneRegistry` entity for it, so registry-mediated selection resolution silently drops
+  newly-created arrows (and likely orbitals/pins/labels via the same pattern) until some unrelated
+  action happens to trigger a full resync.
+- **Bug B**: two independent, uncoordinated endpoint hit-test systems both grab a single arrow
+  endpoint on a click that's merely *near* it, with no matching visible marker: `ViewportGizmo.cpp`'s
+  three 5px hint circles hit-tested at a fixed 10px radius, and `ViewportSceneArrowInteraction.cpp`'s
+  separate initial click-to-select/drag dispatcher, tolerance `max(14px, shaft-half-width + 8px)`.
+  Either one alone explains a plain click silently hijacking to Start/End/midpoint with no visual cue
+  why.
 
-The first is a domain error: the panel conflates the **Bravais lattice** with the **atomic basis**.
-Today the `Face-centered (F)` button *overwrites* the basis table with the four FCC lattice points and
-calls them atoms, so a user who wants diamond gets simple-cubic-with-FCC-atoms (spacegroup 221 Pm-3m)
-instead of diamond (227 Fd-3m), and would have to hand-type eight rows to get the real thing. A
-crystal structure is `lattice ⊗ basis`: diamond is the FCC lattice with a two-atom carbon basis at
-`(0,0,0)` and `(¼,¼,¼)`. Centering becomes a property of the lattice section; the basis table holds
-only the motif; `buildStructure()` convolves them.
+Item #13 (interior path-point dragging + per-segment Bezier curve handles) and items #2/#12/#14/
+outliner-shortcuts are **out of scope** — see Out of scope.
 
-The second is a UI-architecture error: the three preview views are three separate renderer windows
-docked side by side, so the user sees three title bars and three full toolbar sets. They must be
-three *panes inside one renderer window* sharing one horizontal and one vertical toolbar.
+## Investigation summary (code-verified, not guessed)
 
-Alongside those: previews must exist from the first valid draft rather than waiting for the Structure
-Hub hand-off, file loading must use real pickers instead of a raw text field, and the mode's name
-must be the same string everywhere.
+**Bug A.** `RendererPanelOrbitalMenu.cpp`'s `AddFreeSegment` (line 97-110) and the `addSegment`
+lambda inside `DrawSegmentAddItems` (line 159-178) both do:
+```
+arrow.id = windowState.sceneRegistry.AllocateObjectId();
+windowState.sceneArrows.push_back(std::move(arrow));
+```
+`AllocateObjectId()` (`SceneRegistry.cpp:34-37`) only increments a counter and returns an id value —
+it does **not** call `CreateObject`/insert into `SceneRegistry`'s `m_ObjectEntities` map. No
+`SyncLabelEntities` call follows either creation path. Confirmed live today: `renderSceneArrows`'s
+`isSelected` check (fed by `RendererLayer.cpp`'s `SceneSystem::ResolveSourceIndices`, which looks up
+`SceneRegistry::EntityForObjectId`) was `false` for a selected, gizmo-active arrow across 20,000+
+consecutive logged frames — the arrow's gizmo worked throughout (it resolves via a direct
+`AnnotationIndex` scan in `SceneTransform.cpp`, not through the registry), but the registry never had
+an entity for it. `SceneRegistry`'s own map/lookup implementation (`SceneRegistry.cpp:23-75`) and
+`SceneSystem::SyncLabelEntities` (`SceneSystem.cpp:224-305`, which *does* correctly build registry
+entities for arrows/orbitals/labels/pins when called) are both verified correct — this is a missing
+call at arrow-creation time, not a broken sync mechanism.
 
----
+**Bug B.** Two separate systems both narrow a click to a single arrow endpoint with no matching
+visible marker:
+- `ViewportGizmo.cpp:239-260` draws three 5px `AddCircleFilled` hint dots at an arrow's
+  Start/End/midpoint (only shown once the arrow is already the sole selection), hit-tested with a
+  separately-hardcoded `10.0f` literal (`glm::distance(mouse, *screen) <= 10.0f`).
+- `ViewportSceneArrowInteraction.cpp:280-290` — the *initial* click-to-select/drag dispatcher, fires
+  on any click that hits an arrow, not just when it's already selected — sets
+  `sceneArrowDragTarget`/`sceneArrowGizmoActiveTarget` to Start/End when the click lands within
+  `max(14.0f, hitShaftHalfPx + 8.0f)` px of an endpoint (at least 14px, more for a thick shaft), with
+  **no drawn marker at all** for this tolerance zone.
+
+Live-repro'd today: three screenshots of the same static arrow (camera orbited between shots, nothing
+else changed) each showed the gizmo cross on a different one of Start/End/midpoint; log confirmed
+`sceneArrowGizmoActiveTarget` cycling across the session. Either system alone is sufficient to explain
+a plain click silently hijacking to a single endpoint; which one fired in the live repro wasn't
+isolated (not mutually exclusive — the interaction-dispatcher's click-time decision and the gizmo's
+per-frame hint-circle decision can each independently land on the same or different targets).
+
+**Ruled out:** `RendererWindowState::viewOffset` (piped through the renderer as `u_SceneOffset`) is
+export-preview-only (confirmed zero outside `ExportImagePanel.cpp`'s dialog-local copy) — not the
+cause during normal editing.
 
 ## Approach
 
-### 1. Domain — separate lattice from basis
+0. Start from a clean point on `task/39-...` or cut `task/40-arrow-module-fixes` — implementer's call.
 
-`Domain/Crystal/BravaisLattice.hpp:65` already exposes
-`GetCenteringPresetBasis(BravaisCenteringPreset) -> std::vector<glm::vec3>`, which returns **lattice
-points**, not atoms. The name is part of the confusion.
-
-1. Rename it to `GetCenteringTranslations()` so the return value says what it is. Keep the same
-   values (`P` → `{(0,0,0)}`, `I` → `+(½,½,½)`, `F` → `+(½,½,0),(½,0,½),(0,½,½)`, `C` → `+(½,½,0)`).
-2. Add `Domain/Crystal/LatticeBasisExpansion.{hpp,cpp}`:
+1. **Fix A — extract one small, testable helper and route every scene-arrow creation/duplication/
+   paste path through it**, instead of patching each UI-local function/lambda individually (those
+   aren't unit-testable as-is). Something like:
    ```
-   [[nodiscard]] std::vector<AtomSite> ExpandBasisOverLattice(
-       std::span<const AtomSite> basis,
-       BravaisCenteringPreset centering);
+   SceneObjectId AppendSceneArrow(RendererWindowState &windowState, RendererWindowState::SceneArrow arrow);
    ```
-   For each centering translation `t`, for each basis atom `b`: emit an atom at
-   `frac(b.fractional + t)`, species carried through. Wrap into `[0,1)`. Result count is
-   `translations × basis`.
-3. `NewStructureWizardPanel::buildStructure()` calls this instead of turning `m_BasisRows` straight
-   into atoms. `m_BasisRows` is now the motif only.
+   `AppendSceneArrow` **unconditionally overwrites `arrow.id`** with a freshly allocated one
+   internally (never "if unset", never trusting the caller to have cleared it — a duplicated/pasted
+   arrow already carries the *source* object's id, and reusing it would collide with the original in
+   `SceneRegistry`'s id→entity map), pushes to `windowState.sceneArrows`, and returns the new id — it
+   does **not** sync or touch selection itself (no separate wrapper function for the sync step either
+   — call the existing `SceneSystem::SyncLabelEntities` directly, it's already public). Call sites
+   collect the returned ids, set `windowState.selectedSceneArrows` to the **complete** batch once all
+   appends are done, then call `SceneSystem::SyncLabelEntities` once. Known-confirmed gaps to route
+   through this: `AddFreeSegment` and
+   `DrawSegmentAddItems`'s `addSegment` (`RendererPanelOrbitalMenu.cpp`); arrow duplicate/paste and
+   property-panel creation (confirmed gaps per Codex round 3). Also check the equivalent orbital/pin/
+   label creation paths while touching this. **Explicitly excluded**: persistence load and undo/redo
+   snapshot restoration (`SceneObjectsSnapshotCommand.cpp:104`) — restoration deliberately preserves
+   the original ids and already calls its own sync; routing it through `AppendSceneArrow`'s
+   fresh-id contract would break undo (Codex round 5 caught this — round 4's draft wrongly listed
+   undo-restore as a routed site). Do **not** touch `ResolveSourceIndices`, `SceneRegistry`, or
+   `SyncLabelEntities` itself — all three are correct. Regression tests: unit-test `AppendSceneArrow`
+   directly (returned id differs from any input id, `EntityForObjectId` valid only after the paired
+   sync call, not before), one test per routed call site (creation, duplicate, paste) confirming the
+   resulting selection ids are all distinct and all resolve, and a separate test confirming undo
+   restores an object's *original* id unchanged (not routed through the new helper).
 
-**Diamond acceptance case:** Cubic, `a = 3.567`, centering `F`, basis rows `C(0,0,0)` and
-`C(¼,¼,¼)` → 8 atoms, spacegroup 227 (Fd-3m) from the existing `Show symmetry` button. This is the
-single test that proves the model is right; it fails today.
-
-### 2. NewStructure panel — three sections
-
-- **Lattice section** — crystal system, `a/b/c`, angles, and now the centering radio group
-  (`Primitive (P)` / `Body-centered (I)` / `Face-centered (F)` / `Base-centered (C)`). `IsPresetSupportedFor()`
-  still greys out presets the system does not admit. Selecting a centering no longer touches the basis.
-- **Atomic basis section** — the motif. Unchanged widget (`drawBasisTable()`), changed meaning: these
-  are the atoms attached to *one* lattice point. Header text must say so.
-- **Generated atoms** — new collapsing header, collapsed by default, listing every atom
-  `ExpandBasisOverLattice` produced with its fractional coordinates. Read-only. This is what goes to
-  the renderer and to POSCAR, so it is the user's check that the convolution did what they meant.
-
-`drawCenteringPresetRow()`'s current body (clear `m_BasisRows`, refill from the preset) is deleted —
-that mutation is the bug.
-
-### 3. Session lifecycle — previews from the first valid draft
-
-Currently `StructureCreationTabsPanel::Render()` skips sessions in `Draft` state, so nothing appears
-until "Move to Structure Hub" flips the state to `Ready`. Change:
-
-- `NewStructureWizardPanel` creates its session as soon as the draft is valid — at least one basis row
-  with a non-empty species — not on hand-off. `syncDraftToSession()` already runs every frame and
-  keeps the registry copy current.
-- The creation window renders for `Draft` sessions too. It is the draft's viewport for the whole
-  editing session.
-- **"Move to Structure Hub" no longer opens anything.** It publishes `SessionReadyForStructureHub`,
-  which sets `state = Ready` and puts the draft on the Hub's list with its `Add to Project` button.
-  The button label reflects this: it is a submit action, not a window-opening action.
-- Closing the New Structure panel still publishes `RendererTabClosed` (the shared idempotent close
-  path from the archived lifecycle plan, Section 7) — unchanged.
-
-### 4. Renderer — one window, three panes
-
-This is a rewrite of `Presentation/Panels/StructureCreationTabsPanel.cpp`. The DockBuilder 2+1 layout
-and the `m_SessionDockNodes` / `m_LaidOutSessions` bookkeeping all go away.
-
-Established from the code, and what makes this cheap: a `RendererWindowState`
-(`Renderer/RendererWindowState.hpp:40`) owns its own `RendererViewCamera` and `viewportSize`, and
-`RendererLayer::RenderToFbo(windowId, structure, windowState, globalSettings)` returns a texture id.
-`RendererPanel::renderStructureWindow()` is just `Begin` → `drawViewportToolbar` →
-`drawViewportVerticalToolbar` → `SetViewportSize` → `RenderToFbo` → `ImGui::Image`. Three panes
-therefore need three `RendererWindowState`s for camera+FBO, but only one ImGui window and one
-`ImGui::Image` per pane.
-
-1. **Exclude session windows from the normal loop.** `RendererPanel::render()` iterates
-   `m_Layer.GetWindows()` unconditionally (`RendererPanel.cpp:174`). Skip any window whose
-   `sessionId` is non-empty — those are drawn by the creation panel. The existing
-   `dockingInitialized` special-case for session windows at `RendererPanel.cpp:212` becomes dead and
-   is removed.
-2. **Expose the two toolbar draw calls and the viewport draw** so the creation panel can reuse them
-   rather than duplicating. `drawViewportToolbar` / `drawViewportVerticalToolbar` are currently
-   private members of `RendererPanel`; lift the shared body into a small
-   `Presentation/Panels/ViewportToolbars.{hpp,cpp}` free-function pair taking
-   `(RendererWindowState&, RendererLayer&)`. Both panels call it. No behaviour change for normal
-   windows.
-3. **The creation window body:**
-   ```
-   Begin("<StructureName> (h x k x l)###StructureCreationSession_<sessionId>")
-     DrawViewportToolbar(activePane)          // one horizontal toolbar
-     Separator
-     DrawViewportVerticalToolbar(activePane)  // one vertical toolbar
-     SameLine
-     BeginChild("panes")
-       top row    (child, height = 1 - bottomFraction)
-         BeginChild("basis",     width = leftFraction) -> Image(RenderToFbo(basisWindow))
-         vertical splitter
-         BeginChild("unitcell",  rest)                 -> Image(RenderToFbo(cellWindow))
-       horizontal splitter
-       bottom row (child)
-         BeginChild("supercell", full width)           -> Image(RenderToFbo(superWindow))
-     EndChild
-   End
-   ```
-   Layout: **basis + unit cell on top, supercell full-width below.** Increasing size order; the
-   supercell is the one that grows to hundreds of atoms and needs the width.
-4. **Splitters** are draggable; `leftFraction` and `bottomFraction` live in `CreationSession` so a
-   session remembers its own proportions.
-5. **Active pane.** Clicking a pane makes it active; it gets a highlight border. The toolbars and
-   mouse input act on the active pane only, and **each pane keeps its own camera** — rotating the
-   supercell must not move the unit-cell view. Store `activePaneIndex` in `CreationSession`.
-6. **Pane visibility.** The three checkboxes in NewStructure hide a pane; the remaining panes stretch
-   to fill (hide the basis → unit cell spans the top; hide two → the last one takes the window). A
-   hidden pane no longer destroys and recreates a renderer window — it is now purely a layout
-   decision, which also removes the `DockBuilderRemoveNode` crash this replaces.
-
-**The three panes:**
-
-| Pane | Content |
-|------|---------|
-| Basis | The motif alone — `m_BasisRows` as atoms, no centering expansion, no cell box |
-| Unit cell | The conventional cell — full expanded structure, cell box, optional primitive-cell overlay |
-| Supercell | `BuildSupercell(unitCell, h×k×l)`; at `1×1×1` it shows the same content as the unit cell rather than disappearing, so the layout never jumps |
-
-`Show primitive cell` stays, as a contrasting second cell frame drawn inside the unit-cell pane
-(`CreationSession::primitiveCellOverlay`, already plumbed). Now that centering is an explicit lattice
-property it is always known, so the checkbox stops being greyed out for catalog structures.
-
-### 5. File selection — four routes
-
-`Core/Platform/FileDialog.cpp` already wraps NFD (`Vendor/nativefiledialog-extended`, built in
-`premake5.lua:250-263`) but only exposes a folder picker (`NFD_PickFolderN`). All four routes below
-feed the same `dispatchFileLoad()` → `OpenDefectJob` (PuntukasBridge) → `adoptLoadedStructure()` path
-that already exists.
-
-1. **NFD open-file dialog** — add `PickFile(filters)` next to the existing `PickFolder`, using
-   `NFD_OpenDialogN` with filters for `POSCAR`/`CONTCAR`/`*.vasp`/`*.cif`. `Browse` button.
-2. **Project Tree selection** — "Use Project Tree selection" button. The panel subscribes to
-   `ProjectTreeSelectionChanged` (already defined in `Core/Domain/StructureLifecycleEvents.hpp`) and
-   keeps the last selected *file* path.
-3. **Active renderer window** — "Use active viewport" button: copies the structure out of the
-   last-focused `RendererWindowState` directly, no disk read and no Python round-trip.
-4. **Drag and drop** onto the panel. `RendererPanel` already has the pattern with the
-   `DS_WAVECAR_PATH` payload; add a `DS_STRUCTURE_PATH` payload emitted by `ProjectTreePanel` for
-   structure files.
-
-`adoptLoadedStructure()` must now also populate the *basis* correctly: a loaded file gives a full
-atom list, not a motif. It sets centering to `Primitive (P)` and puts every loaded atom in the basis
-table — `P` has a single identity translation, so `lattice ⊗ basis` reproduces the file exactly.
-Recovering a smaller motif from a loaded structure is a symmetry-detection problem (spglib), not
-arithmetic, and is out of scope.
-
-### 6. Naming
-
-`ToString(CreationMode::FromScratch)` returns `"Create New"`, matching the tab. Same for the other
-three (`"From Library"`, `"Import File"`, `"Analyze Existing"`). The enum keeps its internal names.
-The creation window title is `<structure name> (h×k×l)`.
-
-### 7. From Library
-
-Selecting a prototype fills the lattice section (system, parameters, centering) **and** the basis
-table from the catalog, and everything stays editable — pick `Diamond`, change the second basis
-atom's species to `Zn`, and you have zincblende. Same `lattice ⊗ basis` model as Create New, just
-pre-filled. `applyPrototypeToBasis()` is rewritten to split the prototype's conventional-cell
-positions into centering + motif rather than writing all positions as basis rows.
-
----
+2. **Fix B — remove the invisible pre-selection endpoint grab instead of trying to make three
+   uncoordinated systems visually consistent.**
+   - `ViewportSceneArrowInteraction.cpp:280-290`: the click that *establishes* selection (arrow not
+     already the sole selection) always sets `sceneArrowDragTarget`/`sceneArrowGizmoActiveTarget` to
+     `Both` — delete the Start/End distance check on that path entirely. There is no visible marker
+     before selection, so there must be no sub-handle grab before selection either.
+   - Once an arrow is already the **sole** selection, endpoint grabbing happens **only** through the
+     markers that are already visibly drawn — `RendererPanel.cpp:273-319`'s orange Start/End dots
+     (5px normal / 7px active). A multi-selection (several arrows selected together) keeps today's
+     behavior: `RendererPanel` still draws a dot at every selected arrow's endpoints (unchanged), but
+     none of them are individually pickable — dragging always moves every selected arrow's `Both`,
+     matching the existing `singleArrowOnly` gate already used elsewhere in this code (e.g.
+     `ViewportGizmo.cpp:195`). Do not add new multi-selection sub-handle behavior.
+   - **Ordering constraint (Codex round 5):** `RunViewportGizmoChain` (which dispatches the hit-test)
+     runs *before* `RendererPanel.cpp`'s marker-drawing block this same frame
+     (`RendererPanel.cpp:267` vs. `:273-319`) — so hit-testing cannot simply "hit-test against
+     RendererPanel's dots" if that means waiting for them to be drawn first. Instead: factor the
+     marker geometry (screen position + radius, for Start/End/`Both`) into one small shared function
+     that takes the arrow + camera + operation and returns `{point, radius}` per handle; call it from
+     the hit-test *and* separately from the draw call, so both read from the same source without
+     draw needing to run first. Delete `ViewportGizmo.cpp:239-260`'s own separate hint-circle drawing
+     once its hit-test is rebuilt on the shared function. The `Both`/midpoint target has no dot today;
+     give it one via the same shared function if it stays pickable post-selection.
+   - Manual test: first click on an arrow (not yet selected) anywhere along its length, including
+     near an end, always grabs `Both`. A second click, now that it's the sole selection, near a drawn
+     endpoint dot grabs that endpoint; a click just outside the dot's visible radius grabs `Both`
+     instead. With two arrows selected together, no click grabs a single endpoint on either.
 
 ## Key decisions & tradeoffs
 
-| Decision | Rationale | Tradeoff |
-|----------|-----------|----------|
-| **Centering is a lattice property; basis is the motif** | It is the actual crystallography. Diamond becomes FCC + 2 rows instead of 8 hand-typed rows, and the spacegroup comes out right. | Existing saved drafts that used the old "centering fills the basis" behaviour will re-expand and gain atoms. No such drafts are persisted today (drafts are ephemeral), so no migration is written. |
-| **Read-only generated-atoms list, collapsed by default** | The convolution is invisible otherwise — the user types 2 rows and 8 atoms reach POSCAR. | One more widget and a per-frame expansion when expanded. The expansion is `translations × basis`, trivially small at unit-cell scale. |
-| **One window, three panes, one toolbar set** | Directly what was asked, and three toolbar sets ate most of the vertical space. | The panes are no longer independently dockable. Accepted deliberately: they are views of one structure, not three documents. |
-| **Camera per pane, toolbar acts on the active pane** | Rotating the supercell must not disturb the unit-cell view; comparing two orientations is a real need. | A user who *wants* locked cameras has to orbit twice. A "link cameras" toggle is a cheap later addition, not built now. |
-| **Previews from the first valid draft, not from hand-off** | The preview is the feedback loop for editing; making it wait until submission inverts the workflow. | A session exists earlier, so `CreationSessionRegistry` holds drafts that may never be submitted. They are removed by the same idempotent `RendererTabClosed` path. |
-| **"Move to Structure Hub" becomes submit-only** | With previews already open, the button's only remaining job is putting the draft on the Hub's list. | Two-step commit (Move, then Add to Project) survives. Kept because the Hub is where the target folder is confirmed. |
-| **Supercell pane persists at 1×1×1** | The layout must not jump every time h×k×l crosses 1. | Two panes briefly show the same content. Cheaper than a re-laying-out window. |
-| **Loaded files land in the basis under `P` centering** | Reproduces the file byte-exactly with no symmetry guessing. | No motif reduction on import — a loaded FCC file shows 4 basis rows, not 1. Correct, just not minimal. |
-| **All of it in `task/18`** | The domain fix and the layout fix both change what `buildStructure()` feeds the renderer; splitting means merging a state that is still wrong. | One larger review. Mitigated by the acceptance list below. |
-
----
+- **Fix A is a missing-call audit, not a registry redesign.** `ResolveSourceIndices`/`SceneRegistry`
+  are sound (verified by reading their implementation); every other scene-object mutation site in the
+  codebase already calls `SyncLabelEntities` correctly. This closes the actual gap instead of working
+  around it by switching call sites to a different resolution helper.
+- **One shared radius constant for Fix B**, not just a bigger circle — a bigger circle with an
+  unchanged, separately-hardcoded hit-test radius would still leave an invisible halo, just a smaller
+  one; tying both to the same constant is what actually removes the "clicked near it, not on it"
+  failure mode.
 
 ## Risks / open questions
 
-1. **`RenderToFbo` three times per frame.** Three FBOs at pane resolution instead of one at window
-   resolution. Panes are smaller than a full window, so the pixel count is comparable, but this is
-   unverified — measure before assuming, and reuse the existing Tracy instrumentation.
-2. **Toolbar extraction touches normal renderer windows.** Lifting `drawViewportToolbar` /
-   `drawViewportVerticalToolbar` out of `RendererPanel` risks regressing every ordinary viewport.
-   The functions must move without edits; any behaviour change belongs in a separate commit.
-3. **`ExpandBasisOverLattice` and overlapping atoms.** A user can type a basis atom at `(½,½,0)` with
-   `F` centering and land two atoms on the same site. Detect coincident positions and warn in the
-   generated-atoms list — do not silently deduplicate, since the user may be mid-edit.
-4. **`applyPrototypeToBasis` splitting prototypes into centering + motif** is the one genuinely
-   uncertain piece: `prototypes.yaml` stores conventional-cell positions, and factoring them back
-   into centering × motif is a small pattern match, not a general algorithm. If a prototype does not
-   factor cleanly, fall back to `P` + all positions (correct, just not minimal) and log it.
-5. **Splitter fractions in `CreationSession`** put UI layout state in an App-layer type. Acceptable —
-   it is per-session view state with no domain meaning — but it is a boundary smell worth noting.
-
----
+- Bug A's audit list above is not exhaustive — grep for every `windowState.sceneArrows.push_back`/
+  `windowState.sceneOrbitals.push_back`/etc. across the codebase during implementation and confirm
+  each is followed by a sync, don't stop at the two confirmed today.
+- The original, more severe task-35 #1 screenshot (gizmo at the coordinate origin) was not
+  reproduced today; Bug B explains today's live repro but may not fully explain that older report.
+  Re-test #1 against the old screenshots after Fix A + Fix B land, before closing item #1.
+- Whether the outliner-shortcuts-still-broken report (commit `f8d9334`) shares Bug A's root cause is
+  unconfirmed — outliner dispatch was not instrumented today. Do not assume it's fixed as a side
+  effect; re-test live.
 
 ## Out of scope
 
-- Symmetry-based motif reduction on import (finding the minimal basis of a loaded structure).
-- Linked cameras across panes.
-- User-configurable pane arrangements beyond the fixed 2-over-1 and hiding panes.
-- Non-diagonal supercell matrices (`SupercellMatrix::Diagonal` only, as today).
-- Anything in the archived lifecycle plan that is already implemented: session registry, event
-  contracts, path validation, the staging-directory atomic write, `Add to Project`, ProjectTree
-  integration.
-- Export formats other than POSCAR.
-
----
-
-## Acceptance
-
-- [ ] **Diamond:** Cubic, `a = 3.567`, centering `F`, basis `C(0,0,0)` + `C(¼,¼,¼)` → 8 atoms,
-      `Show symmetry` reports spacegroup 227 (Fd-3m).
-- [ ] **BCC iron:** Cubic, centering `I`, basis `Fe(0,0,0)` → 2 atoms, spacegroup 229 (Im-3m).
-- [ ] **Rocksalt:** Cubic, centering `F`, basis `Na(0,0,0)` + `Cl(½,½,½)` → 8 atoms, spacegroup 225.
-- [ ] Selecting a centering never modifies the basis table.
-- [ ] Generated-atoms list matches the atom count and positions in the written POSCAR.
-- [ ] The creation window has exactly one horizontal and one vertical toolbar.
-- [ ] Three panes: basis and unit cell on top, supercell full width below; splitters drag.
-- [ ] Clicking a pane makes it active; orbiting it leaves the other panes' cameras untouched.
-- [ ] Unchecking a view collapses its pane and the others stretch; re-checking restores it. No crash.
-- [ ] Panes appear as soon as the first basis row has a species — before any Structure Hub hand-off.
-- [ ] `Move to Structure Hub` opens no window; it puts the draft on the Hub list as `Ready`.
-- [ ] All four file-selection routes load a POSCAR into the basis table.
-- [ ] The mode reads `Create New` in the tab, in the session state line, and in the Hub list.
-- [ ] Release build green; test suite still 293 passed / 2 skipped, plus new
-      `LatticeBasisExpansionTests` covering P/I/F/C expansion, wrap-around, and coincident-atom
-      detection.
-
-**Build and test only through `scripts/Windows/BuildErrorsOnly.bat` and `scripts/Windows/Build.bat`
-— never raw MSBuild.** Release configuration only during active development.
+- **#13 (interior path-point dragging + per-segment Bezier curve handles)** — deferred to its own
+  design pass. Codex round 2 (see PLAN-REVIEW-LOG.md) found the naive version conflicts with the
+  existing whole-arrow `Both` pick target on straight 2-point arrows, would regress rendering/hit-test
+  cost by tessellating every straight arrow, needs an explicit straight/curved toggle, and needs a
+  real YAML downgrade-safety policy (an old build must not silently discard curve data on re-save).
+  None of that is resolved; do not attempt a quick version of this feature as a side effect of Fix A/B.
+- #2 (arrow/line selection unreliable), #12 (tip-type change does nothing), #14 (Arrow2D looks bad) —
+  not investigated today; each needs its own live-repro session.
+- Fixing `SceneSystem`'s erase functions to keep `SceneRegistry` in sync for atoms/bonds (a separate,
+  independently-discovered "orphaned rows" bug, unrelated to Bug A above) — separate task.
+- Vacancy markers (#8), redefinable default view (#9) — pre-existing backlog items, untouched.

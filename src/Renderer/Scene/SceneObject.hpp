@@ -15,7 +15,11 @@ namespace DefectStudio
 		Bond,
 		PinnedMeasurement,
 		FreeLabel,
-		SceneArrow,
+		SceneOrbital,
+		// Mirror entity for a PathStore entry (S6). Paths live in PathSystem, not in a vector on
+		// RendererWindowState - the mirror is what lets the outliner and picking treat one like any
+		// other scene object once S15 exposes it.
+		ScenePath,
 	};
 
 	[[nodiscard]] const char *SceneObjectKindName(SceneObjectKind kind);
@@ -39,9 +43,10 @@ namespace DefectStudio
 		friend auto operator<=>(SceneObjectId, SceneObjectId) = default;
 	};
 
-	// Carried by every mirrored entity - atom, bond, pinned measurement, free label, scene arrow.
+	// Carried by every mirrored entity - atom, bond, pinned measurement, free label, scene path,
+	// scene orbital.
 	// The one component a consumer can enumerate to see the whole scene
-	// (registry.view<SceneObjectComponent>()), instead of scanning five unrelated vectors.
+	// (registry.view<SceneObjectComponent>()), instead of scanning unrelated vectors.
 	//
 	// ponytail: no provenance enum and no stale flag, though the workstream file lists both. Nothing
 	// reads them yet - the outliner shows name + kind, the properties panel dispatches on kind. Add
@@ -52,8 +57,8 @@ namespace DefectStudio
 		SceneObjectId id;
 		SceneObjectKind kind = SceneObjectKind::Atom;
 		// Position in the flat array this entity mirrors: structure.atoms / structure.bonds /
-		// windowState.pinnedMeasurements / .freeLabels / .sceneArrows. Rewritten on every sync -
-		// only `id` is stable, and only `id` may be stored by anything outside a sync.
+		// windowState.pinnedMeasurements / .freeLabels / .sceneOrbitals. Rewritten on
+		// every sync - only `id` is stable, and only `id` may be stored by anything outside a sync.
 		std::size_t sourceIndex = 0;
 		std::string displayName;
 	};

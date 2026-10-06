@@ -38,7 +38,7 @@ namespace DefectStudio
 			return value.substr(begin, end - begin + 1);
 		}
 
-		// Reads the same column layout puntukas's own VaspOutput.save_orbital_data_csv(irreps=True)
+		// Reads the same column layout puntukas's own VaspOutput.save_orbital_info_csv(ireps=True)
 		// writes (nr,e(up),occ(up),loc(up),irrep(up),e(down),occ(down),loc(down),irrep(down)) - see
 		// ExportOrbitalsCsv, which now writes that exact header so files round-trip either way, and
 		// so a file saved directly from puntukas (Python side) also loads here. numpy's savetxt
@@ -547,7 +547,7 @@ namespace DefectStudio
 	namespace
 	{
 		// Shared by ExportOrbitalsCsv/Tsv - same column names/order/precision as puntukas's own
-		// VaspOutput.save_orbital_data_csv(irreps=True), just with a caller-chosen delimiter. "#"-
+		// VaspOutput.save_orbital_info_csv(ireps=True), just with a caller-chosen delimiter. "#"-
 		// prefixed header (numpy comment convention, so numpy/pandas readers skip it same as a real
 		// puntukas export) instead of our own made-up column names. Padding/alignment is cosmetic in
 		// numpy's version and doesn't survive a naive writer anyway - every consumer (numpy, pandas,

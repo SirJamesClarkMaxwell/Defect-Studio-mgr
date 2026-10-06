@@ -16,12 +16,12 @@ namespace DefectStudio
 		// Real part of the real-space Kohn-Sham wavefunction, C-order (x slowest, z fastest).
 		// Signed, not a probability density - keeps +/- lobe sign for isosurface coloring.
 		std::vector<float> values;
-		float energy = 0.0f;
+		float energy = 0.0f; // eV
 		float occupation = 0.0f;
 	};
 
 	// Extracts one orbital's real-space wavefunction grid from WAVECAR via puntukas
-	// (Wavecar.phi -> PWWavefunction.real_space_wfs()). The grid is too large for the usual
+	// (Wavecar.wavefunction -> PlaneWaveField.to_real_space). The grid is too large for the usual
 	// JSON-line contract - the Python script writes it to a temp raw float32 file and reports its
 	// path/shape in the JSON line; this bridge reads that file and deletes it before returning.
 	class VaspOrbitalGridBridge final

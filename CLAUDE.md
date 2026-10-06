@@ -2,7 +2,7 @@
 
 VESTA-clone crystal-structure/defect visualization tool, C++23 + premake5 (VS2022 generator,
 actually built by VS "18"/2026's MSBuild - see below) + Python subprocess bridges for scientific
-computing (scipy, pymatgen, punktukas-tools).
+computing (scipy, pymatgen, the local `puntukas` rewrite).
 
 This file exists because `AGENTS.md` at the repo root carries the load-bearing project rules
 (Ponytail mode, reuse-first checklist, graphify) but is NOT auto-loaded by Claude Code - only
@@ -49,13 +49,11 @@ included. Two GoogleTest cases are permanently skipped because of this
 `BridgeRoundtripDemoTests.PythonImportsNanobindModuleWhenAvailable`) - that skip count is
 expected, not a regression.
 
-## Structure loading: punktukas-tools vs pymatgen
+## Structure loading: puntukas vs pymatgen
 
-New structure loads go through `PuntukasBridge` (wraps `punktukas-tools`, an ASE-`Atoms`-based
-local package at `~/punktukas-tools`), not `PymatgenBridge` - established preference, see memory.
-`punktukas-tools` has a generic periodic-MIC distance helper
-(`puntukas.atoms.base.AtomsBase.get_distances`, backed by phonopy's `find_mic`) but **no**
-structure-comparison/atom-matching utility (no `linear_sum_assignment`, no `StructureMatcher`
-equivalent) - `Domain/Crystal/StructureComparison.{hpp,cpp}` +
-`ScientificRuntime/Python/ScipyAssignmentBridge` is original code, not a wrapper around an
-existing punktukas feature.
+New structure loads go through `PuntukasBridge` (wraps the ASE-composed `puntukas.core.Atoms`
+package at `C:\Users\fzabi\puntukas_tools2`), not `PymatgenBridge` - established preference, see
+memory. `Atoms.distances`/`distance_matrix` use the minimum-image convention and Angstrom units.
+The rewrite provides same-site-order displacement helpers, but no atom-assignment equivalent to
+`linear_sum_assignment` or `StructureMatcher`; `Domain/Crystal/StructureComparison.{hpp,cpp}` +
+`ScientificRuntime/Python/ScipyAssignmentBridge` remains project code.

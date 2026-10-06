@@ -10,6 +10,9 @@ uniform mat4 u_ViewProjection;
 // this same value via its own u_SceneOffset uniform, so the whole scene stays rigidly attached
 // under it. Translate-only, so it doesn't touch aNormal.
 uniform vec3 u_SceneOffset;
+uniform vec3 u_CameraPosition;
+uniform int u_OutlineMode;
+uniform float u_OutlineExpansion;
 
 out vec3 vNormal;
 out float vSign;
@@ -18,7 +21,16 @@ out vec3 vWorldPos;
 void main()
 {
 	vec3 worldPosition = aPosition + u_SceneOffset;
+	if (u_OutlineMode == 1)
+	{
+		vec3 normal = normalize(aNormal);
+		vec3 viewDirection = normalize(u_CameraPosition - worldPosition);
+		vec3 silhouetteNormal = normal - viewDirection * dot(normal, viewDirection);
+		worldPosition += silhouetteNormal * u_OutlineExpansion;
+	}
 	gl_Position = u_ViewProjection * vec4(worldPosition, 1.0);
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
 	vNormal = normalize(aNormal);
 	vSign = aSign;
 	vWorldPos = worldPosition;

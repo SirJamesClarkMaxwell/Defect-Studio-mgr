@@ -19,12 +19,9 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "background" << YAML::Value;
 		EmitColor(out, renderer.backgroundColor);
 		out << YAML::Key << "bond_radius_multiplier" << YAML::Value << renderer.bondRadiusMultiplier;
+		out << YAML::Key << "vacancy_bond_atom_inset" << YAML::Value << renderer.vacancyBondAtomInset;
 		out << YAML::Key << "color_saturation" << YAML::Value << renderer.colorSaturation;
 		out << YAML::Key << "viewport_supersample" << YAML::Value << renderer.viewportSupersample;
-		out << YAML::Key << "arrow_head_bulge_strength" << YAML::Value << renderer.arrowHeadBulgeStrength;
-		out << YAML::Key << "arrow_default_shaft_width_ratio" << YAML::Value << renderer.arrowDefaultShaftWidthRatio;
-		out << YAML::Key << "arrow_default_head_width_ratio" << YAML::Value << renderer.arrowDefaultHeadWidthRatio;
-		out << YAML::Key << "arrow_default_head_length_ratio" << YAML::Value << renderer.arrowDefaultHeadLengthRatio;
 		out << YAML::Key << "orbit_sensitivity" << YAML::Value << renderer.orbitSensitivity;
 		out << YAML::Key << "pan_sensitivity" << YAML::Value << renderer.panSensitivity;
 		out << YAML::Key << "zoom_sensitivity" << YAML::Value << renderer.zoomSensitivity;
@@ -57,6 +54,25 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "viewport" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "axis_button_size" << YAML::Value << renderer.viewport.axisButtonSize;
 		out << YAML::Key << "icon_button_size" << YAML::Value << renderer.viewport.iconButtonSize;
+		out << YAML::Key << "path_edit_node_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditNodeColor);
+		out << YAML::Key << "path_edit_handle_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditHandleColor);
+		out << YAML::Key << "path_edit_selected_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditSelectedColor);
+		out << YAML::Key << "path_edit_tether_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditTetherColor);
+		out << YAML::Key << "path_edit_outline_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.pathEditOutlineColor);
+		out << YAML::Key << "selection_outline_color" << YAML::Value;
+		EmitColor(out, renderer.viewport.selectionOutlineColor);
+		out << YAML::Key << "path_edit_tether_thickness" << YAML::Value << renderer.viewport.pathEditTetherThickness;
+		out << YAML::Key << "path_edit_outline_thickness" << YAML::Value << renderer.viewport.pathEditOutlineThickness;
+		out << YAML::Key << "selection_outline_width" << YAML::Value << renderer.viewport.selectionOutlineWidth;
+		out << YAML::Key << "transform_gizmo_size" << YAML::Value << renderer.viewport.transformGizmoSize;
+		out << YAML::Key << "navigation_gizmo_size" << YAML::Value << renderer.viewport.navigationGizmoSize;
+		out << YAML::Key << "path_edit_marker_size_multiplier" << YAML::Value
+			<< renderer.viewport.pathEditMarkerSizeMultiplier;
 		out << YAML::Key << "transform_translate_snap" << YAML::Value
 			<< renderer.viewport.transformTranslateSnap;
 		out << YAML::Key << "transform_rotate_snap_degrees" << YAML::Value

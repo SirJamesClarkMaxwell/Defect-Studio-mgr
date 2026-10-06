@@ -18,7 +18,7 @@ namespace DefectStudio
 			return MakePythonUnavailableError(
 				"puntukas is not installed.",
 				technicalDetails,
-				R"(Install it into the app's Python environment: uv pip install -e "C:\Users\fzabi\punktukas-tools\puntukas_tools")",
+				R"(Install it into the app's Python environment: uv pip install -e "C:\Users\fzabi\puntukas_tools2[symmetry]")",
 				"python.puntukas.not_installed");
 		}
 

@@ -20,104 +20,108 @@ namespace DefectStudio
 			return ImGui::GetStyle().FontSizeBase * sizeScale * (segment.level == 0 ? 1.0f : 0.7f);
 		}
 
-		void MathLabel(std::string_view latex, float sizeScale = 1.0f)
-		{
-			const float baseY = ImGui::GetCursorPosY();
-			const float baseSize = ImGui::GetFontSize() * sizeScale;
-			const float baseScreenY = ImGui::GetCursorScreenPos().y;
-			ImFont *font = ImGui::GetFont();
-			ImGui::BeginGroup();
-			bool first = true;
-			float overlineStart = 0.0f;
-			float overlineEnd = 0.0f;
-			int activeOverlineGroup = 0;
-			bool hasOverlineSegment = false;
-			const auto drawOverline = [&]() {
-				if (activeOverlineGroup != 0)
-				{
-					ImGui::GetWindowDrawList()->AddLine(
-						{overlineStart + 1.0f, baseScreenY + 0.02f * baseSize},
-						{overlineEnd - 1.0f, baseScreenY + 0.02f * baseSize},
-						ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
-				}
-				activeOverlineGroup = 0;
-				hasOverlineSegment = false;
-			};
-			for (const MathSegment &segment : SplitMathSegments(latex))
-			{
-				if (!first)
-					ImGui::SameLine(0.0f, 0.0f);
-				if (segment.overlineGroup != activeOverlineGroup)
-				{
-					drawOverline();
-					activeOverlineGroup = segment.overlineGroup;
-				}
-				if (!segment.denominator.empty())
-				{
-					const float padding = 3.0f;
-					const float fontSize = ImGui::GetStyle().FontSizeBase * sizeScale * 0.75f;
-					ImGui::PushFont(font, fontSize);
-					const float numeratorWidth = ImGui::CalcTextSize(segment.text.c_str()).x;
-					const float denominatorWidth = ImGui::CalcTextSize(segment.denominator.c_str()).x;
-					ImGui::PopFont();
-					const float width = std::max(numeratorWidth, denominatorWidth) + padding * 2.0f;
-					const float startX = ImGui::GetCursorPosX();
-					const float startScreenX = ImGui::GetCursorScreenPos().x;
-					ImGui::SetCursorPosY(baseY - 0.25f * baseSize);
-					ImGui::PushFont(font, fontSize);
-					ImGui::SetCursorPosX(startX + (width - numeratorWidth) * 0.5f);
-					ImGui::TextUnformatted(segment.text.c_str());
-					ImGui::PopFont();
-					const float lineY = ImGui::GetItemRectMax().y + 1.0f;
-					ImGui::SetCursorPosY(baseY + 0.42f * baseSize);
-					ImGui::PushFont(font, fontSize);
-					ImGui::SetCursorPosX(startX + (width - denominatorWidth) * 0.5f);
-					ImGui::TextUnformatted(segment.denominator.c_str());
-					ImGui::PopFont();
-					ImGui::GetWindowDrawList()->AddLine(
-						{startScreenX, lineY},
-						{startScreenX + width, lineY},
-						ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
-					ImGui::SetCursorPosX(startX);
-					ImGui::SetCursorPosY(baseY + baseSize);
-					ImGui::Dummy({width, baseSize * 0.5f});
-					if (segment.overlineGroup != 0)
-					{
-						if (!hasOverlineSegment)
-						{
-							overlineStart = ImGui::GetItemRectMin().x;
-							hasOverlineSegment = true;
-						}
-						overlineEnd = ImGui::GetItemRectMax().x;
-					}
-				}
-				else
-				{
-					ImGui::SetCursorPosY(
-						baseY + (segment.level > 0 ? -0.1f : segment.level < 0 ? 0.4f : 0.0f) * baseSize);
-					const bool pushed = sizeScale != 1.0f || segment.level != 0;
-					if (pushed)
-						ImGui::PushFont(font, MathSegmentFontSize(segment, sizeScale));
-					ImGui::TextUnformatted(segment.text.c_str());
-					if (segment.overlineGroup != 0)
-					{
-						if (!hasOverlineSegment)
-						{
-							overlineStart = ImGui::GetItemRectMin().x;
-							hasOverlineSegment = true;
-						}
-						overlineEnd = ImGui::GetItemRectMax().x;
-					}
-					if (pushed)
-						ImGui::PopFont();
-				}
-				first = false;
-			}
-			drawOverline();
-			ImGui::SetCursorPosY(baseY);
-			ImGui::EndGroup();
-		}
+	}
 
+	void GroupTheoryPanel::MathLabel(std::string_view latex, float sizeScale)
+	{
+		const float baseY = ImGui::GetCursorPosY();
+		const float baseSize = ImGui::GetFontSize() * sizeScale;
+		const float baseScreenY = ImGui::GetCursorScreenPos().y;
+		ImFont *font = ImGui::GetFont();
+		ImGui::BeginGroup();
+		bool first = true;
+		float overlineStart = 0.0f;
+		float overlineEnd = 0.0f;
+		int activeOverlineGroup = 0;
+		bool hasOverlineSegment = false;
+		const auto drawOverline = [&]() {
+			if (activeOverlineGroup != 0)
+			{
+				ImGui::GetWindowDrawList()->AddLine(
+					{overlineStart + 1.0f, baseScreenY + 0.02f * baseSize},
+					{overlineEnd - 1.0f, baseScreenY + 0.02f * baseSize},
+					ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
+			}
+			activeOverlineGroup = 0;
+			hasOverlineSegment = false;
+		};
+		for (const MathSegment &segment : SplitMathSegments(latex))
+		{
+			if (!first)
+				ImGui::SameLine(0.0f, 0.0f);
+			if (segment.overlineGroup != activeOverlineGroup)
+			{
+				drawOverline();
+				activeOverlineGroup = segment.overlineGroup;
+			}
+			if (!segment.denominator.empty())
+			{
+				const float padding = 3.0f;
+				const float fontSize = ImGui::GetStyle().FontSizeBase * sizeScale * 0.75f;
+				ImGui::PushFont(font, fontSize);
+				const float numeratorWidth = ImGui::CalcTextSize(segment.text.c_str()).x;
+				const float denominatorWidth = ImGui::CalcTextSize(segment.denominator.c_str()).x;
+				ImGui::PopFont();
+				const float width = std::max(numeratorWidth, denominatorWidth) + padding * 2.0f;
+				const float startX = ImGui::GetCursorPosX();
+				const float startScreenX = ImGui::GetCursorScreenPos().x;
+				ImGui::SetCursorPosY(baseY - 0.25f * baseSize);
+				ImGui::PushFont(font, fontSize);
+				ImGui::SetCursorPosX(startX + (width - numeratorWidth) * 0.5f);
+				ImGui::TextUnformatted(segment.text.c_str());
+				ImGui::PopFont();
+				const float lineY = ImGui::GetItemRectMax().y + 1.0f;
+				ImGui::SetCursorPosY(baseY + 0.42f * baseSize);
+				ImGui::PushFont(font, fontSize);
+				ImGui::SetCursorPosX(startX + (width - denominatorWidth) * 0.5f);
+				ImGui::TextUnformatted(segment.denominator.c_str());
+				ImGui::PopFont();
+				ImGui::GetWindowDrawList()->AddLine(
+					{startScreenX, lineY},
+					{startScreenX + width, lineY},
+					ImGui::GetColorU32(ImGuiCol_Text), 1.0f);
+				ImGui::SetCursorPosX(startX);
+				ImGui::SetCursorPosY(baseY + baseSize);
+				ImGui::Dummy({width, baseSize * 0.5f});
+				if (segment.overlineGroup != 0)
+				{
+					if (!hasOverlineSegment)
+					{
+						overlineStart = ImGui::GetItemRectMin().x;
+						hasOverlineSegment = true;
+					}
+					overlineEnd = ImGui::GetItemRectMax().x;
+				}
+			}
+			else
+			{
+				ImGui::SetCursorPosY(
+					baseY + (segment.level > 0 ? -0.1f : segment.level < 0 ? 0.4f : 0.0f) * baseSize);
+				const bool pushed = sizeScale != 1.0f || segment.level != 0;
+				if (pushed)
+					ImGui::PushFont(font, MathSegmentFontSize(segment, sizeScale));
+				ImGui::TextUnformatted(segment.text.c_str());
+				if (segment.overlineGroup != 0)
+				{
+					if (!hasOverlineSegment)
+					{
+						overlineStart = ImGui::GetItemRectMin().x;
+						hasOverlineSegment = true;
+					}
+					overlineEnd = ImGui::GetItemRectMax().x;
+				}
+				if (pushed)
+					ImGui::PopFont();
+			}
+			first = false;
+		}
+		drawOverline();
+		ImGui::SetCursorPosY(baseY);
+		ImGui::EndGroup();
+	}
+
+	namespace
+	{
 		[[nodiscard]] float MathLabelWidth(std::string_view latex, float sizeScale)
 		{
 			float width = 0.0f;
@@ -140,29 +144,19 @@ namespace DefectStudio
 			return width;
 		}
 
-		void CenteredMathLabel(std::string_view latex, float sizeScale)
-		{
-			const float width = MathLabelWidth(latex, sizeScale);
-			const float available = ImGui::GetContentRegionAvail().x;
-			const float cursor = ImGui::GetCursorPosX();
-			ImGui::SetCursorPosX(cursor + std::max(0.0f, (available - width) * 0.5f));
-			MathLabel(latex, sizeScale);
-		}
+	}
 
-		void Cell(const ExactCoefficient &value)
-		{
-			ImGui::TextUnformatted(FormatExactValue(value, LabelStyle::Unicode).c_str());
-			if (ImGui::IsItemHovered())
-			{
-				char numeric[96];
-				if (value.numericImaginary != 0.0)
-					std::snprintf(numeric, sizeof(numeric), "%.8g %+.8gi", value.numeric, value.numericImaginary);
-				else
-					std::snprintf(numeric, sizeof(numeric), "%.8g", value.numeric);
-				ImGui::SetTooltip("%s", numeric);
-			}
-		}
+	void GroupTheoryPanel::CenteredMathLabel(std::string_view latex, float sizeScale)
+	{
+		const float width = MathLabelWidth(latex, sizeScale);
+		const float available = ImGui::GetContentRegionAvail().x;
+		const float cursor = ImGui::GetCursorPosX();
+		ImGui::SetCursorPosX(cursor + std::max(0.0f, (available - width) * 0.5f));
+		MathLabel(latex, sizeScale);
+	}
 
+	namespace
+	{
 		[[nodiscard]] std::string DetectionText(const PointGroupAnalysisResult &result)
 		{
 			const PointGroupDetection &detection = result.detection;
@@ -213,6 +207,7 @@ namespace DefectStudio
 		ImGui::TextDisabled("%s", detectionInfo.c_str());
 		ImGui::Spacing();
 		drawProjectedVectors();
+		drawRealPairVectors();
 		drawMultiplets();
 		if (ImGui::Button("Copy as Markdown"))
 			copyResults(TableFormat::Markdown);
@@ -270,6 +265,7 @@ namespace DefectStudio
 		if (vectors.empty())
 			return;
 		ImGui::TextUnformatted("Projected vectors");
+		drawSalcBasisCombo();
 		ImGui::TextDisabled("Order starts as projection order (follows atom selection order); reorder freely.");
 		const int columns = static_cast<int>(m_Result->reduction.siteLabels.size()) + 6;
 		if (!ImGui::BeginTable(
@@ -359,6 +355,8 @@ namespace DefectStudio
 			if (ImGui::ArrowButton("##down", ImGuiDir_Down))
 				std::swap(m_VectorOrder[row], m_VectorOrder[row + 1]);
 			ImGui::EndDisabled();
+			ImGui::SameLine();
+			drawSalcButton(vector, projectedSalcName(vectorIndex));
 			ImGui::PopID();
 		}
 		ImGui::EndTable();

@@ -35,7 +35,8 @@ namespace DefectStudio
 		{
 			return space == TransformOrientation::Global ||
 				(space == TransformOrientation::Local && bases.local.has_value()) ||
-				(space == TransformOrientation::Lattice && bases.lattice.has_value());
+				(space == TransformOrientation::Lattice && bases.lattice.has_value()) ||
+				(space == TransformOrientation::Defect && bases.defect.has_value());
 		}
 		[[nodiscard]] glm::vec3 NormalizedColumn(const glm::mat3 &basis, int axis)
 		{
@@ -180,6 +181,7 @@ namespace DefectStudio
 				case TransformOrientation::Global: return "Global";
 				case TransformOrientation::Local: return "Local";
 				case TransformOrientation::Lattice: return "Lattice";
+				case TransformOrientation::Defect: return "Defect";
 			}
 			return "Global";
 		}
@@ -205,6 +207,8 @@ namespace DefectStudio
 			return *bases.local;
 		if (space == TransformOrientation::Lattice && bases.lattice.has_value())
 			return *bases.lattice;
+		if (space == TransformOrientation::Defect && bases.defect.has_value())
+			return *bases.defect;
 		return glm::mat3(1.0f);
 	}
 
@@ -222,6 +226,8 @@ namespace DefectStudio
 			secondary = TransformOrientation::Global;
 		else if (HasBasis(TransformOrientation::Local, bases))
 			secondary = TransformOrientation::Local;
+		else if (HasBasis(TransformOrientation::Defect, bases))
+			secondary = TransformOrientation::Defect;
 
 		if (current.kind != kind || current.axis != axis)
 			return TransformConstraint{kind, axis, primary};

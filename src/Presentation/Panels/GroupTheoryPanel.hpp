@@ -5,6 +5,7 @@
 #include <optional>
 #include <utility>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Core/JobSystem/JobSystemTypes.hpp"
@@ -16,6 +17,7 @@
 #include "Presentation/Panels/GroupTheoryFormatting.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneOrbitalLcao.hpp"
 
 namespace DefectStudio
 {
@@ -36,10 +38,11 @@ namespace DefectStudio
 		GroupTheoryPanel(const GroupTheoryPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
-		enum class CentreMode { SelectionCentroid, Cursor, Atom };
+		enum class CentreMode { SelectionCentroid, Cursor, Atom, Vacancy };
 
 		struct BasisKey
 		{
@@ -58,10 +61,19 @@ namespace DefectStudio
 		void buildBasisAndSubmit(const std::string &windowId, const RendererWindowState &windowState, const StructureRecord &record);
 		void submitAnalysis();
 		[[nodiscard]] std::optional<BasisKey> currentBasisKey() const;
+		[[nodiscard]] Result<SelectionBasis> selectionBasis(
+			const RendererWindowState &windowState, const StructureRecord &record) const;
 
 		void drawCharacterTable();
 		void drawDirectProducts();
 		void drawProjectedVectors();
+		void drawSalcBasisCombo();
+		void drawSalcButton(const SymmetryAdaptedVector &vector, const std::string &name);
+		[[nodiscard]] std::string projectedSalcName(std::size_t vectorIndex) const;
+		void drawRealPairVectors();
+		static void MathLabel(std::string_view latex, float sizeScale = 1.0f);
+		static void CenteredMathLabel(std::string_view latex, float sizeScale);
+		static void Cell(const ExactCoefficient &value);
 		void drawMultiplets();
 		void copyResults(TableFormat format);
 
@@ -70,7 +82,12 @@ namespace DefectStudio
 		WeakRef<JobSystem> m_JobSystem;
 
 		CentreMode m_CentreMode = CentreMode::SelectionCentroid;
+		std::size_t m_VacancyIndex = 0;
+		SalcBasisFunction m_SalcFunction = SalcBasisFunction::Sp3DanglingBond;
 		std::optional<SelectionBasis> m_Basis;
+		// The structure's defect axes when the basis was taken: the request sites are sent in this
+		// frame, so z, e_x and e_y of the result refer to the user's defect axes.
+		std::optional<DefectFrame> m_Frame;
 		std::optional<BasisKey> m_BasisKey;
 		int m_GroupIndex = 0;
 		double m_Tolerance = 0.1;

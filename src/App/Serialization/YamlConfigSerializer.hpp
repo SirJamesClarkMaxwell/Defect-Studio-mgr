@@ -37,10 +37,6 @@ namespace DefectStudio
 
 		enum class RendererKey
 		{
-			ArrowDefaultHeadLengthRatio,
-			ArrowDefaultHeadWidthRatio,
-			ArrowDefaultShaftWidthRatio,
-			ArrowHeadBulgeStrength,
 			AutoApplyDefaultViewOnOpen,
 			Background,
 			BondRadiusMultiplier,
@@ -83,6 +79,18 @@ namespace DefectStudio
 		{
 			AxisButtonSize,
 			IconButtonSize,
+			PathEditHandleColor,
+			PathEditMarkerSizeMultiplier,
+			PathEditNodeColor,
+			PathEditOutlineColor,
+			PathEditOutlineThickness,
+			PathEditSelectedColor,
+			PathEditTetherColor,
+			PathEditTetherThickness,
+			SelectionOutlineColor,
+			SelectionOutlineWidth,
+			TransformGizmoSize,
+			NavigationGizmoSize,
 			TransformRotateSnapDegrees,
 			TransformScaleSnap,
 			TransformTranslateSnap,
@@ -253,10 +261,6 @@ namespace DefectStudio
 		};
 
 		inline const std::unordered_map<RendererKey, const char *> RendererKeyNames = {
-			{RendererKey::ArrowDefaultHeadLengthRatio, "arrow_default_head_length_ratio"},
-			{RendererKey::ArrowDefaultHeadWidthRatio, "arrow_default_head_width_ratio"},
-			{RendererKey::ArrowDefaultShaftWidthRatio, "arrow_default_shaft_width_ratio"},
-			{RendererKey::ArrowHeadBulgeStrength, "arrow_head_bulge_strength"},
 			{RendererKey::AutoApplyDefaultViewOnOpen, "auto_apply_default_view_on_open"},
 			{RendererKey::Background, "background"},
 			{RendererKey::BondRadiusMultiplier, "bond_radius_multiplier"},
@@ -297,6 +301,18 @@ namespace DefectStudio
 		inline const std::unordered_map<RendererViewportKey, const char *> RendererViewportKeyNames = {
 			{RendererViewportKey::AxisButtonSize, "axis_button_size"},
 			{RendererViewportKey::IconButtonSize, "icon_button_size"},
+			{RendererViewportKey::PathEditHandleColor, "path_edit_handle_color"},
+			{RendererViewportKey::PathEditMarkerSizeMultiplier, "path_edit_marker_size_multiplier"},
+			{RendererViewportKey::PathEditNodeColor, "path_edit_node_color"},
+			{RendererViewportKey::PathEditOutlineColor, "path_edit_outline_color"},
+			{RendererViewportKey::PathEditOutlineThickness, "path_edit_outline_thickness"},
+			{RendererViewportKey::PathEditSelectedColor, "path_edit_selected_color"},
+			{RendererViewportKey::PathEditTetherColor, "path_edit_tether_color"},
+			{RendererViewportKey::PathEditTetherThickness, "path_edit_tether_thickness"},
+			{RendererViewportKey::SelectionOutlineColor, "selection_outline_color"},
+			{RendererViewportKey::SelectionOutlineWidth, "selection_outline_width"},
+			{RendererViewportKey::TransformGizmoSize, "transform_gizmo_size"},
+			{RendererViewportKey::NavigationGizmoSize, "navigation_gizmo_size"},
 			{RendererViewportKey::TransformRotateSnapDegrees, "transform_rotate_snap_degrees"},
 			{RendererViewportKey::TransformScaleSnap, "transform_scale_snap"},
 			{RendererViewportKey::TransformTranslateSnap, "transform_translate_snap"},

@@ -7,8 +7,10 @@
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <utility>
 
@@ -16,6 +18,24 @@ namespace DefectStudio
 {
 	namespace
 	{
+		Unique<ICommand> MakeSetVacanciesCommand(WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer, AtomStyleTable styles, CommandContext &context)
+		{
+			const auto payload = context.TryGet<SetVacanciesPayload>(kSetVacanciesPayloadKey);
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetVacanciesCommand(std::move(domainLayer), std::move(rendererLayer), std::move(styles), *payload);
+		}
+
+		Unique<ICommand> MakeSetDefectFrameCommand(WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer, AtomStyleTable styles, CommandContext &context)
+		{
+			const auto payload = context.TryGet<SetDefectFramePayload>(kSetDefectFramePayloadKey);
+			if (payload == nullptr)
+				return nullptr;
+			return CreateSetDefectFrameCommand(std::move(domainLayer), std::move(rendererLayer), std::move(styles), *payload);
+		}
+
 		void RegisterRendererCommand(
 			CommandRegistry &registry,
 			const char *id,
@@ -231,6 +251,11 @@ namespace DefectStudio
 			return CreateRendererSelectionToolToggleCommand(std::move(eventBus), SelectionToolMode::Cursor3D);
 		}
 
+		Unique<ICommand> MakeTextToolToggleCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererSelectionToolToggleCommand(std::move(eventBus), SelectionToolMode::Text);
+		}
+
 		Unique<ICommand> MakeSetAsDefaultViewCommand(Ref<EventBus> eventBus, CommandContext &)
 		{
 			return CreateRendererSetAsDefaultViewCommand(std::move(eventBus));
@@ -239,6 +264,16 @@ namespace DefectStudio
 		Unique<ICommand> MakeApplyDefaultViewCommand(Ref<EventBus> eventBus, CommandContext &)
 		{
 			return CreateRendererApplyDefaultViewCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeNewWindowCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererNewWindowCommand(std::move(eventBus));
+		}
+
+		Unique<ICommand> MakeCloseWindowCommand(Ref<EventBus> eventBus, CommandContext &)
+		{
+			return CreateRendererCloseWindowCommand(std::move(eventBus));
 		}
 
 		Unique<ICommand> MakeDeleteSelectedAtomsCommand(
@@ -383,6 +418,20 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable)
 	{
 		using namespace RendererEvents::Viewport;
+		BindRendererVacancyVisibilityEditor(domainLayer, rendererLayer, atomStyleTable);
+
+		RegisterRendererCommand(
+			registry,
+			"renderer.new_window",
+			"Renderer: New window",
+			"Open an empty renderer window.",
+			std::bind_front(MakeNewWindowCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.close_window",
+			"Renderer: Close window",
+			"Close the active renderer window.",
+			std::bind_front(MakeCloseWindowCommand, eventBus));
 
 		RegisterRendererCommand(
 			registry,
@@ -420,6 +469,25 @@ namespace DefectStudio
 			"Renderer: Align to c* axis",
 			"Align active renderer viewport to reciprocal lattice axis c*.",
 			std::bind_front(MakeAlignAxisCommand, eventBus, 5));
+		// renderer.align_axis_a/b/c follow the defect axes when they are shown; these never do.
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_a_crystal",
+			"Renderer: Align to crystal a axis",
+			"Align active renderer viewport to lattice axis a, even when defect axes are shown.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 6));
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_b_crystal",
+			"Renderer: Align to crystal b axis",
+			"Align active renderer viewport to lattice axis b, even when defect axes are shown.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 7));
+		RegisterRendererCommand(
+			registry,
+			"renderer.align_axis_c_crystal",
+			"Renderer: Align to crystal c axis",
+			"Align active renderer viewport to lattice axis c, even when defect axes are shown.",
+			std::bind_front(MakeAlignAxisCommand, eventBus, 8));
 		RegisterRendererCommand(
 			registry,
 			"renderer.orbit_left",
@@ -699,6 +767,14 @@ namespace DefectStudio
 			"Apply a completed viewport gizmo drag to the domain structure (undoable).",
 			std::bind_front(MakeCommitGizmoTransformCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
 			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(registry, kSetVacanciesCommandId, "Renderer: Edit vacancies",
+			"Replace the structure's vacancy list (undoable).",
+			std::bind_front(MakeSetVacanciesCommand, domainLayer, rendererLayer, atomStyleTable),
+			CommandFlags::HiddenFromPalette);
+		RegisterRendererCommand(registry, kSetDefectFrameCommandId, "Renderer: Set defect axes",
+			"Replace or remove the structure's local defect axes (undoable).",
+			std::bind_front(MakeSetDefectFrameCommand, domainLayer, rendererLayer, atomStyleTable),
+			CommandFlags::HiddenFromPalette);
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.hide",
@@ -802,6 +878,12 @@ namespace DefectStudio
 			"Renderer: Toggle 3D cursor tool",
 			"Toggle the click-to-place 3D cursor tool on the active renderer viewport.",
 			std::bind_front(MakeCursor3DToolToggleCommand, eventBus));
+		RegisterRendererCommand(
+			registry,
+			"renderer.selection.text_tool_toggle",
+			"Renderer: Toggle text tool",
+			"Toggle the click-to-place scene text tool on the active renderer viewport.",
+			std::bind_front(MakeTextToolToggleCommand, eventBus));
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.nudge_up",

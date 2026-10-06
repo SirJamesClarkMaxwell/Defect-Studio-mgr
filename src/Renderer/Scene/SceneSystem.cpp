@@ -3,15 +3,56 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 
 namespace DefectStudio::SceneSystem
 {
+	BindingContext MakePathBindingContext(const RendererWindowState &windowState)
+	{
+		BindingContext context;
+		context.atomPosition = [&windowState](const std::size_t index) -> std::optional<glm::vec3> {
+			if (index >= windowState.structure.atoms.size())
+				return std::nullopt;
+			return windowState.structure.atoms[index].cartesianPosition;
+		};
+		context.atomRadius = [&windowState](const std::size_t index) -> std::optional<float> {
+			if (index >= windowState.structure.atoms.size())
+				return std::nullopt;
+			return windowState.structure.atoms[index].radius;
+		};
+		context.vacancyPosition = [&windowState](const std::size_t index) -> std::optional<glm::vec3> {
+			if (index >= windowState.structure.vacancies.size())
+				return std::nullopt;
+			return windowState.structure.vacancies[index].cartesianPosition;
+		};
+		context.vacancyRadius = [&windowState](const std::size_t index) -> std::optional<float> {
+			if (index >= windowState.structure.vacancies.size())
+				return std::nullopt;
+			return windowState.structure.vacancies[index].radius;
+		};
+		context.objectOrigin = [&windowState](const SceneObjectId id) -> std::optional<glm::vec3> {
+			// Planes have stable ids but no ECS mirror; their live center is the origin.
+			const std::size_t plane = AnnotationIndex(windowState.scenePlanes, id);
+			if (plane < windowState.scenePlanes.size())
+				return windowState.scenePlanes[plane].center;
+			const entt::entity entity = windowState.sceneRegistry.EntityForObjectId(id);
+			if (entity == entt::null || !windowState.sceneRegistry.Registry().all_of<TransformComponent>(entity))
+				return std::nullopt;
+			return windowState.sceneRegistry.Registry().get<TransformComponent>(entity).position;
+		};
+		context.isScenePath = [&windowState](const SceneObjectId id) {
+			return windowState.paths != nullptr && windowState.paths->Store().Find(id) != nullptr;
+		};
+		return context;
+	}
+
 	void SyncSceneWithStructure(SceneRegistry &scene, const RendererStructureData &structure)
 	{
 		std::vector<SceneObjectId> atomIds;
@@ -41,7 +82,7 @@ namespace DefectStudio::SceneSystem
 			Entity entity = scene.CreateObject(SceneObjectKind::Atom, index, atom.element + " " + std::to_string(index), id);
 			entity.AddComponent<TransformComponent>(TransformComponent{atom.cartesianPosition});
 			entity.AddComponent<AtomComponent>(AtomComponent{index, atom.element, atom.radius, atom.color});
-			entity.AddComponent<VisibilityComponent>(VisibilityComponent{atom.visible});
+			entity.AddComponent<VisibilityComponent>(VisibilityComponent{atom.visible, atom.renderable});
 			entity.AddComponent<SelectionComponent>();
 			entity.AddComponent<CollectionComponent>();
 			scene.AtomEntities().push_back(static_cast<entt::entity>(entity));
@@ -64,7 +105,7 @@ namespace DefectStudio::SceneSystem
 			component.radius = bond.radius;
 			component.gradient = bond.gradient;
 			entity.AddComponent<BondComponent>(component);
-			entity.AddComponent<VisibilityComponent>(VisibilityComponent{bond.visible});
+			entity.AddComponent<VisibilityComponent>(VisibilityComponent{bond.visible, bond.renderable});
 			entity.AddComponent<SelectionComponent>();
 			scene.BondEntities().push_back(static_cast<entt::entity>(entity));
 		}
@@ -97,6 +138,7 @@ namespace DefectStudio::SceneSystem
 				continue;
 
 			windowState.structure.atoms[atomComponent.atomIndex].visible = visibilityComponent.visible;
+			windowState.structure.atoms[atomComponent.atomIndex].renderable = visibilityComponent.renderable;
 			if (selectionComponent.selected)
 				windowState.selectedAtomIndices.push_back(atomComponent.atomIndex);
 		}
@@ -111,6 +153,7 @@ namespace DefectStudio::SceneSystem
 				continue;
 
 			windowState.structure.bonds[bondComponent.bondIndex].visible = visibilityComponent.visible;
+			windowState.structure.bonds[bondComponent.bondIndex].renderable = visibilityComponent.renderable;
 			if (selectionComponent.selected)
 				windowState.selectedBondIndices.push_back(bondComponent.bondIndex);
 		}
@@ -154,6 +197,17 @@ namespace DefectStudio::SceneSystem
 		std::vector<std::size_t> resolvedIndices;
 		resolvedIndices.reserve(positions.size());
 		const float toleranceSquared = tolerance * tolerance;
+		// Minimum image across the cell: a site saved at x = -1e-7 comes back at x = L once the file
+		// is reloaded and wrapped into [0, 1), and must still resolve to the same atom.
+		const glm::mat3 &lattice = targetStructure.lattice;
+		const bool periodic = targetStructure.periodic && std::abs(glm::determinant(lattice)) > 1e-6f;
+		const glm::mat3 inverseLattice = periodic ? glm::inverse(lattice) : glm::mat3(1.0f);
+		auto minimumImage = [&](const glm::vec3 &delta) {
+			if (!periodic)
+				return delta;
+			const glm::vec3 fractional = inverseLattice * delta;
+			return lattice * (fractional - glm::round(fractional));
+		};
 
 		for (const glm::vec3 &position : positions)
 		{
@@ -161,7 +215,7 @@ namespace DefectStudio::SceneSystem
 			std::size_t bestIndex = targetStructure.atoms.size();
 			for (std::size_t index = 0; index < targetStructure.atoms.size(); ++index)
 			{
-				const glm::vec3 delta = targetStructure.atoms[index].cartesianPosition - position;
+				const glm::vec3 delta = minimumImage(targetStructure.atoms[index].cartesianPosition - position);
 				const float distanceSquared = glm::dot(delta, delta);
 				if (distanceSquared <= bestDistanceSquared)
 				{
@@ -224,12 +278,15 @@ namespace DefectStudio::SceneSystem
 		for (const entt::entity entity : scene.LabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.LabelEntities().clear();
-		for (const entt::entity entity : scene.ArrowEntities())
-			scene.DestroyEntity(Entity(entity, &scene));
-		scene.ArrowEntities().clear();
 		for (const entt::entity entity : scene.FreeLabelEntities())
 			scene.DestroyEntity(Entity(entity, &scene));
 		scene.FreeLabelEntities().clear();
+		for (const entt::entity entity : scene.OrbitalEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.OrbitalEntities().clear();
+		for (const entt::entity entity : scene.PathEntities())
+			scene.DestroyEntity(Entity(entity, &scene));
+		scene.PathEntities().clear();
 
 		scene.LabelEntities().reserve(windowState.pinnedMeasurements.size());
 		for (std::size_t index = 0; index < windowState.pinnedMeasurements.size(); ++index)
@@ -265,20 +322,65 @@ namespace DefectStudio::SceneSystem
 			scene.FreeLabelEntities().push_back(static_cast<entt::entity>(entity));
 		}
 
-		scene.ArrowEntities().reserve(windowState.sceneArrows.size());
-		for (std::size_t index = 0; index < windowState.sceneArrows.size(); ++index)
+		scene.OrbitalEntities().reserve(windowState.sceneOrbitals.size());
+		for (std::size_t index = 0; index < windowState.sceneOrbitals.size(); ++index)
 		{
-			RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[index];
-			if (!arrow.id.IsValid())
-				arrow.id = scene.AllocateObjectId();
-			Entity entity = scene.CreateObject(SceneObjectKind::SceneArrow, index, "arrow " + std::to_string(index), arrow.id);
-			arrow.id = entity.GetComponent<SceneObjectComponent>().id;
-			entity.AddComponent<TransformComponent>(TransformComponent{(arrow.start + arrow.end) * 0.5f});
+			RendererWindowState::SceneOrbital &orbital = windowState.sceneOrbitals[index];
+			if (!orbital.id.IsValid())
+				orbital.id = scene.AllocateObjectId();
+			Entity entity = scene.CreateObject(
+				SceneObjectKind::SceneOrbital, index, OrbitalPresetName(orbital.preset), orbital.id);
+			orbital.id = entity.GetComponent<SceneObjectComponent>().id;
+			entity.AddComponent<TransformComponent>(
+				TransformComponent{ResolveSceneOrbitalCenters(orbital, windowState.structure).centroid});
 			entity.AddComponent<SelectionComponent>(SelectionComponent{
-				std::find(windowState.selectedSceneArrows.begin(), windowState.selectedSceneArrows.end(), arrow.id) !=
-				windowState.selectedSceneArrows.end()});
-			scene.ArrowEntities().push_back(static_cast<entt::entity>(entity));
+				std::find(windowState.selectedSceneOrbitals.begin(), windowState.selectedSceneOrbitals.end(), orbital.id) !=
+				windowState.selectedSceneOrbitals.end()});
+			scene.OrbitalEntities().push_back(static_cast<entt::entity>(entity));
 		}
+
+		if (windowState.paths != nullptr)
+		{
+			const PathStore &paths = windowState.paths->Store();
+			const BindingContext bindingContext = MakePathBindingContext(windowState);
+			scene.PathEntities().reserve(paths.Size());
+			for (std::size_t index = 0; index < paths.Size(); ++index)
+			{
+				// PathStore::Insert rejects an unset id,
+				// so every stored path already carries one allocated by the window's registry.
+				const ScenePath *storedPath = paths.At(index);
+				if (storedPath == nullptr)
+					continue;
+				const ResolvedNodes resolved = ResolveNodePositions(*storedPath, bindingContext);
+				glm::vec3 position(0.0f);
+				for (const glm::vec3 &nodePosition : resolved.positions)
+					position += nodePosition;
+				if (!resolved.positions.empty())
+					position /= static_cast<float>(resolved.positions.size());
+				Entity entity = scene.CreateObject(
+					SceneObjectKind::ScenePath, index,
+					storedPath->name.empty() ? "path " + std::to_string(index) : storedPath->name, storedPath->id);
+				entity.AddComponent<TransformComponent>(TransformComponent{position});
+				entity.AddComponent<SelectionComponent>(SelectionComponent{false});
+				scene.PathEntities().push_back(static_cast<entt::entity>(entity));
+			}
+		}
+	}
+
+	PathSystem &EnsurePathSystem(RendererWindowState &windowState)
+	{
+		if (windowState.paths == nullptr)
+			windowState.paths = CreateUnique<PathSystem>();
+		return *windowState.paths;
+	}
+
+	SceneObjectId AppendScenePath(RendererWindowState &windowState, ScenePath path)
+	{
+		path.id = windowState.sceneRegistry.AllocateObjectId();
+		const SceneObjectId id = path.id;
+		if (!EnsurePathSystem(windowState).Store().Insert(std::move(path)))
+			return SceneObjectId{};
+		return id;
 	}
 
 	std::vector<std::size_t> ResolveSourceIndices(const SceneRegistry &scene, const std::vector<SceneObjectId> &ids)
@@ -308,9 +410,9 @@ namespace DefectStudio::SceneSystem
 		}
 		for (std::size_t index = 0; index < scene.FreeLabelEntities().size() && index < windowState.freeLabels.size(); ++index)
 			Entity(scene.FreeLabelEntities()[index], &scene).GetComponent<TransformComponent>().position = windowState.freeLabels[index].worldPosition;
-		for (std::size_t index = 0; index < scene.ArrowEntities().size() && index < windowState.sceneArrows.size(); ++index)
-			Entity(scene.ArrowEntities()[index], &scene).GetComponent<TransformComponent>().position =
-				(windowState.sceneArrows[index].start + windowState.sceneArrows[index].end) * 0.5f;
+		for (std::size_t index = 0; index < scene.OrbitalEntities().size() && index < windowState.sceneOrbitals.size(); ++index)
+			Entity(scene.OrbitalEntities()[index], &scene).GetComponent<TransformComponent>().position =
+				ResolveSceneOrbitalCenters(windowState.sceneOrbitals[index], windowState.structure).centroid;
 	}
 
 	void SyncLabelSelection(SceneRegistry &scene, const RendererWindowState &windowState)
@@ -326,6 +428,6 @@ namespace DefectStudio::SceneSystem
 		};
 		sync(scene.LabelEntities(), windowState.selectedPinnedMeasurements);
 		sync(scene.FreeLabelEntities(), windowState.selectedFreeLabels);
-		sync(scene.ArrowEntities(), windowState.selectedSceneArrows);
+		sync(scene.OrbitalEntities(), windowState.selectedSceneOrbitals);
 	}
 } // namespace DefectStudio::SceneSystem

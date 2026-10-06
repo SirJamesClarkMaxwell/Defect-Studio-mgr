@@ -26,6 +26,30 @@ bindings:
     context: ""
     layer: 0
     enabled: true
+  - id: "editor.focus_scene_outliner"
+    chord: "Ctrl+Shift+O"
+    command: "editor.focus_scene_outliner"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "editor.toggle_left_dock_region"
+    chord: "Ctrl+B"
+    command: "editor.toggle_left_dock_region"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "editor.toggle_bottom_dock_region"
+    chord: "Ctrl+J"
+    command: "editor.toggle_bottom_dock_region"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "editor.toggle_right_dock_region"
+    chord: "Ctrl+Alt+I"
+    command: "editor.toggle_right_dock_region"
+    context: ""
+    layer: 0
+    enabled: true
   - id: "system.quit"
     chord: "Ctrl+Shift+W"
     command: "app.quit"
@@ -37,6 +61,18 @@ bindings:
     command: "project.save"
     context: ""
     layer: 0
+    enabled: true
+  - id: "renderer.new_window"
+    chord: "Ctrl+T"
+    command: "renderer.new_window"
+    context: ""
+    layer: 2
+    enabled: true
+  - id: "renderer.close_window"
+    chord: "Ctrl+W"
+    command: "renderer.close_window"
+    context: "renderer.viewport.focused"
+    layer: 2
     enabled: true
   - id: "renderer.align_axis_a"
     chord: "1"
@@ -53,6 +89,24 @@ bindings:
   - id: "renderer.align_axis_c"
     chord: "3"
     command: "renderer.align_axis_c"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_a_crystal"
+    chord: "Shift+1"
+    command: "renderer.align_axis_a_crystal"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_b_crystal"
+    chord: "Shift+2"
+    command: "renderer.align_axis_b_crystal"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.align_axis_c_crystal"
+    chord: "Shift+3"
+    command: "renderer.align_axis_c_crystal"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
@@ -256,6 +310,12 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.selection.text_tool_toggle"
+    chord: "Shift+T"
+    command: "renderer.selection.text_tool_toggle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.selection.cursor3d_tool_toggle"
     chord: "Shift+C"
     command: "renderer.selection.cursor3d_tool_toggle"
@@ -277,6 +337,12 @@ bindings:
   - id: "renderer.gizmo.mode_rotate"
     chord: "R"
     command: "renderer.gizmo.mode_rotate"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.scene_arrow.reverse"
+    chord: "Alt+R"
+    command: "renderer.scene_arrow.reverse"
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
@@ -492,7 +558,7 @@ bindings:
     enabled: true
   - id: "terminal.focus"
     chord: "Ctrl+`"
-    command: "terminal.focus"
+    command: "terminal.toggle"
     context: ""
     layer: 0
     enabled: true
@@ -513,4 +579,52 @@ bindings:
     command: "terminal.split"
     context: ""
     layer: 0
+    enabled: true
+  - id: "renderer.path_edit.toggle"
+    chord: "Tab"
+    command: "renderer.path_edit.toggle"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.leave"
+    chord: "Escape"
+    command: "renderer.path_edit.leave"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.mode_nodes"
+    chord: "1"
+    command: "renderer.path_edit.mode_nodes"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.mode_segments"
+    chord: "2"
+    command: "renderer.path_edit.mode_segments"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.mode_whole"
+    chord: "3"
+    command: "renderer.path_edit.mode_whole"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.extend"
+    chord: "E"
+    command: "renderer.path_edit.extend"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.delete_nodes"
+    chord: "Delete"
+    command: "renderer.path_edit.delete_nodes"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
+    enabled: true
+  - id: "renderer.path_edit.handle_type_menu"
+    chord: "V"
+    command: "renderer.path_edit.handle_type_menu"
+    context: "renderer.viewport.focused && renderer.path_edit.active"
+    layer: 2
     enabled: true

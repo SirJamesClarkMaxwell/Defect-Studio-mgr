@@ -31,6 +31,7 @@ namespace DefectStudio
 		StructureHubPanel(const StructureHubPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Structure; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Current Project Tree selection, pushed in on ProjectTreeSelectionChanged. This is compared

@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -289,6 +290,8 @@ namespace DefectStudio
 
 		ImGui::Separator();
 		drawSelectedElementEditor();
+		if (ImGui::CollapsingHeader("Wakans"))
+			DrawVacancyStyleEditor(m_AtomStyleTable, m_Layer);
 
 		ImGui::Separator();
 		if (ImGui::Button("Save to file"))

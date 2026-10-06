@@ -51,6 +51,11 @@ namespace DefectStudio
 	{
 		glm::ivec3 dimensions = glm::ivec3(0);
 		glm::mat3 cell = glm::mat3(1.0f); // direct real-space cell (Angstrom), cell[i] = lattice vector i
+		// World-space position of the grid's fractional (0,0,0) corner, Angstrom. Zero for a WAVECAR
+		// grid, whose box IS the structure's cell and so already starts at the scene origin. Nonzero
+		// only for an analytic orbital (HydrogenicOrbital.hpp), whose sampling cube is centred on an
+		// arbitrary atom - without this the grid could only ever be drawn at the origin.
+		glm::vec3 origin = glm::vec3(0.0f);
 		std::vector<float> values;
 		float energy = 0.0f;
 		float occupation = 0.0f;
@@ -85,8 +90,8 @@ namespace DefectStudio
 
 	// First-pass heuristic (NOT yet validated against real defect calculations): sums occupation
 	// per spin channel across the given (already band-windowed) records. If only one channel is
-	// populated at all (non-spin-polarized calculation, or puntukas mirroring one channel into
-	// the other) that's still closed-shell -> Singlet. Otherwise equal sums -> paired spins
+	// populated at all (including the bridge's zero-filled down channel for a single-spin
+	// puntukas table) that's still closed-shell -> Singlet. Otherwise equal sums -> paired spins
 	// (Singlet); unequal -> net spin polarization within the window (Triplet-like, an unpaired
 	// electron pair across the two channels). Both channels empty -> Unknown.
 	[[nodiscard]] SpinMultiplicity ClassifySpinMultiplicity(

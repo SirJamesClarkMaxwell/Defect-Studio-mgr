@@ -5,6 +5,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 
 #include <algorithm>
 #include <array>
@@ -30,6 +31,7 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
+#include "Renderer/Scene/SceneSelection.hpp"
 
 namespace DefectStudio
 {
@@ -69,6 +71,7 @@ namespace DefectStudio
 			outAnchor += pin.worldOffset;
 			return true;
 		}
+
 	} // namespace
 
 	void HandleBoxSelectDrag(
@@ -100,24 +103,28 @@ namespace DefectStudio
 
 			ImGuiIO &io = ImGui::GetIO();
 			const RendererEvents::Viewport::RegionSelectMode mode = ResolveRegionSelectMode(io.KeyShift, io.KeyCtrl);
+			if (windowState.pathEdit.IsActive())
+			{
+				ApplyPathElementRectSelection(windowState, rectMin, rectMax, mode);
+				return;
+			}
 			// Gated on pickAtoms/pickBonds the same way HandleViewportPick's plain click already is -
 			// box-select previously always matched atoms regardless of the active selection mode, and
 			// never matched bonds at all even when the mode allowed picking them.
 			PublishRegionSelection(
 				windowState,
-				windowState.pickAtoms ? HitTestRect(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
-				windowState.pickBonds ? HitTestRectBonds(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				(windowState.pickAtoms && windowState.showAtoms) ? HitTestRect(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				(windowState.pickBonds && windowState.showBonds) ? HitTestRectBonds(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
 				mode,
 				layer);
-			// Labels aren't part of the atom/bond region-select event above (single-select fields, not
-			// an entity list) - applied directly here instead, same pickLabels gate as everywhere else.
-			if (windowState.pickLabels)
-			{
-				ApplyLabelRegionSelection(
-					windowState, HitTestRectPinnedMeasurements(windowState, rectMin, rectMax),
-					HitTestRectFreeLabels(windowState, rectMin, rectMax),
-					HitTestRectSceneArrows(windowState, rectMin, rectMax), mode);
-			}
+			// Paths are ordinary scene objects; only label hits use the label selection mask.
+			ApplyLabelRegionSelection(windowState,
+				windowState.pickLabels ? HitTestRectPinnedMeasurements(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				windowState.pickLabels ? HitTestRectFreeLabels(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				mode, HitTestRectScenePaths(windowState, rectMin, rectMax));
+			ApplySceneDrawingRegionSelection(windowState, rectMin, rectMax, 0.0f,
+				mode == RendererEvents::Viewport::RegionSelectMode::Replace,
+				mode == RendererEvents::Viewport::RegionSelectMode::Subtract);
 		}
 	}
 
@@ -139,22 +146,26 @@ namespace DefectStudio
 		const RendererEvents::Viewport::RegionSelectMode mode = io.KeyShift
 			? RendererEvents::Viewport::RegionSelectMode::Subtract
 			: RendererEvents::Viewport::RegionSelectMode::Add;
+		if (windowState.pathEdit.IsActive())
+		{
+			ApplyPathElementCircleSelection(windowState, center, windowState.circleSelectRadius, mode);
+			return;
+		}
 
 		PublishRegionSelection(
 			windowState,
-			windowState.pickAtoms ? HitTestCircle(windowState, center, windowState.circleSelectRadius)
+			(windowState.pickAtoms && windowState.showAtoms) ? HitTestCircle(windowState, center, windowState.circleSelectRadius)
 								   : std::vector<std::size_t>{},
-			windowState.pickBonds ? HitTestCircleBonds(windowState, center, windowState.circleSelectRadius)
+			(windowState.pickBonds && windowState.showBonds) ? HitTestCircleBonds(windowState, center, windowState.circleSelectRadius)
 								   : std::vector<std::size_t>{},
 			mode,
 			layer);
-		if (windowState.pickLabels)
-		{
-			ApplyLabelRegionSelection(
-				windowState, HitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius),
-				HitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius),
-				HitTestCircleSceneArrows(windowState, center, windowState.circleSelectRadius), mode);
-		}
+		ApplyLabelRegionSelection(windowState,
+			windowState.pickLabels ? HitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius) : std::vector<std::size_t>{},
+			windowState.pickLabels ? HitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius) : std::vector<std::size_t>{},
+			mode, HitTestCircleScenePaths(windowState, center, windowState.circleSelectRadius));
+		ApplySceneDrawingRegionSelection(windowState, center, center, windowState.circleSelectRadius, false,
+			mode == RendererEvents::Viewport::RegionSelectMode::Subtract);
 	}
 
 	std::vector<std::size_t> HitTestRect(
@@ -265,7 +276,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+			if (!windowState.pinnedMeasurements[i].visible || !ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
 				continue;
 			const std::optional<glm::vec2> screen =
 				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
@@ -285,7 +296,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+			if (!windowState.pinnedMeasurements[i].visible || !ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
 				continue;
 			const std::optional<glm::vec2> screen =
 				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
@@ -304,6 +315,7 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
+			if (!windowState.freeLabels[i].visible) continue;
 			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
 				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
 			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
@@ -321,6 +333,7 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
+			if (!windowState.freeLabels[i].visible) continue;
 			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
 				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
 			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
@@ -329,83 +342,21 @@ namespace DefectStudio
 		return hitIndices;
 	}
 
-	// sceneArrows counterpart of the point-based hit-testers above - "hit" means the start, end, or
-	// midpoint screen-projects into the rect/circle (good enough for a box/circle-select convenience
-	// feature, not full segment-vs-region clipping).
-	std::vector<std::size_t> HitTestRectSceneArrows(
-		const RendererWindowState &windowState, glm::vec2 rectMin, glm::vec2 rectMax)
-	{
-		std::vector<std::size_t> hitIndices;
-		if (windowState.camera == nullptr)
-			return hitIndices;
-		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		// 5 evenly-spaced samples along the segment, not just start/end/mid - catches a long arrow
-		// crossing the region without either endpoint or its exact midpoint landing inside it (docs/
-		// scene_arrow_rework_plan_corrected.md Step 9's "simple sampling" option).
-		constexpr std::array<float, 5> kSampleT = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
-		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
-		{
-			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[i];
-			bool hit = false;
-			for (const float t : kSampleT)
-			{
-				const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
-					viewProjection, windowState.viewportSize, glm::mix(arrow.start, arrow.end, t));
-				if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
-				{
-					hit = true;
-					break;
-				}
-			}
-			if (hit)
-				hitIndices.push_back(i);
-		}
-		return hitIndices;
-	}
-
-	std::vector<std::size_t> HitTestCircleSceneArrows(
-		const RendererWindowState &windowState, glm::vec2 center, float radius)
-	{
-		std::vector<std::size_t> hitIndices;
-		if (windowState.camera == nullptr)
-			return hitIndices;
-		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		constexpr std::array<float, 5> kSampleT = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
-		for (std::size_t i = 0; i < windowState.sceneArrows.size(); ++i)
-		{
-			const RendererWindowState::SceneArrow &arrow = windowState.sceneArrows[i];
-			bool hit = false;
-			for (const float t : kSampleT)
-			{
-				const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
-					viewProjection, windowState.viewportSize, glm::mix(arrow.start, arrow.end, t));
-				if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))
-				{
-					hit = true;
-					break;
-				}
-			}
-			if (hit)
-				hitIndices.push_back(i);
-		}
-		return hitIndices;
-	}
-
-	// Applies one box/circle-select result to the label/arrow selection vectors - mirrors
+	// Applies one box/circle-select result to the label/path selection vectors - mirrors
 	// RendererLayer::onRegionSelectionRequested's atom/bond semantics exactly: Replace clears
 	// everything first then adds every hit, Add only adds what isn't already there, Subtract only
 	// removes what's found.
 	void ApplyLabelRegionSelection(
 		RendererWindowState &windowState, const std::vector<std::size_t> &pinnedHits,
-		const std::vector<std::size_t> &freeHits, const std::vector<std::size_t> &arrowHits,
-		RendererEvents::Viewport::RegionSelectMode mode)
+		const std::vector<std::size_t> &freeHits,
+		RendererEvents::Viewport::RegionSelectMode mode, const std::vector<SceneObjectId> &pathHits)
 	{
 		using RendererEvents::Viewport::RegionSelectMode;
 		if (mode == RegionSelectMode::Replace)
 		{
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedFreeLabels.clear();
-			windowState.selectedSceneArrows.clear();
+			windowState.selectedScenePaths.clear();
 		}
 
 		auto applyHits = [](auto &selection, const auto &objects, const std::vector<std::size_t> &hits, bool subtract) {
@@ -429,7 +380,17 @@ namespace DefectStudio
 		const bool subtract = mode == RegionSelectMode::Subtract;
 		applyHits(windowState.selectedPinnedMeasurements, windowState.pinnedMeasurements, pinnedHits, subtract);
 		applyHits(windowState.selectedFreeLabels, windowState.freeLabels, freeHits, subtract);
-		applyHits(windowState.selectedSceneArrows, windowState.sceneArrows, arrowHits, subtract);
+		for (const SceneObjectId id : pathHits)
+		{
+			const auto existing = std::find(windowState.selectedScenePaths.begin(), windowState.selectedScenePaths.end(), id);
+			if (subtract)
+			{
+				if (existing != windowState.selectedScenePaths.end())
+					windowState.selectedScenePaths.erase(existing);
+			}
+			else if (existing == windowState.selectedScenePaths.end())
+				windowState.selectedScenePaths.push_back(id);
+		}
 
 		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 	}

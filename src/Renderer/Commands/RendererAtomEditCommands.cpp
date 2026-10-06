@@ -123,43 +123,43 @@ namespace DefectStudio
 		}
 	}
 
+	// Rebuilds RendererStructureData from record.structure and re-syncs windowState's ECS
+	// scene - the common tail every atom-edit command needs after mutating the domain
+	// structure. selectAfter (atom indices in the *new* structure) becomes the selection once
+	// synced; empty leaves nothing selected. Hidden state is captured before rebuilding unless
+	// the caller supplies a remapped override for non-append atom changes.
+	void RebuildAndSync(
+		RendererWindowState &windowState,
+		const StructureRecord &record,
+		const AtomStyleTable &atomStyleTable,
+		const std::vector<std::size_t> &selectAfter,
+		const std::vector<std::size_t> &selectBondsAfter,
+		const HiddenSceneState *hiddenOverride)
+	{
+		const HiddenSceneState capturedState =
+			hiddenOverride == nullptr ? CaptureHiddenSceneState(windowState.structure) : *hiddenOverride;
+
+		windowState.structure = BuildRendererStructureData(
+			record.structure,
+			windowState.structure.sourcePath,
+			windowState.structure.name,
+			atomStyleTable,
+			windowState.structure.domainStructureId);
+		std::vector<std::size_t> hiddenAtoms;
+		for (const std::size_t atomIndex : capturedState.atomIndices)
+			if (atomIndex < windowState.structure.atoms.size())
+				hiddenAtoms.push_back(atomIndex);
+		const std::vector<std::size_t> hiddenBonds =
+			ResolveHiddenBondIndices(windowState.structure, capturedState.bondEndpoints);
+		SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
+		if (!selectAfter.empty() || !hiddenAtoms.empty() || !selectBondsAfter.empty() || !hiddenBonds.empty())
+			SceneSystem::ApplySelectionAndVisibilityToScene(
+				windowState.sceneRegistry, selectAfter, hiddenAtoms, selectBondsAfter, hiddenBonds);
+		SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
+	}
+
 	namespace
 	{
-		// Rebuilds RendererStructureData from record.structure and re-syncs windowState's ECS
-		// scene - the common tail every atom-edit command needs after mutating the domain
-		// structure. selectAfter (atom indices in the *new* structure) becomes the selection once
-		// synced; empty leaves nothing selected. Hidden state is captured before rebuilding unless
-		// the caller supplies a remapped override for non-append atom changes.
-		void RebuildAndSync(
-			RendererWindowState &windowState,
-			const StructureRecord &record,
-			const AtomStyleTable &atomStyleTable,
-			const std::vector<std::size_t> &selectAfter,
-			const std::vector<std::size_t> &selectBondsAfter = {},
-			const HiddenSceneState *hiddenOverride = nullptr)
-		{
-			const HiddenSceneState capturedState =
-				hiddenOverride == nullptr ? CaptureHiddenSceneState(windowState.structure) : *hiddenOverride;
-
-			windowState.structure = BuildRendererStructureData(
-				record.structure,
-				windowState.structure.sourcePath,
-				windowState.structure.name,
-				atomStyleTable,
-				windowState.structure.domainStructureId);
-			std::vector<std::size_t> hiddenAtoms;
-			for (const std::size_t atomIndex : capturedState.atomIndices)
-				if (atomIndex < windowState.structure.atoms.size())
-					hiddenAtoms.push_back(atomIndex);
-			const std::vector<std::size_t> hiddenBonds =
-				ResolveHiddenBondIndices(windowState.structure, capturedState.bondEndpoints);
-			SceneSystem::SyncSceneWithStructure(windowState.sceneRegistry, windowState.structure);
-			if (!selectAfter.empty() || !hiddenAtoms.empty() || !selectBondsAfter.empty() || !hiddenBonds.empty())
-				SceneSystem::ApplySelectionAndVisibilityToScene(
-					windowState.sceneRegistry, selectAfter, hiddenAtoms, selectBondsAfter, hiddenBonds);
-			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
-		}
-
 		// In-process atom clipboard for Copy/Paste (Ctrl+C/Ctrl+V) - shared across every window and
 		// every command instance, matching how a real OS clipboard behaves (copy in one viewport,
 		// paste into another). No project persistence, no OS clipboard integration - just enough to
@@ -235,6 +235,7 @@ namespace DefectStudio
 				m_WindowIdResolved = windowState.windowId;
 				m_PreviousAtoms = target->record->structure.atoms;
 				m_PreviousBonds = target->record->structure.bonds;
+				m_PreviousVacancies = target->record->structure.vacancies;
 				m_HiddenBefore = CaptureHiddenSceneState(windowState.structure);
 				m_DeletedIndices = windowState.selectedAtomIndices;
 				std::sort(m_DeletedIndices.begin(), m_DeletedIndices.end());
@@ -307,6 +308,7 @@ namespace DefectStudio
 
 				target->record->structure.atoms = m_PreviousAtoms;
 				target->record->structure.bonds = m_PreviousBonds;
+				target->record->structure.vacancies = m_PreviousVacancies;
 				if (!m_DeletedIndices.empty())
 					domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				else
@@ -335,6 +337,7 @@ namespace DefectStudio
 			std::string m_WindowIdResolved;
 			std::vector<AtomSite> m_PreviousAtoms;
 			std::vector<Bond> m_PreviousBonds;
+			std::vector<VacancySite> m_PreviousVacancies;
 			std::vector<std::size_t> m_DeletedIndices;
 			HiddenSceneState m_HiddenBefore;
 		};

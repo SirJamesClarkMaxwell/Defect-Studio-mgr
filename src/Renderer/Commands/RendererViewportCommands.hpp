@@ -55,4 +55,13 @@ namespace DefectStudio
 	[[nodiscard]] Unique<ICommand> CreateRendererSelectAllCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererSetAsDefaultViewCommand(Ref<EventBus> eventBus);
 	[[nodiscard]] Unique<ICommand> CreateRendererApplyDefaultViewCommand(Ref<EventBus> eventBus);
+	// Ctrl+T / Ctrl+W. These act on the renderer's set of windows rather than on one viewport's
+	// camera, so they publish into RendererEvents::Windows, not ::Viewport. Ctrl+T reuses the
+	// OpenEmptyRequested event the main menu and the project tree already publish - there is one
+	// "open an empty renderer window" action in the app and this is a third way to reach it, not a
+	// second implementation of it.
+	[[nodiscard]] Unique<ICommand> CreateRendererNewWindowCommand(Ref<EventBus> eventBus);
+	// Publishes CloseRequested with an empty windowId: the command has no way to know which window
+	// is active and must not guess. RendererPanel resolves it.
+	[[nodiscard]] Unique<ICommand> CreateRendererCloseWindowCommand(Ref<EventBus> eventBus);
 } // namespace DefectStudio

@@ -50,7 +50,7 @@ namespace DefectStudio
 			bool relativeToVbm = false;
 			// Irrep (group-theory) labeling - opt-in, real per-band cost (get_symmetry per orbital),
 			// see vasp_output_load.py's _orbitals_payload comment. irrepTol/symprec passed straight
-			// to puntukas' get_orbital_data_for_two_spins.
+			// to puntukas' orbital_info.
 			bool showIrreps = false;
 			float irrepTol = 0.1f;
 			float irrepSymprec = 1e-3f;

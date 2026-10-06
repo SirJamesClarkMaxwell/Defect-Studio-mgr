@@ -170,6 +170,14 @@ namespace DefectStudio
 			centreLabel = "3D cursor";
 		else if (m_CentreMode == CentreMode::Atom)
 			centreLabel = "Atom";
+		const auto &vacancies = windowState.structure.vacancies;
+		std::string vacancyLabel;
+		if (m_CentreMode == CentreMode::Vacancy)
+		{
+			vacancyLabel = m_VacancyIndex < vacancies.size()
+				? vacancies[m_VacancyIndex].label + " #" + std::to_string(m_VacancyIndex + 1) : "Vacancy (missing)";
+			centreLabel = vacancyLabel.c_str();
+		}
 
 		if (ImGui::BeginCombo("Centre", centreLabel))
 		{
@@ -183,6 +191,21 @@ namespace DefectStudio
 
 			if (ImGui::Selectable("Atom", m_CentreMode == CentreMode::Atom))
 				m_CentreMode = CentreMode::Atom;
+			if (vacancies.empty())
+			{
+				ImGui::BeginDisabled();
+				ImGui::Selectable("Vacancy (none)");
+				ImGui::EndDisabled();
+			}
+			for (std::size_t i = 0; i < vacancies.size(); ++i)
+			{
+				const std::string label = vacancies[i].label + " #" + std::to_string(i + 1);
+				if (ImGui::Selectable(label.c_str(), m_CentreMode == CentreMode::Vacancy && m_VacancyIndex == i))
+				{
+					m_CentreMode = CentreMode::Vacancy;
+					m_VacancyIndex = i;
+				}
+			}
 			ImGui::EndCombo();
 		}
 
@@ -200,6 +223,7 @@ namespace DefectStudio
 					ImGui::SameLine(0.0f, 0.0f);
 				ImGui::TextDisabled("%s%s", index == 0 ? "" : ", ", m_Basis->sites[index].label.c_str());
 			}
+			ImGui::TextDisabled(m_Frame ? "Osie: osie defektu (z = oś defektu)" : "Osie: kartezjańskie struktury");
 		}
 		ImGui::Separator();
 	}
@@ -246,38 +270,19 @@ namespace DefectStudio
 		if (windowState.selectedAtomIndices.empty())
 			return;
 
-		const std::size_t primary = windowState.selectedAtomIndices.back();
-		if (primary >= record.structure.atoms.size())
-			return;
-
-		glm::dvec3 centre = glm::dvec3(record.structure.atoms[primary].position);
-		if (m_CentreMode == CentreMode::Cursor)
-			centre = glm::dvec3(windowState.cursor3DPosition);
-
-		Result<SelectionBasis> basis =
-			BuildSelectionBasis(record.structure, windowState.selectedAtomIndices, centre);
+		Result<SelectionBasis> basis = selectionBasis(windowState, record);
 		if (!basis)
 		{
 			m_Error = basis.Error();
 			return;
 		}
 
-		if (m_CentreMode == CentreMode::SelectionCentroid)
-		{
-			glm::dvec3 mean(0.0);
-			for (const BasisSite &site : basis->sites)
-				mean += site.position;
-			centre += mean / static_cast<double>(basis->sites.size());
-			basis = BuildSelectionBasis(record.structure, windowState.selectedAtomIndices, centre);
-			if (!basis)
-			{
-				m_Error = basis.Error();
-				return;
-			}
-		}
-
+		const BasisKey key{windowId, ToString(record.id), record.revision, basis->hash};
+		if (m_BasisKey != key)
+			m_Result.reset();
 		m_Basis = basis.Value();
-		m_BasisKey = BasisKey{windowId, ToString(record.id), record.revision, m_Basis->hash};
+		m_Frame = record.structure.defectFrame;
+		m_BasisKey = key;
 		m_Error.reset();
 		submitAnalysis();
 	}
@@ -305,6 +310,13 @@ namespace DefectStudio
 		PointGroupAnalysisRequest request;
 		request.pointGroupLabel = m_GroupIndex == 0 ? "" : kGroups[m_GroupIndex];
 		request.sites = m_Basis->sites;
+		// Sites are already centred, so only the rotation into the defect axes is applied. The
+		// script tries the identity / same-z frames first, so the result keeps these axes when the
+		// group allows it (see frame_candidates).
+		if (m_Frame)
+			for (BasisSite &site : request.sites)
+				site.position = glm::dvec3(glm::dot(site.position, glm::dvec3(m_Frame->x)),
+					glm::dot(site.position, glm::dvec3(m_Frame->y)), glm::dot(site.position, glm::dvec3(m_Frame->z)));
 		request.symmetryTolerance = m_Tolerance;
 		std::vector<bool> active(m_ActiveVectors.size());
 		for (std::size_t index = 0; index < active.size(); ++index)
@@ -326,29 +338,6 @@ namespace DefectStudio
 		m_SubmittedKey = m_BasisKey;
 		m_PendingJobId = jobSystem->Submit(m_PendingJob, JobPriority::Normal);
 		m_Error.reset();
-	}
-
-	std::optional<GroupTheoryPanel::BasisKey> GroupTheoryPanel::currentBasisKey() const
-	{
-		if (!m_BasisKey.has_value())
-			return std::nullopt;
-
-		Ref<DomainLayer> domainLayer = m_DomainLayer.lock();
-		if (domainLayer == nullptr)
-			return std::nullopt;
-
-		const Result<AtomEditTarget> target =
-			ResolveAtomEditTarget(m_RendererLayer, *domainLayer, m_BasisKey->windowId);
-		if (!target || target->record == nullptr)
-			return std::nullopt;
-
-		const StructureRecord &record = *target->record;
-		if (ToString(record.id) != m_BasisKey->structureId)
-			return std::nullopt;
-
-		BasisKey current = *m_BasisKey;
-		current.revision = record.revision;
-		return current;
 	}
 
 	void GroupTheoryPanel::pollJob()

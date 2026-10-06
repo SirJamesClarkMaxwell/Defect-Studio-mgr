@@ -259,7 +259,7 @@ namespace DefectStudio
 				const std::string_view argument = argv[index];
 				if (argument == "--help" || argument == "-h")
 				{
-					std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events] [--log-level=trace|debug|info|warn|error] [--log-file[=path]]\n";
+					std::cout << "Usage: DefectStudio [--reset-layout] [--trace-events] [--log-level=trace|debug|info|warn|error] [--log-file[=path]] [--project=directory]\n";
 					std::exit(0);
 				}
 
@@ -287,6 +287,14 @@ namespace DefectStudio
 						specification.logLevel = parsedLevel.value();
 						specification.logLevelOverride = parsedLevel.value();
 					}
+				}
+
+				constexpr std::string_view projectPrefix = "--project=";
+				if (argument.starts_with(projectPrefix))
+				{
+					const std::string_view directory = argument.substr(projectPrefix.size());
+					if (!directory.empty())
+						specification.startupProjectDirectory = Path::FromResolved(std::string(directory));
 				}
 
 				constexpr std::string_view logFilePrefix = "--log-file=";
@@ -838,7 +846,9 @@ namespace DefectStudio
 		{
 			ZoneScopedN("Application.setupDefaultLayers.PushEditorLayer");
 			ApplicationDetail::StartupStepTimer timer("LayerStack.push.EditorLayer");
-			m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+			auto editorLayer = CreateUnique<EditorLayer>();
+			editorLayer->SetStartupProjectDirectory(m_Runtime.specification.startupProjectDirectory);
+			m_LayerStack.PushLayer(std::move(editorLayer));
 			timer.Finish(true);
 		}
 		// m_LayerStack.PushLayer(CreateUnique<DemoLayer>());

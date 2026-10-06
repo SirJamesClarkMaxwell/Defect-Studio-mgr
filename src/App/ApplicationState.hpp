@@ -28,6 +28,10 @@ namespace DefectStudio
 		std::optional<bool> logToFileOverride;
 		std::optional<Path> logFilePathOverride;
 		std::optional<bool> traceEventsOverride;
+		// `--project=<directory>`: opened at startup ahead of the recent-projects list. Unset when the
+		// argument is absent or empty. A directory that fails to load is reported and startup falls
+		// back to the recents rule, never to a half-open project.
+		std::optional<Path> startupProjectDirectory;
 	};
 
 	struct ApplicationRuntimeState

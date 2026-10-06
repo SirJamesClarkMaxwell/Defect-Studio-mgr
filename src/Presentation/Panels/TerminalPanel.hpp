@@ -25,6 +25,7 @@ namespace DefectStudio
 		explicit TerminalPanel(std::string title = "Terminal", bool visibleByDefault = false);
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Console; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Entry points for keybound commands (EditorLayer) - see keybindings.yaml

@@ -140,7 +140,7 @@ namespace DefectStudio
 		// ImportError convention those scripts use, so a venv without puntukas installed just
 		// silently skips this instead of dumping a traceback the moment the console opens.
 		static constexpr const char *kPuntukasSetupLines[] = {
-			"try:", "    import puntukas", "    from puntukas.vasp import VaspOutput, Poscar", "except ImportError:",
+			"try:", "    import puntukas", "    from puntukas.core import Atoms", "    from puntukas.vasp import VaspOutput", "except ImportError:",
 			"    pass"};
 		std::string puntukasSetup;
 		for (const char *line : kPuntukasSetupLines)
@@ -153,7 +153,7 @@ namespace DefectStudio
 		appendSegment(std::move(puntukasSetup), true);
 		addKnownIdentifier("puntukas");
 		addKnownIdentifier("VaspOutput");
-		addKnownIdentifier("Poscar");
+		addKnownIdentifier("Atoms");
 
 		if (m_ProjectRoot.empty() && m_ProjectRoots.empty())
 			return;

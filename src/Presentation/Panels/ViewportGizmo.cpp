@@ -1,12 +1,16 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportGizmo.hpp"
+#include "Presentation/Panels/ViewportRotateGizmo.hpp"
+#include "Presentation/Panels/ViewportTranslateGizmo.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <optional>
 #include <utility>
+
+#include <glm/gtc/constants.hpp>
 
 #include "Presentation/Panels/ViewportModalTransform.hpp"
 #include "Renderer/Scene/ViewportNavigationMath.hpp"
@@ -23,6 +27,10 @@ namespace DefectStudio
 	{
 		constexpr float kPickMinDistance = 20.0f;
 		constexpr float kPickMaxDistance = 100.0f;
+		constexpr float kDefaultTransformGizmoSize = 100.0f;
+		constexpr float kScaleHandleLength = 100.0f;
+		constexpr float kScaleHandleHalfExtent = 7.0f;
+		constexpr float kScaleCenterRadius = 12.0f;
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
@@ -130,33 +138,63 @@ namespace DefectStudio
 			return axes;
 		}
 
-		void DrawAxisHandles(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes)
+		void ScaleRotateGizmoGeometry(
+			RotateGizmoGeometry &geometry, const glm::vec2 &pivot, const float gizmoScale)
+		{
+			geometry.trackballRadius *= gizmoScale;
+			for (RotateArcGeometry &arc : geometry.arcs)
+				for (glm::vec2 &point : arc.points)
+					point = pivot + (point - pivot) * gizmoScale;
+		}
+
+		void ScaleTranslatePlaneGeometry(
+			std::array<TranslatePlaneGeometry, 3> &planes,
+			const glm::vec2 &pivot,
+			const float gizmoScale)
+		{
+			for (TranslatePlaneGeometry &plane : planes)
+				if (plane.valid)
+					for (glm::vec2 &corner : plane.corners)
+						corner = pivot + (corner - pivot) * gizmoScale;
+		}
+
+		void DrawAxisHandles(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes,
+			const ImVec2 &imageOrigin, const ImVec2 &imageSize, const float gizmoScale)
 		{
 			ImDrawList &drawList = *ImGui::GetWindowDrawList();
+			drawList.PushClipRect(
+				imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
 			for (int axis = 0; axis < 3; ++axis)
 			{
 				if (!axes[axis].valid)
 					continue;
 				const glm::vec2 direction = axes[axis].direction;
 				const glm::vec2 perpendicular(-direction.y, direction.x);
-				const glm::vec2 tip = pivot + direction * kPickMaxDistance;
-				const glm::vec2 headBase = tip - direction * 16.0f;
-				drawList.AddLine(ImVec2(pivot.x, pivot.y), ImVec2(headBase.x, headBase.y), kAxisColors[axis], 3.5f);
+				const glm::vec2 tip = pivot + direction * kPickMaxDistance * gizmoScale;
+				const glm::vec2 headBase = tip - direction * 16.0f * gizmoScale;
+				drawList.AddLine(
+					ImVec2(pivot.x, pivot.y), ImVec2(headBase.x, headBase.y), ViewportTransformAxisColor(axis),
+					3.5f * gizmoScale);
 				drawList.AddTriangleFilled(
-					ImVec2(tip.x, tip.y), ImVec2(headBase.x + perpendicular.x * 6.0f, headBase.y + perpendicular.y * 6.0f),
-					ImVec2(headBase.x - perpendicular.x * 6.0f, headBase.y - perpendicular.y * 6.0f), kAxisColors[axis]);
+					ImVec2(tip.x, tip.y), ImVec2(headBase.x + perpendicular.x * 6.0f * gizmoScale,
+						headBase.y + perpendicular.y * 6.0f * gizmoScale),
+					ImVec2(headBase.x - perpendicular.x * 6.0f * gizmoScale,
+						headBase.y - perpendicular.y * 6.0f * gizmoScale),
+					ViewportTransformAxisColor(axis));
 			}
-			drawList.AddCircleFilled(ImVec2(pivot.x, pivot.y), 5.0f, IM_COL32(235, 235, 235, 255));
+			drawList.AddCircleFilled(ImVec2(pivot.x, pivot.y), 5.0f * gizmoScale, IM_COL32(235, 235, 235, 255));
+			drawList.PopClipRect();
 		}
 
 		[[nodiscard]] int HitTestAxis(
-			const glm::vec2 &mouse, const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes)
+			const glm::vec2 &mouse, const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes,
+			const float gizmoScale)
 		{
 			const glm::vec2 fromPivot = mouse - pivot;
 			const float radial = glm::length(fromPivot);
-			if (radial < kPickMinDistance || radial > kPickMaxDistance)
+			if (radial < kPickMinDistance * gizmoScale || radial > kPickMaxDistance * gizmoScale)
 				return -1;
-			float bestDistance = 16.0f;
+			float bestDistance = 16.0f * gizmoScale;
 			int bestAxis = -1;
 			for (int axis = 0; axis < 3; ++axis)
 			{
@@ -173,7 +211,48 @@ namespace DefectStudio
 			return bestAxis;
 		}
 
+		void DrawScaleGizmo(const glm::vec2 &pivot, const std::array<AxisProjection, 3> &axes, int hoveredAxis,
+			bool hoveringCenter, const ImVec2 &imageOrigin, const ImVec2 &imageSize, const float gizmoScale)
+		{
+			ImDrawList &drawList = *ImGui::GetWindowDrawList();
+			drawList.PushClipRect(
+				imageOrigin, ImVec2(imageOrigin.x + imageSize.x, imageOrigin.y + imageSize.y), true);
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (!axes[axis].valid)
+					continue;
+				const glm::vec2 direction = axes[axis].direction;
+				const glm::vec2 perpendicular(-direction.y, direction.x);
+				const glm::vec2 tip = pivot + direction * kScaleHandleLength * gizmoScale;
+				const glm::vec2 shaftEnd = tip - direction * (kScaleHandleHalfExtent + 2.0f) * gizmoScale;
+				const ImU32 color = axis == hoveredAxis
+					? IM_COL32(255, 200, 60, 240)
+					: ViewportTransformAxisColor(axis);
+				drawList.AddLine(ImVec2(pivot.x, pivot.y), ImVec2(shaftEnd.x, shaftEnd.y), color, 3.5f * gizmoScale);
+				const glm::vec2 along = direction * kScaleHandleHalfExtent * gizmoScale;
+				const glm::vec2 across = perpendicular * kScaleHandleHalfExtent * gizmoScale;
+				const std::array<ImVec2, 4> box = {
+					ImVec2((tip - along - across).x, (tip - along - across).y),
+					ImVec2((tip + along - across).x, (tip + along - across).y),
+					ImVec2((tip + along + across).x, (tip + along + across).y),
+					ImVec2((tip - along + across).x, (tip - along + across).y)};
+				drawList.AddTriangleFilled(box[0], box[1], box[2], color);
+				drawList.AddTriangleFilled(box[0], box[2], box[3], color);
+				for (int corner = 0; corner < 4; ++corner)
+					drawList.AddLine(box[corner], box[(corner + 1) % 4], IM_COL32(30, 30, 30, 220), gizmoScale);
+			}
+			drawList.AddCircleFilled(
+				ImVec2(pivot.x, pivot.y), kScaleCenterRadius * gizmoScale,
+				hoveringCenter ? IM_COL32(255, 200, 60, 240) : IM_COL32(235, 235, 235, 255));
+			drawList.PopClipRect();
+		}
+
 	} // namespace
+
+	ImU32 ViewportTransformAxisColor(const int axis)
+	{
+		return axis >= 0 && axis < static_cast<int>(kAxisColors.size()) ? kAxisColors[axis] : 0;
+	}
 
 	bool RenderTransformGizmo(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered,
@@ -183,98 +262,106 @@ namespace DefectStudio
 			return true;
 		if (windowState.camera == nullptr)
 			return false;
+		const float gizmoScale = std::max(
+			layer.GetGlobalSettings().viewport.transformGizmoSize / kDefaultTransformGizmoSize, 0.01f);
 
-		SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState);
-		if (SceneTransformPivotPositions(snapshot).empty())
+		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(windowState);
+		if (SceneTransformPivotPositions(windowState, snapshot).empty())
 		{
 			windowState.gizmoDragActive = false;
 			return false;
 		}
 
-		const bool singleArrowOnly = snapshot.atoms.empty() && snapshot.labels.empty() && snapshot.arrows.size() == 1;
-		if (singleArrowOnly)
-		{
-			const std::size_t index = snapshot.arrows.front().index;
-			if (windowState.sceneArrowGizmoActiveArrowIndex != index)
-			{
-				windowState.sceneArrowGizmoActiveArrowIndex = index;
-				windowState.sceneArrowGizmoActiveTarget = RendererWindowState::SceneArrowDragTarget::Both;
-			}
-		}
-
+		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
 		const ModalTransformOp operation = windowState.gizmoOperation == GizmoOperation::Rotate
 			? ModalTransformOp::Rotate
 			: windowState.gizmoOperation == GizmoOperation::Scale
 				? ModalTransformOp::Scale
 				: ModalTransformOp::Translate;
-		snapshot = CaptureSceneTransformSelectionForOperation(windowState, operation);
-		const std::vector<glm::vec3> positions = SceneTransformPivotPositions(snapshot);
+		const std::vector<glm::vec3> anchorPositions = SceneTransformAnchorPositions(windowState, snapshot);
 		const std::optional<glm::vec3> cursor = windowState.cursor3DPlaced
 			? std::optional<glm::vec3>(windowState.cursor3DPosition)
 			: std::nullopt;
-		const glm::vec3 pivot = ComputeTransformPivot(windowState.transformPivotMode, positions, cursor);
-		const glm::mat4 viewProjection =
-			windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		const std::optional<glm::vec2> pivotScreen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, pivot);
-		if (!pivotScreen.has_value())
+		const glm::vec3 gizmoPosition = ComputeTransformPivot(windowState.transformPivotMode, anchorPositions, cursor);
+		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
+		const std::optional<glm::vec2> gizmoScreen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, gizmoPosition);
+		if (!gizmoScreen.has_value())
 			return false;
 
-		const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-		if (singleArrowOnly && windowState.gizmoOperation == GizmoOperation::Translate)
-		{
-			using Target = RendererWindowState::SceneArrowDragTarget;
-			const ArrowTransformStart &arrow = snapshot.arrows.front();
-			const std::array<std::pair<glm::vec3, Target>, 3> points = {{
-				{arrow.start, Target::Start}, {arrow.end, Target::End}, {(arrow.start + arrow.end) * 0.5f, Target::Both}}};
-			for (const auto &[world, target] : points)
-			{
-				if (target == windowState.sceneArrowGizmoActiveTarget)
-					continue;
-				const std::optional<glm::vec2> screen = ProjectAbsolute(viewProjection, imageOrigin, imageSize, world);
-				if (!screen.has_value())
-					continue;
-				ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(screen->x, screen->y), 5.0f, IM_COL32(190, 190, 190, 190));
-				if (hovered && glm::distance(mouse, *screen) <= 10.0f)
-				{
-					if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-						windowState.sceneArrowGizmoActiveTarget = target;
-					return true;
-				}
-			}
-		}
-
-		const bool pointerOnGeometry = IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
+		// Atom picking must not swallow a handle belonging to the selected atom(s). Scene-object
+		// gizmos keep the old overlap guard; path-edit markers already get first refusal in the chain.
+		const bool pointerOnGeometry = !HasAtomTransformTargets(snapshot) &&
+			IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
+		const TransformBases bases = SceneTransformBases(windowState, snapshot);
+		const OrientationAxes worldAxes =
+			ResolveNormalizedOrientationAxes(SceneTransformOrientation(windowState.transformOrientation, snapshot), bases);
+		const std::array<AxisProjection, 3> axes = ProjectAxes(
+			viewProjection, imageOrigin, imageSize, gizmoPosition, *gizmoScreen, worldAxes);
 		if (windowState.gizmoOperation == GizmoOperation::Rotate)
 		{
-			const float radial = glm::length(mouse - *pivotScreen);
-			const bool hoveringRing = hovered && !pointerOnGeometry &&
-				radial >= kPickMinDistance && radial <= kPickMaxDistance;
-			ImGui::GetWindowDrawList()->AddCircle(
-				ImVec2(pivotScreen->x, pivotScreen->y), kPickMaxDistance,
-				hoveringRing ? IM_COL32(255, 200, 60, 220) : IM_COL32(235, 235, 235, 200), 48, 2.5f);
-			if (hoveringRing && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			RotateGizmoGeometry geometry = BuildRotateGizmoGeometry(
+				*windowState.camera, viewProjection, imageOrigin, imageSize, gizmoPosition, *gizmoScreen, worldAxes);
+			ScaleRotateGizmoGeometry(geometry, *gizmoScreen, gizmoScale);
+			const int hoveredAxis = pointerOnGeometry ? -1 : HitTestRotateArcs(geometry, mouse);
+			const float radial = glm::length(mouse - *gizmoScreen);
+			const bool hoveringTrackball = hovered && !pointerOnGeometry &&
+				radial >= geometry.trackballRadius - 7.0f * gizmoScale &&
+				radial <= geometry.trackballRadius + 7.0f * gizmoScale;
+			DrawRotateGizmo(geometry, *gizmoScreen, hoveredAxis, hoveringTrackball, imageOrigin, imageSize);
+			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+				(hoveredAxis >= 0 || hoveringTrackball))
 			{
-				BeginViewportModalTransform(windowState, ModalTransformOp::Rotate, mouse, std::nullopt, true);
+				BeginViewportModalTransform(
+					windowState, ModalTransformOp::Rotate, mouse,
+					hoveredAxis >= 0 ? std::optional<int>(hoveredAxis) : std::nullopt, true);
 				return true;
 			}
-			return hoveringRing;
+			windowState.gizmoDragActive = false;
+			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringTrackball);
+		}
+		if (windowState.gizmoOperation == GizmoOperation::Scale)
+		{
+			const float radial = glm::length(mouse - *gizmoScreen);
+			const bool hoveringCenter = hovered && !pointerOnGeometry && radial <= kScaleCenterRadius * gizmoScale;
+			const int hoveredAxis = pointerOnGeometry || hoveringCenter
+				? -1 : HitTestAxis(mouse, *gizmoScreen, axes, gizmoScale);
+			DrawScaleGizmo(*gizmoScreen, axes, hoveredAxis, hoveringCenter, imageOrigin, imageSize, gizmoScale);
+			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+				(hoveredAxis >= 0 || hoveringCenter))
+			{
+				BeginViewportModalTransform(
+					windowState, ModalTransformOp::Scale, mouse,
+					hoveredAxis >= 0 ? std::optional<int>(hoveredAxis) : std::nullopt, true);
+				return true;
+			}
+			windowState.gizmoDragActive = false;
+			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringCenter);
 		}
 
-		TransformBases bases;
-		bases.local = SceneTransformLocalBasis(snapshot);
-		bases.lattice = windowState.structure.lattice;
-		const OrientationAxes worldAxes = ResolveNormalizedOrientationAxes(windowState.transformOrientation, bases);
-		const std::array<AxisProjection, 3> axes =
-			ProjectAxes(viewProjection, imageOrigin, imageSize, pivot, *pivotScreen, worldAxes);
-		DrawAxisHandles(*pivotScreen, axes);
-		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *pivotScreen, axes);
-		if (hovered && hoveredAxis >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+		std::array<glm::vec2, 3> axisDirections{};
+		for (int axis = 0; axis < 3; ++axis)
+			if (axes[axis].valid)
+				axisDirections[axis] = axes[axis].direction;
+		auto planes = BuildTranslatePlaneGeometry(*gizmoScreen, axisDirections);
+		ScaleTranslatePlaneGeometry(planes, *gizmoScreen, gizmoScale);
+		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *gizmoScreen, axes, gizmoScale);
+		const int hoveredPlaneAxis = pointerOnGeometry || hoveredAxis >= 0
+			? -1
+			: HitTestTranslatePlaneHandles(mouse, planes);
+		DrawTranslatePlaneHandles(planes, hoveredPlaneAxis, imageOrigin, imageSize);
+		DrawAxisHandles(*gizmoScreen, axes, imageOrigin, imageSize, gizmoScale);
+		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hoveredAxis >= 0)
 		{
 			BeginViewportModalTransform(windowState, operation, mouse, hoveredAxis, true);
 			return true;
 		}
+		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hoveredPlaneAxis >= 0)
+		{
+			BeginViewportModalTransform(windowState, operation, mouse, hoveredPlaneAxis, true, true);
+			return true;
+		}
 
 		windowState.gizmoDragActive = false;
-		return hoveredAxis >= 0;
+		return hovered && (hoveredAxis >= 0 || hoveredPlaneAxis >= 0);
 	}
 } // namespace DefectStudio

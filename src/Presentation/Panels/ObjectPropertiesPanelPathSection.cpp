@@ -1,0 +1,226 @@
+﻿#include "Core/dspch.hpp"
+
+#include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
+
+#include <numbers>
+#include <optional>
+#include <type_traits>
+
+#include <imgui.h>
+
+#include "Core/Logging/Logger.hpp"
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
+#include "Presentation/Panels/ScenePathEditorWidget.hpp"
+#include "Presentation/Panels/SceneOrientationControls.hpp"
+#include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Presentation/Panels/ScenePathBindingOperations.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
+#include "Renderer/Path/PathSystem.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
+
+namespace DefectStudio
+{
+	namespace
+	{
+		// Exact-value numeric fields that commit once, when a field is left after an edit.
+		struct NumericFieldCommit
+		{
+			bool active = false;
+			bool commit = false;
+
+			void Float(const char *label, float &value)
+			{
+				ImGui::InputFloat(label, &value, 0.0f, 0.0f, "%.9g");
+				Track();
+			}
+			void Double(const char *label, double &value)
+			{
+				ImGui::InputDouble(label, &value, 0.0, 0.0, "%.9g");
+				Track();
+			}
+
+		private:
+			void Track()
+			{
+				active |= ImGui::IsItemActive();
+				commit |= ImGui::IsItemDeactivatedAfterEdit();
+			}
+		};
+
+		template <typename T>
+		bool ReportPathEditResult(const Result<T> &result)
+		{
+			if (result)
+				return true;
+			DS_LOG_WARN("Path edit failed: {}", result.Error().technicalDetails);
+			return false;
+		}
+
+		void DrawPathNodeBinding(RendererWindowState &windowState)
+		{
+			const Result<PathBinding> current = ResolveActiveScenePathNodeBinding(windowState);
+			if (!current)
+				return;
+			const ScenePath &path = *windowState.paths->Store().Find(windowState.pathEdit.Path());
+			const PathElementId active = windowState.pathEdit.ActiveElement();
+			const bool endpoint = active == path.nodes.front().id || active == path.nodes.back().id;
+			ImGui::SeparatorText("Binding");
+			std::visit([&](const auto &binding) {
+				using Binding = std::decay_t<decltype(binding)>;
+				if constexpr (std::is_same_v<Binding, PathBinding::Free>)
+					ImGui::TextUnformatted("Free");
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
+				{
+					const std::string element = binding.atomIndex < windowState.structure.atoms.size()
+						? windowState.structure.atoms[binding.atomIndex].element : "missing";
+					ImGui::Text("Atom #%zu (%s)", binding.atomIndex, element.c_str());
+				}
+				else if constexpr (std::is_same_v<Binding, PathBinding::CopyVacancy>)
+					ImGui::Text("Vacancy %zu", binding.vacancyIndex);
+				else if constexpr (std::is_same_v<Binding, PathBinding::BondMidpoint>)
+					ImGui::Text("Bond midpoint #%zu-#%zu", binding.atomA, binding.atomB);
+				else
+					ImGui::TextUnformatted("Object origin");
+			}, current.Value().value);
+			const ResolvedNodes resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(windowState));
+			for (const PathDiagnostic &diagnostic : resolved.diagnostics)
+				if (diagnostic.element == active)
+					ImGui::TextWrapped("Warning: %s", diagnostic.message.c_str());
+
+			const std::size_t atomCount = windowState.selectedAtomIndices.size();
+			const bool canBind = atomCount == 1 || atomCount == 2;
+			ImGui::BeginDisabled(!canBind);
+			const bool bind = ImGui::Button("Bind to selected atom(s)");
+			ImGui::EndDisabled();
+			if (!canBind && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Select one atom or Ctrl-click two atoms before selecting the path.");
+			if (bind)
+			{
+				ReportPathEditResult(BindActiveScenePathNodeToSelectedAtoms(windowState));
+				return;
+			}
+
+			const Result<SceneObjectId> objectTarget = ResolveSelectedScenePathBindingObject(windowState);
+			ImGui::BeginDisabled(!objectTarget);
+			const bool bindObject = ImGui::Button("Bind to object origin");
+			ImGui::EndDisabled();
+			if (!objectTarget && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("%s", objectTarget.Error().userMessage.c_str());
+			if (bindObject)
+			{
+				ReportPathEditResult(BindActiveScenePathNodeToSelectedObjectOrigin(windowState));
+				return;
+			}
+
+			// InputScalar does not support EnterReturnsTrue (an ImGui assert), so the typed value lives in
+			// a draft while a field is active and is committed when the field is left after an edit.
+			//   ponytail: one draft for every window; only the focused panel can have an active field.
+			static std::optional<PathBinding> draft;
+			PathBinding edited = draft.value_or(current.Value());
+			if (std::holds_alternative<PathBinding::Free>(edited.value))
+				return;
+			NumericFieldCommit fields;
+			std::visit([&](auto &binding) {
+				using Binding = std::decay_t<decltype(binding)>;
+				if constexpr (!std::is_same_v<Binding, PathBinding::Free>)
+				{
+					fields.Float("Offset X", binding.offset.x);
+					fields.Float("Offset Y", binding.offset.y);
+					fields.Float("Offset Z", binding.offset.z);
+					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition> || std::is_same_v<Binding, PathBinding::CopyVacancy>)
+						if (endpoint)
+							fields.Float("Buffer", binding.buffer);
+				}
+			}, edited.value);
+			draft = fields.active && !fields.commit ? std::optional<PathBinding>(edited) : std::nullopt;
+			if (fields.commit)
+				ReportPathEditResult(SetActiveScenePathNodeBinding(windowState, edited));
+			ImGui::TextDisabled("Enter, Tab or clicking away commits an exact value.");
+			if (ImGui::Button("Detach (keep position)"))
+				ReportPathEditResult(DetachActiveScenePathNodeKeepingPosition(windowState));
+		}
+
+		void DrawPathEditActions(RendererWindowState &windowState)
+		{
+			if (!windowState.pathEdit.IsActive())
+				return;
+
+			ImGui::SeparatorText("Path Edit");
+			ImGui::TextDisabled("1 Nodes/Handles   2 Segments   3 Whole path");
+			ImGui::TextDisabled("E Extend   Delete Remove nodes   V Handle type");
+
+			if (ImGui::Button("Extend endpoint"))
+				ReportPathEditResult(ExtendSelectedScenePathEnd(windowState));
+			ImGui::SameLine();
+			if (ImGui::Button("Insert midpoint"))
+				ReportPathEditResult(InsertSelectedScenePathSegment(windowState));
+			if (ImGui::Button("Delete nodes"))
+				ReportPathEditResult(DeleteSelectedScenePathNodes(windowState));
+			ImGui::SameLine();
+			if (ImGui::Button("Reverse path"))
+				ReportPathEditResult(ReverseEditedScenePath(windowState));
+
+			ImGui::TextUnformatted("Bezier handle type");
+			for (const auto &[label, type] : {
+				std::pair{"Free", BezierHandleType::Free},
+				std::pair{"Aligned", BezierHandleType::Aligned},
+				std::pair{"Vector", BezierHandleType::Vector},
+				std::pair{"Auto", BezierHandleType::Auto}})
+			{
+				if (ImGui::SmallButton(label))
+					ReportPathEditResult(SetSelectedScenePathHandleType(windowState, type));
+				if (type != BezierHandleType::Auto)
+					ImGui::SameLine();
+			}
+
+			DrawPathNodeBinding(windowState);
+			const Result<PathArcParameters> resolved = ResolveSelectedScenePathArc(windowState);
+			if (!resolved)
+				return;
+
+			ImGui::SeparatorText("Circular arc");
+			// Same draft rule as the binding offsets above.
+			static std::optional<PathArcParameters> draft;
+			PathArcParameters edited = draft.value_or(resolved.Value());
+			constexpr double kRadiansPerDegree = std::numbers::pi_v<double> / 180.0;
+			double startDegrees = edited.startAngleRadians / kRadiansPerDegree;
+			double sweepDegrees = edited.signedSweepRadians / kRadiansPerDegree;
+			NumericFieldCommit fields;
+			fields.Double("Center X", edited.center.x);
+			fields.Double("Center Y", edited.center.y);
+			fields.Double("Center Z", edited.center.z);
+			fields.Double("Axis X", edited.axis.x);
+			fields.Double("Axis Y", edited.axis.y);
+			fields.Double("Axis Z", edited.axis.z);
+			fields.Double("Radius", edited.radius);
+			fields.Double("Start angle (deg)", startDegrees);
+			fields.Double("Sweep (deg)", sweepDegrees);
+			edited.startAngleRadians = startDegrees * kRadiansPerDegree;
+			edited.signedSweepRadians = sweepDegrees * kRadiansPerDegree;
+			draft = fields.active && !fields.commit ? std::optional<PathArcParameters>(edited) : std::nullopt;
+			if (fields.commit)
+				ReportPathEditResult(ApplySelectedScenePathArc(windowState, edited));
+			ImGui::TextDisabled("Enter, Tab or clicking away commits an exact value.");
+		}
+	} // namespace
+
+	void DrawSelectedScenePathSection(RendererWindowState &windowState)
+	{
+		ImGui::Separator();
+		DrawScenePathTransformEditor(windowState);
+		DrawSceneDefectPlacementControls(windowState);
+		DrawScenePathEditor(windowState);
+		DrawPathEditActions(windowState);
+		if (ImGui::Button("Delete##SelectedPath"))
+			ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Delete);
+		ImGui::SameLine();
+		if (ImGui::Button("Duplicate##SelectedPath"))
+			ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Duplicate);
+		ImGui::SameLine();
+		if (ImGui::Button("Copy##SelectedPath"))
+			ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Copy);
+		ImGui::SameLine();
+		if (ImGui::Button("Paste##SelectedPath"))
+			ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Paste);
+	}
+}

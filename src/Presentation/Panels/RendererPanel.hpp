@@ -6,7 +6,11 @@
 
 #include <imgui.h>
 
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/RendererTabChrome.hpp"
+#include "Presentation/Operators/SceneOperatorRegistry.hpp"
+#include "Presentation/Panels/OperatorRedoPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
 
 namespace DefectStudio
@@ -16,7 +20,11 @@ namespace DefectStudio
 	class DomainLayer;
 	class EventBus;
 
-	class RendererPanel final : public IPanel
+	// EventReceiver is here for exactly one subscription: Ctrl+W's
+	// RendererEvents::Windows::CloseRequested. It lands here rather than in RendererLayer because
+	// closing a window is a UI decision with a prompt in front of it, and because this panel is
+	// already the one place that owns a deferred close list.
+	class RendererPanel final : public IPanel, public EventReceiver
 	{
 	public:
 		explicit RendererPanel(
@@ -27,14 +35,25 @@ namespace DefectStudio
 			WeakRef<DomainLayer> domainLayer,
 			std::string title = "Renderer",
 			bool visibleByDefault = true);
+		// EventReceiver holds move-only SubscriptionHandles, so the implicit copy constructor is
+		// deleted and Clone() no longer compiles without this. Same reason and same shape as
+		// LoggingPanel's: copy the state, re-subscribe rather than copy the subscription.
+		RendererPanel(const RendererPanel &other);
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Scene; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:
+		void bindWindowEvents();
 		void render(float deltaTime);
+		// `activeWindowId` is ResolveActiveRendererWindowId's answer for this frame, passed down so
+		// the loop can record the active tab's viewport rectangle without resolving it N times.
 		void renderStructureWindow(
-			RendererWindowState &windowState, float deltaTime, std::vector<std::string> &windowsToClose);
+			RendererWindowState &windowState,
+			float deltaTime,
+			std::vector<std::string> &windowsToClose,
+			const std::string &activeWindowId);
 		void handleMeasureToolClick(RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered);
 		// Region select, its hit-tests and the label/arrow gizmos moved to ViewportSelection.hpp -
 		// the creation panes are not RendererPanel windows, so as members none of it ran there.
@@ -51,10 +70,6 @@ namespace DefectStudio
 			const RendererWindowState &windowState, float relX, float relY) const;
 		void renderViewportContextMenu(
 			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
-		// Blender-style "adjust last operation" popup for a just-added SceneArrow - see
-		// RendererWindowState::sceneArrowQuickEditActive.
-		void renderSceneArrowQuickEditPanel(
-			RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);
 
 	private:
 		RendererLayer &m_Layer;
@@ -62,13 +77,15 @@ namespace DefectStudio
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		WeakRef<DomainLayer> m_DomainLayer;
+		OperatorRedoPanel m_OperatorRedoPanel;
+		SceneOperatorRegistry m_OperatorRegistry;
 		std::unordered_map<std::string, ImVec2> m_LastMousePositions;
+		RendererTabCloseCoordinator m_TabClose;
 		// Snapshot of the right-click's world position, taken the frame the viewport context menu
 		// opens (ImGui::IsWindowAppearing()) - "Set 3D cursor here" reads it later, when the user
 		// actually clicks that menu item and the live mouse position no longer points at the click.
 		// Only one context menu can be open at a time app-wide, so a single field is enough.
 		glm::vec3 m_ContextMenuWorldPosition = glm::vec3(0.0f);
-
 		// Add Atom popup (drawAddAtomPopup) - only one instance can be open app-wide, so single
 		// fields are enough, same reasoning as m_ContextMenuWorldPosition above. Doubles as the
 		// window's own open/closed state (passed as ImGui::Begin's p_open), not just a one-shot

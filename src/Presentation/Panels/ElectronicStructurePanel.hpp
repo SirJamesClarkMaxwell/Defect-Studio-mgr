@@ -23,6 +23,7 @@ namespace DefectStudio
 			bool visibleByDefault = false);
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:

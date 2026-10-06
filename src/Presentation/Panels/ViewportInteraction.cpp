@@ -6,14 +6,22 @@
 #include "Presentation/Panels/ViewportInteraction.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #include <imgui.h>
 
 #include "Presentation/Panels/ViewportGizmo.hpp"
+#include "Presentation/Panels/ViewportModalTransform.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
+#include "Presentation/Panels/ViewportPathInsert.hpp"
+#include "Presentation/Panels/ViewportTextEditor.hpp"
+#include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
 
 namespace DefectStudio
 {
@@ -22,9 +30,13 @@ namespace DefectStudio
 		const ImVec2 &imageOrigin,
 		const ImVec2 &imageSize,
 		bool hovered,
+		const float horizontalToolbarOffset,
 		RendererLayer &layer,
 		const WeakRef<CommandRegistry> &commandRegistry)
 	{
+		RefreshAnchoredFreeLabels(windowState);
+		ResolveAnchoredOrbitals(windowState);
+		ResolveAnchoredScenePlanes(windowState);
 		// Keeps each label entity's TransformComponent current before the gizmo/hit-test below read
 		// it - anchors move every frame with the atoms they measure (gizmo drag, nudge, relaxation
 		// playback), so a stale transform would visibly lag a frame behind the label's own draw.
@@ -34,17 +46,57 @@ namespace DefectStudio
 		// have no mouse hit-test of their own, so short-circuiting them behind an earlier gizmo's
 		// mouse-capture would silently drop them whenever the mouse happens to be hovering that
 		// gizmo's pick band.
+		if (IsViewportTextEditorActive(windowState))
+		{
+			DrawViewportTextEditor(windowState, imageOrigin, imageSize);
+			return true;
+		}
+		if (ImGui::GetIO().WantTextInput)
+			return true;
+		if (HandleViewportPathInsert(windowState, imageOrigin, imageSize, hovered))
+			return true;
+		if (hovered && !windowState.pathEdit.IsActive() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
+			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered))
+			return true;
+		if (windowState.activeSelectionTool == SelectionToolMode::Text)
+			return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
+				HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered);
+		// Ctrl+D duplicates (atoms through the keymap command, scene objects in the shortcut handler
+		// below) and the copies then follow the mouse, like Blender's Shift+D. G starts a frame later,
+		// once the copies are the selection; Escape / right click leaves them where they were made.
+		if (std::exchange(windowState.duplicateMovePending, false) && !windowState.modalTransform.has_value())
+			BeginViewportModalTransform(
+				windowState, ModalTransformOp::Translate, glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y));
+		const ImGuiIO &io = ImGui::GetIO();
+		if (hovered && io.KeyCtrl && !io.KeyShift && !io.KeyAlt && !windowState.pathEdit.IsActive() &&
+			ImGui::IsKeyPressed(ImGuiKey_D, false))
+			windowState.duplicateMovePending = true;
 		HandlePinnedMeasurementKeyboardShortcuts(windowState, hovered, layer);
 
 		// Short-circuiting `||` is intentional (unlike the keyboard call above): each function's
 		// mouse click/drag-start logic must NOT also run once an earlier one already claimed this
 		// frame's click - e.g. clicking an atom gizmo handle must not also be reinterpreted as a pin
 		// pick by HandlePinnedMeasurementInteraction's own hit-test underneath it.
-		return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, layer) ||
+		// Region tools own the click; annotation pickers must not consume their drag start.
+		if (windowState.activeSelectionTool == SelectionToolMode::Box ||
+			windowState.activeSelectionTool == SelectionToolMode::Circle)
+			return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
+				RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry);
+		const bool editedPathMarkerClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+			windowState.pathEdit.IsActive() &&
+			IsScenePathMarkerUnderMouse(windowState, imageOrigin, imageSize);
+		return RenderViewportNavigationGizmo(
+			windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
+			// A path marker gets first refusal in Edit Mode. This keeps the smaller marker hitbox ahead
+			// of the gizmo's longer axis hitbox, while non-marker clicks still reach the gizmo below.
+			(editedPathMarkerClicked && HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered)) ||
 			RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry) ||
 			HandlePinnedMeasurementInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleFreeLabelInteraction(windowState, imageOrigin, imageSize, hovered) ||
-			HandleSceneArrowInteraction(windowState, imageOrigin, imageSize, hovered);
+			HandleVacancyInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleScenePlaneInteraction(windowState, imageOrigin, imageSize, hovered);
 	}
 
 	bool DrawAndDispatchSelectionTools(

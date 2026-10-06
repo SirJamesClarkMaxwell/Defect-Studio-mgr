@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -18,6 +20,7 @@
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 
 namespace DefectStudio
 {
@@ -38,6 +41,9 @@ namespace DefectStudio
 	{
 		glm::vec4 positionRadius = glm::vec4(0.0f);
 		glm::vec4 color = glm::vec4(1.0f);
+		float selected = 0.0f;
+		float outlineExpansion = 0.0f;
+		std::size_t sourceIndex = 0;
 	};
 
 	struct OpenGlBondInstance
@@ -45,6 +51,10 @@ namespace DefectStudio
 		glm::mat4 model = glm::mat4(1.0f);
 		glm::vec4 colorA = glm::vec4(1.0f);
 		glm::vec4 colorB = glm::vec4(1.0f);
+		float selected = 0.0f;
+		float outlineExpansion = 0.0f;
+		glm::vec3 outlineCenter = glm::vec3(0.0f);
+		std::size_t sourceIndex = 0;
 	};
 
 	// One glyph quad. aWorldCenter repeats across every glyph of the same label (the string's
@@ -72,50 +82,59 @@ namespace DefectStudio
 		// .frag doesn't read them), same sharing rationale as outlineColor/outlineWidth/cornerRadius.
 		glm::vec3 strokeColor = glm::vec3(0.0f);
 		float strokeWidth = 0.0f;
+		float selected = 0.0f;
 	};
 
-	// One SceneArrow Arrow2D quad. right/up are fully resolved world-space basis vectors, computed
-	// CPU-side in renderSceneArrows/ComputeArrowQuadBasis (camera-facing-plane projection of the
-	// arrow direction for Billboard, fixed world-plane axes for FixedPlane) - so unlike
-	// OpenGlLabelInstance's billboard math, arrow_quad.vert needs no camera uniform of its own.
-	// halfSize/outlineWidth/headHalfWidth/headLength all arrive here already converted from
-	// SceneArrow::ArrowStyle's screen-space pixel units to this arrow's own local world-space scale
-	// (renderSceneArrows does that conversion via a projection probe, same idea as
-	// RendererPanel::handleFreeLabelInteraction's pixel<->world drag conversion) - the shader itself
-	// stays entirely unit-agnostic, same as before.
-	struct OpenGlArrowQuadInstance
+	struct OpenGlSceneOrbitalMeshCache
 	{
-		glm::vec3 worldCenter = glm::vec3(0.0f);
-		glm::vec3 right = glm::vec3(1.0f, 0.0f, 0.0f);
-		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-		glm::vec2 halfSize = glm::vec2(0.0f); // x = half arrow length, y = half shaft width
-		glm::vec4 color = glm::vec4(1.0f);
-		glm::vec3 outlineColor = glm::vec3(0.0f);
-		float outlineWidth = 0.0f;
-		float headHalfWidth = 0.0f; // 0 collapses the SDF union's head triangle to a point (no head)
-		float headLength = 0.0f;
-	};
-
-	// One SceneArrow Arrow3D's welded shaft+head mesh (see BuildWeldedArrowMesh) - unlike bonds'
-	// shared unit m_CylinderMesh/m_ConeMesh, each arrow's mesh has its own proportions (shaftRadius/
-	// headRadius/headLength/length all vary per-arrow), so it can't be instanced from one shared
-	// buffer - every arrow gets its own small VAO/VBO/EBO, indexed by its position in
-	// RendererWindowState::sceneArrows. Rebuilt only when the 4 params below actually change (a
-	// position/orientation-only drag reuses the same geometry through the draw transform) - the
-	// negative defaults guarantee the very first frame for a slot always rebuilds.
-	struct OpenGlSceneArrowMeshCache
-	{
-		float shaftRadius = -1.0f;
-		float headRadius = -1.0f;
-		float headLength = -1.0f;
-		float length = -1.0f;
-		float bulgeStrength = -1.0f;
+		SceneOrbitalMeshKey key;
+		bool initialized = false;
 		OpenGlMeshHandles mesh;
 	};
+
+	// One uploaded stroke mesh per ScenePath. The CPU geometry itself lives in PathCaches (S6); this
+	// is only its GL mirror, deliberately outside the cache so PathCaches stays unit-testable without
+	// a GL context. `key` is the evaluation key the buffers were built from - a mismatch against the
+	// current frame's key is the only thing that triggers a re-upload, and its lodBucket doubles as
+	// QuantiseLod's `previousBucket`, which is where the zoom hysteresis lives between frames.
+	// Vertex attributes are re-declared on every upload, so one entry can switch between the tube and
+	// the ribbon layout when the style profile changes without carrying a layout flag.
+	struct OpenGlScenePathMeshCache
+	{
+		PathEvaluationKey key;
+		OpenGlMeshHandles mesh;
+	};
+
+	// Paths reach the backend as one struct rather than two more defaulted parameters on RenderWindow,
+	// whose signature is already at its limit. The PathSystem is non-const because the pass fills
+	// PathCaches on a miss - evaluating, tessellating and meshing a path is exactly the work S6's cache
+	// exists to skip on every frame after the first.
+	struct BindingContext;
+
+	struct PathRenderInput
+	{
+		PathSystem *paths = nullptr;
+		// Which paths to draw highlighted. Ids, not indices - unlike planes, a path has no vector to
+		// index into. Null or empty means nothing is highlighted.
+		const std::vector<SceneObjectId> *selected = nullptr;
+		// Draw the selected path's actual triangle edges and vertices instead of expanding its
+		// per-face normals into a silhouette. This is diagnostic viewport state, not path style.
+		bool showMeshOverlay = false;
+		// S14: the live context bound nodes resolve against - SceneSystem::MakePathBindingContext for
+		// the window actually being rendered (the export preview copy when exporting). Null means an
+		// empty context: every bound node falls back to its authored position. Captures that window
+		// by reference, so it lives only as long as the RenderWindow call it is passed to.
+		const BindingContext *bindings = nullptr;
+	};
+
+	// Shared cleanup for per-object cached meshes and the backend's static meshes.
+	void DeleteMeshHandles(OpenGlMeshHandles &mesh);
 
 	struct OpenGlViewportResources
 	{
 		OpenGlFrameBuffer frameBuffer;
+		LabelPickQuads labelPickQuads; // rewritten by every renderLabels call
+
 		Time::SteadyTimePoint lastRenderTime{};
 		bool atomsDirty = true;
 		bool bondsDirty = true;
@@ -157,9 +176,13 @@ namespace DefectStudio
 		std::vector<glm::vec3> cachedCellEdgeVertices;
 		// Index into cachedCellEdgeVertices where the overlay (primitive-cell) edges begin.
 		std::size_t cachedOverlayEdgeFirstVertex = 0;
-		// One entry per Arrow3D SceneArrow, indexed by its position in sceneArrows - see
-		// OpenGlSceneArrowMeshCache. Shrunk (with GL cleanup) when sceneArrows.size() drops.
-		std::vector<OpenGlSceneArrowMeshCache> sceneArrow3DMeshCache;
+		OpenGlMeshHandles scenePlaneMesh;
+		OpenGlMeshHandles vacancyMesh;
+		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
+		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
+		// Same reason as the orbital map above: a path keeps its uploaded stroke when the store is
+		// reordered. Entries whose id no longer exists in the store are dropped once per frame.
+		std::unordered_map<SceneObjectId, OpenGlScenePathMeshCache> scenePathMeshCache;
 
 		// Per-window orbital isosurface GPU buffers. Was 2 backend-global slots shared by every
 		// window; regenerating one window's orbital mesh (e.g. dragging its iso-value slider)
@@ -205,8 +228,10 @@ namespace DefectStudio
 			const std::vector<std::size_t> &selectedPinnedMeasurements = {},
 			const std::vector<RendererWindowState::FreeLabel> &freeLabels = {},
 			const std::vector<std::size_t> &selectedFreeLabels = {},
-			const std::vector<RendererWindowState::SceneArrow> &sceneArrows = {},
-			const std::vector<std::size_t> &selectedSceneArrows = {},
+			const std::vector<RendererWindowState::SceneOrbital> &sceneOrbitals = {},
+			const std::vector<std::size_t> &selectedSceneOrbitals = {},
+			const std::vector<RendererWindowState::ScenePlane> &scenePlanes = {},
+			const std::vector<std::size_t> &selectedScenePlanes = {},
 			const std::vector<std::size_t> &selectedAtomIndices = {},
 			const std::vector<std::size_t> &selectedBondIndices = {},
 			// TODO(T08.6.3): temporary debug overlays to validate the isosurface pipeline
@@ -228,7 +253,12 @@ namespace DefectStudio
 			float bondLabelAlignThresholdDeg = 45.0f,
 			// See RendererWindowState::showPeriodicBonds. Last in the list only because everything
 			// above it is already positional at the call sites.
-			bool showPeriodicBonds = true);
+			bool showPeriodicBonds = true,
+			// task/41 S7. A struct rather than the usual pair of defaulted vectors: everything a path
+			// pass needs already lives behind RendererWindowState::paths, and the next stages add to
+			// PathRenderInput instead of to this signature. nullptr = this window owns no paths.
+			const PathRenderInput *pathInput = nullptr,
+			bool showVacancies = true);
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -245,6 +275,8 @@ namespace DefectStudio
 		// missing viewport or write failure. crop* are fractions (0..1) of width/height trimmed
 		// from each edge before writing - a real pixel crop (changes output aspect ratio), not the
 		// pan/zoom reframing that keeps the requested resolution's aspect intact.
+		// windowKey's labels as last drawn; empty when that viewport has not rendered yet.
+		[[nodiscard]] LabelPickQuads GetLabelPickQuads(const std::string &windowKey) const;
 		[[nodiscard]] bool CaptureWindowToPng(
 			const std::string &windowKey,
 			const Path &outputPath,
@@ -261,7 +293,6 @@ namespace DefectStudio
 		Result<void> createCylinderMesh(const RendererStaticMeshData &meshData);
 		Result<void> createConeMesh(const RendererStaticMeshData &meshData);
 		void createLabelQuadMesh();
-		void createArrowQuadMesh();
 		void createScreenGrid();
 		void createIsosurfaceGeometry();
 		// Lazily allocates `resources`'s per-window isosurface GPU buffers on first use - no-op if
@@ -274,7 +305,8 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
-			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
 		void renderBonds(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
@@ -282,51 +314,63 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const std::vector<std::size_t> &selectedIndices = {},
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
-			bool showPeriodicBonds = true);
-		// Atoms-displacement comparison arrows (RendererWindowState::displacementComparison) - one
-		// batched instanced draw for all visible shafts (shared m_CylinderMesh, like renderBonds)
-		// plus one for all visible cone heads (shared m_ConeMesh, already instance-layout-compatible
-		// via createConeMesh but otherwise unused for instancing today - see that function). Unlike
-		// sceneArrows this can be hundreds-to-thousands of auto-generated arrows, so no per-arrow
-		// welded mesh (BuildWeldedArrowMesh) - two shared meshes, CPU-filtered by
-		// displacementComparison->displayThresholdAngstrom each call (no dirty-cache, same choice
-		// renderSceneArrows already makes for its own per-call instance lists). Also draws a ghost
-		// marker (shared m_SphereMesh/"atoms" program) per interstitial-like unmatched comparison
-		// atom. nullptr = no comparison active for this window.
+			bool showPeriodicBonds = true,
+			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
+		// Batched displacement shafts and cone heads use m_CylinderMesh and m_ConeMesh.
+		// Also draws ghost markers for unmatched comparison atoms; nullptr means no comparison.
 		void renderDisplacementArrows(
 			const RendererStructureData &structure,
 			const RendererWindowState::DisplacementComparisonState *displacementComparison,
 			const RendererViewCamera &camera,
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
-		// Figure-annotation arrows (RendererWindowState::sceneArrows). Line draws its shaft through
-		// the shared bond cylinder mesh/shader like before; Arrow3D draws through its own per-arrow
-		// welded shaft+head mesh (BuildWeldedArrowMesh, cached in resources.sceneArrow3DMeshCache -
-		// rebuilt only when that arrow's shaftWidth/headWidth/headLength/length actually change, not
-		// every frame); Arrow2D draws through the arrow_quad SDF shader. No dirty-cache for the first
-		// two lists below (shaftInstances/quadInstances) - rebuilt every call like pinnedInstances in
-		// renderLabels, cheap for the handful of arrows a figure needs.
-		// Called twice per frame with opposite `renderArrow2D` values (see RenderWindow) so Line/
-		// Arrow3D (world-space, depth-tested, drawn with bonds) and Arrow2D (screen-space sized,
-		// depth-disabled, drawn late with labels - docs/scene_arrow_rework_plan_corrected.md
-		// Section 10) each land in the GL state their own semantics need, without either pass paying
-		// for the other kind's work. viewportPixelSize is the actual framebuffer resolution
-		// (resources.frameBuffer.Width/Height) - needed only by the Arrow2D pass to convert
-		// ArrowStyle's pixel-space geometry into this arrow's local world-space scale via a
-		// projection probe.
-		void renderSceneArrows(
-			const std::vector<RendererWindowState::SceneArrow> &arrows,
-			const std::vector<std::size_t> &selectedArrows,
+		void renderSceneOrbitals(
+			const std::vector<RendererWindowState::SceneOrbital> &orbitals,
+			const std::vector<std::size_t> &selectedOrbitals,
+			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
-			bool renderArrow2D,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f),
+			const glm::vec2 &viewportPixelSize = glm::vec2(0.0f));
+		// ScenePlanes reuse the orbital isosurface overlay - a plane is two triangles plus an
+		// optional frame, uploaded and drawn per plane so its own colour and selection outline survive.
+		void renderScenePlanes(
+			const std::vector<RendererWindowState::ScenePlane> &planes,
+			const std::vector<std::size_t> &selectedPlanes,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
+			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		void renderVacancyMarkers(
+			const std::vector<RendererVacancyData> &vacancies,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
+			const glm::vec3 &sceneOffset, bool depthOnly = false);
+		// Paths use an early depth-tested pass with the structure and a late depth-disabled pass
+		// with labels for PathDepthMode::AlwaysOnTop. Each pass draws only its matching paths.
+		//
+		// This is where S1-S6 meet GL: per path, resolve the LOD bucket from screen density, build the
+		// evaluation key from the store's revisions, and take the tessellated + stroked geometry from
+		// PathCaches - recomputing it only on a miss. viewportPixelSize is the framebuffer resolution,
+		// used for the density probe that feeds QuantiseLod (not for stroke width, which is world-space
+		// in S7 - see the task file).
+		void renderScenePaths(
+			const PathRenderInput &input,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			bool renderAlwaysOnTop,
 			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
 			bool showAllLabels,
 			const std::vector<RendererWindowState::PinnedMeasurement> &pinnedMeasurements,
 			const std::vector<std::size_t> &selectedPinnedMeasurements,
@@ -364,18 +408,17 @@ namespace DefectStudio
 			const glm::vec3 &positiveLobeColor,
 			const glm::vec3 &negativeLobeColor,
 			float lobeAlpha,
-			const glm::vec3 &sceneOffset);
+			const glm::vec3 &sceneOffset,
+			bool outline = false,
+			float outlineExpansion = 0.0f,
+			bool writeDepth = true,
+			bool twoSidedOutline = false);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
 		void dispatchBondCompute(const RendererStructureData &structure);
 		[[nodiscard]] OpenGlViewportResources &viewportResources(const std::string &windowKey, int width, int height);
 		[[nodiscard]] glm::mat4 buildBondTransform(const glm::vec3 &start, const glm::vec3 &finish, float radius) const;
-		// Same translate+rotate (local +Z -> direction) as buildBondTransform, but no scale at all -
-		// for BuildWeldedArrowMesh's output, whose vertices already have absolute world-unit radii
-		// and length baked in, so scaling Z by `length` again (as buildBondTransform's radius overload
-		// would) or radius by anything but 1 would double the arrow's real size.
-		[[nodiscard]] glm::mat4 buildArrowRevolutionTransform(const glm::vec3 &start, const glm::vec3 &end) const;
 
 	private:
 		bool m_Initialized = false;
@@ -385,7 +428,6 @@ namespace DefectStudio
 		OpenGlMeshHandles m_CylinderMesh;
 		OpenGlMeshHandles m_ConeMesh;
 		OpenGlMeshHandles m_LabelQuadMesh;
-		OpenGlMeshHandles m_ArrowQuadMesh;
 		// Lazily constructed on first renderLabels() call with showLabels=true - atlas generation
 		// (FreeType + msdfgen) costs real time, no reason to pay it for windows/sessions that never
 		// toggle labels on. Bundled font (see resolveLabelFontPath) same as the app's own UI font.

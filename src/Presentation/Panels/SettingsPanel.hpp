@@ -42,6 +42,7 @@ namespace DefectStudio
         SettingsPanel(const SettingsPanel &other);
 
         void Render() override;
+        [[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Other; }
         [[nodiscard]] Ref<IPanel> Clone() const override;
 
         [[nodiscard]] bool IsUrgentWorkerReserved() const;
@@ -83,6 +84,7 @@ namespace DefectStudio
         void renderInputTab();
         void renderKeyBindingsTab();
         void renderSavedViewsTab();
+        bool renderRendererViewportSettings();
 
         void renderAppearanceColors();
         void renderAppearanceMetrics();

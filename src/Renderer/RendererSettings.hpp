@@ -39,6 +39,19 @@ namespace DefectStudio
 	{
 		float axisButtonSize = 20.0f;
 		float iconButtonSize = 25.0f;
+		// Path Edit Mode's overlay appearance. Marker radii are scaled together in PathHandleGeometry.
+		glm::vec4 pathEditNodeColor = glm::vec4(70.0f / 255.0f, 180.0f / 255.0f, 255.0f / 255.0f, 230.0f / 255.0f);
+		glm::vec4 pathEditHandleColor = glm::vec4(255.0f / 255.0f, 170.0f / 255.0f, 70.0f / 255.0f, 230.0f / 255.0f);
+		glm::vec4 pathEditSelectedColor = glm::vec4(255.0f / 255.0f, 210.0f / 255.0f, 70.0f / 255.0f, 255.0f / 255.0f);
+		glm::vec4 pathEditTetherColor = glm::vec4(180.0f / 255.0f, 180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f);
+		glm::vec4 pathEditOutlineColor = glm::vec4(25.0f / 255.0f, 25.0f / 255.0f, 25.0f / 255.0f, 240.0f / 255.0f);
+		glm::vec4 selectionOutlineColor = glm::vec4(0.91f, 0.52f, 0.02f, 1.0f);
+		float pathEditTetherThickness = 1.0f;
+		float pathEditOutlineThickness = 1.5f;
+		float selectionOutlineWidth = 2.0f;
+		float transformGizmoSize = 100.0f;
+		float navigationGizmoSize = 60.0f;
+		float pathEditMarkerSizeMultiplier = 1.0f;
 		float transformTranslateSnap = 0.1f;
 		float transformRotateSnapDegrees = 5.0f;
 		float transformScaleSnap = 0.1f;
@@ -77,6 +90,8 @@ namespace DefectStudio
 		// only, so orientation/length/normals stay correct) - live like the lighting sliders below,
 		// no cache invalidation needed.
 		float bondRadiusMultiplier = 1.0f;
+		// How far (fraction) a vacancy bond's tube rim reaches inside its atom sphere, see VacancyBond.hpp.
+		float vacancyBondAtomInset = 0.01f;
 		// Luma-preserving saturation multiplier (1 = unchanged, 0 = grayscale, >1 = boosted) applied
 		// in atoms/bonds/isosurface fragment shaders to the already-lit color, right before the
 		// final clamp - fixes the "washed out / pastel" look some users see on a light background by
@@ -87,16 +102,6 @@ namespace DefectStudio
 		// (native resolution, default). Export has its own separate resolution presets
 		// (RenderExportDialogState) - this only affects the live/interactive view.
 		float viewportSupersample = 1.0f;
-		// Rounds Arrow3D's shaft/head shoulder instead of leaving it a sharp corner - see
-		// BuildWeldedArrowMesh (OpenGlRendererBackend.cpp) for how this feeds the mesh. 0 = classic
-		// hard-edged corner, 1 = a wide rounded bulge spread across up to half of headLength.
-		float arrowHeadBulgeStrength = 0.16f;
-		// Default SceneArrow proportions for new/kind-switched Arrow3D and Line arrows, as a fraction
-		// of the arrow's own length L (ApplySceneArrowKindChange multiplies these by L) - not fixed
-		// absolute sizes, so an arrow keeps the same silhouette regardless of how long it is.
-		float arrowDefaultShaftWidthRatio = 0.025f;
-		float arrowDefaultHeadWidthRatio = 0.047f;
-		float arrowDefaultHeadLengthRatio = 0.166f;
 		float orbitSensitivity = 1.0f;
 		float panSensitivity = 1.0f;
 		float zoomSensitivity = 1.0f;

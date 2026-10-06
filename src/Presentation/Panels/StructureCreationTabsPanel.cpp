@@ -16,6 +16,7 @@
 #include "Presentation/Panels/ViewportInteraction.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
+#include "Presentation/Panels/ViewportTextEditor.hpp"
 #include "Presentation/Panels/ViewportToolbars.hpp"
 #include "Renderer/CrystalStructurePreviewWindow.hpp"
 
@@ -175,7 +176,7 @@ namespace DefectStudio
 			{
 				DrawViewportToolbar(*activePane, m_RendererLayer);
 				ImGui::Separator();
-				DrawViewportVerticalToolbar(*activePane, m_RendererLayer);
+				DrawViewportVerticalToolbar(*activePane, m_RendererLayer, m_CommandRegistry);
 				ImGui::SameLine();
 			}
 
@@ -301,17 +302,18 @@ namespace DefectStudio
 			session.activePaneIndex = paneIndex;
 		const bool isActive = session.activePaneIndex == paneIndex;
 		if (!isActive)
-			(void)RenderViewportNavigationGizmo(*windowState, imageOrigin, imageSize, false, m_RendererLayer);
+			(void)RenderViewportNavigationGizmo(*windowState, imageOrigin, imageSize, false, 0.0f, m_RendererLayer);
 
 		// Selection and the transform gizmo, in the order the main viewport uses them: the gizmo gets
 		// first refusal on the frame's mouse, and only a click it did not claim becomes a pick. Panes
 		// had neither - the redesign stopped RendererPanel from drawing them and nothing took over its
 		// per-frame input half, so an atom in a pane could not be selected, let alone moved.
 		// The whole shared chain, not just the atom gizmo: label transforms, the pin keyboard
-		// shortcuts and the scene-arrow gizmo are viewport features too, and a pane that ran only
+		// shortcuts and the scene-object gizmo are viewport features too, and a pane that ran only
 		// RenderTransformGizmo silently lost every one of them.
 		const bool gizmoCapturing = isActive &&
-			RunViewportGizmoChain(*windowState, imageOrigin, imageSize, hovered, m_RendererLayer, m_CommandRegistry);
+			RunViewportGizmoChain(
+				*windowState, imageOrigin, imageSize, hovered, 0.0f, m_RendererLayer, m_CommandRegistry);
 
 		// Box/circle select: overlay, brush radius and drag dispatch. Runs before navigation because
 		// the circle brush consumes the wheel event the camera would otherwise zoom with.
@@ -332,7 +334,13 @@ namespace DefectStudio
 			const float relX = mousePos.x - imageOrigin.x;
 			const float relY = mousePos.y - imageOrigin.y;
 			if (leftClicked && relX >= 0.0f && relY >= 0.0f && relX < imageSize.x && relY < imageSize.y)
-				HandleViewportPick(*windowState, relX, relY, io.KeyCtrl, m_RendererLayer);
+			{
+				if (windowState->activeSelectionTool == SelectionToolMode::Text)
+					HandleViewportTextToolClick(*windowState, imageOrigin, imageSize,
+						ComputeViewportWorldPosition(*windowState, relX, relY));
+				else
+					HandleViewportPick(*windowState, relX, relY, io.KeyCtrl, m_RendererLayer);
+			}
 		}
 
 		// Held-arrow nudge and pan are NOT gated on hover - they run for as long as the pane is the
@@ -345,6 +353,7 @@ namespace DefectStudio
 			ApplyContinuousKeyboardPan(*windowState, deltaTime, m_RendererLayer);
 		}
 
+		DrawViewportTextEditor(*windowState, imageOrigin, imageSize);
 		ImGui::EndChild();
 		ImGui::PopStyleColor();
 	}

@@ -1,0 +1,161 @@
+#pragma once
+
+#include <cstdint>
+#include <optional>
+#include <vector>
+
+#include <glm/glm.hpp>
+
+#include "Domain/Electronic/HydrogenicOrbital.hpp"
+#include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/IsosurfaceMesher.hpp"
+
+namespace DefectStudio
+{
+	// Turns one SceneOrbital's parameters into the wavefunction the domain evaluator understands.
+	// Centres come from the orbital's own centerA/centerB unless anchorAtoms resolve, in which case
+	// the atoms win - that is what makes an anchored orbital follow its atom. An anchor index that
+	// is out of range is ignored rather than clamped, so a stale anchor degrades to the stored
+	// centre instead of snapping to atom 0.
+	//
+	// task/53: an orbital with lcaoComponents is built from them instead - each component is
+	// MakeOrbitalPreset of its own preset member at its resolved centre in RotationFrame(its
+	// rotationEuler), every term's coefficient multiplied by the component's coefficient, all
+	// concatenated; then phaseFlipped. ResolveSceneOrbitalCenters reports the mean of the resolved
+	// component centres as centerA, centerB and centroid; MakeSceneOrbitalMeshKey hashes the
+	// components; ResolveAnchoredOrbitals refreshes each component's `center` from its atom.
+	[[nodiscard]] glm::mat3 SceneOrbitalStretchFrame(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	[[nodiscard]] OrbitalWavefunction BuildOrbitalWavefunction(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	// Resolved world-space centres of an orbital, after anchors are applied - what the properties
+	// panel shows, what the gizmo pivots around, and what the mesh is scaled about.
+	struct SceneOrbitalCenters
+	{
+		glm::vec3 centerA = glm::vec3(0.0f);
+		glm::vec3 centerB = glm::vec3(0.0f);
+		// Midpoint for a two-centre preset, centerA for a single-centre one. The pivot.
+		glm::vec3 centroid = glm::vec3(0.0f);
+	};
+
+	// Shared anchor resolution rule: a missing or stale anchor leaves the stored coordinate alone.
+	// The vector overload preserves the established orbital slot API; arrows use the optional form
+	// so their two ends can detach independently without allocating in the per-frame refresh.
+	[[nodiscard]] glm::vec3 ResolveAnchor(
+		const glm::vec3 &fallback,
+		const std::optional<std::size_t> &anchor,
+		const RendererStructureData &structure);
+	[[nodiscard]] glm::vec3 ResolveAnchor(
+		const glm::vec3 &fallback,
+		const std::vector<std::size_t> &anchors,
+		std::size_t anchorIndex,
+		const RendererStructureData &structure);
+
+	[[nodiscard]] SceneOrbitalCenters ResolveSceneOrbitalCenters(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	// Samples the orbital, extracts both phase lobes and applies SceneOrbital::stretch in the
+	// orbital's own frame, then SceneOrbital::scale, both about the centroid. Returns flat
+	// GL_TRIANGLES triplets exactly as GenerateIsosurfaceMesh does, with IsosurfaceVertex::sign
+	// carrying the phase - so the existing isosurface shader draws this with no change. Empty when
+	// the orbital cannot be meshed (degenerate resolution, zero extent, an iso value no sample reaches).
+	//
+	// This runs on the main thread whenever a parameter changes, NOT every frame - see
+	// SceneOrbitalMeshKey below for how a caller knows when to re-run it.
+	//
+	// ponytail: CPU meshing, reusing GenerateIsosurfaceMesh rather than the GPU compute path the
+	// WAVECAR overlay uses. That path keeps two ~64MB vertex buffers per window and is built to be
+	// re-dispatched every frame while the user scrubs an iso value - correct for one big grid,
+	// wasteful for a dozen small drawing orbitals that only change when someone edits them. The
+	// ceiling is the re-bake hitch: at the default 48^3 it is not noticeable, at 128^3 dragging a
+	// slider will stutter. The upgrade is to move the bake onto JobSystem, not to grow the slot
+	// array.
+	[[nodiscard]] std::vector<IsosurfaceVertex> BuildSceneOrbitalMesh(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	// Everything BuildSceneOrbitalMesh reads, hashed - the renderer's per-orbital mesh cache keeps
+	// one of these beside each baked mesh and re-bakes only when it changes. Colours, alpha and
+	// visibility are deliberately NOT part of it: they are shader uniforms, so changing them must
+	// not throw the mesh away.
+	struct SceneOrbitalMeshKey
+	{
+		std::uint64_t hash = 0;
+
+		[[nodiscard]] bool operator==(const SceneOrbitalMeshKey &other) const
+		{
+			return hash == other.hash;
+		}
+	};
+
+	[[nodiscard]] SceneOrbitalMeshKey MakeSceneOrbitalMeshKey(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	// Overwrites centerA (and centerB, for a two-atom anchor) from the anchored atoms, once per
+	// frame, next to ResolveAnchoredBonds. Orbitals whose anchors are empty or unresolvable are
+	// left alone.
+	void ResolveAnchoredOrbitals(RendererWindowState &windowState);
+
+	// A new orbital of the given preset, placed sensibly for the window's current state: anchored
+	// to the selection when a two-centre preset meets exactly two selected atoms (or a single-centre
+	// preset meets exactly one), otherwise free-standing at `seedPosition`. Its effectiveCharge and
+	// shell come from the anchored atoms' elements where there are any, so an orbital dropped on a
+	// carbon is drawn at carbon's size rather than hydrogen's.
+	[[nodiscard]] RendererWindowState::SceneOrbital MakeDefaultSceneOrbital(
+		const RendererWindowState &windowState, OrbitalPreset preset, const glm::vec3 &seedPosition);
+
+	// Same, but anchored to the atoms named here instead of to the window's selection - what "put
+	// one of these on each of the selected atoms" needs, since that means several orbitals each
+	// anchored to one atom, not one orbital anchored to all of them.
+	[[nodiscard]] RendererWindowState::SceneOrbital MakeDefaultSceneOrbital(
+		const RendererWindowState &windowState,
+		OrbitalPreset preset,
+		const glm::vec3 &seedPosition,
+		const std::vector<std::size_t> &anchorAtoms);
+
+	// True for the molecular presets (sigma/pi/delta and their starred and hybridised partners),
+	// which span two atoms and read centerB. Everything else is a one-centre orbital. One copy for
+	// the whole app - the geometry, the properties panel and the add menu must agree on this or an
+	// orbital anchors to the wrong number of atoms.
+	[[nodiscard]] bool IsTwoCenterPreset(OrbitalPreset preset);
+
+	// Slater effective nuclear charge for an element's valence shell, and the shell that valence
+	// sits in - what MakeDefaultSceneOrbital uses so a preset dropped on an atom starts at a
+	// plausible size. Unknown elements fall back to hydrogen (1.0, shell 1).
+	[[nodiscard]] float ValenceEffectiveCharge(const std::string &element);
+	[[nodiscard]] int ValenceShell(const std::string &element);
+
+	// World-space bounding sphere of the orbital as it is actually drawn - centroid of the
+	// resolved centres, radius = SuggestOrbitalExtent scaled by SceneOrbital::scale and the largest
+	// valid stretch component. Cheap: it does not mesh anything.
+	struct SceneOrbitalBounds
+	{
+		glm::vec3 center = glm::vec3(0.0f);
+		float radius = 0.0f;
+	};
+	[[nodiscard]] SceneOrbitalBounds SceneOrbitalWorldBounds(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	[[nodiscard]] const std::vector<IsosurfaceVertex> &CachedSceneOrbitalMesh(
+		const RendererWindowState &window, const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	struct SceneOrbitalSurfaceHit
+	{
+		std::size_t index;
+		float distance;
+	};
+	[[nodiscard]] std::optional<SceneOrbitalSurfaceHit> PickSceneOrbitalSurface(
+		const RendererWindowState &window, const RendererStructureData &structure,
+		const glm::vec3 &origin, const glm::vec3 &direction);
+
+	// Click-pick. Returns the index into windowState.sceneOrbitals of the frontmost visible orbital
+	// the ray enters, or nullopt. `rayDirection` need not be normalised.
+	//
+	// Tests the cached drawn triangles, so empty space between lobes does not steal atom clicks.
+	[[nodiscard]] std::optional<std::size_t> PickSceneOrbital(
+		const RendererWindowState &windowState,
+		const RendererStructureData &structure,
+		const glm::vec3 &rayOrigin,
+		const glm::vec3 &rayDirection);
+} // namespace DefectStudio

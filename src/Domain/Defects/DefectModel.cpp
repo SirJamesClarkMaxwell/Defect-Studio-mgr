@@ -48,6 +48,41 @@ namespace DefectStudio
 		}
 	} // namespace
 
+	VacancySite MakeVacancySite(const CrystalStructure &structure, const glm::vec3 &position, std::string sourceSpecies)
+	{
+		VacancySite vacancy;
+		vacancy.position = position;
+		vacancy.fractional = structure.CartesianToFractional(position);
+		vacancy.sourceSpecies = std::move(sourceSpecies);
+		vacancy.index = -1;
+		return vacancy;
+	}
+
+	Result<DefectFrame> MakeDefectFrame(
+		const glm::vec3 &origin, const glm::vec3 &zTarget, const std::optional<glm::vec3> xTarget)
+	{
+		const glm::vec3 zAxis = zTarget - origin;
+		if (glm::length(zAxis) < 1e-4f)
+			return StructuredError{ErrorCategory::Validation, Severity::Error,
+				"The defect axis needs two different points.", "MakeDefectFrame: zTarget coincides with origin.",
+				"Pick a target that is not the origin.", "DefectModel", "domain.defect_frame.degenerate_axis"};
+		DefectFrame frame;
+		frame.origin = origin;
+		frame.z = glm::normalize(zAxis);
+		auto perpendicular = [&](const glm::vec3 &v) { return v - glm::dot(v, frame.z) * frame.z; };
+		glm::vec3 x = xTarget ? perpendicular(*xTarget - origin) : glm::vec3(0.0f);
+		if (glm::length(x) < 1e-3f)
+		{
+			const glm::vec3 a = glm::abs(frame.z);
+			const glm::vec3 fallback = a.x <= a.y && a.x <= a.z ? glm::vec3(1, 0, 0)
+				: a.y <= a.z ? glm::vec3(0, 1, 0) : glm::vec3(0, 0, 1);
+			x = perpendicular(fallback);
+		}
+		frame.x = glm::normalize(x);
+		frame.y = glm::cross(frame.z, frame.x);
+		return frame;
+	}
+
 	Result<void> ApplyVacancy(CrystalStructure &structure, const PointDefectOperation &operation)
 	{
 		if (operation.atomIndex >= structure.atoms.size())

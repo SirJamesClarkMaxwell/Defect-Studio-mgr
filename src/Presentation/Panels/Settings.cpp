@@ -457,13 +457,20 @@ namespace DefectStudio
 
 		for (float &channel : m_DraftConfig.renderer.backgroundColor)
 			channel = std::clamp(channel, 0.0f, 1.0f);
+		const auto clampViewportColor = [](std::array<float, 4> &color) {
+			for (float &channel : color)
+				channel = std::clamp(channel, 0.0f, 1.0f);
+		};
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditNodeColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditHandleColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditSelectedColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditTetherColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditOutlineColor);
+		clampViewportColor(m_DraftConfig.renderer.viewport.selectionOutlineColor);
 		m_DraftConfig.renderer.bondRadiusMultiplier = std::clamp(m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f);
+		m_DraftConfig.renderer.vacancyBondAtomInset = std::clamp(m_DraftConfig.renderer.vacancyBondAtomInset, 0.0f, 0.5f);
 		m_DraftConfig.renderer.colorSaturation = std::clamp(m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f);
 		m_DraftConfig.renderer.viewportSupersample = std::clamp(m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f);
-		m_DraftConfig.renderer.arrowHeadBulgeStrength = std::clamp(m_DraftConfig.renderer.arrowHeadBulgeStrength, 0.0f, 1.0f);
-		m_DraftConfig.renderer.arrowDefaultShaftWidthRatio = std::clamp(m_DraftConfig.renderer.arrowDefaultShaftWidthRatio, 0.001f, 0.5f);
-		m_DraftConfig.renderer.arrowDefaultHeadWidthRatio = std::clamp(m_DraftConfig.renderer.arrowDefaultHeadWidthRatio, 0.001f, 1.0f);
-		m_DraftConfig.renderer.arrowDefaultHeadLengthRatio = std::clamp(m_DraftConfig.renderer.arrowDefaultHeadLengthRatio, 0.001f, 1.0f);
 		m_DraftConfig.renderer.orbitSensitivity = std::clamp(m_DraftConfig.renderer.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.panSensitivity = std::clamp(m_DraftConfig.renderer.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_DraftConfig.renderer.zoomSensitivity = std::clamp(m_DraftConfig.renderer.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -491,6 +498,14 @@ namespace DefectStudio
 			m_DraftConfig.renderer.viewport.iconButtonSize,
 			kMinViewportButtonSize,
 			kMaxViewportButtonSize);
+		m_DraftConfig.renderer.viewport.pathEditTetherThickness = std::clamp(
+			m_DraftConfig.renderer.viewport.pathEditTetherThickness, 0.0f, 8.0f);
+		m_DraftConfig.renderer.viewport.pathEditOutlineThickness = std::clamp(
+			m_DraftConfig.renderer.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
+		m_DraftConfig.renderer.viewport.selectionOutlineWidth = std::clamp(
+			m_DraftConfig.renderer.viewport.selectionOutlineWidth, 0.0f, 8.0f);
+		m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier = std::clamp(
+			m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_DraftConfig.renderer.viewport.transformTranslateSnap = std::clamp(
 			m_DraftConfig.renderer.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
 		m_DraftConfig.renderer.viewport.transformRotateSnapDegrees = std::clamp(
@@ -1892,6 +1907,19 @@ namespace DefectStudio
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Vacancy bond atom inset");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			float insetPercent = m_DraftConfig.renderer.vacancyBondAtomInset * 100.0f;
+			if (ImGui::SliderFloat("##VacancyBondAtomInset", &insetPercent, 0.0f, 50.0f, "%.1f%%"))
+			{
+				m_DraftConfig.renderer.vacancyBondAtomInset = insetPercent / 100.0f;
+				markDirty();
+			}
+			ImGui::SetItemTooltip("Jak głęboko koniec wiązania do wakansu wchodzi w sferę atomu, ponad punkt, w którym krawędź rury dotyka powierzchni.");
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
 			ImGui::TextUnformatted("Color saturation");
 			ImGui::TableSetColumnIndex(1);
 			setValueControlWidth();
@@ -1907,48 +1935,6 @@ namespace DefectStudio
 				markDirty();
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
 				ImGui::SetTooltip("Renders the interactive viewport at a higher resolution than the panel and downscales it - sharper edges/orbitals, costs GPU time. 1x = off.");
-
-			ImGui::EndTable();
-		}
-
-		ImGui::SeparatorText("Scene arrows");
-		if (beginRendererTable("RendererArrows"))
-		{
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Head bulge strength");
-			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::SliderFloat("##ArrowHeadBulgeStrength", &m_DraftConfig.renderer.arrowHeadBulgeStrength, 0.0f, 1.0f, "%.2f"))
-				markDirty();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
-				ImGui::SetTooltip("Rounds Arrow3D's shaft/head shoulder. 0 = sharp classic corner, 1 = a wide rounded bulge.");
-
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Default shaft width");
-			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::DragFloat("##ArrowDefaultShaftWidthRatio", &m_DraftConfig.renderer.arrowDefaultShaftWidthRatio, 0.001f, 0.001f, 0.5f, "%.3fx length"))
-				markDirty();
-
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Default head width");
-			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::DragFloat("##ArrowDefaultHeadWidthRatio", &m_DraftConfig.renderer.arrowDefaultHeadWidthRatio, 0.001f, 0.001f, 1.0f, "%.3fx length"))
-				markDirty();
-
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Default head length");
-			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::DragFloat("##ArrowDefaultHeadLengthRatio", &m_DraftConfig.renderer.arrowDefaultHeadLengthRatio, 0.001f, 0.001f, 1.0f, "%.3fx length"))
-				markDirty();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort))
-				ImGui::SetTooltip("New Arrow3D/Line arrows scale shaftWidth/headWidth/headLength from these ratios times the arrow's own length.");
 
 			ImGui::EndTable();
 		}
@@ -2053,23 +2039,93 @@ namespace DefectStudio
 			ImGui::EndTable();
 		}
 
-		ImGui::SeparatorText("Viewport gizmo");
-		if (beginRendererTable("RendererViewport"))
+		if (renderRendererViewportSettings())
+			rendererSettingsChanged = true;
+
+		ImGui::SeparatorText("Path Edit Mode overlay");
+		if (beginRendererTable("RendererPathEditOverlay"))
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Axis button size");
+			ImGui::TextUnformatted("Node color");
 			ImGui::TableSetColumnIndex(1);
-			setValueControlWidth();
-			if (ImGui::SliderFloat("##AxisButtonSize", &m_DraftConfig.renderer.viewport.axisButtonSize, 10.0f, 48.0f, "%.0f"))
+			if (ImGui::ColorEdit4("##PathEditNodeColor", m_DraftConfig.renderer.viewport.pathEditNodeColor.data()))
 				markDirty();
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Icon button size");
+			ImGui::TextUnformatted("Handle color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditHandleColor", m_DraftConfig.renderer.viewport.pathEditHandleColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Selected color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditSelectedColor", m_DraftConfig.renderer.viewport.pathEditSelectedColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Tether color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditTetherColor", m_DraftConfig.renderer.viewport.pathEditTetherColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Outline color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4("##PathEditOutlineColor", m_DraftConfig.renderer.viewport.pathEditOutlineColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Selection outline color");
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::ColorEdit4(
+					"##SelectionOutlineColor", m_DraftConfig.renderer.viewport.selectionOutlineColor.data()))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Tether thickness");
 			ImGui::TableSetColumnIndex(1);
 			setValueControlWidth();
-			if (ImGui::SliderFloat("##IconButtonSize", &m_DraftConfig.renderer.viewport.iconButtonSize, 10.0f, 48.0f, "%.0f"))
+			if (ImGui::SliderFloat(
+					"##PathEditTetherThickness", &m_DraftConfig.renderer.viewport.pathEditTetherThickness, 0.0f, 8.0f, "%.1f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Outline thickness");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##PathEditOutlineThickness", &m_DraftConfig.renderer.viewport.pathEditOutlineThickness, 0.0f, 8.0f, "%.1f"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Selection outline width");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##SelectionOutlineWidth", &m_DraftConfig.renderer.viewport.selectionOutlineWidth, 0.0f, 8.0f, "%.1f px"))
+				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Marker size");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			if (ImGui::SliderFloat(
+					"##PathEditMarkerSizeMultiplier",
+					&m_DraftConfig.renderer.viewport.pathEditMarkerSizeMultiplier,
+					0.25f,
+					4.0f,
+					"%.2fx"))
 				markDirty();
 
 			ImGui::EndTable();

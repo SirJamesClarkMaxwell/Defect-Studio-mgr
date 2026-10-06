@@ -101,6 +101,9 @@ namespace DefectStudio
 				(void)parsedVacancyColor;
 				outVacancyStyle.displayRadius = vacancyNode["display_radius"].as<float>(outVacancyStyle.displayRadius);
 				outVacancyStyle.opacity = vacancyNode["opacity"].as<float>(outVacancyStyle.opacity);
+				outVacancyStyle.dashCount = vacancyNode["dash_count"].as<int>(outVacancyStyle.dashCount);
+				outVacancyStyle.ringWidth = vacancyNode["ring_width"].as<float>(outVacancyStyle.ringWidth);
+				outVacancyStyle.colorBySpecies = vacancyNode["color_by_species"].as<bool>(outVacancyStyle.colorBySpecies);
 				outVacancyStyle.renderMode = ParseVacancyRenderMode(vacancyNode["render_mode"].as<std::string>("ghost"));
 			}
 
@@ -129,7 +132,7 @@ namespace DefectStudio
 				outStyles[symbol] = style;
 			}
 
-			if (outStyles.empty())
+			if (outStyles.empty() && elementsNode.size() != 0)
 			{
 				outError = "Atom style YAML does not contain valid entries";
 				return false;
@@ -160,6 +163,9 @@ namespace DefectStudio
 			EmitColor(emit, vacancyStyle.color);
 			emit << YAML::Key << "display_radius" << YAML::Value << vacancyStyle.displayRadius;
 			emit << YAML::Key << "opacity" << YAML::Value << vacancyStyle.opacity;
+			emit << YAML::Key << "dash_count" << YAML::Value << vacancyStyle.dashCount;
+			emit << YAML::Key << "ring_width" << YAML::Value << vacancyStyle.ringWidth;
+			emit << YAML::Key << "color_by_species" << YAML::Value << vacancyStyle.colorBySpecies;
 			emit << YAML::Key << "render_mode" << YAML::Value << VacancyRenderModeToString(vacancyStyle.renderMode);
 			emit << YAML::EndMap;
 

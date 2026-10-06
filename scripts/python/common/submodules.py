@@ -11,13 +11,14 @@ def ensure_git_submodules(*, dry_run: bool, verbose: bool) -> int:
         dry_run=dry_run,
         verbose=verbose,
     )
-    if code == 0:
-        return 0
-
-    print("[warn] Pinned submodule update failed; retrying configured remote branches.")
-    return run_command(
-        ["git", "submodule", "update", "--remote", "--init", "--recursive", "--force"],
-        cwd=repo_root(),
-        dry_run=dry_run,
-        verbose=verbose,
-    )
+    if code != 0:
+        print(
+            "[error] Submodule update failed. Usually a pinned commit is missing from its "
+            "remote - push it to the fork, then re-run."
+        )
+        print(
+            "[error] Do NOT retry with 'git submodule update --remote': it re-pins every "
+            "submodule (including nested ones such as freetype) to its branch tip, which "
+            "breaks the build in ways that look unrelated."
+        )
+    return code

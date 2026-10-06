@@ -2,7 +2,7 @@ schema_version: 1
 ui:
   font:
     path: app/assets/fonts/segoeui.ttf
-  font_scale: 2.34
+  font_scale: 1.9999999
   font_scale_step: 0.34
   settings_preview_enabled: true
   settings_auto_save_on_preview: true
@@ -54,7 +54,7 @@ appearance:
     disabled_alpha: 0.45
     disabled_background_mix: 0.55
 renderer:
-  background: [0.3164014, 0.3176324, 0.31764707, 1]
+  background: [0.36718187, 0.36861044, 0.36862746, 1]
   bond_radius_multiplier: 2.41
   color_saturation: 2
   viewport_supersample: 1
@@ -88,8 +88,23 @@ renderer:
     fill_direction: [-0.7, 0.3, 0.2]
     back_direction: [0, -0.4, -0.8]
   viewport:
-    axis_button_size: 34
-    icon_button_size: 33
+    axis_button_size: 35
+    icon_button_size: 34
+    path_edit_node_color: [0.27450982, 0.7058824, 1, 0.9019608]
+    path_edit_handle_color: [1, 0.6666667, 0.27450982, 0.9019608]
+    path_edit_selected_color: [1, 0.8235294, 0.27450982, 1]
+    path_edit_tether_color: [0.7058824, 0.7058824, 0.7058824, 0.74509805]
+    path_edit_outline_color: [0.09803922, 0.09803922, 0.09803922, 0.9411765]
+    selection_outline_color: [0.91, 0.52, 0.02, 1]
+    path_edit_tether_thickness: 3.9
+    path_edit_outline_thickness: 3.9
+    selection_outline_width: 2.4
+    transform_gizmo_size: 168
+    navigation_gizmo_size: 78
+    path_edit_marker_size_multiplier: 1.33
+    transform_translate_snap: 0.1
+    transform_rotate_snap_degrees: 5
+    transform_scale_snap: 0.1
   toolbar_wheel:
     rotation_step_delta: 1
     zoom_step_delta: 1

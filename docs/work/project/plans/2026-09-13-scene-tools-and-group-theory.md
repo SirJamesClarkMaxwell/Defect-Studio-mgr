@@ -237,6 +237,16 @@ Release build + tests; `dev` → `main` later as one batch after the full Debug 
    (needs 30 + 31); WAVECAR bases (old workstream 6), full Markdown/LaTeX renderer (old
    workstream 10).
 
+13. **Added 2026-09-18, from testing the task 30b branch** — see
+   `docs/work/project/tasks/32-drawing-control-arrows-and-orbitals.md`: manual shape control for
+   orbitals (lobe width/length multipliers on top of the physics, for legibility in a figure), and
+   curved arrows, paths and a real arrow-tip vocabulary instead of one fixed cone. The arrow-tip and
+   curve half overlaps the Bezier curve object already planned above — slice it against that, not
+   beside it. Also still open in task 30b: the atom buffer never opens a visible gap (item 3,
+   reopened), and deleting a scene object in the viewport leaves its row in the Scene Outliner
+   (item 5) — the outliner reads rows from two different sources and nothing destroys the registry
+   entity on delete, so that one needs a single source of truth, not a per-kind guard.
+
 Order: 0 → 1 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11; 2 parallel after 0. Bonds/orbitals, basis
 objects and panel v2 come before Empty/curves/planes/presets (user decision 2026-09-13).
 

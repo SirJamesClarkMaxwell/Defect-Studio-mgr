@@ -1,16 +1,21 @@
 #pragma once
 
+#include <array>
+
 #include <imgui.h>
 
 #include "Core/Utils/Memory.hpp"
+#include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
 {
 	class CommandRegistry;
 	class RendererLayer;
-	struct RendererWindowState;
+	class RendererViewCamera;
 
-	// G/R/S transform gizmo for one viewport's atom/label/arrow selection. Returns true while it owns the
+	[[nodiscard]] ImU32 ViewportTransformAxisColor(int axis);
+
+	// G/R/S transform gizmo for one viewport's scene selection. Returns true while it owns the
 	// frame's mouse, so the caller can suppress its own picking underneath the handles.
 	//
 	// A free function rather than a RendererPanel member because a viewport is not always a

@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <glm/geometric.hpp>
+
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
@@ -37,6 +39,27 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(windows[0].structure.atoms[0].visible);
 		EXPECT_TRUE(windows[0].structure.atoms[1].visible);
 		EXPECT_FALSE(windows[0].structure.atoms[2].visible);
+	}
+
+	// The "+" menu-bar button opens a window with no atoms at all. Without the empty guard in
+	// BuildWindowFromStructure the inverted sentinel bounds put the camera ~3.9e6 units out and the
+	// grid is a single invisible speck.
+	TEST(RendererStartupBootstrapTests, FramesAnEmptyStructureOnTheOriginInsteadOfMillionsOfUnitsOut)
+	{
+		RendererStartupWindowInput input;
+		input.definition.title = "Pusta scena";
+		input.definition.structureName = "Pusta scena";
+		input.definition.direction = glm::vec3(1.0f, 1.0f, 1.0f);
+
+		std::vector<RendererStartupWindowInput> inputs;
+		inputs.push_back(std::move(input));
+		std::vector<RendererWindowState> windows = BuildRendererStartupWindows(std::move(inputs));
+
+		ASSERT_EQ(windows.size(), 1u);
+		ASSERT_NE(windows[0].camera, nullptr);
+		EXPECT_TRUE(windows[0].structure.atoms.empty());
+		EXPECT_LT(windows[0].camera->Distance(), 100.0f);
+		EXPECT_NEAR(glm::length(windows[0].camera->Target()), 0.0f, 1e-4f);
 	}
 
 	TEST(RendererViewCameraTests, TransitionDurationScalesWithRotationSpeed)

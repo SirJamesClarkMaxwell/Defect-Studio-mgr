@@ -30,7 +30,13 @@ namespace DefectStudio
 		// Basic Latin + Latin-1 Supplement (same range imgui_draw.cpp defaults to, and what
 		// Hazel's Font.cpp loads) - covers digits/letters/punctuation plus U+00B0 "°" and U+00C5
 		// "Å", everything a bond-length/angle label needs (e.g. "1.542 Å", "104.5°").
-		constexpr CharsetRange kCharsetRanges[] = {{0x0020, 0x00FF}};
+		constexpr CharsetRange kCharsetRanges[] = {
+			{0x0020, 0x00FF}, {0x0391, 0x03A9}, {0x03B1, 0x03C9},
+			{0x03D1, 0x03D1}, {0x03D5, 0x03D5}, {0x03F5, 0x03F5},
+			{0x2009, 0x2009}, {0x2032, 0x2032}, {0x210F, 0x210F},
+			{0x2190, 0x2195}, {0x2212, 0x2213}, {0x221E, 0x221E},
+			{0x223C, 0x223C}, {0x2248, 0x2248}, {0x2260, 0x2260},
+			{0x2264, 0x2265}, {0x27E8, 0x27E9}};
 	} // namespace
 
 	MsdfFont::MsdfFont(const Path &fontFilePath)

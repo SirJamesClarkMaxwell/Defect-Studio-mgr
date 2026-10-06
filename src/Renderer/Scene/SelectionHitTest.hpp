@@ -19,19 +19,14 @@ namespace DefectStudio::SelectionHitTest
 
 	[[nodiscard]] bool PointInCircle(glm::vec2 point, glm::vec2 center, float radius);
 
-	// Clamped-t projection of point onto segment [segA, segB], then distance to that closest point -
-	// degenerate (zero-length) segment falls back to point-to-segA distance. Screen-space pixel math,
-	// shared by SceneArrow shaft picking (RendererPanel::handleSceneArrowInteraction) and its region
-	// select (hitTestRectSceneArrows/hitTestCircleSceneArrows), and by DistancePointToTriangle2D below.
+	// Distance to the closest point on a screen-space segment; a degenerate segment uses segA.
 	[[nodiscard]] float DistancePointToSegment(glm::vec2 point, glm::vec2 segA, glm::vec2 segB);
 
 	// Sign-of-cross-product test against all three edges (winding-independent - works whether a/b/c
 	// are wound clockwise or counter-clockwise on screen).
 	[[nodiscard]] bool PointInTriangle(glm::vec2 point, glm::vec2 a, glm::vec2 b, glm::vec2 c);
 
-	// 0 if point is inside or on the triangle, else the distance to its nearest edge. Used for
-	// Arrow2D's head hit-test - the head is a filled triangle on screen (see arrow_quad.frag), so
-	// picking it should match that shape, not a bounding circle.
+	// Zero inside a screen-space triangle, otherwise the distance to its nearest edge.
 	[[nodiscard]] float DistancePointToTriangle2D(glm::vec2 point, glm::vec2 a, glm::vec2 b, glm::vec2 c);
 
 	// Closest points between an infinite ray (rayOrigin + t*rayDir, rayDir normalized) and a finite

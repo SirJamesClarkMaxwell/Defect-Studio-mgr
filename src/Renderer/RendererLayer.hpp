@@ -1,9 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <utility>
 
 #include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
@@ -44,9 +46,11 @@ namespace DefectStudio
 	// click/drag edits) can call it without routing through a layer method for no reason.
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState);
 	void PushSceneObjectsUndoSnapshot(RendererWindowState &windowState, RendererWindowState::LabelUndoSnapshot before);
+	[[nodiscard]] WeakRef<UndoStack> GetBoundRendererUndoStack() noexcept;
 	// Pushes only when the hide/show operation changed the hidden atom or bond set.
 	void PushSceneVisibilityUndoSnapshot(
 		RendererWindowState &windowState, HiddenSceneState before, std::string description);
+	[[nodiscard]] bool HasSelectedSceneObjectsForHide(const RendererWindowState &windowState);
 
 	// notes.txt pt. 8 - explicit single-pin override: force this one label flat regardless of the
 	// live threshold (OpenGlRendererBackend::renderLabels applies bondLabelAlignThresholdDeg to every
@@ -56,8 +60,7 @@ namespace DefectStudio
 	void AlignBondLabelToCamera(RendererWindowState &windowState, std::size_t pinIndex);
 
 	// notes.txt pt. 15 - in-process LabelStyle clipboard shared by pinned measurements and free
-	// labels, mirroring GetArrowStyleClipboard (SceneArrowEditorWidget.hpp). Caller pushes the undo
-	// snapshot before PasteLabelStyle, same convention as PasteArrowStyle.
+	// labels. Caller pushes the undo snapshot before PasteLabelStyle.
 	[[nodiscard]] std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard();
 	void CopyLabelStyle(const RendererWindowState::LabelStyle &style);
 	bool PasteLabelStyle(
@@ -90,6 +93,12 @@ namespace DefectStudio
 		void ApplyConfig(const RendererConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
 		void BindUndoStack(WeakRef<UndoStack> undoStack);
+		void ChangeSceneVisibility(const std::string &windowId, bool showAll);
+		// Bound by command registration so H uses the same domain command as the outliner eye.
+		void BindVacancyVisibilityEditor(std::function<Result<void>(RendererWindowState &, bool)> edit)
+		{
+			m_EditVacancyVisibility = std::move(edit);
+		}
 		[[nodiscard]] WeakRef<UndoStack> GetUndoStackHandle() const noexcept { return m_UndoStack; }
 		[[nodiscard]] Ref<EventBus> GetEventBus() const;
 		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
@@ -114,6 +123,7 @@ namespace DefectStudio
 		// Closes and discards windowId's window (RendererPanel, on its titlebar X). No-op if
 		// unknown.
 		void RemoveWindow(const std::string &windowId);
+		void ClearUndoHistory();
 		[[nodiscard]] std::vector<RendererWindowState> &GetWindows();
 		[[nodiscard]] const std::vector<RendererWindowState> &GetWindows() const;
 		[[nodiscard]] RendererGlobalRenderSettings &GetGlobalSettings();
@@ -135,6 +145,8 @@ namespace DefectStudio
 			const RendererStructureData &structure,
 			const RendererWindowState &windowState,
 			const RendererGlobalRenderSettings &settings);
+		// The labels of windowKey as last drawn (OpenGlRendererBackend::GetLabelPickQuads).
+		[[nodiscard]] LabelPickQuads GetLabelPickQuads(const std::string &windowKey) const;
 		void CollectProfilingData();
 		bool &GetShowPeriodicTableWindow();
 		std::string &GetSelectedPeriodicElement();
@@ -149,7 +161,7 @@ namespace DefectStudio
 		// (previewState is a fresh RendererWindowState, not a view of the real window) into
 		// `previewState`. Single source of truth for both places that open the export dialog
 		// (onExportImageRequested's F12 path and RendererPanelToolbar's "Export PNG..." button) -
-		// they drifted out of sync once already (freeLabels/sceneArrows silently missing from the
+		// they drifted out of sync once already (free labels silently missing from the
 		// F12 path only), so this is the fix for that whole class of bug, not just this one field.
 		void PopulateExportPreviewState(
 			RendererWindowState &previewState, const RendererWindowState &source) const;
@@ -281,6 +293,7 @@ namespace DefectStudio
 		RendererStartupConfig m_StartupConfig;
 		Ref<EventBus> m_EventBus;
 		WeakRef<UndoStack> m_UndoStack;
+		std::function<Result<void>(RendererWindowState &, bool)> m_EditVacancyVisibility;
 		Unique<OpenGlRendererBackend> m_RendererBackend;
 		std::vector<RendererWindowState> m_Windows;
 		std::vector<std::string> m_PeriodicTableSymbols;

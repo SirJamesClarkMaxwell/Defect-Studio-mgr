@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/RendererTypes.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
@@ -22,7 +23,7 @@ namespace DefectStudio
 		// this call.
 		void PushSelectionAndVisibilityToWindowState(const SceneRegistry &scene, RendererWindowState &windowState);
 
-		// Deselects every atom and bond (entities + window mirrors). A plain click on a label/arrow
+		// Deselects every atom and bond (entities + window mirrors). A plain click on an annotation
 		// replaces the selection, so a stale atom selection can't drag the transform pivot away.
 		void ClearStructureSelection(SceneRegistry &scene, RendererWindowState &windowState);
 
@@ -41,7 +42,9 @@ namespace DefectStudio
 		// Translates captured positions into atom indices on `targetStructure` by nearest cartesian
 		// distance, for restoring a view snapshot onto a structure that may differ from the one it
 		// was captured on (e.g. the session default view applied to a different window). A position
-		// with no atom within `tolerance` is dropped rather than mapped to a wrong atom.
+		// with no atom within `tolerance` is dropped rather than mapped to a wrong atom. Distances use
+		// the minimum image of targetStructure.lattice (periodic and not singular), so a site on a cell
+		// face matches whichever side the reloaded file wrapped it to.
 		[[nodiscard]] std::vector<std::size_t> ResolveAtomIndicesByPosition(
 			const RendererStructureData &targetStructure,
 			const std::vector<glm::vec3> &positions,
@@ -54,13 +57,27 @@ namespace DefectStudio
 			const RendererWindowState::PinnedMeasurement &pin,
 			glm::vec3 &outPosition);
 
-		// (Re)builds one entity per annotation - pinned measurement, free label AND scene arrow -
-		// from the three vectors on windowState, destroying the previous set first; same "resync on
+		// (Re)builds one entity per annotation - pinned measurement, free label, path and scene
+		// orbital - from the vectors on windowState, destroying the previous set first; same "resync on
 		// structural change" shape as SyncSceneWithStructure, not a per-frame rebuild. Call after any
-		// add/remove on any of the three. Since task 20 it also assigns a SceneObjectId to any
+		// add/remove on any annotation vector. Since task 20 it also assigns a SceneObjectId to any
 		// annotation whose id is still unset, so an object created without one is addressable from the
 		// next sync on.
 		void SyncLabelEntities(SceneRegistry &scene, RendererWindowState &windowState);
+
+		// task/41: the window's PathSystem, created on first use. Every consumer goes through this
+		// rather than dereferencing windowState.paths, so a window that has never held a path costs
+		// nothing and no call site has to repeat the null check.
+		[[nodiscard]] PathSystem &EnsurePathSystem(RendererWindowState &windowState);
+		[[nodiscard]] BindingContext MakePathBindingContext(const RendererWindowState &windowState);
+
+		// The id on `path` is discarded and a fresh one
+		// allocated, because a duplicated path arrives still carrying its source's id and one id maps to
+		// one entity. Does not call SyncLabelEntities and does not touch selection. Returns the allocated
+		// id on success, or an unset id when PathStore rejects the insert (for example, an id collision).
+		// Undo restoration deliberately keeps original ids and so goes through PathSystem::ReplaceStore
+		// instead.
+		SceneObjectId AppendScenePath(RendererWindowState &windowState, ScenePath path);
 
 		// Ids -> positions in the matching flat array, for the code that must still speak indices:
 		// OpenGlRendererBackend's signatures are deliberately untouched by task 20, so the render call

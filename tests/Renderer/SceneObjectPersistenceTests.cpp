@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cctype>
 
+#include "IO/SceneObjectsIO.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
+#include "Renderer/Scene/ScenePathPersistence.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -81,16 +84,17 @@ namespace DefectStudio::Tests
 	{
 		RendererWindowState window = MakeWindow();
 		window.freeLabels.push_back({});
-		window.sceneArrows.push_back({});
-		window.sceneArrows.push_back({});
-		window.sceneArrows.back().persistKey = "keepme";
+		ScenePath path;
+		const auto generated = SceneSystem::AppendScenePath(window, path);
+		path.persistKey = "keepme";
+		const auto kept = SceneSystem::AppendScenePath(window, path);
 		EnsureScenePersistKeys(window);
 
 		const std::string key = window.freeLabels[0].persistKey;
 		ASSERT_EQ(key.size(), 32u);
 		EXPECT_TRUE(std::all_of(key.begin(), key.end(), [](unsigned char c) { return std::isdigit(c) || (c >= 'a' && c <= 'f'); }));
-		EXPECT_NE(window.sceneArrows[0].persistKey, key);
-		EXPECT_EQ(window.sceneArrows[1].persistKey, "keepme");
+		EXPECT_NE(window.paths->Store().Find(generated)->persistKey, key);
+		EXPECT_EQ(window.paths->Store().Find(kept)->persistKey, "keepme");
 		EnsureScenePersistKeys(window);
 		EXPECT_EQ(window.freeLabels[0].persistKey, key);
 	}
@@ -173,12 +177,17 @@ namespace DefectStudio::Tests
 		label.text = "hi";
 		label.worldPosition = glm::vec3(1.0f);
 		source.freeLabels.push_back(label);
-		RendererWindowState::SceneArrow arrow;
-		arrow.kind = RendererWindowState::ArrowKind::Line;
-		arrow.fixedPlane = RendererWindowState::WorldPlane::XZ;
-		arrow.end = glm::vec3(2.0f, 0.0f, 0.0f);
+		PersistedSceneArrow arrow;
+		arrow.kind = PersistedArrowKind::Line;
+		arrow.endTip = "None";
+		arrow.points[1] = glm::vec3(2.0f, 0.0f, 0.0f);
+		arrow.startAnchorAtoms = {{0, "C", glm::vec3(0)}};
+		arrow.endAnchorAtoms = {{1, "N", glm::vec3(1.5f, 0, 0)}};
+		arrow.atomBuffer = 0.75f;
 		arrow.style.alpha = 0.5f;
-		source.sceneArrows.push_back(arrow);
+		const auto migrated = MigrateArrowToPath(arrow);
+		ASSERT_TRUE(migrated);
+		(void)SceneSystem::AppendScenePath(source, migrated.Value().path);
 		EnsureScenePersistKeys(source);
 
 		const std::vector<PersistedSceneObject> saved = ExtractPersistedSceneObjects(source);
@@ -200,11 +209,122 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(target.freeLabels.size(), 1u);
 		EXPECT_EQ(target.freeLabels[0].text, "hi");
 		EXPECT_EQ(target.freeLabels[0].worldPosition, glm::vec3(1.0f));
-		ASSERT_EQ(target.sceneArrows.size(), 1u);
-		EXPECT_EQ(target.sceneArrows[0].kind, RendererWindowState::ArrowKind::Line);
-		EXPECT_EQ(target.sceneArrows[0].fixedPlane, RendererWindowState::WorldPlane::XZ);
-		EXPECT_EQ(target.sceneArrows[0].end, arrow.end);
-		EXPECT_FLOAT_EQ(target.sceneArrows[0].style.alpha, 0.5f);
+		ASSERT_NE(target.paths, nullptr);
+		ASSERT_EQ(target.paths->Store().Size(), 1u);
+		const ScenePath &path = *target.paths->Store().At(0);
+		EXPECT_EQ(path.transform.position + path.nodes.back().position, arrow.points.back());
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).atomIndex, 0u);
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).atomIndex, 1u);
+		EXPECT_FLOAT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).buffer, 0.75f);
+		EXPECT_FLOAT_EQ(path.style.alpha, 0.5f);
+	}
+
+	TEST(SceneObjectPersistenceTests, HalfBoundPathKeepsTheFreeEndThroughProjectFileRoundTrip)
+	{
+		RendererWindowState source = MakeWindow();
+		ScenePath path;
+		path.nodes = {{PathElementId{1}, glm::vec3(-2.0f, 1.0f, 0.0f), {}},
+			{PathElementId{2}, glm::vec3(1.25f, 0.0f, 0.0f),
+				PathBinding{PathBinding::CopyPosition{1, glm::vec3(0.0f), 0.75f}}}};
+		path.segments = {{PathElementId{3}, LineSegmentData{}}};
+		path.nextElementId = 4;
+		const auto id = SceneSystem::AppendScenePath(source, path);
+		const auto before = ResolveNodePositions(*source.paths->Store().Find(id), SceneSystem::MakePathBindingContext(source));
+		SceneObjectsFile file;
+		file.structures.push_back({"structure", ExtractPersistedSceneObjects(source)});
+		SceneObjectsFile parsed;
+		std::vector<StructuredError> warnings;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(SceneObjectsIO::Serialize(file), parsed, warnings, error)) << error;
+		ASSERT_TRUE(warnings.empty());
+		RendererWindowState target = MakeWindow();
+		ApplyPersistedSceneObjects(target, parsed.structures[0].objects, warnings);
+		ASSERT_TRUE(warnings.empty());
+		ASSERT_NE(target.paths, nullptr);
+		ASSERT_EQ(target.paths->Store().Size(), 1u);
+		const ScenePath &loaded = *target.paths->Store().At(0);
+		EXPECT_TRUE(std::holds_alternative<PathBinding::Free>(loaded.nodes[0].binding.value));
+		const auto &binding = std::get<PathBinding::CopyPosition>(loaded.nodes[1].binding.value);
+		EXPECT_EQ(binding.atomIndex, 1u);
+		EXPECT_FLOAT_EQ(binding.buffer, 0.75f);
+		const auto after = ResolveNodePositions(loaded, SceneSystem::MakePathBindingContext(target));
+		EXPECT_EQ(after.positions, before.positions);
+	}
+
+	TEST(SceneObjectPersistenceTests, OrbitalSceneDecorationsSurviveProjectFileRoundTrip)
+	{
+		RendererWindowState source = MakeWindow();
+		RendererWindowState::SceneOrbital orbital;
+		orbital.preset = OrbitalPreset::Sp3Sigma;
+		orbital.centerA = glm::vec3(0.0f);
+		orbital.centerB = glm::vec3(1.5f, 0.0f, 0.0f);
+		orbital.stretch = glm::vec3(0.6f, 1.4f, 2.25f);
+		orbital.phaseFlipped = true;
+		source.sceneOrbitals.push_back(orbital);
+
+		SceneObjectsFile file;
+		file.structures.push_back({"structure", ExtractPersistedSceneObjects(source)});
+		SceneObjectsFile parsed;
+		std::vector<StructuredError> ioWarnings;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(SceneObjectsIO::Serialize(file), parsed, ioWarnings, error)) << error;
+		ASSERT_TRUE(ioWarnings.empty());
+
+		RendererWindowState target = MakeWindow();
+		std::vector<StructuredError> applyWarnings;
+		ApplyPersistedSceneObjects(target, parsed.structures.at(0).objects, applyWarnings);
+
+		EXPECT_TRUE(applyWarnings.empty());
+		ASSERT_EQ(target.sceneOrbitals.size(), 1u);
+		EXPECT_EQ(target.sceneOrbitals[0].stretch, orbital.stretch);
+		EXPECT_TRUE(target.sceneOrbitals[0].phaseFlipped);
+	}
+
+	TEST(SceneObjectPersistenceTests, ArrowEndpointReferencesRebindAfterAtomsAreReordered)
+	{
+		RendererWindowState source = MakeWindow();
+		PersistedSceneArrow arrow;
+		arrow.startAnchorAtoms = {{0, "C", source.structure.atoms[0].cartesianPosition}};
+		arrow.endAnchorAtoms = {{1, "N", source.structure.atoms[1].cartesianPosition}};
+		const std::vector<PersistedSceneObject> saved = {arrow};
+
+		RendererWindowState target = MakeWindow();
+		std::rotate(target.structure.atoms.begin(), target.structure.atoms.begin() + 1, target.structure.atoms.end());
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(target, saved, warnings);
+
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_NE(target.paths, nullptr);
+		const ScenePath &path = *target.paths->Store().At(0);
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).atomIndex, 2u);
+		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).atomIndex, 0u);
+	}
+
+	TEST(SceneObjectPersistenceTests, AnchoredPlaneSurvivesExtractAndApply)
+	{
+		RendererWindowState source = MakeWindow();
+		RendererWindowState::ScenePlane plane;
+		plane.anchorAtoms = {0, 1, 2};
+		plane.center = glm::vec3(0.5f, 0.5f, 0.0f);
+		source.scenePlanes.push_back(plane);
+		EnsureScenePersistKeys(source);
+
+		const std::vector<PersistedSceneObject> saved = ExtractPersistedSceneObjects(source);
+		ASSERT_EQ(saved.size(), 1u);
+		const auto &savedPlane = std::get<PersistedScenePlane>(saved[0]);
+		ASSERT_EQ(savedPlane.anchorAtoms.size(), 3u);
+		EXPECT_EQ(savedPlane.anchorAtoms[0].element, "C");
+		EXPECT_EQ(savedPlane.anchorAtoms[1].element, "N");
+		EXPECT_EQ(savedPlane.anchorAtoms[2].position, glm::vec3(0.0f, 1.5f, 0.0f));
+
+		RendererWindowState target = MakeWindow();
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(target, saved, warnings);
+
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(target.scenePlanes.size(), 1u);
+		EXPECT_EQ(target.scenePlanes[0].anchorAtoms, (std::vector<std::size_t>{0, 1, 2}));
+		EXPECT_EQ(target.scenePlanes[0].center, plane.center);
 	}
 
 	TEST(SceneObjectPersistenceTests, MergeDedupsByKeyMostRecentWinsAndKeepsDeletedElsewhere)

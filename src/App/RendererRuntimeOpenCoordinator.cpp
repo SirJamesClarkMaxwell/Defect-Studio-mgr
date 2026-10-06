@@ -10,6 +10,7 @@
 #include "Core/Utils/Uuid.hpp"
 #include "Domain/Crystal/BondGenerator.hpp"
 #include "Domain/DomainLayer.hpp"
+#include "Renderer/OpenCrystalStructureAsWindow.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/StructureRendererDataBuilder.hpp"
@@ -37,6 +38,8 @@ namespace DefectStudio
 
 		AddSubscription(m_EventBus->Subscribe<RendererEvents::Windows::OpenStructureRequested>(
 			std::bind_front(&RendererRuntimeOpenCoordinator::onOpenStructureRequested, this)));
+		AddSubscription(m_EventBus->Subscribe<RendererEvents::Windows::OpenEmptyRequested>(
+			std::bind_front(&RendererRuntimeOpenCoordinator::onOpenEmptyRequested, this)));
 		AddSubscription(m_EventBus->Subscribe<JobCompletedEvent>(
 			std::bind_front(&RendererRuntimeOpenCoordinator::onJobCompleted, this)));
 		AddSubscription(m_EventBus->Subscribe<JobFailedEvent>(
@@ -46,6 +49,15 @@ namespace DefectStudio
 	RendererRuntimeOpenCoordinator::~RendererRuntimeOpenCoordinator()
 	{
 		ClearSubscriptions();
+	}
+
+	void RendererRuntimeOpenCoordinator::onOpenEmptyRequested(
+		const RendererEvents::Windows::OpenEmptyRequested &)
+	{
+		if (auto rendererLayer = m_RendererLayer.lock())
+			OpenEmptyRendererWindow(*rendererLayer, "Pusta scena");
+		else
+			DS_LOG_ERROR("Open empty renderer window: RendererLayer unavailable");
 	}
 
 	void RendererRuntimeOpenCoordinator::onOpenStructureRequested(

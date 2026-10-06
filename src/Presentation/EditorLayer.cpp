@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -40,6 +41,7 @@
 #include "IO/SceneObjectsIO.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Presentation/ProjectSceneSave.hpp"
+#include "Renderer/ProjectSceneWindow.hpp"
 #include "Renderer/Scene/SceneObjectPersistence.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/EditorLayer.hpp"
@@ -64,6 +66,7 @@
 #include "Presentation/Panels/TerminalPanel.hpp"
 #include "Presentation/Panels/TextEditorPanel.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 
 namespace DefectStudio
@@ -336,14 +339,14 @@ namespace DefectStudio
 		Ref<ElectronicStructureSession> m_Session;
 	};
 
-	// Un-hides the panel if the user had closed it, then focuses it - a closed docked window has no
-	// ImGui window to focus, so SetVisible must run first (that frame's Render() reopens it, then
-	// SetWindowFocus can find it by title).
+	// Un-hides the panel if the user had closed it, then queues focus until after panel rendering.
+	// A closed docked window has no ImGui window to focus during command execution.
 	class FocusPanelCommand final : public ICommand
 	{
 	public:
-		FocusPanelCommand(WeakRef<IPanel> panel, std::string description)
-			: m_Panel(std::move(panel)), m_Description(std::move(description))
+		FocusPanelCommand(WeakRef<IPanel> panel, std::function<void(const std::string &)> requestFocus,
+		                  std::string description)
+			: m_Panel(std::move(panel)), m_RequestFocus(std::move(requestFocus)), m_Description(std::move(description))
 		{
 		}
 
@@ -353,7 +356,7 @@ namespace DefectStudio
 			if (panel == nullptr)
 				return {};
 			panel->SetVisible(true);
-			ImGui::SetWindowFocus(panel->GetTitle().c_str());
+			m_RequestFocus(panel->GetTitle());
 			return {};
 		}
 
@@ -364,6 +367,7 @@ namespace DefectStudio
 
 	private:
 		WeakRef<IPanel> m_Panel;
+		std::function<void(const std::string &)> m_RequestFocus;
 		std::string m_Description;
 	};
 
@@ -577,6 +581,12 @@ namespace DefectStudio
 		{
 			entry.panel->Render();
 		}
+		if (m_PendingPanelFocusTitle.has_value()
+			&& ImGui::FindWindowByName(m_PendingPanelFocusTitle->c_str()) != nullptr)
+		{
+			ImGui::SetWindowFocus(m_PendingPanelFocusTitle->c_str());
+			m_PendingPanelFocusTitle.reset();
+		}
 	}
 
 	void EditorLayer::initializePanelsIfNeeded()
@@ -602,7 +612,10 @@ namespace DefectStudio
 					{},
 					CommandFlags::None},
 				[this](CommandContext &) -> Unique<ICommand> {
-					return CreateUnique<FocusPanelCommand>(findPanel(m_ProjectTreePanelId), "Focus Project Tree");
+					return CreateUnique<FocusPanelCommand>(
+						findPanel(m_ProjectTreePanelId),
+						[this](const std::string &title) { m_PendingPanelFocusTitle = title; },
+						"Focus Project Tree");
 				});
 			if (!result)
 				DS_LOG_WARN("Focus Project Tree command registration failed: {}", result.Error().technicalDetails);
@@ -630,6 +643,19 @@ namespace DefectStudio
 				"terminal.focus", "Focus Terminal", "Bring the Terminal panel to focus, reopening it first if it was closed.",
 				[](TerminalPanel &terminal) { terminal.RequestFocus(); });
 			registerTerminalCommand(
+				"terminal.toggle", "Toggle Terminal", "Show and focus the Terminal, or hide it when already focused.",
+				[](TerminalPanel &terminal) {
+					ImGuiWindow *terminalWindow = ImGui::FindWindowByName("Terminal###TerminalPanel");
+					ImGuiWindow *focusedWindow = ImGui::GetCurrentContext()->NavWindow;
+					const bool focused = terminalWindow != nullptr
+						&& focusedWindow != nullptr
+						&& (focusedWindow == terminalWindow || focusedWindow->RootWindow == terminalWindow);
+					if (terminal.IsVisible() && focused)
+						terminal.SetVisible(false);
+					else
+						terminal.RequestFocus();
+				});
+			registerTerminalCommand(
 				"terminal.new_tab", "New Terminal Tab", "Open a new terminal tab and focus it.",
 				[](TerminalPanel &terminal) { terminal.OpenNewTab(); });
 			registerTerminalCommand(
@@ -650,9 +676,30 @@ namespace DefectStudio
 				m_DomainLayer,
 				"Renderer",
 				true);
-			registerPanel<SceneOutlinerPanel>(
-				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, "Scene Outliner", true);
-			registerPanel<ObjectPropertiesPanel>(*rendererLayer, m_CommandRegistry, m_DomainLayer, "Object Properties", true);
+			const PanelId sceneOutlinerPanelId = registerPanel<SceneOutlinerPanel>(
+				*rendererLayer, m_DomainLayer, m_JobSystem, m_ElementPropertiesTable, m_CommandRegistry,
+				"Scene Outliner", true);
+			if (auto commandRegistry = m_CommandRegistry.lock())
+			{
+				auto result = commandRegistry->Register(
+					CommandMeta{
+						CommandID{"editor.focus_scene_outliner"},
+						"Focus Scene Outliner",
+						"Editor",
+						"Bring the Scene Outliner panel to focus, reopening it first if it was closed.",
+						{},
+						CommandFlags::None},
+					[this, sceneOutlinerPanelId](CommandContext &) -> Unique<ICommand> {
+						return CreateUnique<FocusPanelCommand>(
+							findPanel(sceneOutlinerPanelId),
+							[this](const std::string &title) { m_PendingPanelFocusTitle = title; },
+							"Focus Scene Outliner");
+					});
+				if (!result)
+					DS_LOG_WARN("Focus Scene Outliner command registration failed: {}", result.Error().technicalDetails);
+			}
+			registerPanel<ObjectPropertiesPanel>(
+				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_AtomStyleTable, "Object Properties", true);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
 			m_NewStructureWizardPanelId = registerPanel<NewStructureWizardPanel>(
@@ -767,33 +814,6 @@ namespace DefectStudio
 		}
 	}
 
-	void EditorLayer::loadSceneObjectsForProject()
-	{
-		m_KeptSceneObjects = {};
-		m_AppliedSceneObjectWindows.clear();
-		if (!m_ActiveProject.has_value())
-			return;
-		std::vector<StructuredError> warnings;
-		std::string error;
-		if (!SceneObjectsIO::Load(m_ActiveProjectDirectory, m_KeptSceneObjects, warnings, error))
-		{
-			DS_LOG_WARN("EditorLayer: scene object load failed: {}", error);
-			return;
-		}
-		for (const StructuredError &warning : warnings)
-		{
-			DS_LOG_WARN("EditorLayer: {}", warning.technicalDetails);
-			if (m_EventBus != nullptr)
-				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
-		}
-		if (auto rendererLayer = m_RendererLayer.lock())
-		{
-			for (RendererWindowState &window : rendererLayer->GetWindows())
-			{
-				applySceneObjectsToWindow(window);
-			}
-		}
-	}
 
 	void EditorLayer::applySceneObjectsToWindow(RendererWindowState &windowState)
 	{
@@ -802,10 +822,41 @@ namespace DefectStudio
 		auto domainLayer = m_DomainLayer.lock();
 		if (domainLayer == nullptr)
 			return;
-		const auto record = domainLayer->Workspace().Structures().Find(windowState.structureId).lock();
+		const auto record = domainLayer->Workspace().Structures().FindMutable(windowState.structureId).lock();
 		if (record == nullptr)
 			return;
 		const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+		for (PersistedStructureSceneObjects &entry : m_KeptSceneObjects.structures)
+		{
+			if (entry.structureKey != key || (entry.vacancies.empty() && !entry.defectFrame))
+				continue;
+			const bool restoreVacancies = record->structure.vacancies.empty() && !entry.vacancies.empty();
+			const bool restoreFrame = !record->structure.defectFrame && entry.defectFrame;
+			if (restoreVacancies || restoreFrame)
+			{
+				if (restoreVacancies)
+					for (const PersistedVacancy &site : entry.vacancies)
+						record->structure.vacancies.push_back({site.position, site.fractional,
+							site.sourceSpecies, site.label, site.index, site.color, site.hidden});
+				if (restoreFrame)
+				{
+					const PersistedDefectFrame &saved = *entry.defectFrame;
+					record->structure.defectFrame = DefectFrame{saved.origin, saved.x, saved.y, saved.z};
+					windowState.defectFrameAxisLength = saved.axisLength.value_or(windowState.defectFrameAxisLength);
+					windowState.defectFrameAxisWidth = saved.axisWidth.value_or(windowState.defectFrameAxisWidth);
+					windowState.defectFrameNegativeAxes = saved.negativeAxes.value_or(windowState.defectFrameNegativeAxes);
+					windowState.showDefectFrame = saved.shown.value_or(windowState.showDefectFrame);
+				}
+				if (auto renderer = m_RendererLayer.lock())
+					for (RendererWindowState &window : renderer->GetWindows())
+						if (window.structureId == record->id)
+							RebuildAndSync(window, *record, m_AtomStyleTable,
+								window.selectedAtomIndices, window.selectedBondIndices);
+			}
+			// Consume once: opening another window after removing all markers must not restore them.
+			entry.vacancies.clear();
+			entry.defectFrame.reset();
+		}
 		std::vector<PersistedSceneObject> objects;
 		bool found = false;
 		if (auto rendererLayer = m_RendererLayer.lock())
@@ -1303,50 +1354,6 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonFilePicked, EventPriority::Normal));
 	}
 
-	void EditorLayer::loadInitialProjectState()
-	{
-		std::vector<RecentProjectEntry> recents;
-		std::string recentsError;
-		(void)RecentProjectsIO::Load(RecentProjectsIO::DefaultFilePath(), recents, recentsError);
-
-		bool opened = false;
-		if (!recents.empty())
-		{
-			ProjectManifest manifest;
-			std::string manifestError;
-			if (ProjectManifestIO::Load(recents.front().projectDirectory, manifest, manifestError))
-			{
-				m_ActiveProject = std::move(manifest);
-				m_ActiveProjectDirectory = recents.front().projectDirectory;
-				loadSceneObjectsForProject();
-				opened = true;
-			}
-			else
-			{
-				DS_LOG_WARN("EditorLayer: most recent project at '{}' failed to load: {}",
-					recents.front().projectDirectory.String(), manifestError);
-			}
-		}
-
-		if (!opened)
-		{
-			std::string error;
-			if (!ProjectRootsIO::Load(ProjectRootsIO::DefaultFilePath(), m_AdHocRoots, error))
-			{
-				DS_LOG_WARN("EditorLayer: failed to load project_roots.yaml: {}", error);
-				m_AdHocRoots.clear();
-			}
-			else if (!error.empty())
-			{
-				// Load() still returns true after a successful migration even if persisting the
-				// migrated seed failed (session stays usable) - surface that failure here instead
-				// of silently dropping it.
-				DS_LOG_WARN("EditorLayer: {}", error);
-			}
-		}
-
-		refreshProjectDependentPanels();
-	}
 
 	void EditorLayer::createNewProject(const Path &directory)
 	{
@@ -1736,16 +1743,61 @@ namespace DefectStudio
 			}
 			return;
 		}
+		pollPendingWindowRestores();
 		SceneObjectsFile sceneObjects = m_KeptSceneObjects;
+		if (auto rendererLayer = m_RendererLayer.lock())
+			sceneObjects.projectObjects = GatherProjectSceneObjects(*rendererLayer);
 		std::vector<StructureId> savedStructures;
 		if (auto domainLayer = m_DomainLayer.lock())
 		{
+			for (const auto &record : domainLayer->Workspace().Structures().Records())
+			{
+				if (record->sourcePath.Empty())
+					continue;
+				const std::string key = SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath);
+				auto entry = std::find_if(sceneObjects.structures.begin(), sceneObjects.structures.end(),
+					[&](const auto &candidate) { return candidate.structureKey == key; });
+				// A registered but unopened structure can still have an unconsumed sidecar.
+				if (entry != sceneObjects.structures.end() &&
+					((!entry->vacancies.empty() && record->structure.vacancies.empty()) ||
+						(entry->defectFrame && !record->structure.defectFrame)))
+					continue;
+				if (entry == sceneObjects.structures.end())
+				{
+					if (record->structure.vacancies.empty() && !record->structure.defectFrame)
+						continue;
+					sceneObjects.structures.push_back({key, {}, {}});
+					entry = std::prev(sceneObjects.structures.end());
+				}
+				entry->vacancies.clear();
+				for (const VacancySite &site : record->structure.vacancies)
+					entry->vacancies.push_back(
+						{site.position, site.fractional, site.sourceSpecies, site.label, site.index, site.color, site.hidden});
+				entry->defectFrame.reset();
+				if (const auto &frame = record->structure.defectFrame)
+				{
+					PersistedDefectFrame saved{frame->origin, frame->x, frame->y, frame->z};
+					// ponytail: the first window showing the structure speaks for all of them.
+					if (auto rendererLayer = m_RendererLayer.lock())
+						for (const RendererWindowState &window : rendererLayer->GetWindows())
+							if (window.structureId == record->id)
+							{
+								saved.axisLength = window.defectFrameAxisLength;
+								saved.axisWidth = window.defectFrameAxisWidth;
+								saved.negativeAxes = window.defectFrameNegativeAxes;
+								saved.shown = window.showDefectFrame;
+								break;
+							}
+					entry->defectFrame = saved;
+				}
+				savedStructures.push_back(record->id);
+			}
 			if (auto rendererLayer = m_RendererLayer.lock())
 			{
 				std::unordered_map<std::string, std::vector<std::pair<std::string, std::vector<PersistedSceneObject>>>>
 					grouped;
 				std::unordered_map<std::string, StructureId> ids;
-				for (const RendererWindowState &window : rendererLayer->GetWindows())
+				for (RendererWindowState &window : rendererLayer->GetWindows())
 				{
 					if (window.structureId.is_nil())
 						continue;
@@ -1805,6 +1857,19 @@ namespace DefectStudio
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(warning)});
 		m_KeptSceneObjects = std::move(sceneObjects);
+		for (auto &entry : m_KeptSceneObjects.structures)
+			for (const auto &id : savedStructures)
+				if (const auto record = domainLayer->Workspace().Structures().Find(id).lock();
+					record != nullptr && entry.structureKey == SceneObjectsIO::MakeStructureKey(m_ActiveProjectDirectory, record->sourcePath))
+				{
+					entry.vacancies.clear();
+					entry.defectFrame.reset();
+					break;
+				}
+		if (auto rendererLayer = m_RendererLayer.lock())
+			for (RendererWindowState &window : rendererLayer->GetWindows())
+				if (window.isProjectScene)
+					window.sceneObjectsDirty = false;
 		// Legacy in-app-built structure export removed in Step 11. All new structures flow
 		// through StructureLifecycleCoordinator (AddStructureToProjectRequested event).
 	}
@@ -1897,172 +1962,6 @@ namespace DefectStudio
 	void EditorLayer::onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &)
 	{
 		m_CommandPaletteOpenRequested = true;
-	}
-
-	void EditorLayer::renderMainMenuBar()
-	{
-		if (!ImGui::BeginMainMenuBar())
-			return;
-
-		renderFileMenu();
-		renderEditMenu();
-		renderViewMenu();
-		renderToolsMenu();
-		renderHelpMenu();
-
-		ImGui::EndMainMenuBar();
-	}
-
-	void EditorLayer::renderFileMenu()
-	{
-		if (!ImGui::BeginMenu("Plik"))
-			return;
-
-		if (ImGui::MenuItem("Nowy"))
-		{
-			Result<std::optional<Path>> picked = Platform::PickFolder({});
-			if (picked && picked->has_value())
-				createNewProject(picked->value());
-		}
-		if (ImGui::MenuItem("Otworz"))
-		{
-			Result<std::optional<Path>> picked = Platform::PickFolder({});
-			if (picked && picked->has_value())
-				openProject(picked->value());
-		}
-		if (ImGui::MenuItem("Zapisz", "Ctrl+S"))
-			persistCurrentRoots();
-		if (ImGui::BeginMenu("Ostatnie projekty"))
-		{
-			std::vector<RecentProjectEntry> recents;
-			std::string recentsError;
-			(void)RecentProjectsIO::Load(RecentProjectsIO::DefaultFilePath(), recents, recentsError);
-			if (recents.empty())
-				ImGui::MenuItem("Brak ostatnich projektow", nullptr, false, false);
-			else
-			{
-				for (const RecentProjectEntry &entry : recents)
-				{
-					if (ImGui::MenuItem(entry.projectDirectory.String().c_str()))
-						openProject(entry.projectDirectory);
-				}
-			}
-			ImGui::EndMenu();
-		}
-		// Real viewport PNG export (ExportImagePanel/renderer.export.image, F12) already exists -
-		// points at it instead of the JSON/CSV/LaTeX/ZIP placeholders that had no feature behind them.
-		if (ImGui::MenuItem("Eksport obrazu (PNG)..."))
-		{
-			if (auto panel = findPanel(m_ExportImagePanelId).lock())
-			{
-				panel->SetVisible(true);
-				ImGui::SetWindowFocus(panel->GetTitle().c_str());
-			}
-		}
-		if (ImGui::MenuItem("Wyjdz", "Ctrl+Shift+W"))
-		{
-			if (auto commandRegistry = m_CommandRegistry.lock())
-			{
-				CommandContext context;
-				Result<CommandOutcome> result = commandRegistry->Execute(CommandID{"app.quit"}, std::move(context));
-				if (!result)
-					DS_LOG_WARN("Quit command failed: {}", result.Error().technicalDetails);
-			}
-		}
-		ImGui::EndMenu();
-	}
-
-	void EditorLayer::renderEditMenu()
-	{
-		if (!ImGui::BeginMenu("Edycja"))
-			return;
-
-		auto executeCommand = [this](const char *commandId)
-		{
-			if (auto commandRegistry = m_CommandRegistry.lock())
-			{
-				CommandContext context;
-				Result<CommandOutcome> result = commandRegistry->Execute(CommandID{commandId}, std::move(context));
-				if (!result)
-					DS_LOG_WARN("Command '{}' failed: {}", commandId, result.Error().technicalDetails);
-			}
-		};
-
-		// edit.undo/edit.redo already exist and work (Ctrl+Z/Ctrl+Y, CoreLayer::registerSystemCommands)
-		// - these were disabled stubs pretending the feature didn't exist.
-		if (ImGui::MenuItem("Cofnij", "Ctrl+Z"))
-			executeCommand("edit.undo");
-		if (ImGui::MenuItem("Ponow", "Ctrl+Y"))
-			executeCommand("edit.redo");
-		ImGui::EndMenu();
-	}
-
-	void EditorLayer::renderViewMenu()
-	{
-		if (!ImGui::BeginMenu("Widok"))
-			return;
-
-		const auto panelIds = m_Panels.GetIds();
-		for (const PanelId panelId : panelIds)
-		{
-			if (auto panel = findPanel(panelId).lock())
-			{
-				bool visible = panel->IsVisible();
-				if (ImGui::MenuItem(panel->GetTitle().c_str(), nullptr, &visible))
-					panel->SetVisible(visible);
-			}
-		}
-
-		if (ImGui::BeginMenu("Klonuj panel"))
-		{
-			for (const PanelId panelId : panelIds)
-			{
-				if (auto panel = findPanel(panelId).lock())
-				{
-					if (ImGui::MenuItem(panel->GetTitle().c_str()))
-						(void)m_Panels.Clone(panelId);
-				}
-			}
-			ImGui::EndMenu();
-		}
-
-		ImGui::EndMenu();
-	}
-
-	void EditorLayer::renderToolsMenu()
-	{
-		if (!ImGui::BeginMenu("Narzedzia"))
-			return;
-
-		// The Settings panel already exists (registered visible-by-default) - this just gives it a
-		// conventional Tools>Preferences entry point instead of leaving it reachable only from Widok.
-		if (ImGui::MenuItem("Preferencje"))
-		{
-			if (auto panel = findPanel(m_SettingsPanelId).lock())
-			{
-				panel->SetVisible(true);
-				ImGui::SetWindowFocus(panel->GetTitle().c_str());
-			}
-		}
-		ImGui::EndMenu();
-	}
-
-	void EditorLayer::renderHelpMenu()
-	{
-		if (!ImGui::BeginMenu("Pomoc"))
-			return;
-
-		// The keybindings table (chord/command/description/context) already exists inside Settings -
-		// points at it rather than duplicating it in a second window.
-		if (ImGui::MenuItem("Lista skrotow"))
-		{
-			if (auto panel = findPanel(m_SettingsPanelId).lock())
-			{
-				panel->SetVisible(true);
-				ImGui::SetWindowFocus(panel->GetTitle().c_str());
-			}
-		}
-		ImGui::EndMenu();
 	}
 
 } // namespace DefectStudio

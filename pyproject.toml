@@ -17,6 +17,9 @@ scientific-core = [
     "numpy>=2.0",
     "scipy>=1.14",
     "ase>=3.22",
+    "puntukas[symmetry]",
+    "groupy-symmetry",
+    "dephonopy",
     "pymatgen>=2025.1",
     "spglib>=2.0",
     "seekpath>=2.1",
@@ -37,3 +40,9 @@ docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
 ]
+
+[tool.uv.sources]
+# Private bitbucket.org/puntukas checkouts: cloned into Vendor/, gitignored, never committed.
+puntukas = { path = "Vendor/puntukas_tools2", editable = true }
+groupy-symmetry = { path = "Vendor/groupy", editable = true }
+dephonopy = { path = "Vendor/dephonopy", editable = true }

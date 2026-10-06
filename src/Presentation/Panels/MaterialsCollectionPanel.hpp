@@ -34,6 +34,7 @@ namespace DefectStudio
 		MaterialsCollectionPanel(const MaterialsCollectionPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Structure; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Pushed by EditorLayer whenever the active project changes. An empty path means no project

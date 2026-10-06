@@ -20,6 +20,15 @@ namespace DefectStudio
 	class DomainLayer;
 	class RendererLayer;
 	struct StructureRecord;
+	struct HiddenSceneState;
+
+	void RebuildAndSync(
+		RendererWindowState &windowState,
+		const StructureRecord &record,
+		const AtomStyleTable &atomStyleTable,
+		const std::vector<std::size_t> &selectAfter,
+		const std::vector<std::size_t> &selectBondsAfter = {},
+		const HiddenSceneState *hiddenOverride = nullptr);
 
 	// Resolved window + the mutable domain StructureRecord backing it, shared by every atom-edit
 	// command (RendererAtomEditCommands.cpp) and by ObjectPropertiesPanel, which needs domain-only

@@ -50,6 +50,7 @@
 [submodule "Vendor/ImPlot"]
 	path = Vendor/ImPlot
 	url = https://github.com/sjcmdev/implot.git
+	branch = defectstudio-premake
 [submodule "Vendor/ImGuizmo"]
 	path = Vendor/ImGuizmo
 	url = https://github.com/sjcmdev/ImGuizmo.git

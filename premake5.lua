@@ -2,7 +2,7 @@ workspace "DefectStudio"
     architecture "x86_64"
     startproject "DefectStudio"
     location "build/generated/%{_ACTION}"
-    toolset "msc-v145"
+    toolset(os.getenv("DS_TOOLSET") or "msc-v145")
 
     configurations {
         "Debug",
@@ -224,7 +224,10 @@ local function DefineTracyProject()
         includedirs { "Vendor/Tracy/public" }
         defines {
             "TRACY_ENABLE",
-            "TRACY_NO_SYSTEM_TRACING"
+            "TRACY_NO_SYSTEM_TRACING",
+            -- Without ON_DEMAND the client queues every zone from startup until a profiler
+            -- connects, in its own allocator: ~1.5 MB/s idle, 10 GB after a few hours.
+            "TRACY_ON_DEMAND"
         }
 
         filter "system:windows"
@@ -364,6 +367,7 @@ include "Vendor/msdf-atlas-gen"
 -- (scripts/Windows/GenerateProjects.bat) silently discards uncommitted edits there. See
 -- src/Presentation/ImGuiUserConfig.hpp for what this actually overrides.
 project "ImGui"
+    files { "Vendor/ImGui/misc/cpp/imgui_stdlib.h", "Vendor/ImGui/misc/cpp/imgui_stdlib.cpp" }
     includedirs { "src" }
     filter "configurations:Debug"
         defines { 'IMGUI_USER_CONFIG="Presentation/ImGuiUserConfig.hpp"' }
@@ -565,9 +569,11 @@ project "DefectStudio"
         postbuildcommands {
             'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
             'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL',
-            -- /D: only copies files newer than the destination, so repeat builds stay fast.
-            'if not exist "%{cfg.targetdir}\\install" mkdir "%{cfg.targetdir}\\install"',
-            'xcopy /E /Y /I /D "' .. windowsInstallSource .. '\\*" "%{cfg.targetdir}\\install\\" >NUL'
+            -- robocopy, not xcopy: the bundled Python runtime under install/app/python has paths that
+            -- pass 254 characters once prefixed with the target dir, and xcopy dies on those with a
+            -- bogus "Insufficient memory". /XO keeps the old xcopy /D behaviour (skip older sources)
+            -- so repeat builds stay fast. robocopy exit codes 0-7 mean success, so map them to 0.
+            'robocopy "' .. windowsInstallSource .. '" "%{cfg.targetdir}\\install" /E /XO /NFL /NDL /NJH /NJS /NP >NUL & if errorlevel 8 (exit /b 1) else (cmd /c exit 0)'
         }
 
     filter { "system:windows", "action:vs2022" }
@@ -578,7 +584,10 @@ project "DefectStudio"
         defines {
             "DS_PLATFORM_WINDOWS",
             "TRACY_ENABLE",
-            "TRACY_NO_SYSTEM_TRACING"
+            "TRACY_NO_SYSTEM_TRACING",
+            -- Without ON_DEMAND the client queues every zone from startup until a profiler
+            -- connects, in its own allocator: ~1.5 MB/s idle, 10 GB after a few hours.
+            "TRACY_ON_DEMAND"
         }
         files { "install/app/assets/icon.rc" }
         links { "Tracy" }
@@ -755,6 +764,12 @@ project "DefectStudioTests"
             "GLFW_INCLUDE_NONE",
             "IMGUI_IMPL_OPENGL_LOADER_GLAD"
         }
+        -- The GL smoke tests initialize the production backend, which loads its shaders from disk;
+        -- they need the same shader tree next to the test exe that the app gets next to its own.
+        postbuildcommands {
+            'if not exist "%{cfg.targetdir}\\shaders" mkdir "%{cfg.targetdir}\\shaders"',
+            'xcopy /E /Y /I "' .. windowsShaderSource .. '\\*" "%{cfg.targetdir}\\shaders\\" >NUL'
+        }
 
     filter { "system:windows", "action:vs2022" }
         buildoptions { "/utf-8" }
@@ -763,6 +778,10 @@ project "DefectStudioTests"
         pic "On"
         defines { "DS_PLATFORM_LINUX" }
         links { "pthread" }
+        postbuildcommands {
+            'mkdir -p "%{cfg.targetdir}/shaders"',
+            'cp -r src/Renderer/OpenGl/Shaders/. "%{cfg.targetdir}/shaders/"'
+        }
 
     filter "system:macosx"
         defines { "DS_PLATFORM_MACOS" }

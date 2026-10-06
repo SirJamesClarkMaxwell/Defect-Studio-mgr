@@ -6,13 +6,8 @@ import pathlib
 import sys
 import tempfile
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-
 try:
     from puntukas.vasp import VaspOutput
-
-    from common.puntukas_compat import patch_incar_tolerant_encoding
-    patch_incar_tolerant_encoding()
 except ImportError as exc:
     print(json.dumps({"error": "puntukas_not_installed", "detail": str(exc)}), file=sys.stderr)
     raise SystemExit(1)
@@ -24,16 +19,15 @@ def load_orbital_grid_payload(directory: str, ispin: int, ikpt: int, band: int) 
     if output.wavecar is None:
         raise FileNotFoundError("Missing wavecar")
 
-    # Wavecar.phi() returns reciprocal-space PW coefficients (PWWavefunction); real_space_wfs()
-    # FFTs those onto a real-space grid (RSWavefunction, complex128, already normalized). The real
-    # part keeps the wavefunction's sign - needed for +/- lobe isosurface coloring, unlike |psi|^2
-    # which discards it.
+    # wavefunction() returns a PlaneWaveField; to_real_space() FFTs it onto the reader's own
+    # minimal fast grid. The real part keeps the wavefunction's sign, which is needed for +/- lobe
+    # isosurface coloring, unlike |psi|^2 which discards it.
     # `band` here is VASP's own 1-based number (matching OUTCAR/EIGENVAL and the orbital table in
-    # vasp_output_load.py's _orbitals_payload) - Wavecar.phi indexes the WAVECAR band array
+    # vasp_output_load.py's _orbitals_payload) - Wavecar.wavefunction indexes the WAVECAR band array
     # 0-based, hence the -1. Keep this in sync with that other conversion: this is the grid-fetch
     # counterpart to the same band the table already displays.
-    phi = output.wavecar.phi(ispin, ikpt, max(band - 1, 0))
-    real_space = phi.real_space_wfs()
+    field = output.wavecar.wavefunction(ispin, ikpt, max(band - 1, 0))
+    real_space = field.to_real_space()
     grid = real_space.data.real.astype("float32")
 
     # Grid is too large for a JSON-line payload (up to tens of MB) - write it as a raw contiguous
@@ -46,9 +40,9 @@ def load_orbital_grid_payload(directory: str, ispin: int, ikpt: int, band: int) 
     return {
         "gridPath": grid_path,
         "dims": list(grid.shape),
-        "cell": real_space.cell.tolist(),
-        "energy": float(phi.energy),
-        "occupation": float(phi.occ),
+        "cell": real_space.cell.array.tolist(),
+        "energy": float(field.meta["energy"]),
+        "occupation": float(field.meta["occupation"]),
     }
 
 

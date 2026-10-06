@@ -17,7 +17,6 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
-#include "Presentation/Panels/SceneArrowEditorWidget.hpp"
 #include "Presentation/Panels/ViewportToolbarPopover.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -447,6 +446,14 @@ namespace DefectStudio
 			ImGui::SeparatorText("Guides");
 			ImGui::Checkbox("Cell", &windowState.showCellBox);
 			ImGui::Checkbox("Grid", &windowState.showGrid);
+			ImGui::Checkbox("Vacancies", &windowState.showVacancies);
+			ImGui::BeginDisabled(!windowState.structure.defectFrame.has_value());
+			ImGui::Checkbox("Defect axes", &windowState.showDefectFrame);
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip(windowState.structure.defectFrame
+						? "Local x/y/z of the defect. While shown, 1/2/3 look along them; Shift+1/2/3 along a/b/c."
+						: "No defect axes yet - right-click > Osie defektu.");
 			ImGui::EndPopup();
 		}
 		sameLineTight();

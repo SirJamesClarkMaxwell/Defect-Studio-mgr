@@ -39,6 +39,7 @@ namespace DefectStudio
 		DisplacementComparisonPanel(const DisplacementComparisonPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Structure; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Prefills the comparison file path + last threshold from the just-opened project's manifest

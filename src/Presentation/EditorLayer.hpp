@@ -24,6 +24,7 @@
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/EditorUiState.hpp"
+#include "Presentation/PanelDockRegions.hpp"
 #include "Presentation/Panels/LoggingPanel.hpp"
 #include "Presentation/Panels/ProgressMonitorWindow.hpp"
 #include "Presentation/Panels/ProjectTreePanel.hpp"
@@ -129,6 +130,7 @@ namespace DefectStudio
 	{
 	public:
 		EditorLayer();
+		void SetStartupProjectDirectory(std::optional<Path> directory);
 		void BindRuntimeServices(Ref<EventBus> eventBus,
 		                         WeakRef<JobSystem> jobSystem,
 		                         WeakRef<ProgressTracker> progressTracker,
@@ -159,12 +161,18 @@ namespace DefectStudio
 		WeakRef<IPanel> findPanel(PanelId panelId);
 		WeakRef<const IPanel> findPanel(PanelId panelId) const;
 
+		using CommandMenuExecutor = std::function<void(const char *)>;
 		void renderMainMenuBar();
-		void renderFileMenu();
-		void renderEditMenu();
+		void renderFileMenu(const CommandMenuExecutor &executeCommand);
+		void renderEditMenu(const CommandMenuExecutor &executeCommand);
 		void renderViewMenu();
+		void renderCommandMenu(const CommandMenuExecutor &executeCommand);
 		void renderToolsMenu();
 		void renderHelpMenu();
+		void updateDockRegionPanelTitles();
+		void registerDockRegionCommands();
+		void toggleDockRegion(DockRegion region);
+		void applyDockRegionDecision(const DockRegionToggle::Decision &decision);
 		void initializePanelsIfNeeded();
 		void handleFontShortcuts(Event &event);
 		void renderCommandPalettePopup();
@@ -274,6 +282,7 @@ namespace DefectStudio
 		bool m_CommandPaletteOpenRequested = false;
 		int m_CommandPaletteSelection = 0;
 		std::array<char, 128> m_CommandPaletteSearchBuffer{};
+		std::optional<std::string> m_PendingPanelFocusTitle;
 		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
 		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see
 		// RendererStartupBootstrap::GenerateRendererWindowId, which pollPendingWindowRestores
@@ -286,6 +295,7 @@ namespace DefectStudio
 		// m_PendingWindowRestores above - root list changes are rare and shouldn't risk being lost
 		// to a crash).
 		std::optional<ProjectManifest> m_ActiveProject;
+		std::optional<Path> m_StartupProjectDirectory;
 		Path m_ActiveProjectDirectory;
 		std::vector<ProjectRootEntry> m_AdHocRoots;
 		SceneObjectsFile m_KeptSceneObjects;
@@ -301,6 +311,13 @@ namespace DefectStudio
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
 		PanelId m_NewStructureWizardPanelId = 0;
+		DockRegionToggle m_LeftDockRegion;
+		DockRegionToggle m_BottomDockRegion;
+		DockRegionToggle m_RightDockRegion;
+		DockRegionTracker m_DockRegionTracker;
+		std::vector<std::string> m_LeftDockTitles;
+		std::vector<std::string> m_BottomDockTitles;
+		std::vector<std::string> m_RightDockTitles;
 
 		// Shared with App's StructureLifecycleCoordinator: the one place in-progress creation
 		// sessions live. Panels read through this instead of keeping their own draft copies.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,8 @@ namespace DefectStudio
 		LatticeCell cell;
 		std::vector<AtomSite> atoms;
 		std::vector<VacancySite> vacancies;
+		// Saved in the scene_objects.yaml sidecar like `vacancies` - a POSCAR has no place for it.
+		std::optional<DefectFrame> defectFrame;
 		std::vector<Bond> bonds;
 		BondGenerationSettings bondSettings;
 		bool isPeriodic = true;

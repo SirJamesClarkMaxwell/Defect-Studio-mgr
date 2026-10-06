@@ -53,6 +53,7 @@ namespace DefectStudio
 		NewStructureWizardPanel(const NewStructureWizardPanel &other) = default;
 
 		void Render() override;
+		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Structure; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 		// Retrieve the currently-built structure (if valid).

@@ -42,7 +42,7 @@ namespace DefectStudio
 		// --- Stable object identity ---
 
 		// Next unused id for this window. Call at the point an object is *created* (a push_back into
-		// sceneArrows/freeLabels/pinnedMeasurements), not at sync time, so the object is addressable
+		// paths/freeLabels/pinnedMeasurements), not at sync time, so the object is addressable
 		// before the next sync runs.
 		[[nodiscard]] SceneObjectId AllocateObjectId();
 
@@ -128,19 +128,6 @@ namespace DefectStudio
 			return Entity(m_LabelEntities[index], this);
 		}
 
-		// Index -> entity lookup for scene arrows and free labels, same shape as the three above.
-		// Populated by SceneSystem::SyncLabelEntities, which mirrors all three annotation kinds since
-		// task 20 - before it, arrows and free labels had no entity at all.
-		[[nodiscard]] std::vector<entt::entity> &ArrowEntities()
-		{
-			return m_ArrowEntities;
-		}
-
-		[[nodiscard]] const std::vector<entt::entity> &ArrowEntities() const
-		{
-			return m_ArrowEntities;
-		}
-
 		[[nodiscard]] std::vector<entt::entity> &FreeLabelEntities()
 		{
 			return m_FreeLabelEntities;
@@ -151,11 +138,26 @@ namespace DefectStudio
 			return m_FreeLabelEntities;
 		}
 
-		[[nodiscard]] Entity ArrowEntityAt(std::size_t index)
+		[[nodiscard]] std::vector<entt::entity> &OrbitalEntities()
 		{
-			if (index >= m_ArrowEntities.size())
-				return Entity{};
-			return Entity(m_ArrowEntities[index], this);
+			return m_OrbitalEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &OrbitalEntities() const
+		{
+			return m_OrbitalEntities;
+		}
+
+		// Same shape again for paths, where the index is the position in the window's PathStore
+		// rather than in a vector on RendererWindowState.
+		[[nodiscard]] std::vector<entt::entity> &PathEntities()
+		{
+			return m_PathEntities;
+		}
+
+		[[nodiscard]] const std::vector<entt::entity> &PathEntities() const
+		{
+			return m_PathEntities;
 		}
 
 		[[nodiscard]] Entity FreeLabelEntityAt(std::size_t index)
@@ -165,13 +167,28 @@ namespace DefectStudio
 			return Entity(m_FreeLabelEntities[index], this);
 		}
 
+		[[nodiscard]] Entity OrbitalEntityAt(std::size_t index)
+		{
+			if (index >= m_OrbitalEntities.size())
+				return Entity{};
+			return Entity(m_OrbitalEntities[index], this);
+		}
+
+		[[nodiscard]] Entity PathEntityAt(std::size_t index)
+		{
+			if (index >= m_PathEntities.size())
+				return Entity{};
+			return Entity(m_PathEntities[index], this);
+		}
+
 	private:
 		entt::registry m_Registry;
 		std::vector<entt::entity> m_AtomEntities;
 		std::vector<entt::entity> m_BondEntities;
 		std::vector<entt::entity> m_LabelEntities;
-		std::vector<entt::entity> m_ArrowEntities;
 		std::vector<entt::entity> m_FreeLabelEntities;
+		std::vector<entt::entity> m_OrbitalEntities;
+		std::vector<entt::entity> m_PathEntities;
 		std::unordered_map<std::uint64_t, entt::entity> m_ObjectEntities;
 		std::uint64_t m_NextObjectId = 1;
 	};

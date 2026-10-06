@@ -168,7 +168,7 @@ namespace DefectStudio
 		if (windowState.camera == nullptr)
 			return;
 		ImGuiIO &io = ImGui::GetIO();
-		const bool nudgeGateOpen = !windowState.selectedAtomIndices.empty() &&
+		const bool nudgeGateOpen = !io.WantTextInput && !windowState.selectedAtomIndices.empty() &&
 			layer.GetFocusedViewportWindowId() == windowState.windowId;
 		glm::vec2 nudgeScreenDirection(0.0f);
 		if (nudgeGateOpen && io.KeyCtrl && io.KeyShift)
@@ -254,7 +254,7 @@ namespace DefectStudio
 		if (windowState.camera == nullptr)
 			return;
 		ImGuiIO &io = ImGui::GetIO();
-		const bool panGateOpen = layer.GetFocusedViewportWindowId() == windowState.windowId;
+		const bool panGateOpen = !io.WantTextInput && layer.GetFocusedViewportWindowId() == windowState.windowId;
 		glm::vec2 pixelDelta(0.0f);
 		if (panGateOpen && io.KeyAlt && io.KeyShift)
 		{

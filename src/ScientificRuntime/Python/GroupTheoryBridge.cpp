@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Core/Utils/Uuid.hpp"
+#include "Domain/Symmetry/SymmetryAdaptedBasis.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
 #include "ScientificRuntime/Python/ScriptBridgeUtils.hpp"
 
@@ -57,9 +58,10 @@ namespace DefectStudio
 					"`python scripts/python/prepare_app_python_runtime.py`.",
 					"python.groupy.not_installed");
 
-			const std::array<const char *, 6> knownCodes = {
+			const std::array<const char *, 10> knownCodes = {
 				"unknown_point_group", "empty_basis", "frame_alignment_failed", "basis_not_closed",
-				"invalid_active_space", "invalid_json"};
+				"invalid_active_space", "invalid_json", "quaternionic_irrep", "projection_rank_mismatch",
+				"conjugate_partner_missing", "complex_irrep_dimension"};
 			for (const char *knownCode : knownCodes)
 				if (*scriptCode == knownCode)
 					return MakePythonExecutionError(
@@ -122,7 +124,7 @@ namespace DefectStudio
 					error.technicalDetails,
 					"Reinstall the app's Python environment (groupy_symmetry is a declared dependency).",
 					"python.groupy.not_installed");
-			return error;
+			return MakeAnalysisScriptError(error);
 		}
 
 		const std::string jsonLine = ExtractJsonLineFromOutput(runResult->standardOutput);
@@ -153,6 +155,8 @@ namespace DefectStudio
 					vector.coefficients.push_back(ParseCoefficient(coefficient));
 				result.projectedVectors.push_back(std::move(vector));
 			}
+			if (const auto validation = ValidateSymmetryAdaptedBasis(result); !validation)
+				return validation.Error();
 			return result;
 		}
 		catch (const std::exception &exception)
@@ -266,6 +270,19 @@ namespace DefectStudio
 					vector.coefficients.push_back(ParseCoefficient(value));
 				result.reduction.projectedVectors.push_back(std::move(vector));
 			}
+			for (const auto &entry : reduction.value("realPairVectors", nlohmann::json::array()))
+			{
+				SymmetryAdaptedVector vector;
+				vector.irrepLabel = entry.at("irrepLabel").get<std::string>();
+				vector.conjugateIrrepLabel = entry.at("conjugateIrrepLabel").get<std::string>();
+				vector.occurrenceIndex = entry.at("occurrenceIndex").get<int>();
+				vector.irrepRow = entry.at("irrepRow").get<int>();
+				for (const auto &value : entry.at("coefficients"))
+					vector.coefficients.push_back(ParseCoefficient(value));
+				result.reduction.realPairVectors.push_back(std::move(vector));
+			}
+			if (const auto validation = ValidateSymmetryAdaptedBasis(result.reduction); !validation)
+				return validation.Error();
 			for (const auto &entry : json.at("multiplets"))
 				result.multiplets.push_back({entry.at("irrepLabel"), entry.at("spinMultiplicity"), entry.at("irrepDimension"), entry.at("countPerRow"), entry.at("totalStates")});
 			result.multipletTotalStates = json.at("multipletTotalStates").get<int>();

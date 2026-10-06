@@ -80,4 +80,37 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(saveObserved);
 		EXPECT_EQ(cycleDirection, -1);
 	}
+
+	TEST(RendererViewportCommandTests, NewWindowCommandPublishesOpenEmptyRequested)
+	{
+		auto eventBus = CreateRef<EventBus>();
+		bool observed = false;
+		auto subscription = eventBus->Subscribe<RendererEvents::Windows::OpenEmptyRequested>(
+			[&observed](const RendererEvents::Windows::OpenEmptyRequested &) {
+				observed = true;
+			});
+
+		CommandContext context;
+		ASSERT_TRUE(CreateRendererNewWindowCommand(eventBus)->Execute(context));
+
+		EXPECT_TRUE(observed);
+	}
+
+	TEST(RendererViewportCommandTests, CloseWindowCommandPublishesCloseRequestedWithEmptyWindowId)
+	{
+		auto eventBus = CreateRef<EventBus>();
+		bool observed = false;
+		std::string observedWindowId;
+		auto subscription = eventBus->Subscribe<RendererEvents::Windows::CloseRequested>(
+			[&observed, &observedWindowId](const RendererEvents::Windows::CloseRequested &event) {
+				observed = true;
+				observedWindowId = event.windowId;
+			});
+
+		CommandContext context;
+		ASSERT_TRUE(CreateRendererCloseWindowCommand(eventBus)->Execute(context));
+
+		EXPECT_TRUE(observed);
+		EXPECT_TRUE(observedWindowId.empty());
+	}
 } // namespace DefectStudio::Tests

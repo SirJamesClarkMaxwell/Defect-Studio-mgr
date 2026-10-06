@@ -30,12 +30,16 @@
 #include "Core/Utils/Time.hpp"
 #include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
+#include "Renderer/Path/PathHandleGeometry.hpp"
+#include "Renderer/Path/VacancyBond.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
+#include "Renderer/Scene/SceneVisibility.hpp"
+#include "Renderer/Scene/SceneSelection.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 #include "Events/ProjectEvents.hpp"
@@ -48,8 +52,10 @@ namespace DefectStudio
 		WeakRef<UndoStack> g_RendererUndoStack;
 		RendererLayer *g_RendererLayer = nullptr;
 
-		void QueueSceneObjectsModified(const RendererWindowState &windowState)
+		void QueueSceneObjectsModified(RendererWindowState &windowState)
 		{
+			if (windowState.isProjectScene)
+				windowState.sceneObjectsDirty = true;
 			if (g_SceneObjectEventBus == nullptr || windowState.structureId.is_nil())
 				return;
 
@@ -404,6 +410,12 @@ namespace DefectStudio
 			m_LastFocusedViewportWindowId.clear();
 	}
 
+	void RendererLayer::ClearUndoHistory()
+	{
+		if (auto undoStack = m_UndoStack.lock())
+			undoStack->Clear();
+	}
+
 	std::vector<RendererWindowState> &RendererLayer::GetWindows()
 	{
 		return m_Windows;
@@ -483,8 +495,19 @@ namespace DefectStudio
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedPinnedMeasurements);
 		const std::vector<std::size_t> selectedFreeLabels =
 			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedFreeLabels);
-		const std::vector<std::size_t> selectedSceneArrows =
-			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneArrows);
+		const std::vector<std::size_t> selectedSceneOrbitals =
+			SceneSystem::ResolveSourceIndices(windowState.sceneRegistry, windowState.selectedSceneOrbitals);
+		std::vector<std::size_t> selectedScenePlanes;
+		selectedScenePlanes.reserve(windowState.selectedScenePlanes.size());
+		for (const SceneObjectId id : windowState.selectedScenePlanes)
+		{
+			const std::size_t index = AnnotationIndex(windowState.scenePlanes, id);
+			if (index < windowState.scenePlanes.size())
+				selectedScenePlanes.push_back(index);
+		}
+		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
+		const PathRenderInput pathInput{
+			windowState.paths.get(), &windowState.selectedScenePaths, windowState.showPathMeshOverlay, &bindings};
 		return m_RendererBackend->RenderWindow(
 			windowKey,
 			structure,
@@ -501,8 +524,10 @@ namespace DefectStudio
 			selectedPinnedMeasurements,
 			windowState.freeLabels,
 			selectedFreeLabels,
-			windowState.sceneArrows,
-			selectedSceneArrows,
+			windowState.sceneOrbitals,
+			selectedSceneOrbitals,
+			windowState.scenePlanes,
+			selectedScenePlanes,
 			windowState.selectedAtomIndices,
 			windowState.selectedBondIndices,
 			nullptr,
@@ -513,7 +538,14 @@ namespace DefectStudio
 			windowState.bondLabelAutoOffsetEnabled,
 			windowState.bondLabelAutoOffsetMagnitude,
 			windowState.bondLabelAlignThresholdDeg,
-			windowState.showPeriodicBonds);
+			windowState.showPeriodicBonds,
+			&pathInput,
+			windowState.showVacancies);
+	}
+
+	LabelPickQuads RendererLayer::GetLabelPickQuads(const std::string &windowKey) const
+	{
+		return m_RendererBackend == nullptr ? LabelPickQuads{} : m_RendererBackend->GetLabelPickQuads(windowKey);
 	}
 
 	int RendererLayer::RegenerateOrbitalIsosurface(
@@ -577,6 +609,7 @@ namespace DefectStudio
 		previewState.showBonds = source.showBonds;
 		previewState.showPeriodicBonds = source.showPeriodicBonds;
 		previewState.showCellBox = source.showCellBox;
+		previewState.showVacancies = source.showVacancies;
 		previewState.showGrid = source.showGrid;
 		previewState.selectedAtomIndices = source.selectedAtomIndices;
 		// previewState is a fresh RendererWindowState, not a copy of the real window - every one of
@@ -585,8 +618,15 @@ namespace DefectStudio
 		// this is centralized instead of inlined at each of the two call sites.
 		previewState.pinnedMeasurements = source.pinnedMeasurements;
 		previewState.freeLabels = source.freeLabels;
-		previewState.sceneArrows = source.sceneArrows;
+		previewState.sceneOrbitals = source.sceneOrbitals;
+		previewState.scenePlanes = source.scenePlanes;
+		if (source.paths != nullptr) SceneSystem::EnsurePathSystem(previewState).ReplaceStore(source.paths->Store());
 		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
+		// What an export contains is the outliner's camera column alone, independent of what H hid
+		// in the viewport. This is the only place that channel is consumed, and previewState is a
+		// throwaway, so collapsing the two columns onto `visible` here costs the live window
+		// nothing. See Renderer/Scene/SceneVisibility.hpp.
+		ApplyRenderPassVisibility(previewState);
 	}
 
 	bool RendererLayer::CaptureWindowToPng(
@@ -987,12 +1027,9 @@ namespace DefectStudio
 			config.backgroundColor[2],
 			config.backgroundColor[3]);
 		m_GlobalRenderSettings.bondRadiusMultiplier = config.bondRadiusMultiplier;
+		m_GlobalRenderSettings.vacancyBondAtomInset = config.vacancyBondAtomInset;
 		m_GlobalRenderSettings.colorSaturation = config.colorSaturation;
 		m_GlobalRenderSettings.viewportSupersample = config.viewportSupersample;
-		m_GlobalRenderSettings.arrowHeadBulgeStrength = config.arrowHeadBulgeStrength;
-		m_GlobalRenderSettings.arrowDefaultShaftWidthRatio = config.arrowDefaultShaftWidthRatio;
-		m_GlobalRenderSettings.arrowDefaultHeadWidthRatio = config.arrowDefaultHeadWidthRatio;
-		m_GlobalRenderSettings.arrowDefaultHeadLengthRatio = config.arrowDefaultHeadLengthRatio;
 		m_GlobalRenderSettings.orbitSensitivity = config.orbitSensitivity;
 		m_GlobalRenderSettings.panSensitivity = config.panSensitivity;
 		m_GlobalRenderSettings.zoomSensitivity = config.zoomSensitivity;
@@ -1034,6 +1071,48 @@ namespace DefectStudio
 			config.viewport.iconButtonSize,
 			10.0f,
 			48.0f);
+		m_GlobalRenderSettings.viewport.pathEditNodeColor = glm::vec4(
+			config.viewport.pathEditNodeColor[0],
+			config.viewport.pathEditNodeColor[1],
+			config.viewport.pathEditNodeColor[2],
+			config.viewport.pathEditNodeColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditHandleColor = glm::vec4(
+			config.viewport.pathEditHandleColor[0],
+			config.viewport.pathEditHandleColor[1],
+			config.viewport.pathEditHandleColor[2],
+			config.viewport.pathEditHandleColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditSelectedColor = glm::vec4(
+			config.viewport.pathEditSelectedColor[0],
+			config.viewport.pathEditSelectedColor[1],
+			config.viewport.pathEditSelectedColor[2],
+			config.viewport.pathEditSelectedColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditTetherColor = glm::vec4(
+			config.viewport.pathEditTetherColor[0],
+			config.viewport.pathEditTetherColor[1],
+			config.viewport.pathEditTetherColor[2],
+			config.viewport.pathEditTetherColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditOutlineColor = glm::vec4(
+			config.viewport.pathEditOutlineColor[0],
+			config.viewport.pathEditOutlineColor[1],
+			config.viewport.pathEditOutlineColor[2],
+			config.viewport.pathEditOutlineColor[3]);
+		m_GlobalRenderSettings.viewport.selectionOutlineColor = glm::vec4(
+			config.viewport.selectionOutlineColor[0],
+			config.viewport.selectionOutlineColor[1],
+			config.viewport.selectionOutlineColor[2],
+			config.viewport.selectionOutlineColor[3]);
+		m_GlobalRenderSettings.viewport.pathEditTetherThickness = std::clamp(
+			config.viewport.pathEditTetherThickness, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.pathEditOutlineThickness = std::clamp(
+			config.viewport.pathEditOutlineThickness, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.selectionOutlineWidth = std::clamp(
+			config.viewport.selectionOutlineWidth, 0.0f, 8.0f);
+		m_GlobalRenderSettings.viewport.transformGizmoSize = std::clamp(
+			config.viewport.transformGizmoSize, 40.0f, 200.0f);
+		m_GlobalRenderSettings.viewport.navigationGizmoSize = std::clamp(
+			config.viewport.navigationGizmoSize, 24.0f, 120.0f);
+		m_GlobalRenderSettings.viewport.pathEditMarkerSizeMultiplier = std::clamp(
+			config.viewport.pathEditMarkerSizeMultiplier, 0.25f, 4.0f);
 		m_GlobalRenderSettings.viewport.transformTranslateSnap = std::clamp(
 			config.viewport.transformTranslateSnap, 0.0001f, 1000.0f);
 		m_GlobalRenderSettings.viewport.transformRotateSnapDegrees = std::clamp(
@@ -1056,12 +1135,10 @@ namespace DefectStudio
 			m_GlobalRenderSettings.lighting.backDirection = glm::normalize(glm::vec3(0.0f, -0.4f, -0.8f));
 
 		m_GlobalRenderSettings.bondRadiusMultiplier = std::clamp(m_GlobalRenderSettings.bondRadiusMultiplier, 0.1f, 4.0f);
+		m_GlobalRenderSettings.vacancyBondAtomInset = std::clamp(m_GlobalRenderSettings.vacancyBondAtomInset, 0.0f, 0.5f);
+		g_VacancyBondAtomInset = m_GlobalRenderSettings.vacancyBondAtomInset;
 		m_GlobalRenderSettings.colorSaturation = std::clamp(m_GlobalRenderSettings.colorSaturation, 0.0f, 2.0f);
 		m_GlobalRenderSettings.viewportSupersample = std::clamp(m_GlobalRenderSettings.viewportSupersample, 1.0f, 3.0f);
-		m_GlobalRenderSettings.arrowHeadBulgeStrength = std::clamp(m_GlobalRenderSettings.arrowHeadBulgeStrength, 0.0f, 1.0f);
-		m_GlobalRenderSettings.arrowDefaultShaftWidthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultShaftWidthRatio, 0.001f, 0.5f);
-		m_GlobalRenderSettings.arrowDefaultHeadWidthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultHeadWidthRatio, 0.001f, 1.0f);
-		m_GlobalRenderSettings.arrowDefaultHeadLengthRatio = std::clamp(m_GlobalRenderSettings.arrowDefaultHeadLengthRatio, 0.001f, 1.0f);
 		m_GlobalRenderSettings.orbitSensitivity = std::clamp(m_GlobalRenderSettings.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.panSensitivity = std::clamp(m_GlobalRenderSettings.panSensitivity, kMinSensitivity, kMaxSensitivity);
 		m_GlobalRenderSettings.zoomSensitivity = std::clamp(m_GlobalRenderSettings.zoomSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -1081,6 +1158,7 @@ namespace DefectStudio
 			m_GlobalRenderSettings.focusSelectedAtomRadiusMultiplier,
 			kMinFocusRadiusMultiplier,
 			kMaxFocusRadiusMultiplier);
+		SetPathHandleSizeMultiplier(m_GlobalRenderSettings.viewport.pathEditMarkerSizeMultiplier);
 		m_GlobalRenderSettings.toolbarWheel.rotationStepDelta = std::clamp(
 			m_GlobalRenderSettings.toolbarWheel.rotationStepDelta,
 			kMinWheelStepDelta,
@@ -1332,20 +1410,39 @@ namespace DefectStudio
 	void RendererLayer::onAlignToAxisRequested(const RendererEvents::Viewport::AlignToAxisRequested &event)
 	{
 		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 5)
+		if (windowState == nullptr || windowState->camera == nullptr || event.axis < 0 || event.axis > 8)
+			return;
+		// 1/2/3 are bound to align-to-axis, and path Edit Mode gives the same three keys the element
+		// mode - node-handle / segment / whole path. Both would otherwise fire on one press, aligning
+		// the camera while switching mode. Edit Mode wins, the way it does in Blender: inside it the
+		// number keys stop being view presets. a*/b*/c* on 4/5/6 go the same way, hence the whole
+		// handler rather than the first three axes.
+		if (windowState->pathEdit.IsActive())
 			return;
 
 		// axis 0-2 = a/b/c (real lattice), 3-5 = a*/b*/c* (reciprocal lattice) - mirrors the
 		// toolbar axis buttons (RendererPanelToolbar.cpp), which read the same two matrices.
-		const bool isReciprocal = event.axis > 2;
-		const glm::mat3 &basis = isReciprocal ? windowState->structure.reciprocalLattice : windowState->structure.lattice;
-		const glm::vec3 axis = basis[static_cast<std::size_t>(event.axis - (isReciprocal ? 3 : 0))];
+		// 0-2 look along the defect's x/y/z instead when it has axes (shown or hidden); 6-8 = a/b/c always.
+		glm::vec3 axis(0.0f);
+		glm::vec3 up(0.0f, 0.0f, 1.0f);
+		const auto &frame = windowState->structure.defectFrame;
+		if (event.axis <= 2 && frame)
+		{
+			axis = event.axis == 0 ? frame->x : event.axis == 1 ? frame->y : frame->z;
+			up = event.axis == 2 ? frame->y : frame->z;
+		}
+		else
+		{
+			const bool isReciprocal = event.axis >= 3 && event.axis <= 5;
+			const glm::mat3 &basis = isReciprocal ? windowState->structure.reciprocalLattice : windowState->structure.lattice;
+			axis = basis[static_cast<std::size_t>(event.axis % 3)];
+		}
 		if (glm::dot(axis, axis) <= 1e-8f)
 			return;
 
 		const RendererViewSnapshot before = captureViewSnapshot(*windowState);
 		RendererViewCamera targetCamera = *windowState->camera;
-		targetCamera.SetAlignToAxis(glm::normalize(axis), glm::vec3(0.0f, 0.0f, 1.0f));
+		targetCamera.SetAlignToAxis(glm::normalize(axis), up);
 		const RendererViewSnapshot after = CaptureViewSnapshotFromCamera(targetCamera, before);
 		pushViewChange(*windowState, before, after, "keyboard.align_axis");
 		restoreViewSnapshot(*windowState, after, "keyboard.align_axis");
@@ -1543,7 +1640,7 @@ namespace DefectStudio
 		{
 			// No atom selected: frame the selected labels/arrows (arrow = both endpoints) instead.
 			const std::vector<glm::vec3> positions =
-				SceneTransformPivotPositions(CaptureSceneTransformSelection(*windowState));
+				SceneTransformPivotPositions(*windowState, CaptureSceneTransformSelection(*windowState));
 			if (positions.empty())
 				return;
 			target = ComputeTransformPivot(TransformPivotMode::Median, positions, std::nullopt);
@@ -1597,6 +1694,11 @@ namespace DefectStudio
 			QueueSceneObjectsModified(windowState);
 	}
 
+	WeakRef<UndoStack> GetBoundRendererUndoStack() noexcept
+	{
+		return g_RendererUndoStack;
+	}
+
 	void PushPinnedMeasurementUndoSnapshot(RendererWindowState &windowState)
 	{
 		PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
@@ -1647,10 +1749,7 @@ namespace DefectStudio
 		pin.rotationOffsetRadians = 0.0f;
 	}
 
-	// notes.txt pt. 15 - single in-process style clipboard shared by every pinned/free label, mirroring
-	// GetArrowStyleClipboard (SceneArrowEditorWidget.hpp/ObjectPropertiesPanel.cpp, 29469cb). Unlike
-	// arrows, LabelStyle has no separate "geometry" fields to split out - it IS the whole style - so
-	// there's only one clipboard, not a Geometry/Style pair.
+	// In-process style clipboard shared by pinned measurements and free labels.
 	std::optional<RendererWindowState::LabelStyle> &GetLabelStyleClipboard()
 	{
 		static std::optional<RendererWindowState::LabelStyle> clipboard;
@@ -2302,26 +2401,71 @@ namespace DefectStudio
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 	}
 
+	void RendererLayer::ChangeSceneVisibility(const std::string &windowId, bool showAll)
+	{
+		if (findViewportCommandWindow(windowId) == nullptr) return;
+		RendererWindowState &windowState = *findViewportCommandWindow(windowId);
+		const auto undoStack = m_UndoStack.lock();
+		std::optional<UndoScope> group;
+		const std::string description = showAll ? "Show all" : "Hide selection";
+		if (undoStack != nullptr) group.emplace(*undoStack, description);
+		const bool editVacancies = showAll ?
+			std::any_of(windowState.structure.vacancies.begin(), windowState.structure.vacancies.end(),
+				[](const RendererVacancyData &vacancy) { return vacancy.hidden; }) :
+			!windowState.selectedVacancies.empty();
+		if (editVacancies)
+		{
+			if (!m_EditVacancyVisibility)
+			{
+				DS_LOG_WARN("Vacancy visibility commands are unavailable.");
+				if (group) (void)group->Cancel();
+				return;
+			}
+			const auto result = m_EditVacancyVisibility(windowState, showAll);
+			if (!result)
+			{
+				DS_LOG_WARN("Vacancy visibility failed: {}", result.Error().technicalDetails);
+				if (group) (void)group->Cancel();
+				return;
+			}
+		}
+		HiddenSceneState before = CaptureHiddenSceneState(windowState.structure);
+		if (showAll || HasSelectedSceneObjectsForHide(windowState))
+			PushPinnedMeasurementUndoSnapshot(windowState);
+		if (showAll)
+		{
+			ShowAllSceneObjects(windowState);
+			ShowAllModifier{}.Apply(windowState.sceneRegistry, windowState);
+		}
+		else
+		{
+			SetSelectedSceneObjectsVisible(windowState, false);
+			HideSelectionModifier{}.Apply(windowState.sceneRegistry, windowState);
+		}
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		PushSceneVisibilityUndoSnapshot(windowState, std::move(before), description);
+		if (group)
+		{
+			const auto result = group->Commit();
+			if (!result) DS_LOG_WARN("Visibility undo group failed: {}", result.Error().technicalDetails);
+		}
+	}
+
 	void RendererLayer::onHideSelectionRequested(const RendererEvents::Viewport::HideSelectionRequested &event)
 	{
-		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr)
-			return;
+		ChangeSceneVisibility(event.windowId, false);
+	}
 
-		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
-		HideSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
-		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Hide selection");
+	bool HasSelectedSceneObjectsForHide(const RendererWindowState &windowState)
+	{
+		return !windowState.selectedPinnedMeasurements.empty() || !windowState.selectedFreeLabels.empty() ||
+			!windowState.selectedSceneOrbitals.empty() ||
+			!windowState.selectedScenePlanes.empty() || !windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;
 	}
 
 	void RendererLayer::onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event)
 	{
-		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr)
-			return;
-
-		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
-		ShowAllModifier{}.Apply(windowState->sceneRegistry, *windowState);
-		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Show all");
+		ChangeSceneVisibility(event.windowId, true);
 	}
 
 	void RendererLayer::onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event)
@@ -2342,44 +2486,7 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		// Only entity kinds the active pick mode actually allows picking (2026-08-29 feedback: this
-		// previously matched every atom+bond unconditionally, so a bonds+labels-only mode - Ctrl+3 -
-		// still selected every atom too). Entities of a kind the mode excludes are left untouched
-		// rather than forced unselected, so switching mode to also grab labels doesn't silently wipe
-		// an atom selection made under a different mode. Only visible entities within an included kind
-		// - selecting hidden ones too would let a subsequent M/gizmo/delete act on something the user
-		// can't see or intended to exclude via H (matches InvertSelectionModifier's same rule).
-		SceneRegistry &scene = windowState->sceneRegistry;
-		entt::registry &registry = scene.Registry();
-		if (windowState->pickAtoms)
-		{
-			for (const entt::entity entity : registry.view<AtomComponent, SelectionComponent, const VisibilityComponent>())
-				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
-		}
-		if (windowState->pickBonds)
-		{
-			for (const entt::entity entity : registry.view<BondComponent, SelectionComponent, const VisibilityComponent>())
-				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
-		}
-		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
-
-		// Labels aren't part of the ECS selection sync above (plain std::vector fields, not entities)
-		// - same pickLabels-gated trio (pinned measurements + free labels + scene arrows) box/circle-
-		// select already treats as one group (RendererPanel::handleBoxSelectDrag/handleCircleSelectDrag),
-		// and the reason "select all bond-labels" (2026-08-29 feedback) needs no new shortcut of its
-		// own - Ctrl+A while in labels-pickable mode now covers it directly.
-		if (windowState->pickLabels)
-		{
-			windowState->selectedPinnedMeasurements.clear();
-			for (std::size_t index = 0; index < windowState->pinnedMeasurements.size(); ++index)
-				windowState->selectedPinnedMeasurements.push_back(windowState->pinnedMeasurements[index].id);
-			windowState->selectedFreeLabels.clear();
-			for (std::size_t index = 0; index < windowState->freeLabels.size(); ++index)
-				windowState->selectedFreeLabels.push_back(windowState->freeLabels[index].id);
-			windowState->selectedSceneArrows.clear();
-			for (std::size_t index = 0; index < windowState->sceneArrows.size(); ++index)
-				windowState->selectedSceneArrows.push_back(windowState->sceneArrows[index].id);
-		}
+		SelectAllVisibleSceneObjects(*windowState);
 	}
 
 	void RendererLayer::onCursor3DSetPositionRequested(const RendererEvents::Viewport::Cursor3DSetPositionRequested &event)

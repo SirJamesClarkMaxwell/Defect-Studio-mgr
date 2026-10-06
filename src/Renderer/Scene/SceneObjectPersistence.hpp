@@ -31,15 +31,17 @@ namespace DefectStudio
 	// Random 128-bit key as 32 lowercase hex chars.
 	[[nodiscard]] std::string GenerateScenePersistKey();
 
-	// Gives every pinned measurement / free label / scene arrow with an empty persistKey a fresh one.
+	// Gives every persisted scene annotation with an empty persistKey a fresh one.
 	// Called from SceneSystem's annotation sync, so every creation site is covered in one place.
 	void EnsureScenePersistKeys(RendererWindowState &window);
 
 	// Window -> file. A linked pin stores its atoms' current index/element/position; a pin with
-	// linkBroken stores its frozen atom data instead.
+	// linkBroken stores its frozen atom data instead. Legacy runtime arrows are not extracted.
 	[[nodiscard]] std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWindowState &window);
+	// Save entry point: assign stable keys before extracting any binding target.
+	[[nodiscard]] std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(RendererWindowState &window);
 
-	// File -> window. Replaces the window's pinnedMeasurements/freeLabels/sceneArrows, clears their
+	// File -> window. Replaces the window's scene objects, migrates v1 arrows to paths, clears their
 	// selections (the global UndoStack is left alone). Every object gets a freshly allocated SceneObjectId
 	// from window.sceneRegistry (file ids are never reused); persistKey is kept as-is (a new one is
 	// generated when empty). Pin atom indices come from ResolveAtomReference, so a reordered structure

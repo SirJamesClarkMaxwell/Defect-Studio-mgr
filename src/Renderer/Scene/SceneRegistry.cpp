@@ -14,7 +14,8 @@ namespace DefectStudio
 		case SceneObjectKind::Bond: return "Bond";
 		case SceneObjectKind::PinnedMeasurement: return "Pinned measurement";
 		case SceneObjectKind::FreeLabel: return "Free label";
-		case SceneObjectKind::SceneArrow: return "Scene arrow";
+		case SceneObjectKind::SceneOrbital: return "Scene orbital";
+		case SceneObjectKind::ScenePath: return "Scene path";
 		}
 		return "Object";
 	}

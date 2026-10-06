@@ -35,6 +35,7 @@ layout(std430, binding = 2) buffer CounterBuffer
 
 uniform ivec3 u_Dimensions;
 uniform mat3 u_Cell;
+uniform vec3 u_Origin;
 uniform float u_IsoValue;
 uniform float u_LobeSign;
 uniform uint u_MaxVertices;
@@ -55,7 +56,7 @@ int GridIndex(ivec3 p)
 vec3 CellPosition(ivec3 p)
 {
 	vec3 fractional = vec3(p) / vec3(u_Dimensions);
-	return u_Cell[0] * fractional.x + u_Cell[1] * fractional.y + u_Cell[2] * fractional.z;
+	return u_Origin + u_Cell[0] * fractional.x + u_Cell[1] * fractional.y + u_Cell[2] * fractional.z;
 }
 
 float SampleGrid(ivec3 p)

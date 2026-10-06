@@ -9,6 +9,8 @@ layout(location = 5) in vec4 aModelCol2;
 layout(location = 6) in vec4 aModelCol3;
 layout(location = 7) in vec4 aColorA;
 layout(location = 8) in vec4 aColorB;
+layout(location = 9) in float aSelected;
+layout(location = 10) in float aOutlineExpansion;
 
 uniform mat4 u_ViewProjection;
 // Scales only the cylinder's local radial (x/y) axes before the per-instance model matrix, which
@@ -21,24 +23,36 @@ uniform float u_BondRadiusMultiplier;
 // as of Etap F Phase 1) - render-time-only, applied after the per-instance model transform so it
 // never touches the baked cylinder geometry/orientation.
 uniform vec3 u_SceneOffset;
+uniform vec3 u_CameraPosition;
+uniform int u_OutlineMode;
 
 out vec3 vNormal;
 out vec4 vColorA;
 out vec4 vColorB;
 out float vGradientT;
 out vec3 vWorldPos;
+out float vSelected;
 
 void main()
 {
     mat4 model = mat4(aModelCol0, aModelCol1, aModelCol2, aModelCol3);
     vec4 worldPosition = model * vec4(aPosition.xy * u_BondRadiusMultiplier, aPosition.z, 1.0);
     worldPosition.xyz += u_SceneOffset;
-    gl_Position = u_ViewProjection * worldPosition;
 
     mat3 normalMatrix = transpose(inverse(mat3(model)));
     vNormal = normalize(normalMatrix * aNormal);
+	if (u_OutlineMode == 1)
+	{
+		vec3 viewDirection = normalize(u_CameraPosition - worldPosition.xyz);
+		vec3 silhouetteNormal = vNormal - viewDirection * dot(vNormal, viewDirection);
+		worldPosition.xyz += silhouetteNormal * aOutlineExpansion;
+	}
+	gl_Position = u_ViewProjection * worldPosition;
+	if (u_OutlineMode == 1)
+		gl_Position.z += 0.0001 * gl_Position.w;
     vColorA = aColorA;
     vColorB = aColorB;
     vGradientT = aGradientT;
     vWorldPos = worldPosition.xyz;
+	vSelected = aSelected;
 }

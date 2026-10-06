@@ -38,6 +38,7 @@ namespace DefectStudio
 		~RendererRuntimeOpenCoordinator();
 
 	private:
+		void onOpenEmptyRequested(const RendererEvents::Windows::OpenEmptyRequested &event);
 		void onOpenStructureRequested(const RendererEvents::Windows::OpenStructureRequested &event);
 		void onJobCompleted(const JobCompletedEvent &event);
 		void onJobFailed(const JobFailedEvent &event);

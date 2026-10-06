@@ -246,10 +246,11 @@ POSCAR/POTCAR ordering cannot desynchronise as long as both are produced from th
 in one operation.
 
 **POTCAR generation is a checkbox in the save dialog**, greyed out with an explanation until
-punktukas' `pseudodir` is configured. One call does it: `write_potcar(path, initialize=True)`
-(`puntukas/vasp/directory_reader.py:168`), which calls `initialize_pps()` itself. DefectStudio needs
-**no** pseudopotential path of its own — punktukas keeps `paths["pseudodir"]` in its own config under
-`user_config_dir("puntukas", appauthor=False)` (`puntukas/config/base.py:88`).
+puntukas' `pseudodir` is configured. The rewrite loads datasets with
+`VaspInput.set_potentials()` and writes them with
+`puntukas.vasp.potcar.write_potcar(path, list(inp.potcars.values()))`. DefectStudio needs **no**
+pseudopotential path of its own — puntukas discovers `paths.json`'s `pseudodir` under its VASP user
+config directory after checking `PUNTUKAS_VASP_PP_PATH` and `VASP_PP_PATH`.
 
 *Why a checkbox and not automatic:* bundling POTCAR into every save would make saving a structure
 impossible on a machine without a pseudopotential library. Full VASP input preparation

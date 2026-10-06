@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -15,7 +16,12 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
+#include "Domain/Electronic/HydrogenicOrbital.hpp"
+#include "Renderer/Path/PathEditSession.hpp"
+#include "Renderer/Path/PathStore.hpp"
+#include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
+#include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
 
@@ -43,6 +49,19 @@ namespace DefectStudio
 		glm::vec2 viewportSize = glm::vec2(640.0f, 480.0f);
 		bool showGrid = true;
 		bool showCellBox = true;
+		// task/51: the vacancy markers (RendererStructureData::vacancies). Toggled by the Scene
+		// Outliner's "Vacancies" group eye; per window, like showCellBox.
+		bool showVacancies = true;
+		// Draws the defect axes (RendererStructureData::defectFrame) and lets them be picked. Hiding
+		// them changes nothing else: the 1/2/3 keys, the Defect orientation and the group-theory frame
+		// keep using them. Eye menu of the horizontal toolbar, Outliner eye, H / Alt+H.
+		bool showDefectFrame = true;
+		// How the defect axes "empty" is drawn (Blender's plain axes): half-length along each axis in
+		// Angstrom, line width in pixels, and whether -x/-y/-z are drawn too.
+		//   ponytail: per window, not saved with the project.
+		float defectFrameAxisLength = 1.6f;
+		float defectFrameAxisWidth = 2.5f;
+		bool defectFrameNegativeAxes = true;
 		bool showBonds = true;
 		// Bonds that cross a periodic cell boundary (Bond::periodicShift) run to an image atom that is
 		// not drawn, so they read as stubs poking out of the cell. Correct, and the only way a 2D
@@ -142,6 +161,11 @@ namespace DefectStudio
 			bool linkBroken = false;
 			std::vector<glm::vec3> frozenAtomPositions; // same order/size as atomIndices, valid when linkBroken
 			std::vector<std::string> frozenAtomElements;
+			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
+			// the eye (drawn in the viewport, what H toggles), `renderable` the camera (drawn in an
+			// exported render). Independent on purpose.
+			bool visible = true;
+			bool renderable = true;
 		};
 		std::vector<PinnedMeasurement> pinnedMeasurements;
 		// Free-floating annotation label (ObjectPropertiesPanel "Free labels" section) - arbitrary
@@ -160,11 +184,22 @@ namespace DefectStudio
 			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
 			// object's position in the vector, which does not.
 			SceneObjectId id;
+			// TeX-like markup (Renderer/Text/TexMarkup.hpp): V_B, E_g^{(1)}, \alpha.
 			std::string text = "Label";
 			glm::vec3 worldPosition = glm::vec3(0.0f);
+			// Text that follows an atom or a vacancy (at most one set): worldPosition = anchor +
+			// anchorOffset, refreshed every frame (Renderer/Scene/SceneFreeLabelAnchors.hpp).
+			std::optional<std::size_t> anchorAtom;
+			std::optional<std::size_t> anchorVacancy;
+			glm::vec3 anchorOffset = glm::vec3(0.0f);
 			float rotationRadians = 0.0f;
 			LabelStyle style;
 			std::string persistKey; // see PinnedMeasurement::persistKey
+			// The Scene Outliner's two columns, see Renderer/Scene/SceneVisibility.hpp. `visible` is
+			// the eye (drawn in the viewport, what H toggles), `renderable` the camera (drawn in an
+			// exported render). Independent on purpose.
+			bool visible = true;
+			bool renderable = true;
 		};
 		std::vector<FreeLabel> freeLabels;
 		// Click-select + drag-to-move for freeLabels (RendererPanel::handleFreeLabelInteraction) - same
@@ -173,75 +208,189 @@ namespace DefectStudio
 		// same convention as selectedPinnedMeasurements above (back() is the drag/gizmo anchor).
 		std::vector<SceneObjectId> selectedFreeLabels;
 		bool freeLabelDragging = false;
+		bool freeLabelDragUndoPushed = false;
 		glm::vec2 freeLabelDragLastMouse = glm::vec2(0.0f);
-		// Figure-annotation arrow (ObjectPropertiesPanel "Arrows" section) - a straight directional
-		// line from start to end, for pointing at a displacement/direction in an export shot.
-		// Line: shaft only (bond cylinder mesh/shader, reused as-is). Arrow3D: shaft + a cone head
-		// (OpenGlRendererBackend::createConeMesh, "bonds" program reused - bonds.vert is a generic
-		// model-transform shader, not cylinder-specific). Arrow2D: a flat quad instead of a shaft,
-		// either camera-facing (Billboard) or lying flat in a chosen world plane (FixedPlane) - see
-		// OpenGlRendererBackend::renderSceneArrows/ComputeArrowQuadBasis. Renderer-only like
-		// FreeLabel/PinnedMeasurement, not persisted with the project yet. Gizmo/attached
-		// label/undo for arrows are a later phase - labels already have all three
-		// (renderLabelTransformGizmo/AttachedLabel), arrows don't yet.
-		enum class ArrowKind { Line, Arrow2D, Arrow3D };
-		enum class Arrow2DOrientation { Billboard, FixedPlane };
-		enum class WorldPlane { XY, XZ, YZ };
-
-		struct ArrowStyle
+		// A hydrogenic orbital drawn as a scene annotation (task 26): the user picks a preset -
+		// s/p/d, an sp/sp2/sp3 hybrid lobe, or a sigma/pi/delta molecular orbital with its
+		// antibonding partner - and it is evaluated analytically and meshed as an isosurface with
+		// its two phases coloured separately. Nothing here is read from a calculation; this is a
+		// drawing object, which is why it lives beside the labels and arrows rather than in the
+		// electronic-structure session that owns WAVECAR orbitals.
+		struct SceneOrbital
 		{
-			glm::vec3 color = glm::vec3(0.95f, 0.75f, 0.1f);
-			float alpha = 1.0f;
-			float shaftWidth = 0.06f; // radius; was the old hardcoded kArrowShaftRadius
-			glm::vec3 outlineColor = glm::vec3(0.0f);
-			float outlineWidth = 0.0f;
-			float headWidth = 0.14f;  // Arrow3D cone base diameter / Arrow2D has no head, unused there
-			float headLength = 0.22f; // Arrow3D cone height, unused for Line/Arrow2D
-		};
+			// task/53: one term of an LCAO orbital - a single-centre preset member on one atom, with
+			// its own orientation and coefficient. See lcaoComponents.
+			struct LcaoComponent
+			{
+				// Index into structure.atoms. The component sits on that atom while the index resolves
+				// and at `center` once it does not - the anchorAtoms rule, so a stale anchor degrades
+				// instead of snapping to atom 0. ResolveAnchoredOrbitals refreshes `center`.
+				std::size_t anchorAtom = 0;
+				glm::vec3 center = glm::vec3(0.0f);
+				// Single-centre presets only; a component whose preset IsTwoCenterPreset contributes
+				// nothing.
+				OrbitalPreset preset = OrbitalPreset::Sp3;
+				int shell = 2;
+				int lobeIndex = 0;
+				float effectiveCharge = 1.0f;
+				glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees, the rotationEuler convention below
+				float coefficient = 1.0f;
+			};
 
-		struct SceneArrow
-		{
-			// Stable identity, allocated by SceneRegistry::AllocateObjectId at creation (task 20).
-			// Survives resyncs, deletions of other objects and undo/redo snapshots - unlike the
-			// object's position in the vector, which does not.
+			// Stable identity allocated by SceneRegistry.
 			SceneObjectId id;
-			ArrowKind kind = ArrowKind::Arrow3D;
-			Arrow2DOrientation orientation2D = Arrow2DOrientation::Billboard;
-			WorldPlane fixedPlane = WorldPlane::XY;
-			glm::vec3 start = glm::vec3(0.0f);
-			glm::vec3 end = glm::vec3(0.0f, 0.0f, 1.0f);
-			ArrowStyle style;
+			OrbitalPreset preset = OrbitalPreset::P;
+			// Fed straight to OrbitalPresetSettings - see HydrogenicOrbital.hpp for what each one
+			// selects and how each is clamped.
+			int shell = 2;
+			int lobeIndex = 0;
+			float effectiveCharge = 1.0f;
+			glm::vec3 centerA = glm::vec3(0.0f);
+			// Only read by the two-centre presets. For a single-centre one it is left alone rather
+			// than hidden, so switching preset back and forth does not lose the bond the user set up.
+			glm::vec3 centerB = glm::vec3(1.5f, 0.0f, 0.0f);
+			// Optional atom anchoring, indices into structure.atoms: one entry drives centerA, two
+			// drive centerA and centerB. Resolved every frame, so an
+			// orbital sits on its atom through gizmo drags, nudges and relaxation playback. Anchors
+			// that no longer resolve are ignored, never indexed.
+			std::vector<std::size_t> anchorAtoms;
+			// Euler angles in degrees, applied to single-centre presets only - the two-centre ones
+			// take their orientation from centerB - centerA. Degrees rather than a matrix so the
+			// properties panel and the YAML both stay readable.
+			glm::vec3 rotationEuler = glm::vec3(0.0f);
+			// Scene-level sign decoration. BuildOrbitalWavefunction applies it after constructing the
+			// physical preset, so the Domain preset builders remain an unmodified description of it.
+			bool phaseFlipped = false;
+			// Uniform mesh scale about the orbital's centroid, purely for composing a figure. It
+			// does NOT change the physics - effectiveCharge is the knob that actually contracts or
+			// expands the wavefunction. Kept separate so a drawing that was scaled to look right
+			// next to an atom stays honest about which number is which.
+			float scale = 1.0f;
+			// Per-axis stretch in the orbital's own frame, on top of the uniform scale. x and y
+			// span the lobe while z runs along it. This changes only the drawing, not the orbital
+			// preset or the physical meaning of effectiveCharge and isoFraction.
+			glm::vec3 stretch = glm::vec3(1.0f);
+			// Iso value as a fraction of the sampled grid's peak amplitude (SuggestOrbitalIsoValue),
+			// not an absolute value - a diffuse 3d and a tight 1s then both come out looking like
+			// the textbook picture at the same setting.
+			float isoFraction = 0.2f;
+			// Samples per axis for the sampling cube. Meshing is CPU-side and runs on the main
+			// thread whenever a parameter changes, so this is the frame-hitch knob.
+			int resolution = 48;
+			// Off = flat face normals (the faceted look); on = normals from the exact field.
+			bool smoothShading = true;
+			glm::vec3 positiveLobeColor = glm::vec3(0.85f, 0.25f, 0.25f);
+			glm::vec3 negativeLobeColor = glm::vec3(0.25f, 0.35f, 0.9f);
+			float alpha = 0.75f;
+			// The outliner's eye column - see Renderer/Scene/SceneVisibility.hpp.
+			bool visible = true;
+			// ...and its camera column: drawn in an exported render. Independent of `visible`.
+			bool renderable = true;
+			std::string persistKey; // see PinnedMeasurement::persistKey
+			// task/53: when non-empty the orbital IS this linear combination, psi = sum c_i phi_i,
+			// and preset, shell, lobeIndex, effectiveCharge, centerA/centerB, anchorAtoms and
+			// rotationEuler are not read by BuildOrbitalWavefunction. phaseFlipped, scale, stretch,
+			// isoFraction, resolution, colours and visibility apply as usual. G/R detaches components; the
+			// starting components are pinned to their atoms. Built by BuildSalcSceneOrbital.
+			std::vector<LcaoComponent> lcaoComponents;
+			// Outliner and properties title when non-empty (e.g. "e_x (E #1)"); otherwise the preset
+			// name is shown, as before.
+			std::string displayName;
+		};
+		std::vector<SceneOrbital> sceneOrbitals;
+		// Derived CPU mesh shared by rendering, surface picking and region selection.
+		mutable std::unordered_map<SceneObjectId,
+			std::pair<std::uint64_t, std::vector<IsosurfaceVertex>>> sceneOrbitalMeshes;
+		std::vector<SceneObjectId> selectedSceneOrbitals;
+		// Indices into structure.vacancies (ViewportVacancySelection.hpp). Cleared by the same clicks
+		// that clear the other scene-object selections.
+		std::vector<std::size_t> selectedVacancies;
+		// The defect axes (structure.defectFrame) are selected: gizmo target, Delete, properties.
+		bool defectFrameSelected = false;
+		// Ctrl+D was pressed: start moving the copies (G) on the next frame, once they are the selection.
+		bool duplicateMovePending = false;
+		// Temporary parenting: objects that G/R/S of the selected defect axes carry along, about the
+		// axes' origin. Per session, never saved; stale ids/indices are skipped.
+		//   ponytail: vacancy indices shift when an earlier vacancy is deleted; ids if that bites.
+		struct DefectFrameChildren
+		{
+			std::vector<SceneObjectId> freeLabels;
+			std::vector<SceneObjectId> paths;
+			std::vector<SceneObjectId> orbitals;
+			std::vector<SceneObjectId> planes;
+			std::vector<std::size_t> vacancies;
+
+			[[nodiscard]] std::size_t Count() const
+			{
+				return freeLabels.size() + paths.size() + orbitals.size() + planes.size() + vacancies.size();
+			}
+		} defectFrameChildren;
+		// Copied from RendererLayer::GetLabelPickQuads after every viewport render, so the label click
+		// test hits the label where it was drawn.
+		LabelPickQuads labelPickQuads;
+
+		// A flat quad drawn through a set of points - a molecular plane, a slip plane, a mirror
+		// plane for the group-theory panel to point at. It is a drawing, not a
+		// measurement: the points it was fitted through are consumed at creation and not kept, so
+		// nothing here is linked to an atom and nothing has to be unlinked later.
+		struct ScenePlane
+		{
+			// Stable identity allocated by SceneRegistry.
+			SceneObjectId id;
+			glm::vec3 center = glm::vec3(0.0f);
+			// Unit normal. With `tangent` (unit, perpendicular to it) this fixes the quad's frame;
+			// the second in-plane axis is the cross product, so there is no third vector to keep
+			// consistent.
+			glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f);
+			glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
+			// Half-width along `tangent` and half-height along normal x tangent, Angstrom.
+			glm::vec2 halfExtents = glm::vec2(2.0f);
+			// Optional atom anchoring, indices into structure.atoms, same shape and lifetime rules
+			// as SceneOrbital::anchorAtoms - but here the whole frame is re-fitted from the atoms
+			// rather than a centre copied, so a plane through three atoms stays through them while
+			// they move. Needs at least two resolvable entries; anything less is ignored. Empty
+			// means a free plane, which is what "Odczep" leaves behind.
+			std::vector<std::size_t> anchorAtoms;
+			glm::vec3 color = glm::vec3(0.35f, 0.65f, 0.9f);
+			float alpha = 0.35f;
+			// Drawn on top of the outline of the quad. Off gives a plain translucent sheet.
+			bool showBorder = true;
+			// The Scene Outliner's two columns - see Renderer/Scene/SceneVisibility.hpp.
+			bool visible = true;
+			bool renderable = true;
 			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
-		std::vector<SceneArrow> sceneArrows;
-		// Click-select + drag for sceneArrows (RendererPanel::handleSceneArrowInteraction) - same
-		// multi-select/group-drag shape as selectedFreeLabels above, plus which endpoint a single
-		// selected arrow's drag actually grabs (irrelevant once more than one is selected - a
-		// multi-selection always moves every selected arrow's start AND end together, same rigid
-		// group-drag convention as labels).
-		std::vector<SceneObjectId> selectedSceneArrows;
-		bool sceneArrowDragging = false;
-		glm::vec2 sceneArrowDragLastMouse = glm::vec2(0.0f);
-		enum class SceneArrowDragTarget { Start, End, Both };
-		SceneArrowDragTarget sceneArrowDragTarget = SceneArrowDragTarget::Both;
-		// Drives the Blender-style "adjust last operation" quick-edit window (RendererPanel::
-		// renderSceneArrowQuickEditPanel) - set right after an arrow is added via Shift+A/right-click
-		// Add/ObjectPropertiesPanel's own "+ Add arrow"; cleared on Escape, on selection changing away
-		// from this arrow, or when another arrow is added. Bool+index pair rather than
-		// std::optional<std::size_t> - same convention as cursor3DPlaced/cursor3DPosition above, no
-		// new include needed.
-		bool sceneArrowQuickEditActive = false;
-		std::size_t sceneArrowQuickEditIndex = 0;
-		// Atoms-displacement comparison (T08 item 0 / T16 item 8) - this window is the "reference"
-		// structure; comparisonFilePath is a second, differently-composed-or-not structure loaded
-		// once (off the main thread, CompareStructuresJob) and matched against it. Unlike
-		// sceneArrows this is auto-generated (hundreds-to-thousands of pairs, not a handful of
-		// hand-placed annotations) and drawn as a single batched instanced draw call
-		// (OpenGlRendererBackend::renderDisplacementArrows), not per-arrow welded meshes. Renderer-
-		// only, like sceneArrows - the file path + threshold are the only two fields mirrored into
-		// ProjectManifest (EditorLayer::onDisplacementComparisonStateChanged), the computed result
-		// itself is not persisted and is recomputed by pressing "Compare" again after reopening a
-		// project.
+		std::vector<ScenePlane> scenePlanes;
+
+		// task/41: the window's paths, and the caches derived from them. A Unique rather than a member
+		// by value so that the vector of windows reallocating does not move the caches out from under
+		// anything holding a reference into them; null until the first path is created (see
+		// SceneSystem::EnsurePathSystem).
+		Unique<PathSystem> paths;
+		// Multi-select; back() is the gizmo anchor.
+		std::vector<SceneObjectId> selectedScenePlanes;
+		// task/41 S11a: the selected paths, ids into `paths->Store()` rather than indices into a
+		// vector - a path has no vector to index. Same multi-select shape as the other annotations, and it
+		// must be cleared everywhere they are: a stale entry here shows the wrong Properties section.
+		std::vector<SceneObjectId> selectedScenePaths;
+		// Blender-like edit aid for validating the generated path mesh. Per viewport and deliberately
+		// not persisted as object data.
+		bool showPathMeshOverlay = false;
+		// Edit Mode state for the one path opened from selectedScenePaths; element selection is kept
+		// separate so leaving the session never changes Object Mode's path selection.
+		PathEditSession pathEdit;
+		// Set by renderer.path_edit.handle_type_menu (V); the viewport opens the handle-type popup on
+		// its next frame and clears it. A command cannot call ImGui::OpenPopup itself - it runs outside
+		// the viewport window's ImGui ID scope.
+		bool pathHandleTypeMenuRequested = false;
+
+		// Add > Orbital: whether a picked preset lands on the selected atoms or at the 3D cursor.
+		// A sticky flag on the window rather than a level of submenu, which is what made that menu
+		// six flyouts deep. Per-window and not persisted - it is a mode for the next click, not a
+		// project setting.
+		bool orbitalAddAnchorToSelection = true;
+		// Atoms-displacement comparison: generated pairs drawn in a batched instanced pass.
+		// Only the comparison file and threshold are persisted; the result is recomputed on demand.
 		struct DisplacementComparisonState
 		{
 			Path comparisonFilePath;
@@ -268,12 +417,15 @@ namespace DefectStudio
 		// One entry in the scene-object undo snapshot - both label kinds together, since a single
 		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
 		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).
-		// sceneArrows joined this same snapshot for the same reason - one shared scene-object scope.
 		struct LabelUndoSnapshot
 		{
 			std::vector<PinnedMeasurement> pinnedMeasurements;
 			std::vector<FreeLabel> freeLabels;
-			std::vector<SceneArrow> sceneArrows;
+			std::vector<SceneOrbital> sceneOrbitals;
+			std::vector<ScenePlane> scenePlanes;
+			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
+			PathStore paths;
+			bool showDefectFrame = true;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like
@@ -339,7 +491,7 @@ namespace DefectStudio
 		// the show*/visibility flags above (those hide things from view; these gate what a click can
 		// select once shown). Ctrl+1 atoms-only, Ctrl+2 +bonds, Ctrl+3 bonds+labels (no atoms - lets
 		// a label be gizmo-dragged without risking an accidental atom drag), Ctrl+4 everything.
-		// sceneArrows share this same flag rather than getting a pickArrows of their own - one more
+		// Paths share pickLabels - one more
 		// "label-like annotation" kind under the same umbrella, not a new axis of selection-mode UI.
 		bool pickAtoms = true;
 		bool pickBonds = true;
@@ -347,6 +499,9 @@ namespace DefectStudio
 		// Set by RendererLayer::onAddAtomPopupToggleRequested (Shift+A), read and cleared by
 		// RendererPanel's shared request consumer, which forwards it into the one app-wide Add menu.
 		bool addAtomPopupRequested = false;
+		// The shared Add menu opens the existing coordinate editor at this position.
+		std::optional<glm::vec3> addAtomCoordinatesPopupPosition;
+		bool addAtomCoordinatesPopupFractional = false;
 		std::optional<glm::vec2> addMenuScreenPosition;
 		// Box/circle drag-select (Alt+B / Alt+C). Coordinates are viewport-relative pixels, same
 		// space as RendererPanel::handleAtomPick's relX/relY.
@@ -361,14 +516,17 @@ namespace DefectStudio
 		std::optional<ModalTransformSession> modalTransform;
 		SceneTransformSelectionSnapshot modalTransformSelection;
 		std::optional<LabelUndoSnapshot> modalTransformSceneObjectsBefore;
+		// task/41 S11g: the scene objects as they were before the Properties panel's current style
+		// drag started, held for as long as the drag lasts. ImGui reports a change on every frame a
+		// slider or colour picker is held, so routing each of those frames through the undo-recording
+		// edit context is what turns a one-second drag into sixty Ctrl+Z presses. The editor applies
+		// the intermediate frames silently and pushes this one snapshot when the widget is released -
+		// the same "capture once, commit once" contract `modalTransformSceneObjectsBefore` gives
+		// G/R/S. Empty means no drag is in flight.
+		std::optional<LabelUndoSnapshot> scenePathStyleEditBefore;
 		bool modalTransformStartedFromHandle = false;
 		TransformOrientation transformOrientation = TransformOrientation::Global;
 		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
-		// Which Start/End/midpoint candidate owns the unified transform gizmo for a single arrow.
-		// The other two render as activation dots. Reset to Both whenever
-		// sceneArrowGizmoActiveArrowIndex no longer matches the current single-arrow selection.
-		SceneArrowDragTarget sceneArrowGizmoActiveTarget = SceneArrowDragTarget::Both;
-		std::size_t sceneArrowGizmoActiveArrowIndex = static_cast<std::size_t>(-1);
 		enum class NavigationGizmoDragMode
 		{
 			None,
@@ -403,6 +561,9 @@ namespace DefectStudio
 		// like pinnedMeasurements - not a domain concept, not persisted with the project yet.
 		glm::vec3 cursor3DPosition = glm::vec3(0.0f);
 		bool cursor3DPlaced = false;
+		// Shared sticky preference for both right-click Add > Orbital and the vertical toolbar's
+		// orbital popup. Per-window UI state; it does not need project persistence.
+		bool anchorOrbitalToSelection = true;
 		// Non-destructive whole-scene reposition for framing an export shot (Etap F Phase 1) -
 		// forwarded as a render-time uniform (u_SceneOffset) to every geometry pass (atoms/bonds/
 		// cell box/grid/labels/isosurface, see OpenGlRendererBackend::RenderWindow), never baked
@@ -412,7 +573,7 @@ namespace DefectStudio
 		// RendererWindowState (RenderExportDialogState::previewState) - always 0 on a real viewport
 		// window's RendererWindowState, since nothing in the interactive viewport writes it anymore
 		// (this replaced an earlier v1 that mutated atom.cartesianPosition directly and only worked
-		// for atoms/bonds/picking - cell box/grid/scene arrows never got that mutation, so they'd
+		// for atoms/bonds/picking - cell box/grid/annotations never got that mutation, so they'd
 		// visibly detach; see RendererLayer::RenderToFbo for how this value reaches RenderWindow).
 		glm::vec3 viewOffset = glm::vec3(0.0f);
 		// GPU compute-shader isosurface mesh for one spin channel's rendered orbital
@@ -438,6 +599,15 @@ namespace DefectStudio
 
 		// Link to StructureRecord for dirty flag checking
 		StructureId structureId;
+
+		// The project's one structure-free scene (Renderer/ProjectSceneWindow.hpp). An explicit flag,
+		// not "structureId is nil": ad-hoc empty windows and creation previews are structure-free too
+		// and must never be saved into the project.
+		bool isProjectScene = false;
+		// Project scene only: set by every scene-object undo entry pushed or replayed for this window,
+		// cleared by ResetProjectSceneWindow and by a successful project save. Drives the title's "*",
+		// the role StructureRecord::revision plays for structure-backed windows.
+		bool sceneObjectsDirty = false;
 
 		// Set on the ephemeral preview windows of a structure creation session (see CreationSession).
 		// Such a window is deliberately NOT domain-backed - structureId stays empty - and its whole

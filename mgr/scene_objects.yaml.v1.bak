@@ -1,0 +1,158 @@
+formatVersion: 1
+structures:
+  - structureKey: C:/Users/fzabi/Desktop/STUDIA/Defect-Studio-mgr/test-directory/generation_test/NV/POSCAR
+    objects:
+      - kind: SceneArrow
+        persistKey: ""
+        arrowKind: Arrow2D
+        orientation2D: Billboard
+        fixedPlane: XY
+        points:
+          - [8.448351, 8.434301, 8.610466]
+          - [10.448354, 8.434301, 8.610466]
+          - [11.974359, 8.619189, 8.844482]
+        curve_segments: 24
+        start_tip: Open
+        end_tip: Plain
+        startAnchorAtoms:
+          []
+        endAnchorAtoms:
+          []
+        atom_buffer: 1.15
+        style:
+          color: [0.949, 0.71, 0.114]
+          alpha: 1
+          shaftWidth: 8
+          dashed: false
+          dash_length: 0.25
+          gap_length: 0.15
+          outlineColor: [0.06, 0.055, 0.05]
+          outlineWidth: 1.25
+          headWidth: 22
+          headLength: 28
+          useGradient: false
+          gradientStart: [0.6, 0.6, 0.6]
+          gradientFinish: [0.9, 0.9, 0.9]
+      - kind: SceneOrbital
+        persistKey: eed9debcdf2e481cae88e9f3b3cffc4d
+        preset: sp3
+        shell: 2
+        lobeIndex: 0
+        effectiveCharge: 3.2499998
+        centerA: [8.9175, 8.9175, 7.1340003]
+        centerB: [8.633999, 7.134, 7.1340003]
+        anchorAtoms:
+          - index: 510
+            element: C
+            position: [8.9175, 8.9175, 7.1340003]
+        rotationEuler: [10, 296, -34]
+        scale: 1
+        stretch: [0.52, 0.52, 0.88]
+        isoFraction: 0.2
+        resolution: 48
+        positiveLobeColor: [0.85, 0.25, 0.25]
+        negativeLobeColor: [0.25, 0.35, 0.9]
+        alpha: 0.75
+        visible: false
+      - kind: SceneOrbital
+        persistKey: 369fc55b512142ebbfeb30735b3e8c9b
+        preset: sp3
+        shell: 2
+        lobeIndex: 0
+        effectiveCharge: 3.2499998
+        centerA: [8.9175, 7.134, 8.9175]
+        centerB: [8.633999, 7.134, 7.1340003]
+        anchorAtoms:
+          - index: 507
+            element: C
+            position: [8.9175, 7.134, 8.9175]
+        rotationEuler: [254, -54, 0]
+        scale: 1
+        stretch: [0.52, 0.52, 0.88]
+        isoFraction: 0.2
+        resolution: 48
+        positiveLobeColor: [0.85, 0.25, 0.25]
+        negativeLobeColor: [0.25, 0.35, 0.9]
+        alpha: 0.75
+        visible: false
+      - kind: SceneOrbital
+        persistKey: f06e49e20b4b4b78a819e6d6a8100a7e
+        preset: sp3
+        shell: 2
+        lobeIndex: 0
+        effectiveCharge: 3.2499998
+        centerA: [7.1339993, 7.134, 7.1340003]
+        centerB: [8.633999, 7.134, 7.1340003]
+        anchorAtoms:
+          - index: 414
+            element: C
+            position: [7.1339993, 7.134, 7.1340003]
+        rotationEuler: [296, 0, 0]
+        scale: 1
+        stretch: [0.52, 0.52, 0.88]
+        isoFraction: 0.2
+        resolution: 48
+        positiveLobeColor: [0.85, 0.25, 0.25]
+        negativeLobeColor: [0.25, 0.35, 0.9]
+        alpha: 0.75
+        visible: false
+      - kind: ScenePlane
+        persistKey: 0785c2efed0944fc93eeb9fc72115d59
+        center: [7.728499, 8.322999, 7.7285]
+        normal: [0.7071067, 0.7071069, 9.0262965e-08]
+        tangent: [0.32505763, -0.32505766, 0.88807374]
+        halfExtents: [2.9450467, 1.5244688]
+        anchorAtoms:
+          - index: 998
+            element: N
+            position: [7.1339993, 8.9175, 8.9175]
+          - index: 507
+            element: C
+            position: [8.9175, 7.134, 8.9175]
+          - index: 418
+            element: C
+            position: [7.134, 8.9175, 5.3505006]
+        color: [0.41427463, 0.569226, 1]
+        alpha: 0.13
+        showBorder: true
+        visible: false
+      - kind: ScenePlane
+        persistKey: 68d649cc250b40889dc22379fa10e3cc
+        center: [7.728499, 7.7285, 8.323]
+        normal: [-0.7071066, -1.07562045e-07, -0.707107]
+        tangent: [0.32505763, 0.88807386, -0.32505757]
+        halfExtents: [2.8690512, 1.4851298]
+        anchorAtoms:
+          - index: 998
+            element: N
+            position: [7.1339993, 8.9175, 8.9175]
+          - index: 510
+            element: C
+            position: [8.9175, 8.9175, 7.1340003]
+          - index: 411
+            element: C
+            position: [7.134, 5.3505, 8.9175]
+        color: [0.41427463, 0.569226, 1]
+        alpha: 0.35
+        showBorder: true
+        visible: false
+      - kind: ScenePlane
+        persistKey: 03763ee1aba847e7a282412bc5455b61
+        center: [8.323, 8.322999, 8.323]
+        normal: [3.051755e-08, 0.70710665, -0.70710695]
+        tangent: [0.88807416, 0.3250573, 0.3250572]
+        halfExtents: [3.355915, 1.7371485]
+        anchorAtoms:
+          - index: 998
+            element: N
+            position: [7.1339993, 8.9175, 8.9175]
+          - index: 615
+            element: C
+            position: [10.701001, 8.9175, 8.9175]
+          - index: 414
+            element: C
+            position: [7.1339993, 7.134, 7.1340003]
+        color: [0.41427463, 0.569226, 1]
+        alpha: 0.35
+        showBorder: true
+        visible: false

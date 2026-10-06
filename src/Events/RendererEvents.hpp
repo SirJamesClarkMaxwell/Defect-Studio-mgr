@@ -393,6 +393,24 @@ namespace DefectStudio::RendererEvents::Viewport
 
 namespace DefectStudio::RendererEvents::Windows
 {
+	// Opens an empty renderer window (e.g. the Project Tree and main menu "+" actions).
+	struct OpenEmptyRequested final : public BusEvent
+	{
+	};
+
+	// Ctrl+W - closes one renderer window. An empty windowId means "the active tab", which
+	// RendererPanel resolves through RendererLayer::GetLastFocusedViewportWindowId(); the toolbar
+	// and menu paths that know which window they mean fill it in.
+	//
+	// The event only asks. Whether the close needs a confirmation, and when the window is actually
+	// removed, is RendererPanel's business - it already owns a deferred close list, because
+	// removing a window from inside the loop that iterates them is how you invalidate the
+	// reference you are holding.
+	struct CloseRequested final : public BusEvent
+	{
+		std::string windowId;
+	};
+
 	// Opens filePath as a new renderer window at runtime (e.g. Project Tree "Open Defect").
 	// Handled off the main thread via JobSystem - see RendererLayer::onOpenStructureRequested.
 	struct OpenStructureRequested final : public BusEvent

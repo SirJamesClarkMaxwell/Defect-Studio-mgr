@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #include "IO/TextFileIO.hpp"
+#include "Renderer/Scene/ScenePathPersistence.hpp"
 
 namespace DefectStudio
 {
@@ -15,17 +16,34 @@ bool SaveProjectWithSceneObjects(const Path &projectDirectory, ProjectManifest &
 								 const StructureFileWriter &writeStructureFile,
 								 std::vector<StructuredError> &outWarnings, std::string &outError)
 {
-	const std::filesystem::path project = projectDirectory.Native().lexically_normal();
+	SceneObjectsFile migratedSceneObjects = sceneObjects;
+	const auto migration = MigratePersistedSceneArrows(migratedSceneObjects, outWarnings);
+	if (!migration)
+	{
+		outError = migration.Error().technicalDetails;
+		outWarnings.push_back(migration.Error());
+		return false;
+	}
+	auto insideDirectory = [](const Path &directory, const std::filesystem::path &source) {
+		if (directory.Empty())
+			return false;
+		const std::filesystem::path normalized = directory.Native().lexically_normal();
+		auto directoryIt = normalized.begin();
+		auto sourceIt = source.begin();
+		for (; directoryIt != normalized.end(); ++directoryIt, ++sourceIt)
+			if (sourceIt == source.end() || *directoryIt != *sourceIt)
+				return false;
+		return true;
+	};
+	// The data roots are part of the project too - the Project Tree lists them and the app already
+	// authorizes structure writes into them (Add to Project).
 	auto insideProject = [&](const Path &sourcePath) {
 		if (sourcePath.Empty())
 			return false;
 		const std::filesystem::path source = sourcePath.Native().lexically_normal();
-		auto projectIt = project.begin();
-		auto sourceIt = source.begin();
-		for (; projectIt != project.end(); ++projectIt, ++sourceIt)
-			if (sourceIt == source.end() || *projectIt != *sourceIt)
-				return false;
-		return true;
+		return insideDirectory(projectDirectory, source) ||
+			std::any_of(manifest.roots.begin(), manifest.roots.end(),
+				[&](const ProjectRootEntry &root) { return insideDirectory(root.path, source); });
 	};
 	std::vector<StructureId> writtenStructures;
 	for (const StructureId &id : savedStructures)
@@ -49,7 +67,7 @@ bool SaveProjectWithSceneObjects(const Path &projectDirectory, ProjectManifest &
 		}
 		writtenStructures.push_back(id);
 	}
-	if (!SceneObjectsIO::Save(projectDirectory, sceneObjects, outError))
+	if (!SceneObjectsIO::Save(projectDirectory, migratedSceneObjects, outError))
 		return false;
 	if (!ProjectManifestIO::Save(projectDirectory, manifest, outError))
 		return false;
