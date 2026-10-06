@@ -26,6 +26,7 @@ scientific-core = [
     "matplotlib>=3.9",
     "pandas>=2.2",
     "symengine>=0.11",
+    "pymatgen-analysis-defects==2026.3.20"  # FNV engine, pinned: validated vs sxdefectalign,
 ]
 scientific-extended = [
     "phonopy>=2.0",

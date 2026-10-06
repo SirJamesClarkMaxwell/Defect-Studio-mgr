@@ -44,8 +44,20 @@ użytkownik może je zmienić albo przeliczyć krok 1. Podział:
 ## Poprawki do planu
 
 1. **Kolejność.** Start od LOCPOT i jednej poprawki zgodnej z sxdefectalign na diamencie.
-   CHG/CHGCAR, wizualizacja gęstości, eFNV, interpolacja siatek i 3-poziomowy cache przesunięte za
-   MVP. Niezgodne siatki są w MVP odrzucane.
+   eFNV, interpolacja siatek i 3-poziomowy cache przesunięte za MVP. Niezgodne siatki są w MVP
+   odrzucane.
+   - **Zmiana 2026-10-06 (decyzja użytkownika): CHGCAR jest w MVP.** Wizualizacja gęstości spinowej
+     (blok magnetyzacji CHGCAR stanu q=±1) i Δρ = ρ(q) − ρ(0) służy do ręcznego wskazania, gdzie
+     jest dodany/zabrany elektron, czyli `--center`, oraz do oceny lokalizacji ładunku. Analiza
+     diamentu pokazała, że bez tego FNV liczy się też dla stanów zdelokalizowanych (Ge_C/Si_C ±1,
+     XN2V −1: nachylenie ΔV_DFT/V_model ≈ 0–0.3), gdzie wynik nie ma sensu.
+   - Reużycie: siatka i izopowierzchnie już istnieją dla orbitali WAVECAR
+     (`VaspOrbitalGridBridge`/`VaspOrbitalGridConversion`, `IsosurfaceMesher` +
+     `isosurface_march.comp`, `ElectronicStructurePanel`). Nowy jest tylko odczyt
+     `puntukas.vasp.Chgcar` (blok total + magnetyzacja) i semantyka „gęstość”, nie „orbital”.
+   - W MVP: propozycja środka = centroid |m(r)| (lub |Δρ|), przeciągana przez użytkownika;
+     metryka lokalizacji = ułamek |m| w kuli R wokół środka (R = 5 Å ≈ 18% komórki 512 at.)
+     obok nachylenia z LOCPOT; ostrzeżenie, gdy ładunek jest zdelokalizowany.
 2. **Silnik.** `pymatgen-analysis-defects` nie jest zainstalowany (ani `.venv`, ani
    `install/app/python`).
    - Bierze skalarne ε.
@@ -157,3 +169,19 @@ Dla każdego (defekt, q) z inżynierki:
 - q = 0 daje 0.
 
 Tolerancja według użytkownika „do przetestowania”, ustalimy przy pierwszym porównaniu.
+
+## Test zgodności pymatgen-analysis-defects 2026.3.20 vs sxdefectalign (GeN q = −1, 2026-10-06)
+
+Skrypt: `test-directory/fnv-diamond/analysis/pymatgen_vs_sx.py` (dane lokalne, gitignored).
+
+- ΔV_DFT (planar average, pierwszy blok LOCPOT): zgodne do 5e-7 eV na wszystkich osiach. Czytnik,
+  kanał spinowy i siatka (180, bez końca przedziału) są zgodne.
+- E_lat: 0.252535 vs 0.252685 eV, różnica −0.15 meV (kryterium ~1 meV spełnione).
+- V_model: stałe przesunięcie +3.66 meV (plus kształt w rdzeniu σ ≤ 3 meV, w oknie plateau ~0.2 meV).
+  Przyczyna: wyraz G = 0 modelu Gaussa. sxdefectalign: średnia V_model = −0.00444 eV, pymatgen:
+  −0.00078 eV. Stosunek = 5.70 = ε, czyli pymatgen dzieli wyraz G = 0 przez ε, a sxdefectalign nie.
+- Skutek: C różni się o ~3.5 meV, E_corr o +3.4 meV dla |q| = 1 (0.2333 vs 0.2299 eV). Wyraz ∝ q,
+  więc różnica E_corr ∝ q²: przewidywane ~14.6 meV dla |q| = 2 (do sprawdzenia na GeV −2).
+- Okno pymatgen 1 Å daje E_corr 0.2346 eV; z naszym plateau 0.2333 eV.
+- Do decyzji: którą konwencję G = 0 przyjąć (zgodność z pracą = sxdefectalign) i czy korygować ją
+  stałą, czy liczyć V_model samodzielnie.
