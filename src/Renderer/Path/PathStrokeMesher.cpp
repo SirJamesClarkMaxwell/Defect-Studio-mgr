@@ -103,7 +103,7 @@ namespace DefectStudio
 				const auto existing = std::find_if(result.begin(), result.end(), [length](const GradientPieceSample &sample) {
 					return !sample.isGradientStop && sample.sample.arcLength == length;
 				});
-				const glm::vec4 color(stop.color, stop.alpha);
+				const glm::vec4 color(stop.color, stop.alpha * style.alpha);
 				if (existing != result.end())
 				{
 					existing->color = color;
@@ -252,25 +252,27 @@ namespace DefectStudio
 	{
 		if (!style.gradient.enabled || style.gradient.stops.empty())
 			return glm::vec4(style.color, style.alpha);
+		// The path's Alpha is an overall opacity: it scales the gradient's own stop alphas.
+		const auto withOpacity = [&style](const glm::vec3 &color, float alpha) { return glm::vec4(color, alpha * style.alpha); };
 		const auto &stops = style.gradient.stops;
 		if (normalizedT <= stops.front().position)
-			return glm::vec4(stops.front().color, stops.front().alpha);
+			return withOpacity(stops.front().color, stops.front().alpha);
 		if (normalizedT >= stops.back().position)
-			return glm::vec4(stops.back().color, stops.back().alpha);
+			return withOpacity(stops.back().color, stops.back().alpha);
 		for (std::size_t index = 1; index < stops.size(); ++index)
 			if (normalizedT <= stops[index].position)
 			{
 				const PathGradientStop &a = stops[index - 1];
 				const PathGradientStop &b = stops[index];
 				if (b.position == a.position)
-					return glm::vec4(b.color, b.alpha);
+					return withOpacity(b.color, b.alpha);
 				const double fraction = (normalizedT - a.position) / (b.position - a.position);
-				return glm::vec4(glm::mix(a.color, b.color, static_cast<float>(fraction)), glm::mix(a.alpha, b.alpha, static_cast<float>(fraction)));
+				return withOpacity(glm::mix(a.color, b.color, static_cast<float>(fraction)), glm::mix(a.alpha, b.alpha, static_cast<float>(fraction)));
 			}
 		return glm::vec4(style.color, style.alpha);
 	}
 
-	StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style, const bool capEndpoints)
+	StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style)
 	{
 		StrokeGeometry geometry;
 		if (!std::isfinite(style.width) || style.width <= 0.0f || style.radialSegments < 3u)
@@ -344,7 +346,7 @@ namespace DefectStudio
 				if (attachEnd)
 					samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 				detail::AppendThickFlatPiece(mesh, samples, style,
-					(!atStart || capEndpoints) && !attachStart, (!atEnd || capEndpoints) && !attachEnd,
+					!attachStart, !attachEnd,
 					hasGradientSamples ? &sampleColors : nullptr);
 			}
 			detail::AppendAttachedThickFlatDecoration(mesh, startContour, evaluated.samples.front(), true,
@@ -396,8 +398,8 @@ namespace DefectStudio
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (detail::UsesTubeVertices(style))
 				AppendTubePiece(geometry, samples, shaftStyle,
-					(!atStart || capEndpoints) && !(atStart && startContour.closesBack),
-					(!atEnd || capEndpoints) && !(atEnd && endContour.closesBack),
+					!(atStart && startContour.closesBack),
+					!(atEnd && endContour.closesBack),
 					startHandoff, hasGradientSamples ? &sampleColors : nullptr);
 			else
 				AppendRibbonPiece(geometry, samples, style, hasGradientSamples ? &sampleColors : nullptr);

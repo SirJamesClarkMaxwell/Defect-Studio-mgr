@@ -61,7 +61,8 @@ namespace DefectStudio
 		}
 
 		[[nodiscard]] ScenePath MakeBondLine(const RendererWindowState &windowState, const glm::vec3 &start,
-			const glm::vec3 &end, const glm::vec3 &startColor, const glm::vec3 &endColor, float bondRadiusMultiplier)
+			const glm::vec3 &end, const glm::vec3 &startColor, const glm::vec3 &endColor, float bondRadiusMultiplier,
+			std::optional<std::size_t> atomIndex = std::nullopt)
 		{
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 			path.name = "Vacancy bond";
@@ -71,10 +72,23 @@ namespace DefectStudio
 			path.style.startDecoration.kind = PathDecorationKind::None;
 			path.style.endDecoration.kind = PathDecorationKind::None;
 			// Match the bond renderer's radius clamp and global multiplier.
-			const float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
+			// As thick as the atom's own bonds; vacancy-vacancy lines (or a bondless atom) fall back
+			// to the structure's first bond.
+			float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
+			if (atomIndex)
+			{
+				float atomBond = 0.0f;
+				for (const RendererBondData &bond : windowState.structure.bonds)
+					if (bond.firstAtomIndex == *atomIndex || bond.secondAtomIndex == *atomIndex)
+						atomBond = std::max(atomBond, bond.radius);
+				if (atomBond > 0.0f)
+					bondRadius = atomBond;
+			}
 			path.style.width = 2.0f * std::max(bondRadius, 0.001f) * bondRadiusMultiplier;
 			path.style.gradient.enabled = true;
 			path.style.gradient.stops = {{0.0f, startColor, 1.0f}, {1.0f, endColor, 1.0f}};
+			// Slightly see-through by default, so a bond to an empty site reads as weaker than a real one.
+			path.style.alpha = 0.7f;
 			return path;
 		}
 
@@ -84,7 +98,7 @@ namespace DefectStudio
 			const RendererAtomData &atom = windowState.structure.atoms[atomIndex];
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[vacancyIndex];
 			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, vacancy.cartesianPosition,
-				atom.color, vacancy.color, bondRadiusMultiplier);
+				atom.color, vacancy.color, bondRadiusMultiplier, atomIndex);
 			// Match the ordinary bond's sphere-surface trim using the effective rendered tube radius.
 			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {},
 				VacancyBondAtomBuffer(atom.radius, path.style.width * 0.5f)}};

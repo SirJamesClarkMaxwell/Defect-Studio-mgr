@@ -24,7 +24,9 @@ namespace DefectStudio
 			!std::isfinite(tubeRadius) || tubeRadius < 0.0f)
 			return 0.0f;
 		const float ratio = tubeRadius / atomRadius;
-		return std::sqrt(std::max(1.0f - ratio * ratio, 0.0f));
+		// 10% deeper than the exact rim-on-surface point: a tessellated atom sphere lies slightly
+		// inside the true one, and an exact rim would poke through it.
+		return 0.9f * std::sqrt(std::max(1.0f - ratio * ratio, 0.0f));
 	}
 
 	// Recognise the generated style and bindings, including tasks 69/74's buffered endpoints.
@@ -36,7 +38,7 @@ namespace DefectStudio
 			!std::holds_alternative<LineSegmentData>(path.segments.front().data) ||
 			!std::holds_alternative<PathTransformBinding::Free>(path.transformBinding.value) ||
 			style.profile != StrokeProfile::Round || style.cap != PathLineCap::Butt ||
-			style.depthMode != PathDepthMode::DepthTest || style.alpha != 1.0f || style.dash.enabled ||
+			style.depthMode != PathDepthMode::DepthTest || style.dash.enabled || // alpha is a display choice
 			style.startDecoration.kind != PathDecorationKind::None ||
 			style.endDecoration.kind != PathDecorationKind::None ||
 			!style.gradient.enabled || style.gradient.stops.size() != 2 ||

@@ -272,7 +272,12 @@ namespace DefectStudio
 		ImGui::NewLine();
 		SyncMarkerIds(markerState, gradient, selectedStop);
 
-		const float width = ImGui::GetContentRegionAvail().x;
+		// Inset the bar by a marker's half width (+ selection border) on both sides: markers at 0 and
+		// 1 otherwise stick out past the content region, and an auto-sized panel grows to fit them
+		// every frame - which widens the bar and the markers again.
+		const float available = ImGui::GetContentRegionAvail().x;
+		const float inset = std::max(4.0f, available * 0.0125f) + 2.0f;
+		const float width = available - 2.0f * inset;
 		constexpr float kMinimumWidth = 1.0f;
 		if (!std::isfinite(width) || width < kMinimumWidth)
 		{
@@ -291,9 +296,9 @@ namespace DefectStudio
 		}
 		constexpr float kBarHeight = 24.0f;
 		constexpr float kMarkerHeight = 14.0f;
-		const ImVec2 barMinimum = ImGui::GetCursorScreenPos();
+		const ImVec2 barMinimum(ImGui::GetCursorScreenPos().x + inset, ImGui::GetCursorScreenPos().y);
 		const ImVec2 barMaximum(barMinimum.x + width, barMinimum.y + kBarHeight);
-		ImGui::Dummy(ImVec2(width, kBarHeight + kMarkerHeight + 4.0f + style.ItemSpacing.y));
+		ImGui::Dummy(ImVec2(available, kBarHeight + kMarkerHeight + 4.0f + style.ItemSpacing.y));
 		const ImVec2 nextItem = ImGui::GetCursorScreenPos();
 		DrawGradientBar(*ImGui::GetWindowDrawList(), barMinimum, barMaximum, gradient);
 

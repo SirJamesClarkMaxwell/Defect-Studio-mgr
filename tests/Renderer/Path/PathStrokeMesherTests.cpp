@@ -1306,13 +1306,14 @@ namespace DefectStudio::Tests
 		style.gradient.enabled = true;
 		style.gradient.stops = {{0.0f, glm::vec3(1.0f, 0.0f, 0.0f), 0.2f}, {1.0f, glm::vec3(0.0f, 0.0f, 1.0f), 0.8f}};
 		EXPECT_FLOAT_EQ(SampleStrokeColor(style, -1.0).r, 1.0f);
-		EXPECT_FLOAT_EQ(SampleStrokeColor(style, -1.0).a, 0.2f);
+		// The path Alpha (0.4) scales the stop alphas as an overall opacity.
+		EXPECT_FLOAT_EQ(SampleStrokeColor(style, -1.0).a, 0.2f * 0.4f);
 		EXPECT_FLOAT_EQ(SampleStrokeColor(style, 2.0).b, 1.0f);
-		EXPECT_FLOAT_EQ(SampleStrokeColor(style, 2.0).a, 0.8f);
+		EXPECT_FLOAT_EQ(SampleStrokeColor(style, 2.0).a, 0.8f * 0.4f);
 		const glm::vec4 middle = SampleStrokeColor(style, 0.5);
 		EXPECT_NEAR(middle.r, 0.5f, 1e-6f);
 		EXPECT_NEAR(middle.b, 0.5f, 1e-6f);
-		EXPECT_NEAR(middle.a, 0.5f, 1e-6f);
+		EXPECT_NEAR(middle.a, 0.5f * 0.4f, 1e-6f);
 	}
 
 	TEST(PathStrokeMesherTests, InvalidStyleAndGradientProduceDiagnosticsOnly)

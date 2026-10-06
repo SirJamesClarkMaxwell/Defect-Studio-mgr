@@ -16,7 +16,6 @@
 #include "Renderer/Path/PathLod.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
 #include "Renderer/Path/PathTessellator.hpp"
-#include "Renderer/Path/VacancyBond.hpp"
 
 namespace DefectStudio
 {
@@ -180,7 +179,7 @@ namespace DefectStudio
 					? FrameSeed{FrameSeed::Mode::FixedNormal, glm::dvec3(path.style.ribbonNormal)} : FrameSeed{};
 				const EvaluatedPath evaluated = Tessellate(path, resolved,
 					TessellationSettings{ToleranceForLod(lodBucket, 0.5), 12, 4096, frameSeed});
-				cached = &system.Caches().Store(path.id, key, CachedPathGeometry{evaluated, BuildStroke(evaluated, path.style, !GeneratedVacancyBondPair(path).has_value())});
+				cached = &system.Caches().Store(path.id, key, CachedPathGeometry{evaluated, BuildStroke(evaluated, path.style)});
 			}
 			if (cached->stroke.indices.empty())
 				return;
