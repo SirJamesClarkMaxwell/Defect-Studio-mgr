@@ -17,16 +17,20 @@ namespace DefectStudio
 		friend bool operator==(const VacancyBondPair &, const VacancyBondPair &) = default;
 	};
 
-	// Atom-radii buffer: the tube's rim lies on the atom sphere, as in renderBonds.
+	// Settings > Renderer "Vacancy bond atom inset": how much deeper than the exact rim-on-surface
+	// point the tube ends (a tessellated sphere lies slightly inside the true one, so an exact rim
+	// can poke through). Set by RendererLayer when settings apply.
+	//   ponytail: process-wide like the bond multiplier it sits next to; per-window if ever needed.
+	inline float g_VacancyBondAtomInset = 0.01f;
+
+	// Atom-radii buffer: the tube's rim lies (just inside) the atom sphere, as in renderBonds.
 	[[nodiscard]] inline float VacancyBondAtomBuffer(float atomRadius, float tubeRadius)
 	{
 		if (!std::isfinite(atomRadius) || atomRadius <= 0.0f ||
 			!std::isfinite(tubeRadius) || tubeRadius < 0.0f)
 			return 0.0f;
 		const float ratio = tubeRadius / atomRadius;
-		// 10% deeper than the exact rim-on-surface point: a tessellated atom sphere lies slightly
-		// inside the true one, and an exact rim would poke through it.
-		return 0.9f * std::sqrt(std::max(1.0f - ratio * ratio, 0.0f));
+		return (1.0f - std::clamp(g_VacancyBondAtomInset, 0.0f, 1.0f)) * std::sqrt(std::max(1.0f - ratio * ratio, 0.0f));
 	}
 
 	// Recognise the generated style and bindings, including tasks 69/74's buffered endpoints.

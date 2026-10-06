@@ -67,10 +67,10 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(vacancyBinding.vacancyIndex, 0u);
 		EXPECT_FLOAT_EQ(vacancyBinding.buffer, 0.0f);
 		EXPECT_EQ(line.style.depthMode, PathDepthMode::DepthTest);
-		// The tube rim, rather than its centreline, meets the atom surface (10% deeper, inside it).
+		// The tube rim, rather than its centreline, meets the atom surface (1% deeper by default, inside it).
 		window.structure.atoms[0].radius = 0.15f;
 		const auto resolved = ResolveNodePositions(line, SceneSystem::MakePathBindingContext(window));
-		EXPECT_NEAR(glm::length(resolved.positions.front() - window.structure.atoms[0].cartesianPosition), 0.9f * 0.12f, 1e-5f);
+		EXPECT_NEAR(glm::length(resolved.positions.front() - window.structure.atoms[0].cartesianPosition), 0.99f * 0.12f, 1e-5f);
 		EXPECT_NEAR(std::hypot(0.12f, line.style.width * 0.5f), window.structure.atoms[0].radius, 1e-5f);
 		const glm::vec3 end = resolved.positions[1];
 		EXPECT_NEAR(end.x, 0.0f, 1e-5f);
@@ -141,7 +141,7 @@ namespace DefectStudio::Tests
 		const auto after = ResolveNodePositions(line, context);
 		// Turning the bond keeps the same sphere-surface clearance at the atom end.
 		const glm::vec3 atom = window.structure.atoms[0].cartesianPosition;
-		const float shrink = 0.9f * std::sqrt(window.structure.atoms[0].radius * window.structure.atoms[0].radius -
+		const float shrink = 0.99f * std::sqrt(window.structure.atoms[0].radius * window.structure.atoms[0].radius -
 			line.style.width * line.style.width * 0.25f);
 		EXPECT_NEAR(glm::length(before.positions[0] - atom), shrink, 1e-5f);
 		EXPECT_NEAR(glm::length(after.positions[0] - atom), shrink, 1e-5f);
@@ -197,13 +197,13 @@ namespace DefectStudio::Tests
 
 	TEST(ViewportVacancyAddTests, AtomBufferPutsTubeRimOnSphereAndClampsOversizedTubes)
 	{
-		EXPECT_NEAR(VacancyBondAtomBuffer(0.15f, 0.09f), 0.72f, 1e-6f); // 0.9 x the exact rim point
+		EXPECT_NEAR(VacancyBondAtomBuffer(0.15f, 0.09f), 0.792f, 1e-6f); // 0.99 x the exact rim point (default 1% inset)
 		for (float radius : {0.15f, 0.45f, 1.0f})
 			for (float fraction : {0.0f, 0.2f, 0.6f, 0.99f})
 			{
 				const float tube = radius * fraction;
 				const float shrink = radius * VacancyBondAtomBuffer(radius, tube);
-				EXPECT_NEAR(shrink * shrink / 0.81f + tube * tube, radius * radius, 1e-6f);
+				EXPECT_NEAR(shrink * shrink / (0.99f * 0.99f) + tube * tube, radius * radius, 1e-6f);
 				EXPECT_LE(shrink * shrink + tube * tube, radius * radius + 1e-6f); // rim stays inside
 			}
 		EXPECT_FLOAT_EQ(VacancyBondAtomBuffer(0.15f, 0.15f), 0.0f);
@@ -253,17 +253,17 @@ namespace DefectStudio::Tests
 				window.structure.atoms[0].radius = radius;
 				path.style.width = width;
 				const auto resolved = ResolveNodePositions(path, bindings);
-				const float expected = 0.9f * std::sqrt(std::max(radius * radius - width * width * 0.25f, 0.0f));
+				const float expected = 0.99f * std::sqrt(std::max(radius * radius - width * width * 0.25f, 0.0f));
 				EXPECT_NEAR(glm::length(resolved.positions.front() - window.structure.atoms[0].cartesianPosition), expected, 1e-5f);
 				EXPECT_EQ(resolved.positions.back(), window.structure.vacancies[0].cartesianPosition);
 				if (resolved.positions != initial.positions) // (0.15, default width) is the initial state
 					EXPECT_NE(BindingSourceRevision(path, initial), BindingSourceRevision(path, resolved));
-				EXPECT_NEAR(std::get<PathBinding::CopyPosition>(path.nodes.front().binding.value).buffer, 0.72f, 1e-6f);
+				EXPECT_NEAR(std::get<PathBinding::CopyPosition>(path.nodes.front().binding.value).buffer, 0.792f, 1e-6f);
 			}
 		// Ordinary authored paths keep their explicit buffer, even after width edits.
 		path.style.gradient.enabled = false;
 		EXPECT_NEAR(glm::length(ResolveNodePositions(path, bindings).positions.front() -
-			window.structure.atoms[0].cartesianPosition), 0.216f, 1e-5f);
+			window.structure.atoms[0].cartesianPosition), 0.2376f, 1e-5f);
 	}
 	class VacancyBondRegenerationTests : public testing::Test
 	{

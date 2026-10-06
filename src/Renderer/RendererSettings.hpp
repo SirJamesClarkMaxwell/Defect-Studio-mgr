@@ -90,6 +90,8 @@ namespace DefectStudio
 		// only, so orientation/length/normals stay correct) - live like the lighting sliders below,
 		// no cache invalidation needed.
 		float bondRadiusMultiplier = 1.0f;
+		// How far (fraction) a vacancy bond's tube rim reaches inside its atom sphere, see VacancyBond.hpp.
+		float vacancyBondAtomInset = 0.01f;
 		// Luma-preserving saturation multiplier (1 = unchanged, 0 = grayscale, >1 = boosted) applied
 		// in atoms/bonds/isosurface fragment shaders to the already-lit color, right before the
 		// final clamp - fixes the "washed out / pastel" look some users see on a light background by

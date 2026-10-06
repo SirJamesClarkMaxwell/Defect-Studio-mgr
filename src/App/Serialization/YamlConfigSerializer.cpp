@@ -603,6 +603,11 @@ namespace DefectStudio
 				{rendererSection, rendererBondRadiusMultiplierKey},
 				{},
 				config.renderer.bondRadiusMultiplier);
+			config.renderer.vacancyBondAtomInset = ReadValue(
+				root,
+				{rendererSection, "vacancy_bond_atom_inset"},
+				{},
+				config.renderer.vacancyBondAtomInset);
 			config.renderer.colorSaturation = ReadValue(
 				root,
 				{rendererSection, rendererColorSaturationKey},
@@ -978,6 +983,11 @@ namespace DefectStudio
 				{rendererSection, rendererBondRadiusMultiplierKey},
 				{},
 				config.renderer.bondRadiusMultiplier);
+			config.renderer.vacancyBondAtomInset = ReadValue(
+				root,
+				{rendererSection, "vacancy_bond_atom_inset"},
+				{},
+				config.renderer.vacancyBondAtomInset);
 			config.renderer.colorSaturation = ReadValue(
 				root,
 				{rendererSection, rendererColorSaturationKey},

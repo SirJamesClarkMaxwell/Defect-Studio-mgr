@@ -468,6 +468,7 @@ namespace DefectStudio
 		clampViewportColor(m_DraftConfig.renderer.viewport.pathEditOutlineColor);
 		clampViewportColor(m_DraftConfig.renderer.viewport.selectionOutlineColor);
 		m_DraftConfig.renderer.bondRadiusMultiplier = std::clamp(m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f);
+		m_DraftConfig.renderer.vacancyBondAtomInset = std::clamp(m_DraftConfig.renderer.vacancyBondAtomInset, 0.0f, 0.5f);
 		m_DraftConfig.renderer.colorSaturation = std::clamp(m_DraftConfig.renderer.colorSaturation, 0.0f, 2.0f);
 		m_DraftConfig.renderer.viewportSupersample = std::clamp(m_DraftConfig.renderer.viewportSupersample, 1.0f, 3.0f);
 		m_DraftConfig.renderer.orbitSensitivity = std::clamp(m_DraftConfig.renderer.orbitSensitivity, kMinSensitivity, kMaxSensitivity);
@@ -1903,6 +1904,19 @@ namespace DefectStudio
 			setValueControlWidth();
 			if (ImGui::SliderFloat("##BondRadiusMultiplier", &m_DraftConfig.renderer.bondRadiusMultiplier, 0.1f, 4.0f, "%.2fx"))
 				markDirty();
+
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted("Vacancy bond atom inset");
+			ImGui::TableSetColumnIndex(1);
+			setValueControlWidth();
+			float insetPercent = m_DraftConfig.renderer.vacancyBondAtomInset * 100.0f;
+			if (ImGui::SliderFloat("##VacancyBondAtomInset", &insetPercent, 0.0f, 50.0f, "%.1f%%"))
+			{
+				m_DraftConfig.renderer.vacancyBondAtomInset = insetPercent / 100.0f;
+				markDirty();
+			}
+			ImGui::SetItemTooltip("Jak głęboko koniec wiązania do wakansu wchodzi w sferę atomu, ponad punkt, w którym krawędź rury dotyka powierzchni.");
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);

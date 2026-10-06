@@ -31,6 +31,7 @@
 #include "IO/TextFileIO.hpp"
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 #include "Renderer/Path/PathHandleGeometry.hpp"
+#include "Renderer/Path/VacancyBond.hpp"
 #include "Renderer/RendererStartupBootstrap.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
@@ -1026,6 +1027,7 @@ namespace DefectStudio
 			config.backgroundColor[2],
 			config.backgroundColor[3]);
 		m_GlobalRenderSettings.bondRadiusMultiplier = config.bondRadiusMultiplier;
+		m_GlobalRenderSettings.vacancyBondAtomInset = config.vacancyBondAtomInset;
 		m_GlobalRenderSettings.colorSaturation = config.colorSaturation;
 		m_GlobalRenderSettings.viewportSupersample = config.viewportSupersample;
 		m_GlobalRenderSettings.orbitSensitivity = config.orbitSensitivity;
@@ -1133,6 +1135,8 @@ namespace DefectStudio
 			m_GlobalRenderSettings.lighting.backDirection = glm::normalize(glm::vec3(0.0f, -0.4f, -0.8f));
 
 		m_GlobalRenderSettings.bondRadiusMultiplier = std::clamp(m_GlobalRenderSettings.bondRadiusMultiplier, 0.1f, 4.0f);
+		m_GlobalRenderSettings.vacancyBondAtomInset = std::clamp(m_GlobalRenderSettings.vacancyBondAtomInset, 0.0f, 0.5f);
+		g_VacancyBondAtomInset = m_GlobalRenderSettings.vacancyBondAtomInset;
 		m_GlobalRenderSettings.colorSaturation = std::clamp(m_GlobalRenderSettings.colorSaturation, 0.0f, 2.0f);
 		m_GlobalRenderSettings.viewportSupersample = std::clamp(m_GlobalRenderSettings.viewportSupersample, 1.0f, 3.0f);
 		m_GlobalRenderSettings.orbitSensitivity = std::clamp(m_GlobalRenderSettings.orbitSensitivity, kMinSensitivity, kMaxSensitivity);

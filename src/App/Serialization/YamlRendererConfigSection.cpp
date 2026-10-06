@@ -19,6 +19,7 @@ namespace DefectStudio::ConfigYaml
 		out << YAML::Key << "background" << YAML::Value;
 		EmitColor(out, renderer.backgroundColor);
 		out << YAML::Key << "bond_radius_multiplier" << YAML::Value << renderer.bondRadiusMultiplier;
+		out << YAML::Key << "vacancy_bond_atom_inset" << YAML::Value << renderer.vacancyBondAtomInset;
 		out << YAML::Key << "color_saturation" << YAML::Value << renderer.colorSaturation;
 		out << YAML::Key << "viewport_supersample" << YAML::Value << renderer.viewportSupersample;
 		out << YAML::Key << "orbit_sensitivity" << YAML::Value << renderer.orbitSensitivity;
