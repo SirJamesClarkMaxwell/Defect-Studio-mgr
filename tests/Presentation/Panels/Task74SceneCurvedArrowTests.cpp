@@ -66,9 +66,9 @@ namespace DefectStudio::Tests
 			RendererWindowState before, after;
 			PrepareEnds(before, cycle);
 			PrepareEnds(after, cycle);
-			const auto oldIds = AddCurvedArrowThroughSelectedAtoms(before, {.axisMode = CurvedArrowAxisMode::DefectZ});
+			const auto oldIds = AddCurvedArrowThroughSelectedAtoms(before, {.axisMode = CurvedArrowAxisMode::DefectZ, .arrowCount = 1});
 			const auto newIds = AddCurvedArrowThroughSelectedAtoms(after,
-				{.axisMode = CurvedArrowAxisMode::DefectZ, .radiusScale = 1.3f});
+				{.axisMode = CurvedArrowAxisMode::DefectZ, .arrowCount = 1, .radiusScale = 1.3f});
 			ASSERT_TRUE(oldIds);
 			ASSERT_TRUE(newIds);
 			ASSERT_EQ(oldIds->size(), newIds->size());
@@ -84,7 +84,7 @@ namespace DefectStudio::Tests
 				ASSERT_TRUE(newSample);
 				EXPECT_GT(glm::length(newSample->position), glm::length(oldSample->position));
 				for (const auto &node : newPath.nodes)
-					EXPECT_GT(glm::length(std::get<PathBinding::CopyPosition>(node.binding.value).offset), 0.0f);
+					EXPECT_EQ(std::get<PathBinding::CopyPosition>(node.binding.value).offset, glm::vec3(0));
 				const auto oldNodes = ResolveNodePositions(newPath, SceneSystem::MakePathBindingContext(after));
 				const auto index = std::get<PathBinding::CopyPosition>(newPath.nodes[0].binding.value).atomIndex;
 				after.structure.atoms[index].cartesianPosition.z += 1.0f;

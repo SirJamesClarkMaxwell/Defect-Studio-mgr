@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -147,6 +148,13 @@ namespace DefectStudio
 			snapshot.orbitals.push_back(
 				{index, centers.centerA, centers.centerB, orbital.rotationEuler, orbital.scale,
 					!orbital.anchorAtoms.empty(), orbital.lcaoComponents.empty() && IsTwoCenterPreset(orbital.preset)});
+			auto &start = snapshot.orbitals.back();
+			start.anchorAtoms = orbital.anchorAtoms;
+			start.stretch = orbital.stretch;
+			start.stretchFrame = SceneOrbitalStretchFrame(orbital, window.structure);
+			for (const auto &component : orbital.lcaoComponents)
+				start.components.push_back({component.anchorAtom,
+					ResolveAnchor(component.center, component.anchorAtom, window.structure), component.rotationEuler});
 		}
 		for (const SceneObjectId id : withChildren(window.selectedScenePlanes, window.defectFrameChildren.planes))
 		{
@@ -155,7 +163,7 @@ namespace DefectStudio
 				continue;
 			const RendererWindowState::ScenePlane &plane = window.scenePlanes[index];
 			snapshot.planes.push_back(
-				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents});
+				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents, plane.anchorAtoms});
 		}
 		if (window.pathEdit.IsActive()) CaptureSceneTransformPathElements(window, snapshot);
 		else CaptureSceneTransformPaths(window, snapshot);
@@ -262,8 +270,20 @@ namespace DefectStudio
 			if (start.index >= window.sceneOrbitals.size())
 				continue;
 			RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[start.index];
-			if (!orbital.lcaoComponents.empty() && operation != ModalTransformOp::Scale)
+			orbital.stretch = start.stretch;
+			if (!start.components.empty() && operation != ModalTransformOp::Scale)
+			{
+				const glm::vec3 pivot = ItemPivot(pivotMode, start.centerA, selectionPivot);
+				for (std::size_t i = 0; i < start.components.size() && i < orbital.lcaoComponents.size(); ++i)
+				{
+					auto &component = orbital.lcaoComponents[i];
+					component.center = ApplyTransformDelta(delta.spatial, start.components[i].center, pivot);
+					component.anchorAtom = std::numeric_limits<std::size_t>::max();
+					if (operation == ModalTransformOp::Rotate)
+						component.rotationEuler = RotatedEulerDegrees(start.components[i].rotationEuler, delta.spatial.rotation);
+				}
 				continue;
+			}
 			if (operation == ModalTransformOp::Translate)
 			{
 				orbital.centerA = ApplyTransformDelta(delta.spatial, start.centerA, selectionPivot);
@@ -280,10 +300,30 @@ namespace DefectStudio
 				orbital.centerA = ApplyTransformDelta(delta.spatial, start.centerA, pivot);
 				if (start.twoCenter)
 					orbital.centerB = ApplyTransformDelta(delta.spatial, start.centerB, pivot);
+				// Turning in place keeps the anchors; only a rotation that carries the centres away detaches them.
+				if (glm::distance(orbital.centerA, start.centerA) > kEpsilon ||
+					(start.twoCenter && glm::distance(orbital.centerB, start.centerB) > kEpsilon))
+					orbital.anchorAtoms.clear();
 				orbital.rotationEuler = RotatedEulerDegrees(start.rotationEuler, delta.spatial.rotation);
 			}
 			else
-				orbital.scale = std::clamp(start.scale * delta.scaleFactor, 0.05f, 20.0f);
+			{
+				const glm::mat3 uniform(delta.spatial.linear[0][0]);
+				const bool isotropic = glm::length(delta.spatial.linear[0] - uniform[0]) < kEpsilon &&
+					glm::length(delta.spatial.linear[1] - uniform[1]) < kEpsilon &&
+					glm::length(delta.spatial.linear[2] - uniform[2]) < kEpsilon;
+				if (isotropic)
+					orbital.scale = std::clamp(start.scale * delta.scaleFactor, 0.05f, 20.0f);
+				else
+				{
+					// ponytail: authored stretch stores three extents, not shear. Project off-axis
+					// scaling onto those extents; add an affine shape matrix if shear is needed.
+					orbital.scale = start.scale;
+					for (int axis = 0; axis < 3; ++axis)
+						orbital.stretch[axis] = std::clamp(start.stretch[axis] *
+							glm::length(delta.spatial.linear * start.stretchFrame[axis]), 0.05f, 20.0f);
+				}
+			}
 		}
 
 		for (const PlaneTransformStart &start : snapshot.planes)
@@ -291,6 +331,8 @@ namespace DefectStudio
 			if (start.index >= window.scenePlanes.size())
 				continue;
 			RendererWindowState::ScenePlane &plane = window.scenePlanes[start.index];
+			if (operation != ModalTransformOp::Scale)
+				plane.anchorAtoms.clear();
 			if (operation == ModalTransformOp::Translate)
 			{
 				plane.center = ApplyTransformDelta(delta.spatial, start.center, selectionPivot);
@@ -327,16 +369,22 @@ namespace DefectStudio
 				continue;
 			RendererWindowState::SceneOrbital &orbital = window.sceneOrbitals[start.index];
 			orbital.scale = start.scale;
-			if (!orbital.lcaoComponents.empty())
+			orbital.stretch = start.stretch;
+			orbital.anchorAtoms = start.anchorAtoms;
+			if (!start.components.empty())
+			{
+				for (std::size_t i = 0; i < start.components.size() && i < orbital.lcaoComponents.size(); ++i)
+				{
+					auto &component = orbital.lcaoComponents[i];
+					component.anchorAtom = start.components[i].anchorAtom;
+					component.center = start.components[i].center;
+					component.rotationEuler = start.components[i].rotationEuler;
+				}
 				continue;
+			}
 			orbital.centerA = start.centerA;
 			orbital.centerB = start.centerB;
 			orbital.rotationEuler = start.rotationEuler;
-			if (start.anchored && window.modalTransformSceneObjectsBefore.has_value() &&
-				start.index < window.modalTransformSceneObjectsBefore->sceneOrbitals.size())
-			{
-				orbital.anchorAtoms = window.modalTransformSceneObjectsBefore->sceneOrbitals[start.index].anchorAtoms;
-			}
 		}
 		for (const PlaneTransformStart &start : snapshot.planes)
 		{
@@ -347,6 +395,7 @@ namespace DefectStudio
 			plane.normal = start.normal;
 			plane.tangent = start.tangent;
 			plane.halfExtents = start.halfExtents;
+			plane.anchorAtoms = start.anchorAtoms;
 		}
 		RestoreSceneTransformPaths(window, snapshot);
 		RestoreSceneTransformPathElements(window, snapshot);

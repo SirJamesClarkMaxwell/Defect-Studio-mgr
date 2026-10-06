@@ -112,8 +112,8 @@ namespace DefectStudio
 		const RendererWindowState &windowState);
 	[[nodiscard]] bool HandleFreeLabelInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
-	// Click-select for sceneOrbitals: plain click replaces, Ctrl-click toggles. Ray-vs-bounding-
-	// sphere (PickSceneOrbital), no drag - an orbital is moved with the transform gizmo, because a
+	// Click-select for sceneOrbitals: plain click replaces, Ctrl-click toggles, Shift-click adds.
+	// Tests the drawn orbital surface, no drag - an orbital is moved with the transform gizmo, because a
 	// stray drag detaching one from the atom it sits on would be the wrong default.
 	[[nodiscard]] bool HandleSceneOrbitalInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);

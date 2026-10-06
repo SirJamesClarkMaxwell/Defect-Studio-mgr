@@ -38,6 +38,7 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
 #include "Renderer/Scene/SceneVisibility.hpp"
+#include "Renderer/Scene/SceneSelection.hpp"
 #include "Renderer/Scene/ViewModifier.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 #include "Events/ProjectEvents.hpp"
@@ -2396,42 +2397,71 @@ namespace DefectStudio
 		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
 	}
 
+	void RendererLayer::ChangeSceneVisibility(const std::string &windowId, bool showAll)
+	{
+		if (findViewportCommandWindow(windowId) == nullptr) return;
+		RendererWindowState &windowState = *findViewportCommandWindow(windowId);
+		const auto undoStack = m_UndoStack.lock();
+		std::optional<UndoScope> group;
+		const std::string description = showAll ? "Show all" : "Hide selection";
+		if (undoStack != nullptr) group.emplace(*undoStack, description);
+		const bool editVacancies = showAll ?
+			std::any_of(windowState.structure.vacancies.begin(), windowState.structure.vacancies.end(),
+				[](const RendererVacancyData &vacancy) { return vacancy.hidden; }) :
+			!windowState.selectedVacancies.empty();
+		if (editVacancies)
+		{
+			if (!m_EditVacancyVisibility)
+			{
+				DS_LOG_WARN("Vacancy visibility commands are unavailable.");
+				if (group) (void)group->Cancel();
+				return;
+			}
+			const auto result = m_EditVacancyVisibility(windowState, showAll);
+			if (!result)
+			{
+				DS_LOG_WARN("Vacancy visibility failed: {}", result.Error().technicalDetails);
+				if (group) (void)group->Cancel();
+				return;
+			}
+		}
+		HiddenSceneState before = CaptureHiddenSceneState(windowState.structure);
+		if (showAll || HasSelectedSceneObjectsForHide(windowState))
+			PushPinnedMeasurementUndoSnapshot(windowState);
+		if (showAll)
+		{
+			ShowAllSceneObjects(windowState);
+			ShowAllModifier{}.Apply(windowState.sceneRegistry, windowState);
+		}
+		else
+		{
+			SetSelectedSceneObjectsVisible(windowState, false);
+			HideSelectionModifier{}.Apply(windowState.sceneRegistry, windowState);
+		}
+		SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
+		PushSceneVisibilityUndoSnapshot(windowState, std::move(before), description);
+		if (group)
+		{
+			const auto result = group->Commit();
+			if (!result) DS_LOG_WARN("Visibility undo group failed: {}", result.Error().technicalDetails);
+		}
+	}
+
 	void RendererLayer::onHideSelectionRequested(const RendererEvents::Viewport::HideSelectionRequested &event)
 	{
-		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr)
-			return;
-
-		// Atoms and bonds are hidden through the ECS mirror, the other scene objects through their
-		// own flags - see Renderer/Scene/SceneVisibility.hpp for why the two halves stay separate.
-		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
-		if (HasSelectedSceneObjectsForHide(*windowState))
-		{
-			PushPinnedMeasurementUndoSnapshot(*windowState);
-			SetSelectedSceneObjectsVisible(*windowState, false);
-		}
-		HideSelectionModifier{}.Apply(windowState->sceneRegistry, *windowState);
-		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Hide selection");
+		ChangeSceneVisibility(event.windowId, false);
 	}
 
 	bool HasSelectedSceneObjectsForHide(const RendererWindowState &windowState)
 	{
 		return !windowState.selectedPinnedMeasurements.empty() || !windowState.selectedFreeLabels.empty() ||
 			!windowState.selectedSceneOrbitals.empty() ||
-			!windowState.selectedScenePlanes.empty() || !windowState.selectedScenePaths.empty();
+			!windowState.selectedScenePlanes.empty() || !windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;
 	}
 
 	void RendererLayer::onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event)
 	{
-		RendererWindowState *windowState = findViewportCommandWindow(event.windowId);
-		if (windowState == nullptr)
-			return;
-
-		HiddenSceneState before = CaptureHiddenSceneState(windowState->structure);
-		PushPinnedMeasurementUndoSnapshot(*windowState);
-		ShowAllSceneObjects(*windowState);
-		ShowAllModifier{}.Apply(windowState->sceneRegistry, *windowState);
-		PushSceneVisibilityUndoSnapshot(*windowState, std::move(before), "Show all");
+		ChangeSceneVisibility(event.windowId, true);
 	}
 
 	void RendererLayer::onSelectionInvertRequested(const RendererEvents::Viewport::SelectionInvertRequested &event)
@@ -2452,41 +2482,7 @@ namespace DefectStudio
 		if (windowState == nullptr)
 			return;
 
-		// Only entity kinds the active pick mode actually allows picking (2026-08-29 feedback: this
-		// previously matched every atom+bond unconditionally, so a bonds+labels-only mode - Ctrl+3 -
-		// still selected every atom too). Entities of a kind the mode excludes are left untouched
-		// rather than forced unselected, so switching mode to also grab labels doesn't silently wipe
-		// an atom selection made under a different mode. Only visible entities within an included kind
-		// - selecting hidden ones too would let a subsequent M/gizmo/delete act on something the user
-		// can't see or intended to exclude via H (matches InvertSelectionModifier's same rule).
-		SceneRegistry &scene = windowState->sceneRegistry;
-		entt::registry &registry = scene.Registry();
-		if (windowState->pickAtoms)
-		{
-			for (const entt::entity entity : registry.view<AtomComponent, SelectionComponent, const VisibilityComponent>())
-				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
-		}
-		if (windowState->pickBonds)
-		{
-			for (const entt::entity entity : registry.view<BondComponent, SelectionComponent, const VisibilityComponent>())
-				registry.get<SelectionComponent>(entity).selected = registry.get<const VisibilityComponent>(entity).visible;
-		}
-		SceneSystem::PushSelectionAndVisibilityToWindowState(scene, *windowState);
-
-		// Labels aren't part of the ECS selection sync above (plain std::vector fields, not entities)
-		// - same pickLabels-gated labels (pinned measurements + free labels) box/circle-
-		// select already treats as one group (RendererPanel::handleBoxSelectDrag/handleCircleSelectDrag),
-		// and the reason "select all bond-labels" (2026-08-29 feedback) needs no new shortcut of its
-		// own - Ctrl+A while in labels-pickable mode now covers it directly.
-		if (windowState->pickLabels)
-		{
-			windowState->selectedPinnedMeasurements.clear();
-			for (std::size_t index = 0; index < windowState->pinnedMeasurements.size(); ++index)
-				windowState->selectedPinnedMeasurements.push_back(windowState->pinnedMeasurements[index].id);
-			windowState->selectedFreeLabels.clear();
-			for (std::size_t index = 0; index < windowState->freeLabels.size(); ++index)
-				windowState->selectedFreeLabels.push_back(windowState->freeLabels[index].id);
-		}
+		SelectAllVisibleSceneObjects(*windowState);
 	}
 
 	void RendererLayer::onCursor3DSetPositionRequested(const RendererEvents::Viewport::Cursor3DSetPositionRequested &event)

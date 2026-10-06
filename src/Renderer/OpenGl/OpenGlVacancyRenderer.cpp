@@ -77,8 +77,9 @@ namespace DefectStudio
 			const glm::vec3 center = vacancy.cartesianPosition + sceneOffset;
 			const glm::vec3 normal = glm::normalize(glm::cross(right, up));
 			glUseProgram(program);
+			// Wireframe has no fill, but its dashes still sit on the same spherical depth surface.
 			if (radiusLocation >= 0)
-				glUniform1f(radiusLocation, vacancy.renderMode == VacancyRenderMode::Wireframe ? 0.0f : vacancy.radius);
+				glUniform1f(radiusLocation, vacancy.radius);
 			if (centerLocation >= 0) glUniform3fv(centerLocation, 1, &center.x);
 			if (normalLocation >= 0) glUniform3fv(normalLocation, 1, &normal.x);
 			if (perspectiveLocation >= 0)

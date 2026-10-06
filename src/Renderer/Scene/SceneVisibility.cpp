@@ -48,7 +48,7 @@ namespace DefectStudio
 
 	bool AnySceneObjectSelected(const RendererWindowState &windowState)
 	{
-		return !windowState.selectedAtomIndices.empty() || !windowState.selectedPinnedMeasurements.empty() ||
+		return !windowState.selectedAtomIndices.empty() || !windowState.selectedBondIndices.empty() || !windowState.selectedVacancies.empty() || !windowState.selectedPinnedMeasurements.empty() ||
 			!windowState.selectedFreeLabels.empty() ||
 			!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty() ||
 			!windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;

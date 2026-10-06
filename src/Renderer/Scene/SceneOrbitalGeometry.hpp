@@ -24,6 +24,9 @@ namespace DefectStudio
 	// concatenated; then phaseFlipped. ResolveSceneOrbitalCenters reports the mean of the resolved
 	// component centres as centerA, centerB and centroid; MakeSceneOrbitalMeshKey hashes the
 	// components; ResolveAnchoredOrbitals refreshes each component's `center` from its atom.
+	[[nodiscard]] glm::mat3 SceneOrbitalStretchFrame(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
 	[[nodiscard]] OrbitalWavefunction BuildOrbitalWavefunction(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
 
@@ -134,14 +137,22 @@ namespace DefectStudio
 	[[nodiscard]] SceneOrbitalBounds SceneOrbitalWorldBounds(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
 
+	[[nodiscard]] const std::vector<IsosurfaceVertex> &CachedSceneOrbitalMesh(
+		const RendererWindowState &window, const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure);
+
+	struct SceneOrbitalSurfaceHit
+	{
+		std::size_t index;
+		float distance;
+	};
+	[[nodiscard]] std::optional<SceneOrbitalSurfaceHit> PickSceneOrbitalSurface(
+		const RendererWindowState &window, const RendererStructureData &structure,
+		const glm::vec3 &origin, const glm::vec3 &direction);
+
 	// Click-pick. Returns the index into windowState.sceneOrbitals of the frontmost visible orbital
 	// the ray enters, or nullopt. `rayDirection` need not be normalised.
 	//
-	// ponytail: the test is ray-vs-bounding-sphere, not ray-vs-mesh. A p orbital's sphere covers
-	// the empty waist between its two lobes, so clicking there selects it - which is the forgiving
-	// behaviour for a drawing object anyway, and it costs one dot product instead of walking
-	// fourteen thousand triangles on the UI thread. Exact picking means testing cache.mesh in the
-	// backend, where the triangles already live; nothing else here would change.
+	// Tests the cached drawn triangles, so empty space between lobes does not steal atom clicks.
 	[[nodiscard]] std::optional<std::size_t> PickSceneOrbital(
 		const RendererWindowState &windowState,
 		const RendererStructureData &structure,

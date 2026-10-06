@@ -270,7 +270,7 @@ namespace DefectStudio
 		return glm::vec4(style.color, style.alpha);
 	}
 
-	StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style)
+	StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style, const bool capEndpoints)
 	{
 		StrokeGeometry geometry;
 		if (!std::isfinite(style.width) || style.width <= 0.0f || style.radialSegments < 3u)
@@ -343,7 +343,8 @@ namespace DefectStudio
 					samples.front() = DecorationBackSample(samples.front(), evaluated.samples.front(), startContour, true);
 				if (attachEnd)
 					samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
-				detail::AppendThickFlatPiece(mesh, samples, style, !attachStart, !attachEnd,
+				detail::AppendThickFlatPiece(mesh, samples, style,
+					(!atStart || capEndpoints) && !attachStart, (!atEnd || capEndpoints) && !attachEnd,
 					hasGradientSamples ? &sampleColors : nullptr);
 			}
 			detail::AppendAttachedThickFlatDecoration(mesh, startContour, evaluated.samples.front(), true,
@@ -394,8 +395,10 @@ namespace DefectStudio
 			if (endHandoff)
 				samples.back() = DecorationBackSample(samples.back(), evaluated.samples.back(), endContour, false);
 			if (detail::UsesTubeVertices(style))
-				AppendTubePiece(geometry, samples, shaftStyle, !(atStart && startContour.closesBack),
-					!(atEnd && endContour.closesBack), startHandoff, hasGradientSamples ? &sampleColors : nullptr);
+				AppendTubePiece(geometry, samples, shaftStyle,
+					(!atStart || capEndpoints) && !(atStart && startContour.closesBack),
+					(!atEnd || capEndpoints) && !(atEnd && endContour.closesBack),
+					startHandoff, hasGradientSamples ? &sampleColors : nullptr);
 			else
 				AppendRibbonPiece(geometry, samples, style, hasGradientSamples ? &sampleColors : nullptr);
 		}

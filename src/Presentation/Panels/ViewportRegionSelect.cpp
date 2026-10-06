@@ -31,6 +31,7 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
+#include "Renderer/Scene/SceneSelection.hpp"
 
 namespace DefectStudio
 {
@@ -112,22 +113,16 @@ namespace DefectStudio
 			// never matched bonds at all even when the mode allowed picking them.
 			PublishRegionSelection(
 				windowState,
-				windowState.pickAtoms ? HitTestRect(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
-				windowState.pickBonds ? HitTestRectBonds(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				(windowState.pickAtoms && windowState.showAtoms) ? HitTestRect(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				(windowState.pickBonds && windowState.showBonds) ? HitTestRectBonds(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
 				mode,
 				layer);
-			// Labels aren't part of the atom/bond region-select event above (single-select fields, not
-			// an entity list) - applied directly here instead, same pickLabels gate as everywhere else.
-			if (windowState.pickLabels)
-			{
-				ApplyLabelRegionSelection(
-					windowState, HitTestRectPinnedMeasurements(windowState, rectMin, rectMax),
-					HitTestRectFreeLabels(windowState, rectMin, rectMax),
-					mode,
-					HitTestRectScenePaths(windowState, rectMin, rectMax));
-			}
-			ApplyCentreRegionSelection(windowState,
-				[&](glm::vec2 point) { return SelectionHitTest::PointInRect(point, rectMin, rectMax); },
+			// Paths are ordinary scene objects; only label hits use the label selection mask.
+			ApplyLabelRegionSelection(windowState,
+				windowState.pickLabels ? HitTestRectPinnedMeasurements(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				windowState.pickLabels ? HitTestRectFreeLabels(windowState, rectMin, rectMax) : std::vector<std::size_t>{},
+				mode, HitTestRectScenePaths(windowState, rectMin, rectMax));
+			ApplySceneDrawingRegionSelection(windowState, rectMin, rectMax, 0.0f,
 				mode == RendererEvents::Viewport::RegionSelectMode::Replace,
 				mode == RendererEvents::Viewport::RegionSelectMode::Subtract);
 		}
@@ -159,22 +154,17 @@ namespace DefectStudio
 
 		PublishRegionSelection(
 			windowState,
-			windowState.pickAtoms ? HitTestCircle(windowState, center, windowState.circleSelectRadius)
+			(windowState.pickAtoms && windowState.showAtoms) ? HitTestCircle(windowState, center, windowState.circleSelectRadius)
 								   : std::vector<std::size_t>{},
-			windowState.pickBonds ? HitTestCircleBonds(windowState, center, windowState.circleSelectRadius)
+			(windowState.pickBonds && windowState.showBonds) ? HitTestCircleBonds(windowState, center, windowState.circleSelectRadius)
 								   : std::vector<std::size_t>{},
 			mode,
 			layer);
-		if (windowState.pickLabels)
-		{
-			ApplyLabelRegionSelection(
-				windowState, HitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius),
-				HitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius),
-				mode,
-				HitTestCircleScenePaths(windowState, center, windowState.circleSelectRadius));
-		}
-		ApplyCentreRegionSelection(windowState,
-			[&](glm::vec2 point) { return glm::length(point - center) <= windowState.circleSelectRadius; }, false,
+		ApplyLabelRegionSelection(windowState,
+			windowState.pickLabels ? HitTestCirclePinnedMeasurements(windowState, center, windowState.circleSelectRadius) : std::vector<std::size_t>{},
+			windowState.pickLabels ? HitTestCircleFreeLabels(windowState, center, windowState.circleSelectRadius) : std::vector<std::size_t>{},
+			mode, HitTestCircleScenePaths(windowState, center, windowState.circleSelectRadius));
+		ApplySceneDrawingRegionSelection(windowState, center, center, windowState.circleSelectRadius, false,
 			mode == RendererEvents::Viewport::RegionSelectMode::Subtract);
 	}
 
@@ -286,7 +276,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+			if (!windowState.pinnedMeasurements[i].visible || !ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
 				continue;
 			const std::optional<glm::vec2> screen =
 				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
@@ -306,7 +296,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+			if (!windowState.pinnedMeasurements[i].visible || !ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
 				continue;
 			const std::optional<glm::vec2> screen =
 				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
@@ -325,6 +315,7 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
+			if (!windowState.freeLabels[i].visible) continue;
 			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
 				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
 			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
@@ -342,6 +333,7 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
+			if (!windowState.freeLabels[i].visible) continue;
 			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
 				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
 			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))

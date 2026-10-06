@@ -2,6 +2,7 @@
 
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <type_traits>
 #include <utility>
@@ -61,8 +62,25 @@ namespace DefectStudio
 				domain->Workspace().Structures().MarkModified(target->record->id);
 				for (RendererWindowState &window : renderer->GetWindows())
 					if (window.structure.domainStructureId == target->windowState->structure.domainStructureId)
+					{
+						const bool hadFrame = window.structure.defectFrame.has_value();
 						RebuildAndSync(window, *target->record, m_Styles,
 							window.selectedAtomIndices, window.selectedBondIndices);
+						if constexpr (std::is_same_v<Payload, SetDefectFramePayload>)
+						{
+							if (!hadFrame && window.structure.defectFrame)
+								window.transformOrientation = TransformOrientation::Defect;
+							else if (!window.structure.defectFrame)
+							{
+								window.transformOrientation = TransformOrientation::Global;
+								window.defectFrameSelected = false;
+								window.defectFrameChildren = {};
+							}
+						}
+						std::erase_if(window.selectedVacancies, [&](std::size_t index) {
+							return index >= window.structure.vacancies.size() || window.structure.vacancies[index].hidden;
+						});
+					}
 				return {};
 			}
 
@@ -90,5 +108,29 @@ namespace DefectStudio
 		return CreateUnique<SetStructureFieldCommand<&CrystalStructure::defectFrame, SetDefectFramePayload,
 			&SetDefectFramePayload::frame>>(std::move(domainLayer), std::move(rendererLayer),
 			std::move(atomStyleTable), std::move(payload));
+	}
+	void BindRendererVacancyVisibilityEditor(WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable)
+	{
+		if (const auto renderer = rendererLayer.lock())
+			renderer->BindVacancyVisibilityEditor([domainLayer, rendererLayer, atomStyleTable](RendererWindowState &window, bool showAll) -> Result<void> {
+				const auto selected = window.selectedVacancies;
+				SetVacanciesPayload payload{window.windowId, {}, showAll ? "Show vacancies" : "Hide vacancies"};
+				payload.edit = [selected, showAll](std::vector<VacancySite> &vacancies, const CrystalStructure &) {
+					for (std::size_t index = 0; index < vacancies.size(); ++index)
+						if (showAll || std::find(selected.begin(), selected.end(), index) != selected.end())
+							vacancies[index].hidden = !showAll;
+				};
+				// H itself runs inside CommandRegistry::Execute; execute the existing child command
+				// directly to avoid a rejected nested registry call, and join the visibility UndoScope.
+				auto command = CreateSetVacanciesCommand(domainLayer, rendererLayer, atomStyleTable, std::move(payload));
+				CommandContext context;
+				const auto result = command->Execute(context);
+				if (!result) return result;
+				if (const auto layer = rendererLayer.lock())
+					if (const auto stack = layer->GetUndoStackHandle().lock())
+						(void)stack->PushExecuted(std::move(command));
+				return {};
+			});
 	}
 } // namespace DefectStudio

@@ -46,6 +46,16 @@ namespace DefectStudio
 		// to (1.5, 0, 0), so treating it as a real centre put the gizmo halfway to a point nothing
 		// is drawn at. Only a two-centre preset contributes centerB to the pivot, or takes a write.
 		bool twoCenter = false;
+		std::vector<std::size_t> anchorAtoms;
+		struct Component
+		{
+			std::size_t anchorAtom;
+			glm::vec3 center;
+			glm::vec3 rotationEuler;
+		};
+		std::vector<Component> components;
+		glm::vec3 stretch = glm::vec3(1.0f);
+		glm::mat3 stretchFrame = glm::mat3(1.0f);
 	};
 
 	struct PlaneTransformStart
@@ -55,6 +65,7 @@ namespace DefectStudio
 		glm::vec3 normal = glm::vec3(0.0f, 0.0f, 1.0f);
 		glm::vec3 tangent = glm::vec3(1.0f, 0.0f, 0.0f);
 		glm::vec2 halfExtents = glm::vec2(1.0f);
+		std::vector<std::size_t> anchorAtoms;
 	};
 
 	// A selected vacancy marker (structure.vacancies index) and the defect axes. Both are domain data:

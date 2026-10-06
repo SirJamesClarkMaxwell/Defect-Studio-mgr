@@ -61,6 +61,7 @@ namespace DefectStudio
 			parameters.radiusScale = ReadFiniteFloat(values, "radiusScale", parameters.radiusScale);
 			parameters.endGap = ReadFiniteFloat(values, "endGap", std::max(0.0f, GetScenePathAtomBuffer() - 1.0f));
 			parameters.curvature = ReadFiniteFloat(values, "curvature", parameters.curvature);
+			parameters.tiltDegrees = ReadFiniteFloat(values, "tiltDegrees", parameters.tiltDegrees);
 			parameters.decoration = ReadEnum(values, "decoration", parameters.decoration, 9);
 			parameters.color = ReadFiniteColor(values, "color", parameters.color);
 			parameters.strokeWidth = ReadFiniteFloat(values, "strokeWidth", parameters.strokeWidth);
@@ -102,6 +103,7 @@ namespace DefectStudio
 			FloatParameter("radiusScale", "Promień okręgu", 0.8f, 2.5f),
 			FloatParameter("endGap", "Odstęp od atomów", 0.0f, 3.0f),
 			FloatParameter("curvature", "Wygięcie łuku", 0.05f, 1.5f),
+			FloatParameter("tiltDegrees", "Nachylenie", -180.0f, 180.0f),
 			EnumParameter("decoration", "Dekoracja", {
 				"Brak", "Strzałka", "Wklęsła", "Latex", "Belka", "Okrąg", "Kwadrat", "Romb", "Klin"}),
 			{.key = "color", .label = "Kolor", .kind = SceneOperatorParameter::Kind::Color},
@@ -116,6 +118,7 @@ namespace DefectStudio
 			{"radiusScale", defaults.radiusScale},
 			{"endGap", std::max(0.0f, GetScenePathAtomBuffer() - 1.0f)},
 			{"curvature", defaults.curvature},
+			{"tiltDegrees", defaults.tiltDegrees},
 			{"decoration", static_cast<int>(defaults.decoration)},
 			{"color", defaults.color},
 			{"strokeWidth", defaults.strokeWidth}};
@@ -127,9 +130,17 @@ namespace DefectStudio
 				return true;
 			if (key == "axisMode")
 				return mode != CurvedArrowSelectionMode::Cycle;
-			if (key == "curvature" || key == "radiusScale" || key == "endGap")
+			if (key == "arrowCount")
+				return mode != CurvedArrowSelectionMode::Cycle;
+			if (key == "curvature" || key == "radiusScale" || key == "endGap" || key == "tiltDegrees")
 				return mode != CurvedArrowSelectionMode::Bond;
 			return mode == CurvedArrowSelectionMode::Bond;
+		};
+		op.parameterMaximum = [](const SceneOperatorParameter &parameter, const SceneOperatorValues &values,
+			const RendererWindowState &window) {
+			return parameter.key == "arrowCount" && ResolveCurvedArrowSelectionMode(window,
+				ReadEnum(values, "axisMode", CurvedArrowAxisMode::Auto, 3)) == CurvedArrowSelectionMode::TwoEnds
+				? 2.0f : parameter.maximum;
 		};
 		op.execute = [](RendererWindowState &window, const SceneOperatorValues &values) {
 			// The runner owns the undo entry: an operator re-runs many times behind a single one.

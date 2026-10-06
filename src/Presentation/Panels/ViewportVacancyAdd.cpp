@@ -3,6 +3,7 @@
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -15,6 +16,7 @@
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/Path/PathTopology.hpp"
+#include "Renderer/Path/VacancyBond.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -27,7 +29,6 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr float kShellTolerance = 1.15f;
-		constexpr float kAtomEndBuffer = 0.9f; // in atom radii
 
 		[[nodiscard]] std::optional<glm::vec3> SelectedAtomCentroid(const RendererWindowState &windowState)
 		{
@@ -84,8 +85,8 @@ namespace DefectStudio
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[vacancyIndex];
 			ScenePath path = MakeBondLine(windowState, atom.cartesianPosition, vacancy.cartesianPosition,
 				atom.color, vacancy.color, bondRadiusMultiplier);
-			// The atom end starts just inside the sphere (like a bond seen from outside), not at its centre.
-			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, kAtomEndBuffer}};
+			// Centre-bound ends let the atom sphere hide the tube instead of exposing a buffered rim.
+			path.nodes[0].binding = PathBinding{PathBinding::CopyPosition{atomIndex, {}, 0.0f}};
 			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{vacancyIndex, {}, 0.0f}};
 			MovePathOriginToCentre(path);
 			return path;
@@ -102,6 +103,42 @@ namespace DefectStudio
 			path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{secondIndex, {}, 0.0f}};
 			MovePathOriginToCentre(path);
 			return path;
+		}
+
+		[[nodiscard]] Result<SceneObjectId> RegenerateVacancyBond(RendererWindowState &windowState, ScenePath replacement)
+		{
+			// Path edits validate topology; reject an undrawable width before replacing any old bond.
+			if (!std::isfinite(replacement.style.width) || replacement.style.width <= 0.0f)
+				return StructuredError{ErrorCategory::Validation, Severity::Error,
+					"Vacancy bond width must be finite and positive.", "Invalid effective bond radius.",
+					"Choose a positive bond radius.", "Presentation/ViewportVacancyAdd",
+					"vacancy.bond_invalid_width", DisplayPolicy::Silent};
+			const auto pair = GeneratedVacancyBondPair(replacement);
+			std::vector<SceneObjectId> existing;
+			if (pair && windowState.paths != nullptr)
+				windowState.paths->Store().Visit([&](const ScenePath &path) {
+					if (GeneratedVacancyBondPair(path) == pair)
+						existing.push_back(path.id);
+				});
+			const PathEditContext silent = MakeSilentPathEditContext(windowState);
+			if (existing.empty())
+				return AddScenePath(silent, std::move(replacement));
+
+			const SceneObjectId retained = existing.front();
+			const auto report = ApplyPathEdit(silent, std::span<const SceneObjectId>(&retained, 1),
+				PathRevisionKind::Geometry, "Regenerate vacancy bond", [&](ScenePath &path) -> Result<void> {
+					replacement.id = path.id;
+					replacement.persistKey = path.persistKey;
+					replacement.name = path.name;
+					path = std::move(replacement);
+					return {};
+				});
+			if (!report.AnyApplied())
+				return report.skipped.front().reason;
+			// Delete duplicates only after the replacement validates; a failed edit keeps the old bonds.
+			existing.erase(existing.begin());
+			(void)DeleteScenePaths(silent, existing);
+			return retained;
 		}
 
 		[[nodiscard]] float NearestShownAtomDistance(const RendererWindowState &windowState, const glm::vec3 &position)
@@ -174,8 +211,9 @@ namespace DefectStudio
 			for (const std::size_t vacancy : windowState.selectedVacancies)
 				if (vacancy < vacancies.size())
 					chosen.push_back(vacancy);
-			for (std::size_t index = 0; chosen.empty() && index < vacancies.size(); ++index)
-				chosen.push_back(index); // nothing selected: every vacancy
+			if (chosen.empty())
+				for (std::size_t index = 0; index < vacancies.size(); ++index)
+					chosen.push_back(index); // nothing selected: every vacancy
 			for (const std::size_t vacancy : chosen)
 				for (const std::size_t atom : NeighbourShell(windowState, vacancies[vacancy].cartesianPosition))
 					pairs.emplace_back(atom, vacancy);
@@ -194,6 +232,8 @@ namespace DefectStudio
 				}
 			}
 		}
+		std::sort(pairs.begin(), pairs.end());
+		pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
 		DS_LOG_INFO("Vacancy bonds: {} line(s) from {} selected atom(s), {} selected vacancy(ies), {} vacancy(ies) in total",
 			pairs.size(), atoms.size(), windowState.selectedVacancies.size(), vacancies.size());
 		if (pairs.empty() && vacancyPairs.empty())
@@ -203,7 +243,7 @@ namespace DefectStudio
 		std::vector<SceneObjectId> added;
 		for (const auto &[atom, vacancy] : pairs)
 		{
-			const auto result = AddScenePath(MakeSilentPathEditContext(windowState), MakeVacancyBond(windowState, atom, vacancy, bondRadiusMultiplier));
+			const auto result = RegenerateVacancyBond(windowState, MakeVacancyBond(windowState, atom, vacancy, bondRadiusMultiplier));
 			if (result)
 				added.push_back(result.Value());
 			else
@@ -211,8 +251,8 @@ namespace DefectStudio
 		}
 		for (const auto &[first, second] : vacancyPairs)
 		{
-			const auto result = AddScenePath(
-				MakeSilentPathEditContext(windowState), MakeVacancyPairBond(windowState, first, second, bondRadiusMultiplier));
+			const auto result = RegenerateVacancyBond(
+				windowState, MakeVacancyPairBond(windowState, first, second, bondRadiusMultiplier));
 			if (result)
 				added.push_back(result.Value());
 			else

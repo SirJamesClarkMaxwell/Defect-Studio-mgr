@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -20,6 +21,7 @@
 #include "Renderer/Path/PathStore.hpp"
 #include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
+#include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
 
@@ -286,14 +288,17 @@ namespace DefectStudio
 			// task/53: when non-empty the orbital IS this linear combination, psi = sum c_i phi_i,
 			// and preset, shell, lobeIndex, effectiveCharge, centerA/centerB, anchorAtoms and
 			// rotationEuler are not read by BuildOrbitalWavefunction. phaseFlipped, scale, stretch,
-			// isoFraction, resolution, colours and visibility apply as usual. G/R/S: scale only - the
-			// components are pinned to their atoms. Built by BuildSalcSceneOrbital.
+			// isoFraction, resolution, colours and visibility apply as usual. G/R detaches components; the
+			// starting components are pinned to their atoms. Built by BuildSalcSceneOrbital.
 			std::vector<LcaoComponent> lcaoComponents;
 			// Outliner and properties title when non-empty (e.g. "e_x (E #1)"); otherwise the preset
 			// name is shown, as before.
 			std::string displayName;
 		};
 		std::vector<SceneOrbital> sceneOrbitals;
+		// Derived CPU mesh shared by rendering, surface picking and region selection.
+		mutable std::unordered_map<SceneObjectId,
+			std::pair<std::uint64_t, std::vector<IsosurfaceVertex>>> sceneOrbitalMeshes;
 		std::vector<SceneObjectId> selectedSceneOrbitals;
 		// Indices into structure.vacancies (ViewportVacancySelection.hpp). Cleared by the same clicks
 		// that clear the other scene-object selections.
@@ -418,6 +423,7 @@ namespace DefectStudio
 			std::vector<ScenePlane> scenePlanes;
 			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
 			PathStore paths;
+			bool showDefectFrame = true;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like

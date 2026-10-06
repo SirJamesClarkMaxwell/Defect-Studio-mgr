@@ -134,5 +134,8 @@ namespace DefectStudio
 	//   * A disabled or empty gradient adds no samples, so nothing without a gradient changes.
 	// - Fewer than two samples, or a zero-length path, yields empty geometry and no crash.
 	// - No NaN or Inf ever reaches a vertex field.
-	[[nodiscard]] StrokeGeometry BuildStroke(const EvaluatedPath &evaluated, const PathStrokeStyle &style);
+	// capEndpoints=false leaves terminal tube ends open (bonds whose ends are inside spheres).
+	// Interior dash caps and decorations are unchanged.
+	[[nodiscard]] StrokeGeometry BuildStroke(
+		const EvaluatedPath &evaluated, const PathStrokeStyle &style, bool capEndpoints = true);
 }

@@ -77,6 +77,11 @@ namespace DefectStudio
 		// mouse click/drag-start logic must NOT also run once an earlier one already claimed this
 		// frame's click - e.g. clicking an atom gizmo handle must not also be reinterpreted as a pin
 		// pick by HandlePinnedMeasurementInteraction's own hit-test underneath it.
+		// Region tools own the click; annotation pickers must not consume their drag start.
+		if (windowState.activeSelectionTool == SelectionToolMode::Box ||
+			windowState.activeSelectionTool == SelectionToolMode::Circle)
+			return RenderViewportNavigationGizmo(windowState, imageOrigin, imageSize, hovered, horizontalToolbarOffset, layer) ||
+				RenderTransformGizmo(windowState, imageOrigin, imageSize, hovered, layer, commandRegistry);
 		const bool editedPathMarkerClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 			windowState.pathEdit.IsActive() &&
 			IsScenePathMarkerUnderMouse(windowState, imageOrigin, imageSize);

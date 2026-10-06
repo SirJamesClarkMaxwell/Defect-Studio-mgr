@@ -7,6 +7,7 @@
 #include "Presentation/Panels/ViewportPicking.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 #include <imgui.h>
@@ -18,7 +19,7 @@
 
 namespace DefectStudio
 {
-	// Plain click replaces the selection, Ctrl-click toggles - the same two rules as arrows and
+	// Plain click replaces the selection, Ctrl-click toggles and Shift-click adds, as arrows and
 	// orbitals. No drag: a plane is moved with the transform gizmo, and a sheet that slid away
 	// under a stray click would be hard to put back where it was fitted.
 	bool HandleScenePlaneInteraction(
@@ -50,24 +51,35 @@ namespace DefectStudio
 		const glm::vec3 rayOrigin = glm::vec3(nearPoint) / nearPoint.w;
 		const glm::vec3 rayDirection = glm::vec3(farPoint) / farPoint.w - rayOrigin;
 
-		// An atom under the cursor wins: the hit volume here is far larger than the drawn shape and
-		// usually contains the atom the object sits on, which would otherwise be unclickable in the
-		// "All" selection mode.
-		if (windowState.pickAtoms && PickAtomAlongRay(windowState, rayOrigin, rayDirection))
-			return false;
 
 		const std::optional<std::size_t> hit = PickScenePlane(windowState, rayOrigin, rayDirection);
 		if (!hit)
 			return false;
+		const auto &plane = windowState.scenePlanes[*hit];
+		const glm::vec3 direction = glm::normalize(rayDirection);
+		const float planeDistance = glm::dot(plane.center - rayOrigin, plane.normal) / glm::dot(direction, plane.normal);
+		if (windowState.pickAtoms && windowState.showAtoms)
+			for (const auto &atom : windowState.structure.atoms)
+			{
+				if (!atom.visible) continue;
+				const glm::vec3 offset = rayOrigin - atom.cartesianPosition;
+				const float b = glm::dot(offset, direction);
+				const float discriminant = b * b - glm::dot(offset, offset) + atom.radius * atom.radius;
+				if (discriminant >= 0.0f)
+				{
+					const float distance = -b - std::sqrt(discriminant);
+					if (distance > 0.0f && distance < planeDistance) return false;
+				}
+			}
 
 		const SceneObjectId id = windowState.scenePlanes[*hit].id;
 		auto &selection = windowState.selectedScenePlanes;
-		if (ImGui::GetIO().KeyCtrl)
+		if (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift)
 		{
 			const auto found = std::find(selection.begin(), selection.end(), id);
 			if (found == selection.end())
 				selection.push_back(id);
-			else
+			else if (ImGui::GetIO().KeyCtrl)
 				selection.erase(found);
 		}
 		else
@@ -77,12 +89,15 @@ namespace DefectStudio
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
 
-		// Claiming the click clears the other kinds, so the properties panel shows one thing.
-		windowState.selectedFreeLabels.clear();
-		windowState.selectedPinnedMeasurements.clear();
-		windowState.selectedSceneOrbitals.clear();
-		windowState.selectedVacancies.clear();
-		windowState.defectFrameSelected = false;
+		if (!ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift)
+		{
+			// Claiming the click clears the other kinds, so the properties panel shows one thing.
+			windowState.selectedFreeLabels.clear();
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedVacancies.clear();
+			windowState.defectFrameSelected = false;
+		}
 		return true;
 	}
 } // namespace DefectStudio

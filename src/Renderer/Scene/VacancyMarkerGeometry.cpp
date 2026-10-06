@@ -25,7 +25,7 @@ namespace DefectStudio
 		if (vacancy.renderMode != VacancyRenderMode::Wireframe)
 		{
 			mesh.fill.reserve(kVacancyDiscSegments * 3);
-			const float radius = vacancy.radius - width * 0.5f;
+			const float radius = vacancy.radius; // Fill the dash gaps all the way to the visible outline.
 			for (int i = 0; i < kVacancyDiscSegments; ++i)
 			{
 				mesh.fill.push_back({vacancy.cartesianPosition, normal, 1.0f});

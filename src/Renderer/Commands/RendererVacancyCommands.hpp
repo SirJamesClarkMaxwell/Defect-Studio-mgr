@@ -65,4 +65,7 @@ namespace DefectStudio
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
 		SetDefectFramePayload payload);
+	// Uses the existing SetVacancies command inside H/Alt+H's shared visibility undo group.
+	void BindRendererVacancyVisibilityEditor(WeakRef<DomainLayer> domainLayer,
+		WeakRef<RendererLayer> rendererLayer, AtomStyleTable atomStyleTable);
 } // namespace DefectStudio

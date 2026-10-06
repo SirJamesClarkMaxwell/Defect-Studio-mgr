@@ -37,8 +37,8 @@ namespace DefectStudio
 	// own basis); every vertex's normal is normalize(cross(cameraRight, cameraUp)), facing the viewer.
 	//
 	// Geometry, with r = vacancy.radius, w = min(ringWidth, r), centre = vacancy.cartesianPosition:
-	// - fill: kVacancyDiscSegments triangles (centre, rim_i, rim_i+1), rim on radius r - w/2, so the
-	//   fill ends under the middle of the ring rather than poking out past it.
+	// - fill: kVacancyDiscSegments triangles (centre, rim_i, rim_i+1), rim on radius r, so the
+	//   entire interior, including the gaps between dashes, occludes/tints bonds.
 	// - ring: an annulus between r - w and r. dashCount = clamp(vacancy.dashCount, 0,
 	//   kVacancyMaxDashCount). dashCount > 0: dashCount dashes, dash k covering the angles
 	//   [k, k + 0.5] * 2pi / dashCount measured from cameraRight toward cameraUp (a 50% duty cycle),

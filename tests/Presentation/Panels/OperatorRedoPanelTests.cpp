@@ -191,7 +191,7 @@ namespace DefectStudio::Tests
 		std::vector<ScenePath> before;
 		for (const auto id : window.paths->Store().Ids()) before.push_back(*window.paths->Store().Find(id));
 		const SceneOperatorValues edits{
-			{"radiusScale", 1.3f}, {"endGap", 0.6f}, {"curvature", 1.0f}, {"decoration", 0}, {"color", glm::vec3(0, 1, 0)}, {"strokeWidth", 0.2f}};
+			{"radiusScale", 1.3f}, {"endGap", 0.6f}, {"curvature", 1.0f}, {"tiltDegrees", 90.0f}, {"decoration", 0}, {"color", glm::vec3(0, 1, 0)}, {"strokeWidth", 0.2f}};
 		std::size_t checked = 0;
 		for (const auto &parameter : op.schema)
 		{
@@ -209,10 +209,11 @@ namespace DefectStudio::Tests
 			for (std::size_t i = 0; i < ids.size(); ++i)
 			{
 				const auto &path = *window.paths->Store().Find(ids[i]);
-				if (parameter.key == "curvature")
+				if (parameter.key == "curvature" || parameter.key == "radiusScale" || parameter.key == "tiltDegrees")
 				{
 					const auto &arc = std::get<CircularArcSegmentData>(path.segments.front().data);
-					EXPECT_NEAR(arc.signedSweepRadians, 2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
+					if (parameter.key == "curvature")
+						EXPECT_NEAR(arc.signedSweepRadians, 2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
 					const auto context = SceneSystem::MakePathBindingContext(window);
 					const auto oldSample = EvaluateSegment(before[i], ResolveNodePositions(before[i], context), 0, 0.5);
 					const auto newSample = EvaluateSegment(path, ResolveNodePositions(path, context), 0, 0.5);
@@ -220,7 +221,7 @@ namespace DefectStudio::Tests
 					ASSERT_TRUE(newSample);
 					EXPECT_GT(glm::distance(oldSample->position, newSample->position), 1.0e-3);
 				}
-				else if (parameter.key == "radiusScale" || parameter.key == "endGap")
+				else if (parameter.key == "endGap")
 				{
 					const auto context = SceneSystem::MakePathBindingContext(window);
 					const auto oldNodes = ResolveNodePositions(before[i], context);
@@ -259,22 +260,22 @@ namespace DefectStudio::Tests
 		std::vector<std::string> hidden;
 		const auto op = ObserveRelevance(CurvedArrow(), window, hidden);
 		ASSERT_TRUE(panel.RunAndOpen(op, window));
-		EXPECT_EQ(hidden, (std::vector<std::string>{"radiusScale", "endGap", "curvature"}));
+		EXPECT_EQ(hidden, (std::vector<std::string>{"radiusScale", "endGap", "curvature", "tiltDegrees"}));
 		auto values = panel.Values();
 		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::DefectZ);
 		ASSERT_TRUE(panel.Reapply(window, values));
 		const std::vector<std::string> nonBondHidden{
-			"radiusRule", "radiusFactor", "arrowCount", "sweepDegrees", "rotationDegrees"};
+			"radiusRule", "radiusFactor", "sweepDegrees", "rotationDegrees"};
 		EXPECT_EQ(hidden, nonBondHidden);
 		values["curvature"] = 1.0f;
 		ASSERT_TRUE(panel.Reapply(window, values));
-		ASSERT_EQ(PathCount(window), 1u);
+		ASSERT_EQ(PathCount(window), 2u);
 		const auto &path = *window.paths->Store().Find(window.paths->Store().Ids().front());
 		EXPECT_NEAR(std::get<CircularArcSegmentData>(path.segments.front().data).signedSweepRadians,
 			2.0f * std::numbers::pi_v<float> / 3.0f, 1.0e-5f);
 		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::Bond);
 		ASSERT_TRUE(panel.Reapply(window, values));
-		EXPECT_EQ(hidden, (std::vector<std::string>{"radiusScale", "endGap", "curvature"}));
+		EXPECT_EQ(hidden, (std::vector<std::string>{"radiusScale", "endGap", "curvature", "tiltDegrees"}));
 		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
 	}
 
@@ -317,5 +318,52 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(PathCount(window), 0u);
 		ASSERT_TRUE(undoStack->Redo());
 		EXPECT_EQ(PathCount(window), 6u);
+	}
+}
+
+namespace DefectStudio::Tests
+{
+	TEST_F(OperatorRedoPanelTests, PairCountAndTiltReapplyWithInputSelectionAndOneUndoEntry)
+	{
+		auto &window = Window();
+		window.structure.atoms = {{"C", {2, 0, 0}}, {"C", {-1, 1.7320508f, 0}}};
+		window.selectedAtomIndices = {0, 1};
+		window.structure.defectFrame.emplace();
+		window.structure.defectFrame->z = {0, 0, 1};
+		SceneOperator op = CurvedArrow();
+		float countMaximum = 0;
+		op.parameterMaximum = [rule = op.parameterMaximum, &countMaximum](const SceneOperatorParameter &parameter,
+			const SceneOperatorValues &values, const RendererWindowState &input) {
+			EXPECT_EQ(input.selectedAtomIndices, (std::vector<std::size_t>{0, 1}));
+			const float maximum = rule(parameter, values, input);
+			if (parameter.key == "arrowCount") countMaximum = maximum;
+			return maximum;
+		};
+		ASSERT_TRUE(panel.RunAndOpen(op, window));
+		EXPECT_FLOAT_EQ(countMaximum, 6);
+		auto values = panel.Values();
+		values["axisMode"] = static_cast<int>(CurvedArrowAxisMode::DefectZ);
+		values["tiltDegrees"] = 90.0f;
+		for (int count : {1, 2})
+		{
+			values["arrowCount"] = count;
+			ASSERT_TRUE(panel.Reapply(window, values));
+			EXPECT_FLOAT_EQ(countMaximum, 2);
+			ASSERT_EQ(PathCount(window), static_cast<std::size_t>(count));
+			EXPECT_EQ(window.selectedScenePaths, window.paths->Store().Ids());
+			for (const auto id : window.selectedScenePaths)
+			{
+				const auto &path = *window.paths->Store().Find(id);
+				const auto resolved = ResolveNodePositions(path, SceneSystem::MakePathBindingContext(window));
+				const auto sample = EvaluateSegment(path, resolved, 0, 0.5);
+				ASSERT_TRUE(sample);
+				EXPECT_GT(std::abs(sample->position.z), 0.05);
+			}
+			EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		}
+		ASSERT_TRUE(undoStack->Undo());
+		EXPECT_EQ(PathCount(window), 0u);
+		ASSERT_TRUE(undoStack->Redo());
+		EXPECT_EQ(PathCount(window), 2u);
 	}
 }

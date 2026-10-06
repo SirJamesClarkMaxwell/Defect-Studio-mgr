@@ -29,6 +29,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneSelection.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
@@ -97,6 +98,9 @@ namespace DefectStudio
 	void HandlePinnedMeasurementKeyboardShortcuts(
 		RendererWindowState &windowState, bool hovered, RendererLayer &layer)
 	{
+		if (hovered && ImGui::GetIO().KeyAlt && !ImGui::GetIO().KeyCtrl &&
+			ImGui::IsKeyPressed(ImGuiKey_A, false) && !windowState.pathEdit.IsActive())
+			ClearAllSceneSelection(windowState);
 		if (!windowState.pickLabels)
 			return;
 		// Path Edit Mode owns Delete and V. In particular, do not let the same Delete key remove the

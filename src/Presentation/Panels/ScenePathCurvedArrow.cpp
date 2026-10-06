@@ -6,7 +6,6 @@
 #include <cmath>
 #include <numbers>
 #include <utility>
-#include <type_traits>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -204,6 +203,7 @@ namespace DefectStudio
 				path.transform.position = origin;
 				path.transform.rotation = BondFrameRotation(axis);
 				path.transformBinding.value = PathTransformBinding::BondFrame{atomA, atomB, rotation + glm::radians(spacingDegrees * i)};
+				path.style.shadeSmooth = true;
 				path.style.width = parameters.strokeWidth;
 				path.style.color = parameters.color;
 				path.style.endDecoration.kind = parameters.decoration;
@@ -232,7 +232,8 @@ namespace DefectStudio
 		}
 
 		// Prepare and validate the whole batch before changing the scene or its undo history.
-		if (!bondMode) for (std::size_t i = 0, count = cycle ? ends.size() : 1; i < count; ++i)
+		float pairAngle = 0.0f;
+		if (!bondMode) for (std::size_t i = 0, count = cycle ? ends.size() : std::clamp(parameters.arrowCount, 1, 2); i < count; ++i)
 		{
 			const auto &a = ends[i], &b = ends[(i + 1) % ends.size()];
 			const auto u = glm::normalize(radial(a.position)), v = glm::normalize(radial(b.position));
@@ -240,45 +241,29 @@ namespace DefectStudio
 			if (std::abs(angle) < 1.0e-4f)
 				return ArrowError("path.arc_sweep_out_of_range", "The arrow ends must have different angles around the axis.");
 			if (cycle && angle < 0) angle += 2.0f * std::numbers::pi_v<float>;
+			if (!cycle)
+			{
+				if (i == 0) pairAngle = angle;
+				angle = pairAngle; // Reversing the chord with the same sweep puts the return arc on the other side.
+			}
 			ScenePath path = MakeDevScenePath(ScenePathDevPreset::Line, glm::vec3(0));
 			path.name = "Zakrzywiona strzałka (C_n)";
 			path.transform.position = glm::vec3(0);
-			path.nodes[0].position = a.position + (radiusScale - 1.0f) * radial(a.position);
-			path.nodes[1].position = b.position + (radiusScale - 1.0f) * radial(b.position);
+			path.nodes[0].position = a.position;
+			path.nodes[1].position = b.position;
 			path.nodes[0].binding = a.binding;
 			path.nodes[1].binding = b.binding;
-			for (std::size_t nodeIndex = 0; nodeIndex < 2; ++nodeIndex)
-			{
-				const auto &end = nodeIndex == 0 ? a : b;
-				const glm::vec3 offset = path.nodes[nodeIndex].position - end.position;
-				const glm::vec3 direction = glm::normalize(
-					path.nodes[1 - nodeIndex].position - path.nodes[nodeIndex].position);
-				std::visit([&](auto &binding) {
-					using Binding = std::decay_t<decltype(binding)>;
-					if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition> ||
-						std::is_same_v<Binding, PathBinding::CopyVacancy>)
-					{
-						binding.offset = offset;
-						const float radius = [&] {
-							if constexpr (std::is_same_v<Binding, PathBinding::CopyPosition>)
-								return window.structure.atoms[binding.atomIndex].radius;
-							else
-								return window.structure.vacancies[binding.vacancyIndex].radius;
-						}();
-						if (radiusScale == 1.0f || radius <= 0.0f)
-							return; // Preserve the existing geometry and binding at scale one.
-						const float target = buffer * radius;
-						const float projection = glm::dot(offset, direction);
-						const float discriminant = projection * projection + target * target - glm::dot(offset, offset);
-						// ponytail: radial offsets already beyond the requested clearance need no trim;
-						// a full orbit constraint would be needed to enforce a smaller gap there.
-						binding.buffer = glm::length(offset) >= target || discriminant < 0.0f ? 0.0f :
-							std::max(0.0f, -projection + std::sqrt(discriminant)) / radius;
-					}
-				}, path.nodes[nodeIndex].binding.value);
-			}
-			// DeriveArc fits the circle to the resolved (buffered) chord, including unequal radii/heights.
-			path.segments[0].data = CircularArcSegmentData{axis, angle * curvature};
+			// Keep the clearance-bound ends fixed. Scaling sagitta (h = chord/2 * tan(sweep/4))
+			// moves the arc outward continuously, without the old sphere-exit/zero-trim switch.
+			const float sweep = radiusScale == 1.0f ? angle * curvature :
+				4.0f * std::atan(radiusScale * std::tan(angle * curvature * 0.25f));
+			// A pair shares one orientation for its chord line, so its bulges stay opposite at every tilt.
+			const glm::vec3 chord = glm::normalize(!cycle && i == 1 ? a.position - b.position : b.position - a.position);
+			const glm::vec3 normal = glm::normalize(axis - chord * glm::dot(axis, chord));
+			const float tilt = glm::radians(std::isfinite(parameters.tiltDegrees) ?
+				std::clamp(parameters.tiltDegrees, -180.0f, 180.0f) : 0.0f);
+			path.segments[0].data = CircularArcSegmentData{glm::angleAxis(tilt, chord) * normal, sweep};
+			path.style.shadeSmooth = true;
 			path.style.width = parameters.strokeWidth;
 			path.style.color = parameters.color;
 			path.style.endDecoration.kind = parameters.decoration;

@@ -126,7 +126,7 @@ namespace DefectStudio
 			return true;
 		}
 
-		if (!windowState.pickLabels || windowState.camera == nullptr || windowState.paths == nullptr ||
+		if (windowState.camera == nullptr || windowState.paths == nullptr ||
 			windowState.paths->Store().Empty())
 			return false;
 		if (!hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -148,12 +148,12 @@ namespace DefectStudio
 			return false;
 
 		auto &selection = windowState.selectedScenePaths;
-		if (ImGui::GetIO().KeyCtrl)
+		if (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift)
 		{
 			const auto found = std::find(selection.begin(), selection.end(), hit->path);
 			if (found == selection.end())
 				selection.push_back(hit->path);
-			else
+			else if (ImGui::GetIO().KeyCtrl)
 				selection.erase(found);
 		}
 		else
@@ -163,13 +163,16 @@ namespace DefectStudio
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
 
-		// Claiming the click clears the other kinds, so the properties panel shows one thing.
-		windowState.selectedFreeLabels.clear();
-		windowState.selectedPinnedMeasurements.clear();
-		windowState.selectedSceneOrbitals.clear();
-		windowState.selectedVacancies.clear();
-		windowState.defectFrameSelected = false;
-		windowState.selectedScenePlanes.clear();
+		if (!ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift)
+		{
+			// Claiming the click clears the other kinds, so the properties panel shows one thing.
+			windowState.selectedFreeLabels.clear();
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedVacancies.clear();
+			windowState.defectFrameSelected = false;
+			windowState.selectedScenePlanes.clear();
+		}
 		return true;
 	}
 

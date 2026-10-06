@@ -94,7 +94,7 @@ namespace DefectStudio::Tests
 			EXPECT_FLOAT_EQ(vertex.sign, -1.0f);
 	}
 
-	TEST(VacancyMarkerGeometryTests, RingIsAnAnnulusOnTheRimAndFillEndsUnderIt)
+	TEST(VacancyMarkerGeometryTests, RingIsAnAnnulusAndFillCoversDashGapsToTheOutline)
 	{
 		const float width = 0.1f;
 		const VacancyMarkerMesh mesh =
@@ -109,7 +109,7 @@ namespace DefectStudio::Tests
 		float fillMax = 0.0f;
 		for (const IsosurfaceVertex &vertex : mesh.fill)
 			fillMax = std::max(fillMax, glm::length(vertex.position - kCentre));
-		EXPECT_NEAR(fillMax, 0.5f - 0.5f * width, 1e-4f);
+		EXPECT_NEAR(fillMax, 0.5f, 1e-4f);
 	}
 
 	// Dash k covers [k, k + 0.5] of a period, so no ring vertex lies strictly inside the second half

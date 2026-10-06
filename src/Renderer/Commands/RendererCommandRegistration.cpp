@@ -10,6 +10,7 @@
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <utility>
 
@@ -417,6 +418,7 @@ namespace DefectStudio
 		ElementPropertiesTable elementPropertiesTable)
 	{
 		using namespace RendererEvents::Viewport;
+		BindRendererVacancyVisibilityEditor(domainLayer, rendererLayer, atomStyleTable);
 
 		RegisterRendererCommand(
 			registry,

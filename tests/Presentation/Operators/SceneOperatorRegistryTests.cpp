@@ -304,3 +304,44 @@ namespace DefectStudio::Tests
 		}
 	}
 }
+
+namespace DefectStudio::Tests
+{
+	TEST(SceneOperatorRegistryTests, TiltSchemaAndExactVisibleSetsAgreeWithEachMode)
+	{
+		SceneOperatorRegistry registry;
+		ASSERT_TRUE(RegisterCurvedArrowOperator(registry));
+		const auto &op = *registry.Find("scene.curved_arrow");
+		ASSERT_NE(FindParameter(op, "tiltDegrees"), nullptr);
+		const auto &tilt = *FindParameter(op, "tiltDegrees");
+		EXPECT_EQ(tilt.label, "Nachylenie");
+		EXPECT_EQ(tilt.kind, SceneOperatorParameter::Kind::Float);
+		EXPECT_FLOAT_EQ(tilt.minimum, -180);
+		EXPECT_FLOAT_EQ(tilt.maximum, 180);
+		EXPECT_FLOAT_EQ(std::get<float>(op.defaults.at("tiltDegrees")), 0);
+		RendererWindowState window;
+		window.structure.atoms = {{"C", {2, 0, 0}}, {"C", {-1, std::sqrt(3.0f), 0}}, {"C", {-1, -std::sqrt(3.0f), 0}}};
+		for (int mode = 0; mode < 3; ++mode)
+		{
+			window.selectedAtomIndices = mode == 0 ? std::vector<std::size_t>{0, 1, 2} : std::vector<std::size_t>{0, 1};
+			auto values = op.defaults;
+			values["axisMode"] = static_cast<int>(mode == 2 ? CurvedArrowAxisMode::DefectZ : CurvedArrowAxisMode::Auto);
+			std::vector<std::string> visible;
+			for (const auto &parameter : op.schema)
+				if (op.isParameterRelevant(parameter.key, values, window)) visible.push_back(parameter.key);
+			const std::vector<std::vector<std::string>> expected{
+				{"radiusScale", "endGap", "curvature", "tiltDegrees", "decoration", "color", "strokeWidth"},
+				{"axisMode", "radiusRule", "radiusFactor", "arrowCount", "sweepDegrees", "rotationDegrees", "decoration", "color", "strokeWidth"},
+				{"axisMode", "arrowCount", "radiusScale", "endGap", "curvature", "tiltDegrees", "decoration", "color", "strokeWidth"}};
+			EXPECT_EQ(visible, expected[mode]);
+			ASSERT_TRUE(op.parameterMaximum);
+			EXPECT_FLOAT_EQ(op.parameterMaximum(*FindParameter(op, "arrowCount"), values, window), mode == 2 ? 2.0f : 6.0f);
+		}
+		window.structure.vacancies.push_back({{0, 1, 0}});
+		window.selectedAtomIndices = {0};
+		window.selectedVacancies = {0};
+		EXPECT_TRUE(op.isParameterRelevant("arrowCount", op.defaults, window));
+		EXPECT_TRUE(op.isParameterRelevant("tiltDegrees", op.defaults, window));
+		EXPECT_FLOAT_EQ(op.parameterMaximum(*FindParameter(op, "arrowCount"), op.defaults, window), 2);
+	}
+}

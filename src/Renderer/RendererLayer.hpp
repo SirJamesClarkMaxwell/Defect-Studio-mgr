@@ -1,9 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <utility>
 
 #include "Core/Layer.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
@@ -91,6 +93,12 @@ namespace DefectStudio
 		void ApplyConfig(const RendererConfig &config);
 		void BindEventBus(Ref<EventBus> eventBus);
 		void BindUndoStack(WeakRef<UndoStack> undoStack);
+		void ChangeSceneVisibility(const std::string &windowId, bool showAll);
+		// Bound by command registration so H uses the same domain command as the outliner eye.
+		void BindVacancyVisibilityEditor(std::function<Result<void>(RendererWindowState &, bool)> edit)
+		{
+			m_EditVacancyVisibility = std::move(edit);
+		}
 		[[nodiscard]] WeakRef<UndoStack> GetUndoStackHandle() const noexcept { return m_UndoStack; }
 		[[nodiscard]] Ref<EventBus> GetEventBus() const;
 		void BeginViewInteraction(const std::string &windowId, std::string sourceAction);
@@ -285,6 +293,7 @@ namespace DefectStudio
 		RendererStartupConfig m_StartupConfig;
 		Ref<EventBus> m_EventBus;
 		WeakRef<UndoStack> m_UndoStack;
+		std::function<Result<void>(RendererWindowState &, bool)> m_EditVacancyVisibility;
 		Unique<OpenGlRendererBackend> m_RendererBackend;
 		std::vector<RendererWindowState> m_Windows;
 		std::vector<std::string> m_PeriodicTableSymbols;

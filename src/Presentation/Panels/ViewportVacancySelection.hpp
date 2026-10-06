@@ -33,12 +33,6 @@ namespace DefectStudio
 	void HandleVacancyKeyboardShortcuts(RendererWindowState &windowState, bool hovered, RendererLayer &layer,
 		DomainLayer *domain, CommandRegistry *registry);
 
-	// Box/circle select for the kinds whose screen footprint is a point: orbitals (bounding-sphere
-	// centre, when labels are pickable) and vacancy markers (when atoms or labels are). `inside`
-	// tests a point in viewport pixels. Replace clears both selections first, Subtract removes hits.
-	void ApplyCentreRegionSelection(RendererWindowState &windowState, const std::function<bool(glm::vec2)> &inside,
-		bool replace, bool subtract);
-
 	// Selection ring around each selected marker (ImGui overlay).
 	void DrawSelectedVacancyOverlay(
 		const RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize);

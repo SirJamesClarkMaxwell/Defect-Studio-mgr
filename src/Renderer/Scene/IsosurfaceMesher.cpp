@@ -2,6 +2,7 @@
 
 #include "Renderer/Scene/IsosurfaceMesher.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -26,6 +27,7 @@ namespace DefectStudio
 		{
 			glm::vec3 position;
 			float value; // already sign-adjusted by the caller (see GenerateLobeMesh)
+			glm::vec3 normal;
 		};
 
 		[[nodiscard]] std::size_t GridIndex(const glm::ivec3 &dims, int i, int j, int k)
@@ -34,24 +36,25 @@ namespace DefectStudio
 				static_cast<std::size_t>(j) * static_cast<std::size_t>(dims.z) + static_cast<std::size_t>(k);
 		}
 
-		[[nodiscard]] glm::vec3 EdgeCrossing(float iso, const GridSample &a, const GridSample &b)
+		[[nodiscard]] GridSample EdgeCrossing(float iso, const GridSample &a, const GridSample &b)
 		{
 			const float denominator = b.value - a.value;
 			const float t = std::abs(denominator) > 1e-12f ? (iso - a.value) / denominator : 0.5f;
-			return glm::mix(a.position, b.position, glm::clamp(t, 0.0f, 1.0f));
+			const float blend = glm::clamp(t, 0.0f, 1.0f);
+			return {glm::mix(a.position, b.position, blend), iso, glm::mix(a.normal, b.normal, blend)};
 		}
 
 		void EmitTriangle(
 			std::vector<IsosurfaceVertex> &out, float sign,
-			const glm::vec3 &p0, const glm::vec3 &p1, const glm::vec3 &p2)
+			const GridSample &p0, const GridSample &p1, const GridSample &p2)
 		{
-			const glm::vec3 crossProduct = glm::cross(p1 - p0, p2 - p0);
+			const glm::vec3 crossProduct = glm::cross(p1.position - p0.position, p2.position - p0.position);
 			const glm::vec3 normal = glm::length(crossProduct) > 1e-12f
 				? glm::normalize(crossProduct)
 				: glm::vec3(0.0f, 1.0f, 0.0f);
-			out.push_back(IsosurfaceVertex{p0, normal, sign});
-			out.push_back(IsosurfaceVertex{p1, normal, sign});
-			out.push_back(IsosurfaceVertex{p2, normal, sign});
+			for (const GridSample &point : {p0, p1, p2})
+				out.push_back({point.position, glm::length(point.normal) > 1e-12f
+					? glm::normalize(point.normal) : normal, sign});
 		}
 
 		// Handles all 16 in/out configurations of one tetrahedron's 4 corners against `iso`.
@@ -86,9 +89,9 @@ namespace DefectStudio
 					if (vertex != singleton)
 						others[cursor++] = vertex;
 
-				const glm::vec3 p0 = EdgeCrossing(iso, corners[singleton], corners[others[0]]);
-				const glm::vec3 p1 = EdgeCrossing(iso, corners[singleton], corners[others[1]]);
-				const glm::vec3 p2 = EdgeCrossing(iso, corners[singleton], corners[others[2]]);
+				const GridSample p0 = EdgeCrossing(iso, corners[singleton], corners[others[0]]);
+				const GridSample p1 = EdgeCrossing(iso, corners[singleton], corners[others[1]]);
+				const GridSample p2 = EdgeCrossing(iso, corners[singleton], corners[others[2]]);
 
 				if (singletonIsIn)
 					EmitTriangle(out, sign, p0, p1, p2);
@@ -114,10 +117,10 @@ namespace DefectStudio
 				const int c = outsideVertices[0];
 				const int d = outsideVertices[1];
 
-				const glm::vec3 pac = EdgeCrossing(iso, corners[a], corners[c]);
-				const glm::vec3 pad = EdgeCrossing(iso, corners[a], corners[d]);
-				const glm::vec3 pbd = EdgeCrossing(iso, corners[b], corners[d]);
-				const glm::vec3 pbc = EdgeCrossing(iso, corners[b], corners[c]);
+				const GridSample pac = EdgeCrossing(iso, corners[a], corners[c]);
+				const GridSample pad = EdgeCrossing(iso, corners[a], corners[d]);
+				const GridSample pbd = EdgeCrossing(iso, corners[b], corners[d]);
+				const GridSample pbc = EdgeCrossing(iso, corners[b], corners[c]);
 
 				EmitTriangle(out, sign, pac, pad, pbd);
 				EmitTriangle(out, sign, pac, pbd, pbc);
@@ -128,6 +131,21 @@ namespace DefectStudio
 			std::vector<IsosurfaceVertex> &out, const OrbitalGridData &grid, float isoValue, float sign)
 		{
 			const glm::ivec3 &dims = grid.dimensions;
+			const glm::mat3 normalMatrix = glm::transpose(glm::inverse(grid.cell));
+			auto normalAt = [&](const glm::ivec3 &sample) {
+				glm::vec3 gradient(0.0f);
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					glm::ivec3 low = sample, high = sample;
+					low[axis] = std::max(0, sample[axis] - 1);
+					high[axis] = std::min(dims[axis] - 1, sample[axis] + 1);
+					gradient[axis] = (grid.values[GridIndex(dims, high.x, high.y, high.z)] -
+						grid.values[GridIndex(dims, low.x, low.y, low.z)]) *
+						static_cast<float>(dims[axis]) / static_cast<float>(high[axis] - low[axis]);
+				}
+				// Outward from each signed lobe. Interpolate before normalizing at the edge crossing.
+				return -sign * (normalMatrix * gradient);
+			};
 			for (int i = 0; i + 1 < dims.x; ++i)
 			{
 				for (int j = 0; j + 1 < dims.y; ++j)
@@ -146,7 +164,7 @@ namespace DefectStudio
 								grid.origin + grid.cell[0] * fractional.x + grid.cell[1] * fractional.y +
 								grid.cell[2] * fractional.z;
 							const float rawValue = grid.values[GridIndex(dims, offset.x, offset.y, offset.z)];
-							cubeCorners[corner] = GridSample{position, sign * rawValue};
+							cubeCorners[corner] = GridSample{position, sign * rawValue, normalAt(offset)};
 						}
 
 						for (const std::array<int, 4> &tetrahedron : kCubeTetrahedra)
@@ -165,7 +183,11 @@ namespace DefectStudio
 	std::vector<IsosurfaceVertex> GenerateIsosurfaceMesh(const OrbitalGridData &grid, float isoValue)
 	{
 		std::vector<IsosurfaceVertex> vertices;
-		if (grid.dimensions.x < 2 || grid.dimensions.y < 2 || grid.dimensions.z < 2 || isoValue <= 0.0f)
+		if (grid.dimensions.x < 2 || grid.dimensions.y < 2 || grid.dimensions.z < 2 ||
+			!std::isfinite(isoValue) || isoValue <= 0.0f ||
+			std::abs(glm::determinant(grid.cell)) < 1e-12f ||
+			grid.values.size() != static_cast<std::size_t>(grid.dimensions.x) *
+				static_cast<std::size_t>(grid.dimensions.y) * static_cast<std::size_t>(grid.dimensions.z))
 			return vertices;
 
 		GenerateLobeMesh(vertices, grid, isoValue, 1.0f);

@@ -6,6 +6,7 @@
 #include "Presentation/Panels/ViewportPicking.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 #include <imgui.h>
@@ -17,7 +18,7 @@
 
 namespace DefectStudio
 {
-	// Plain click replaces the selection, Ctrl-click toggles - the same two rules every other scene
+	// Plain click replaces the selection, Ctrl-click toggles and Shift-click adds, as other scene
 	// object in this viewport follows, so there is nothing new to learn for orbitals.
 	//
 	// There is deliberately no drag here. An orbital is moved through the transform gizmo like an
@@ -52,25 +53,31 @@ namespace DefectStudio
 		const glm::vec3 rayOrigin = glm::vec3(nearPoint) / nearPoint.w;
 		const glm::vec3 rayDirection = glm::vec3(farPoint) / farPoint.w - rayOrigin;
 
-		// An atom under the cursor wins: the hit volume here is far larger than the drawn shape and
-		// usually contains the atom the object sits on, which would otherwise be unclickable in the
-		// "All" selection mode.
-		if (windowState.pickAtoms && PickAtomAlongRay(windowState, rayOrigin, rayDirection))
-			return false;
-
-		const std::optional<std::size_t> hit =
-			PickSceneOrbital(windowState, windowState.structure, rayOrigin, rayDirection);
-		if (!hit)
-			return false;
-
-		const SceneObjectId id = windowState.sceneOrbitals[*hit].id;
+		const auto hit = PickSceneOrbitalSurface(windowState, windowState.structure, rayOrigin, rayDirection);
+		if (!hit) return false;
+		// Compare drawn surfaces, not the orbital bounding sphere or the padded atom pick radius.
+		const glm::vec3 direction = glm::normalize(rayDirection);
+		if (windowState.pickAtoms && windowState.showAtoms)
+			for (const auto &atom : windowState.structure.atoms)
+			{
+				if (!atom.visible) continue;
+				const glm::vec3 offset = rayOrigin - atom.cartesianPosition;
+				const float b = glm::dot(offset, direction);
+				const float discriminant = b * b - glm::dot(offset, offset) + atom.radius * atom.radius;
+				if (discriminant >= 0.0f)
+				{
+					const float distance = -b - std::sqrt(discriminant);
+					if (distance > 0.0f && distance < hit->distance) return false;
+				}
+			}
+		const SceneObjectId id = windowState.sceneOrbitals[hit->index].id;
 		auto &selection = windowState.selectedSceneOrbitals;
-		if (ImGui::GetIO().KeyCtrl)
+		if (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift)
 		{
 			const auto found = std::find(selection.begin(), selection.end(), id);
 			if (found == selection.end())
 				selection.push_back(id);
-			else
+			else if (ImGui::GetIO().KeyCtrl)
 				selection.erase(found);
 		}
 		else
@@ -80,14 +87,17 @@ namespace DefectStudio
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
 
-		// Claiming the click also means clearing the other kinds' selections, so the properties
-		// panel shows one thing rather than an orbital and a leftover arrow at once.
-		windowState.selectedFreeLabels.clear();
-		windowState.selectedPinnedMeasurements.clear();
-		windowState.selectedScenePlanes.clear();
-		windowState.selectedScenePaths.clear();
-		windowState.selectedVacancies.clear();
-		windowState.defectFrameSelected = false;
+		if (!ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift)
+		{
+			// Claiming the click also means clearing the other kinds' selections, so the properties
+			// panel shows one thing rather than an orbital and a leftover arrow at once.
+			windowState.selectedFreeLabels.clear();
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedScenePlanes.clear();
+			windowState.selectedScenePaths.clear();
+			windowState.selectedVacancies.clear();
+			windowState.defectFrameSelected = false;
+		}
 		return true;
 	}
 } // namespace DefectStudio

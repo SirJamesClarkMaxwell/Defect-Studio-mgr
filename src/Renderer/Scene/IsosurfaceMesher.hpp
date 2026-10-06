@@ -19,16 +19,14 @@ namespace DefectStudio
 
 	// CPU marching-tetrahedra isosurface extraction (6-tet cube decomposition, not marching
 	// cubes - a much smaller/safer case table: 16 entries instead of 256, at the cost of more
-	// triangles per cell). Reference implementation to validate the data pipeline and algorithm;
-	// the compute shader (isosurface_march.comp) is the one actually used for rendering/export and
-	// has since diverged in one respect - it uses interpolated density-gradient normals instead of
-	// this file's flat per-triangle normal, which is what actually renders smoothly. Case-table and
-	// vertex positions are still kept identical between the two.
+	// triangles per cell). Used by scene and LCAO orbitals. Calculation-grid overlays use the
+	// compute shader (isosurface_march.comp). Both interpolate density-gradient normals; case-table
+	// and vertex positions are kept identical between the two.
 	//
 	// Extracts BOTH lobes of the signed wavefunction grid in one pass: the positive-value
 	// surface at +isoValue and the negative-value surface at -isoValue (isoValue must be > 0,
 	// otherwise returns empty). Output is flat GL_TRIANGLES triplets (every 3 consecutive
-	// vertices is one triangle, flat-shaded, no vertex welding).
+	// vertices is one triangle, smooth gradient normals, no vertex welding).
 	[[nodiscard]] std::vector<IsosurfaceVertex> GenerateIsosurfaceMesh(
 		const OrbitalGridData &grid, float isoValue);
 } // namespace DefectStudio

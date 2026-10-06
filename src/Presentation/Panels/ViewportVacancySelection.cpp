@@ -32,7 +32,7 @@ namespace DefectStudio
 		void DropStaleSelection(RendererWindowState &windowState)
 		{
 			std::erase_if(windowState.selectedVacancies,
-				[&](const std::size_t index) { return index >= windowState.structure.vacancies.size(); });
+				[&](const std::size_t index) { return index >= windowState.structure.vacancies.size() || windowState.structure.vacancies[index].hidden; });
 		}
 
 		// Replaces the domain vacancy list with `edit` applied to it - the one route every vacancy edit
@@ -111,8 +111,8 @@ namespace DefectStudio
 		const ImVec2 mouse = ImGui::GetMousePos();
 		if (IsDefectFrameUnderMouse(windowState, imageOrigin, imageSize, mouse))
 		{
-			const bool additive = ImGui::GetIO().KeyCtrl;
-			windowState.defectFrameSelected = additive ? !windowState.defectFrameSelected : true;
+			const bool additive = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift;
+			windowState.defectFrameSelected = ImGui::GetIO().KeyCtrl ? !windowState.defectFrameSelected : true;
 			// Ctrl keeps the rest of the selection: selected objects + axes move together about the axes.
 			if (!additive)
 			{
@@ -142,12 +142,12 @@ namespace DefectStudio
 			return false;
 
 		auto &selection = windowState.selectedVacancies;
-		if (ImGui::GetIO().KeyCtrl)
+		if (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift)
 		{
 			const auto found = std::find(selection.begin(), selection.end(), *hit);
 			if (found == selection.end())
 				selection.push_back(*hit);
-			else
+			else if (ImGui::GetIO().KeyCtrl)
 				selection.erase(found);
 		}
 		else
@@ -156,11 +156,14 @@ namespace DefectStudio
 			windowState.defectFrameSelected = false;
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 		}
-		windowState.selectedFreeLabels.clear();
-		windowState.selectedPinnedMeasurements.clear();
-		windowState.selectedSceneOrbitals.clear();
-		windowState.selectedScenePlanes.clear();
-		windowState.selectedScenePaths.clear();
+		if (!ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift)
+		{
+			windowState.selectedFreeLabels.clear();
+			windowState.selectedPinnedMeasurements.clear();
+			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedScenePlanes.clear();
+			windowState.selectedScenePaths.clear();
+		}
 		return true;
 	}
 
@@ -182,40 +185,6 @@ namespace DefectStudio
 			if (!result)
 				DS_LOG_WARN("Remove defect axes failed: {}", result.Error().technicalDetails);
 		}
-	}
-
-	void ApplyCentreRegionSelection(RendererWindowState &windowState, const std::function<bool(glm::vec2)> &inside,
-		const bool replace, const bool subtract)
-	{
-		if (windowState.camera == nullptr)
-			return;
-		if (replace)
-		{
-			windowState.selectedSceneOrbitals.clear();
-			windowState.selectedVacancies.clear();
-			windowState.defectFrameSelected = false;
-		}
-		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
-		auto hit = [&](const glm::vec3 &world) {
-			const auto screen = SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, world);
-			return screen.has_value() && inside(*screen);
-		};
-		auto apply = [subtract](auto &selection, const auto &value) {
-			const auto existing = std::find(selection.begin(), selection.end(), value);
-			if (subtract && existing != selection.end())
-				selection.erase(existing);
-			else if (!subtract && existing == selection.end())
-				selection.push_back(value);
-		};
-		if (windowState.pickLabels)
-			for (const auto &orbital : windowState.sceneOrbitals)
-				if (orbital.visible && hit(SceneOrbitalWorldBounds(orbital, windowState.structure).center))
-					apply(windowState.selectedSceneOrbitals, orbital.id);
-		if ((windowState.pickAtoms || windowState.pickLabels) && windowState.showVacancies)
-			for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
-				if (!windowState.structure.vacancies[index].hidden &&
-					hit(windowState.structure.vacancies[index].cartesianPosition))
-					apply(windowState.selectedVacancies, index);
 	}
 
 	void DrawSelectedVacancyOverlay(

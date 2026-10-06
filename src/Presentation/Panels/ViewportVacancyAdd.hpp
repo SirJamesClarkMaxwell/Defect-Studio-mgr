@@ -19,7 +19,8 @@ namespace DefectStudio
 	//   atoms selected  -> each atom to the one selected vacancy, else to its nearest vacancy
 	//   otherwise       -> each selected vacancy (none selected: every vacancy) to its
 	//                      nearest-neighbour shell of shown atoms
-	// Returns how many were added (one undo step for all).
+	// Replaces generated bonds for the same pairs, preserving one ID/name and removing duplicates.
+	// Returns how many pairs were created or regenerated (one undo step for all).
 	std::size_t AddVacancyBonds(RendererWindowState &windowState, float bondRadiusMultiplier = 1.0f);
 
 	// Atoms within 1.15x the nearest shown atom's distance from `position` (the first shell).

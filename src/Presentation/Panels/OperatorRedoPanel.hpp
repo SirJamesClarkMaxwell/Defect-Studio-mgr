@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Core/Diagnostics/StructuredError.hpp"
@@ -56,6 +57,7 @@ namespace DefectStudio
 		std::vector<std::size_t> m_SelectedVacancies;
 		SceneOperatorValues m_Values;
 		std::vector<std::string> m_HiddenKeys;
+		std::unordered_map<std::string, float> m_ParameterMaximums;
 		std::string m_WindowId;
 		std::size_t m_UndoDepth = 0;
 		bool m_Open = false;

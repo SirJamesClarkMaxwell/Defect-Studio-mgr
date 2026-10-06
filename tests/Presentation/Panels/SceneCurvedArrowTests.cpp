@@ -58,7 +58,7 @@ namespace DefectStudio::Tests
 		window.selectedAtomIndices = {0, 1};
 		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto &path = *window.paths->Store().Find(added->front());
 		EXPECT_EQ(window.selectedScenePaths, *added);
 		EXPECT_EQ(path.style.startDecoration.kind, PathDecorationKind::None);
@@ -104,7 +104,7 @@ namespace DefectStudio::Tests
 		window.selectedVacancies = {0};
 		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto &path = *window.paths->Store().Find(added->front());
 		const auto &arc = std::get<CircularArcSegmentData>(path.segments[0].data);
 		EXPECT_NEAR(arc.signedSweepRadians, std::numbers::pi_v<float> / 3, 1.0e-5);
@@ -148,7 +148,7 @@ namespace DefectStudio::Tests
 		window.selectedVacancies = {0};
 		const auto added = AddCurvedArrowThroughSelectedAtoms(window);
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto &path = *window.paths->Store().Find(added->front());
 		EXPECT_TRUE(std::holds_alternative<PathBinding::CopyVacancy>(path.nodes.back().binding.value));
 		EXPECT_TRUE(ValidatePath(path).empty());
@@ -164,7 +164,7 @@ namespace DefectStudio::Tests
 		window.selectedAtomIndices = {1, 0};
 		const auto added = AddCurvedArrowThroughSelectedAtoms(window, {.axisMode = CurvedArrowAxisMode::DefectZ});
 		ASSERT_TRUE(added);
-		ASSERT_EQ(added->size(), 1u);
+		ASSERT_EQ(added->size(), 2u);
 		const auto &path = *window.paths->Store().Find(added->front());
 		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[0].binding.value).atomIndex, 1u);
 		EXPECT_EQ(std::get<PathBinding::CopyPosition>(path.nodes[1].binding.value).atomIndex, 0u);
@@ -461,7 +461,7 @@ namespace DefectStudio::Tests
 				const auto added = AddCurvedArrowThroughSelectedAtoms(window,
 					{.axisMode = CurvedArrowAxisMode::DefectZ, .curvature = requested}, SceneOperationUndo::Suppress);
 				ASSERT_TRUE(added);
-				ASSERT_EQ(added->size(), cycle ? 3u : 1u);
+				ASSERT_EQ(added->size(), cycle ? 3u : 2u);
 				for (const auto id : *added)
 					EXPECT_NEAR(std::get<CircularArcSegmentData>(window.paths->Store().Find(id)->segments.front().data).signedSweepRadians,
 						2.0f * std::numbers::pi_v<float> / 3.0f * expected, 1.0e-5f);

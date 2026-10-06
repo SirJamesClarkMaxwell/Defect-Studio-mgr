@@ -182,6 +182,12 @@ namespace DefectStudio
 		return centers;
 	}
 
+	glm::mat3 SceneOrbitalStretchFrame(
+		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
+	{
+		return OrbitalFrame(orbital, ResolveSceneOrbitalCenters(orbital, structure));
+	}
+
 	OrbitalWavefunction BuildOrbitalWavefunction(
 		const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
 	{
@@ -380,52 +386,69 @@ namespace DefectStudio
 		return bounds;
 	}
 
-	std::optional<std::size_t> PickSceneOrbital(
-		const RendererWindowState &windowState,
-		const RendererStructureData &structure,
-		const glm::vec3 &rayOrigin,
-		const glm::vec3 &rayDirection)
+	const std::vector<IsosurfaceVertex> &CachedSceneOrbitalMesh(
+		const RendererWindowState &window, const RendererWindowState::SceneOrbital &orbital, const RendererStructureData &structure)
 	{
-		const float directionLength = glm::length(rayDirection);
-		if (!std::isfinite(directionLength) || directionLength <= 0.0f)
+		std::erase_if(window.sceneOrbitalMeshes, [&](const auto &entry) {
+			return std::none_of(window.sceneOrbitals.begin(), window.sceneOrbitals.end(),
+				[&](const auto &object) { return object.id == entry.first; });
+		});
+		const auto key = MakeSceneOrbitalMeshKey(orbital, structure);
+		auto [entry, inserted] = window.sceneOrbitalMeshes.try_emplace(orbital.id);
+		if (inserted || entry->second.first != key.hash)
+			entry->second = {key.hash, BuildSceneOrbitalMesh(orbital, structure)};
+		return entry->second.second;
+	}
+
+	std::optional<SceneOrbitalSurfaceHit> PickSceneOrbitalSurface(
+		const RendererWindowState &window, const RendererStructureData &structure,
+		const glm::vec3 &origin, const glm::vec3 &rayDirection)
+	{
+		const float length = glm::length(rayDirection);
+		if (!std::isfinite(length) || length <= 0.0f)
 			return std::nullopt;
-		const glm::vec3 direction = rayDirection / directionLength;
-
-		std::optional<std::size_t> nearest;
-		float nearestDistance = std::numeric_limits<float>::max();
-		for (std::size_t index = 0; index < windowState.sceneOrbitals.size(); ++index)
+		const glm::vec3 direction = rayDirection / length;
+		std::optional<SceneOrbitalSurfaceHit> hit;
+		for (std::size_t index = 0; index < window.sceneOrbitals.size(); ++index)
 		{
-			const RendererWindowState::SceneOrbital &orbital = windowState.sceneOrbitals[index];
-			if (!orbital.visible)
+			const auto &orbital = window.sceneOrbitals[index];
+			if (!orbital.visible) continue;
+			// Retain the cheap bounding sphere as broad phase.
+			const auto bounds = SceneOrbitalWorldBounds(orbital, structure);
+			const glm::vec3 offset = bounds.center - origin;
+			const float along = glm::dot(offset, direction);
+			if (bounds.radius <= 0.0f || along + bounds.radius < 0.0f ||
+				glm::dot(offset, offset) - along * along > bounds.radius * bounds.radius)
 				continue;
-
-			const SceneOrbitalBounds bounds = SceneOrbitalWorldBounds(orbital, structure);
-			if (bounds.radius <= 0.0f)
-				continue;
-
-			const glm::vec3 toCenter = bounds.center - rayOrigin;
-			const float alongRay = glm::dot(toCenter, direction);
-			const float perpendicularSquared = glm::dot(toCenter, toCenter) - alongRay * alongRay;
-			const float radiusSquared = bounds.radius * bounds.radius;
-			if (perpendicularSquared > radiusSquared)
-				continue;
-
-			// Distance to where the ray enters the sphere. Standing inside one counts as a hit at
-			// zero rather than as a miss behind the camera, so an orbital you have flown into is
-			// still clickable.
-			const float halfChord = std::sqrt(radiusSquared - perpendicularSquared);
-			const float entry = alongRay - halfChord;
-			const float exit = alongRay + halfChord;
-			if (exit < 0.0f)
-				continue;
-			const float distance = std::max(0.0f, entry);
-			if (distance < nearestDistance)
+			const auto &mesh = CachedSceneOrbitalMesh(window, orbital, structure);
+			for (std::size_t vertex = 0; vertex + 2 < mesh.size(); vertex += 3)
 			{
-				nearestDistance = distance;
-				nearest = index;
+				const glm::vec3 a = mesh[vertex].position;
+				const glm::vec3 edge1 = mesh[vertex + 1].position - a;
+				const glm::vec3 edge2 = mesh[vertex + 2].position - a;
+				const glm::vec3 cross = glm::cross(direction, edge2);
+				const float determinant = glm::dot(edge1, cross);
+				if (std::abs(determinant) < 1e-10f) continue;
+				const glm::vec3 relative = origin - a;
+				const float u = glm::dot(relative, cross) / determinant;
+				if (u < 0.0f || u > 1.0f) continue;
+				const glm::vec3 q = glm::cross(relative, edge1);
+				const float v = glm::dot(direction, q) / determinant;
+				if (v < 0.0f || u + v > 1.0f) continue;
+				const float distance = glm::dot(edge2, q) / determinant;
+				if (distance > 0.0f && (!hit || distance < hit->distance))
+					hit = SceneOrbitalSurfaceHit{index, distance};
 			}
 		}
-		return nearest;
+		return hit;
+	}
+
+	std::optional<std::size_t> PickSceneOrbital(
+		const RendererWindowState &window, const RendererStructureData &structure,
+		const glm::vec3 &origin, const glm::vec3 &direction)
+	{
+		const auto hit = PickSceneOrbitalSurface(window, structure, origin, direction);
+		return hit ? std::optional<std::size_t>(hit->index) : std::nullopt;
 	}
 
 	int ValenceShell(const std::string &element)

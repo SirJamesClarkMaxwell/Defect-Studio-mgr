@@ -79,10 +79,16 @@ namespace DefectStudio
 		const RendererWindowState &window, const SceneOperatorValues &values)
 	{
 		m_HiddenKeys.clear();
-		if (m_Operator->isParameterRelevant)
-			for (const auto &parameter : m_Operator->schema)
-				if (!m_Operator->isParameterRelevant(parameter.key, values, window))
-					m_HiddenKeys.push_back(parameter.key);
+		m_ParameterMaximums.clear();
+		for (const auto &parameter : m_Operator->schema)
+		{
+			if (m_Operator->isParameterRelevant && !m_Operator->isParameterRelevant(parameter.key, values, window))
+				m_HiddenKeys.push_back(parameter.key);
+			const float maximum = m_Operator->parameterMaximum ?
+				m_Operator->parameterMaximum(parameter, values, window) : parameter.maximum;
+			m_ParameterMaximums[parameter.key] = std::isfinite(maximum) ?
+				std::max(parameter.minimum, maximum) : parameter.maximum;
+		}
 	}
 
 	void OperatorRedoPanel::PollInvalidation(const UndoStack &undoStack, const RendererWindowState *window) noexcept
@@ -108,6 +114,7 @@ namespace DefectStudio
 		m_SelectedVacancies.clear();
 		m_Values.clear();
 		m_HiddenKeys.clear();
+		m_ParameterMaximums.clear();
 		m_WindowId.clear();
 		m_UndoDepth = 0;
 		m_Open = false;
@@ -168,17 +175,23 @@ namespace DefectStudio
 				if (value == m_Values.end())
 					continue;
 				const std::string label = parameter.label + "##OperatorRedo_" + parameter.key;
+				const auto bound = m_ParameterMaximums.find(parameter.key);
+				const float maximumValue = bound == m_ParameterMaximums.end() ? parameter.maximum : bound->second;
 				bool changed = false;
 				switch (parameter.kind)
 				{
 				case SceneOperatorParameter::Kind::Float:
 					if (auto *current = std::get_if<float>(&value->second))
-						changed = ImGui::SliderFloat(label.c_str(), current, parameter.minimum, parameter.maximum);
+						changed = ImGui::SliderFloat(label.c_str(), current, parameter.minimum, maximumValue);
 					break;
 				case SceneOperatorParameter::Kind::Int:
 					if (auto *current = std::get_if<int>(&value->second))
-						changed = ImGui::SliderInt(label.c_str(), current,
-							static_cast<int>(std::ceil(parameter.minimum)), static_cast<int>(std::floor(parameter.maximum)));
+					{
+						const int minimum = static_cast<int>(std::ceil(parameter.minimum));
+						const int maximum = static_cast<int>(std::floor(maximumValue));
+						*current = std::clamp(*current, minimum, maximum);
+						changed = ImGui::SliderInt(label.c_str(), current, minimum, maximum);
+					}
 					break;
 				case SceneOperatorParameter::Kind::Bool:
 					if (auto *current = std::get_if<bool>(&value->second))

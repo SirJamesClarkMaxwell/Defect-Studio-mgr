@@ -259,3 +259,63 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(PickFrontmostScenePath(system, settings, BindingContext{}).has_value());
 	}
 } // namespace DefectStudio::Tests
+
+namespace DefectStudio::Tests
+{
+	TEST(ScenePathPickingTests, ThinCurvedBoundAndBondFrameStrokesHitTwoPixelsFromTheirRenderedPolyline)
+	{
+		for (bool bondFrame : {false, true})
+			for (bool perspective : {false, true})
+			{
+				PathSystem system;
+				ScenePath path = StraightPath(77, 0.0f);
+				path.style.width = 0.03f;
+				path.segments[0].data = CircularArcSegmentData{glm::vec3(0, 0, 1), glm::radians(100.0f)};
+				BindingContext bindings;
+				bindings.atomPosition = [](std::size_t i) -> std::optional<glm::vec3> {
+					return i == 0 ? glm::vec3(-1, 0, -0.5f) : glm::vec3(1, 0.8f, 0.5f);
+				};
+				bindings.atomRadius = [](std::size_t) -> std::optional<float> { return 0.4f; };
+				if (bondFrame)
+				{
+					path.transform.position = {25, 30, 40}; // fallback is deliberately far from the bond
+					path.transformBinding.value = PathTransformBinding::BondFrame{0, 1, glm::radians(37.0f)};
+				}
+				else
+				{
+					path.nodes[0].binding.value = PathBinding::CopyPosition{0, {}, 1.15f};
+					path.nodes[1].binding.value = PathBinding::CopyPosition{1, {}, 1.15f};
+					for (auto &node : path.nodes) node.position += glm::vec3(0, 40, 0);
+				}
+				ASSERT_TRUE(system.Store().Insert(std::move(path)));
+				const auto &stored = *system.Store().Find(SceneObjectId{77});
+				const auto resolved = ResolveNodePositions(stored, bindings);
+				const auto evaluated = Tessellate(stored, resolved, TessellationSettings{});
+				ASSERT_GE(evaluated.samples.size(), 3u);
+				system.Caches().Store(stored.id, {system.Store().RevisionsFor(stored.id), BindingSourceRevision(stored, resolved), 3},
+					CachedPathGeometry{evaluated, {}});
+				PathPickSettings settings = Settings(glm::vec2(0));
+				settings.viewProjection = (perspective ?
+					glm::perspective(glm::radians(45.0f), kViewport.x / kViewport.y, 0.1f, 100.0f) :
+					glm::ortho(-5.0f, 5.0f, -3.75f, 3.75f, 0.1f, 100.0f)) *
+					glm::lookAt(glm::vec3(0, 0, 10), glm::vec3(0), glm::vec3(0, 1, 0));
+				const std::size_t i = evaluated.samples.size() / 2;
+				const auto project = [&](const glm::dvec3 &p) {
+					const glm::vec4 clip = settings.viewProjection * glm::vec4(glm::vec3(p), 1);
+					const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+					return glm::vec2((ndc.x + 1) * kViewport.x * 0.5f, (1 - ndc.y) * kViewport.y * 0.5f);
+				};
+				const glm::vec2 a = project(evaluated.samples[i-1].position), b = project(evaluated.samples[i].position);
+				const glm::vec2 tangent = glm::normalize(b - a);
+				settings.cursor = (a + b) * 0.5f + glm::vec2(-tangent.y, tangent.x) * 2.0f;
+				const auto hit = PickFrontmostScenePath(system, settings, bindings);
+				ASSERT_TRUE(hit);
+				EXPECT_EQ(hit->path, stored.id);
+				EXPECT_EQ(hit->result.kind, PathPickKind::WholePath);
+				EXPECT_LE(hit->result.screenDistance, 2.01f);
+				// The thin stroke alone cannot cover a cursor two pixels away at this zoom.
+				settings.strokePickTolerance = 0;
+				EXPECT_FALSE(PickFrontmostScenePath(system, settings, bindings));
+			}
+	}
+}

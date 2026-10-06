@@ -47,7 +47,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
 		{
 			const RendererAtomData &atom = windowState.structure.atoms[i];
-			if (!atom.visible)
+			if (!atom.visible || !windowState.showAtoms)
 				continue;
 			const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
 			const float b = 2.0f * glm::dot(oc, rayDir);
@@ -71,7 +71,7 @@ namespace DefectStudio
 	void HandleAtomPick(
 		RendererWindowState &windowState, float relX, float relY, bool additive, RendererLayer &layer)
 	{
-		if (!windowState.pickAtoms)
+		if (!windowState.pickAtoms || !windowState.showAtoms)
 			return;
 		if (!windowState.camera || windowState.structure.atoms.empty())
 			return;
@@ -143,12 +143,12 @@ namespace DefectStudio
 
 		float bestAtomT = std::numeric_limits<float>::max();
 		std::size_t hitAtomIndex = std::numeric_limits<std::size_t>::max();
-		if (windowState.pickAtoms)
+		if (windowState.pickAtoms && windowState.showAtoms)
 		{
 			for (std::size_t i = 0; i < windowState.structure.atoms.size(); ++i)
 			{
 				const RendererAtomData &atom = windowState.structure.atoms[i];
-				if (!atom.visible)
+				if (!atom.visible || !windowState.showAtoms)
 					continue;
 				const glm::vec3 oc = rayOrigin - atom.cartesianPosition;
 				const float a = glm::dot(rayDir, rayDir);
@@ -169,7 +169,7 @@ namespace DefectStudio
 
 		float bestBondT = std::numeric_limits<float>::max();
 		std::size_t hitBondIndex = std::numeric_limits<std::size_t>::max();
-		if (windowState.pickBonds)
+		if (windowState.pickBonds && windowState.showBonds)
 		{
 			for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
 			{
