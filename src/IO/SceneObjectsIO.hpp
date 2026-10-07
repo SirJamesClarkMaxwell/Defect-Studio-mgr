@@ -303,9 +303,33 @@ namespace DefectStudio
 		PersistedPathStyle style;
 	};
 
+	// task/84: a hide volume - the sphere/box/cylinder that hides the atoms inside or outside it.
+	// Field for field with Renderer/Scene/SceneHideVolume.hpp, except that the orientation is stored
+	// as Euler degrees (as PersistedSceneOrbital does) rather than a matrix: a hand-edited
+	// scene_objects.yaml is something the user reads, and nine floats that must stay orthonormal is
+	// not readable.
+	struct PersistedSceneHideVolume
+	{
+		std::string persistKey;
+		std::string kind = "Sphere";      // Sphere | Box | Cylinder; anything else skips the entry
+		std::string frame = "Anchored";   // Anchored | Fractional; anything else skips the entry
+		glm::vec3 center = glm::vec3(0.0f);
+		glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees, applied XYZ as for an orbital
+		// Read per kind, exactly as SceneHideVolume::halfExtents documents: sphere x = radius; box
+		// three half-sides; cylinder x = radius, z = half-height.
+		glm::vec3 halfExtents = glm::vec3(1.0f);
+		std::vector<PersistedAtomRef> anchorAtoms;
+		bool invert = false;
+		std::string name;
+		glm::vec3 color = glm::vec3(0.9f, 0.5f, 0.2f);
+		float alpha = 0.18f;
+		bool visible = true;
+		bool renderable = true;
+	};
+
 	using PersistedSceneObject = std::variant<
 		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital,
-		PersistedScenePlane, PersistedScenePath>;
+		PersistedScenePlane, PersistedScenePath, PersistedSceneHideVolume>;
 
 	// task/51: one domain VacancySite. Not a scene object - a vacancy is structure data - but the
 	// structure itself is stored as a POSCAR, which has no way to say "an atom was here", so the
