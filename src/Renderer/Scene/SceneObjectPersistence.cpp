@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <glm/gtc/quaternion.hpp>
 
 namespace DefectStudio
 {
@@ -201,6 +202,25 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.visible = plane.visible;
 		result.emplace_back(std::move(p));
 	}
+	for (const auto &volume : window.sceneHideVolumes)
+	{
+		PersistedSceneHideVolume p;
+		p.persistKey = volume.persistKey;
+		p.kind = volume.kind == HideVolumeKind::Sphere ? "Sphere"
+			: volume.kind == HideVolumeKind::Box ? "Box" : "Cylinder";
+		p.frame = volume.frame == HideVolumeFrame::Anchored ? "Anchored" : "Fractional";
+		p.center = volume.center;
+		p.rotationEuler = glm::degrees(glm::eulerAngles(glm::normalize(glm::quat_cast(volume.orientation))));
+		p.halfExtents = volume.halfExtents;
+		p.anchorAtoms = PersistAtomReferences(window.structure, volume.anchorAtoms);
+		p.invert = volume.invert;
+		p.name = volume.name;
+		p.color = volume.color;
+		p.alpha = volume.alpha;
+		p.visible = volume.visible;
+		p.renderable = volume.renderable;
+		result.emplace_back(std::move(p));
+	}
 	if (window.paths != nullptr)
 	{
 		window.paths->Store().Visit(
@@ -216,6 +236,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.freeLabels.clear();
 	window.sceneOrbitals.clear();
 	window.scenePlanes.clear();
+	window.sceneHideVolumes.clear();
 	if (window.paths != nullptr)
 		window.paths->Clear();
 	window.selectedScenePlanes.clear();
@@ -383,7 +404,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 							loadedPaths.emplace_back(id, std::cref(value));
 					}
 				}
-				else
+				else if constexpr (std::is_same_v<T, PersistedScenePlane>)
 				{
 					RendererWindowState::ScenePlane pl;
 					pl.id = window.sceneRegistry.AllocateObjectId();
@@ -406,6 +427,47 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					pl.showBorder = value.showBorder;
 					pl.visible = value.visible;
 					window.scenePlanes.push_back(std::move(pl));
+				}
+				else if constexpr (std::is_same_v<T, PersistedSceneHideVolume>)
+				{
+					SceneHideVolume volume;
+					volume.id = window.sceneRegistry.AllocateObjectId();
+					volume.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					if (value.kind == "Sphere")
+						volume.kind = HideVolumeKind::Sphere;
+					else if (value.kind == "Box")
+						volume.kind = HideVolumeKind::Box;
+					else if (value.kind == "Cylinder")
+						volume.kind = HideVolumeKind::Cylinder;
+					else
+					{
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene hide volume was skipped",
+							"Unknown hide volume shape '" + value.kind + "'.", "The hide volume was not loaded.",
+							"SceneObjectPersistence", "scene_objects.entry_skipped");
+						return;
+					}
+					if (value.frame == "Anchored")
+						volume.frame = HideVolumeFrame::Anchored;
+					else if (value.frame == "Fractional")
+						volume.frame = HideVolumeFrame::Fractional;
+					else
+					{
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene hide volume was skipped",
+							"Unknown hide volume frame '" + value.frame + "'.", "The hide volume was not loaded.",
+							"SceneObjectPersistence", "scene_objects.entry_skipped");
+						return;
+					}
+					volume.center = value.center;
+					volume.orientation = glm::mat3_cast(glm::normalize(glm::quat(glm::radians(value.rotationEuler))));
+					volume.halfExtents = value.halfExtents;
+					volume.anchorAtoms = ResolveAtomReferences(window.structure, value.anchorAtoms);
+					volume.invert = value.invert;
+					volume.name = value.name;
+					volume.color = value.color;
+					volume.alpha = value.alpha;
+					volume.visible = value.visible;
+					volume.renderable = value.renderable;
+					window.sceneHideVolumes.push_back(std::move(volume));
 				}
 			},
 			object);

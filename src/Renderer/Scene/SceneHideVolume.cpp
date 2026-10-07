@@ -1,8 +1,11 @@
 #include "Renderer/Scene/SceneHideVolume.hpp"
 
 #include <cmath>
+#include <utility>
 
 #include <glm/gtc/matrix_inverse.hpp>
+
+#include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
 {
@@ -122,5 +125,60 @@ namespace DefectStudio
 				result.push_back(atomIndex);
 		}
 		return result;
+	}
+
+	void ApplyHideVolumeMaskToWindowState(RendererWindowState &windowState)
+	{
+		const std::vector<std::size_t> visibleCoveredAtoms =
+			AtomsCoveredByHideVolumes(windowState.structure, windowState.sceneHideVolumes);
+
+		std::vector<SceneHideVolume> renderableVolumes;
+		renderableVolumes.reserve(windowState.sceneHideVolumes.size());
+		for (const SceneHideVolume &volume : windowState.sceneHideVolumes)
+		{
+			if (!volume.renderable)
+				continue;
+
+			SceneHideVolume renderableVolume = volume;
+			renderableVolume.visible = true;
+			renderableVolumes.push_back(std::move(renderableVolume));
+		}
+		const std::vector<std::size_t> renderableCoveredAtoms =
+			AtomsCoveredByHideVolumes(windowState.structure, renderableVolumes);
+
+		std::vector<bool> visibleCovered(windowState.structure.atoms.size(), false);
+		for (const std::size_t atomIndex : visibleCoveredAtoms)
+			if (atomIndex < visibleCovered.size())
+				visibleCovered[atomIndex] = true;
+
+		std::vector<bool> renderableCovered(windowState.structure.atoms.size(), false);
+		for (const std::size_t atomIndex : renderableCoveredAtoms)
+			if (atomIndex < renderableCovered.size())
+				renderableCovered[atomIndex] = true;
+
+		for (std::size_t atomIndex = 0; atomIndex < windowState.structure.atoms.size(); ++atomIndex)
+		{
+			if (visibleCovered[atomIndex])
+				windowState.structure.atoms[atomIndex].visible = false;
+			if (renderableCovered[atomIndex])
+				windowState.structure.atoms[atomIndex].renderable = false;
+		}
+
+		for (RendererBondData &bond : windowState.structure.bonds)
+		{
+			const std::size_t firstAtomIndex = bond.firstAtomIndex;
+			const std::size_t secondAtomIndex = bond.secondAtomIndex;
+			const bool visibleEndpointCovered =
+				(firstAtomIndex < visibleCovered.size() && visibleCovered[firstAtomIndex]) ||
+				(secondAtomIndex < visibleCovered.size() && visibleCovered[secondAtomIndex]);
+			const bool renderableEndpointCovered =
+				(firstAtomIndex < renderableCovered.size() && renderableCovered[firstAtomIndex]) ||
+				(secondAtomIndex < renderableCovered.size() && renderableCovered[secondAtomIndex]);
+
+			if (visibleEndpointCovered)
+				bond.visible = false;
+			if (renderableEndpointCovered)
+				bond.renderable = false;
+		}
 	}
 } // namespace DefectStudio

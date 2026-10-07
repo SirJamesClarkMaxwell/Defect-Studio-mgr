@@ -38,6 +38,9 @@ namespace DefectStudio::SceneObjectsYaml
 	[[nodiscard]] bool ParsePlane(const YAML::Node &node, PersistedScenePlane &plane);
 	void EmitPlane(YAML::Emitter &emit, const PersistedScenePlane &plane);
 
+	[[nodiscard]] bool ParseHideVolume(const YAML::Node &node, PersistedSceneHideVolume &volume);
+	void EmitHideVolume(YAML::Emitter &emit, const PersistedSceneHideVolume &volume);
+
 	[[nodiscard]] bool ParsePath(const YAML::Node &node, PersistedScenePath &path);
 	void EmitPath(YAML::Emitter &emit, const PersistedScenePath &path);
 } // namespace DefectStudio::SceneObjectsYaml

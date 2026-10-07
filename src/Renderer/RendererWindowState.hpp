@@ -23,6 +23,7 @@
 #include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
 
 namespace DefectStudio
@@ -361,6 +362,7 @@ namespace DefectStudio
 			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<ScenePlane> scenePlanes;
+		std::vector<SceneHideVolume> sceneHideVolumes;
 
 		// task/41: the window's paths, and the caches derived from them. A Unique rather than a member
 		// by value so that the vector of windows reallocating does not move the caches out from under
@@ -423,6 +425,7 @@ namespace DefectStudio
 			std::vector<FreeLabel> freeLabels;
 			std::vector<SceneOrbital> sceneOrbitals;
 			std::vector<ScenePlane> scenePlanes;
+			std::vector<SceneHideVolume> sceneHideVolumes;
 			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
 			PathStore paths;
 			bool showDefectFrame = true;

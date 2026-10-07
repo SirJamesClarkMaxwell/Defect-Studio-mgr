@@ -203,6 +203,12 @@ void ParseObjects(const YAML::Node &objects, std::vector<PersistedSceneObject> &
 			valid = SceneObjectsYaml::ParsePlane(node, value);
 			object = std::move(value);
 		}
+		else if (kind == "SceneHideVolume")
+		{
+			PersistedSceneHideVolume value;
+			valid = SceneObjectsYaml::ParseHideVolume(node, value);
+			object = std::move(value);
+		}
 		else if (kind == "ScenePath")
 		{
 			PersistedScenePath value;
@@ -268,6 +274,10 @@ void EmitObjects(YAML::Emitter &emit, const std::vector<PersistedSceneObject> &o
 				else if constexpr (std::is_same_v<T, PersistedScenePath>)
 				{
 					SceneObjectsYaml::EmitPath(emit, value);
+				}
+				else if constexpr (std::is_same_v<T, PersistedSceneHideVolume>)
+				{
+					SceneObjectsYaml::EmitHideVolume(emit, value);
 				}
 				else
 				{

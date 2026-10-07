@@ -53,6 +53,8 @@ namespace DefectStudio
 	{
 		// Stable identity allocated by SceneRegistry, as for every other scene object.
 		SceneObjectId id;
+		// Stable across a save/load, unlike `id` - see RendererWindowState::PinnedMeasurement.
+		std::string persistKey;
 		HideVolumeKind kind = HideVolumeKind::Sphere;
 		HideVolumeFrame frame = HideVolumeFrame::Anchored;
 
@@ -109,4 +111,21 @@ namespace DefectStudio
 	// structure is rebuilt - atom positions only move on a rebuild, so this is not per-frame work.
 	[[nodiscard]] std::vector<std::size_t> AtomsCoveredByHideVolumes(
 		const RendererStructureData &structure, std::span<const SceneHideVolume> volumes);
+
+	// Folds `windowState.sceneHideVolumes` into the atom and bond flags of
+	// `windowState.structure`, clearing them and never setting them - the manual half (H, the
+	// outliner eye, HiddenSceneState) stays the owner of what is true, and this only takes away.
+	// That is what keeps editing a radius from resurrecting what the user hid by hand.
+	//
+	// The volume's own two columns map straight onto the atoms' two: a volume with the eye set cuts
+	// `visible`, one with the camera set cuts `renderable`. So a volume can drop the bulk from an
+	// exported render while leaving it on screen to work with.
+	//
+	// A bond goes with either of its endpoints - the existing H semantics, no new rule.
+	//
+	// Call at the end of SceneSystem::PushSelectionAndVisibilityToWindowState, on the window-state
+	// mirror only, never on the ECS components. Idempotent and non-accumulating, because the mirror
+	// is rebuilt from the ECS on every push: deleting a volume brings its atoms back on the next one.
+	struct RendererWindowState;
+	void ApplyHideVolumeMaskToWindowState(RendererWindowState &windowState);
 } // namespace DefectStudio

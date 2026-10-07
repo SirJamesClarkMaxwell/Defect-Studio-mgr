@@ -88,7 +88,9 @@ namespace DefectStudio::Tests
 		};
 
 		std::vector<StructuredError> warnings;
-		const PersistedSceneHideVolume *parsed = FirstVolume(RoundTrip(original, warnings));
+		// Named, not a temporary: FirstVolume hands back a pointer into the file it was given.
+		const SceneObjectsFile loaded = RoundTrip(original, warnings);
+		const PersistedSceneHideVolume *parsed = FirstVolume(loaded);
 		ASSERT_NE(parsed, nullptr);
 		ASSERT_EQ(parsed->anchorAtoms.size(), 2u);
 		EXPECT_EQ(parsed->anchorAtoms[0].index, 510u);

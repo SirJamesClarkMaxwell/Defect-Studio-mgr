@@ -107,7 +107,8 @@ namespace DefectStudio
 	{
 		return {
 			window.pinnedMeasurements, window.freeLabels, window.sceneOrbitals,
-			window.scenePlanes, window.paths ? window.paths->Store() : PathStore{}, window.showDefectFrame};
+			window.scenePlanes, window.sceneHideVolumes, window.paths ? window.paths->Store() : PathStore{},
+			window.showDefectFrame};
 	}
 
 	void RestoreSceneObjectsSnapshot(RendererWindowState &window, SceneObjectsSnapshot snapshot)
@@ -116,6 +117,7 @@ namespace DefectStudio
 		window.freeLabels = std::move(snapshot.freeLabels);
 		window.sceneOrbitals = std::move(snapshot.sceneOrbitals);
 		window.scenePlanes = std::move(snapshot.scenePlanes);
+		window.sceneHideVolumes = std::move(snapshot.sceneHideVolumes);
 		window.showDefectFrame = snapshot.showDefectFrame;
 		if (!window.showDefectFrame) window.defectFrameSelected = false;
 		SceneSystem::EnsurePathSystem(window).ReplaceStore(std::move(snapshot.paths));
