@@ -1,3 +1,5 @@
+#include "Core/dspch.hpp"
+
 #include "Renderer/Scene/SceneHideVolume.hpp"
 
 #include <cmath>
