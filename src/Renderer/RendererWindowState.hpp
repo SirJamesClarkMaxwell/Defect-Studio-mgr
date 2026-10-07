@@ -364,6 +364,7 @@ namespace DefectStudio
 		};
 		std::vector<ScenePlane> scenePlanes;
 		std::vector<SceneHideVolume> sceneHideVolumes;
+		std::vector<SceneObjectId> selectedSceneHideVolumes;
 
 		// task/83: one component of a CHGCAR (total, spin density, spin up/down, optionally minus a
 		// reference CHGCAR) drawn as a two-sign isosurface at +/- isoValue. Unlike SceneOrbital this

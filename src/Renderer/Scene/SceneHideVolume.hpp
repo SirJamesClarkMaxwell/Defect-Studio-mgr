@@ -112,6 +112,21 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<std::size_t> AtomsCoveredByHideVolumes(
 		const RendererStructureData &structure, std::span<const SceneHideVolume> volumes);
 
+	// The volume's surface as a world-space triangle soup (every three entries are one triangle,
+	// outward winding), for the translucent viewport overlay. Same frame resolution as
+	// PointInHideVolume, so in `Fractional` a sphere comes out as the ellipsoid it actually cuts and
+	// a box as a parallelepiped. `invert` is ignored - the surface is the same either way. Empty for
+	// a singular lattice in `Fractional`, or a non-positive dimension.
+	//
+	// Every vertex lies on the surface: pulled 2 % towards the centre it is inside the volume,
+	// pushed 2 % away it is outside (SceneHideVolumeMeshTests pins this).
+	[[nodiscard]] std::vector<glm::vec3> BuildHideVolumeTriangles(
+		const SceneHideVolume &volume, const RendererStructureData &structure);
+
+	// The volume's centre in world space: the anchor centroid if it resolves, else `center`, mapped
+	// through the lattice for `Fractional`.
+	[[nodiscard]] glm::vec3 HideVolumeWorldCenter(const SceneHideVolume &volume, const RendererStructureData &structure);
+
 	// Folds `windowState.sceneHideVolumes` into the atom and bond flags of
 	// `windowState.structure`, clearing them and never setting them - the manual half (H, the
 	// outliner eye, HiddenSceneState) stays the owner of what is true, and this only takes away.
