@@ -4,6 +4,7 @@
 
 #include "Presentation/Panels/ObjectPropertiesPanelSections.hpp"
 #include "Presentation/Panels/ObjectPropertiesSelection.hpp"
+#include "Presentation/Panels/SceneDensityEditor.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathEditorWidget.hpp"
 #include "Presentation/Panels/ViewportGizmo.hpp"
@@ -345,6 +346,8 @@ namespace DefectStudio
 				DrawSelectedSceneOrbitalSection(*windowState);
 			if (sections.planes)
 				DrawSelectedScenePlaneSection(*windowState);
+			if (sections.densities)
+				DrawSelectedSceneDensitySection(*windowState);
 			if (sections.paths)
 				DrawSelectedScenePathSection(*windowState);
 			if (sections.defectFrame)

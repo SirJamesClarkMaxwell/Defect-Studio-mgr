@@ -14,6 +14,7 @@
 #include "Presentation/Operators/SceneOperatorRegistry.hpp"
 #include "Presentation/Panels/OperatorRedoPanel.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
+#include "Presentation/Panels/SceneDensityEditor.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -244,5 +245,9 @@ namespace DefectStudio
 		}
 		else if (!eventBus && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Widok nie jest połączony z systemem zdarzeń.");
+		ImGui::SeparatorText("Dane z obliczeń");
+		if (ImGui::MenuItem("Gęstość z CHGCAR..."))
+			AddSceneDensityFromFileDialog(windowState);
+		ImGui::SetItemTooltip("Gęstość ładunku lub spinu z pliku CHGCAR jako izopowierzchnia.");
 	}
 }

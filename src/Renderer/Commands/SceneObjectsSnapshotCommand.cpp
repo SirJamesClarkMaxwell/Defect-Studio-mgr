@@ -108,7 +108,7 @@ namespace DefectStudio
 		return {
 			window.pinnedMeasurements, window.freeLabels, window.sceneOrbitals,
 			window.scenePlanes, window.sceneHideVolumes, window.paths ? window.paths->Store() : PathStore{},
-			window.showDefectFrame};
+			window.showDefectFrame, window.sceneDensities};
 	}
 
 	void RestoreSceneObjectsSnapshot(RendererWindowState &window, SceneObjectsSnapshot snapshot)
@@ -118,6 +118,7 @@ namespace DefectStudio
 		window.sceneOrbitals = std::move(snapshot.sceneOrbitals);
 		window.scenePlanes = std::move(snapshot.scenePlanes);
 		window.sceneHideVolumes = std::move(snapshot.sceneHideVolumes);
+		window.sceneDensities = std::move(snapshot.sceneDensities);
 		window.showDefectFrame = snapshot.showDefectFrame;
 		if (!window.showDefectFrame) window.defectFrameSelected = false;
 		SceneSystem::EnsurePathSystem(window).ReplaceStore(std::move(snapshot.paths));
@@ -125,6 +126,7 @@ namespace DefectStudio
 		KeepExistingSelection(window.selectedFreeLabels, window.freeLabels);
 		KeepExistingSelection(window.selectedSceneOrbitals, window.sceneOrbitals);
 		KeepExistingSelection(window.selectedScenePlanes, window.scenePlanes);
+		KeepExistingSelection(window.selectedSceneDensities, window.sceneDensities);
 		std::erase_if(window.selectedScenePaths, [&window](const SceneObjectId id) {
 			return window.paths == nullptr || !window.paths->Store().Contains(id);
 		});

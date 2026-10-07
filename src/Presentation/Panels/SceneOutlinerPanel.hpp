@@ -75,6 +75,8 @@ namespace DefectStudio
 		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
 		// SceneRegistry entity, because nothing about it needs a transform or a selection component.
 		void drawPlanesGroup(RendererWindowState &windowState);
+		// task/83: sceneDensities, same direct-vector shape as the planes group. Hidden while empty.
+		void drawDensitiesGroup(RendererWindowState &windowState);
 		// task/51: structure.vacancies. Group eye = showVacancies; a row's X removes that vacancy
 		// through renderer.vacancy.set, so it is one undo step like every other domain edit.
 		void drawVacanciesGroup(RendererWindowState &windowState);
@@ -87,7 +89,8 @@ namespace DefectStudio
 			PinnedMeasurement,
 			Orbital,
 			Plane,
-			Path
+			Path,
+			Density
 		};
 		struct SelectionAnchor
 		{

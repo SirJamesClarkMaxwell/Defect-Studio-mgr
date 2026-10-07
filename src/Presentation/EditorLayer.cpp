@@ -51,6 +51,7 @@
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
+#include "Presentation/Panels/SceneDensityLoader.hpp"
 #include "Presentation/Panels/ExportImagePanel.hpp"
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/DisplacementComparisonPanel.hpp"
@@ -576,6 +577,8 @@ namespace DefectStudio
 		pollPendingWindowRestores();
 		renderMainMenuBar();
 		renderCommandPalettePopup();
+		if (m_SceneDensityLoader != nullptr)
+			m_SceneDensityLoader->Update();
 
 		for (auto &entry : m_Panels.Entries())
 		{
@@ -736,6 +739,7 @@ namespace DefectStudio
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
 			// (not local) so saveProjectWindowState/pollPendingWindowRestores can reach it too.
 			m_ElectronicStructureSession = CreateRef<ElectronicStructureSession>(*rendererLayer, m_JobSystem);
+			m_SceneDensityLoader = CreateRef<SceneDensityLoader>(*rendererLayer, m_JobSystem);
 			// Applied here (not in loadInitialProjectState(), which runs before this session
 			// exists) - the active project's manifest, if any, owns the bulk reference now (see
 			// T07.5.5); ElectronicStructureSession's own persisted-defaults file stays as a

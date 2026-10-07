@@ -19,6 +19,7 @@ namespace DefectStudio::Platform
 		const std::string &filterExtension);
 
 	// nullopt = user cancelled (not an error). StructuredError = dialog/init failure.
+	// An empty filterExtension lists every file (extensionless VASP outputs).
 	[[nodiscard]] Result<std::optional<Path>> PickOpenFile(
 		const Path &defaultDirectory,
 		const std::string &filterName,

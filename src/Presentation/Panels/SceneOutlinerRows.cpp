@@ -109,6 +109,7 @@ namespace DefectStudio
 			? SceneObjectEditKind::FreeLabel
 			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
 			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
+			: rowKind == SelectionRowKind::Density ? SceneObjectEditKind::Density
 			: SceneObjectEditKind::Path;
 		bool sceneMutated = false;
 		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
@@ -396,6 +397,54 @@ namespace DefectStudio
 						windowState, SelectionRowKind::Plane, ids, plane.id, selection);
 				const bool sceneMutated = drawSceneObjectContextMenu(
 					windowState, SelectionRowKind::Plane, plane.id, selection, contextRequested);
+				ImGui::PopID();
+				if (sceneMutated)
+					break;
+			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	void SceneOutlinerPanel::drawDensitiesGroup(RendererWindowState &windowState)
+	{
+		if (windowState.sceneDensities.empty())
+			return;
+		ImGui::PushID("##densitiesGroup");
+		ImGui::SetNextItemAllowOverlap();
+		const bool open = ImGui::TreeNodeEx(
+			"##densities", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen,
+			"Gęstości (%zu)", windowState.sceneDensities.size());
+		ApplySceneVisibilityColumnEdit(
+			windowState.sceneDensities, DrawSceneVisibilityColumns(SceneVisibilityStateFor(windowState.sceneDensities)));
+		if (open)
+		{
+			std::vector<SceneObjectId> ids;
+			ids.reserve(windowState.sceneDensities.size());
+			for (const RendererWindowState::SceneDensity &density : windowState.sceneDensities)
+				ids.push_back(density.id);
+			for (std::size_t index = 0; index < windowState.sceneDensities.size(); ++index)
+			{
+				RendererWindowState::SceneDensity &density = windowState.sceneDensities[index];
+				ImGui::PushID(static_cast<int>(index));
+				const char *state = density.loadState == RendererWindowState::SceneDensity::LoadState::Failed ? "  (błąd)"
+					: density.loadState == RendererWindowState::SceneDensity::LoadState::Ready ? ""
+					: "  (wczytywanie...)";
+				const std::string rowLabel = density.displayName + state;
+				auto &selection = windowState.selectedSceneDensities;
+				const bool selected = std::find(selection.begin(), selection.end(), density.id) != selection.end();
+				if (selected)
+					PushSelectedRowColors();
+				ImGui::SetNextItemAllowOverlap();
+				const bool rowActivated = ImGui::Selectable(rowLabel.c_str(), selected);
+				const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+				if (selected)
+					ImGui::PopStyleColor(3);
+				DrawSceneVisibilityColumns(density.visible, density.renderable);
+				if (rowActivated)
+					applyAnnotationRowSelection(windowState, SelectionRowKind::Density, ids, density.id, selection);
+				const bool sceneMutated = drawSceneObjectContextMenu(
+					windowState, SelectionRowKind::Density, density.id, selection, contextRequested);
 				ImGui::PopID();
 				if (sceneMutated)
 					break;

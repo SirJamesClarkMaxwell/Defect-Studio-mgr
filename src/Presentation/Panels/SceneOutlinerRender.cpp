@@ -26,6 +26,7 @@ namespace DefectStudio
 			AddSceneVisibilityColumnFlags(windowState.freeLabels, flags);
 			AddSceneVisibilityColumnFlags(windowState.sceneOrbitals, flags);
 			AddSceneVisibilityColumnFlags(windowState.scenePlanes, flags);
+			AddSceneVisibilityColumnFlags(windowState.sceneDensities, flags);
 			if (windowState.paths != nullptr)
 				windowState.paths->Store().Visit([&flags](const ScenePath &path) { flags.Add(path.visible, path.renderable); });
 			return SceneVisibilityStateFrom(flags);
@@ -48,6 +49,7 @@ namespace DefectStudio
 			ApplySceneVisibilityColumnEdit(windowState.freeLabels, edit);
 			ApplySceneVisibilityColumnEdit(windowState.sceneOrbitals, edit);
 			ApplySceneVisibilityColumnEdit(windowState.scenePlanes, edit);
+			ApplySceneVisibilityColumnEdit(windowState.sceneDensities, edit);
 			if (windowState.paths != nullptr)
 				ApplySceneVisibilityColumnEdit(windowState.paths->Store(), edit);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
@@ -119,6 +121,8 @@ namespace DefectStudio
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Plane}
 				: !activeWindow.selectedFreeLabels.empty()
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::FreeLabel}
+				: !activeWindow.selectedSceneDensities.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Density}
 				: std::nullopt;
 			const ImGuiIO &io = ImGui::GetIO();
 			if (selectedKind.has_value() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
@@ -228,6 +232,7 @@ namespace DefectStudio
 					drawLabelsGroup(windowState);
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
+					drawDensitiesGroup(windowState);
 					drawVacanciesGroup(windowState);
 					DrawDefectFrameOutlinerRow(windowState);
 					drawPathsGroup(windowState);

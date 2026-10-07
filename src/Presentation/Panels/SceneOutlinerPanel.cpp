@@ -49,6 +49,8 @@ namespace DefectStudio
 			windowState.defectFrameSelected = false;
 			if (&windowState.selectedScenePlanes != keep)
 				windowState.selectedScenePlanes.clear();
+			if (&windowState.selectedSceneDensities != keep)
+				windowState.selectedSceneDensities.clear();
 			if (&windowState.selectedScenePaths != keep)
 				windowState.selectedScenePaths.clear();
 		}
@@ -162,6 +164,7 @@ namespace DefectStudio
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedSceneDensities.clear();
 			windowState.selectedScenePaths.clear();
 			if (eventBus == nullptr)
 				continue;
