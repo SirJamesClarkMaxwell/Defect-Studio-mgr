@@ -4,6 +4,7 @@
 #include <optional>
 #include <string_view>
 
+#include "Domain/Electronic/DensityAnalysis.hpp"
 #include "Domain/Electronic/ElectronicStructureModel.hpp"
 
 namespace DefectStudio
@@ -74,5 +75,8 @@ namespace DefectStudio
 	{
 		OrbitalGridData grid;
 		DensityGridStatistics statistics;
+		// task/85: centroid of |value| (DensityAnalysis.hpp), computed by the loader on the worker
+		// thread so the N panel has the FNV centre proposal the moment the grid arrives.
+		std::optional<DensityCentre> centroid;
 	};
 } // namespace DefectStudio

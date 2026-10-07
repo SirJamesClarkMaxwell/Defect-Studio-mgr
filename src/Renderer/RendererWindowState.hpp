@@ -402,11 +402,22 @@ namespace DefectStudio
 			bool renderable = true;
 			std::string persistKey; // see PinnedMeasurement::persistKey
 
+			// task/85: localisation analysis (DensityAnalysis.hpp). The centre is cartesian, A, the
+			// FNV `--center` proposal; nullopt follows the loaded grid's |value| centroid, a value
+			// is the user's override (typed, dragged or taken from selected atoms). Saved.
+			std::optional<glm::vec3> analysisCentre;
+			float analysisRadius = 5.0f;
+
 			// Derived, never saved. Shared rather than owned so an undo snapshot of the scene does
 			// not copy ~23 MB per object, and an undo back to an earlier component is instant.
 			Ref<const DensityGrid> data;
 			LoadState loadState = LoadState::Pending;
 			std::string loadError;
+			// Cache for the N panel's radial profile: valid while `data` and the centre it was
+			// computed around are unchanged (SceneDensityRadialProfile recomputes otherwise).
+			Ref<const DensityRadialProfile> radialProfile;
+			const DensityGrid *radialProfileGrid = nullptr;
+			glm::vec3 radialProfileCentre = glm::vec3(0.0f);
 		};
 		std::vector<SceneDensity> sceneDensities;
 		std::vector<SceneObjectId> selectedSceneDensities;

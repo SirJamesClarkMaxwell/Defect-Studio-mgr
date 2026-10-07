@@ -52,6 +52,19 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(difference->statistics.minimum, 0.0f);
 	}
 
+	TEST(VaspDensityGridBridgeTests, TheLoaderProposesTheCentroidOfTheMagnitude)
+	{
+		const Result<DensityGrid> result = VaspDensityGridBridge{}.LoadDensityGrid(Chgcar(), DensityComponent::Magnetization);
+		if (!result)
+			GTEST_SKIP() << "puntukas unavailable: " << result.Error().technicalDetails;
+		ASSERT_TRUE(result->centroid.has_value());
+		// |m| = 0.5 on x = 0 and 0.25 on x = 1/4: weighted mean x = 1/12. Uniform along y and z: 0.5.
+		EXPECT_NEAR(result->centroid->fractional.x, 1.0f / 12.0f, 1e-4f);
+		EXPECT_FLOAT_EQ(result->centroid->fractional.y, 0.5f);
+		EXPECT_FLOAT_EQ(result->centroid->fractional.z, 0.5f);
+		EXPECT_NEAR(result->centroid->cartesian.x, 2.0f / 12.0f, 1e-4f);
+	}
+
 	TEST(VaspDensityGridBridgeTests, MissingFileIsAnError)
 	{
 		const Result<DensityGrid> result =
