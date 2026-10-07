@@ -6,16 +6,25 @@ from __future__ import annotations
 
 from contextlib import redirect_stdout
 import json
+import re
 from pathlib import Path
 import sys
 
 try:
     import numpy as np
-    from pymatgen.io.vasp import Incar, Locpot
+    from pymatgen.io.vasp import Locpot
     from pymatgen.analysis.defects.corrections.freysoldt import get_freysoldt_correction
 except ImportError as exc:
     print(f"pymatgen_defects_not_installed: {exc}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def read_encut(incar_path: Path) -> float:
+    # Not pymatgen's Incar: hand-written INCARs carry comments in any encoding (the Okeanos ones have
+    # a truncated UTF-8 Polish letter), and only one number is needed.
+    text = incar_path.read_bytes().decode("utf-8", errors="replace")
+    match = re.search(r"^\s*ENCUT\s*=\s*([0-9.+\-eE]+)", text, flags=re.MULTILINE | re.IGNORECASE)
+    return float(match.group(1)) if match else 520.0
 
 
 def load(defect_path: str, bulk_path: str, q: int, eps: float,
@@ -26,7 +35,7 @@ def load(defect_path: str, bulk_path: str, q: int, eps: float,
         raise ValueError("fnv_request_invalid: expected three finite centre coordinates and a finite cutoff")
     if encut <= 0:
         incar_path = Path(defect_path).parent / "INCAR"
-        encut = float(Incar.from_file(incar_path).get("ENCUT", 520)) if incar_path.is_file() else 520.0
+        encut = read_encut(incar_path) if incar_path.is_file() else 520.0
     if not np.isfinite(encut) or encut <= 0:
         raise ValueError("fnv_request_invalid: ENCUT must be positive and finite")
 
