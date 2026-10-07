@@ -229,6 +229,8 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.chgcarPath = density.chgcarPath.Utf8();
 		p.referencePath = density.referencePath.Utf8();
 		p.component = DensityComponentKey(density.component);
+		p.analysisCentre = density.analysisCentre;
+		p.analysisRadius = density.analysisRadius;
 		p.isoValue = density.isoValue;
 		p.showNegative = density.showNegative;
 		p.positiveColor = density.positiveColor;
@@ -441,6 +443,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 							"SceneDensity component '" + value.component + "' is not one of total/magnetization/up/down.",
 							"The density was loaded as magnetization.", "SceneObjectPersistence", "scene_objects.entry_defaulted");
 					d.isoValue = value.isoValue;
+					d.analysisCentre = value.analysisCentre;
+					d.analysisRadius = value.analysisRadius;
 					d.showNegative = value.showNegative;
 					d.positiveColor = value.positiveColor;
 					d.negativeColor = value.negativeColor;

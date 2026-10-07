@@ -11,6 +11,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Platform/FileDialog.hpp"
 #include "Presentation/Panels/PropertyGrid.hpp"
+#include "Presentation/Panels/SceneDensityLocalisation.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneSelection.hpp"
 
@@ -181,6 +182,8 @@ namespace DefectStudio
 	void InvalidateSceneDensity(SceneDensity &density)
 	{
 		density.data.reset();
+		density.radialProfile.reset();
+		density.radialProfileGrid = nullptr;
 		density.loadState = SceneDensity::LoadState::Pending;
 		density.loadError.clear();
 		density.isoValue = 0.0f;
@@ -244,7 +247,7 @@ namespace DefectStudio
 
 		const float labelWidth = PropertyGridLabelWidth(
 			{"Nazwa", "Plik", "Składowa", "Odejmij", "Stan", "Izowartość", "Ujemna faza", "Kolor +", "Kolor -",
-				"Krycie", "Atomy w pliku", "Całka |.|"});
+				"Krycie", "Atomy w pliku", "Całka |.|", "Środek", "Pozycja", "--center", "Promień R", "W kuli R", "R50 / R90"});
 		constexpr ImGuiTreeNodeFlags kOpen = ImGuiTreeNodeFlags_DefaultOpen;
 
 		if (ImGui::CollapsingHeader("Źródło", kOpen))
@@ -331,6 +334,8 @@ namespace DefectStudio
 
 		if (density->data != nullptr && ImGui::CollapsingHeader("Statystyki", kOpen))
 			DrawStatistics(windowState, *density, labelWidth);
+		if (density->data != nullptr && ImGui::CollapsingHeader("Lokalizacja (FNV)", kOpen))
+			DrawSceneDensityLocalisation(windowState, *density, labelWidth);
 		ImGui::PopID();
 	}
 } // namespace DefectStudio

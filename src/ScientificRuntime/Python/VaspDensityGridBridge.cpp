@@ -89,6 +89,7 @@ namespace DefectStudio
 			if (!values)
 				return values.Error();
 			grid.values = std::move(values).Value();
+			density.centroid = AbsoluteDensityCentroid(density.grid);
 			return density;
 		}
 		catch (const std::exception &exception)

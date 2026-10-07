@@ -8,6 +8,8 @@
 #include <glad/gl.h>
 
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SceneDensityAnalysis.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 namespace DefectStudio
 {
@@ -70,6 +72,28 @@ namespace DefectStudio
 			}
 			renderIsosurfaceGpuOverlay(cache.buffers.vao, cache.vertexCount, camera, globalSettings,
 				density.positiveColor, density.negativeColor, density.alpha, sceneOffset);
+		}
+
+		// Anchored, unbound spheres use only their own centre, not a structure's lattice or atoms.
+		const RendererStructureData unanchoredStructure;
+		for (const std::size_t index : selectedDensities)
+		{
+			if (index >= densities.size())
+				continue;
+			const auto &density = densities[index];
+			if (!density.id.IsValid() || !density.visible || !density.data)
+				continue;
+			const auto centre = SceneDensityAnalysisCentre(density);
+			if (!centre)
+				continue;
+			SceneHideVolume sphere;
+			sphere.kind = HideVolumeKind::Sphere;
+			sphere.frame = HideVolumeFrame::Anchored;
+			sphere.center = *centre;
+			sphere.halfExtents.x = density.analysisRadius;
+			const auto triangles = BuildHideVolumeTriangles(sphere, unanchoredStructure);
+			renderSceneVolumeOverlay(triangles, resources.sceneHideVolumeMesh, camera, globalSettings,
+				glm::vec3(1.0f), 0.12f, sceneOffset);
 		}
 	}
 } // namespace DefectStudio

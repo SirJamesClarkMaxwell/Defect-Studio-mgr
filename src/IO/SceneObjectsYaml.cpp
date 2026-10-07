@@ -271,6 +271,17 @@ namespace DefectStudio::SceneObjectsYaml
 			density.alpha = node["alpha"].as<float>(density.alpha);
 			density.visible = node["visible"].as<bool>(density.visible);
 			density.renderable = node["renderable"].as<bool>(density.renderable);
+			if (node["analysisCentre"])
+			{
+				glm::vec3 centre;
+				if (!Vec3(node["analysisCentre"], centre) || !std::isfinite(centre.x) ||
+					!std::isfinite(centre.y) || !std::isfinite(centre.z))
+					return false;
+				density.analysisCentre = centre;
+			}
+			density.analysisRadius = node["analysisRadius"].as<float>(density.analysisRadius);
+			if (!std::isfinite(density.analysisRadius) || density.analysisRadius <= 0.0f)
+				return false;
 			return true;
 		}
 		catch (const YAML::Exception &)
@@ -289,6 +300,9 @@ namespace DefectStudio::SceneObjectsYaml
 			 << YAML::Value << density.showNegative;
 		EmitVec3(emit, "positiveColor", density.positiveColor);
 		EmitVec3(emit, "negativeColor", density.negativeColor);
+		if (density.analysisCentre)
+			EmitVec3(emit, "analysisCentre", *density.analysisCentre);
+		emit << YAML::Key << "analysisRadius" << YAML::Value << density.analysisRadius;
 		emit << YAML::Key << "alpha" << YAML::Value << density.alpha << YAML::Key << "visible" << YAML::Value
 			 << density.visible << YAML::Key << "renderable" << YAML::Value << density.renderable;
 	}

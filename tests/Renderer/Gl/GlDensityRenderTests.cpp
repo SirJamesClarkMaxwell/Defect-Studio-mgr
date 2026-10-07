@@ -161,6 +161,12 @@ namespace DefectStudio::Tests
 		const Result<DensityGrid> loaded =
 			VaspDensityGridBridge{}.LoadDensityGrid(Path(chgcar), DensityComponent::Magnetization);
 		ASSERT_TRUE(loaded) << loaded.Error().technicalDetails;
+		// The FNV centre proposal and localisation for the same file (task 85), for the record.
+		ASSERT_TRUE(loaded->centroid.has_value());
+		const DensityRadialProfile profile = AbsoluteDensityRadialProfile(loaded->grid, loaded->centroid->cartesian);
+		std::printf("centroid frac (%.5f, %.5f, %.5f), |rho| within 3/5/7 A: %.3f %.3f %.3f\n",
+			loaded->centroid->fractional.x, loaded->centroid->fractional.y, loaded->centroid->fractional.z,
+			profile.FractionWithin(3.0f), profile.FractionWithin(5.0f), profile.FractionWithin(7.0f));
 
 		constexpr int width = 800;
 		constexpr int height = 800;

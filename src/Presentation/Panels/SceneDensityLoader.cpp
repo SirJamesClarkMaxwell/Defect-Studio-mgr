@@ -82,6 +82,11 @@ namespace DefectStudio
 				density->loadState = SceneDensity::LoadState::Ready;
 				DS_LOG_INFO("SceneDensityLoader: {} ({}) loaded, integral {:.4f}", entry.chgcarPath.Utf8(),
 					DensityComponentKey(entry.component), density->data->statistics.integral);
+				if (density->data->centroid)
+				{
+					const glm::vec3 &centre = density->data->centroid->fractional;
+					DS_LOG_INFO("SceneDensityLoader: centroid |rho| (fractional) {:.4f},{:.4f},{:.4f}", centre.x, centre.y, centre.z);
+				}
 			}
 			else
 			{

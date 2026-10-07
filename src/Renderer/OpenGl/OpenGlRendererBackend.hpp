@@ -405,6 +405,13 @@ namespace DefectStudio
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset);
+		void renderSceneVolumeOverlay(
+			const std::vector<glm::vec3> &triangles,
+			OpenGlMeshHandles &handles,
+			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &color, float alpha,
+			const glm::vec3 &sceneOffset);
 		void renderVacancyMarkers(
 			const std::vector<RendererVacancyData> &vacancies,
 			const RendererViewCamera &camera,

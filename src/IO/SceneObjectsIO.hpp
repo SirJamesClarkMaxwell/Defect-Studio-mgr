@@ -96,6 +96,8 @@ namespace DefectStudio
 		float alpha = 0.7f;
 		bool visible = true;
 		bool renderable = true;
+		std::optional<glm::vec3> analysisCentre;
+		float analysisRadius = 5.0f;
 	};
 
 	struct PersistedPinnedMeasurement
