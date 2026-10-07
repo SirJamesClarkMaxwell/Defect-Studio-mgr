@@ -98,3 +98,56 @@ header:
 Write `docs/work/project/tasks/84-hide-volumes-report.md`: every file changed, the precedence rule
 as implemented, what the manual-H interaction does in practice, and anything in step 6 or 7 cut
 short.
+
+## Goal
+
+Hide volumes work: a sphere, box or cylinder added to a structure hides every atom inside it (or
+outside it, inverted), survives save/load, and can be copied to another structure as a per-material
+render preset. An `Anchored` volume means the same physical region in any supercell; a `Fractional`
+one scales with the cell. Setting up a defect or wavefunction render stops being a manual H sweep.
+
+## Files to create or change
+
+Create:
+- `src/Renderer/Scene/SceneHideVolume.cpp` - implements the header below. The header already exists.
+- `docs/work/project/tasks/84-hide-volumes-report.md`
+
+Already written, and are the contract - do not change:
+- `src/Renderer/Scene/SceneHideVolume.hpp`
+- `tests/Renderer/Scene/SceneHideVolumeTests.cpp`
+
+Change (steps 3-7, in later rounds of this task):
+- `src/Renderer/RendererWindowState.hpp` - `std::vector<SceneHideVolume> sceneHideVolumes;`
+- `src/Renderer/Scene/SceneSystem.cpp` - AND the volume mask into the hidden set
+- `src/IO/SceneObjectsIO.hpp`, `src/IO/SceneObjectsYaml.cpp` - `PersistedSceneHideVolume`
+- `src/Renderer/Scene/SceneObjectPersistence.cpp` - mapping both ways
+- `src/Presentation/Panels/ViewportAddMenu.cpp`, `SceneOutlinerRender.cpp`, Object Properties
+
+## Files that must NOT be touched
+
+- anything under `src/Domain/` - a hide volume is a view concept, it never reaches the domain
+- `src/Presentation/Operators/**`, `OperatorRedoPanel.*`, `CurvedArrowParameters.hpp` - task 80
+- `IsosurfaceMesher.*`, `SceneOrbitalGeometry.*`, orbital IO - task 81
+- `src/Renderer/Scene/ViewModifier.cpp`, `HiddenSceneState.*`, `SceneVisibility.*` - the manual H
+  half stays exactly as it is; the volume mask is added beside it, not inside it
+- `premake5.lua` - run `scripts/Windows/GenerateProjects.bat` instead
+
+## Acceptance criteria
+
+1. `DefectStudioTests.exe --gtest_filter=SceneHideVolumeTests.*` - all green, no test expectation or
+   header signature changed.
+2. The full Release suite has no new failures beyond the two permanent
+   `DS_PYTHON_CAPI_AVAILABLE=0` skips.
+3. `SceneHideVolume.cpp` is under ~500 lines and includes nothing from `Presentation`, `App` or
+   `Domain`.
+4. `AnchoredVolumeCoversTheSamePhysicalRadiusInEverySupercell` and
+   `FractionalVolumeScalesWithTheCell` both pass - they are the feature, not edge cases.
+
+## Constraints
+
+- Renderer layer. No ImGui, no Presentation or App includes, no Domain mutation.
+- No exceptions in render paths (`AGENTS.md`).
+- A singular lattice returns false, never NaN - the Fractional path must not divide blind.
+- `glm` is already a dependency; do not add another maths library.
+- The frame transform happens once in front of a single shape test. Do not write three independent
+  world-space tests with the frame handling copied into each.
