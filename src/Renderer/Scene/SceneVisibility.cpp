@@ -51,7 +51,8 @@ namespace DefectStudio
 		return !windowState.selectedAtomIndices.empty() || !windowState.selectedBondIndices.empty() || !windowState.selectedVacancies.empty() || !windowState.selectedPinnedMeasurements.empty() ||
 			!windowState.selectedFreeLabels.empty() ||
 			!windowState.selectedSceneOrbitals.empty() || !windowState.selectedScenePlanes.empty() ||
-			!windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;
+			!windowState.selectedSceneDensities.empty() || !windowState.selectedScenePaths.empty() ||
+			windowState.defectFrameSelected;
 	}
 
 	void SetSelectedSceneObjectsVisible(RendererWindowState &windowState, const bool visible)
@@ -60,6 +61,7 @@ namespace DefectStudio
 		SetVisibleWhereSelected(windowState.freeLabels, windowState.selectedFreeLabels, visible);
 		SetVisibleWhereSelected(windowState.sceneOrbitals, windowState.selectedSceneOrbitals, visible);
 		SetVisibleWhereSelected(windowState.scenePlanes, windowState.selectedScenePlanes, visible);
+		SetVisibleWhereSelected(windowState.sceneDensities, windowState.selectedSceneDensities, visible);
 		const std::vector<SceneObjectId> &selectedPaths = windowState.selectedScenePaths;
 		ForEachPath(windowState, [&selectedPaths, visible](ScenePath &path) {
 			if (std::find(selectedPaths.begin(), selectedPaths.end(), path.id) != selectedPaths.end())
@@ -79,6 +81,7 @@ namespace DefectStudio
 		SetVisibleEverywhere(windowState.freeLabels, true);
 		SetVisibleEverywhere(windowState.sceneOrbitals, true);
 		SetVisibleEverywhere(windowState.scenePlanes, true);
+		SetVisibleEverywhere(windowState.sceneDensities, true);
 		ForEachPath(windowState, [](ScenePath &path) { path.visible = true; });
 		windowState.showDefectFrame = true;
 	}
@@ -91,6 +94,7 @@ namespace DefectStudio
 		CollapseOntoRenderable(windowState.freeLabels);
 		CollapseOntoRenderable(windowState.sceneOrbitals);
 		CollapseOntoRenderable(windowState.scenePlanes);
+		CollapseOntoRenderable(windowState.sceneDensities);
 		ForEachPath(windowState, [](ScenePath &path) { path.visible = path.renderable; });
 	}
 } // namespace DefectStudio

@@ -6,6 +6,7 @@
 #include <iterator>
 #include <utility>
 
+#include "Presentation/Panels/SceneDensityEditor.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -37,6 +38,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Orbital: return windowState.selectedSceneOrbitals;
 			case SceneObjectEditKind::Plane: return windowState.selectedScenePlanes;
 			case SceneObjectEditKind::Path: return windowState.selectedScenePaths;
+			case SceneObjectEditKind::Density: return windowState.selectedSceneDensities;
 			}
 			return windowState.selectedScenePaths;
 		}
@@ -49,6 +51,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Orbital: return !GetSceneOrbitalClipboard().empty();
 			case SceneObjectEditKind::Plane: return !GetScenePlaneClipboard().empty();
 			case SceneObjectEditKind::Path: return !GetScenePathClipboard().empty();
+			case SceneObjectEditKind::Density: return false;
 			}
 			return false;
 		}
@@ -141,6 +144,8 @@ namespace DefectStudio
 		const SceneObjectEditKind kind,
 		const SceneObjectEditAction action)
 	{
+		if (kind == SceneObjectEditKind::Density && action == SceneObjectEditAction::Copy)
+			return false;
 		if (action == SceneObjectEditAction::Paste)
 			return ClipboardHasObjects(kind);
 		return !SelectionFor(windowState, kind).empty();
@@ -188,6 +193,9 @@ namespace DefectStudio
 			case SceneObjectEditKind::Path:
 				EraseScenePaths(windowState, windowState.selectedScenePaths);
 				break;
+			case SceneObjectEditKind::Density:
+				EraseSceneDensities(windowState, windowState.selectedSceneDensities);
+				break;
 			}
 			break;
 
@@ -198,6 +206,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Orbital: DuplicateSelectedSceneOrbitals(windowState); break;
 			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState); break;
 			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState); break;
+			case SceneObjectEditKind::Density: DuplicateSelectedSceneDensities(windowState); break;
 			}
 			break;
 
@@ -209,6 +218,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Orbital: CopySceneOrbitalsToClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: CopyScenePlanesToClipboard(windowState); break;
 			case SceneObjectEditKind::Path: CopyScenePathsToClipboard(windowState); break;
+			case SceneObjectEditKind::Density: break;
 			}
 			break;
 
@@ -219,6 +229,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Orbital: PasteSceneOrbitalsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: PasteScenePlanesFromClipboard(windowState); break;
 			case SceneObjectEditKind::Path: PasteScenePathsFromClipboard(windowState); break;
+			case SceneObjectEditKind::Density: break;
 			}
 			break;
 		}

@@ -20,6 +20,7 @@ namespace DefectStudio
 		window.selectedFreeLabels.clear();
 		window.selectedSceneOrbitals.clear();
 		window.selectedScenePlanes.clear();
+		window.selectedSceneDensities.clear();
 		window.selectedScenePaths.clear();
 		window.selectedVacancies.clear();
 		window.defectFrameSelected = false;

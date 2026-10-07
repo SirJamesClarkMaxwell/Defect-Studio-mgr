@@ -11,7 +11,9 @@ namespace DefectStudio
 		FreeLabel,
 		Orbital,
 		Plane,
-		Path
+		Path,
+		// Delete and Duplicate only: a density is a loaded grid, not a drawing to copy between windows.
+		Density
 	};
 
 	enum class SceneObjectEditAction

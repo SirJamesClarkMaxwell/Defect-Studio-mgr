@@ -16,6 +16,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
+#include "Domain/Electronic/DensityGrid.hpp"
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Renderer/Path/PathEditSession.hpp"
 #include "Renderer/Path/PathStore.hpp"
@@ -362,6 +363,51 @@ namespace DefectStudio
 		};
 		std::vector<ScenePlane> scenePlanes;
 
+		// task/83: one component of a CHGCAR (total, spin density, spin up/down, optionally minus a
+		// reference CHGCAR) drawn as a two-sign isosurface at +/- isoValue. Unlike SceneOrbital this
+		// one IS read from a calculation: the object stores what to load, SceneDensityLoader
+		// (Presentation) runs the job and fills `data`. The grid's box is the CHGCAR cell starting
+		// at the scene origin, so it overlays the structure that calculation was run on.
+		struct SceneDensity
+		{
+			enum class LoadState
+			{
+				// Wants (re)loading: just created, restored from a project, or its source changed.
+				Pending,
+				Loading,
+				Ready,
+				Failed,
+			};
+
+			SceneObjectId id;
+			std::string displayName;
+			Path chgcarPath;
+			// Empty = no subtraction. Otherwise the same component of this CHGCAR is subtracted on
+			// the same grid - rho(q) - rho(0) for the charge that a charged state adds.
+			Path referencePath;
+			DensityComponent component = DensityComponent::Magnetization;
+			// e/Ang^3, absolute. The positive surface is drawn at +isoValue, the negative one at
+			// -isoValue. Zero until the first load picks 10 % of the grid's peak |value|.
+			float isoValue = 0.0f;
+			bool showNegative = true;
+			// VESTA's spin-density colours: yellow for the majority sign, cyan for the minority one.
+			glm::vec3 positiveColor = glm::vec3(0.95f, 0.80f, 0.10f);
+			glm::vec3 negativeColor = glm::vec3(0.10f, 0.75f, 0.95f);
+			float alpha = 0.7f;
+			// The Scene Outliner's two columns - see Renderer/Scene/SceneVisibility.hpp.
+			bool visible = true;
+			bool renderable = true;
+			std::string persistKey; // see PinnedMeasurement::persistKey
+
+			// Derived, never saved. Shared rather than owned so an undo snapshot of the scene does
+			// not copy ~23 MB per object, and an undo back to an earlier component is instant.
+			Ref<const DensityGrid> data;
+			LoadState loadState = LoadState::Pending;
+			std::string loadError;
+		};
+		std::vector<SceneDensity> sceneDensities;
+		std::vector<SceneObjectId> selectedSceneDensities;
+
 		// task/41: the window's paths, and the caches derived from them. A Unique rather than a member
 		// by value so that the vector of windows reallocating does not move the caches out from under
 		// anything holding a reference into them; null until the first path is created (see
@@ -426,6 +472,8 @@ namespace DefectStudio
 			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
 			PathStore paths;
 			bool showDefectFrame = true;
+			// Last so the positional captures above stay valid; the grids are shared, not copied.
+			std::vector<SceneDensity> sceneDensities;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like

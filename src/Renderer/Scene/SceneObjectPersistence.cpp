@@ -201,6 +201,23 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.visible = plane.visible;
 		result.emplace_back(std::move(p));
 	}
+	for (const auto &density : window.sceneDensities)
+	{
+		PersistedSceneDensity p;
+		p.persistKey = density.persistKey;
+		p.displayName = density.displayName;
+		p.chgcarPath = density.chgcarPath.Utf8();
+		p.referencePath = density.referencePath.Utf8();
+		p.component = DensityComponentKey(density.component);
+		p.isoValue = density.isoValue;
+		p.showNegative = density.showNegative;
+		p.positiveColor = density.positiveColor;
+		p.negativeColor = density.negativeColor;
+		p.alpha = density.alpha;
+		p.visible = density.visible;
+		p.renderable = density.renderable;
+		result.emplace_back(std::move(p));
+	}
 	if (window.paths != nullptr)
 	{
 		window.paths->Store().Visit(
@@ -216,9 +233,11 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.freeLabels.clear();
 	window.sceneOrbitals.clear();
 	window.scenePlanes.clear();
+	window.sceneDensities.clear();
 	if (window.paths != nullptr)
 		window.paths->Clear();
 	window.selectedScenePlanes.clear();
+	window.selectedSceneDensities.clear();
 	window.selectedScenePaths.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
@@ -382,6 +401,31 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 						else
 							loadedPaths.emplace_back(id, std::cref(value));
 					}
+				}
+				else if constexpr (std::is_same_v<T, PersistedSceneDensity>)
+				{
+					// The grid is not in the file: the object comes back Pending and
+					// SceneDensityLoader re-reads it from chgcarPath.
+					RendererWindowState::SceneDensity d;
+					d.id = window.sceneRegistry.AllocateObjectId();
+					d.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					d.displayName = value.displayName;
+					d.chgcarPath = Path::FromUtf8(value.chgcarPath);
+					d.referencePath = value.referencePath.empty() ? Path() : Path::FromUtf8(value.referencePath);
+					if (const std::optional<DensityComponent> component = ParseDensityComponent(value.component))
+						d.component = *component;
+					else
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Unknown density component",
+							"SceneDensity component '" + value.component + "' is not one of total/magnetization/up/down.",
+							"The density was loaded as magnetization.", "SceneObjectPersistence", "scene_objects.entry_defaulted");
+					d.isoValue = value.isoValue;
+					d.showNegative = value.showNegative;
+					d.positiveColor = value.positiveColor;
+					d.negativeColor = value.negativeColor;
+					d.alpha = value.alpha;
+					d.visible = value.visible;
+					d.renderable = value.renderable;
+					window.sceneDensities.push_back(std::move(d));
 				}
 				else
 				{

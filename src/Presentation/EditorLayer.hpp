@@ -42,6 +42,7 @@ namespace DefectStudio
 	class ContextManager;
 	class KeymapResolver;
 	class RendererLayer;
+	class SceneDensityLoader;
 	class DomainLayer;
 	struct RendererWindowState;
 	struct StructureRecord;
@@ -284,6 +285,8 @@ namespace DefectStudio
 		std::array<char, 128> m_CommandPaletteSearchBuffer{};
 		std::optional<std::string> m_PendingPanelFocusTitle;
 		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
+		// task/83: loads CHGCAR densities for scene objects, polled once per frame.
+		Ref<SceneDensityLoader> m_SceneDensityLoader;
 		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see
 		// RendererStartupBootstrap::GenerateRendererWindowId, which pollPendingWindowRestores
 		// recomputes to match against whatever actually shows up in RendererLayer::GetWindows().

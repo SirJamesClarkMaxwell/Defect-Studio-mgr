@@ -3,6 +3,7 @@
 #include "ScientificRuntime/Python/ScriptBridgeUtils.hpp"
 
 #include <array>
+#include <fstream>
 #include <optional>
 #include <sstream>
 
@@ -10,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Core/Platform/PlatformPaths.hpp"
+#include "ScientificRuntime/Python/PythonErrors.hpp"
 
 namespace DefectStudio
 {
@@ -93,6 +95,32 @@ namespace DefectStudio
 		}
 
 		return {};
+	}
+
+	Result<std::vector<float>> ReadFloat32GridFile(const Path &gridPath, const std::size_t expectedCount)
+	{
+		std::ifstream file(gridPath.Native(), std::ios::binary);
+		if (!file)
+		{
+			return MakePythonExecutionError(
+				"Grid file could not be opened.",
+				"Path: " + gridPath.String(),
+				"Verify the loader script wrote the grid file before exiting.",
+				"python.grid_file.missing");
+		}
+
+		std::vector<float> values(expectedCount);
+		file.read(reinterpret_cast<char *>(values.data()),
+			static_cast<std::streamsize>(expectedCount * sizeof(float)));
+		if (!file)
+		{
+			return MakePythonExecutionError(
+				"Grid file was shorter than the reported dimensions.",
+				"Path: " + gridPath.String() + ", expected " + std::to_string(expectedCount) + " float32 values.",
+				"Verify the grid dimensions match the written file size.",
+				"python.grid_file.truncated");
+		}
+		return values;
 	}
 
 	PythonExampleScript ResolvePythonExampleScript(const char *fileName)

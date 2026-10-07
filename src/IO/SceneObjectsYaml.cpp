@@ -251,6 +251,48 @@ namespace DefectStudio::SceneObjectsYaml
 			 << plane.showBorder << YAML::Key << "visible" << YAML::Value << plane.visible;
 	}
 
+	bool ParseDensity(const YAML::Node &node, PersistedSceneDensity &density)
+	{
+		try
+		{
+			density.chgcarPath = node["chgcarPath"].as<std::string>("");
+			if (density.chgcarPath.empty())
+				return false;
+			if (node["positiveColor"] && !Vec3(node["positiveColor"], density.positiveColor))
+				return false;
+			if (node["negativeColor"] && !Vec3(node["negativeColor"], density.negativeColor))
+				return false;
+			density.persistKey = node["persistKey"].as<std::string>("");
+			density.displayName = node["displayName"].as<std::string>("");
+			density.referencePath = node["referencePath"].as<std::string>("");
+			density.component = node["component"].as<std::string>(density.component);
+			density.isoValue = node["isoValue"].as<float>(density.isoValue);
+			density.showNegative = node["showNegative"].as<bool>(density.showNegative);
+			density.alpha = node["alpha"].as<float>(density.alpha);
+			density.visible = node["visible"].as<bool>(density.visible);
+			density.renderable = node["renderable"].as<bool>(density.renderable);
+			return true;
+		}
+		catch (const YAML::Exception &)
+		{
+			return false;
+		}
+	}
+
+	void EmitDensity(YAML::Emitter &emit, const PersistedSceneDensity &density)
+	{
+		emit << YAML::Key << "kind" << YAML::Value << "SceneDensity" << YAML::Key << "persistKey" << YAML::Value
+			 << density.persistKey << YAML::Key << "displayName" << YAML::Value << density.displayName
+			 << YAML::Key << "chgcarPath" << YAML::Value << density.chgcarPath << YAML::Key << "referencePath"
+			 << YAML::Value << density.referencePath << YAML::Key << "component" << YAML::Value << density.component
+			 << YAML::Key << "isoValue" << YAML::Value << density.isoValue << YAML::Key << "showNegative"
+			 << YAML::Value << density.showNegative;
+		EmitVec3(emit, "positiveColor", density.positiveColor);
+		EmitVec3(emit, "negativeColor", density.negativeColor);
+		emit << YAML::Key << "alpha" << YAML::Value << density.alpha << YAML::Key << "visible" << YAML::Value
+			 << density.visible << YAML::Key << "renderable" << YAML::Value << density.renderable;
+	}
+
 	namespace
 	{
 		bool ParseBinding(const YAML::Node &node, PersistedPathBinding &binding)

@@ -209,6 +209,12 @@ void ParseObjects(const YAML::Node &objects, std::vector<PersistedSceneObject> &
 			valid = SceneObjectsYaml::ParsePath(node, value);
 			object = std::move(value);
 		}
+		else if (kind == "SceneDensity")
+		{
+			PersistedSceneDensity value;
+			valid = SceneObjectsYaml::ParseDensity(node, value);
+			object = std::move(value);
+		}
 		if (valid)
 			outObjects.push_back(std::move(object));
 		else
@@ -268,6 +274,10 @@ void EmitObjects(YAML::Emitter &emit, const std::vector<PersistedSceneObject> &o
 				else if constexpr (std::is_same_v<T, PersistedScenePath>)
 				{
 					SceneObjectsYaml::EmitPath(emit, value);
+				}
+				else if constexpr (std::is_same_v<T, PersistedSceneDensity>)
+				{
+					SceneObjectsYaml::EmitDensity(emit, value);
 				}
 				else
 				{

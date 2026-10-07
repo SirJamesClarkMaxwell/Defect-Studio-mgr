@@ -38,6 +38,10 @@ namespace DefectStudio::SceneObjectsYaml
 	[[nodiscard]] bool ParsePlane(const YAML::Node &node, PersistedScenePlane &plane);
 	void EmitPlane(YAML::Emitter &emit, const PersistedScenePlane &plane);
 
+	// Returns false without `chgcarPath`. Everything else falls back to the struct defaults.
+	[[nodiscard]] bool ParseDensity(const YAML::Node &node, PersistedSceneDensity &density);
+	void EmitDensity(YAML::Emitter &emit, const PersistedSceneDensity &density);
+
 	[[nodiscard]] bool ParsePath(const YAML::Node &node, PersistedScenePath &path);
 	void EmitPath(YAML::Emitter &emit, const PersistedScenePath &path);
 } // namespace DefectStudio::SceneObjectsYaml

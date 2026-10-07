@@ -80,6 +80,24 @@ namespace DefectStudio
 		bool visible = true;
 	};
 
+	// task/83: RendererWindowState::SceneDensity minus the loaded grid, which is re-read from
+	// chgcarPath (and referencePath) on load. component is DensityComponentKey's spelling.
+	struct PersistedSceneDensity
+	{
+		std::string persistKey;
+		std::string displayName;
+		std::string chgcarPath; // required
+		std::string referencePath;
+		std::string component = "magnetization";
+		float isoValue = 0.0f;
+		bool showNegative = true;
+		glm::vec3 positiveColor = glm::vec3(0.95f, 0.80f, 0.10f);
+		glm::vec3 negativeColor = glm::vec3(0.10f, 0.75f, 0.95f);
+		float alpha = 0.7f;
+		bool visible = true;
+		bool renderable = true;
+	};
+
 	struct PersistedPinnedMeasurement
 	{
 		std::string persistKey; // 32 lowercase hex chars; empty = none (a new one is assigned on load)
@@ -305,7 +323,7 @@ namespace DefectStudio
 
 	using PersistedSceneObject = std::variant<
 		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital,
-		PersistedScenePlane, PersistedScenePath>;
+		PersistedScenePlane, PersistedScenePath, PersistedSceneDensity>;
 
 	// task/51: one domain VacancySite. Not a scene object - a vacancy is structure data - but the
 	// structure itself is stored as a POSCAR, which has no way to say "an atom was here", so the
@@ -366,7 +384,7 @@ namespace DefectStudio
 	//   structures:
 	//     - structureKey: structures/NV/POSCAR
 	//       objects:
-	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital | ScenePlane
+	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital | ScenePlane | SceneDensity
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
 	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
 	//           written as `arrowKind` so it does not collide with the entry tag)

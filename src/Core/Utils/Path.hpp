@@ -90,6 +90,11 @@ namespace DefectStudio
 
 		[[nodiscard]] const std::filesystem::path &Native() const;
 		[[nodiscard]] std::string String() const;
+		// UTF-8, whatever the system code page. String() goes through the ANSI code page and throws
+		// for characters it cannot map (cp1252 has no "ż"); use these for anything shown in ImGui,
+		// written to YAML or passed as a process argument (ProcessRunner decodes those as UTF-8).
+		[[nodiscard]] std::string Utf8() const;
+		[[nodiscard]] static Path FromUtf8(std::string_view utf8);
 		[[nodiscard]] bool Empty() const;
 
 	private:
