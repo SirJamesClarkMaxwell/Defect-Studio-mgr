@@ -15,6 +15,7 @@
 #include "Presentation/Panels/OperatorRedoPanel.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/SceneDensityEditor.hpp"
+#include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -77,6 +78,7 @@ namespace DefectStudio
 				windowState.selectedPinnedMeasurements.clear();
 				windowState.selectedSceneOrbitals.clear();
 				windowState.selectedScenePlanes.clear();
+				windowState.selectedSceneHideVolumes.clear();
 				windowState.selectedScenePaths.clear();
 				windowState.selectedVacancies.clear();
 				windowState.defectFrameSelected = false;
@@ -186,6 +188,13 @@ namespace DefectStudio
 		DrawSceneDrawingAddItems(windowState, position, addCurvedArrow);
 		DrawScenePlaneAddItems(windowState, position);
 		DrawOrbitalAddMenu(windowState, position);
+		if (ImGui::BeginMenu("Bryła ukrywająca"))
+		{
+			if (ImGui::MenuItem("Kula")) AddSceneHideVolume(windowState, HideVolumeKind::Sphere);
+			if (ImGui::MenuItem("Prostopadłościan")) AddSceneHideVolume(windowState, HideVolumeKind::Box);
+			if (ImGui::MenuItem("Walec")) AddSceneHideVolume(windowState, HideVolumeKind::Cylinder);
+			ImGui::EndMenu();
+		}
 		if (ImGui::MenuItem("Tekst (swobodna etykieta)"))
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
@@ -198,6 +207,7 @@ namespace DefectStudio
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedSceneHideVolumes.clear();
 			windowState.selectedScenePaths.clear();
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;

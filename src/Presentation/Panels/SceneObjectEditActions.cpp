@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "Presentation/Panels/SceneDensityEditor.hpp"
+#include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Renderer/RendererLayer.hpp"
@@ -39,6 +40,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Plane: return windowState.selectedScenePlanes;
 			case SceneObjectEditKind::Path: return windowState.selectedScenePaths;
 			case SceneObjectEditKind::Density: return windowState.selectedSceneDensities;
+			case SceneObjectEditKind::HideVolume: return windowState.selectedSceneHideVolumes;
 			}
 			return windowState.selectedScenePaths;
 		}
@@ -52,6 +54,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Plane: return !GetScenePlaneClipboard().empty();
 			case SceneObjectEditKind::Path: return !GetScenePathClipboard().empty();
 			case SceneObjectEditKind::Density: return false;
+			case SceneObjectEditKind::HideVolume: return !GetSceneHideVolumeClipboard().empty();
 			}
 			return false;
 		}
@@ -176,8 +179,8 @@ namespace DefectStudio
 		switch (action)
 		{
 		case SceneObjectEditAction::Delete:
-			// DeleteScenePaths records the whole batch itself.
-			if (kind != SceneObjectEditKind::Path)
+			// Paths and hide volumes record the whole batch themselves.
+			if (kind != SceneObjectEditKind::Path && kind != SceneObjectEditKind::HideVolume)
 				PushPinnedMeasurementUndoSnapshot(windowState);
 			switch (kind)
 			{
@@ -196,6 +199,9 @@ namespace DefectStudio
 			case SceneObjectEditKind::Density:
 				EraseSceneDensities(windowState, windowState.selectedSceneDensities);
 				break;
+			case SceneObjectEditKind::HideVolume:
+				EraseSceneHideVolumes(windowState, windowState.selectedSceneHideVolumes);
+				break;
 			}
 			break;
 
@@ -207,6 +213,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState); break;
 			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState); break;
 			case SceneObjectEditKind::Density: DuplicateSelectedSceneDensities(windowState); break;
+			case SceneObjectEditKind::HideVolume: DuplicateSelectedSceneHideVolumes(windowState); break;
 			}
 			break;
 
@@ -219,6 +226,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Plane: CopyScenePlanesToClipboard(windowState); break;
 			case SceneObjectEditKind::Path: CopyScenePathsToClipboard(windowState); break;
 			case SceneObjectEditKind::Density: break;
+			case SceneObjectEditKind::HideVolume: CopySceneHideVolumesToClipboard(windowState); break;
 			}
 			break;
 
@@ -230,6 +238,7 @@ namespace DefectStudio
 			case SceneObjectEditKind::Plane: PasteScenePlanesFromClipboard(windowState); break;
 			case SceneObjectEditKind::Path: PasteScenePathsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Density: break;
+			case SceneObjectEditKind::HideVolume: PasteSceneHideVolumesFromClipboard(windowState); break;
 			}
 			break;
 		}

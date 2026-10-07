@@ -194,6 +194,9 @@ namespace DefectStudio
 				windowState, SceneObjectEditKind::Density, SceneObjectEditAction::Delete);
 
 		const bool scenePathSelected = !windowState.selectedScenePaths.empty();
+		if (!windowState.selectedSceneHideVolumes.empty() && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+			ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::HideVolume, SceneObjectEditAction::Delete);
+
 		if (scenePathSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 			ExecuteSceneObjectEditAction(
 				windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Delete);
@@ -257,6 +260,8 @@ namespace DefectStudio
 			return SceneObjectEditKind::FreeLabel;
 		if (!windowState.selectedSceneDensities.empty())
 			return SceneObjectEditKind::Density;
+		if (!windowState.selectedSceneHideVolumes.empty())
+			return SceneObjectEditKind::HideVolume;
 		return std::nullopt;
 	}
 
@@ -383,6 +388,7 @@ namespace DefectStudio
 		const SceneObjectId hitLabel = windowState.freeLabels[static_cast<std::size_t>(hitIndex)].id;
 		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
 		windowState.selectedPinnedMeasurements.clear();
+		windowState.selectedSceneHideVolumes.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedVacancies.clear();
 		windowState.defectFrameSelected = false;

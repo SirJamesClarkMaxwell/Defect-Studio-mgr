@@ -213,6 +213,7 @@ namespace DefectStudio
 		// Index into cachedCellEdgeVertices where the overlay (primitive-cell) edges begin.
 		std::size_t cachedOverlayEdgeFirstVertex = 0;
 		OpenGlMeshHandles scenePlaneMesh;
+		OpenGlMeshHandles sceneHideVolumeMesh;
 		OpenGlMeshHandles vacancyMesh;
 		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
 		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
@@ -297,7 +298,9 @@ namespace DefectStudio
 			const PathRenderInput *pathInput = nullptr,
 			bool showVacancies = true,
 			const std::vector<RendererWindowState::SceneDensity> &sceneDensities = {},
-			const std::vector<std::size_t> &selectedSceneDensities = {});
+			const std::vector<std::size_t> &selectedSceneDensities = {},
+			const std::vector<SceneHideVolume> &sceneHideVolumes = {},
+			const std::vector<std::size_t> &selectedSceneHideVolumes = {});
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -394,6 +397,14 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		void renderSceneHideVolumes(
+			const std::vector<SceneHideVolume> &volumes,
+			const std::vector<std::size_t> &selectedVolumes,
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &sceneOffset);
 		void renderVacancyMarkers(
 			const std::vector<RendererVacancyData> &vacancies,
 			const RendererViewCamera &camera,

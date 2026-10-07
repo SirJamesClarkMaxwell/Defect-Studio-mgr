@@ -11,6 +11,7 @@ namespace DefectStudio
 		bool orbitals = false;
 		bool planes = false;
 		bool densities = false;
+		bool hideVolumes = false;
 		bool paths = false;
 		bool vacancies = false;
 		bool defectFrame = false;

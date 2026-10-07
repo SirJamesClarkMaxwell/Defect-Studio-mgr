@@ -513,6 +513,12 @@ namespace DefectStudio
 				selectedSceneDensities.push_back(index);
 		}
 		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
+		std::vector<std::size_t> selectedSceneHideVolumes;
+		for (const SceneObjectId id : windowState.selectedSceneHideVolumes)
+		{
+			const std::size_t index = AnnotationIndex(windowState.sceneHideVolumes, id);
+			if (index < windowState.sceneHideVolumes.size()) selectedSceneHideVolumes.push_back(index);
+		}
 		const PathRenderInput pathInput{
 			windowState.paths.get(), &windowState.selectedScenePaths, windowState.showPathMeshOverlay, &bindings};
 		return m_RendererBackend->RenderWindow(
@@ -549,7 +555,9 @@ namespace DefectStudio
 			&pathInput,
 			windowState.showVacancies,
 			windowState.sceneDensities,
-			selectedSceneDensities);
+			selectedSceneDensities,
+			windowState.sceneHideVolumes,
+			selectedSceneHideVolumes);
 	}
 
 	LabelPickQuads RendererLayer::GetLabelPickQuads(const std::string &windowKey) const

@@ -644,7 +644,9 @@ namespace DefectStudio
 		const PathRenderInput *pathInput,
 		bool showVacancies,
 		const std::vector<RendererWindowState::SceneDensity> &sceneDensities,
-		const std::vector<std::size_t> &selectedSceneDensities)
+		const std::vector<std::size_t> &selectedSceneDensities,
+		const std::vector<SceneHideVolume> &sceneHideVolumes,
+		const std::vector<std::size_t> &selectedSceneHideVolumes)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -832,6 +834,7 @@ namespace DefectStudio
 				orbitalChannelDown->lobeAlpha, sceneOffset);
 		renderScenePlanes(
 			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+		renderSceneHideVolumes(sceneHideVolumes, selectedSceneHideVolumes, structure, camera, resources, globalSettings, sceneOffset);
 		// Drawn last and depth-test-disabled (see renderLabels) so an annotation always reads clearly
 		// on top of the structure, regardless of where in 3D space it's anchored.
 		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
@@ -931,6 +934,8 @@ namespace DefectStudio
 				}
 			}
 			DeleteMeshHandles(resources.vacancyMesh);
+			DeleteMeshHandles(resources.scenePlaneMesh);
+			DeleteMeshHandles(resources.sceneHideVolumeMesh);
 			for (auto &[id, cacheEntry] : resources.sceneOrbitalMeshCache)
 			{
 				(void)id;

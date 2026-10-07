@@ -13,7 +13,8 @@ namespace DefectStudio
 		Plane,
 		Path,
 		// Delete and Duplicate only: a density is a loaded grid, not a drawing to copy between windows.
-		Density
+		Density,
+		HideVolume
 	};
 
 	enum class SceneObjectEditAction

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <utility>
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 
 #include "Renderer/RendererWindowState.hpp"
@@ -127,6 +128,91 @@ namespace DefectStudio
 				result.push_back(atomIndex);
 		}
 		return result;
+	}
+
+	glm::vec3 HideVolumeWorldCenter(const SceneHideVolume &volume, const RendererStructureData &structure)
+	{
+		const glm::vec3 center = ResolveHideVolumeCenter(volume, structure).value_or(volume.center);
+		return volume.frame == HideVolumeFrame::Fractional ? structure.lattice * center : center;
+	}
+
+	std::vector<glm::vec3> BuildHideVolumeTriangles(
+		const SceneHideVolume &volume, const RendererStructureData &structure)
+	{
+		const PreparedHideVolume prepared = PrepareHideVolume(volume, structure.lattice, structure);
+		const glm::vec3 &extents = volume.halfExtents;
+		if (!prepared.valid || !(extents.x > 0.0f) ||
+			(volume.kind == HideVolumeKind::Box && !(extents.y > 0.0f)) ||
+			(volume.kind != HideVolumeKind::Sphere && !(extents.z > 0.0f)))
+			return {};
+
+		const glm::mat3 frameToWorld = volume.frame == HideVolumeFrame::Fractional ? structure.lattice : glm::mat3(1.0f);
+		const glm::vec3 scale = volume.kind == HideVolumeKind::Sphere ? glm::vec3(extents.x) :
+			volume.kind == HideVolumeKind::Cylinder ? glm::vec3(extents.x, extents.x, extents.z) : extents;
+		const glm::mat3 transform = frameToWorld * volume.orientation;
+		const bool reflected = glm::determinant(transform) < 0.0f;
+		std::vector<glm::vec3> mesh;
+		const auto world = [&](const glm::vec3 &local) {
+			return frameToWorld * (prepared.center + volume.orientation * (scale * local));
+		};
+		const auto triangle = [&](const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c) {
+			mesh.push_back(world(a));
+			mesh.push_back(world(reflected ? c : b));
+			mesh.push_back(world(reflected ? b : c));
+		};
+		if (volume.kind == HideVolumeKind::Sphere)
+		{
+			constexpr int slices = 24, stacks = 12;
+			mesh.reserve(slices * (stacks - 1) * 6);
+			const auto point = [](int slice, int stack) {
+				if (stack == 0) return glm::vec3(0, 0, 1);
+				if (stack == stacks) return glm::vec3(0, 0, -1);
+				const float theta = glm::two_pi<float>() * static_cast<float>(slice) / slices;
+				const float phi = glm::pi<float>() * static_cast<float>(stack) / stacks;
+				return glm::vec3(std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi));
+			};
+			for (int stack = 0; stack < stacks; ++stack)
+				for (int slice = 0; slice < slices; ++slice)
+				{
+					const auto a = point(slice, stack), b = point(slice, stack + 1);
+					const auto c = point(slice + 1, stack + 1), d = point(slice + 1, stack);
+					if (stack != stacks - 1) triangle(a, b, c);
+					if (stack != 0) triangle(a, c, d);
+				}
+		}
+		else if (volume.kind == HideVolumeKind::Box)
+		{
+			mesh.reserve(36);
+			for (int axis = 0; axis < 3; ++axis)
+				for (const float side : {-1.0f, 1.0f})
+				{
+					glm::vec3 normal(0), u(0), v(0);
+					normal[axis] = side;
+					u[(axis + 1) % 3] = 1.0f;
+					v[(axis + 2) % 3] = side;
+					const auto a = normal - u - v, b = normal + u - v;
+					const auto c = normal + u + v, d = normal - u + v;
+					triangle(a, b, c);
+					triangle(a, c, d);
+				}
+		}
+		else if (volume.kind == HideVolumeKind::Cylinder)
+		{
+			constexpr int segments = 32;
+			mesh.reserve(segments * 12);
+			for (int segment = 0; segment < segments; ++segment)
+			{
+				const float a = glm::two_pi<float>() * static_cast<float>(segment) / segments;
+				const float b = glm::two_pi<float>() * static_cast<float>(segment + 1) / segments;
+				const glm::vec3 lowerA(std::cos(a), std::sin(a), -1), lowerB(std::cos(b), std::sin(b), -1);
+				const glm::vec3 upperA(std::cos(a), std::sin(a), 1), upperB(std::cos(b), std::sin(b), 1);
+				triangle(lowerA, lowerB, upperB);
+				triangle(lowerA, upperB, upperA);
+				triangle(glm::vec3(0, 0, -1), lowerB, lowerA);
+				triangle(glm::vec3(0, 0, 1), upperA, upperB);
+			}
+		}
+		return mesh;
 	}
 
 	void ApplyHideVolumeMaskToWindowState(RendererWindowState &windowState)

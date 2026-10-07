@@ -6,7 +6,7 @@ namespace DefectStudio
 {
 	bool ObjectPropertiesSections::Empty() const
 	{
-		return !atoms && !labels && !orbitals && !planes && !densities && !paths && !vacancies && !defectFrame;
+		return !atoms && !labels && !orbitals && !planes && !densities && !hideVolumes && !paths && !vacancies && !defectFrame;
 	}
 
 	ObjectPropertiesSections ResolveObjectPropertiesSections(const RendererWindowState &windowState)
@@ -17,6 +17,7 @@ namespace DefectStudio
 		sections.orbitals = !windowState.selectedSceneOrbitals.empty();
 		sections.planes = !windowState.selectedScenePlanes.empty();
 		sections.densities = !windowState.selectedSceneDensities.empty();
+		sections.hideVolumes = !windowState.selectedSceneHideVolumes.empty();
 		sections.paths = !windowState.selectedScenePaths.empty();
 		sections.vacancies = !windowState.selectedVacancies.empty();
 		sections.defectFrame = windowState.defectFrameSelected && windowState.structure.defectFrame.has_value();

@@ -254,6 +254,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.sceneOrbitals.clear();
 	window.scenePlanes.clear();
 	window.sceneHideVolumes.clear();
+	window.selectedSceneHideVolumes.clear();
 	window.sceneDensities.clear();
 	if (window.paths != nullptr)
 		window.paths->Clear();
@@ -518,6 +519,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	}
 	for (const auto &[id, persisted] : loadedPaths)
 		ResolveScenePathObjectOriginBindings(window, id, persisted.get(), warnings);
+	SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
 }
 
 } // namespace DefectStudio

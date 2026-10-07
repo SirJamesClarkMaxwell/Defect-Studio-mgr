@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <string_view>
 
 #include <imgui.h>
 
@@ -74,62 +73,6 @@ namespace DefectStudio
 		}
 
 	} // namespace
-
-	std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
-		const SceneRegistry &scene, const SceneObjectKind kind)
-	{
-		std::vector<std::size_t> indices;
-		const auto view = scene.Registry().view<const SceneObjectComponent>();
-		for (const entt::entity entity : view)
-		{
-			const SceneObjectComponent &object = view.get<const SceneObjectComponent>(entity);
-			if (object.kind == kind)
-				indices.push_back(object.sourceIndex);
-		}
-		std::sort(indices.begin(), indices.end());
-		return indices;
-	}
-
-	bool SceneOutlinerPanel::drawSceneObjectContextMenu(
-		RendererWindowState &windowState,
-		const SelectionRowKind rowKind,
-		const SceneObjectId clickedId,
-		std::vector<SceneObjectId> &selection,
-		const bool openRequested)
-	{
-		if (openRequested)
-		{
-			selectAnnotationRowForContextMenu(windowState, rowKind, clickedId, selection);
-			ImGui::OpenPopup("##SceneObjectRowContextMenu");
-		}
-		if (!ImGui::BeginPopup("##SceneObjectRowContextMenu"))
-			return false;
-
-		const SceneObjectEditKind editKind = rowKind == SelectionRowKind::FreeLabel
-			? SceneObjectEditKind::FreeLabel
-			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
-			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
-			: rowKind == SelectionRowKind::Density ? SceneObjectEditKind::Density
-			: SceneObjectEditKind::Path;
-		bool sceneMutated = false;
-		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
-			const SceneObjectEditAction action)
-		{
-			const bool enabled = CanExecuteSceneObjectEditAction(windowState, editKind, action);
-			if (ImGui::MenuItem(label.data(), shortcut.data(), false, enabled))
-			{
-				ExecuteSceneObjectEditAction(windowState, editKind, action);
-				sceneMutated = action != SceneObjectEditAction::Copy;
-				ImGui::CloseCurrentPopup();
-			}
-		};
-		drawAction("Usun", "Delete", SceneObjectEditAction::Delete);
-		drawAction("Duplikuj", "Ctrl+D", SceneObjectEditAction::Duplicate);
-		drawAction("Kopiuj", "Ctrl+C", SceneObjectEditAction::Copy);
-		drawAction("Wklej", "Ctrl+V", SceneObjectEditAction::Paste);
-		ImGui::EndPopup();
-		return sceneMutated;
-	}
 
 	void SceneOutlinerPanel::drawAtomRow(
 		RendererWindowState &windowState, const std::size_t atomIndex,
@@ -510,6 +453,7 @@ namespace DefectStudio
 						windowState.selectedPinnedMeasurements.clear();
 						windowState.selectedSceneOrbitals.clear();
 						windowState.selectedScenePlanes.clear();
+						windowState.selectedSceneHideVolumes.clear();
 						windowState.selectedScenePaths.clear();
 						SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 					}
@@ -553,5 +497,4 @@ namespace DefectStudio
 		}
 		ImGui::PopID();
 	}
-
 } // namespace DefectStudio

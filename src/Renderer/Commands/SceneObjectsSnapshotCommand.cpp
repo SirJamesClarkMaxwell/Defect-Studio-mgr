@@ -127,6 +127,7 @@ namespace DefectStudio
 		KeepExistingSelection(window.selectedSceneOrbitals, window.sceneOrbitals);
 		KeepExistingSelection(window.selectedScenePlanes, window.scenePlanes);
 		KeepExistingSelection(window.selectedSceneDensities, window.sceneDensities);
+		KeepExistingSelection(window.selectedSceneHideVolumes, window.sceneHideVolumes);
 		std::erase_if(window.selectedScenePaths, [&window](const SceneObjectId id) {
 			return window.paths == nullptr || !window.paths->Store().Contains(id);
 		});
@@ -139,6 +140,7 @@ namespace DefectStudio
 		window.freeLabelDragging = false;
 		SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
 		SceneSystem::SyncLabelSelection(window.sceneRegistry, window);
+		SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
 	}
 
 	Unique<ICommand> CreateSceneObjectsSnapshotCommand(
