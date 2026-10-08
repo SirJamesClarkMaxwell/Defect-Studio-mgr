@@ -78,6 +78,9 @@ namespace DefectStudio
 		glm::mat3 orientation = glm::mat3(1.0f);
 		glm::vec3 halfExtents = glm::vec3(1.0f);
 		std::vector<std::size_t> anchorAtoms;
+		// The volume's axes in world space (unit columns) - the gizmo's Local frame. Equal to
+		// `orientation` for Anchored; `lattice * orientation`, normalised, for Fractional.
+		glm::mat3 worldAxes = glm::mat3(1.0f);
 	};
 
 	// A selected vacancy marker (structure.vacancies index) and the defect axes. Both are domain data:

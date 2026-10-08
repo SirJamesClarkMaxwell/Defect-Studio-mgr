@@ -220,7 +220,7 @@ namespace DefectStudio
 		if (!snapshot.paths.empty())
 			return glm::mat3(snapshot.paths.back().transform.rotation);
 		if (!snapshot.hideVolumes.empty())
-			return snapshot.hideVolumes.back().orientation;
+			return snapshot.hideVolumes.back().worldAxes;
 		return std::nullopt;
 	}
 

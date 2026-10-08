@@ -99,4 +99,28 @@ namespace DefectStudio::Tests
 		EXPECT_FLOAT_EQ(turned.halfExtents.x, 2.0f); // each apply starts from the snapshot
 		EXPECT_NEAR(turned.orientation[0].y, 1.0f, 1e-6f);
 	}
+	// A cubic cell whose a points along world y: the fractional volume's axes are not the world's.
+	TEST(SceneTransformHideVolumeTests, AFractionalVolumeTurnsAndShowsItsAxesInWorldSpace)
+	{
+		RendererWindowState window = WindowWithVolume();
+		window.structure.lattice = glm::mat3(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(-10.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 10.0f));
+		SceneHideVolume &volume = window.sceneHideVolumes.front();
+		volume.kind = HideVolumeKind::Cylinder;
+		volume.frame = HideVolumeFrame::Fractional;
+		volume.anchorAtoms.clear();
+		volume.center = glm::vec3(0.5f);
+		const SceneTransformSelectionSnapshot snapshot = CaptureSceneTransformSelection(window);
+
+		const std::optional<glm::mat3> local = SceneTransformLocalBasis(snapshot);
+		ASSERT_TRUE(local.has_value());
+		EXPECT_NEAR((*local)[0].y, 1.0f, 1e-6f); // Local X is the cell's a, world +y
+
+		SceneTransformDelta turn;
+		turn.spatial.rotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		ApplySceneTransformSelection(window, snapshot, turn, ModalTransformOp::Rotate,
+			TransformPivotMode::IndividualOrigins, glm::vec3(0.0f));
+		const glm::vec3 axis = glm::normalize(window.structure.lattice * window.sceneHideVolumes.front().orientation[2]);
+		EXPECT_NEAR(axis.y, -1.0f, 1e-5f); // world z turned about world x goes to -y
+		EXPECT_EQ(window.sceneHideVolumes.front().center, glm::vec3(0.5f));
+	}
 } // namespace DefectStudio::Tests

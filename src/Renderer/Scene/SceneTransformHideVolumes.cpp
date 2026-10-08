@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -23,6 +24,27 @@ namespace DefectStudio
 			return std::abs(glm::determinant(lattice)) > kEpsilon ? glm::inverse(lattice) * world : volume.center;
 		}
 
+		// World -> the volume's own frame space: identity for Anchored, fractional for Fractional.
+		// nullopt for a singular lattice.
+		[[nodiscard]] std::optional<glm::mat3> FrameFromWorld(const SceneHideVolume &volume, const glm::mat3 &lattice)
+		{
+			if (volume.frame != HideVolumeFrame::Fractional)
+				return glm::mat3(1.0f);
+			if (std::abs(glm::determinant(lattice)) <= kEpsilon)
+				return std::nullopt;
+			return glm::inverse(lattice);
+		}
+
+		// Gram-Schmidt, keeping column 2 (the cylinder axis) exact: `orientation` must stay orthonormal.
+		[[nodiscard]] glm::mat3 Orthonormalised(const glm::mat3 &axes)
+		{
+			const glm::vec3 z = glm::normalize(axes[2]);
+			glm::vec3 x = axes[0] - glm::dot(axes[0], z) * z;
+			x = glm::dot(x, x) > kEpsilon ? glm::normalize(x)
+				: glm::normalize(glm::cross(std::abs(z.z) < 0.9f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f), z));
+			return glm::mat3(x, glm::cross(z, x), z);
+		}
+
 		void RefreshMask(RendererWindowState &window)
 		{
 			SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
@@ -37,8 +59,16 @@ namespace DefectStudio
 				[id](const SceneHideVolume &volume) { return volume.id == id; });
 			if (it == window.sceneHideVolumes.end())
 				continue;
+			glm::mat3 worldAxes = it->orientation;
+			if (it->frame == HideVolumeFrame::Fractional)
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					const glm::vec3 world = window.structure.lattice * it->orientation[axis];
+					worldAxes[axis] = glm::dot(world, world) > kEpsilon ? glm::normalize(world) : it->orientation[axis];
+				}
 			snapshot.hideVolumes.push_back({static_cast<std::size_t>(it - window.sceneHideVolumes.begin()),
-				HideVolumeWorldCenter(*it, window.structure), it->center, it->orientation, it->halfExtents, it->anchorAtoms});
+				HideVolumeWorldCenter(*it, window.structure), it->center, it->orientation, it->halfExtents, it->anchorAtoms,
+				worldAxes});
 		}
 	}
 
@@ -57,13 +87,17 @@ namespace DefectStudio
 			volume.orientation = start.orientation;
 			volume.halfExtents = start.halfExtents;
 			volume.anchorAtoms = start.anchorAtoms;
+			// The world-space linear part and rotation, carried into the frame `orientation` lives in.
+			const std::optional<glm::mat3> frameFromWorld = FrameFromWorld(volume, window.structure.lattice);
+			if (!frameFromWorld)
+				continue;
+			const glm::mat3 worldFromFrame = glm::inverse(*frameFromWorld);
 			if (operation == ModalTransformOp::Scale)
 			{
-				// ponytail: in the Fractional frame the axes live in fractional space; the world-space
-				// stretch is read along them as if the cell were cubic. Exact for Anchored volumes.
+				const glm::mat3 linear = *frameFromWorld * delta.spatial.linear * worldFromFrame;
 				glm::vec3 axisScale(1.0f);
 				for (int axis = 0; axis < 3; ++axis)
-					axisScale[axis] = glm::length(delta.spatial.linear * start.orientation[axis]);
+					axisScale[axis] = glm::length(linear * start.orientation[axis]);
 				if (volume.kind == HideVolumeKind::Sphere)
 					volume.halfExtents.x = start.halfExtents.x * delta.scaleFactor;
 				else if (volume.kind == HideVolumeKind::Cylinder)
@@ -83,7 +117,10 @@ namespace DefectStudio
 				: selectionPivot;
 			const glm::vec3 world = ApplyTransformDelta(delta.spatial, start.worldCenter, pivot);
 			if (operation == ModalTransformOp::Rotate)
-				volume.orientation = glm::mat3_cast(glm::normalize(delta.spatial.rotation)) * start.orientation;
+				// ponytail: in a non-cubic cell a world rotation is not a rotation of fractional space;
+				// re-orthonormalising keeps the volume valid with the cylinder axis where it was turned to.
+				volume.orientation = Orthonormalised(
+					*frameFromWorld * glm::mat3_cast(glm::normalize(delta.spatial.rotation)) * worldFromFrame * start.orientation);
 			if (glm::distance(world, start.worldCenter) > kEpsilon)
 			{
 				volume.anchorAtoms.clear();
