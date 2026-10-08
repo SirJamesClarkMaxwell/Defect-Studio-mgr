@@ -512,6 +512,7 @@ namespace DefectStudio
 		// output vertex buffer/counter/VAO (what actually gets drawn) live in
 		// OpenGlViewportResources instead, see its isosurface* fields.
 		unsigned int m_IsosurfaceGridSsbo = 0;
+		unsigned int m_IsosurfaceCounterReadback = 0; // same sharing argument as the grid SSBO
 		unsigned int m_ComputeInputSsbo = 0;
 		unsigned int m_ComputeOutputSsbo = 0;
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;

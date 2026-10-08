@@ -912,6 +912,11 @@ namespace DefectStudio
 			glDeleteBuffers(1, &m_IsosurfaceGridSsbo);
 			m_IsosurfaceGridSsbo = 0;
 		}
+		if (m_IsosurfaceCounterReadback != 0)
+		{
+			glDeleteBuffers(1, &m_IsosurfaceCounterReadback);
+			m_IsosurfaceCounterReadback = 0;
+		}
 		for (auto &[windowKey, resources] : m_Viewports)
 		{
 			(void)windowKey;
@@ -1324,6 +1329,10 @@ namespace DefectStudio
 		glBindVertexArray(0);
 
 		glGenBuffers(1, &m_IsosurfaceGridSsbo);
+		glGenBuffers(1, &m_IsosurfaceCounterReadback);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, m_IsosurfaceCounterReadback);
+		glBufferData(GL_COPY_WRITE_BUFFER, sizeof(unsigned int), nullptr, GL_STREAM_READ);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
 	}
 
 	void CreateIsosurfaceGpuBuffers(OpenGlIsosurfaceGpuBuffers &buffers)
@@ -2939,9 +2948,16 @@ namespace DefectStudio
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		}
 
+		// The counter stays in video memory; reading it straight back made the driver migrate it to
+		// host memory on every re-march (NVIDIA 131186 per iso-slider step). Copy it GPU-side into a
+		// GL_STREAM_READ buffer and read that one instead.
 		unsigned int vertexCount = 0;
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffers.counterSsbo);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &vertexCount);
+		glBindBuffer(GL_COPY_READ_BUFFER, buffers.counterSsbo);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, m_IsosurfaceCounterReadback);
+		glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, sizeof(unsigned int));
+		glGetBufferSubData(GL_COPY_WRITE_BUFFER, 0, sizeof(unsigned int), &vertexCount);
+		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 		vertexCount = std::min(vertexCount, static_cast<unsigned int>(kMaxIsosurfaceGpuVertices));
