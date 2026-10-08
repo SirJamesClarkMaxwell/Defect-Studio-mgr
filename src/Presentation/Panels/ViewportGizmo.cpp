@@ -34,80 +34,11 @@ namespace DefectStudio
 		constexpr std::array<ImU32, 3> kAxisColors = {
 			IM_COL32(230, 70, 70, 200), IM_COL32(90, 210, 90, 200), IM_COL32(90, 150, 240, 200)};
 
-		struct Ray
-		{
-			glm::vec3 origin = glm::vec3(0.0f);
-			glm::vec3 direction = glm::vec3(0.0f, 0.0f, -1.0f);
-		};
-
 		struct AxisProjection
 		{
 			glm::vec2 direction = glm::vec2(0.0f);
 			bool valid = false;
 		};
-
-		[[nodiscard]] std::optional<Ray> MakeScreenRay(
-			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &screenPosition)
-		{
-			if (windowState.camera == nullptr || windowState.viewportSize.x <= 0.0f || windowState.viewportSize.y <= 0.0f)
-				return std::nullopt;
-			const glm::vec2 relative = screenPosition - glm::vec2(imageOrigin.x, imageOrigin.y);
-			if (relative.x < 0.0f || relative.y < 0.0f ||
-				relative.x >= windowState.viewportSize.x || relative.y >= windowState.viewportSize.y)
-				return std::nullopt;
-
-			const glm::vec2 ndc(
-				relative.x * 2.0f / windowState.viewportSize.x - 1.0f,
-				1.0f - relative.y * 2.0f / windowState.viewportSize.y);
-			const glm::mat4 inverseViewProjection =
-				glm::inverse(windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix());
-			const glm::vec4 nearH = inverseViewProjection * glm::vec4(ndc, -1.0f, 1.0f);
-			const glm::vec4 farH = inverseViewProjection * glm::vec4(ndc, 1.0f, 1.0f);
-			if (std::abs(nearH.w) <= 1.0e-6f || std::abs(farH.w) <= 1.0e-6f)
-				return std::nullopt;
-			const glm::vec3 nearPoint = glm::vec3(nearH) / nearH.w;
-			const glm::vec3 direction = glm::vec3(farH) / farH.w - nearPoint;
-			if (glm::dot(direction, direction) <= 1.0e-8f)
-				return std::nullopt;
-			return Ray{nearPoint, glm::normalize(direction)};
-		}
-
-		[[nodiscard]] bool IsAtomOrBondUnderMouse(
-			const RendererWindowState &windowState, const ImVec2 &imageOrigin, const glm::vec2 &mouse)
-		{
-			const std::optional<Ray> ray = MakeScreenRay(windowState, imageOrigin, mouse);
-			if (!ray.has_value())
-				return false;
-			for (const RendererAtomData &atom : windowState.structure.atoms)
-			{
-				if (!atom.visible)
-					continue;
-				const glm::vec3 offset = ray->origin - atom.cartesianPosition;
-				const float b = 2.0f * glm::dot(offset, ray->direction);
-				const float radius = atom.radius * 1.35f;
-				const float discriminant = b * b - 4.0f * (glm::dot(offset, offset) - radius * radius);
-				if (discriminant >= 0.0f && (-b + std::sqrt(discriminant)) * 0.5f > 0.001f)
-					return true;
-			}
-			for (const RendererBondData &bond : windowState.structure.bonds)
-			{
-				if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
-					bond.secondAtomIndex >= windowState.structure.atoms.size())
-					continue;
-				float rayDistance = 0.0f;
-				glm::vec3 closestOnBond(0.0f);
-				SelectionHitTest::ClosestPointsRaySegment(
-					ray->origin, ray->direction,
-					windowState.structure.atoms[bond.firstAtomIndex].cartesianPosition,
-					windowState.structure.atoms[bond.secondAtomIndex].cartesianPosition + bond.secondAtomPeriodicOffset,
-					rayDistance, closestOnBond);
-				const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
-				if (rayDistance > 0.001f &&
-					glm::distance(ray->origin + ray->direction * rayDistance, closestOnBond) <= pickRadius)
-					return true;
-			}
-			return false;
-		}
 
 		[[nodiscard]] std::optional<glm::vec2> ProjectAbsolute(
 			const glm::mat4 &viewProjection, const ImVec2 &imageOrigin, const ImVec2 &imageSize,
@@ -192,7 +123,8 @@ namespace DefectStudio
 		{
 			const glm::vec2 fromPivot = mouse - pivot;
 			const float radial = glm::length(fromPivot);
-			if (radial < kPickMinDistance * gizmoScale || radial > kPickMaxDistance * gizmoScale)
+			// Past the tip by the scale handle's square, so the whole square is grabbable.
+			if (radial < kPickMinDistance * gizmoScale || radial > (kPickMaxDistance + 2.0f * kScaleHandleHalfExtent) * gizmoScale)
 				return -1;
 			float bestDistance = 16.0f * gizmoScale;
 			int bestAxis = -1;
@@ -288,10 +220,9 @@ namespace DefectStudio
 		if (!gizmoScreen.has_value())
 			return false;
 
-		// Atom picking must not swallow a handle belonging to the selected atom(s). Scene-object
-		// gizmos keep the old overlap guard; path-edit markers already get first refusal in the chain.
-		const bool pointerOnGeometry = !HasAtomTransformTargets(snapshot) &&
-			IsAtomOrBondUnderMouse(windowState, imageOrigin, mouse);
+		// A handle always wins over the atom or bond drawn under it, for scene objects too: an overlap
+		// guard here left a hide volume's handles grabbable only in the gaps between atoms of a dense
+		// cell (task 91). Path-edit markers already get first refusal in the chain.
 		const TransformBases bases = SceneTransformBases(windowState, snapshot);
 		const OrientationAxes worldAxes =
 			ResolveNormalizedOrientationAxes(SceneTransformOrientation(windowState.transformOrientation, snapshot), bases);
@@ -302,13 +233,13 @@ namespace DefectStudio
 			RotateGizmoGeometry geometry = BuildRotateGizmoGeometry(
 				*windowState.camera, viewProjection, imageOrigin, imageSize, gizmoPosition, *gizmoScreen, worldAxes);
 			ScaleRotateGizmoGeometry(geometry, *gizmoScreen, gizmoScale);
-			const int hoveredAxis = pointerOnGeometry ? -1 : HitTestRotateArcs(geometry, mouse);
+			const int hoveredAxis = HitTestRotateArcs(geometry, mouse);
 			const float radial = glm::length(mouse - *gizmoScreen);
-			const bool hoveringTrackball = hovered && !pointerOnGeometry &&
+			const bool hoveringTrackball = hovered &&
 				radial >= geometry.trackballRadius - 7.0f * gizmoScale &&
 				radial <= geometry.trackballRadius + 7.0f * gizmoScale;
 			DrawRotateGizmo(geometry, *gizmoScreen, hoveredAxis, hoveringTrackball, imageOrigin, imageSize);
-			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 				(hoveredAxis >= 0 || hoveringTrackball))
 			{
 				BeginViewportModalTransform(
@@ -317,16 +248,16 @@ namespace DefectStudio
 				return true;
 			}
 			windowState.gizmoDragActive = false;
-			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringTrackball);
+			return hovered && (hoveredAxis >= 0 || hoveringTrackball);
 		}
 		if (windowState.gizmoOperation == GizmoOperation::Scale)
 		{
 			const float radial = glm::length(mouse - *gizmoScreen);
-			const bool hoveringCenter = hovered && !pointerOnGeometry && radial <= kScaleCenterRadius * gizmoScale;
-			const int hoveredAxis = pointerOnGeometry || hoveringCenter
+			const bool hoveringCenter = hovered && radial <= kScaleCenterRadius * gizmoScale;
+			const int hoveredAxis = hoveringCenter
 				? -1 : HitTestAxis(mouse, *gizmoScreen, axes, gizmoScale);
 			DrawScaleGizmo(*gizmoScreen, axes, hoveredAxis, hoveringCenter, imageOrigin, imageSize, gizmoScale);
-			if (hovered && !pointerOnGeometry && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
 				(hoveredAxis >= 0 || hoveringCenter))
 			{
 				BeginViewportModalTransform(
@@ -335,7 +266,7 @@ namespace DefectStudio
 				return true;
 			}
 			windowState.gizmoDragActive = false;
-			return hovered && !pointerOnGeometry && (hoveredAxis >= 0 || hoveringCenter);
+			return hovered && (hoveredAxis >= 0 || hoveringCenter);
 		}
 
 		std::array<glm::vec2, 3> axisDirections{};
@@ -344,8 +275,8 @@ namespace DefectStudio
 				axisDirections[axis] = axes[axis].direction;
 		auto planes = BuildTranslatePlaneGeometry(*gizmoScreen, axisDirections);
 		ScaleTranslatePlaneGeometry(planes, *gizmoScreen, gizmoScale);
-		const int hoveredAxis = pointerOnGeometry ? -1 : HitTestAxis(mouse, *gizmoScreen, axes, gizmoScale);
-		const int hoveredPlaneAxis = pointerOnGeometry || hoveredAxis >= 0
+		const int hoveredAxis = HitTestAxis(mouse, *gizmoScreen, axes, gizmoScale);
+		const int hoveredPlaneAxis = hoveredAxis >= 0
 			? -1
 			: HitTestTranslatePlaneHandles(mouse, planes);
 		DrawTranslatePlaneHandles(planes, hoveredPlaneAxis, imageOrigin, imageSize);
