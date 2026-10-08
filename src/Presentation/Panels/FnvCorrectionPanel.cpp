@@ -73,6 +73,8 @@ namespace DefectStudio
 	Ref<IPanel> FnvCorrectionPanel::Clone() const
 	{
 		auto clone = CreateRef<FnvCorrectionPanel>(m_RendererLayer, m_JobSystem, GetTitle(), IsVisible());
+		clone->m_SaveHandler = m_SaveHandler;
+		clone->m_Saved = m_Saved;
 		clone->m_Request = m_Request;
 		clone->m_DielectricSource = m_DielectricSource;
 		clone->m_Profiles = m_Profiles;
@@ -86,6 +88,7 @@ namespace DefectStudio
 	void FnvCorrectionPanel::invalidateProfiles()
 	{
 		++m_InputRevision;
+		m_Dirty = true;
 		m_Profiles.reset();
 		m_Error.clear();
 	}
@@ -128,6 +131,12 @@ namespace DefectStudio
 
 	void FnvCorrectionPanel::proposeWindows()
 	{
+		m_Dirty = true;
+		rebuildAlignments(std::nullopt);
+	}
+
+	void FnvCorrectionPanel::rebuildAlignments(const std::optional<std::array<FnvPlateauWindow, 3>> &windows)
+	{
 		if (!m_Profiles)
 			return;
 		for (int a = 0; a < 3; ++a)
@@ -142,13 +151,16 @@ namespace DefectStudio
 			if (!std::isfinite(axis.length) || axis.length <= 0.0 || axis.position.size() < 2 ||
 				axis.position.size() != axis.deltaV.size() || axis.position.size() != m_ModelPotential[a].size() ||
 				!finite(axis.position) || !finite(axis.deltaV) || !finite(m_ModelPotential[a]) ||
-				!(axis.position[1] > axis.position[0]))
+				!(axis.position[1] > axis.position[0]) ||
+				(windows && (!std::isfinite((*windows)[a].centre) || !std::isfinite((*windows)[a].width) ||
+					(*windows)[a].width < 0.0)))
 			{
 				m_Error = "Nieprawidłowe profile FNV.";
 				m_Profiles.reset();
 				return;
 			}
-			m_Alignments[a] = ProposeFnvAlignment(axis, m_ModelPotential[a]);
+			m_Alignments[a] = windows ? AlignFnvInWindow(axis, m_ModelPotential[a], (*windows)[a]) :
+				ProposeFnvAlignment(axis, m_ModelPotential[a]);
 		}
 	}
 
@@ -158,18 +170,22 @@ namespace DefectStudio
 		{
 			const float labelWidth = PropertyGridLabelWidth(
 				{"LOCPOT defektu", "LOCPOT bulk", "Ładunek q", "ε", "Źródło ε", "Środek", "ENCUT"});
+			drawSavedEntries(labelWidth);
 			PropertyGrid grid("##FnvData", labelWidth);
 			if (grid)
 			{
 				grid.Row("LOCPOT defektu");
 				if (DrawPathField("defect", m_Request.defectLocpot, m_Error))
 				{
-					if (const auto charge = ChargeFromCalculationFolder(m_Request.defectLocpot))
-						m_Request.charge = *charge;
-					if (m_Request.bulkLocpot.Empty())
-						if (const auto bulk = FindBulkLocpotNear(m_Request.defectLocpot))
-							m_Request.bulkLocpot = *bulk;
-					invalidateProfiles();
+					if (!selectSavedLocpot(m_Request.defectLocpot))
+					{
+						if (const auto charge = ChargeFromCalculationFolder(m_Request.defectLocpot))
+							m_Request.charge = *charge;
+						if (m_Request.bulkLocpot.Empty())
+							if (const auto bulk = FindBulkLocpotNear(m_Request.defectLocpot))
+								m_Request.bulkLocpot = *bulk;
+						invalidateProfiles();
+					}
 				}
 				grid.Row("LOCPOT bulk");
 				if (DrawPathField("bulk", m_Request.bulkLocpot, m_Error))
@@ -182,7 +198,8 @@ namespace DefectStudio
 				if (ImGui::InputDouble("##epsilon", &m_Request.dielectric, 0.0, 0.0, "%.3f"))
 					invalidateProfiles();
 				grid.Row("Źródło ε");
-				ImGui::InputText("##epsilonSource", m_DielectricSource.data(), m_DielectricSource.size());
+				if (ImGui::InputText("##epsilonSource", m_DielectricSource.data(), m_DielectricSource.size()))
+					m_Dirty = true;
 				grid.Row("Środek", "Współrzędne ułamkowe środka defektu.");
 				if (ImGui::InputScalarN("##centre", ImGuiDataType_Double, &m_Request.centreFractional.x, 3,
 					nullptr, nullptr, "%.6f"))
@@ -277,7 +294,9 @@ namespace DefectStudio
 				const auto &alignment = m_Alignments[a];
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(kAxes[a]);
-				ImGui::TableSetColumnIndex(1); ImGui::Checkbox("##use", &m_UseAxis[a]);
+				ImGui::TableSetColumnIndex(1);
+				if (ImGui::Checkbox("##use", &m_UseAxis[a]))
+					m_Dirty = true;
 				ImGui::TableSetColumnIndex(2); ImGui::Text("%.2f ± %.2f", alignment.window.centre, alignment.window.width / 2.0);
 				ImGui::TableSetColumnIndex(3); ImGui::Text("%+.4f", alignment.alignment);
 				ImGui::TableSetColumnIndex(4); ImGui::Text("%.4f", alignment.spread);
@@ -348,7 +367,10 @@ namespace DefectStudio
 	{
 		pollJob();
 		if (!IsVisible())
+		{
+			persistChanges();
 			return;
+		}
 		ImGui::SetNextWindowSize(ImVec2(780.0f, 760.0f), ImGuiCond_FirstUseEver);
 		bool stillOpen = true;
 		const bool draw = ImGui::Begin(GetTitle().c_str(), &stillOpen);
@@ -363,5 +385,6 @@ namespace DefectStudio
 				drawPlots();
 		}
 		ImGui::End();
+		persistChanges();
 	}
 } // namespace DefectStudio

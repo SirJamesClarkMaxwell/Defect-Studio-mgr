@@ -1,12 +1,14 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "Core/Utils/Memory.hpp"
+#include "IO/FnvCorrectionsIO.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "ScientificRuntime/Python/FnvCorrectionBridge.hpp"
 
@@ -24,9 +26,19 @@ namespace DefectStudio
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
+		// The project's saved corrections (EditorLayer, on project open). Does not call the handler.
+		void SetPersistedState(FnvCorrectionsFile file);
+		// Called with the whole file after every change worth keeping; EditorLayer writes it to disk.
+		void SetSaveHandler(std::function<void(const FnvCorrectionsFile &)> handler) { m_SaveHandler = std::move(handler); }
 
 	private:
 		void drawData();
+		void drawSavedEntries(float labelWidth);
+		void loadSavedEntry();
+		bool selectSavedLocpot(const Path &path);
+		[[nodiscard]] PersistedFnvCorrection currentEntry() const;
+		void persistChanges();
+		void publishSavedState();
 		void drawResult();
 		void drawPlots();
 		void drawAxisPlot(int axis);
@@ -34,10 +46,15 @@ namespace DefectStudio
 		void submitProfiles();
 		void pollJob();
 		void proposeWindows();
+		void rebuildAlignments(const std::optional<std::array<FnvPlateauWindow, 3>> &windows);
 		void copyResult() const;
 
 		RendererLayer &m_RendererLayer;
 		WeakRef<JobSystem> m_JobSystem;
+		std::function<void(const FnvCorrectionsFile &)> m_SaveHandler;
+		FnvCorrectionsFile m_Saved;
+		bool m_Dirty = false;
+		std::vector<std::string> m_SavedLabels;
 		FnvProfileRequest m_Request;
 		std::array<char, 256> m_DielectricSource{};
 		Ref<FnvCorrectionJob> m_PendingJob;

@@ -36,6 +36,7 @@
 #include "IO/PoscarWriter.hpp"
 #include "IO/POTCARWriter.hpp"
 #include "IO/ProjectManifestIO.hpp"
+#include "IO/FnvCorrectionsIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/RecentProjectsIO.hpp"
 #include "IO/SceneObjectsIO.hpp"
@@ -735,7 +736,7 @@ namespace DefectStudio
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_EventBus, m_ElementPropertiesTable,
 				"Atoms Displacement", false);
 			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
-			registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
+			m_FnvCorrectionPanelId = registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
@@ -803,6 +804,8 @@ namespace DefectStudio
 			true,
 			m_RendererLayer);
 		m_PanelsInitialized = true;
+		// Startup project loading runs before the analysis panels exist.
+		loadFnvCorrectionsForProject();
 		applyPanelVisibilityState();
 
 		loadAndQueueProjectWindowRestores();
@@ -1441,6 +1444,8 @@ namespace DefectStudio
 
 	void EditorLayer::refreshProjectDependentPanels()
 	{
+		loadFnvCorrectionsForProject();
+
 		if (auto panel = findPanel(m_ProjectTreePanelId).lock())
 		{
 			if (auto *treePanel = dynamic_cast<ProjectTreePanel *>(panel.get()))
@@ -1608,6 +1613,35 @@ namespace DefectStudio
 		std::string error;
 		if (!ProjectManifestIO::Save(m_ActiveProjectDirectory, *m_ActiveProject, error))
 			DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after displacement comparison change: {}", error);
+	}
+
+	void EditorLayer::loadFnvCorrectionsForProject()
+	{
+		auto panel = std::dynamic_pointer_cast<FnvCorrectionPanel>(findPanel(m_FnvCorrectionPanelId).lock());
+		if (panel == nullptr)
+			return;
+		FnvCorrectionsFile file;
+		if (m_ActiveProject.has_value())
+		{
+			std::vector<std::string> warnings;
+			std::string error;
+			if (!FnvCorrectionsIO::Load(m_ActiveProjectDirectory, file, warnings, error))
+			{
+				DS_LOG_WARN("EditorLayer: failed to load fnv_corrections.yaml: {}", error);
+				file = {};
+			}
+			for (const auto &warning : warnings)
+				DS_LOG_WARN("EditorLayer: fnv_corrections.yaml: {}", warning);
+		}
+		panel->SetPersistedState(std::move(file));
+		// Without a project the corrections live for the session only, as before.
+		panel->SetSaveHandler([this](const FnvCorrectionsFile &corrections) {
+			if (!m_ActiveProject.has_value())
+				return;
+			std::string error;
+			if (!FnvCorrectionsIO::Save(m_ActiveProjectDirectory, corrections, error))
+				DS_LOG_WARN("EditorLayer: failed to save fnv_corrections.yaml: {}", error);
+		});
 	}
 
 	void EditorLayer::onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event)

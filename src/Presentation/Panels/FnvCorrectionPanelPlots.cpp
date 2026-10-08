@@ -94,6 +94,7 @@ namespace DefectStudio
 				right = std::clamp(right, left + step, length);
 			const FnvPlateauWindow window{wrap(alignment.defectPosition + (left + right) / 2.0), right - left};
 			alignment = AlignFnvInWindow(axis, model, window);
+			m_Dirty = true;
 		}
 
 		const auto limits = ImPlot::GetPlotLimits();

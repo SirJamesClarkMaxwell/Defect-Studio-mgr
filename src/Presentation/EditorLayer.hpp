@@ -229,6 +229,8 @@ namespace DefectStudio
 		void onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event);
 		// Atoms-displacement comparison panel - see ProjectManifest::displacementComparisonPath.
 		void onDisplacementComparisonStateChanged(const ProjectEvents::DisplacementComparisonStateChanged &event);
+		// fnv_corrections.yaml -> FnvCorrectionPanel; the panel saves back through its handler.
+		void loadFnvCorrectionsForProject();
 		// ProjectTreePanel's per-directory RMB "Set as Displacement Comparison".
 		void onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event);
 		// This window's vertical-toolbar quick-launch button.
@@ -311,6 +313,7 @@ namespace DefectStudio
 		PanelId m_SettingsPanelId = 0;
 		PanelId m_ExportImagePanelId = 0;
 		PanelId m_DisplacementComparisonPanelId = 0;
+		PanelId m_FnvCorrectionPanelId = 0;
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
 		PanelId m_NewStructureWizardPanelId = 0;
