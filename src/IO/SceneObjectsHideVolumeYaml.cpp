@@ -32,6 +32,7 @@ namespace DefectStudio::SceneObjectsYaml
 			volume.alpha = node["alpha"].as<float>(volume.alpha);
 			volume.visible = node["visible"].as<bool>(volume.visible);
 			volume.renderable = node["renderable"].as<bool>(volume.renderable);
+			volume.active = node["active"] ? node["active"].as<bool>() : volume.visible;
 			return true;
 		}
 		catch (const YAML::Exception &)
@@ -53,6 +54,7 @@ namespace DefectStudio::SceneObjectsYaml
 			 << volume.name;
 		EmitVec3(emit, "color", volume.color);
 		emit << YAML::Key << "alpha" << YAML::Value << volume.alpha << YAML::Key << "visible" << YAML::Value
-			 << volume.visible << YAML::Key << "renderable" << YAML::Value << volume.renderable;
+			 << volume.visible << YAML::Key << "renderable" << YAML::Value << volume.renderable << YAML::Key
+			 << "active" << YAML::Value << volume.active;
 	}
 } // namespace DefectStudio::SceneObjectsYaml

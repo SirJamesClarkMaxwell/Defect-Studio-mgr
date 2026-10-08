@@ -342,9 +342,13 @@ namespace DefectStudio
 		bool invert = false;
 		std::string name;
 		glm::vec3 color = glm::vec3(0.9f, 0.5f, 0.2f);
-		float alpha = 0.18f;
+		float alpha = 0.8f; // Outline opacity.
+		// Task 91: the cut is `active`, the two eyes only show the outline. A file written before
+		// that has no `active` key, and its eye meant both - so the parser reads `active` from
+		// `visible` there, and an old volume with the eye off stays switched off.
+		bool active = true;
 		bool visible = true;
-		bool renderable = true;
+		bool renderable = false;
 	};
 
 	using PersistedSceneObject = std::variant<

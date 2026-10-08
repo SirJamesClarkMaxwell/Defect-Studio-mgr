@@ -65,7 +65,8 @@ namespace DefectStudio
 				return;
 			const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 			windowState.paths->Store().Visit([&](const ScenePath &path) {
-				if (!path.visible || !path.renderable)
+				if (!path.visible || !path.renderable ||
+					BoundToHiddenEndpoint(path, windowState.structure, windowState.sceneHideVolumes))
 					return;
 				const CachedPathGeometry *cached = windowState.paths->Caches().FindLastBuilt(path.id);
 				if (cached == nullptr)
@@ -95,7 +96,8 @@ namespace DefectStudio
 				return hits;
 
 			const ScenePath *path = windowState.paths->Store().Find(windowState.pathEdit.Path());
-			if (path == nullptr || !path->visible || !path->renderable)
+			if (path == nullptr || !path->visible || !path->renderable ||
+				BoundToHiddenEndpoint(*path, windowState.structure, windowState.sceneHideVolumes))
 				return hits;
 
 			const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);

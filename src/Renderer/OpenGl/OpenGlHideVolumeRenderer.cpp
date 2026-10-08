@@ -2,12 +2,16 @@
 
 #include "Renderer/OpenGl/OpenGlRendererBackend.hpp"
 
+#include <algorithm>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 #include <glad/gl.h>
 
 #include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
 {
@@ -18,17 +22,74 @@ namespace DefectStudio
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
+		const glm::vec2 &viewportPixelSize,
 		const glm::vec3 &sceneOffset)
 	{
-		if (selectedVolumes.empty()) return;
-		for (const std::size_t index : selectedVolumes)
+		const glm::mat4 view = camera.ViewMatrix();
+		const glm::mat4 viewProjection = camera.ProjectionMatrix() * view;
+		const glm::vec3 cameraRight(view[0][0], view[1][0], view[2][0]);
+		const glm::vec3 cameraBack(view[0][2], view[1][2], view[2][2]);
+		RendererGlobalRenderSettings lineSettings = globalSettings;
+		lineSettings.lighting.ambientIntensity = 1.0f;
+		lineSettings.lighting.keyIntensity = lineSettings.lighting.fillIntensity = lineSettings.lighting.backIntensity = 0.0f;
+		lineSettings.lighting.specularIntensity = lineSettings.lighting.rimIntensity = 0.0f;
+		lineSettings.colorSaturation = 1.0f;
+		for (std::size_t index = 0; index < volumes.size(); ++index)
 		{
-			if (index >= volumes.size() || !volumes[index].visible) continue;
+			if (!volumes[index].visible) continue;
 			const SceneHideVolume &volume = volumes[index];
-			const auto triangles = BuildHideVolumeTriangles(volume, structure);
-			renderSceneVolumeOverlay(triangles, resources.sceneHideVolumeMesh, camera, globalSettings,
-				volume.color, volume.alpha, sceneOffset);
+			const bool selected = std::find(selectedVolumes.begin(), selectedVolumes.end(), index) != selectedVolumes.end();
+			const auto edges = BuildHideVolumeEdges(volume, structure);
+			std::vector<glm::vec3> triangles;
+			triangles.reserve(edges.size() * 3);
+			for (std::size_t edge = 0; edge + 1 < edges.size(); edge += 2)
+			{
+				glm::vec3 a = edges[edge] + sceneOffset;
+				glm::vec3 b = edges[edge + 1] + sceneOffset;
+				if (!SelectionHitTest::ClipSegmentToNearPlane(viewProjection, a, b)) continue;
+				a -= sceneOffset;
+				b -= sceneOffset;
+				const glm::vec3 towardCamera = camera.Projection() == CameraProjection::Perspective
+					? camera.Position() - (a + b) * 0.5f - sceneOffset : cameraBack;
+				const glm::vec3 side = glm::cross(b - a, towardCamera);
+				if (glm::dot(side, side) <= 1.0e-12f) continue;
+				const auto widthA = WorldUnitsPerPixelAt(camera, a + sceneOffset, cameraRight, viewportPixelSize);
+				const auto widthB = WorldUnitsPerPixelAt(camera, b + sceneOffset, cameraRight, viewportPixelSize);
+				if (!widthA || !widthB) continue;
+				// Like plane frames, use quads instead of non-portable wide GL_LINES.
+				const glm::vec3 unitSide = glm::normalize(side) * (selected ? 1.5f : 0.75f);
+				const glm::vec3 da = unitSide * *widthA, db = unitSide * *widthB;
+				triangles.insert(triangles.end(), {a - da, b - db, b + db, a - da, b + db, a + da});
+			}
+			const glm::vec3 color = selected ? glm::mix(volume.color, glm::vec3(1.0f), 0.2f) : volume.color;
+			const float alpha = std::clamp(volume.alpha * (selected ? 1.25f : 1.0f), 0.0f, 1.0f) *
+				(volume.active ? 1.0f : 0.5f);
+			renderSceneVolumeOverlay(triangles, resources.sceneHideVolumeMesh, camera, lineSettings,
+				color, alpha, sceneOffset);
 		}
+	}
+
+	int OpenGlRendererBackend::uploadIsosurfaceHideVolumes(
+		const std::vector<SceneHideVolume> &volumes, const RendererStructureData &structure)
+	{
+		const unsigned int program = m_ShaderLibrary.Program("isosurface");
+		if (program == 0) return 0;
+		glUseProgram(program);
+		int count = 0;
+		// ponytail: clip the first eight valid active volumes; use a buffer if more are needed.
+		for (const auto &volume : volumes)
+		{
+			if (!volume.active) continue;
+			const auto worldToUnit = HideVolumeWorldToUnit(volume, structure);
+			if (!worldToUnit) continue;
+			const std::string suffix = "[" + std::to_string(count) + "]";
+			glUniformMatrix4fv(m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeWorldToUnit" + suffix),
+				1, GL_FALSE, &(*worldToUnit)[0][0]);
+			glUniform1i(m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeKind" + suffix), static_cast<int>(volume.kind));
+			glUniform1i(m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeInvert" + suffix), volume.invert ? 1 : 0);
+			if (++count == 8) break;
+		}
+		return count;
 	}
 
 	void OpenGlRendererBackend::renderSceneVolumeOverlay(

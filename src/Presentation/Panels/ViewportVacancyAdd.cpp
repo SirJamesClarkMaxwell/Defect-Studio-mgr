@@ -15,6 +15,7 @@
 #include "Domain/Defects/DefectModel.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Path/VacancyBond.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -156,13 +157,26 @@ namespace DefectStudio
 			return retained;
 		}
 
-		[[nodiscard]] float NearestShownAtomDistance(const RendererWindowState &windowState, const glm::vec3 &position)
+		// Hidden by hand (H), read from the scene rather than the mirror: a hide volume's cut is a
+		// view, not a statement about which atoms neighbour a vacancy. Taking it into account made a
+		// volume that covered the real shell bond the vacancy to a far atom (task 91).
+		[[nodiscard]] std::vector<bool> ShownByHand(const RendererWindowState &windowState)
+		{
+			std::vector<bool> shown(windowState.structure.atoms.size(), true);
+			for (const std::size_t index : CaptureHiddenSceneState(windowState).atomIndices)
+				if (index < shown.size())
+					shown[index] = false;
+			return shown;
+		}
+
+		[[nodiscard]] float NearestShownAtomDistance(
+			const RendererWindowState &windowState, const std::vector<bool> &shown, const glm::vec3 &position)
 		{
 			float nearest = std::numeric_limits<float>::max();
-			for (const RendererAtomData &atom : windowState.structure.atoms)
-				if (atom.visible)
+			for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+				if (shown[index])
 				{
-					const float distance = glm::length(atom.cartesianPosition - position);
+					const float distance = glm::length(windowState.structure.atoms[index].cartesianPosition - position);
 					if (distance > 1.0e-3f)
 						nearest = std::min(nearest, distance);
 				}
@@ -188,12 +202,13 @@ namespace DefectStudio
 	std::vector<std::size_t> NeighbourShell(const RendererWindowState &windowState, const glm::vec3 &position)
 	{
 		const auto &atoms = windowState.structure.atoms;
-		const float nearest = NearestShownAtomDistance(windowState, position);
+		const std::vector<bool> shown = ShownByHand(windowState);
+		const float nearest = NearestShownAtomDistance(windowState, shown, position);
 		std::vector<std::size_t> shell;
 		for (std::size_t index = 0; index < atoms.size(); ++index)
 		{
 			const float distance = glm::length(atoms[index].cartesianPosition - position);
-			if (atoms[index].visible && distance > 1.0e-3f && distance <= nearest * kShellTolerance)
+			if (shown[index] && distance > 1.0e-3f && distance <= nearest * kShellTolerance)
 				shell.push_back(index);
 		}
 		return shell;
@@ -237,7 +252,7 @@ namespace DefectStudio
 			for (const std::size_t a : chosen)
 			{
 				const glm::vec3 &first = vacancies[a].cartesianPosition;
-				const float shell = NearestShownAtomDistance(windowState, first) * kShellTolerance;
+				const float shell = NearestShownAtomDistance(windowState, ShownByHand(windowState), first) * kShellTolerance;
 				for (std::size_t b = 0; b < vacancies.size(); ++b)
 				{
 					const std::pair<std::size_t, std::size_t> pair{std::min(a, b), std::max(a, b)};

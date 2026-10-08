@@ -7,6 +7,8 @@
 
 #include "Renderer/Scene/SceneObjectAppearance.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
 
 #include <algorithm>
 #include <array>
@@ -811,41 +813,46 @@ namespace DefectStudio
 		// Earlier atoms/bonds keep their colour through the translucent fill; later overlays
 		// already tested against this same marker depth before the pre-pass was added.
 		if (showVacancies)
-			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
+			renderVacancyMarkers(structure, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
+		PathRenderInput boundPathInput = pathInput != nullptr ? *pathInput : PathRenderInput{};
+		boundPathInput.structure = &structure;
+		boundPathInput.hideVolumes = &sceneHideVolumes;
 		// Transparent paths need the opaque atom depth/color first, just as the other overlays do.
 		if (pathInput != nullptr && pathInput->paths != nullptr)
-			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
+			renderScenePaths(boundPathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
 		if (showVacancies)
-			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+			renderVacancyMarkers(structure, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+		const int hideVolumeCount = uploadIsosurfaceHideVolumes(sceneHideVolumes, structure);
 		renderSceneOrbitals(
-			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset,
+			sceneOrbitals, selectedSceneOrbitals, structure, hideVolumeCount, camera, resources, globalSettings, sceneOffset,
 			viewportPixelSize);
 		renderSceneDensities(
-			sceneDensities, selectedSceneDensities, camera, resources, globalSettings, sceneOffset, viewportPixelSize);
+			sceneDensities, selectedSceneDensities, hideVolumeCount, camera, resources, globalSettings, sceneOffset, viewportPixelSize);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[0], orbitalChannelUp->vertexCount, camera, globalSettings,
 				orbitalChannelUp->positiveLobeColor, orbitalChannelUp->negativeLobeColor, orbitalChannelUp->lobeAlpha,
-				sceneOffset);
+				sceneOffset, false, 0.0f, true, false, hideVolumeCount);
 		if (orbitalChannelDown != nullptr && orbitalChannelDown->enabled && orbitalChannelDown->vertexCount > 0)
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[1], orbitalChannelDown->vertexCount, camera, globalSettings,
 				orbitalChannelDown->positiveLobeColor, orbitalChannelDown->negativeLobeColor,
-				orbitalChannelDown->lobeAlpha, sceneOffset);
+				orbitalChannelDown->lobeAlpha, sceneOffset, false, 0.0f, true, false, hideVolumeCount);
 		renderScenePlanes(
 			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
-		renderSceneHideVolumes(sceneHideVolumes, selectedSceneHideVolumes, structure, camera, resources, globalSettings, sceneOffset);
+		renderSceneHideVolumes(sceneHideVolumes, selectedSceneHideVolumes, structure, camera, resources, globalSettings,
+			viewportPixelSize, sceneOffset);
 		// Drawn last and depth-test-disabled (see renderLabels) so an annotation always reads clearly
 		// on top of the structure, regardless of where in 3D space it's anchored.
 		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
 		{
 			renderLabels(
-				structure, camera, resources, globalSettings, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
+				structure, sceneHideVolumes, camera, resources, globalSettings, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
 				freeLabels, selectedFreeLabels, sceneOffset, bondLabelAutoOffsetEnabled,
 				bondLabelAutoOffsetMagnitude, bondLabelAlignThresholdDeg);
 		}
 		if (pathInput != nullptr && pathInput->paths != nullptr)
-			renderScenePaths(*pathInput, camera, resources, globalSettings, true, viewportPixelSize, sceneOffset);
+			renderScenePaths(boundPathInput, camera, resources, globalSettings, true, viewportPixelSize, sceneOffset);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -2049,6 +2056,7 @@ namespace DefectStudio
 	// reads back - no separate export wiring needed.
 	void OpenGlRendererBackend::renderLabels(
 		const RendererStructureData &structure,
+		const std::vector<SceneHideVolume> &volumes,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
@@ -2121,6 +2129,18 @@ namespace DefectStudio
 			}
 			instancesToDraw = &resources.cachedLabelInstances;
 			backgroundInstancesToDraw = &resources.cachedLabelBackgroundInstances;
+			if (!volumes.empty())
+			{
+				pinnedInstances = resources.cachedLabelInstances;
+				pinnedBackgroundInstances = resources.cachedLabelBackgroundInstances;
+				const auto covered = [&](const OpenGlLabelInstance &instance) {
+					return PointCoveredByHideVolumes(volumes, instance.worldCenter, structure);
+				};
+				std::erase_if(pinnedInstances, covered);
+				std::erase_if(pinnedBackgroundInstances, covered);
+				instancesToDraw = &pinnedInstances;
+				backgroundInstancesToDraw = &pinnedBackgroundInstances;
+			}
 		}
 		else if (!pinnedMeasurements.empty() || !freeLabels.empty())
 		{
@@ -2235,6 +2255,7 @@ namespace DefectStudio
 							renderOffset += SafeNormalize(projected, fallbackPerp) * bondLabelAutoOffsetMagnitude;
 						}
 
+						if (PointCoveredByHideVolumes(volumes, midpoint + renderOffset, structure)) return;
 						const LabelLocalBounds bounds = AppendBondLabelInstances(
 							*m_LabelFont, midpoint + renderOffset, lengthAngstrom, pinnedInstances, effectiveStyle,
 							totalRotation, selected);
@@ -2301,6 +2322,7 @@ namespace DefectStudio
 							const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 							const float angleDeg = glm::degrees(std::acos(cosAngle));
 							const glm::vec3 anglePosition = pin.frozenAtomPositions[1] + offset;
+							if (PointCoveredByHideVolumes(volumes, anglePosition, structure)) continue;
 							const LabelLocalBounds bounds = AppendAngleLabelInstances(*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle, pin.rotationOffsetRadians, selected);
 							AppendLabelBackgroundInstance(anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances, selected);
 							recordPick(resources.labelPickQuads.pinned[pinIndex], anglePosition, bounds, effectiveStyle,
@@ -2329,6 +2351,7 @@ namespace DefectStudio
 						const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 						const float angleDeg = glm::degrees(std::acos(cosAngle));
 						const glm::vec3 anglePosition = vertexAtom.cartesianPosition + offset;
+						if (PointCoveredByHideVolumes(volumes, anglePosition, structure)) continue;
 						const LabelLocalBounds bounds = AppendAngleLabelInstances(
 							*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle,
 							pin.rotationOffsetRadians, selected);
@@ -2342,7 +2365,7 @@ namespace DefectStudio
 			for (std::size_t labelIndex = 0; labelIndex < freeLabels.size(); ++labelIndex)
 			{
 				const RendererWindowState::FreeLabel &label = freeLabels[labelIndex];
-				if (!label.visible)
+				if (!IsFreeLabelVisible(label, structure, volumes))
 					continue;
 				const bool selected = std::find(selectedFreeLabels.begin(), selectedFreeLabels.end(), labelIndex) !=
 					selectedFreeLabels.end();
@@ -2656,6 +2679,7 @@ namespace DefectStudio
 
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
+		glUniform1i(m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeCount"), 0);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
@@ -2747,7 +2771,8 @@ namespace DefectStudio
 		bool outline,
 		float outlineExpansion,
 		bool writeDepth,
-		bool twoSidedOutline)
+		bool twoSidedOutline,
+		int hideVolumeCount)
 	{
 		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
 		// (resources.isosurfaceVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
@@ -2759,6 +2784,8 @@ namespace DefectStudio
 
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
+		const int hideVolumeCountLocation = m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeCount");
+		glUniform1i(hideVolumeCountLocation, hideVolumeCount);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
@@ -2848,6 +2875,7 @@ namespace DefectStudio
 			glDisable(GL_CULL_FACE);
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+		glUniform1i(hideVolumeCountLocation, 0);
 		glBindVertexArray(0);
 		glDepthMask(previousDepthMask);
 		if (previousCull)

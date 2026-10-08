@@ -5,6 +5,7 @@
 
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
+#include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/SceneOutlinerVisibilityColumns.hpp"
 
 #include <algorithm>
@@ -98,6 +99,14 @@ namespace DefectStudio
 			: rowKind == SelectionRowKind::HideVolume ? SceneObjectEditKind::HideVolume
 			: SceneObjectEditKind::Path;
 		bool sceneMutated = false;
+		if (rowKind == SelectionRowKind::HideVolume && ImGui::MenuItem("Włącz/Wyłącz ukrywanie"))
+		{
+			const auto index = AnnotationIndex(windowState.sceneHideVolumes, clickedId);
+			if (index < windowState.sceneHideVolumes.size())
+				SetSceneHideVolumeActive(windowState, clickedId, !windowState.sceneHideVolumes[index].active);
+			sceneMutated = true;
+			ImGui::CloseCurrentPopup();
+		}
 		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
 			const SceneObjectEditAction action)
 		{

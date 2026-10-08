@@ -161,6 +161,11 @@ namespace DefectStudio
 		// empty context: every bound node falls back to its authored position. Captures that window
 		// by reference, so it lives only as long as the RenderWindow call it is passed to.
 		const BindingContext *bindings = nullptr;
+		// Task 91: a path bound to a hidden atom (H or a hide volume) or to a hidden or covered
+		// vacancy is not drawn - a generated vacancy bond goes with its endpoint, as a bond does.
+		// Filled by RenderWindow; null skips the check.
+		const RendererStructureData *structure = nullptr;
+		const std::vector<SceneHideVolume> *hideVolumes = nullptr;
 	};
 
 	// Shared cleanup for per-object cached meshes and the backend's static meshes.
@@ -373,6 +378,7 @@ namespace DefectStudio
 		void renderSceneDensities(
 			const std::vector<RendererWindowState::SceneDensity> &densities,
 			const std::vector<std::size_t> &selectedDensities,
+			int hideVolumeCount,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -382,6 +388,7 @@ namespace DefectStudio
 			const std::vector<RendererWindowState::SceneOrbital> &orbitals,
 			const std::vector<std::size_t> &selectedOrbitals,
 			const RendererStructureData &structure,
+			int hideVolumeCount,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -404,7 +411,10 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset);
+		[[nodiscard]] int uploadIsosurfaceHideVolumes(
+			const std::vector<SceneHideVolume> &volumes, const RendererStructureData &structure);
 		void renderSceneVolumeOverlay(
 			const std::vector<glm::vec3> &triangles,
 			OpenGlMeshHandles &handles,
@@ -413,7 +423,8 @@ namespace DefectStudio
 			const glm::vec3 &color, float alpha,
 			const glm::vec3 &sceneOffset);
 		void renderVacancyMarkers(
-			const std::vector<RendererVacancyData> &vacancies,
+			const RendererStructureData &structure,
+			const std::vector<SceneHideVolume> &volumes,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -437,6 +448,7 @@ namespace DefectStudio
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,
+			const std::vector<SceneHideVolume> &volumes,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -481,7 +493,8 @@ namespace DefectStudio
 			bool outline = false,
 			float outlineExpansion = 0.0f,
 			bool writeDepth = true,
-			bool twoSidedOutline = false);
+			bool twoSidedOutline = false,
+			int hideVolumeCount = 0);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.

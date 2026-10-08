@@ -10,6 +10,16 @@ namespace DefectStudio
 {
 	class RendererLayer;
 	struct RendererWindowState;
+	struct ViewportPickRay
+	{
+		glm::vec3 origin;
+		glm::vec3 direction;
+	};
+	// Displayed-image coordinates; origin is in scene space (viewOffset removed).
+	[[nodiscard]] std::optional<ViewportPickRay> ComputeViewportPickRay(
+		const RendererWindowState &window, glm::vec2 position, glm::vec2 imageSize);
+	[[nodiscard]] std::optional<std::size_t> PickBondAlongRay(
+		const RendererWindowState &window, const glm::vec3 &origin, const glm::vec3 &direction);
 
 	// Nearest visible atom whose (padded) sphere the world-space ray enters, or nullopt. Ignores
 	// pickAtoms - callers decide whether atoms are pickable. The scene-object click handlers use it

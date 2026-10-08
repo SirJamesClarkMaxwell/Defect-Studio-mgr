@@ -1,6 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
+#include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/HiddenSceneState.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace
 {
@@ -76,5 +81,28 @@ namespace
 		const HiddenSceneState carried =
 			RemapHiddenSceneStateAfterAtomRemoval(CaptureHiddenSceneState(before), {2});
 		EXPECT_EQ(carried.atomIndices, (std::vector<std::size_t>{3, 4}));
+	}
+
+	TEST(HiddenSceneStateTests, AHideVolumesCutIsNotRecordedAsAManualHide)
+	{
+		// Task 91 item 3: the structure mirror carries the volume's cut, so a snapshot read from it
+		// turned covered atoms into a manual H that outlived the volume being shrunk.
+		RendererWindowState window;
+		window.structure = MakeChain(5);
+		window.structure.lattice = glm::mat3(40.0f);
+		for (std::size_t index = 0; index < 5; ++index)
+			window.structure.atoms[index].cartesianPosition = glm::vec3(3.0f * static_cast<float>(index), 0.0f, 0.0f);
+		SceneSystem::SyncSceneWithStructure(window.sceneRegistry, window.structure);
+		SceneSystem::ApplySelectionAndVisibilityToScene(window.sceneRegistry, {}, {4}, {}, {}); // H on atom 4
+		SceneHideVolume volume;
+		volume.halfExtents = glm::vec3(1.0f); // covers atom 0 only
+		window.sceneHideVolumes.push_back(volume);
+		SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
+		ASSERT_FALSE(window.structure.atoms[0].visible);
+
+		const HiddenSceneState state = CaptureHiddenSceneState(window);
+		EXPECT_EQ(state.atomIndices, (std::vector<std::size_t>{4}));
+		// Bond 0-1 is cut by the volume in the mirror, not hidden by hand.
+		EXPECT_EQ(std::count(state.bondEndpoints.begin(), state.bondEndpoints.end(), std::pair<std::size_t, std::size_t>{0, 1}), 0);
 	}
 } // namespace

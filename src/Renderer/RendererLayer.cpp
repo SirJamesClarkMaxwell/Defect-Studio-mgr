@@ -638,6 +638,9 @@ namespace DefectStudio
 		previewState.sceneOrbitals = source.sceneOrbitals;
 		previewState.scenePlanes = source.scenePlanes;
 		previewState.sceneDensities = source.sceneDensities;
+		previewState.sceneHideVolumes = source.sceneHideVolumes;
+		for (auto &volume : previewState.sceneHideVolumes)
+			volume.visible = volume.renderable;
 		if (source.paths != nullptr) SceneSystem::EnsurePathSystem(previewState).ReplaceStore(source.paths->Store());
 		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
 		// What an export contains is the outliner's camera column alone, independent of what H hid
@@ -1292,13 +1295,13 @@ namespace DefectStudio
 		for (const std::size_t index : snapshot.selectedAtomIndices)
 			if (index < windowState.structure.atoms.size())
 				snapshot.selectedAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
-		for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+		// The manual hide only - a hide volume's cut is re-derived on restore, not stored.
+		for (const std::size_t index : CaptureHiddenSceneState(windowState).atomIndices)
 		{
-			if (!windowState.structure.atoms[index].visible)
-			{
-				snapshot.hiddenAtomIndices.push_back(index);
-				snapshot.hiddenAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
-			}
+			if (index >= windowState.structure.atoms.size())
+				continue;
+			snapshot.hiddenAtomIndices.push_back(index);
+			snapshot.hiddenAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
 		}
 		return snapshot;
 	}
@@ -1729,7 +1732,7 @@ namespace DefectStudio
 		if (undoStack == nullptr || undoStack->IsApplying() || g_RendererLayer == nullptr)
 			return;
 
-		if (CaptureHiddenSceneState(windowState.structure) == before)
+		if (CaptureHiddenSceneState(windowState) == before)
 			return;
 
 		RendererLayer &rendererLayer = *g_RendererLayer;
@@ -2447,7 +2450,7 @@ namespace DefectStudio
 				return;
 			}
 		}
-		HiddenSceneState before = CaptureHiddenSceneState(windowState.structure);
+		HiddenSceneState before = CaptureHiddenSceneState(windowState);
 		if (showAll || HasSelectedSceneObjectsForHide(windowState))
 			PushPinnedMeasurementUndoSnapshot(windowState);
 		if (showAll)

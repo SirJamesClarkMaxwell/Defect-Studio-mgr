@@ -24,6 +24,14 @@ namespace DefectStudio
 	// Atoms and bonds with visible == false. Bond endpoints are normalized to (min, max).
 	[[nodiscard]] HiddenSceneState CaptureHiddenSceneState(const RendererStructureData &structure);
 
+	// What the user hid, read from VisibilityComponent rather than the window's structure mirror:
+	// the mirror also carries what hide volumes cut (ApplyHideVolumeMaskToWindowState), and
+	// recording that as a manual hide keeps those atoms hidden after the volume shrinks or goes.
+	// Every undo / view snapshot of a live window goes through this one. Falls back to the mirror
+	// for a window whose scene has no atom entities.
+	struct RendererWindowState;
+	[[nodiscard]] HiddenSceneState CaptureHiddenSceneState(const RendererWindowState &window);
+
 	// `removedAtomIndices` are indices in the pre-removal structure, any order, duplicates allowed.
 	// Hidden atoms that were removed are dropped; the rest shift down by the number of removed atoms
 	// below them. Bonds touching a removed atom are dropped; the rest have both endpoints remapped.

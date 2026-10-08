@@ -128,7 +128,8 @@ namespace DefectStudio
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
-			if (!windowState.pinnedMeasurements[i].visible)
+			glm::vec3 anchor(0.0f);
+			if (!ResolvePickablePinnedMeasurementPosition(windowState, i, anchor))
 				continue;
 			if (const auto inside = MouseInLabelQuad(
 					windowState, windowState.labelPickQuads.pinned, i, imageOrigin, imageSize, mousePos))
@@ -140,9 +141,8 @@ namespace DefectStudio
 				}
 				continue;
 			}
-			glm::vec3 anchor(0.0f);
 			glm::vec2 anchorScreen;
-			if (!resolveAnchor(windowState.pinnedMeasurements[i], anchor) || !projectToScreen(anchor, anchorScreen))
+			if (!projectToScreen(anchor, anchorScreen))
 				continue;
 			const float distance = glm::length(mousePos - anchorScreen);
 			if (distance < bestDistance)
@@ -175,6 +175,7 @@ namespace DefectStudio
 		windowState.defectFrameSelected = false;
 		windowState.selectedScenePlanes.clear();
 		windowState.selectedScenePaths.clear();
+		windowState.selectedSceneHideVolumes.clear();
 		if (!additive)
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 

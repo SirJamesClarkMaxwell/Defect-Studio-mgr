@@ -82,7 +82,13 @@ namespace DefectStudio
 		{
 			const ImVec2 openedAt = ImGui::GetMousePosOnOpeningCurrentPopup();
 			m_ContextMenuWorldPosition =
-				computeViewportWorldPosition(windowState, openedAt.x - imageOrigin.x, openedAt.y - imageOrigin.y);
+				computeViewportWorldPosition(windowState,
+					(openedAt.x - imageOrigin.x) * windowState.viewportSize.x / imageSize.x,
+					(openedAt.y - imageOrigin.y) * windowState.viewportSize.y / imageSize.y);
+			m_ContextMenuAtom.reset();
+			if (const auto ray = ComputeViewportPickRay(windowState,
+				glm::vec2(openedAt.x - imageOrigin.x, openedAt.y - imageOrigin.y), glm::vec2(imageSize.x, imageSize.y)))
+				m_ContextMenuAtom = PickAtomAlongRay(windowState, ray->origin, ray->direction);
 		}
 
 		Ref<EventBus> eventBus = m_Layer.GetEventBus();
@@ -101,9 +107,13 @@ namespace DefectStudio
 		if (ImGui::BeginMenu("Add"))
 		{
 			DrawSceneAddMenu(windowState, m_CommandRegistry, m_ContextMenuWorldPosition, eventBus, false,
-				&m_OperatorRedoPanel, &m_OperatorRegistry, m_Layer.GetGlobalSettings().bondRadiusMultiplier);
+				&m_OperatorRedoPanel, &m_OperatorRegistry, m_Layer.GetGlobalSettings().bondRadiusMultiplier,
+				SceneAddMenuSection::Full, m_ContextMenuAtom);
 			ImGui::EndMenu();
 		}
+		if (m_ContextMenuAtom)
+			DrawHideVolumeAddMenu(windowState, m_ContextMenuWorldPosition, m_OperatorRedoPanel, m_OperatorRegistry,
+				m_ContextMenuAtom, "Ukryj wokół atomu");
 
 		ImGui::Separator();
 

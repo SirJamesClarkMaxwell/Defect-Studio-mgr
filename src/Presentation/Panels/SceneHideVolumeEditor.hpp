@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include "Presentation/Operators/SceneOperator.hpp"
 
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneHideVolume.hpp"
@@ -23,14 +24,19 @@ namespace DefectStudio
 	// A new volume of `kind`, not yet in `windowState`:
 	// - with atoms selected: Anchored on them (anchorAtoms = selectedAtomIndices), radius =
 	//   max(kDefaultHideVolumeRadius, largest distance from their centroid + 1 A);
-	// - without: unanchored, centred on the middle of the cell, radius kDefaultHideVolumeRadius.
+	// - without: anchor on targetAtom if valid, else use targetPosition (legacy calls: cell centre).
 	// `invert` is ON - the common case is "keep the cluster, drop the bulk". Box gets that radius as
 	// all three half-sides, cylinder as radius and half-height (axis z). Name "Kula N" /
 	// "Prostopadloscian N" / "Walec N" (Polish, with diacritics), N = count of that kind + 1.
-	[[nodiscard]] SceneHideVolume MakeSceneHideVolume(const RendererWindowState &windowState, HideVolumeKind kind);
+	[[nodiscard]] SceneHideVolume MakeSceneHideVolume(const RendererWindowState &windowState, HideVolumeKind kind,
+		std::optional<std::size_t> targetAtom = std::nullopt, std::optional<glm::vec3> targetPosition = std::nullopt);
 
 	// MakeSceneHideVolume + allocate id + push (one undo step), select it alone, refresh the mask.
-	void AddSceneHideVolume(RendererWindowState &windowState, HideVolumeKind kind);
+	void AddSceneHideVolume(RendererWindowState &windowState, HideVolumeKind kind,
+		std::optional<std::size_t> targetAtom = std::nullopt, std::optional<glm::vec3> targetPosition = std::nullopt);
+	SceneObjectId AddSceneHideVolume(RendererWindowState &windowState, SceneHideVolume volume,
+		SceneOperationUndo undo = SceneOperationUndo::Push);
+	void SetSceneHideVolumeActive(RendererWindowState &windowState, SceneObjectId id, bool active);
 
 	void EraseSceneHideVolumes(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 	// Same anchors and dimensions, new id, empty persistKey; the copies become the selection.

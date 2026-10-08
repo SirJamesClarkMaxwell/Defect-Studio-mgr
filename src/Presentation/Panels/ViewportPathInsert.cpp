@@ -43,7 +43,8 @@ namespace DefectStudio
 			return false;
 		}
 		const auto path = window.paths->Store().Find(session.Path());
-		if (!path || !path->visible || !path->renderable)
+		if (!path || !path->visible || !path->renderable ||
+			BoundToHiddenEndpoint(*path, window.structure, window.sceneHideVolumes))
 		{
 			session.CancelInsert();
 			return false;

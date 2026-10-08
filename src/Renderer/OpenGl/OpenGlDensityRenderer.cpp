@@ -16,6 +16,7 @@ namespace DefectStudio
 	void OpenGlRendererBackend::renderSceneDensities(
 		const std::vector<RendererWindowState::SceneDensity> &densities,
 		const std::vector<std::size_t> &selectedDensities,
+		const int hideVolumeCount,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
@@ -68,10 +69,12 @@ namespace DefectStudio
 				const float outlineExpansion =
 					worldPerPixel.has_value() ? globalSettings.viewport.selectionOutlineWidth * *worldPerPixel : 0.0f;
 				renderIsosurfaceGpuOverlay(cache.buffers.vao, cache.vertexCount, camera, globalSettings,
-					density.positiveColor, density.negativeColor, density.alpha, sceneOffset, true, outlineExpansion);
+					density.positiveColor, density.negativeColor, density.alpha, sceneOffset, true, outlineExpansion,
+					true, false, hideVolumeCount);
 			}
 			renderIsosurfaceGpuOverlay(cache.buffers.vao, cache.vertexCount, camera, globalSettings,
-				density.positiveColor, density.negativeColor, density.alpha, sceneOffset);
+				density.positiveColor, density.negativeColor, density.alpha, sceneOffset, false, 0.0f,
+				true, false, hideVolumeCount);
 		}
 
 		// Anchored, unbound spheres use only their own centre, not a structure's lattice or atoms.

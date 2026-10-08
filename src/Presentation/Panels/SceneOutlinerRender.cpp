@@ -295,8 +295,11 @@ namespace DefectStudio
 				const bool selected = std::find(selection.begin(), selection.end(), id) != selection.end();
 				ImGui::PushID(static_cast<int>(index));
 				ImGui::SetNextItemAllowOverlap();
+				if (!volume.active) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 				const bool activated = ImGui::Selectable(volume.name.c_str(), selected);
 				const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+				if (!volume.active) ImGui::PopStyleColor();
+				ImGui::SetItemTooltip("Oko i kamera sterują obrysem. Ukrywanie przełączysz w menu wiersza lub we właściwościach bryły.");
 				const auto edit = DrawSceneVisibilityColumns(SceneVisibilityColumnState{volume.visible, volume.renderable});
 				if (edit.visibleChanged || edit.renderableChanged)
 				{

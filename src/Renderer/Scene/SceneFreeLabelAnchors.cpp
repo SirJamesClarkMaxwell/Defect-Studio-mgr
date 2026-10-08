@@ -6,9 +6,24 @@
 #include <utility>
 
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 namespace DefectStudio
 {
+	bool IsFreeLabelVisible(const RendererWindowState::FreeLabel &label,
+		const RendererStructureData &structure, std::span<const SceneHideVolume> hideVolumes)
+	{
+		if (!label.visible || PointCoveredByHideVolumes(hideVolumes, label.worldPosition, structure)) return false;
+		if (label.anchorAtom && *label.anchorAtom < structure.atoms.size() &&
+			!structure.atoms[*label.anchorAtom].visible) return false;
+		if (label.anchorVacancy && *label.anchorVacancy < structure.vacancies.size())
+		{
+			const auto &vacancy = structure.vacancies[*label.anchorVacancy];
+			if (vacancy.hidden || PointCoveredByHideVolumes(hideVolumes, vacancy.cartesianPosition, structure)) return false;
+		}
+		return true;
+	}
+
 	std::optional<glm::vec3> ResolveFreeLabelAnchor(
 		const RendererWindowState &window, const RendererWindowState::FreeLabel &label)
 	{

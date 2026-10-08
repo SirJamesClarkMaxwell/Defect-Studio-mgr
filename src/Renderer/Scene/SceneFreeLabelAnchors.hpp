@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -17,6 +18,9 @@
 // keeps following its atom from the new place (SceneTransform's free-label apply/restore).
 namespace DefectStudio
 {
+	[[nodiscard]] bool IsFreeLabelVisible(const RendererWindowState::FreeLabel &label,
+		const RendererStructureData &structure, std::span<const SceneHideVolume> hideVolumes);
+
 	// The anchor's current world position, nullopt when the label is free or the anchor is stale.
 	[[nodiscard]] std::optional<glm::vec3> ResolveFreeLabelAnchor(
 		const RendererWindowState &window, const RendererWindowState::FreeLabel &label);

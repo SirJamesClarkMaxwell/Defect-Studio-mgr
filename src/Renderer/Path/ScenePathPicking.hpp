@@ -5,6 +5,7 @@
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/PathPicking.hpp"
 #include "Renderer/Path/PathSystem.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 namespace DefectStudio
 {
@@ -25,6 +26,7 @@ namespace DefectStudio
 	// Node positions are resolved against `bindings` - the caller's live context
 	// (SceneSystem::MakePathBindingContext), the same one the render pass gets - so a bound node's
 	// hitbox and pixels come from the same position: at its atom, not at its authored fallback.
+	// Viewport callers also supply the live structure and volumes to reject hidden bound endpoints.
 	//
 	// The evaluated polyline comes from PathCaches::FindLastBuilt, i.e. whatever the render pass
 	// last built for that path, and is deliberately NOT re-tessellated here: a hitbox has to agree
@@ -40,5 +42,6 @@ namespace DefectStudio
 	// two paths crossing under the cursor are both at distance zero, and the one drawn in front is
 	// the one the user is pointing at. An exact tie goes to the earlier path in store order.
 	[[nodiscard]] std::optional<ScenePathPick> PickFrontmostScenePath(
-		const PathSystem &paths, const PathPickSettings &settings, const BindingContext &bindings);
+		const PathSystem &paths, const PathPickSettings &settings, const BindingContext &bindings,
+		const RendererStructureData &structure = {}, std::span<const SceneHideVolume> hideVolumes = {});
 } // namespace DefectStudio

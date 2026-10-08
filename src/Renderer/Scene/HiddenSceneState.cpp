@@ -4,6 +4,9 @@
 
 #include <algorithm>
 
+#include "Renderer/RendererWindowState.hpp"
+#include "Renderer/Scene/SceneComponents.hpp"
+
 namespace DefectStudio
 {
 	HiddenSceneState CaptureHiddenSceneState(const RendererStructureData &structure)
@@ -18,6 +21,37 @@ namespace DefectStudio
 			if (bond.visible)
 				continue;
 
+			state.bondEndpoints.emplace_back(
+				std::min<std::size_t>(bond.firstAtomIndex, bond.secondAtomIndex),
+				std::max<std::size_t>(bond.firstAtomIndex, bond.secondAtomIndex));
+		}
+		return state;
+	}
+
+	HiddenSceneState CaptureHiddenSceneState(const RendererWindowState &window)
+	{
+		const entt::registry &registry = window.sceneRegistry.Registry();
+		auto atoms = registry.view<const AtomComponent, const VisibilityComponent>();
+		if (atoms.begin() == atoms.end())
+			return CaptureHiddenSceneState(window.structure);
+
+		HiddenSceneState state;
+		for (const entt::entity entity : atoms)
+			if (!atoms.get<const VisibilityComponent>(entity).visible)
+				state.atomIndices.push_back(atoms.get<const AtomComponent>(entity).atomIndex);
+		std::sort(state.atomIndices.begin(), state.atomIndices.end());
+
+		std::vector<std::size_t> hiddenBonds;
+		auto bonds = registry.view<const BondComponent, const VisibilityComponent>();
+		for (const entt::entity entity : bonds)
+			if (!bonds.get<const VisibilityComponent>(entity).visible)
+				hiddenBonds.push_back(bonds.get<const BondComponent>(entity).bondIndex);
+		std::sort(hiddenBonds.begin(), hiddenBonds.end());
+		for (const std::size_t bondIndex : hiddenBonds)
+		{
+			if (bondIndex >= window.structure.bonds.size())
+				continue;
+			const RendererBondData &bond = window.structure.bonds[bondIndex];
 			state.bondEndpoints.emplace_back(
 				std::min<std::size_t>(bond.firstAtomIndex, bond.secondAtomIndex),
 				std::max<std::size_t>(bond.firstAtomIndex, bond.secondAtomIndex));

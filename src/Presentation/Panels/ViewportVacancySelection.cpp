@@ -23,6 +23,7 @@
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 namespace DefectStudio
@@ -84,7 +85,7 @@ namespace DefectStudio
 		for (std::size_t index = 0; index < windowState.structure.vacancies.size(); ++index)
 		{
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[index];
-			if (vacancy.hidden)
+			if (vacancy.hidden || PointCoveredByHideVolumes(windowState.sceneHideVolumes, vacancy.cartesianPosition, windowState.structure))
 				continue;
 			const glm::vec3 toCentre = vacancy.cartesianPosition - rayOrigin;
 			const float along = glm::dot(toCentre, direction);
@@ -123,6 +124,7 @@ namespace DefectStudio
 				windowState.selectedSceneOrbitals.clear();
 				windowState.selectedScenePlanes.clear();
 				windowState.selectedScenePaths.clear();
+				windowState.selectedSceneHideVolumes.clear();
 			}
 			return true;
 		}
@@ -163,6 +165,7 @@ namespace DefectStudio
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();
 			windowState.selectedScenePaths.clear();
+			windowState.selectedSceneHideVolumes.clear();
 		}
 		return true;
 	}
@@ -209,6 +212,7 @@ namespace DefectStudio
 			if (index >= windowState.structure.vacancies.size())
 				continue;
 			const RendererVacancyData &vacancy = windowState.structure.vacancies[index];
+			if (vacancy.hidden || PointCoveredByHideVolumes(windowState.sceneHideVolumes, vacancy.cartesianPosition, windowState.structure)) continue;
 			ImVec2 centre, edge;
 			if (!project(vacancy.cartesianPosition, centre) ||
 				!project(vacancy.cartesianPosition + cameraRight * vacancy.radius * 1.2f, edge))

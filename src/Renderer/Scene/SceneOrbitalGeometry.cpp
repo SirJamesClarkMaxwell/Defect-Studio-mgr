@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 #include <algorithm>
 #include <array>
@@ -437,7 +438,8 @@ namespace DefectStudio
 				const float v = glm::dot(direction, q) / determinant;
 				if (v < 0.0f || u + v > 1.0f) continue;
 				const float distance = glm::dot(edge2, q) / determinant;
-				if (distance > 0.0f && (!hit || distance < hit->distance))
+				if (distance > 0.0f && (!hit || distance < hit->distance) &&
+					!PointCoveredByHideVolumes(window.sceneHideVolumes, origin + direction * distance, structure))
 					hit = SceneOrbitalSurfaceHit{index, distance};
 			}
 		}

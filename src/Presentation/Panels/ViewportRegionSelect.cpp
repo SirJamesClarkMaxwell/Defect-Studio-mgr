@@ -32,48 +32,11 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 #include "Renderer/Scene/SceneSelection.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
 
 namespace DefectStudio
 {
-	namespace
-	{
-		// Resolves the same anchor point renderLabels() draws a pin at (bond midpoint / angle vertex),
-		// worldOffset already applied - ignores the bond's periodic-image shift for a 2-atom pin (only
-		// matters for bonds crossing a periodic cell boundary), fine for a hit-test. Shared by the
-		// region-select (box/circle) hit-testers below; HandlePinnedMeasurementInteraction keeps its
-		// own equivalent local lambda since it predates this and touching working click/drag code for
-		// a pure de-dup isn't worth the risk.
-		[[nodiscard]] bool ResolvePinnedMeasurementAnchor(
-			const RendererStructureData &structure, const RendererWindowState::PinnedMeasurement &pin,
-			glm::vec3 &outAnchor)
-		{
-			const bool inRange = std::all_of(pin.atomIndices.begin(), pin.atomIndices.end(), [&](const std::size_t index) {
-				return index < structure.atoms.size();
-			});
-			if (!inRange)
-				return false;
-			if (pin.atomIndices.size() == 2)
-			{
-				outAnchor =
-					(structure.atoms[pin.atomIndices[0]].cartesianPosition +
-						structure.atoms[pin.atomIndices[1]].cartesianPosition) *
-					0.5f;
-			}
-			else if (pin.atomIndices.size() == 3)
-			{
-				const std::size_t vertexIndex = ResolveAngleVertexIndex(structure, pin.atomIndices);
-				outAnchor = structure.atoms[vertexIndex].cartesianPosition;
-			}
-			else
-			{
-				return false;
-			}
-			outAnchor += pin.worldOffset;
-			return true;
-		}
-
-	} // namespace
-
 	void HandleBoxSelectDrag(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, bool hovered, RendererLayer &layer)
 	{
@@ -276,7 +239,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!windowState.pinnedMeasurements[i].visible || !ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+			if (!ResolvePickablePinnedMeasurementPosition(windowState, i, anchor))
 				continue;
 			const std::optional<glm::vec2> screen =
 				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
@@ -296,7 +259,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < windowState.pinnedMeasurements.size(); ++i)
 		{
 			glm::vec3 anchor(0.0f);
-			if (!windowState.pinnedMeasurements[i].visible || !ResolvePinnedMeasurementAnchor(windowState.structure, windowState.pinnedMeasurements[i], anchor))
+			if (!ResolvePickablePinnedMeasurementPosition(windowState, i, anchor))
 				continue;
 			const std::optional<glm::vec2> screen =
 				SelectionHitTest::ProjectToScreen(viewProjection, windowState.viewportSize, anchor);
@@ -315,7 +278,7 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
-			if (!windowState.freeLabels[i].visible) continue;
+			if (!IsFreeLabelVisible(windowState.freeLabels[i], windowState.structure, windowState.sceneHideVolumes)) continue;
 			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
 				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
 			if (screen.has_value() && SelectionHitTest::PointInRect(*screen, rectMin, rectMax))
@@ -333,7 +296,7 @@ namespace DefectStudio
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix();
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
-			if (!windowState.freeLabels[i].visible) continue;
+			if (!IsFreeLabelVisible(windowState.freeLabels[i], windowState.structure, windowState.sceneHideVolumes)) continue;
 			const std::optional<glm::vec2> screen = SelectionHitTest::ProjectToScreen(
 				viewProjection, windowState.viewportSize, windowState.freeLabels[i].worldPosition);
 			if (screen.has_value() && SelectionHitTest::PointInCircle(*screen, center, radius))

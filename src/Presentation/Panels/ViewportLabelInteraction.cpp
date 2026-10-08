@@ -32,6 +32,7 @@
 #include "Renderer/Scene/SceneSelection.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ScenePathEditCommands.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
@@ -39,6 +40,19 @@
 
 namespace DefectStudio
 {
+	bool ResolvePickablePinnedMeasurementPosition(const RendererWindowState &window, std::size_t index, glm::vec3 &position)
+	{
+		if (index >= window.pinnedMeasurements.size() || !window.pinnedMeasurements[index].visible ||
+			!SceneSystem::ResolvePinnedMeasurementPosition(window.structure, window.pinnedMeasurements[index], position)) return false;
+		// The drawn quad carries the periodic bond image's exact label centre.
+		if (index < window.labelPickQuads.pinned.size())
+		{
+			if (!window.labelPickQuads.pinned[index].valid) return false;
+			position = window.labelPickQuads.pinned[index].centre;
+		}
+		return !PointCoveredByHideVolumes(window.sceneHideVolumes, position, window.structure);
+	}
+
 	// Whether `mouse` lies inside label `index` as it was last drawn (labels.vert's billboard
 	// math on the recorded rect, projected to the viewport image). nullopt when that label has
 	// no recorded quad - not drawn last frame, or drawn by the all-bonds pass - so the caller
@@ -50,6 +64,7 @@ namespace DefectStudio
 		if (index >= quads.size() || !quads[index].valid || windowState.camera == nullptr)
 			return std::nullopt;
 		const LabelPickQuad &quad = quads[index];
+		if (PointCoveredByHideVolumes(windowState.sceneHideVolumes, quad.centre, windowState.structure)) return false;
 		const glm::mat4 view = windowState.camera->ViewMatrix();
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * view;
 		const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
@@ -353,8 +368,9 @@ namespace DefectStudio
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
-			if (!windowState.freeLabels[i].visible)
+			if (!IsFreeLabelVisible(windowState.freeLabels[i], windowState.structure, windowState.sceneHideVolumes))
 				continue;
+			if (i < windowState.labelPickQuads.free.size() && !windowState.labelPickQuads.free[i].valid) continue;
 			if (const auto inside = MouseInLabelQuad(
 					windowState, windowState.labelPickQuads.free, i, imageOrigin, imageSize, mousePos))
 			{

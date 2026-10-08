@@ -10,6 +10,9 @@
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
+#include "Renderer/Path/PathBindingResolver.hpp"
 
 namespace DefectStudio
 {
@@ -46,7 +49,8 @@ namespace DefectStudio
 			}
 		if ((window.pickAtoms || window.pickLabels) && window.showVacancies)
 			for (std::size_t i = 0; i < window.structure.vacancies.size(); ++i)
-				if (!window.structure.vacancies[i].hidden) vacancies.push_back(i);
+				if (!window.structure.vacancies[i].hidden && !PointCoveredByHideVolumes(window.sceneHideVolumes,
+					window.structure.vacancies[i].cartesianPosition, window.structure)) vacancies.push_back(i);
 		const bool frame = (window.pickAtoms || window.pickLabels) && window.showDefectFrame &&
 			window.structure.defectFrame.has_value();
 		auto visibleIds = [](const auto &objects, auto &ids) {
@@ -55,7 +59,8 @@ namespace DefectStudio
 		if (window.pickLabels)
 		{
 			visibleIds(window.pinnedMeasurements, pins);
-			visibleIds(window.freeLabels, labels);
+			for (const auto &label : window.freeLabels)
+				if (IsFreeLabelVisible(label, window.structure, window.sceneHideVolumes)) labels.push_back(label.id);
 			for (const auto &orbital : window.sceneOrbitals)
 				if (orbital.visible && !CachedSceneOrbitalMesh(window, orbital, window.structure).empty())
 					orbitals.push_back(orbital.id);
@@ -64,7 +69,8 @@ namespace DefectStudio
 		// Paths follow their own Object/Edit Mode picker and remain selectable in every pick mask.
 		if (window.paths)
 			window.paths->Store().Visit([&](const ScenePath &path) {
-				if (path.visible && path.renderable && path.nodes.size() >= 2 && !path.segments.empty())
+				if (path.visible && path.renderable && path.nodes.size() >= 2 && !path.segments.empty() &&
+					!BoundToHiddenEndpoint(path, window.structure, window.sceneHideVolumes))
 					paths.push_back(path.id);
 			});
 		auto containsAll = [](const auto &selection, const auto &ids) {
@@ -168,6 +174,48 @@ namespace DefectStudio
 			}
 			return false;
 		};
+		const bool hasActiveVolumes = std::any_of(window.sceneHideVolumes.begin(), window.sceneHideVolumes.end(),
+			[](const auto &volume) { return volume.active; });
+		auto orbitalTriangleHits = [&](const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c) {
+			if (!triangleHits(a, b, c)) return false;
+			if (!hasActiveVolumes) return true;
+			// Each non-inverted shape is convex, so three covered vertices cover the whole face.
+			for (const auto &volume : window.sceneHideVolumes)
+				if (volume.active && !volume.invert &&
+					PointInHideVolume(volume, a, window.structure.lattice, window.structure) &&
+					PointInHideVolume(volume, b, window.structure.lattice, window.structure) &&
+					PointInHideVolume(volume, c, window.structure.lattice, window.structure)) return false;
+			const auto x = project(a), y = project(b), z = project(c);
+			if (!x || !y || !z) return false;
+			const auto cross = [](glm::vec2 u, glm::vec2 v) { return u.x * v.y - u.y * v.x; };
+			const float area = cross(*y - *x, *z - *x);
+			if (std::abs(area) < 1e-8f) return false;
+			const glm::vec3 inverseW(1.0f / (vp * glm::vec4(a, 1)).w,
+				1.0f / (vp * glm::vec4(b, 1)).w, 1.0f / (vp * glm::vec4(c, 1)).w);
+			auto visibleAt = [&](glm::vec2 point) {
+				if (!inside(point)) return false;
+				const float u = cross(*y - point, *z - point) / area;
+				const float v = cross(*z - point, *x - point) / area;
+				const float w = 1.0f - u - v;
+				if (u < 0 || v < 0 || w < 0) return false;
+				// Perspective-correct interpolation gives the ray's world-space surface hit.
+				const glm::vec3 weights = glm::vec3(u, v, w) * inverseW;
+				const glm::vec3 world = (a * weights.x + b * weights.y + c * weights.z) /
+					(weights.x + weights.y + weights.z);
+				return !PointCoveredByHideVolumes(window.sceneHideVolumes, world, window.structure);
+			};
+			if (visibleAt(radius > 0 ? minimum : (minimum + maximum) * 0.5f) ||
+				visibleAt(*x) || visibleAt(*y) || visibleAt(*z)) return true;
+			const glm::vec2 regionMin = radius > 0 ? minimum - glm::vec2(radius) : minimum;
+			const glm::vec2 regionMax = radius > 0 ? minimum + glm::vec2(radius) : maximum;
+			const glm::vec2 low = glm::max(glm::max(glm::min(*x, glm::min(*y, *z)), regionMin), glm::vec2(0));
+			const glm::vec2 high = glm::min(glm::min(glm::max(*x, glm::max(*y, *z)), regionMax), window.viewportSize);
+			// ponytail: clipped regions sample pixel centres; use analytic clipping if subpixel hits are needed.
+			for (float py = std::ceil(low.y - 0.5f) + 0.5f; py <= high.y; py += 1.0f)
+				for (float px = std::ceil(low.x - 0.5f) + 0.5f; px <= high.x; px += 1.0f)
+					if (visibleAt(glm::vec2(px, py))) return true;
+			return false;
+		};
 		auto apply = [subtract](auto &selection, const auto id) {
 			const auto found = std::find(selection.begin(), selection.end(), id);
 			if (subtract && found != selection.end()) selection.erase(found);
@@ -180,7 +228,7 @@ namespace DefectStudio
 				if (!orbital.visible) continue;
 				const auto &mesh = CachedSceneOrbitalMesh(window, orbital, window.structure);
 				for (std::size_t i = 0; i + 2 < mesh.size(); i += 3)
-					if (triangleHits(mesh[i].position, mesh[i+1].position, mesh[i+2].position))
+					if (orbitalTriangleHits(mesh[i].position, mesh[i+1].position, mesh[i+2].position))
 					{
 						apply(window.selectedSceneOrbitals, orbital.id);
 						break;
@@ -201,7 +249,8 @@ namespace DefectStudio
 				{
 					const auto &vacancy = window.structure.vacancies[i];
 					const auto screen = project(vacancy.cartesianPosition);
-					if (!vacancy.hidden && screen && inside(*screen)) apply(window.selectedVacancies, i);
+					if (!vacancy.hidden && !PointCoveredByHideVolumes(window.sceneHideVolumes,
+						vacancy.cartesianPosition, window.structure) && screen && inside(*screen)) apply(window.selectedVacancies, i);
 				}
 			if (window.showDefectFrame && window.structure.defectFrame)
 			{

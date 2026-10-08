@@ -85,14 +85,17 @@ namespace DefectStudio
 		}
 	} // namespace
 
-	SceneHideVolume MakeSceneHideVolume(const RendererWindowState &windowState, HideVolumeKind kind)
+	SceneHideVolume MakeSceneHideVolume(const RendererWindowState &windowState, HideVolumeKind kind,
+		std::optional<std::size_t> targetAtom, std::optional<glm::vec3> targetPosition)
 	{
 		SceneHideVolume volume;
 		volume.kind = kind;
 		volume.invert = true;
 		volume.anchorAtoms = SelectedAtoms(windowState);
+		if (volume.anchorAtoms.empty() && targetAtom && *targetAtom < windowState.structure.atoms.size())
+			volume.anchorAtoms = {*targetAtom};
 		volume.center = ResolveHideVolumeCenter(volume, windowState.structure).value_or(
-			windowState.structure.lattice * glm::vec3(0.5f));
+			targetPosition.value_or(windowState.structure.lattice * glm::vec3(0.5f)));
 		float radius = kDefaultHideVolumeRadius;
 		for (const std::size_t index : volume.anchorAtoms)
 			radius = std::max(radius, glm::distance(windowState.structure.atoms[index].cartesianPosition, volume.center) + 1.0f);
@@ -104,15 +107,30 @@ namespace DefectStudio
 		return volume;
 	}
 
-	void AddSceneHideVolume(RendererWindowState &windowState, HideVolumeKind kind)
+	void AddSceneHideVolume(RendererWindowState &windowState, HideVolumeKind kind,
+		std::optional<std::size_t> targetAtom, std::optional<glm::vec3> targetPosition)
 	{
-		SceneHideVolume volume = MakeSceneHideVolume(windowState, kind);
-		PushPinnedMeasurementUndoSnapshot(windowState);
+		AddSceneHideVolume(windowState, MakeSceneHideVolume(windowState, kind, targetAtom, targetPosition));
+	}
+
+	SceneObjectId AddSceneHideVolume(RendererWindowState &windowState, SceneHideVolume volume, SceneOperationUndo undo)
+	{
+		if (undo == SceneOperationUndo::Push) PushPinnedMeasurementUndoSnapshot(windowState);
 		volume.id = windowState.sceneRegistry.AllocateObjectId();
 		const SceneObjectId id = volume.id;
 		windowState.sceneHideVolumes.push_back(std::move(volume));
 		ClearAllSceneSelection(windowState);
 		windowState.selectedSceneHideVolumes = {id};
+		RefreshMask(windowState);
+		return id;
+	}
+
+	void SetSceneHideVolumeActive(RendererWindowState &windowState, SceneObjectId id, bool active)
+	{
+		const auto index = AnnotationIndex(windowState.sceneHideVolumes, id);
+		if (index >= windowState.sceneHideVolumes.size() || windowState.sceneHideVolumes[index].active == active) return;
+		PushPinnedMeasurementUndoSnapshot(windowState);
+		windowState.sceneHideVolumes[index].active = active;
 		RefreshMask(windowState);
 	}
 
@@ -185,9 +203,7 @@ namespace DefectStudio
 
 	std::size_t CountAtomsHiddenBySceneHideVolume(const RendererWindowState &windowState, const SceneHideVolume &volume)
 	{
-		SceneHideVolume active = volume;
-		active.visible = true;
-		return AtomsCoveredByHideVolumes(windowState.structure, std::span<const SceneHideVolume>(&active, 1)).size();
+		return AtomsCoveredByHideVolumes(windowState.structure, std::span<const SceneHideVolume>(&volume, 1)).size();
 	}
 
 	void DrawSelectedSceneHideVolumeSection(RendererWindowState &windowState)
@@ -198,6 +214,9 @@ namespace DefectStudio
 		auto &volume = windowState.sceneHideVolumes[index];
 		ImGui::PushID("##SceneHideVolume");
 		ImGui::SeparatorText("Bryła ukrywająca");
+		bool active = volume.active;
+		if (ImGui::Checkbox("Aktywna (ukrywa)", &active)) SetSceneHideVolumeActive(windowState, volume.id, active);
+		ImGui::SetItemTooltip("Włącza ukrywanie. Oko i kamera sterują tylko rysowaniem obrysu.");
 		if (windowState.selectedSceneHideVolumes.size() > 1)
 			ImGui::TextDisabled("Zaznaczono %zu - edytujesz pierwszą.", windowState.selectedSceneHideVolumes.size());
 		const float labelWidth = PropertyGridLabelWidth({"Nazwa", "Kształt", "Układ", "Ukrywa", "Kotwica", "Środek",

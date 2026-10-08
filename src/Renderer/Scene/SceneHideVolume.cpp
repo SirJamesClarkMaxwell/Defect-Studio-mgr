@@ -2,6 +2,7 @@
 
 #include "Renderer/Scene/SceneHideVolume.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -70,6 +71,32 @@ namespace DefectStudio
 
 			return inside != volume.invert;
 		}
+
+		// unit shape -> world is p -> frameToWorld * (center + linear * p).
+		struct UnitFrame
+		{
+			glm::mat3 frameToWorld = glm::mat3(1.0f);
+			glm::vec3 center = glm::vec3(0.0f);
+			glm::mat3 linear = glm::mat3(1.0f);
+		};
+
+		// nullopt in exactly the cases BuildHideVolumeTriangles returns nothing.
+		std::optional<UnitFrame> MakeUnitFrame(const SceneHideVolume &volume, const RendererStructureData &structure)
+		{
+			const PreparedHideVolume prepared = PrepareHideVolume(volume, structure.lattice, structure);
+			const glm::vec3 &extents = volume.halfExtents;
+			if (!prepared.valid || !(extents.x > 0.0f) ||
+				(volume.kind == HideVolumeKind::Box && !(extents.y > 0.0f)) ||
+				(volume.kind != HideVolumeKind::Sphere && !(extents.z > 0.0f)))
+				return std::nullopt;
+			const glm::vec3 scale = volume.kind == HideVolumeKind::Sphere ? glm::vec3(extents.x) :
+				volume.kind == HideVolumeKind::Cylinder ? glm::vec3(extents.x, extents.x, extents.z) : extents;
+			UnitFrame frame;
+			frame.frameToWorld = volume.frame == HideVolumeFrame::Fractional ? structure.lattice : glm::mat3(1.0f);
+			frame.center = prepared.center;
+			frame.linear = volume.orientation * glm::mat3(scale.x, 0, 0, 0, scale.y, 0, 0, 0, scale.z);
+			return frame;
+		}
 	} // namespace
 
 	std::optional<glm::vec3> ResolveHideVolumeCenter(
@@ -109,7 +136,7 @@ namespace DefectStudio
 		std::vector<bool> covered(structure.atoms.size(), false);
 		for (const SceneHideVolume &volume : volumes)
 		{
-			if (!volume.visible)
+			if (!volume.active)
 				continue;
 
 			const PreparedHideVolume prepared = PrepareHideVolume(volume, structure.lattice, structure);
@@ -217,56 +244,95 @@ namespace DefectStudio
 
 	void ApplyHideVolumeMaskToWindowState(RendererWindowState &windowState)
 	{
-		const std::vector<std::size_t> visibleCoveredAtoms =
-			AtomsCoveredByHideVolumes(windowState.structure, windowState.sceneHideVolumes);
-
-		std::vector<SceneHideVolume> renderableVolumes;
-		renderableVolumes.reserve(windowState.sceneHideVolumes.size());
-		for (const SceneHideVolume &volume : windowState.sceneHideVolumes)
+		RendererStructureData &structure = windowState.structure;
+		std::vector<bool> covered(structure.atoms.size(), false);
+		for (const std::size_t atomIndex : AtomsCoveredByHideVolumes(structure, windowState.sceneHideVolumes))
 		{
-			if (!volume.renderable)
+			covered[atomIndex] = true;
+			structure.atoms[atomIndex].visible = false;
+			structure.atoms[atomIndex].renderable = false;
+		}
+		for (RendererBondData &bond : structure.bonds)
+		{
+			const bool endpointCovered = (bond.firstAtomIndex < covered.size() && covered[bond.firstAtomIndex]) ||
+				(bond.secondAtomIndex < covered.size() && covered[bond.secondAtomIndex]);
+			if (!endpointCovered)
 				continue;
-
-			SceneHideVolume renderableVolume = volume;
-			renderableVolume.visible = true;
-			renderableVolumes.push_back(std::move(renderableVolume));
+			bond.visible = false;
+			bond.renderable = false;
 		}
-		const std::vector<std::size_t> renderableCoveredAtoms =
-			AtomsCoveredByHideVolumes(windowState.structure, renderableVolumes);
+	}
 
-		std::vector<bool> visibleCovered(windowState.structure.atoms.size(), false);
-		for (const std::size_t atomIndex : visibleCoveredAtoms)
-			if (atomIndex < visibleCovered.size())
-				visibleCovered[atomIndex] = true;
+	bool PointCoveredByHideVolumes(
+		std::span<const SceneHideVolume> volumes, const glm::vec3 worldPoint, const RendererStructureData &structure)
+	{
+		return std::any_of(volumes.begin(), volumes.end(), [&](const SceneHideVolume &volume) {
+			return volume.active && PointInHideVolume(volume, worldPoint, structure.lattice, structure);
+		});
+	}
 
-		std::vector<bool> renderableCovered(windowState.structure.atoms.size(), false);
-		for (const std::size_t atomIndex : renderableCoveredAtoms)
-			if (atomIndex < renderableCovered.size())
-				renderableCovered[atomIndex] = true;
+	std::optional<glm::mat4> HideVolumeWorldToUnit(const SceneHideVolume &volume, const RendererStructureData &structure)
+	{
+		const std::optional<UnitFrame> frame = MakeUnitFrame(volume, structure);
+		if (!frame)
+			return std::nullopt;
+		// unit -> world is p -> frameToWorld * (center + linear * p); invert the affine map.
+		// MakeUnitFrame already refused a singular lattice and non-positive extents.
+		glm::mat4 forward(frame->frameToWorld * frame->linear);
+		forward[3] = glm::vec4(frame->frameToWorld * frame->center, 1.0f);
+		return glm::inverse(forward);
+	}
 
-		for (std::size_t atomIndex = 0; atomIndex < windowState.structure.atoms.size(); ++atomIndex)
+	std::vector<glm::vec3> BuildHideVolumeEdges(const SceneHideVolume &volume, const RendererStructureData &structure)
+	{
+		const std::optional<UnitFrame> frame = MakeUnitFrame(volume, structure);
+		if (!frame)
+			return {};
+		std::vector<glm::vec3> lines;
+		const auto world = [&](const glm::vec3 &unit) { return frame->frameToWorld * (frame->center + frame->linear * unit); };
+		const auto segment = [&](const glm::vec3 &a, const glm::vec3 &b) {
+			lines.push_back(world(a));
+			lines.push_back(world(b));
+		};
+		// A unit circle in the plane spanned by unit axes `u` and `v`, lifted by `offset`.
+		const auto circle = [&](const glm::vec3 &u, const glm::vec3 &v, const glm::vec3 &offset) {
+			constexpr int segments = 48;
+			for (int index = 0; index < segments; ++index)
+			{
+				const float a = glm::two_pi<float>() * static_cast<float>(index) / segments;
+				const float b = glm::two_pi<float>() * static_cast<float>(index + 1) / segments;
+				segment(offset + std::cos(a) * u + std::sin(a) * v, offset + std::cos(b) * u + std::sin(b) * v);
+			}
+		};
+		const glm::vec3 x(1, 0, 0), y(0, 1, 0), z(0, 0, 1);
+		switch (volume.kind)
 		{
-			if (visibleCovered[atomIndex])
-				windowState.structure.atoms[atomIndex].visible = false;
-			if (renderableCovered[atomIndex])
-				windowState.structure.atoms[atomIndex].renderable = false;
+		case HideVolumeKind::Sphere:
+			circle(x, y, glm::vec3(0.0f));
+			circle(y, z, glm::vec3(0.0f));
+			circle(z, x, glm::vec3(0.0f));
+			break;
+		case HideVolumeKind::Box:
+			for (int axis = 0; axis < 3; ++axis)
+				for (const float s1 : {-1.0f, 1.0f})
+					for (const float s2 : {-1.0f, 1.0f})
+					{
+						glm::vec3 a(0.0f);
+						a[(axis + 1) % 3] = s1;
+						a[(axis + 2) % 3] = s2;
+						glm::vec3 b = a;
+						a[axis] = -1.0f;
+						b[axis] = 1.0f;
+						segment(a, b);
+					}
+			break;
+		case HideVolumeKind::Cylinder:
+			circle(x, y, -z);
+			circle(x, y, z);
+			for (const glm::vec3 &rim : {x, -x, y, -y})
+				segment(rim - z, rim + z);
+			break;
 		}
-
-		for (RendererBondData &bond : windowState.structure.bonds)
-		{
-			const std::size_t firstAtomIndex = bond.firstAtomIndex;
-			const std::size_t secondAtomIndex = bond.secondAtomIndex;
-			const bool visibleEndpointCovered =
-				(firstAtomIndex < visibleCovered.size() && visibleCovered[firstAtomIndex]) ||
-				(secondAtomIndex < visibleCovered.size() && visibleCovered[secondAtomIndex]);
-			const bool renderableEndpointCovered =
-				(firstAtomIndex < renderableCovered.size() && renderableCovered[firstAtomIndex]) ||
-				(secondAtomIndex < renderableCovered.size() && renderableCovered[secondAtomIndex]);
-
-			if (visibleEndpointCovered)
-				bond.visible = false;
-			if (renderableEndpointCovered)
-				bond.renderable = false;
-		}
+		return lines;
 	}
 } // namespace DefectStudio

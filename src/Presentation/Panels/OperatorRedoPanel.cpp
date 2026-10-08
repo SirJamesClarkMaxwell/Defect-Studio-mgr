@@ -21,7 +21,8 @@ namespace DefectStudio
 		}
 	}
 
-	Result<void> OperatorRedoPanel::RunAndOpen(const SceneOperator &op, RendererWindowState &window)
+	Result<void> OperatorRedoPanel::RunAndOpen(const SceneOperator &op, RendererWindowState &window,
+		const SceneOperatorValues &initialValues)
 	{
 		Close();
 		m_Operator = &op;
@@ -29,6 +30,7 @@ namespace DefectStudio
 		m_SelectedAtoms = window.selectedAtomIndices;
 		m_SelectedVacancies = window.selectedVacancies;
 		m_Values = op.defaults;
+		for (const auto &[key, value] : initialValues) m_Values[key] = value;
 		m_WindowId = window.windowId;
 		RefreshHiddenParameters(window, m_Values);
 

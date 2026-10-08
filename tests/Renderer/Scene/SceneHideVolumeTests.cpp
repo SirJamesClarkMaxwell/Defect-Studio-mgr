@@ -217,14 +217,17 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(AtomsCoveredByHideVolumes(structure, volumes), (std::vector<std::size_t>{0, 1, 2, 3}));
 	}
 
-	TEST(SceneHideVolumeTests, VolumeWithTheEyeClearedContributesNothing)
+	TEST(SceneHideVolumeTests, AnInactiveVolumeContributesNothing)
 	{
 		const RendererStructureData structure = StructureWith({glm::vec3(0, 0, 0)});
 		SceneHideVolume volume = Sphere(glm::vec3(0.0f), 2.0f);
 
 		EXPECT_EQ(AtomsCoveredByHideVolumes(structure, std::vector<SceneHideVolume>{volume}).size(), 1u);
 
-		volume.visible = false;
+		volume.visible = false; // the outline's eye does not switch the cut off
+		EXPECT_EQ(AtomsCoveredByHideVolumes(structure, std::vector<SceneHideVolume>{volume}).size(), 1u);
+
+		volume.active = false;
 		EXPECT_TRUE(AtomsCoveredByHideVolumes(structure, std::vector<SceneHideVolume>{volume}).empty());
 	}
 

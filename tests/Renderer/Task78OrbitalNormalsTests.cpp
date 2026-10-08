@@ -3,6 +3,7 @@
 #include <cmath>
 #include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -111,6 +112,39 @@ namespace DefectStudio::Tests
 			EXPECT_LT(glm::length(mesh[i].normal - mesh[i + 1].normal), 1e-4f);
 		EXPECT_NE(MakeSceneOrbitalMeshKey(orbital, structure).hash,
 			[&] { auto copy = orbital; copy.smoothShading = true; return MakeSceneOrbitalMeshKey(copy, structure).hash; }());
+	}
+
+	TEST(Task78OrbitalPickingTests, CoveredFrontSurfaceFallsThroughToVisibleRearSurfaceAndThenMisses)
+	{
+		RendererWindowState window;
+		RendererWindowState::SceneOrbital orbital;
+		orbital.id = window.sceneRegistry.AllocateObjectId();
+		orbital.preset = OrbitalPreset::S;
+		orbital.resolution = 16;
+		window.sceneOrbitals = {orbital};
+		const auto bounds = SceneOrbitalWorldBounds(orbital, window.structure);
+		const glm::vec3 origin(0, 0, bounds.radius * 4.0f), direction(0, 0, -2);
+		const auto front = PickSceneOrbitalSurface(window, window.structure, origin, direction);
+		ASSERT_TRUE(front);
+		SceneHideVolume cut;
+		cut.kind = HideVolumeKind::Box;
+		cut.center = glm::vec3(0, 0, bounds.radius);
+		cut.halfExtents = glm::vec3(bounds.radius);
+		cut.visible = false;
+		window.sceneHideVolumes = {cut};
+		const auto rear = PickSceneOrbitalSurface(window, window.structure, origin, direction);
+		ASSERT_TRUE(rear);
+		EXPECT_EQ(rear->index, front->index);
+		EXPECT_GT(rear->distance, front->distance);
+		EXPECT_FALSE(PointCoveredByHideVolumes(window.sceneHideVolumes,
+			origin + glm::normalize(direction) * rear->distance, window.structure));
+		window.sceneHideVolumes[0].center = glm::vec3(0);
+		window.sceneHideVolumes[0].halfExtents = glm::vec3(bounds.radius * 2);
+		EXPECT_FALSE(PickSceneOrbitalSurface(window, window.structure, origin, direction));
+		window.sceneHideVolumes[0].active = false;
+		const auto restored = PickSceneOrbitalSurface(window, window.structure, origin, direction);
+		ASSERT_TRUE(restored);
+		EXPECT_FLOAT_EQ(restored->distance, front->distance);
 	}
 
 	TEST(Task78OrbitalPickingTests, SurfaceInFrontOfAnAtomIsHitAndEmptyBoundingSphereSpaceMisses)

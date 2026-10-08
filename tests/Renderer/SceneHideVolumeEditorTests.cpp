@@ -92,6 +92,71 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(VisibleFlags(window), std::vector<bool>(6, true));
 	}
 
+	TEST(SceneHideVolumeEditorTests, AddAtGivenAtomAnchorsAndImmediatelyRefreshesTheMask)
+	{
+		RendererWindowState window;
+		BuildRow(window);
+		const auto preview = MakeSceneHideVolume(window, HideVolumeKind::Sphere, 4u, glm::vec3(100));
+		EXPECT_EQ(preview.anchorAtoms, std::vector<std::size_t>{4});
+		EXPECT_EQ(preview.center, glm::vec3(12, 0, 0));
+		AddSceneHideVolume(window, HideVolumeKind::Sphere, 4u, glm::vec3(100));
+		ASSERT_EQ(window.sceneHideVolumes.size(), 1u);
+		EXPECT_EQ(window.sceneHideVolumes.front().anchorAtoms, std::vector<std::size_t>{4});
+		EXPECT_EQ(VisibleFlags(window), (std::vector<bool>{false, false, false, true, true, true}));
+	}
+
+	TEST(SceneHideVolumeEditorTests, AddAtGivenPointKeepsThePointAndIgnoresAStaleAtomTarget)
+	{
+		RendererWindowState window;
+		BuildRow(window);
+		const glm::vec3 point(9, 0, 0);
+		const auto preview = MakeSceneHideVolume(window, HideVolumeKind::Box, std::nullopt, point);
+		EXPECT_TRUE(preview.anchorAtoms.empty());
+		EXPECT_EQ(preview.center, point);
+		AddSceneHideVolume(window, HideVolumeKind::Box, 99u, point);
+		ASSERT_EQ(window.sceneHideVolumes.size(), 1u);
+		EXPECT_TRUE(window.sceneHideVolumes.front().anchorAtoms.empty());
+		EXPECT_EQ(window.sceneHideVolumes.front().center, point);
+		EXPECT_EQ(VisibleFlags(window), (std::vector<bool>{false, false, true, true, true, false}));
+	}
+
+	TEST(SceneHideVolumeEditorTests, SelectedAtomsTakePrecedenceOverTheContextMenuTarget)
+	{
+		RendererWindowState window;
+		BuildRow(window);
+		SelectAtoms(window, {0, 1});
+		AddSceneHideVolume(window, HideVolumeKind::Cylinder, 5u, glm::vec3(100));
+		ASSERT_EQ(window.sceneHideVolumes.size(), 1u);
+		EXPECT_EQ(window.sceneHideVolumes.front().anchorAtoms, (std::vector<std::size_t>{0, 1}));
+		EXPECT_EQ(window.sceneHideVolumes.front().center, glm::vec3(1.5f, 0, 0));
+	}
+
+	TEST(SceneHideVolumeEditorTests, ActiveToggleRefreshesTheMaskAndPreservesManualHiding)
+	{
+		RendererWindowState window;
+		BuildRow(window);
+		SceneSystem::ApplySelectionAndVisibilityToScene(window.sceneRegistry, {0}, {1});
+		SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
+		AddSceneHideVolume(window, HideVolumeKind::Sphere);
+		const auto id = window.sceneHideVolumes.front().id;
+		window.sceneHideVolumes.front().visible = false;
+		window.sceneHideVolumes.front().renderable = false;
+		SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
+		EXPECT_EQ(VisibleFlags(window), (std::vector<bool>{true, false, false, false, false, false}));
+		EXPECT_EQ(CountAtomsHiddenBySceneHideVolume(window, window.sceneHideVolumes.front()), 4u);
+		const auto activeSnapshot = CaptureSceneObjectsSnapshot(window);
+
+		SetSceneHideVolumeActive(window, id, false);
+		EXPECT_EQ(VisibleFlags(window), (std::vector<bool>{true, false, true, true, true, true}));
+		EXPECT_EQ(CountAtomsHiddenBySceneHideVolume(window, window.sceneHideVolumes.front()), 0u);
+		RestoreSceneObjectsSnapshot(window, activeSnapshot);
+		EXPECT_TRUE(window.sceneHideVolumes.front().active);
+		EXPECT_EQ(VisibleFlags(window), (std::vector<bool>{true, false, false, false, false, false}));
+		SetSceneHideVolumeActive(window, id, false);
+		SetSceneHideVolumeActive(window, id, true);
+		EXPECT_EQ(VisibleFlags(window), (std::vector<bool>{true, false, false, false, false, false}));
+	}
+
 	TEST(SceneHideVolumeEditorTests, EraseAndDuplicateRefreshTheMask)
 	{
 		RendererWindowState window;

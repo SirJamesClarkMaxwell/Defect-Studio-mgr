@@ -217,6 +217,7 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.name = volume.name;
 		p.color = volume.color;
 		p.alpha = volume.alpha;
+		p.active = volume.active;
 		p.visible = volume.visible;
 		p.renderable = volume.renderable;
 		result.emplace_back(std::move(p));
@@ -514,6 +515,7 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					volume.name = value.name;
 					volume.color = value.color;
 					volume.alpha = value.alpha;
+					volume.active = value.active;
 					volume.visible = value.visible;
 					volume.renderable = value.renderable;
 					window.sceneHideVolumes.push_back(std::move(volume));

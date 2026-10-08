@@ -63,7 +63,7 @@ namespace DefectStudio
 				if (!window.has_value())
 					return TargetUnavailableError(m_WindowId);
 
-				m_After = CaptureHiddenSceneState(window->get().structure);
+				m_After = CaptureHiddenSceneState(window->get());
 				RestoreSceneVisibilitySnapshot(window->get(), m_Before);
 				return {};
 			}

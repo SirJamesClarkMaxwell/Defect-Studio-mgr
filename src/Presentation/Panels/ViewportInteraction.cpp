@@ -96,6 +96,7 @@ namespace DefectStudio
 			HandleVacancyInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleSceneOrbitalInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleScenePathInteraction(windowState, imageOrigin, imageSize, hovered) ||
+			HandleSceneHideVolumeInteraction(windowState, imageOrigin, imageSize, hovered) ||
 			HandleScenePlaneInteraction(windowState, imageOrigin, imageSize, hovered);
 	}
 

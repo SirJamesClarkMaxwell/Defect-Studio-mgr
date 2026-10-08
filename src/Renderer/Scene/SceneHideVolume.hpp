@@ -81,11 +81,16 @@ namespace DefectStudio
 
 		std::string name;
 		glm::vec3 color = glm::vec3(0.9f, 0.5f, 0.2f);
-		float alpha = 0.18f;
-		// The Scene Outliner's two columns, as everywhere else: `visible` is the eye (the volume is
-		// drawn in the viewport AND its mask applies), `renderable` is the camera.
+		float alpha = 0.8f; // Outline opacity.
+		// Whether the volume hides anything at all. Independent of the eyes below: a volume set up
+		// once is usually wanted out of sight while it keeps cutting, so hiding its outline must not
+		// bring the atoms back (task 91). Turning the cut off is this flag, not the eye.
+		bool active = true;
+		// The Scene Outliner's two columns, as everywhere else, now about the outline only:
+		// `visible` draws the wireframe in the viewport, `renderable` draws it in an exported image.
+		// Off by default for the camera - an exported defect render should not carry the cage.
 		bool visible = true;
-		bool renderable = true;
+		bool renderable = false;
 	};
 
 	// Centroid of the anchor atoms that are in range, or nullopt when the volume is not anchored or
@@ -106,8 +111,8 @@ namespace DefectStudio
 		const glm::mat3 &lattice,
 		const RendererStructureData &structure);
 
-	// Indices into `structure.atoms` covered by at least one volume with `visible` set, ascending and
-	// unique. Volumes with the eye cleared contribute nothing. Evaluated when a volume changes or the
+	// Indices into `structure.atoms` covered by at least one volume with `active` set, ascending and
+	// unique. Inactive volumes contribute nothing; the eyes do not matter. Evaluated when a volume changes or the
 	// structure is rebuilt - atom positions only move on a rebuild, so this is not per-frame work.
 	[[nodiscard]] std::vector<std::size_t> AtomsCoveredByHideVolumes(
 		const RendererStructureData &structure, std::span<const SceneHideVolume> volumes);
@@ -123,6 +128,27 @@ namespace DefectStudio
 	[[nodiscard]] std::vector<glm::vec3> BuildHideVolumeTriangles(
 		const SceneHideVolume &volume, const RendererStructureData &structure);
 
+	// The volume's outline as a world-space line list (every two entries are one segment), for the
+	// wireframe overlay and for picking it in the viewport. Same frame resolution and the same
+	// empty cases as BuildHideVolumeTriangles. Box: its 12 edges. Cylinder: both rims and four
+	// lines along the axis. Sphere: three great circles in the volume's own planes (an ellipsoid's
+	// in `Fractional`).
+	[[nodiscard]] std::vector<glm::vec3> BuildHideVolumeEdges(
+		const SceneHideVolume &volume, const RendererStructureData &structure);
+
+	// World -> the volume's unit shape: the sphere becomes |p| <= 1, the box max|p_i| <= 1, the
+	// cylinder |p.xy| <= 1 and |p.z| <= 1. Affine in both frames (the fractional map is linear), so
+	// one matrix carries the test to a shader that clips an isosurface per fragment. `invert` is not
+	// folded in - the caller flips the result. nullopt when BuildHideVolumeTriangles would be empty.
+	[[nodiscard]] std::optional<glm::mat4> HideVolumeWorldToUnit(
+		const SceneHideVolume &volume, const RendererStructureData &structure);
+
+	// True when any active volume covers `worldPoint` (invert applied). For the few things that are
+	// placed in space but are not atoms - vacancy markers, labels - checked when they are drawn or
+	// picked rather than cached, since they move without a structure rebuild.
+	[[nodiscard]] bool PointCoveredByHideVolumes(
+		std::span<const SceneHideVolume> volumes, glm::vec3 worldPoint, const RendererStructureData &structure);
+
 	// The volume's centre in world space: the anchor centroid if it resolves, else `center`, mapped
 	// through the lattice for `Fractional`.
 	[[nodiscard]] glm::vec3 HideVolumeWorldCenter(const SceneHideVolume &volume, const RendererStructureData &structure);
@@ -132,9 +158,12 @@ namespace DefectStudio
 	// outliner eye, HiddenSceneState) stays the owner of what is true, and this only takes away.
 	// That is what keeps editing a radius from resurrecting what the user hid by hand.
 	//
-	// The volume's own two columns map straight onto the atoms' two: a volume with the eye set cuts
-	// `visible`, one with the camera set cuts `renderable`. So a volume can drop the bulk from an
-	// exported render while leaving it on screen to work with.
+	// An active volume cuts both `visible` and `renderable`; its eyes only show or hide its outline.
+	//
+	// The mirror flags this writes are therefore NOT the manual state. Anything that records what
+	// the user hid (undo snapshots, view snapshots, the outliner eye) must read VisibilityComponent
+	// - CaptureHiddenSceneState(const RendererWindowState &) - or a volume's cut gets baked in as a manual H
+	// and outlives the volume being shrunk or deleted.
 	//
 	// A bond goes with either of its endpoints - the existing H semantics, no new rule.
 	//

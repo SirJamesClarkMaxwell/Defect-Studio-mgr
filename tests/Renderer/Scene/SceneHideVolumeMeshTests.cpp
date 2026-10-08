@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <optional>
+
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Renderer/Scene/SceneHideVolume.hpp"
@@ -42,13 +45,10 @@ namespace DefectStudio::Tests
 			return volume;
 		}
 
-		// Every vertex on the surface: 2 % in is covered, 2 % out is not.
-		void ExpectVerticesOnSurface(const SceneHideVolume &volume, const RendererStructureData &structure)
+		// Every point on the surface: 2 % in is covered, 2 % out is not.
+		void ExpectPointsOnSurface(
+			const SceneHideVolume &volume, const RendererStructureData &structure, const std::vector<glm::vec3> &triangles)
 		{
-			const std::vector<glm::vec3> triangles = BuildHideVolumeTriangles(volume, structure);
-			ASSERT_FALSE(triangles.empty());
-			ASSERT_EQ(triangles.size() % 3, 0u);
-
 			SceneHideVolume plain = volume;
 			plain.invert = false;
 			const glm::vec3 centre = HideVolumeWorldCenter(volume, structure);
@@ -60,7 +60,82 @@ namespace DefectStudio::Tests
 				EXPECT_FALSE(PointInHideVolume(plain, outward, structure.lattice, structure));
 			}
 		}
+
+		void ExpectVerticesOnSurface(const SceneHideVolume &volume, const RendererStructureData &structure)
+		{
+			const std::vector<glm::vec3> triangles = BuildHideVolumeTriangles(volume, structure);
+			ASSERT_FALSE(triangles.empty());
+			ASSERT_EQ(triangles.size() % 3, 0u);
+			ExpectPointsOnSurface(volume, structure, triangles);
+		}
+
+		[[nodiscard]] RendererStructureData SkewedCell()
+		{
+			return StructureWithLattice(glm::mat3(glm::vec3(10, 0, 0), glm::vec3(3, 8, 0), glm::vec3(1, 2, 12)));
+		}
 	} // namespace
+
+	TEST(SceneHideVolumeMeshTests, TheWireframeLiesOnTheSurface)
+	{
+		const RendererStructureData structure = SkewedCell();
+		for (const HideVolumeKind kind : {HideVolumeKind::Sphere, HideVolumeKind::Box, HideVolumeKind::Cylinder})
+			for (const HideVolumeFrame frame : {HideVolumeFrame::Anchored, HideVolumeFrame::Fractional})
+			{
+				SCOPED_TRACE(static_cast<int>(kind) * 10 + static_cast<int>(frame));
+				const SceneHideVolume volume = Volume(kind, frame);
+				const std::vector<glm::vec3> lines = BuildHideVolumeEdges(volume, structure);
+				ASSERT_FALSE(lines.empty());
+				ASSERT_EQ(lines.size() % 2, 0u);
+				ExpectPointsOnSurface(volume, structure, lines);
+			}
+		EXPECT_EQ(BuildHideVolumeEdges(Volume(HideVolumeKind::Box, HideVolumeFrame::Anchored), structure).size(), 24u);
+	}
+
+	TEST(SceneHideVolumeMeshTests, TheUnitTransformAgreesWithThePointTest)
+	{
+		// The shader clip and the atom mask must cut the same region.
+		const RendererStructureData structure = SkewedCell();
+		for (const HideVolumeKind kind : {HideVolumeKind::Sphere, HideVolumeKind::Box, HideVolumeKind::Cylinder})
+			for (const HideVolumeFrame frame : {HideVolumeFrame::Anchored, HideVolumeFrame::Fractional})
+			{
+				SCOPED_TRACE(static_cast<int>(kind) * 10 + static_cast<int>(frame));
+				const SceneHideVolume volume = Volume(kind, frame);
+				const std::optional<glm::mat4> toUnit = HideVolumeWorldToUnit(volume, structure);
+				ASSERT_TRUE(toUnit.has_value());
+				const glm::vec3 centre = HideVolumeWorldCenter(volume, structure);
+				for (int step = 0; step < 400; ++step)
+				{
+					// A deterministic spray around the centre, well past the surface.
+					const float t = static_cast<float>(step);
+					const glm::vec3 point = centre + 4.0f * glm::vec3(std::sin(t * 1.3f), std::cos(t * 0.7f), std::sin(t * 2.1f + 1.0f));
+					const glm::vec3 unit = glm::vec3(*toUnit * glm::vec4(point, 1.0f));
+					const bool insideUnit = kind == HideVolumeKind::Sphere ? glm::dot(unit, unit) <= 1.0f
+						: kind == HideVolumeKind::Box ? glm::all(glm::lessThanEqual(glm::abs(unit), glm::vec3(1.0f)))
+						: (unit.x * unit.x + unit.y * unit.y <= 1.0f && std::abs(unit.z) <= 1.0f);
+					const float margin = kind == HideVolumeKind::Box ? glm::abs(glm::max(glm::max(std::abs(unit.x), std::abs(unit.y)), std::abs(unit.z)) - 1.0f)
+						: glm::abs(glm::length(kind == HideVolumeKind::Sphere ? unit : glm::vec3(unit.x, unit.y, 0.0f)) - 1.0f);
+					if (margin < 1e-3f)
+						continue; // on the surface, either answer is fine
+					EXPECT_EQ(insideUnit, PointInHideVolume(volume, point, structure.lattice, structure)) << step;
+				}
+			}
+		const RendererStructureData singular = StructureWithLattice(glm::mat3(0.0f));
+		EXPECT_FALSE(HideVolumeWorldToUnit(Volume(HideVolumeKind::Sphere, HideVolumeFrame::Fractional), singular).has_value());
+	}
+
+	TEST(SceneHideVolumeMeshTests, CoverageCountsActiveVolumesOnly)
+	{
+		const RendererStructureData structure = StructureWithLattice(glm::mat3(10.0f));
+		SceneHideVolume volume = Volume(HideVolumeKind::Sphere, HideVolumeFrame::Anchored);
+		const glm::vec3 centre = HideVolumeWorldCenter(volume, structure);
+		std::vector<SceneHideVolume> volumes{volume};
+		EXPECT_TRUE(PointCoveredByHideVolumes(volumes, centre, structure));
+		volumes[0].invert = true;
+		EXPECT_FALSE(PointCoveredByHideVolumes(volumes, centre, structure));
+		volumes[0].invert = false;
+		volumes[0].active = false;
+		EXPECT_FALSE(PointCoveredByHideVolumes(volumes, centre, structure));
+	}
 
 	TEST(SceneHideVolumeMeshTests, EveryShapeAndFrameMeshesItsOwnSurface)
 	{

@@ -137,7 +137,7 @@ namespace DefectStudio
 		const HiddenSceneState *hiddenOverride)
 	{
 		const HiddenSceneState capturedState =
-			hiddenOverride == nullptr ? CaptureHiddenSceneState(windowState.structure) : *hiddenOverride;
+			hiddenOverride == nullptr ? CaptureHiddenSceneState(windowState) : *hiddenOverride;
 
 		windowState.structure = BuildRendererStructureData(
 			record.structure,
@@ -236,7 +236,7 @@ namespace DefectStudio
 				m_PreviousAtoms = target->record->structure.atoms;
 				m_PreviousBonds = target->record->structure.bonds;
 				m_PreviousVacancies = target->record->structure.vacancies;
-				m_HiddenBefore = CaptureHiddenSceneState(windowState.structure);
+				m_HiddenBefore = CaptureHiddenSceneState(windowState);
 				m_DeletedIndices = windowState.selectedAtomIndices;
 				std::sort(m_DeletedIndices.begin(), m_DeletedIndices.end());
 

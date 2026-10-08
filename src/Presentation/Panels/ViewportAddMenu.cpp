@@ -140,9 +140,28 @@ namespace DefectStudio
 			if (windowState.structure.defectFrame) DrawScenePlaneDefectPlacementMenu(windowState, true);
 		}
 	}
+	void DrawHideVolumeAddMenu(RendererWindowState &window, const glm::vec3 &position,
+		OperatorRedoPanel &redoPanel, SceneOperatorRegistry &registry,
+		std::optional<std::size_t> targetAtom, std::string_view label)
+	{
+		if (!ImGui::BeginMenu(label.data())) return;
+		const auto add = [&](std::string_view name, HideVolumeKind kind) {
+			if (!ImGui::MenuItem(name.data())) return;
+			if (registry.Find("scene.hide_volume") == nullptr) return;
+			const auto result = redoPanel.RunAndOpen(*registry.Find("scene.hide_volume"), window,
+				MakeHideVolumeOperatorValues(window, kind, targetAtom, position));
+			if (!result) DS_LOG_WARN("Add hide volume failed: {}", result.Error().technicalDetails);
+		};
+		add("Kula", HideVolumeKind::Sphere);
+		add("Prostopadłościan", HideVolumeKind::Box);
+		add("Walec", HideVolumeKind::Cylinder);
+		ImGui::EndMenu();
+	}
+
 	void DrawSceneAddMenu(RendererWindowState &windowState, const WeakRef<CommandRegistry> &commands,
 		const glm::vec3 &position, const Ref<EventBus> &eventBus, bool fractionalAtomPosition,
-		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry, float bondRadiusMultiplier, SceneAddMenuSection section)
+		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry, float bondRadiusMultiplier, SceneAddMenuSection section,
+		std::optional<std::size_t> targetAtom)
 	{
 		const auto addCurvedArrow = [&]()
 		{
@@ -188,11 +207,13 @@ namespace DefectStudio
 		DrawSceneDrawingAddItems(windowState, position, addCurvedArrow);
 		DrawScenePlaneAddItems(windowState, position);
 		DrawOrbitalAddMenu(windowState, position);
-		if (ImGui::BeginMenu("Bryła ukrywająca"))
+		if (redoPanel != nullptr && operatorRegistry != nullptr)
+			DrawHideVolumeAddMenu(windowState, position, *redoPanel, *operatorRegistry, targetAtom);
+		else if (ImGui::BeginMenu("Bryła ukrywająca"))
 		{
-			if (ImGui::MenuItem("Kula")) AddSceneHideVolume(windowState, HideVolumeKind::Sphere);
-			if (ImGui::MenuItem("Prostopadłościan")) AddSceneHideVolume(windowState, HideVolumeKind::Box);
-			if (ImGui::MenuItem("Walec")) AddSceneHideVolume(windowState, HideVolumeKind::Cylinder);
+			if (ImGui::MenuItem("Kula")) AddSceneHideVolume(windowState, HideVolumeKind::Sphere, targetAtom, position);
+			if (ImGui::MenuItem("Prostopadłościan")) AddSceneHideVolume(windowState, HideVolumeKind::Box, targetAtom, position);
+			if (ImGui::MenuItem("Walec")) AddSceneHideVolume(windowState, HideVolumeKind::Cylinder, targetAtom, position);
 			ImGui::EndMenu();
 		}
 		if (ImGui::MenuItem("Tekst (swobodna etykieta)"))

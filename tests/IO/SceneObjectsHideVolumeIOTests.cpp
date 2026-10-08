@@ -21,6 +21,7 @@ namespace DefectStudio::Tests
 			volume.name = "diament NV";
 			volume.color = glm::vec3(0.1f, 0.2f, 0.3f);
 			volume.alpha = 0.42f;
+			volume.active = true; // still cutting with both eyes off - task 91
 			volume.visible = false;
 			volume.renderable = false;
 			return volume;
@@ -75,7 +76,35 @@ namespace DefectStudio::Tests
 				EXPECT_NEAR(parsed->alpha, original.alpha, 1e-6f);
 				EXPECT_EQ(parsed->visible, original.visible);
 				EXPECT_EQ(parsed->renderable, original.renderable);
+				EXPECT_EQ(parsed->active, original.active);
 			}
+		}
+	}
+
+	TEST(SceneObjectsHideVolumeIOTests, AFileWithoutActiveTakesItFromTheEye)
+	{
+		// Before task 91 the eye meant "drawn and cutting"; an old volume with the eye off stays off.
+		for (const bool eye : {false, true})
+		{
+			PersistedSceneHideVolume original = Volume("Sphere", "Anchored");
+			original.visible = eye;
+			SceneObjectsFile file;
+			PersistedStructureSceneObjects entry;
+			entry.structureKey = "structures/NV/POSCAR";
+			entry.objects.emplace_back(original);
+			file.structures.push_back(entry);
+			std::string text = SceneObjectsIO::Serialize(file);
+			const std::size_t key = text.find("active:");
+			ASSERT_NE(key, std::string::npos);
+			text.erase(key, text.find('\n', key) - key);
+
+			SceneObjectsFile loaded;
+			std::vector<StructuredError> warnings;
+			std::string error;
+			ASSERT_TRUE(SceneObjectsIO::Parse(text, loaded, warnings, error)) << error << "\n" << text;
+			const PersistedSceneHideVolume *parsed = FirstVolume(loaded);
+			ASSERT_NE(parsed, nullptr);
+			EXPECT_EQ(parsed->active, eye);
 		}
 	}
 

@@ -19,6 +19,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneSelection.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -161,6 +162,38 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(HitTestRectScenePaths(noCache, glm::vec2(395.0f, 295.0f), glm::vec2(405.0f, 305.0f)).empty());
 		EXPECT_TRUE(HitTestCircleScenePaths(noCache, glm::vec2(400.0f, 300.0f), 8.0f).empty());
 		EXPECT_NE(noCachedId, SceneObjectId{});
+	}
+
+	TEST(ScenePathOperationsTests, HiddenBindingsExcludePathsFromRegionsEditMarkersAndSelectAll)
+	{
+		for (const bool vacancyBinding : {false, true})
+		{
+			RendererWindowState window;
+			PrepareRegionWindow(window);
+			window.structure.atoms.resize(1);
+			window.structure.atoms[0].visible = false;
+			window.structure.vacancies.resize(1);
+			window.sceneHideVolumes.emplace_back();
+			ScenePath path = Path(window, 1);
+			if (vacancyBinding) path.nodes.front().binding.value = PathBinding::CopyVacancy{0};
+			else path.nodes.front().binding.value = PathBinding::CopyPosition{0};
+			const auto id = Add(window, std::move(path));
+			PrimePathCache(window, id);
+			EXPECT_TRUE(HitTestRectScenePaths(window, glm::vec2(0), window.viewportSize).empty());
+			EXPECT_TRUE(HitTestCircleScenePaths(window, glm::vec2(400, 300), 500).empty());
+			SelectAllVisibleSceneObjects(window);
+			EXPECT_TRUE(window.selectedScenePaths.empty());
+			window.pathEdit.Enter(id);
+			ApplyPathElementRectSelection(window, glm::vec2(0), window.viewportSize,
+				RendererEvents::Viewport::RegionSelectMode::Replace);
+			EXPECT_TRUE(window.pathEdit.Selection().empty());
+			ApplyPathElementCircleSelection(window, glm::vec2(400, 300), 500,
+				RendererEvents::Viewport::RegionSelectMode::Add);
+			EXPECT_TRUE(window.pathEdit.Selection().empty());
+			window.structure.atoms[0].visible = true;
+			window.sceneHideVolumes[0].active = false;
+			EXPECT_EQ(HitTestCircleScenePaths(window, glm::vec2(400, 300), 500), (std::vector<SceneObjectId>{id}));
+		}
 	}
 
 	class ScenePathUndoTests : public testing::Test

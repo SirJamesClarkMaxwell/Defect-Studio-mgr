@@ -81,30 +81,29 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(windowState.structure.bonds[2].visible);  // 2-3
 	}
 
-	TEST(SceneHideVolumeMaskTests, TheTwoColumnsAreMaskedByTheVolumesOwnTwoColumns)
+	TEST(SceneHideVolumeMaskTests, HidingTheOutlineKeepsTheCut)
 	{
-		// A volume carries the same eye/camera split as every other scene object, and it maps
-		// straight through: its eye cuts what is on screen, its camera cuts what an export contains.
-		// So a volume can drop the bulk from a render while leaving it visible to work with.
+		// Task 91: the eyes are about the wireframe only. A volume set up once is usually wanted out
+		// of sight while it keeps cutting, on screen and in an export alike.
 		RendererWindowState windowState = WindowWithChain();
 		SceneHideVolume volume = SphereAtOrigin(2.0f);
-		volume.visible = false;   // not cutting the viewport
-		volume.renderable = true; // but still cutting the export
+		volume.visible = false;
+		volume.renderable = false;
 		windowState.sceneHideVolumes.push_back(volume);
 
 		ApplyHideVolumeMaskToWindowState(windowState);
 
-		EXPECT_TRUE(windowState.structure.atoms[0].visible);
+		EXPECT_FALSE(windowState.structure.atoms[0].visible);
 		EXPECT_FALSE(windowState.structure.atoms[0].renderable);
+		EXPECT_FALSE(windowState.structure.bonds[0].visible);
 		EXPECT_FALSE(windowState.structure.bonds[0].renderable);
 	}
 
-	TEST(SceneHideVolumeMaskTests, AVolumeWithBothColumnsClearedChangesNothing)
+	TEST(SceneHideVolumeMaskTests, AnInactiveVolumeChangesNothing)
 	{
 		RendererWindowState windowState = WindowWithChain();
 		SceneHideVolume volume = SphereAtOrigin(100.0f); // would cover everything
-		volume.visible = false;
-		volume.renderable = false;
+		volume.active = false;
 		windowState.sceneHideVolumes.push_back(volume);
 
 		ApplyHideVolumeMaskToWindowState(windowState);

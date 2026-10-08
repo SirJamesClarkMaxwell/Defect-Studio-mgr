@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/ViewportPicking.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -32,8 +33,55 @@ namespace DefectStudio
 			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
 			windowState.selectedScenePaths.clear();
+			windowState.selectedSceneHideVolumes.clear();
 		}
 	} // namespace
+
+	std::optional<ViewportPickRay> ComputeViewportPickRay(
+		const RendererWindowState &window, glm::vec2 position, glm::vec2 imageSize)
+	{
+		if (!window.camera || imageSize.x <= 0 || imageSize.y <= 0) return std::nullopt;
+		const glm::vec2 ndc(2.0f * position.x / imageSize.x - 1.0f, 1.0f - 2.0f * position.y / imageSize.y);
+		const auto inverse = glm::inverse(window.camera->ProjectionMatrix() * window.camera->ViewMatrix());
+		const auto nearPoint = inverse * glm::vec4(ndc, -1.0f, 1.0f);
+		const auto farPoint = inverse * glm::vec4(ndc, 1.0f, 1.0f);
+		if (std::abs(nearPoint.w) < 1e-6f || std::abs(farPoint.w) < 1e-6f) return std::nullopt;
+		const glm::vec3 origin = glm::vec3(nearPoint) / nearPoint.w;
+		const glm::vec3 direction = glm::vec3(farPoint) / farPoint.w - origin;
+		const float length = glm::length(direction);
+		if (!std::isfinite(length) || length <= 1e-6f) return std::nullopt;
+		return ViewportPickRay{origin - window.viewOffset, direction / length};
+	}
+
+	std::optional<std::size_t> PickBondAlongRay(
+		const RendererWindowState &window, const glm::vec3 &origin, const glm::vec3 &direction)
+	{
+		const float length = glm::length(direction);
+		if (!window.showBonds || !std::isfinite(length) || length <= 0) return std::nullopt;
+		const glm::vec3 rayDirection = direction / length;
+		std::optional<std::size_t> hit;
+		float best = std::numeric_limits<float>::max();
+		for (std::size_t index = 0; index < window.structure.bonds.size(); ++index)
+		{
+			const auto &bond = window.structure.bonds[index];
+			if (!bond.visible || bond.firstAtomIndex >= window.structure.atoms.size() ||
+				bond.secondAtomIndex >= window.structure.atoms.size()) continue;
+			const auto &first = window.structure.atoms[bond.firstAtomIndex];
+			const auto &second = window.structure.atoms[bond.secondAtomIndex];
+			if (!first.visible || !second.visible) continue;
+			float distance = 0;
+			glm::vec3 closest(0);
+			SelectionHitTest::ClosestPointsRaySegment(origin, rayDirection, first.cartesianPosition,
+				second.cartesianPosition + bond.secondAtomPeriodicOffset, distance, closest);
+			if (distance <= 0.001f || distance >= best) continue;
+			if (glm::distance(origin + rayDirection * distance, closest) <= std::max(bond.radius * 2.5f, 0.12f))
+			{
+				best = distance;
+				hit = index;
+			}
+		}
+		return hit;
+	}
 
 	std::optional<std::size_t> PickAtomAlongRay(
 		const RendererWindowState &windowState, const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection)
@@ -76,22 +124,9 @@ namespace DefectStudio
 		if (!windowState.camera || windowState.structure.atoms.empty())
 			return;
 
-		const float vpW = windowState.viewportSize.x;
-		const float vpH = windowState.viewportSize.y;
-		if (vpW <= 0.0f || vpH <= 0.0f)
-			return;
-
-		const float ndcX = (2.0f * relX / vpW) - 1.0f;
-		const float ndcY = -((2.0f * relY / vpH) - 1.0f);
-
-		const glm::mat4 invVP = glm::inverse(
-			windowState.camera->ProjectionMatrix() *
-			windowState.camera->ViewMatrix());
-
-		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
-		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
-		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
-		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+		const auto ray = ComputeViewportPickRay(windowState, glm::vec2(relX, relY), windowState.viewportSize);
+		if (!ray) return;
+		const glm::vec3 rayOrigin = ray->origin, rayDir = ray->direction;
 
 		const std::optional<std::size_t> hit = PickAtomAlongRay(windowState, rayOrigin, rayDir);
 		if (!hit)
@@ -124,22 +159,9 @@ namespace DefectStudio
 		if (!windowState.camera)
 			return;
 
-		const float vpW = windowState.viewportSize.x;
-		const float vpH = windowState.viewportSize.y;
-		if (vpW <= 0.0f || vpH <= 0.0f)
-			return;
-
-		const float ndcX = (2.0f * relX / vpW) - 1.0f;
-		const float ndcY = -((2.0f * relY / vpH) - 1.0f);
-
-		const glm::mat4 invVP = glm::inverse(
-			windowState.camera->ProjectionMatrix() *
-			windowState.camera->ViewMatrix());
-
-		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
-		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
-		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
-		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+		const auto ray = ComputeViewportPickRay(windowState, glm::vec2(relX, relY), windowState.viewportSize);
+		if (!ray) return;
+		const glm::vec3 rayOrigin = ray->origin, rayDir = ray->direction;
 
 		float bestAtomT = std::numeric_limits<float>::max();
 		std::size_t hitAtomIndex = std::numeric_limits<std::size_t>::max();
@@ -169,39 +191,17 @@ namespace DefectStudio
 
 		float bestBondT = std::numeric_limits<float>::max();
 		std::size_t hitBondIndex = std::numeric_limits<std::size_t>::max();
-		if (windowState.pickBonds && windowState.showBonds)
-		{
-			for (std::size_t i = 0; i < windowState.structure.bonds.size(); ++i)
+		if (windowState.pickBonds)
+			if (const auto hit = PickBondAlongRay(windowState, rayOrigin, rayDir))
 			{
-				const RendererBondData &bond = windowState.structure.bonds[i];
-				if (!bond.visible || bond.firstAtomIndex >= windowState.structure.atoms.size() ||
-					bond.secondAtomIndex >= windowState.structure.atoms.size())
-					continue;
-				const RendererAtomData &firstAtom = windowState.structure.atoms[bond.firstAtomIndex];
-				const RendererAtomData &secondAtom = windowState.structure.atoms[bond.secondAtomIndex];
-				if (!firstAtom.visible || !secondAtom.visible)
-					continue;
-
-				float t = 0.0f;
-				glm::vec3 closestOnSegment(0.0f);
-				SelectionHitTest::ClosestPointsRaySegment(
-					rayOrigin, rayDir, firstAtom.cartesianPosition,
-					secondAtom.cartesianPosition + bond.secondAtomPeriodicOffset, t, closestOnSegment);
-				if (t <= 0.001f || t >= bestBondT)
-					continue;
-
-				// Padded well past the rendered cylinder radius - bonds are thin, and unlike an
-				// atom's sphere there's no natural "click anywhere on the visible disc" target to aim
-				// for.
-				const float pickRadius = std::max(bond.radius * 2.5f, 0.12f);
-				const glm::vec3 closestOnRay = rayOrigin + rayDir * t;
-				if (glm::distance(closestOnRay, closestOnSegment) <= pickRadius)
-				{
-					bestBondT = t;
-					hitBondIndex = i;
-				}
+				hitBondIndex = *hit;
+				const auto &bond = windowState.structure.bonds[*hit];
+				glm::vec3 closest(0);
+				SelectionHitTest::ClosestPointsRaySegment(rayOrigin, rayDir,
+					windowState.structure.atoms[bond.firstAtomIndex].cartesianPosition,
+					windowState.structure.atoms[bond.secondAtomIndex].cartesianPosition + bond.secondAtomPeriodicOffset,
+					bestBondT, closest);
 			}
-		}
 
 		// Whichever hit is closer to the camera wins (atom keeps priority on an exact tie) - not "an
 		// atom always wins if its inflated pick sphere was touched at all", which used to make a bond
@@ -248,25 +248,18 @@ namespace DefectStudio
 	// the 3D-cursor tool click and the viewport context menu's "Set 3D cursor here".
 	glm::vec3 ComputeViewportWorldPosition(const RendererWindowState &windowState, float relX, float relY)
 	{
-		if (!windowState.camera || windowState.viewportSize.x <= 0.0f || windowState.viewportSize.y <= 0.0f)
-			return glm::vec3(0.0f);
-
-		const float ndcX = (2.0f * relX / windowState.viewportSize.x) - 1.0f;
-		const float ndcY = -((2.0f * relY / windowState.viewportSize.y) - 1.0f);
-
-		const glm::mat4 invVP = glm::inverse(windowState.camera->ProjectionMatrix() * windowState.camera->ViewMatrix());
-		const glm::vec4 nearH = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
-		const glm::vec4 farH = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
-		const glm::vec3 rayOrigin = glm::vec3(nearH) / nearH.w;
-		const glm::vec3 rayDir = glm::normalize(glm::vec3(farH) / farH.w - rayOrigin);
+		const auto ray = ComputeViewportPickRay(windowState, glm::vec2(relX, relY), windowState.viewportSize);
+		if (!ray) return glm::vec3(0);
+		const glm::vec3 rayOrigin = ray->origin, rayDir = ray->direction;
 
 		if (const auto atom = PickAtomAlongRay(windowState, rayOrigin, rayDir))
 			return windowState.structure.atoms[*atom].cartesianPosition;
 		glm::vec3 hitPosition(0.0f);
 		{
-			const glm::vec3 forward = glm::normalize(windowState.camera->Target() - rayOrigin);
+			const glm::vec3 target = windowState.camera->Target() - windowState.viewOffset;
+			const glm::vec3 forward = glm::normalize(target - rayOrigin);
 			const float denom = glm::dot(rayDir, forward);
-			const float planeT = std::abs(denom) > 0.0001f ? glm::dot(windowState.camera->Target() - rayOrigin, forward) / denom : 0.0f;
+			const float planeT = std::abs(denom) > 0.0001f ? glm::dot(target - rayOrigin, forward) / denom : 0.0f;
 			hitPosition = rayOrigin + rayDir * planeT;
 		}
 		return hitPosition;

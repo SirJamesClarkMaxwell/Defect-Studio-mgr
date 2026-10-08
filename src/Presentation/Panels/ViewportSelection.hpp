@@ -18,6 +18,12 @@ namespace DefectStudio
 	class RendererLayer;
 	struct RendererWindowState;
 	struct LabelPickQuad;
+	[[nodiscard]] bool ResolvePickablePinnedMeasurementPosition(
+		const RendererWindowState &window, std::size_t index, glm::vec3 &position);
+	[[nodiscard]] std::optional<SceneObjectId> PickSceneHideVolumeOutline(
+		const RendererWindowState &window, glm::vec2 mouse, glm::vec2 imageSize);
+	[[nodiscard]] bool HandleSceneHideVolumeInteraction(
+		RendererWindowState &window, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
 
 	[[nodiscard]] std::optional<bool> MouseInLabelQuad(const RendererWindowState &windowState,
 		const std::vector<LabelPickQuad> &quads, std::size_t index, const ImVec2 &imageOrigin,

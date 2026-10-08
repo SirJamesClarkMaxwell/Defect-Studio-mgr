@@ -3,9 +3,26 @@
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace DefectStudio::SelectionHitTest
 {
+	bool ClipSegmentToNearPlane(const glm::mat4 &viewProjection, glm::vec3 &a, glm::vec3 &b)
+	{
+		const glm::vec4 clipA = viewProjection * glm::vec4(a, 1.0f);
+		const glm::vec4 clipB = viewProjection * glm::vec4(b, 1.0f);
+		const float distanceA = clipA.z + clipA.w, distanceB = clipB.z + clipB.w;
+		if (!std::isfinite(distanceA) || !std::isfinite(distanceB)) return false;
+		if (distanceA < 0.0f && distanceB < 0.0f) return false;
+		if (distanceA < 0.0f || distanceB < 0.0f)
+		{
+			const glm::vec3 intersection = glm::mix(a, b, distanceA / (distanceA - distanceB));
+			if (distanceA < 0.0f) a = intersection;
+			else b = intersection;
+		}
+		return true;
+	}
+
 	std::optional<glm::vec2> ProjectToScreen(
 		const glm::mat4 &viewProjection, glm::vec2 viewportSize, const glm::vec3 &worldPosition)
 	{

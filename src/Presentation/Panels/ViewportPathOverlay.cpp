@@ -23,7 +23,8 @@ namespace DefectStudio
 			return;
 
 		const ScenePath *path = windowState.paths->Store().Find(windowState.pathEdit.Path());
-		if (path == nullptr || !path->visible || !path->renderable)
+		if (path == nullptr || !path->visible || !path->renderable ||
+			BoundToHiddenEndpoint(*path, windowState.structure, windowState.sceneHideVolumes))
 			return;
 
 		const glm::mat4 view = windowState.camera->ViewMatrix();
