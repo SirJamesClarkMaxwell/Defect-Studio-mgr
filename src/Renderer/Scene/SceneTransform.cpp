@@ -15,6 +15,7 @@
 #include "Renderer/Scene/SceneOrbitalGeometry.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SceneTransformDefectMarkers.hpp"
+#include "Renderer/Scene/SceneTransformHideVolumes.hpp"
 #include "Renderer/Scene/SceneTransformPathElements.hpp"
 #include "Renderer/Scene/SceneTransformPaths.hpp"
 #include "Renderer/Scene/SceneTransformLabels.hpp"
@@ -99,7 +100,7 @@ namespace DefectStudio
 			std::vector<glm::vec3> positions;
 			positions.reserve(
 				snapshot.atoms.size() + snapshot.labels.size() +
-				snapshot.orbitals.size() * 2 + snapshot.planes.size());
+				snapshot.orbitals.size() * 2 + snapshot.planes.size() + snapshot.hideVolumes.size());
 			for (const AtomTransformStart &atom : snapshot.atoms)
 				positions.push_back(atom.position);
 			for (const LabelTransformStart &label : snapshot.labels)
@@ -112,6 +113,8 @@ namespace DefectStudio
 			}
 			for (const PlaneTransformStart &plane : snapshot.planes)
 				positions.push_back(plane.center);
+			for (const HideVolumeTransformStart &volume : snapshot.hideVolumes)
+				positions.push_back(volume.worldCenter);
 			for (const VacancyTransformStart &vacancy : snapshot.vacancies)
 				positions.push_back(vacancy.position);
 			if (snapshot.defectFrame)
@@ -165,6 +168,8 @@ namespace DefectStudio
 			snapshot.planes.push_back(
 				{index, plane.center, plane.normal, plane.tangent, plane.halfExtents, plane.anchorAtoms});
 		}
+		if (!window.pathEdit.IsActive())
+			CaptureSceneTransformHideVolumes(window, snapshot);
 		if (window.pathEdit.IsActive()) CaptureSceneTransformPathElements(window, snapshot);
 		else CaptureSceneTransformPaths(window, snapshot);
 		if (!window.pathEdit.IsActive())
@@ -214,6 +219,8 @@ namespace DefectStudio
 			return PlaneBasis(snapshot.planes.back());
 		if (!snapshot.paths.empty())
 			return glm::mat3(snapshot.paths.back().transform.rotation);
+		if (!snapshot.hideVolumes.empty())
+			return snapshot.hideVolumes.back().orientation;
 		return std::nullopt;
 	}
 
@@ -244,7 +251,8 @@ namespace DefectStudio
 	bool HasSceneObjectTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
 	{
 		return !snapshot.labels.empty() || !snapshot.orbitals.empty() ||
-			!snapshot.planes.empty() || !snapshot.paths.empty() || !snapshot.pathElements.empty();
+			!snapshot.planes.empty() || !snapshot.hideVolumes.empty() || !snapshot.paths.empty() ||
+			!snapshot.pathElements.empty();
 	}
 
 	bool HasDefectMarkerTransformTargets(const SceneTransformSelectionSnapshot &snapshot)
@@ -350,6 +358,7 @@ namespace DefectStudio
 					start.halfExtents * extentScale, glm::vec2(0.01f), glm::vec2(1000.0f));
 			}
 		}
+		ApplySceneTransformHideVolumes(window, snapshot, delta, operation, pivotMode, selectionPivot);
 		ApplySceneTransformPaths(window, snapshot, delta, operation, pivotMode, selectionPivot);
 		ApplySceneTransformPathElements(window, snapshot, delta, operation, pivotMode, selectionPivot);
 		ApplySceneTransformDefectMarkers(window, snapshot, delta, pivotMode, selectionPivot);
@@ -397,6 +406,7 @@ namespace DefectStudio
 			plane.halfExtents = start.halfExtents;
 			plane.anchorAtoms = start.anchorAtoms;
 		}
+		RestoreSceneTransformHideVolumes(window, snapshot);
 		RestoreSceneTransformPaths(window, snapshot);
 		RestoreSceneTransformPathElements(window, snapshot);
 		RestoreSceneTransformDefectMarkers(window, snapshot);
