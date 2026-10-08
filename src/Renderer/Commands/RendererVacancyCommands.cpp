@@ -5,12 +5,16 @@
 #include <algorithm>
 #include <optional>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 #include "Renderer/RendererLayer.hpp"
+#include "Renderer/Scene/SceneReferenceRemap.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -58,6 +62,35 @@ namespace DefectStudio
 							m_Payload.edit(*m_Next, target->record->structure);
 					}
 				}
+				std::vector<std::size_t> removed;
+				if constexpr (std::is_same_v<Payload, SetVacanciesPayload>)
+					if (m_Next->size() < m_Previous.size())
+					{
+						// Removal keeps list order. Match every field so coincident, differently styled sites stay distinct.
+						std::size_t next = 0;
+						for (std::size_t old = 0; old < m_Previous.size(); ++old)
+						{
+							const auto &a = m_Previous[old];
+							if (next < m_Next->size())
+							{
+								const auto &b = (*m_Next)[next];
+								if (a.position == b.position && a.fractional == b.fractional &&
+									a.sourceSpecies == b.sourceSpecies && a.label == b.label &&
+									a.index == b.index && a.color == b.color && a.hidden == b.hidden)
+								{ ++next; continue; }
+							}
+							removed.push_back(old);
+						}
+						if (!undo)
+							for (auto &window : renderer->GetWindows())
+								if (window.structure.domainStructureId == target->windowState->structure.domainStructureId)
+								{
+									m_SceneBefore.insert_or_assign(window.windowId, WindowSnapshot{
+										CaptureSceneObjectsSnapshot(window), window.defectFrameChildren});
+									if (!m_SceneAfter.contains(window.windowId))
+										RemapSceneVacancyReferencesAfterVacancyRemoval(window, removed);
+								}
+					}
 				target->record->structure.*Field = undo ? m_Previous : *m_Next;
 				domain->Workspace().Structures().MarkModified(target->record->id);
 				for (RendererWindowState &window : renderer->GetWindows())
@@ -66,6 +99,21 @@ namespace DefectStudio
 						const bool hadFrame = window.structure.defectFrame.has_value();
 						RebuildAndSync(window, *target->record, m_Styles,
 							window.selectedAtomIndices, window.selectedBondIndices);
+						if (!removed.empty())
+						{
+							const auto &snapshots = undo ? m_SceneBefore : m_SceneAfter;
+							if (const auto snapshot = snapshots.find(window.windowId); snapshot != snapshots.end())
+							{
+								RestoreSceneObjectsSnapshot(window, snapshot->second.scene);
+								window.defectFrameChildren = snapshot->second.children;
+							}
+							else if (!undo)
+							{
+								SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+								m_SceneAfter.emplace(window.windowId, WindowSnapshot{
+									CaptureSceneObjectsSnapshot(window), window.defectFrameChildren});
+							}
+						}
 						if constexpr (std::is_same_v<Payload, SetDefectFramePayload>)
 						{
 							if (!hadFrame && window.structure.defectFrame)
@@ -91,6 +139,12 @@ namespace DefectStudio
 			std::string m_WindowId;
 			std::remove_cvref_t<decltype(std::declval<CrystalStructure &>().*Field)> m_Previous;
 			std::optional<std::remove_cvref_t<decltype(std::declval<CrystalStructure &>().*Field)>> m_Next;
+			struct WindowSnapshot
+			{
+				SceneObjectsSnapshot scene;
+				RendererWindowState::DefectFrameChildren children;
+			};
+			std::unordered_map<std::string, WindowSnapshot> m_SceneBefore, m_SceneAfter;
 		};
 	} // namespace
 

@@ -313,7 +313,6 @@ namespace DefectStudio
 		bool duplicateMovePending = false;
 		// Temporary parenting: objects that G/R/S of the selected defect axes carry along, about the
 		// axes' origin. Per session, never saved; stale ids/indices are skipped.
-		//   ponytail: vacancy indices shift when an earlier vacancy is deleted; ids if that bites.
 		struct DefectFrameChildren
 		{
 			std::vector<SceneObjectId> freeLabels;

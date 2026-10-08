@@ -8,8 +8,10 @@
 #include "Domain/Defects/DefectModel.hpp"
 #include "Domain/DomainLayer.hpp"
 #include "Domain/ProjectWorkspace.hpp"
+#include "Renderer/Commands/SceneObjectsSnapshotCommand.hpp"
 #include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
+#include "Renderer/Scene/SceneReferenceRemap.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
@@ -101,7 +103,9 @@ namespace DefectStudio
 				if (!m_DeletedIndices.empty() && m_DeletedIndices.back() >= m_PreviousAtoms.size())
 					return MakeAtomEditError("renderer.atom_edit.index_out_of_range",
 						"Wybrany atom nie jest już dostępny.", "Selected atom index is out of range.");
-				m_AddedLabelIds.clear();
+				m_SceneBefore = CaptureSceneObjectsSnapshot(windowState);
+				m_DefectChildrenBefore = windowState.defectFrameChildren;
+				m_DisplacementBefore = windowState.displacementComparison;
 
 				// Resolve+mutate selected bonds first, while atom indices (and therefore bond
 				// endpoint indices) are still the ones selectedBondIndices was resolved against -
@@ -145,16 +149,26 @@ namespace DefectStudio
 
 				const HiddenSceneState hiddenAfterDelete =
 					RemapHiddenSceneStateAfterAtomRemoval(m_HiddenBefore, m_DeletedIndices);
+				std::vector<std::size_t> vacancyIndices;
+				for (std::size_t index = 0; index < m_DeletedIndices.size(); ++index)
+					vacancyIndices.push_back(m_PreviousVacancies.size() + m_DeletedIndices.size() - 1 - index);
+				RemapSceneAtomReferencesAfterAtomRemoval(windowState, m_DeletedIndices, vacancyIndices);
 				if (!m_DeletedIndices.empty())
 					domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				else
 					domainLayer->Workspace().Structures().MarkModified(target->record->id);
 				RebuildAndSync(windowState, *target->record, m_AtomStyleTable, {}, {}, &hiddenAfterDelete);
+				SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 				std::vector<std::size_t> newVacancies;
 				for (std::size_t index = m_PreviousVacancies.size(); index < windowState.structure.vacancies.size(); ++index)
 					newVacancies.push_back(index);
-				if (!newVacancies.empty())
-					m_AddedLabelIds = AddVacancyLabels(windowState, newVacancies);
+				if (m_SceneAfter)
+					RestoreSceneObjectsSnapshot(windowState, *m_SceneAfter);
+				else
+				{
+					if (!newVacancies.empty()) (void)AddVacancyLabels(windowState, newVacancies);
+					m_SceneAfter = CaptureSceneObjectsSnapshot(windowState);
+				}
 				return {};
 			}
 
@@ -178,10 +192,9 @@ namespace DefectStudio
 				target->record->structure.bonds = m_PreviousBonds;
 				target->record->structure.vacancies = m_PreviousVacancies;
 				auto &window = *target->windowState;
-				std::erase_if(window.freeLabels, [this](const auto &label) {
-					return std::find(m_AddedLabelIds.begin(), m_AddedLabelIds.end(), label.id) != m_AddedLabelIds.end();
-				});
-				for (const SceneObjectId id : m_AddedLabelIds) std::erase(window.selectedFreeLabels, id);
+				window.defectFrameChildren = m_DefectChildrenBefore;
+				window.displacementComparison = m_DisplacementBefore;
+				RestoreSceneObjectsSnapshot(window, m_SceneBefore);
 				if (!m_DeletedIndices.empty())
 					domainLayer->Workspace().Structures().MarkStructureFileModified(target->record->id);
 				else
@@ -214,7 +227,10 @@ namespace DefectStudio
 			std::vector<VacancySite> m_PreviousVacancies;
 			std::vector<std::size_t> m_DeletedIndices;
 			HiddenSceneState m_HiddenBefore;
-			std::vector<SceneObjectId> m_AddedLabelIds;
+			SceneObjectsSnapshot m_SceneBefore;
+			std::optional<SceneObjectsSnapshot> m_SceneAfter;
+			RendererWindowState::DefectFrameChildren m_DefectChildrenBefore;
+			std::optional<RendererWindowState::DisplacementComparisonState> m_DisplacementBefore;
 		};
 
 	} // namespace
