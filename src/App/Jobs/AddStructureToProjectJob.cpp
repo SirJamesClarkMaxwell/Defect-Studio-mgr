@@ -40,7 +40,8 @@ namespace DefectStudio
 			if (!file)
 				return false;
 			file << contents;
-			return file.good();
+			file.close();
+			return !file.fail();
 		}
 	} // namespace
 
@@ -50,15 +51,13 @@ namespace DefectStudio
 		CrystalStructure structure,
 		std::string sanitizedName,
 		Path targetDirectory,
-		Path authorizedRootSnapshot,
-		Path scratchDirectory)
+		Path authorizedRootSnapshot)
 		: m_SessionId(sessionId),
 		  m_AttemptId(attemptId),
 		  m_Structure(std::move(structure)),
 		  m_SanitizedName(std::move(sanitizedName)),
 		  m_TargetDirectory(std::move(targetDirectory)),
-		  m_AuthorizedRootSnapshot(std::move(authorizedRootSnapshot)),
-		  m_ScratchDirectory(std::move(scratchDirectory))
+		  m_AuthorizedRootSnapshot(std::move(authorizedRootSnapshot))
 	{
 	}
 
@@ -130,8 +129,9 @@ namespace DefectStudio
 		context.SetMessage("Writing POSCAR file");
 		context.SetProgress(1.0f, 4.0f);
 
-		const std::string stagingName = std::string("_poscar_staging_") + ToString(m_SessionId) + "_"
-			+ ToString(m_AttemptId) + "_" + ToString(GenerateUuid());
+		// Unique per attempt but short: three full UUIDs here pushed the POSCAR path in a deep project
+		// past MAX_PATH, and the native writer could not open it.
+		const std::string stagingName = std::string("_staging_") + ToString(GenerateUuid()).substr(0, 13);
 		const FilePath stagingPath = canonicalTarget / stagingName;
 		if (!std::filesystem::create_directory(stagingPath, error) || error)
 			return IoError(
@@ -139,22 +139,21 @@ namespace DefectStudio
 				"create_directory failed for " + stagingPath.string() + ": " + error.message(),
 				"Check that the project folder is writable, then retry.");
 
-		// 5. The POSCAR itself. The Python bridge's scratch input lives OUTSIDE the staging directory,
-		// so a failed cleanup of it can never end up committed inside the structure folder.
-		const Path scratchInputPath = m_ScratchDirectory
-			/ FilePath(ToString(m_SessionId) + "_" + ToString(m_AttemptId) + "_poscar_input.json");
+		// 5. The POSCAR itself, written natively into the staging directory.
 		const FilePath poscarPath = stagingPath / "POSCAR";
-		Result<void> written = PoscarWriter::Write(m_Structure, Path::FromResolved(poscarPath), scratchInputPath);
+		Result<void> written = PoscarWriter::Write(m_Structure, Path::FromResolved(poscarPath));
 
 		std::error_code cleanupError;
-		FileSystem::Remove(scratchInputPath.Native(), cleanupError); // Best-effort; never gates the result
 
 		if (!written)
 		{
 			// 6. Nothing was committed: the destination was never created, so removing staging is the
 			// complete rollback.
 			FileSystem::RemoveAll(stagingPath, cleanupError);
-			return written.Error();
+			StructuredError failure = written.Error();
+			if (cleanupError)
+				failure.userMessage += "\nNie udało się usunąć folderu tymczasowego: " + Path(stagingPath).Utf8();
+			return failure;
 		}
 
 		// 5b. Sentinel, written before the commit so it is part of the directory the rename publishes.
@@ -164,7 +163,8 @@ namespace DefectStudio
 		{
 			FileSystem::RemoveAll(stagingPath, cleanupError);
 			return IoError(
-				"Could not prepare the structure folder",
+				cleanupError ? "Nie udało się przygotować struktury ani usunąć folderu tymczasowego: " + Path(stagingPath).Utf8()
+					: "Nie udało się przygotować folderu struktury",
 				"Failed to write " + std::string(PendingRegistrationSentinel) + " in " + stagingPath.string(),
 				"Check that the project folder is writable, then retry.");
 		}

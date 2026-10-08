@@ -87,7 +87,8 @@ namespace DefectStudio
 	// stays the UNIT cell because the middle preview pane renders it, so the expansion has to happen
 	// where the whole structure is needed - in the supercell pane and in Add to Project alike, which
 	// is why this lives here instead of in either of them.
-	[[nodiscard]] CrystalStructure BuildSessionExportStructure(const CreationSession &session);
+	// Failure must reach the caller; never silently substitute the unit cell for a failed supercell.
+	[[nodiscard]] Result<CrystalStructure> BuildSessionExportStructure(const CreationSession &session);
 
 	// Single source of truth for active creation sessions, owned by the composition root. NewStructure
 	// and StructureHub both read through this instead of holding their own copies of the draft.

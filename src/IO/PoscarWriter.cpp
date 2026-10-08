@@ -3,151 +3,147 @@
 #include "IO/PoscarWriter.hpp"
 
 #include <algorithm>
-#include <chrono>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <limits>
+#include <locale>
+#include <numeric>
+#include <string_view>
 
-#include <nlohmann/json.hpp>
+#ifdef DS_PLATFORM_WINDOWS
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+#endif
 
-#include "Core/Utils/Path.hpp"
-#include "Core/Platform/PlatformPaths.hpp"
-#include "Domain/Crystal/CrystalStructure.hpp"
-#include "ScientificRuntime/Python/ScriptRunner.hpp"
+#include "Core/Utils/Uuid.hpp"
+#include "Domain/Crystal/StructureValidation.hpp"
 
 namespace DefectStudio
 {
-	Result<void> PoscarWriter::Write(
-		const CrystalStructure &structure,
-		const Path &outputPath,
-		const Path &inputJsonPath,
-		bool overwriteExisting)
+	namespace
 	{
-		// Sort atoms by species (groups same elements together) for POSCAR output.
-		// Defect-pattern key sorting (prototype + defect SET) deferred to when DefectConfiguration
-		// is actively linked to structures; for now, group by species + position.
-		std::vector<std::size_t> atomIndices;
-		for (std::size_t i = 0; i < structure.atoms.size(); ++i)
-			atomIndices.push_back(i);
-
-		std::sort(atomIndices.begin(), atomIndices.end(), [&](std::size_t a, std::size_t b) {
-			const auto &specA = structure.atoms[a].species;
-			const auto &specB = structure.atoms[b].species;
-			if (specA != specB)
-				return specA < specB; // Sort by species alphabetically
-			// Same species: sort by fractional position (x, y, z)
-			const auto &posA = structure.atoms[a].fractional;
-			const auto &posB = structure.atoms[b].fractional;
-			if (posA.x != posB.x)
-				return posA.x < posB.x;
-			if (posA.y != posB.y)
-				return posA.y < posB.y;
-			return posA.z < posB.z;
-		});
-
-		// nlohmann::json, not hand-rolled string building - a Windows output path is full of
-		// backslashes, and pasting it raw into a JSON string produced invalid escapes ("\U", "\N"),
-		// which made every single save fail in json.load on the Python side.
-		nlohmann::json species = nlohmann::json::array();
-		nlohmann::json positions = nlohmann::json::array();
-		for (const std::size_t index : atomIndices)
+		struct TempFileCleanup
 		{
-			const AtomSite &atom = structure.atoms[index];
-			species.push_back(atom.species);
-			positions.push_back({atom.fractional.x, atom.fractional.y, atom.fractional.z});
-		}
-
-		nlohmann::json cell = nlohmann::json::array();
-		for (const glm::vec3 &vector : structure.cell.vectors)
-			cell.push_back({vector.x, vector.y, vector.z});
-
-		const nlohmann::json payload = {
-			{"output_path", outputPath.String()},
-			{"species", std::move(species)},
-			{"positions", std::move(positions)},
-			{"cell", std::move(cell)},
-			{"pbc", {true, true, true}},
-			{"overwrite", overwriteExisting}};
-
-		// Write JSON to the caller-supplied scratch file (unique per attempt - see the header note).
-		const std::string jsonStr = payload.dump();
-		const Path jsonPath = inputJsonPath;
-		if (!jsonPath.Native().parent_path().empty())
-			FileSystem::CreateDirectories(jsonPath.Native().parent_path());
-
-		std::ofstream jsonFile(jsonPath.String());
-		if (!jsonFile)
-			return StructuredError(
-				ErrorCategory::IO,
-				Severity::Error,
-				"Failed to write POSCAR input file",
-				"Could not open: " + jsonPath.String(),
-				"Check disk permissions");
-
-		jsonFile << jsonStr;
-		jsonFile.close();
-
-		// Invoke Python script with JSON file as argument
-		ScriptRunner runner;
-		ScriptRunOptions options;
-		const std::filesystem::path relativeScript =
-			std::filesystem::path("install") / "users" / "default" / "scripts" / "write_poscar.py";
-		for (const Path &start : {Platform::GetExecutableDirectory(), Path::FromResolved(FileSystem::CurrentPath())})
-		{
-			Path cursor = start;
-			for (int depth = 0; depth < 10 && !cursor.Empty(); ++depth)
+			FilePath path;
+			bool created = false;
+			~TempFileCleanup()
 			{
-				const Path candidate = cursor / relativeScript;
-				if (FileSystem::Exists(candidate.Native()))
+				if (created)
 				{
-					options.scriptPath = candidate;
-					options.workingDirectory = cursor;
-					break;
+					std::error_code error;
+					FileSystem::Remove(path, error);
 				}
-				const Path parent = cursor.parent_path();
-				if (parent.Empty() || parent == cursor)
-					break;
-				cursor = parent;
 			}
-			if (!options.scriptPath.Empty())
-				break;
-		}
-		if (options.scriptPath.Empty())
+		};
+
+		[[nodiscard]] StructuredError WriteError(std::string details)
 		{
-			options.scriptPath = Path::FromResolved(FileSystem::CurrentPath() / relativeScript);
-			options.workingDirectory = Path::FromResolved(FileSystem::CurrentPath());
+			return StructuredError(ErrorCategory::IO, Severity::Error,
+				"Nie udało się zapisać pliku POSCAR", std::move(details),
+				"Sprawdź folder docelowy, uprawnienia i dostępną przestrzeń na dysku.", "PoscarWriter");
 		}
-		options.arguments.push_back(jsonPath.String());
-		options.timeout = std::chrono::milliseconds(5000);
-		options.requireZeroExitCode = true;
+	} // namespace
 
-		auto result = runner.RunFile(options);
-		FileSystem::Remove(jsonPath); // Clean up temp file
+	Result<void> PoscarWriter::Write(
+		const CrystalStructure &structure, const Path &outputPath, bool overwriteExisting)
+	{
+		if (Result<void> valid = ValidateStructureForPersistence(structure); !valid)
+			return valid.Error();
+		if (outputPath.Empty() || outputPath.Native().filename().empty())
+			return WriteError("Empty POSCAR output path");
 
-		if (!result.HasValue())
-			return StructuredError(
-				ErrorCategory::IO,
-				Severity::Error,
-				"POSCAR write failed",
-				result.Error().technicalDetails,
-				result.Error().suggestion);
+		// ASE accepted only chemical symbols (including its dummy element X), not arbitrary labels.
+		constexpr std::string_view symbols =
+			" X H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn "
+			"Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce "
+			"Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn "
+			"Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og ";
+		for (const AtomSite &atom : structure.atoms)
+			if (atom.species.find_first_of(" \t\r\n") != std::string::npos
+				|| symbols.find(" " + atom.species + " ") == std::string_view::npos)
+				return StructuredError(ErrorCategory::Validation, Severity::Error,
+					"Nieprawidłowy symbol pierwiastka", "Invalid species: " + atom.species,
+					"Wybierz prawidłowy pierwiastek przed zapisaniem struktury.", "PoscarWriter");
 
-		const auto &scriptResult = result.Value();
-		if (scriptResult.timedOut)
-			return StructuredError(
-				ErrorCategory::IO,
-				Severity::Error,
-				"POSCAR write timed out",
-				"Python subprocess exceeded 5 second limit",
-				"Check if ase.io.write is slow on this structure");
+		try
+		{
+			std::vector<std::size_t> indices(structure.atoms.size());
+			std::iota(indices.begin(), indices.end(), std::size_t{0});
+			std::sort(indices.begin(), indices.end(), [&](std::size_t a, std::size_t b) {
+				const auto &left = structure.atoms[a];
+				const auto &right = structure.atoms[b];
+				if (left.species != right.species)
+					return left.species < right.species;
+				if (left.fractional.x != right.fractional.x)
+					return left.fractional.x < right.fractional.x;
+				if (left.fractional.y != right.fractional.y)
+					return left.fractional.y < right.fractional.y;
+				return left.fractional.z < right.fractional.z;
+			});
 
-		if (scriptResult.exitCode != 0)
-			return StructuredError(
-				ErrorCategory::IO,
-				Severity::Error,
-				"POSCAR write subprocess error",
-				scriptResult.standardError,
-				"Verify ase is installed and structure is valid");
+			std::vector<std::pair<std::string, std::size_t>> speciesCounts;
+			for (std::size_t index : indices)
+			{
+				const std::string &species = structure.atoms[index].species;
+				if (speciesCounts.empty() || speciesCounts.back().first != species)
+					speciesCounts.emplace_back(species, 0);
+				++speciesCounts.back().second;
+			}
 
-		return Result<void>{};
+			// Short on purpose: a path past MAX_PATH makes the ofstream below fail on Windows (ase handled
+			// long paths, this does not), and 8 hex digits are plenty inside one destination folder.
+			TempFileCleanup temp{outputPath.Native().parent_path() / (".poscar_" + ToString(GenerateUuid()).substr(0, 8) + ".tmp")};
+			std::ofstream file(temp.path, std::ios::out | std::ios::binary | std::ios::noreplace);
+			if (!file)
+				return WriteError("Could not create temporary POSCAR in " + outputPath.parent_path().Utf8());
+			temp.created = true;
+			file.imbue(std::locale::classic());
+			// ASE's default comment lists the species in their output order.
+			for (std::size_t i = 0; i < speciesCounts.size(); ++i)
+				file << (i == 0 ? "" : " ") << speciesCounts[i].first;
+			file << "\n1.0000000000000000\n";
+			// Scientific notation keeps 17 significant digits even for very small coordinates.
+			file << std::scientific << std::setprecision(std::numeric_limits<double>::max_digits10 - 1);
+			for (const auto &row : structure.cell.vectors)
+				file << "  " << static_cast<double>(row.x) << ' ' << static_cast<double>(row.y) << ' '
+					<< static_cast<double>(row.z) << '\n';
+			for (const auto &entry : speciesCounts)
+				file << ' ' << entry.first;
+			file << '\n';
+			for (const auto &entry : speciesCounts)
+				file << ' ' << entry.second;
+			file << "\nDirect\n";
+			for (std::size_t index : indices)
+			{
+				const auto &position = structure.atoms[index].fractional;
+				file << "  " << static_cast<double>(position.x) << ' ' << static_cast<double>(position.y) << ' '
+					<< static_cast<double>(position.z) << '\n';
+			}
+			file.close();
+			if (!file)
+				return WriteError("Writing or closing temporary POSCAR failed for " + outputPath.Utf8());
+
+			std::error_code error;
+			if (!overwriteExisting)
+				FileSystem::RenameNoReplace(temp.path, outputPath.Native(), error);
+			else
+			{
+#ifdef DS_PLATFORM_WINDOWS
+				if (::MoveFileExW(temp.path.c_str(), outputPath.Native().c_str(), MOVEFILE_REPLACE_EXISTING) == 0)
+					error = std::error_code(static_cast<int>(::GetLastError()), std::system_category());
+#else
+				std::filesystem::rename(temp.path, outputPath.Native(), error);
+#endif
+			}
+			if (error)
+				return WriteError("POSCAR commit failed for " + outputPath.Utf8() + ": " + error.message());
+			temp.created = false;
+			return Result<void>{};
+		}
+		catch (const std::exception &exception)
+		{
+			return WriteError(exception.what());
+		}
 	}
 } // namespace DefectStudio

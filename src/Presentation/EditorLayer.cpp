@@ -1874,9 +1874,7 @@ namespace DefectStudio
 		auto domainLayer = m_DomainLayer.lock();
 		std::vector<StructuredError> warnings;
 		const StructureFileWriter writeStructureFile = [](const CrystalStructure &structure, const Path &path) {
-			const Path scratch = Path::FromResolved(
-				std::filesystem::temp_directory_path() / ("defectstudio_poscar_" + ToString(GenerateUuid()) + ".json"));
-			return PoscarWriter::Write(structure, path, scratch, true);
+			return PoscarWriter::Write(structure, path, true);
 		};
 		if (domainLayer == nullptr ||
 			!SaveProjectWithSceneObjects(m_ActiveProjectDirectory, *m_ActiveProject, sceneObjects,
@@ -1947,8 +1945,14 @@ namespace DefectStudio
 
 	void EditorLayer::onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &)
 	{
-		// Legacy in-app-built structure export removed in Step 11. To save a structure, use
-		// StructureHubPanel "Add to Project" workflow (publishes AddStructureToProjectRequested).
+		if (auto panel = findPanel(m_StructureHubPanelId).lock())
+			panel->SetVisible(true);
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(NotificationRequestedEvent{ToNotification(StructuredError(
+				ErrorCategory::Validation, Severity::Warning,
+				"Aby zapisać nową strukturę, wybierz folder i użyj „Add to Project” w Structure Hub.",
+				"Structure file save requires the creation-session add-to-project flow",
+				"Zmiany struktur należących do projektu zapiszesz skrótem Ctrl+S.", "EditorLayer"))});
 	}
 
 	// The only POTCAR trigger left after Step 11 removed the legacy save path: a structure that was

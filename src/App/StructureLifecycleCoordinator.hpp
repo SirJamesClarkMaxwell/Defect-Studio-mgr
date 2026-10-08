@@ -42,8 +42,7 @@ namespace DefectStudio
 			Ref<EventBus> eventBus,
 			WeakRef<JobSystem> jobSystem,
 			WeakRef<DomainLayer> domainLayer,
-			Ref<CreationSessionRegistry> sessionRegistry,
-			Path scratchDirectory);
+			Ref<CreationSessionRegistry> sessionRegistry);
 		~StructureLifecycleCoordinator();
 
 	private:
@@ -64,9 +63,6 @@ namespace DefectStudio
 		WeakRef<JobSystem> m_JobSystem;
 		WeakRef<DomainLayer> m_DomainLayer;
 		Ref<CreationSessionRegistry> m_SessionRegistry;
-		// Scratch space for the Python bridge's per-attempt input file. Deliberately outside any
-		// project directory, so a cleanup failure there can never leak into a committed structure.
-		Path m_ScratchDirectory;
 		// Canonicalized once here, on receipt: every later check compares against these, so
 		// "reject symlinks" and "roots are canonical" are one policy applied at different times.
 		std::vector<Path> m_ProjectRoots;

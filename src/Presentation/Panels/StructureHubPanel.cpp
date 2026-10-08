@@ -10,7 +10,7 @@
 
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Core/Utils/PathValidation.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 
 namespace DefectStudio
 {
@@ -155,13 +155,15 @@ namespace DefectStudio
 			const bool busy = session.activeAttemptId.has_value();
 			const bool hasName = nameBuffer[0] != '\0';
 			const bool hasTarget = !session.targetDirectory.Empty() || !m_TargetDirectory.Empty();
-			ImGui::BeginDisabled(busy || !hasName || !hasTarget || session.draftStructure.atoms.empty());
+			ImGui::BeginDisabled(busy || !hasName || !hasTarget || session.draftStructure.atoms.empty() || m_EventBus == nullptr);
 			if (ImGui::Button("Add to Project", {-1, 0}))
 				dispatchAddToProject(session);
 			ImGui::EndDisabled();
 
 			if (busy)
 				ImGui::TextDisabled("Writing structure...");
+			else if (!hasTarget)
+				ImGui::TextDisabled("Otwórz projekt i wybierz folder docelowy w drzewie projektu.");
 		}
 
 		ImGui::PopID();
@@ -204,11 +206,14 @@ namespace DefectStudio
 		const Path target = session.targetDirectory.Empty() ? m_TargetDirectory : session.targetDirectory;
 		const std::string displayName = nameBufferFor(session).data();
 
-		// Cheap local feedback for the obvious mistakes. The coordinator and the job both validate
-		// again - this check exists so a typo does not have to round-trip through a background job.
-		if (Result<std::string> validated = PathValidation::ValidateAndSanitizeName(displayName); !validated)
+		Result<CrystalStructure> exported = BuildSessionExportStructure(session);
+		if (!exported)
 		{
-			session.lastError = validated.Error();
+			session.lastError = exported.Error();
+			session.state = CreationSessionState::Failed;
+			Notification notification = ToNotification(exported.Error());
+			notification.title = "Nie udało się przygotować struktury do zapisu";
+			m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
 			return;
 		}
 
@@ -218,7 +223,7 @@ namespace DefectStudio
 
 		DomainEvents::AddStructureToProjectRequested event;
 		event.sessionId = session.sessionId;
-		event.structure = BuildSessionExportStructure(session);
+		event.structure = std::move(exported.Value());
 		event.displayName = displayName;
 		event.targetDirectory = target.Native();
 		m_EventBus->Publish(event);

@@ -11,6 +11,7 @@
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportInput.hpp"
 #include "Presentation/Panels/ViewportInteraction.hpp"
@@ -401,7 +402,16 @@ namespace DefectStudio
 
 		// Exactly what Add to Project writes - the pane is a preview of the file, not a second
 		// interpretation of the same counts.
-		const CrystalStructure supercell = BuildSessionExportStructure(session);
+		Result<CrystalStructure> exported = BuildSessionExportStructure(session);
+		if (!exported)
+		{
+			session.lastError = exported.Error();
+			m_PreviewSignatures[sessionKey] = signature;
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(exported.Error())});
+			return;
+		}
+		const CrystalStructure &supercell = exported.Value();
 
 		const auto show = [&](std::size_t index,
 							  const CrystalStructure &structure,

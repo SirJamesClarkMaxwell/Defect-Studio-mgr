@@ -21,7 +21,9 @@ namespace DefectStudio::Tests
 	TEST(CreationSessionTests, ExportStructureIsTheUnitCellWhenTheSupercellIsOneByOneByOne)
 	{
 		const CreationSession session = BccIron();
-		EXPECT_EQ(BuildSessionExportStructure(session).atoms.size(), 2u);
+		const auto exported = BuildSessionExportStructure(session);
+		ASSERT_TRUE(exported);
+		EXPECT_EQ(exported->atoms.size(), 2u);
 	}
 
 	// The bug this guards: Add to Project wrote draftStructure and ignored the supercell counts
@@ -31,16 +33,19 @@ namespace DefectStudio::Tests
 		CreationSession session = BccIron();
 		session.supercellCounts = glm::ivec3(2, 2, 2);
 
-		const CrystalStructure exported = BuildSessionExportStructure(session);
+		const auto exported = BuildSessionExportStructure(session);
+		ASSERT_TRUE(exported);
 
-		EXPECT_EQ(exported.atoms.size(), 16u);
-		EXPECT_NEAR(glm::length(exported.cell.vectors[0]), 5.74f, 1e-4f);
+		EXPECT_EQ(exported->atoms.size(), 16u);
+		EXPECT_NEAR(glm::length(exported->cell.vectors[0]), 5.74f, 1e-4f);
 	}
 
 	TEST(CreationSessionTests, ExportStructureOfAnEmptyDraftStaysEmpty)
 	{
 		CreationSession session;
 		session.supercellCounts = glm::ivec3(3, 3, 3);
-		EXPECT_TRUE(BuildSessionExportStructure(session).atoms.empty());
+		const auto exported = BuildSessionExportStructure(session);
+		ASSERT_TRUE(exported);
+		EXPECT_TRUE(exported->atoms.empty());
 	}
 } // namespace DefectStudio::Tests

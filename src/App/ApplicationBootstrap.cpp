@@ -955,8 +955,7 @@ namespace DefectStudio
 				m_EventBus,
 				coreLayer->GetJobSystemHandle(),
 				m_LayerStack.FindLayerAs<DomainLayer>(LayerId::Domain),
-				m_CreationSessionRegistry,
-				Path::FromResolved(FileSystem::CurrentPath() / "install" / "users" / "default" / "temp" / "structure_creation"));
+				m_CreationSessionRegistry);
 			timer.Finish(true);
 		}
 

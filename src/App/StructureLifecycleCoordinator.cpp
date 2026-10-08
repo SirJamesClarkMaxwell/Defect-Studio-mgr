@@ -8,6 +8,7 @@
 #include "Core/Domain/StructureLifecycleEvents.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/PathValidation.hpp"
 #include "Domain/Crystal/StructureValidation.hpp"
 #include "Domain/DomainLayer.hpp"
@@ -28,19 +29,25 @@ namespace DefectStudio
 				std::move(suggestion),
 				"StructureLifecycleCoordinator");
 		}
+
+		void ReportCleanupFailure(EventBus &bus, const FilePath &path, const std::error_code &error)
+		{
+			if (error)
+				bus.Queue(NotificationRequestedEvent{ToNotification(StructuredError(
+					ErrorCategory::IO, Severity::Warning, "Nie udało się usunąć pliku lub folderu: " + Path(path).Utf8(),
+					error.message(), "Sprawdź uprawnienia i usuń pozostałość ręcznie.", "StructureLifecycleCoordinator"))});
+		}
 	} // namespace
 
 	StructureLifecycleCoordinator::StructureLifecycleCoordinator(
 		Ref<EventBus> eventBus,
 		WeakRef<JobSystem> jobSystem,
 		WeakRef<DomainLayer> domainLayer,
-		Ref<CreationSessionRegistry> sessionRegistry,
-		Path scratchDirectory)
+		Ref<CreationSessionRegistry> sessionRegistry)
 		: m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem)),
 		  m_DomainLayer(std::move(domainLayer)),
-		  m_SessionRegistry(std::move(sessionRegistry)),
-		  m_ScratchDirectory(std::move(scratchDirectory))
+		  m_SessionRegistry(std::move(sessionRegistry))
 	{
 		if (m_EventBus == nullptr)
 			return;
@@ -57,6 +64,9 @@ namespace DefectStudio
 			std::bind_front(&StructureLifecycleCoordinator::onJobCompleted, this)));
 		AddSubscription(m_EventBus->Subscribe<JobFailedEvent>(
 			std::bind_front(&StructureLifecycleCoordinator::onJobFailed, this)));
+		AddSubscription(m_EventBus->Subscribe<JobCancelledEvent>([this](const JobCancelledEvent &event) {
+			onJobFailed(JobFailedEvent{event.id, event.name, event.type, "Anulowano dodawanie struktury.", event.finishedAt});
+		}));
 	}
 
 	StructureLifecycleCoordinator::~StructureLifecycleCoordinator()
@@ -78,6 +88,7 @@ namespace DefectStudio
 			{
 				DS_LOG_WARN("Structure Lifecycle: ignoring project root '{}': {}",
 					root.String(), symlinkFree.Error().technicalDetails);
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(symlinkFree.Error())});
 				continue;
 			}
 
@@ -86,6 +97,9 @@ namespace DefectStudio
 			if (error)
 			{
 				DS_LOG_WARN("Structure Lifecycle: ignoring project root '{}': {}", root.String(), error.message());
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(WorkflowError(
+					"Folder projektu jest niedostępny", root.Utf8() + ": " + error.message(),
+					"Sprawdź folder projektu i wybierz go ponownie."))});
 				continue;
 			}
 			m_ProjectRoots.push_back(Path::FromResolved(canonical));
@@ -99,6 +113,8 @@ namespace DefectStudio
 		if (session == nullptr)
 		{
 			DS_LOG_WARN("Structure Lifecycle: hand-off for unknown session {}", ToString(event.sessionId));
+			publishFailure(event.sessionId, Uuid{}, WorkflowError("Szkic struktury nie jest już otwarty",
+				"Unknown session at hand-off: " + ToString(event.sessionId), "Utwórz nowy szkic struktury."));
 			return;
 		}
 
@@ -133,13 +149,18 @@ namespace DefectStudio
 		}
 
 		return WorkflowError(
-			"Target folder is outside the project",
+			m_ProjectRoots.empty() ? "Brak dostępnego folderu głównego projektu" : "Folder docelowy jest poza projektem",
 			canonical.string() + " is not under any registered project root",
-			"Choose a folder inside one of the open project roots.");
+			"Otwórz folder projektu i wybierz w nim folder docelowy.");
 	}
 
 	void StructureLifecycleCoordinator::publishFailure(const Uuid &sessionId, const Uuid &attemptId, StructuredError error)
 	{
+		Notification notification = ToNotification(error);
+		notification.title = "Nie udało się dodać struktury do projektu";
+		if (!error.suggestion.empty())
+			notification.message += "\n" + error.suggestion;
+		m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
 		DomainEvents::ProjectStructureAddFailed failureEvent;
 		failureEvent.sessionId = sessionId;
 		failureEvent.attemptId = attemptId;
@@ -204,16 +225,7 @@ namespace DefectStudio
 			return;
 		}
 
-		// Pre-flight the duplicate check that the registry repeats at the END of the flow. It has to
-		// happen HERE, before anything is written, for two reasons:
-		//
-		//  - a real duplicate is then reported without creating a directory, writing a POSCAR and
-		//    deleting both again (which used to leave an empty folder and its .pending_registration
-		//    sentinel in the project tree after every refused add), and
-		//  - a record whose file has since been DELETED from the Project Tree is only recognisable
-		//    while the file is still missing. By registration time this attempt has written a new
-		//    file at that exact path, and the dangling record is indistinguishable from a live one -
-		//    which is what made a deleted structure impossible to re-add for the rest of the session.
+		// Check duplicates before writing, while records for deleted files are still distinguishable.
 		const Path plannedPoscarPath = Path::FromResolved(
 			authorized.Value().first.Native() / sanitizedName.Value() / "POSCAR");
 		if (Ref<DomainLayer> domainLayer = m_DomainLayer.lock(); domainLayer != nullptr)
@@ -276,10 +288,18 @@ namespace DefectStudio
 			event.structure,
 			sanitizedName.Value(),
 			authorized.Value().first,
-			authorized.Value().second,
-			m_ScratchDirectory);
+			authorized.Value().second);
 
 		const JobId id = jobSystem->Submit(job, JobPriority::Normal);
+		if (id == 0)
+		{
+			session->activeAttemptId.reset();
+			session->state = CreationSessionState::Failed;
+			session->lastError = WorkflowError("Nie udało się rozpocząć dodawania struktury",
+				"JobSystem::Submit returned 0", "Spróbuj ponownie po uruchomieniu aplikacji.");
+			publishFailure(event.sessionId, attemptId, *session->lastError);
+			return;
+		}
 		m_PendingJobs[id] = std::move(job);
 	}
 
@@ -296,9 +316,7 @@ namespace DefectStudio
 
 		session->state = CreationSessionState::Closing;
 
-		// Removing the session detaches it from the UI immediately either way. If an attempt is still
-		// in flight, its late completion lands in onJobCompleted with no session to find - which is
-		// exactly the orphan path that deletes the unregistered directory.
+		// A late completion after closing is discarded and its unregistered directory removed.
 		if (session->activeAttemptId.has_value())
 		{
 			DS_LOG_INFO("Structure Lifecycle: session {} closed with attempt {} still in flight; "
@@ -320,6 +338,7 @@ namespace DefectStudio
 		const FilePath structureDirectory = outcome->Value().Native().parent_path();
 		std::error_code error;
 		FileSystem::RemoveAll(structureDirectory, error);
+		ReportCleanupFailure(*m_EventBus, structureDirectory, error);
 		if (error)
 			DS_LOG_WARN("Structure Lifecycle: could not remove orphaned structure directory '{}': {}",
 				structureDirectory.string(), error.message());
@@ -400,12 +419,10 @@ namespace DefectStudio
 
 		if (!registered)
 		{
-			// Written but unregistered: this attempt created the whole directory (the job refuses to
-			// write into an existing one), so the whole directory goes. Removing only the POSCAR used
-			// to leave an empty folder carrying a .pending_registration sentinel in the project tree
-			// for every failed add.
+			// This attempt created the directory; roll back the whole unregistered directory.
 			std::error_code error;
 			FileSystem::RemoveAll(poscarPath.Native().parent_path(), error);
+			ReportCleanupFailure(*m_EventBus, poscarPath.Native().parent_path(), error);
 			if (error)
 				DS_LOG_WARN("Structure Lifecycle: could not remove unregistered structure directory '{}': {}",
 					poscarPath.Native().parent_path().string(), error.message());
@@ -417,9 +434,7 @@ namespace DefectStudio
 			return;
 		}
 
-		// The POTCAR request rides along on the record: EditorLayer writes the file when it sees
-		// ProjectStructureAdded, because POTCAR generation is an IO/config concern (it needs
-		// ui.pseudopotential_dir) and does not belong in the lifecycle coordinator.
+		// EditorLayer handles the POTCAR request after ProjectStructureAdded.
 		if (Ref<StructureRecord> record =
 				domainLayer->Workspace().Structures().FindMutable(registered.Value()).lock();
 			record != nullptr)
@@ -431,6 +446,7 @@ namespace DefectStudio
 		// contract depends on: a structure directory that still has one was never confirmed.
 		std::error_code sentinelError;
 		FileSystem::Remove(poscarPath.Native().parent_path() / PendingRegistrationSentinel, sentinelError);
+		ReportCleanupFailure(*m_EventBus, poscarPath.Native().parent_path() / PendingRegistrationSentinel, sentinelError);
 
 		session->activeAttemptId.reset();
 		session->state = CreationSessionState::Success;
@@ -456,8 +472,8 @@ namespace DefectStudio
 		Ref<AddStructureToProjectJob> job = std::move(it->second);
 		m_PendingJobs.erase(it);
 
-		// The job reports expected failures through its outcome and completes normally, so reaching
-		// here means it threw: an unexpected bug or a cancellation, not a validation result.
+		// Cancellation can arrive after the file was committed; it still needs rollback.
+		discardOrphanedAttempt(*job);
 		const Uuid sessionId = job->GetSessionId();
 		const Uuid attemptId = job->GetAttemptId();
 
@@ -469,7 +485,7 @@ namespace DefectStudio
 		}
 
 		StructuredError error = WorkflowError(
-			"Failed to add structure to project", event.errorMessage, "See the log for details, then retry.");
+			"Nie udało się dodać struktury do projektu", event.errorMessage, "Sprawdź dziennik i spróbuj ponownie.");
 		session->activeAttemptId.reset();
 		session->state = CreationSessionState::Failed;
 		session->lastError = error;
