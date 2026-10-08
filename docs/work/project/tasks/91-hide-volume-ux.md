@@ -37,3 +37,22 @@ Persistence: `active` in `scene_objects.yaml`; a file without it takes `active` 
   clip for densities and orbitals.
 - Presentation (Codex B): viewport click selection, the operator popup, add-at-atom, `active` in
   the UI, vacancy/label picking skips covered ones.
+
+## Done (commit db71480) and how to try it
+
+- Add > Bryła ukrywająca (or right-click an atom > Ukryj wokół atomu): the Operator Redo popup opens
+  with kind, frame, size and "Ukryj na zewnątrz"; changing a value replaces the volume just added.
+- The outline is a wireframe, drawn while the eye is on, brighter when selected. Clicking a line of
+  it selects the volume; an atom or bond under the cursor still wins.
+- Eye off: the cage disappears, the atoms stay hidden. "Aktywna (ukrywa)" in Object Properties, or
+  the outliner row's context menu, switches the cut. An inactive cage is drawn at half opacity.
+- Inside an active volume: vacancy markers and their labels, free labels, pinned measurements, paths
+  bound to a hidden atom (vacancy bonds) and the density / orbital isosurfaces disappear, and none of
+  them can be clicked or region-selected.
+- Resizing a volume after aligning the view to an axis, adding a vacancy or H / Alt+H brings the
+  uncovered atoms back (item 3).
+- "Wiązania do sąsiadów" picks the physical neighbour shell even when a volume covers it (item 4,
+  most likely cause - a vacancy bond to the nearest *visible* atom).
+
+Not done: the camera eye defaults to off for new volumes (no cage in exports); the isosurface clip
+takes the first eight active volumes.
