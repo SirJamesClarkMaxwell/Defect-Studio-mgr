@@ -109,8 +109,8 @@ namespace DefectStudio
 
 	[[nodiscard]] bool HandlePinnedMeasurementInteraction(
 		RendererWindowState &windowState, const ImVec2 &imageOrigin, const ImVec2 &imageSize, bool hovered);
-	// F flip / Ctrl+Shift+</> scale-step for selected pins, plus Delete for selected pins, free
-	// labels, paths, orbitals and planes. Keyboard-only, no mouse hit-test, so unlike the click/drag
+	// F flip / Ctrl+Shift+</> scale-step for selected pins and label-style shortcuts.
+	// Object edits are routed by CoreLayer. Keyboard-only, no mouse hit-test, so unlike the click/drag
 	// handlers it must run every frame regardless of whether a gizmo captured this frame's mouse.
 	void HandlePinnedMeasurementKeyboardShortcuts(
 		RendererWindowState &windowState, bool hovered, RendererLayer &layer);

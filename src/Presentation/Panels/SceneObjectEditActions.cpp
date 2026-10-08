@@ -3,9 +3,12 @@
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <utility>
 
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Presentation/Panels/SceneDensityEditor.hpp"
 #include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
@@ -36,6 +39,7 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: return windowState.selectedFreeLabels;
+			case SceneObjectEditKind::PinnedMeasurement: return windowState.selectedPinnedMeasurements;
 			case SceneObjectEditKind::Orbital: return windowState.selectedSceneOrbitals;
 			case SceneObjectEditKind::Plane: return windowState.selectedScenePlanes;
 			case SceneObjectEditKind::Path: return windowState.selectedScenePaths;
@@ -49,11 +53,12 @@ namespace DefectStudio
 		{
 			switch (kind)
 			{
-			case SceneObjectEditKind::FreeLabel: return !GetSceneFreeLabelClipboard().empty();
+			case SceneObjectEditKind::FreeLabel: return !GetPersistedSceneFreeLabelClipboard().empty();
+			case SceneObjectEditKind::PinnedMeasurement: return !GetScenePinnedMeasurementClipboard().empty();
 			case SceneObjectEditKind::Orbital: return !GetSceneOrbitalClipboard().empty();
 			case SceneObjectEditKind::Plane: return !GetScenePlaneClipboard().empty();
 			case SceneObjectEditKind::Path: return !GetScenePathClipboard().empty();
-			case SceneObjectEditKind::Density: return false;
+			case SceneObjectEditKind::Density: return !GetSceneDensityClipboard().empty();
 			case SceneObjectEditKind::HideVolume: return !GetSceneHideVolumeClipboard().empty();
 			}
 			return false;
@@ -147,8 +152,6 @@ namespace DefectStudio
 		const SceneObjectEditKind kind,
 		const SceneObjectEditAction action)
 	{
-		if (kind == SceneObjectEditKind::Density && action == SceneObjectEditAction::Copy)
-			return false;
 		if (action == SceneObjectEditAction::Paste)
 			return ClipboardHasObjects(kind);
 		return !SelectionFor(windowState, kind).empty();
@@ -160,6 +163,11 @@ namespace DefectStudio
 		{
 			static SceneObjectEditKind kind = SceneObjectEditKind::Path;
 			return kind;
+		}
+		bool &SceneClipboardActive()
+		{
+			static bool active = false;
+			return active;
 		}
 	} // namespace
 
@@ -187,6 +195,9 @@ namespace DefectStudio
 			case SceneObjectEditKind::FreeLabel:
 				EraseSceneFreeLabels(windowState, windowState.selectedFreeLabels);
 				break;
+			case SceneObjectEditKind::PinnedMeasurement:
+				EraseScenePinnedMeasurements(windowState, windowState.selectedPinnedMeasurements);
+				break;
 			case SceneObjectEditKind::Orbital:
 				EraseSceneOrbitals(windowState, windowState.selectedSceneOrbitals);
 				break;
@@ -209,6 +220,7 @@ namespace DefectStudio
 			switch (kind)
 			{
 			case SceneObjectEditKind::FreeLabel: DuplicateSelectedSceneFreeLabels(windowState); break;
+			case SceneObjectEditKind::PinnedMeasurement: DuplicateSelectedScenePinnedMeasurements(windowState); break;
 			case SceneObjectEditKind::Orbital: DuplicateSelectedSceneOrbitals(windowState); break;
 			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState); break;
 			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState); break;
@@ -219,13 +231,15 @@ namespace DefectStudio
 
 		case SceneObjectEditAction::Copy:
 			LastCopiedKind() = kind;
+			SceneClipboardActive() = true;
 			switch (kind)
 			{
-			case SceneObjectEditKind::FreeLabel: CopySceneFreeLabelsToClipboard(windowState); break;
+			case SceneObjectEditKind::FreeLabel: CopyPersistedSceneFreeLabelsToClipboard(windowState); break;
+			case SceneObjectEditKind::PinnedMeasurement: CopyScenePinnedMeasurementsToClipboard(windowState); break;
 			case SceneObjectEditKind::Orbital: CopySceneOrbitalsToClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: CopyScenePlanesToClipboard(windowState); break;
 			case SceneObjectEditKind::Path: CopyScenePathsToClipboard(windowState); break;
-			case SceneObjectEditKind::Density: break;
+			case SceneObjectEditKind::Density: CopySceneDensitiesToClipboard(windowState); break;
 			case SceneObjectEditKind::HideVolume: CopySceneHideVolumesToClipboard(windowState); break;
 			}
 			break;
@@ -233,15 +247,90 @@ namespace DefectStudio
 		case SceneObjectEditAction::Paste:
 			switch (kind)
 			{
-			case SceneObjectEditKind::FreeLabel: PasteSceneFreeLabelsFromClipboard(windowState); break;
+			case SceneObjectEditKind::FreeLabel: PastePersistedSceneFreeLabelsFromClipboard(windowState); break;
+			case SceneObjectEditKind::PinnedMeasurement: PasteScenePinnedMeasurementsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Orbital: PasteSceneOrbitalsFromClipboard(windowState); break;
 			case SceneObjectEditKind::Plane: PasteScenePlanesFromClipboard(windowState); break;
 			case SceneObjectEditKind::Path: PasteScenePathsFromClipboard(windowState); break;
-			case SceneObjectEditKind::Density: break;
+			case SceneObjectEditKind::Density: PasteSceneDensitiesFromClipboard(windowState); break;
 			case SceneObjectEditKind::HideVolume: PasteSceneHideVolumesFromClipboard(windowState); break;
 			}
 			break;
 		}
 		return true;
+	}
+
+	bool HandleSceneObjectEditShortcut(RendererWindowState &window, SceneObjectEditAction action)
+	{
+		if (!window.selectedAtomIndices.empty() || !window.selectedBondIndices.empty())
+		{
+			if (action == SceneObjectEditAction::Copy) SceneClipboardActive() = false;
+			return false;
+		}
+		if (window.pathEdit.IsActive() || window.modalTransform.has_value()) return true;
+		constexpr SceneObjectEditKind kinds[] = {SceneObjectEditKind::Orbital, SceneObjectEditKind::Plane,
+			SceneObjectEditKind::Path, SceneObjectEditKind::FreeLabel, SceneObjectEditKind::Density,
+			SceneObjectEditKind::HideVolume, SceneObjectEditKind::PinnedMeasurement};
+		bool selected = false;
+		for (const auto kind : kinds)
+		{
+			if (SelectionFor(window, kind).empty()) continue;
+			selected = true;
+			(void)ExecuteSceneObjectEditAction(window, kind, action);
+			if (action != SceneObjectEditAction::Delete) return true;
+		}
+		if (selected || !window.selectedVacancies.empty()) return true;
+		if (action == SceneObjectEditAction::Paste && SceneClipboardActive())
+		{
+			(void)ExecuteSceneObjectEditAction(window, LastCopiedKind(), action);
+			return true;
+		}
+		return false;
+	}
+
+	namespace
+	{
+		class SceneObjectShortcutCommand final : public ICommand
+		{
+		public:
+			explicit SceneObjectShortcutCommand(RendererLayer &layer) : m_Layer(layer) {}
+			Result<void> Execute(CommandContext &context) override
+			{
+				const auto requested = context.GetCopy<std::string>("scene_objects.shortcut_action");
+				const auto handled = context.GetCopy<Ref<bool>>("scene_objects.shortcut_handled");
+				if (!requested) return requested.Error();
+				if (!handled) return handled.Error();
+				if (!handled.Value()) return {};
+				SceneObjectEditAction action;
+				if (requested.Value() == "renderer.selection.delete") action = SceneObjectEditAction::Delete;
+				else if (requested.Value() == "renderer.selection.copy") action = SceneObjectEditAction::Copy;
+				else if (requested.Value() == "renderer.selection.paste") action = SceneObjectEditAction::Paste;
+				else if (requested.Value() == "renderer.selection.duplicate") action = SceneObjectEditAction::Duplicate;
+				else return {};
+				auto &layer = m_Layer.get();
+				const auto &focusedId = layer.GetFocusedViewportWindowId();
+				for (auto &window : layer.GetWindows())
+					if (window.windowId == focusedId || (focusedId.empty() && layer.GetWindows().size() == 1))
+					{
+						*handled.Value() = HandleSceneObjectEditShortcut(window, action);
+						break;
+					}
+				return {};
+			}
+			std::string Description() const override { return "Edycja obiektów sceny"; }
+		private:
+			std::reference_wrapper<RendererLayer> m_Layer;
+		};
+	}
+
+	void RegisterSceneObjectShortcutCommand(CommandRegistry &registry, RendererLayer &layer)
+	{
+		const CommandID id{"renderer.scene_objects.shortcut"};
+		if (registry.HasCommand(id)) return;
+		const auto result = registry.Register({id, "Edycja obiektów sceny", "Renderer", "Edycja obiektów sceny", {},
+			CommandFlags::HiddenFromPalette}, [renderer = std::ref(layer)](CommandContext &) -> Unique<ICommand> {
+				return CreateUnique<SceneObjectShortcutCommand>(renderer.get());
+			});
+		if (!result) DS_LOG_WARN("Scene object shortcut registration failed: {}", result.Error().technicalDetails);
 	}
 } // namespace DefectStudio

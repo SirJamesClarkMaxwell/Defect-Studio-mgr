@@ -51,6 +51,7 @@ namespace DefectStudio
 			m_UndoDepth = 0;
 		m_Collapsed = false;
 		m_Open = true;
+		m_JustOpened = true;
 		return {};
 	}
 
@@ -124,6 +125,14 @@ namespace DefectStudio
 		m_UndoDepth = 0;
 		m_Open = false;
 		m_Collapsed = false;
+		m_JustOpened = false;
+	}
+
+	void OperatorRedoPanel::HandleViewportActivity(bool clicked, bool operationStarted) noexcept
+	{
+		if (!m_Open) return;
+		if (operationStarted || (clicked && !m_JustOpened)) Close();
+		m_JustOpened = false;
 	}
 
 	void OperatorRedoPanel::CommitEdit(SceneOperatorValues before)
@@ -165,14 +174,15 @@ namespace DefectStudio
 	{
 		if (!m_Open || m_Operator == nullptr || window.windowId != m_WindowId)
 			return;
+		m_JustOpened = false;
 
 		const ImVec2 viewportPosition = ImGui::GetWindowPos();
 		const ImVec2 viewportSize = ImGui::GetWindowSize();
 		ImGui::SetNextWindowPos(
 			ImVec2(viewportPosition.x + 8.0f, viewportPosition.y + viewportSize.y - 8.0f),
 			ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-		const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking |
-			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+		const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing;
 		bool visible = true;
 		if (!ImGui::Begin("Dostosuj operację###OperatorRedoPanel", &visible, flags))
 		{

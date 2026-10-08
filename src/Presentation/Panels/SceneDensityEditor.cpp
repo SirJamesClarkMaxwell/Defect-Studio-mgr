@@ -17,6 +17,24 @@
 
 namespace DefectStudio
 {
+	SceneObjectClipboard &GetSceneDensityClipboard()
+	{
+		static SceneObjectClipboard clipboard;
+		return clipboard;
+	}
+
+	void CopySceneDensitiesToClipboard(const RendererWindowState &window)
+	{
+		CopySceneObjectClipboard(window, &RendererWindowState::sceneDensities,
+			window.selectedSceneDensities, GetSceneDensityClipboard());
+	}
+
+	void PasteSceneDensitiesFromClipboard(RendererWindowState &window)
+	{
+		PasteSceneObjectClipboard(window, GetSceneDensityClipboard(),
+			&RendererWindowState::sceneDensities, window.selectedSceneDensities);
+	}
+
 	namespace
 	{
 		using SceneDensity = RendererWindowState::SceneDensity;

@@ -51,6 +51,8 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(sphere.frame, HideVolumeFrame::Anchored);
 		EXPECT_EQ(sphere.anchorAtoms, (std::vector<std::size_t>{0, 1}));
 		EXPECT_TRUE(sphere.invert);
+		EXPECT_EQ(sphere.color, glm::vec3(0, 1, 1));
+		EXPECT_FLOAT_EQ(sphere.alpha, 0.75f);
 		EXPECT_FLOAT_EQ(sphere.halfExtents.x, kDefaultHideVolumeRadius); // 1.5 + 1 < 4
 		EXPECT_EQ(sphere.name.rfind("Kula", 0), 0u);
 
@@ -241,5 +243,28 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(warnings.empty());
 		ASSERT_EQ(reopened.sceneHideVolumes.size(), 1u);
 		EXPECT_EQ(VisibleFlags(reopened), (std::vector<bool>{true, true, false, false, false, false}));
+	}
+
+	TEST(SceneHideVolumeEditorTests, LoadingLegacyFillOpacityRestoresAVisibleOutlineOnlyBelowThreshold)
+	{
+		for (const float savedAlpha : {0.0f, 0.049f, 0.05f, 0.3f})
+		{
+			RendererWindowState window;
+			BuildRow(window);
+			PersistedSceneHideVolume saved;
+			saved.alpha = savedAlpha;
+			saved.color = glm::vec3(1, 0, 0);
+			saved.visible = false;
+			saved.active = false;
+			std::vector<StructuredError> warnings;
+			ApplyPersistedSceneObjects(window, {PersistedSceneObject{saved}}, warnings);
+			ASSERT_TRUE(warnings.empty());
+			ASSERT_EQ(window.sceneHideVolumes.size(), 1u);
+			const auto &volume = window.sceneHideVolumes.front();
+			EXPECT_FLOAT_EQ(volume.alpha, savedAlpha < 0.05f ? 0.75f : savedAlpha);
+			EXPECT_EQ(volume.color, saved.color);
+			EXPECT_FALSE(volume.visible);
+			EXPECT_FALSE(volume.active);
+		}
 	}
 } // namespace DefectStudio::Tests

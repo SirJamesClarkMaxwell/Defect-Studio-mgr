@@ -10,6 +10,7 @@
 #include "Renderer/RendererViewCamera.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneHideVolumeSilhouette.hpp"
 #include "Renderer/Scene/SceneSelection.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
@@ -64,7 +65,9 @@ namespace DefectStudio
 		for (const auto &volume : window.sceneHideVolumes)
 		{
 			if (!volume.visible) continue;
-			const auto edges = BuildHideVolumeEdges(volume, window.structure);
+			auto edges = BuildHideVolumeEdges(volume, window.structure);
+			const auto silhouette = BuildHideVolumeSilhouette(volume, window.structure, *window.camera, window.viewOffset);
+			edges.insert(edges.end(), silhouette.begin(), silhouette.end());
 			for (std::size_t segment = 0; segment + 1 < edges.size(); segment += 2)
 			{
 				auto a = viewProjection * glm::vec4(edges[segment] + window.viewOffset, 1);

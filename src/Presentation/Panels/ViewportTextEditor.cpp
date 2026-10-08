@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ViewportTextEditor.hpp"
+#include "Presentation/Panels/SceneObjectEditActions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,24 @@
 
 namespace DefectStudio
 {
+	SceneObjectClipboard &GetPersistedSceneFreeLabelClipboard()
+	{
+		static SceneObjectClipboard clipboard;
+		return clipboard;
+	}
+
+	void CopyPersistedSceneFreeLabelsToClipboard(const RendererWindowState &window)
+	{
+		CopySceneObjectClipboard(window, &RendererWindowState::freeLabels,
+			window.selectedFreeLabels, GetPersistedSceneFreeLabelClipboard());
+	}
+
+	void PastePersistedSceneFreeLabelsFromClipboard(RendererWindowState &window)
+	{
+		PasteSceneObjectClipboard(window, GetPersistedSceneFreeLabelClipboard(),
+			&RendererWindowState::freeLabels, window.selectedFreeLabels);
+	}
+
 	namespace
 	{
 		struct TextEditSession

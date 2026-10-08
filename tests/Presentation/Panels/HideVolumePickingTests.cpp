@@ -1,12 +1,14 @@
 #include "Core/dspch.hpp"
 
 #include <gtest/gtest.h>
+#include <algorithm>
 
 #include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/ViewportPicking.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Presentation/Panels/ViewportVacancySelection.hpp"
 #include "Renderer/RendererViewCamera.hpp"
+#include "Renderer/Scene/SceneHideVolumeSilhouette.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 #include "IO/SceneObjectsIO.hpp"
 
@@ -45,8 +47,41 @@ namespace DefectStudio::Tests
 
 	TEST(HideVolumePickingTests, NewAndPersistedVolumesDefaultToOutlineOpacity)
 	{
-		EXPECT_FLOAT_EQ(SceneHideVolume{}.alpha, 0.8f);
-		EXPECT_FLOAT_EQ(PersistedSceneHideVolume{}.alpha, 0.8f);
+		EXPECT_FLOAT_EQ(SceneHideVolume{}.alpha, 0.75f);
+		EXPECT_FLOAT_EQ(PersistedSceneHideVolume{}.alpha, 0.75f);
+		EXPECT_EQ(SceneHideVolume{}.color, glm::vec3(0, 1, 1));
+		EXPECT_EQ(PersistedSceneHideVolume{}.color, glm::vec3(0, 1, 1));
+	}
+
+	TEST(HideVolumePickingTests, SilhouetteIsPickableAwayFromAllThreeGreatCircles)
+	{
+		for (const auto projection : {CameraProjection::Orthographic, CameraProjection::Perspective})
+		{
+			RendererWindowState window;
+			Prepare(window);
+			window.camera->SetProjection(projection);
+			window.camera->SetOrbitState(glm::vec3(0), 6, 0.7f, 0.5f);
+			window.viewOffset = glm::vec3(0.3f, 0.2f, -0.1f);
+			const auto id = AddOutline(window, HideVolumeKind::Sphere);
+			const auto silhouette = BuildHideVolumeSilhouette(window.sceneHideVolumes.front(), window.structure,
+				*window.camera, window.viewOffset);
+			ASSERT_FALSE(silhouette.empty());
+			const auto greatCircles = BuildHideVolumeEdges(window.sceneHideVolumes.front(), window.structure);
+			int checked = 0;
+			for (const auto &point : silhouette)
+			{
+				const auto screen = Project(window, point, window.viewportSize);
+				float closest = 1000;
+				for (std::size_t segment = 0; segment < greatCircles.size(); segment += 2)
+					closest = std::min(closest, SelectionHitTest::DistancePointToSegment(screen,
+						Project(window, greatCircles[segment], window.viewportSize),
+						Project(window, greatCircles[segment + 1], window.viewportSize)));
+				if (closest <= 8) continue;
+				EXPECT_EQ(PickSceneHideVolumeOutline(window, screen, window.viewportSize), id);
+				++checked;
+			}
+			EXPECT_GT(checked, 0);
+		}
 	}
 
 	TEST(HideVolumePickingTests, HiddenAnchorsExcludeOffsetLabelsFromRectangleAndCircleSelection)

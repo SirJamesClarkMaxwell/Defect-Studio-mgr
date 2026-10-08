@@ -13,8 +13,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		constexpr glm::vec3 kSceneObjectCopyOffset(0.5f, 0.0f, 0.0f);
-
 		template <typename Object>
 		[[nodiscard]] std::size_t FindObjectIndex(
 			const std::vector<Object> &objects, const SceneObjectId id)
@@ -29,30 +27,12 @@ namespace DefectStudio
 
 		void OffsetAndDetach(RendererWindowState::SceneOrbital &orbital)
 		{
-			orbital.centerA += kSceneObjectCopyOffset;
-			orbital.centerB += kSceneObjectCopyOffset;
-			orbital.anchorAtoms.clear();
+			OffsetSceneClipboardCopy(orbital);
 		}
 
 		void OffsetAndDetach(RendererWindowState::ScenePlane &plane)
 		{
-			plane.center += kSceneObjectCopyOffset;
-			plane.anchorAtoms.clear();
-		}
-
-		template <typename Object>
-		void CopySelectedObjects(
-			const std::vector<Object> &objects,
-			const std::vector<SceneObjectId> &selection,
-			std::vector<Object> &clipboard)
-		{
-			clipboard.clear();
-			for (const SceneObjectId id : selection)
-			{
-				const std::size_t index = FindObjectIndex(objects, id);
-				if (index < objects.size())
-					clipboard.push_back(objects[index]);
-			}
+			OffsetSceneClipboardCopy(plane);
 		}
 
 		template <typename Object, typename Offset>
@@ -95,9 +75,9 @@ namespace DefectStudio
 		}
 	} // namespace
 
-	std::vector<RendererWindowState::SceneOrbital> &GetSceneOrbitalClipboard()
+	SceneObjectClipboard &GetSceneOrbitalClipboard()
 	{
-		static std::vector<RendererWindowState::SceneOrbital> clipboard;
+		static SceneObjectClipboard clipboard;
 		return clipboard;
 	}
 
@@ -110,8 +90,8 @@ namespace DefectStudio
 
 	void CopySceneOrbitalsToClipboard(const RendererWindowState &windowState)
 	{
-		CopySelectedObjects(
-			windowState.sceneOrbitals, windowState.selectedSceneOrbitals, GetSceneOrbitalClipboard());
+		CopySceneObjectClipboard(windowState, &RendererWindowState::sceneOrbitals,
+			windowState.selectedSceneOrbitals, GetSceneOrbitalClipboard());
 	}
 
 	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState)
@@ -128,25 +108,20 @@ namespace DefectStudio
 
 	void PasteSceneOrbitalsFromClipboard(RendererWindowState &windowState)
 	{
-		const std::vector<RendererWindowState::SceneOrbital> &clipboard = GetSceneOrbitalClipboard();
-		if (clipboard.empty())
-			return;
-		PushPinnedMeasurementUndoSnapshot(windowState);
-		windowState.selectedSceneOrbitals = AppendCopies(
-			windowState, clipboard, windowState.sceneOrbitals,
-			[](RendererWindowState::SceneOrbital &orbital) { OffsetAndDetach(orbital); });
-		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
+		PasteSceneObjectClipboard(windowState, GetSceneOrbitalClipboard(),
+			&RendererWindowState::sceneOrbitals, windowState.selectedSceneOrbitals);
 	}
 
-	std::vector<RendererWindowState::ScenePlane> &GetScenePlaneClipboard()
+	SceneObjectClipboard &GetScenePlaneClipboard()
 	{
-		static std::vector<RendererWindowState::ScenePlane> clipboard;
+		static SceneObjectClipboard clipboard;
 		return clipboard;
 	}
 
 	void CopyScenePlanesToClipboard(const RendererWindowState &windowState)
 	{
-		CopySelectedObjects(windowState.scenePlanes, windowState.selectedScenePlanes, GetScenePlaneClipboard());
+		CopySceneObjectClipboard(windowState, &RendererWindowState::scenePlanes,
+			windowState.selectedScenePlanes, GetScenePlaneClipboard());
 	}
 
 	void DuplicateSelectedScenePlanes(RendererWindowState &windowState)
@@ -162,12 +137,7 @@ namespace DefectStudio
 
 	void PasteScenePlanesFromClipboard(RendererWindowState &windowState)
 	{
-		const std::vector<RendererWindowState::ScenePlane> &clipboard = GetScenePlaneClipboard();
-		if (clipboard.empty())
-			return;
-		PushPinnedMeasurementUndoSnapshot(windowState);
-		windowState.selectedScenePlanes = AppendCopies(
-			windowState, clipboard, windowState.scenePlanes,
-			[](RendererWindowState::ScenePlane &plane) { OffsetAndDetach(plane); });
+		PasteSceneObjectClipboard(windowState, GetScenePlaneClipboard(),
+			&RendererWindowState::scenePlanes, windowState.selectedScenePlanes);
 	}
 } // namespace DefectStudio

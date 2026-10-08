@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Presentation/Panels/ScenePathCurvedArrow.hpp"
+#include "Presentation/Panels/SceneObjectClipboard.hpp"
 #include "Renderer/Path/PathCommands.hpp"
 #include "Renderer/Path/PathEvaluator.hpp"
 #include "Renderer/RendererWindowState.hpp"
@@ -34,7 +35,7 @@ namespace DefectStudio
 	void SelectAddedScenePaths(RendererWindowState &windowState, std::vector<SceneObjectId> ids);
 
 	// Clipboard shared across windows, same lifetime and shape as the orbital/plane ones.
-	[[nodiscard]] std::vector<ScenePath> &GetScenePathClipboard();
+	[[nodiscard]] SceneObjectClipboard &GetScenePathClipboard();
 
 	void CopyScenePathsToClipboard(const RendererWindowState &windowState);
 	void DuplicateSelectedScenePaths(RendererWindowState &windowState);

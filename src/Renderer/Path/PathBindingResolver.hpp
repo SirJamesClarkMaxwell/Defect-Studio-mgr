@@ -61,6 +61,8 @@ namespace DefectStudio
 	//
 	// The identity transform leaves every resolved position exactly where it was before paths had
 	// one, which is what makes existing files load unchanged.
+	// Clipboard fallback must freeze the live bond frame, not its last authored transform.
+	[[nodiscard]] PathTransform ResolvePathTransform(const ScenePath &path, const BindingContext &context);
 	[[nodiscard]] ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context);
 
 	// S14: the cache-key component for what a path's BOUND nodes resolved to

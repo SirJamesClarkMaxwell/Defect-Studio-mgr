@@ -10,13 +10,11 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/KeyboardEvents.hpp"
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
-#include "Core/Input/KeyInputProcessor.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobSystemConfigEvents.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "Core/Commands/SystemCommands.hpp"
-#include "Core/Utils/Input.hpp"
 
 namespace DefectStudio
 {
@@ -322,56 +320,6 @@ namespace DefectStudio
 			if (m_JobSystem->RemoveFromHistory(id) && m_ProgressTracker != nullptr)
 				(void)m_ProgressTracker->RemoveEntry(id);
 		}
-	}
-
-	void CoreLayer::onBindingsLoaded(const AppEvents::Keymap::BindingsLoaded &event)
-	{
-		if (m_KeymapResolver == nullptr)
-			return;
-
-		for (const KeyBinding &binding : event.bindings)
-		{
-			if (binding.id.rfind("system.", 0) == 0)
-				continue;
-			auto result = m_KeymapResolver->RegisterBinding(binding);
-			if (!result)
-				DS_LOG_WARN("CoreLayer: loaded binding conflict: {}", result.Error().technicalDetails);
-		}
-		DS_LOG_INFO("CoreLayer: {} user keybindings loaded", event.bindings.size());
-	}
-
-	bool CoreLayer::onKeyPressed(KeyPressedEvent &event)
-	{
-		return dispatchKeyChord(Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode())), false);
-	}
-
-	// GLFW_REPEAT (OS auto-repeat while a key is held) - only bindings explicitly marked
-	// `repeatable: true` in keybindings.yaml fire here (continuous camera orbit while held, say);
-	// everything else only ever runs once per physical press via onKeyPressed above. Without this
-	// gate, holding Delete or Ctrl+D would spam that command on every repeat tick.
-	bool CoreLayer::onKeyRepeated(KeyRepeatedEvent &event)
-	{
-		return dispatchKeyChord(Input::MakeKeyChord(static_cast<KeyCode>(event.GetKeyCode())), true);
-	}
-
-	bool CoreLayer::dispatchKeyChord(const KeyChord &chord, bool requireRepeatable)
-	{
-		if (m_CommandService == nullptr || m_KeymapResolver == nullptr || m_ContextManager == nullptr)
-			return false;
-
-		std::optional<KeyBinding> binding = m_KeymapResolver->Resolve(chord, *m_ContextManager);
-		if (!binding)
-			return false;
-		if (requireRepeatable && !binding->repeatable)
-			return false;
-
-		CommandContext context(ContextID{"core.keybinding"});
-		context.SetSource("CoreLayer shortcut " + ToString(chord));
-		auto commandResult = m_CommandService->Execute(binding->commandId, std::move(context));
-		if (!commandResult)
-			DS_LOG_WARN("CoreLayer command shortcut failed: {}", commandResult.Error().technicalDetails);
-
-		return true;
 	}
 
 	Unique<ICommand> CoreLayer::createUndoCommand(CommandContext &)

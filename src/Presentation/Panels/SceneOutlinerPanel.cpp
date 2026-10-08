@@ -93,6 +93,7 @@ namespace DefectStudio
 
 		const SceneObjectEditKind editKind = rowKind == SelectionRowKind::FreeLabel
 			? SceneObjectEditKind::FreeLabel
+			: rowKind == SelectionRowKind::PinnedMeasurement ? SceneObjectEditKind::PinnedMeasurement
 			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
 			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
 			: rowKind == SelectionRowKind::Density ? SceneObjectEditKind::Density

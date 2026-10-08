@@ -10,6 +10,7 @@
 #include <glad/gl.h>
 
 #include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneHideVolumeSilhouette.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 
@@ -39,33 +40,37 @@ namespace DefectStudio
 			if (!volumes[index].visible) continue;
 			const SceneHideVolume &volume = volumes[index];
 			const bool selected = std::find(selectedVolumes.begin(), selectedVolumes.end(), index) != selectedVolumes.end();
-			const auto edges = BuildHideVolumeEdges(volume, structure);
-			std::vector<glm::vec3> triangles;
-			triangles.reserve(edges.size() * 3);
-			for (std::size_t edge = 0; edge + 1 < edges.size(); edge += 2)
-			{
-				glm::vec3 a = edges[edge] + sceneOffset;
-				glm::vec3 b = edges[edge + 1] + sceneOffset;
-				if (!SelectionHitTest::ClipSegmentToNearPlane(viewProjection, a, b)) continue;
-				a -= sceneOffset;
-				b -= sceneOffset;
-				const glm::vec3 towardCamera = camera.Projection() == CameraProjection::Perspective
-					? camera.Position() - (a + b) * 0.5f - sceneOffset : cameraBack;
-				const glm::vec3 side = glm::cross(b - a, towardCamera);
-				if (glm::dot(side, side) <= 1.0e-12f) continue;
-				const auto widthA = WorldUnitsPerPixelAt(camera, a + sceneOffset, cameraRight, viewportPixelSize);
-				const auto widthB = WorldUnitsPerPixelAt(camera, b + sceneOffset, cameraRight, viewportPixelSize);
-				if (!widthA || !widthB) continue;
-				// Like plane frames, use quads instead of non-portable wide GL_LINES.
-				const glm::vec3 unitSide = glm::normalize(side) * (selected ? 1.5f : 0.75f);
-				const glm::vec3 da = unitSide * *widthA, db = unitSide * *widthB;
-				triangles.insert(triangles.end(), {a - da, b - db, b + db, a - da, b + db, a + da});
-			}
+			const auto silhouette = BuildHideVolumeSilhouette(volume, structure, camera, sceneOffset);
 			const glm::vec3 color = selected ? glm::mix(volume.color, glm::vec3(1.0f), 0.2f) : volume.color;
 			const float alpha = std::clamp(volume.alpha * (selected ? 1.25f : 1.0f), 0.0f, 1.0f) *
 				(volume.active ? 1.0f : 0.5f);
-			renderSceneVolumeOverlay(triangles, resources.sceneHideVolumeMesh, camera, lineSettings,
-				color, alpha, sceneOffset);
+			const auto drawEdges = [&](const std::vector<glm::vec3> &edges, float opacity) {
+				std::vector<glm::vec3> triangles;
+				triangles.reserve(edges.size() * 3);
+				for (std::size_t edge = 0; edge + 1 < edges.size(); edge += 2)
+				{
+					glm::vec3 a = edges[edge] + sceneOffset;
+					glm::vec3 b = edges[edge + 1] + sceneOffset;
+					if (!SelectionHitTest::ClipSegmentToNearPlane(viewProjection, a, b)) continue;
+					a -= sceneOffset;
+					b -= sceneOffset;
+					const glm::vec3 towardCamera = camera.Projection() == CameraProjection::Perspective
+						? camera.Position() - (a + b) * 0.5f - sceneOffset : cameraBack;
+					const glm::vec3 side = glm::cross(b - a, towardCamera);
+					if (glm::dot(side, side) <= 1.0e-12f) continue;
+					const auto widthA = WorldUnitsPerPixelAt(camera, a + sceneOffset, cameraRight, viewportPixelSize);
+					const auto widthB = WorldUnitsPerPixelAt(camera, b + sceneOffset, cameraRight, viewportPixelSize);
+					if (!widthA || !widthB) continue;
+					// Like plane frames, use quads instead of non-portable wide GL_LINES.
+					const glm::vec3 unitSide = glm::normalize(side) * (selected ? 1.5f : 0.75f);
+					const glm::vec3 da = unitSide * *widthA, db = unitSide * *widthB;
+					triangles.insert(triangles.end(), {a - da, b - db, b + db, a - da, b + db, a + da});
+				}
+				renderSceneVolumeOverlay(triangles, resources.sceneHideVolumeMesh, camera, lineSettings,
+					color, opacity, sceneOffset);
+			};
+			drawEdges(BuildHideVolumeEdges(volume, structure), silhouette.empty() ? alpha : alpha * 0.35f);
+			drawEdges(silhouette, alpha);
 		}
 	}
 

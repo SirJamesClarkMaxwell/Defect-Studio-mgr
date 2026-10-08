@@ -46,6 +46,8 @@ namespace DefectStudio
 
 		// The ImGui body, drawn in the viewport's bottom-left corner. A no-op while closed.
 		void Draw(RendererWindowState &window);
+		// Call before viewport actions; the click that created the panel belongs to the operator.
+		void HandleViewportActivity(bool clicked, bool operationStarted) noexcept;
 
 	private:
 		void CommitEdit(SceneOperatorValues before);
@@ -70,5 +72,6 @@ namespace DefectStudio
 		std::size_t m_UndoDepth = 0;
 		bool m_Open = false;
 		bool m_Collapsed = false;
+		bool m_JustOpened = false;
 	};
 }

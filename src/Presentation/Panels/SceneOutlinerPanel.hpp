@@ -23,6 +23,7 @@ namespace DefectStudio
 	// Planes deliberately bypass this path and walk RendererWindowState::scenePlanes directly.
 	[[nodiscard]] std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
 		const SceneRegistry &scene, SceneObjectKind kind);
+	[[nodiscard]] bool IsSceneOutlinerVacancyBond(const ScenePath &path);
 
 	// Lists only the displayed renderer window (one structure per window - no Collections, see docs/work/
 	// project/plans/2026-08-23-outliner-bonds-displacement.md). Every row carries Blender's two
@@ -65,7 +66,7 @@ namespace DefectStudio
 		bool drawFreeLabelRow(
 			RendererWindowState &windowState, std::size_t labelIndex,
 			const std::vector<SceneObjectId> &orderedIds);
-		void drawPinnedMeasurementRow(
+		bool drawPinnedMeasurementRow(
 			RendererWindowState &windowState, std::size_t pinIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawOrbitalsGroup(RendererWindowState &windowState);
@@ -81,7 +82,7 @@ namespace DefectStudio
 		// task/51: structure.vacancies. Group eye = showVacancies; a row's X removes that vacancy
 		// through renderer.vacancy.set, so it is one undo step like every other domain edit.
 		void drawVacanciesGroup(RendererWindowState &windowState);
-		void drawPathsGroup(RendererWindowState &windowState);
+		void drawPathsGroup(RendererWindowState &windowState, bool vacancyBonds = false);
 
 		enum class SelectionRowKind
 		{

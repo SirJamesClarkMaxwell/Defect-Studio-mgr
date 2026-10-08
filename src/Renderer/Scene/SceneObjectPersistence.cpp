@@ -514,7 +514,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					volume.invert = value.invert;
 					volume.name = value.name;
 					volume.color = value.color;
-					volume.alpha = value.alpha;
+					// Old translucent fills allowed zero opacity; their wireframe must remain visible.
+					volume.alpha = value.alpha < 0.05f ? SceneHideVolume{}.alpha : value.alpha;
 					volume.active = value.active;
 					volume.visible = value.visible;
 					volume.renderable = value.renderable;

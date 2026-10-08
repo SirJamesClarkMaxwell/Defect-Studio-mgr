@@ -182,7 +182,7 @@ namespace DefectStudio
 		return sceneMutated;
 	}
 
-	void SceneOutlinerPanel::drawPinnedMeasurementRow(
+	bool SceneOutlinerPanel::drawPinnedMeasurementRow(
 		RendererWindowState &windowState, const std::size_t pinIndex,
 		const std::vector<SceneObjectId> &orderedIds)
 	{
@@ -199,6 +199,7 @@ namespace DefectStudio
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
 		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);
 		DrawSceneVisibilityColumns(
@@ -206,8 +207,11 @@ namespace DefectStudio
 		if (rowActivated)
 			applyAnnotationRowSelection(
 				windowState, SelectionRowKind::PinnedMeasurement, orderedIds, id, selection);
+		const bool sceneMutated = drawSceneObjectContextMenu(
+			windowState, SelectionRowKind::PinnedMeasurement, id, selection, contextRequested);
 		ImGui::PopID();
 		ImGui::PopID();
+		return sceneMutated;
 	}
 
 	void SceneOutlinerPanel::drawLabelsGroup(RendererWindowState &windowState)
@@ -241,7 +245,8 @@ namespace DefectStudio
 			const std::vector<SceneObjectId> pinIds =
 				CollectIds(windowState.pinnedMeasurements, pinIndices);
 			for (const std::size_t index : pinIndices)
-				drawPinnedMeasurementRow(windowState, index, pinIds);
+				if (drawPinnedMeasurementRow(windowState, index, pinIds))
+					break;
 			ImGui::TreePop();
 		}
 		ImGui::PopID();

@@ -98,6 +98,9 @@ namespace DefectStudio::Tests
 		EXPECT_NEAR(worldOffset.x, transformOffset.x, 1.0e-5f);
 		EXPECT_NEAR(worldOffset.y, transformOffset.y, 1.0e-5f);
 		EXPECT_NEAR(worldOffset.z, transformOffset.z, 1.0e-5f);
+		EXPECT_NEAR(worldOffset.x, 0.5f, 1.0e-5f);
+		EXPECT_NEAR(worldOffset.y, 0.0f, 1.0e-5f);
+		EXPECT_NEAR(worldOffset.z, 0.0f, 1.0e-5f);
 	}
 
 	TEST(ScenePathOperationsTests, EraseRemovesSelectionAndLeavesOtherIds)

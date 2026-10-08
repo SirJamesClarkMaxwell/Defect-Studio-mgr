@@ -259,6 +259,9 @@ namespace DefectStudio
 		// question from "is the cursor over the viewport" to "is it over the last toolbar" - which is
 		// false almost everywhere and silently kills every click the viewport handles.
 		const bool hovered = ImGui::IsItemHovered();
+		m_OperatorRedoPanel.HandleViewportActivity(hovered &&
+			(ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+				ImGui::IsMouseClicked(ImGuiMouseButton_Middle)), windowState.modalTransform.has_value());
 
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		const float horizontalToolbarOffset = windowState.windowId == activeWindowId
@@ -450,11 +453,11 @@ namespace DefectStudio
 
 		DrawViewportTextEditor(windowState, imageOrigin, viewportSize);
 		if (m_OperatorRedoPanel.IsOpen())
+		{
 			if (const Ref<UndoStack> undoStack = m_Layer.GetUndoStackHandle().lock())
-			{
 				m_OperatorRedoPanel.PollInvalidation(*undoStack, &windowState);
-				m_OperatorRedoPanel.Draw(windowState);
-			}
+			m_OperatorRedoPanel.Draw(windowState);
+		}
 		ImGui::SetCursorScreenPos(imageOrigin);
 		ImGui::End();
 	}

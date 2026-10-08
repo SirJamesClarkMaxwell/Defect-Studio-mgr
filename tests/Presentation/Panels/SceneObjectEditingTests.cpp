@@ -6,6 +6,21 @@
 
 namespace DefectStudio::Tests
 {
+	TEST(SceneOutlinerVacancyBondsTests, MembershipUsesAnyNodeBindingRatherThanTheName)
+	{
+		ScenePath path;
+		path.name = "Vacancy bond";
+		path.nodes.resize(3);
+		EXPECT_FALSE(IsSceneOutlinerVacancyBond(path));
+		path.nodes[2].binding = PathBinding{PathBinding::CopyPosition{0, {}, 0.0f}};
+		EXPECT_FALSE(IsSceneOutlinerVacancyBond(path));
+		path.name = "Zmieniona nazwa";
+		path.nodes[1].binding = PathBinding{PathBinding::CopyVacancy{999, {}, 0.0f}};
+		EXPECT_TRUE(IsSceneOutlinerVacancyBond(path));
+		path.nodes[1].binding = PathBinding{};
+		EXPECT_FALSE(IsSceneOutlinerVacancyBond(path));
+	}
+
 	TEST(SceneObjectEditingTests, EraseSceneOrbitalsResyncsRegistryAndOutlinerRows)
 	{
 		RendererWindowState window;

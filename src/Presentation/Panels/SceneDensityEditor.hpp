@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Presentation/Panels/SceneObjectClipboard.hpp"
 
 namespace DefectStudio
 {
@@ -29,6 +30,9 @@ namespace DefectStudio
 	void EraseSceneDensities(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 	// Copies share the loaded grid, so a duplicate shows at once and can take its own iso/colours.
 	void DuplicateSelectedSceneDensities(RendererWindowState &windowState);
+	[[nodiscard]] SceneObjectClipboard &GetSceneDensityClipboard();
+	void CopySceneDensitiesToClipboard(const RendererWindowState &windowState);
+	void PasteSceneDensitiesFromClipboard(RendererWindowState &windowState);
 
 	// The N panel / Object Properties section for the first selected density.
 	void DrawSelectedSceneDensitySection(RendererWindowState &windowState);

@@ -421,11 +421,48 @@ namespace DefectStudio::Tests
 		const auto original = CaptureSceneObjectsSnapshot(window);
 		undoStack->Clear();
 		window.selectedVacancies = {0};
-		EXPECT_EQ(AddVacancyBonds(window, 0.0f), 0u); // invalid zero width
+		window.structure.bonds.emplace_back().radius = std::numeric_limits<float>::max();
+		EXPECT_EQ(AddVacancyBonds(window, 2.0f), 0u); // overflow still rejects the replacement
 		EXPECT_EQ(window.paths->Store().Ids(), original.paths.Ids());
 		window.paths->Store().Visit([&](const ScenePath &path) {
 			EXPECT_EQ(path.style.width, original.paths.Find(path.id)->style.width);
 		});
 		EXPECT_EQ(undoStack->GetUndoDepth(), 0u);
+	}
+
+	TEST_F(VacancyBondRegenerationTests, InvalidMultiplierUsesDefaultThicknessAndRegeneratesTheExistingBonds)
+	{
+		auto &window = Window();
+		window.selectedVacancies = {0};
+		ASSERT_EQ(AddVacancyBonds(window), 3u);
+		const auto ids = window.paths->Store().Ids();
+		for (const float multiplier : {0.0f, -1.0f, std::numeric_limits<float>::quiet_NaN(),
+			std::numeric_limits<float>::infinity()})
+		{
+			undoStack->Clear();
+			window.selectedVacancies = {0};
+			ASSERT_EQ(AddVacancyBonds(window, multiplier), 3u);
+			EXPECT_EQ(window.paths->Store().Ids(), ids);
+			window.paths->Store().Visit([](const ScenePath &path) {
+				EXPECT_FLOAT_EQ(path.style.width, 0.18f);
+			});
+			EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+		}
+	}
+
+	TEST(ViewportVacancyAddTests, NonfiniteBondRadiiUseAFiniteFallbackOrAnotherIncidentBond)
+	{
+		for (const float invalidRadius : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()})
+		{
+			auto window = WindowWithVacancy();
+			window.structure.bonds.emplace_back().radius = invalidRadius;
+			window.selectedVacancies = {0};
+			ASSERT_EQ(AddVacancyBonds(window), 3u);
+			window.paths->Store().Visit([](const ScenePath &path) { EXPECT_FLOAT_EQ(path.style.width, 0.18f); });
+			window.structure.bonds.emplace_back().radius = 0.07f;
+			window.selectedAtomIndices = {0};
+			ASSERT_EQ(AddVacancyBonds(window, 2.5f), 1u);
+			EXPECT_FLOAT_EQ(window.paths->Store().Find(window.selectedScenePaths.front())->style.width, 0.35f);
+		}
 	}
 } // namespace DefectStudio::Tests

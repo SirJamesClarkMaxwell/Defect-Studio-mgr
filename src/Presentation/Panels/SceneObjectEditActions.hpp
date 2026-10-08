@@ -3,16 +3,19 @@
 #include <vector>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Presentation/Panels/SceneObjectClipboard.hpp"
 
 namespace DefectStudio
 {
+	class CommandRegistry;
+	class RendererLayer;
 	enum class SceneObjectEditKind
 	{
 		FreeLabel,
+		PinnedMeasurement,
 		Orbital,
 		Plane,
 		Path,
-		// Delete and Duplicate only: a density is a loaded grid, not a drawing to copy between windows.
 		Density,
 		HideVolume
 	};
@@ -33,10 +36,21 @@ namespace DefectStudio
 
 	// The kind the last Copy put on a clipboard: Ctrl+V with nothing selected pastes that kind.
 	[[nodiscard]] SceneObjectEditKind LastCopiedSceneObjectEditKind();
+	void RegisterSceneObjectShortcutCommand(CommandRegistry &registry, RendererLayer &layer);
+	// Returns true when scene selection/clipboard owns the shortcut, even if its clipboard is empty.
+	[[nodiscard]] bool HandleSceneObjectEditShortcut(RendererWindowState &windowState, SceneObjectEditAction action);
 
 	[[nodiscard]] std::vector<RendererWindowState::FreeLabel> &GetSceneFreeLabelClipboard();
 	void CopySceneFreeLabelsToClipboard(const RendererWindowState &windowState);
 	void DuplicateSelectedSceneFreeLabels(RendererWindowState &windowState);
 	void PasteSceneFreeLabelsFromClipboard(RendererWindowState &windowState);
 	void EraseSceneFreeLabels(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
+	[[nodiscard]] SceneObjectClipboard &GetPersistedSceneFreeLabelClipboard();
+	void CopyPersistedSceneFreeLabelsToClipboard(const RendererWindowState &windowState);
+	void PastePersistedSceneFreeLabelsFromClipboard(RendererWindowState &windowState);
+	[[nodiscard]] SceneObjectClipboard &GetScenePinnedMeasurementClipboard();
+	void CopyScenePinnedMeasurementsToClipboard(const RendererWindowState &windowState);
+	void PasteScenePinnedMeasurementsFromClipboard(RendererWindowState &windowState);
+	void DuplicateSelectedScenePinnedMeasurements(RendererWindowState &windowState);
+	void EraseScenePinnedMeasurements(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 } // namespace DefectStudio

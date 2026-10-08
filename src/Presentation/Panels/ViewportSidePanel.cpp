@@ -64,7 +64,9 @@ namespace DefectStudio
 		const ImGuiIO &io = ImGui::GetIO();
 		const bool plainN = !io.KeyCtrl && !io.KeyAlt && !io.KeyShift && !io.WantTextInput &&
 			ImGui::IsKeyPressed(ImGuiKey_N, false);
-		if (plainN && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && !windowState.modalTransform.has_value())
+		// The redo overlay may own focus after adding a volume; N still belongs to the hovered viewport.
+		if (plainN && (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) ||
+			ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) && !windowState.modalTransform.has_value())
 			state.open = !state.open;
 
 		// Exponential approach rather than a linear ramp - it starts fast and settles, which is what

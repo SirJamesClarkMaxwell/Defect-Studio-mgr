@@ -57,6 +57,8 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(panel.IsOpen());
 		EXPECT_EQ(undo->GetUndoDepth(), 1u);
 		ASSERT_EQ(Window().sceneHideVolumes.size(), 1u);
+		EXPECT_EQ(Window().sceneHideVolumes.front().color, glm::vec3(0, 1, 1));
+		EXPECT_FLOAT_EQ(Window().sceneHideVolumes.front().alpha, 0.75f);
 		EXPECT_EQ(Window().sceneHideVolumes.front().anchorAtoms, std::vector<std::size_t>{1});
 		EXPECT_FALSE(Window().structure.atoms[2].visible);
 		auto values = panel.Values();

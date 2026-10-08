@@ -5,6 +5,7 @@
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
+#include "Presentation/Panels/SceneDensityEditor.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -18,6 +19,9 @@ namespace DefectStudio::Tests
 			GetScenePlaneClipboard().clear();
 			GetSceneOrbitalClipboard().clear();
 			GetSceneFreeLabelClipboard().clear();
+			GetPersistedSceneFreeLabelClipboard().clear();
+			GetScenePinnedMeasurementClipboard().clear();
+			GetSceneDensityClipboard().clear();
 		}
 	} // namespace
 
@@ -25,10 +29,10 @@ namespace DefectStudio::Tests
 	{
 		ClearSceneObjectClipboards();
 		RendererWindowState window;
-		RendererWindowState::ScenePlane plane;
+		PersistedScenePlane plane;
 		plane.center = glm::vec3(1.0f, 2.0f, 3.0f);
-		plane.anchorAtoms = {0, 1, 2};
-		GetScenePlaneClipboard() = {plane};
+		plane.anchorAtoms = {{0, "C", {}}, {1, "C", {}}, {2, "C", {}}};
+		GetScenePlaneClipboard() = {SceneClipboardObject{plane}};
 
 		PasteScenePlanesFromClipboard(window);
 
@@ -42,11 +46,11 @@ namespace DefectStudio::Tests
 	{
 		ClearSceneObjectClipboards();
 		RendererWindowState window;
-		RendererWindowState::SceneOrbital orbital;
+		PersistedSceneOrbital orbital;
 		orbital.centerA = glm::vec3(1.0f, 2.0f, 3.0f);
 		orbital.centerB = glm::vec3(4.0f, 5.0f, 6.0f);
-		orbital.anchorAtoms = {0, 1};
-		GetSceneOrbitalClipboard() = {orbital};
+		orbital.anchorAtoms = {{0, "C", {}}, {1, "C", {}}};
+		GetSceneOrbitalClipboard() = {SceneClipboardObject{orbital}};
 
 		PasteSceneOrbitalsFromClipboard(window);
 
@@ -61,14 +65,14 @@ namespace DefectStudio::Tests
 	{
 		ClearSceneObjectClipboards();
 		RendererWindowState window;
-		RendererWindowState::FreeLabel label;
-		label.worldPosition = glm::vec3(1.0f, 2.0f, 3.0f);
-		GetSceneFreeLabelClipboard() = {label};
+		PersistedFreeLabel label;
+		label.position = glm::vec3(1.0f, 2.0f, 3.0f);
+		GetPersistedSceneFreeLabelClipboard() = {SceneClipboardObject{label}};
 
-		PasteSceneFreeLabelsFromClipboard(window);
+		PastePersistedSceneFreeLabelsFromClipboard(window);
 
 		ASSERT_EQ(window.freeLabels.size(), 1u);
-		EXPECT_EQ(window.freeLabels[0].worldPosition, label.worldPosition + kClipboardOffset);
+		EXPECT_EQ(window.freeLabels[0].worldPosition, label.position + kClipboardOffset);
 		ClearSceneObjectClipboards();
 	}
 
@@ -85,7 +89,8 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(ExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::Plane, SceneObjectEditAction::Copy));
 		ASSERT_EQ(GetScenePlaneClipboard().size(), 1u);
-		EXPECT_EQ(GetScenePlaneClipboard()[0].id, plane.id);
+		ASSERT_TRUE(std::holds_alternative<PersistedScenePlane>(GetScenePlaneClipboard()[0].persisted));
+		EXPECT_EQ(std::get<PersistedScenePlane>(GetScenePlaneClipboard()[0].persisted).center, plane.center);
 
 		EXPECT_TRUE(ExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::Plane, SceneObjectEditAction::Duplicate));
@@ -100,6 +105,8 @@ namespace DefectStudio::Tests
 		const SceneObjectId pastedId = window.scenePlanes.back().id;
 		EXPECT_NE(pastedId, plane.id);
 		EXPECT_NE(pastedId, duplicateId);
+		EXPECT_EQ(window.scenePlanes.back().center, plane.center + kClipboardOffset);
+		EXPECT_NE(window.scenePlanes.back().persistKey, window.scenePlanes.front().persistKey);
 		EXPECT_EQ(window.selectedScenePlanes, std::vector<SceneObjectId>{pastedId});
 
 		EXPECT_TRUE(ExecuteSceneObjectEditAction(
@@ -124,11 +131,17 @@ namespace DefectStudio::Tests
 			window, SceneObjectEditKind::Orbital, SceneObjectEditAction::Paste));
 		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::FreeLabel, SceneObjectEditAction::Paste));
+		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
+			window, SceneObjectEditKind::PinnedMeasurement, SceneObjectEditAction::Paste));
+		EXPECT_FALSE(CanExecuteSceneObjectEditAction(
+			window, SceneObjectEditKind::Density, SceneObjectEditAction::Paste));
 
 		GetScenePathClipboard().emplace_back();
 		GetScenePlaneClipboard().emplace_back();
 		GetSceneOrbitalClipboard().emplace_back();
-		GetSceneFreeLabelClipboard().emplace_back();
+		GetPersistedSceneFreeLabelClipboard().emplace_back();
+		GetScenePinnedMeasurementClipboard().emplace_back();
+		GetSceneDensityClipboard().emplace_back();
 		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::Path, SceneObjectEditAction::Paste));
 		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
@@ -137,6 +150,10 @@ namespace DefectStudio::Tests
 			window, SceneObjectEditKind::Orbital, SceneObjectEditAction::Paste));
 		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
 			window, SceneObjectEditKind::FreeLabel, SceneObjectEditAction::Paste));
+		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
+			window, SceneObjectEditKind::PinnedMeasurement, SceneObjectEditAction::Paste));
+		EXPECT_TRUE(CanExecuteSceneObjectEditAction(
+			window, SceneObjectEditKind::Density, SceneObjectEditAction::Paste));
 		ClearSceneObjectClipboards();
 	}
 } // namespace DefectStudio::Tests

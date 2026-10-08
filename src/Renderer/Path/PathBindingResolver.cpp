@@ -132,6 +132,11 @@ namespace DefectStudio
 		return false;
 	}
 
+	PathTransform ResolvePathTransform(const ScenePath &path, const BindingContext &context)
+	{
+		return ResolveTransform(path, context);
+	}
+
 	ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context)
 	{
 		ResolvedNodes resolved;

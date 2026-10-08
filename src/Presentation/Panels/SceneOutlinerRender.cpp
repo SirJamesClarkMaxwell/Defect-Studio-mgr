@@ -122,6 +122,8 @@ namespace DefectStudio
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Plane}
 				: !activeWindow.selectedFreeLabels.empty()
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::FreeLabel}
+				: !activeWindow.selectedPinnedMeasurements.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::PinnedMeasurement}
 				: !activeWindow.selectedSceneDensities.empty()
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Density}
 				: !activeWindow.selectedSceneHideVolumes.empty()
@@ -240,6 +242,7 @@ namespace DefectStudio
 					drawVacanciesGroup(windowState);
 					DrawDefectFrameOutlinerRow(windowState);
 					drawPathsGroup(windowState);
+					drawPathsGroup(windowState, true);
 
 					ImGui::TreePop();
 				}

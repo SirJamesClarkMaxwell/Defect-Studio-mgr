@@ -152,6 +152,35 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(panel.Reapply(Window(), SceneOperatorValues{}));
 		EXPECT_EQ(PathCount(Window()), 0u);
 	}
+
+	TEST_F(OperatorRedoPanelTests, OpeningClickAndIdleFramesKeepBothOperatorPanelsOpen)
+	{
+		ASSERT_TRUE(RegisterHideVolumeOperator(registry));
+		for (const char *id : {"scene.curved_arrow", "scene.hide_volume"})
+		{
+			Window().selectedAtomIndices = {0, 1};
+			ASSERT_TRUE(panel.RunAndOpen(*registry.Find(id), Window()));
+			panel.HandleViewportActivity(true, false); // The click that invoked the operator.
+			for (int frame = 0; frame < 120; ++frame)
+			{
+				Window().selectedAtomIndices.clear(); // A selection change alone is not an operation.
+				panel.HandleViewportActivity(false, false);
+				panel.PollInvalidation(*undoStack, &Window());
+				ASSERT_TRUE(panel.IsOpen());
+			}
+			panel.HandleViewportActivity(true, false);
+			EXPECT_FALSE(panel.IsOpen());
+		}
+	}
+
+	TEST_F(OperatorRedoPanelTests, StartingAnotherOperationClosesEvenANewPanelWithoutRestoringItsSnapshot)
+	{
+		ASSERT_TRUE(panel.RunAndOpen(CurvedArrow(), Window()));
+		panel.HandleViewportActivity(false, true);
+		EXPECT_FALSE(panel.IsOpen());
+		EXPECT_EQ(PathCount(Window()), 2u);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1u);
+	}
 }
 
 namespace DefectStudio::Tests

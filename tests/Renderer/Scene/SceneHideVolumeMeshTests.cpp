@@ -6,9 +6,70 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneHideVolumeSilhouette.hpp"
 
 namespace DefectStudio::Tests
 {
+	TEST(SceneHideVolumeMeshTests, PerspectiveSilhouetteLiesOnTheSphereAndEveryCameraRayIsTangent)
+	{
+		RendererStructureData structure;
+		structure.atoms = {{"C", {1, 2, 3}}};
+		SceneHideVolume volume;
+		volume.anchorAtoms = {0};
+		volume.center = glm::vec3(100); // The resolved anchor, not this stored centre, is used.
+		volume.halfExtents.x = 2;
+		RendererViewCamera camera;
+		camera.SetProjection(CameraProjection::Perspective);
+		camera.SetOrbitState(glm::vec3(0), 9, 0.7f, 0.4f);
+		const glm::vec3 offset(2, -1, 0.5f);
+		const glm::vec3 center = structure.atoms.front().cartesianPosition;
+		const glm::vec3 eye = camera.Position() - offset;
+		const float distance = glm::length(camera.Position() - center - offset);
+		const glm::vec3 normal = (eye - center) / distance;
+		const glm::vec3 circleCenter = center + 4.0f / distance * normal;
+		const float circleRadius = 2.0f * std::sqrt(1.0f - 4.0f / (distance * distance));
+		const auto edges = BuildHideVolumeSilhouette(volume, structure, camera, offset);
+		ASSERT_EQ(edges.size(), 192u);
+		for (const auto &point : edges)
+		{
+			EXPECT_NEAR(glm::length(point - center), 2.0f, 1e-5f);
+			EXPECT_NEAR(glm::dot(point - center, eye - point), 0.0f, 2e-5f);
+			EXPECT_NEAR(glm::dot(point - circleCenter, normal), 0.0f, 1e-5f);
+			EXPECT_NEAR(glm::length(point - circleCenter), circleRadius, 1e-5f);
+		}
+		volume.frame = HideVolumeFrame::Fractional;
+		EXPECT_TRUE(BuildHideVolumeSilhouette(volume, structure, camera, offset).empty());
+		volume.frame = HideVolumeFrame::Anchored;
+		volume.halfExtents.x = distance;
+		EXPECT_TRUE(BuildHideVolumeSilhouette(volume, structure, camera, offset).empty());
+		volume.halfExtents.x = distance + 1;
+		EXPECT_TRUE(BuildHideVolumeSilhouette(volume, structure, camera, offset).empty());
+	}
+
+	TEST(SceneHideVolumeMeshTests, OrthographicSilhouetteHasTheFullRadiusPerpendicularToTheView)
+	{
+		RendererStructureData structure;
+		SceneHideVolume volume;
+		volume.center = glm::vec3(1, 2, 3);
+		volume.halfExtents.x = 2;
+		RendererViewCamera camera;
+		camera.SetOrbitState(glm::vec3(0), 10, 0.7f, 0.5f);
+		const auto view = camera.ViewMatrix();
+		const glm::vec3 normal(view[0][2], view[1][2], view[2][2]);
+		const auto edges = BuildHideVolumeSilhouette(volume, structure, camera, glm::vec3(3));
+		ASSERT_EQ(edges.size(), 192u);
+		for (const auto &point : edges)
+		{
+			EXPECT_NEAR(glm::length(point - volume.center), 2.0f, 1e-5f);
+			EXPECT_NEAR(glm::dot(point - volume.center, normal), 0.0f, 1e-5f);
+		}
+		volume.halfExtents.x = 0;
+		EXPECT_TRUE(BuildHideVolumeSilhouette(volume, structure, camera, glm::vec3(0)).empty());
+		volume.halfExtents.x = 2;
+		volume.kind = HideVolumeKind::Box;
+		EXPECT_TRUE(BuildHideVolumeSilhouette(volume, structure, camera, glm::vec3(0)).empty());
+	}
+
 	namespace
 	{
 		[[nodiscard]] RendererStructureData StructureWithLattice(const glm::mat3 &lattice)

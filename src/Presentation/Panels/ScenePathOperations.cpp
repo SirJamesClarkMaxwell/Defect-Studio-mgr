@@ -11,6 +11,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/ScenePathPersistence.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 
 namespace DefectStudio
@@ -84,6 +85,8 @@ namespace DefectStudio
 		windowState.selectedFreeLabels.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedScenePlanes.clear();
+		windowState.selectedSceneDensities.clear();
+		windowState.selectedSceneHideVolumes.clear();
 		windowState.selectedVacancies.clear();
 		windowState.defectFrameSelected = false;
 		SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
@@ -139,15 +142,16 @@ namespace DefectStudio
 		return added;
 	}
 
-	std::vector<ScenePath> &GetScenePathClipboard()
+	SceneObjectClipboard &GetScenePathClipboard()
 	{
-		static std::vector<ScenePath> clipboard;
+		static SceneObjectClipboard clipboard;
 		return clipboard;
 	}
 
 	void OffsetAndDetachScenePath(ScenePath &path, const glm::vec3 &offset)
 	{
 		path.transform.position += offset;
+		path.transformBinding = PathTransformBinding{};
 		for (PathNode &node : path.nodes)
 		{
 			node.binding = PathBinding{};
@@ -159,7 +163,28 @@ namespace DefectStudio
 
 	void CopyScenePathsToClipboard(const RendererWindowState &windowState)
 	{
-		GetScenePathClipboard() = CollectSelected(windowState);
+		auto &clipboard = GetScenePathClipboard();
+		clipboard.clear();
+		for (ScenePath path : CollectSelected(windowState))
+		{
+			const auto context = SceneSystem::MakePathBindingContext(windowState);
+			path.transform = ResolvePathTransform(path, context);
+			const auto resolved = ResolveNodePositions(path, context);
+			if (std::abs(path.transform.scale.x) > 1e-6f && std::abs(path.transform.scale.y) > 1e-6f &&
+				std::abs(path.transform.scale.z) > 1e-6f)
+				for (std::size_t index = 0; index < path.nodes.size(); ++index)
+					if (!std::holds_alternative<PathBinding::Free>(path.nodes[index].binding.value))
+						path.nodes[index].position = (glm::inverse(path.transform.rotation) *
+							(resolved.positions[index] - path.transform.position)) / path.transform.scale;
+			SceneClipboardObject entry{ExtractPersistedScenePath(path, windowState), path.visible, path.renderable, {}};
+			entry.sourceStructureId = windowState.structure.domainStructureId;
+			entry.sourceWindowId = windowState.windowId;
+			for (const PathNode &node : path.nodes)
+				entry.vacancyRefs.push_back(std::holds_alternative<PathBinding::CopyVacancy>(node.binding.value)
+					? SceneClipboardVacancyReference(windowState.structure,
+						std::get<PathBinding::CopyVacancy>(node.binding.value).vacancyIndex) : std::nullopt);
+			clipboard.push_back(std::move(entry));
+		}
 	}
 
 	void DuplicateSelectedScenePaths(RendererWindowState &windowState)
@@ -177,13 +202,52 @@ namespace DefectStudio
 
 	void PasteScenePathsFromClipboard(RendererWindowState &windowState)
 	{
-		std::vector<ScenePath> copies = GetScenePathClipboard();
-		if (copies.empty())
-			return;
-		PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
-		std::vector<SceneObjectId> newIds = AppendCopies(windowState, std::move(copies));
-		if (!newIds.empty())
-			windowState.selectedScenePaths = std::move(newIds);
+		const auto objects = ResolveSceneClipboardObjects(GetScenePathClipboard(), windowState.structure);
+		std::vector<StructuredError> warnings;
+		std::vector<ScenePath> copies;
+		std::vector<PersistedScenePath> saved;
+		for (std::size_t index = 0; index < objects.size(); ++index)
+		{
+			const auto &object = objects[index];
+			if (!std::holds_alternative<PersistedScenePath>(object)) continue;
+			const auto &persisted = std::get<PersistedScenePath>(object);
+			auto built = BuildScenePath(persisted, windowState.structure, warnings);
+			if (!built)
+			{
+				warnings.push_back(built.Error());
+				continue;
+			}
+			ScenePath copy = std::move(built.Value());
+			PersistedScenePath savedPath = persisted;
+			if (SceneClipboardPastesIntoSource(GetScenePathClipboard()[index], windowState))
+			{
+				OffsetAndDetachScenePath(copy, kScenePathCopyOffset);
+				for (auto &node : savedPath.nodes) node.binding = PersistedPathBinding{};
+			}
+			// Persisted bond-frame arcs use local +z; a detached copy needs the frozen world axis.
+			if (persisted.transformBinding.kind == "BondFrame" &&
+				std::holds_alternative<PathTransformBinding::Free>(copy.transformBinding.value))
+				for (auto &segment : copy.segments)
+					if (auto *arc = std::get_if<CircularArcSegmentData>(&segment.data))
+						arc->planeNormal = copy.transform.rotation * glm::vec3(0, 0, 1);
+			copies.push_back(std::move(copy));
+			saved.push_back(std::move(savedPath));
+		}
+		if (!copies.empty())
+		{
+			PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
+			std::vector<SceneObjectId> ids;
+			for (std::size_t index = 0; index < copies.size(); ++index)
+			{
+				copies[index].persistKey = GenerateScenePersistKey();
+				const auto added = AddScenePath(MakeSilentPathEditContext(windowState), std::move(copies[index]));
+				if (!added) { warnings.push_back(added.Error()); continue; }
+				ids.push_back(added.Value());
+				ResolveScenePathObjectOriginBindings(windowState, added.Value(), saved[index], warnings);
+			}
+			SelectAddedScenePaths(windowState, std::move(ids));
+		}
+		ReportSceneClipboardWarnings(warnings);
 	}
 
 	void EraseScenePaths(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids)

@@ -80,8 +80,8 @@ namespace DefectStudio
 		bool invert = false;
 
 		std::string name;
-		glm::vec3 color = glm::vec3(0.9f, 0.5f, 0.2f);
-		float alpha = 0.8f; // Outline opacity.
+		glm::vec3 color = glm::vec3(0.0f, 1.0f, 1.0f);
+		float alpha = 0.75f; // Outline opacity.
 		// Whether the volume hides anything at all. Independent of the eyes below: a volume set up
 		// once is usually wanted out of sight while it keeps cutting, so hiding its outline must not
 		// bring the atoms back (task 91). Turning the cut off is this flag, not the eye.

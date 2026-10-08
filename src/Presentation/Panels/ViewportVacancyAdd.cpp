@@ -76,15 +76,18 @@ namespace DefectStudio
 			// As thick as the atom's own bonds; vacancy-vacancy lines (or a bondless atom) fall back
 			// to the structure's first bond.
 			float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
+			if (!std::isfinite(bondRadius)) bondRadius = 0.09f;
 			if (atomIndex)
 			{
 				float atomBond = 0.0f;
 				for (const RendererBondData &bond : windowState.structure.bonds)
-					if (bond.firstAtomIndex == *atomIndex || bond.secondAtomIndex == *atomIndex)
+					if (std::isfinite(bond.radius) && (bond.firstAtomIndex == *atomIndex || bond.secondAtomIndex == *atomIndex))
 						atomBond = std::max(atomBond, bond.radius);
 				if (atomBond > 0.0f)
 					bondRadius = atomBond;
 			}
+			// Legacy/invalid thickness settings must not turn generated vacancy bonds into zero-width paths.
+			if (!std::isfinite(bondRadiusMultiplier) || bondRadiusMultiplier <= 0.0f) bondRadiusMultiplier = 1.0f;
 			path.style.width = 2.0f * std::max(bondRadius, 0.001f) * bondRadiusMultiplier;
 			path.style.gradient.enabled = true;
 			path.style.gradient.stops = {{0.0f, startColor, 1.0f}, {1.0f, endColor, 1.0f}};
