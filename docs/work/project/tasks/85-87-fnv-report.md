@@ -46,7 +46,7 @@ so the app's Python has pymatgen-analysis-defects 2026.3.20. Another machine nee
 
 ## Not done
 
-- FNV inputs/results are not saved with the project (session only).
+- FNV inputs/results are not saved with the project (session only). Done in task 89.
 - No viewport marker for the FNV centre other than the density's R sphere.
 - Formation/binding energies and Origin/CSV export (plan `2026-10-06-defect-energies-and-origin-export.md`).
-- The OpenGL counter-readback warning spam on the iso slider (`2026-10-07-density-followups.md`).
+- The OpenGL counter-readback warning spam on the iso slider. Done in task 88.
