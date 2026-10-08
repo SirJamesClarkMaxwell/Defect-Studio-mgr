@@ -26,7 +26,7 @@ namespace DefectStudio
 
 	void FnvCorrectionPanel::SetPersistedState(FnvCorrectionsFile file)
 	{
-		m_Saved = std::move(file);
+		*m_Saved = std::move(file);
 		m_SavedLabels.clear();
 		loadSavedEntry();
 	}
@@ -45,12 +45,12 @@ namespace DefectStudio
 		m_Profiles.reset();
 		m_Alignments = {};
 		m_ModelPotential = {};
-		if (m_Saved.active < 0 || m_Saved.active >= static_cast<int>(m_Saved.corrections.size()))
+		if (m_Saved->active < 0 || m_Saved->active >= static_cast<int>(m_Saved->corrections.size()))
 		{
-			m_Saved.active = -1;
+			m_Saved->active = -1;
 			return;
 		}
-		const auto &entry = m_Saved.corrections[m_Saved.active];
+		const auto &entry = m_Saved->corrections[m_Saved->active];
 		m_Request = {entry.defectLocpot, entry.bulkLocpot, entry.charge, entry.dielectric,
 			entry.centreFractional, entry.energyCutoff};
 		std::snprintf(m_DielectricSource.data(), m_DielectricSource.size(), "%s", entry.dielectricSource.c_str());
@@ -82,14 +82,14 @@ namespace DefectStudio
 	void FnvCorrectionPanel::publishSavedState()
 	{
 		if (m_SaveHandler)
-			m_SaveHandler(m_Saved);
+			m_SaveHandler(*m_Saved);
 	}
 
 	void FnvCorrectionPanel::persistChanges()
 	{
 		if (!m_Dirty || ImGui::IsMouseDown(ImGuiMouseButton_Left) || m_Request.defectLocpot.Empty())
 			return;
-		UpsertFnvCorrection(m_Saved, currentEntry());
+		UpsertFnvCorrection(*m_Saved, currentEntry());
 		m_Dirty = false;
 		m_SavedLabels.clear();
 		publishSavedState();
@@ -97,12 +97,12 @@ namespace DefectStudio
 
 	bool FnvCorrectionPanel::selectSavedLocpot(const Path &path)
 	{
-		const auto found = std::find_if(m_Saved.corrections.begin(), m_Saved.corrections.end(), [&](const auto &entry) {
+		const auto found = std::find_if(m_Saved->corrections.begin(), m_Saved->corrections.end(), [&](const auto &entry) {
 			return entry.defectLocpot.Native().lexically_normal() == path.Native().lexically_normal();
 		});
-		if (found == m_Saved.corrections.end())
+		if (found == m_Saved->corrections.end())
 			return false;
-		m_Saved.active = static_cast<int>(found - m_Saved.corrections.begin());
+		m_Saved->active = static_cast<int>(found - m_Saved->corrections.begin());
 		loadSavedEntry();
 		publishSavedState();
 		return true;
@@ -110,7 +110,7 @@ namespace DefectStudio
 
 	void FnvCorrectionPanel::drawSavedEntries(const float labelWidth)
 	{
-		if (m_Saved.corrections.empty())
+		if (m_Saved->corrections.empty())
 			return;
 		PropertyGrid grid("##FnvSavedData", labelWidth);
 		if (!grid)
@@ -118,16 +118,16 @@ namespace DefectStudio
 		grid.Row("Zapisane");
 		const float buttonWidth = ImGui::CalcTextSize("Usuń").x + 2.0f * ImGui::GetStyle().FramePadding.x;
 		ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonWidth - ImGui::GetStyle().ItemSpacing.x));
-		const std::string preview = m_Saved.active < 0 ? "Nowe" :
-			(m_SavedLabels.size() == m_Saved.corrections.size() ? m_SavedLabels[m_Saved.active] :
-				EntryLabel(m_Saved.corrections[m_Saved.active]));
+		const std::string preview = m_Saved->active < 0 ? "Nowe" :
+			(m_SavedLabels.size() == m_Saved->corrections.size() ? m_SavedLabels[m_Saved->active] :
+				EntryLabel(m_Saved->corrections[m_Saved->active]));
 		std::optional<int> selected;
 		if (ImGui::BeginCombo("##FnvSaved", preview.c_str()))
 		{
-			if (ImGui::IsWindowAppearing() || m_SavedLabels.size() != m_Saved.corrections.size())
+			if (ImGui::IsWindowAppearing() || m_SavedLabels.size() != m_Saved->corrections.size())
 			{
 				m_SavedLabels.clear();
-				for (const auto &entry : m_Saved.corrections)
+				for (const auto &entry : m_Saved->corrections)
 				{
 					std::string energy = "—";
 					if (entry.profiles)
@@ -150,12 +150,12 @@ namespace DefectStudio
 					m_SavedLabels.push_back(EntryLabel(entry) + "  E_corr=" + energy);
 				}
 			}
-			if (ImGui::Selectable("Nowe", m_Saved.active == -1))
+			if (ImGui::Selectable("Nowe", m_Saved->active == -1))
 				selected = -1;
-			for (int i = 0; i < static_cast<int>(m_Saved.corrections.size()); ++i)
+			for (int i = 0; i < static_cast<int>(m_Saved->corrections.size()); ++i)
 			{
 				ImGui::PushID(i);
-				if (ImGui::Selectable(m_SavedLabels[i].c_str(), m_Saved.active == i))
+				if (ImGui::Selectable(m_SavedLabels[i].c_str(), m_Saved->active == i))
 					selected = i;
 				ImGui::PopID();
 			}
@@ -163,16 +163,16 @@ namespace DefectStudio
 		}
 		if (selected)
 		{
-			m_Saved.active = *selected;
+			m_Saved->active = *selected;
 			loadSavedEntry();
 			publishSavedState();
 		}
 		ImGui::SameLine();
-		ImGui::BeginDisabled(m_Saved.active < 0);
+		ImGui::BeginDisabled(m_Saved->active < 0);
 		if (ImGui::Button("Usuń"))
 		{
-			m_Saved.corrections.erase(m_Saved.corrections.begin() + m_Saved.active);
-			m_Saved.active = -1;
+			m_Saved->corrections.erase(m_Saved->corrections.begin() + m_Saved->active);
+			m_Saved->active = -1;
 			m_SavedLabels.clear();
 			loadSavedEntry();
 			publishSavedState();

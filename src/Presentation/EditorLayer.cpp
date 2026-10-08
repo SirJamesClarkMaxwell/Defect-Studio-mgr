@@ -1390,6 +1390,7 @@ namespace DefectStudio
 		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
+		loadFnvCorrectionsForProject();
 
 		if (m_ElectronicStructureSession != nullptr)
 		{
@@ -1416,6 +1417,7 @@ namespace DefectStudio
 		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
+		loadFnvCorrectionsForProject();
 
 		if (m_ElectronicStructureSession != nullptr)
 		{
@@ -1444,8 +1446,6 @@ namespace DefectStudio
 
 	void EditorLayer::refreshProjectDependentPanels()
 	{
-		loadFnvCorrectionsForProject();
-
 		if (auto panel = findPanel(m_ProjectTreePanelId).lock())
 		{
 			if (auto *treePanel = dynamic_cast<ProjectTreePanel *>(panel.get()))

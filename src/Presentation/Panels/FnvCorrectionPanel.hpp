@@ -52,7 +52,8 @@ namespace DefectStudio
 		RendererLayer &m_RendererLayer;
 		WeakRef<JobSystem> m_JobSystem;
 		std::function<void(const FnvCorrectionsFile &)> m_SaveHandler;
-		FnvCorrectionsFile m_Saved;
+		// Shared with Clone()s, so two FNV windows never save diverging copies of the project's file.
+		Ref<FnvCorrectionsFile> m_Saved = CreateRef<FnvCorrectionsFile>();
 		bool m_Dirty = false;
 		std::vector<std::string> m_SavedLabels;
 		FnvProfileRequest m_Request;
