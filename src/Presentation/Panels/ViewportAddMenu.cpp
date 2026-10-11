@@ -216,12 +216,20 @@ namespace DefectStudio
 			if (ImGui::MenuItem("Walec")) AddSceneHideVolume(windowState, HideVolumeKind::Cylinder, targetAtom, position);
 			ImGui::EndMenu();
 		}
-		if (ImGui::MenuItem("Tekst (swobodna etykieta)"))
+		const bool addText = ImGui::MenuItem("Tekst (swobodna etykieta)");
+		const bool addCharge = ImGui::MenuItem("Znacznik ładunku");
+		ImGui::SetItemTooltip("Punkt, który uznajemy za środek ładunku defektu (np. --center FNV).");
+		if (addText || addCharge)
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			RendererWindowState::FreeLabel label;
 			label.id = windowState.sceneRegistry.AllocateObjectId();
 			label.worldPosition = position;
+			if (addCharge)
+			{
+				label.charge = 1;
+				label.text = ChargeMarkerText(1);
+			}
 			const auto id = label.id;
 			windowState.freeLabels.push_back(std::move(label));
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
@@ -234,7 +242,8 @@ namespace DefectStudio
 			windowState.defectFrameSelected = false;
 			windowState.selectedFreeLabels = {id};
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-			OpenViewportTextEditor(windowState, id, true);
+			if (addText)
+				OpenViewportTextEditor(windowState, id, true);
 		}
 		if (ImGui::MenuItem("Narzędzie tekstu", "Shift+T", false, eventBus != nullptr))
 		{

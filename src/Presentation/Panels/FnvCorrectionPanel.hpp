@@ -43,6 +43,7 @@ namespace DefectStudio
 		void drawPlots();
 		void plotAxis(int axis, bool editable);
 		void proposeCentre();
+		void syncChargeMarker(bool create);
 		void invalidateProfiles();
 		void submitProfiles();
 		void pollJob();
@@ -74,5 +75,8 @@ namespace DefectStudio
 		bool m_ShowDeltaV = false;
 		bool m_ShowModel = false;
 		int m_EditedAxis = 0; // the axis whose plateau window the plot's handles move
+		// task/95: the charge marker's fractional position after the last sync, and whose it was.
+		std::optional<glm::dvec3> m_MarkerCentre;
+		std::string m_MarkerKey;
 	};
 } // namespace DefectStudio

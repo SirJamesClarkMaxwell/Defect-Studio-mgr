@@ -812,16 +812,17 @@ namespace DefectStudio
 		// Reserve the marker's front-sphere depth before paths can write colour behind it.
 		// Earlier atoms/bonds keep their colour through the translucent fill; later overlays
 		// already tested against this same marker depth before the pre-pass was added.
+		std::vector<RendererVacancyData> markers = ChargeMarkerSpheres(freeLabels, structure, sceneHideVolumes);
 		if (showVacancies)
-			renderVacancyMarkers(structure, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
+			markers.insert(markers.begin(), structure.vacancies.begin(), structure.vacancies.end());
+		renderVacancyMarkers(structure, markers, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
 		PathRenderInput boundPathInput = pathInput != nullptr ? *pathInput : PathRenderInput{};
 		boundPathInput.structure = &structure;
 		boundPathInput.hideVolumes = &sceneHideVolumes;
 		// Transparent paths need the opaque atom depth/color first, just as the other overlays do.
 		if (pathInput != nullptr && pathInput->paths != nullptr)
 			renderScenePaths(boundPathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
-		if (showVacancies)
-			renderVacancyMarkers(structure, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+		renderVacancyMarkers(structure, markers, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
 		const int hideVolumeCount = uploadIsosurfaceHideVolumes(sceneHideVolumes, structure);
 		renderSceneOrbitals(
 			sceneOrbitals, selectedSceneOrbitals, structure, hideVolumeCount, camera, resources, globalSettings, sceneOffset,

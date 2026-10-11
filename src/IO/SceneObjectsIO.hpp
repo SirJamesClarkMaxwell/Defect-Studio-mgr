@@ -123,6 +123,8 @@ namespace DefectStudio
 		std::optional<int> anchorVacancy;
 		glm::vec3 anchorOffset = glm::vec3(0.0f);
 		PersistedLabelStyle style;
+		std::optional<int> charge; // task/95 charge marker
+		std::string fnvKey;
 	};
 
 	enum class PersistedArrowKind { Line, Arrow2D, Arrow3D };

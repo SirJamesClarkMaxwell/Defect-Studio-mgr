@@ -214,39 +214,63 @@ namespace DefectStudio
 		return sceneMutated;
 	}
 
-	void SceneOutlinerPanel::drawLabelsGroup(RendererWindowState &windowState)
+	void SceneOutlinerPanel::drawLabelsGroup(RendererWindowState &windowState, const bool chargeMarkers)
 	{
-		ImGui::PushID("##labelsGroup");
+		// task/95: charge markers are free labels too, but get their own "Ładunki" group.
+		const auto inGroup = [chargeMarkers](const RendererWindowState::FreeLabel &label) {
+			return label.charge.has_value() == chargeMarkers;
+		};
+		const std::size_t freeCount = static_cast<std::size_t>(
+			std::count_if(windowState.freeLabels.begin(), windowState.freeLabels.end(), inGroup));
+		if (chargeMarkers && freeCount == 0)
+			return;
+		ImGui::PushID(chargeMarkers ? "##chargesGroup" : "##labelsGroup");
 		char groupLabel[32];
 		// One header over two collections - free labels and pinned measurements both live under it.
-		std::snprintf(
-			groupLabel, sizeof(groupLabel), "Labels (%zu)",
-			windowState.freeLabels.size() + windowState.pinnedMeasurements.size());
+		std::snprintf(groupLabel, sizeof(groupLabel), chargeMarkers ? "Ładunki (%zu)" : "Labels (%zu)",
+			freeCount + (chargeMarkers ? 0 : windowState.pinnedMeasurements.size()));
 		ImGui::SetNextItemAllowOverlap();
 		const bool open = ImGui::TreeNodeEx(
 			"##labels", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
 		SceneVisibilityColumnAccumulator flags;
-		AddSceneVisibilityColumnFlags(windowState.freeLabels, flags);
-		AddSceneVisibilityColumnFlags(windowState.pinnedMeasurements, flags);
+		for (const auto &label : windowState.freeLabels)
+			if (inGroup(label))
+				flags.Add(label.visible, label.renderable);
+		if (!chargeMarkers)
+			AddSceneVisibilityColumnFlags(windowState.pinnedMeasurements, flags);
 		const SceneVisibilityColumnEdit edit = DrawSceneVisibilityColumns(SceneVisibilityStateFrom(flags));
-		ApplySceneVisibilityColumnEdit(windowState.freeLabels, edit);
-		ApplySceneVisibilityColumnEdit(windowState.pinnedMeasurements, edit);
+		for (auto &label : windowState.freeLabels)
+			if (inGroup(label))
+			{
+				if (edit.visibleChanged)
+					label.visible = edit.visible;
+				if (edit.renderableChanged)
+					label.renderable = edit.renderable;
+			}
+		if (!chargeMarkers)
+			ApplySceneVisibilityColumnEdit(windowState.pinnedMeasurements, edit);
 		if (open)
 		{
-			const std::vector<std::size_t> freeLabelIndices =
+			std::vector<std::size_t> freeLabelIndices =
 				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::FreeLabel);
+			std::erase_if(freeLabelIndices, [&](const std::size_t index) {
+				return index >= windowState.freeLabels.size() || !inGroup(windowState.freeLabels[index]);
+			});
 			const std::vector<SceneObjectId> freeLabelIds =
 				CollectIds(windowState.freeLabels, freeLabelIndices);
 			for (const std::size_t index : freeLabelIndices)
 				if (drawFreeLabelRow(windowState, index, freeLabelIds))
 					break;
-			const std::vector<std::size_t> pinIndices =
-				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
-			const std::vector<SceneObjectId> pinIds =
-				CollectIds(windowState.pinnedMeasurements, pinIndices);
-			for (const std::size_t index : pinIndices)
-				if (drawPinnedMeasurementRow(windowState, index, pinIds))
-					break;
+			if (!chargeMarkers)
+			{
+				const std::vector<std::size_t> pinIndices =
+					CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
+				const std::vector<SceneObjectId> pinIds =
+					CollectIds(windowState.pinnedMeasurements, pinIndices);
+				for (const std::size_t index : pinIndices)
+					if (drawPinnedMeasurementRow(windowState, index, pinIds))
+						break;
+			}
 			ImGui::TreePop();
 		}
 		ImGui::PopID();

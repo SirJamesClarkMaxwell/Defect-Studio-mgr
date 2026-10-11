@@ -235,6 +235,7 @@ namespace DefectStudio
 						drawSpeciesGroup(windowState, species, atomIndices);
 
 					drawLabelsGroup(windowState);
+					drawLabelsGroup(windowState, true);
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
 					drawDensitiesGroup(windowState);

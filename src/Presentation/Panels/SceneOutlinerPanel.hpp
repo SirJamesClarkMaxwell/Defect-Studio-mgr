@@ -62,7 +62,7 @@ namespace DefectStudio
 		// ("Orbitals") - child groups under a window row, same nesting shape as
 		// drawSpeciesGroup/drawAtomRow above, both visibility columns included. Row click selects in
 		// the viewport the same way an atom row's does.
-		void drawLabelsGroup(RendererWindowState &windowState);
+		void drawLabelsGroup(RendererWindowState &windowState, bool chargeMarkers = false);
 		bool drawFreeLabelRow(
 			RendererWindowState &windowState, std::size_t labelIndex,
 			const std::vector<SceneObjectId> &orderedIds);

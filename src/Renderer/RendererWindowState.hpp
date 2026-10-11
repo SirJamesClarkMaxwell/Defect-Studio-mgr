@@ -202,6 +202,11 @@ namespace DefectStudio
 			// exported render). Independent on purpose.
 			bool visible = true;
 			bool renderable = true;
+			// task/95: set = a charge marker - also drawn as a vacancy-like sphere coloured by the
+			// sign (SceneChargeMarker.hpp) and listed under "Ładunki" in the outliner. `fnvKey` is the
+			// defect LOCPOT of the FNV correction whose centre the marker is (empty = free-standing).
+			std::optional<int> charge;
+			std::string fnvKey;
 		};
 		std::vector<FreeLabel> freeLabels;
 		// Click-select + drag-to-move for freeLabels (RendererPanel::handleFreeLabelInteraction) - same

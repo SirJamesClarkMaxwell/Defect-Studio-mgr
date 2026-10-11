@@ -141,6 +141,8 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.anchorOffset = label.anchorOffset;
 		p.rotationRadians = label.rotationRadians;
 		p.style = ToPersisted(label.style);
+		p.charge = label.charge;
+		p.fnvKey = label.fnvKey;
 		result.emplace_back(std::move(p));
 	}
 	for (const auto &orbital : window.sceneOrbitals)
@@ -325,6 +327,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					l.anchorOffset = value.anchorOffset;
 					l.rotationRadians = value.rotationRadians;
 					l.style = FromPersisted(value.style);
+					l.charge = value.charge;
+					l.fnvKey = value.fnvKey;
 					window.freeLabels.push_back(std::move(l));
 				}
 				else if constexpr (std::is_same_v<T, PersistedSceneArrow>)

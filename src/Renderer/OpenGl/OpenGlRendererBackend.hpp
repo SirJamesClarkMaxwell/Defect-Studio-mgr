@@ -422,8 +422,10 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &color, float alpha,
 			const glm::vec3 &sceneOffset);
+		// `markers`: the structure's vacancies and the charge-marker spheres (task/95).
 		void renderVacancyMarkers(
 			const RendererStructureData &structure,
+			const std::vector<RendererVacancyData> &markers,
 			const std::vector<SceneHideVolume> &volumes,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,

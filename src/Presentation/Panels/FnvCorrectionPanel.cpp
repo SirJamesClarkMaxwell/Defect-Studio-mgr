@@ -15,6 +15,8 @@
 #include "Presentation/Panels/PropertyGrid.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "Renderer/Scene/SceneDensityAnalysis.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
+#include "Renderer/Scene/SceneSystem.hpp"
 
 namespace DefectStudio
 {
@@ -277,6 +279,13 @@ namespace DefectStudio
 				}
 				ImGui::SetItemTooltip("Centroid atomów, których nie ma w bulku (CONTCAR obok LOCPOT) - jak w pracy inż.");
 				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::BeginDisabled(m_Request.defectLocpot.Empty());
+				if (ImGui::Button("Znacznik w scenie"))
+					syncChargeMarker(true);
+				ImGui::SetItemTooltip("Znacznik ładunku w ostatnim aktywnym widoku, związany z polem Środek: "
+					"przesunięcie znacznika zmienia środek i odwrotnie.");
+				ImGui::EndDisabled();
 				if (!m_CentreSource.empty())
 				{
 					grid.Row("");
@@ -411,6 +420,65 @@ namespace DefectStudio
 		ImGui::SetClipboardText(line.c_str());
 	}
 
+	void FnvCorrectionPanel::syncChargeMarker(const bool create)
+	{
+		const std::string key = m_Request.defectLocpot.Utf8();
+		if (key != m_MarkerKey)
+			m_MarkerCentre.reset(); // another defect: its marker follows the centre, not the other way
+		m_MarkerKey = key;
+		if (key.empty())
+			return;
+		for (auto &window : m_RendererLayer.GetWindows())
+		{
+			if (window.windowId != m_RendererLayer.GetLastFocusedViewportWindowId())
+				continue;
+			const glm::dmat3 lattice(window.structure.lattice);
+			auto marker = std::find_if(window.freeLabels.begin(), window.freeLabels.end(),
+				[&](const auto &label) { return label.charge && label.fnvKey == key; });
+			if (marker == window.freeLabels.end())
+			{
+				if (!create)
+					return;
+				PushPinnedMeasurementUndoSnapshot(window);
+				RendererWindowState::FreeLabel label;
+				label.id = window.sceneRegistry.AllocateObjectId();
+				label.fnvKey = key;
+				window.freeLabels.push_back(std::move(label));
+				SceneSystem::SyncLabelEntities(window.sceneRegistry, window);
+				marker = std::prev(window.freeLabels.end());
+				marker->worldPosition = glm::vec3(lattice * m_Request.centreFractional);
+			}
+			const auto at = FractionalCoordinates(window.structure.lattice, marker->worldPosition);
+			if (!at)
+				return;
+			const auto differs = [](const glm::dvec3 &a, const glm::dvec3 &b) {
+				const glm::dvec3 d = a - b;
+				return glm::length(d - glm::round(d)) > 1e-5; // float positions: ~1e-7 of a cell
+			};
+			if (m_MarkerCentre && differs(*at, *m_MarkerCentre))
+			{
+				// Moved in the scene (G, the gizmo, a drag): the scene wins.
+				m_Request.centreFractional = *at;
+				m_CentreSource = "znacznik w scenie";
+				invalidateProfiles();
+			}
+			else if (differs(*at, m_Request.centreFractional))
+			{
+				marker->worldPosition = glm::vec3(lattice * m_Request.centreFractional);
+				if (const auto anchor = ResolveFreeLabelAnchor(window, *marker))
+					marker->anchorOffset = marker->worldPosition - *anchor;
+			}
+			if (marker->charge != m_Request.charge)
+			{
+				if (!marker->charge || marker->text == ChargeMarkerText(*marker->charge))
+					marker->text = ChargeMarkerText(m_Request.charge);
+				marker->charge = m_Request.charge;
+			}
+			m_MarkerCentre = FractionalCoordinates(window.structure.lattice, marker->worldPosition);
+			return;
+		}
+	}
+
 	void FnvCorrectionPanel::Render()
 	{
 		pollJob();
@@ -426,6 +494,7 @@ namespace DefectStudio
 			SetVisible(false);
 		if (draw)
 		{
+			syncChargeMarker(false);
 			drawData();
 			if (m_Profiles)
 				drawPlots();

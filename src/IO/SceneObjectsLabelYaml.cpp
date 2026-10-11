@@ -58,6 +58,9 @@ namespace DefectStudio::SceneObjectsYaml
 			label.persistKey = node["persistKey"].as<std::string>("");
 			label.text = node["text"].as<std::string>(label.text);
 			label.rotationRadians = node["rotationRadians"].as<float>(label.rotationRadians);
+			if (node["charge"])
+				label.charge = node["charge"].as<int>();
+			label.fnvKey = node["fnvKey"].as<std::string>("");
 			if (node["anchorVacancy"])
 			{
 				label.anchorVacancy = node["anchorVacancy"].as<int>();
@@ -84,6 +87,10 @@ namespace DefectStudio::SceneObjectsYaml
 			emit << YAML::Key << "anchorVacancy" << YAML::Value << *label.anchorVacancy;
 		if (!label.anchorAtoms.empty() || label.anchorVacancy || label.anchorOffset != glm::vec3(0.0f))
 			EmitVec3(emit, "anchorOffset", label.anchorOffset);
+		if (label.charge)
+			emit << YAML::Key << "charge" << YAML::Value << *label.charge;
+		if (!label.fnvKey.empty())
+			emit << YAML::Key << "fnvKey" << YAML::Value << label.fnvKey;
 		EmitLabelStyle(emit, label.style);
 	}
 

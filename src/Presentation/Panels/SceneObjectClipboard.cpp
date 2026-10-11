@@ -56,6 +56,7 @@ namespace DefectStudio
 			if (std::holds_alternative<PersistedFreeLabel>(object))
 			{
 				auto &label = std::get<PersistedFreeLabel>(object);
+				label.fnvKey.clear(); // a pasted charge marker is a free-standing copy, not a second FNV centre
 				if (label.anchorVacancy)
 				{
 					const auto resolved = entry.vacancyRefs.empty() ? std::nullopt
