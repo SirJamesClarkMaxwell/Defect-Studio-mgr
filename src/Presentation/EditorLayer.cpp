@@ -36,6 +36,8 @@
 #include "IO/PoscarWriter.hpp"
 #include "IO/POTCARWriter.hpp"
 #include "IO/ProjectManifestIO.hpp"
+#include "IO/EnergeticsIO.hpp"
+#include "IO/FnvCorrectionsIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/RecentProjectsIO.hpp"
 #include "IO/SceneObjectsIO.hpp"
@@ -47,14 +49,17 @@
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
 #include "Presentation/Panels/NewStructureWizardPanel.hpp"
-#include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
+#include "Presentation/Panels/SceneDensityLoader.hpp"
 #include "Presentation/Panels/ExportImagePanel.hpp"
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/DisplacementComparisonPanel.hpp"
 #include "Presentation/Panels/GroupTheoryPanel.hpp"
+#include "Presentation/Panels/FnvCorrectionPanel.hpp"
+#include "Presentation/Panels/DefectEnergeticsSession.hpp"
+#include "Presentation/Panels/CalculationSummarySession.hpp"
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 #include "Presentation/Panels/ObjectPropertiesPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
@@ -542,6 +547,8 @@ namespace DefectStudio
 		saveProjectWindowState();
 		savePanelVisibilityState();
 		m_Panels.Clear();
+		m_DefectEnergeticsSession.reset();
+		m_CalculationSummarySession.reset();
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
 		m_EventBus.reset();
@@ -576,11 +583,21 @@ namespace DefectStudio
 		pollPendingWindowRestores();
 		renderMainMenuBar();
 		renderCommandPalettePopup();
+		if (m_SceneDensityLoader != nullptr)
+			m_SceneDensityLoader->Update();
 
+		// Session commits happen on this main-thread boundary, once per frame even with closed views.
+		if (m_DefectEnergeticsSession)
+			m_DefectEnergeticsSession->Update();
+		if (m_CalculationSummarySession)
+			m_CalculationSummarySession->Update();
 		for (auto &entry : m_Panels.Entries())
 		{
+			dockAnalysisPanelOnFirstUse(*entry.panel);
 			entry.panel->Render();
 		}
+		if (m_DefectEnergeticsSession)
+			m_DefectEnergeticsSession->FlushChanges();
 		if (m_PendingPanelFocusTitle.has_value()
 			&& ImGui::FindWindowByName(m_PendingPanelFocusTitle->c_str()) != nullptr)
 		{
@@ -623,8 +640,7 @@ namespace DefectStudio
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
 		m_CalculatorConsolePanelId = registerPanel<CalculatorConsolePanel>("Integrated Python Console", false);
-		m_CalculationSummaryPanelId =
-			registerPanel<CalculationSummaryPanel>(m_JobSystem, "Calculation Summary", false);
+		registerCalculationSummaryViews();
 		if (auto commandRegistry = m_CommandRegistry.lock())
 		{
 			const auto registerTerminalCommand =
@@ -731,11 +747,14 @@ namespace DefectStudio
 				*rendererLayer, m_DomainLayer, m_JobSystem, m_EventBus, m_ElementPropertiesTable,
 				"Atoms Displacement", false);
 			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
+			m_FnvCorrectionPanelId = registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
+			registerDefectEnergeticsViews();
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
 			// (not local) so saveProjectWindowState/pollPendingWindowRestores can reach it too.
 			m_ElectronicStructureSession = CreateRef<ElectronicStructureSession>(*rendererLayer, m_JobSystem);
+			m_SceneDensityLoader = CreateRef<SceneDensityLoader>(*rendererLayer, m_JobSystem);
 			// Applied here (not in loadInitialProjectState(), which runs before this session
 			// exists) - the active project's manifest, if any, owns the bulk reference now (see
 			// T07.5.5); ElectronicStructureSession's own persisted-defaults file stays as a
@@ -797,6 +816,8 @@ namespace DefectStudio
 			true,
 			m_RendererLayer);
 		m_PanelsInitialized = true;
+		// Startup project loading runs before the analysis panels exist.
+		loadFnvCorrectionsForProject();
 		applyPanelVisibilityState();
 
 		loadAndQueueProjectWindowRestores();
@@ -1340,6 +1361,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onTextFileOpenRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::CalculationSummaryOpenRequested>(
 			*m_EventBus, *this, &EditorLayer::onCalculationSummaryOpenRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::EnergeticsFoldersAddRequested>(
+			*m_EventBus, *this, &EditorLayer::onEnergeticsFoldersAddRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::IrrepLabelOverridesChanged>(
 			*m_EventBus, *this, &EditorLayer::onIrrepLabelOverridesChanged, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonStateChanged>(
@@ -1381,6 +1404,7 @@ namespace DefectStudio
 		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
+		loadFnvCorrectionsForProject();
 
 		if (m_ElectronicStructureSession != nullptr)
 		{
@@ -1407,6 +1431,7 @@ namespace DefectStudio
 		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
+		loadFnvCorrectionsForProject();
 
 		if (m_ElectronicStructureSession != nullptr)
 		{
@@ -1649,15 +1674,6 @@ namespace DefectStudio
 		}
 	}
 
-	void EditorLayer::onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event)
-	{
-		if (auto panel = findPanel(m_CalculationSummaryPanelId).lock())
-		{
-			if (auto *summary = dynamic_cast<CalculationSummaryPanel *>(panel.get()))
-				summary->OpenDirectory(event.directory);
-		}
-	}
-
 	void EditorLayer::onWavecarDropped(const RendererEvents::Viewport::WavecarDropped &event)
 	{
 		if (m_ElectronicStructureSession == nullptr)
@@ -1834,9 +1850,7 @@ namespace DefectStudio
 		auto domainLayer = m_DomainLayer.lock();
 		std::vector<StructuredError> warnings;
 		const StructureFileWriter writeStructureFile = [](const CrystalStructure &structure, const Path &path) {
-			const Path scratch = Path::FromResolved(
-				std::filesystem::temp_directory_path() / ("defectstudio_poscar_" + ToString(GenerateUuid()) + ".json"));
-			return PoscarWriter::Write(structure, path, scratch, true);
+			return PoscarWriter::Write(structure, path, true);
 		};
 		if (domainLayer == nullptr ||
 			!SaveProjectWithSceneObjects(m_ActiveProjectDirectory, *m_ActiveProject, sceneObjects,
@@ -1907,8 +1921,14 @@ namespace DefectStudio
 
 	void EditorLayer::onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &)
 	{
-		// Legacy in-app-built structure export removed in Step 11. To save a structure, use
-		// StructureHubPanel "Add to Project" workflow (publishes AddStructureToProjectRequested).
+		if (auto panel = findPanel(m_StructureHubPanelId).lock())
+			panel->SetVisible(true);
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(NotificationRequestedEvent{ToNotification(StructuredError(
+				ErrorCategory::Validation, Severity::Warning,
+				"Aby zapisać nową strukturę, wybierz folder i użyj „Add to Project” w Structure Hub.",
+				"Structure file save requires the creation-session add-to-project flow",
+				"Zmiany struktur należących do projektu zapiszesz skrótem Ctrl+S.", "EditorLayer"))});
 	}
 
 	// The only POTCAR trigger left after Step 11 removed the legacy save path: a structure that was

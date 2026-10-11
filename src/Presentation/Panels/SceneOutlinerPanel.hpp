@@ -23,6 +23,7 @@ namespace DefectStudio
 	// Planes deliberately bypass this path and walk RendererWindowState::scenePlanes directly.
 	[[nodiscard]] std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
 		const SceneRegistry &scene, SceneObjectKind kind);
+	[[nodiscard]] bool IsSceneOutlinerVacancyBond(const ScenePath &path);
 
 	// Lists only the displayed renderer window (one structure per window - no Collections, see docs/work/
 	// project/plans/2026-08-23-outliner-bonds-displacement.md). Every row carries Blender's two
@@ -61,11 +62,11 @@ namespace DefectStudio
 		// ("Orbitals") - child groups under a window row, same nesting shape as
 		// drawSpeciesGroup/drawAtomRow above, both visibility columns included. Row click selects in
 		// the viewport the same way an atom row's does.
-		void drawLabelsGroup(RendererWindowState &windowState);
+		void drawLabelsGroup(RendererWindowState &windowState, bool chargeMarkers = false);
 		bool drawFreeLabelRow(
 			RendererWindowState &windowState, std::size_t labelIndex,
 			const std::vector<SceneObjectId> &orderedIds);
-		void drawPinnedMeasurementRow(
+		bool drawPinnedMeasurementRow(
 			RendererWindowState &windowState, std::size_t pinIndex,
 			const std::vector<SceneObjectId> &orderedIds);
 		void drawOrbitalsGroup(RendererWindowState &windowState);
@@ -75,10 +76,13 @@ namespace DefectStudio
 		// scenePlanes. Unlike the groups above it walks the vector directly: a plane has no
 		// SceneRegistry entity, because nothing about it needs a transform or a selection component.
 		void drawPlanesGroup(RendererWindowState &windowState);
+		// task/83: sceneDensities, same direct-vector shape as the planes group. Hidden while empty.
+		void drawDensitiesGroup(RendererWindowState &windowState);
+		void drawHideVolumesGroup(RendererWindowState &windowState);
 		// task/51: structure.vacancies. Group eye = showVacancies; a row's X removes that vacancy
 		// through renderer.vacancy.set, so it is one undo step like every other domain edit.
 		void drawVacanciesGroup(RendererWindowState &windowState);
-		void drawPathsGroup(RendererWindowState &windowState);
+		void drawPathsGroup(RendererWindowState &windowState, bool vacancyBonds = false);
 
 		enum class SelectionRowKind
 		{
@@ -87,7 +91,9 @@ namespace DefectStudio
 			PinnedMeasurement,
 			Orbital,
 			Plane,
-			Path
+			Path,
+			Density,
+			HideVolume
 		};
 		struct SelectionAnchor
 		{

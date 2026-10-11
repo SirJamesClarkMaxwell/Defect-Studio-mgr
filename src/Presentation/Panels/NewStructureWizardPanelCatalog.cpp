@@ -10,6 +10,8 @@
 #include <glm/common.hpp>
 
 #include "Core/Logging/Logger.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Domain/Crystal/PrimitiveCell.hpp"
 
 namespace DefectStudio
@@ -85,6 +87,8 @@ namespace DefectStudio
 		if (!loaded)
 		{
 			m_CatalogError = loaded.Error().userMessage;
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(loaded.Error())});
 			return;
 		}
 		m_Catalog = std::move(loaded).Value();
@@ -163,6 +167,10 @@ namespace DefectStudio
 		if (prototypeIt == m_Catalog.prototypes.end())
 		{
 			m_CatalogError = "materials.yaml references unknown prototype: " + polytypeIt->second;
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(NotificationRequestedEvent{ToNotification(StructuredError(
+					ErrorCategory::Validation, Severity::Error, "Materiał wskazuje nieznany prototyp",
+					m_CatalogError, "Sprawdź definicje materiałów i prototypów.", "NewStructureWizardPanel"))});
 			return;
 		}
 		m_SelectedPrototypeIndex = static_cast<int>(std::distance(m_Catalog.prototypes.begin(), prototypeIt));

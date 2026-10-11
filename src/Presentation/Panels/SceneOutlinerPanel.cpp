@@ -5,12 +5,14 @@
 
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/SceneObjectMultiSelection.hpp"
+#include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/SceneOutlinerVisibilityColumns.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <map>
 #include <optional>
+#include <string_view>
 
 #include <imgui.h>
 
@@ -49,11 +51,81 @@ namespace DefectStudio
 			windowState.defectFrameSelected = false;
 			if (&windowState.selectedScenePlanes != keep)
 				windowState.selectedScenePlanes.clear();
+			if (&windowState.selectedSceneDensities != keep)
+				windowState.selectedSceneDensities.clear();
+			if (&windowState.selectedSceneHideVolumes != keep)
+				windowState.selectedSceneHideVolumes.clear();
 			if (&windowState.selectedScenePaths != keep)
 				windowState.selectedScenePaths.clear();
 		}
 
 	} // namespace
+
+	std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
+		const SceneRegistry &scene, const SceneObjectKind kind)
+	{
+		std::vector<std::size_t> indices;
+		const auto view = scene.Registry().view<const SceneObjectComponent>();
+		for (const entt::entity entity : view)
+		{
+			const SceneObjectComponent &object = view.get<const SceneObjectComponent>(entity);
+			if (object.kind == kind)
+				indices.push_back(object.sourceIndex);
+		}
+		std::sort(indices.begin(), indices.end());
+		return indices;
+	}
+
+	bool SceneOutlinerPanel::drawSceneObjectContextMenu(
+		RendererWindowState &windowState,
+		const SelectionRowKind rowKind,
+		const SceneObjectId clickedId,
+		std::vector<SceneObjectId> &selection,
+		const bool openRequested)
+	{
+		if (openRequested)
+		{
+			selectAnnotationRowForContextMenu(windowState, rowKind, clickedId, selection);
+			ImGui::OpenPopup("##SceneObjectRowContextMenu");
+		}
+		if (!ImGui::BeginPopup("##SceneObjectRowContextMenu"))
+			return false;
+
+		const SceneObjectEditKind editKind = rowKind == SelectionRowKind::FreeLabel
+			? SceneObjectEditKind::FreeLabel
+			: rowKind == SelectionRowKind::PinnedMeasurement ? SceneObjectEditKind::PinnedMeasurement
+			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
+			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
+			: rowKind == SelectionRowKind::Density ? SceneObjectEditKind::Density
+			: rowKind == SelectionRowKind::HideVolume ? SceneObjectEditKind::HideVolume
+			: SceneObjectEditKind::Path;
+		bool sceneMutated = false;
+		if (rowKind == SelectionRowKind::HideVolume && ImGui::MenuItem("Włącz/Wyłącz ukrywanie"))
+		{
+			const auto index = AnnotationIndex(windowState.sceneHideVolumes, clickedId);
+			if (index < windowState.sceneHideVolumes.size())
+				SetSceneHideVolumeActive(windowState, clickedId, !windowState.sceneHideVolumes[index].active);
+			sceneMutated = true;
+			ImGui::CloseCurrentPopup();
+		}
+		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
+			const SceneObjectEditAction action)
+		{
+			const bool enabled = CanExecuteSceneObjectEditAction(windowState, editKind, action);
+			if (ImGui::MenuItem(label.data(), shortcut.data(), false, enabled))
+			{
+				ExecuteSceneObjectEditAction(windowState, editKind, action);
+				sceneMutated = action != SceneObjectEditAction::Copy;
+				ImGui::CloseCurrentPopup();
+			}
+		};
+		drawAction("Usun", "Delete", SceneObjectEditAction::Delete);
+		drawAction("Duplikuj", "Ctrl+D", SceneObjectEditAction::Duplicate);
+		drawAction("Kopiuj", "Ctrl+C", SceneObjectEditAction::Copy);
+		drawAction("Wklej", "Ctrl+V", SceneObjectEditAction::Paste);
+		ImGui::EndPopup();
+		return sceneMutated;
+	}
 
 	SceneOutlinerPanel::SceneOutlinerPanel(
 		RendererLayer &layer,
@@ -162,6 +234,8 @@ namespace DefectStudio
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedSceneDensities.clear();
+			windowState.selectedSceneHideVolumes.clear();
 			windowState.selectedScenePaths.clear();
 			if (eventBus == nullptr)
 				continue;

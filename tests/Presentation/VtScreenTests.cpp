@@ -151,4 +151,26 @@ namespace DefectStudio::Tests
 
 		EXPECT_EQ(screen.CellAt(0, 0).foreground, 1);
 	}
+
+	TEST(VtScreenTests, PredictionTextIsDimAndExtendedColoursDoNotLeakIntoOtherAttributes)
+	{
+		VtScreen screen(20, 5);
+		// PSReadLine's inline prediction: bright white, dim, italic; then a 256-colour grey and a
+		// truecolour red whose arguments (5, 2, 238, ...) must not be read as SGR codes of their own.
+		screen.Feed("\x1b[97;2;3mab\x1b[0m\x1b[38;5;238mc\x1b[38;2;255;0;0;1md");
+		EXPECT_TRUE(screen.CellAt(0, 0).dim);
+		EXPECT_EQ(screen.CellAt(0, 0).foreground, 15);
+		EXPECT_FALSE(screen.CellAt(0, 2).dim);
+		EXPECT_EQ(screen.CellAt(0, 2).foreground, 8);
+		EXPECT_FALSE(screen.CellAt(0, 2).bold);
+		EXPECT_TRUE(screen.CellAt(0, 3).bold);
+	}
+
+	TEST(VtScreenTests, ScrollbackKeepsTheNewestRowsUpToTheCap)
+	{
+		VtScreen screen(10, 2);
+		for (std::size_t i = 0; i < VtScreen::kMaxScrollback + 10; ++i)
+			screen.Feed("x\r\n");
+		EXPECT_EQ(screen.Scrollback().size(), VtScreen::kMaxScrollback);
+	}
 } // namespace DefectStudio::Tests

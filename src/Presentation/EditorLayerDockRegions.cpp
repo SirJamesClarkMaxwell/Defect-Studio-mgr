@@ -49,6 +49,36 @@ namespace DefectStudio
 		}
 	}
 
+	void EditorLayer::dockAnalysisPanelOnFirstUse(const IPanel &panel)
+	{
+		const auto preferred = AnalysisDockRegion(panel.GetTitle());
+		if (!panel.IsVisible() || !preferred)
+			return;
+		const ImGuiID dockspace = ImGui::GetMainViewport()->ID;
+		if (ImGui::DockBuilderGetCentralNode(dockspace) == nullptr)
+			return;
+		const auto &central = *ImGui::DockBuilderGetCentralNode(dockspace);
+		ImGuiID target = central.ID;
+		// Reuse existing dock regions; never split/rebuild the user's saved layout.
+		for (const auto &entry : m_Panels.Entries())
+		{
+			if (!entry.panel || !entry.panel->IsVisible())
+				continue;
+			if (ImGui::FindWindowByName(entry.panel->GetTitle().c_str()) == nullptr)
+				continue;
+			const auto &window = *ImGui::FindWindowByName(entry.panel->GetTitle().c_str());
+			if (window.DockNode == nullptr || window.DockNode->IsFloatingNode())
+				continue;
+			const auto region = ClassifyDockRegion(ToDockRectangle(*window.DockNode), ToDockRectangle(central));
+			if (region == *preferred)
+			{
+				target = window.DockNode->ID;
+				break;
+			}
+		}
+		ImGui::SetNextWindowDockID(target, ImGuiCond_FirstUseEver);
+	}
+
 	void EditorLayer::updateDockRegionPanelTitles()
 	{
 		m_LeftDockTitles.clear();

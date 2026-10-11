@@ -13,6 +13,7 @@ namespace DefectStudio
 		uint8_t foreground = 7; // ANSI color index, 0-15
 		uint8_t background = 0;
 		bool bold = false;
+		bool dim = false; // SGR 2 - PSReadLine's inline prediction text
 	};
 
 	// Minimal ANSI/VT100 screen buffer: turns a raw ConPTY output byte stream into a character
@@ -20,7 +21,7 @@ namespace DefectStudio
 	// basic 16-color SGR, line wrap, scroll-on-linefeed. A plain scrollback of printed text
 	// (the pre-ConPTY MVP) can't show this: readline redraws the prompt in place using cursor
 	// moves, not by re-printing lines.
-	// ponytail: no 256-color/truecolor SGR, no alternate screen buffer (vim/htop/less will
+	// ponytail: 256-color/truecolor SGR is folded onto the 16-color palette, no alternate screen buffer (vim/htop/less will
 	// render wrong), no OSC title parsing (swallowed, not shown), byte-level text (not real
 	// UTF-8 decoding - multi-byte characters render as several mojibake cells). Upgrade path:
 	// a real VT100/xterm conformance suite if a full-screen TUI app needs to run inside this
@@ -55,7 +56,8 @@ namespace DefectStudio
 
 		[[nodiscard]] const VtCell &CellAt(int row, int column) const;
 
-		// Rows that scrolled off the top, oldest first. Unbounded (MVP - see class comment).
+		// Rows that scrolled off the top, oldest first, at most kMaxScrollback.
+		static constexpr std::size_t kMaxScrollback = 5000;
 		[[nodiscard]] const std::vector<std::vector<VtCell>> &Scrollback() const
 		{
 			return m_Scrollback;
@@ -88,6 +90,7 @@ namespace DefectStudio
 		uint8_t m_CurrentForeground = 7;
 		uint8_t m_CurrentBackground = 0;
 		bool m_CurrentBold = false;
+		bool m_CurrentDim = false;
 
 		std::vector<std::vector<VtCell>> m_Grid;
 		std::vector<std::vector<VtCell>> m_Scrollback;

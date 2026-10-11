@@ -61,6 +61,12 @@ void EnsureScenePersistKeys(RendererWindowState &window)
 	for (auto &plane : window.scenePlanes)
 		if (plane.persistKey.empty())
 			plane.persistKey = GenerateScenePersistKey();
+	for (auto &volume : window.sceneHideVolumes)
+		if (volume.persistKey.empty())
+			volume.persistKey = GenerateScenePersistKey();
+	for (auto &density : window.sceneDensities)
+		if (density.persistKey.empty())
+			density.persistKey = GenerateScenePersistKey();
 	if (window.paths != nullptr)
 	{
 		// The store only hands out mutable access through the two revision-bumping mutators, so a

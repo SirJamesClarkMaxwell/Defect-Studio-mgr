@@ -119,10 +119,11 @@ namespace DefectStudio::Platform
 		const nfdnfilteritem_t filterItem{filterNameNative.c_str(), filterExtensionNative.c_str()};
 
 		nfdnchar_t *outPath = nullptr;
+		// An empty extension means "any file" - VASP outputs (CHGCAR, LOCPOT) have none.
 		const nfdresult_t dialogResult = NFD_OpenDialogN(
 			&outPath,
-			&filterItem,
-			1,
+			filterExtension.empty() ? nullptr : &filterItem,
+			filterExtension.empty() ? 0 : 1,
 			defaultDirectoryNative.empty() ? nullptr : defaultDirectoryNative.c_str());
 
 		Result<std::optional<Path>> returnValue = std::optional<Path>(std::nullopt);

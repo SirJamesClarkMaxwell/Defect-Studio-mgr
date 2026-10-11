@@ -68,6 +68,21 @@ namespace DefectStudio
 		std::vector<std::size_t> anchorAtoms;
 	};
 
+	// A selected hide volume. `worldCenter` is where the gizmo stands (anchor centroid or the
+	// stored centre, through the lattice for Fractional); the rest is what restore puts back.
+	struct HideVolumeTransformStart
+	{
+		std::size_t index = 0;
+		glm::vec3 worldCenter = glm::vec3(0.0f);
+		glm::vec3 center = glm::vec3(0.0f);
+		glm::mat3 orientation = glm::mat3(1.0f);
+		glm::vec3 halfExtents = glm::vec3(1.0f);
+		std::vector<std::size_t> anchorAtoms;
+		// The volume's axes in world space (unit columns) - the gizmo's Local frame. Equal to
+		// `orientation` for Anchored; `lattice * orientation`, normalised, for Fractional.
+		glm::mat3 worldAxes = glm::mat3(1.0f);
+	};
+
 	// A selected vacancy marker (structure.vacancies index) and the defect axes. Both are domain data:
 	// the drag moves the renderer copies, the commit writes the domain through renderer.vacancy.set /
 	// renderer.defect_frame.set (SceneTransformDefectMarkers.hpp).
@@ -122,6 +137,7 @@ namespace DefectStudio
 		// tangent round), scale grows the drawn size (orbital.scale, plane.halfExtents).
 		std::vector<OrbitalTransformStart> orbitals;
 		std::vector<PlaneTransformStart> planes;
+		std::vector<HideVolumeTransformStart> hideVolumes;
 		// G/R/S compose onto each selected path's object transform.
 		std::vector<PathTransformStart> paths;
 		// Edit Mode's elements, inside one path whose own transform does NOT change. `paths` and

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <utility>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -15,6 +16,28 @@ namespace DefectStudio::Tests
 			return projection * view;
 		}
 	} // namespace
+
+	TEST(SelectionHitTestTests, NearPlaneClippingRetainsCrossingSegmentAndRejectsSegmentBehindCamera)
+	{
+		const auto vp = BuildTestViewProjection();
+		for (const bool reverse : {false, true})
+		{
+			glm::vec3 a(0.01f, 0, 6), b(0.01f, 0, 0);
+			if (reverse) std::swap(a, b);
+			ASSERT_TRUE(SelectionHitTest::ClipSegmentToNearPlane(vp, a, b));
+			const glm::vec3 clipped = reverse ? b : a;
+			EXPECT_NEAR(clipped.z, 4.9f, 1e-5f);
+			EXPECT_NEAR(clipped.x, 0.01f, 1e-6f);
+			EXPECT_TRUE(SelectionHitTest::ProjectToScreen(vp, glm::vec2(800, 600), clipped));
+		}
+		glm::vec3 a(0, 0, 6), b(0, 0, 7);
+		EXPECT_FALSE(SelectionHitTest::ClipSegmentToNearPlane(vp, a, b));
+		a = glm::vec3(0, 0, 0);
+		b = glm::vec3(1, 0, 0);
+		EXPECT_TRUE(SelectionHitTest::ClipSegmentToNearPlane(vp, a, b));
+		EXPECT_EQ(a, glm::vec3(0));
+		EXPECT_EQ(b, glm::vec3(1, 0, 0));
+	}
 
 	TEST(SelectionHitTestTests, ProjectToScreenPlacesOriginAtViewportCenter)
 	{

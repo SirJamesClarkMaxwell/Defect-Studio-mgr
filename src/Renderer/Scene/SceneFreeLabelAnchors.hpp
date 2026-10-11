@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -17,6 +18,9 @@
 // keeps following its atom from the new place (SceneTransform's free-label apply/restore).
 namespace DefectStudio
 {
+	[[nodiscard]] bool IsFreeLabelVisible(const RendererWindowState::FreeLabel &label,
+		const RendererStructureData &structure, std::span<const SceneHideVolume> hideVolumes);
+
 	// The anchor's current world position, nullopt when the label is free or the anchor is stale.
 	[[nodiscard]] std::optional<glm::vec3> ResolveFreeLabelAnchor(
 		const RendererWindowState &window, const RendererWindowState::FreeLabel &label);
@@ -29,4 +33,11 @@ namespace DefectStudio
 	// marker. Returns the new labels' ids in vacancy order; the caller pushes the undo snapshot and
 	// selects them.
 	std::vector<SceneObjectId> AddVacancyLabels(RendererWindowState &window, const std::vector<std::size_t> &vacancies);
+
+	// task/95: charge markers (FreeLabel::charge set). The text a new marker gets: "+1", "-1", "0".
+	[[nodiscard]] std::string ChargeMarkerText(int charge);
+	// The sphere under every visible charge marker, drawn by the vacancy-marker pass: red for a
+	// positive charge, blue for a negative one, grey for 0.
+	[[nodiscard]] std::vector<RendererVacancyData> ChargeMarkerSpheres(std::span<const RendererWindowState::FreeLabel> labels,
+		const RendererStructureData &structure, std::span<const SceneHideVolume> hideVolumes);
 } // namespace DefectStudio

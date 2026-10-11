@@ -143,4 +143,49 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(reopened.freeLabels[2].anchorVacancy.has_value());
 		EXPECT_EQ(reopened.freeLabels[2].worldPosition, glm::vec3(9.0f));
 	}
+
+	// task/95: a charge marker is a free label with a charge; it gets a sphere coloured by the sign,
+	// and the charge and its FNV link survive a save.
+	TEST(SceneFreeLabelAnchorsTests, ChargeMarkersGetASphereAndSurviveSaveAndLoad)
+	{
+		EXPECT_EQ(ChargeMarkerText(1), "+1");
+		EXPECT_EQ(ChargeMarkerText(-2), "-2");
+		EXPECT_EQ(ChargeMarkerText(0), "0");
+
+		RendererWindowState window = WindowWithAtomAndVacancies();
+		AddLabel(window).worldPosition = glm::vec3(9.0f); // plain text: no sphere
+		{
+			RendererWindowState::FreeLabel &marker = AddLabel(window);
+			marker.charge = -1;
+			marker.fnvKey = "O:/GeV/Stan_1-/HSE/PrecFock_Normal/LOCPOT";
+			marker.worldPosition = glm::vec3(1.0f, 2.0f, 3.0f);
+		}
+		{
+			RendererWindowState::FreeLabel &hidden = AddLabel(window);
+			hidden.charge = 1;
+			hidden.visible = false;
+		}
+		const auto spheres = ChargeMarkerSpheres(window.freeLabels, window.structure, window.sceneHideVolumes);
+		ASSERT_EQ(spheres.size(), 1u);
+		EXPECT_EQ(spheres[0].cartesianPosition, glm::vec3(1.0f, 2.0f, 3.0f));
+		EXPECT_GT(spheres[0].color.b, spheres[0].color.r); // negative: blue
+
+		SceneObjectsFile file;
+		PersistedStructureSceneObjects entry;
+		entry.structureKey = "structures/GeV/CONTCAR";
+		entry.objects = ExtractPersistedSceneObjects(window);
+		file.structures.push_back(entry);
+		SceneObjectsFile loaded;
+		std::vector<StructuredError> parseWarnings;
+		std::string error;
+		ASSERT_TRUE(SceneObjectsIO::Parse(SceneObjectsIO::Serialize(file), loaded, parseWarnings, error)) << error;
+		RendererWindowState reopened = WindowWithAtomAndVacancies();
+		std::vector<StructuredError> warnings;
+		ApplyPersistedSceneObjects(reopened, loaded.structures[0].objects, warnings);
+		ASSERT_EQ(reopened.freeLabels.size(), 3u);
+		EXPECT_FALSE(reopened.freeLabels[0].charge.has_value());
+		EXPECT_EQ(reopened.freeLabels[1].charge, std::optional<int>(-1));
+		EXPECT_EQ(reopened.freeLabels[1].fnvKey, "O:/GeV/Stan_1-/HSE/PrecFock_Normal/LOCPOT");
+		EXPECT_EQ(reopened.freeLabels[2].charge, std::optional<int>(1));
+	}
 } // namespace DefectStudio::Tests

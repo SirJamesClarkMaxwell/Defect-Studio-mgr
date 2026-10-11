@@ -178,7 +178,7 @@ namespace DefectStudio
 	void VtScreen::putChar(char32_t ch)
 	{
 		m_Grid[static_cast<std::size_t>(m_CursorRow)][static_cast<std::size_t>(m_CursorColumn)] =
-			VtCell{ch, m_CurrentForeground, m_CurrentBackground, m_CurrentBold};
+			VtCell{ch, m_CurrentForeground, m_CurrentBackground, m_CurrentBold, m_CurrentDim};
 		++m_CursorColumn;
 		if (m_CursorColumn >= m_Columns)
 		{
@@ -190,6 +190,8 @@ namespace DefectStudio
 	void VtScreen::newLineScroll()
 	{
 		m_Scrollback.push_back(std::move(m_Grid.front()));
+		if (m_Scrollback.size() > kMaxScrollback)
+			m_Scrollback.erase(m_Scrollback.begin()); // ponytail: O(n) vector shift per line past the cap, a ring buffer if it ever shows
 		m_Grid.erase(m_Grid.begin());
 		m_Grid.push_back(MakeBlankRow(m_Columns));
 	}
@@ -288,39 +290,57 @@ namespace DefectStudio
 	void VtScreen::applySgr()
 	{
 		if (m_Params.empty())
-		{
-			m_CurrentForeground = 7;
-			m_CurrentBackground = 0;
-			m_CurrentBold = false;
-			return;
-		}
+			m_Params.push_back(0);
 
-		for (const int code : m_Params)
+		// 38;5;n / 38;2;r;g;b (and 48;...) folded onto the 16-color palette.
+		const auto extended = [&](std::size_t &i) -> uint8_t {
+			if (i + 2 < m_Params.size() && m_Params[i + 1] == 5)
+			{
+				const int n = m_Params[i + 2];
+				i += 2;
+				return n < 16 ? static_cast<uint8_t>(n) : n >= 232 ? static_cast<uint8_t>(n < 244 ? 8 : 7) : uint8_t{7};
+			}
+			if (i + 4 < m_Params.size() && m_Params[i + 1] == 2)
+			{
+				const int brightness = m_Params[i + 2] + m_Params[i + 3] + m_Params[i + 4];
+				i += 4;
+				return brightness < 200 ? uint8_t{8} : uint8_t{7};
+			}
+			return 7;
+		};
+		for (std::size_t i = 0; i < m_Params.size(); ++i)
 		{
+			const int code = m_Params[i];
 			if (code == 0)
 			{
 				m_CurrentForeground = 7;
 				m_CurrentBackground = 0;
 				m_CurrentBold = false;
+				m_CurrentDim = false;
 			}
 			else if (code == 1)
 				m_CurrentBold = true;
+			else if (code == 2)
+				m_CurrentDim = true;
 			else if (code == 22)
-				m_CurrentBold = false;
+				m_CurrentBold = m_CurrentDim = false;
 			else if (code >= 30 && code <= 37)
 				m_CurrentForeground = static_cast<uint8_t>(code - 30);
+			else if (code == 38)
+				m_CurrentForeground = extended(i);
 			else if (code == 39)
 				m_CurrentForeground = 7;
 			else if (code >= 40 && code <= 47)
 				m_CurrentBackground = static_cast<uint8_t>(code - 40);
+			else if (code == 48)
+				m_CurrentBackground = extended(i);
 			else if (code == 49)
 				m_CurrentBackground = 0;
 			else if (code >= 90 && code <= 97)
 				m_CurrentForeground = static_cast<uint8_t>(code - 90 + 8);
 			else if (code >= 100 && code <= 107)
 				m_CurrentBackground = static_cast<uint8_t>(code - 100 + 8);
-			// Everything else (256-color/truecolor introducers, underline, blink, ...) is a
-			// deliberate no-op - see class comment.
+			// Everything else (italic, underline, blink, ...) is a deliberate no-op.
 		}
 	}
 

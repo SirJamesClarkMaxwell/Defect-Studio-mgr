@@ -2,6 +2,7 @@
 
 #include "Renderer/Path/PathBindingResolver.hpp"
 #include "Renderer/Path/VacancyBond.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -107,6 +108,34 @@ namespace DefectStudio
 			}, node.binding.value);
 		}
 	} // namespace
+
+	bool BoundToHiddenEndpoint(const ScenePath &path, const RendererStructureData &structure,
+		std::span<const SceneHideVolume> hideVolumes)
+	{
+		for (const PathNode &node : path.nodes)
+		{
+			if (std::holds_alternative<PathBinding::CopyPosition>(node.binding.value))
+			{
+				const auto &atom = std::get<PathBinding::CopyPosition>(node.binding.value);
+				if (atom.atomIndex < structure.atoms.size() && !structure.atoms[atom.atomIndex].visible)
+					return true;
+			}
+			else if (std::holds_alternative<PathBinding::CopyVacancy>(node.binding.value))
+			{
+				const auto &site = std::get<PathBinding::CopyVacancy>(node.binding.value);
+				if (site.vacancyIndex >= structure.vacancies.size()) continue;
+				const auto &vacancy = structure.vacancies[site.vacancyIndex];
+				if (vacancy.hidden || PointCoveredByHideVolumes(hideVolumes, vacancy.cartesianPosition, structure))
+					return true;
+			}
+		}
+		return false;
+	}
+
+	PathTransform ResolvePathTransform(const ScenePath &path, const BindingContext &context)
+	{
+		return ResolveTransform(path, context);
+	}
 
 	ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context)
 	{

@@ -20,12 +20,14 @@ namespace DefectStudio
 			IM_COL32(0xF1, 0x4C, 0x4C, 255), IM_COL32(0x23, 0xD1, 0x8B, 255), IM_COL32(0xF5, 0xF5, 0x43, 255),
 			IM_COL32(0x3B, 0x8E, 0xEA, 255), IM_COL32(0xD6, 0x70, 0xD6, 255), IM_COL32(0x29, 0xB8, 0xDB, 255),
 			IM_COL32(0xFF, 0xFF, 0xFF, 255)};
+		const VtCell kBlankCell{};
 
-		ImU32 PaletteColor(uint8_t index, bool bold)
+		ImU32 PaletteColor(uint8_t index, bool bold, bool dim = false)
 		{
 			if (bold && index < 8)
 				index = static_cast<uint8_t>(index + 8);
-			return kAnsiPalette[index & 0x0F];
+			const ImU32 color = kAnsiPalette[index & 0x0F];
+			return dim ? (color & ~IM_COL32_A_MASK) | IM_COL32(0, 0, 0, 110) : color;
 		}
 
 		struct KeyMapping
@@ -164,6 +166,9 @@ namespace DefectStudio
 		// one-frame-lag caveat as the viewport modal-transform capture.
 		io.WantCaptureKeyboard = true;
 
+		if (io.InputQueueCharacters.Size > 0 || ImGui::IsKeyPressed(ImGuiKey_Enter))
+			session.scrollOffset = 0; // typing jumps back to the prompt
+
 		for (int i = 0; i < io.InputQueueCharacters.Size; ++i)
 		{
 			const ImWchar character = io.InputQueueCharacters[i];
@@ -182,6 +187,9 @@ namespace DefectStudio
 			if (ImGui::IsKeyPressed(mapping.key, true))
 				session.process.WriteRaw(mapping.bytes);
 		}
+		// Ctrl+Space: PSReadLine's MenuComplete (the completion list). NUL needs an explicit length.
+		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Space, false))
+			session.process.WriteRaw(std::string(1, '\0'));
 	}
 
 	bool TerminalPanel::renderSession(Session &session, float width, bool focusRequested)
@@ -214,7 +222,10 @@ namespace DefectStudio
 		}
 
 		ImGui::BeginChild(
-			"Grid", ImVec2(width, 0.0f), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+			"Grid", ImVec2(width, 0.0f), true,
+			ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoNavInputs);
+		// NoNavInputs: Tab would otherwise start ImGui's widget tabbing and move the focus out of
+		// the pane, so the shell never saw a second Tab (completion cycling).
 		if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 			ImGui::SetWindowFocus();
 		if (focusRequested)
@@ -223,16 +234,34 @@ namespace DefectStudio
 		if (isFocused)
 			forwardKeyboardInput(session);
 
+		const ImGuiIO &io = ImGui::GetIO();
 		ImDrawList *drawList = ImGui::GetWindowDrawList();
 		const ImVec2 origin = ImGui::GetCursorScreenPos();
 		drawList->AddRectFilled(origin, ImVec2(origin.x + available.x, origin.y + available.y), IM_COL32(0, 0, 0, 255));
 
+		// Scrollback: the wheel moves the view over the rows that scrolled off the top; new output
+		// keeps the view where it is unless it is following the live screen.
+		const auto &scrollback = session.screen.Scrollback();
+		if (session.scrollOffset > 0 && scrollback.size() > session.scrollbackSeen)
+			session.scrollOffset += static_cast<int>(scrollback.size() - session.scrollbackSeen);
+		session.scrollbackSeen = scrollback.size();
+		if (ImGui::IsWindowHovered() && io.MouseWheel != 0.0f)
+			session.scrollOffset += static_cast<int>(std::lround(io.MouseWheel * 3.0f));
+		session.scrollOffset = std::clamp(session.scrollOffset, 0, static_cast<int>(scrollback.size()));
+		const int firstLine = static_cast<int>(scrollback.size()) - session.scrollOffset;
+
 		char glyph[5] = {};
 		for (int row = 0; row < session.screen.Rows(); ++row)
 		{
+			const int line = firstLine + row;
+			const bool inScrollback = line < static_cast<int>(scrollback.size());
+			const int screenRow = line - static_cast<int>(scrollback.size());
 			for (int col = 0; col < session.screen.Columns(); ++col)
 			{
-				const VtCell &cell = session.screen.CellAt(row, col);
+				const VtCell &cell = inScrollback
+					? (col < static_cast<int>(scrollback[static_cast<std::size_t>(line)].size())
+						? scrollback[static_cast<std::size_t>(line)][static_cast<std::size_t>(col)] : kBlankCell)
+					: session.screen.CellAt(screenRow, col);
 				const ImVec2 cellPos(origin.x + col * glyphSize.x, origin.y + row * glyphSize.y);
 				if (cell.background != 0)
 				{
@@ -243,12 +272,12 @@ namespace DefectStudio
 				if (cell.codepoint != U' ' && cell.codepoint != 0)
 				{
 					const int length = ImTextCharToUtf8(glyph, static_cast<unsigned int>(cell.codepoint));
-					drawList->AddText(cellPos, PaletteColor(cell.foreground, cell.bold), glyph, glyph + length);
+					drawList->AddText(cellPos, PaletteColor(cell.foreground, cell.bold, cell.dim), glyph, glyph + length);
 				}
 			}
 		}
 
-		if (std::fmod(ImGui::GetTime(), 1.0) < 0.5)
+		if (session.scrollOffset == 0 && std::fmod(ImGui::GetTime(), 1.0) < 0.5)
 		{
 			const ImVec2 cursorPos(
 				origin.x + session.screen.CursorColumn() * glyphSize.x, origin.y + session.screen.CursorRow() * glyphSize.y);

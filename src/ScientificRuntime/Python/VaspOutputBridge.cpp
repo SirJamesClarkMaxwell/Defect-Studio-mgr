@@ -3,6 +3,8 @@
 #include "ScientificRuntime/Python/VaspOutputBridge.hpp"
 
 #include <nlohmann/json.hpp>
+#include <cmath>
+#include <limits>
 
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/Time.hpp"
@@ -37,16 +39,72 @@ namespace DefectStudio
 		template <typename T>
 		[[nodiscard]] std::optional<T> GetOptional(const nlohmann::json &object, const char *key)
 		{
-			const nlohmann::json &value = object.at(key);
-			if (value.is_null())
+			const auto found = object.find(key);
+			if (found == object.end() || found->is_null())
 				return std::nullopt;
-			return value.get<T>();
+			return found->get<T>();
+		}
+
+		std::vector<double> ParseTrend(const nlohmann::json &summary, const std::string &key)
+		{
+			std::vector<double> trend;
+			const auto found = summary.find(key);
+			if (found != summary.end() && found->is_array())
+				for (const auto &value : *found)
+					trend.push_back(value.is_null() ? std::numeric_limits<double>::quiet_NaN() : value.get<double>());
+			return trend;
 		}
 
 		[[nodiscard]] VaspOutputSummaryData ParseSummaryJson(const nlohmann::json &summary)
 		{
 			VaspOutputSummaryData data;
 			data.energyTrend = GetOptional<std::vector<double>>(summary, "energy_trend");
+			data.forceTrend = ParseTrend(summary, "force_trend");
+			data.energyWithoutEntropy = ParseTrend(summary, "energy_without_entropy");
+			data.energySigmaZero = ParseTrend(summary, "energy_sigma_zero");
+			data.finished = GetOptional<bool>(summary, "finished");
+			data.reachedAccuracy = GetOptional<bool>(summary, "reached_accuracy");
+			data.nsw = GetOptional<int>(summary, "nsw");
+			data.ibrion = GetOptional<int>(summary, "ibrion");
+			data.ediffg = GetOptional<double>(summary, "ediffg");
+			data.outcarWriteTime = GetOptional<double>(summary, "outcar_write_time");
+			data.ksBandStart = summary.value("ks_band_start", 0);
+			data.ksBandEnd = summary.value("ks_band_end", 0);
+			data.ksDefaultBandStart = summary.value("ks_default_band_start", data.ksBandStart);
+			data.ksDefaultBandEnd = summary.value("ks_default_band_end", data.ksBandEnd);
+			if (const auto steps = summary.find("ks_steps"); steps != summary.end() && steps->is_array())
+			{
+				for (const auto &entry : *steps)
+				{
+					VaspKsStepData step;
+					step.step = entry.at("step").get<int>();
+					step.fermi = GetOptional<double>(entry, "fermi");
+					if (step.step < 1 || !data.energyTrend || step.step > static_cast<int>(data.energyTrend->size()) ||
+						(!data.ksSteps.empty() && step.step <= data.ksSteps.back().step) ||
+						(step.fermi && !std::isfinite(*step.fermi)))
+						throw std::runtime_error("KS step outside the ionic trajectory");
+					for (const auto &source : entry.at("blocks"))
+					{
+						VaspKsBlockData block;
+						block.spin = source.at("spin").get<int>();
+						block.kpoint = source.at("kpoint").get<int>();
+						block.bands = source.at("bands").get<std::vector<int>>();
+						block.energies = source.at("energies").get<std::vector<double>>();
+						block.occupations = source.at("occupations").get<std::vector<double>>();
+						if (block.spin < 1 || block.spin > 2 || block.kpoint < 1 ||
+							block.bands.size() != block.energies.size() || block.bands.size() != block.occupations.size())
+							throw std::runtime_error("Invalid KS block dimensions");
+						for (std::size_t i = 0; i < block.bands.size(); ++i)
+							if (block.bands[i] < 1 || (i > 0 && block.bands[i] <= block.bands[i - 1]) ||
+								!std::isfinite(block.energies[i]) || !std::isfinite(block.occupations[i]))
+								throw std::runtime_error("Invalid KS band value");
+						step.blocks.push_back(std::move(block));
+					}
+					if (step.blocks.empty())
+						throw std::runtime_error("Empty KS snapshot");
+					data.ksSteps.push_back(std::move(step));
+				}
+			}
 			data.finalEnergy = GetOptional<double>(summary, "final_energy");
 			data.cpuTimeSeconds = GetOptional<double>(summary, "cpu_time");
 			data.userTimeSeconds = GetOptional<double>(summary, "user_time");
@@ -78,7 +136,7 @@ namespace DefectStudio
 		[[nodiscard]] VaspOutputData ParseVaspOutputPayloadJson(const nlohmann::json &payload)
 		{
 			VaspOutputData data;
-			data.path = Path(payload.at("path").get<std::string>());
+			data.path = Path::FromUtf8(payload.at("path").get<std::string>());
 
 			const nlohmann::json &gap = payload.at("gap");
 			if (!gap.is_null())
@@ -118,7 +176,7 @@ namespace DefectStudio
 
 	Result<VaspOutputData> VaspOutputBridge::LoadOutput(
 		const Path &directory, int bandStart, int bandEnd, bool includeOrbitals, bool includeIrreps, float irrepTol,
-		float symprec) const
+		float symprec, bool includeKs, const std::string &outcarName) const
 	{
 		if (directory.Empty())
 		{
@@ -133,13 +191,13 @@ namespace DefectStudio
 		const PythonExampleScript script = ResolvePythonExampleScript("vasp_output_load.py");
 		options.scriptPath = script.scriptPath;
 		options.arguments = {
-			directory.String(), std::to_string(bandStart), std::to_string(bandEnd),
+			directory.Utf8(), std::to_string(bandStart), std::to_string(bandEnd),
 			includeOrbitals ? "1" : "0", includeIrreps ? "1" : "0", std::to_string(irrepTol),
-			std::to_string(symprec)};
+			std::to_string(symprec), includeKs ? "1" : "0", outcarName};
 		options.workingDirectory = script.workingDirectory;
 
 		const auto startTime = Time::NowSteady();
-		DS_LOG_DEBUG("VaspOutputBridge: loading VASP output from {}", directory.String());
+		DS_LOG_DEBUG("VaspOutputBridge: loading VASP output from {}", directory.Utf8());
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
 		if (!runResult)
 		{

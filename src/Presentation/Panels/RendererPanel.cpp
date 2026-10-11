@@ -81,6 +81,7 @@ namespace DefectStudio
 		  m_DomainLayer(std::move(domainLayer))
 	{
 		(void)RegisterCurvedArrowOperator(m_OperatorRegistry);
+		(void)RegisterHideVolumeOperator(m_OperatorRegistry);
 		if (Ref<CommandRegistry> registry = m_CommandRegistry.lock())
 		{
 			RegisterViewportSceneObjectCommands(*registry, m_Layer);
@@ -98,6 +99,7 @@ namespace DefectStudio
 		  m_DomainLayer(other.m_DomainLayer),
 		  m_LastMousePositions(other.m_LastMousePositions),
 		  m_ContextMenuWorldPosition(other.m_ContextMenuWorldPosition),
+		  m_ContextMenuAtom(other.m_ContextMenuAtom),
 		  m_AddAtomPopupRequested(other.m_AddAtomPopupRequested),
 		  m_AddAtomPopupWindowId(other.m_AddAtomPopupWindowId),
 		  m_AddAtomPopupFractional(other.m_AddAtomPopupFractional),
@@ -109,6 +111,7 @@ namespace DefectStudio
 		  m_AddMenuScreenPos(other.m_AddMenuScreenPos)
 	{
 		(void)RegisterCurvedArrowOperator(m_OperatorRegistry);
+		(void)RegisterHideVolumeOperator(m_OperatorRegistry);
 		// m_TabClose and the active viewport rectangle are deliberately NOT copied: a half-answered
 		// close prompt and a rectangle measured in another panel's frame both belong to the instance
 		// that produced them.
@@ -256,6 +259,9 @@ namespace DefectStudio
 		// question from "is the cursor over the viewport" to "is it over the last toolbar" - which is
 		// false almost everywhere and silently kills every click the viewport handles.
 		const bool hovered = ImGui::IsItemHovered();
+		m_OperatorRedoPanel.HandleViewportActivity(hovered &&
+			(ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+				ImGui::IsMouseClicked(ImGuiMouseButton_Middle)), windowState.modalTransform.has_value());
 
 		const ImVec2 cursorAfterImage = ImGui::GetCursorScreenPos();
 		const float horizontalToolbarOffset = windowState.windowId == activeWindowId
@@ -447,11 +453,11 @@ namespace DefectStudio
 
 		DrawViewportTextEditor(windowState, imageOrigin, viewportSize);
 		if (m_OperatorRedoPanel.IsOpen())
+		{
 			if (const Ref<UndoStack> undoStack = m_Layer.GetUndoStackHandle().lock())
-			{
 				m_OperatorRedoPanel.PollInvalidation(*undoStack, &windowState);
-				m_OperatorRedoPanel.Draw(windowState);
-			}
+			m_OperatorRedoPanel.Draw(windowState);
+		}
 		ImGui::SetCursorScreenPos(imageOrigin);
 		ImGui::End();
 	}

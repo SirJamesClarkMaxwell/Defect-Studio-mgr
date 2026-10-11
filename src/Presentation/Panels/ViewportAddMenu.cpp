@@ -14,6 +14,8 @@
 #include "Presentation/Operators/SceneOperatorRegistry.hpp"
 #include "Presentation/Panels/OperatorRedoPanel.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
+#include "Presentation/Panels/SceneDensityEditor.hpp"
+#include "Presentation/Panels/SceneHideVolumeEditor.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
 #include "Presentation/Panels/ViewportVacancyAdd.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -76,6 +78,7 @@ namespace DefectStudio
 				windowState.selectedPinnedMeasurements.clear();
 				windowState.selectedSceneOrbitals.clear();
 				windowState.selectedScenePlanes.clear();
+				windowState.selectedSceneHideVolumes.clear();
 				windowState.selectedScenePaths.clear();
 				windowState.selectedVacancies.clear();
 				windowState.defectFrameSelected = false;
@@ -137,9 +140,28 @@ namespace DefectStudio
 			if (windowState.structure.defectFrame) DrawScenePlaneDefectPlacementMenu(windowState, true);
 		}
 	}
+	void DrawHideVolumeAddMenu(RendererWindowState &window, const glm::vec3 &position,
+		OperatorRedoPanel &redoPanel, SceneOperatorRegistry &registry,
+		std::optional<std::size_t> targetAtom, std::string_view label)
+	{
+		if (!ImGui::BeginMenu(label.data())) return;
+		const auto add = [&](std::string_view name, HideVolumeKind kind) {
+			if (!ImGui::MenuItem(name.data())) return;
+			if (registry.Find("scene.hide_volume") == nullptr) return;
+			const auto result = redoPanel.RunAndOpen(*registry.Find("scene.hide_volume"), window,
+				MakeHideVolumeOperatorValues(window, kind, targetAtom, position));
+			if (!result) DS_LOG_WARN("Add hide volume failed: {}", result.Error().technicalDetails);
+		};
+		add("Kula", HideVolumeKind::Sphere);
+		add("Prostopadłościan", HideVolumeKind::Box);
+		add("Walec", HideVolumeKind::Cylinder);
+		ImGui::EndMenu();
+	}
+
 	void DrawSceneAddMenu(RendererWindowState &windowState, const WeakRef<CommandRegistry> &commands,
 		const glm::vec3 &position, const Ref<EventBus> &eventBus, bool fractionalAtomPosition,
-		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry, float bondRadiusMultiplier, SceneAddMenuSection section)
+		OperatorRedoPanel *redoPanel, SceneOperatorRegistry *operatorRegistry, float bondRadiusMultiplier, SceneAddMenuSection section,
+		std::optional<std::size_t> targetAtom)
 	{
 		const auto addCurvedArrow = [&]()
 		{
@@ -185,24 +207,43 @@ namespace DefectStudio
 		DrawSceneDrawingAddItems(windowState, position, addCurvedArrow);
 		DrawScenePlaneAddItems(windowState, position);
 		DrawOrbitalAddMenu(windowState, position);
-		if (ImGui::MenuItem("Tekst (swobodna etykieta)"))
+		if (redoPanel != nullptr && operatorRegistry != nullptr)
+			DrawHideVolumeAddMenu(windowState, position, *redoPanel, *operatorRegistry, targetAtom);
+		else if (ImGui::BeginMenu("Bryła ukrywająca"))
+		{
+			if (ImGui::MenuItem("Kula")) AddSceneHideVolume(windowState, HideVolumeKind::Sphere, targetAtom, position);
+			if (ImGui::MenuItem("Prostopadłościan")) AddSceneHideVolume(windowState, HideVolumeKind::Box, targetAtom, position);
+			if (ImGui::MenuItem("Walec")) AddSceneHideVolume(windowState, HideVolumeKind::Cylinder, targetAtom, position);
+			ImGui::EndMenu();
+		}
+		const bool addText = ImGui::MenuItem("Tekst (swobodna etykieta)");
+		const bool addCharge = ImGui::MenuItem("Znacznik ładunku");
+		ImGui::SetItemTooltip("Punkt, który uznajemy za środek ładunku defektu (np. --center FNV).");
+		if (addText || addCharge)
 		{
 			PushPinnedMeasurementUndoSnapshot(windowState);
 			RendererWindowState::FreeLabel label;
 			label.id = windowState.sceneRegistry.AllocateObjectId();
 			label.worldPosition = position;
+			if (addCharge)
+			{
+				label.charge = 1;
+				label.text = ChargeMarkerText(1);
+			}
 			const auto id = label.id;
 			windowState.freeLabels.push_back(std::move(label));
 			SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedSceneOrbitals.clear();
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedSceneHideVolumes.clear();
 			windowState.selectedScenePaths.clear();
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 			windowState.selectedFreeLabels = {id};
 			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
-			OpenViewportTextEditor(windowState, id, true);
+			if (addText)
+				OpenViewportTextEditor(windowState, id, true);
 		}
 		if (ImGui::MenuItem("Narzędzie tekstu", "Shift+T", false, eventBus != nullptr))
 		{
@@ -244,5 +285,9 @@ namespace DefectStudio
 		}
 		else if (!eventBus && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Widok nie jest połączony z systemem zdarzeń.");
+		ImGui::SeparatorText("Dane z obliczeń");
+		if (ImGui::MenuItem("Gęstość z CHGCAR..."))
+			AddSceneDensityFromFileDialog(windowState);
+		ImGui::SetItemTooltip("Gęstość ładunku lub spinu z pliku CHGCAR jako izopowierzchnia.");
 	}
 }

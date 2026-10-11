@@ -1,52 +1,45 @@
 #pragma once
 
-#include <optional>
-#include <string>
+#include <cstdint>
 
-#include "Core/JobSystem/JobSystemTypes.hpp"
-#include "Core/Utils/Memory.hpp"
-#include "Core/Utils/Path.hpp"
+#include "Presentation/Panels/CalculationSummarySession.hpp"
 #include "Presentation/Panels/IPanel.hpp"
-#include "ScientificRuntime/Python/VaspOutputBridge.hpp"
 
 namespace DefectStudio
 {
-	class JobSystem;
-	class VaspOutputJob;
-
-	// Per-directory summary of a completed VASP calculation (docs/work/project/plans/
-	// 2026-08-24-calc-tools.md section 5): energy convergence trend (plotted), final energy, band
-	// gap, CPU/user/system/elapsed time, total drift, NELECT/ISPIN, pressure/stress, space group.
-	// Loaded via the same VaspOutputBridge/VaspOutputJob ElectronicStructurePanel uses, extended
-	// (not duplicated into a new bridge) - see the plan's explicit decision on this. Opened via
-	// ProjectTreePanel's per-folder RMB "Show Calculation Summary" (ProjectEvents::
-	// CalculationSummaryOpenRequested), same wiring shape as "Set as Bulk Reference". TextEditorPanel-
-	// style: one panel instance, no tabs - opening a new directory replaces whatever was open.
 	class CalculationSummaryPanel final : public IPanel
 	{
 	public:
-		explicit CalculationSummaryPanel(
-			WeakRef<JobSystem> jobSystem, std::string title = "Calculation Summary", bool visibleByDefault = false);
-		CalculationSummaryPanel(const CalculationSummaryPanel &other) = default;
-
+		CalculationSummaryPanel(Ref<CalculationSummarySession> session, std::string title, bool visibleByDefault = false);
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
+		[[nodiscard]] const char *GetSubcategory() const override { return "Obliczenia VASP"; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
-
-		// Targets `directory`, dispatches a fresh load (replacing any previously loaded directory/
-		// data), and makes the panel visible.
-		void OpenDirectory(Path directory);
+		[[nodiscard]] const Ref<CalculationSummarySession> &Session() const { return m_Session; }
+		void RequestFocus();
+		void DockAsTab(const CalculationSummaryPanel &target)
+		{
+			m_PendingDockId = target.DockId();
+			m_TabTargetTitle = target.GetTitle();
+		}
+		void Close();
+		[[nodiscard]] bool IsClosed() const { return m_Closed; }
+		[[nodiscard]] unsigned int DockId() const { return m_DockId; }
+		[[nodiscard]] std::uint64_t FocusOrder() const { return m_FocusOrder; }
 
 	private:
-		void dispatchLoad();
-		void pollJob();
+		void renderChain();
+		void renderPlots(bool convergence);
+		void renderBoundaries();
 		void renderSummary(const VaspOutputData &data);
-
-		WeakRef<JobSystem> m_JobSystem;
-		Path m_Directory;
-		std::optional<VaspOutputData> m_Data;
-		std::string m_Error;
-		Ref<VaspOutputJob> m_PendingJob;
-		JobId m_PendingJobId = 0;
+		Ref<CalculationSummarySession> m_Session;
+		float m_TopFraction = 0.45f;
+		float m_LeftFraction = 0.5f;
+		unsigned int m_DockId = 0;
+		std::optional<unsigned int> m_PendingDockId;
+		std::optional<std::string> m_TabTargetTitle;
+		std::uint64_t m_FocusOrder = 0;
+		bool m_FocusRequested = false;
+		bool m_Closed = false;
 	};
 } // namespace DefectStudio

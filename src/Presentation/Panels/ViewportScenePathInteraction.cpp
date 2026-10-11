@@ -52,6 +52,7 @@ namespace DefectStudio
 		[[nodiscard]] PathPickResult PickEditedPath(
 			const RendererWindowState &windowState, const ScenePath &path, const PathPickSettings &settings)
 		{
+			if (BoundToHiddenEndpoint(path, windowState.structure, windowState.sceneHideVolumes)) return {};
 			const CachedPathGeometry *cached = windowState.paths->Caches().FindLastBuilt(path.id);
 			static const EvaluatedPath empty;
 			const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
@@ -143,7 +144,8 @@ namespace DefectStudio
 		PathPickSettings settings = BuildPathPickSettings(windowState, imageOrigin, imageSize, false);
 		settings.cursor = glm::vec2(relativeX, relativeY);
 		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
-		const std::optional<ScenePathPick> hit = PickFrontmostScenePath(*windowState.paths, settings, bindings);
+		const std::optional<ScenePathPick> hit = PickFrontmostScenePath(*windowState.paths, settings, bindings,
+			windowState.structure, windowState.sceneHideVolumes);
 		if (!hit)
 			return false;
 
@@ -172,6 +174,7 @@ namespace DefectStudio
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 			windowState.selectedScenePlanes.clear();
+			windowState.selectedSceneHideVolumes.clear();
 		}
 		return true;
 	}
@@ -184,7 +187,8 @@ namespace DefectStudio
 			return false;
 
 		const ScenePath *path = windowState.paths->Store().Find(windowState.pathEdit.Path());
-		if (path == nullptr || !path->visible || !path->renderable)
+		if (path == nullptr || !path->visible || !path->renderable ||
+			BoundToHiddenEndpoint(*path, windowState.structure, windowState.sceneHideVolumes))
 			return false;
 
 		const glm::vec2 mouse = glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y) -

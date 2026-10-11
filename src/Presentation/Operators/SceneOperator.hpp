@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -45,7 +46,8 @@ namespace DefectStudio
 		std::vector<std::string> enumLabels;
 	};
 
-	using SceneOperatorValue = std::variant<float, int, bool, glm::vec3>;
+	// Hidden insertion targets keep atom indices in their native size_t form.
+	using SceneOperatorValue = std::variant<float, int, bool, glm::vec3, std::size_t>;
 	using SceneOperatorValues = std::unordered_map<std::string, SceneOperatorValue>;
 
 	// A named, re-runnable scene operation. `execute` must be callable any number of times on the

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -29,4 +30,10 @@ namespace DefectStudio
 	// Registers the C_n arrow operator under the id "scene.curved_arrow". Its schema and defaults
 	// mirror CurvedArrowParameters field by field.
 	[[nodiscard]] Result<void> RegisterCurvedArrowOperator(SceneOperatorRegistry &registry);
+	[[nodiscard]] Result<void> RegisterHideVolumeOperator(SceneOperatorRegistry &registry);
+	enum class HideVolumeKind;
+	// Contextual defaults and insertion target stay in the panel's values across every re-run.
+	[[nodiscard]] SceneOperatorValues MakeHideVolumeOperatorValues(const RendererWindowState &window,
+		HideVolumeKind kind, std::optional<std::size_t> targetAtom = std::nullopt,
+		std::optional<glm::vec3> targetPosition = std::nullopt);
 }

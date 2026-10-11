@@ -6,16 +6,19 @@
 #include <glad/gl.h>
 
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 #include "Renderer/Scene/VacancyMarkerGeometry.hpp"
 
 namespace DefectStudio
 {
 	void OpenGlRendererBackend::renderVacancyMarkers(
-		const std::vector<RendererVacancyData> &vacancies, const RendererViewCamera &camera,
+		const RendererStructureData &structure, const std::vector<RendererVacancyData> &markers,
+		const std::vector<SceneHideVolume> &volumes,
+		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources, const RendererGlobalRenderSettings &globalSettings,
 		const glm::vec2 &viewportPixelSize, const glm::vec3 &sceneOffset, bool depthOnly)
 	{
-		if (vacancies.empty())
+		if (markers.empty())
 			return;
 		const unsigned int program = m_ShaderLibrary.Program("isosurface");
 		if (program == 0)
@@ -78,9 +81,9 @@ namespace DefectStudio
 		};
 		// One draw pair per marker, so each vacancy keeps its own colour (V_B / V_N, own colours).
 		//   ponytail: two draws per vacancy; batch by colour if structures ever carry hundreds.
-		for (const auto &vacancy : vacancies)
+		for (const auto &vacancy : markers)
 		{
-			if (vacancy.hidden)
+			if (vacancy.hidden || PointCoveredByHideVolumes(volumes, vacancy.cartesianPosition, structure))
 				continue;
 			float width = vacancy.ringWidth;
 			for (const auto &axis : {right, up})

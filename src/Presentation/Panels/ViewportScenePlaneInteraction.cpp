@@ -95,6 +95,8 @@ namespace DefectStudio
 			windowState.selectedFreeLabels.clear();
 			windowState.selectedPinnedMeasurements.clear();
 			windowState.selectedSceneOrbitals.clear();
+			windowState.selectedSceneHideVolumes.clear();
+			windowState.selectedScenePaths.clear();
 			windowState.selectedVacancies.clear();
 			windowState.defectFrameSelected = false;
 		}

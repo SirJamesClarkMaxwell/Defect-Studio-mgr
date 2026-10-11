@@ -85,6 +85,42 @@ namespace DefectStudio
 		float selected = 0.0f;
 	};
 
+	// One vertex as isosurface_march.comp writes it (std430: two vec4s, w of normalSign = lobe sign).
+	struct IsosurfaceGpuVertex
+	{
+		glm::vec4 position;
+		glm::vec4 normalSign;
+	};
+	// 32 bytes/vertex * kMaxIsosurfaceGpuVertices = 64MB per buffer, but real usage is far smaller
+	// (marching-tetrahedra output scales with surface area, not grid volume) - the singlet_HSE band-0
+	// reference case used ~113k vertices. Overflow is dropped safely by the compute shader's own
+	// bounds check, not corrupted.
+	inline constexpr std::size_t kMaxIsosurfaceGpuVertices = 2'000'000;
+
+	// Vertex SSBO + counter + the VAO that reads the same SSBO as a vertex buffer: what one GPU
+	// isosurface needs. Geometry never leaves the GPU between the compute pass and the draw.
+	struct OpenGlIsosurfaceGpuBuffers
+	{
+		unsigned int vao = 0;
+		unsigned int vertexSsbo = 0;
+		unsigned int counterSsbo = 0;
+	};
+	void CreateIsosurfaceGpuBuffers(OpenGlIsosurfaceGpuBuffers &buffers);
+	void DeleteIsosurfaceGpuBuffers(OpenGlIsosurfaceGpuBuffers &buffers);
+
+	// task/83: a SceneDensity's own GPU isosurface, re-marched only when what it was marched from
+	// changes. `grid` is identity only (the Ref'd DensityGrid's address), never dereferenced.
+	//   ponytail: one fixed 64MB vertex buffer per density object; size it from a counting pass
+	//   if people start keeping more than a handful of densities in one window.
+	struct OpenGlSceneDensityMeshCache
+	{
+		const void *grid = nullptr;
+		float isoValue = 0.0f;
+		bool negativeLobe = true;
+		int vertexCount = 0;
+		OpenGlIsosurfaceGpuBuffers buffers;
+	};
+
 	struct OpenGlSceneOrbitalMeshCache
 	{
 		SceneOrbitalMeshKey key;
@@ -125,6 +161,11 @@ namespace DefectStudio
 		// empty context: every bound node falls back to its authored position. Captures that window
 		// by reference, so it lives only as long as the RenderWindow call it is passed to.
 		const BindingContext *bindings = nullptr;
+		// Task 91: a path bound to a hidden atom (H or a hide volume) or to a hidden or covered
+		// vacancy is not drawn - a generated vacancy bond goes with its endpoint, as a bond does.
+		// Filled by RenderWindow; null skips the check.
+		const RendererStructureData *structure = nullptr;
+		const std::vector<SceneHideVolume> *hideVolumes = nullptr;
 	};
 
 	// Shared cleanup for per-object cached meshes and the backend's static meshes.
@@ -177,12 +218,14 @@ namespace DefectStudio
 		// Index into cachedCellEdgeVertices where the overlay (primitive-cell) edges begin.
 		std::size_t cachedOverlayEdgeFirstVertex = 0;
 		OpenGlMeshHandles scenePlaneMesh;
+		OpenGlMeshHandles sceneHideVolumeMesh;
 		OpenGlMeshHandles vacancyMesh;
 		// Stable ids preserve baked meshes when sceneOrbitals is reordered.
 		std::unordered_map<SceneObjectId, OpenGlSceneOrbitalMeshCache> sceneOrbitalMeshCache;
 		// Same reason as the orbital map above: a path keeps its uploaded stroke when the store is
 		// reordered. Entries whose id no longer exists in the store are dropped once per frame.
 		std::unordered_map<SceneObjectId, OpenGlScenePathMeshCache> scenePathMeshCache;
+		std::unordered_map<SceneObjectId, OpenGlSceneDensityMeshCache> sceneDensityMeshCache;
 
 		// Per-window orbital isosurface GPU buffers. Was 2 backend-global slots shared by every
 		// window; regenerating one window's orbital mesh (e.g. dragging its iso-value slider)
@@ -258,7 +301,11 @@ namespace DefectStudio
 			// pass needs already lives behind RendererWindowState::paths, and the next stages add to
 			// PathRenderInput instead of to this signature. nullptr = this window owns no paths.
 			const PathRenderInput *pathInput = nullptr,
-			bool showVacancies = true);
+			bool showVacancies = true,
+			const std::vector<RendererWindowState::SceneDensity> &sceneDensities = {},
+			const std::vector<std::size_t> &selectedSceneDensities = {},
+			const std::vector<SceneHideVolume> &sceneHideVolumes = {},
+			const std::vector<std::size_t> &selectedSceneHideVolumes = {});
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -324,10 +371,24 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		// Marches `grid` into `buffers` (isosurface_march.comp), positive lobe always and negative
+		// lobe when asked, and returns the vertex count - 0 on failure or an empty surface.
+		[[nodiscard]] int dispatchIsosurfaceCompute(
+			const OrbitalGridData &grid, float isoValue, const OpenGlIsosurfaceGpuBuffers &buffers, bool negativeLobe);
+		void renderSceneDensities(
+			const std::vector<RendererWindowState::SceneDensity> &densities,
+			const std::vector<std::size_t> &selectedDensities,
+			int hideVolumeCount,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &sceneOffset,
+			const glm::vec2 &viewportPixelSize);
 		void renderSceneOrbitals(
 			const std::vector<RendererWindowState::SceneOrbital> &orbitals,
 			const std::vector<std::size_t> &selectedOrbitals,
 			const RendererStructureData &structure,
+			int hideVolumeCount,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -343,8 +404,29 @@ namespace DefectStudio
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec2 &viewportPixelSize,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		void renderSceneHideVolumes(
+			const std::vector<SceneHideVolume> &volumes,
+			const std::vector<std::size_t> &selectedVolumes,
+			const RendererStructureData &structure,
+			const RendererViewCamera &camera,
+			OpenGlViewportResources &resources,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec2 &viewportPixelSize,
+			const glm::vec3 &sceneOffset);
+		[[nodiscard]] int uploadIsosurfaceHideVolumes(
+			const std::vector<SceneHideVolume> &volumes, const RendererStructureData &structure);
+		void renderSceneVolumeOverlay(
+			const std::vector<glm::vec3> &triangles,
+			OpenGlMeshHandles &handles,
+			const RendererViewCamera &camera,
+			const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &color, float alpha,
+			const glm::vec3 &sceneOffset);
+		// `markers`: the structure's vacancies and the charge-marker spheres (task/95).
 		void renderVacancyMarkers(
-			const std::vector<RendererVacancyData> &vacancies,
+			const RendererStructureData &structure,
+			const std::vector<RendererVacancyData> &markers,
+			const std::vector<SceneHideVolume> &volumes,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -368,6 +450,7 @@ namespace DefectStudio
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
 		void renderLabels(
 			const RendererStructureData &structure,
+			const std::vector<SceneHideVolume> &volumes,
 			const RendererViewCamera &camera,
 			OpenGlViewportResources &resources,
 			const RendererGlobalRenderSettings &globalSettings,
@@ -412,7 +495,8 @@ namespace DefectStudio
 			bool outline = false,
 			float outlineExpansion = 0.0f,
 			bool writeDepth = true,
-			bool twoSidedOutline = false);
+			bool twoSidedOutline = false,
+			int hideVolumeCount = 0);
 		// T09 extension point: GPU-side bond transform via compute shader.
 		// SSBO i shader są inicjalizowane, ale dispatch nie jest wywoływany.
 		// Aktywować gdy T09 wprowadzi automatyczną regenerację bondów przy przesuwaniu atomów.
@@ -443,6 +527,7 @@ namespace DefectStudio
 		// output vertex buffer/counter/VAO (what actually gets drawn) live in
 		// OpenGlViewportResources instead, see its isosurface* fields.
 		unsigned int m_IsosurfaceGridSsbo = 0;
+		unsigned int m_IsosurfaceCounterReadback = 0; // same sharing argument as the grid SSBO
 		unsigned int m_ComputeInputSsbo = 0;
 		unsigned int m_ComputeOutputSsbo = 0;
 		std::unordered_map<std::string, OpenGlViewportResources> m_Viewports;

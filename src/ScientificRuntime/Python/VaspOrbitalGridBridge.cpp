@@ -2,8 +2,6 @@
 
 #include "ScientificRuntime/Python/VaspOrbitalGridBridge.hpp"
 
-#include <fstream>
-
 #include <nlohmann/json.hpp>
 
 #include "Core/Logging/Logger.hpp"
@@ -22,32 +20,6 @@ namespace DefectStudio
 				technicalDetails,
 				R"(Install it into the app's Python environment: uv pip install -e "C:\Users\fzabi\puntukas_tools2[symmetry]")",
 				"python.puntukas.not_installed");
-		}
-
-		[[nodiscard]] Result<std::vector<float>> ReadGridFile(const Path &gridPath, std::size_t expectedCount)
-		{
-			std::ifstream file(gridPath.Native(), std::ios::binary);
-			if (!file)
-			{
-				return MakePythonExecutionError(
-					"Orbital grid file could not be opened.",
-					"Path: " + gridPath.String(),
-					"Verify scripts/python/examples/vasp_orbital_grid_load.py wrote the grid file before exiting.",
-					"python.vasp_orbital_grid.file_missing");
-			}
-
-			std::vector<float> values(expectedCount);
-			file.read(reinterpret_cast<char *>(values.data()),
-				static_cast<std::streamsize>(expectedCount * sizeof(float)));
-			if (!file)
-			{
-				return MakePythonExecutionError(
-					"Orbital grid file was shorter than the reported dimensions.",
-					"Path: " + gridPath.String() + ", expected " + std::to_string(expectedCount) + " float32 values.",
-					"Verify the grid dimensions match the written file size.",
-					"python.vasp_orbital_grid.truncated_file");
-			}
-			return values;
 		}
 	} // namespace
 
@@ -125,7 +97,7 @@ namespace DefectStudio
 				static_cast<std::size_t>(data.dimensions.y) *
 				static_cast<std::size_t>(data.dimensions.z);
 
-			Result<std::vector<float>> gridResult = ReadGridFile(gridPath, expectedCount);
+			Result<std::vector<float>> gridResult = ReadFloat32GridFile(gridPath, expectedCount);
 			FileSystem::Remove(gridPath);
 			if (!gridResult)
 				return gridResult.Error();

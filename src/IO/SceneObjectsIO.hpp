@@ -80,6 +80,26 @@ namespace DefectStudio
 		bool visible = true;
 	};
 
+	// task/83: RendererWindowState::SceneDensity minus the loaded grid, which is re-read from
+	// chgcarPath (and referencePath) on load. component is DensityComponentKey's spelling.
+	struct PersistedSceneDensity
+	{
+		std::string persistKey;
+		std::string displayName;
+		std::string chgcarPath; // required
+		std::string referencePath;
+		std::string component = "magnetization";
+		float isoValue = 0.0f;
+		bool showNegative = true;
+		glm::vec3 positiveColor = glm::vec3(0.95f, 0.80f, 0.10f);
+		glm::vec3 negativeColor = glm::vec3(0.10f, 0.75f, 0.95f);
+		float alpha = 0.7f;
+		bool visible = true;
+		bool renderable = true;
+		std::optional<glm::vec3> analysisCentre;
+		float analysisRadius = 5.0f;
+	};
+
 	struct PersistedPinnedMeasurement
 	{
 		std::string persistKey; // 32 lowercase hex chars; empty = none (a new one is assigned on load)
@@ -103,6 +123,8 @@ namespace DefectStudio
 		std::optional<int> anchorVacancy;
 		glm::vec3 anchorOffset = glm::vec3(0.0f);
 		PersistedLabelStyle style;
+		std::optional<int> charge; // task/95 charge marker
+		std::string fnvKey;
 	};
 
 	enum class PersistedArrowKind { Line, Arrow2D, Arrow3D };
@@ -303,9 +325,38 @@ namespace DefectStudio
 		PersistedPathStyle style;
 	};
 
+	// task/84: a hide volume - the sphere/box/cylinder that hides the atoms inside or outside it.
+	// Field for field with Renderer/Scene/SceneHideVolume.hpp, except that the orientation is stored
+	// as Euler degrees (as PersistedSceneOrbital does) rather than a matrix: a hand-edited
+	// scene_objects.yaml is something the user reads, and nine floats that must stay orthonormal is
+	// not readable.
+	struct PersistedSceneHideVolume
+	{
+		std::string persistKey;
+		std::string kind = "Sphere";      // Sphere | Box | Cylinder; anything else skips the entry
+		std::string frame = "Anchored";   // Anchored | Fractional; anything else skips the entry
+		glm::vec3 center = glm::vec3(0.0f);
+		glm::vec3 rotationEuler = glm::vec3(0.0f); // degrees, applied XYZ as for an orbital
+		// Read per kind, exactly as SceneHideVolume::halfExtents documents: sphere x = radius; box
+		// three half-sides; cylinder x = radius, z = half-height.
+		glm::vec3 halfExtents = glm::vec3(1.0f);
+		std::vector<PersistedAtomRef> anchorAtoms;
+		bool invert = false;
+		std::string name;
+		glm::vec3 color = glm::vec3(0.0f, 1.0f, 1.0f);
+		float alpha = 0.75f; // Outline opacity.
+		// Task 91: the cut is `active`, the two eyes only show the outline. A file written before
+		// that has no `active` key, and its eye meant both - so the parser reads `active` from
+		// `visible` there, and an old volume with the eye off stays switched off.
+		bool active = true;
+		bool visible = true;
+		bool renderable = false;
+	};
+
 	using PersistedSceneObject = std::variant<
 		PersistedPinnedMeasurement, PersistedFreeLabel, PersistedSceneArrow, PersistedSceneOrbital,
-		PersistedScenePlane, PersistedScenePath>;
+		PersistedScenePlane, PersistedScenePath, PersistedSceneHideVolume,
+		PersistedSceneDensity>;
 
 	// task/51: one domain VacancySite. Not a scene object - a vacancy is structure data - but the
 	// structure itself is stored as a POSCAR, which has no way to say "an atom was here", so the
@@ -366,7 +417,7 @@ namespace DefectStudio
 	//   structures:
 	//     - structureKey: structures/NV/POSCAR
 	//       objects:
-	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital | ScenePlane
+	//         - kind: PinnedMeasurement | FreeLabel | SceneArrow | SceneOrbital | ScenePlane | SceneDensity
 	//           ...per-kind payload (camelCase keys = the struct field names above, vec as [x, y, z],
 	//           enums as their enumerator name, style as a nested map; SceneArrow's `kind` field is
 	//           written as `arrowKind` so it does not collide with the entry tag)

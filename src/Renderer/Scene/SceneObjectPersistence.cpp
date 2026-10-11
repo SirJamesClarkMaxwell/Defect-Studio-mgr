@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <glm/gtc/quaternion.hpp>
 
 namespace DefectStudio
 {
@@ -140,6 +141,8 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.anchorOffset = label.anchorOffset;
 		p.rotationRadians = label.rotationRadians;
 		p.style = ToPersisted(label.style);
+		p.charge = label.charge;
+		p.fnvKey = label.fnvKey;
 		result.emplace_back(std::move(p));
 	}
 	for (const auto &orbital : window.sceneOrbitals)
@@ -201,6 +204,45 @@ std::vector<PersistedSceneObject> ExtractPersistedSceneObjects(const RendererWin
 		p.visible = plane.visible;
 		result.emplace_back(std::move(p));
 	}
+	for (const auto &volume : window.sceneHideVolumes)
+	{
+		PersistedSceneHideVolume p;
+		p.persistKey = volume.persistKey;
+		p.kind = volume.kind == HideVolumeKind::Sphere ? "Sphere"
+			: volume.kind == HideVolumeKind::Box ? "Box" : "Cylinder";
+		p.frame = volume.frame == HideVolumeFrame::Anchored ? "Anchored" : "Fractional";
+		p.center = volume.center;
+		p.rotationEuler = glm::degrees(glm::eulerAngles(glm::normalize(glm::quat_cast(volume.orientation))));
+		p.halfExtents = volume.halfExtents;
+		p.anchorAtoms = PersistAtomReferences(window.structure, volume.anchorAtoms);
+		p.invert = volume.invert;
+		p.name = volume.name;
+		p.color = volume.color;
+		p.alpha = volume.alpha;
+		p.active = volume.active;
+		p.visible = volume.visible;
+		p.renderable = volume.renderable;
+		result.emplace_back(std::move(p));
+	}
+	for (const auto &density : window.sceneDensities)
+	{
+		PersistedSceneDensity p;
+		p.persistKey = density.persistKey;
+		p.displayName = density.displayName;
+		p.chgcarPath = density.chgcarPath.Utf8();
+		p.referencePath = density.referencePath.Utf8();
+		p.component = DensityComponentKey(density.component);
+		p.analysisCentre = density.analysisCentre;
+		p.analysisRadius = density.analysisRadius;
+		p.isoValue = density.isoValue;
+		p.showNegative = density.showNegative;
+		p.positiveColor = density.positiveColor;
+		p.negativeColor = density.negativeColor;
+		p.alpha = density.alpha;
+		p.visible = density.visible;
+		p.renderable = density.renderable;
+		result.emplace_back(std::move(p));
+	}
 	if (window.paths != nullptr)
 	{
 		window.paths->Store().Visit(
@@ -216,9 +258,13 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 	window.freeLabels.clear();
 	window.sceneOrbitals.clear();
 	window.scenePlanes.clear();
+	window.sceneHideVolumes.clear();
+	window.selectedSceneHideVolumes.clear();
+	window.sceneDensities.clear();
 	if (window.paths != nullptr)
 		window.paths->Clear();
 	window.selectedScenePlanes.clear();
+	window.selectedSceneDensities.clear();
 	window.selectedScenePaths.clear();
 	window.selectedPinnedMeasurements.clear();
 	window.selectedFreeLabels.clear();
@@ -281,6 +327,8 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					l.anchorOffset = value.anchorOffset;
 					l.rotationRadians = value.rotationRadians;
 					l.style = FromPersisted(value.style);
+					l.charge = value.charge;
+					l.fnvKey = value.fnvKey;
 					window.freeLabels.push_back(std::move(l));
 				}
 				else if constexpr (std::is_same_v<T, PersistedSceneArrow>)
@@ -383,7 +431,34 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 							loadedPaths.emplace_back(id, std::cref(value));
 					}
 				}
-				else
+				else if constexpr (std::is_same_v<T, PersistedSceneDensity>)
+				{
+					// The grid is not in the file: the object comes back Pending and
+					// SceneDensityLoader re-reads it from chgcarPath.
+					RendererWindowState::SceneDensity d;
+					d.id = window.sceneRegistry.AllocateObjectId();
+					d.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					d.displayName = value.displayName;
+					d.chgcarPath = Path::FromUtf8(value.chgcarPath);
+					d.referencePath = value.referencePath.empty() ? Path() : Path::FromUtf8(value.referencePath);
+					if (const std::optional<DensityComponent> component = ParseDensityComponent(value.component))
+						d.component = *component;
+					else
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Unknown density component",
+							"SceneDensity component '" + value.component + "' is not one of total/magnetization/up/down.",
+							"The density was loaded as magnetization.", "SceneObjectPersistence", "scene_objects.entry_defaulted");
+					d.isoValue = value.isoValue;
+					d.analysisCentre = value.analysisCentre;
+					d.analysisRadius = value.analysisRadius;
+					d.showNegative = value.showNegative;
+					d.positiveColor = value.positiveColor;
+					d.negativeColor = value.negativeColor;
+					d.alpha = value.alpha;
+					d.visible = value.visible;
+					d.renderable = value.renderable;
+					window.sceneDensities.push_back(std::move(d));
+				}
+				else if constexpr (std::is_same_v<T, PersistedScenePlane>)
 				{
 					RendererWindowState::ScenePlane pl;
 					pl.id = window.sceneRegistry.AllocateObjectId();
@@ -407,11 +482,55 @@ void ApplyPersistedSceneObjects(RendererWindowState &window, const std::vector<P
 					pl.visible = value.visible;
 					window.scenePlanes.push_back(std::move(pl));
 				}
+				else if constexpr (std::is_same_v<T, PersistedSceneHideVolume>)
+				{
+					SceneHideVolume volume;
+					volume.id = window.sceneRegistry.AllocateObjectId();
+					volume.persistKey = value.persistKey.empty() ? GenerateScenePersistKey() : value.persistKey;
+					if (value.kind == "Sphere")
+						volume.kind = HideVolumeKind::Sphere;
+					else if (value.kind == "Box")
+						volume.kind = HideVolumeKind::Box;
+					else if (value.kind == "Cylinder")
+						volume.kind = HideVolumeKind::Cylinder;
+					else
+					{
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene hide volume was skipped",
+							"Unknown hide volume shape '" + value.kind + "'.", "The hide volume was not loaded.",
+							"SceneObjectPersistence", "scene_objects.entry_skipped");
+						return;
+					}
+					if (value.frame == "Anchored")
+						volume.frame = HideVolumeFrame::Anchored;
+					else if (value.frame == "Fractional")
+						volume.frame = HideVolumeFrame::Fractional;
+					else
+					{
+						warnings.emplace_back(ErrorCategory::IO, Severity::Warning, "Scene hide volume was skipped",
+							"Unknown hide volume frame '" + value.frame + "'.", "The hide volume was not loaded.",
+							"SceneObjectPersistence", "scene_objects.entry_skipped");
+						return;
+					}
+					volume.center = value.center;
+					volume.orientation = glm::mat3_cast(glm::normalize(glm::quat(glm::radians(value.rotationEuler))));
+					volume.halfExtents = value.halfExtents;
+					volume.anchorAtoms = ResolveAtomReferences(window.structure, value.anchorAtoms);
+					volume.invert = value.invert;
+					volume.name = value.name;
+					volume.color = value.color;
+					// Old translucent fills allowed zero opacity; their wireframe must remain visible.
+					volume.alpha = value.alpha < 0.05f ? SceneHideVolume{}.alpha : value.alpha;
+					volume.active = value.active;
+					volume.visible = value.visible;
+					volume.renderable = value.renderable;
+					window.sceneHideVolumes.push_back(std::move(volume));
+				}
 			},
 			object);
 	}
 	for (const auto &[id, persisted] : loadedPaths)
 		ResolveScenePathObjectOriginBindings(window, id, persisted.get(), warnings);
+	SceneSystem::PushSelectionAndVisibilityToWindowState(window.sceneRegistry, window);
 }
 
 } // namespace DefectStudio

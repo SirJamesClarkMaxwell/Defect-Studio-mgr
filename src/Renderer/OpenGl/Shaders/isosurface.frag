@@ -25,6 +25,11 @@ uniform float u_RimPower;
 uniform float u_Saturation;
 uniform int u_OutlineMode;
 uniform vec4 u_OutlineColor;
+uniform vec3 u_SceneOffset;
+uniform int u_HideVolumeCount;
+uniform mat4 u_HideVolumeWorldToUnit[8];
+uniform int u_HideVolumeKind[8];
+uniform int u_HideVolumeInvert[8];
 
 // Zero for ordinary isosurfaces. Vacancy discs keep their flat colour and spherical depth.
 uniform float u_VacancyRadius;
@@ -60,6 +65,18 @@ float ComputeSpecular(vec3 normalVector, vec3 lightDirection, vec3 viewDirection
 
 void main()
 {
+	for (int i = 0; i < u_HideVolumeCount; ++i)
+	{
+		vec3 p = (u_HideVolumeWorldToUnit[i] * vec4(vWorldPos - u_SceneOffset, 1.0)).xyz;
+		bool inside;
+		if (u_HideVolumeKind[i] == 0)
+			inside = dot(p, p) <= 1.0;
+		else if (u_HideVolumeKind[i] == 1)
+			inside = all(lessThanEqual(abs(p), vec3(1.0)));
+		else
+			inside = dot(p.xy, p.xy) <= 1.0 && abs(p.z) <= 1.0;
+		if (inside != (u_HideVolumeInvert[i] != 0)) discard;
+	}
 	// Assign on every path, including the outline return, as required by GLSL.
 	gl_FragDepth = gl_FragCoord.z;
 	if (u_VacancyRadius > 0.0)

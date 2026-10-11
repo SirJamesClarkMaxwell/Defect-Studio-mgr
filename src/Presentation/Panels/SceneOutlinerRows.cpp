@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <string_view>
 
 #include <imgui.h>
 
@@ -74,61 +73,6 @@ namespace DefectStudio
 		}
 
 	} // namespace
-
-	std::vector<std::size_t> CollectSceneOutlinerSourceIndices(
-		const SceneRegistry &scene, const SceneObjectKind kind)
-	{
-		std::vector<std::size_t> indices;
-		const auto view = scene.Registry().view<const SceneObjectComponent>();
-		for (const entt::entity entity : view)
-		{
-			const SceneObjectComponent &object = view.get<const SceneObjectComponent>(entity);
-			if (object.kind == kind)
-				indices.push_back(object.sourceIndex);
-		}
-		std::sort(indices.begin(), indices.end());
-		return indices;
-	}
-
-	bool SceneOutlinerPanel::drawSceneObjectContextMenu(
-		RendererWindowState &windowState,
-		const SelectionRowKind rowKind,
-		const SceneObjectId clickedId,
-		std::vector<SceneObjectId> &selection,
-		const bool openRequested)
-	{
-		if (openRequested)
-		{
-			selectAnnotationRowForContextMenu(windowState, rowKind, clickedId, selection);
-			ImGui::OpenPopup("##SceneObjectRowContextMenu");
-		}
-		if (!ImGui::BeginPopup("##SceneObjectRowContextMenu"))
-			return false;
-
-		const SceneObjectEditKind editKind = rowKind == SelectionRowKind::FreeLabel
-			? SceneObjectEditKind::FreeLabel
-			: rowKind == SelectionRowKind::Orbital ? SceneObjectEditKind::Orbital
-			: rowKind == SelectionRowKind::Plane ? SceneObjectEditKind::Plane
-			: SceneObjectEditKind::Path;
-		bool sceneMutated = false;
-		const auto drawAction = [&](const std::string_view label, const std::string_view shortcut,
-			const SceneObjectEditAction action)
-		{
-			const bool enabled = CanExecuteSceneObjectEditAction(windowState, editKind, action);
-			if (ImGui::MenuItem(label.data(), shortcut.data(), false, enabled))
-			{
-				ExecuteSceneObjectEditAction(windowState, editKind, action);
-				sceneMutated = action != SceneObjectEditAction::Copy;
-				ImGui::CloseCurrentPopup();
-			}
-		};
-		drawAction("Usun", "Delete", SceneObjectEditAction::Delete);
-		drawAction("Duplikuj", "Ctrl+D", SceneObjectEditAction::Duplicate);
-		drawAction("Kopiuj", "Ctrl+C", SceneObjectEditAction::Copy);
-		drawAction("Wklej", "Ctrl+V", SceneObjectEditAction::Paste);
-		ImGui::EndPopup();
-		return sceneMutated;
-	}
 
 	void SceneOutlinerPanel::drawAtomRow(
 		RendererWindowState &windowState, const std::size_t atomIndex,
@@ -238,7 +182,7 @@ namespace DefectStudio
 		return sceneMutated;
 	}
 
-	void SceneOutlinerPanel::drawPinnedMeasurementRow(
+	bool SceneOutlinerPanel::drawPinnedMeasurementRow(
 		RendererWindowState &windowState, const std::size_t pinIndex,
 		const std::vector<SceneObjectId> &orderedIds)
 	{
@@ -255,6 +199,7 @@ namespace DefectStudio
 			PushSelectedRowColors();
 		ImGui::SetNextItemAllowOverlap();
 		const bool rowActivated = ImGui::Selectable(rowLabel, isSelected);
+		const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
 		if (isSelected)
 			ImGui::PopStyleColor(3);
 		DrawSceneVisibilityColumns(
@@ -262,42 +207,70 @@ namespace DefectStudio
 		if (rowActivated)
 			applyAnnotationRowSelection(
 				windowState, SelectionRowKind::PinnedMeasurement, orderedIds, id, selection);
+		const bool sceneMutated = drawSceneObjectContextMenu(
+			windowState, SelectionRowKind::PinnedMeasurement, id, selection, contextRequested);
 		ImGui::PopID();
 		ImGui::PopID();
+		return sceneMutated;
 	}
 
-	void SceneOutlinerPanel::drawLabelsGroup(RendererWindowState &windowState)
+	void SceneOutlinerPanel::drawLabelsGroup(RendererWindowState &windowState, const bool chargeMarkers)
 	{
-		ImGui::PushID("##labelsGroup");
+		// task/95: charge markers are free labels too, but get their own "Ładunki" group.
+		const auto inGroup = [chargeMarkers](const RendererWindowState::FreeLabel &label) {
+			return label.charge.has_value() == chargeMarkers;
+		};
+		const std::size_t freeCount = static_cast<std::size_t>(
+			std::count_if(windowState.freeLabels.begin(), windowState.freeLabels.end(), inGroup));
+		if (chargeMarkers && freeCount == 0)
+			return;
+		ImGui::PushID(chargeMarkers ? "##chargesGroup" : "##labelsGroup");
 		char groupLabel[32];
 		// One header over two collections - free labels and pinned measurements both live under it.
-		std::snprintf(
-			groupLabel, sizeof(groupLabel), "Labels (%zu)",
-			windowState.freeLabels.size() + windowState.pinnedMeasurements.size());
+		std::snprintf(groupLabel, sizeof(groupLabel), chargeMarkers ? "Ładunki (%zu)" : "Labels (%zu)",
+			freeCount + (chargeMarkers ? 0 : windowState.pinnedMeasurements.size()));
 		ImGui::SetNextItemAllowOverlap();
 		const bool open = ImGui::TreeNodeEx(
 			"##labels", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth, "%s", groupLabel);
 		SceneVisibilityColumnAccumulator flags;
-		AddSceneVisibilityColumnFlags(windowState.freeLabels, flags);
-		AddSceneVisibilityColumnFlags(windowState.pinnedMeasurements, flags);
+		for (const auto &label : windowState.freeLabels)
+			if (inGroup(label))
+				flags.Add(label.visible, label.renderable);
+		if (!chargeMarkers)
+			AddSceneVisibilityColumnFlags(windowState.pinnedMeasurements, flags);
 		const SceneVisibilityColumnEdit edit = DrawSceneVisibilityColumns(SceneVisibilityStateFrom(flags));
-		ApplySceneVisibilityColumnEdit(windowState.freeLabels, edit);
-		ApplySceneVisibilityColumnEdit(windowState.pinnedMeasurements, edit);
+		for (auto &label : windowState.freeLabels)
+			if (inGroup(label))
+			{
+				if (edit.visibleChanged)
+					label.visible = edit.visible;
+				if (edit.renderableChanged)
+					label.renderable = edit.renderable;
+			}
+		if (!chargeMarkers)
+			ApplySceneVisibilityColumnEdit(windowState.pinnedMeasurements, edit);
 		if (open)
 		{
-			const std::vector<std::size_t> freeLabelIndices =
+			std::vector<std::size_t> freeLabelIndices =
 				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::FreeLabel);
+			std::erase_if(freeLabelIndices, [&](const std::size_t index) {
+				return index >= windowState.freeLabels.size() || !inGroup(windowState.freeLabels[index]);
+			});
 			const std::vector<SceneObjectId> freeLabelIds =
 				CollectIds(windowState.freeLabels, freeLabelIndices);
 			for (const std::size_t index : freeLabelIndices)
 				if (drawFreeLabelRow(windowState, index, freeLabelIds))
 					break;
-			const std::vector<std::size_t> pinIndices =
-				CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
-			const std::vector<SceneObjectId> pinIds =
-				CollectIds(windowState.pinnedMeasurements, pinIndices);
-			for (const std::size_t index : pinIndices)
-				drawPinnedMeasurementRow(windowState, index, pinIds);
+			if (!chargeMarkers)
+			{
+				const std::vector<std::size_t> pinIndices =
+					CollectSceneOutlinerSourceIndices(windowState.sceneRegistry, SceneObjectKind::PinnedMeasurement);
+				const std::vector<SceneObjectId> pinIds =
+					CollectIds(windowState.pinnedMeasurements, pinIndices);
+				for (const std::size_t index : pinIndices)
+					if (drawPinnedMeasurementRow(windowState, index, pinIds))
+						break;
+			}
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -405,6 +378,54 @@ namespace DefectStudio
 		ImGui::PopID();
 	}
 
+	void SceneOutlinerPanel::drawDensitiesGroup(RendererWindowState &windowState)
+	{
+		if (windowState.sceneDensities.empty())
+			return;
+		ImGui::PushID("##densitiesGroup");
+		ImGui::SetNextItemAllowOverlap();
+		const bool open = ImGui::TreeNodeEx(
+			"##densities", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen,
+			"Gęstości (%zu)", windowState.sceneDensities.size());
+		ApplySceneVisibilityColumnEdit(
+			windowState.sceneDensities, DrawSceneVisibilityColumns(SceneVisibilityStateFor(windowState.sceneDensities)));
+		if (open)
+		{
+			std::vector<SceneObjectId> ids;
+			ids.reserve(windowState.sceneDensities.size());
+			for (const RendererWindowState::SceneDensity &density : windowState.sceneDensities)
+				ids.push_back(density.id);
+			for (std::size_t index = 0; index < windowState.sceneDensities.size(); ++index)
+			{
+				RendererWindowState::SceneDensity &density = windowState.sceneDensities[index];
+				ImGui::PushID(static_cast<int>(index));
+				const char *state = density.loadState == RendererWindowState::SceneDensity::LoadState::Failed ? "  (błąd)"
+					: density.loadState == RendererWindowState::SceneDensity::LoadState::Ready ? ""
+					: "  (wczytywanie...)";
+				const std::string rowLabel = density.displayName + state;
+				auto &selection = windowState.selectedSceneDensities;
+				const bool selected = std::find(selection.begin(), selection.end(), density.id) != selection.end();
+				if (selected)
+					PushSelectedRowColors();
+				ImGui::SetNextItemAllowOverlap();
+				const bool rowActivated = ImGui::Selectable(rowLabel.c_str(), selected);
+				const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+				if (selected)
+					ImGui::PopStyleColor(3);
+				DrawSceneVisibilityColumns(density.visible, density.renderable);
+				if (rowActivated)
+					applyAnnotationRowSelection(windowState, SelectionRowKind::Density, ids, density.id, selection);
+				const bool sceneMutated = drawSceneObjectContextMenu(
+					windowState, SelectionRowKind::Density, density.id, selection, contextRequested);
+				ImGui::PopID();
+				if (sceneMutated)
+					break;
+			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
 	void SceneOutlinerPanel::drawVacanciesGroup(RendererWindowState &windowState)
 	{
 		if (windowState.structure.vacancies.empty())
@@ -461,6 +482,7 @@ namespace DefectStudio
 						windowState.selectedPinnedMeasurements.clear();
 						windowState.selectedSceneOrbitals.clear();
 						windowState.selectedScenePlanes.clear();
+						windowState.selectedSceneHideVolumes.clear();
 						windowState.selectedScenePaths.clear();
 						SceneSystem::ClearStructureSelection(windowState.sceneRegistry, windowState);
 					}
@@ -504,5 +526,4 @@ namespace DefectStudio
 		}
 		ImGui::PopID();
 	}
-
 } // namespace DefectStudio

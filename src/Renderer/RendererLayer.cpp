@@ -505,7 +505,20 @@ namespace DefectStudio
 			if (index < windowState.scenePlanes.size())
 				selectedScenePlanes.push_back(index);
 		}
+		std::vector<std::size_t> selectedSceneDensities;
+		for (const SceneObjectId id : windowState.selectedSceneDensities)
+		{
+			const std::size_t index = AnnotationIndex(windowState.sceneDensities, id);
+			if (index < windowState.sceneDensities.size())
+				selectedSceneDensities.push_back(index);
+		}
 		const BindingContext bindings = SceneSystem::MakePathBindingContext(windowState);
+		std::vector<std::size_t> selectedSceneHideVolumes;
+		for (const SceneObjectId id : windowState.selectedSceneHideVolumes)
+		{
+			const std::size_t index = AnnotationIndex(windowState.sceneHideVolumes, id);
+			if (index < windowState.sceneHideVolumes.size()) selectedSceneHideVolumes.push_back(index);
+		}
 		const PathRenderInput pathInput{
 			windowState.paths.get(), &windowState.selectedScenePaths, windowState.showPathMeshOverlay, &bindings};
 		return m_RendererBackend->RenderWindow(
@@ -540,7 +553,11 @@ namespace DefectStudio
 			windowState.bondLabelAlignThresholdDeg,
 			windowState.showPeriodicBonds,
 			&pathInput,
-			windowState.showVacancies);
+			windowState.showVacancies,
+			windowState.sceneDensities,
+			selectedSceneDensities,
+			windowState.sceneHideVolumes,
+			selectedSceneHideVolumes);
 	}
 
 	LabelPickQuads RendererLayer::GetLabelPickQuads(const std::string &windowKey) const
@@ -620,6 +637,10 @@ namespace DefectStudio
 		previewState.freeLabels = source.freeLabels;
 		previewState.sceneOrbitals = source.sceneOrbitals;
 		previewState.scenePlanes = source.scenePlanes;
+		previewState.sceneDensities = source.sceneDensities;
+		previewState.sceneHideVolumes = source.sceneHideVolumes;
+		for (auto &volume : previewState.sceneHideVolumes)
+			volume.visible = volume.renderable;
 		if (source.paths != nullptr) SceneSystem::EnsurePathSystem(previewState).ReplaceStore(source.paths->Store());
 		previewState.bondLabelsAlignToDirection = source.bondLabelsAlignToDirection;
 		// What an export contains is the outliner's camera column alone, independent of what H hid
@@ -1274,13 +1295,13 @@ namespace DefectStudio
 		for (const std::size_t index : snapshot.selectedAtomIndices)
 			if (index < windowState.structure.atoms.size())
 				snapshot.selectedAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
-		for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+		// The manual hide only - a hide volume's cut is re-derived on restore, not stored.
+		for (const std::size_t index : CaptureHiddenSceneState(windowState).atomIndices)
 		{
-			if (!windowState.structure.atoms[index].visible)
-			{
-				snapshot.hiddenAtomIndices.push_back(index);
-				snapshot.hiddenAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
-			}
+			if (index >= windowState.structure.atoms.size())
+				continue;
+			snapshot.hiddenAtomIndices.push_back(index);
+			snapshot.hiddenAtomPositions.push_back(windowState.structure.atoms[index].cartesianPosition);
 		}
 		return snapshot;
 	}
@@ -1711,7 +1732,7 @@ namespace DefectStudio
 		if (undoStack == nullptr || undoStack->IsApplying() || g_RendererLayer == nullptr)
 			return;
 
-		if (CaptureHiddenSceneState(windowState.structure) == before)
+		if (CaptureHiddenSceneState(windowState) == before)
 			return;
 
 		RendererLayer &rendererLayer = *g_RendererLayer;
@@ -2429,7 +2450,7 @@ namespace DefectStudio
 				return;
 			}
 		}
-		HiddenSceneState before = CaptureHiddenSceneState(windowState.structure);
+		HiddenSceneState before = CaptureHiddenSceneState(windowState);
 		if (showAll || HasSelectedSceneObjectsForHide(windowState))
 			PushPinnedMeasurementUndoSnapshot(windowState);
 		if (showAll)
@@ -2460,7 +2481,8 @@ namespace DefectStudio
 	{
 		return !windowState.selectedPinnedMeasurements.empty() || !windowState.selectedFreeLabels.empty() ||
 			!windowState.selectedSceneOrbitals.empty() ||
-			!windowState.selectedScenePlanes.empty() || !windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;
+			!windowState.selectedScenePlanes.empty() || !windowState.selectedSceneDensities.empty() ||
+			!windowState.selectedScenePaths.empty() || windowState.defectFrameSelected;
 	}
 
 	void RendererLayer::onShowAllRequested(const RendererEvents::Viewport::ShowAllRequested &event)

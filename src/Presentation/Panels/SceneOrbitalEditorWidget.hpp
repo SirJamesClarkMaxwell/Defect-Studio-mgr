@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Presentation/Panels/SceneObjectClipboard.hpp"
 
 namespace DefectStudio
 {
@@ -53,14 +54,13 @@ namespace DefectStudio
 	void EraseScenePlanes(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 
 	// Process-wide whole-object clipboards.
-	// Copies receive fresh ids, lose persistence keys, move by a small world-space offset and detach
-	// from atoms so the anchor resolver cannot snap them back onto the source object.
-	[[nodiscard]] std::vector<RendererWindowState::SceneOrbital> &GetSceneOrbitalClipboard();
+	// Paste resolves persisted anchors in the destination; Duplicate still offsets and detaches.
+	[[nodiscard]] SceneObjectClipboard &GetSceneOrbitalClipboard();
 	void CopySceneOrbitalsToClipboard(const RendererWindowState &windowState);
 	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState);
 	void PasteSceneOrbitalsFromClipboard(RendererWindowState &windowState);
 
-	[[nodiscard]] std::vector<RendererWindowState::ScenePlane> &GetScenePlaneClipboard();
+	[[nodiscard]] SceneObjectClipboard &GetScenePlaneClipboard();
 	void CopyScenePlanesToClipboard(const RendererWindowState &windowState);
 	void DuplicateSelectedScenePlanes(RendererWindowState &windowState);
 	void PasteScenePlanesFromClipboard(RendererWindowState &windowState);

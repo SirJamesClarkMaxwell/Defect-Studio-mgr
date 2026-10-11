@@ -16,6 +16,7 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/Crystal/StructureComparison.hpp"
 #include "Domain/DomainIds.hpp"
+#include "Domain/Electronic/DensityGrid.hpp"
 #include "Domain/Electronic/HydrogenicOrbital.hpp"
 #include "Renderer/Path/PathEditSession.hpp"
 #include "Renderer/Path/PathStore.hpp"
@@ -23,6 +24,7 @@
 #include "Renderer/Scene/ModalTransform.hpp"
 #include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
 
 namespace DefectStudio
@@ -200,6 +202,11 @@ namespace DefectStudio
 			// exported render). Independent on purpose.
 			bool visible = true;
 			bool renderable = true;
+			// task/95: set = a charge marker - also drawn as a vacancy-like sphere coloured by the
+			// sign (SceneChargeMarker.hpp) and listed under "Ładunki" in the outliner. `fnvKey` is the
+			// defect LOCPOT of the FNV correction whose centre the marker is (empty = free-standing).
+			std::optional<int> charge;
+			std::string fnvKey;
 		};
 		std::vector<FreeLabel> freeLabels;
 		// Click-select + drag-to-move for freeLabels (RendererPanel::handleFreeLabelInteraction) - same
@@ -311,7 +318,6 @@ namespace DefectStudio
 		bool duplicateMovePending = false;
 		// Temporary parenting: objects that G/R/S of the selected defect axes carry along, about the
 		// axes' origin. Per session, never saved; stale ids/indices are skipped.
-		//   ponytail: vacancy indices shift when an earlier vacancy is deleted; ids if that bites.
 		struct DefectFrameChildren
 		{
 			std::vector<SceneObjectId> freeLabels;
@@ -361,6 +367,64 @@ namespace DefectStudio
 			std::string persistKey; // see PinnedMeasurement::persistKey
 		};
 		std::vector<ScenePlane> scenePlanes;
+		std::vector<SceneHideVolume> sceneHideVolumes;
+		std::vector<SceneObjectId> selectedSceneHideVolumes;
+
+		// task/83: one component of a CHGCAR (total, spin density, spin up/down, optionally minus a
+		// reference CHGCAR) drawn as a two-sign isosurface at +/- isoValue. Unlike SceneOrbital this
+		// one IS read from a calculation: the object stores what to load, SceneDensityLoader
+		// (Presentation) runs the job and fills `data`. The grid's box is the CHGCAR cell starting
+		// at the scene origin, so it overlays the structure that calculation was run on.
+		struct SceneDensity
+		{
+			enum class LoadState
+			{
+				// Wants (re)loading: just created, restored from a project, or its source changed.
+				Pending,
+				Loading,
+				Ready,
+				Failed,
+			};
+
+			SceneObjectId id;
+			std::string displayName;
+			Path chgcarPath;
+			// Empty = no subtraction. Otherwise the same component of this CHGCAR is subtracted on
+			// the same grid - rho(q) - rho(0) for the charge that a charged state adds.
+			Path referencePath;
+			DensityComponent component = DensityComponent::Magnetization;
+			// e/Ang^3, absolute. The positive surface is drawn at +isoValue, the negative one at
+			// -isoValue. Zero until the first load picks 10 % of the grid's peak |value|.
+			float isoValue = 0.0f;
+			bool showNegative = true;
+			// VESTA's spin-density colours: yellow for the majority sign, cyan for the minority one.
+			glm::vec3 positiveColor = glm::vec3(0.95f, 0.80f, 0.10f);
+			glm::vec3 negativeColor = glm::vec3(0.10f, 0.75f, 0.95f);
+			float alpha = 0.7f;
+			// The Scene Outliner's two columns - see Renderer/Scene/SceneVisibility.hpp.
+			bool visible = true;
+			bool renderable = true;
+			std::string persistKey; // see PinnedMeasurement::persistKey
+
+			// task/85: localisation analysis (DensityAnalysis.hpp). The centre is cartesian, A, the
+			// FNV `--center` proposal; nullopt follows the loaded grid's |value| centroid, a value
+			// is the user's override (typed, dragged or taken from selected atoms). Saved.
+			std::optional<glm::vec3> analysisCentre;
+			float analysisRadius = 5.0f;
+
+			// Derived, never saved. Shared rather than owned so an undo snapshot of the scene does
+			// not copy ~23 MB per object, and an undo back to an earlier component is instant.
+			Ref<const DensityGrid> data;
+			LoadState loadState = LoadState::Pending;
+			std::string loadError;
+			// Cache for the N panel's radial profile: valid while `data` and the centre it was
+			// computed around are unchanged (SceneDensityRadialProfile recomputes otherwise).
+			Ref<const DensityRadialProfile> radialProfile;
+			const DensityGrid *radialProfileGrid = nullptr;
+			glm::vec3 radialProfileCentre = glm::vec3(0.0f);
+		};
+		std::vector<SceneDensity> sceneDensities;
+		std::vector<SceneObjectId> selectedSceneDensities;
 
 		// task/41: the window's paths, and the caches derived from them. A Unique rather than a member
 		// by value so that the vector of windows reallocating does not move the caches out from under
@@ -423,9 +487,12 @@ namespace DefectStudio
 			std::vector<FreeLabel> freeLabels;
 			std::vector<SceneOrbital> sceneOrbitals;
 			std::vector<ScenePlane> scenePlanes;
+			std::vector<SceneHideVolume> sceneHideVolumes;
 			// Paths join the same scope: one logical edit touches one kind, undo restores all of them.
 			PathStore paths;
 			bool showDefectFrame = true;
+			// Last so the positional captures above stay valid; the grids are shared, not copied.
+			std::vector<SceneDensity> sceneDensities;
 		};
 			// Applies to every bond-length pin (new and already-pinned) - toggled in bulk by
 			// `A` (see RendererLayer::onLabelsToggleBondAlignmentRequested), not per-pin like

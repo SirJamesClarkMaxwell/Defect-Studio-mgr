@@ -42,6 +42,9 @@ namespace DefectStudio
 	class ContextManager;
 	class KeymapResolver;
 	class RendererLayer;
+	class SceneDensityLoader;
+	class DefectEnergeticsSession;
+	class CalculationSummarySession;
 	class DomainLayer;
 	struct RendererWindowState;
 	struct StructureRecord;
@@ -113,6 +116,7 @@ namespace DefectStudio
 		struct BulkDirectoryChangeRequested;
 		struct TextFileOpenRequested;
 		struct CalculationSummaryOpenRequested;
+		struct EnergeticsFoldersAddRequested;
 		struct IrrepLabelOverridesChanged;
 		struct DisplacementComparisonStateChanged;
 		struct DisplacementComparisonFileRequested;
@@ -224,10 +228,18 @@ namespace DefectStudio
 		void onTextFileOpenRequested(const ProjectEvents::TextFileOpenRequested &event);
 		// Calculation Summary panel: ProjectTreePanel's per-folder RMB "Show Calculation Summary".
 		void onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event);
+		void onEnergeticsFoldersAddRequested(const ProjectEvents::EnergeticsFoldersAddRequested &event);
 		// Custom (irrep -> label) table in ElectronicStructurePanel - see ProjectManifest::irrepLabelOverrides.
 		void onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event);
 		// Atoms-displacement comparison panel - see ProjectManifest::displacementComparisonPath.
 		void onDisplacementComparisonStateChanged(const ProjectEvents::DisplacementComparisonStateChanged &event);
+		// fnv_corrections.yaml -> FnvCorrectionPanel; the panel saves back through its handler.
+		void loadFnvCorrectionsForProject();
+		// energetics.yaml -> DefectEnergeticsPanel (task/99); called at the end of the FNV load.
+		void loadEnergeticsForProject();
+		void registerDefectEnergeticsViews();
+		void registerCalculationSummaryViews();
+		void dockAnalysisPanelOnFirstUse(const IPanel &panel);
 		// ProjectTreePanel's per-directory RMB "Set as Displacement Comparison".
 		void onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event);
 		// This window's vertical-toolbar quick-launch button.
@@ -284,6 +296,10 @@ namespace DefectStudio
 		std::array<char, 128> m_CommandPaletteSearchBuffer{};
 		std::optional<std::string> m_PendingPanelFocusTitle;
 		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
+		Ref<DefectEnergeticsSession> m_DefectEnergeticsSession;
+		Ref<CalculationSummarySession> m_CalculationSummarySession;
+		// task/83: loads CHGCAR densities for scene objects, polled once per frame.
+		Ref<SceneDensityLoader> m_SceneDensityLoader;
 		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see
 		// RendererStartupBootstrap::GenerateRendererWindowId, which pollPendingWindowRestores
 		// recomputes to match against whatever actually shows up in RendererLayer::GetWindows().
@@ -308,6 +324,8 @@ namespace DefectStudio
 		PanelId m_SettingsPanelId = 0;
 		PanelId m_ExportImagePanelId = 0;
 		PanelId m_DisplacementComparisonPanelId = 0;
+		PanelId m_FnvCorrectionPanelId = 0;
+		PanelId m_DefectEnergeticsPanelId = 0;
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
 		PanelId m_NewStructureWizardPanelId = 0;

@@ -16,6 +16,7 @@
 #include "Renderer/Path/PathLod.hpp"
 #include "Renderer/Path/PathStrokeMesher.hpp"
 #include "Renderer/Path/PathTessellator.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 namespace DefectStudio
 {
@@ -151,6 +152,9 @@ namespace DefectStudio
 
 		system.Store().Visit([&](const ScenePath &path) {
 			if (!path.visible || !path.renderable || path.nodes.size() < 2 || path.style.depthMode == (renderAlwaysOnTop ? PathDepthMode::DepthTest : PathDepthMode::AlwaysOnTop))
+				return;
+			if (input.structure && BoundToHiddenEndpoint(path, *input.structure,
+				input.hideVolumes ? std::span<const SceneHideVolume>(*input.hideVolumes) : std::span<const SceneHideVolume>{}))
 				return;
 			// Resolve once for both the LOD probe and a cache miss. The probe must use world positions;
 			// authored node positions are local once a path has an object transform.

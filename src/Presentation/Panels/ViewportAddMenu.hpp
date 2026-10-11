@@ -1,6 +1,9 @@
 ﻿#pragma once
 
 #include <glm/glm.hpp>
+#include <optional>
+#include <cstddef>
+#include <string_view>
 #include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
@@ -11,10 +14,13 @@ namespace DefectStudio
 	class SceneOperatorRegistry;
 	struct RendererWindowState;
 	enum class SceneAddMenuSection { Full, Drawing, Planes, Orbitals };
+	void DrawHideVolumeAddMenu(RendererWindowState &window, const glm::vec3 &position,
+		OperatorRedoPanel &redoPanel, SceneOperatorRegistry &registry,
+		std::optional<std::size_t> targetAtom = std::nullopt, std::string_view label = "Bryła ukrywająca");
 	// One catalogue for RMB, Shift+A, and every toolbar Add popup. Atom uses the existing
 	// coordinate editor; only the insertion position differs between entry points.
 	void DrawSceneAddMenu(RendererWindowState &windowState, const WeakRef<CommandRegistry> &commands,
 		const glm::vec3 &position, const Ref<EventBus> &eventBus, bool fractionalAtomPosition = false,
 		OperatorRedoPanel *redoPanel = nullptr, SceneOperatorRegistry *operatorRegistry = nullptr, float bondRadiusMultiplier = 1.0f,
-		SceneAddMenuSection section = SceneAddMenuSection::Full);
+		SceneAddMenuSection section = SceneAddMenuSection::Full, std::optional<std::size_t> targetAtom = std::nullopt);
 }

@@ -20,6 +20,7 @@
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SelectionHitTest.hpp"
 #include "Renderer/Scene/SceneTransform.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -259,6 +260,73 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(window.selectedSceneOrbitals.empty());
 		EXPECT_TRUE(window.selectedScenePlanes.empty());
 		EXPECT_TRUE(window.selectedVacancies.empty());
+	}
+
+	TEST(Task78SelectionTests, CoveredVacanciesAreExcludedFromBothRegionsAndSelectAll)
+	{
+		RendererWindowState window;
+		window.showVacancies = true;
+		window.viewportSize = glm::vec2(800, 600);
+		window.camera = CreateUnique<RendererViewCamera>();
+		window.camera->SetViewport(800, 600);
+		window.camera->SetOrbitState(glm::vec3(0), 10, 0, 0);
+		window.structure.vacancies.resize(3);
+		window.structure.vacancies[1].cartesianPosition = glm::vec3(2, 0, 0);
+		window.structure.vacancies[2].hidden = true;
+		window.sceneHideVolumes.emplace_back();
+		window.sceneHideVolumes[0].visible = false;
+		ApplySceneDrawingRegionSelection(window, glm::vec2(0), window.viewportSize, 0, true, false);
+		EXPECT_EQ(window.selectedVacancies, (std::vector<std::size_t>{1}));
+		ApplySceneDrawingRegionSelection(window, window.viewportSize * 0.5f, {}, 500, true, false);
+		EXPECT_EQ(window.selectedVacancies, (std::vector<std::size_t>{1}));
+		ClearAllSceneSelection(window);
+		SelectAllVisibleSceneObjects(window);
+		EXPECT_EQ(window.selectedVacancies, (std::vector<std::size_t>{1}));
+		ClearAllSceneSelection(window);
+		window.sceneHideVolumes[0].active = false;
+		SelectAllVisibleSceneObjects(window);
+		EXPECT_EQ(window.selectedVacancies, (std::vector<std::size_t>{0, 1}));
+	}
+
+	TEST(Task78SelectionTests, OrbitalRegionsRejectCoveredPatchButKeepUncoveredPartsOfTheSameTriangle)
+	{
+		RendererWindowState window;
+		window.viewportSize = glm::vec2(800, 600);
+		window.camera = CreateUnique<RendererViewCamera>();
+		window.camera->SetViewport(800, 600);
+		window.camera->SetOrbitState(glm::vec3(0), 10, 0, 0);
+		RendererWindowState::SceneOrbital orbital;
+		orbital.id = window.sceneRegistry.AllocateObjectId();
+		window.sceneOrbitals = {orbital};
+		// A large face with a small cut in its interior: all three vertices remain outside the cut.
+		window.sceneOrbitalMeshes[orbital.id] = {MakeSceneOrbitalMeshKey(orbital, window.structure).hash,
+			{{glm::vec3(-1, -2, -1), glm::vec3(0, 1, 0), 1},
+			 {glm::vec3(1, 2, -1), glm::vec3(0, 1, 0), 1},
+			 {glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 1}}};
+		window.sceneHideVolumes.emplace_back();
+		window.sceneHideVolumes[0].halfExtents = glm::vec3(0.2f);
+		for (const auto projection : {CameraProjection::Orthographic, CameraProjection::Perspective})
+		{
+			window.camera->SetProjection(projection);
+			const auto vp = window.camera->ProjectionMatrix() * window.camera->ViewMatrix();
+			for (const bool invert : {false, true})
+				for (const glm::vec3 point : {glm::vec3(0), glm::vec3(0, 0, 0.7f)})
+				{
+					window.sceneHideVolumes[0].invert = invert;
+					const auto screen = SelectionHitTest::ProjectToScreen(vp, window.viewportSize, point);
+					ASSERT_TRUE(screen);
+					for (const bool circle : {false, true})
+					{
+						ApplySceneDrawingRegionSelection(window, circle ? *screen : *screen - glm::vec2(3),
+							*screen + glm::vec2(3), circle ? 3.0f : 0.0f, true, false);
+						EXPECT_EQ(window.selectedSceneOrbitals.empty(), (point.z == 0.0f) != invert);
+					}
+				}
+		}
+		window.sceneHideVolumes[0].invert = false;
+		window.sceneHideVolumes[0].halfExtents = glm::vec3(3);
+		ApplySceneDrawingRegionSelection(window, glm::vec2(0), window.viewportSize, 0, true, false);
+		EXPECT_TRUE(window.selectedSceneOrbitals.empty());
 	}
 
 	TEST(Task78TransformTests, NumericDefectXMovesEachKindAndAnchoredPlaneStaysMoved)

@@ -27,6 +27,19 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(ClassifyDockRegion(Rect(200.0f, 0.0f, 800.0f, 40.0f), kCentral), DockRegion::Top);
 	}
 
+	TEST(PanelDockRegionsTests, LinkedAnalysisViewsReuseTheExistingRegions)
+	{
+		EXPECT_EQ(AnalysisDockRegion("Defect Energetics"), std::optional{DockRegion::Left});
+		EXPECT_EQ(AnalysisDockRegion("Calculation Summary"), std::optional{DockRegion::Left});
+		EXPECT_EQ(AnalysisDockRegion("Obliczenia"), std::optional{DockRegion::Bottom});
+		EXPECT_EQ(AnalysisDockRegion("Energie tworzenia"), std::optional{DockRegion::Central});
+		EXPECT_EQ(AnalysisDockRegion("Koncentracje"), std::optional{DockRegion::Central});
+		EXPECT_EQ(AnalysisDockRegion("Zbieżność"), std::optional{DockRegion::Central});
+		EXPECT_EQ(AnalysisDockRegion("Poziomy przejść"), std::optional{DockRegion::Right});
+		EXPECT_EQ(AnalysisDockRegion("Poziomy KS"), std::optional{DockRegion::Right});
+		EXPECT_FALSE(AnalysisDockRegion("Project Tree"));
+	}
+
 	TEST(PanelDockRegionsTests, TheCentralNodeItselfAndAnythingOverlappingItIsCentral)
 	{
 		EXPECT_EQ(ClassifyDockRegion(kCentral, kCentral), DockRegion::Central);

@@ -57,6 +57,19 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(sections.Empty());
 	}
 
+	TEST(ObjectPropertiesSelectionTests, AHideVolumeAloneGetsItsPropertiesInADiamondCell)
+	{
+		RendererWindowState window;
+		window.structure.lattice = glm::mat3(glm::vec3(0, 1.78f, 1.78f),
+			glm::vec3(1.78f, 0, 1.78f), glm::vec3(1.78f, 1.78f, 0));
+		window.sceneHideVolumes.emplace_back().id = window.sceneRegistry.AllocateObjectId();
+		window.selectedSceneHideVolumes = {window.sceneHideVolumes.front().id};
+		const auto sections = ResolveObjectPropertiesSections(window);
+		EXPECT_TRUE(sections.hideVolumes);
+		EXPECT_FALSE(sections.atoms);
+		EXPECT_FALSE(sections.Empty());
+	}
+
 	// A ray down -z through two markers picks the nearer one; a hidden group picks nothing.
 	TEST(ObjectPropertiesSelectionTests, VacancyPickTakesTheNearestShownMarker)
 	{

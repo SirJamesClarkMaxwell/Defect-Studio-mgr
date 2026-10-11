@@ -1,6 +1,8 @@
 #pragma once
 
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +45,8 @@ namespace DefectStudio
 	//     axis the sidebar toggles own;
 	//   - anything overlapping central on both axes -> Central.
 	[[nodiscard]] DockRegion ClassifyDockRegion(const DockRectangle &node, const DockRectangle &central);
+	// First-use hints for the linked analysis views; saved INI placement always wins.
+	[[nodiscard]] std::optional<DockRegion> AnalysisDockRegion(std::string_view title);
 
 	// Sticky panel -> region memory.
 	//

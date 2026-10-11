@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 
 #include <glm/glm.hpp>
 
@@ -13,6 +14,12 @@
 
 namespace DefectStudio
 {
+	struct RendererStructureData;
+	struct SceneHideVolume;
+
+	[[nodiscard]] bool BoundToHiddenEndpoint(const ScenePath &path,
+		const RendererStructureData &structure, std::span<const SceneHideVolume> hideVolumes);
+
 	// A narrow view of the scene, injected rather than reached for: the resolver stays pure and is
 	// testable without a window, a registry or a structure.
 	struct BindingContext
@@ -54,6 +61,8 @@ namespace DefectStudio
 	//
 	// The identity transform leaves every resolved position exactly where it was before paths had
 	// one, which is what makes existing files load unchanged.
+	// Clipboard fallback must freeze the live bond frame, not its last authored transform.
+	[[nodiscard]] PathTransform ResolvePathTransform(const ScenePath &path, const BindingContext &context);
 	[[nodiscard]] ResolvedNodes ResolveNodePositions(const ScenePath &path, const BindingContext &context);
 
 	// S14: the cache-key component for what a path's BOUND nodes resolved to

@@ -187,6 +187,24 @@ namespace DefectStudio
 		{
 			ImGui::Text("%zu label(s) selected - style below applies to all of them", pinCount + freeCount);
 		}
+		if (pinCount == 0 && freeCount == 1)
+		{
+			auto &label = windowState.freeLabels[FindObjectIndex(windowState.freeLabels, windowState.selectedFreeLabels[0])];
+			if (label.charge)
+			{
+				// task/95: the text follows the charge while it is still the automatic one.
+				int charge = *label.charge;
+				if (ImGui::InputInt("Ładunek q", &charge))
+				{
+					PushPinnedMeasurementUndoSnapshot(windowState);
+					if (label.text == ChargeMarkerText(*label.charge))
+						label.text = ChargeMarkerText(charge);
+					label.charge = charge;
+				}
+				if (!label.fnvKey.empty())
+					ImGui::TextDisabled("Środek FNV: %s", label.fnvKey.c_str());
+			}
+		}
 		DrawSelectedFreeLabelTextProperties(windowState);
 		DrawPinPlacementRows(windowState);
 		ImGui::SeparatorText("Style");

@@ -6,6 +6,9 @@
 
 namespace DefectStudio::SelectionHitTest
 {
+	// Clips world-space endpoints before projection; false when both lie behind the near plane.
+	[[nodiscard]] bool ClipSegmentToNearPlane(const glm::mat4 &viewProjection, glm::vec3 &a, glm::vec3 &b);
+
 	// Projects a world-space point through a view-projection matrix into viewport pixel space
 	// (origin top-left, y-down - matches ImGui mouse coordinates relative to the viewport image
 	// origin, and is the exact inverse of RendererPanel::handleAtomPick's screen->NDC mapping).

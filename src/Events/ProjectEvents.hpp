@@ -64,12 +64,19 @@ namespace DefectStudio::ProjectEvents
 	};
 
 	// Queued from ProjectTreePanel's per-node RMB "Show Calculation Summary" (same context menu as
-	// "Set as Bulk Reference"/"Open Defect"). EditorLayer routes it to the single
-	// CalculationSummaryPanel instance (TextEditorPanel-style: opening a new directory replaces
-	// whatever was open, no tabs - see CalculationSummaryPanel's class comment).
+	// "Set as Bulk Reference"/"Open Defect"). EditorLayer opens a new CalculationSummarySession
+	// chain and shows its summary, convergence and KS views together.
 	struct CalculationSummaryOpenRequested final : public BusEvent
 	{
 		Path directory;
+	};
+
+	// Queued from ProjectTreePanel's RMB "Dodaj do analizy termodynamicznej" (every selected folder
+	// when the clicked one is part of a multi-selection). EditorLayer adds them to the Defect
+	// Energetics session (AddDefectFolder: extra root or restore) and shows its main window.
+	struct EnergeticsFoldersAddRequested final : public BusEvent
+	{
+		std::vector<Path> directories;
 	};
 
 	// Queued from ElectronicStructurePanel's custom irrep-label editor (add/remove/edit a row).

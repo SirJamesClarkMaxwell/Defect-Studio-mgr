@@ -8,23 +8,23 @@ namespace DefectStudio
 {
 	VaspOutputJob::VaspOutputJob(
 		Path calculationDirectory, int bandStart, int bandEnd, bool includeOrbitals, bool includeIrreps,
-		float irrepTol, float symprec)
+		float irrepTol, float symprec, bool includeKs, std::string outcarName)
 		: m_CalculationDirectory(std::move(calculationDirectory)), m_BandStart(bandStart), m_BandEnd(bandEnd),
 		  m_IncludeOrbitals(includeOrbitals), m_IncludeIrreps(includeIrreps), m_IrrepTol(irrepTol),
-		  m_Symprec(symprec) {}
+		  m_Symprec(symprec), m_IncludeKs(includeKs), m_OutcarName(std::move(outcarName)) {}
 
-	std::string VaspOutputJob::GetName() const { return "Load VASP Output: " + m_CalculationDirectory.String(); }
+	std::string VaspOutputJob::GetName() const { return "Load VASP Output: " + m_CalculationDirectory.Utf8(); }
 	std::string VaspOutputJob::GetType() const { return "VaspOutputJob"; }
 
 	void VaspOutputJob::Execute(JobContext &context)
 	{
 		context.SetStage("vasp-output");
-		context.SetMessage("Loading band-gap/orbital data via puntukas");
+		context.SetMessage("Loading VASP output");
 		context.SetProgress(0.0f, 1.0f);
 
 		Result<VaspOutputData> loadResult = m_Bridge.LoadOutput(
 			m_CalculationDirectory, m_BandStart, m_BandEnd, m_IncludeOrbitals, m_IncludeIrreps, m_IrrepTol,
-			m_Symprec);
+			m_Symprec, m_IncludeKs, m_OutcarName);
 		if (!loadResult)
 			throw std::runtime_error(loadResult.Error().technicalDetails);
 

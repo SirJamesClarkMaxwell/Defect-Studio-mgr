@@ -157,6 +157,8 @@ namespace DefectStudio::SceneSystem
 			if (selectionComponent.selected)
 				windowState.selectedBondIndices.push_back(bondComponent.bondIndex);
 		}
+
+		ApplyHideVolumeMaskToWindowState(windowState);
 	}
 
 	void ApplySelectionAndVisibilityToScene(

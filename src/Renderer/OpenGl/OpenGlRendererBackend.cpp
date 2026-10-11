@@ -7,6 +7,8 @@
 
 #include "Renderer/Scene/SceneObjectAppearance.hpp"
 #include "Renderer/Scene/ScenePlaneGeometry.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
+#include "Renderer/Scene/SceneFreeLabelAnchors.hpp"
 
 #include <algorithm>
 #include <array>
@@ -642,7 +644,11 @@ namespace DefectStudio
 		float bondLabelAlignThresholdDeg,
 		bool showPeriodicBonds,
 		const PathRenderInput *pathInput,
-		bool showVacancies)
+		bool showVacancies,
+		const std::vector<RendererWindowState::SceneDensity> &sceneDensities,
+		const std::vector<std::size_t> &selectedSceneDensities,
+		const std::vector<SceneHideVolume> &sceneHideVolumes,
+		const std::vector<std::size_t> &selectedSceneHideVolumes)
 	{
 		if (!m_Initialized)
 			return 0;
@@ -806,39 +812,48 @@ namespace DefectStudio
 		// Reserve the marker's front-sphere depth before paths can write colour behind it.
 		// Earlier atoms/bonds keep their colour through the translucent fill; later overlays
 		// already tested against this same marker depth before the pre-pass was added.
+		std::vector<RendererVacancyData> markers = ChargeMarkerSpheres(freeLabels, structure, sceneHideVolumes);
 		if (showVacancies)
-			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
+			markers.insert(markers.begin(), structure.vacancies.begin(), structure.vacancies.end());
+		renderVacancyMarkers(structure, markers, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset, true);
+		PathRenderInput boundPathInput = pathInput != nullptr ? *pathInput : PathRenderInput{};
+		boundPathInput.structure = &structure;
+		boundPathInput.hideVolumes = &sceneHideVolumes;
 		// Transparent paths need the opaque atom depth/color first, just as the other overlays do.
 		if (pathInput != nullptr && pathInput->paths != nullptr)
-			renderScenePaths(*pathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
-		if (showVacancies)
-			renderVacancyMarkers(structure.vacancies, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+			renderScenePaths(boundPathInput, camera, resources, globalSettings, false, viewportPixelSize, sceneOffset);
+		renderVacancyMarkers(structure, markers, sceneHideVolumes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+		const int hideVolumeCount = uploadIsosurfaceHideVolumes(sceneHideVolumes, structure);
 		renderSceneOrbitals(
-			sceneOrbitals, selectedSceneOrbitals, structure, camera, resources, globalSettings, sceneOffset,
+			sceneOrbitals, selectedSceneOrbitals, structure, hideVolumeCount, camera, resources, globalSettings, sceneOffset,
 			viewportPixelSize);
+		renderSceneDensities(
+			sceneDensities, selectedSceneDensities, hideVolumeCount, camera, resources, globalSettings, sceneOffset, viewportPixelSize);
 		if (debugIsosurfaceMesh && !debugIsosurfaceMesh->empty())
 			renderIsosurfaceOverlay(*debugIsosurfaceMesh, camera, globalSettings);
 		if (orbitalChannelUp != nullptr && orbitalChannelUp->enabled && orbitalChannelUp->vertexCount > 0)
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[0], orbitalChannelUp->vertexCount, camera, globalSettings,
 				orbitalChannelUp->positiveLobeColor, orbitalChannelUp->negativeLobeColor, orbitalChannelUp->lobeAlpha,
-				sceneOffset);
+				sceneOffset, false, 0.0f, true, false, hideVolumeCount);
 		if (orbitalChannelDown != nullptr && orbitalChannelDown->enabled && orbitalChannelDown->vertexCount > 0)
 			renderIsosurfaceGpuOverlay(resources.isosurfaceVao[1], orbitalChannelDown->vertexCount, camera, globalSettings,
 				orbitalChannelDown->positiveLobeColor, orbitalChannelDown->negativeLobeColor,
-				orbitalChannelDown->lobeAlpha, sceneOffset);
+				orbitalChannelDown->lobeAlpha, sceneOffset, false, 0.0f, true, false, hideVolumeCount);
 		renderScenePlanes(
 			scenePlanes, selectedScenePlanes, camera, resources, globalSettings, viewportPixelSize, sceneOffset);
+		renderSceneHideVolumes(sceneHideVolumes, selectedSceneHideVolumes, structure, camera, resources, globalSettings,
+			viewportPixelSize, sceneOffset);
 		// Drawn last and depth-test-disabled (see renderLabels) so an annotation always reads clearly
 		// on top of the structure, regardless of where in 3D space it's anchored.
 		if (showLabels || !pinnedMeasurements.empty() || !freeLabels.empty())
 		{
 			renderLabels(
-				structure, camera, resources, globalSettings, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
+				structure, sceneHideVolumes, camera, resources, globalSettings, showLabels, pinnedMeasurements, selectedPinnedMeasurements,
 				freeLabels, selectedFreeLabels, sceneOffset, bondLabelAutoOffsetEnabled,
 				bondLabelAutoOffsetMagnitude, bondLabelAlignThresholdDeg);
 		}
 		if (pathInput != nullptr && pathInput->paths != nullptr)
-			renderScenePaths(*pathInput, camera, resources, globalSettings, true, viewportPixelSize, sceneOffset);
+			renderScenePaths(boundPathInput, camera, resources, globalSettings, true, viewportPixelSize, sceneOffset);
 
 		resources.frameBuffer.Unbind();
 		resources.lastRenderTime = Time::NowSteady();
@@ -905,6 +920,11 @@ namespace DefectStudio
 			glDeleteBuffers(1, &m_IsosurfaceGridSsbo);
 			m_IsosurfaceGridSsbo = 0;
 		}
+		if (m_IsosurfaceCounterReadback != 0)
+		{
+			glDeleteBuffers(1, &m_IsosurfaceCounterReadback);
+			m_IsosurfaceCounterReadback = 0;
+		}
 		for (auto &[windowKey, resources] : m_Viewports)
 		{
 			(void)windowKey;
@@ -927,6 +947,8 @@ namespace DefectStudio
 				}
 			}
 			DeleteMeshHandles(resources.vacancyMesh);
+			DeleteMeshHandles(resources.scenePlaneMesh);
+			DeleteMeshHandles(resources.sceneHideVolumeMesh);
 			for (auto &[id, cacheEntry] : resources.sceneOrbitalMeshCache)
 			{
 				(void)id;
@@ -939,6 +961,12 @@ namespace DefectStudio
 				DeleteMeshHandles(cacheEntry.mesh);
 			}
 			resources.scenePathMeshCache.clear();
+			for (auto &[id, cacheEntry] : resources.sceneDensityMeshCache)
+			{
+				(void)id;
+				DeleteIsosurfaceGpuBuffers(cacheEntry.buffers);
+			}
+			resources.sceneDensityMeshCache.clear();
 		}
 
 		m_LabelFont.reset();
@@ -1290,20 +1318,6 @@ namespace DefectStudio
 		glBindVertexArray(0);
 	}
 
-	namespace
-	{
-		// 32 bytes/vertex * 3 * kMaxIsosurfaceGpuVertices ~= 192MB worst case, but real usage is
-		// far smaller (marching-tetrahedra output scales with surface area, not grid volume) - the
-		// singlet_HSE band-0 reference case used ~113k vertices. Overflow is dropped safely by the
-		// compute shader's own bounds check, not corrupted.
-		constexpr std::size_t kMaxIsosurfaceGpuVertices = 2'000'000;
-		struct IsosurfaceGpuVertex
-		{
-			glm::vec4 position;
-			glm::vec4 normalSign;
-		};
-	} // namespace
-
 	void OpenGlRendererBackend::createIsosurfaceGeometry()
 	{
 		glGenVertexArrays(1, &m_IsosurfaceVao);
@@ -1323,6 +1337,51 @@ namespace DefectStudio
 		glBindVertexArray(0);
 
 		glGenBuffers(1, &m_IsosurfaceGridSsbo);
+		glGenBuffers(1, &m_IsosurfaceCounterReadback);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, m_IsosurfaceCounterReadback);
+		glBufferData(GL_COPY_WRITE_BUFFER, sizeof(unsigned int), nullptr, GL_STREAM_READ);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+	}
+
+	void CreateIsosurfaceGpuBuffers(OpenGlIsosurfaceGpuBuffers &buffers)
+	{
+		glGenBuffers(1, &buffers.vertexSsbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffers.vertexSsbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER,
+			static_cast<GLsizeiptr>(kMaxIsosurfaceGpuVertices * sizeof(IsosurfaceGpuVertex)),
+			nullptr, GL_DYNAMIC_COPY);
+		glGenBuffers(1, &buffers.counterSsbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffers.counterSsbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_COPY);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+		// Same buffer, two roles: written as an SSBO by the compute shader, read as a vertex
+		// buffer here - geometry never leaves the GPU between the two.
+		glGenVertexArrays(1, &buffers.vao);
+		glBindVertexArray(buffers.vao);
+		glBindBuffer(GL_ARRAY_BUFFER, buffers.vertexSsbo);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, position)));
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign)));
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
+			reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign) + sizeof(glm::vec3)));
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+	}
+
+	void DeleteIsosurfaceGpuBuffers(OpenGlIsosurfaceGpuBuffers &buffers)
+	{
+		if (buffers.vertexSsbo != 0)
+			glDeleteBuffers(1, &buffers.vertexSsbo);
+		if (buffers.counterSsbo != 0)
+			glDeleteBuffers(1, &buffers.counterSsbo);
+		if (buffers.vao != 0)
+			glDeleteVertexArrays(1, &buffers.vao);
+		buffers = {};
 	}
 
 	void OpenGlRendererBackend::ensureIsosurfaceBuffers(OpenGlViewportResources &resources)
@@ -1332,31 +1391,11 @@ namespace DefectStudio
 
 		for (int slot = 0; slot < kIsosurfaceSlotCount; ++slot)
 		{
-			glGenBuffers(1, &resources.isosurfaceVertexSsbo[slot]);
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, resources.isosurfaceVertexSsbo[slot]);
-			glBufferData(GL_SHADER_STORAGE_BUFFER,
-				static_cast<GLsizeiptr>(kMaxIsosurfaceGpuVertices * sizeof(IsosurfaceGpuVertex)),
-				nullptr, GL_DYNAMIC_COPY);
-			glGenBuffers(1, &resources.isosurfaceCounterSsbo[slot]);
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, resources.isosurfaceCounterSsbo[slot]);
-			glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(unsigned int), nullptr, GL_DYNAMIC_COPY);
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-			// Same buffer, two roles: written as an SSBO by the compute shader, read as a vertex
-			// buffer here - geometry never leaves the GPU between the two.
-			glGenVertexArrays(1, &resources.isosurfaceVao[slot]);
-			glBindVertexArray(resources.isosurfaceVao[slot]);
-			glBindBuffer(GL_ARRAY_BUFFER, resources.isosurfaceVertexSsbo[slot]);
-			glEnableVertexAttribArray(0);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
-				reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, position)));
-			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
-				reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign)));
-			glEnableVertexAttribArray(2);
-			glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(IsosurfaceGpuVertex),
-				reinterpret_cast<void *>(offsetof(IsosurfaceGpuVertex, normalSign) + sizeof(glm::vec3)));
-			glBindVertexArray(0);
+			OpenGlIsosurfaceGpuBuffers buffers;
+			CreateIsosurfaceGpuBuffers(buffers);
+			resources.isosurfaceVao[slot] = buffers.vao;
+			resources.isosurfaceVertexSsbo[slot] = buffers.vertexSsbo;
+			resources.isosurfaceCounterSsbo[slot] = buffers.counterSsbo;
 		}
 	}
 
@@ -2018,6 +2057,7 @@ namespace DefectStudio
 	// reads back - no separate export wiring needed.
 	void OpenGlRendererBackend::renderLabels(
 		const RendererStructureData &structure,
+		const std::vector<SceneHideVolume> &volumes,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
@@ -2090,6 +2130,18 @@ namespace DefectStudio
 			}
 			instancesToDraw = &resources.cachedLabelInstances;
 			backgroundInstancesToDraw = &resources.cachedLabelBackgroundInstances;
+			if (!volumes.empty())
+			{
+				pinnedInstances = resources.cachedLabelInstances;
+				pinnedBackgroundInstances = resources.cachedLabelBackgroundInstances;
+				const auto covered = [&](const OpenGlLabelInstance &instance) {
+					return PointCoveredByHideVolumes(volumes, instance.worldCenter, structure);
+				};
+				std::erase_if(pinnedInstances, covered);
+				std::erase_if(pinnedBackgroundInstances, covered);
+				instancesToDraw = &pinnedInstances;
+				backgroundInstancesToDraw = &pinnedBackgroundInstances;
+			}
 		}
 		else if (!pinnedMeasurements.empty() || !freeLabels.empty())
 		{
@@ -2204,6 +2256,7 @@ namespace DefectStudio
 							renderOffset += SafeNormalize(projected, fallbackPerp) * bondLabelAutoOffsetMagnitude;
 						}
 
+						if (PointCoveredByHideVolumes(volumes, midpoint + renderOffset, structure)) return;
 						const LabelLocalBounds bounds = AppendBondLabelInstances(
 							*m_LabelFont, midpoint + renderOffset, lengthAngstrom, pinnedInstances, effectiveStyle,
 							totalRotation, selected);
@@ -2270,6 +2323,7 @@ namespace DefectStudio
 							const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 							const float angleDeg = glm::degrees(std::acos(cosAngle));
 							const glm::vec3 anglePosition = pin.frozenAtomPositions[1] + offset;
+							if (PointCoveredByHideVolumes(volumes, anglePosition, structure)) continue;
 							const LabelLocalBounds bounds = AppendAngleLabelInstances(*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle, pin.rotationOffsetRadians, selected);
 							AppendLabelBackgroundInstance(anglePosition, bounds, effectiveStyle, pin.rotationOffsetRadians, pinnedBackgroundInstances, selected);
 							recordPick(resources.labelPickQuads.pinned[pinIndex], anglePosition, bounds, effectiveStyle,
@@ -2298,6 +2352,7 @@ namespace DefectStudio
 						const float cosAngle = glm::clamp(glm::dot(toA, toC) / (lengthA * lengthC), -1.0f, 1.0f);
 						const float angleDeg = glm::degrees(std::acos(cosAngle));
 						const glm::vec3 anglePosition = vertexAtom.cartesianPosition + offset;
+						if (PointCoveredByHideVolumes(volumes, anglePosition, structure)) continue;
 						const LabelLocalBounds bounds = AppendAngleLabelInstances(
 							*m_LabelFont, anglePosition, angleDeg, pinnedInstances, effectiveStyle,
 							pin.rotationOffsetRadians, selected);
@@ -2311,7 +2366,7 @@ namespace DefectStudio
 			for (std::size_t labelIndex = 0; labelIndex < freeLabels.size(); ++labelIndex)
 			{
 				const RendererWindowState::FreeLabel &label = freeLabels[labelIndex];
-				if (!label.visible)
+				if (!IsFreeLabelVisible(label, structure, volumes))
 					continue;
 				const bool selected = std::find(selectedFreeLabels.begin(), selectedFreeLabels.end(), labelIndex) !=
 					selectedFreeLabels.end();
@@ -2625,6 +2680,7 @@ namespace DefectStudio
 
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
+		glUniform1i(m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeCount"), 0);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
@@ -2716,7 +2772,8 @@ namespace DefectStudio
 		bool outline,
 		float outlineExpansion,
 		bool writeDepth,
-		bool twoSidedOutline)
+		bool twoSidedOutline,
+		int hideVolumeCount)
 	{
 		// Same "isosurface" shader/lighting/colors as the CPU overlay - only the vertex source
 		// (resources.isosurfaceVao, filled by RegenerateIsosurfaceGpu) and draw count differ, so a
@@ -2728,6 +2785,8 @@ namespace DefectStudio
 
 		const glm::mat4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
 		glUseProgram(program);
+		const int hideVolumeCountLocation = m_ShaderLibrary.Uniform("isosurface", "u_HideVolumeCount");
+		glUniform1i(hideVolumeCountLocation, hideVolumeCount);
 		const int viewProjectionLocation = m_ShaderLibrary.Uniform("isosurface", "u_ViewProjection");
 		if (viewProjectionLocation >= 0)
 			glUniformMatrix4fv(viewProjectionLocation, 1, GL_FALSE, &viewProjection[0][0]);
@@ -2817,6 +2876,7 @@ namespace DefectStudio
 			glDisable(GL_CULL_FACE);
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+		glUniform1i(hideVolumeCountLocation, 0);
 		glBindVertexArray(0);
 		glDepthMask(previousDepthMask);
 		if (previousCull)
@@ -2844,6 +2904,20 @@ namespace DefectStudio
 		OpenGlViewportResources &resources = viewportIt->second;
 		ensureIsosurfaceBuffers(resources);
 
+		const int vertexCount = dispatchIsosurfaceCompute(grid, isoValue,
+			OpenGlIsosurfaceGpuBuffers{resources.isosurfaceVao[slot], resources.isosurfaceVertexSsbo[slot],
+				resources.isosurfaceCounterSsbo[slot]},
+			true);
+		DS_LOG_INFO("RegenerateIsosurfaceGpu: generated {} vertices", vertexCount);
+		return vertexCount;
+	}
+
+	int OpenGlRendererBackend::dispatchIsosurfaceCompute(
+		const OrbitalGridData &grid, const float isoValue, const OpenGlIsosurfaceGpuBuffers &buffers,
+		const bool negativeLobe)
+	{
+		if (grid.dimensions.x < 2 || grid.dimensions.y < 2 || grid.dimensions.z < 2 || !(isoValue > 0.0f))
+			return 0;
 		const unsigned int program = m_ShaderLibrary.Program("isosurface_compute");
 		if (program == 0)
 			return 0;
@@ -2861,12 +2935,12 @@ namespace DefectStudio
 			grid.values.data(), GL_STATIC_DRAW);
 
 		const unsigned int zero = 0;
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, resources.isosurfaceCounterSsbo[slot]);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffers.counterSsbo);
 		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &zero);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_IsosurfaceGridSsbo);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, resources.isosurfaceVertexSsbo[slot]);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, resources.isosurfaceCounterSsbo[slot]);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buffers.vertexSsbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, buffers.counterSsbo);
 
 		glUseProgram(program);
 		const int dimensionsLocation = m_ShaderLibrary.Uniform("isosurface_compute", "u_Dimensions");
@@ -2895,19 +2969,27 @@ namespace DefectStudio
 
 		for (const float lobeSign : {1.0f, -1.0f})
 		{
+			if (lobeSign < 0.0f && !negativeLobe)
+				break;
 			if (signLocation >= 0)
 				glUniform1f(signLocation, lobeSign);
 			glDispatchCompute(groups, 1, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		}
 
+		// The counter stays in video memory; reading it straight back made the driver migrate it to
+		// host memory on every re-march (NVIDIA 131186 per iso-slider step). Copy it GPU-side into a
+		// GL_STREAM_READ buffer and read that one instead.
 		unsigned int vertexCount = 0;
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, resources.isosurfaceCounterSsbo[slot]);
-		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(unsigned int), &vertexCount);
+		glBindBuffer(GL_COPY_READ_BUFFER, buffers.counterSsbo);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, m_IsosurfaceCounterReadback);
+		glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, sizeof(unsigned int));
+		glGetBufferSubData(GL_COPY_WRITE_BUFFER, 0, sizeof(unsigned int), &vertexCount);
+		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+		glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 		vertexCount = std::min(vertexCount, static_cast<unsigned int>(kMaxIsosurfaceGpuVertices));
-		DS_LOG_INFO("RegenerateIsosurfaceGpu: generated {} vertices", vertexCount);
 		return static_cast<int>(vertexCount);
 	}
 

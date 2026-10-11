@@ -1390,6 +1390,20 @@ namespace DefectStudio
 			request.directory = directory;
 			m_EventBus->Queue(request);
 		}
+		if (ImGui::MenuItem("Dodaj do analizy termodynamicznej") && m_EventBus != nullptr)
+		{
+			ProjectEvents::EnergeticsFoldersAddRequested request;
+			const std::string clicked = directory.Utf8();
+			if (m_SelectedPaths.size() > 1 && std::find(m_SelectedPaths.begin(), m_SelectedPaths.end(), clicked) != m_SelectedPaths.end())
+				for (const std::string &selected : m_SelectedPaths)
+					request.directories.push_back(Path::FromUtf8(selected));
+			else
+				request.directories.push_back(directory);
+			m_EventBus->Queue(request);
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Folder defektu (z podfolderami q-1, q0, ...) lub folder z wieloma defektami.\n"
+				"Działa na wszystkie zaznaczone foldery (Ctrl/Shift+klik).");
 		if (ImGui::MenuItem("Set as Displacement Comparison", nullptr, false, hasDefectFile) && m_EventBus != nullptr)
 		{
 			ProjectEvents::DisplacementComparisonFileRequested request;

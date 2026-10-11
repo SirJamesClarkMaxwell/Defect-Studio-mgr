@@ -38,8 +38,7 @@ namespace DefectStudio
 			CrystalStructure structure,
 			std::string sanitizedName,
 			Path targetDirectory,
-			Path authorizedRootSnapshot,
-			Path scratchDirectory);
+			Path authorizedRootSnapshot);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -62,7 +61,6 @@ namespace DefectStudio
 		std::string m_SanitizedName;
 		Path m_TargetDirectory;
 		Path m_AuthorizedRootSnapshot;
-		Path m_ScratchDirectory;
 		std::optional<Result<Path>> m_Outcome;
 	};
 } // namespace DefectStudio

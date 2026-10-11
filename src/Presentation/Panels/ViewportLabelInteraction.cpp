@@ -32,6 +32,7 @@
 #include "Renderer/Scene/SceneSelection.hpp"
 #include "Renderer/Scene/SceneComponents.hpp"
 #include "Renderer/Scene/SceneSystem.hpp"
+#include "Renderer/Scene/SceneHideVolume.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ScenePathEditCommands.hpp"
 #include "Presentation/Panels/SceneOrbitalEditorWidget.hpp"
@@ -39,6 +40,19 @@
 
 namespace DefectStudio
 {
+	bool ResolvePickablePinnedMeasurementPosition(const RendererWindowState &window, std::size_t index, glm::vec3 &position)
+	{
+		if (index >= window.pinnedMeasurements.size() || !window.pinnedMeasurements[index].visible ||
+			!SceneSystem::ResolvePinnedMeasurementPosition(window.structure, window.pinnedMeasurements[index], position)) return false;
+		// The drawn quad carries the periodic bond image's exact label centre.
+		if (index < window.labelPickQuads.pinned.size())
+		{
+			if (!window.labelPickQuads.pinned[index].valid) return false;
+			position = window.labelPickQuads.pinned[index].centre;
+		}
+		return !PointCoveredByHideVolumes(window.sceneHideVolumes, position, window.structure);
+	}
+
 	// Whether `mouse` lies inside label `index` as it was last drawn (labels.vert's billboard
 	// math on the recorded rect, projected to the viewport image). nullopt when that label has
 	// no recorded quad - not drawn last frame, or drawn by the all-bonds pass - so the caller
@@ -50,6 +64,7 @@ namespace DefectStudio
 		if (index >= quads.size() || !quads[index].valid || windowState.camera == nullptr)
 			return std::nullopt;
 		const LabelPickQuad &quad = quads[index];
+		if (PointCoveredByHideVolumes(windowState.sceneHideVolumes, quad.centre, windowState.structure)) return false;
 		const glm::mat4 view = windowState.camera->ViewMatrix();
 		const glm::mat4 viewProjection = windowState.camera->ProjectionMatrix() * view;
 		const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
@@ -89,10 +104,11 @@ namespace DefectStudio
 	void RegisterViewportSceneObjectCommands(CommandRegistry &registry, RendererLayer &rendererLayer)
 	{
 		RegisterScenePathObjectCommands(registry, rendererLayer);
+		RegisterSceneObjectShortcutCommand(registry, rendererLayer);
 	}
 
-	// Keyboard-only shortcuts for selected scene objects: pin flip/scale, scene clipboard actions,
-	// and Delete for pins, free labels, paths, orbitals and planes. No mouse hit-test of its own, so
+	// Keyboard-only label style shortcuts. Object edits go through CoreLayer's command routing.
+	// No mouse hit-test of its own, so
 	// the caller runs this unconditionally every frame rather than folding it into the
 	// short-circuiting interaction chain.
 	void HandlePinnedMeasurementKeyboardShortcuts(
@@ -121,19 +137,6 @@ namespace DefectStudio
 				if (pinIndex < windowState.pinnedMeasurements.size())
 					windowState.pinnedMeasurements[pinIndex].flipped ^= true;
 			}
-		}
-		// Delete removes every selected pin - M/Shift+M are add-only (a bulk press over a growing
-		// selection used to also silently unpin anything already pinned within it, which made
-		// "select more, press M again" an unpredictable mix of adding and removing), so this is now
-		// the only way to unpin a label; click (or box/circle-select) to select it/them first.
-		if (pinSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-		{
-			PushPinnedMeasurementUndoSnapshot(windowState);
-			for (const SceneObjectId id : windowState.selectedPinnedMeasurements)
-				windowState.pinnedMeasurements.erase(std::remove_if(windowState.pinnedMeasurements.begin(), windowState.pinnedMeasurements.end(),
-					[id](const auto &pin) { return pin.id == id; }), windowState.pinnedMeasurements.end());
-			windowState.selectedPinnedMeasurements.clear();
-			SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 		}
 		// Ctrl+Shift+>/< steps every selected pin's size (the same RendererWindowState::
 		// PinnedMeasurement::scale the label transform gizmo's Scale handle drags) by a fixed
@@ -173,45 +176,7 @@ namespace DefectStudio
 			}
 		}
 
-		// Delete removes every selected free label - same rationale as the pin Delete above.
 		const bool freeLabelSelected = !windowState.selectedFreeLabels.empty();
-		if (freeLabelSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-			ExecuteSceneObjectEditAction(
-				windowState, SceneObjectEditKind::FreeLabel, SceneObjectEditAction::Delete);
-
-		const bool sceneOrbitalSelected = !windowState.selectedSceneOrbitals.empty();
-		if (sceneOrbitalSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-			ExecuteSceneObjectEditAction(
-				windowState, SceneObjectEditKind::Orbital, SceneObjectEditAction::Delete);
-
-		const bool scenePlaneSelected = !windowState.selectedScenePlanes.empty();
-		if (scenePlaneSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-			ExecuteSceneObjectEditAction(
-				windowState, SceneObjectEditKind::Plane, SceneObjectEditAction::Delete);
-
-		const bool scenePathSelected = !windowState.selectedScenePaths.empty();
-		if (scenePathSelected && hovered && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-			ExecuteSceneObjectEditAction(
-				windowState, SceneObjectEditKind::Path, SceneObjectEditAction::Delete);
-
-		// Ctrl+C/V/D for scene drawings - same "raw ImGui key check, bypass CoreLayer entirely" shape as
-		// Delete just above. renderer.selection.copy/paste/duplicate (CoreLayer-dispatched, bound to the
-		// same chords) only ever touch atoms - there's no fallback chain in CoreLayer::dispatchKeyChord
-		// to make them "also try annotations", so this runs independently alongside the atom command.
-		const bool ctrlHeld = ImGui::GetIO().KeyCtrl;
-		std::optional<SceneObjectEditKind> selectedDrawingKind = ResolveSelectedDrawingKind(windowState);
-		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_C, false))
-			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Copy);
-		if (hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_V, false))
-		{
-			// A selected plane/orbital chooses
-			// its own clipboard, avoiding an ambiguous paste when several kind-specific clipboards exist.
-			ExecuteSceneObjectEditAction(
-				windowState, selectedDrawingKind.value_or(LastCopiedSceneObjectEditKind()),
-				SceneObjectEditAction::Paste);
-		}
-		if (selectedDrawingKind.has_value() && hovered && ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false))
-			ExecuteSceneObjectEditAction(windowState, *selectedDrawingKind, SceneObjectEditAction::Duplicate);
 
 		const bool altHeld = ImGui::GetIO().KeyAlt;
 		const bool shiftHeld = ImGui::GetIO().KeyShift;
@@ -251,6 +216,10 @@ namespace DefectStudio
 			return SceneObjectEditKind::Path;
 		if (!windowState.selectedFreeLabels.empty())
 			return SceneObjectEditKind::FreeLabel;
+		if (!windowState.selectedSceneDensities.empty())
+			return SceneObjectEditKind::Density;
+		if (!windowState.selectedSceneHideVolumes.empty())
+			return SceneObjectEditKind::HideVolume;
 		return std::nullopt;
 	}
 
@@ -342,8 +311,9 @@ namespace DefectStudio
 		float bestDistance = kPickRadius;
 		for (std::size_t i = 0; i < windowState.freeLabels.size(); ++i)
 		{
-			if (!windowState.freeLabels[i].visible)
+			if (!IsFreeLabelVisible(windowState.freeLabels[i], windowState.structure, windowState.sceneHideVolumes))
 				continue;
+			if (i < windowState.labelPickQuads.free.size() && !windowState.labelPickQuads.free[i].valid) continue;
 			if (const auto inside = MouseInLabelQuad(
 					windowState, windowState.labelPickQuads.free, i, imageOrigin, imageSize, mousePos))
 			{
@@ -377,6 +347,7 @@ namespace DefectStudio
 		const SceneObjectId hitLabel = windowState.freeLabels[static_cast<std::size_t>(hitIndex)].id;
 		const auto existing = std::find(selection.begin(), selection.end(), hitLabel);
 		windowState.selectedPinnedMeasurements.clear();
+		windowState.selectedSceneHideVolumes.clear();
 		windowState.selectedSceneOrbitals.clear();
 		windowState.selectedVacancies.clear();
 		windowState.defectFrameSelected = false;

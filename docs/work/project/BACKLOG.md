@@ -2,6 +2,12 @@
 
 Open items found during manual testing that are not yet scheduled into a task.
 
+- **`scripts/python/build.py` exits 0 on a failed build** (2026-10-07, task/84). MSBuild prints
+  "Kompilacja NIE POWIODLA SIE / Liczba bledow: 10" and the wrapper still reports
+  `[exited with code 0]`, leaving the previous `.exe` in place. Any check that trusts the exit
+  code - a script, a hook, an agent - silently tests a stale binary. The wrapper has to
+  propagate MSBuild's exit code.
+
 - **Undo after a small atom move looks slightly off** (2026-09-13, manual run of the hide/delete fix). Hard to
   describe; it worked when repeated. Reproduce with Object Properties open (coordinates visible): move an atom
   a tiny amount with the gizmo / G, then Ctrl+Z, and compare coordinates before/after. Suspects: float

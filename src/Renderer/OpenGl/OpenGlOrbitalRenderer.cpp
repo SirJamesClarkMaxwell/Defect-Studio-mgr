@@ -68,6 +68,7 @@ namespace DefectStudio
 		const std::vector<RendererWindowState::SceneOrbital> &orbitals,
 		const std::vector<std::size_t> &selectedOrbitals,
 		const RendererStructureData &structure,
+		const int hideVolumeCount,
 		const RendererViewCamera &camera,
 		OpenGlViewportResources &resources,
 		const RendererGlobalRenderSettings &globalSettings,
@@ -116,10 +117,11 @@ namespace DefectStudio
 				renderIsosurfaceGpuOverlay(
 					cache.mesh.vao, cache.mesh.indexCount, camera, globalSettings,
 					orbital.positiveLobeColor, orbital.negativeLobeColor, orbital.alpha, sceneOffset, true,
-					outlineExpansion);
+					outlineExpansion, true, false, hideVolumeCount);
 			renderIsosurfaceGpuOverlay(
 				cache.mesh.vao, cache.mesh.indexCount, camera, globalSettings,
-				orbital.positiveLobeColor, orbital.negativeLobeColor, orbital.alpha, sceneOffset);
+				orbital.positiveLobeColor, orbital.negativeLobeColor, orbital.alpha, sceneOffset, false, 0.0f,
+				true, false, hideVolumeCount);
 		}
 	}
 } // namespace DefectStudio

@@ -82,7 +82,13 @@ namespace DefectStudio
 		{
 			const ImVec2 openedAt = ImGui::GetMousePosOnOpeningCurrentPopup();
 			m_ContextMenuWorldPosition =
-				computeViewportWorldPosition(windowState, openedAt.x - imageOrigin.x, openedAt.y - imageOrigin.y);
+				computeViewportWorldPosition(windowState,
+					(openedAt.x - imageOrigin.x) * windowState.viewportSize.x / imageSize.x,
+					(openedAt.y - imageOrigin.y) * windowState.viewportSize.y / imageSize.y);
+			m_ContextMenuAtom.reset();
+			if (const auto ray = ComputeViewportPickRay(windowState,
+				glm::vec2(openedAt.x - imageOrigin.x, openedAt.y - imageOrigin.y), glm::vec2(imageSize.x, imageSize.y)))
+				m_ContextMenuAtom = PickAtomAlongRay(windowState, ray->origin, ray->direction);
 		}
 
 		Ref<EventBus> eventBus = m_Layer.GetEventBus();
@@ -101,26 +107,29 @@ namespace DefectStudio
 		if (ImGui::BeginMenu("Add"))
 		{
 			DrawSceneAddMenu(windowState, m_CommandRegistry, m_ContextMenuWorldPosition, eventBus, false,
-				&m_OperatorRedoPanel, &m_OperatorRegistry, m_Layer.GetGlobalSettings().bondRadiusMultiplier);
+				&m_OperatorRedoPanel, &m_OperatorRegistry, m_Layer.GetGlobalSettings().bondRadiusMultiplier,
+				SceneAddMenuSection::Full, m_ContextMenuAtom);
 			ImGui::EndMenu();
 		}
+		if (m_ContextMenuAtom)
+			DrawHideVolumeAddMenu(windowState, m_ContextMenuWorldPosition, m_OperatorRedoPanel, m_OperatorRegistry,
+				m_ContextMenuAtom, "Ukryj wokół atomu");
 
 		ImGui::Separator();
 
-		const bool pathSelection = !windowState.selectedScenePaths.empty();
-		const auto editPathOrAtoms = [&](SceneObjectEditAction action, const char *commandId) {
-			if (pathSelection || (action == SceneObjectEditAction::Paste && !hasSelection &&
-				CanExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, action)))
-				ExecuteSceneObjectEditAction(windowState, SceneObjectEditKind::Path, action);
-			else
+		// The same routing as Ctrl+C/V/D: selected scene objects (and the last scene copy, for Paste)
+		// first, atoms otherwise.
+		const bool sceneSelection = HasSceneObjectSelection(windowState);
+		const auto editSceneOrAtoms = [&](SceneObjectEditAction action, const char *commandId) {
+			if (!HandleSceneObjectEditShortcut(windowState, action))
 				runCommand(commandId);
 		};
-		if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSelection || pathSelection))
-			editPathOrAtoms(SceneObjectEditAction::Copy, "renderer.selection.copy");
+		if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSelection || sceneSelection))
+			editSceneOrAtoms(SceneObjectEditAction::Copy, "renderer.selection.copy");
 		if (ImGui::MenuItem("Paste", "Ctrl+V"))
-			editPathOrAtoms(SceneObjectEditAction::Paste, "renderer.selection.paste");
-		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection || pathSelection))
-			editPathOrAtoms(SceneObjectEditAction::Duplicate, "renderer.selection.duplicate");
+			editSceneOrAtoms(SceneObjectEditAction::Paste, "renderer.selection.paste");
+		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection || sceneSelection))
+			editSceneOrAtoms(SceneObjectEditAction::Duplicate, "renderer.selection.duplicate");
 
 		// LabelStyle has no separate
 		// geometry to split out, so just one Copy/Paste Style pair. Applies to whichever label kind is
@@ -156,8 +165,8 @@ namespace DefectStudio
 
 		ImGui::Separator();
 
-		if (ImGui::MenuItem("Delete", "Del", false, hasSelection || pathSelection))
-			editPathOrAtoms(SceneObjectEditAction::Delete, "renderer.selection.delete");
+		if (ImGui::MenuItem("Delete", "Del", false, hasSelection || sceneSelection))
+			editSceneOrAtoms(SceneObjectEditAction::Delete, "renderer.selection.delete");
 		DrawDefectFrameMenu(windowState, commandRegistry.get());
 		// H hides every selected kind, not only atoms - see Renderer/Scene/SceneVisibility.hpp.
 		if (ImGui::MenuItem("Hide", "H", false, AnySceneObjectSelected(windowState)))

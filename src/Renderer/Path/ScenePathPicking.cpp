@@ -25,10 +25,12 @@ namespace DefectStudio
 	} // namespace
 
 	std::optional<ScenePathPick> PickFrontmostScenePath(
-		const PathSystem &paths, const PathPickSettings &settings, const BindingContext &bindings)
+		const PathSystem &paths, const PathPickSettings &settings, const BindingContext &bindings,
+		const RendererStructureData &structure, std::span<const SceneHideVolume> hideVolumes)
 	{
 		std::optional<ScenePathPick> best;
 		paths.Store().Visit([&](const ScenePath &path) {
+			if (BoundToHiddenEndpoint(path, structure, hideVolumes)) return;
 			// An empty EvaluatedPath is the "never rendered" case the header documents: the shaft
 			// drops out and only the decorations and, in edit mode, the markers remain pickable.
 			const CachedPathGeometry *cached = paths.Caches().FindLastBuilt(path.id);

@@ -86,6 +86,7 @@ namespace DefectStudio
 		// actually clicks that menu item and the live mouse position no longer points at the click.
 		// Only one context menu can be open at a time app-wide, so a single field is enough.
 		glm::vec3 m_ContextMenuWorldPosition = glm::vec3(0.0f);
+		std::optional<std::size_t> m_ContextMenuAtom;
 		// Add Atom popup (drawAddAtomPopup) - only one instance can be open app-wide, so single
 		// fields are enough, same reasoning as m_ContextMenuWorldPosition above. Doubles as the
 		// window's own open/closed state (passed as ImGui::Begin's p_open), not just a one-shot

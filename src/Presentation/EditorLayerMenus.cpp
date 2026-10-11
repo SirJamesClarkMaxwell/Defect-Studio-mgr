@@ -199,21 +199,43 @@ namespace DefectStudio
 		}
 
 		const std::vector<PanelMenuGroup> groups = BuildPanelMenuGroups(panelEntries);
+		// The category's panels: those without a subcategory first, then one submenu per
+		// subcategory, in registration order.
+		const auto forEachPanelItem = [&](const PanelCategory category, const auto &item) {
+			std::vector<std::string> subcategories;
+			for (const PanelId panelId : panelIds)
+				if (auto panel = findPanel(panelId).lock(); panel && panel->GetCategory() == category)
+				{
+					if (const char *sub = panel->GetSubcategory())
+					{
+						if (std::find(subcategories.begin(), subcategories.end(), sub) == subcategories.end())
+							subcategories.emplace_back(sub);
+					}
+					else
+						item(panelId, *panel);
+				}
+			for (const std::string &sub : subcategories)
+			{
+				if (!ImGui::BeginMenu(sub.c_str()))
+					continue;
+				for (const PanelId panelId : panelIds)
+					if (auto panel = findPanel(panelId).lock(); panel && panel->GetCategory() == category &&
+						panel->GetSubcategory() && sub == panel->GetSubcategory())
+						item(panelId, *panel);
+				ImGui::EndMenu();
+			}
+		};
 		for (const PanelMenuGroup &group : groups)
 		{
 			if (!ImGui::BeginMenu(PanelCategoryName(group.category)))
 				continue;
 
-			for (const PanelId panelId : panelIds)
-			{
-				if (auto panel = findPanel(panelId).lock(); panel && panel->GetCategory() == group.category)
-				{
-					const std::string label = panel->GetTitle() + "##panel_" + std::to_string(panelId);
-					bool visible = panel->IsVisible();
-					if (ImGui::MenuItem(label.c_str(), nullptr, &visible))
-						panel->SetVisible(visible);
-				}
-			}
+			forEachPanelItem(group.category, [&](const PanelId panelId, IPanel &panel) {
+				const std::string label = panel.GetTitle() + "##panel_" + std::to_string(panelId);
+				bool visible = panel.IsVisible();
+				if (ImGui::MenuItem(label.c_str(), nullptr, &visible))
+					panel.SetVisible(visible);
+			});
 			ImGui::EndMenu();
 		}
 
@@ -224,15 +246,11 @@ namespace DefectStudio
 				if (!ImGui::BeginMenu(PanelCategoryName(group.category)))
 					continue;
 
-				for (const PanelId panelId : panelIds)
-				{
-					if (auto panel = findPanel(panelId).lock(); panel && panel->GetCategory() == group.category)
-					{
-						const std::string label = panel->GetTitle() + "##panel_" + std::to_string(panelId);
-						if (ImGui::MenuItem(label.c_str()))
-							(void)m_Panels.Clone(panelId);
-					}
-				}
+				forEachPanelItem(group.category, [&](const PanelId panelId, IPanel &panel) {
+					const std::string label = panel.GetTitle() + "##panel_" + std::to_string(panelId);
+					if (ImGui::MenuItem(label.c_str()))
+						(void)m_Panels.Clone(panelId);
+				});
 				ImGui::EndMenu();
 			}
 			ImGui::EndMenu();

@@ -32,6 +32,22 @@ namespace DefectStudio
 		float lumo = 0.0f;
 	};
 
+	struct VaspKsBlockData
+	{
+		int spin = 1;
+		int kpoint = 1;
+		std::vector<int> bands;
+		std::vector<double> energies;
+		std::vector<double> occupations;
+	};
+
+	struct VaspKsStepData
+	{
+		int step = 0;
+		std::optional<double> fermi;
+		std::vector<VaspKsBlockData> blocks;
+	};
+
 	// Calculation-level summary fields (Calculation Summary panel, docs/work/project/plans/
 	// 2026-08-24-calc-tools.md section 5) - each independently optional since a partial/older
 	// OUTCAR or vasprun.xml can have some of these and not others; see vasp_output_load.py's
@@ -39,8 +55,22 @@ namespace DefectStudio
 	struct VaspOutputSummaryData
 	{
 		// One entry per ionic step (its converged/last SCF energy) - the "how did it converge"
-		// trend. Comes from the public VasprunData.energies trajectory.
+		// trend. OUTCAR ionic TOTEN, falling back to vasprun only when OUTCAR is absent.
 		std::optional<std::vector<double>> energyTrend;
+		std::vector<double> forceTrend;
+		std::vector<double> energyWithoutEntropy;
+		std::vector<double> energySigmaZero;
+		std::vector<VaspKsStepData> ksSteps;
+		int ksBandStart = 0;
+		int ksBandEnd = 0;
+		int ksDefaultBandStart = 0;
+		int ksDefaultBandEnd = 0;
+		std::optional<double> outcarWriteTime;
+		std::optional<bool> finished;
+		std::optional<bool> reachedAccuracy;
+		std::optional<int> nsw;
+		std::optional<int> ibrion;
+		std::optional<double> ediffg;
 		std::optional<double> finalEnergy;
 		std::optional<double> cpuTimeSeconds;
 		std::optional<double> userTimeSeconds;
@@ -97,7 +127,9 @@ namespace DefectStudio
 			bool includeOrbitals = true,
 			bool includeIrreps = false,
 			float irrepTol = 0.1f,
-			float symprec = 1e-3f) const;
+			float symprec = 1e-3f,
+			bool includeKs = false,
+			const std::string &outcarName = "OUTCAR") const;
 
 	private:
 		ScriptRunner m_ScriptRunner;

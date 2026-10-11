@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 #include "Presentation/Panels/SceneOutlinerPanel.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <map>
 #include <optional>
@@ -26,6 +27,7 @@ namespace DefectStudio
 			AddSceneVisibilityColumnFlags(windowState.freeLabels, flags);
 			AddSceneVisibilityColumnFlags(windowState.sceneOrbitals, flags);
 			AddSceneVisibilityColumnFlags(windowState.scenePlanes, flags);
+			AddSceneVisibilityColumnFlags(windowState.sceneDensities, flags);
 			if (windowState.paths != nullptr)
 				windowState.paths->Store().Visit([&flags](const ScenePath &path) { flags.Add(path.visible, path.renderable); });
 			return SceneVisibilityStateFrom(flags);
@@ -48,6 +50,7 @@ namespace DefectStudio
 			ApplySceneVisibilityColumnEdit(windowState.freeLabels, edit);
 			ApplySceneVisibilityColumnEdit(windowState.sceneOrbitals, edit);
 			ApplySceneVisibilityColumnEdit(windowState.scenePlanes, edit);
+			ApplySceneVisibilityColumnEdit(windowState.sceneDensities, edit);
 			if (windowState.paths != nullptr)
 				ApplySceneVisibilityColumnEdit(windowState.paths->Store(), edit);
 			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
@@ -119,6 +122,12 @@ namespace DefectStudio
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Plane}
 				: !activeWindow.selectedFreeLabels.empty()
 				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::FreeLabel}
+				: !activeWindow.selectedPinnedMeasurements.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::PinnedMeasurement}
+				: !activeWindow.selectedSceneDensities.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::Density}
+				: !activeWindow.selectedSceneHideVolumes.empty()
+				? std::optional<SceneObjectEditKind>{SceneObjectEditKind::HideVolume}
 				: std::nullopt;
 			const ImGuiIO &io = ImGui::GetIO();
 			if (selectedKind.has_value() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
@@ -226,11 +235,15 @@ namespace DefectStudio
 						drawSpeciesGroup(windowState, species, atomIndices);
 
 					drawLabelsGroup(windowState);
+					drawLabelsGroup(windowState, true);
 					drawOrbitalsGroup(windowState);
 					drawPlanesGroup(windowState);
+					drawDensitiesGroup(windowState);
+					drawHideVolumesGroup(windowState);
 					drawVacanciesGroup(windowState);
 					DrawDefectFrameOutlinerRow(windowState);
 					drawPathsGroup(windowState);
+					drawPathsGroup(windowState, true);
 
 					ImGui::TreePop();
 				}
@@ -257,5 +270,57 @@ namespace DefectStudio
 			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 		else
 			io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+	}
+
+	void SceneOutlinerPanel::drawHideVolumesGroup(RendererWindowState &windowState)
+	{
+		if (windowState.sceneHideVolumes.empty()) return;
+		ImGui::PushID("##hideVolumesGroup");
+		ImGui::SetNextItemAllowOverlap();
+		const bool open = ImGui::TreeNodeEx("##hideVolumes",
+			ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen,
+			"Bryły ukrywające (%zu)", windowState.sceneHideVolumes.size());
+		const auto groupEdit = DrawSceneVisibilityColumns(SceneVisibilityStateFor(windowState.sceneHideVolumes));
+		if (groupEdit.visibleChanged || groupEdit.renderableChanged)
+		{
+			PushPinnedMeasurementUndoSnapshot(windowState);
+			ApplySceneVisibilityColumnEdit(windowState.sceneHideVolumes, groupEdit);
+			SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
+		}
+		if (open)
+		{
+			std::vector<SceneObjectId> ids;
+			for (const auto &volume : windowState.sceneHideVolumes) ids.push_back(volume.id);
+			for (std::size_t index = 0; index < windowState.sceneHideVolumes.size(); ++index)
+			{
+				auto &volume = windowState.sceneHideVolumes[index];
+				auto &selection = windowState.selectedSceneHideVolumes;
+				const SceneObjectId id = volume.id;
+				const bool selected = std::find(selection.begin(), selection.end(), id) != selection.end();
+				ImGui::PushID(static_cast<int>(index));
+				ImGui::SetNextItemAllowOverlap();
+				if (!volume.active) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+				const bool activated = ImGui::Selectable(volume.name.c_str(), selected);
+				const bool contextRequested = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+				if (!volume.active) ImGui::PopStyleColor();
+				ImGui::SetItemTooltip("Oko i kamera sterują obrysem. Ukrywanie przełączysz w menu wiersza lub we właściwościach bryły.");
+				const auto edit = DrawSceneVisibilityColumns(SceneVisibilityColumnState{volume.visible, volume.renderable});
+				if (edit.visibleChanged || edit.renderableChanged)
+				{
+					PushPinnedMeasurementUndoSnapshot(windowState);
+					if (edit.visibleChanged) volume.visible = edit.visible;
+					if (edit.renderableChanged) volume.renderable = edit.renderable;
+					SceneSystem::PushSelectionAndVisibilityToWindowState(windowState.sceneRegistry, windowState);
+				}
+				if (activated)
+					applyAnnotationRowSelection(windowState, SelectionRowKind::HideVolume, ids, id, selection);
+				const bool mutated = drawSceneObjectContextMenu(
+					windowState, SelectionRowKind::HideVolume, id, selection, contextRequested);
+				ImGui::PopID();
+				if (mutated) break;
+			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
 	}
 } // namespace DefectStudio

@@ -46,6 +46,12 @@ namespace DefectStudio
 			return PanelCategory::Other;
 		}
 
+		// Submenu inside the category's drawer (nullptr: listed directly in the drawer).
+		[[nodiscard]] virtual const char *GetSubcategory() const
+		{
+			return nullptr;
+		}
+
 		[[nodiscard]] virtual Ref<IPanel> Clone() const = 0;
 
 		virtual void Render() = 0;

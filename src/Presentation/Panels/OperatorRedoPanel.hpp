@@ -22,8 +22,9 @@ namespace DefectStudio
 	public:
 		// Captures the pre-operation scene, pushes ONE undo entry for the whole session, runs the
 		// operator with its defaults and opens the panel. A failing run pushes nothing and leaves
-		// the panel closed.
-		[[nodiscard]] Result<void> RunAndOpen(const SceneOperator &op, RendererWindowState &window);
+		// the panel closed. initialValues override defaults, including a menu's insertion target.
+		[[nodiscard]] Result<void> RunAndOpen(const SceneOperator &op, RendererWindowState &window,
+			const SceneOperatorValues &initialValues = {});
 
 		// Restores the held snapshot AND the selection the operator consumed, then runs it again
 		// with `values`. Does not touch the undo stack. A failing run closes the panel and leaves
@@ -45,6 +46,8 @@ namespace DefectStudio
 
 		// The ImGui body, drawn in the viewport's bottom-left corner. A no-op while closed.
 		void Draw(RendererWindowState &window);
+		// Call before viewport actions; the click that created the panel belongs to the operator.
+		void HandleViewportActivity(bool clicked, bool operationStarted) noexcept;
 
 	private:
 		void CommitEdit(SceneOperatorValues before);
@@ -69,5 +72,6 @@ namespace DefectStudio
 		std::size_t m_UndoDepth = 0;
 		bool m_Open = false;
 		bool m_Collapsed = false;
+		bool m_JustOpened = false;
 	};
 }

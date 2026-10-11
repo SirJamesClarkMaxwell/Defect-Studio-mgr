@@ -182,6 +182,42 @@ namespace DefectStudio::Tests
 		}
 	}
 
+	TEST(ScenePathPickingTests, HiddenBoundEndpointsDoNotShadowTheVisiblePathBehind)
+	{
+		for (const bool vacancyBinding : {false, true})
+		{
+			PathSystem system;
+			InsertAndPrime(system, StraightPath(1, 0.0f));
+			ScenePath front = StraightPath(2, 2.0f);
+			if (vacancyBinding) front.nodes.front().binding.value = PathBinding::CopyVacancy{0};
+			else front.nodes.front().binding.value = PathBinding::CopyPosition{0};
+			InsertAndPrime(system, std::move(front));
+			RendererStructureData structure;
+			structure.atoms.resize(1);
+			structure.atoms[0].visible = false;
+			structure.vacancies.resize(1);
+			structure.vacancies[0].hidden = true;
+			const auto settings = Settings(glm::vec2(400.0f, 300.0f));
+			auto pick = PickFrontmostScenePath(system, settings, {}, structure);
+			ASSERT_TRUE(pick);
+			EXPECT_EQ(pick->path, SceneObjectId{1});
+			structure.atoms[0].visible = true;
+			structure.vacancies[0].hidden = false;
+			pick = PickFrontmostScenePath(system, settings, {}, structure);
+			ASSERT_TRUE(pick);
+			EXPECT_EQ(pick->path, SceneObjectId{2});
+			if (vacancyBinding)
+			{
+				SceneHideVolume volume;
+				volume.visible = false;
+				const std::vector<SceneHideVolume> volumes{volume};
+				pick = PickFrontmostScenePath(system, settings, {}, structure, volumes);
+				ASSERT_TRUE(pick);
+				EXPECT_EQ(pick->path, SceneObjectId{1});
+			}
+		}
+	}
+
 	// Criterion 8: the documented ceiling - a path the render pass never reached has no shaft.
 	TEST(ScenePathPickingTests, PathWithNoCachedGeometryOffersNoShaft)
 	{

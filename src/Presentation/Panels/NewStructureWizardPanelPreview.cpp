@@ -11,6 +11,8 @@
 #include <imgui.h>
 
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "ScientificRuntime/Python/OpenDefectJob.hpp"
 #include "ScientificRuntime/Python/PymatgenConversion.hpp"
 #include "Core/Platform/FileDialog.hpp"
@@ -43,6 +45,17 @@ namespace DefectStudio
 				return params;
 			}
 	} // namespace
+
+	void NewStructureWizardPanel::reportLoadFailure(const StructuredError &error)
+	{
+		m_LoadError = error.userMessage;
+		if (m_EventBus != nullptr)
+		{
+			Notification notification = ToNotification(error);
+			notification.title = "Nie udało się wczytać struktury";
+			m_EventBus->Queue(NotificationRequestedEvent{std::move(notification)});
+		}
+	}
 
 	void NewStructureWizardPanel::drawFileLoadSection()
 	{
@@ -119,7 +132,7 @@ namespace DefectStudio
 			Platform::PickOpenFile(Path{}, "Structure files", "vasp,cif,POSCAR,CONTCAR");
 		if (!picked)
 		{
-			m_LoadError = picked.Error().userMessage;
+			reportLoadFailure(picked.Error());
 			return;
 		}
 		if (!picked.Value().has_value())
@@ -187,7 +200,8 @@ namespace DefectStudio
 		Ref<JobSystem> jobSystem = m_JobSystem.lock();
 		if (jobSystem == nullptr)
 		{
-			m_LoadError = "JobSystem unavailable";
+			reportLoadFailure(StructuredError(ErrorCategory::Runtime, Severity::Error,
+				"System zadań jest niedostępny", "JobSystem unavailable", "Uruchom aplikację ponownie."));
 			return;
 		}
 
@@ -199,6 +213,14 @@ namespace DefectStudio
 		// frame for the whole cold-import cost.
 		m_PendingLoadJob = CreateRef<OpenDefectJob>(Path(filePath), filePath);
 		m_PendingLoadJobId = jobSystem->Submit(m_PendingLoadJob, JobPriority::Normal);
+		if (m_PendingLoadJobId == 0)
+		{
+			m_PendingLoadJob.reset();
+			reportLoadFailure(StructuredError(ErrorCategory::Runtime, Severity::Error,
+				"Nie udało się rozpocząć wczytywania struktury", "JobSystem::Submit returned 0",
+				"Uruchom aplikację ponownie."));
+			return;
+		}
 		m_LoadError.clear();
 		m_LoadStatus.clear();
 	}
@@ -210,13 +232,20 @@ namespace DefectStudio
 
 		Ref<JobSystem> jobSystem = m_JobSystem.lock();
 		if (jobSystem == nullptr)
+		{
+			m_PendingLoadJob.reset();
+			m_PendingLoadJobId = 0;
+			reportLoadFailure(StructuredError(ErrorCategory::Runtime, Severity::Error,
+				"Wczytywanie struktury zostało przerwane", "JobSystem unavailable while polling",
+				"Uruchom aplikację ponownie."));
 			return;
+		}
 
 		const std::optional<JobSnapshot> snapshot = jobSystem->GetJob(m_PendingLoadJobId);
-		if (!snapshot.has_value() || snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)
+		if (snapshot.has_value() && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running))
 			return;
 
-		if (snapshot->status == JobStatus::Completed && m_PendingLoadJob->GetResult().has_value())
+		if (snapshot.has_value() && snapshot->status == JobStatus::Completed && m_PendingLoadJob->GetResult().has_value())
 		{
 			const CrystalStructure loaded = ConvertPymatgenStructureToCrystalStructure(
 				*m_PendingLoadJob->GetResult(), m_PendingLoadJob->GetDisplayName());
@@ -226,9 +255,9 @@ namespace DefectStudio
 		}
 		else
 		{
-			m_LoadError = snapshot.has_value() && !snapshot->errorMessage.empty()
-				? snapshot->errorMessage
-				: "Structure load failed";
+			reportLoadFailure(StructuredError(ErrorCategory::IO, Severity::Error,
+				"Nie udało się wczytać struktury", snapshot.has_value() ? snapshot->errorMessage : "Job outcome unavailable",
+				"Sprawdź plik oraz dziennik i spróbuj ponownie."));
 		}
 
 		m_PendingLoadJob.reset();

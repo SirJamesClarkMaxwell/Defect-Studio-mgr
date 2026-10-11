@@ -92,6 +92,7 @@ namespace DefectStudio
 		// Submit-only: publishes SessionReadyForStructureHub, which puts the draft on the Hub's
 		// list. It opens nothing - the panes are already open.
 		void moveToStructureHub();
+		void reportLoadFailure(const StructuredError &error);
 		// Keeps the registry's copy of the draft current while the user edits.
 		void syncDraftToSession();
 

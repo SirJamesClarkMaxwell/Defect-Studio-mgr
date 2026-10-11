@@ -269,6 +269,17 @@ namespace DefectStudio
 		return m_Path.string();
 	}
 
+	std::string Path::Utf8() const
+	{
+		const std::u8string utf8 = m_Path.u8string();
+		return std::string(utf8.begin(), utf8.end());
+	}
+
+	Path Path::FromUtf8(const std::string_view utf8)
+	{
+		return Path(std::filesystem::path(std::u8string(utf8.begin(), utf8.end())));
+	}
+
 	bool Path::Empty() const
 	{
 		return m_Path.empty();

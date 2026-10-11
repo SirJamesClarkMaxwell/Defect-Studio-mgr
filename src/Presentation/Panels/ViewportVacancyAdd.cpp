@@ -15,6 +15,7 @@
 #include "Domain/Defects/DefectModel.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/ScenePathOperations.hpp"
+#include "Renderer/Scene/HiddenSceneState.hpp"
 #include "Renderer/Path/PathTopology.hpp"
 #include "Renderer/Path/VacancyBond.hpp"
 #include "Presentation/Panels/ViewportDefectFrame.hpp"
@@ -75,15 +76,18 @@ namespace DefectStudio
 			// As thick as the atom's own bonds; vacancy-vacancy lines (or a bondless atom) fall back
 			// to the structure's first bond.
 			float bondRadius = windowState.structure.bonds.empty() ? 0.09f : windowState.structure.bonds.front().radius;
+			if (!std::isfinite(bondRadius)) bondRadius = 0.09f;
 			if (atomIndex)
 			{
 				float atomBond = 0.0f;
 				for (const RendererBondData &bond : windowState.structure.bonds)
-					if (bond.firstAtomIndex == *atomIndex || bond.secondAtomIndex == *atomIndex)
+					if (std::isfinite(bond.radius) && (bond.firstAtomIndex == *atomIndex || bond.secondAtomIndex == *atomIndex))
 						atomBond = std::max(atomBond, bond.radius);
 				if (atomBond > 0.0f)
 					bondRadius = atomBond;
 			}
+			// Legacy/invalid thickness settings must not turn generated vacancy bonds into zero-width paths.
+			if (!std::isfinite(bondRadiusMultiplier) || bondRadiusMultiplier <= 0.0f) bondRadiusMultiplier = 1.0f;
 			path.style.width = 2.0f * std::max(bondRadius, 0.001f) * bondRadiusMultiplier;
 			path.style.gradient.enabled = true;
 			path.style.gradient.stops = {{0.0f, startColor, 1.0f}, {1.0f, endColor, 1.0f}};
@@ -156,13 +160,26 @@ namespace DefectStudio
 			return retained;
 		}
 
-		[[nodiscard]] float NearestShownAtomDistance(const RendererWindowState &windowState, const glm::vec3 &position)
+		// Hidden by hand (H), read from the scene rather than the mirror: a hide volume's cut is a
+		// view, not a statement about which atoms neighbour a vacancy. Taking it into account made a
+		// volume that covered the real shell bond the vacancy to a far atom (task 91).
+		[[nodiscard]] std::vector<bool> ShownByHand(const RendererWindowState &windowState)
+		{
+			std::vector<bool> shown(windowState.structure.atoms.size(), true);
+			for (const std::size_t index : CaptureHiddenSceneState(windowState).atomIndices)
+				if (index < shown.size())
+					shown[index] = false;
+			return shown;
+		}
+
+		[[nodiscard]] float NearestShownAtomDistance(
+			const RendererWindowState &windowState, const std::vector<bool> &shown, const glm::vec3 &position)
 		{
 			float nearest = std::numeric_limits<float>::max();
-			for (const RendererAtomData &atom : windowState.structure.atoms)
-				if (atom.visible)
+			for (std::size_t index = 0; index < windowState.structure.atoms.size(); ++index)
+				if (shown[index])
 				{
-					const float distance = glm::length(atom.cartesianPosition - position);
+					const float distance = glm::length(windowState.structure.atoms[index].cartesianPosition - position);
 					if (distance > 1.0e-3f)
 						nearest = std::min(nearest, distance);
 				}
@@ -188,12 +205,13 @@ namespace DefectStudio
 	std::vector<std::size_t> NeighbourShell(const RendererWindowState &windowState, const glm::vec3 &position)
 	{
 		const auto &atoms = windowState.structure.atoms;
-		const float nearest = NearestShownAtomDistance(windowState, position);
+		const std::vector<bool> shown = ShownByHand(windowState);
+		const float nearest = NearestShownAtomDistance(windowState, shown, position);
 		std::vector<std::size_t> shell;
 		for (std::size_t index = 0; index < atoms.size(); ++index)
 		{
 			const float distance = glm::length(atoms[index].cartesianPosition - position);
-			if (atoms[index].visible && distance > 1.0e-3f && distance <= nearest * kShellTolerance)
+			if (shown[index] && distance > 1.0e-3f && distance <= nearest * kShellTolerance)
 				shell.push_back(index);
 		}
 		return shell;
@@ -237,7 +255,7 @@ namespace DefectStudio
 			for (const std::size_t a : chosen)
 			{
 				const glm::vec3 &first = vacancies[a].cartesianPosition;
-				const float shell = NearestShownAtomDistance(windowState, first) * kShellTolerance;
+				const float shell = NearestShownAtomDistance(windowState, ShownByHand(windowState), first) * kShellTolerance;
 				for (std::size_t b = 0; b < vacancies.size(); ++b)
 				{
 					const std::pair<std::size_t, std::size_t> pair{std::min(a, b), std::max(a, b)};
