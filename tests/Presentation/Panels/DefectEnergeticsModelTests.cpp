@@ -228,6 +228,55 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(mu.size(), 1u + 2u * 2u); // two sets x (C, Ge)
 	}
 
+	TEST(DefectEnergeticsModelTests, ExtraRootsUseTheDeepestRootAndMergeMatchingGroupsOnce)
+	{
+		EnergeticsFile file = Diamond();
+		file.runs.push_back(Run("X:/other/wrapper/GeSiV/q0", {"C", "Ge"}, {510, 1}, {4, 14}, 2054, -5377));
+		file.runs.push_back(Run("X:/other/GeV/q0", {"C", "Ge"}, {510, 1}, {4, 14}, 2054, -5376));
+		file.runs.push_back(Run("X:/other/Vacancy/q0", {"C"}, {511}, {4}, 2044, -5380));
+		file.runs.push_back(Run("X:/outside/Excluded/q0", {"C"}, {511}, {4}, 2044, -5380));
+		file.extraRoots = {Path::FromUtf8("X:/other"), Path::FromUtf8("X:/other/wrapper/GeSiV/"),
+			Path::FromUtf8("X:/other"), Path::FromUtf8("O:/GeV")};
+		const auto check = [&](const EnergeticsModel &model) {
+			ASSERT_EQ(model.rows.size(), 4u);
+			EXPECT_EQ(model.rows[0].defect, "GeSiV");
+			EXPECT_EQ(model.rows[0].candidates, (std::vector<std::size_t>{5}));
+			EXPECT_EQ(model.rows[1].defect, "GeV");
+			EXPECT_EQ(model.rows[1].charge, 0);
+			EXPECT_EQ(model.rows[1].candidates, (std::vector<std::size_t>{0, 6}));
+			EXPECT_EQ(model.rows[2].charge, -1);
+			EXPECT_EQ(model.rows[2].candidates, (std::vector<std::size_t>{1, 2}));
+			EXPECT_EQ(model.rows[3].defect, "Vacancy");
+			EXPECT_EQ(model.rows[3].candidates, (std::vector<std::size_t>{7}));
+		};
+		check(BuildEnergeticsModel(file, Fnv(), kEdges));
+		std::reverse(file.extraRoots.begin(), file.extraRoots.end());
+		check(BuildEnergeticsModel(file, Fnv(), kEdges));
+		file.extraRoots.clear();
+		EXPECT_EQ(BuildEnergeticsModel(file, Fnv(), kEdges).rows.size(), 2u);
+		file.root = {};
+		file.extraRoots = {Path::FromUtf8("X:/other/wrapper/GeSiV")};
+		const auto extraOnly = BuildEnergeticsModel(file, Fnv(), kEdges);
+		ASSERT_EQ(extraOnly.rows.size(), 1u);
+		EXPECT_EQ(extraOnly.rows[0].defect, "GeSiV");
+	}
+
+	TEST(DefectEnergeticsModelTests, HiddenDefectsHaveNoRowsOrExportsAndRestoreTheirChoices)
+	{
+		EnergeticsFile file = Diamond();
+		file.choices.push_back({"GeV", -1, file.runs[1].directory, {}, true});
+		file.hiddenDefects = {"GeV"};
+		const auto hidden = BuildEnergeticsModel(file, Fnv(), kEdges);
+		EXPECT_TRUE(hidden.rows.empty());
+		for (const auto &[name, text] : ExportEnergeticsTsv(hidden, file, Fnv()))
+			EXPECT_EQ(text.find("GeV"), std::string::npos) << name;
+		file.hiddenDefects.clear();
+		const auto restored = BuildEnergeticsModel(file, Fnv(), kEdges);
+		ASSERT_EQ(restored.rows.size(), 2u);
+		EXPECT_EQ(restored.rows[1].energyRun, std::optional<std::size_t>(1));
+		EXPECT_TRUE(restored.rows[1].userChoice);
+	}
+
 	// Opt-in, real data: DS_ENERGETICS_DATA = test-directory/fnv-diamond/okeanos/data (local copies of
 	// the thesis runs, <defect>/q<n>/ and bulk/), DS_ENERGETICS_MU = the folder with Ge/, Si/, N/
 	// references (O:/Potencjaly_chemiczne). Every neutral state against the reproduction table

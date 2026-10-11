@@ -3,6 +3,7 @@
 #include "Presentation/Panels/DefectEnergeticsSession.hpp"
 
 #include <algorithm>
+#include <array>
 #include <format>
 
 #include "Core/JobSystem/JobContext.hpp"
@@ -12,20 +13,29 @@
 
 namespace DefectStudio
 {
-	// Walks the folder and reads every run's OUTCAR head and tail, reusing the cached record of a
+	// Walks the folders and reads every run's OUTCAR head and tail, reusing the cached record of a
 	// run whose OUTCAR did not change. The walk alone takes minutes on the Okeanos mount.
 	class VaspRunScanJob final : public IJob
 	{
 	public:
-		VaspRunScanJob(Path root, std::vector<VaspRunRecord> cached)
-			: m_Root(std::move(root)), m_Cached(std::move(cached)) {}
+		VaspRunScanJob(std::vector<Path> roots, std::vector<VaspRunRecord> cached)
+			: m_Roots(std::move(roots)), m_Cached(std::move(cached)) {}
 
 		[[nodiscard]] std::string GetName() const override { return "Skan obliczeń VASP"; }
 		[[nodiscard]] std::string GetType() const override { return "energetics.scan"; }
 		void Execute(JobContext &context) override
 		{
 			context.SetStage("Szukanie OUTCAR");
-			const auto runs = VaspRunRecordIO::FindRuns(m_Root, [&] { return context.IsCancellationRequested(); });
+			std::vector<Path> runs;
+			for (const Path &root : m_Roots)
+			{
+				context.ThrowIfCancellationRequested();
+				const auto found = VaspRunRecordIO::FindRuns(root, [&] { return context.IsCancellationRequested(); });
+				for (const Path &path : found)
+					runs.push_back(Path::FromResolved(path.Native().lexically_normal()));
+			}
+			std::sort(runs.begin(), runs.end(), [](const Path &a, const Path &b) { return a.Native() < b.Native(); });
+			runs.erase(std::unique(runs.begin(), runs.end()), runs.end());
 			context.ThrowIfCancellationRequested();
 			std::vector<VaspRunRecord> records;
 			for (std::size_t i = 0; i < runs.size(); ++i)
@@ -34,16 +44,17 @@ namespace DefectStudio
 				context.SetProgress(static_cast<float>(i), static_cast<float>(runs.size()));
 				context.SetMessage(runs[i].Utf8());
 				const auto cached = std::find_if(m_Cached.begin(), m_Cached.end(),
-					[&](const VaspRunRecord &record) { return record.directory == runs[i]; });
+					[&](const VaspRunRecord &record) { return record.directory.Native().lexically_normal() == runs[i].Native(); });
 				records.push_back(cached != m_Cached.end() && VaspRunRecordIO::IsUpToDate(*cached)
 					? *cached : VaspRunRecordIO::Read(runs[i]));
 			}
 			m_Result = std::move(records);
 		}
 		[[nodiscard]] std::optional<std::vector<VaspRunRecord>> &Result() noexcept { return m_Result; }
+		[[nodiscard]] const std::vector<Path> &Roots() const noexcept { return m_Roots; }
 
 	private:
-		Path m_Root;
+		std::vector<Path> m_Roots;
 		std::vector<VaspRunRecord> m_Cached;
 		std::optional<std::vector<VaspRunRecord>> m_Result;
 	};
@@ -86,6 +97,11 @@ namespace DefectStudio
 	void DefectEnergeticsSession::rebuild()
 	{
 		m_Model = BuildEnergeticsModel(*m_File, fnvFile(), m_Edges);
+		// Old concentration snapshots must not keep a removed defect visible or exportable.
+		if (std::any_of(m_Concentrations.defects.begin(), m_Concentrations.defects.end(), [&](const auto &defect) {
+			return std::none_of(m_Model.rows.begin(), m_Model.rows.end(), [&](const auto &row) { return row.defect == defect; });
+		}))
+			m_Concentrations = {};
 		const Path bulk = m_Model.bulk ? m_File->runs[*m_Model.bulk].directory : Path{};
 		if (bulk != m_BulkDirectory)
 		{
@@ -102,6 +118,57 @@ namespace DefectStudio
 	{
 		m_Changed = true;
 		InvalidateInputs();
+	}
+
+	void DefectEnergeticsSession::HideDefect(const std::string &name)
+	{
+		auto &hidden = m_File->hiddenDefects;
+		if (name.empty() || std::find(hidden.begin(), hidden.end(), name) != hidden.end())
+			return;
+		hidden.push_back(name);
+		Changed();
+	}
+
+	void DefectEnergeticsSession::RestoreDefect(const std::string &name)
+	{
+		// Copy before erasing: the caller may hold a reference into hiddenDefects.
+		const std::string restored = name;
+		if (std::erase(m_File->hiddenDefects, restored) != 0)
+			Changed();
+	}
+
+	void DefectEnergeticsSession::AddDefectFolder(const Path &path)
+	{
+		if (path.Empty()) return;
+		const std::array single{path};
+		const auto normal = CalculationRoot(path, single);
+		if (!normal) return;
+		const std::array primary{m_File->root};
+		if (!CalculationRoot(*normal, primary) &&
+			std::none_of(m_File->extraRoots.begin(), m_File->extraRoots.end(), [&](const Path &root) {
+				const std::array candidate{root};
+				return CalculationRoot(root, candidate) == normal;
+			}))
+		{
+			m_File->extraRoots.push_back(*normal);
+			Changed();
+		}
+		startScan();
+	}
+
+	void DefectEnergeticsSession::RemoveExtraRoot(const Path &path)
+	{
+		const std::array single{path};
+		const auto normal = CalculationRoot(path, single);
+		if (!normal) return;
+		if (std::erase_if(m_File->extraRoots, [&](const Path &root) {
+			const std::array candidate{root};
+			return CalculationRoot(root, candidate) == normal;
+		}) == 0)
+			return;
+		Changed();
+		if (m_ScanJob)
+			startScan();
 	}
 
 	void DefectEnergeticsSession::readBandEdges()
@@ -142,9 +209,17 @@ namespace DefectStudio
 	void DefectEnergeticsSession::startScan()
 	{
 		const auto jobSystem = m_JobSystem.lock();
-		if (m_ScanJob || !jobSystem || m_File->root.Empty())
+		if (!jobSystem)
 			return;
-		m_ScanJob = CreateRef<VaspRunScanJob>(m_File->root, m_File->runs);
+		if (m_ScanJob)
+			(void)jobSystem->RequestCancel(m_ScanJobId);
+		m_ScanJob.reset();
+		m_ScanJobId = 0;
+		std::vector<Path> roots = m_File->extraRoots;
+		if (!m_File->root.Empty()) roots.push_back(m_File->root);
+		std::erase_if(roots, [](const Path &root) { return root.Empty(); });
+		if (roots.empty()) return;
+		m_ScanJob = CreateRef<VaspRunScanJob>(std::move(roots), m_File->runs);
 		m_ScanJobId = jobSystem->Submit(m_ScanJob, JobPriority::Normal);
 		m_Message.clear();
 	}
@@ -159,10 +234,10 @@ namespace DefectStudio
 			return;
 		if (snapshot && snapshot->status == JobStatus::Completed && m_ScanJob->Result())
 		{
-			// Runs outside the root were added by hand (mu references): the walk cannot find them again.
+			// Runs outside all scanned roots were added by hand (mu references).
 			std::vector<VaspRunRecord> outside;
 			for (auto &run : m_File->runs)
-				if (Relative(run.directory, m_File->root) == run.directory.Utf8())
+				if (!CalculationRoot(run.directory, m_ScanJob->Roots()))
 					outside.push_back(std::move(run));
 			m_File->runs = std::move(*m_ScanJob->Result());
 			m_File->runs.insert(m_File->runs.end(), outside.begin(), outside.end());

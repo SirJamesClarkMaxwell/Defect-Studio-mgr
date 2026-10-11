@@ -19,6 +19,8 @@ namespace DefectStudio
 
 	private:
 		void drawSource();
+		void drawDefectSet();
+		void drawDefectContextMenu(const std::string &defect);
 		void pickReference(const std::string &species);
 		void drawRows();
 		void drawCalculations(); // export, scan message, rows table and FNV queue

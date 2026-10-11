@@ -41,6 +41,8 @@ namespace DefectStudio::Tests
 		{
 			EnergeticsFile file;
 			file.root = Path::FromUtf8("O:/");
+			file.extraRoots = {kProject / Path::FromUtf8("data/GeSiV"), Path::FromUtf8("X:/other/GeV")};
+			file.hiddenDefects = {"GeN", "SiV"};
 			VaspRunRecord unread;
 			unread.directory = kProject / Path::FromUtf8("data/GeV/q0");
 			unread.error = "brak OUTCAR";
@@ -78,6 +80,10 @@ namespace DefectStudio::Tests
 		const std::string text = EnergeticsIO::Serialize(file, kProject);
 		EXPECT_NE(text.find("data/GeN/q-1/LOCPOT_1-"), std::string::npos); // relative inside the project
 		EXPECT_EQ(text.find("D:/projekty/diament/data"), std::string::npos);
+		EXPECT_NE(text.find("extra_roots:"), std::string::npos);
+		EXPECT_NE(text.find("data/GeSiV"), std::string::npos);
+		EXPECT_NE(text.find("X:/other/GeV"), std::string::npos);
+		EXPECT_NE(text.find("hidden_defects:"), std::string::npos);
 
 		EnergeticsFile parsed;
 		std::vector<std::string> warnings;
@@ -85,6 +91,8 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(EnergeticsIO::Parse(text, kProject, parsed, warnings, error)) << error;
 		EXPECT_TRUE(warnings.empty());
 		EXPECT_EQ(parsed.root, file.root);
+		EXPECT_EQ(parsed.extraRoots, file.extraRoots);
+		EXPECT_EQ(parsed.hiddenDefects, file.hiddenDefects);
 		ASSERT_EQ(parsed.runs.size(), 2u);
 		const VaspRunRecord &run = parsed.runs[0];
 		const VaspRunRecord expected = GeVMinus();
@@ -158,5 +166,23 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(error.empty());
 		EXPECT_FALSE(EnergeticsIO::Parse("- not a map\n", kProject, empty, warnings, error));
 		EXPECT_EQ(EnergeticsIO::FilePath(kProject), kProject / Path::FromUtf8("energetics.yaml"));
+	}
+
+	TEST(EnergeticsIOTests, DefectListsDefaultToEmptyAndBadEntriesDoNotDropGoodOnes)
+	{
+		EnergeticsFile parsed;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(EnergeticsIO::Parse("formatVersion: 1\n", kProject, parsed, warnings, error));
+		EXPECT_TRUE(parsed.extraRoots.empty());
+		EXPECT_TRUE(parsed.hiddenDefects.empty());
+		ASSERT_TRUE(EnergeticsIO::Parse(
+			"extra_roots: [data/GeV, '', {bad: path}, data/GeV]\n"
+			"hidden_defects: [GeV, '', {bad: name}, GeV]\n", kProject, parsed, warnings, error)) << error;
+		EXPECT_EQ(parsed.extraRoots, (std::vector<Path>{kProject / Path::FromUtf8("data/GeV")}));
+		EXPECT_EQ(parsed.hiddenDefects, (std::vector<std::string>{"GeV"}));
+		EXPECT_EQ(warnings.size(), 4u);
+		ASSERT_TRUE(EnergeticsIO::Parse("extra_roots: {}\nhidden_defects: {}\n", kProject, parsed, warnings, error));
+		EXPECT_EQ(warnings.size(), 2u);
 	}
 } // namespace DefectStudio::Tests

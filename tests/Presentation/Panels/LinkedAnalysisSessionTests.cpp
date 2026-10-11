@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <chrono>
+#include <fstream>
 
 #include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/DefectEnergeticsPanel.hpp"
@@ -9,6 +11,17 @@ namespace DefectStudio::Tests
 {
 	namespace
 	{
+		struct ScanWorkspace
+		{
+			Path root = Path::FromResolved(FileSystem::TempDirectoryPath()) /
+				("DefectStudioDefectSetTests_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+			~ScanWorkspace()
+			{
+				std::error_code ignored;
+				FileSystem::RemoveAll(root.Native(), ignored);
+			}
+		};
+
 		EnergeticsFile VacancyInputs()
 		{
 			EnergeticsFile file;
@@ -103,6 +116,110 @@ namespace DefectStudio::Tests
 		session.InvalidateInputs();
 		session.FlushChanges();
 		EXPECT_FALSE(session.ConcentrationsCurrent());
+	}
+
+	TEST(LinkedAnalysisSessionTests, DefectSetEditsSaveOnceAtFlushAndDoNotDuplicateRoots)
+	{
+		DefectEnergeticsSession session(WeakRef<JobSystem>{});
+		EnergeticsFile file;
+		file.root = Path::FromUtf8("O:/data");
+		session.SetPersistedState(file);
+		int saves = 0;
+		session.SetSaveHandler([&](const EnergeticsFile &saved) { file = saved; ++saves; });
+		session.HideDefect("GeV");
+		session.HideDefect("GeV");
+		session.HideDefect("");
+		session.AddDefectFolder(Path::FromUtf8("O:/data/GeV"));
+		session.AddDefectFolder(Path::FromUtf8("O:/data"));
+		session.AddDefectFolder({});
+		session.AddDefectFolder(Path::FromUtf8("X:/other/GeV"));
+		session.AddDefectFolder(Path::FromUtf8("X:/other/./GeV/"));
+		EXPECT_EQ(saves, 0);
+		session.FlushChanges();
+		EXPECT_EQ(saves, 1);
+		EXPECT_EQ(file.hiddenDefects, (std::vector<std::string>{"GeV"}));
+		EXPECT_EQ(file.extraRoots, (std::vector<Path>{Path::FromUtf8("X:/other/GeV")}));
+		session.RestoreDefect("GeV");
+		session.RemoveExtraRoot(Path::FromUtf8("X:/other/GeV/"));
+		session.FlushChanges();
+		EXPECT_EQ(saves, 2);
+		EXPECT_TRUE(file.hiddenDefects.empty());
+		EXPECT_TRUE(file.extraRoots.empty());
+		session.RestoreDefect("GeV");
+		session.RemoveExtraRoot(Path::FromUtf8("X:/other/GeV"));
+		session.FlushChanges();
+		EXPECT_EQ(saves, 2);
+	}
+
+	TEST(LinkedAnalysisSessionTests, HidingADefectDropsItsConcentrationSnapshotAtFlush)
+	{
+		const auto jobs = CreateRef<JobSystem>(Ref<EventBus>{}, 1);
+		DefectEnergeticsSession session(jobs);
+		session.SetPersistedState(VacancyInputs());
+		session.StartConcentrations();
+		ASSERT_TRUE(WaitForConcentrations(jobs));
+		session.Update();
+		ASSERT_TRUE(session.ConcentrationsCurrent());
+		ASSERT_EQ(session.Concentrations().defects, (std::vector<std::string>{"vacancy"}));
+		session.HideDefect("vacancy");
+		EXPECT_FALSE(session.ConcentrationsCurrent());
+		EXPECT_FALSE(session.Concentrations().solutions.empty()); // Deferred while views hold references.
+		session.FlushChanges();
+		EXPECT_TRUE(session.Concentrations().defects.empty());
+		EXPECT_TRUE(session.Concentrations().solutions.empty());
+		session.StartConcentrations();
+		EXPECT_EQ(jobs->GetAllJobs().size(), 1u); // Hidden states cannot start a new concentration job.
+	}
+
+	TEST(LinkedAnalysisSessionTests, ScanDeduplicatesOverlappingRootsReusesCacheAndKeepsOutsideReferences)
+	{
+		ScanWorkspace workspace;
+		EnergeticsFile file;
+		file.root = workspace.root / "primary";
+		const Path extra = workspace.root / "extra";
+		file.extraRoots = {extra, extra / "Vacancy"};
+		for (const Path &directory : {file.root / "Vacancy" / "q0", extra / "Vacancy" / "q0"})
+		{
+			ASSERT_TRUE(FileSystem::CreateDirectories(directory.Native()));
+			{
+				std::ofstream outcar((directory / "OUTCAR").Native(), std::ios::binary);
+				outcar << " TITEL = PAW_PBE C\n ions per type = 1\n ZVAL = 4\n NELECT = 4\n"
+					" free  energy   TOTEN = -10\n General timing and accounting\n";
+			}
+			file.runs.push_back(VaspRunRecordIO::Read(directory));
+			ASSERT_TRUE(file.runs.back().error.empty());
+			file.runs.back().method.encut = 1234; // Only the cache has this marker.
+		}
+		VaspRunRecord missing;
+		missing.directory = extra / "deleted" / "q0";
+		file.runs.push_back(missing);
+		VaspRunRecord reference;
+		reference.directory = workspace.root / "reference";
+		reference.error = "hand-added reference";
+		file.runs.push_back(reference);
+		const auto jobs = CreateRef<JobSystem>(Ref<EventBus>{}, 1);
+		DefectEnergeticsSession session(jobs);
+		session.SetPersistedState(file);
+		session.SetSaveHandler([&](const EnergeticsFile &saved) { file = saved; });
+		session.AddDefectFolder(file.root); // An already covered folder still rescans all roots.
+		ASSERT_EQ(jobs->GetAllJobs().size(), 1u);
+		ASSERT_TRUE(WaitForConcentrations(jobs));
+		EXPECT_EQ(file.runs.size(), 4u); // A job cannot commit state.
+		session.Update();
+		session.FlushChanges();
+		ASSERT_EQ(file.runs.size(), 3u);
+		for (const auto &run : file.runs)
+			if (run.directory == reference.directory)
+				EXPECT_EQ(run.error, reference.error);
+			else
+				EXPECT_EQ(run.method.encut, 1234);
+		EXPECT_EQ(std::count_if(file.runs.begin(), file.runs.end(), [&](const auto &run) {
+			return run.directory == extra / "Vacancy" / "q0";
+		}), 1);
+		EXPECT_EQ(std::count_if(file.runs.begin(), file.runs.end(), [&](const auto &run) {
+			return run.directory == reference.directory;
+		}), 1);
+		EXPECT_EQ(file.extraRoots.size(), 2u);
 	}
 
 	TEST(LinkedAnalysisSessionTests, StaleAndPreviousProjectJobsCannotReplaceResults)

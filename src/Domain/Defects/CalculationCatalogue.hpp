@@ -82,6 +82,11 @@ namespace DefectStudio
 	};
 	[[nodiscard]] std::vector<DefectRunGroup> GroupDefectRuns(std::span<const VaspRunRecord> records,
 		std::size_t bulk, const Path &root, int maxChangedAtoms = 10);
+	// Same grouping over several roots; each run belongs to its deepest containing root.
+	[[nodiscard]] std::vector<DefectRunGroup> GroupDefectRuns(std::span<const VaspRunRecord> records,
+		std::size_t bulk, std::span<const Path> roots, int maxChangedAtoms = 10);
+	// Includes the root directory itself; returns a lexically normalised root, or nullopt outside.
+	[[nodiscard]] std::optional<Path> CalculationRoot(const Path &directory, std::span<const Path> roots);
 
 	// Bulk candidates: usable, q = 0, the largest ion count of any usable run (the supercell, not a
 	// primitive cell or a reference), and no element outside those every such largest run has (so
