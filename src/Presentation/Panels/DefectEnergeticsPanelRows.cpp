@@ -79,6 +79,27 @@ namespace DefectStudio
 			(m_Session->m_Model.rows[first].hidden ? hiddenGroups : groups).emplace_back(first, last);
 			first = last;
 		}
+		// Multi-selection of defect nodes (Ctrl/Shift+click), stored by defect name so it survives a
+		// rebuild; item index = position in `order` (visible groups, then hidden ones).
+		std::vector<std::string> order;
+		for (const auto &list : {groups, hiddenGroups})
+			for (const auto [first, last] : list)
+				order.push_back(m_Session->m_Model.rows[first].defect);
+		m_DefectSelection.UserData = &order;
+		m_DefectSelection.AdapterIndexToStorageId = [](ImGuiSelectionBasicStorage *storage, const int index) {
+			return ImHashStr((*static_cast<const std::vector<std::string> *>(storage->UserData))[static_cast<std::size_t>(index)].c_str());
+		};
+		m_DefectSelection.ApplyRequests(ImGui::BeginMultiSelect(ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_ClearOnClickVoid,
+			m_DefectSelection.Size, static_cast<int>(order.size())));
+		const auto targetsFor = [&](const std::string &defect) {
+			if (!m_DefectSelection.Contains(ImHashStr(defect.c_str())))
+				return std::vector<std::string>{defect};
+			std::vector<std::string> selected;
+			for (const std::string &name : order)
+				if (m_DefectSelection.Contains(ImHashStr(name.c_str())))
+					selected.push_back(name);
+			return selected;
+		};
 		const auto drawGroup = [&](const std::size_t first, const std::size_t last)
 		{
 			const std::string defect = m_Session->m_Model.rows[first].defect;
@@ -105,9 +126,13 @@ namespace DefectStudio
 			ImGui::EndDisabled();
 			ImGui::SetItemTooltip("Uwzględnij wszystkie stany ładunkowe w wykresie, obwiedni i eksporcie.");
 			ImGui::SameLine();
-			const bool open = ImGui::TreeNodeEx(defect.c_str(), ImGuiTreeNodeFlags_SpanTextWidth);
-			drawDefectContextMenu(defect);
-			ImGui::SetItemTooltip("Prawy klik: ukryj / usuń z analizy.");
+			ImGui::SetNextItemSelectionUserData(static_cast<ImGuiSelectionUserData>(std::find(order.begin(), order.end(), defect) - order.begin()));
+			ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanTextWidth | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+			if (m_DefectSelection.Contains(ImHashStr(defect.c_str())))
+				nodeFlags |= ImGuiTreeNodeFlags_Selected;
+			const bool open = ImGui::TreeNodeEx(defect.c_str(), nodeFlags);
+			drawDefectContextMenu(targetsFor(defect));
+			ImGui::SetItemTooltip("Ctrl/Shift+klik: zaznacz kilka. Prawy klik: ukryj / uwzględnij / usuń (zaznaczone).");
 			ImGui::TableNextColumn();
 			ImGui::TextDisabled("q: %s", charges.c_str());
 			ImGui::TableSetColumnIndex(6);
@@ -138,6 +163,7 @@ namespace DefectStudio
 			}
 			ImGui::PopStyleColor();
 		}
+		m_DefectSelection.ApplyRequests(ImGui::EndMultiSelect());
 		ImGui::EndTable();
 
 		// FNV queue

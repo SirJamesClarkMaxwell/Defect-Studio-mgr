@@ -54,21 +54,33 @@ namespace DefectStudio
 		}
 	}
 
-	void DefectEnergeticsPanel::drawDefectContextMenu(const std::string &defect)
+	void DefectEnergeticsPanel::drawDefectContextMenu(const std::vector<std::string> &targets)
 	{
-		if (!ImGui::BeginPopupContextItem())
+		if (targets.empty() || !ImGui::BeginPopupContextItem())
 			return;
+		if (targets.size() > 1)
+			ImGui::TextDisabled("Zaznaczone: %zu", targets.size());
 		const auto &hidden = m_Session->m_File->hiddenDefects;
-		if (std::find(hidden.begin(), hidden.end(), defect) != hidden.end())
-		{
-			if (ImGui::MenuItem("Pokaż"))
-				m_Session->RestoreDefect(defect);
-		}
-		else if (ImGui::MenuItem("Ukryj"))
-			m_Session->HideDefect(defect);
+		const bool allHidden = std::all_of(targets.begin(), targets.end(), [&](const std::string &defect) {
+			return std::find(hidden.begin(), hidden.end(), defect) != hidden.end();
+		});
+		if (ImGui::MenuItem(allHidden ? "Pokaż" : "Ukryj"))
+			for (const std::string &defect : targets)
+				allHidden ? m_Session->RestoreDefect(defect) : m_Session->HideDefect(defect);
 		ImGui::SetItemTooltip("Zostaje w tabeli (przygaszony, na dole), poza wykresami, koncentracjami i eksportem.");
+		const auto include = [&](const bool included) {
+			for (const EnergeticsRow &row : m_Session->m_Model.rows)
+				if (std::find(targets.begin(), targets.end(), row.defect) != targets.end())
+					m_Session->choiceFor(row).included = included;
+			m_Session->Changed();
+		};
+		if (ImGui::MenuItem("Uwzględnij wszystkie stany"))
+			include(true);
+		if (ImGui::MenuItem("Wyklucz wszystkie stany"))
+			include(false);
 		if (ImGui::MenuItem("Usuń z analizy"))
-			m_Session->RemoveDefect(defect);
+			for (const std::string &defect : targets)
+				m_Session->RemoveDefect(defect);
 		ImGui::SetItemTooltip("Znika z tabeli. Przywrócisz go, dodając jego folder ponownie (drzewo projektu albo przycisk).");
 		ImGui::EndPopup();
 	}

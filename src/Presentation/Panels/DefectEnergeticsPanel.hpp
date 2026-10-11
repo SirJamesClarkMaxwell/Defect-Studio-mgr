@@ -1,6 +1,11 @@
 #pragma once
 
 #include <array>
+#include <string>
+#include <vector>
+
+#include <imgui.h>
+
 #include "Presentation/Panels/DefectEnergeticsSession.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 
@@ -20,7 +25,8 @@ namespace DefectStudio
 	private:
 		void drawSource();
 		void drawDefectSet();
-		void drawDefectContextMenu(const std::string &defect);
+		// `targets`: the clicked defect, or every selected one when it is part of the selection.
+		void drawDefectContextMenu(const std::vector<std::string> &targets);
 		void pickReference(const std::string &species);
 		void drawRows();
 		void drawCalculations(); // export, scan message, rows table and FNV queue
@@ -44,5 +50,6 @@ namespace DefectStudio
 		float m_ConcentrationHeight = 300.0f;
 		std::array<double, 2> m_FormationRange{};
 		std::array<char, 64> m_NewPhaseFormula{}, m_NewSetName{};
+		ImGuiSelectionBasicStorage m_DefectSelection; // Ctrl/Shift+click in the rows table, by defect name hash
 	};
 } // namespace DefectStudio
