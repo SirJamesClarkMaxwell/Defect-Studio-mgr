@@ -116,6 +116,7 @@ namespace DefectStudio
 		struct BulkDirectoryChangeRequested;
 		struct TextFileOpenRequested;
 		struct CalculationSummaryOpenRequested;
+		struct EnergeticsFoldersAddRequested;
 		struct IrrepLabelOverridesChanged;
 		struct DisplacementComparisonStateChanged;
 		struct DisplacementComparisonFileRequested;
@@ -227,6 +228,7 @@ namespace DefectStudio
 		void onTextFileOpenRequested(const ProjectEvents::TextFileOpenRequested &event);
 		// Calculation Summary panel: ProjectTreePanel's per-folder RMB "Show Calculation Summary".
 		void onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event);
+		void onEnergeticsFoldersAddRequested(const ProjectEvents::EnergeticsFoldersAddRequested &event);
 		// Custom (irrep -> label) table in ElectronicStructurePanel - see ProjectManifest::irrepLabelOverrides.
 		void onIrrepLabelOverridesChanged(const ProjectEvents::IrrepLabelOverridesChanged &event);
 		// Atoms-displacement comparison panel - see ProjectManifest::displacementComparisonPath.

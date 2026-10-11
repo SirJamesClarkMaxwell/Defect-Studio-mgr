@@ -43,6 +43,7 @@ namespace DefectStudio::Tests
 			file.root = Path::FromUtf8("O:/");
 			file.extraRoots = {kProject / Path::FromUtf8("data/GeSiV"), Path::FromUtf8("X:/other/GeV")};
 			file.hiddenDefects = {"GeN", "SiV"};
+			file.removedDefects = {"N_C"};
 			VaspRunRecord unread;
 			unread.directory = kProject / Path::FromUtf8("data/GeV/q0");
 			unread.error = "brak OUTCAR";
@@ -93,6 +94,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(parsed.root, file.root);
 		EXPECT_EQ(parsed.extraRoots, file.extraRoots);
 		EXPECT_EQ(parsed.hiddenDefects, file.hiddenDefects);
+		EXPECT_EQ(parsed.removedDefects, file.removedDefects);
 		ASSERT_EQ(parsed.runs.size(), 2u);
 		const VaspRunRecord &run = parsed.runs[0];
 		const VaspRunRecord expected = GeVMinus();

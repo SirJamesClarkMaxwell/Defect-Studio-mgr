@@ -97,9 +97,9 @@ namespace DefectStudio
 	void DefectEnergeticsSession::rebuild()
 	{
 		m_Model = BuildEnergeticsModel(*m_File, fnvFile(), m_Edges);
-		// Old concentration snapshots must not keep a removed defect visible or exportable.
+		// Old concentration snapshots must not keep a removed or hidden defect visible or exportable.
 		if (std::any_of(m_Concentrations.defects.begin(), m_Concentrations.defects.end(), [&](const auto &defect) {
-			return std::none_of(m_Model.rows.begin(), m_Model.rows.end(), [&](const auto &row) { return row.defect == defect; });
+			return std::none_of(m_Model.rows.begin(), m_Model.rows.end(), [&](const auto &row) { return row.defect == defect && !row.hidden; });
 		}))
 			m_Concentrations = {};
 		const Path bulk = m_Model.bulk ? m_File->runs[*m_Model.bulk].directory : Path{};
@@ -137,9 +137,32 @@ namespace DefectStudio
 			Changed();
 	}
 
+	void DefectEnergeticsSession::RemoveDefect(const std::string &name)
+	{
+		const std::string removed = name; // a copy: the lists below may hold the caller's string
+		if (removed.empty() || std::find(m_File->removedDefects.begin(), m_File->removedDefects.end(), removed) != m_File->removedDefects.end())
+			return;
+		std::erase(m_File->hiddenDefects, removed);
+		m_File->removedDefects.push_back(removed);
+		Changed();
+	}
+
 	void DefectEnergeticsSession::AddDefectFolder(const Path &path)
 	{
 		if (path.Empty()) return;
+		// Defects already scanned under `path` come back (removed or hidden ones).
+		if (m_Model.bulk)
+		{
+			std::vector<Path> roots = m_File->extraRoots;
+			roots.push_back(m_File->root);
+			const std::array folder{path};
+			for (const DefectRunGroup &group : GroupDefectRuns(m_File->runs, *m_Model.bulk, roots))
+				if (std::any_of(group.runs.begin(), group.runs.end(), [&](const std::size_t run) {
+						return CalculationRoot(m_File->runs[run].directory, folder).has_value();
+					}) &&
+					(std::erase(m_File->removedDefects, group.defect) + std::erase(m_File->hiddenDefects, group.defect)) != 0)
+					Changed();
+		}
 		const std::array single{path};
 		const auto normal = CalculationRoot(path, single);
 		if (!normal) return;

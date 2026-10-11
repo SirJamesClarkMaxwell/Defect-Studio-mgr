@@ -66,7 +66,8 @@ namespace DefectStudio
 		int formatVersion = 1;
 		Path root;                    // the scanned folder
 		std::vector<Path> extraRoots;
-		std::vector<std::string> hiddenDefects;
+		std::vector<std::string> hiddenDefects;  // still listed (dimmed), left out of the analysis
+		std::vector<std::string> removedDefects; // not listed at all; adding their folder again restores them
 		std::vector<VaspRunRecord> runs; // the last scan, the cache
 		std::optional<Path> bulkRun;  // unset = the only BulkCandidates entry
 		std::vector<EnergeticsChoice> choices;

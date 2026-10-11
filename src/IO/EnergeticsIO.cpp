@@ -245,6 +245,12 @@ namespace DefectStudio
 				if (std::find(file.hiddenDefects.begin(), file.hiddenDefects.end(), name) == file.hiddenDefects.end())
 					file.hiddenDefects.push_back(name);
 			});
+			entries("removed_defects", [&](const auto &node) {
+				const auto name = node.template as<std::string>();
+				if (name.empty()) throw std::invalid_argument("empty defect name");
+				if (std::find(file.removedDefects.begin(), file.removedDefects.end(), name) == file.removedDefects.end())
+					file.removedDefects.push_back(name);
+			});
 			entries("runs", [&](const auto &node) { file.runs.push_back(ReadRun(node, projectDirectory)); });
 			entries("choices", [&](const auto &node) {
 				RequireMap(node);
@@ -322,6 +328,7 @@ namespace DefectStudio
 		for (const auto &root : file.extraRoots) emit << StoredPath(root, projectDirectory);
 		emit << YAML::EndSeq;
 		EmitSequence(emit, "hidden_defects", file.hiddenDefects);
+		EmitSequence(emit, "removed_defects", file.removedDefects);
 		if (file.bulkRun) EmitValue(emit, "bulkRun", StoredPath(*file.bulkRun, projectDirectory));
 		EmitValue(emit, "dielectric", file.dielectric);
 		EmitValue(emit, "dielectricSource", file.dielectricSource);

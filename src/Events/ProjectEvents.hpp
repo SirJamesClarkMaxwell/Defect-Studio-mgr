@@ -71,6 +71,14 @@ namespace DefectStudio::ProjectEvents
 		Path directory;
 	};
 
+	// Queued from ProjectTreePanel's RMB "Dodaj do analizy termodynamicznej" (every selected folder
+	// when the clicked one is part of a multi-selection). EditorLayer adds them to the Defect
+	// Energetics session (AddDefectFolder: extra root or restore) and shows its main window.
+	struct EnergeticsFoldersAddRequested final : public BusEvent
+	{
+		std::vector<Path> directories;
+	};
+
 	// Queued from ElectronicStructurePanel's custom irrep-label editor (add/remove/edit a row).
 	// EditorLayer applies the whole list to ElectronicStructureSession immediately (works even with
 	// no project open) and persists it into the active project's manifest if one exists - same

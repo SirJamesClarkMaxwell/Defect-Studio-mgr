@@ -1361,6 +1361,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onTextFileOpenRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::CalculationSummaryOpenRequested>(
 			*m_EventBus, *this, &EditorLayer::onCalculationSummaryOpenRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::EnergeticsFoldersAddRequested>(
+			*m_EventBus, *this, &EditorLayer::onEnergeticsFoldersAddRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::IrrepLabelOverridesChanged>(
 			*m_EventBus, *this, &EditorLayer::onIrrepLabelOverridesChanged, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonStateChanged>(

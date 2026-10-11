@@ -164,4 +164,14 @@ namespace DefectStudio
 		panel->Session()->OpenDirectory(event.directory);
 		panel->RequestFocus();
 	}
+
+	void EditorLayer::onEnergeticsFoldersAddRequested(const ProjectEvents::EnergeticsFoldersAddRequested &event)
+	{
+		if (!m_DefectEnergeticsSession)
+			return;
+		for (const Path &directory : event.directories)
+			m_DefectEnergeticsSession->AddDefectFolder(directory);
+		if (const auto panel = findPanel(m_DefectEnergeticsPanelId).lock())
+			panel->SetVisible(true);
+	}
 } // namespace DefectStudio

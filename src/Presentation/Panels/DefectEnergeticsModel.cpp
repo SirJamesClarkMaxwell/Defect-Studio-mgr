@@ -119,7 +119,7 @@ namespace DefectStudio
 		roots.push_back(file.root);
 		for (const DefectRunGroup &group : GroupDefectRuns(file.runs, *model.bulk, roots))
 		{
-			if (std::find(file.hiddenDefects.begin(), file.hiddenDefects.end(), group.defect) != file.hiddenDefects.end())
+			if (std::find(file.removedDefects.begin(), file.removedDefects.end(), group.defect) != file.removedDefects.end())
 				continue;
 			EnergeticsRow row;
 			row.defect = group.defect;
@@ -138,6 +138,8 @@ namespace DefectStudio
 				}
 			if (choice)
 				row.included = choice->included;
+			row.hidden = std::find(file.hiddenDefects.begin(), file.hiddenDefects.end(), row.defect) != file.hiddenDefects.end();
+			row.included = row.included && !row.hidden;
 			if (choice && choice->locpot)
 				row.locpot = *choice->locpot;
 			else if (row.energyRun && file.runs[*row.energyRun].hasLocpot)
