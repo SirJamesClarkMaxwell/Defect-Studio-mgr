@@ -160,12 +160,23 @@ namespace DefectStudio
 		return clipboard;
 	}
 
+	namespace
+	{
+		// The window the clipboard was copied from: atom anchors are indices into its structure only.
+		std::string &HideVolumeClipboardSource()
+		{
+			static std::string windowId;
+			return windowId;
+		}
+	} // namespace
+
 	void CopySceneHideVolumesToClipboard(const RendererWindowState &windowState)
 	{
 		auto copies = SelectedVolumes(windowState);
 		for (SceneHideVolume &copy : copies)
 			copy.center = ResolveHideVolumeCenter(copy, windowState.structure).value_or(copy.center);
 		GetSceneHideVolumeClipboard() = std::move(copies);
+		HideVolumeClipboardSource() = windowState.windowId;
 	}
 
 	void PasteSceneHideVolumesFromClipboard(RendererWindowState &windowState)
@@ -173,10 +184,14 @@ namespace DefectStudio
 		auto copies = GetSceneHideVolumeClipboard();
 		if (copies.empty()) return;
 		const auto atoms = SelectedAtoms(windowState);
+		const bool sameStructure = HideVolumeClipboardSource() == windowState.windowId;
 		for (SceneHideVolume &copy : copies)
 		{
 			if (copy.frame == HideVolumeFrame::Fractional) copy.anchorAtoms.clear();
 			else if (!atoms.empty()) copy.anchorAtoms = atoms;
+			// Another structure: the source's atom indices mean other atoms here. Drop them; the
+			// centre resolved at copy time keeps the volume where it was.
+			else if (!sameStructure) copy.anchorAtoms.clear();
 			else std::erase_if(copy.anchorAtoms, [&windowState](std::size_t index) {
 				return index >= windowState.structure.atoms.size();
 			});

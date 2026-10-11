@@ -39,6 +39,8 @@ namespace DefectStudio
 	void RegisterSceneObjectShortcutCommand(CommandRegistry &registry, RendererLayer &layer);
 	// Returns true when scene selection/clipboard owns the shortcut, even if its clipboard is empty.
 	[[nodiscard]] bool HandleSceneObjectEditShortcut(RendererWindowState &windowState, SceneObjectEditAction action);
+	// Any scene object (not an atom or bond) selected - what enables Copy/Duplicate in menus.
+	[[nodiscard]] bool HasSceneObjectSelection(const RendererWindowState &windowState);
 
 	[[nodiscard]] std::vector<RendererWindowState::FreeLabel> &GetSceneFreeLabelClipboard();
 	void CopySceneFreeLabelsToClipboard(const RendererWindowState &windowState);

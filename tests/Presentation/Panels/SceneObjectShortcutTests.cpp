@@ -100,6 +100,44 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(Window().sceneHideVolumes.size(), 1u);
 	}
 
+	TEST_F(SceneObjectShortcutTests, AHideVolumePastesIntoAnotherStructureWhereItWasCopiedOrOntoTheSelectedAtoms)
+	{
+		Window().structure.atoms.resize(3);
+		Window().structure.atoms[2].cartesianPosition = glm::vec3(1.0f, 2.0f, 3.0f);
+		SceneHideVolume volume;
+		volume.kind = HideVolumeKind::Sphere;
+		volume.frame = HideVolumeFrame::Anchored;
+		volume.anchorAtoms = {2};
+		volume.halfExtents = glm::vec3(1.0f);
+		AddSceneHideVolume(Window(), volume);
+		Press(KeyCode::C);
+
+		RendererWindowState other;
+		other.windowId = "other-structure";
+		other.structure.atoms.resize(5);
+		other.structure.atoms[4].cartesianPosition = glm::vec3(7.0f, 7.0f, 7.0f);
+		renderer.AddWindow(std::move(other));
+		RendererWindowState &target = renderer.GetWindows().back();
+		// Atom 2 of the source means another atom here: the copy stays where it was copied.
+		PasteSceneHideVolumesFromClipboard(target);
+		ASSERT_EQ(target.sceneHideVolumes.size(), 1u);
+		EXPECT_TRUE(target.sceneHideVolumes.front().anchorAtoms.empty());
+		EXPECT_EQ(HideVolumeWorldCenter(target.sceneHideVolumes.front(), target.structure), glm::vec3(1.0f, 2.0f, 3.0f));
+
+		// Atoms selected: Ctrl+V still pastes the copied volume (not the atom clipboard), on them.
+		target.selectedSceneHideVolumes.clear();
+		target.selectedAtomIndices = {4};
+		EXPECT_TRUE(HandleSceneObjectEditShortcut(target, SceneObjectEditAction::Paste));
+		ASSERT_EQ(target.sceneHideVolumes.size(), 2u);
+		EXPECT_EQ(target.sceneHideVolumes.back().anchorAtoms, std::vector<std::size_t>{4});
+		EXPECT_EQ(atomCalls, 0);
+
+		// The source structure keeps the anchor.
+		Window().selectedSceneHideVolumes.clear();
+		PasteSceneHideVolumesFromClipboard(Window());
+		EXPECT_EQ(Window().sceneHideVolumes.back().anchorAtoms, std::vector<std::size_t>{2});
+	}
+
 	TEST_F(SceneObjectShortcutTests, EmptySceneClipboardIsConsumedWhileAVolumeIsSelected)
 	{
 		GetSceneHideVolumeClipboard().clear();

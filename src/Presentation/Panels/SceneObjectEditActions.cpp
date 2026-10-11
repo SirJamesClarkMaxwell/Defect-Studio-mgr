@@ -265,6 +265,13 @@ namespace DefectStudio
 		if (!window.selectedAtomIndices.empty() || !window.selectedBondIndices.empty())
 		{
 			if (action == SceneObjectEditAction::Copy) SceneClipboardActive() = false;
+			// Paste follows the most recent Copy: a copied scene object (e.g. a hide volume, which
+			// then anchors to the selected atoms) still wins over the atom clipboard.
+			if (action == SceneObjectEditAction::Paste && SceneClipboardActive())
+			{
+				(void)ExecuteSceneObjectEditAction(window, LastCopiedKind(), action);
+				return true;
+			}
 			return false;
 		}
 		if (window.pathEdit.IsActive() || window.modalTransform.has_value()) return true;
@@ -285,6 +292,15 @@ namespace DefectStudio
 			(void)ExecuteSceneObjectEditAction(window, LastCopiedKind(), action);
 			return true;
 		}
+		return false;
+	}
+
+	bool HasSceneObjectSelection(const RendererWindowState &window)
+	{
+		for (const auto kind : {SceneObjectEditKind::Orbital, SceneObjectEditKind::Plane, SceneObjectEditKind::Path,
+			SceneObjectEditKind::FreeLabel, SceneObjectEditKind::Density, SceneObjectEditKind::HideVolume,
+			SceneObjectEditKind::PinnedMeasurement})
+			if (!SelectionFor(window, kind).empty()) return true;
 		return false;
 	}
 
