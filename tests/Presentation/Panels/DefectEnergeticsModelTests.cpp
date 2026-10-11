@@ -261,16 +261,24 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(extraOnly.rows[0].defect, "GeSiV");
 	}
 
-	TEST(DefectEnergeticsModelTests, HiddenDefectsHaveNoRowsOrExportsAndRestoreTheirChoices)
+	TEST(DefectEnergeticsModelTests, HiddenDefectsStayListedOutOfTheAnalysisRemovedOnesAreGone)
 	{
 		EnergeticsFile file = Diamond();
 		file.choices.push_back({"GeV", -1, file.runs[1].directory, {}, true});
 		file.hiddenDefects = {"GeV"};
 		const auto hidden = BuildEnergeticsModel(file, Fnv(), kEdges);
-		EXPECT_TRUE(hidden.rows.empty());
+		ASSERT_EQ(hidden.rows.size(), 2u);
+		for (const auto &row : hidden.rows)
+		{
+			EXPECT_TRUE(row.hidden);
+			EXPECT_FALSE(row.included);
+		}
 		for (const auto &[name, text] : ExportEnergeticsTsv(hidden, file, Fnv()))
 			EXPECT_EQ(text.find("GeV"), std::string::npos) << name;
 		file.hiddenDefects.clear();
+		file.removedDefects = {"GeV"};
+		EXPECT_TRUE(BuildEnergeticsModel(file, Fnv(), kEdges).rows.empty());
+		file.removedDefects.clear();
 		const auto restored = BuildEnergeticsModel(file, Fnv(), kEdges);
 		ASSERT_EQ(restored.rows.size(), 2u);
 		EXPECT_EQ(restored.rows[1].energyRun, std::optional<std::size_t>(1));

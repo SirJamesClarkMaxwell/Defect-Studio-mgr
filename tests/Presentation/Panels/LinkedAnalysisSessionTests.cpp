@@ -149,6 +149,13 @@ namespace DefectStudio::Tests
 		session.RemoveExtraRoot(Path::FromUtf8("X:/other/GeV"));
 		session.FlushChanges();
 		EXPECT_EQ(saves, 2);
+		session.HideDefect("GeN");
+		session.RemoveDefect("GeN"); // removing takes it off the hidden list
+		session.RemoveDefect("GeN");
+		session.FlushChanges();
+		EXPECT_EQ(saves, 3);
+		EXPECT_TRUE(file.hiddenDefects.empty());
+		EXPECT_EQ(file.removedDefects, (std::vector<std::string>{"GeN"}));
 	}
 
 	TEST(LinkedAnalysisSessionTests, HidingADefectDropsItsConcentrationSnapshotAtFlush)

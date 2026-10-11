@@ -2,6 +2,8 @@
 
 #include "Presentation/Panels/DefectEnergeticsPanel.hpp"
 
+#include <algorithm>
+
 #include <imgui.h>
 
 #include "Core/Platform/FileDialog.hpp"
@@ -36,32 +38,38 @@ namespace DefectStudio
 			}
 		}
 
-		const auto &hidden = m_Session->m_File->hiddenDefects;
-		if (!hidden.empty())
-			ImGui::TextUnformatted("Ukryte defekty:");
-		for (std::size_t i = 0; i < hidden.size(); ++i)
+		ImGui::SameLine();
+		ImGui::TextDisabled("(albo prawy klik na folderze w drzewie projektu)");
+		if (const auto &removed = m_Session->m_File->removedDefects; !removed.empty())
 		{
-			ImGui::PushID(hidden[i].c_str());
-			const bool restore = ImGui::SmallButton("przywróć");
 			ImGui::SameLine();
-			ImGui::TextUnformatted(hidden[i].c_str());
-			ImGui::PopID();
-			if (restore)
+			ImGui::TextDisabled("· usunięte: %zu", removed.size());
+			if (ImGui::BeginItemTooltip())
 			{
-				const std::string defect = hidden[i]; // a copy: the call erases the element
-				m_Session->RestoreDefect(defect);
-				break;
+				for (const auto &name : removed)
+					ImGui::BulletText("%s", name.c_str());
+				ImGui::TextDisabled("Dodaj ich folder ponownie, by przywrócić.");
+				ImGui::EndTooltip();
 			}
 		}
 	}
 
 	void DefectEnergeticsPanel::drawDefectContextMenu(const std::string &defect)
 	{
-		if (ImGui::BeginPopupContextItem())
+		if (!ImGui::BeginPopupContextItem())
+			return;
+		const auto &hidden = m_Session->m_File->hiddenDefects;
+		if (std::find(hidden.begin(), hidden.end(), defect) != hidden.end())
 		{
-			if (ImGui::MenuItem("Usuń z analizy"))
-				m_Session->HideDefect(defect);
-			ImGui::EndPopup();
+			if (ImGui::MenuItem("Pokaż"))
+				m_Session->RestoreDefect(defect);
 		}
+		else if (ImGui::MenuItem("Ukryj"))
+			m_Session->HideDefect(defect);
+		ImGui::SetItemTooltip("Zostaje w tabeli (przygaszony, na dole), poza wykresami, koncentracjami i eksportem.");
+		if (ImGui::MenuItem("Usuń z analizy"))
+			m_Session->RemoveDefect(defect);
+		ImGui::SetItemTooltip("Znika z tabeli. Przywrócisz go, dodając jego folder ponownie (drzewo projektu albo przycisk).");
+		ImGui::EndPopup();
 	}
 } // namespace DefectStudio

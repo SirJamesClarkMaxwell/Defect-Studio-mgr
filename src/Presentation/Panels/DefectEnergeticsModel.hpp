@@ -37,6 +37,7 @@ namespace DefectStudio
 		std::optional<FnvCorrection> correction;
 		std::array<FnvAxisAlignment, 3> alignments{};
 		bool included = true;
+		bool hidden = false; // EnergeticsFile::hiddenDefects: listed dimmed, never included
 		// In words, Polish: "brak E_corr (FNV)" for a charged row without a correction, "FNV: q = +1,
 		// wiersz q = -1" for an entry of another charge, "metoda: <mismatch>" per MethodMismatches with
 		// the bulk, "obliczenie niezbieżne" when the energy run is not CalculationUsable.

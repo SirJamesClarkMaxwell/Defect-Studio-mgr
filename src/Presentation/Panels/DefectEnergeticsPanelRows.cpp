@@ -68,14 +68,20 @@ namespace DefectStudio
 		ImGui::TableSetupColumn("E_f(0) [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Uwagi", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableHeadersRow();
-		// One tree node per defect (its included states, tri-state), its charge
-		// states as the children.
+		// One tree node per defect (its included states, tri-state), its charge states as the
+		// children. Groups of rows per defect; hidden defects go last, dimmed, under their own node.
+		std::vector<std::pair<std::size_t, std::size_t>> groups, hiddenGroups;
 		for (std::size_t first = 0; first < m_Session->m_Model.rows.size();)
 		{
-			const std::string defect = m_Session->m_Model.rows[first].defect;
 			std::size_t last = first;
-			while (last < m_Session->m_Model.rows.size() && m_Session->m_Model.rows[last].defect == defect)
+			while (last < m_Session->m_Model.rows.size() && m_Session->m_Model.rows[last].defect == m_Session->m_Model.rows[first].defect)
 				++last;
+			(m_Session->m_Model.rows[first].hidden ? hiddenGroups : groups).emplace_back(first, last);
+			first = last;
+		}
+		const auto drawGroup = [&](const std::size_t first, const std::size_t last)
+		{
+			const std::string defect = m_Session->m_Model.rows[first].defect;
 			std::size_t included = 0, problems = 0;
 			std::string charges;
 			for (std::size_t r = first; r < last; ++r)
@@ -89,17 +95,19 @@ namespace DefectStudio
 			ImGui::PushID(defect.c_str());
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
+			ImGui::BeginDisabled(m_Session->m_Model.rows[first].hidden);
 			if (TriStateCheckbox("##included", included, count))
 			{
 				for (std::size_t r = first; r < last; ++r)
 					m_Session->choiceFor(m_Session->m_Model.rows[r]).included = included != count;
 				m_Session->Changed();
 			}
+			ImGui::EndDisabled();
 			ImGui::SetItemTooltip("Uwzględnij wszystkie stany ładunkowe w wykresie, obwiedni i eksporcie.");
 			ImGui::SameLine();
 			const bool open = ImGui::TreeNodeEx(defect.c_str(), ImGuiTreeNodeFlags_SpanTextWidth);
 			drawDefectContextMenu(defect);
-			ImGui::SetItemTooltip("Prawy klik: usuń defekt z analizy.");
+			ImGui::SetItemTooltip("Prawy klik: ukryj / usuń z analizy.");
 			ImGui::TableNextColumn();
 			ImGui::TextDisabled("q: %s", charges.c_str());
 			ImGui::TableSetColumnIndex(6);
@@ -112,7 +120,23 @@ namespace DefectStudio
 				ImGui::TreePop();
 			}
 			ImGui::PopID();
-			first = last;
+		};
+		for (const auto [first, last] : groups)
+			drawGroup(first, last);
+		if (!hiddenGroups.empty())
+		{
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			const bool open = ImGui::TreeNodeEx("##hiddenDefects", ImGuiTreeNodeFlags_SpanTextWidth, "Ukryte (%zu)", hiddenGroups.size());
+			ImGui::SetItemTooltip("Poza wykresami, koncentracjami i eksportem. Prawy klik na defekcie: Pokaż.");
+			if (open)
+			{
+				for (const auto [first, last] : hiddenGroups)
+					drawGroup(first, last);
+				ImGui::TreePop();
+			}
+			ImGui::PopStyleColor();
 		}
 		ImGui::EndTable();
 

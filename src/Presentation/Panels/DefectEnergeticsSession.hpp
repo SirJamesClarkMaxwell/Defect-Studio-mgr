@@ -75,6 +75,9 @@ namespace DefectStudio
 		void Changed();
 		void HideDefect(const std::string &name);
 		void RestoreDefect(const std::string &name);
+		// Out of the table altogether (an extra root that is exactly this defect's folder is dropped,
+		// anything else is remembered in removedDefects); AddDefectFolder on its folder restores it.
+		void RemoveDefect(const std::string &name);
 		void AddDefectFolder(const Path &path);
 		void RemoveExtraRoot(const Path &path);
 		void StartConcentrations();
