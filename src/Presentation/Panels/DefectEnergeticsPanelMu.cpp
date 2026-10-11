@@ -74,7 +74,11 @@ namespace DefectStudio
 					ImGui::TextColored(kWarningColor, "brak");
 				ImGui::TableNextColumn();
 				const auto chosen = m_File->references.find(species);
-				const std::string preview = chosen != m_File->references.end() ? chosen->second.Utf8() : "auto";
+				const auto chosenRun = chosen == m_File->references.end() ? m_File->runs.end()
+					: std::find_if(m_File->runs.begin(), m_File->runs.end(), [&](const VaspRunRecord &run) { return run.directory == chosen->second; });
+				const std::string preview = chosen == m_File->references.end() ? "auto"
+					: chosenRun != m_File->runs.end() ? runLabel(static_cast<std::size_t>(chosenRun - m_File->runs.begin()))
+					: chosen->second.Utf8();
 				ImGui::SetNextItemWidth(-1.0f);
 				if (ImGui::BeginCombo("##reference", preview.c_str()))
 				{
@@ -97,6 +101,9 @@ namespace DefectStudio
 							ImGui::SetItemTooltip("%d atomów, %.6f eV/atom", composition.begin()->second,
 								*m_File->runs[run].totalEnergy / composition.begin()->second);
 					}
+					if (ImGui::Selectable("z folderu..."))
+						pickReference(species);
+					ImGui::SetItemTooltip("Obliczenie spoza folderu obliczeń, np. O:/Potencjaly_chemiczne/Ge/...");
 					ImGui::EndCombo();
 				}
 				ImGui::PopID();
@@ -247,102 +254,5 @@ namespace DefectStudio
 		}
 		ImGui::EndDisabled();
 		ImGui::SetItemTooltip("Nowy zestaw zaczyna od wartości zaznaczonego.");
-	}
-
-	// E_f(E_F) of every included state under the chosen mu set, each defect's envelope drawn thick,
-	// and the transition levels (they do not depend on mu).
-	void DefectEnergeticsPanel::drawFormation()
-	{
-		if (!ImGui::CollapsingHeader("Energie tworzenia", ImGuiTreeNodeFlags_DefaultOpen))
-			return;
-		if (m_Model.muSets.empty() || m_Model.reference.gap <= 0.0)
-		{
-			ImGui::TextDisabled("Potrzebne: bulk z przerwą i potencjały chemiczne.");
-			return;
-		}
-		const auto &set = m_Model.muSets[static_cast<std::size_t>(m_MuSet)];
-		const SpeciesEnergies mu = AbsoluteChemicalPotentials(m_Model.chemicalPotentials, set.deltaMu);
-		const double gap = m_Model.reference.gap;
-		ImGui::Text("Zestaw μ: %s%s", set.vertex ? "bogate: " : "", set.name.c_str());
-
-		std::map<std::string, std::vector<std::pair<double, int>>> defects; // intercept, charge
-		for (const auto &row : m_Model.rows)
-		{
-			if (!row.included)
-				continue;
-			const auto state = EnergeticsRowState(*m_File, row);
-			const auto intercept = state ? FormationEnergy(*state, m_Model.reference, mu, 0.0) : std::nullopt;
-			if (intercept)
-				defects[row.defect].emplace_back(*intercept, row.charge);
-		}
-		if (ImPlot::BeginPlot("##Formation", ImVec2(-1.0f, std::max(220.0f, 0.6f * ImGui::GetContentRegionAvail().x))))
-		{
-			ImPlot::SetupAxes("E_F - E_VBM [eV]", "E_f [eV]", 0, ImPlotAxisFlags_AutoFit);
-			ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, gap, ImPlotCond_Always);
-			ImPlot::SetupLegend(ImPlotLocation_NorthEast);
-			int colour = 0;
-			for (const auto &[defect, lines] : defects)
-			{
-				const ImVec4 tint = ImPlot::GetColormapColor(colour++);
-				ImPlotSpec thin;
-				thin.LineColor = ImVec4(tint.x, tint.y, tint.z, 0.35f);
-				thin.Flags = ImPlotItemFlags_NoLegend;
-				std::vector<double> intercepts;
-				std::vector<int> charges;
-				for (const auto &[intercept, charge] : lines)
-				{
-					const double xs[2]{0.0, gap};
-					const double ys[2]{intercept, intercept + charge * gap};
-					ImPlot::PlotLine(("##" + defect + std::to_string(charge)).c_str(), xs, ys, 2, thin);
-					intercepts.push_back(intercept);
-					charges.push_back(charge);
-				}
-				std::vector<double> xs, ys;
-				for (const auto &segment : LowerEnvelope(intercepts, charges, gap))
-					for (const double x : {segment.from, segment.to})
-					{
-						xs.push_back(x);
-						ys.push_back(intercepts[segment.line] + charges[segment.line] * x);
-					}
-				ImPlotSpec thick;
-				thick.LineColor = tint;
-				thick.LineWeight = 2.5f;
-				ImPlot::PlotLine(defect.c_str(), xs.data(), ys.data(), static_cast<int>(xs.size()), thick);
-			}
-			ImPlot::EndPlot();
-		}
-
-		if (ImGui::BeginTable("##Transitions", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
-		{
-			ImGui::TableSetupColumn("Defekt");
-			ImGui::TableSetupColumn("Przejście");
-			ImGui::TableSetupColumn("ε od VBM [eV]");
-			ImGui::TableSetupColumn("E_g − ε [eV]");
-			ImGui::TableHeadersRow();
-			for (const auto &[defect, lines] : defects)
-			{
-				std::vector<double> intercepts;
-				std::vector<int> charges;
-				for (const auto &[intercept, charge] : lines)
-				{
-					intercepts.push_back(intercept);
-					charges.push_back(charge);
-				}
-				const auto envelope = LowerEnvelope(intercepts, charges, gap);
-				for (const auto &level : EnvelopeTransitions(envelope, charges))
-				{
-					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::TextUnformatted(defect.c_str());
-					ImGui::TableNextColumn();
-					ImGui::Text("(%+d/%+d)", level.chargeFrom, level.chargeTo);
-					ImGui::TableNextColumn();
-					ImGui::Text("%.4f", level.level);
-					ImGui::TableNextColumn();
-					ImGui::Text("%.4f", gap - level.level);
-				}
-			}
-			ImGui::EndTable();
-		}
 	}
 } // namespace DefectStudio

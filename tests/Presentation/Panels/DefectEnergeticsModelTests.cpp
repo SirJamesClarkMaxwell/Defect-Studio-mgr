@@ -181,6 +181,10 @@ namespace DefectStudio::Tests
 		EnergeticsFile noGe = Diamond();
 		noGe.runs.pop_back();
 		EXPECT_FALSE(BuildEnergeticsModel(noGe, Fnv(), kEdges).chemicalPotentialError.empty());
+		// ...unless every defect with Ge is left out.
+		for (const auto &row : BuildEnergeticsModel(noGe, Fnv(), kEdges).rows)
+			noGe.choices.push_back({.defect = row.defect, .charge = row.charge, .included = false});
+		EXPECT_TRUE(BuildEnergeticsModel(noGe, Fnv(), kEdges).chemicalPotentialError.empty());
 	}
 
 	TEST(DefectEnergeticsModelTests, TheTsvExportHasEveryFileAndColumn)

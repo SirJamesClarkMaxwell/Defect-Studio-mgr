@@ -266,4 +266,34 @@ namespace DefectStudio::VaspRunRecordIO
 			return std::nullopt;
 		return ParseEigenval(text.str());
 	}
+
+	std::optional<double> ParsePoscarVolume(const std::string_view text)
+	{
+		std::istringstream stream{std::string(text)};
+		std::string comment;
+		double scale = 0.0;
+		double a[3][3]{};
+		if (!std::getline(stream, comment) || !(stream >> scale))
+			return std::nullopt;
+		for (auto &row : a)
+			for (double &value : row)
+				if (!(stream >> value))
+					return std::nullopt;
+		const double det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+			+ a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+		const double volume = scale < 0.0 ? -scale : std::abs(det) * scale * scale * scale;
+		return volume > 0.0 ? std::optional<double>(volume) : std::nullopt;
+	}
+
+	std::optional<double> ReadCellVolume(const Path &directory)
+	{
+		for (const char *name : {"CONTCAR", "POSCAR"})
+		{
+			std::ifstream stream((directory / name).Native(), std::ios::binary);
+			std::string head((std::istreambuf_iterator<char>(stream)), {});
+			if (const auto volume = ParsePoscarVolume(head.substr(0, 4096)))
+				return volume;
+		}
+		return std::nullopt;
+	}
 }

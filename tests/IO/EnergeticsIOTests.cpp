@@ -60,6 +60,10 @@ namespace DefectStudio::Tests
 				{"C", Path::FromUtf8("O:/Idealna-Super-Komórka")}};
 			file.competing = {{"SiC", {{"Si", 1}, {"C", 1}}, Path::FromUtf8("E:/fazy/SiC")}};
 			file.muSets = {{"N-poor", {{"N", -1.25}}}};
+			file.concentrations.temperatureMax = 1500.0;
+			file.concentrations.sites = {{"GeV", 4.4e22}};
+			file.concentrations.degeneracy = {{"GeV", 4.0}};
+			file.concentrations.lineFrom = "N-poor";
 			file.dielectric = 5.7;
 			file.dielectricSource = "promotor (diament)";
 			file.gap = 5.47;
@@ -119,6 +123,11 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(parsed.muSets.size(), 1u);
 		EXPECT_EQ(parsed.muSets[0].name, "N-poor");
 		EXPECT_EQ(parsed.muSets[0].deltaMu, (SpeciesEnergies{{"N", -1.25}}));
+		EXPECT_DOUBLE_EQ(parsed.concentrations.temperatureMax, 1500.0);
+		EXPECT_DOUBLE_EQ(parsed.concentrations.sites.at("GeV"), 4.4e22);
+		EXPECT_DOUBLE_EQ(parsed.concentrations.degeneracy.at("GeV"), 4.0);
+		EXPECT_EQ(parsed.concentrations.lineFrom, "N-poor");
+		EXPECT_DOUBLE_EQ(parsed.concentrations.electronMass, 0.46);
 		EXPECT_DOUBLE_EQ(parsed.dielectric, 5.7);
 		EXPECT_EQ(parsed.dielectricSource, "promotor (diament)");
 		EXPECT_EQ(parsed.gap, std::optional<double>(5.47));

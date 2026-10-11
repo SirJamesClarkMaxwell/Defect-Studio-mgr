@@ -53,5 +53,10 @@ namespace DefectStudio
 		[[nodiscard]] std::optional<BandEdges> ParseEigenval(std::string_view text);
 		// ParseEigenval of `directory`/EIGENVAL (~50 KB for a 512-atom Gamma-only run).
 		[[nodiscard]] std::optional<BandEdges> ReadBandEdges(const Path &directory);
+		// Cell volume in A^3 from POSCAR/CONTCAR text: |a1 . (a2 x a3)| * scale^3, or -scale when the
+		// scale line is negative (VASP's "this is the volume"). nullopt when the header is unreadable.
+		[[nodiscard]] std::optional<double> ParsePoscarVolume(std::string_view text);
+		// ParsePoscarVolume of `directory`/CONTCAR, else POSCAR.
+		[[nodiscard]] std::optional<double> ReadCellVolume(const Path &directory);
 	} // namespace VaspRunRecordIO
 } // namespace DefectStudio

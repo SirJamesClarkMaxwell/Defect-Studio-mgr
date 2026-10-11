@@ -183,7 +183,7 @@ namespace DefectStudio
 		std::set<std::string> others;
 		for (const auto &row : model.rows)
 			for (const auto &[species, count] : row.addedAtoms)
-				if (count != 0 && !bulkComposition.contains(species))
+				if (row.included && count != 0 && !bulkComposition.contains(species)) // a left-out defect needs no mu
 					others.insert(species);
 		for (const auto &phase : file.competing)
 			for (const auto &[species, count] : phase.formula)

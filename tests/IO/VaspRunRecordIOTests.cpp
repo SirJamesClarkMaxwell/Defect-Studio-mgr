@@ -96,6 +96,18 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(junk.error.empty());
 	}
 
+	TEST(VaspRunRecordIOTests, PoscarVolumeFromTheLatticeOrANegativeScale)
+	{
+		// 512-atom diamond: 4x4x4 conventional cells of a = 3.567 A.
+		const auto volume = VaspRunRecordIO::ParsePoscarVolume(
+			"diamond\n 3.567\n 4 0 0\n 0 4 0\n 0 0 4\n C\n 512\nDirect\n");
+		ASSERT_TRUE(volume.has_value());
+		EXPECT_NEAR(*volume, 64.0 * 3.567 * 3.567 * 3.567, 1e-9);
+		EXPECT_NEAR(512.0 / *volume * 1e24, 1.76e23, 0.01e23); // atoms per cm^3
+		EXPECT_DOUBLE_EQ(*VaspRunRecordIO::ParsePoscarVolume("x\n-100\n1 0 0\n0 1 0\n0 0 1\n"), 100.0);
+		EXPECT_FALSE(VaspRunRecordIO::ParsePoscarVolume("x\n1.0\n1 0 0\n").has_value());
+	}
+
 	TEST(VaspRunRecordIOTests, RunsAreFoundAtAnyDepthAndReadFromHeadAndTail)
 	{
 		const Path root = Path::FromResolved(FileSystem::TempDirectoryPath()) / "ds-vasp-runs-test";

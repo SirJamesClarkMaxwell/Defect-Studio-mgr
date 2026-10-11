@@ -18,7 +18,8 @@ namespace DefectStudio
 	public:
 		VaspOutputJob(
 			Path calculationDirectory, int bandStart = 0, int bandEnd = 10, bool includeOrbitals = true,
-			bool includeIrreps = false, float irrepTol = 0.1f, float symprec = 1e-3f);
+			bool includeIrreps = false, float irrepTol = 0.1f, float symprec = 1e-3f,
+			bool includeKs = false, std::string outcarName = "OUTCAR");
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -44,6 +45,8 @@ namespace DefectStudio
 		bool m_IncludeIrreps;
 		float m_IrrepTol;
 		float m_Symprec;
+		bool m_IncludeKs;
+		std::string m_OutcarName;
 		VaspOutputBridge m_Bridge;
 		std::optional<VaspOutputData> m_Result;
 	};

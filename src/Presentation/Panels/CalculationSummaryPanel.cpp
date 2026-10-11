@@ -3,13 +3,13 @@
 #include "Presentation/Panels/CalculationSummaryPanel.hpp"
 
 #include <algorithm>
-#include <cstdio>
 
-#include <implot.h>
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Platform/FileDialog.hpp"
 #include "IO/TextFileIO.hpp"
 #include "ScientificRuntime/Python/VaspOutputJob.hpp"
 
@@ -17,52 +17,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		// Property/value two-column layout for every scalar summary field - see user feedback,
-		// this replaced a flat list of ImGui::Text lines.
-		void RenderRow(const char *label, const std::string &value)
-		{
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted(label);
-			ImGui::TableSetColumnIndex(1);
-			ImGui::TextUnformatted(value.c_str());
-		}
-
-		std::string FormatVec3(const std::array<double, 3> &v)
-		{
-			char buffer[96];
-			std::snprintf(buffer, sizeof(buffer), "%.4g, %.4g, %.4g", v[0], v[1], v[2]);
-			return buffer;
-		}
-
-		// "5169.2s" alone is unreadable for real VASP walltimes (routinely hours-to-days) - adds
-		// the same duration broken into d/h/m/s alongside the raw seconds value.
-		std::string FormatDurationSeconds(double totalSeconds)
-		{
-			if (totalSeconds < 0.0)
-				totalSeconds = 0.0;
-			const auto totalWholeSeconds = static_cast<long long>(totalSeconds);
-			const long long days = totalWholeSeconds / 86400;
-			const long long hours = (totalWholeSeconds % 86400) / 3600;
-			const long long minutes = (totalWholeSeconds % 3600) / 60;
-			const double seconds = totalSeconds - static_cast<double>(days * 86400 + hours * 3600 + minutes * 60);
-
-			std::string breakdown;
-			if (days > 0)
-				breakdown += std::to_string(days) + "d ";
-			if (days > 0 || hours > 0)
-				breakdown += std::to_string(hours) + "h ";
-			if (days > 0 || hours > 0 || minutes > 0)
-				breakdown += std::to_string(minutes) + "m ";
-			char secondsBuffer[32];
-			std::snprintf(secondsBuffer, sizeof(secondsBuffer), "%.1fs", seconds);
-			breakdown += secondsBuffer;
-
-			char rawBuffer[32];
-			std::snprintf(rawBuffer, sizeof(rawBuffer), "%.1fs", totalSeconds);
-			return std::string(rawBuffer) + " (" + breakdown + ")";
-		}
-
 		[[nodiscard]] Path CachePath()
 		{
 			return Path::FromResolved(
@@ -82,7 +36,7 @@ namespace DefectStudio
 		nlohmann::json SerializeVaspOutputData(const VaspOutputData &data)
 		{
 			nlohmann::json payload;
-			payload["path"] = data.path.String();
+			payload["path"] = data.path.Utf8();
 			if (data.gap.has_value())
 				payload["gap"] = {{"bandgap", data.gap->bandgap}, {"homo", data.gap->homo}, {"lumo", data.gap->lumo}};
 			else
@@ -94,6 +48,28 @@ namespace DefectStudio
 			const VaspOutputSummaryData &summary = data.summary;
 			nlohmann::json summaryJson;
 			summaryJson["energy_trend"] = OptJson(summary.energyTrend);
+			summaryJson["force_trend"] = summary.forceTrend;
+			summaryJson["energy_without_entropy"] = summary.energyWithoutEntropy;
+			summaryJson["energy_sigma_zero"] = summary.energySigmaZero;
+			summaryJson["finished"] = OptJson(summary.finished);
+			summaryJson["reached_accuracy"] = OptJson(summary.reachedAccuracy);
+			summaryJson["nsw"] = OptJson(summary.nsw);
+			summaryJson["ibrion"] = OptJson(summary.ibrion);
+			summaryJson["ediffg"] = OptJson(summary.ediffg);
+			summaryJson["outcar_write_time"] = OptJson(summary.outcarWriteTime);
+			summaryJson["ks_band_start"] = summary.ksBandStart;
+			summaryJson["ks_band_end"] = summary.ksBandEnd;
+			summaryJson["ks_default_band_start"] = summary.ksDefaultBandStart;
+			summaryJson["ks_default_band_end"] = summary.ksDefaultBandEnd;
+			summaryJson["ks_steps"] = nlohmann::json::array();
+			for (const auto &step : summary.ksSteps)
+			{
+				nlohmann::json blocks = nlohmann::json::array();
+				for (const auto &block : step.blocks)
+					blocks.push_back({{"spin", block.spin}, {"kpoint", block.kpoint}, {"bands", block.bands},
+						{"energies", block.energies}, {"occupations", block.occupations}});
+				summaryJson["ks_steps"].push_back({{"step", step.step}, {"fermi", OptJson(step.fermi)}, {"blocks", blocks}});
+			}
 			summaryJson["final_energy"] = OptJson(summary.finalEnergy);
 			summaryJson["cpu_time"] = OptJson(summary.cpuTimeSeconds);
 			summaryJson["user_time"] = OptJson(summary.userTimeSeconds);
@@ -154,7 +130,16 @@ namespace DefectStudio
 		if (std::optional<VaspOutputData> cached = LoadCache(); cached.has_value())
 		{
 			m_Directory = cached->path;
-			m_Data = std::move(cached);
+			Run run;
+			run.directory = m_Directory;
+			m_AutoBands = false;
+			if (cached->summary.ksBandStart > 0)
+			{
+				m_BandStart = cached->summary.ksBandStart;
+				m_BandEnd = cached->summary.ksBandEnd;
+			}
+			run.data = std::move(cached);
+			m_Chain.push_back(std::move(run));
 		}
 	}
 
@@ -165,195 +150,199 @@ namespace DefectStudio
 
 	void CalculationSummaryPanel::OpenDirectory(Path directory)
 	{
+		if (const auto jobs = m_JobSystem.lock())
+			for (const auto &run : m_Chain)
+				if (run.job)
+					(void)jobs->RequestCancel(run.jobId);
 		m_Directory = std::move(directory);
-		m_Data.reset();
+		m_Chain.clear();
+		Run run;
+		run.directory = m_Directory;
+		m_Chain.push_back(std::move(run));
+		m_DetailRun = 0;
+		m_AutoBands = true;
+		m_SortPending = false;
 		m_Error.clear();
 		dispatchLoad();
 		SetVisible(true);
 	}
 
-	void CalculationSummaryPanel::dispatchLoad()
+	bool CalculationSummaryPanel::isLoading() const
 	{
-		Ref<JobSystem> jobSystem = m_JobSystem.lock();
-		if (jobSystem == nullptr)
+		return std::ranges::any_of(m_Chain, [](const Run &run) { return run.job != nullptr; });
+	}
+
+	void CalculationSummaryPanel::dispatchRun(Run &run, int bandStart, int bandEnd)
+	{
+		const auto jobs = m_JobSystem.lock();
+		if (!jobs)
 		{
-			m_Error = "JobSystem unavailable";
+			run.error = "JobSystem unavailable";
 			return;
 		}
-		// includeOrbitals=false - this panel never shows orbital data, no reason to pay for the
-		// WAVECAR read/per-band diagonalization ElectronicStructurePanel's dispatch needs.
-		m_PendingJob = CreateRef<VaspOutputJob>(m_Directory, 0, 0, false);
-		m_PendingJobId = jobSystem->Submit(m_PendingJob, JobPriority::Normal);
-		m_Error.clear();
+		run.job = CreateRef<VaspOutputJob>(run.directory, bandStart, bandEnd, false, false,
+			0.1f, 1e-3f, true, run.outcarName);
+		run.jobId = jobs->Submit(run.job, JobPriority::Normal);
+		run.error.clear();
+		if (run.jobId == 0)
+		{
+			run.job.reset();
+			run.error = "Could not submit load job";
+		}
+	}
+
+	void CalculationSummaryPanel::dispatchLoad()
+	{
+		for (auto &run : m_Chain)
+			dispatchRun(run, m_AutoBands ? 0 : m_BandStart, m_AutoBands ? 0 : m_BandEnd);
 	}
 
 	void CalculationSummaryPanel::pollJob()
 	{
-		if (m_PendingJob == nullptr)
+		const auto jobs = m_JobSystem.lock();
+		if (!jobs)
 			return;
-
-		Ref<JobSystem> jobSystem = m_JobSystem.lock();
-		if (jobSystem == nullptr)
-			return;
-
-		const std::optional<JobSnapshot> snapshot = jobSystem->GetJob(m_PendingJobId);
-		if (!snapshot.has_value() || snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)
-			return;
-
-		if (snapshot->status == JobStatus::Completed)
+		for (auto &run : m_Chain)
 		{
-			const std::optional<VaspOutputData> &result = m_PendingJob->GetResult();
-			if (result.has_value())
+			if (!run.job)
+				continue;
+			const auto snapshot = jobs->GetJob(run.jobId);
+			if (!snapshot || snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)
+				continue;
+			if (snapshot->status == JobStatus::Completed && run.job->GetResult())
 			{
-				m_Data = *result;
-				m_Error.clear();
-				SaveCache(*m_Data);
+				run.data = *run.job->GetResult();
+				run.error.clear();
+				if (run.directory == m_Directory && run.outcarName == "OUTCAR")
+					SaveCache(*run.data);
 			}
 			else
 			{
-				m_Error = "Load completed with no result";
+				run.error = snapshot->errorMessage.empty() ? "Load failed" : snapshot->errorMessage;
+			}
+			run.job.reset();
+			run.jobId = 0;
+		}
+		if (isLoading())
+			return;
+		if (m_SortPending)
+		{
+			std::stable_sort(m_Chain.begin(), m_Chain.end(), [](const Run &a, const Run &b)
+			{
+				const auto time = [](const Run &run)
+				{
+					return run.data ? run.data->summary.outcarWriteTime.value_or(0.0) : 0.0;
+				};
+				return time(a) < time(b);
+			});
+			m_DetailRun = static_cast<int>(m_Chain.size()) - 1;
+			m_SortPending = false;
+		}
+		if (m_AutoBands)
+		{
+			for (auto it = m_Chain.rbegin(); it != m_Chain.rend(); ++it)
+			{
+				if (!it->data || it->data->summary.ksSteps.empty())
+					continue;
+				m_BandStart = it->data->summary.ksDefaultBandStart;
+				m_BandEnd = it->data->summary.ksDefaultBandEnd;
+				// The final run defines a common band window for the entire continuation chain.
+				for (auto &run : m_Chain)
+					if (run.error.empty() && run.data && !run.data->summary.ksSteps.empty() &&
+						(run.data->summary.ksBandStart != m_BandStart || run.data->summary.ksBandEnd != m_BandEnd))
+						dispatchRun(run, m_BandStart, m_BandEnd);
+				break;
 			}
 		}
-		else
-		{
-			m_Error = snapshot->errorMessage.empty() ? "Load failed" : snapshot->errorMessage;
-		}
-		m_PendingJob.reset();
-		m_PendingJobId = 0;
 	}
 
-	void CalculationSummaryPanel::renderSummary(const VaspOutputData &data)
+	void CalculationSummaryPanel::renderChain()
 	{
-		const VaspOutputSummaryData &summary = data.summary;
-
-		if (ImGui::BeginTable("##SummaryFields", 2,
-				ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+		const bool loading = isLoading();
+		ImGui::BeginDisabled(loading);
+		if (ImGui::Button("Reload"))
+			dispatchLoad();
+		ImGui::SameLine();
+		if (ImGui::Button("Add continuation..."))
 		{
-			ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-
-			char buffer[128];
-
-			if (summary.finalEnergy.has_value())
+			const auto picked = Platform::PickFolder(m_Directory);
+			if (!picked)
+				m_Error = picked.Error().technicalDetails;
+			else if (*picked)
 			{
-				std::snprintf(buffer, sizeof(buffer), "%.6f eV", *summary.finalEnergy);
-				RenderRow("Final energy", buffer);
-			}
-			else
-			{
-				RenderRow("Final energy", "unavailable");
-			}
-
-			if (data.gap.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->homo);
-				RenderRow("HOMO", buffer);
-				std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->lumo);
-				RenderRow("LUMO", buffer);
-				std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->bandgap);
-				RenderRow("Band gap", buffer);
-			}
-			else
-			{
-				RenderRow("Band gap", "unavailable (no vasprun.xml)");
-			}
-
-			if (summary.cpuTimeSeconds.has_value())
-				RenderRow("CPU time", FormatDurationSeconds(*summary.cpuTimeSeconds));
-			if (summary.userTimeSeconds.has_value())
-				RenderRow("User time", FormatDurationSeconds(*summary.userTimeSeconds));
-			if (summary.systemTimeSeconds.has_value())
-				RenderRow("System time", FormatDurationSeconds(*summary.systemTimeSeconds));
-			if (summary.elapsedTimeSeconds.has_value())
-				RenderRow("Elapsed time", FormatDurationSeconds(*summary.elapsedTimeSeconds));
-			if (!summary.cpuTimeSeconds.has_value() && !summary.elapsedTimeSeconds.has_value())
-				RenderRow("Timing", "unavailable (no OUTCAR)");
-
-			if (summary.totalDrift.has_value())
-				RenderRow("Total drift (eV/A)", FormatVec3(*summary.totalDrift));
-			else
-				RenderRow("Total drift", "unavailable");
-
-			if (summary.nelect.has_value())
-				RenderRow("NELECT", std::to_string(*summary.nelect));
-			if (summary.ispin.has_value())
-				RenderRow("ISPIN", std::to_string(*summary.ispin));
-
-			if (summary.pressureKilobar.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%.3f kB", *summary.pressureKilobar);
-				RenderRow("Pressure", buffer);
-			}
-
-			if (summary.spaceGroupSymbol.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%s (#%s)", summary.spaceGroupSymbol->c_str(),
-					summary.spaceGroupNumber.has_value() ? std::to_string(*summary.spaceGroupNumber).c_str() : "?");
-				RenderRow("Space group", buffer);
-			}
-			else
-			{
-				RenderRow("Space group", "unavailable");
-			}
-
-			if (summary.pointGroupSchoenflies.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%s (%s)", summary.pointGroupSchoenflies->c_str(),
-					summary.pointGroupSymbol.has_value() ? summary.pointGroupSymbol->c_str() : "?");
-				RenderRow("Point group", buffer);
-			}
-			else
-			{
-				RenderRow("Point group", "unavailable");
-			}
-
-			ImGui::EndTable();
-		}
-
-		if (summary.stressTensorKilobar.has_value())
-		{
-			ImGui::Spacing();
-			ImGui::TextUnformatted("Stress tensor (kB)");
-			const auto &stress = *summary.stressTensorKilobar;
-			if (ImGui::BeginTable("##StressTensor", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
-			{
-				for (const auto &row : stress)
+				Run run;
+				run.directory = **picked;
+				if (!std::ranges::any_of(m_Chain, [&](const Run &existing)
+					{ return existing.directory == run.directory && existing.outcarName == run.outcarName; }))
 				{
-					ImGui::TableNextRow();
-					for (std::size_t col = 0; col < 3; ++col)
-					{
-						ImGui::TableSetColumnIndex(static_cast<int>(col));
-						ImGui::Text("%.4f", row[col]);
-					}
+					m_Chain.push_back(std::move(run));
+					m_SortPending = true;
+					dispatchRun(m_Chain.back(), m_AutoBands ? 0 : m_BandStart, m_AutoBands ? 0 : m_BandEnd);
 				}
-				ImGui::EndTable();
 			}
 		}
-
-		// Fills whatever vertical space is left in the window, rather than a fixed height - the
-		// plot is the one element in this panel that benefits from more room, everything else
-		// above is fixed-size text/tables. Clamped to a floor so a very short window doesn't
-		// collapse it to nothing.
-		ImGui::Spacing();
-		ImGui::TextUnformatted("Convergence");
-		if (summary.energyTrend.has_value() && summary.energyTrend->size() > 1)
+		if (ImGui::Button("Add saved OUTCAR..."))
 		{
-			const std::vector<double> &trend = *summary.energyTrend;
-			std::vector<double> steps(trend.size());
-			for (std::size_t i = 0; i < trend.size(); ++i)
-				steps[i] = static_cast<double>(i + 1);
-
-			const float plotHeight = std::max(150.0f, ImGui::GetContentRegionAvail().y);
-			if (ImPlot::BeginPlot("##ConvergencePlot", ImVec2(-1.0f, plotHeight)))
+			const auto picked = Platform::PickOpenFile(m_Directory, "OUTCAR (including saved copies)", "");
+			if (!picked)
+				m_Error = picked.Error().technicalDetails;
+			else if (*picked)
 			{
-				ImPlot::SetupAxes("Ionic step", "Energy (eV)");
-				ImPlot::PlotLine("Energy", steps.data(), trend.data(), static_cast<int>(trend.size()));
-				ImPlot::EndPlot();
+				Run run;
+				run.directory = (**picked).parent_path();
+				run.outcarName = (**picked).filename().Utf8();
+				if (!std::ranges::any_of(m_Chain, [&](const Run &existing)
+					{ return existing.directory == run.directory && existing.outcarName == run.outcarName; }))
+				{
+					m_Chain.push_back(std::move(run));
+					m_SortPending = true;
+					dispatchRun(m_Chain.back(), m_AutoBands ? 0 : m_BandStart, m_AutoBands ? 0 : m_BandEnd);
+				}
 			}
 		}
-		else
+		ImGui::EndDisabled();
+		if (loading)
 		{
-			ImGui::TextDisabled("Convergence trend unavailable (needs more than one ionic step)");
+			ImGui::SameLine();
+			ImGui::TextDisabled("Loading...");
+		}
+		for (std::size_t i = 0; i < m_Chain.size(); ++i)
+		{
+			ImGui::PushID(static_cast<int>(i));
+			const auto &run = m_Chain[i];
+			const std::string label = std::to_string(i + 1) + ". " + run.directory.filename().Utf8() + " / " + run.outcarName;
+			if (ImGui::Selectable(label.c_str(), m_DetailRun == static_cast<int>(i)))
+				m_DetailRun = static_cast<int>(i);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", run.directory.Utf8().c_str());
+			ImGui::BeginDisabled(loading);
+			ImGui::BeginDisabled(i == 0);
+			if (ImGui::SmallButton("Up"))
+			{
+				std::swap(m_Chain[i], m_Chain[i - 1]);
+				m_DetailRun = static_cast<int>(i - 1);
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::BeginDisabled(i + 1 == m_Chain.size());
+			if (ImGui::SmallButton("Down"))
+			{
+				std::swap(m_Chain[i], m_Chain[i + 1]);
+				m_DetailRun = static_cast<int>(i + 1);
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			const bool remove = ImGui::SmallButton("Remove");
+			ImGui::EndDisabled();
+			if (!run.error.empty())
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", run.error.c_str());
+			ImGui::PopID();
+			if (remove)
+			{
+				m_Chain.erase(m_Chain.begin() + static_cast<std::ptrdiff_t>(i));
+				m_DetailRun = std::max(0, static_cast<int>(m_Chain.size()) - 1);
+				break;
+			}
 		}
 	}
 
@@ -361,8 +350,7 @@ namespace DefectStudio
 	{
 		if (!IsVisible())
 			return;
-
-		ImGui::SetNextWindowSize(ImVec2(480.0f, 620.0f), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(640.0f, 800.0f), ImGuiCond_FirstUseEver);
 		bool stillOpen = true;
 		if (!ImGui::Begin(GetTitle().c_str(), &stillOpen))
 		{
@@ -370,45 +358,23 @@ namespace DefectStudio
 			return;
 		}
 		if (!stillOpen)
-		{
 			SetVisible(false);
-			ImGui::End();
-			return;
-		}
-
 		pollJob();
-
 		if (m_Directory.Empty())
 		{
-			ImGui::TextDisabled(
-				"No directory selected - right-click a folder in the Project Tree and choose "
-				"\"Show Calculation Summary\".");
+			ImGui::TextDisabled("Right-click a folder in the Project Tree and choose \"Show Calculation Summary\".");
 			ImGui::End();
 			return;
 		}
-
 		ImGui::SetWindowFontScale(1.2f);
-
-		ImGui::TextDisabled("%s", m_Directory.String().c_str());
-
-		const bool loading = m_PendingJob != nullptr;
-		ImGui::BeginDisabled(loading);
-		if (ImGui::Button(m_Data.has_value() ? "Reload" : "Load"))
-			dispatchLoad();
-		ImGui::EndDisabled();
-		if (loading)
-		{
-			ImGui::SameLine();
-			ImGui::TextDisabled("Loading...");
-		}
+		ImGui::TextDisabled("%s", m_Directory.Utf8().c_str());
+		renderChain();
 		if (!m_Error.empty())
 			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Error.c_str());
-
-		if (m_Data.has_value())
-			renderSummary(*m_Data);
-
+		if (m_DetailRun >= 0 && m_DetailRun < static_cast<int>(m_Chain.size()) && m_Chain[m_DetailRun].data)
+			renderSummary(*m_Chain[m_DetailRun].data);
+		renderPlots();
 		ImGui::SetWindowFontScale(1.0f);
-
 		ImGui::End();
 	}
 } // namespace DefectStudio

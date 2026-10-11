@@ -271,6 +271,22 @@ namespace DefectStudio
 				set.deltaMu = ReadSpeciesMap<double>(node["deltaMu"]);
 				file.muSets.push_back(std::move(set));
 			});
+			attempt("concentrations", [&] {
+				const YAML::Node node = root["concentrations"];
+				if (!node) return;
+				ConcentrationSettings &c = file.concentrations;
+				ReadValue(node, "electronMass", c.electronMass);
+				ReadValue(node, "holeMass", c.holeMass);
+				ReadValue(node, "temperatureMin", c.temperatureMin);
+				ReadValue(node, "temperatureMax", c.temperatureMax);
+				ReadValue(node, "temperatureSteps", c.temperatureSteps);
+				ReadValue(node, "fixedCharge", c.fixedCharge);
+				if (node["sites"]) c.sites = ReadSpeciesMap<double>(node["sites"]);
+				if (node["degeneracy"]) c.degeneracy = ReadSpeciesMap<double>(node["degeneracy"]);
+				ReadValue(node, "lineFrom", c.lineFrom);
+				ReadValue(node, "lineTo", c.lineTo);
+				ReadValue(node, "linePoints", c.linePoints);
+			});
 			outFile = std::move(file);
 			return true;
 		}
@@ -324,7 +340,20 @@ namespace DefectStudio
 			EmitMap(emit, "deltaMu", set.deltaMu);
 			emit << YAML::EndMap;
 		}
-		emit << YAML::EndSeq << YAML::EndMap;
+		const ConcentrationSettings &c = file.concentrations;
+		emit << YAML::EndSeq << YAML::Key << "concentrations" << YAML::Value << YAML::BeginMap;
+		EmitValue(emit, "electronMass", c.electronMass);
+		EmitValue(emit, "holeMass", c.holeMass);
+		EmitValue(emit, "temperatureMin", c.temperatureMin);
+		EmitValue(emit, "temperatureMax", c.temperatureMax);
+		EmitValue(emit, "temperatureSteps", c.temperatureSteps);
+		EmitValue(emit, "fixedCharge", c.fixedCharge);
+		EmitMap(emit, "sites", c.sites);
+		EmitMap(emit, "degeneracy", c.degeneracy);
+		EmitValue(emit, "lineFrom", c.lineFrom);
+		EmitValue(emit, "lineTo", c.lineTo);
+		EmitValue(emit, "linePoints", c.linePoints);
+		emit << YAML::EndMap << YAML::EndMap;
 		if (!emit.good()) throw std::runtime_error(emit.GetLastError());
 		return emit.c_str();
 	}

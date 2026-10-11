@@ -156,6 +156,12 @@ namespace DefectStudio
 			const auto formation = state ? FormationEnergy(*state, m_Model.reference, mu, 0.0) : std::nullopt;
 			if (formation)
 				ImGui::Text("%.4f", *formation);
+			else if (!row.energyRun && !row.candidates.empty())
+			{
+				ImGui::TextColored(kWarningColor, "wybierz");
+				ImGui::SetItemTooltip("Żadne obliczenie nie jest zbieżne i zakończone (%s).\n"
+					"Wybierz je ręcznie w kolumnie \"Obliczenie energii\", jeśli mimo to ma być użyte.", row.proposalReason.c_str());
+			}
 			else
 				ImGui::TextDisabled("-");
 

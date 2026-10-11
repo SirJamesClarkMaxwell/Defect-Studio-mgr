@@ -43,6 +43,24 @@ namespace DefectStudio
 		SpeciesEnergies deltaMu; // eV/atom, species absent = 0
 	};
 
+	// Equilibrium concentrations (task 100): carriers, the temperature window, fixed doping and the
+	// per-defect site density and degeneracy. Plan: docs/work/project/plans/2026-10-11-defect-concentrations.md.
+	struct ConcentrationSettings
+	{
+		// Aggregate DOS masses / m_0 (all valleys, no spin). Provisional diamond preset: Alasio et al.,
+		// PR Applied 21, 054043 (2024), Table II - check the valley normalisation before relying on n, p.
+		double electronMass = 0.46;
+		double holeMass = 1.25;
+		double temperatureMin = 300.0; // K
+		double temperatureMax = 2000.0;
+		int temperatureSteps = 50;
+		double fixedCharge = 0.0; // cm^-3, ionised donors positive
+		std::map<std::string, double> sites;      // defect -> cm^-3; missing = bulk atoms / volume
+		std::map<std::string, double> degeneracy; // defect -> g for every charge state; missing = 1
+		std::string lineFrom, lineTo;             // mu set names: the Delta mu line, empty = off
+		int linePoints = 21;
+	};
+
 	struct EnergeticsFile
 	{
 		int formatVersion = 1;
@@ -57,6 +75,7 @@ namespace DefectStudio
 		std::string dielectricSource;
 		std::optional<double> gap;    // unset = CBM - VBM of the bulk run's EIGENVAL
 		std::string gapSource;
+		ConcentrationSettings concentrations;
 	};
 
 	// energetics.yaml. Paths inside the project are written relative to it, others absolute, '/'

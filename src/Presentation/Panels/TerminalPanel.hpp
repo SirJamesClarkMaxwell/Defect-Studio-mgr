@@ -45,6 +45,10 @@ namespace DefectStudio
 			int columns = 80;
 			int rows = 24;
 			int id = 0;
+			// Rows scrolled back from the live screen (0 = following the output), and the
+			// scrollback size it was measured against - new lines keep the view where it was.
+			int scrollOffset = 0;
+			std::size_t scrollbackSeen = 0;
 		};
 
 		struct Tab

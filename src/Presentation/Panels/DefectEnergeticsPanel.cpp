@@ -82,6 +82,8 @@ namespace DefectStudio
 		clone->m_FnvPanel = m_FnvPanel;
 		clone->m_Edges = m_Edges;
 		clone->m_MuSet = m_MuSet;
+		clone->m_ShowContinuations = m_ShowContinuations;
+		clone->m_BulkVolume = m_BulkVolume;
 		return clone;
 	}
 
@@ -117,8 +119,12 @@ namespace DefectStudio
 	void DefectEnergeticsPanel::readBandEdges()
 	{
 		m_Edges.reset();
+		m_BulkVolume.reset();
 		if (m_Model.bulk)
+		{
 			m_Edges = VaspRunRecordIO::ReadBandEdges(m_File->runs[*m_Model.bulk].directory);
+			m_BulkVolume = VaspRunRecordIO::ReadCellVolume(m_File->runs[*m_Model.bulk].directory);
+		}
 	}
 
 	EnergeticsChoice &DefectEnergeticsPanel::choiceFor(const EnergeticsRow &row)
@@ -132,6 +138,30 @@ namespace DefectStudio
 		choice.defect = row.defect;
 		choice.charge = row.charge;
 		return choices.emplace_back(std::move(choice));
+	}
+
+	void DefectEnergeticsPanel::pickReference(const std::string &species)
+	{
+		const auto picked = Platform::PickFolder(m_File->root);
+		if (!picked || !picked->has_value())
+			return;
+		// ponytail: read on the UI thread - one small OUTCAR head + tail, about a second over SSHFS.
+		VaspRunRecord record = VaspRunRecordIO::Read(**picked);
+		const SpeciesCounts composition = CalculationComposition(record);
+		if (!record.error.empty() || composition.size() != 1 || !composition.contains(species))
+		{
+			m_Message = record.error.empty() ? std::format("{}: to nie jest obliczenie samego {}.", (*picked)->Utf8(), species)
+				: record.error;
+			return;
+		}
+		const auto existing = std::find_if(m_File->runs.begin(), m_File->runs.end(),
+			[&](const VaspRunRecord &run) { return run.directory == record.directory; });
+		if (existing != m_File->runs.end())
+			*existing = std::move(record);
+		else
+			m_File->runs.push_back(std::move(record));
+		m_File->references[species] = **picked;
+		changed();
 	}
 
 	std::string DefectEnergeticsPanel::runLabel(const std::size_t run) const
@@ -165,7 +195,13 @@ namespace DefectStudio
 			return;
 		if (snapshot && snapshot->status == JobStatus::Completed && m_ScanJob->Result())
 		{
+			// Runs outside the root were added by hand (mu references): the walk cannot find them again.
+			std::vector<VaspRunRecord> outside;
+			for (auto &run : m_File->runs)
+				if (Relative(run.directory, m_File->root) == run.directory.Utf8())
+					outside.push_back(std::move(run));
 			m_File->runs = std::move(*m_ScanJob->Result());
+			m_File->runs.insert(m_File->runs.end(), outside.begin(), outside.end());
 			std::size_t broken = 0;
 			for (const auto &run : m_File->runs)
 				broken += run.error.empty() ? 0 : 1;
@@ -341,6 +377,7 @@ namespace DefectStudio
 	{
 		pollScan();
 		pollFnvBatch();
+		pollConcentrations();
 		if (!IsVisible())
 			return;
 		ImGui::SetNextWindowSize(ImVec2(900.0f, 820.0f), ImGuiCond_FirstUseEver);
@@ -355,6 +392,7 @@ namespace DefectStudio
 			drawRows();
 			drawChemicalPotentials();
 			drawFormation();
+			drawConcentrations();
 			drawExport();
 		}
 		ImGui::End();
