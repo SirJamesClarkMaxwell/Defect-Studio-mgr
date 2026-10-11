@@ -47,12 +47,40 @@ namespace DefectStudio
 
 	void DefectEnergeticsPanel::drawChemicalPotentials()
 	{
-		if (!ImGui::CollapsingHeader("Potencjały chemiczne", ImGuiTreeNodeFlags_DefaultOpen))
+		ImGui::SeparatorText("Warunki");
+		if (ImGui::SmallButton("Pokaż wszystkie okna energetyki"))
+			m_Session->ShowViews();
+		ImGui::SetItemTooltip("Obliczenia, Energie tworzenia, Poziomy przejść, Koncentracje i FNV Correction.");
+		if (!m_Session->m_Model.chemicalPotentialError.empty())
+			ImGui::TextColored(kWarningColor, "%s", m_Session->m_Model.chemicalPotentialError.c_str());
+		if (!ImGui::BeginTabBar("##Conditions"))
 			return;
-		const ChemicalPotentialSystem &system = m_Model.chemicalPotentials;
-		if (!m_Model.chemicalPotentialError.empty())
-			ImGui::TextColored(kWarningColor, "%s", m_Model.chemicalPotentialError.c_str());
+		if (ImGui::BeginTabItem("Źródło / bulk"))
+		{
+			drawSource();
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Referencje μ"))
+		{
+			drawMuReferences();
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Fazy"))
+		{
+			drawMuPhases();
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Zestawy μ"))
+		{
+			drawMuSets();
+			ImGui::EndTabItem();
+		}
+		ImGui::EndTabBar();
+	}
 
+	void DefectEnergeticsPanel::drawMuReferences()
+	{
+		const ChemicalPotentialSystem &system = m_Session->m_Model.chemicalPotentials;
 		// mu_ref per element: which run it comes from.
 		ImGui::SeparatorText("Referencje μ_ref (eV/atom)");
 		if (ImGui::BeginTable("##MuReferences", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
@@ -73,33 +101,33 @@ namespace DefectStudio
 				else
 					ImGui::TextColored(kWarningColor, "brak");
 				ImGui::TableNextColumn();
-				const auto chosen = m_File->references.find(species);
-				const auto chosenRun = chosen == m_File->references.end() ? m_File->runs.end()
-					: std::find_if(m_File->runs.begin(), m_File->runs.end(), [&](const VaspRunRecord &run) { return run.directory == chosen->second; });
-				const std::string preview = chosen == m_File->references.end() ? "auto"
-					: chosenRun != m_File->runs.end() ? runLabel(static_cast<std::size_t>(chosenRun - m_File->runs.begin()))
+				const auto chosen = m_Session->m_File->references.find(species);
+				const auto chosenRun = chosen == m_Session->m_File->references.end() ? m_Session->m_File->runs.end()
+					: std::find_if(m_Session->m_File->runs.begin(), m_Session->m_File->runs.end(), [&](const VaspRunRecord &run) { return run.directory == chosen->second; });
+				const std::string preview = chosen == m_Session->m_File->references.end() ? "auto"
+					: chosenRun != m_Session->m_File->runs.end() ? m_Session->runLabel(static_cast<std::size_t>(chosenRun - m_Session->m_File->runs.begin()))
 					: chosen->second.Utf8();
 				ImGui::SetNextItemWidth(-1.0f);
 				if (ImGui::BeginCombo("##reference", preview.c_str()))
 				{
-					if (ImGui::Selectable("auto", chosen == m_File->references.end()))
+					if (ImGui::Selectable("auto", chosen == m_Session->m_File->references.end()))
 					{
-						m_File->references.erase(species);
-						changed();
+						m_Session->m_File->references.erase(species);
+						m_Session->Changed();
 					}
-					for (std::size_t run = 0; run < m_File->runs.size(); ++run)
+					for (std::size_t run = 0; run < m_Session->m_File->runs.size(); ++run)
 					{
-						const SpeciesCounts composition = CalculationComposition(m_File->runs[run]);
+						const SpeciesCounts composition = CalculationComposition(m_Session->m_File->runs[run]);
 						if (composition.size() != 1 || composition.begin()->first != species)
 							continue;
-						if (ImGui::Selectable(runLabel(run).c_str()))
+						if (ImGui::Selectable(m_Session->runLabel(run).c_str()))
 						{
-							m_File->references[species] = m_File->runs[run].directory;
-							changed();
+							m_Session->m_File->references[species] = m_Session->m_File->runs[run].directory;
+							m_Session->Changed();
 						}
-						if (m_File->runs[run].totalEnergy)
+						if (m_Session->m_File->runs[run].totalEnergy)
 							ImGui::SetItemTooltip("%d atomów, %.6f eV/atom", composition.begin()->second,
-								*m_File->runs[run].totalEnergy / composition.begin()->second);
+								*m_Session->m_File->runs[run].totalEnergy / composition.begin()->second);
 					}
 					if (ImGui::Selectable("z folderu..."))
 						pickReference(species);
@@ -111,13 +139,18 @@ namespace DefectStudio
 			ImGui::EndTable();
 		}
 
+	}
+
+	void DefectEnergeticsPanel::drawMuPhases()
+	{
+		const ChemicalPotentialSystem &system = m_Session->m_Model.chemicalPotentials;
 		// Competing phases: each one an inequality on the Delta mu of its elements.
 		ImGui::SeparatorText("Fazy konkurencyjne");
 		ImGui::TextDisabled("Bez nich jedynym ograniczeniem jest Δμ_i ≤ 0 (praca inż.). Np. SiC, Si3N4, Ge3N4.");
 		int removePhase = -1;
-		for (std::size_t p = 0; p < m_File->competing.size(); ++p)
+		for (std::size_t p = 0; p < m_Session->m_File->competing.size(); ++p)
 		{
-			EnergeticsPhase &phase = m_File->competing[p];
+			EnergeticsPhase &phase = m_Session->m_File->competing[p];
 			ImGui::PushID(static_cast<int>(p));
 			ImGui::Text("%s", FormulaText(phase.formula).c_str());
 			ImGui::SameLine(80.0f);
@@ -132,16 +165,16 @@ namespace DefectStudio
 			ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - 8.0f));
 			if (ImGui::BeginCombo("##phaseRun", phase.run.Empty() ? "wybierz obliczenie" : phase.run.Utf8().c_str()))
 			{
-				for (std::size_t run = 0; run < m_File->runs.size(); ++run)
+				for (std::size_t run = 0; run < m_Session->m_File->runs.size(); ++run)
 				{
-					const SpeciesCounts composition = CalculationComposition(m_File->runs[run]);
+					const SpeciesCounts composition = CalculationComposition(m_Session->m_File->runs[run]);
 					bool matches = !composition.empty();
 					for (const auto &[species, count] : composition)
 						matches = matches && phase.formula.contains(species);
-					if (matches && ImGui::Selectable(runLabel(run).c_str(), phase.run == m_File->runs[run].directory))
+					if (matches && ImGui::Selectable(m_Session->runLabel(run).c_str(), phase.run == m_Session->m_File->runs[run].directory))
 					{
-						phase.run = m_File->runs[run].directory;
-						changed();
+						phase.run = m_Session->m_File->runs[run].directory;
+						m_Session->Changed();
 					}
 				}
 				ImGui::EndCombo();
@@ -153,8 +186,8 @@ namespace DefectStudio
 		}
 		if (removePhase >= 0)
 		{
-			m_File->competing.erase(m_File->competing.begin() + removePhase);
-			changed();
+			m_Session->m_File->competing.erase(m_Session->m_File->competing.begin() + removePhase);
+			m_Session->Changed();
 		}
 		ImGui::SetNextItemWidth(120.0f);
 		ImGui::InputTextWithHint("##newPhase", "wzór, np. Si3N4", m_NewPhaseFormula.data(), m_NewPhaseFormula.size());
@@ -163,12 +196,17 @@ namespace DefectStudio
 		ImGui::BeginDisabled(!formula);
 		if (ImGui::Button("Dodaj fazę"))
 		{
-			m_File->competing.push_back({m_NewPhaseFormula.data(), *formula, Path()});
+			m_Session->m_File->competing.push_back({m_NewPhaseFormula.data(), *formula, Path()});
 			m_NewPhaseFormula.fill('\0');
-			changed();
+			m_Session->Changed();
 		}
 		ImGui::EndDisabled();
 
+	}
+
+	void DefectEnergeticsPanel::drawMuSets()
+	{
+		const ChemicalPotentialSystem &system = m_Session->m_Model.chemicalPotentials;
 		// The sets: corners of the allowed region (computed) and the user's own.
 		ImGui::SeparatorText("Zestawy μ (Δμ w eV/atom)");
 		const int columns = 3 + static_cast<int>(system.species.size());
@@ -181,15 +219,16 @@ namespace DefectStudio
 				ImGui::TableSetupColumn(("Δμ_" + species).c_str(), ImGuiTableColumnFlags_WidthStretch, 1.0f);
 			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableHeadersRow();
-			const std::size_t vertices = static_cast<std::size_t>(std::count_if(m_Model.muSets.begin(), m_Model.muSets.end(),
+			const std::size_t vertices = static_cast<std::size_t>(std::count_if(m_Session->m_Model.muSets.begin(), m_Session->m_Model.muSets.end(),
 				[](const auto &set) { return set.vertex; }));
-			for (std::size_t s = 0; s < m_Model.muSets.size(); ++s)
+			for (std::size_t s = 0; s < m_Session->m_Model.muSets.size(); ++s)
 			{
-				const EnergeticsMuSetView &set = m_Model.muSets[s];
+				const EnergeticsMuSetView &set = m_Session->m_Model.muSets[s];
 				ImGui::PushID(static_cast<int>(s));
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				ImGui::RadioButton("##use", &m_MuSet, static_cast<int>(s));
+				if (ImGui::RadioButton("##use", &m_Session->m_MuSet, static_cast<int>(s)))
+					m_Session->InvalidateInputs();
 				ImGui::SetItemTooltip("Ten zestaw na wykresie i w tabeli E_f(0).");
 				ImGui::TableNextColumn();
 				if (set.vertex)
@@ -210,8 +249,8 @@ namespace DefectStudio
 						ImGui::SetNextItemWidth(-1.0f);
 						if (ImGui::InputDouble(("##" + species).c_str(), &delta, 0.0, 0.0, "%.4f"))
 						{
-							m_File->muSets[s - vertices].deltaMu[species] = delta;
-							changed();
+							m_Session->m_File->muSets[s - vertices].deltaMu[species] = delta;
+							m_Session->Changed();
 						}
 					}
 				}
@@ -236,8 +275,8 @@ namespace DefectStudio
 		}
 		if (removeSet >= 0)
 		{
-			m_File->muSets.erase(m_File->muSets.begin() + removeSet);
-			changed();
+			m_Session->m_File->muSets.erase(m_Session->m_File->muSets.begin() + removeSet);
+			m_Session->Changed();
 		}
 		ImGui::SetNextItemWidth(200.0f);
 		ImGui::InputTextWithHint("##newSet", "nazwa, np. N-ubogie", m_NewSetName.data(), m_NewSetName.size());
@@ -246,11 +285,11 @@ namespace DefectStudio
 		if (ImGui::Button("Dodaj zestaw"))
 		{
 			EnergeticsMuSet set{m_NewSetName.data(), {}};
-			if (!m_Model.muSets.empty())
-				set.deltaMu = m_Model.muSets[static_cast<std::size_t>(m_MuSet)].deltaMu; // start from the chosen one
-			m_File->muSets.push_back(std::move(set));
+			if (!m_Session->m_Model.muSets.empty())
+				set.deltaMu = m_Session->m_Model.muSets[static_cast<std::size_t>(m_Session->m_MuSet)].deltaMu; // start from the chosen one
+			m_Session->m_File->muSets.push_back(std::move(set));
 			m_NewSetName.fill('\0');
-			changed();
+			m_Session->Changed();
 		}
 		ImGui::EndDisabled();
 		ImGui::SetItemTooltip("Nowy zestaw zaczyna od wartości zaznaczonego.");

@@ -43,6 +43,8 @@ namespace DefectStudio
 	class KeymapResolver;
 	class RendererLayer;
 	class SceneDensityLoader;
+	class DefectEnergeticsSession;
+	class CalculationSummarySession;
 	class DomainLayer;
 	struct RendererWindowState;
 	struct StructureRecord;
@@ -233,6 +235,9 @@ namespace DefectStudio
 		void loadFnvCorrectionsForProject();
 		// energetics.yaml -> DefectEnergeticsPanel (task/99); called at the end of the FNV load.
 		void loadEnergeticsForProject();
+		void registerDefectEnergeticsViews();
+		void registerCalculationSummaryViews();
+		void dockAnalysisPanelOnFirstUse(const IPanel &panel);
 		// ProjectTreePanel's per-directory RMB "Set as Displacement Comparison".
 		void onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event);
 		// This window's vertical-toolbar quick-launch button.
@@ -289,6 +294,8 @@ namespace DefectStudio
 		std::array<char, 128> m_CommandPaletteSearchBuffer{};
 		std::optional<std::string> m_PendingPanelFocusTitle;
 		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
+		Ref<DefectEnergeticsSession> m_DefectEnergeticsSession;
+		Ref<CalculationSummarySession> m_CalculationSummarySession;
 		// task/83: loads CHGCAR densities for scene objects, polled once per frame.
 		Ref<SceneDensityLoader> m_SceneDensityLoader;
 		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see

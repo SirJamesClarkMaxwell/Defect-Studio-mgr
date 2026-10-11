@@ -62,123 +62,151 @@ namespace DefectStudio
 	{
 		const VaspOutputSummaryData &summary = data.summary;
 
-		if (ImGui::BeginTable("##SummaryFields", 2,
-				ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+		if (!ImGui::BeginTabBar("##RunFields"))
+			return;
+		const char *tabs[]{"Wynik", "Parametry", "Czas", "Naprężenia / symetria"};
+		for (int tab = 0; tab < 4; ++tab)
 		{
-			ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-
-			char buffer[128];
-
-			if (summary.finalEnergy.has_value())
+			if (!ImGui::BeginTabItem(tabs[tab]))
+				continue;
+			if (ImGui::BeginTable("##SummaryFields", 2,
+					ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
 			{
-				std::snprintf(buffer, sizeof(buffer), "%.6f eV", *summary.finalEnergy);
-				RenderRow("Final energy", buffer);
-			}
-			else
-			{
-				RenderRow("Final energy", "unavailable");
-			}
+				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
 
-			if (data.gap.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->homo);
-				RenderRow("HOMO", buffer);
-				std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->lumo);
-				RenderRow("LUMO", buffer);
-				std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->bandgap);
-				RenderRow("Band gap", buffer);
-			}
-			else
-			{
-				RenderRow("Band gap", "unavailable (no complete eigenvalues)");
-			}
+				char buffer[128];
 
-			if (summary.finished)
-				RenderRow("Timing footer present", *summary.finished ? "yes (finished)" : "no (unfinished / truncated)");
-			if (summary.reachedAccuracy)
-				RenderRow("Reached required accuracy", *summary.reachedAccuracy ? "yes" : "no");
-			if (summary.nsw)
-				RenderRow("NSW", std::to_string(*summary.nsw));
-			if (summary.ibrion)
-				RenderRow("IBRION", std::to_string(*summary.ibrion));
-			if (summary.ediffg)
-				RenderRow("EDIFFG", std::to_string(*summary.ediffg));
-			if (!summary.forceTrend.empty() && std::isfinite(summary.forceTrend.back()))
-			{
-				std::snprintf(buffer, sizeof(buffer), "%.6f eV/A", summary.forceTrend.back());
-				RenderRow("Last max |F|", buffer);
-			}
-			if (summary.cpuTimeSeconds.has_value())
-				RenderRow("CPU time", FormatDurationSeconds(*summary.cpuTimeSeconds));
-			if (summary.userTimeSeconds.has_value())
-				RenderRow("User time", FormatDurationSeconds(*summary.userTimeSeconds));
-			if (summary.systemTimeSeconds.has_value())
-				RenderRow("System time", FormatDurationSeconds(*summary.systemTimeSeconds));
-			if (summary.elapsedTimeSeconds.has_value())
-				RenderRow("Elapsed time", FormatDurationSeconds(*summary.elapsedTimeSeconds));
-			if (!summary.cpuTimeSeconds.has_value() && !summary.elapsedTimeSeconds.has_value())
-				RenderRow("Timing", "unavailable (no OUTCAR)");
-
-			if (summary.totalDrift.has_value())
-				RenderRow("Total drift (eV/A)", FormatVec3(*summary.totalDrift));
-			else
-				RenderRow("Total drift", "unavailable");
-
-			if (summary.nelect.has_value())
-				RenderRow("NELECT", std::to_string(*summary.nelect));
-			if (summary.ispin.has_value())
-				RenderRow("ISPIN", std::to_string(*summary.ispin));
-
-			if (summary.pressureKilobar.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%.3f kB", *summary.pressureKilobar);
-				RenderRow("Pressure", buffer);
-			}
-
-			if (summary.spaceGroupSymbol.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%s (#%s)", summary.spaceGroupSymbol->c_str(),
-					summary.spaceGroupNumber.has_value() ? std::to_string(*summary.spaceGroupNumber).c_str() : "?");
-				RenderRow("Space group", buffer);
-			}
-			else
-			{
-				RenderRow("Space group", "unavailable");
-			}
-
-			if (summary.pointGroupSchoenflies.has_value())
-			{
-				std::snprintf(buffer, sizeof(buffer), "%s (%s)", summary.pointGroupSchoenflies->c_str(),
-					summary.pointGroupSymbol.has_value() ? summary.pointGroupSymbol->c_str() : "?");
-				RenderRow("Point group", buffer);
-			}
-			else
-			{
-				RenderRow("Point group", "unavailable");
-			}
-
-			ImGui::EndTable();
-		}
-
-		if (summary.stressTensorKilobar.has_value())
-		{
-			ImGui::Spacing();
-			ImGui::TextUnformatted("Stress tensor (kB)");
-			const auto &stress = *summary.stressTensorKilobar;
-			if (ImGui::BeginTable("##StressTensor", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
-			{
-				for (const auto &row : stress)
+				if (tab == 0)
 				{
-					ImGui::TableNextRow();
-					for (std::size_t col = 0; col < 3; ++col)
+					if (summary.finalEnergy.has_value())
 					{
-						ImGui::TableSetColumnIndex(static_cast<int>(col));
-						ImGui::Text("%.4f", row[col]);
+						std::snprintf(buffer, sizeof(buffer), "%.6f eV", *summary.finalEnergy);
+						RenderRow("Final energy", buffer);
 					}
+					else
+					{
+						RenderRow("Final energy", "unavailable");
+					}
+
+					if (data.gap.has_value())
+					{
+						std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->homo);
+						RenderRow("HOMO", buffer);
+						std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->lumo);
+						RenderRow("LUMO", buffer);
+						std::snprintf(buffer, sizeof(buffer), "%.3f eV", data.gap->bandgap);
+						RenderRow("Band gap", buffer);
+					}
+					else
+					{
+						RenderRow("Band gap", "unavailable (no complete eigenvalues)");
+					}
+
+					if (summary.finished)
+						RenderRow("Timing footer present", *summary.finished ? "yes (finished)" : "no (unfinished / truncated)");
+					if (summary.reachedAccuracy)
+						RenderRow("Reached required accuracy", *summary.reachedAccuracy ? "yes" : "no");
+				}
+				if (tab == 1)
+				{
+					if (summary.nsw)
+						RenderRow("NSW", std::to_string(*summary.nsw));
+					if (summary.ibrion)
+						RenderRow("IBRION", std::to_string(*summary.ibrion));
+					if (summary.ediffg)
+						RenderRow("EDIFFG", std::to_string(*summary.ediffg));
+				}
+				if (tab == 0 && !summary.forceTrend.empty() && std::isfinite(summary.forceTrend.back()))
+				{
+					std::snprintf(buffer, sizeof(buffer), "%.6f eV/A", summary.forceTrend.back());
+					RenderRow("Last max |F|", buffer);
+				}
+				if (tab == 2)
+				{
+					if (summary.cpuTimeSeconds.has_value())
+						RenderRow("CPU time", FormatDurationSeconds(*summary.cpuTimeSeconds));
+					if (summary.userTimeSeconds.has_value())
+						RenderRow("User time", FormatDurationSeconds(*summary.userTimeSeconds));
+					if (summary.systemTimeSeconds.has_value())
+						RenderRow("System time", FormatDurationSeconds(*summary.systemTimeSeconds));
+					if (summary.elapsedTimeSeconds.has_value())
+						RenderRow("Elapsed time", FormatDurationSeconds(*summary.elapsedTimeSeconds));
+					if (!summary.cpuTimeSeconds.has_value() && !summary.elapsedTimeSeconds.has_value())
+						RenderRow("Timing", "unavailable (no OUTCAR)");
+
+				}
+				if (tab == 3)
+				{
+					if (summary.totalDrift.has_value())
+						RenderRow("Total drift (eV/A)", FormatVec3(*summary.totalDrift));
+					else
+						RenderRow("Total drift", "unavailable");
+
+				}
+				if (tab == 1)
+				{
+					if (summary.nelect.has_value())
+						RenderRow("NELECT", std::to_string(*summary.nelect));
+					if (summary.ispin.has_value())
+						RenderRow("ISPIN", std::to_string(*summary.ispin));
+
+				}
+				if (tab == 3)
+				{
+					if (summary.pressureKilobar.has_value())
+					{
+						std::snprintf(buffer, sizeof(buffer), "%.3f kB", *summary.pressureKilobar);
+						RenderRow("Pressure", buffer);
+					}
+
+					if (summary.spaceGroupSymbol.has_value())
+					{
+						std::snprintf(buffer, sizeof(buffer), "%s (#%s)", summary.spaceGroupSymbol->c_str(),
+							summary.spaceGroupNumber.has_value() ? std::to_string(*summary.spaceGroupNumber).c_str() : "?");
+						RenderRow("Space group", buffer);
+					}
+					else
+					{
+						RenderRow("Space group", "unavailable");
+					}
+
+					if (summary.pointGroupSchoenflies.has_value())
+					{
+						std::snprintf(buffer, sizeof(buffer), "%s (%s)", summary.pointGroupSchoenflies->c_str(),
+							summary.pointGroupSymbol.has_value() ? summary.pointGroupSymbol->c_str() : "?");
+						RenderRow("Point group", buffer);
+					}
+					else
+					{
+						RenderRow("Point group", "unavailable");
+					}
+
 				}
 				ImGui::EndTable();
 			}
+
+			if (tab == 3 && summary.stressTensorKilobar.has_value())
+			{
+				ImGui::Spacing();
+				ImGui::TextUnformatted("Stress tensor (kB)");
+				const auto &stress = *summary.stressTensorKilobar;
+				if (ImGui::BeginTable("##StressTensor", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
+				{
+					for (const auto &row : stress)
+					{
+						ImGui::TableNextRow();
+						for (std::size_t col = 0; col < 3; ++col)
+						{
+							ImGui::TableSetColumnIndex(static_cast<int>(col));
+							ImGui::Text("%.4f", row[col]);
+						}
+					}
+					ImGui::EndTable();
+				}
+			}
+			ImGui::EndTabItem();
 		}
+		ImGui::EndTabBar();
 	}
 } // namespace DefectStudio

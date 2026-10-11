@@ -49,7 +49,6 @@
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
 #include "Presentation/Panels/NewStructureWizardPanel.hpp"
-#include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
 #include "Presentation/Panels/ElectronicStructureSession.hpp"
@@ -58,8 +57,9 @@
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/DisplacementComparisonPanel.hpp"
 #include "Presentation/Panels/GroupTheoryPanel.hpp"
-#include "Presentation/Panels/DefectEnergeticsPanel.hpp"
 #include "Presentation/Panels/FnvCorrectionPanel.hpp"
+#include "Presentation/Panels/DefectEnergeticsSession.hpp"
+#include "Presentation/Panels/CalculationSummarySession.hpp"
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 #include "Presentation/Panels/ObjectPropertiesPanel.hpp"
 #include "Presentation/Panels/RendererPanel.hpp"
@@ -547,6 +547,8 @@ namespace DefectStudio
 		saveProjectWindowState();
 		savePanelVisibilityState();
 		m_Panels.Clear();
+		m_DefectEnergeticsSession.reset();
+		m_CalculationSummarySession.reset();
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
 		m_EventBus.reset();
@@ -584,10 +586,18 @@ namespace DefectStudio
 		if (m_SceneDensityLoader != nullptr)
 			m_SceneDensityLoader->Update();
 
+		// Session commits happen on this main-thread boundary, once per frame even with closed views.
+		if (m_DefectEnergeticsSession)
+			m_DefectEnergeticsSession->Update();
+		if (m_CalculationSummarySession)
+			m_CalculationSummarySession->Update();
 		for (auto &entry : m_Panels.Entries())
 		{
+			dockAnalysisPanelOnFirstUse(*entry.panel);
 			entry.panel->Render();
 		}
+		if (m_DefectEnergeticsSession)
+			m_DefectEnergeticsSession->FlushChanges();
 		if (m_PendingPanelFocusTitle.has_value()
 			&& ImGui::FindWindowByName(m_PendingPanelFocusTitle->c_str()) != nullptr)
 		{
@@ -630,8 +640,7 @@ namespace DefectStudio
 		m_TextEditorPanelId = registerPanel<TextEditorPanel>("Text Editor", false);
 		m_TerminalPanelId = registerPanel<TerminalPanel>("Terminal", false);
 		m_CalculatorConsolePanelId = registerPanel<CalculatorConsolePanel>("Integrated Python Console", false);
-		m_CalculationSummaryPanelId =
-			registerPanel<CalculationSummaryPanel>(m_JobSystem, "Calculation Summary", false);
+		registerCalculationSummaryViews();
 		if (auto commandRegistry = m_CommandRegistry.lock())
 		{
 			const auto registerTerminalCommand =
@@ -739,13 +748,7 @@ namespace DefectStudio
 				"Atoms Displacement", false);
 			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
 			m_FnvCorrectionPanelId = registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
-			m_DefectEnergeticsPanelId = registerPanel<DefectEnergeticsPanel>(m_JobSystem, "Defect Energetics", false);
-			if (const auto summary = std::dynamic_pointer_cast<CalculationSummaryPanel>(findPanel(m_CalculationSummaryPanelId).lock()))
-				summary->SetBandEdgesProvider([energetics = std::weak_ptr(std::dynamic_pointer_cast<DefectEnergeticsPanel>(
-					findPanel(m_DefectEnergeticsPanelId).lock()))]() -> std::optional<VaspRunRecordIO::BandEdges> {
-					const auto panel = energetics.lock();
-					return panel ? panel->BulkBandEdges() : std::nullopt;
-				});
+			registerDefectEnergeticsViews();
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
@@ -1624,65 +1627,6 @@ namespace DefectStudio
 			DS_LOG_WARN("EditorLayer: failed to save manifest.yaml after displacement comparison change: {}", error);
 	}
 
-	void EditorLayer::loadFnvCorrectionsForProject()
-	{
-		auto panel = std::dynamic_pointer_cast<FnvCorrectionPanel>(findPanel(m_FnvCorrectionPanelId).lock());
-		if (panel == nullptr)
-			return;
-		FnvCorrectionsFile file;
-		if (m_ActiveProject.has_value())
-		{
-			std::vector<std::string> warnings;
-			std::string error;
-			if (!FnvCorrectionsIO::Load(m_ActiveProjectDirectory, file, warnings, error))
-			{
-				DS_LOG_WARN("EditorLayer: failed to load fnv_corrections.yaml: {}", error);
-				file = {};
-			}
-			for (const auto &warning : warnings)
-				DS_LOG_WARN("EditorLayer: fnv_corrections.yaml: {}", warning);
-		}
-		panel->SetPersistedState(std::move(file));
-		// Without a project the corrections live for the session only, as before.
-		panel->SetSaveHandler([this](const FnvCorrectionsFile &corrections) {
-			if (!m_ActiveProject.has_value())
-				return;
-			std::string error;
-			if (!FnvCorrectionsIO::Save(m_ActiveProjectDirectory, corrections, error))
-				DS_LOG_WARN("EditorLayer: failed to save fnv_corrections.yaml: {}", error);
-		});
-		loadEnergeticsForProject();
-	}
-
-	void EditorLayer::loadEnergeticsForProject()
-	{
-		auto panel = std::dynamic_pointer_cast<DefectEnergeticsPanel>(findPanel(m_DefectEnergeticsPanelId).lock());
-		if (panel == nullptr)
-			return;
-		panel->SetFnvPanel(std::dynamic_pointer_cast<FnvCorrectionPanel>(findPanel(m_FnvCorrectionPanelId).lock()));
-		EnergeticsFile file;
-		if (m_ActiveProject.has_value())
-		{
-			std::vector<std::string> warnings;
-			std::string error;
-			if (!EnergeticsIO::Load(m_ActiveProjectDirectory, file, warnings, error))
-			{
-				DS_LOG_WARN("EditorLayer: failed to load energetics.yaml: {}", error);
-				file = {};
-			}
-			for (const auto &warning : warnings)
-				DS_LOG_WARN("EditorLayer: energetics.yaml: {}", warning);
-		}
-		panel->SetPersistedState(std::move(file));
-		panel->SetSaveHandler([this](const EnergeticsFile &energetics) {
-			if (!m_ActiveProject.has_value())
-				return;
-			std::string error;
-			if (!EnergeticsIO::Save(m_ActiveProjectDirectory, energetics, error))
-				DS_LOG_WARN("EditorLayer: failed to save energetics.yaml: {}", error);
-		});
-	}
-
 	void EditorLayer::onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event)
 	{
 		if (auto panel = findPanel(m_DisplacementComparisonPanelId).lock())
@@ -1725,15 +1669,6 @@ namespace DefectStudio
 		{
 			if (auto *textEditor = dynamic_cast<TextEditorPanel *>(panel.get()))
 				textEditor->OpenFile(event.path);
-		}
-	}
-
-	void EditorLayer::onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event)
-	{
-		if (auto panel = findPanel(m_CalculationSummaryPanelId).lock())
-		{
-			if (auto *summary = dynamic_cast<CalculationSummaryPanel *>(panel.get()))
-				summary->OpenDirectory(event.directory);
 		}
 	}
 

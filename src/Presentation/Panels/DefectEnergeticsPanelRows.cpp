@@ -10,9 +10,7 @@
 
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Platform/FileDialog.hpp"
-#include "Presentation/Panels/FnvCorrectionInputs.hpp"
 #include "Presentation/Panels/FnvCorrectionPanel.hpp"
-#include "ScientificRuntime/Python/FnvCorrectionBridge.hpp"
 
 namespace DefectStudio
 {
@@ -41,43 +39,39 @@ namespace DefectStudio
 	// proposal), the LOCPOT that goes to FNV, E_corr and E_f(0) under the chosen mu set.
 	void DefectEnergeticsPanel::drawRows()
 	{
-		if (!ImGui::CollapsingHeader("Obliczenia", ImGuiTreeNodeFlags_DefaultOpen))
-			return;
-		if (m_Model.rows.empty())
+		if (m_Session->m_Model.rows.empty())
 		{
-			ImGui::TextDisabled(m_File->runs.empty() ? "Wskaż folder i kliknij Skanuj."
+			ImGui::TextDisabled(m_Session->m_File->runs.empty() ? "Wskaż folder i kliknij Skanuj."
 				: "Brak obliczeń defektów (sprawdź bulk).");
 			return;
 		}
-		const SpeciesEnergies mu = m_Model.muSets.empty() ? SpeciesEnergies{}
-			: AbsoluteChemicalPotentials(m_Model.chemicalPotentials, m_Model.muSets[static_cast<std::size_t>(m_MuSet)].deltaMu);
+		const SpeciesEnergies mu = m_Session->m_Model.muSets.empty() ? SpeciesEnergies{}
+			: AbsoluteChemicalPotentials(m_Session->m_Model.chemicalPotentials, m_Session->m_Model.muSets[static_cast<std::size_t>(m_Session->m_MuSet)].deltaMu);
 		constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
 			ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable;
-		if (!ImGui::BeginTable("##EnergeticsRows", 7, flags))
+		if (!ImGui::BeginTable("##EnergeticsRows", 6, flags))
 			return;
 		ImGui::TableSetupColumn("Defekt / q", ImGuiTableColumnFlags_WidthFixed);
-		ImGui::TableSetupColumn("Kont.", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Obliczenie energii (zbieżne)", ImGuiTableColumnFlags_WidthStretch, 3.0f);
 		ImGui::TableSetupColumn("LOCPOT dla FNV", ImGuiTableColumnFlags_WidthStretch, 2.0f);
 		ImGui::TableSetupColumn("E_corr [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("E_f(0) [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Uwagi", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableHeadersRow();
-		// One tree node per defect (its states included / with continuations, tri-state), its charge
+		// One tree node per defect (its included states, tri-state), its charge
 		// states as the children.
-		for (std::size_t first = 0; first < m_Model.rows.size();)
+		for (std::size_t first = 0; first < m_Session->m_Model.rows.size();)
 		{
-			const std::string defect = m_Model.rows[first].defect;
+			const std::string defect = m_Session->m_Model.rows[first].defect;
 			std::size_t last = first;
-			while (last < m_Model.rows.size() && m_Model.rows[last].defect == defect)
+			while (last < m_Session->m_Model.rows.size() && m_Session->m_Model.rows[last].defect == defect)
 				++last;
-			std::size_t included = 0, continued = 0, problems = 0;
+			std::size_t included = 0, problems = 0;
 			std::string charges;
 			for (std::size_t r = first; r < last; ++r)
 			{
-				const EnergeticsRow &row = m_Model.rows[r];
+				const EnergeticsRow &row = m_Session->m_Model.rows[r];
 				included += row.included ? 1 : 0;
-				continued += m_Continuations.contains({defect, row.charge}) ? 1 : 0;
 				problems += row.problems.size();
 				charges += (charges.empty() ? "" : "  ") + ChargeText(row.charge);
 			}
@@ -88,21 +82,15 @@ namespace DefectStudio
 			if (TriStateCheckbox("##included", included, count))
 			{
 				for (std::size_t r = first; r < last; ++r)
-					choiceFor(m_Model.rows[r]).included = included != count;
-				changed();
+					m_Session->choiceFor(m_Session->m_Model.rows[r]).included = included != count;
+				m_Session->Changed();
 			}
 			ImGui::SetItemTooltip("Uwzględnij wszystkie stany ładunkowe w wykresie, obwiedni i eksporcie.");
 			ImGui::SameLine();
 			const bool open = ImGui::TreeNodeEx(defect.c_str(), ImGuiTreeNodeFlags_SpanTextWidth);
 			ImGui::TableNextColumn();
-			if (TriStateCheckbox("##continued", continued, count))
-				for (std::size_t r = first; r < last; ++r)
-					continued != count ? (void)m_Continuations.insert({defect, m_Model.rows[r].charge})
-						: (void)m_Continuations.erase({defect, m_Model.rows[r].charge});
-			ImGui::SetItemTooltip("Kontynuacje: wszystkie linie stanów na całej przerwie, nie tylko obwiednia.");
-			ImGui::TableNextColumn();
 			ImGui::TextDisabled("q: %s", charges.c_str());
-			ImGui::TableSetColumnIndex(6);
+			ImGui::TableSetColumnIndex(5);
 			if (problems)
 				ImGui::TextColored(kWarningColor, "(!) %zu", problems);
 			if (open)
@@ -117,77 +105,72 @@ namespace DefectStudio
 		ImGui::EndTable();
 
 		// FNV queue
-		if (m_FnvRunning || !m_FnvQueue.empty())
+		if (m_Session->m_FnvRunning || !m_Session->m_FnvQueue.empty())
 		{
-			ImGui::ProgressBar(m_FnvTotal ? static_cast<float>(m_FnvDone) / static_cast<float>(m_FnvTotal) : 0.0f,
+			ImGui::ProgressBar(m_Session->m_FnvTotal ? static_cast<float>(m_Session->m_FnvDone) / static_cast<float>(m_Session->m_FnvTotal) : 0.0f,
 				ImVec2(-ImGui::CalcTextSize("Anuluj").x - 3.0f * ImGui::GetStyle().FramePadding.x, 0.0f),
-				m_FnvRunning ? std::format("FNV {}/{}: {} q={}", m_FnvDone + 1, m_FnvTotal, m_FnvRunning->defect,
-					ChargeText(m_FnvRunning->charge)).c_str() : nullptr);
+				m_Session->m_FnvRunning ? std::format("FNV {}/{}: {} q={}", m_Session->m_FnvDone + 1, m_Session->m_FnvTotal, m_Session->m_FnvRunning->defect,
+					ChargeText(m_Session->m_FnvRunning->charge)).c_str() : nullptr);
 			ImGui::SameLine();
 			if (ImGui::Button("Anuluj##fnv"))
 			{
-				m_FnvQueue.clear();
-				if (const auto jobSystem = m_JobSystem.lock(); jobSystem && m_FnvJobId)
-					(void)jobSystem->RequestCancel(m_FnvJobId);
+				m_Session->m_FnvQueue.clear();
+				if (const auto jobSystem = m_Session->m_JobSystem.lock(); jobSystem && m_Session->m_FnvJobId)
+					(void)jobSystem->RequestCancel(m_Session->m_FnvJobId);
 			}
 		}
 		else
 		{
 			std::size_t missing = 0;
-			for (const auto &row : m_Model.rows)
+			for (const auto &row : m_Session->m_Model.rows)
 				missing += row.included && row.charge != 0 && !row.correction && !row.locpot.Empty() ? 1 : 0;
-			ImGui::BeginDisabled(missing == 0 || !m_Model.bulk);
+			ImGui::BeginDisabled(missing == 0 || !m_Session->m_Model.bulk);
 			if (ImGui::Button(std::format("Policz brakujące FNV ({})", missing).c_str()))
-				startFnvBatch();
+				m_Session->startFnvBatch();
 			ImGui::EndDisabled();
 			ImGui::SetItemTooltip("Kolejno, jedno naraz: profile pymatgen (2 LOCPOT, ~1 min lokalnie, kilka minut po "
 				"sieci), środek z domieszek, okna plateau zaproponowane. Okna i środek poprawisz potem w panelu FNV.");
 		}
 	}
 
-	// A charge state under its defect's node: included, continuation, the energy run, the LOCPOT for
+	// A charge state under its defect's node: included, the energy run, the LOCPOT for
 	// FNV, E_corr, E_f(0) and the problems.
 	void DefectEnergeticsPanel::drawStateRow(const std::size_t r, const SpeciesEnergies &mu)
 	{
-		const EnergeticsRow &row = m_Model.rows[r];
+		const EnergeticsRow &row = m_Session->m_Model.rows[r];
 		ImGui::PushID(static_cast<int>(r));
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		bool included = row.included;
 		if (ImGui::Checkbox("##included", &included))
 		{
-			choiceFor(row).included = included;
-			changed();
+			m_Session->choiceFor(row).included = included;
+			m_Session->Changed();
 		}
 		ImGui::SetItemTooltip("Uwzględnij w wykresie, obwiedni i eksporcie.");
 		ImGui::SameLine();
 		ImGui::Text("q = %s", ChargeText(row.charge).c_str());
-		ImGui::TableNextColumn();
-		bool continued = m_Continuations.contains({row.defect, row.charge});
-		if (ImGui::Checkbox("##continued", &continued))
-			continued ? (void)m_Continuations.insert({row.defect, row.charge}) : (void)m_Continuations.erase({row.defect, row.charge});
-		ImGui::SetItemTooltip("Linia tego stanu na całej przerwie.");
 
 		ImGui::TableNextColumn();
 		{
 			const std::string preview = row.energyRun
-				? runLabel(*row.energyRun) + (row.userChoice ? "" : "  (auto)")
+				? m_Session->runLabel(*row.energyRun) + (row.userChoice ? "" : "  (auto)")
 				: "wybierz: " + row.proposalReason;
 			ImGui::SetNextItemWidth(-1.0f);
 			if (ImGui::BeginCombo("##energyRun", preview.c_str()))
 			{
 				if (ImGui::Selectable(("auto: " + row.proposalReason).c_str(), !row.userChoice))
 				{
-					choiceFor(row).energyRun.reset();
-					changed();
+					m_Session->choiceFor(row).energyRun.reset();
+					m_Session->Changed();
 				}
 				for (const std::size_t candidate : row.candidates)
 				{
-					const VaspRunRecord &run = m_File->runs[candidate];
-					if (ImGui::Selectable(runLabel(candidate).c_str(), row.userChoice && row.energyRun == candidate))
+					const VaspRunRecord &run = m_Session->m_File->runs[candidate];
+					if (ImGui::Selectable(m_Session->runLabel(candidate).c_str(), row.userChoice && row.energyRun == candidate))
 					{
-						choiceFor(row).energyRun = run.directory;
-						changed();
+						m_Session->choiceFor(row).energyRun = run.directory;
+						m_Session->Changed();
 					}
 					ImGui::SetItemTooltip("%s, PRECFOCK %s, ENCUT %.0f eV\nTOTEN %s eV\n%s",
 						run.method.hybrid ? "HSE" : "PBE", run.method.precFock.empty() ? "-" : run.method.precFock.c_str(),
@@ -200,7 +183,7 @@ namespace DefectStudio
 
 		ImGui::TableNextColumn();
 		{
-			const bool own = std::any_of(m_File->choices.begin(), m_File->choices.end(), [&](const auto &choice) {
+			const bool own = std::any_of(m_Session->m_File->choices.begin(), m_Session->m_File->choices.end(), [&](const auto &choice) {
 				return choice.defect == row.defect && choice.charge == row.charge && choice.locpot;
 			});
 			const float button = ImGui::GetFrameHeight();
@@ -212,11 +195,11 @@ namespace DefectStudio
 			ImGui::SameLine(0.0f, spacing);
 			if (ImGui::Button("...", ImVec2(button, 0.0f)))
 			{
-				const auto picked = Platform::PickOpenFile(row.locpot.Empty() ? m_File->root : row.locpot.parent_path(), "", "");
+				const auto picked = Platform::PickOpenFile(row.locpot.Empty() ? m_Session->m_File->root : row.locpot.parent_path(), "", "");
 				if (picked && picked->has_value())
 				{
-					choiceFor(row).locpot = **picked;
-					changed();
+					m_Session->choiceFor(row).locpot = **picked;
+					m_Session->Changed();
 				}
 			}
 			ImGui::SetItemTooltip("Inny LOCPOT dla FNV niż z obliczenia energii (np. GeN q-1 w pracy inż.).");
@@ -225,8 +208,8 @@ namespace DefectStudio
 				ImGui::SameLine(0.0f, spacing);
 				if (ImGui::Button("x", ImVec2(button, 0.0f)))
 				{
-					choiceFor(row).locpot.reset();
-					changed();
+					m_Session->choiceFor(row).locpot.reset();
+					m_Session->Changed();
 				}
 				ImGui::SetItemTooltip("Wróć do LOCPOT obliczenia energii.");
 			}
@@ -238,7 +221,7 @@ namespace DefectStudio
 		else if (row.correction)
 		{
 			if (ImGui::SmallButton(std::format("{:.4f}", row.correction->correction).c_str()))
-				if (const auto panel = m_FnvPanel.lock())
+				if (const auto panel = m_Session->m_FnvPanel.lock())
 					panel->ShowCorrection(row.locpot);
 			ImGui::SetItemTooltip("E_lat %.4f, C %.4f (rozrzut osi %.4f) eV - kliknij, by otworzyć w FNV.",
 				row.correction->latticeEnergy, row.correction->alignment, row.correction->alignmentSpread);
@@ -247,8 +230,8 @@ namespace DefectStudio
 			ImGui::TextColored(kWarningColor, "brak");
 
 		ImGui::TableNextColumn();
-		const auto state = EnergeticsRowState(*m_File, row);
-		const auto formation = state ? FormationEnergy(*state, m_Model.reference, mu, 0.0) : std::nullopt;
+		const auto state = EnergeticsRowState(*m_Session->m_File, row);
+		const auto formation = state ? FormationEnergy(*state, m_Session->m_Model.reference, mu, 0.0) : std::nullopt;
 		if (formation)
 			ImGui::Text("%.4f", *formation);
 		else if (!row.energyRun && !row.candidates.empty())
@@ -274,91 +257,4 @@ namespace DefectStudio
 		ImGui::PopID();
 	}
 
-	void DefectEnergeticsPanel::startFnvBatch()
-	{
-		if (!m_Model.bulk)
-			return;
-		const Path bulkLocpot = m_File->runs[*m_Model.bulk].directory / Path::FromUtf8("LOCPOT");
-		const auto bulkStructure = ReadLocpotStructure(bulkLocpot);
-		std::vector<std::string> skipped;
-		for (const auto &row : m_Model.rows)
-		{
-			if (!row.included || row.charge == 0 || row.correction || row.locpot.Empty())
-				continue;
-			const auto defectStructure = ReadLocpotStructure(row.locpot);
-			const auto centre = defectStructure && bulkStructure ? FindImpurityCentre(*defectStructure, *bulkStructure)
-				: std::nullopt;
-			if (!centre)
-			{
-				skipped.push_back(std::format("{} q={}", row.defect, ChargeText(row.charge)));
-				continue;
-			}
-			FnvTask task;
-			task.defect = row.defect;
-			task.charge = row.charge;
-			task.entry.defectLocpot = row.locpot;
-			task.entry.bulkLocpot = bulkLocpot;
-			task.entry.charge = row.charge;
-			task.entry.dielectric = m_File->dielectric;
-			task.entry.dielectricSource = m_File->dielectricSource;
-			task.entry.centreFractional = centre->fractional;
-			task.entry.convention = FnvModelConvention::Sxdefectalign;
-			m_FnvQueue.push_back(std::move(task));
-		}
-		m_FnvDone = 0;
-		m_FnvTotal = m_FnvQueue.size();
-		m_Message = skipped.empty() ? std::string() : "Bez środka (brak domieszki - ustaw w FNV): " + [&] {
-			std::string list;
-			for (const auto &name : skipped)
-				list += (list.empty() ? "" : ", ") + name;
-			return list;
-		}();
-		submitNextFnv();
-	}
-
-	void DefectEnergeticsPanel::submitNextFnv()
-	{
-		const auto jobSystem = m_JobSystem.lock();
-		if (!jobSystem || m_FnvQueue.empty())
-			return;
-		m_FnvRunning = std::move(m_FnvQueue.front());
-		m_FnvQueue.pop_front();
-		FnvProfileRequest request;
-		request.defectLocpot = m_FnvRunning->entry.defectLocpot;
-		request.bulkLocpot = m_FnvRunning->entry.bulkLocpot;
-		request.charge = m_FnvRunning->entry.charge;
-		request.dielectric = m_FnvRunning->entry.dielectric;
-		request.centreFractional = m_FnvRunning->entry.centreFractional;
-		request.energyCutoff = m_FnvRunning->entry.energyCutoff;
-		m_FnvJob = CreateRef<FnvCorrectionJob>(request);
-		m_FnvJobId = jobSystem->Submit(m_FnvJob, JobPriority::Normal);
-	}
-
-	void DefectEnergeticsPanel::pollFnvBatch()
-	{
-		if (!m_FnvJob)
-			return;
-		const auto jobSystem = m_JobSystem.lock();
-		const auto snapshot = jobSystem ? jobSystem->GetJob(m_FnvJobId) : std::nullopt;
-		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running))
-			return;
-		if (snapshot && snapshot->status == JobStatus::Completed && m_FnvJob->GetResult() && m_FnvRunning)
-		{
-			PersistedFnvCorrection entry = std::move(m_FnvRunning->entry);
-			entry.profiles = std::move(*m_FnvJob->GetResult());
-			for (int a = 0; a < 3; ++a)
-				entry.windows[a] = ProposeFnvAlignment(entry.profiles->axes[a],
-					FnvModelPotential(*entry.profiles, a, entry.convention)).window;
-			if (const auto panel = m_FnvPanel.lock())
-				panel->StoreCorrection(std::move(entry));
-		}
-		else if (m_FnvRunning)
-			m_Message = std::format("FNV {} q={}: {}", m_FnvRunning->defect, ChargeText(m_FnvRunning->charge),
-				snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "nie powiodło się");
-		++m_FnvDone;
-		m_FnvJob.reset();
-		m_FnvJobId = 0;
-		m_FnvRunning.reset();
-		submitNextFnv();
-	}
 } // namespace DefectStudio

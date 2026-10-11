@@ -64,9 +64,8 @@ namespace DefectStudio::ProjectEvents
 	};
 
 	// Queued from ProjectTreePanel's per-node RMB "Show Calculation Summary" (same context menu as
-	// "Set as Bulk Reference"/"Open Defect"). EditorLayer routes it to the single
-	// CalculationSummaryPanel instance (TextEditorPanel-style: opening a new directory replaces
-	// whatever was open, no tabs - see CalculationSummaryPanel's class comment).
+	// "Set as Bulk Reference"/"Open Defect"). EditorLayer opens a new CalculationSummarySession
+	// chain and shows its summary, convergence and KS views together.
 	struct CalculationSummaryOpenRequested final : public BusEvent
 	{
 		Path directory;

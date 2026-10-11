@@ -6,6 +6,19 @@
 
 namespace DefectStudio
 {
+	std::optional<DockRegion> AnalysisDockRegion(const std::string_view title)
+	{
+		if (title == "Defect Energetics" || title == "Calculation Summary")
+			return DockRegion::Left;
+		if (title == "Obliczenia")
+			return DockRegion::Bottom;
+		if (title == "Poziomy przejść" || title == "Poziomy KS")
+			return DockRegion::Right;
+		if (title == "Energie tworzenia" || title == "Koncentracje" || title == "Zbieżność")
+			return DockRegion::Central;
+		return std::nullopt;
+	}
+
 	DockRegion ClassifyDockRegion(const DockRectangle &node, const DockRectangle &central)
 	{
 		if (central.min.x >= central.max.x || central.min.y >= central.max.y)
