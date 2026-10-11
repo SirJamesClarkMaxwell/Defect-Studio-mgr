@@ -21,7 +21,6 @@ namespace DefectStudio
 	namespace
 	{
 		constexpr ImVec4 kWarningColor(0.95f, 0.75f, 0.30f, 1.0f);
-		constexpr std::array<const char *, 3> kAxes{"a1", "a2", "a3"};
 
 		bool DrawPathField(const char *id, Path &path, std::string &error)
 		{
@@ -82,6 +81,11 @@ namespace DefectStudio
 		clone->m_UseAxis = m_UseAxis;
 		clone->m_Alignments = m_Alignments;
 		clone->m_ModelPotential = m_ModelPotential;
+		clone->m_AxisLabels = m_AxisLabels;
+		clone->m_CentreSource = m_CentreSource;
+		clone->m_ShowDeltaV = m_ShowDeltaV;
+		clone->m_ShowModel = m_ShowModel;
+		clone->m_EditedAxis = m_EditedAxis;
 		return clone;
 	}
 
@@ -129,6 +133,22 @@ namespace DefectStudio
 		m_PendingJobId = 0;
 	}
 
+	void FnvCorrectionPanel::proposeCentre()
+	{
+		if (m_Request.defectLocpot.Empty() || m_Request.bulkLocpot.Empty())
+			return;
+		const auto defect = ReadLocpotStructure(m_Request.defectLocpot);
+		const auto bulk = ReadLocpotStructure(m_Request.bulkLocpot);
+		const auto centre = defect && bulk ? FindImpurityCentre(*defect, *bulk) : std::nullopt;
+		if (!centre)
+		{
+			m_CentreSource = "brak domieszki w strukturze - podaj środek";
+			return;
+		}
+		m_Request.centreFractional = centre->fractional;
+		m_CentreSource = "auto: centroid " + centre->species;
+	}
+
 	void FnvCorrectionPanel::proposeWindows()
 	{
 		m_Dirty = true;
@@ -139,6 +159,8 @@ namespace DefectStudio
 	{
 		if (!m_Profiles)
 			return;
+		const auto structure = ReadLocpotStructure(m_Request.defectLocpot);
+		m_AxisLabels = structure ? FnvAxisLabels(structure->lattice) : std::array<std::string, 3>{"a1", "a2", "a3"};
 		for (int a = 0; a < 3; ++a)
 		{
 			const auto &axis = m_Profiles->axes[a];
@@ -184,12 +206,16 @@ namespace DefectStudio
 						if (m_Request.bulkLocpot.Empty())
 							if (const auto bulk = FindBulkLocpotNear(m_Request.defectLocpot))
 								m_Request.bulkLocpot = *bulk;
+						proposeCentre();
 						invalidateProfiles();
 					}
 				}
 				grid.Row("LOCPOT bulk");
 				if (DrawPathField("bulk", m_Request.bulkLocpot, m_Error))
+				{
+					proposeCentre();
 					invalidateProfiles();
+				}
 				grid.Row("Ładunek q", "q = -1: dodatkowy elektron. sxdefectalign: --charge = -q");
 				if (ImGui::InputInt("##q", &m_Request.charge))
 					invalidateProfiles();
@@ -203,7 +229,10 @@ namespace DefectStudio
 				grid.Row("Środek", "Współrzędne ułamkowe środka defektu.");
 				if (ImGui::InputScalarN("##centre", ImGuiDataType_Double, &m_Request.centreFractional.x, 3,
 					nullptr, nullptr, "%.6f"))
+				{
+					m_CentreSource = "ręcznie";
 					invalidateProfiles();
+				}
 				std::optional<glm::dvec3> densityCentre, atomsCentre;
 				for (const auto &window : m_RendererLayer.GetWindows())
 				{
@@ -226,6 +255,7 @@ namespace DefectStudio
 				if (ImGui::Button("Z gęstości"))
 				{
 					m_Request.centreFractional = *densityCentre;
+					m_CentreSource = "centroid gęstości";
 					invalidateProfiles();
 				}
 				ImGui::EndDisabled();
@@ -234,9 +264,27 @@ namespace DefectStudio
 				if (ImGui::Button("Z zaznaczonych atomów"))
 				{
 					m_Request.centreFractional = *atomsCentre;
+					m_CentreSource = "zaznaczone atomy";
 					invalidateProfiles();
 				}
 				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::BeginDisabled(m_Request.defectLocpot.Empty() || m_Request.bulkLocpot.Empty());
+				if (ImGui::Button("Z domieszek"))
+				{
+					proposeCentre();
+					invalidateProfiles();
+				}
+				ImGui::SetItemTooltip("Centroid atomów, których nie ma w bulku (CONTCAR obok LOCPOT) - jak w pracy inż.");
+				ImGui::EndDisabled();
+				if (!m_CentreSource.empty())
+				{
+					grid.Row("");
+					if (m_CentreSource.starts_with("brak"))
+						ImGui::TextColored(kWarningColor, "%s", m_CentreSource.c_str());
+					else
+						ImGui::TextDisabled("źródło: %s", m_CentreSource.c_str());
+				}
 				grid.Row("ENCUT", "0 = z INCAR obok LOCPOT defektu (bez INCAR: 520 eV).");
 				if (ImGui::InputDouble("##encut", &m_Request.energyCutoff, 0.0, 0.0,
 					m_Request.energyCutoff == 0.0 ? "z INCAR" : "%.1f eV"))
@@ -282,7 +330,7 @@ namespace DefectStudio
 		}
 		if (!m_Profiles)
 			return;
-		if (ImGui::BeginTable("##FnvAxes", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX |
+		if (ImGui::BeginTable("##FnvAxes", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
 			ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
 		{
 			for (const char *label : {"Oś", "Użyj", "Okno [Å]", "C [eV]", "Rozrzut", "Nachylenie", "Plateau"})
@@ -293,7 +341,7 @@ namespace DefectStudio
 				ImGui::PushID(a);
 				const auto &alignment = m_Alignments[a];
 				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(kAxes[a]);
+				ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(m_AxisLabels[a].c_str());
 				ImGui::TableSetColumnIndex(1);
 				if (ImGui::Checkbox("##use", &m_UseAxis[a]))
 					m_Dirty = true;
@@ -301,7 +349,7 @@ namespace DefectStudio
 				ImGui::TableSetColumnIndex(3); ImGui::Text("%+.4f", alignment.alignment);
 				ImGui::TableSetColumnIndex(4); ImGui::Text("%.4f", alignment.spread);
 				ImGui::TableSetColumnIndex(5); ImGui::Text("%.2f", alignment.slope);
-				ImGui::TableSetColumnIndex(6); ImGui::TextUnformatted(alignment.flat ? "✓" : "✗");
+				ImGui::TableSetColumnIndex(6); ImGui::TextUnformatted(alignment.flat ? "tak" : "nie");
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
@@ -331,7 +379,7 @@ namespace DefectStudio
 			slope += m_Alignments[a].slope;
 			++count;
 			if (!m_Alignments[a].flat)
-				ImGui::TextWrapped("Oś %s: brak plateau - przesuń okno albo zmień oś.", kAxes[a]);
+				ImGui::TextWrapped("Oś %s: brak plateau - przesuń okno albo zmień oś.", m_AxisLabels[a].c_str());
 		}
 		slope /= count;
 		if (slope < 0.3)
@@ -380,9 +428,9 @@ namespace DefectStudio
 		{
 			drawData();
 			if (m_Profiles)
-				drawResult();
-			if (m_Profiles)
 				drawPlots();
+			if (m_Profiles)
+				drawResult();
 		}
 		ImGui::End();
 		persistChanges();

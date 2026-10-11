@@ -45,6 +45,7 @@ namespace DefectStudio
 		m_Profiles.reset();
 		m_Alignments = {};
 		m_ModelPotential = {};
+		m_CentreSource.clear();
 		if (m_Saved->active < 0 || m_Saved->active >= static_cast<int>(m_Saved->corrections.size()))
 		{
 			m_Saved->active = -1;
@@ -56,6 +57,7 @@ namespace DefectStudio
 		std::snprintf(m_DielectricSource.data(), m_DielectricSource.size(), "%s", entry.dielectricSource.c_str());
 		m_Convention = entry.convention;
 		m_UseAxis = entry.useAxis;
+		m_CentreSource = "zapisany wpis";
 		m_Profiles = entry.profiles;
 		rebuildAlignments(entry.windows);
 	}

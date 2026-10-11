@@ -115,7 +115,8 @@ namespace DefectStudio
 			radii[i] = maxRadius * static_cast<double>(i) / static_cast<double>(radii.size() - 1);
 			fractions[i] = profile->FractionWithin(static_cast<float>(radii[i]));
 		}
-		if (ImPlot::BeginPlot("##DensityCumulative", ImVec2(-1.0f, 140.0f), ImPlotFlags_NoLegend))
+		if (ImPlot::BeginPlot("##DensityCumulative",
+			ImVec2(-1.0f, std::max(140.0f, 0.6f * ImGui::GetContentRegionAvail().x)), ImPlotFlags_NoLegend))
 		{
 			ImPlot::SetupAxes("r (Å)", "Ułamek |ρ|");
 			ImPlot::SetupAxesLimits(0.0, maxRadius, 0.0, 1.0, ImPlotCond_Always);

@@ -41,7 +41,8 @@ namespace DefectStudio
 		void publishSavedState();
 		void drawResult();
 		void drawPlots();
-		void drawAxisPlot(int axis);
+		void plotAxis(int axis, bool editable);
+		void proposeCentre();
 		void invalidateProfiles();
 		void submitProfiles();
 		void pollJob();
@@ -68,5 +69,10 @@ namespace DefectStudio
 		std::array<bool, 3> m_UseAxis{true, true, true};
 		std::array<FnvAxisAlignment, 3> m_Alignments;
 		std::array<std::vector<double>, 3> m_ModelPotential;
+		std::array<std::string, 3> m_AxisLabels{"a1", "a2", "a3"};
+		std::string m_CentreSource; // where the centre came from, shown under the field
+		bool m_ShowDeltaV = false;
+		bool m_ShowModel = false;
+		int m_EditedAxis = 0; // the axis whose plateau window the plot's handles move
 	};
 } // namespace DefectStudio

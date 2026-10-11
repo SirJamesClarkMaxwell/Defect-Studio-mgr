@@ -27,6 +27,27 @@ def read_encut(incar_path: Path) -> float:
     return float(match.group(1)) if match else 520.0
 
 
+def pymatgen_roll(x: np.ndarray, axbulk: float, length: float) -> tuple[int, float]:
+    """The roll perform_pot_corr applies (first grid point strictly past the defect -> index 0,
+    no roll for a defect at 0) and how far that grid point sits from the defect, in A.
+    pymatgen builds V_model with the defect at index 0, so after undoing the roll the model peaks
+    `offset` (0 .. one grid step) away from the true centre; shift_periodic moves it back."""
+    if axbulk < 0:
+        axbulk += length
+    elif axbulk > length:
+        axbulk -= length
+    if not axbulk:
+        return 0, 0.0
+    i = next((k for k in range(len(x)) if axbulk < x[k]), len(x) - 1)
+    return len(x) - i, float(x[i] - axbulk)
+
+
+def shift_periodic(values: np.ndarray, offset: float, length: float) -> np.ndarray:
+    """values(x + offset) for a smooth periodic profile, by a Fourier phase shift."""
+    freq = np.fft.fftfreq(len(values), d=length / len(values))
+    return np.fft.ifft(np.fft.fft(values) * np.exp(2j * np.pi * freq * offset)).real
+
+
 def load(defect_path: str, bulk_path: str, q: int, eps: float,
          centre: list[float], encut: float) -> dict:
     if q == 0 or not np.isfinite(eps) or eps <= 0:
@@ -54,12 +75,9 @@ def load(defect_path: str, bulk_path: str, q: int, eps: float,
         pd = res.metadata["plot_data"][a]["pot_plot_data"]
         x = np.asarray(pd["x"])
         length = defect.structure.lattice.abc[a]
-        # Undo pymatgen's defect-at-index-zero roll, exactly as in pymatgen_vs_sx.py.
-        axbulk = centre[a] * length
-        i = int(np.argmax(x > axbulk))
-        roll = len(x) - i
+        roll, offset = pymatgen_roll(x, centre[a] * length, length)
         dv = np.roll(pd["dft_diff"], -roll)
-        vr = np.roll(pd["Vr"], -roll)
+        vr = shift_periodic(np.roll(pd["Vr"], -roll), offset, length)
         axes.append({"length": float(length), "deltaV": dv.tolist(), "modelPotential": vr.tolist()})
     return {
         "electrostatic": float(res.metadata["electrostatic"]),
@@ -69,7 +87,23 @@ def load(defect_path: str, bulk_path: str, q: int, eps: float,
     }
 
 
+def selftest() -> None:
+    length, n = 14.0, 180
+    x = np.arange(n) * length / n
+    gauss = lambda c: sum(np.exp(-((x - c + k * length) ** 2) / 0.5) for k in (-1, 0, 1))
+    # pymatgen's model sits on grid point 91 for a defect at 6.95 A; moving it back lands on 6.95
+    roll, offset = pymatgen_roll(x, 6.95, length)
+    assert roll == n - 90 and abs(offset - (x[90] - 6.95)) < 1e-12
+    assert np.abs(shift_periodic(gauss(x[90]), offset, length) - gauss(6.95)).max() < 1e-9
+    assert pymatgen_roll(x, 0.0, length) == (0, 0.0)
+    assert pymatgen_roll(x, x[-1] + 0.01, length)[0] == 1  # past the last point: pymatgen rolls by 1
+    print("ok")
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--selftest"]:
+        selftest()
+        return 0
     if len(sys.argv) != 7:
         print(__doc__.splitlines()[2], file=sys.stderr)
         return 1

@@ -1,6 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
+#include <format>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "ScientificRuntime/Python/FnvCorrectionBridge.hpp"
 #include "ScientificRuntimeTestPaths.hpp"
@@ -89,5 +94,74 @@ namespace DefectStudio::Tests
 			alignments[a] = ProposeFnvAlignment(
 				profiles.axes[a], FnvModelPotential(profiles, a, FnvModelConvention::Pymatgen));
 		EXPECT_NEAR(CombineFnvCorrection(profiles, alignments).correction, 0.23324, 1e-3);
+	}
+
+	// Path B of the thesis formation-energy reproduction (skill defect-formation-energy), off by
+	// default: the FNV panel's default calculation (cutoff from INCAR, sxdefectalign convention,
+	// automatic plateau, all axes) for every case, headless. ~1 min per case.
+	//   set DS_FNV_BATCH_CASES=<TSV: tag, q, fx,fy,fz, defect LOCPOT, bulk LOCPOT>
+	//   set DS_FNV_BATCH_OUT=<existing folder>  -> ecorr_app.csv + <tag>_profiles.csv
+	TEST(FnvCorrectionBridgeTests, DiamondBatchForFormationEnergies)
+	{
+		const char *cases = std::getenv("DS_FNV_BATCH_CASES");
+		const char *out = std::getenv("DS_FNV_BATCH_OUT");
+		if (cases == nullptr || *cases == '\0' || out == nullptr || *out == '\0')
+			GTEST_SKIP() << "DS_FNV_BATCH_CASES / DS_FNV_BATCH_OUT not set";
+
+		std::ifstream input(Path::FromUtf8(cases).Native());
+		ASSERT_TRUE(input) << cases;
+		std::ofstream summary((Path::FromUtf8(out) / "ecorr_app.csv").Native());
+		summary << "tag,q,E_lat_eV,C_eV,C_axis_spread_eV,E_corr_eV,energyCutoff_eV,modelPotentialMean_eV,"
+				   "C_a0,C_a1,C_a2,sigma_a0,sigma_a1,sigma_a2,flat_a0,flat_a1,flat_a2,slope_a0,slope_a1,slope_a2\n";
+
+		std::string line;
+		while (std::getline(input, line))
+		{
+			if (line.empty() || line.front() == '#')
+				continue;
+			std::istringstream fields(line);
+			std::string tag, charge, centre, defect, bulk;
+			std::getline(fields, tag, '\t');
+			std::getline(fields, charge, '\t');
+			std::getline(fields, centre, '\t');
+			std::getline(fields, defect, '\t');
+			std::getline(fields, bulk, '\t');
+			SCOPED_TRACE(tag);
+
+			FnvProfileRequest request;
+			request.defectLocpot = Path::FromUtf8(defect);
+			request.bulkLocpot = Path::FromUtf8(bulk);
+			request.charge = std::stoi(charge);
+			request.dielectric = 5.7;
+			std::replace(centre.begin(), centre.end(), ',', ' ');
+			std::istringstream(centre) >> request.centreFractional.x >> request.centreFractional.y >> request.centreFractional.z;
+			const Result<FnvProfiles> result = FnvCorrectionBridge{}.ComputeProfiles(request);
+			ASSERT_TRUE(result) << result.Error().technicalDetails;
+			const FnvProfiles &profiles = *result;
+
+			std::array<FnvAxisAlignment, 3> alignments;
+			std::array<std::vector<double>, 3> models;
+			for (int a = 0; a < 3; ++a)
+			{
+				models[a] = FnvModelPotential(profiles, a, FnvModelConvention::Sxdefectalign);
+				alignments[a] = ProposeFnvAlignment(profiles.axes[a], models[a]);
+			}
+			const FnvCorrection correction = CombineFnvCorrection(profiles, alignments);
+			summary << std::format("{},{},{:.9f},{:.9f},{:.9f},{:.9f},{:.6f},{:.9f}", tag, profiles.charge,
+				correction.latticeEnergy, correction.alignment, correction.alignmentSpread, correction.correction,
+				profiles.energyCutoff, profiles.modelPotentialMean);
+			for (const auto &al : alignments) summary << std::format(",{:.9f}", al.alignment);
+			for (const auto &al : alignments) summary << std::format(",{:.9f}", al.spread);
+			for (const auto &al : alignments) summary << "," << (al.flat ? 1 : 0);
+			for (const auto &al : alignments) summary << std::format(",{:.6f}", al.slope);
+			summary << "\n" << std::flush;
+
+			std::ofstream dump((Path::FromUtf8(out) / (tag + "_profiles.csv")).Native());
+			dump << "axis,x_A,deltaV_eV,Vmodel_sx_eV\n";
+			for (int a = 0; a < 3; ++a)
+				for (std::size_t k = 0; k < profiles.axes[a].position.size(); ++k)
+					dump << std::format("{},{:.9f},{:.9f},{:.9f}\n", a, profiles.axes[a].position[k],
+						profiles.axes[a].deltaV[k], models[a][k]);
+		}
 	}
 } // namespace DefectStudio::Tests
