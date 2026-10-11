@@ -40,6 +40,7 @@ namespace DefectStudio
 		drawExport();
 		if (!m_Session->m_Message.empty())
 			ImGui::TextWrapped("%s", m_Session->m_Message.c_str());
+		drawDefectSet();
 		drawRows();
 	}
 
@@ -97,6 +98,8 @@ namespace DefectStudio
 			ImGui::SetItemTooltip("Uwzględnij wszystkie stany ładunkowe w wykresie, obwiedni i eksporcie.");
 			ImGui::SameLine();
 			const bool open = ImGui::TreeNodeEx(defect.c_str(), ImGuiTreeNodeFlags_SpanTextWidth);
+			drawDefectContextMenu(defect);
+			ImGui::SetItemTooltip("Prawy klik: usuń defekt z analizy.");
 			ImGui::TableNextColumn();
 			ImGui::TextDisabled("q: %s", charges.c_str());
 			ImGui::TableSetColumnIndex(6);

@@ -231,10 +231,10 @@ namespace DefectStudio::Tests
 	TEST(DefectEnergeticsModelTests, ExtraRootsUseTheDeepestRootAndMergeMatchingGroupsOnce)
 	{
 		EnergeticsFile file = Diamond();
-		file.runs.push_back(Run("X:/other/wrapper/GeSiV/q0", {"C", "Ge"}, {510, 1}, {4, 14}, 2054, -5377));
-		file.runs.push_back(Run("X:/other/GeV/q0", {"C", "Ge"}, {510, 1}, {4, 14}, 2054, -5376));
-		file.runs.push_back(Run("X:/other/Vacancy/q0", {"C"}, {511}, {4}, 2044, -5380));
-		file.runs.push_back(Run("X:/outside/Excluded/q0", {"C"}, {511}, {4}, 2044, -5380));
+		file.runs.push_back(Tests::Run("X:/other/wrapper/GeSiV/q0", {"C", "Ge"}, {510, 1}, {4, 14}, 2054, -5377));
+		file.runs.push_back(Tests::Run("X:/other/GeV/q0", {"C", "Ge"}, {510, 1}, {4, 14}, 2054, -5376));
+		file.runs.push_back(Tests::Run("X:/other/Vacancy/q0", {"C"}, {511}, {4}, 2044, -5380));
+		file.runs.push_back(Tests::Run("X:/outside/Excluded/q0", {"C"}, {511}, {4}, 2044, -5380));
 		file.extraRoots = {Path::FromUtf8("X:/other"), Path::FromUtf8("X:/other/wrapper/GeSiV/"),
 			Path::FromUtf8("X:/other"), Path::FromUtf8("O:/GeV")};
 		const auto check = [&](const EnergeticsModel &model) {

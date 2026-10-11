@@ -30,7 +30,8 @@ namespace DefectStudio
 			ImGui::PopID();
 			if (remove)
 			{
-				m_Session->RemoveExtraRoot(roots[i]);
+				const Path root = roots[i]; // a copy: the call erases the element
+				m_Session->RemoveExtraRoot(root);
 				break;
 			}
 		}
@@ -47,7 +48,8 @@ namespace DefectStudio
 			ImGui::PopID();
 			if (restore)
 			{
-				m_Session->RestoreDefect(hidden[i]);
+				const std::string defect = hidden[i]; // a copy: the call erases the element
+				m_Session->RestoreDefect(defect);
 				break;
 			}
 		}
