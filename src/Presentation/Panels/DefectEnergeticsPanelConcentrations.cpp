@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/DefectEnergeticsPanel.hpp"
+#include "Presentation/Panels/PlotWidgets.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -336,7 +337,7 @@ namespace DefectStudio
 			ImGui::TextColored(kWarningColor, "%zu punktów bez rozwiązania (przerwy na wykresach).", failed);
 		const double gap = m_Model.reference.gap;
 		const double margin = std::max(0.25, 0.08 * gap);
-		const float height = std::max(200.0f, 0.4f * ImGui::GetContentRegionAvail().x);
+		const float height = m_ConcentrationHeight;
 		const auto solution = [&](std::size_t l, std::size_t t) -> const DefectConcentrationSolution & { return result.solutions[l * nT + t]; };
 
 		// c(T) and E_F(T) at one lambda.
@@ -368,11 +369,12 @@ namespace DefectStudio
 			plotSeries("p", result.temperatures, [&](std::size_t t) { return LogPlottable(solution(l, t), solution(l, t).holesCm3); }, nT, dashed);
 			ImPlot::EndPlot();
 		}
+		PlotHeightHandle("##concentrationHeight", m_ConcentrationHeight);
 		if (ImPlot::BeginPlot("##FermiT", ImVec2(-1.0f, 0.6f * height)))
 		{
 			ImPlot::SetupAxes("T [K]", "E_F - E_VBM [eV]", ImPlotAxisFlags_AutoFit);
 			ImPlot::SetupAxisLimits(ImAxis_Y1, -margin, gap + margin, ImPlotCond_Always);
-			drawBands(gap, false);
+			DrawBandEdges(0.0, gap, false);
 			plotSeries("E_F", result.temperatures, [&](std::size_t t) { return solution(l, t).converged ? solution(l, t).fermiLevelEv : kNan; }, nT, ImPlotSpec());
 			ImPlot::EndPlot();
 		}

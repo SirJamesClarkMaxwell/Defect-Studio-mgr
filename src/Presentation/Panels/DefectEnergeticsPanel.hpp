@@ -5,7 +5,9 @@
 #include <deque>
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Core/JobSystem/JobSystemTypes.hpp"
@@ -55,11 +57,14 @@ namespace DefectStudio
 		void SetPersistedState(EnergeticsFile file);
 		void SetSaveHandler(std::function<void(const EnergeticsFile &)> handler) { m_SaveHandler = std::move(handler); }
 		// Where the FNV corrections are read from and the batch results go.
+		// EIGENVAL band edges of the chosen bulk (absolute KS energies), nullopt without one.
+		[[nodiscard]] const std::optional<VaspRunRecordIO::BandEdges> &BulkBandEdges() const { return m_Edges; }
 		void SetFnvPanel(WeakRef<FnvCorrectionPanel> panel) { m_FnvPanel = std::move(panel); }
 
 	private:
 		void drawSource();
 		void drawRows();
+		void drawStateRow(std::size_t row, const SpeciesEnergies &mu);
 		void drawChemicalPotentials();
 		void drawFormation();
 		void drawExport();
@@ -67,9 +72,6 @@ namespace DefectStudio
 		void startConcentrations();
 		void pollConcentrations();
 		[[nodiscard]] std::string concentrationsTsv() const;
-		// Valence band (red, below 0) and conduction band (blue, above gap) fading from their edges,
-		// inside the current ImPlot plot; `alongX`: the energy is the x axis.
-		static void drawBands(double gap, bool alongX);
 		void startScan();
 		void pollScan();
 		void startFnvBatch();
@@ -77,7 +79,8 @@ namespace DefectStudio
 		void submitNextFnv();
 		void readBandEdges();
 		void pickReference(const std::string &species); // mu_ref from a run folder outside the root
-		void changed(); // rebuild the model and save
+		void renderWindow();
+		void changed(); // rebuild the model and save at the end of the frame
 		void rebuild();
 		[[nodiscard]] const FnvCorrectionsFile &fnvFile() const;
 		[[nodiscard]] EnergeticsChoice &choiceFor(const EnergeticsRow &row);
@@ -117,7 +120,10 @@ namespace DefectStudio
 		int m_ConcentrationMap = 0; // 0 = E_F, k > 0 = log10 c of defect k-1
 
 		int m_MuSet = 0;
-		bool m_ShowContinuations = false; // every charge line over the gap, not only the envelope
+		bool m_Changed = false;
+		float m_FormationHeight = 380.0f, m_TransitionsHeight = 260.0f, m_ConcentrationHeight = 300.0f; // drag handles
+		std::array<double, 2> m_FormationRange{}; // E_f axis last fitted to the data; refitted when the data move
+		std::set<std::pair<std::string, int>> m_Continuations; // (defect, q) lines drawn over the whole gap, not only the envelope
 		std::array<char, 64> m_NewPhaseFormula{};
 		std::array<char, 64> m_NewSetName{};
 	};

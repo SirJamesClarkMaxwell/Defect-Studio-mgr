@@ -193,8 +193,8 @@ def _summary_payload(output, directory: pathlib.Path, band_start=0, band_end=0,
         parsed = _scan_outcar(path, None)
         if include_ks:
             homo, lumo = parsed.get("homo_band", 1), parsed.get("lumo_band", 1)
-            default_start = max(1, min(homo, lumo) - 8)
-            default_end = min(max(homo, lumo) + 8, parsed.get("nbands", max(homo, lumo) + 8))
+            default_start = max(1, min(homo, lumo) - 3)
+            default_end = min(max(homo, lumo) + 3, parsed.get("nbands", max(homo, lumo) + 3))
             if band_start <= 0 or band_end <= 0:
                 band_start, band_end = default_start, default_end
             parsed = _scan_outcar(path, (band_start, band_end))

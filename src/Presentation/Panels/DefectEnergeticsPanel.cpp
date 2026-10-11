@@ -82,7 +82,7 @@ namespace DefectStudio
 		clone->m_FnvPanel = m_FnvPanel;
 		clone->m_Edges = m_Edges;
 		clone->m_MuSet = m_MuSet;
-		clone->m_ShowContinuations = m_ShowContinuations;
+		clone->m_Continuations = m_Continuations;
 		clone->m_BulkVolume = m_BulkVolume;
 		return clone;
 	}
@@ -109,11 +109,10 @@ namespace DefectStudio
 		m_MuSet = std::clamp(m_MuSet, 0, std::max(0, static_cast<int>(m_Model.muSets.size()) - 1));
 	}
 
+	// Deferred to the end of Render(): the draw loops hold references into m_Model.rows.
 	void DefectEnergeticsPanel::changed()
 	{
-		rebuild();
-		if (m_SaveHandler)
-			m_SaveHandler(*m_File);
+		m_Changed = true;
 	}
 
 	void DefectEnergeticsPanel::readBandEdges()
@@ -378,8 +377,19 @@ namespace DefectStudio
 		pollScan();
 		pollFnvBatch();
 		pollConcentrations();
-		if (!IsVisible())
-			return;
+		if (IsVisible())
+			renderWindow();
+		if (m_Changed)
+		{
+			m_Changed = false;
+			rebuild();
+			if (m_SaveHandler)
+				m_SaveHandler(*m_File);
+		}
+	}
+
+	void DefectEnergeticsPanel::renderWindow()
+	{
 		ImGui::SetNextWindowSize(ImVec2(900.0f, 820.0f), ImGuiCond_FirstUseEver);
 		bool stillOpen = true;
 		const bool draw = ImGui::Begin(GetTitle().c_str(), &stillOpen);

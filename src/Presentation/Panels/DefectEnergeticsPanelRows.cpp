@@ -6,6 +6,7 @@
 #include <format>
 
 #include <imgui.h>
+#include <imgui_internal.h> // ImGuiItemFlags_MixedValue
 
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Platform/FileDialog.hpp"
@@ -22,6 +23,17 @@ namespace DefectStudio
 		std::string ChargeText(const int charge)
 		{
 			return charge > 0 ? std::format("+{}", charge) : std::format("{}", charge);
+		}
+
+		// Checked when all `count` are on, mixed when some; returns true when clicked (then: all on
+		// unless all were on).
+		bool TriStateCheckbox(const char *id, const std::size_t on, const std::size_t count)
+		{
+			bool all = on == count;
+			ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, on > 0 && on < count);
+			const bool clicked = ImGui::Checkbox(id, &all);
+			ImGui::PopItemFlag();
+			return clicked;
 		}
 	} // namespace
 
@@ -41,142 +53,66 @@ namespace DefectStudio
 			: AbsoluteChemicalPotentials(m_Model.chemicalPotentials, m_Model.muSets[static_cast<std::size_t>(m_MuSet)].deltaMu);
 		constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
 			ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable;
-		if (!ImGui::BeginTable("##EnergeticsRows", 8, flags))
+		if (!ImGui::BeginTable("##EnergeticsRows", 7, flags))
 			return;
-		ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
-		ImGui::TableSetupColumn("Defekt", ImGuiTableColumnFlags_WidthFixed);
-		ImGui::TableSetupColumn("q", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Defekt / q", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Kont.", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Obliczenie energii (zbieżne)", ImGuiTableColumnFlags_WidthStretch, 3.0f);
 		ImGui::TableSetupColumn("LOCPOT dla FNV", ImGuiTableColumnFlags_WidthStretch, 2.0f);
 		ImGui::TableSetupColumn("E_corr [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("E_f(0) [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Uwagi", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableHeadersRow();
-		std::string previousDefect;
-		for (std::size_t r = 0; r < m_Model.rows.size(); ++r)
+		// One tree node per defect (its states included / with continuations, tri-state), its charge
+		// states as the children.
+		for (std::size_t first = 0; first < m_Model.rows.size();)
 		{
-			const EnergeticsRow &row = m_Model.rows[r];
-			ImGui::PushID(static_cast<int>(r));
+			const std::string defect = m_Model.rows[first].defect;
+			std::size_t last = first;
+			while (last < m_Model.rows.size() && m_Model.rows[last].defect == defect)
+				++last;
+			std::size_t included = 0, continued = 0, problems = 0;
+			std::string charges;
+			for (std::size_t r = first; r < last; ++r)
+			{
+				const EnergeticsRow &row = m_Model.rows[r];
+				included += row.included ? 1 : 0;
+				continued += m_Continuations.contains({defect, row.charge}) ? 1 : 0;
+				problems += row.problems.size();
+				charges += (charges.empty() ? "" : "  ") + ChargeText(row.charge);
+			}
+			const std::size_t count = last - first;
+			ImGui::PushID(defect.c_str());
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			bool included = row.included;
-			if (ImGui::Checkbox("##included", &included))
+			if (TriStateCheckbox("##included", included, count))
 			{
-				choiceFor(row).included = included;
+				for (std::size_t r = first; r < last; ++r)
+					choiceFor(m_Model.rows[r]).included = included != count;
 				changed();
 			}
-			ImGui::SetItemTooltip("Uwzględnij w wykresie, obwiedni i eksporcie.");
+			ImGui::SetItemTooltip("Uwzględnij wszystkie stany ładunkowe w wykresie, obwiedni i eksporcie.");
+			ImGui::SameLine();
+			const bool open = ImGui::TreeNodeEx(defect.c_str(), ImGuiTreeNodeFlags_SpanTextWidth);
 			ImGui::TableNextColumn();
-			if (row.defect != previousDefect)
-				ImGui::TextUnformatted(row.defect.c_str());
-			previousDefect = row.defect;
+			if (TriStateCheckbox("##continued", continued, count))
+				for (std::size_t r = first; r < last; ++r)
+					continued != count ? (void)m_Continuations.insert({defect, m_Model.rows[r].charge})
+						: (void)m_Continuations.erase({defect, m_Model.rows[r].charge});
+			ImGui::SetItemTooltip("Kontynuacje: wszystkie linie stanów na całej przerwie, nie tylko obwiednia.");
 			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(ChargeText(row.charge).c_str());
-
-			ImGui::TableNextColumn();
+			ImGui::TextDisabled("q: %s", charges.c_str());
+			ImGui::TableSetColumnIndex(6);
+			if (problems)
+				ImGui::TextColored(kWarningColor, "(!) %zu", problems);
+			if (open)
 			{
-				const std::string preview = row.energyRun
-					? runLabel(*row.energyRun) + (row.userChoice ? "" : "  (auto)")
-					: "wybierz: " + row.proposalReason;
-				ImGui::SetNextItemWidth(-1.0f);
-				if (ImGui::BeginCombo("##energyRun", preview.c_str()))
-				{
-					if (ImGui::Selectable(("auto: " + row.proposalReason).c_str(), !row.userChoice))
-					{
-						choiceFor(row).energyRun.reset();
-						changed();
-					}
-					for (const std::size_t candidate : row.candidates)
-					{
-						const VaspRunRecord &run = m_File->runs[candidate];
-						if (ImGui::Selectable(runLabel(candidate).c_str(), row.userChoice && row.energyRun == candidate))
-						{
-							choiceFor(row).energyRun = run.directory;
-							changed();
-						}
-						ImGui::SetItemTooltip("%s, PRECFOCK %s, ENCUT %.0f eV\nTOTEN %s eV\n%s",
-							run.method.hybrid ? "HSE" : "PBE", run.method.precFock.empty() ? "-" : run.method.precFock.c_str(),
-							run.method.encut, run.totalEnergy ? std::format("{:.8f}", *run.totalEnergy).c_str() : "brak",
-							run.directory.Utf8().c_str());
-					}
-					ImGui::EndCombo();
-				}
-			}
-
-			ImGui::TableNextColumn();
-			{
-				const bool own = std::any_of(m_File->choices.begin(), m_File->choices.end(), [&](const auto &choice) {
-					return choice.defect == row.defect && choice.charge == row.charge && choice.locpot;
-				});
-				const float button = ImGui::GetFrameHeight();
-				const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-				std::string shown = row.locpot.Empty() ? "brak" : row.locpot.parent_path().filename().Utf8() + "/" + row.locpot.filename().Utf8();
-				ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x - (own ? 2.0f : 1.0f) * (button + spacing)));
-				ImGui::InputText("##locpot", shown.data(), shown.size() + 1, ImGuiInputTextFlags_ReadOnly);
-				ImGui::SetItemTooltip("%s", row.locpot.Empty() ? "Obliczenie energii nie ma LOCPOT - wskaż plik." : row.locpot.Utf8().c_str());
-				ImGui::SameLine(0.0f, spacing);
-				if (ImGui::Button("...", ImVec2(button, 0.0f)))
-				{
-					const auto picked = Platform::PickOpenFile(row.locpot.Empty() ? m_File->root : row.locpot.parent_path(), "", "");
-					if (picked && picked->has_value())
-					{
-						choiceFor(row).locpot = **picked;
-						changed();
-					}
-				}
-				ImGui::SetItemTooltip("Inny LOCPOT dla FNV niż z obliczenia energii (np. GeN q-1 w pracy inż.).");
-				if (own)
-				{
-					ImGui::SameLine(0.0f, spacing);
-					if (ImGui::Button("x", ImVec2(button, 0.0f)))
-					{
-						choiceFor(row).locpot.reset();
-						changed();
-					}
-					ImGui::SetItemTooltip("Wróć do LOCPOT obliczenia energii.");
-				}
-			}
-
-			ImGui::TableNextColumn();
-			if (row.charge == 0)
-				ImGui::TextDisabled("0");
-			else if (row.correction)
-			{
-				if (ImGui::SmallButton(std::format("{:.4f}", row.correction->correction).c_str()))
-					if (const auto panel = m_FnvPanel.lock())
-						panel->ShowCorrection(row.locpot);
-				ImGui::SetItemTooltip("E_lat %.4f, C %.4f (rozrzut osi %.4f) eV - kliknij, by otworzyć w FNV.",
-					row.correction->latticeEnergy, row.correction->alignment, row.correction->alignmentSpread);
-			}
-			else
-				ImGui::TextColored(kWarningColor, "brak");
-
-			ImGui::TableNextColumn();
-			const auto state = EnergeticsRowState(*m_File, row);
-			const auto formation = state ? FormationEnergy(*state, m_Model.reference, mu, 0.0) : std::nullopt;
-			if (formation)
-				ImGui::Text("%.4f", *formation);
-			else if (!row.energyRun && !row.candidates.empty())
-			{
-				ImGui::TextColored(kWarningColor, "wybierz");
-				ImGui::SetItemTooltip("Żadne obliczenie nie jest zbieżne i zakończone (%s).\n"
-					"Wybierz je ręcznie w kolumnie \"Obliczenie energii\", jeśli mimo to ma być użyte.", row.proposalReason.c_str());
-			}
-			else
-				ImGui::TextDisabled("-");
-
-			ImGui::TableNextColumn();
-			if (!row.problems.empty())
-			{
-				ImGui::TextColored(kWarningColor, "(!) %zu", row.problems.size());
-				if (ImGui::BeginItemTooltip())
-				{
-					for (const auto &problem : row.problems)
-						ImGui::BulletText("%s", problem.c_str());
-					ImGui::EndTooltip();
-				}
+				for (std::size_t r = first; r < last; ++r)
+					drawStateRow(r, mu);
+				ImGui::TreePop();
 			}
 			ImGui::PopID();
+			first = last;
 		}
 		ImGui::EndTable();
 
@@ -207,6 +143,135 @@ namespace DefectStudio
 			ImGui::SetItemTooltip("Kolejno, jedno naraz: profile pymatgen (2 LOCPOT, ~1 min lokalnie, kilka minut po "
 				"sieci), środek z domieszek, okna plateau zaproponowane. Okna i środek poprawisz potem w panelu FNV.");
 		}
+	}
+
+	// A charge state under its defect's node: included, continuation, the energy run, the LOCPOT for
+	// FNV, E_corr, E_f(0) and the problems.
+	void DefectEnergeticsPanel::drawStateRow(const std::size_t r, const SpeciesEnergies &mu)
+	{
+		const EnergeticsRow &row = m_Model.rows[r];
+		ImGui::PushID(static_cast<int>(r));
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		bool included = row.included;
+		if (ImGui::Checkbox("##included", &included))
+		{
+			choiceFor(row).included = included;
+			changed();
+		}
+		ImGui::SetItemTooltip("Uwzględnij w wykresie, obwiedni i eksporcie.");
+		ImGui::SameLine();
+		ImGui::Text("q = %s", ChargeText(row.charge).c_str());
+		ImGui::TableNextColumn();
+		bool continued = m_Continuations.contains({row.defect, row.charge});
+		if (ImGui::Checkbox("##continued", &continued))
+			continued ? (void)m_Continuations.insert({row.defect, row.charge}) : (void)m_Continuations.erase({row.defect, row.charge});
+		ImGui::SetItemTooltip("Linia tego stanu na całej przerwie.");
+
+		ImGui::TableNextColumn();
+		{
+			const std::string preview = row.energyRun
+				? runLabel(*row.energyRun) + (row.userChoice ? "" : "  (auto)")
+				: "wybierz: " + row.proposalReason;
+			ImGui::SetNextItemWidth(-1.0f);
+			if (ImGui::BeginCombo("##energyRun", preview.c_str()))
+			{
+				if (ImGui::Selectable(("auto: " + row.proposalReason).c_str(), !row.userChoice))
+				{
+					choiceFor(row).energyRun.reset();
+					changed();
+				}
+				for (const std::size_t candidate : row.candidates)
+				{
+					const VaspRunRecord &run = m_File->runs[candidate];
+					if (ImGui::Selectable(runLabel(candidate).c_str(), row.userChoice && row.energyRun == candidate))
+					{
+						choiceFor(row).energyRun = run.directory;
+						changed();
+					}
+					ImGui::SetItemTooltip("%s, PRECFOCK %s, ENCUT %.0f eV\nTOTEN %s eV\n%s",
+						run.method.hybrid ? "HSE" : "PBE", run.method.precFock.empty() ? "-" : run.method.precFock.c_str(),
+						run.method.encut, run.totalEnergy ? std::format("{:.8f}", *run.totalEnergy).c_str() : "brak",
+						run.directory.Utf8().c_str());
+				}
+				ImGui::EndCombo();
+			}
+		}
+
+		ImGui::TableNextColumn();
+		{
+			const bool own = std::any_of(m_File->choices.begin(), m_File->choices.end(), [&](const auto &choice) {
+				return choice.defect == row.defect && choice.charge == row.charge && choice.locpot;
+			});
+			const float button = ImGui::GetFrameHeight();
+			const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			std::string shown = row.locpot.Empty() ? "brak" : row.locpot.parent_path().filename().Utf8() + "/" + row.locpot.filename().Utf8();
+			ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x - (own ? 2.0f : 1.0f) * (button + spacing)));
+			ImGui::InputText("##locpot", shown.data(), shown.size() + 1, ImGuiInputTextFlags_ReadOnly);
+			ImGui::SetItemTooltip("%s", row.locpot.Empty() ? "Obliczenie energii nie ma LOCPOT - wskaż plik." : row.locpot.Utf8().c_str());
+			ImGui::SameLine(0.0f, spacing);
+			if (ImGui::Button("...", ImVec2(button, 0.0f)))
+			{
+				const auto picked = Platform::PickOpenFile(row.locpot.Empty() ? m_File->root : row.locpot.parent_path(), "", "");
+				if (picked && picked->has_value())
+				{
+					choiceFor(row).locpot = **picked;
+					changed();
+				}
+			}
+			ImGui::SetItemTooltip("Inny LOCPOT dla FNV niż z obliczenia energii (np. GeN q-1 w pracy inż.).");
+			if (own)
+			{
+				ImGui::SameLine(0.0f, spacing);
+				if (ImGui::Button("x", ImVec2(button, 0.0f)))
+				{
+					choiceFor(row).locpot.reset();
+					changed();
+				}
+				ImGui::SetItemTooltip("Wróć do LOCPOT obliczenia energii.");
+			}
+		}
+
+		ImGui::TableNextColumn();
+		if (row.charge == 0)
+			ImGui::TextDisabled("0");
+		else if (row.correction)
+		{
+			if (ImGui::SmallButton(std::format("{:.4f}", row.correction->correction).c_str()))
+				if (const auto panel = m_FnvPanel.lock())
+					panel->ShowCorrection(row.locpot);
+			ImGui::SetItemTooltip("E_lat %.4f, C %.4f (rozrzut osi %.4f) eV - kliknij, by otworzyć w FNV.",
+				row.correction->latticeEnergy, row.correction->alignment, row.correction->alignmentSpread);
+		}
+		else
+			ImGui::TextColored(kWarningColor, "brak");
+
+		ImGui::TableNextColumn();
+		const auto state = EnergeticsRowState(*m_File, row);
+		const auto formation = state ? FormationEnergy(*state, m_Model.reference, mu, 0.0) : std::nullopt;
+		if (formation)
+			ImGui::Text("%.4f", *formation);
+		else if (!row.energyRun && !row.candidates.empty())
+		{
+			ImGui::TextColored(kWarningColor, "wybierz");
+			ImGui::SetItemTooltip("Żadne obliczenie nie jest zbieżne i zakończone (%s).\n"
+				"Wybierz je ręcznie w kolumnie \"Obliczenie energii\", jeśli mimo to ma być użyte.", row.proposalReason.c_str());
+		}
+		else
+			ImGui::TextDisabled("-");
+
+		ImGui::TableNextColumn();
+		if (!row.problems.empty())
+		{
+			ImGui::TextColored(kWarningColor, "(!) %zu", row.problems.size());
+			if (ImGui::BeginItemTooltip())
+			{
+				for (const auto &problem : row.problems)
+					ImGui::BulletText("%s", problem.c_str());
+				ImGui::EndTooltip();
+			}
+		}
+		ImGui::PopID();
 	}
 
 	void DefectEnergeticsPanel::startFnvBatch()

@@ -1,9 +1,11 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/DefectEnergeticsPanel.hpp"
+#include "Presentation/Panels/PlotWidgets.hpp"
 
 #include <algorithm>
 #include <format>
+#include <limits>
 #include <map>
 
 #include <imgui.h>
@@ -24,36 +26,6 @@ namespace DefectStudio
 		};
 	} // namespace
 
-	// The valence band (red, below E_F = 0) and the conduction band (blue, above E_g), each
-	// fading away from its edge. `alongX`: the energy is the x axis (E_f(E_F) plot), else y.
-	void DefectEnergeticsPanel::drawBands(const double gap, const bool alongX)
-	{
-		const ImPlotRect limits = ImPlot::GetPlotLimits();
-		const ImU32 red = IM_COL32(220, 60, 60, 120), redClear = IM_COL32(220, 60, 60, 0);
-		const ImU32 blue = IM_COL32(60, 110, 235, 120), blueClear = IM_COL32(60, 110, 235, 0);
-		ImDrawList *draw = ImPlot::GetPlotDrawList();
-		ImPlot::PushPlotClipRect();
-		if (alongX)
-		{
-			if (limits.X.Min < 0.0)
-				draw->AddRectFilledMultiColor(ImPlot::PlotToPixels(limits.X.Min, limits.Y.Max),
-					ImPlot::PlotToPixels(0.0, limits.Y.Min), redClear, red, red, redClear);
-			if (limits.X.Max > gap)
-				draw->AddRectFilledMultiColor(ImPlot::PlotToPixels(gap, limits.Y.Max),
-					ImPlot::PlotToPixels(limits.X.Max, limits.Y.Min), blue, blueClear, blueClear, blue);
-		}
-		else
-		{
-			if (limits.Y.Min < 0.0)
-				draw->AddRectFilledMultiColor(ImPlot::PlotToPixels(limits.X.Min, 0.0),
-					ImPlot::PlotToPixels(limits.X.Max, limits.Y.Min), red, red, redClear, redClear);
-			if (limits.Y.Max > gap)
-				draw->AddRectFilledMultiColor(ImPlot::PlotToPixels(limits.X.Min, limits.Y.Max),
-					ImPlot::PlotToPixels(limits.X.Max, gap), blueClear, blueClear, blue, blue);
-		}
-		ImPlot::PopPlotClipRect();
-	}
-
 	// E_f(E_F) of every included state under the chosen mu set (each defect's envelope thick, the
 	// other charge lines optional), the bands outside the gap, and the transition levels as their
 	// own plot and table (they do not depend on mu).
@@ -71,9 +43,6 @@ namespace DefectStudio
 		const double gap = m_Model.reference.gap;
 		const double margin = std::max(0.25, 0.08 * gap);
 		ImGui::Text("Zestaw μ: %s%s", set.vertex ? "bogate: " : "", set.name.c_str());
-		ImGui::SameLine();
-		ImGui::Checkbox("Kontynuacje krzywych", &m_ShowContinuations);
-		ImGui::SetItemTooltip("Wszystkie stany ładunkowe na całej przerwie, nie tylko obwiednia.");
 
 		std::map<std::string, DefectLines> defects;
 		for (const auto &row : m_Model.rows)
@@ -95,27 +64,50 @@ namespace DefectStudio
 			lines.colour = ImPlot::GetColormapColor(colour++);
 		}
 
-		if (ImPlot::BeginPlot("##Formation", ImVec2(-1.0f, std::max(220.0f, 0.6f * ImGui::GetContentRegionAvail().x))))
+		// E_f range of what is drawn; the axis follows it only when it changes, so it can be zoomed.
+		std::array<double, 2> range{std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest()};
+		const auto widen = [&](const double y) { range = {std::min(range[0], y), std::max(range[1], y)}; };
+		for (const auto &[defect, lines] : defects)
 		{
-			ImPlot::SetupAxes("E_F - E_VBM [eV]", "E_f [eV]", 0, ImPlotAxisFlags_AutoFit);
+			for (const auto &segment : lines.envelope)
+				for (const double x : {segment.from, segment.to})
+					widen(lines.intercepts[segment.line] + lines.charges[segment.line] * x);
+			for (std::size_t k = 0; k < lines.intercepts.size(); ++k)
+				if (m_Continuations.contains({defect, lines.charges[k]}))
+				{
+					widen(lines.intercepts[k]);
+					widen(lines.intercepts[k] + lines.charges[k] * gap);
+				}
+		}
+		const bool refit = range[0] <= range[1] && range != m_FormationRange;
+		if (refit)
+			m_FormationRange = range;
+		const double pad = std::max(0.2, 0.08 * (range[1] - range[0]));
+
+		ImPlotSpec textSpec;
+		textSpec.Flags = ImPlotItemFlags_NoFit;
+		if (ImPlot::BeginPlot("##Formation", ImVec2(-1.0f, m_FormationHeight)))
+		{
+			ImPlot::SetupAxes("E_F - E_VBM [eV]", "E_f [eV]");
 			ImPlot::SetupAxisLimits(ImAxis_X1, -margin, gap + margin, ImPlotCond_Always);
+			if (refit)
+				ImPlot::SetupAxisLimits(ImAxis_Y1, range[0] - pad, range[1] + pad, ImPlotCond_Always);
 			ImPlot::SetupLegend(ImPlotLocation_NorthEast);
-			drawBands(gap, true);
-			ImPlot::PlotText("VBM", -0.5 * margin, ImPlot::GetPlotLimits().Y.Max, ImVec2(0.0f, 10.0f));
-			ImPlot::PlotText("CBM", gap + 0.5 * margin, ImPlot::GetPlotLimits().Y.Max, ImVec2(0.0f, 10.0f));
+			DrawBandEdges(0.0, gap, true);
+			ImPlot::PlotText("VBM", -0.5 * margin, ImPlot::GetPlotLimits().Y.Max, ImVec2(0.0f, 10.0f), textSpec);
+			ImPlot::PlotText("CBM", gap + 0.5 * margin, ImPlot::GetPlotLimits().Y.Max, ImVec2(0.0f, 10.0f), textSpec);
 			for (const auto &[defect, lines] : defects)
 			{
-				if (m_ShowContinuations)
+				ImPlotSpec thin;
+				thin.LineColor = ImVec4(lines.colour.x, lines.colour.y, lines.colour.z, 0.35f);
+				thin.Flags = ImPlotItemFlags_NoLegend;
+				for (std::size_t k = 0; k < lines.intercepts.size(); ++k)
 				{
-					ImPlotSpec thin;
-					thin.LineColor = ImVec4(lines.colour.x, lines.colour.y, lines.colour.z, 0.35f);
-					thin.Flags = ImPlotItemFlags_NoLegend;
-					for (std::size_t k = 0; k < lines.intercepts.size(); ++k)
-					{
-						const double xs[2]{0.0, gap};
-						const double ys[2]{lines.intercepts[k], lines.intercepts[k] + lines.charges[k] * gap};
-						ImPlot::PlotLine(("##" + defect + std::to_string(lines.charges[k])).c_str(), xs, ys, 2, thin);
-					}
+					if (!m_Continuations.contains({defect, lines.charges[k]}))
+						continue;
+					const double xs[2]{0.0, gap};
+					const double ys[2]{lines.intercepts[k], lines.intercepts[k] + lines.charges[k] * gap};
+					ImPlot::PlotLine(("##" + defect + std::to_string(lines.charges[k])).c_str(), xs, ys, 2, thin);
 				}
 				std::vector<double> xs, ys;
 				for (const auto &segment : lines.envelope)
@@ -131,13 +123,14 @@ namespace DefectStudio
 			}
 			ImPlot::EndPlot();
 		}
+		PlotHeightHandle("##formationHeight", m_FormationHeight);
 
 		// Charge transition levels in the gap, one column per defect.
 		std::vector<std::string> names;
 		for (const auto &[defect, lines] : defects)
 			if (!lines.transitions.empty())
 				names.push_back(defect);
-		if (!names.empty() && ImPlot::BeginPlot("##Transitions", ImVec2(-1.0f, std::max(200.0f, 0.45f * ImGui::GetContentRegionAvail().x))))
+		if (!names.empty() && ImPlot::BeginPlot("##Transitions", ImVec2(-1.0f, m_TransitionsHeight)))
 		{
 			std::vector<double> ticks(names.size());
 			std::vector<const char *> labels(names.size());
@@ -150,9 +143,9 @@ namespace DefectStudio
 			ImPlot::SetupAxisLimits(ImAxis_X1, -0.6, static_cast<double>(names.size()) - 0.4, ImPlotCond_Always);
 			ImPlot::SetupAxisLimits(ImAxis_Y1, -margin, gap + margin, ImPlotCond_Always);
 			ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), static_cast<int>(ticks.size()), labels.data());
-			drawBands(gap, false);
-			ImPlot::PlotText("VBM", 0.0, -0.5 * margin);
-			ImPlot::PlotText("CBM", 0.0, gap + 0.5 * margin);
+			DrawBandEdges(0.0, gap, false);
+			ImPlot::PlotText("VBM", 0.0, -0.5 * margin, ImVec2(0.0f, 0.0f), textSpec);
+			ImPlot::PlotText("CBM", 0.0, gap + 0.5 * margin, ImVec2(0.0f, 0.0f), textSpec);
 			for (std::size_t i = 0; i < names.size(); ++i)
 			{
 				const DefectLines &lines = defects[names[i]];
@@ -166,10 +159,11 @@ namespace DefectStudio
 					const double ys[2]{level.level, level.level};
 					ImPlot::PlotLine(std::format("##{}{}{}", names[i], level.chargeFrom, level.chargeTo).c_str(), xs, ys, 2, spec);
 					ImPlot::PlotText(std::format("({:+d}/{:+d}) {:.2f}", level.chargeFrom, level.chargeTo, level.level).c_str(),
-						ticks[i], level.level, ImVec2(0.0f, -9.0f));
+						ticks[i], level.level, ImVec2(0.0f, -9.0f), textSpec);
 				}
 			}
 			ImPlot::EndPlot();
+			PlotHeightHandle("##transitionsHeight", m_TransitionsHeight);
 		}
 
 		if (ImGui::BeginTable("##TransitionTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))

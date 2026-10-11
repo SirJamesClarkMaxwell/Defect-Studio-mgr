@@ -740,6 +740,12 @@ namespace DefectStudio
 			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
 			m_FnvCorrectionPanelId = registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
 			m_DefectEnergeticsPanelId = registerPanel<DefectEnergeticsPanel>(m_JobSystem, "Defect Energetics", false);
+			if (const auto summary = std::dynamic_pointer_cast<CalculationSummaryPanel>(findPanel(m_CalculationSummaryPanelId).lock()))
+				summary->SetBandEdgesProvider([energetics = std::weak_ptr(std::dynamic_pointer_cast<DefectEnergeticsPanel>(
+					findPanel(m_DefectEnergeticsPanelId).lock()))]() -> std::optional<VaspRunRecordIO::BandEdges> {
+					const auto panel = energetics.lock();
+					return panel ? panel->BulkBandEdges() : std::nullopt;
+				});
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member

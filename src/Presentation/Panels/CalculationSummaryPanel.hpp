@@ -1,11 +1,13 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
+#include "IO/VaspRunRecordIO.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "ScientificRuntime/Python/VaspOutputBridge.hpp"
 
@@ -30,6 +32,11 @@ namespace DefectStudio
 		// Targets `directory`, dispatches a fresh load (replacing any previously loaded directory/
 		// data), and makes the panel visible.
 		void OpenDirectory(Path directory);
+		// VBM/CBM drawn on the KS plot when no bulk was picked here (EditorLayer: Defect Energetics' bulk).
+		void SetBandEdgesProvider(std::function<std::optional<VaspRunRecordIO::BandEdges>()> provider)
+		{
+			m_BandEdgesProvider = std::move(provider);
+		}
 
 	private:
 		struct Run
@@ -62,5 +69,9 @@ namespace DefectStudio
 		bool m_AutoBands = true;
 		bool m_SortPending = false;
 		bool m_RelativeToFermi = false;
+		std::function<std::optional<VaspRunRecordIO::BandEdges>()> m_BandEdgesProvider;
+		std::optional<VaspRunRecordIO::BandEdges> m_PickedEdges; // from EIGENVAL of m_EdgesDirectory
+		Path m_EdgesDirectory;
+		float m_ConvergenceHeight = 240.0f, m_KsHeight = 360.0f; // drag handles under the plots
 	};
 } // namespace DefectStudio
