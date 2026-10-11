@@ -92,11 +92,11 @@ namespace DefectStudio
 			textSpec.Flags = ImPlotItemFlags_NoFit;
 			if (ImPlot::BeginPlot("##Formation", ImVec2(-1.0f, std::max(1.0f, ImGui::GetContentRegionAvail().y))))
 			{
-				ImPlot::SetupAxes("E_F - E_VBM [eV]", "E_f [eV]");
+				ImPlot::SetupAxes(" ", " ");
 				ImPlot::SetupAxisLimits(ImAxis_X1, -margin, gap + margin, ImPlotCond_Always);
 				if (refit)
 					ImPlot::SetupAxisLimits(ImAxis_Y1, range[0] - pad, range[1] + pad, ImPlotCond_Always);
-				ImPlot::SetupLegend(ImPlotLocation_NorthEast);
+				ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside);
 				DrawBandEdges(0.0, gap, true);
 				ImPlot::PlotText("VBM", -0.5 * margin, ImPlot::GetPlotLimits().Y.Max, ImVec2(0.0f, 10.0f), textSpec);
 				ImPlot::PlotText("CBM", gap + 0.5 * margin, ImPlot::GetPlotLimits().Y.Max, ImVec2(0.0f, 10.0f), textSpec);
@@ -125,7 +125,10 @@ namespace DefectStudio
 					thick.LineWeight = 2.5f;
 					ImPlot::PlotLine(defect.c_str(), xs.data(), ys.data(), static_cast<int>(xs.size()), thick);
 				}
+				ImRect plotRect;
+				const ImRect frame = CurrentPlotFrame(&plotRect);
 				ImPlot::EndPlot();
+				DrawTexAxisLabels(frame, plotRect, "E_F [eV]", "E_f [eV]");
 			}
 
 			return;
@@ -152,7 +155,7 @@ namespace DefectStudio
 					ticks[i] = static_cast<double>(i);
 					labels[i] = names[i].c_str();
 				}
-				ImPlot::SetupAxes(nullptr, "ε − E_VBM [eV]");
+				ImPlot::SetupAxes(nullptr, " ");
 				ImPlot::SetupAxisLimits(ImAxis_X1, -0.6, static_cast<double>(names.size()) - 0.4, ImPlotCond_Always);
 				ImPlot::SetupAxisLimits(ImAxis_Y1, -margin, gap + margin, ImPlotCond_Always);
 				ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), static_cast<int>(ticks.size()), labels.data());
@@ -175,7 +178,10 @@ namespace DefectStudio
 							ticks[i], level.level, ImVec2(0.0f, -9.0f), textSpec);
 					}
 				}
+				ImRect plotRect;
+				const ImRect frame = CurrentPlotFrame(&plotRect);
 				ImPlot::EndPlot();
+				DrawTexAxisLabels(frame, plotRect, nullptr, "\\varepsilon [eV]");
 			}
 
 			ImGui::EndTabItem();

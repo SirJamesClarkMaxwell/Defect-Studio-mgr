@@ -39,6 +39,7 @@ namespace DefectStudio
 
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
+		[[nodiscard]] const char *GetSubcategory() const override { return "Struktura elektronowa"; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 
 	private:

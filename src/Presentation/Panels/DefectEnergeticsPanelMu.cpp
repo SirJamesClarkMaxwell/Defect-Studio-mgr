@@ -47,14 +47,18 @@ namespace DefectStudio
 
 	void DefectEnergeticsPanel::drawChemicalPotentials()
 	{
-		ImGui::SeparatorText("Warunki");
 		if (ImGui::SmallButton("Pokaż wszystkie okna energetyki"))
 			m_Session->ShowViews();
-		ImGui::SetItemTooltip("Obliczenia, Energie tworzenia, Poziomy przejść, Koncentracje i FNV Correction.");
+		ImGui::SetItemTooltip("Energie tworzenia, Poziomy przejść, Koncentracje i FNV Correction.\nZamknięcie tego okna zamyka pozostałe okna energetyki.");
 		if (!m_Session->m_Model.chemicalPotentialError.empty())
 			ImGui::TextColored(kWarningColor, "%s", m_Session->m_Model.chemicalPotentialError.c_str());
 		if (!ImGui::BeginTabBar("##Conditions"))
 			return;
+		if (ImGui::BeginTabItem("Obliczenia"))
+		{
+			drawCalculations();
+			ImGui::EndTabItem();
+		}
 		if (ImGui::BeginTabItem("Źródło / bulk"))
 		{
 			drawSource();

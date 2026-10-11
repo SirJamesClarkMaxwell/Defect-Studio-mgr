@@ -13,6 +13,7 @@ namespace DefectStudio
 		DefectEnergeticsPanel(Ref<DefectEnergeticsSession> session, View view, std::string title, bool visibleByDefault = false);
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
+		[[nodiscard]] const char *GetSubcategory() const override { return "Energetyka defektów"; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		[[nodiscard]] const Ref<DefectEnergeticsSession> &Session() const { return m_Session; }
 
@@ -20,6 +21,7 @@ namespace DefectStudio
 		void drawSource();
 		void pickReference(const std::string &species);
 		void drawRows();
+		void drawCalculations(); // export, scan message, rows table and FNV queue
 		void drawStateRow(std::size_t row, const SpeciesEnergies &mu);
 		void drawChemicalPotentials();
 		void drawMuReferences();

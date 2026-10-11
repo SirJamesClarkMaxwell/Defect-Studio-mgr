@@ -23,10 +23,10 @@ namespace DefectStudio
 			m_CalculationSummarySession, View::Convergence, "Zbieżność", false);
 		const auto ks = registerPanel<CalculationSummaryPanel>(
 			m_CalculationSummarySession, View::KsLevels, "Poziomy KS", false);
-		m_CalculationSummarySession->SetShowViewsHandler([this, convergence, ks] {
+		m_CalculationSummarySession->SetShowViewsHandler([this, convergence, ks](const bool visible) {
 			for (const auto id : {m_CalculationSummaryPanelId, convergence, ks})
 				if (const auto panel = findPanel(id).lock())
-					panel->SetVisible(true);
+					panel->SetVisible(visible);
 		});
 	}
 
@@ -38,15 +38,14 @@ namespace DefectStudio
 		m_DefectEnergeticsPanelId = registerPanel<DefectEnergeticsPanel>(
 			m_DefectEnergeticsSession, View::Conditions, "Defect Energetics", false);
 		const std::array views{m_DefectEnergeticsPanelId,
-			registerPanel<DefectEnergeticsPanel>(m_DefectEnergeticsSession, View::Calculations, "Obliczenia", false),
 			registerPanel<DefectEnergeticsPanel>(m_DefectEnergeticsSession, View::Formation, "Energie tworzenia", false),
 			registerPanel<DefectEnergeticsPanel>(m_DefectEnergeticsSession, View::Transitions, "Poziomy przejść", false),
 			registerPanel<DefectEnergeticsPanel>(m_DefectEnergeticsSession, View::Concentrations, "Koncentracje", false),
 			m_FnvCorrectionPanelId};
-		m_DefectEnergeticsSession->SetShowViewsHandler([this, views] {
+		m_DefectEnergeticsSession->SetShowViewsHandler([this, views](const bool visible) {
 			for (const auto id : views)
-				if (const auto panel = findPanel(id).lock())
-					panel->SetVisible(true);
+				if (const auto panel = findPanel(id).lock(); panel && (visible || id != m_FnvCorrectionPanelId))
+					panel->SetVisible(visible); // FNV Correction stays: it is used on its own too
 		});
 		const auto fnv = std::dynamic_pointer_cast<FnvCorrectionPanel>(findPanel(m_FnvCorrectionPanelId).lock());
 		m_DefectEnergeticsSession->SetFnvPanel(fnv);

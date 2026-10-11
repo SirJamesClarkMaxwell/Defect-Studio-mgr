@@ -23,7 +23,13 @@ namespace DefectStudio
 		~CalculationSummarySession();
 		void OpenDirectory(Path directory);
 		void Update();
-		void SetShowViewsHandler(std::function<void()> handler) { m_ShowViews = std::move(handler); }
+		// EditorLayer: show (true) or hide (false) the registered views - closing the main one hides all.
+		void SetShowViewsHandler(std::function<void(bool)> handler) { m_ShowViews = std::move(handler); }
+		void HideViews() const
+		{
+			if (m_ShowViews)
+				m_ShowViews(false);
+		}
 		void SetBandEdgesProvider(std::function<std::optional<VaspRunRecordIO::BandEdges>()> provider)
 		{ m_BandEdgesProvider = std::move(provider); }
 
@@ -57,6 +63,6 @@ namespace DefectStudio
 		std::function<std::optional<VaspRunRecordIO::BandEdges>()> m_BandEdgesProvider;
 		std::optional<VaspRunRecordIO::BandEdges> m_PickedEdges; // from EIGENVAL of m_EdgesDirectory
 		Path m_EdgesDirectory;
-		std::function<void()> m_ShowViews;
+		std::function<void(bool)> m_ShowViews;
 	};
 } // namespace DefectStudio

@@ -61,7 +61,7 @@ namespace DefectStudio::Tests
 		ASSERT_NE(ksClone, nullptr);
 		EXPECT_EQ(ksClone->Session(), summary);
 		int shown = 0;
-		summary->SetShowViewsHandler([&] { ++shown; });
+		summary->SetShowViewsHandler([&](const bool visible) { shown += visible ? 1 : 0; });
 		summary->OpenDirectory(Path::FromUtf8("task101-missing-fixture"));
 		EXPECT_EQ(shown, 1);
 	}

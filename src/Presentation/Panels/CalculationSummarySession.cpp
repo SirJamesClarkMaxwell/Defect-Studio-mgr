@@ -168,7 +168,7 @@ namespace DefectStudio
 		m_Error.clear();
 		dispatchLoad();
 		if (m_ShowViews)
-			m_ShowViews();
+			m_ShowViews(true);
 	}
 
 	bool CalculationSummarySession::isLoading() const

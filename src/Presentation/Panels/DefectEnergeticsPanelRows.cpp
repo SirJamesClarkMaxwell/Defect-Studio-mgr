@@ -35,6 +35,14 @@ namespace DefectStudio
 		}
 	} // namespace
 
+	void DefectEnergeticsPanel::drawCalculations()
+	{
+		drawExport();
+		if (!m_Session->m_Message.empty())
+			ImGui::TextWrapped("%s", m_Session->m_Message.c_str());
+		drawRows();
+	}
+
 	// One line per (defect, q): whether it counts, the run whose TOTEN is used (auto = the
 	// proposal), the LOCPOT that goes to FNV, E_corr and E_f(0) under the chosen mu set.
 	void DefectEnergeticsPanel::drawRows()
@@ -49,10 +57,11 @@ namespace DefectStudio
 			: AbsoluteChemicalPotentials(m_Session->m_Model.chemicalPotentials, m_Session->m_Model.muSets[static_cast<std::size_t>(m_Session->m_MuSet)].deltaMu);
 		constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
 			ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable;
-		if (!ImGui::BeginTable("##EnergeticsRows", 6, flags))
+		if (!ImGui::BeginTable("##EnergeticsRows", 7, flags))
 			return;
 		ImGui::TableSetupColumn("Defekt / q", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Obliczenie energii (zbieżne)", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+		ImGui::TableSetupColumn("E [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("LOCPOT dla FNV", ImGuiTableColumnFlags_WidthStretch, 2.0f);
 		ImGui::TableSetupColumn("E_corr [eV]", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("E_f(0) [eV]", ImGuiTableColumnFlags_WidthFixed);
@@ -90,7 +99,7 @@ namespace DefectStudio
 			const bool open = ImGui::TreeNodeEx(defect.c_str(), ImGuiTreeNodeFlags_SpanTextWidth);
 			ImGui::TableNextColumn();
 			ImGui::TextDisabled("q: %s", charges.c_str());
-			ImGui::TableSetColumnIndex(5);
+			ImGui::TableSetColumnIndex(6);
 			if (problems)
 				ImGui::TextColored(kWarningColor, "(!) %zu", problems);
 			if (open)
@@ -180,6 +189,12 @@ namespace DefectStudio
 				ImGui::EndCombo();
 			}
 		}
+
+		ImGui::TableNextColumn(); // TOTEN of the energy run
+		if (const auto &runs = m_Session->m_File->runs; row.energyRun && *row.energyRun < runs.size() && runs[*row.energyRun].totalEnergy)
+			ImGui::Text("%.4f", *runs[*row.energyRun].totalEnergy);
+		else
+			ImGui::TextDisabled("-");
 
 		ImGui::TableNextColumn();
 		{

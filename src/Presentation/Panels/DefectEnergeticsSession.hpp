@@ -54,12 +54,18 @@ namespace DefectStudio
 			m_FnvPanel = std::move(panel);
 			InvalidateInputs();
 		}
-		// EditorLayer: make every energetics view and the FNV panel visible.
-		void SetShowViewsHandler(std::function<void()> handler) { m_ShowViews = std::move(handler); }
+		// EditorLayer: show every energetics view and the FNV panel (true), or hide the energetics
+		// views (false - closing the main one closes them all).
+		void SetShowViewsHandler(std::function<void(bool)> handler) { m_ShowViews = std::move(handler); }
 		void ShowViews() const
 		{
 			if (m_ShowViews)
-				m_ShowViews();
+				m_ShowViews(true);
+		}
+		void HideViews() const
+		{
+			if (m_ShowViews)
+				m_ShowViews(false);
 		}
 		void SetFnvStoreHandler(std::function<void(PersistedFnvCorrection)> handler) { m_StoreFnv = std::move(handler); }
 		[[nodiscard]] const std::optional<VaspRunRecordIO::BandEdges> &BulkBandEdges() const { return m_Edges; }
@@ -119,7 +125,7 @@ namespace DefectStudio
 		bool m_Changed = false;
 		std::set<std::pair<std::string, int>> m_Continuations;
 		std::function<void(PersistedFnvCorrection)> m_StoreFnv;
-		std::function<void()> m_ShowViews;
+		std::function<void(bool)> m_ShowViews;
 		Path m_BulkDirectory;
 		bool m_ModelDirty = true;
 		std::uint64_t m_InputRevision = 0, m_SubmittedRevision = 0;

@@ -12,6 +12,7 @@ namespace DefectStudio
 		CalculationSummaryPanel(Ref<CalculationSummarySession> session, View view, std::string title, bool visibleByDefault = false);
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
+		[[nodiscard]] const char *GetSubcategory() const override { return "Obliczenia VASP"; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		[[nodiscard]] const Ref<CalculationSummarySession> &Session() const { return m_Session; }
 

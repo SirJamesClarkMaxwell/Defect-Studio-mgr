@@ -25,6 +25,7 @@ namespace DefectStudio
 
 		void Render() override;
 		[[nodiscard]] PanelCategory GetCategory() const override { return PanelCategory::Analysis; }
+		[[nodiscard]] const char *GetSubcategory() const override { return "Energetyka defektów"; }
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		// The project's saved corrections (EditorLayer, on project open). Does not call the handler.
 		void SetPersistedState(FnvCorrectionsFile file);

@@ -238,7 +238,7 @@ namespace DefectStudio
 			const float height = m_ConcentrationHeight;
 			if (ImPlot::BeginPlot("##ConcentrationT", ImVec2(-1.0f, height)))
 			{
-				ImPlot::SetupAxes("T [K]", "c [cm⁻³]", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+				ImPlot::SetupAxes(" ", " ", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 				ImPlot::SetupLegend(ImPlotLocation_SouthEast);
 				for (std::size_t d = 0; d < result.defects.size(); ++d)
@@ -247,16 +247,22 @@ namespace DefectStudio
 						nT, ImPlotSpec());
 				plotSeries("n", result.temperatures, [&](std::size_t t) { return LogPlottable(solution(l, t), solution(l, t).electronsCm3); }, nT, dashed);
 				plotSeries("p", result.temperatures, [&](std::size_t t) { return LogPlottable(solution(l, t), solution(l, t).holesCm3); }, nT, dashed);
+				ImRect plotRect;
+				const ImRect frame = CurrentPlotFrame(&plotRect);
 				ImPlot::EndPlot();
+				DrawTexAxisLabels(frame, plotRect, "T [K]", "c [cm^{-3}]");
 			}
 			PlotHeightHandle("##concentrationHeight", m_ConcentrationHeight);
 			if (ImPlot::BeginPlot("##FermiT", ImVec2(-1.0f, std::max(1.0f, ImGui::GetContentRegionAvail().y))))
 			{
-				ImPlot::SetupAxes("T [K]", "E_F - E_VBM [eV]", ImPlotAxisFlags_AutoFit);
+				ImPlot::SetupAxes(" ", " ", ImPlotAxisFlags_AutoFit);
 				ImPlot::SetupAxisLimits(ImAxis_Y1, -margin, gap + margin, ImPlotCond_Always);
 				DrawBandEdges(0.0, gap, false);
 				plotSeries("E_F", result.temperatures, [&](std::size_t t) { return solution(l, t).converged ? solution(l, t).fermiLevelEv : kNan; }, nT, ImPlotSpec());
+				ImRect plotRect;
+				const ImRect frame = CurrentPlotFrame(&plotRect);
 				ImPlot::EndPlot();
+				DrawTexAxisLabels(frame, plotRect, "T [K]", "E_F [eV]");
 			}
 
 			return;
@@ -281,7 +287,7 @@ namespace DefectStudio
 			const float height = m_ConcentrationHeight;
 			if (ImPlot::BeginPlot("##ConcentrationLambda", ImVec2(-1.0f, height)))
 			{
-				ImPlot::SetupAxes("λ", "c [cm⁻³]", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+				ImPlot::SetupAxes(" ", " ", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 				ImPlot::SetupLegend(ImPlotLocation_SouthEast);
 				for (std::size_t d = 0; d < result.defects.size(); ++d)
@@ -290,17 +296,23 @@ namespace DefectStudio
 						nL, ImPlotSpec());
 				plotSeries("n", result.lambdas, [&](std::size_t k) { return LogPlottable(solution(k, t), solution(k, t).electronsCm3); }, nL, dashed);
 				plotSeries("p", result.lambdas, [&](std::size_t k) { return LogPlottable(solution(k, t), solution(k, t).holesCm3); }, nL, dashed);
+				ImRect plotRect;
+				const ImRect frame = CurrentPlotFrame(&plotRect);
 				ImPlot::EndPlot();
+				DrawTexAxisLabels(frame, plotRect, "\\lambda", "c [cm^{-3}]");
 			}
 
 			PlotHeightHandle("##lambdaHeight", m_ConcentrationHeight);
 			if (ImPlot::BeginPlot("##FermiLambda", ImVec2(-1.0f, std::max(1.0f, ImGui::GetContentRegionAvail().y))))
 			{
-				ImPlot::SetupAxes("λ", "E_F - E_VBM [eV]", ImPlotAxisFlags_AutoFit);
+				ImPlot::SetupAxes(" ", " ", ImPlotAxisFlags_AutoFit);
 				ImPlot::SetupAxisLimits(ImAxis_Y1, -margin, gap + margin, ImPlotCond_Always);
 				DrawBandEdges(0.0, gap, false);
 				plotSeries("E_F", result.lambdas, [&](std::size_t k) { return solution(k, t).converged ? solution(k, t).fermiLevelEv : kNan; }, nL, ImPlotSpec());
+				ImRect plotRect;
+				const ImRect frame = CurrentPlotFrame(&plotRect);
 				ImPlot::EndPlot();
+				DrawTexAxisLabels(frame, plotRect, "\\lambda", "E_F [eV]");
 			}
 			return;
 		}

@@ -117,7 +117,11 @@ namespace DefectStudio
 		bool stillOpen = true;
 		const bool draw = ImGui::Begin(GetTitle().c_str(), &stillOpen);
 		if (!stillOpen)
+		{
 			SetVisible(false);
+			if (m_View == View::Summary)
+				m_Session->HideViews();
+		}
 		if (!draw)
 		{
 			ImGui::End();

@@ -218,18 +218,17 @@ namespace DefectStudio
 		bool stillOpen = true;
 		const bool draw = ImGui::Begin(GetTitle().c_str(), &stillOpen);
 		if (!stillOpen)
+		{
 			SetVisible(false);
+			if (m_View == View::Conditions)
+				m_Session->HideViews();
+		}
 		if (draw)
 		{
 			switch (m_View)
 			{
 			case View::Conditions: drawChemicalPotentials(); break;
-			case View::Calculations:
-				drawExport();
-				if (!m_Session->m_Message.empty())
-					ImGui::TextWrapped("%s", m_Session->m_Message.c_str());
-				drawRows();
-				break;
+			case View::Calculations: drawCalculations(); break;
 			case View::Formation:
 			case View::Transitions: drawFormation(); break;
 			case View::Concentrations: drawConcentrations(); break;
