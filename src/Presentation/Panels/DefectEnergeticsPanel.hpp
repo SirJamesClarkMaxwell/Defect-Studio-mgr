@@ -18,6 +18,8 @@ namespace DefectStudio
 
 	private:
 		void drawSource();
+		void drawDefectSet();
+		void drawDefectContextMenu(const std::string &defect);
 		void pickReference(const std::string &species);
 		void drawRows();
 		void drawStateRow(std::size_t row, const SpeciesEnergies &mu);

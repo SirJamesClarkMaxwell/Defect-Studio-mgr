@@ -1,8 +1,11 @@
 ﻿#include "Core/dspch.hpp"
 #include "Domain/Defects/CalculationCatalogue.hpp"
 
+#include <algorithm>
+#include <array>
 #include <charconv>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <regex>
@@ -115,22 +118,52 @@ namespace DefectStudio
 	std::vector<DefectRunGroup> GroupDefectRuns(std::span<const VaspRunRecord> records,
 		std::size_t bulk, const Path &root, int maxChangedAtoms)
 	{
+		const std::array roots{root};
+		return GroupDefectRuns(records, bulk, roots, maxChangedAtoms);
+	}
+
+	std::optional<Path> CalculationRoot(const Path &directory, std::span<const Path> roots)
+	{
+		std::optional<Path> found;
+		std::ptrdiff_t depth = -1;
+		if (directory.Empty()) return found;
+		for (const Path &root : roots)
+		{
+			if (root.Empty()) continue;
+			auto native = root.Native().lexically_normal();
+			if (native.filename().empty()) native = native.parent_path();
+			const auto relative = directory.Native().lexically_normal().lexically_relative(native);
+			if (relative.empty() || relative.is_absolute() ||
+				std::any_of(relative.begin(), relative.end(), [](const auto &part) { return part == ".."; }))
+				continue;
+			const auto candidateDepth = std::distance(native.begin(), native.end());
+			if (candidateDepth > depth)
+			{
+				depth = candidateDepth;
+				found = Path::FromResolved(std::move(native));
+			}
+		}
+		return found;
+	}
+
+	std::vector<DefectRunGroup> GroupDefectRuns(std::span<const VaspRunRecord> records,
+		std::size_t bulk, std::span<const Path> roots, int maxChangedAtoms)
+	{
 		std::vector<DefectRunGroup> groups;
-		if (bulk >= records.size() || root.Empty() || maxChangedAtoms < 0)
+		if (bulk >= records.size() || roots.empty() || maxChangedAtoms < 0)
 			return groups;
 		const auto host = CalculationComposition(records[bulk]);
 		if (host.empty())
 			return groups;
-		auto rootPath = root.Native().lexically_normal();
-		if (rootPath.filename().empty())
-			rootPath = rootPath.parent_path();
 		for (std::size_t i = 0; i < records.size(); ++i)
 		{
 			if (i == bulk)
 				continue;
-			const auto relative = records[i].directory.Native().lexically_normal().lexically_relative(rootPath);
-			if (relative.empty() || relative == "." || relative.is_absolute() ||
-				std::any_of(relative.begin(), relative.end(), [](const auto &part) { return part == ".."; }))
+			const auto root = CalculationRoot(records[i].directory, roots);
+			if (!root)
+				continue;
+			const auto relative = records[i].directory.Native().lexically_normal().lexically_relative(root->Native());
+			if (relative == ".")
 				continue;
 			const auto charge = CalculationCharge(records[i]);
 			if (!charge)
@@ -147,7 +180,7 @@ namespace DefectStudio
 			if (changed == 0 || changed > maxChangedAtoms)
 				continue;
 			const Path first = Path::FromResolved(*relative.begin());
-			const std::string defect = ChargeFromFolderName(first.Utf8()) ? Path::FromResolved(rootPath).filename().Utf8() : first.Utf8();
+			const std::string defect = ChargeFromFolderName(first.Utf8()) ? root->filename().Utf8() : first.Utf8();
 			auto found = std::find_if(groups.begin(), groups.end(), [&](const auto &group) { return group.defect == defect && group.charge == *charge; });
 			if (found == groups.end())
 				groups.push_back({defect, *charge, std::move(difference), {i}});

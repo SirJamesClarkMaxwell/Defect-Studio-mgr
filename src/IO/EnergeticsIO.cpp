@@ -231,10 +231,23 @@ namespace DefectStudio
 					return;
 				}
 				for (std::size_t i = 0; i < nodes.size(); ++i)
-					attempt(key + " " + std::to_string(i), [&] { RequireMap(nodes[i]); read(nodes[i]); });
+					attempt(key + " " + std::to_string(i), [&] { read(nodes[i]); });
 			};
+			entries("extra_roots", [&](const auto &node) {
+				const Path path = ReadPath(node, projectDirectory);
+				if (path.Empty()) throw std::invalid_argument("empty extra root");
+				if (std::find(file.extraRoots.begin(), file.extraRoots.end(), path) == file.extraRoots.end())
+					file.extraRoots.push_back(path);
+			});
+			entries("hidden_defects", [&](const auto &node) {
+				const auto name = node.template as<std::string>();
+				if (name.empty()) throw std::invalid_argument("empty defect name");
+				if (std::find(file.hiddenDefects.begin(), file.hiddenDefects.end(), name) == file.hiddenDefects.end())
+					file.hiddenDefects.push_back(name);
+			});
 			entries("runs", [&](const auto &node) { file.runs.push_back(ReadRun(node, projectDirectory)); });
 			entries("choices", [&](const auto &node) {
+				RequireMap(node);
 				EnergeticsChoice choice;
 				choice.defect = node["defect"].template as<std::string>();
 				if (choice.defect.empty()) throw std::invalid_argument("empty defect name");
@@ -257,6 +270,7 @@ namespace DefectStudio
 					});
 			});
 			entries("competing", [&](const auto &node) {
+				RequireMap(node);
 				EnergeticsPhase phase;
 				phase.name = node["name"].template as<std::string>();
 				phase.formula = ReadSpeciesMap<int>(node["formula"]);
@@ -265,6 +279,7 @@ namespace DefectStudio
 				file.competing.push_back(std::move(phase));
 			});
 			entries("muSets", [&](const auto &node) {
+				RequireMap(node);
 				EnergeticsMuSet set;
 				set.name = node["name"].template as<std::string>();
 				if (set.name.empty()) throw std::invalid_argument("empty mu set name");
@@ -303,6 +318,10 @@ namespace DefectStudio
 		emit << YAML::Precision(std::numeric_limits<double>::max_digits10) << YAML::BeginMap;
 		EmitValue(emit, "formatVersion", kFormatVersion);
 		EmitValue(emit, "root", StoredPath(file.root, projectDirectory));
+		emit << YAML::Key << "extra_roots" << YAML::Value << YAML::BeginSeq;
+		for (const auto &root : file.extraRoots) emit << StoredPath(root, projectDirectory);
+		emit << YAML::EndSeq;
+		EmitSequence(emit, "hidden_defects", file.hiddenDefects);
 		if (file.bulkRun) EmitValue(emit, "bulkRun", StoredPath(*file.bulkRun, projectDirectory));
 		EmitValue(emit, "dielectric", file.dielectric);
 		EmitValue(emit, "dielectricSource", file.dielectricSource);

@@ -65,6 +65,8 @@ namespace DefectStudio
 	{
 		int formatVersion = 1;
 		Path root;                    // the scanned folder
+		std::vector<Path> extraRoots;
+		std::vector<std::string> hiddenDefects;
 		std::vector<VaspRunRecord> runs; // the last scan, the cache
 		std::optional<Path> bulkRun;  // unset = the only BulkCandidates entry
 		std::vector<EnergeticsChoice> choices;

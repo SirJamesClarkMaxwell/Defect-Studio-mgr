@@ -67,6 +67,10 @@ namespace DefectStudio
 		void InvalidateInputs();
 		// Views call this after editing persisted inputs; save is deferred until FlushChanges().
 		void Changed();
+		void HideDefect(const std::string &name);
+		void RestoreDefect(const std::string &name);
+		void AddDefectFolder(const Path &path);
+		void RemoveExtraRoot(const Path &path);
 		void StartConcentrations();
 		[[nodiscard]] bool ConcentrationsCurrent() const { return m_ConcentrationsCurrent; }
 		[[nodiscard]] const EnergeticsConcentrations &Concentrations() const { return m_Concentrations; }

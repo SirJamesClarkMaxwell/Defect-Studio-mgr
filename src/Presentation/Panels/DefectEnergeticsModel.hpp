@@ -64,7 +64,7 @@ namespace DefectStudio
 		ChemicalPotentialSystem chemicalPotentials;
 		std::string chemicalPotentialError;       // "brak referencji μ: Ge", or ChemicalPotentialVertices' error
 		std::vector<EnergeticsMuSetView> muSets;  // vertices first, then file.muSets
-		std::vector<EnergeticsRow> rows;          // GroupDefectRuns(file.runs, bulk, file.root) order
+		std::vector<EnergeticsRow> rows;          // visible groups, defect then charge descending
 	};
 
 	[[nodiscard]] EnergeticsModel BuildEnergeticsModel(const EnergeticsFile &file, const FnvCorrectionsFile &fnv,

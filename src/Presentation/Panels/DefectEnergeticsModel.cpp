@@ -115,8 +115,12 @@ namespace DefectStudio
 		const VaspRunRecord &bulk = file.runs[*model.bulk];
 
 		// Rows.
-		for (const DefectRunGroup &group : GroupDefectRuns(file.runs, *model.bulk, file.root))
+		std::vector<Path> roots = file.extraRoots;
+		roots.push_back(file.root);
+		for (const DefectRunGroup &group : GroupDefectRuns(file.runs, *model.bulk, roots))
 		{
+			if (std::find(file.hiddenDefects.begin(), file.hiddenDefects.end(), group.defect) != file.hiddenDefects.end())
+				continue;
 			EnergeticsRow row;
 			row.defect = group.defect;
 			row.charge = group.charge;
