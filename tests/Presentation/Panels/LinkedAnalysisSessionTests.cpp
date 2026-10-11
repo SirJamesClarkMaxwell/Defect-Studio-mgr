@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "Presentation/Panels/CalculationSummaryPanel.hpp"
+#include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/Panels/DefectEnergeticsPanel.hpp"
 #include "../../Core/JobSystem/JobSystemTestUtils.hpp"
 
@@ -67,16 +68,95 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(formationClone->Session(), energetics);
 		formationClone->SetVisible(true);
 		EXPECT_FALSE(formation.IsVisible());
+	}
 
-		const auto summary = CreateRef<CalculationSummarySession>(WeakRef<JobSystem>{});
-		CalculationSummaryPanel ks(summary, CalculationSummaryPanel::View::KsLevels, "Poziomy KS");
-		const auto ksClone = std::dynamic_pointer_cast<CalculationSummaryPanel>(ks.Clone());
-		ASSERT_NE(ksClone, nullptr);
-		EXPECT_EQ(ksClone->Session(), summary);
-		int shown = 0;
-		summary->SetShowViewsHandler([&](const bool visible) { shown += visible ? 1 : 0; });
-		summary->OpenDirectory(Path::FromUtf8("task101-missing-fixture"));
-		EXPECT_EQ(shown, 1);
+	TEST(LinkedAnalysisSessionTests, CalculationSummaryClonesOwnSessionsAndKeepIndependentSelections)
+	{
+		const auto summary = CreateRef<CalculationSummarySession>(WeakRef<JobSystem>{}, false);
+		summary->OpenDirectory(Path::FromUtf8("task103-missing-fixture"));
+		summary->SetAvailableBands({1022, 1023});
+		summary->SetBandSelected(1022, false);
+		summary->SetSpinSelected(2, false);
+		int updates = 0;
+		summary->SetUpdateInstancesHandler([&] { ++updates; });
+		CalculationSummaryPanel panel(summary, "Calculation Summary");
+		const auto clone = std::dynamic_pointer_cast<CalculationSummaryPanel>(panel.Clone());
+		const auto another = std::dynamic_pointer_cast<CalculationSummaryPanel>(panel.Clone());
+		ASSERT_NE(clone, nullptr);
+		ASSERT_NE(another, nullptr);
+		EXPECT_NE(clone->Session(), summary);
+		EXPECT_EQ(clone->Session()->Directory(), summary->Directory());
+		EXPECT_NE(clone->GetTitle(), panel.GetTitle());
+		EXPECT_NE(clone->GetTitle(), another->GetTitle());
+		EXPECT_TRUE(clone->IsVisible());
+		EXPECT_FALSE(panel.IsVisible());
+		EXPECT_FALSE(clone->Session()->IsKsLevelSelected(1, 1022));
+		EXPECT_TRUE(clone->Session()->IsKsLevelSelected(1, 1023));
+		EXPECT_FALSE(clone->Session()->IsKsLevelSelected(2, 1023));
+		clone->Session()->SetBandSelected(1022, true);
+		clone->Session()->SetSpinSelected(2, true);
+		EXPECT_FALSE(summary->IsKsLevelSelected(1, 1022));
+		EXPECT_FALSE(summary->IsKsLevelSelected(2, 1023));
+		clone->Session()->Update();
+		EXPECT_EQ(updates, 0); // A clone must not copy the editor's registry-maintenance callback.
+		summary->Update();
+		EXPECT_EQ(updates, 1);
+		clone->Session()->OpenDirectory(Path::FromUtf8("task103-other-fixture"));
+		EXPECT_NE(clone->Session()->Directory(), summary->Directory());
+	}
+
+	TEST(LinkedAnalysisSessionTests, CalculationSummaryBandSelectionSurvivesReloadedBandWindows)
+	{
+		CalculationSummarySession session(WeakRef<JobSystem>{}, false);
+		session.SetAvailableBands({1022, 1023, 1024});
+		EXPECT_TRUE(session.IsKsLevelSelected(1, 1022));
+		EXPECT_TRUE(session.IsKsLevelSelected(2, 1022));
+		session.SetBandSelected(1023, false);
+		session.SetSpinSelected(2, false);
+		session.SetAvailableBands({1022, 1023, 1024});
+		EXPECT_FALSE(session.IsKsLevelSelected(1, 1023));
+		session.SetAvailableBands({1023, 1024, 1025});
+		EXPECT_FALSE(session.BandSelection().contains(1022));
+		EXPECT_FALSE(session.IsKsLevelSelected(1, 1023));
+		EXPECT_TRUE(session.IsKsLevelSelected(1, 1025));
+		EXPECT_FALSE(session.IsKsLevelSelected(2, 1025));
+		session.SetBandSelected(9999, true);
+		EXPECT_FALSE(session.BandSelection().contains(9999));
+		session.SetSpinSelected(0, false);
+		session.SetSpinSelected(3, false);
+		EXPECT_FALSE(session.IsKsLevelSelected(0, 1025));
+		EXPECT_FALSE(session.IsKsLevelSelected(3, 1025));
+		session.SetAvailableBands({});
+		EXPECT_TRUE(session.BandSelection().empty());
+	}
+
+	TEST(LinkedAnalysisSessionTests, CalculationSummaryFocusAndCloseAffectOnlyTheirInstance)
+	{
+		PanelRegistry registry;
+		const auto first = CreateRef<CalculationSummarySession>(WeakRef<JobSystem>{}, false);
+		const auto second = CreateRef<CalculationSummarySession>(WeakRef<JobSystem>{}, false);
+		first->OpenDirectory(Path::FromUtf8("task103-first-fixture"));
+		second->OpenDirectory(Path::FromUtf8("task103-second-fixture"));
+		const auto firstId = registry.Add<CalculationSummaryPanel>(first, "Calculation Summary");
+		const auto secondId = registry.Add<CalculationSummaryPanel>(second, "Calculation Summary: second##2", true);
+		const auto panel = std::dynamic_pointer_cast<CalculationSummaryPanel>(registry.Get(firstId).lock());
+		const auto other = std::dynamic_pointer_cast<CalculationSummaryPanel>(registry.Get(secondId).lock());
+		ASSERT_NE(panel, nullptr);
+		ASSERT_NE(other, nullptr);
+		EXPECT_LT(panel->FocusOrder(), other->FocusOrder());
+		panel->RequestFocus();
+		EXPECT_GT(panel->FocusOrder(), other->FocusOrder());
+		EXPECT_TRUE(panel->IsVisible());
+		panel->Close();
+		EXPECT_TRUE(panel->IsClosed());
+		EXPECT_FALSE(panel->IsVisible());
+		EXPECT_EQ(panel->Clone(), nullptr);
+		EXPECT_TRUE(other->IsVisible());
+		EXPECT_FALSE(other->IsClosed());
+		EXPECT_TRUE(registry.Contains(firstId)); // Removal is deferred until the main-thread update.
+		EXPECT_TRUE(registry.Remove(firstId));
+		EXPECT_FALSE(registry.Contains(firstId));
+		EXPECT_TRUE(registry.Contains(secondId));
 	}
 
 	TEST(LinkedAnalysisSessionTests, FlushSavesOnceAndProjectReplacementDropsPendingEdits)

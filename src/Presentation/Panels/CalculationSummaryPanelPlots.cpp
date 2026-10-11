@@ -40,11 +40,12 @@ namespace DefectStudio
 		}
 	}
 
-	void CalculationSummaryPanel::renderPlots()
+	void CalculationSummaryPanel::renderPlots(bool convergence)
 	{
 		const double missing = std::numeric_limits<double>::quiet_NaN();
 		std::vector<double> steps, energies, forces, withoutEntropy, sigmaZero;
 		std::set<int> kpoints;
+		std::set<int> bandIndices;
 		bool hasFermi = true;
 		bool hasKs = false;
 		for (const auto &run : m_Session->m_Chain)
@@ -65,7 +66,10 @@ namespace DefectStudio
 				hasKs = true;
 				hasFermi = hasFermi && step.fermi.has_value();
 				for (const auto &block : step.blocks)
+				{
 					kpoints.insert(block.kpoint);
+					bandIndices.insert(block.bands.begin(), block.bands.end());
+				}
 			}
 		}
 		if (steps.empty())
@@ -77,7 +81,7 @@ namespace DefectStudio
 		{
 			return std::ranges::any_of(values, [](double value) { return std::isfinite(value); });
 		};
-		if (m_View == View::Convergence)
+		if (convergence)
 		{
 			ImGui::Spacing();
 			if (ImPlot::BeginPlot("Convergence", ImVec2(-1.0f, std::max(1.0f, ImGui::GetContentRegionAvail().y))))
@@ -178,7 +182,6 @@ namespace DefectStudio
 			double x, y, fill;
 		};
 		std::map<std::pair<int, int>, std::vector<Level>> bands;
-		std::set<int> bandIndices;
 		bool spinPolarised = false;
 		std::size_t offset = 0;
 		for (const auto &run : m_Session->m_Chain)
@@ -199,11 +202,47 @@ namespace DefectStudio
 					{
 						bands[{block.spin, block.bands[i]}].push_back({x, block.energies[i] - shift,
 							std::clamp(block.occupations[i] / full, 0.0, 1.0)});
-						bandIndices.insert(block.bands[i]);
 					}
 				}
 			offset += summary.energyTrend->size();
 		}
+		m_Session->SetAvailableBands(bandIndices);
+		ImGui::Checkbox("spin up", &m_Session->m_SpinSelected[0]);
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!spinPolarised);
+		ImGui::Checkbox("spin down", &m_Session->m_SpinSelected[1]);
+		ImGui::EndDisabled();
+		if (ImGui::SmallButton("wszystkie"))
+		{
+			for (auto &[band, selected] : m_Session->m_BandSelection)
+				selected = true;
+			m_Session->m_SpinSelected = {true, true};
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("żadne"))
+			for (auto &[band, selected] : m_Session->m_BandSelection)
+				selected = false;
+		if (ImGui::BeginChild("##Bands", ImVec2(0.0f, 2.0f * ImGui::GetFrameHeightWithSpacing()), ImGuiChildFlags_Borders))
+		{
+			int colourIndex = 0;
+			for (auto &[band, selected] : m_Session->m_BandSelection)
+			{
+				const std::string label = std::to_string(band);
+				const float width = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label.c_str()).x;
+				if (colourIndex > 0)
+				{
+					ImGui::SameLine();
+					if (ImGui::GetContentRegionAvail().x < width)
+						ImGui::NewLine();
+				}
+				const ImVec4 colour = ImPlot::GetColormapColor(colourIndex++);
+				ImGui::PushStyleColor(ImGuiCol_Text, colour);
+				ImGui::PushStyleColor(ImGuiCol_CheckMark, colour);
+				ImGui::Checkbox(label.c_str(), &selected);
+				ImGui::PopStyleColor(2);
+			}
+		}
+		ImGui::EndChild();
 		if (ImPlot::BeginPlot("KS levels", ImVec2(-1.0f, std::max(1.0f, ImGui::GetContentRegionAvail().y))))
 		{
 			ImPlot::SetupAxes("Global ionic step", m_Session->m_RelativeToFermi ? "Energy - E-fermi (eV)" : "Energy (eV)");
@@ -226,6 +265,8 @@ namespace DefectStudio
 			for (const auto &[key, levels] : bands)
 			{
 				const auto [spin, band] = key;
+				if (!m_Session->IsKsLevelSelected(spin, band))
+					continue;
 				const ImVec4 colour = ImPlot::GetColormapColor(static_cast<int>(std::distance(bandIndices.begin(), bandIndices.find(band))));
 				const std::string label = std::format("band {}{}", band, spinPolarised ? (spin == 1 ? ", spin up" : ", spin down") : "");
 				// The levels as short bars (fitted, in the legend).

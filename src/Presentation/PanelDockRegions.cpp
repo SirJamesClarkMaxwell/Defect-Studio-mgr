@@ -8,7 +8,7 @@ namespace DefectStudio
 {
 	std::optional<DockRegion> AnalysisDockRegion(const std::string_view title)
 	{
-		if (title == "Defect Energetics" || title == "Calculation Summary")
+		if (title == "Defect Energetics" || title.starts_with("Calculation Summary"))
 			return DockRegion::Left;
 		if (title == "Obliczenia")
 			return DockRegion::Bottom;

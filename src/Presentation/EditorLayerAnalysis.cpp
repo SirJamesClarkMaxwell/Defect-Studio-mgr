@@ -16,17 +16,25 @@ namespace DefectStudio
 	void EditorLayer::registerCalculationSummaryViews()
 	{
 		m_CalculationSummarySession = CreateRef<CalculationSummarySession>(m_JobSystem);
-		using View = CalculationSummaryPanel::View;
 		m_CalculationSummaryPanelId = registerPanel<CalculationSummaryPanel>(
-			m_CalculationSummarySession, View::Summary, "Calculation Summary", false);
-		const auto convergence = registerPanel<CalculationSummaryPanel>(
-			m_CalculationSummarySession, View::Convergence, "Zbieżność", false);
-		const auto ks = registerPanel<CalculationSummaryPanel>(
-			m_CalculationSummarySession, View::KsLevels, "Poziomy KS", false);
-		m_CalculationSummarySession->SetShowViewsHandler([this, convergence, ks](const bool visible) {
-			for (const auto id : {m_CalculationSummaryPanelId, convergence, ks})
-				if (const auto panel = findPanel(id).lock())
-					panel->SetVisible(visible);
+			m_CalculationSummarySession, "Calculation Summary", false);
+		// The first instance keeps the existing INI/visibility key for startup cache restoration.
+		m_CalculationSummarySession->SetUpdateInstancesHandler([this] {
+			// This runs before EditorLayer iterates the registry to render panels.
+			for (const PanelId id : m_Panels.GetIds())
+			{
+				const auto panel = std::dynamic_pointer_cast<CalculationSummaryPanel>(findPanel(id).lock());
+				if (!panel)
+					continue;
+				if (panel->IsClosed())
+				{
+					(void)m_Panels.Remove(id);
+					if (id == m_CalculationSummaryPanelId)
+						m_CalculationSummaryPanelId = 0;
+				}
+				else if (panel->Session() != m_CalculationSummarySession)
+					panel->Session()->Update();
+			}
 		});
 	}
 
@@ -124,7 +132,36 @@ namespace DefectStudio
 
 	void EditorLayer::onCalculationSummaryOpenRequested(const ProjectEvents::CalculationSummaryOpenRequested &event)
 	{
-		if (m_CalculationSummarySession)
-			m_CalculationSummarySession->OpenDirectory(event.directory);
+		if (event.directory.Empty())
+			return;
+		Ref<CalculationSummaryPanel> mostRecent;
+		for (const auto &entry : m_Panels.Entries())
+		{
+			const auto panel = std::dynamic_pointer_cast<CalculationSummaryPanel>(entry.panel);
+			if (!panel || panel->IsClosed())
+				continue;
+			if (panel->Session()->Directory() == event.directory)
+			{
+				panel->RequestFocus();
+				return;
+			}
+			if (!mostRecent || panel->FocusOrder() > mostRecent->FocusOrder())
+				mostRecent = panel;
+		}
+		auto panel = std::dynamic_pointer_cast<CalculationSummaryPanel>(findPanel(m_CalculationSummaryPanelId).lock());
+		if (!panel || panel->IsClosed() || !panel->Session()->Directory().Empty())
+		{
+			const auto session = CreateRef<CalculationSummarySession>(m_JobSystem, false);
+			session->SetBandEdgesProvider([this]() -> std::optional<VaspRunRecordIO::BandEdges> {
+				return m_DefectEnergeticsSession ? m_DefectEnergeticsSession->BulkBandEdges() : std::nullopt;
+			});
+			const auto id = registerPanel<CalculationSummaryPanel>(session, "Calculation Summary", true);
+			panel = std::dynamic_pointer_cast<CalculationSummaryPanel>(findPanel(id).lock());
+			panel->SetTitle("Calculation Summary: " + event.directory.filename().Utf8() + "##" + std::to_string(id));
+			if (mostRecent)
+				panel->DockAsTab(*mostRecent);
+		}
+		panel->Session()->OpenDirectory(event.directory);
+		panel->RequestFocus();
 	}
 } // namespace DefectStudio

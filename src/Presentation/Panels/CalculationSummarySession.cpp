@@ -122,9 +122,11 @@ namespace DefectStudio
 		}
 	} // namespace
 
-	CalculationSummarySession::CalculationSummarySession(WeakRef<JobSystem> jobSystem)
+	CalculationSummarySession::CalculationSummarySession(WeakRef<JobSystem> jobSystem, bool restoreCache)
 		: m_JobSystem(std::move(jobSystem))
 	{
+		if (!restoreCache)
+			return;
 		if (std::optional<VaspOutputData> cached = LoadCache(); cached.has_value())
 		{
 			m_Directory = cached->path;
@@ -144,6 +146,47 @@ namespace DefectStudio
 	CalculationSummarySession::~CalculationSummarySession()
 	{
 		cancelJobs();
+	}
+
+	Ref<CalculationSummarySession> CalculationSummarySession::clone() const
+	{
+		auto copy = CreateRef<CalculationSummarySession>(*this);
+		copy->m_UpdateInstances = {};
+		for (auto &run : copy->m_Chain)
+		{
+			const bool loading = run.job != nullptr;
+			run.job.reset();
+			run.jobId = 0;
+			if (loading)
+				copy->dispatchRun(run, copy->m_AutoBands ? 0 : copy->m_BandStart, copy->m_AutoBands ? 0 : copy->m_BandEnd);
+		}
+		return copy;
+	}
+
+	void CalculationSummarySession::SetAvailableBands(const std::set<int> &bands)
+	{
+		std::erase_if(m_BandSelection, [&](const auto &entry) { return !bands.contains(entry.first); });
+		for (const int band : bands)
+			m_BandSelection.try_emplace(band, true);
+	}
+
+	void CalculationSummarySession::SetBandSelected(int band, bool selected)
+	{
+		if (const auto it = m_BandSelection.find(band); it != m_BandSelection.end())
+			it->second = selected;
+	}
+
+	void CalculationSummarySession::SetSpinSelected(int spin, bool selected)
+	{
+		if (spin >= 1 && spin <= 2)
+			m_SpinSelected[spin - 1] = selected;
+	}
+
+	bool CalculationSummarySession::IsKsLevelSelected(int spin, int band) const
+	{
+		const auto it = m_BandSelection.find(band);
+		return spin >= 1 && spin <= 2 && m_SpinSelected[spin - 1] &&
+			it != m_BandSelection.end() && it->second;
 	}
 
 	void CalculationSummarySession::cancelJobs()
@@ -166,9 +209,9 @@ namespace DefectStudio
 		m_AutoBands = true;
 		m_SortPending = false;
 		m_Error.clear();
+		m_BandSelection.clear();
+		m_SpinSelected = {true, true};
 		dispatchLoad();
-		if (m_ShowViews)
-			m_ShowViews(true);
 	}
 
 	bool CalculationSummarySession::isLoading() const
@@ -203,6 +246,8 @@ namespace DefectStudio
 
 	void CalculationSummarySession::Update()
 	{
+		if (m_UpdateInstances)
+			m_UpdateInstances();
 		const auto jobs = m_JobSystem.lock();
 		if (!jobs)
 			return;

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <array>
 #include <functional>
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -19,17 +22,18 @@ namespace DefectStudio
 	class CalculationSummarySession
 	{
 	public:
-		explicit CalculationSummarySession(WeakRef<JobSystem> jobSystem);
+		explicit CalculationSummarySession(WeakRef<JobSystem> jobSystem, bool restoreCache = true);
 		~CalculationSummarySession();
 		void OpenDirectory(Path directory);
 		void Update();
-		// EditorLayer: show (true) or hide (false) the registered views - closing the main one hides all.
-		void SetShowViewsHandler(std::function<void(bool)> handler) { m_ShowViews = std::move(handler); }
-		void HideViews() const
-		{
-			if (m_ShowViews)
-				m_ShowViews(false);
-		}
+		[[nodiscard]] const Path &Directory() const { return m_Directory; }
+		// EditorLayer's existing main-thread update also maintains runtime summary instances.
+		void SetUpdateInstancesHandler(std::function<void()> handler) { m_UpdateInstances = std::move(handler); }
+		void SetAvailableBands(const std::set<int> &bands);
+		[[nodiscard]] const std::map<int, bool> &BandSelection() const { return m_BandSelection; }
+		void SetBandSelected(int band, bool selected);
+		void SetSpinSelected(int spin, bool selected);
+		[[nodiscard]] bool IsKsLevelSelected(int spin, int band) const;
 		void SetBandEdgesProvider(std::function<std::optional<VaspRunRecordIO::BandEdges>()> provider)
 		{ m_BandEdgesProvider = std::move(provider); }
 
@@ -46,6 +50,7 @@ namespace DefectStudio
 		};
 
 		void dispatchLoad();
+		[[nodiscard]] Ref<CalculationSummarySession> clone() const;
 		void cancelJobs();
 		void dispatchRun(Run &run, int bandStart, int bandEnd);
 		[[nodiscard]] bool isLoading() const;
@@ -60,9 +65,11 @@ namespace DefectStudio
 		bool m_AutoBands = true;
 		bool m_SortPending = false;
 		bool m_RelativeToFermi = false;
+		std::map<int, bool> m_BandSelection;
+		std::array<bool, 2> m_SpinSelected{true, true};
 		std::function<std::optional<VaspRunRecordIO::BandEdges>()> m_BandEdgesProvider;
 		std::optional<VaspRunRecordIO::BandEdges> m_PickedEdges; // from EIGENVAL of m_EdgesDirectory
 		Path m_EdgesDirectory;
-		std::function<void(bool)> m_ShowViews;
+		std::function<void()> m_UpdateInstances;
 	};
 } // namespace DefectStudio
