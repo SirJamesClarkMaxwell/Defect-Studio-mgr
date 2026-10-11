@@ -81,6 +81,38 @@ namespace DefectStudio
 		return entry;
 	}
 
+	void FnvCorrectionPanel::StoreCorrection(PersistedFnvCorrection entry)
+	{
+		const Path shown = m_Saved->active >= 0 ? m_Saved->corrections[static_cast<std::size_t>(m_Saved->active)].defectLocpot : Path();
+		const Path stored = entry.defectLocpot;
+		if (UpsertFnvCorrection(*m_Saved, std::move(entry)) < 0)
+			return;
+		m_Saved->active = -1;
+		for (std::size_t i = 0; i < m_Saved->corrections.size(); ++i)
+			if (!shown.Empty() && m_Saved->corrections[i].defectLocpot == shown)
+				m_Saved->active = static_cast<int>(i);
+		m_SavedLabels.clear();
+		// The shown entry was just recomputed elsewhere: show the new numbers.
+		if (!shown.Empty() && shown == stored && !m_Dirty)
+			loadSavedEntry();
+		publishSavedState();
+	}
+
+	void FnvCorrectionPanel::ShowCorrection(const Path &defectLocpot)
+	{
+		SetVisible(true);
+		ImGui::SetWindowFocus(GetTitle().c_str());
+		if (defectLocpot.Empty() || selectSavedLocpot(defectLocpot))
+			return;
+		persistChanges();
+		const Path bulk = m_Request.bulkLocpot;
+		m_Saved->active = -1;
+		loadSavedEntry();
+		m_Request.defectLocpot = defectLocpot;
+		m_Request.bulkLocpot = bulk;
+		defectLocpotPicked();
+	}
+
 	void FnvCorrectionPanel::publishSavedState()
 	{
 		if (m_SaveHandler)

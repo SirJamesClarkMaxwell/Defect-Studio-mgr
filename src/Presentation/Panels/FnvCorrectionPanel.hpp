@@ -30,6 +30,13 @@ namespace DefectStudio
 		void SetPersistedState(FnvCorrectionsFile file);
 		// Called with the whole file after every change worth keeping; EditorLayer writes it to disk.
 		void SetSaveHandler(std::function<void(const FnvCorrectionsFile &)> handler) { m_SaveHandler = std::move(handler); }
+		// task/99: the energetics panel reads the saved corrections, stores its batch results here and
+		// opens one entry for editing.
+		[[nodiscard]] const FnvCorrectionsFile &SavedCorrections() const { return *m_Saved; }
+		// Upserts by defect LOCPOT and saves; the entry the panel shows stays the shown one.
+		void StoreCorrection(PersistedFnvCorrection entry);
+		// Shows the panel with that LOCPOT's saved entry, or a new one for it.
+		void ShowCorrection(const Path &defectLocpot);
 
 	private:
 		void drawData();
@@ -43,6 +50,7 @@ namespace DefectStudio
 		void drawPlots();
 		void plotAxis(int axis, bool editable);
 		void proposeCentre();
+		void defectLocpotPicked(); // charge from the folder, bulk next to it, centre from impurities
 		void syncChargeMarker(bool create);
 		void invalidateProfiles();
 		void submitProfiles();

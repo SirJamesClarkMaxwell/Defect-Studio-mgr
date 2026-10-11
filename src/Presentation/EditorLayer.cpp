@@ -36,6 +36,7 @@
 #include "IO/PoscarWriter.hpp"
 #include "IO/POTCARWriter.hpp"
 #include "IO/ProjectManifestIO.hpp"
+#include "IO/EnergeticsIO.hpp"
 #include "IO/FnvCorrectionsIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/RecentProjectsIO.hpp"
@@ -57,6 +58,7 @@
 #include "Presentation/Panels/OccupationDiagramPanel.hpp"
 #include "Presentation/Panels/DisplacementComparisonPanel.hpp"
 #include "Presentation/Panels/GroupTheoryPanel.hpp"
+#include "Presentation/Panels/DefectEnergeticsPanel.hpp"
 #include "Presentation/Panels/FnvCorrectionPanel.hpp"
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
 #include "Presentation/Panels/ObjectPropertiesPanel.hpp"
@@ -737,6 +739,7 @@ namespace DefectStudio
 				"Atoms Displacement", false);
 			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
 			m_FnvCorrectionPanelId = registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
+			m_DefectEnergeticsPanelId = registerPanel<DefectEnergeticsPanel>(m_JobSystem, "Defect Energetics", false);
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
 			// instead of a fixed height squeezed under a long list of controls. Kept as a member
@@ -1641,6 +1644,36 @@ namespace DefectStudio
 			std::string error;
 			if (!FnvCorrectionsIO::Save(m_ActiveProjectDirectory, corrections, error))
 				DS_LOG_WARN("EditorLayer: failed to save fnv_corrections.yaml: {}", error);
+		});
+		loadEnergeticsForProject();
+	}
+
+	void EditorLayer::loadEnergeticsForProject()
+	{
+		auto panel = std::dynamic_pointer_cast<DefectEnergeticsPanel>(findPanel(m_DefectEnergeticsPanelId).lock());
+		if (panel == nullptr)
+			return;
+		panel->SetFnvPanel(std::dynamic_pointer_cast<FnvCorrectionPanel>(findPanel(m_FnvCorrectionPanelId).lock()));
+		EnergeticsFile file;
+		if (m_ActiveProject.has_value())
+		{
+			std::vector<std::string> warnings;
+			std::string error;
+			if (!EnergeticsIO::Load(m_ActiveProjectDirectory, file, warnings, error))
+			{
+				DS_LOG_WARN("EditorLayer: failed to load energetics.yaml: {}", error);
+				file = {};
+			}
+			for (const auto &warning : warnings)
+				DS_LOG_WARN("EditorLayer: energetics.yaml: {}", warning);
+		}
+		panel->SetPersistedState(std::move(file));
+		panel->SetSaveHandler([this](const EnergeticsFile &energetics) {
+			if (!m_ActiveProject.has_value())
+				return;
+			std::string error;
+			if (!EnergeticsIO::Save(m_ActiveProjectDirectory, energetics, error))
+				DS_LOG_WARN("EditorLayer: failed to save energetics.yaml: {}", error);
 		});
 	}
 

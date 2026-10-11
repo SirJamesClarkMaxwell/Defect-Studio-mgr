@@ -135,6 +135,17 @@ namespace DefectStudio
 		m_PendingJobId = 0;
 	}
 
+	void FnvCorrectionPanel::defectLocpotPicked()
+	{
+		if (const auto charge = ChargeFromCalculationFolder(m_Request.defectLocpot))
+			m_Request.charge = *charge;
+		if (m_Request.bulkLocpot.Empty())
+			if (const auto bulk = FindBulkLocpotNear(m_Request.defectLocpot))
+				m_Request.bulkLocpot = *bulk;
+		proposeCentre();
+		invalidateProfiles();
+	}
+
 	void FnvCorrectionPanel::proposeCentre()
 	{
 		if (m_Request.defectLocpot.Empty() || m_Request.bulkLocpot.Empty())
@@ -199,19 +210,8 @@ namespace DefectStudio
 			if (grid)
 			{
 				grid.Row("LOCPOT defektu");
-				if (DrawPathField("defect", m_Request.defectLocpot, m_Error))
-				{
-					if (!selectSavedLocpot(m_Request.defectLocpot))
-					{
-						if (const auto charge = ChargeFromCalculationFolder(m_Request.defectLocpot))
-							m_Request.charge = *charge;
-						if (m_Request.bulkLocpot.Empty())
-							if (const auto bulk = FindBulkLocpotNear(m_Request.defectLocpot))
-								m_Request.bulkLocpot = *bulk;
-						proposeCentre();
-						invalidateProfiles();
-					}
-				}
+				if (DrawPathField("defect", m_Request.defectLocpot, m_Error) && !selectSavedLocpot(m_Request.defectLocpot))
+					defectLocpotPicked();
 				grid.Row("LOCPOT bulk");
 				if (DrawPathField("bulk", m_Request.bulkLocpot, m_Error))
 				{

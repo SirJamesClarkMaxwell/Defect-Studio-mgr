@@ -231,6 +231,8 @@ namespace DefectStudio
 		void onDisplacementComparisonStateChanged(const ProjectEvents::DisplacementComparisonStateChanged &event);
 		// fnv_corrections.yaml -> FnvCorrectionPanel; the panel saves back through its handler.
 		void loadFnvCorrectionsForProject();
+		// energetics.yaml -> DefectEnergeticsPanel (task/99); called at the end of the FNV load.
+		void loadEnergeticsForProject();
 		// ProjectTreePanel's per-directory RMB "Set as Displacement Comparison".
 		void onDisplacementComparisonFileRequested(const ProjectEvents::DisplacementComparisonFileRequested &event);
 		// This window's vertical-toolbar quick-launch button.
@@ -314,6 +316,7 @@ namespace DefectStudio
 		PanelId m_ExportImagePanelId = 0;
 		PanelId m_DisplacementComparisonPanelId = 0;
 		PanelId m_FnvCorrectionPanelId = 0;
+		PanelId m_DefectEnergeticsPanelId = 0;
 		PanelId m_MaterialsCollectionPanelId = 0;
 		PanelId m_StructureHubPanelId = 0;
 		PanelId m_NewStructureWizardPanelId = 0;
