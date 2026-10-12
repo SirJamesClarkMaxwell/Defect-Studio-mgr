@@ -177,5 +177,119 @@ class ReferenceCaseTests(unittest.TestCase):
             self.assertLess(above / total, 0.02, key)
 
 
+BULK = ROOT / "test-directory" / "sjcm_mgr" / "hBN" / "bulk" / "phonons" / "vasp_661"
+
+
+@unittest.skipIf(IMPORT_ERROR is not None, f"dephonopy/numpy missing: {IMPORT_ERROR}")
+@unittest.skipUnless((CASE / "dispersion").is_dir() and BULK.is_dir(),
+                     "defect and bulk reference data in test-directory/ not present")
+class EmbeddingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.out = Path(cls.tmp.name) / "embedded"
+        cls.small_out = Path(cls.tmp.name) / "nonembedded"
+        args = (
+            "--fc-dir", CASE / "dispersion",
+            "--gs-dir", CASE / "relax",
+            "--es-dir", CASE / "excited" / "try_1_singlet",
+            "--triplet-dir", CASE / "excited" / "try_1_tryplet",
+            "--zpl-exp", 4.08,
+        )
+        cls.proc, cls.payload = run_script(
+            *args, "--bulk-fc-dir", BULK, "--mult", "12x12x1", "--out-dir", cls.out,
+        )
+        cls.small_proc, cls.small_payload = run_script(*args, "--out-dir", cls.small_out)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+        self.assertTrue(self.payload["ok"])
+
+    def summary(self):
+        return json.loads((self.out / "summary.json").read_text(encoding="utf-8"))
+
+    def test_sizes_and_embedding_metadata(self):
+        summary = self.summary()
+        self.assertEqual(summary["n_atoms"], 288)
+        self.assertEqual(summary["n_modes"], 864)
+        embedding = summary["embedding"]
+        self.assertEqual(embedding["defect_sites"], 2)
+        self.assertEqual(embedding["mult"], [12, 12, 1])
+        self.assertEqual(Path(embedding["bulk_fc_dir"]), BULK.resolve())
+        self.assertGreater(embedding["dcutoff_A"], 0)
+        self.assertGreater(embedding["bcutoff_A"], 0)
+
+    def test_origin_alignment(self):
+        from ase.geometry import find_mic
+
+        embedding = self.summary()["embedding"]
+        structure = json.loads((self.out / "structure.json").read_text(encoding="utf-8"))
+        primitive = np.asarray(structure["cell_A"]) / np.asarray(embedding["mult"])[:, None]
+        difference = np.asarray(embedding["origin_shift_A"]) - [1.25, 0.7217, 0]
+        self.assertLess(find_mic(difference, primitive)[1], 0.05)
+
+    def test_huang_rhys_and_dominant_mode(self):
+        self.assertAlmostEqual(self.summary()["s_total"], 1.4217, delta=0.005)
+        header, rows = read_tsv(self.out / "modes.tsv")
+        self.assertEqual(len(rows), 864)
+        col = {name: i for i, name in enumerate(header)}
+        top = max(rows, key=lambda row: float(row[col["S_k"]]))
+        self.assertAlmostEqual(float(top[col["freq_meV"]]), 199.81, delta=0.1)
+        self.assertEqual(top[col["irrep"]], "A1")
+        self.assertAlmostEqual(float(top[col["S_k"]]), 0.537, delta=0.005)
+
+    def check_poscar(self, directory, n_atoms):
+        from ase.io import read
+
+        self.assertTrue((directory / "POSCAR").is_file())
+        atoms = read(directory / "POSCAR", format="vasp")
+        structure = json.loads((directory / "structure.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(atoms), n_atoms)
+        self.assertEqual(atoms.get_chemical_symbols(), structure["symbols"])
+        np.testing.assert_allclose(atoms.get_positions(), structure["positions_A"], atol=1e-10)
+        np.testing.assert_allclose(atoms.get_cell(), structure["cell_A"], atol=1e-10)
+
+    def test_embedded_poscar(self):
+        self.check_poscar(self.out, 288)
+
+    def test_nonembedded_summary_and_poscar(self):
+        self.assertEqual(self.small_proc.returncode, 0, self.small_proc.stderr[-3000:])
+        self.assertTrue(self.small_payload["ok"])
+        summary = json.loads((self.small_out / "summary.json").read_text(encoding="utf-8"))
+        self.assertIsNone(summary["embedding"])
+        self.assertEqual(summary["n_atoms"], 162)
+        self.check_poscar(self.small_out, 162)
+
+    def test_embedded_eigenvectors_and_participation(self):
+        vectors = np.load(self.out / "eigenvectors.npy")
+        participation = np.load(self.out / "participation.npy")
+        self.assertEqual(vectors.shape, (864, 288, 3))
+        self.assertEqual(participation.shape, (864, 288))
+        np.testing.assert_allclose(participation.sum(axis=1), 1, atol=1e-4)
+        np.testing.assert_allclose((vectors.astype(np.float64) ** 2).sum(axis=2), participation, atol=1e-4)
+
+    def test_invalid_embedding_options_leave_no_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "result"
+            for options in (("--bulk-fc-dir", BULK), ("--mult", "12x12x1"),
+                            ("--bulk-fc-dir", BULK, "--mult", "12x0x1"),
+                            ("--bulk-fc-dir", BULK, "--mult", "12x12x1", "--dcutoff", "nan"),
+                            ("--bulk-fc-dir", BULK, "--mult", "12x12x1", "--bcutoff", "-1")):
+                with self.subTest(options=options):
+                    proc, payload = run_script(
+                        "--fc-dir", CASE / "dispersion", "--gs-dir", CASE / "relax",
+                        "--es-dir", CASE / "excited" / "try_1_singlet", "--out-dir", out, *options,
+                    )
+                    self.assertNotEqual(proc.returncode, 0)
+                    self.assertIsNotNone(payload, proc.stderr[-2000:])
+                    self.assertFalse(payload["ok"])
+                    self.assertTrue(payload["error"])
+                    self.assertFalse(out.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
