@@ -670,6 +670,15 @@ namespace DefectStudio
 		{
 			DS_LOG_WARN("Font Awesome 6 icon font could not be merged into ImGui font atlas");
 		}
+		// Fallback for symbols the UI face lacks (ℏ in the phonon plots and table, ⊕, subscripts):
+		// glyphs load on demand, merged faces are searched after the UI font.
+		if (const Path math = Path::FromResolved(std::filesystem::path("C:/Windows/Fonts/cambria.ttc")); FileSystem::Exists(math))
+		{
+			ImFontConfig fallbackConfig;
+			fallbackConfig.MergeMode = true;
+			fallbackConfig.FontNo = 1; // Cambria Math
+			io.Fonts->AddFontFromFileTTF(math.String().c_str(), ImGuiLayerDetail::FontPixelSize, &fallbackConfig);
+		}
 
 		// Code editor font (TextEditorPanel) - always CascadiaMono regardless of the UI font picked
 		// above, since ImGuiColorTextEdit's cursor/column grid assumes a fixed-width font and a

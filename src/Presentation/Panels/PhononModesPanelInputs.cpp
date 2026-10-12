@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <format>
 #include <imgui.h>
 
@@ -23,7 +24,14 @@ namespace DefectStudio
 			ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x -
 				ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x));
 			if (ImGui::InputText("##directory", text.data(), text.size(), editable ? 0 : ImGuiInputTextFlags_ReadOnly))
-				path = Path::FromUtf8(text.data());
+			{
+				// Pasted paths often carry spaces or quotes around them; Windows rejects those.
+				std::string_view typed = text.data();
+				const auto first = typed.find_first_not_of(" \t\r\n\"'");
+				typed = first == std::string_view::npos ? std::string_view{} :
+					typed.substr(first, typed.find_last_not_of(" \t\r\n\"'") - first + 1);
+				path = Path::FromUtf8(std::string(typed));
+			}
 			bool changed = editable && ImGui::IsItemDeactivatedAfterEdit();
 			ImGui::SetItemTooltip("%s", full.c_str());
 			ImGui::SameLine();
@@ -39,6 +47,33 @@ namespace DefectStudio
 			}
 			ImGui::PopID();
 			return changed;
+		}
+
+		bool Overlaps(const Path &a, const Path &b)
+		{
+			if (a.Empty() || b.Empty()) return false;
+			const auto x = std::filesystem::weakly_canonical(a.Native()), y = std::filesystem::weakly_canonical(b.Native());
+			const auto within = [](const std::filesystem::path &inner, const std::filesystem::path &outer) {
+				const auto [end, _] = std::mismatch(outer.begin(), outer.end(), inner.begin(), inner.end());
+				return end == outer.end();
+			};
+			return within(x, y) || within(y, x);
+		}
+
+		// Why "Policz" is disabled, in the user's words; empty when it can run.
+		std::string ComputationBlocker(const PhononPanelSettings &settings)
+		{
+			if (settings.forceConstantDirectory.Empty()) return "Ustaw katalog stałych siłowych (FC).";
+			if (settings.groundStateDirectory.Empty()) return "Ustaw stan podstawowy.";
+			if (settings.excitedStateDirectory.Empty()) return "Ustaw stan wzbudzony.";
+			if (settings.resultDirectory.Empty()) return "Ustaw katalog wyników.";
+			if (!settings.embeddingMult.empty() && settings.bulkForceConstantDirectory.Empty())
+				return "Embedding włączony bez katalogu FC bulku - ustaw go albo odznacz Embedding.";
+			for (const Path *input : {&settings.forceConstantDirectory, &settings.groundStateDirectory,
+				&settings.excitedStateDirectory, &settings.tripletDirectory, &settings.bulkForceConstantDirectory})
+				if (Overlaps(settings.resultDirectory, *input))
+					return "Katalog wyników nie może leżeć w katalogu wejściowym (ani go zawierać).";
+			return {};
 		}
 	}
 
@@ -108,11 +143,11 @@ namespace DefectStudio
 			drawEmbedding();
 			ImGui::EndDisabled();
 		}
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || settings.forceConstantDirectory.Empty() ||
-			settings.groundStateDirectory.Empty() || settings.excitedStateDirectory.Empty() || settings.resultDirectory.Empty() ||
-			(!settings.embeddingMult.empty() && settings.bulkForceConstantDirectory.Empty()));
+		const std::string blocker = ComputationBlocker(settings);
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || !blocker.empty());
 		if (ImGui::Button("Policz")) submitComputation();
 		ImGui::EndDisabled();
+		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
 		ImGui::SameLine();
 		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
 		if (ImGui::Button("Wczytaj wyniki..."))
@@ -131,6 +166,8 @@ namespace DefectStudio
 					ImVec2(-1.0f, 0.0f), snapshot->currentMessage.c_str());
 			if (ImGui::Button("Anuluj") && jobs) (void)jobs->RequestCancel(m_PendingJobId);
 		}
+		if (!blocker.empty() && !m_PendingJob)
+			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "%s", blocker.c_str());
 		if (!m_Error.empty())
 			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_Error.c_str());
 	}
