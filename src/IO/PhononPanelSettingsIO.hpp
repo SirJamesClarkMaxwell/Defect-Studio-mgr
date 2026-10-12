@@ -23,6 +23,14 @@ namespace DefectStudio
 		std::optional<double> experimentalZplEv;
 		double sigmaMeV = 6.0;
 		double gammaMeV = 2.0;
+		// task/104g: embedding; empty bulk dir or mult = no embedding
+		Path bulkForceConstantDirectory;
+		std::string embeddingMult;           // "24x24x1"
+		std::optional<double> dcutoffAngstrom;
+		std::optional<double> bcutoffAngstrom;
+		// task/104g: CCD single points (scripts/python/examples/ccd_inputs.py); empty = <project>/ccd/<es dir name>
+		Path ccdOutputDirectory;
+		double ccdStep = 0.25;
 
 		// The loaded result directory (PhononAnalysisIO); empty = nothing loaded
 		Path resultDirectory;
@@ -42,7 +50,8 @@ namespace DefectStudio
 
 	// phonon_panel.yaml next to manifest.yaml. Schema (all keys optional on read):
 	//   formatVersion: 1
-	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplExp, sigma, gamma}
+	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplExp, sigma, gamma,
+	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep}   # dcutoff/bcutoff absent = default
 	//   resultDir: ...
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
 	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter}

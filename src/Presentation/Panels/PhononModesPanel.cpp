@@ -2,6 +2,7 @@
 #include "Presentation/Panels/PhononModesPanel.hpp"
 
 #include <algorithm>
+#include <sstream>
 #include <imgui.h>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -10,6 +11,7 @@
 #include "IO/PhononAnalysisIO.hpp"
 #include "Renderer/RendererLayer.hpp"
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
+#include "ScientificRuntime/Python/CcdInputsJob.hpp"
 
 namespace DefectStudio
 {
@@ -24,6 +26,8 @@ namespace DefectStudio
 		clone->m_ProjectDirectory = m_ProjectDirectory;
 		clone->m_SaveHandler = m_SaveHandler;
 		clone->m_Session->Settings() = m_Session->Settings();
+		clone->m_EmbeddingMult = m_EmbeddingMult;
+		clone->m_EmbeddingSummary = m_EmbeddingSummary;
 		if (m_Session->Result())
 			clone->m_Session->SetResult(*m_Session->Result());
 		return clone;
@@ -68,6 +72,11 @@ namespace DefectStudio
 				(void)jobs->RequestCancel(m_PendingJobId);
 		m_PendingJob.reset();
 		m_PendingJobId = 0;
+		if (m_PendingCcdJob)
+			if (const auto jobs = m_JobSystem.lock())
+				(void)jobs->RequestCancel(m_PendingCcdJobId);
+		m_PendingCcdJob.reset();
+		m_PendingCcdJobId = 0;
 	}
 
 	void PhononModesPanel::SetPersistedState(PhononPanelSettings settings, Path projectDirectory)
@@ -78,6 +87,21 @@ namespace DefectStudio
 		m_Session->Settings() = std::move(settings);
 		m_ProjectDirectory = std::move(projectDirectory);
 		m_Error.clear();
+		m_CcdResult.clear();
+		m_CcdError.clear();
+		m_EmbeddingSummary.clear();
+		m_EmbeddingMult = {12, 12, 1};
+		if (!m_Session->Settings().embeddingMult.empty())
+		{
+			std::istringstream mult(m_Session->Settings().embeddingMult);
+			char first = 0, second = 0;
+			std::array<int, 3> values;
+			if (mult >> values[0] >> first >> values[1] >> second >> values[2] && first == 'x' && second == 'x' &&
+				mult.peek() == std::char_traits<char>::eof() && std::all_of(values.begin(), values.end(), [](int n) { return n > 0; }))
+				m_EmbeddingMult = values;
+			else
+				m_Session->Settings().embeddingMult.clear();
+		}
 		if (!m_Session->Settings().resultDirectory.Empty())
 			loadResult(m_Session->Settings().resultDirectory);
 	}
@@ -90,7 +114,7 @@ namespace DefectStudio
 
 	void PhononModesPanel::SetDirectory(const std::string &role, const Path &directory)
 	{
-		if (role != "fc" && role != "gs" && role != "es" && role != "triplet" && role != "result") return;
+		if (role != "fc" && role != "gs" && role != "es" && role != "triplet" && role != "bulk" && role != "result") return;
 		cancelJob();
 		auto &settings = m_Session->Settings();
 		if (role == "fc")
@@ -103,6 +127,7 @@ namespace DefectStudio
 		else if (role == "gs") settings.groundStateDirectory = directory;
 		else if (role == "es") settings.excitedStateDirectory = directory;
 		else if (role == "triplet") settings.tripletDirectory = directory;
+		else if (role == "bulk") settings.bulkForceConstantDirectory = directory;
 		else if (role == "result")
 		{
 			loadResult(directory);
@@ -120,6 +145,7 @@ namespace DefectStudio
 		StopAnimation();
 		m_Session->SetResult(std::move(result));
 		m_Session->Settings().resultDirectory = directory;
+		loadEmbeddingSummary(directory);
 		const auto &loaded = *m_Session->Result();
 		auto &zpl = m_Session->Settings().plZpl;
 		const bool available = zpl == "computed" ? !loaded.plComputed.empty() :
@@ -146,6 +172,13 @@ namespace DefectStudio
 		request.experimentalZplEv = settings.experimentalZplEv;
 		request.sigmaMeV = settings.sigmaMeV;
 		request.gammaMeV = settings.gammaMeV;
+		if (!settings.embeddingMult.empty())
+		{
+			request.bulkForceConstantDirectory = settings.bulkForceConstantDirectory;
+			request.embeddingMult = m_EmbeddingMult;
+			request.dcutoffAngstrom = settings.dcutoffAngstrom;
+			request.bcutoffAngstrom = settings.bcutoffAngstrom;
+		}
 		request.outputDirectory = settings.resultDirectory;
 		m_PendingJob = CreateRef<PhononAnalysisJob>(std::move(request));
 		m_PendingJobId = jobs->Submit(m_PendingJob, JobPriority::Normal);
@@ -246,6 +279,7 @@ namespace DefectStudio
 	void PhononModesPanel::Render()
 	{
 		pollJob();
+		pollCcdJob();
 		if (!IsVisible())
 		{
 			StopAnimation();
@@ -266,6 +300,7 @@ namespace DefectStudio
 		else if (draw)
 		{
 			drawInputs();
+			drawCcd();
 			if (m_Session->Result())
 			{
 				drawSummary();

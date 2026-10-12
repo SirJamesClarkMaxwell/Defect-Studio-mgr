@@ -1414,6 +1414,7 @@ namespace DefectStudio
 		if (ImGui::BeginMenu("Fonony"))
 		{
 			for (const auto &[role, label] : {std::pair{"fc", "Ustaw jako katalog FC"},
+				std::pair{"bulk", "Ustaw jako katalog FC bulku (embedding)"},
 				std::pair{"gs", "Ustaw jako katalog stanu podstawowego"},
 				std::pair{"es", "Ustaw jako katalog stanu wzbudzonego"},
 				std::pair{"triplet", "Ustaw jako katalog trypletu (korekcja spinowa)"},

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <regex>
 #include <stdexcept>
 
 #include <yaml-cpp/yaml.h>
@@ -143,6 +144,28 @@ namespace DefectStudio
 				});
 				ReadNumber(inputs, "sigma", settings.sigmaMeV, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
 				ReadNumber(inputs, "gamma", settings.gammaMeV, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
+				ReadSetting(inputs, "bulkFcDir", settings.bulkForceConstantDirectory, outWarnings, readPath);
+				ReadSetting(inputs, "mult", settings.embeddingMult, outWarnings, [](const YAML::Node &node) {
+					const auto value = node.as<std::string>();
+					std::smatch parts;
+					if (!value.empty())
+					{
+						if (!std::regex_match(value, parts, std::regex("([1-9][0-9]*)x([1-9][0-9]*)x([1-9][0-9]*)")))
+							throw std::invalid_argument("mult must contain three positive integers, e.g. 12x12x1");
+						for (int i = 1; i <= 3; ++i) (void)std::stoi(parts[i].str());
+					}
+					return value;
+				});
+				const auto readCutoff = [](const YAML::Node &node) {
+					const double number = node.as<double>();
+					if (!std::isfinite(number) || number <= 0.0)
+						throw std::invalid_argument("cutoff must be positive and finite");
+					return number;
+				};
+				ReadSetting(inputs, "dcutoff", settings.dcutoffAngstrom, outWarnings, readCutoff);
+				ReadSetting(inputs, "bcutoff", settings.bcutoffAngstrom, outWarnings, readCutoff);
+				ReadSetting(inputs, "ccdDir", settings.ccdOutputDirectory, outWarnings, readPath);
+				ReadNumber(inputs, "ccdStep", settings.ccdStep, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
 			}
 			ReadSetting(root, "resultDir", settings.resultDirectory, outWarnings, readPath);
 			const auto view = root["view"];
@@ -199,7 +222,15 @@ namespace DefectStudio
 		if (settings.experimentalZplEv)
 			emit << YAML::Key << "zplExp" << YAML::Value << *settings.experimentalZplEv;
 		emit << YAML::Key << "sigma" << YAML::Value << settings.sigmaMeV
-			<< YAML::Key << "gamma" << YAML::Value << settings.gammaMeV << YAML::EndMap
+			<< YAML::Key << "gamma" << YAML::Value << settings.gammaMeV
+			<< YAML::Key << "bulkFcDir" << YAML::Value << StoredPath(settings.bulkForceConstantDirectory, projectDirectory)
+			<< YAML::Key << "mult" << YAML::Value << settings.embeddingMult;
+		if (settings.dcutoffAngstrom)
+			emit << YAML::Key << "dcutoff" << YAML::Value << *settings.dcutoffAngstrom;
+		if (settings.bcutoffAngstrom)
+			emit << YAML::Key << "bcutoff" << YAML::Value << *settings.bcutoffAngstrom;
+		emit << YAML::Key << "ccdDir" << YAML::Value << StoredPath(settings.ccdOutputDirectory, projectDirectory)
+			<< YAML::Key << "ccdStep" << YAML::Value << settings.ccdStep << YAML::EndMap
 			<< YAML::Key << "resultDir" << YAML::Value << StoredPath(settings.resultDirectory, projectDirectory)
 			<< YAML::Key << "view" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "selectedMode" << YAML::Value << settings.selectedMode

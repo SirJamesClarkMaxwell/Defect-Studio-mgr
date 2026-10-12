@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 #include <optional>
 #include <string>
@@ -18,6 +19,7 @@ namespace DefectStudio
 	class JobSystem;
 	class RendererLayer;
 	class PhononAnalysisJob;
+	class CcdInputsJob;
 
 	// task/104d: Gamma phonon modes of a defect supercell and the harmonic PL built on them
 	// (docs/work/project/tasks/104d-phonon-panel.md). Computes through PhononAnalysisJob or loads an
@@ -54,6 +56,12 @@ namespace DefectStudio
 		void selectMode(int index);
 		void cancelJob();
 		void drawInputs();
+		void drawEmbedding();
+		void drawCcd();
+		void submitCcd();
+		void pollCcdJob();
+		[[nodiscard]] Path ccdOutputPath() const;
+		void loadEmbeddingSummary(const Path &directory);
 		void drawSummary();
 		void drawModesTable();
 		void drawPlots();
@@ -79,6 +87,12 @@ namespace DefectStudio
 		std::vector<std::string> m_WindowsBeforeOpen;
 		Ref<PhononAnalysisJob> m_PendingJob;
 		JobId m_PendingJobId = 0;
+		Ref<CcdInputsJob> m_PendingCcdJob;
+		JobId m_PendingCcdJobId = 0;
+		std::array<int, 3> m_EmbeddingMult = {12, 12, 1};
+		std::string m_EmbeddingSummary;
+		std::string m_CcdResult;
+		std::string m_CcdError;
 		std::string m_Error;
 		std::string m_WindowError;
 		bool m_BindRequested = false;

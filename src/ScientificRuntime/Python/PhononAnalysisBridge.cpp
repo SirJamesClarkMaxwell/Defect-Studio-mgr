@@ -2,6 +2,7 @@
 
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <sstream>
@@ -26,8 +27,19 @@ namespace DefectStudio
 			arguments.insert(arguments.end(), {"--zpl-exp", std::format("{:.10g}", *request.experimentalZplEv)});
 		arguments.insert(arguments.end(), {
 			"--sigma", std::format("{:.10g}", request.sigmaMeV),
-			"--gamma", std::format("{:.10g}", request.gammaMeV),
-			"--out-dir", request.outputDirectory.Utf8()});
+			"--gamma", std::format("{:.10g}", request.gammaMeV)});
+		if (request.bulkForceConstantDirectory)
+			arguments.insert(arguments.end(), {"--bulk-fc-dir", request.bulkForceConstantDirectory->Utf8()});
+		if (request.embeddingMult)
+		{
+			const auto &mult = *request.embeddingMult;
+			arguments.insert(arguments.end(), {"--mult", std::format("{}x{}x{}", mult[0], mult[1], mult[2])});
+		}
+		if (request.dcutoffAngstrom)
+			arguments.insert(arguments.end(), {"--dcutoff", std::format("{:.10g}", *request.dcutoffAngstrom)});
+		if (request.bcutoffAngstrom)
+			arguments.insert(arguments.end(), {"--bcutoff", std::format("{:.10g}", *request.bcutoffAngstrom)});
+		arguments.insert(arguments.end(), {"--out-dir", request.outputDirectory.Utf8()});
 		return arguments;
 	}
 
@@ -84,8 +96,20 @@ namespace DefectStudio
 				"Expected an output path, positive finite sigma/gamma and a positive finite experimental ZPL when provided.",
 				"Check the output path, broadening and experimental ZPL.", "python.phonon.request_invalid");
 		}
+		if (request.bulkForceConstantDirectory.has_value() != request.embeddingMult.has_value() ||
+			(request.embeddingMult && std::any_of(request.embeddingMult->begin(), request.embeddingMult->end(),
+				[](int value) { return value < 1; })) ||
+			(request.dcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.dcutoffAngstrom) || *request.dcutoffAngstrom <= 0.0)) ||
+			(request.bcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.bcutoffAngstrom) || *request.bcutoffAngstrom <= 0.0)))
+		{
+			return MakePythonExecutionError(
+				"Phonon embedding request is invalid.",
+				"Expected both bulk FC directory and three positive multipliers; cutoffs require embedding and must be positive and finite.",
+				"Check the embedding directory, multipliers and cutoffs.", "python.phonon.request_invalid");
+		}
 		for (const Path &directory : {request.forceConstantDirectory, request.groundStateDirectory,
-			request.excitedStateDirectory, request.tripletDirectory.value_or(request.excitedStateDirectory)})
+			request.excitedStateDirectory, request.tripletDirectory.value_or(request.excitedStateDirectory),
+			request.bulkForceConstantDirectory.value_or(request.forceConstantDirectory)})
 		{
 			std::error_code error;
 			if (directory.Empty() || !std::filesystem::is_directory(directory.Native(), error))
@@ -93,7 +117,7 @@ namespace DefectStudio
 				return MakePythonExecutionError(
 					"A phonon analysis input directory was not found.",
 					"Directory: " + directory.Utf8() + "\n" + error.message(),
-					"Pick existing force-constant, ground-state, excited-state and optional triplet directories.",
+					"Pick existing force-constant, ground-state, excited-state and optional triplet/bulk directories.",
 					"python.phonon.request_invalid");
 			}
 		}

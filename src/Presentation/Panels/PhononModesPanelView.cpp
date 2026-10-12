@@ -16,6 +16,7 @@ namespace DefectStudio
 		const auto &result = *m_Session->Result();
 		ImGui::SeparatorText("Podsumowanie");
 		ImGui::Text("S_total = %.4f   Debye–Waller = %.4f   N = %zu", result.sTotal, result.debyeWaller, result.AtomCount());
+		if (!m_EmbeddingSummary.empty()) ImGui::TextWrapped("%s", m_EmbeddingSummary.c_str());
 		for (const auto &[label, value] : {std::pair{"obliczone", result.zplEv.computed},
 			std::pair{"po korekcji spinowej", result.zplEv.spinPurified}, std::pair{"eksperymentalne", result.zplEv.experimental}})
 			if (value) { ImGui::Text("ZPL (%s): %.4f eV", label, *value); }

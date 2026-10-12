@@ -24,6 +24,11 @@ namespace DefectStudio::Tests
 			settings.experimentalZplEv = 4.08;
 			settings.sigmaMeV = 5.5;
 			settings.gammaMeV = 1.25;
+			settings.bulkForceConstantDirectory = kProject / "bulk" / "phonons";
+			settings.embeddingMult = "24x24x1";
+			settings.dcutoffAngstrom = 6.5;
+			settings.ccdOutputDirectory = kProject / "ccd" / "dimer";
+			settings.ccdStep = 0.125;
 			settings.resultDirectory = kProject / "phonons" / "dimer";
 			settings.selectedMode = 485;
 			settings.participationThreshold = 0.025;
@@ -58,6 +63,13 @@ namespace DefectStudio::Tests
 		EXPECT_DOUBLE_EQ(*loaded.experimentalZplEv, 4.08);
 		EXPECT_DOUBLE_EQ(loaded.sigmaMeV, 5.5);
 		EXPECT_DOUBLE_EQ(loaded.gammaMeV, 1.25);
+		EXPECT_EQ(loaded.bulkForceConstantDirectory, original.bulkForceConstantDirectory);
+		EXPECT_EQ(loaded.embeddingMult, "24x24x1");
+		ASSERT_TRUE(loaded.dcutoffAngstrom.has_value());
+		EXPECT_DOUBLE_EQ(*loaded.dcutoffAngstrom, 6.5);
+		EXPECT_FALSE(loaded.bcutoffAngstrom.has_value());
+		EXPECT_EQ(loaded.ccdOutputDirectory, original.ccdOutputDirectory);
+		EXPECT_DOUBLE_EQ(loaded.ccdStep, 0.125);
 		EXPECT_EQ(loaded.resultDirectory, original.resultDirectory);
 		EXPECT_EQ(loaded.selectedMode, 485);
 		EXPECT_DOUBLE_EQ(loaded.participationThreshold, 0.025);

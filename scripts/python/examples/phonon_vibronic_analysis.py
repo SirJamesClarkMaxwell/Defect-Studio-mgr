@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import sys
+from types import SimpleNamespace
 from uuid import uuid4
 
 # Keep scientific-package imports from writing into the read-only input/runtime trees.
@@ -16,6 +17,7 @@ sys.dont_write_bytecode = True
 
 import numpy as np
 from scipy.constants import atomic_mass, electron_volt, hbar, physical_constants
+from scipy.linalg import eigh
 
 
 def read_toten(directory):
@@ -150,7 +152,17 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
                          "origin_shift_A": shift.tolist(), "dcutoff_A": float(info["dcutoff"]),
                          "bcutoff_A": float(bcutoff if bcutoff is not None else bulk_fc.max_cutoff),
                          "defect_sites": len(info["positions"])}
-        modes = fc.calculate_modes(defect_info=info)
+        from dephonopy.matrix_storage import serial_matrix
+
+        # Override only the dense serial solver, leaving numpy and all other users untouched.
+        serial_np = serial_matrix.np
+        serial_matrix.np = SimpleNamespace(**(vars(serial_np) | {
+            "linalg": SimpleNamespace(**(vars(serial_np.linalg) | {
+                "eigh": lambda a: eigh(a, driver="evd")}))}))
+        try:
+            modes = fc.calculate_modes(defect_info=info)
+        finally:
+            serial_matrix.np = serial_np
         modes.calculate_irreps()
         modes.calculate_iprs()
         if embedding is not None:

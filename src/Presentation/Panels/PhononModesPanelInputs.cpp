@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <imgui.h>
 
 #include "Core/JobSystem/JobSystem.hpp"
@@ -48,7 +49,7 @@ namespace DefectStudio
 		if (ImGui::CollapsingHeader("Wejścia"))
 		{
 			ImGui::TextDisabled("Katalogi można też ustawić przez RMB → Fonony w Project Tree.");
-			ImGui::BeginDisabled(m_PendingJob != nullptr);
+			ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
 			{
 				PropertyGrid grid("##phononInputs", PropertyGridLabelWidth({"Stałe siłowe (FC)",
 					"Stan podstawowy", "Stan wzbudzony", "Tryplet (opcjonalny)", "ZPL eksperymentalne [eV]", "Katalog wyników"}));
@@ -103,14 +104,17 @@ namespace DefectStudio
 					if (DrawFolder("output", settings.resultDirectory, m_Error, true)) persist();
 				}
 			}
+			ImGui::SeparatorText("Embedding (opcjonalnie)");
+			drawEmbedding();
 			ImGui::EndDisabled();
 		}
-		ImGui::BeginDisabled(m_PendingJob != nullptr || settings.forceConstantDirectory.Empty() ||
-			settings.groundStateDirectory.Empty() || settings.excitedStateDirectory.Empty() || settings.resultDirectory.Empty());
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || settings.forceConstantDirectory.Empty() ||
+			settings.groundStateDirectory.Empty() || settings.excitedStateDirectory.Empty() || settings.resultDirectory.Empty() ||
+			(!settings.embeddingMult.empty() && settings.bulkForceConstantDirectory.Empty()));
 		if (ImGui::Button("Policz")) submitComputation();
 		ImGui::EndDisabled();
 		ImGui::SameLine();
-		ImGui::BeginDisabled(m_PendingJob != nullptr);
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
 		if (ImGui::Button("Wczytaj wyniki..."))
 		{
 			const auto picked = Platform::PickFolder(settings.resultDirectory);
@@ -129,5 +133,104 @@ namespace DefectStudio
 		}
 		if (!m_Error.empty())
 			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_Error.c_str());
+	}
+
+	void PhononModesPanel::drawEmbedding()
+	{
+		auto &settings = m_Session->Settings();
+		const auto storeMult = [&] {
+			for (auto &value : m_EmbeddingMult) value = std::max(1, value);
+			settings.embeddingMult = std::format("{}x{}x{}", m_EmbeddingMult[0], m_EmbeddingMult[1], m_EmbeddingMult[2]);
+		};
+		bool enabled = !settings.embeddingMult.empty();
+		if (ImGui::Checkbox("Embedding", &enabled))
+		{
+			if (enabled) storeMult();
+			else settings.embeddingMult.clear();
+			persist();
+		}
+		ImGui::BeginDisabled(!enabled);
+		{
+			PropertyGrid grid("##phononEmbedding", PropertyGridLabelWidth({"Katalog FC bulku", "mult (N x M x K)", "dcutoff [Å]", "bcutoff [Å]"}));
+			if (grid)
+			{
+				grid.Row("Katalog FC bulku");
+				if (DrawFolder("bulk", settings.bulkForceConstantDirectory, m_Error, true)) persist();
+				grid.Row("mult (N x M x K)");
+				ImGui::InputInt3("##mult", m_EmbeddingMult.data());
+				if (ImGui::IsItemDeactivatedAfterEdit())
+				{
+					storeMult();
+					persist();
+				}
+				for (const auto &[label, cutoff] : {std::pair{"dcutoff [Å]", std::ref(settings.dcutoffAngstrom)},
+					std::pair{"bcutoff [Å]", std::ref(settings.bcutoffAngstrom)}})
+				{
+					grid.Row(label);
+					ImGui::PushID(label);
+					auto &value = cutoff.get();
+					bool useDefault = !value.has_value();
+					if (ImGui::Checkbox("domyślny", &useDefault))
+					{
+						value = useDefault ? std::nullopt : std::optional<double>(6.0);
+						persist();
+					}
+					if (value)
+					{
+						ImGui::SameLine();
+						ImGui::InputDouble("##cutoff", &*value, 0.0, 0.0, "%.3f");
+						if (ImGui::IsItemDeactivatedAfterEdit())
+						{
+							if (!std::isfinite(*value) || *value <= 0.0) value = 6.0;
+							persist();
+						}
+					}
+					ImGui::PopID();
+				}
+			}
+		}
+		ImGui::EndDisabled();
+		ImGui::TextDisabled("FC bulku: RMB → Fonony → Ustaw jako katalog FC bulku (embedding).");
+		ImGui::TextDisabled("Czas rośnie ~N^3: 24x24x1 ~5 s, 36x36x1 ~20 s, 48x48x1 ~2 min na tym PC");
+	}
+
+	void PhononModesPanel::drawCcd()
+	{
+		if (!ImGui::CollapsingHeader("CCD")) return;
+		auto &settings = m_Session->Settings();
+		ImGui::TextDisabled("GS i ES: katalogi z Wejścia.");
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
+		{
+			PropertyGrid grid("##ccdInputs", PropertyGridLabelWidth({"Katalog CCD", "Krok t"}));
+			if (grid)
+			{
+				grid.Row("Katalog CCD");
+				Path output = ccdOutputPath();
+				const bool changed = DrawFolder("ccd", output, m_CcdError, true);
+				if (output != ccdOutputPath())
+					settings.ccdOutputDirectory = output;
+				if (changed) persist();
+				grid.Row("Krok t");
+				ImGui::InputDouble("##ccdStep", &settings.ccdStep, 0.0, 0.0, "%.4g");
+				if (ImGui::IsItemDeactivatedAfterEdit())
+				{
+					if (!std::isfinite(settings.ccdStep) || settings.ccdStep <= 0.0) settings.ccdStep = 0.25;
+					persist();
+				}
+			}
+		}
+		ImGui::BeginDisabled(settings.groundStateDirectory.Empty() || settings.excitedStateDirectory.Empty() || ccdOutputPath().Empty());
+		if (ImGui::Button("Generuj wejścia CCD")) submitCcd();
+		ImGui::EndDisabled();
+		ImGui::EndDisabled();
+		if (m_PendingCcdJob)
+		{
+			ImGui::TextDisabled("Generowanie wejść CCD...");
+			if (ImGui::Button("Anuluj CCD"))
+				if (const auto jobs = m_JobSystem.lock()) (void)jobs->RequestCancel(m_PendingCcdJobId);
+		}
+		if (!m_CcdResult.empty()) ImGui::TextUnformatted(m_CcdResult.c_str());
+		if (!m_CcdError.empty()) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_CcdError.c_str());
+		ImGui::TextDisabled("Przed sbatch: WAVECAR do es/t_+100 i gs/t_+000");
 	}
 }

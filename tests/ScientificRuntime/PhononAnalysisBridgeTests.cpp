@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -42,6 +43,59 @@ namespace DefectStudio::Tests
 			"--es-dir", request.excitedStateDirectory.Utf8(), "--triplet-dir", request.tripletDirectory->Utf8(),
 			"--zpl-exp", "4.08", "--sigma", "5", "--gamma", "1.5", "--out-dir", request.outputDirectory.Utf8()};
 		EXPECT_EQ(full, expectedFull);
+
+		request.bulkForceConstantDirectory = Path::FromUtf8("D:/calc/bulk");
+		request.embeddingMult = std::array<int, 3>{24, 24, 1};
+		request.dcutoffAngstrom = 6.0;
+		const std::vector<std::string> embedded = BuildPhononAnalysisArguments(request);
+		const std::vector<std::string> expectedEmbedded = {
+			"--fc-dir", request.forceConstantDirectory.Utf8(), "--gs-dir", request.groundStateDirectory.Utf8(),
+			"--es-dir", request.excitedStateDirectory.Utf8(), "--triplet-dir", request.tripletDirectory->Utf8(),
+			"--zpl-exp", "4.08", "--sigma", "5", "--gamma", "1.5",
+			"--bulk-fc-dir", request.bulkForceConstantDirectory->Utf8(), "--mult", "24x24x1", "--dcutoff", "6",
+			"--out-dir", request.outputDirectory.Utf8()};
+		EXPECT_EQ(embedded, expectedEmbedded);
+	}
+
+	TEST(PhononAnalysisBridgeTests, HalfAnEmbeddingRequestIsRejected)
+	{
+		PhononAnalysisRequest request;
+		request.forceConstantDirectory = FindRepoRoot();
+		request.groundStateDirectory = FindRepoRoot();
+		request.excitedStateDirectory = FindRepoRoot();
+		request.outputDirectory = Path::FromResolved(std::filesystem::temp_directory_path() / "ds_phonon_never_written");
+		request.embeddingMult = std::array<int, 3>{12, 12, 1};
+		Result<PhononAnalysisRunSummary> summary = PhononAnalysisBridge{}.Run(request);
+		ASSERT_FALSE(summary);
+		EXPECT_EQ(summary.Error().code, "python.phonon.request_invalid");
+
+		request.bulkForceConstantDirectory = FindRepoRoot();
+		request.embeddingMult = std::array<int, 3>{12, 0, 1};
+		summary = PhononAnalysisBridge{}.Run(request);
+		ASSERT_FALSE(summary);
+		EXPECT_EQ(summary.Error().code, "python.phonon.request_invalid");
+	}
+
+	// Embedded end to end (task 104f numbers): 12x12x1, S_total 1.4217.
+	TEST(PhononAnalysisBridgeTests, EmbeddedReferenceCaseRunsEndToEnd)
+	{
+		const Path root = ReferenceCase();
+		const Path bulk = FindRepoRoot() / "test-directory" / "sjcm_mgr" / "hBN" / "bulk" / "phonons" / "vasp_661";
+		if (!FileSystem::Exists((root / "dispersion").Native()) || !FileSystem::Exists(bulk.Native()))
+			GTEST_SKIP() << "reference data in test-directory/ not present";
+		PhononAnalysisRequest request;
+		request.forceConstantDirectory = root / "dispersion";
+		request.groundStateDirectory = root / "relax";
+		request.excitedStateDirectory = root / "excited" / "try_1_singlet";
+		request.bulkForceConstantDirectory = bulk;
+		request.embeddingMult = std::array<int, 3>{12, 12, 1};
+		request.outputDirectory =
+			Path::FromResolved(std::filesystem::temp_directory_path() / ("ds_phonon_e2e_emb_" + ToString(GenerateUuid())));
+		const Result<PhononAnalysisRunSummary> summary = PhononAnalysisBridge{}.Run(request);
+		ASSERT_TRUE(summary) << summary.Error().userMessage << "\n" << summary.Error().technicalDetails;
+		EXPECT_NEAR(summary->sTotal, 1.4217, 0.005);
+		EXPECT_TRUE(FileSystem::Exists((request.outputDirectory / "POSCAR").Native()));
+		std::filesystem::remove_all(request.outputDirectory.Native());
 	}
 
 	TEST(PhononAnalysisBridgeTests, ParsesTheSuccessLineAfterLogNoise)

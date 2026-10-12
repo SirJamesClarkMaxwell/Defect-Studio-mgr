@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 #include <optional>
 #include <string>
@@ -24,6 +25,11 @@ namespace DefectStudio
 		std::optional<double> experimentalZplEv;
 		double sigmaMeV = 6.0;
 		double gammaMeV = 2.0;
+		// task/104g: embedding into a larger bulk supercell (script task 104f). Both or neither.
+		std::optional<Path> bulkForceConstantDirectory;
+		std::optional<std::array<int, 3>> embeddingMult;
+		std::optional<double> dcutoffAngstrom;
+		std::optional<double> bcutoffAngstrom;
 		Path outputDirectory;
 	};
 
@@ -35,8 +41,9 @@ namespace DefectStudio
 	};
 
 	// The script's command line, in this order: --fc-dir, --gs-dir, --es-dir, [--triplet-dir],
-	// [--zpl-exp], --sigma, --gamma, --out-dir; each flag followed by its value as a separate
-	// argument. Paths as Utf8(), numbers with std::format("{:.10g}").
+	// [--zpl-exp], --sigma, --gamma, [--bulk-fc-dir, --mult NxMxK], [--dcutoff], [--bcutoff],
+	// --out-dir; each flag followed by its value as a separate argument. Paths as Utf8(), numbers
+	// with std::format("{:.10g}"), mult as e.g. "24x24x1".
 	[[nodiscard]] std::vector<std::string> BuildPhononAnalysisArguments(const PhononAnalysisRequest &request);
 
 	// The last JSON line of the script's stdout: {"ok": true, "out_dir", "s_total", "stable"} ->
@@ -48,7 +55,8 @@ namespace DefectStudio
 	{
 	public:
 		// Errors: an input directory that does not exist or an empty output path
-		// ("python.phonon.request_invalid", checked before Python starts), sigma/gamma <= 0 (same code),
+		// ("python.phonon.request_invalid", checked before Python starts), sigma/gamma <= 0, only one
+		// of bulkForceConstantDirectory/embeddingMult, a mult entry < 1, a cutoff <= 0 (same code),
 		// then whatever ParsePhononAnalysisOutput reports. The script exits 1 with a JSON error line,
 		// so a non-zero exit code is NOT by itself the error - its JSON message is.
 		[[nodiscard]] Result<PhononAnalysisRunSummary> Run(
