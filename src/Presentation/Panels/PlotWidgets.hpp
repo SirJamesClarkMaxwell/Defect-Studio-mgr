@@ -60,7 +60,7 @@ namespace DefectStudio
 	}
 
 	// A small subset of TeX for plot labels: "_x" / "_{..}" subscript, "^x" / "^{..}" superscript,
-	// \mu \Delta \varepsilon \epsilon \lambda \sigma \cdot. Each run is UTF-8 text at one level
+	// \mu \Delta \varepsilon \epsilon \lambda \sigma \cdot \hbar \omega \beta. Each run is UTF-8 text at one level
 	// (-1 sub, 0 normal, +1 super). ponytail: no nesting beyond one level, no fractions - matplotlib
 	// gets real LaTeX in the Figure module.
 	struct TexRun
@@ -72,7 +72,8 @@ namespace DefectStudio
 	inline std::vector<TexRun> ParseTexLite(const std::string_view tex)
 	{
 		static constexpr std::pair<std::string_view, std::string_view> kSymbols[]{{"varepsilon", "ε"}, {"epsilon", "ε"},
-			{"Delta", "Δ"}, {"lambda", "λ"}, {"sigma", "σ"}, {"mu", "μ"}, {"cdot", "·"}};
+			{"Delta", "Δ"}, {"lambda", "λ"}, {"sigma", "σ"}, {"mu", "μ"}, {"cdot", "·"},
+			{"hbar", "ℏ"}, {"omega", "ω"}, {"beta", "β"}};
 		std::vector<TexRun> runs;
 		const auto append = [&](const std::string_view text, const int level) {
 			if (runs.empty() || runs.back().level != level)

@@ -1411,6 +1411,22 @@ namespace DefectStudio
 			m_EventBus->Queue(request);
 		}
 
+		if (ImGui::BeginMenu("Fonony"))
+		{
+			for (const auto &[role, label] : {std::pair{"fc", "Ustaw jako katalog FC"},
+				std::pair{"gs", "Ustaw jako katalog stanu podstawowego"},
+				std::pair{"es", "Ustaw jako katalog stanu wzbudzonego"},
+				std::pair{"triplet", "Ustaw jako katalog trypletu (korekcja spinowa)"},
+				std::pair{"result", "Wczytaj wyniki fononowe"}})
+				if (ImGui::MenuItem(label) && m_EventBus)
+				{
+					ProjectEvents::PhononDirectoryRequested request;
+					request.role = role;
+					request.directory = directory;
+					m_EventBus->Queue(request);
+				}
+			ImGui::EndMenu();
+		}
 		ImGui::Separator();
 		renderFileOpsMenuItems(directory, /*isContainer=*/true, /*isRealEntry=*/true);
 

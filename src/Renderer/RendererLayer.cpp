@@ -557,7 +557,8 @@ namespace DefectStudio
 			windowState.sceneDensities,
 			selectedSceneDensities,
 			windowState.sceneHideVolumes,
-			selectedSceneHideVolumes);
+			selectedSceneHideVolumes,
+			windowState.modeArrows);
 	}
 
 	LabelPickQuads RendererLayer::GetLabelPickQuads(const std::string &windowKey) const

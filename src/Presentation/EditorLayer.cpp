@@ -58,6 +58,7 @@
 #include "Presentation/Panels/DisplacementComparisonPanel.hpp"
 #include "Presentation/Panels/GroupTheoryPanel.hpp"
 #include "Presentation/Panels/FnvCorrectionPanel.hpp"
+#include "Presentation/Panels/PhononModesPanel.hpp"
 #include "Presentation/Panels/DefectEnergeticsSession.hpp"
 #include "Presentation/Panels/CalculationSummarySession.hpp"
 #include "Presentation/Panels/ElementCatalogPanel.hpp"
@@ -543,6 +544,7 @@ namespace DefectStudio
 
 	void EditorLayer::OnDetach()
 	{
+		stopPhononAnimations();
 		DS_LOG_INFO("EditorLayer detached");
 		saveProjectWindowState();
 		savePanelVisibilityState();
@@ -748,6 +750,7 @@ namespace DefectStudio
 				"Atoms Displacement", false);
 			registerPanel<GroupTheoryPanel>(*rendererLayer, m_DomainLayer, m_JobSystem, "Group Theory", false);
 			m_FnvCorrectionPanelId = registerPanel<FnvCorrectionPanel>(*rendererLayer, m_JobSystem, "FNV Correction", false);
+			m_PhononModesPanelId = registerPanel<PhononModesPanel>(*rendererLayer, m_JobSystem, m_EventBus, "Fonony", false);
 			registerDefectEnergeticsViews();
 			// Shared model/job-dispatch behind both panels below (band data, caches, in-flight
 			// jobs) - split into two windows so the occupation plot can fill its own window
@@ -818,6 +821,7 @@ namespace DefectStudio
 		m_PanelsInitialized = true;
 		// Startup project loading runs before the analysis panels exist.
 		loadFnvCorrectionsForProject();
+		loadPhononsForProject();
 		applyPanelVisibilityState();
 
 		loadAndQueueProjectWindowRestores();
@@ -1367,6 +1371,10 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onIrrepLabelOverridesChanged, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonStateChanged>(
 			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonStateChanged, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::PhononDirectoryRequested>(
+			*m_EventBus, *this, &EditorLayer::onPhononDirectoryRequested, EventPriority::Normal));
+		AddSubscription(m_EventBus->Subscribe<RendererEvents::Windows::CloseRequested>(
+			[this](const RendererEvents::Windows::CloseRequested &) { stopPhononAnimations(); }, EventPriority::Highest));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonFileRequested>(
 			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonFileRequested, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<RendererEvents::Viewport::DisplacementComparisonPanelRequested>(
@@ -1399,12 +1407,14 @@ namespace DefectStudio
 			return;
 		}
 
+		stopPhononAnimations();
 		m_ActiveProject = std::move(manifest);
 		m_ActiveProjectDirectory = directory;
 		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
 		loadFnvCorrectionsForProject();
+		loadPhononsForProject();
 
 		if (m_ElectronicStructureSession != nullptr)
 		{
@@ -1426,12 +1436,14 @@ namespace DefectStudio
 			return;
 		}
 
+		stopPhononAnimations();
 		m_ActiveProject = std::move(manifest);
 		m_ActiveProjectDirectory = directory;
 		loadSceneObjectsForProject();
 		refreshProjectDependentPanels();
 		touchAndSaveRecentProject(directory);
 		loadFnvCorrectionsForProject();
+		loadPhononsForProject();
 
 		if (m_ElectronicStructureSession != nullptr)
 		{
@@ -1743,6 +1755,7 @@ namespace DefectStudio
 
 	void EditorLayer::onProjectSaveRequested(const CoreEvents::ProjectSaveRequested &)
 	{
+		stopPhononAnimations();
 		if (!m_ActiveProject.has_value())
 		{
 			persistCurrentRoots();
@@ -1890,6 +1903,7 @@ namespace DefectStudio
 
 	void EditorLayer::onProjectSaveAsRequested(const CoreEvents::ProjectSaveAsRequested &)
 	{
+		stopPhononAnimations();
 		Path suggestedDir = m_ActiveProjectDirectory.empty()
 			? Path::FromResolved(FileSystem::CurrentPath())
 			: m_ActiveProjectDirectory.parent_path();
@@ -1921,6 +1935,7 @@ namespace DefectStudio
 
 	void EditorLayer::onStructureFileSaveRequested(const CoreEvents::StructureFileSaveRequested &)
 	{
+		stopPhononAnimations();
 		if (auto panel = findPanel(m_StructureHubPanelId).lock())
 			panel->SetVisible(true);
 		if (m_EventBus != nullptr)

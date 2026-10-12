@@ -10,6 +10,12 @@
 
 namespace DefectStudio::ProjectEvents
 {
+	struct PhononDirectoryRequested final : public BusEvent
+	{
+		std::string role; // fc | gs | es | triplet | result
+		Path directory;
+	};
+
 	struct SceneObjectsModified final : public BusEvent
 	{
 		StructureId structureId;

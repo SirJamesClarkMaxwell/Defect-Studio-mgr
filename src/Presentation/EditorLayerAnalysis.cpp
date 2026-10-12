@@ -4,15 +4,57 @@
 #include "Presentation/Panels/CalculationSummaryPanel.hpp"
 #include "Presentation/Panels/DefectEnergeticsPanel.hpp"
 #include "Presentation/Panels/FnvCorrectionPanel.hpp"
+#include "Presentation/Panels/PhononModesPanel.hpp"
 #include "Core/Logging/Logger.hpp"
 
 #include <array>
 #include "Events/ProjectEvents.hpp"
 #include "IO/EnergeticsIO.hpp"
 #include "IO/FnvCorrectionsIO.hpp"
+#include "IO/PhononPanelSettingsIO.hpp"
 
 namespace DefectStudio
 {
+	void EditorLayer::stopPhononAnimations()
+	{
+		for (const auto &entry : m_Panels.Entries())
+			if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel))
+				panel->StopAnimation();
+	}
+
+	void EditorLayer::loadPhononsForProject()
+	{
+		PhononPanelSettings settings;
+		if (m_ActiveProject)
+		{
+			std::vector<std::string> warnings;
+			std::string error;
+			if (!PhononPanelSettingsIO::Load(m_ActiveProjectDirectory, settings, warnings, error))
+			{
+				DS_LOG_WARN("EditorLayer: failed to load phonon_panel.yaml: {}", error);
+				settings = {};
+			}
+			for (const auto &warning : warnings) DS_LOG_WARN("EditorLayer: phonon_panel.yaml: {}", warning);
+		}
+		for (const auto &entry : m_Panels.Entries())
+			if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel))
+			{
+				panel->SetPersistedState(settings, m_ActiveProject ? m_ActiveProjectDirectory : Path{});
+				panel->SetSaveHandler([this](const PhononPanelSettings &state) {
+					if (!m_ActiveProject) return;
+					std::string error;
+					if (!PhononPanelSettingsIO::Save(m_ActiveProjectDirectory, state, error))
+						DS_LOG_WARN("EditorLayer: failed to save phonon_panel.yaml: {}", error);
+				});
+			}
+	}
+
+	void EditorLayer::onPhononDirectoryRequested(const ProjectEvents::PhononDirectoryRequested &event)
+	{
+		if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(findPanel(m_PhononModesPanelId).lock()))
+			panel->SetDirectory(event.role, event.directory);
+	}
+
 	void EditorLayer::registerCalculationSummaryViews()
 	{
 		m_CalculationSummarySession = CreateRef<CalculationSummarySession>(m_JobSystem);

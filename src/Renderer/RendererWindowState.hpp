@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Renderer/RendererTypes.hpp"
+#include "Renderer/ModeArrows.hpp"
 #include "Renderer/RendererSettings.hpp"
 #include "Renderer/RendererViewCamera.hpp"
 
@@ -478,6 +479,8 @@ namespace DefectStudio
 			float fixedNormalizationMaxAngstrom = 0.5f;
 		};
 		std::optional<DisplacementComparisonState> displacementComparison;
+		// task/104d: arrows of the phonon mode the Phonons panel shows in this window (Renderer/ModeArrows.hpp).
+		std::optional<ModeArrowsState> modeArrows;
 		// One entry in the scene-object undo snapshot - both label kinds together, since a single
 		// logical edit (e.g. dragging the gizmo) only ever touches one kind but undo/redo needs to
 		// restore the OTHER kind's vector too (it didn't change, so just copies through unchanged).

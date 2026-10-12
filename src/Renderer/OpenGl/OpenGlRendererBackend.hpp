@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -305,7 +306,8 @@ namespace DefectStudio
 			const std::vector<RendererWindowState::SceneDensity> &sceneDensities = {},
 			const std::vector<std::size_t> &selectedSceneDensities = {},
 			const std::vector<SceneHideVolume> &sceneHideVolumes = {},
-			const std::vector<std::size_t> &selectedSceneHideVolumes = {});
+			const std::vector<std::size_t> &selectedSceneHideVolumes = {},
+			const std::optional<ModeArrowsState> &modeArrows = {});
 
 		// Runs the marching-tetrahedra compute shader (isosurface_march.comp - GPU port of
 		// GenerateIsosurfaceMesh) over `grid` and returns the resulting vertex count (0 on
@@ -371,6 +373,9 @@ namespace DefectStudio
 			const RendererViewCamera &camera,
 			const RendererGlobalRenderSettings &globalSettings,
 			const glm::vec3 &sceneOffset = glm::vec3(0.0f));
+		void renderArrowSegments(const std::vector<ArrowSegment> &segments,
+			const RendererViewCamera &camera, const RendererGlobalRenderSettings &globalSettings,
+			const glm::vec3 &sceneOffset);
 		// Marches `grid` into `buffers` (isosurface_march.comp), positive lobe always and negative
 		// lobe when asked, and returns the vertex count - 0 on failure or an empty surface.
 		[[nodiscard]] int dispatchIsosurfaceCompute(
