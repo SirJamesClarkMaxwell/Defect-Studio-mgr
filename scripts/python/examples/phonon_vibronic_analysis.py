@@ -301,7 +301,7 @@ def write_result(result, directory):
                    comments="", fmt="%.12g")
 
 
-def publish(result, out_dir):
+def publish(result, out_dir, writer=write_result):
     """Stage a complete sibling directory and retain the previous result on failure."""
     out_dir = Path(out_dir).absolute()
     if out_dir.is_symlink() or (out_dir.exists() and not out_dir.is_dir()):
@@ -321,7 +321,7 @@ def publish(result, out_dir):
     try:
         new = staging / "new"
         new.mkdir()
-        write_result(result, new)
+        writer(result, new)
         if out_dir.exists():
             out_dir.replace(backup)
         try:
