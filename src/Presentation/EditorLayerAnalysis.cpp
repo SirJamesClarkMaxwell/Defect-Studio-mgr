@@ -40,6 +40,7 @@ namespace DefectStudio
 			if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel))
 			{
 				panel->SetPersistedState(settings, m_ActiveProject ? m_ActiveProjectDirectory : Path{});
+				panel->SetProjectRoots(currentRootsMutable());
 				panel->SetSaveHandler([this](const PhononPanelSettings &state) {
 					if (!m_ActiveProject) return;
 					std::string error;

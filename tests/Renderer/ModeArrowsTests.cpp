@@ -15,6 +15,7 @@ namespace DefectStudio::Tests
 			{
 				RendererAtomData atom;
 				atom.element = "C";
+				atom.radius = 0.5f;
 				atom.cartesianPosition = glm::vec3(static_cast<float>(i), 0.0f, 0.0f);
 				structure.atoms.push_back(atom);
 			}
@@ -31,16 +32,19 @@ namespace DefectStudio::Tests
 		}
 	} // namespace
 
-	TEST(ModeArrowsTests, SegmentsStartAtTheCurrentAtomPosition)
+	TEST(ModeArrowsTests, SegmentsStartAtTheCurrentAtomSurfaceAndKeepTheirLength)
 	{
 		RendererStructureData structure = ThreeAtoms();
 		structure.atoms[2].cartesianPosition = glm::vec3(5.0f, 5.0f, 5.0f); // e.g. mid-animation
+		structure.atoms[2].radius = 0.75f;
 		const std::vector<ArrowSegment> segments = BuildModeArrowSegments(structure, TwoArrows());
 		ASSERT_EQ(segments.size(), 2u);
-		EXPECT_EQ(segments[0].base, glm::vec3(0.0f, 0.0f, 0.0f));
-		EXPECT_EQ(segments[0].tip, glm::vec3(0.0f, 2.0f, 0.0f));
-		EXPECT_EQ(segments[1].base, glm::vec3(5.0f, 5.0f, 5.0f));
-		EXPECT_EQ(segments[1].tip, glm::vec3(5.0f, 5.0f, 6.0f));
+		EXPECT_EQ(segments[0].base, glm::vec3(0.0f, 0.5f, 0.0f));
+		EXPECT_EQ(segments[0].tip, glm::vec3(0.0f, 2.5f, 0.0f));
+		EXPECT_EQ(segments[1].base, glm::vec3(5.0f, 5.0f, 5.75f));
+		EXPECT_EQ(segments[1].tip, glm::vec3(5.0f, 5.0f, 6.75f));
+		EXPECT_EQ(segments[0].tip - segments[0].base, TwoArrows().arrows[0].vectorAngstrom);
+		EXPECT_EQ(segments[1].tip - segments[1].base, TwoArrows().arrows[1].vectorAngstrom);
 	}
 
 	TEST(ModeArrowsTests, ColourRampsFromLowToHighOnRelativeLength)
@@ -64,7 +68,7 @@ namespace DefectStudio::Tests
 		state.arrows.push_back({1, glm::vec3(std::numeric_limits<float>::quiet_NaN())});
 		const std::vector<ArrowSegment> segments = BuildModeArrowSegments(structure, state);
 		ASSERT_EQ(segments.size(), 1u);
-		EXPECT_EQ(segments[0].base, glm::vec3(2.0f, 0.0f, 0.0f));
+		EXPECT_EQ(segments[0].base, glm::vec3(2.0f, 0.0f, 0.5f));
 		// with atom 0 hidden the remaining arrow is the longest drawn one
 		EXPECT_FLOAT_EQ(segments[0].color.r, 1.0f);
 

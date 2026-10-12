@@ -30,13 +30,21 @@ namespace DefectStudio
 					std::tuple{"computed", "obliczone", result.zplEv.computed.has_value() && !result.plComputed.empty()},
 					std::tuple{"spin_purified", "po korekcji spinowej", result.zplEv.spinPurified.has_value() && !result.plSpinPurified.empty()},
 					std::tuple{"experimental", "eksperymentalne", result.zplEv.experimental.has_value() && !result.plExperimental.empty()}})
-					if (available && ImGui::Selectable(label, settings.plZpl == key)) { settings.plZpl = key; persist(); }
+					if (available && ImGui::Selectable(label, settings.plZpl == key)) { settings.plZpl = key; m_ResetPlots = true; persist(); }
 				ImGui::EndCombo();
+			}
+			const bool reset = m_ResetPlots || m_PlotTab != tab;
+			if (reset)
+			{
+				ImPlot::SetNextAxisToFit(ImAxis_Y1);
+				if (tab == 1) ImPlot::SetNextAxisToFit(ImAxis_Y2);
 			}
 			if (ImPlot::BeginPlot("##plot", ImVec2(-1.0f, height)))
 			{
-				ImPlot::SetupAxes(" ", " ", 0, ImPlotAxisFlags_AutoFit);
-				if (tab == 1) ImPlot::SetupAxis(ImAxis_Y2, " ", ImPlotAxisFlags_AuxDefault | ImPlotAxisFlags_AutoFit);
+				ImPlot::SetupAxes(" ", " ");
+				if (tab == 1) ImPlot::SetupAxis(ImAxis_Y2, " ", ImPlotAxisFlags_AuxDefault);
+				const auto [minimum, maximum] = tab < 2 ? m_Session->ModeEnergyRangeMeV() : m_Session->PlEnergyRangeEv();
+				ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 				ImPlot::SetupFinish();
 				ImRect plotRect;
 				const ImRect frame = CurrentPlotFrame(&plotRect);
@@ -96,6 +104,8 @@ namespace DefectStudio
 						ImPlot::PlotLine("PL", result.plPhotonEnergyEv.data(), curve.data(), static_cast<int>(curve.size()));
 				}
 				ImPlot::EndPlot();
+				m_ResetPlots = false;
+				m_PlotTab = tab;
 				DrawTexAxisLabels(frame, plotRect, tab == 2 ? "E [eV], E_{ZPL}" : "\\hbar\\omega [meV]",
 					tab == 0 ? "\\beta = N/N_{eff}" : tab == 1 ? "S_k" : "PL [j.u.]");
 				if (tab == 1)

@@ -166,6 +166,14 @@ namespace DefectStudio
 				ReadSetting(inputs, "bcutoff", settings.bcutoffAngstrom, outWarnings, readCutoff);
 				ReadSetting(inputs, "ccdDir", settings.ccdOutputDirectory, outWarnings, readPath);
 				ReadNumber(inputs, "ccdStep", settings.ccdStep, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
+				ReadSetting(inputs, "dispersionDir", settings.dispersionDirectory, outWarnings, readPath);
+				ReadSetting(inputs, "dispersionInPlane", settings.dispersionInPlane, outWarnings,
+					[](const YAML::Node &node) { return node.as<bool>(); });
+				ReadSetting(inputs, "dispersionPoints", settings.dispersionPoints, outWarnings, [](const YAML::Node &node) {
+					const int points = node.as<int>();
+					if (points < 2) throw std::invalid_argument("dispersionPoints must be at least 2");
+					return points;
+				});
 			}
 			ReadSetting(root, "resultDir", settings.resultDirectory, outWarnings, readPath);
 			const auto view = root["view"];
@@ -230,7 +238,10 @@ namespace DefectStudio
 		if (settings.bcutoffAngstrom)
 			emit << YAML::Key << "bcutoff" << YAML::Value << *settings.bcutoffAngstrom;
 		emit << YAML::Key << "ccdDir" << YAML::Value << StoredPath(settings.ccdOutputDirectory, projectDirectory)
-			<< YAML::Key << "ccdStep" << YAML::Value << settings.ccdStep << YAML::EndMap
+			<< YAML::Key << "ccdStep" << YAML::Value << settings.ccdStep
+			<< YAML::Key << "dispersionDir" << YAML::Value << StoredPath(settings.dispersionDirectory, projectDirectory)
+			<< YAML::Key << "dispersionInPlane" << YAML::Value << settings.dispersionInPlane
+			<< YAML::Key << "dispersionPoints" << YAML::Value << settings.dispersionPoints << YAML::EndMap
 			<< YAML::Key << "resultDir" << YAML::Value << StoredPath(settings.resultDirectory, projectDirectory)
 			<< YAML::Key << "view" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "selectedMode" << YAML::Value << settings.selectedMode

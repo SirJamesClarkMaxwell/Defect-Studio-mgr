@@ -29,6 +29,9 @@ namespace DefectStudio::Tests
 			settings.dcutoffAngstrom = 6.5;
 			settings.ccdOutputDirectory = kProject / "ccd" / "dimer";
 			settings.ccdStep = 0.125;
+			settings.dispersionDirectory = kProject / "phonons" / "bulk_dispersion";
+			settings.dispersionInPlane = false;
+			settings.dispersionPoints = 51;
 			settings.resultDirectory = kProject / "phonons" / "dimer";
 			settings.selectedMode = 485;
 			settings.participationThreshold = 0.025;
@@ -70,6 +73,9 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(loaded.bcutoffAngstrom.has_value());
 		EXPECT_EQ(loaded.ccdOutputDirectory, original.ccdOutputDirectory);
 		EXPECT_DOUBLE_EQ(loaded.ccdStep, 0.125);
+		EXPECT_EQ(loaded.dispersionDirectory, original.dispersionDirectory);
+		EXPECT_FALSE(loaded.dispersionInPlane);
+		EXPECT_EQ(loaded.dispersionPoints, 51);
 		EXPECT_EQ(loaded.resultDirectory, original.resultDirectory);
 		EXPECT_EQ(loaded.selectedMode, 485);
 		EXPECT_DOUBLE_EQ(loaded.participationThreshold, 0.025);
@@ -136,6 +142,30 @@ namespace DefectStudio::Tests
 		std::string error;
 		EXPECT_FALSE(PhononPanelSettingsIO::Parse("formatVersion: 2\n", kProject, loaded, warnings, error));
 		EXPECT_FALSE(error.empty());
+	}
+
+	TEST(PhononPanelSettingsIOTests, OldFilesUseDispersionDefaults)
+	{
+		PhononPanelSettings loaded = Custom();
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("formatVersion: 1\ninputs: {fcDir: bulk}\n", kProject, loaded, warnings, error));
+		EXPECT_TRUE(loaded.dispersionDirectory.Empty());
+		EXPECT_TRUE(loaded.dispersionInPlane);
+		EXPECT_EQ(loaded.dispersionPoints, 101);
+		EXPECT_TRUE(warnings.empty());
+	}
+
+	TEST(PhononPanelSettingsIOTests, BadDispersionSettingsKeepDefaults)
+	{
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("inputs: {dispersionPoints: 1, dispersionInPlane: wrong}\n",
+			kProject, loaded, warnings, error));
+		EXPECT_EQ(loaded.dispersionPoints, 101);
+		EXPECT_TRUE(loaded.dispersionInPlane);
+		EXPECT_EQ(warnings.size(), 2u);
 	}
 
 	TEST(PhononPanelSettingsIOTests, SaveThenLoadFromDisk)

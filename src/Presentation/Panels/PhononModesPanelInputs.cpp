@@ -15,40 +15,6 @@ namespace DefectStudio
 {
 	namespace
 	{
-		bool DrawFolder(const char *id, Path &path, std::string &error, bool editable = false)
-		{
-			ImGui::PushID(id);
-			const auto full = path.Utf8();
-			std::vector<char> text(full.begin(), full.end());
-			text.resize(full.size() + 1024, '\0');
-			ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x -
-				ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x));
-			if (ImGui::InputText("##directory", text.data(), text.size(), editable ? 0 : ImGuiInputTextFlags_ReadOnly))
-			{
-				// Pasted paths often carry spaces or quotes around them; Windows rejects those.
-				std::string_view typed = text.data();
-				const auto first = typed.find_first_not_of(" \t\r\n\"'");
-				typed = first == std::string_view::npos ? std::string_view{} :
-					typed.substr(first, typed.find_last_not_of(" \t\r\n\"'") - first + 1);
-				path = Path::FromUtf8(std::string(typed));
-			}
-			bool changed = editable && ImGui::IsItemDeactivatedAfterEdit();
-			ImGui::SetItemTooltip("%s", full.c_str());
-			ImGui::SameLine();
-			if (ImGui::Button("..."))
-			{
-				const auto picked = Platform::PickFolder(path);
-				if (!picked) error = picked.Error().userMessage;
-				else if (picked->has_value())
-				{
-					path = **picked;
-					changed = true;
-				}
-			}
-			ImGui::PopID();
-			return changed;
-		}
-
 		bool Overlaps(const Path &a, const Path &b)
 		{
 			if (a.Empty() || b.Empty()) return false;
@@ -77,6 +43,34 @@ namespace DefectStudio
 		}
 	}
 
+	bool PhononModesPanel::DrawFolder(const char *id, Path &path, std::string &error, bool editable)
+	{
+		ImGui::PushID(id);
+		auto &[text, editing] = m_FolderEdits[id];
+		if (!editing)
+		{
+			const auto label = PhononPanelSession::DirectoryLabel(path, m_ProjectDirectory, m_ProjectRoots);
+			text.assign(label.begin(), label.end());
+			text.resize(label.size() + 1024, '\0');
+		}
+		ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x -
+			ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x));
+		ImGui::InputText("##directory", text.data(), text.size(), editable ? 0 : ImGuiInputTextFlags_ReadOnly);
+		editing = ImGui::IsItemActive();
+		bool changed = editable && ImGui::IsItemDeactivatedAfterEdit();
+		if (changed) path = PhononPanelSession::ResolveDirectoryText(text.data(), m_ProjectDirectory);
+		ImGui::SetItemTooltip("%s", path.Utf8().c_str());
+		ImGui::SameLine();
+		if (ImGui::Button("..."))
+		{
+			const auto picked = Platform::PickFolder(path);
+			if (!picked) error = picked.Error().userMessage;
+			else if (picked->has_value()) { path = **picked; changed = true; }
+		}
+		ImGui::PopID();
+		return changed;
+	}
+
 	void PhononModesPanel::drawInputs()
 	{
 		auto &settings = m_Session->Settings();
@@ -84,7 +78,7 @@ namespace DefectStudio
 		if (ImGui::CollapsingHeader("Wejścia"))
 		{
 			ImGui::TextDisabled("Katalogi można też ustawić przez RMB → Fonony w Project Tree.");
-			ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
+			ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
 			{
 				PropertyGrid grid("##phononInputs", PropertyGridLabelWidth({"Stałe siłowe (FC)",
 					"Stan podstawowy", "Stan wzbudzony", "Tryplet (opcjonalny)", "ZPL eksperymentalne [eV]", "Katalog wyników"}));
@@ -144,12 +138,12 @@ namespace DefectStudio
 			ImGui::EndDisabled();
 		}
 		const std::string blocker = ComputationBlocker(settings);
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || !blocker.empty());
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || !blocker.empty());
 		if (ImGui::Button("Policz")) submitComputation();
 		ImGui::EndDisabled();
 		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
 		ImGui::SameLine();
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
 		if (ImGui::Button("Wczytaj wyniki..."))
 		{
 			const auto picked = Platform::PickFolder(settings.resultDirectory);
@@ -236,7 +230,7 @@ namespace DefectStudio
 		if (!ImGui::CollapsingHeader("CCD")) return;
 		auto &settings = m_Session->Settings();
 		ImGui::TextDisabled("GS i ES: katalogi z Wejścia.");
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr);
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
 		{
 			PropertyGrid grid("##ccdInputs", PropertyGridLabelWidth({"Katalog CCD", "Krok t"}));
 			if (grid)

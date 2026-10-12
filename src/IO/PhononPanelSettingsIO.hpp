@@ -31,6 +31,9 @@ namespace DefectStudio
 		// task/104g: CCD single points (scripts/python/examples/ccd_inputs.py); empty = <project>/ccd/<es dir name>
 		Path ccdOutputDirectory;
 		double ccdStep = 0.25;
+		Path dispersionDirectory; // empty = <project>/phonons/bulk_dispersion
+		bool dispersionInPlane = true;
+		int dispersionPoints = 101;
 
 		// The loaded result directory (PhononAnalysisIO); empty = nothing loaded
 		Path resultDirectory;
@@ -51,7 +54,8 @@ namespace DefectStudio
 	// phonon_panel.yaml next to manifest.yaml. Schema (all keys optional on read):
 	//   formatVersion: 1
 	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplExp, sigma, gamma,
-	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep}   # dcutoff/bcutoff absent = default
+	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep,
+	//            dispersionDir, dispersionInPlane, dispersionPoints} # dcutoff/bcutoff absent = default
 	//   resultDir: ...
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
 	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter}

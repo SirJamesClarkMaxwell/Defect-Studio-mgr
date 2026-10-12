@@ -3,12 +3,15 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "Domain/Vibrations/PhononModes.hpp"
 #include "IO/PhononPanelSettingsIO.hpp"
+#include "IO/ProjectRootsIO.hpp"
 
 namespace DefectStudio
 {
@@ -27,6 +30,14 @@ namespace DefectStudio
 	class PhononPanelSession final
 	{
 	public:
+		// Same lexical containment rule as StoredPath: project first, then a labelled tree root.
+		[[nodiscard]] static std::string DirectoryLabel(const Path &path, const Path &projectDirectory,
+			const std::vector<ProjectRootEntry> &roots);
+		// Pasted spaces/quotes are stripped; relative input is resolved against the project.
+		[[nodiscard]] static Path ResolveDirectoryText(std::string_view text, const Path &projectDirectory);
+		[[nodiscard]] std::pair<double, double> ModeEnergyRangeMeV() const;
+		[[nodiscard]] std::pair<double, double> PlEnergyRangeEv() const;
+
 		[[nodiscard]] PhononPanelSettings &Settings() noexcept { return m_Settings; }
 		[[nodiscard]] const PhononPanelSettings &Settings() const noexcept { return m_Settings; }
 

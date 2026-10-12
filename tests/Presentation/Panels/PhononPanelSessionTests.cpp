@@ -77,6 +77,48 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(session.Settings().selectedMode, 4);
 	}
 
+	TEST(PhononPanelSessionTests, DirectoryLabelsPreferTheProjectThenLabelledRoots)
+	{
+		const Path project = Path::FromUtf8("D:/work/project");
+		const std::vector<ProjectRootEntry> roots = {{"1", Path::FromUtf8("D:/work"), "work"},
+			{"2", Path::FromUtf8("K:/calculations"), "server"}};
+		EXPECT_EQ(PhononPanelSession::DirectoryLabel(project / "phonons" / ".." / "bulk", project, roots), "bulk");
+		EXPECT_EQ(PhononPanelSession::DirectoryLabel(project, project, roots), ".");
+		EXPECT_EQ(PhononPanelSession::DirectoryLabel(Path::FromUtf8("K:/calculations/hbn/fc"), project, roots), "server/hbn/fc");
+		EXPECT_EQ(PhononPanelSession::DirectoryLabel(Path::FromUtf8("D:/work/project-other/fc"), project, {}),
+			Path::FromUtf8("D:/work/project-other/fc").Utf8());
+		EXPECT_EQ(PhononPanelSession::DirectoryLabel(Path::FromUtf8("Z:/fc"), project, roots), Path::FromUtf8("Z:/fc").Utf8());
+		EXPECT_TRUE(PhononPanelSession::DirectoryLabel({}, project, roots).empty());
+	}
+
+	TEST(PhononPanelSessionTests, TypedDirectoriesTrimQuotesAndResolveAgainstTheProject)
+	{
+		const Path project = Path::FromUtf8("D:/work/project");
+		EXPECT_EQ(PhononPanelSession::ResolveDirectoryText("  \"phonons/../bulk\"  ", project), project / "bulk");
+		EXPECT_EQ(PhononPanelSession::ResolveDirectoryText(" 'K:/fc' ", project), Path::FromUtf8("K:/fc"));
+		EXPECT_TRUE(PhononPanelSession::ResolveDirectoryText(" \" \" ", project).Empty());
+	}
+
+	TEST(PhononPanelSessionTests, PlotRangesIncludeImaginaryModesAndTheVisiblePlTail)
+	{
+		PhononPanelSession session;
+		auto result = TwoAtoms();
+		result.modes[3].frequencyMeV = -4.0;
+		result.plPhotonEnergyEv = {1.0, 1.5, 2.0, 2.5};
+		result.plExperimental = {0.0, 0.001, 0.5, 1.0};
+		result.zplEv.experimental = 2.5;
+		result.plComputed = {0.0, 0.1, 1.0, 0.0};
+		result.zplEv.computed = 2.0;
+		session.SetResult(std::move(result));
+		EXPECT_DOUBLE_EQ(session.ModeEnergyRangeMeV().first, -9.0);
+		EXPECT_DOUBLE_EQ(session.ModeEnergyRangeMeV().second, 220.0);
+		EXPECT_DOUBLE_EQ(session.PlEnergyRangeEv().first, 2.0);
+		EXPECT_DOUBLE_EQ(session.PlEnergyRangeEv().second, 2.65);
+		session.Settings().plZpl = "computed";
+		EXPECT_DOUBLE_EQ(session.PlEnergyRangeEv().first, 1.5);
+		EXPECT_DOUBLE_EQ(session.PlEnergyRangeEv().second, 2.15);
+	}
+
 	TEST(PhononPanelSessionTests, PersistedValidSelectionSurvivesSetResult)
 	{
 		PhononPanelSession session;

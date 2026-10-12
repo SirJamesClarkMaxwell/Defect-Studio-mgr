@@ -35,8 +35,9 @@ namespace DefectStudio
 		glm::vec4 color = glm::vec4(1.0f);
 	};
 
-	// One segment per drawable arrow: base = the atom's CURRENT cartesianPosition (so arrows ride
-	// along with the mode animation), tip = base + vectorAngstrom. Colour is a linear ramp
+	// One segment per drawable arrow: base = the atom's CURRENT cartesianPosition plus its drawn
+	// radius along the arrow direction (so arrows ride on the animated atom surface).
+	// tip = base + vectorAngstrom: visible length is unchanged. Colour is a linear ramp
 	// lowColor -> highColor on |vector| / (largest |vector| among the drawn arrows), alpha 1.
 	// Skipped: state not visible, atomIndex out of range, hidden atom when onlyForVisibleAtoms,
 	// non-finite or |vector| <= 1e-4 Angstrom. Order follows `arrows`.

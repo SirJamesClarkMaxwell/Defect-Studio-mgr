@@ -4,12 +4,15 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "IO/PhononPanelSettingsIO.hpp"
+#include "IO/PhononDispersionIO.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Presentation/Panels/PhononPanelSession.hpp"
 
@@ -20,6 +23,7 @@ namespace DefectStudio
 	class RendererLayer;
 	class PhononAnalysisJob;
 	class CcdInputsJob;
+	class PhononDispersionJob;
 
 	// task/104d: Gamma phonon modes of a defect supercell and the harmonic PL built on them
 	// (docs/work/project/tasks/104d-phonon-panel.md). Computes through PhononAnalysisJob or loads an
@@ -39,6 +43,7 @@ namespace DefectStudio
 		// EditorLayer on project open (and with defaults on project close). Stops any animation
 		// first, then loads settings.resultDirectory if it is set. Does not call the save handler.
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
+		void SetProjectRoots(std::vector<ProjectRootEntry> roots) { m_ProjectRoots = std::move(roots); }
 		// Called with the settings after every change worth keeping; EditorLayer writes phonon_panel.yaml.
 		void SetSaveHandler(std::function<void(const PhononPanelSettings &)> handler) { m_SaveHandler = std::move(handler); }
 
@@ -56,6 +61,12 @@ namespace DefectStudio
 		void selectMode(int index);
 		void cancelJob();
 		void drawInputs();
+		bool DrawFolder(const char *id, Path &path, std::string &error, bool editable = true);
+		void drawDispersion();
+		void submitDispersion();
+		void pollDispersionJob();
+		bool loadDispersion(const Path &directory);
+		[[nodiscard]] Path dispersionOutputPath() const;
 		void drawEmbedding();
 		void drawCcd();
 		void submitCcd();
@@ -81,6 +92,9 @@ namespace DefectStudio
 
 		Ref<PhononPanelSession> m_Session = CreateRef<PhononPanelSession>();
 		Path m_ProjectDirectory;
+		std::vector<ProjectRootEntry> m_ProjectRoots;
+		// Keep uncommitted directory text intact until the edit ends.
+		std::unordered_map<std::string, std::pair<std::vector<char>, bool>> m_FolderEdits;
 		// The renderer window holding the force-constant supercell, found by
 		// structure.sourcePath == <fc dir>/POSCAR after openSupercellWindow(); empty = not bound.
 		std::string m_WindowId;
@@ -89,6 +103,14 @@ namespace DefectStudio
 		JobId m_PendingJobId = 0;
 		Ref<CcdInputsJob> m_PendingCcdJob;
 		JobId m_PendingCcdJobId = 0;
+		Ref<PhononDispersionJob> m_PendingDispersionJob;
+		JobId m_PendingDispersionJobId = 0;
+		std::optional<PhononDispersion> m_Dispersion;
+		std::string m_DispersionError;
+		bool m_ResetDispersionPlot = true;
+		bool m_ResetPlots = true;
+		int m_PlotTab = -1;
+		bool m_ScrollToMode = false;
 		std::array<int, 3> m_EmbeddingMult = {12, 12, 1};
 		std::string m_EmbeddingSummary;
 		std::string m_CcdResult;

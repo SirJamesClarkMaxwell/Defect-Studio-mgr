@@ -21,7 +21,8 @@ namespace DefectStudio
 			const float length = glm::length(arrow.vectorAngstrom);
 			if ((state.onlyForVisibleAtoms && !atom.visible) || !std::isfinite(length) || length <= 1e-4f)
 				continue;
-			segments.push_back({atom.cartesianPosition, atom.cartesianPosition + arrow.vectorAngstrom, glm::vec4(1.0f)});
+			const glm::vec3 base = atom.cartesianPosition + atom.radius * (arrow.vectorAngstrom / length);
+			segments.push_back({base, base + arrow.vectorAngstrom, glm::vec4(1.0f)});
 			lengths.push_back(length);
 			longest = std::max(longest, length);
 		}

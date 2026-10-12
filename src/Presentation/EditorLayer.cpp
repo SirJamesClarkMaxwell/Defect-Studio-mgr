@@ -1509,6 +1509,10 @@ namespace DefectStudio
 			}
 		}
 
+		for (const auto &entry : m_Panels.Entries())
+			if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel))
+				panel->SetProjectRoots(currentRootsMutable());
+
 		// App-layer coordinators authorize write targets against this list; they must not reach into
 		// the UI's copy, so the roots are pushed out as an event from this one funnel.
 		if (m_EventBus != nullptr)

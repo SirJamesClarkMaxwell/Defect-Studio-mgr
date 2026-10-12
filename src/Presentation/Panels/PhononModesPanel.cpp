@@ -12,6 +12,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
 #include "ScientificRuntime/Python/CcdInputsJob.hpp"
+#include "ScientificRuntime/Python/PhononDispersionJob.hpp"
 
 namespace DefectStudio
 {
@@ -24,6 +25,8 @@ namespace DefectStudio
 	{
 		auto clone = CreateRef<PhononModesPanel>(m_RendererLayer, m_JobSystem, m_EventBus, GetTitle(), IsVisible());
 		clone->m_ProjectDirectory = m_ProjectDirectory;
+		clone->m_ProjectRoots = m_ProjectRoots;
+		clone->m_Dispersion = m_Dispersion;
 		clone->m_SaveHandler = m_SaveHandler;
 		clone->m_Session->Settings() = m_Session->Settings();
 		clone->m_EmbeddingMult = m_EmbeddingMult;
@@ -77,6 +80,11 @@ namespace DefectStudio
 				(void)jobs->RequestCancel(m_PendingCcdJobId);
 		m_PendingCcdJob.reset();
 		m_PendingCcdJobId = 0;
+		if (m_PendingDispersionJob)
+			if (const auto jobs = m_JobSystem.lock())
+				(void)jobs->RequestCancel(m_PendingDispersionJobId);
+		m_PendingDispersionJob.reset();
+		m_PendingDispersionJobId = 0;
 	}
 
 	void PhononModesPanel::SetPersistedState(PhononPanelSettings settings, Path projectDirectory)
@@ -86,6 +94,12 @@ namespace DefectStudio
 		m_Session->ClearResult();
 		m_Session->Settings() = std::move(settings);
 		m_ProjectDirectory = std::move(projectDirectory);
+		m_FolderEdits.clear();
+		m_Dispersion.reset();
+		m_DispersionError.clear();
+		m_ResetPlots = true;
+		m_PlotTab = -1;
+		m_ScrollToMode = false;
 		m_Error.clear();
 		m_CcdResult.clear();
 		m_CcdError.clear();
@@ -104,6 +118,10 @@ namespace DefectStudio
 		}
 		if (!m_Session->Settings().resultDirectory.Empty())
 			loadResult(m_Session->Settings().resultDirectory);
+		const Path dispersion = dispersionOutputPath();
+		if (!m_Session->Settings().dispersionDirectory.Empty() ||
+			(!dispersion.Empty() && FileSystem::IsDirectory(dispersion.Native())))
+			(void)loadDispersion(dispersion);
 	}
 
 	void PhononModesPanel::persist()
@@ -144,6 +162,7 @@ namespace DefectStudio
 			return;
 		StopAnimation();
 		m_Session->SetResult(std::move(result));
+		m_ResetPlots = true;
 		m_Session->Settings().resultDirectory = directory;
 		loadEmbeddingSummary(directory);
 		const auto &loaded = *m_Session->Result();
@@ -270,6 +289,7 @@ namespace DefectStudio
 		const bool paused = m_Paused;
 		StopAnimation();
 		m_Session->SelectMode(index);
+		m_ScrollToMode = true;
 		if (const auto window = targetWindow(); window && running)
 			m_Session->StartAnimation(window->get());
 		m_Paused = paused;
@@ -280,6 +300,7 @@ namespace DefectStudio
 	{
 		pollJob();
 		pollCcdJob();
+		pollDispersionJob();
 		if (!IsVisible())
 		{
 			StopAnimation();
@@ -301,6 +322,7 @@ namespace DefectStudio
 		{
 			drawInputs();
 			drawCcd();
+			drawDispersion();
 			if (m_Session->Result())
 			{
 				drawSummary();

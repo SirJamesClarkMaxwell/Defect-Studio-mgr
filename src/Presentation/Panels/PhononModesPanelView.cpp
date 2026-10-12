@@ -77,7 +77,7 @@ namespace DefectStudio
 			});
 			specs->SpecsDirty = false;
 		}
-		bool scrollToSelection = false;
+		bool scrollToSelection = m_ScrollToMode;
 		if (ImGui::IsWindowFocused() && !modes.empty())
 		{
 			const int direction = ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? -1 : 0;
@@ -95,8 +95,12 @@ namespace DefectStudio
 		if (scrollToSelection)
 		{
 			const auto found = std::find(modes.begin(), modes.end(), static_cast<std::size_t>(settings.selectedMode));
-			const int row = static_cast<int>(found - modes.begin());
-			clipper.IncludeItemsByIndex(row, row + 1);
+			if (found != modes.end())
+			{
+				const int row = static_cast<int>(found - modes.begin());
+				clipper.IncludeItemsByIndex(row, row + 1);
+			}
+			else scrollToSelection = false;
 		}
 		while (clipper.Step())
 			for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
@@ -107,6 +111,8 @@ namespace DefectStudio
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
 				const bool selected = settings.selectedMode == static_cast<int>(index);
+				if (selected)
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_HeaderActive));
 				if (ImGui::Selectable(std::to_string(mode.index).c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
 					selectMode(static_cast<int>(index));
 				if (selected && scrollToSelection) ImGui::SetScrollHereY();
@@ -120,6 +126,7 @@ namespace DefectStudio
 				ImGui::PopID();
 			}
 		ImGui::EndTable();
+		m_ScrollToMode = false;
 	}
 
 	void PhononModesPanel::drawVisualisation()
@@ -134,23 +141,23 @@ namespace DefectStudio
 		auto &settings = m_Session->Settings();
 		if (ImGui::Checkbox("Pokaż strzałki", &settings.showArrows)) persist();
 		float threshold = static_cast<float>(settings.participationThreshold);
-		if (ImGui::SliderFloat("Próg udziału", &threshold, 1e-4f, 1.0f, "%.4g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp))
+		if (ImGui::SliderFloat("Ukryj strzałki poniżej udziału", &threshold, 1e-4f, 1.0f, "%.4g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp))
 			settings.participationThreshold = threshold;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::SetItemTooltip("Udział atomu w modzie = |e_i|^2 (suma po atomach = 1). Strzałki atomów o mniejszym udziale są ukryte.");
 		ImGui::Text("strzałek: %zu z %zu", m_Session->ArrowCount(), m_Session->Result()->AtomCount());
 		float fraction = static_cast<float>(settings.carriedFraction * 100.0);
-		if (ImGui::SliderFloat("X [%]", &fraction, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp)) settings.carriedFraction = fraction / 100.0;
+		if (ImGui::SliderFloat("Zlicz atomy niosące [%]", &fraction, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp)) settings.carriedFraction = fraction / 100.0;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::SetItemTooltip("Ile najsilniej drgających atomów razem niesie X %% modu (kolumna N(X%%) w tabeli).");
 		ImGui::Text("%zu atomów niesie %.1f %% modu", m_Session->AtomsCarryingSelectedFraction(), settings.carriedFraction * 100.0);
-		ImGui::InputDouble("Długość najdłuższej strzałki [Å]", &settings.arrowLengthAngstrom, 0.0, 0.0, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit())
-		{
-			if (!std::isfinite(settings.arrowLengthAngstrom) || settings.arrowLengthAngstrom <= 0.0) settings.arrowLengthAngstrom = 1.5;
-			persist();
-		}
-		ImGui::ColorEdit3("Mały udział", &settings.arrowLowColor.x);
+		float length = static_cast<float>(settings.arrowLengthAngstrom);
+		if (ImGui::DragFloat("Długość najdłuższej strzałki [Å]", &length, 0.01f, 0.1f, 5.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+			settings.arrowLengthAngstrom = length;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
-		ImGui::ColorEdit3("Duży udział", &settings.arrowHighColor.x);
+		ImGui::ColorEdit3("Mały udział", &settings.arrowLowColor.x, ImGuiColorEditFlags_NoInputs);
+		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::ColorEdit3("Duży udział", &settings.arrowHighColor.x, ImGuiColorEditFlags_NoInputs);
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
 		const auto window = targetWindow();
 		ImGui::BeginDisabled(!window || !m_WindowError.empty() || !m_Session->SelectedMode());
@@ -162,18 +169,14 @@ namespace DefectStudio
 		ImGui::SameLine();
 		if (ImGui::Button("⏹ Stop")) StopAnimation();
 		ImGui::EndDisabled();
-		ImGui::InputDouble("Amplituda [Å]", &settings.animationAmplitudeAngstrom, 0.0, 0.0, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit())
-		{
-			if (!std::isfinite(settings.animationAmplitudeAngstrom) || settings.animationAmplitudeAngstrom < 0.0) settings.animationAmplitudeAngstrom = 0.3;
-			persist();
-		}
-		ImGui::InputDouble("Okres [s]", &settings.animationPeriodSeconds, 0.0, 0.0, "%.3f");
-		if (ImGui::IsItemDeactivatedAfterEdit())
-		{
-			if (!std::isfinite(settings.animationPeriodSeconds) || settings.animationPeriodSeconds <= 0.0) settings.animationPeriodSeconds = 1.5;
-			persist();
-		}
+		float amplitude = static_cast<float>(settings.animationAmplitudeAngstrom);
+		if (ImGui::DragFloat("Amplituda [Å]", &amplitude, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+			settings.animationAmplitudeAngstrom = amplitude;
+		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		float period = static_cast<float>(settings.animationPeriodSeconds);
+		if (ImGui::DragFloat("Okres [s]", &period, 0.02f, 0.2f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+			settings.animationPeriodSeconds = period;
+		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
 		ImGui::BeginDisabled(!window || !m_Paused || !m_Session->IsAnimating());
 		float phase = static_cast<float>(m_Session->Phase());
 		if (ImGui::SliderFloat("Faza", &phase, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, "%.2f rad", ImGuiSliderFlags_AlwaysClamp))
