@@ -2,13 +2,14 @@
 #include "Presentation/Panels/PhononModesPanel.hpp"
 
 #include <algorithm>
-#include <format>
+#include <span>
 #include <imgui.h>
 #include <implot.h>
 
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Platform/FileDialog.hpp"
 #include "Presentation/Panels/PropertyGrid.hpp"
+#include "Presentation/Panels/PlotWidgets.hpp"
 #include "ScientificRuntime/Python/PhononDispersionJob.hpp"
 
 namespace DefectStudio
@@ -122,18 +123,17 @@ namespace DefectStudio
 		std::vector<const char *> labels;
 		for (const auto &tick : result.ticks) { ticks.push_back(tick.distance); labels.push_back(tick.label.c_str()); }
 		ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), static_cast<int>(ticks.size()), labels.data(), false);
-		ImPlotSpec bandStyle;
-		bandStyle.LineColor = ImVec4(0.3f, 0.75f, 0.95f, 1.0f);
-		bandStyle.Flags = ImPlotItemFlags_NoLegend;
+		auto &bandStyle = settings.seriesStyles["dispersion/bands"];
 		for (std::size_t start = 0; start < result.segment.size();)
 		{
 			std::size_t end = start + 1;
 			while (end < result.segment.size() && result.segment[end] == result.segment[start]) ++end;
 			for (int band = 0; band < result.bandCount; ++band)
-				ImPlot::PlotLine(std::format("##band{}segment{}", band, start).c_str(), result.distance.data() + start,
-					result.bandsMeV[band].data() + start, static_cast<int>(end - start), bandStyle);
+				PlotStyledLine("Pasma", std::span<const double>(result.distance).subspan(start, end - start),
+					std::span<const double>(result.bandsMeV[band]).subspan(start, end - start), bandStyle);
 			start = end;
 		}
+		if (SeriesLegendPopup("Pasma", bandStyle)) persist();
 		ImPlotSpec guide;
 		guide.Flags = ImPlotItemFlags_NoLegend | ImPlotItemFlags_NoFit;
 		guide.LineColor = ImVec4(0.55f, 0.55f, 0.55f, 1.0f);

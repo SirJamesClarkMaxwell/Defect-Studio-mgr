@@ -140,6 +140,7 @@ namespace DefectStudio
 		else if (const auto window = targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
 		auto &settings = m_Session->Settings();
 		if (ImGui::Checkbox("Pokaż strzałki", &settings.showArrows)) persist();
+		if (ImGui::Checkbox("Strzałki zgodne z fazą", &settings.arrowsFollowPhase)) persist();
 		float threshold = static_cast<float>(settings.participationThreshold);
 		if (ImGui::SliderFloat("Ukryj strzałki poniżej udziału", &threshold, 1e-4f, 1.0f, "%.4g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp))
 			settings.participationThreshold = threshold;

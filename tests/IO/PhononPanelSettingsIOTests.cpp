@@ -38,6 +38,9 @@ namespace DefectStudio::Tests
 			settings.carriedFraction = 0.8;
 			settings.arrowLengthAngstrom = 2.25;
 			settings.showArrows = false;
+			settings.arrowsFollowPhase = false;
+			settings.seriesStyles["beta/A1"] = {glm::vec4(0.1f, 0.2f, 0.3f, 0.4f), 3.0f, false, true, 0.6f, 2};
+			settings.seriesStyles["PL/PL"] = {};
 			settings.arrowLowColor = glm::vec3(0.1f, 0.2f, 0.3f);
 			settings.arrowHighColor = glm::vec3(0.9f, 0.8f, 0.7f);
 			settings.animationAmplitudeAngstrom = 0.45;
@@ -82,6 +85,17 @@ namespace DefectStudio::Tests
 		EXPECT_DOUBLE_EQ(loaded.carriedFraction, 0.8);
 		EXPECT_DOUBLE_EQ(loaded.arrowLengthAngstrom, 2.25);
 		EXPECT_FALSE(loaded.showArrows);
+		EXPECT_FALSE(loaded.arrowsFollowPhase);
+		ASSERT_EQ(loaded.seriesStyles.size(), 2u);
+		const auto &style = loaded.seriesStyles.at("beta/A1");
+		ASSERT_TRUE(style.color);
+		for (int i = 0; i < 4; ++i) EXPECT_FLOAT_EQ((*style.color)[i], (*original.seriesStyles.at("beta/A1").color)[i]);
+		EXPECT_FLOAT_EQ(style.lineWeight, 3.0f);
+		EXPECT_FALSE(style.visible);
+		EXPECT_TRUE(style.filled);
+		EXPECT_FLOAT_EQ(style.fillAlpha, 0.6f);
+		EXPECT_EQ(style.lineStyle, 2);
+		EXPECT_FALSE(loaded.seriesStyles.at("PL/PL").color);
 		EXPECT_FLOAT_EQ(loaded.arrowLowColor.y, 0.2f);
 		EXPECT_FLOAT_EQ(loaded.arrowHighColor.z, 0.7f);
 		EXPECT_DOUBLE_EQ(loaded.animationAmplitudeAngstrom, 0.45);
@@ -153,6 +167,8 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(loaded.dispersionDirectory.Empty());
 		EXPECT_TRUE(loaded.dispersionInPlane);
 		EXPECT_EQ(loaded.dispersionPoints, 101);
+		EXPECT_TRUE(loaded.arrowsFollowPhase);
+		EXPECT_TRUE(loaded.seriesStyles.empty());
 		EXPECT_TRUE(warnings.empty());
 	}
 
@@ -166,6 +182,45 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(loaded.dispersionPoints, 101);
 		EXPECT_TRUE(loaded.dispersionInPlane);
 		EXPECT_EQ(warnings.size(), 2u);
+	}
+
+	TEST(PhononPanelSettingsIOTests, BadSeriesFieldsKeepDefaultsAndOtherSeriesSurvive)
+	{
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(R"(
+arrowsFollowPhase: wrong
+seriesStyles:
+  beta/A1: {color: [1, 0, .nan, 1], weight: 0, visible: wrong, filled: true, fillAlpha: 2, lineStyle: 3}
+  S/other: {color: null, weight: 6, lineStyle: 1}
+  broken: []
+)", kProject, loaded, warnings, error)) << error;
+		EXPECT_TRUE(loaded.arrowsFollowPhase);
+		const auto &style = loaded.seriesStyles.at("beta/A1");
+		EXPECT_FALSE(style.color);
+		EXPECT_FLOAT_EQ(style.lineWeight, 1.5f);
+		EXPECT_TRUE(style.visible);
+		EXPECT_TRUE(style.filled);
+		EXPECT_FLOAT_EQ(style.fillAlpha, 0.25f);
+		EXPECT_EQ(style.lineStyle, 0);
+		EXPECT_FLOAT_EQ(loaded.seriesStyles.at("S/other").lineWeight, 6.0f);
+		EXPECT_EQ(loaded.seriesStyles.at("S/other").lineStyle, 1);
+		EXPECT_FALSE(loaded.seriesStyles.contains("broken"));
+		EXPECT_EQ(warnings.size(), 7u);
+	}
+
+	TEST(PhononPanelSettingsIOTests, NonMapSeriesStylesWarnWithoutDiscardingSettings)
+	{
+		for (const char *text : {"seriesStyles: []", "seriesStyles: null"})
+		{
+			PhononPanelSettings loaded;
+			std::vector<std::string> warnings;
+			std::string error;
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error));
+			EXPECT_TRUE(loaded.seriesStyles.empty());
+			EXPECT_EQ(warnings.size(), 1u);
+		}
 	}
 
 	TEST(PhononPanelSettingsIOTests, SaveThenLoadFromDisk)

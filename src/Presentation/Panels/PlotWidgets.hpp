@@ -5,14 +5,29 @@
 #include <cfloat>
 #include <string>
 #include <string_view>
+#include <span>
 #include <vector>
 
 #include <imgui.h>
 #include <implot.h>
 #include <implot_internal.h> // ImPlotPlot::FrameRect/PlotRect for the TeX axis labels
 
+#include "IO/PlotSeriesStyle.hpp"
+
 namespace DefectStudio
 {
+	void ApplySeriesStyle(const PlotSeriesStyle &style, ImPlotSpec &spec);
+	// Live edits apply immediately; true means the edit ended and should be persisted.
+	[[nodiscard]] bool SeriesLegendPopup(const char *label, PlotSeriesStyle &style, bool allowFill = true);
+	void PlotStyledLine(const char *label, std::span<const double> xs, std::span<const double> ys,
+		const PlotSeriesStyle &style, ImPlotItemFlags flags = 0);
+	void PlotStyledStems(const char *label, std::span<const double> xs, std::span<const double> ys,
+		const PlotSeriesStyle &style);
+	void PlotStyledInfLine(const char *label, double x, const PlotSeriesStyle &style);
+	// Screen-space dash pairs clipped to [left, top, right, bottom]; NaNs break the path.
+	[[nodiscard]] std::vector<glm::dvec2> PlotDashSegments(std::span<const glm::dvec2> points,
+		const glm::dvec4 &bounds, int lineStyle);
+
 	// A thin bar under a plot: drag it to change the plot's height (kept by the caller).
 	inline void PlotHeightHandle(const char *id, float &height, const float minHeight = 120.0f)
 	{

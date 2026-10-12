@@ -95,6 +95,49 @@ namespace DefectStudio
 		{
 			emit << YAML::Flow << YAML::BeginSeq << color.x << color.y << color.z << YAML::EndSeq;
 		}
+
+		void ReadSeriesStyles(const YAML::Node &styles, PhononPanelSettings &settings, std::vector<std::string> &warnings)
+		{
+			if (!styles) return;
+			if (!styles.IsMap()) { Warn(warnings, "seriesStyles", "expected a map"); return; }
+			for (const auto &entry : styles)
+			{
+				try
+				{
+					const auto key = entry.first.as<std::string>();
+					const auto map = entry.second;
+					if (!map.IsMap()) { Warn(warnings, "seriesStyles/" + key, "expected a map"); continue; }
+					PlotSeriesStyle style;
+					if (map["color"] && !map["color"].IsNull())
+						ReadSetting(map, "color", style.color, warnings, [](const YAML::Node &node) {
+							if (!node.IsSequence() || node.size() != 4) throw std::invalid_argument("color must contain four components");
+							glm::vec4 color;
+							for (int i = 0; i < 4; ++i)
+							{
+								color[i] = node[i].as<float>();
+								if (!std::isfinite(color[i]) || color[i] < 0.0f || color[i] > 1.0f)
+									throw std::invalid_argument("color components must be finite and between 0 and 1");
+							}
+							return color;
+						});
+					double weight = style.lineWeight, alpha = style.fillAlpha;
+					ReadNumber(map, "weight", weight, warnings, 0.5, 6.0);
+					ReadNumber(map, "fillAlpha", alpha, warnings, 0.0, 1.0);
+					style.lineWeight = static_cast<float>(weight);
+					style.fillAlpha = static_cast<float>(alpha);
+					const auto boolean = [](const YAML::Node &node) { return node.as<bool>(); };
+					ReadSetting(map, "visible", style.visible, warnings, boolean);
+					ReadSetting(map, "filled", style.filled, warnings, boolean);
+					ReadSetting(map, "lineStyle", style.lineStyle, warnings, [](const YAML::Node &node) {
+						const int value = node.as<int>();
+						if (value < 0 || value > 2) throw std::invalid_argument("unknown line style");
+						return value;
+					});
+					settings.seriesStyles.emplace(key, std::move(style));
+				}
+				catch (const std::exception &exception) { Warn(warnings, "seriesStyles", exception.what()); }
+			}
+		}
 	} // namespace
 
 	Path PhononPanelSettingsIO::FilePath(const Path &projectDirectory)
@@ -126,6 +169,9 @@ namespace DefectStudio
 				throw std::invalid_argument("phonon_panel.yaml uses a future format version");
 
 			PhononPanelSettings settings;
+			ReadSetting(root, "arrowsFollowPhase", settings.arrowsFollowPhase, outWarnings,
+				[](const YAML::Node &node) { return node.as<bool>(); });
+			ReadSeriesStyles(root["seriesStyles"], settings, outWarnings);
 			const auto readPath = [&](const YAML::Node &node) { return ReadPath(node, projectDirectory); };
 			const auto inputs = root["inputs"];
 			if (inputs && !inputs.IsMap())
@@ -222,6 +268,21 @@ namespace DefectStudio
 		YAML::Emitter emit;
 		emit << YAML::Precision(17) << YAML::BeginMap
 			<< YAML::Key << "formatVersion" << YAML::Value << kFormatVersion
+			<< YAML::Key << "arrowsFollowPhase" << YAML::Value << settings.arrowsFollowPhase
+			<< YAML::Key << "seriesStyles" << YAML::Value << YAML::BeginMap;
+		for (const auto &[key, style] : settings.seriesStyles)
+		{
+			emit << YAML::Key << key << YAML::Value << YAML::BeginMap << YAML::Key << "color" << YAML::Value;
+			if (style.color)
+				emit << YAML::Flow << YAML::BeginSeq << style.color->x << style.color->y << style.color->z << style.color->w << YAML::EndSeq;
+			else emit << YAML::Null;
+			emit << YAML::Key << "weight" << YAML::Value << style.lineWeight
+				<< YAML::Key << "visible" << YAML::Value << style.visible
+				<< YAML::Key << "filled" << YAML::Value << style.filled
+				<< YAML::Key << "fillAlpha" << YAML::Value << style.fillAlpha
+				<< YAML::Key << "lineStyle" << YAML::Value << style.lineStyle << YAML::EndMap;
+		}
+		emit << YAML::EndMap
 			<< YAML::Key << "inputs" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "fcDir" << YAML::Value << StoredPath(settings.forceConstantDirectory, projectDirectory)
 			<< YAML::Key << "gsDir" << YAML::Value << StoredPath(settings.groundStateDirectory, projectDirectory)

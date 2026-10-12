@@ -175,9 +175,11 @@ namespace DefectStudio
 		ModeArrowsState arrows;
 		arrows.lowColor = m_Settings.arrowLowColor;
 		arrows.highColor = m_Settings.arrowHighColor;
+		// Same sin(phase) as AnimatedPositions: the arrow is the atom's current displacement direction.
+		const double phaseScale = IsAnimating() && m_Settings.arrowsFollowPhase ? std::sin(m_Phase) : 1.0;
 		for (const auto &arrow : BuildModeArrows(*m_Result, *mode, m_Settings.participationThreshold,
 			m_Settings.arrowLengthAngstrom))
-			arrows.arrows.push_back({arrow.atomIndex, glm::vec3(arrow.vectorAngstrom)});
+			arrows.arrows.push_back({arrow.atomIndex, glm::vec3(phaseScale * arrow.vectorAngstrom)});
 		window.modeArrows = std::move(arrows);
 		return true;
 	}
@@ -192,6 +194,7 @@ namespace DefectStudio
 		for (const auto &atom : window.structure.atoms)
 			m_RestPositions->push_back(atom.cartesianPosition);
 		m_Phase = 0.0;
+		(void)ApplyArrows(window, error);
 	}
 
 	void PhononPanelSession::AdvanceAnimation(RendererWindowState &window, double deltaSeconds)
@@ -216,6 +219,7 @@ namespace DefectStudio
 		for (std::size_t i = 0; i < frame.size(); ++i)
 			window.structure.atoms[i].cartesianPosition = (*m_RestPositions)[i] +
 				glm::vec3(frame[i] - m_Result->positionsAngstrom[i]);
+		(void)ApplyArrows(window, error);
 	}
 
 	void PhononPanelSession::StopAnimation(RendererWindowState &window)
@@ -225,5 +229,7 @@ namespace DefectStudio
 				window.structure.atoms[i].cartesianPosition = (*m_RestPositions)[i];
 		m_RestPositions.reset();
 		m_Phase = 0.0;
+		std::string error;
+		(void)ApplyArrows(window, error);
 	}
 }

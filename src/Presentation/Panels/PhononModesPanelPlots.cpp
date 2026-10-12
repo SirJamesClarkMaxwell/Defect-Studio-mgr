@@ -21,6 +21,8 @@ namespace DefectStudio
 		{
 			const char *title = tab == 0 ? "β(ℏω)" : tab == 1 ? "S_k i S(ℏω)" : "PL";
 			if (!ImGui::BeginTabItem(title)) continue;
+			ImGui::PushID(tab);
+			const std::string plotKey = tab == 0 ? "beta/" : tab == 1 ? "S/" : "PL/";
 			// Keep each tab aligned with the filter row above the mode table.
 			if (tab < 2) ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
 			else if (ImGui::BeginCombo("ZPL", settings.plZpl == "computed" ? "obliczone" :
@@ -59,11 +61,12 @@ namespace DefectStudio
 						(a1 ? a1x : otherx).push_back(mode.frequencyMeV);
 						(a1 ? a1y : othery).push_back(tab == 0 ? mode.beta : mode.huangRhys);
 					}
-					ImPlotSpec stems;
-					stems.LineColor = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-					if (!otherx.empty()) ImPlot::PlotStems("inne irreps", otherx.data(), othery.data(), static_cast<int>(otherx.size()), 0.0, stems);
-					stems.LineColor = ImVec4(0.3f, 0.75f, 0.95f, 1.0f);
-					if (!a1x.empty()) ImPlot::PlotStems("A1", a1x.data(), a1y.data(), static_cast<int>(a1x.size()), 0.0, stems);
+					auto &otherStyle = settings.seriesStyles[plotKey + "other"];
+					auto &a1Style = settings.seriesStyles[plotKey + "A1"];
+					PlotStyledStems("inne irreps", otherx, othery, otherStyle);
+					if (SeriesLegendPopup("inne irreps", otherStyle, false)) persist();
+					PlotStyledStems("A1", a1x, a1y, a1Style);
+					if (SeriesLegendPopup("A1", a1Style, false)) persist();
 					if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 					{
 						const auto mouse = ImGui::GetIO().MousePos;
@@ -72,6 +75,7 @@ namespace DefectStudio
 						for (const auto index : modes)
 						{
 							const auto &mode = result.modes[index];
+							if (!(mode.irrep == "A1" ? a1Style.visible : otherStyle.visible)) continue;
 							const auto tip = ImPlot::PlotToPixels(mode.frequencyMeV, tab == 0 ? mode.beta : mode.huangRhys);
 							const auto base = ImPlot::PlotToPixels(mode.frequencyMeV, 0.0);
 							const float distance = std::abs(tip.x - mouse.x);
@@ -85,15 +89,16 @@ namespace DefectStudio
 					}
 					if (const auto selected = m_Session->SelectedMode())
 					{
-						ImPlotSpec line;
-						line.LineColor = ImVec4(1.0f, 0.7f, 0.2f, 1.0f);
-						line.Flags = ImPlotItemFlags_NoLegend | ImPlotItemFlags_NoFit;
-						ImPlot::PlotInfLines("##selected", &result.modes[*selected].frequencyMeV, 1, line);
+						auto &style = settings.seriesStyles[plotKey + "selected"];
+						PlotStyledInfLine("Wybrany mod", result.modes[*selected].frequencyMeV, style);
+						if (SeriesLegendPopup("Wybrany mod", style, false)) persist();
 					}
 					if (tab == 1 && !result.spectralEnergyMeV.empty())
 					{
 						ImPlot::SetAxes(ImAxis_X1, ImAxis_Y2);
-						ImPlot::PlotLine("S(ℏω)", result.spectralEnergyMeV.data(), result.spectralDensityPerMeV.data(), static_cast<int>(result.spectralEnergyMeV.size()));
+						auto &style = settings.seriesStyles[plotKey + "density"];
+						PlotStyledLine("S(ℏω)", result.spectralEnergyMeV, result.spectralDensityPerMeV, style);
+						if (SeriesLegendPopup("S(ℏω)", style)) persist();
 					}
 				}
 				else
@@ -101,7 +106,11 @@ namespace DefectStudio
 					const auto &curve = settings.plZpl == "computed" ? result.plComputed :
 						settings.plZpl == "spin_purified" ? result.plSpinPurified : result.plExperimental;
 					if (!curve.empty())
-						ImPlot::PlotLine("PL", result.plPhotonEnergyEv.data(), curve.data(), static_cast<int>(curve.size()));
+					{
+						auto &style = settings.seriesStyles[plotKey + "PL"];
+						PlotStyledLine("PL", result.plPhotonEnergyEv, curve, style);
+						if (SeriesLegendPopup("PL", style)) persist();
+					}
 				}
 				ImPlot::EndPlot();
 				m_ResetPlots = false;
@@ -115,6 +124,7 @@ namespace DefectStudio
 			}
 			if (tab == 2 && result.plComputed.empty() && result.plSpinPurified.empty() && result.plExperimental.empty())
 				ImGui::TextDisabled("Brak widma PL w wyniku.");
+			ImGui::PopID();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();

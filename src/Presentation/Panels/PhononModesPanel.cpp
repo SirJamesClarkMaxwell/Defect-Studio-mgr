@@ -275,12 +275,14 @@ namespace DefectStudio
 			clearWindow();
 			return;
 		}
-		if (!m_Session->ApplyArrows(target, m_WindowError))
+		if (!m_Session->WindowMatches(target, m_WindowError))
 			StopAnimation();
 		else if (m_Session->IsAnimating() && !m_Paused)
 			m_Session->AdvanceAnimation(target, ImGui::GetIO().DeltaTime);
 		else if (m_Session->IsAnimating())
 			m_Session->SetPhase(target, m_Session->Phase());
+		else
+			(void)m_Session->ApplyArrows(target, m_WindowError);
 	}
 
 	void PhononModesPanel::selectMode(int index)
@@ -320,6 +322,7 @@ namespace DefectStudio
 		}
 		else if (draw)
 		{
+			ImGui::PushID(m_ProjectDirectory.Utf8().c_str());
 			drawInputs();
 			drawCcd();
 			drawDispersion();
@@ -337,6 +340,7 @@ namespace DefectStudio
 				}
 				drawVisualisation();
 			}
+			ImGui::PopID();
 		}
 		if (open) syncWindow();
 		ImGui::End();

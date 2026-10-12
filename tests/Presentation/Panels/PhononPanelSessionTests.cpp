@@ -5,6 +5,7 @@
 
 #include "Presentation/Panels/PhononPanelSession.hpp"
 #include "Renderer/RendererWindowState.hpp"
+#include "Renderer/ModeArrows.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -212,6 +213,39 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(session.ApplyArrows(window, error));
 		EXPECT_FALSE(window.modeArrows.has_value());
 		EXPECT_FALSE(error.empty());
+	}
+
+	TEST(PhononPanelSessionTests, ArrowsFollowPhaseOnAdvanceAndPausedSliderAndRestoreOnStop)
+	{
+		PhononPanelSession session;
+		session.SetResult(TwoAtoms());
+		RendererWindowState window = Window();
+		std::string error;
+		ASSERT_TRUE(session.ApplyArrows(window, error));
+		const auto staticArrows = window.modeArrows->arrows;
+		session.StartAnimation(window);
+		// Atoms move with sin(phase); the arrows must match: full at pi/2, flipped at -pi/2, gone at pi.
+		session.SetPhase(window, std::numbers::pi / 2.0);
+		ASSERT_EQ(window.modeArrows->arrows.size(), staticArrows.size());
+		for (std::size_t i = 0; i < staticArrows.size(); ++i)
+			EXPECT_LE(glm::length(window.modeArrows->arrows[i].vectorAngstrom - staticArrows[i].vectorAngstrom), 1e-6f);
+		session.SetPhase(window, -std::numbers::pi / 2.0);
+		for (std::size_t i = 0; i < staticArrows.size(); ++i)
+			EXPECT_LE(glm::length(window.modeArrows->arrows[i].vectorAngstrom + staticArrows[i].vectorAngstrom), 1e-6f);
+		session.SetPhase(window, std::numbers::pi);
+		for (const auto &arrow : window.modeArrows->arrows) EXPECT_LE(glm::length(arrow.vectorAngstrom), 1e-6f);
+		EXPECT_TRUE(BuildModeArrowSegments(window.structure, *window.modeArrows).empty());
+		session.AdvanceAnimation(window, session.Settings().animationPeriodSeconds / 4.0); // pi -> 3pi/2 = -pi/2
+		for (std::size_t i = 0; i < staticArrows.size(); ++i)
+			EXPECT_LE(glm::length(window.modeArrows->arrows[i].vectorAngstrom + staticArrows[i].vectorAngstrom), 1e-6f);
+		session.Settings().arrowsFollowPhase = false;
+		session.SetPhase(window, std::numbers::pi);
+		for (std::size_t i = 0; i < staticArrows.size(); ++i)
+			EXPECT_LE(glm::length(window.modeArrows->arrows[i].vectorAngstrom - staticArrows[i].vectorAngstrom), 1e-6f);
+		session.Settings().arrowsFollowPhase = true;
+		session.StopAnimation(window);
+		for (std::size_t i = 0; i < staticArrows.size(); ++i)
+			EXPECT_LE(glm::length(window.modeArrows->arrows[i].vectorAngstrom - staticArrows[i].vectorAngstrom), 1e-6f);
 	}
 
 	TEST(PhononPanelSessionTests, AnimationMovesAtomsAroundTheirWindowPositionsAndStopRestoresThem)

@@ -68,13 +68,14 @@ namespace DefectStudio
 		[[nodiscard]] bool WindowMatches(const RendererWindowState &window, std::string &outError) const;
 
 		// Rebuilds window.modeArrows from the selected mode and Settings() (threshold, arrow length,
-		// colours, showArrows). Clears it (nullopt) when there is no selection, showArrows is false or
+		// colours, showArrows). During animation, arrowsFollowPhase scales vectors by cos(Phase()).
+		// Clears it (nullopt) when there is no selection, showArrows is false or
 		// the window does not match. Returns false (outError set) only for a mismatch.
 		bool ApplyArrows(RendererWindowState &window, std::string &outError) const;
 
 		// Animation. Start captures the rest positions (no-op if already animating or no valid
 		// selection / mismatching window). Advance moves the phase by 2*pi*dt/period and writes the
-		// frame; SetPhase writes the frame for a given phase (the paused slider). Stop writes the rest
+		// frame and arrows; SetPhase writes both for a given phase (the paused slider). Stop writes the rest
 		// positions back and forgets them. Advance/SetPhase do nothing unless animating.
 		void StartAnimation(RendererWindowState &window);
 		void AdvanceAnimation(RendererWindowState &window, double deltaSeconds);

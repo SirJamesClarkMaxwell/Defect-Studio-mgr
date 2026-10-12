@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -7,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "IO/PlotSeriesStyle.hpp"
 
 namespace DefectStudio
 {
@@ -43,6 +45,8 @@ namespace DefectStudio
 		double carriedFraction = 0.9;     // for the "N atoms carry X % of the mode" readout
 		double arrowLengthAngstrom = 1.5; // the longest arrow of the mode
 		bool showArrows = true;
+		bool arrowsFollowPhase = true;
+		std::map<std::string, PlotSeriesStyle> seriesStyles; // <plot>/<series>
 		glm::vec3 arrowLowColor = glm::vec3(0.25f, 0.75f, 0.35f);
 		glm::vec3 arrowHighColor = glm::vec3(0.85f, 0.2f, 0.2f);
 		double animationAmplitudeAngstrom = 0.3;
@@ -57,6 +61,8 @@ namespace DefectStudio
 	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep,
 	//            dispersionDir, dispersionInPlane, dispersionPoints} # dcutoff/bcutoff absent = default
 	//   resultDir: ...
+	//   arrowsFollowPhase: true
+	//   seriesStyles: {"<plot>/<series>": {color: [r,g,b,a] | null, weight, visible, filled, fillAlpha, lineStyle}}
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
 	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter}
 	// Paths inside projectDirectory are written relative to it with '/' separators, others absolute
