@@ -20,6 +20,8 @@ scientific-core = [
     "puntukas[symmetry]",
     "groupy-symmetry",
     "dephonopy",
+    "lxml>=5.0",    # dephonopy parsers/vasp.py, undeclared in its setup.py
+    "traits>=6.4",  # dephonopy force_constants/base.py, undeclared in its setup.py
     "pymatgen>=2025.1",
     "spglib>=2.0",
     "seekpath>=2.1",
