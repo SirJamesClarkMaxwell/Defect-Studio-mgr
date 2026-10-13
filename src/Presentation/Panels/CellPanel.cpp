@@ -18,9 +18,10 @@
 namespace DefectStudio
 {
 	CellPanel::CellPanel(RendererLayer &layer, WeakRef<CommandRegistry> commands, WeakRef<DomainLayer> domain,
-		std::string title, bool visibleByDefault)
+		ElementPropertiesTable elements, AtomStyleTable styles, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault), m_Layer(layer),
-		  m_Commands(std::move(commands)), m_Domain(std::move(domain))
+		  m_Commands(std::move(commands)), m_Domain(std::move(domain)),
+		  m_Elements(std::move(elements)), m_Styles(std::move(styles))
 	{
 	}
 
@@ -152,6 +153,7 @@ namespace DefectStudio
 		bool open = true;
 		if (ImGui::Begin(GetTitle().c_str(), &open))
 		{
+			drawNewCell();
 			const auto domain = m_Domain.lock();
 			const auto commands = m_Commands.lock();
 			const auto &windowId = m_Layer.GetLastFocusedViewportWindowId();
@@ -193,6 +195,7 @@ namespace DefectStudio
 						ImGui::TextDisabled("Zakończ transformację atomów przed edycją komórki.");
 					ImGui::BeginDisabled(!commands || transforming);
 					drawEditor(record.structure);
+					drawSublattice(record.structure, record.revision);
 					ImGui::EndDisabled();
 					// Keep the wrap result visible across our own commit; external edits/undo reseed next frame.
 					if (m_Coincident)

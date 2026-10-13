@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -156,6 +157,8 @@ namespace DefectStudio
 	void EraseNumericChar(ModalTransformSession &session);
 	// Accepts "[-]num" and "[-]num/num"; nullopt for incomplete/invalid or non-finite values,
 	// a zero denominator or a trailing '/'.
+	[[nodiscard]] std::optional<float> ParseNumericText(std::string_view text);
+	// ParseNumericText(session.numericText).
 	[[nodiscard]] std::optional<float> NumericValue(const ModalTransformSession &session);
 	// Nearest p/q with q <= 24 within 1e-4 (smallest denominator on ties), else nullopt.
 	[[nodiscard]] std::optional<std::pair<int, int>> NearestSimpleFraction(float value);

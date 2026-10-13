@@ -40,13 +40,19 @@ visual pattern, a species and an offset; never a space group or Wyckoff letter.
 
 ## Files to create or change
 
+- Approved 2026-10-14 after your stop: extract the text part of `NumericValue` into
+  `[[nodiscard]] std::optional<float> ParseNumericText(std::string_view text);` in `ModalTransform.{hpp,cpp}` (same
+  rules: "[-]num" or "[-]num/num", zero denominator / trailing '/' -> nullopt); `NumericValue` calls it. No other change
+  there; existing ModalTransform tests must pass unchanged, add one test for `ParseNumericText`.
+
 - `src/Domain/Crystal/CellEditing.{hpp,cpp}`, `src/Presentation/Panels/CellPanel.{hpp,cpp}` (split if > 500 lines,
   e.g. `CellPanelSublattice.cpp`)
 - tests: `tests/Domain/Crystal/CellEditingTests.cpp`
 
 ## Files that must NOT be touched
 
-- Phonon files, `src/IO/*`, `EditorLayerAnalysis.cpp` (other tasks); `ModalTransform*`
+- Phonon files, `src/IO/*`, `EditorLayerAnalysis.cpp` (other tasks); `ModalTransform*` EXCEPT the parser
+  extraction below
 - `Vendor/`, `install/`, `build/`; `docs/` except `docs/work/project/reports/task-112d-add-sublattice.md`
 
 ## Acceptance criteria (GoogleTests)

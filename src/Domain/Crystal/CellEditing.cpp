@@ -137,4 +137,31 @@ namespace DefectStudio
 		outCoincident = FindCoincidentAtomIndices(result.atoms);
 		return result;
 	}
+
+	CrystalStructure AddSublattice(const CrystalStructure &structure, const std::string &species,
+		BravaisCenteringPreset centering, const glm::vec3 &offset, std::vector<std::size_t> &outCoincident)
+	{
+		CrystalStructure result = structure;
+		AtomSite seed;
+		seed.species = species;
+		seed.fractional = offset;
+		// ExpandBasisOverLattice wraps the fractional coordinates into [0,1).
+		for (AtomSite atom : ExpandBasisOverLattice(std::span<const AtomSite>(&seed, 1), centering))
+		{
+			atom.index = static_cast<int>(result.atoms.size());
+			atom.position = result.FractionalToCartesian(atom.fractional);
+			result.atoms.push_back(std::move(atom));
+		}
+		outCoincident = FindCoincidentAtomIndices(result.atoms);
+		return result;
+	}
+
+	CrystalStructure EmptyCell(const LatticeCell &cell)
+	{
+		CrystalStructure structure;
+		structure.name = "Nowa komórka";
+		structure.cell = cell;
+		structure.isPeriodic = true;
+		return structure;
+	}
 } // namespace DefectStudio

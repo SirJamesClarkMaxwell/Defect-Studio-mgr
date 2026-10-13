@@ -378,16 +378,20 @@ namespace DefectStudio
 
 	std::optional<float> NumericValue(const ModalTransformSession &session)
 	{
-		const auto parse = [](std::string_view text) -> std::optional<float> {
-			if (text.empty())
+		return ParseNumericText(session.numericText);
+	}
+
+	std::optional<float> ParseNumericText(std::string_view text)
+	{
+		const auto parse = [](std::string_view part) -> std::optional<float> {
+			if (part.empty())
 				return std::nullopt;
 			float value = 0.0f;
-			const auto [parsedEnd, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-			if (error != std::errc{} || parsedEnd != text.data() + text.size() || !std::isfinite(value))
+			const auto [parsedEnd, error] = std::from_chars(part.data(), part.data() + part.size(), value);
+			if (error != std::errc{} || parsedEnd != part.data() + part.size() || !std::isfinite(value))
 				return std::nullopt;
 			return value;
 		};
-		const std::string_view text = session.numericText;
 		const std::size_t slash = text.find('/');
 		const std::optional<float> numerator = parse(text.substr(0, slash));
 		if (slash == std::string_view::npos || !numerator)

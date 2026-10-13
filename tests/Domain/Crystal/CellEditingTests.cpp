@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <limits>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -189,4 +190,50 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(wrapped.atoms.size(), 8u);
 		EXPECT_TRUE(coincident.empty());
 	}
-} // namespace DefectStudio::Tests
+
+	TEST(CellEditingTests, TwoFccSublatticesInAnEmptyCubicCellGiveZincblende)
+	{
+		const CrystalStructure empty = EmptyCell(BuildLatticeCell(CrystalSystem::Cubic, LatticeParameters{5.43f}));
+		EXPECT_TRUE(empty.atoms.empty());
+		EXPECT_TRUE(empty.isPeriodic);
+		std::vector<std::size_t> coincident;
+		const CrystalStructure cations = AddSublattice(empty, "Zn", BravaisCenteringPreset::FaceCentered, glm::vec3(0.0f), coincident);
+		ASSERT_EQ(cations.atoms.size(), 4u);
+		EXPECT_TRUE(coincident.empty());
+		const CrystalStructure built = AddSublattice(cations, "S", BravaisCenteringPreset::FaceCentered, glm::vec3(0.25f), coincident);
+		EXPECT_TRUE(coincident.empty());
+		const CrystalStructure reference = Zincblende();
+		ASSERT_EQ(built.atoms.size(), reference.atoms.size());
+		for (const AtomSite &expected : reference.atoms)
+		{
+			const auto match = std::find_if(built.atoms.begin(), built.atoms.end(), [&](const AtomSite &atom) {
+				return atom.species == expected.species && glm::length(atom.fractional - expected.fractional) < 1e-5f;
+			});
+			EXPECT_NE(match, built.atoms.end()) << expected.species << " at " << expected.fractional.x << " "
+				<< expected.fractional.y << " " << expected.fractional.z;
+		}
+		for (std::size_t i = 0; i < built.atoms.size(); ++i)
+		{
+			EXPECT_EQ(built.atoms[i].index, static_cast<int>(i));
+			ExpectVectorNear(built.atoms[i].position, built.FractionalToCartesian(built.atoms[i].fractional));
+		}
+	}
+
+	TEST(CellEditingTests, SublatticeOnOccupiedSitesIsReportedAndKept)
+	{
+		std::vector<std::size_t> coincident;
+		const CrystalStructure result = AddSublattice(Zincblende(), "Zn", BravaisCenteringPreset::Primitive, glm::vec3(1.0f, 0.0f, 0.0f), coincident);
+		EXPECT_EQ(result.atoms.size(), 9u);
+		EXPECT_EQ(coincident.size(), 2u); // the new atom and the Zn already at the origin
+		EXPECT_NE(std::find(coincident.begin(), coincident.end(), std::size_t{8}), coincident.end());
+	}
+
+	TEST(CellEditingTests, SublatticeOffsetIsWrappedIntoTheCell)
+	{
+		std::vector<std::size_t> coincident;
+		const CrystalStructure empty = EmptyCell(BuildLatticeCell(CrystalSystem::Cubic, LatticeParameters{4.0f}));
+		const CrystalStructure result = AddSublattice(empty, "C", BravaisCenteringPreset::Primitive, glm::vec3(1.25f, -0.25f, 0.0f), coincident);
+		ASSERT_EQ(result.atoms.size(), 1u);
+		ExpectVectorNear(result.atoms[0].fractional, glm::vec3(0.25f, 0.75f, 0.0f));
+	}
+}

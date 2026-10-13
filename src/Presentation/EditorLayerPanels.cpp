@@ -285,7 +285,7 @@ namespace DefectStudio
 			registerPanel<ObjectPropertiesPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_AtomStyleTable, "Object Properties", true);
 			registerPanel<CellPanel>(
-				*rendererLayer, m_CommandRegistry, m_DomainLayer, "Komórka", false);
+				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, m_AtomStyleTable, "Komórka", false);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
 			m_NewStructureWizardPanelId = registerPanel<NewStructureWizardPanel>(

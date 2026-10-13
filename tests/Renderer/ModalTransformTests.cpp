@@ -579,4 +579,14 @@ namespace
 		for (float value : {0.137f, 1.0f / 25.0f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::max()})
 			EXPECT_FALSE(NearestSimpleFraction(value));
 	}
+
+	TEST(ModalTransformTests, ParseNumericTextIsTheSessionParserForPlainStrings)
+	{
+		EXPECT_FLOAT_EQ(*ParseNumericText("1/4"), 0.25f);
+		EXPECT_FLOAT_EQ(*ParseNumericText("-0.37"), -0.37f);
+		EXPECT_FALSE(ParseNumericText("").has_value());
+		EXPECT_FALSE(ParseNumericText("1/").has_value());
+		EXPECT_FALSE(ParseNumericText("1/0").has_value());
+		EXPECT_FALSE(ParseNumericText("a").has_value());
+	}
 } // namespace
