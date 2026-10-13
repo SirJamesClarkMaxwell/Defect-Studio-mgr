@@ -68,7 +68,7 @@ namespace DefectStudio
 		if (ImGui::CollapsingHeader("Wejścia"))
 		{
 			ImGui::TextDisabled("Katalogi można też ustawić przez RMB → Fonony w Project Tree.");
-			ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
+			ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || m_PendingCcdAnalysisJob != nullptr);
 			{
 				PropertyGrid grid("##phononInputs", PropertyGridLabelWidth({"Stałe siłowe (FC)",
 					"Stan podstawowy", "Stan wzbudzony", "Tryplet (opcjonalny)", "Katalog wyników"}));
@@ -111,13 +111,13 @@ namespace DefectStudio
 			ImGui::EndDisabled();
 		}
 		const std::string blocker = ComputationBlocker(settings, computationOutputPath());
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || !blocker.empty());
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || m_PendingCcdAnalysisJob != nullptr || !blocker.empty());
 		if (ImGui::Button("Policz")) submitComputation();
 		ImGui::EndDisabled();
 		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
-		else if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
+		else if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob || m_PendingCcdAnalysisJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		ImGui::SameLine();
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || m_PendingCcdAnalysisJob != nullptr);
 		if (ImGui::Button("Wczytaj wyniki..."))
 		{
 			const auto picked = Platform::PickFolder(settings.resultDirectory);
@@ -125,7 +125,7 @@ namespace DefectStudio
 			else if (picked->has_value()) SetDirectory("result", **picked);
 		}
 		ImGui::EndDisabled();
-		if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
+		if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob || m_PendingCcdAnalysisJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		if (m_PendingJob)
 		{
 			const auto jobs = m_JobSystem.lock();
@@ -200,43 +200,4 @@ namespace DefectStudio
 		ImGui::TextDisabled("Czas rośnie ~N^3: 24x24x1 ~5 s, 36x36x1 ~20 s, 48x48x1 ~2 min na tym PC");
 	}
 
-	void PhononModesPanel::drawCcd()
-	{
-		if (!ImGui::CollapsingHeader("CCD")) return;
-		auto &settings = m_Session->Settings();
-		ImGui::TextDisabled("GS i ES: katalogi z Wejścia.");
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
-		{
-			PropertyGrid grid("##ccdInputs", PropertyGridLabelWidth({"Katalog CCD", "Krok t"}));
-			if (grid)
-			{
-				grid.Row("Katalog CCD");
-				Path output = ccdOutputPath();
-				const bool changed = DrawFolder("ccd", output, m_CcdError, true);
-				if (output != ccdOutputPath())
-					settings.ccdOutputDirectory = output;
-				if (changed) persist();
-				grid.Row("Krok t");
-				ImGui::InputDouble("##ccdStep", &settings.ccdStep, 0.0, 0.0, "%.4g");
-				if (ImGui::IsItemDeactivatedAfterEdit())
-				{
-					if (!std::isfinite(settings.ccdStep) || settings.ccdStep <= 0.0) settings.ccdStep = 0.25;
-					persist();
-				}
-			}
-		}
-		ImGui::BeginDisabled(settings.groundStateDirectory.Empty() || settings.excitedStateDirectory.Empty() || ccdOutputPath().Empty());
-		if (ImGui::Button("Generuj wejścia CCD")) submitCcd();
-		ImGui::EndDisabled();
-		ImGui::EndDisabled();
-		if (m_PendingCcdJob)
-		{
-			ImGui::TextDisabled("Generowanie wejść CCD...");
-			if (ImGui::Button("Anuluj CCD"))
-				if (const auto jobs = m_JobSystem.lock()) (void)jobs->RequestCancel(m_PendingCcdJobId);
-		}
-		if (!m_CcdResult.empty()) ImGui::TextUnformatted(m_CcdResult.c_str());
-		if (!m_CcdError.empty()) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_CcdError.c_str());
-		ImGui::TextDisabled("Przed sbatch: WAVECAR do es/t_+100 i gs/t_+000");
-	}
 }

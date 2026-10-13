@@ -12,6 +12,7 @@
 #include "Renderer/RendererLayer.hpp"
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
 #include "ScientificRuntime/Python/CcdInputsJob.hpp"
+#include "ScientificRuntime/Python/CcdAnalysisJob.hpp"
 #include "ScientificRuntime/Python/PhononDispersionJob.hpp"
 
 namespace DefectStudio
@@ -35,6 +36,7 @@ namespace DefectStudio
 		clone->m_EmbeddingSummary = m_EmbeddingSummary;
 		if (m_Session->Result())
 			clone->m_Session->SetResult(*m_Session->Result());
+		if (const auto ccd = m_Session->CcdResult()) clone->m_Session->SetCcdResult(ccd->get());
 		return clone;
 	}
 
@@ -82,6 +84,9 @@ namespace DefectStudio
 				(void)jobs->RequestCancel(m_PendingCcdJobId);
 		m_PendingCcdJob.reset();
 		m_PendingCcdJobId = 0;
+		if (m_PendingCcdAnalysisJob)
+			if (const auto jobs = m_JobSystem.lock()) (void)jobs->RequestCancel(m_PendingCcdAnalysisJobId);
+		m_PendingCcdAnalysisJob.reset(); m_PendingCcdAnalysisJobId = 0;
 		if (m_PendingDispersionJob)
 			if (const auto jobs = m_JobSystem.lock())
 				(void)jobs->RequestCancel(m_PendingDispersionJobId);
@@ -96,6 +101,7 @@ namespace DefectStudio
 		m_Session->CancelDatasetScan();
 		m_Session->SetDatasets({});
 		m_Session->ClearResult();
+		m_Session->ClearCcdResult();
 		m_Session->Settings() = std::move(settings);
 		m_ProjectDirectory = std::move(projectDirectory);
 		m_FolderEdits.clear();
@@ -110,6 +116,7 @@ namespace DefectStudio
 		m_Error.clear();
 		m_CcdResult.clear();
 		m_CcdError.clear();
+		m_CcdAnalysisError.clear();
 		m_EmbeddingSummary.clear();
 		m_EmbeddingMult = {12, 12, 1};
 		if (!m_Session->Settings().embeddingMult.empty())
@@ -127,6 +134,8 @@ namespace DefectStudio
 			loadResult(m_Session->Settings().resultDirectory);
 		if (!m_Session->Settings().selectedDispersionDirectory.Empty())
 			(void)loadDispersion(m_Session->Settings().selectedDispersionDirectory);
+		if (!m_Session->Settings().selectedCcdDirectory.Empty())
+			(void)loadCcdResult(m_Session->Settings().selectedCcdDirectory);
 		for (const auto &path : m_Session->Settings().comparedDirectories)
 			if (auto ref = ReadDatasetRef(path)) m_Session->AddDataset(std::move(*ref));
 	}
@@ -246,7 +255,7 @@ namespace DefectStudio
 		for (const auto &window : m_RendererLayer.GetWindows()) m_WindowsBeforeOpen.push_back(window.windowId);
 		RendererEvents::Windows::OpenStructureRequested event;
 		event.filePath = supercellPath();
-		event.displayName = "Superkomórka (fonony)";
+		event.displayName = std::string(PhononPanelSession::SupercellWindowTitle);
 		m_BindRequested = true;
 		m_EventBus->Queue(event);
 	}
@@ -256,7 +265,7 @@ namespace DefectStudio
 		const Path source = supercellPath();
 		if (m_WindowId.empty())
 			for (auto &window : m_RendererLayer.GetWindows())
-				if (PhononPanelSession::SameFilePath(window.structure.sourcePath, source, m_ProjectDirectory) &&
+				if (m_Session->CanBindWindow(window, source, m_ProjectDirectory) &&
 					(!m_BindRequested || std::find(m_WindowsBeforeOpen.begin(), m_WindowsBeforeOpen.end(), window.windowId) == m_WindowsBeforeOpen.end()))
 				{
 					m_WindowId = window.windowId;
@@ -276,7 +285,7 @@ namespace DefectStudio
 			return;
 		}
 		auto &target = window->get();
-		if (!PhononPanelSession::SameFilePath(target.structure.sourcePath, source, m_ProjectDirectory))
+		if (!m_Session->CanBindWindow(target, source, m_ProjectDirectory))
 		{
 			clearWindow();
 			return;
@@ -308,6 +317,7 @@ namespace DefectStudio
 	{
 		pollJob();
 		pollCcdJob();
+		pollCcdAnalysisJob();
 		pollDispersionJob();
 		if (m_Session->PollDatasetScan()) m_ResetPlots = true;
 		if (!IsVisible())
@@ -348,6 +358,7 @@ namespace DefectStudio
 				}
 				drawVisualisation();
 			}
+			else drawPlots();
 			ImGui::PopID();
 		}
 		if (open) syncWindow();

@@ -137,7 +137,8 @@ namespace DefectStudio
 		if (!m_Result)
 			return modes;
 		for (std::size_t i = 0; i < m_Result->ModeCount(); ++i)
-			if (!m_Result->modes[i].isTranslation && (m_Settings.irrepFilter.empty() ||
+			if (!m_Result->modes[i].isTranslation && m_Result->modes[i].huangRhys >= m_Settings.minHuangRhys &&
+				(m_Settings.irrepFilter.empty() ||
 				m_Result->modes[i].irrep == m_Settings.irrepFilter))
 				modes.push_back(i);
 		std::stable_sort(modes.begin(), modes.end(), [&](auto a, auto b) {
@@ -202,6 +203,14 @@ namespace DefectStudio
 					break;
 				}
 		return outError.empty();
+	}
+
+	bool PhononPanelSession::CanBindWindow(const RendererWindowState &window, const Path &supercell,
+		const Path &projectDirectory) const
+	{
+		if (SameFilePath(window.structure.sourcePath, supercell, projectDirectory)) return true;
+		std::string error;
+		return window.title == SupercellWindowTitle && WindowMatches(window, error);
 	}
 
 	bool PhononPanelSession::ApplyArrows(RendererWindowState &window, std::string &outError) const

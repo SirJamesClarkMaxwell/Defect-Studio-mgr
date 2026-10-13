@@ -66,7 +66,7 @@ namespace DefectStudio
 	{
 		if (!ImGui::CollapsingHeader("Dyspersja bulku")) return;
 		auto &settings = m_Session->Settings();
-		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
+		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || m_PendingCcdAnalysisJob != nullptr);
 		{
 			PropertyGrid grid("##dispersionInputs", PropertyGridLabelWidth({"Katalog FC bulku", "Katalog wyników (opcjonalny)", "npoints"}));
 			if (grid)
@@ -96,7 +96,7 @@ namespace DefectStudio
 		if (ImGui::Button("Policz dyspersję")) submitDispersion();
 		ImGui::EndDisabled();
 		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
-		else if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
+		else if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob || m_PendingCcdAnalysisJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		ImGui::SameLine();
 		if (ImGui::Button("Wczytaj..."))
 		{
@@ -105,7 +105,7 @@ namespace DefectStudio
 			else if (picked->has_value() && loadDispersion(**picked)) persist();
 		}
 		ImGui::EndDisabled();
-		if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
+		if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob || m_PendingCcdAnalysisJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		if (m_PendingDispersionJob)
 		{
 			const auto jobs = m_JobSystem.lock();

@@ -102,6 +102,55 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(session.Settings().comparedDirectories.empty());
 	}
 
+	TEST(PhononPanelSessionTests, CcdSelectionAndComparisonAreIndependentOfPhononsAndDispersion)
+	{
+		PhononPanelSession session;
+		const Path p = Path::FromUtf8("D:/project/defectstudio/phonons"), c = Path::FromUtf8("D:/project/defectstudio/ccd");
+		session.SetDatasets({{AnalysisDatasetKind::Phonons, p, "P", "ds.phonon_vibronic.v1"},
+			{AnalysisDatasetKind::Ccd, c, "C", "ds.ccd_analysis.v1"}});
+		ASSERT_TRUE(session.SelectDataset(p));
+		ASSERT_TRUE(session.SelectDataset(c));
+		EXPECT_EQ(session.Settings().resultDirectory, p);
+		EXPECT_EQ(session.Settings().selectedCcdDirectory, c);
+		session.SetCompared(c, true); session.SetCompared(c, true);
+		EXPECT_EQ(session.Settings().comparedDirectories, (std::vector<Path>{c}));
+		session.SetCompared(c, false);
+		EXPECT_FALSE(session.IsCompared(c));
+	}
+
+	TEST(PhononPanelSessionTests, CcdLevelsUseEachBottomAndInterpolatedTurningPoints)
+	{
+		CcdAnalysisResult result;
+		result.zplEv = 2;
+		result.deltaQ = 1;
+		result.curves.q = {-2, -1, 0, 1, 2, 3};
+		result.curves.vGsEv = {4, 1, 0, 1, 4, 9};
+		result.curves.vEsEv = {11, 6, 3, 2, 3, 6};
+		result.levels.gsMeV = {500, 1000, 10000};
+		result.levels.esMeV = {1000};
+		EXPECT_EQ(PhononPanelSession::CcdLevelRange(result, false, 0), (std::pair{-0.5, 0.5}));
+		EXPECT_EQ(PhononPanelSession::CcdLevelRange(result, false, 1), (std::pair{-1.0, 1.0}));
+		EXPECT_EQ(PhononPanelSession::CcdLevelRange(result, true, 0), (std::pair{0.0, 2.0}));
+		EXPECT_FALSE(PhononPanelSession::CcdLevelRange(result, false, 2));
+		EXPECT_FALSE(PhononPanelSession::CcdLevelRange(result, true, 1));
+	}
+
+	TEST(PhononPanelSessionTests, CcdPlUsefulRangeIncludesAllAvailableCurvesAndZpl)
+	{
+		CcdAnalysisResult result;
+		result.zplEv = 2;
+		result.pl1d.energyEv = {0, 0.5, 1, 1.5, 2, 2.5};
+		result.pl1d.numerov = {0, 0, 0, 0.1, 1, 0};
+		result.pl1d.harmonic = {0, 0, 0.2, 0.5, 1, 0};
+		EXPECT_EQ(PhononPanelSession::UsefulRange(result), (std::pair{1.0, 2.15}));
+		PhononPanelSession session;
+		session.SetCcdResult(result);
+		ASSERT_TRUE(session.CcdResult());
+		EXPECT_DOUBLE_EQ(session.CcdResult()->get().zplEv, 2);
+		session.ClearCcdResult();
+		EXPECT_FALSE(session.CcdResult());
+	}
+
 	TEST(PhononPanelSessionTests, OutputMayBeInsideInputButMustNotContainIt)
 	{
 		const Path input = Path::FromResolved(FileSystem::CurrentPath()) / "calc/fc";
@@ -247,6 +296,29 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(session.VisibleModes(), (std::vector<std::size_t>{5, 4}));
 	}
 
+	TEST(PhononPanelSessionTests, HuangRhysFilterCombinesWithIrrepAndRetainsSelection)
+	{
+		PhononPanelSession session;
+		auto result = TwoAtoms();
+		result.modes[0].huangRhys = 1.0; // translations never pass
+		result.modes[3].huangRhys = 0.001;
+		result.modes[5].huangRhys = 0.05;
+		result.modes[4].huangRhys = 0.5;
+		session.SetResult(std::move(result));
+		session.SelectMode(3);
+		session.Settings().minHuangRhys = 0.01;
+		EXPECT_EQ(session.VisibleModes(), (std::vector<std::size_t>{5, 4}));
+		EXPECT_EQ(session.SelectedMode(), 3u);
+		session.Settings().minHuangRhys = 0.05; // inclusive threshold
+		EXPECT_EQ(session.VisibleModes(), (std::vector<std::size_t>{5, 4}));
+		session.Settings().irrepFilter = "E";
+		EXPECT_TRUE(session.VisibleModes().empty());
+		EXPECT_EQ(session.SelectedMode(), 3u);
+		session.Settings().irrepFilter.clear();
+		session.Settings().minHuangRhys = 0.0;
+		EXPECT_EQ(session.VisibleModes(), (std::vector<std::size_t>{3, 5, 4}));
+	}
+
 	TEST(PhononPanelSessionTests, SelectModeIgnoresTranslationsAndBadIndices)
 	{
 		PhononPanelSession session;
@@ -284,6 +356,23 @@ namespace DefectStudio::Tests
 		RendererWindowState extra = Window();
 		extra.structure.atoms.push_back(extra.structure.atoms[0]);
 		EXPECT_FALSE(session.WindowMatches(extra, error));
+	}
+
+	TEST(PhononPanelSessionTests, RestoredSupercellWindowOfAnotherResultIsBoundByTitleWhenAtomsMatch)
+	{
+		PhononPanelSession session;
+		session.SetResult(TwoAtoms());
+		const Path supercell = Path::FromUtf8("C:/new/defectstudio/phonons/POSCAR");
+		RendererWindowState window = Window();
+		window.structure.sourcePath = Path::FromUtf8("C:/old/phonons/dimer/POSCAR");
+		EXPECT_FALSE(session.CanBindWindow(window, supercell, {}));
+		window.title = std::string(PhononPanelSession::SupercellWindowTitle);
+		EXPECT_TRUE(session.CanBindWindow(window, supercell, {}));
+		RendererWindowState other = Window("C");
+		other.title = window.title;
+		EXPECT_FALSE(session.CanBindWindow(other, supercell, {}));
+		other.structure.sourcePath = supercell; // opened from this result: bound, WindowMatches reports the error
+		EXPECT_TRUE(session.CanBindWindow(other, supercell, {}));
 	}
 
 	TEST(PhononPanelSessionTests, ApplyArrowsWritesTheSelectedModeIntoTheWindow)

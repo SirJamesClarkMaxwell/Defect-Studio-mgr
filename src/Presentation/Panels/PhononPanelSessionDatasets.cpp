@@ -7,6 +7,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Platform/PlatformPaths.hpp"
 #include "IO/PhononAnalysisIO.hpp"
+#include "IO/CcdAnalysisIO.hpp"
 
 namespace DefectStudio
 {
@@ -58,6 +59,7 @@ namespace DefectStudio
 				return SameFilePath(existing.directory, dataset.directory, {});
 			})) m_Datasets.push_back(std::move(dataset));
 		m_Spectra.clear();
+		m_CcdResults.clear();
 	}
 
 	void PhononPanelSession::AddDataset(AnalysisDatasetRef dataset)
@@ -66,6 +68,7 @@ namespace DefectStudio
 			return SameFilePath(entry.directory, dataset.directory, {});
 		});
 		m_Spectra.erase(SpectraKey(dataset.directory));
+		m_CcdResults.erase(SpectraKey(dataset.directory));
 		if (found == m_Datasets.end()) m_Datasets.push_back(std::move(dataset));
 		else *found = std::move(dataset);
 		std::sort(m_Datasets.begin(), m_Datasets.end(), [](const auto &a, const auto &b) { return a.directory.Native() < b.directory.Native(); });
@@ -86,7 +89,7 @@ namespace DefectStudio
 		}
 		if (IsCompared(directory)) return;
 		if (std::any_of(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
-			return entry.kind == AnalysisDatasetKind::Phonons && SameFilePath(entry.directory, directory, {});
+			return entry.kind != AnalysisDatasetKind::Dispersion && SameFilePath(entry.directory, directory, {});
 		})) m_Settings.comparedDirectories.push_back(directory);
 	}
 
@@ -95,8 +98,9 @@ namespace DefectStudio
 		const auto found = std::find_if(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
 			return SameFilePath(entry.directory, directory, {});
 		});
-		if (found == m_Datasets.end() || found->kind == AnalysisDatasetKind::Ccd) return false;
+		if (found == m_Datasets.end()) return false;
 		if (found->kind == AnalysisDatasetKind::Phonons) m_Settings.resultDirectory = found->directory;
+		else if (found->kind == AnalysisDatasetKind::Ccd) m_Settings.selectedCcdDirectory = found->directory;
 		else m_Settings.selectedDispersionDirectory = found->directory;
 		return true;
 	}
@@ -113,6 +117,20 @@ namespace DefectStudio
 		}
 		outError = error;
 		return result ? std::optional<std::reference_wrapper<const PhononAnalysisResult>>(std::cref(*result)) : std::nullopt;
+	}
+
+	std::optional<std::reference_wrapper<const CcdAnalysisResult>> PhononPanelSession::Ccd(
+		const Path &directory, std::string &outError)
+	{
+		auto [it, inserted] = m_CcdResults.try_emplace(SpectraKey(directory));
+		auto &[result, error] = it->second;
+		if (inserted)
+		{
+			CcdAnalysisResult ccd;
+			if (CcdAnalysisIO::Load(directory, ccd, error)) result = std::move(ccd);
+		}
+		outError = error;
+		return result ? std::optional<std::reference_wrapper<const CcdAnalysisResult>>(std::cref(*result)) : std::nullopt;
 	}
 
 	void PhononPanelSession::StartDatasetScan(WeakRef<JobSystem> jobs, std::vector<Path> roots)
@@ -150,6 +168,7 @@ namespace DefectStudio
 			// Explicit selections also survive when their directories are outside scanned roots.
 			auto pinned = m_Settings.comparedDirectories;
 			pinned.push_back(m_Settings.resultDirectory); pinned.push_back(m_Settings.selectedDispersionDirectory);
+			pinned.push_back(m_Settings.selectedCcdDirectory);
 			for (const auto &path : pinned)
 				if (!path.Empty())
 					if (auto ref = ReadDatasetRef(path)) datasets.push_back(std::move(*ref));

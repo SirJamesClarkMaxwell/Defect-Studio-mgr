@@ -23,6 +23,7 @@ namespace DefectStudio
 	class RendererLayer;
 	class PhononAnalysisJob;
 	class CcdInputsJob;
+	class CcdAnalysisJob;
 	class PhononDispersionJob;
 
 	// task/104d: Gamma phonon modes of a defect supercell and the harmonic PL built on them
@@ -78,6 +79,14 @@ namespace DefectStudio
 		void submitCcd();
 		void pollCcdJob();
 		[[nodiscard]] Path ccdOutputPath() const;
+		[[nodiscard]] Path ccdAnalysisOutputPath() const;
+		[[nodiscard]] std::string ccdAnalysisBlocker() const;
+		void submitCcdAnalysis();
+		void pollCcdAnalysisJob();
+		bool loadCcdResult(const Path &directory);
+		void drawCcdPlotTabs(); // inside the shared plot tab bar; also available without phonons
+		void drawCcdPlot(const CcdAnalysisResult &result);
+		void drawCcdPlPlot(const CcdAnalysisResult &result);
 		void loadEmbeddingSummary(const Path &directory);
 		void drawSummary();
 		void drawModesTable();
@@ -111,6 +120,8 @@ namespace DefectStudio
 		JobId m_PendingJobId = 0;
 		Ref<CcdInputsJob> m_PendingCcdJob;
 		JobId m_PendingCcdJobId = 0;
+		Ref<CcdAnalysisJob> m_PendingCcdAnalysisJob;
+		JobId m_PendingCcdAnalysisJobId = 0;
 		Ref<PhononDispersionJob> m_PendingDispersionJob;
 		JobId m_PendingDispersionJobId = 0;
 		std::optional<PhononDispersion> m_Dispersion;
@@ -123,6 +134,7 @@ namespace DefectStudio
 		std::string m_EmbeddingSummary;
 		std::string m_CcdResult;
 		std::string m_CcdError;
+		std::string m_CcdAnalysisError;
 		std::string m_Error;
 		std::string m_WindowError;
 		bool m_BindRequested = false;

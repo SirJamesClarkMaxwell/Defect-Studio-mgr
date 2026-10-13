@@ -14,12 +14,12 @@ namespace DefectStudio
 {
 	void PhononModesPanel::drawPlots()
 	{
-		const auto &result = *m_Session->Result();
 		auto &settings = m_Session->Settings();
 		const float height = ImGui::GetTextLineHeightWithSpacing() * 18.0f;
 		if (!ImGui::BeginTabBar("##phononPlots")) return;
-		for (int tab = 0; tab < 3; ++tab)
+		for (int tab = 0; m_Session->Result() && tab < 3; ++tab)
 		{
+			const auto &result = *m_Session->Result();
 			const char *title = tab == 0 ? "β(ℏω)" : tab == 1 ? "S_k i S(ℏω)" : "PL";
 			if (!ImGui::BeginTabItem(title)) continue;
 			ImGui::PushID(tab);
@@ -137,6 +137,7 @@ namespace DefectStudio
 			ImGui::PopID();
 			ImGui::EndTabItem();
 		}
+		drawCcdPlotTabs();
 		ImGui::EndTabBar();
 	}
 }

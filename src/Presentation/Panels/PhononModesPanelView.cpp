@@ -38,7 +38,9 @@ namespace DefectStudio
 	void PhononModesPanel::drawModesTable()
 	{
 		auto &settings = m_Session->Settings();
-		if (ImGui::BeginCombo("Irrep", settings.irrepFilter.empty() ? "wszystkie" : settings.irrepFilter.c_str()))
+		ImGui::TextUnformatted("Irrep"); ImGui::SameLine();
+		ImGui::SetNextItemWidth(110.0f);
+		if (ImGui::BeginCombo("##irrep", settings.irrepFilter.empty() ? "wszystkie" : settings.irrepFilter.c_str()))
 		{
 			if (ImGui::Selectable("wszystkie", settings.irrepFilter.empty())) { settings.irrepFilter.clear(); persist(); }
 			for (const auto &irrep : m_Session->Irreps())
@@ -46,7 +48,16 @@ namespace DefectStudio
 			ImGui::EndCombo();
 		}
 		const auto &result = *m_Session->Result();
+		ImGui::SameLine(); ImGui::TextUnformatted("min S_k"); ImGui::SameLine();
+		float minimum = static_cast<float>(settings.minHuangRhys);
+		ImGui::SetNextItemWidth(90.0f);
+		if (ImGui::DragFloat("##minSk", &minimum, 0.0001f, 0.0f, 1.0f, "%.4g",
+			ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoRoundToFormat))
+		{ settings.minHuangRhys = minimum; persist(); }
+		ImGui::SetItemTooltip("Pokaż tylko mody o czynniku Huanga-Rhysa S_k ≥ progu (udział modu w S)");
 		auto modes = m_Session->VisibleModes();
+		const auto total = std::count_if(result.modes.begin(), result.modes.end(), [](const auto &mode) { return !mode.isTranslation; });
+		ImGui::SameLine(); ImGui::Text("modów: %zu z %zu", modes.size(), static_cast<std::size_t>(total));
 		const std::string fractionLabel = std::format("N({:.0f}%)", settings.carriedFraction * 100.0);
 		if (!ImGui::BeginTable("##phononModes", 7, ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY |
 			ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit,
@@ -114,7 +125,8 @@ namespace DefectStudio
 				const bool selected = settings.selectedMode == static_cast<int>(index);
 				const std::string label = (selected ? (m_Session->IsAnimating() ? "▶ " : "● ") : "") +
 					std::to_string(mode.index) + "###mode";
-				if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
+				// The accent row background marks the selection; Selectable's own highlight would stack on it.
+				if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
 					selectMode(static_cast<int>(index));
 				if (selected)
 				{
@@ -178,8 +190,8 @@ namespace DefectStudio
 		ImGui::EndDisabled();
 		if (!ImGui::BeginTable("##visualisationSettings", 3, ImGuiTableFlags_SizingStretchSame)) return;
 		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Próg udziału");
-		ImGui::SetItemTooltip("Udział atomu w modzie = |e_i|^2 (suma po atomach = 1). Strzałki atomów o mniejszym udziale są ukryte.");
+		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Próg strzałek");
+		ImGui::SetItemTooltip("Udział atomu w modzie = |e_i|^2 (suma po atomach = 1). Strzałki atomów o mniejszym udziale są ukryte. Nie filtruje tabeli - do tego służy min S_k.");
 		ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Atomy niosące [%]");
 		ImGui::SetItemTooltip("Ile najsilniej drgających atomów razem niesie X %% modu (kolumna N(X%%) w tabeli).");
 		ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted("Długość strzałki [Å]");

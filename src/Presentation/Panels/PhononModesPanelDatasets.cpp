@@ -67,7 +67,8 @@ namespace DefectStudio
 				ImGui::PushID(dataset.directory.Utf8().c_str());
 				ImGui::TableNextRow();
 				const bool active = PhononPanelSession::SameFilePath(dataset.directory,
-					dataset.kind == AnalysisDatasetKind::Dispersion ? settings.selectedDispersionDirectory : settings.resultDirectory, m_ProjectDirectory);
+					dataset.kind == AnalysisDatasetKind::Dispersion ? settings.selectedDispersionDirectory :
+					dataset.kind == AnalysisDatasetKind::Ccd ? settings.selectedCcdDirectory : settings.resultDirectory, m_ProjectDirectory);
 				if (active)
 				{
 					const auto accent = ImGui::GetColorU32(ImGuiCol_CheckMark, 0.35f);
@@ -76,18 +77,22 @@ namespace DefectStudio
 				}
 				ImGui::TableSetColumnIndex(0);
 				bool compared = m_Session->IsCompared(dataset.directory);
-				ImGui::BeginDisabled(dataset.kind != AnalysisDatasetKind::Phonons);
+				ImGui::BeginDisabled(dataset.kind == AnalysisDatasetKind::Dispersion);
 				if (ImGui::Checkbox("##compare", &compared)) { m_Session->SetCompared(dataset.directory, compared); m_ResetPlots = true; persist(); }
 				ImGui::EndDisabled();
-				if (dataset.kind != AnalysisDatasetKind::Phonons) ImGui::SetItemTooltip("Porównania dotyczą widm fononowych.");
+				if (dataset.kind == AnalysisDatasetKind::Dispersion) ImGui::SetItemTooltip("Porównaj widma fononowe lub PL 1D zestawów CCD.");
 				ImGui::TableSetColumnIndex(1);
-				ImGui::BeginDisabled(dataset.kind == AnalysisDatasetKind::Ccd);
-				if (ImGui::Selectable((dataset.label + "###dataset").c_str(), active, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) selected = dataset;
-				ImGui::EndDisabled();
-				if (dataset.kind == AnalysisDatasetKind::Ccd) ImGui::SetItemTooltip("Podgląd CCD będzie dostępny w panelu CCD.");
+				// Not `selected`: the accent row background marks it over the full row height (checkbox
+				// rows are taller than a Selectable), the frame-high Selectable only adds hover.
+				ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+				if (ImGui::Selectable(((active ? "● " : "") + dataset.label + "###dataset").c_str(), false,
+					ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, ImGui::GetFrameHeight()))) selected = dataset;
+				ImGui::PopStyleVar();
 				ImGui::TableSetColumnIndex(2);
+				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(dataset.kind == AnalysisDatasetKind::Phonons ? "fonony" : dataset.kind == AnalysisDatasetKind::Dispersion ? "dyspersja" : "CCD");
 				ImGui::TableSetColumnIndex(3);
+				ImGui::AlignTextToFramePadding();
 				const auto pathLabel = PhononPanelSession::DirectoryLabel(dataset.directory, m_ProjectDirectory, m_ProjectRoots);
 				ImGui::TextUnformatted(pathLabel.c_str()); ImGui::SetItemTooltip("%s", dataset.directory.Utf8().c_str());
 				ImGui::TableSetColumnIndex(4);
@@ -97,6 +102,12 @@ namespace DefectStudio
 					if (active && m_Session->Result()) formula = m_Session->Result()->zplFormulaText;
 					else if (const auto spectra = m_Session->Spectra(dataset.directory, error)) formula = spectra->get().zplFormulaText;
 				}
+				else if (dataset.kind == AnalysisDatasetKind::Ccd)
+				{
+					if (active && m_Session->CcdResult()) formula = m_Session->CcdResult()->get().zplFormulaText;
+					else if (const auto ccd = m_Session->Ccd(dataset.directory, error)) formula = ccd->get().zplFormulaText;
+				}
+				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(formula.empty() ? "-" : formula.c_str());
 				if (!error.empty()) ImGui::SetItemTooltip("%s", error.c_str());
 				ImGui::PopID();
@@ -107,9 +118,11 @@ namespace DefectStudio
 		if (selected)
 		{
 			if (selected->kind == AnalysisDatasetKind::Phonons) loadResult(selected->directory);
+			else if (selected->kind == AnalysisDatasetKind::Ccd) (void)loadCcdResult(selected->directory);
 			else (void)loadDispersion(selected->directory);
 			persist();
 		}
+		if (!m_CcdAnalysisError.empty()) ImGui::TextColored(ImVec4(1, 0.35f, 0.35f, 1), "%s", m_CcdAnalysisError.c_str());
 	}
 
 	void PhononModesPanel::drawZplInputs()

@@ -280,6 +280,78 @@ seriesStyles:
 		EXPECT_EQ(loaded.zplFormula, "E_es - E_gs");
 	}
 
+	TEST(PhononPanelSettingsIOTests, MinimumHuangRhysRoundTripsAndLegacyFilesDefaultToZero)
+	{
+		PhononPanelSettings settings, loaded;
+		settings.minHuangRhys = 0.0123;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(PhononPanelSettingsIO::Serialize(settings, kProject),
+			kProject, loaded, warnings, error));
+		EXPECT_DOUBLE_EQ(loaded.minHuangRhys, 0.0123);
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("view: {selectedMode: 3}", kProject, loaded, warnings, error));
+		EXPECT_DOUBLE_EQ(loaded.minHuangRhys, 0.0);
+		for (const char *value : {"-1", ".nan", "wrong"})
+		{
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(std::string("view: {minHuangRhys: ") + value + "}",
+				kProject, loaded, warnings, error));
+			EXPECT_DOUBLE_EQ(loaded.minHuangRhys, 0.0);
+			EXPECT_EQ(warnings.size(), 1u);
+		}
+	}
+
+	TEST(PhononPanelSettingsIOTests, CcdSelectionInputsAndViewRoundTripAndOldFilesLoadDefaults)
+	{
+		PhononPanelSettings settings, loaded;
+		settings.selectedCcdDirectory = kProject / "defectstudio/ccd";
+		settings.ccdDirectory = kProject / "ccd-path";
+		settings.ccdAnalysisOutputDirectory = Path::FromUtf8("K:/CCD result");
+		settings.ccdTemperatureK = 125.5;
+		settings.ccdPhononCurvature = true;
+		settings.ccdLevels = 8;
+		settings.ccdWavefunctions = true;
+		settings.ccdProbability = true;
+		settings.ccdWavefunctionScale = 0.12;
+		settings.ccdArrows = false;
+		settings.ccdComparePhononPl = true;
+		std::vector<std::string> warnings;
+		std::string error;
+		const auto text = PhononPanelSettingsIO::Serialize(settings, kProject);
+		EXPECT_EQ(text.find("D:/projekty/hbn"), std::string::npos);
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error));
+		EXPECT_TRUE(warnings.empty());
+		EXPECT_EQ(loaded.selectedCcdDirectory, settings.selectedCcdDirectory);
+		EXPECT_EQ(loaded.ccdDirectory, settings.ccdDirectory);
+		EXPECT_EQ(loaded.ccdAnalysisOutputDirectory, settings.ccdAnalysisOutputDirectory);
+		EXPECT_DOUBLE_EQ(loaded.ccdTemperatureK, 125.5);
+		EXPECT_TRUE(loaded.ccdPhononCurvature);
+		EXPECT_EQ(loaded.ccdLevels, 8);
+		EXPECT_TRUE(loaded.ccdWavefunctions);
+		EXPECT_TRUE(loaded.ccdProbability);
+		EXPECT_DOUBLE_EQ(loaded.ccdWavefunctionScale, 0.12);
+		EXPECT_FALSE(loaded.ccdArrows);
+		EXPECT_TRUE(loaded.ccdComparePhononPl);
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("formatVersion: 1", kProject, loaded, warnings, error));
+		EXPECT_TRUE(loaded.selectedCcdDirectory.Empty());
+		EXPECT_TRUE(loaded.ccdDirectory.Empty());
+		EXPECT_FALSE(loaded.ccdPhononCurvature);
+		EXPECT_DOUBLE_EQ(loaded.ccdTemperatureK, 0);
+		EXPECT_EQ(loaded.ccdLevels, PhononPanelSettings{}.ccdLevels);
+	}
+
+	TEST(PhononPanelSettingsIOTests, InvalidCcdControlsKeepDefaultsWithWarnings)
+	{
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("inputs: {ccdTemperature: -1, ccdPhononCurvature: wrong}\n"
+			"view: {ccdLevels: 9, ccdWavefunctionScale: .nan, ccdProbability: wrong}", kProject, loaded, warnings, error));
+		EXPECT_EQ(warnings.size(), 5u);
+		EXPECT_DOUBLE_EQ(loaded.ccdTemperatureK, 0);
+		EXPECT_EQ(loaded.ccdLevels, 3);
+		EXPECT_DOUBLE_EQ(loaded.ccdWavefunctionScale, 0.05);
+	}
+
 	TEST(PhononPanelSettingsIOTests, MissingFileGivesDefaults)
 	{
 		const Path project =

@@ -36,6 +36,17 @@ namespace DefectStudio
 		// task/104g: CCD single points (scripts/python/examples/ccd_inputs.py); empty = <project>/ccd/<es dir name>
 		Path ccdOutputDirectory;
 		double ccdStep = 0.25;
+		Path ccdDirectory; // optional completed CCD path, distinct from generated-point output
+		Path ccdAnalysisOutputDirectory; // empty = DefaultDatasetDirectory(..., "ccd", ...)
+		double ccdTemperatureK = 0.0;
+		bool ccdPhononCurvature = false;
+		Path selectedCcdDirectory;
+		int ccdLevels = 3;
+		bool ccdWavefunctions = false;
+		bool ccdProbability = false; // chi squared instead of chi
+		double ccdWavefunctionScale = 0.05;
+		bool ccdArrows = true;
+		bool ccdComparePhononPl = false;
 		Path dispersionDirectory; // optional output override
 		Path selectedDispersionDirectory;
 		std::vector<Path> comparedDirectories;
@@ -58,19 +69,22 @@ namespace DefectStudio
 		double animationPeriodSeconds = 1.5; // visual period, not the physical one
 		std::string plZpl = "experimental";   // computed | spin_purified | experimental | formula
 		std::string irrepFilter;              // empty = all irreps
+		double minHuangRhys = 0.0;            // mode filter; separate from the per-atom arrow threshold
 	};
 
 	// phonon_panel.yaml next to manifest.yaml. Schema (all keys optional on read):
 	//   formatVersion: 1
 	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplFormula, gsAtEsDir, esAtGsDir, outputDir, sigma, gamma,
-	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep,
+	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep, ccdPathDir, ccdAnalysisOutputDir,
+	//            ccdTemperature, ccdPhononCurvature,
 	//            dispersionDir, dispersionInPlane, dispersionPoints} # dcutoff/bcutoff absent = default
 	//   resultDir: ...
-	//   datasets: {compared: [paths], dispersion: path}
+	//   datasets: {compared: [paths], dispersion: path, ccd: path}
 	//   arrowsFollowPhase: true
 	//   seriesStyles: {"<plot>/<series>": {color: [r,g,b,a] | null, weight, visible, filled, fillAlpha, lineStyle}}
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
-	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter}
+	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter, minHuangRhys,
+	//          ccdLevels, ccdWavefunctions, ccdProbability, ccdWavefunctionScale, ccdArrows, ccdComparePhononPl}
 	// Paths inside projectDirectory are written relative to it with '/' separators, others absolute
 	// (same rule as FnvCorrectionsIO). Legacy zplExp is read as numeric formula text.
 	class PhononPanelSettingsIO

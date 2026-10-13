@@ -13,6 +13,7 @@
 #include <glm/glm.hpp>
 
 #include "Domain/Vibrations/PhononModes.hpp"
+#include "Domain/Vibrations/CcdAnalysis.hpp"
 #include "IO/PhononPanelSettingsIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/AnalysisDatasetIO.hpp"
@@ -48,6 +49,15 @@ namespace DefectStudio
 		bool SelectDataset(const Path &directory);
 		[[nodiscard]] std::optional<std::reference_wrapper<const PhononAnalysisResult>> Spectra(
 			const Path &directory, std::string &outError);
+		[[nodiscard]] std::optional<std::reference_wrapper<const CcdAnalysisResult>> Ccd(
+			const Path &directory, std::string &outError);
+		void SetCcdResult(CcdAnalysisResult result);
+		void ClearCcdResult();
+		[[nodiscard]] std::optional<std::reference_wrapper<const CcdAnalysisResult>> CcdResult() const noexcept;
+		[[nodiscard]] static std::pair<double, double> UsefulRange(const CcdAnalysisResult &result);
+		// Classical crossings around the branch minimum; absent if the sampled well does not bracket the level.
+		[[nodiscard]] static std::optional<std::pair<double, double>> CcdLevelRange(
+			const CcdAnalysisResult &result, bool excited, std::size_t n);
 		void StartDatasetScan(WeakRef<JobSystem> jobs, std::vector<Path> roots);
 		void CancelDatasetScan();
 		bool PollDatasetScan(); // commits completed job on main thread, true if the list changed
@@ -83,7 +93,7 @@ namespace DefectStudio
 		[[nodiscard]] const PhononAnalysisResult *Result() const noexcept;
 
 		// Mode indices for the table: translations left out, Settings().irrepFilter applied
-		// (empty = all), in ascending frequency order.
+		// (empty = all) and minHuangRhys applied, in ascending frequency order. Selection is retained.
 		[[nodiscard]] std::vector<std::size_t> VisibleModes() const;
 		// Distinct irreps of the non-translation modes, sorted, for the filter combo.
 		[[nodiscard]] std::vector<std::string> Irreps() const;
@@ -100,6 +110,12 @@ namespace DefectStudio
 		// The window shows this result if it has the same atom count and the same element per atom
 		// (RendererAtomData::element vs symbols, in order). outError says what differs.
 		[[nodiscard]] bool WindowMatches(const RendererWindowState &window, std::string &outError) const;
+		// Title of the window the panel opens; a restored window keeps it.
+		static constexpr std::string_view SupercellWindowTitle = "Superkomórka (fonony)";
+		// The panel drives a window opened from `supercell`, or its own supercell window (title) showing
+		// these atoms - restored from a project saved with another result of the same structure.
+		[[nodiscard]] bool CanBindWindow(const RendererWindowState &window, const Path &supercell,
+			const Path &projectDirectory) const;
 
 		// Rebuilds window.modeArrows from the selected mode and Settings() (threshold, arrow length,
 		// colours, showArrows). During animation, arrowsFollowPhase scales vectors by cos(Phase()).
@@ -122,6 +138,8 @@ namespace DefectStudio
 	private:
 		std::vector<AnalysisDatasetRef> m_Datasets;
 		std::map<std::string, std::pair<std::optional<PhononAnalysisResult>, std::string>> m_Spectra;
+		std::map<std::string, std::pair<std::optional<CcdAnalysisResult>, std::string>> m_CcdResults;
+		std::optional<CcdAnalysisResult> m_CcdResult;
 		WeakRef<JobSystem> m_ScanJobs;
 		Ref<AnalysisDatasetScanJob> m_ScanJob;
 		JobId m_ScanJobId = 0;

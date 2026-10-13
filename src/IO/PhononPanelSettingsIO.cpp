@@ -217,6 +217,11 @@ namespace DefectStudio
 				ReadSetting(inputs, "bcutoff", settings.bcutoffAngstrom, outWarnings, readCutoff);
 				ReadSetting(inputs, "ccdDir", settings.ccdOutputDirectory, outWarnings, readPath);
 				ReadNumber(inputs, "ccdStep", settings.ccdStep, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
+				ReadSetting(inputs, "ccdPathDir", settings.ccdDirectory, outWarnings, readPath);
+				ReadSetting(inputs, "ccdAnalysisOutputDir", settings.ccdAnalysisOutputDirectory, outWarnings, readPath);
+				ReadNumber(inputs, "ccdTemperature", settings.ccdTemperatureK, outWarnings);
+				ReadSetting(inputs, "ccdPhononCurvature", settings.ccdPhononCurvature, outWarnings,
+					[](const YAML::Node &node) { return node.as<bool>(); });
 				ReadSetting(inputs, "dispersionDir", settings.dispersionDirectory, outWarnings, readPath);
 				ReadSetting(inputs, "dispersionInPlane", settings.dispersionInPlane, outWarnings,
 					[](const YAML::Node &node) { return node.as<bool>(); });
@@ -234,6 +239,7 @@ namespace DefectStudio
 				// Legacy dispersionDir was both output and selection.
 				settings.selectedDispersionDirectory = settings.dispersionDirectory;
 				ReadSetting(datasets, "dispersion", settings.selectedDispersionDirectory, outWarnings, readPath);
+				ReadSetting(datasets, "ccd", settings.selectedCcdDirectory, outWarnings, readPath);
 				ReadSetting(datasets, "compared", settings.comparedDirectories, outWarnings, [&](const YAML::Node &node) {
 					if (!node.IsSequence()) throw std::invalid_argument("expected a sequence");
 					std::vector<Path> paths;
@@ -257,6 +263,7 @@ namespace DefectStudio
 					return mode;
 				});
 				ReadNumber(view, "participationThreshold", settings.participationThreshold, outWarnings, 0.0, 1.0);
+				ReadNumber(view, "minHuangRhys", settings.minHuangRhys, outWarnings);
 				ReadNumber(view, "carriedFraction", settings.carriedFraction, outWarnings, 0.0, 1.0, true);
 				ReadNumber(view, "arrowLength", settings.arrowLengthAngstrom, outWarnings, 0.0,
 					std::numeric_limits<double>::max(), true);
@@ -275,6 +282,17 @@ namespace DefectStudio
 				});
 				ReadSetting(view, "irrepFilter", settings.irrepFilter, outWarnings,
 					[](const YAML::Node &node) { return node.as<std::string>(); });
+				ReadSetting(view, "ccdLevels", settings.ccdLevels, outWarnings, [](const YAML::Node &node) {
+					const int n = node.as<int>();
+					if (n < 0 || n > 8) throw std::invalid_argument("CCD levels must be 0..8");
+					return n;
+				});
+				const auto boolean = [](const YAML::Node &node) { return node.as<bool>(); };
+				ReadSetting(view, "ccdWavefunctions", settings.ccdWavefunctions, outWarnings, boolean);
+				ReadSetting(view, "ccdProbability", settings.ccdProbability, outWarnings, boolean);
+				ReadSetting(view, "ccdArrows", settings.ccdArrows, outWarnings, boolean);
+				ReadSetting(view, "ccdComparePhononPl", settings.ccdComparePhononPl, outWarnings, boolean);
+				ReadNumber(view, "ccdWavefunctionScale", settings.ccdWavefunctionScale, outWarnings, 0.0, 1.0);
 			}
 			outSettings = std::move(settings);
 			return true;
@@ -325,17 +343,23 @@ namespace DefectStudio
 			emit << YAML::Key << "bcutoff" << YAML::Value << *settings.bcutoffAngstrom;
 		emit << YAML::Key << "ccdDir" << YAML::Value << StoredPath(settings.ccdOutputDirectory, projectDirectory)
 			<< YAML::Key << "ccdStep" << YAML::Value << settings.ccdStep
+			<< YAML::Key << "ccdPathDir" << YAML::Value << StoredPath(settings.ccdDirectory, projectDirectory)
+			<< YAML::Key << "ccdAnalysisOutputDir" << YAML::Value << StoredPath(settings.ccdAnalysisOutputDirectory, projectDirectory)
+			<< YAML::Key << "ccdTemperature" << YAML::Value << settings.ccdTemperatureK
+			<< YAML::Key << "ccdPhononCurvature" << YAML::Value << settings.ccdPhononCurvature
 			<< YAML::Key << "dispersionDir" << YAML::Value << StoredPath(settings.dispersionDirectory, projectDirectory)
 			<< YAML::Key << "dispersionInPlane" << YAML::Value << settings.dispersionInPlane
 			<< YAML::Key << "dispersionPoints" << YAML::Value << settings.dispersionPoints << YAML::EndMap
 			<< YAML::Key << "resultDir" << YAML::Value << StoredPath(settings.resultDirectory, projectDirectory)
 			<< YAML::Key << "datasets" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "dispersion" << YAML::Value << StoredPath(settings.selectedDispersionDirectory, projectDirectory)
+			<< YAML::Key << "ccd" << YAML::Value << StoredPath(settings.selectedCcdDirectory, projectDirectory)
 			<< YAML::Key << "compared" << YAML::Value << YAML::BeginSeq;
 		for (const auto &path : settings.comparedDirectories) emit << StoredPath(path, projectDirectory);
 		emit << YAML::EndSeq << YAML::EndMap << YAML::Key << "view" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "selectedMode" << YAML::Value << settings.selectedMode
 			<< YAML::Key << "participationThreshold" << YAML::Value << settings.participationThreshold
+			<< YAML::Key << "minHuangRhys" << YAML::Value << settings.minHuangRhys
 			<< YAML::Key << "carriedFraction" << YAML::Value << settings.carriedFraction
 			<< YAML::Key << "arrowLength" << YAML::Value << settings.arrowLengthAngstrom
 			<< YAML::Key << "showArrows" << YAML::Value << settings.showArrows
@@ -346,6 +370,12 @@ namespace DefectStudio
 		emit << YAML::Key << "amplitude" << YAML::Value << settings.animationAmplitudeAngstrom
 			<< YAML::Key << "period" << YAML::Value << settings.animationPeriodSeconds
 			<< YAML::Key << "plZpl" << YAML::Value << settings.plZpl
+			<< YAML::Key << "ccdLevels" << YAML::Value << settings.ccdLevels
+			<< YAML::Key << "ccdWavefunctions" << YAML::Value << settings.ccdWavefunctions
+			<< YAML::Key << "ccdProbability" << YAML::Value << settings.ccdProbability
+			<< YAML::Key << "ccdWavefunctionScale" << YAML::Value << settings.ccdWavefunctionScale
+			<< YAML::Key << "ccdArrows" << YAML::Value << settings.ccdArrows
+			<< YAML::Key << "ccdComparePhononPl" << YAML::Value << settings.ccdComparePhononPl
 			<< YAML::Key << "irrepFilter" << YAML::Value << settings.irrepFilter << YAML::EndMap << YAML::EndMap;
 		if (!emit.good())
 			throw std::runtime_error(emit.GetLastError());
