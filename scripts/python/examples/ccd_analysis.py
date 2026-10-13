@@ -184,7 +184,8 @@ def harmonic_pl_model(omega_es, omega_gs, delta_q, temperature):
         if not np.isfinite(completeness).all() or np.any(completeness > 1 + 1e-6):
             raise ValueError("Harmonic overlaps lost accuracy; use a shorter thermal ladder")
         populations = boltzmann_weights(model.initial_energies, temperature)
-        if completeness[0] > 0.99 and populations @ completeness > 0.99:
+        # A 1% omitted tail can exceed 1% of the peak in the normalised PL band.
+        if completeness[0] > 0.9999 and populations @ completeness > 0.9999:
             return model
     raise ValueError("Harmonic Franck-Condon sum did not close")
 
@@ -231,7 +232,7 @@ def numerov_model(data, omegas, delta_q, temperature, n_states):
             ni *= 2
             margin *= 1.5
             continue
-        if np.min(model.completeness()) <= 0.99:
+        if np.min(model.completeness()) <= 0.9999:
             nf = math.ceil(nf * 1.5)
             margin *= 1.5
             continue
@@ -239,7 +240,14 @@ def numerov_model(data, omegas, delta_q, temperature, n_states):
                   for branch, ladder in states.items()}
         info = dict(gs_levels_meV=levels["gs"], es_levels_meV=levels["es"],
                     fc_0n=model.factors[0].tolist(), fc_sum=float(model.completeness()[0]))
-        return model, info, np.column_stack((x / Q_AU, curves["gs"], curves["es"]))
+        indices = np.unique(np.linspace(0, len(x) - 1, min(2001, len(x)), dtype=int))
+        wave_columns, wave_names = [x[indices] / Q_AU], ["Q_amu05_A"]
+        for branch in ("gs", "es"):
+            for n, wave in enumerate(states[branch].wavefunctions[:8]):
+                wave_columns.append(wave[indices] * math.sqrt(Q_AU))
+                wave_names.append(f"{branch}_{n}")
+        waves = dict(values=np.column_stack(wave_columns), header="\t".join(wave_names))
+        return model, info, np.column_stack((x / Q_AU, curves["gs"], curves["es"])), waves
     raise ValueError("Could not contain the vibrational ladders and close the Franck-Condon sum")
 
 
@@ -297,6 +305,10 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
         points, data, minima = read_points(paths["ccd_dir"])
         from_ccd = float(minima["es"][1] - minima["gs"][1])
         dq = float(minima["es"][0] - minima["gs"][0])
+        for point in points:
+            point["Q_amu05_A"] -= minima["gs"][0]
+        for values in data.values():
+            values[:, 0] -= minima["gs"][0]
         harmonic, omegas = {}, {}
         for branch in ("gs", "es"):
             harmonic[branch], omegas[branch] = fit_well(data[branch], dq)
@@ -305,6 +317,13 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
         from_ccd, spin_purified = point_zpls["from_ccd"], point_zpls["spin_purified"]
         if harmonic is None and "phonon_1d" not in models:
             raise ValueError("No curvature: supply --gs-at-es-dir/--es-at-gs-dir or --phonon-result")
+        gs_energy = final_toten(paths["gs_dir"], required=True)
+        for branch, t, key in (("gs", 0, "gs_dir"), ("es", 1, "es_dir"),
+                               ("gs", 1, "gs_at_es_dir"), ("es", 0, "es_at_gs_dir"),
+                               ("triplet", 1, "triplet_dir")):
+            if paths[key]:
+                points.append(dict(branch=branch, t=t, Q_amu05_A=t * dq,
+                                   energy_eV=final_toten(paths[key], required=True) - gs_energy, status="ok"))
     formula_info, formula_zpl = None, None
     if zpl_formula is not None:
         sources = {"E_gs": "gs_dir", "E_es": "es_dir", "E_T": "triplet_dir",
@@ -317,12 +336,37 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
     used = next((value for value in candidates if value is not None), None)
     if used is None or not math.isfinite(used) or used <= 0:
         raise ValueError("ZPL must be finite and positive (eV)")
-    if data is not None:
+    synthesized = data is None
+    for point in points:
+        if point["branch"] == "es" and point["energy_eV"] is not None:
+            point["energy_eV"] += used - from_ccd
+    if synthesized:
+        if harmonic is None:
+            omegas = dict(gs=omega, es=omega)
+        q = np.linspace(0, dq, 3)
+        data = {branch: np.column_stack((q, convert(0.5 * omegas[branch]**2 *
+                ((q - centre) * Q_AU)**2, "Ha", "eV") + floor))
+                for branch, centre, floor in (("gs", 0, 0), ("es", dq, used))}
+        if harmonic is None:
+            harmonic = {branch: fit_well(values, dq)[0] for branch, values in data.items()}
+    else:
         data["es"][:, 1] += used - from_ccd
-        models["numerov"], numerov, curves = numerov_model(data, omegas, dq, temperature, n_states)
-        models["harmonic"] = harmonic_pl_model(omegas["es"], omegas["gs"], dq, temperature)
-    elif harmonic is not None:
-        models["harmonic"] = harmonic_pl_model(omegas["es"], omegas["gs"], dq, temperature)
+    models["numerov"], numerov, curves, waves = numerov_model(data, omegas, dq, temperature, n_states)
+    models["harmonic"] = harmonic_pl_model(omegas["es"], omegas["gs"], dq, temperature)
+    endpoints = {branch: continued_spline(values)(np.array([0, dq])) for branch, values in data.items()}
+    source = "curves"
+    for point in points:
+        if point["branch"] not in endpoints or point["status"] != "ok":
+            continue
+        for i, q in enumerate((0, dq)):
+            if math.isclose(point["Q_amu05_A"], q, abs_tol=1e-8):
+                endpoints[point["branch"]][i] = point["energy_eV"]
+                if (point["branch"], i) in (("gs", 1), ("es", 0)):
+                    source = "points"
+    gs, es = endpoints["gs"], endpoints["es"]
+    franck_condon = dict(absorption_eV=float(es[0] - gs[0]), emission_eV=float(es[1] - gs[1]),
+                        relaxation_gs_eV=float(gs[1] - gs[0]), relaxation_es_eV=float(es[0] - es[1]),
+                        zpl_eV=used, delta_Q_amu05_A=dq, source=source)
     upper = used + 20 * convert(temperature, "K", "eV") + 6 * sigma / 1000
     energies = np.linspace(min(1e-6, upper / 10000), upper, max(4001, math.ceil(upper * 10000 / sigma)))
     pl = [energies]
@@ -340,17 +384,21 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
                    label=label if label is not None else (paths["es_dir"] or paths["ccd_dir"] or paths["phonon_result"]).name,
                    zpl_formula=formula_info,
                    zpl_eV=dict(from_ccd=from_ccd, spin_purified=spin_purified, used=used, formula=formula_zpl),
-                   harmonic=harmonic, numerov=numerov,
+                   harmonic=harmonic, numerov=numerov, franck_condon=franck_condon,
                    phonon_1d=phonon, sigma_meV=sigma, temperature_K=temperature,
                    input_paths={key: str(path) if path else None for key, path in paths.items()},
                    units={"Q_amu05_A": "amu^0.5 Angstrom", "delta_Q_amu05_A": "amu^0.5 Angstrom",
-                          "energy_eV": "eV, relative to lowest ok gs point", "zpl_eV": "eV",
+                          "energy_eV": "eV, relative to gs minimum; es includes rigid ZPL shift", "zpl_eV": "eV",
+                          "franck_condon": "energies in eV; delta_Q_amu05_A in amu^0.5 Angstrom",
+                          "wavefunctions": "(amu^0.5 Angstrom)^-0.5; integral |chi|^2 dQ = 1",
                           "levels_meV": "meV, relative to each potential bottom", "hbar_omega_meV": "meV",
                           "sigma_meV": "meV, Gaussian standard deviation", "temperature_K": "K",
                           "S": "dimensionless", "fc_0n": "dimensionless", "intensity": "relative, max 1"},
                    approximation="1D configuration coordinate; local harmonic fits; cubic CCD spline with "
                    "bound quadratic tails; rigid excited-state ZPL shift; phonon effective mode has equal curvatures")
-    return dict(summary=summary, curves=curves, pl=np.column_stack(pl))
+    if synthesized:
+        summary["approximation"] += "; synthesized harmonic branches from point curvatures or phonon effective mode"
+    return dict(summary=summary, curves=curves, wavefunctions=waves, pl=np.column_stack(pl))
 
 
 def write_result(result, directory):
@@ -368,6 +416,7 @@ def write_result(result, directory):
                 for n, energy in enumerate(result["summary"]["numerov"][f"{branch}_levels_meV"]):
                     handle.write(f"{branch}\t{n}\t{energy:.12g}\n")
     for name, array, header in (("ccd_curves", result["curves"], "Q_amu05_A\tV_gs_eV\tV_es_eV"),
+                                 ("wavefunctions", result["wavefunctions"]["values"], result["wavefunctions"]["header"]),
                                  ("pl_1d", result["pl"], "photon_energy_eV\tintensity_numerov\t"
                                   "intensity_harmonic\tintensity_phonon_1d")):
         with (directory / f"{name}.tsv").open("w", encoding="ascii", newline="\n") as handle:

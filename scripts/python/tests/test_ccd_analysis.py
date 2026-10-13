@@ -3,11 +3,15 @@
 import csv
 import json
 import math
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import uuid4
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts" / "python" / "examples" / "ccd_analysis.py"
@@ -71,16 +75,45 @@ def poisson(s, n):
 
 class CcdAnalysisTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.tmp = Path(self._tmp.name)
+        # Python 3.13 mkdtemp's Windows ACL blocks sandbox access; inherit the parent ACL.
+        self.tmp = Path(tempfile.gettempdir()) / f"ds-ccd-{uuid4().hex}"
+        self.tmp.mkdir()
         self.ccd = self.tmp / "ccd"
         self.out = self.tmp / "out"
 
     def tearDown(self):
-        self._tmp.cleanup()
+        shutil.rmtree(self.tmp)
 
     def summary(self):
         return json.loads((self.out / "summary.json").read_text(encoding="utf-8"))
+
+    def assert_view_data(self, omega_gs, omega_es):
+        summary = self.summary()
+        curves = np.loadtxt(self.out / "ccd_curves.tsv", skiprows=1)
+        self.assertGreater(len(curves), 0)
+        with (self.out / "wavefunctions.tsv").open(encoding="ascii") as handle:
+            header = handle.readline().strip().split("\t")
+            waves = np.loadtxt(handle)
+        self.assertEqual(header[0], "Q_amu05_A")
+        self.assertLessEqual(len(waves), 2001)
+        np.testing.assert_allclose(waves[[0, -1], 0], curves[[0, -1], 0])
+        for branch, omega in (("gs", omega_gs), ("es", omega_es)):
+            levels = summary["numerov"][f"{branch}_levels_meV"]
+            count = min(8, len(levels))
+            self.assertEqual([h for h in header if h.startswith(branch + "_")],
+                             [f"{branch}_{n}" for n in range(count)])
+            np.testing.assert_allclose(levels[:count], (np.arange(count) + 0.5) * omega, rtol=1e-3)
+        np.testing.assert_allclose(np.trapezoid(waves[:, 1:]**2, waves[:, 0], axis=0), 1, atol=1e-3)
+        pl = np.loadtxt(self.out / "pl_1d.tsv", skiprows=1)
+        self.assertLess(np.max(np.abs(pl[:, 1] - pl[:, 2])), 1e-2)
+        fc = summary["franck_condon"]
+        self.assertAlmostEqual(fc["absorption_eV"] - fc["emission_eV"],
+                               fc["relaxation_gs_eV"] + fc["relaxation_es_eV"], delta=1e-9)
+        self.assertEqual(fc["zpl_eV"], summary["zpl_eV"]["used"])
+        self.assertEqual(fc["delta_Q_amu05_A"], summary["delta_Q_amu05_A"])
+        with (self.out / "levels.tsv").open(encoding="ascii") as handle:
+            self.assertEqual(len(list(csv.DictReader(handle, delimiter="\t"))),
+                             sum(len(summary["numerov"][f"{b}_levels_meV"]) for b in ("gs", "es")))
 
     def test_equal_harmonic_wells_reproduce_poisson(self):
         make_ccd(self.ccd)
@@ -125,6 +158,8 @@ class CcdAnalysisTests(unittest.TestCase):
             # The sideband maximum sits about S quanta below the ZPL.
             self.assertAlmostEqual(peak[0], 2.0 - s * 0.030, delta=0.04)
         self.assertTrue(all(math.isnan(row[3]) for row in rows))
+        self.assert_view_data(30.0, 30.0)
+        self.assertEqual(summary["franck_condon"]["source"], "points")
 
     def test_unequal_curvatures_give_two_huang_rhys_factors(self):
         make_ccd(self.ccd, omega_gs=30.0, omega_es=40.0)
@@ -166,6 +201,13 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(zpl["from_ccd"], 2.0, places=6)
         self.assertAlmostEqual(zpl["used"], 3.5, places=6)
         self.assertAlmostEqual(payload["zpl_eV"], 3.5, places=6)
+        summary = self.summary()
+        fc = summary["franck_condon"]
+        relaxation = C * 30.0**2 / 1000
+        self.assertAlmostEqual(fc["absorption_eV"], 3.5 + relaxation, places=7)
+        self.assertAlmostEqual(fc["emission_eV"], 3.5 - relaxation, places=7)
+        es_at_gs = next(p for p in summary["points"] if p["branch"] == "es" and p["t"] == 0)
+        self.assertAlmostEqual(es_at_gs["energy_eV"], fc["absorption_eV"], places=9)
 
     def test_constant_formula_precedes_override_and_labels_nested_dataset(self):
         make_ccd(self.ccd)
@@ -213,8 +255,11 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(summary["phonon_1d"]["hbar_omega_eff_meV"], omega_eff, delta=1e-6)
         self.assertAlmostEqual(summary["phonon_1d"]["delta_Q_amu05_A"], 1.0, delta=1e-9)
         self.assertAlmostEqual(summary["phonon_1d"]["S"], C * omega_eff, delta=1e-6)
-        self.assertIsNone(summary["harmonic"])
-        self.assertIsNone(summary["numerov"])
+        self.assert_view_data(omega_eff, omega_eff)
+        self.assertEqual(summary["franck_condon"]["source"], "curves")
+        self.assertIn("synthesized harmonic branches", summary["approximation"])
+        pl = np.loadtxt(self.out / "pl_1d.tsv", skiprows=1)
+        np.testing.assert_allclose(pl[:, 2], pl[:, 3])
         # Default ZPL without CCD points: the spin-purified one when present.
         self.assertAlmostEqual(summary["zpl_eV"]["used"], 3.75, places=9)
 
@@ -246,7 +291,9 @@ class CcdAnalysisTests(unittest.TestCase):
             self.assertAlmostEqual(summary["harmonic"][branch]["hbar_omega_meV"], 30.0, delta=0.1)
         self.assertEqual(summary["harmonic"]["gs"]["curvature_from"], "gs_at_es_dir")
         self.assertIn("equal curvature", summary["harmonic"]["es"]["curvature_from"])
-        self.assertIsNone(summary["numerov"])
+        self.assert_view_data(30.0, 30.0)
+        self.assertEqual(summary["franck_condon"]["source"], "points")
+        self.assertEqual(len(summary["points"]), 4)
         proc, payload = run(*args, "--zpl-formula", "E_gs@es - E_gs", "--out-dir", self.out)
         self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
         summary = self.summary()
@@ -258,6 +305,82 @@ class CcdAnalysisTests(unittest.TestCase):
         proc, payload = run(*args[:6], "--out-dir", self.tmp / "out2")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("curvature", payload["error"])
+
+    def test_point_wells_win_over_phonons_and_export_all_five_points(self):
+        from ase import Atoms
+        from ase.io import write
+
+        dq = 0.4 * math.sqrt(12.011 / 2)
+        rg, re = (C * dq**2 * omega**2 / 1000 for omega in (30.0, 40.0))
+        args = []
+        for key, energy, shift in (("gs-dir", -100.0, 0), ("es-dir", -98.0, 0.4),
+                                   ("triplet-dir", -97.7, 0.4), ("gs-at-es-dir", -100.0 + rg, 0.4),
+                                   ("es-at-gs-dir", -98.0 + re, 0)):
+            directory = self.tmp / key
+            directory.mkdir()
+            write(directory / "CONTCAR", Atoms("C2", positions=[(1 + shift, 1, 1), (6, 1, 1)],
+                                               cell=[10, 10, 10], pbc=True), format="vasp", direct=True)
+            (directory / "OUTCAR").write_text(f"  free  energy   TOTEN  =     {energy:.10f} eV\n", encoding="ascii")
+            args.extend(("--" + key, directory))
+        phonon = self.tmp / "phonon"
+        phonon.mkdir()
+        (phonon / "summary.json").write_text(json.dumps({"schema": "ds.phonon_vibronic.v1",
+                                                         "zpl_eV": {"computed": 2.5}}), encoding="ascii")
+        (phonon / "modes.tsv").write_text("freq_meV\tq_k_amu05_A\tis_translation\n50\t0.5\t0\n", encoding="ascii")
+        proc, payload = run(*args, "--phonon-result", phonon, "--zpl-formula", "2*E_es - E_T - E_gs",
+                            "--out-dir", self.out)
+        self.assertEqual(proc.returncode, 0, (payload, proc.stderr[-3000:]))
+        self.assert_view_data(30.0, 40.0)
+        summary = self.summary()
+        fc = summary["franck_condon"]
+        self.assertAlmostEqual(fc["absorption_eV"], 1.7 + re, places=8)
+        self.assertAlmostEqual(fc["emission_eV"], 1.7 - rg, places=8)
+        self.assertAlmostEqual(fc["relaxation_gs_eV"], rg, places=8)
+        self.assertAlmostEqual(fc["relaxation_es_eV"], re, places=8)
+        with (self.out / "ccd_points.tsv").open(encoding="ascii") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(rows), 5)
+        self.assertTrue(all(row["status"] == "ok" for row in rows))
+        expected = [("gs", 0, 0), ("es", 1, 1.7), ("gs", 1, rg),
+                    ("es", 0, 1.7 + re), ("triplet", 1, 2.3)]
+        for row, (branch, t, energy) in zip(rows, expected):
+            self.assertEqual(row["branch"], branch)
+            self.assertEqual(float(row["t"]), t)
+            self.assertAlmostEqual(float(row["Q_amu05_A"]), t * dq, places=8)
+            self.assertAlmostEqual(float(row["energy_eV"]), energy, places=8)
+        self.assertEqual(summary["phonon_1d"]["hbar_omega_eff_meV"], 50)
+        pl = np.loadtxt(self.out / "pl_1d.tsv", skiprows=1)
+        self.assertGreater(np.max(np.abs(pl[:, 2] - pl[:, 3])), 0.1)
+        # With no vertical points, the phonon frequency supplies the point-mode curves.
+        proc, payload = run(*args[:6], "--phonon-result", phonon, "--out-dir", self.out)
+        self.assertEqual(proc.returncode, 0, (payload, proc.stderr[-3000:]))
+        self.assert_view_data(50.0, 50.0)
+        self.assertAlmostEqual(self.summary()["delta_Q_amu05_A"], dq, places=8)
+        self.assertEqual(self.summary()["franck_condon"]["source"], "curves")
+
+    def test_path_without_vertical_endpoints_uses_curves_and_centres_q(self):
+        make_ccd(self.ccd, gs_t=(-0.5, -0.25, 0, 0.25, 0.5, 0.75),
+                 es_t=(0.25, 0.5, 0.75, 1, 1.25, 1.5))
+        # An arbitrary origin on the input axis must disappear from all exported Q values.
+        path = self.ccd / "ccd_path.csv"
+        with path.open(encoding="ascii", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        for row in rows:
+            row["Q_amu05_A"] = str(float(row["Q_amu05_A"]) + 4)
+        with path.open("w", encoding="ascii", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=("branch", "t", "Q_amu05_A"))
+            writer.writeheader()
+            writer.writerows(rows)
+        proc, payload = run("--ccd-dir", self.ccd, "--out-dir", self.out)
+        self.assertEqual(proc.returncode, 0, (payload, proc.stderr[-3000:]))
+        self.assert_view_data(30.0, 30.0)
+        summary = self.summary()
+        self.assertEqual(summary["franck_condon"]["source"], "curves")
+        gs_min = next(p for p in summary["points"] if p["branch"] == "gs" and p["t"] == 0)
+        self.assertEqual(gs_min["Q_amu05_A"], 0)
+        curves = np.loadtxt(self.out / "ccd_curves.tsv", skiprows=1)
+        self.assertAlmostEqual(curves[np.argmin(curves[:, 1]), 0], 0, delta=0.01)
+        self.assertAlmostEqual(curves[np.argmin(curves[:, 2]), 0], 1, delta=0.01)
 
     @unittest.skipUnless((V2CBCN_DIMER / "ground_state" / "excited_geometry_HSE" / "OUTCAR").is_file(),
                          "V2CBCN dimer data in test-directory/ not present")
@@ -285,6 +408,11 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(formula_summary["zpl_eV"]["formula"], summary["zpl_eV"]["spin_purified"])
         self.assertAlmostEqual(payload["zpl_eV"], 4.2046, delta=1e-3)
         self.assertEqual(list(formula_summary["zpl_formula"]["variables_eV"]), ["E_gs", "E_es", "E_T"])
+        omega = formula_summary["harmonic"]["gs"]["hbar_omega_meV"]
+        self.assert_view_data(omega, omega)
+        self.assertEqual(formula_summary["franck_condon"]["source"], "points")
+        # The reference dataset has no es-at-gs calculation: only four real points exist.
+        self.assertEqual(len(formula_summary["points"]), 4)
 
     @unittest.skipUnless((VV / "ccd_path.csv").is_file(), "VV CCD data in test-directory/ not present")
     def test_vv_reader_flags_bad_points(self):
