@@ -40,9 +40,8 @@ namespace DefectStudio
 		const SceneClipboardObject &entry, const RendererWindowState &window);
 
 	template <typename Object>
-	void OffsetSceneClipboardCopy(Object &copy)
+	void OffsetSceneClipboardCopy(Object &copy, const glm::vec3 &offset = glm::vec3(0.5f, 0.0f, 0.0f))
 	{
-		const glm::vec3 offset(0.5f, 0.0f, 0.0f);
 		if constexpr (std::is_same_v<Object, RendererWindowState::FreeLabel>)
 		{
 			copy.worldPosition += offset;
@@ -102,7 +101,8 @@ namespace DefectStudio
 
 	template <typename Object>
 	void PasteSceneObjectClipboard(RendererWindowState &window, const SceneObjectClipboard &clipboard,
-		std::vector<Object> RendererWindowState::*member, std::vector<SceneObjectId> &selection)
+		std::vector<Object> RendererWindowState::*member, std::vector<SceneObjectId> &selection,
+		const glm::vec3 &offset = glm::vec3(0.5f, 0.0f, 0.0f))
 	{
 		if (clipboard.empty()) return;
 		RendererWindowState restored;
@@ -125,7 +125,7 @@ namespace DefectStudio
 			copy.persistKey = GenerateScenePersistKey();
 			copy.visible = clipboard[index].visible;
 			copy.renderable = clipboard[index].renderable;
-			if (SceneClipboardPastesIntoSource(clipboard[index], window)) OffsetSceneClipboardCopy(copy);
+			if (SceneClipboardPastesIntoSource(clipboard[index], window)) OffsetSceneClipboardCopy(copy, offset);
 			selection.push_back(copy.id);
 			(window.*member).push_back(std::move(copy));
 		}

@@ -352,4 +352,124 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(Window().freeLabels.front().worldPosition, glm::vec3(-1, 2, 0));
 		EXPECT_EQ(Window().freeLabels.front().anchorOffset, glm::vec3(0, 2, 0));
 	}
+
+	class RendererAtomDuplicateCommandTests : public RendererAtomDeleteCommandTests
+	{
+	protected:
+		Unique<ICommand> DuplicateCommand(glm::vec3 offset = glm::vec3(0.5f, 0.0f, 0.0f))
+		{
+			return CreateDuplicateSelectedAtomsCommand(domain, renderer, styles, {}, Window().windowId, offset);
+		}
+	};
+
+	TEST_F(RendererAtomDuplicateCommandTests, ZeroOffsetPreservesCartesianAndFractionalPositionsAndSelectsCopies)
+	{
+		auto target = ResolveAtomEditTarget(*renderer, *domain, Window().windowId);
+		ASSERT_TRUE(target.HasValue());
+		target->record->structure.isPeriodic = true;
+		target->record->structure.cell.vectors = {
+			glm::vec3(5.43f, 0, 0), glm::vec3(1.25f, 4.7f, 0), glm::vec3(0.3f, 0.8f, 6.2f)};
+		for (auto &atom : target->record->structure.atoms)
+			atom.fractional = target->record->structure.CartesianToFractional(atom.position);
+		Window().selectedAtomIndices = {0, 2};
+		auto command = DuplicateCommand(glm::vec3(0.0f));
+		CommandContext context;
+		ASSERT_TRUE(command->Execute(context).HasValue());
+		ASSERT_EQ(record->structure.atoms.size(), 5u);
+		auto selected = Window().selectedAtomIndices;
+		std::sort(selected.begin(), selected.end());
+		EXPECT_EQ(selected, (std::vector<std::size_t>{3, 4}));
+		for (std::size_t copy = 3; copy < 5; ++copy)
+		{
+			const auto &source = record->structure.atoms[(copy - 3) * 2];
+			EXPECT_EQ(record->structure.atoms[copy].position, source.position);
+			EXPECT_EQ(record->structure.atoms[copy].fractional, source.fractional);
+		}
+	}
+
+	TEST_F(RendererAtomDuplicateCommandTests, DefaultOffsetDuplicateKeepsItsOwnUndoEntry)
+	{
+		Window().selectedAtomIndices = {1};
+		auto command = CreateDuplicateSelectedAtomsCommand(domain, renderer, styles, {}, Window().windowId);
+		CommandContext context;
+		ASSERT_TRUE(command->Execute(context).HasValue());
+		UndoStack stack;
+		ASSERT_TRUE(stack.PushExecuted(std::move(command)));
+		ASSERT_EQ(record->structure.atoms.size(), 4u);
+		EXPECT_EQ(record->structure.atoms.back().position, glm::vec3(2.5f, 0, 0));
+		EXPECT_EQ(Window().selectedAtomIndices, (std::vector<std::size_t>{3}));
+		EXPECT_EQ(stack.GetUndoDepth(), 1u);
+		EXPECT_FALSE(stack.HasActiveGroup());
+	}
+
+	TEST_F(RendererAtomDuplicateCommandTests, DuplicateAndTransformGroupUndoAndRedoAsOneStep)
+	{
+		Window().selectedAtomIndices = {0, 2};
+		const auto before = record->structure.atoms;
+		UndoStack stack;
+		ASSERT_TRUE(stack.BeginGroup("Duplicate and transform selection").HasValue());
+		CommandContext context;
+		auto duplicate = DuplicateCommand(glm::vec3(0.0f));
+		ASSERT_TRUE(duplicate->Execute(context).HasValue());
+		ASSERT_TRUE(stack.PushExecuted(std::move(duplicate)));
+		auto copies = Window().selectedAtomIndices;
+		std::sort(copies.begin(), copies.end());
+		GizmoTransformPayload payload{Window().windowId, copies, {glm::vec3(1, 2, 0), glm::vec3(3, 2, 0)}};
+		auto transform = CreateTransformSelectedAtomsCommand(domain, renderer, styles, {}, std::move(payload));
+		ASSERT_TRUE(transform->Execute(context).HasValue());
+		ASSERT_TRUE(stack.PushExecuted(std::move(transform)));
+		ASSERT_TRUE(stack.EndGroup().HasValue());
+		EXPECT_EQ(stack.GetUndoDepth(), 1u);
+		ASSERT_TRUE(stack.Undo().HasValue());
+		ASSERT_EQ(record->structure.atoms.size(), before.size());
+		for (std::size_t index = 0; index < before.size(); ++index)
+			EXPECT_EQ(record->structure.atoms[index].position, before[index].position);
+		auto restoredSelection = Window().selectedAtomIndices;
+		std::sort(restoredSelection.begin(), restoredSelection.end());
+		EXPECT_EQ(restoredSelection, (std::vector<std::size_t>{0, 2}));
+		ASSERT_TRUE(stack.Redo().HasValue());
+		ASSERT_EQ(record->structure.atoms.size(), 5u);
+		EXPECT_EQ(record->structure.atoms[3].position, glm::vec3(1, 2, 0));
+		EXPECT_EQ(record->structure.atoms[4].position, glm::vec3(3, 2, 0));
+		EXPECT_EQ(stack.GetUndoDepth(), 1u);
+	}
+
+	TEST_F(RendererAtomDuplicateCommandTests, CancelDuplicatePreservesAtomsHistoryAndExistingRedoBranch)
+	{
+		Window().selectedAtomIndices = {1};
+		UndoStack stack;
+		CommandContext context;
+		for (int index = 0; index < 2; ++index)
+		{
+			auto previous = DuplicateCommand();
+			ASSERT_TRUE(previous->Execute(context).HasValue());
+			ASSERT_TRUE(stack.PushExecuted(std::move(previous)));
+		}
+		ASSERT_TRUE(stack.Undo().HasValue());
+		stack.MarkClean();
+		const auto before = record->structure.atoms;
+		const auto selection = Window().selectedAtomIndices;
+		const auto undoDepth = stack.GetUndoDepth();
+		const auto redoDepth = stack.GetRedoDepth();
+		ASSERT_TRUE(stack.BeginGroup("Duplicate and transform selection").HasValue());
+		auto duplicate = DuplicateCommand(glm::vec3(0.0f));
+		ASSERT_TRUE(duplicate->Execute(context).HasValue());
+		ASSERT_TRUE(stack.PushExecuted(std::move(duplicate)));
+		Window().structure.atoms.back().cartesianPosition += glm::vec3(9.0f);
+		ASSERT_TRUE(stack.CancelGroup().HasValue());
+		ASSERT_EQ(record->structure.atoms.size(), before.size());
+		for (std::size_t index = 0; index < before.size(); ++index)
+		{
+			EXPECT_EQ(record->structure.atoms[index].position, before[index].position);
+			EXPECT_EQ(Window().structure.atoms[index].cartesianPosition, before[index].position);
+		}
+		EXPECT_EQ(Window().selectedAtomIndices, selection);
+		EXPECT_EQ(stack.GetUndoDepth(), undoDepth);
+		EXPECT_EQ(stack.GetRedoDepth(), redoDepth);
+		EXPECT_TRUE(stack.IsClean());
+		EXPECT_FALSE(stack.HasActiveGroup());
+		ASSERT_TRUE(stack.Redo().HasValue());
+		EXPECT_EQ(record->structure.atoms.size(), before.size() + 1);
+	}
+
 } // namespace DefectStudio::Tests

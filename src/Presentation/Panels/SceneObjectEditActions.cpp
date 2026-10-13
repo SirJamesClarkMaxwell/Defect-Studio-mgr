@@ -33,8 +33,9 @@ namespace DefectStudio
 				: static_cast<std::size_t>(std::distance(windowState.freeLabels.begin(), found));
 		}
 
-		[[nodiscard]] const std::vector<SceneObjectId> &SelectionFor(
-			const RendererWindowState &windowState, const SceneObjectEditKind kind)
+		template <typename Window>
+		[[nodiscard]] auto &SelectionFor(
+			Window &windowState, const SceneObjectEditKind kind)
 		{
 			switch (kind)
 			{
@@ -83,7 +84,7 @@ namespace DefectStudio
 		}
 	}
 
-	void DuplicateSelectedSceneFreeLabels(RendererWindowState &windowState)
+	void DuplicateSelectedSceneFreeLabels(RendererWindowState &windowState, const glm::vec3 &offset)
 	{
 		if (windowState.selectedFreeLabels.empty())
 			return;
@@ -103,7 +104,7 @@ namespace DefectStudio
 		{
 			copy.id = windowState.sceneRegistry.AllocateObjectId();
 			copy.persistKey.clear();
-			copy.worldPosition += kFreeLabelCopyOffset;
+			copy.worldPosition += offset;
 			newIds.push_back(copy.id);
 			windowState.freeLabels.push_back(std::move(copy));
 		}
@@ -179,7 +180,8 @@ namespace DefectStudio
 	bool ExecuteSceneObjectEditAction(
 		RendererWindowState &windowState,
 		const SceneObjectEditKind kind,
-		const SceneObjectEditAction action)
+		const SceneObjectEditAction action,
+		const glm::vec3 &offset)
 	{
 		if (!CanExecuteSceneObjectEditAction(windowState, kind, action))
 			return false;
@@ -219,13 +221,20 @@ namespace DefectStudio
 		case SceneObjectEditAction::Duplicate:
 			switch (kind)
 			{
-			case SceneObjectEditKind::FreeLabel: DuplicateSelectedSceneFreeLabels(windowState); break;
-			case SceneObjectEditKind::PinnedMeasurement: DuplicateSelectedScenePinnedMeasurements(windowState); break;
-			case SceneObjectEditKind::Orbital: DuplicateSelectedSceneOrbitals(windowState); break;
-			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState); break;
-			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState); break;
+			case SceneObjectEditKind::FreeLabel: DuplicateSelectedSceneFreeLabels(windowState, offset); break;
+			case SceneObjectEditKind::PinnedMeasurement: DuplicateSelectedScenePinnedMeasurements(windowState, offset); break;
+			case SceneObjectEditKind::Orbital: DuplicateSelectedSceneOrbitals(windowState, offset); break;
+			case SceneObjectEditKind::Plane: DuplicateSelectedScenePlanes(windowState, offset); break;
+			case SceneObjectEditKind::Path: DuplicateSelectedScenePaths(windowState, offset); break;
 			case SceneObjectEditKind::Density: DuplicateSelectedSceneDensities(windowState); break;
 			case SceneObjectEditKind::HideVolume: DuplicateSelectedSceneHideVolumes(windowState); break;
+			}
+			if (offset == glm::vec3(0.0f))
+			{
+				std::vector<SceneObjectId> copies = SelectionFor(windowState, kind);
+				ClearAllSceneSelection(windowState);
+				SelectionFor(windowState, kind) = std::move(copies);
+				SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
 			}
 			break;
 
@@ -260,7 +269,7 @@ namespace DefectStudio
 		return true;
 	}
 
-	bool HandleSceneObjectEditShortcut(RendererWindowState &window, SceneObjectEditAction action)
+	bool HandleSceneObjectEditShortcut(RendererWindowState &window, SceneObjectEditAction action, const glm::vec3 &offset)
 	{
 		if (!window.selectedAtomIndices.empty() || !window.selectedBondIndices.empty())
 		{
@@ -283,7 +292,7 @@ namespace DefectStudio
 		{
 			if (SelectionFor(window, kind).empty()) continue;
 			selected = true;
-			(void)ExecuteSceneObjectEditAction(window, kind, action);
+			(void)ExecuteSceneObjectEditAction(window, kind, action, offset);
 			if (action != SceneObjectEditAction::Delete) return true;
 		}
 		if (selected || !window.selectedVacancies.empty()) return true;
@@ -324,11 +333,14 @@ namespace DefectStudio
 				else if (requested.Value() == "renderer.selection.duplicate") action = SceneObjectEditAction::Duplicate;
 				else return {};
 				auto &layer = m_Layer.get();
-				const auto &focusedId = layer.GetFocusedViewportWindowId();
+				const auto windowId = context.TryGet<std::string>("renderer.window_id");
+				const auto offset = context.TryGet<glm::vec3>("renderer.duplicate_offset");
+				const auto &focusedId = windowId != nullptr ? *windowId : layer.GetFocusedViewportWindowId();
 				for (auto &window : layer.GetWindows())
 					if (window.windowId == focusedId || (focusedId.empty() && layer.GetWindows().size() == 1))
 					{
-						*handled.Value() = HandleSceneObjectEditShortcut(window, action);
+						*handled.Value() = HandleSceneObjectEditShortcut(
+							window, action, offset != nullptr ? *offset : glm::vec3(0.5f, 0.0f, 0.0f));
 						break;
 					}
 				return {};

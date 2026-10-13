@@ -301,10 +301,13 @@ namespace DefectStudio
 			WeakRef<RendererLayer> rendererLayer,
 			AtomStyleTable atomStyleTable,
 			ElementPropertiesTable elementPropertiesTable,
-			CommandContext &)
+			CommandContext &context)
 		{
+			const auto offset = context.TryGet<glm::vec3>("renderer.duplicate_offset");
+			const auto windowId = context.TryGet<std::string>("renderer.window_id");
 			return CreateDuplicateSelectedAtomsCommand(
-				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable));
+				std::move(domainLayer), std::move(rendererLayer), std::move(atomStyleTable), std::move(elementPropertiesTable),
+				windowId != nullptr ? *windowId : std::string{}, offset != nullptr ? *offset : glm::vec3(0.5f, 0.0f, 0.0f));
 		}
 
 		Unique<ICommand> MakeNudgeSelectedAtomsCommand(

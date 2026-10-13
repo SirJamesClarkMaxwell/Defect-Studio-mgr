@@ -25,14 +25,14 @@ namespace DefectStudio
 				: static_cast<std::size_t>(std::distance(objects.begin(), found));
 		}
 
-		void OffsetAndDetach(RendererWindowState::SceneOrbital &orbital)
+		void OffsetAndDetach(RendererWindowState::SceneOrbital &orbital, const glm::vec3 &offset)
 		{
-			OffsetSceneClipboardCopy(orbital);
+			OffsetSceneClipboardCopy(orbital, offset);
 		}
 
-		void OffsetAndDetach(RendererWindowState::ScenePlane &plane)
+		void OffsetAndDetach(RendererWindowState::ScenePlane &plane, const glm::vec3 &offset)
 		{
-			OffsetSceneClipboardCopy(plane);
+			OffsetSceneClipboardCopy(plane, offset);
 		}
 
 		template <typename Object, typename Offset>
@@ -94,7 +94,7 @@ namespace DefectStudio
 			windowState.selectedSceneOrbitals, GetSceneOrbitalClipboard());
 	}
 
-	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState)
+	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState, const glm::vec3 &offset)
 	{
 		if (windowState.selectedSceneOrbitals.empty())
 			return;
@@ -102,7 +102,7 @@ namespace DefectStudio
 		windowState.selectedSceneOrbitals = DuplicateSelectedObjects(
 			windowState, windowState.sceneOrbitals, windowState.selectedSceneOrbitals,
 			windowState.sceneOrbitals,
-			[](RendererWindowState::SceneOrbital &orbital) { OffsetAndDetach(orbital); });
+			[&offset](RendererWindowState::SceneOrbital &orbital) { OffsetAndDetach(orbital, offset); });
 		SceneSystem::SyncLabelEntities(windowState.sceneRegistry, windowState);
 	}
 
@@ -124,7 +124,7 @@ namespace DefectStudio
 			windowState.selectedScenePlanes, GetScenePlaneClipboard());
 	}
 
-	void DuplicateSelectedScenePlanes(RendererWindowState &windowState)
+	void DuplicateSelectedScenePlanes(RendererWindowState &windowState, const glm::vec3 &offset)
 	{
 		if (windowState.selectedScenePlanes.empty())
 			return;
@@ -132,7 +132,7 @@ namespace DefectStudio
 		windowState.selectedScenePlanes = DuplicateSelectedObjects(
 			windowState, windowState.scenePlanes, windowState.selectedScenePlanes,
 			windowState.scenePlanes,
-			[](RendererWindowState::ScenePlane &plane) { OffsetAndDetach(plane); });
+			[&offset](RendererWindowState::ScenePlane &plane) { OffsetAndDetach(plane, offset); });
 	}
 
 	void PasteScenePlanesFromClipboard(RendererWindowState &windowState)

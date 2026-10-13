@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cmath>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <string_view>
 #include <system_error>
@@ -128,15 +129,37 @@ namespace DefectStudio
 			return 0;
 		}
 
+		// Lattice-unit translations use the raw cell vector, so "1/8" moves by exactly a/8.
 		[[nodiscard]] glm::vec3 NumericTranslationDirection(const ModalTransformSession &session)
 		{
-			if (session.constraint.kind == ConstraintKind::None)
-				return NormalizedColumn(ResolveBasis(session.orientation, session.bases), 0);
-
-			const int axis = session.constraint.kind == ConstraintKind::Axis
-				? session.constraint.axis
+			const bool free = session.constraint.kind == ConstraintKind::None;
+			const int axis = free ? 0
+				: session.constraint.kind == ConstraintKind::Axis ? session.constraint.axis
 				: FirstPlaneAxis(session.constraint.axis);
-			return NormalizedColumn(ResolveBasis(session.constraint.space, session.bases), axis);
+			const glm::mat3 basis = ResolveBasis(free ? session.orientation : session.constraint.space, session.bases);
+			if (axis < 0 || axis > 2)
+				return glm::vec3(0.0f);
+			return session.op == ModalTransformOp::Translate && UsesLatticeUnits(session)
+				? basis[axis]
+				: NormalizedColumn(basis, axis);
+		}
+
+		[[nodiscard]] float SessionSnapStep(
+			const ModalTransformSession &session, SnapMode mode, const TransformSnapSteps &steps)
+		{
+			if (session.op != ModalTransformOp::Translate || !UsesLatticeUnits(session))
+				return ResolveSnapStep(session.op, mode, steps);
+			if (mode == SnapMode::Off)
+				return 0.0f;
+			return mode == SnapMode::Fine ? steps.latticeFraction / 3.0f : steps.latticeFraction;
+		}
+
+		void WriteFraction(std::ostream &output, float value)
+		{
+			if (const auto fraction = NearestSimpleFraction(value))
+				output << fraction->first << '/' << fraction->second;
+			else
+				output << std::fixed << std::setprecision(4) << value;
 		}
 
 		[[nodiscard]] glm::vec3 SnapTranslation(
@@ -148,7 +171,10 @@ namespace DefectStudio
 			const TransformOrientation space = session.constraint.kind == ConstraintKind::None
 				? session.orientation
 				: session.constraint.space;
-			const glm::mat3 basis = NormalizedBasis(ResolveBasis(space, session.bases));
+			// Lattice units: snap the coordinates in the raw (skewed, unnormalized) cell basis.
+			const glm::mat3 basis = UsesLatticeUnits(session)
+				? *session.bases.lattice
+				: NormalizedBasis(ResolveBasis(space, session.bases));
 			if (std::abs(glm::determinant(basis)) <= kEpsilon)
 				return translation;
 
@@ -210,6 +236,17 @@ namespace DefectStudio
 		if (space == TransformOrientation::Defect && bases.defect.has_value())
 			return *bases.defect;
 		return glm::mat3(1.0f);
+	}
+
+	bool UsesLatticeUnits(const ModalTransformSession &session)
+	{
+		const TransformOrientation space = session.constraint.kind == ConstraintKind::None
+			? session.orientation
+			: session.constraint.space;
+		if (!session.latticeUnits || space != TransformOrientation::Lattice || !session.bases.lattice)
+			return false;
+		const float determinant = glm::determinant(*session.bases.lattice);
+		return std::isfinite(determinant) && std::abs(determinant) > kEpsilon;
 	}
 
 	TransformConstraint CycleConstraint(
@@ -311,8 +348,19 @@ namespace DefectStudio
 	{
 		if (character >= '0' && character <= '9')
 			session.numericText += character;
-		else if (character == '.' && session.numericText.find('.') == std::string::npos)
-			session.numericText += character;
+		else if (character == '.')
+		{
+			// One decimal point per side of the fraction bar.
+			const std::size_t slash = session.numericText.find('/');
+			if (session.numericText.find('.', slash == std::string::npos ? 0 : slash + 1) == std::string::npos)
+				session.numericText += character;
+		}
+		else if (character == '/')
+		{
+			if (!session.numericText.empty() && session.numericText.back() >= '0' &&
+				session.numericText.back() <= '9' && session.numericText.find('/') == std::string::npos)
+				session.numericText += character;
+		}
 		else if (character == '-')
 		{
 			if (!session.numericText.empty() && session.numericText.front() == '-')
@@ -330,15 +378,47 @@ namespace DefectStudio
 
 	std::optional<float> NumericValue(const ModalTransformSession &session)
 	{
-		if (session.numericText.empty())
+		const auto parse = [](std::string_view text) -> std::optional<float> {
+			if (text.empty())
+				return std::nullopt;
+			float value = 0.0f;
+			const auto [parsedEnd, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+			if (error != std::errc{} || parsedEnd != text.data() + text.size() || !std::isfinite(value))
+				return std::nullopt;
+			return value;
+		};
+		const std::string_view text = session.numericText;
+		const std::size_t slash = text.find('/');
+		const std::optional<float> numerator = parse(text.substr(0, slash));
+		if (slash == std::string_view::npos || !numerator)
+			return numerator;
+		const std::optional<float> denominator = parse(text.substr(slash + 1));
+		if (!denominator || *denominator == 0.0f)
 			return std::nullopt;
-		float value = 0.0f;
-		const auto [parsedEnd, error] = std::from_chars(
-			session.numericText.data(), session.numericText.data() + session.numericText.size(), value);
-		if (error != std::errc{} || parsedEnd != session.numericText.data() + session.numericText.size() ||
-			!std::isfinite(value))
+		const float value = *numerator / *denominator;
+		return std::isfinite(value) ? std::optional<float>(value) : std::nullopt;
+	}
+
+	std::optional<std::pair<int, int>> NearestSimpleFraction(float value)
+	{
+		if (!std::isfinite(value))
 			return std::nullopt;
-		return value;
+		std::optional<std::pair<int, int>> nearest;
+		double bestError = 1.0e-4;
+		for (int q = 1; q <= 24; ++q)
+		{
+			const double p = std::round(static_cast<double>(value) * q);
+			if (p < std::numeric_limits<int>::min() || p > std::numeric_limits<int>::max())
+				continue;
+			const double error = std::abs(static_cast<double>(value) - p / q);
+			// Strictly better only: ties keep the smaller denominator.
+			if (error <= bestError && (!nearest || error < bestError))
+			{
+				nearest = std::pair{static_cast<int>(p), q};
+				bestError = error;
+			}
+		}
+		return nearest;
 	}
 
 	TransformDelta EvaluateModalTransform(
@@ -364,7 +444,7 @@ namespace DefectStudio
 			return result;
 		}
 
-		const float snapStep = ResolveSnapStep(session.op, snap, steps);
+		const float snapStep = SessionSnapStep(session, snap, steps);
 		if (session.op == ModalTransformOp::Translate)
 		{
 			const Ray startRay = ScreenRay(view, session.startMouse);
@@ -484,7 +564,26 @@ namespace DefectStudio
 
 		std::ostringstream output;
 		output << OperationName(session.op) << "  " << constraintName << " (" << OrientationName(space) << ")  ";
-		if (!session.numericText.empty())
+		const bool lattice = session.op == ModalTransformOp::Translate && UsesLatticeUnits(session);
+		if (lattice)
+		{
+			// "+1/8 a  = 0.679 A": each free lattice coordinate as a fraction, then the Cartesian length.
+			if (!session.numericText.empty())
+				output << "D " << session.numericText << "  ";
+			const glm::vec3 coordinates = glm::inverse(*session.bases.lattice) * delta.translation;
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if ((session.constraint.kind == ConstraintKind::Axis && session.constraint.axis != axis) ||
+					(session.constraint.kind == ConstraintKind::Plane && session.constraint.axis == axis))
+					continue;
+				if (coordinates[axis] >= 0.0f)
+					output << '+';
+				WriteFraction(output, coordinates[axis]);
+				output << ' ' << letters[axis] << "  ";
+			}
+			output << "= " << std::fixed << std::setprecision(3) << glm::length(delta.translation) << " A";
+		}
+		else if (!session.numericText.empty())
 			output << (session.op == ModalTransformOp::Rotate ? "A " : session.op == ModalTransformOp::Scale ? "F " : "D ")
 				<< session.numericText;
 		else
@@ -501,9 +600,15 @@ namespace DefectStudio
 			}
 		}
 
-		const float snapStep = ResolveSnapStep(session.op, snap, steps);
+		const float snapStep = SessionSnapStep(session, snap, steps);
 		if (snapStep > 0.0f)
-			output << "  Snap " << std::defaultfloat << snapStep;
+		{
+			output << "  Snap ";
+			if (lattice)
+				WriteFraction(output, snapStep);
+			else
+				output << std::defaultfloat << snapStep;
+		}
 		return output.str();
 	}
 } // namespace DefectStudio

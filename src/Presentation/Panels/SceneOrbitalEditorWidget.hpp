@@ -57,11 +57,13 @@ namespace DefectStudio
 	// Paste resolves persisted anchors in the destination; Duplicate still offsets and detaches.
 	[[nodiscard]] SceneObjectClipboard &GetSceneOrbitalClipboard();
 	void CopySceneOrbitalsToClipboard(const RendererWindowState &windowState);
-	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState);
+	void DuplicateSelectedSceneOrbitals(RendererWindowState &windowState,
+		const glm::vec3 &offset = glm::vec3(0.5f, 0.0f, 0.0f));
 	void PasteSceneOrbitalsFromClipboard(RendererWindowState &windowState);
 
 	[[nodiscard]] SceneObjectClipboard &GetScenePlaneClipboard();
 	void CopyScenePlanesToClipboard(const RendererWindowState &windowState);
-	void DuplicateSelectedScenePlanes(RendererWindowState &windowState);
+	void DuplicateSelectedScenePlanes(RendererWindowState &windowState,
+		const glm::vec3 &offset = glm::vec3(0.5f, 0.0f, 0.0f));
 	void PasteScenePlanesFromClipboard(RendererWindowState &windowState);
 } // namespace DefectStudio

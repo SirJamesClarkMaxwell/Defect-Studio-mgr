@@ -179,12 +179,14 @@ namespace DefectStudio
 				WeakRef<RendererLayer> rendererLayer,
 				AtomStyleTable atomStyleTable,
 				ElementPropertiesTable elementPropertiesTable,
-				std::string windowId)
+				std::string windowId,
+				glm::vec3 offset)
 				: m_DomainLayer(std::move(domainLayer)),
 				  m_RendererLayer(std::move(rendererLayer)),
 				  m_AtomStyleTable(std::move(atomStyleTable)),
 				  m_ElementPropertiesTable(std::move(elementPropertiesTable)),
-				  m_WindowId(std::move(windowId))
+				  m_WindowId(std::move(windowId)),
+				  m_Offset(offset)
 			{
 			}
 
@@ -219,9 +221,7 @@ namespace DefectStudio
 				m_SourceIndices = windowState.selectedAtomIndices;
 				std::sort(m_SourceIndices.begin(), m_SourceIndices.end());
 
-				// Blender's duplicate drops the copy right next to the original rather than
-				// exactly on top of it - small fixed offset, no smarter placement heuristic.
-				constexpr glm::vec3 kDuplicateOffset(0.5f, 0.0f, 0.0f);
+				// Ctrl+D keeps its fixed nudge; Shift+D supplies zero for an in-place copy.
 				CrystalStructure &structure = target->record->structure;
 				std::vector<std::size_t> newIndices;
 				newIndices.reserve(m_SourceIndices.size());
@@ -232,8 +232,9 @@ namespace DefectStudio
 
 					PointDefectOperation operation;
 					operation.atom = structure.atoms[sourceIndex];
-					operation.atom.position += kDuplicateOffset;
-					operation.atom.fractional = structure.CartesianToFractional(operation.atom.position);
+					operation.atom.position += m_Offset;
+					if (m_Offset != glm::vec3(0.0f))
+						operation.atom.fractional = structure.CartesianToFractional(operation.atom.position);
 					newIndices.push_back(structure.atoms.size());
 					Result<void> result = ApplyInterstitial(structure, operation);
 					if (!result)
@@ -285,6 +286,7 @@ namespace DefectStudio
 			AtomStyleTable m_AtomStyleTable;
 			ElementPropertiesTable m_ElementPropertiesTable;
 			std::string m_WindowId;
+			glm::vec3 m_Offset;
 			std::string m_WindowIdResolved;
 			std::vector<AtomSite> m_PreviousAtoms;
 			std::vector<Bond> m_PreviousBonds;
@@ -1266,14 +1268,16 @@ namespace DefectStudio
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
 		ElementPropertiesTable elementPropertiesTable,
-		std::string windowId)
+		std::string windowId,
+		glm::vec3 offset)
 	{
 		return CreateUnique<DuplicateSelectedAtomsCommand>(
 			std::move(domainLayer),
 			std::move(rendererLayer),
 			std::move(atomStyleTable),
 			std::move(elementPropertiesTable),
-			std::move(windowId));
+			std::move(windowId),
+			offset);
 	}
 
 	Unique<ICommand> CreateAddAtomAtCoordinatesCommand(

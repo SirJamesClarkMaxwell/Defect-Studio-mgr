@@ -44,6 +44,10 @@ namespace DefectStudio
 			return false;
 		if (requireRepeatable && !binding->repeatable)
 			return false;
+		// The viewport handles Shift+D as an in-place duplicate gesture; keep the view command in the palette.
+		if (chord == KeyChord{KeyCode::D, KeyModifiers::Shift} &&
+			binding->commandId.value == "renderer.view.set_as_project_default")
+			return true;
 
 		CommandContext context(ContextID{"core.keybinding"});
 		context.SetSource("CoreLayer shortcut " + ToString(chord));

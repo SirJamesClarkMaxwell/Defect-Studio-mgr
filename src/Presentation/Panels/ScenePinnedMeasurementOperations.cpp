@@ -22,13 +22,13 @@ namespace DefectStudio
 			&RendererWindowState::pinnedMeasurements, window.selectedPinnedMeasurements);
 	}
 
-	void DuplicateSelectedScenePinnedMeasurements(RendererWindowState &window)
+	void DuplicateSelectedScenePinnedMeasurements(RendererWindowState &window, const glm::vec3 &offset)
 	{
 		SceneObjectClipboard copies;
 		CopySceneObjectClipboard(window, &RendererWindowState::pinnedMeasurements,
 			window.selectedPinnedMeasurements, copies);
 		PasteSceneObjectClipboard(window, copies, &RendererWindowState::pinnedMeasurements,
-			window.selectedPinnedMeasurements);
+			window.selectedPinnedMeasurements, offset);
 	}
 
 	void EraseScenePinnedMeasurements(RendererWindowState &window, const std::vector<SceneObjectId> &ids)

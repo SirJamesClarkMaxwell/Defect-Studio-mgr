@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -74,6 +75,7 @@ namespace DefectStudio
 		float translate = 0.1f;
 		float rotateDegrees = 5.0f;
 		float scale = 0.1f;
+		float latticeFraction = 0.125f; // Increment step in lattice units; Fine = latticeFraction / 3.
 	};
 
 	struct ModalTransformView
@@ -108,6 +110,8 @@ namespace DefectStudio
 		TransformConstraint constraint;
 		// Non-empty = numeric override active (even when it does not parse yet, e.g. "-").
 		std::string numericText;
+		// Lattice orientation only: translations are fractions of the non-normalized cell vectors.
+		bool latticeUnits = true;
 	};
 
 	[[nodiscard]] ModalTransformSession BeginModalTransform(
@@ -116,6 +120,9 @@ namespace DefectStudio
 
 	// Global, or a missing Local/Lattice frame, resolves to identity.
 	[[nodiscard]] glm::mat3 ResolveBasis(TransformOrientation space, const TransformBases &bases);
+	// True when latticeUnits is on, the translation frame is Lattice (constraint.space, or
+	// orientation for None), and bases.lattice is present, finite and non-singular.
+	[[nodiscard]] bool UsesLatticeUnits(const ModalTransformSession &session);
 
 	// One X/Y/Z press (plane = Shift held). Same axis and kind as `current` advances the cycle
 	// primary -> secondary -> None; a different axis or kind restarts at primary.
@@ -137,16 +144,21 @@ namespace DefectStudio
 
 	// Nearest multiple of step; step <= 0 returns value unchanged.
 	[[nodiscard]] float SnapValue(float value, float step);
-	// Off -> 0; Increment -> the op's step; Fine -> step / 10.
+	// Angstrom/degrees/factor steps: Off -> 0; Increment -> the op's step; Fine -> step / 10.
+	// Lattice translation uses latticeFraction (Fine: / 3) inside EvaluateModalTransform instead.
 	[[nodiscard]] float ResolveSnapStep(ModalTransformOp op, SnapMode mode, const TransformSnapSteps &steps);
 	// Ctrl -> Increment, Ctrl+Shift -> Fine, otherwise Off.
 	[[nodiscard]] SnapMode SnapModeFromModifiers(bool ctrl, bool shift);
 
-	// '0'-'9' append; '.' only once; '-' toggles a leading minus; anything else is ignored.
+	// '0'-'9' append; '.' once per numerator/denominator; '-' toggles a leading minus.
+	// '/' appends once, only right after a digit and never as the first char; other input is ignored.
 	void AppendNumericChar(ModalTransformSession &session, char character);
 	void EraseNumericChar(ModalTransformSession &session);
-	// nullopt when empty or not yet a number ("-", ".", "-.").
+	// Accepts "[-]num" and "[-]num/num"; nullopt for incomplete/invalid or non-finite values,
+	// a zero denominator or a trailing '/'.
 	[[nodiscard]] std::optional<float> NumericValue(const ModalTransformSession &session);
+	// Nearest p/q with q <= 24 within 1e-4 (smallest denominator on ties), else nullopt.
+	[[nodiscard]] std::optional<std::pair<int, int>> NearestSimpleFraction(float value);
 
 	// Call once per frame. Numeric override (numericText non-empty) ignores the mouse and snapping:
 	// Translate moves `value` along the constraint axis (None -> column 0 of the orientation basis,
@@ -159,6 +171,9 @@ namespace DefectStudio
 	// turning counter-clockwise as seen by the viewer; axis = constraint axis (Plane: its excluded
 	// column; None: toward the viewer); snapped in degrees. Scale = |mouse - pivotScreen| /
 	// |startMouse - pivotScreen|, snapped.
+	// Under UsesLatticeUnits, numeric Translate uses the raw lattice column instead of its unit
+	// direction, and mouse snapping uses inverse(raw lattice), latticeFraction (Fine: / 3) and
+	// the same allowed/zeroed coordinates. Unsnapped mouse translation is unchanged.
 	[[nodiscard]] TransformDelta EvaluateModalTransform(
 		ModalTransformSession &session, const ModalTransformView &view, const glm::vec2 &mouse, SnapMode snap,
 		const TransformSnapSteps &steps);
@@ -175,6 +190,8 @@ namespace DefectStudio
 	// One line, e.g. "Move  X (Global)  D 2.000 A  Snap 0.1". Names the op (Move/Rotate/Scale), the
 	// constraint axis letters (X/Y/Z, or a/b/c under Lattice; plane lists both letters), the space
 	// name, the current value (typed text when numeric is active) and the snap step when snapping.
+	// Lattice translation shows each allowed coordinate as a simple fraction or 4 decimals,
+	// then the whole translation's length in A; typed text stays verbatim, snap steps use fractions.
 	[[nodiscard]] std::string FormatModalTransformHeader(
 		const ModalTransformSession &session, const TransformDelta &delta, SnapMode snap,
 		const TransformSnapSteps &steps);

@@ -38,7 +38,8 @@ namespace DefectStudio
 	[[nodiscard]] SceneObjectClipboard &GetScenePathClipboard();
 
 	void CopyScenePathsToClipboard(const RendererWindowState &windowState);
-	void DuplicateSelectedScenePaths(RendererWindowState &windowState);
+	void DuplicateSelectedScenePaths(RendererWindowState &windowState,
+		const glm::vec3 &offset = glm::vec3(0.5f, 0.0f, 0.0f));
 	void PasteScenePathsFromClipboard(RendererWindowState &windowState);
 	void EraseScenePaths(RendererWindowState &windowState, const std::vector<SceneObjectId> &ids);
 

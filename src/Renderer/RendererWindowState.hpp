@@ -317,6 +317,8 @@ namespace DefectStudio
 		bool defectFrameSelected = false;
 		// Ctrl+D was pressed: start moving the copies (G) on the next frame, once they are the selection.
 		bool duplicateMovePending = false;
+		// Shift+D owns an open undo group until its modal transform is confirmed or cancelled.
+		bool duplicateInPlacePending = false;
 		// Temporary parenting: objects that G/R/S of the selected defect axes carry along, about the
 		// axes' origin. Per session, never saved; stale ids/indices are skipped.
 		struct DefectFrameChildren

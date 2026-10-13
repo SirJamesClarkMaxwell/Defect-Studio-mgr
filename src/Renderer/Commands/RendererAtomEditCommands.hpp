@@ -60,7 +60,8 @@ namespace DefectStudio
 		WeakRef<RendererLayer> rendererLayer,
 		AtomStyleTable atomStyleTable,
 		ElementPropertiesTable elementPropertiesTable,
-		std::string windowId = {});
+		std::string windowId = {},
+		glm::vec3 offset = glm::vec3(0.5f, 0.0f, 0.0f));
 
 	// Adds a Manual-origin bond between exactly 2 selected atoms ('J') - undoable. Fails if the
 	// selection isn't exactly 2 atoms or the two are already bonded (Auto or Manual).

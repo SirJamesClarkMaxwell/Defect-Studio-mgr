@@ -43,14 +43,14 @@ namespace DefectStudio
 		// Inserts each copy and returns the ids that actually landed. One snapshot has already been
 		// pushed by the caller, so this runs on a context with no undo sink.
 		[[nodiscard]] std::vector<SceneObjectId> AppendCopies(
-			RendererWindowState &windowState, std::vector<ScenePath> copies)
+			RendererWindowState &windowState, std::vector<ScenePath> copies, const glm::vec3 &offset)
 		{
 			const PathEditContext silent = MakeSilentPathEditContext(windowState);
 			std::vector<SceneObjectId> newIds;
 			newIds.reserve(copies.size());
 			for (ScenePath &copy : copies)
 			{
-				OffsetAndDetachScenePath(copy, kScenePathCopyOffset);
+				OffsetAndDetachScenePath(copy, offset);
 				// AppendScenePath mints the id, so the copy must not arrive carrying the original's.
 				copy.id = SceneObjectId{};
 				if (const Result<SceneObjectId> added = AddScenePath(silent, std::move(copy)); added.HasValue())
@@ -187,7 +187,7 @@ namespace DefectStudio
 		}
 	}
 
-	void DuplicateSelectedScenePaths(RendererWindowState &windowState)
+	void DuplicateSelectedScenePaths(RendererWindowState &windowState, const glm::vec3 &offset)
 	{
 		std::vector<ScenePath> copies = CollectSelected(windowState);
 		if (copies.empty())
@@ -195,7 +195,7 @@ namespace DefectStudio
 		// One snapshot for the whole batch, before anything is inserted: otherwise a five-path
 		// duplicate needs five undos to take back.
 		PushSceneObjectsUndoSnapshot(windowState, CaptureSceneObjectsSnapshot(windowState));
-		std::vector<SceneObjectId> newIds = AppendCopies(windowState, std::move(copies));
+		std::vector<SceneObjectId> newIds = AppendCopies(windowState, std::move(copies), offset);
 		if (!newIds.empty())
 			windowState.selectedScenePaths = std::move(newIds);
 	}

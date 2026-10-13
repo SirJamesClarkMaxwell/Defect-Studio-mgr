@@ -80,6 +80,8 @@ namespace DefectStudio
 				AppendNumericChar(session, '-');
 			if (ImGui::IsKeyPressed(ImGuiKey_Period, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadDecimal, false))
 				AppendNumericChar(session, '.');
+			if (ImGui::IsKeyPressed(ImGuiKey_Slash, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadDivide, false))
+				AppendNumericChar(session, '/');
 			if (ImGui::IsKeyPressed(ImGuiKey_Backspace, false))
 				EraseNumericChar(session);
 		}
@@ -156,6 +158,10 @@ namespace DefectStudio
 			ImGui::GetForegroundDrawList()->AddText(
 				ImVec2(view.viewportOrigin.x + 12.0f, view.viewportOrigin.y + 12.0f),
 				IM_COL32(255, 240, 150, 255), header.c_str());
+			ImGui::GetForegroundDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f,
+				ImVec2(view.viewportOrigin.x + 12.0f, view.viewportOrigin.y + 16.0f + ImGui::GetFontSize()),
+				IM_COL32(180, 180, 180, 220),
+				"X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Enter · Esc");
 		}
 
 		[[nodiscard]] float RotationAmount(
@@ -191,15 +197,15 @@ namespace DefectStudio
 			return local[0][0];
 		}
 
-		void CommitAtomPreview(
+		[[nodiscard]] bool CommitAtomPreview(
 			RendererWindowState &windowState, const SceneTransformSelectionSnapshot &snapshot,
 			const WeakRef<CommandRegistry> &commandRegistryRef, std::string_view description)
 		{
 			if (windowState.structure.domainStructureId.empty())
-				return;
+				return false;
 			Ref<CommandRegistry> commandRegistry = commandRegistryRef.lock();
 			if (commandRegistry == nullptr)
-				return;
+				return false;
 
 			GizmoTransformPayload payload;
 			payload.windowId = windowState.windowId;
@@ -212,7 +218,7 @@ namespace DefectStudio
 				payload.afterPositions.push_back(windowState.structure.atoms[start.index].cartesianPosition);
 			}
 			if (payload.atomIndices.empty())
-				return;
+				return false;
 
 			CommandContext context;
 			context.Set<GizmoTransformPayload>("gizmo.transform_payload", std::move(payload));
@@ -220,6 +226,7 @@ namespace DefectStudio
 				commandRegistry->Execute(CommandID{"renderer.gizmo.commit_transform"}, std::move(context));
 			if (!result)
 				DS_LOG_WARN("Gizmo transform commit failed: {}", result.Error().technicalDetails);
+			return result.HasValue();
 		}
 
 		// Vacancies and the defect axes are domain data: the preview moved the renderer copies, the
@@ -259,7 +266,7 @@ namespace DefectStudio
 					SetDefectFramePayload{windowState.windowId, windowState.structure.defectFrame, std::string(description)});
 		}
 
-		void CommitTransform(
+		[[nodiscard]] bool CommitTransform(
 			RendererWindowState &windowState, RendererLayer &layer,
 			const WeakRef<CommandRegistry> &commandRegistryRef, std::string_view description)
 		{
@@ -276,7 +283,7 @@ namespace DefectStudio
 
 			if (hasSceneObjects)
 				PushSceneObjectsUndoSnapshot(windowState, std::move(*windowState.modalTransformSceneObjectsBefore));
-			if (hasAtoms)
+			const bool atomsCommitted = !hasAtoms ||
 				CommitAtomPreview(windowState, windowState.modalTransformSelection, commandRegistryRef, description);
 			if (markerCommands > 0)
 				CommitDefectMarkerPreview(windowState, selection, commandRegistryRef, description);
@@ -286,6 +293,7 @@ namespace DefectStudio
 				if (!committed)
 					DS_LOG_WARN("Transform undo group commit failed: {}", committed.Error().technicalDetails);
 			}
+			return atomsCommitted;
 		}
 	} // namespace
 
@@ -340,8 +348,37 @@ namespace DefectStudio
 		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
 		{
 			RestoreSceneTransformSelection(windowState, windowState.modalTransformSelection);
+			if (std::exchange(windowState.duplicateInPlacePending, false))
+			{
+				if (Ref<UndoStack> undoStack = layer.GetUndoStackHandle().lock())
+				{
+					const Result<void> cancelled = undoStack->CancelGroup();
+					if (!cancelled)
+						DS_LOG_WARN("Duplicate rollback failed: {}", cancelled.Error().technicalDetails);
+				}
+			}
 			ResetModalTransform(windowState);
 			return true;
+		}
+
+		if (windowState.duplicateInPlacePending && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt)
+		{
+			std::optional<ModalTransformOp> operation;
+			if (ImGui::IsKeyPressed(ImGuiKey_G, false))
+				operation = ModalTransformOp::Translate;
+			else if (ImGui::IsKeyPressed(ImGuiKey_R, false))
+				operation = ModalTransformOp::Rotate;
+			else if (ImGui::IsKeyPressed(ImGuiKey_S, false))
+				operation = ModalTransformOp::Scale;
+			if (operation.has_value() && *operation != session.op)
+			{
+				RestoreSceneTransformSelection(windowState, windowState.modalTransformSelection);
+				ModalTransformSession switched = BeginModalTransform(
+					*operation, session.orientation, session.bases, session.pivot, mouse);
+				switched.anchor = session.anchor;
+				switched.latticeUnits = session.latticeUnits;
+				session = std::move(switched);
+			}
 		}
 
 		constexpr std::array<ImGuiKey, 3> axisKeys = {ImGuiKey_X, ImGuiKey_Y, ImGuiKey_Z};
@@ -355,6 +392,8 @@ namespace DefectStudio
 			}
 		}
 		CaptureNumericInput(session);
+		if (ImGui::IsKeyPressed(ImGuiKey_U, false))
+			session.latticeUnits = !session.latticeUnits;
 
 		const TransformSnapSteps steps = SnapSteps(layer);
 		const SnapMode snap = SnapModeFromModifiers(ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
@@ -375,10 +414,21 @@ namespace DefectStudio
 		const bool confirmed = enterPressed || (windowState.modalTransformStartedFromHandle
 			? !ImGui::IsMouseDown(ImGuiMouseButton_Left)
 			: ImGui::IsMouseClicked(ImGuiMouseButton_Left));
-		if (!confirmed)
+		if (!confirmed || (!session.numericText.empty() && !NumericValue(session).has_value()))
 			return true;
 
-		CommitTransform(windowState, layer, commandRegistryRef, CommitDescription(session.op));
+		const bool committed = CommitTransform(windowState, layer, commandRegistryRef, CommitDescription(session.op));
+		if (std::exchange(windowState.duplicateInPlacePending, false))
+		{
+			if (!committed)
+				RestoreSceneTransformSelection(windowState, windowState.modalTransformSelection);
+			if (Ref<UndoStack> undoStack = layer.GetUndoStackHandle().lock())
+			{
+				const Result<void> closed = committed ? undoStack->EndGroup() : undoStack->CancelGroup();
+				if (!closed)
+					DS_LOG_WARN("Duplicate undo group close failed: {}", closed.Error().technicalDetails);
+			}
+		}
 		ResetModalTransform(windowState);
 		return true;
 	}
