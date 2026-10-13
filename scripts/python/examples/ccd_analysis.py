@@ -25,6 +25,7 @@ from puntukas.vibronic import (boltzmann_weights, franck_condon_model, harmonic_
 
 from ccd_inputs import dirname_for
 from phonon_vibronic_analysis import publish
+from zpl_formula import evaluate, used_variables
 
 Q_AU = convert(1.0, "angstrom", "bohr") * math.sqrt(convert(1.0, "amu", "me"))
 FINAL_TOTEN = re.compile(r"free  energy   TOTEN\s*=\s*([-+\d.EeDd]+)")
@@ -263,7 +264,8 @@ def phonon_mode(directory):
 
 
 def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0.0, n_states=None,
-            gs_dir=None, es_dir=None, triplet_dir=None, gs_at_es_dir=None, es_at_gs_dir=None):
+            gs_dir=None, es_dir=None, triplet_dir=None, gs_at_es_dir=None, es_at_gs_dir=None,
+            zpl_formula=None, label=None):
     if ccd_dir is None and phonon_result is None and gs_dir is None:
         raise ValueError("Supply --ccd-dir, --gs-dir/--es-dir or --phonon-result")
     if (gs_dir is None) != (es_dir is None):
@@ -303,7 +305,15 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
         from_ccd, spin_purified = point_zpls["from_ccd"], point_zpls["spin_purified"]
         if harmonic is None and "phonon_1d" not in models:
             raise ValueError("No curvature: supply --gs-at-es-dir/--es-at-gs-dir or --phonon-result")
-    candidates = (zpl, spin_purified, from_ccd, zpls.get("computed_spin_purified"), zpls.get("computed"))
+    formula_info, formula_zpl = None, None
+    if zpl_formula is not None:
+        sources = {"E_gs": "gs_dir", "E_es": "es_dir", "E_T": "triplet_dir",
+                   "E_gs@es": "gs_at_es_dir", "E_es@gs": "es_at_gs_dir"}
+        energies = {name: final_toten(paths[sources[name]], required=True) if paths[sources[name]] else None
+                    for name in used_variables(zpl_formula)}
+        formula_zpl = evaluate(zpl_formula, energies)
+        formula_info = dict(text=zpl_formula, variables_eV=energies, value_eV=formula_zpl)
+    candidates = (formula_zpl, zpl, spin_purified, from_ccd, zpls.get("computed_spin_purified"), zpls.get("computed"))
     used = next((value for value in candidates if value is not None), None)
     if used is None or not math.isfinite(used) or used <= 0:
         raise ValueError("ZPL must be finite and positive (eV)")
@@ -327,7 +337,10 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
             raise ValueError(f"Invalid {name} luminescence band")
         pl.append(intensity / intensity.max())
     summary = dict(schema="ds.ccd_analysis.v1", points=points, delta_Q_amu05_A=dq,
-                   zpl_eV=dict(from_ccd=from_ccd, spin_purified=spin_purified, used=used), harmonic=harmonic, numerov=numerov,
+                   label=label if label is not None else (paths["es_dir"] or paths["ccd_dir"] or paths["phonon_result"]).name,
+                   zpl_formula=formula_info,
+                   zpl_eV=dict(from_ccd=from_ccd, spin_purified=spin_purified, used=used, formula=formula_zpl),
+                   harmonic=harmonic, numerov=numerov,
                    phonon_1d=phonon, sigma_meV=sigma, temperature_K=temperature,
                    input_paths={key: str(path) if path else None for key, path in paths.items()},
                    units={"Q_amu05_A": "amu^0.5 Angstrom", "delta_Q_amu05_A": "amu^0.5 Angstrom",
@@ -372,6 +385,8 @@ def main():
     for name in ("gs-dir", "es-dir", "triplet-dir", "gs-at-es-dir", "es-at-gs-dir"):
         parser.add_argument(f"--{name}", type=Path)
     parser.add_argument("--zpl", type=float)
+    parser.add_argument("--zpl-formula")
+    parser.add_argument("--label")
     parser.add_argument("--sigma", type=float, default=6.0)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--n-states", type=int)

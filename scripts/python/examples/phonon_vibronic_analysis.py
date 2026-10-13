@@ -5,6 +5,7 @@ import argparse
 from contextlib import redirect_stdout
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -18,6 +19,7 @@ sys.dont_write_bytecode = True
 import numpy as np
 from scipy.constants import atomic_mass, electron_volt, hbar, physical_constants
 from scipy.linalg import eigh
+from zpl_formula import evaluate, used_variables
 
 
 def read_toten(directory):
@@ -77,7 +79,8 @@ def origin_shift(defect, bulk, primitive):
 
 
 def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, gamma=2.0,
-            bulk_fc_dir=None, mult=None, dcutoff=None, bcutoff=None):
+            bulk_fc_dir=None, mult=None, dcutoff=None, bcutoff=None, zpl_formula=None,
+            gs_at_es_dir=None, es_at_gs_dir=None, label=None):
     """Read inputs and return arrays plus metadata; publishing is a separate operation."""
     if (bulk_fc_dir is None) != (mult is None):
         raise ValueError("bulk-fc-dir and mult must be supplied together")
@@ -94,15 +97,27 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
     paths = {"fc_dir": Path(fc_dir).resolve(), "gs_dir": Path(gs_dir).resolve(),
              "es_dir": Path(es_dir).resolve(),
              "triplet_dir": Path(triplet_dir).resolve() if triplet_dir else None}
+    used_names = used_variables(zpl_formula) if zpl_formula is not None else []
+    for key, directory in (("gs_at_es_dir", gs_at_es_dir), ("es_at_gs_dir", es_at_gs_dir)):
+        paths[key] = Path(directory).resolve() if directory is not None else None
     if bulk_fc_dir is not None:
         paths["bulk_fc_dir"] = Path(bulk_fc_dir).resolve()
     for path in paths.values():
         if path is not None and not path.is_dir():
             raise ValueError(f"Input directory does not exist: {path}")
     gs_energy, es_energy = read_toten(paths["gs_dir"]), read_toten(paths["es_dir"])
+    triplet_energy = read_toten(paths["triplet_dir"]) if triplet_dir else None
     zpls = {"computed": es_energy - gs_energy,
-            "computed_spin_purified": (2 * es_energy - read_toten(paths["triplet_dir"]) - gs_energy
-                                       if triplet_dir else None), "experimental": zpl_exp}
+            "computed_spin_purified": (2 * es_energy - triplet_energy - gs_energy
+                                       if triplet_dir else None), "experimental": zpl_exp, "formula": None}
+    formula_info = None
+    if zpl_formula is not None:
+        energies = {"E_gs": gs_energy, "E_es": es_energy, "E_T": triplet_energy,
+                    **{name: read_toten(paths[key]) if name in used_names and paths[key] else None for name, key in
+                       (("E_gs@es", "gs_at_es_dir"), ("E_es@gs", "es_at_gs_dir"))}}
+        zpls["formula"] = evaluate(zpl_formula, energies)
+        formula_info = {"text": zpl_formula, "variables_eV": {name: energies[name] for name in used_names},
+                        "value_eV": zpls["formula"]}
     if any(value is not None and value <= 0 for value in zpls.values()):
         raise ValueError("ZPL energies must be positive for emission")
 
@@ -250,13 +265,17 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
              "q_k_amu05_A": "amu^0.5 Angstrom", "is_translation": "boolean (0 or 1)",
              "energy_meV": "meV", "S_E_per_meV": "1/meV", "photon_energy_eV": "eV",
              "intensity_computed": "relative, max 1", "intensity_spin_purified": "relative, max 1",
-             "intensity_experimental": "relative, max 1", "eigenvectors": "dimensionless, mass-weighted",
+             "intensity_experimental": "relative, max 1", "intensity_formula": "relative, max 1",
+             "eigenvectors": "dimensionless, mass-weighted",
              "participation": "dimensionless, per-atom squared eigenvector norm",
              "positions_A": "Angstrom", "cell_A": "Angstrom", "masses_amu": "amu",
              "s_total": "dimensionless", "debye_waller": "dimensionless", "zpl_eV": "eV",
              "max_displacement_A": "Angstrom", "delta_Q_amu05_A": "amu^0.5 Angstrom",
              "sigma_meV": "meV, Gaussian standard deviation", "gamma_meV": "meV, Lorentzian width"}
     summary = {"schema": "ds.phonon_vibronic.v1", "n_atoms": n_atoms, "n_modes": n_modes,
+               "label": label if label is not None else paths["es_dir"].name + (
+                   " (emb " + "x".join(map(str, mult)) + ")" if embedding is not None else ""),
+               "zpl_formula": formula_info,
                "embedding": embedding,
                "translations": {"indices": translations.tolist(), "freq_meV": frequencies[translations].tolist()},
                "imaginary_modes": [{"index": int(i), "freq_meV": float(frequencies[i])} for i in imaginary],
@@ -296,7 +315,7 @@ def write_result(result, directory):
                    result["q"][i], int(result["is_translation"][i]))
             handle.write("\t".join(str(value) for value in row) + "\n")
     for name, header in (("spectral_function", "energy_meV\tS_E_per_meV"),
-                         ("pl", "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental")):
+                         ("pl", "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula")):
         np.savetxt(directory / f"{name}.tsv", result[name], delimiter="\t", header=header,
                    comments="", fmt="%.12g")
 
@@ -307,11 +326,18 @@ def publish(result, out_dir, writer=write_result):
     if out_dir.is_symlink() or (out_dir.exists() and not out_dir.is_dir()):
         raise ValueError("Output must be a directory, not a file or symlink")
     out_dir = out_dir.resolve()
-    for value in result["summary"]["input_paths"].values():
+    relative = {}
+    for key, value in result["summary"]["input_paths"].items():
+        relative[key] = None
         if value is not None:
-            path = Path(value)
-            if out_dir == path or out_dir in path.parents or path in out_dir.parents:
+            path = Path(value).resolve()
+            if out_dir == path or out_dir in path.parents:
                 raise ValueError("Output directory must not overlap an input directory")
+            try:
+                relative[key] = os.path.relpath(path, out_dir).replace("\\", "/")
+            except ValueError:  # Windows paths on different drives cannot be relative.
+                relative[key] = path.as_posix()
+    result["summary"]["inputs_relative"] = relative
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     # mkdir inherits the parent's ACL; Python 3.13 mkdtemp's Windows ACL blocks sandbox access.
     staging = out_dir.parent / f".{out_dir.name}-{uuid4().hex}"
@@ -353,6 +379,10 @@ def main():
         parser.add_argument(f"--{name}", required=True, type=Path)
     parser.add_argument("--triplet-dir", type=Path)
     parser.add_argument("--zpl-exp", type=float)
+    parser.add_argument("--zpl-formula")
+    parser.add_argument("--gs-at-es-dir", type=Path)
+    parser.add_argument("--es-at-gs-dir", type=Path)
+    parser.add_argument("--label")
     parser.add_argument("--bulk-fc-dir", type=Path)
     parser.add_argument("--mult", type=parse_mult)
     parser.add_argument("--dcutoff", type=float)

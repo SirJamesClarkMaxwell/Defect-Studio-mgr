@@ -9,14 +9,19 @@ without it. See docs/work/project/tasks/104-phonon-vibronic-script.md.
 
 import json
 import math
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts" / "python" / "examples" / "phonon_vibronic_analysis.py"
+sys.path.insert(0, str(SCRIPT.parent))
 CASE = ROOT / "test-directory" / "sjcm_mgr" / "PL-spectra" / "dimer" / "CH0" / "R2SCAN" / "9x9x1"
 
 try:
@@ -48,6 +53,64 @@ def read_tsv(path):
     return header, rows
 
 
+class PublishTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.gettempdir()) / f"ds-publish-{uuid4().hex}"
+        self.tmp.mkdir()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.input = self.tmp / "input"
+        self.input.mkdir()
+        self.source = self.input / "OUTCAR"
+        self.source.write_text("keep", encoding="utf-8")
+        self.result = {"summary": {"input_paths": {"fc_dir": str(self.input), "triplet_dir": None}}}
+
+    @staticmethod
+    def write(result, directory):
+        (directory / "summary.json").write_text(json.dumps(result["summary"]), encoding="utf-8")
+
+    def test_publish_inside_input_and_republish_relative_to_final_directory(self):
+        from phonon_vibronic_analysis import publish
+
+        out = self.input / "defectstudio" / "dispersion"
+        publish(self.result, out, writer=self.write)
+        summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["inputs_relative"], {"fc_dir": "../..", "triplet_dir": None})
+        self.assertEqual(summary["input_paths"], self.result["summary"]["input_paths"])
+        other = self.tmp / "elsewhere"
+        publish(self.result, other, writer=self.write)
+        self.assertEqual(self.result["summary"]["inputs_relative"]["fc_dir"], "../input")
+        publish(self.result, out, writer=self.write)
+        self.assertEqual(self.source.read_text(encoding="utf-8"), "keep")
+
+    def test_rejects_output_that_would_delete_input(self):
+        from phonon_vibronic_analysis import publish
+
+        for out in (self.input, self.tmp):
+            with self.subTest(out=out), self.assertRaises(ValueError):
+                publish(self.result, out, writer=self.write)
+        self.assertEqual(self.source.read_text(encoding="utf-8"), "keep")
+
+    def test_other_drive_keeps_absolute_path(self):
+        from phonon_vibronic_analysis import publish
+
+        with patch.object(os.path, "relpath", side_effect=ValueError("different drives")):
+            publish(self.result, self.tmp / "out", writer=self.write)
+        self.assertEqual(self.result["summary"]["inputs_relative"]["fc_dir"], str(self.input).replace("\\", "/"))
+
+    def test_failed_writer_preserves_previous_result_and_inputs(self):
+        from phonon_vibronic_analysis import publish
+
+        out = self.input / "defectstudio" / "dispersion"
+        publish(self.result, out, writer=self.write)
+        previous = (out / "summary.json").read_bytes()
+        def fail(result, directory):
+            raise OSError("writer failed")
+        with self.assertRaises(OSError):
+            publish(self.result, out, writer=fail)
+        self.assertEqual((out / "summary.json").read_bytes(), previous)
+        self.assertEqual(self.source.read_text(encoding="utf-8"), "keep")
+
+
 @unittest.skipIf(IMPORT_ERROR is not None, f"dephonopy/numpy missing: {IMPORT_ERROR}")
 class FailureTests(unittest.TestCase):
     def test_bad_input_reports_json_error_and_leaves_no_output(self):
@@ -73,12 +136,17 @@ class ReferenceCaseTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls.tmp.name) / "result"
+        cls.unused = Path(cls.tmp.name) / "unused-without-outcar"
+        cls.unused.mkdir()
         cls.proc, cls.payload = run_script(
             "--fc-dir", CASE / "dispersion",
             "--gs-dir", CASE / "relax",
             "--es-dir", CASE / "excited" / "try_1_singlet",
             "--triplet-dir", CASE / "excited" / "try_1_tryplet",
             "--zpl-exp", 4.08,
+            "--zpl-formula", "2*E_es - E_T - E_gs",
+            "--label", "Dimer α",
+            "--gs-at-es-dir", cls.unused,
             "--out-dir", cls.out,
         )
 
@@ -117,6 +185,31 @@ class ReferenceCaseTests(unittest.TestCase):
         self.assertAlmostEqual(zpl["computed"], 3.452, delta=0.002)
         self.assertAlmostEqual(zpl["computed_spin_purified"], 3.749, delta=0.002)
         self.assertAlmostEqual(zpl["experimental"], 4.08, places=6)
+        self.assertAlmostEqual(zpl["formula"], zpl["computed_spin_purified"], places=9)
+        summary = self.summary()
+        self.assertEqual(summary["label"], "Dimer α")
+        self.assertEqual(summary["zpl_formula"]["text"], "2*E_es - E_T - E_gs")
+        self.assertEqual(list(summary["zpl_formula"]["variables_eV"]), ["E_gs", "E_es", "E_T"])
+        self.assertEqual(summary["zpl_formula"]["value_eV"], zpl["formula"])
+        self.assertEqual(summary["input_paths"]["gs_at_es_dir"], str(self.unused.resolve()))
+        for key, path in summary["input_paths"].items():
+            if path:
+                self.assertEqual((self.out / summary["inputs_relative"][key]).resolve(), Path(path))
+
+    def test_cross_geometry_formula_reads_only_toten(self):
+        cross = Path(self.tmp.name) / "es_at_gs"
+        cross.mkdir(exist_ok=True)
+        (cross / "OUTCAR").write_text("free energy TOTEN = -100 eV\nfree energy TOTEN = -96 eV\n",
+                                     encoding="ascii")
+        out = Path(self.tmp.name) / "cross-result"
+        proc, payload = run_script("--fc-dir", CASE / "dispersion", "--gs-dir", CASE / "relax",
+                                  "--es-dir", CASE / "excited" / "try_1_singlet",
+                                  "--es-at-gs-dir", cross, "--zpl-formula", "E_es@gs + 100", "--out-dir", out)
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["zpl_formula"], dict(text="E_es@gs + 100",
+                                                   variables_eV={"E_es@gs": -96}, value_eV=4))
+        self.assertEqual(summary["input_paths"]["es_at_gs_dir"], str(cross.resolve()))
 
     def test_modes_table(self):
         header, rows = read_tsv(self.out / "modes.tsv")
@@ -163,12 +256,14 @@ class ReferenceCaseTests(unittest.TestCase):
         header, rows = read_tsv(self.out / "pl.tsv")
         self.assertEqual(
             header,
-            ["photon_energy_eV", "intensity_computed", "intensity_spin_purified", "intensity_experimental"],
+            ["photon_energy_eV", "intensity_computed", "intensity_spin_purified", "intensity_experimental",
+             "intensity_formula"],
         )
         data = np.array(rows, dtype=float)
         energy = data[:, 0]
         zpl = self.summary()["zpl_eV"]
-        for column, key in ((1, "computed"), (2, "computed_spin_purified"), (3, "experimental")):
+        np.testing.assert_allclose(data[:, 4], data[:, 2])
+        for column, key in ((1, "computed"), (2, "computed_spin_purified"), (3, "experimental"), (4, "formula")):
             intensity = data[:, column]
             self.assertAlmostEqual(np.nanmax(intensity), 1.0, places=6)
             # T = 0 emission: almost no weight above the ZPL beyond the Lorentzian tail
@@ -219,6 +314,9 @@ class EmbeddingTests(unittest.TestCase):
         embedding = summary["embedding"]
         self.assertEqual(embedding["defect_sites"], 2)
         self.assertEqual(embedding["mult"], [12, 12, 1])
+        self.assertEqual(summary["label"], "try_1_singlet (emb 12x12x1)")
+        self.assertIsNone(summary["zpl_formula"])
+        self.assertTrue(np.isnan(np.loadtxt(self.out / "pl.tsv", skiprows=1)[:, 4]).all())
         self.assertEqual(Path(embedding["bulk_fc_dir"]), BULK.resolve())
         self.assertGreater(embedding["dcutoff_A"], 0)
         self.assertGreater(embedding["bcutoff_A"], 0)
@@ -262,6 +360,8 @@ class EmbeddingTests(unittest.TestCase):
         summary = json.loads((self.small_out / "summary.json").read_text(encoding="utf-8"))
         self.assertIsNone(summary["embedding"])
         self.assertEqual(summary["n_atoms"], 162)
+        self.assertEqual(summary["label"], "try_1_singlet")
+        self.assertIsNone(summary["zpl_formula"])
         self.check_poscar(self.small_out, 162)
 
     def test_embedded_eigenvectors_and_participation(self):

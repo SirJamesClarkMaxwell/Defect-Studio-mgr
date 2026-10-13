@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Uuid.hpp"
@@ -153,7 +154,58 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(result.plSpinPurified.empty()); // all nan
 		ASSERT_EQ(result.plExperimental.size(), 3u);
 		EXPECT_NEAR(result.plExperimental[2], 1.0, 1e-12);
+		EXPECT_TRUE(result.plFormula.empty());
+		EXPECT_FALSE(result.zplEv.formula.has_value());
+		EXPECT_TRUE(result.zplFormulaText.empty());
+		EXPECT_TRUE(result.label.empty());
 
+		std::filesystem::remove_all(dir);
+	}
+
+	TEST(PhononAnalysisIOTests, LoadsFormulaMetadataAndFiveColumnPl)
+	{
+		const FilePath dir = WriteFixture("formula");
+		nlohmann::json summary;
+		{
+			std::ifstream in(dir / "summary.json");
+			in >> summary;
+		}
+		summary["zpl_eV"]["formula"] = 1.945;
+		summary["zpl_formula"] = {{"text", "1.945"}, {"variables_eV", nlohmann::json::object()}, {"value_eV", 1.945}};
+		summary["label"] = "Dimer";
+		WriteText(dir / "summary.json", summary.dump());
+		WriteText(dir / "pl.tsv",
+			"photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula\n"
+			"1.8\t0.1\tnan\t0.0\t0.2\n"
+			"1.945\t1\tnan\t0.2\t1\n");
+		PhononAnalysisResult result;
+		std::string error;
+		ASSERT_TRUE(Load(dir, result, error)) << error;
+		ASSERT_TRUE(result.zplEv.formula.has_value());
+		EXPECT_DOUBLE_EQ(*result.zplEv.formula, 1.945);
+		EXPECT_EQ(result.zplFormulaText, "1.945");
+		EXPECT_EQ(result.label, "Dimer");
+		ASSERT_EQ(result.plFormula.size(), 2u);
+		EXPECT_DOUBLE_EQ(result.plFormula[0], 0.2);
+		EXPECT_DOUBLE_EQ(result.plFormula[1], 1.0);
+
+		summary["zpl_eV"]["formula"] = nullptr;
+		summary["zpl_formula"] = nullptr;
+		WriteText(dir / "summary.json", summary.dump());
+		WriteText(dir / "pl.tsv",
+			"photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula\n"
+			"1.945\t1\tnan\t0.2\tnan\n");
+		ASSERT_TRUE(Load(dir, result, error)) << error;
+		EXPECT_TRUE(result.plFormula.empty());
+		EXPECT_FALSE(result.zplEv.formula.has_value());
+		EXPECT_TRUE(result.zplFormulaText.empty());
+
+		WriteText(dir / "pl.tsv",
+			"photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula\n"
+			"1.8\t0.1\tnan\t0.0\tnan\n"
+			"1.945\t1\tnan\t0.2\t1\n");
+		EXPECT_FALSE(Load(dir, result, error));
+		EXPECT_EQ(error.rfind("pl.tsv:", 0), 0u);
 		std::filesystem::remove_all(dir);
 	}
 

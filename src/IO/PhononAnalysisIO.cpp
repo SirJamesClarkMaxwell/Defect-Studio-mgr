@@ -58,7 +58,7 @@ namespace DefectStudio
 		}
 
 		template <typename Consumer>
-		void ReadTable(const Path &path, const std::string &header, Consumer consume)
+		void ReadTable(const Path &path, const std::string &header, Consumer consume, const std::string &alternateHeader = {})
 		{
 			std::istringstream stream(ReadText(path));
 			std::string line;
@@ -69,9 +69,9 @@ namespace DefectStudio
 					line.pop_back();
 				return true;
 			};
-			if (!readLine() || line != header)
+			if (!readLine() || (line != header && (alternateHeader.empty() || line != alternateHeader)))
 				throw std::invalid_argument("Invalid table header");
-			const auto columns = SplitRow(header).size();
+			const auto columns = SplitRow(line).size();
 			while (readLine())
 			{
 				if (line.empty())
@@ -209,6 +209,12 @@ namespace DefectStudio
 				return zpl.at(key).is_null() ? std::nullopt : std::optional<double>(Finite(zpl.at(key).get<double>()));
 			};
 			result.zplEv = {readZpl("computed"), readZpl("computed_spin_purified"), readZpl("experimental")};
+			if (zpl.contains("formula"))
+				result.zplEv.formula = readZpl("formula");
+			if (summary.contains("zpl_formula") && !summary.at("zpl_formula").is_null())
+				result.zplFormulaText = summary.at("zpl_formula").at("text").get<std::string>();
+			if (summary.contains("label"))
+				result.label = summary.at("label").get<std::string>();
 			result.sigmaMeV = Finite(summary.at("sigma_meV").get<double>());
 			result.gammaMeV = Finite(summary.at("gamma_meV").get<double>());
 			result.maxDisplacementAngstrom = Finite(summary.at("max_displacement_A").get<double>());
@@ -276,8 +282,11 @@ namespace DefectStudio
 						result.plComputed.push_back(ParseNumber<double>(row[1]));
 						result.plSpinPurified.push_back(ParseNumber<double>(row[2]));
 						result.plExperimental.push_back(ParseNumber<double>(row[3]));
-					});
-				for (auto &column : {std::ref(result.plComputed), std::ref(result.plSpinPurified), std::ref(result.plExperimental)})
+						if (row.size() == 5)
+							result.plFormula.push_back(ParseNumber<double>(row[4]));
+					}, "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula");
+				for (auto &column : {std::ref(result.plComputed), std::ref(result.plSpinPurified), std::ref(result.plExperimental),
+					std::ref(result.plFormula)})
 				{
 					if (std::all_of(column.get().begin(), column.get().end(), [](double value) { return std::isnan(value); }))
 						column.get().clear();

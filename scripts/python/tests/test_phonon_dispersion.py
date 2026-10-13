@@ -59,6 +59,8 @@ def test_hbn_bulk_dispersion(bulk_result):
     assert summary["primitive_symbols"] == ["B", "N"]
     assert np.asarray(summary["primitive_cell_A"]).shape == (3, 3)
     assert summary["symmetrized"] is symmetrized
+    assert summary["label"] == BULK.name
+    assert (out / summary["inputs_relative"]["fc_dir"]).resolve() == BULK.resolve()
     assert summary["ticks"][0]["label"] == "Γ"
     assert np.count_nonzero(np.abs(summary["gamma_freq_meV"]) < 1) == 3
     assert 150 < summary["max_freq_meV"] < 220
@@ -128,10 +130,12 @@ def test_in_plane_path_keeps_only_qz_zero_segments(work_dir):
     if not (BULK / "dephonopy_disp.yaml").is_file():
         pytest.skip("hBN bulk reference data in test-directory/ not present")
     out = work_dir / "result"
-    proc, payload = run_script("--fc-dir", BULK, "--npoints", 21, "--in-plane", "--out-dir", out)
+    proc, payload = run_script("--fc-dir", BULK, "--npoints", 21, "--in-plane",
+                               "--label", "hBN α", "--out-dir", out)
     assert proc.returncode == 0, proc.stderr[-3000:]
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     assert [tick["label"] for tick in summary["ticks"]] == ["Γ", "M", "K", "Γ"]
     assert summary["breaks"] == []
     assert summary["in_plane"] is True
+    assert summary["label"] == "hBN α"
     assert 150 < summary["max_freq_meV"] < 220

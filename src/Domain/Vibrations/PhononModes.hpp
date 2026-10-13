@@ -30,6 +30,7 @@ namespace DefectStudio
 		std::optional<double> computed;
 		std::optional<double> spinPurified;
 		std::optional<double> experimental;
+		std::optional<double> formula;
 	};
 
 	// The whole result directory in memory. The 162-atom reference case is ~1.3 MB of vectors, so
@@ -57,6 +58,8 @@ namespace DefectStudio
 		double sTotal = 0.0;
 		double debyeWaller = 0.0;
 		PhononZplEv zplEv;
+		std::string zplFormulaText;
+		std::string label;
 		bool stable = true;
 		std::vector<int> imaginaryModes;
 		double sigmaMeV = 0.0;
@@ -74,6 +77,7 @@ namespace DefectStudio
 		std::vector<double> plComputed;
 		std::vector<double> plSpinPurified;
 		std::vector<double> plExperimental;
+		std::vector<double> plFormula;
 
 		[[nodiscard]] std::size_t AtomCount() const noexcept { return symbols.size(); }
 		[[nodiscard]] std::size_t ModeCount() const noexcept { return modes.size(); }

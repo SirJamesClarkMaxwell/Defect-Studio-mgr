@@ -93,6 +93,10 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(summary["delta_Q_amu05_A"], 1.0, places=6)
         self.assertAlmostEqual(summary["zpl_eV"]["from_ccd"], 2.0, places=6)
         self.assertAlmostEqual(summary["zpl_eV"]["used"], 2.0, places=6)
+        self.assertIsNone(summary["zpl_formula"])
+        self.assertEqual(summary["label"], "ccd")
+        self.assertEqual(summary["inputs_relative"]["ccd_dir"], "../ccd")
+        self.assertIsNone(summary["inputs_relative"]["es_dir"])
         s = C * 30.0
         for branch in ("gs", "es"):
             fit = summary["harmonic"][branch]
@@ -163,6 +167,20 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(zpl["used"], 3.5, places=6)
         self.assertAlmostEqual(payload["zpl_eV"], 3.5, places=6)
 
+    def test_constant_formula_precedes_override_and_labels_nested_dataset(self):
+        make_ccd(self.ccd)
+        self.out = self.ccd / "defectstudio" / "ccd"
+        proc, payload = run("--ccd-dir", self.ccd, "--zpl", 3.5,
+                            "--zpl-formula", "1.945", "--label", "Eksperyment α", "--out-dir", self.out)
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        summary = self.summary()
+        self.assertEqual(summary["label"], "Eksperyment α")
+        self.assertEqual(summary["zpl_eV"]["formula"], 1.945)
+        self.assertEqual(payload["zpl_eV"], 1.945)
+        self.assertEqual(summary["zpl_formula"], dict(text="1.945", variables_eV={}, value_eV=1.945))
+        self.assertEqual(summary["inputs_relative"]["ccd_dir"], "../..")
+        self.assertTrue((self.ccd / "ccd_path.csv").is_file())
+
     def test_too_few_converged_points_is_a_json_error(self):
         make_ccd(self.ccd, gs_t=(0.0, 0.25))
         proc, payload = run("--ccd-dir", self.ccd, "--out-dir", self.out)
@@ -229,6 +247,13 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertEqual(summary["harmonic"]["gs"]["curvature_from"], "gs_at_es_dir")
         self.assertIn("equal curvature", summary["harmonic"]["es"]["curvature_from"])
         self.assertIsNone(summary["numerov"])
+        proc, payload = run(*args, "--zpl-formula", "E_gs@es - E_gs", "--out-dir", self.out)
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        summary = self.summary()
+        self.assertAlmostEqual(summary["zpl_eV"]["formula"], relaxation, places=7)
+        self.assertAlmostEqual(payload["zpl_eV"], relaxation, places=7)
+        self.assertEqual(summary["label"], "es")
+        self.assertEqual(list(summary["zpl_formula"]["variables_eV"]), ["E_gs", "E_gs@es"])
         # Without any curvature source the run must refuse, not guess.
         proc, payload = run(*args[:6], "--out-dir", self.tmp / "out2")
         self.assertEqual(proc.returncode, 1)
@@ -249,6 +274,17 @@ class CcdAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(summary["zpl_eV"]["used"], 4.2046, delta=1e-3)
         self.assertAlmostEqual(summary["harmonic"]["gs"]["hbar_omega_meV"], 110.16, delta=0.5)
         self.assertAlmostEqual(summary["harmonic"]["gs"]["S"], 2.063, delta=0.02)
+        proc, payload = run("--gs-dir", V2CBCN_DIMER / "ground_state" / "singlet_HSE",
+                            "--es-dir", V2CBCN_DIMER / "exc_ms" / "singlet_HSE",
+                            "--triplet-dir", V2CBCN_DIMER / "exc_ms" / "triplet_HSE",
+                            "--gs-at-es-dir", V2CBCN_DIMER / "ground_state" / "excited_geometry_HSE",
+                            "--zpl-formula", "2*E_es - E_T - E_gs", "--zpl", 1,
+                            "--out-dir", self.out)
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        formula_summary = self.summary()
+        self.assertAlmostEqual(formula_summary["zpl_eV"]["formula"], summary["zpl_eV"]["spin_purified"])
+        self.assertAlmostEqual(payload["zpl_eV"], 4.2046, delta=1e-3)
+        self.assertEqual(list(formula_summary["zpl_formula"]["variables_eV"]), ["E_gs", "E_es", "E_T"])
 
     @unittest.skipUnless((VV / "ccd_path.csv").is_file(), "VV CCD data in test-directory/ not present")
     def test_vv_reader_flags_bad_points(self):

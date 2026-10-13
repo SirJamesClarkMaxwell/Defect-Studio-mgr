@@ -95,7 +95,7 @@ def keep_in_plane(phonon):
     phonon.run_band_structure(paths, path_connections=new_connections, labels=new_labels)
 
 
-def analyse(fc_dir, npoints=101, no_symmetrize=False, in_plane=False):
+def analyse(fc_dir, npoints=101, no_symmetrize=False, in_plane=False, label=None):
     if npoints < 2:
         raise ValueError("npoints must be at least 2")
     fc_dir = Path(fc_dir).resolve()
@@ -113,7 +113,7 @@ def analyse(fc_dir, npoints=101, no_symmetrize=False, in_plane=False):
             keep_in_plane(phonon)
         result = band_data(phonon)
     result["summary"].update(input_paths={"fc_dir": str(fc_dir)}, symmetrized=not no_symmetrize,
-                             in_plane=in_plane)
+                             in_plane=in_plane, label=label if label is not None else fc_dir.name)
     return result
 
 
@@ -140,6 +140,7 @@ def main():
     parser.add_argument("--in-plane", action="store_true",
                         help="only q_z = 0 segments (2D slab with vacuum along z)")
     parser.add_argument("--out-dir", required=True, type=Path)
+    parser.add_argument("--label")
     try:
         args = vars(parser.parse_args())
         out_dir = args.pop("out_dir")
