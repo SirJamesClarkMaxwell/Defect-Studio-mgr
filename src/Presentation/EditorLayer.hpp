@@ -45,6 +45,7 @@ namespace DefectStudio
 	class SceneDensityLoader;
 	class DefectEnergeticsSession;
 	class CalculationSummarySession;
+	class PhononPanelSession;
 	class DomainLayer;
 	struct RendererWindowState;
 	struct StructureRecord;
@@ -236,6 +237,7 @@ namespace DefectStudio
 		void onDisplacementComparisonStateChanged(const ProjectEvents::DisplacementComparisonStateChanged &event);
 		// fnv_corrections.yaml -> FnvCorrectionPanel; the panel saves back through its handler.
 		void loadFnvCorrectionsForProject();
+		void registerPhononViews();
 		void loadPhononsForProject();
 		void stopPhononAnimations();
 		void onPhononDirectoryRequested(const ProjectEvents::PhononDirectoryRequested &event);
@@ -302,6 +304,7 @@ namespace DefectStudio
 		Ref<ElectronicStructureSession> m_ElectronicStructureSession;
 		Ref<DefectEnergeticsSession> m_DefectEnergeticsSession;
 		Ref<CalculationSummarySession> m_CalculationSummarySession;
+		Ref<PhononPanelSession> m_PhononSession;
 		// task/83: loads CHGCAR densities for scene objects, polled once per frame.
 		Ref<SceneDensityLoader> m_SceneDensityLoader;
 		// Keyed by the predicted deterministic windowId (hash of sourcePath) - see

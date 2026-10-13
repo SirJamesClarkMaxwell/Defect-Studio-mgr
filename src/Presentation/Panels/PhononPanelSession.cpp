@@ -110,6 +110,8 @@ namespace DefectStudio
 
 	void PhononPanelSession::SetResult(PhononAnalysisResult result)
 	{
+		StopAnimation();
+		++m_PlotRevision;
 		m_Result = std::move(result);
 		if (SelectedMode())
 			return;
@@ -122,6 +124,8 @@ namespace DefectStudio
 
 	void PhononPanelSession::ClearResult()
 	{
+		StopAnimation();
+		++m_PlotRevision;
 		m_Result.reset();
 		m_Settings.selectedMode = -1;
 	}
@@ -163,7 +167,14 @@ namespace DefectStudio
 	{
 		if (m_Result && modeIndex >= 0 && static_cast<std::size_t>(modeIndex) < m_Result->ModeCount() &&
 			!m_Result->modes[modeIndex].isTranslation)
+		{
+			const bool running = IsAnimating();
+			const bool paused = m_Paused;
+			StopAnimation();
 			m_Settings.selectedMode = modeIndex;
+			if (const auto window = targetWindow(); window && running) StartAnimation(window->get());
+			m_Paused = paused;
+		}
 	}
 
 	std::optional<std::size_t> PhononPanelSession::SelectedMode() const

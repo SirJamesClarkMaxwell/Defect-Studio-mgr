@@ -6,8 +6,8 @@
 
 namespace DefectStudio
 {
-	void PhononPanelSession::SetCcdResult(CcdAnalysisResult result) { m_CcdResult = std::move(result); }
-	void PhononPanelSession::ClearCcdResult() { m_CcdResult.reset(); }
+	void PhononPanelSession::SetCcdResult(CcdAnalysisResult result) { m_CcdResult = std::move(result); ++m_PlotRevision; }
+	void PhononPanelSession::ClearCcdResult() { m_CcdResult.reset(); ++m_PlotRevision; }
 	std::optional<std::reference_wrapper<const CcdAnalysisResult>> PhononPanelSession::CcdResult() const noexcept
 	{
 		return m_CcdResult ? std::optional<std::reference_wrapper<const CcdAnalysisResult>>(std::cref(*m_CcdResult)) : std::nullopt;

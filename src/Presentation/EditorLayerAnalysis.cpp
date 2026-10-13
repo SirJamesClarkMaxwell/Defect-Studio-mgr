@@ -15,11 +15,24 @@
 
 namespace DefectStudio
 {
+	void EditorLayer::registerPhononViews()
+	{
+		m_PhononSession = CreateRef<PhononPanelSession>(m_JobSystem, m_EventBus);
+		using View = PhononModesPanel::View;
+		m_PhononModesPanelId = registerPanel<PhononModesPanel>(m_PhononSession, View::Main, "Fonony", false);
+		registerPanel<PhononModesPanel>(m_PhononSession, View::Modes, "Fonony: mody", false);
+		registerPanel<PhononModesPanel>(m_PhononSession, View::Plots, "Fonony: wykresy", false);
+		m_PhononSession->SetShowViewsHandler([this](const bool visible) {
+			for (const auto &entry : m_Panels.Entries())
+				if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel);
+					panel && panel->Session() == m_PhononSession)
+					panel->SetVisible(visible);
+		});
+	}
+
 	void EditorLayer::stopPhononAnimations()
 	{
-		for (const auto &entry : m_Panels.Entries())
-			if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel))
-				panel->StopAnimation();
+		if (m_PhononSession) m_PhononSession->StopAnimation();
 	}
 
 	void EditorLayer::loadPhononsForProject()
@@ -36,24 +49,20 @@ namespace DefectStudio
 			}
 			for (const auto &warning : warnings) DS_LOG_WARN("EditorLayer: phonon_panel.yaml: {}", warning);
 		}
-		for (const auto &entry : m_Panels.Entries())
-			if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(entry.panel))
-			{
-				panel->SetPersistedState(settings, m_ActiveProject ? m_ActiveProjectDirectory : Path{});
-				panel->SetProjectRoots(currentRootsMutable());
-				panel->SetSaveHandler([this](const PhononPanelSettings &state) {
-					if (!m_ActiveProject) return;
-					std::string error;
-					if (!PhononPanelSettingsIO::Save(m_ActiveProjectDirectory, state, error))
-						DS_LOG_WARN("EditorLayer: failed to save phonon_panel.yaml: {}", error);
-				});
-			}
+		if (!m_PhononSession) return;
+		m_PhononSession->SetPersistedState(std::move(settings), m_ActiveProject ? m_ActiveProjectDirectory : Path{});
+		m_PhononSession->SetProjectRoots(currentRootsMutable());
+		m_PhononSession->SetSaveHandler([this](const PhononPanelSettings &state) {
+			if (!m_ActiveProject) return;
+			std::string error;
+			if (!PhononPanelSettingsIO::Save(m_ActiveProjectDirectory, state, error))
+				DS_LOG_WARN("EditorLayer: failed to save phonon_panel.yaml: {}", error);
+		});
 	}
 
 	void EditorLayer::onPhononDirectoryRequested(const ProjectEvents::PhononDirectoryRequested &event)
 	{
-		if (const auto panel = std::dynamic_pointer_cast<PhononModesPanel>(findPanel(m_PhononModesPanelId).lock()))
-			panel->SetDirectory(event.role, event.directory);
+		if (m_PhononSession) m_PhononSession->SetDirectory(event.role, event.directory);
 	}
 
 	void EditorLayer::registerCalculationSummaryViews()

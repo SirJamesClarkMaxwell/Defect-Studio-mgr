@@ -8,11 +8,11 @@ namespace DefectStudio
 {
 	std::optional<DockRegion> AnalysisDockRegion(const std::string_view title)
 	{
-		if (title == "Defect Energetics" || title.starts_with("Calculation Summary"))
+		if (title == "Fonony" || title == "Defect Energetics" || title.starts_with("Calculation Summary"))
 			return DockRegion::Left;
-		if (title == "Obliczenia")
+		if (title == "Fonony: mody" || title == "Obliczenia")
 			return DockRegion::Bottom;
-		if (title == "Poziomy przejść" || title == "Poziomy KS")
+		if (title == "Fonony: wykresy" || title == "Poziomy przejść" || title == "Poziomy KS")
 			return DockRegion::Right;
 		if (title == "Energie tworzenia" || title == "Koncentracje" || title == "Zbieżność")
 			return DockRegion::Central;

@@ -48,10 +48,11 @@ namespace DefectStudio
 		}
 	}
 
-	PhononPanelSession::~PhononPanelSession() { CancelDatasetScan(); }
+	PhononPanelSession::~PhononPanelSession() { cancelJob(); CancelDatasetScan(); }
 
 	void PhononPanelSession::SetDatasets(std::vector<AnalysisDatasetRef> datasets)
 	{
+		++m_PlotRevision;
 		std::sort(datasets.begin(), datasets.end(), [](const auto &a, const auto &b) { return a.directory.Native() < b.directory.Native(); });
 		m_Datasets.clear();
 		for (auto &dataset : datasets)
@@ -64,6 +65,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::AddDataset(AnalysisDatasetRef dataset)
 	{
+		++m_PlotRevision;
 		const auto found = std::find_if(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
 			return SameFilePath(entry.directory, dataset.directory, {});
 		});
@@ -82,15 +84,22 @@ namespace DefectStudio
 
 	void PhononPanelSession::SetCompared(const Path &directory, bool compared)
 	{
+		const bool wasCompared = IsCompared(directory);
 		if (!compared)
 		{
 			std::erase_if(m_Settings.comparedDirectories, [&](const auto &path) { return SameFilePath(path, directory, {}); });
+			if (wasCompared) { ++m_PlotRevision; Changed(); }
 			return;
 		}
 		if (IsCompared(directory)) return;
 		if (std::any_of(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
 			return entry.kind != AnalysisDatasetKind::Dispersion && SameFilePath(entry.directory, directory, {});
-		})) m_Settings.comparedDirectories.push_back(directory);
+		}))
+		{
+			m_Settings.comparedDirectories.push_back(directory);
+			++m_PlotRevision;
+			Changed();
+		}
 	}
 
 	bool PhononPanelSession::SelectDataset(const Path &directory)
@@ -110,7 +119,8 @@ namespace DefectStudio
 		const Path &directory, std::string &outError)
 	{
 		auto [it, inserted] = m_Spectra.try_emplace(SpectraKey(directory));
-		auto &[result, error] = it->second;
+		auto &result = it->second.result;
+		auto &error = it->second.error;
 		if (inserted)
 		{
 			PhononAnalysisResult spectra;
@@ -118,6 +128,23 @@ namespace DefectStudio
 		}
 		outError = error;
 		return result ? std::optional<std::reference_wrapper<const PhononAnalysisResult>>(std::cref(*result)) : std::nullopt;
+	}
+
+	std::optional<std::reference_wrapper<const PhononAnalysisResult>> PhononPanelSession::PlotModes(
+		const Path &directory, std::string &outError)
+	{
+		(void)Spectra(directory, outError);
+		auto &cached = m_Spectra.at(SpectraKey(directory));
+		// Upgrade the existing spectra cache only when a mode plot needs the larger result.
+		if (!cached.modesRequested)
+		{
+			cached.modesRequested = true;
+			PhononAnalysisResult result;
+			if (PhononAnalysisIO::Load(directory, result, cached.modesError)) cached.result = std::move(result);
+		}
+		outError = cached.modesError;
+		if (!cached.result || cached.result->modes.empty()) return std::nullopt;
+		return std::cref(*cached.result);
 	}
 
 	std::optional<std::reference_wrapper<const CcdAnalysisResult>> PhononPanelSession::Ccd(

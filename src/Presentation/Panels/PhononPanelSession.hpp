@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+#include <unordered_map>
 #include <cstddef>
 #include <functional>
 #include <map>
@@ -15,6 +18,7 @@
 #include "Domain/Vibrations/PhononModes.hpp"
 #include "Domain/Vibrations/CcdAnalysis.hpp"
 #include "IO/PhononPanelSettingsIO.hpp"
+#include "IO/PhononDispersionIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/AnalysisDatasetIO.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
@@ -23,7 +27,13 @@
 namespace DefectStudio
 {
 	struct RendererWindowState;
+	class EventBus;
 	class JobSystem;
+	class PhononModesPanel;
+	class PhononAnalysisJob;
+	class CcdInputsJob;
+	class CcdAnalysisJob;
+	class PhononDispersionJob;
 	class AnalysisDatasetScanJob;
 
 	// task/104d: everything the Phonons panel does that is not ImGui - the loaded result, the
@@ -39,7 +49,31 @@ namespace DefectStudio
 	class PhononPanelSession final
 	{
 	public:
+		PhononPanelSession();
+		explicit PhononPanelSession(WeakRef<JobSystem> jobs, Ref<EventBus> eventBus = {});
 		~PhononPanelSession();
+		void Update(std::vector<RendererWindowState> &windows, double deltaSeconds, bool anyViewVisible);
+		void Changed();
+		void FlushChanges();
+		[[nodiscard]] std::uint64_t PlotRevision() const noexcept { return m_PlotRevision; }
+		void InvalidatePlots() noexcept { ++m_PlotRevision; }
+		void SetPlZpl(std::string choice);
+		void SubmitComputation();
+		void SubmitCcdInputs();
+		void SubmitCcdAnalysis();
+		void SubmitDispersion();
+		[[nodiscard]] bool IsBusy() const noexcept
+		{
+			return m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob;
+		}
+		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
+		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
+		void SetDirectory(const std::string &role, const Path &directory);
+		void StopAnimation();
+		[[nodiscard]] const std::string &WindowId() const noexcept { return m_WindowId; }
+		void SetSaveHandler(std::function<void(const PhononPanelSettings &)> handler) { m_SaveHandler = std::move(handler); }
+		void SetShowViewsHandler(std::function<void(bool)> handler) { m_ShowViewsHandler = std::move(handler); }
+		void ShowViews(bool visible) { if (m_ShowViewsHandler) m_ShowViewsHandler(visible); }
 		void SetDatasets(std::vector<AnalysisDatasetRef> datasets);
 		void AddDataset(AnalysisDatasetRef dataset);
 		[[nodiscard]] const std::vector<AnalysisDatasetRef> &Datasets() const noexcept { return m_Datasets; }
@@ -51,6 +85,8 @@ namespace DefectStudio
 		[[nodiscard]] const Path &CurrentDataset() const noexcept { return m_CurrentDataset; }
 		void SetCurrentDataset(Path directory) { m_CurrentDataset = std::move(directory); }
 		[[nodiscard]] std::optional<std::reference_wrapper<const PhononAnalysisResult>> Spectra(
+			const Path &directory, std::string &outError);
+		[[nodiscard]] std::optional<std::reference_wrapper<const PhononAnalysisResult>> PlotModes(
 			const Path &directory, std::string &outError);
 		[[nodiscard]] std::optional<std::reference_wrapper<const CcdAnalysisResult>> Ccd(
 			const Path &directory, std::string &outError);
@@ -139,9 +175,73 @@ namespace DefectStudio
 		[[nodiscard]] double Phase() const noexcept { return m_Phase; }
 
 	private:
+		friend class PhononModesPanel;
+		void loadResult(const Path &directory);
+		void scanDatasets();
+		[[nodiscard]] Path defaultDatasetPath(const std::vector<Path> &inputs, const std::string &kind) const;
+		[[nodiscard]] Path computationOutputPath() const;
+		void cancelJob();
+		void cancelJob(JobId id);
+		void pollJob();
+		[[nodiscard]] Path dispersionOutputPath() const;
+		bool loadDispersion(const Path &directory);
+		void pollDispersionJob();
+		[[nodiscard]] Path ccdOutputPath() const;
+		void pollCcdJob();
+		[[nodiscard]] Path ccdAnalysisOutputPath() const;
+		[[nodiscard]] std::string ccdAnalysisBlocker() const;
+		bool loadCcdResult(const Path &directory);
+		void pollCcdAnalysisJob();
+		[[nodiscard]] std::optional<std::reference_wrapper<RendererWindowState>> targetWindow();
+		void clearWindow();
+		[[nodiscard]] Path supercellPath() const;
+		void openSupercellWindow();
+		void syncWindow(double deltaSeconds); // finds the bound window, applies arrows, advances the animation
+		void loadEmbeddingSummary(const Path &directory);
+		WeakRef<JobSystem> m_JobSystem;
+		Ref<EventBus> m_EventBus;
+		std::function<void(const PhononPanelSettings &)> m_SaveHandler;
+		std::function<void(bool)> m_ShowViewsHandler;
+		bool m_Changed = false;
+		std::uint64_t m_PlotRevision = 1;
+		std::string m_ObservedPlZpl = "computed";
+		// The renderer owns this vector for the session's lifetime; only Update installs the binding.
+		std::optional<std::reference_wrapper<std::vector<RendererWindowState>>> m_Windows;
+		Path m_ProjectDirectory;
+		std::vector<ProjectRootEntry> m_ProjectRoots;
+		mutable std::unordered_map<std::string, Path> m_DefaultDatasetDirectories;
+		std::string m_WindowId;
+		std::vector<std::string> m_WindowsBeforeOpen;
+		Ref<PhononAnalysisJob> m_PendingJob;
+		JobId m_PendingJobId = 0;
+		Ref<CcdInputsJob> m_PendingCcdJob;
+		JobId m_PendingCcdJobId = 0;
+		Ref<CcdAnalysisJob> m_PendingCcdAnalysisJob;
+		JobId m_PendingCcdAnalysisJobId = 0;
+		Ref<PhononDispersionJob> m_PendingDispersionJob;
+		JobId m_PendingDispersionJobId = 0;
+		std::optional<PhononDispersion> m_Dispersion;
+		std::string m_DispersionError;
+		std::array<int, 3> m_EmbeddingMult = {12, 12, 1};
+		std::string m_EmbeddingSummary;
+		std::string m_CcdInputsResult;
+		std::string m_CcdError;
+		std::string m_CcdAnalysisError;
+		std::string m_Error;
+		std::string m_WindowError;
+		bool m_BindRequested = false;
+		bool m_Paused = false;
+
 		std::vector<AnalysisDatasetRef> m_Datasets;
 		Path m_CurrentDataset;
-		std::map<std::string, std::pair<std::optional<PhononAnalysisResult>, std::string>> m_Spectra;
+		struct CachedPhonons
+		{
+			std::optional<PhononAnalysisResult> result;
+			std::string error;
+			bool modesRequested = false;
+			std::string modesError;
+		};
+		std::map<std::string, CachedPhonons> m_Spectra;
 		std::map<std::string, std::pair<std::optional<CcdAnalysisResult>, std::string>> m_CcdResults;
 		std::optional<CcdAnalysisResult> m_CcdResult;
 		WeakRef<JobSystem> m_ScanJobs;

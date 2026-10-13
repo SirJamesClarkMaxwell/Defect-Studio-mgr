@@ -1,5 +1,5 @@
 #include "Core/dspch.hpp"
-#include "Presentation/Panels/PhononModesPanel.hpp"
+#include "Presentation/Panels/PhononPanelSession.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 
 namespace DefectStudio
 {
-	void PhononModesPanel::loadEmbeddingSummary(const Path &directory)
+	void PhononPanelSession::loadEmbeddingSummary(const Path &directory)
 	{
 		m_EmbeddingSummary.clear();
 		std::string text, error;

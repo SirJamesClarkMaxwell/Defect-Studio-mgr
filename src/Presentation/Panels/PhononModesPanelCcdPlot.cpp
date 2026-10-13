@@ -108,7 +108,7 @@ namespace DefectStudio
 			if (const auto result = m_Session->CcdResult())
 			{
 				const auto &s = m_Session->Settings();
-				const auto label = PhononPanelSession::DirectoryLabel(s.selectedCcdDirectory, m_ProjectDirectory, m_ProjectRoots);
+				const auto label = PhononPanelSession::DirectoryLabel(s.selectedCcdDirectory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
 				ImGui::TextUnformatted(label.c_str()); ImGui::SetItemTooltip("%s", s.selectedCcdDirectory.Utf8().c_str());
 				if (tab == 3) drawCcdPlot(result->get());
 				else drawCcdPlPlot(result->get());
@@ -153,9 +153,9 @@ namespace DefectStudio
 		for (const auto &point : result.points) { minimum = std::min(minimum, point.q); maximum = std::max(maximum, point.q); }
 		const double margin = 0.25 * std::max(maximum - minimum, 0.2);
 		minimum -= margin; maximum += margin;
-		const bool reset = m_ResetPlots || m_PlotTab != 3;
+		const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 3;
 		if (reset) ImPlot::SetNextAxisToFit(ImAxis_Y1);
-		if (!ImPlot::BeginPlot("##ccdPlot", ImVec2(-1, ImGui::GetTextLineHeightWithSpacing() * 20))) return;
+		if (!ImPlot::BeginPlot("##ccdPlot", ImVec2(-1, std::max(ImGui::GetContentRegionAvail().y, 1.0f)))) return;
 		ImPlot::SetupAxes(" ", " ");
 		ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 		ImPlot::SetupFinish();
@@ -231,7 +231,7 @@ namespace DefectStudio
 		ImPlot::FitPoint(ImPlotPoint(minimum, -0.16 * std::max(result.zplEv, 1.0)));
 		ImPlot::EndPlot();
 		DrawTexAxisLabels(frame, rect, "Q [amu^{1/2} Å]", "E [eV]");
-		m_ResetPlots = false; m_PlotTab = 3;
+		m_LastPlotRevision = m_Session->PlotRevision(); m_PlotTab = 3;
 		if (result.curves.q.empty()) ImGui::TextDisabled("Brak ccd_curves.tsv w tym zestawie.");
 	}
 }

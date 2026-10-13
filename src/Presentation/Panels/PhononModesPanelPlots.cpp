@@ -15,18 +15,31 @@ namespace DefectStudio
 	void PhononModesPanel::drawPlots()
 	{
 		auto &settings = m_Session->Settings();
-		const float height = ImGui::GetTextLineHeightWithSpacing() * 18.0f;
 		if (!ImGui::BeginTabBar("##phononPlots")) return;
-		for (int tab = 0; m_Session->Result() && tab < 3; ++tab)
+		for (int tab = 0; tab < 3; ++tab)
 		{
-			const auto &result = *m_Session->Result();
 			const char *title = tab == 0 ? "β(ℏω)" : tab == 1 ? "S_k i S(ℏω)" : "PL";
 			if (!ImGui::BeginTabItem(title)) continue;
+			const auto active = m_Session->Result();
+			std::optional<std::reference_wrapper<const PhononAnalysisResult>> compared;
+			if (!active)
+				for (const auto &dataset : m_Session->Datasets())
+					if (dataset.kind == AnalysisDatasetKind::Phonons && m_Session->IsCompared(dataset.directory))
+					{
+						std::string error;
+						compared = tab == 0 ? m_Session->PlotModes(dataset.directory, error) : m_Session->Spectra(dataset.directory, error);
+						if (compared) break;
+					}
+			if (!active && !compared)
+			{
+				ImGui::TextDisabled("Wczytaj wynik fononowy lub zaznacz zestaw fononów do porównania.");
+				ImGui::EndTabItem();
+				continue;
+			}
+			const auto &result = active ? *active : compared->get();
 			ImGui::PushID(tab);
 			const std::string plotKey = tab == 0 ? "beta/" : tab == 1 ? "S/" : "PL/";
-			// Keep each tab aligned with the filter row above the mode table.
-			if (tab < 2) ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
-			else
+			if (tab == 2)
 			{
 				ImGui::TextUnformatted("ZPL"); ImGui::SameLine();
 				if (ImGui::BeginCombo("##plZpl", settings.plZpl == "computed" ? "obliczone" :
@@ -37,25 +50,25 @@ namespace DefectStudio
 						std::tuple{"spin_purified", "po korekcji spinowej", result.zplEv.spinPurified.has_value() && !result.plSpinPurified.empty()},
 						std::tuple{"experimental", "eksperymentalne", result.zplEv.experimental.has_value() && !result.plExperimental.empty()},
 						std::tuple{"formula", "wzór", result.zplEv.formula.has_value() && !result.plFormula.empty()}})
-						if (available && ImGui::Selectable(label, settings.plZpl == key)) { settings.plZpl = key; m_ResetPlots = true; persist(); }
+						if (available && ImGui::Selectable(label, settings.plZpl == key)) { m_Session->SetPlZpl(key); }
 					ImGui::EndCombo();
 				}
 			}
-			const bool reset = m_ResetPlots || m_PlotTab != tab;
+			const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != tab;
 			if (reset)
 			{
 				ImPlot::SetNextAxisToFit(ImAxis_Y1);
 				if (tab == 1) ImPlot::SetNextAxisToFit(ImAxis_Y2);
 			}
-			if (ImPlot::BeginPlot("##plot", ImVec2(-1.0f, height)))
+			if (ImPlot::BeginPlot("##plot", ImVec2(-1.0f, std::max(ImGui::GetContentRegionAvail().y, 1.0f))))
 			{
 				ImPlot::SetupAxes(" ", " ");
 				if (tab == 1) ImPlot::SetupAxis(ImAxis_Y2, " ", ImPlotAxisFlags_AuxDefault);
-				auto [minimum, maximum] = tab < 2 ? m_Session->ModeEnergyRangeMeV() : m_Session->PlEnergyRangeEv();
+				auto [minimum, maximum] = PhononPanelSession::UsefulRange(result, tab == 2, settings.plZpl);
 				if (tab > 0)
 					for (const auto &dataset : m_Session->Datasets())
 						if (dataset.kind == AnalysisDatasetKind::Phonons && m_Session->IsCompared(dataset.directory) &&
-							!PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, m_ProjectDirectory))
+							(!active || !PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, m_Session->m_ProjectDirectory)))
 						{
 							std::string error;
 							if (const auto spectra = m_Session->Spectra(dataset.directory, error))
@@ -71,7 +84,14 @@ namespace DefectStudio
 				const ImRect frame = CurrentPlotFrame(&plotRect);
 				if (tab < 2)
 				{
-					const auto modes = m_Session->VisibleModes();
+					auto modes = active ? m_Session->VisibleModes() : std::vector<std::size_t>{};
+					if (!active)
+						for (std::size_t i = 0; i < result.modes.size(); ++i)
+						{
+							const auto &mode = result.modes[i];
+							if (!mode.isTranslation && mode.huangRhys >= settings.minHuangRhys &&
+								(settings.irrepFilter.empty() || settings.irrepFilter == mode.irrep)) modes.push_back(i);
+						}
 					std::vector<double> a1x, a1y, otherx, othery;
 					for (const auto index : modes)
 					{
@@ -86,7 +106,7 @@ namespace DefectStudio
 					if (SeriesLegendPopup("inne irreps", otherStyle, false)) persist();
 					PlotStyledStems("A1", a1x, a1y, a1Style);
 					if (SeriesLegendPopup("A1", a1Style, false)) persist();
-					if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+					if (active && ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 					{
 						const auto mouse = ImGui::GetIO().MousePos;
 						float nearest = 8.0f;
@@ -123,7 +143,7 @@ namespace DefectStudio
 					drawDatasetSpectra(true, minimum, maximum);
 				}
 				ImPlot::EndPlot();
-				m_ResetPlots = false;
+				m_LastPlotRevision = m_Session->PlotRevision();
 				m_PlotTab = tab;
 				DrawTexAxisLabels(frame, plotRect, tab == 2 ? "E [eV], E_{ZPL}" : "\\hbar\\omega [meV]",
 					tab == 0 ? "\\beta = N/N_{eff}" : tab == 1 ? "S_k" : "PL [j.u.]");
@@ -138,6 +158,11 @@ namespace DefectStudio
 			ImGui::EndTabItem();
 		}
 		drawCcdPlotTabs();
+		if (ImGui::BeginTabItem("Dyspersja"))
+		{
+			drawDispersionPlot();
+			ImGui::EndTabItem();
+		}
 		ImGui::EndTabBar();
 	}
 }

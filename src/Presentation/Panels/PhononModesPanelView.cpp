@@ -17,7 +17,7 @@ namespace DefectStudio
 		const auto &result = *m_Session->Result();
 		ImGui::SeparatorText("Podsumowanie");
 		ImGui::Text("S_total = %.4f   Debye–Waller = %.4f   N = %zu", result.sTotal, result.debyeWaller, result.AtomCount());
-		if (!m_EmbeddingSummary.empty()) ImGui::TextWrapped("%s", m_EmbeddingSummary.c_str());
+		if (!m_Session->m_EmbeddingSummary.empty()) ImGui::TextWrapped("%s", m_Session->m_EmbeddingSummary.c_str());
 		for (const auto &[label, value] : {std::pair{"obliczone", result.zplEv.computed},
 			std::pair{"po korekcji spinowej", result.zplEv.spinPurified}, std::pair{"eksperymentalne", result.zplEv.experimental}})
 			if (value) { ImGui::Text("ZPL (%s): %.4f eV", label, *value); }
@@ -152,11 +152,12 @@ namespace DefectStudio
 	{
 		ImGui::SeparatorText("Wizualizacja");
 		ImGui::BeginDisabled(m_Session->Settings().forceConstantDirectory.Empty());
-		if (ImGui::Button("Otwórz superkomórkę")) openSupercellWindow();
+		if (ImGui::Button("Otwórz superkomórkę")) m_Session->openSupercellWindow();
 		ImGui::EndDisabled();
+		if (m_Session->Settings().forceConstantDirectory.Empty()) ImGui::SetItemTooltip("Ustaw katalog stałych siłowych (FC).");
 		ImGui::SameLine();
-		if (!m_WindowError.empty()) ImGui::TextDisabled("%s", m_WindowError.c_str());
-		else if (const auto window = targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
+		if (!m_Session->m_WindowError.empty()) ImGui::TextDisabled("%s", m_Session->m_WindowError.c_str());
+		else if (const auto window = m_Session->targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
 		auto &settings = m_Session->Settings();
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Pokaż strzałki");
@@ -178,16 +179,20 @@ namespace DefectStudio
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
 		ImGui::SetItemTooltip("Duży udział");
 		ImGui::SameLine();
-		const auto window = targetWindow();
-		ImGui::BeginDisabled(!window || !m_WindowError.empty() || !m_Session->SelectedMode());
-		if (ImGui::Button(m_Session->IsAnimating() && !m_Paused ? "⏸ Pauza" : "▶ Animuj"))
+		const auto window = m_Session->targetWindow();
+		const std::string animationBlocker = !m_Session->SelectedMode() ? "Wybierz mod." :
+			!window ? "Otwórz superkomórkę FC." : m_Session->m_WindowError;
+		ImGui::BeginDisabled(!window || !m_Session->m_WindowError.empty() || !m_Session->SelectedMode());
+		if (ImGui::Button(m_Session->IsAnimating() && !m_Session->m_Paused ? "⏸ Pauza" : "▶ Animuj"))
 		{
-			if (!m_Session->IsAnimating()) { m_Session->StartAnimation(window->get()); m_Paused = false; }
-			else m_Paused = !m_Paused;
+			if (!m_Session->IsAnimating()) { m_Session->StartAnimation(window->get()); m_Session->m_Paused = false; }
+			else m_Session->m_Paused = !m_Session->m_Paused;
 		}
+		if (!animationBlocker.empty()) ImGui::SetItemTooltip("%s", animationBlocker.c_str());
 		ImGui::SameLine();
 		if (ImGui::Button("⏹ Stop")) StopAnimation();
 		ImGui::EndDisabled();
+		if (!animationBlocker.empty()) ImGui::SetItemTooltip("%s", animationBlocker.c_str());
 		if (!ImGui::BeginTable("##visualisationSettings", 3, ImGuiTableFlags_SizingStretchSame)) return;
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Próg strzałek");
@@ -238,7 +243,7 @@ namespace DefectStudio
 			settings.animationPeriodSeconds = period;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
 		ImGui::TableSetColumnIndex(2);
-		ImGui::BeginDisabled(!window || !m_Paused || !m_Session->IsAnimating());
+		ImGui::BeginDisabled(!window || !m_Session->m_Paused || !m_Session->IsAnimating());
 		float phase = static_cast<float>(m_Session->Phase());
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::SliderFloat("##phase", &phase, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, "%.2f rad", ImGuiSliderFlags_AlwaysClamp))

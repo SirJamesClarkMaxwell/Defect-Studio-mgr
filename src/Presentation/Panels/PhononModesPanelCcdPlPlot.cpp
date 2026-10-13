@@ -13,7 +13,7 @@ namespace DefectStudio
 	{
 		auto &s = m_Session->Settings();
 		ImGui::Text("ZPL %.5g eV (%s)", result.zplEv, result.zplFormulaText.empty() ? "z wyniku" : result.zplFormulaText.c_str());
-		if (ImGui::Checkbox("porównaj z PL fononów", &s.ccdComparePhononPl)) { m_ResetPlots = true; persist(); }
+		if (ImGui::Checkbox("porównaj z PL fononów", &s.ccdComparePhononPl)) { m_Session->InvalidatePlots(); persist(); }
 		if (s.ccdComparePhononPl)
 		{
 			if (!m_Session->Result()) ImGui::TextDisabled("Wczytaj aktywny zestaw fononów do porównania.");
@@ -23,7 +23,7 @@ namespace DefectStudio
 		std::vector<std::string> errors;
 		for (const auto &dataset : m_Session->Datasets())
 			if (dataset.kind == AnalysisDatasetKind::Ccd && m_Session->IsCompared(dataset.directory) &&
-				!PhononPanelSession::SameFilePath(dataset.directory, s.selectedCcdDirectory, m_ProjectDirectory))
+				!PhononPanelSession::SameFilePath(dataset.directory, s.selectedCcdDirectory, m_Session->m_ProjectDirectory))
 			{
 				std::string error;
 				if (const auto ccd = m_Session->Ccd(dataset.directory, error))
@@ -38,9 +38,9 @@ namespace DefectStudio
 			const auto [low, high] = PhononPanelSession::UsefulRange(*m_Session->Result(), true, s.plZpl);
 			minimum = std::min(minimum, low); maximum = std::max(maximum, high);
 		}
-		const bool reset = m_ResetPlots || m_PlotTab != 4;
+		const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 4;
 		if (reset) ImPlot::SetNextAxisToFit(ImAxis_Y1);
-		if (!ImPlot::BeginPlot("##ccdPlPlot", ImVec2(-1, ImGui::GetTextLineHeightWithSpacing() * 20))) return;
+		if (!ImPlot::BeginPlot("##ccdPlPlot", ImVec2(-1, std::max(ImGui::GetContentRegionAvail().y, 1.0f)))) return;
 		ImPlot::SetupAxes(" ", " ");
 		ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 		ImPlot::SetupFinish();
@@ -58,25 +58,25 @@ namespace DefectStudio
 		if (s.ccdComparePhononPl && m_Session->Result())
 		{
 			const auto &phonons = *m_Session->Result();
-			const auto path = PhononPanelSession::DirectoryLabel(s.resultDirectory, m_ProjectDirectory, m_ProjectRoots);
+			const auto path = PhononPanelSession::DirectoryLabel(s.resultDirectory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
 			draw((phonons.label.empty() ? path : phonons.label) + " (fonony)###phononPL", "PL1D/phonons/" + path,
 				phonons.plPhotonEnergyEv, PhononPanelSession::PlCurve(phonons, PhononPanelSession::PlCurveChoice(phonons, s.plZpl)));
 		}
 		for (const auto &dataset : m_Session->Datasets())
 			if (dataset.kind == AnalysisDatasetKind::Ccd && m_Session->IsCompared(dataset.directory) &&
-				!PhononPanelSession::SameFilePath(dataset.directory, s.selectedCcdDirectory, m_ProjectDirectory))
+				!PhononPanelSession::SameFilePath(dataset.directory, s.selectedCcdDirectory, m_Session->m_ProjectDirectory))
 			{
 				std::string error;
 				if (const auto ccd = m_Session->Ccd(dataset.directory, error))
 				{
-					const auto path = PhononPanelSession::DirectoryLabel(dataset.directory, m_ProjectDirectory, m_ProjectRoots);
+					const auto path = PhononPanelSession::DirectoryLabel(dataset.directory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
 					draw(dataset.label + "###" + dataset.directory.Utf8(), "PL1D/" + path,
 						ccd->get().pl1d.energyEv, ccd->get().pl1d.numerov);
 				}
 			}
 		ImPlot::EndPlot();
 		DrawTexAxisLabels(frame, rect, "E [eV]", "PL 1D [j.u.]");
-		m_ResetPlots = false; m_PlotTab = 4;
+		m_LastPlotRevision = m_Session->PlotRevision(); m_PlotTab = 4;
 		if (result.pl1d.numerov.empty() && result.pl1d.harmonic.empty() && result.pl1d.phonon1d.empty())
 			ImGui::TextDisabled("Brak widma pl_1d.tsv w tym zestawie.");
 		for (const auto &error : errors) ImGui::TextColored(ImVec4(1, 0.35f, 0.35f, 1), "%s", error.c_str());
