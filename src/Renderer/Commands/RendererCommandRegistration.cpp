@@ -7,6 +7,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Events/RendererEvents.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
+#include "Renderer/Commands/RendererCellEditCommand.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 
@@ -18,6 +19,16 @@ namespace DefectStudio
 {
 	namespace
 	{
+		Unique<ICommand> MakeReplaceStructureCommand(WeakRef<DomainLayer> domainLayer,
+			WeakRef<RendererLayer> rendererLayer, AtomStyleTable styles, ElementPropertiesTable elements, CommandContext &context)
+		{
+			const auto payload = context.TryGet<ReplaceStructurePayload>(kReplaceStructurePayloadKey);
+			if (payload == nullptr)
+				return nullptr;
+			return CreateReplaceStructureCommand(std::move(domainLayer), std::move(rendererLayer),
+				std::move(styles), std::move(elements), *payload);
+		}
+
 		Unique<ICommand> MakeSetVacanciesCommand(WeakRef<DomainLayer> domainLayer,
 			WeakRef<RendererLayer> rendererLayer, AtomStyleTable styles, CommandContext &context)
 		{
@@ -422,6 +433,14 @@ namespace DefectStudio
 	{
 		using namespace RendererEvents::Viewport;
 		BindRendererVacancyVisibilityEditor(domainLayer, rendererLayer, atomStyleTable);
+
+		RegisterRendererCommand(
+			registry,
+			kReplaceStructureCommandId,
+			"Renderer: Edit cell",
+			"Replace the active window's structure for cell editing, repeat or wrap (undoable).",
+			std::bind_front(MakeReplaceStructureCommand, domainLayer, rendererLayer, atomStyleTable, elementPropertiesTable),
+			CommandFlags::Undoable | CommandFlags::HiddenFromPalette);
 
 		RegisterRendererCommand(
 			registry,

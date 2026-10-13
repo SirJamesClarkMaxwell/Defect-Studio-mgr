@@ -48,6 +48,7 @@
 #include "Renderer/Scene/SceneSystem.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/Panels/BondSettingsPanel.hpp"
+#include "Presentation/Panels/CellPanel.hpp"
 #include "Presentation/Panels/NewStructureWizardPanel.hpp"
 #include "Presentation/Panels/CalculatorConsolePanel.hpp"
 #include "Presentation/Panels/ElectronicStructurePanel.hpp"
@@ -283,6 +284,8 @@ namespace DefectStudio
 			}
 			registerPanel<ObjectPropertiesPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_AtomStyleTable, "Object Properties", true);
+			registerPanel<CellPanel>(
+				*rendererLayer, m_CommandRegistry, m_DomainLayer, "Komórka", false);
 			registerPanel<BondSettingsPanel>(
 				*rendererLayer, m_CommandRegistry, m_DomainLayer, m_ElementPropertiesTable, "Bond Settings", false);
 			m_NewStructureWizardPanelId = registerPanel<NewStructureWizardPanel>(
