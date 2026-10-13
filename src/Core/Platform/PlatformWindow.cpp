@@ -40,6 +40,11 @@ namespace DefectStudio::Platform
 		return {};
 	}
 
+	bool FileSystemNamesEqual(const FilePath &left, const FilePath &right)
+	{
+		return left == right;
+	}
+
 	Path GetExecutableDirectory()
 	{
 		return {};

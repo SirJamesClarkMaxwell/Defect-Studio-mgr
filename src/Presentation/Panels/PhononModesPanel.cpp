@@ -248,10 +248,10 @@ namespace DefectStudio
 	void PhononModesPanel::syncWindow()
 	{
 		const Path source = supercellPath();
-		if (m_WindowId.empty() && m_BindRequested)
+		if (m_WindowId.empty())
 			for (auto &window : m_RendererLayer.GetWindows())
-				if (window.structure.sourcePath == source &&
-					std::find(m_WindowsBeforeOpen.begin(), m_WindowsBeforeOpen.end(), window.windowId) == m_WindowsBeforeOpen.end())
+				if (PhononPanelSession::SameFilePath(window.structure.sourcePath, source, m_ProjectDirectory) &&
+					(!m_BindRequested || std::find(m_WindowsBeforeOpen.begin(), m_WindowsBeforeOpen.end(), window.windowId) == m_WindowsBeforeOpen.end()))
 				{
 					m_WindowId = window.windowId;
 					m_BindRequested = false;
@@ -270,7 +270,7 @@ namespace DefectStudio
 			return;
 		}
 		auto &target = window->get();
-		if (target.structure.sourcePath != source)
+		if (!PhononPanelSession::SameFilePath(target.structure.sourcePath, source, m_ProjectDirectory))
 		{
 			clearWindow();
 			return;

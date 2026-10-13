@@ -66,6 +66,11 @@ namespace DefectStudio::Platform
 		return directories;
 	}
 
+	bool FileSystemNamesEqual(const FilePath &left, const FilePath &right)
+	{
+		return left == right;
+	}
+
 	Path GetExecutableDirectory()
 	{
 		char buffer[PATH_MAX] = {};

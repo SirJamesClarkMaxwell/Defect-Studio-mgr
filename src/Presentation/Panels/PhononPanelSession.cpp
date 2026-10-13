@@ -5,6 +5,7 @@
 #include <cmath>
 #include <numbers>
 
+#include "Core/Platform/PlatformPaths.hpp"
 #include "Renderer/RendererWindowState.hpp"
 
 namespace DefectStudio
@@ -38,6 +39,33 @@ namespace DefectStudio
 		const Path base = projectDirectory.Empty() ? Path::FromResolved(FileSystem::CurrentPath()) : projectDirectory;
 		return Path::FromResolved((path.Native().is_absolute() ? path.Native() :
 			base.Native() / path.Native()).lexically_normal());
+	}
+
+	bool PhononPanelSession::SameFilePath(const Path &left, const Path &right, const Path &projectDirectory)
+	{
+		if (left.Empty() || right.Empty()) return false;
+		const auto normalized = [&](const Path &path) {
+			auto native = path.Native();
+			if (native.is_relative()) native = projectDirectory.Native() / native;
+			std::error_code error;
+			native = FileSystem::Absolute(native, error);
+			if (error) return FilePath{};
+			return native.lexically_normal();
+		};
+		const auto normalizedLeft = normalized(left), normalizedRight = normalized(right);
+		if (normalizedLeft.empty() || normalizedRight.empty()) return false;
+		return Platform::FileSystemNamesEqual(normalizedLeft, normalizedRight);
+	}
+
+	std::pair<std::size_t, std::size_t> PhononPanelSession::GridIndexRange(std::span<const double> grid,
+		double minimum, double maximum)
+	{
+		if (grid.empty() || minimum > maximum) return {0, 0};
+		std::size_t first = static_cast<std::size_t>(std::lower_bound(grid.begin(), grid.end(), minimum) - grid.begin());
+		std::size_t last = static_cast<std::size_t>(std::upper_bound(grid.begin(), grid.end(), maximum) - grid.begin());
+		if (first > 0) --first;
+		if (last < grid.size()) ++last;
+		return {first, last};
 	}
 
 	std::pair<double, double> PhononPanelSession::ModeEnergyRangeMeV() const

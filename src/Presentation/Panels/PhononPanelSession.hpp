@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,6 +36,11 @@ namespace DefectStudio
 			const std::vector<ProjectRootEntry> &roots);
 		// Pasted spaces/quotes are stripped; relative input is resolved against the project.
 		[[nodiscard]] static Path ResolveDirectoryText(std::string_view text, const Path &projectDirectory);
+		// Relative paths use the project directory; empty paths never match. Windows ignores case.
+		[[nodiscard]] static bool SameFilePath(const Path &left, const Path &right, const Path &projectDirectory);
+		// Sorted grid inside [minimum, maximum], with one sample on either side, clamped to the grid.
+		[[nodiscard]] static std::pair<std::size_t, std::size_t> GridIndexRange(std::span<const double> grid,
+			double minimum, double maximum);
 		[[nodiscard]] std::pair<double, double> ModeEnergyRangeMeV() const;
 		[[nodiscard]] std::pair<double, double> PlEnergyRangeEv() const;
 

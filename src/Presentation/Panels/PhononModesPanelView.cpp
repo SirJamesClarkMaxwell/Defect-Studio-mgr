@@ -2,6 +2,7 @@
 #include "Presentation/Panels/PhononModesPanel.hpp"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <format>
 #include <numbers>
@@ -111,10 +112,16 @@ namespace DefectStudio
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
 				const bool selected = settings.selectedMode == static_cast<int>(index);
-				if (selected)
-					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_HeaderActive));
-				if (ImGui::Selectable(std::to_string(mode.index).c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
+				const std::string label = (selected ? (m_Session->IsAnimating() ? "▶ " : "● ") : "") +
+					std::to_string(mode.index) + "###mode";
+				if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
 					selectMode(static_cast<int>(index));
+				if (selected)
+				{
+					const ImU32 accent = ImGui::GetColorU32(ImGuiCol_CheckMark, 0.35f);
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, accent);
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, accent);
+				}
 				if (selected && scrollToSelection) ImGui::SetScrollHereY();
 				ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", mode.frequencyMeV);
 				ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted(mode.irrep.c_str());
@@ -139,27 +146,26 @@ namespace DefectStudio
 		if (!m_WindowError.empty()) ImGui::TextDisabled("%s", m_WindowError.c_str());
 		else if (const auto window = targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
 		auto &settings = m_Session->Settings();
-		if (ImGui::Checkbox("Pokaż strzałki", &settings.showArrows)) persist();
-		if (ImGui::Checkbox("Strzałki zgodne z fazą", &settings.arrowsFollowPhase)) persist();
-		float threshold = static_cast<float>(settings.participationThreshold);
-		if (ImGui::SliderFloat("Ukryj strzałki poniżej udziału", &threshold, 1e-4f, 1.0f, "%.4g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp))
-			settings.participationThreshold = threshold;
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted("Pokaż strzałki");
+		if (ImGui::IsItemClicked()) { settings.showArrows = !settings.showArrows; persist(); }
+		ImGui::SameLine();
+		if (ImGui::Checkbox("##showArrows", &settings.showArrows)) persist();
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Zgodne z fazą");
+		if (ImGui::IsItemClicked()) { settings.arrowsFollowPhase = !settings.arrowsFollowPhase; persist(); }
+		ImGui::SameLine();
+		if (ImGui::Checkbox("##arrowsFollowPhase", &settings.arrowsFollowPhase)) persist();
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Kolory:"); ImGui::SameLine();
+		ImGui::ColorEdit3("##arrowLowColor", &settings.arrowLowColor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
-		ImGui::SetItemTooltip("Udział atomu w modzie = |e_i|^2 (suma po atomach = 1). Strzałki atomów o mniejszym udziale są ukryte.");
-		ImGui::Text("strzałek: %zu z %zu", m_Session->ArrowCount(), m_Session->Result()->AtomCount());
-		float fraction = static_cast<float>(settings.carriedFraction * 100.0);
-		if (ImGui::SliderFloat("Zlicz atomy niosące [%]", &fraction, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp)) settings.carriedFraction = fraction / 100.0;
+		ImGui::SetItemTooltip("Mały udział");
+		ImGui::SameLine();
+		ImGui::ColorEdit3("##arrowHighColor", &settings.arrowHighColor.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
-		ImGui::SetItemTooltip("Ile najsilniej drgających atomów razem niesie X %% modu (kolumna N(X%%) w tabeli).");
-		ImGui::Text("%zu atomów niesie %.1f %% modu", m_Session->AtomsCarryingSelectedFraction(), settings.carriedFraction * 100.0);
-		float length = static_cast<float>(settings.arrowLengthAngstrom);
-		if (ImGui::DragFloat("Długość najdłuższej strzałki [Å]", &length, 0.01f, 0.1f, 5.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
-			settings.arrowLengthAngstrom = length;
-		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
-		ImGui::ColorEdit3("Mały udział", &settings.arrowLowColor.x, ImGuiColorEditFlags_NoInputs);
-		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
-		ImGui::ColorEdit3("Duży udział", &settings.arrowHighColor.x, ImGuiColorEditFlags_NoInputs);
-		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::SetItemTooltip("Duży udział");
+		ImGui::SameLine();
 		const auto window = targetWindow();
 		ImGui::BeginDisabled(!window || !m_WindowError.empty() || !m_Session->SelectedMode());
 		if (ImGui::Button(m_Session->IsAnimating() && !m_Paused ? "⏸ Pauza" : "▶ Animuj"))
@@ -170,18 +176,62 @@ namespace DefectStudio
 		ImGui::SameLine();
 		if (ImGui::Button("⏹ Stop")) StopAnimation();
 		ImGui::EndDisabled();
+		if (!ImGui::BeginTable("##visualisationSettings", 3, ImGuiTableFlags_SizingStretchSame)) return;
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Próg udziału");
+		ImGui::SetItemTooltip("Udział atomu w modzie = |e_i|^2 (suma po atomach = 1). Strzałki atomów o mniejszym udziale są ukryte.");
+		ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Atomy niosące [%]");
+		ImGui::SetItemTooltip("Ile najsilniej drgających atomów razem niesie X %% modu (kolumna N(X%%) w tabeli).");
+		ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted("Długość strzałki [Å]");
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		float threshold = static_cast<float>(settings.participationThreshold);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::SliderFloat("##participationThreshold", &threshold, 1e-4f, 1.0f, "%.4g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp))
+			settings.participationThreshold = threshold;
+		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::SetItemTooltip("Udział atomu w modzie = |e_i|^2 (suma po atomach = 1). Strzałki atomów o mniejszym udziale są ukryte.");
+		ImGui::TableSetColumnIndex(1);
+		float fraction = static_cast<float>(settings.carriedFraction * 100.0);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::SliderFloat("##carriedFraction", &fraction, 0.1f, 100.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp)) settings.carriedFraction = fraction / 100.0;
+		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::SetItemTooltip("Ile najsilniej drgających atomów razem niesie X %% modu (kolumna N(X%%) w tabeli).");
+		ImGui::TableSetColumnIndex(2);
+		float length = static_cast<float>(settings.arrowLengthAngstrom);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##arrowLength", &length, 0.01f, 0.1f, 5.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+			settings.arrowLengthAngstrom = length;
+		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("strzałek: %zu z %zu", m_Session->ArrowCount(), m_Session->Result()->AtomCount());
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("%zu atomów niesie %.1f %% modu", m_Session->AtomsCarryingSelectedFraction(), settings.carriedFraction * 100.0);
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Amplituda [Å]");
+		ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Okres [s]");
+		ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted("Faza");
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
 		float amplitude = static_cast<float>(settings.animationAmplitudeAngstrom);
-		if (ImGui::DragFloat("Amplituda [Å]", &amplitude, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##animationAmplitude", &amplitude, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
 			settings.animationAmplitudeAngstrom = amplitude;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::TableSetColumnIndex(1);
 		float period = static_cast<float>(settings.animationPeriodSeconds);
-		if (ImGui::DragFloat("Okres [s]", &period, 0.02f, 0.2f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##animationPeriod", &period, 0.02f, 0.2f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
 			settings.animationPeriodSeconds = period;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::TableSetColumnIndex(2);
 		ImGui::BeginDisabled(!window || !m_Paused || !m_Session->IsAnimating());
 		float phase = static_cast<float>(m_Session->Phase());
-		if (ImGui::SliderFloat("Faza", &phase, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, "%.2f rad", ImGuiSliderFlags_AlwaysClamp))
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::SliderFloat("##phase", &phase, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, "%.2f rad", ImGuiSliderFlags_AlwaysClamp))
 			m_Session->SetPhase(window->get(), phase);
 		ImGui::EndDisabled();
+		ImGui::EndTable();
 	}
 }

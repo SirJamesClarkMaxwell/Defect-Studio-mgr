@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
 #include <tuple>
 #include <imgui.h>
 #include <implot.h>
@@ -97,7 +98,9 @@ namespace DefectStudio
 					{
 						ImPlot::SetAxes(ImAxis_X1, ImAxis_Y2);
 						auto &style = settings.seriesStyles[plotKey + "density"];
-						PlotStyledLine("S(ℏω)", result.spectralEnergyMeV, result.spectralDensityPerMeV, style);
+						const auto [first, last] = PhononPanelSession::GridIndexRange(result.spectralEnergyMeV, minimum, maximum);
+						PlotStyledLine("S(ℏω)", std::span(result.spectralEnergyMeV).subspan(first, last - first),
+							std::span(result.spectralDensityPerMeV).subspan(first, last - first), style);
 						if (SeriesLegendPopup("S(ℏω)", style)) persist();
 					}
 				}
@@ -108,7 +111,9 @@ namespace DefectStudio
 					if (!curve.empty())
 					{
 						auto &style = settings.seriesStyles[plotKey + "PL"];
-						PlotStyledLine("PL", result.plPhotonEnergyEv, curve, style);
+						const auto [first, last] = PhononPanelSession::GridIndexRange(result.plPhotonEnergyEv, minimum, maximum);
+						PlotStyledLine("PL", std::span(result.plPhotonEnergyEv).subspan(first, last - first),
+							std::span(curve).subspan(first, last - first), style);
 						if (SeriesLegendPopup("PL", style)) persist();
 					}
 				}

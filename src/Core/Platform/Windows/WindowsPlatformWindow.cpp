@@ -345,6 +345,11 @@ namespace DefectStudio::Platform
 		return directories;
 	}
 
+	bool FileSystemNamesEqual(const FilePath &left, const FilePath &right)
+	{
+		return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_EQUAL;
+	}
+
 	Path GetExecutableDirectory()
 	{
 		wchar_t modulePath[MAX_PATH] = {};

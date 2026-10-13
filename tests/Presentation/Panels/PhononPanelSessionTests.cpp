@@ -120,6 +120,60 @@ namespace DefectStudio::Tests
 		EXPECT_DOUBLE_EQ(session.PlEnergyRangeEv().second, 2.15);
 	}
 
+	TEST(PhononPanelSessionTests, SameFilePathsNormalizeSeparatorsDotsAndWindowsCase)
+	{
+		const Path source = Path::FromUtf8("C:/a/b/POSCAR");
+#ifdef DS_PLATFORM_WINDOWS
+		EXPECT_TRUE(PhononPanelSession::SameFilePath(source, Path::FromUtf8("c:\\a\\b\\.\\POSCAR"), {}));
+		EXPECT_TRUE(PhononPanelSession::SameFilePath(Path::FromUtf8("C:/Żółć/POSCAR"),
+			Path::FromUtf8("c:/żółć/poscar"), {}));
+#else
+		EXPECT_FALSE(PhononPanelSession::SameFilePath(source, Path::FromUtf8("c:/a/b/POSCAR"), {}));
+#endif
+		EXPECT_TRUE(PhononPanelSession::SameFilePath(source, Path::FromUtf8("C:/a/b/../b/./POSCAR"), {}));
+		EXPECT_FALSE(PhononPanelSession::SameFilePath(source, Path::FromUtf8("C:/a/c/POSCAR"), {}));
+		EXPECT_FALSE(PhononPanelSession::SameFilePath({}, source, {}));
+		EXPECT_FALSE(PhononPanelSession::SameFilePath(source, {}, {}));
+		EXPECT_FALSE(PhononPanelSession::SameFilePath({}, {}, {}));
+	}
+
+	TEST(PhononPanelSessionTests, SameFilePathsResolveRelativeRestoredSourcesAgainstTheProject)
+	{
+		const Path project = Path::FromResolved(FileSystem::CurrentPath()) / "phonon-project";
+		const Path source = project / "result" / "POSCAR";
+		const Path relative = Path::FromUtf8("result/./POSCAR");
+		EXPECT_TRUE(PhononPanelSession::SameFilePath(relative, source, project));
+		EXPECT_TRUE(PhononPanelSession::SameFilePath(source, relative, project));
+		EXPECT_FALSE(PhononPanelSession::SameFilePath(relative, source, project / "other"));
+		EXPECT_TRUE(PhononPanelSession::SameFilePath(Path::FromUtf8("./POSCAR"),
+			Path::FromResolved(FileSystem::CurrentPath()) / "POSCAR", {}));
+	}
+
+	TEST(PhononPanelSessionTests, GridIndexRangeIncludesOneSampleOnEachSide)
+	{
+		const std::vector<double> grid{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+		const auto expect = [&](double minimum, double maximum, std::size_t first, std::size_t last) {
+			EXPECT_EQ(PhononPanelSession::GridIndexRange(grid, minimum, maximum), (std::pair{first, last}));
+		};
+		expect(2.5, 6.2, 2, 8); // samples 2..7
+		expect(2.0, 6.0, 1, 8); // inclusive endpoints, plus the margin
+		expect(2.2, 2.8, 2, 4); // no interior sample: keep its two neighbours
+		expect(3.0, 3.0, 2, 5);
+		expect(-2.0, 0.2, 0, 2);
+		expect(9.8, 12.0, 9, 11);
+		expect(-2.0, 12.0, 0, 11);
+		expect(-2.0, -1.0, 0, 1);
+		expect(11.0, 12.0, 10, 11);
+		expect(6.0, 2.0, 0, 0);
+	}
+
+	TEST(PhononPanelSessionTests, GridIndexRangeHandlesEmptyAndSingleSampleGrids)
+	{
+		EXPECT_EQ(PhononPanelSession::GridIndexRange({}, 2.5, 6.2), (std::pair<std::size_t, std::size_t>{0, 0}));
+		const std::vector<double> grid{4.0};
+		EXPECT_EQ(PhononPanelSession::GridIndexRange(grid, 2.5, 6.2), (std::pair<std::size_t, std::size_t>{0, 1}));
+	}
+
 	TEST(PhononPanelSessionTests, PersistedValidSelectionSurvivesSetResult)
 	{
 		PhononPanelSession session;
