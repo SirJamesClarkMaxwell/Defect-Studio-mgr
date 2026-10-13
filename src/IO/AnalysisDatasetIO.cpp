@@ -24,8 +24,18 @@ namespace DefectStudio
 			else if (schema == "ds.phonon_dispersion.v1") kind = AnalysisDatasetKind::Dispersion;
 			else if (schema == "ds.ccd_analysis.v1") kind = AnalysisDatasetKind::Ccd;
 			else return std::nullopt;
-			return AnalysisDatasetRef{kind, Path::FromResolved(directory.Native().lexically_normal()),
+			AnalysisDatasetRef dataset{kind, Path::FromResolved(directory.Native().lexically_normal()),
 				summary.value("label", directory.filename().Utf8()), schema};
+			for (const auto key : {"input_paths", "inputs_relative"})
+				if (summary.contains(key) && summary[key].is_object())
+					for (const auto &[name, value] : summary[key].items())
+					{
+						if (!value.is_string() || value.get_ref<const std::string &>().empty()) continue;
+						const auto path = Path::FromUtf8(value.get<std::string>());
+						dataset.inputs[name] = Path::FromResolved((path.Native().is_absolute() ? path.Native() :
+							directory.Native() / path.Native()).lexically_normal());
+					}
+			return dataset;
 		}
 		catch (const std::exception &) { return std::nullopt; }
 	}

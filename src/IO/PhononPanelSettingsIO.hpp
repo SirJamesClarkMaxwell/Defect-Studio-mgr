@@ -15,7 +15,7 @@ namespace DefectStudio
 	// task/104c: everything the Phonons panel (task 104d) lets the user set, so reopening the
 	// project shows the same result, mode, arrows and animation settings. Inputs of the last
 	// computation are kept too, so "Policz ponownie" needs no re-picking.
-	struct PhononPanelSettings
+	struct PhononCaseSettings
 	{
 		// Computation inputs (PhononAnalysisRequest); empty = not chosen yet
 		Path forceConstantDirectory;
@@ -33,7 +33,7 @@ namespace DefectStudio
 		std::string embeddingMult;           // "24x24x1"
 		std::optional<double> dcutoffAngstrom;
 		std::optional<double> bcutoffAngstrom;
-		// task/104g: CCD single points (scripts/python/examples/ccd_inputs.py); empty = <project>/ccd/<es dir name>
+		// task/104g: CCD single points (scripts/python/examples/ccd_inputs.py); empty = collision-safe case output
 		Path ccdOutputDirectory;
 		double ccdStep = 0.25;
 		Path ccdDirectory; // optional completed CCD path, distinct from generated-point output
@@ -41,6 +41,24 @@ namespace DefectStudio
 		double ccdTemperatureK = 0.0;
 		bool ccdPhononCurvature = false;
 		Path selectedCcdDirectory;
+		// The loaded result directory (PhononAnalysisIO); empty = nothing loaded
+		Path resultDirectory;
+		int selectedMode = -1;            // index into the modes table, -1 = none
+		std::string plZpl = "experimental";   // computed | spin_purified | experimental | formula
+		std::string irrepFilter;              // empty = all irreps
+		double minHuangRhys = 0.0;            // mode filter; separate from the per-atom arrow threshold
+	};
+
+	struct PhononCase
+	{
+		std::string id;
+		std::string name;
+		std::vector<Path> datasets;
+		PhononCaseSettings settings;
+	};
+
+	struct PhononPanelSettings : PhononCaseSettings
+	{
 		int ccdLevels = 3;
 		bool ccdWavefunctions = false;
 		bool ccdProbability = false; // chi squared instead of chi
@@ -53,10 +71,7 @@ namespace DefectStudio
 		bool dispersionInPlane = true;
 		int dispersionPoints = 101;
 
-		// The loaded result directory (PhononAnalysisIO); empty = nothing loaded
-		Path resultDirectory;
 
-		int selectedMode = -1;            // index into the modes table, -1 = none
 		double participationThreshold = 0.01;
 		double carriedFraction = 0.9;     // for the "N atoms carry X % of the mode" readout
 		double arrowLengthAngstrom = 1.5; // the longest arrow of the mode
@@ -67,13 +82,18 @@ namespace DefectStudio
 		glm::vec3 arrowHighColor = glm::vec3(0.85f, 0.2f, 0.2f);
 		double animationAmplitudeAngstrom = 0.3;
 		double animationPeriodSeconds = 1.5; // visual period, not the physical one
-		std::string plZpl = "experimental";   // computed | spin_purified | experimental | formula
-		std::string irrepFilter;              // empty = all irreps
-		double minHuangRhys = 0.0;            // mode filter; separate from the per-atom arrow threshold
+		std::vector<PhononCase> cases; // active settings are synchronized from the base on read/save
+		std::string activeCaseId;
+		int nextCaseNumber = 1; // high-water mark; removed ids are never reused
 	};
 
 	// phonon_panel.yaml next to manifest.yaml. Schema (all keys optional on read):
-	//   formatVersion: 1
+	//   formatVersion: 2
+	//   activeCase: case-1
+	//   nextCaseNumber: 2
+	//   cases: [{id, name, datasets: [paths], inputs: {case input keys below}, resultDir, ccd,
+	//            view: {selectedMode, plZpl, irrepFilter, minHuangRhys}}]
+	//   Top-level inputs/view/datasets contain only global fields; v1 flat keys still read:
 	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplFormula, gsAtEsDir, esAtGsDir, outputDir, sigma, gamma,
 	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep, ccdPathDir, ccdAnalysisOutputDir,
 	//            ccdTemperature, ccdPhononCurvature,
@@ -90,7 +110,7 @@ namespace DefectStudio
 	class PhononPanelSettingsIO
 	{
 	public:
-		static constexpr int kFormatVersion = 1;
+		static constexpr int kFormatVersion = 2;
 
 		[[nodiscard]] static Path FilePath(const Path &projectDirectory); // projectDirectory / "phonon_panel.yaml"
 

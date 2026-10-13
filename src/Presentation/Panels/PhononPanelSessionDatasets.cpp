@@ -52,6 +52,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::SetDatasets(std::vector<AnalysisDatasetRef> datasets)
 	{
+		m_CaseOutputDirectories.clear();
 		++m_PlotRevision;
 		std::sort(datasets.begin(), datasets.end(), [](const auto &a, const auto &b) { return a.directory.Native() < b.directory.Native(); });
 		m_Datasets.clear();
@@ -65,6 +66,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::AddDataset(AnalysisDatasetRef dataset)
 	{
+		m_CaseOutputDirectories.clear();
 		++m_PlotRevision;
 		const auto found = std::find_if(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
 			return SameFilePath(entry.directory, dataset.directory, {});
@@ -128,6 +130,16 @@ namespace DefectStudio
 		}
 		outError = error;
 		return result ? std::optional<std::reference_wrapper<const PhononAnalysisResult>>(std::cref(*result)) : std::nullopt;
+	}
+
+	void PhononPanelSession::cacheActiveResult()
+	{
+		if (!m_Result || m_Settings.resultDirectory.Empty()) return;
+		auto &cached = m_Spectra[SpectraKey(m_Settings.resultDirectory)];
+		cached.result = *m_Result;
+		cached.error.clear();
+		cached.modesRequested = true;
+		cached.modesError.clear();
 	}
 
 	std::optional<std::reference_wrapper<const PhononAnalysisResult>> PhononPanelSession::PlotModes(
@@ -197,6 +209,8 @@ namespace DefectStudio
 			auto pinned = m_Settings.comparedDirectories;
 			pinned.push_back(m_Settings.resultDirectory); pinned.push_back(m_Settings.selectedDispersionDirectory);
 			pinned.push_back(m_Settings.selectedCcdDirectory);
+			for (const auto &item : Cases())
+				pinned.insert(pinned.end(), item.datasets.begin(), item.datasets.end());
 			for (const auto &path : pinned)
 				if (!path.Empty())
 					if (auto ref = ReadDatasetRef(path)) datasets.push_back(std::move(*ref));

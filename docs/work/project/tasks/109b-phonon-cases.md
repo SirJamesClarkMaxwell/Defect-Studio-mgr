@@ -39,6 +39,7 @@ restarts, and two cases never write into the same result directory.
            //  thresholds, ccd view toggles) - unchanged
        std::vector<PhononCase> cases;  // cases[i].settings of the active case may be stale; the base is the truth
        std::string activeCaseId;
+       int nextCaseNumber = 1;         // high-water mark: new ids are "case-<nextCaseNumber>", then ++; never reused
    };
    ```
    Move the listed fields from `PhononPanelSettings` into the base, same names and defaults. Nothing else moves.
@@ -46,6 +47,7 @@ restarts, and two cases never write into the same result directory.
    ```yaml
    formatVersion: 2
    activeCase: case-2
+   nextCaseNumber: 3            # missing -> 1 + highest "case-N" in the file
    cases:
      - {id: case-1, name: "C2 dimer R2SCAN 9x9x1", datasets: [paths], inputs: {fcDir, gsDir, ... v1 case keys},
         resultDir: ..., ccd: path, view: {selectedMode, plZpl, irrepFilter, minHuangRhys}}
@@ -131,7 +133,9 @@ restarts, and two cases never write into the same result directory.
    right inputs and attachments; running it again creates nothing.
 5. `ProposedDatasets` matches by provenance (relative `inputs_relative` resolved), ignores attached ones.
 6. Window binding: a window titled for case A is not bound when case B is active; legacy title binds when atoms match.
-7. All existing phonon tests still pass unchanged (except the format version constant if a test pins it - say so).
+7. All existing phonon tests still pass unchanged, except `PhononPanelSettingsIOTests.NewerFormatVersionIsRejected`,
+   whose "future" version input becomes 3 (approved 2026-10-14).
+8. Ids: create case-1, case-2, remove case-2, serialize + parse, add a case -> `case-3`.
 
 ## Constraints
 

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include "Core/Utils/Uuid.hpp"
@@ -52,6 +53,40 @@ namespace DefectStudio::Tests
 		if (error) GTEST_SKIP() << "Directory symlinks unavailable: " << error.message();
 		EXPECT_TRUE(FindDatasets(root / "link", {}).empty());
 		EXPECT_EQ(FindDatasets(root, {}).size(), 1u);
+	}
+
+	TEST_F(AnalysisDatasetIOTests, ProvenancePrefersRelativePathsAndFallsBackPerKey)
+	{
+		const auto dataset = root / "defectstudio/phonons";
+		Summary(dataset, R"({
+  "schema": "ds.phonon_vibronic.v1",
+  "input_paths": {"gs_dir": "old-gs", "es_dir": "../../es", "triplet_dir": null, "bulk_fc_dir": "../../bulk"},
+  "inputs_relative": {"gs_dir": "../../gs", "fc_dir": "../../fc", "es_dir": null, "absent": null}
+})");
+		const auto ref = ReadDatasetRef(dataset);
+		ASSERT_TRUE(ref);
+		EXPECT_EQ(ref->inputs.at("gs_dir"), root / "gs");
+		EXPECT_EQ(ref->inputs.at("es_dir"), root / "es");
+		EXPECT_EQ(ref->inputs.at("fc_dir"), root / "fc");
+		EXPECT_EQ(ref->inputs.at("bulk_fc_dir"), root / "bulk");
+		EXPECT_FALSE(ref->inputs.contains("triplet_dir"));
+		EXPECT_FALSE(ref->inputs.contains("absent"));
+	}
+
+	TEST_F(AnalysisDatasetIOTests, AbsoluteProvenanceAndMissingInputsKeepExistingFields)
+	{
+		const auto dataset = root / "defectstudio/ccd";
+		std::string absolute = (root / "gs").Utf8();
+		std::replace(absolute.begin(), absolute.end(), '\\', '/');
+		Summary(dataset, "{\"schema\":\"ds.ccd_analysis.v1\",\"label\":\"CCD\",\"input_paths\":{\"gs_dir\":\"" + absolute + "\"}}");
+		const auto ref = ReadDatasetRef(dataset);
+		ASSERT_TRUE(ref);
+		EXPECT_EQ(ref->inputs.at("gs_dir"), root / "gs");
+		EXPECT_EQ(ref->label, "CCD");
+		EXPECT_EQ(ref->kind, AnalysisDatasetKind::Ccd);
+		Summary(dataset, R"({"schema":"ds.ccd_analysis.v1","label":"CCD"})");
+		ASSERT_TRUE(ReadDatasetRef(dataset));
+		EXPECT_TRUE(ReadDatasetRef(dataset)->inputs.empty());
 	}
 
 	TEST_F(AnalysisDatasetIOTests, DefaultUsesCommonInputDirectoryAndChecksItsExistingAncestor)

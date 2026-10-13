@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "IO/PhononPanelSettingsIO.hpp"
+#include "IO/PhononPanelSettingsIOCases.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -146,7 +147,7 @@ namespace DefectStudio
 		return projectDirectory / "phonon_panel.yaml";
 	}
 
-	bool PhononPanelSettingsIO::Parse(const std::string &text, const Path &projectDirectory,
+	bool PhononSettingsDetail::ParseFlat(const std::string &text, const Path &projectDirectory,
 		PhononPanelSettings &outSettings, std::vector<std::string> &outWarnings, std::string &outError)
 	{
 		outSettings = {};
@@ -159,14 +160,14 @@ namespace DefectStudio
 			const auto root = YAML::Load(text);
 			if (!root.IsMap())
 				throw std::invalid_argument("phonon_panel.yaml root is not a map");
-			int version = kFormatVersion;
+			int version = 1;
 			ReadSetting(root, "formatVersion", version, outWarnings, [](const YAML::Node &node) {
 				const int number = node.as<int>();
 				if (number < 1)
 					throw std::invalid_argument("formatVersion must be positive");
 				return number;
 			});
-			if (version > kFormatVersion)
+			if (version > PhononPanelSettingsIO::kFormatVersion)
 				throw std::invalid_argument("phonon_panel.yaml uses a future format version");
 
 			PhononPanelSettings settings;
@@ -304,11 +305,11 @@ namespace DefectStudio
 		}
 	}
 
-	std::string PhononPanelSettingsIO::Serialize(const PhononPanelSettings &settings, const Path &projectDirectory)
+	std::string PhononSettingsDetail::SerializeFlat(const PhononPanelSettings &settings, const Path &projectDirectory)
 	{
 		YAML::Emitter emit;
 		emit << YAML::Precision(17) << YAML::BeginMap
-			<< YAML::Key << "formatVersion" << YAML::Value << kFormatVersion
+			<< YAML::Key << "formatVersion" << YAML::Value << PhononPanelSettingsIO::kFormatVersion
 			<< YAML::Key << "arrowsFollowPhase" << YAML::Value << settings.arrowsFollowPhase
 			<< YAML::Key << "seriesStyles" << YAML::Value << YAML::BeginMap;
 		for (const auto &[key, style] : settings.seriesStyles)

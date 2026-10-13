@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,6 +17,7 @@ namespace DefectStudio
 		Path directory;
 		std::string label;
 		std::string schema;
+		std::map<std::string, Path> inputs;
 	};
 	[[nodiscard]] std::optional<AnalysisDatasetRef> ReadDatasetRef(const Path &directory);
 	// Children of defectstudio directories, without symlinks or descending into datasets.

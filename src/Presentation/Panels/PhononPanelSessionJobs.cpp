@@ -22,7 +22,7 @@ namespace DefectStudio
 		if (const auto jobs = m_JobSystem.lock()) (void)jobs->RequestCancel(id);
 	}
 
-	void PhononPanelSession::cancelJob()
+	void PhononPanelSession::cancelCaseJobs()
 	{
 		if (m_PendingJob) cancelJob(m_PendingJobId);
 		m_PendingJob.reset();
@@ -32,6 +32,11 @@ namespace DefectStudio
 		m_PendingCcdJobId = 0;
 		if (m_PendingCcdAnalysisJob) cancelJob(m_PendingCcdAnalysisJobId);
 		m_PendingCcdAnalysisJob.reset(); m_PendingCcdAnalysisJobId = 0;
+	}
+
+	void PhononPanelSession::cancelJob()
+	{
+		cancelCaseJobs();
 		if (m_PendingDispersionJob) cancelJob(m_PendingDispersionJobId);
 		m_PendingDispersionJob.reset();
 		m_PendingDispersionJobId = 0;
@@ -65,6 +70,7 @@ namespace DefectStudio
 			request.bcutoffAngstrom = settings.bcutoffAngstrom;
 		}
 		request.outputDirectory = computationOutputPath();
+		AttachDataset(ActiveCaseId(), request.outputDirectory);
 		m_PendingJob = CreateRef<PhononAnalysisJob>(std::move(request));
 		m_PendingJobId = jobs->Submit(m_PendingJob, JobPriority::Normal);
 		m_Error.clear();
@@ -80,6 +86,7 @@ namespace DefectStudio
 		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingJob->GetResult())
 		{
 			loadResult(m_PendingJob->GetResult()->outputDirectory);
+			AttachDataset(ActiveCaseId(), m_PendingJob->GetResult()->outputDirectory);
 			Changed();
 		}
 		else

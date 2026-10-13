@@ -77,11 +77,11 @@ namespace DefectStudio
 					grid.Row("Stałe siłowe (FC)");
 					if (DrawFolder("fc", settings.forceConstantDirectory, m_Session->m_Error)) SetDirectory("fc", settings.forceConstantDirectory);
 					grid.Row("Stan podstawowy");
-					if (DrawFolder("gs", settings.groundStateDirectory, m_Session->m_Error)) persist();
+					if (DrawFolder("gs", settings.groundStateDirectory, m_Session->m_Error)) SetDirectory("gs", settings.groundStateDirectory);
 					grid.Row("Stan wzbudzony");
-					if (DrawFolder("es", settings.excitedStateDirectory, m_Session->m_Error)) persist();
+					if (DrawFolder("es", settings.excitedStateDirectory, m_Session->m_Error)) SetDirectory("es", settings.excitedStateDirectory);
 					grid.Row("Tryplet (opcjonalny)");
-					if (DrawFolder("triplet", settings.tripletDirectory, m_Session->m_Error)) persist();
+					if (DrawFolder("triplet", settings.tripletDirectory, m_Session->m_Error)) SetDirectory("triplet", settings.tripletDirectory);
 					if (!settings.tripletDirectory.Empty())
 					{
 						grid.Row("");
@@ -161,7 +161,7 @@ namespace DefectStudio
 			if (grid)
 			{
 				grid.Row("Katalog FC bulku");
-				if (DrawFolder("bulk", settings.bulkForceConstantDirectory, m_Session->m_Error, true)) persist();
+				if (DrawFolder("bulk", settings.bulkForceConstantDirectory, m_Session->m_Error, true)) SetDirectory("bulk", settings.bulkForceConstantDirectory);
 				grid.Row("mult (N x M x K)");
 				ImGui::InputInt3("##mult", m_Session->m_EmbeddingMult.data());
 				if (ImGui::IsItemDeactivatedAfterEdit())

@@ -66,7 +66,7 @@ namespace DefectStudio
 		for (const auto &window : m_Windows->get()) m_WindowsBeforeOpen.push_back(window.windowId);
 		RendererEvents::Windows::OpenStructureRequested event;
 		event.filePath = supercellPath();
-		event.displayName = std::string(PhononPanelSession::SupercellWindowTitle);
+		event.displayName = CaseWindowTitle();
 		m_BindRequested = true;
 		m_EventBus->Queue(event);
 	}
@@ -74,12 +74,21 @@ namespace DefectStudio
 	void PhononPanelSession::syncWindow(double deltaSeconds)
 	{
 		const Path source = supercellPath();
+		if (m_WindowId.empty() && !m_BindRequested)
+			if (const auto bound = m_CaseWindows.find(ActiveCaseId()); bound != m_CaseWindows.end())
+				for (auto &window : m_Windows->get())
+					if (window.windowId == bound->second && CanBindWindow(window, source, m_ProjectDirectory))
+					{
+						m_WindowId = window.windowId;
+						break;
+					}
 		if (m_WindowId.empty())
 			for (auto &window : m_Windows->get())
 				if (CanBindWindow(window, source, m_ProjectDirectory) &&
 					(!m_BindRequested || std::find(m_WindowsBeforeOpen.begin(), m_WindowsBeforeOpen.end(), window.windowId) == m_WindowsBeforeOpen.end()))
 				{
 					m_WindowId = window.windowId;
+					if (!ActiveCaseId().empty()) m_CaseWindows[ActiveCaseId()] = m_WindowId;
 					m_BindRequested = false;
 					break;
 				}

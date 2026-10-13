@@ -69,6 +69,24 @@ namespace DefectStudio
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
 		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
 		void SetDirectory(const std::string &role, const Path &directory);
+		[[nodiscard]] const std::vector<PhononCase> &Cases() const;
+		[[nodiscard]] const std::string &ActiveCaseId() const;
+		std::string AddCase(std::string name);
+		std::string DuplicateCase(const std::string &id);
+		void RemoveCase(const std::string &id);
+		void RenameCase(const std::string &id, std::string name);
+		bool ActivateCase(const std::string &id);
+		void AttachDataset(const std::string &caseId, const Path &directory);
+		void DetachDataset(const std::string &caseId, const Path &directory);
+		[[nodiscard]] std::vector<Path> ProposedDatasets(const std::string &caseId) const;
+		std::vector<std::string> CreateCasesFromDatasets();
+		[[nodiscard]] Path CaseOutputDirectory(const std::string &kindDirName) const;
+		[[nodiscard]] std::string CaseWindowTitle() const;
+		[[nodiscard]] bool CaseChecked(const std::string &id) const;
+		void SetCaseChecked(const std::string &id, bool checked);
+		[[nodiscard]] std::optional<std::reference_wrapper<const PhononAnalysisResult>> CachedCaseResult(const std::string &id) const;
+		[[nodiscard]] bool HasUnattachedCaseDatasets() const;
+		[[nodiscard]] std::string DatasetCaseId(const Path &directory) const;
 		void StopAnimation();
 		[[nodiscard]] const std::string &WindowId() const noexcept { return m_WindowId; }
 		void SetSaveHandler(std::function<void(const PhononPanelSettings &)> handler) { m_SaveHandler = std::move(handler); }
@@ -177,10 +195,12 @@ namespace DefectStudio
 	private:
 		friend class PhononModesPanel;
 		void loadResult(const Path &directory);
+		void cacheActiveResult();
 		void scanDatasets();
 		[[nodiscard]] Path defaultDatasetPath(const std::vector<Path> &inputs, const std::string &kind) const;
 		[[nodiscard]] Path computationOutputPath() const;
 		void cancelJob();
+		void cancelCaseJobs();
 		void cancelJob(JobId id);
 		void pollJob();
 		[[nodiscard]] Path dispersionOutputPath() const;
@@ -210,6 +230,9 @@ namespace DefectStudio
 		Path m_ProjectDirectory;
 		std::vector<ProjectRootEntry> m_ProjectRoots;
 		mutable std::unordered_map<std::string, Path> m_DefaultDatasetDirectories;
+		mutable std::unordered_map<std::string, Path> m_CaseOutputDirectories;
+		std::map<std::string, std::string> m_CaseWindows;
+		std::map<std::string, bool> m_CheckedCases;
 		std::string m_WindowId;
 		std::vector<std::string> m_WindowsBeforeOpen;
 		Ref<PhononAnalysisJob> m_PendingJob;
@@ -248,7 +271,7 @@ namespace DefectStudio
 		Ref<AnalysisDatasetScanJob> m_ScanJob;
 		JobId m_ScanJobId = 0;
 		std::string m_ScanMessage;
-		PhononPanelSettings m_Settings;
+		mutable PhononPanelSettings m_Settings;
 		std::optional<PhononAnalysisResult> m_Result;
 		std::optional<std::vector<glm::vec3>> m_RestPositions;
 		double m_Phase = 0.0;

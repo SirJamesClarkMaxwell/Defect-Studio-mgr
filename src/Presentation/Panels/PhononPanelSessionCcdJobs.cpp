@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <sstream>
+#include <nlohmann/json.hpp>
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Events/RendererEvents.hpp"
@@ -22,7 +23,7 @@ namespace DefectStudio
 		const auto &settings = Settings();
 		if (!settings.ccdOutputDirectory.Empty()) return settings.ccdOutputDirectory;
 		if (m_ProjectDirectory.Empty() || settings.excitedStateDirectory.Empty()) return {};
-		return m_ProjectDirectory.Join("ccd") / settings.excitedStateDirectory.filename();
+		return CaseOutputDirectory("ccd_inputs");
 	}
 
 	void PhononPanelSession::SubmitCcdInputs()
@@ -36,6 +37,7 @@ namespace DefectStudio
 		}
 		auto &settings = Settings();
 		settings.ccdOutputDirectory = ccdOutputPath();
+		AttachDataset(ActiveCaseId(), settings.ccdOutputDirectory);
 		m_PendingCcdJob = CreateRef<CcdInputsJob>(settings.groundStateDirectory, settings.excitedStateDirectory,
 			settings.ccdOutputDirectory, settings.ccdStep);
 		m_PendingCcdJobId = jobs->Submit(m_PendingCcdJob, JobPriority::Normal);
@@ -51,7 +53,16 @@ namespace DefectStudio
 		const auto snapshot = jobs ? jobs->GetJob(m_PendingCcdJobId) : std::nullopt;
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
 		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingCcdJob->GetResult())
+		{
 			m_CcdInputsResult = *m_PendingCcdJob->GetResult();
+			try
+			{
+				const auto result = nlohmann::json::parse(m_CcdInputsResult);
+				AttachDataset(ActiveCaseId(), Path::FromUtf8(result.at("out_dir").get<std::string>()));
+				Changed();
+			}
+			catch (const std::exception &exception) { m_CcdError = exception.what(); }
+		}
 		else if (snapshot && snapshot->status == JobStatus::Failed && m_PendingCcdJob->GetError())
 			m_CcdError = m_PendingCcdJob->GetError()->userMessage;
 		else
@@ -62,14 +73,7 @@ namespace DefectStudio
 
 	Path PhononPanelSession::ccdAnalysisOutputPath() const
 	{
-		const auto &s = Settings();
-		if (!s.ccdAnalysisOutputDirectory.Empty()) return s.ccdAnalysisOutputDirectory;
-		std::vector<Path> inputs;
-		if (!s.ccdDirectory.Empty()) inputs.push_back(s.ccdDirectory);
-		else if (!s.groundStateDirectory.Empty()) inputs = {s.groundStateDirectory, s.excitedStateDirectory, s.tripletDirectory,
-			s.groundAtExcitedDirectory, s.excitedAtGroundDirectory};
-		if (s.ccdPhononCurvature) inputs.push_back(s.resultDirectory);
-		return defaultDatasetPath(inputs, "ccd");
+		return CaseOutputDirectory("ccd");
 	}
 
 	std::string PhononPanelSession::ccdAnalysisBlocker() const
@@ -112,7 +116,8 @@ namespace DefectStudio
 	{
 		CcdAnalysisResult result;
 		if (!CcdAnalysisIO::Load(directory, result, m_CcdAnalysisError)) return false;
-		AddDataset({AnalysisDatasetKind::Ccd, directory,
+		if (auto ref = ReadDatasetRef(directory)) AddDataset(std::move(*ref));
+		else AddDataset({AnalysisDatasetKind::Ccd, directory,
 			result.label.empty() ? directory.filename().Utf8() : result.label, "ds.ccd_analysis.v1"});
 		SetCcdResult(std::move(result));
 		(void)SelectDataset(directory);
@@ -142,6 +147,7 @@ namespace DefectStudio
 			!s.excitedStateDirectory.Empty() ? s.excitedStateDirectory : s.resultDirectory,
 			m_ProjectDirectory, m_ProjectRoots);
 		request.outputDirectory = ccdAnalysisOutputPath();
+		AttachDataset(ActiveCaseId(), request.outputDirectory);
 		m_PendingCcdAnalysisJob = CreateRef<CcdAnalysisJob>(std::move(request));
 		m_PendingCcdAnalysisJobId = jobs->Submit(m_PendingCcdAnalysisJob, JobPriority::Normal);
 		Changed();
@@ -155,7 +161,11 @@ namespace DefectStudio
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
 		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingCcdAnalysisJob->GetResult())
 		{
-			if (loadCcdResult(m_PendingCcdAnalysisJob->GetResult()->outputDirectory)) Changed();
+			if (loadCcdResult(m_PendingCcdAnalysisJob->GetResult()->outputDirectory))
+			{
+				AttachDataset(ActiveCaseId(), m_PendingCcdAnalysisJob->GetResult()->outputDirectory);
+				Changed();
+			}
 		}
 		else m_CcdAnalysisError = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie CCD przerwane.";
 		m_PendingCcdAnalysisJob.reset(); m_PendingCcdAnalysisJobId = 0;

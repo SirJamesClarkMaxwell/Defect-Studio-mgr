@@ -153,8 +153,120 @@ namespace DefectStudio::Tests
 		PhononPanelSettings loaded;
 		std::vector<std::string> warnings;
 		std::string error;
-		EXPECT_FALSE(PhononPanelSettingsIO::Parse("formatVersion: 2\n", kProject, loaded, warnings, error));
+		EXPECT_FALSE(PhononPanelSettingsIO::Parse("formatVersion: 3\n", kProject, loaded, warnings, error));
 		EXPECT_FALSE(error.empty());
+	}
+
+	TEST(PhononPanelSettingsIOTests, VersionOneMigratesInputsResultsAndCcdIntoOneCase)
+	{
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(R"(
+formatVersion: 1
+inputs: {fcDir: dimer/fc, gsDir: dimer/gs, esDir: dimer/es, zplFormula: "E_es - E_gs", sigma: 7, gamma: 3}
+resultDir: defectstudio/phonons
+datasets: {ccd: defectstudio/ccd, compared: [other/phonons]}
+view: {selectedMode: 4, plZpl: formula, irrepFilter: A1, minHuangRhys: 0.2}
+)", kProject, loaded, warnings, error)) << error;
+		ASSERT_EQ(loaded.cases.size(), 1u);
+		EXPECT_TRUE(warnings.empty());
+		EXPECT_EQ(loaded.activeCaseId, "case-1");
+		EXPECT_EQ(loaded.nextCaseNumber, 2);
+		const auto &item = loaded.cases.front();
+		EXPECT_EQ(item.name, "dimer/gs");
+		EXPECT_EQ(item.settings.forceConstantDirectory, kProject / "dimer/fc");
+		EXPECT_EQ(item.settings.groundStateDirectory, kProject / "dimer/gs");
+		EXPECT_EQ(item.settings.excitedStateDirectory, kProject / "dimer/es");
+		EXPECT_EQ(item.settings.zplFormula, "E_es - E_gs");
+		EXPECT_DOUBLE_EQ(item.settings.sigmaMeV, 7.0);
+		EXPECT_DOUBLE_EQ(item.settings.gammaMeV, 3.0);
+		EXPECT_EQ(item.settings.selectedMode, 4);
+		EXPECT_EQ(item.settings.plZpl, "formula");
+		EXPECT_EQ(item.settings.irrepFilter, "A1");
+		EXPECT_DOUBLE_EQ(item.settings.minHuangRhys, 0.2);
+		EXPECT_EQ(item.datasets, (std::vector<Path>{kProject / "defectstudio/phonons", kProject / "defectstudio/ccd"}));
+		EXPECT_EQ(loaded.resultDirectory, item.settings.resultDirectory);
+		EXPECT_EQ(loaded.comparedDirectories, (std::vector<Path>{kProject / "other/phonons"}));
+	}
+
+	TEST(PhononPanelSettingsIOTests, TwoCasesRoundTripUsesTheActiveBaseAndKeepsGlobals)
+	{
+		auto original = Custom();
+		original.ccdDirectory = kProject / "a/points";
+		original.ccdAnalysisOutputDirectory = kProject / "a/ccd-output";
+		original.ccdTemperatureK = 120.0;
+		original.ccdPhononCurvature = true;
+		original.selectedCcdDirectory = kProject / "a/ccd-result";
+		original.bcutoffAngstrom = 8.0;
+		original.minHuangRhys = 0.05;
+		original.cases = {{"case-1", "A", {original.resultDirectory, original.selectedCcdDirectory}, original},
+			{"case-2", "B", {kProject / "b/phonons"}, {}}};
+		original.activeCaseId = "case-2";
+		original.nextCaseNumber = 9;
+		original.groundStateDirectory = kProject / "b/gs";
+		original.resultDirectory = kProject / "b/phonons";
+		original.selectedMode = 12;
+		original.irrepFilter = "E";
+		original.plZpl = "formula";
+		original.comparedDirectories = {kProject / "a/phonons"};
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		const auto text = PhononPanelSettingsIO::Serialize(original, kProject);
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error)) << error;
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_EQ(loaded.cases.size(), 2u);
+		EXPECT_EQ(loaded.activeCaseId, "case-2");
+		EXPECT_EQ(loaded.nextCaseNumber, 9);
+		EXPECT_EQ(loaded.cases[0].id, "case-1");
+		EXPECT_EQ(loaded.cases[0].name, "A");
+		EXPECT_EQ(loaded.cases[0].datasets, original.cases[0].datasets);
+		EXPECT_EQ(loaded.cases[0].settings.groundStateDirectory, original.cases[0].settings.groundStateDirectory);
+		EXPECT_EQ(loaded.cases[0].settings.ccdDirectory, original.ccdDirectory);
+		EXPECT_EQ(loaded.cases[0].settings.ccdAnalysisOutputDirectory, original.ccdAnalysisOutputDirectory);
+		EXPECT_DOUBLE_EQ(loaded.cases[0].settings.ccdTemperatureK, 120.0);
+		EXPECT_TRUE(loaded.cases[0].settings.ccdPhononCurvature);
+		EXPECT_EQ(loaded.cases[0].settings.selectedCcdDirectory, original.selectedCcdDirectory);
+		EXPECT_EQ(loaded.cases[0].settings.bcutoffAngstrom, original.bcutoffAngstrom);
+		EXPECT_EQ(loaded.cases[1].settings.groundStateDirectory, original.groundStateDirectory);
+		EXPECT_EQ(loaded.cases[1].settings.selectedMode, 12);
+		EXPECT_EQ(loaded.cases[1].settings.irrepFilter, "E");
+		EXPECT_EQ(loaded.groundStateDirectory, original.groundStateDirectory);
+		EXPECT_EQ(loaded.resultDirectory, original.resultDirectory);
+		EXPECT_EQ(loaded.plZpl, "formula");
+		EXPECT_EQ(loaded.comparedDirectories, original.comparedDirectories);
+		EXPECT_EQ(loaded.seriesStyles.size(), original.seriesStyles.size());
+		EXPECT_EQ(loaded.arrowLowColor, original.arrowLowColor);
+		EXPECT_EQ(loaded.dispersionDirectory, original.dispersionDirectory);
+		EXPECT_FALSE(loaded.dispersionInPlane);
+		EXPECT_EQ(loaded.dispersionPoints, 51);
+	}
+
+	TEST(PhononPanelSettingsIOTests, EmptyProjectAndMissingHighWaterMark)
+	{
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		for (const auto &text : {std::string("formatVersion: 1\n"), PhononPanelSettingsIO::Serialize({}, kProject)})
+		{
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error));
+			EXPECT_TRUE(loaded.cases.empty());
+			EXPECT_TRUE(loaded.activeCaseId.empty());
+		}
+		const std::string casesText = R"(
+cases:
+  - {id: case-4, name: A}
+  - {id: case-8, name: B}
+activeCase: case-8
+)";
+		for (const auto &prefix : {"formatVersion: 2\n", ""})
+		{
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(prefix + casesText, kProject, loaded, warnings, error)) << error;
+			EXPECT_EQ(loaded.activeCaseId, "case-8");
+			EXPECT_EQ(loaded.nextCaseNumber, 9);
+			EXPECT_TRUE(warnings.empty());
+		}
 	}
 
 	TEST(PhononPanelSettingsIOTests, OldFilesUseDispersionDefaults)

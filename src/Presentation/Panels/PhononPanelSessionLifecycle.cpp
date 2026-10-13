@@ -30,6 +30,7 @@ namespace DefectStudio
 	void PhononPanelSession::FlushChanges()
 	{
 		if (!std::exchange(m_Changed, false)) return;
+		(void)Cases();
 		if (m_SaveHandler) m_SaveHandler(m_Settings);
 	}
 

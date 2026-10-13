@@ -219,9 +219,15 @@ namespace DefectStudio
 	bool PhononPanelSession::CanBindWindow(const RendererWindowState &window, const Path &supercell,
 		const Path &projectDirectory) const
 	{
+		for (const auto &[id, windowId] : m_CaseWindows)
+			if (id != ActiveCaseId() && windowId == window.windowId) return false;
+		for (const auto &item : m_Settings.cases)
+			if (item.id != ActiveCaseId() && window.title != CaseWindowTitle() &&
+				window.title == std::string(SupercellWindowTitle) + " – " + item.name)
+				return false;
 		if (SameFilePath(window.structure.sourcePath, supercell, projectDirectory)) return true;
 		std::string error;
-		return window.title == SupercellWindowTitle && WindowMatches(window, error);
+		return (window.title == CaseWindowTitle() || window.title == SupercellWindowTitle) && WindowMatches(window, error);
 	}
 
 	bool PhononPanelSession::ApplyArrows(RendererWindowState &window, std::string &outError) const

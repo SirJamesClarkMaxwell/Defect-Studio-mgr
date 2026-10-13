@@ -26,6 +26,9 @@ namespace DefectStudio
 		ClearResult();
 		ClearCcdResult();
 		Settings() = std::move(settings);
+		m_CaseWindows.clear();
+		m_CheckedCases.clear();
+		m_CaseOutputDirectories.clear();
 		m_ProjectDirectory = std::move(projectDirectory);
 		m_CurrentDataset = {};
 		m_Changed = false;
@@ -59,6 +62,9 @@ namespace DefectStudio
 			(void)loadCcdResult(Settings().selectedCcdDirectory);
 		for (const auto &path : Settings().comparedDirectories)
 			if (auto ref = ReadDatasetRef(path)) AddDataset(std::move(*ref));
+		for (const auto &item : Cases())
+			for (const auto &path : item.datasets)
+				if (auto ref = ReadDatasetRef(path)) AddDataset(std::move(*ref));
 		// The loads above each made their own row current; on project open the phonon result wins.
 		const auto &loaded = Settings();
 		SetCurrentDataset(!loaded.resultDirectory.Empty() ? loaded.resultDirectory :
@@ -68,20 +74,24 @@ namespace DefectStudio
 	void PhononPanelSession::SetDirectory(const std::string &role, const Path &directory)
 	{
 		if (role != "fc" && role != "gs" && role != "es" && role != "triplet" && role != "bulk" && role != "result") return;
+		const Path selectedDirectory = directory;
+		if (Cases().empty()) (void)AddCase(selectedDirectory.filename().Utf8());
 		cancelJob();
 		auto &settings = Settings();
 		if (role == "fc")
 		{
 			clearWindow();
-			settings.forceConstantDirectory = directory;
+			settings.forceConstantDirectory = selectedDirectory;
 		}
-		else if (role == "gs") settings.groundStateDirectory = directory;
-		else if (role == "es") settings.excitedStateDirectory = directory;
-		else if (role == "triplet") settings.tripletDirectory = directory;
-		else if (role == "bulk") settings.bulkForceConstantDirectory = directory;
+		else if (role == "gs") settings.groundStateDirectory = selectedDirectory;
+		else if (role == "es") settings.excitedStateDirectory = selectedDirectory;
+		else if (role == "triplet") settings.tripletDirectory = selectedDirectory;
+		else if (role == "bulk") settings.bulkForceConstantDirectory = selectedDirectory;
 		else if (role == "result")
 		{
-			loadResult(directory);
+			loadResult(selectedDirectory);
+			if (SameFilePath(settings.resultDirectory, selectedDirectory, m_ProjectDirectory))
+				AttachDataset(ActiveCaseId(), selectedDirectory);
 		}
 		else return;
 		ShowViews(true);
@@ -133,10 +143,6 @@ namespace DefectStudio
 	Path PhononPanelSession::computationOutputPath() const
 	{
 		const auto &s = Settings();
-		if (!s.outputDirectory.Empty()) return s.outputDirectory;
-		std::vector<Path> inputs{s.forceConstantDirectory, s.groundStateDirectory, s.excitedStateDirectory,
-			s.tripletDirectory, s.groundAtExcitedDirectory, s.excitedAtGroundDirectory};
-		if (!s.embeddingMult.empty()) inputs.push_back(s.bulkForceConstantDirectory);
-		return defaultDatasetPath(inputs, s.embeddingMult.empty() ? "phonons" : "phonons_emb_" + s.embeddingMult);
+		return CaseOutputDirectory(s.embeddingMult.empty() ? "phonons" : "phonons_emb_" + s.embeddingMult);
 	}
 }
