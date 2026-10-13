@@ -29,6 +29,8 @@ namespace DefectStudio
 		clone->m_Dispersion = m_Dispersion;
 		clone->m_SaveHandler = m_SaveHandler;
 		clone->m_Session->Settings() = m_Session->Settings();
+		clone->m_Session->SetDatasets(m_Session->Datasets());
+		clone->m_ZplPreset = m_ZplPreset;
 		clone->m_EmbeddingMult = m_EmbeddingMult;
 		clone->m_EmbeddingSummary = m_EmbeddingSummary;
 		if (m_Session->Result())
@@ -91,10 +93,15 @@ namespace DefectStudio
 	{
 		clearWindow();
 		cancelJob();
+		m_Session->CancelDatasetScan();
+		m_Session->SetDatasets({});
 		m_Session->ClearResult();
 		m_Session->Settings() = std::move(settings);
 		m_ProjectDirectory = std::move(projectDirectory);
 		m_FolderEdits.clear();
+		m_DefaultDatasetDirectories.clear();
+		const auto &formula = m_Session->Settings().zplFormula;
+		m_ZplPreset = formula == "E_es - E_gs" ? 0 : formula == "2*E_es - E_T - E_gs" ? 1 : formula == "1.945" ? 2 : 3;
 		m_Dispersion.reset();
 		m_DispersionError.clear();
 		m_ResetPlots = true;
@@ -118,10 +125,10 @@ namespace DefectStudio
 		}
 		if (!m_Session->Settings().resultDirectory.Empty())
 			loadResult(m_Session->Settings().resultDirectory);
-		const Path dispersion = dispersionOutputPath();
-		if (!m_Session->Settings().dispersionDirectory.Empty() ||
-			(!dispersion.Empty() && FileSystem::IsDirectory(dispersion.Native())))
-			(void)loadDispersion(dispersion);
+		if (!m_Session->Settings().selectedDispersionDirectory.Empty())
+			(void)loadDispersion(m_Session->Settings().selectedDispersionDirectory);
+		for (const auto &path : m_Session->Settings().comparedDirectories)
+			if (auto ref = ReadDatasetRef(path)) m_Session->AddDataset(std::move(*ref));
 	}
 
 	void PhononModesPanel::persist()
@@ -139,8 +146,6 @@ namespace DefectStudio
 		{
 			clearWindow();
 			settings.forceConstantDirectory = directory;
-			if (settings.resultDirectory.Empty() && !m_ProjectDirectory.Empty())
-				settings.resultDirectory = m_ProjectDirectory.Join("phonons") / directory.parent_path().filename();
 		}
 		else if (role == "gs") settings.groundStateDirectory = directory;
 		else if (role == "es") settings.excitedStateDirectory = directory;
@@ -157,6 +162,7 @@ namespace DefectStudio
 
 	void PhononModesPanel::loadResult(const Path &directory)
 	{
+		if (auto ref = ReadDatasetRef(directory)) m_Session->AddDataset(std::move(*ref));
 		PhononAnalysisResult result;
 		if (!PhononAnalysisIO::Load(directory, result, m_Error))
 			return;
@@ -164,13 +170,11 @@ namespace DefectStudio
 		m_Session->SetResult(std::move(result));
 		m_ResetPlots = true;
 		m_Session->Settings().resultDirectory = directory;
+		(void)m_Session->SelectDataset(directory);
 		loadEmbeddingSummary(directory);
 		const auto &loaded = *m_Session->Result();
 		auto &zpl = m_Session->Settings().plZpl;
-		const bool available = zpl == "computed" ? !loaded.plComputed.empty() :
-			zpl == "spin_purified" ? !loaded.plSpinPurified.empty() : !loaded.plExperimental.empty();
-		if (!available)
-			zpl = !loaded.plExperimental.empty() ? "experimental" : !loaded.plSpinPurified.empty() ? "spin_purified" : "computed";
+		zpl = PhononPanelSession::PlCurveChoice(loaded, zpl);
 		m_Error.clear();
 	}
 
@@ -188,7 +192,9 @@ namespace DefectStudio
 		request.groundStateDirectory = settings.groundStateDirectory;
 		request.excitedStateDirectory = settings.excitedStateDirectory;
 		if (!settings.tripletDirectory.Empty()) request.tripletDirectory = settings.tripletDirectory;
-		request.experimentalZplEv = settings.experimentalZplEv;
+		request.zplFormula = settings.zplFormula;
+		request.groundAtExcitedDirectory = settings.groundAtExcitedDirectory;
+		request.excitedAtGroundDirectory = settings.excitedAtGroundDirectory;
 		request.sigmaMeV = settings.sigmaMeV;
 		request.gammaMeV = settings.gammaMeV;
 		if (!settings.embeddingMult.empty())
@@ -198,7 +204,7 @@ namespace DefectStudio
 			request.dcutoffAngstrom = settings.dcutoffAngstrom;
 			request.bcutoffAngstrom = settings.bcutoffAngstrom;
 		}
-		request.outputDirectory = settings.resultDirectory;
+		request.outputDirectory = computationOutputPath();
 		m_PendingJob = CreateRef<PhononAnalysisJob>(std::move(request));
 		m_PendingJobId = jobs->Submit(m_PendingJob, JobPriority::Normal);
 		m_Error.clear();
@@ -303,6 +309,7 @@ namespace DefectStudio
 		pollJob();
 		pollCcdJob();
 		pollDispersionJob();
+		if (m_Session->PollDatasetScan()) m_ResetPlots = true;
 		if (!IsVisible())
 		{
 			StopAnimation();
@@ -323,6 +330,7 @@ namespace DefectStudio
 		else if (draw)
 		{
 			ImGui::PushID(m_ProjectDirectory.Utf8().c_str());
+			drawDatasets();
 			drawInputs();
 			drawCcd();
 			drawDispersion();

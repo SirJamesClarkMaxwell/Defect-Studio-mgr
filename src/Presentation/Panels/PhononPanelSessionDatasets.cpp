@@ -1,0 +1,193 @@
+#include "Core/dspch.hpp"
+#include "Presentation/Panels/PhononPanelSession.hpp"
+
+#include <algorithm>
+#include <filesystem>
+#include "Core/JobSystem/JobContext.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Platform/PlatformPaths.hpp"
+#include "IO/PhononAnalysisIO.hpp"
+
+namespace DefectStudio
+{
+	class AnalysisDatasetScanJob final : public IJob
+	{
+	public:
+		explicit AnalysisDatasetScanJob(std::vector<Path> roots) : m_Roots(std::move(roots)) {}
+		std::string GetName() const override { return "Skan zestawów analiz"; }
+		std::string GetType() const override { return "phonon.datasets.scan"; }
+		void Execute(JobContext &context) override
+		{
+			std::vector<AnalysisDatasetRef> found;
+			context.SetStage("Szukanie zestawów");
+			for (std::size_t i = 0; i < m_Roots.size(); ++i)
+			{
+				context.ThrowIfCancellationRequested();
+				context.SetMessage(m_Roots[i].Utf8());
+				context.SetProgress(static_cast<float>(i), static_cast<float>(m_Roots.size()));
+				auto datasets = FindDatasets(m_Roots[i], [&] { return context.IsCancellationRequested(); });
+				found.insert(found.end(), datasets.begin(), datasets.end());
+			}
+			context.ThrowIfCancellationRequested();
+			m_Result = std::move(found);
+		}
+		std::optional<std::vector<AnalysisDatasetRef>> &Result() noexcept { return m_Result; }
+	private:
+		std::vector<Path> m_Roots;
+		std::optional<std::vector<AnalysisDatasetRef>> m_Result;
+	};
+
+	namespace
+	{
+		// One spelling per directory: "a/b" and "a\b" must hit the same cache entry.
+		std::string SpectraKey(const Path &directory)
+		{
+			const auto text = directory.Native().lexically_normal().generic_u8string();
+			return std::string(text.begin(), text.end());
+		}
+	}
+
+	PhononPanelSession::~PhononPanelSession() { CancelDatasetScan(); }
+
+	void PhononPanelSession::SetDatasets(std::vector<AnalysisDatasetRef> datasets)
+	{
+		std::sort(datasets.begin(), datasets.end(), [](const auto &a, const auto &b) { return a.directory.Native() < b.directory.Native(); });
+		m_Datasets.clear();
+		for (auto &dataset : datasets)
+			if (std::none_of(m_Datasets.begin(), m_Datasets.end(), [&](const auto &existing) {
+				return SameFilePath(existing.directory, dataset.directory, {});
+			})) m_Datasets.push_back(std::move(dataset));
+		m_Spectra.clear();
+	}
+
+	void PhononPanelSession::AddDataset(AnalysisDatasetRef dataset)
+	{
+		const auto found = std::find_if(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
+			return SameFilePath(entry.directory, dataset.directory, {});
+		});
+		m_Spectra.erase(SpectraKey(dataset.directory));
+		if (found == m_Datasets.end()) m_Datasets.push_back(std::move(dataset));
+		else *found = std::move(dataset);
+		std::sort(m_Datasets.begin(), m_Datasets.end(), [](const auto &a, const auto &b) { return a.directory.Native() < b.directory.Native(); });
+	}
+
+	bool PhononPanelSession::IsCompared(const Path &directory) const
+	{
+		return std::any_of(m_Settings.comparedDirectories.begin(), m_Settings.comparedDirectories.end(),
+			[&](const auto &path) { return SameFilePath(path, directory, {}); });
+	}
+
+	void PhononPanelSession::SetCompared(const Path &directory, bool compared)
+	{
+		if (!compared)
+		{
+			std::erase_if(m_Settings.comparedDirectories, [&](const auto &path) { return SameFilePath(path, directory, {}); });
+			return;
+		}
+		if (IsCompared(directory)) return;
+		if (std::any_of(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
+			return entry.kind == AnalysisDatasetKind::Phonons && SameFilePath(entry.directory, directory, {});
+		})) m_Settings.comparedDirectories.push_back(directory);
+	}
+
+	bool PhononPanelSession::SelectDataset(const Path &directory)
+	{
+		const auto found = std::find_if(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
+			return SameFilePath(entry.directory, directory, {});
+		});
+		if (found == m_Datasets.end() || found->kind == AnalysisDatasetKind::Ccd) return false;
+		if (found->kind == AnalysisDatasetKind::Phonons) m_Settings.resultDirectory = found->directory;
+		else m_Settings.selectedDispersionDirectory = found->directory;
+		return true;
+	}
+
+	std::optional<std::reference_wrapper<const PhononAnalysisResult>> PhononPanelSession::Spectra(
+		const Path &directory, std::string &outError)
+	{
+		auto [it, inserted] = m_Spectra.try_emplace(SpectraKey(directory));
+		auto &[result, error] = it->second;
+		if (inserted)
+		{
+			PhononAnalysisResult spectra;
+			if (PhononAnalysisIO::LoadSpectra(directory, spectra, error)) result = std::move(spectra);
+		}
+		outError = error;
+		return result ? std::optional<std::reference_wrapper<const PhononAnalysisResult>>(std::cref(*result)) : std::nullopt;
+	}
+
+	void PhononPanelSession::StartDatasetScan(WeakRef<JobSystem> jobs, std::vector<Path> roots)
+	{
+		CancelDatasetScan();
+		m_ScanJobs = std::move(jobs);
+		m_ScanMessage.clear();
+		std::erase_if(roots, [](const auto &root) { return root.Empty(); });
+		std::sort(roots.begin(), roots.end(), [](const auto &a, const auto &b) { return a.Native() < b.Native(); });
+		roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
+		if (roots.empty()) return;
+		const auto system = m_ScanJobs.lock();
+		if (!system) { m_ScanMessage = "JobSystem niedostępny."; return; }
+		m_ScanJob = CreateRef<AnalysisDatasetScanJob>(std::move(roots));
+		m_ScanJobId = system->Submit(m_ScanJob, JobPriority::Normal);
+	}
+
+	void PhononPanelSession::CancelDatasetScan()
+	{
+		if (m_ScanJob)
+			if (const auto system = m_ScanJobs.lock()) (void)system->RequestCancel(m_ScanJobId);
+		m_ScanJob.reset(); m_ScanJobId = 0;
+	}
+
+	bool PhononPanelSession::PollDatasetScan()
+	{
+		if (!m_ScanJob) return false;
+		const auto system = m_ScanJobs.lock();
+		const auto snapshot = system ? system->GetJob(m_ScanJobId) : std::nullopt;
+		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return false;
+		const bool completed = snapshot && snapshot->status == JobStatus::Completed && m_ScanJob->Result();
+		if (completed)
+		{
+			auto datasets = std::move(*m_ScanJob->Result());
+			// Explicit selections also survive when their directories are outside scanned roots.
+			auto pinned = m_Settings.comparedDirectories;
+			pinned.push_back(m_Settings.resultDirectory); pinned.push_back(m_Settings.selectedDispersionDirectory);
+			for (const auto &path : pinned)
+				if (!path.Empty())
+					if (auto ref = ReadDatasetRef(path)) datasets.push_back(std::move(*ref));
+			SetDatasets(std::move(datasets));
+			m_ScanMessage = "Skan zakończony.";
+		}
+		else m_ScanMessage = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Skan przerwany.";
+		m_ScanJob.reset(); m_ScanJobId = 0;
+		return completed;
+	}
+
+	const std::vector<double> &PhononPanelSession::PlCurve(const PhononAnalysisResult &result, std::string_view choice)
+	{
+		if (choice == "formula") return result.plFormula;
+		if (choice == "spin_purified") return result.plSpinPurified;
+		if (choice == "experimental") return result.plExperimental;
+		return result.plComputed;
+	}
+
+	std::string PhononPanelSession::PlCurveChoice(const PhononAnalysisResult &result, std::string_view preferred)
+	{
+		if (!PlCurve(result, preferred).empty()) return std::string(preferred);
+		for (const auto key : {"computed", "spin_purified", "experimental", "formula"})
+			if (!PlCurve(result, key).empty()) return key;
+		return "computed";
+	}
+
+	bool PhononPanelSession::OutputContainsInput(const Path &output, const Path &input)
+	{
+		if (input.Empty()) return false;
+		if (output.Empty()) return true;
+		std::error_code error;
+		const auto outer = FileSystem::WeaklyCanonical(output.Native(), error);
+		if (error) return true;
+		const auto inner = FileSystem::WeaklyCanonical(input.Native(), error);
+		if (error) return true;
+		auto a = outer.begin(), b = inner.begin();
+		for (; a != outer.end() && b != inner.end() && Platform::FileSystemNamesEqual(*a, *b); ++a, ++b) {}
+		return a == outer.end();
+	}
+}

@@ -22,5 +22,7 @@ namespace DefectStudio
 		// spectral_function.tsv or pl.tsv leaves those vectors empty. A pl.tsv column that is all
 		// nan is left empty.
 		[[nodiscard]] static bool Load(const Path &directory, PhononAnalysisResult &outResult, std::string &outError);
+		// Summary and optional spectra only; no structure, modes or NPY allocation.
+		[[nodiscard]] static bool LoadSpectra(const Path &directory, PhononAnalysisResult &outResult, std::string &outError);
 	};
 } // namespace DefectStudio

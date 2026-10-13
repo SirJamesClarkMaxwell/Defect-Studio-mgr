@@ -23,6 +23,10 @@ namespace DefectStudio
 		Path excitedStateDirectory;
 		std::optional<Path> tripletDirectory; // single point at the excited geometry - spin purification
 		std::optional<double> experimentalZplEv;
+		std::string zplFormula;
+		Path groundAtExcitedDirectory;
+		Path excitedAtGroundDirectory;
+		std::string label;
 		double sigmaMeV = 6.0;
 		double gammaMeV = 2.0;
 		// task/104g: embedding into a larger bulk supercell (script task 104f). Both or neither.
@@ -41,7 +45,8 @@ namespace DefectStudio
 	};
 
 	// The script's command line, in this order: --fc-dir, --gs-dir, --es-dir, [--triplet-dir],
-	// [--zpl-exp], --sigma, --gamma, [--bulk-fc-dir, --mult NxMxK], [--dcutoff], [--bcutoff],
+	// [--zpl-exp], [--zpl-formula], [--gs-at-es-dir], [--es-at-gs-dir], [--label],
+	// --sigma, --gamma, [--bulk-fc-dir, --mult NxMxK], [--dcutoff], [--bcutoff],
 	// --out-dir; each flag followed by its value as a separate argument. Paths as Utf8(), numbers
 	// with std::format("{:.10g}"), mult as e.g. "24x24x1".
 	[[nodiscard]] std::vector<std::string> BuildPhononAnalysisArguments(const PhononAnalysisRequest &request);

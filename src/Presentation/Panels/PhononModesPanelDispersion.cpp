@@ -18,15 +18,16 @@ namespace DefectStudio
 	{
 		const auto &settings = m_Session->Settings();
 		if (!settings.dispersionDirectory.Empty()) return settings.dispersionDirectory;
-		return m_ProjectDirectory.Empty() ? Path{} : m_ProjectDirectory.Join("phonons/bulk_dispersion");
+		return defaultDatasetPath({settings.bulkForceConstantDirectory}, "dispersion");
 	}
 
 	bool PhononModesPanel::loadDispersion(const Path &directory)
 	{
+		if (auto ref = ReadDatasetRef(directory)) m_Session->AddDataset(std::move(*ref));
 		PhononDispersion result;
 		if (!PhononDispersionIO::Load(directory, result, m_DispersionError)) return false;
 		m_Dispersion = std::move(result);
-		m_Session->Settings().dispersionDirectory = directory;
+		(void)m_Session->SelectDataset(directory);
 		m_ResetDispersionPlot = true;
 		return true;
 	}
@@ -36,9 +37,8 @@ namespace DefectStudio
 		const auto jobs = m_JobSystem.lock();
 		if (!jobs) { m_DispersionError = "JobSystem niedostępny."; return; }
 		auto &settings = m_Session->Settings();
-		settings.dispersionDirectory = dispersionOutputPath();
 		m_PendingDispersionJob = CreateRef<PhononDispersionJob>(settings.bulkForceConstantDirectory,
-			settings.dispersionDirectory, settings.dispersionInPlane, settings.dispersionPoints);
+			dispersionOutputPath(), settings.dispersionInPlane, settings.dispersionPoints);
 		m_PendingDispersionJobId = jobs->Submit(m_PendingDispersionJob, JobPriority::Normal);
 		m_DispersionError.clear();
 		persist();
@@ -68,16 +68,14 @@ namespace DefectStudio
 		auto &settings = m_Session->Settings();
 		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
 		{
-			PropertyGrid grid("##dispersionInputs", PropertyGridLabelWidth({"Katalog FC bulku", "Katalog dyspersji", "npoints"}));
+			PropertyGrid grid("##dispersionInputs", PropertyGridLabelWidth({"Katalog FC bulku", "Katalog wyników (opcjonalny)", "npoints"}));
 			if (grid)
 			{
 				grid.Row("Katalog FC bulku");
 				if (DrawFolder("dispersionBulk", settings.bulkForceConstantDirectory, m_DispersionError)) persist();
-				grid.Row("Katalog dyspersji");
-				Path output = dispersionOutputPath();
-				if (DrawFolder("dispersionOutput", output, m_DispersionError))
+				grid.Row("Katalog wyników (opcjonalny)");
+				if (DrawFolder("dispersionOutput", settings.dispersionDirectory, m_DispersionError, true, dispersionOutputPath()))
 				{
-					settings.dispersionDirectory = output;
 					persist();
 				}
 				grid.Row("npoints");
@@ -90,9 +88,15 @@ namespace DefectStudio
 			}
 		}
 		if (ImGui::Checkbox("tylko w płaszczyźnie (2D)", &settings.dispersionInPlane)) persist();
-		ImGui::BeginDisabled(settings.bulkForceConstantDirectory.Empty() || dispersionOutputPath().Empty());
+		const std::string blocker = settings.bulkForceConstantDirectory.Empty() ? "Ustaw katalog FC bulku." :
+			dispersionOutputPath().Empty() ? "Ustaw katalog projektu lub katalog wyników." :
+			PhononPanelSession::OutputContainsInput(dispersionOutputPath(), settings.bulkForceConstantDirectory) ?
+			"Katalog wyników nie może być katalogiem wejściowym ani go zawierać." : "";
+		ImGui::BeginDisabled(!blocker.empty());
 		if (ImGui::Button("Policz dyspersję")) submitDispersion();
 		ImGui::EndDisabled();
+		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
+		else if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		ImGui::SameLine();
 		if (ImGui::Button("Wczytaj..."))
 		{
@@ -101,6 +105,7 @@ namespace DefectStudio
 			else if (picked->has_value() && loadDispersion(**picked)) persist();
 		}
 		ImGui::EndDisabled();
+		if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		if (m_PendingDispersionJob)
 		{
 			const auto jobs = m_JobSystem.lock();
@@ -112,6 +117,9 @@ namespace DefectStudio
 		}
 		if (!m_DispersionError.empty()) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_DispersionError.c_str());
 		if (!m_Dispersion) return;
+		const auto selectedLabel = PhononPanelSession::DirectoryLabel(settings.selectedDispersionDirectory, m_ProjectDirectory, m_ProjectRoots);
+		ImGui::TextUnformatted(selectedLabel.c_str());
+		ImGui::SetItemTooltip("%s", settings.selectedDispersionDirectory.Utf8().c_str());
 		const auto &result = *m_Dispersion;
 		ImGui::Text("pasm: %d, max ℏω = %.2f meV", result.bandCount, result.maxMeV);
 		if (!ImPlot::BeginPlot("##bulkDispersion", ImVec2(-1.0f, ImGui::GetTextLineHeightWithSpacing() * 18.0f))) return;

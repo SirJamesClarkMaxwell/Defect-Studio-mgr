@@ -209,6 +209,27 @@ namespace DefectStudio::Tests
 		std::filesystem::remove_all(dir);
 	}
 
+	TEST(PhononAnalysisIOTests, SpectraLoadDoesNotNeedStructureModesOrNpyAndPreservesOutputOnError)
+	{
+		const FilePath dir = WriteFixture("overlay");
+		for (const char *file : {"structure.json", "modes.tsv", "eigenvectors.npy", "participation.npy"})
+			std::filesystem::remove(dir / file);
+		PhononAnalysisResult result;
+		std::string error;
+		ASSERT_TRUE(PhononAnalysisIO::LoadSpectra(Path::FromResolved(dir), result, error)) << error;
+		EXPECT_TRUE(result.modes.empty()); EXPECT_TRUE(result.eigenvectors.empty());
+		EXPECT_EQ(result.spectralEnergyMeV.size(), 3u);
+		EXPECT_EQ(result.plComputed.size(), 3u);
+		EXPECT_TRUE(result.plSpinPurified.empty());
+		EXPECT_DOUBLE_EQ(result.sTotal, 1.25);
+		EXPECT_FALSE(result.stable);
+		WriteText(dir / "spectral_function.tsv", "energy_meV\tS_E_per_meV\n2\t0\n1\t1\n");
+		EXPECT_FALSE(PhononAnalysisIO::LoadSpectra(Path::FromResolved(dir), result, error));
+		EXPECT_EQ(result.spectralEnergyMeV.size(), 3u);
+		EXPECT_EQ(error.rfind("spectral_function.tsv:", 0), 0u);
+		std::filesystem::remove_all(dir);
+	}
+
 	TEST(PhononAnalysisIOTests, SpectraFilesAreOptional)
 	{
 		const FilePath dir = WriteFixture("nospectra");

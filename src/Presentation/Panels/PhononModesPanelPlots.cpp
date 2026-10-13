@@ -26,15 +26,20 @@ namespace DefectStudio
 			const std::string plotKey = tab == 0 ? "beta/" : tab == 1 ? "S/" : "PL/";
 			// Keep each tab aligned with the filter row above the mode table.
 			if (tab < 2) ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
-			else if (ImGui::BeginCombo("ZPL", settings.plZpl == "computed" ? "obliczone" :
-				settings.plZpl == "spin_purified" ? "po korekcji spinowej" : "eksperymentalne"))
+			else
 			{
-				for (const auto &[key, label, available] : {
-					std::tuple{"computed", "obliczone", result.zplEv.computed.has_value() && !result.plComputed.empty()},
-					std::tuple{"spin_purified", "po korekcji spinowej", result.zplEv.spinPurified.has_value() && !result.plSpinPurified.empty()},
-					std::tuple{"experimental", "eksperymentalne", result.zplEv.experimental.has_value() && !result.plExperimental.empty()}})
-					if (available && ImGui::Selectable(label, settings.plZpl == key)) { settings.plZpl = key; m_ResetPlots = true; persist(); }
-				ImGui::EndCombo();
+				ImGui::TextUnformatted("ZPL"); ImGui::SameLine();
+				if (ImGui::BeginCombo("##plZpl", settings.plZpl == "computed" ? "obliczone" :
+					settings.plZpl == "spin_purified" ? "po korekcji spinowej" : settings.plZpl == "formula" ? "wzór" : "eksperymentalne"))
+				{
+					for (const auto &[key, label, available] : {
+						std::tuple{"computed", "obliczone", result.zplEv.computed.has_value() && !result.plComputed.empty()},
+						std::tuple{"spin_purified", "po korekcji spinowej", result.zplEv.spinPurified.has_value() && !result.plSpinPurified.empty()},
+						std::tuple{"experimental", "eksperymentalne", result.zplEv.experimental.has_value() && !result.plExperimental.empty()},
+						std::tuple{"formula", "wzór", result.zplEv.formula.has_value() && !result.plFormula.empty()}})
+						if (available && ImGui::Selectable(label, settings.plZpl == key)) { settings.plZpl = key; m_ResetPlots = true; persist(); }
+					ImGui::EndCombo();
+				}
 			}
 			const bool reset = m_ResetPlots || m_PlotTab != tab;
 			if (reset)
@@ -46,7 +51,20 @@ namespace DefectStudio
 			{
 				ImPlot::SetupAxes(" ", " ");
 				if (tab == 1) ImPlot::SetupAxis(ImAxis_Y2, " ", ImPlotAxisFlags_AuxDefault);
-				const auto [minimum, maximum] = tab < 2 ? m_Session->ModeEnergyRangeMeV() : m_Session->PlEnergyRangeEv();
+				auto [minimum, maximum] = tab < 2 ? m_Session->ModeEnergyRangeMeV() : m_Session->PlEnergyRangeEv();
+				if (tab > 0)
+					for (const auto &dataset : m_Session->Datasets())
+						if (dataset.kind == AnalysisDatasetKind::Phonons && m_Session->IsCompared(dataset.directory) &&
+							!PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, m_ProjectDirectory))
+						{
+							std::string error;
+							if (const auto spectra = m_Session->Spectra(dataset.directory, error))
+							{
+								const auto [low, high] = PhononPanelSession::UsefulRange(spectra->get(), tab == 2, settings.plZpl);
+								minimum = std::min(minimum, low);
+								maximum = std::max(maximum, high);
+							}
+						}
 				ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 				ImPlot::SetupFinish();
 				ImRect plotRect;
@@ -94,28 +112,15 @@ namespace DefectStudio
 						PlotStyledInfLine("Wybrany mod", result.modes[*selected].frequencyMeV, style);
 						if (SeriesLegendPopup("Wybrany mod", style, false)) persist();
 					}
-					if (tab == 1 && !result.spectralEnergyMeV.empty())
+					if (tab == 1)
 					{
 						ImPlot::SetAxes(ImAxis_X1, ImAxis_Y2);
-						auto &style = settings.seriesStyles[plotKey + "density"];
-						const auto [first, last] = PhononPanelSession::GridIndexRange(result.spectralEnergyMeV, minimum, maximum);
-						PlotStyledLine("S(ℏω)", std::span(result.spectralEnergyMeV).subspan(first, last - first),
-							std::span(result.spectralDensityPerMeV).subspan(first, last - first), style);
-						if (SeriesLegendPopup("S(ℏω)", style)) persist();
+						drawDatasetSpectra(false, minimum, maximum);
 					}
 				}
 				else
 				{
-					const auto &curve = settings.plZpl == "computed" ? result.plComputed :
-						settings.plZpl == "spin_purified" ? result.plSpinPurified : result.plExperimental;
-					if (!curve.empty())
-					{
-						auto &style = settings.seriesStyles[plotKey + "PL"];
-						const auto [first, last] = PhononPanelSession::GridIndexRange(result.plPhotonEnergyEv, minimum, maximum);
-						PlotStyledLine("PL", std::span(result.plPhotonEnergyEv).subspan(first, last - first),
-							std::span(curve).subspan(first, last - first), style);
-						if (SeriesLegendPopup("PL", style)) persist();
-					}
+					drawDatasetSpectra(true, minimum, maximum);
 				}
 				ImPlot::EndPlot();
 				m_ResetPlots = false;
@@ -127,7 +132,7 @@ namespace DefectStudio
 						0.5f * (plotRect.Min.y + plotRect.Max.y + TexTextSize(ParseTexLite("S(\\hbar\\omega) [meV^{-1}]"), ImGui::GetFontSize()).x)),
 						ImGui::GetColorU32(ImGuiCol_Text), "S(\\hbar\\omega) [meV^{-1}]", true);
 			}
-			if (tab == 2 && result.plComputed.empty() && result.plSpinPurified.empty() && result.plExperimental.empty())
+			if (tab == 2 && result.plComputed.empty() && result.plSpinPurified.empty() && result.plExperimental.empty() && result.plFormula.empty())
 				ImGui::TextDisabled("Brak widma PL w wyniku.");
 			ImGui::PopID();
 			ImGui::EndTabItem();

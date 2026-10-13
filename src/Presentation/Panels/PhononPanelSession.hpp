@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -13,10 +15,15 @@
 #include "Domain/Vibrations/PhononModes.hpp"
 #include "IO/PhononPanelSettingsIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
+#include "IO/AnalysisDatasetIO.hpp"
+#include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {
 	struct RendererWindowState;
+	class JobSystem;
+	class AnalysisDatasetScanJob;
 
 	// task/104d: everything the Phonons panel does that is not ImGui - the loaded result, the
 	// persisted settings, the mode list, and what goes into the bound renderer window (mode arrows
@@ -31,6 +38,25 @@ namespace DefectStudio
 	class PhononPanelSession final
 	{
 	public:
+		~PhononPanelSession();
+		void SetDatasets(std::vector<AnalysisDatasetRef> datasets);
+		void AddDataset(AnalysisDatasetRef dataset);
+		[[nodiscard]] const std::vector<AnalysisDatasetRef> &Datasets() const noexcept { return m_Datasets; }
+		void SetCompared(const Path &directory, bool compared);
+		[[nodiscard]] bool IsCompared(const Path &directory) const;
+		// Selection only; the panel commits it after loading the requested result successfully.
+		bool SelectDataset(const Path &directory);
+		[[nodiscard]] std::optional<std::reference_wrapper<const PhononAnalysisResult>> Spectra(
+			const Path &directory, std::string &outError);
+		void StartDatasetScan(WeakRef<JobSystem> jobs, std::vector<Path> roots);
+		void CancelDatasetScan();
+		bool PollDatasetScan(); // commits completed job on main thread, true if the list changed
+		[[nodiscard]] bool IsScanningDatasets() const noexcept { return m_ScanJob != nullptr; }
+		[[nodiscard]] const std::string &DatasetScanMessage() const noexcept { return m_ScanMessage; }
+		[[nodiscard]] static std::string PlCurveChoice(const PhononAnalysisResult &result, std::string_view preferred);
+		[[nodiscard]] static const std::vector<double> &PlCurve(const PhononAnalysisResult &result, std::string_view choice);
+		// True also on path resolution failure: never enable a destructive output in that case.
+		[[nodiscard]] static bool OutputContainsInput(const Path &output, const Path &input);
 		// Same lexical containment rule as StoredPath: project first, then a labelled tree root.
 		[[nodiscard]] static std::string DirectoryLabel(const Path &path, const Path &projectDirectory,
 			const std::vector<ProjectRootEntry> &roots);
@@ -41,6 +67,8 @@ namespace DefectStudio
 		// Sorted grid inside [minimum, maximum], with one sample on either side, clamped to the grid.
 		[[nodiscard]] static std::pair<std::size_t, std::size_t> GridIndexRange(std::span<const double> grid,
 			double minimum, double maximum);
+		// Default x range of one result: modes (or where S(hw) > 1e-3 max) for S, PL rise .. ZPL + 0.15 eV for PL.
+		[[nodiscard]] static std::pair<double, double> UsefulRange(const PhononAnalysisResult &result, bool pl, std::string_view plZpl);
 		[[nodiscard]] std::pair<double, double> ModeEnergyRangeMeV() const;
 		[[nodiscard]] std::pair<double, double> PlEnergyRangeEv() const;
 
@@ -92,6 +120,12 @@ namespace DefectStudio
 		[[nodiscard]] double Phase() const noexcept { return m_Phase; }
 
 	private:
+		std::vector<AnalysisDatasetRef> m_Datasets;
+		std::map<std::string, std::pair<std::optional<PhononAnalysisResult>, std::string>> m_Spectra;
+		WeakRef<JobSystem> m_ScanJobs;
+		Ref<AnalysisDatasetScanJob> m_ScanJob;
+		JobId m_ScanJobId = 0;
+		std::string m_ScanMessage;
 		PhononPanelSettings m_Settings;
 		std::optional<PhononAnalysisResult> m_Result;
 		std::optional<std::vector<glm::vec3>> m_RestPositions;

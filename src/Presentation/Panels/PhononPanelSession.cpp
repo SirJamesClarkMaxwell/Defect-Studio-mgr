@@ -68,27 +68,44 @@ namespace DefectStudio
 		return {first, last};
 	}
 
+	std::pair<double, double> PhononPanelSession::UsefulRange(const PhononAnalysisResult &result, bool pl, std::string_view plZpl)
+	{
+		if (pl)
+		{
+			if (result.plPhotonEnergyEv.empty()) return {0.0, 1.0};
+			const auto choice = PlCurveChoice(result, plZpl);
+			const auto &curve = PlCurve(result, choice);
+			const auto zpl = choice == "computed" ? result.zplEv.computed : choice == "spin_purified" ? result.zplEv.spinPurified :
+				choice == "formula" ? result.zplEv.formula : result.zplEv.experimental;
+			double minimum = result.plPhotonEnergyEv.front();
+			for (std::size_t i = 0; i < curve.size(); ++i)
+				if (curve[i] > 1e-3) { minimum = result.plPhotonEnergyEv[i]; break; }
+			const double maximum = zpl.value_or(result.plPhotonEnergyEv.back()) + 0.15;
+			return {std::min(minimum, maximum - 0.15), maximum};
+		}
+		if (!result.modes.empty())
+		{
+			const auto [lowest, highest] = std::minmax_element(result.modes.begin(), result.modes.end(),
+				[](const auto &a, const auto &b) { return a.frequencyMeV < b.frequencyMeV; });
+			return {std::min(0.0, lowest->frequencyMeV) - 5.0, 1.1 * highest->frequencyMeV};
+		}
+		const auto &density = result.spectralDensityPerMeV;
+		if (density.empty()) return {-5.0, 1.0};
+		const double peak = *std::max_element(density.begin(), density.end());
+		std::size_t last = 0;
+		for (std::size_t i = 0; i < density.size(); ++i)
+			if (density[i] > 1e-3 * peak) last = i;
+		return {-5.0, 1.1 * result.spectralEnergyMeV[last]};
+	}
+
 	std::pair<double, double> PhononPanelSession::ModeEnergyRangeMeV() const
 	{
-		if (!m_Result || m_Result->modes.empty()) return {-5.0, 1.0};
-		const auto [lowest, highest] = std::minmax_element(m_Result->modes.begin(), m_Result->modes.end(),
-			[](const auto &a, const auto &b) { return a.frequencyMeV < b.frequencyMeV; });
-		return {std::min(0.0, lowest->frequencyMeV) - 5.0, 1.1 * highest->frequencyMeV};
+		return m_Result ? UsefulRange(*m_Result, false, m_Settings.plZpl) : std::pair{-5.0, 1.0};
 	}
 
 	std::pair<double, double> PhononPanelSession::PlEnergyRangeEv() const
 	{
-		if (!m_Result || m_Result->plPhotonEnergyEv.empty()) return {0.0, 1.0};
-		const auto &result = *m_Result;
-		const auto &curve = m_Settings.plZpl == "computed" ? result.plComputed :
-			m_Settings.plZpl == "spin_purified" ? result.plSpinPurified : result.plExperimental;
-		const auto zpl = m_Settings.plZpl == "computed" ? result.zplEv.computed :
-			m_Settings.plZpl == "spin_purified" ? result.zplEv.spinPurified : result.zplEv.experimental;
-		double minimum = result.plPhotonEnergyEv.front();
-		for (std::size_t i = 0; i < curve.size(); ++i)
-			if (curve[i] > 1e-3) { minimum = result.plPhotonEnergyEv[i]; break; }
-		const double maximum = zpl.value_or(result.plPhotonEnergyEv.back()) + 0.15;
-		return {std::min(minimum, maximum - 0.15), maximum};
+		return m_Result ? UsefulRange(*m_Result, true, m_Settings.plZpl) : std::pair{0.0, 1.0};
 	}
 
 	void PhononPanelSession::SetResult(PhononAnalysisResult result)

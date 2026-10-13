@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <format>
 #include <limits>
 #include <regex>
 #include <stdexcept>
@@ -182,12 +183,16 @@ namespace DefectStudio
 				ReadSetting(inputs, "gsDir", settings.groundStateDirectory, outWarnings, readPath);
 				ReadSetting(inputs, "esDir", settings.excitedStateDirectory, outWarnings, readPath);
 				ReadSetting(inputs, "tripletDir", settings.tripletDirectory, outWarnings, readPath);
-				ReadSetting(inputs, "zplExp", settings.experimentalZplEv, outWarnings, [](const YAML::Node &node) {
+				ReadSetting(inputs, "zplExp", settings.zplFormula, outWarnings, [](const YAML::Node &node) {
 					const double number = node.as<double>();
 					if (!std::isfinite(number) || number <= 0.0)
 						throw std::invalid_argument("experimental ZPL must be positive and finite");
-					return number;
+					return std::format("{:.15g}", number);
 				});
+				ReadSetting(inputs, "zplFormula", settings.zplFormula, outWarnings, [](const YAML::Node &node) { return node.as<std::string>(); });
+				ReadSetting(inputs, "gsAtEsDir", settings.groundAtExcitedDirectory, outWarnings, readPath);
+				ReadSetting(inputs, "esAtGsDir", settings.excitedAtGroundDirectory, outWarnings, readPath);
+				ReadSetting(inputs, "outputDir", settings.outputDirectory, outWarnings, readPath);
 				ReadNumber(inputs, "sigma", settings.sigmaMeV, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
 				ReadNumber(inputs, "gamma", settings.gammaMeV, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
 				ReadSetting(inputs, "bulkFcDir", settings.bulkForceConstantDirectory, outWarnings, readPath);
@@ -222,6 +227,24 @@ namespace DefectStudio
 				});
 			}
 			ReadSetting(root, "resultDir", settings.resultDirectory, outWarnings, readPath);
+			const auto datasets = root["datasets"];
+			if (datasets && !datasets.IsMap()) Warn(outWarnings, "datasets", "expected a map");
+			else
+			{
+				// Legacy dispersionDir was both output and selection.
+				settings.selectedDispersionDirectory = settings.dispersionDirectory;
+				ReadSetting(datasets, "dispersion", settings.selectedDispersionDirectory, outWarnings, readPath);
+				ReadSetting(datasets, "compared", settings.comparedDirectories, outWarnings, [&](const YAML::Node &node) {
+					if (!node.IsSequence()) throw std::invalid_argument("expected a sequence");
+					std::vector<Path> paths;
+					for (const auto &item : node)
+					{
+						const auto path = readPath(item);
+						if (!path.Empty() && std::find(paths.begin(), paths.end(), path) == paths.end()) paths.push_back(path);
+					}
+					return paths;
+				});
+			}
 			const auto view = root["view"];
 			if (view && !view.IsMap())
 				Warn(outWarnings, "view", "expected a map");
@@ -246,7 +269,7 @@ namespace DefectStudio
 					std::numeric_limits<double>::max(), true);
 				ReadSetting(view, "plZpl", settings.plZpl, outWarnings, [](const YAML::Node &node) {
 					const auto zpl = node.as<std::string>();
-					if (zpl != "computed" && zpl != "spin_purified" && zpl != "experimental")
+					if (zpl != "computed" && zpl != "spin_purified" && zpl != "experimental" && zpl != "formula")
 						throw std::invalid_argument("unknown PL ZPL choice");
 					return zpl;
 				});
@@ -287,9 +310,11 @@ namespace DefectStudio
 			<< YAML::Key << "fcDir" << YAML::Value << StoredPath(settings.forceConstantDirectory, projectDirectory)
 			<< YAML::Key << "gsDir" << YAML::Value << StoredPath(settings.groundStateDirectory, projectDirectory)
 			<< YAML::Key << "esDir" << YAML::Value << StoredPath(settings.excitedStateDirectory, projectDirectory)
-			<< YAML::Key << "tripletDir" << YAML::Value << StoredPath(settings.tripletDirectory, projectDirectory);
-		if (settings.experimentalZplEv)
-			emit << YAML::Key << "zplExp" << YAML::Value << *settings.experimentalZplEv;
+			<< YAML::Key << "tripletDir" << YAML::Value << StoredPath(settings.tripletDirectory, projectDirectory)
+			<< YAML::Key << "zplFormula" << YAML::Value << settings.zplFormula
+			<< YAML::Key << "gsAtEsDir" << YAML::Value << StoredPath(settings.groundAtExcitedDirectory, projectDirectory)
+			<< YAML::Key << "esAtGsDir" << YAML::Value << StoredPath(settings.excitedAtGroundDirectory, projectDirectory)
+			<< YAML::Key << "outputDir" << YAML::Value << StoredPath(settings.outputDirectory, projectDirectory);
 		emit << YAML::Key << "sigma" << YAML::Value << settings.sigmaMeV
 			<< YAML::Key << "gamma" << YAML::Value << settings.gammaMeV
 			<< YAML::Key << "bulkFcDir" << YAML::Value << StoredPath(settings.bulkForceConstantDirectory, projectDirectory)
@@ -304,7 +329,11 @@ namespace DefectStudio
 			<< YAML::Key << "dispersionInPlane" << YAML::Value << settings.dispersionInPlane
 			<< YAML::Key << "dispersionPoints" << YAML::Value << settings.dispersionPoints << YAML::EndMap
 			<< YAML::Key << "resultDir" << YAML::Value << StoredPath(settings.resultDirectory, projectDirectory)
-			<< YAML::Key << "view" << YAML::Value << YAML::BeginMap
+			<< YAML::Key << "datasets" << YAML::Value << YAML::BeginMap
+			<< YAML::Key << "dispersion" << YAML::Value << StoredPath(settings.selectedDispersionDirectory, projectDirectory)
+			<< YAML::Key << "compared" << YAML::Value << YAML::BeginSeq;
+		for (const auto &path : settings.comparedDirectories) emit << StoredPath(path, projectDirectory);
+		emit << YAML::EndSeq << YAML::EndMap << YAML::Key << "view" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "selectedMode" << YAML::Value << settings.selectedMode
 			<< YAML::Key << "participationThreshold" << YAML::Value << settings.participationThreshold
 			<< YAML::Key << "carriedFraction" << YAML::Value << settings.carriedFraction

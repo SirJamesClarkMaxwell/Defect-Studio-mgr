@@ -57,6 +57,22 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(embedded, expectedEmbedded);
 	}
 
+	TEST(PhononAnalysisBridgeTests, FormulaArgumentsAreSeparateAndOmittedWhenEmpty)
+	{
+		PhononAnalysisRequest request;
+		request.zplFormula = "E_es@gs - E_gs";
+		request.groundAtExcitedDirectory = Path::FromUtf8("D:/calc/gs at es");
+		request.excitedAtGroundDirectory = Path::FromUtf8("D:/calc/es at gs");
+		request.label = "Dimer (emb 12x12x1)";
+		const auto args = BuildPhononAnalysisArguments(request);
+		const std::vector<std::string> formulaArgs = {"--zpl-formula", request.zplFormula,
+			"--gs-at-es-dir", request.groundAtExcitedDirectory.Utf8(), "--es-at-gs-dir", request.excitedAtGroundDirectory.Utf8(),
+			"--label", request.label};
+		EXPECT_EQ(std::vector<std::string>(args.begin() + 6, args.begin() + 14), formulaArgs);
+		request.zplFormula.clear(); request.groundAtExcitedDirectory = Path{}; request.excitedAtGroundDirectory = Path{}; request.label.clear();
+		EXPECT_EQ(BuildPhononAnalysisArguments(request).size(), 12u);
+	}
+
 	TEST(PhononAnalysisBridgeTests, HalfAnEmbeddingRequestIsRejected)
 	{
 		PhononAnalysisRequest request;

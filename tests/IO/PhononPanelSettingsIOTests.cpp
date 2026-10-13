@@ -21,7 +21,7 @@ namespace DefectStudio::Tests
 			settings.groundStateDirectory = kProject / "dimer" / "relax";
 			settings.excitedStateDirectory = Path::FromUtf8("K:/sjcm_mgr/dimer/excited/try_1_singlet");
 			settings.tripletDirectory = kProject / "dimer" / "triplet";
-			settings.experimentalZplEv = 4.08;
+			settings.zplFormula = "4.08";
 			settings.sigmaMeV = 5.5;
 			settings.gammaMeV = 1.25;
 			settings.bulkForceConstantDirectory = kProject / "bulk" / "phonons";
@@ -65,8 +65,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(loaded.groundStateDirectory, original.groundStateDirectory);
 		EXPECT_EQ(loaded.excitedStateDirectory, original.excitedStateDirectory);
 		EXPECT_EQ(loaded.tripletDirectory, original.tripletDirectory);
-		ASSERT_TRUE(loaded.experimentalZplEv.has_value());
-		EXPECT_DOUBLE_EQ(*loaded.experimentalZplEv, 4.08);
+		EXPECT_EQ(loaded.zplFormula, "4.08");
 		EXPECT_DOUBLE_EQ(loaded.sigmaMeV, 5.5);
 		EXPECT_DOUBLE_EQ(loaded.gammaMeV, 1.25);
 		EXPECT_EQ(loaded.bulkForceConstantDirectory, original.bulkForceConstantDirectory);
@@ -115,13 +114,13 @@ namespace DefectStudio::Tests
 	TEST(PhononPanelSettingsIOTests, NoExperimentalZplStaysEmpty)
 	{
 		PhononPanelSettings settings = Custom();
-		settings.experimentalZplEv.reset();
+		settings.zplFormula.clear();
 		PhononPanelSettings loaded;
 		std::vector<std::string> warnings;
 		std::string error;
 		ASSERT_TRUE(PhononPanelSettingsIO::Parse(PhononPanelSettingsIO::Serialize(settings, kProject), kProject, loaded,
 			warnings, error));
-		EXPECT_FALSE(loaded.experimentalZplEv.has_value());
+		EXPECT_TRUE(loaded.zplFormula.empty());
 	}
 
 	TEST(PhononPanelSettingsIOTests, EmptyTextGivesDefaults)
@@ -241,6 +240,44 @@ seriesStyles:
 		EXPECT_EQ(loaded.selectedMode, 12);
 		EXPECT_EQ(loaded.resultDirectory, settings.resultDirectory);
 		std::filesystem::remove_all(project.Native());
+	}
+
+	TEST(PhononPanelSettingsIOTests, FormulaAndDatasetsRoundTripWithRelativeAndAbsolutePaths)
+	{
+		PhononPanelSettings settings;
+		settings.zplFormula = "2*E_es - E_T - E_gs";
+		settings.groundAtExcitedDirectory = kProject / "gs-at-es";
+		settings.excitedAtGroundDirectory = Path::FromUtf8("K:/es-at-gs");
+		settings.outputDirectory = kProject / "defectstudio/phonons";
+		settings.comparedDirectories = {kProject / "a/defectstudio/phonons", Path::FromUtf8("K:/b/defectstudio/phonons")};
+		settings.selectedDispersionDirectory = kProject / "bulk/defectstudio/dispersion";
+		settings.plZpl = "formula";
+		const auto text = PhononPanelSettingsIO::Serialize(settings, kProject);
+		EXPECT_EQ(text.find("D:/projekty/hbn"), std::string::npos);
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error)) << error;
+		EXPECT_TRUE(warnings.empty());
+		EXPECT_EQ(loaded.zplFormula, settings.zplFormula);
+		EXPECT_EQ(loaded.groundAtExcitedDirectory, settings.groundAtExcitedDirectory);
+		EXPECT_EQ(loaded.excitedAtGroundDirectory, settings.excitedAtGroundDirectory);
+		EXPECT_EQ(loaded.outputDirectory, settings.outputDirectory);
+		EXPECT_EQ(loaded.comparedDirectories, settings.comparedDirectories);
+		EXPECT_EQ(loaded.selectedDispersionDirectory, settings.selectedDispersionDirectory);
+		EXPECT_EQ(loaded.plZpl, "formula");
+	}
+
+	TEST(PhononPanelSettingsIOTests, LegacyExperimentalZplBecomesFormulaAndNewFormulaWins)
+	{
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("inputs: {zplExp: 1.945}\n", kProject, loaded, warnings, error));
+		EXPECT_EQ(loaded.zplFormula, "1.945");
+		EXPECT_TRUE(warnings.empty());
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("inputs: {zplExp: 1.945, zplFormula: E_es - E_gs}\n", kProject, loaded, warnings, error));
+		EXPECT_EQ(loaded.zplFormula, "E_es - E_gs");
 	}
 
 	TEST(PhononPanelSettingsIOTests, MissingFileGivesDefaults)

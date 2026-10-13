@@ -22,7 +22,10 @@ namespace DefectStudio
 		Path groundStateDirectory;
 		Path excitedStateDirectory;
 		Path tripletDirectory;
-		std::optional<double> experimentalZplEv;
+		std::string zplFormula;
+		Path groundAtExcitedDirectory;
+		Path excitedAtGroundDirectory;
+		Path outputDirectory; // optional computation override, separate from the active result
 		double sigmaMeV = 6.0;
 		double gammaMeV = 2.0;
 		// task/104g: embedding; empty bulk dir or mult = no embedding
@@ -33,7 +36,9 @@ namespace DefectStudio
 		// task/104g: CCD single points (scripts/python/examples/ccd_inputs.py); empty = <project>/ccd/<es dir name>
 		Path ccdOutputDirectory;
 		double ccdStep = 0.25;
-		Path dispersionDirectory; // empty = <project>/phonons/bulk_dispersion
+		Path dispersionDirectory; // optional output override
+		Path selectedDispersionDirectory;
+		std::vector<Path> comparedDirectories;
 		bool dispersionInPlane = true;
 		int dispersionPoints = 101;
 
@@ -51,22 +56,23 @@ namespace DefectStudio
 		glm::vec3 arrowHighColor = glm::vec3(0.85f, 0.2f, 0.2f);
 		double animationAmplitudeAngstrom = 0.3;
 		double animationPeriodSeconds = 1.5; // visual period, not the physical one
-		std::string plZpl = "experimental";   // computed | spin_purified | experimental
+		std::string plZpl = "experimental";   // computed | spin_purified | experimental | formula
 		std::string irrepFilter;              // empty = all irreps
 	};
 
 	// phonon_panel.yaml next to manifest.yaml. Schema (all keys optional on read):
 	//   formatVersion: 1
-	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplExp, sigma, gamma,
+	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplFormula, gsAtEsDir, esAtGsDir, outputDir, sigma, gamma,
 	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep,
 	//            dispersionDir, dispersionInPlane, dispersionPoints} # dcutoff/bcutoff absent = default
 	//   resultDir: ...
+	//   datasets: {compared: [paths], dispersion: path}
 	//   arrowsFollowPhase: true
 	//   seriesStyles: {"<plot>/<series>": {color: [r,g,b,a] | null, weight, visible, filled, fillAlpha, lineStyle}}
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
 	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter}
 	// Paths inside projectDirectory are written relative to it with '/' separators, others absolute
-	// (same rule as FnvCorrectionsIO). zplExp absent = no experimental ZPL.
+	// (same rule as FnvCorrectionsIO). Legacy zplExp is read as numeric formula text.
 	class PhononPanelSettingsIO
 	{
 	public:

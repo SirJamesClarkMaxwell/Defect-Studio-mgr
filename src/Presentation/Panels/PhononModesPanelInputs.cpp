@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
 #include <format>
 #include <imgui.h>
 
@@ -15,35 +14,25 @@ namespace DefectStudio
 {
 	namespace
 	{
-		bool Overlaps(const Path &a, const Path &b)
-		{
-			if (a.Empty() || b.Empty()) return false;
-			const auto x = std::filesystem::weakly_canonical(a.Native()), y = std::filesystem::weakly_canonical(b.Native());
-			const auto within = [](const std::filesystem::path &inner, const std::filesystem::path &outer) {
-				const auto [end, _] = std::mismatch(outer.begin(), outer.end(), inner.begin(), inner.end());
-				return end == outer.end();
-			};
-			return within(x, y) || within(y, x);
-		}
-
 		// Why "Policz" is disabled, in the user's words; empty when it can run.
-		std::string ComputationBlocker(const PhononPanelSettings &settings)
+		std::string ComputationBlocker(const PhononPanelSettings &settings, const Path &output)
 		{
 			if (settings.forceConstantDirectory.Empty()) return "Ustaw katalog stałych siłowych (FC).";
 			if (settings.groundStateDirectory.Empty()) return "Ustaw stan podstawowy.";
 			if (settings.excitedStateDirectory.Empty()) return "Ustaw stan wzbudzony.";
-			if (settings.resultDirectory.Empty()) return "Ustaw katalog wyników.";
+			if (output.Empty()) return "Ustaw katalog projektu lub katalog wyników.";
 			if (!settings.embeddingMult.empty() && settings.bulkForceConstantDirectory.Empty())
 				return "Embedding włączony bez katalogu FC bulku - ustaw go albo odznacz Embedding.";
-			for (const Path *input : {&settings.forceConstantDirectory, &settings.groundStateDirectory,
-				&settings.excitedStateDirectory, &settings.tripletDirectory, &settings.bulkForceConstantDirectory})
-				if (Overlaps(settings.resultDirectory, *input))
-					return "Katalog wyników nie może leżeć w katalogu wejściowym (ani go zawierać).";
+			for (const Path &input : {settings.forceConstantDirectory, settings.groundStateDirectory,
+				settings.excitedStateDirectory, settings.tripletDirectory, settings.groundAtExcitedDirectory,
+				settings.excitedAtGroundDirectory, settings.embeddingMult.empty() ? Path{} : settings.bulkForceConstantDirectory})
+				if (PhononPanelSession::OutputContainsInput(output, input))
+					return "Katalog wyników nie może być katalogiem wejściowym ani go zawierać.";
 			return {};
 		}
 	}
 
-	bool PhononModesPanel::DrawFolder(const char *id, Path &path, std::string &error, bool editable)
+	bool PhononModesPanel::DrawFolder(const char *id, Path &path, std::string &error, bool editable, const Path &hint)
 	{
 		ImGui::PushID(id);
 		auto &[text, editing] = m_FolderEdits[id];
@@ -55,15 +44,16 @@ namespace DefectStudio
 		}
 		ImGui::SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x -
 			ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x));
-		ImGui::InputText("##directory", text.data(), text.size(), editable ? 0 : ImGuiInputTextFlags_ReadOnly);
+		const auto hintLabel = PhononPanelSession::DirectoryLabel(hint, m_ProjectDirectory, m_ProjectRoots);
+		ImGui::InputTextWithHint("##directory", hintLabel.c_str(), text.data(), text.size(), editable ? 0 : ImGuiInputTextFlags_ReadOnly);
 		editing = ImGui::IsItemActive();
 		bool changed = editable && ImGui::IsItemDeactivatedAfterEdit();
 		if (changed) path = PhononPanelSession::ResolveDirectoryText(text.data(), m_ProjectDirectory);
-		ImGui::SetItemTooltip("%s", path.Utf8().c_str());
+		ImGui::SetItemTooltip("%s", (path.Empty() ? hint : path).Utf8().c_str());
 		ImGui::SameLine();
 		if (ImGui::Button("..."))
 		{
-			const auto picked = Platform::PickFolder(path);
+			const auto picked = Platform::PickFolder(path.Empty() ? hint : path);
 			if (!picked) error = picked.Error().userMessage;
 			else if (picked->has_value()) { path = **picked; changed = true; }
 		}
@@ -81,7 +71,7 @@ namespace DefectStudio
 			ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
 			{
 				PropertyGrid grid("##phononInputs", PropertyGridLabelWidth({"Stałe siłowe (FC)",
-					"Stan podstawowy", "Stan wzbudzony", "Tryplet (opcjonalny)", "ZPL eksperymentalne [eV]", "Katalog wyników"}));
+					"Stan podstawowy", "Stan wzbudzony", "Tryplet (opcjonalny)", "Katalog wyników"}));
 				if (grid)
 				{
 					grid.Row("Stałe siłowe (FC)");
@@ -96,24 +86,6 @@ namespace DefectStudio
 					{
 						grid.Row("");
 						if (ImGui::SmallButton("Usuń tryplet")) { settings.tripletDirectory = Path{}; persist(); }
-					}
-					grid.Row("ZPL eksperymentalne [eV]");
-					bool experimental = settings.experimentalZplEv.has_value();
-					if (ImGui::Checkbox("##useZpl", &experimental))
-					{
-						settings.experimentalZplEv = experimental ? std::optional<double>(2.0) : std::nullopt;
-						persist();
-					}
-					if (experimental)
-					{
-						ImGui::SameLine();
-						ImGui::InputDouble("##zpl", &*settings.experimentalZplEv, 0.0, 0.0, "%.4f");
-						if (ImGui::IsItemDeactivatedAfterEdit())
-						{
-							if (!std::isfinite(*settings.experimentalZplEv) || *settings.experimentalZplEv <= 0.0)
-								settings.experimentalZplEv = 2.0;
-							persist();
-						}
 					}
 					grid.Row("sigma [meV]");
 					ImGui::InputDouble("##sigma", &settings.sigmaMeV, 0.0, 0.0, "%.3f");
@@ -130,18 +102,20 @@ namespace DefectStudio
 						persist();
 					}
 					grid.Row("Katalog wyników");
-					if (DrawFolder("output", settings.resultDirectory, m_Error, true)) persist();
+					if (DrawFolder("output", settings.outputDirectory, m_Error, true, computationOutputPath())) persist();
 				}
 			}
+			drawZplInputs();
 			ImGui::SeparatorText("Embedding (opcjonalnie)");
 			drawEmbedding();
 			ImGui::EndDisabled();
 		}
-		const std::string blocker = ComputationBlocker(settings);
+		const std::string blocker = ComputationBlocker(settings, computationOutputPath());
 		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr || !blocker.empty());
 		if (ImGui::Button("Policz")) submitComputation();
 		ImGui::EndDisabled();
 		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
+		else if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		ImGui::SameLine();
 		ImGui::BeginDisabled(m_PendingJob != nullptr || m_PendingCcdJob != nullptr || m_PendingDispersionJob != nullptr);
 		if (ImGui::Button("Wczytaj wyniki..."))
@@ -151,6 +125,7 @@ namespace DefectStudio
 			else if (picked->has_value()) SetDirectory("result", **picked);
 		}
 		ImGui::EndDisabled();
+		if (m_PendingJob || m_PendingCcdJob || m_PendingDispersionJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		if (m_PendingJob)
 		{
 			const auto jobs = m_JobSystem.lock();

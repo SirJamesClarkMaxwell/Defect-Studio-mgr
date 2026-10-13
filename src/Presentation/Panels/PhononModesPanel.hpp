@@ -43,7 +43,7 @@ namespace DefectStudio
 		// EditorLayer on project open (and with defaults on project close). Stops any animation
 		// first, then loads settings.resultDirectory if it is set. Does not call the save handler.
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
-		void SetProjectRoots(std::vector<ProjectRootEntry> roots) { m_ProjectRoots = std::move(roots); }
+		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
 		// Called with the settings after every change worth keeping; EditorLayer writes phonon_panel.yaml.
 		void SetSaveHandler(std::function<void(const PhononPanelSettings &)> handler) { m_SaveHandler = std::move(handler); }
 
@@ -61,7 +61,13 @@ namespace DefectStudio
 		void selectMode(int index);
 		void cancelJob();
 		void drawInputs();
-		bool DrawFolder(const char *id, Path &path, std::string &error, bool editable = true);
+		bool DrawFolder(const char *id, Path &path, std::string &error, bool editable = true, const Path &hint = {});
+		void drawDatasets();
+		void scanDatasets();
+		void drawZplInputs();
+		void drawDatasetSpectra(bool pl, double minimum, double maximum); // x range: samples outside are not drawn
+		[[nodiscard]] Path computationOutputPath() const;
+		[[nodiscard]] Path defaultDatasetPath(const std::vector<Path> &inputs, const std::string &kind) const;
 		void drawDispersion();
 		void submitDispersion();
 		void pollDispersionJob();
@@ -95,6 +101,8 @@ namespace DefectStudio
 		std::vector<ProjectRootEntry> m_ProjectRoots;
 		// Keep uncommitted directory text intact until the edit ends.
 		std::unordered_map<std::string, std::pair<std::vector<char>, bool>> m_FolderEdits;
+		mutable std::unordered_map<std::string, Path> m_DefaultDatasetDirectories;
+		int m_ZplPreset = 3;
 		// The renderer window holding the force-constant supercell, found by
 		// structure.sourcePath == <fc dir>/POSCAR after openSupercellWindow(); empty = not bound.
 		std::string m_WindowId;

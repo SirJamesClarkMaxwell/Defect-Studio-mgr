@@ -174,7 +174,78 @@ namespace DefectStudio
 				throw std::invalid_argument("Expected a positive integer count");
 			return value.get<std::size_t>();
 		}
+
+		void ReadMetadata(const nlohmann::json &summary, PhononAnalysisResult &result)
+		{
+			result.sTotal = Finite(summary.at("s_total").get<double>());
+			result.debyeWaller = Finite(summary.at("debye_waller").get<double>());
+			result.stable = summary.at("stable").get<bool>();
+			const auto &zpl = summary.at("zpl_eV");
+			const auto read = [&](const std::string &key) -> std::optional<double> {
+				return zpl.at(key).is_null() ? std::nullopt :
+					std::optional<double>(Finite(zpl.at(key).get<double>()));
+			};
+			result.zplEv = {read("computed"), read("computed_spin_purified"), read("experimental"),
+				zpl.contains("formula") ? read("formula") : std::nullopt};
+			if (summary.contains("zpl_formula") && !summary.at("zpl_formula").is_null())
+				result.zplFormulaText = summary.at("zpl_formula").at("text").get<std::string>();
+			result.label = summary.value("label", std::string{});
+			result.sigmaMeV = Finite(summary.at("sigma_meV").get<double>());
+			result.gammaMeV = Finite(summary.at("gamma_meV").get<double>());
+			result.maxDisplacementAngstrom = Finite(summary.at("max_displacement_A").get<double>());
+			result.deltaQAmuHalfAngstrom = Finite(summary.at("delta_Q_amu05_A").get<double>());
+			result.approximation = summary.at("approximation").get<std::string>();
+		}
+
+		void ReadSpectra(const Path &directory, PhononAnalysisResult &result, std::string &currentFile)
+		{
+			currentFile = "spectral_function.tsv";
+			if (FileSystem::Exists((directory / currentFile).Native()))
+				ReadTable(directory / currentFile, "energy_meV\tS_E_per_meV", [&](const auto &row) {
+					const auto energy = Finite(ParseNumber<double>(row[0]));
+					if (!result.spectralEnergyMeV.empty() && energy <= result.spectralEnergyMeV.back())
+						throw std::invalid_argument("Spectral grid must be strictly increasing");
+					result.spectralEnergyMeV.push_back(energy);
+					result.spectralDensityPerMeV.push_back(Finite(ParseNumber<double>(row[1])));
+				});
+			currentFile = "pl.tsv";
+			if (!FileSystem::Exists((directory / currentFile).Native())) return;
+			ReadTable(directory / currentFile,
+				"photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental", [&](const auto &row) {
+					const auto energy = Finite(ParseNumber<double>(row[0]));
+					if (!result.plPhotonEnergyEv.empty() && energy <= result.plPhotonEnergyEv.back())
+						throw std::invalid_argument("PL grid must be strictly increasing");
+					result.plPhotonEnergyEv.push_back(energy);
+					result.plComputed.push_back(ParseNumber<double>(row[1]));
+					result.plSpinPurified.push_back(ParseNumber<double>(row[2]));
+					result.plExperimental.push_back(ParseNumber<double>(row[3]));
+					if (row.size() == 5) result.plFormula.push_back(ParseNumber<double>(row[4]));
+				}, "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula");
+			for (auto &column : {std::ref(result.plComputed), std::ref(result.plSpinPurified), std::ref(result.plExperimental), std::ref(result.plFormula)})
+			{
+				if (std::all_of(column.get().begin(), column.get().end(), [](double value) { return std::isnan(value); })) column.get().clear();
+				else for (const auto value : column.get()) (void)Finite(value);
+			}
+		}
 	} // namespace
+
+	bool PhononAnalysisIO::LoadSpectra(const Path &directory, PhononAnalysisResult &outResult, std::string &outError)
+	{
+		outError.clear();
+		std::string currentFile = "summary.json";
+		try
+		{
+			PhononAnalysisResult result;
+			result.directory = directory;
+			const auto summary = nlohmann::json::parse(ReadText(directory / currentFile));
+			if (summary.at("schema").get<std::string>() != kSchema) throw std::invalid_argument("Unsupported phonon analysis schema");
+			ReadMetadata(summary, result);
+			ReadSpectra(directory, result, currentFile);
+			outResult = std::move(result);
+			return true;
+		}
+		catch (const std::exception &exception) { outError = currentFile + ": " + exception.what(); return false; }
+	}
 
 	bool PhononAnalysisIO::Load(const Path &directory, PhononAnalysisResult &outResult, std::string &outError)
 	{
@@ -191,9 +262,6 @@ namespace DefectStudio
 			const auto modes = ReadCount(summary.at("n_modes"));
 			if (atoms > static_cast<std::size_t>(std::numeric_limits<int>::max()) / 3 || modes != atoms * 3)
 				throw std::invalid_argument("Expected 3 modes per atom");
-			result.sTotal = Finite(summary.at("s_total").get<double>());
-			result.debyeWaller = Finite(summary.at("debye_waller").get<double>());
-			result.stable = summary.at("stable").get<bool>();
 			const auto &imaginary = summary.at("imaginary_modes");
 			if (!imaginary.is_array())
 				throw std::invalid_argument("imaginary_modes must be an array");
@@ -204,22 +272,7 @@ namespace DefectStudio
 					throw std::invalid_argument("Imaginary mode index is out of range");
 				result.imaginaryModes.push_back(index);
 			}
-			const auto &zpl = summary.at("zpl_eV");
-			auto readZpl = [&](const std::string &key) -> std::optional<double> {
-				return zpl.at(key).is_null() ? std::nullopt : std::optional<double>(Finite(zpl.at(key).get<double>()));
-			};
-			result.zplEv = {readZpl("computed"), readZpl("computed_spin_purified"), readZpl("experimental")};
-			if (zpl.contains("formula"))
-				result.zplEv.formula = readZpl("formula");
-			if (summary.contains("zpl_formula") && !summary.at("zpl_formula").is_null())
-				result.zplFormulaText = summary.at("zpl_formula").at("text").get<std::string>();
-			if (summary.contains("label"))
-				result.label = summary.at("label").get<std::string>();
-			result.sigmaMeV = Finite(summary.at("sigma_meV").get<double>());
-			result.gammaMeV = Finite(summary.at("gamma_meV").get<double>());
-			result.maxDisplacementAngstrom = Finite(summary.at("max_displacement_A").get<double>());
-			result.deltaQAmuHalfAngstrom = Finite(summary.at("delta_Q_amu05_A").get<double>());
-			result.approximation = summary.at("approximation").get<std::string>();
+			ReadMetadata(summary, result);
 
 			currentFile = "structure.json";
 			const auto structure = nlohmann::json::parse(ReadText(directory / currentFile));
@@ -267,34 +320,7 @@ namespace DefectStudio
 			if (std::any_of(result.participation.begin(), result.participation.end(), [](float value) { return value < 0.0f; }))
 				throw std::invalid_argument("Participation must be nonnegative");
 
-			currentFile = "spectral_function.tsv";
-			if (FileSystem::Exists((directory / currentFile).Native()))
-				ReadTable(directory / currentFile, "energy_meV\tS_E_per_meV", [&](const auto &row) {
-					result.spectralEnergyMeV.push_back(Finite(ParseNumber<double>(row[0])));
-					result.spectralDensityPerMeV.push_back(Finite(ParseNumber<double>(row[1])));
-				});
-			currentFile = "pl.tsv";
-			if (FileSystem::Exists((directory / currentFile).Native()))
-			{
-				ReadTable(directory / currentFile,
-					"photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental", [&](const auto &row) {
-						result.plPhotonEnergyEv.push_back(Finite(ParseNumber<double>(row[0])));
-						result.plComputed.push_back(ParseNumber<double>(row[1]));
-						result.plSpinPurified.push_back(ParseNumber<double>(row[2]));
-						result.plExperimental.push_back(ParseNumber<double>(row[3]));
-						if (row.size() == 5)
-							result.plFormula.push_back(ParseNumber<double>(row[4]));
-					}, "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\tintensity_formula");
-				for (auto &column : {std::ref(result.plComputed), std::ref(result.plSpinPurified), std::ref(result.plExperimental),
-					std::ref(result.plFormula)})
-				{
-					if (std::all_of(column.get().begin(), column.get().end(), [](double value) { return std::isnan(value); }))
-						column.get().clear();
-					else
-						for (const auto value : column.get())
-							(void)Finite(value);
-				}
-			}
+			ReadSpectra(directory, result, currentFile);
 			outResult = std::move(result);
 			return true;
 		}

@@ -25,6 +25,10 @@ namespace DefectStudio
 			arguments.insert(arguments.end(), {"--triplet-dir", request.tripletDirectory->Utf8()});
 		if (request.experimentalZplEv)
 			arguments.insert(arguments.end(), {"--zpl-exp", std::format("{:.10g}", *request.experimentalZplEv)});
+		if (!request.zplFormula.empty()) arguments.insert(arguments.end(), {"--zpl-formula", request.zplFormula});
+		if (!request.groundAtExcitedDirectory.Empty()) arguments.insert(arguments.end(), {"--gs-at-es-dir", request.groundAtExcitedDirectory.Utf8()});
+		if (!request.excitedAtGroundDirectory.Empty()) arguments.insert(arguments.end(), {"--es-at-gs-dir", request.excitedAtGroundDirectory.Utf8()});
+		if (!request.label.empty()) arguments.insert(arguments.end(), {"--label", request.label});
 		arguments.insert(arguments.end(), {
 			"--sigma", std::format("{:.10g}", request.sigmaMeV),
 			"--gamma", std::format("{:.10g}", request.gammaMeV)});
@@ -109,7 +113,9 @@ namespace DefectStudio
 		}
 		for (const Path &directory : {request.forceConstantDirectory, request.groundStateDirectory,
 			request.excitedStateDirectory, request.tripletDirectory.value_or(request.excitedStateDirectory),
-			request.bulkForceConstantDirectory.value_or(request.forceConstantDirectory)})
+			request.bulkForceConstantDirectory.value_or(request.forceConstantDirectory),
+			request.groundAtExcitedDirectory.Empty() ? request.groundStateDirectory : request.groundAtExcitedDirectory,
+			request.excitedAtGroundDirectory.Empty() ? request.excitedStateDirectory : request.excitedAtGroundDirectory})
 		{
 			std::error_code error;
 			if (directory.Empty() || !std::filesystem::is_directory(directory.Native(), error))

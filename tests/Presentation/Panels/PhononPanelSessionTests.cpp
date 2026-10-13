@@ -69,6 +69,57 @@ namespace DefectStudio::Tests
 		}
 	} // namespace
 
+	TEST(PhononPanelSessionTests, DatasetSelectionAndComparedSetPersistWithoutChangingOutputOverride)
+	{
+		PhononPanelSession session;
+		const Path project = Path::FromUtf8("D:/project");
+		const Path a = project / "defectstudio/phonons", b = project / "b/defectstudio/phonons", d = project / "defectstudio/dispersion";
+		session.SetDatasets({{AnalysisDatasetKind::Phonons, a, "A", "ds.phonon_vibronic.v1"},
+			{AnalysisDatasetKind::Phonons, b, "B", "ds.phonon_vibronic.v1"},
+			{AnalysisDatasetKind::Dispersion, d, "Bulk", "ds.phonon_dispersion.v1"}});
+		session.Settings().outputDirectory = project / "override";
+		session.SetCompared(b, true); session.SetCompared(b, true);
+		EXPECT_TRUE(session.IsCompared(b));
+		EXPECT_EQ(session.Settings().comparedDirectories.size(), 1u);
+		EXPECT_TRUE(session.SelectDataset(a));
+		EXPECT_EQ(session.Settings().resultDirectory, a);
+		EXPECT_TRUE(session.SelectDataset(d));
+		EXPECT_EQ(session.Settings().selectedDispersionDirectory, d);
+		EXPECT_EQ(session.Settings().resultDirectory, a);
+		EXPECT_EQ(session.Settings().outputDirectory, project / "override");
+		EXPECT_FALSE(session.SelectDataset(project / "missing"));
+		PhononPanelSettings restored;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(PhononPanelSettingsIO::Serialize(session.Settings(), project), project,
+			restored, warnings, error));
+		EXPECT_EQ(restored.comparedDirectories, (std::vector<Path>{b}));
+		EXPECT_EQ(restored.resultDirectory, a);
+		EXPECT_EQ(restored.selectedDispersionDirectory, d);
+		session.SetCompared(b, false);
+		EXPECT_FALSE(session.IsCompared(b));
+		session.SetCompared(d, true);
+		EXPECT_TRUE(session.Settings().comparedDirectories.empty());
+	}
+
+	TEST(PhononPanelSessionTests, OutputMayBeInsideInputButMustNotContainIt)
+	{
+		const Path input = Path::FromResolved(FileSystem::CurrentPath()) / "calc/fc";
+		EXPECT_FALSE(PhononPanelSession::OutputContainsInput(input / "defectstudio/dispersion", input));
+		EXPECT_TRUE(PhononPanelSession::OutputContainsInput(input, input));
+		EXPECT_TRUE(PhononPanelSession::OutputContainsInput(input.parent_path(), input));
+		EXPECT_FALSE(PhononPanelSession::OutputContainsInput(input / "../fc-other", input));
+	}
+
+	TEST(PhononPanelSessionTests, ComparedPlUsesPreferredCurveOrFirstAvailable)
+	{
+		PhononAnalysisResult result;
+		result.plComputed = {0.5}; result.plFormula = {1.0};
+		EXPECT_EQ(PhononPanelSession::PlCurveChoice(result, "formula"), "formula");
+		EXPECT_EQ(PhononPanelSession::PlCurveChoice(result, "experimental"), "computed");
+		EXPECT_EQ(PhononPanelSession::PlCurve(result, "formula"), result.plFormula);
+	}
+
 	TEST(PhononPanelSessionTests, NewResultSelectsTheStrongestCoupledMode)
 	{
 		PhononPanelSession session;
@@ -340,5 +391,18 @@ namespace DefectStudio::Tests
 		RendererWindowState wrong = Window("C");
 		session.StartAnimation(wrong);
 		EXPECT_FALSE(session.IsAnimating());
+	}
+	TEST(PhononPanelSessionTests, UsefulRangeOfSpectraOnlyResultStopsWhereTheDensityDies)
+	{
+		// LoadSpectra results have no modes: the S range comes from the density, not the 3000 meV grid end.
+		PhononAnalysisResult spectra;
+		for (int i = 0; i <= 3000; ++i)
+		{
+			spectra.spectralEnergyMeV.push_back(i);
+			spectra.spectralDensityPerMeV.push_back(i <= 200 ? 1.0 : 0.0);
+		}
+		const auto [low, high] = PhononPanelSession::UsefulRange(spectra, false, "computed");
+		EXPECT_DOUBLE_EQ(low, -5.0);
+		EXPECT_DOUBLE_EQ(high, 220.0);
 	}
 } // namespace DefectStudio::Tests
