@@ -46,7 +46,10 @@ namespace DefectStudio
 		void SetCompared(const Path &directory, bool compared);
 		[[nodiscard]] bool IsCompared(const Path &directory) const;
 		// Selection only; the panel commits it after loading the requested result successfully.
+		// Also makes it the current dataset: the one highlighted row, whatever its kind.
 		bool SelectDataset(const Path &directory);
+		[[nodiscard]] const Path &CurrentDataset() const noexcept { return m_CurrentDataset; }
+		void SetCurrentDataset(Path directory) { m_CurrentDataset = std::move(directory); }
 		[[nodiscard]] std::optional<std::reference_wrapper<const PhononAnalysisResult>> Spectra(
 			const Path &directory, std::string &outError);
 		[[nodiscard]] std::optional<std::reference_wrapper<const CcdAnalysisResult>> Ccd(
@@ -137,6 +140,7 @@ namespace DefectStudio
 
 	private:
 		std::vector<AnalysisDatasetRef> m_Datasets;
+		Path m_CurrentDataset;
 		std::map<std::string, std::pair<std::optional<PhononAnalysisResult>, std::string>> m_Spectra;
 		std::map<std::string, std::pair<std::optional<CcdAnalysisResult>, std::string>> m_CcdResults;
 		std::optional<CcdAnalysisResult> m_CcdResult;

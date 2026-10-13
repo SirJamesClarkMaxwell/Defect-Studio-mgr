@@ -138,6 +138,10 @@ namespace DefectStudio
 			(void)loadCcdResult(m_Session->Settings().selectedCcdDirectory);
 		for (const auto &path : m_Session->Settings().comparedDirectories)
 			if (auto ref = ReadDatasetRef(path)) m_Session->AddDataset(std::move(*ref));
+		// The loads above each made their own row current; on project open the phonon result wins.
+		const auto &loaded = m_Session->Settings();
+		m_Session->SetCurrentDataset(!loaded.resultDirectory.Empty() ? loaded.resultDirectory :
+			!loaded.selectedCcdDirectory.Empty() ? loaded.selectedCcdDirectory : loaded.selectedDispersionDirectory);
 	}
 
 	void PhononModesPanel::persist()

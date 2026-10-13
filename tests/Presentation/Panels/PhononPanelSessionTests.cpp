@@ -83,11 +83,14 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(session.Settings().comparedDirectories.size(), 1u);
 		EXPECT_TRUE(session.SelectDataset(a));
 		EXPECT_EQ(session.Settings().resultDirectory, a);
+		EXPECT_EQ(session.CurrentDataset(), a);
 		EXPECT_TRUE(session.SelectDataset(d));
 		EXPECT_EQ(session.Settings().selectedDispersionDirectory, d);
 		EXPECT_EQ(session.Settings().resultDirectory, a);
+		EXPECT_EQ(session.CurrentDataset(), d); // one highlighted row across kinds
 		EXPECT_EQ(session.Settings().outputDirectory, project / "override");
 		EXPECT_FALSE(session.SelectDataset(project / "missing"));
+		EXPECT_EQ(session.CurrentDataset(), d);
 		PhononPanelSettings restored;
 		std::vector<std::string> warnings;
 		std::string error;

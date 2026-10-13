@@ -102,6 +102,7 @@ namespace DefectStudio
 		if (found->kind == AnalysisDatasetKind::Phonons) m_Settings.resultDirectory = found->directory;
 		else if (found->kind == AnalysisDatasetKind::Ccd) m_Settings.selectedCcdDirectory = found->directory;
 		else m_Settings.selectedDispersionDirectory = found->directory;
+		m_CurrentDataset = found->directory;
 		return true;
 	}
 

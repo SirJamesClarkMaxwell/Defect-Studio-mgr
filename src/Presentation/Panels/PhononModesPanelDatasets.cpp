@@ -55,9 +55,10 @@ namespace DefectStudio
 			ImGui::SameLine(); ImGui::TextUnformatted(m_Session->DatasetScanMessage().c_str());
 		}
 		std::optional<AnalysisDatasetRef> selected;
-		if (ImGui::BeginTable("##datasets", 5, ImGuiTableFlags_SizingStretchProp))
+		if (ImGui::BeginTable("##datasets", 6, ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("porównaj", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("W", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Nazwa"); ImGui::TableSetupColumn("Typ", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Katalog"); ImGui::TableSetupColumn("ZPL");
 			ImGui::TableHeadersRow();
@@ -66,10 +67,11 @@ namespace DefectStudio
 			{
 				ImGui::PushID(dataset.directory.Utf8().c_str());
 				ImGui::TableNextRow();
+				// Loaded = the panel uses it (one per kind, a marker); current = the one row last opened, the only fill.
 				const bool active = PhononPanelSession::SameFilePath(dataset.directory,
 					dataset.kind == AnalysisDatasetKind::Dispersion ? settings.selectedDispersionDirectory :
 					dataset.kind == AnalysisDatasetKind::Ccd ? settings.selectedCcdDirectory : settings.resultDirectory, m_ProjectDirectory);
-				if (active)
+				if (PhononPanelSession::SameFilePath(dataset.directory, m_Session->CurrentDataset(), m_ProjectDirectory))
 				{
 					const auto accent = ImGui::GetColorU32(ImGuiCol_CheckMark, 0.35f);
 					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, accent);
@@ -85,17 +87,21 @@ namespace DefectStudio
 				// Not `selected`: the accent row background marks it over the full row height (checkbox
 				// rows are taller than a Selectable), the frame-high Selectable only adds hover.
 				ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
-				if (ImGui::Selectable(((active ? "● " : "") + dataset.label + "###dataset").c_str(), false,
+				if (ImGui::Selectable(active ? "●###dataset" : "###dataset", false,
 					ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, ImGui::GetFrameHeight()))) selected = dataset;
 				ImGui::PopStyleVar();
+				if (active) ImGui::SetItemTooltip("Wczytany: panel używa tego zestawu (jeden na rodzaj: fonony, dyspersja, CCD).");
 				ImGui::TableSetColumnIndex(2);
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextUnformatted(dataset.kind == AnalysisDatasetKind::Phonons ? "fonony" : dataset.kind == AnalysisDatasetKind::Dispersion ? "dyspersja" : "CCD");
+				ImGui::TextUnformatted(dataset.label.c_str());
 				ImGui::TableSetColumnIndex(3);
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextUnformatted(dataset.kind == AnalysisDatasetKind::Phonons ? "fonony" : dataset.kind == AnalysisDatasetKind::Dispersion ? "dyspersja" : "CCD");
+				ImGui::TableSetColumnIndex(4);
 				ImGui::AlignTextToFramePadding();
 				const auto pathLabel = PhononPanelSession::DirectoryLabel(dataset.directory, m_ProjectDirectory, m_ProjectRoots);
 				ImGui::TextUnformatted(pathLabel.c_str()); ImGui::SetItemTooltip("%s", dataset.directory.Utf8().c_str());
-				ImGui::TableSetColumnIndex(4);
+				ImGui::TableSetColumnIndex(5);
 				std::string formula, error;
 				if (dataset.kind == AnalysisDatasetKind::Phonons)
 				{
