@@ -12,6 +12,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <deque>
+#include <variant>
 
 #include <glm/glm.hpp>
 
@@ -23,6 +25,8 @@
 #include "IO/AnalysisDatasetIO.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
+#include "ScientificRuntime/Python/CcdAnalysisJob.hpp"
 
 namespace DefectStudio
 {
@@ -35,6 +39,16 @@ namespace DefectStudio
 	class CcdAnalysisJob;
 	class PhononDispersionJob;
 	class AnalysisDatasetScanJob;
+	namespace Tests { struct PhononBatchTestAccess; }
+
+	enum class PhononBatchStep { Phonons, CcdAnalysis };
+	enum class PhononCaseStatus { Idle, Queued, Running, Done, Failed, Cancelled };
+	struct PhononCaseRun
+	{
+		PhononCaseStatus status = PhononCaseStatus::Idle;
+		std::string message;
+		Path output;
+	};
 
 	// task/104d: everything the Phonons panel does that is not ImGui - the loaded result, the
 	// persisted settings, the mode list, and what goes into the bound renderer window (mode arrows
@@ -62,9 +76,18 @@ namespace DefectStudio
 		void SubmitCcdInputs();
 		void SubmitCcdAnalysis();
 		void SubmitDispersion();
+		void StartBatch(std::vector<std::string> caseIds, std::vector<PhononBatchStep> steps);
+		void CancelBatch();
+		[[nodiscard]] const PhononCaseRun &CaseRun(const std::string &caseId) const;
+		[[nodiscard]] bool IsBatchRunning() const;
+		[[nodiscard]] std::pair<std::size_t, std::size_t> BatchProgress() const;
+		[[nodiscard]] std::string ComputationBlocker() const;
+		[[nodiscard]] std::string ComputationBlocker(const PhononCaseSettings &settings, const std::string &caseId) const;
+		[[nodiscard]] Path CaseOutputDirectory(const std::string &kindDirName,
+			const PhononCaseSettings &settings, const std::string &caseId) const;
 		[[nodiscard]] bool IsBusy() const noexcept
 		{
-			return m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob;
+			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob;
 		}
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
 		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
@@ -194,6 +217,36 @@ namespace DefectStudio
 
 	private:
 		friend class PhononModesPanel;
+		friend void DrawPhononCases(PhononPanelSession &session);
+		friend struct Tests::PhononBatchTestAccess;
+		struct BatchEntry
+		{
+			std::string caseId;
+			std::variant<PhononAnalysisRequest, CcdAnalysisRequest> request;
+		};
+		[[nodiscard]] PhononAnalysisRequest computationRequest(const PhononCaseSettings &settings, const std::string &caseId) const;
+		[[nodiscard]] CcdAnalysisRequest ccdAnalysisRequest(const PhononCaseSettings &settings, const std::string &caseId) const;
+		[[nodiscard]] Path computationOutputPath(const PhononCaseSettings &settings, const std::string &caseId) const;
+		[[nodiscard]] Path ccdAnalysisOutputPath(const PhononCaseSettings &settings, const std::string &caseId) const;
+		[[nodiscard]] std::string ccdAnalysisBlocker(const PhononCaseSettings &settings, const std::string &caseId,
+			bool plannedPhonons = false) const;
+		void submitComputation(PhononAnalysisRequest request, const std::string &caseId);
+		void submitCcdAnalysis(CcdAnalysisRequest request, const std::string &caseId);
+		void submitNextBatch();
+		void finishCaseJob(PhononBatchStep step, const std::string &caseId, const Path &output, JobStatus status,
+			std::string message);
+		[[nodiscard]] std::string commitCaseOutput(const std::string &caseId, PhononBatchStep step, const Path &output);
+		[[nodiscard]] JobId submitCaseJob(const Ref<IJob> &job);
+		std::deque<BatchEntry> m_BatchQueue;
+		std::optional<BatchEntry> m_BatchEntry;
+		std::map<std::string, PhononCaseRun> m_CaseRuns;
+		std::size_t m_BatchDone = 0, m_BatchTotal = 0;
+		bool m_BatchCancelling = false;
+		bool m_BatchPhonons = true, m_BatchCcdAnalysis = false;
+		// Originating case of each job slot (the slots can overlap, so one shared id would mix them up).
+		std::string m_PendingCaseId, m_PendingCcdInputsCaseId, m_PendingCcdAnalysisCaseId;
+		// Tests replace only execution; requests and main-thread completion use the real session flow.
+		std::function<JobId(const Ref<IJob> &)> m_CaseJobSubmitter;
 		void loadResult(const Path &directory);
 		void cacheActiveResult();
 		void scanDatasets();

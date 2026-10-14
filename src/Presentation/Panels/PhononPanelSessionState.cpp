@@ -28,6 +28,8 @@ namespace DefectStudio
 		Settings() = std::move(settings);
 		m_CaseWindows.clear();
 		m_CheckedCases.clear();
+		m_CaseRuns.clear();
+		m_BatchDone = m_BatchTotal = 0;
 		m_CaseOutputDirectories.clear();
 		m_ProjectDirectory = std::move(projectDirectory);
 		m_CurrentDataset = {};
@@ -76,7 +78,6 @@ namespace DefectStudio
 		if (role != "fc" && role != "gs" && role != "es" && role != "triplet" && role != "bulk" && role != "result") return;
 		const Path selectedDirectory = directory;
 		if (Cases().empty()) (void)AddCase(selectedDirectory.filename().Utf8());
-		cancelJob();
 		auto &settings = Settings();
 		if (role == "fc")
 		{
@@ -142,7 +143,6 @@ namespace DefectStudio
 
 	Path PhononPanelSession::computationOutputPath() const
 	{
-		const auto &s = Settings();
-		return CaseOutputDirectory(s.embeddingMult.empty() ? "phonons" : "phonons_emb_" + s.embeddingMult);
+		return computationOutputPath(Settings(), ActiveCaseId());
 	}
 }

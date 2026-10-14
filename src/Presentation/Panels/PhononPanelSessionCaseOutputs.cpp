@@ -7,7 +7,12 @@ namespace DefectStudio
 {
 	Path PhononPanelSession::CaseOutputDirectory(const std::string &kindDirName) const
 	{
-		const auto &s = Settings();
+		return CaseOutputDirectory(kindDirName, Settings(), ActiveCaseId());
+	}
+
+	Path PhononPanelSession::CaseOutputDirectory(const std::string &kindDirName,
+		const PhononCaseSettings &s, const std::string &caseId) const
+	{
 		if (kindDirName.starts_with("phonons") && !s.outputDirectory.Empty()) return s.outputDirectory;
 		if (kindDirName == "ccd" && !s.ccdAnalysisOutputDirectory.Empty()) return s.ccdAnalysisOutputDirectory;
 		if (kindDirName == "ccd_inputs" && !s.ccdOutputDirectory.Empty()) return s.ccdOutputDirectory;
@@ -31,13 +36,13 @@ namespace DefectStudio
 		if (plain.Empty()) return {};
 		std::string name;
 		for (const auto &item : m_Settings.cases)
-			if (item.id == ActiveCaseId()) name = item.name;
-		std::string key = ActiveCaseId() + "\n" + name + "\n" + plain.Utf8() + "\n" +
+			if (item.id == caseId) name = item.name;
+		std::string key = caseId + "\n" + name + "\n" + plain.Utf8() + "\n" +
 			s.groundStateDirectory.Utf8() + "\n" + s.excitedStateDirectory.Utf8();
 		if (const auto cached = m_CaseOutputDirectories.find(key); cached != m_CaseOutputDirectories.end()) return cached->second;
 		const auto collides = [&](const Path &directory) {
 			const auto owner = DatasetCaseId(directory);
-			if (!owner.empty() && owner != ActiveCaseId()) return true;
+			if (!owner.empty() && owner != caseId) return true;
 			if (const auto summary = ReadDatasetRef(directory))
 			{
 				const auto gs = summary->inputs.find("gs_dir"), es = summary->inputs.find("es_dir");

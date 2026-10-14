@@ -2,6 +2,7 @@
 #include "Presentation/Panels/PhononPanelSession.hpp"
 
 #include <imgui.h>
+#include <format>
 
 namespace DefectStudio
 {
@@ -11,13 +12,14 @@ namespace DefectStudio
 		ImGui::SetItemTooltip("Jedno przejście GS → ES jednego defektu; warianty wyników są zestawami w przypadku.");
 		if (!shown) return;
 		std::string activate, duplicate, remove, renameId, rename;
-		if (ImGui::BeginTable("##cases", 5, ImGuiTableFlags_SizingStretchProp))
+		if (ImGui::BeginTable("##cases", 6, ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("liczyć", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Nazwa");
 			ImGui::TableSetupColumn("Zestawy", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("ZPL [eV]", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("S", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableHeadersRow();
 			for (const auto &item : session.Cases())
 			{
@@ -73,9 +75,55 @@ namespace DefectStudio
 				ImGui::TableSetColumnIndex(4);
 				if (result) ImGui::Text("%.4f", result->get().sTotal);
 				else ImGui::TextUnformatted("-");
+				ImGui::TableSetColumnIndex(5);
+				const auto &run = session.CaseRun(item.id);
+				std::string_view status = "-";
+				switch (run.status)
+				{
+					case PhononCaseStatus::Queued: status = "w kolejce"; break;
+					case PhononCaseStatus::Running: status = "liczy…"; break;
+					case PhononCaseStatus::Done: status = "gotowe"; break;
+					case PhononCaseStatus::Failed: status = "błąd"; break;
+					case PhononCaseStatus::Cancelled: status = "anulowano"; break;
+					case PhononCaseStatus::Idle: break;
+				}
+				ImGui::TextUnformatted(status.data());
+				if (!run.message.empty()) ImGui::SetItemTooltip("%s", run.message.c_str());
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
+		}
+		ImGui::TextUnformatted("Kroki:");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(session.IsBatchRunning());
+		ImGui::Checkbox("fonony", &session.m_BatchPhonons);
+		ImGui::SameLine();
+		ImGui::Checkbox("analiza CCD", &session.m_BatchCcdAnalysis);
+		ImGui::EndDisabled();
+		std::vector<std::string> checked;
+		for (const auto &item : session.Cases())
+			if (session.CaseChecked(item.id)) checked.push_back(item.id);
+		const std::string reason = session.IsBatchRunning() ? "Kolejka już działa." :
+			session.IsBusy() ? "Poczekaj na zakończenie bieżącego zadania." :
+			checked.empty() ? "Zaznacz przypadki do obliczenia." :
+			!session.m_BatchPhonons && !session.m_BatchCcdAnalysis ? "Wybierz co najmniej jeden krok." : "";
+		ImGui::BeginDisabled(!reason.empty());
+		if (ImGui::Button(std::format("Policz zaznaczone ({})", checked.size()).c_str()))
+		{
+			std::vector<PhononBatchStep> steps;
+			if (session.m_BatchPhonons) steps.push_back(PhononBatchStep::Phonons);
+			if (session.m_BatchCcdAnalysis) steps.push_back(PhononBatchStep::CcdAnalysis);
+			session.StartBatch(std::move(checked), std::move(steps));
+		}
+		ImGui::EndDisabled();
+		if (!reason.empty()) ImGui::SetItemTooltip("%s", reason.c_str());
+		if (session.IsBatchRunning())
+		{
+			const auto [done, total] = session.BatchProgress();
+			const auto label = std::format("{} / {}", done, total);
+			ImGui::ProgressBar(total ? static_cast<float>(done) / static_cast<float>(total) : 0.0f,
+				ImVec2(-1.0f, 0.0f), label.c_str());
+			if (ImGui::Button("Anuluj##batch")) session.CancelBatch();
 		}
 		// Release table references before changing the list or loading another result.
 		if (!renameId.empty()) session.RenameCase(renameId, std::move(rename));

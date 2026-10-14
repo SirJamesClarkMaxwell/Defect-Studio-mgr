@@ -36,6 +36,7 @@ namespace DefectStudio
 			return;
 		}
 		auto &settings = Settings();
+		m_PendingCcdInputsCaseId = ActiveCaseId();
 		settings.ccdOutputDirectory = ccdOutputPath();
 		AttachDataset(ActiveCaseId(), settings.ccdOutputDirectory);
 		m_PendingCcdJob = CreateRef<CcdInputsJob>(settings.groundStateDirectory, settings.excitedStateDirectory,
@@ -54,62 +55,27 @@ namespace DefectStudio
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
 		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingCcdJob->GetResult())
 		{
-			m_CcdInputsResult = *m_PendingCcdJob->GetResult();
+			if (m_PendingCcdInputsCaseId == ActiveCaseId()) m_CcdInputsResult = *m_PendingCcdJob->GetResult();
 			try
 			{
-				const auto result = nlohmann::json::parse(m_CcdInputsResult);
-				AttachDataset(ActiveCaseId(), Path::FromUtf8(result.at("out_dir").get<std::string>()));
+				const auto result = nlohmann::json::parse(*m_PendingCcdJob->GetResult());
+				AttachDataset(m_PendingCcdInputsCaseId, Path::FromUtf8(result.at("out_dir").get<std::string>()));
 				Changed();
 			}
-			catch (const std::exception &exception) { m_CcdError = exception.what(); }
+			catch (const std::exception &exception) { if (m_PendingCcdInputsCaseId == ActiveCaseId()) m_CcdError = exception.what(); }
 		}
-		else if (snapshot && snapshot->status == JobStatus::Failed && m_PendingCcdJob->GetError())
+		else if (m_PendingCcdInputsCaseId == ActiveCaseId() && snapshot && snapshot->status == JobStatus::Failed && m_PendingCcdJob->GetError())
 			m_CcdError = m_PendingCcdJob->GetError()->userMessage;
-		else
+		else if (m_PendingCcdInputsCaseId == ActiveCaseId())
 			m_CcdError = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Generowanie CCD przerwane.";
+		m_PendingCcdInputsCaseId.clear();
 		m_PendingCcdJob.reset();
 		m_PendingCcdJobId = 0;
 	}
 
 	Path PhononPanelSession::ccdAnalysisOutputPath() const
 	{
-		return CaseOutputDirectory("ccd");
-	}
-
-	std::string PhononPanelSession::ccdAnalysisBlocker() const
-	{
-		const auto &s = Settings();
-		if (m_JobSystem.expired()) return "JobSystem niedostępny.";
-		if (s.ccdPhononCurvature && (!Result() || s.resultDirectory.Empty()))
-			return "Wczytaj aktywny zestaw fononów dla krzywizny.";
-		std::vector<Path> inputs;
-		const bool points = !s.groundStateDirectory.Empty() || !s.excitedStateDirectory.Empty();
-		if ((!s.ccdDirectory.Empty() || !points) &&
-			(s.zplFormula.find("E_gs") != std::string::npos || s.zplFormula.find("E_es") != std::string::npos || s.zplFormula.find("E_T") != std::string::npos))
-			return "Wzór z energiami wymaga punktów GS/ES. Dla ścieżki CCD / samego modu fononowego podaj liczbę ZPL lub zostaw wzór pusty.";
-		if (!s.ccdDirectory.Empty()) inputs.push_back(s.ccdDirectory);
-		else if (points)
-		{
-			if (s.groundStateDirectory.Empty() || s.excitedStateDirectory.Empty()) return "Ustaw GS i ES w sekcji Wejścia lub katalog ścieżki CCD.";
-			if (s.groundAtExcitedDirectory.Empty() && s.excitedAtGroundDirectory.Empty() && !s.ccdPhononCurvature)
-				return "Brak krzywizny: ustaw E_gs@es / E_es@gs lub włącz krzywiznę z fononów.";
-			inputs = {s.groundStateDirectory, s.excitedStateDirectory, s.tripletDirectory,
-				s.groundAtExcitedDirectory, s.excitedAtGroundDirectory};
-		}
-		else if (!s.ccdPhononCurvature) return "Ustaw GS/ES, ścieżkę CCD lub krzywiznę z aktywnych fononów.";
-		if (s.ccdPhononCurvature) inputs.push_back(s.resultDirectory);
-		const auto output = ccdAnalysisOutputPath();
-		if (output.Empty()) return "Ustaw katalog projektu lub katalog wyników CCD.";
-		for (const auto &input : inputs)
-		{
-			if (input.Empty()) continue;
-			std::error_code error;
-			if (!std::filesystem::is_directory(input.Native(), error)) return "Katalog wejściowy nie istnieje: " + input.Utf8();
-			if (PhononPanelSession::OutputContainsInput(output, input)) return "Katalog wyników nie może być wejściem ani go zawierać.";
-		}
-		if (!std::isfinite(s.sigmaMeV) || s.sigmaMeV <= 0 || !std::isfinite(s.ccdTemperatureK) || s.ccdTemperatureK < 0)
-			return "sigma musi być dodatnia, a T nieujemne.";
-		return {};
+		return ccdAnalysisOutputPath(Settings(), ActiveCaseId());
 	}
 
 	bool PhononPanelSession::loadCcdResult(const Path &directory)
@@ -131,25 +97,19 @@ namespace DefectStudio
 		if (!m_CcdAnalysisError.empty()) return;
 		const auto jobs = m_JobSystem.lock();
 		if (!jobs) { m_CcdAnalysisError = "JobSystem niedostępny."; return; }
-		const auto &s = Settings();
-		CcdAnalysisRequest request;
-		request.ccdDir = s.ccdDirectory;
-		if (s.ccdDirectory.Empty() && !s.groundStateDirectory.Empty())
-		{
-			request.gsDir = s.groundStateDirectory; request.esDir = s.excitedStateDirectory;
-			request.tripletDir = s.tripletDirectory;
-			request.gsAtEsDir = s.groundAtExcitedDirectory; request.esAtGsDir = s.excitedAtGroundDirectory;
-		}
-		request.zplFormula = s.zplFormula;
-		if (s.ccdPhononCurvature) request.phononResultDir = s.resultDirectory;
-		request.sigmaMeV = s.sigmaMeV; request.temperatureK = s.ccdTemperatureK;
-		request.label = PhononPanelSession::DirectoryLabel(!s.ccdDirectory.Empty() ? s.ccdDirectory :
-			!s.excitedStateDirectory.Empty() ? s.excitedStateDirectory : s.resultDirectory,
-			m_ProjectDirectory, m_ProjectRoots);
-		request.outputDirectory = ccdAnalysisOutputPath();
-		AttachDataset(ActiveCaseId(), request.outputDirectory);
+		submitCcdAnalysis(ccdAnalysisRequest(Settings(), ActiveCaseId()), ActiveCaseId());
+	}
+
+	void PhononPanelSession::submitCcdAnalysis(CcdAnalysisRequest request, const std::string &caseId)
+	{
+		m_PendingCcdAnalysisCaseId = caseId;
+		auto &run = m_CaseRuns[caseId];
+		run.status = PhononCaseStatus::Running;
+		run.output = request.outputDirectory;
+		if (!m_BatchEntry) run.message.clear();
+		AttachDataset(caseId, request.outputDirectory);
 		m_PendingCcdAnalysisJob = CreateRef<CcdAnalysisJob>(std::move(request));
-		m_PendingCcdAnalysisJobId = jobs->Submit(m_PendingCcdAnalysisJob, JobPriority::Normal);
+		m_PendingCcdAnalysisJobId = submitCaseJob(m_PendingCcdAnalysisJob);
 		Changed();
 	}
 
@@ -159,15 +119,12 @@ namespace DefectStudio
 		const auto jobs = m_JobSystem.lock();
 		const auto snapshot = jobs ? jobs->GetJob(m_PendingCcdAnalysisJobId) : std::nullopt;
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
-		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingCcdAnalysisJob->GetResult())
-		{
-			if (loadCcdResult(m_PendingCcdAnalysisJob->GetResult()->outputDirectory))
-			{
-				AttachDataset(ActiveCaseId(), m_PendingCcdAnalysisJob->GetResult()->outputDirectory);
-				Changed();
-			}
-		}
-		else m_CcdAnalysisError = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie CCD przerwane.";
+		const bool completed = snapshot && snapshot->status == JobStatus::Completed && m_PendingCcdAnalysisJob->GetResult();
+		const std::string caseId = std::exchange(m_PendingCcdAnalysisCaseId, {});
+		finishCaseJob(PhononBatchStep::CcdAnalysis, caseId,
+			completed ? m_PendingCcdAnalysisJob->GetResult()->outputDirectory : CaseRun(caseId).output,
+			completed ? JobStatus::Completed : snapshot && snapshot->status == JobStatus::Cancelled ? JobStatus::Cancelled : JobStatus::Failed,
+			completed ? std::string{} : snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie CCD przerwane.");
 		m_PendingCcdAnalysisJob.reset(); m_PendingCcdAnalysisJobId = 0;
 	}
 }

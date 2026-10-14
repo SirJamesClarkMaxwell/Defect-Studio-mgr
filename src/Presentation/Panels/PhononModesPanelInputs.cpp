@@ -12,26 +12,6 @@
 
 namespace DefectStudio
 {
-	namespace
-	{
-		// Why "Policz" is disabled, in the user's words; empty when it can run.
-		std::string ComputationBlocker(const PhononPanelSettings &settings, const Path &output)
-		{
-			if (settings.forceConstantDirectory.Empty()) return "Ustaw katalog stałych siłowych (FC).";
-			if (settings.groundStateDirectory.Empty()) return "Ustaw stan podstawowy.";
-			if (settings.excitedStateDirectory.Empty()) return "Ustaw stan wzbudzony.";
-			if (output.Empty()) return "Ustaw katalog projektu lub katalog wyników.";
-			if (!settings.embeddingMult.empty() && settings.bulkForceConstantDirectory.Empty())
-				return "Embedding włączony bez katalogu FC bulku - ustaw go albo odznacz Embedding.";
-			for (const Path &input : {settings.forceConstantDirectory, settings.groundStateDirectory,
-				settings.excitedStateDirectory, settings.tripletDirectory, settings.groundAtExcitedDirectory,
-				settings.excitedAtGroundDirectory, settings.embeddingMult.empty() ? Path{} : settings.bulkForceConstantDirectory})
-				if (PhononPanelSession::OutputContainsInput(output, input))
-					return "Katalog wyników nie może być katalogiem wejściowym ani go zawierać.";
-			return {};
-		}
-	}
-
 	bool PhononModesPanel::DrawFolder(const char *id, Path &path, std::string &error, bool editable, const Path &hint)
 	{
 		ImGui::PushID(id);
@@ -68,7 +48,7 @@ namespace DefectStudio
 		if (ImGui::CollapsingHeader("Wejścia"))
 		{
 			ImGui::TextDisabled("Katalogi można też ustawić przez RMB → Fonony w Project Tree.");
-			ImGui::BeginDisabled(m_Session->m_PendingJob != nullptr || m_Session->m_PendingCcdJob != nullptr || m_Session->m_PendingDispersionJob != nullptr || m_Session->m_PendingCcdAnalysisJob != nullptr);
+			ImGui::BeginDisabled(m_Session->IsBusy() && !m_Session->IsBatchRunning());
 			{
 				PropertyGrid grid("##phononInputs", PropertyGridLabelWidth({"Stałe siłowe (FC)",
 					"Stan podstawowy", "Stan wzbudzony", "Tryplet (opcjonalny)", "Katalog wyników"}));
@@ -110,14 +90,14 @@ namespace DefectStudio
 			drawEmbedding();
 			ImGui::EndDisabled();
 		}
-		const std::string blocker = ComputationBlocker(settings, m_Session->computationOutputPath());
-		ImGui::BeginDisabled(m_Session->m_PendingJob != nullptr || m_Session->m_PendingCcdJob != nullptr || m_Session->m_PendingDispersionJob != nullptr || m_Session->m_PendingCcdAnalysisJob != nullptr || !blocker.empty());
+		const std::string blocker = m_Session->ComputationBlocker();
+		ImGui::BeginDisabled(m_Session->IsBusy() || !blocker.empty());
 		if (ImGui::Button("Policz")) m_Session->SubmitComputation();
 		ImGui::EndDisabled();
 		if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
-		else if (m_Session->m_PendingJob || m_Session->m_PendingCcdJob || m_Session->m_PendingDispersionJob || m_Session->m_PendingCcdAnalysisJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
+		else if (m_Session->IsBusy()) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		ImGui::SameLine();
-		ImGui::BeginDisabled(m_Session->m_PendingJob != nullptr || m_Session->m_PendingCcdJob != nullptr || m_Session->m_PendingDispersionJob != nullptr || m_Session->m_PendingCcdAnalysisJob != nullptr);
+		ImGui::BeginDisabled(m_Session->IsBusy());
 		if (ImGui::Button("Wczytaj wyniki..."))
 		{
 			const auto picked = Platform::PickFolder(settings.resultDirectory);
@@ -125,7 +105,7 @@ namespace DefectStudio
 			else if (picked->has_value()) SetDirectory("result", **picked);
 		}
 		ImGui::EndDisabled();
-		if (m_Session->m_PendingJob || m_Session->m_PendingCcdJob || m_Session->m_PendingDispersionJob || m_Session->m_PendingCcdAnalysisJob) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
+		if (m_Session->IsBusy()) ImGui::SetItemTooltip("Poczekaj na zakończenie bieżącego zadania.");
 		if (m_Session->m_PendingJob)
 		{
 			const auto jobs = m_Session->m_JobSystem.lock();
@@ -133,7 +113,11 @@ namespace DefectStudio
 			if (snapshot)
 				ImGui::ProgressBar(snapshot->totalWork > 0.0f ? snapshot->completedWork / snapshot->totalWork : 0.0f,
 					ImVec2(-1.0f, 0.0f), snapshot->currentMessage.c_str());
-			if (ImGui::Button("Anuluj")) m_Session->cancelJob(m_Session->m_PendingJobId);
+			if (ImGui::Button("Anuluj"))
+			{
+				if (m_Session->IsBatchRunning()) m_Session->CancelBatch();
+				else m_Session->cancelJob(m_Session->m_PendingJobId);
+			}
 		}
 		if (!blocker.empty() && !m_Session->m_PendingJob)
 			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "%s", blocker.c_str());

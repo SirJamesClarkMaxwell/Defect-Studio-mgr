@@ -36,7 +36,14 @@ namespace DefectStudio
 
 	void PhononPanelSession::cancelJob()
 	{
+		CancelBatch();
 		cancelCaseJobs();
+		m_BatchQueue.clear();
+		m_BatchEntry.reset();
+		m_BatchCancelling = false;
+		m_PendingCaseId.clear();
+		m_PendingCcdInputsCaseId.clear();
+		m_PendingCcdAnalysisCaseId.clear();
 		if (m_PendingDispersionJob) cancelJob(m_PendingDispersionJobId);
 		m_PendingDispersionJob.reset();
 		m_PendingDispersionJobId = 0;
@@ -51,29 +58,22 @@ namespace DefectStudio
 			m_Error = "JobSystem niedostępny.";
 			return;
 		}
-		const auto &settings = Settings();
-		PhononAnalysisRequest request;
-		request.forceConstantDirectory = settings.forceConstantDirectory;
-		request.groundStateDirectory = settings.groundStateDirectory;
-		request.excitedStateDirectory = settings.excitedStateDirectory;
-		if (!settings.tripletDirectory.Empty()) request.tripletDirectory = settings.tripletDirectory;
-		request.zplFormula = settings.zplFormula;
-		request.groundAtExcitedDirectory = settings.groundAtExcitedDirectory;
-		request.excitedAtGroundDirectory = settings.excitedAtGroundDirectory;
-		request.sigmaMeV = settings.sigmaMeV;
-		request.gammaMeV = settings.gammaMeV;
-		if (!settings.embeddingMult.empty())
-		{
-			request.bulkForceConstantDirectory = settings.bulkForceConstantDirectory;
-			request.embeddingMult = m_EmbeddingMult;
-			request.dcutoffAngstrom = settings.dcutoffAngstrom;
-			request.bcutoffAngstrom = settings.bcutoffAngstrom;
-		}
-		request.outputDirectory = computationOutputPath();
-		AttachDataset(ActiveCaseId(), request.outputDirectory);
+		m_Error = ComputationBlocker();
+		if (!m_Error.empty()) return;
+		submitComputation(computationRequest(Settings(), ActiveCaseId()), ActiveCaseId());
+	}
+
+	void PhononPanelSession::submitComputation(PhononAnalysisRequest request, const std::string &caseId)
+	{
+		m_PendingCaseId = caseId;
+		auto &run = m_CaseRuns[caseId];
+		run.status = PhononCaseStatus::Running;
+		run.output = request.outputDirectory;
+		if (!m_BatchEntry) run.message.clear();
+		AttachDataset(caseId, request.outputDirectory);
 		m_PendingJob = CreateRef<PhononAnalysisJob>(std::move(request));
-		m_PendingJobId = jobs->Submit(m_PendingJob, JobPriority::Normal);
-		m_Error.clear();
+		m_PendingJobId = submitCaseJob(m_PendingJob);
+		if (caseId == ActiveCaseId()) m_Error.clear();
 		Changed();
 	}
 
@@ -83,14 +83,12 @@ namespace DefectStudio
 		const auto jobs = m_JobSystem.lock();
 		const auto snapshot = jobs ? jobs->GetJob(m_PendingJobId) : std::nullopt;
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
-		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingJob->GetResult())
-		{
-			loadResult(m_PendingJob->GetResult()->outputDirectory);
-			AttachDataset(ActiveCaseId(), m_PendingJob->GetResult()->outputDirectory);
-			Changed();
-		}
-		else
-			m_Error = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie fononów przerwane.";
+		const bool completed = snapshot && snapshot->status == JobStatus::Completed && m_PendingJob->GetResult();
+		const std::string caseId = std::exchange(m_PendingCaseId, {});
+		finishCaseJob(PhononBatchStep::Phonons, caseId,
+			completed ? m_PendingJob->GetResult()->outputDirectory : CaseRun(caseId).output,
+			completed ? JobStatus::Completed : snapshot && snapshot->status == JobStatus::Cancelled ? JobStatus::Cancelled : JobStatus::Failed,
+			completed ? std::string{} : snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie fononów przerwane.");
 		m_PendingJob.reset();
 		m_PendingJobId = 0;
 	}

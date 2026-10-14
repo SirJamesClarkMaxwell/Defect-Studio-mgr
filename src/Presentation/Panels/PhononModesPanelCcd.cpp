@@ -17,7 +17,7 @@ namespace DefectStudio
 	{
 		if (!ImGui::CollapsingHeader("CCD / PL 1D")) return;
 		auto &s = m_Session->Settings();
-		const bool busy = m_Session->m_PendingJob || m_Session->m_PendingCcdJob || m_Session->m_PendingDispersionJob || m_Session->m_PendingCcdAnalysisJob;
+		const bool busy = m_Session->IsBusy();
 		ImGui::TextDisabled("GS, ES, tryplet, dodatkowe energie i ZPL: sekcja Wejścia.");
 		ImGui::BeginDisabled(busy);
 		{
@@ -59,7 +59,11 @@ namespace DefectStudio
 			const auto snapshot = jobs ? jobs->GetJob(m_Session->m_PendingCcdAnalysisJobId) : std::nullopt;
 			if (snapshot) ImGui::ProgressBar(snapshot->totalWork > 0 ? snapshot->completedWork / snapshot->totalWork : 0,
 				ImVec2(-1, 0), snapshot->currentMessage.c_str());
-			if (ImGui::Button("Anuluj analizę CCD")) m_Session->cancelJob(m_Session->m_PendingCcdAnalysisJobId);
+			if (ImGui::Button("Anuluj analizę CCD"))
+			{
+				if (m_Session->IsBatchRunning()) m_Session->CancelBatch();
+				else m_Session->cancelJob(m_Session->m_PendingCcdAnalysisJobId);
+			}
 		}
 		if (!m_Session->m_CcdAnalysisError.empty()) ImGui::TextColored(ImVec4(1, 0.35f, 0.35f, 1), "%s", m_Session->m_CcdAnalysisError.c_str());
 		if (ImGui::TreeNode("Generuj punkty CCD"))

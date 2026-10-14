@@ -78,7 +78,6 @@ namespace DefectStudio
 			if (!cases.empty()) (void)ActivateCase(cases[std::min(index, cases.size() - 1)].id);
 			else
 			{
-				cancelCaseJobs();
 				ClearResult();
 				ClearCcdResult();
 				static_cast<PhononCaseSettings &>(m_Settings) = {};
@@ -124,7 +123,6 @@ namespace DefectStudio
 		if (ActiveCaseId() == requested) return true;
 		const auto settings = found->settings;
 		clearWindow();
-		cancelCaseJobs();
 		cacheActiveResult();
 		m_Result.reset();
 		m_CcdResult.reset();
