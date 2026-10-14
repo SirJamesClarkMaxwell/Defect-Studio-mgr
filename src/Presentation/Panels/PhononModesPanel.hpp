@@ -15,6 +15,7 @@
 #include "IO/PhononDispersionIO.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Presentation/Panels/PhononPanelSession.hpp"
+#include "Presentation/Panels/PlotWidgets.hpp"
 
 namespace DefectStudio
 {
@@ -56,7 +57,6 @@ namespace DefectStudio
 		void drawDatasets();
 
 		void drawZplInputs();
-		void drawDatasetSpectra(bool pl, double minimum, double maximum); // x range: samples outside are not drawn
 
 		void drawDispersion();
 
@@ -84,5 +84,9 @@ namespace DefectStudio
 		int m_PlotTab = -1;
 		bool m_ScrollToMode = false;
 		int m_LastSelectedMode = -1;
+		std::unordered_map<std::string, PlotExportState> m_PlotExports;
+		PlotExportState m_TableExport;
+		int m_ModeSortColumn = 1;
+		bool m_ModeSortAscending = true;
 	};
 } // namespace DefectStudio

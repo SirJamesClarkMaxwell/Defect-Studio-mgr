@@ -9,6 +9,7 @@
 #include <imgui.h>
 #include <implot.h>
 #include "Presentation/Panels/PlotWidgets.hpp"
+#include "Presentation/Panels/PhononPlotData.hpp"
 
 namespace DefectStudio
 {
@@ -145,14 +146,9 @@ namespace DefectStudio
 			{ s.ccdWavefunctionScale = scale; persist(); }
 			if (result.wavefunctions.q.empty()) ImGui::TextDisabled("Brak wavefunctions.tsv w tym zestawie.");
 		}
-		double minimum = std::min(0.0, result.deltaQ), maximum = std::max(0.0, result.deltaQ);
-		for (bool excited : {false, true})
-			for (int n = 0; n < s.ccdLevels; ++n)
-				if (const auto range = PhononPanelSession::CcdLevelRange(result, excited, n))
-				{ minimum = std::min(minimum, range->first); maximum = std::max(maximum, range->second); }
-		for (const auto &point : result.points) { minimum = std::min(minimum, point.q); maximum = std::max(maximum, point.q); }
-		const double margin = 0.25 * std::max(maximum - minimum, 0.2);
-		minimum -= margin; maximum += margin;
+		auto plot = BuildCcdPlotData(result, s, s.selectedCcdDirectory, CurrentPlotColors());
+		PlotExportPopup(plot, m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, result.label), m_PlotExports[plot.id]);
+		const double minimum = plot.x.minimum, maximum = plot.x.maximum;
 		const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 3;
 		if (reset) ImPlot::SetNextAxisToFit(ImAxis_Y1);
 		if (!ImPlot::BeginPlot("##ccdPlot", ImVec2(-1, std::max(ImGui::GetContentRegionAvail().y, 1.0f)))) return;
@@ -160,28 +156,27 @@ namespace DefectStudio
 		ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 		ImPlot::SetupFinish();
 		ImRect rect; const auto frame = CurrentPlotFrame(&rect);
-		const auto [first, last] = PhononPanelSession::GridIndexRange(result.curves.q, minimum, maximum);
-		const auto xs = std::span(result.curves.q).subspan(first, last - first);
-		auto &gsStyle = s.seriesStyles["CCD/gs"], &esStyle = s.seriesStyles["CCD/es"];
-		PlotStyledLine("V_gs", xs, std::span(result.curves.vGsEv).subspan(first, last - first), gsStyle);
-		if (SeriesLegendPopup("V_gs", gsStyle)) persist();
-		PlotStyledLine("V_es", xs, std::span(result.curves.vEsEv).subspan(first, last - first), esStyle);
-		if (SeriesLegendPopup("V_es", esStyle)) persist();
+		for (auto &series : plot.series)
+			if (series.id == "CCD/gs" || series.id == "CCD/es")
+			{
+				auto &style = s.seriesStyles[series.id];
+				ResolvePlotItemColor(series, style);
+				if (PlotSeries(series, style)) persist();
+				ResolvePlotItemColor(series, style);
+			}
 		const ImU32 gsColor = ImPlot::GetItem("V_gs")->Color, esColor = ImPlot::GetItem("V_es")->Color;
 		auto &pointsStyle = s.seriesStyles["CCD/points"];
 		PlotStyledLine("Punkty", {}, {}, pointsStyle);
+		for (auto &series : plot.series)
+			if (series.kind == PlotSeriesKind::Scatter)
+			{
+				if (!pointsStyle.color && (series.id.starts_with("CCD/points/gs/") || series.id.starts_with("CCD/points/es/")))
+					series.style = BranchStyle(pointsStyle, series.id.starts_with("CCD/points/gs/") ? gsColor : esColor);
+				if (PlotSeries(series, pointsStyle)) persist();
+			}
 		for (const auto &point : result.points)
 		{
-			const auto projected = point.branch == "triplet" ? std::nullopt : Potential(result, point.branch == "es", point.q);
-			const double energy = point.energyEv.value_or(projected.value_or(0.0));
-			const auto color = point.branch == "gs" ? gsColor : point.branch == "es" ? esColor : IM_COL32(170, 110, 230, 255);
-			ImPlotSpec spec; ApplySeriesStyle(BranchStyle(pointsStyle, color), spec);
-			spec.Marker = point.branch == "triplet" ? ImPlotMarker_Diamond : ImPlotMarker_Circle;
-			spec.MarkerSize = 5;
-			spec.FillAlpha = 1.0f;
-			spec.MarkerLineColor = spec.LineColor;
-			spec.MarkerFillColor = point.status == "ok" ? spec.LineColor : ImVec4(0, 0, 0, 0);
-			ImPlot::PlotScatter("Punkty", &point.q, &energy, 1, spec);
+			const double energy = CcdPlotPointEnergy(result, point);
 			const auto p = ImPlot::PlotToPixels(point.q, energy), mouse = ImGui::GetIO().MousePos;
 			if (pointsStyle.visible && ImPlot::IsPlotHovered() && std::hypot(p.x - mouse.x, p.y - mouse.y) < 8)
 				ImGui::SetTooltip("%s, t=%.4g, Q=%.4g\nE=%s eV\n%s%s", point.branch.c_str(), point.t, point.q,
@@ -193,17 +188,23 @@ namespace DefectStudio
 		for (bool excited : {false, true})
 		{
 			const auto &levels = excited ? result.levels.esMeV : result.levels.gsMeV;
-			const auto &waves = excited ? result.wavefunctions.es : result.wavefunctions.gs;
 			const auto color = excited ? esColor : gsColor;
 			auto &waveStyle = s.seriesStyles[excited ? "CCD/chi_es" : "CCD/chi_gs"];
 			const char *label = excited ? "χ es" : "χ gs";
 			if (s.ccdWavefunctions) PlotStyledLine(label, {}, {}, BranchStyle(waveStyle, color));
+			for (auto &series : plot.series)
+				if (series.id.starts_with(excited ? "CCD/levels/es/" : "CCD/levels/gs/") ||
+					series.id.starts_with(excited ? "CCD/chi_es/" : "CCD/chi_gs/"))
+				{
+					auto &style = s.seriesStyles[PhononPlotStyleKey(series)];
+					series.style = BranchStyle(style, color);
+					if (PlotSeries(series, style, false)) persist();
+				}
 			for (std::size_t n = 0; n < std::min(levels.size(), static_cast<std::size_t>(s.ccdLevels)); ++n)
 			{
 				const double energy = (excited ? result.zplEv : 0) + levels[n] / 1000;
 				if (const auto range = PhononPanelSession::CcdLevelRange(result, excited, n))
 				{
-					PlotStyledLine("Poziomy", std::array{range->first, range->second}, std::array{energy, energy}, BranchStyle(levelStyle, color));
 					const auto mouse = ImPlot::GetPlotMousePos();
 					const auto pixel = ImPlot::PlotToPixels(mouse.x, energy);
 					if (levelStyle.visible && ImPlot::IsPlotHovered() && mouse.x >= range->first && mouse.x <= range->second &&
@@ -211,12 +212,6 @@ namespace DefectStudio
 						ImGui::SetTooltip("%s n=%zu: %.4g meV ponad minimum\nFC(0,n) = %s", excited ? "es" : "gs", n, levels[n],
 							(!excited && n < result.fc0n.size() ? std::format("{:.5g}", result.fc0n[n]) : "-").c_str());
 				}
-				if (!s.ccdWavefunctions || n >= waves.size() || waves[n].size() != result.wavefunctions.q.size()) continue;
-				const auto [a, b] = PhononPanelSession::GridIndexRange(result.wavefunctions.q, minimum, maximum);
-				std::vector<double> values;
-				for (std::size_t i = a; i < b; ++i)
-					values.push_back(energy + s.ccdWavefunctionScale * (s.ccdProbability ? waves[n][i] * waves[n][i] : waves[n][i]));
-				PlotStyledLine(label, std::span(result.wavefunctions.q).subspan(a, b - a), values, BranchStyle(waveStyle, color));
 			}
 			if (s.ccdWavefunctions && SeriesLegendPopup(label, waveStyle, false)) persist();
 		}

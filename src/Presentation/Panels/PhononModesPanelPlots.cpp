@@ -9,6 +9,7 @@
 #include <implot.h>
 
 #include "Presentation/Panels/PlotWidgets.hpp"
+#include "Presentation/Panels/PhononPlotData.hpp"
 
 namespace DefectStudio
 {
@@ -54,6 +55,12 @@ namespace DefectStudio
 					ImGui::EndCombo();
 				}
 			}
+			const auto colors = CurrentPlotColors();
+			auto plot = tab == 0 ? BuildBetaPlotData(*m_Session, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots, colors) :
+				tab == 1 ? BuildSPlotData(*m_Session, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots, colors) :
+				BuildPlPlotData(*m_Session, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots, colors);
+			if (tab == 2) ImGui::SameLine();
+			PlotExportPopup(plot, m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, result.label), m_PlotExports[plot.id]);
 			const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != tab;
 			if (reset)
 			{
@@ -64,24 +71,19 @@ namespace DefectStudio
 			{
 				ImPlot::SetupAxes(" ", " ");
 				if (tab == 1) ImPlot::SetupAxis(ImAxis_Y2, " ", ImPlotAxisFlags_AuxDefault);
-				auto [minimum, maximum] = PhononPanelSession::UsefulRange(result, tab == 2, settings.plZpl);
-				if (tab > 0)
-					for (const auto &dataset : m_Session->Datasets())
-						if (dataset.kind == AnalysisDatasetKind::Phonons && m_Session->IsCompared(dataset.directory) &&
-							(!active || !PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, m_Session->m_ProjectDirectory)))
-						{
-							std::string error;
-							if (const auto spectra = m_Session->Spectra(dataset.directory, error))
-							{
-								const auto [low, high] = PhononPanelSession::UsefulRange(spectra->get(), tab == 2, settings.plZpl);
-								minimum = std::min(minimum, low);
-								maximum = std::max(maximum, high);
-							}
-						}
-				ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
+				ImPlot::SetupAxisLimits(ImAxis_X1, plot.x.minimum, plot.x.maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 				ImPlot::SetupFinish();
 				ImRect plotRect;
 				const ImRect frame = CurrentPlotFrame(&plotRect);
+				for (auto &series : plot.series)
+				{
+					auto &style = settings.seriesStyles[PhononPlotStyleKey(series)];
+					const auto legendId = PhononPlotLegendId(series);
+					ResolvePlotItemColor(series, style, legendId);
+					if (PlotSeries(series, style, legendId)) persist();
+					ResolvePlotItemColor(series, style, legendId);
+				}
+				ImPlot::SetAxes(ImAxis_X1, ImAxis_Y1);
 				if (tab < 2)
 				{
 					auto modes = active ? m_Session->VisibleModes() : std::vector<std::size_t>{};
@@ -92,20 +94,8 @@ namespace DefectStudio
 							if (!mode.isTranslation && mode.huangRhys >= settings.minHuangRhys &&
 								(settings.irrepFilter.empty() || settings.irrepFilter == mode.irrep)) modes.push_back(i);
 						}
-					std::vector<double> a1x, a1y, otherx, othery;
-					for (const auto index : modes)
-					{
-						const auto &mode = result.modes[index];
-						const bool a1 = mode.irrep == "A1";
-						(a1 ? a1x : otherx).push_back(mode.frequencyMeV);
-						(a1 ? a1y : othery).push_back(tab == 0 ? mode.beta : mode.huangRhys);
-					}
 					auto &otherStyle = settings.seriesStyles[plotKey + "other"];
 					auto &a1Style = settings.seriesStyles[plotKey + "A1"];
-					PlotStyledStems("inne irreps", otherx, othery, otherStyle);
-					if (SeriesLegendPopup("inne irreps", otherStyle, false)) persist();
-					PlotStyledStems("A1", a1x, a1y, a1Style);
-					if (SeriesLegendPopup("A1", a1Style, false)) persist();
 					if (active && ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 					{
 						const auto mouse = ImGui::GetIO().MousePos;
@@ -126,21 +116,6 @@ namespace DefectStudio
 						}
 						if (selected >= 0) selectMode(selected);
 					}
-					if (const auto selected = m_Session->SelectedMode())
-					{
-						auto &style = settings.seriesStyles[plotKey + "selected"];
-						PlotStyledInfLine("Wybrany mod", result.modes[*selected].frequencyMeV, style);
-						if (SeriesLegendPopup("Wybrany mod", style, false)) persist();
-					}
-					if (tab == 1)
-					{
-						ImPlot::SetAxes(ImAxis_X1, ImAxis_Y2);
-						drawDatasetSpectra(false, minimum, maximum);
-					}
-				}
-				else
-				{
-					drawDatasetSpectra(true, minimum, maximum);
 				}
 				ImPlot::EndPlot();
 				m_LastPlotRevision = m_Session->PlotRevision();

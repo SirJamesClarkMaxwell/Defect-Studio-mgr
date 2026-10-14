@@ -210,30 +210,4 @@ namespace DefectStudio
 			}
 		}
 	}
-
-	void PhononModesPanel::drawDatasetSpectra(bool pl, double minimum, double maximum)
-	{
-		auto &settings = m_Session->Settings();
-		const auto draw = [&](const PhononAnalysisResult &result, const Path &directory, const std::string &label) {
-			const auto key = (pl ? "PL/" : "S/") + PhononPanelSession::DirectoryLabel(directory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
-			const auto legend = label + "###" + directory.Utf8();
-			auto &style = settings.seriesStyles[key];
-			const auto &x = pl ? result.plPhotonEnergyEv : result.spectralEnergyMeV;
-			const auto &y = pl ? PhononPanelSession::PlCurve(result, PhononPanelSession::PlCurveChoice(result, settings.plZpl)) : result.spectralDensityPerMeV;
-			if (x.empty() || y.size() != x.size()) return;
-			// Only the visible range, so auto-fit (double click) does not zoom out to the grid end.
-			const auto [first, last] = PhononPanelSession::GridIndexRange(x, minimum, maximum);
-			PlotStyledLine(legend.c_str(), std::span(x).subspan(first, last - first), std::span(y).subspan(first, last - first), style);
-			if (SeriesLegendPopup(legend.c_str(), style)) persist();
-		};
-		if (const auto active = m_Session->Result())
-			draw(*active, settings.resultDirectory, active->label.empty() ? settings.resultDirectory.filename().Utf8() : active->label);
-		for (const auto &dataset : m_Session->Datasets())
-			if (dataset.kind == AnalysisDatasetKind::Phonons && m_Session->IsCompared(dataset.directory) &&
-				(!m_Session->Result() || !PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, m_Session->m_ProjectDirectory)))
-			{
-				std::string error;
-				if (const auto spectra = m_Session->Spectra(dataset.directory, error)) draw(spectra->get(), dataset.directory, dataset.label);
-			}
-	}
 }

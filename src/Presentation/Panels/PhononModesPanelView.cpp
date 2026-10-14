@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include "Renderer/RendererWindowState.hpp"
+#include "Presentation/Panels/PhononPlotData.hpp"
 
 namespace DefectStudio
 {
@@ -59,6 +60,11 @@ namespace DefectStudio
 		const auto total = std::count_if(result.modes.begin(), result.modes.end(), [](const auto &mode) { return !mode.isTranslation; });
 		ImGui::SameLine(); ImGui::Text("modów: %zu z %zu", modes.size(), static_cast<std::size_t>(total));
 		const std::string fractionLabel = std::format("N({:.0f}%)", settings.carriedFraction * 100.0);
+		auto exportModes = modes;
+		SortPhononModes(result, exportModes, m_ModeSortColumn, m_ModeSortAscending);
+		ImGui::SameLine();
+		TableExportPopup(PhononModesColumns(result, exportModes, settings.carriedFraction, m_Session->m_ProjectDirectory),
+			m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, result.label), m_TableExport);
 		if (!ImGui::BeginTable("##phononModes", 7, ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY |
 			ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit,
 			ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 18.0f))) return;
@@ -71,22 +77,9 @@ namespace DefectStudio
 		if (const auto specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0)
 		{
 			const auto sort = specs->Specs[0];
-			std::stable_sort(modes.begin(), modes.end(), [&](auto a, auto b) {
-				const auto &left = result.modes[a], &right = result.modes[b];
-				if (sort.ColumnIndex == 2)
-					return sort.SortDirection == ImGuiSortDirection_Ascending ? left.irrep < right.irrep : right.irrep < left.irrep;
-				const auto value = [&](const PhononMode &mode) {
-					switch (sort.ColumnIndex)
-					{
-					case 0: return static_cast<double>(mode.index);
-					case 3: return mode.beta;
-					case 4: return mode.effectiveAtomCount;
-					case 5: return mode.huangRhys;
-					default: return mode.frequencyMeV;
-					}
-				};
-				return sort.SortDirection == ImGuiSortDirection_Ascending ? value(left) < value(right) : value(right) < value(left);
-			});
+			m_ModeSortColumn = sort.ColumnIndex;
+			m_ModeSortAscending = sort.SortDirection == ImGuiSortDirection_Ascending;
+			SortPhononModes(result, modes, m_ModeSortColumn, m_ModeSortAscending);
 			specs->SpecsDirty = false;
 		}
 		bool scrollToSelection = m_ScrollToMode;

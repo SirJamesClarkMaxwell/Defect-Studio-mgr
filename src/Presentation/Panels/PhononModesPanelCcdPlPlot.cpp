@@ -6,6 +6,7 @@
 #include <imgui.h>
 #include <implot.h>
 #include "Presentation/Panels/PlotWidgets.hpp"
+#include "Presentation/Panels/PhononPlotData.hpp"
 
 namespace DefectStudio
 {
@@ -19,25 +20,17 @@ namespace DefectStudio
 			if (!m_Session->Result()) ImGui::TextDisabled("Wczytaj aktywny zestaw fononów do porównania.");
 			else ImGui::TextDisabled("PL fononów: ZPL %s", PhononPanelSession::PlCurveChoice(*m_Session->Result(), s.plZpl).c_str());
 		}
-		auto [minimum, maximum] = PhononPanelSession::UsefulRange(result);
+		auto plot = BuildCcdPlPlotData(*m_Session, result, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots, CurrentPlotColors());
+		PlotExportPopup(plot, m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, result.label), m_PlotExports[plot.id]);
+		const double minimum = plot.x.minimum, maximum = plot.x.maximum;
 		std::vector<std::string> errors;
 		for (const auto &dataset : m_Session->Datasets())
 			if (dataset.kind == AnalysisDatasetKind::Ccd && m_Session->IsCompared(dataset.directory) &&
 				!PhononPanelSession::SameFilePath(dataset.directory, s.selectedCcdDirectory, m_Session->m_ProjectDirectory))
 			{
 				std::string error;
-				if (const auto ccd = m_Session->Ccd(dataset.directory, error))
-				{
-					const auto [low, high] = PhononPanelSession::UsefulRange(ccd->get());
-					minimum = std::min(minimum, low); maximum = std::max(maximum, high);
-				}
-				else errors.push_back(dataset.label + ": " + error);
+				if (!m_Session->Ccd(dataset.directory, error)) errors.push_back(dataset.label + ": " + error);
 			}
-		if (s.ccdComparePhononPl && m_Session->Result())
-		{
-			const auto [low, high] = PhononPanelSession::UsefulRange(*m_Session->Result(), true, s.plZpl);
-			minimum = std::min(minimum, low); maximum = std::max(maximum, high);
-		}
 		const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 4;
 		if (reset) ImPlot::SetNextAxisToFit(ImAxis_Y1);
 		if (!ImPlot::BeginPlot("##ccdPlPlot", ImVec2(-1, std::max(ImGui::GetContentRegionAvail().y, 1.0f)))) return;
@@ -45,35 +38,14 @@ namespace DefectStudio
 		ImPlot::SetupAxisLimits(ImAxis_X1, minimum, maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
 		ImPlot::SetupFinish();
 		ImRect rect; const auto frame = CurrentPlotFrame(&rect);
-		const auto draw = [&](const std::string &label, const std::string &key, const std::vector<double> &x, const std::vector<double> &y) {
-			if (x.empty() || y.size() != x.size()) return;
-			const auto [first, last] = PhononPanelSession::GridIndexRange(x, minimum, maximum);
-			auto &style = s.seriesStyles[key];
-			PlotStyledLine(label.c_str(), std::span(x).subspan(first, last - first), std::span(y).subspan(first, last - first), style);
-			if (SeriesLegendPopup(label.c_str(), style)) persist();
-		};
-		draw("Numerov", "PL1D/numerov", result.pl1d.energyEv, result.pl1d.numerov);
-		draw("harmoniczne", "PL1D/harmonic", result.pl1d.energyEv, result.pl1d.harmonic);
-		draw("fonon 1D", "PL1D/phonon1d", result.pl1d.energyEv, result.pl1d.phonon1d);
-		if (s.ccdComparePhononPl && m_Session->Result())
+		for (auto &series : plot.series)
 		{
-			const auto &phonons = *m_Session->Result();
-			const auto path = PhononPanelSession::DirectoryLabel(s.resultDirectory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
-			draw((phonons.label.empty() ? path : phonons.label) + " (fonony)###phononPL", "PL1D/phonons/" + path,
-				phonons.plPhotonEnergyEv, PhononPanelSession::PlCurve(phonons, PhononPanelSession::PlCurveChoice(phonons, s.plZpl)));
+			auto &style = s.seriesStyles[PhononPlotStyleKey(series)];
+			const auto legendId = PhononPlotLegendId(series);
+			ResolvePlotItemColor(series, style, legendId);
+			if (PlotSeries(series, style, legendId)) persist();
+			ResolvePlotItemColor(series, style, legendId);
 		}
-		for (const auto &dataset : m_Session->Datasets())
-			if (dataset.kind == AnalysisDatasetKind::Ccd && m_Session->IsCompared(dataset.directory) &&
-				!PhononPanelSession::SameFilePath(dataset.directory, s.selectedCcdDirectory, m_Session->m_ProjectDirectory))
-			{
-				std::string error;
-				if (const auto ccd = m_Session->Ccd(dataset.directory, error))
-				{
-					const auto path = PhononPanelSession::DirectoryLabel(dataset.directory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
-					draw(dataset.label + "###" + dataset.directory.Utf8(), "PL1D/" + path,
-						ccd->get().pl1d.energyEv, ccd->get().pl1d.numerov);
-				}
-			}
 		ImPlot::EndPlot();
 		DrawTexAxisLabels(frame, rect, "E [eV]", "PL 1D [j.u.]");
 		m_LastPlotRevision = m_Session->PlotRevision(); m_PlotTab = 4;

@@ -13,6 +13,8 @@
 #include <implot_internal.h> // ImPlotPlot::FrameRect/PlotRect for the TeX axis labels
 
 #include "IO/PlotSeriesStyle.hpp"
+#include "IO/DataTableIO.hpp"
+#include "Presentation/Figures/PlotData.hpp"
 
 namespace DefectStudio
 {
@@ -24,6 +26,22 @@ namespace DefectStudio
 	void PlotStyledStems(const char *label, std::span<const double> xs, std::span<const double> ys,
 		const PlotSeriesStyle &style);
 	void PlotStyledInfLine(const char *label, double x, const PlotSeriesStyle &style);
+	[[nodiscard]] bool PlotSeries(const PlotSeriesData &series, PlotSeriesStyle &style);
+	[[nodiscard]] bool PlotSeries(const PlotSeriesData &series, PlotSeriesStyle &style, bool allowFill);
+	[[nodiscard]] bool PlotSeries(const PlotSeriesData &series, PlotSeriesStyle &style,
+		const std::string &legendId, bool allowFill = true);
+	void ResolvePlotItemColor(PlotSeriesData &series, const PlotSeriesStyle &style, const std::string &legendId = std::string{});
+	[[nodiscard]] std::vector<glm::vec4> CurrentPlotColors();
+	struct PlotExportState
+	{
+		bool originHeader = false;
+		bool onlyVisible = true;
+		std::string message;
+		Path file;
+	};
+	void PlotExportPopup(const PlotData &plot, const Path &project, const std::string &datasetLabel, PlotExportState &state);
+	void TableExportPopup(std::span<const DataTableColumn> columns, const Path &project,
+		const std::string &datasetLabel, PlotExportState &state);
 	// Screen-space dash pairs clipped to [left, top, right, bottom]; NaNs break the path.
 	[[nodiscard]] std::vector<glm::dvec2> PlotDashSegments(std::span<const glm::dvec2> points,
 		const glm::dvec4 &bounds, int lineStyle);

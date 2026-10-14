@@ -3,6 +3,10 @@
 
 #include <array>
 #include <cmath>
+#include <format>
+#include <functional>
+
+#include "Core/Platform/FileDialog.hpp"
 
 namespace DefectStudio
 {
@@ -170,5 +174,148 @@ namespace DefectStudio
 		auto line = style;
 		line.filled = false;
 		PlotStyledLine(label, std::array{x, x}, std::array{limits.Y.Min, limits.Y.Max}, line, ImPlotItemFlags_NoFit);
+	}
+
+	void ResolvePlotItemColor(PlotSeriesData &series, const PlotSeriesStyle &style, const std::string &legendId)
+	{
+		const auto label = legendId.empty() ? series.label : series.label + "###" + legendId;
+		if (style.color) series.style.color = style.color;
+		else if (ImPlot::GetItem(label.c_str()))
+		{
+			// Automatic colours belong to retained legend items, even after comparisons are removed.
+			const auto color = ImGui::ColorConvertU32ToFloat4(ImPlot::GetItem(label.c_str())->Color);
+			series.style.color = glm::vec4(color.x, color.y, color.z, color.w);
+		}
+		else series.style.color.reset();
+	}
+
+	bool PlotSeries(const PlotSeriesData &series, PlotSeriesStyle &style)
+	{
+		return PlotSeries(series, style, true);
+	}
+
+	bool PlotSeries(const PlotSeriesData &series, PlotSeriesStyle &style, bool allowFill)
+	{
+		return PlotSeries(series, style, std::string{}, allowFill);
+	}
+
+	bool PlotSeries(const PlotSeriesData &series, PlotSeriesStyle &style, const std::string &legendId, bool allowFill)
+	{
+		const auto label = legendId.empty() ? series.label : series.label + "###" + legendId;
+		ImPlot::SetAxes(ImAxis_X1, series.yAxis == 1 ? ImAxis_Y2 : ImAxis_Y1);
+		auto resolved = style;
+		if (!resolved.color) resolved.color = series.style.color;
+		switch (series.kind)
+		{
+		case PlotSeriesKind::Line:
+		case PlotSeriesKind::Segments:
+			PlotStyledLine(label.c_str(), series.x, series.y, resolved);
+			break;
+		case PlotSeriesKind::Stems:
+			PlotStyledStems(label.c_str(), series.x, series.y, resolved);
+			break;
+		case PlotSeriesKind::VerticalLine:
+			if (!series.x.empty()) PlotStyledInfLine(label.c_str(), series.x.front(), resolved);
+			break;
+		case PlotSeriesKind::Scatter:
+		{
+			ImPlotSpec spec;
+			ApplySeriesStyle(resolved, spec);
+			spec.Marker = series.marker.shape == PlotMarker::Shape::Diamond ? ImPlotMarker_Diamond :
+				series.marker.shape == PlotMarker::Shape::Square ? ImPlotMarker_Square : ImPlotMarker_Circle;
+			spec.MarkerSize = series.marker.size;
+			spec.FillAlpha = 1.0f;
+			spec.MarkerLineColor = spec.LineColor;
+			spec.MarkerFillColor = series.marker.filled ? spec.LineColor : ImVec4(0, 0, 0, 0);
+			ImPlot::HideNextItem(!style.visible, ImPlotCond_Once);
+			ImPlot::PlotScatter(label.c_str(), series.x.data(), series.y.data(), static_cast<int>(series.x.size()), spec);
+			break;
+		}
+		}
+		return SeriesLegendPopup(label.c_str(), style, allowFill &&
+			(series.kind == PlotSeriesKind::Line || series.kind == PlotSeriesKind::Segments));
+	}
+
+	std::vector<glm::vec4> CurrentPlotColors()
+	{
+		std::vector<glm::vec4> colors;
+		for (int i = 0; i < ImPlot::GetColormapSize(); ++i)
+		{
+			const auto color = ImPlot::GetColormapColor(i);
+			colors.emplace_back(color.x, color.y, color.z, color.w);
+		}
+		return colors;
+	}
+
+	namespace
+	{
+		void ExportPopup(const std::string &button, const Path &project, std::string defaultName, PlotExportState &state,
+			bool plot, const std::function<std::vector<DataTableColumn>()> &columns)
+		{
+			for (auto &ch : defaultName)
+				if (static_cast<unsigned char>(ch) < 32 || std::string_view("<>:\"/\\|?*").find(ch) != std::string_view::npos) ch = '_';
+			if (ImGui::SmallButton(button.c_str())) ImGui::OpenPopup("##export");
+			ImGui::SetItemTooltip("Eksport danych do TSV/CSV lub schowka, z bieżącymi filtrami i ustawieniami wykresu.");
+			if (ImGui::BeginPopup("##export"))
+			{
+				ImGui::Checkbox("nagłówek Origin", &state.originHeader);
+				ImGui::SetItemTooltip("Dodatkowe wiersze Units i Comments.");
+				if (plot)
+				{
+					ImGui::Checkbox("tylko widoczne serie", &state.onlyVisible);
+					ImGui::SetItemTooltip("Pomiń serie ukryte w legendzie; po wyłączeniu zapisz również ukryte serie.");
+				}
+				const auto data = columns();
+				ImGui::BeginDisabled(data.empty());
+				for (const auto &[extension, label] : {std::pair{"tsv", "Zapisz TSV…"}, std::pair{"csv", "Zapisz CSV…"}})
+				{
+					if (ImGui::MenuItem(label))
+					{
+						DataTableFormat format;
+						format.originHeader = state.originHeader; format.delimiter = std::string_view(extension) == "csv" ? ',' : '\t';
+						const auto picked = Platform::PickSaveFile(project, defaultName + "." + extension, extension, extension);
+						if (!picked) { state.message = picked.Error().userMessage; state.file = Path{}; }
+						else if (picked->has_value())
+						{
+							std::string error;
+							if (SaveDataTable(**picked, data, format, error))
+							{
+								state.file = **picked;
+								state.message = std::format("Zapisano {} kolumn: {}", data.size(), PlotSourceComment(state.file, project));
+							}
+							else { state.message = error; state.file = Path{}; }
+						}
+					}
+					ImGui::SetItemTooltip("%s", data.empty() ? "Brak serii do eksportu." : "Zapisz dane liczbowe i tekstowe w wybranym pliku.");
+				}
+				if (ImGui::MenuItem("Kopiuj do schowka (TSV)"))
+				{
+					DataTableFormat format; format.originHeader = state.originHeader;
+					ImGui::SetClipboardText(FormatDataTable(data, format).c_str());
+					state.message = std::format("Skopiowano {} kolumn do schowka.", data.size()); state.file = Path{};
+				}
+				ImGui::SetItemTooltip("%s", data.empty() ? "Brak serii do eksportu." : "Tekst rozdzielony tabulatorami, gotowy do wklejenia w Origin.");
+				ImGui::EndDisabled();
+				ImGui::EndPopup();
+			}
+			if (!state.message.empty())
+			{
+				ImGui::TextWrapped("%s", state.message.c_str());
+				if (!state.file.Empty()) ImGui::SetItemTooltip("%s", state.file.Utf8().c_str());
+			}
+		}
+	}
+
+	void PlotExportPopup(const PlotData &plot, const Path &project, const std::string &datasetLabel, PlotExportState &state)
+	{
+		ExportPopup("Eksport…", project, plot.id + "_" + datasetLabel, state, true,
+			[&] { return PlotDataColumns(plot, project, state.onlyVisible); });
+	}
+
+	void TableExportPopup(std::span<const DataTableColumn> columns, const Path &project,
+		const std::string &datasetLabel, PlotExportState &state)
+	{
+		ExportPopup("Eksport tabeli…", project, "modes_" + datasetLabel, state, false,
+			[&] { return std::vector<DataTableColumn>(columns.begin(), columns.end()); });
 	}
 }
