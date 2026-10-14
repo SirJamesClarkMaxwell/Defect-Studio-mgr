@@ -32,17 +32,29 @@ to their own case, and the queue can be cancelled.
    case's stored settings; ONLY if that case is the active one, load the result into the view (same path as today's
    single computation). Then submit the next request. Failure: `Failed` + message, continue with the next.
    CCD step of a case runs after its phonon step (it may use the new phonon result when the case uses phonon curvature).
-3. **Single `Policz` stays** and is disabled with a reason while a batch runs (one runner at a time); the batch
+3. **Switching cases never cancels work** (found in review 2026-10-14: `ActivateCase` calls `cancelCaseJobs()`,
+   so changing the active case silently kills a running computation). The single `Policz` / `Policz CCD` jobs also
+   record their originating case id and complete through the same path as a batch entry (attach to that case,
+   load into the view only if it is active). `ActivateCase` stops the animation and unbinds the window as now, but
+   leaves jobs running. Test: start a single computation in case A, activate B, complete -> dataset attached to A,
+   B's view untouched.
+4. **Single `Policz` stays** and is disabled with a reason while a batch runs (one runner at a time); the batch
    button is disabled with a reason while a single computation runs.
-4. **UI** (`Fonony`, `Przypadki` section): under the table a row `Kroki:` checkboxes `fonony` / `analiza CCD`,
+5. **UI** (`Fonony`, `Przypadki` section): under the table a row `Kroki:` checkboxes `fonony` / `analiza CCD`,
    button `Policz zaznaczone (N)`, while running a progress bar `k / n` + `Anuluj`; a `Status` column in the cases
    table (`-`, `w kolejce`, `liczy…`, `gotowe`, `błąd` with the message in a tooltip, `anulowano`).
-5. Project switch / `SetPersistedState` cancels the batch (same as 109a for single jobs). Batch state is not persisted.
+6. Project switch / `SetPersistedState` cancels the batch (same as 109a for single jobs). Batch state is not persisted.
+
+Requests for a non-active case are built from that case's stored `PhononCaseSettings`: generalise
+`CaseOutputDirectory`, `computationOutputPath`, `ccdAnalysisOutputPath` and the blocker checks
+(`ComputationBlocker` in `PhononModesPanelInputs.cpp`, `ccdAnalysisBlocker`) to take a case's settings + id instead
+of reading the active ones (keep the existing no-argument forms as thin wrappers for the active case). Move
+`ComputationBlocker` into the session so the panel and the batch share it.
 
 ## Files to create or change
 
 - `src/Presentation/Panels/PhononPanelSession.hpp`, new `PhononPanelSessionBatch.cpp`, the session job/lifecycle files
-- the main view file holding the `Przypadki` section
+- the main view files: `PhononModesPanelCases.cpp` (Przypadki), `PhononModesPanelInputs.cpp` and `PhononModesPanelCcd.cpp` (blockers moved to the session), `PhononPanelSessionCaseOutputs.cpp`, `PhononPanelSessionCases.cpp` (ActivateCase)
 - tests: new `tests/Presentation/Panels/PhononBatchTests.cpp` (use the existing JobSystem test utils / gates; a fake
   or stubbed job is fine if real Python is not needed - search how other session tests stub jobs)
 
