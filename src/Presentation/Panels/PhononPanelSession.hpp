@@ -219,6 +219,11 @@ namespace DefectStudio
 		friend class PhononModesPanel;
 		friend void DrawPhononCases(PhononPanelSession &session);
 		friend struct Tests::PhononBatchTestAccess;
+		void submitFigure(const Path &specPath, bool all);
+		void pollFigureJob();
+		void cancelFigureJob();
+		JobId m_FigureJobId = 0;
+		std::string m_FigureMessage;
 		struct BatchEntry
 		{
 			std::string caseId;

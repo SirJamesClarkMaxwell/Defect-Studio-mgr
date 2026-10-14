@@ -85,6 +85,8 @@ namespace DefectStudio
 		std::vector<PhononCase> cases; // active settings are synchronized from the base on read/save
 		std::string activeCaseId;
 		int nextCaseNumber = 1; // high-water mark; removed ids are never reused
+		std::string plAxis = "energy"; // energy | zpl_loss (E_ZPL - E, meV)
+		std::string plNormalization = "none"; // none | max | area (full grid)
 	};
 
 	// phonon_panel.yaml next to manifest.yaml. Schema (all keys optional on read):
@@ -104,7 +106,8 @@ namespace DefectStudio
 	//   seriesStyles: {"<plot>/<series>": {color: [r,g,b,a] | null, weight, visible, filled, fillAlpha, lineStyle}}
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
 	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter, minHuangRhys,
-	//          ccdLevels, ccdWavefunctions, ccdProbability, ccdWavefunctionScale, ccdArrows, ccdComparePhononPl}
+	//          ccdLevels, ccdWavefunctions, ccdProbability, ccdWavefunctionScale, ccdArrows, ccdComparePhononPl,
+	//          plAxis: energy | zpl_loss, plNormalization: none | max | area}
 	// Paths inside projectDirectory are written relative to it with '/' separators, others absolute
 	// (same rule as FnvCorrectionsIO). Legacy zplExp is read as numeric formula text.
 	class PhononPanelSettingsIO

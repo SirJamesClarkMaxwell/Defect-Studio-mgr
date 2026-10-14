@@ -22,6 +22,7 @@ namespace DefectStudio
 		}
 		auto plot = BuildCcdPlPlotData(*m_Session, result, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots, CurrentPlotColors());
 		PlotExportPopup(plot, m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, result.label), m_PlotExports[plot.id]);
+		drawFigure(plot, PhononExportLabel(*m_Session, result.label));
 		const double minimum = plot.x.minimum, maximum = plot.x.maximum;
 		std::vector<std::string> errors;
 		for (const auto &dataset : m_Session->Datasets())

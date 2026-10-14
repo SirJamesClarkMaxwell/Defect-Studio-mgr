@@ -318,4 +318,11 @@ namespace DefectStudio
 		ExportPopup("Eksport tabeli…", project, "modes_" + datasetLabel, state, false,
 			[&] { return std::vector<DataTableColumn>(columns.begin(), columns.end()); });
 	}
+
+	void TableExportPopup(std::span<const DataTableColumn> columns, const Path &project,
+		const std::string &defaultName, PlotExportState &state, const std::string &buttonLabel)
+	{
+		ExportPopup(buttonLabel, project, defaultName, state, false,
+			[&] { return std::vector<DataTableColumn>(columns.begin(), columns.end()); });
+	}
 }

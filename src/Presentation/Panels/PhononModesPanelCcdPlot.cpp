@@ -148,6 +148,7 @@ namespace DefectStudio
 		}
 		auto plot = BuildCcdPlotData(result, s, s.selectedCcdDirectory, CurrentPlotColors());
 		PlotExportPopup(plot, m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, result.label), m_PlotExports[plot.id]);
+		drawFigure(plot, PhononExportLabel(*m_Session, result.label));
 		const double minimum = plot.x.minimum, maximum = plot.x.maximum;
 		const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 3;
 		if (reset) ImPlot::SetNextAxisToFit(ImAxis_Y1);

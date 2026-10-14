@@ -18,6 +18,15 @@ namespace DefectStudio
 			return found == settings.seriesStyles.end() ? PlotSeriesStyle{} : found->second;
 		}
 
+		std::optional<std::pair<double, double>> PlotRange(const PhononAnalysisResult &result, int tab, const PhononPanelSettings &settings)
+		{
+			const auto range = PhononPanelSession::UsefulRange(result, tab == 2, settings.plZpl);
+			if (tab != 2 || settings.plAxis != "zpl_loss") return range;
+			const auto selected = SelectPhononPlCurve(result, settings.plZpl);
+			if (!selected.zplEv) return std::nullopt;
+			return std::pair{1000.0 * (*selected.zplEv - range.second), 1000.0 * (*selected.zplEv - range.first)};
+		}
+
 		PlotData PhononPlot(PhononPanelSession &session, const Path &project,
 			const std::vector<ProjectRootEntry> &roots, int tab, std::span<const glm::vec4> colors)
 		{
@@ -26,7 +35,9 @@ namespace DefectStudio
 			plot.id = tab == 0 ? "beta" : tab == 1 ? "S" : "PL";
 			plot.title = tab == 0 ? "β(ℏω)" : tab == 1 ? "S_k i S(ℏω)" : "PL";
 			plot.x = {tab == 2 ? "E, E_{ZPL}" : "\\hbar\\omega", tab == 2 ? "eV" : "meV"};
+			if (tab == 2 && settings.plAxis == "zpl_loss") plot.x = {"E_{ZPL} - E", "meV"};
 			plot.y = {tab == 0 ? "\\beta = N/N_{eff}" : tab == 1 ? "S_k" : "PL", tab == 2 ? "j.u." : ""};
+			if (tab == 2 && settings.plNormalization == "area") plot.y.unit = plot.x.unit + "^{-1}";
 			plot.hasY2 = tab == 1;
 			plot.y2 = {"S(\\hbar\\omega)", "meV^{-1}"};
 			std::optional<std::reference_wrapper<const PhononAnalysisResult>> primary;
@@ -41,8 +52,9 @@ namespace DefectStudio
 						if (primary) { primarySource = dataset.directory; break; }
 					}
 			if (!primary) return plot;
-			const auto [low, high] = PhononPanelSession::UsefulRange(primary->get(), tab == 2, settings.plZpl);
-			plot.x.minimum = low; plot.x.maximum = high;
+			const auto primaryRange = PlotRange(primary->get(), tab, settings);
+			bool hasRange = primaryRange.has_value();
+			plot.x.minimum = primaryRange ? primaryRange->first : -150.0; plot.x.maximum = primaryRange ? primaryRange->second : 1000.0;
 			if (tab > 0)
 				for (const auto &dataset : session.Datasets())
 					if (dataset.kind == AnalysisDatasetKind::Phonons && session.IsCompared(dataset.directory) &&
@@ -51,8 +63,12 @@ namespace DefectStudio
 						std::string error;
 						if (const auto result = session.Spectra(dataset.directory, error))
 						{
-							const auto [a, b] = PhononPanelSession::UsefulRange(result->get(), tab == 2, settings.plZpl);
-							plot.x.minimum = std::min(plot.x.minimum, a); plot.x.maximum = std::max(plot.x.maximum, b);
+							if (const auto range = PlotRange(result->get(), tab, settings))
+							{
+								plot.x.minimum = hasRange ? std::min(plot.x.minimum, range->first) : range->first;
+								plot.x.maximum = hasRange ? std::max(plot.x.maximum, range->second) : range->second;
+								hasRange = true;
+							}
 						}
 					}
 			if (tab < 2)
@@ -95,13 +111,34 @@ namespace DefectStudio
 				}
 			}
 			const auto addSpectrum = [&](const PhononAnalysisResult &result, const Path &source, const std::string &label) {
-				const auto &x = tab == 2 ? result.plPhotonEnergyEv : result.spectralEnergyMeV;
-				const auto &y = tab == 2 ? PhononPanelSession::PlCurve(result, PhononPanelSession::PlCurveChoice(result, settings.plZpl)) : result.spectralDensityPerMeV;
+				const auto selected = SelectPhononPlCurve(result, settings.plZpl);
+				auto plX = tab == 2 ? result.plPhotonEnergyEv : std::vector<double>{};
+				auto plY = tab == 2 ? PhononPanelSession::PlCurve(result, selected.choice) : std::vector<double>{};
+				const auto &x = tab == 2 ? plX : result.spectralEnergyMeV;
+				const auto &y = tab == 2 ? plY : result.spectralDensityPerMeV;
 				if (x.empty() || y.size() != x.size()) return;
+				if (tab == 2 && settings.plAxis == "zpl_loss")
+				{
+					if (!selected.zplEv) return;
+					for (auto &value : plX) value = 1000.0 * (*selected.zplEv - value);
+					std::reverse(plX.begin(), plX.end()); std::reverse(plY.begin(), plY.end());
+				}
+				if (tab == 2 && settings.plNormalization != "none")
+				{
+					double scale = 0.0;
+					if (settings.plNormalization == "max") scale = *std::max_element(y.begin(), y.end());
+					else
+						for (std::size_t i = 1; i < x.size(); ++i)
+							scale += 0.5 * (y[i - 1] + y[i]) * (x[i] - x[i - 1]);
+					if (std::isfinite(scale) && scale > 0.0)
+						for (auto &value : plY) value /= scale;
+				}
 				const auto [first, last] = PhononPanelSession::GridIndexRange(x, plot.x.minimum, plot.x.maximum);
 				PlotSeriesData series;
 				series.id = plot.id + "/" + PhononPanelSession::DirectoryLabel(source, project, roots);
 				series.label = label;
+				if (tab == 2 && selected.choice != settings.plZpl)
+					series.label += " (ZPL: " + PhononZplSourceLabel(selected.choice) + ")";
 				series.x.assign(x.begin() + first, x.begin() + last); series.y.assign(y.begin() + first, y.begin() + last);
 				series.yAxis = tab == 1 ? 1 : 0;
 				series.source = source; series.style = Style(settings, series.id);
@@ -133,6 +170,20 @@ namespace DefectStudio
 			series.x.assign(x.begin() + first, x.begin() + last); series.y.assign(y.begin() + first, y.begin() + last);
 			plot.series.push_back(std::move(series));
 		}
+	}
+
+	PhononPlSelection SelectPhononPlCurve(const PhononAnalysisResult &result, std::string_view preferred)
+	{
+		const auto choice = PhononPanelSession::PlCurveChoice(result, preferred);
+		const auto value = choice == "formula" ? result.zplEv.formula : choice == "experimental" ? result.zplEv.experimental :
+			choice == "spin_purified" ? result.zplEv.spinPurified : result.zplEv.computed;
+		return {choice, value && std::isfinite(*value) ? value : std::nullopt};
+	}
+
+	std::string PhononZplSourceLabel(std::string_view choice)
+	{
+		return choice == "computed" ? "obliczone" : choice == "spin_purified" ? "po korekcji spinowej" :
+			choice == "formula" ? "wzór" : "eksperymentalne";
 	}
 
 	void ResolvePlotColors(PlotData &plot, std::span<const glm::vec4> colors)

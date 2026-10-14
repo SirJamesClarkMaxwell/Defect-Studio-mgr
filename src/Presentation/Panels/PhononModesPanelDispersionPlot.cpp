@@ -25,6 +25,7 @@ namespace DefectStudio
 		ImGui::Text("pasm: %d, max ℏω = %.2f meV", result.bandCount, result.maxMeV);
 		auto plot = BuildDispersionPlotData(result, settings, settings.selectedDispersionDirectory, CurrentPlotColors());
 		PlotExportPopup(plot, m_Session->m_ProjectDirectory, PhononExportLabel(*m_Session, selectedLabel), m_PlotExports[plot.id]);
+		drawFigure(plot, PhononExportLabel(*m_Session, selectedLabel));
 		if (!ImPlot::BeginPlot("##bulkDispersion", ImVec2(-1.0f, std::max(ImGui::GetContentRegionAvail().y, 1.0f)))) return;
 		ImPlot::SetupAxes(nullptr, "ℏω [meV]", ImPlotAxisFlags_NoGridLines, 0);
 		const auto condition = (m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 5) ? ImPlotCond_Always : ImPlotCond_Once;

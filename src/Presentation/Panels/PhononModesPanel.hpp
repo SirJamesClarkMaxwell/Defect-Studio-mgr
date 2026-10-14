@@ -70,10 +70,20 @@ namespace DefectStudio
 		void drawSummary();
 		void drawModesTable();
 		void drawPlots();
+		void drawComparison();
 		void drawVisualisation();
 
 		void persist();
 		void drawDispersionPlot();
+		void drawFigure(const PlotData &plot, const std::string &label);
+		struct FigureState
+		{
+			std::array<char, 512> name{};
+			float widthCm = 8.5f, heightCm = 6.5f;
+			bool pdf = true, svg = false, png = false;
+		};
+		std::unordered_map<std::string, FigureState> m_Figures;
+		Path m_FigureProject;
 
 		Ref<PhononPanelSession> m_Session;
 		View m_View;
@@ -86,6 +96,7 @@ namespace DefectStudio
 		int m_LastSelectedMode = -1;
 		std::unordered_map<std::string, PlotExportState> m_PlotExports;
 		PlotExportState m_TableExport;
+		PlotExportState m_ComparisonExport{true};
 		int m_ModeSortColumn = 1;
 		bool m_ModeSortAscending = true;
 	};

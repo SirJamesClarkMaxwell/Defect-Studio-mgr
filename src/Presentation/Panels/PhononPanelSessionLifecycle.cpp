@@ -41,6 +41,7 @@ namespace DefectStudio
 		pollCcdJob();
 		pollCcdAnalysisJob();
 		pollDispersionJob();
+		pollFigureJob();
 		submitNextBatch();
 		(void)PollDatasetScan();
 		// A closed target must never transfer its captured positions to a different window.

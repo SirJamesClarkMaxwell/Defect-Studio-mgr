@@ -42,6 +42,8 @@ namespace DefectStudio
 	void PlotExportPopup(const PlotData &plot, const Path &project, const std::string &datasetLabel, PlotExportState &state);
 	void TableExportPopup(std::span<const DataTableColumn> columns, const Path &project,
 		const std::string &datasetLabel, PlotExportState &state);
+	void TableExportPopup(std::span<const DataTableColumn> columns, const Path &project,
+		const std::string &defaultName, PlotExportState &state, const std::string &buttonLabel);
 	// Screen-space dash pairs clipped to [left, top, right, bottom]; NaNs break the path.
 	[[nodiscard]] std::vector<glm::dvec2> PlotDashSegments(std::span<const glm::dvec2> points,
 		const glm::dvec4 &bounds, int lineStyle);

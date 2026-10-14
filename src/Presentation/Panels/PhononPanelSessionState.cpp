@@ -21,6 +21,7 @@ namespace DefectStudio
 	{
 		clearWindow();
 		cancelJob();
+		cancelFigureJob();
 		CancelDatasetScan();
 		SetDatasets({});
 		ClearResult();

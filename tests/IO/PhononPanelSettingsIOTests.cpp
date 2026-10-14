@@ -474,4 +474,24 @@ seriesStyles:
 		ASSERT_TRUE(PhononPanelSettingsIO::Load(project, loaded, warnings, error)) << error;
 		EXPECT_TRUE(loaded.resultDirectory.Empty());
 	}
+
+	TEST(PhononPanelSettingsIOTests, PlComparisonViewKeysRoundTripAndMissingOrInvalidKeysKeepDefaults)
+	{
+		PhononPanelSettings settings, loaded;
+		std::vector<std::string> warnings;
+		std::string error;
+		settings.plAxis = "zpl_loss";
+		for (const auto normalization : {"max", "area"})
+		{
+			settings.plNormalization = normalization;
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(PhononPanelSettingsIO::Serialize(settings, kProject), kProject, loaded, warnings, error));
+			EXPECT_EQ(loaded.plAxis, "zpl_loss"); EXPECT_EQ(loaded.plNormalization, normalization); EXPECT_TRUE(warnings.empty());
+		}
+		for (const auto text : {"formatVersion: 2", "formatVersion: 1", "view: {plAxis: wrong, plNormalization: wrong}"})
+		{
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error));
+			EXPECT_EQ(loaded.plAxis, "energy"); EXPECT_EQ(loaded.plNormalization, "none");
+		}
+		EXPECT_EQ(warnings.size(), 2u);
+	}
 } // namespace DefectStudio::Tests

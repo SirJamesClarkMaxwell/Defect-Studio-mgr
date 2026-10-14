@@ -1,6 +1,9 @@
 #pragma once
 
+#include <array>
+#include <optional>
 #include <span>
+#include <string_view>
 
 #include "IO/DataTableIO.hpp"
 #include "IO/PhononDispersionIO.hpp"
@@ -9,6 +12,26 @@
 
 namespace DefectStudio
 {
+	struct PhononPlSelection
+	{
+		std::string choice;
+		std::optional<double> zplEv;
+	};
+	[[nodiscard]] PhononPlSelection SelectPhononPlCurve(const PhononAnalysisResult &result, std::string_view preferred);
+	[[nodiscard]] std::string PhononZplSourceLabel(std::string_view choice);
+
+	struct PhononComparisonRow
+	{
+		Path directory;
+		std::string caseId, caseName, label, zplSource;
+		bool compared = false, active = false;
+		// ZPL, delta Q, S, DW %, effective energy, strongest energy, S_k, n_eff, imaginary count.
+		std::array<std::optional<double>, 9> values;
+		std::array<std::string, 9> reasons;
+	};
+	[[nodiscard]] std::vector<PhononComparisonRow> BuildPhononComparisonRows(PhononPanelSession &session, const Path &project);
+	[[nodiscard]] std::vector<DataTableColumn> PhononComparisonColumns(std::span<const PhononComparisonRow> rows);
+
 	// UI supplies the current colormap; adapters resolve automatic colours without depending on ImPlot.
 	[[nodiscard]] PlotData BuildBetaPlotData(PhononPanelSession &session, const Path &project,
 		const std::vector<ProjectRootEntry> &roots = std::vector<ProjectRootEntry>{}, std::span<const glm::vec4> colors = std::span<const glm::vec4>{});

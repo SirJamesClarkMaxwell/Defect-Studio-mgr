@@ -269,4 +269,96 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(filtered[0].values, std::vector<double>{4});
 		EXPECT_NE(FormatDataTable(filtered, {}).find("\tA1\t"), std::string::npos);
 	}
+
+	TEST(PhononPlotDataTests, PlLossAxisUsesEachCurvesOwnZplAndBothPeaksAreAtZero)
+	{
+		Workspace workspace;
+		const auto compared = workspace.Comparison();
+		workspace.Write(compared, "summary.json", R"({"schema":"ds.phonon_vibronic.v1","label":"comparison",
+			"s_total":1,"debye_waller":0.36,"stable":true,"sigma_meV":6,"gamma_meV":2,
+			"max_displacement_A":0.1,"delta_Q_amu05_A":0.2,"approximation":"harmonic",
+			"zpl_eV":{"computed":2.5,"computed_spin_purified":null,"experimental":null}})");
+		workspace.Write(compared, "pl.tsv", "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\n"
+			"2.4\t0\tnan\tnan\n2.5\t3\tnan\tnan\n2.6\t0\tnan\tnan\n");
+		PhononPanelSession session;
+		const auto active = workspace.root / "active";
+		session.Settings().resultDirectory = active;
+		auto result = TwoModes(active);
+		result.zplEv.computed = 1.9; result.plPhotonEnergyEv = {1.8, 1.9, 2.0}; result.plComputed = {0, 2, 0};
+		session.SetResult(result); session.SetPlZpl("computed"); session.Settings().plAxis = "zpl_loss"; session.Settings().plNormalization = "max";
+		session.AddDataset({AnalysisDatasetKind::Phonons, compared, "comparison", "ds.phonon_vibronic.v1"});
+		session.SetCompared(compared, true);
+		const auto plot = BuildPlPlotData(session, workspace.root);
+		ASSERT_EQ(plot.series.size(), 2u); EXPECT_EQ(plot.x.unit, "meV"); EXPECT_EQ(plot.x.labelTex, "E_{ZPL} - E");
+		for (const auto &series : plot.series)
+		{
+			const auto peak = std::max_element(series.y.begin(), series.y.end()) - series.y.begin();
+			EXPECT_NEAR(series.x[peak], 0.0, 1e-10); EXPECT_DOUBLE_EQ(series.y[peak], 1.0);
+			EXPECT_TRUE(std::is_sorted(series.x.begin(), series.x.end()));
+		}
+		session.ClearResult();
+		EXPECT_EQ(BuildPlPlotData(session, workspace.root).series.size(), 1u);
+	}
+
+	TEST(PhononPlotDataTests, PlNormalizationUsesTheFullGridBeforeTrimmingAndTheDisplayedAxisUnits)
+	{
+		PhononPanelSession session;
+		auto result = TwoModes();
+		result.plComputed = {0, 2, 4, 6, 20};
+		session.SetResult(result); session.SetPlZpl("computed"); session.Settings().plNormalization = "max";
+		const auto maximum = BuildPlPlotData(session, {});
+		ASSERT_EQ(maximum.series.size(), 1u); ASSERT_EQ(maximum.series[0].y.size(), 4u);
+		EXPECT_DOUBLE_EQ(maximum.series[0].y[2], 4.0 / 20.0);
+		EXPECT_EQ(maximum.series[0].x.back(), 3.0);
+		session.Settings().plNormalization = "area";
+		const auto area = BuildPlPlotData(session, {});
+		EXPECT_NEAR(area.series[0].y[2], 4.0 / 22.0, 1e-12); EXPECT_EQ(area.y.unit, "eV^{-1}");
+		session.Settings().plAxis = "zpl_loss";
+		const auto loss = BuildPlPlotData(session, {});
+		const auto zero = std::find(loss.series[0].x.begin(), loss.series[0].x.end(), 0.0);
+		ASSERT_NE(zero, loss.series[0].x.end());
+		EXPECT_NEAR(loss.series[0].y[zero - loss.series[0].x.begin()], 4.0 / 22000.0, 1e-12);
+		EXPECT_EQ(PlotDataColumns(loss, {})[1].unit, "meV^{-1}");
+		EXPECT_NE(FormatDataTable(PlotDataColumns(loss, {}), {}).find("0.000181818182"), std::string::npos);
+	}
+
+	TEST(PhononPlotDataTests, PlFallbackRecordsSourceAndLabelsItWithoutChangingIdentityOrStyle)
+	{
+		PhononPanelSession session;
+		auto result = TwoModes(Path::FromUtf8("C:/project/data"));
+		session.Settings().resultDirectory = result.directory; session.SetResult(result);
+		session.SetPlZpl("computed");
+		const auto requested = BuildPlPlotData(session, Path::FromUtf8("C:/project"));
+		session.Settings().seriesStyles[requested.series[0].id].visible = false;
+		session.SetPlZpl("spin_purified"); session.Settings().plAxis = "zpl_loss";
+		const auto fallback = BuildPlPlotData(session, Path::FromUtf8("C:/project"));
+		const auto selected = SelectPhononPlCurve(result, "spin_purified");
+		EXPECT_EQ(selected.choice, "computed"); EXPECT_EQ(selected.zplEv, 2.0);
+		EXPECT_EQ(fallback.series[0].label, "active (ZPL: obliczone)");
+		EXPECT_EQ(fallback.series[0].id, requested.series[0].id); EXPECT_FALSE(fallback.series[0].style.visible);
+		EXPECT_EQ(PhononPlotLegendId(fallback.series[0]), PhononPlotLegendId(requested.series[0]));
+		result.plComputed.clear(); result.zplEv.spinPurified = 2.3; result.plSpinPurified = result.plExperimental;
+		session.SetResult(result); session.SetPlZpl("computed");
+		EXPECT_EQ(BuildPlPlotData(session, {}).series[0].label, "active (ZPL: po korekcji spinowej)");
+		result.zplEv.spinPurified.reset(); session.SetResult(result);
+		EXPECT_TRUE(BuildPlPlotData(session, {}).series.empty());
+		result.plSpinPurified.clear(); result.plExperimental.clear(); session.SetResult(result);
+		EXPECT_EQ(BuildPlPlotData(session, {}).series[0].label, "active (ZPL: wzór)");
+	}
+
+	TEST(PhononPlotDataTests, PlLossRangeIncludesOnlyCurvesWhoseOwnZplIsAvailable)
+	{
+		Workspace workspace;
+		const auto directory = workspace.Comparison();
+		workspace.Write(directory, "pl.tsv", "photon_energy_eV\tintensity_computed\tintensity_spin_purified\tintensity_experimental\n"
+			"1\t0\tnan\tnan\n2\t1\tnan\tnan\n3\t0\tnan\tnan\n");
+		PhononPanelSession session;
+		auto result = TwoModes(); result.zplEv.computed.reset();
+		session.SetResult(result); session.SetPlZpl("computed"); session.Settings().plAxis = "zpl_loss";
+		session.AddDataset({AnalysisDatasetKind::Phonons, directory, "comparison", "ds.phonon_vibronic.v1"});
+		session.SetCompared(directory, true);
+		const auto plot = BuildPlPlotData(session, workspace.root);
+		ASSERT_EQ(plot.series.size(), 1u); EXPECT_EQ(plot.series[0].source, directory);
+		EXPECT_NEAR(plot.x.minimum, -150.0, 1e-10); EXPECT_NEAR(plot.x.maximum, 0.0, 1e-10);
+	}
 }

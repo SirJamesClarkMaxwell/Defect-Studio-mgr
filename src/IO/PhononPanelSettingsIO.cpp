@@ -281,6 +281,16 @@ namespace DefectStudio
 						throw std::invalid_argument("unknown PL ZPL choice");
 					return zpl;
 				});
+				ReadSetting(view, "plAxis", settings.plAxis, outWarnings, [](const YAML::Node &node) {
+					const auto value = node.as<std::string>();
+					if (value != "energy" && value != "zpl_loss") throw std::invalid_argument("unknown PL axis");
+					return value;
+				});
+				ReadSetting(view, "plNormalization", settings.plNormalization, outWarnings, [](const YAML::Node &node) {
+					const auto value = node.as<std::string>();
+					if (value != "none" && value != "max" && value != "area") throw std::invalid_argument("unknown PL normalization");
+					return value;
+				});
 				ReadSetting(view, "irrepFilter", settings.irrepFilter, outWarnings,
 					[](const YAML::Node &node) { return node.as<std::string>(); });
 				ReadSetting(view, "ccdLevels", settings.ccdLevels, outWarnings, [](const YAML::Node &node) {
@@ -371,6 +381,8 @@ namespace DefectStudio
 		emit << YAML::Key << "amplitude" << YAML::Value << settings.animationAmplitudeAngstrom
 			<< YAML::Key << "period" << YAML::Value << settings.animationPeriodSeconds
 			<< YAML::Key << "plZpl" << YAML::Value << settings.plZpl
+			<< YAML::Key << "plAxis" << YAML::Value << settings.plAxis
+			<< YAML::Key << "plNormalization" << YAML::Value << settings.plNormalization
 			<< YAML::Key << "ccdLevels" << YAML::Value << settings.ccdLevels
 			<< YAML::Key << "ccdWavefunctions" << YAML::Value << settings.ccdWavefunctions
 			<< YAML::Key << "ccdProbability" << YAML::Value << settings.ccdProbability
