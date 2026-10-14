@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/CellPanel.hpp"
+#include "Presentation/Panels/CellPanelSelectionOps.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -197,6 +198,9 @@ namespace DefectStudio
 					drawEditor(record.structure);
 					drawSublattice(record.structure, record.revision);
 					ImGui::EndDisabled();
+					ImGui::SeparatorText("Zaznaczone atomy");
+					const auto requested = DrawCellSelectionOperationButtons();
+					DrawCellSelectionOperationPopups(windowId, m_Layer, m_Commands, m_Domain, requested);
 					// Keep the wrap result visible across our own commit; external edits/undo reseed next frame.
 					if (m_Coincident)
 						m_Revision = record.revision;

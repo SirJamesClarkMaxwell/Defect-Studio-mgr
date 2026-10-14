@@ -607,6 +607,17 @@ namespace DefectStudio
 		std::optional<SnapTarget> modalSnapTargetHit;
 		PickedAxisState modalPickedAxis;
 		TransformDelta modalLastDelta;
+		struct ConfirmedTransform
+		{
+			ModalTransformOp op;
+			TransformConstraint constraint;
+			TransformOrientation orientation;
+			SceneTransformDelta delta;
+			TransformPivotMode pivotMode;
+			bool duplicated;
+		};
+		std::optional<ConfirmedTransform> lastConfirmedTransform;
+		bool repeatLastTransformRequested = false;
 		// Pivot picks fold the preview here; modalTransformSelection remains the cancellation/undo start.
 		std::optional<SceneTransformSelectionSnapshot> modalTransformPreviewSelection;
 		enum class NavigationGizmoDragMode

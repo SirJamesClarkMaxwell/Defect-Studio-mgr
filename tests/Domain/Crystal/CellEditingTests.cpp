@@ -236,4 +236,94 @@ namespace DefectStudio::Tests
 		ASSERT_EQ(result.atoms.size(), 1u);
 		ExpectVectorNear(result.atoms[0].fractional, glm::vec3(0.25f, 0.75f, 0.0f));
 	}
+
+	TEST(CellEditingTests, RepeatAppendsThreeUnwrappedCopiesAndPreservesMetadata)
+	{
+		auto structure = EmptyCell(BuildLatticeCell(CrystalSystem::Cubic, LatticeParameters{2.0f}));
+		AtomSite atom;
+		atom.species = "C";
+		atom.label = "motif";
+		atom.charge = 2.0f;
+		structure.atoms.push_back(atom);
+		std::vector<std::size_t> coincident = {99};
+		const auto result = RepeatAtoms(structure, std::array<std::size_t, 1>{0}, glm::vec3(1, 0, 0), 3, coincident);
+		ASSERT_EQ(result.atoms.size(), 4u);
+		EXPECT_EQ(structure.atoms.size(), 1u);
+		for (std::size_t index = 0; index < result.atoms.size(); ++index)
+		{
+			EXPECT_EQ(result.atoms[index].position, glm::vec3(static_cast<float>(index), 0, 0));
+			EXPECT_EQ(result.atoms[index].fractional, glm::vec3(static_cast<float>(index) / 2.0f, 0, 0));
+			EXPECT_EQ(result.atoms[index].index, static_cast<int>(index));
+			EXPECT_EQ(result.atoms[index].label, "motif");
+			EXPECT_EQ(result.atoms[index].charge, atom.charge);
+		}
+		EXPECT_EQ(result.atoms.back().fractional.x, 1.5f);
+	}
+
+	TEST(CellEditingTests, RepeatReportsOccupiedSitesAndKeepsEveryCopy)
+	{
+		auto structure = EmptyCell(BuildLatticeCell(CrystalSystem::Cubic, LatticeParameters{10.0f}));
+		structure.atoms = {AtomSite{"C", glm::vec3(0), glm::vec3(0), 0},
+			AtomSite{"Si", glm::vec3(1, 0, 0), glm::vec3(0.1f, 0, 0), 1}};
+		std::vector<std::size_t> coincident;
+		const auto result = RepeatAtoms(structure, std::array<std::size_t, 2>{0, 0}, glm::vec3(1, 0, 0), 1, coincident);
+		ASSERT_EQ(result.atoms.size(), 3u);
+		EXPECT_EQ(coincident, (std::vector<std::size_t>{1, 2}));
+		EXPECT_EQ(result.atoms[2].position, structure.atoms[1].position);
+		EXPECT_EQ(result.atoms[2].species, "C");
+	}
+
+	TEST(CellEditingTests, MirrorPlaneCopiesOrMovesAndUpdatesSkewCellFractions)
+	{
+		auto structure = EmptyCell(BuildLatticeCell(CrystalSystem::Triclinic, LatticeParameters{2, 3, 4, 80, 75, 65}));
+		AtomSite atom;
+		atom.species = "C";
+		atom.position = glm::vec3(0.2f, 0.3f, 0);
+		atom.fractional = structure.CartesianToFractional(atom.position);
+		atom.label = "source";
+		structure.atoms.push_back(atom);
+		std::vector<std::size_t> coincident = {99};
+		const auto indices = std::array<std::size_t, 1>{0};
+		const auto copied = MirrorAtoms(structure, indices, glm::vec3(0.5f, 0, 0), glm::vec3(5, 0, 0), true, coincident);
+		ASSERT_EQ(copied.atoms.size(), 2u);
+		EXPECT_TRUE(coincident.empty());
+		EXPECT_EQ(copied.atoms[0].position, atom.position);
+		ExpectVectorNear(copied.atoms[1].position, glm::vec3(0.8f, 0.3f, 0));
+		ExpectVectorNear(copied.atoms[1].fractional, structure.CartesianToFractional(copied.atoms[1].position));
+		EXPECT_EQ(copied.atoms[1].index, 1);
+		EXPECT_EQ(copied.atoms[1].label, "source");
+		const auto moved = MirrorAtoms(structure, indices, glm::vec3(0.5f, 0, 0), glm::vec3(1, 0, 0), false, coincident);
+		ASSERT_EQ(moved.atoms.size(), 1u);
+		ExpectVectorNear(moved.atoms[0].position, copied.atoms[1].position);
+		ExpectVectorNear(moved.atoms[0].fractional, copied.atoms[1].fractional);
+		EXPECT_EQ(structure.atoms[0].position, atom.position);
+	}
+
+	TEST(CellEditingTests, InversionAndMirrorCoincidenceKeepImagesWithoutWrapping)
+	{
+		auto structure = EmptyCell(BuildLatticeCell(CrystalSystem::Cubic, LatticeParameters{1.0f}));
+		structure.atoms.push_back(AtomSite{"C", glm::vec3(0), glm::vec3(0), 0});
+		std::vector<std::size_t> coincident;
+		const auto indices = std::array<std::size_t, 1>{0};
+		const auto inverted = MirrorAtoms(structure, indices, glm::vec3(0.5f), glm::vec3(0), false, coincident);
+		ASSERT_EQ(inverted.atoms.size(), 1u);
+		EXPECT_EQ(inverted.atoms[0].position, glm::vec3(1));
+		EXPECT_EQ(inverted.atoms[0].fractional, glm::vec3(1));
+		const auto copied = MirrorAtoms(structure, indices, glm::vec3(0), glm::vec3(1, 0, 0), true, coincident);
+		ASSERT_EQ(copied.atoms.size(), 2u);
+		EXPECT_EQ(coincident, (std::vector<std::size_t>{0, 1}));
+	}
+
+	TEST(CellEditingTests, InvalidSelectionOperationsDoNotPartiallyChangeTheStructure)
+	{
+		const auto structure = Zincblende();
+		std::vector<std::size_t> coincident = {99};
+		const auto repeated = RepeatAtoms(structure, std::array<std::size_t, 2>{0, 99}, glm::vec3(1), 3, coincident);
+		EXPECT_EQ(repeated.atoms.size(), structure.atoms.size());
+		EXPECT_TRUE(coincident.empty());
+		const auto mirrored = MirrorAtoms(structure, std::array<std::size_t, 1>{0}, glm::vec3(0),
+			glm::vec3(std::numeric_limits<float>::quiet_NaN()), false, coincident);
+		EXPECT_EQ(mirrored.atoms[0].position, structure.atoms[0].position);
+		EXPECT_TRUE(coincident.empty());
+	}
 }

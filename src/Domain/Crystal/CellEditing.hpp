@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Domain/Crystal/BravaisLattice.hpp"
 #include "Domain/Crystal/CrystalStructure.hpp"
@@ -20,4 +22,8 @@ namespace DefectStudio
 		BravaisCenteringPreset centering, const glm::vec3 &offset, std::vector<std::size_t> &outCoincident);
 	// Periodic structure with this cell and no atoms, the start of a cell built from sublattices.
 	[[nodiscard]] CrystalStructure EmptyCell(const LatticeCell &cell);
+	[[nodiscard]] CrystalStructure RepeatAtoms(const CrystalStructure &structure, std::span<const std::size_t> indices,
+		const glm::vec3 &shift, int count, std::vector<std::size_t> &outCoincident);
+	[[nodiscard]] CrystalStructure MirrorAtoms(const CrystalStructure &structure, std::span<const std::size_t> indices,
+		const glm::vec3 &point, const glm::vec3 &normal, bool copy, std::vector<std::size_t> &outCoincident);
 } // namespace DefectStudio

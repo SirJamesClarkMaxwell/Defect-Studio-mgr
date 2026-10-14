@@ -340,6 +340,12 @@ bindings:
     context: "renderer.viewport.focused"
     layer: 2
     enabled: true
+  - id: "renderer.gizmo.repeat_last"
+    chord: "Shift+R"
+    command: "renderer.gizmo.repeat_last"
+    context: "renderer.viewport.focused"
+    layer: 2
+    enabled: true
   - id: "renderer.scene_arrow.reverse"
     chord: "Alt+R"
     command: "renderer.scene_arrow.reverse"

@@ -16,6 +16,7 @@
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
 #include "Presentation/Panels/ViewportGizmo.hpp"
 #include "Presentation/Panels/ViewportModalTransform.hpp"
+#include "Presentation/Panels/ViewportModalCommit.hpp"
 #include "Presentation/Panels/ViewportNavigationGizmo.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Presentation/Panels/ViewportPathInsert.hpp"
@@ -30,66 +31,6 @@
 
 namespace DefectStudio
 {
-	namespace
-	{
-		void BeginInPlaceDuplicateMove(
-			RendererWindowState &windowState, RendererLayer &layer,
-			const WeakRef<CommandRegistry> &commandRegistryRef, const glm::vec2 &mouse)
-		{
-			Ref<CommandRegistry> registry = commandRegistryRef.lock();
-			Ref<UndoStack> undoStack = layer.GetUndoStackHandle().lock();
-			if (registry == nullptr || undoStack == nullptr || undoStack->HasActiveGroup() ||
-				windowState.camera == nullptr || windowState.modalTransform.has_value())
-				return;
-			if (windowState.selectedAtomIndices.empty() && !HasSceneObjectSelection(windowState))
-				return;
-
-			const Result<void> begun = undoStack->BeginGroup("Duplicate and transform selection");
-			if (!begun)
-			{
-				DS_LOG_WARN("Duplicate undo group failed: {}", begun.Error().technicalDetails);
-				return;
-			}
-			CommandContext context;
-			context.Set("renderer.window_id", windowState.windowId);
-			context.Set("renderer.duplicate_offset", glm::vec3(0.0f));
-			const Ref<bool> handled = CreateRef<bool>(false);
-			context.Set("scene_objects.shortcut_action", std::string("renderer.selection.duplicate"));
-			context.Set("scene_objects.shortcut_handled", handled);
-			Result<CommandOutcome> result =
-				registry->Execute(CommandID{"renderer.scene_objects.shortcut"}, context);
-			if (result && !*handled)
-				result = registry->Execute(CommandID{"renderer.selection.duplicate"}, std::move(context));
-			if (result)
-			{
-				if (!*handled)
-				{
-					windowState.selectedPinnedMeasurements.clear();
-					windowState.selectedFreeLabels.clear();
-					windowState.selectedSceneOrbitals.clear();
-					windowState.selectedScenePlanes.clear();
-					windowState.selectedScenePaths.clear();
-					windowState.selectedSceneDensities.clear();
-					windowState.selectedSceneHideVolumes.clear();
-					windowState.selectedVacancies.clear();
-					windowState.defectFrameSelected = false;
-					SceneSystem::SyncLabelSelection(windowState.sceneRegistry, windowState);
-				}
-				windowState.duplicateInPlacePending = true;
-				BeginViewportModalTransform(windowState, ModalTransformOp::Translate, mouse);
-				if (windowState.modalTransform.has_value())
-					return;
-				DS_LOG_WARN("In-place duplicate cancelled: the copied selection has no modal transform targets.");
-			}
-			else
-				DS_LOG_WARN("In-place duplicate failed: {}", result.Error().technicalDetails);
-			windowState.duplicateInPlacePending = false;
-			const Result<void> cancelled = undoStack->CancelGroup();
-			if (!cancelled)
-				DS_LOG_WARN("Duplicate rollback failed: {}", cancelled.Error().technicalDetails);
-		}
-	} // namespace
-
 	bool RunViewportGizmoChain(
 		RendererWindowState &windowState,
 		const ImVec2 &imageOrigin,
@@ -133,6 +74,14 @@ namespace DefectStudio
 			BeginViewportModalTransform(
 				windowState, ModalTransformOp::Translate, glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y));
 		const ImGuiIO &io = ImGui::GetIO();
+		const bool repeatRequested = std::exchange(windowState.repeatLastTransformRequested, false);
+		if (!windowState.modalTransform && !windowState.pathEdit.IsActive() &&
+			(repeatRequested || (hovered && io.KeyShift && !io.KeyCtrl && !io.KeyAlt &&
+				ImGui::IsKeyPressed(ImGuiKey_R, false))))
+		{
+			(void)RepeatViewportModalTransform(windowState, layer, commandRegistry);
+			return true;
+		}
 		if (hovered && io.KeyShift && !io.KeyCtrl && !io.KeyAlt && !windowState.pathEdit.IsActive() &&
 			ImGui::IsKeyPressed(ImGuiKey_D, false))
 			BeginInPlaceDuplicateMove(

@@ -8,6 +8,7 @@
 #include "Events/RendererEvents.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/Commands/RendererCellEditCommand.hpp"
+#include "Renderer/Commands/RendererRepeatLastCommand.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
 #include "Renderer/Commands/RendererViewportCommands.hpp"
 
@@ -678,6 +679,9 @@ namespace DefectStudio
 			"Renderer: Gizmo - Scale",
 			"Switch the active renderer viewport's transform gizmo to scale.",
 			std::bind_front(MakeGizmoOperationCommand, eventBus, GizmoOperation::Scale));
+		RegisterRendererCommand(registry, "renderer.gizmo.repeat_last", "Renderer: Repeat last transform",
+			"Repeat the last confirmed modal operation on the current selection.",
+			[rendererLayer](CommandContext &) { return CreateRepeatLastTransformRequestCommand(rendererLayer); });
 		RegisterRendererCommand(
 			registry,
 			"renderer.selection.mode_atoms",

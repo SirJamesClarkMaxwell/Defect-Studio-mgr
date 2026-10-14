@@ -7,6 +7,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Presentation/Panels/CellPanelSelectionOps.hpp"
 #include "Presentation/Panels/ViewportAddMenu.hpp"
 #include "Presentation/Panels/ScenePathDevMenu.hpp"
 #include "Presentation/Panels/SceneObjectEditActions.hpp"
@@ -68,7 +69,11 @@ namespace DefectStudio
 			ImGui::OpenPopup(kContextMenuId);
 
 		if (!ImGui::BeginPopup(kContextMenuId))
+		{
+			DrawCellSelectionOperationPopups(windowState.windowId, m_Layer, m_CommandRegistry, m_DomainLayer);
 			return;
+		}
+		std::optional<CellSelectionOperation> selectionOperation;
 
 		// Recorded here, on the frame the popup actually appears, rather than in a separate
 		// "hovered && right-clicked" branch outside it. Those were two different conditions deciding
@@ -130,6 +135,11 @@ namespace DefectStudio
 			editSceneOrAtoms(SceneObjectEditAction::Paste, "renderer.selection.paste");
 		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, hasSelection || sceneSelection))
 			editSceneOrAtoms(SceneObjectEditAction::Duplicate, "renderer.selection.duplicate");
+		if (ImGui::BeginMenu("Przekształć"))
+		{
+			selectionOperation = DrawCellSelectionOperationButtons(true);
+			ImGui::EndMenu();
+		}
 
 		// LabelStyle has no separate
 		// geometry to split out, so just one Copy/Paste Style pair. Applies to whichever label kind is
@@ -247,6 +257,7 @@ namespace DefectStudio
 		}
 
 		ImGui::EndPopup();
+		DrawCellSelectionOperationPopups(windowState.windowId, m_Layer, m_CommandRegistry, m_DomainLayer, selectionOperation);
 	}
 
 } // namespace DefectStudio
