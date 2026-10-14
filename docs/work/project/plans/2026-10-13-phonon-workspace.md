@@ -35,13 +35,13 @@ Branch bazowy: `task/109-phonon-workspace` (z `task/105-ccd-analysis`, niezmergo
 
 ## Zadania
 
-| Task | Zakres |
-|---|---|
-| 109a | Wspólna `PhononPanelSession` (zadania, dyspersja, okno, błędy, `Update()`/`FlushChanges()`), trzy widoki, EditorLayer jak w 101 |
-| 109b | Przypadki: `phonon_panel.yaml` v2 (`cases`, `activeCase`, migracja v1 → jeden przypadek), przypinanie zestawów (propozycje ze skanu), katalogi bez kolizji, okno per przypadek |
-| 109c | Kolejka wsadowa: zaznaczone przypadki → fonony / CCD sekwencyjnie, status i przyczyna per przypadek, anulowanie, wynik nie przełącza aktywnego przypadku |
-| 109d | Porównanie: oś PL E albo E − E_ZPL, normalizacja max/pole, źródło ZPL przy krzywej, tabela zbiorcza przypadków (ZPL, ΔQ, S, DW, ℏω_eff, najsilniejszy mod, mody urojone) |
-| 110 | Adaptery serii (wspólne dla ImPlot, TSV i rycin) + „Eksport danych (TSV/CSV)…” przy każdym wykresie fononów, tabela modów i zbiorcza do TSV; opcjonalny nagłówek Origin |
-| 111 | Zalążek rycin: `FigureSpec` (Presentation, bez ImGui) → `figures/<nazwa>.figure.json` → `render_figure.py` (matplotlib, `thesis.mplstyle`, PDF/SVG/PNG) przez `PythonScriptJob`; „Renderuj wszystkie”; pilot S(ℏω)/PL, potem CCD z adnotacjami (strzałki, klamry w danych) |
+| Task | Zakres | Stan (2026-10-14) |
+|---|---|---|
+| 109a | Wspólna `PhononPanelSession` (zadania, dyspersja, okno, błędy, `Update()`/`FlushChanges()`), trzy widoki, EditorLayer jak w 101 | zrobione `43cd734`, GUI niesprawdzone |
+| 109b | Przypadki: `phonon_panel.yaml` v2 (`cases`, `activeCase`, migracja v1 → jeden przypadek), przypinanie zestawów (propozycje ze skanu), katalogi bez kolizji, okno per przypadek | zrobione `e652b74`, GUI niesprawdzone |
+| 109c | Kolejka wsadowa: zaznaczone przypadki → fonony / CCD sekwencyjnie, status i przyczyna per przypadek, anulowanie, wynik nie przełącza aktywnego przypadku | zrobione `489a5a8`, GUI niesprawdzone |
+| 109d | Porównanie: oś PL E albo E − E_ZPL, normalizacja max/pole, źródło ZPL przy krzywej, tabela zbiorcza przypadków (ZPL, ΔQ, S, DW, ℏω_eff, najsilniejszy mod, mody urojone) | zrobione `802cd18`, GUI niesprawdzone |
+| 110 | Adaptery serii (wspólne dla ImPlot, TSV i rycin) + „Eksport danych (TSV/CSV)…” przy każdym wykresie fononów, tabela modów i zbiorcza do TSV; opcjonalny nagłówek Origin | zrobione `90daab5 + f380b18`, GUI niesprawdzone |
+| 111 | Zalążek rycin: `FigureSpec` (Presentation, bez ImGui) → `figures/<nazwa>.figure.json` → `render_figure.py` (matplotlib, `thesis.mplstyle`, PDF/SVG/PNG) przez `PythonScriptJob`; „Renderuj wszystkie”; pilot S(ℏω)/PL, potem CCD z adnotacjami (strzałki, klamry w danych) | zrobione `802cd18`, GUI niesprawdzone |
 
 Struktury (chalkopiryt, przyciąganie gizmo) – osobny tor, plan po konsultacji z codex.

@@ -1,6 +1,8 @@
 # Budowanie trudnych komórek gizmo zamiast grup przestrzennych
 
-Status: propozycja (2026-10-13), konsultacja codex (read-only). Do decyzji użytkownika: kolejność wycinków.
+Status (2026-10-14): wycinki 1-3 zrobione na `task/109-phonon-workspace` - 112a+b `fe8d7d4`, 112c `35e7942`,
+112d `7f4ab9f`, 112e `a98a8aa`, 112f `c8c61c3`, 112g `0636acb`; GUI niesprawdzone przez użytkownika. Zostaje:
+malowanie wzoru pierwiastków, pełne gizmo komórki, czyszczenie pozycji, powiązane pozycje (wycinki 3-5).
 
 Użytkownik (2026-10-13): generator z grupy przestrzennej / Wyckoffa „vesta już tak robi i nie jest to wygodne”.
 Cel: wygodne budowanie (np. chalkopiryt CuFeS2) dla kogoś, kto nie zna grup punktowych ani pozycji Wyckoffa,
