@@ -440,7 +440,10 @@ namespace DefectStudio
 		{
 			const float value = numeric.value_or(session.op == ModalTransformOp::Scale ? 1.0f : 0.0f);
 			if (session.op == ModalTransformOp::Translate)
-				result.translation = NumericTranslationDirection(session) * value;
+				result.translation = session.distanceReference
+					? (numeric ? TranslationAtDistance(session.anchor, *session.distanceReference, *numeric,
+						session.constraint, session.bases).value_or(glm::vec3(0.0f)) : glm::vec3(0.0f))
+					: NumericTranslationDirection(session) * value;
 			else if (session.op == ModalTransformOp::Rotate)
 			{
 				const glm::vec3 axis = RotationAxis(session, view);
@@ -575,7 +578,8 @@ namespace DefectStudio
 		output << OperationName(session.op) << "  " << constraintName << " (" << OrientationName(space) << ")  ";
 		if (space == TransformOrientation::Picked)
 			output << "oś A→B (" << session.pickedAxisLabel << ")  ";
-		const bool lattice = session.op == ModalTransformOp::Translate && UsesLatticeUnits(session);
+		const bool lattice = session.op == ModalTransformOp::Translate && UsesLatticeUnits(session) &&
+			!(session.distanceReference && !session.numericText.empty());
 		if (lattice)
 		{
 			// "+1/8 a  = 0.679 A": each free lattice coordinate as a fraction, then the Cartesian length.
@@ -596,7 +600,7 @@ namespace DefectStudio
 		}
 		else if (!session.numericText.empty())
 			output << (session.op == ModalTransformOp::Rotate ? "A " : session.op == ModalTransformOp::Scale ? "F " : "D ")
-				<< session.numericText << (space == TransformOrientation::Picked && session.op == ModalTransformOp::Translate ? " Å" : "");
+				<< session.numericText << ((space == TransformOrientation::Picked || session.distanceReference) && session.op == ModalTransformOp::Translate ? " Å" : "");
 		else
 		{
 			output << std::fixed << std::setprecision(3);
@@ -620,6 +624,6 @@ namespace DefectStudio
 			else
 				output << std::defaultfloat << snapStep;
 		}
-		return output.str();
+		return output.str() + FormatModalReferenceHeader(session, delta);
 	}
 } // namespace DefectStudio

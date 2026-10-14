@@ -14,7 +14,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/ViewportGizmo.hpp"
-#include "Presentation/Panels/ViewportPicking.hpp"
+#include "Presentation/Panels/ViewportModalPicking.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
@@ -71,6 +71,7 @@ namespace DefectStudio
 			windowState.modalSnapTargets.clear();
 			windowState.modalSnapTargetHit.reset();
 			windowState.modalPickedAxis = {};
+			windowState.modalTransformPreviewSelection.reset();
 		}
 
 		void CaptureNumericInput(ModalTransformSession &session)
@@ -162,7 +163,7 @@ namespace DefectStudio
 			std::string header = FormatModalTransformHeader(session, delta, window.modalSnapTargetHit ? SnapMode::Off : snap, steps);
 			header += window.modalSnapTarget == SnapTargetMode::Targets ? "  Cele" : "  Siatka";
 			if (window.modalPickedAxis.active)
-				header += window.modalPickedAxis.firstPosition ? "  Wskaż B (A: " + window.modalPickedAxis.firstLabel + ")" : "  Wskaż A";
+				header += window.modalPickedAxis.Prompt();
 			if (const auto &target = window.modalSnapTargetHit)
 			{
 				header += FormatSnapTargetHeader(*target, window.structure, session.anchor + delta.translation);
@@ -189,7 +190,11 @@ namespace DefectStudio
 			ImGui::GetForegroundDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f,
 				ImVec2(view.viewportOrigin.x + 12.0f, view.viewportOrigin.y + 16.0f + ImGui::GetFontSize()),
 				IM_COL32(180, 180, 180, 220),
-				"X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Tab cele/siatka · V oś z dwóch atomów · Enter · Esc");
+				session.op == ModalTransformOp::Translate
+					? "X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Tab cele/siatka · V oś z dwóch atomów · D odległość od atomu · Enter · Esc"
+					: session.op == ModalTransformOp::Rotate
+						? "X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Tab cele/siatka · V oś z dwóch atomów · P punkt obrotu (atom) · Enter · Esc"
+						: "X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Tab cele/siatka · P punkt obrotu (atom) · Enter · Esc");
 		}
 
 		[[nodiscard]] float RotationAmount(
@@ -361,6 +366,7 @@ namespace DefectStudio
 		windowState.modalSnapTarget = windowState.snapTarget;
 		windowState.modalSnapTargetHit.reset();
 		windowState.modalPickedAxis = {};
+		windowState.modalTransformPreviewSelection.reset();
 		windowState.modalLastDelta = {};
 		if (axis.has_value())
 			windowState.modalTransform->constraint = CycleConstraint({}, *axis, planeConstraint, orientation, bases);
@@ -390,23 +396,8 @@ namespace DefectStudio
 			glm::vec2(imageOrigin.x, imageOrigin.y), glm::vec2(imageSize.x, imageSize.y)};
 		if (ImGui::IsKeyPressed(ImGuiKey_Tab, false))
 			windowState.modalSnapTarget = windowState.modalSnapTarget == SnapTargetMode::Grid ? SnapTargetMode::Targets : SnapTargetMode::Grid;
-		if (session.op != ModalTransformOp::Scale && IsUnmodifiedModalAxisKeyPressed(ImGuiKey_V))
-			windowState.modalPickedAxis = {true, std::nullopt, {}};
-		if (windowState.modalPickedAxis.active)
+		if (UpdateViewportModalPicking(windowState, view, mouse))
 		{
-			session.startMouse += mouse - session.lastMouse;
-			session.lastMouse = mouse;
-			windowState.modalSnapTargetHit.reset();
-			if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-				windowState.modalPickedAxis = {};
-			else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse.x >= view.viewportOrigin.x &&
-				mouse.y >= view.viewportOrigin.y && mouse.x <= view.viewportOrigin.x + view.viewportSize.x &&
-				mouse.y <= view.viewportOrigin.y + view.viewportSize.y)
-			{
-				const auto ray = ComputeViewportPickRay(windowState, mouse - view.viewportOrigin, view.viewportSize);
-				if (const auto atom = ray ? PickAtomAlongRay(windowState, ray->origin, ray->direction) : std::nullopt)
-					windowState.modalPickedAxis.Pick(windowState.structure, *atom, session);
-			}
 			DrawModalOverlay(session, windowState.modalLastDelta, SnapMode::Off, SnapSteps(layer), view, windowState);
 			return true;
 		}
@@ -442,7 +433,9 @@ namespace DefectStudio
 					*operation, session.orientation, session.bases, session.pivot, mouse);
 				switched.anchor = session.anchor;
 				switched.latticeUnits = session.latticeUnits;
+				switched.pickedPivotLabel = session.pickedPivotLabel;
 				session = std::move(switched);
+				windowState.modalTransformPreviewSelection.reset();
 			}
 		}
 
@@ -476,8 +469,8 @@ namespace DefectStudio
 		delta.rotationRadians = RotationAmount(session, snap, steps);
 		delta.scaleFactor = ScaleFactor(delta.spatial, session);
 		ApplySceneTransformSelection(
-			windowState, windowState.modalTransformSelection, delta, session.op,
-			windowState.transformPivotMode, session.pivot);
+			windowState, windowState.modalTransformPreviewSelection ? *windowState.modalTransformPreviewSelection : windowState.modalTransformSelection, delta, session.op,
+			session.pickedPivotLabel.empty() ? windowState.transformPivotMode : TransformPivotMode::Median, session.pivot);
 		DrawModalOverlay(session, delta.spatial, snap, steps, view, windowState);
 
 		const bool enterPressed =
@@ -485,7 +478,7 @@ namespace DefectStudio
 		const bool confirmed = enterPressed || (windowState.modalTransformStartedFromHandle
 			? !ImGui::IsMouseDown(ImGuiMouseButton_Left)
 			: ImGui::IsMouseClicked(ImGuiMouseButton_Left));
-		if (!confirmed || (!session.numericText.empty() && !NumericValue(session).has_value()))
+		if (!confirmed || !CanConfirmModalTransform(session))
 			return true;
 
 		const bool committed = CommitTransform(windowState, layer, commandRegistryRef, CommitDescription(session.op));

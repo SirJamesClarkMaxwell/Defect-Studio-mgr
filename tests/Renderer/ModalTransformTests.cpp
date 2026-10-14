@@ -6,6 +6,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Renderer/Scene/ModalTransform.hpp"
+#include "Renderer/Scene/ModalSnapTargets.hpp"
+#include "Renderer/RendererWindowState.hpp"
+#include "Presentation/Panels/ViewportModalPicking.hpp"
 
 namespace
 {
@@ -644,6 +647,244 @@ namespace
 		ExpectVec3Near(ApplyTransformDelta(delta, session.pivot + glm::vec3(0, 1, 0), session.pivot),
 			session.pivot + glm::vec3(0, 0, 1));
 		ExpectVec3Near(ApplyTransformDelta(delta, session.pivot, session.pivot), session.pivot);
+	}
+
+	TEST(ModalTransformTests, DistanceRadialTranslationReachesTargetAndRejectsCoincidentAnchor)
+	{
+		const auto translation = TranslationAtDistance({2, 0, 0}, glm::vec3(0), 3.0f, {}, {});
+		ASSERT_TRUE(translation);
+		ExpectVec3Near(*translation, {1, 0, 0});
+		const auto zero = TranslationAtDistance({2, 0, 0}, glm::vec3(0), 0.0f, {}, {});
+		ASSERT_TRUE(zero);
+		ExpectVec3Near(*zero, {-2, 0, 0});
+		EXPECT_FALSE(TranslationAtDistance(glm::vec3(0), glm::vec3(0), 3.0f, {}, {}));
+	}
+
+	TEST(ModalTransformTests, DistanceAxisChoosesNearestRootAndPositiveDirectionOnTies)
+	{
+		const auto axis = Axis(0, TransformOrientation::Global);
+		const auto tie = TranslationAtDistance({0, 1, 0}, glm::vec3(0), std::sqrt(2.0f), axis, {});
+		ASSERT_TRUE(tie);
+		// The roots have equal |t|; ties move in the positive basis direction.
+		ExpectVec3Near(*tie, {1, 0, 0});
+		const auto nearest = TranslationAtDistance({2, 0, 0}, glm::vec3(0), 1.0f, axis, {});
+		ASSERT_TRUE(nearest);
+		ExpectVec3Near(*nearest, {-1, 0, 0});
+		const auto negativeSide = TranslationAtDistance({-2, 0, 0}, glm::vec3(0), 1.0f, axis, {});
+		ASSERT_TRUE(negativeSide);
+		ExpectVec3Near(*negativeSide, {1, 0, 0});
+		EXPECT_FALSE(TranslationAtDistance({0, 5, 0}, glm::vec3(0), 1.0f, axis, {}));
+		const auto tangent = TranslationAtDistance({2, 1, 0}, glm::vec3(0), 1.0f, axis, {});
+		ASSERT_TRUE(tangent);
+		ExpectVec3Near(*tangent, {-2, 0, 0});
+	}
+
+	TEST(ModalTransformTests, DistancePlaneFindsNearestCirclePointAndRejectsItsCentre)
+	{
+		const auto plane = Plane(2, TransformOrientation::Global);
+		const auto translation = TranslationAtDistance({2, 0, 1}, glm::vec3(0), std::sqrt(2.0f), plane, {});
+		ASSERT_TRUE(translation);
+		ExpectVec3Near(glm::vec3(2, 0, 1) + *translation, {1, 0, 1});
+		EXPECT_FALSE(TranslationAtDistance({0, 0, 1}, glm::vec3(0), 2.0f, plane, {}));
+		EXPECT_FALSE(TranslationAtDistance({2, 0, 2}, glm::vec3(0), 1.0f, plane, {}));
+		const auto tangent = TranslationAtDistance({2, 0, 1}, glm::vec3(0), 1.0f, plane, {});
+		ASSERT_TRUE(tangent);
+		ExpectVec3Near(*tangent, {-2, 0, 0});
+	}
+
+	TEST(ModalTransformTests, DistancePlaneUsesTheSpanOfSkewLatticeColumns)
+	{
+		TransformBases bases;
+		bases.lattice = glm::mat3(glm::vec3(2, 0, 0), glm::vec3(1, 3, 0), glm::vec3(2, 1, 4));
+		const glm::vec3 reference(4, 2, 3), anchor = reference + glm::vec3(2, 0, 1);
+		const auto translation = TranslationAtDistance(anchor, reference, std::sqrt(2.0f),
+			Plane(2, TransformOrientation::Lattice), bases);
+		ASSERT_TRUE(translation);
+		ExpectVec3Near(*translation, {-1, 0, 0});
+		// The excluded c column is skewed; the a/b plane still has normal Z.
+		EXPECT_FLOAT_EQ(translation->z, 0.0f);
+	}
+
+	TEST(ModalTransformTests, DistanceRejectsInvalidInputsAndDegenerateConstraints)
+	{
+		const float infinity = std::numeric_limits<float>::infinity();
+		const float nan = std::numeric_limits<float>::quiet_NaN();
+		for (const float distance : {-1.0f, infinity, nan})
+			EXPECT_FALSE(TranslationAtDistance({2, 0, 0}, glm::vec3(0), distance, {}, {}));
+		EXPECT_FALSE(TranslationAtDistance(glm::vec3(infinity), glm::vec3(0), 2.0f, {}, {}));
+		EXPECT_FALSE(TranslationAtDistance({2, 0, 0}, glm::vec3(nan), 2.0f, {}, {}));
+		EXPECT_FALSE(TranslationAtDistance({2, 0, 0}, glm::vec3(0), 2.0f, Axis(3, TransformOrientation::Global), {}));
+		TransformBases bases;
+		bases.local = glm::mat3(0.0f);
+		EXPECT_FALSE(TranslationAtDistance({2, 0, 0}, glm::vec3(0), 2.0f, Axis(0, TransformOrientation::Local), bases));
+		EXPECT_FALSE(TranslationAtDistance({2, 0, 0}, glm::vec3(0), 2.0f, Plane(2, TransformOrientation::Local), bases));
+	}
+
+	TEST(ModalTransformTests, NumericDistanceIsATargetInAngstromsIncludingLatticeUnits)
+	{
+		for (const auto orientation : {TransformOrientation::Global, TransformOrientation::Lattice})
+		{
+			TransformBases bases;
+			bases.lattice = glm::mat3(glm::vec3(7, 0, 0), glm::vec3(2, 3, 0), glm::vec3(0, 0, 5));
+			auto session = BeginModalTransform(ModalTransformOp::Translate, orientation, bases, glm::vec3(0), glm::vec2(50));
+			session.anchor = {2, 1, 0};
+			session.constraint = Axis(0, orientation);
+			session.distanceReference = glm::vec3(0);
+			session.distanceReferenceLabel = "Cu12";
+			session.numericText = "2.5";
+			const auto delta = EvaluateModalTransform(session, MakeTopView(), {90, 90}, SnapMode::Increment, {});
+			EXPECT_NEAR(glm::length(session.anchor + delta.translation), 2.5f, kEps);
+			EXPECT_FLOAT_EQ(delta.translation.y, 0.0f);
+			EXPECT_FLOAT_EQ(delta.translation.z, 0.0f);
+			EXPECT_TRUE(CanConfirmModalTransform(session));
+			const auto header = FormatModalTransformHeader(session, delta, SnapMode::Off, {});
+			EXPECT_NE(header.find("D 2.5 Å"), std::string::npos);
+			EXPECT_NE(header.find("odległość od Cu12: 2.50 Å"), std::string::npos);
+		}
+	}
+
+	TEST(ModalTransformTests, DistanceReferenceLeavesMouseTranslationUnchangedAndShowsLiveDistance)
+	{
+		auto original = BeginModalTransform(ModalTransformOp::Translate, TransformOrientation::Global, {}, glm::vec3(0), glm::vec2(50));
+		original.anchor = {2, 0, 0};
+		auto referenced = original;
+		referenced.distanceReference = glm::vec3(0);
+		referenced.distanceReferenceLabel = "Cu12";
+		const auto delta = EvaluateModalTransform(referenced, MakeTopView(), {60, 50}, SnapMode::Off, {});
+		ExpectVec3Near(delta.translation, EvaluateModalTransform(original, MakeTopView(), {60, 50}, SnapMode::Off, {}).translation);
+		EXPECT_NE(FormatModalTransformHeader(referenced, delta, SnapMode::Off, {}).find("odległość od Cu12: 3.00 Å"), std::string::npos);
+		EXPECT_TRUE(CanConfirmModalTransform(referenced));
+	}
+
+	TEST(ModalTransformTests, UnreachableOrInvalidDistanceReturnsZeroAndBlocksConfirmation)
+	{
+		auto session = BeginModalTransform(ModalTransformOp::Translate, TransformOrientation::Global, {}, glm::vec3(0), glm::vec2(50));
+		session.anchor = {0, 5, 0};
+		session.constraint = Axis(0, TransformOrientation::Global);
+		session.distanceReference = glm::vec3(0);
+		session.distanceReferenceLabel = "Cu12";
+		for (const auto text : {"1", "-1", "1/", "1/0"})
+		{
+			session.numericText = text;
+			const auto delta = EvaluateModalTransform(session, MakeTopView(), {70, 50}, SnapMode::Off, {});
+			ExpectVec3Near(delta.translation, glm::vec3(0));
+			EXPECT_FALSE(CanConfirmModalTransform(session));
+			EXPECT_NE(FormatModalTransformHeader(session, delta, SnapMode::Off, {}).find("nieosiągalne"), std::string::npos);
+		}
+		session.numericText = "13/2";
+		EXPECT_TRUE(CanConfirmModalTransform(session));
+		session.distanceReference.reset();
+		session.numericText = "-1";
+		EXPECT_TRUE(CanConfirmModalTransform(session));
+	}
+
+	TEST(ModalTransformTests, PivotPickRestartsRotateAndScaleReferencesAndNamesTheAtom)
+	{
+		RendererStructureData structure;
+		structure.atoms.push_back({"Cu", {3, 4, 5}});
+		for (const auto op : {ModalTransformOp::Rotate, ModalTransformOp::Scale})
+		{
+			auto session = BeginModalTransform(op, TransformOrientation::Global, {}, glm::vec3(0), glm::vec2(50));
+			session.accumulatedAngleRadians = 2.0f;
+			session.numericText = "45";
+			PickedAxisState picking{true, std::nullopt, {}, ModalPickPurpose::Pivot};
+			picking.Pick(structure, 0, session, {70, 80});
+			EXPECT_FALSE(picking.active);
+			ExpectVec3Near(session.pivot, {3, 4, 5});
+			EXPECT_EQ(session.startMouse, glm::vec2(70, 80));
+			EXPECT_EQ(session.lastMouse, glm::vec2(70, 80));
+			EXPECT_FLOAT_EQ(session.accumulatedAngleRadians, 0.0f);
+			EXPECT_TRUE(session.numericText.empty());
+			EXPECT_NE(FormatModalTransformHeader(session, {}, SnapMode::Off, {}).find("punkt obrotu: Cu1"), std::string::npos);
+			const auto delta = EvaluateModalTransform(session, MakeTopView(), {70, 80}, SnapMode::Off, {});
+			ExpectVec3Near(ApplyTransformDelta(delta, {2, 0, 0}, session.pivot), {2, 0, 0});
+		}
+	}
+
+	TEST(ModalTransformTests, ReferencePickPurposesRespectOperationsAndAxisPickingStillHasTwoClicks)
+	{
+		RendererStructureData structure;
+		structure.atoms = {{"Cu", {0, 0, 0}}, {"S", {2, 0, 0}}};
+		ModalTransformSession session;
+		PickedAxisState pivot{true, std::nullopt, {}, ModalPickPurpose::Pivot};
+		pivot.Pick(structure, 0, session);
+		EXPECT_TRUE(pivot.active);
+		EXPECT_TRUE(session.pickedPivotLabel.empty());
+		PickedAxisState distance{true, std::nullopt, {}, ModalPickPurpose::DistanceReference};
+		for (const auto op : {ModalTransformOp::Rotate, ModalTransformOp::Scale})
+		{
+			session.op = op;
+			distance.Pick(structure, 0, session);
+			EXPECT_TRUE(distance.active);
+			EXPECT_FALSE(session.distanceReference);
+		}
+		session.op = ModalTransformOp::Translate;
+		distance.Pick(structure, 0, session);
+		EXPECT_FALSE(distance.active);
+		ASSERT_TRUE(session.distanceReference);
+		EXPECT_EQ(session.distanceReferenceLabel, "Cu1");
+		PickedAxisState axis{true, std::nullopt, {}};
+		axis.Pick(structure, 0, session);
+		EXPECT_EQ(axis.purpose, ModalPickPurpose::AxisB);
+		EXPECT_TRUE(axis.active);
+		axis.Pick(structure, 1, session);
+		EXPECT_FALSE(axis.active);
+		EXPECT_EQ(session.pickedAxisLabel, "Cu1→S2");
+	}
+
+	TEST(ModalTransformTests, ModalAtomPickerIgnoresMovedAtomsWithoutChangingTheirVisibility)
+	{
+		RendererWindowState window;
+		window.showAtoms = true;
+		window.structure.atoms = {{"S", {0, 0, 2}}, {"Cu", {0, 0, 0}}};
+		window.modalTransformSelection.atoms.push_back({0, {0, 0, 2}});
+		EXPECT_EQ(PickViewportModalAtomAlongRay(window, {0, 0, 10}, {0, 0, -1}), std::optional<std::size_t>(1));
+		EXPECT_TRUE(window.structure.atoms[0].visible);
+		window.structure.atoms[1].visible = false;
+		EXPECT_FALSE(PickViewportModalAtomAlongRay(window, {0, 0, 10}, {0, 0, -1}));
+		window.structure.atoms[1].visible = true;
+		window.showAtoms = false;
+		EXPECT_FALSE(PickViewportModalAtomAlongRay(window, {0, 0, 10}, {0, 0, -1}));
+	}
+
+	TEST(ModalTransformTests, PivotFoldPreservesPreviewOriginalSnapshotAndSinglePivotApplication)
+	{
+		for (const auto op : {ModalTransformOp::Rotate, ModalTransformOp::Scale})
+		{
+			RendererWindowState window;
+			window.structure.atoms = {{"S", {2, 0, 0}}, {"S", {4, 0, 0}}, {"Cu", {0, 1, 0}}};
+			window.selectedAtomIndices = {0, 1};
+			window.modalTransformSelection = CaptureSceneTransformSelection(window);
+			window.modalTransform = BeginModalTransform(op, TransformOrientation::Global, {}, {3, 0, 0}, {50, 50});
+			window.modalTransform->constraint = Axis(2, TransformOrientation::Global);
+			window.modalTransform->numericText = op == ModalTransformOp::Rotate ? "90" : "2";
+			if (op == ModalTransformOp::Scale)
+				window.modalTransform->constraint = {};
+			SceneTransformDelta initial;
+			initial.spatial = EvaluateModalTransform(*window.modalTransform, MakeTopView(), {60, 50}, SnapMode::Off, {});
+			ApplySceneTransformSelection(window, window.modalTransformSelection, initial, op, TransformPivotMode::Median, {3, 0, 0});
+			const glm::vec3 visible = window.structure.atoms[0].cartesianPosition;
+			window.transformPivotMode = TransformPivotMode::IndividualOrigins;
+			window.modalPickedAxis = {true, std::nullopt, {}, ModalPickPurpose::Pivot};
+			ApplyViewportModalAtomPick(window, 0, {70, 50});
+			EXPECT_TRUE(window.modalPickedAxis.active);
+			ApplyViewportModalAtomPick(window, 2, {70, 50});
+			EXPECT_FALSE(window.modalPickedAxis.active);
+			ASSERT_TRUE(window.modalTransformPreviewSelection);
+			ExpectVec3Near(window.modalTransformPreviewSelection->atoms[0].position, visible);
+			ExpectVec3Near(window.modalTransformSelection.atoms[0].position, {2, 0, 0});
+			ExpectVec3Near(window.structure.atoms[0].cartesianPosition, visible);
+			window.modalTransform->numericText = op == ModalTransformOp::Rotate ? "90" : "2";
+			SceneTransformDelta next;
+			next.spatial = EvaluateModalTransform(*window.modalTransform, MakeTopView(), {70, 50}, SnapMode::Off, {});
+			const auto &session = *window.modalTransform;
+			ApplySceneTransformSelection(window, *window.modalTransformPreviewSelection, next, op,
+				session.pickedPivotLabel.empty() ? window.transformPivotMode : TransformPivotMode::Median, session.pivot);
+			ExpectVec3Near(window.structure.atoms[0].cartesianPosition, ApplyTransformDelta(next.spatial, visible, {0, 1, 0}));
+			RestoreSceneTransformSelection(window, window.modalTransformSelection);
+			ExpectVec3Near(window.structure.atoms[0].cartesianPosition, {2, 0, 0});
+			ExpectVec3Near(window.structure.atoms[1].cartesianPosition, {4, 0, 0});
+		}
 	}
 
 	TEST(ModalTransformTests, ParseNumericTextIsTheSessionParserForPlainStrings)

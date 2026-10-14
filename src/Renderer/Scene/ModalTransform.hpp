@@ -116,6 +116,9 @@ namespace DefectStudio
 		// Lattice orientation only: translations are fractions of the non-normalized cell vectors.
 		bool latticeUnits = true;
 		std::string pickedAxisLabel;
+		std::string pickedPivotLabel;
+		std::optional<glm::vec3> distanceReference;
+		std::string distanceReferenceLabel;
 	};
 
 	// Column 0 points A->B; the remaining columns form a right-handed orthonormal frame.
@@ -145,6 +148,14 @@ namespace DefectStudio
 	// two remaining columns. None: unchanged.
 	[[nodiscard]] glm::vec3 ConstrainTranslation(
 		const glm::vec3 &worldDelta, const TransformConstraint &constraint, const TransformBases &bases);
+
+	// None: radial ray reference->anchor. Axis: nearest line/sphere root (positive on ties).
+	// Plane: nearest point on the sphere's circle in the plane through anchor.
+	// Unreachable distances, non-finite inputs and degenerate paths return nullopt.
+	[[nodiscard]] std::optional<glm::vec3> TranslationAtDistance(const glm::vec3 &anchor, const glm::vec3 &reference,
+		float distance, const TransformConstraint &constraint, const TransformBases &bases);
+	[[nodiscard]] bool CanConfirmModalTransform(const ModalTransformSession &session);
+	[[nodiscard]] std::string FormatModalReferenceHeader(const ModalTransformSession &session, const TransformDelta &delta);
 
 	// B * diag * B^-1 with `factor` on the constrained column(s) (all three for None), 1 elsewhere.
 	[[nodiscard]] glm::mat3 ConstrainedScaleMatrix(
@@ -184,6 +195,8 @@ namespace DefectStudio
 	// Under UsesLatticeUnits, numeric Translate uses the raw lattice column instead of its unit
 	// direction, and mouse snapping uses inverse(raw lattice), latticeFraction (Fine: / 3) and
 	// the same allowed/zeroed coordinates. Unsnapped mouse translation is unchanged.
+	// With a distanceReference, numeric Translate instead targets that distance in Angstroms;
+	// an invalid/unreachable target gives zero translation and CanConfirmModalTransform is false.
 	[[nodiscard]] TransformDelta EvaluateModalTransform(
 		ModalTransformSession &session, const ModalTransformView &view, const glm::vec2 &mouse, SnapMode snap,
 		const TransformSnapSteps &steps);

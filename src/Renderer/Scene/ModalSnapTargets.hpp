@@ -35,12 +35,18 @@ namespace DefectStudio
 		const RendererStructureData &structure, const glm::vec3 &translatedAnchor);
 
 	// Picking keeps the preview still. A and B refer to the positions visible at each click.
+	enum class ModalPickPurpose { AxisA, AxisB, Pivot, DistanceReference };
+
 	struct PickedAxisState
 	{
 		bool active = false;
 		std::optional<glm::vec3> firstPosition;
 		std::string firstLabel;
+		ModalPickPurpose purpose = ModalPickPurpose::AxisA;
 
 		void Pick(const RendererStructureData &structure, std::size_t atomIndex, ModalTransformSession &session);
+		void Pick(const RendererStructureData &structure, std::size_t atomIndex, ModalTransformSession &session,
+			const glm::vec2 &mouse);
+		[[nodiscard]] std::string Prompt() const;
 	};
 } // namespace DefectStudio

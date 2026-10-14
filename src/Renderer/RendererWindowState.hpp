@@ -607,6 +607,8 @@ namespace DefectStudio
 		std::optional<SnapTarget> modalSnapTargetHit;
 		PickedAxisState modalPickedAxis;
 		TransformDelta modalLastDelta;
+		// Pivot picks fold the preview here; modalTransformSelection remains the cancellation/undo start.
+		std::optional<SceneTransformSelectionSnapshot> modalTransformPreviewSelection;
 		enum class NavigationGizmoDragMode
 		{
 			None,

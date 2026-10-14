@@ -132,26 +132,6 @@ namespace DefectStudio
 		return glm::mat3(x, y, glm::cross(x, y));
 	}
 
-	void PickedAxisState::Pick(const RendererStructureData &structure, std::size_t atomIndex,
-		ModalTransformSession &session)
-	{
-		if (!active || atomIndex >= structure.atoms.size())
-			return;
-		const glm::vec3 position = structure.atoms[atomIndex].cartesianPosition;
-		if (!firstPosition)
-		{
-			firstPosition = position;
-			firstLabel = AtomLabel(structure, static_cast<int>(atomIndex));
-		}
-		else if (const auto basis = MakePickedBasis(*firstPosition, position))
-		{
-			session.bases.picked = *basis;
-			session.constraint = {ConstraintKind::Axis, 0, TransformOrientation::Picked};
-			session.pickedAxisLabel = firstLabel + "→" + AtomLabel(structure, static_cast<int>(atomIndex));
-			active = false;
-		}
-	}
-
 	std::string FormatSnapTargetHeader(const SnapTarget &target, const RendererStructureData &structure,
 		const glm::vec3 &translatedAnchor)
 	{
