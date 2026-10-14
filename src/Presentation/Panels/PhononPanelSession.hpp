@@ -18,6 +18,7 @@
 #include <glm/glm.hpp>
 
 #include "Domain/Vibrations/PhononModes.hpp"
+#include "Domain/Vibrations/VibrationField.hpp"
 #include "Domain/Vibrations/CcdAnalysis.hpp"
 #include "IO/PhononPanelSettingsIO.hpp"
 #include "IO/PhononDispersionIO.hpp"
@@ -182,6 +183,11 @@ namespace DefectStudio
 		void SelectMode(int modeIndex);
 		[[nodiscard]] std::optional<std::size_t> SelectedMode() const;
 
+		void SetMixAngle(double radians);
+		[[nodiscard]] double MixAngle() const;
+		[[nodiscard]] std::optional<std::size_t> DegeneratePartnerOfSelected() const;
+		[[nodiscard]] const VibrationField &Field() const;
+
 		// Readouts for the selected mode: arrows that pass the participation threshold, and
 		// AtomsCarryingFraction(Settings().carriedFraction). 0 without a selection.
 		[[nodiscard]] std::size_t ArrowCount() const;
@@ -331,6 +337,10 @@ namespace DefectStudio
 		std::string m_ScanMessage;
 		mutable PhononPanelSettings m_Settings;
 		std::optional<PhononAnalysisResult> m_Result;
+		void rebuildField() const;
+		mutable VibrationField m_Field;
+		mutable std::optional<std::size_t> m_FieldMode;
+		mutable double m_MixAngle = 0.0;
 		std::optional<std::vector<glm::vec3>> m_RestPositions;
 		double m_Phase = 0.0;
 	};

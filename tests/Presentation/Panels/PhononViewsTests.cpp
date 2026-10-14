@@ -319,6 +319,111 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(session.PlotRevision(), revision);
 	}
 
+	TEST(PhononViewsTests, MixAngleChangesTheNextFrameWithoutStoppingAndSelectionResetsIt)
+	{
+		PhononPanelSession session;
+		auto result = OneAtom();
+		for (auto &mode : result.modes) mode.irrep = "E";
+		result.modes[1].frequencyMeV = result.modes[0].frequencyMeV + 0.2;
+		session.SetResult(result);
+		session.Settings().animationAmplitudeAngstrom = 0.2;
+		session.Settings().arrowLengthAngstrom = 2.0;
+		auto windows = Windows();
+		session.Update(windows, 0, true);
+		const auto rest = windows[0].structure.atoms[0].cartesianPosition;
+		session.StartAnimation(windows[0]);
+		session.SetPhase(windows[0], std::numbers::pi / 2.0);
+		const auto firstFrame = windows[0].structure.atoms[0].cartesianPosition;
+		const auto revision = session.PlotRevision();
+		ASSERT_EQ(session.DegeneratePartnerOfSelected(), 1u);
+		session.SetMixAngle(std::numbers::pi / 4.0);
+		EXPECT_TRUE(session.IsAnimating());
+		EXPECT_EQ(session.PlotRevision(), revision);
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, firstFrame);
+		session.SetPhase(windows[0], std::numbers::pi / 2.0);
+		const auto mixed = windows[0].structure.atoms[0].cartesianPosition;
+		EXPECT_NEAR(mixed.x, rest.x + 0.2 / std::sqrt(2.0), 1e-6);
+		EXPECT_NEAR(mixed.y, rest.y + 0.2 / std::sqrt(2.0), 1e-6);
+		ASSERT_TRUE(windows[0].modeArrows);
+		ASSERT_EQ(windows[0].modeArrows->arrows.size(), 1u);
+		EXPECT_NEAR(windows[0].modeArrows->arrows[0].vectorAngstrom.y, 2.0 / std::sqrt(2.0), 1e-6);
+		session.SetMixAngle(std::numbers::pi / 2.0);
+		session.SetPhase(windows[0], std::numbers::pi / 2.0);
+		EXPECT_NEAR(windows[0].structure.atoms[0].cartesianPosition.x, rest.x, 1e-6);
+		EXPECT_NEAR(windows[0].structure.atoms[0].cartesianPosition.y, rest.y + 0.2, 1e-6);
+		session.SelectMode(1);
+		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+		EXPECT_TRUE(session.IsAnimating());
+		session.StopAnimation(windows[0]);
+		EXPECT_FALSE(session.RestPositionsCaptured());
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+	}
+
+	TEST(PhononViewsTests, FieldTracksLegacySettingsSelectionAndReplacementAtTheSameIndex)
+	{
+		PhononPanelSession session;
+		auto result = OneAtom();
+		session.SetResult(result);
+		session.SetMixAngle(std::numbers::pi / 4.0);
+		session.Settings().selectedMode = 1;
+		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+		ASSERT_EQ(session.Field().real.size(), 1u);
+		EXPECT_EQ(session.Field().real[0], glm::dvec3(0, 1, 0));
+		session.SetMixAngle(std::numbers::pi / 4.0);
+		result.eigenvectors = {1, 0, 0, 0, 0, 1};
+		session.SetResult(result);
+		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+		EXPECT_EQ(session.Field().real[0], glm::dvec3(0, 0, 1));
+		session.ClearResult();
+		EXPECT_TRUE(session.Field().real.empty());
+		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+		EXPECT_FALSE(session.DegeneratePartnerOfSelected());
+	}
+
+	TEST(PhononViewsTests, MixedAnimationRestoresPositionsWhenHiddenAndOnProjectReplacement)
+	{
+		PhononPanelSession session;
+		session.SetResult(OneAtom());
+		auto windows = Windows();
+		const auto rest = windows[0].structure.atoms[0].cartesianPosition;
+		session.Update(windows, 0, true);
+		session.StartAnimation(windows[0]);
+		session.SetMixAngle(std::numbers::pi / 4.0);
+		session.SetPhase(windows[0], std::numbers::pi / 2.0);
+		session.Update(windows, 0, false);
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+		EXPECT_FALSE(session.IsAnimating());
+		EXPECT_FALSE(windows[0].modeArrows);
+		session.Update(windows, 0, true);
+		session.StartAnimation(windows[0]);
+		session.SetPhase(windows[0], std::numbers::pi / 2.0);
+		session.SetPersistedState({}, {});
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+		EXPECT_FALSE(session.IsAnimating());
+		EXPECT_TRUE(session.Field().real.empty());
+		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+	}
+
+	TEST(PhononViewsTests, MixedAnimationRestoresPositionsAndDropsFieldOnCaseSwitchWithoutResults)
+	{
+		PhononPanelSession session;
+		const auto first = session.AddCase("first");
+		const auto second = session.AddCase("second");
+		ASSERT_TRUE(session.ActivateCase(first));
+		session.SetResult(OneAtom());
+		auto windows = Windows();
+		session.Update(windows, 0, true);
+		const auto rest = windows[0].structure.atoms[0].cartesianPosition;
+		session.StartAnimation(windows[0]);
+		session.SetMixAngle(std::numbers::pi / 4.0);
+		session.SetPhase(windows[0], std::numbers::pi / 2.0);
+		ASSERT_TRUE(session.ActivateCase(second));
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+		EXPECT_FALSE(session.IsAnimating());
+		EXPECT_TRUE(session.Field().real.empty());
+		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+	}
+
 	TEST(PhononViewsTests, PhononViewsUseExistingLeftBottomAndRightDockRegions)
 	{
 		EXPECT_EQ(AnalysisDockRegion("Fonony"), DockRegion::Left);

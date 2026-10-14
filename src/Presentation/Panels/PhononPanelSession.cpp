@@ -114,12 +114,18 @@ namespace DefectStudio
 		++m_PlotRevision;
 		m_Result = std::move(result);
 		if (SelectedMode())
+		{
+			m_MixAngle = 0.0;
+			rebuildField();
 			return;
+		}
 		m_Settings.selectedMode = -1;
 		for (std::size_t i = 0; i < m_Result->ModeCount(); ++i)
 			if (!m_Result->modes[i].isTranslation && (m_Settings.selectedMode < 0 ||
 				m_Result->modes[i].huangRhys > m_Result->modes[m_Settings.selectedMode].huangRhys))
 				m_Settings.selectedMode = static_cast<int>(i);
+		m_MixAngle = 0.0;
+		rebuildField();
 	}
 
 	void PhononPanelSession::ClearResult()
@@ -128,6 +134,8 @@ namespace DefectStudio
 		++m_PlotRevision;
 		m_Result.reset();
 		m_Settings.selectedMode = -1;
+		m_MixAngle = 0.0;
+		rebuildField();
 	}
 
 	const PhononAnalysisResult *PhononPanelSession::Result() const noexcept
@@ -172,6 +180,7 @@ namespace DefectStudio
 			const bool paused = m_Paused;
 			StopAnimation();
 			m_Settings.selectedMode = modeIndex;
+			(void)Field();
 			if (const auto window = targetWindow(); window && running) StartAnimation(window->get());
 			m_Paused = paused;
 		}
@@ -189,8 +198,50 @@ namespace DefectStudio
 	std::size_t PhononPanelSession::ArrowCount() const
 	{
 		const auto mode = SelectedMode();
-		return mode ? BuildModeArrows(*m_Result, *mode, m_Settings.participationThreshold,
+		return mode ? FieldArrows(Field(), std::nullopt, m_Settings.participationThreshold,
 			m_Settings.arrowLengthAngstrom).size() : 0;
+	}
+
+	void PhononPanelSession::rebuildField() const
+	{
+		m_FieldMode = SelectedMode();
+		m_Field = m_FieldMode ? DefectModeField(*m_Result, *m_FieldMode,
+			DegeneratePartnerOfSelected(), m_MixAngle) : VibrationField{};
+	}
+
+	const VibrationField &PhononPanelSession::Field() const
+	{
+		// Settings() remains mutable: detect legacy callers changing the selection directly.
+		if (m_FieldMode != SelectedMode())
+		{
+			m_MixAngle = 0.0;
+			rebuildField();
+		}
+		return m_Field;
+	}
+
+	void PhononPanelSession::SetMixAngle(double radians)
+	{
+		(void)Field();
+		if (!std::isfinite(radians) || !DegeneratePartnerOfSelected())
+			return;
+		radians = std::clamp(radians, 0.0, std::numbers::pi);
+		if (m_MixAngle == radians)
+			return;
+		m_MixAngle = radians;
+		rebuildField();
+	}
+
+	double PhononPanelSession::MixAngle() const
+	{
+		(void)Field();
+		return m_MixAngle;
+	}
+
+	std::optional<std::size_t> PhononPanelSession::DegeneratePartnerOfSelected() const
+	{
+		const auto mode = SelectedMode();
+		return mode ? DegeneratePartner(*m_Result, *mode) : std::nullopt;
 	}
 
 	std::size_t PhononPanelSession::AtomsCarryingSelectedFraction() const
@@ -246,11 +297,14 @@ namespace DefectStudio
 		ModeArrowsState arrows;
 		arrows.lowColor = m_Settings.arrowLowColor;
 		arrows.highColor = m_Settings.arrowHighColor;
-		// Same sin(phase) as AnimatedPositions: the arrow is the atom's current displacement direction.
-		const double phaseScale = IsAnimating() && m_Settings.arrowsFollowPhase ? std::sin(m_Phase) : 1.0;
-		for (const auto &arrow : BuildModeArrows(*m_Result, *mode, m_Settings.participationThreshold,
+		const auto &field = Field();
+		// Keep cycle-scaled arrows: they shrink to zero at equilibrium, like the animated atoms.
+		const bool followPhase = IsAnimating() && m_Settings.arrowsFollowPhase;
+		const auto displacements = followPhase ? FieldDisplacements(field, m_Phase, m_Settings.arrowLengthAngstrom) :
+			std::vector<glm::dvec3>{};
+		for (const auto &arrow : FieldArrows(field, std::nullopt, m_Settings.participationThreshold,
 			m_Settings.arrowLengthAngstrom))
-			arrows.arrows.push_back({arrow.atomIndex, glm::vec3(phaseScale * arrow.vectorAngstrom)});
+			arrows.arrows.push_back({arrow.atomIndex, glm::vec3(followPhase ? displacements[arrow.atomIndex] : arrow.vectorAngstrom)});
 		window.modeArrows = std::move(arrows);
 		return true;
 	}
@@ -259,7 +313,7 @@ namespace DefectStudio
 	{
 		std::string error;
 		if (IsAnimating() || !SelectedMode() || !WindowMatches(window, error) ||
-			m_Result->positionsAngstrom.size() != window.structure.atoms.size())
+			Field().equilibriumAngstrom.size() != window.structure.atoms.size())
 			return;
 		m_RestPositions.emplace();
 		for (const auto &atom : window.structure.atoms)
@@ -283,13 +337,13 @@ namespace DefectStudio
 		const auto mode = SelectedMode();
 		if (!IsAnimating() || !mode || !std::isfinite(phaseRadians) || !WindowMatches(window, error) ||
 			m_RestPositions->size() != window.structure.atoms.size() ||
-			m_Result->positionsAngstrom.size() != window.structure.atoms.size())
+			Field().equilibriumAngstrom.size() != window.structure.atoms.size())
 			return;
 		m_Phase = phaseRadians;
-		const auto frame = AnimatedPositions(*m_Result, *mode, m_Phase, m_Settings.animationAmplitudeAngstrom);
+		const auto frame = FieldDisplacements(Field(), m_Phase, m_Settings.animationAmplitudeAngstrom);
 		for (std::size_t i = 0; i < frame.size(); ++i)
 			window.structure.atoms[i].cartesianPosition = (*m_RestPositions)[i] +
-				glm::vec3(frame[i] - m_Result->positionsAngstrom[i]);
+				glm::vec3(frame[i]);
 		(void)ApplyArrows(window, error);
 	}
 

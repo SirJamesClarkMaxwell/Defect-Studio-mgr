@@ -143,7 +143,36 @@ namespace DefectStudio
 
 	void PhononModesPanel::drawVisualisation()
 	{
-		ImGui::SeparatorText("Wizualizacja");
+		ImGui::SeparatorText("Animacja drgań");
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted("Źródło"); ImGui::SameLine();
+		ImGui::SetNextItemWidth(190.0f);
+		if (ImGui::BeginCombo("##vibrationSource", "mod defektu"))
+		{
+			(void)ImGui::Selectable("mod defektu", true);
+			ImGui::BeginDisabled();
+			(void)ImGui::Selectable("kierunek ΔQ", false);
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Wymaga wektora ΔR z analizy CCD (następna wersja).");
+			(void)ImGui::Selectable("mod bulku w q", false);
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Wymaga modu bulku w punkcie q (następna wersja).");
+			ImGui::EndDisabled();
+			ImGui::EndCombo();
+		}
+		ImGui::SetItemTooltip("Źródło pola przemieszczeń atomów.");
+		ImGui::TextUnformatted(m_Session->Field().label.c_str());
+		if (const auto partner = m_Session->DegeneratePartnerOfSelected())
+		{
+			ImGui::Text("Zdegenerowany z modem %d", m_Session->Result()->modes[*partner].index);
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted("Mieszanie θ"); ImGui::SameLine();
+			float angle = static_cast<float>(m_Session->MixAngle() * 180.0 / std::numbers::pi);
+			ImGui::SetNextItemWidth(190.0f);
+			if (ImGui::DragFloat("##vibrationMixAngle", &angle, 0.5f, 0.0f, 180.0f, "%.1f°", ImGuiSliderFlags_AlwaysClamp))
+				m_Session->SetMixAngle(angle * std::numbers::pi / 180.0);
+			ImGui::SetItemTooltip("cos θ · e1 + sin θ · e2; 0° = wybrany mod, 90° = partner");
+		}
 		ImGui::BeginDisabled(m_Session->Settings().forceConstantDirectory.Empty());
 		if (ImGui::Button("Otwórz superkomórkę")) m_Session->openSupercellWindow();
 		ImGui::EndDisabled();
