@@ -1,6 +1,6 @@
 # Handoff - stan pracy (aktualizowany przy każdym pushu)
 
-Ostatnia aktualizacja: 2026-10-14. Branch: `task/109-phonon-workspace` (od `task/105-ccd-analysis`, ten od
+Ostatnia aktualizacja: 2026-10-14 ~06:00 (Release i Debug zielone: 1796 testów, 1791 przechodzi, 5 pominiętych). Branch: `task/109-phonon-workspace` (od `task/105-ccd-analysis`, ten od
 `dev` 3739e5b). Nic nie jest zmergowane do `dev`/`main`; merge dopiero po sprawdzeniu GUI przez użytkownika i
 pełnym buildzie Debug + Release (skill `full-build-verify`).
 
@@ -32,8 +32,9 @@ danych z klastra/dysku O:).
 
 ## W toku / następne
 
-1. **108b** (zadanie `tasks/108b-ccd-displacement-direction.md`): animacja kierunku ΔQ, oba tryby. Zlecone do codex
-   (start po resecie limitu); jeśli brak wyniku/raportu - zlecić ponownie tym samym promptem.
+1. **108b** (zadanie `tasks/108b-ccd-displacement-direction.md`): animacja kierunku ΔQ, oba tryby. NIE zlecone
+   (brak internetu, wstrzymane 2026-10-14 rano). Następny krok: zlecić codex promptem jak dla 108a
+   (zadanie + STYLE RULE + „Do NOT run MSBuild”), potem build, testy, commit, push.
 2. **108c** nowy job Python: mod bulku w q (phonopy, `vibration.json`), niewspółmierne q = fragment + podpowiedź
    N×M×K; **108d** klik/przeciąganie po dyspersji. Zadań jeszcze nie napisano - projekt w planie 108.
 3. Struktury dalej (opcjonalnie): malowanie wzoru pierwiastków, czyszczenie pozycji, powiązane pozycje (spglib).
