@@ -30,7 +30,8 @@ namespace DefectStudio
 		Global,
 		Local,
 		Lattice,
-		Defect
+		Defect,
+		Picked
 	};
 
 	enum class TransformPivotMode
@@ -60,6 +61,7 @@ namespace DefectStudio
 		std::optional<glm::mat3> local;
 		std::optional<glm::mat3> lattice;
 		std::optional<glm::mat3> defect;
+		std::optional<glm::mat3> picked;
 	};
 
 	// Axis: move/rotate/scale along basis column `axis`. Plane: `axis` is the EXCLUDED column -
@@ -113,7 +115,12 @@ namespace DefectStudio
 		std::string numericText;
 		// Lattice orientation only: translations are fractions of the non-normalized cell vectors.
 		bool latticeUnits = true;
+		std::string pickedAxisLabel;
 	};
+
+	// Column 0 points A->B; the remaining columns form a right-handed orthonormal frame.
+	// Coincident or non-finite points have no axis.
+	[[nodiscard]] std::optional<glm::mat3> MakePickedBasis(const glm::vec3 &a, const glm::vec3 &b);
 
 	[[nodiscard]] ModalTransformSession BeginModalTransform(
 		ModalTransformOp op, TransformOrientation orientation, TransformBases bases, const glm::vec3 &pivot,

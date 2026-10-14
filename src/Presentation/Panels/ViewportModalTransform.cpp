@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/ViewportModalTransform.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <optional>
@@ -13,6 +14,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Presentation/Panels/ViewportGizmo.hpp"
+#include "Presentation/Panels/ViewportPicking.hpp"
 #include "Presentation/Panels/ViewportSelection.hpp"
 #include "Renderer/Commands/RendererAtomEditCommands.hpp"
 #include "Renderer/Commands/RendererVacancyCommands.hpp"
@@ -66,6 +68,9 @@ namespace DefectStudio
 			windowState.modalTransformSceneObjectsBefore.reset();
 			windowState.modalTransformStartedFromHandle = false;
 			windowState.gizmoDragActive = false;
+			windowState.modalSnapTargets.clear();
+			windowState.modalSnapTargetHit.reset();
+			windowState.modalPickedAxis = {};
 		}
 
 		void CaptureNumericInput(ModalTransformSession &session)
@@ -126,7 +131,7 @@ namespace DefectStudio
 
 		void DrawModalOverlay(
 			const ModalTransformSession &session, const TransformDelta &delta, SnapMode snap,
-			const TransformSnapSteps &steps, const ModalTransformView &view)
+			const TransformSnapSteps &steps, const ModalTransformView &view, const RendererWindowState &window)
 		{
 			if (session.constraint.kind != ConstraintKind::None && session.constraint.axis >= 0 &&
 				session.constraint.axis < 3)
@@ -154,14 +159,37 @@ namespace DefectStudio
 				drawList->PopClipRect();
 			}
 
-			const std::string header = FormatModalTransformHeader(session, delta, snap, steps);
+			std::string header = FormatModalTransformHeader(session, delta, window.modalSnapTargetHit ? SnapMode::Off : snap, steps);
+			header += window.modalSnapTarget == SnapTargetMode::Targets ? "  Cele" : "  Siatka";
+			if (window.modalPickedAxis.active)
+				header += window.modalPickedAxis.firstPosition ? "  Wskaż B (A: " + window.modalPickedAxis.firstLabel + ")" : "  Wskaż A";
+			if (const auto &target = window.modalSnapTargetHit)
+			{
+				header += FormatSnapTargetHeader(*target, window.structure, session.anchor + delta.translation);
+				const auto end = ProjectAbsolute(view, target->position), start = ProjectAbsolute(view, session.anchor);
+				if (end)
+				{
+					ImDrawList &draw = *ImGui::GetForegroundDrawList();
+					draw.PushClipRect(ImVec2(view.viewportOrigin.x, view.viewportOrigin.y),
+						ImVec2(view.viewportOrigin.x + view.viewportSize.x, view.viewportOrigin.y + view.viewportSize.y), true);
+					draw.AddCircle(ImVec2(end->x, end->y), 9.0f, IM_COL32(255, 240, 150, 255), 0, 2.0f);
+					const float length = start ? glm::distance(*start, *end) : 0.0f;
+					for (float offset = 0.0f; offset < length; offset += 10.0f)
+					{
+						const glm::vec2 a = glm::mix(*start, *end, offset / length);
+						const glm::vec2 b = glm::mix(*start, *end, std::min(offset + 5.0f, length) / length);
+						draw.AddLine(ImVec2(a.x, a.y), ImVec2(b.x, b.y), IM_COL32(255, 240, 150, 220));
+					}
+					draw.PopClipRect();
+				}
+			}
 			ImGui::GetForegroundDrawList()->AddText(
 				ImVec2(view.viewportOrigin.x + 12.0f, view.viewportOrigin.y + 12.0f),
 				IM_COL32(255, 240, 150, 255), header.c_str());
 			ImGui::GetForegroundDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.85f,
 				ImVec2(view.viewportOrigin.x + 12.0f, view.viewportOrigin.y + 16.0f + ImGui::GetFontSize()),
 				IM_COL32(180, 180, 180, 220),
-				"X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Enter · Esc");
+				"X/Y/Z oś · Shift płaszczyzna · U jednostki (Sieć) · Ctrl przyciąganie · Tab cele/siatka · V oś z dwóch atomów · Enter · Esc");
 		}
 
 		[[nodiscard]] float RotationAmount(
@@ -322,6 +350,18 @@ namespace DefectStudio
 		const TransformOrientation orientation = SceneTransformOrientation(windowState.transformOrientation, snapshot);
 		windowState.modalTransform = BeginModalTransform(op, orientation, bases, pivot, mouse);
 		windowState.modalTransform->anchor = anchor;
+		std::vector<std::size_t> movedAtoms;
+		for (const AtomTransformStart &atom : snapshot.atoms)
+			movedAtoms.push_back(atom.index);
+		windowState.modalSnapTargets = CollectSnapTargets(windowState.structure, movedAtoms, windowState.showCellBox);
+		std::erase_if(windowState.modalSnapTargets, [&windowState](const SnapTarget &target) {
+			return (target.kind == SnapTargetKind::Atom && !windowState.showAtoms) ||
+				(target.kind == SnapTargetKind::BondMidpoint && !windowState.showBonds);
+		});
+		windowState.modalSnapTarget = windowState.snapTarget;
+		windowState.modalSnapTargetHit.reset();
+		windowState.modalPickedAxis = {};
+		windowState.modalLastDelta = {};
 		if (axis.has_value())
 			windowState.modalTransform->constraint = CycleConstraint({}, *axis, planeConstraint, orientation, bases);
 		windowState.modalTransformSelection = std::move(snapshot);
@@ -345,6 +385,31 @@ namespace DefectStudio
 		ImGui::GetIO().WantCaptureKeyboard = true;
 		windowState.gizmoDragActive = true;
 		ModalTransformSession &session = *windowState.modalTransform;
+		const ModalTransformView view{
+			windowState.camera->ViewMatrix(), windowState.camera->ProjectionMatrix(),
+			glm::vec2(imageOrigin.x, imageOrigin.y), glm::vec2(imageSize.x, imageSize.y)};
+		if (ImGui::IsKeyPressed(ImGuiKey_Tab, false))
+			windowState.modalSnapTarget = windowState.modalSnapTarget == SnapTargetMode::Grid ? SnapTargetMode::Targets : SnapTargetMode::Grid;
+		if (session.op != ModalTransformOp::Scale && IsUnmodifiedModalAxisKeyPressed(ImGuiKey_V))
+			windowState.modalPickedAxis = {true, std::nullopt, {}};
+		if (windowState.modalPickedAxis.active)
+		{
+			session.startMouse += mouse - session.lastMouse;
+			session.lastMouse = mouse;
+			windowState.modalSnapTargetHit.reset();
+			if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+				windowState.modalPickedAxis = {};
+			else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mouse.x >= view.viewportOrigin.x &&
+				mouse.y >= view.viewportOrigin.y && mouse.x <= view.viewportOrigin.x + view.viewportSize.x &&
+				mouse.y <= view.viewportOrigin.y + view.viewportSize.y)
+			{
+				const auto ray = ComputeViewportPickRay(windowState, mouse - view.viewportOrigin, view.viewportSize);
+				if (const auto atom = ray ? PickAtomAlongRay(windowState, ray->origin, ray->direction) : std::nullopt)
+					windowState.modalPickedAxis.Pick(windowState.structure, *atom, session);
+			}
+			DrawModalOverlay(session, windowState.modalLastDelta, SnapMode::Off, SnapSteps(layer), view, windowState);
+			return true;
+		}
 		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
 		{
 			RestoreSceneTransformSelection(windowState, windowState.modalTransformSelection);
@@ -397,17 +462,23 @@ namespace DefectStudio
 
 		const TransformSnapSteps steps = SnapSteps(layer);
 		const SnapMode snap = SnapModeFromModifiers(ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
-		const ModalTransformView view{
-			windowState.camera->ViewMatrix(), windowState.camera->ProjectionMatrix(),
-			glm::vec2(imageOrigin.x, imageOrigin.y), glm::vec2(imageSize.x, imageSize.y)};
 		SceneTransformDelta delta;
 		delta.spatial = EvaluateModalTransform(session, view, mouse, snap, steps);
+		windowState.modalSnapTargetHit.reset();
+		if (session.op == ModalTransformOp::Translate && snap != SnapMode::Off && session.numericText.empty() &&
+			windowState.modalSnapTarget == SnapTargetMode::Targets)
+		{
+			windowState.modalSnapTargetHit = PickSnapTarget(windowState.modalSnapTargets, view, mouse, 12.0f);
+			if (const auto &target = windowState.modalSnapTargetHit)
+				delta.spatial.translation = TranslationOntoTarget(session.anchor, target->position, session.constraint, session.bases);
+		}
+		windowState.modalLastDelta = delta.spatial;
 		delta.rotationRadians = RotationAmount(session, snap, steps);
 		delta.scaleFactor = ScaleFactor(delta.spatial, session);
 		ApplySceneTransformSelection(
 			windowState, windowState.modalTransformSelection, delta, session.op,
 			windowState.transformPivotMode, session.pivot);
-		DrawModalOverlay(session, delta.spatial, snap, steps, view);
+		DrawModalOverlay(session, delta.spatial, snap, steps, view, windowState);
 
 		const bool enterPressed =
 			ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);

@@ -37,7 +37,8 @@ namespace DefectStudio
 			return space == TransformOrientation::Global ||
 				(space == TransformOrientation::Local && bases.local.has_value()) ||
 				(space == TransformOrientation::Lattice && bases.lattice.has_value()) ||
-				(space == TransformOrientation::Defect && bases.defect.has_value());
+				(space == TransformOrientation::Defect && bases.defect.has_value()) ||
+				(space == TransformOrientation::Picked && bases.picked.has_value());
 		}
 		[[nodiscard]] glm::vec3 NormalizedColumn(const glm::mat3 &basis, int axis)
 		{
@@ -208,6 +209,7 @@ namespace DefectStudio
 				case TransformOrientation::Local: return "Local";
 				case TransformOrientation::Lattice: return "Lattice";
 				case TransformOrientation::Defect: return "Defect";
+				case TransformOrientation::Picked: return "Picked";
 			}
 			return "Global";
 		}
@@ -235,6 +237,8 @@ namespace DefectStudio
 			return *bases.lattice;
 		if (space == TransformOrientation::Defect && bases.defect.has_value())
 			return *bases.defect;
+		if (space == TransformOrientation::Picked && bases.picked.has_value())
+			return *bases.picked;
 		return glm::mat3(1.0f);
 	}
 
@@ -266,7 +270,8 @@ namespace DefectStudio
 		else if (HasBasis(TransformOrientation::Defect, bases))
 			secondary = TransformOrientation::Defect;
 
-		if (current.kind != kind || current.axis != axis)
+		if (current.kind != kind || current.axis != axis ||
+			(current.space == TransformOrientation::Picked && primary != TransformOrientation::Picked))
 			return TransformConstraint{kind, axis, primary};
 		if (current.space == primary && secondary.has_value())
 			return TransformConstraint{kind, axis, *secondary};
@@ -568,6 +573,8 @@ namespace DefectStudio
 
 		std::ostringstream output;
 		output << OperationName(session.op) << "  " << constraintName << " (" << OrientationName(space) << ")  ";
+		if (space == TransformOrientation::Picked)
+			output << "oś A→B (" << session.pickedAxisLabel << ")  ";
 		const bool lattice = session.op == ModalTransformOp::Translate && UsesLatticeUnits(session);
 		if (lattice)
 		{
@@ -589,7 +596,7 @@ namespace DefectStudio
 		}
 		else if (!session.numericText.empty())
 			output << (session.op == ModalTransformOp::Rotate ? "A " : session.op == ModalTransformOp::Scale ? "F " : "D ")
-				<< session.numericText;
+				<< session.numericText << (space == TransformOrientation::Picked && session.op == ModalTransformOp::Translate ? " Å" : "");
 		else
 		{
 			output << std::fixed << std::setprecision(3);

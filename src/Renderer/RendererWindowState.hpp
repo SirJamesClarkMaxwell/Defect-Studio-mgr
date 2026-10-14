@@ -23,6 +23,7 @@
 #include "Renderer/Path/PathStore.hpp"
 #include "Renderer/Path/PathSystem.hpp"
 #include "Renderer/Scene/ModalTransform.hpp"
+#include "Renderer/Scene/ModalSnapTargets.hpp"
 #include "Renderer/Scene/IsosurfaceMesher.hpp"
 #include "Renderer/Scene/SceneRegistry.hpp"
 #include "Renderer/Scene/SceneHideVolume.hpp"
@@ -599,6 +600,13 @@ namespace DefectStudio
 		bool modalTransformStartedFromHandle = false;
 		TransformOrientation transformOrientation = TransformOrientation::Global;
 		TransformPivotMode transformPivotMode = TransformPivotMode::Median;
+		// Per-window mode, copied at start so Tab affects only the current operation.
+		SnapTargetMode snapTarget = SnapTargetMode::Grid;
+		SnapTargetMode modalSnapTarget = SnapTargetMode::Grid;
+		std::vector<SnapTarget> modalSnapTargets;
+		std::optional<SnapTarget> modalSnapTargetHit;
+		PickedAxisState modalPickedAxis;
+		TransformDelta modalLastDelta;
 		enum class NavigationGizmoDragMode
 		{
 			None,

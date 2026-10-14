@@ -580,6 +580,72 @@ namespace
 			EXPECT_FALSE(NearestSimpleFraction(value));
 	}
 
+	TEST(ModalTransformTests, PickedBasisIsRightHandedOrthonormalAndRejectsDegeneratePoints)
+	{
+		for (const glm::vec3 direction : {glm::vec3(1, 2, 3), glm::vec3(0, 0, 1), glm::vec3(0, 0, -1)})
+		{
+			const auto basis = MakePickedBasis(glm::vec3(2, 3, 4), glm::vec3(2, 3, 4) + direction);
+			ASSERT_TRUE(basis);
+			ExpectVec3Near((*basis)[0], glm::normalize(direction));
+			for (int first = 0; first < 3; ++first)
+				for (int second = 0; second < 3; ++second)
+					EXPECT_NEAR(glm::dot((*basis)[first], (*basis)[second]), first == second ? 1.0f : 0.0f, kEps);
+			EXPECT_NEAR(glm::determinant(*basis), 1.0f, kEps);
+		}
+		EXPECT_FALSE(MakePickedBasis(glm::vec3(1), glm::vec3(1)));
+		EXPECT_FALSE(MakePickedBasis(glm::vec3(0), glm::vec3(std::numeric_limits<float>::infinity())));
+	}
+
+	TEST(ModalTransformTests, PickedConstraintCyclesAndNormalKeysReturnToTheirOrientation)
+	{
+		TransformBases bases;
+		bases.picked = MakePickedBasis(glm::vec3(0), glm::vec3(1, 2, 0));
+		EXPECT_EQ(ResolveBasis(TransformOrientation::Picked, bases), *bases.picked);
+		EXPECT_EQ(ResolveBasis(TransformOrientation::Picked, {}), glm::mat3(1));
+		const auto picked = CycleConstraint({}, 0, false, TransformOrientation::Picked, bases);
+		ExpectConstraint(picked, ConstraintKind::Axis, 0, TransformOrientation::Picked);
+		const auto global = CycleConstraint(picked, 0, false, TransformOrientation::Picked, bases);
+		ExpectConstraint(global, ConstraintKind::Axis, 0, TransformOrientation::Global);
+		ExpectConstraint(CycleConstraint(global, 0, false, TransformOrientation::Picked, bases),
+			ConstraintKind::None, -1, TransformOrientation::Global);
+		ExpectConstraint(CycleConstraint(picked, 0, false, TransformOrientation::Global, bases),
+			ConstraintKind::Axis, 0, TransformOrientation::Global);
+		ExpectConstraint(CycleConstraint({}, 0, false, TransformOrientation::Picked, {}),
+			ConstraintKind::Axis, 0, TransformOrientation::Global);
+	}
+
+	TEST(ModalTransformTests, PickedNumericFractionsUseAngstromsAndHeaderNamesTheAtoms)
+	{
+		TransformBases bases;
+		bases.lattice = glm::mat3(10.0f);
+		bases.picked = MakePickedBasis(glm::vec3(0), glm::vec3(1, 1, 0));
+		auto session = BeginModalTransform(ModalTransformOp::Translate, TransformOrientation::Lattice,
+			bases, glm::vec3(0), glm::vec2(50));
+		session.constraint = Axis(0, TransformOrientation::Picked);
+		session.pickedAxisLabel = "Cu3→S7";
+		session.numericText = "1/8";
+		EXPECT_FALSE(UsesLatticeUnits(session));
+		const auto delta = EvaluateModalTransform(session, MakeTopView(), glm::vec2(70), SnapMode::Increment, {});
+		ExpectVec3Near(delta.translation, (*bases.picked)[0] * 0.125f);
+		const auto header = FormatModalTransformHeader(session, delta, SnapMode::Off, {});
+		EXPECT_NE(header.find("oś A→B (Cu3→S7)"), std::string::npos);
+		EXPECT_NE(header.find("D 1/8 Å"), std::string::npos);
+	}
+
+	TEST(ModalTransformTests, PickedRotationUsesCurrentPivot)
+	{
+		TransformBases bases;
+		bases.picked = MakePickedBasis(glm::vec3(0), glm::vec3(1, 0, 0));
+		auto session = BeginModalTransform(ModalTransformOp::Rotate, TransformOrientation::Global,
+			bases, glm::vec3(3, 4, 5), glm::vec2(50));
+		session.constraint = Axis(0, TransformOrientation::Picked);
+		session.numericText = "90";
+		const auto delta = EvaluateModalTransform(session, MakeTopView(), glm::vec2(70), SnapMode::Off, {});
+		ExpectVec3Near(ApplyTransformDelta(delta, session.pivot + glm::vec3(0, 1, 0), session.pivot),
+			session.pivot + glm::vec3(0, 0, 1));
+		ExpectVec3Near(ApplyTransformDelta(delta, session.pivot, session.pivot), session.pivot);
+	}
+
 	TEST(ModalTransformTests, ParseNumericTextIsTheSessionParserForPlainStrings)
 	{
 		EXPECT_FLOAT_EQ(*ParseNumericText("1/4"), 0.25f);

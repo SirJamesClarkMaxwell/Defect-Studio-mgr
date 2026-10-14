@@ -82,6 +82,14 @@ namespace DefectStudio
 		ImGui::EndDisabled();
 
 		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x * 0.70f);
+		ImGui::BeginDisabled(windowState.modalTransform.has_value());
+		const bool targetSnap = windowState.snapTarget == SnapTargetMode::Targets;
+		if (ImGui::Button(targetSnap ? "Cele##SnapTarget" : "Siatka##SnapTarget"))
+			windowState.snapTarget = targetSnap ? SnapTargetMode::Grid : SnapTargetMode::Targets;
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Ctrl: przyciąganie do siatki lub celów. Tab podczas G/R/S zmienia tryb tylko dla tej operacji.");
+		ImGui::EndDisabled();
+		ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x * 0.70f);
 		if (BeginViewportToolbarPopover({
 				"##TransformSnapButton", "##TransformSnapPopup", 0u, ICON_FA_MAGNET, nullptr,
 				"Transform Snap Steps (hold Ctrl during G/R/S)", uiScale, iconExtent, 220.0f}))
