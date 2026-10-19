@@ -45,16 +45,30 @@ unavailable.
    (same rule as `WindowMatches`); otherwise a button `Otwórz geometrię GS` opening the GS endpoint (path from the
    json) as a window bound to the session, the same way `Otwórz superkomórkę` does. Switching the source stops the
    animation first (rest positions restored).
+5. **Persistence (user decision 2026-10-20: animation state per case, nothing auto-starts)**: add to
+   `PhononCaseSettings` (`src/IO/PhononPanelSettingsIO.hpp`) `std::string animationSource = "mode";`
+   (`mode | ccd_direction`; 108c adds `bulk_q`), `double mixAngleDegrees = 0.0;` (the 108a θ, today reset with the
+   mode - keep that reset when the USER picks another mode, but restore the saved angle after a load / case switch),
+   `std::string ccdMotion = "sweep";` (`sweep | oscillate`), `double ccdSweepQ = 0.0;` (amu^½ Å, where the sweep
+   was parked), `double ccdExtent = 1.0;`. Serialize them in the case `view` map next to `selectedMode` (extend
+   `CaseView` in `PhononPanelSettingsIOCases.cpp` and the base `view` read/write in `PhononPanelSettingsIO.cpp`
+   exactly like `minHuangRhys`; bad value -> default + warning; unknown enum text -> default + warning). Update the
+   schema comment in the header. Loading a project or switching case restores source/motion/Q/extent/θ but never
+   starts the animation; a saved `ccd_direction` whose dataset has no ΔR falls back to showing the disabled reason
+   (the saved value is kept, not overwritten, until the user picks another source).
 
 ## Files to create or change
 
 - `scripts/python/examples/ccd_analysis.py`
 - `src/Domain/Vibrations/CcdAnalysis.hpp`, `src/Domain/Vibrations/VibrationField.{hpp,cpp}`
 - `src/IO/CcdAnalysisIO.{hpp,cpp}`
+- `src/IO/PhononPanelSettingsIO.{hpp,cpp}`, `src/IO/PhononPanelSettingsIOCases.cpp` (persistence, item 5)
 - `src/Presentation/Panels/PhononPanelSession.{hpp,cpp}` (+ a new session file if > 500 lines),
-  `PhononPanelSessionWindow.cpp`, `PhononModesPanelView.cpp`
+  `PhononPanelSessionWindow.cpp`, `PhononModesPanelView.cpp`, `PhononModesPanel.cpp` (only to draw the animation
+  section outside the `Result()` guard so the ΔQ source works with a CCD dataset alone; summary and mode table stay
+  guarded, phonon-specific readouts in the view become conditional)
 - tests: `tests/Domain/Vibrations/VibrationFieldTests.cpp`, the CCD IO tests (search `CcdAnalysisIO` in `tests/`),
-  session tests in `tests/Presentation/Panels/PhononViewsTests.cpp`
+  session tests in `tests/Presentation/Panels/PhononViewsTests.cpp`, `tests/IO/PhononPanelSettingsIOTests.cpp`
 
 ## Files that must NOT be touched
 
@@ -69,7 +83,10 @@ unavailable.
 3. Domain: Sweep at φ = 0 -> 0, φ = π -> ΔR·extent; Oscillate normalised like 108a; participation sums to 1.
 4. Session: ΔQ source disabled with the reason without a displacement; with one, sweep then Stop restores the rest
    positions exactly; switching source stops the animation.
-5. Existing tests pass. Report: files, tests, how old datasets behave, anything not done.
+5. Persistence: per-case roundtrip of the five new keys (two cases with different values survive save/load and a
+   case switch); bad values -> defaults + warnings; v1 files and v2 files without the keys load with defaults; after
+   load the animation is stopped and θ equals the saved angle.
+6. Existing tests pass. Report: files, tests, how old datasets behave, anything not done.
 
 ## Constraints
 

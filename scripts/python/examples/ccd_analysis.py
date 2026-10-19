@@ -11,6 +11,7 @@ from contextlib import redirect_stdout
 import csv
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sys
@@ -50,11 +51,11 @@ def final_toten(directory, required=False):
     return energy
 
 
-def delta_q_between(gs_dir, es_dir):
+def delta_q_between(gs_dir, es_dir, *, return_arrays=False, filename="CONTCAR"):
     """Mass-weighted minimum-image distance between two CONTCARs, centre-of-mass drift removed."""
     from ase.io import read
 
-    gs, es = (read(directory / "CONTCAR", format="vasp") for directory in (gs_dir, es_dir))
+    gs, es = (read(directory / filename, format="vasp") for directory in (gs_dir, es_dir))
     if gs.get_chemical_symbols() != es.get_chemical_symbols() or not np.allclose(
             gs.cell.array, es.cell.array, rtol=0, atol=1e-5):
         raise ValueError("Ground and excited CONTCARs must have the same ordered species and cell")
@@ -62,13 +63,22 @@ def delta_q_between(gs_dir, es_dir):
     displacement = (fractional - np.round(fractional)) @ gs.cell.array
     masses = gs.get_masses()
     displacement -= np.average(displacement, axis=0, weights=masses)
-    return float(np.sqrt(masses @ (displacement**2).sum(axis=1)))
+    dq = float(np.sqrt(masses @ (displacement**2).sum(axis=1)))
+    arrays = dict(schema="ds.ccd_displacement.v1", symbols=gs.get_chemical_symbols(),
+                  masses_amu=masses.tolist(), cell_angstrom=gs.cell.array.tolist(),
+                  gs_positions_angstrom=gs.get_positions().tolist(),
+                  displacement_angstrom=displacement.tolist(), delta_Q_amu05_A=dq)
+    assert math.isclose(dq, math.sqrt(sum(m * sum(x*x for x in dr)
+                                        for m, dr in zip(arrays["masses_amu"], arrays["displacement_angstrom"]))),
+                        rel_tol=1e-12, abs_tol=1e-12)
+    return (dq, arrays) if return_arrays else dq
 
 
-def point_wells(paths):
+def point_wells(paths, displacement_data=None):
     """Two relaxed minima (+ triplet, + single points at the other minimum) -> 1D harmonic wells."""
     energy = {key: final_toten(paths[key], required=True) for key in ("gs_dir", "es_dir")}
-    dq = delta_q_between(paths["gs_dir"], paths["es_dir"])
+    dq = (displacement_data[0] if displacement_data is not None else
+          delta_q_between(paths["gs_dir"], paths["es_dir"]))
     if dq <= 0:
         raise ValueError("Ground and excited geometries are identical")
     zpls = {"from_ccd": energy["es_dir"] - energy["gs_dir"], "spin_purified": (
@@ -297,6 +307,17 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
     points, data, harmonic, numerov, phonon = [], None, None, None, None
     curves, from_ccd, spin_purified, dq = np.empty((0, 3)), None, None, None
     models, zpls = {}, {}
+    displacement_data, displacement_endpoints = None, None
+    if paths["gs_dir"]:
+        displacement_data = delta_q_between(paths["gs_dir"], paths["es_dir"], return_arrays=True)
+        displacement_endpoints = (("gs_dir", "CONTCAR"), ("es_dir", "CONTCAR"))
+    elif paths["ccd_dir"]:
+        gs = paths["ccd_dir"] / "gs" / dirname_for(0)
+        es = paths["ccd_dir"] / "es" / dirname_for(1)
+        if (gs / "POSCAR").is_file() and (es / "POSCAR").is_file():
+            displacement_data = delta_q_between(gs, es, return_arrays=True, filename="POSCAR")
+            displacement_endpoints = (("ccd_dir", f"gs/{dirname_for(0)}/POSCAR"),
+                                      ("ccd_dir", f"es/{dirname_for(1)}/POSCAR"))
     if paths["phonon_result"]:
         phonon, omega, zpls = phonon_mode(paths["phonon_result"])
         dq = phonon["delta_Q_amu05_A"]
@@ -313,7 +334,7 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
         for branch in ("gs", "es"):
             harmonic[branch], omegas[branch] = fit_well(data[branch], dq)
     if paths["gs_dir"]:
-        dq, point_zpls, harmonic, omegas = point_wells(paths)
+        dq, point_zpls, harmonic, omegas = point_wells(paths, displacement_data)
         from_ccd, spin_purified = point_zpls["from_ccd"], point_zpls["spin_purified"]
         if harmonic is None and "phonon_1d" not in models:
             raise ValueError("No curvature: supply --gs-at-es-dir/--es-at-gs-dir or --phonon-result")
@@ -381,6 +402,7 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
             raise ValueError(f"Invalid {name} luminescence band")
         pl.append(intensity / intensity.max())
     summary = dict(schema="ds.ccd_analysis.v1", points=points, delta_Q_amu05_A=dq,
+                   displacement_file="ccd_displacement.json" if displacement_data is not None else None,
                    label=label if label is not None else (paths["es_dir"] or paths["ccd_dir"] or paths["phonon_result"]).name,
                    zpl_formula=formula_info,
                    zpl_eV=dict(from_ccd=from_ccd, spin_purified=spin_purified, used=used, formula=formula_zpl),
@@ -398,10 +420,26 @@ def analyse(ccd_dir=None, phonon_result=None, zpl=None, sigma=6.0, temperature=0
                    "bound quadratic tails; rigid excited-state ZPL shift; phonon effective mode has equal curvatures")
     if synthesized:
         summary["approximation"] += "; synthesized harmonic branches from point curvatures or phonon effective mode"
-    return dict(summary=summary, curves=curves, wavefunctions=waves, pl=np.column_stack(pl))
+    return dict(summary=summary, curves=curves, wavefunctions=waves, pl=np.column_stack(pl),
+                displacement=displacement_data[1] if displacement_data is not None else None,
+                displacement_endpoints=displacement_endpoints)
 
 
 def write_result(result, directory):
+    if result.get("displacement") is not None:
+        displacement = dict(result["displacement"])
+        for name, (key, suffix) in zip(("gs_source", "es_source"), result["displacement_endpoints"]):
+            # publish has already made inputs_relative relative to the FINAL output, not its staging directory.
+            root = result["summary"].get("inputs_relative", result["summary"]["input_paths"])[key]
+            source = Path(root) / suffix
+            if source.is_absolute():
+                try:
+                    source = Path(os.path.relpath(source, directory))
+                except ValueError:  # Different Windows drives, like inputs_relative in publish.
+                    pass
+            displacement[name] = source.as_posix()
+        (directory / "ccd_displacement.json").write_text(json.dumps(displacement, indent=2, allow_nan=False)
+                                                        + "\n", encoding="ascii")
     (directory / "summary.json").write_bytes((json.dumps(result["summary"], indent=2, allow_nan=False)
                                                + "\n").encode("ascii"))
     with (directory / "ccd_points.tsv").open("w", encoding="ascii", newline="\n") as handle:
@@ -423,6 +461,24 @@ def write_result(result, directory):
             np.savetxt(handle, array, delimiter="\t", header=header, comments="", fmt="%.12g")
 
 
+def self_test():
+    from ase import Atoms
+    from unittest.mock import patch
+
+    gs = Atoms("HHe", scaled_positions=[[0.95, 0, 0], [0.4, 0, 0]],
+               cell=[4, 4, 4], pbc=True, masses=[1, 4])
+    es = gs.copy()
+    es.set_scaled_positions([[0.05, 0, 0], [0.4, 0, 0]])
+    with patch("ase.io.read", side_effect=[gs, es]):
+        dq, data = delta_q_between(Path("gs"), Path("es"), return_arrays=True)
+    dr, masses = np.array(data["displacement_angstrom"]), np.array(data["masses_amu"])
+    np.testing.assert_allclose(dr, [[0.32, 0, 0], [-0.08, 0, 0]], atol=1e-12)
+    np.testing.assert_allclose(masses @ dr, [0, 0, 0], atol=1e-12)
+    assert math.isclose(dq, math.sqrt(0.128), rel_tol=1e-12)
+    assert math.isclose(dq, math.sqrt(float(masses @ (dr**2).sum(axis=1))), rel_tol=1e-12)
+    assert data["symbols"] == ["H", "He"]
+
+
 def main():
     class Parser(argparse.ArgumentParser):
         def error(self, message):
@@ -439,10 +495,17 @@ def main():
     parser.add_argument("--sigma", type=float, default=6.0)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--n-states", type=int)
-    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path)
+    parser.add_argument("--self-test", action="store_true")
     try:
         args = vars(parser.parse_args())
+        if args.pop("self_test"):
+            self_test()
+            print(json.dumps(dict(ok=True, self_test=True)))
+            return 0
         out_dir = args.pop("out_dir")
+        if out_dir is None:
+            raise ValueError("Supply --out-dir")
         with redirect_stdout(sys.stderr):
             result = analyse(**args)
             out_dir = publish(result, out_dir, writer=write_result)

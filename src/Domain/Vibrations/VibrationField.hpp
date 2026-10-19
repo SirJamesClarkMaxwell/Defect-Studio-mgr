@@ -1,10 +1,13 @@
 #pragma once
 
 #include "Domain/Vibrations/PhononModes.hpp"
+#include "Domain/Vibrations/CcdAnalysis.hpp"
 
 namespace DefectStudio
 {
-	// At phase phi: real_i * sin(phi) + imag_i * cos(phi). Empty imag means a real field.
+	enum class VibrationMotion { Oscillate, Sweep };
+
+	// Oscillate at phase phi: real_i * sin(phi) + imag_i * cos(phi). Empty imag means a real field.
 	struct VibrationField
 	{
 		std::string label;
@@ -12,17 +15,22 @@ namespace DefectStudio
 		std::vector<glm::dvec3> equilibriumAngstrom;
 		std::vector<glm::dvec3> real, imag;
 		std::vector<double> participation; // sums to 1; empty means uniform
+		VibrationMotion motion = VibrationMotion::Oscillate;
 	};
 
 	// Largest semi-major axis over all atoms; one normalisation for the whole cycle.
 	[[nodiscard]] double FieldCycleMaximum(const VibrationField &field);
 	[[nodiscard]] std::vector<glm::dvec3> FieldDisplacements(const VibrationField &field, double phaseRadians,
 		double amplitudeAngstrom);
+	// Sweep ignores amplitude and uses physical real * extent * (1 - cos(phi)) / 2; the old overload uses extent 1.
+	[[nodiscard]] std::vector<glm::dvec3> FieldDisplacements(const VibrationField &field, double phaseRadians,
+		double amplitudeAngstrom, double extent);
 	// Normalises the requested direction over ALL atoms before filtering; nullopt uses the real part.
 	[[nodiscard]] std::vector<ModeArrow> FieldArrows(const VibrationField &field, std::optional<double> phaseRadians,
 		double participationThreshold, double maxLengthAngstrom);
 	[[nodiscard]] VibrationField DefectModeField(const PhononAnalysisResult &result, std::size_t mode,
 		std::optional<std::size_t> partner = std::nullopt, double mixAngleRadians = 0.0);
+	[[nodiscard]] VibrationField CcdDirectionField(const CcdDisplacement &displacement);
 	[[nodiscard]] std::optional<std::size_t> DegeneratePartner(const PhononAnalysisResult &result,
 		std::size_t mode, double toleranceMeV = 0.5);
 } // namespace DefectStudio

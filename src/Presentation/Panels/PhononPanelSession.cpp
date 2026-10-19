@@ -112,10 +112,11 @@ namespace DefectStudio
 	{
 		StopAnimation();
 		++m_PlotRevision;
+		if (m_Result) m_Settings.mixAngleDegrees = 0.0;
 		m_Result = std::move(result);
 		if (SelectedMode())
 		{
-			m_MixAngle = 0.0;
+			m_MixAngle = m_Settings.mixAngleDegrees * std::numbers::pi / 180.0;
 			rebuildField();
 			return;
 		}
@@ -124,7 +125,7 @@ namespace DefectStudio
 			if (!m_Result->modes[i].isTranslation && (m_Settings.selectedMode < 0 ||
 				m_Result->modes[i].huangRhys > m_Result->modes[m_Settings.selectedMode].huangRhys))
 				m_Settings.selectedMode = static_cast<int>(i);
-		m_MixAngle = 0.0;
+		m_MixAngle = m_Settings.mixAngleDegrees * std::numbers::pi / 180.0;
 		rebuildField();
 	}
 
@@ -134,6 +135,7 @@ namespace DefectStudio
 		++m_PlotRevision;
 		m_Result.reset();
 		m_Settings.selectedMode = -1;
+		m_Settings.mixAngleDegrees = 0.0;
 		m_MixAngle = 0.0;
 		rebuildField();
 	}
@@ -179,7 +181,9 @@ namespace DefectStudio
 			const bool running = IsAnimating();
 			const bool paused = m_Paused;
 			StopAnimation();
+			if (m_Settings.selectedMode != modeIndex) m_Settings.mixAngleDegrees = 0.0;
 			m_Settings.selectedMode = modeIndex;
+			rebuildField();
 			(void)Field();
 			if (const auto window = targetWindow(); window && running) StartAnimation(window->get());
 			m_Paused = paused;
@@ -197,26 +201,41 @@ namespace DefectStudio
 
 	std::size_t PhononPanelSession::ArrowCount() const
 	{
-		const auto mode = SelectedMode();
-		return mode ? FieldArrows(Field(), std::nullopt, m_Settings.participationThreshold,
-			m_Settings.arrowLengthAngstrom).size() : 0;
+		return FieldArrows(Field(), std::nullopt, m_Settings.participationThreshold,
+			m_Settings.arrowLengthAngstrom).size();
 	}
 
 	void PhononPanelSession::rebuildField() const
 	{
 		m_FieldMode = SelectedMode();
-		m_Field = m_FieldMode ? DefectModeField(*m_Result, *m_FieldMode,
-			DegeneratePartnerOfSelected(), m_MixAngle) : VibrationField{};
+		m_FieldSource = m_Settings.animationSource;
+		m_FieldMotion = m_Settings.ccdMotion;
+		m_FieldCase = ActiveCaseId();
+		m_FieldRevision = m_PlotRevision;
+		m_MixAngle = m_Settings.mixAngleDegrees * std::numbers::pi / 180.0;
+		if (m_FieldSource == "ccd_direction")
+		{
+			m_Field = m_CcdResult && m_CcdResult->displacement ? CcdDirectionField(*m_CcdResult->displacement) : VibrationField{};
+			m_Field.motion = m_FieldMotion == "sweep" ? VibrationMotion::Sweep : VibrationMotion::Oscillate;
+		}
+		else
+			m_Field = m_FieldMode ? DefectModeField(*m_Result, *m_FieldMode,
+				DegeneratePartnerOfSelected(), m_MixAngle) : VibrationField{};
 	}
 
 	const VibrationField &PhononPanelSession::Field() const
 	{
 		// Settings() remains mutable: detect legacy callers changing the selection directly.
-		if (m_FieldMode != SelectedMode())
+		if (m_FieldMode != SelectedMode() && m_FieldCase == ActiveCaseId() && m_FieldRevision == m_PlotRevision)
 		{
+			m_Settings.mixAngleDegrees = 0.0;
 			m_MixAngle = 0.0;
 			rebuildField();
 		}
+		if (m_FieldRevision != m_PlotRevision || m_FieldCase != ActiveCaseId() ||
+			m_FieldSource != m_Settings.animationSource || m_FieldMotion != m_Settings.ccdMotion ||
+			m_MixAngle != m_Settings.mixAngleDegrees * std::numbers::pi / 180.0)
+			rebuildField();
 		return m_Field;
 	}
 
@@ -229,7 +248,9 @@ namespace DefectStudio
 		if (m_MixAngle == radians)
 			return;
 		m_MixAngle = radians;
+		m_Settings.mixAngleDegrees = radians * 180.0 / std::numbers::pi;
 		rebuildField();
+		Changed();
 	}
 
 	double PhononPanelSession::MixAngle() const
@@ -253,6 +274,22 @@ namespace DefectStudio
 	bool PhononPanelSession::WindowMatches(const RendererWindowState &window, std::string &outError) const
 	{
 		outError.clear();
+		if (m_Settings.animationSource == "ccd_direction")
+		{
+			outError = CcdDirectionBlocker();
+			if (!outError.empty()) return false;
+			const auto &symbols = Field().symbols;
+			if (window.structure.atoms.size() != symbols.size())
+				outError = "Liczba atomów okna różni się od geometrii CCD.";
+			else
+				for (std::size_t i = 0; i < symbols.size(); ++i)
+					if (window.structure.atoms[i].element != symbols[i])
+					{
+						outError = "Pierwiastki lub kolejność atomów różnią się od geometrii CCD.";
+						break;
+					}
+			return outError.empty();
+		}
 		if (!m_Result)
 			outError = "Brak wyniku fononowego.";
 		else if (window.structure.atoms.size() != m_Result->AtomCount())
@@ -276,6 +313,11 @@ namespace DefectStudio
 			if (item.id != ActiveCaseId() && window.title != CaseWindowTitle() &&
 				window.title == std::string(SupercellWindowTitle) + " – " + item.name)
 				return false;
+		if (m_Settings.animationSource == "ccd_direction")
+		{
+			std::string error;
+			return WindowMatches(window, error);
+		}
 		if (SameFilePath(window.structure.sourcePath, supercell, projectDirectory)) return true;
 		std::string error;
 		return (window.title == CaseWindowTitle() || window.title == SupercellWindowTitle) && WindowMatches(window, error);
@@ -284,15 +326,14 @@ namespace DefectStudio
 	bool PhononPanelSession::ApplyArrows(RendererWindowState &window, std::string &outError) const
 	{
 		window.modeArrows.reset();
-		if (!m_Result)
+		if (m_Settings.animationSource != "ccd_direction" && !m_Result)
 		{
 			outError.clear();
 			return true;
 		}
 		if (!WindowMatches(window, outError))
 			return false;
-		const auto mode = SelectedMode();
-		if (!mode || !m_Settings.showArrows)
+		if (Field().real.empty() || !m_Settings.showArrows)
 			return true;
 		ModeArrowsState arrows;
 		arrows.lowColor = m_Settings.arrowLowColor;
@@ -300,7 +341,8 @@ namespace DefectStudio
 		const auto &field = Field();
 		// Keep cycle-scaled arrows: they shrink to zero at equilibrium, like the animated atoms.
 		const bool followPhase = IsAnimating() && m_Settings.arrowsFollowPhase;
-		const auto displacements = followPhase ? FieldDisplacements(field, m_Phase, m_Settings.arrowLengthAngstrom) :
+		const auto displacements = followPhase ? FieldDisplacements(field, m_Phase, m_Settings.arrowLengthAngstrom,
+			m_Settings.ccdExtent) :
 			std::vector<glm::dvec3>{};
 		for (const auto &arrow : FieldArrows(field, std::nullopt, m_Settings.participationThreshold,
 			m_Settings.arrowLengthAngstrom))
@@ -312,13 +354,21 @@ namespace DefectStudio
 	void PhononPanelSession::StartAnimation(RendererWindowState &window)
 	{
 		std::string error;
-		if (IsAnimating() || !SelectedMode() || !WindowMatches(window, error) ||
+		if (IsAnimating() || Field().real.empty() || !WindowMatches(window, error) ||
 			Field().equilibriumAngstrom.size() != window.structure.atoms.size())
 			return;
 		m_RestPositions.emplace();
 		for (const auto &atom : window.structure.atoms)
 			m_RestPositions->push_back(atom.cartesianPosition);
 		m_Phase = 0.0;
+		m_AnimationSource = m_Settings.animationSource;
+		if (m_AnimationSource == "ccd_direction")
+		{
+			const double maximum = CcdSweepMaximum();
+			if (Field().motion == VibrationMotion::Sweep && maximum > 0.0)
+				m_Phase = std::acos(1.0 - 2.0 * std::clamp(m_Settings.ccdSweepQ / maximum, 0.0, 1.0));
+			SetPhase(window, m_Phase);
+		}
 		(void)ApplyArrows(window, error);
 	}
 
@@ -334,21 +384,26 @@ namespace DefectStudio
 	void PhononPanelSession::SetPhase(RendererWindowState &window, double phaseRadians)
 	{
 		std::string error;
-		const auto mode = SelectedMode();
-		if (!IsAnimating() || !mode || !std::isfinite(phaseRadians) || !WindowMatches(window, error) ||
+		if (!IsAnimating() || Field().real.empty() || !std::isfinite(phaseRadians) || !WindowMatches(window, error) ||
 			m_RestPositions->size() != window.structure.atoms.size() ||
 			Field().equilibriumAngstrom.size() != window.structure.atoms.size())
 			return;
 		m_Phase = phaseRadians;
-		const auto frame = FieldDisplacements(Field(), m_Phase, m_Settings.animationAmplitudeAngstrom);
+		const auto &field = Field();
+		const auto frame = FieldDisplacements(field, m_Phase, m_Settings.animationAmplitudeAngstrom, m_Settings.ccdExtent);
 		for (std::size_t i = 0; i < frame.size(); ++i)
 			window.structure.atoms[i].cartesianPosition = (*m_RestPositions)[i] +
 				glm::vec3(frame[i]);
+		if (m_Settings.animationSource == "ccd_direction" && field.motion == VibrationMotion::Sweep)
+		{
+			m_Settings.ccdSweepQ = CcdSweepMaximum() * (1.0 - std::cos(m_Phase)) / 2.0;
+		}
 		(void)ApplyArrows(window, error);
 	}
 
 	void PhononPanelSession::StopAnimation(RendererWindowState &window)
 	{
+		if (IsAnimating() && m_AnimationSource == "ccd_direction") Changed();
 		if (m_RestPositions && m_RestPositions->size() == window.structure.atoms.size())
 			for (std::size_t i = 0; i < m_RestPositions->size(); ++i)
 				window.structure.atoms[i].cartesianPosition = (*m_RestPositions)[i];
@@ -356,5 +411,61 @@ namespace DefectStudio
 		m_Phase = 0.0;
 		std::string error;
 		(void)ApplyArrows(window, error);
+	}
+
+	std::string PhononPanelSession::CcdDirectionBlocker() const
+	{
+		if (!m_CcdResult) return "Brak wybranego zestawu CCD.";
+		if (!m_CcdResult->displacement) return "Zestaw CCD bez ΔR — uruchom ponownie „Policz CCD”.";
+		if (m_Settings.animationSource == "ccd_direction" && Field().real.empty()) return "Nieprawidłowy wektor ΔR w zestawie CCD.";
+		return {};
+	}
+
+	void PhononPanelSession::SetAnimationSource(std::string source)
+	{
+		if ((source != "mode" && source != "ccd_direction") || m_Settings.animationSource == source) return;
+		StopAnimation();
+		if (const auto window = targetWindow()) window->get().modeArrows.reset();
+		m_Settings.animationSource = std::move(source);
+		rebuildField();
+		if (m_Windows) syncWindow(0.0);
+		Changed();
+	}
+
+	void PhononPanelSession::SetCcdMotion(std::string motion)
+	{
+		if ((motion != "sweep" && motion != "oscillate") || m_Settings.ccdMotion == motion) return;
+		StopAnimation();
+		m_Settings.ccdMotion = std::move(motion);
+		rebuildField();
+		Changed();
+	}
+
+	double PhononPanelSession::CcdSweepMaximum() const
+	{
+		return m_CcdResult && m_CcdResult->displacement ? m_Settings.ccdExtent * m_CcdResult->displacement->deltaQ : 0.0;
+	}
+
+	void PhononPanelSession::SetCcdSweepQ(RendererWindowState &window, double q)
+	{
+		const double maximum = CcdSweepMaximum();
+		if (!std::isfinite(q) || maximum <= 0.0 || m_Settings.animationSource != "ccd_direction" ||
+			m_Settings.ccdMotion != "sweep") return;
+		std::string error;
+		if (!WindowMatches(window, error)) return;
+		if (!IsAnimating()) StartAnimation(window);
+		m_Paused = true;
+		SetPhase(window, std::acos(1.0 - 2.0 * std::clamp(q / maximum, 0.0, 1.0)));
+		Changed();
+	}
+
+	void PhononPanelSession::SetCcdExtent(double extent)
+	{
+		if (!std::isfinite(extent)) return;
+		m_Settings.ccdExtent = std::clamp(extent, 1.0, 2.0);
+		m_Settings.ccdSweepQ = std::min(m_Settings.ccdSweepQ, CcdSweepMaximum());
+		if (const auto window = targetWindow(); window && IsAnimating() && m_Paused)
+			SetCcdSweepQ(window->get(), m_Settings.ccdSweepQ);
+		Changed();
 	}
 }

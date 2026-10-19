@@ -187,6 +187,12 @@ namespace DefectStudio
 		[[nodiscard]] double MixAngle() const;
 		[[nodiscard]] std::optional<std::size_t> DegeneratePartnerOfSelected() const;
 		[[nodiscard]] const VibrationField &Field() const;
+		[[nodiscard]] std::string CcdDirectionBlocker() const;
+		void SetAnimationSource(std::string source);
+		void SetCcdMotion(std::string motion);
+		void SetCcdSweepQ(RendererWindowState &window, double q);
+		void SetCcdExtent(double extent);
+		[[nodiscard]] double CcdSweepMaximum() const;
 
 		// Readouts for the selected mode: arrows that pass the participation threshold, and
 		// AtomsCarryingFraction(Settings().carriedFraction). 0 without a selection.
@@ -341,6 +347,9 @@ namespace DefectStudio
 		mutable VibrationField m_Field;
 		mutable std::optional<std::size_t> m_FieldMode;
 		mutable double m_MixAngle = 0.0;
+		mutable std::string m_FieldSource, m_FieldMotion, m_FieldCase;
+		mutable std::uint64_t m_FieldRevision = 0;
+		std::string m_AnimationSource;
 		std::optional<std::vector<glm::vec3>> m_RestPositions;
 		double m_Phase = 0.0;
 	};

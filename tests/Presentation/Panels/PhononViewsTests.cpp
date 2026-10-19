@@ -296,6 +296,11 @@ namespace DefectStudio::Tests
 		EXPECT_GT(session.PlotRevision(), revision);
 		ASSERT_NE(session.Result(), nullptr);
 		EXPECT_EQ(session.CurrentDataset(), dataset);
+		auto saved = session.Settings();
+		saved.mixAngleDegrees = 42.0;
+		session.SetPersistedState(saved, workspace.root);
+		EXPECT_NEAR(session.MixAngle(), 42.0 * std::numbers::pi / 180.0, 1e-12);
+		EXPECT_FALSE(session.IsAnimating());
 	}
 
 	TEST(PhononViewsTests, HiddenUpdateCommitsCompletedScanOnlyOnceOnTheMainThread)
@@ -422,6 +427,67 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(session.IsAnimating());
 		EXPECT_TRUE(session.Field().real.empty());
 		EXPECT_DOUBLE_EQ(session.MixAngle(), 0.0);
+	}
+
+	TEST(PhononViewsTests, CcdOnlySweepAndSourceSwitchRestoreTheExactOriginalPositions)
+	{
+		PhononPanelSession session;
+		EXPECT_FALSE(session.CcdDirectionBlocker().empty());
+		session.SetCcdResult({});
+		EXPECT_NE(session.CcdDirectionBlocker().find("ΔR"), std::string::npos);
+		CcdAnalysisResult ccd;
+		ccd.displacement.emplace();
+		auto &data = *ccd.displacement;
+		data.symbols = {"B"}; data.masses = {1}; data.deltaQ = 1;
+		data.gsPositions = {glm::dvec3(3, 0, 0)}; data.displacement = {glm::dvec3(1, 0, 0)};
+		session.SetCcdResult(ccd);
+		EXPECT_TRUE(session.CcdDirectionBlocker().empty());
+		session.SetAnimationSource("ccd_direction");
+		auto windows = Windows();
+		session.Update(windows, 0, true);
+		const auto rest = windows[0].structure.atoms[0].cartesianPosition;
+		session.SetCcdExtent(1.5);
+		session.SetCcdSweepQ(windows[0], 1.5);
+		// Frames are rest positions of the window + ΔR, not the json GS positions (wrapping may differ).
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest + glm::vec3(1.5f, 0.0f, 0.0f));
+		session.StopAnimation();
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+		session.SetCcdMotion("oscillate"); session.StartAnimation(windows[0]);
+		session.SetPhase(windows[0], -std::numbers::pi / 2);
+		EXPECT_NEAR(windows[0].structure.atoms[0].cartesianPosition.x, rest.x - 0.3, 1e-6);
+		session.StopAnimation(); session.SetCcdMotion("sweep");
+		windows[0].structure.atoms[0].element = "N";
+		std::string mismatch;
+		EXPECT_FALSE(session.WindowMatches(windows[0], mismatch));
+		windows[0].structure.atoms[0].element = "B";
+		session.StartAnimation(windows[0]);
+		session.SetPhase(windows[0], std::numbers::pi);
+		session.SetAnimationSource("mode");
+		EXPECT_FALSE(session.IsAnimating());
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+	}
+
+	TEST(PhononViewsTests, CaseAnimationSettingsRoundTripAndRestoreWithoutAutoplayOrDisplacement)
+	{
+		PhononPanelSession session;
+		const auto first = session.AddCase("first"), second = session.AddCase("second");
+		session.Settings().animationSource = "ccd_direction"; session.Settings().ccdMotion = "oscillate";
+		session.Settings().ccdSweepQ = 0.7; session.Settings().ccdExtent = 1.5; session.Settings().mixAngleDegrees = 65;
+		ASSERT_TRUE(session.ActivateCase(first));
+		session.Settings().mixAngleDegrees = 30;
+		const auto text = PhononPanelSettingsIO::Serialize(session.Settings(), {});
+		PhononPanelSettings loaded;
+		std::vector<std::string> warnings; std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, {}, loaded, warnings, error)) << error;
+		session.SetPersistedState(loaded, {});
+		EXPECT_NEAR(session.MixAngle(), std::numbers::pi / 6, 1e-12);
+		ASSERT_TRUE(session.ActivateCase(second));
+		EXPECT_EQ(session.Settings().animationSource, "ccd_direction"); EXPECT_EQ(session.Settings().ccdMotion, "oscillate");
+		EXPECT_DOUBLE_EQ(session.Settings().ccdSweepQ, 0.7); EXPECT_DOUBLE_EQ(session.Settings().ccdExtent, 1.5);
+		EXPECT_NEAR(session.MixAngle(), 65 * std::numbers::pi / 180, 1e-12);
+		EXPECT_FALSE(session.CcdDirectionBlocker().empty()); EXPECT_FALSE(session.IsAnimating());
+		ASSERT_TRUE(session.ActivateCase(first));
+		EXPECT_EQ(session.Settings().animationSource, "mode"); EXPECT_NEAR(session.MixAngle(), std::numbers::pi / 6, 1e-12);
 	}
 
 	TEST(PhononViewsTests, PhononViewsUseExistingLeftBottomAndRightDockRegions)

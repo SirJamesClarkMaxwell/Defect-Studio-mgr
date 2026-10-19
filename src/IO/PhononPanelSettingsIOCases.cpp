@@ -15,7 +15,8 @@ namespace DefectStudio
 	namespace
 	{
 		const std::vector<std::string> GlobalInputs = {"dispersionDir", "dispersionInPlane", "dispersionPoints"};
-		const std::vector<std::string> CaseView = {"selectedMode", "plZpl", "irrepFilter", "minHuangRhys"};
+		const std::vector<std::string> CaseView = {"selectedMode", "plZpl", "irrepFilter", "minHuangRhys",
+			"animationSource", "mixAngleDegrees", "ccdMotion", "ccdSweepQ", "ccdExtent"};
 
 		YAML::Node Subset(const YAML::Node &map, const std::vector<std::string> &keys, bool include)
 		{

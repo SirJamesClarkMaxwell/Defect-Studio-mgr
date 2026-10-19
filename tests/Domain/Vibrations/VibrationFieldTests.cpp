@@ -230,6 +230,38 @@ namespace DefectStudio::Tests
 		ExpectVec(FieldDisplacements(field, 0.5, 0.2)[0], glm::dvec3(0));
 	}
 
+	TEST(VibrationFieldTests, CcdSweepUsesPhysicalDisplacementAndOscillationUsesCycleNormalisation)
+	{
+		CcdDisplacement data;
+		data.symbols = {"H", "He"};
+		data.masses = {1, 4};
+		data.gsPositions = {glm::dvec3(3.8, 0, 0), glm::dvec3(1.6, 0, 0)};
+		data.displacement = {glm::dvec3(0.32, 0, 0), glm::dvec3(-0.08, 0, 0)};
+		data.deltaQ = std::sqrt(0.128);
+		auto field = CcdDirectionField(data);
+		ASSERT_EQ(field.real.size(), 2u);
+		EXPECT_EQ(field.real, data.displacement);
+		EXPECT_EQ(field.equilibriumAngstrom, data.gsPositions);
+		EXPECT_EQ(field.motion, VibrationMotion::Sweep);
+		EXPECT_NEAR(std::accumulate(field.participation.begin(), field.participation.end(), 0.0), 1.0, 1e-12);
+		EXPECT_NEAR(field.participation[0], 0.8, 1e-12);
+		ExpectVec(FieldArrows(field, std::numbers::pi, 0, 1)[0].vectorAngstrom, glm::dvec3(1, 0, 0));
+		for (std::size_t atom = 0; atom < 2; ++atom)
+		{
+			ExpectVec(FieldDisplacements(field, 0, 100)[atom], glm::dvec3(0));
+			ExpectVec(FieldDisplacements(field, std::numbers::pi, 0)[atom], data.displacement[atom]);
+			ExpectVec(FieldDisplacements(field, std::numbers::pi, -7, 1.5)[atom], 1.5 * data.displacement[atom]);
+			ExpectVec(FieldDisplacements(field, 2 * std::numbers::pi, 0)[atom], glm::dvec3(0));
+		}
+		field.motion = VibrationMotion::Oscillate;
+		ExpectVec(FieldDisplacements(field, std::numbers::pi / 2, 0.2)[0], glm::dvec3(0.2, 0, 0));
+		ExpectVec(FieldDisplacements(field, -std::numbers::pi / 2, 0.2)[1], glm::dvec3(0.05, 0, 0));
+		data.deltaQ *= 2;
+		EXPECT_TRUE(CcdDirectionField(data).real.empty());
+		data.deltaQ = 0;
+		EXPECT_TRUE(CcdDirectionField(data).real.empty());
+	}
+
 	TEST(VibrationFieldTests, InvalidDefectDataReturnsEmptyField)
 	{
 		auto result = Pair();

@@ -11,6 +11,7 @@
 #include <string_view>
 #include <nlohmann/json.hpp>
 #include "IO/TextFileIO.hpp"
+#include "Domain/Vibrations/VibrationField.hpp"
 
 namespace DefectStudio::CcdAnalysisIO
 {
@@ -32,6 +33,67 @@ namespace DefectStudio::CcdAnalysisIO
 			const double value = std::stod(text, &consumed);
 			if (consumed != text.size() || !std::isfinite(value)) throw std::invalid_argument("invalid numeric cell: " + text);
 			return value;
+		}
+
+		void ReadDisplacement(const Path &directory, const nlohmann::json &summary, CcdAnalysisResult &result)
+		{
+			std::string file = "ccd_displacement.json";
+			try
+			{
+				if (summary.contains("displacement_file"))
+				{
+					if (summary.at("displacement_file").is_null()) return;
+					file = summary.at("displacement_file").get<std::string>();
+					if (file != "ccd_displacement.json") throw std::invalid_argument("unsupported displacement file");
+				}
+				std::error_code error;
+				const bool exists = std::filesystem::exists((directory / file).Native(), error);
+				if (error) throw std::runtime_error(error.message());
+				if (!exists) return;
+				std::string text, message;
+				if (!TextFileIO::Load(directory / file, text, message)) throw std::runtime_error(message);
+				const auto json = nlohmann::json::parse(text);
+				if (json.at("schema") != "ds.ccd_displacement.v1") throw std::invalid_argument("unsupported displacement schema");
+				CcdDisplacement displacement;
+				displacement.symbols = json.at("symbols").get<std::vector<std::string>>();
+				const auto vectors = [&](const std::string &key) {
+					const auto &array = json.at(key);
+					if (!array.is_array()) throw std::invalid_argument(key + " must be an array");
+					std::vector<glm::dvec3> values;
+					for (const auto &row : array)
+					{
+						if (!row.is_array() || row.size() != 3) throw std::invalid_argument("expected a three-component vector");
+						values.emplace_back(Finite(row[0]), Finite(row[1]), Finite(row[2]));
+					}
+					return values;
+				};
+				const auto cell = vectors("cell_angstrom");
+				if (cell.size() != 3) throw std::invalid_argument("cell must contain three vectors");
+				const double volume = glm::dot(cell[0], glm::cross(cell[1], cell[2]));
+				if (!std::isfinite(volume) || volume == 0.0) throw std::invalid_argument("singular cell");
+				std::copy(cell.begin(), cell.end(), displacement.cell.begin());
+				const auto &masses = json.at("masses_amu");
+				if (!masses.is_array()) throw std::invalid_argument("masses must be an array");
+				for (const auto &mass : masses) displacement.masses.push_back(Finite(mass));
+				displacement.gsPositions = vectors("gs_positions_angstrom");
+				displacement.displacement = vectors("displacement_angstrom");
+				displacement.deltaQ = Finite(json.at("delta_Q_amu05_A"));
+				const auto source = [&](const std::string &key) {
+					const auto value = json.at(key).get<std::string>();
+					if (value.empty()) throw std::invalid_argument("empty endpoint source");
+					const auto path = Path::FromUtf8(value);
+					return Path::FromResolved((path.Native().is_absolute() ? path.Native() :
+						directory.Native() / path.Native()).lexically_normal()).Utf8();
+				};
+				displacement.gsSource = source("gs_source");
+				displacement.esSource = source("es_source");
+				if (CcdDirectionField(displacement).real.empty()) throw std::invalid_argument("invalid displacement arrays or ΔQ norm");
+				result.displacement = std::move(displacement);
+			}
+			catch (const std::exception &exception)
+			{
+				result.loadWarnings.push_back(file + ": " + exception.what());
+			}
 		}
 
 		std::size_t Index(const std::string &text)
@@ -158,7 +220,9 @@ namespace DefectStudio::CcdAnalysisIO
 			std::string text;
 			if (!TextFileIO::Load(directory / file, text, error)) { error = file + ": " + error; return false; }
 			CcdAnalysisResult result;
-			ReadSummary(nlohmann::json::parse(text), result);
+			const auto summary = nlohmann::json::parse(text);
+			ReadSummary(summary, result);
+			ReadDisplacement(directory, summary, result);
 			file = "ccd_points.tsv";
 			if (const auto table = ReadTable(directory, file))
 			{

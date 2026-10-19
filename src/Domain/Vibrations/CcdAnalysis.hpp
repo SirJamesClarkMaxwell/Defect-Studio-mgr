@@ -1,11 +1,24 @@
 #pragma once
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include <glm/glm.hpp>
+
 namespace DefectStudio
 {
+	struct CcdDisplacement
+	{
+		std::vector<std::string> symbols;
+		std::vector<double> masses;
+		std::array<glm::dvec3, 3> cell{};
+		std::vector<glm::dvec3> gsPositions, displacement;
+		double deltaQ = 0.0;
+		std::string gsSource, esSource; // resolved by IO; domain does not perform file access
+	};
+
 	struct CcdPoint
 	{
 		std::string branch;
@@ -46,5 +59,7 @@ namespace DefectStudio
 		{
 			std::vector<double> energyEv, numerov, harmonic, phonon1d; // unavailable columns are empty
 		} pl1d;
+		std::optional<CcdDisplacement> displacement;
+		std::vector<std::string> loadWarnings;
 	};
 }

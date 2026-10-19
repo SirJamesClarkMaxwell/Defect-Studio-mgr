@@ -200,6 +200,8 @@ view: {selectedMode: 4, plZpl: formula, irrepFilter: A1, minHuangRhys: 0.2}
 		original.selectedCcdDirectory = kProject / "a/ccd-result";
 		original.bcutoffAngstrom = 8.0;
 		original.minHuangRhys = 0.05;
+		original.animationSource = "ccd_direction"; original.mixAngleDegrees = 45.0;
+		original.ccdMotion = "oscillate"; original.ccdSweepQ = 0.8; original.ccdExtent = 1.5;
 		original.cases = {{"case-1", "A", {original.resultDirectory, original.selectedCcdDirectory}, original},
 			{"case-2", "B", {kProject / "b/phonons"}, {}}};
 		original.activeCaseId = "case-2";
@@ -209,6 +211,8 @@ view: {selectedMode: 4, plZpl: formula, irrepFilter: A1, minHuangRhys: 0.2}
 		original.selectedMode = 12;
 		original.irrepFilter = "E";
 		original.plZpl = "formula";
+		original.animationSource = "mode"; original.mixAngleDegrees = 90.0;
+		original.ccdMotion = "sweep"; original.ccdSweepQ = 1.2; original.ccdExtent = 2.0;
 		original.comparedDirectories = {kProject / "a/phonons"};
 		PhononPanelSettings loaded;
 		std::vector<std::string> warnings;
@@ -232,6 +236,11 @@ view: {selectedMode: 4, plZpl: formula, irrepFilter: A1, minHuangRhys: 0.2}
 		EXPECT_EQ(loaded.cases[1].settings.groundStateDirectory, original.groundStateDirectory);
 		EXPECT_EQ(loaded.cases[1].settings.selectedMode, 12);
 		EXPECT_EQ(loaded.cases[1].settings.irrepFilter, "E");
+		EXPECT_EQ(loaded.cases[0].settings.animationSource, "ccd_direction"); EXPECT_EQ(loaded.animationSource, "mode");
+		EXPECT_DOUBLE_EQ(loaded.cases[0].settings.mixAngleDegrees, 45.0); EXPECT_DOUBLE_EQ(loaded.mixAngleDegrees, 90.0);
+		EXPECT_EQ(loaded.cases[0].settings.ccdMotion, "oscillate"); EXPECT_EQ(loaded.ccdMotion, "sweep");
+		EXPECT_DOUBLE_EQ(loaded.cases[0].settings.ccdSweepQ, 0.8); EXPECT_DOUBLE_EQ(loaded.ccdSweepQ, 1.2);
+		EXPECT_DOUBLE_EQ(loaded.cases[0].settings.ccdExtent, 1.5); EXPECT_DOUBLE_EQ(loaded.ccdExtent, 2.0);
 		EXPECT_EQ(loaded.groundStateDirectory, original.groundStateDirectory);
 		EXPECT_EQ(loaded.resultDirectory, original.resultDirectory);
 		EXPECT_EQ(loaded.plZpl, "formula");
@@ -253,6 +262,8 @@ view: {selectedMode: 4, plZpl: formula, irrepFilter: A1, minHuangRhys: 0.2}
 			ASSERT_TRUE(PhononPanelSettingsIO::Parse(text, kProject, loaded, warnings, error));
 			EXPECT_TRUE(loaded.cases.empty());
 			EXPECT_TRUE(loaded.activeCaseId.empty());
+			EXPECT_EQ(loaded.animationSource, "mode"); EXPECT_EQ(loaded.ccdMotion, "sweep");
+			EXPECT_DOUBLE_EQ(loaded.mixAngleDegrees, 0); EXPECT_DOUBLE_EQ(loaded.ccdSweepQ, 0); EXPECT_DOUBLE_EQ(loaded.ccdExtent, 1);
 		}
 		const std::string casesText = R"(
 cases:
@@ -462,6 +473,14 @@ seriesStyles:
 		EXPECT_DOUBLE_EQ(loaded.ccdTemperatureK, 0);
 		EXPECT_EQ(loaded.ccdLevels, 3);
 		EXPECT_DOUBLE_EQ(loaded.ccdWavefunctionScale, 0.05);
+		for (const auto values : {"animationSource: wrong, mixAngleDegrees: .nan, ccdMotion: wrong, ccdSweepQ: -1, ccdExtent: 0.5",
+			"animationSource: bulk_q, mixAngleDegrees: 181, ccdMotion: 1, ccdSweepQ: .inf, ccdExtent: 2.1"})
+		{
+			ASSERT_TRUE(PhononPanelSettingsIO::Parse(std::string("view: {") + values + "}", kProject, loaded, warnings, error));
+			EXPECT_EQ(warnings.size(), 5u);
+			EXPECT_EQ(loaded.animationSource, "mode"); EXPECT_EQ(loaded.ccdMotion, "sweep");
+			EXPECT_DOUBLE_EQ(loaded.mixAngleDegrees, 0); EXPECT_DOUBLE_EQ(loaded.ccdSweepQ, 0); EXPECT_DOUBLE_EQ(loaded.ccdExtent, 1);
+		}
 	}
 
 	TEST(PhononPanelSettingsIOTests, MissingFileGivesDefaults)

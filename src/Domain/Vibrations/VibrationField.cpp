@@ -67,7 +67,22 @@ namespace DefectStudio
 	std::vector<glm::dvec3> FieldDisplacements(const VibrationField &field, double phaseRadians,
 		double amplitudeAngstrom)
 	{
+		return FieldDisplacements(field, phaseRadians, amplitudeAngstrom, 1.0);
+	}
+
+	std::vector<glm::dvec3> FieldDisplacements(const VibrationField &field, double phaseRadians,
+		double amplitudeAngstrom, double extent)
+	{
 		std::vector<glm::dvec3> displacements(field.real.size(), glm::dvec3(0.0));
+		if (field.motion == VibrationMotion::Sweep)
+		{
+			if (!ValidVectors(field) || !std::isfinite(phaseRadians) || !std::isfinite(extent) || extent < 0.0)
+				return displacements;
+			const double fraction = extent * (1.0 - std::cos(phaseRadians)) / 2.0;
+			for (std::size_t atom = 0; atom < displacements.size(); ++atom)
+				displacements[atom] = field.real[atom] * fraction;
+			return displacements;
+		}
 		const double maximum = FieldCycleMaximum(field);
 		if (maximum <= 0.0 || !std::isfinite(phaseRadians) || !std::isfinite(amplitudeAngstrom))
 			return displacements;
@@ -88,8 +103,9 @@ namespace DefectStudio
 				return !std::isfinite(value) || value < 0.0;
 			}))
 			return {};
-		const double sine = phaseRadians ? std::sin(*phaseRadians) : 1.0;
-		const double cosine = phaseRadians ? std::cos(*phaseRadians) : 0.0;
+		const double sine = phaseRadians ? (field.motion == VibrationMotion::Sweep ?
+			(1.0 - std::cos(*phaseRadians)) / 2.0 : std::sin(*phaseRadians)) : 1.0;
+		const double cosine = phaseRadians && field.motion == VibrationMotion::Oscillate ? std::cos(*phaseRadians) : 0.0;
 		std::vector<glm::dvec3> directions;
 		directions.reserve(atoms);
 		double longest = 0.0;
@@ -165,6 +181,34 @@ namespace DefectStudio
 			// ponytail: two-member mixing only; extend to a multiplet basis when more angles are needed.
 			if (last - first + 1 > 2) field.label += " · mieszanie tylko dwóch modów";
 		}
+		return field;
+	}
+
+	VibrationField CcdDirectionField(const CcdDisplacement &displacement)
+	{
+		const auto atoms = displacement.symbols.size();
+		if (atoms == 0 || displacement.masses.size() != atoms || displacement.gsPositions.size() != atoms ||
+			displacement.displacement.size() != atoms || !std::isfinite(displacement.deltaQ) || displacement.deltaQ <= 0.0)
+			return {};
+		VibrationField field;
+		field.symbols = displacement.symbols;
+		field.equilibriumAngstrom = displacement.gsPositions;
+		field.real = displacement.displacement;
+		field.motion = VibrationMotion::Sweep;
+		double total = 0.0;
+		for (std::size_t atom = 0; atom < atoms; ++atom)
+		{
+			const double mass = displacement.masses[atom];
+			if (field.symbols[atom].empty() || !std::isfinite(mass) || mass <= 0.0 ||
+				!Finite(field.real[atom]) || !Finite(field.equilibriumAngstrom[atom]))
+				return {};
+			const double weight = mass * glm::dot(field.real[atom], field.real[atom]);
+			total += weight;
+			field.participation.push_back(weight / (displacement.deltaQ * displacement.deltaQ));
+		}
+		if (!std::isfinite(total) || std::abs(std::sqrt(total) - displacement.deltaQ) > 1e-6 * displacement.deltaQ)
+			return {};
+		field.label = std::format("kierunek ΔQ · ΔQ {:.2f} amu^½ Å", displacement.deltaQ);
 		return field;
 	}
 

@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <nlohmann/json.hpp>
 #include "Core/Utils/Uuid.hpp"
 #include "IO/CcdAnalysisIO.hpp"
 #include "ScientificRuntime/ScientificRuntimeTestPaths.hpp"
@@ -138,6 +139,50 @@ namespace DefectStudio::Tests
 			EXPECT_NE(error.find(file), std::string::npos) << error;
 			Write(file.c_str(), saved);
 		}
+	}
+
+	TEST_F(CcdAnalysisIOTests, DisplacementLoadsOptionalGeometryAndWarnsWithoutDiscardingSpectra)
+	{
+		CcdAnalysisResult result;
+		std::string error;
+		ASSERT_TRUE(CcdAnalysisIO::Load(directory, result, error));
+		EXPECT_FALSE(result.displacement);
+		EXPECT_TRUE(result.loadWarnings.empty());
+		const auto json = nlohmann::json::parse(R"({"schema":"ds.ccd_displacement.v1","symbols":["H","He"],
+			"masses_amu":[1,4],"cell_angstrom":[[4,0,0],[0,4,0],[0,0,4]],
+			"gs_positions_angstrom":[[3.8,0,0],[1.6,0,0]],"displacement_angstrom":[[0.4,0,0],[-0.1,0,0]],
+			"delta_Q_amu05_A":0.4472135954999579,"gs_source":"../gs/CONTCAR","es_source":"../es/CONTCAR"})");
+		Write("ccd_displacement.json", json.dump());
+		ASSERT_TRUE(CcdAnalysisIO::Load(directory, result, error)) << error;
+		ASSERT_TRUE(result.displacement);
+		EXPECT_TRUE(error.empty());
+		EXPECT_TRUE(result.loadWarnings.empty());
+		const auto &data = *result.displacement;
+		EXPECT_EQ(data.symbols, (std::vector<std::string>{"H", "He"}));
+		EXPECT_EQ(data.masses, (std::vector<double>{1, 4}));
+		EXPECT_EQ(data.cell[1], glm::dvec3(0, 4, 0));
+		EXPECT_EQ(data.gsPositions[0], glm::dvec3(3.8, 0, 0));
+		EXPECT_EQ(data.displacement[1], glm::dvec3(-0.1, 0, 0));
+		EXPECT_EQ(Path::FromUtf8(data.gsSource), Path::FromResolved((directory.Native() / "../gs/CONTCAR").lexically_normal()));
+		for (const auto &[key, value] : std::vector<std::pair<std::string, nlohmann::json>>{
+			{"schema", "ds.ccd_displacement.v2"}, {"masses_amu", {1, 0}}, {"symbols", {"H"}},
+			{"gs_positions_angstrom", {{0, 0}}}, {"displacement_angstrom", {{0, 0, 0}, {0, 0, 0}}},
+			{"delta_Q_amu05_A", 1}, {"delta_Q_amu05_A", nullptr}, {"gs_source", ""}, {"cell_angstrom", {}}})
+		{
+			auto bad = json;
+			bad[key] = value;
+			Write("ccd_displacement.json", bad.dump());
+			ASSERT_TRUE(CcdAnalysisIO::Load(directory, result, error)) << key << ": " << error;
+			EXPECT_TRUE(error.empty());
+			EXPECT_FALSE(result.displacement);
+			ASSERT_EQ(result.loadWarnings.size(), 1u);
+			EXPECT_NE(result.loadWarnings[0].find("ccd_displacement.json"), std::string::npos);
+			EXPECT_EQ(result.pl1d.numerov.size(), 2u);
+		}
+		Write("ccd_displacement.json", "{");
+		ASSERT_TRUE(CcdAnalysisIO::Load(directory, result, error));
+		EXPECT_FALSE(result.displacement);
+		EXPECT_EQ(result.loadWarnings.size(), 1u);
 	}
 
 	TEST(CcdAnalysisReferenceTests, LoadsRealPointAndPhononEffectiveOutputsWhenPresent)

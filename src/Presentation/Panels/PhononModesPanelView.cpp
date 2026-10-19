@@ -143,17 +143,21 @@ namespace DefectStudio
 
 	void PhononModesPanel::drawVisualisation()
 	{
+		auto &settings = m_Session->Settings();
+		const auto ccdBlocker = m_Session->CcdDirectionBlocker();
 		ImGui::SeparatorText("Animacja drgań");
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Źródło"); ImGui::SameLine();
 		ImGui::SetNextItemWidth(190.0f);
-		if (ImGui::BeginCombo("##vibrationSource", "mod defektu"))
+		if (ImGui::BeginCombo("##vibrationSource", settings.animationSource == "ccd_direction" ? "kierunek ΔQ" : "mod defektu"))
 		{
-			(void)ImGui::Selectable("mod defektu", true);
+			if (ImGui::Selectable("mod defektu", settings.animationSource == "mode")) m_Session->SetAnimationSource("mode");
+			ImGui::BeginDisabled(!ccdBlocker.empty());
+			if (ImGui::Selectable("kierunek ΔQ", settings.animationSource == "ccd_direction")) m_Session->SetAnimationSource("ccd_direction");
+			if (!ccdBlocker.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("%s", ccdBlocker.c_str());
+			ImGui::EndDisabled();
 			ImGui::BeginDisabled();
-			(void)ImGui::Selectable("kierunek ΔQ", false);
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Wymaga wektora ΔR z analizy CCD (następna wersja).");
 			(void)ImGui::Selectable("mod bulku w q", false);
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				ImGui::SetTooltip("Wymaga modu bulku w punkcie q (następna wersja).");
@@ -161,8 +165,13 @@ namespace DefectStudio
 			ImGui::EndCombo();
 		}
 		ImGui::SetItemTooltip("Źródło pola przemieszczeń atomów.");
+		const bool ccd = settings.animationSource == "ccd_direction";
+		bool sweep = ccd && settings.ccdMotion == "sweep";
+		if (ccd && !ccdBlocker.empty()) ImGui::TextDisabled("%s", ccdBlocker.c_str());
+		if (ccd && m_Session->CcdResult())
+			for (const auto &warning : m_Session->CcdResult()->get().loadWarnings) ImGui::TextWrapped("%s", warning.c_str());
 		ImGui::TextUnformatted(m_Session->Field().label.c_str());
-		if (const auto partner = m_Session->DegeneratePartnerOfSelected())
+		if (const auto partner = m_Session->DegeneratePartnerOfSelected(); partner && !ccd)
 		{
 			ImGui::Text("Zdegenerowany z modem %d", m_Session->Result()->modes[*partner].index);
 			ImGui::AlignTextToFramePadding();
@@ -173,14 +182,33 @@ namespace DefectStudio
 				m_Session->SetMixAngle(angle * std::numbers::pi / 180.0);
 			ImGui::SetItemTooltip("cos θ · e1 + sin θ · e2; 0° = wybrany mod, 90° = partner");
 		}
-		ImGui::BeginDisabled(m_Session->Settings().forceConstantDirectory.Empty());
-		if (ImGui::Button("Otwórz superkomórkę")) m_Session->openSupercellWindow();
+		if (ccd)
+		{
+			ImGui::TextUnformatted("Ruch"); ImGui::SameLine();
+			ImGui::SetNextItemWidth(220.0f);
+			if (ImGui::BeginCombo("##ccdMotion", sweep ? "przejście GS ↔ ES" : "drganie wokół GS"))
+			{
+				if (ImGui::Selectable("przejście GS ↔ ES", sweep)) m_Session->SetCcdMotion("sweep");
+				if (ImGui::Selectable("drganie wokół GS", !sweep)) m_Session->SetCcdMotion("oscillate");
+				ImGui::EndCombo();
+			}
+			sweep = settings.ccdMotion == "sweep";
+			if (sweep)
+			{
+				float extent = static_cast<float>(settings.ccdExtent);
+				ImGui::TextUnformatted("Zasięg"); ImGui::SameLine();
+				ImGui::SetNextItemWidth(190.0f);
+				if (ImGui::DragFloat("##ccdExtent", &extent, 0.01f, 1.0f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+					m_Session->SetCcdExtent(extent);
+			}
+		}
+		ImGui::BeginDisabled(ccd ? !ccdBlocker.empty() || m_Session->supercellPath().Empty() : settings.forceConstantDirectory.Empty());
+		if (ImGui::Button(ccd ? "Otwórz geometrię GS" : "Otwórz superkomórkę")) m_Session->openSupercellWindow();
 		ImGui::EndDisabled();
-		if (m_Session->Settings().forceConstantDirectory.Empty()) ImGui::SetItemTooltip("Ustaw katalog stałych siłowych (FC).");
+		if (!ccd && settings.forceConstantDirectory.Empty()) ImGui::SetItemTooltip("Ustaw katalog stałych siłowych (FC).");
 		ImGui::SameLine();
 		if (!m_Session->m_WindowError.empty()) ImGui::TextDisabled("%s", m_Session->m_WindowError.c_str());
 		else if (const auto window = m_Session->targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
-		auto &settings = m_Session->Settings();
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Pokaż strzałki");
 		if (ImGui::IsItemClicked()) { settings.showArrows = !settings.showArrows; persist(); }
@@ -202,13 +230,15 @@ namespace DefectStudio
 		ImGui::SetItemTooltip("Duży udział");
 		ImGui::SameLine();
 		const auto window = m_Session->targetWindow();
-		const std::string animationBlocker = !m_Session->SelectedMode() ? "Wybierz mod." :
-			!window ? "Otwórz superkomórkę FC." : m_Session->m_WindowError;
-		ImGui::BeginDisabled(!window || !m_Session->m_WindowError.empty() || !m_Session->SelectedMode());
+		const std::string animationBlocker = ccd && !ccdBlocker.empty() ? ccdBlocker :
+			!ccd && !m_Session->SelectedMode() ? "Wybierz mod." :
+			!window ? (ccd ? "Otwórz geometrię GS." : "Otwórz superkomórkę FC.") : m_Session->m_WindowError;
+		ImGui::BeginDisabled(!animationBlocker.empty());
 		if (ImGui::Button(m_Session->IsAnimating() && !m_Session->m_Paused ? "⏸ Pauza" : "▶ Animuj"))
 		{
 			if (!m_Session->IsAnimating()) { m_Session->StartAnimation(window->get()); m_Session->m_Paused = false; }
 			else m_Session->m_Paused = !m_Session->m_Paused;
+			persist();
 		}
 		if (!animationBlocker.empty()) ImGui::SetItemTooltip("%s", animationBlocker.c_str());
 		ImGui::SameLine();
@@ -244,20 +274,23 @@ namespace DefectStudio
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("strzałek: %zu z %zu", m_Session->ArrowCount(), m_Session->Result()->AtomCount());
+		ImGui::Text("strzałek: %zu z %zu", m_Session->ArrowCount(), m_Session->Field().symbols.size());
 		ImGui::TableSetColumnIndex(1);
-		ImGui::Text("%zu atomów niesie %.1f %% modu", m_Session->AtomsCarryingSelectedFraction(), settings.carriedFraction * 100.0);
+		if (!ccd && m_Session->Result())
+			ImGui::Text("%zu atomów niesie %.1f %% modu", m_Session->AtomsCarryingSelectedFraction(), settings.carriedFraction * 100.0);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Amplituda [Å]");
 		ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("Okres [s]");
-		ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted("Faza");
+		ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted(sweep ? "Q [amu^½ Å]" : "Faza");
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		float amplitude = static_cast<float>(settings.animationAmplitudeAngstrom);
 		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::BeginDisabled(sweep);
 		if (ImGui::DragFloat("##animationAmplitude", &amplitude, 0.005f, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
 			settings.animationAmplitudeAngstrom = amplitude;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
+		ImGui::EndDisabled();
 		ImGui::TableSetColumnIndex(1);
 		float period = static_cast<float>(settings.animationPeriodSeconds);
 		ImGui::SetNextItemWidth(-FLT_MIN);
@@ -265,10 +298,17 @@ namespace DefectStudio
 			settings.animationPeriodSeconds = period;
 		if (ImGui::IsItemDeactivatedAfterEdit()) persist();
 		ImGui::TableSetColumnIndex(2);
-		ImGui::BeginDisabled(!window || !m_Session->m_Paused || !m_Session->IsAnimating());
+		ImGui::BeginDisabled(!window || !animationBlocker.empty() ||
+			(sweep ? m_Session->IsAnimating() && !m_Session->m_Paused : !m_Session->m_Paused || !m_Session->IsAnimating()));
 		float phase = static_cast<float>(m_Session->Phase());
 		ImGui::SetNextItemWidth(-FLT_MIN);
-		if (ImGui::SliderFloat("##phase", &phase, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, "%.2f rad", ImGuiSliderFlags_AlwaysClamp))
+		if (sweep)
+		{
+			float q = static_cast<float>(settings.ccdSweepQ);
+			if (ImGui::DragFloat("##ccdSweepQ", &q, 0.01f, 0.0f, static_cast<float>(m_Session->CcdSweepMaximum()), "%.3f", ImGuiSliderFlags_AlwaysClamp))
+				m_Session->SetCcdSweepQ(window->get(), q);
+		}
+		else if (ImGui::SliderFloat("##phase", &phase, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, "%.2f rad", ImGuiSliderFlags_AlwaysClamp))
 			m_Session->SetPhase(window->get(), phase);
 		ImGui::EndDisabled();
 		ImGui::EndTable();

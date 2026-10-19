@@ -75,9 +75,9 @@ namespace DefectStudio
 					m_LastSelectedMode = m_Session->Settings().selectedMode;
 					drawSummary();
 					drawModesTable();
-					drawVisualisation();
 				}
 				else ImGui::TextDisabled("Wczytaj wynik fononowy w oknie Fonony.");
+				drawVisualisation();
 			}
 			else drawPlots();
 			ImGui::PopID();

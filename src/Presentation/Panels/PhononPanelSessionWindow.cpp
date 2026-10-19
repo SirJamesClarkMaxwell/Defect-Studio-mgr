@@ -52,6 +52,8 @@ namespace DefectStudio
 
 	Path PhononPanelSession::supercellPath() const
 	{
+		if (m_Settings.animationSource == "ccd_direction")
+			return m_CcdResult && m_CcdResult->displacement ? Path::FromUtf8(m_CcdResult->displacement->gsSource) : Path{};
 		const PhononPanelSettings &settings = Settings();
 		if (!settings.resultDirectory.Empty() && FileSystem::Exists(settings.resultDirectory.Join("POSCAR").Native()))
 			return settings.resultDirectory.Join("POSCAR");
@@ -73,6 +75,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::syncWindow(double deltaSeconds)
 	{
+		if (IsAnimating() && m_AnimationSource != m_Settings.animationSource) StopAnimation();
 		const Path source = supercellPath();
 		if (m_WindowId.empty() && !m_BindRequested)
 			if (const auto bound = m_CaseWindows.find(ActiveCaseId()); bound != m_CaseWindows.end())
@@ -101,7 +104,9 @@ namespace DefectStudio
 				m_WindowId.clear();
 				m_BindRequested = false;
 			}
-			m_WindowError = m_BindRequested ? "Oczekiwanie na otwarcie POSCAR..." : "Otwórz superkomórkę FC.";
+			m_WindowError = m_BindRequested ? (m_Settings.animationSource == "ccd_direction" ?
+				"Oczekiwanie na otwarcie geometrii GS..." : "Oczekiwanie na otwarcie POSCAR...") :
+				m_Settings.animationSource == "ccd_direction" ? "Otwórz geometrię GS." : "Otwórz superkomórkę FC.";
 			return;
 		}
 		auto &target = window->get();

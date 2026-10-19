@@ -265,6 +265,19 @@ namespace DefectStudio
 				});
 				ReadNumber(view, "participationThreshold", settings.participationThreshold, outWarnings, 0.0, 1.0);
 				ReadNumber(view, "minHuangRhys", settings.minHuangRhys, outWarnings);
+				ReadSetting(view, "animationSource", settings.animationSource, outWarnings, [](const YAML::Node &node) {
+					const auto value = node.as<std::string>();
+					if (value != "mode" && value != "ccd_direction") throw std::invalid_argument("unknown animation source");
+					return value;
+				});
+				ReadNumber(view, "mixAngleDegrees", settings.mixAngleDegrees, outWarnings, 0.0, 180.0);
+				ReadSetting(view, "ccdMotion", settings.ccdMotion, outWarnings, [](const YAML::Node &node) {
+					const auto value = node.as<std::string>();
+					if (value != "sweep" && value != "oscillate") throw std::invalid_argument("unknown CCD motion");
+					return value;
+				});
+				ReadNumber(view, "ccdSweepQ", settings.ccdSweepQ, outWarnings);
+				ReadNumber(view, "ccdExtent", settings.ccdExtent, outWarnings, 1.0, 2.0);
 				ReadNumber(view, "carriedFraction", settings.carriedFraction, outWarnings, 0.0, 1.0, true);
 				ReadNumber(view, "arrowLength", settings.arrowLengthAngstrom, outWarnings, 0.0,
 					std::numeric_limits<double>::max(), true);
@@ -369,6 +382,11 @@ namespace DefectStudio
 		for (const auto &path : settings.comparedDirectories) emit << StoredPath(path, projectDirectory);
 		emit << YAML::EndSeq << YAML::EndMap << YAML::Key << "view" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "selectedMode" << YAML::Value << settings.selectedMode
+			<< YAML::Key << "animationSource" << YAML::Value << settings.animationSource
+			<< YAML::Key << "mixAngleDegrees" << YAML::Value << settings.mixAngleDegrees
+			<< YAML::Key << "ccdMotion" << YAML::Value << settings.ccdMotion
+			<< YAML::Key << "ccdSweepQ" << YAML::Value << settings.ccdSweepQ
+			<< YAML::Key << "ccdExtent" << YAML::Value << settings.ccdExtent
 			<< YAML::Key << "participationThreshold" << YAML::Value << settings.participationThreshold
 			<< YAML::Key << "minHuangRhys" << YAML::Value << settings.minHuangRhys
 			<< YAML::Key << "carriedFraction" << YAML::Value << settings.carriedFraction
