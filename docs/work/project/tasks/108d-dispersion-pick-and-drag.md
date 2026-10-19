@@ -38,10 +38,17 @@ animating with the new field.
    not match, stop the animation (rest positions restored) and show the existing „Otwórz superkomórkę bulku”.
 5. **Newest wins**: a new submission cancels the pending mode job (108c); a result of a cancelled/older request is
    never applied (check a request id, not only cancellation).
+6. **Output directories** (follow-up from the 108c review): 108c publishes every request into a new
+   `bulk_mode_<uuid>` directory, which piles up while dragging. Name the output deterministically from the request:
+   `bulk_mode_q<qx>_<qy>_<qz>_b<band>_<supercell>` (q rounded to 6 decimals, `-` -> `m`, `.` -> `p`; supercell =
+   the requested text, `auto` or `NxMxK`) under the same
+   parent as today, so repeating a request reuses (overwrites) its directory and different requests never overwrite
+   each other (a stale cancelled run can only rewrite the same request's content). Keep the request-id check.
 
 ## Files to create or change
 
 - `src/Presentation/Panels/PhononPlotData.{hpp,cpp}` (pure helpers)
+- `src/Presentation/Panels/PhononPanelSessionBulkMode.cpp` (output directory naming, item 6)
 - `src/Presentation/Panels/PhononModesPanelDispersionPlot.cpp`
 - `src/Presentation/Panels/PhononPanelSession.hpp` + the 108c bulk-mode session file (request id, picked row,
   submit-from-pick, field swap)
@@ -60,7 +67,8 @@ animating with the new field.
 2. Session: pick -> source `bulk_q`, case `bulkQ`/`bulkBand` set, one job submitted; two quick requests -> only the
    newest result applied; with a bound bulk window and `auto`, the request carries the window's N×M×K; a matching new
    field keeps `IsAnimating()` true and the rest positions unchanged; a non-matching one stops and restores.
-3. Existing tests pass. Report: files, tests, anything not done; say how the click vs pan distinction behaves.
+3. Output directory: the same request twice -> the same directory; different q/band/supercell -> different ones.
+4. Existing tests pass. Report: files, tests, anything not done; say how the click vs pan distinction behaves.
 
 ## Constraints
 
