@@ -35,7 +35,7 @@ namespace DefectStudio
 						AnalysisDatasetKind::Phonons : AnalysisDatasetKind::Ccd, path, path.filename().Utf8() + " (bez podsumowania)", {}});
 		bool showOther = false;
 		const auto groupFor = [&](const AnalysisDatasetRef &dataset) {
-			if (dataset.kind == AnalysisDatasetKind::Dispersion) return 3;
+			if (dataset.kind == AnalysisDatasetKind::Dispersion || dataset.kind == AnalysisDatasetKind::BulkMode) return 3;
 			const auto owner = m_Session->DatasetCaseId(dataset.directory);
 			if (!owner.empty() && owner == m_Session->ActiveCaseId()) return 0;
 			if (std::any_of(proposed.begin(), proposed.end(), [&](const auto &path) {
@@ -69,14 +69,15 @@ namespace DefectStudio
 						showOther = ImGui::CollapsingHeader("Inne");
 						ImGui::SetItemTooltip("Zestawy nieprzypięte lub należące do innych przypadków.");
 					}
-					else ImGui::TextUnformatted(group == 0 ? "Przypięte" : group == 1 ? "Proponowane" : "Dyspersja (globalna)");
+					else ImGui::TextUnformatted(group == 0 ? "Przypięte" : group == 1 ? "Proponowane" : "Bulk (współdzielone zestawy)");
 				}
 				if (group == 2 && !showOther) continue;
 				ImGui::PushID(dataset.directory.Utf8().c_str());
 				ImGui::TableNextRow();
 				// Loaded = the panel uses it (one per kind, a marker); current = the one row last opened, the only fill.
 				const bool active = PhononPanelSession::SameFilePath(dataset.directory,
-					dataset.kind == AnalysisDatasetKind::Dispersion ? settings.selectedDispersionDirectory :
+						dataset.kind == AnalysisDatasetKind::Dispersion ? settings.selectedDispersionDirectory :
+						dataset.kind == AnalysisDatasetKind::BulkMode ? settings.selectedBulkModeDirectory :
 					dataset.kind == AnalysisDatasetKind::Ccd ? settings.selectedCcdDirectory : settings.resultDirectory, m_Session->m_ProjectDirectory);
 				if (PhononPanelSession::SameFilePath(dataset.directory, m_Session->CurrentDataset(), m_Session->m_ProjectDirectory))
 				{
@@ -86,11 +87,11 @@ namespace DefectStudio
 				}
 				ImGui::TableSetColumnIndex(0);
 				bool compared = m_Session->IsCompared(dataset.directory);
-				ImGui::BeginDisabled(dataset.kind == AnalysisDatasetKind::Dispersion || dataset.schema.empty());
+				ImGui::BeginDisabled(dataset.kind == AnalysisDatasetKind::Dispersion || dataset.kind == AnalysisDatasetKind::BulkMode || dataset.schema.empty());
 				if (ImGui::Checkbox("##compare", &compared)) { m_Session->SetCompared(dataset.directory, compared); persist(); }
 				ImGui::EndDisabled();
 				ImGui::SetItemTooltip("%s", dataset.schema.empty() ? "Brak widma: wygenerowane punkty CCD lub niedostępny wynik. Przeskanuj zestawy po obliczeniach." :
-					dataset.kind == AnalysisDatasetKind::Dispersion ?
+					(dataset.kind == AnalysisDatasetKind::Dispersion || dataset.kind == AnalysisDatasetKind::BulkMode) ?
 					"Porównaj widma fononowe lub PL 1D zestawów CCD." : "Dodaj / usuń zestaw w globalnym porównaniu.");
 				ImGui::TableSetColumnIndex(1);
 				// Not `selected`: the accent row background marks it over the full row height (checkbox
@@ -102,7 +103,7 @@ namespace DefectStudio
 				ImGui::PopStyleVar();
 				ImGui::EndDisabled();
 				if (dataset.schema.empty()) ImGui::SetItemTooltip("Brak podsumowania wyniku; punkty CCD trzeba najpierw obliczyć i przeanalizować.");
-				if (active) ImGui::SetItemTooltip("Wczytany: panel używa tego zestawu (jeden na rodzaj: fonony, dyspersja, CCD).");
+				if (active) ImGui::SetItemTooltip("Wczytany: panel używa tego zestawu (jeden na rodzaj: fonony, dyspersja, mod bulku, CCD).");
 				ImGui::TableSetColumnIndex(2);
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(dataset.label.c_str());
@@ -127,7 +128,7 @@ namespace DefectStudio
 				}
 				ImGui::TableSetColumnIndex(3);
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextUnformatted(dataset.kind == AnalysisDatasetKind::Phonons ? "fonony" : dataset.kind == AnalysisDatasetKind::Dispersion ? "dyspersja" : "CCD");
+				ImGui::TextUnformatted(dataset.kind == AnalysisDatasetKind::Phonons ? "fonony" : dataset.kind == AnalysisDatasetKind::Dispersion ? "dyspersja" : dataset.kind == AnalysisDatasetKind::BulkMode ? "mod bulku" : "CCD");
 				ImGui::TableSetColumnIndex(4);
 				ImGui::AlignTextToFramePadding();
 				const auto pathLabel = PhononPanelSession::DirectoryLabel(dataset.directory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
@@ -162,6 +163,7 @@ namespace DefectStudio
 				(void)m_Session->AddCase(selected->label);
 			if (selected->kind == AnalysisDatasetKind::Phonons) m_Session->loadResult(selected->directory);
 			else if (selected->kind == AnalysisDatasetKind::Ccd) (void)m_Session->loadCcdResult(selected->directory);
+			else if (selected->kind == AnalysisDatasetKind::BulkMode) (void)m_Session->LoadBulkMode(selected->directory);
 			else (void)m_Session->loadDispersion(selected->directory);
 			persist();
 		}

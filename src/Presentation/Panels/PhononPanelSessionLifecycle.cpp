@@ -41,6 +41,7 @@ namespace DefectStudio
 		pollCcdJob();
 		pollCcdAnalysisJob();
 		pollDispersionJob();
+		pollBulkModeJob();
 		pollFigureJob();
 		submitNextBatch();
 		(void)PollDatasetScan();

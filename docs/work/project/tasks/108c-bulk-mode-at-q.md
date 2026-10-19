@@ -24,15 +24,16 @@ bulks show different dispersions after a case switch, two cases with the same bu
    the FC loading of `phonon_dispersion.analyse`: `ForceConstants(fc_dir)`, `ensure_symmetry()` unless
    `--no-symmetrize`, `fc.Phonopy(unit_cell=fc.atoms)`):
    - args: `--fc-dir`, `--q qx qy qz` (same basis as `qpoints.tsv`), `--band` (zero-based branch at that q,
-     ascending frequency), `--supercell auto|NxMxK` (diagonal multiples of the phonopy UNIT cell), `--in-plane`
+     ascending frequency), `--supercell auto|NxMxK` (diagonal multiples of the phonopy PRIMITIVE cell - the cell
+     the dispersion path and q refer to; the loaded unit cell can itself be a 9×9×1 supercell), `--in-plane`
      (z multiple forced to 1), `--max-multiple` (default 24), `--degenerate-tol-mev` (default 0.5), `--out-dir`,
      `--self-test`.
-   - Compute with phonopy's modulation API (`run_modulations` / `get_modulations_and_supercell`), NOT a hand-written
-     phase: it applies e_κ · exp(i 2π q·(R + τ_κ)) / √m_κ exactly once. VERIFY in the installed phonopy source which
-     basis its modulation q uses (primitive vs unit-cell reciprocal) and convert from the primitive basis if needed;
-     write the conversion and the source line you checked into the report.
-   - `auto` supercell: the smallest diagonal N×M×K (each ≤ `--max-multiple`, K = 1 with `--in-plane`) with
-     q_unit_i · N_i ∈ ℤ (tolerance 1e-6), q_unit = q converted to the unit-cell reciprocal basis. If none exists:
+   - (Revised twice 2026-10-20.) phonopy 4.2.2 measures modulation dimensions from the PRIMITIVE cell, so use
+     phonopy's modulation API (`run_modulations` / `get_modulations_and_supercell`) with dimension = N×M×K of the
+     primitive cell; it applies e_κ · exp(i 2π q·(R + τ_κ)) / √m_κ itself (cite the source line in the report). No
+     hand-built phase, no unit-cell cross-check.
+   - `auto` supercell: the smallest diagonal N×M×K of the primitive cell (each ≤ `--max-multiple`, K = 1 with
+     `--in-plane`) with q_i · N_i ∈ ℤ (tolerance 1e-6), q in the primitive reciprocal basis. If none exists:
      use the smallest N×M×K whose fragment shows at least one wavelength along each in-plane direction where q ≠ 0,
      capped by `--max-multiple`, and set `commensurate: false`. An explicit NxMxK that is not commensurate is
      computed anyway with `commensurate: false`. `suggested_supercell` = the smallest commensurate one or null.
@@ -57,8 +58,10 @@ bulks show different dispersions after a case switch, two cases with the same bu
      `commensurate: false`, `suggested_supercell: null` with `--max-multiple 24`; (e) mass division happens once
      (two masses, compare with e/√m by hand at Γ optical).
    - Real-data check for the report (do not commit outputs): bulk hBN FC in
-     `test-directory/sjcm_mgr/hBN/bulk/phonons/vasp_661` at K (1/3, 1/3, 0) with `--in-plane`: N×M×K = 3×3×1,
-     the two degenerate branches at K report a partner.
+     `test-directory/sjcm_mgr/hBN/bulk/phonons/vasp_661` (2-atom primitive, unit cell 9×9×1 of it): at K
+     (1/3, 1/3, 0) with `--in-plane` `auto` gives 3×3×1 (18 atoms), frequencies match `run_qpoints` (first run:
+     38.74, 76.00, 110.55, 133.75, 148.03, 159.32 meV), no partner (B ≠ N lifts the K degeneracy); at Γ the in-plane
+     optical pair (E′) report each other as partners (the three acoustic branches at Γ are all ~0, any partner is fine).
 3. **IO** `src/IO/PhononModeIO.{hpp,cpp}` (new): `Load(directory, PhononModeField &out, std::string &error)` for
    `vibration.json`; `PhononModeField` lives in new `src/Domain/Vibrations/BulkMode.hpp` (plain data: label,
    frequencyMeV, q, band, bandCount, supercell, commensurate, optional suggestedSupercell, symbols, masses, cell,
@@ -124,7 +127,7 @@ bulks show different dispersions after a case switch, two cases with the same bu
 
 1. `.venv/Scripts/python.exe scripts/python/examples/phonon_mode.py --self-test` passes (a)-(e); the dispersion
    script's existing tests pass and a dispersion output has `qpoints.tsv` with the same row count.
-2. Real-data check reported (K point 3×3×1, degenerate partner) - numbers in the report.
+2. Real-data check reported (K: 3×3×1, no partner; Γ: E′ partners) - numbers in the report.
 3. IO: synthetic `vibration.json` roundtrip; partner absent/present; malformed -> error; `qpoints.tsv` absent ->
    empty, mismatched rows -> error; dataset scan recognises `ds.phonon_mode.v1`.
 4. Domain: `BulkModeField` at θ = 0 equals the main field, θ = 90° the partner; participation sums to 1.

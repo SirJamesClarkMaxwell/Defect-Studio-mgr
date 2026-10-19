@@ -114,6 +114,23 @@ namespace DefectStudio::PhononDispersionIO
 					result.bandsMeV[band].push_back(Number(columns[band + 2]));
 			}
 			if (result.distance.empty()) throw std::invalid_argument("Empty dispersion.tsv");
+			if (FileSystem::Exists((directory / "qpoints.tsv").Native()))
+			{
+				std::string qText;
+				if (!TextFileIO::Load(directory / "qpoints.tsv", qText, error)) return false;
+				std::istringstream qTable(qText);
+				std::getline(qTable, line);
+				if (Columns(line) != std::vector<std::string>{"qx", "qy", "qz"})
+					throw std::invalid_argument("Invalid qpoints.tsv header");
+				while (std::getline(qTable, line))
+				{
+					if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
+					const auto columns = Columns(line);
+					if (columns.size() != 3) throw std::invalid_argument("Invalid qpoints.tsv row");
+					result.qpoints.emplace_back(Number(columns[0]), Number(columns[1]), Number(columns[2]));
+				}
+				if (result.qpoints.size() != result.distance.size()) throw std::invalid_argument("qpoints.tsv row count mismatch");
+			}
 			out = std::move(result);
 			return true;
 		}

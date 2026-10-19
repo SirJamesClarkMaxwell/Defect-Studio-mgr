@@ -54,6 +54,24 @@ namespace DefectStudio::Tests
 		EXPECT_DOUBLE_EQ(result.minMeV, -2.0);
 		EXPECT_DOUBLE_EQ(result.maxMeV, 8.0);
 		EXPECT_TRUE(result.inPlane);
+		EXPECT_TRUE(result.qpoints.empty());
+	}
+
+	TEST_F(PhononDispersionIOTests, OptionalQpointsMustMatchRowsAndContainFiniteTriples)
+	{
+		PhononDispersion result;
+		std::string error;
+		Write("qpoints.tsv", "qx\tqy\tqz\n0\t0\t0\n0.5\t0\t0\n0.333333333333\t0.333333333333\t0\n0\t0\t0\n");
+		ASSERT_TRUE(PhononDispersionIO::Load(directory, result, error)) << error;
+		ASSERT_EQ(result.qpoints.size(), 4u);
+		EXPECT_EQ(result.qpoints[1], glm::dvec3(0.5, 0, 0));
+		for (const char *text : {"qx\tqy\tqz\n0\t0\t0\n", "qx\tqy\tqz\n0\tnan\t0\n", "qx\tqy\tqz\n0\t0\n", "x\ty\tz\n"})
+		{
+			Write("qpoints.tsv", text);
+			EXPECT_FALSE(PhononDispersionIO::Load(directory, result, error));
+			EXPECT_FALSE(error.empty());
+			EXPECT_EQ(result.qpoints.size(), 4u);
+		}
 	}
 
 	TEST_F(PhononDispersionIOTests, WrongSchemaFailsWithoutReplacingTheResult)

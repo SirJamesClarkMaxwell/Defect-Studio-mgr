@@ -28,6 +28,7 @@ namespace DefectStudio
 		ClearCcdResult();
 		Settings() = std::move(settings);
 		m_CaseWindows.clear();
+		m_BulkWindows.clear();
 		m_CheckedCases.clear();
 		m_CaseRuns.clear();
 		m_BatchDone = m_BatchTotal = 0;
@@ -59,19 +60,23 @@ namespace DefectStudio
 		}
 		if (!Settings().resultDirectory.Empty())
 			loadResult(Settings().resultDirectory);
-		if (!Settings().selectedDispersionDirectory.Empty())
-			(void)loadDispersion(Settings().selectedDispersionDirectory);
+		loadCaseBulk();
 		if (!Settings().selectedCcdDirectory.Empty())
 			(void)loadCcdResult(Settings().selectedCcdDirectory);
 		for (const auto &path : Settings().comparedDirectories)
 			if (auto ref = ReadDatasetRef(path)) AddDataset(std::move(*ref));
 		for (const auto &item : Cases())
+		{
+			for (const auto &path : {item.settings.selectedDispersionDirectory, item.settings.selectedBulkModeDirectory})
+				if (auto ref = ReadDatasetRef(path)) AddDataset(std::move(*ref));
 			for (const auto &path : item.datasets)
 				if (auto ref = ReadDatasetRef(path)) AddDataset(std::move(*ref));
+		}
 		// The loads above each made their own row current; on project open the phonon result wins.
 		const auto &loaded = Settings();
 		SetCurrentDataset(!loaded.resultDirectory.Empty() ? loaded.resultDirectory :
-			!loaded.selectedCcdDirectory.Empty() ? loaded.selectedCcdDirectory : loaded.selectedDispersionDirectory);
+			!loaded.selectedCcdDirectory.Empty() ? loaded.selectedCcdDirectory :
+			!loaded.selectedBulkModeDirectory.Empty() ? loaded.selectedBulkModeDirectory : loaded.selectedDispersionDirectory);
 	}
 
 	void PhononPanelSession::SetDirectory(const std::string &role, const Path &directory)
@@ -88,7 +93,17 @@ namespace DefectStudio
 		else if (role == "gs") settings.groundStateDirectory = selectedDirectory;
 		else if (role == "es") settings.excitedStateDirectory = selectedDirectory;
 		else if (role == "triplet") settings.tripletDirectory = selectedDirectory;
-		else if (role == "bulk") settings.bulkForceConstantDirectory = selectedDirectory;
+		else if (role == "bulk")
+		{
+			if (!SameFilePath(settings.bulkForceConstantDirectory, selectedDirectory, m_ProjectDirectory))
+			{
+				if (settings.animationSource == "bulk_q") clearWindow();
+				settings.selectedDispersionDirectory = {};
+				settings.selectedBulkModeDirectory = {};
+			}
+			settings.bulkForceConstantDirectory = selectedDirectory;
+			loadCaseBulk();
+		}
 		else if (role == "result")
 		{
 			loadResult(selectedDirectory);

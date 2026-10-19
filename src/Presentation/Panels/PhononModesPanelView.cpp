@@ -3,10 +3,13 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <format>
 #include <numbers>
 #include <imgui.h>
+
+#include "Core/JobSystem/JobSystem.hpp"
 
 #include "Renderer/RendererWindowState.hpp"
 #include "Presentation/Panels/PhononPlotData.hpp"
@@ -149,7 +152,7 @@ namespace DefectStudio
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Źródło"); ImGui::SameLine();
 		ImGui::SetNextItemWidth(190.0f);
-		if (ImGui::BeginCombo("##vibrationSource", settings.animationSource == "ccd_direction" ? "kierunek ΔQ" : "mod defektu"))
+		if (ImGui::BeginCombo("##vibrationSource", settings.animationSource == "bulk_q" ? "mod bulku w q" : settings.animationSource == "ccd_direction" ? "kierunek ΔQ" : "mod defektu"))
 		{
 			if (ImGui::Selectable("mod defektu", settings.animationSource == "mode")) m_Session->SetAnimationSource("mode");
 			ImGui::BeginDisabled(!ccdBlocker.empty());
@@ -157,23 +160,93 @@ namespace DefectStudio
 			if (!ccdBlocker.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				ImGui::SetTooltip("%s", ccdBlocker.c_str());
 			ImGui::EndDisabled();
-			ImGui::BeginDisabled();
-			(void)ImGui::Selectable("mod bulku w q", false);
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("Wymaga modu bulku w punkcie q (następna wersja).");
+			ImGui::BeginDisabled(settings.bulkForceConstantDirectory.Empty());
+			if (ImGui::Selectable("mod bulku w q", settings.animationSource == "bulk_q")) m_Session->SetAnimationSource("bulk_q");
+			if (settings.bulkForceConstantDirectory.Empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("Ustaw katalog FC bulku w przypadku.");
 			ImGui::EndDisabled();
 			ImGui::EndCombo();
 		}
 		ImGui::SetItemTooltip("Źródło pola przemieszczeń atomów.");
 		const bool ccd = settings.animationSource == "ccd_direction";
+		const bool bulk = settings.animationSource == "bulk_q";
 		bool sweep = ccd && settings.ccdMotion == "sweep";
+		if (bulk)
+		{
+			ImGui::TextUnformatted("q (zredukowane, baza prymitywna)");
+			for (int axis = 0; axis < 3; ++axis)
+			{
+				if (axis) ImGui::SameLine();
+				float value = static_cast<float>(settings.bulkQ[axis]);
+				ImGui::SetNextItemWidth(110.0f);
+				if (ImGui::DragFloat(axis == 0 ? "qx" : axis == 1 ? "qy" : "qz", &value, 0.001f, 0.0f, 0.0f, "%.6g"))
+				{
+					settings.bulkQ[axis] = value;
+					persist();
+				}
+			}
+			ImGui::SetNextItemWidth(150.0f);
+			if (ImGui::InputInt("Gałąź", &settings.bulkBand))
+			{
+				settings.bulkBand = std::clamp(settings.bulkBand, 0, m_Session->m_Dispersion ? m_Session->m_Dispersion->bandCount - 1 : INT_MAX);
+				persist();
+			}
+			std::vector<char> size(settings.bulkSupercell.begin(), settings.bulkSupercell.end());
+			size.resize(size.size() + 128, '\0');
+			ImGui::SetNextItemWidth(190.0f);
+			if (ImGui::InputText("Superkomórka", size.data(), size.size())) { settings.bulkSupercell = size.data(); persist(); }
+			ImGui::SetItemTooltip("auto lub NxMxK, np. 3x3x1; wielokrotności komórki prymitywnej. W 2D K = 1.");
+			const auto reason = m_Session->BulkModeBlocker();
+			const std::string blocker = !reason.empty() ? reason : m_Session->IsBusy() ? "Poczekaj na zakończenie bieżącego zadania." : "";
+			ImGui::BeginDisabled(!blocker.empty());
+			if (ImGui::Button("Policz mod")) m_Session->SubmitBulkMode();
+			ImGui::EndDisabled();
+			if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
+			if (m_Session->m_PendingModeJob)
+			{
+				const auto jobs = m_Session->m_JobSystem.lock();
+				const auto snapshot = jobs ? jobs->GetJob(m_Session->m_PendingModeJobId) : std::nullopt;
+				if (snapshot) ImGui::ProgressBar(snapshot->totalWork > 0.0f ? snapshot->completedWork / snapshot->totalWork : 0.0f,
+					ImVec2(-1.0f, 0.0f), snapshot->currentMessage.c_str());
+				if (ImGui::Button("Anuluj mod bulku")) m_Session->CancelBulkMode();
+			}
+			if (!m_Session->m_BulkModeError.empty()) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_Session->m_BulkModeError.c_str());
+			if (const auto &mode = m_Session->BulkMode(); mode)
+			{
+				ImGui::Text("ℏω = %.3f meV, q = (%.6g, %.6g, %.6g), gałąź %d, %d×%d×%d", mode->frequencyMeV,
+					mode->q.x, mode->q.y, mode->q.z, mode->band, mode->supercell[0], mode->supercell[1], mode->supercell[2]);
+				if (!mode->commensurate)
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Ruch nie domyka się okresowo w tej superkomórce (fragment fali).");
+					if (mode->suggestedSupercell)
+					{
+						const auto &suggested = *mode->suggestedSupercell;
+						const auto value = std::format("{}x{}x{}", suggested[0], suggested[1], suggested[2]);
+						const auto label = std::format("Użyj {}×{}×{}", suggested[0], suggested[1], suggested[2]);
+						ImGui::BeginDisabled(m_Session->IsBusy());
+						if (ImGui::Button(label.c_str()))
+						{
+							settings.bulkQ = mode->q;
+							settings.bulkBand = mode->band;
+							settings.bulkSupercell = value;
+							if (suggested[2] != 1) settings.dispersionInPlane = false;
+							m_Session->SubmitBulkMode();
+						}
+						ImGui::EndDisabled();
+					}
+					else ImGui::TextDisabled("Brak współmiernej superkomórki ≤ 24");
+				}
+			}
+		}
 		if (ccd && !ccdBlocker.empty()) ImGui::TextDisabled("%s", ccdBlocker.c_str());
 		if (ccd && m_Session->CcdResult())
 			for (const auto &warning : m_Session->CcdResult()->get().loadWarnings) ImGui::TextWrapped("%s", warning.c_str());
 		ImGui::TextUnformatted(m_Session->Field().label.c_str());
-		if (const auto partner = m_Session->DegeneratePartnerOfSelected(); partner && !ccd)
+		if (const auto partner = bulk ? (m_Session->BulkMode() && m_Session->BulkMode()->partner ?
+			std::optional<std::size_t>(m_Session->BulkMode()->partner->band) : std::nullopt) : m_Session->DegeneratePartnerOfSelected(); partner && !ccd)
 		{
-			ImGui::Text("Zdegenerowany z modem %d", m_Session->Result()->modes[*partner].index);
+			if (bulk) ImGui::Text("Zdegenerowany z gałęzią %zu", *partner);
+			else ImGui::Text("Zdegenerowany z modem %d", m_Session->Result()->modes[*partner].index);
 			ImGui::AlignTextToFramePadding();
 			ImGui::TextUnformatted("Mieszanie θ"); ImGui::SameLine();
 			float angle = static_cast<float>(m_Session->MixAngle() * 180.0 / std::numbers::pi);
@@ -202,10 +275,10 @@ namespace DefectStudio
 					m_Session->SetCcdExtent(extent);
 			}
 		}
-		ImGui::BeginDisabled(ccd ? !ccdBlocker.empty() || m_Session->supercellPath().Empty() : settings.forceConstantDirectory.Empty());
-		if (ImGui::Button(ccd ? "Otwórz geometrię GS" : "Otwórz superkomórkę")) m_Session->openSupercellWindow();
+		ImGui::BeginDisabled(bulk ? !m_Session->BulkMode() || m_Session->supercellPath().Empty() : ccd ? !ccdBlocker.empty() || m_Session->supercellPath().Empty() : settings.forceConstantDirectory.Empty());
+		if (ImGui::Button(bulk ? "Otwórz superkomórkę bulku" : ccd ? "Otwórz geometrię GS" : "Otwórz superkomórkę")) m_Session->openSupercellWindow();
 		ImGui::EndDisabled();
-		if (!ccd && settings.forceConstantDirectory.Empty()) ImGui::SetItemTooltip("Ustaw katalog stałych siłowych (FC).");
+		if (!ccd && !bulk && settings.forceConstantDirectory.Empty()) ImGui::SetItemTooltip("Ustaw katalog stałych siłowych (FC).");
 		ImGui::SameLine();
 		if (!m_Session->m_WindowError.empty()) ImGui::TextDisabled("%s", m_Session->m_WindowError.c_str());
 		else if (const auto window = m_Session->targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
@@ -231,8 +304,9 @@ namespace DefectStudio
 		ImGui::SameLine();
 		const auto window = m_Session->targetWindow();
 		const std::string animationBlocker = ccd && !ccdBlocker.empty() ? ccdBlocker :
-			!ccd && !m_Session->SelectedMode() ? "Wybierz mod." :
-			!window ? (ccd ? "Otwórz geometrię GS." : "Otwórz superkomórkę FC.") : m_Session->m_WindowError;
+			bulk && !m_Session->BulkMode() ? "Policz lub wczytaj mod bulku." :
+			!ccd && !bulk && !m_Session->SelectedMode() ? "Wybierz mod." :
+			!window ? (bulk ? "Otwórz superkomórkę bulku." : ccd ? "Otwórz geometrię GS." : "Otwórz superkomórkę FC.") : m_Session->m_WindowError;
 		ImGui::BeginDisabled(!animationBlocker.empty());
 		if (ImGui::Button(m_Session->IsAnimating() && !m_Session->m_Paused ? "⏸ Pauza" : "▶ Animuj"))
 		{
@@ -276,7 +350,7 @@ namespace DefectStudio
 		ImGui::TableSetColumnIndex(0);
 		ImGui::Text("strzałek: %zu z %zu", m_Session->ArrowCount(), m_Session->Field().symbols.size());
 		ImGui::TableSetColumnIndex(1);
-		if (!ccd && m_Session->Result())
+		if (!ccd && !bulk && m_Session->Result())
 			ImGui::Text("%zu atomów niesie %.1f %% modu", m_Session->AtomsCarryingSelectedFraction(), settings.carriedFraction * 100.0);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Amplituda [Å]");

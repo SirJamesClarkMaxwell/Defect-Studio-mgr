@@ -23,6 +23,7 @@ namespace DefectStudio
 			if (schema == "ds.phonon_vibronic.v1") kind = AnalysisDatasetKind::Phonons;
 			else if (schema == "ds.phonon_dispersion.v1") kind = AnalysisDatasetKind::Dispersion;
 			else if (schema == "ds.ccd_analysis.v1") kind = AnalysisDatasetKind::Ccd;
+			else if (schema == "ds.phonon_mode.v1") kind = AnalysisDatasetKind::BulkMode;
 			else return std::nullopt;
 			AnalysisDatasetRef dataset{kind, Path::FromResolved(directory.Native().lexically_normal()),
 				summary.value("label", directory.filename().Utf8()), schema};

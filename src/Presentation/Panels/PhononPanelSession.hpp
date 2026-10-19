@@ -39,6 +39,7 @@ namespace DefectStudio
 	class CcdInputsJob;
 	class CcdAnalysisJob;
 	class PhononDispersionJob;
+	class PhononModeJob;
 	class AnalysisDatasetScanJob;
 	namespace Tests { struct PhononBatchTestAccess; }
 
@@ -77,6 +78,16 @@ namespace DefectStudio
 		void SubmitCcdInputs();
 		void SubmitCcdAnalysis();
 		void SubmitDispersion();
+		void SubmitBulkMode();
+		void CancelBulkMode();
+		[[nodiscard]] bool IsBulkModeRunning() const noexcept { return m_PendingModeJob != nullptr; }
+		[[nodiscard]] std::string BulkModeBlocker() const;
+		[[nodiscard]] static bool ValidBulkSupercell(const std::string &value);
+		[[nodiscard]] const std::optional<PhononModeField> &BulkMode() const noexcept { return m_BulkMode; }
+		[[nodiscard]] const std::optional<PhononDispersion> &Dispersion() const noexcept { return m_Dispersion; }
+		void SetBulkMode(PhononModeField mode);
+		bool LoadBulkMode(const Path &directory, bool adoptControls = true);
+		void OpenBulkSupercellWindow();
 		void StartBatch(std::vector<std::string> caseIds, std::vector<PhononBatchStep> steps);
 		void CancelBatch();
 		[[nodiscard]] const PhononCaseRun &CaseRun(const std::string &caseId) const;
@@ -88,7 +99,7 @@ namespace DefectStudio
 			const PhononCaseSettings &settings, const std::string &caseId) const;
 		[[nodiscard]] bool IsBusy() const noexcept
 		{
-			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob;
+			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob || m_PendingModeJob;
 		}
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
 		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
@@ -231,6 +242,17 @@ namespace DefectStudio
 		friend class PhononModesPanel;
 		friend void DrawPhononCases(PhononPanelSession &session);
 		friend struct Tests::PhononBatchTestAccess;
+		void pollBulkModeJob();
+		void loadCaseBulk();
+		void selectCaseDispersion();
+		[[nodiscard]] bool bulkWindowMatches(const RendererWindowState &window, std::string &error) const;
+		[[nodiscard]] bool isBulkWindow(const RendererWindowState &window, const Path &projectDirectory) const;
+		Ref<PhononModeJob> m_PendingModeJob;
+		JobId m_PendingModeJobId = 0;
+		std::string m_PendingModeCaseId, m_PendingDispersionCaseId;
+		std::optional<PhononModeField> m_BulkMode;
+		std::string m_BulkModeError;
+		std::map<std::string, std::string> m_BulkWindows;
 		void submitFigure(const Path &specPath, bool all);
 		void pollFigureJob();
 		void cancelFigureJob();

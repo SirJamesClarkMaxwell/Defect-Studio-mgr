@@ -241,6 +241,7 @@ namespace DefectStudio
 				settings.selectedDispersionDirectory = settings.dispersionDirectory;
 				ReadSetting(datasets, "dispersion", settings.selectedDispersionDirectory, outWarnings, readPath);
 				ReadSetting(datasets, "ccd", settings.selectedCcdDirectory, outWarnings, readPath);
+				ReadSetting(datasets, "bulkMode", settings.selectedBulkModeDirectory, outWarnings, readPath);
 				ReadSetting(datasets, "compared", settings.comparedDirectories, outWarnings, [&](const YAML::Node &node) {
 					if (!node.IsSequence()) throw std::invalid_argument("expected a sequence");
 					std::vector<Path> paths;
@@ -265,9 +266,11 @@ namespace DefectStudio
 				});
 				ReadNumber(view, "participationThreshold", settings.participationThreshold, outWarnings, 0.0, 1.0);
 				ReadNumber(view, "minHuangRhys", settings.minHuangRhys, outWarnings);
-				ReadSetting(view, "animationSource", settings.animationSource, outWarnings, [](const YAML::Node &node) {
+				ReadSetting(view, "animationSource", settings.animationSource, outWarnings, [&](const YAML::Node &node) {
 					const auto value = node.as<std::string>();
-					if (value != "mode" && value != "ccd_direction") throw std::invalid_argument("unknown animation source");
+					if (value != "mode" && value != "ccd_direction" && value != "bulk_q") throw std::invalid_argument("unknown animation source");
+					if (value == "bulk_q" && settings.bulkForceConstantDirectory.Empty() && settings.selectedBulkModeDirectory.Empty())
+						throw std::invalid_argument("bulk source requires bulk FC or a selected bulk mode");
 					return value;
 				});
 				ReadNumber(view, "mixAngleDegrees", settings.mixAngleDegrees, outWarnings, 0.0, 180.0);
@@ -278,6 +281,27 @@ namespace DefectStudio
 				});
 				ReadNumber(view, "ccdSweepQ", settings.ccdSweepQ, outWarnings);
 				ReadNumber(view, "ccdExtent", settings.ccdExtent, outWarnings, 1.0, 2.0);
+				ReadSetting(view, "bulkQ", settings.bulkQ, outWarnings, [](const YAML::Node &node) {
+					if (!node.IsSequence() || node.size() != 3) throw std::invalid_argument("q must contain three components");
+					glm::dvec3 q;
+					for (int i = 0; i < 3; ++i)
+					{
+						q[i] = node[i].as<double>();
+						if (!std::isfinite(q[i])) throw std::invalid_argument("q must be finite");
+					}
+					return q;
+				});
+				ReadSetting(view, "bulkBand", settings.bulkBand, outWarnings, [](const YAML::Node &node) {
+					const int band = node.as<int>();
+					if (band < 0) throw std::invalid_argument("band must be nonnegative");
+					return band;
+				});
+				ReadSetting(view, "bulkSupercell", settings.bulkSupercell, outWarnings, [](const YAML::Node &node) {
+					const auto value = node.as<std::string>();
+					if (value != "auto" && !std::regex_match(value, std::regex("[1-9][0-9]*[xX][1-9][0-9]*[xX][1-9][0-9]*")))
+						throw std::invalid_argument("supercell must be auto or NxMxK");
+					return value;
+				});
 				ReadNumber(view, "carriedFraction", settings.carriedFraction, outWarnings, 0.0, 1.0, true);
 				ReadNumber(view, "arrowLength", settings.arrowLengthAngstrom, outWarnings, 0.0,
 					std::numeric_limits<double>::max(), true);
@@ -378,6 +402,7 @@ namespace DefectStudio
 			<< YAML::Key << "datasets" << YAML::Value << YAML::BeginMap
 			<< YAML::Key << "dispersion" << YAML::Value << StoredPath(settings.selectedDispersionDirectory, projectDirectory)
 			<< YAML::Key << "ccd" << YAML::Value << StoredPath(settings.selectedCcdDirectory, projectDirectory)
+			<< YAML::Key << "bulkMode" << YAML::Value << StoredPath(settings.selectedBulkModeDirectory, projectDirectory)
 			<< YAML::Key << "compared" << YAML::Value << YAML::BeginSeq;
 		for (const auto &path : settings.comparedDirectories) emit << StoredPath(path, projectDirectory);
 		emit << YAML::EndSeq << YAML::EndMap << YAML::Key << "view" << YAML::Value << YAML::BeginMap
@@ -387,6 +412,10 @@ namespace DefectStudio
 			<< YAML::Key << "ccdMotion" << YAML::Value << settings.ccdMotion
 			<< YAML::Key << "ccdSweepQ" << YAML::Value << settings.ccdSweepQ
 			<< YAML::Key << "ccdExtent" << YAML::Value << settings.ccdExtent
+			<< YAML::Key << "bulkQ" << YAML::Value << YAML::Flow << YAML::BeginSeq
+			<< settings.bulkQ.x << settings.bulkQ.y << settings.bulkQ.z << YAML::EndSeq
+			<< YAML::Key << "bulkBand" << YAML::Value << settings.bulkBand
+			<< YAML::Key << "bulkSupercell" << YAML::Value << settings.bulkSupercell
 			<< YAML::Key << "participationThreshold" << YAML::Value << settings.participationThreshold
 			<< YAML::Key << "minHuangRhys" << YAML::Value << settings.minHuangRhys
 			<< YAML::Key << "carriedFraction" << YAML::Value << settings.carriedFraction

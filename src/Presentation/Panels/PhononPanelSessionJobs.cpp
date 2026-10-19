@@ -36,6 +36,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::cancelJob()
 	{
+		CancelBulkMode();
 		CancelBatch();
 		cancelCaseJobs();
 		m_BatchQueue.clear();
@@ -47,6 +48,7 @@ namespace DefectStudio
 		if (m_PendingDispersionJob) cancelJob(m_PendingDispersionJobId);
 		m_PendingDispersionJob.reset();
 		m_PendingDispersionJobId = 0;
+		m_PendingDispersionCaseId.clear();
 	}
 
 	void PhononPanelSession::SubmitComputation()
@@ -119,6 +121,7 @@ namespace DefectStudio
 		auto &settings = Settings();
 		m_PendingDispersionJob = CreateRef<PhononDispersionJob>(settings.bulkForceConstantDirectory,
 			dispersionOutputPath(), settings.dispersionInPlane, settings.dispersionPoints);
+		m_PendingDispersionCaseId = ActiveCaseId();
 		m_PendingDispersionJobId = jobs->Submit(m_PendingDispersionJob, JobPriority::Normal);
 		m_DispersionError.clear();
 		Changed();
@@ -132,13 +135,22 @@ namespace DefectStudio
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
 		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingDispersionJob->GetResult())
 		{
-			if (loadDispersion(*m_PendingDispersionJob->GetResult())) Changed();
+			const auto output = *m_PendingDispersionJob->GetResult();
+			if (auto dataset = ReadDatasetRef(output)) AddDataset(std::move(*dataset));
+			if (m_PendingDispersionCaseId == ActiveCaseId())
+			{
+				if (loadDispersion(output)) Changed();
+			}
+			else
+				for (auto &item : m_Settings.cases)
+					if (item.id == m_PendingDispersionCaseId) { item.settings.selectedDispersionDirectory = output; Changed(); }
 		}
-		else if (snapshot && snapshot->status == JobStatus::Failed && m_PendingDispersionJob->GetError())
+		else if (m_PendingDispersionCaseId == ActiveCaseId() && snapshot && snapshot->status == JobStatus::Failed && m_PendingDispersionJob->GetError())
 			m_DispersionError = m_PendingDispersionJob->GetError()->userMessage;
-		else
+		else if (m_PendingDispersionCaseId == ActiveCaseId())
 			m_DispersionError = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie dyspersji przerwane.";
 		m_PendingDispersionJob.reset();
 		m_PendingDispersionJobId = 0;
+		m_PendingDispersionCaseId.clear();
 	}
 }

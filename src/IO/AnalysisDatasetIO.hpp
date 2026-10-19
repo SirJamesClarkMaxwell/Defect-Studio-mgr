@@ -10,7 +10,7 @@
 
 namespace DefectStudio
 {
-	enum class AnalysisDatasetKind { Phonons, Dispersion, Ccd };
+	enum class AnalysisDatasetKind { Phonons, Dispersion, Ccd, BulkMode };
 	struct AnalysisDatasetRef
 	{
 		AnalysisDatasetKind kind;

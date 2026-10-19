@@ -178,6 +178,12 @@ namespace DefectStudio
 		if (m_Result && modeIndex >= 0 && static_cast<std::size_t>(modeIndex) < m_Result->ModeCount() &&
 			!m_Result->modes[modeIndex].isTranslation)
 		{
+			if (m_Settings.animationSource == "bulk_q")
+			{
+				m_Settings.selectedMode = modeIndex;
+				rebuildField();
+				return;
+			}
 			const bool running = IsAnimating();
 			const bool paused = m_Paused;
 			StopAnimation();
@@ -218,6 +224,8 @@ namespace DefectStudio
 			m_Field = m_CcdResult && m_CcdResult->displacement ? CcdDirectionField(*m_CcdResult->displacement) : VibrationField{};
 			m_Field.motion = m_FieldMotion == "sweep" ? VibrationMotion::Sweep : VibrationMotion::Oscillate;
 		}
+		else if (m_FieldSource == "bulk_q")
+			m_Field = m_BulkMode ? BulkModeField(*m_BulkMode, m_MixAngle) : VibrationField{};
 		else
 			m_Field = m_FieldMode ? DefectModeField(*m_Result, *m_FieldMode,
 				DegeneratePartnerOfSelected(), m_MixAngle) : VibrationField{};
@@ -226,7 +234,7 @@ namespace DefectStudio
 	const VibrationField &PhononPanelSession::Field() const
 	{
 		// Settings() remains mutable: detect legacy callers changing the selection directly.
-		if (m_FieldMode != SelectedMode() && m_FieldCase == ActiveCaseId() && m_FieldRevision == m_PlotRevision)
+		if (m_Settings.animationSource != "bulk_q" && m_FieldMode != SelectedMode() && m_FieldCase == ActiveCaseId() && m_FieldRevision == m_PlotRevision)
 		{
 			m_Settings.mixAngleDegrees = 0.0;
 			m_MixAngle = 0.0;
@@ -242,7 +250,8 @@ namespace DefectStudio
 	void PhononPanelSession::SetMixAngle(double radians)
 	{
 		(void)Field();
-		if (!std::isfinite(radians) || !DegeneratePartnerOfSelected())
+		if (!std::isfinite(radians) || (m_Settings.animationSource == "bulk_q" ?
+			!m_BulkMode || !m_BulkMode->partner : !DegeneratePartnerOfSelected()))
 			return;
 		radians = std::clamp(radians, 0.0, std::numbers::pi);
 		if (m_MixAngle == radians)
@@ -274,6 +283,8 @@ namespace DefectStudio
 	bool PhononPanelSession::WindowMatches(const RendererWindowState &window, std::string &outError) const
 	{
 		outError.clear();
+		if (m_Settings.animationSource == "bulk_q") return bulkWindowMatches(window, outError);
+		if (isBulkWindow(window, m_ProjectDirectory)) { outError = "Okno bulku nie jest oknem defektu."; return false; }
 		if (m_Settings.animationSource == "ccd_direction")
 		{
 			outError = CcdDirectionBlocker();
@@ -307,6 +318,12 @@ namespace DefectStudio
 	bool PhononPanelSession::CanBindWindow(const RendererWindowState &window, const Path &supercell,
 		const Path &projectDirectory) const
 	{
+		if (m_Settings.animationSource == "bulk_q")
+		{
+			std::string error;
+			return SameFilePath(window.structure.sourcePath, supercell, projectDirectory) && WindowMatches(window, error);
+		}
+		if (isBulkWindow(window, projectDirectory)) return false;
 		for (const auto &[id, windowId] : m_CaseWindows)
 			if (id != ActiveCaseId() && windowId == window.windowId) return false;
 		for (const auto &item : m_Settings.cases)
@@ -325,8 +342,11 @@ namespace DefectStudio
 
 	bool PhononPanelSession::ApplyArrows(RendererWindowState &window, std::string &outError) const
 	{
+		if (m_Settings.animationSource == "bulk_q" && !bulkWindowMatches(window, outError)) return false;
+		if (m_Settings.animationSource != "bulk_q" && isBulkWindow(window, m_ProjectDirectory))
+			return WindowMatches(window, outError);
 		window.modeArrows.reset();
-		if (m_Settings.animationSource != "ccd_direction" && !m_Result)
+		if (m_Settings.animationSource != "ccd_direction" && m_Settings.animationSource != "bulk_q" && !m_Result)
 		{
 			outError.clear();
 			return true;
@@ -369,6 +389,7 @@ namespace DefectStudio
 				m_Phase = std::acos(1.0 - 2.0 * std::clamp(m_Settings.ccdSweepQ / maximum, 0.0, 1.0));
 			SetPhase(window, m_Phase);
 		}
+		if (m_AnimationSource == "bulk_q") SetPhase(window, m_Phase);
 		(void)ApplyArrows(window, error);
 	}
 
@@ -423,9 +444,8 @@ namespace DefectStudio
 
 	void PhononPanelSession::SetAnimationSource(std::string source)
 	{
-		if ((source != "mode" && source != "ccd_direction") || m_Settings.animationSource == source) return;
-		StopAnimation();
-		if (const auto window = targetWindow()) window->get().modeArrows.reset();
+		if ((source != "mode" && source != "ccd_direction" && source != "bulk_q") || m_Settings.animationSource == source) return;
+		clearWindow();
 		m_Settings.animationSource = std::move(source);
 		rebuildField();
 		if (m_Windows) syncWindow(0.0);

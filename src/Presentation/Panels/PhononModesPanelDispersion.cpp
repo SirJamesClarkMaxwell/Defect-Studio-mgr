@@ -23,7 +23,14 @@ namespace DefectStudio
 			if (grid)
 			{
 				grid.Row("Katalog FC bulku");
-				if (DrawFolder("dispersionBulk", settings.bulkForceConstantDirectory, m_Session->m_DispersionError)) persist();
+				const auto previousBulk = settings.bulkForceConstantDirectory;
+				if (DrawFolder("dispersionBulk", settings.bulkForceConstantDirectory, m_Session->m_DispersionError))
+				{
+					const auto directory = settings.bulkForceConstantDirectory;
+					settings.bulkForceConstantDirectory = previousBulk;
+					m_Session->SetDirectory("bulk", directory);
+					persist();
+				}
 				grid.Row("Katalog wyników (opcjonalny)");
 				if (DrawFolder("dispersionOutput", settings.dispersionDirectory, m_Session->m_DispersionError, true, m_Session->dispersionOutputPath()))
 				{

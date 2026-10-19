@@ -9,6 +9,35 @@
 
 namespace DefectStudio::Tests
 {
+	TEST(VibrationFieldTests, BulkMixingPreservesQuadraturesAndNormalizesParticipation)
+	{
+		PhononModeField mode;
+		mode.label = "K"; mode.frequencyMeV = 100.0;
+		mode.symbols = {"B", "N"};
+		mode.positions = {glm::dvec3(1, 2, 3), glm::dvec3(4, 5, 6)};
+		mode.real = {glm::dvec3(1, 0, 0), glm::dvec3(0, 0.5, 0)};
+		mode.imag = {glm::dvec3(0, 1, 0), glm::dvec3(0.5, 0, 0)};
+		mode.partner = PhononModePartner{1, 100.1,
+			{glm::dvec3(0, 0, 1), glm::dvec3(1, 0, 0)}, {glm::dvec3(1, 0, 0), glm::dvec3(0, 0, 1)}};
+		const auto main = BulkModeField(mode);
+		EXPECT_EQ(main.real, mode.real); EXPECT_EQ(main.imag, mode.imag);
+		EXPECT_EQ(main.equilibriumAngstrom, mode.positions);
+		EXPECT_NE(main.label.find("bulk"), std::string::npos);
+		EXPECT_NEAR(std::accumulate(main.participation.begin(), main.participation.end(), 0.0), 1.0, 1e-12);
+		EXPECT_NEAR(main.participation[0], 0.8, 1e-12);
+		const auto partner = BulkModeField(mode, std::numbers::pi / 2.0);
+		for (std::size_t atom = 0; atom < 2; ++atom)
+		{
+			EXPECT_LT(glm::length(partner.real[atom] - mode.partner->real[atom]), 1e-12);
+			EXPECT_LT(glm::length(partner.imag[atom] - mode.partner->imag[atom]), 1e-12);
+		}
+		EXPECT_NEAR(std::accumulate(partner.participation.begin(), partner.participation.end(), 0.0), 1.0, 1e-12);
+		mode.partner.reset();
+		EXPECT_EQ(BulkModeField(mode, std::numbers::pi / 2.0).real, mode.real);
+		mode.imag.pop_back();
+		EXPECT_TRUE(BulkModeField(mode).real.empty());
+	}
+
 	namespace
 	{
 		PhononAnalysisResult Pair()

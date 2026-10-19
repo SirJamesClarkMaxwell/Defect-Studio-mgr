@@ -69,7 +69,8 @@ def band_data(phonon):
                          "band_n": "meV (signed hbar omega)", "gamma_freq_meV": "meV",
                          "min_freq_meV": "meV", "max_freq_meV": "meV",
                          "primitive_cell_A": "Angstrom"}}
-    return {"summary": summary, "dispersion": np.vstack(rows)}
+    summary.update(qpoints_file="qpoints.tsv", q_basis="primitive_reciprocal_reduced")
+    return {"summary": summary, "dispersion": np.vstack(rows), "qpoints": np.vstack(data["qpoints"])}
 
 
 def keep_in_plane(phonon):
@@ -126,6 +127,8 @@ def write_result(result, directory):
         f"band_{i}" for i in range(result["summary"]["n_bands"]))
     np.savetxt(directory / "dispersion.tsv", result["dispersion"], delimiter="\t", header=header,
                comments="", fmt=["%d"] + ["%.12g"] * (result["summary"]["n_bands"] + 1))
+    np.savetxt(directory / "qpoints.tsv", result["qpoints"], delimiter="\t", header="qx\tqy\tqz",
+               comments="", fmt="%.12g")
 
 
 def main():

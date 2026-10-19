@@ -52,6 +52,8 @@ namespace DefectStudio
 
 	Path PhononPanelSession::supercellPath() const
 	{
+		if (m_Settings.animationSource == "bulk_q")
+			return m_BulkMode && !m_Settings.selectedBulkModeDirectory.Empty() ? m_Settings.selectedBulkModeDirectory / "POSCAR" : Path{};
 		if (m_Settings.animationSource == "ccd_direction")
 			return m_CcdResult && m_CcdResult->displacement ? Path::FromUtf8(m_CcdResult->displacement->gsSource) : Path{};
 		const PhononPanelSettings &settings = Settings();
@@ -77,8 +79,9 @@ namespace DefectStudio
 	{
 		if (IsAnimating() && m_AnimationSource != m_Settings.animationSource) StopAnimation();
 		const Path source = supercellPath();
+		auto &caseWindows = m_Settings.animationSource == "bulk_q" ? m_BulkWindows : m_CaseWindows;
 		if (m_WindowId.empty() && !m_BindRequested)
-			if (const auto bound = m_CaseWindows.find(ActiveCaseId()); bound != m_CaseWindows.end())
+			if (const auto bound = caseWindows.find(ActiveCaseId()); bound != caseWindows.end())
 				for (auto &window : m_Windows->get())
 					if (window.windowId == bound->second && CanBindWindow(window, source, m_ProjectDirectory))
 					{
@@ -91,7 +94,7 @@ namespace DefectStudio
 					(!m_BindRequested || std::find(m_WindowsBeforeOpen.begin(), m_WindowsBeforeOpen.end(), window.windowId) == m_WindowsBeforeOpen.end()))
 				{
 					m_WindowId = window.windowId;
-					if (!ActiveCaseId().empty()) m_CaseWindows[ActiveCaseId()] = m_WindowId;
+					if (!ActiveCaseId().empty()) caseWindows[ActiveCaseId()] = m_WindowId;
 					m_BindRequested = false;
 					break;
 				}
@@ -107,6 +110,7 @@ namespace DefectStudio
 			m_WindowError = m_BindRequested ? (m_Settings.animationSource == "ccd_direction" ?
 				"Oczekiwanie na otwarcie geometrii GS..." : "Oczekiwanie na otwarcie POSCAR...") :
 				m_Settings.animationSource == "ccd_direction" ? "Otwórz geometrię GS." : "Otwórz superkomórkę FC.";
+			if (m_Settings.animationSource == "bulk_q") m_WindowError = m_BindRequested ? "Oczekiwanie na otwarcie bulku..." : "Otwórz superkomórkę bulku.";
 			return;
 		}
 		auto &target = window->get();

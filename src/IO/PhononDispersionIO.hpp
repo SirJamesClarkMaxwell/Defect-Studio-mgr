@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
 
@@ -18,6 +19,7 @@ namespace DefectStudio
 		std::vector<double> breaks;
 		double minMeV = 0.0, maxMeV = 0.0;
 		bool inPlane = false;
+		std::vector<glm::dvec3> qpoints;
 	};
 
 	namespace PhononDispersionIO

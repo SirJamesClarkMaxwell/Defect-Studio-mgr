@@ -212,6 +212,36 @@ namespace DefectStudio
 		return field;
 	}
 
+	VibrationField BulkModeField(const PhononModeField &mode, double mixAngleRadians)
+	{
+		const auto atoms = mode.symbols.size();
+		if (atoms == 0 || mode.positions.size() != atoms || mode.real.size() != atoms || mode.imag.size() != atoms ||
+			(mode.partner && (!std::isfinite(mixAngleRadians) ||
+			mode.partner->real.size() != atoms || mode.partner->imag.size() != atoms)))
+			return {};
+		VibrationField field;
+		field.symbols = mode.symbols;
+		field.equilibriumAngstrom = mode.positions;
+		const double cosine = mode.partner ? std::cos(mixAngleRadians) : 1.0;
+		const double sine = mode.partner ? std::sin(mixAngleRadians) : 0.0;
+		double total = 0.0;
+		for (std::size_t atom = 0; atom < atoms; ++atom)
+		{
+			const auto real = cosine * mode.real[atom] + (mode.partner ? sine * mode.partner->real[atom] : glm::dvec3(0.0));
+			const auto imag = cosine * mode.imag[atom] + (mode.partner ? sine * mode.partner->imag[atom] : glm::dvec3(0.0));
+			if (!Finite(real) || !Finite(imag) || !Finite(mode.positions[atom])) return {};
+			field.real.push_back(real);
+			field.imag.push_back(imag);
+			const double weight = glm::dot(real, real) + glm::dot(imag, imag);
+			field.participation.push_back(weight);
+			total += weight;
+		}
+		if (!std::isfinite(total) || total <= 0.0) return {};
+		for (auto &weight : field.participation) weight /= total;
+		field.label = std::format("bulk · {} · ℏω {:.1f} meV", mode.label, mode.frequencyMeV);
+		return field;
+	}
+
 	std::optional<std::size_t> DegeneratePartner(const PhononAnalysisResult &result, std::size_t mode,
 		double toleranceMeV)
 	{

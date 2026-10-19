@@ -54,6 +54,7 @@ namespace DefectStudio
 		}
 		if (!m_Settings.resultDirectory.Empty()) loadResult(m_Settings.resultDirectory);
 		if (!m_Settings.selectedCcdDirectory.Empty()) (void)loadCcdResult(m_Settings.selectedCcdDirectory);
+		loadCaseBulk();
 		if (m_Windows) syncWindow(0.0);
 		Changed();
 		return newId;
@@ -71,6 +72,7 @@ namespace DefectStudio
 		if (active) clearWindow();
 		cases.erase(found);
 		m_CaseWindows.erase(removed);
+		m_BulkWindows.erase(removed);
 		m_CheckedCases.erase(removed);
 		if (active)
 		{
@@ -81,6 +83,7 @@ namespace DefectStudio
 				ClearResult();
 				ClearCcdResult();
 				static_cast<PhononCaseSettings &>(m_Settings) = {};
+				loadCaseBulk();
 				m_CurrentDataset = {};
 				m_EmbeddingSummary.clear();
 				m_EmbeddingMult = {12, 12, 1};
@@ -142,7 +145,9 @@ namespace DefectStudio
 		}
 		if (!settings.resultDirectory.Empty()) loadResult(settings.resultDirectory);
 		if (!settings.selectedCcdDirectory.Empty()) (void)loadCcdResult(settings.selectedCcdDirectory);
-		m_CurrentDataset = !settings.resultDirectory.Empty() ? settings.resultDirectory : settings.selectedCcdDirectory;
+		loadCaseBulk();
+		m_CurrentDataset = !settings.resultDirectory.Empty() ? settings.resultDirectory : !settings.selectedCcdDirectory.Empty() ?
+			settings.selectedCcdDirectory : !settings.selectedBulkModeDirectory.Empty() ? settings.selectedBulkModeDirectory : m_Settings.selectedDispersionDirectory;
 		if (m_Windows) syncWindow(0.0);
 		m_CaseOutputDirectories.clear();
 		++m_PlotRevision;
@@ -158,7 +163,7 @@ namespace DefectStudio
 		const auto dataset = std::find_if(m_Datasets.begin(), m_Datasets.end(), [&](const auto &item) {
 			return SameFilePath(item.directory, attached, m_ProjectDirectory);
 		});
-		if (dataset != m_Datasets.end() && dataset->kind == AnalysisDatasetKind::Dispersion) return;
+		if (dataset != m_Datasets.end() && (dataset->kind == AnalysisDatasetKind::Dispersion || dataset->kind == AnalysisDatasetKind::BulkMode)) return;
 		for (auto &item : m_Settings.cases)
 		{
 			std::erase_if(item.datasets, [&](const auto &path) { return SameFilePath(path, attached, m_ProjectDirectory); });
@@ -185,6 +190,12 @@ namespace DefectStudio
 
 	std::string PhononPanelSession::CaseWindowTitle() const
 	{
+		if (m_Settings.animationSource == "bulk_q")
+		{
+			for (const auto &item : m_Settings.cases)
+				if (item.id == ActiveCaseId()) return "Superkomórka bulku (fonony) – " + item.name;
+			return "Superkomórka bulku (fonony)";
+		}
 		for (const auto &item : m_Settings.cases)
 			if (item.id == ActiveCaseId()) return std::string(SupercellWindowTitle) + " – " + item.name;
 		return std::string(SupercellWindowTitle);

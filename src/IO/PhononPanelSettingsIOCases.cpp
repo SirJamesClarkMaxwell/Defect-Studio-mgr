@@ -16,7 +16,7 @@ namespace DefectStudio
 	{
 		const std::vector<std::string> GlobalInputs = {"dispersionDir", "dispersionInPlane", "dispersionPoints"};
 		const std::vector<std::string> CaseView = {"selectedMode", "plZpl", "irrepFilter", "minHuangRhys",
-			"animationSource", "mixAngleDegrees", "ccdMotion", "ccdSweepQ", "ccdExtent"};
+			"animationSource", "mixAngleDegrees", "ccdMotion", "ccdSweepQ", "ccdExtent", "bulkQ", "bulkBand", "bulkSupercell"};
 
 		YAML::Node Subset(const YAML::Node &map, const std::vector<std::string> &keys, bool include)
 		{
@@ -40,6 +40,8 @@ namespace DefectStudio
 			result["inputs"] = Subset(node["inputs"], GlobalInputs, false);
 			result["resultDir"] = node["resultDir"];
 			result["ccd"] = node["datasets"]["ccd"];
+			result["dispersion"] = node["datasets"]["dispersion"];
+			result["bulkMode"] = node["datasets"]["bulkMode"];
 			result["view"] = Subset(node["view"], CaseView, true);
 			return result;
 		}
@@ -104,6 +106,8 @@ namespace DefectStudio
 			if (node["resultDir"]) flat["resultDir"] = node["resultDir"];
 			if (node["view"]) flat["view"] = node["view"];
 			if (node["ccd"]) flat["datasets"]["ccd"] = node["ccd"];
+			if (node["dispersion"]) flat["datasets"]["dispersion"] = node["dispersion"];
+			if (node["bulkMode"]) flat["datasets"]["bulkMode"] = node["bulkMode"];
 			if (node["datasets"]) flat["datasets"]["compared"] = node["datasets"];
 			PhononPanelSettings parsed;
 			if (!PhononSettingsDetail::ParseFlat(YAML::Dump(flat), projectDirectory, parsed, warnings, error)) return false;
@@ -154,6 +158,7 @@ namespace DefectStudio
 							std::vector<std::string> warnings;
 							if (!ParseCase(node, projectDirectory, item, warnings, outError))
 								throw std::invalid_argument(outError);
+							if (!node["dispersion"]) item.settings.selectedDispersionDirectory = settings.selectedDispersionDirectory;
 							outWarnings.insert(outWarnings.end(), warnings.begin(), warnings.end());
 							settings.nextCaseNumber = std::max(settings.nextCaseNumber, CaseNumber(item.id) + 1);
 							settings.cases.push_back(std::move(item));
@@ -211,6 +216,8 @@ namespace DefectStudio
 		root["view"] = Subset(root["view"], CaseView, false);
 		root.remove("resultDir");
 		root["datasets"].remove("ccd");
+		root["datasets"].remove("dispersion");
+		root["datasets"].remove("bulkMode");
 		root["activeCase"] = snapshot.activeCaseId;
 		root["nextCaseNumber"] = snapshot.nextCaseNumber;
 		root["cases"] = YAML::Node(YAML::NodeType::Sequence);

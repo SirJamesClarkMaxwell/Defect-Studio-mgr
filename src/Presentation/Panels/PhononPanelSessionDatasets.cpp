@@ -62,6 +62,7 @@ namespace DefectStudio
 			})) m_Datasets.push_back(std::move(dataset));
 		m_Spectra.clear();
 		m_CcdResults.clear();
+		if (!m_Datasets.empty()) selectCaseDispersion();
 	}
 
 	void PhononPanelSession::AddDataset(AnalysisDatasetRef dataset)
@@ -95,7 +96,7 @@ namespace DefectStudio
 		}
 		if (IsCompared(directory)) return;
 		if (std::any_of(m_Datasets.begin(), m_Datasets.end(), [&](const auto &entry) {
-			return entry.kind != AnalysisDatasetKind::Dispersion && SameFilePath(entry.directory, directory, {});
+			return entry.kind != AnalysisDatasetKind::Dispersion && entry.kind != AnalysisDatasetKind::BulkMode && SameFilePath(entry.directory, directory, {});
 		}))
 		{
 			m_Settings.comparedDirectories.push_back(directory);
@@ -112,6 +113,7 @@ namespace DefectStudio
 		if (found == m_Datasets.end()) return false;
 		if (found->kind == AnalysisDatasetKind::Phonons) m_Settings.resultDirectory = found->directory;
 		else if (found->kind == AnalysisDatasetKind::Ccd) m_Settings.selectedCcdDirectory = found->directory;
+		else if (found->kind == AnalysisDatasetKind::BulkMode) m_Settings.selectedBulkModeDirectory = found->directory;
 		else m_Settings.selectedDispersionDirectory = found->directory;
 		m_CurrentDataset = found->directory;
 		return true;
@@ -209,8 +211,13 @@ namespace DefectStudio
 			auto pinned = m_Settings.comparedDirectories;
 			pinned.push_back(m_Settings.resultDirectory); pinned.push_back(m_Settings.selectedDispersionDirectory);
 			pinned.push_back(m_Settings.selectedCcdDirectory);
+			pinned.push_back(m_Settings.selectedBulkModeDirectory);
 			for (const auto &item : Cases())
+			{
+				pinned.push_back(item.settings.selectedDispersionDirectory);
+				pinned.push_back(item.settings.selectedBulkModeDirectory);
 				pinned.insert(pinned.end(), item.datasets.begin(), item.datasets.end());
+			}
 			for (const auto &path : pinned)
 				if (!path.Empty())
 					if (auto ref = ReadDatasetRef(path)) datasets.push_back(std::move(*ref));

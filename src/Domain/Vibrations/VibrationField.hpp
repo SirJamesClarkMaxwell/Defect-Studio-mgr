@@ -2,6 +2,7 @@
 
 #include "Domain/Vibrations/PhononModes.hpp"
 #include "Domain/Vibrations/CcdAnalysis.hpp"
+#include "Domain/Vibrations/BulkMode.hpp"
 
 namespace DefectStudio
 {
@@ -31,6 +32,7 @@ namespace DefectStudio
 	[[nodiscard]] VibrationField DefectModeField(const PhononAnalysisResult &result, std::size_t mode,
 		std::optional<std::size_t> partner = std::nullopt, double mixAngleRadians = 0.0);
 	[[nodiscard]] VibrationField CcdDirectionField(const CcdDisplacement &displacement);
+	[[nodiscard]] VibrationField BulkModeField(const PhononModeField &mode, double mixAngleRadians = 0.0);
 	[[nodiscard]] std::optional<std::size_t> DegeneratePartner(const PhononAnalysisResult &result,
 		std::size_t mode, double toleranceMeV = 0.5);
 } // namespace DefectStudio

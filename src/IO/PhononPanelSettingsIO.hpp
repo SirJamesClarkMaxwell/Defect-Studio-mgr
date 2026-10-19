@@ -47,11 +47,16 @@ namespace DefectStudio
 		std::string plZpl = "experimental";   // computed | spin_purified | experimental | formula
 		std::string irrepFilter;              // empty = all irreps
 		double minHuangRhys = 0.0;            // mode filter; separate from the per-atom arrow threshold
-		std::string animationSource = "mode"; // mode | ccd_direction
+		std::string animationSource = "mode"; // mode | ccd_direction | bulk_q
 		double mixAngleDegrees = 0.0;
 		std::string ccdMotion = "sweep"; // sweep | oscillate
 		double ccdSweepQ = 0.0; // amu^0.5 Angstrom; restored without starting animation
 		double ccdExtent = 1.0;
+		Path selectedDispersionDirectory;
+		glm::dvec3 bulkQ{0.0};
+		int bulkBand = 0;
+		std::string bulkSupercell = "auto";
+		Path selectedBulkModeDirectory;
 	};
 
 	struct PhononCase
@@ -71,7 +76,6 @@ namespace DefectStudio
 		bool ccdArrows = true;
 		bool ccdComparePhononPl = false;
 		Path dispersionDirectory; // optional output override
-		Path selectedDispersionDirectory;
 		std::vector<Path> comparedDirectories;
 		bool dispersionInPlane = true;
 		int dispersionPoints = 101;
@@ -98,9 +102,9 @@ namespace DefectStudio
 	//   formatVersion: 2
 	//   activeCase: case-1
 	//   nextCaseNumber: 2
-	//   cases: [{id, name, datasets: [paths], inputs: {case input keys below}, resultDir, ccd,
+	//   cases: [{id, name, datasets: [paths], inputs: {case input keys below}, resultDir, ccd, dispersion, bulkMode,
 	//            view: {selectedMode, animationSource, mixAngleDegrees, ccdMotion, ccdSweepQ, ccdExtent,
-	//                   plZpl, irrepFilter, minHuangRhys}}]
+	//                   plZpl, irrepFilter, minHuangRhys, bulkQ, bulkBand, bulkSupercell}}]
 	//   Top-level inputs/view/datasets contain only global fields; v1 flat keys still read:
 	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplFormula, gsAtEsDir, esAtGsDir, outputDir, sigma, gamma,
 	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep, ccdPathDir, ccdAnalysisOutputDir,
@@ -111,7 +115,7 @@ namespace DefectStudio
 	//   arrowsFollowPhase: true
 	//   seriesStyles: {"<plot>/<series>": {color: [r,g,b,a] | null, weight, visible, filled, fillAlpha, lineStyle}}
 	//   view: {selectedMode, participationThreshold, carriedFraction, arrowLength, showArrows,
-	//          animationSource: mode | ccd_direction, mixAngleDegrees: 0..180,
+	//          animationSource: mode | ccd_direction | bulk_q, mixAngleDegrees: 0..180,
 	//          ccdMotion: sweep | oscillate, ccdSweepQ: >=0, ccdExtent: 1..2,
 	//          arrowLowColor: [r, g, b], arrowHighColor: [r, g, b], amplitude, period, plZpl, irrepFilter, minHuangRhys,
 	//          ccdLevels, ccdWavefunctions, ccdProbability, ccdWavefunctionScale, ccdArrows, ccdComparePhononPl,
