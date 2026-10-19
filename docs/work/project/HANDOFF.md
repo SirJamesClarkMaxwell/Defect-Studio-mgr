@@ -1,6 +1,6 @@
 # Handoff - stan pracy (aktualizowany przy każdym pushu)
 
-Ostatnia aktualizacja: 2026-10-14 ~06:00 (Release i Debug zielone: 1796 testów, 1791 przechodzi, 5 pominiętych). Branch: `task/109-phonon-workspace` (od `task/105-ccd-analysis`, ten od
+Ostatnia aktualizacja: 2026-10-20 (108b zrobione, Debug zielony; Release do sprawdzenia po serii 108c-e). Branch: `task/109-phonon-workspace` (od `task/105-ccd-analysis`, ten od
 `dev` 3739e5b). Nic nie jest zmergowane do `dev`/`main`; merge dopiero po sprawdzeniu GUI przez użytkownika i
 pełnym buildzie Debug + Release (skill `full-build-verify`).
 
@@ -26,24 +26,27 @@ pełnym buildzie Debug + Release (skill `full-build-verify`).
 | 489a5a8 | 109c kolejka wsadowa; zmiana przypadku nie anuluje liczenia |
 | 802cd18 | 109d porównanie (oś E_ZPL−E, normalizacja, tabela Porównanie) + 111 ryciny matplotlib |
 | 099b894, 0636acb | 108a pole drgań + mieszanie modów zdegenerowanych, 112g Powtórz/Odbij/`Shift+R` |
+| 970f8cd | 108b animacja kierunku ΔQ (przejście GS ↔ ES, drganie wokół GS), stan animacji per przypadek |
 
 Testy Debug: 1796, 1791 przechodzi, 5 pominiętych (oczekiwane: 2 przez `DS_PYTHON_CAPI_AVAILABLE=0`, 3 wymagające
 danych z klastra/dysku O:).
 
 ## W toku / następne
 
-1. **108b** (zadanie `tasks/108b-ccd-displacement-direction.md`): animacja kierunku ΔQ, oba tryby. NIE zlecone
-   (brak internetu, wstrzymane 2026-10-14 rano). Następny krok: zlecić codex promptem jak dla 108a
-   (zadanie + STYLE RULE + „Do NOT run MSBuild”), potem build, testy, commit, push.
-2. **108c** nowy job Python: mod bulku w q (phonopy, `vibration.json`), niewspółmierne q = fragment + podpowiedź
-   N×M×K; **108d** klik/przeciąganie po dyspersji. Zadań jeszcze nie napisano - projekt w planie 108.
-3. Struktury dalej (opcjonalnie): malowanie wzoru pierwiastków, czyszczenie pozycji, powiązane pozycje (spglib).
-4. Przed merge: użytkownik klika GUI (lista niżej), build Release obu projektów + testy.
+Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`): 108b-e + persystencja per przypadek + porównanie
+wielu defektów. Zadania: `tasks/108c-bulk-mode-at-q.md`, `108d-dispersion-pick-and-drag.md`,
+`108e-displacement-comparison.md`; plan `plans/2026-10-14-vibration-animation.md` (decyzje 4-6).
+
+1. **108c** (mod bulku w q, `phonon_mode.py`, bulk per przypadek): zlecone codex 2026-10-20 ~00:50.
+2. **108d** klik/przeciąganie po dyspersji, potem **108e** porównanie ΔR.
+3. Po serii: build Release obu projektów + pełne testy, HANDOFF, push.
+4. Przed merge: użytkownik klika GUI (lista niżej).
 
 ## Do kliknięcia (GUI)
 
 Fonony: podświetlenie wiersza, 3 okna, przełączanie przypadków, `Policz zaznaczone`, `Porównanie`, `Eksport…`,
-`Rycina…`, wykresy wyglądają jak wcześniej (rysowanie przeszło na adaptery), „Animacja drgań” + `Mieszanie θ`.
+`Rycina…`, wykresy wyglądają jak wcześniej (rysowanie przeszło na adaptery), „Animacja drgań” + `Mieszanie θ`,
+źródło `kierunek ΔQ` (wymaga ponownego `Policz CCD`, potem `Otwórz geometrię GS`, Ruch, Zasięg, suwak Q).
 Struktury: `G X 1/8`, `Shift+D`, panel Komórka (podsieć, powtórz 1×1×2), tryb Cele (Ctrl), `V`, `P`, `D`,
 `Przekształć` → Powtórz/Odbij, `Shift+R`. Uwaga: dawne `Shift+D` „ustaw widok jako domyślny” jest tylko w palecie.
 
