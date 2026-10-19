@@ -164,6 +164,49 @@ namespace DefectStudio::Tests
 		EXPECT_NE(FormatDataTable(columns, {}).find("\n\t\t\t\n"), std::string::npos);
 	}
 
+	TEST(PhononPlotDataTests, DispersionPickUsesPixelScalesAndReturnsTheWholeSelection)
+	{
+		PhononDispersion result;
+		result.bandCount = 2; result.distance = {0, 1}; result.segment = {0, 1};
+		result.bandsMeV = {{8, 0}, {30, 40}};
+		result.qpoints = {{0, 0, 0}, {0.5, 0.25, 0}};
+		const auto horizontal = PickDispersion(result, 0, 0, 1, 1);
+		ASSERT_TRUE(horizontal); EXPECT_EQ(horizontal->row, 1u); EXPECT_EQ(horizontal->band, 0);
+		EXPECT_EQ(horizontal->segment, 1); EXPECT_DOUBLE_EQ(horizontal->distance, 1);
+		EXPECT_DOUBLE_EQ(horizontal->frequencyMeV, 0); EXPECT_EQ(horizontal->q, result.qpoints[1]);
+		const auto vertical = PickDispersion(result, 0, 0, 0.01, 10);
+		ASSERT_TRUE(vertical); EXPECT_EQ(vertical->row, 0u);
+		const auto branch = PickDispersion(result, 1, 39, 0.01, 1);
+		ASSERT_TRUE(branch); EXPECT_EQ(branch->row, 1u); EXPECT_EQ(branch->band, 1);
+	}
+
+	TEST(PhononPlotDataTests, DispersionPickRequiresQAndRejectsDistantOrInvalidCoordinates)
+	{
+		PhononDispersion result;
+		result.bandCount = 1; result.distance = {0}; result.segment = {0}; result.bandsMeV = {{0}};
+		EXPECT_FALSE(PickDispersion(result, 0, 0, 1, 1));
+		result.qpoints = {{0, 0, 0}};
+		EXPECT_TRUE(PickDispersion(result, 12, 0, 1, 1));
+		EXPECT_FALSE(PickDispersion(result, 12.01, 0, 1, 1));
+		EXPECT_FALSE(PickDispersion(result, 9, 9, 1, 1));
+		EXPECT_FALSE(PickDispersion(result, 0, 0, 0, 1));
+		EXPECT_FALSE(PickDispersion(result, 0, 0, 1, -1));
+		EXPECT_FALSE(PickDispersion(result, std::numeric_limits<double>::quiet_NaN(), 0, 1, 1));
+		EXPECT_FALSE(PickDispersion(result, 0, 0, 1, std::numeric_limits<double>::infinity()));
+	}
+
+	TEST(PhononPlotDataTests, DispersionSnapClampsToItsSegmentAtDuplicatedBreakDistances)
+	{
+		PhononDispersion result;
+		result.distance = {0, 0.5, 1, 1, 1.5, 2}; result.segment = {0, 0, 0, 1, 1, 1};
+		EXPECT_EQ(SnapToSegment(result, 0, -10), 0u); EXPECT_EQ(SnapToSegment(result, 0, 10), 2u);
+		EXPECT_EQ(SnapToSegment(result, 1, -10), 3u); EXPECT_EQ(SnapToSegment(result, 1, 10), 5u);
+		EXPECT_EQ(SnapToSegment(result, 0, 1), 2u); EXPECT_EQ(SnapToSegment(result, 1, 1), 3u);
+		EXPECT_EQ(SnapToSegment(result, 0, 0.6), 1u); EXPECT_EQ(SnapToSegment(result, 1, 1.6), 4u);
+		EXPECT_EQ(SnapToSegment(result, 2, 1), result.distance.size());
+		EXPECT_EQ(SnapToSegment({}, 0, 0), 0u);
+	}
+
 	TEST(PhononPlotDataTests, ColumnConversionUsesLabelsUnitsVisibilityAndOneXForVerticalLines)
 	{
 		PlotData plot;

@@ -42,6 +42,7 @@ namespace DefectStudio
 	class PhononModeJob;
 	class AnalysisDatasetScanJob;
 	namespace Tests { struct PhononBatchTestAccess; }
+	namespace Tests { struct PhononDispersionTestAccess; }
 
 	enum class PhononBatchStep { Phonons, CcdAnalysis };
 	enum class PhononCaseStatus { Idle, Queued, Running, Done, Failed, Cancelled };
@@ -79,6 +80,8 @@ namespace DefectStudio
 		void SubmitCcdAnalysis();
 		void SubmitDispersion();
 		void SubmitBulkMode();
+		void PickDispersionRow(std::size_t row, int band);
+		[[nodiscard]] std::optional<std::size_t> DispersionRow();
 		void CancelBulkMode();
 		[[nodiscard]] bool IsBulkModeRunning() const noexcept { return m_PendingModeJob != nullptr; }
 		[[nodiscard]] std::string BulkModeBlocker() const;
@@ -253,6 +256,18 @@ namespace DefectStudio
 		std::optional<PhononModeField> m_BulkMode;
 		std::string m_BulkModeError;
 		std::map<std::string, std::string> m_BulkWindows;
+		friend struct Tests::PhononDispersionTestAccess;
+		void submitBulkMode(const std::string &supercell);
+		[[nodiscard]] std::string bulkModeSupercellForPick();
+		[[nodiscard]] Path bulkModeOutputPath(const std::string &supercell) const;
+		bool applyBulkModeResult(std::uint64_t requestId, const std::string &caseId, const Path &output);
+		std::uint64_t m_ModeRequestId = 0, m_PendingModeRequestId = 0;
+		std::optional<std::size_t> m_PickedDispersionRow;
+		int m_PickedDispersionSegment = 0;
+		Path m_PickedDispersionDirectory;
+		std::uint32_t m_DispersionInputPlot = 0;
+		bool m_DispersionClickArmed = false, m_DispersionDragHeld = false;
+		std::map<std::string, std::array<int, 3>> m_BulkWindowSizes;
 		void submitFigure(const Path &specPath, bool all);
 		void pollFigureJob();
 		void cancelFigureJob();

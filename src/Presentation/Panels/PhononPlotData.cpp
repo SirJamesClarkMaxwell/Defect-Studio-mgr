@@ -277,6 +277,39 @@ namespace DefectStudio
 		return fallback.empty() ? "dataset" : fallback;
 	}
 
+	std::optional<DispersionPick> PickDispersion(const PhononDispersion &result,
+		double distance, double frequencyMeV, double distancePerPixel, double meVPerPixel)
+	{
+		std::optional<DispersionPick> picked;
+		if (!std::isfinite(distance) || !std::isfinite(frequencyMeV) || !std::isfinite(distancePerPixel) ||
+			!std::isfinite(meVPerPixel) || distancePerPixel <= 0.0 || meVPerPixel <= 0.0) return picked;
+		double nearest = 12.0;
+		for (std::size_t row = 0; row < std::min({result.distance.size(), result.segment.size(), result.qpoints.size()}); ++row)
+			for (std::size_t band = 0; band < result.bandsMeV.size(); ++band)
+			{
+				if (row >= result.bandsMeV[band].size()) continue;
+				const auto &q = result.qpoints[row];
+				if (!std::isfinite(q.x) || !std::isfinite(q.y) || !std::isfinite(q.z)) continue;
+				const double pixels = std::hypot((result.distance[row] - distance) / distancePerPixel,
+					(result.bandsMeV[band][row] - frequencyMeV) / meVPerPixel);
+				if (pixels <= nearest && (!picked || pixels < nearest))
+				{
+					nearest = pixels;
+					picked = DispersionPick{row, static_cast<int>(band), result.segment[row], result.distance[row], result.bandsMeV[band][row], q};
+				}
+			}
+		return picked;
+	}
+
+	std::size_t SnapToSegment(const PhononDispersion &result, int segment, double distance)
+	{
+		std::size_t row = result.distance.size();
+		for (std::size_t i = 0; i < std::min(result.distance.size(), result.segment.size()); ++i)
+			if (result.segment[i] == segment && (row == result.distance.size() ||
+				std::abs(result.distance[i] - distance) < std::abs(result.distance[row] - distance))) row = i;
+		return row;
+	}
+
 	std::vector<DataTableColumn> PlotDataColumns(const PlotData &plot, const Path &project, bool onlyVisible)
 	{
 		std::vector<DataTableColumn> columns;

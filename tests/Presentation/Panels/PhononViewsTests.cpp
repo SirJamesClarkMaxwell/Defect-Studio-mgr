@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <numbers>
+#include <nlohmann/json.hpp>
 
 #include "Core/Utils/Uuid.hpp"
 #include "Presentation/PanelDockRegions.hpp"
@@ -14,6 +16,17 @@
 
 namespace DefectStudio::Tests
 {
+	struct PhononDispersionTestAccess
+	{
+		static bool Load(PhononPanelSession &session, const Path &directory) { return session.loadDispersion(directory); }
+		static JobId Job(const PhononPanelSession &session) { return session.m_PendingModeJobId; }
+		static std::uint64_t Request(const PhononPanelSession &session) { return session.m_PendingModeRequestId; }
+		static std::string Size(PhononPanelSession &session) { return session.bulkModeSupercellForPick(); }
+		static Path Output(const PhononPanelSession &session, const std::string &size) { return session.bulkModeOutputPath(size); }
+		static bool Complete(PhononPanelSession &session, std::uint64_t request, const std::string &caseId, const Path &output)
+		{ return session.applyBulkModeResult(request, caseId, output); }
+	};
+
 	namespace
 	{
 		PhononAnalysisResult OneAtom()
@@ -67,6 +80,25 @@ namespace DefectStudio::Tests
 			Ref<Gate> gate;
 			~OpenGateOnExit() { gate->Open(); }
 		};
+
+		void DispersionDataset(Workspace &workspace, const Path &directory, bool withQ = true)
+		{
+			workspace.Write(directory, "summary.json", R"({"schema":"ds.phonon_dispersion.v1","n_bands":2,
+				"in_plane":true,"min_freq_meV":1,"max_freq_meV":40,"ticks":[{"distance":0,"label":"G"}],"breaks":[1]})");
+			workspace.Write(directory, "dispersion.tsv", "segment\tdistance\tband_0\tband_1\n0\t0\t1\t10\n0\t1\t2\t20\n1\t1\t3\t30\n1\t2\t4\t40\n");
+			if (withQ) workspace.Write(directory, "qpoints.tsv", "qx\tqy\tqz\n0\t0\t0\n0.25\t0\t0\n0\t0.25\t0\n0\t0.5\t0\n");
+		}
+
+		void BulkDataset(Workspace &workspace, const Path &directory, const std::string &symbol = "B", bool alongX = false)
+		{
+			workspace.Write(directory, "summary.json", R"({"schema":"ds.phonon_mode.v1","label":"bulk"})");
+			workspace.Write(directory, "vibration.json", nlohmann::json{{"schema", "ds.phonon_mode.v1"}, {"label", "bulk"},
+				{"q_basis", "primitive_reciprocal_reduced"}, {"q", {0, 0, 0}}, {"band", 0}, {"n_bands", 2},
+				{"frequency_meV", 10}, {"supercell", {3, 2, 1}}, {"commensurate", true}, {"suggested_supercell", nullptr},
+				{"symbols", {symbol}}, {"masses_amu", {1}}, {"cell_angstrom", {{3, 0, 0}, {0, 2, 0}, {0, 0, 1}}},
+				{"positions_angstrom", {{0, 0, 0}}}, {"real_angstrom", {{alongX ? 1 : 0, alongX ? 0 : 1, 0}}}, {"imag_angstrom", {{0, 0, 1}}},
+				{"partner", nullptr}}.dump());
+		}
 
 		void WriteNpy(const Path &file, const std::string &shape, const std::vector<float> &values)
 		{
@@ -488,6 +520,134 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(session.CcdDirectionBlocker().empty()); EXPECT_FALSE(session.IsAnimating());
 		ASSERT_TRUE(session.ActivateCase(first));
 		EXPECT_EQ(session.Settings().animationSource, "mode"); EXPECT_NEAR(session.MixAngle(), std::numbers::pi / 6, 1e-12);
+	}
+
+	TEST(PhononViewsTests, DispersionPickSubmitsOnceAndOnlyTheNewestRequestCanCommit)
+	{
+		Workspace workspace;
+		const auto dispersion = workspace.root / "dispersion", output = workspace.root / "mode";
+		DispersionDataset(workspace, dispersion); BulkDataset(workspace, output);
+		const auto jobs = CreateRef<JobSystem>(Ref<EventBus>{}, 1);
+		const auto gate = CreateRef<Gate>();
+		OpenGateOnExit release{gate};
+		const auto blocking = jobs->Submit(CreateRef<BlockingJob>(gate));
+		ASSERT_TRUE(WaitUntil([&] { return jobs->GetJob(blocking)->status == JobStatus::Running; }, Time::Milliseconds(5000)));
+		PhononPanelSession session(jobs);
+		session.SetPersistedState({}, workspace.root);
+		const auto caseId = session.AddCase("pick");
+		session.Settings().bulkForceConstantDirectory = workspace.root;
+		ASSERT_TRUE(PhononDispersionTestAccess::Load(session, dispersion));
+		session.PickDispersionRow(1, 1);
+		const auto first = PhononDispersionTestAccess::Request(session), firstJob = PhononDispersionTestAccess::Job(session);
+		EXPECT_EQ(session.Settings().animationSource, "bulk_q"); EXPECT_EQ(session.Settings().bulkBand, 1);
+		EXPECT_EQ(session.Settings().bulkQ, glm::dvec3(0.25, 0, 0)); EXPECT_EQ(session.DispersionRow(), 1u);
+		EXPECT_EQ(PhononDispersionTestAccess::Size(session), "auto");
+		EXPECT_EQ(jobs->GetAllJobs().size(), 2u);
+		session.PickDispersionRow(3, 0);
+		const auto newest = PhononDispersionTestAccess::Request(session);
+		EXPECT_NE(first, newest); EXPECT_TRUE(jobs->GetJob(firstJob)->cancellationRequested);
+		EXPECT_EQ(jobs->GetAllJobs().size(), 3u);
+		EXPECT_FALSE(PhononDispersionTestAccess::Complete(session, first, caseId, output));
+		EXPECT_FALSE(session.BulkMode()); EXPECT_TRUE(session.Settings().selectedBulkModeDirectory.Empty());
+		EXPECT_TRUE(PhononDispersionTestAccess::Complete(session, newest, caseId, output));
+		ASSERT_TRUE(session.BulkMode()); EXPECT_EQ(session.Settings().selectedBulkModeDirectory, output);
+		EXPECT_EQ(session.Settings().bulkQ, glm::dvec3(0, 0.5, 0)); EXPECT_EQ(session.Settings().bulkBand, 0);
+		EXPECT_EQ(session.Settings().bulkSupercell, "auto"); EXPECT_EQ(session.Cases()[0].settings.bulkQ, session.Settings().bulkQ);
+		session.CancelBulkMode();
+		EXPECT_FALSE(PhononDispersionTestAccess::Complete(session, newest, caseId, output));
+		session.PickDispersionRow(10, 0); session.PickDispersionRow(0, 10);
+		EXPECT_EQ(jobs->GetAllJobs().size(), 3u);
+		session.PickDispersionRow(0, 1);
+		const auto inactiveRequest = PhononDispersionTestAccess::Request(session);
+		const auto other = session.AddCase("other");
+		EXPECT_FALSE(PhononDispersionTestAccess::Complete(session, newest, caseId, output));
+		EXPECT_TRUE(PhononDispersionTestAccess::Complete(session, inactiveRequest, caseId, output));
+		EXPECT_EQ(session.ActiveCaseId(), other); EXPECT_FALSE(session.BulkMode());
+		EXPECT_TRUE(session.Settings().selectedBulkModeDirectory.Empty());
+		EXPECT_EQ(session.Cases()[0].settings.selectedBulkModeDirectory, output);
+		session.CancelBulkMode();
+	}
+
+	TEST(PhononViewsTests, BulkModeOutputNamesReuseARequestAndSeparateQBandAndSize)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		session.SetPersistedState({}, workspace.root); session.Settings().bulkForceConstantDirectory = workspace.root;
+		session.Settings().bulkQ = {-1.0 / 3, 0.25, -0.0}; session.Settings().bulkBand = 1;
+		const auto first = PhononDispersionTestAccess::Output(session, "auto");
+		EXPECT_EQ(first.filename().Utf8(), "bulk_mode_qm0p333333_0p250000_0p000000_b1_auto");
+		EXPECT_EQ(PhononDispersionTestAccess::Output(session, "auto"), first);
+		EXPECT_NE(PhononDispersionTestAccess::Output(session, "3x2x1"), first);
+		session.Settings().bulkBand = 0; EXPECT_NE(PhononDispersionTestAccess::Output(session, "auto"), first);
+		session.Settings().bulkBand = 1;
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			session.Settings().bulkQ[axis] += 0.1;
+			EXPECT_NE(PhononDispersionTestAccess::Output(session, "auto"), first);
+			session.Settings().bulkQ[axis] -= 0.1;
+		}
+	}
+
+	TEST(PhononViewsTests, DispersionExplorationKeepsTheBoundSizeAndSwapsMatchingFieldsWithoutStopping)
+	{
+		Workspace workspace;
+		const auto original = workspace.root / "old", replacement = workspace.root / "new", mismatch = workspace.root / "mismatch";
+		BulkDataset(workspace, original); BulkDataset(workspace, replacement, "B", true); BulkDataset(workspace, mismatch, "N");
+		DispersionDataset(workspace, workspace.root / "dispersion");
+		const auto jobs = CreateRef<JobSystem>(Ref<EventBus>{}, 1);
+		const auto gate = CreateRef<Gate>();
+		OpenGateOnExit release{gate};
+		const auto blocking = jobs->Submit(CreateRef<BlockingJob>(gate));
+		ASSERT_TRUE(WaitUntil([&] { return jobs->GetJob(blocking)->status == JobStatus::Running; }, Time::Milliseconds(5000)));
+		PhononPanelSession session(jobs);
+		session.SetPersistedState({}, workspace.root);
+		session.Settings().bulkForceConstantDirectory = workspace.root; // without it BulkModeBlocker refuses the pick
+		ASSERT_TRUE(session.LoadBulkMode(original));
+		session.Settings().bulkSupercell = "auto"; session.SetAnimationSource("bulk_q");
+		auto windows = Windows();
+		windows[0].title = "Superkomórka bulku (fonony)"; windows[0].structure.sourcePath = original / "POSCAR";
+		session.Update(windows, 0, true);
+		const auto rest = windows[0].structure.atoms[0].cartesianPosition;
+		session.StartAnimation(windows[0]); session.SetPhase(windows[0], 0.7);
+		ASSERT_TRUE(session.IsAnimating()); const auto frame = windows[0].structure.atoms[0].cartesianPosition;
+		ASSERT_TRUE(PhononDispersionTestAccess::Load(session, workspace.root / "dispersion"));
+		session.PickDispersionRow(2, 1);
+		EXPECT_EQ(PhononDispersionTestAccess::Size(session), "3x2x1"); EXPECT_EQ(session.Settings().bulkSupercell, "auto");
+		EXPECT_EQ(jobs->GetAllJobs().size(), 2u);
+		ASSERT_TRUE(PhononDispersionTestAccess::Complete(session, PhononDispersionTestAccess::Request(session), session.ActiveCaseId(), replacement));
+		EXPECT_TRUE(session.IsAnimating()); EXPECT_DOUBLE_EQ(session.Phase(), 0.7);
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, frame);
+		EXPECT_EQ(windows[0].structure.sourcePath, replacement / "POSCAR");
+		session.Update(windows, 0, true); EXPECT_TRUE(session.IsAnimating());
+		EXPECT_NEAR(windows[0].structure.atoms[0].cartesianPosition.x, rest.x + 0.3 * std::sin(0.7), 1e-6);
+		EXPECT_NEAR(windows[0].structure.atoms[0].cartesianPosition.y, rest.y, 1e-6);
+		session.StopAnimation(); EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest);
+		session.StartAnimation(windows[0]); session.SetPhase(windows[0], 0.7);
+		ASSERT_TRUE(session.LoadBulkMode(mismatch, false));
+		EXPECT_FALSE(session.IsAnimating()); EXPECT_TRUE(session.WindowId().empty());
+		EXPECT_EQ(windows[0].structure.atoms[0].cartesianPosition, rest); EXPECT_FALSE(windows[0].modeArrows);
+		EXPECT_EQ(windows[0].structure.sourcePath, replacement / "POSCAR");
+		session.Update(windows, 0, true); EXPECT_TRUE(session.WindowId().empty());
+	}
+
+	TEST(PhononViewsTests, DispersionLineRestoresFromCaseQWithToleranceAndLegacyDataCannotBePicked)
+	{
+		Workspace workspace;
+		const auto dispersion = workspace.root / "dispersion", legacy = workspace.root / "legacy";
+		DispersionDataset(workspace, dispersion); DispersionDataset(workspace, legacy, false);
+		PhononPanelSession session;
+		const auto first = session.AddCase("first"), second = session.AddCase("second");
+		session.Settings().selectedDispersionDirectory = dispersion; session.Settings().bulkQ = {0, 0.2500005, 0};
+		ASSERT_TRUE(session.ActivateCase(first));
+		session.Settings().selectedDispersionDirectory = dispersion; session.Settings().bulkQ = {0.25, 0, 0};
+		const auto saved = session.Settings();
+		session.SetPersistedState(saved, workspace.root);
+		EXPECT_EQ(session.DispersionRow(), 1u); EXPECT_FALSE(session.IsAnimating()); EXPECT_FALSE(session.IsBusy());
+		ASSERT_TRUE(session.ActivateCase(second)); EXPECT_EQ(session.DispersionRow(), 2u);
+		session.Settings().bulkQ = {0.9, 0.9, 0}; EXPECT_FALSE(session.DispersionRow());
+		ASSERT_TRUE(PhononDispersionTestAccess::Load(session, legacy)); EXPECT_FALSE(session.DispersionRow());
+		const auto q = session.Settings().bulkQ;
+		session.PickDispersionRow(0, 0); EXPECT_EQ(session.Settings().bulkQ, q); EXPECT_FALSE(session.IsBusy());
 	}
 
 	TEST(PhononViewsTests, PhononViewsUseExistingLeftBottomAndRightDockRegions)

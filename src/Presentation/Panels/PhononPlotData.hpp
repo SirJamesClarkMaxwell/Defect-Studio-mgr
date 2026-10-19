@@ -45,6 +45,17 @@ namespace DefectStudio
 		const Path &project, const std::vector<ProjectRootEntry> &roots = std::vector<ProjectRootEntry>{}, std::span<const glm::vec4> colors = std::span<const glm::vec4>{});
 	[[nodiscard]] PlotData BuildDispersionPlotData(const PhononDispersion &result,
 		const PhononPanelSettings &settings, const Path &source, std::span<const glm::vec4> colors = std::span<const glm::vec4>{});
+	struct DispersionPick
+	{
+		std::size_t row = 0;
+		int band = 0, segment = 0;
+		double distance = 0.0, frequencyMeV = 0.0;
+		glm::dvec3 q{0.0};
+	};
+	[[nodiscard]] std::optional<DispersionPick> PickDispersion(const PhononDispersion &result,
+		double distance, double frequencyMeV, double distancePerPixel, double meVPerPixel);
+	// Returns distance.size() when the segment has no rows.
+	[[nodiscard]] std::size_t SnapToSegment(const PhononDispersion &result, int segment, double distance);
 	[[nodiscard]] std::string PhononPlotStyleKey(const PlotSeriesData &series);
 	[[nodiscard]] std::string PhononPlotLegendId(const PlotSeriesData &series);
 	[[nodiscard]] std::vector<DataTableColumn> PhononModesColumns(const PhononAnalysisResult &result,

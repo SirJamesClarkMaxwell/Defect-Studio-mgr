@@ -7,7 +7,6 @@
 #include <format>
 #include <regex>
 #include "Core/JobSystem/JobSystem.hpp"
-#include "Core/Utils/Uuid.hpp"
 #include "IO/PhononModeIO.hpp"
 #include "Renderer/RendererWindowState.hpp"
 #include "ScientificRuntime/Python/PhononModeJob.hpp"
@@ -40,18 +39,95 @@ namespace DefectStudio
 
 	void PhononPanelSession::SubmitBulkMode()
 	{
+		submitBulkMode(m_Settings.bulkSupercell);
+	}
+
+	std::optional<std::size_t> PhononPanelSession::DispersionRow()
+	{
+		if (!m_Dispersion || m_Dispersion->qpoints.empty() || m_PickedDispersionDirectory != m_Settings.selectedDispersionDirectory)
+		{
+			m_PickedDispersionRow.reset();
+			m_DispersionClickArmed = m_DispersionDragHeld = false;
+			m_DispersionInputPlot = 0;
+			m_PickedDispersionDirectory = m_Settings.selectedDispersionDirectory;
+		}
+		if (!m_Dispersion || m_Dispersion->qpoints.empty()) return std::nullopt;
+		const auto &result = *m_Dispersion;
+		const auto count = std::min({result.qpoints.size(), result.distance.size(), result.segment.size()});
+		const auto matches = [&](std::size_t row) {
+			const auto delta = result.qpoints[row] - m_Settings.bulkQ;
+			return std::abs(delta.x) <= 1e-6 && std::abs(delta.y) <= 1e-6 && std::abs(delta.z) <= 1e-6;
+		};
+		if (m_PickedDispersionRow && *m_PickedDispersionRow < count &&
+			(m_DispersionDragHeld || matches(*m_PickedDispersionRow)))
+		{
+			m_PickedDispersionSegment = result.segment[*m_PickedDispersionRow];
+			return m_PickedDispersionRow;
+		}
+		m_PickedDispersionRow.reset();
+		for (std::size_t row = 0; row < count; ++row)
+			if (matches(row))
+			{
+				m_PickedDispersionRow = row;
+				m_PickedDispersionSegment = result.segment[row];
+				break;
+			}
+		return m_PickedDispersionRow;
+	}
+
+	void PhononPanelSession::PickDispersionRow(std::size_t row, int band)
+	{
+		if (!m_Dispersion || row >= m_Dispersion->qpoints.size() || row >= m_Dispersion->segment.size() ||
+			row >= m_Dispersion->distance.size() || band < 0 || static_cast<std::size_t>(band) >= m_Dispersion->bandsMeV.size() ||
+			row >= m_Dispersion->bandsMeV[band].size()) return;
+		m_Settings.bulkQ = m_Dispersion->qpoints[row];
+		m_Settings.bulkBand = band;
+		m_PickedDispersionRow = row;
+		m_PickedDispersionSegment = m_Dispersion->segment[row];
+		m_PickedDispersionDirectory = m_Settings.selectedDispersionDirectory;
+		SetAnimationSource("bulk_q");
+		Changed();
+		submitBulkMode(bulkModeSupercellForPick());
+	}
+
+	std::string PhononPanelSession::bulkModeSupercellForPick()
+	{
+		auto size = m_Settings.bulkSupercell;
+		if (size == "auto")
+			if (const auto window = targetWindow(); window && m_BulkMode)
+			{
+				const auto &bound = m_BulkWindowSizes.try_emplace(window->get().windowId, m_BulkMode->supercell).first->second;
+				size = std::format("{}x{}x{}", bound[0], bound[1], bound[2]);
+			}
+		return size;
+	}
+
+	Path PhononPanelSession::bulkModeOutputPath(const std::string &supercell) const
+	{
+		const auto coordinate = [](double value) {
+			auto text = std::format("{:.6f}", std::abs(value) < 0.0000005 ? 0.0 : value);
+			std::replace(text.begin(), text.end(), '-', 'm');
+			std::replace(text.begin(), text.end(), '.', 'p');
+			return text;
+		};
+		const auto base = defaultDatasetPath({m_Settings.bulkForceConstantDirectory}, "bulk_mode");
+		return base.parent_path() / std::format("bulk_mode_q{}_{}_{}_b{}_{}", coordinate(m_Settings.bulkQ.x),
+			coordinate(m_Settings.bulkQ.y), coordinate(m_Settings.bulkQ.z), m_Settings.bulkBand, supercell);
+	}
+
+	void PhononPanelSession::submitBulkMode(const std::string &supercell)
+	{
 		if (IsBusy() && !m_PendingModeJob) { m_BulkModeError = "Poczekaj na zakończenie bieżącego zadania."; return; }
 		m_BulkModeError = BulkModeBlocker();
 		if (!m_BulkModeError.empty()) return;
 		const auto jobs = m_JobSystem.lock();
 		if (!jobs) { m_BulkModeError = "JobSystem niedostępny."; return; }
 		CancelBulkMode();
-		// Separate publications prevent a cancelled subprocess from overwriting a newer request.
-		const auto base = defaultDatasetPath({m_Settings.bulkForceConstantDirectory}, "bulk_mode");
-		const auto output = base.parent_path() / ("bulk_mode_" + ToString(GenerateUuid()));
+		const auto output = bulkModeOutputPath(supercell);
 		m_PendingModeCaseId = ActiveCaseId();
+		m_PendingModeRequestId = m_ModeRequestId;
 		m_PendingModeJob = CreateRef<PhononModeJob>(m_Settings.bulkForceConstantDirectory, output,
-			m_Settings.bulkQ, m_Settings.bulkBand, m_Settings.bulkSupercell, m_Settings.dispersionInPlane);
+			m_Settings.bulkQ, m_Settings.bulkBand, supercell, m_Settings.dispersionInPlane);
 		m_PendingModeJobId = jobs->Submit(m_PendingModeJob, JobPriority::Normal);
 		m_BulkModeError.clear();
 		Changed();
@@ -59,10 +135,31 @@ namespace DefectStudio
 
 	void PhononPanelSession::CancelBulkMode()
 	{
+		++m_ModeRequestId;
 		if (m_PendingModeJob) cancelJob(m_PendingModeJobId);
 		m_PendingModeJob.reset();
 		m_PendingModeJobId = 0;
+		m_PendingModeRequestId = 0;
 		m_PendingModeCaseId.clear();
+	}
+
+	bool PhononPanelSession::applyBulkModeResult(std::uint64_t requestId, const std::string &caseId, const Path &output)
+	{
+		if (requestId == 0 || requestId != m_ModeRequestId || requestId != m_PendingModeRequestId) return false;
+		if (caseId == ActiveCaseId())
+		{
+			if (!LoadBulkMode(output, false)) return false;
+		}
+		else
+		{
+			const auto item = std::find_if(m_Settings.cases.begin(), m_Settings.cases.end(),
+				[&](const auto &entry) { return entry.id == caseId; });
+			if (item == m_Settings.cases.end()) return false;
+			item->settings.selectedBulkModeDirectory = output;
+		}
+		if (auto dataset = ReadDatasetRef(output)) AddDataset(std::move(*dataset));
+		Changed();
+		return true;
 	}
 
 	void PhononPanelSession::pollBulkModeJob()
@@ -72,29 +169,31 @@ namespace DefectStudio
 		const auto snapshot = jobs ? jobs->GetJob(m_PendingModeJobId) : std::nullopt;
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return;
 		const auto caseId = m_PendingModeCaseId;
-		if (snapshot && snapshot->status == JobStatus::Completed && m_PendingModeJob->GetResult())
+		if (m_PendingModeRequestId != m_ModeRequestId) { CancelBulkMode(); return; }
+		if (snapshot && !snapshot->cancellationRequested && snapshot->status == JobStatus::Completed && m_PendingModeJob->GetResult())
 		{
 			const auto output = *m_PendingModeJob->GetResult();
-			if (auto dataset = ReadDatasetRef(output)) AddDataset(std::move(*dataset));
-			if (caseId == ActiveCaseId())
-			{
-				if (LoadBulkMode(output)) Changed();
-			}
-			else
-				for (auto &item : m_Settings.cases)
-					if (item.id == caseId) { item.settings.selectedBulkModeDirectory = output; Changed(); }
+			(void)applyBulkModeResult(m_PendingModeRequestId, caseId, output);
 		}
 		else if (caseId == ActiveCaseId())
 			m_BulkModeError = m_PendingModeJob->GetError() ? m_PendingModeJob->GetError()->userMessage :
 				snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Obliczanie modu przerwane.";
 		m_PendingModeJob.reset();
 		m_PendingModeJobId = 0;
+		m_PendingModeRequestId = 0;
 		m_PendingModeCaseId.clear();
 	}
 
 	void PhononPanelSession::SetBulkMode(PhononModeField mode)
 	{
-		if (m_Settings.animationSource == "bulk_q") clearWindow();
+		if (m_Settings.animationSource == "bulk_q")
+		{
+			const auto window = targetWindow();
+			if (window && m_BulkMode) m_BulkWindowSizes.try_emplace(window->get().windowId, m_BulkMode->supercell);
+			if (!window || window->get().structure.atoms.size() != mode.symbols.size() ||
+				!std::equal(mode.symbols.begin(), mode.symbols.end(), window->get().structure.atoms.begin(),
+					[](const auto &symbol, const auto &atom) { return symbol == atom.element; })) clearWindow();
+		}
 		m_BulkMode = std::move(mode);
 		++m_PlotRevision;
 		rebuildField();
@@ -106,6 +205,9 @@ namespace DefectStudio
 		if (!PhononModeIO::Load(directory, mode, m_BulkModeError)) return false;
 		SetBulkMode(std::move(mode));
 		m_Settings.selectedBulkModeDirectory = directory;
+		// The existing binding gate uses the source path; adopt the new dataset without rebuilding the window.
+		if (m_Settings.animationSource == "bulk_q")
+			if (const auto window = targetWindow()) window->get().structure.sourcePath = directory / "POSCAR";
 		if (adoptControls)
 		{
 			m_Settings.bulkQ = m_BulkMode->q;
@@ -142,6 +244,11 @@ namespace DefectStudio
 
 	void PhononPanelSession::loadCaseBulk()
 	{
+		if (m_BulkWindows.empty()) m_BulkWindowSizes.clear();
+		m_PickedDispersionRow.reset();
+		m_PickedDispersionDirectory = {};
+		m_DispersionInputPlot = 0;
+		m_DispersionClickArmed = m_DispersionDragHeld = false;
 		m_Dispersion.reset();
 		m_DispersionError.clear();
 		m_BulkMode.reset();
