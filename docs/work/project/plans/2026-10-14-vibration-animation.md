@@ -32,6 +32,7 @@ segmencie ścieżki (bez przeskoku przez przerwy), liczy po puszczeniu, nowsze �
 | 108b | ΔQ: `ccd_analysis.py` zapisuje uporządkowane ΔR i geometrię GS; stare zbiory bez wektora → jasny powód „niedostępne” | rozszerzenie istniejącego |
 | 108c | nowy job `phonon_mode.py` (FC bulku jak w dyspersji, `run_qpoints(with_eigenvectors)` + modulacja), `vibration.json` + POSCAR; dyspersja zapisuje q numerycznie | nowy |
 | 108d | klik/przeciąganie w dyspersji, okno bulku, przełączanie źródeł zachowuje kamerę | nie |
+| 108e | porównanie ΔR między przypadkami: lokalizacja (atomy 90 % ΔQ², ΔQ²(r)), pokrycie ΔQ² modami, podobieństwo ΔR | nie |
 
 ## Pułapki fizyczne
 
@@ -49,3 +50,11 @@ segmencie ścieżki (bez przeskoku przez przerwy), liczy po puszczeniu, nowsze �
    wzdłuż ΔR.
 3. Mody zdegenerowane: **od razu suwak kąta mieszania** cos θ · e1 + sin θ · e2 (dla par zdegenerowanych,
    także modów defektu, np. E w C3v) - wchodzi do 108a.
+
+## Decyzje użytkownika (2026-10-20)
+
+4. Stan animacji **per przypadek** (źródło, mod, θ, tryb ΔQ, Q, zasięg, q + gałąź, superkomórka); globalnie
+   amplituda, okres, strzałki. Po wczytaniu nic nie startuje samo.
+5. Bulk to zestaw współdzielony przez przypadki; przypadek wskazuje swój bulk (dyspersja i mod bulku per przypadek).
+6. Porównanie ΔR między defektami (108e). Zadania: `tasks/108b-…`, `108c-bulk-mode-at-q.md`,
+   `108d-dispersion-pick-and-drag.md`, `108e-displacement-comparison.md`.
