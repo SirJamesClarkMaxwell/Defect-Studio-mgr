@@ -372,7 +372,13 @@ namespace DefectStudio
 			std::string modesError;
 		};
 		std::map<std::string, CachedPhonons> m_Spectra;
-		std::map<std::string, std::pair<std::optional<CcdAnalysisResult>, std::string>> m_CcdResults;
+		struct CachedCcd
+		{
+			std::optional<CcdAnalysisResult> result;
+			std::string error;
+			std::array<std::filesystem::file_time_type, 2> modified{};
+		};
+		std::map<std::string, CachedCcd> m_CcdResults;
 		std::optional<CcdAnalysisResult> m_CcdResult;
 		WeakRef<JobSystem> m_ScanJobs;
 		Ref<AnalysisDatasetScanJob> m_ScanJob;

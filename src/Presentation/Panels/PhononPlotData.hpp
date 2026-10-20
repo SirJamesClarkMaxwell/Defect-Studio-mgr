@@ -26,11 +26,17 @@ namespace DefectStudio
 		std::string caseId, caseName, label, zplSource;
 		bool compared = false, active = false;
 		// ZPL, delta Q, S, DW %, effective energy, strongest energy, S_k, n_eff, imaginary count.
-		std::array<std::optional<double>, 9> values;
-		std::array<std::string, 9> reasons;
+		// CCD delta Q, maximum displacement, carried atoms, mode coverage %, largest mode share %.
+		std::array<std::optional<double>, 14> values;
+		std::array<std::string, 14> reasons;
 	};
 	[[nodiscard]] std::vector<PhononComparisonRow> BuildPhononComparisonRows(PhononPanelSession &session, const Path &project);
 	[[nodiscard]] std::vector<DataTableColumn> PhononComparisonColumns(std::span<const PhononComparisonRow> rows);
+	// The one-argument API retains the original twelve-column export schema.
+	[[nodiscard]] std::vector<DataTableColumn> PhononComparisonColumns(std::span<const PhononComparisonRow> rows, double carriedFraction);
+	[[nodiscard]] std::vector<DataTableColumn> BuildDisplacementOverlapColumns(PhononPanelSession &session, const Path &project);
+	[[nodiscard]] PlotData BuildLocalisationPlotData(PhononPanelSession &session, const Path &project,
+		const std::vector<ProjectRootEntry> &roots = std::vector<ProjectRootEntry>{}, std::span<const glm::vec4> colors = std::span<const glm::vec4>{});
 
 	// UI supplies the current colormap; adapters resolve automatic colours without depending on ImPlot.
 	[[nodiscard]] PlotData BuildBetaPlotData(PhononPanelSession &session, const Path &project,

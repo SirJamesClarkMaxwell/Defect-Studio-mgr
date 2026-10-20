@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <tuple>
+#include <nlohmann/json.hpp>
 
 #include "Core/Utils/Uuid.hpp"
 #include "Presentation/Panels/PhononPlotData.hpp"
@@ -49,6 +52,21 @@ namespace DefectStudio::Tests
 					"0\t0\tA1\t1\t1\t99\t99\t1\n1\t50\tA1\t1\t1\t0.2\t1\t0\n2\t100\tE\t1\t1\t0.7\t2\t0\n");
 				Npy(directory / "eigenvectors.npy", "(3, 1, 3)", {1, 0, 0, 0, 1, 0, 0, 0, 1});
 				Npy(directory / "participation.npy", "(3, 1)", {1, 1, 1});
+				return directory;
+			}
+			Path Ccd(const std::string &name, int axis = 0, const std::string &symbol = "B")
+			{
+				const auto directory = root / name;
+				Write(directory, "summary.json", R"({"schema":"ds.ccd_analysis.v1","delta_Q_amu05_A":3.1622776601683795,
+					"zpl_eV":{"used":2},"displacement_file":"ccd_displacement.json"})");
+				auto data = nlohmann::json::parse(R"({"schema":"ds.ccd_displacement.v1","symbols":["B","N","N"],
+					"masses_amu":[2,1,1],"cell_angstrom":[[10,0,0],[0,10,0],[0,0,10]],
+					"gs_positions_angstrom":[[0.1,0,0],[9.9,0,0],[4,0,0]],
+					"displacement_angstrom":[[2,0,0],[1,0,0],[1,0,0]],"delta_Q_amu05_A":3.1622776601683795,
+					"gs_source":"gs/POSCAR","es_source":"es/POSCAR"})");
+				data["symbols"][0] = symbol;
+				if (axis == 1) data["displacement_angstrom"] = {{0, 2, 0}, {0, 1, 0}, {0, 1, 0}};
+				Write(directory, "ccd_displacement.json", data.dump());
 				return directory;
 			}
 		};
@@ -194,5 +212,161 @@ namespace DefectStudio::Tests
 		const auto text = FormatDataTable(columns, format);
 		EXPECT_NE(text.find("\n\t\t\teV\tamu^½ Å\t\t%\tmeV\tmeV\t\t\t\n"), std::string::npos);
 		EXPECT_TRUE(PhononComparisonColumns({}).empty());
+	}
+
+	TEST(PhononComparisonTests, DisplacementColumnsUseSelectedCcdAndFullExportRetainsTableOrderAndFraction)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		auto phonons = Synthetic(); phonons.deltaQAmuHalfAngstrom = 5;
+		SetSynthetic(session, workspace.root / "phonons", phonons);
+		auto rows = BuildPhononComparisonRows(session, workspace.root);
+		for (std::size_t i = 9; i < 12; ++i)
+		{
+			EXPECT_FALSE(rows[0].values[i]); EXPECT_EQ(rows[0].reasons[i], "Brak zestawu CCD z ΔR w przypadku.");
+		}
+		const auto legacy = workspace.Ccd("legacy");
+		std::filesystem::remove((legacy / "ccd_displacement.json").Native());
+		session.Settings().selectedCcdDirectory = legacy;
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_EQ(rows[0].reasons[9], "Zestaw CCD bez ΔR - przelicz CCD.");
+		session.Settings().selectedCcdDirectory = workspace.Ccd("ccd");
+		session.Settings().carriedFraction = 0.8;
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		ASSERT_EQ(rows.size(), 1u);
+		for (std::size_t i = 9; i < 14; ++i) { ASSERT_TRUE(rows[0].values[i]); EXPECT_TRUE(std::isfinite(*rows[0].values[i])); }
+		EXPECT_NEAR(*rows[0].values[9], std::sqrt(10.0), 1e-12);
+		EXPECT_EQ(rows[0].values[10], 2); EXPECT_EQ(rows[0].values[11], 1);
+		EXPECT_EQ(rows[0].values[12], 20); EXPECT_EQ(rows[0].values[13], 16);
+		const auto columns = PhononComparisonColumns(rows, 0.8);
+		ASSERT_EQ(columns.size(), 17u);
+		EXPECT_EQ(columns[12].name, "ΔQ (CCD)"); EXPECT_EQ(columns[12].unit, "amu^½ Å");
+		EXPECT_EQ(columns[13].name, "max |ΔR|"); EXPECT_EQ(columns[13].unit, "Å");
+		EXPECT_EQ(columns[14].name, "atomy 80 % ΔQ²");
+		EXPECT_EQ(columns[15].name, "pokrycie ΔQ² modami"); EXPECT_EQ(columns[15].unit, "%");
+		EXPECT_EQ(columns[16].name, "największy udział modu"); EXPECT_EQ(columns[16].unit, "%");
+		for (std::size_t i = 0; i < rows[0].values.size(); ++i) EXPECT_EQ(columns[i + 3].values[0], *rows[0].values[i]);
+		EXPECT_EQ(PhononComparisonColumns(rows).size(), 12u);
+		EXPECT_TRUE(PhononComparisonColumns({}, 0.9).empty());
+		DataTableFormat format; format.originHeader = true;
+		EXPECT_NE(FormatDataTable(columns, format).find("atomy 80 % ΔQ²"), std::string::npos);
+		session.Settings().carriedFraction = 0.9;
+		EXPECT_EQ(BuildPhononComparisonRows(session, workspace.root)[0].values[11], 2);
+	}
+
+	TEST(PhononComparisonTests, CoverageExcludesTranslationsAndNeedsFiniteProjectionsAndPositivePhononDeltaQ)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		auto phonons = Synthetic(); phonons.deltaQAmuHalfAngstrom = 5; phonons.modes[1].frequencyMeV = -50;
+		SetSynthetic(session, workspace.root / "phonons", phonons);
+		auto rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_EQ(rows[0].values[12], 20); EXPECT_EQ(rows[0].values[13], 16);
+		phonons.modes[1].qAmuHalfAngstrom = std::numeric_limits<double>::quiet_NaN(); session.SetResult(phonons);
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_FALSE(rows[0].values[12]); EXPECT_FALSE(rows[0].values[13]); EXPECT_FALSE(rows[0].reasons[12].empty());
+		phonons = Synthetic(); phonons.deltaQAmuHalfAngstrom = 0; session.SetResult(phonons);
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_FALSE(rows[0].values[12]); EXPECT_FALSE(rows[0].values[13]);
+		phonons = Synthetic(); phonons.modes.clear(); session.SetResult(phonons);
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_FALSE(rows[0].values[12]); EXPECT_EQ(rows[0].reasons[12], rows[0].reasons[5]);
+		const auto columns = PhononComparisonColumns(rows, 0.9);
+		for (std::size_t i = 12; i < 17; ++i) EXPECT_TRUE(std::isnan(columns[i].values[0]));
+	}
+
+	TEST(PhononComparisonTests, LocalisationUsesOneSeriesPerActiveOrComparedCaseWithSelectedDisplacement)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		SetSynthetic(session, workspace.root / "phonons", Synthetic());
+		const auto a = session.ActiveCaseId();
+		const auto ccdA = workspace.Ccd("ccd-a"), ccdB = workspace.Ccd("ccd-b", 1);
+		session.Settings().selectedCcdDirectory = ccdA;
+		const auto variant = workspace.Dataset("variant");
+		session.AddDataset({AnalysisDatasetKind::Phonons, variant, "variant", {}}); session.AttachDataset(a, variant);
+		session.SetCompared(variant, true);
+		const auto b = session.AddCase("second");
+		session.AddDataset({AnalysisDatasetKind::Ccd, ccdB, "ccd-b", {}}); session.AttachDataset(b, ccdB);
+		session.Settings().selectedCcdDirectory = ccdB;
+		(void)session.AddCase("ignored"); session.Settings().selectedCcdDirectory = workspace.Ccd("ignored");
+		ASSERT_TRUE(session.ActivateCase(b));
+		session.Settings().seriesStyles["localisation/" + a].visible = false;
+		const std::vector<glm::vec4> colors = {{1, 0, 0, 1}, {0, 1, 0, 1}};
+		const auto plot = BuildLocalisationPlotData(session, workspace.root, {}, colors);
+		EXPECT_EQ(plot.id, "localisation"); EXPECT_EQ(plot.x.unit, "Å"); EXPECT_EQ(plot.y.maximum, 1);
+		ASSERT_EQ(plot.series.size(), 2u);
+		EXPECT_EQ(plot.series[0].label, "second"); EXPECT_EQ(plot.series[0].source, ccdB);
+		EXPECT_EQ(plot.series[1].label, "case"); EXPECT_EQ(plot.series[1].source, ccdA); EXPECT_FALSE(plot.series[1].style.visible);
+		EXPECT_NE(PhononPlotLegendId(plot.series[0]), PhononPlotLegendId(plot.series[1]));
+		for (const auto &series : plot.series)
+		{
+			EXPECT_TRUE(std::is_sorted(series.x.begin(), series.x.end()));
+			EXPECT_TRUE(std::is_sorted(series.y.begin(), series.y.end())); EXPECT_DOUBLE_EQ(series.y.back(), 1);
+			EXPECT_EQ(PhononPlotStyleKey(series), series.id);
+		}
+		const auto exported = PlotDataColumns(plot, workspace.root, false);
+		ASSERT_EQ(exported.size(), 4u); EXPECT_EQ(exported[0].unit, "Å");
+		EXPECT_EQ(exported[1].values, plot.series[0].y); EXPECT_NE(exported[0].comment.find("ccd-b"), std::string::npos);
+		EXPECT_EQ(PlotDataColumns(plot, workspace.root, true).size(), 2u);
+		EXPECT_EQ(session.ActiveCaseId(), b); EXPECT_EQ(session.Settings().selectedCcdDirectory, ccdB);
+		const auto rows = BuildPhononComparisonRows(session, workspace.root);
+		ASSERT_FALSE(rows.empty()); EXPECT_EQ(rows[0].caseId, b); EXPECT_TRUE(rows[0].values[9]);
+	}
+
+	TEST(PhononComparisonTests, OverlapTableIncludesComparableValuesAndEmptyCellsForIncompatibleCases)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		for (const auto &[name, axis, symbol] : {std::tuple{"first", 0, "B"}, std::tuple{"second", 1, "B"}, std::tuple{"third", 0, "C"}})
+		{
+			const auto id = session.AddCase(name);
+			const auto directory = workspace.Ccd(name, axis, symbol);
+			session.AddDataset({AnalysisDatasetKind::Ccd, directory, name, {}}); session.AttachDataset(id, directory);
+			session.Settings().selectedCcdDirectory = directory; session.SetCompared(directory, true);
+		}
+		const auto columns = BuildDisplacementOverlapColumns(session, workspace.root);
+		ASSERT_EQ(columns.size(), 4u);
+		EXPECT_EQ(columns[0].text, (std::vector<std::string>{"third", "first", "second"}));
+		for (std::size_t i = 1; i < columns.size(); ++i)
+		{
+			EXPECT_EQ(columns[i].name, columns[0].text[i - 1]); EXPECT_FALSE(columns[i].comment.empty());
+			EXPECT_NEAR(columns[i].values[i - 1], 1, 1e-12);
+		}
+		EXPECT_TRUE(std::isnan(columns[1].values[1])); EXPECT_TRUE(std::isnan(columns[2].values[0]));
+		EXPECT_DOUBLE_EQ(columns[2].values[2], 0); EXPECT_DOUBLE_EQ(columns[3].values[1], 0);
+		EXPECT_NE(FormatDataTable(columns, {}).find("first\t\t1\t0\n"), std::string::npos);
+		PhononPanelSession empty;
+		EXPECT_TRUE(BuildDisplacementOverlapColumns(empty, workspace.root).empty());
+		EXPECT_TRUE(BuildLocalisationPlotData(empty, workspace.root).series.empty());
+	}
+
+	TEST(PhononComparisonTests, CcdCacheInvalidatesOnDisplacementAndSummaryTimestampsAndRecoversFailedReads)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		const auto directory = workspace.Ccd("cached-ccd");
+		const auto id = session.AddCase("ccd-only");
+		session.AddDataset({AnalysisDatasetKind::Ccd, directory, "ccd", {}}); session.AttachDataset(id, directory);
+		session.Settings().selectedCcdDirectory = directory;
+		const auto initial = BuildPhononComparisonRows(session, workspace.root);
+		ASSERT_EQ(initial.size(), 1u); ASSERT_TRUE(initial[0].values[9]);
+		const auto displacementFile = (directory / "ccd_displacement.json").Native();
+		const auto timestamp = std::filesystem::last_write_time(displacementFile);
+		workspace.Write(directory, "ccd_displacement.json", "invalid");
+		std::filesystem::last_write_time(displacementFile, timestamp);
+		EXPECT_EQ(BuildPhononComparisonRows(session, workspace.root)[0].values[9], initial[0].values[9]);
+		std::filesystem::last_write_time(displacementFile, timestamp + std::chrono::seconds(2));
+		EXPECT_FALSE(BuildPhononComparisonRows(session, workspace.root)[0].values[9]);
+		EXPECT_TRUE(BuildLocalisationPlotData(session, workspace.root).series.empty());
+		(void)workspace.Ccd("cached-ccd");
+		std::filesystem::last_write_time(displacementFile, timestamp + std::chrono::seconds(4));
+		EXPECT_TRUE(BuildPhononComparisonRows(session, workspace.root)[0].values[9]);
+		const auto summaryFile = (directory / "summary.json").Native();
+		const auto summaryTimestamp = std::filesystem::last_write_time(summaryFile);
+		workspace.Write(directory, "summary.json", R"({"schema":"ds.ccd_analysis.v1","delta_Q_amu05_A":1,"zpl_eV":{"used":2},"displacement_file":null})");
+		std::filesystem::last_write_time(summaryFile, summaryTimestamp + std::chrono::seconds(2));
+		EXPECT_FALSE(BuildPhononComparisonRows(session, workspace.root)[0].values[9]);
+		EXPECT_TRUE(BuildDisplacementOverlapColumns(session, workspace.root).empty());
 	}
 }

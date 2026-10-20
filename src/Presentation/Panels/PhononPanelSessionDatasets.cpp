@@ -165,9 +165,19 @@ namespace DefectStudio
 		const Path &directory, std::string &outError)
 	{
 		auto [it, inserted] = m_CcdResults.try_emplace(SpectraKey(directory));
-		auto &[result, error] = it->second;
-		if (inserted)
+		auto &[result, error, modified] = it->second;
+		std::array<std::filesystem::file_time_type, 2> timestamps;
+		std::size_t index = 0;
+		for (const auto name : {"summary.json", "ccd_displacement.json"})
 		{
+			std::error_code ignored;
+			timestamps[index++] = std::filesystem::last_write_time((directory / name).Native(), ignored);
+		}
+		if (inserted || modified != timestamps)
+		{
+			if (!inserted) ++m_PlotRevision;
+			modified = timestamps;
+			result.reset(); error.clear();
 			CcdAnalysisResult ccd;
 			if (CcdAnalysisIO::Load(directory, ccd, error)) result = std::move(ccd);
 		}

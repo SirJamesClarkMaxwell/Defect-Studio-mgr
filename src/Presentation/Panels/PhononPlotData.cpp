@@ -252,6 +252,7 @@ namespace DefectStudio
 
 	std::string PhononPlotLegendId(const PlotSeriesData &series)
 	{
+		if (series.id.starts_with("localisation/")) return series.id;
 		if (series.kind == PlotSeriesKind::Line && (series.id.starts_with("S/") || series.id.starts_with("PL/")))
 			return series.source.Utf8();
 		if (series.id.starts_with("PL1D/phonons/")) return "phononPL";
