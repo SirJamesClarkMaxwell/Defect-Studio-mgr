@@ -10,6 +10,8 @@ pełnym buildzie Debug + Release (skill `full-build-verify`).
 - `docs/work/project/plans/2026-10-13-structure-building-gizmo.md` - budowanie komórek gizmo (112a-112g), status.
 - `docs/work/project/plans/2026-10-14-vibration-animation.md` - uniwersalna „Animacja drgań” (108a-d) z decyzjami.
 - `docs/work/project/plans/2026-10-11-figure-module.md` - moduł rycin (matplotlib), 111 to zalążek.
+- `docs/work/project/plans/2026-10-20-python-session-and-scripts.md` - inwentarz Pythona + propozycja (sesja ze
+  zmiennymi, skrypty z szablonu, debugger VS Code, `ds` read-only), po 2 rundach z codex; czeka na decyzje (§7).
 - Zadania: `docs/work/project/tasks/<NN>-*.md`, raporty: `docs/work/project/reports/task-<NN>-*.md`.
 
 ## Zrobione (commity na branchu, build Debug + testy zielone, GUI NIESPRAWDZONE)
@@ -44,6 +46,8 @@ Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`) jest zrobiony: 1
    na dyspersji), unieważnianie cache porównania po mtime (dziś tylko „Odśwież”), mieszanie 3-krotnych multipletów.
 3. Struktury dalej (opcjonalnie): malowanie wzoru pierwiastków, czyszczenie pozycji, powiązane pozycje (spglib).
 4. Merge do `dev` dopiero po GUI + pełnym Debug/Release.
+5. Python (osobny tor, nic nie zaczęte): plan `2026-10-20-python-session-and-scripts.md`, pytania w §7.
+   Znaleziony ukryty błąd: `InteractiveProcess::Terminate()` robi `join` przed zamknięciem joba (etap P0).
 
 ## Do kliknięcia (GUI)
 
