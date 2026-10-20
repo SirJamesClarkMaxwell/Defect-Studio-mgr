@@ -1,6 +1,6 @@
 # Handoff - stan pracy (aktualizowany przy każdym pushu)
 
-Ostatnia aktualizacja: 2026-10-20 (108b zrobione, Debug zielony; Release do sprawdzenia po serii 108c-e). Branch: `task/109-phonon-workspace` (od `task/105-ccd-analysis`, ten od
+Ostatnia aktualizacja: 2026-10-20 (seria 108b-e zrobiona; Debug + Release zielone: 1826 testów, 1821 przechodzi, 5 pominiętych). Branch: `task/109-phonon-workspace` (od `task/105-ccd-analysis`, ten od
 `dev` 3739e5b). Nic nie jest zmergowane do `dev`/`main`; merge dopiero po sprawdzeniu GUI przez użytkownika i
 pełnym buildzie Debug + Release (skill `full-build-verify`).
 
@@ -27,26 +27,33 @@ pełnym buildzie Debug + Release (skill `full-build-verify`).
 | 802cd18 | 109d porównanie (oś E_ZPL−E, normalizacja, tabela Porównanie) + 111 ryciny matplotlib |
 | 099b894, 0636acb | 108a pole drgań + mieszanie modów zdegenerowanych, 112g Powtórz/Odbij/`Shift+R` |
 | 970f8cd | 108b animacja kierunku ΔQ (przejście GS ↔ ES, drganie wokół GS), stan animacji per przypadek |
+| d0c7246 | 108c mod bulku w q (`phonon_mode.py`, modulacja phonopy na N×M×K komórki prymitywnej), bulk i dyspersja per przypadek |
+| fe0329e | 108d klik/przeciąganie po dyspersji, liczenie po puszczeniu, stałe katalogi `bulk_mode_q…` |
+| 3cba960 | 108e porównanie ΔR: ΔQ (CCD), max ΔR, atomy 90 % ΔQ², pokrycie modami, wykres ΔQ²(r), podobieństwo ΔR |
 
-Testy Debug: 1796, 1791 przechodzi, 5 pominiętych (oczekiwane: 2 przez `DS_PYTHON_CAPI_AVAILABLE=0`, 3 wymagające
+Testy Debug i Release: 1826, 1821 przechodzi, 5 pominiętych (oczekiwane: 2 przez `DS_PYTHON_CAPI_AVAILABLE=0`, 3 wymagające
 danych z klastra/dysku O:).
 
 ## W toku / następne
 
-Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`): 108b-e + persystencja per przypadek + porównanie
-wielu defektów. Zadania: `tasks/108c-bulk-mode-at-q.md`, `108d-dispersion-pick-and-drag.md`,
-`108e-displacement-comparison.md`; plan `plans/2026-10-14-vibration-animation.md` (decyzje 4-6).
+Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`) jest zrobiony: 108b-e + persystencja per przypadek
++ porównanie wielu defektów. Raporty: `reports/task-108b…108e-*.md` (odstępstwa od zadań opisane na końcu).
 
-1. **108c** (mod bulku w q, `phonon_mode.py`, bulk per przypadek): zlecone codex 2026-10-20 ~00:50.
-2. **108d** klik/przeciąganie po dyspersji, potem **108e** porównanie ΔR.
-3. Po serii: build Release obu projektów + pełne testy, HANDOFF, push.
-4. Przed merge: użytkownik klika GUI (lista niżej).
+1. Użytkownik klika GUI (lista niżej) - nic z 108a-e nie było oglądane w aplikacji.
+2. Otwarte pomysły (nie zlecone): grupowanie zestawów `bulk_mode_q…` w tabeli zestawów (przy dużej liczbie kliknięć
+   na dyspersji), unieważnianie cache porównania po mtime (dziś tylko „Odśwież”), mieszanie 3-krotnych multipletów.
+3. Struktury dalej (opcjonalnie): malowanie wzoru pierwiastków, czyszczenie pozycji, powiązane pozycje (spglib).
+4. Merge do `dev` dopiero po GUI + pełnym Debug/Release.
 
 ## Do kliknięcia (GUI)
 
 Fonony: podświetlenie wiersza, 3 okna, przełączanie przypadków, `Policz zaznaczone`, `Porównanie`, `Eksport…`,
 `Rycina…`, wykresy wyglądają jak wcześniej (rysowanie przeszło na adaptery), „Animacja drgań” + `Mieszanie θ`,
-źródło `kierunek ΔQ` (wymaga ponownego `Policz CCD`, potem `Otwórz geometrię GS`, Ruch, Zasięg, suwak Q).
+źródło `kierunek ΔQ` (wymaga ponownego `Policz CCD`, potem `Otwórz geometrię GS`, Ruch, Zasięg, suwak Q),
+źródło `mod bulku w q` (FC bulku w przypadku, np. `sjcm_mgr/hBN/bulk/phonons/vasp_661`: `Policz dyspersję` - nowa,
+bo stara nie ma `qpoints.tsv` - potem klik na krzywej w `Fonony: wykresy` → Dyspersja, przeciąganie linii,
+`Otwórz superkomórkę bulku`, ostrzeżenie o fragmencie i `Użyj N×M×K`), Porównanie: nowe kolumny ΔR, wykres
+ΔQ²(r), tabela „Podobieństwo ΔR”; zmiana przypadku przywraca jego źródło/q/gałąź/θ i nic nie startuje samo.
 Struktury: `G X 1/8`, `Shift+D`, panel Komórka (podsieć, powtórz 1×1×2), tryb Cele (Ctrl), `V`, `P`, `D`,
 `Przekształć` → Powtórz/Odbij, `Shift+R`. Uwaga: dawne `Shift+D` „ustaw widok jako domyślny” jest tylko w palecie.
 

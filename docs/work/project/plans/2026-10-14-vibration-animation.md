@@ -26,13 +26,13 @@ segmencie ścieżki (bez przeskoku przez przerwy), liczy po puszczeniu, nowsze �
 
 ## Wycinki
 
-| Wycinek | Zakres | Python |
-|---|---|---|
-| 108a | pole przemieszczeń + uniwersalne sterowanie, na razie tylko mod defektu; testy kwadratury zespolonej, Stop/zapis/zmiana przypadku/zamknięcie okna przywracają pozycje | nie |
-| 108b | ΔQ: `ccd_analysis.py` zapisuje uporządkowane ΔR i geometrię GS; stare zbiory bez wektora → jasny powód „niedostępne” | rozszerzenie istniejącego |
-| 108c | nowy job `phonon_mode.py` (FC bulku jak w dyspersji, `run_qpoints(with_eigenvectors)` + modulacja), `vibration.json` + POSCAR; dyspersja zapisuje q numerycznie | nowy |
-| 108d | klik/przeciąganie w dyspersji, okno bulku, przełączanie źródeł zachowuje kamerę | nie |
-| 108e | porównanie ΔR między przypadkami: lokalizacja (atomy 90 % ΔQ², ΔQ²(r)), pokrycie ΔQ² modami, podobieństwo ΔR | nie |
+| Wycinek | Zakres | Python | Stan (2026-10-20) |
+|---|---|---|---|
+| 108a | pole przemieszczeń + uniwersalne sterowanie, na razie tylko mod defektu; testy kwadratury zespolonej, Stop/zapis/zmiana przypadku/zamknięcie okna przywracają pozycje | nie | zrobione 099b894 |
+| 108b | ΔQ: `ccd_analysis.py` zapisuje uporządkowane ΔR i geometrię GS; stare zbiory bez wektora → jasny powód „niedostępne” | rozszerzenie istniejącego | zrobione 970f8cd |
+| 108c | nowy job `phonon_mode.py` (FC bulku jak w dyspersji, `run_qpoints(with_eigenvectors)` + modulacja), `vibration.json` + POSCAR; dyspersja zapisuje q numerycznie | nowy | zrobione d0c7246 |
+| 108d | klik/przeciąganie w dyspersji, okno bulku, przełączanie źródeł zachowuje kamerę | nie | zrobione fe0329e |
+| 108e | porównanie ΔR między przypadkami: lokalizacja (atomy 90 % ΔQ², ΔQ²(r)), pokrycie ΔQ² modami, podobieństwo ΔR | nie | zrobione 3cba960 |
 
 ## Pułapki fizyczne
 
