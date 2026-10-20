@@ -1,6 +1,7 @@
 # Moduł Figure: eksport wykresów przez matplotlib ("Origin-light")
 
 Status: propozycja (2026-10-11), do decyzji użytkownika. Konsultacja: codex (read-only).
+Faza 1 częściowo zrobiona w zadaniach 110/111 (fonony). Aktualny plan: `2026-10-20-figures-tsv-origin.md`.
 
 **Zrobiłbym moduł „Figure” do przygotowywania rycin do pracy: jedna specyfikacja JSON i jeden renderer matplotlib, z ograniczonym edytorem wyglądu.** Taki moduł ma sens: zastąpi powtarzalne przenoszenie TSV do Origina, zachowując dane i ustawienia potrzebne do odtworzenia ryciny.
 
