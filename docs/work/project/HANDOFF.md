@@ -40,9 +40,13 @@ danych z klastra/dysku O:).
 
 ## W toku / następne
 
-**2026-11-17 - nowy plan, czeka na „start”:** `plans/2026-11-17-phonon-server-results-and-comparison.md` (113a-g):
+**2026-11-17 - plan 113a-g w toku:** `plans/2026-11-17-phonon-server-results-and-comparison.md`:
 odczyt wyników z serwera (P: = sjcm_mgr, embedding 9..50, HR, lineshape), defekty dodawane z folderu jak w
 termodynamice, PL eksperymentalne z pliku, metody HR + cutoff, zbieżność po n, generator zadań na serwer.
+- f1d41a4 113a import wyników HR z serwera (P: 12×12×1: S 1,4221, ZPL 3,452 eV), b300e0e 113f1 czytnik tabel +
+  widmo eksperymentalne (Domain). Debug: 1844 testy, 1839 OK, 5 pominiętych. GUI niesprawdzone.
+- U codex: 113e (defekty z folderu, ukrywanie, porównanie widocznych) i 113b (metoda HR, cutoff, σ_max) równolegle.
+- Gotowe zadania: `tasks/113f2-experimental-pl-overlay.md` (po 113e). Do napisania: 113c, 113d, 113g.
 
 Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`) jest zrobiony: 108b-e + persystencja per przypadek
 + porównanie wielu defektów. Raporty: `reports/task-108b…108e-*.md` (odstępstwa od zadań opisane na końcu).
