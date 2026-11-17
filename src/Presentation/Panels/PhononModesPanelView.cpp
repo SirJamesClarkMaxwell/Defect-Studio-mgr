@@ -143,7 +143,7 @@ namespace DefectStudio
 				ImGui::TableSetColumnIndex(5); ImGui::Text("%.4f", mode.huangRhys);
 				if (ImGui::TableSetColumnIndex(6))
 				{
-					if (result.hasEigenvectors) ImGui::Text("%zu", AtomsCarryingFraction(result, index, settings.carriedFraction));
+					if (!ModeRows(result, index).participation.empty()) ImGui::Text("%zu", AtomsCarryingFraction(result, index, settings.carriedFraction));
 					else { ImGui::TextUnformatted("—"); ImGui::SetItemTooltip("%s", PhononPanelSession::ServerVectorsUnavailable.data()); }
 				}
 				ImGui::PopID();
@@ -252,12 +252,21 @@ namespace DefectStudio
 		ImGui::TextUnformatted(m_Session->Field().label.c_str());
 		if (!ccd && !bulk && m_Session->Result() && !m_Session->Result()->hasEigenvectors)
 		{
-			ImGui::BeginDisabled();
-			ImGui::Button("Animuj");
+			const auto blocker = m_Session->ModeVectorBlocker();
+			const auto selected = m_Session->SelectedMode();
+			const bool loaded = selected && !ModeRows(*m_Session->Result(), *selected).eigenvector.empty();
+			ImGui::BeginDisabled(loaded || m_Session->IsBusy() || !blocker.empty());
+			if (ImGui::Button(loaded ? "Wektor modu wczytany" : "Wczytaj wektor modu")) m_Session->SubmitModeVector();
 			ImGui::EndDisabled();
-			ImGui::SetItemTooltip("%s", PhononPanelSession::ServerVectorsUnavailable.data());
-			ImGui::TextWrapped("%s", PhononPanelSession::ServerVectorsUnavailable.data());
-			return;
+			if (!blocker.empty()) ImGui::SetItemTooltip("%s", blocker.c_str());
+			if (m_Session->m_ModeVectorJob)
+			{
+				ImGui::TextDisabled("Wczytywanie wektora modu...");
+				ImGui::SameLine();
+				if (ImGui::Button("Anuluj wektor modu")) m_Session->CancelModeVector();
+			}
+			if (!m_Session->m_ModeVectorError.empty())
+				ImGui::TextWrapped("%s", m_Session->m_ModeVectorError.c_str());
 		}
 		if (const auto partner = bulk ? (m_Session->BulkMode() && m_Session->BulkMode()->partner ?
 			std::optional<std::size_t>(m_Session->BulkMode()->partner->band) : std::nullopt) : m_Session->DegeneratePartnerOfSelected(); partner && !ccd)
@@ -292,18 +301,18 @@ namespace DefectStudio
 					m_Session->SetCcdExtent(extent);
 			}
 		}
-		ImGui::BeginDisabled(bulk ? !m_Session->BulkMode() || m_Session->supercellPath().Empty() : ccd ? !ccdBlocker.empty() || m_Session->supercellPath().Empty() : settings.forceConstantDirectory.Empty());
+		ImGui::BeginDisabled(bulk ? !m_Session->BulkMode() || m_Session->supercellPath().Empty() : ccd ? !ccdBlocker.empty() || m_Session->supercellPath().Empty() : m_Session->supercellPath().Empty());
 		if (ImGui::Button(bulk ? "Otwórz superkomórkę bulku" : ccd ? "Otwórz geometrię GS" : "Otwórz superkomórkę")) m_Session->openSupercellWindow();
 		ImGui::EndDisabled();
-		if (!ccd && !bulk && settings.forceConstantDirectory.Empty()) ImGui::SetItemTooltip("Ustaw katalog stałych siłowych (FC).");
+		if (!ccd && !bulk && m_Session->supercellPath().Empty()) ImGui::SetItemTooltip("Brak POSCAR superkomórki.");
 		ImGui::SameLine();
 		if (!m_Session->m_WindowError.empty()) ImGui::TextDisabled("%s", m_Session->m_WindowError.c_str());
 		else if (const auto window = m_Session->targetWindow()) ImGui::TextDisabled("%s", window->get().title.c_str());
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Pokaż strzałki");
-		if (ImGui::IsItemClicked()) { settings.showArrows = !settings.showArrows; persist(); }
+		if (ImGui::IsItemClicked()) { settings.showArrows = !settings.showArrows; if (settings.showArrows) m_Session->SubmitModeVector(); persist(); }
 		ImGui::SameLine();
-		if (ImGui::Checkbox("##showArrows", &settings.showArrows)) persist();
+		if (ImGui::Checkbox("##showArrows", &settings.showArrows)) { if (settings.showArrows) m_Session->SubmitModeVector(); persist(); }
 		ImGui::SameLine();
 		ImGui::TextUnformatted("Zgodne z fazą");
 		if (ImGui::IsItemClicked()) { settings.arrowsFollowPhase = !settings.arrowsFollowPhase; persist(); }
@@ -323,6 +332,7 @@ namespace DefectStudio
 		const std::string animationBlocker = ccd && !ccdBlocker.empty() ? ccdBlocker :
 			bulk && !m_Session->BulkMode() ? "Policz lub wczytaj mod bulku." :
 			!ccd && !bulk && !m_Session->SelectedMode() ? "Wybierz mod." :
+			!ccd && !bulk && m_Session->Result() && !m_Session->Result()->hasEigenvectors && !m_Session->ModeVectorBlocker().empty() ? m_Session->ModeVectorBlocker() :
 			!window ? (bulk ? "Otwórz superkomórkę bulku." : ccd ? "Otwórz geometrię GS." : "Otwórz superkomórkę FC.") : m_Session->m_WindowError;
 		ImGui::BeginDisabled(!animationBlocker.empty());
 		if (ImGui::Button(m_Session->IsAnimating() && !m_Session->m_Paused ? "⏸ Pauza" : "▶ Animuj"))

@@ -13,8 +13,8 @@ namespace DefectStudio
 		std::vector<glm::dvec3> PhysicalDisplacements(const PhononAnalysisResult &result, std::size_t mode)
 		{
 			const auto atoms = result.AtomCount();
-			if (!result.hasEigenvectors || mode >= result.ModeCount() || atoms == 0 || result.massesAmu.size() != atoms ||
-				mode >= result.eigenvectors.size() / 3 / atoms)
+			const auto rows = ModeRows(result, mode);
+			if (rows.eigenvector.empty() || result.massesAmu.size() != atoms)
 				return {};
 			std::vector<glm::dvec3> displacements;
 			displacements.reserve(atoms);
@@ -23,9 +23,9 @@ namespace DefectStudio
 				const double mass = result.massesAmu[atom];
 				if (!std::isfinite(mass) || mass <= 0.0)
 					return {};
-				const auto offset = (mode * atoms + atom) * 3;
-				const glm::dvec3 displacement = glm::dvec3(result.eigenvectors[offset],
-					result.eigenvectors[offset + 1], result.eigenvectors[offset + 2]) / std::sqrt(mass);
+				const auto offset = atom * 3;
+				const glm::dvec3 displacement = glm::dvec3(rows.eigenvector[offset],
+					rows.eigenvector[offset + 1], rows.eigenvector[offset + 2]) / std::sqrt(mass);
 				if (!std::isfinite(displacement.x) || !std::isfinite(displacement.y) || !std::isfinite(displacement.z))
 					return {};
 				displacements.push_back(displacement);
@@ -42,11 +42,28 @@ namespace DefectStudio
 		}
 	} // namespace
 
+	PhononModeRows ModeRows(const PhononAnalysisResult &result, std::size_t mode)
+	{
+		const auto atoms = result.AtomCount();
+		if (atoms == 0 || mode >= result.ModeCount()) return {};
+		if (const auto found = result.fetchedModes.find(mode); found != result.fetchedModes.end())
+		{
+			const auto &row = found->second;
+			if (row && row->modeIndex == mode && row->eigenvector.size() / 3 == atoms &&
+				row->eigenvector.size() % 3 == 0 && row->participation.size() == atoms)
+				return {row->eigenvector, row->participation};
+			return {};
+		}
+		if (!result.hasEigenvectors) return {};
+		return {mode < result.eigenvectors.size() / 3 / atoms ? std::span(result.eigenvectors).subspan(mode * atoms * 3, atoms * 3) : std::span<const float>{},
+			mode < result.participation.size() / atoms ? std::span(result.participation).subspan(mode * atoms, atoms) : std::span<const float>{}};
+	}
+
 	std::vector<ModeArrow> BuildModeArrows(const PhononAnalysisResult &result, std::size_t mode,
 		double participationThreshold, double maxLengthAngstrom)
 	{
-		const auto atoms = result.AtomCount();
-		if (!result.hasEigenvectors || atoms == 0 || mode >= result.ModeCount() || mode >= result.participation.size() / atoms ||
+		const auto rows = ModeRows(result, mode);
+		if (rows.participation.empty() ||
 			!std::isfinite(participationThreshold) || !std::isfinite(maxLengthAngstrom) || maxLengthAngstrom < 0.0)
 			return {};
 		const auto displacements = PhysicalDisplacements(result, mode);
@@ -54,7 +71,7 @@ namespace DefectStudio
 		std::vector<ModeArrow> arrows;
 		for (std::size_t atom = 0; atom < displacements.size(); ++atom)
 		{
-			const double participation = result.participation[mode * atoms + atom];
+			const double participation = rows.participation[atom];
 			if (participation >= participationThreshold)
 				arrows.push_back({atom, longest > 0.0 ? displacements[atom] * (maxLengthAngstrom / longest) :
 					glm::dvec3(0.0), participation});
@@ -65,11 +82,11 @@ namespace DefectStudio
 	std::size_t AtomsCarryingFraction(const PhononAnalysisResult &result, std::size_t mode, double fraction)
 	{
 		const auto atoms = result.AtomCount();
-		if (!result.hasEigenvectors || atoms == 0 || mode >= result.ModeCount() || mode >= result.participation.size() / atoms ||
+		const auto rows = ModeRows(result, mode);
+		if (rows.participation.empty() ||
 			!std::isfinite(fraction) || fraction <= 0.0 || fraction > 1.0)
 			return 0;
-		const auto first = result.participation.begin() + mode * atoms;
-		std::vector<float> participation(first, first + atoms);
+		std::vector<float> participation(rows.participation.begin(), rows.participation.end());
 		if (std::any_of(participation.begin(), participation.end(), [](float value) {
 			return !std::isfinite(value) || value < 0.0f;
 		}))
@@ -91,7 +108,7 @@ namespace DefectStudio
 		double phaseRadians, double amplitudeAngstrom)
 	{
 		auto positions = result.positionsAngstrom;
-		if (!result.hasEigenvectors || mode >= result.ModeCount() || result.modes[mode].isTranslation ||
+		if (mode >= result.ModeCount() || result.modes[mode].isTranslation ||
 			positions.size() != result.AtomCount() || !std::isfinite(phaseRadians) || !std::isfinite(amplitudeAngstrom))
 			return positions;
 		const auto displacements = PhysicalDisplacements(result, mode);

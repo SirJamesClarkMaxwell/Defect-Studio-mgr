@@ -114,6 +114,7 @@ namespace DefectStudio
 		++m_PlotRevision;
 		if (m_Result) m_Settings.mixAngleDegrees = 0.0;
 		m_Result = std::move(result);
+		restoreModeVectors();
 		if (SelectedMode())
 		{
 			m_MixAngle = m_Settings.mixAngleDegrees * std::numbers::pi / 180.0;
@@ -134,6 +135,7 @@ namespace DefectStudio
 		StopAnimation();
 		++m_PlotRevision;
 		m_Result.reset();
+		restoreModeVectors();
 		m_Settings.selectedMode = -1;
 		m_Settings.mixAngleDegrees = 0.0;
 		m_MixAngle = 0.0;
@@ -184,15 +186,18 @@ namespace DefectStudio
 				rebuildField();
 				return;
 			}
+			if (m_Settings.selectedMode != modeIndex) { CancelModeVector(); m_ModeVectorError.clear(); }
 			const bool running = IsAnimating();
 			const bool paused = m_Paused;
 			StopAnimation();
 			if (m_Settings.selectedMode != modeIndex) m_Settings.mixAngleDegrees = 0.0;
 			m_Settings.selectedMode = modeIndex;
+			touchModeVector(modeIndex);
 			rebuildField();
 			(void)Field();
 			if (const auto window = targetWindow(); window && running) StartAnimation(window->get());
 			m_Paused = paused;
+			if (m_Settings.showArrows) SubmitModeVector();
 		}
 	}
 
@@ -271,7 +276,8 @@ namespace DefectStudio
 	std::optional<std::size_t> PhononPanelSession::DegeneratePartnerOfSelected() const
 	{
 		const auto mode = SelectedMode();
-		return mode ? DegeneratePartner(*m_Result, *mode) : std::nullopt;
+		const auto partner = mode ? DegeneratePartner(*m_Result, *mode) : std::nullopt;
+		return partner && !ModeRows(*m_Result, *partner).eigenvector.empty() ? partner : std::nullopt;
 	}
 
 	std::size_t PhononPanelSession::AtomsCarryingSelectedFraction() const
@@ -303,8 +309,6 @@ namespace DefectStudio
 		}
 		if (!m_Result)
 			outError = "Brak wyniku fononowego.";
-		else if (!m_Result->hasEigenvectors)
-			outError = ServerVectorsUnavailable;
 		else if (window.structure.atoms.size() != m_Result->AtomCount())
 			outError = "Liczba atomów okna różni się od superkomórki FC.";
 		else
@@ -320,8 +324,6 @@ namespace DefectStudio
 	bool PhononPanelSession::CanBindWindow(const RendererWindowState &window, const Path &supercell,
 		const Path &projectDirectory) const
 	{
-		if (m_Settings.animationSource != "ccd_direction" && m_Settings.animationSource != "bulk_q" &&
-			m_Result && !m_Result->hasEigenvectors) return false;
 		if (m_Settings.animationSource == "bulk_q")
 		{
 			std::string error;
@@ -373,28 +375,6 @@ namespace DefectStudio
 			arrows.arrows.push_back({arrow.atomIndex, glm::vec3(followPhase ? displacements[arrow.atomIndex] : arrow.vectorAngstrom)});
 		window.modeArrows = std::move(arrows);
 		return true;
-	}
-
-	void PhononPanelSession::StartAnimation(RendererWindowState &window)
-	{
-		std::string error;
-		if (IsAnimating() || Field().real.empty() || !WindowMatches(window, error) ||
-			Field().equilibriumAngstrom.size() != window.structure.atoms.size())
-			return;
-		m_RestPositions.emplace();
-		for (const auto &atom : window.structure.atoms)
-			m_RestPositions->push_back(atom.cartesianPosition);
-		m_Phase = 0.0;
-		m_AnimationSource = m_Settings.animationSource;
-		if (m_AnimationSource == "ccd_direction")
-		{
-			const double maximum = CcdSweepMaximum();
-			if (Field().motion == VibrationMotion::Sweep && maximum > 0.0)
-				m_Phase = std::acos(1.0 - 2.0 * std::clamp(m_Settings.ccdSweepQ / maximum, 0.0, 1.0));
-			SetPhase(window, m_Phase);
-		}
-		if (m_AnimationSource == "bulk_q") SetPhase(window, m_Phase);
-		(void)ApplyArrows(window, error);
 	}
 
 	void PhononPanelSession::AdvanceAnimation(RendererWindowState &window, double deltaSeconds)

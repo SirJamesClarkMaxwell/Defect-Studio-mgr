@@ -43,6 +43,7 @@ namespace DefectStudio
 		pollCcdAnalysisJob();
 		pollDispersionJob();
 		pollBulkModeJob();
+		pollModeVectorJob();
 		pollFigureJob();
 		PollExperimentalSpectra();
 		submitNextBatch();

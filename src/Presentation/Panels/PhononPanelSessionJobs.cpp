@@ -36,6 +36,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::cancelJob()
 	{
+		CancelModeVector();
 		cancelServerJob();
 		CancelBulkMode();
 		CancelBatch();

@@ -45,11 +45,13 @@ namespace DefectStudio
 	class CcdAnalysisJob;
 	class PhononDispersionJob;
 	class PhononModeJob;
+	class PhononModeVectorJob;
 	class AnalysisDatasetScanJob;
 	class ExperimentalSpectrumJob;
 	namespace Tests { struct PhononBatchTestAccess; }
 	namespace Tests { struct PhononDispersionTestAccess; }
 	namespace Tests { struct PhononServerTestAccess; }
+	namespace Tests { struct PhononModeVectorTestAccess; }
 
 	enum class PhononBatchStep { Phonons, CcdAnalysis };
 	enum class PhononCaseStatus { Idle, Queued, Running, Done, Failed, Cancelled };
@@ -124,6 +126,9 @@ namespace DefectStudio
 		void SubmitCcdAnalysis();
 		void SubmitDispersion();
 		void SubmitBulkMode();
+		void SubmitModeVector(bool animate = false);
+		void CancelModeVector();
+		[[nodiscard]] std::string ModeVectorBlocker() const;
 		void PickDispersionRow(std::size_t row, int band);
 		[[nodiscard]] std::optional<std::size_t> DispersionRow();
 		void CancelBulkMode();
@@ -146,7 +151,7 @@ namespace DefectStudio
 			const PhononCaseSettings &settings, const std::string &caseId) const;
 		[[nodiscard]] bool IsBusy() const noexcept
 		{
-			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob || m_PendingModeJob || m_ServerJob;
+			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob || m_PendingModeJob || m_ServerJob || m_ModeVectorJob;
 		}
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
 		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
@@ -322,7 +327,24 @@ namespace DefectStudio
 		friend class AnalysisDatasetScanJob;
 		friend struct Tests::PhononBatchTestAccess;
 		friend struct Tests::PhononServerTestAccess;
-		static constexpr std::string_view ServerVectorsUnavailable = "Wynik z serwera nie ma wektorów własnych (będą wczytywane na żądanie - zadanie 113g).";
+		friend struct Tests::PhononModeVectorTestAccess;
+		void pollModeVectorJob();
+		void restoreModeVectors();
+		bool cacheModeVector(const Path &dataset, Ref<const PhononModeVector> vector);
+		void touchModeVector(std::size_t mode);
+		struct CachedModeVector
+		{
+			Path dataset;
+			Ref<const PhononModeVector> vector;
+			std::filesystem::file_time_type summaryModified{};
+		};
+		std::deque<CachedModeVector> m_ModeVectorCache;
+		Ref<PhononModeVectorJob> m_ModeVectorJob;
+		JobId m_ModeVectorJobId = 0;
+		Path m_ModeVectorDataset, m_ServerEmbeddedDirectory;
+		std::size_t m_ModeVectorIndex = 0;
+		std::string m_ModeVectorCase, m_ModeVectorError, m_ServerEmbeddedError, m_ModeVectorAnimateWindow;
+		static constexpr std::string_view ServerVectorsUnavailable = "Wczytaj wektor tego modu z modes.h5.";
 		void startServerScan(const Path &root);
 		void importServerResults();
 		bool queueServerResults(const std::string &caseId, const std::vector<ServerHrResult> &results);

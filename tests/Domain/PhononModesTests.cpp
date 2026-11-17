@@ -4,6 +4,7 @@
 #include <numbers>
 
 #include "Domain/Vibrations/PhononModes.hpp"
+#include "Domain/Vibrations/VibrationField.hpp"
 
 namespace DefectStudio::Tests
 {
@@ -47,6 +48,49 @@ namespace DefectStudio::Tests
 			EXPECT_NEAR(actual.z, expected.z, 1e-6);
 		}
 	} // namespace
+
+	TEST(PhononModesTests, SparseServerRowsDriveArrowsAnimationParticipationAndFieldLikeDenseRows)
+	{
+		const auto dense = TwoAtoms();
+		auto sparse = dense;
+		sparse.hasEigenvectors = false; sparse.eigenvectors.clear(); sparse.participation.clear();
+		auto vector = CreateRef<PhononModeVector>(); vector->modeIndex = 3;
+		const auto rows = ModeRows(dense, 3);
+		vector->eigenvector.assign(rows.eigenvector.begin(), rows.eigenvector.end());
+		vector->participation.assign(rows.participation.begin(), rows.participation.end());
+		sparse.fetchedModes[3] = vector;
+		const auto arrows = BuildModeArrows(sparse, 3, 0, 1);
+		const auto expected = BuildModeArrows(dense, 3, 0, 1);
+		ASSERT_EQ(arrows.size(), expected.size());
+		for (std::size_t i = 0; i < arrows.size(); ++i) ExpectVec(arrows[i].vectorAngstrom, expected[i].vectorAngstrom);
+		EXPECT_EQ(AnimatedPositions(sparse, 3, 1, .2), AnimatedPositions(dense, 3, 1, .2));
+		EXPECT_EQ(AtomsCarryingFraction(sparse, 3, .9), AtomsCarryingFraction(dense, 3, .9));
+		EXPECT_EQ(DefectModeField(sparse, 3).real, DefectModeField(dense, 3).real);
+		EXPECT_EQ(DefectModeField(sparse, 3).participation, DefectModeField(dense, 3).participation);
+		EXPECT_TRUE(ModeRows(sparse, 2).eigenvector.empty());
+		EXPECT_TRUE(ModeRows(sparse, 99).eigenvector.empty());
+		EXPECT_TRUE(DefectModeField(sparse, 3, 4).real.empty());
+		sparse.fetchedModes.clear();
+		EXPECT_TRUE(BuildModeArrows(sparse, 3, 0, 1).empty());
+		EXPECT_EQ(AnimatedPositions(sparse, 3, 1, .2), sparse.positionsAngstrom);
+	}
+
+	TEST(PhononModesTests, LargeServerCellUsesOnlyOneLinearSizedRow)
+	{
+		PhononAnalysisResult result;
+		result.hasEigenvectors = false;
+		result.symbols.assign(2001, "C"); result.massesAmu.assign(2001, 12.);
+		result.positionsAngstrom.assign(2001, glm::dvec3(0.)); result.modes.resize(6003);
+		auto row = CreateRef<PhononModeVector>(); row->modeIndex = 6002;
+		row->eigenvector.assign(6003, 0.f); row->eigenvector[0] = 1.f;
+		row->participation.assign(2001, 0.f); row->participation[0] = 1.f;
+		result.fetchedModes[6002] = row;
+		EXPECT_EQ(BuildModeArrows(result, 6002, .01, 1).size(), 1u);
+		EXPECT_EQ(AtomsCarryingFraction(result, 6002, .9), 1u);
+		EXPECT_EQ(DefectModeField(result, 6002).real.size(), 2001u);
+		EXPECT_GT(AnimatedPositions(result, 6002, std::numbers::pi / 2, .1)[0].x, 0.);
+		EXPECT_TRUE(result.eigenvectors.empty()); EXPECT_TRUE(result.participation.empty());
+	}
 
 	TEST(PhononModesTests, ArrowsFollowPhysicalDisplacementScaledToTheLongest)
 	{

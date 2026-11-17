@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <map>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -20,6 +21,34 @@ namespace DefectStudio
 	[[nodiscard]] PhononPlSelection SelectPhononPlCurve(const PhononAnalysisResult &result, std::string_view preferred);
 	[[nodiscard]] std::string PhononZplSourceLabel(std::string_view choice);
 	void NormalizePhononPl(std::span<const double> x, std::vector<double> &y, std::string_view normalization);
+
+	struct PhononSeriesMember
+	{
+		std::reference_wrapper<const PhononAnalysisResult> result;
+		double n = 0.0; // Unknown FC-cell size is placed at zero, never inferred from atom count.
+		std::string label;
+		std::optional<double> effectiveMeV, franckCondonMeV;
+		std::map<std::string, double> irrepS;
+		bool uncertainIrreps = false;
+	};
+	struct PhononConvergenceSeries
+	{
+		std::string id, label;
+		std::vector<PhononSeriesMember> members;
+	};
+	// References borrow the existing session comparison cache; no result/vector copies or extra cache.
+	[[nodiscard]] std::vector<PhononConvergenceSeries> GroupPhononSeries(
+		std::span<const std::reference_wrapper<const PhononAnalysisResult>> results);
+	[[nodiscard]] std::vector<PhononConvergenceSeries> BuildPhononSeries(PhononPanelSession &session, const Path &project,
+		std::string &outError);
+	[[nodiscard]] glm::vec4 PhononSeriesColor(std::size_t index, std::size_t count);
+	// plot: 0=S, 1=DW, 2=HR-weighted effective energy, 3=E_FC, 4=irreps, 5=PL, 6=S(hw).
+	[[nodiscard]] PlotData BuildPhononSeriesPlot(const PhononConvergenceSeries &series, const PhononPanelSettings &settings, int plot);
+	[[nodiscard]] std::vector<DataTableColumn> PhononSeriesColumns(const PhononConvergenceSeries &series,
+		std::string_view preferredZpl);
+	[[nodiscard]] std::string PhononSeriesFileName(const PhononConvergenceSeries &series);
+	[[nodiscard]] bool SavePhononSeriesOrigin(const PhononConvergenceSeries &series, std::string_view preferredZpl,
+		const Path &project, Path &outFile, std::string &outError);
 	void AppendExperimentalPl(PlotData &plot, PhononPanelSession &session, const Path &project, std::span<const glm::vec4> colors);
 	[[nodiscard]] std::string PhononExperimentalSeriesNote(PhononPanelSession &session, const PlotSeriesData &series);
 

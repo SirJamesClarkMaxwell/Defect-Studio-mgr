@@ -28,6 +28,7 @@ namespace DefectStudio
 
 	void PhononPanelSession::StopAnimation()
 	{
+		m_ModeVectorAnimateWindow.clear();
 		if (const auto window = targetWindow())
 			StopAnimation(window->get());
 		else if (RestPositionsCaptured())
@@ -56,6 +57,8 @@ namespace DefectStudio
 			return m_BulkMode && !m_Settings.selectedBulkModeDirectory.Empty() ? m_Settings.selectedBulkModeDirectory / "POSCAR" : Path{};
 		if (m_Settings.animationSource == "ccd_direction")
 			return m_CcdResult && m_CcdResult->displacement ? Path::FromUtf8(m_CcdResult->displacement->gsSource) : Path{};
+		if (m_Result && !m_Result->hasEigenvectors)
+			return m_ServerEmbeddedDirectory.Empty() ? Path{} : m_ServerEmbeddedDirectory / "POSCAR";
 		const PhononPanelSettings &settings = Settings();
 		if (!settings.resultDirectory.Empty() && FileSystem::Exists(settings.resultDirectory.Join("POSCAR").Native()))
 			return settings.resultDirectory.Join("POSCAR");

@@ -1,6 +1,8 @@
 # Fonony: wyniki z serwera, zbieżność po n, porównanie defektów, PL eksperymentalne (113a-113g)
 
-Status: plan, czeka na „start” użytkownika. Branch: `task/109-phonon-workspace` (bez merge).
+Status 2026-11-17: 113a-g zaimplementowane (codex) i zweryfikowane buildem + testami; GUI niesprawdzone.
+Commity: f1d41a4 (113a), b300e0e (113f1), 51e914d (113e+113b), ac33ab0 (113f2+113d), następny (113c+113g).
+Branch: `task/109-phonon-workspace` (bez merge).
 
 ## Skąd to się wzięło (2026-11-17)
 

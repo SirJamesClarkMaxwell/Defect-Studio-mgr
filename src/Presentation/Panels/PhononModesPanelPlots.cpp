@@ -160,6 +160,11 @@ namespace DefectStudio
 			ImGui::EndTabItem();
 		}
 		drawCcdPlotTabs();
+		if (ImGui::BeginTabItem("Zbieżność"))
+		{
+			drawConvergence();
+			ImGui::EndTabItem();
+		}
 		if (ImGui::BeginTabItem("Dyspersja"))
 		{
 			drawDispersionPlot();

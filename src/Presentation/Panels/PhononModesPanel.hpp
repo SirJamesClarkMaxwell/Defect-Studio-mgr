@@ -73,6 +73,7 @@ namespace DefectStudio
 		void drawModesTable();
 		void drawPlots();
 		void drawComparison();
+		void drawConvergence();
 		void drawVisualisation();
 
 		void persist();
@@ -99,6 +100,8 @@ namespace DefectStudio
 		std::unordered_map<std::string, PlotExportState> m_PlotExports;
 		PlotExportState m_TableExport;
 		PlotExportState m_ComparisonExport{true};
+		std::string m_ConvergenceSeries, m_ConvergenceContext;
+		int m_ConvergenceScalar = 0;
 		int m_ModeSortColumn = 1;
 		bool m_ModeSortAscending = true;
 	};

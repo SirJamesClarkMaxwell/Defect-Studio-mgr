@@ -129,6 +129,7 @@ namespace DefectStudio
 		if (ActiveCaseId() == requested) return true;
 		const auto settings = found->settings;
 		clearWindow();
+		CancelModeVector();
 		cacheActiveResult();
 		m_Result.reset();
 		m_CcdResult.reset();

@@ -3,12 +3,15 @@
 #include <array>
 #include <cstddef>
 #include <optional>
+#include <map>
+#include <span>
 #include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "Core/Utils/Memory.hpp"
 
 namespace DefectStudio
 {
@@ -34,9 +37,19 @@ namespace DefectStudio
 		std::optional<double> formula;
 	};
 
-	// The whole result directory in memory. The 162-atom reference case is ~1.3 MB of vectors, so
-	// everything is loaded at once.
-	// ponytail: eager load, read rows of eigenvectors.npy lazily if embedded cells (10^4+ atoms) arrive
+	struct PhononModeVector
+	{
+		std::size_t modeIndex = 0;
+		double frequencyMeV = 0.0;
+		std::vector<float> eigenvector, participation;
+	};
+
+	struct PhononModeRows
+	{
+		std::span<const float> eigenvector, participation;
+	};
+
+	// Local results load all rows; server results retain only fetched modes.
 	struct PhononAnalysisResult
 	{
 		Path directory;
@@ -54,6 +67,7 @@ namespace DefectStudio
 		//   participation[mode * atomCount + atom]             - |e_ki|^2, each mode sums to 1
 		std::vector<float> eigenvectors;
 		std::vector<float> participation;
+		std::map<std::size_t, Ref<const PhononModeVector>> fetchedModes;
 
 		// summary.json
 		double sTotal = 0.0;
@@ -93,6 +107,9 @@ namespace DefectStudio
 		[[nodiscard]] std::size_t AtomCount() const noexcept { return symbols.size(); }
 		[[nodiscard]] std::size_t ModeCount() const noexcept { return modes.size(); }
 	};
+
+	// Empty spans for an unavailable mode, including server results with only stale dense arrays.
+	[[nodiscard]] PhononModeRows ModeRows(const PhononAnalysisResult &result, std::size_t mode);
 
 	struct ModeArrow
 	{

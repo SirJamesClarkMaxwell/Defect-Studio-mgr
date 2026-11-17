@@ -50,8 +50,13 @@ termodynamice, PL eksperymentalne z pliku, metody HR + cutoff, zbieżność po n
   pytest 100 OK, 1 stary błąd (`test_check_include_directions`). Dimer 9×9×1: displacements 1,4067 (bez cutoff) /
   1,4222 (emb., auto); approximate_forces 0,788 / 0,824 (12×12×1) / 0,876 (24×24×1) - rośnie z n, FC bulku przy
   defekcie C-C jest przybliżeniem.
-- U codex: 113f2 (PL eksperymentalne na wykresach) i 113d (generator zadania; szablony = zasoby użytkownika w
-  `install/users/default/scripts/server_templates/`, gitignored, nigdy w repo). Potem 113c, 113g.
+- ac33ab0 113f2 (PL eksperymentalne na wykresach i w porównaniu) + 113d (generator zadania; szablony = zasoby
+  użytkownika w `install/users/default/scripts/server_templates/`, gitignored, nigdy w repo; kopie zmieniane też
+  poza CONFIG - lista w `job.json`).
+- 113c (zakładka „Zbieżność”, eksport serii pod Origin jak `lineshape.py`) + 113g (wektor jednego modu z
+  `modes.h5` na żądanie; A1 199,82 meV w 12×12×1). Debug: 1904 testy, 1899 OK, 5 pominiętych; pytest 124 OK +
+  1 stary błąd. Cały plan 113a-g zrobiony; **GUI niesprawdzone** - lista kliknięć w raportach `task-113*.md`.
+- Odkryte: test `JobSystemHierarchyTests` raz padł w pełnym przebiegu (30/30 osobno OK) - niestabilny pod obciążeniem.
 
 Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`) jest zrobiony: 108b-e + persystencja per przypadek
 + porównanie wielu defektów. Raporty: `reports/task-108b…108e-*.md` (odstępstwa od zadań opisane na końcu).

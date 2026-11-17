@@ -133,11 +133,13 @@ namespace DefectStudio
 		std::optional<std::size_t> partner, double mixAngleRadians)
 	{
 		const auto atoms = result.AtomCount();
+		const auto selectedRows = ModeRows(result, mode);
+		const auto partnerRows = partner ? ModeRows(result, *partner) : PhononModeRows{};
 		const auto validMode = [&](std::size_t index) {
 			return index < result.ModeCount() && !result.modes[index].isTranslation &&
-				index < result.eigenvectors.size() / 3 / atoms;
+				!ModeRows(result, index).eigenvector.empty();
 		};
-		if (!result.hasEigenvectors || atoms == 0 || result.positionsAngstrom.size() != atoms || result.massesAmu.size() != atoms ||
+		if (atoms == 0 || result.positionsAngstrom.size() != atoms || result.massesAmu.size() != atoms ||
 			!std::isfinite(mixAngleRadians) || !validMode(mode) || (partner && !validMode(*partner)))
 			return {};
 		VibrationField field;
@@ -152,18 +154,18 @@ namespace DefectStudio
 			const double mass = result.massesAmu[atom];
 			if (!std::isfinite(mass) || mass <= 0.0 || !Finite(field.equilibriumAngstrom[atom]))
 				return {};
-			const auto eigenvector = [&](std::size_t index) {
-				const auto offset = (index * atoms + atom) * 3;
-				return glm::dvec3(result.eigenvectors[offset], result.eigenvectors[offset + 1], result.eigenvectors[offset + 2]);
+			const auto eigenvector = [&](const PhononModeRows &rows) {
+				const auto offset = atom * 3;
+				return glm::dvec3(rows.eigenvector[offset], rows.eigenvector[offset + 1], rows.eigenvector[offset + 2]);
 			};
-			const auto e = cosine * eigenvector(mode) + (partner ? sine * eigenvector(*partner) : glm::dvec3(0.0));
+			const auto e = cosine * eigenvector(selectedRows) + (partner ? sine * eigenvector(partnerRows) : glm::dvec3(0.0));
 			const auto displacement = e / std::sqrt(mass);
 			if (!Finite(displacement))
 				return {};
 			field.real.push_back(displacement);
 			// Preserve the stored float32 participation at theta=0, including threshold boundaries.
 			const double participation = (!partner || mixAngleRadians == 0.0) &&
-				mode < result.participation.size() / atoms ? result.participation[mode * atoms + atom] : glm::dot(e, e);
+				!selectedRows.participation.empty() ? selectedRows.participation[atom] : glm::dot(e, e);
 			if (!std::isfinite(participation) || participation < 0.0)
 				return {};
 			field.participation.push_back(participation);

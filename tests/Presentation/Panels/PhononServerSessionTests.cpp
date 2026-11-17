@@ -58,7 +58,7 @@ namespace DefectStudio::Tests
 		RendererWindowState window;
 		std::string error;
 		EXPECT_FALSE(session.WindowMatches(window, error));
-		EXPECT_NE(error.find("113g"), std::string::npos);
+		EXPECT_FALSE(error.empty());
 		EXPECT_FALSE(session.CanBindWindow(window, {}, {}));
 		session.StartAnimation(window);
 		EXPECT_FALSE(session.IsAnimating());

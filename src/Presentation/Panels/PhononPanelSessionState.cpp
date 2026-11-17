@@ -21,6 +21,7 @@ namespace DefectStudio
 	{
 		clearWindow();
 		cancelJob();
+		m_ModeVectorCache.clear();
 		cancelFigureJob();
 		CancelDatasetScan();
 		clearExperimentalSpectra();
