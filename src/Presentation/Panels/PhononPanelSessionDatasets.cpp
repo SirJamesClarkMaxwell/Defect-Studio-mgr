@@ -14,7 +14,7 @@ namespace DefectStudio
 	class AnalysisDatasetScanJob final : public IJob
 	{
 	public:
-		explicit AnalysisDatasetScanJob(std::vector<Path> roots) : m_Roots(std::move(roots)) {}
+		explicit AnalysisDatasetScanJob(std::vector<Path> roots, bool server = false) : m_Roots(std::move(roots)), m_Server(server) {}
 		std::string GetName() const override { return "Skan zestawów analiz"; }
 		std::string GetType() const override { return "phonon.datasets.scan"; }
 		void Execute(JobContext &context) override
@@ -26,14 +26,25 @@ namespace DefectStudio
 				context.ThrowIfCancellationRequested();
 				context.SetMessage(m_Roots[i].Utf8());
 				context.SetProgress(static_cast<float>(i), static_cast<float>(m_Roots.size()));
-				auto datasets = FindDatasets(m_Roots[i], [&] { return context.IsCancellationRequested(); });
-				found.insert(found.end(), datasets.begin(), datasets.end());
+				if (m_Server)
+				{
+					auto hits = FindServerHrResults(m_Roots[i], [&] { return context.IsCancellationRequested(); });
+					m_ServerResults.insert(m_ServerResults.end(), hits.begin(), hits.end());
+				}
+				else
+				{
+					auto datasets = FindDatasets(m_Roots[i], [&] { return context.IsCancellationRequested(); });
+					found.insert(found.end(), datasets.begin(), datasets.end());
+				}
 			}
 			context.ThrowIfCancellationRequested();
 			m_Result = std::move(found);
 		}
 		std::optional<std::vector<AnalysisDatasetRef>> &Result() noexcept { return m_Result; }
+		std::vector<ServerHrResult> &ServerResults() noexcept { return m_ServerResults; }
 	private:
+		bool m_Server;
+		std::vector<ServerHrResult> m_ServerResults;
 		std::vector<Path> m_Roots;
 		std::optional<std::vector<AnalysisDatasetRef>> m_Result;
 	};
@@ -200,11 +211,27 @@ namespace DefectStudio
 		m_ScanJobId = system->Submit(m_ScanJob, JobPriority::Normal);
 	}
 
+	void PhononPanelSession::startServerScan(const Path &root)
+	{
+		if (IsBusy()) return;
+		CancelDatasetScan();
+		m_ServerResults.clear(); m_ServerChecked.clear(); m_ServerRuns.clear();
+		m_ServerPopupRequested = false;
+		m_ScanJobs = m_JobSystem;
+		const auto jobs = m_ScanJobs.lock();
+		if (!jobs) { m_Error = "JobSystem niedostępny."; return; }
+		m_ScanningServer = true;
+		m_ScanMessage = "Szukanie wyników HR na serwerze...";
+		m_ScanJob = CreateRef<AnalysisDatasetScanJob>(std::vector<Path>{root}, true);
+		m_ScanJobId = jobs->Submit(m_ScanJob, JobPriority::Normal);
+	}
+
 	void PhononPanelSession::CancelDatasetScan()
 	{
 		if (m_ScanJob)
 			if (const auto system = m_ScanJobs.lock()) (void)system->RequestCancel(m_ScanJobId);
 		m_ScanJob.reset(); m_ScanJobId = 0;
+		m_ScanningServer = false;
 	}
 
 	bool PhononPanelSession::PollDatasetScan()
@@ -214,6 +241,19 @@ namespace DefectStudio
 		const auto snapshot = system ? system->GetJob(m_ScanJobId) : std::nullopt;
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return false;
 		const bool completed = snapshot && snapshot->status == JobStatus::Completed && m_ScanJob->Result();
+		if (m_ScanningServer)
+		{
+			if (completed)
+			{
+				m_ServerResults = std::move(m_ScanJob->ServerResults());
+				m_ServerChecked.assign(m_ServerResults.size(), true);
+				m_ServerPopupRequested = true;
+				m_ScanMessage.clear();
+			}
+			else m_ScanMessage = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Skan przerwany.";
+			m_ScanJob.reset(); m_ScanJobId = 0; m_ScanningServer = false;
+			return false;
+		}
 		if (completed)
 		{
 			auto datasets = std::move(*m_ScanJob->Result());

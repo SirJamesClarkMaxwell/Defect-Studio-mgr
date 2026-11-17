@@ -76,7 +76,14 @@ namespace DefectStudio
 		if (!IsBatchRunning()) return;
 		m_BatchCancelling = true;
 		for (const auto &entry : m_BatchQueue)
+		{
 			m_CaseRuns[entry.caseId].status = PhononCaseStatus::Cancelled;
+			if (std::holds_alternative<PhononAnalysisRequest>(entry.request))
+			{
+				const auto &request = std::get<PhononAnalysisRequest>(entry.request);
+				if (!request.serverHrDirectory.Empty()) m_ServerRuns[request.serverHrDirectory.Utf8()].status = PhononCaseStatus::Cancelled;
+			}
+		}
 		m_BatchDone += m_BatchQueue.size();
 		m_BatchQueue.clear();
 		if (m_BatchEntry)
@@ -95,7 +102,11 @@ namespace DefectStudio
 		const auto &entry = *m_BatchEntry;
 		m_CaseRuns[entry.caseId].status = PhononCaseStatus::Running;
 		if (std::holds_alternative<PhononAnalysisRequest>(entry.request))
+		{
+			const auto &request = std::get<PhononAnalysisRequest>(entry.request);
+			if (!request.serverHrDirectory.Empty()) m_ServerRuns[request.serverHrDirectory.Utf8()].status = PhononCaseStatus::Running;
 			submitComputation(std::get<PhononAnalysisRequest>(entry.request), entry.caseId);
+		}
 		else
 			submitCcdAnalysis(std::get<CcdAnalysisRequest>(entry.request), entry.caseId);
 	}
@@ -152,6 +163,14 @@ namespace DefectStudio
 		{
 			message = commitCaseOutput(caseId, step, output);
 			if (!message.empty()) status = JobStatus::Failed;
+		}
+		if (m_BatchEntry && std::holds_alternative<PhononAnalysisRequest>(m_BatchEntry->request))
+		{
+			const auto &request = std::get<PhononAnalysisRequest>(m_BatchEntry->request);
+			if (!request.serverHrDirectory.Empty())
+				m_ServerRuns[request.serverHrDirectory.Utf8()] = {
+					status == JobStatus::Completed ? PhononCaseStatus::Done :
+					status == JobStatus::Cancelled ? PhononCaseStatus::Cancelled : PhononCaseStatus::Failed, message, output};
 		}
 		auto &run = m_CaseRuns[caseId];
 		const bool failedEarlier = m_BatchEntry && !run.message.empty();

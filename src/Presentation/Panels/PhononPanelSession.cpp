@@ -303,6 +303,8 @@ namespace DefectStudio
 		}
 		if (!m_Result)
 			outError = "Brak wyniku fononowego.";
+		else if (!m_Result->hasEigenvectors)
+			outError = ServerVectorsUnavailable;
 		else if (window.structure.atoms.size() != m_Result->AtomCount())
 			outError = "Liczba atomów okna różni się od superkomórki FC.";
 		else
@@ -318,6 +320,8 @@ namespace DefectStudio
 	bool PhononPanelSession::CanBindWindow(const RendererWindowState &window, const Path &supercell,
 		const Path &projectDirectory) const
 	{
+		if (m_Settings.animationSource != "ccd_direction" && m_Settings.animationSource != "bulk_q" &&
+			m_Result && !m_Result->hasEigenvectors) return false;
 		if (m_Settings.animationSource == "bulk_q")
 		{
 			std::string error;

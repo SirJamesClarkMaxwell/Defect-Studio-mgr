@@ -24,6 +24,7 @@
 #include "IO/PhononDispersionIO.hpp"
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/AnalysisDatasetIO.hpp"
+#include "IO/PhononServerResultsIO.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
@@ -43,6 +44,7 @@ namespace DefectStudio
 	class AnalysisDatasetScanJob;
 	namespace Tests { struct PhononBatchTestAccess; }
 	namespace Tests { struct PhononDispersionTestAccess; }
+	namespace Tests { struct PhononServerTestAccess; }
 
 	enum class PhononBatchStep { Phonons, CcdAnalysis };
 	enum class PhononCaseStatus { Idle, Queued, Running, Done, Failed, Cancelled };
@@ -245,6 +247,15 @@ namespace DefectStudio
 		friend class PhononModesPanel;
 		friend void DrawPhononCases(PhononPanelSession &session);
 		friend struct Tests::PhononBatchTestAccess;
+		friend struct Tests::PhononServerTestAccess;
+		static constexpr std::string_view ServerVectorsUnavailable = "Wynik z serwera nie ma wektorów własnych (będą wczytywane na żądanie - zadanie 113g).";
+		void startServerScan(const Path &root);
+		void importServerResults();
+		[[nodiscard]] Path serverOutputPath(const ServerHrResult &hit) const;
+		std::vector<ServerHrResult> m_ServerResults;
+		std::vector<bool> m_ServerChecked;
+		std::map<std::string, PhononCaseRun> m_ServerRuns;
+		bool m_ScanningServer = false, m_ServerPopupRequested = false;
 		void pollBulkModeJob();
 		void loadCaseBulk();
 		void selectCaseDispersion();

@@ -23,6 +23,8 @@ namespace DefectStudio
 		cancelJob();
 		cancelFigureJob();
 		CancelDatasetScan();
+		m_ServerResults.clear(); m_ServerChecked.clear(); m_ServerRuns.clear();
+		m_ServerPopupRequested = false;
 		SetDatasets({});
 		ClearResult();
 		ClearCcdResult();

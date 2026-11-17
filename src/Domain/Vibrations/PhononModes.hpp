@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -67,6 +68,15 @@ namespace DefectStudio
 		double maxDisplacementAngstrom = 0.0;
 		double deltaQAmuHalfAngstrom = 0.0;
 		std::string approximation;
+
+		// task/113a: provenance. "server" = imported from a cluster dephonopy result
+		// (phonon_server_import.py); such a result has no eigenvectors/participation (both empty,
+		// hasEigenvectors false) until one mode is fetched on demand (task 113g).
+		std::string source = "local";
+		bool hasEigenvectors = true;
+		std::string hrMethod;                   // "displacements", ...; empty for old datasets
+		std::optional<double> hrCutoffAngstrom; // nullopt = automatic / not recorded
+		std::optional<std::array<int, 3>> supercell; // embedding/server supercell, nullopt = FC cell
 
 		// spectral_function.tsv
 		std::vector<double> spectralEnergyMeV;

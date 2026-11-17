@@ -45,6 +45,16 @@ namespace DefectStudio::Tests
 		EXPECT_FALSE(ReadDatasetRef(root / "defectstudio/x"));
 	}
 
+	TEST_F(AnalysisDatasetIOTests, FindsNestedServerImportsAndAcceptsAnImportAsRoot)
+	{
+		const auto directory = root / "defectstudio/phonons/server/9x9x1/12x12x1/displacements";
+		Summary(directory, R"({"schema":"ds.phonon_vibronic.v1","source":"server","has_eigenvectors":false})");
+		const auto found = FindDatasets(root, {});
+		ASSERT_EQ(found.size(), 1u);
+		EXPECT_EQ(found[0].directory, directory);
+		EXPECT_EQ(FindDatasets(directory, {}).size(), 1u);
+	}
+
 	TEST_F(AnalysisDatasetIOTests, SkipsDirectorySymlinksIncludingTheRoot)
 	{
 		Summary(root / "real/defectstudio/phonons", R"({"schema":"ds.phonon_vibronic.v1"})");

@@ -91,6 +91,7 @@ namespace DefectStudio
 			ImGui::EndDisabled();
 		}
 		const std::string blocker = m_Session->ComputationBlocker();
+		drawServerImport();
 		ImGui::BeginDisabled(m_Session->IsBusy() || !blocker.empty());
 		if (ImGui::Button("Policz")) m_Session->SubmitComputation();
 		ImGui::EndDisabled();

@@ -77,11 +77,18 @@ namespace DefectStudio
 					ImGuiSelectableFlags_AllowOverlap)) selected = index;
 				const auto path = PhononPanelSession::DirectoryLabel(row.directory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
 				ImGui::SetItemTooltip("%s\nKliknij, aby aktywować przypadek i wczytać zestaw.", path.c_str());
+				for (const auto &dataset : m_Session->Datasets())
+					if (PhononPanelSession::SameFilePath(dataset.directory, row.directory, m_Session->m_ProjectDirectory))
+						if (const auto source = dataset.inputs.find("hr_dir"); source != dataset.inputs.end())
+						{
+							ImGui::SameLine(); ImGui::TextDisabled("serwer");
+							ImGui::SetItemTooltip("%s", source->second.Utf8().c_str());
+						}
 				for (std::size_t i = 0; i < row.values.size(); ++i)
 				{
 					ImGui::TableSetColumnIndex(static_cast<int>(i + 3));
 					if (row.values[i]) ImGui::Text("%.6g", *row.values[i]);
-					else ImGui::TextUnformatted("-");
+					else ImGui::TextUnformatted("—");
 					if (!row.values[i]) ImGui::SetItemTooltip("%s", row.reasons[i].c_str());
 					else if (i == 0) ImGui::SetItemTooltip("ZPL: %s", row.zplSource.c_str());
 				}

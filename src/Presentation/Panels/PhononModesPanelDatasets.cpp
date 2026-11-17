@@ -107,6 +107,11 @@ namespace DefectStudio
 				ImGui::TableSetColumnIndex(2);
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(dataset.label.c_str());
+				if (const auto source = dataset.inputs.find("hr_dir"); source != dataset.inputs.end())
+				{
+					ImGui::SameLine(); ImGui::TextDisabled("serwer");
+					ImGui::SetItemTooltip("%s", source->second.Utf8().c_str());
+				}
 				const auto owner = m_Session->DatasetCaseId(dataset.directory);
 				if (group == 2 && !owner.empty())
 					for (const auto &item : m_Session->Cases())

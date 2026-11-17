@@ -47,15 +47,18 @@ namespace DefectStudio
 		if (root.Empty() || (cancelled && cancelled())) return datasets;
 		std::error_code error;
 		if (!std::filesystem::is_directory(std::filesystem::symlink_status(root.Native(), error)) || error) return datasets;
-		// Include root itself when the caller starts at a dataset child of defectstudio.
-		if (root.parent_path().filename().Utf8() == "defectstudio")
+		const auto inStore = [](const FilePath &path) {
+			return std::find(path.begin(), path.end(), FilePath("defectstudio")) != path.end();
+		};
+		// Server imports are nested below defectstudio/phonons/server, unlike local datasets.
+		if (inStore(root.Native()))
 			if (auto dataset = ReadDatasetRef(root)) { datasets.push_back(std::move(*dataset)); return datasets; }
 		std::filesystem::recursive_directory_iterator it(root.Native(), std::filesystem::directory_options::skip_permission_denied, error), end;
 		while (!error && it != end)
 		{
 			if (cancelled && cancelled()) break;
 			const auto status = it->symlink_status(error);
-			if (!error && std::filesystem::is_directory(status) && it->path().parent_path().filename() == "defectstudio")
+			if (!error && std::filesystem::is_directory(status) && inStore(it->path()))
 				if (auto dataset = ReadDatasetRef(Path::FromResolved(it->path())))
 				{
 					datasets.push_back(std::move(*dataset));

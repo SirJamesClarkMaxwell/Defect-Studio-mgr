@@ -339,7 +339,8 @@ namespace DefectStudio
 			columns[0].values.push_back(mode.index); columns[1].values.push_back(mode.frequencyMeV);
 			columns[2].text.push_back(mode.irrep); columns[3].values.push_back(mode.beta);
 			columns[4].values.push_back(mode.effectiveAtomCount); columns[5].values.push_back(mode.huangRhys);
-			columns[6].values.push_back(static_cast<double>(AtomsCarryingFraction(result, index, carriedFraction)));
+			columns[6].values.push_back(result.hasEigenvectors ? static_cast<double>(AtomsCarryingFraction(result, index, carriedFraction)) :
+				std::numeric_limits<double>::quiet_NaN());
 		}
 		return columns;
 	}
@@ -360,6 +361,7 @@ namespace DefectStudio
 				default: return mode.frequencyMeV;
 				}
 			};
+			if (std::isfinite(value(left)) != std::isfinite(value(right))) return std::isfinite(value(left));
 			return ascending ? value(left) < value(right) : value(right) < value(left);
 		});
 	}

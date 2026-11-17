@@ -47,6 +47,20 @@ namespace DefectStudio
 		return arguments;
 	}
 
+	std::vector<std::string> BuildPhononServerImportArguments(const PhononAnalysisRequest &request)
+	{
+		std::vector<std::string> arguments = {"--hr-dir", request.serverHrDirectory.Utf8()};
+		if (request.experimentalZplEv)
+			arguments.insert(arguments.end(), {"--zpl-exp", std::format("{:.10g}", *request.experimentalZplEv)});
+		if (!request.zplFormula.empty()) arguments.insert(arguments.end(), {"--zpl-formula", request.zplFormula});
+		if (!request.label.empty()) arguments.insert(arguments.end(), {"--label", request.label});
+		arguments.insert(arguments.end(), {
+			"--sigma", std::format("{:.10g}", request.sigmaMeV),
+			"--gamma", std::format("{:.10g}", request.gammaMeV),
+			"--out-dir", request.outputDirectory.Utf8()});
+		return arguments;
+	}
+
 	Result<PhononAnalysisRunSummary> ParsePhononAnalysisOutput(const std::string &standardOutput)
 	{
 		// The shared extractor returns the first JSON line; this script's final line is the result.
@@ -91,48 +105,50 @@ namespace DefectStudio
 	Result<PhononAnalysisRunSummary> PhononAnalysisBridge::Run(
 		const PhononAnalysisRequest &request, std::function<bool()> shouldCancel) const
 	{
+		const bool server = !request.serverHrDirectory.Empty();
 		if (request.outputDirectory.Empty() || !std::isfinite(request.sigmaMeV) || request.sigmaMeV <= 0.0 ||
 			!std::isfinite(request.gammaMeV) || request.gammaMeV <= 0.0 ||
-			(request.experimentalZplEv && (!std::isfinite(*request.experimentalZplEv) || *request.experimentalZplEv <= 0.0)))
+			(!server && request.experimentalZplEv && (!std::isfinite(*request.experimentalZplEv) || *request.experimentalZplEv <= 0.0)))
 		{
 			return MakePythonExecutionError(
 				"Phonon analysis request is invalid.",
 				"Expected an output path, positive finite sigma/gamma and a positive finite experimental ZPL when provided.",
 				"Check the output path, broadening and experimental ZPL.", "python.phonon.request_invalid");
 		}
-		if (request.bulkForceConstantDirectory.has_value() != request.embeddingMult.has_value() ||
+		if (!server && (request.bulkForceConstantDirectory.has_value() != request.embeddingMult.has_value() ||
 			(request.embeddingMult && std::any_of(request.embeddingMult->begin(), request.embeddingMult->end(),
 				[](int value) { return value < 1; })) ||
 			(request.dcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.dcutoffAngstrom) || *request.dcutoffAngstrom <= 0.0)) ||
-			(request.bcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.bcutoffAngstrom) || *request.bcutoffAngstrom <= 0.0)))
+			(request.bcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.bcutoffAngstrom) || *request.bcutoffAngstrom <= 0.0))))
 		{
 			return MakePythonExecutionError(
 				"Phonon embedding request is invalid.",
 				"Expected both bulk FC directory and three positive multipliers; cutoffs require embedding and must be positive and finite.",
 				"Check the embedding directory, multipliers and cutoffs.", "python.phonon.request_invalid");
 		}
-		for (const Path &directory : {request.forceConstantDirectory, request.groundStateDirectory,
+		const auto directories = server ? std::vector<Path>{request.serverHrDirectory} : std::vector<Path>{request.forceConstantDirectory, request.groundStateDirectory,
 			request.excitedStateDirectory, request.tripletDirectory.value_or(request.excitedStateDirectory),
 			request.bulkForceConstantDirectory.value_or(request.forceConstantDirectory),
 			request.groundAtExcitedDirectory.Empty() ? request.groundStateDirectory : request.groundAtExcitedDirectory,
-			request.excitedAtGroundDirectory.Empty() ? request.excitedStateDirectory : request.excitedAtGroundDirectory})
+			request.excitedAtGroundDirectory.Empty() ? request.excitedStateDirectory : request.excitedAtGroundDirectory};
+		for (const Path &directory : directories)
 		{
 			std::error_code error;
 			if (directory.Empty() || !std::filesystem::is_directory(directory.Native(), error))
 			{
 				return MakePythonExecutionError(
-					"A phonon analysis input directory was not found.",
+					"A phonon analysis input directory was not found: " + directory.Utf8(),
 					"Directory: " + directory.Utf8() + "\n" + error.message(),
 					"Pick existing force-constant, ground-state, excited-state and optional triplet/bulk directories.",
 					"python.phonon.request_invalid");
 			}
 		}
 
-		const PythonExampleScript script = ResolvePythonExampleScript("phonon_vibronic_analysis.py");
+		const PythonExampleScript script = ResolvePythonExampleScript(server ? "phonon_server_import.py" : "phonon_vibronic_analysis.py");
 		ScriptRunOptions options;
 		options.scriptPath = script.scriptPath;
 		options.workingDirectory = script.workingDirectory;
-		options.arguments = BuildPhononAnalysisArguments(request);
+		options.arguments = server ? BuildPhononServerImportArguments(request) : BuildPhononAnalysisArguments(request);
 		options.requireZeroExitCode = false;
 		options.shouldCancel = std::move(shouldCancel);
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);

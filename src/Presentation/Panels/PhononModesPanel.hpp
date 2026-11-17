@@ -53,6 +53,7 @@ namespace DefectStudio
 		void selectMode(int index);
 
 		void drawInputs();
+		void drawServerImport();
 		bool DrawFolder(const char *id, Path &path, std::string &error, bool editable = true, const Path &hint = {});
 		void drawDatasets();
 

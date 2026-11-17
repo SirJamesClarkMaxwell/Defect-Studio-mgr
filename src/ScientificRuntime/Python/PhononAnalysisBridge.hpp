@@ -34,6 +34,10 @@ namespace DefectStudio
 		std::optional<std::array<int, 3>> embeddingMult;
 		std::optional<double> dcutoffAngstrom;
 		std::optional<double> bcutoffAngstrom;
+		// task/113a: non-empty = import a cluster result (ServerHrResult::hrDirectory) with
+		// phonon_server_import.py instead of computing; force-constant/GS/ES/embedding fields are
+		// then ignored and not validated (the script finds GS/ES from hr_factors.log).
+		Path serverHrDirectory;
 		Path outputDirectory;
 	};
 
@@ -50,6 +54,10 @@ namespace DefectStudio
 	// --out-dir; each flag followed by its value as a separate argument. Paths as Utf8(), numbers
 	// with std::format("{:.10g}"), mult as e.g. "24x24x1".
 	[[nodiscard]] std::vector<std::string> BuildPhononAnalysisArguments(const PhononAnalysisRequest &request);
+
+	// task/113a: phonon_server_import.py command line, in this order: --hr-dir, [--zpl-exp],
+	// [--zpl-formula], [--label], --sigma, --gamma, --out-dir. Same value formatting as above.
+	[[nodiscard]] std::vector<std::string> BuildPhononServerImportArguments(const PhononAnalysisRequest &request);
 
 	// The last JSON line of the script's stdout: {"ok": true, "out_dir", "s_total", "stable"} ->
 	// summary; {"ok": false, "error": msg} -> error code "python.phonon.script_failed" whose

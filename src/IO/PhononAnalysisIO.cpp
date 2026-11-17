@@ -190,10 +190,25 @@ namespace DefectStudio
 			if (summary.contains("zpl_formula") && !summary.at("zpl_formula").is_null())
 				result.zplFormulaText = summary.at("zpl_formula").at("text").get<std::string>();
 			result.label = summary.value("label", std::string{});
+			result.source = summary.value("source", std::string("local"));
+			result.hasEigenvectors = summary.value("has_eigenvectors", true);
+			result.hrMethod = summary.value("hr_method", std::string{});
+			if (summary.contains("hr_cutoff_A") && !summary.at("hr_cutoff_A").is_null())
+				result.hrCutoffAngstrom = Finite(summary.at("hr_cutoff_A").get<double>());
+			if (summary.contains("supercell") && !summary.at("supercell").is_null())
+			{
+				if (!summary.at("supercell").is_array() || summary.at("supercell").size() != 3)
+					throw std::invalid_argument("Supercell must have three multipliers");
+				result.supercell = summary.at("supercell").get<std::array<int, 3>>();
+				if (std::any_of(result.supercell->begin(), result.supercell->end(), [](int value) { return value <= 0; }))
+					throw std::invalid_argument("Supercell multipliers must be positive");
+			}
 			result.sigmaMeV = Finite(summary.at("sigma_meV").get<double>());
 			result.gammaMeV = Finite(summary.at("gamma_meV").get<double>());
-			result.maxDisplacementAngstrom = Finite(summary.at("max_displacement_A").get<double>());
-			result.deltaQAmuHalfAngstrom = Finite(summary.at("delta_Q_amu05_A").get<double>());
+			result.maxDisplacementAngstrom = summary.at("max_displacement_A").is_null() ?
+				std::numeric_limits<double>::quiet_NaN() : Finite(summary.at("max_displacement_A").get<double>());
+			result.deltaQAmuHalfAngstrom = summary.at("delta_Q_amu05_A").is_null() ?
+				std::numeric_limits<double>::quiet_NaN() : Finite(summary.at("delta_Q_amu05_A").get<double>());
 			result.approximation = summary.at("approximation").get<std::string>();
 		}
 
@@ -302,8 +317,10 @@ namespace DefectStudio
 						throw std::invalid_argument("Mode indices must be consecutive from zero");
 					mode.frequencyMeV = Finite(ParseNumber<double>(row[1]));
 					mode.irrep = row[2];
-					mode.effectiveAtomCount = Finite(ParseNumber<double>(row[3]));
-					mode.beta = Finite(ParseNumber<double>(row[4]));
+					mode.effectiveAtomCount = ParseNumber<double>(row[3]);
+					mode.beta = ParseNumber<double>(row[4]);
+					if (std::isinf(mode.effectiveAtomCount) || std::isinf(mode.beta))
+						throw std::invalid_argument("Participation counts cannot be infinite");
 					mode.huangRhys = Finite(ParseNumber<double>(row[5]));
 					mode.qAmuHalfAngstrom = Finite(ParseNumber<double>(row[6]));
 					if (row[7] != "0" && row[7] != "1")
@@ -313,12 +330,15 @@ namespace DefectStudio
 				});
 			if (result.ModeCount() != modes)
 				throw std::invalid_argument("modes.tsv must contain 3 * n_atoms rows");
-			currentFile = "eigenvectors.npy";
-			result.eigenvectors = ReadNpy(directory / currentFile, {modes, atoms, 3});
-			currentFile = "participation.npy";
-			result.participation = ReadNpy(directory / currentFile, {modes, atoms});
-			if (std::any_of(result.participation.begin(), result.participation.end(), [](float value) { return value < 0.0f; }))
-				throw std::invalid_argument("Participation must be nonnegative");
+			if (result.hasEigenvectors)
+			{
+				currentFile = "eigenvectors.npy";
+				result.eigenvectors = ReadNpy(directory / currentFile, {modes, atoms, 3});
+				currentFile = "participation.npy";
+				result.participation = ReadNpy(directory / currentFile, {modes, atoms});
+				if (std::any_of(result.participation.begin(), result.participation.end(), [](float value) { return value < 0.0f; }))
+					throw std::invalid_argument("Participation must be nonnegative");
+			}
 
 			ReadSpectra(directory, result, currentFile);
 			outResult = std::move(result);

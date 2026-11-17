@@ -25,6 +25,12 @@ namespace DefectStudio
 			const auto summary = nlohmann::json::parse(text);
 			if (!summary.contains("embedding") || summary.at("embedding").is_null()) return;
 			const auto &embedding = summary.at("embedding");
+			if (summary.value("source", std::string{}) == "server")
+			{
+				const auto mult = embedding.at("mult").get<std::array<int, 3>>();
+				m_EmbeddingSummary = std::format("embedding (serwer): {}x{}x{}", mult[0], mult[1], mult[2]);
+				return;
+			}
 			if (!embedding.at("mult").is_array() || embedding.at("mult").size() != 3 ||
 				!embedding.at("origin_shift_A").is_array() || embedding.at("origin_shift_A").size() != 3)
 				throw std::invalid_argument("Embedding mult and origin shift must have three components");

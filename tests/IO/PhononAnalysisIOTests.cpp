@@ -162,6 +162,52 @@ namespace DefectStudio::Tests
 		std::filesystem::remove_all(dir);
 	}
 
+	TEST(PhononAnalysisIOTests, LoadsServerResultWithoutNpyAndWithUnknownDisplacementAndParticipation)
+	{
+		const FilePath dir = WriteFixture("server");
+		nlohmann::json summary;
+		{
+			std::ifstream in(dir / "summary.json");
+			in >> summary;
+		}
+		summary["source"] = "server";
+		summary["has_eigenvectors"] = false;
+		summary["hr_method"] = "displacements";
+		summary["hr_cutoff_A"] = 4.0;
+		summary["supercell"] = {12, 12, 1};
+		summary["max_displacement_A"] = nullptr;
+		summary["delta_Q_amu05_A"] = nullptr;
+		summary["zpl_eV"]["computed"] = nullptr;
+		WriteText(dir / "summary.json", summary.dump());
+		std::filesystem::remove(dir / "eigenvectors.npy");
+		std::filesystem::remove(dir / "participation.npy");
+		std::string table = "index\tfreq_meV\tirrep\tn_eff\tbeta\tS_k\tq_k_amu05_A\tis_translation\n";
+		for (int i = 0; i < 6; ++i)
+			table += std::to_string(i) + "\t10\t???\tnan\tnan\t0\t0\t" + (i < 3 ? "1\n" : "0\n");
+		WriteText(dir / "modes.tsv", table);
+		PhononAnalysisResult result;
+		std::string error;
+		ASSERT_TRUE(Load(dir, result, error)) << error;
+		EXPECT_EQ(result.source, "server");
+		EXPECT_FALSE(result.hasEigenvectors);
+		EXPECT_EQ(result.hrMethod, "displacements");
+		ASSERT_TRUE(result.hrCutoffAngstrom);
+		EXPECT_DOUBLE_EQ(*result.hrCutoffAngstrom, 4.0);
+		ASSERT_TRUE(result.supercell);
+		EXPECT_EQ(*result.supercell, (std::array<int, 3>{12, 12, 1}));
+		EXPECT_TRUE(result.eigenvectors.empty());
+		EXPECT_TRUE(result.participation.empty());
+		EXPECT_TRUE(std::isnan(result.modes[5].effectiveAtomCount));
+		EXPECT_TRUE(std::isnan(result.modes[5].beta));
+		EXPECT_TRUE(std::isnan(result.maxDisplacementAngstrom));
+		EXPECT_TRUE(std::isnan(result.deltaQAmuHalfAngstrom));
+		EXPECT_FALSE(result.zplEv.computed);
+		ASSERT_TRUE(PhononAnalysisIO::LoadSpectra(Path::FromResolved(dir), result, error)) << error;
+		EXPECT_FALSE(result.hasEigenvectors);
+		EXPECT_EQ(result.source, "server");
+		std::filesystem::remove_all(dir);
+	}
+
 	TEST(PhononAnalysisIOTests, LoadsFormulaMetadataAndFiveColumnPl)
 	{
 		const FilePath dir = WriteFixture("formula");

@@ -72,7 +72,7 @@ namespace DefectStudio
 		run.status = PhononCaseStatus::Running;
 		run.output = request.outputDirectory;
 		if (!m_BatchEntry) run.message.clear();
-		AttachDataset(caseId, request.outputDirectory);
+		if (request.serverHrDirectory.Empty()) AttachDataset(caseId, request.outputDirectory);
 		m_PendingJob = CreateRef<PhononAnalysisJob>(std::move(request));
 		m_PendingJobId = submitCaseJob(m_PendingJob);
 		if (caseId == ActiveCaseId()) m_Error.clear();

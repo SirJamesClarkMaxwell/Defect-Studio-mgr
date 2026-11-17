@@ -73,6 +73,38 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(BuildPhononAnalysisArguments(request).size(), 12u);
 	}
 
+	TEST(PhononAnalysisBridgeTests, ServerImportArgumentsFollowTheScriptInterface)
+	{
+		PhononAnalysisRequest request;
+		request.forceConstantDirectory = Path::FromUtf8("D:/ignored");
+		request.serverHrDirectory = Path::FromUtf8("P:/sys/spectral-function/12x12x1/displacements");
+		request.sigmaMeV = 2.0;
+		request.gammaMeV = 0.5;
+		request.outputDirectory = Path::FromUtf8("D:/proj/defectstudio/phonons/x");
+		const std::vector<std::string> minimal = {"--hr-dir", request.serverHrDirectory.Utf8(),
+			"--sigma", "2", "--gamma", "0.5", "--out-dir", request.outputDirectory.Utf8()};
+		EXPECT_EQ(BuildPhononServerImportArguments(request), minimal);
+
+		request.experimentalZplEv = 4.08;
+		request.zplFormula = "E_es - E_gs";
+		request.label = "Dimer 12x12x1";
+		const std::vector<std::string> full = {"--hr-dir", request.serverHrDirectory.Utf8(), "--zpl-exp", "4.08",
+			"--zpl-formula", "E_es - E_gs", "--label", "Dimer 12x12x1",
+			"--sigma", "2", "--gamma", "0.5", "--out-dir", request.outputDirectory.Utf8()};
+		EXPECT_EQ(BuildPhononServerImportArguments(request), full);
+	}
+
+	TEST(PhononAnalysisBridgeTests, ServerImportSkipsLocalInputValidation)
+	{
+		PhononAnalysisRequest request; // no FC/GS/ES: must not be "request_invalid"
+		request.serverHrDirectory = Path::FromResolved(std::filesystem::temp_directory_path() / "ds_no_such_hr_dir");
+		request.outputDirectory = Path::FromResolved(std::filesystem::temp_directory_path() / "ds_phonon_never_written");
+		const Result<PhononAnalysisRunSummary> summary = PhononAnalysisBridge{}.Run(request);
+		ASSERT_FALSE(summary);
+		EXPECT_EQ(summary.Error().code, "python.phonon.request_invalid"); // the hr directory itself must exist
+		EXPECT_NE(summary.Error().userMessage.find("ds_no_such_hr_dir"), std::string::npos);
+	}
+
 	TEST(PhononAnalysisBridgeTests, HalfAnEmbeddingRequestIsRejected)
 	{
 		PhononAnalysisRequest request;

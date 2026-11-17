@@ -137,7 +137,7 @@ namespace DefectStudio
 			return index < result.ModeCount() && !result.modes[index].isTranslation &&
 				index < result.eigenvectors.size() / 3 / atoms;
 		};
-		if (atoms == 0 || result.positionsAngstrom.size() != atoms || result.massesAmu.size() != atoms ||
+		if (!result.hasEigenvectors || atoms == 0 || result.positionsAngstrom.size() != atoms || result.massesAmu.size() != atoms ||
 			!std::isfinite(mixAngleRadians) || !validMode(mode) || (partner && !validMode(*partner)))
 			return {};
 		VibrationField field;

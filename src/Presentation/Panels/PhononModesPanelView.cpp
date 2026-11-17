@@ -25,6 +25,7 @@ namespace DefectStudio
 		for (const auto &[label, value] : {std::pair{"obliczone", result.zplEv.computed},
 			std::pair{"po korekcji spinowej", result.zplEv.spinPurified}, std::pair{"eksperymentalne", result.zplEv.experimental}})
 			if (value) { ImGui::Text("ZPL (%s): %.4f eV", label, *value); }
+			else ImGui::Text("ZPL (%s): —", label);
 		if (!result.stable)
 		{
 			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "mody urojone: %zu", result.imaginaryModes.size());
@@ -133,11 +134,18 @@ namespace DefectStudio
 				if (selected && scrollToSelection) ImGui::SetScrollHereY();
 				ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", mode.frequencyMeV);
 				ImGui::TableSetColumnIndex(2); ImGui::TextUnformatted(mode.irrep.c_str());
-				ImGui::TableSetColumnIndex(3); ImGui::Text("%.2f", mode.beta);
-				ImGui::TableSetColumnIndex(4); ImGui::Text("%.2f", mode.effectiveAtomCount);
+				ImGui::TableSetColumnIndex(3);
+				if (std::isfinite(mode.beta)) ImGui::Text("%.2f", mode.beta);
+				else ImGui::TextUnformatted("—");
+				ImGui::TableSetColumnIndex(4);
+				if (std::isfinite(mode.effectiveAtomCount)) ImGui::Text("%.2f", mode.effectiveAtomCount);
+				else ImGui::TextUnformatted("—");
 				ImGui::TableSetColumnIndex(5); ImGui::Text("%.4f", mode.huangRhys);
 				if (ImGui::TableSetColumnIndex(6))
-					ImGui::Text("%zu", AtomsCarryingFraction(result, index, settings.carriedFraction));
+				{
+					if (result.hasEigenvectors) ImGui::Text("%zu", AtomsCarryingFraction(result, index, settings.carriedFraction));
+					else { ImGui::TextUnformatted("—"); ImGui::SetItemTooltip("%s", PhononPanelSession::ServerVectorsUnavailable.data()); }
+				}
 				ImGui::PopID();
 			}
 		ImGui::EndTable();
@@ -242,6 +250,15 @@ namespace DefectStudio
 		if (ccd && m_Session->CcdResult())
 			for (const auto &warning : m_Session->CcdResult()->get().loadWarnings) ImGui::TextWrapped("%s", warning.c_str());
 		ImGui::TextUnformatted(m_Session->Field().label.c_str());
+		if (!ccd && !bulk && m_Session->Result() && !m_Session->Result()->hasEigenvectors)
+		{
+			ImGui::BeginDisabled();
+			ImGui::Button("Animuj");
+			ImGui::EndDisabled();
+			ImGui::SetItemTooltip("%s", PhononPanelSession::ServerVectorsUnavailable.data());
+			ImGui::TextWrapped("%s", PhononPanelSession::ServerVectorsUnavailable.data());
+			return;
+		}
 		if (const auto partner = bulk ? (m_Session->BulkMode() && m_Session->BulkMode()->partner ?
 			std::optional<std::size_t>(m_Session->BulkMode()->partner->band) : std::nullopt) : m_Session->DegeneratePartnerOfSelected(); partner && !ccd)
 		{

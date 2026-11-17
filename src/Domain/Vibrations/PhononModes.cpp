@@ -13,7 +13,7 @@ namespace DefectStudio
 		std::vector<glm::dvec3> PhysicalDisplacements(const PhononAnalysisResult &result, std::size_t mode)
 		{
 			const auto atoms = result.AtomCount();
-			if (mode >= result.ModeCount() || atoms == 0 || result.massesAmu.size() != atoms ||
+			if (!result.hasEigenvectors || mode >= result.ModeCount() || atoms == 0 || result.massesAmu.size() != atoms ||
 				mode >= result.eigenvectors.size() / 3 / atoms)
 				return {};
 			std::vector<glm::dvec3> displacements;
@@ -46,7 +46,7 @@ namespace DefectStudio
 		double participationThreshold, double maxLengthAngstrom)
 	{
 		const auto atoms = result.AtomCount();
-		if (atoms == 0 || mode >= result.ModeCount() || mode >= result.participation.size() / atoms ||
+		if (!result.hasEigenvectors || atoms == 0 || mode >= result.ModeCount() || mode >= result.participation.size() / atoms ||
 			!std::isfinite(participationThreshold) || !std::isfinite(maxLengthAngstrom) || maxLengthAngstrom < 0.0)
 			return {};
 		const auto displacements = PhysicalDisplacements(result, mode);
@@ -65,7 +65,7 @@ namespace DefectStudio
 	std::size_t AtomsCarryingFraction(const PhononAnalysisResult &result, std::size_t mode, double fraction)
 	{
 		const auto atoms = result.AtomCount();
-		if (atoms == 0 || mode >= result.ModeCount() || mode >= result.participation.size() / atoms ||
+		if (!result.hasEigenvectors || atoms == 0 || mode >= result.ModeCount() || mode >= result.participation.size() / atoms ||
 			!std::isfinite(fraction) || fraction <= 0.0 || fraction > 1.0)
 			return 0;
 		const auto first = result.participation.begin() + mode * atoms;
@@ -91,7 +91,7 @@ namespace DefectStudio
 		double phaseRadians, double amplitudeAngstrom)
 	{
 		auto positions = result.positionsAngstrom;
-		if (mode >= result.ModeCount() || result.modes[mode].isTranslation ||
+		if (!result.hasEigenvectors || mode >= result.ModeCount() || result.modes[mode].isTranslation ||
 			positions.size() != result.AtomCount() || !std::isfinite(phaseRadians) || !std::isfinite(amplitudeAngstrom))
 			return positions;
 		const auto displacements = PhysicalDisplacements(result, mode);

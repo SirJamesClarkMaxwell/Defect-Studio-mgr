@@ -22,6 +22,21 @@ from scipy.linalg import eigh
 from zpl_formula import evaluate, used_variables
 
 
+RESULT_UNITS = {"index": "dimensionless, zero-based", "freq_meV": "meV (signed hbar omega)",
+         "irrep": "point-group label", "n_eff": "atoms (dephonopy physical-displacement IPR)",
+         "beta": "dimensionless, n_atoms / n_eff", "S_k": "dimensionless",
+         "q_k_amu05_A": "amu^0.5 Angstrom", "is_translation": "boolean (0 or 1)",
+         "energy_meV": "meV", "S_E_per_meV": "1/meV", "photon_energy_eV": "eV",
+         "intensity_computed": "relative, max 1", "intensity_spin_purified": "relative, max 1",
+         "intensity_experimental": "relative, max 1", "intensity_formula": "relative, max 1",
+         "eigenvectors": "dimensionless, mass-weighted",
+         "participation": "dimensionless, per-atom squared eigenvector norm",
+         "positions_A": "Angstrom", "cell_A": "Angstrom", "masses_amu": "amu",
+         "s_total": "dimensionless", "debye_waller": "dimensionless", "zpl_eV": "eV",
+         "max_displacement_A": "Angstrom", "delta_Q_amu05_A": "amu^0.5 Angstrom",
+         "sigma_meV": "meV, Gaussian standard deviation", "gamma_meV": "meV, Lorentzian width"}
+
+
 def read_toten(directory):
     energy = None
     pattern = re.compile(r"free\s+energy\s+TOTEN\s*=\s*([-+\d.EeDd]+)")
@@ -78,6 +93,51 @@ def origin_shift(defect, bulk, primitive):
     return best_shift
 
 
+def build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma):
+    from dephonopy.hr_factors.io import gaussian_smoothing
+    from dephonopy.hr_factors.luminescence import calc_luminescence
+
+    finite_s = np.isfinite(s_k)
+    # Even FFT length avoids dephonopy's odd-grid phase error; pad multiphonon tails.
+    extent = max(2000.0, float(np.max(np.abs(frequencies))) * (2 * max(s_total, 1) + 12),
+                 100 * gamma)
+    step = min(0.2, sigma / 20, gamma / 10)
+    n_grid = 2 ** math.ceil(math.log2(extent / step + 1))
+    # shortcut: dense serial spectra, reject excessive grids until a streaming API is needed.
+    if n_grid > 2**20:
+        raise ValueError("Requested broadening requires more than 1048576 spectrum samples")
+    spectral_modes = ~is_translation & finite_s
+    energy, density = gaussian_smoothing(frequencies[spectral_modes], s_k[spectral_modes],
+                                         sig=sigma, n=n_grid, xlim=(0, extent))
+    integral = float(np.trapezoid(density, energy))
+    if s_total != 0:
+        if integral <= 0:
+            raise ValueError("Cannot normalize the spectral function")
+        density *= s_total / integral
+    spectra = []
+    for zpl in zpls.values():
+        if zpl is None:
+            spectra.append(None)
+        else:
+            photon_energy, intensity = calc_luminescence(energy, density, zpl=zpl * 1000,
+                                                         gamma=gamma, absorption=False)
+            spectra.append((photon_energy, intensity))
+    available = [spectrum[0] for spectrum in spectra if spectrum is not None]
+    photon_grid = np.unique(np.concatenate(available)) if available else np.array([], dtype=float)
+    photon_grid = photon_grid[photon_grid > 0]
+    pl = [photon_grid]
+    for spectrum in spectra:
+        if spectrum is None:
+            pl.append(np.full(photon_grid.shape, np.nan))
+        else:
+            intensity = np.interp(photon_grid, *spectrum, left=0, right=0)
+            if not np.isfinite(intensity).all() or intensity.max() <= 0:
+                raise ValueError("Invalid luminescence spectrum")
+            pl.append(intensity / intensity.max())
+
+    return np.column_stack((energy, density)), np.column_stack(pl)
+
+
 def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, gamma=2.0,
             bulk_fc_dir=None, mult=None, dcutoff=None, bcutoff=None, zpl_formula=None,
             gs_at_es_dir=None, es_at_gs_dir=None, label=None):
@@ -125,8 +185,7 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
         from dephonopy.force_constants import ForceConstants
         from dephonopy.hr_factors.fc_displacements import (hr_factors_from_displacements,
                                                           compare_systems_and_embedd_array)
-        from dephonopy.hr_factors.io import read_atomic_displacements, gaussian_smoothing
-        from dephonopy.hr_factors.luminescence import calc_luminescence
+        from dephonopy.hr_factors.io import read_atomic_displacements
 
         fc = ForceConstants(str(paths["fc_dir"]))
         # Enforce permutation symmetry and the acoustic sum rule before diagonalization.
@@ -223,56 +282,11 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
             raise ValueError("Non-finite phonon data or invalid participation counts")
         s_total = float(s_k[finite_s].sum())
         imaginary = np.flatnonzero((frequencies < -0.5) & ~is_translation)
-        # Even FFT length avoids dephonopy's odd-grid phase error; pad multiphonon tails.
-        extent = max(2000.0, float(np.max(np.abs(frequencies))) * (2 * max(s_total, 1) + 12),
-                     100 * gamma)
-        step = min(0.2, sigma / 20, gamma / 10)
-        n_grid = 2 ** math.ceil(math.log2(extent / step + 1))
-        # shortcut: dense serial spectra, reject excessive grids until a streaming API is needed.
-        if n_grid > 2**20:
-            raise ValueError("Requested broadening requires more than 1048576 spectrum samples")
-        spectral_modes = ~is_translation & finite_s
-        energy, density = gaussian_smoothing(frequencies[spectral_modes], s_k[spectral_modes],
-                                             sig=sigma, n=n_grid, xlim=(0, extent))
-        integral = float(np.trapezoid(density, energy))
-        if s_total != 0:
-            if integral <= 0:
-                raise ValueError("Cannot normalize the spectral function")
-            density *= s_total / integral
-        spectra = []
-        for zpl in zpls.values():
-            if zpl is None:
-                spectra.append(None)
-            else:
-                photon_energy, intensity = calc_luminescence(energy, density, zpl=zpl * 1000,
-                                                             gamma=gamma, absorption=False)
-                spectra.append((photon_energy, intensity))
-        photon_grid = np.unique(np.concatenate([spectrum[0] for spectrum in spectra if spectrum is not None]))
-        photon_grid = photon_grid[photon_grid > 0]
-        pl = [photon_grid]
-        for spectrum in spectra:
-            if spectrum is None:
-                pl.append(np.full(photon_grid.shape, np.nan))
-            else:
-                intensity = np.interp(photon_grid, *spectrum, left=0, right=0)
-                if not np.isfinite(intensity).all() or intensity.max() <= 0:
-                    raise ValueError("Invalid luminescence spectrum")
-                pl.append(intensity / intensity.max())
+        spectral_function, pl = build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma)
 
-    units = {"index": "dimensionless, zero-based", "freq_meV": "meV (signed hbar omega)",
-             "irrep": "point-group label", "n_eff": "atoms (dephonopy physical-displacement IPR)",
-             "beta": "dimensionless, n_atoms / n_eff", "S_k": "dimensionless",
-             "q_k_amu05_A": "amu^0.5 Angstrom", "is_translation": "boolean (0 or 1)",
-             "energy_meV": "meV", "S_E_per_meV": "1/meV", "photon_energy_eV": "eV",
-             "intensity_computed": "relative, max 1", "intensity_spin_purified": "relative, max 1",
-             "intensity_experimental": "relative, max 1", "intensity_formula": "relative, max 1",
-             "eigenvectors": "dimensionless, mass-weighted",
-             "participation": "dimensionless, per-atom squared eigenvector norm",
-             "positions_A": "Angstrom", "cell_A": "Angstrom", "masses_amu": "amu",
-             "s_total": "dimensionless", "debye_waller": "dimensionless", "zpl_eV": "eV",
-             "max_displacement_A": "Angstrom", "delta_Q_amu05_A": "amu^0.5 Angstrom",
-             "sigma_meV": "meV, Gaussian standard deviation", "gamma_meV": "meV, Lorentzian width"}
     summary = {"schema": "ds.phonon_vibronic.v1", "n_atoms": n_atoms, "n_modes": n_modes,
+               "source": "local", "has_eigenvectors": True, "hr_method": "displacements",
+               "hr_cutoff_A": None, "supercell": list(mult) if mult is not None else None,
                "label": label if label is not None else paths["es_dir"].name + (
                    " (emb " + "x".join(map(str, mult)) + ")" if embedding is not None else ""),
                "zpl_formula": formula_info,
@@ -284,13 +298,13 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
                "delta_Q_amu05_A": float(np.sqrt(np.sum(masses[:, None] * displacement**2))),
                "sigma_meV": sigma, "gamma_meV": gamma,
                "input_paths": {key: str(path) if path else None for key, path in paths.items()},
-               "units": units, "force_constant_correction": "dephonopy.ensure_symmetry (permutation + acoustic sum rule)",
+               "units": RESULT_UNITS, "force_constant_correction": "dephonopy.ensure_symmetry (permutation + acoustic sum rule)",
                "approximation": "harmonic, equal ground/excited curvatures, displaced oscillators, T=0"}
     return {"summary": summary, "structure": {"symbols": symbols, "positions_A": atoms.get_positions().tolist(),
             "cell_A": cell.tolist(), "masses_amu": masses.tolist()}, "frequencies": frequencies,
             "irreps": modes.irreps, "n_eff": n_eff, "s_k": s_k, "q": q,
             "is_translation": is_translation, "eigenvectors": eigenvectors,
-            "spectral_function": np.column_stack((energy, density)), "pl": np.column_stack(pl)}
+            "spectral_function": spectral_function, "pl": pl}
 
 
 def write_result(result, directory):
@@ -304,9 +318,10 @@ def write_result(result, directory):
     structure = result["structure"]
     write(directory / "POSCAR", Atoms(symbols=structure["symbols"], positions=structure["positions_A"],
                                      cell=structure["cell_A"], pbc=True), format="vasp", vasp5=True, sort=False)
-    vectors = result["eigenvectors"]
-    np.save(directory / "eigenvectors.npy", vectors.astype(np.float32))
-    np.save(directory / "participation.npy", np.sum(vectors**2, axis=2).astype(np.float32))
+    vectors = result.get("eigenvectors")
+    if vectors is not None:
+        np.save(directory / "eigenvectors.npy", vectors.astype(np.float32))
+        np.save(directory / "participation.npy", np.sum(vectors**2, axis=2).astype(np.float32))
     with (directory / "modes.tsv").open("w", encoding="utf-8") as handle:
         handle.write("index\tfreq_meV\tirrep\tn_eff\tbeta\tS_k\tq_k_amu05_A\tis_translation\n")
         for i, freq in enumerate(result["frequencies"]):
