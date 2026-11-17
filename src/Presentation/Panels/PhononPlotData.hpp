@@ -29,6 +29,11 @@ namespace DefectStudio
 		// CCD delta Q, maximum displacement, carried atoms, mode coverage %, largest mode share %.
 		std::array<std::optional<double>, 14> values;
 		std::array<std::string, 14> reasons;
+		// source, supercell/FC cell, HR method, cutoff (auto when recorded as null).
+		std::array<std::string, 4> provenance;
+		std::array<std::string, 4> provenanceReasons;
+		std::optional<double> franckCondonMeV;
+		std::string franckCondonReason;
 	};
 	[[nodiscard]] std::vector<PhononComparisonRow> BuildPhononComparisonRows(PhononPanelSession &session, const Path &project);
 	[[nodiscard]] std::vector<DataTableColumn> PhononComparisonColumns(std::span<const PhononComparisonRow> rows);

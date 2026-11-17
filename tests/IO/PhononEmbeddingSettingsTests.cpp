@@ -44,5 +44,21 @@ namespace DefectStudio::Tests
 		EXPECT_TRUE(settings.ccdOutputDirectory.Empty());
 		EXPECT_DOUBLE_EQ(settings.ccdStep, 0.25);
 		EXPECT_TRUE(warnings.empty());
+		EXPECT_EQ(settings.hrMethod, "displacements");
+		EXPECT_FALSE(settings.hrCutoffAngstrom);
+		EXPECT_FALSE(settings.sigmaMaxMeV);
+	}
+
+	TEST(PhononEmbeddingSettingsTests, InvalidHrSettingsKeepDefaultsAndWarn)
+	{
+		PhononPanelSettings settings;
+		std::vector<std::string> warnings;
+		std::string error;
+		ASSERT_TRUE(PhononPanelSettingsIO::Parse("inputs: {hrMethod: other, hrCutoff: .nan, sigmaMax: 5}\n",
+			Path::FromUtf8("D:/project"), settings, warnings, error)) << error;
+		EXPECT_EQ(settings.hrMethod, "displacements");
+		EXPECT_FALSE(settings.hrCutoffAngstrom);
+		EXPECT_FALSE(settings.sigmaMaxMeV);
+		EXPECT_EQ(warnings.size(), 3u);
 	}
 }

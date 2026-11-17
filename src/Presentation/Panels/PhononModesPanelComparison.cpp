@@ -13,14 +13,20 @@ namespace DefectStudio
 {
 	namespace
 	{
-		constexpr std::array<std::string_view, 17> Columns = {"porównaj", "Przypadek", "Zestaw", "ZPL [eV]",
+		constexpr std::array<std::string_view, 22> Columns = {"porównaj", "Przypadek", "Zestaw", "ZPL [eV]",
 			"ΔQ [amu^½ Å]", "S", "DW [%]", "ℏω_eff [meV]", "Najsilniejszy mod [meV]", "S_k", "n_eff", "Mody urojone",
-			"ΔQ (CCD) [amu^½ Å]", "max |ΔR| [Å]", "atomy ΔQ²", "pokrycie ΔQ² modami [%]", "największy udział modu [%]"};
+			"ΔQ (CCD) [amu^½ Å]", "max |ΔR| [Å]", "atomy ΔQ²", "pokrycie ΔQ² modami [%]", "największy udział modu [%]",
+			"źródło", "komórka", "metoda HR", "cutoff [Å]", "E_FC = Σ S_k ℏω_k [meV]"};
 
 	}
 
 	void PhononModesPanel::drawComparison()
 	{
+		if (ImGui::Button("Porównaj wszystkie widoczne")) m_Session->CompareAllVisibleCases();
+		ImGui::SetItemTooltip("Dodaj bieżący zestaw fononowy każdego widocznego przypadku do wspólnych wykresów.");
+		ImGui::SameLine();
+		if (ImGui::Button("Wyczyść")) m_Session->ClearCompared();
+		ImGui::SetItemTooltip("Wyczyść zestawy zaznaczone do porównania.");
 		const auto rows = BuildPhononComparisonRows(*m_Session, m_Session->m_ProjectDirectory);
 		const auto columns = PhononComparisonColumns(rows, m_Session->Settings().carriedFraction);
 		ImGui::PushID("comparison");
@@ -54,7 +60,7 @@ namespace DefectStudio
 					ImGui::TableNextRow(); ImGui::TableSetColumnIndex(1);
 					ImGui::TextUnformatted(row.caseId.empty() ? "Bez przypadku" : row.caseName.c_str());
 				}
-				ImGui::PushID(row.directory.Utf8().c_str());
+				ImGui::PushID((row.caseId + "/" + row.directory.Utf8()).c_str());
 				ImGui::TableNextRow();
 				if (row.active)
 				{
@@ -73,10 +79,13 @@ namespace DefectStudio
 				ImGui::SetItemTooltip("%s", known ? "Uwzględnij zestaw we wspólnym porównaniu wykresów." : "Brak rozpoznanego zestawu; wczytaj podsumowanie lub przeskanuj ponownie.");
 				ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(row.caseName.c_str());
 				ImGui::TableSetColumnIndex(2);
+				ImGui::BeginDisabled(row.directory.Empty());
 				if (ImGui::Selectable(row.label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns |
 					ImGuiSelectableFlags_AllowOverlap)) selected = index;
+				ImGui::EndDisabled();
 				const auto path = PhononPanelSession::DirectoryLabel(row.directory, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots);
-				ImGui::SetItemTooltip("%s\nKliknij, aby aktywować przypadek i wczytać zestaw.", path.c_str());
+				ImGui::SetItemTooltip("%s", row.directory.Empty() ? "Brak zestawu w tym przypadku; wczytaj lub oblicz wynik." :
+					(path + "\nKliknij, aby aktywować przypadek i wczytać zestaw.").c_str());
 				for (const auto &dataset : m_Session->Datasets())
 					if (PhononPanelSession::SameFilePath(dataset.directory, row.directory, m_Session->m_ProjectDirectory))
 						if (const auto source = dataset.inputs.find("hr_dir"); source != dataset.inputs.end())
@@ -92,6 +101,15 @@ namespace DefectStudio
 					if (!row.values[i]) ImGui::SetItemTooltip("%s", row.reasons[i].c_str());
 					else if (i == 0) ImGui::SetItemTooltip("ZPL: %s", row.zplSource.c_str());
 				}
+				for (std::size_t i = 0; i < row.provenance.size(); ++i)
+				{
+					ImGui::TableSetColumnIndex(static_cast<int>(17 + i));
+					ImGui::TextUnformatted(row.provenance[i].empty() ? "—" : row.provenance[i].c_str());
+					if (row.provenance[i].empty()) ImGui::SetItemTooltip("%s", row.provenanceReasons[i].c_str());
+				}
+				ImGui::TableSetColumnIndex(21);
+				if (row.franckCondonMeV) ImGui::Text("%.6g", *row.franckCondonMeV);
+				else { ImGui::TextUnformatted("—"); ImGui::SetItemTooltip("%s", row.franckCondonReason.c_str()); }
 				ImGui::PopID();
 			}
 			ImGui::EndTable();

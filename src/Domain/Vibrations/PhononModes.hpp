@@ -64,6 +64,7 @@ namespace DefectStudio
 		bool stable = true;
 		std::vector<int> imaginaryModes;
 		double sigmaMeV = 0.0;
+		std::optional<double> sigmaMaxMeV;
 		double gammaMeV = 0.0;
 		double maxDisplacementAngstrom = 0.0;
 		double deltaQAmuHalfAngstrom = 0.0;

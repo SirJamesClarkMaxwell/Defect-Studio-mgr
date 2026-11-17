@@ -42,10 +42,12 @@ def read_column(path, count, strings=False):
     return values
 
 
-def analyse(hr_dir, sigma, gamma, zpl_exp=None, zpl_formula=None, label=None):
+def analyse(hr_dir, sigma, gamma, zpl_exp=None, zpl_formula=None, label=None, sigma_max=None):
     for name, value in (("sigma", sigma), ("gamma", gamma)):
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be finite and positive (meV)")
+    if sigma_max is not None and (not math.isfinite(sigma_max) or sigma_max < sigma):
+        raise ValueError("sigma-max must be finite and at least sigma (meV)")
     if zpl_exp is not None and (not math.isfinite(zpl_exp) or zpl_exp <= 0):
         raise ValueError("Experimental ZPL must be finite and positive (eV)")
     hr_dir = Path(hr_dir).resolve()
@@ -136,7 +138,7 @@ def analyse(hr_dir, sigma, gamma, zpl_exp=None, zpl_formula=None, label=None):
             delta_q = float(np.sqrt(np.sum(np.asarray(gs.get_masses())[:, None] * displacement**2)))
         s_total = float(s_k[3:][frequencies[3:] > 0].sum())
         spectral_function, pl = build_spectra(frequencies, np.where(frequencies > 0, s_k, 0),
-                                             is_translation, s_total, zpls, sigma, gamma)
+                                             is_translation, s_total, zpls, sigma, gamma, sigma_max)
 
     cutoff = re.search(r"cutoff radius\s*\((?:auto|user)\):\s*([-+\d.eE]+)\s*A", log)
     cutoff = float(cutoff[1]) if cutoff else None
@@ -158,7 +160,7 @@ def analyse(hr_dir, sigma, gamma, zpl_exp=None, zpl_formula=None, label=None):
                "imaginary_modes": [{"index": int(i), "freq_meV": float(frequencies[i])} for i in imaginary],
                "stable": len(imaginary) == 0, "s_total": s_total, "debye_waller": math.exp(-s_total),
                "max_displacement_A": maximum, "delta_Q_amu05_A": delta_q,
-               "sigma_meV": sigma, "gamma_meV": gamma,
+               "sigma_meV": sigma, "sigma_max_meV": sigma_max, "gamma_meV": gamma,
                "input_paths": {key: str(path) if path else None for key, path in paths.items()},
                "units": RESULT_UNITS,
                "approximation": f"dephonopy calc_hr_factors ({method}), harmonic displaced oscillators, T=0"}
@@ -182,6 +184,7 @@ def main():
     parser.add_argument("--zpl-exp", type=float)
     parser.add_argument("--zpl-formula")
     parser.add_argument("--label")
+    parser.add_argument("--sigma-max", type=float)
     try:
         args = vars(parser.parse_args())
         out_dir = args.pop("out_dir")

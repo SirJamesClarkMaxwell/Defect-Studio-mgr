@@ -217,6 +217,14 @@ namespace DefectStudio
 		panel->RequestFocus();
 	}
 
+	void EditorLayer::onPhononFoldersAddRequested(const ProjectEvents::PhononFoldersAddRequested &event)
+	{
+		if (!m_PhononSession) return;
+		m_PhononSession->AddDefectFolders(event.directories);
+		if (const auto panel = findPanel(m_PhononModesPanelId).lock())
+			panel->SetVisible(true);
+	}
+
 	void EditorLayer::onEnergeticsFoldersAddRequested(const ProjectEvents::EnergeticsFoldersAddRequested &event)
 	{
 		if (!m_DefectEnergeticsSession)

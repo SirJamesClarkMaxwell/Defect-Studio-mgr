@@ -148,7 +148,7 @@ namespace DefectStudio
 	std::vector<std::size_t> PhononPanelSession::VisibleModes() const
 	{
 		std::vector<std::size_t> modes;
-		if (!m_Result)
+		if (!m_Result || !ActiveCaseVisible())
 			return modes;
 		for (std::size_t i = 0; i < m_Result->ModeCount(); ++i)
 			if (!m_Result->modes[i].isTranslation && m_Result->modes[i].huangRhys >= m_Settings.minHuangRhys &&

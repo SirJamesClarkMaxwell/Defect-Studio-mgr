@@ -29,7 +29,10 @@ namespace DefectStudio
 		std::string label;
 		double sigmaMeV = 6.0;
 		double gammaMeV = 2.0;
-		// task/104g: embedding into a larger bulk supercell (script task 104f). Both or neither.
+		std::string hrMethod = "displacements";
+		std::optional<double> hrCutoffAngstrom;
+		std::optional<double> sigmaMaxMeV;
+		// Bulk FC is also used without embedding by approximate_forces.
 		std::optional<Path> bulkForceConstantDirectory;
 		std::optional<std::array<int, 3>> embeddingMult;
 		std::optional<double> dcutoffAngstrom;
@@ -51,12 +54,12 @@ namespace DefectStudio
 	// The script's command line, in this order: --fc-dir, --gs-dir, --es-dir, [--triplet-dir],
 	// [--zpl-exp], [--zpl-formula], [--gs-at-es-dir], [--es-at-gs-dir], [--label],
 	// --sigma, --gamma, [--bulk-fc-dir, --mult NxMxK], [--dcutoff], [--bcutoff],
-	// --out-dir; each flag followed by its value as a separate argument. Paths as Utf8(), numbers
+	// [--hr-method], [--hr-cutoff], [--sigma-max], --out-dir; each flag followed by its value. Paths as Utf8(), numbers
 	// with std::format("{:.10g}"), mult as e.g. "24x24x1".
 	[[nodiscard]] std::vector<std::string> BuildPhononAnalysisArguments(const PhononAnalysisRequest &request);
 
 	// task/113a: phonon_server_import.py command line, in this order: --hr-dir, [--zpl-exp],
-	// [--zpl-formula], [--label], --sigma, --gamma, --out-dir. Same value formatting as above.
+	// [--zpl-formula], [--label], --sigma, --gamma, [--sigma-max], --out-dir. Same value formatting as above.
 	[[nodiscard]] std::vector<std::string> BuildPhononServerImportArguments(const PhononAnalysisRequest &request);
 
 	// The last JSON line of the script's stdout: {"ok": true, "out_dir", "s_total", "stable"} ->
@@ -69,7 +72,8 @@ namespace DefectStudio
 	public:
 		// Errors: an input directory that does not exist or an empty output path
 		// ("python.phonon.request_invalid", checked before Python starts), sigma/gamma <= 0, only one
-		// of bulkForceConstantDirectory/embeddingMult, a mult entry < 1, a cutoff <= 0 (same code),
+		// of bulkForceConstantDirectory/embeddingMult (except bulk alone for approximate_forces),
+		// missing method inputs, sigmaMax < sigma, a mult entry < 1, a cutoff <= 0 (same code),
 		// then whatever ParsePhononAnalysisOutput reports. The script exits 1 with a JSON error line,
 		// so a non-zero exit code is NOT by itself the error - its JSON message is.
 		[[nodiscard]] Result<PhononAnalysisRunSummary> Run(

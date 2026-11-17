@@ -104,6 +104,7 @@ namespace DefectStudio::Tests
 		session.SetPersistedState({}, root);
 		const auto a = session.AddCase("A");
 		session.Settings().sigmaMeV = 2; session.Settings().gammaMeV = .5; session.Settings().zplFormula = "1.945";
+		session.Settings().sigmaMaxMeV = 8;
 		const Path systemA = root / "server/a/9x9x1", systemB = root / "server/b/9x9x1";
 		ServerHrResult first{systemA / "spectral-function/12x12x1/displacements", systemA, {12, 12, 1}, "displacements", "displacements", {}};
 		ServerHrResult second{systemB / "spectral-function/12x12x1/displacements", systemB, {12, 12, 1}, "displacements", "displacements", {}};
@@ -112,6 +113,7 @@ namespace DefectStudio::Tests
 		const auto request = PhononServerTestAccess::Current(session);
 		EXPECT_EQ(request.serverHrDirectory, first.hrDirectory);
 		EXPECT_DOUBLE_EQ(request.sigmaMeV, 2); EXPECT_DOUBLE_EQ(request.gammaMeV, .5);
+		EXPECT_EQ(request.sigmaMaxMeV, 8);
 		EXPECT_EQ(request.zplFormula, "1.945");
 		EXPECT_TRUE(request.forceConstantDirectory.Empty());
 		EXPECT_EQ(request.outputDirectory, root / "defectstudio/phonons/server/9x9x1/12x12x1/displacements");

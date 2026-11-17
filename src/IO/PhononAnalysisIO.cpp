@@ -204,6 +204,11 @@ namespace DefectStudio
 					throw std::invalid_argument("Supercell multipliers must be positive");
 			}
 			result.sigmaMeV = Finite(summary.at("sigma_meV").get<double>());
+			if (summary.contains("sigma_max_meV") && !summary.at("sigma_max_meV").is_null())
+			{
+				result.sigmaMaxMeV = Finite(summary.at("sigma_max_meV").get<double>());
+				if (*result.sigmaMaxMeV < result.sigmaMeV) throw std::invalid_argument("sigma_max_meV must be at least sigma_meV");
+			}
 			result.gammaMeV = Finite(summary.at("gamma_meV").get<double>());
 			result.maxDisplacementAngstrom = summary.at("max_displacement_A").is_null() ?
 				std::numeric_limits<double>::quiet_NaN() : Finite(summary.at("max_displacement_A").get<double>());

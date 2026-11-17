@@ -239,7 +239,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(rows[0].values[10], 2); EXPECT_EQ(rows[0].values[11], 1);
 		EXPECT_EQ(rows[0].values[12], 20); EXPECT_EQ(rows[0].values[13], 16);
 		const auto columns = PhononComparisonColumns(rows, 0.8);
-		ASSERT_EQ(columns.size(), 17u);
+		ASSERT_EQ(columns.size(), 22u);
 		EXPECT_EQ(columns[12].name, "ΔQ (CCD)"); EXPECT_EQ(columns[12].unit, "amu^½ Å");
 		EXPECT_EQ(columns[13].name, "max |ΔR|"); EXPECT_EQ(columns[13].unit, "Å");
 		EXPECT_EQ(columns[14].name, "atomy 80 % ΔQ²");
@@ -252,6 +252,70 @@ namespace DefectStudio::Tests
 		EXPECT_NE(FormatDataTable(columns, format).find("atomy 80 % ΔQ²"), std::string::npos);
 		session.Settings().carriedFraction = 0.9;
 		EXPECT_EQ(BuildPhononComparisonRows(session, workspace.root)[0].values[11], 2);
+	}
+
+	TEST(PhononComparisonTests, ProvenanceAndFranckCondonColumnsMatchTableOrderAndExcludeTranslations)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		auto result = Synthetic();
+		result.source = "server"; result.hrMethod = "displacements";
+		result.supercell = std::array<int, 3>{12, 12, 1}; result.hrCutoffAngstrom = 4.5;
+		SetSynthetic(session, workspace.root / "server", result);
+		auto rows = BuildPhononComparisonRows(session, workspace.root);
+		ASSERT_EQ(rows.size(), 1u);
+		EXPECT_EQ(rows[0].provenance, (std::array<std::string, 4>{"serwer", "12x12x1", "displacements", "4.5"}));
+		ASSERT_TRUE(rows[0].franckCondonMeV); EXPECT_DOUBLE_EQ(*rows[0].franckCondonMeV, 80);
+		const auto columns = PhononComparisonColumns(rows, .9);
+		ASSERT_EQ(columns.size(), 22u);
+		for (std::size_t i = 0; i < 4; ++i) EXPECT_EQ(columns[17 + i].text[0], rows[0].provenance[i]);
+		EXPECT_EQ(columns[20].unit, "Å"); EXPECT_EQ(columns[21].unit, "meV"); EXPECT_DOUBLE_EQ(columns[21].values[0], 80);
+		result.source = "local"; result.supercell.reset(); result.hrCutoffAngstrom.reset(); session.SetResult(result);
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_EQ(rows[0].provenance[0], "lokalne"); EXPECT_EQ(rows[0].provenance[1], "FC cell"); EXPECT_EQ(rows[0].provenance[3], "auto");
+		result.hrMethod.clear(); result.modes.clear(); session.SetResult(result);
+		rows = BuildPhononComparisonRows(session, workspace.root);
+		EXPECT_TRUE(rows[0].provenance[2].empty()); EXPECT_FALSE(rows[0].provenanceReasons[2].empty());
+		EXPECT_FALSE(rows[0].franckCondonMeV); EXPECT_FALSE(rows[0].franckCondonReason.empty());
+	}
+
+	TEST(PhononComparisonTests, HiddenCasesLeaveComparisonPlotsAndExportsAndReturnWhenShown)
+	{
+		Workspace workspace;
+		PhononPanelSession session;
+		SetSynthetic(session, workspace.root / "first", Synthetic());
+		const auto first = session.ActiveCaseId();
+		session.Settings().selectedCcdDirectory = workspace.Ccd("first-ccd");
+		const auto second = session.AddCase("second");
+		SetSynthetic(session, workspace.root / "second", Synthetic());
+		session.CompareAllVisibleCases();
+		EXPECT_TRUE(session.IsCompared(workspace.root / "first")); EXPECT_TRUE(session.IsCompared(workspace.root / "second"));
+		session.SetCaseChecked(second, true); session.SetCaseHidden(second, true);
+		EXPECT_FALSE(session.CaseChecked(second)); EXPECT_FALSE(session.DatasetVisible(workspace.root / "second"));
+		EXPECT_TRUE(session.VisibleModes().empty());
+		const auto rows = BuildPhononComparisonRows(session, workspace.root);
+		ASSERT_EQ(rows.size(), 1u); EXPECT_EQ(rows[0].caseId, first);
+		EXPECT_EQ(PhononComparisonColumns(rows, .9)[1].text, (std::vector<std::string>{"case"}));
+		session.SetCaseHidden(first, true);
+		EXPECT_TRUE(BuildPhononComparisonRows(session, workspace.root).empty());
+		EXPECT_TRUE(BuildBetaPlotData(session, workspace.root).series.empty());
+		EXPECT_TRUE(BuildSPlotData(session, workspace.root).series.empty());
+		EXPECT_TRUE(BuildPlPlotData(session, workspace.root).series.empty());
+		EXPECT_TRUE(BuildLocalisationPlotData(session, workspace.root).series.empty());
+		EXPECT_TRUE(BuildDisplacementOverlapColumns(session, workspace.root).empty());
+		session.SetCaseHidden(first, false);
+		EXPECT_EQ(BuildPhononComparisonRows(session, workspace.root).size(), 1u);
+		session.ClearCompared(); EXPECT_FALSE(session.IsCompared(workspace.root / "first"));
+	}
+
+	TEST(PhononComparisonTests, VisibleCasesWithoutDatasetsKeepAnEmptyComparisonRow)
+	{
+		PhononPanelSession session;
+		const auto id = session.AddCase("waiting for server");
+		const auto rows = BuildPhononComparisonRows(session, {});
+		ASSERT_EQ(rows.size(), 1u); EXPECT_EQ(rows[0].caseId, id); EXPECT_EQ(rows[0].label, "—");
+		EXPECT_FALSE(rows[0].values[0]); EXPECT_FALSE(rows[0].franckCondonMeV);
+		session.SetCaseHidden(id, true); EXPECT_TRUE(BuildPhononComparisonRows(session, {}).empty());
 	}
 
 	TEST(PhononComparisonTests, CoverageExcludesTranslationsAndNeedsFiniteProjectionsAndPositivePhononDeltaQ)

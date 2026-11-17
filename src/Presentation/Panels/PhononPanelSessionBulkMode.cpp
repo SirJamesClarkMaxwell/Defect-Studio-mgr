@@ -237,7 +237,7 @@ namespace DefectStudio
 		select(m_Settings);
 		for (auto &item : m_Settings.cases)
 			if (item.id != ActiveCaseId()) select(item.settings);
-		if (!m_Dispersion && !m_Settings.selectedDispersionDirectory.Empty())
+		if (ActiveCaseVisible() && !m_Dispersion && !m_Settings.selectedDispersionDirectory.Empty())
 			(void)loadDispersion(m_Settings.selectedDispersionDirectory);
 		if (changed) Changed();
 	}

@@ -152,6 +152,8 @@ namespace DefectStudio
 			*m_EventBus, *this, &EditorLayer::onDisplacementComparisonStateChanged, EventPriority::Normal));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::PhononDirectoryRequested>(
 			*m_EventBus, *this, &EditorLayer::onPhononDirectoryRequested, EventPriority::Normal));
+		AddSubscription(subscribeEditorLayer<ProjectEvents::PhononFoldersAddRequested>(
+			*m_EventBus, *this, &EditorLayer::onPhononFoldersAddRequested, EventPriority::Normal));
 		AddSubscription(m_EventBus->Subscribe<RendererEvents::Windows::CloseRequested>(
 			[this](const RendererEvents::Windows::CloseRequested &) { stopPhononAnimations(); }, EventPriority::Highest));
 		AddSubscription(subscribeEditorLayer<ProjectEvents::DisplacementComparisonFileRequested>(

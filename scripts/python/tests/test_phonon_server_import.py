@@ -94,6 +94,18 @@ class ServerImportTests(unittest.TestCase):
             self.result(zpl_formula="E_es-E_gs")
         self.assertEqual(self.result(zpl_formula="1.945")["summary"]["zpl_eV"]["formula"], 1.945)
 
+    def test_sigma_max_preserves_server_method_and_cutoff(self):
+        fixed = self.result()
+        variable = self.result(sigma_max=8.)
+        self.assertIsNone(fixed["summary"]["sigma_max_meV"])
+        self.assertEqual(variable["summary"]["sigma_max_meV"], 8.)
+        for key in ("hr_method", "hr_cutoff_A", "s_total"):
+            self.assertEqual(variable["summary"][key], fixed["summary"][key])
+        self.assertLess(variable["spectral_function"][:, 1].max(), fixed["spectral_function"][:, 1].max())
+        for value in (0, 1, float("nan"), float("inf")):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "sigma-max"):
+                self.result(sigma_max=value)
+
     def test_embedded_iprs_and_frequency_header_units(self):
         np.savetxt(self.embedded / "iprs.dat", [2, 2, 2, 1.5, 1.2, 1.1])
         np.savetxt(self.embedded / "freq.dat", [-.1, .2, .3, 1, 2, 3], header="frequencies (mev)")
@@ -132,11 +144,12 @@ class ServerImportTests(unittest.TestCase):
         before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in self.system.rglob("*") if p.is_file()}
         out = self.root / "cli-output"
         command = [sys.executable, str(ROOT / "scripts/python/examples/phonon_server_import.py"),
-                   "--hr-dir", str(self.hr), "--sigma", "2", "--gamma", ".5", "--out-dir", str(out)]
+                   "--hr-dir", str(self.hr), "--sigma", "2", "--gamma", ".5", "--sigma-max", "8", "--out-dir", str(out)]
         for _ in range(2):
             proc = subprocess.run(command, capture_output=True, text=True, timeout=60)
             self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
             self.assertTrue(json.loads(proc.stdout.splitlines()[-1])["ok"])
+            self.assertEqual(json.loads((out / "summary.json").read_text())["sigma_max_meV"], 8.)
         after = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in self.system.rglob("*") if p.is_file()}
         self.assertEqual(before, after)
         command[-1] = str(self.system / "derived")

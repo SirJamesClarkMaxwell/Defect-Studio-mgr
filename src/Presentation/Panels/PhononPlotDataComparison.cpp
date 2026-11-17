@@ -9,6 +9,23 @@
 
 namespace DefectStudio
 {
+	std::string PlotSourceComment(const Path &source, const Path &project)
+	{
+		if (source.Empty()) return {};
+		if (project.Empty()) return source.Utf8();
+		const auto relative = source.Native().lexically_normal().lexically_relative(project.Native().lexically_normal());
+		if (relative.empty()) return source.Utf8();
+		const auto text = relative.generic_u8string();
+		return std::string(text.begin(), text.end());
+	}
+
+	std::string PhononExportLabel(const PhononPanelSession &session, std::string fallback)
+	{
+		for (const auto &entry : session.Cases())
+			if (entry.id == session.ActiveCaseId() && !entry.name.empty()) return entry.name;
+		return fallback.empty() ? "dataset" : fallback;
+	}
+
 	namespace
 	{
 		std::optional<std::reference_wrapper<const CcdDisplacement>> CaseDisplacement(
@@ -39,7 +56,7 @@ namespace DefectStudio
 			std::vector<ComparedDisplacement> result;
 			for (bool active : {true, false})
 				for (const auto &item : session.Cases())
-					if ((item.id == session.ActiveCaseId()) == active && (active ||
+					if (!item.hidden && (item.id == session.ActiveCaseId()) == active && (active ||
 						session.IsCompared(item.settings.resultDirectory) || session.IsCompared(item.settings.selectedCcdDirectory) ||
 						std::any_of(item.datasets.begin(), item.datasets.end(), [&](const auto &path) { return session.IsCompared(path); })))
 					{
@@ -92,20 +109,34 @@ namespace DefectStudio
 			row.zplSource = selected.zplEv ? PhononZplSourceLabel(selected.choice) : "Brak dostępnego ZPL w podsumowaniu.";
 			if (!selected.zplEv) row.reasons[0] = row.zplSource;
 			set(1, result.deltaQAmuHalfAngstrom); set(2, result.sTotal); set(3, 100.0 * result.debyeWaller);
+			row.provenance[0] = result.source == "server" ? "serwer" : "lokalne";
+			row.provenance[2] = result.hrMethod;
+			if (result.supercell)
+				row.provenance[1] = std::format("{}x{}x{}", (*result.supercell)[0], (*result.supercell)[1], (*result.supercell)[2]);
+			else if (!result.hrMethod.empty()) row.provenance[1] = "FC cell";
+			if (result.hrCutoffAngstrom) row.provenance[3] = std::format("{:g}", *result.hrCutoffAngstrom);
+			else if (!result.hrMethod.empty()) row.provenance[3] = "auto";
+			row.franckCondonReason = "Brak skończonych dodatnich energii modów i nieujemnych S_k.";
 			if (!hasModes)
 			{
+				row.franckCondonReason = modesError.empty() ? "Brak tabeli modów." : modesError;
 				for (std::size_t i = 4; i < row.values.size(); ++i)
 					row.reasons[i] = modesError.empty() ? "Brak tabeli modów." : modesError;
 				return;
 			}
 			set(8, static_cast<double>(result.imaginaryModes.size()));
 			std::optional<std::size_t> strongest;
-			double q2 = 0.0, weighted = 0.0, largestQ2 = 0.0;
+			double q2 = 0.0, weighted = 0.0, largestQ2 = 0.0, franckCondon = 0.0;
+			bool validFranckCondon = true, hasVibrations = false;
 			bool valid = true;
 			for (std::size_t i = 0; i < result.modes.size(); ++i)
 			{
 				const auto &mode = result.modes[i];
 				if (mode.isTranslation) continue;
+				hasVibrations = true;
+				validFranckCondon = validFranckCondon && std::isfinite(mode.frequencyMeV) && mode.frequencyMeV > 0.0 &&
+					std::isfinite(mode.huangRhys) && mode.huangRhys >= 0.0;
+				franckCondon += mode.huangRhys * mode.frequencyMeV;
 				if (std::isfinite(mode.huangRhys) && (!strongest || mode.huangRhys > result.modes[*strongest].huangRhys)) strongest = i;
 				valid = valid && std::isfinite(mode.frequencyMeV) && mode.frequencyMeV > 0.0 && std::isfinite(mode.qAmuHalfAngstrom);
 				q2 += mode.qAmuHalfAngstrom * mode.qAmuHalfAngstrom;
@@ -114,6 +145,7 @@ namespace DefectStudio
 				weighted += product * product;
 			}
 			const double deltaQ2 = result.deltaQAmuHalfAngstrom * result.deltaQAmuHalfAngstrom;
+			if (hasVibrations && validFranckCondon && std::isfinite(franckCondon)) row.franckCondonMeV = franckCondon;
 			if (std::isfinite(q2) && std::isfinite(deltaQ2) && result.deltaQAmuHalfAngstrom > 0.0 && deltaQ2 > 0.0)
 			{
 				set(12, 100.0 * (q2 / deltaQ2)); set(13, 100.0 * (largestQ2 / deltaQ2));
@@ -144,13 +176,15 @@ namespace DefectStudio
 			row.active = !caseId.empty() && caseId == session.ActiveCaseId() && session.Result() &&
 				PhononPanelSession::SameFilePath(directory, session.Settings().resultDirectory, project);
 			row.reasons.fill("Brak wartości w podsumowaniu.");
+			row.provenanceReasons.fill("Starszy zestaw nie zapisał tej informacji o obliczeniu.");
+			row.franckCondonReason = "Brak tabeli modów z energiami i S_k.";
 			std::string error;
 			std::optional<std::reference_wrapper<const PhononAnalysisResult>> result;
 			if (session.Result() && PhononPanelSession::SameFilePath(directory, session.Settings().resultDirectory, project))
 				result = std::cref(*session.Result());
-			else if (phonons) result = session.PlotModes(directory, error);
+			else if (phonons && !directory.Empty()) result = session.PlotModes(directory, error);
 			const bool hasModes = result && !result->get().modes.empty();
-			if (!result && phonons)
+			if (!result && phonons && !directory.Empty())
 			{
 				std::string summaryError;
 				result = session.Spectra(directory, summaryError);
@@ -163,7 +197,7 @@ namespace DefectStudio
 		const auto &cases = session.Cases();
 		for (bool active : {true, false})
 			for (const auto &item : cases)
-				if ((item.id == session.ActiveCaseId()) == active)
+				if (!item.hidden && (item.id == session.ActiveCaseId()) == active)
 				{
 					const auto before = rows.size();
 					for (const auto &path : item.datasets)
@@ -176,12 +210,17 @@ namespace DefectStudio
 						else if (found == session.Datasets().end() && PhononPanelSession::SameFilePath(path, item.settings.resultDirectory, project))
 							add(path, item.id, item.name, path.filename().Utf8(), item.settings.plZpl);
 					}
+					if (!item.settings.resultDirectory.Empty() && std::none_of(rows.begin() + before, rows.end(), [&](const auto &row) {
+						return PhononPanelSession::SameFilePath(row.directory, item.settings.resultDirectory, project);
+					})) add(item.settings.resultDirectory, item.id, item.name, {}, item.settings.plZpl);
 					if (rows.size() == before && !item.settings.selectedCcdDirectory.Empty())
 						add(item.settings.selectedCcdDirectory, item.id, item.name,
 							item.settings.selectedCcdDirectory.filename().Utf8(), item.settings.plZpl, false);
+					if (rows.size() == before) add({}, item.id, item.name, "—", item.settings.plZpl, false);
 				}
 		for (const auto &dataset : session.Datasets())
-			if (dataset.kind == AnalysisDatasetKind::Phonons && session.IsCompared(dataset.directory) && session.DatasetCaseId(dataset.directory).empty())
+			if (dataset.kind == AnalysisDatasetKind::Phonons && session.DatasetVisible(dataset.directory) && session.IsCompared(dataset.directory) && session.DatasetCaseId(dataset.directory).empty() &&
+				std::none_of(rows.begin(), rows.end(), [&](const auto &row) { return PhononPanelSession::SameFilePath(row.directory, dataset.directory, project); }))
 				add(dataset.directory, {}, "-", dataset.label, session.Settings().plZpl);
 		return rows;
 	}
@@ -216,6 +255,14 @@ namespace DefectStudio
 		for (const auto &row : rows)
 			for (std::size_t i = 9; i < row.values.size(); ++i)
 				columns[i + 3].values.push_back(row.values[i].value_or(std::numeric_limits<double>::quiet_NaN()));
+		for (const std::string_view name : {"źródło", "komórka", "metoda HR", "cutoff"})
+			columns.push_back({std::string(name), name == "cutoff" ? "Å" : "", "", {}, {}});
+		columns.push_back({"E_FC = Σ S_k ℏω_k", "meV", "", {}, {}});
+		for (const auto &row : rows)
+		{
+			for (std::size_t i = 0; i < row.provenance.size(); ++i) columns[17 + i].text.push_back(row.provenance[i].empty() ? "—" : row.provenance[i]);
+			columns[21].values.push_back(row.franckCondonMeV.value_or(std::numeric_limits<double>::quiet_NaN()));
+		}
 		return columns;
 	}
 

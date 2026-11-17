@@ -24,6 +24,9 @@ namespace DefectStudio::Tests
 			settings.zplFormula = "4.08";
 			settings.sigmaMeV = 5.5;
 			settings.gammaMeV = 1.25;
+			settings.hrMethod = "approximate_forces";
+			settings.hrCutoffAngstrom = 4.5;
+			settings.sigmaMaxMeV = 12.0;
 			settings.bulkForceConstantDirectory = kProject / "bulk" / "phonons";
 			settings.embeddingMult = "24x24x1";
 			settings.dcutoffAngstrom = 6.5;
@@ -68,6 +71,15 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(loaded.zplFormula, "4.08");
 		EXPECT_DOUBLE_EQ(loaded.sigmaMeV, 5.5);
 		EXPECT_DOUBLE_EQ(loaded.gammaMeV, 1.25);
+		EXPECT_EQ(loaded.hrMethod, "approximate_forces");
+		ASSERT_TRUE(loaded.hrCutoffAngstrom);
+		EXPECT_DOUBLE_EQ(*loaded.hrCutoffAngstrom, 4.5);
+		ASSERT_TRUE(loaded.sigmaMaxMeV);
+		EXPECT_DOUBLE_EQ(*loaded.sigmaMaxMeV, 12.0);
+		ASSERT_FALSE(loaded.cases.empty());
+		EXPECT_EQ(loaded.cases.front().settings.hrMethod, loaded.hrMethod);
+		EXPECT_EQ(loaded.cases.front().settings.hrCutoffAngstrom, loaded.hrCutoffAngstrom);
+		EXPECT_EQ(loaded.cases.front().settings.sigmaMaxMeV, loaded.sigmaMaxMeV);
 		EXPECT_EQ(loaded.bulkForceConstantDirectory, original.bulkForceConstantDirectory);
 		EXPECT_EQ(loaded.embeddingMult, "24x24x1");
 		ASSERT_TRUE(loaded.dcutoffAngstrom.has_value());

@@ -19,6 +19,10 @@ namespace DefectStudio
 		request.excitedAtGroundDirectory = settings.excitedAtGroundDirectory;
 		request.sigmaMeV = settings.sigmaMeV;
 		request.gammaMeV = settings.gammaMeV;
+		request.hrMethod = settings.hrMethod;
+		request.hrCutoffAngstrom = settings.hrCutoffAngstrom;
+		request.sigmaMaxMeV = settings.sigmaMaxMeV;
+		if (settings.hrMethod == "approximate_forces") request.bulkForceConstantDirectory = settings.bulkForceConstantDirectory;
 		if (!settings.embeddingMult.empty())
 		{
 			request.bulkForceConstantDirectory = settings.bulkForceConstantDirectory;
@@ -47,11 +51,21 @@ namespace DefectStudio
 		if (settings.groundStateDirectory.Empty()) return "Ustaw stan podstawowy.";
 		if (settings.excitedStateDirectory.Empty()) return "Ustaw stan wzbudzony.";
 		if (output.Empty()) return "Ustaw katalog projektu lub katalog wyników.";
+		if (settings.hrMethod == "forces" && settings.groundAtExcitedDirectory.Empty())
+			return "Metoda forces wymaga GS w geometrii ES.";
+		if (settings.hrMethod == "approximate_forces" && settings.bulkForceConstantDirectory.Empty())
+			return "Metoda approximate_forces wymaga katalogu FC bulku.";
+		if (settings.hrMethod != "displacements" && settings.hrMethod != "approximate_forces" && settings.hrMethod != "forces")
+			return "Nieznana metoda HR.";
+		if (settings.hrCutoffAngstrom && (!std::isfinite(*settings.hrCutoffAngstrom) || *settings.hrCutoffAngstrom <= 0))
+			return "Promień HR musi być dodatni i skończony.";
+		if (settings.sigmaMaxMeV && (!std::isfinite(*settings.sigmaMaxMeV) || *settings.sigmaMaxMeV < settings.sigmaMeV))
+			return "sigma_max musi być skończona i nie mniejsza od sigma.";
 		if (!settings.embeddingMult.empty() && settings.bulkForceConstantDirectory.Empty())
 			return "Embedding włączony bez katalogu FC bulku - ustaw go albo odznacz Embedding.";
 		for (const Path &input : {settings.forceConstantDirectory, settings.groundStateDirectory,
 			settings.excitedStateDirectory, settings.tripletDirectory, settings.groundAtExcitedDirectory,
-			settings.excitedAtGroundDirectory, settings.embeddingMult.empty() ? Path{} : settings.bulkForceConstantDirectory})
+			settings.excitedAtGroundDirectory, settings.embeddingMult.empty() && settings.hrMethod != "approximate_forces" ? Path{} : settings.bulkForceConstantDirectory})
 		{
 			if (PhononPanelSession::OutputContainsInput(output, input))
 				return "Katalog wyników nie może być katalogiem wejściowym ani go zawierać.";

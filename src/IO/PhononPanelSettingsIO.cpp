@@ -19,27 +19,8 @@ namespace DefectStudio
 {
 	namespace
 	{
-		std::string StoredPath(const Path &path, const Path &projectDirectory)
-		{
-			if (path.Empty())
-				return {};
-			auto native = path.Native().lexically_normal();
-			const auto relative = native.lexically_relative(projectDirectory.Native().lexically_normal());
-			if (!projectDirectory.Empty() && !relative.empty() && !relative.is_absolute() &&
-				std::none_of(relative.begin(), relative.end(), [](const auto &part) { return part == ".."; }))
-				native = relative;
-			const auto utf8 = native.generic_u8string();
-			return std::string(utf8.begin(), utf8.end());
-		}
-
-		Path ReadPath(const YAML::Node &node, const Path &projectDirectory)
-		{
-			const Path path = Path::FromUtf8(node.as<std::string>());
-			if (path.Empty())
-				return {};
-			return Path::FromResolved((path.Native().is_absolute() ? path.Native() :
-				projectDirectory.Native() / path.Native()).lexically_normal());
-		}
+		using PhononSettingsDetail::StoredPath;
+		using PhononSettingsDetail::ReadPath;
 
 		void Warn(std::vector<std::string> &warnings, const std::string &key, const std::string &reason)
 		{
@@ -216,6 +197,18 @@ namespace DefectStudio
 				};
 				ReadSetting(inputs, "dcutoff", settings.dcutoffAngstrom, outWarnings, readCutoff);
 				ReadSetting(inputs, "bcutoff", settings.bcutoffAngstrom, outWarnings, readCutoff);
+				ReadSetting(inputs, "hrMethod", settings.hrMethod, outWarnings, [](const YAML::Node &node) {
+					const auto method = node.as<std::string>();
+					if (method != "displacements" && method != "approximate_forces" && method != "forces")
+						throw std::invalid_argument("unknown HR method");
+					return method;
+				});
+				ReadSetting(inputs, "hrCutoff", settings.hrCutoffAngstrom, outWarnings, readCutoff);
+				ReadSetting(inputs, "sigmaMax", settings.sigmaMaxMeV, outWarnings, [&](const YAML::Node &node) {
+					const double number = readCutoff(node);
+					if (number < settings.sigmaMeV) throw std::invalid_argument("sigmaMax must be at least sigma");
+					return number;
+				});
 				ReadSetting(inputs, "ccdDir", settings.ccdOutputDirectory, outWarnings, readPath);
 				ReadNumber(inputs, "ccdStep", settings.ccdStep, outWarnings, 0.0, std::numeric_limits<double>::max(), true);
 				ReadSetting(inputs, "ccdPathDir", settings.ccdDirectory, outWarnings, readPath);
@@ -389,6 +382,11 @@ namespace DefectStudio
 			emit << YAML::Key << "dcutoff" << YAML::Value << *settings.dcutoffAngstrom;
 		if (settings.bcutoffAngstrom)
 			emit << YAML::Key << "bcutoff" << YAML::Value << *settings.bcutoffAngstrom;
+		emit << YAML::Key << "hrMethod" << YAML::Value << settings.hrMethod;
+		if (settings.hrCutoffAngstrom)
+			emit << YAML::Key << "hrCutoff" << YAML::Value << *settings.hrCutoffAngstrom;
+		if (settings.sigmaMaxMeV)
+			emit << YAML::Key << "sigmaMax" << YAML::Value << *settings.sigmaMaxMeV;
 		emit << YAML::Key << "ccdDir" << YAML::Value << StoredPath(settings.ccdOutputDirectory, projectDirectory)
 			<< YAML::Key << "ccdStep" << YAML::Value << settings.ccdStep
 			<< YAML::Key << "ccdPathDir" << YAML::Value << StoredPath(settings.ccdDirectory, projectDirectory)

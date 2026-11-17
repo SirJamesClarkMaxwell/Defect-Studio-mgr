@@ -107,7 +107,8 @@ namespace DefectStudio
 		if (auto ref = ReadDatasetRef(directory)) AddDataset(std::move(*ref));
 		PhononDispersion result;
 		if (!PhononDispersionIO::Load(directory, result, m_DispersionError)) return false;
-		m_Dispersion = std::move(result);
+		if (ActiveCaseVisible()) m_Dispersion = std::move(result);
+		else m_Dispersion.reset();
 		++m_PlotRevision;
 		(void)SelectDataset(directory);
 		return true;

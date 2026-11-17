@@ -25,6 +25,7 @@
 #include "IO/ProjectRootsIO.hpp"
 #include "IO/AnalysisDatasetIO.hpp"
 #include "IO/PhononServerResultsIO.hpp"
+#include "IO/PhononDefectFolderScan.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
@@ -53,6 +54,20 @@ namespace DefectStudio
 		PhononCaseStatus status = PhononCaseStatus::Idle;
 		std::string message;
 		Path output;
+	};
+
+	struct PhononFolderSelection
+	{
+		PhononFolderProposal proposal;
+		bool selected = true;
+		std::string existingCase;
+		std::vector<bool> serverChecked, datasetChecked;
+	};
+
+	struct PhononNewServerResult
+	{
+		ServerHrResult result;
+		bool updated = false;
 	};
 
 	// task/104d: everything the Phonons panel does that is not ImGui - the loaded result, the
@@ -111,7 +126,18 @@ namespace DefectStudio
 		void SetDirectory(const std::string &role, const Path &directory);
 		[[nodiscard]] const std::vector<PhononCase> &Cases() const;
 		[[nodiscard]] const std::string &ActiveCaseId() const;
-		std::string AddCase(std::string name);
+		std::string AddCase(std::string name, bool activate = true);
+		void AddDefectFolders(std::vector<Path> roots);
+		void RescanDefectFolders();
+		void RemoveDefectRoot(const Path &root);
+		std::vector<std::string> CreateCasesFromFolders(const std::vector<PhononFolderSelection> &selections);
+		void ImportNewServerResults(const std::string &caseId);
+		[[nodiscard]] const std::vector<PhononNewServerResult> &NewServerResults(const std::string &caseId) const;
+		void SetCaseHidden(const std::string &id, bool hidden);
+		[[nodiscard]] bool DatasetVisible(const Path &directory) const;
+		[[nodiscard]] bool ActiveCaseVisible() const;
+		void CompareAllVisibleCases();
+		void ClearCompared();
 		std::string DuplicateCase(const std::string &id);
 		void RemoveCase(const std::string &id);
 		void RenameCase(const std::string &id, std::string name);
@@ -246,11 +272,24 @@ namespace DefectStudio
 	private:
 		friend class PhononModesPanel;
 		friend void DrawPhononCases(PhononPanelSession &session);
+		friend void DrawPhononDefectFolders(PhononPanelSession &session);
+		friend class AnalysisDatasetScanJob;
 		friend struct Tests::PhononBatchTestAccess;
 		friend struct Tests::PhononServerTestAccess;
 		static constexpr std::string_view ServerVectorsUnavailable = "Wynik z serwera nie ma wektorów własnych (będą wczytywane na żądanie - zadanie 113g).";
 		void startServerScan(const Path &root);
 		void importServerResults();
+		bool queueServerResults(const std::string &caseId, const std::vector<ServerHrResult> &results);
+		void startDefectFolderScan(std::vector<Path> roots, bool proposals);
+		void commitDefectFolderScan(std::vector<PhononFolderProposal> proposals,
+			std::map<std::string, std::vector<PhononNewServerResult>> newResults);
+		static std::map<std::string, std::vector<PhononNewServerResult>> findNewServerResults(
+			const std::vector<PhononFolderProposal> &proposals, const std::vector<PhononCase> &cases,
+			const Path &project, const std::function<bool()> &cancelled);
+		std::vector<PhononFolderSelection> m_DefectFolderSelections;
+		std::map<std::string, std::vector<PhononNewServerResult>> m_NewServerResults;
+		std::vector<Path> m_DefectFolderScanRoots;
+		bool m_ScanningDefectFolders = false, m_ProposeDefectFolders = false, m_DefectFolderPopupRequested = false;
 		[[nodiscard]] Path serverOutputPath(const ServerHrResult &hit) const;
 		std::vector<ServerHrResult> m_ServerResults;
 		std::vector<bool> m_ServerChecked;

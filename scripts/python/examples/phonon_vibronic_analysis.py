@@ -34,7 +34,8 @@ RESULT_UNITS = {"index": "dimensionless, zero-based", "freq_meV": "meV (signed h
          "positions_A": "Angstrom", "cell_A": "Angstrom", "masses_amu": "amu",
          "s_total": "dimensionless", "debye_waller": "dimensionless", "zpl_eV": "eV",
          "max_displacement_A": "Angstrom", "delta_Q_amu05_A": "amu^0.5 Angstrom",
-         "sigma_meV": "meV, Gaussian standard deviation", "gamma_meV": "meV, Lorentzian width"}
+         "sigma_meV": "meV, Gaussian standard deviation", "sigma_max_meV": "meV, maximum Gaussian standard deviation",
+         "gamma_meV": "meV, Lorentzian width"}
 
 
 def read_toten(directory):
@@ -93,22 +94,28 @@ def origin_shift(defect, bulk, primitive):
     return best_shift
 
 
-def build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma):
+def build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma, sigma_max=None):
     from dephonopy.hr_factors.io import gaussian_smoothing
     from dephonopy.hr_factors.luminescence import calc_luminescence
 
     finite_s = np.isfinite(s_k)
     # Even FFT length avoids dephonopy's odd-grid phase error; pad multiphonon tails.
     extent = max(2000.0, float(np.max(np.abs(frequencies))) * (2 * max(s_total, 1) + 12),
-                 100 * gamma)
+                 100 * gamma, 12 * max(sigma, sigma_max or sigma))
     step = min(0.2, sigma / 20, gamma / 10)
     n_grid = 2 ** math.ceil(math.log2(extent / step + 1))
     # shortcut: dense serial spectra, reject excessive grids until a streaming API is needed.
     if n_grid > 2**20:
         raise ValueError("Requested broadening requires more than 1048576 spectrum samples")
     spectral_modes = ~is_translation & finite_s
-    energy, density = gaussian_smoothing(frequencies[spectral_modes], s_k[spectral_modes],
-                                         sig=sigma, n=n_grid, xlim=(0, extent))
+    sticks = frequencies[spectral_modes]
+    # dephonopy uses sig + slope*x: shift its origin to give the requested endpoint widths.
+    origin = float(sticks.min()) if sigma_max is not None and len(sticks) else 0.0
+    variable = sigma_max if len(sticks) > 1 and np.ptp(sticks) > 0 else None
+    energy, density = gaussian_smoothing(sticks - origin, s_k[spectral_modes],
+                                         sig=sigma, sig_max=variable, n=n_grid,
+                                         xlim=(-origin, extent - origin))
+    energy += origin
     integral = float(np.trapezoid(density, energy))
     if s_total != 0:
         if integral <= 0:
@@ -140,18 +147,30 @@ def build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma)
 
 def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, gamma=2.0,
             bulk_fc_dir=None, mult=None, dcutoff=None, bcutoff=None, zpl_formula=None,
-            gs_at_es_dir=None, es_at_gs_dir=None, label=None):
+            gs_at_es_dir=None, es_at_gs_dir=None, label=None, hr_method="displacements",
+            hr_cutoff=None, sigma_max=None):
     """Read inputs and return arrays plus metadata; publishing is a separate operation."""
-    if (bulk_fc_dir is None) != (mult is None):
-        raise ValueError("bulk-fc-dir and mult must be supplied together")
+    if hr_method not in ("displacements", "approximate_forces", "forces"):
+        raise ValueError("hr-method must be displacements, approximate_forces or forces")
+    if hr_method == "approximate_forces" and bulk_fc_dir is None:
+        raise ValueError("approximate_forces requires --bulk-fc-dir")
+    if hr_method == "forces" and gs_at_es_dir is None:
+        raise ValueError("forces requires --gs-at-es-dir (GS forces at the ES geometry)")
+    if ((mult is not None and bulk_fc_dir is None)
+            or (bulk_fc_dir is not None and mult is None and hr_method != "approximate_forces")):
+        raise ValueError("bulk-fc-dir and mult must be supplied together except for approximate_forces")
     if mult is not None and (len(mult) != 3 or any(not isinstance(n, int) or n <= 0 for n in mult)):
         raise ValueError("mult must contain three positive integers")
     for name, value in (("dcutoff", dcutoff), ("bcutoff", bcutoff)):
-        if value is not None and (bulk_fc_dir is None or not math.isfinite(value) or value <= 0):
+        if value is not None and (mult is None or not math.isfinite(value) or value <= 0):
             raise ValueError(f"{name} requires embedding and must be finite and positive (Angstrom)")
     for name, value in (("sigma", sigma), ("gamma", gamma)):
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be finite and positive (meV)")
+    if hr_cutoff is not None and (not math.isfinite(hr_cutoff) or hr_cutoff <= 0):
+        raise ValueError("hr-cutoff must be finite and positive (Angstrom)")
+    if sigma_max is not None and (not math.isfinite(sigma_max) or sigma_max < sigma):
+        raise ValueError("sigma-max must be finite and at least sigma (meV)")
     if zpl_exp is not None and (not math.isfinite(zpl_exp) or zpl_exp <= 0):
         raise ValueError("Experimental ZPL must be finite and positive (eV)")
     paths = {"fc_dir": Path(fc_dir).resolve(), "gs_dir": Path(gs_dir).resolve(),
@@ -184,8 +203,9 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
     with redirect_stdout(sys.stderr):
         from dephonopy.force_constants import ForceConstants
         from dephonopy.hr_factors.fc_displacements import (hr_factors_from_displacements,
+                                                          hr_factors_from_forces,
                                                           compare_systems_and_embedd_array)
-        from dephonopy.hr_factors.io import read_atomic_displacements
+        from dephonopy.hr_factors.io import read_atomic_displacements, read_force_differences
 
         fc = ForceConstants(str(paths["fc_dir"]))
         # Enforce permutation symmetry and the acoustic sum rule before diagonalization.
@@ -209,13 +229,18 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
         displacement = np.asarray(displacement, dtype=float)
         displacement -= np.average(displacement, axis=0, weights=masses)
         embedding, info = None, None
+        shift = np.zeros(3)
         if bulk_fc_dir is not None:
-            from dephonopy.embedding.defect_fc import construct_and_embed_defect_serial
-
             bulk_fc = ForceConstants(str(paths["bulk_fc_dir"]))
             bulk_fc.ensure_symmetry()
             primitive = bulk_fc.primitive_cell
             shift = origin_shift(fc.atoms, bulk_fc.atoms, primitive)
+            if hr_method == "approximate_forces" and (len(bulk_fc.atoms) != len(gs)
+                    or not np.allclose(bulk_fc.atoms.get_cell(), cell, rtol=0, atol=1e-5)):
+                raise ValueError("approximate_forces requires bulk FC in the same cell as GS/ES")
+        if mult is not None:
+            from dephonopy.embedding.defect_fc import construct_and_embed_defect_serial
+
             for geometry in (fc.atoms, gs):
                 geometry.set_positions(geometry.get_positions() - shift)
                 geometry.wrap()
@@ -226,6 +251,41 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
                          "origin_shift_A": shift.tolist(), "dcutoff_A": float(info["dcutoff"]),
                          "bcutoff_A": float(bcutoff if bcutoff is not None else bulk_fc.max_cutoff),
                          "defect_sites": len(info["positions"])}
+        if hr_method == "approximate_forces":
+            from dephonopy.hr_factors.harmonic_forces import calculate_force_differences_from_displacements
+
+            # calculate_modes mass-weights the FC in place: embedding must finish first.
+            bulk_modes = bulk_fc.calculate_modes()
+            bulk_positions = bulk_modes.atoms.get_positions().copy()
+            try:
+                bulk_modes.atoms.set_positions(bulk_positions + shift)
+                bulk_modes.atoms.wrap()
+                forces, force_atoms, _ = calculate_force_differences_from_displacements(
+                    str(paths["es_dir"] / "CONTCAR"), str(paths["gs_dir"] / "CONTCAR"), bulk_modes)
+            finally:
+                bulk_modes.atoms.set_positions(bulk_positions)
+        elif hr_method == "forces":
+            # Emission: initial ES, final GS PES at the same ES geometry; returns F_ES - F_GS@ES.
+            forces, force_atoms, final_atoms = read_force_differences(
+                str(paths["es_dir"]), str(paths["gs_at_es_dir"]), check_equal_positions=True)
+            if (final_atoms.get_chemical_symbols() != symbols
+                    or not np.allclose(final_atoms.get_masses(), masses, rtol=0, atol=1e-5)):
+                raise ValueError("GS at ES must have the same ordered species and masses as ES")
+        if hr_method != "displacements" and (np.shape(forces) != (len(gs), 3) or not np.isfinite(forces).all()):
+            raise ValueError("Expected finite force differences for every GS/ES atom")
+        cutoff = hr_cutoff
+        sites = None
+        if embedding is not None or cutoff is not None:
+            from dephonopy.embedding.atoms import check_defect_cutoff_radius
+
+            # Without embedding use every atom tied for the largest GS/ES displacement.
+            lengths = np.linalg.norm(displacement, axis=1)
+            sites = info["positions"] if info is not None else gs.get_positions()[
+                np.isclose(lengths, lengths.max(), rtol=1e-5, atol=1e-10)]
+            try:
+                cutoff = check_defect_cutoff_radius(gs, sites, cutoff, verbose=False)
+            except RuntimeError:
+                cutoff = check_defect_cutoff_radius(gs, sites, None, verbose=False)
         from dephonopy.matrix_storage import serial_matrix
 
         # Override only the dense serial solver, leaving numpy and all other users untouched.
@@ -239,13 +299,19 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
             serial_matrix.np = serial_np
         modes.calculate_irreps()
         modes.calculate_iprs()
-        if embedding is not None:
-            reference = hr_factors_from_displacements(modes, displacement, small_atoms=gs)
-            displacement, _ = compare_systems_and_embedd_array(
-                modes, displacement, small_atoms=gs, cutoff=None, defect_sites=None,
-                bulk_atoms=None, nm="displacements")
+        if hr_method == "displacements":
+            reference = hr_factors_from_displacements(modes, displacement.copy(),
+                small_atoms=gs if cutoff is not None else None, cutoff=cutoff, defect_sites=sites)
         else:
-            reference = hr_factors_from_displacements(modes, displacement)
+            if mult is not None:
+                force_atoms.set_positions(force_atoms.get_positions() - shift)
+                force_atoms.wrap()
+            reference = hr_factors_from_forces(modes, forces, small_atoms=force_atoms if cutoff is not None else None,
+                                               cutoff=cutoff, defect_sites=sites)
+        if cutoff is not None:
+            displacement, _ = compare_systems_and_embedd_array(
+                modes, displacement, small_atoms=gs, cutoff=cutoff, defect_sites=sites,
+                bulk_atoms=None, nm="displacements")
         atoms = modes.atoms
         symbols = atoms.get_chemical_symbols()
         masses = np.asarray(atoms.get_masses(), dtype=float)
@@ -264,6 +330,13 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
             raise ValueError("Invalid phonon eigenvector norms")
         eigenvectors /= norms[:, None, None]
         translations, q, s_k = mode_factors(frequencies, eigenvectors, masses, displacement)
+        if hr_method != "displacements":
+            # Force methods use dephonopy's mode projections and S_k, never displacement-derived S_k.
+            s_k = np.r_[np.zeros(3), reference["hr_factors"]]
+            q = np.r_[np.zeros(3), reference["fc_displ"]] * np.sqrt(
+                physical_constants["electron mass"][0] / atomic_mass) * physical_constants["Bohr radius"][0] * 1e10
+            s_k[translations] = 0.0
+            q[translations] = 0.0
         is_translation = np.zeros(n_modes, dtype=bool)
         is_translation[translations] = True
         # The library drops indices 0:3; compare only the common non-translation modes.
@@ -282,11 +355,11 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
             raise ValueError("Non-finite phonon data or invalid participation counts")
         s_total = float(s_k[finite_s].sum())
         imaginary = np.flatnonzero((frequencies < -0.5) & ~is_translation)
-        spectral_function, pl = build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma)
+        spectral_function, pl = build_spectra(frequencies, s_k, is_translation, s_total, zpls, sigma, gamma, sigma_max)
 
     summary = {"schema": "ds.phonon_vibronic.v1", "n_atoms": n_atoms, "n_modes": n_modes,
-               "source": "local", "has_eigenvectors": True, "hr_method": "displacements",
-               "hr_cutoff_A": None, "supercell": list(mult) if mult is not None else None,
+               "source": "local", "has_eigenvectors": True, "hr_method": hr_method,
+               "hr_cutoff_A": float(cutoff) if cutoff is not None else None, "supercell": list(mult) if mult is not None else None,
                "label": label if label is not None else paths["es_dir"].name + (
                    " (emb " + "x".join(map(str, mult)) + ")" if embedding is not None else ""),
                "zpl_formula": formula_info,
@@ -296,7 +369,7 @@ def analyse(fc_dir, gs_dir, es_dir, triplet_dir=None, zpl_exp=None, sigma=6.0, g
                "stable": len(imaginary) == 0, "s_total": s_total, "debye_waller": math.exp(-s_total),
                "zpl_eV": zpls, "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
                "delta_Q_amu05_A": float(np.sqrt(np.sum(masses[:, None] * displacement**2))),
-               "sigma_meV": sigma, "gamma_meV": gamma,
+               "sigma_meV": sigma, "sigma_max_meV": sigma_max, "gamma_meV": gamma,
                "input_paths": {key: str(path) if path else None for key, path in paths.items()},
                "units": RESULT_UNITS, "force_constant_correction": "dephonopy.ensure_symmetry (permutation + acoustic sum rule)",
                "approximation": "harmonic, equal ground/excited curvatures, displaced oscillators, T=0"}
@@ -403,6 +476,9 @@ def main():
     parser.add_argument("--dcutoff", type=float)
     parser.add_argument("--bcutoff", type=float)
     parser.add_argument("--sigma", type=float, default=6.0, help="Gaussian standard deviation (meV)")
+    parser.add_argument("--sigma-max", type=float)
+    parser.add_argument("--hr-method", choices=("displacements", "approximate_forces", "forces"), default="displacements")
+    parser.add_argument("--hr-cutoff", type=float)
     parser.add_argument("--gamma", type=float, default=2.0, help="Lorentzian broadening (meV)")
     try:
         args = vars(parser.parse_args())

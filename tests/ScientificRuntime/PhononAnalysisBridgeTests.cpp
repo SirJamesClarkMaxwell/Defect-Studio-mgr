@@ -2,6 +2,7 @@
 
 #include <array>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -105,6 +106,63 @@ namespace DefectStudio::Tests
 		EXPECT_NE(summary.Error().userMessage.find("ds_no_such_hr_dir"), std::string::npos);
 	}
 
+	TEST(PhononAnalysisBridgeTests, HrControlsAreOrderedBeforeOutputAndServerOnlyUsesBroadening)
+	{
+		PhononAnalysisRequest request;
+		request.hrMethod = "approximate_forces";
+		request.hrCutoffAngstrom = 4.5;
+		request.sigmaMaxMeV = 12.0;
+		request.bulkForceConstantDirectory = Path::FromUtf8("D:/bulk FC");
+		request.outputDirectory = Path::FromUtf8("D:/result");
+		const auto local = BuildPhononAnalysisArguments(request);
+		const std::vector<std::string> tail = {"--hr-method", "approximate_forces", "--hr-cutoff", "4.5",
+			"--sigma-max", "12", "--out-dir", request.outputDirectory.Utf8()};
+		EXPECT_EQ(std::vector<std::string>(local.end() - 8, local.end()), tail);
+		EXPECT_EQ(local[10], "--bulk-fc-dir"); // bulk FC without --mult for approximate forces
+		request.serverHrDirectory = Path::FromUtf8("P:/server");
+		const std::vector<std::string> server = {"--hr-dir", request.serverHrDirectory.Utf8(),
+			"--sigma", "6", "--gamma", "2", "--sigma-max", "12", "--out-dir", request.outputDirectory.Utf8()};
+		EXPECT_EQ(BuildPhononServerImportArguments(request), server);
+		request.hrMethod = "forces";
+		const auto forces = BuildPhononAnalysisArguments(request);
+		EXPECT_EQ(forces[forces.size() - 7], "forces");
+	}
+
+	TEST(PhononAnalysisBridgeTests, InvalidHrControlsAreRejectedBeforeStartingPython)
+	{
+		PhononAnalysisRequest request;
+		request.forceConstantDirectory = FindRepoRoot();
+		request.groundStateDirectory = FindRepoRoot();
+		request.excitedStateDirectory = FindRepoRoot();
+		request.outputDirectory = FindRepoRoot() / "phonon-never-written";
+		for (const std::string method : {"unknown", "forces", "approximate_forces"})
+		{
+			request.hrMethod = method;
+			const auto result = PhononAnalysisBridge{}.Run(request);
+			ASSERT_FALSE(result);
+			EXPECT_EQ(result.Error().code, "python.phonon.request_invalid");
+		}
+		request.hrMethod = "displacements";
+		for (const double value : {0.0, -1.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()})
+		{
+			request.hrCutoffAngstrom = value;
+			auto result = PhononAnalysisBridge{}.Run(request);
+			ASSERT_FALSE(result);
+			EXPECT_EQ(result.Error().code, "python.phonon.request_invalid");
+			request.hrCutoffAngstrom.reset();
+			request.sigmaMaxMeV = value;
+			result = PhononAnalysisBridge{}.Run(request);
+			ASSERT_FALSE(result);
+			EXPECT_EQ(result.Error().code, "python.phonon.request_invalid");
+			request.sigmaMaxMeV.reset();
+		}
+		request.sigmaMaxMeV = 5.0;
+		request.serverHrDirectory = FindRepoRoot();
+		const auto result = PhononAnalysisBridge{}.Run(request);
+		ASSERT_FALSE(result);
+		EXPECT_EQ(result.Error().code, "python.phonon.request_invalid");
+	}
+
 	TEST(PhononAnalysisBridgeTests, HalfAnEmbeddingRequestIsRejected)
 	{
 		PhononAnalysisRequest request;
@@ -154,6 +212,26 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(summary->outputDirectory.Utf8(), Path::FromUtf8("D:/calc/out").Utf8());
 		EXPECT_NEAR(summary->sTotal, 1.4066, 1e-12);
 		EXPECT_FALSE(summary->stable);
+	}
+
+	TEST(PhononAnalysisBridgeTests, ApproximateForcesAcceptsBulkWithoutEmbedding)
+	{
+		const Path root = ReferenceCase();
+		const Path bulk = FindRepoRoot() / "test-directory/sjcm_mgr/hBN/bulk/phonons/vasp_661";
+		if (!FileSystem::Exists((root / "dispersion").Native()) || !FileSystem::Exists(bulk.Native()))
+			GTEST_SKIP() << "reference data in test-directory/ not present";
+		PhononAnalysisRequest request;
+		request.forceConstantDirectory = root / "dispersion";
+		request.groundStateDirectory = root / "relax";
+		request.excitedStateDirectory = root / "excited/try_1_singlet";
+		request.hrMethod = "approximate_forces";
+		request.bulkForceConstantDirectory = bulk;
+		request.sigmaMaxMeV = 8;
+		request.outputDirectory = FindRepoRoot() / ".task-113b-temp" / ToString(GenerateUuid());
+		const auto summary = PhononAnalysisBridge{}.Run(request);
+		ASSERT_TRUE(summary) << summary.Error().userMessage << "\n" << summary.Error().technicalDetails;
+		EXPECT_NEAR(summary->sTotal, 0.7883808316, 0.005);
+		std::filesystem::remove_all(request.outputDirectory.Native());
 	}
 
 	TEST(PhononAnalysisBridgeTests, ScriptErrorMessageReachesTheUser)

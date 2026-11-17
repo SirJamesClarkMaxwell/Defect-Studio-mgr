@@ -20,6 +20,12 @@ namespace DefectStudio::Tests
 		{
 			session.m_CaseJobSubmitter = std::move(submit);
 		}
+		static std::vector<PhononFolderSelection> Propose(PhononPanelSession &session, std::vector<PhononFolderProposal> proposals)
+		{
+			session.m_ProposeDefectFolders = true;
+			session.commitDefectFolderScan(std::move(proposals), {});
+			return session.m_DefectFolderSelections;
+		}
 		static Request RequestFor(const PhononPanelSession &session, const Ref<IJob> &job)
 		{
 			if (session.m_BatchEntry) return session.m_BatchEntry->request;
@@ -225,12 +231,18 @@ namespace DefectStudio::Tests
 		s.embeddingMult = "36x36x1";
 		s.dcutoffAngstrom = 7;
 		s.sigmaMeV = 8;
+		s.hrMethod = "approximate_forces";
+		s.hrCutoffAngstrom = 5;
+		s.sigmaMaxMeV = 12;
 		const auto originalGs = s.groundStateDirectory;
 		session.StartBatch({a, b}, {PhononBatchStep::Phonons});
 		session.SetDirectory("gs", root / "edited");
 		s.embeddingMult = "2x2x2";
 		s.dcutoffAngstrom = 3;
 		s.sigmaMeV = 20;
+		s.hrMethod = "displacements";
+		s.hrCutoffAngstrom.reset();
+		s.sigmaMaxMeV.reset();
 		s.outputDirectory = root / "edited-output";
 		ASSERT_TRUE(Release(0));
 		Tick();
@@ -240,6 +252,9 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(request.embeddingMult, (std::array<int, 3>{36, 36, 1}));
 		EXPECT_EQ(request.dcutoffAngstrom, 7);
 		EXPECT_EQ(request.sigmaMeV, 8);
+		EXPECT_EQ(request.hrMethod, "approximate_forces");
+		EXPECT_EQ(request.hrCutoffAngstrom, 5);
+		EXPECT_EQ(request.sigmaMaxMeV, 12);
 		EXPECT_EQ(request.outputDirectory, root / "B/phonons");
 		ASSERT_TRUE(Release(1));
 		Tick();
@@ -427,6 +442,40 @@ namespace DefectStudio::Tests
 		Tick();
 		EXPECT_EQ(Case(a).settings.resultDirectory, first);
 		EXPECT_EQ(Case(b).settings.resultDirectory, second);
+	}
+
+	TEST_F(PhononBatchTests, FolderProposalsRouteCheckedServerImportsToEachNewCaseWithoutActivation)
+	{
+		const auto original = Add("original");
+		std::vector<PhononFolderSelection> selections;
+		for (const auto name : {"server-a", "server-b"})
+		{
+			PhononFolderSelection selection;
+			auto &proposal = selection.proposal;
+			proposal.name = name; proposal.systemDirectory = root / name;
+			proposal.groundStateDirectory = proposal.systemDirectory / "gs";
+			proposal.excitedStateDirectory = proposal.systemDirectory / "es";
+			ServerHrResult hit{proposal.systemDirectory / "spectral-function/12x12x1/displacements", proposal.systemDirectory,
+				{12, 12, 1}, "displacements", "displacements", {}};
+			proposal.serverResults = {hit, hit}; selection.serverChecked = {true, false};
+			selections.push_back(std::move(selection));
+		}
+		const auto created = session.CreateCasesFromFolders(selections);
+		ASSERT_EQ(created.size(), 2u); ASSERT_EQ(requests.size(), 1u);
+		const auto duplicates = PhononBatchTestAccess::Propose(session, {selections[0].proposal});
+		ASSERT_EQ(duplicates.size(), 1u); EXPECT_FALSE(duplicates[0].selected); EXPECT_EQ(duplicates[0].existingCase, "server-a");
+		EXPECT_EQ(duplicates[0].serverChecked, (std::vector<bool>{true, true}));
+		EXPECT_EQ(session.ActiveCaseId(), original);
+		const auto first = std::get<PhononAnalysisRequest>(requests[0]);
+		EXPECT_EQ(first.serverHrDirectory, selections[0].proposal.serverResults[0].hrDirectory);
+		ASSERT_TRUE(Release(0)); Tick(); ASSERT_EQ(requests.size(), 2u);
+		EXPECT_EQ(session.DatasetCaseId(first.outputDirectory), created[0]);
+		const auto second = std::get<PhononAnalysisRequest>(requests[1]);
+		EXPECT_EQ(second.serverHrDirectory, selections[1].proposal.serverResults[0].hrDirectory);
+		ASSERT_TRUE(Release(1)); Tick();
+		EXPECT_EQ(session.DatasetCaseId(second.outputDirectory), created[1]);
+		EXPECT_EQ(session.ActiveCaseId(), original); EXPECT_FALSE(session.IsBatchRunning());
+		EXPECT_EQ(session.BatchProgress(), (std::pair<std::size_t, std::size_t>{2, 2}));
 	}
 
 	TEST_F(PhononBatchTests, IndependentCcdStillRunsAfterPhononFailureAndCaseRemainsFailed)

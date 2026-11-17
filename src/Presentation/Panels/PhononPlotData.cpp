@@ -41,11 +41,12 @@ namespace DefectStudio
 			plot.hasY2 = tab == 1;
 			plot.y2 = {"S(\\hbar\\omega)", "meV^{-1}"};
 			std::optional<std::reference_wrapper<const PhononAnalysisResult>> primary;
+			const bool activeVisible = session.ActiveCaseVisible();
 			Path primarySource = settings.resultDirectory;
-			if (const auto active = session.Result()) primary = std::cref(*active);
+			if (const auto active = session.Result(); active && activeVisible) primary = std::cref(*active);
 			else
 				for (const auto &dataset : session.Datasets())
-					if (dataset.kind == AnalysisDatasetKind::Phonons && session.IsCompared(dataset.directory))
+					if (dataset.kind == AnalysisDatasetKind::Phonons && session.DatasetVisible(dataset.directory) && session.IsCompared(dataset.directory))
 					{
 						std::string error;
 						primary = tab == 0 ? session.PlotModes(dataset.directory, error) : session.Spectra(dataset.directory, error);
@@ -57,7 +58,7 @@ namespace DefectStudio
 			plot.x.minimum = primaryRange ? primaryRange->first : -150.0; plot.x.maximum = primaryRange ? primaryRange->second : 1000.0;
 			if (tab > 0)
 				for (const auto &dataset : session.Datasets())
-					if (dataset.kind == AnalysisDatasetKind::Phonons && session.IsCompared(dataset.directory) &&
+					if (dataset.kind == AnalysisDatasetKind::Phonons && session.DatasetVisible(dataset.directory) && session.IsCompared(dataset.directory) &&
 						(!session.Result() || !PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, project)))
 					{
 						std::string error;
@@ -73,8 +74,8 @@ namespace DefectStudio
 					}
 			if (tab < 2)
 			{
-				auto modes = session.Result() ? session.VisibleModes() : std::vector<std::size_t>{};
-				if (!session.Result())
+				auto modes = session.Result() && activeVisible ? session.VisibleModes() : std::vector<std::size_t>{};
+				if (!session.Result() || !activeVisible)
 					for (std::size_t i = 0; i < primary->get().modes.size(); ++i)
 					{
 						const auto &mode = primary->get().modes[i];
@@ -100,7 +101,7 @@ namespace DefectStudio
 					}
 					plot.series.push_back(std::move(series));
 				}
-				if (const auto selected = session.SelectedMode())
+				if (const auto selected = session.SelectedMode(); selected && activeVisible)
 				{
 					PlotSeriesData series;
 					series.id = plot.id + "/selected"; series.label = "Wybrany mod";
@@ -146,10 +147,10 @@ namespace DefectStudio
 			};
 			if (tab > 0)
 			{
-				if (const auto active = session.Result())
+				if (const auto active = session.Result(); active && activeVisible)
 					addSpectrum(*active, settings.resultDirectory, active->label.empty() ? settings.resultDirectory.filename().Utf8() : active->label);
 				for (const auto &dataset : session.Datasets())
-					if (dataset.kind == AnalysisDatasetKind::Phonons && session.IsCompared(dataset.directory) &&
+					if (dataset.kind == AnalysisDatasetKind::Phonons && session.DatasetVisible(dataset.directory) && session.IsCompared(dataset.directory) &&
 						(!session.Result() || !PhononPanelSession::SameFilePath(dataset.directory, settings.resultDirectory, project)))
 					{
 						std::string error;
@@ -219,6 +220,7 @@ namespace DefectStudio
 	{
 		PlotData plot;
 		plot.id = "dispersion"; plot.title = "Dyspersja";
+		if (std::any_of(settings.cases.begin(), settings.cases.end(), [&](const auto &item) { return item.id == settings.activeCaseId && item.hidden; })) return plot;
 		plot.y = {"\\hbar\\omega", "meV", std::min(0.0, result.minMeV) - 5.0, std::max(0.0, result.maxMeV) + 5.0};
 		if (result.distance.empty()) return plot;
 		plot.x.minimum = result.distance.front(); plot.x.maximum = std::max(result.distance.back(), result.distance.front() + 1e-6);
@@ -259,23 +261,6 @@ namespace DefectStudio
 		if (series.id.starts_with("PL1D/") && series.id != "PL1D/numerov" &&
 			series.id != "PL1D/harmonic" && series.id != "PL1D/phonon1d") return series.source.Utf8();
 		return {};
-	}
-
-	std::string PlotSourceComment(const Path &source, const Path &project)
-	{
-		if (source.Empty()) return {};
-		if (project.Empty()) return source.Utf8();
-		const auto relative = source.Native().lexically_normal().lexically_relative(project.Native().lexically_normal());
-		if (relative.empty()) return source.Utf8();
-		const auto text = relative.generic_u8string();
-		return std::string(text.begin(), text.end());
-	}
-
-	std::string PhononExportLabel(const PhononPanelSession &session, std::string fallback)
-	{
-		for (const auto &entry : session.Cases())
-			if (entry.id == session.ActiveCaseId() && !entry.name.empty()) return entry.name;
-		return fallback.empty() ? "dataset" : fallback;
 	}
 
 	std::optional<DispersionPick> PickDispersion(const PhononDispersion &result,
@@ -383,6 +368,7 @@ namespace DefectStudio
 	{
 		PlotData plot;
 		plot.id = "CCD"; plot.title = "CCD";
+		if (std::any_of(settings.cases.begin(), settings.cases.end(), [&](const auto &item) { return item.id == settings.activeCaseId && item.hidden; })) return plot;
 		plot.x = {"Q", "amu^{1/2} Å", std::min(0.0, result.deltaQ), std::max(0.0, result.deltaQ)};
 		plot.y = {"E", "eV"};
 		for (bool excited : {false, true})
@@ -461,7 +447,7 @@ namespace DefectStudio
 		const auto [minimum, maximum] = PhononPanelSession::UsefulRange(result);
 		plot.x = {"E", "eV", minimum, maximum}; plot.y = {"PL 1D", "j.u."};
 		for (const auto &dataset : session.Datasets())
-			if (dataset.kind == AnalysisDatasetKind::Ccd && session.IsCompared(dataset.directory) &&
+			if (dataset.kind == AnalysisDatasetKind::Ccd && session.DatasetVisible(dataset.directory) && session.IsCompared(dataset.directory) &&
 				!PhononPanelSession::SameFilePath(dataset.directory, settings.selectedCcdDirectory, project))
 			{
 				std::string error;
@@ -471,15 +457,18 @@ namespace DefectStudio
 					plot.x.minimum = std::min(plot.x.minimum, low); plot.x.maximum = std::max(plot.x.maximum, high);
 				}
 			}
-		if (settings.ccdComparePhononPl && session.Result())
+		if (settings.ccdComparePhononPl && session.ActiveCaseVisible() && session.Result())
 		{
 			const auto [low, high] = PhononPanelSession::UsefulRange(*session.Result(), true, settings.plZpl);
 			plot.x.minimum = std::min(plot.x.minimum, low); plot.x.maximum = std::max(plot.x.maximum, high);
 		}
-		AddLine(plot, settings, "PL1D/numerov", "Numerov", settings.selectedCcdDirectory, result.pl1d.energyEv, result.pl1d.numerov);
-		AddLine(plot, settings, "PL1D/harmonic", "harmoniczne", settings.selectedCcdDirectory, result.pl1d.energyEv, result.pl1d.harmonic);
-		AddLine(plot, settings, "PL1D/phonon1d", "fonon 1D", settings.selectedCcdDirectory, result.pl1d.energyEv, result.pl1d.phonon1d);
-		if (settings.ccdComparePhononPl && session.Result())
+		if (session.ActiveCaseVisible())
+		{
+			AddLine(plot, settings, "PL1D/numerov", "Numerov", settings.selectedCcdDirectory, result.pl1d.energyEv, result.pl1d.numerov);
+			AddLine(plot, settings, "PL1D/harmonic", "harmoniczne", settings.selectedCcdDirectory, result.pl1d.energyEv, result.pl1d.harmonic);
+			AddLine(plot, settings, "PL1D/phonon1d", "fonon 1D", settings.selectedCcdDirectory, result.pl1d.energyEv, result.pl1d.phonon1d);
+		}
+		if (settings.ccdComparePhononPl && session.ActiveCaseVisible() && session.Result())
 		{
 			const auto &phonons = *session.Result();
 			const auto path = PhononPanelSession::DirectoryLabel(settings.resultDirectory, project, roots);
@@ -487,7 +476,7 @@ namespace DefectStudio
 				settings.resultDirectory, phonons.plPhotonEnergyEv, PhononPanelSession::PlCurve(phonons, PhononPanelSession::PlCurveChoice(phonons, settings.plZpl)));
 		}
 		for (const auto &dataset : session.Datasets())
-			if (dataset.kind == AnalysisDatasetKind::Ccd && session.IsCompared(dataset.directory) &&
+			if (dataset.kind == AnalysisDatasetKind::Ccd && session.DatasetVisible(dataset.directory) && session.IsCompared(dataset.directory) &&
 				!PhononPanelSession::SameFilePath(dataset.directory, settings.selectedCcdDirectory, project))
 			{
 				std::string error;

@@ -124,6 +124,7 @@ namespace DefectStudio
 		struct DisplacementComparisonFilePickRequested;
 		struct DisplacementComparisonFilePicked;
 		struct PhononDirectoryRequested;
+		struct PhononFoldersAddRequested;
 	}
 
 	namespace RendererEvents::Viewport
@@ -241,6 +242,7 @@ namespace DefectStudio
 		void loadPhononsForProject();
 		void stopPhononAnimations();
 		void onPhononDirectoryRequested(const ProjectEvents::PhononDirectoryRequested &event);
+		void onPhononFoldersAddRequested(const ProjectEvents::PhononFoldersAddRequested &event);
 		// energetics.yaml -> DefectEnergeticsPanel (task/99); called at the end of the FNV load.
 		void loadEnergeticsForProject();
 		void registerDefectEnergeticsViews();

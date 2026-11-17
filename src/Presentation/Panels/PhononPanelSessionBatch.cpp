@@ -40,7 +40,7 @@ namespace DefectStudio
 			if (std::ranges::find(seen, id) != seen.end()) continue;
 			seen.push_back(id);
 			const auto found = std::ranges::find(m_Settings.cases, id, &PhononCase::id);
-			if (found == m_Settings.cases.end()) continue;
+			if (found == m_Settings.cases.end() || found->hidden) continue;
 			const auto settings = found->settings;
 			const std::size_t count = static_cast<std::size_t>(phonons) + static_cast<std::size_t>(ccd);
 			m_BatchTotal += count;
@@ -168,9 +168,15 @@ namespace DefectStudio
 		{
 			const auto &request = std::get<PhononAnalysisRequest>(m_BatchEntry->request);
 			if (!request.serverHrDirectory.Empty())
+			{
 				m_ServerRuns[request.serverHrDirectory.Utf8()] = {
 					status == JobStatus::Completed ? PhononCaseStatus::Done :
 					status == JobStatus::Cancelled ? PhononCaseStatus::Cancelled : PhononCaseStatus::Failed, message, output};
+				if (status == JobStatus::Completed)
+					std::erase_if(m_NewServerResults[caseId], [&](const auto &hit) {
+						return SameFilePath(hit.result.hrDirectory, request.serverHrDirectory, m_ProjectDirectory);
+					});
+			}
 		}
 		auto &run = m_CaseRuns[caseId];
 		const bool failedEarlier = m_BatchEntry && !run.message.empty();

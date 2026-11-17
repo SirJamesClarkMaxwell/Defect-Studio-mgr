@@ -28,6 +28,9 @@ namespace DefectStudio
 		Path outputDirectory; // optional computation override, separate from the active result
 		double sigmaMeV = 6.0;
 		double gammaMeV = 2.0;
+		std::string hrMethod = "displacements";
+		std::optional<double> hrCutoffAngstrom;
+		std::optional<double> sigmaMaxMeV;
 		// task/104g: embedding; empty bulk dir or mult = no embedding
 		Path bulkForceConstantDirectory;
 		std::string embeddingMult;           // "24x24x1"
@@ -65,6 +68,8 @@ namespace DefectStudio
 		std::string name;
 		std::vector<Path> datasets;
 		PhononCaseSettings settings;
+		Path sourceDirectory;
+		bool hidden = false;
 	};
 
 	struct PhononPanelSettings : PhononCaseSettings
@@ -77,6 +82,7 @@ namespace DefectStudio
 		bool ccdComparePhononPl = false;
 		Path dispersionDirectory; // optional output override
 		std::vector<Path> comparedDirectories;
+		std::vector<Path> defectRoots;
 		bool dispersionInPlane = true;
 		int dispersionPoints = 101;
 
@@ -102,12 +108,13 @@ namespace DefectStudio
 	//   formatVersion: 2
 	//   activeCase: case-1
 	//   nextCaseNumber: 2
-	//   cases: [{id, name, datasets: [paths], inputs: {case input keys below}, resultDir, ccd, dispersion, bulkMode,
+	//   defectRoots: [paths] # remembered defect folders, rescanned on project load
+	//   cases: [{id, name, sourceDir, hidden: false, datasets: [paths], inputs: {case input keys below}, resultDir, ccd, dispersion, bulkMode,
 	//            view: {selectedMode, animationSource, mixAngleDegrees, ccdMotion, ccdSweepQ, ccdExtent,
 	//                   plZpl, irrepFilter, minHuangRhys, bulkQ, bulkBand, bulkSupercell}}]
 	//   Top-level inputs/view/datasets contain only global fields; v1 flat keys still read:
 	//   inputs: {fcDir, gsDir, esDir, tripletDir, zplFormula, gsAtEsDir, esAtGsDir, outputDir, sigma, gamma,
-	//            bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep, ccdPathDir, ccdAnalysisOutputDir,
+	//            hrMethod, hrCutoff, sigmaMax, bulkFcDir, mult, dcutoff, bcutoff, ccdDir, ccdStep, ccdPathDir, ccdAnalysisOutputDir,
 	//            ccdTemperature, ccdPhononCurvature,
 	//            dispersionDir, dispersionInPlane, dispersionPoints} # dcutoff/bcutoff absent = default
 	//   resultDir: ...

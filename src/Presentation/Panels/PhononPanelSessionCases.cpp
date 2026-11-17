@@ -18,7 +18,7 @@ namespace DefectStudio
 
 	const std::string &PhononPanelSession::ActiveCaseId() const { return m_Settings.activeCaseId; }
 
-	std::string PhononPanelSession::AddCase(std::string name)
+	std::string PhononPanelSession::AddCase(std::string name, bool activate)
 	{
 		(void)Cases();
 		if (m_Settings.nextCaseNumber < 1 || m_Settings.nextCaseNumber == std::numeric_limits<int>::max())
@@ -29,7 +29,9 @@ namespace DefectStudio
 		const auto id = "case-" + std::to_string(m_Settings.nextCaseNumber++);
 		if (name.empty()) name = "Przypadek " + id.substr(5);
 		m_Settings.cases.push_back({id, std::move(name), {}, {}});
-		(void)ActivateCase(id);
+		if (activate) (void)ActivateCase(id);
+		++m_PlotRevision;
+		Changed();
 		return id;
 	}
 
@@ -203,6 +205,8 @@ namespace DefectStudio
 
 	bool PhononPanelSession::CaseChecked(const std::string &id) const
 	{
+		for (const auto &item : m_Settings.cases)
+			if (item.id == id && item.hidden) return false;
 		const auto found = m_CheckedCases.find(id);
 		return found != m_CheckedCases.end() && found->second;
 	}

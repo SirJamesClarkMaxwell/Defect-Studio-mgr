@@ -12,6 +12,32 @@
 
 namespace DefectStudio
 {
+	namespace PhononSettingsDetail
+	{
+		std::string StoredPath(const Path &path, const Path &projectDirectory)
+		{
+			if (path.Empty())
+				return {};
+			auto native = path.Native().lexically_normal();
+			const auto relative = native.lexically_relative(projectDirectory.Native().lexically_normal());
+			if (!projectDirectory.Empty() && !relative.empty() && !relative.is_absolute() &&
+				std::none_of(relative.begin(), relative.end(), [](const auto &part) { return part == ".."; }))
+				native = relative;
+			const auto utf8 = native.generic_u8string();
+			return std::string(utf8.begin(), utf8.end());
+		}
+
+		Path ReadPath(const YAML::Node &node, const Path &projectDirectory)
+		{
+			if (!node.IsScalar()) throw std::invalid_argument("expected a path string");
+			const Path path = Path::FromUtf8(node.as<std::string>());
+			if (path.Empty())
+				return {};
+			return Path::FromResolved((path.Native().is_absolute() ? path.Native() :
+				projectDirectory.Native() / path.Native()).lexically_normal());
+		}
+	}
+
 	namespace
 	{
 		const std::vector<std::string> GlobalInputs = {"dispersionDir", "dispersionInPlane", "dispersionPoints"};
@@ -113,6 +139,10 @@ namespace DefectStudio
 			if (!PhononSettingsDetail::ParseFlat(YAML::Dump(flat), projectDirectory, parsed, warnings, error)) return false;
 			item.settings = parsed;
 			item.datasets = std::move(parsed.comparedDirectories);
+			try { if (node["sourceDir"]) item.sourceDirectory = PhononSettingsDetail::ReadPath(node["sourceDir"], projectDirectory); }
+			catch (const std::exception &exception) { warnings.push_back("Ignored phonon case sourceDir: " + std::string(exception.what())); }
+			try { if (node["hidden"]) item.hidden = node["hidden"].as<bool>(); }
+			catch (const std::exception &exception) { warnings.push_back("Ignored phonon case hidden: " + std::string(exception.what())); }
 			return true;
 		}
 	}
@@ -134,6 +164,19 @@ namespace DefectStudio
 				return true;
 			}
 			const auto root = YAML::Load(text);
+			if (const auto roots = root["defectRoots"])
+			{
+				if (!roots.IsSequence()) outWarnings.push_back("Ignored phonon setting defectRoots: expected a sequence");
+				else
+					for (const auto &node : roots)
+						try
+						{
+							const auto path = PhononSettingsDetail::ReadPath(node, projectDirectory);
+							if (!path.Empty() && std::find(settings.defectRoots.begin(), settings.defectRoots.end(), path) == settings.defectRoots.end())
+								settings.defectRoots.push_back(path);
+						}
+						catch (const std::exception &exception) { outWarnings.push_back("Ignored phonon defect root: " + std::string(exception.what())); }
+			}
 			int version = root["cases"] ? 2 : 1;
 			try { if (root["formatVersion"]) version = root["formatVersion"].as<int>(); }
 			catch (const YAML::Exception &) {}
@@ -220,6 +263,8 @@ namespace DefectStudio
 		root["datasets"].remove("bulkMode");
 		root["activeCase"] = snapshot.activeCaseId;
 		root["nextCaseNumber"] = snapshot.nextCaseNumber;
+		root["defectRoots"] = YAML::Node(YAML::NodeType::Sequence);
+		for (const auto &path : snapshot.defectRoots) root["defectRoots"].push_back(PhononSettingsDetail::StoredPath(path, projectDirectory));
 		root["cases"] = YAML::Node(YAML::NodeType::Sequence);
 		for (const auto &item : snapshot.cases)
 		{
@@ -227,6 +272,8 @@ namespace DefectStudio
 			auto node = CaseNode(values, projectDirectory);
 			node["id"] = item.id;
 			node["name"] = item.name;
+			node["sourceDir"] = PhononSettingsDetail::StoredPath(item.sourceDirectory, projectDirectory);
+			node["hidden"] = item.hidden;
 			PhononPanelSettings paths;
 			paths.comparedDirectories = item.datasets;
 			node["datasets"] = YAML::Load(PhononSettingsDetail::SerializeFlat(paths, projectDirectory))["datasets"]["compared"];

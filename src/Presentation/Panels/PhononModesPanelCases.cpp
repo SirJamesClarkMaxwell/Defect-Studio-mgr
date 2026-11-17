@@ -2,16 +2,20 @@
 #include "Presentation/Panels/PhononPanelSession.hpp"
 
 #include <imgui.h>
+#include <algorithm>
 #include <format>
 
 namespace DefectStudio
 {
+	void DrawPhononDefectFolders(PhononPanelSession &session);
+
 	void DrawPhononCases(PhononPanelSession &session)
 	{
 		const bool shown = ImGui::CollapsingHeader("Przypadki", ImGuiTreeNodeFlags_DefaultOpen);
 		ImGui::SetItemTooltip("Jedno przejście GS → ES jednego defektu; warianty wyników są zestawami w przypadku.");
-		if (!shown) return;
-		std::string activate, duplicate, remove, renameId, rename;
+		if (!shown) { DrawPhononDefectFolders(session); return; }
+		std::string activate, duplicate, remove, renameId, rename, hideId, importId;
+		bool hide = false;
 		if (ImGui::BeginTable("##cases", 6, ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("liczyć", ImGuiTableColumnFlags_WidthFixed);
@@ -21,11 +25,14 @@ namespace DefectStudio
 			ImGui::TableSetupColumn("S", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableHeadersRow();
-			for (const auto &item : session.Cases())
+			auto cases = session.Cases();
+			std::stable_sort(cases.begin(), cases.end(), [](const auto &a, const auto &b) { return a.hidden < b.hidden; });
+			for (const auto &item : cases)
 			{
 				ImGui::PushID(item.id.c_str());
+				if (item.hidden) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.45f);
 				ImGui::TableNextRow();
-				if (item.id == session.ActiveCaseId())
+				if (!item.hidden && item.id == session.ActiveCaseId())
 				{
 					const auto accent = ImGui::GetColorU32(ImGuiCol_CheckMark, 0.35f);
 					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, accent);
@@ -33,8 +40,11 @@ namespace DefectStudio
 				}
 				ImGui::TableSetColumnIndex(0);
 				bool checked = session.CaseChecked(item.id);
+				ImGui::BeginDisabled(item.hidden);
 				if (ImGui::Checkbox("##compute", &checked)) session.SetCaseChecked(item.id, checked);
-				ImGui::SetItemTooltip("Uwzględnij w kolejce obliczeń. Wybór obowiązuje w tej sesji.");
+				ImGui::EndDisabled();
+				ImGui::SetItemTooltip("%s", item.hidden ? "Pokaż przypadek, aby uwzględnić go w obliczeniach." :
+					"Uwzględnij w kolejce obliczeń. Wybór obowiązuje w tej sesji.");
 				ImGui::TableSetColumnIndex(1);
 				if (ImGui::Selectable(item.name.c_str(), false, ImGuiSelectableFlags_SpanAllColumns |
 					ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, ImGui::GetFrameHeight()))) activate = item.id;
@@ -52,6 +62,8 @@ namespace DefectStudio
 					ImGui::SetItemTooltip("Nazwa przypadku widoczna na liście i w tytule jego okna.");
 					if (ImGui::MenuItem("Duplikuj")) duplicate = item.id;
 					ImGui::SetItemTooltip("Kopia ustawień bez przypiętych zestawów i nadpisań katalogów wynikowych.");
+					if (ImGui::MenuItem(item.hidden ? "Pokaż" : "Ukryj")) { hideId = item.id; hide = !item.hidden; }
+					ImGui::SetItemTooltip("Zostaje na liście (przygaszony, na dole), poza wykresami, porównaniem i eksportem.");
 					if (ImGui::MenuItem("Usuń z listy")) remove = item.id;
 					ImGui::SetItemTooltip("Pliki zostają. Usuwa tylko przypadek i przypięcia na tej liście.");
 					ImGui::EndPopup();
@@ -89,6 +101,24 @@ namespace DefectStudio
 				}
 				ImGui::TextUnformatted(status.data());
 				if (!run.message.empty()) ImGui::SetItemTooltip("%s", run.message.c_str());
+				const auto &newResults = session.NewServerResults(item.id);
+				if (!newResults.empty())
+				{
+					ImGui::Text("%zu nowych wyników", newResults.size());
+					if (ImGui::BeginItemTooltip())
+					{
+						for (const auto &entry : newResults)
+							ImGui::Text("%dx%dx%d / %s%s\n%s", entry.result.supercell[0], entry.result.supercell[1], entry.result.supercell[2],
+								entry.result.variant.c_str(), entry.updated ? " (zaktualizowane na serwerze)" : "", entry.result.hrDirectory.Utf8().c_str());
+						ImGui::EndTooltip();
+					}
+					ImGui::BeginDisabled(session.IsBusy() || session.m_ProjectDirectory.Empty());
+					if (ImGui::SmallButton("Wczytaj")) importId = item.id;
+					ImGui::EndDisabled();
+					ImGui::SetItemTooltip("%s", session.IsBusy() ? "Poczekaj na zakończenie bieżącego zadania." :
+						session.m_ProjectDirectory.Empty() ? "Otwórz projekt przed importem." : "Wczytaj nowe i zaktualizowane wyniki do tego przypadku.");
+				}
+				if (item.hidden) ImGui::PopStyleVar();
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
@@ -97,8 +127,10 @@ namespace DefectStudio
 		ImGui::SameLine();
 		ImGui::BeginDisabled(session.IsBatchRunning());
 		ImGui::Checkbox("fonony", &session.m_BatchPhonons);
+		ImGui::SetItemTooltip("Policz fonony dla zaznaczonych widocznych przypadków.");
 		ImGui::SameLine();
 		ImGui::Checkbox("analiza CCD", &session.m_BatchCcdAnalysis);
+		ImGui::SetItemTooltip("Uruchom analizę CCD dla zaznaczonych widocznych przypadków.");
 		ImGui::EndDisabled();
 		std::vector<std::string> checked;
 		for (const auto &item : session.Cases())
@@ -127,12 +159,15 @@ namespace DefectStudio
 		}
 		// Release table references before changing the list or loading another result.
 		if (!renameId.empty()) session.RenameCase(renameId, std::move(rename));
+		if (!hideId.empty()) session.SetCaseHidden(hideId, hide);
+		if (!importId.empty()) session.ImportNewServerResults(importId);
 		if (!remove.empty()) session.RemoveCase(remove);
 		else if (!duplicate.empty()) (void)session.DuplicateCase(duplicate);
-		else if (!activate.empty()) (void)session.ActivateCase(activate);
+		else if (!activate.empty() && importId.empty() && hideId.empty()) (void)session.ActivateCase(activate);
 		if (ImGui::Button("Nowy przypadek")) (void)session.AddCase({});
 		ImGui::SetItemTooltip("Dodaj pusty przypadek i ustaw go jako aktywny.");
 		ImGui::SameLine();
+		DrawPhononDefectFolders(session);
 		const bool available = session.HasUnattachedCaseDatasets();
 		ImGui::BeginDisabled(!available);
 		if (ImGui::Button("Przypadki z zestawów")) (void)session.CreateCasesFromDatasets();

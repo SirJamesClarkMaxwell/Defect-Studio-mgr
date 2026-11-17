@@ -43,6 +43,12 @@ namespace DefectStudio
 			arguments.insert(arguments.end(), {"--dcutoff", std::format("{:.10g}", *request.dcutoffAngstrom)});
 		if (request.bcutoffAngstrom)
 			arguments.insert(arguments.end(), {"--bcutoff", std::format("{:.10g}", *request.bcutoffAngstrom)});
+		if (request.hrMethod != "displacements")
+			arguments.insert(arguments.end(), {"--hr-method", request.hrMethod});
+		if (request.hrCutoffAngstrom)
+			arguments.insert(arguments.end(), {"--hr-cutoff", std::format("{:.10g}", *request.hrCutoffAngstrom)});
+		if (request.sigmaMaxMeV)
+			arguments.insert(arguments.end(), {"--sigma-max", std::format("{:.10g}", *request.sigmaMaxMeV)});
 		arguments.insert(arguments.end(), {"--out-dir", request.outputDirectory.Utf8()});
 		return arguments;
 	}
@@ -56,8 +62,10 @@ namespace DefectStudio
 		if (!request.label.empty()) arguments.insert(arguments.end(), {"--label", request.label});
 		arguments.insert(arguments.end(), {
 			"--sigma", std::format("{:.10g}", request.sigmaMeV),
-			"--gamma", std::format("{:.10g}", request.gammaMeV),
-			"--out-dir", request.outputDirectory.Utf8()});
+			"--gamma", std::format("{:.10g}", request.gammaMeV)});
+		if (request.sigmaMaxMeV)
+			arguments.insert(arguments.end(), {"--sigma-max", std::format("{:.10g}", *request.sigmaMaxMeV)});
+		arguments.insert(arguments.end(), {"--out-dir", request.outputDirectory.Utf8()});
 		return arguments;
 	}
 
@@ -108,6 +116,7 @@ namespace DefectStudio
 		const bool server = !request.serverHrDirectory.Empty();
 		if (request.outputDirectory.Empty() || !std::isfinite(request.sigmaMeV) || request.sigmaMeV <= 0.0 ||
 			!std::isfinite(request.gammaMeV) || request.gammaMeV <= 0.0 ||
+			(request.sigmaMaxMeV && (!std::isfinite(*request.sigmaMaxMeV) || *request.sigmaMaxMeV < request.sigmaMeV)) ||
 			(!server && request.experimentalZplEv && (!std::isfinite(*request.experimentalZplEv) || *request.experimentalZplEv <= 0.0)))
 		{
 			return MakePythonExecutionError(
@@ -115,16 +124,21 @@ namespace DefectStudio
 				"Expected an output path, positive finite sigma/gamma and a positive finite experimental ZPL when provided.",
 				"Check the output path, broadening and experimental ZPL.", "python.phonon.request_invalid");
 		}
-		if (!server && (request.bulkForceConstantDirectory.has_value() != request.embeddingMult.has_value() ||
+		if (!server && ((request.embeddingMult && !request.bulkForceConstantDirectory) ||
+			(request.bulkForceConstantDirectory && !request.embeddingMult && request.hrMethod != "approximate_forces") ||
+			(request.hrMethod != "displacements" && request.hrMethod != "approximate_forces" && request.hrMethod != "forces") ||
+			(request.hrMethod == "approximate_forces" && !request.bulkForceConstantDirectory) ||
+			(request.hrMethod == "forces" && request.groundAtExcitedDirectory.Empty()) ||
+			(request.hrCutoffAngstrom && (!std::isfinite(*request.hrCutoffAngstrom) || *request.hrCutoffAngstrom <= 0.0)) ||
 			(request.embeddingMult && std::any_of(request.embeddingMult->begin(), request.embeddingMult->end(),
 				[](int value) { return value < 1; })) ||
 			(request.dcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.dcutoffAngstrom) || *request.dcutoffAngstrom <= 0.0)) ||
 			(request.bcutoffAngstrom && (!request.embeddingMult || !std::isfinite(*request.bcutoffAngstrom) || *request.bcutoffAngstrom <= 0.0))))
 		{
 			return MakePythonExecutionError(
-				"Phonon embedding request is invalid.",
-				"Expected both bulk FC directory and three positive multipliers; cutoffs require embedding and must be positive and finite.",
-				"Check the embedding directory, multipliers and cutoffs.", "python.phonon.request_invalid");
+				"Phonon HR/embedding request is invalid: check the method inputs and cutoffs.",
+				"approximate_forces requires bulk FC; forces requires GS at ES. Embedding requires bulk FC and positive multipliers. Cutoffs must be positive and finite.",
+				"Check the HR method, GS at ES, bulk FC, multipliers and cutoffs.", "python.phonon.request_invalid");
 		}
 		const auto directories = server ? std::vector<Path>{request.serverHrDirectory} : std::vector<Path>{request.forceConstantDirectory, request.groundStateDirectory,
 			request.excitedStateDirectory, request.tripletDirectory.value_or(request.excitedStateDirectory),

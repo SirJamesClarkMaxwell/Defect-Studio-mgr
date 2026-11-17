@@ -16,6 +16,11 @@ namespace DefectStudio::ProjectEvents
 		Path directory;
 	};
 
+	struct PhononFoldersAddRequested final : public BusEvent
+	{
+		std::vector<Path> directories;
+	};
+
 	struct SceneObjectsModified final : public BusEvent
 	{
 		StructureId structureId;

@@ -67,12 +67,69 @@ namespace DefectStudio
 						grid.Row("");
 						if (ImGui::SmallButton("Usuń tryplet")) { settings.tripletDirectory = Path{}; persist(); }
 					}
+					grid.Row("Katalog FC bulku");
+					if (DrawFolder("bulk", settings.bulkForceConstantDirectory, m_Session->m_Error, true)) SetDirectory("bulk", settings.bulkForceConstantDirectory);
+					grid.Row("Metoda HR");
+					if (ImGui::BeginCombo("##hrMethod", settings.hrMethod.c_str()))
+					{
+						for (const std::string method : {"displacements", "approximate_forces", "forces"})
+						{
+							const bool missing = (method == "forces" && settings.groundAtExcitedDirectory.Empty()) ||
+								(method == "approximate_forces" && settings.bulkForceConstantDirectory.Empty());
+							ImGui::BeginDisabled(missing);
+							if (ImGui::Selectable(method.c_str(), settings.hrMethod == method)) { settings.hrMethod = method; persist(); }
+							ImGui::EndDisabled();
+							if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+								ImGui::SetTooltip("%s", method == "displacements" ? "Z różnicy geometrii GS/ES; wymaga FC, GS i ES." :
+									method == "approximate_forces" ? "Siły harmoniczne z różnicy GS/ES; wymaga katalogu FC bulku (także bez embeddingu)." :
+									"Różnica sił ES - GS@ES; ustaw GS w geometrii ES w sekcji ZPL.");
+						}
+						ImGui::EndCombo();
+					}
+					grid.Row("HR cutoff [Å]");
+					bool autoCutoff = !settings.hrCutoffAngstrom;
+					if (ImGui::Checkbox("auto##hrCutoff", &autoCutoff))
+					{
+						settings.hrCutoffAngstrom = autoCutoff ? std::nullopt : std::optional<double>(6.0);
+						persist();
+					}
+					ImGui::SetItemTooltip("Auto: bez odcięcia bez embeddingu; promień dephonopy przy embeddingu.");
+					if (settings.hrCutoffAngstrom)
+					{
+						ImGui::SameLine();
+						float cutoff = static_cast<float>(*settings.hrCutoffAngstrom);
+						if (ImGui::DragFloat("##hrCutoff", &cutoff, 0.05f, 0.001f, 1000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+						{
+							settings.hrCutoffAngstrom = std::isfinite(cutoff) ? std::max(0.001f, cutoff) : 6.0f;
+							persist();
+						}
+					}
 					grid.Row("sigma [meV]");
 					ImGui::InputDouble("##sigma", &settings.sigmaMeV, 0.0, 0.0, "%.3f");
 					if (ImGui::IsItemDeactivatedAfterEdit())
 					{
 						if (!std::isfinite(settings.sigmaMeV) || settings.sigmaMeV <= 0.0) settings.sigmaMeV = 6.0;
+						if (settings.sigmaMaxMeV) settings.sigmaMaxMeV = std::max(settings.sigmaMeV, *settings.sigmaMaxMeV);
 						persist();
+					}
+					grid.Row("sigma_max [meV]");
+					bool variableSigma = settings.sigmaMaxMeV.has_value();
+					if (ImGui::Checkbox("włącz##sigmaMax", &variableSigma))
+					{
+						settings.sigmaMaxMeV = variableSigma ? std::optional<double>(settings.sigmaMeV) : std::nullopt;
+						persist();
+					}
+					ImGui::SetItemTooltip("Szerokość Gaussa rośnie liniowo od sigma dla najniższego do sigma_max dla najwyższego modu.");
+					if (settings.sigmaMaxMeV)
+					{
+						ImGui::SameLine();
+						float sigmaMax = static_cast<float>(*settings.sigmaMaxMeV);
+						if (ImGui::DragFloat("##sigmaMax", &sigmaMax, 0.1f, static_cast<float>(settings.sigmaMeV),
+							static_cast<float>(std::max(1000.0, settings.sigmaMeV)), "%.3f", ImGuiSliderFlags_AlwaysClamp))
+						{
+							settings.sigmaMaxMeV = std::isfinite(sigmaMax) ? std::max(settings.sigmaMeV, static_cast<double>(sigmaMax)) : settings.sigmaMeV;
+							persist();
+						}
 					}
 					grid.Row("gamma [meV]");
 					ImGui::InputDouble("##gamma", &settings.gammaMeV, 0.0, 0.0, "%.3f");
@@ -145,8 +202,6 @@ namespace DefectStudio
 			PropertyGrid grid("##phononEmbedding", PropertyGridLabelWidth({"Katalog FC bulku", "mult (N x M x K)", "dcutoff [Å]", "bcutoff [Å]"}));
 			if (grid)
 			{
-				grid.Row("Katalog FC bulku");
-				if (DrawFolder("bulk", settings.bulkForceConstantDirectory, m_Session->m_Error, true)) SetDirectory("bulk", settings.bulkForceConstantDirectory);
 				grid.Row("mult (N x M x K)");
 				ImGui::InputInt3("##mult", m_Session->m_EmbeddingMult.data());
 				if (ImGui::IsItemDeactivatedAfterEdit())

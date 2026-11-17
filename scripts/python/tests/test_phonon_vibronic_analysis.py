@@ -8,6 +8,7 @@ without it. See docs/work/project/tasks/104-phonon-vibronic-script.md.
 """
 
 import json
+from contextlib import contextmanager
 import math
 import os
 import shutil
@@ -51,6 +52,60 @@ def read_tsv(path):
         header = handle.readline().split()
         rows = [line.split() for line in handle if line.strip()]
     return header, rows
+
+
+@contextmanager
+def temporary_directory():
+    # mkdir inherits the repo ACL; Python 3.13 mkdtemp's private ACL blocks the sandbox.
+    directory = ROOT / ".task-113b-temp" / uuid4().hex
+    directory.mkdir(parents=True)
+    try:
+        yield directory
+    finally:
+        shutil.rmtree(directory)
+
+
+@unittest.skipIf(IMPORT_ERROR is not None, f"dephonopy/numpy missing: {IMPORT_ERROR}")
+class HrControlsTests(unittest.TestCase):
+    def test_invalid_method_inputs_fail_before_reading_files(self):
+        from phonon_vibronic_analysis import analyse
+
+        for options, message in (({"hr_method": "unknown"}, "hr-method"),
+                                 ({"hr_method": "approximate_forces"}, "bulk-fc-dir"),
+                                 ({"hr_method": "forces"}, "gs-at-es-dir"),
+                                 ({"hr_cutoff": 0}, "hr-cutoff"),
+                                 ({"hr_cutoff": float("nan")}, "hr-cutoff"),
+                                 ({"sigma_max": 5}, "sigma-max"),
+                                 ({"sigma_max": float("inf")}, "sigma-max")):
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
+                analyse("missing", "missing", "missing", **options)
+
+    def test_sigma_max_endpoint_widths_and_monotonic_broadening(self):
+        from phonon_vibronic_analysis import build_spectra
+
+        widths = []
+        for sigma_max in (2, 4, 8):
+            spectral, _ = build_spectra(np.array([100., 200.]), np.array([0., 1.]),
+                                        np.zeros(2, dtype=bool), 1., {}, 2., .5, sigma_max)
+            energy, density = spectral.T
+            widths.append(np.sqrt(np.trapezoid((energy - 200)**2 * density, energy)))
+            self.assertAlmostEqual(widths[-1], sigma_max, places=6)
+            self.assertAlmostEqual(np.trapezoid(density, energy), 1.)
+        self.assertTrue(widths[0] < widths[1] < widths[2])
+        spectral, _ = build_spectra(np.array([100., 200.]), np.array([1., 0.]),
+                                    np.zeros(2, dtype=bool), 1., {}, 2., .5, 8.)
+        self.assertAlmostEqual(np.sqrt(np.trapezoid((spectral[:, 0] - 100)**2 * spectral[:, 1],
+                                                   spectral[:, 0])), 2., places=6)
+
+    def test_sigma_max_handles_one_mode_and_equal_frequencies(self):
+        from phonon_vibronic_analysis import build_spectra
+
+        for frequencies in (np.array([100.]), np.array([100., 100.])):
+            spectral, _ = build_spectra(frequencies, np.ones(len(frequencies)),
+                                        np.zeros(len(frequencies), dtype=bool), float(len(frequencies)),
+                                        {}, 2., .5, 8.)
+            self.assertTrue(np.isfinite(spectral).all())
+            self.assertAlmostEqual(np.trapezoid(spectral[:, 1], spectral[:, 0]), len(frequencies))
 
 
 class PublishTests(unittest.TestCase):
@@ -114,7 +169,7 @@ class PublishTests(unittest.TestCase):
 @unittest.skipIf(IMPORT_ERROR is not None, f"dephonopy/numpy missing: {IMPORT_ERROR}")
 class FailureTests(unittest.TestCase):
     def test_bad_input_reports_json_error_and_leaves_no_output(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with temporary_directory() as tmp:
             out = Path(tmp) / "result"
             proc, payload = run_script(
                 "--fc-dir", Path(tmp) / "missing",
@@ -134,9 +189,9 @@ class FailureTests(unittest.TestCase):
 class ReferenceCaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
-        cls.out = Path(cls.tmp.name) / "result"
-        cls.unused = Path(cls.tmp.name) / "unused-without-outcar"
+        cls.tmp = cls.enterClassContext(temporary_directory())
+        cls.out = cls.tmp / "result"
+        cls.unused = cls.tmp / "unused-without-outcar"
         cls.unused.mkdir()
         cls.proc, cls.payload = run_script(
             "--fc-dir", CASE / "dispersion",
@@ -149,10 +204,6 @@ class ReferenceCaseTests(unittest.TestCase):
             "--gs-at-es-dir", cls.unused,
             "--out-dir", cls.out,
         )
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.tmp.cleanup()
 
     def setUp(self):
         self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
@@ -197,11 +248,11 @@ class ReferenceCaseTests(unittest.TestCase):
                 self.assertEqual((self.out / summary["inputs_relative"][key]).resolve(), Path(path))
 
     def test_cross_geometry_formula_reads_only_toten(self):
-        cross = Path(self.tmp.name) / "es_at_gs"
+        cross = self.tmp / "es_at_gs"
         cross.mkdir(exist_ok=True)
         (cross / "OUTCAR").write_text("free energy TOTEN = -100 eV\nfree energy TOTEN = -96 eV\n",
                                      encoding="ascii")
-        out = Path(self.tmp.name) / "cross-result"
+        out = self.tmp / "cross-result"
         proc, payload = run_script("--fc-dir", CASE / "dispersion", "--gs-dir", CASE / "relax",
                                   "--es-dir", CASE / "excited" / "try_1_singlet",
                                   "--es-at-gs-dir", cross, "--zpl-formula", "E_es@gs + 100", "--out-dir", out)
@@ -281,9 +332,9 @@ BULK = ROOT / "test-directory" / "sjcm_mgr" / "hBN" / "bulk" / "phonons" / "vasp
 class EmbeddingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
-        cls.out = Path(cls.tmp.name) / "embedded"
-        cls.small_out = Path(cls.tmp.name) / "nonembedded"
+        cls.tmp = cls.enterClassContext(temporary_directory())
+        cls.out = cls.tmp / "embedded"
+        cls.small_out = cls.tmp / "nonembedded"
         args = (
             "--fc-dir", CASE / "dispersion",
             "--gs-dir", CASE / "relax",
@@ -295,10 +346,6 @@ class EmbeddingTests(unittest.TestCase):
             *args, "--bulk-fc-dir", BULK, "--mult", "12x12x1", "--out-dir", cls.out,
         )
         cls.small_proc, cls.small_payload = run_script(*args, "--out-dir", cls.small_out)
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.tmp.cleanup()
 
     def setUp(self):
         self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
@@ -373,7 +420,7 @@ class EmbeddingTests(unittest.TestCase):
         np.testing.assert_allclose((vectors.astype(np.float64) ** 2).sum(axis=2), participation, atol=1e-4)
 
     def test_invalid_embedding_options_leave_no_output(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with temporary_directory() as tmp:
             out = Path(tmp) / "result"
             for options in (("--bulk-fc-dir", BULK), ("--mult", "12x12x1"),
                             ("--bulk-fc-dir", BULK, "--mult", "12x0x1"),
@@ -389,6 +436,61 @@ class EmbeddingTests(unittest.TestCase):
                     self.assertFalse(payload["ok"])
                     self.assertTrue(payload["error"])
                     self.assertFalse(out.exists())
+
+    def test_hr_methods_cutoffs_and_reference_sizes(self):
+        from phonon_vibronic_analysis import analyse
+
+        plain = json.loads((self.small_out / "summary.json").read_text(encoding="utf-8"))
+        embedded = self.summary()
+        self.assertEqual(plain["hr_method"], "displacements")
+        self.assertIsNone(plain["hr_cutoff_A"])
+        self.assertIsNone(plain["sigma_max_meV"])
+        self.assertGreater(embedded["hr_cutoff_A"], 0)
+        print(f"113b displacements none: S={plain['s_total']:.10f}")
+        print(f"113b displacements embedded12 auto: S={embedded['s_total']:.10f}, cutoff={embedded['hr_cutoff_A']:.10f}")
+        auto = analyse(CASE / "dispersion", CASE / "relax", CASE / "excited/try_1_singlet",
+                       bulk_fc_dir=BULK, mult=(9, 9, 1))["summary"]
+        self.assertAlmostEqual(auto["s_total"], 1.422, delta=.01)
+        print(f"113b displacements embedded9 auto: S={auto['s_total']:.10f}, cutoff={auto['hr_cutoff_A']:.10f}")
+        result = analyse(CASE / "dispersion", CASE / "relax", CASE / "excited/try_1_singlet",
+                         hr_cutoff=embedded["hr_cutoff_A"], sigma_max=8.)
+        self.assertAlmostEqual(result["summary"]["hr_cutoff_A"], embedded["hr_cutoff_A"])
+        self.assertEqual(result["summary"]["sigma_max_meV"], 8.)
+        print(f"113b displacements explicit auto radius, FC cell: S={result['summary']['s_total']:.10f}")
+        for mult, expected in ((None, .7883808316), ((12, 12, 1), .8237285540), ((24, 24, 1), .8760143534)):
+            result = analyse(CASE / "dispersion", CASE / "relax", CASE / "excited/try_1_singlet",
+                             bulk_fc_dir=BULK, mult=mult, hr_method="approximate_forces")
+            summary = result["summary"]
+            self.assertEqual(summary["hr_method"], "approximate_forces")
+            self.assertTrue(math.isfinite(summary["s_total"]))
+            self.assertGreater(summary["s_total"], 0)
+            self.assertAlmostEqual(summary["s_total"], expected, delta=.005)
+            self.assertAlmostEqual(float(result["s_k"].sum()), summary["s_total"])
+            print(f"113b approximate_forces {mult or 'FC cell'}: S={summary['s_total']:.10f}, cutoff={summary['hr_cutoff_A']}")
+
+    def test_force_method_uses_emission_order_and_library_factors(self):
+        from dephonopy.hr_factors.io import read_atomic_displacements
+        from dephonopy.hr_factors.fc_displacements import hr_factors_from_forces
+        from phonon_vibronic_analysis import analyse
+
+        _, _, es = read_atomic_displacements(str(CASE / "relax/CONTCAR"),
+                                             str(CASE / "excited/try_1_singlet/CONTCAR"), verbose=False)
+        forces = np.zeros((len(es), 3))
+        forces[:2, 0] = [1e-4, -1e-4]
+        reference = {}
+        def calculate(*args, **kwargs):
+            reference.update(hr_factors_from_forces(*args, **kwargs))
+            return reference
+        with patch("dephonopy.hr_factors.io.read_force_differences", return_value=(forces, es, es)) as reader, \
+                patch("dephonopy.hr_factors.fc_displacements.hr_factors_from_forces", side_effect=calculate) as hr:
+            result = analyse(CASE / "dispersion", CASE / "relax", CASE / "excited/try_1_singlet",
+                             gs_at_es_dir=CASE / "relax", hr_method="forces")
+        reader.assert_called_once_with(str((CASE / "excited/try_1_singlet").resolve()),
+                                       str((CASE / "relax").resolve()), check_equal_positions=True)
+        self.assertEqual(result["summary"]["hr_method"], "forces")
+        self.assertEqual(hr.call_count, 1)
+        self.assertGreater(result["summary"]["s_total"], 0)
+        np.testing.assert_array_equal(result["s_k"][3:], reference["hr_factors"])
 
 
 if __name__ == "__main__":

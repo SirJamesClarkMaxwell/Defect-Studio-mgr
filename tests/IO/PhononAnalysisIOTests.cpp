@@ -142,6 +142,7 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(result.zplEv.experimental.has_value());
 		EXPECT_NEAR(*result.zplEv.experimental, 4.08, 1e-12);
 		EXPECT_NEAR(result.sigmaMeV, 6.0, 1e-12);
+		EXPECT_FALSE(result.sigmaMaxMeV);
 		EXPECT_NEAR(result.gammaMeV, 2.0, 1e-12);
 		EXPECT_NEAR(result.maxDisplacementAngstrom, 0.0632, 1e-12);
 		EXPECT_NEAR(result.deltaQAmuHalfAngstrom, 0.334, 1e-12);
@@ -174,6 +175,7 @@ namespace DefectStudio::Tests
 		summary["has_eigenvectors"] = false;
 		summary["hr_method"] = "displacements";
 		summary["hr_cutoff_A"] = 4.0;
+		summary["sigma_max_meV"] = 12.0;
 		summary["supercell"] = {12, 12, 1};
 		summary["max_displacement_A"] = nullptr;
 		summary["delta_Q_amu05_A"] = nullptr;
@@ -191,6 +193,8 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(result.source, "server");
 		EXPECT_FALSE(result.hasEigenvectors);
 		EXPECT_EQ(result.hrMethod, "displacements");
+		ASSERT_TRUE(result.sigmaMaxMeV);
+		EXPECT_DOUBLE_EQ(*result.sigmaMaxMeV, 12.0);
 		ASSERT_TRUE(result.hrCutoffAngstrom);
 		EXPECT_DOUBLE_EQ(*result.hrCutoffAngstrom, 4.0);
 		ASSERT_TRUE(result.supercell);
@@ -205,6 +209,29 @@ namespace DefectStudio::Tests
 		ASSERT_TRUE(PhononAnalysisIO::LoadSpectra(Path::FromResolved(dir), result, error)) << error;
 		EXPECT_FALSE(result.hasEigenvectors);
 		EXPECT_EQ(result.source, "server");
+		std::filesystem::remove_all(dir);
+	}
+
+	TEST(PhononAnalysisIOTests, SigmaMaxAcceptsNullAndRejectsNarrowerOrMalformedValues)
+	{
+		const FilePath dir = WriteFixture("sigma_max");
+		nlohmann::json summary;
+		{
+			std::ifstream in(dir / "summary.json");
+			in >> summary;
+		}
+		PhononAnalysisResult result;
+		std::string error;
+		summary["sigma_max_meV"] = nullptr;
+		WriteText(dir / "summary.json", summary.dump());
+		ASSERT_TRUE(Load(dir, result, error)) << error;
+		EXPECT_FALSE(result.sigmaMaxMeV);
+		for (const nlohmann::json value : {nlohmann::json(5.0), nlohmann::json("invalid")})
+		{
+			summary["sigma_max_meV"] = value;
+			WriteText(dir / "summary.json", summary.dump());
+			EXPECT_FALSE(Load(dir, result, error));
+		}
 		std::filesystem::remove_all(dir);
 	}
 

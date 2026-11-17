@@ -10,6 +10,7 @@ namespace DefectStudio
 	void PhononPanelSession::ClearCcdResult() { m_CcdResult.reset(); ++m_PlotRevision; }
 	std::optional<std::reference_wrapper<const CcdAnalysisResult>> PhononPanelSession::CcdResult() const noexcept
 	{
+		if (!ActiveCaseVisible()) return std::nullopt;
 		return m_CcdResult ? std::optional<std::reference_wrapper<const CcdAnalysisResult>>(std::cref(*m_CcdResult)) : std::nullopt;
 	}
 

@@ -14,7 +14,9 @@ namespace DefectStudio
 	class AnalysisDatasetScanJob final : public IJob
 	{
 	public:
-		explicit AnalysisDatasetScanJob(std::vector<Path> roots, bool server = false) : m_Roots(std::move(roots)), m_Server(server) {}
+		explicit AnalysisDatasetScanJob(std::vector<Path> roots, bool server = false, std::vector<Path> folders = {},
+			std::vector<PhononCase> cases = {}, Path project = {}) : m_Server(server), m_Roots(std::move(roots)),
+			m_FolderRoots(std::move(folders)), m_Cases(std::move(cases)), m_Project(std::move(project)) {}
 		std::string GetName() const override { return "Skan zestawów analiz"; }
 		std::string GetType() const override { return "phonon.datasets.scan"; }
 		void Execute(JobContext &context) override
@@ -38,14 +40,34 @@ namespace DefectStudio
 				}
 			}
 			context.ThrowIfCancellationRequested();
+			for (const auto &root : m_FolderRoots)
+			{
+				context.ThrowIfCancellationRequested();
+				context.SetMessage(root.Utf8());
+				auto proposals = ScanPhononDefectFolder(root, [&] { return context.IsCancellationRequested(); });
+				for (auto &proposal : proposals)
+					if (std::none_of(m_Proposals.begin(), m_Proposals.end(), [&](const auto &item) {
+						return PhononPanelSession::SameFilePath(item.systemDirectory, proposal.systemDirectory, m_Project);
+					})) m_Proposals.push_back(std::move(proposal));
+			}
+			m_NewResults = PhononPanelSession::findNewServerResults(m_Proposals, m_Cases, m_Project,
+				[&] { return context.IsCancellationRequested(); });
+			context.ThrowIfCancellationRequested();
 			m_Result = std::move(found);
 		}
 		std::optional<std::vector<AnalysisDatasetRef>> &Result() noexcept { return m_Result; }
 		std::vector<ServerHrResult> &ServerResults() noexcept { return m_ServerResults; }
+		std::vector<PhononFolderProposal> &Proposals() noexcept { return m_Proposals; }
+		std::map<std::string, std::vector<PhononNewServerResult>> &NewResults() noexcept { return m_NewResults; }
 	private:
 		bool m_Server;
 		std::vector<ServerHrResult> m_ServerResults;
 		std::vector<Path> m_Roots;
+		std::vector<Path> m_FolderRoots;
+		std::vector<PhononCase> m_Cases;
+		Path m_Project;
+		std::vector<PhononFolderProposal> m_Proposals;
+		std::map<std::string, std::vector<PhononNewServerResult>> m_NewResults;
 		std::optional<std::vector<AnalysisDatasetRef>> m_Result;
 	};
 
@@ -204,11 +226,27 @@ namespace DefectStudio
 		std::erase_if(roots, [](const auto &root) { return root.Empty(); });
 		std::sort(roots.begin(), roots.end(), [](const auto &a, const auto &b) { return a.Native() < b.Native(); });
 		roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
-		if (roots.empty()) return;
+		if (roots.empty() && m_Settings.defectRoots.empty()) return;
 		const auto system = m_ScanJobs.lock();
 		if (!system) { m_ScanMessage = "JobSystem niedostępny."; return; }
-		m_ScanJob = CreateRef<AnalysisDatasetScanJob>(std::move(roots));
+		m_ScanJob = CreateRef<AnalysisDatasetScanJob>(std::move(roots), false, m_Settings.defectRoots, Cases(), m_ProjectDirectory);
 		m_ScanJobId = system->Submit(m_ScanJob, JobPriority::Normal);
+	}
+
+	void PhononPanelSession::startDefectFolderScan(std::vector<Path> roots, bool proposals)
+	{
+		CancelDatasetScan();
+		m_DefectFolderScanRoots = std::move(roots);
+		m_DefectFolderSelections.clear();
+		m_DefectFolderPopupRequested = false;
+		m_ScanJobs = m_JobSystem;
+		const auto jobs = m_ScanJobs.lock();
+		if (!jobs) { m_ScanMessage = "JobSystem niedostępny."; return; }
+		m_ScanningDefectFolders = true;
+		m_ProposeDefectFolders = proposals;
+		m_ScanMessage = "Szukanie par GS + ES i wyników serwera...";
+		m_ScanJob = CreateRef<AnalysisDatasetScanJob>(std::vector<Path>{}, false, m_DefectFolderScanRoots, Cases(), m_ProjectDirectory);
+		m_ScanJobId = jobs->Submit(m_ScanJob, JobPriority::Normal);
 	}
 
 	void PhononPanelSession::startServerScan(const Path &root)
@@ -229,9 +267,14 @@ namespace DefectStudio
 	void PhononPanelSession::CancelDatasetScan()
 	{
 		if (m_ScanJob)
+		{
 			if (const auto system = m_ScanJobs.lock()) (void)system->RequestCancel(m_ScanJobId);
+			m_ScanMessage = "Skan przerwany.";
+		}
 		m_ScanJob.reset(); m_ScanJobId = 0;
 		m_ScanningServer = false;
+		m_ScanningDefectFolders = false;
+		m_ProposeDefectFolders = false;
 	}
 
 	bool PhononPanelSession::PollDatasetScan()
@@ -241,6 +284,14 @@ namespace DefectStudio
 		const auto snapshot = system ? system->GetJob(m_ScanJobId) : std::nullopt;
 		if (snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running)) return false;
 		const bool completed = snapshot && snapshot->status == JobStatus::Completed && m_ScanJob->Result();
+		if (m_ScanningDefectFolders)
+		{
+			if (completed) commitDefectFolderScan(std::move(m_ScanJob->Proposals()), std::move(m_ScanJob->NewResults()));
+			else m_ScanMessage = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Skan przerwany.";
+			m_ScanJob.reset(); m_ScanJobId = 0;
+			m_ScanningDefectFolders = false;
+			return completed;
+		}
 		if (m_ScanningServer)
 		{
 			if (completed)
@@ -272,6 +323,7 @@ namespace DefectStudio
 				if (!path.Empty())
 					if (auto ref = ReadDatasetRef(path)) datasets.push_back(std::move(*ref));
 			SetDatasets(std::move(datasets));
+			commitDefectFolderScan(std::move(m_ScanJob->Proposals()), std::move(m_ScanJob->NewResults()));
 			m_ScanMessage = "Skan zakończony.";
 		}
 		else m_ScanMessage = snapshot && !snapshot->errorMessage.empty() ? snapshot->errorMessage : "Skan przerwany.";
