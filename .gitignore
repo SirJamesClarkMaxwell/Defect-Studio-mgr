@@ -55,3 +55,6 @@ test-directory/
 Vendor/groupy/
 Vendor/puntukas_tools2/
 Vendor/dephonopy/
+
+# User assets: cluster job templates (task 113d) - never commit
+install/users/*/scripts/server_templates/
