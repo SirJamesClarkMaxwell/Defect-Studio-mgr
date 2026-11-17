@@ -81,7 +81,7 @@ namespace DefectStudio
 		}
 	}
 
-	PhononPanelSession::~PhononPanelSession() { cancelJob(); cancelFigureJob(); CancelDatasetScan(); }
+	PhononPanelSession::~PhononPanelSession() { cancelJob(); cancelFigureJob(); CancelDatasetScan(); clearExperimentalSpectra(); }
 
 	void PhononPanelSession::SetDatasets(std::vector<AnalysisDatasetRef> datasets)
 	{

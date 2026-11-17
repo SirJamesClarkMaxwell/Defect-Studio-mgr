@@ -11,12 +11,14 @@
 
 namespace DefectStudio
 {
+	void DrawPhononPlotSeries(PhononPanelSession &session, PlotData &plot);
+
 	namespace
 	{
-		constexpr std::array<std::string_view, 22> Columns = {"porównaj", "Przypadek", "Zestaw", "ZPL [eV]",
+		constexpr std::array<std::string_view, 23> Columns = {"porównaj", "Przypadek", "Zestaw", "ZPL [eV]",
 			"ΔQ [amu^½ Å]", "S", "DW [%]", "ℏω_eff [meV]", "Najsilniejszy mod [meV]", "S_k", "n_eff", "Mody urojone",
 			"ΔQ (CCD) [amu^½ Å]", "max |ΔR| [Å]", "atomy ΔQ²", "pokrycie ΔQ² modami [%]", "największy udział modu [%]",
-			"źródło", "komórka", "metoda HR", "cutoff [Å]", "E_FC = Σ S_k ℏω_k [meV]"};
+			"źródło", "komórka", "metoda HR", "cutoff [Å]", "E_FC = Σ S_k ℏω_k [meV]", "ZPL eksp. [eV]"};
 
 	}
 
@@ -110,11 +112,36 @@ namespace DefectStudio
 				ImGui::TableSetColumnIndex(21);
 				if (row.franckCondonMeV) ImGui::Text("%.6g", *row.franckCondonMeV);
 				else { ImGui::TextUnformatted("—"); ImGui::SetItemTooltip("%s", row.franckCondonReason.c_str()); }
+				ImGui::TableSetColumnIndex(22);
+				if (row.experimentalZplEv) ImGui::Text("%.6g", *row.experimentalZplEv);
+				else ImGui::TextUnformatted("—");
+				ImGui::SetItemTooltip("ZPL pierwszego widocznego widma eksperymentalnego; — gdy nie podano.");
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
 		}
 		if (rows.empty()) ImGui::TextDisabled("Przypnij zestawy fononów do przypadków lub zaznacz je do porównania.");
+		ImGui::TextUnformatted("PL — porównanie");
+		ImGui::SetItemTooltip("Oś, normalizację i wybór ZPL ustaw w zakładce PL. Linie przerywane: widma eksperymentalne.");
+		auto pl = BuildPlPlotData(*m_Session, m_Session->m_ProjectDirectory, m_Session->m_ProjectRoots, CurrentPlotColors());
+		ImGui::PushID("comparisonPL");
+		PlotExportPopup(pl, m_Session->m_ProjectDirectory, "comparison_PL", m_PlotExports["comparison_PL"]);
+		drawFigure(pl, "comparison_PL");
+		if (!pl.series.empty() && ImPlot::BeginPlot("##comparisonPL", ImVec2(-1.0f, 200.0f)))
+		{
+			const auto xLabel = pl.x.labelTex + " [" + pl.x.unit + "]";
+			const auto yLabel = pl.y.labelTex + " [" + pl.y.unit + "]";
+			const bool reset = m_LastPlotRevision != m_Session->PlotRevision() || m_PlotTab != 6;
+			ImPlot::SetupAxes(" ", " ");
+			ImPlot::SetupAxisLimits(ImAxis_X1, pl.x.minimum, pl.x.maximum, reset ? ImPlotCond_Always : ImPlotCond_Once);
+			ImPlot::SetupFinish();
+			ImRect plotRect;
+			const ImRect frame = CurrentPlotFrame(&plotRect);
+			DrawPhononPlotSeries(*m_Session, pl);
+			ImPlot::EndPlot();
+			DrawTexAxisLabels(frame, plotRect, xLabel.c_str(), yLabel.c_str());
+		}
+		ImGui::PopID();
 		ImGui::TextUnformatted("Podobieństwo ΔR");
 		ImGui::SetItemTooltip("Wymagana ta sama kolejność atomów i pierwiastków oraz masy zgodne do 1e-3 amu. Bez dopasowania ani obrotu atomów.");
 		const auto overlap = BuildDisplacementOverlapColumns(*m_Session, m_Session->m_ProjectDirectory);
@@ -181,6 +208,7 @@ namespace DefectStudio
 			m_LastPlotRevision = m_Session->PlotRevision(); m_PlotTab = 6;
 			DrawTexAxisLabels(frame, plotRect, "r [Å]", plot.y.labelTex.c_str());
 		}
+		m_LastPlotRevision = m_Session->PlotRevision(); m_PlotTab = 6;
 		if (selected)
 		{
 			const auto &row = rows[*selected];

@@ -45,8 +45,13 @@ odczyt wyników z serwera (P: = sjcm_mgr, embedding 9..50, HR, lineshape), defek
 termodynamice, PL eksperymentalne z pliku, metody HR + cutoff, zbieżność po n, generator zadań na serwer.
 - f1d41a4 113a import wyników HR z serwera (P: 12×12×1: S 1,4221, ZPL 3,452 eV), b300e0e 113f1 czytnik tabel +
   widmo eksperymentalne (Domain). Debug: 1844 testy, 1839 OK, 5 pominiętych. GUI niesprawdzone.
-- U codex: 113e (defekty z folderu, ukrywanie, porównanie widocznych) i 113b (metoda HR, cutoff, σ_max) równolegle.
-- Gotowe zadania: `tasks/113f2-experimental-pl-overlay.md` (po 113e). Do napisania: 113c, 113d, 113g.
+- 51e914d 113e (defekty z folderu jak w termodynamice, ukrywanie, „Porównaj wszystkie widoczne”, nowe foldery
+  skanowane przy otwarciu projektu) + 113b (metoda HR, cutoff, σ_max). Debug: 1864 testy, 1859 OK, 5 pominiętych;
+  pytest 100 OK, 1 stary błąd (`test_check_include_directions`). Dimer 9×9×1: displacements 1,4067 (bez cutoff) /
+  1,4222 (emb., auto); approximate_forces 0,788 / 0,824 (12×12×1) / 0,876 (24×24×1) - rośnie z n, FC bulku przy
+  defekcie C-C jest przybliżeniem.
+- U codex: 113f2 (PL eksperymentalne na wykresach) i 113d (generator zadania; szablony = zasoby użytkownika w
+  `install/users/default/scripts/server_templates/`, gitignored, nigdy w repo). Potem 113c, 113g.
 
 Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`) jest zrobiony: 108b-e + persystencja per przypadek
 + porównanie wielu defektów. Raporty: `reports/task-108b…108e-*.md` (odstępstwa od zadań opisane na końcu).

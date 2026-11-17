@@ -38,11 +38,13 @@ namespace DefectStudio
 	{
 		m_Windows = windows;
 		pollJob();
+		pollServerJob();
 		pollCcdJob();
 		pollCcdAnalysisJob();
 		pollDispersionJob();
 		pollBulkModeJob();
 		pollFigureJob();
+		PollExperimentalSpectra();
 		submitNextBatch();
 		(void)PollDatasetScan();
 		// A closed target must never transfer its captured positions to a different window.

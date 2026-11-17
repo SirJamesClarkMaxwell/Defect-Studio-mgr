@@ -239,7 +239,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(rows[0].values[10], 2); EXPECT_EQ(rows[0].values[11], 1);
 		EXPECT_EQ(rows[0].values[12], 20); EXPECT_EQ(rows[0].values[13], 16);
 		const auto columns = PhononComparisonColumns(rows, 0.8);
-		ASSERT_EQ(columns.size(), 22u);
+		ASSERT_EQ(columns.size(), 23u);
 		EXPECT_EQ(columns[12].name, "ΔQ (CCD)"); EXPECT_EQ(columns[12].unit, "amu^½ Å");
 		EXPECT_EQ(columns[13].name, "max |ΔR|"); EXPECT_EQ(columns[13].unit, "Å");
 		EXPECT_EQ(columns[14].name, "atomy 80 % ΔQ²");
@@ -267,7 +267,7 @@ namespace DefectStudio::Tests
 		EXPECT_EQ(rows[0].provenance, (std::array<std::string, 4>{"serwer", "12x12x1", "displacements", "4.5"}));
 		ASSERT_TRUE(rows[0].franckCondonMeV); EXPECT_DOUBLE_EQ(*rows[0].franckCondonMeV, 80);
 		const auto columns = PhononComparisonColumns(rows, .9);
-		ASSERT_EQ(columns.size(), 22u);
+		ASSERT_EQ(columns.size(), 23u);
 		for (std::size_t i = 0; i < 4; ++i) EXPECT_EQ(columns[17 + i].text[0], rows[0].provenance[i]);
 		EXPECT_EQ(columns[20].unit, "Å"); EXPECT_EQ(columns[21].unit, "meV"); EXPECT_DOUBLE_EQ(columns[21].values[0], 80);
 		result.source = "local"; result.supercell.reset(); result.hrCutoffAngstrom.reset(); session.SetResult(result);

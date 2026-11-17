@@ -192,6 +192,10 @@ namespace DefectStudio
 			}
 			if (result) FillComparison(row, result->get(), preferred, hasModes, error);
 			FillDisplacement(row, session);
+			for (const auto &item : session.Cases())
+				if (item.id == caseId)
+					for (const auto &source : item.experimentalSpectra)
+						if (source.visible) { row.experimentalZplEv = source.zplEv; break; }
 			rows.push_back(std::move(row));
 		};
 		const auto &cases = session.Cases();
@@ -258,10 +262,12 @@ namespace DefectStudio
 		for (const std::string_view name : {"źródło", "komórka", "metoda HR", "cutoff"})
 			columns.push_back({std::string(name), name == "cutoff" ? "Å" : "", "", {}, {}});
 		columns.push_back({"E_FC = Σ S_k ℏω_k", "meV", "", {}, {}});
+		columns.push_back({"ZPL eksp.", "eV", "Pierwsze widoczne widmo eksperymentalne przypadku.", {}, {}});
 		for (const auto &row : rows)
 		{
 			for (std::size_t i = 0; i < row.provenance.size(); ++i) columns[17 + i].text.push_back(row.provenance[i].empty() ? "—" : row.provenance[i]);
 			columns[21].values.push_back(row.franckCondonMeV.value_or(std::numeric_limits<double>::quiet_NaN()));
+			columns[22].values.push_back(row.experimentalZplEv.value_or(std::numeric_limits<double>::quiet_NaN()));
 		}
 		return columns;
 	}

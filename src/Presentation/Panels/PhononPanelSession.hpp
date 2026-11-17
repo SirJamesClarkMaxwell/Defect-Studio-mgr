@@ -14,6 +14,7 @@
 #include <vector>
 #include <deque>
 #include <variant>
+#include <tuple>
 
 #include <glm/glm.hpp>
 
@@ -26,10 +27,12 @@
 #include "IO/AnalysisDatasetIO.hpp"
 #include "IO/PhononServerResultsIO.hpp"
 #include "IO/PhononDefectFolderScan.hpp"
+#include "IO/DataTableIO.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "ScientificRuntime/Python/PhononAnalysisBridge.hpp"
 #include "ScientificRuntime/Python/CcdAnalysisJob.hpp"
+#include "ScientificRuntime/Python/ServerJobBridge.hpp"
 
 namespace DefectStudio
 {
@@ -43,6 +46,7 @@ namespace DefectStudio
 	class PhononDispersionJob;
 	class PhononModeJob;
 	class AnalysisDatasetScanJob;
+	class ExperimentalSpectrumJob;
 	namespace Tests { struct PhononBatchTestAccess; }
 	namespace Tests { struct PhononDispersionTestAccess; }
 	namespace Tests { struct PhononServerTestAccess; }
@@ -70,6 +74,21 @@ namespace DefectStudio
 		bool updated = false;
 	};
 
+	struct PhononServerJobControls
+	{
+		int nMin = 10, nMax = 50;
+		Path templates, output, result;
+		std::string message;
+	};
+
+	struct PhononExperimentalData
+	{
+		ParsedDataTable table;
+		std::string preview, error;
+		std::optional<ExperimentalSpectrum> spectrum;
+		bool loading = false;
+	};
+
 	// task/104d: everything the Phonons panel does that is not ImGui - the loaded result, the
 	// persisted settings, the mode list, and what goes into the bound renderer window (mode arrows
 	// and animated atom positions). The panel only draws widgets and forwards intents here.
@@ -89,10 +108,18 @@ namespace DefectStudio
 		void Update(std::vector<RendererWindowState> &windows, double deltaSeconds, bool anyViewVisible);
 		void Changed();
 		void FlushChanges();
+		[[nodiscard]] const PhononExperimentalData &Experimental(const ExperimentalSpectrumSource &source);
+		void PollExperimentalSpectra();
+		bool AddExperimentalSpectrum(ExperimentalSpectrumSource source);
 		[[nodiscard]] std::uint64_t PlotRevision() const noexcept { return m_PlotRevision; }
 		void InvalidatePlots() noexcept { ++m_PlotRevision; }
 		void SetPlZpl(std::string choice);
 		void SubmitComputation();
+		void SubmitServerJob();
+		[[nodiscard]] std::string ServerJobBlocker() const;
+		[[nodiscard]] Path DefaultServerJobDirectory() const;
+		[[nodiscard]] ServerJobRequest ServerJobInputs() const;
+		PhononServerJobControls &ServerJobControls() { return m_ServerJobControls[ActiveCaseId()]; }
 		void SubmitCcdInputs();
 		void SubmitCcdAnalysis();
 		void SubmitDispersion();
@@ -119,7 +146,7 @@ namespace DefectStudio
 			const PhononCaseSettings &settings, const std::string &caseId) const;
 		[[nodiscard]] bool IsBusy() const noexcept
 		{
-			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob || m_PendingModeJob;
+			return IsBatchRunning() || m_PendingJob || m_PendingCcdJob || m_PendingCcdAnalysisJob || m_PendingDispersionJob || m_PendingModeJob || m_ServerJob;
 		}
 		void SetPersistedState(PhononPanelSettings settings, Path projectDirectory);
 		void SetProjectRoots(std::vector<ProjectRootEntry> roots);
@@ -270,7 +297,26 @@ namespace DefectStudio
 		[[nodiscard]] double Phase() const noexcept { return m_Phase; }
 
 	private:
+		friend void DrawPhononExperimental(PhononPanelSession &session,
+			std::unordered_map<std::string, std::pair<std::vector<char>, bool>> &edits);
+		void clearExperimentalSpectra();
+		struct CachedExperimental
+		{
+			std::filesystem::file_time_type modified{};
+			PhononExperimentalData data;
+			Ref<ExperimentalSpectrumJob> job;
+			JobId jobId = 0;
+		};
+		std::map<std::tuple<std::string, int, int, std::string>, CachedExperimental> m_ExperimentalSpectra;
+		ExperimentalSpectrumSource m_ExperimentalImport;
+		std::string m_ExperimentalImportCase;
 		friend class PhononModesPanel;
+		void pollServerJob();
+		void cancelServerJob();
+		Ref<ServerJob> m_ServerJob;
+		JobId m_ServerJobId = 0;
+		std::string m_ServerJobCase;
+		std::map<std::string, PhononServerJobControls> m_ServerJobControls;
 		friend void DrawPhononCases(PhononPanelSession &session);
 		friend void DrawPhononDefectFolders(PhononPanelSession &session);
 		friend class AnalysisDatasetScanJob;

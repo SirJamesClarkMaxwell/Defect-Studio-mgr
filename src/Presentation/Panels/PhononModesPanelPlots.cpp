@@ -13,6 +13,8 @@
 
 namespace DefectStudio
 {
+	void DrawPhononPlotSeries(PhononPanelSession &session, PlotData &plot);
+
 	void PhononModesPanel::drawPlots()
 	{
 		auto &settings = m_Session->Settings();
@@ -31,13 +33,14 @@ namespace DefectStudio
 						compared = tab == 0 ? m_Session->PlotModes(dataset.directory, error) : m_Session->Spectra(dataset.directory, error);
 						if (compared) break;
 					}
-			if (!active && !compared)
+			if (!active && !compared && tab != 2)
 			{
 				ImGui::TextDisabled("Wczytaj wynik fononowy lub zaznacz zestaw fononów do porównania.");
 				ImGui::EndTabItem();
 				continue;
 			}
-			const auto &result = active ? *active : compared->get();
+			const PhononAnalysisResult empty;
+			const auto &result = active ? *active : compared ? compared->get() : empty;
 			ImGui::PushID(tab);
 			const std::string plotKey = tab == 0 ? "beta/" : tab == 1 ? "S/" : "PL/";
 			if (tab == 2)
@@ -103,14 +106,7 @@ namespace DefectStudio
 				ImPlot::SetupFinish();
 				ImRect plotRect;
 				const ImRect frame = CurrentPlotFrame(&plotRect);
-				for (auto &series : plot.series)
-				{
-					auto &style = settings.seriesStyles[PhononPlotStyleKey(series)];
-					const auto legendId = PhononPlotLegendId(series);
-					ResolvePlotItemColor(series, style, legendId);
-					if (PlotSeries(series, style, legendId)) persist();
-					ResolvePlotItemColor(series, style, legendId);
-				}
+				DrawPhononPlotSeries(*m_Session, plot);
 				ImPlot::SetAxes(ImAxis_X1, ImAxis_Y1);
 				if (tab < 2)
 				{
@@ -156,7 +152,7 @@ namespace DefectStudio
 						0.5f * (plotRect.Min.y + plotRect.Max.y + TexTextSize(ParseTexLite("S(\\hbar\\omega) [meV^{-1}]"), ImGui::GetFontSize()).x)),
 						ImGui::GetColorU32(ImGuiCol_Text), "S(\\hbar\\omega) [meV^{-1}]", true);
 			}
-			if (tab == 2 && result.plComputed.empty() && result.plSpinPurified.empty() && result.plExperimental.empty() && result.plFormula.empty())
+			if (tab == 2 && plot.series.empty() && result.plComputed.empty() && result.plSpinPurified.empty() && result.plExperimental.empty() && result.plFormula.empty())
 				ImGui::TextDisabled("Brak widma PL w wyniku.");
 			else if (tab == 2 && settings.plAxis == "zpl_loss" && plot.series.empty())
 				ImGui::TextDisabled("Brak dostępnego ZPL dla krzywych PL; nie można wyrównać osi.");

@@ -3,15 +3,30 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "Core/Utils/Path.hpp"
+#include "Domain/Vibrations/ExperimentalSpectrum.hpp"
 #include "IO/PlotSeriesStyle.hpp"
 
 namespace DefectStudio
 {
+	struct ExperimentalSpectrumSource
+	{
+		Path file;
+		int xColumn = 0;
+		int yColumn = 1;
+		std::string unit = "eV";
+		std::string label;
+		std::optional<double> zplEv;
+		bool visible = true;
+	};
+
+	[[nodiscard]] std::optional<SpectrumAxisUnit> ExperimentalSpectrumUnit(std::string_view unit);
+
 	// task/104c: everything the Phonons panel (task 104d) lets the user set, so reopening the
 	// project shows the same result, mode, arrows and animation settings. Inputs of the last
 	// computation are kept too, so "Policz ponownie" needs no re-picking.
@@ -70,6 +85,7 @@ namespace DefectStudio
 		PhononCaseSettings settings;
 		Path sourceDirectory;
 		bool hidden = false;
+		std::vector<ExperimentalSpectrumSource> experimentalSpectra;
 	};
 
 	struct PhononPanelSettings : PhononCaseSettings

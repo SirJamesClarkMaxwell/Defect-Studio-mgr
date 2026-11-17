@@ -12,6 +12,9 @@
 
 namespace DefectStudio
 {
+	void DrawPhononExperimental(PhononPanelSession &session,
+		std::unordered_map<std::string, std::pair<std::vector<char>, bool>> &edits);
+
 	bool PhononModesPanel::DrawFolder(const char *id, Path &path, std::string &error, bool editable, const Path &hint)
 	{
 		ImGui::PushID(id);
@@ -149,6 +152,8 @@ namespace DefectStudio
 		}
 		const std::string blocker = m_Session->ComputationBlocker();
 		drawServerImport();
+		DrawPhononExperimental(*m_Session, m_FolderEdits);
+		drawServerJob();
 		ImGui::BeginDisabled(m_Session->IsBusy() || !blocker.empty());
 		if (ImGui::Button("Policz")) m_Session->SubmitComputation();
 		ImGui::EndDisabled();

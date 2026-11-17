@@ -139,6 +139,7 @@ namespace DefectStudio
 			if (!PhononSettingsDetail::ParseFlat(YAML::Dump(flat), projectDirectory, parsed, warnings, error)) return false;
 			item.settings = parsed;
 			item.datasets = std::move(parsed.comparedDirectories);
+			PhononSettingsDetail::ReadExperimental(node["experimental"], projectDirectory, item, warnings);
 			try { if (node["sourceDir"]) item.sourceDirectory = PhononSettingsDetail::ReadPath(node["sourceDir"], projectDirectory); }
 			catch (const std::exception &exception) { warnings.push_back("Ignored phonon case sourceDir: " + std::string(exception.what())); }
 			try { if (node["hidden"]) item.hidden = node["hidden"].as<bool>(); }
@@ -274,6 +275,7 @@ namespace DefectStudio
 			node["name"] = item.name;
 			node["sourceDir"] = PhononSettingsDetail::StoredPath(item.sourceDirectory, projectDirectory);
 			node["hidden"] = item.hidden;
+			PhononSettingsDetail::WriteExperimental(node, projectDirectory, item);
 			PhononPanelSettings paths;
 			paths.comparedDirectories = item.datasets;
 			node["datasets"] = YAML::Load(PhononSettingsDetail::SerializeFlat(paths, projectDirectory))["datasets"]["compared"];

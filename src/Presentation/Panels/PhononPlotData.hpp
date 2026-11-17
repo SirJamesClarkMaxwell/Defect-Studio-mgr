@@ -19,6 +19,9 @@ namespace DefectStudio
 	};
 	[[nodiscard]] PhononPlSelection SelectPhononPlCurve(const PhononAnalysisResult &result, std::string_view preferred);
 	[[nodiscard]] std::string PhononZplSourceLabel(std::string_view choice);
+	void NormalizePhononPl(std::span<const double> x, std::vector<double> &y, std::string_view normalization);
+	void AppendExperimentalPl(PlotData &plot, PhononPanelSession &session, const Path &project, std::span<const glm::vec4> colors);
+	[[nodiscard]] std::string PhononExperimentalSeriesNote(PhononPanelSession &session, const PlotSeriesData &series);
 
 	struct PhononComparisonRow
 	{
@@ -34,6 +37,7 @@ namespace DefectStudio
 		std::array<std::string, 4> provenanceReasons;
 		std::optional<double> franckCondonMeV;
 		std::string franckCondonReason;
+		std::optional<double> experimentalZplEv;
 	};
 	[[nodiscard]] std::vector<PhononComparisonRow> BuildPhononComparisonRows(PhononPanelSession &session, const Path &project);
 	[[nodiscard]] std::vector<DataTableColumn> PhononComparisonColumns(std::span<const PhononComparisonRow> rows);

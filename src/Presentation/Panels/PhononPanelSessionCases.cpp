@@ -46,6 +46,7 @@ namespace DefectStudio
 		copy.settings.ccdAnalysisOutputDirectory = {};
 		const auto newId = AddCase(copy.name + " (kopia)");
 		if (newId.empty()) return {};
+		m_Settings.cases.back().experimentalSpectra = std::move(copy.experimentalSpectra);
 		static_cast<PhononCaseSettings &>(m_Settings) = std::move(copy.settings);
 		m_EmbeddingMult = {12, 12, 1};
 		if (!m_Settings.embeddingMult.empty())

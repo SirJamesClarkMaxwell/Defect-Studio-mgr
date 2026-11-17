@@ -124,16 +124,7 @@ namespace DefectStudio
 					for (auto &value : plX) value = 1000.0 * (*selected.zplEv - value);
 					std::reverse(plX.begin(), plX.end()); std::reverse(plY.begin(), plY.end());
 				}
-				if (tab == 2 && settings.plNormalization != "none")
-				{
-					double scale = 0.0;
-					if (settings.plNormalization == "max") scale = *std::max_element(y.begin(), y.end());
-					else
-						for (std::size_t i = 1; i < x.size(); ++i)
-							scale += 0.5 * (y[i - 1] + y[i]) * (x[i] - x[i - 1]);
-					if (std::isfinite(scale) && scale > 0.0)
-						for (auto &value : plY) value /= scale;
-				}
+				if (tab == 2) NormalizePhononPl(x, plY, settings.plNormalization);
 				const auto [first, last] = PhononPanelSession::GridIndexRange(x, plot.x.minimum, plot.x.maximum);
 				PlotSeriesData series;
 				series.id = plot.id + "/" + PhononPanelSession::DirectoryLabel(source, project, roots);
@@ -212,7 +203,14 @@ namespace DefectStudio
 	PlotData BuildPlPlotData(PhononPanelSession &session, const Path &project,
 		const std::vector<ProjectRootEntry> &roots, std::span<const glm::vec4> colors)
 	{
-		return PhononPlot(session, project, roots, 2, colors);
+		auto plot = PhononPlot(session, project, roots, 2, colors);
+		AppendExperimentalPl(plot, session, project, colors);
+		if (plot.x.maximum <= plot.x.minimum)
+		{
+			plot.x.minimum = session.Settings().plAxis == "zpl_loss" ? -150.0 : 0.0;
+			plot.x.maximum = session.Settings().plAxis == "zpl_loss" ? 1000.0 : 4.0;
+		}
+		return plot;
 	}
 
 	PlotData BuildDispersionPlotData(const PhononDispersion &result,
@@ -254,6 +252,7 @@ namespace DefectStudio
 
 	std::string PhononPlotLegendId(const PlotSeriesData &series)
 	{
+		if (series.id.starts_with("pl/exp/")) return series.id;
 		if (series.id.starts_with("localisation/")) return series.id;
 		if (series.kind == PlotSeriesKind::Line && (series.id.starts_with("S/") || series.id.starts_with("PL/")))
 			return series.source.Utf8();
