@@ -40,6 +40,10 @@ danych z klastra/dysku O:).
 
 ## W toku / następne
 
+**2026-11-17 - nowy plan, czeka na „start”:** `plans/2026-11-17-phonon-server-results-and-comparison.md` (113a-g):
+odczyt wyników z serwera (P: = sjcm_mgr, embedding 9..50, HR, lineshape), defekty dodawane z folderu jak w
+termodynamice, PL eksperymentalne z pliku, metody HR + cutoff, zbieżność po n, generator zadań na serwer.
+
 Zakres zatwierdzony 2026-10-20 (pamięć `vibration-108-scope`) jest zrobiony: 108b-e + persystencja per przypadek
 + porównanie wielu defektów. Raporty: `reports/task-108b…108e-*.md` (odstępstwa od zadań opisane na końcu).
 
